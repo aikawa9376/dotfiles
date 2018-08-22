@@ -1,14 +1,3 @@
-export PATH="/usr/local/bin:$PATH"
-export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
-PS1="%{$fg[cyan]%}%1~ %(!.#.$)${reset_color}"
-
-# -------------------------------------
-# fzf 
-# -------------------------------------
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-#export FZF_DEFAULT_COMMAND='fd --type f'
-export FZF_DEFAULT_OPTS='--height 40% --reverse --border'
-
 # -------------------------------------
 # antigen
 # -------------------------------------
@@ -27,9 +16,39 @@ antigen bundle zsh-users/zsh-autosuggestions
 antigen apply
 
 # -------------------------------------
+# 基本設定
+# -------------------------------------
+export PATH="/usr/local/bin:$PATH"
+export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
+#PS1="%{$fg[cyan]%}%1~ %(!.#.$)${reset_color}"
+
+autoload -Uz vcs_info
+setopt prompt_subst
+
+zstyle ':vcs_info:git:*' check-for-changes true
+zstyle ':vcs_info:git:*' unstagedstr '!'
+zstyle ':vcs_info:git:*' stagedstr '+'
+zstyle ':vcs_info:*' formats ' %c%u(%s:%b)'
+zstyle ':vcs_info:*' actionformats ' %c%u(%s:%b|%a)'
+precmd () {
+    psvar=()
+    LANG=en_US.UTF-8 vcs_info
+    [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
+}
+
+PROMPT="%B%F{white}❯❯[%n@%m]
+%B%F{white}❯%f%b "
+RPROMPT="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*" 
+# -------------------------------------
+# fzf 
+# -------------------------------------
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+#export FZF_DEFAULT_COMMAND='fd --type f'
+export FZF_DEFAULT_OPTS='--height 40% --reverse --border'
+
+# -------------------------------------
 # 補完機能
 # -------------------------------------
-
 # 補完機能の強化
 autoload -U compinit
 compinit
@@ -92,11 +111,37 @@ setopt auto_pushd
 # -------------------------------------
 # コマンド履歴
 # -------------------------------------
+# 失敗したコマンドは無視
+__record_command() {
+  typeset -g _LASTCMD=${1%%$'\n'}
+  return 1
+}
+zshaddhistory_functions+=(__record_command)
+
+__update_history() {
+  local last_status="$?"
+
+  # hist_ignore_space
+  if [[ ! -n ${_LASTCMD%% *} ]]; then
+    return
+  fi
+
+  # hist_reduce_blanks
+  local cmd_reduce_blanks=$(echo ${_LASTCMD} | tr -s ' ')
+
+  # Record the commands that have succeeded
+  if [[ ${last_status} == 0 ]]; then
+    print -sr -- "${cmd_reduce_blanks}"
+  fi
+}
+precmd_functions+=(__update_history)
 HISTFILE=~/.zsh_history
 HISTSIZE=6000000
 SAVEHIST=6000000
-setopt hist_ignore_dups     # ignore duplication command history list
+setopt hist_ignore_all_dups # ignore duplication command history list
+setopt hist_ignore_space    # スペースから始まるコマンドを無視
 setopt share_history        # share command history data
+setopt hist_no_store        # historyコマンドは履歴に登録しない
 # コマンド履歴検索
 autoload history-search-end
 zle -N history-beginning-search-backward-end history-search-end
