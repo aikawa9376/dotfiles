@@ -6,7 +6,7 @@ PS1="%{$fg[cyan]%}%1~ %(!.#.$)${reset_color}"
 # fzf 
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-export FZF_DEFAULT_COMMAND='rg --files --hidden --glob "!.git"'
+#export FZF_DEFAULT_COMMAND='fd --type f'
 export FZF_DEFAULT_OPTS='--height 40% --reverse --border'
 
 # -------------------------------------
@@ -103,3 +103,10 @@ zle -N history-beginning-search-backward-end history-search-end
 zle -N history-beginning-search-forward-end history-search-end
 bindkey "^P" history-beginning-search-backward-end
 bindkey "^N" history-beginning-search-forward-end
+
+# -------------------------------------
+# エイリアス
+# -------------------------------------
+alias l='ls -GAF'
+alias ls='ls -G'
+alias lsa='ls -GAFltr'
