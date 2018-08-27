@@ -26,6 +26,7 @@ endif
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/denite.nvim')
+call dein#add('vim-scripts/taglist.vim')
 call dein#add('tpope/vim-surround')
 call dein#add('terryma/vim-multiple-cursors')
 call dein#add('vim-airline/vim-airline')
@@ -64,9 +65,9 @@ let g:deoplete#enable_at_startup = 1
 
 " Snippet key-mappings.
 " Note: It must be "imap" and "smap".  It uses <Plug> mappings.
-imap <C-j>     <Plug>(neosnippet_expand_or_jump)
-smap <C-j>     <Plug>(neosnippet_expand_or_jump)
-xmap <C-j>     <Plug>(neosnippet_expand_target)
+imap <C-s> <Plug>(neosnippet_expand_or_jump)
+smap <C-s> <Plug>(neosnippet_expand_or_jump)
+xmap <C-s> <Plug>(neosnippet_expand_target)
 
 " For conceal markers.
 if has('conceal')
@@ -160,7 +161,9 @@ set smartindent
 nnoremap <Space>l gg=G
 
 "ノーマルモード中にEnterで改行
-noremap <CR> i<CR><Esc>
+nnoremap <CR> i<CR><Esc>
+nnoremap <Space>d mzo<ESC>`z
+nnoremap <Space>u mzO<ESC>`z
 
 "インサートモードで bash 風キーマップ
 inoremap <C-a> <C-o>^
@@ -175,9 +178,15 @@ inoremap <C-k> <C-o>D<Right>
 inoremap <C-u> <C-o>d^
 inoremap <C-w> <C-o>db
 
+nnoremap <C-h> ^
+nnoremap <C-l> $
+
 "j, k による移動を折り返されたテキストでも自然に振る舞うように変更
 nnoremap j gj
 nnoremap k gk
+
+"行末の1文字先までカーソルを移動できるように
+set virtualedit=onemore
 
 "vを二回で行末まで選択
 vnoremap v $h
@@ -205,6 +214,8 @@ set wildmenu wildmode=list:full "コマンドモード補完
 
 "タブの設定
 "TABにて対応ペアにジャンプ
+runtime macros/matchit.vim
+let b:match_words = "if:endif,foreach:endforeach,\<begin\>:\<end\>"
 nnoremap <Tab> %
 vnoremap <Tab> %
 nmap <silent> <Tab>x :close<CR>
@@ -216,6 +227,11 @@ nmap <silent> <Tab>H :-tabmove<CR>
 
 "入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
+
+"ジャンプリストで中央に持ってくる
+nnoremap <C-o> <C-o>zz
+nnoremap <C-i> <C-i>zz
+
 "emmet
 let g:user_emmet_install_global = 0
 autocmd FileType phtml,html,php,css EmmetInstall
@@ -230,13 +246,17 @@ nnoremap <Space>n :NERDTreeToggle<CR>
 "前回のカーソル位置からスタート
 augroup vimrcEx
   au BufRead * if line("'\"") > 0 && line("'\"") <= line("$") |
-  \ exe "normal g`\"" | endif
+        \ exe "normal g`\"" | endif
 augroup END
 
 "fzf
 nnoremap <Space>f :Files<CR>
 nnoremap <Space>b :Buffers<CR>
+nnoremap <Space>a :Ag<CR>
+
+"ctags
+nnoremap <Space>o :TlistToggle<CR>
 
 "vimrcをスペースドットで開く
-nnoremap <C-1> :<c-u>e ~\.vimrc<CR>
+nnoremap <Space>. :<c-u>e ~/.vimrc<CR>
 "nnoremap <C-2> :<c-u>source ~\.vimrc<CR>

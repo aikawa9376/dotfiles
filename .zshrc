@@ -24,6 +24,7 @@ export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 
 autoload -Uz vcs_info
 setopt prompt_subst
+setopt combining_chars
 
 zstyle ':vcs_info:git:*' check-for-changes true
 zstyle ':vcs_info:git:*' unstagedstr '!'
@@ -155,3 +156,4 @@ bindkey "^N" history-beginning-search-forward-end
 alias l='ls -GAF'
 alias ls='ls -G'
 alias lsa='ls -GAFltr'
+alias ctags="`brew --prefix`/bin/ctags"
