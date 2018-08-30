@@ -31,15 +31,33 @@ zstyle ':vcs_info:git:*' unstagedstr '!'
 zstyle ':vcs_info:git:*' stagedstr '+'
 zstyle ':vcs_info:*' formats ' %c%u(%s:%b)'
 zstyle ':vcs_info:*' actionformats ' %c%u(%s:%b|%a)'
-precmd () {
-    psvar=()
-    LANG=en_US.UTF-8 vcs_info
-    [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
-}
 
-PROMPT="%B%F{white}❯❯[%n@%m]
-%B%F{white}❯%f%b "
-RPROMPT="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*" 
+precmd () {
+  # 1行あける
+  print
+  # カレントディレクトリ
+  local left="%B%F{white}❯❯[%n@%m]"
+  # バージョン管理されてた場合、ブランチ名
+  vcs_info
+  psvar=()
+  LANG=en_US.UTF-8 vcs_info
+  [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
+  local right="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*"
+  # スペースの長さを計算
+  # テキストを装飾する場合、エスケープシーケンスをカウントしないようにします
+  local invisible='%([BSUbfksu]|([FK]|){*})'
+  local leftwidth=${#${(S%%)left//$~invisible/}}
+  local rightwidth=${#${(S%%)right//$~invisible/}}
+  local padwidth=$(($COLUMNS - ($leftwidth + $rightwidth) % $COLUMNS))
+
+  print -P $left${(r:$padwidth:: :)}$right
+}
+PROMPT="%B%F{white}❯%f%b "
+TOUT = 1
+TRAPALRM() {
+  zle reset-prompt
+}
+#RPROMPT="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*" 
 # -------------------------------------
 # fzf 
 # -------------------------------------

@@ -37,6 +37,8 @@ call dein#add('altercation/vim-colors-solarized')
 call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('pangloss/vim-javascript')
+call dein#add('Lokaltog/vim-easymotion')
+call dein#add('szw/vim-tags')
 
 " You can specify revision/branch/tag.
 call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
@@ -150,6 +152,8 @@ nnoremap <Space>k 4kzz
 "x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
 vnoremap x "_x
+nnoremap s "_s
+vnoremap s "_s
 
 "vv で行末まで選択
 vnoremap v ^$h
@@ -236,6 +240,10 @@ nnoremap <C-i> <C-i>zz
 let g:user_emmet_install_global = 0
 autocmd FileType phtml,html,php,css EmmetInstall
 imap <silent> <Tab> <C-y>,
+
+"eazymotionu
+let g:EasyMotion_do_mapping = 0 
+nmap m <Plug>(easymotion-s2)
 
 "ファイル操作系
 map <Space> <Nop>
