@@ -36,7 +36,7 @@ precmd () {
   # 1行あける
   print
   # カレントディレクトリ
-  local left="%B%F{white}❯❯[%n@%m]"
+  local left="%B%F{white}>>%n@%m]"
   # バージョン管理されてた場合、ブランチ名
   vcs_info
   psvar=()
@@ -52,8 +52,7 @@ precmd () {
 
   print -P $left${(r:$padwidth:: :)}$right
 }
-PROMPT="%B%F{white}❯%f%b "
-TOUT = 1
+PROMPT="%B%F{white}>%f%b "
 TRAPALRM() {
   zle reset-prompt
 }
