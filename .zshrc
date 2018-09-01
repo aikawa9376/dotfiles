@@ -32,11 +32,14 @@ zstyle ':vcs_info:git:*' stagedstr '+'
 zstyle ':vcs_info:*' formats ' %c%u(%s:%b)'
 zstyle ':vcs_info:*' actionformats ' %c%u(%s:%b|%a)'
 
+# -------------------------------------
+# prompt 
+# -------------------------------------
 precmd () {
   # 1行あける
   print
   # カレントディレクトリ
-  local left="%B%F{white}❯❯[%n@%m]"
+  local left="%B%F{white}>>[%n@%m]"
   # バージョン管理されてた場合、ブランチ名
   vcs_info
   psvar=()
@@ -52,12 +55,13 @@ precmd () {
 
   print -P $left${(r:$padwidth:: :)}$right
 }
-PROMPT="%B%F{white}❯%f%b "
-TOUT = 1
+
+PROMPT="%B%F{white}>%f%b "
 TRAPALRM() {
   zle reset-prompt
 }
 #RPROMPT="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*" 
+
 # -------------------------------------
 # fzf 
 # -------------------------------------
@@ -171,7 +175,8 @@ bindkey "^N" history-beginning-search-forward-end
 # -------------------------------------
 # エイリアス
 # -------------------------------------
-alias l='ls -GAF'
-alias ls='ls -G'
-alias lsa='ls -GAFltr'
-alias ctags="`brew --prefix`/bin/ctags"
+alias l='ls -GAF --color=auto'
+alias ls='ls -G --color=auto'
+alias lsa='ls -GAFltr --color=auto'
+alias node='nodejs'
+#alias ctags="`brew --prefix`/bin/ctags"
