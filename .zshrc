@@ -55,7 +55,6 @@ precmd () {
 
   print -P $left${(r:$padwidth:: :)}$right
 }
-
 PROMPT="%B%F{white}>%f%b "
 TRAPALRM() {
   zle reset-prompt
@@ -179,4 +178,5 @@ alias l='ls -GAF --color=auto'
 alias ls='ls -G --color=auto'
 alias lsa='ls -GAFltr --color=auto'
 alias node='nodejs'
+# todo os-fix
 #alias ctags="`brew --prefix`/bin/ctags"
