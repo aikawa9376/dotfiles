@@ -174,9 +174,20 @@ bindkey "^N" history-beginning-search-forward-end
 # -------------------------------------
 # エイリアス
 # -------------------------------------
-alias l='ls -GAF --color=auto'
-alias ls='ls -G --color=auto'
-alias lsa='ls -GAFltr --color=auto'
-alias node='nodejs'
-# todo os-fix
-#alias ctags="`brew --prefix`/bin/ctags"
+case ${OSTYPE} in
+    darwin*)
+        alias ctags="`brew --prefix`/bin/ctags"
+        alias l='ls -GAF'
+        alias ls='ls -G'
+        alias lsa='ls -GAFltr'
+        ;;
+    linux*)
+        alias l='ls -GAF --color=auto'
+        alias ls='ls -G --color=auto'
+        alias lsa='ls -GAFltr --color=auto'
+esac
+
+if ((${+commands[nodejs]})) then
+  alias node='nodejs'
+fi
+
