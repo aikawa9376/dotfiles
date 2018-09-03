@@ -26,7 +26,6 @@ endif
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/denite.nvim')
-call dein#add('vim-scripts/taglist.vim')
 call dein#add('tpope/vim-surround')
 call dein#add('terryma/vim-multiple-cursors')
 call dein#add('vim-airline/vim-airline')
@@ -38,7 +37,7 @@ call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('pangloss/vim-javascript')
 call dein#add('Lokaltog/vim-easymotion')
-call dein#add('szw/vim-tags')
+call dein#add('vim-scripts/taglist.vim')
 
 " You can specify revision/branch/tag.
 call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
@@ -117,9 +116,10 @@ endif
 " ファイル処理関連の設定
 set confirm    " 保存されていないファイルがあるときは終了前に保存確認
 set hidden     " 保存されていないファイルがあるときでも別のファイルを開くことが出来る
-set autoread   "外部でファイルに変更がされた場合は読みなおす
+set autoread   " 外部でファイルに変更がされた場合は読みなおす
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
+set autochdir  " ディレクトリを自動で移動
 
 "検索をファイルの先頭へ循環しない
 set nowrapscan
@@ -171,8 +171,8 @@ nnoremap <Space>l gg=G
 
 "ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
-nnoremap <Space>d mzo<ESC>`z
-nnoremap <Space>u mzO<ESC>`z
+nnoremap <Space>d mzo<ESC>`zj
+nnoremap <Space>u mzO<ESC>`zk
 
 "インサートモードで bash 風キーマップ
 inoremap <C-a> <C-o>^

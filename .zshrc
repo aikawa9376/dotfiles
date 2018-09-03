@@ -12,6 +12,8 @@ antigen bundle mollifier/anyframe
 antigen bundle supercrabtree/k
 # autosuggestions
 antigen bundle zsh-users/zsh-autosuggestions
+# enhancd
+antigen bundle b4b4r07/enhancd
 
 antigen apply
 
@@ -20,8 +22,10 @@ antigen apply
 # -------------------------------------
 export PATH="/usr/local/bin:$PATH"
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
-#PS1="%{$fg[cyan]%}%1~ %(!.#.$)${reset_color}"
 
+# -------------------------------------
+# prompt 
+# -------------------------------------
 autoload -Uz vcs_info
 setopt prompt_subst
 setopt combining_chars
@@ -32,9 +36,6 @@ zstyle ':vcs_info:git:*' stagedstr '+'
 zstyle ':vcs_info:*' formats ' %c%u(%s:%b)'
 zstyle ':vcs_info:*' actionformats ' %c%u(%s:%b|%a)'
 
-# -------------------------------------
-# prompt 
-# -------------------------------------
 precmd () {
   # 1行あける
   print
@@ -130,6 +131,10 @@ setopt correct
 setopt auto_cd
 setopt auto_pushd
 
+function agvim () {   
+  vim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') 
+} 
+
 # -------------------------------------
 # コマンド履歴
 # -------------------------------------
@@ -187,7 +192,7 @@ case ${OSTYPE} in
         alias lsa='ls -GAFltr --color=auto'
 esac
 
-if ((${+commands[nodejs]})) then
+if ((${+commands[nodejs]})); then
   alias node='nodejs'
 fi
 
