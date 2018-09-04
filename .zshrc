@@ -44,7 +44,7 @@ precmd () {
   # バージョン管理されてた場合、ブランチ名
   vcs_info
   psvar=()
-  LANG=en_US.UTF-8 vcs_info
+  LANG=jp_JP.UTF-8 vcs_info
   [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
   local right="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*"
   # スペースの長さを計算
