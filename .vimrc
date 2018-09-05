@@ -38,6 +38,7 @@ call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('pangloss/vim-javascript')
 call dein#add('Lokaltog/vim-easymotion')
 call dein#add('vim-scripts/taglist.vim')
+call dein#add('Yggdroot/indentLine')
 
 " You can specify revision/branch/tag.
 call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
