@@ -67,7 +67,13 @@ TRAPALRM() {
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 #export FZF_DEFAULT_COMMAND='fd --type f'
-export FZF_DEFAULT_OPTS='--height 40% --reverse --border'
+export FZF_DEFAULT_OPTS='
+--height 40% 
+--reverse 
+--border
+--color dark,hl:34,hl+:22,bg+:236,fg+:240 
+--color info:108,prompt:109,spinner:108,pointer:168,marker:168
+'
 
 # -------------------------------------
 # 補完機能
@@ -180,16 +186,16 @@ bindkey "^N" history-beginning-search-forward-end
 # エイリアス
 # -------------------------------------
 case ${OSTYPE} in
-    darwin*)
-        alias ctags="`brew --prefix`/bin/ctags"
-        alias l='ls -GAF'
-        alias ls='ls -G'
-        alias lsa='ls -GAFltr'
-        ;;
-    linux*)
-        alias l='ls -GAF --color=auto'
-        alias ls='ls -G --color=auto'
-        alias lsa='ls -GAFltr --color=auto'
+  darwin*)
+    alias ctags="`brew --prefix`/bin/ctags"
+    alias l='ls -GAF'
+    alias ls='ls -G'
+    alias lsa='ls -GAFltr'
+    ;;
+  linux*)
+    alias l='ls -GAF --color=auto'
+    alias ls='ls -G --color=auto'
+    alias lsa='ls -GAFltr --color=auto'
 esac
 
 if ((${+commands[nodejs]})); then
