@@ -16,6 +16,10 @@ zplug "zsh-users/zsh-autosuggestions"
 zplug "b4b4r07/enhancd"
 # git plugin
 #zplug "plugin/git", from:oh-my-zsh
+# 256 coloer ???
+zplug "chrissicool/zsh-256color"
+# pair auto
+zplug "hlissner/zsh-autopair", defer:2
 # zplug selfupdate
 zplug 'zplug/zplug', hook-build:'zplug --self-manage'
 
