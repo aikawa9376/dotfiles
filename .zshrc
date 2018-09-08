@@ -1,27 +1,39 @@
 # -------------------------------------
-# antigen
+# zplug
 # -------------------------------------
-source ~/.zsh/antigen/antigen.zsh
+source ~/.zplug/init.zsh
 # zsh-completions
-antigen bundle zsh-users/zsh-completions
+zplug "zsh-users/zsh-completions"
 # zsh-syntax-highlighting
-antigen bundle zsh-users/zsh-syntax-highlighting
+zplug "zsh-users/zsh-syntax-highlighting"
 # anyframe
-antigen bundle mollifier/anyframe
+zplug "mollifier/anyframe"
 # k
-antigen bundle supercrabtree/k
+zplug "supercrabtree/k"
 # autosuggestions
-antigen bundle zsh-users/zsh-autosuggestions
+zplug "zsh-users/zsh-autosuggestions"
 # enhancd
-antigen bundle b4b4r07/enhancd
+zplug "b4b4r07/enhancd"
+# git plugin
+zplug "plugin/git", from:oh-my-zsh
+# zplug selfupdate
+zplug 'zplug/zplug', hook-build:'zplug --self-manage'
 
-antigen apply
+if ! zplug check --verbose; then     
+  printf "Install? [y/N]: "     
+  if read -q; then         
+    echo; zplug install     
+  fi 
+fi  
+# プラグインを読み込み、コマンドにパスを通す 
+zplug load --verbose
 
 # -------------------------------------
 # 基本設定
 # -------------------------------------
 export PATH="/usr/local/bin:$PATH"
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
+export TERM='xterm-256color'
 
 # -------------------------------------
 # prompt 
@@ -71,7 +83,7 @@ export FZF_DEFAULT_OPTS='
 --height 40% 
 --reverse 
 --border
---color dark,hl:34,hl+:22,bg+:236,fg+:240 
+--color dark,hl:34,hl+:2,bg+:236,fg+:240 
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
 '
 
