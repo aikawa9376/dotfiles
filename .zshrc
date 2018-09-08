@@ -15,7 +15,7 @@ zplug "zsh-users/zsh-autosuggestions"
 # enhancd
 zplug "b4b4r07/enhancd"
 # git plugin
-zplug "plugin/git", from:oh-my-zsh
+#zplug "plugin/git", from:oh-my-zsh
 # zplug selfupdate
 zplug 'zplug/zplug', hook-build:'zplug --self-manage'
 
