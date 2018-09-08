@@ -83,7 +83,7 @@ export FZF_DEFAULT_OPTS='
 --height 40% 
 --reverse 
 --border
---color dark,hl:34,hl+:2,bg+:236,fg+:240 
+--color dark,hl:34,hl+:40,bg+:235,fg+:15 
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
 '
 
