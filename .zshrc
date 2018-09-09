@@ -13,7 +13,7 @@ zplug "supercrabtree/k"
 # autosuggestions
 zplug "zsh-users/zsh-autosuggestions"
 # enhancd
-zplug "b4b4r07/enhancd"
+zplug "b4b4r07/enhancd", use:init.sh
 # git plugin
 #zplug "plugin/git", from:oh-my-zsh
 # zplug selfupdate
