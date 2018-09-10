@@ -28,7 +28,6 @@ call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/denite.nvim')
 call dein#add('tpope/vim-surround')
 call dein#add('terryma/vim-multiple-cursors')
-call dein#add('vim-airline/vim-airline')
 call dein#add('mattn/emmet-vim')
 call dein#add('Townk/vim-autoclose')
 call dein#add('scrooloose/nerdtree')
@@ -41,6 +40,9 @@ call dein#add('vim-scripts/taglist.vim')
 call dein#add('Yggdroot/indentLine')
 call dein#add('tpope/vim-fugitive')
 call dein#add('yegappan/mru')
+call dein#add('vim-airline/vim-airline')
+call dein#add('vim-airline/vim-airline-themes')
+call dein#add('edkolev/tmuxline.vim')
 
 " You can specify revision/branch/tag.
 call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
@@ -269,6 +271,17 @@ augroup END
 nnoremap <Space>f :Files<CR>
 nnoremap <Space>b :Buffers<CR>
 nnoremap <Space>a :Ag<CR>
+
+"tmuxline
+let g:tmuxline_preset = {
+  \'a'    : '#S',
+  \'c'    : ['#(whoami)', '#(uptime | cud -d " " -f 1,2,3)'],
+  \'win'  : ['#I', '#W'],
+  \'cwin' : ['#I', '#W', '#F'],
+  \'x'    : '#(date)',
+  \'y'    : ['%R', '%a', '%Y'],
+  \'z'    : '#H'}
+let g:tmuxline_theme = 'papercolor'
 
 "ctags
 nnoremap <Space>o :TlistToggle<CR>
