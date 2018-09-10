@@ -15,7 +15,7 @@ zplug "zsh-users/zsh-autosuggestions"
 # enhancd
 zplug "b4b4r07/enhancd", use:init.sh
 # git plugin
-#zplug "plugin/git", from:oh-my-zsh
+zplug "plugin/git", from:oh-my-zsh
 # 256 coloer ???
 zplug "chrissicool/zsh-256color"
 # pair auto
@@ -217,4 +217,6 @@ esac
 if ((${+commands[nodejs]})); then
   alias node='nodejs'
 fi
+
+alias exec='exec $SHELL -1'
 
