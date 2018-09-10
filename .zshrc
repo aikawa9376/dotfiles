@@ -205,10 +205,10 @@ bindkey "^N" history-beginning-search-forward-end
 mru() {
     local -a f
     f=(
-    ~/.vim_mru_files(N)
-    ~/.unite/file_mru(N)
-    ~/.cache/ctrlp/mru/cache.txt(N)
-    ~/.frill(N)
+    ~/.vim_mru_files(n)
+    ~/.unite/file_mru(n)
+    ~/.cache/ctrlp/mru/cache.txt(n)
+    ~/.frill(n)
     )
     if [[ $#f -eq 0 ]]; then
         echo "There is no available MRU Vim plugins" >&2
@@ -314,5 +314,5 @@ if ((${+commands[nodejs]})); then
   alias node='nodejs'
 fi
 
-alias exec='exec $SHELL -1'
+alias reload='exec $SHELL -1'
 
