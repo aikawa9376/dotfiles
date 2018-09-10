@@ -83,7 +83,7 @@ TRAPALRM() {
 # fzf 
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-#export FZF_DEFAULT_COMMAND='fd --type f'
+export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
 export FZF_DEFAULT_OPTS='
 --height 40% 
 --reverse 
