@@ -40,6 +40,7 @@ call dein#add('Lokaltog/vim-easymotion')
 call dein#add('vim-scripts/taglist.vim')
 call dein#add('Yggdroot/indentLine')
 call dein#add('tpope/vim-fugitive')
+call dein#add('yegappan/mru')
 
 " You can specify revision/branch/tag.
 call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
