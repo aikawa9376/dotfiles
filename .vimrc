@@ -33,6 +33,7 @@ call dein#add('Townk/vim-autoclose')
 call dein#add('scrooloose/nerdtree')
 call dein#add('altercation/vim-colors-solarized')
 call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
+
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('pangloss/vim-javascript')
 call dein#add('Lokaltog/vim-easymotion')
@@ -209,6 +210,9 @@ vnoremap v $h
 "OSのクリップボードをレジスタ指定無しで Yank, Put 出来るようにする
 set clipboard=unnamed,unnamedplus
 
+"win系でもALT-v矩形選択を可能に
+nmap <Space>v <C-v>
+
 "screen利用時設定
 set ttymouse=xterm
 
@@ -272,21 +276,27 @@ nnoremap <Space>f :Files<CR>
 nnoremap <Space>b :Buffers<CR>
 nnoremap <Space>a :Ag<CR>
 
-"tmuxline
-let g:tmuxline_preset = {
-  \'a'    : '#S',
-  \'c'    : ['#(whoami)', '#(uptime | cud -d " " -f 1,2,3)'],
-  \'win'  : ['#I', '#W'],
-  \'cwin' : ['#I', '#W', '#F'],
-  \'x'    : '#(date)',
-  \'y'    : ['%R', '%a', '%Y'],
-  \'z'    : '#H'}
-let g:tmuxline_theme = 'papercolor'
+"airline&&tmuxline
+let g:airline_theme = 'minimalist'
+let g:airline_powerline_fonts = 1 
+let g:airline_enable_branch = 1
+let g:airline_enable_syntastic =1
+set laststatus=2
+
+"let g:tmuxline_preset = {
+"  \'a'    : '#S',
+"  \'c'    : ['#(whoami)', '#(uptime | cud -d " " -f 1,2,3)'],
+"  \'win'  : ['#I', '#W'],
+"  \'cwin' : ['#I', '#W', '#F'],
+"  \'x'    : '#(date)',
+"  \'y'    : ['%R', '%a', '%Y'],
+"  \'z'    : '#H'}
+"let g:tmuxline_theme = 'papercolor'
 
 "ctags
 nnoremap <Space>o :TlistToggle<CR>
 set fileformats=unix,dos,mac
-set fileencodings=utf-8,sjis
+set fileencodings=:tf-8,sjis
 
 set tags=.tags;$HOME
 
