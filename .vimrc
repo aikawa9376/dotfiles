@@ -64,6 +64,7 @@ endif
 set number
 set background=dark
 set backspace=indent,eol,start
+set encoding=utf-8
 syntax enable
 let g:solarized_termcolors=256
 colorscheme solarized
@@ -281,7 +282,25 @@ let g:airline_theme = 'minimalist'
 let g:airline_powerline_fonts = 1 
 let g:airline_enable_branch = 1
 let g:airline_enable_syntastic =1
+let g:Powerline_symbols = 'fancy'
 set laststatus=2
+if !exists('g:airline_symbols')
+  let g:airline_symbols = {}
+endif
+let g:airline_symbols.linenr = '☰'
+let g:airline_symbols.maxlinenr = '㏑'
+let g:airline_symbols.branch = '⎇'
+let g:airline_symbols.paste = 'ρ'
+let g:airline_symbols.spell = 'Ꞩ'
+let g:airline_symbols.notexists = 'Ɇ'
+let g:airline_symbols.whitespace = 'Ξ'
+let g:airline_symbols.crypt = '🔒'
+" old vim-powerline symbols
+let g:airline_left_sep = '⮀'
+let g:airline_right_sep = '⮂'
+let g:airline_left_alt_sep = '⮁'
+let g:airline_right_alt_sep = '⮃'
+let g:airline_symbols.readonly = '⭤'
 
 "let g:tmuxline_preset = {
 "  \'a'    : '#S',
@@ -296,7 +315,7 @@ set laststatus=2
 "ctags
 nnoremap <Space>o :TlistToggle<CR>
 set fileformats=unix,dos,mac
-set fileencodings=:tf-8,sjis
+set fileencodings=:utf-8,sjis
 
 set tags=.tags;$HOME
 
