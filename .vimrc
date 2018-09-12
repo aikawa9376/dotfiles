@@ -42,6 +42,8 @@ call dein#add('tpope/vim-fugitive')
 call dein#add('yegappan/mru')
 call dein#add('vim-airline/vim-airline')
 call dein#add('vim-airline/vim-airline-themes')
+" php
+call dein#add('StanAngeloff/php.vim')
 "call dein#add('edkolev/tmuxline.vim')
 
 " You can specify revision/branch/tag.
@@ -119,6 +121,8 @@ if has('vim_starting')
     " 置換モード時に非点滅の下線タイプのカーソル
     let &t_SR .= "\e[4 q"
 endif
+let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
+let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
 
 " ファイル処理関連の設定
 set confirm    " 保存されていないファイルがあるときは終了前に保存確認
@@ -313,7 +317,6 @@ nnoremap <Space>o :TlistToggle<CR>
 set fileformats=unix,dos,mac
 set fileencodings=:utf-8,sjis
 
-"set tags=.tags;$HOME
 set tags=./tags,tags;$HOME
 function! s:execute_ctags() abort
   " 探すタグファイル名
