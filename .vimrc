@@ -31,9 +31,8 @@ call dein#add('terryma/vim-multiple-cursors')
 call dein#add('mattn/emmet-vim')
 call dein#add('Townk/vim-autoclose')
 call dein#add('scrooloose/nerdtree')
-call dein#add('altercation/vim-colors-solarized')
+call dein#add('NLKNguyen/papercolor-theme')
 call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
-
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('pangloss/vim-javascript')
 call dein#add('Lokaltog/vim-easymotion')
@@ -43,7 +42,7 @@ call dein#add('tpope/vim-fugitive')
 call dein#add('yegappan/mru')
 call dein#add('vim-airline/vim-airline')
 call dein#add('vim-airline/vim-airline-themes')
-call dein#add('edkolev/tmuxline.vim')
+"call dein#add('edkolev/tmuxline.vim')
 
 " You can specify revision/branch/tag.
 call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
@@ -62,20 +61,21 @@ endif
 "End dein Scripts-------------------------
 
 set number
-set background=dark
 set backspace=indent,eol,start
 set encoding=utf-8
 syntax enable
-let g:solarized_termcolors=256
-colorscheme solarized
+"set t_Co = 256
+set background=dark
+colorscheme PaperColor
 
 let g:deoplete#enable_at_startup = 1
 
 " Snippet key-mappings.
 " Note: It must be "imap" and "smap".  It uses <Plug> mappings.
-imap <C-s> <Plug>(neosnippet_expand_or_jump)
-smap <C-s> <Plug>(neosnippet_expand_or_jump)
-xmap <C-s> <Plug>(neosnippet_expand_target)
+set <M-s>=<ESC>s
+imap <ESC>s <Plug>(neosnippet_expand_or_jump)
+smap <ESC>s <Plug>(neosnippet_expand_or_jump)
+xmap <ESC>s <Plug>(neosnippet_expand_target)
 
 " For conceal markers.
 if has('conceal')
@@ -302,8 +302,6 @@ let g:airline_right_sep = '⮂'
 let g:airline_left_alt_sep = '⮁'
 let g:airline_right_alt_sep = '⮃'
 let g:airline_symbols.readonly = '⭤'
-
-"let g:tmuxline_theme = 'papercolor'
 
 "ctags
 nnoremap <Space>o :TlistToggle<CR>
