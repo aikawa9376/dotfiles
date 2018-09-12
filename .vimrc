@@ -273,9 +273,14 @@ augroup vimrcEx
 augroup END
 
 "fzf
-nnoremap <Space>f :Files<CR>
+nnoremap <Space>F :Files<CR>
+nnoremap <Space>f :ProjectFiles<CR>
 nnoremap <Space>b :Buffers<CR>
 nnoremap <Space>a :Ag<CR>
+function! s:find_git_root()
+  return system('git rev-parse --show-toplevel 2> /dev/null')[:-2]
+endfunction
+command! ProjectFiles execute 'Files' s:find_git_root()
 
 "airline&&tmuxline
 let g:airline_theme = 'minimalist'
@@ -308,8 +313,8 @@ nnoremap <Space>o :TlistToggle<CR>
 set fileformats=unix,dos,mac
 set fileencodings=:utf-8,sjis
 
-set tags=.tags;$HOME
-
+"set tags=.tags;$HOME
+set tags=./tags,tags;$HOME
 function! s:execute_ctags() abort
   " 探すタグファイル名
   let tag_name = '.tags'
