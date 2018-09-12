@@ -296,20 +296,13 @@ let g:airline_symbols.notexists = 'Ɇ'
 let g:airline_symbols.whitespace = 'Ξ'
 let g:airline_symbols.crypt = '🔒'
 " old vim-powerline symbols
+let g:airline_symbols.branch = '⭠'
 let g:airline_left_sep = '⮀'
 let g:airline_right_sep = '⮂'
 let g:airline_left_alt_sep = '⮁'
 let g:airline_right_alt_sep = '⮃'
 let g:airline_symbols.readonly = '⭤'
 
-"let g:tmuxline_preset = {
-"  \'a'    : '#S',
-"  \'c'    : ['#(whoami)', '#(uptime | cud -d " " -f 1,2,3)'],
-"  \'win'  : ['#I', '#W'],
-"  \'cwin' : ['#I', '#W', '#F'],
-"  \'x'    : '#(date)',
-"  \'y'    : ['%R', '%a', '%Y'],
-"  \'z'    : '#H'}
 "let g:tmuxline_theme = 'papercolor'
 
 "ctags
