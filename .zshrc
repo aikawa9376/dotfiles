@@ -158,6 +158,10 @@ function agvim () {
   vim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') 
 } 
 
+function fvim () {   
+  vim $(fzf $@) 
+} 
+
 # -------------------------------------
 # コマンド履歴
 # -------------------------------------
@@ -205,10 +209,10 @@ bindkey "^N" history-beginning-search-forward-end
 mru() {
     local -a f
     f=(
-    ~/.vim_mru_files(n)
-    ~/.unite/file_mru(n)
-    ~/.cache/ctrlp/mru/cache.txt(n)
-    ~/.frill(n)
+    ~/.vim_mru_files(N)
+    ~/.unite/file_mru(N)
+    ~/.cache/ctrlp/mru/cache.txt(N)
+    ~/.frill(N)
     )
     if [[ $#f -eq 0 ]]; then
         echo "There is no available MRU Vim plugins" >&2
@@ -308,6 +312,7 @@ case ${OSTYPE} in
     alias l='ls -GAF --color=auto'
     alias ls='ls -G --color=auto'
     alias lsa='ls -GAFltr --color=auto'
+    alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
 esac
 
 if ((${+commands[nodejs]})); then

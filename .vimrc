@@ -34,7 +34,6 @@ call dein#add('scrooloose/nerdtree')
 call dein#add('NLKNguyen/papercolor-theme')
 call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
-call dein#add('pangloss/vim-javascript')
 call dein#add('Lokaltog/vim-easymotion')
 call dein#add('vim-scripts/taglist.vim')
 call dein#add('Yggdroot/indentLine')
@@ -44,6 +43,8 @@ call dein#add('vim-airline/vim-airline')
 call dein#add('vim-airline/vim-airline-themes')
 " php
 call dein#add('StanAngeloff/php.vim')
+" javascript
+call dein#add('pangloss/vim-javascript')
 "call dein#add('edkolev/tmuxline.vim')
 
 " You can specify revision/branch/tag.
@@ -68,6 +69,8 @@ set encoding=utf-8
 syntax enable
 "set t_Co = 256
 set background=dark
+autocmd ColorScheme * highlight Normal ctermbg=none
+autocmd ColorScheme * highlight LineNr ctermbg=none
 colorscheme PaperColor
 
 let g:deoplete#enable_at_startup = 1
@@ -97,32 +100,32 @@ let g:ale_fix_on_save = 1
 let g:ale_javascript_prettier_use_local_config = 1
 
 " multiple_cursorsの設定
-set <M-n>=<ESC>n
-map <ESC>n <M-n>
-set <M-S-n>=<ESC>N
-map <ESC>N <M-S-n>
 function! Multiple_cursors_before()
-  if exists(':NeoCompleteLock')==2
-    exe 'NeoCompleteLock'
-  endif
+    let b:deoplete_disable_auto_complete = 1
 endfunction
+
 function! Multiple_cursors_after()
-  if exists(':NeoCompleteUnlock')==2
-    exe 'NeoCompleteUnlock'
-  endif
+    let b:deoplete_disable_auto_complete = 0
 endfunction
 
 " Insertモードのときカーソルの形状を変更
-if has('vim_starting')
-    " 挿入モード時に非点滅の縦棒タイプのカーソル
-    let &t_SI .= "\e[6 q"
-    " ノーマルモード時に非点滅のブロックタイプのカーソル
-    let &t_EI .= "\e[2 q"
-    " 置換モード時に非点滅の下線タイプのカーソル
-    let &t_SR .= "\e[4 q"
+if has('mac')
+  let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
+  let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
 endif
-let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
-let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
+if has('unix')
+  if &term =~ "screen"
+    let &t_ti.= "\eP\e[1 q\e\\"
+    let &t_SI.= "\eP\e[5 q\e\\"
+    let &t_EI.= "\eP\e[1 q\e\\"
+    let &t_te.= "\eP\e[0 q\e\\"
+  elseif &term =~ "xterm"
+    let &t_ti.="\e[1 q"
+    let &t_SI.="\e[5 q"
+    let &t_EI.="\e[1 q"
+    let &t_te.="\e[0 q"
+  endif
+endif
 
 " ファイル処理関連の設定
 set confirm    " 保存されていないファイルがあるときは終了前に保存確認
@@ -262,6 +265,7 @@ imap <silent> <Tab> <C-y>,
 
 "eazymotionu
 let g:EasyMotion_do_mapping = 0 
+let g:EasyMotion_smartcase = 1
 nmap m <Plug>(easymotion-s2)
 
 "ファイル操作系
@@ -269,6 +273,13 @@ map <Space> <Nop>
 map <Space>w :<c-u>w<CR>
 nnoremap <Space>q :<c-u>wq<CR>
 nnoremap <Space>n :NERDTreeToggle<CR>
+nnoremap <Space>x :bd<CR>
+set <M-h>=<ESC>h
+set <M-l>=<ESC>l
+set <M-j>=<ESC>j
+nmap <silent> <ESC>h :bprevious<CR>
+nmap <silent> <ESC>l :bnext<CR>
+nmap <silent> <ESC>j :b#<CR>
 
 "前回のカーソル位置からスタート
 augroup vimrcEx
@@ -281,6 +292,7 @@ nnoremap <Space>F :Files<CR>
 nnoremap <Space>f :ProjectFiles<CR>
 nnoremap <Space>b :Buffers<CR>
 nnoremap <Space>a :Ag<CR>
+nnoremap <Space>l :Lines<CR>
 function! s:find_git_root()
   return system('git rev-parse --show-toplevel 2> /dev/null')[:-2]
 endfunction
@@ -311,6 +323,9 @@ let g:airline_right_sep = '⮂'
 let g:airline_left_alt_sep = '⮁'
 let g:airline_right_alt_sep = '⮃'
 let g:airline_symbols.readonly = '⭤'
+
+let g:airline#extensions#tabline#enabled = 1
+let g:airline#extensions#tabline#fnamemod = ':t'
 
 "ctags
 nnoremap <Space>o :TlistToggle<CR>
