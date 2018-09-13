@@ -291,12 +291,26 @@ augroup END
 nnoremap <Space>F :Files<CR>
 nnoremap <Space>f :ProjectFiles<CR>
 nnoremap <Space>b :Buffers<CR>
-nnoremap <Space>a :Ag<CR>
+nnoremap <Space>A :Ag<CR>
+nnoremap <Space>a :Rag<CR>
 nnoremap <Space>l :Lines<CR>
 function! s:find_git_root()
   return system('git rev-parse --show-toplevel 2> /dev/null')[:-2]
 endfunction
 command! ProjectFiles execute 'Files' s:find_git_root()
+command! -bang -nargs=? -complete=dir Files
+  \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
+command! -bang -nargs=* Ag
+  \ call fzf#vim#ag(<q-args>,
+  \  <bang>0 ? fzf#vim#with_preview('up:60%')
+  \    : fzf#vim#with_preview('right:50%:hidden', '?'),
+  \  <bang>0)
+function! s:with_git_root()
+  let root = systemlist('git rev-parse --show-toplevel')[0]
+  return v:shell_error ? {} : {'dir': root}
+endfunction
+command! -nargs=* Rag
+  \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
 
 "airline&&tmuxline
 let g:airline_theme = 'minimalist'

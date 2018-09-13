@@ -24,6 +24,8 @@ zplug "hlissner/zsh-autopair", defer:2
 zplug 'zplug/zplug', hook-build:'zplug --self-manage'
 # ゴミ箱機能
 zplug "b4b4r07/zsh-gomi", if:"which fzf"
+# finder
+zplug "b4b4r07/cli-finder"
 
 if ! zplug check --verbose; then     
   printf "Install? [y/N]: "     
@@ -320,4 +322,4 @@ if ((${+commands[nodejs]})); then
 fi
 
 alias reload='exec $SHELL -1'
-
+alias -g from='$(mru)'
