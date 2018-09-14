@@ -26,6 +26,7 @@ endif
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/denite.nvim')
+call dein#add('Shougo/context_filetype.vim')
 call dein#add('tpope/vim-surround')
 call dein#add('terryma/vim-multiple-cursors')
 call dein#add('mattn/emmet-vim')
@@ -39,6 +40,7 @@ call dein#add('vim-scripts/taglist.vim')
 call dein#add('Yggdroot/indentLine')
 call dein#add('tpope/vim-fugitive')
 call dein#add('yegappan/mru')
+call dein#add('tyru/caw.vim')
 call dein#add('vim-airline/vim-airline')
 call dein#add('vim-airline/vim-airline-themes')
 " php
@@ -75,6 +77,22 @@ colorscheme PaperColor
 
 let g:deoplete#enable_at_startup = 1
 
+" functions
+function! s:find_git_root()
+  return system('git rev-parse --show-toplevel 2> /dev/null')[:-2]
+endfunction
+function! s:with_git_root()
+  let root = systemlist('git rev-parse --show-toplevel')[0]
+  return v:shell_error ? {} : {'dir': root}
+endfunction
+command! -nargs=*
+\   Debug
+\   try
+\|      echom <q-args> ":" string(<args>)
+\|  catch
+\|      echom <q-args>
+\|  endtry
+
 " Snippet key-mappings.
 " Note: It must be "imap" and "smap".  It uses <Plug> mappings.
 set <M-s>=<ESC>s
@@ -94,10 +112,14 @@ let g:ale_fixers['html'] = ['prettier']
 let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
 let g:ale_fixers['php'] = ['prettier']
+let g:ale_linters = {}
+" let g:ale_linters['php'] = ['phan']
 " ファイル保存時に実行
 let g:ale_fix_on_save = 1
+let g:ale_lint_on_text_changed = 0
 " ローカルの設定ファイルを考慮する
 let g:ale_javascript_prettier_use_local_config = 1
+let g:ale_php_phan_executable = 'vendor/bin/phan'
 
 " multiple_cursorsの設定
 function! Multiple_cursors_before()
@@ -127,13 +149,17 @@ if has('unix')
   endif
 endif
 
+" 行の最初の文字の前にコメント文字をトグル
+nmap <C-_> <Plug>(caw:hatpos:toggle)
+vmap <C-_> <Plug>(caw:hatpos:toggle)
+
 " ファイル処理関連の設定
 set confirm    " 保存されていないファイルがあるときは終了前に保存確認
 set hidden     " 保存されていないファイルがあるときでも別のファイルを開くことが出来る
 set autoread   " 外部でファイルに変更がされた場合は読みなおす
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
-set autochdir  " ディレクトリを自動で移動
+" set autochdir  " ディレクトリを自動で移動
 
 "検索をファイルの先頭へ循環しない
 set nowrapscan
@@ -291,12 +317,9 @@ augroup END
 nnoremap <Space>F :Files<CR>
 nnoremap <Space>f :ProjectFiles<CR>
 nnoremap <Space>b :Buffers<CR>
-nnoremap <Space>A :Ag<CR>
-nnoremap <Space>a :Rag<CR>
+nnoremap <Space>a :Ag<CR>
+nnoremap <Space>A :Rag<CR>
 nnoremap <Space>l :Lines<CR>
-function! s:find_git_root()
-  return system('git rev-parse --show-toplevel 2> /dev/null')[:-2]
-endfunction
 command! ProjectFiles execute 'Files' s:find_git_root()
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
@@ -305,10 +328,6 @@ command! -bang -nargs=* Ag
   \  <bang>0 ? fzf#vim#with_preview('up:60%')
   \    : fzf#vim#with_preview('right:50%:hidden', '?'),
   \  <bang>0)
-function! s:with_git_root()
-  let root = systemlist('git rev-parse --show-toplevel')[0]
-  return v:shell_error ? {} : {'dir': root}
-endfunction
 command! -nargs=* Rag
   \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
 
@@ -370,4 +389,4 @@ augroup END
 
 "vimrcをスペースドットで開く
 nnoremap <Space>. :<c-u>e ~/.vimrc<CR>
-"nnoremap <C-2> :<c-u>source ~\.vimrc<CR>
+nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.vimrc<CR>
