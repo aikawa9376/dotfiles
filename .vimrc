@@ -12,6 +12,7 @@ call dein#begin(expand('~/.vim/bundle'))
 " Let dein manage dein
 " Required:
 call dein#add('Shougo/dein.vim')
+call dein#add('Shougo/vimproc', {'build': 'make'})
 " Add or remove your plugins here: 
 call dein#add('Shougo/deoplete.nvim') 
 if !has('nvim')
@@ -25,29 +26,37 @@ else
 endif
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
-call dein#add('Shougo/denite.nvim')
 call dein#add('Shougo/context_filetype.vim')
+" text
 call dein#add('tpope/vim-surround')
-call dein#add('terryma/vim-multiple-cursors')
+call dein#add('tpope/vim-repeat')
 call dein#add('mattn/emmet-vim')
+call dein#add('alvan/vim-closetag')
 call dein#add('Townk/vim-autoclose')
+call dein#add('tyru/caw.vim')
+call dein#add('thinca/vim-visualstar')
+call dein#add('terryma/vim-multiple-cursors')
+call dein#add('Yggdroot/indentLine')
+call dein#add('Lokaltog/vim-easymotion')
+" list
 call dein#add('scrooloose/nerdtree')
-call dein#add('NLKNguyen/papercolor-theme')
 call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
-call dein#add('Lokaltog/vim-easymotion')
 call dein#add('vim-scripts/taglist.vim')
-call dein#add('Yggdroot/indentLine')
-call dein#add('tpope/vim-fugitive')
 call dein#add('yegappan/mru')
-call dein#add('tyru/caw.vim')
+" git
+call dein#add('tpope/vim-fugitive')
+call dein#add('airblade/vim-gitgutter')
+call dein#add('airblade/vim-rooter')
+" desigh
 call dein#add('vim-airline/vim-airline')
 call dein#add('vim-airline/vim-airline-themes')
+call dein#add('NLKNguyen/papercolor-theme')
+"call dein#add('edkolev/tmuxline.vim')
 " php
 call dein#add('StanAngeloff/php.vim')
 " javascript
 call dein#add('pangloss/vim-javascript')
-"call dein#add('edkolev/tmuxline.vim')
 
 " You can specify revision/branch/tag.
 call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
@@ -56,7 +65,8 @@ call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
 call dein#end()
 
 " Required:
-filetype plugin indent on
+filetype off
+filetype plugin indent off
 
 " If you want to install not installed plugins on startup.
 if dein#check_install()
@@ -68,6 +78,10 @@ endif
 set number
 set backspace=indent,eol,start
 set encoding=utf-8
+set fileformats=unix,dos,mac
+set fileencodings=utf-8,sjis
+set redrawtime=10000
+set ttimeoutlen=10
 syntax enable
 "set t_Co = 256
 set background=dark
@@ -86,12 +100,12 @@ function! s:with_git_root()
   return v:shell_error ? {} : {'dir': root}
 endfunction
 command! -nargs=*
-\   Debug
-\   try
-\|      echom <q-args> ":" string(<args>)
-\|  catch
-\|      echom <q-args>
-\|  endtry
+      \   Debug
+      \   try
+      \|      echom <q-args> ":" string(<args>)
+      \|  catch
+        \|      echom <q-args>
+        \|  endtry
 
 " Snippet key-mappings.
 " Note: It must be "imap" and "smap".  It uses <Plug> mappings.
@@ -111,7 +125,7 @@ let g:ale_fixers['javascript'] = ['prettier-eslint']
 let g:ale_fixers['html'] = ['prettier']
 let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
-let g:ale_fixers['php'] = ['prettier']
+" let g:ale_fixers['php'] = ['prettier']
 let g:ale_linters = {}
 " let g:ale_linters['php'] = ['phan']
 " ファイル保存時に実行
@@ -123,11 +137,11 @@ let g:ale_php_phan_executable = 'vendor/bin/phan'
 
 " multiple_cursorsの設定
 function! Multiple_cursors_before()
-    let b:deoplete_disable_auto_complete = 1
+  let b:deoplete_disable_auto_complete = 1
 endfunction
 
 function! Multiple_cursors_after()
-    let b:deoplete_disable_auto_complete = 0
+  let b:deoplete_disable_auto_complete = 0
 endfunction
 
 " Insertモードのときカーソルの形状を変更
@@ -187,18 +201,18 @@ set scrolloff=10
 "半画面スクロールで位置を真ん中に
 nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz
-nnoremap <S-}> <S-}>zz
-nnoremap <S-{> <S-{>zz
-nnoremap <S-)> <S-)>zz
-nnoremap <S-(> <S-(>zz
-nnoremap <Space>j 4jzz
-nnoremap <Space>k 4kzz
+nnoremap } }zz
+nnoremap { {zz
+nnoremap ) )zz
+nnoremap ( (zz
 
 "x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
 vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
+" 大文字のPでレジスタ0を指定
+nnoremap P "0p
 
 "vv で行末まで選択
 vnoremap v ^$h
@@ -207,7 +221,7 @@ vnoremap v ^$h
 vnoremap < <gv
 vnoremap > >gv
 set smartindent
-nnoremap <Space>l gg=G
+nnoremap <Space>i gg=G
 
 "ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
@@ -283,6 +297,8 @@ inoremap <silent> jj <Esc>
 "ジャンプリストで中央に持ってくる
 nnoremap <C-o> <C-o>zz
 nnoremap <C-i> <C-i>zz
+nnoremap g; g;zz
+nnoremap g, g,zz
 
 "emmet
 let g:user_emmet_install_global = 0
@@ -320,22 +336,25 @@ nnoremap <Space>b :Buffers<CR>
 nnoremap <Space>a :Ag<CR>
 nnoremap <Space>A :Rag<CR>
 nnoremap <Space>l :Lines<CR>
+nnoremap <Space>e :History<CR>
 command! ProjectFiles execute 'Files' s:find_git_root()
 command! -bang -nargs=? -complete=dir Files
-  \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
+      \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
 command! -bang -nargs=* Ag
-  \ call fzf#vim#ag(<q-args>,
-  \  <bang>0 ? fzf#vim#with_preview('up:60%')
-  \    : fzf#vim#with_preview('right:50%:hidden', '?'),
-  \  <bang>0)
+      \ call fzf#vim#ag(<q-args>,
+      \  <bang>0 ? fzf#vim#with_preview('up:60%')
+      \    : fzf#vim#with_preview('right:50%:hidden', '?'),
+      \  <bang>0)
 command! -nargs=* Rag
-  \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
+      \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
 
 "airline&&tmuxline
 let g:airline_theme = 'minimalist'
 let g:airline_powerline_fonts = 1 
 let g:airline_enable_branch = 1
-let g:airline_enable_syntastic =1
+let g:airline#extensions#ale#enabled = 1
+let g:airline_detect_whitespace=0
+let g:airline#extensions#whitespace#enabled = 0
 let g:Powerline_symbols = 'fancy'
 set laststatus=2
 if !exists('g:airline_symbols')
@@ -362,13 +381,11 @@ let g:airline#extensions#tabline#fnamemod = ':t'
 
 "ctags
 nnoremap <Space>o :TlistToggle<CR>
-set fileformats=unix,dos,mac
-set fileencodings=:utf-8,sjis
 
 set tags=./tags,tags;$HOME
 function! s:execute_ctags() abort
   " 探すタグファイル名
-  let tag_name = '.tags'
+  let tag_name = 'tags'
   " ディレクトリを遡り、タグファイルを探し、パス取得
   let tags_path = findfile(tag_name, '.;')
   " タグファイルパスが見つからなかった場合
@@ -379,6 +396,7 @@ function! s:execute_ctags() abort
   " `:p:h`の部分は、:h filename-modifiersで確認
   let tags_dirpath = fnamemodify(tags_path, ':p:h')
   " 見つかったタグファイルのディレクトリに移動して、ctagsをバックグラウンド実行（エラー出力破棄）
+  " execute 'silent !cd' tags_dirpath '&& ctags -R -f' tag_name '2> /dev/null &'
   execute 'silent !cd' tags_dirpath '&& ctags -R -f' tag_name '2> /dev/null &'
 endfunction
 
@@ -390,3 +408,7 @@ augroup END
 "vimrcをスペースドットで開く
 nnoremap <Space>. :<c-u>e ~/.vimrc<CR>
 nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.vimrc<CR>
+
+" filetype on
+filetype on
+filetype plugin indent on
