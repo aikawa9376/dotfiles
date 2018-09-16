@@ -317,9 +317,9 @@ map <Space>w :<c-u>w<CR>
 nnoremap <Space>q :<c-u>wq<CR>
 nnoremap <Space>n :NERDTreeToggle<CR>
 nnoremap <Space>x :bd<CR>
-set <M-h>=<ESC>h
-set <M-l>=<ESC>l
-set <M-j>=<ESC>j
+nmap <ESC>h <M-h>
+nmap <ESC>l <M-l>
+nmap <ESC>j <M-j>
 nmap <silent> <ESC>h :bprevious<CR>
 nmap <silent> <ESC>l :bnext<CR>
 nmap <silent> <ESC>j :b#<CR>
