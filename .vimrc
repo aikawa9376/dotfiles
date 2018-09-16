@@ -56,8 +56,12 @@ call dein#add('NLKNguyen/papercolor-theme')
 "call dein#add('edkolev/tmuxline.vim')
 " php
 call dein#add('StanAngeloff/php.vim')
+" start call ':call deoplete#sources#padawan#InstallServer()'
+call dein#add('padawan-php/deoplete-padawan')
 " javascript
 call dein#add('pangloss/vim-javascript')
+call dein#add('HerringtonDarkholme/yats.vim')
+call dein#add('mhartington/nvim-typescript', {'build': './install.sh'})
 
 " You can specify revision/branch/tag.
 call dein#add('Shougo/vimshell', { 'rev': '3787e5' })
@@ -90,7 +94,16 @@ autocmd ColorScheme * highlight Normal ctermbg=none
 autocmd ColorScheme * highlight LineNr ctermbg=none
 colorscheme PaperColor
 
+" deoplete setup
 let g:deoplete#enable_at_startup = 1
+let g:deoplete#auto_complete_delay = 0
+let g:deoplete#auto_complete_start_length = 1
+let g:deoplete#enable_camel_case = 0
+let g:deoplete#enable_ignore_case = 0
+let g:deoplete#enable_refresh_always = 0
+let g:deoplete#enable_smart_case = 1
+let g:deoplete#file#enable_buffer_path = 1
+let g:deoplete#max_list = 100
 
 " functions
 function! s:find_git_root()
@@ -107,13 +120,31 @@ command! -nargs=*
       \|  catch
         \|      echom <q-args>
         \|  endtry
+if has('unix') && !has('gui_running')
+  " Use meta keys in console.
+  function! s:use_meta_keys()  " {{{
+    for i in map(
+    \   range(char2nr('a'), char2nr('z'))
+    \ + range(char2nr('A'), char2nr('Z'))
+    \ + range(char2nr('0'), char2nr('9'))
+    \ , 'nr2char(v:val)')
+      " <ESC>O do not map because used by arrow keys.
+      if i != 'O'
+        execute 'nmap <ESC>' . i '<M-' . i . '>'
+      endif
+    endfor
+  endfunction  " }}}
+
+  call s:use_meta_keys()
+  map <NUL> <C-Space>
+  map! <NUL> <C-Space>
+endif
 
 " Snippet key-mappings.
 " Note: It must be "imap" and "smap".  It uses <Plug> mappings.
-set <M-s>=<ESC>s
-imap <ESC>s <Plug>(neosnippet_expand_or_jump)
-smap <ESC>s <Plug>(neosnippet_expand_or_jump)
-xmap <ESC>s <Plug>(neosnippet_expand_target)
+imap <C-Space> <Plug>(neosnippet_expand_or_jump)
+smap <C-Space> <Plug>(neosnippet_expand_or_jump)
+xmap <C-Space> <Plug>(neosnippet_expand_target)
 
 " For conceal markers.
 if has('conceal')
@@ -314,12 +345,9 @@ nmap m <Plug>(easymotion-s2)
 "ファイル操作系
 map <Space> <Nop>
 map <Space>w :<c-u>w<CR>
+map <Space>x :<c-u>bd<CR>
 nnoremap <Space>q :<c-u>wq<CR>
 nnoremap <Space>n :NERDTreeToggle<CR>
-nnoremap <Space>x :bd<CR>
-nmap <ESC>h <M-h>
-nmap <ESC>l <M-l>
-nmap <ESC>j <M-j>
 nmap <silent> <ESC>h :bprevious<CR>
 nmap <silent> <ESC>l :bnext<CR>
 nmap <silent> <ESC>j :b#<CR>
@@ -425,30 +453,30 @@ let g:context_filetype#same_filetypes.php = 'html'
 let g:context_filetype#same_filetypes.html = 'php'
 let b:context_filetype_filetypes = context_filetype#default_filetypes()
 call extend(b:context_filetype_filetypes, 
-   \ {'php' : [
-   \   {
-   \    'start':
-   \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
-   \    'end': '</script>', 'filetype': 'javascript',
-   \   },
-   \   {
-   \    'start':
-   \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
-   \    'end': '</script>', 'filetype': 'coffee',
-   \   },
-   \   {
-   \    'start':
-   \     '<script\%( [^>]*\)\?>',
-   \    'end': '</script>', 'filetype': 'javascript',
-   \   },
-   \   {
-   \    'start':
-   \     '<style\%( [^>]*\)\?>',
-   \    'end': '</style>', 'filetype': 'css',
-   \   },
-   \   {
-   \    'start':
-   \     '<[^>]\+ style=\([''"]\)',
-   \    'end': '\1', 'filetype': 'css',
-   \   },
-   \ ]})
+  \ {'php' : [
+  \   {
+  \    'start':
+  \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
+  \    'end': '</script>', 'filetype': 'javascript',
+  \   },
+  \   {
+  \    'start':
+  \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
+  \    'end': '</script>', 'filetype': 'coffee',
+  \   },
+  \   {
+  \    'start':
+  \     '<script\%( [^>]*\)\?>',
+  \    'end': '</script>', 'filetype': 'javascript',
+  \   },
+  \   {
+  \    'start':
+  \     '<style\%( [^>]*\)\?>',
+  \    'end': '</style>', 'filetype': 'css',
+  \   },
+  \   {
+  \    'start':
+  \     '<[^>]\+ style=\([''"]\)',
+  \    'end': '\1', 'filetype': 'css',
+  \   },
+  \ ]})
