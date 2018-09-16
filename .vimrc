@@ -126,7 +126,7 @@ let g:ale_fixers['javascript'] = ['prettier-eslint']
 let g:ale_fixers['html'] = ['prettier']
 let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
-" let g:ale_fixers['php'] = ['prettier']
+let g:ale_fixers['php'] = ['prettier']
 let g:ale_linters = {}
 " let g:ale_linters['php'] = ['phan']
 " ファイル保存時に実行
@@ -212,8 +212,8 @@ nnoremap x "_x
 vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
-" 大文字のPでレジスタ0を指定
-nnoremap P "0p
+" Space pでレジスタ0を指定
+nnoremap <Space>p "0p
 
 "vv で行末まで選択
 vnoremap v ^$h
@@ -417,3 +417,38 @@ nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.vimrc<CR>
 " filetype on
 filetype on
 filetype plugin indent on
+if !exists('g:context_filetype#same_filetypes')
+  let g:context_filetype#same_filetypes = {}
+endif
+let g:context_filetype#same_filetypes.php = 'phtml'
+let g:context_filetype#same_filetypes.php = 'html'
+let g:context_filetype#same_filetypes.html = 'php'
+let b:context_filetype_filetypes = context_filetype#default_filetypes()
+call extend(b:context_filetype_filetypes, 
+   \ {'php' : [
+   \   {
+   \    'start':
+   \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
+   \    'end': '</script>', 'filetype': 'javascript',
+   \   },
+   \   {
+   \    'start':
+   \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
+   \    'end': '</script>', 'filetype': 'coffee',
+   \   },
+   \   {
+   \    'start':
+   \     '<script\%( [^>]*\)\?>',
+   \    'end': '</script>', 'filetype': 'javascript',
+   \   },
+   \   {
+   \    'start':
+   \     '<style\%( [^>]*\)\?>',
+   \    'end': '</style>', 'filetype': 'css',
+   \   },
+   \   {
+   \    'start':
+   \     '<[^>]\+ style=\([''"]\)',
+   \    'end': '\1', 'filetype': 'css',
+   \   },
+   \ ]})
