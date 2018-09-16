@@ -27,6 +27,7 @@ endif
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/context_filetype.vim')
+call dein#add('osyo-manga/vim-precious')
 " text
 call dein#add('tpope/vim-surround')
 call dein#add('tpope/vim-repeat')
@@ -337,6 +338,10 @@ nnoremap <Space>a :Ag<CR>
 nnoremap <Space>A :Rag<CR>
 nnoremap <Space>l :Lines<CR>
 nnoremap <Space>e :History<CR>
+" <C-]>でタグ検索
+nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR><CR>
+" fzfからファイルにジャンプできるようにする
+let g:fzf_buffers_jump = 1
 command! ProjectFiles execute 'Files' s:find_git_root()
 command! -bang -nargs=? -complete=dir Files
       \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
