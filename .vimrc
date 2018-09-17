@@ -27,6 +27,7 @@ endif
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/context_filetype.vim')
+" call dein#add('Shougo/echodoc.vim')
 call dein#add('osyo-manga/vim-precious')
 " text
 call dein#add('tpope/vim-surround')
@@ -46,7 +47,7 @@ call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('vim-scripts/taglist.vim')
 call dein#add('yegappan/mru')
 " git
-call dein#add('tpope/vim-fugitive')
+call dein#add('tpope/vim-fugitive', {'on_cmd' : 'Gstatus'})
 call dein#add('airblade/vim-gitgutter')
 call dein#add('airblade/vim-rooter')
 " desigh
@@ -57,6 +58,7 @@ call dein#add('NLKNguyen/papercolor-theme')
 " php
 call dein#add('StanAngeloff/php.vim')
 " start call ':call deoplete#sources#padawan#InstallServer()'
+" add ln /usr/bin/ {$plugin}/padawan-php/bin/padawan and padawan-server
 call dein#add('padawan-php/deoplete-padawan')
 " javascript
 call dein#add('pangloss/vim-javascript')
@@ -87,6 +89,8 @@ set fileformats=unix,dos,mac
 set fileencodings=utf-8,sjis
 set redrawtime=10000
 set ttimeoutlen=10
+set completeopt=menuone
+" set cursorcolumn
 syntax enable
 "set t_Co = 256
 set background=dark
@@ -389,7 +393,14 @@ command! -bang -nargs=* Ag
 command! -nargs=* Rag
       \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
 
-"airline&&tmuxline
+" fugitive
+nmap <ESC>s :Gstatus<CR>
+nmap <ESC>d :Gdiff<CR>
+nmap <ESC>a :Gwrite<CR>
+nmap <ESC>r :Gremove<CR>
+nmap <ESC>b :Gblame<CR>
+
+" airline&&tmuxline
 let g:airline_theme = 'minimalist'
 let g:airline_powerline_fonts = 1 
 let g:airline_enable_branch = 1
