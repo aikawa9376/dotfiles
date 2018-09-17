@@ -107,7 +107,7 @@ let g:deoplete#max_list = 100
 
 " call deoplete#custom#source('neosnippet', 'rank', 1000)
 call deoplete#custom#source('tag', 'min_pattern_length', 4)
-call deoplete#custom#source('padawan', 'mark', 'pd')
+call deoplete#custom#source('padawan', 'mark', '[P]')
 call deoplete#custom#source('padawan', 'rank', 10)
 " call deoplete#custom#option('sources', {
 "     \ '_': ['neosnippet', 'buffer', 'tag', 'padawan'],
