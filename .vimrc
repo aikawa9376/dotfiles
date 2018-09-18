@@ -268,9 +268,6 @@ vnoremap s "_s
 " Space pでレジスタ0を指定
 nnoremap <Space>p "0p
 
-"vv で行末まで選択
-vnoremap v ^$h
-
 "選択範囲のインデントを連続して変更
 vnoremap < <gv
 vnoremap > >gv

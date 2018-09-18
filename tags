@@ -162,8 +162,6 @@ s:find_git_root	.vimrc	/^function! s:find_git_root()$/;"	f
 s:use_meta_keys	.vimrc	/^  function! s:use_meta_keys()  " {{{$/;"	f
 s:with_git_root	.vimrc	/^function! s:with_git_root()$/;"	f
 t	.tmux.conf	/^bind -n WheelUpPane if-shell -F -t = "#{mouse_any_flag}" "send-keys -M" "if -Ft= '#{pane_in_mode/;"	k
-v	.vimrc	/^vnoremap v $h$/;"	m
-v	.vimrc	/^vnoremap v ^$h$/;"	m
 vimrcEx	.vimrc	/^augroup vimrcEx$/;"	a
 x	.vimrc	/^nnoremap x "_x$/;"	m
 x	.vimrc	/^vnoremap x "_x$/;"	m
