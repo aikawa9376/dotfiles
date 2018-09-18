@@ -125,10 +125,11 @@ setopt globdots              # 明確なドットの指定なしで.から始ま
 
 setopt list_packed           # リストを詰めて表示
 
-bindkey "^I" menu-complete   # 展開する前に補完候補を出させる(Ctrl-iで補完するようにする)
+# fzf ** not working 
+# bindkey "^I" menu-complete   # 展開する前に補完候補を出させる(Ctrl-iで補完するようにする)
 
-# 補完候補を ←↓↑→ でも選択出来るようにする
-zstyle ':completion:*:default' menu select=2
+# 補完候補を emacs kybind で選択出来るようにする
+zstyle ':completion:*:default' menu select=1
 
 # 補完関数の表示を過剰にする編
 zstyle ':completion:*' verbose yes
@@ -151,7 +152,7 @@ zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 # -------------------------------------
 # 補正機能
 # -------------------------------------
-## 入力しているコマンド名が間違っている場合にもしかして：を出す。
+# 入力しているコマンド名が間違っている場合にもしかして：を出す。
 setopt correct
 
 # -------------------------------------

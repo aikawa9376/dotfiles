@@ -27,14 +27,15 @@ endif
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/context_filetype.vim')
-" call dein#add('Shougo/echodoc.vim')
+call dein#add('Shougo/echodoc.vim')
 call dein#add('osyo-manga/vim-precious')
 " text
 call dein#add('tpope/vim-surround')
 call dein#add('tpope/vim-repeat')
 call dein#add('mattn/emmet-vim')
 call dein#add('alvan/vim-closetag')
-call dein#add('Townk/vim-autoclose')
+" call dein#add('Townk/vim-autoclose')
+call dein#add('cohama/lexima.vim')
 call dein#add('tyru/caw.vim')
 call dein#add('thinca/vim-visualstar')
 call dein#add('terryma/vim-multiple-cursors')
@@ -47,7 +48,7 @@ call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('vim-scripts/taglist.vim')
 call dein#add('yegappan/mru')
 " git
-call dein#add('tpope/vim-fugitive', {'on_cmd' : 'Gstatus'})
+call dein#add('tpope/vim-fugitive')
 call dein#add('airblade/vim-gitgutter')
 call dein#add('airblade/vim-rooter')
 " desigh
@@ -108,6 +109,8 @@ let g:deoplete#enable_refresh_always = 0
 let g:deoplete#enable_smart_case = 1
 let g:deoplete#file#enable_buffer_path = 1
 let g:deoplete#max_list = 100
+let g:deoplete#sources#padawan#server_autostart = 1
+let g:deoplete#sources#padawan#add_parentheses = 1
 
 " call deoplete#custom#source('neosnippet', 'rank', 1000)
 call deoplete#custom#source('tag', 'min_pattern_length', 4)
@@ -177,6 +180,7 @@ let g:ale_fix_on_save = 1
 let g:ale_lint_on_text_changed = 0
 " ローカルの設定ファイルを考慮する
 let g:ale_javascript_prettier_use_local_config = 1
+" 設定を見直す必要あり
 let g:ale_php_phan_executable = 'vendor/bin/phan'
 
 " multiple_cursorsの設定
@@ -269,8 +273,8 @@ nnoremap <Space>i gg=G
 
 "ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
-nnoremap <Space>d mzo<ESC>`zj
-nnoremap <Space>u mzO<ESC>`zk
+nnoremap <M-d> mzo<ESC>`zj
+nnoremap <M-u> mzO<ESC>`zk
 
 "インサートモードで bash 風キーマップ
 inoremap <C-a> <C-o>^
@@ -359,7 +363,7 @@ map <Space> <Nop>
 map <Space>w :<c-u>w<CR>
 map <Space>x :<c-u>bd<CR>
 nnoremap <Space>q :<c-u>wq<CR>
-nnoremap <Space>n :NERDTreeToggle<CR>
+nnoremap <silent> <Space>n :NERDTreeToggle<CR>
 nmap <silent> <ESC>h :bprevious<CR>
 nmap <silent> <ESC>l :bnext<CR>
 nmap <silent> <ESC>j :b#<CR>
@@ -371,13 +375,13 @@ augroup vimrcEx
 augroup END
 
 "fzf
-nnoremap <Space>F :Files<CR>
-nnoremap <Space>f :ProjectFiles<CR>
-nnoremap <Space>b :Buffers<CR>
-nnoremap <Space>a :Ag<CR>
-nnoremap <Space>A :Rag<CR>
-nnoremap <Space>l :Lines<CR>
-nnoremap <Space>e :History<CR>
+nnoremap <silent> <Space>F :Files<CR>
+nnoremap <silent> <Space>f :ProjectFiles<CR>
+nnoremap <silent> <Space>b :Buffers<CR>
+nnoremap <silent> <Space>a :Ag<CR>
+nnoremap <silent> <Space>A :Rag<CR>
+nnoremap <silent> <Space>l :Lines<CR>
+nnoremap <silent> <Space>e :History<CR>
 " <C-]>でタグ検索
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR><CR>
 " fzfからファイルにジャンプできるようにする
@@ -394,11 +398,13 @@ command! -nargs=* Rag
       \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
 
 " fugitive
-nmap <ESC>s :Gstatus<CR>
-nmap <ESC>d :Gdiff<CR>
-nmap <ESC>a :Gwrite<CR>
-nmap <ESC>r :Gremove<CR>
-nmap <ESC>b :Gblame<CR>
+nmap <silent> <Space>s :Gstatus<CR>
+nmap <silent> <Space>d :Gdiff<CR>
+nmap <silent> <Space>w :Gwrite<CR>
+nmap <silent> <Space>r :Gremove<CR>
+nmap <silent> <Space>h :Gblame<CR>
+" test
+nmap <Space>g :call fugitive#detect(@%)<CR>
 
 " airline&&tmuxline
 let g:airline_theme = 'minimalist'
@@ -432,7 +438,7 @@ let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#fnamemod = ':t'
 
 "ctags
-nnoremap <Space>o :TlistToggle<CR>
+nnoremap <silent> <Space>o :TlistToggle<CR>
 
 set tags=./tags,tags;$HOME
 function! s:execute_ctags() abort
@@ -458,7 +464,7 @@ augroup ctags
 augroup END
 
 "vimrcをスペースドットで開く
-nnoremap <Space>. :<c-u>e ~/.vimrc<CR>
+nnoremap <silent> <Space>. :<c-u>e ~/.vimrc<CR>
 nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.vimrc<CR>
 
 " filetype on
