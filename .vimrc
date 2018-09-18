@@ -29,6 +29,7 @@ call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/context_filetype.vim')
 call dein#add('Shougo/echodoc.vim')
 call dein#add('osyo-manga/vim-precious')
+call dein#add('vim-scripts/vim-auto-save')
 " text
 call dein#add('tpope/vim-surround')
 call dein#add('tpope/vim-repeat')
@@ -45,6 +46,7 @@ call dein#add('Lokaltog/vim-easymotion')
 call dein#add('scrooloose/nerdtree')
 call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
+call dein#add('junegunn/vim-peekaboo')
 call dein#add('vim-scripts/taglist.vim')
 call dein#add('yegappan/mru')
 " git
@@ -60,7 +62,7 @@ call dein#add('NLKNguyen/papercolor-theme')
 call dein#add('StanAngeloff/php.vim')
 " start call ':call deoplete#sources#padawan#InstallServer()'
 " add ln /usr/bin/ {$plugin}/padawan-php/bin/padawan and padawan-server
-call dein#add('padawan-php/deoplete-padawan')
+call dein#add('padawan-php/deoplete-padawan', {'build': 'composer install'})
 " javascript
 call dein#add('pangloss/vim-javascript')
 call dein#add('HerringtonDarkholme/yats.vim')
@@ -173,6 +175,7 @@ let g:ale_fixers['html'] = ['prettier']
 let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
 let g:ale_fixers['php'] = ['prettier']
+let g:ale_fixers['phtml'] = ['prettier']
 let g:ale_linters = {}
 " let g:ale_linters['php'] = ['phan']
 " ファイル保存時に実行
@@ -222,6 +225,9 @@ set autoread   " 外部でファイルに変更がされた場合は読みなお
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
 " set autochdir  " ディレクトリを自動で移動
+let g:auto_save = 1 " auto save enable
+nmap <silent> <Space>q :AutoSaveToggle<CR>
+let g:auto_save_silent = 1 " silent auto save
 
 "検索をファイルの先頭へ循環しない
 set nowrapscan
@@ -362,7 +368,7 @@ nmap m <Plug>(easymotion-s2)
 map <Space> <Nop>
 map <Space>w :<c-u>w<CR>
 map <Space>x :<c-u>bd<CR>
-nnoremap <Space>q :<c-u>wq<CR>
+" nnoremap <Space>q :<c-u>wq<CR>
 nnoremap <silent> <Space>n :NERDTreeToggle<CR>
 nmap <silent> <ESC>h :bprevious<CR>
 nmap <silent> <ESC>l :bnext<CR>
@@ -400,7 +406,7 @@ command! -nargs=* Rag
 " fugitive
 nmap <silent> <Space>s :Gstatus<CR>
 nmap <silent> <Space>d :Gdiff<CR>
-nmap <silent> <Space>w :Gwrite<CR>
+" nmap <silent> <Space>w :Gwrite<CR>
 nmap <silent> <Space>r :Gremove<CR>
 nmap <silent> <Space>h :Gblame<CR>
 " test
