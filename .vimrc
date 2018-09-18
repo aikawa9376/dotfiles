@@ -141,10 +141,10 @@ if has('unix') && !has('gui_running')
   " Use meta keys in console.
   function! s:use_meta_keys()  " {{{
     for i in map(
-    \   range(char2nr('a'), char2nr('z'))
-    \ + range(char2nr('A'), char2nr('Z'))
-    \ + range(char2nr('0'), char2nr('9'))
-    \ , 'nr2char(v:val)')
+          \   range(char2nr('a'), char2nr('z'))
+          \ + range(char2nr('A'), char2nr('Z'))
+          \ + range(char2nr('0'), char2nr('9'))
+          \ , 'nr2char(v:val)')
       " <ESC>O do not map because used by arrow keys.
       if i != 'O'
         execute 'nmap <ESC>' . i '<M-' . i . '>'
@@ -305,8 +305,8 @@ nnoremap k gk
 "行末の1文字先までカーソルを移動できるように
 set virtualedit=onemore
 
-"vを二回で行末まで選択
-vnoremap v $h
+" vを二回で行末まで選択 *multiple_cursorsと競合
+" vnoremap v $h
 
 "動作環境との統合
 "OSのクリップボードをレジスタ指定無しで Yank, Put 出来るようにする
@@ -484,30 +484,30 @@ let g:context_filetype#same_filetypes.php = 'html'
 let g:context_filetype#same_filetypes.html = 'php'
 let b:context_filetype_filetypes = context_filetype#default_filetypes()
 call extend(b:context_filetype_filetypes, 
-  \ {'php' : [
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'javascript',
-  \   },
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'coffee',
-  \   },
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'javascript',
-  \   },
-  \   {
-  \    'start':
-  \     '<style\%( [^>]*\)\?>',
-  \    'end': '</style>', 'filetype': 'css',
-  \   },
-  \   {
-  \    'start':
-  \     '<[^>]\+ style=\([''"]\)',
-  \    'end': '\1', 'filetype': 'css',
-  \   },
-  \ ]})
+      \ {'php' : [
+      \   {
+      \    'start':
+      \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
+      \    'end': '</script>', 'filetype': 'javascript',
+      \   },
+      \   {
+      \    'start':
+      \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
+      \    'end': '</script>', 'filetype': 'coffee',
+      \   },
+      \   {
+      \    'start':
+      \     '<script\%( [^>]*\)\?>',
+      \    'end': '</script>', 'filetype': 'javascript',
+      \   },
+      \   {
+      \    'start':
+      \     '<style\%( [^>]*\)\?>',
+      \    'end': '</style>', 'filetype': 'css',
+      \   },
+      \   {
+      \    'start':
+      \     '<[^>]\+ style=\([''"]\)',
+      \    'end': '\1', 'filetype': 'css',
+      \   },
+      \ ]})
