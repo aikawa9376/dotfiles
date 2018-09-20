@@ -42,6 +42,7 @@ zplug load --verbose
 export PATH="/usr/local/bin:$PATH"
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 export TERM='xterm-256color'
+stty stop undef
 KEYTIMEOUT=1
 case $(uname -a) in
    *Microsoft*) unsetopt BG_NICE ;;

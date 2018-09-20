@@ -30,9 +30,14 @@
 <C-n>	.vimrc	/^inoremap <C-n> <Down>$/;"	m
 <C-o>	.vimrc	/^nnoremap <C-o> <C-o>zz$/;"	m
 <C-p>	.vimrc	/^inoremap <C-p> <Up>$/;"	m
+<C-s>	.vimrc	/^map <C-s> <Nop>$/;"	m
+<C-s>	.vimrc	/^nmap <C-s> <Plug>(expand_region_shrink)$/;"	m
+<C-s>	.vimrc	/^vmap <C-s> <Plug>(expand_region_shrink)$/;"	m
 <C-u>	.vimrc	/^inoremap <C-u> <C-o>d^$/;"	m
 <C-u>	.vimrc	/^nnoremap <C-u> <C-u>zz$/;"	m
 <C-w>	.vimrc	/^inoremap <C-w> <C-o>db$/;"	m
+<C-w>	.vimrc	/^nmap <C-w> <Plug>(expand_region_expand)$/;"	m
+<C-w>	.vimrc	/^vmap <C-w> <Plug>(expand_region_expand)$/;"	m
 <CR>	.vimrc	/^nnoremap <CR> i<CR><Esc>$/;"	m
 <ESC>h	.vimrc	/^nmap <silent> <ESC>h :bprevious<CR>$/;"	m
 <ESC>j	.vimrc	/^nmap <silent> <ESC>j :b#<CR>$/;"	m
@@ -45,6 +50,8 @@
 <Space>	.vimrc	/^map <Space> <Nop>$/;"	m
 <Space>,	.vimrc	/^nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~\/.vimrc<CR>$/;"	m
 <Space>.	.vimrc	/^nnoremap <silent> <Space>. :<c-u>e ~\/.vimrc<CR>$/;"	m
+<Space><CR>	.vimrc	/^inoremap <expr><Space><CR> IsEndSemicolon() ? "<C-O>$;<CR>" : "<C-O>$<CR>"$/;"	m
+<Space><CR>	.vimrc	/^nnoremap <expr><Space><CR> IsEndSemicolon() ? "i<C-O>$;<CR><ESC>" : "i<C-O>$<CR><ESC>"$/;"	m
 <Space>A	.vimrc	/^nnoremap <silent> <Space>A :Rag<CR>$/;"	m
 <Space>F	.vimrc	/^nnoremap <silent> <Space>F :Files<CR>$/;"	m
 <Space>a	.vimrc	/^nnoremap <silent> <Space>a :Ag<CR>$/;"	m
@@ -78,6 +85,7 @@
 Ag	.vimrc	/^command! -bang -nargs=* Ag$/;"	c
 Debug	.vimrc	/^      \\   Debug$/;"	c
 Files	.vimrc	/^command! -bang -nargs=? -complete=dir Files$/;"	c
+IsEndSemicolon	.vimrc	/^function! IsEndSemicolon()$/;"	f
 Multiple_cursors_after	.vimrc	/^function! Multiple_cursors_after()$/;"	f
 Multiple_cursors_before	.vimrc	/^function! Multiple_cursors_before()$/;"	f
 N	.vimrc	/^nnoremap N Nzz$/;"	m

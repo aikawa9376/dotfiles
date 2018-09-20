@@ -40,10 +40,12 @@ call dein#add('cohama/lexima.vim')
 call dein#add('tyru/caw.vim')
 call dein#add('thinca/vim-visualstar')
 call dein#add('terryma/vim-multiple-cursors')
+call dein#add('terryma/vim-expand-region')
 call dein#add('Yggdroot/indentLine')
 call dein#add('Lokaltog/vim-easymotion')
 " list
 call dein#add('scrooloose/nerdtree')
+call dein#add('xuyuanp/nerdtree-git-plugin')
 call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('junegunn/vim-peekaboo')
@@ -60,6 +62,7 @@ call dein#add('NLKNguyen/papercolor-theme')
 "call dein#add('edkolev/tmuxline.vim')
 " php
 call dein#add('StanAngeloff/php.vim')
+call dein#add('captbaritone/better-indent-support-for-php-with-html')
 " start call ':call deoplete#sources#padawan#InstallServer()'
 " add ln /usr/bin/ {$plugin}/padawan-php/bin/padawan and padawan-server
 call dein#add('padawan-php/deoplete-padawan', {'build': 'composer install'})
@@ -171,11 +174,10 @@ endif
 " lint
 let g:ale_fixers = {}
 let g:ale_fixers['javascript'] = ['prettier-eslint']
-let g:ale_fixers['html'] = ['prettier']
+let g:ale_fixers['html'] = ['tidy']
 let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
-let g:ale_fixers['php'] = ['prettier']
-let g:ale_fixers['phtml'] = ['prettier']
+let g:ale_fixers['php'] = ['tidy', 'prettier']
 let g:ale_linters = {}
 " let g:ale_linters['php'] = ['phan']
 " ファイル保存時に実行
@@ -185,6 +187,7 @@ let g:ale_lint_on_text_changed = 0
 let g:ale_javascript_prettier_use_local_config = 1
 " 設定を見直す必要あり
 let g:ale_php_phan_executable = 'vendor/bin/phan'
+let g:ale_html_tidy_options = '-config .tidyrc'
 
 " multiple_cursorsの設定
 function! Multiple_cursors_before()
@@ -194,6 +197,12 @@ endfunction
 function! Multiple_cursors_after()
   let b:deoplete_disable_auto_complete = 0
 endfunction
+" intelljのctrl-wみたいの
+nmap <C-w> <Plug>(expand_region_expand)
+vmap <C-w> <Plug>(expand_region_expand)
+map <C-s> <Nop>
+nmap <C-s> <Plug>(expand_region_shrink)
+vmap <C-s> <Plug>(expand_region_shrink)
 
 " Insertモードのときカーソルの形状を変更
 if has('mac')
@@ -225,7 +234,7 @@ set autoread   " 外部でファイルに変更がされた場合は読みなお
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
 " set autochdir  " ディレクトリを自動で移動
-let g:auto_save = 1 " auto save enable
+let g:auto_save = 0 " start auto save disable
 nmap <silent> <Space>q :AutoSaveToggle<CR>
 let g:auto_save_silent = 1 " silent auto save
 
@@ -242,23 +251,23 @@ set hlsearch
 nmap <silent> <Esc><Esc> :nohlsearch<CR>
 
 "検索後にジャンプした際に検索単語を画面中央に持ってくる
-nnoremap n nzz
-nnoremap N Nzz
-nnoremap * *zz
-nnoremap # #zz
-nnoremap g* g*zz
-nnoremap g# g#zz
+nnoremap n nzz10<C-e>
+nnoremap N Nzz10<C-e>
+nnoremap * *zz10<C-e>
+nnoremap # #zz10<C-e>
+nnoremap g* g*zz10<C-e>
+nnoremap g# g#zz10<C-e>
 
 "スクロール時に表示を10行確保
 set scrolloff=10
 
 "半画面スクロールで位置を真ん中に
-nnoremap <C-u> <C-u>zz
-nnoremap <C-d> <C-d>zz
-nnoremap } }zz
-nnoremap { {zz
-nnoremap ) )zz
-nnoremap ( (zz
+nnoremap <C-u> <C-u>zz10<C-e>
+nnoremap <C-d> <C-d>zz10<C-e>
+nnoremap } }zz10<C-e>
+nnoremap { {zz10<C-e>
+nnoremap ) )zz10<C-e>
+nnoremap ( (zz10<C-e>
 
 "x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
@@ -342,26 +351,26 @@ nmap <silent> <Tab>l gt
 nmap <silent> <Tab>L :+tabmove<CR>
 nmap <silent> <Tab>H :-tabmove<CR>
 
-"入力モード中に素早くJJと入力した場合はESCとみなす
+" 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
 
-"ジャンプリストで中央に持ってくる
-nnoremap <C-o> <C-o>zz
-nnoremap <C-i> <C-i>zz
-nnoremap g; g;zz
-nnoremap g, g,zz
+" ジャンプリストで中央に持ってくる
+nnoremap <C-o> <C-o>zz10<C-e>
+nnoremap <C-i> <C-i>zz10<C-e>
+nnoremap g; g;zz10<C-e>
+nnoremap g, g,zz10<C-e>
 
-"emmet
+" emmet
 let g:user_emmet_install_global = 0
 autocmd FileType phtml,html,php,css EmmetInstall
 imap <silent> <Tab> <C-y>,
 
-"eazymotionu
+" eazymotionu
 let g:EasyMotion_do_mapping = 0 
 let g:EasyMotion_smartcase = 1
 nmap m <Plug>(easymotion-s2)
 
-"ファイル操作系
+" ファイル操作系
 map <Space> <Nop>
 map <Space>w :<c-u>w<CR>
 map <Space>x :<c-u>bd<CR>
@@ -371,11 +380,23 @@ nmap <silent> <ESC>h :bprevious<CR>
 nmap <silent> <ESC>l :bnext<CR>
 nmap <silent> <ESC>j :b#<CR>
 
-"前回のカーソル位置からスタート
+" 前回のカーソル位置からスタート
 augroup vimrcEx
   au BufRead * if line("'\"") > 0 && line("'\"") <= line("$") |
         \ exe "normal g`\"" | endif
 augroup END
+
+" セミコロンを付けて改行
+function! IsEndSemicolon()
+  let c = getline(".")[col("$")-2]
+  if c != ';'
+    return 1
+  else
+    return 0
+  endif
+endfunction
+nnoremap <expr><Space><CR> IsEndSemicolon() ? "i<C-O>$;<CR><ESC>" : "i<C-O>$<CR><ESC>"
+inoremap <expr><Space><CR> IsEndSemicolon() ? "<C-O>$;<CR>" : "<C-O>$<CR>"
 
 "fzf
 nnoremap <silent> <Space>F :Files<CR>
