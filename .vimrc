@@ -198,8 +198,8 @@ function! Multiple_cursors_after()
   let b:deoplete_disable_auto_complete = 0
 endfunction
 " intelljのctrl-wみたいの
-nmap <C-w> <Plug>(expand_region_expand)
-vmap <C-w> <Plug>(expand_region_expand)
+nmap <C-a> <Plug>(expand_region_expand)
+vmap <C-a> <Plug>(expand_region_expand)
 map <C-s> <Nop>
 nmap <C-s> <Plug>(expand_region_shrink)
 vmap <C-s> <Plug>(expand_region_shrink)
@@ -411,13 +411,13 @@ nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR><CR>
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
 command! ProjectFiles execute 'Files' s:find_git_root()
-command! -bang -nargs=? -complete=dir Files
-      \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
-command! -bang -nargs=* Ag
-      \ call fzf#vim#ag(<q-args>,
-      \  <bang>0 ? fzf#vim#with_preview('up:60%')
-      \    : fzf#vim#with_preview('right:50%:hidden', '?'),
-      \  <bang>0)
+" command! -bang -nargs=? -complete=dir Files
+"      \ call fzf#vim#files(<q-args>, fzf#vim#with_preview(), <bang>0)
+" command! -bang -nargs=* Ag
+"      \ call fzf#vim#ag(<q-args>,
+"      \  <bang>0 ? fzf#vim#with_preview('up:60%')
+"      \    : fzf#vim#with_preview('right:50%:hidden', '?'),
+"      \  <bang>0)
 command! -nargs=* Rag
       \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
 
