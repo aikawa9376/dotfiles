@@ -162,11 +162,11 @@ setopt auto_cd
 setopt auto_pushd
 
 function agvim () {   
-  vim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') 
+  nvim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') 
 } 
 
 function fvim () {   
-  vim $(fzf $@) 
+  nvim $(fzf $@) 
 } 
 
 # -------------------------------------
@@ -328,3 +328,5 @@ fi
 
 alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
+alias fzf='fzf --preview "pygmentize -g  {}"'
+alias vim='nvim'

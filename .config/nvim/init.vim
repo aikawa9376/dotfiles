@@ -15,19 +15,12 @@ call dein#add('Shougo/dein.vim')
 call dein#add('Shougo/vimproc', {'build': 'make'})
 " Add or remove your plugins here: 
 call dein#add('Shougo/deoplete.nvim') 
-if !has('nvim')
-  call dein#add('roxma/nvim-yarp')
-  call dein#add('roxma/vim-hug-neovim-rpc')
-endif
-if has('job') && has('channel') && has('timers')
-  call dein#add('w0rp/ale')
-else
-  call dein#add('vim-syntastic/syntastic')
-endif
+call dein#add('w0rp/ale')
+
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/context_filetype.vim')
-call dein#add('Shougo/echodoc.vim')
+" call dein#add('Shougo/echodoc.vim')
 call dein#add('osyo-manga/vim-precious')
 call dein#add('vim-scripts/vim-auto-save')
 " text
@@ -35,6 +28,7 @@ call dein#add('tpope/vim-surround')
 call dein#add('tpope/vim-repeat')
 call dein#add('mattn/emmet-vim')
 call dein#add('alvan/vim-closetag')
+call dein#add('machakann/vim-highlightedyank')
 " call dein#add('Townk/vim-autoclose')
 call dein#add('cohama/lexima.vim')
 call dein#add('tyru/caw.vim')
@@ -49,7 +43,7 @@ call dein#add('xuyuanp/nerdtree-git-plugin')
 call dein#add('junegunn/fzf', { 'build': './install', 'merged': 0 })
 call dein#add('junegunn/fzf.vim', { 'depends': 'fzf' })
 call dein#add('junegunn/vim-peekaboo')
-call dein#add('vim-scripts/taglist.vim')
+call dein#add('majutsushi/tagbar')
 call dein#add('yegappan/mru')
 " git
 call dein#add('tpope/vim-fugitive')
@@ -91,6 +85,7 @@ endif
 set number
 set backspace=indent,eol,start
 set encoding=utf-8
+" set ambiwidth=double
 set fileformats=unix,dos,mac
 set fileencodings=utf-8,sjis
 set redrawtime=10000
@@ -114,7 +109,7 @@ let g:deoplete#enable_refresh_always = 0
 let g:deoplete#enable_smart_case = 1
 let g:deoplete#file#enable_buffer_path = 1
 let g:deoplete#max_list = 100
-let g:deoplete#sources#padawan#server_autostart = 1
+let g:deoplete#sources#padawan#server_autostart = 0
 let g:deoplete#sources#padawan#add_parentheses = 1
 
 " call deoplete#custom#source('neosnippet', 'rank', 1000)
@@ -140,25 +135,6 @@ command! -nargs=*
       \|  catch
         \|      echom <q-args>
         \|  endtry
-if has('unix') && !has('gui_running')
-  " Use meta keys in console.
-  function! s:use_meta_keys()  " {{{
-    for i in map(
-          \   range(char2nr('a'), char2nr('z'))
-          \ + range(char2nr('A'), char2nr('Z'))
-          \ + range(char2nr('0'), char2nr('9'))
-          \ , 'nr2char(v:val)')
-      " <ESC>O do not map because used by arrow keys.
-      if i != 'O'
-        execute 'nmap <ESC>' . i '<M-' . i . '>'
-      endif
-    endfor
-  endfunction  " }}}
-
-  call s:use_meta_keys()
-  map <NUL> <C-Space>
-  map! <NUL> <C-Space>
-endif
 
 " Snippet key-mappings.
 " Note: It must be "imap" and "smap".  It uses <Plug> mappings.
@@ -247,10 +223,12 @@ set smartcase
 
 ""検索語句をハイライト ESC二回でオフ
 set incsearch
+set inccommand=split
 set hlsearch
 nmap <silent> <Esc><Esc> :nohlsearch<CR>
 
 "検索後にジャンプした際に検索単語を画面中央に持ってくる
+nnoremap zz zz10<C-e>
 nnoremap n nzz10<C-e>
 nnoremap N Nzz10<C-e>
 nnoremap * *zz10<C-e>
@@ -293,6 +271,7 @@ inoremap <C-a> <C-o>^
 inoremap <C-e> <C-o>$<Right>
 inoremap <C-b> <Left>
 inoremap <C-f> <Right>
+
 inoremap <C-n> <Down>
 inoremap <C-p> <Up>
 inoremap <C-h> <BS>
@@ -320,9 +299,6 @@ set clipboard=unnamed,unnamedplus
 
 "win系でもALT-v矩形選択を可能に
 nmap <Space>v <C-v>
-
-"screen利用時設定
-set ttymouse=xterm
 
 "マウスの入力を受け付ける
 set mouse=a
@@ -375,9 +351,9 @@ nmap <Space> <Nop>
 nmap <Space>w :<c-u>w<CR>
 nmap <Space>x :<c-u>bd<CR>
 " nnoremap <Space>q :<c-u>wq<CR>
-nmap <silent> <ESC>h :bprevious<CR>
-nmap <silent> <ESC>l :bnext<CR>
-nmap <silent> <ESC>j :b#<CR>
+nmap <silent> <M-h> :bprevious<CR>
+nmap <silent> <M-l> :bnext<CR>
+nmap <silent> <M-j> :b#<CR>
 nnoremap <silent> <Space>n :NERDTreeToggle<CR>
 let g:NERDTreeShowHidden = 1
 let g:NERDTreeShowBookmarks = 1
@@ -409,7 +385,7 @@ nnoremap <silent> <Space>A :Rag<CR>
 nnoremap <silent> <Space>l :Lines<CR>
 nnoremap <silent> <Space>e :History<CR>
 " <C-]>でタグ検索
-nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR><CR>
+nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
 command! ProjectFiles execute 'Files' s:find_git_root()
@@ -445,6 +421,7 @@ let g:airline_detect_whitespace=0
 let g:airline#extensions#whitespace#enabled = 0
 let g:Powerline_symbols = 'fancy'
 set laststatus=2
+
 if !exists('g:airline_symbols')
   let g:airline_symbols = {}
 endif
@@ -468,7 +445,7 @@ let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#fnamemod = ':t'
 
 "ctags
-nnoremap <silent> <Space>o :TlistToggle<CR>
+nnoremap <silent> <Space>o :TagbarToggle<CR>
 
 set tags=./tags,tags;$HOME
 function! s:execute_ctags() abort
@@ -493,16 +470,16 @@ augroup ctags
   autocmd BufWritePost * call s:execute_ctags()
 augroup END
 
-let Tlist_Show_One_File = 1
-let Tlist_Use_Right_Window = 1
-let Tlist_Compact_Format = 1
-let Tlist_Auto_Highlight_Tag = 1
-let Tlist_WinWidth = 40
-let Tlist_Exit_OnlyWindow = 1
+let g:tagbar_autopreview = 1
+let g:tagbar_compact = 1
+let g:tagbar_autoshowtag = 1
+let g:tagbar_width = 40
+let g:tagbar_previewwin_pos = 'rightbelow'
+" let g:tagbar_autoclose = 1
 
 "vimrcをスペースドットで開く
-nnoremap <silent> <Space>. :<c-u>e ~/.vimrc<CR>
-nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.vimrc<CR>
+nnoremap <silent> <Space>. :<c-u>e ~/.config/nvim/init.vim<CR>
+nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
 
 " filetype on
 filetype on
