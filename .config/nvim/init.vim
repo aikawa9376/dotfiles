@@ -1,6 +1,6 @@
 "dein Scripts-----------------------------
 if &compatible
-  set nocompatible 
+  set nocompatible
 endif
 
 " Required:
@@ -13,9 +13,10 @@ call dein#begin(expand('~/.vim/bundle'))
 " Required:
 call dein#add('Shougo/dein.vim')
 call dein#add('Shougo/vimproc', {'build': 'make'})
-" Add or remove your plugins here: 
-call dein#add('Shougo/deoplete.nvim') 
+" Add or remove your plugins here:
+call dein#add('Shougo/deoplete.nvim')
 call dein#add('w0rp/ale')
+" call dein#add('ryanoasis/vim-devicons')
 
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
@@ -26,9 +27,11 @@ call dein#add('vim-scripts/vim-auto-save')
 " text
 call dein#add('tpope/vim-surround')
 call dein#add('tpope/vim-repeat')
+call dein#add('tpope/vim-abolish')
 call dein#add('mattn/emmet-vim')
 call dein#add('alvan/vim-closetag')
 call dein#add('machakann/vim-highlightedyank')
+call dein#add('thirtythreeforty/lessspace.vim')
 " call dein#add('Townk/vim-autoclose')
 call dein#add('cohama/lexima.vim')
 call dein#add('tyru/caw.vim')
@@ -342,7 +345,7 @@ autocmd FileType phtml,html,php,css EmmetInstall
 imap <silent> <Tab> <C-y>,
 
 " eazymotionu
-let g:EasyMotion_do_mapping = 0 
+let g:EasyMotion_do_mapping = 0
 let g:EasyMotion_smartcase = 1
 nmap m <Plug>(easymotion-s2)
 
@@ -350,13 +353,15 @@ nmap m <Plug>(easymotion-s2)
 nmap <Space> <Nop>
 nmap <Space>w :<c-u>w<CR>
 nmap <Space>x :<c-u>bd<CR>
-" nnoremap <Space>q :<c-u>wq<CR>
+" nnoremap <Space>q :<c-u>
+" wq<CR>
 nmap <silent> <M-h> :bprevious<CR>
 nmap <silent> <M-l> :bnext<CR>
 nmap <silent> <M-j> :b#<CR>
 nnoremap <silent> <Space>n :NERDTreeToggle<CR>
 let g:NERDTreeShowHidden = 1
 let g:NERDTreeShowBookmarks = 1
+let g:NERDTreeMinimalUI = 1
 
 " 前回のカーソル位置からスタート
 augroup vimrcEx
@@ -399,7 +404,7 @@ command! -bang -nargs=? -complete=dir Files
 "     \  <bang>0)
 " command! -nargs=* Rag
 "      \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
-command! -bang -nargs=* Ag 
+command! -bang -nargs=* Ag
       \call fzf#vim#ag(<q-args>, fzf#wrap('rg',
       \ {'options': "--preview 'pygmentize -g $(cut -d: -f1 <<< {}) | sed -n $(cut -d: -f2 <<< {}),\\$p | head -".&lines."'"}))
 
@@ -414,7 +419,7 @@ nmap <Space>g :call fugitive#detect(@%)<CR>
 
 " airline&&tmuxline
 let g:airline_theme = 'minimalist'
-let g:airline_powerline_fonts = 1 
+let g:airline_powerline_fonts = 1
 let g:airline_enable_branch = 1
 let g:airline#extensions#ale#enabled = 1
 let g:airline_detect_whitespace=0
@@ -491,7 +496,7 @@ let g:context_filetype#same_filetypes.php = 'phtml'
 let g:context_filetype#same_filetypes.php = 'html'
 let g:context_filetype#same_filetypes.html = 'php'
 let b:context_filetype_filetypes = context_filetype#default_filetypes()
-call extend(b:context_filetype_filetypes, 
+call extend(b:context_filetype_filetypes,
       \ {'php' : [
       \   {
       \    'start':

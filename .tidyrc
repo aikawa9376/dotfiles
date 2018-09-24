@@ -1,0 +1,26 @@
+indent: auto
+indent-spaces: 2
+wrap: 120
+wrap-php: no
+markup: yes
+vertical-space: yes
+tidy-mark:  no
+fix-backslash: no
+fix-uri: no
+escape-scripts: no
+show-warnings: yes
+show-body-only: auto
+numeric-entities: yes
+quote-marks: no
+quote-nbsp: no
+quote-ampersand: no
+break-before-br: yes
+uppercase-tags: no
+uppercase-attributes: no
+char-encoding: utf-8
+new-inline-tags: cfif, cfelse, math, mroot,
+  mrow, mi, mn, mo, msqrt, mfrac, msubsup, munderover,
+  munder, mover, mmultiscripts, msup, msub, mtext,
+  mprescripts, mtable, mtr, mtd, mth
+new-blocklevel-tags: cfoutput, cfquery
+new-empty-tags: cfelse
