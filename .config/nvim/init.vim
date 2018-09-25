@@ -156,7 +156,8 @@ let g:ale_fixers['javascript'] = ['prettier-eslint']
 let g:ale_fixers['html'] = ['tidy']
 let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
-let g:ale_fixers['php'] = ['tidy', 'prettier']
+" let g:ale_fixers['php'] = ['tidy', 'prettier']
+let g:ale_fixers['php'] = ['prettier']
 let g:ale_linters = {}
 " let g:ale_linters['php'] = ['phan']
 " ファイル保存時に実行
@@ -353,8 +354,7 @@ nmap m <Plug>(easymotion-s2)
 nmap <Space> <Nop>
 nmap <Space>w :<c-u>w<CR>
 nmap <Space>x :<c-u>bd<CR>
-" nnoremap <Space>q :<c-u>
-" wq<CR>
+nmap <Space>W :<c-u>wq<CR>
 nmap <silent> <M-h> :bprevious<CR>
 nmap <silent> <M-l> :bnext<CR>
 nmap <silent> <M-j> :b#<CR>
