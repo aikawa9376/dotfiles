@@ -41,6 +41,7 @@ call dein#add('terryma/vim-multiple-cursors')
 call dein#add('terryma/vim-expand-region')
 call dein#add('Yggdroot/indentLine')
 call dein#add('Lokaltog/vim-easymotion')
+call dein#add('kana/vim-textobj-user')
 " list
 call dein#add('scrooloose/nerdtree')
 call dein#add('xuyuanp/nerdtree-git-plugin')
@@ -153,7 +154,7 @@ endif
 
 " lint
 let g:ale_fixers = {}
-let g:ale_fixers['javascript'] = ['prettier-eslint']
+let g:ale_fixers['javascript'] = ['prettier']
 let g:ale_fixers['html'] = ['tidy']
 let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
@@ -525,3 +526,16 @@ call extend(b:context_filetype_filetypes,
       \    'end': '\1', 'filetype': 'css',
       \   },
       \ ]})
+" insert mode に入った時に 'filetype' を切り換える。
+" カーソル移動時の自動切り替えを無効化
+let g:precious_enable_switch_CursorMoved = {
+      \	"*" : 0
+      \}
+let g:precious_enable_switch_CursorMoved_i = {
+      \   "*" : 0
+      \}
+augroup precious_set
+  autocmd!
+  autocmd InsertEnter * :PreciousSwitch
+  autocmd InsertLeave * :PreciousReset
+augroup END
