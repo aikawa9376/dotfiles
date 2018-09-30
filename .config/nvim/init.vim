@@ -44,7 +44,6 @@ call dein#add('Lokaltog/vim-easymotion')
 call dein#add('kana/vim-textobj-user')
 call dein#add('kana/vim-textobj-entire')
 call dein#add('kana/vim-textobj-indent')
-call dein#add('kana/vim-textobj-function')
 call dein#add('akiyan/vim-textobj-php')
 " list
 call dein#add('scrooloose/nerdtree')
