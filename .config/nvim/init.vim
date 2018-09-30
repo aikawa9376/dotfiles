@@ -42,6 +42,10 @@ call dein#add('terryma/vim-expand-region')
 call dein#add('Yggdroot/indentLine')
 call dein#add('Lokaltog/vim-easymotion')
 call dein#add('kana/vim-textobj-user')
+call dein#add('kana/vim-textobj-entire')
+call dein#add('kana/vim-textobj-indent')
+call dein#add('kana/vim-textobj-function')
+call dein#add('akiyan/vim-textobj-php')
 " list
 call dein#add('scrooloose/nerdtree')
 call dein#add('xuyuanp/nerdtree-git-plugin')
@@ -532,7 +536,7 @@ let g:precious_enable_switch_CursorMoved = {
       \	"*" : 0
       \}
 let g:precious_enable_switch_CursorMoved_i = {
-      \   "*" : 0
+      \ "*" : 0
       \}
 augroup precious_set
   autocmd!
