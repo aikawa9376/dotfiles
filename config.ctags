@@ -24,7 +24,6 @@
 --regex-js=/['"]*([A-Za-z$][A-Za-z0-9_$]+)['"]*:[ \t]*function[ \t]*\(/\1/m,method/
 --regex-js=/([A-Za-z0-9_$]+)\[["']([A-Za-z0-9_$]+)["']\][ \t]*=[ \t]*function[ \t]*\(/\2/m,method/
 
-
 --langdef=typescript
 --langmap=typescript:.ts
 --regex-typescript=/^[ \t]*(export)?[ \t]*class[ \t]+([a-zA-Z0-9_]+)/\2/c,classes/
@@ -36,6 +35,10 @@
 --regex-typescript=/^[ \t]*(export)?[ \t]*interface[ \t]+([a-zA-Z0-9_]+)/\2/i,interfaces/
 --regex-typescript=/^[ \t]*(export)?[ \t]*enum[ \t]+([a-zA-Z0-9_]+)/\2/e,enums/
 --regex-typescript=/^[ \t]*import[ \t]+([a-zA-Z0-9_]+)/\1/I,imports/
+
+--langmap=html:+.phtml
+--regex-html=/id="([A-Za-z0-9_-]+)"/\1/d,id,ids/
+--regex-html=/class="([A-Za-z0-9_-]+)"/\1/c,class,classes/
 
 --langmap=css:.css
 --langmap=css:+.styl
@@ -63,7 +66,4 @@
 
 --langmap=php:.php
 --langmap=php:+.inc
---regex-php=/(^|^[^*]+[[:blank:]])const[[:blank:]]+([a-z0-9_]+)/\1/d,const/
---regex-php=/(^|^[^*]+[[:blank:]])class[[:blank:]]+([[:alpha:]][[:alnum:]_]*)/\2/c,class/
---regex-php=/(^|^[^*]+[[:blank:]])function[[:blank:]]+&?[[:blank:]]*([[:alpha:]][[:alnum:]_]*)/\2/f,function/
-
+--regex-php=/(^|^[^*]+[[:blank:]])const[[:blank:]]+([a-z0-9_]+)/\1/co,const/
