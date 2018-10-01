@@ -101,7 +101,7 @@ set ttimeoutlen=10
 set completeopt=menuone
 " set cursorcolumn
 syntax enable
-"set t_Co = 256
+set t_Co=256
 set background=dark
 autocmd ColorScheme * highlight Normal ctermbg=none
 autocmd ColorScheme * highlight LineNr ctermbg=none
@@ -339,6 +339,9 @@ nmap <silent> <Tab>H :-tabmove<CR>
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
 
+" ペーストモードを自動解除
+autocmd InsertLeave * set nopaste
+
 " ジャンプリストで中央に持ってくる
 nnoremap <C-o> <C-o>zz10<C-e>
 nnoremap <C-i> <C-i>zz10<C-e>
@@ -542,3 +545,16 @@ augroup precious_set
   autocmd InsertEnter * :PreciousSwitch
   autocmd InsertLeave * :PreciousReset
 augroup END
+
+" 固有のvimrcを用意　.vimrc.local
+augroup vimrc-local
+  autocmd!
+  autocmd BufNewFile,BufReadPost * call s:vimrc_local(expand('<afile>:p:h'))
+augroup END
+
+function! s:vimrc_local(loc)
+  let files = findfile('.vimrc.local', escape(a:loc, ' ') . ';', -1)
+  for i in reverse(filter(files, 'filereadable(v:val)'))
+    source `=i`
+  endfor
+endfunction
