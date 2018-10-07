@@ -14,15 +14,17 @@ call dein#begin(expand('~/.vim/bundle'))
 call dein#add('Shougo/dein.vim')
 call dein#add('Shougo/vimproc', {'build': 'make'})
 " Add or remove your plugins here:
-call dein#add('Shougo/deoplete.nvim')
+call dein#add('Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' })
 call dein#add('w0rp/ale')
+call dein#add('autozimu/LanguageClient-neovim', { 'rev': 'next', 'build': 'bash install.sh' })
+call dein#add('tpope/vim-obsession')
 " call dein#add('ryanoasis/vim-devicons')
 
 call dein#add('Shougo/neosnippet')
 call dein#add('Shougo/neosnippet-snippets')
 call dein#add('Shougo/context_filetype.vim')
 " call dein#add('Shougo/echodoc.vim')
-call dein#add('osyo-manga/vim-precious')
+" call dein#add('osyo-manga/vim-precious')
 call dein#add('vim-scripts/vim-auto-save')
 " text
 call dein#add('tpope/vim-surround')
@@ -532,19 +534,6 @@ call extend(b:context_filetype_filetypes,
       \    'end': '\1', 'filetype': 'css',
       \   },
       \ ]})
-" insert mode に入った時に 'filetype' を切り換える。
-" カーソル移動時の自動切り替えを無効化
-let g:precious_enable_switch_CursorMoved = {
-      \	"*" : 0
-      \}
-let g:precious_enable_switch_CursorMoved_i = {
-      \ "*" : 0
-      \}
-augroup precious_set
-  autocmd!
-  autocmd InsertEnter * :PreciousSwitch
-  autocmd InsertLeave * :PreciousReset
-augroup END
 
 " 固有のvimrcを用意　.vimrc.local
 augroup vimrc-local
