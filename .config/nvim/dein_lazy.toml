@@ -1,0 +1,338 @@
+# shougo---------------------------------
+
+[[plugins]]
+repo = 'Shougo/deoplete.nvim'
+do =  'UpdateRemotePlugins'
+hook_source = '''
+" deoplete setup
+let g:deoplete#enable_at_startup = 1
+let g:deoplete#auto_complete_delay = 0
+let g:deoplete#auto_complete_start_length = 1
+let g:deoplete#enable_camel_case = 0
+let g:deoplete#enable_ignore_case = 0
+let g:deoplete#enable_refresh_always = 0
+let g:deoplete#enable_smart_case = 1
+let g:deoplete#file#enable_buffer_path = 1
+let g:deoplete#max_list = 100
+let g:deoplete#sources#padawan#server_autostart = 0
+let g:deoplete#sources#padawan#add_parentheses = 1
+
+" call deoplete#custom#source('neosnippet', 'rank', 1000)
+call deoplete#custom#source('tag', 'min_pattern_length', 4)
+call deoplete#custom#source('padawan', 'mark', '[P]')
+call deoplete#custom#source('padawan', 'rank', 10)
+" call deoplete#custom#option('sources', {
+"     \ '_': ['neosnippet', 'buffer', 'tag', 'padawan'],
+"     \})
+'''
+on_i = 1
+
+[[plugins]]
+repo = 'Shougo/neosnippet'
+depends = ['neosnippet-snippets', 'context_filetype.vim']
+on_i = 1
+on_ft = ['snippet']
+hook_source = '''
+" Snippet key-mappings.
+" Note: It must be "imap" and "smap".  It uses <Plug> mappings.
+imap <C-Space> <Plug>(neosnippet_expand_or_jump)
+smap <C-Space> <Plug>(neosnippet_expand_or_jump)
+xmap <C-Space> <Plug>(neosnippet_expand_target)
+
+" For conceal markers.
+if has('conceal')
+  set conceallevel=2 concealcursor=niv
+endif
+'''
+[[plugins]]
+repo = 'Shougo/neosnippet-snippets'
+
+[[plugins]]
+repo = 'Shougo/context_filetype.vim'
+hook_source = '''
+if !exists('g:context_filetype#same_filetypes')
+  let g:context_filetype#same_filetypes = {}
+endif
+let g:context_filetype#same_filetypes.php = 'phtml'
+let b:context_filetype_filetypes = context_filetype#default_filetypes()
+call extend(b:context_filetype_filetypes,
+      \ {'php' : [
+      \   {
+      \    'start':
+      \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
+      \    'end': '</script>', 'filetype': 'javascript',
+      \   },
+      \   {
+      \    'start':
+      \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
+      \    'end': '</script>', 'filetype': 'coffee',
+      \   },
+      \   {
+      \    'start':
+      \     '<script\%( [^>]*\)\?>',
+      \    'end': '</script>', 'filetype': 'javascript',
+      \   },
+      \   {
+      \    'start':
+      \     '<style\%( [^>]*\)\?>',
+      \    'end': '</style>', 'filetype': 'css',
+      \   },
+      \   {
+      \    'start':
+      \     '<[^>]\+ style=\([''"]\)',
+      \    'end': '\1', 'filetype': 'css',
+      \   },
+      \ ]})
+'''
+
+[[plugins]]
+repo = 'Shougo/vimshell'
+rev = '3787e5'
+
+# text-----------------------------------
+
+[[plugins]]
+repo = 'mattn/emmet-vim'
+on_i = 1
+on_ft = ['html', 'php', 'phtml', 'js']
+hook_add = '''
+let g:user_emmet_install_global = 0
+autocmd FileType phtml,html,php,css EmmetInstall
+imap <silent> <Tab> <C-y>,
+'''
+
+[[plugins]]
+repo = 'alvan/vim-closetag'
+on_i = 1
+
+[[plugins]]
+repo = 'cespare/vim-toml'
+on_ft = ['toml']
+
+[[plugins]]
+repo = 'cohama/lexima.vim'
+
+[[plugins]]
+repo = 'tpope/vim-surround'
+
+[[plugins]]
+repo = 'tpope/vim-repeat'
+
+[[plugins]]
+repo = 'tpope/vim-abolish'
+
+[[plugins]]
+repo = 'machakann/vim-highlightedyank'
+
+[[plugins]]
+repo = 'thirtythreeforty/lessspace.vim'
+
+[[plugins]]
+repo = 'yuratomo/w3m.vim'
+
+[[plugins]]
+repo = 'tyru/caw.vim'
+on_map = '<Plug>(caw:hatpos:toggle)'
+hook_add = '''
+nmap <C-_> <Plug>(caw:hatpos:toggle)
+vmap <C-_> <Plug>(caw:hatpos:toggle)
+'''
+
+[[plugins]]
+repo = 'thinca/vim-visualstar'
+
+[[plugins]]
+repo = 'terryma/vim-multiple-cursors'
+hook_source = '''
+function! Multiple_cursors_before()
+  let b:deoplete_disable_auto_complete = 1
+endfunction
+
+function! Multiple_cursors_after()
+  let b:deoplete_disable_auto_complete = 0
+endfunction
+'''
+
+[[plugins]]
+repo = 'terryma/vim-expand-region'
+hook_source = '''
+nmap - <Plug>(expand_region_expand)
+vmap - <Plug>(expand_region_expand)
+nmap _ <Plug>(expand_region_shrink)
+vmap _ <Plug>(expand_region_shrink)
+'''
+
+[[plugins]]
+repo = 'Yggdroot/indentLine'
+
+[[plugins]]
+repo = 'Lokaltog/vim-easymotion'
+hook_source = '''
+let g:EasyMotion_do_mapping = 0
+let g:EasyMotion_smartcase = 1
+nmap m <Plug>(easymotion-s2)
+'''
+
+[[plugins]]
+repo = 'kana/vim-textobj-user'
+depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php']
+
+[[plugins]]
+repo = 'kana/vim-textobj-entire'
+
+[[plugins]]
+repo = 'kana/vim-textobj-indent'
+
+[[plugins]]
+repo = 'akiyan/vim-textobj-php'
+on_ft = ['php', 'html', 'pthml']
+
+# liet-----------------------------------
+
+[[plugins]]
+repo = 'scrooloose/nerdtree'
+depends = ['nerdtree-git-plugin']
+on_cmd = ['NERDTreeToggle']
+hook_add = '''
+nnoremap <silent> <Space>n :NERDTreeToggle<CR>
+let g:NERDTreeShowHidden = 1
+let g:NERDTreeShowBookmarks = 1
+let g:NERDTreeMinimalUI = 1
+'''
+
+[[plugins]]
+repo = 'xuyuanp/nerdtree-git-plugin'
+
+[[plugins]]
+repo = 'junegunn/fzf'
+depends = ['fzf.vim']
+build = './install'
+merged = 0
+
+[[plugins]]
+repo = 'junegunn/fzf.vim'
+hook_add = '''
+function! s:find_git_root()
+  return system('git rev-parse --show-toplevel 2> /dev/null')[:-2]
+endfunction
+function! s:with_git_root()
+  let root = systemlist('git rev-parse --show-toplevel')[0]
+  return v:shell_error ? {} : {'dir': root}
+endfunction
+nnoremap <silent> <Space>F :Files<CR>
+nnoremap <silent> <Space>f :ProjectFiles<CR>
+nnoremap <silent> <Space>b :Buffers<CR>
+nnoremap <silent> <Space>a :Ag<CR>
+nnoremap <silent> <Space>A :Rag<CR>
+nnoremap <silent> <Space>l :Lines<CR>
+nnoremap <silent> <Space>e :History<CR>
+" <C-]>でタグ検索
+nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
+" fzfからファイルにジャンプできるようにする
+let g:fzf_buffers_jump = 1
+command! ProjectFiles execute 'Files' s:find_git_root()
+command! -bang -nargs=? -complete=dir Files
+      \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
+      \ {'options': "--preview 'pygmentize -g {}'"}))
+" command! -bang -nargs=* Ag
+"     \ call fzf#vim#ag(<q-args>,
+"     \  <bang>0 ? fzf#vim#with_preview('up:60%')
+"     \    : fzf#vim#with_preview('right:50%:hidden', '?'),
+"     \  <bang>0)
+" command! -nargs=* Rag
+"      \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
+command! -bang -nargs=* Ag
+      \call fzf#vim#ag(<q-args>, fzf#wrap('rg',
+      \ {'options': "--preview 'pygmentize -g $(cut -d: -f1 <<< {}) | sed -n $(cut -d: -f2 <<< {}),\\$p | head -".&lines."'"}))
+'''
+
+[[plugins]]
+repo = 'majutsushi/tagbar'
+on_cmd = ['TagbarToggle']
+hook_add = '''
+nnoremap <silent> <Space>o :TagbarToggle<CR>
+let g:tagbar_autopreview = 1
+let g:tagbar_compact = 1
+let g:tagbar_autoshowtag = 1
+let g:tagbar_width = 40
+let g:tagbar_previewwin_pos = 'rightbelow'
+'''
+
+[[plugins]]
+repo = 'junegunn/vim-peekaboo'
+
+[[plugins]]
+repo = 'yegappan/mru'
+
+# git------------------------------------
+
+[[plugins]]
+repo = 'tpope/vim-fugitive'
+hook_source = '''
+nmap <silent> <Space>s :Gstatus<CR>
+nmap <silent> <Space>d :Gdiff<CR>
+" nmap <silent> <Space>w :Gwrite<CR>
+nmap <silent> <Space>r :Gremove<CR>
+nmap <silent> <Space>h :Gblame<CR>
+" test
+nmap <Space>g :call fugitive#detect(@%)<CR>
+'''
+
+[[plugins]]
+repo = 'airblade/vim-gitgutter'
+
+[[plugins]]
+repo = 'airblade/vim-rooter'
+
+# lint & lsp & sources-------------------
+
+[[plugins]]
+repo = 'w0rp/ale'
+hook_source = '''
+let g:ale_fixers = {}
+let g:ale_fixers['javascript'] = ['prettier']
+let g:ale_fixers['html'] = ['tidy']
+let g:ale_fixers['css'] = ['prettier']
+let g:ale_fixers['scss'] = ['prettier']
+" let g:ale_fixers['php'] = ['tidy', 'prettier']
+let g:ale_fixers['php'] = ['prettier']
+let g:ale_linters = {}
+" let g:ale_linters['php'] = ['phan']
+" ファイル保存時に実行
+let g:ale_fix_on_save = 1
+let g:ale_lint_on_text_changed = 0
+" ローカルの設定ファイルを考慮する
+let g:ale_javascript_prettier_use_local_config = 1
+" 設定を見直す必要あり
+let g:ale_php_phan_executable = 'vendor/bin/phan'
+let g:ale_html_tidy_options = '-config .tidyrc'
+'''
+
+[[plugins]]
+repo = 'autozimu/LanguageClient-neovim'
+rev = 'next'
+build = 'bash install.sh'
+
+# php------------------------------------
+
+[[plugins]]
+repo = 'StanAngeloff/php.vim'
+on_ft = ['html', 'php', 'phtml']
+
+[[plugins]]
+repo = 'captbaritone/better-indent-support-for-php-with-html'
+on_ft = ['html', 'php', 'phtml']
+
+[[plugins]]
+repo = 'padawan-php/deoplete-padawan'
+build = 'composer install'
+on_ft = ['html', 'php', 'phtml']
+
+[[plugins]]
+repo = 'HerringtonDarkholme/yats.vim'
+on_ft = ['html', 'php', 'phtml', 'js']
+
+[[plugins]]
+repo = 'mhartington/nvim-typescript'
+build = './install.sh'
+on_ft = ['html', 'php', 'phtml', 'js']

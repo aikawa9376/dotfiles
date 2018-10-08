@@ -6,14 +6,18 @@ source ~/.zplug/init.zsh
 zplug "zsh-users/zsh-completions"
 # zsh-syntax-highlighting
 zplug "zsh-users/zsh-syntax-highlighting"
+# autosuggestions
+zplug "zsh-users/zsh-autosuggestions"
 # anyframe
 zplug "mollifier/anyframe"
 # k
 zplug "supercrabtree/k"
-# autosuggestions
-zplug "zsh-users/zsh-autosuggestions"
 # enhancd
 zplug "b4b4r07/enhancd", use:init.sh
+# ゴミ箱機能
+zplug "b4b4r07/zsh-gomi", if:"which fzf"
+# finder
+zplug "b4b4r07/cli-finder"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # 256 coloer ???
@@ -22,18 +26,14 @@ zplug "chrissicool/zsh-256color"
 zplug "hlissner/zsh-autopair", defer:2
 # zplug selfupdate
 zplug 'zplug/zplug', hook-build:'zplug --self-manage'
-# ゴミ箱機能
-zplug "b4b4r07/zsh-gomi", if:"which fzf"
-# finder
-zplug "b4b4r07/cli-finder"
 
-if ! zplug check --verbose; then     
-  printf "Install? [y/N]: "     
-  if read -q; then         
-    echo; zplug install     
-  fi 
-fi  
-# プラグインを読み込み、コマンドにパスを通す 
+if ! zplug check --verbose; then
+  printf "Install? [y/N]: "
+  if read -q; then
+    echo; zplug install
+  fi
+fi
+# プラグインを読み込み、コマンドにパスを通す
 zplug load --verbose
 
 # -------------------------------------
@@ -49,7 +49,7 @@ case $(uname -a) in
 esac
 
 # -------------------------------------
-# prompt 
+# prompt
 # -------------------------------------
 autoload -Uz vcs_info
 setopt prompt_subst
@@ -87,14 +87,14 @@ TRAPALRM() {
 }
 
 # -------------------------------------
-# fzf 
+# fzf
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
 export FZF_DEFAULT_OPTS='
---height 40% 
---reverse 
---color dark,hl:34,hl+:40,bg+:235,fg+:15 
+--height 40%
+--reverse
+--color dark,hl:34,hl+:40,bg+:235,fg+:15
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
 '
 
@@ -125,11 +125,13 @@ setopt globdots              # 明確なドットの指定なしで.から始ま
 
 setopt list_packed           # リストを詰めて表示
 
-# fzf ** not working 
+# fzf ** not working
 # bindkey "^I" menu-complete   # 展開する前に補完候補を出させる(Ctrl-iで補完するようにする)
 
 # 補完候補を emacs kybind で選択出来るようにする
 zstyle ':completion:*:default' menu select=1
+# bindkey '^n' expand-or-complete
+# bindkey '^p' reverse-menu-complete
 
 # 補完関数の表示を過剰にする編
 zstyle ':completion:*' verbose yes
@@ -161,13 +163,13 @@ setopt correct
 setopt auto_cd
 setopt auto_pushd
 
-function agvim () {   
-  nvim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') 
-} 
+function agvim () {
+  nvim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}')
+}
 
-function fvim () {   
-  nvim $(fzf $@) 
-} 
+function fvim () {
+  nvim $(fzf $@)
+}
 
 # -------------------------------------
 # コマンド履歴
