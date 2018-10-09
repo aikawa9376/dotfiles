@@ -14,6 +14,11 @@ repo = 'airblade/vim-rooter'
 [[plugins]]
 repo = 'Yggdroot/indentLine'
 
+[[plugins]]
+repo = 'autozimu/LanguageClient-neovim'
+rev = 'next'
+build = 'bash install.sh'
+
 # design---------------------------------
 
 [[plugins]]

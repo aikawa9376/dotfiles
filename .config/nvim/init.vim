@@ -15,13 +15,12 @@ let s:dein_repo_dir = s:dein_dir . '/repos/github.com/Shougo/dein.vim'
 if !isdirectory(s:dein_repo_dir)
   call system('git clone https://github.com/Shougo/dein.vim ' . shellescape(s:dein_repo_dir))
 endif
-" set runtimepath+=$HOME/.cache/nvim/dein/repos/github.com/Shougo/dein.vim
 let &runtimepath = s:dein_repo_dir .",". &runtimepath
 " プラグイン読み込み＆キャッシュ作成
-" let s:toml_file = fnamemodify(expand('<sfile>'), ':h').'/dein.toml'
-" let s:toml_lazy_file = fnamemodify(expand('<sfile>'), ':h').'/dein_lazy.toml'
-let s:toml_file = '~/.config/nvim/dein.toml'
-let s:toml_lazy_file = '~/.config/nvim/dein_lazy.toml'
+" let s:toml_file = '~/.config/nvim/dein.toml'
+" let s:toml_lazy_file = '~/.config/nvim/dein_lazy.toml'
+let s:toml_file = fnamemodify(expand('<sfile>'), ':h').'/dein.toml'
+let s:toml_lazy_file = fnamemodify(expand('<sfile>'), ':h').'/dein_lazy.toml'
 if dein#load_state(s:dein_dir)
   call dein#begin(s:dein_dir)
   call dein#load_toml(s:toml_file, {'lazy': 0})
@@ -81,8 +80,6 @@ if has('unix')
     let &t_te.="\e[0 q"
   endif
 endif
-
-" 行の最初の文字の前にコメント文字をトグル
 
 " ファイル処理関連の設定
 set confirm    " 保存されていないファイルがあるときは終了前に保存確認
@@ -167,9 +164,6 @@ nnoremap k gk
 "行末の1文字先までカーソルを移動できるように
 set virtualedit=onemore
 
-" vを二回で行末まで選択 *multiple_cursorsと競合
-" vnoremap v $h
-
 "動作環境との統合
 "OSのクリップボードをレジスタ指定無しで Yank, Put 出来るようにする
 set clipboard=unnamed,unnamedplus
@@ -216,8 +210,6 @@ nnoremap <C-i> <C-i>zz10<C-e>
 nnoremap g; g;zz10<C-e>
 nnoremap g, g,zz10<C-e>
 
-" emmet
-
 " ファイル操作系
 nmap <Space> <Nop>
 nmap <Space>w :<c-u>w<CR>
@@ -244,7 +236,6 @@ function! IsEndSemicolon()
 endfunction
 nnoremap <expr><Space><CR> IsEndSemicolon() ? "i<C-O>$;<CR><ESC>" : "i<C-O>$<CR><ESC>"
 " inoremap <expr><Space><CR> IsEndSemicolon() ? "<C-O>$;<CR>" : "<C-O>$<CR>"
-
 
 "ctags
 set tags=./tags,tags;$HOME

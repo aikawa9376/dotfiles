@@ -14,8 +14,8 @@ let g:deoplete#enable_refresh_always = 0
 let g:deoplete#enable_smart_case = 1
 let g:deoplete#file#enable_buffer_path = 1
 let g:deoplete#max_list = 100
-let g:deoplete#sources#padawan#server_autostart = 0
-let g:deoplete#sources#padawan#add_parentheses = 1
+" let g:deoplete#sources#padawan#server_autostart = 0
+" let g:deoplete#sources#padawan#add_parentheses = 1
 
 " call deoplete#custom#source('neosnippet', 'rank', 1000)
 call deoplete#custom#source('tag', 'min_pattern_length', 4)
@@ -216,6 +216,7 @@ repo = 'junegunn/fzf'
 depends = ['fzf.vim']
 build = './install'
 merged = 0
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'junegunn/fzf.vim'
@@ -317,11 +318,6 @@ let g:ale_javascript_prettier_use_local_config = 1
 let g:ale_php_phan_executable = 'vendor/bin/phan'
 let g:ale_html_tidy_options = '-config .tidyrc'
 '''
-
-[[plugins]]
-repo = 'autozimu/LanguageClient-neovim'
-rev = 'next'
-build = 'bash install.sh'
 
 # php------------------------------------
 
