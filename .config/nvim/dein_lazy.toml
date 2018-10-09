@@ -25,12 +25,12 @@ call deoplete#custom#source('padawan', 'rank', 10)
 "     \ '_': ['neosnippet', 'buffer', 'tag', 'padawan'],
 "     \})
 '''
-on_i = 1
+on_event = 'InsertEnter'
 
 [[plugins]]
 repo = 'Shougo/neosnippet'
 depends = ['neosnippet-snippets', 'context_filetype.vim']
-on_i = 1
+on_event = 'InsertEnter'
 on_ft = ['snippet']
 hook_source = '''
 " Snippet key-mappings.
@@ -93,7 +93,7 @@ rev = '3787e5'
 
 [[plugins]]
 repo = 'mattn/emmet-vim'
-on_i = 1
+on_event = 'InsertEnter'
 on_ft = ['html', 'php', 'phtml', 'js']
 hook_add = '''
 let g:user_emmet_install_global = 0
@@ -103,7 +103,7 @@ imap <silent> <Tab> <C-y>,
 
 [[plugins]]
 repo = 'alvan/vim-closetag'
-on_i = 1
+on_event = 'InsertEnter'
 
 [[plugins]]
 repo = 'cespare/vim-toml'
@@ -176,6 +176,7 @@ nmap m <Plug>(easymotion-s2)
 [[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php']
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'kana/vim-textobj-entire'
@@ -335,4 +336,4 @@ on_ft = ['html', 'php', 'phtml', 'js']
 [[plugins]]
 repo = 'mhartington/nvim-typescript'
 build = './install.sh'
-on_ft = ['html', 'php', 'phtml', 'js']
+on_ft = ['ts']
