@@ -107,28 +107,15 @@ on_event = 'InsertEnter'
 
 [[plugins]]
 repo = 'cespare/vim-toml'
+depends = ['vim-SyntaxRange']
 on_ft = ['toml']
 
 [[plugins]]
+repo = 'inkarkat/vim-SyntaxRange'
+
+[[plugins]]
 repo = 'cohama/lexima.vim'
-
-[[plugins]]
-repo = 'tpope/vim-surround'
-
-[[plugins]]
-repo = 'tpope/vim-repeat'
-
-[[plugins]]
-repo = 'tpope/vim-abolish'
-
-[[plugins]]
-repo = 'machakann/vim-highlightedyank'
-
-[[plugins]]
-repo = 'thirtythreeforty/lessspace.vim'
-
-[[plugins]]
-repo = 'yuratomo/w3m.vim'
+on_event = 'InsertEnter'
 
 [[plugins]]
 repo = 'tyru/caw.vim'
@@ -140,10 +127,12 @@ vmap <C-_> <Plug>(caw:hatpos:toggle)
 
 [[plugins]]
 repo = 'thinca/vim-visualstar'
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'terryma/vim-multiple-cursors'
-hook_source = '''
+on_event = 'VimEnter'
+hook_add = '''
 function! Multiple_cursors_before()
   let b:deoplete_disable_auto_complete = 1
 endfunction
@@ -155,7 +144,8 @@ endfunction
 
 [[plugins]]
 repo = 'terryma/vim-expand-region'
-hook_source = '''
+on_map = '<Plug>(expand_region_expand)'
+hook_add = '''
 nmap - <Plug>(expand_region_expand)
 vmap - <Plug>(expand_region_expand)
 nmap _ <Plug>(expand_region_shrink)
@@ -163,11 +153,9 @@ vmap _ <Plug>(expand_region_shrink)
 '''
 
 [[plugins]]
-repo = 'Yggdroot/indentLine'
-
-[[plugins]]
 repo = 'Lokaltog/vim-easymotion'
-hook_source = '''
+on_map = '<Plug>(easymotion-s2)'
+hook_add = '''
 let g:EasyMotion_do_mapping = 0
 let g:EasyMotion_smartcase = 1
 nmap m <Plug>(easymotion-s2)
@@ -186,7 +174,26 @@ repo = 'kana/vim-textobj-indent'
 
 [[plugins]]
 repo = 'akiyan/vim-textobj-php'
-on_ft = ['php', 'html', 'pthml']
+
+[[plugins]]
+repo = 'tpope/vim-surround'
+on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'tpope/vim-repeat'
+on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'tpope/vim-abolish'
+on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'machakann/vim-highlightedyank'
+on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'thirtythreeforty/lessspace.vim'
+on_event = 'VimEnter'
 
 # liet-----------------------------------
 
@@ -261,15 +268,18 @@ let g:tagbar_previewwin_pos = 'rightbelow'
 
 [[plugins]]
 repo = 'junegunn/vim-peekaboo'
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'yegappan/mru'
+on_event = 'VimEnter'
 
 # git------------------------------------
 
 [[plugins]]
 repo = 'tpope/vim-fugitive'
-hook_source = '''
+on_cmd = ['Gstatus', 'Gdiff', 'Gremove', 'Gblame']
+hook_add = '''
 nmap <silent> <Space>s :Gstatus<CR>
 nmap <silent> <Space>d :Gdiff<CR>
 " nmap <silent> <Space>w :Gwrite<CR>
@@ -281,15 +291,14 @@ nmap <Space>g :call fugitive#detect(@%)<CR>
 
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
-
-[[plugins]]
-repo = 'airblade/vim-rooter'
+on_event = 'VimEnter'
 
 # lint & lsp & sources-------------------
 
 [[plugins]]
 repo = 'w0rp/ale'
-hook_source = '''
+on_event = 'VimEnter'
+hook_add = '''
 let g:ale_fixers = {}
 let g:ale_fixers['javascript'] = ['prettier']
 let g:ale_fixers['html'] = ['tidy']
