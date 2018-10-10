@@ -35,8 +35,8 @@ endif
 " }}}
 
 " Required:
-filetype off
-filetype plugin indent off
+filetype on
+filetype plugin indent on
 
 set number
 set backspace=indent,eol,start
@@ -59,8 +59,6 @@ command! -nargs=*
       \|  catch
         \|      echom <q-args>
         \|  endtry
-
-map <C-s> <Nop>
 
 " Insertモードのときカーソルの形状を変更
 if has('mac')
@@ -128,6 +126,8 @@ nnoremap s "_s
 vnoremap s "_s
 " Space pでレジスタ0を指定
 nnoremap <Space>p "0p
+" visual modeでヤンクしたときに末尾に
+vnoremap y ygv<ESC>$
 
 "選択範囲のインデントを連続して変更
 vnoremap < <gv
@@ -214,7 +214,7 @@ nnoremap g, g,zz10<C-e>
 nmap <Space> <Nop>
 nmap <Space>w :<c-u>w<CR>
 nmap <Space>x :<c-u>bd<CR>
-nmap <Space>W :<c-u>wq<CR>
+nmap <Space>q :<c-u>wq<CR>
 nmap <silent> <M-h> :bprevious<CR>
 nmap <silent> <M-l> :bnext<CR>
 nmap <silent> <M-j> :b#<CR>
@@ -265,11 +265,6 @@ augroup END
 nnoremap <silent> <Space>. :<c-u>e ~/.config/nvim/init.vim<CR>
 nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
 
-" filetype on
-filetype on
-filetype plugin indent on
-
-
 " 固有のvimrcを用意　.vimrc.local
 augroup vimrc-local
   autocmd!
@@ -289,6 +284,7 @@ augroup END
 
 autocmd MyVimrc BufNewFile,BufRead dein*.toml call s:syntax_range_dein()
 
+" ここをTOMLに入れたい
 function! s:syntax_range_dein() abort
   let start = '^\s*hook_\%('.
   \           'add\|source\|post_source\|post_update'.
@@ -296,4 +292,32 @@ function! s:syntax_range_dein() abort
 
   call SyntaxRange#Include(printf(start, "'''"), "'''", 'vim', '')
   call SyntaxRange#Include(printf(start, '"""'), '"""', 'vim', '')
+endfunction
+
+function! SetLeximaAddRule() abort
+  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': "'", 'input': "'"})
+  call lexima#add_rule({'at': "\\%#\\n\\s*'", 'char': "'", 'input': "'", 'delete': "'"})
+  call lexima#add_rule({'char': '<C-h>', 'at': "'\\%#'", 'delete': 1})
+
+  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '{', 'input': '{'})
+  call lexima#add_rule({'at': '\%#\n\s*}', 'char': '}', 'input': '}', 'delete': '}'})
+  call lexima#add_rule({'char': '<C-h>', 'at': '{\%#}', 'delete': 1})
+
+  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '[', 'input': '['})
+  call lexima#add_rule({'at': '\%#\n\s*\]', 'char': ']', 'input': ']', 'delete': ']'})
+  call lexima#add_rule({'char': '<C-h>', 'at': '\[\%#\]', 'delete': 1})
+
+  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '(', 'input': '('})
+  call lexima#add_rule({'at': '\%#\n\s*)', 'char': ')', 'input': ')', 'delete': ')'})
+  call lexima#add_rule({'char': '<C-h>', 'at': '(\%#)', 'delete': 1})
+
+  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '"', 'input': '"'})
+  call lexima#add_rule({'at': '\%#\n\s*"', 'char': '"', 'input': '"', 'delete': '"'})
+  call lexima#add_rule({'char': '<C-h>', 'at': '"\%#"', 'delete': 1})
+
+  call lexima#add_rule({'char': '<TAB>', 'at': '\%#)', 'leave': 1})
+  call lexima#add_rule({'char': '<TAB>', 'at': '\%#"', 'leave': 1})
+  call lexima#add_rule({'char': '<TAB>', 'at': '\%#''', '''leave': 1})
+  call lexima#add_rule({'char': '<TAB>', 'at': '\%#]', 'leave': 1})
+  call lexima#add_rule({'char': '<TAB>', 'at': '\%#}', 'leave': 1})
 endfunction
