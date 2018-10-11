@@ -47,6 +47,7 @@ set fileencodings=utf-8,sjis
 set redrawtime=10000
 set ttimeoutlen=10
 set completeopt=menuone
+set noshowmode
 " set cursorcolumn
 syntax enable
 set t_Co=256
@@ -262,7 +263,7 @@ augroup ctags
 augroup END
 
 "vimrcをスペースドットで開く
-nnoremap <silent> <Space>. :<c-u>e ~/.config/nvim/init.vim<CR>
+" nnoremap <silent> <Space>. :<c-u>e ~/.config/nvim/init.vim<CR>
 nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
 
 " 固有のvimrcを用意　.vimrc.local
@@ -278,14 +279,9 @@ function! s:vimrc_local(loc)
   endfor
 endfunction
 
-augroup MyVimrc
-    autocmd!
-augroup END
-
-autocmd MyVimrc BufNewFile,BufRead dein*.toml call s:syntax_range_dein()
 
 " ここをTOMLに入れたい
-function! s:syntax_range_dein() abort
+function! Syntax_range_dein() abort
   let start = '^\s*hook_\%('.
   \           'add\|source\|post_source\|post_update'.
   \           '\)\s*=\s*%s'
@@ -317,7 +313,7 @@ function! SetLeximaAddRule() abort
 
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#)', 'leave': 1})
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#"', 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#''', '''leave': 1})
+  call lexima#add_rule({'char': '<TAB>', 'at': "\\%#'", "leave": 1})
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#]', 'leave': 1})
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#}', 'leave': 1})
 endfunction

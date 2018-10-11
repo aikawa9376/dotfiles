@@ -2,6 +2,7 @@
 
 [[plugins]]
 repo = 'Shougo/deoplete.nvim'
+depends = ['neosnippet', 'context_filetype.vim', 'neco-syntax', 'echodoc.vim', 'neoinclude.vim', 'FastFold']
 do =  'UpdateRemotePlugins'
 hook_source = '''
 " deoplete setup
@@ -29,7 +30,7 @@ on_event = 'InsertEnter'
 
 [[plugins]]
 repo = 'Shougo/neosnippet'
-depends = ['neosnippet-snippets', 'context_filetype.vim']
+depends = ['neosnippet-snippets']
 on_event = 'InsertEnter'
 on_ft = ['snippet']
 hook_source = '''
@@ -86,6 +87,21 @@ call extend(b:context_filetype_filetypes,
 '''
 
 [[plugins]]
+repo = 'Shougo/neco-syntax'
+
+[[plugins]]
+repo = 'Shougo/echodoc.vim'
+hook_add = '''
+let g:echodoc#enable_at_startup = 1
+'''
+
+[[plugins]]
+repo = 'Shougo/neoinclude.vim'
+
+[[plugins]]
+repo = 'konfekt/FastFold'
+
+[[plugins]]
 repo = 'Shougo/vimshell'
 rev = '3787e5'
 
@@ -107,11 +123,17 @@ on_event = 'InsertEnter'
 
 [[plugins]]
 repo = 'cespare/vim-toml'
-depends = ['vim-SyntaxRange']
 on_ft = ['toml']
 
 [[plugins]]
 repo = 'inkarkat/vim-SyntaxRange'
+on_event = 'VimEnter'
+hook_post_source = '''
+augroup MyVimrc
+    autocmd!
+    autocmd MyVimrc BufNewFile,BufRead,InsertLeave dein*.toml call Syntax_range_dein()
+augroup END
+'''
 
 [[plugins]]
 repo = 'cohama/lexima.vim'
@@ -164,7 +186,7 @@ nmap m <Plug>(easymotion-s2)
 
 [[plugins]]
 repo = 'kana/vim-textobj-user'
-depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php']
+depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php', 'vim-textobj-syntax', 'vim-textobj-comment', 'vim-textobj-function']
 on_event = 'VimEnter'
 
 [[plugins]]
@@ -174,12 +196,25 @@ repo = 'kana/vim-textobj-entire'
 repo = 'kana/vim-textobj-indent'
 
 [[plugins]]
+repo = 'kana/vim-textobj-function'
+depends = ['vim-textobj-function-syntax']
+
+[[plugins]]
+repo = 'kana/vim-textobj-syntax'
+
+[[plugins]]
+repo = 'glts/vim-textobj-comment'
+
+[[plugins]]
 repo = 'akiyan/vim-textobj-php'
+
+[[plugins]]
+repo = 'haya14busa/vim-textobj-function-syntax'
 
 [[plugins]]
 repo = 'kana/vim-operator-user'
 depends = ['vim-operator-replace']
-on_map = 'nmap <C-s> <plug>(operator-replace)'
+on_map = '<plug>(operator-replace)'
 on_event = 'VimEnter'
 
 [[plugins]]
@@ -241,31 +276,42 @@ function! s:with_git_root()
   let root = systemlist('git rev-parse --show-toplevel')[0]
   return v:shell_error ? {} : {'dir': root}
 endfunction
-nnoremap <silent> <Space>F :Files<CR>
-nnoremap <silent> <Space>f :ProjectFiles<CR>
+nnoremap <silent> <Space>f :Files<CR>
 nnoremap <silent> <Space>b :Buffers<CR>
 nnoremap <silent> <Space>a :Ag<CR>
-nnoremap <silent> <Space>A :Rag<CR>
 nnoremap <silent> <Space>l :Lines<CR>
-nnoremap <silent> <Space>e :History<CR>
+nnoremap <silent> <Space>e :MRUFilesCWD<CR>
+nnoremap <silent> <Space>. :DotFiles<CR>
 " <C-]>でタグ検索
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
-command! ProjectFiles execute 'Files' s:find_git_root()
 command! -bang -nargs=? -complete=dir Files
       \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
       \ {'options': "--preview 'pygmentize -g {}'"}))
-" command! -bang -nargs=* Ag
-"     \ call fzf#vim#ag(<q-args>,
-"     \  <bang>0 ? fzf#vim#with_preview('up:60%')
-"     \    : fzf#vim#with_preview('right:50%:hidden', '?'),
-"     \  <bang>0)
-" command! -nargs=* Rag
-"      \ call fzf#vim#ag(<q-args>, extend(s:with_git_root(),{'down':'~40%'}))
 command! -bang -nargs=* Ag
       \call fzf#vim#ag(<q-args>, fzf#wrap('rg',
       \ {'options': "--preview 'pygmentize -g $(cut -d: -f1 <<< {}) | sed -n $(cut -d: -f2 <<< {}),\\$p | head -".&lines."'"}))
+command! -bang Lines
+      \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
+
+command! DotFiles execute 'Files ~/dotfiles'
+
+" MRU handling, limited to current directory
+command! MRUFilesCWD call fzf#run({
+\  'source': s:mru_files_for_cwd(),
+\  'sink': 'edit',
+\  'options': '-m -x +s --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
+\  'down': '40%'})
+
+" This relies on the yegappan/mru plugin for live MRU updating. Also relies on
+" the fact that you don't change the location of the file it uses as its cache.
+function! s:mru_files_for_cwd()
+  return map(filter(
+  \  systemlist("sed -n '2,$p' ~/.vim_mru_files"),
+  \  "v:val =~ '^" . getcwd() . "' && v:val !~ '__Tagbar__\\|\\[YankRing]\\|fugitive:\\|NERD_tree\\|^/tmp/\\|.git/'"
+  \ ), 'fnamemodify(v:val, ":p:.")')
+endfunction
 '''
 
 [[plugins]]

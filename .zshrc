@@ -313,14 +313,14 @@ HELP
 case ${OSTYPE} in
   darwin*)
     alias ctags="`brew --prefix`/bin/ctags"
-    alias l='ls -GAF'
-    alias ls='ls -G'
-    alias lsa='ls -GAFltr'
+    alias l='ls -GAFh'
+    alias ls='ls -Gh'
+    alias lsa='ls -GAFltrh'
     ;;
   linux*)
-    alias l='ls -GAF --color=auto'
-    alias ls='ls -G --color=auto'
-    alias lsa='ls -GAFltr --color=auto'
+    alias l='ls -GAFh --color=auto'
+    alias ls='ls -Gh --color=auto'
+    alias lsa='ls -GAFltrh --color=auto'
     alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
 esac
 
