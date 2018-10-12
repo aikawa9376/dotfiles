@@ -186,7 +186,7 @@ nmap m <Plug>(easymotion-s2)
 
 [[plugins]]
 repo = 'kana/vim-textobj-user'
-depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php', 'vim-textobj-syntax', 'vim-textobj-comment', 'vim-textobj-function']
+depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php', 'vim-textobj-syntax', 'vim-textobj-comment', 'vim-textobj-between', 'vim-textobj-from_regexp']
 on_event = 'VimEnter'
 
 [[plugins]]
@@ -196,8 +196,7 @@ repo = 'kana/vim-textobj-entire'
 repo = 'kana/vim-textobj-indent'
 
 [[plugins]]
-repo = 'kana/vim-textobj-function'
-depends = ['vim-textobj-function-syntax']
+repo = 'thinca/vim-textobj-between'
 
 [[plugins]]
 repo = 'kana/vim-textobj-syntax'
@@ -209,7 +208,7 @@ repo = 'glts/vim-textobj-comment'
 repo = 'akiyan/vim-textobj-php'
 
 [[plugins]]
-repo = 'haya14busa/vim-textobj-function-syntax'
+repo = 'osyo-manga/vim-textobj-from_regexp'
 
 [[plugins]]
 repo = 'kana/vim-operator-user'

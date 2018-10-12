@@ -69,3 +69,12 @@ autocmd ColorScheme * highlight LineNr ctermbg=none
 colorscheme PaperColor
 '''
 
+# labos
+[[plugins]]
+repo = 'flazz/vim-colorschemes'
+
+[[plugins]]
+repo = 'matze/vim-move'
+
+[[plugins]]
+repo = 'MattesGroeger/vim-bookmarks'
