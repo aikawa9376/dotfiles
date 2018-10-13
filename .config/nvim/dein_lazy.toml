@@ -186,11 +186,14 @@ nmap m <Plug>(easymotion-s2)
 
 [[plugins]]
 repo = 'kana/vim-textobj-user'
-depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php', 'vim-textobj-syntax', 'vim-textobj-comment', 'vim-textobj-between', 'vim-textobj-from_regexp']
+depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php', 'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment', 'vim-textobj-between', 'vim-textobj-from_regexp']
 on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'kana/vim-textobj-entire'
+
+[[plugins]]
+repo = 'kana/vim-textobj-line'
 
 [[plugins]]
 repo = 'kana/vim-textobj-indent'
@@ -242,6 +245,10 @@ on_event = 'VimEnter'
 repo = 'thirtythreeforty/lessspace.vim'
 on_event = 'VimEnter'
 
+[[plugins]]
+repo = 'matze/vim-move'
+on_event = 'VimEnter'
+
 # liet-----------------------------------
 
 [[plugins]]
@@ -249,7 +256,7 @@ repo = 'scrooloose/nerdtree'
 depends = ['nerdtree-git-plugin']
 on_cmd = ['NERDTreeToggle']
 hook_add = '''
-nnoremap <silent> <Space>n :NERDTreeToggle<CR>
+" nnoremap <silent> <Space>n :NERDTreeToggle<CR>
 let g:NERDTreeShowHidden = 1
 let g:NERDTreeShowBookmarks = 1
 let g:NERDTreeMinimalUI = 1

@@ -17,8 +17,6 @@ if !isdirectory(s:dein_repo_dir)
 endif
 let &runtimepath = s:dein_repo_dir .",". &runtimepath
 " プラグイン読み込み＆キャッシュ作成
-" let s:toml_file = '~/.config/nvim/dein.toml'
-" let s:toml_lazy_file = '~/.config/nvim/dein_lazy.toml'
 let s:toml_file = fnamemodify(expand('<sfile>'), ':h').'/dein.toml'
 let s:toml_lazy_file = fnamemodify(expand('<sfile>'), ':h').'/dein_lazy.toml'
 if dein#load_state(s:dein_dir)
@@ -37,6 +35,8 @@ endif
 " Required:
 filetype on
 filetype plugin indent on
+syntax enable
+set t_Co=256
 
 set number
 set backspace=indent,eol,start
@@ -49,8 +49,6 @@ set ttimeoutlen=10
 set completeopt=menuone
 set noshowmode
 " set cursorcolumn
-syntax enable
-set t_Co=256
 
 " functions
 command! -nargs=*
@@ -62,7 +60,7 @@ command! -nargs=*
         \|  endtry
 
 " Insertモードのときカーソルの形状を変更
-if has('mac')
+if has('darwin')
   let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
   let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
 endif
@@ -87,20 +85,20 @@ set autoread   " 外部でファイルに変更がされた場合は読みなお
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
 
-"検索をファイルの先頭へ循環しない
+" 検索をファイルの先頭へ循環しない
 set nowrapscan
 
-"大文字小文字の区別なし
+" 大文字小文字の区別なし
 set ignorecase
 set smartcase
 
-""検索語句をハイライト ESC二回でオフ
+" "検索語句をハイライト ESC二回でオフ
 set incsearch
 set inccommand=split
 set hlsearch
 nmap <silent> <Esc><Esc> :nohlsearch<CR>
 
-"検索後にジャンプした際に検索単語を画面中央に持ってくる
+" 検索後にジャンプした際に検索単語を画面中央に持ってくる
 nnoremap zz zz10<C-e>
 nnoremap n nzz10<C-e>
 nnoremap N Nzz10<C-e>
@@ -109,39 +107,42 @@ nnoremap # #zz10<C-e>
 nnoremap g* g*zz10<C-e>
 nnoremap g# g#zz10<C-e>
 
-"スクロール時に表示を10行確保
+" スクロール時に表示を10行確保
 set scrolloff=10
 
-"半画面スクロールで位置を真ん中に
-nnoremap <C-u> <C-u>zz10<C-e>
+" 半画面スクロールで位置を真ん中に
+nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz10<C-e>
 nnoremap } }zz10<C-e>
 nnoremap { {zz10<C-e>
 nnoremap ) )zz10<C-e>
 nnoremap ( (zz10<C-e>
 
-"x キー削除でデフォルトレジスタに入れない
+" x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
 vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
+" ペーストの挙動を入れ替え
+" nnoremap p gp
+" nnoremap gp p
 " Space pでレジスタ0を指定
 nnoremap <Space>p "0p
 " visual modeでヤンクしたときに末尾に
 vnoremap y ygv<ESC>$
 
-"選択範囲のインデントを連続して変更
+" 選択範囲のインデントを連続して変更
 vnoremap < <gv
 vnoremap > >gv
 set smartindent
-nnoremap <Space>i gg=G
+nnoremap <Space>i mzgg=G`z
 
-"ノーマルモード中にEnterで改行
+" ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
 nnoremap <M-d> mzo<ESC>`zj
 nnoremap <M-u> mzO<ESC>`zk
 
-"インサートモードで bash 風キーマップ
+" インサートモードで bash 風キーマップ
 inoremap <C-a> <C-o>^
 inoremap <C-e> <C-o>$<Right>
 inoremap <C-b> <Left>
@@ -158,36 +159,48 @@ inoremap <C-w> <C-o>db
 nnoremap <C-h> ^
 nnoremap <C-l> $
 
-"j, k による移動を折り返されたテキストでも自然に振る舞うように変更
+" j, k による移動を折り返されたテキストでも自然に振る舞うように変更
 nnoremap j gj
 nnoremap k gk
 
-"行末の1文字先までカーソルを移動できるように
+" コマンドモードでemacs
+cnoremap <C-b> <Left>
+cnoremap <C-f> <Right>
+cnoremap <C-n> <Down>
+cnoremap <C-p> <Up>
+cnoremap <C-a> <Home>
+cnoremap <C-e> <End>
+cnoremap <C-d> <Del>
+
+" terminal mode
+set splitbelow
+command! -nargs=* TERM split | resize20 | term <args>
+nmap <silent><F12> :<c-u>TERM<CR>
+tnoremap <silent><C-[> <C-\><C-n>
+
+" 行末の1文字先までカーソルを移動できるように
 set virtualedit=onemore
 
-"動作環境との統合
-"OSのクリップボードをレジスタ指定無しで Yank, Put 出来るようにする
+" 動作環境との統合
+" OSのクリップボードをレジスタ指定無しで Yank, Put 出来るようにする
 set clipboard=unnamed,unnamedplus
 
-"win系でもALT-v矩形選択を可能に
-nmap <Space>v <C-v>
-
-"マウスの入力を受け付ける
+" マウスの入力を受け付ける
 set mouse=a
 
-"tab/indentの設定
+" tab/indentの設定
 set shellslash
 set expandtab "タブ入力を複数の空白入力に置き換える
 set tabstop=2 "画面上でタブ文字が占める幅
 set shiftwidth=2 "自動インデントでずれる幅
 set softtabstop=2
-"連続した空白に対してタブキーやバックスペースキーでカーソルが動く幅
+" 連続した空白に対してタブキーやバックスペースキーでカーソルが動く幅
 set autoindent "改行時に前の行のインデントを継続する
 set smartindent "改行時に入力された行の末尾に合わせて次の行のインデントを増減する
 set wildmenu wildmode=list:full "コマンドモード補完
 
-"タブの設定
-"TABにて対応ペアにジャンプ
+" タブの設定
+" TABにて対応ペアにジャンプ
 runtime macros/matchit.vim
 let b:match_words = "if:endif,foreach:endforeach,\<begin\>:\<end\>"
 nnoremap <Tab> %
@@ -216,9 +229,8 @@ nmap <Space> <Nop>
 nmap <Space>w :<c-u>w<CR>
 nmap <Space>x :<c-u>bd<CR>
 nmap <Space>q :<c-u>wq<CR>
-nmap <silent> <M-h> :bprevious<CR>
-nmap <silent> <M-l> :bnext<CR>
-nmap <silent> <M-j> :b#<CR>
+nmap <silent> <M-b> :bprevious<CR>
+nmap <silent> <M-f> :bnext<CR>
 
 " 前回のカーソル位置からスタート
 augroup vimrcEx
@@ -238,7 +250,7 @@ endfunction
 nnoremap <expr><Space><CR> IsEndSemicolon() ? "i<C-O>$;<CR><ESC>" : "i<C-O>$<CR><ESC>"
 " inoremap <expr><Space><CR> IsEndSemicolon() ? "<C-O>$;<CR>" : "<C-O>$<CR>"
 
-"ctags
+" ctags
 set tags=./tags,tags;$HOME
 function! s:execute_ctags() abort
   " 探すタグファイル名
@@ -262,7 +274,7 @@ augroup ctags
   autocmd BufWritePost * call s:execute_ctags()
 augroup END
 
-"vimrcをスペースドットで開く
+" vimrcをスペースドットで開く
 " nnoremap <silent> <Space>. :<c-u>e ~/.config/nvim/init.vim<CR>
 nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
 
@@ -278,7 +290,6 @@ function! s:vimrc_local(loc)
     source `=i`
   endfor
 endfunction
-
 
 " ここをTOMLに入れたい
 function! Syntax_range_dein() abort
