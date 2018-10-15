@@ -322,6 +322,7 @@ case ${OSTYPE} in
     alias ls='ls -Gh --color=auto'
     alias lsa='ls -GAFltrh --color=auto'
     alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
+    alias fixd-p='/mnt/d/仕事/相川　設定など/app/pause.exe &'
 esac
 
 if ((${+commands[nodejs]})); then

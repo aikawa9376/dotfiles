@@ -127,7 +127,7 @@ vnoremap s "_s
 " nnoremap p gp
 " nnoremap gp p
 " Space pでレジスタ0を指定
-nnoremap <Space>p "0p
+" nnoremap <Space>p "0p
 " visual modeでヤンクしたときに末尾に
 vnoremap y ygv<ESC>$
 

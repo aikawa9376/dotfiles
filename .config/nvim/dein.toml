@@ -19,6 +19,9 @@ repo = 'autozimu/LanguageClient-neovim'
 rev = 'next'
 build = 'bash install.sh'
 
+[[plugins]]
+repo = 'sheerun/vim-polyglot'
+
 # design---------------------------------
 
 [[plugins]]
@@ -74,8 +77,10 @@ colorscheme PaperColor
 repo = 'flazz/vim-colorschemes'
 
 [[plugins]]
-repo = 'MattesGroeger/vim-bookmarks'
+repo = 'mg979/vim-bookmarks'
+rev = 'fzf'
 hook_add = '''
+let g:bookmark_prefer_fzf = 1
 nmap <Space>mm <Plug>BookmarkToggle
 nmap <Space>mi <Plug>BookmarkAnnotate
 nmap <Space>ma <Plug>BookmarkShowAll
