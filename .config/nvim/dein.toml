@@ -13,6 +13,9 @@ repo = 'airblade/vim-rooter'
 
 [[plugins]]
 repo = 'Yggdroot/indentLine'
+hook_add = '''
+let g:indentLine_faster = 1
+'''
 
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
