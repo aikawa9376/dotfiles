@@ -147,7 +147,7 @@ zstyle ':completion:*:options' description 'yes'
 zstyle ':completion:*' group-name ''
 
 #LS_COLORSを設定しておく
-export LS_COLORS='di=34:ln=35:so=32:pi=33:ex=31:bd=46;34:cd=43;34:su=41;30:sg=46;30:tw=42;30:ow=43;30'
+export LS_COLORS='di=01;34:ln=35:so=32:pi=33:ex=31:bd=46;34:cd=43;34:su=41;30:sg=46;30:tw=42;30:ow=43;30'
 #ファイル補完候補に色を付ける
 zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 
@@ -313,9 +313,9 @@ HELP
 case ${OSTYPE} in
   darwin*)
     alias ctags="`brew --prefix`/bin/ctags"
-    alias l='ls -GAFh'
-    alias ls='ls -Gh'
-    alias lsa='ls -GAFltrh'
+    alias l='gls -GAFh --color=auto'
+    alias ls='gls -Gh --color=auto'
+    alias lsa='gls -GAFltrh --color=auto'
     ;;
   linux*)
     alias l='ls -GAFh --color=auto'

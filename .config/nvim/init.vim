@@ -48,6 +48,8 @@ set redrawtime=10000
 set ttimeoutlen=10
 set completeopt=menuone
 set noshowmode
+" set spell
+" set spelllang=en,cjk
 " set cursorcolumn
 
 " functions
