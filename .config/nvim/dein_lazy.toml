@@ -2,7 +2,10 @@
 
 [[plugins]]
 repo = 'Shougo/deoplete.nvim'
-depends = ['neosnippet', 'context_filetype.vim', 'neco-syntax', 'echodoc.vim', 'neoinclude.vim', 'FastFold']
+depends = [
+'neosnippet', 'context_filetype.vim', 'neco-syntax',
+'echodoc.vim', 'neoinclude.vim', 'FastFold'
+]
 do =  'UpdateRemotePlugins'
 hook_source = '''
 " deoplete setup
@@ -204,7 +207,11 @@ nmap m <Plug>(easymotion-s2)
 
 [[plugins]]
 repo = 'kana/vim-textobj-user'
-depends = ['vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php', 'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment', 'vim-textobj-between', 'vim-textobj-from_regexp']
+depends = [
+'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
+'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment',
+'vim-textobj-between', 'vim-textobj-from_regexp'
+]
 on_event = 'VimEnter'
 
 [[plugins]]
@@ -281,11 +288,70 @@ let g:NERDTreeMinimalUI = 1
 '''
 
 [[plugins]]
+repo = 'Shougo/defx.nvim'
+on_cmd = ['Defx']
+hook_add = '''
+nmap <silent><Space>n :Defx -toggle -direction=topleft -split=vertical -winwidth=35<CR>
+autocmd FileType defx call s:defx_my_settings()
+function! s:defx_my_settings() abort
+" Define mappings
+nnoremap <silent><buffer><expr> <CR>
+\ defx#do_action('open', 'wincmd w \| drop')
+nnoremap <silent><buffer><expr> c
+\ defx#do_action('copy')
+nnoremap <silent><buffer><expr> m
+\ defx#do_action('move')
+nnoremap <silent><buffer><expr> p
+\ defx#do_action('paste')
+nnoremap <silent><buffer><expr> l
+\ defx#do_action('open')
+nnoremap <silent><buffer><expr> E
+\ defx#do_action('open', 'vsplit')
+nnoremap <silent><buffer><expr> P
+\ defx#do_action('open', 'pedit')
+nnoremap <silent><buffer><expr> K
+\ defx#do_action('new_directory')
+nnoremap <silent><buffer><expr> N
+\ defx#do_action('new_file')
+nnoremap <silent><buffer><expr> d
+\ defx#do_action('remove')
+nnoremap <silent><buffer><expr> r
+\ defx#do_action('rename')
+nnoremap <silent><buffer><expr> x
+\ defx#do_action('execute_system')
+nnoremap <silent><buffer><expr> yy
+\ defx#do_action('yank_path')
+nnoremap <silent><buffer><expr> .
+\ defx#do_action('toggle_ignored_files')
+nnoremap <silent><buffer><expr> h
+\ defx#do_action('cd', ['..'])
+nnoremap <silent><buffer><expr> ~
+\ defx#do_action('cd')
+nnoremap <silent><buffer><expr> q
+\ defx#do_action('quit')
+nnoremap <silent><buffer><expr> <Space>
+\ defx#do_action('toggle_select') . 'j'
+nnoremap <silent><buffer><expr> *
+\ defx#do_action('toggle_select_all')
+nnoremap <silent><buffer><expr> j
+\ line('.') == line('$') ? 'gg' : 'j'
+nnoremap <silent><buffer><expr> k
+\ line('.') == 1 ? 'G' : 'k'
+nnoremap <silent><buffer><expr> <C-l>
+\ defx#do_action('redraw')
+nnoremap <silent><buffer><expr> <C-g>
+\ defx#do_action('print')
+nnoremap <silent><buffer><expr> cd
+\ defx#do_action('change_vim_cwd')
+endfunction
+'''
+
+[[plugins]]
 repo = 'xuyuanp/nerdtree-git-plugin'
 
 [[plugins]]
 repo = 'junegunn/fzf'
-depends = ['fzf.vim']
+depends = ['fzf.vim', 'vim-bookmarks']
 build = './install'
 merged = 0
 on_event = 'VimEnter'
@@ -301,6 +367,7 @@ nnoremap <silent> <Space>a :Ag<CR>
 nnoremap <silent> <Space>l :Lines<CR>
 nnoremap <silent> <Space>e :MRUFilesCWD<CR>
 nnoremap <silent> <Space>. :DotFiles<CR>
+nnoremap <silent> <space>O :Outline<CR>
 " <C-]>でタグ検索
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 nnoremap <silent> <Space>p :YanksAfter<CR>
@@ -370,7 +437,6 @@ function! s:outline(...)
 endfunction
 
 command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
-nnoremap <silent> <space>O :Outline<CR>
 
 " MRU handling, limited to current directory
 command! MRUFilesCWD call fzf#run({
@@ -423,6 +489,23 @@ command! YanksBefore call fzf#run(fzf#wrap('YanksBefore', {
 '''
 
 [[plugins]]
+repo = 'mg979/vim-bookmarks'
+rev = 'fzf'
+hook_add = '''
+let g:bookmark_prefer_fzf = 1
+nmap <Space>mm <Plug>BookmarkToggle
+nmap <Space>mi <Plug>BookmarkAnnotate
+nmap <Space>ma <Plug>BookmarkShowAll
+nmap <Space>mj <Plug>BookmarkNext
+nmap <Space>mk <Plug>BookmarkPrev
+nmap <Space>mc <Plug>BookmarkClear
+nmap <Space>mx <Plug>BookmarkClearAll
+nmap <Space>mkk <Plug>BookmarkMoveUp
+nmap <Space>mjj <Plug>BookmarkMoveDown
+nmap <Space>mg <Plug>BookmarkMoveToLine
+'''
+
+[[plugins]]
 repo = 'majutsushi/tagbar'
 on_cmd = ['TagbarToggle']
 hook_add = '''
@@ -454,7 +537,7 @@ on_cmd = ['Gstatus', 'Gdiff', 'Gremove', 'Gblame', 'Gitv']
 hook_add = '''
 nmap <silent> <Space>s :Gstatus<CR>
 nmap <silent> <Space>d :Gdiff<CR>
-" nmap <silent> <Space>w :Gwrite<CR>
+nmap <silent> <Space>c :Gcommit<CR>
 nmap <silent> <Space>r :Gremove<CR>
 nmap <silent> <Space>h :Gblame<CR>
 " test

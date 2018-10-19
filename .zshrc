@@ -40,8 +40,9 @@ zplug load --verbose
 # 基本設定
 # -------------------------------------
 export PATH="/usr/local/bin:$PATH"
-export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 export TERM='xterm-256color'
+export WCWIDTH_CJK_LEGACY='yes'
+export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 stty stop undef
 KEYTIMEOUT=1
 case $(uname -a) in
@@ -91,6 +92,7 @@ TRAPALRM() {
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
+export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_OPTS='
 --height 40%
 --reverse
@@ -147,7 +149,7 @@ zstyle ':completion:*:options' description 'yes'
 zstyle ':completion:*' group-name ''
 
 #LS_COLORSを設定しておく
-export LS_COLORS='di=01;34:ln=35:so=32:pi=33:ex=31:bd=46;34:cd=43;34:su=41;30:sg=46;30:tw=42;30:ow=43;30'
+export LS_COLORS='di=01;34:ln=35:so=32:pi=33:ex=04:bd=46;34:cd=43;34:su=41;30:sg=46;30:tw=42;30:ow=04;01;34'
 #ファイル補完候補に色を付ける
 zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 
@@ -333,3 +335,4 @@ alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
 alias fzf='fzf --preview "pygmentize -g  {}"'
 alias vim='nvim'
+alias ca='richpager -n'
