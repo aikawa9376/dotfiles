@@ -251,6 +251,10 @@ nmap <C-s> <plug>(operator-replace)
 '''
 
 [[plugins]]
+repo = 'kana/vim-submode'
+on_event = 'VimEnter'
+
+[[plugins]]
 repo = 'tpope/vim-surround'
 on_event = 'VimEnter'
 

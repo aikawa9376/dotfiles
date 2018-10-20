@@ -125,13 +125,8 @@ nnoremap x "_x
 vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
-" ペーストの挙動を入れ替え
-" nnoremap p gp
-" nnoremap gp p
-" Space pでレジスタ0を指定
-" nnoremap <Space>p "0p
-" visual modeでヤンクしたときに末尾に
-vnoremap y ygv<ESC>$
+" ヤンクした後に末尾に移動
+nmap <C-t> `]
 
 " 選択範囲のインデントを連続して変更
 vnoremap < <gv
