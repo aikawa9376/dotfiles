@@ -117,12 +117,12 @@ nnoremap g# g#zz10<C-e>
 set scrolloff=10
 
 " 半画面スクロールで位置を真ん中に
-nnoremap <C-u> <C-u>zz10<C-e>
-nnoremap <C-d> <C-d>zz10<C-e>
-nnoremap } }zz10<C-e>
-nnoremap { {zz10<C-e>
-nnoremap ) )zz10<C-e>
-nnoremap ( (zz10<C-e>
+" nnoremap <C-u> <C-u>zz10<C-e>
+" nnoremap <C-d> <C-d>zz10<C-e>
+" nnoremap } }zz10<C-e>
+" nnoremap { {zz10<C-e>
+" nnoremap ) )zz10<C-e>
+" nnoremap ( (zz10<C-e>
 
 " x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
@@ -225,7 +225,7 @@ nmap <Space>q :<c-u>wq<CR>
 nmap <silent> <M-b> :bprevious<CR>
 nmap <silent> <M-f> :
 " QuickFixおよびHelpでは q でバッファを閉じる
-autocmd MyAutoCmd FileType help,qf,gitv nnoremap <buffer> q <C-w>cbnext<CR>
+autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 
 " 前回のカーソル位置からスタート
 augroup vimrcEx

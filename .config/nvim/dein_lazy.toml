@@ -197,6 +197,16 @@ vmap _ <Plug>(expand_region_shrink)
 '''
 
 [[plugins]]
+repo = 'terryma/vim-smooth-scroll'
+on_event = 'VimEnter'
+hook_add = '''
+noremap <silent> <c-u> :call smooth_scroll#up(&scroll, 0, 2)<CR>
+noremap <silent> <c-d> :call smooth_scroll#down(&scroll, 0, 2)<CR>
+noremap <silent> <c-b> :call smooth_scroll#up(&scroll*2, 0, 4)<CR>
+noremap <silent> <c-f> :call smooth_scroll#down(&scroll*2, 0, 4)<CR>
+'''
+
+[[plugins]]
 repo = 'Lokaltog/vim-easymotion'
 on_map = '<Plug>(easymotion-s2)'
 hook_add = '''
