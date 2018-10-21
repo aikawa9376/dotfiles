@@ -94,11 +94,15 @@ set nowrapscan
 set ignorecase
 set smartcase
 
-" "検索語句をハイライト ESC二回でオフ
+" 検索語句をハイライト ESC二回でオフ
 set incsearch
 set inccommand=split
 set hlsearch
 nmap <silent> <Esc><Esc> :nohlsearch<CR>
+
+" すごく移動する
+nnoremap <C-j> 10j
+nnoremap <C-k> 10k
 
 " 検索後にジャンプした際に検索単語を画面中央に持ってくる
 nnoremap zz zz10<C-e>

@@ -318,6 +318,7 @@ case ${OSTYPE} in
     alias l='gls -GAFh --color=auto'
     alias ls='gls -Gh --color=auto'
     alias lsa='gls -GAFltrh --color=auto'
+    alias ql='qlmanage -p "$@" >& /dev/null'
     ;;
   linux*)
     alias l='ls -GAFh --color=auto'
