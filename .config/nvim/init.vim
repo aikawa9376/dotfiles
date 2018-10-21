@@ -330,8 +330,8 @@ function! SetLeximaAddRule() abort
 endfunction
 
 " php用の設定はここ
-let fts = ['php', 'phtml']
-if index(fts, &filetype) == 0
-  inoremap <M--> ->
-  inoremap <M-=> =>
-endif
+autocmd FileType php,phml call s:php_my_settings()
+function! s:php_my_settings() abort
+  inoremap <buffer> <M--> ->
+  inoremap <buffer> <M-=> =>
+endfunction

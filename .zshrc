@@ -326,6 +326,7 @@ case ${OSTYPE} in
     alias lsa='ls -GAFltrh --color=auto'
     alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
     alias fixd-p='/mnt/d/仕事/相川　設定など/app/pause.exe &'
+    alias ql='~/c/Program\ Files/WindowsApps/21090PaddyXu.QuickLook_3.6.3.0_neutral__egxr34yet59cg/Package/QuickLook.exe'
 esac
 
 if ((${+commands[nodejs]})); then
