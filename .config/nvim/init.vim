@@ -199,18 +199,11 @@ set autoindent "改行時に前の行のインデントを継続する
 set smartindent "改行時に入力された行の末尾に合わせて次の行のインデントを増減する
 set wildmenu wildmode=list:full "コマンドモード補完
 
-" タブの設定
 " TABにて対応ペアにジャンプ
 runtime macros/matchit.vim
 let b:match_words = "if:endif,foreach:endforeach,\<begin\>:\<end\>"
 nnoremap <Tab> %
 vnoremap <Tab> %
-nmap <silent> <Tab>x :close<CR>
-nmap <silent> <Tab>c :close<CR>
-nmap <silent> <Tab>h gT
-nmap <silent> <Tab>l gt
-nmap <silent> <Tab>L :+tabmove<CR>
-nmap <silent> <Tab>H :-tabmove<CR>
 
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
@@ -230,7 +223,9 @@ nmap <Space>w :<c-u>w<CR>
 nmap <Space>x :<c-u>bd<CR>
 nmap <Space>q :<c-u>wq<CR>
 nmap <silent> <M-b> :bprevious<CR>
-nmap <silent> <M-f> :bnext<CR>
+nmap <silent> <M-f> :
+" QuickFixおよびHelpでは q でバッファを閉じる
+autocmd MyAutoCmd FileType help,qf,gitv nnoremap <buffer> q <C-w>cbnext<CR>
 
 " 前回のカーソル位置からスタート
 augroup vimrcEx
