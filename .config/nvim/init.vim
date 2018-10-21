@@ -48,6 +48,7 @@ set redrawtime=10000
 set ttimeoutlen=10
 set completeopt=menuone
 set noshowmode
+" set colorcolumn=120
 " set spell
 " set spelllang=en,cjk
 " set cursorcolumn
@@ -62,10 +63,6 @@ command! -nargs=*
         \|  endtry
 
 " Insertモードのときカーソルの形状を変更
-if has('darwin')
-  let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
-  let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
-endif
 if has('unix')
   if &term =~ "screen"
     let &t_ti.= "\eP\e[1 q\e\\"
@@ -77,6 +74,9 @@ if has('unix')
     let &t_SI.="\e[5 q"
     let &t_EI.="\e[1 q"
     let &t_te.="\e[0 q"
+  elseif  has('mac')
+    let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
+    let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
   endif
 endif
 
@@ -144,7 +144,6 @@ inoremap <C-a> <C-o>^
 inoremap <C-e> <C-o>$<Right>
 inoremap <C-b> <Left>
 inoremap <C-f> <Right>
-
 inoremap <C-n> <Down>
 inoremap <C-p> <Up>
 inoremap <C-h> <BS>
@@ -325,3 +324,10 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#]', 'leave': 1})
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#}', 'leave': 1})
 endfunction
+
+" php用の設定はここ
+let fts = ['php', 'phtml']
+if index(fts, &filetype) == 0
+  inoremap <M--> ->
+  inoremap <M-=> =>
+endif
