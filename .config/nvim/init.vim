@@ -86,6 +86,7 @@ set hidden     " 保存されていないファイルがあるときでも別の
 set autoread   " 外部でファイルに変更がされた場合は読みなおす
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
+set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバッファを開く
 
 " 検索をファイルの先頭へ循環しない
 set nowrapscan
@@ -105,13 +106,12 @@ nnoremap <C-j> 10j
 nnoremap <C-k> 10k
 
 " 検索後にジャンプした際に検索単語を画面中央に持ってくる
-nnoremap zz zz10<C-e>
-nnoremap n nzz10<C-e>
-nnoremap N Nzz10<C-e>
-nnoremap * *zz10<C-e>
-nnoremap # #zz10<C-e>
-nnoremap g* g*zz10<C-e>
-nnoremap g# g#zz10<C-e>
+nnoremap n nzz
+nnoremap N Nzz
+nnoremap * *zz
+nnoremap # #zz
+nnoremap g* g*zz
+nnoremap g# g#zz
 
 " スクロール時に表示を10行確保
 set scrolloff=10
@@ -223,7 +223,7 @@ nmap <Space>w :<c-u>w<CR>
 nmap <Space>x :<c-u>bd<CR>
 nmap <Space>q :<c-u>wq<CR>
 nmap <silent> <M-b> :bprevious<CR>
-nmap <silent> <M-f> :
+nmap <silent> <M-f> :bnext<CR>
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 
@@ -329,4 +329,16 @@ autocmd FileType php,phml call s:php_my_settings()
 function! s:php_my_settings() abort
   inoremap <buffer> <M--> ->
   inoremap <buffer> <M-=> =>
+  nnoremap <buffer> <expr><F2> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
+endfunction
+
+function! IsPhpOrHtml() abort
+  let fe = &filetype
+  if fe == 'php'
+    return 1
+  elseif fe == 'phtml'
+    return 1
+  elseif fe == 'html'
+    return 0
+  endif
 endfunction
