@@ -70,11 +70,16 @@ precmd () {
   # カレントディレクトリ
   local left="%B%F{white}>>[%n@%m]"
   # バージョン管理されてた場合、ブランチ名
-  vcs_info
-  psvar=()
-  LANG=jp_JP.UTF-8 vcs_info
-  [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
-  local right="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*"
+  inside_git_repo="$(git rev-parse --is-inside-work-tree 2>/dev/null)"
+  if [ "$inside_git_repo" ]; then
+    vcs_info
+    psvar=()
+    LANG=jp_JP.UTF-8 vcs_info
+    [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
+    local right="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*"
+  else
+    local right="%B%F{blue}%~%f%b %B%F{yellow}%D %*"
+  fi
   # スペースの長さを計算
   # テキストを装飾する場合、エスケープシーケンスをカウントしないようにします
   local invisible='%([BSUbfksu]|([FK]|){*})'
@@ -341,3 +346,4 @@ alias -g from='$(mru)'
 alias fzf='fzf --preview "pygmentize -g  {}"'
 alias vim='nvim'
 alias ca='richpager -n'
+alias t='tmuximum'
