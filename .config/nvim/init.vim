@@ -330,6 +330,7 @@ function! s:php_my_settings() abort
   inoremap <buffer> <M--> ->
   inoremap <buffer> <M-=> =>
   nnoremap <buffer> <expr><F2> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
+  nnoremap <buffer> <M-4> bi$<ESC>e
 endfunction
 
 function! IsPhpOrHtml() abort
