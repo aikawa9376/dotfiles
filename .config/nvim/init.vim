@@ -116,14 +116,6 @@ nnoremap g# g#zz
 " スクロール時に表示を10行確保
 set scrolloff=10
 
-" 半画面スクロールで位置を真ん中に
-" nnoremap <C-u> <C-u>zz10<C-e>
-" nnoremap <C-d> <C-d>zz10<C-e>
-" nnoremap } }zz10<C-e>
-" nnoremap { {zz10<C-e>
-" nnoremap ) )zz10<C-e>
-" nnoremap ( (zz10<C-e>
-
 " x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
 vnoremap x "_x
@@ -212,10 +204,10 @@ inoremap <silent> jj <Esc>
 autocmd InsertLeave * set nopaste
 
 " ジャンプリストで中央に持ってくる
-nnoremap <C-o> <C-o>zz10<C-e>
-nnoremap <C-i> <C-i>zz10<C-e>
-nnoremap g; g;zz10<C-e>
-nnoremap g, g,zz10<C-e>
+nnoremap <C-o> <C-o>zz
+nnoremap <C-i> <C-i>zz
+nnoremap g; g;zz
+nnoremap g, g,zz
 
 " ファイル操作系
 nmap <Space> <Nop>
@@ -260,7 +252,6 @@ function! s:execute_ctags() abort
   " `:p:h`の部分は、:h filename-modifiersで確認
   let tags_dirpath = fnamemodify(tags_path, ':p:h')
   " 見つかったタグファイルのディレクトリに移動して、ctagsをバックグラウンド実行（エラー出力破棄）
-  " execute '!cd' tags_dirpath '&& ctags -R -f' tag_name ' &'
   execute 'silent !cd' tags_dirpath '&& ctags -R -f' tag_name '2> /dev/null &'
 endfunction
 
@@ -270,7 +261,6 @@ augroup ctags
 augroup END
 
 " vimrcをスペースドットで開く
-" nnoremap <silent> <Space>. :<c-u>e ~/.config/nvim/init.vim<CR>
 nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
 
 " 固有のvimrcを用意　.vimrc.local

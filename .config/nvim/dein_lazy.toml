@@ -263,10 +263,19 @@ nmap <C-s> <plug>(operator-replace)
 [[plugins]]
 repo = 'kana/vim-submode'
 on_event = 'VimEnter'
+hook_source = '''
+call submode#enter_with('historyback', 'n', '', 'g;', 'g;')
+call submode#map('historyback', 'n', '', ';', 'g;')
+call submode#enter_with('historyprev', 'n', '', 'g,', 'g,')
+call submode#map('historyprev', 'n', '', ',', 'g,')
+'''
 
 [[plugins]]
 repo = 'tpope/vim-surround'
 on_event = 'VimEnter'
+hook_add = '''
+let g:surround_{char2nr("P")} = "<?php \r ?>""
+'''
 
 [[plugins]]
 repo = 'tpope/vim-repeat'
