@@ -26,6 +26,8 @@ zplug "chrissicool/zsh-256color"
 zplug "hlissner/zsh-autopair", defer:2
 # zplug selfupdate
 zplug 'zplug/zplug', hook-build:'zplug --self-manage'
+# tmux fzf
+zplug "arks22/tmuximum", as:command
 
 if ! zplug check --verbose; then
   printf "Install? [y/N]: "
