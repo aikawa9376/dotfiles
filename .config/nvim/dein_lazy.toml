@@ -477,8 +477,7 @@ function! s:mru_files_for_cwd()
   \ ), 'fnamemodify(v:val, ":p:.")')
 endfunction
 
-" BookMark handling, limited to current directory
-
+" YankRing fzf
 function! FZFYankList() abort
   function! KeyValue(key, val)
     let line = join(a:val[0], '⏎')
