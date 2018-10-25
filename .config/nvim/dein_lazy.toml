@@ -113,7 +113,7 @@ rev = '3787e5'
 [[plugins]]
 repo = 'mattn/emmet-vim'
 on_event = 'InsertEnter'
-on_ft = ['html', 'php', 'phtml', 'js']
+on_ft = ['html', 'php', 'phtml', 'javascript']
 hook_add = '''
 let g:user_emmet_install_global = 0
 autocmd FileType phtml,html,php,css EmmetInstall
@@ -636,9 +636,19 @@ on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
 repo = 'HerringtonDarkholme/yats.vim'
-on_ft = ['html', 'php', 'phtml', 'js']
+on_ft = ['html', 'php', 'phtml', 'javascript']
+
+# javascript & typescript----------------
+
+[[plugins]]
+repo = 'othree/javascript-libraries-syntax.vim'
+on_ft = ['javascript', 'typescript']
 
 [[plugins]]
 repo = 'mhartington/nvim-typescript'
 build = './install.sh'
-on_ft = ['ts']
+on_ft = ['typescript']
+
+[[plugins]]
+repo = 'burnettk/vim-angular'
+on_ft = ['typescript']

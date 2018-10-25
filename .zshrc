@@ -18,6 +18,8 @@ zplug "b4b4r07/enhancd", use:init.sh
 zplug "b4b4r07/zsh-gomi", if:"which fzf"
 # finder
 zplug "b4b4r07/cli-finder"
+# finder
+zplug "b4b4r07/zle-vimode"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # 256 coloer ???
@@ -26,10 +28,10 @@ zplug "chrissicool/zsh-256color"
 zplug "urbainvaes/fzf-marks"
 # pair auto
 zplug "hlissner/zsh-autopair", defer:2
-# zplug selfupdate
-zplug 'zplug/zplug', hook-build:'zplug --self-manage'
 # tmux fzf
 zplug "arks22/tmuximum", as:command
+# zplug selfupdate
+zplug 'zplug/zplug', hook-build:'zplug --self-manage'
 
 if ! zplug check --verbose; then
   printf "Install? [y/N]: "
@@ -70,7 +72,7 @@ precmd () {
   # 1行あける
   print
   # カレントディレクトリ
-  local left="%B%F{white}>>[%n@%m]"
+  local left="%B%F{white}>>[%B%F{blue}%~%f%b:%m]"
   # バージョン管理されてた場合、ブランチ名
   inside_git_repo="$(git rev-parse --is-inside-work-tree 2>/dev/null)"
   if [ "$inside_git_repo" ]; then
@@ -78,9 +80,9 @@ precmd () {
     psvar=()
     LANG=jp_JP.UTF-8 vcs_info
     [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
-    local right="%B%F{green}%1(v|%1v|)%f%b %B%F{blue}%~%f%b %B%F{yellow}%D %*"
+    local right="%B%F{green}%1(v|%1v|)%f%b %B%F{yellow}%D %*"
   else
-    local right="%B%F{blue}%~%f%b %B%F{yellow}%D %*"
+    local right="%B%F{yellow}%D %*"
   fi
   # スペースの長さを計算
   # テキストを装飾する場合、エスケープシーケンスをカウントしないようにします
