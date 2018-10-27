@@ -52,8 +52,7 @@ if has('conceal')
 endif
 
 " add honza
-let s:vim_snippet_dir = '~/.cache/dein/repos/github.com/honza/vim-snippets/snippets'
-let g:neosnippet#snippets_directory = s:vim_snippet_dir
+let g:neosnippet#snippets_directory = '~/.config/nvim/snippets'
 '''
 
 [[plugins]]
