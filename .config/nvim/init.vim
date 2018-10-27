@@ -44,8 +44,8 @@ set encoding=utf-8
 " set ambiwidth=double
 set fileformats=unix,dos,mac
 set fileencodings=utf-8,sjis
-set redrawtime=10000
-set ttimeoutlen=10
+" set redrawtime=10000
+set ttimeoutlen=1
 set completeopt=menuone
 set noshowmode
 " set colorcolumn=120

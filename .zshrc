@@ -71,8 +71,6 @@ zstyle ':vcs_info:*' actionformats ' %c%u(%s:%b|%a)'
 precmd () {
   # 1行あける
   print
-  # カレントディレクトリ
-  local left="%B%F{white}>>[%B%F{blue}%~%f%b:%m]"
   # バージョン管理されてた場合、ブランチ名
   inside_git_repo="$(git rev-parse --is-inside-work-tree 2>/dev/null)"
   if [ "$inside_git_repo" ]; then
@@ -80,10 +78,11 @@ precmd () {
     psvar=()
     LANG=jp_JP.UTF-8 vcs_info
     [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
-    local right="%B%F{green}%1(v|%1v|)%f%b %B%F{yellow}%D %*"
+    local left="%B%F{white}>>%B%F{blue}%~%f%b%B%F{green}%1(v|%1v|)%f%b"
   else
-    local right="%B%F{yellow}%D %*"
+    local left="%B%F{white}>>%B%F{blue}%~%f%b"
   fi
+  local right="%B%F{white}[%m:%B%F{yellow}%D %*%B%F{white}]"
   # スペースの長さを計算
   # テキストを装飾する場合、エスケープシーケンスをカウントしないようにします
   local invisible='%([BSUbfksu]|([FK]|){*})'
@@ -93,7 +92,7 @@ precmd () {
 
   print -P $left${(r:$padwidth:: :)}$right
 }
-PROMPT="%B%F{white}>%f%b "
+# PROMPT="%B%F{white}>%f%b "
 TRAPALRM() {
   zle reset-prompt
 }
