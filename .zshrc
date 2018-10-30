@@ -24,8 +24,6 @@ zplug "b4b4r07/zle-vimode"
 zplug "plugin/git", from:oh-my-zsh
 # 256 coloer ???
 zplug "chrissicool/zsh-256color"
-# bookmark
-zplug "urbainvaes/fzf-marks"
 # pair auto
 zplug "hlissner/zsh-autopair", defer:2
 # tmux fzf
