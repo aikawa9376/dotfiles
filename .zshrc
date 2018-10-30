@@ -45,6 +45,7 @@ zplug load --verbose
 # -------------------------------------
 export PATH="/usr/local/bin:$PATH"
 export TERM='xterm-256color'
+export EDITOR='nvim'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 stty stop undef
