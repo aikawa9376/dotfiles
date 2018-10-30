@@ -5,7 +5,7 @@ source ~/.zplug/init.zsh
 # zsh-completions
 zplug "zsh-users/zsh-completions"
 # zsh-syntax-highlighting
-zplug "zsh-users/zsh-syntax-highlighting"
+zplug "zsh-users/zsh-syntax-highlighting", defer:2
 # autosuggestions
 zplug "zsh-users/zsh-autosuggestions"
 # anyframe
@@ -18,14 +18,14 @@ zplug "b4b4r07/enhancd", use:init.sh
 zplug "b4b4r07/zsh-gomi", if:"which fzf"
 # finder
 zplug "b4b4r07/cli-finder"
-# finder
-zplug "b4b4r07/zle-vimode"
+# vim keybind fork
+# zplug "b4b4r07/zle-vimode"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # 256 coloer ???
 zplug "chrissicool/zsh-256color"
 # pair auto
-zplug "hlissner/zsh-autopair", defer:2
+zplug "hlissner/zsh-autopair", defer:3
 # tmux fzf
 zplug "arks22/tmuximum", as:command
 # zplug selfupdate
@@ -49,10 +49,20 @@ export EDITOR='nvim'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 stty stop undef
-KEYTIMEOUT=1
+# KEYTIMEOUT=1
 case $(uname -a) in
    *Microsoft*) unsetopt BG_NICE ;;
 esac
+
+# 外部ファイル読み込み
+export ZCONFDIR="$HOME/.config/zsh"
+function loadlib() {
+  lib=${1:?"You have to specify a library file"}
+  if [ -f "$lib" ];then #ファイルの存在を確認
+    source "$lib"
+  fi
+}
+loadlib $ZCONFDIR/zsh-vimode.zsh
 
 # -------------------------------------
 # prompt
