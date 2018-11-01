@@ -91,6 +91,13 @@ do-enter() {
     fi
 
     /bin/ls -F
+    if type precmd > /dev/null 2>&1; then
+      precmd
+    fi
+    local precmd_func
+    for precmd_func in $precmd_functions; do
+      $precmd_func
+    done
     zle reset-prompt
 }
 zle -N do-enter

@@ -48,6 +48,7 @@ export TERM='xterm-256color'
 export EDITOR='nvim'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
+
 stty stop undef
 # KEYTIMEOUT=1
 case $(uname -a) in
@@ -100,10 +101,6 @@ precmd () {
   local padwidth=$(($COLUMNS - ($leftwidth + $rightwidth) % $COLUMNS))
 
   print -P $left${(r:$padwidth:: :)}$right
-}
-# PROMPT="%B%F{white}>%f%b "
-TRAPALRM() {
-  zle reset-prompt
 }
 
 # -------------------------------------
@@ -419,7 +416,8 @@ fi
 alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
 alias -g to='$(destination_directories)'
+alias -g l='| less'
 alias fzf='fzf --preview "pygmentize -g  {}"'
 alias vim='nvim'
-alias ca='richpager -n'
+alias cat='richpager -n'
 alias t='tmuximum'
