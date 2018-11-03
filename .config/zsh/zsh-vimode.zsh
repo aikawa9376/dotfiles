@@ -90,6 +90,7 @@ do-enter() {
         return
     fi
 
+    print
     /bin/ls -F
     if type precmd > /dev/null 2>&1; then
       precmd

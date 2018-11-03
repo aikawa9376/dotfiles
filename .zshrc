@@ -108,8 +108,9 @@ precmd () {
 # fzf
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
+export FZF_DEFAULT_COMMAND='fd --type file --follow --hidden --color=always --exclude  .git'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always'
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_OPTS='
 --height 40%
@@ -250,7 +251,7 @@ case ${OSTYPE} in
     alias ql='qlmanage -p "$@" >& /dev/null'
     ;;
   linux*)
-    alias ls='ls -GAFh --color=auto'
+    alias ls='exa -bghHl'
     # alias ls='ls -Gh --color=auto'
     alias lsa='ls -GAFltrh --color=auto'
     alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
