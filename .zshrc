@@ -109,6 +109,7 @@ precmd () {
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='rg --files --hidden --follow --glob "!.git/*"'
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_OPTS='
 --height 40%
@@ -243,14 +244,14 @@ bindkey "^N" history-beginning-search-forward-end
 case ${OSTYPE} in
   darwin*)
     alias ctags="`brew --prefix`/bin/ctags"
-    alias l='gls -GAFh --color=auto'
-    alias ls='gls -Gh --color=auto'
+    alias ls='gls -GAFh --color=auto'
+    # alias ls='gls -Gh --color=auto'
     alias lsa='gls -GAFltrh --color=auto'
     alias ql='qlmanage -p "$@" >& /dev/null'
     ;;
   linux*)
-    alias l='ls -GAFh --color=auto'
-    alias ls='ls -Gh --color=auto'
+    alias ls='ls -GAFh --color=auto'
+    # alias ls='ls -Gh --color=auto'
     alias lsa='ls -GAFltrh --color=auto'
     alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
     alias fixd-p='/mnt/d/仕事/相川　設定など/app/pause.exe &'

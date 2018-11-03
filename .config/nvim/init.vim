@@ -7,7 +7,6 @@ augroup MyAutoCmd
   autocmd!
 augroup END
 
-" dein settings {{{
 " dein自体の自動インストール
 let s:cache_home = empty($XDG_CACHE_HOME) ? expand('~/.cache') : $XDG_CACHE_HOME
 let s:dein_dir = s:cache_home . '/dein'
@@ -30,7 +29,6 @@ endif
 if has('vim_starting') && dein#check_install()
   call dein#install()
 endif
-" }}}
 
 " Required:
 filetype on
@@ -52,6 +50,7 @@ set noshowmode
 " set spell
 " set spelllang=en,cjk
 " set cursorcolumn
+runtime macros/matchit.vim
 
 " functions
 command! -nargs=*
@@ -148,6 +147,9 @@ inoremap <C-k> <C-o>D<Right>
 inoremap <C-u> <C-o>d^
 inoremap <C-w> <C-o>db
 
+" 文字選択・移動など
+nnoremap Y y$
+" nnoremap V v$
 nnoremap <C-h> ^
 nnoremap <C-l> $
 
@@ -190,12 +192,6 @@ set softtabstop=2
 set autoindent "改行時に前の行のインデントを継続する
 set smartindent "改行時に入力された行の末尾に合わせて次の行のインデントを増減する
 set wildmenu wildmode=list:full "コマンドモード補完
-
-" TABにて対応ペアにジャンプ
-runtime macros/matchit.vim
-let b:match_words = "if:endif,foreach:endforeach,\<begin\>:\<end\>"
-nnoremap <Tab> %
-vnoremap <Tab> %
 
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
@@ -321,6 +317,7 @@ function! s:php_my_settings() abort
   inoremap <buffer> <M-=> =>
   nnoremap <buffer> <expr><F2> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
   nnoremap <buffer> <M-4> bi$<ESC>e
+  " let b:match_words .= ',if.*(.*)\s{:selse\s{:},?php:?>,for:},if:endif,foreach:endforeach'
 endfunction
 
 function! IsPhpOrHtml() abort
