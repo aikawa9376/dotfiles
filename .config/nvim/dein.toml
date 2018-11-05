@@ -31,7 +31,8 @@ repo = 'sheerun/vim-polyglot'
 repo = 'vim-airline/vim-airline'
 depends = ['vim-airline-themes']
 hook_add = '''
-let g:airline_theme = 'minimalist'
+" let g:airline_theme = 'minimalist'
+let g:airline_theme = 'solarized'
 let g:airline_powerline_fonts = 1
 let g:airline_enable_branch = 1
 let g:airline#extensions#ale#enabled = 1
@@ -66,13 +67,23 @@ let g:airline#extensions#tabline#fnamemod = ':t'
 [[plugins]]
 repo = 'vim-airline/vim-airline-themes'
 
+# [[plugins]]
+# repo = 'NLKNguyen/papercolor-theme'
+# hook_add = '''
+# set background=dark
+# autocmd ColorScheme * highlight Normal ctermbg=none
+# autocmd ColorScheme * highlight LineNr ctermbg=none
+# colorscheme PaperColor
+# '''
+
 [[plugins]]
-repo = 'NLKNguyen/papercolor-theme'
+repo = 'altercation/vim-colors-solarized'
 hook_add = '''
 set background=dark
 autocmd ColorScheme * highlight Normal ctermbg=none
-autocmd ColorScheme * highlight LineNr ctermbg=none
-colorscheme PaperColor
+" autocmd ColorScheme * highlight LineNr ctermbg=none
+colorscheme solarized
+let g:solarized_termcolors=16
 '''
 
 [[plugins]]

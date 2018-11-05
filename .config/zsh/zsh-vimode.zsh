@@ -91,7 +91,7 @@ do-enter() {
     fi
 
     print
-    /bin/ls -F
+    /bin/ls -FGh --color=auto
     if type precmd > /dev/null 2>&1; then
       precmd
     fi

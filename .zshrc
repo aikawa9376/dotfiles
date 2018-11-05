@@ -4,6 +4,8 @@
 source ~/.zplug/init.zsh
 # zsh-completions
 zplug "zsh-users/zsh-completions"
+# zsh-history-substring-search
+zplug "zsh-users/zsh-history-substring-search"
 # zsh-syntax-highlighting
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 # autosuggestions
@@ -65,6 +67,7 @@ function loadlib() {
 }
 loadlib $ZCONFDIR/zsh-vimode.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
+loadlib $ZCONFDIR/zsh-bookmark.zsh
 
 # -------------------------------------
 # prompt
@@ -110,7 +113,7 @@ precmd () {
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='fd --type file --follow --hidden --color=always --exclude  .git'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always'
+export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude  .git'
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_OPTS='
 --height 40%
@@ -233,11 +236,11 @@ setopt hist_ignore_space    # スペースから始まるコマンドを無視
 setopt share_history        # share command history data
 setopt hist_no_store        # historyコマンドは履歴に登録しない
 # コマンド履歴検索
-autoload history-search-end
-zle -N history-beginning-search-backward-end history-search-end
-zle -N history-beginning-search-forward-end history-search-end
-bindkey "^P" history-beginning-search-backward-end
-bindkey "^N" history-beginning-search-forward-end
+# autoload history-search-end
+# zle -N history-beginning-search-backward-end history-search-end
+# zle -N history-beginning-search-forward-end history-search-end
+bindkey "^P" history-substring-search-up
+bindkey "^N" history-substring-search-down
 
 # -------------------------------------
 # エイリアス
@@ -251,9 +254,9 @@ case ${OSTYPE} in
     alias ql='qlmanage -p "$@" >& /dev/null'
     ;;
   linux*)
-    alias ls='exa -bghHl'
-    # alias ls='ls -Gh --color=auto'
-    alias lsa='ls -GAFltrh --color=auto'
+    alias ls='ls -GAFltrh --color=auto'
+    alias lsa='exa -aghHl --color=auto --time-style long-iso'
+    alias lsg='exa -aghHl --git --color=auto --time-style long-iso'
     alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
     alias fixd-p='/mnt/d/仕事/相川　設定など/app/pause.exe &'
     alias ql='~/c/Program\ Files/WindowsApps/21090PaddyXu.QuickLook_3.6.3.0_neutral__egxr34yet59cg/Package/QuickLook.exe'
