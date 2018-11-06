@@ -89,7 +89,7 @@ set autoread   " 外部でファイルに変更がされた場合は読みなお
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
 set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバッファを開く
-nmap <Space>z :call DeleteHideBuffer<CR>
+nmap <Space>z :DeleteHideBuffer<CR>
 command! DeleteHideBuffer :call s:delete_hide_buffer()
 function! s:delete_hide_buffer()
   let list = filter(range(1, bufnr("$")), "bufexists(v:val) && !buflisted(v:val)")
