@@ -45,6 +45,9 @@ set ttimeoutlen=1
 set completeopt=menuone
 set noshowmode
 set cursorline
+set list
+" set listchars=tab:»-,trail:-,eol:↲,extends:»,precedes:«,nbsp:%
+set listchars=tab:»-,trail:-,extends:»,precedes:«,nbsp:%
 " set ambiwidth=double
 " set redrawtime=10000
 " set colorcolumn=120
@@ -89,7 +92,7 @@ set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバ�
 nmap <Space>z :call DeleteHideBuffer<CR>
 command! DeleteHideBuffer :call s:delete_hide_buffer()
 function! s:delete_hide_buffer()
-	let list = filter(range(1, bufnr("$")), "bufexists(v:val) && !buflisted(v:val)")
+  let list = filter(range(1, bufnr("$")), "bufexists(v:val) && !buflisted(v:val)")
     for num in list
         execute "bw ".num
     endfor
