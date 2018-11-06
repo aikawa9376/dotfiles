@@ -39,17 +39,17 @@ set t_Co=256
 set number
 set backspace=indent,eol,start
 set encoding=utf-8
-" set ambiwidth=double
 set fileformats=unix,dos,mac
 set fileencodings=utf-8,sjis
-" set redrawtime=10000
 set ttimeoutlen=1
 set completeopt=menuone
 set noshowmode
+set cursorline
+" set ambiwidth=double
+" set redrawtime=10000
 " set colorcolumn=120
 " set spell
 " set spelllang=en,cjk
-" set cursorcolumn
 runtime macros/matchit.vim
 
 " functions
@@ -86,6 +86,14 @@ set autoread   " 外部でファイルに変更がされた場合は読みなお
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
 set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバッファを開く
+nmap <Space>z :call DeleteHideBuffer<CR>
+command! DeleteHideBuffer :call s:delete_hide_buffer()
+function! s:delete_hide_buffer()
+	let list = filter(range(1, bufnr("$")), "bufexists(v:val) && !buflisted(v:val)")
+    for num in list
+        execute "bw ".num
+    endfor
+endfunction
 
 " 検索をファイルの先頭へ循環しない
 set nowrapscan
@@ -99,10 +107,6 @@ set incsearch
 set inccommand=split
 set hlsearch
 nmap <silent> <Esc><Esc> :nohlsearch<CR>
-
-" すごく移動する
-nnoremap <C-j> 10j
-nnoremap <C-k> 10k
 
 " 検索後にジャンプした際に検索単語を画面中央に持ってくる
 nnoremap n nzz
@@ -122,6 +126,7 @@ nnoremap s "_s
 vnoremap s "_s
 " ヤンクした後に末尾に移動
 nmap <C-t> `]
+nmap <M-p> o<C-r>"<ESC>
 
 " 選択範囲のインデントを連続して変更
 vnoremap < <gv
@@ -131,6 +136,7 @@ nnoremap <Space>i mzgg=G`z
 
 " ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
+" nnoremap <Space><CR> $a<CR><Esc>
 nnoremap <M-d> mzo<ESC>`zj
 nnoremap <M-u> mzO<ESC>`zk
 
@@ -152,6 +158,11 @@ nnoremap Y y$
 " nnoremap V v$
 nnoremap <C-h> ^
 nnoremap <C-l> $
+nnoremap <C-e> 10<C-e>
+nnoremap <C-y> 10<C-y>
+" すごく移動する
+nnoremap <C-j> 10j
+nnoremap <C-k> 10k
 
 " j, k による移動を折り返されたテキストでも自然に振る舞うように変更
 nnoremap j gj
@@ -165,6 +176,7 @@ cnoremap <C-p> <Up>
 cnoremap <C-a> <Home>
 cnoremap <C-e> <End>
 cnoremap <C-d> <Del>
+cnoremap <C-k> <C-o>D<Right>
 
 " terminal mode
 set splitbelow
@@ -215,23 +227,32 @@ nmap <silent> <M-f> :bnext<CR>
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 
+" window操作系
+nmap <silent> \| :<c-u>vsplit<CR>
+nmap <silent> - :<c-u>split<CR>
+nmap <TAB><TAB> <C-w>w
+nmap <TAB>h <C-w>h
+nmap <TAB>j <C-w>j
+nmap <TAB>k <C-w>k
+nmap <TAB>l <C-w>l
+nmap <TAB>H <C-w>H
+nmap <TAB>J <C-w>J
+nmap <TAB>K <C-w>K
+nmap <TAB>L <C-w>L
+nmap <TAB>+ <C-w>+
+nmap <TAB>- <C-w>-
+nmap <TAB>> <C-w>>
+nmap <TAB>< <C-w><
+nmap <TAB>x :<c-u>q<CR>
+
 " 前回のカーソル位置からスタート
 augroup vimrcEx
   au BufRead * if line("'\"") > 0 && line("'\"") <= line("$") |
         \ exe "normal g`\"" | endif
 augroup END
 
-" セミコロンを付けて改行
-function! IsEndSemicolon()
-  let c = getline(".")[col("$")-2]
-  if c != ';'
-    return 1
-  else
-    return 0
-  endif
-endfunction
-nnoremap <expr><Space><CR> IsEndSemicolon() ? "i<C-O>$;<CR><ESC>" : "i<C-O>$<CR><ESC>"
-" inoremap <expr><Space><CR> IsEndSemicolon() ? "<C-O>$;<CR>" : "<C-O>$<CR>"
+" 文末にセミコロンを付ける
+nnoremap <M-;> mz$a;<ESC>`z
 
 " ctags
 set tags=./tags,tags;$HOME
@@ -259,7 +280,7 @@ augroup END
 " vimrcをスペースドットで開く
 nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
 
-" 固有のvimrcを用意　.vimrc.local
+" 固有のvimrcを用意 .vimrc.local
 augroup vimrc-local
   autocmd!
   autocmd BufNewFile,BufReadPost * call s:vimrc_local(expand('<afile>:p:h'))
