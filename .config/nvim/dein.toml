@@ -62,10 +62,25 @@ let g:airline_symbols.readonly = '⭤'
 
 let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#fnamemod = ':t'
+" let g:airline#extensions#default#layout = [ [ 'a', 'b', 'c', 's' ], [ 'x', 'y', 'z', 'error', 'warning' ] ]
 '''
 
 [[plugins]]
 repo = 'vim-airline/vim-airline-themes'
+
+[[plugins]]
+repo = '97-109-107/scrollbar.vim'
+hook_add = '''
+let g:airline_section_c = airline#section#create(['file', ' : ', '%{ScrollBar()}'])
+'''
+
+# [[plugins]]
+# repo = 'lornix/vim-scrollbar'
+# hook_add = '''
+# let g:scrollbar_thumb='a'
+# highlight Scrollbar_Thumb ctermfg=green ctermbg=black guifg=green guibg=black cterm=none
+# nmap <leader>' :call ToggleScrollbar()<cr>
+# '''
 
 # [[plugins]]
 # repo = 'NLKNguyen/papercolor-theme'
