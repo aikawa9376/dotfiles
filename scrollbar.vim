@@ -12,7 +12,7 @@ set cpoptions&vim
 " Default to '#' for scrollbar, '|' for non-scrollbar.
 " (User can override these!)
 if !exists('g:scrollbar_thumb')
-    let g:scrollbar_thumb='a'
+    let g:scrollbar_thumb=':'
 endif
 if !exists('g:scrollbar_clear')
     let g:scrollbar_clear='|'
@@ -29,7 +29,7 @@ exec "sign define sbthumb text=".g:scrollbar_thumb." texthl=Scrollbar_Thumb"
 " Set up a default mapping to toggle the scrollbar (but only if user hasn't
 " already done it). Default is <leader>sb.
 if !hasmapto('ToggleScrollbar')
-    map <silent> <unique> <leader>sb :call ToggleScrollbar()<cr>
+    map <silent> <unique> <leader>| :call ToggleScrollbar()<cr>
 endif
 
 " Function to initialize the scrollbar's 'active' vars.
@@ -98,13 +98,7 @@ function! SetupScrollbarBindings()
     :nnoremap <silent> <C-D> <C-D>:call RefreshScrollbar()<CR>
     :nnoremap <silent> <C-U> <C-U>:call RefreshScrollbar()<CR>
 
-    :nnoremap <silent> j j:call RefreshScrollbar()<CR>
-    :nnoremap <silent> k k:call RefreshScrollbar()<CR>
-
     :nnoremap <silent> n n:call RefreshScrollbar()<CR>
-
-    :nnoremap <silent> <UP> <UP>:call RefreshScrollbar()<CR>
-    :nnoremap <silent> <DOWN> <DOWN>:call RefreshScrollbar()<CR>
 endfunction
 
 " Main function that is called every time a user navigates the current buffer.

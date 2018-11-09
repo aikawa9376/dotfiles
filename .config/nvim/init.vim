@@ -274,20 +274,7 @@ autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 " window操作系
 nmap <silent> \| :<c-u>vsplit<CR>
 nmap <silent> - :<c-u>split<CR>
-nmap <TAB><TAB> <C-w>w
-nmap <TAB>h <C-w>h
-nmap <TAB>j <C-w>j
-nmap <TAB>k <C-w>k
-nmap <TAB>l <C-w>l
-nmap <TAB>H <C-w>H
-nmap <TAB>J <C-w>J
-nmap <TAB>K <C-w>K
-nmap <TAB>L <C-w>L
-nmap <TAB>+ <C-w>+
-nmap <TAB>- <C-w>-
-nmap <TAB>> <C-w>>
-nmap <TAB>< <C-w><
-nmap <TAB>x :<c-u>q<CR>
+nmap <C-w>x :<c-u>q<CR>
 
 " 前回のカーソル位置からスタート
 augroup vimrcEx

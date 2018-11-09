@@ -68,11 +68,11 @@ let g:airline#extensions#tabline#fnamemod = ':t'
 [[plugins]]
 repo = 'vim-airline/vim-airline-themes'
 
-[[plugins]]
-repo = '97-109-107/scrollbar.vim'
-hook_add = '''
-let g:airline_section_c = airline#section#create(['file', ' : ', '%{ScrollBar()}'])
-'''
+# [[plugins]]
+# repo = '97-109-107/scrollbar.vim'
+# hook_add = '''
+# let g:airline_section_c = airline#section#create(['file', ' : ', '%{ScrollBar()}'])
+# '''
 
 # [[plugins]]
 # repo = 'lornix/vim-scrollbar'
