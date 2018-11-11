@@ -263,10 +263,13 @@ on_event = 'VimEnter'
 hook_source = '''
 let g:submode_timeoutlen = 5000
 let g:submode_keep_leaving_key = 1
+" let g:submode_keyseqs_to_leave = ['<Esc>:call EndScrollbar()<CR>']
 call submode#enter_with('history', 'n', '', 'g;', 'g;zz')
 call submode#enter_with('history', 'n', '', 'g,', 'g,zz')
-call submode#map('history', 'n', '', ';', 'g;zz')
-call submode#map('history', 'n', '', ',', 'g,zz')
+" call submode#enter_with('move', 'n', '', '<C-d>', '<C-d>zz:call StartScrollbar()<CR>')
+" call submode#enter_with('move', 'n', '', '<C-u>', '<C-u>zz:call StartScrollbar()<CR>')
+" call submode#map('move', 'n', '', '<C-d>', '<C-d>zz:call RefreshScrollbar()<CR>')
+" call submode#map('move', 'n', '', '<C-u>', '<C-u>zz:call RefreshScrollbar()<CR>')
 call submode#enter_with('bufmove', 'n', '', '<C-w>+', '<C-w>+')
 call submode#enter_with('bufmove', 'n', '', '<C-w>-', '<C-w>-')
 call submode#enter_with('bufmove', 'n', '', '<C-w>>', '<C-w>>')
@@ -379,7 +382,7 @@ hook_add = '''
 let g:fzf_buffers_jump = 1
 nnoremap <silent> <Space>f :Files<CR>
 nnoremap <silent> <Space>b :Buffers<CR>
-nnoremap <silent> <Space>a :Ag<CR>
+nnoremap <silent> <Space>a :Rg<CR>
 nnoremap <silent> <Space>l :Lines<CR>
 nnoremap <silent> <Space>e :MRUFilesCWD<CR>
 nnoremap <silent> <Space>. :DotFiles<CR>
@@ -388,18 +391,30 @@ nnoremap <silent> <space>O :Outline<CR>
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 nnoremap <silent> <Space>p :YanksAfter<CR>
 nnoremap <silent> <Space>P :YanksBefore<CR>
+nnoremap <silent> q: :History:<CR>
+nnoremap <silent> q/ :History/<CR>
 
 imap <M-p> <plug>(fzf-complete-path)
 imap <c-x><c-j> <plug>(fzf-complete-file-ag)
 
+nmap <Space><tab> <plug>(fzf-maps-n)
+xmap <Space><tab> <plug>(fzf-maps-x)
+omap <Space><tab> <plug>(fzf-maps-o)
+
 command! -bang -nargs=? -complete=dir Files
-      \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-      \ {'options': "--preview 'pygmentize -g {}'"}))
+  \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
+  \ {'options': "--preview 'pygmentize -g {}'"}))
 command! -bang -nargs=* Ag
-      \call fzf#vim#ag(<q-args>, fzf#wrap('rg',
-      \ {'options': "--preview 'pygmentize -g $(cut -d: -f1 <<< {}) | sed -n $(cut -d: -f2 <<< {}),\\$p | head -".&lines."'"}))
+  \ call fzf#vim#ag(<q-args>, fzf#wrap('ag',
+  \ {'options': "--preview 'pygmentize -g $(cut -d: -f1 <<< {}) | sed -n $(cut -d: -f2 <<< {}),\\$p | head -".&lines."'"}))
+command! -bang -nargs=* Rg
+  \ call fzf#vim#grep(
+  \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden', '?'),
+  \   <bang>0)
 command! -bang Lines
-      \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
+  \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
 
 command! DotFiles execute 'Files ~/dotfiles'
 

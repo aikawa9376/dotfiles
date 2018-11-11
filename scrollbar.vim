@@ -1,4 +1,4 @@
-" Skip init if the loaded_scrollbar var is set.
+" skip init if the loaded_scrollbar var is set.
 if exists('g:loaded_scrollbar')
     finish
 endif
@@ -29,7 +29,7 @@ exec "sign define sbthumb text=".g:scrollbar_thumb." texthl=Scrollbar_Thumb"
 " Set up a default mapping to toggle the scrollbar (but only if user hasn't
 " already done it). Default is <leader>sb.
 if !hasmapto('ToggleScrollbar')
-    map <silent> <unique> <leader>| :call ToggleScrollbar()<cr>
+    map <silent> <unique> <Space>\| :call ToggleScrollbar()<cr>
 endif
 
 " Function to initialize the scrollbar's 'active' vars.
@@ -68,6 +68,28 @@ function! ToggleScrollbar()
     endif
 endfunction
 
+function! StartScrollbar()
+  " Toggle to active. Setup the scrollbar.
+  let b:scrollbar_active=1
+  autocmd BufEnter     * :call <sid>showScrollbar()
+  " call <sid>SetupScrollbar()
+  " call SetupScrollbarBindings()
+endfunction
+
+function! EndScrollbar()
+  if b:scrollbar_active
+    " Toggle to inactive mode.
+    let b:scrollbar_active=0
+    " Unset all autocmds for scrollbar.
+    augroup Scrollbar_augroup
+      autocmd!
+    augroup END
+    " call ResetScrollbarBindings()
+    " Remove all signs that have been set.
+    :sign unplace *
+  endif
+endfunction
+
 function RefreshScrollbar()
     call <sid>showScrollbar()
 endfunction
@@ -99,6 +121,22 @@ function! SetupScrollbarBindings()
     :nnoremap <silent> <C-U> <C-U>:call RefreshScrollbar()<CR>
 
     :nnoremap <silent> n n:call RefreshScrollbar()<CR>
+endfunction
+
+" Set up keybindings that update scrollbar state.
+function! ResetScrollbarBindings()
+    let g:scrollbar_binding_active=1
+    " Trigger scrollbar refreshes with buffer-moving commands.
+    :nnoremap <silent> <C-E> <C-E>
+    :nnoremap <silent> <C-Y> <C-Y>
+
+    :nnoremap <silent> <C-F> <C-F>
+    :nnoremap <silent> <C-B> <C-B>
+
+    :nnoremap <silent> <C-D> <C-D>
+    :nnoremap <silent> <C-U> <C-U>
+
+    :nnoremap <silent> n n
 endfunction
 
 " Main function that is called every time a user navigates the current buffer.
@@ -155,10 +193,10 @@ endfunction
 
 " Call setup if vars are set for 'active' scrollbar.
 if g:scrollbar_active != 0
-    call <sid>SetupScrollbar()
+    " call <sid>SetupScrollbar()
 endif
 if g:scrollbar_binding_active != 1
-    call SetupScrollbarBinding()
+    " call SetupScrollbarBindings()
 endif
 "
 " Restore cpoptions.
