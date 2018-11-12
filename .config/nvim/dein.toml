@@ -31,7 +31,6 @@ repo = 'sheerun/vim-polyglot'
 repo = 'vim-airline/vim-airline'
 depends = ['vim-airline-themes']
 hook_add = '''
-" let g:airline_theme = 'minimalist'
 let g:airline_theme = 'solarized'
 let g:airline_powerline_fonts = 1
 let g:airline_enable_branch = 1
@@ -57,7 +56,7 @@ let g:airline_symbols.branch = '⭠'
 let g:airline_left_sep = '⮀'
 let g:airline_right_sep = '⮂'
 let g:airline_left_alt_sep = '⮁'
-let g:airline_right_alt_sep = '⮃'
+let g:airline_right_alt_sep = '⮂'
 let g:airline_symbols.readonly = '⭤'
 
 let g:airline#extensions#tabline#enabled = 1
@@ -68,35 +67,11 @@ let g:airline#extensions#tabline#fnamemod = ':t'
 [[plugins]]
 repo = 'vim-airline/vim-airline-themes'
 
-# [[plugins]]
-# repo = '97-109-107/scrollbar.vim'
-# hook_add = '''
-# let g:airline_section_c = airline#section#create(['file', ' : ', '%{ScrollBar()}'])
-# '''
-
-# [[plugins]]
-# repo = 'lornix/vim-scrollbar'
-# hook_add = '''
-# let g:scrollbar_thumb='a'
-# highlight Scrollbar_Thumb ctermfg=green ctermbg=black guifg=green guibg=black cterm=none
-# nmap <leader>' :call ToggleScrollbar()<cr>
-# '''
-
-# [[plugins]]
-# repo = 'NLKNguyen/papercolor-theme'
-# hook_add = '''
-# set background=dark
-# autocmd ColorScheme * highlight Normal ctermbg=none
-# autocmd ColorScheme * highlight LineNr ctermbg=none
-# colorscheme PaperColor
-# '''
-
 [[plugins]]
 repo = 'altercation/vim-colors-solarized'
 hook_add = '''
 set background=dark
 autocmd MyAutoCmd ColorScheme * highlight Normal ctermbg=none
-" autocmd ColorScheme * highlight LineNr ctermbg=none
 colorscheme solarized
 let g:solarized_termcolors=16
 '''

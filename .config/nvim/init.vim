@@ -46,23 +46,12 @@ set completeopt=menuone
 set noshowmode
 set cursorline
 set list
-" set listchars=tab:»-,trail:-,eol:↲,extends:»,precedes:«,nbsp:%
+set undofile
+set undodir=$HOME/.config/nvim/undo/
 set listchars=tab:»-,trail:-,extends:»,precedes:«,nbsp:%
-" set ambiwidth=double
-" set redrawtime=10000
-" set colorcolumn=120
 " set spell
 " set spelllang=en,cjk
 runtime macros/matchit.vim
-
-" functions
-command! -nargs=*
-      \   Debug
-      \   try
-      \|      echom <q-args> ":" string(<args>)
-      \|  catch
-        \|      echom <q-args>
-        \|  endtry
 
 " Insertモードのときカーソルの形状を変更
 if has('unix')

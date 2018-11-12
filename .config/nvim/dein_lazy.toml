@@ -4,9 +4,10 @@
 repo = 'Shougo/deoplete.nvim'
 depends = [
 'neosnippet', 'context_filetype.vim', 'neco-syntax',
-'echodoc.vim', 'neoinclude.vim', 'FastFold'
+'echodoc.vim', 'neoinclude.vim', 'FastFold', 'neopairs.vim',
+'deoplete-tabnine'
 ]
-do =  'UpdateRemotePlugins'
+do = 'UpdateRemotePlugins'
 hook_source = '''
 " deoplete setup
 let g:deoplete#enable_at_startup = 1
@@ -18,16 +19,10 @@ let g:deoplete#enable_refresh_always = 0
 let g:deoplete#enable_smart_case = 1
 let g:deoplete#file#enable_buffer_path = 1
 let g:deoplete#max_list = 100
-" let g:deoplete#sources#padawan#server_autostart = 0
-" let g:deoplete#sources#padawan#add_parentheses = 1
 
-" call deoplete#custom#source('neosnippet', 'rank', 1000)
 call deoplete#custom#source('tag', 'min_pattern_length', 4)
 call deoplete#custom#source('padawan', 'mark', '[P]')
 call deoplete#custom#source('padawan', 'rank', 10)
-" call deoplete#custom#option('sources', {
-"     \ '_': ['neosnippet', 'buffer', 'tag', 'padawan'],
-"     \})
 
 " 戻れてもいいかもしれない
 autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
@@ -112,6 +107,16 @@ let g:echodoc#enable_at_startup = 1
 repo = 'Shougo/neoinclude.vim'
 
 [[plugins]]
+repo = 'Shougo/neopairs.vim'
+hook_add = '''
+let g:neopairs#enable = 1
+'''
+
+[[plugins]]
+repo = 'Shougo/deoplete-tabnine'
+build = './install.sh'
+
+[[plugins]]
 repo = 'konfekt/FastFold'
 
 [[plugins]]
@@ -122,7 +127,7 @@ rev = '3787e5'
 
 [[plugins]]
 repo = 'mattn/emmet-vim'
-# on_event = 'InsertEnter'
+# on_event = 'insertenter'
 on_ft = ['html', 'php', 'phtml', 'javascript']
 hook_add = '''
 let g:user_emmet_install_global = 0
@@ -193,16 +198,6 @@ function g:Multiple_cursors_after()
 endfunction
 '''
 
-# [[plugins]]
-# repo = 'terryma/vim-expand-region'
-# on_map = '<Plug>(expand_region_expand)'
-# hook_add = '''
-# nmap - <Plug>(expand_region_expand)
-# vmap - <Plug>(expand_region_expand)
-# nmap _ <Plug>(expand_region_shrink)
-# vmap _ <Plug>(expand_region_shrink)
-# '''
-
 [[plugins]]
 repo = 'Lokaltog/vim-easymotion'
 on_map = '<Plug>(easymotion-s2)'
@@ -217,7 +212,7 @@ repo = 'kana/vim-textobj-user'
 depends = [
 'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
 'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment',
-'vim-textobj-between', 'vim-textobj-from_regexp'
+'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-chunk'
 ]
 on_event = 'VimEnter'
 
@@ -238,6 +233,18 @@ repo = 'kana/vim-textobj-syntax'
 
 [[plugins]]
 repo = 'glts/vim-textobj-comment'
+hook_add = '''
+let g:textobj_comment_no_default_key_mappings = 1
+xmap a/ <Plug>(textobj-comment-a)
+omap a/ <Plug>(textobj-comment-a)
+xmap i/ <Plug>(textobj-comment-i)
+omap i/ <Plug>(textobj-comment-i)
+xmap a? <Plug>(textobj-comment-big-a)
+omap a? <Plug>(textobj-comment-big-a)
+'''
+
+[[plugins]]
+repo = 'Chun-Yang/vim-textobj-chunk'
 
 [[plugins]]
 repo = 'akiyan/vim-textobj-php'
@@ -263,13 +270,8 @@ on_event = 'VimEnter'
 hook_source = '''
 let g:submode_timeoutlen = 5000
 let g:submode_keep_leaving_key = 1
-" let g:submode_keyseqs_to_leave = ['<Esc>:call EndScrollbar()<CR>']
 call submode#enter_with('history', 'n', '', 'g;', 'g;zz')
 call submode#enter_with('history', 'n', '', 'g,', 'g,zz')
-" call submode#enter_with('move', 'n', '', '<C-d>', '<C-d>zz:call StartScrollbar()<CR>')
-" call submode#enter_with('move', 'n', '', '<C-u>', '<C-u>zz:call StartScrollbar()<CR>')
-" call submode#map('move', 'n', '', '<C-d>', '<C-d>zz:call RefreshScrollbar()<CR>')
-" call submode#map('move', 'n', '', '<C-u>', '<C-u>zz:call RefreshScrollbar()<CR>')
 call submode#enter_with('bufmove', 'n', '', '<C-w>+', '<C-w>+')
 call submode#enter_with('bufmove', 'n', '', '<C-w>-', '<C-w>-')
 call submode#enter_with('bufmove', 'n', '', '<C-w>>', '<C-w>>')
@@ -561,11 +563,17 @@ hook_add = '''
 let MRU_Max_Entries = 1000
 '''
 
+[[plugins]]
+repo = 'simnalamburt/vim-mundo'
+on_cmd = ['MundoToggle']
+hook_add = '''
+nnoremap <F5> :MundoToggle<CR>
+'''
+
 # git------------------------------------
 
 [[plugins]]
 repo = 'tpope/vim-fugitive'
-depends = ['gitv']
 on_cmd = ['Gstatus', 'Gdiff', 'Gremove', 'Gblame', 'Gitv']
 hook_add = '''
 nmap <silent> <Space>s :Gstatus<CR>
@@ -578,27 +586,15 @@ nmap <Space>g :call fugitive#detect(@%)<CR>
 '''
 
 [[plugins]]
-repo = 'gregsexton/gitv'
+repo = 'lambdalisue/gina.vim'
+on_cmd = ['Gina']
+hook_add = '''
+'''
+
+[[plugins]]
+repo = 'cohama/agit.vim'
+on_cmd = ['Agit']
 hook_source = '''
-autocmd MyAutoCmd FileType gitv call s:my_gitv_settings()
-function! s:my_gitv_settings()
-  setlocal iskeyword+=/,-,.
-  nnoremap <silent><buffer> C :<C-u>Git checkout <C-r><C-w><CR>
-  nnoremap <silent><buffer> t :<C-u>windo call <SID>toggle_git_folding()<CR>1<C-w>w
-  nnoremap <buffer> <Space>rb :<C-u>Git rebase <C-r>=GitvGetCurrentHash()<CR><Space>
-  nnoremap <buffer> <Space>R :<C-u>Git revert <C-r>=GitvGetCurrentHash()<CR><CR>
-  nnoremap <buffer> <Space>h :<C-u>Git cherry-pick <C-r>=GitvGetCurrentHash()<CR><CR>
-  nnoremap <buffer> <Space>rh :<C-u>Git reset --hard <C-r>=GitvGetCurrentHash()<CR>
-endfunction
-function! s:gitv_get_current_hash()
-  return matchstr(getline('.'), '\[\zs.\{7\}\ze\]$')
-endfunction
-autocmd MyAutoCmd FileType git setlocal nofoldenable foldlevel=0
-function! s:toggle_git_folding()
-  if &filetype ==# 'git'
-    setlocal foldenable!
-  endif
-endfunction
 '''
 
 [[plugins]]
@@ -616,7 +612,6 @@ let g:ale_fixers['javascript'] = ['prettier']
 let g:ale_fixers['html'] = ['tidy']
 let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
-" let g:ale_fixers['php'] = ['tidy', 'prettier']
 let g:ale_fixers['php'] = ['prettier']
 let g:ale_linters = {}
 " let g:ale_linters['php'] = ['phan']
