@@ -48,7 +48,7 @@ set cursorline
 set list
 set undofile
 set undodir=$HOME/.config/nvim/undo/
-set listchars=tab:»-,trail:-,extends:»,precedes:«,nbsp:%
+set listchars=tab:»-,extends:»,precedes:«,nbsp:%
 " set spell
 " set spelllang=en,cjk
 runtime macros/matchit.vim

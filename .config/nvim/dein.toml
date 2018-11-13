@@ -25,6 +25,12 @@ build = 'bash install.sh'
 [[plugins]]
 repo = 'sheerun/vim-polyglot'
 
+# [[plugins]]
+# repo = 'andymass/vim-matchup'
+# hook_add = '''
+# let g:matchup_transmute_enabled = 1
+# '''
+
 # design---------------------------------
 
 [[plugins]]
