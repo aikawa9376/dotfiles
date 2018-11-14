@@ -21,6 +21,18 @@ let g:indentLine_faster = 1
 repo = 'autozimu/LanguageClient-neovim'
 rev = 'next'
 build = 'bash install.sh'
+hook_add = '''
+let g:LanguageClient_autoStart         = 1 " NeoVim起動時にLSPを自動スタート
+let g:LanguageClient_diagnosticsEnable = 0 " シンタックスチェックをOFF
+nnoremap <silent> K :call LanguageClient_textDocument_hover()<CR>
+nnoremap <silent> gd :call LanguageClient_textDocument_definition()<CR>
+nnoremap <silent> <F5> :call LanguageClient_textDocument_rename()<CR>
+nnoremap <silent> <F3> :call LanguageClient_textDocument_references()<CR>
+'''
+
+[[plugins]]
+repo = 'roxma/LanguageServer-php-neovim',
+build = 'composer install && composer run-script parse-stubs'
 
 [[plugins]]
 repo = 'sheerun/vim-polyglot'
