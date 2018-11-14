@@ -102,6 +102,7 @@ repo = 'Shougo/neco-syntax'
 repo = 'Shougo/echodoc.vim'
 hook_add = '''
 let g:echodoc#enable_at_startup = 1
+let g:echodoc#type = 'virtual'
 '''
 
 [[plugins]]
@@ -273,6 +274,8 @@ let g:submode_timeoutlen = 5000
 let g:submode_keep_leaving_key = 1
 call submode#enter_with('history', 'n', '', 'g;', 'g;zz')
 call submode#enter_with('history', 'n', '', 'g,', 'g,zz')
+call submode#map('history', 'n', '', ';', 'g;zz')
+call submode#map('history', 'n', '', ',', 'g,zz')
 call submode#enter_with('bufmove', 'n', '', '<C-w>+', '<C-w>+')
 call submode#enter_with('bufmove', 'n', '', '<C-w>-', '<C-w>-')
 call submode#enter_with('bufmove', 'n', '', '<C-w>>', '<C-w>>')
@@ -624,6 +627,7 @@ let g:ale_javascript_prettier_use_local_config = 1
 " 設定を見直す必要あり
 let g:ale_php_phan_executable = 'vendor/bin/phan'
 let g:ale_html_tidy_options = '-config .tidyrc'
+let g:ale_virtualtext_cursor = 1
 '''
 
 # php------------------------------------
