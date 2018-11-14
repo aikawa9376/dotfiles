@@ -51,7 +51,6 @@ set undodir=$HOME/.config/nvim/undo/
 set listchars=tab:»-,extends:»,precedes:«,nbsp:%
 " set spell
 " set spelllang=en,cjk
-runtime macros/matchit.vim
 
 " Insertモードのときカーソルの形状を変更
 if has('unix')
