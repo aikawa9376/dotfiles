@@ -650,10 +650,10 @@ on_ft = ['html', 'php', 'phtml']
 repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
 
-[[plugins]]
-repo = 'padawan-php/deoplete-padawan'
-build = 'composer install'
-on_ft = ['html', 'php', 'phtml']
+# [[plugins]]
+# repo = 'padawan-php/deoplete-padawan'
+# build = 'composer install'
+# on_ft = ['html', 'php', 'phtml']
 
 # [[plugins]]
 # repo = 'HerringtonDarkholme/yats.vim'
