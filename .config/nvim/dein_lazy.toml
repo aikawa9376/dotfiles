@@ -4,10 +4,8 @@
 repo = 'Shougo/deoplete.nvim'
 depends = [
 'neosnippet', 'context_filetype.vim', 'neco-syntax',
-'echodoc.vim', 'neoinclude.vim', 'FastFold', 'neopairs.vim',
-'deoplete-tabnine'
+'echodoc.vim', 'neoinclude.vim', 'FastFold', 'neopairs.vim'
 ]
-do = 'UpdateRemotePlugins'
 hook_source = '''
 " deoplete setup
 let g:deoplete#enable_at_startup = 1
@@ -19,11 +17,13 @@ let g:deoplete#enable_refresh_always = 0
 let g:deoplete#enable_smart_case = 1
 let g:deoplete#file#enable_buffer_path = 1
 let g:deoplete#max_list = 100
+let g:deoplete#num_processes = 4
+" let g:deoplete#async_timeout = 100000000
 
 call deoplete#custom#source('tag', 'min_pattern_length', 4)
 call deoplete#custom#source('padawan', 'mark', '[P]')
-call deoplete#custom#source('padawan', 'rank', 10)
-call deoplete#custom#source('tabnine', 'rank', 50)
+" call deoplete#custom#source('padawan', 'rank', 10)
+" call deoplete#custom#source('tabnine', 'rank', 50)
 
 " 戻れてもいいかもしれない
 autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
@@ -52,6 +52,28 @@ let g:neosnippet#snippets_directory = '~/.config/nvim/snippets'
 '''
 
 [[plugins]]
+repo = 'autozimu/LanguageClient-neovim'
+depends = ['deoplete.nvim']
+on_event = 'InsertEnter'
+rev = 'next'
+build = 'bash install.sh'
+hook_add = '''
+set hidden
+let g:LanguageClient_serverCommands = {
+  \ 'rust': ['~/.cargo/bin/rustup', 'run', 'stable', 'rls'],
+  \ 'javascript': ['javascript-typescript-stdio'],
+  \ 'python': ['pyls'],
+  \ }
+let g:LanguageClient_autoStart         = 1 " NeoVim起動時にLSPを自動スタート
+let g:LanguageClient_diagnosticsEnable = 0 " シンタックスチェックをOFF
+nnoremap <silent> K :call LanguageClient_textDocument_hover()<CR>
+nnoremap <silent> gd :call LanguageClient_textDocument_definition()<CR>
+nnoremap <silent> <F2> :call LanguageClient_textDocument_rename()<CR>
+nnoremap <silent> <F3> :call LanguageClient_textDocument_references()<CR>
+'''
+
+
+[[plugins]]
 repo = 'Shougo/neosnippet-snippets'
 
 [[plugins]]
@@ -64,6 +86,8 @@ if !exists('g:context_filetype#same_filetypes')
   let g:context_filetype#same_filetypes = {}
 endif
 let g:context_filetype#same_filetypes.php = 'phtml'
+let g:context_filetype#same_filetypes.php = 'html'
+let g:context_filetype#same_filetypes.html = 'php'
 let b:context_filetype_filetypes = context_filetype#default_filetypes()
 call extend(b:context_filetype_filetypes,
       \ {'php' : [
@@ -114,15 +138,17 @@ hook_add = '''
 let g:neopairs#enable = 1
 '''
 
-[[plugins]]
-repo = 'Shougo/deoplete-tabnine'
-build = './install.sh'
+# [[plugins]]
+# repo = 'Shougo/deoplete-tabnine'
+# build = './install.sh'
 
 [[plugins]]
 repo = 'konfekt/FastFold'
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'Shougo/vimshell'
+on_event = 'VimEnter'
 rev = '3787e5'
 
 # text-----------------------------------
@@ -640,9 +666,14 @@ on_ft = ['html', 'php', 'phtml']
 repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
 
+[[plugins]]
+repo = 'padawan-php/deoplete-padawan'
+on_ft = ['php', 'phtml']
+build = 'composer install'
+
 # [[plugins]]
-# repo = 'HerringtonDarkholme/yats.vim'
-# on_ft = ['typescript']
+# repo = 'roxma/LanguageServer-php-neovim',
+# build = 'composer install && composer run-script parse-stubs'
 
 # javascript & typescript----------------
 
@@ -654,3 +685,4 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'burnettk/vim-angular'
 on_ft = ['javascript']
+

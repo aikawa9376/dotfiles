@@ -66,4 +66,6 @@
 
 --langmap=php:.php
 --langmap=php:+.inc
---regex-php=/(^|^[^*]+[[:blank:]])const[[:blank:]]+([a-z0-9_]+)/\1/co,const/
+--regex-php=/(^|^[^*]+[[:blank:]])const[[:blank:]]+([a-z0-9_]+)/\1/q,co,const/
+--regex-php=/id="([A-Za-z0-9_-]+)"/\1/x,id,ids/
+--regex-php=/class="([A-Za-z0-9_-]+)"/\1/p,class,classes/
