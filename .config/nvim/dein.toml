@@ -17,9 +17,11 @@ hook_add = '''
 let g:indentLine_faster = 1
 '''
 
-
 [[plugins]]
 repo = 'sheerun/vim-polyglot'
+hook_add = '''
+let g:jsx_ext_required = 1
+'''
 
 [[plugins]]
 repo = 'andymass/vim-matchup'

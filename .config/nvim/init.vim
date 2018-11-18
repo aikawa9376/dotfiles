@@ -47,8 +47,7 @@ set noshowmode
 set cursorline
 set list
 set undofile
-set undodir=$HOME/.config/nvim/undo/
-set listchars=tab:»-,extends:»,precedes:«,nbsp:%
+
 " set spell
 " set spelllang=en,cjk
 
@@ -355,7 +354,7 @@ autocmd FileType php,phml call s:php_my_settings()
 function! s:php_my_settings() abort
   inoremap <buffer> <M--> ->
   inoremap <buffer> <M-=> =>
-  nnoremap <buffer> <expr><F2> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
+  nnoremap <buffer> <expr><F1> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
   nnoremap <buffer> <M-4> bi$<ESC>e
   " let b:match_words .= ',if.*(.*)\s{:selse\s{:},?php:?>,for:},if:endif,foreach:endforeach'
 endfunction
