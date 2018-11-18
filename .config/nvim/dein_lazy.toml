@@ -9,33 +9,32 @@ depends = [
 hook_source = '''
 " deoplete setup
 let g:deoplete#enable_at_startup = 1
-let g:deoplete#auto_complete_delay = 5
-let g:deoplete#auto_refresh_delay = 30
-let g:deoplete#auto_complete_start_length = 1
-let g:deoplete#enable_camel_case = 0
-let g:deoplete#enable_ignore_case = 0
-let g:deoplete#enable_refresh_always = 0
-let g:deoplete#enable_smart_case = 1
-let g:deoplete#file#enable_buffer_path = 1
-let g:deoplete#max_list = 100
-let g:deoplete#num_processes = 10
-" let g:deoplete#async_timeout = 100000000
+
+let s:deoplete_custom_option = {
+      \ 'auto_complete_delay': 5,
+      \ 'auto_refresh_delay': 30,
+      \ 'auto_refresh_delay': 30,
+      \ 'camel_case': v:false,
+      \ 'ignore_case': v:true,
+      \ 'max_list': 100,
+      \ 'min_pattern_length': 1,
+      \ 'num_processes': 10,
+      \ 'on_insert_enter': v:true,
+      \ 'on_text_changed_i': v:true,
+      \ 'refresh_always': v:false,
+      \ 'skip_chars': ['(', ')'],
+      \ 'smart_case': v:true,
+      \ }
+call deoplete#custom#option(s:deoplete_custom_option)
 
 call deoplete#custom#source('tag', 'min_pattern_length', 4)
 call deoplete#custom#source('padawan', 'mark', '[P]')
-" call deoplete#custom#source('padawan', 'rank', 10)
-" call deoplete#custom#source('tabnine', 'rank', 50)
 
 " 戻れてもいいかもしれない
 autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
 
-inoremap <expr><C-h> deoplete#smart_close_popup()."\<C-h>"
-inoremap <expr><BS> deoplete#smart_close_popup()."\<C-h>"
-
 inoremap <expr><C-g> deoplete#refresh()
-inoremap <expr><C-e> deoplete#cancel_popup()
 inoremap <silent><expr><C-l> deoplete#complete_common_string()
-
 inoremap <expr> '  pumvisible() ? deoplete#close_popup() : "'"
 '''
 on_event = 'InsertEnter'
@@ -614,6 +613,9 @@ hook_add = '''
 nnoremap U :MundoToggle<CR>
 '''
 
+[[plugins]]
+repo = 'thinca/vim-qfreplace'
+
 # git------------------------------------
 
 [[plugins]]
@@ -622,11 +624,8 @@ on_cmd = ['Gstatus', 'Gdiff', 'Gremove', 'Gblame', 'Gitv']
 hook_add = '''
 nmap <silent> <Space>s :Gstatus<CR>
 nmap <silent> <Space>d :Gdiff<CR>
-nmap <silent> <Space>c :Gcommit<CR>
 nmap <silent> <Space>r :Gremove<CR>
 nmap <silent> <Space>h :Gblame<CR>
-" test
-nmap <Space>g :call fugitive#detect(@%)<CR>
 '''
 
 [[plugins]]

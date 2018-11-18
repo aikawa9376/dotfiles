@@ -47,7 +47,8 @@ set noshowmode
 set cursorline
 set list
 set undofile
-
+set undodir=$HOME/.config/nvim/undo/
+set listchars=tab:»-,extends:»,precedes:«,nbsp:%
 " set spell
 " set spelllang=en,cjk
 
@@ -168,17 +169,17 @@ nnoremap <M-d> mzo<ESC>`zj
 nnoremap <M-u> mzO<ESC>`zk
 
 " インサートモードで bash 風キーマップ
-inoremap <C-a> <C-o>^
-inoremap <C-e> <C-o>$<Right>
-inoremap <C-b> <Left>
-inoremap <C-f> <Right>
-inoremap <C-n> <Down>
-inoremap <C-p> <Up>
-inoremap <C-h> <BS>
-inoremap <C-d> <Del>
-inoremap <C-k> <C-o>D<Right>
-inoremap <C-u> <C-o>d^
-inoremap <C-w> <C-o>db
+inoremap <C-a> <C-g>U<C-o>^
+inoremap <C-e> <C-g>U<C-o>$<C-g>U<Right>
+inoremap <C-b> <C-g>U<Left>
+inoremap <C-f> <C-g>U<Right>
+inoremap <C-n> <C-g>U<Down>
+inoremap <C-p> <C-g>U<Up>
+inoremap <C-h> <C-g>U<BS>
+inoremap <C-d> <C-g>U<Del>
+inoremap <C-k> <C-g>U<C-o>D<Right>
+inoremap <C-u> <C-g>U<C-o>d^
+inoremap <C-w> <C-g>U<C-o>db
 
 " 文字選択・移動など
 nnoremap Y y$
