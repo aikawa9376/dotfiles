@@ -192,6 +192,17 @@ nnoremap <C-y> 10<C-y>
 nnoremap <C-j> 10j
 nnoremap <C-k> 10k
 
+" gJで空白を削除する
+fun! JoinSpaceless()
+    execute 'normal J'
+    " Character under cursor is whitespace?
+    if matchstr(getline('.'), '\%' . col('.') . 'c.') =~ '\s'
+        " When remove it!
+        execute 'normal dw'
+    endif
+endfun
+nnoremap gJ :call JoinSpaceless()<CR>
+
 " j, k による移動を折り返されたテキストでも自然に振る舞うように変更
 nnoremap j gj
 nnoremap k gk
