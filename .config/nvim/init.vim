@@ -154,7 +154,7 @@ nnoremap s "_s
 vnoremap s "_s
 " ヤンクした後に末尾に移動
 nmap <C-t> `]
-nmap <M-p> o<C-r>"<ESC>
+nmap <M-p> o<Esc>p
 
 " 選択範囲のインデントを連続して変更
 vnoremap < <gv
@@ -273,7 +273,6 @@ autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 " window操作系
 nmap <silent> \| :<c-u>vsplit<CR>
 nmap <silent> - :<c-u>split<CR>
-nmap <C-w>x :<c-u>q<CR>
 
 " 前回のカーソル位置からスタート
 augroup vimrcEx
