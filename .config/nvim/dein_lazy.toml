@@ -32,13 +32,6 @@ call deoplete#custom#source('padawan', 'mark', '[P]')
 
 " 戻れてもいいかもしれない
 autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
-
-" inoremap <silent><expr> <C-Space>
-"  \ pumvisible() ? "\<C-n>" :
-"  \ deoplete#mappings#manual_complete()
-" inoremap <expr><C-g> deoplete#refresh()
-" inoremap <silent><expr><C-l> deoplete#complete_common_string()
-" inoremap <expr> '  pumvisible() ? deoplete#close_popup() : "'"
 '''
 on_event = 'InsertEnter'
 
@@ -68,7 +61,6 @@ let g:neosnippet#snippets_directory = '~/.config/nvim/snippets'
 
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
-# depends = ['deoplete.nvim', 'LanguageServer-php-neovim']
 depends = ['deoplete.nvim']
 on_ft = ['rust','javascript','python']
 rev = 'next'
@@ -463,6 +455,7 @@ imap <M-p> <plug>(fzf-complete-path)
 imap <c-x><c-j> <plug>(fzf-complete-file-ag)
 
 nmap <Space><tab> <plug>(fzf-maps-n)
+" imap <expr> <C-c> :execute "\<plug>\(fzf-maps-i)"
 xmap <Space><tab> <plug>(fzf-maps-x)
 omap <Space><tab> <plug>(fzf-maps-o)
 
