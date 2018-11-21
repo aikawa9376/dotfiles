@@ -27,7 +27,7 @@ let s:deoplete_custom_option = {
       \ }
 call deoplete#custom#option(s:deoplete_custom_option)
 
-" call deoplete#custom#source('tag', 'min_pattern_length', 4)
+" call deoplete#custom#source('tag', 'min_pattern_length', 2)
 call deoplete#custom#source('padawan', 'mark', '[P]')
 
 " 戻れてもいいかもしれない
@@ -40,6 +40,7 @@ autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
 " inoremap <silent><expr><C-l> deoplete#complete_common_string()
 " inoremap <expr> '  pumvisible() ? deoplete#close_popup() : "'"
 '''
+on_event = 'InsertEnter'
 
 [[plugins]]
 repo = 'Shougo/neosnippet'
@@ -69,7 +70,7 @@ let g:neosnippet#snippets_directory = '~/.config/nvim/snippets'
 repo = 'autozimu/LanguageClient-neovim'
 # depends = ['deoplete.nvim', 'LanguageServer-php-neovim']
 depends = ['deoplete.nvim']
-on_event = 'VimEnter'
+on_ft = ['rust','javascript','python']
 rev = 'next'
 build = 'bash install.sh'
 hook_add = '''
@@ -357,6 +358,18 @@ on_event = 'VimEnter'
 repo = 'matze/vim-move'
 on_event = 'VimEnter'
 
+[[plugins]]
+repo = 'andymass/vim-matchup'
+on_event = 'VimEnter'
+hook_add = '''
+autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
+let g:matchup_transmute_enabled = 1
+'''
+
+[[plugins]]
+repo = 'wellle/targets.vim'
+on_event = 'VimEnter'
+
 # list-----------------------------------
 
 [[plugins]]
@@ -526,10 +539,10 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 
 " MRU handling, limited to current directory
 command! MRUFilesCWD call fzf#run({
-\  'source': s:mru_files_for_cwd(),
-\  'sink': 'edit',
-\  'options': '-m -x +s --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
-\  'down': '40%'})
+  \  'source': s:mru_files_for_cwd(),
+  \  'sink': 'edit',
+  \  'options': '-m -x +s --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
+  \  'down': '40%'})
 
 " This relies on the yegappan/mru plugin for live MRU updating. Also relies on
 " the fact that you don't change the location of the file it uses as its cache.
@@ -539,6 +552,13 @@ function! s:mru_files_for_cwd()
   \  "v:val =~ '^" . getcwd() . "' && v:val !~ '__Tagbar__\\|\\[YankRing]\\|fugitive:\\|NERD_tree\\|^/tmp/\\|.git/'"
   \ ), 'fnamemodify(v:val, ":p:.")')
 endfunction
+
+command! -bang -nargs=* Memo
+  \ call fzf#vim#grep(
+  \   'rg --column -n --hidden --ignore-case --no-heading --color=always ' .shellescape(<q-args>) . ' ~/.cache/junkfile/', 1,
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden', '?'),
+  \   <bang>0)
 
 " YankRing fzf
 function! FZFYankList() abort
@@ -623,6 +643,21 @@ nnoremap U :MundoToggle<CR>
 [[plugins]]
 repo = 'brooth/far.vim'
 on_event = 'VimEnter'
+hook_add = '''
+let g:far#source = 'agnvim'
+'''
+
+[[plugins]]
+repo = 'Shougo/junkfile.vim'
+on_cmd = ['JunkfileOpen']
+
+[[plugins]]
+repo = 'jeetsukumaran/vim-buffergator'
+on_cmd = ['BuffergatorToggle']
+hook_add = '''
+let g:buffergator_vsplit_size = 35
+nnoremap <silent> <Space>B :BuffergatorToggle<CR>
+'''
 
 # git------------------------------------
 
