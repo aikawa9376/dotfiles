@@ -93,6 +93,14 @@ nnoremap <silent> <M-m> :call LanguageClient_contextMenu()<CR>
 '''
 
 [[plugins]]
+repo = 'Shougo/denite.nvim'
+on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'jeetsukumaran/vim-buffergator'
+on_event = 'VimEnter'
+
+[[plugins]]
 repo = 'Shougo/neosnippet-snippets'
 
 [[plugins]]
@@ -617,11 +625,15 @@ nnoremap U :MundoToggle<CR>
 repo = 'brooth/far.vim'
 on_event = 'VimEnter'
 
+[[plugins]]
+repo = 'tpope/vim-dadbod'
+on_event = 'VimEnter'
+
 # git------------------------------------
 
 [[plugins]]
 repo = 'tpope/vim-fugitive'
-on_cmd = ['Gstatus', 'Gdiff', 'Gremove', 'Gblame', 'Gitv']
+on_cmd = ['Gstatus', 'Gdiff', 'Gremove', 'Gblame']
 hook_add = '''
 nmap <silent> <Space>s :Gstatus<CR>
 nmap <silent> <Space>d :Gdiff<CR>

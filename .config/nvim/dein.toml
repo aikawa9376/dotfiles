@@ -33,6 +33,10 @@ let g:matchup_transmute_enabled = 1
 [[plugins]]
 repo = 'wellle/targets.vim'
 
+[[plugins]]
+repo = 'Valloric/YouCompleteMe'
+build = 'install.py'
+
 # design---------------------------------
 
 [[plugins]]
