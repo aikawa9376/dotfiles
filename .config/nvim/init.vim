@@ -154,7 +154,7 @@ nnoremap s "_s
 vnoremap s "_s
 " ヤンクした後に末尾に移動
 nmap <C-t> `]
-nmap <M-p> o<Esc>p
+nmap <M-p> o<ESC>p
 
 " 選択範囲のインデントを連続して変更
 vnoremap < <gv
@@ -186,6 +186,7 @@ nnoremap Y y$
 " nnoremap V v$
 nnoremap <C-h> ^
 nnoremap <C-l> $
+nnoremap <silent><C-g> :call cursor(0,strlen(getline("."))/2)<CR>
 nnoremap <C-e> 10<C-e>
 nnoremap <C-y> 10<C-y>
 " すごく移動する
@@ -280,8 +281,12 @@ augroup vimrcEx
         \ exe "normal g`\"" | endif
 augroup END
 
-" 文末にセミコロンを付ける
+" 文末に○○を付ける
 nnoremap <M-;> mz$a;<ESC>`z
+nnoremap <M-,> mz$a,<ESC>`z
+
+" 補完系
+inoremap <C-l> <C-x><C-l>
 
 " ctags
 set tags=./tags,tags;$HOME

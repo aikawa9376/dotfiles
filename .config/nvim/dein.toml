@@ -23,20 +23,6 @@ hook_add = '''
 let g:jsx_ext_required = 1
 '''
 
-[[plugins]]
-repo = 'andymass/vim-matchup'
-hook_add = '''
-autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
-let g:matchup_transmute_enabled = 1
-'''
-
-[[plugins]]
-repo = 'wellle/targets.vim'
-
-[[plugins]]
-repo = 'Valloric/YouCompleteMe'
-build = 'install.py'
-
 # design---------------------------------
 
 [[plugins]]
