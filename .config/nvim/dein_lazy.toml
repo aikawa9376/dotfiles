@@ -16,7 +16,7 @@ let s:deoplete_custom_option = {
       \ 'auto_refresh_delay': 30,
       \ 'camel_case': v:false,
       \ 'ignore_case': v:true,
-      \ 'max_list': 1000,
+      \ 'max_list': 100,
       \ 'min_pattern_length': 1,
       \ 'num_processes': 10,
       \ 'on_insert_enter': v:true,
@@ -749,6 +749,7 @@ repo = 'burnettk/vim-angular'
 on_ft = ['javascript']
 
 # rust----------------------------------
+
 [[plugins]]
 repo = 'rust-lang/rust.vim'
 on_ft = ['rust']

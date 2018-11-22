@@ -23,6 +23,9 @@ hook_add = '''
 let g:jsx_ext_required = 1
 '''
 
+[[plugins]]
+repo = 'osyo-manga/vim-vigemo'
+
 # design---------------------------------
 
 [[plugins]]
