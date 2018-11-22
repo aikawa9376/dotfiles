@@ -668,7 +668,7 @@ nnoremap <silent> <Space>B :BuffergatorToggle<CR>
 repo = 'lambdalisue/gina.vim'
 on_cmd = ['Gina']
 hook_source = '''
-nnoremap <Space>gp :Gina push
+nnoremap <Space>gp :Gina push<CR>
 call gina#custom#command#option(
  \ '/\%(status\|log\|reflog\)',
  \ '--opener', 'split'
