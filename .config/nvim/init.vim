@@ -50,8 +50,51 @@ set undofile
 set undodir=$HOME/.config/nvim/undo/
 set listchars=tab:»-,extends:»,precedes:«,nbsp:%
 set updatetime=100
-" set spell
-" set spelllang=en,cjk
+set nofoldenable
+set foldmethod=indent
+set foldcolumn=0
+set foldnestmax=1  " maximum fold depth
+set nospell
+set spelllang=en,cjk
+
+let g:loaded_gzip              = 1
+let g:loaded_tar               = 1
+let g:loaded_tarPlugin         = 1
+let g:loaded_zip               = 1
+let g:loaded_zipPlugin         = 1
+let g:loaded_rrhelper          = 1
+let g:loaded_2html_plugin      = 1
+let g:loaded_vimball           = 1
+let g:loaded_vimballPlugin     = 1
+let g:loaded_getscript         = 1
+let g:loaded_getscriptPlugin   = 1
+let g:loaded_netrw             = 1
+let g:loaded_netrwPlugin       = 1
+let g:loaded_netrwSettings     = 1
+let g:loaded_netrwFileHandlers = 1
+
+nmap <Space> <Leader>
+
+noremap <Plug>(my-switch) <Nop>
+nmap <Leader>S <Plug>(my-switch)
+nnoremap <silent> <Plug>(my-switch)s :<C-u>setl spell! spell?<CR>
+nnoremap <silent> <Plug>(my-switch)l :<C-u>setl list! list?<CR>
+nnoremap <silent> <Plug>(my-switch)t :<C-u>setl expandtab! expandtab?<CR>
+nnoremap <silent> <Plug>(my-switch)w :<C-u>setl wrap! wrap?<CR>
+nnoremap <silent> <Plug>(my-switch)p :<C-u>setl paste! paste?<CR>
+nnoremap <silent> <Plug>(my-switch)b :<C-u>setl scrollbind! scrollbind?<CR>
+nnoremap <silent> <Plug>(my-switch)y :call <SID>toggle_syntax()<CR>
+function! s:toggle_syntax() abort
+  if exists('g:syntax_on')
+    syntax off
+    redraw
+    echo 'syntax off'
+  else
+    syntax on
+    redraw
+    echo 'syntax on'
+  endif
+endfunction
 
 " Insertモードのときカーソルの形状を変更
 if has('unix')
@@ -78,7 +121,7 @@ set autoread   " 外部でファイルに変更がされた場合は読みなお
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
 set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバッファを開く
-nmap <Space>z :Bonly<CR>
+nmap <Leader>z :Bonly<CR>
 command! -nargs=? -complete=buffer -bang Bonly
     \ :call BufOnly('<args>', '<bang>')
 function! BufOnly(buffer, bang)
@@ -161,11 +204,11 @@ nmap <M-p> o<ESC>p==
 vnoremap < <gv
 vnoremap > >gv
 set smartindent
-nnoremap <Space>i mzgg=G`z
+nnoremap <Leader>i mzgg=G`z
 
 " ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
-" nnoremap <Space><CR> $a<CR><Esc>
+" nnoremap <Leader><CR> $a<CR><Esc>
 nnoremap <M-d> mzo<ESC>`zj
 nnoremap <M-u> mzO<ESC>`zk
 
@@ -263,10 +306,10 @@ nnoremap <C-f> <C-f>zz
 nnoremap <C-b> <C-b>zz
 
 " ファイル操作系
-nmap <Space> <Nop>
-nmap <Space>w :<c-u>w<CR>
-nmap <Space>x :<c-u>bd<CR>
-nmap <Space>q :<c-u>wq<CR>
+nmap <Leader> <Nop>
+nmap <Leader>w :<c-u>w<CR>
+nmap <Leader>x :<c-u>bd<CR>
+nmap <Leader>q :<c-u>wq<CR>
 nmap <silent> <M-b> :bprevious<CR>
 nmap <silent> <M-f> :bnext<CR>
 " QuickFixおよびHelpでは q でバッファを閉じる
@@ -313,7 +356,7 @@ augroup ctags
 augroup END
 
 " vimrcをスペースドットで開く
-nnoremap <Space>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
+nnoremap <Leader>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
 
 " 固有のvimrcを用意 .vimrc.local
 augroup vimrc-local

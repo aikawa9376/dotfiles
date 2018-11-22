@@ -374,8 +374,12 @@ on_event = 'VimEnter'
 repo = 'osyo-manga/vim-vigemo'
 on_map = '<Plug>(vigemo-search)'
 hook_add = '''
-nmap <Space>/ <Plug>(vigemo-search)
+nmap <Leader>/ <Plug>(vigemo-search)
 '''
+
+[[plugins]]
+repo = 'junegunn/vim-easy-align'
+on_event = 'VimEnter'
 
 # list-----------------------------------
 
@@ -383,7 +387,7 @@ nmap <Space>/ <Plug>(vigemo-search)
 repo = 'Shougo/defx.nvim'
 on_cmd = ['Defx']
 hook_add = '''
-nmap <silent><Space>n :Defx -toggle -direction=topleft -split=vertical -winwidth=35<CR>
+nmap <silent><Leader>n :Defx -toggle -direction=topleft -split=vertical -winwidth=35<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
 " Define mappings
@@ -421,7 +425,7 @@ nnoremap <silent><buffer><expr> ~
 \ defx#do_action('cd')
 nnoremap <silent><buffer><expr> q
 \ defx#do_action('quit')
-nnoremap <silent><buffer><expr> <Space>
+nnoremap <silent><buffer><expr> <Leader>
 \ defx#do_action('toggle_select') . 'j'
 nnoremap <silent><buffer><expr> *
 \ defx#do_action('toggle_select_all')
@@ -450,32 +454,32 @@ repo = 'junegunn/fzf.vim'
 hook_add = '''
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
-nnoremap <silent> <Space>f :Files<CR>
-nnoremap <silent> <Space>b :Buffers<CR>
-nnoremap <silent> <Space>a :Rg<CR>
-nnoremap <silent> <Space>l :Lines<CR>
-nnoremap <silent> <Space>e :MRUFilesCWD<CR>
-nnoremap <silent> <Space>. :DotFiles<CR>
-nnoremap <silent> <space>O :Outline<CR>
-nnoremap <silent> <space>M :Memo<CR>
-nnoremap <silent> <space>gc :BCommits<CR>
-nnoremap <silent> <space>gC :Commits<CR>
+nnoremap <silent> <Leader>f :Files<CR>
+nnoremap <silent> <Leader>b :Buffers<CR>
+nnoremap <silent> <Leader>a :Rg<CR>
+nnoremap <silent> <Leader>l :Lines<CR>
+nnoremap <silent> <Leader>e :MRUFilesCWD<CR>
+nnoremap <silent> <Leader>. :DotFiles<CR>
+nnoremap <silent> <Leader>O :Outline<CR>
+nnoremap <silent> <Leader>M :Memo<CR>
+nnoremap <silent> <Leader>gc :BCommits<CR>
+nnoremap <silent> <Leader>gC :Commits<CR>
 " <C-]>でタグ検索
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
-" <Space>]で使用箇所検索
-nnoremap <silent> <expr> <Space>] ':Rg(' . expand('<cword>') . ')<CR>'
-nnoremap <silent> <Space>p :YanksAfter<CR>
-nnoremap <silent> <Space>P :YanksBefore<CR>
+" <Leader>]で使用箇所検索
+nnoremap <silent> <expr> <Leader>] ':Rg(' . expand('<cword>') . ')<CR>'
+nnoremap <silent> <Leader>p :YanksAfter<CR>
+nnoremap <silent> <Leader>P :YanksBefore<CR>
 nnoremap <silent> q: :History:<CR>
 nnoremap <silent> q/ :History/<CR>
 
 imap <M-p> <plug>(fzf-complete-path)
 imap <c-x><c-j> <plug>(fzf-complete-file-ag)
 
-nmap <Space><tab> <plug>(fzf-maps-n)
+nmap <Leader><tab> <plug>(fzf-maps-n)
 imap jc <plug>(fzf-maps-i)
-xmap <Space><tab> <plug>(fzf-maps-x)
-omap <Space><tab> <plug>(fzf-maps-o)
+xmap <Leader><tab> <plug>(fzf-maps-x)
+omap <Leader><tab> <plug>(fzf-maps-o)
 
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
@@ -609,23 +613,23 @@ repo = 'mg979/vim-bookmarks'
 rev = 'fzf'
 hook_add = '''
 let g:bookmark_prefer_fzf = 1
-nmap <Space>mm <Plug>BookmarkToggle
-nmap <Space>mi <Plug>BookmarkAnnotate
-nmap <Space>ma <Plug>BookmarkShowAll
-nmap <Space>mj <Plug>BookmarkNext
-nmap <Space>mk <Plug>BookmarkPrev
-nmap <Space>mc <Plug>BookmarkClear
-nmap <Space>mx <Plug>BookmarkClearAll
-nmap <Space>mkk <Plug>BookmarkMoveUp
-nmap <Space>mjj <Plug>BookmarkMoveDown
-nmap <Space>mg <Plug>BookmarkMoveToLine
+nmap <Leader>mm <Plug>BookmarkToggle
+nmap <Leader>mi <Plug>BookmarkAnnotate
+nmap <Leader>ma <Plug>BookmarkShowAll
+nmap <Leader>mj <Plug>BookmarkNext
+nmap <Leader>mk <Plug>BookmarkPrev
+nmap <Leader>mc <Plug>BookmarkClear
+nmap <Leader>mx <Plug>BookmarkClearAll
+nmap <Leader>mkk <Plug>BookmarkMoveUp
+nmap <Leader>mjj <Plug>BookmarkMoveDown
+nmap <Leader>mg <Plug>BookmarkMoveToLine
 '''
 
 [[plugins]]
 repo = 'majutsushi/tagbar'
 on_cmd = ['TagbarToggle']
 hook_add = '''
-nnoremap <silent> <Space>o :TagbarToggle<CR>
+nnoremap <silent> <Leader>o :TagbarToggle<CR>
 let g:tagbar_autopreview = 1
 let g:tagbar_compact = 1
 let g:tagbar_autoshowtag = 1
@@ -667,7 +671,8 @@ repo = 'jeetsukumaran/vim-buffergator'
 on_cmd = ['BuffergatorToggle']
 hook_add = '''
 let g:buffergator_vsplit_size = 35
-nnoremap <silent> <Space>B :BuffergatorToggle<CR>
+let g:buffergator_suppress_keymaps = 1
+nnoremap <silent> <Leader>B :BuffergatorToggle<CR>
 '''
 
 [[plugins]]
@@ -680,11 +685,11 @@ on_event = 'VimEnter'
 repo = 'lambdalisue/gina.vim'
 on_cmd = ['Gina']
 hook_add = '''
-nmap <Space>gns :Gina status<CR>
-nmap <Space>gnb :Gina blame<CR>
-nmap <Space>gp :Gina push<CR>
-nmap <Space>gnc :Gina commit -m 'auto update'<CR>
-nmap <Space>gA :Gina add .<CR>
+nmap <Leader>gns :Gina status<CR>
+nmap <Leader>gnb :Gina blame<CR>
+nmap <Leader>gp :Gina push<CR>
+nmap <Leader>gnc :Gina commit -m 'auto update'<CR>
+nmap <Leader>gA :Gina add .<CR>
 '''
 hook_source = '''
 call gina#custom#command#option(
@@ -697,7 +702,7 @@ call gina#custom#command#option(
 repo = 'cohama/agit.vim'
 on_cmd = ['Agit']
 hook_add = '''
-nmap <Space>gl :Agit<CR>
+nmap <Leader>gl :Agit<CR>
 '''
 
 # lint & lsp & sources-------------------
