@@ -98,10 +98,6 @@ repo = 'Shougo/denite.nvim'
 on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'jeetsukumaran/vim-buffergator'
-on_event = 'VimEnter'
-
-[[plugins]]
 repo = 'Shougo/neosnippet-snippets'
 
 [[plugins]]
@@ -677,7 +673,6 @@ nnoremap <silent> <Leader>B :BuffergatorToggle<CR>
 
 [[plugins]]
 repo = 'tpope/vim-dadbod'
-on_event = 'VimEnter'
 
 # git------------------------------------
 
