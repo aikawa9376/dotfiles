@@ -24,7 +24,17 @@ let g:jsx_ext_required = 1
 '''
 
 [[plugins]]
-repo = 'osyo-manga/vim-vigemo'
+repo = 'tpope/vim-fugitive'
+hook_add = '''
+nmap <silent> <Space>gs :Gstatus<CR>
+nmap <silent> <Space>gd :Gdiff<CR>
+nmap <silent> <Space>ga :Gwrite<CR>
+nmap <silent> <Space>gr :Gremove<CR>
+nmap <silent> <Space>gb :Gblame -w<CR>
+'''
+
+[[plugins]]
+repo = 'airblade/vim-gitgutter'
 
 # design---------------------------------
 
@@ -62,7 +72,6 @@ let g:airline_symbols.readonly = '⭤'
 
 let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#fnamemod = ':t'
-" let g:airline#extensions#default#layout = [ [ 'a', 'b', 'c', 's' ], [ 'x', 'y', 'z', 'error', 'warning' ] ]
 '''
 
 [[plugins]]

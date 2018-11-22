@@ -49,6 +49,7 @@ set list
 set undofile
 set undodir=$HOME/.config/nvim/undo/
 set listchars=tab:»-,extends:»,precedes:«,nbsp:%
+set updatetime=100
 " set spell
 " set spelllang=en,cjk
 
@@ -154,7 +155,7 @@ nnoremap s "_s
 vnoremap s "_s
 " ヤンクした後に末尾に移動
 nmap <C-t> `]
-nmap <M-p> o<ESC>p
+nmap <M-p> o<ESC>p==
 
 " 選択範囲のインデントを連続して変更
 vnoremap < <gv
