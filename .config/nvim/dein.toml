@@ -29,16 +29,12 @@ hook_add = '''
 nmap <silent> <Space>gs :Gstatus<CR>
 nmap <silent> <Space>gd :Gdiff<CR>
 nmap <silent> <Space>ga :Gwrite<CR>
-nmap <silent> <Space>gc :Gcommit -v<CR>
 nmap <silent> <Space>gr :Gremove<CR>
 nmap <silent> <Space>gb :Gblame -w<CR>
 '''
 
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
-hook_add = '''
-set updatetime=100
-'''
 
 # design---------------------------------
 

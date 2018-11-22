@@ -450,7 +450,7 @@ nnoremap <silent> <Space>e :MRUFilesCWD<CR>
 nnoremap <silent> <Space>. :DotFiles<CR>
 nnoremap <silent> <space>O :Outline<CR>
 nnoremap <silent> <space>M :Memo<CR>
-nnoremap <silent> <space>gb :BCommits<CR>
+nnoremap <silent> <space>gc :BCommits<CR>
 nnoremap <silent> <space>gC :Commits<CR>
 " <C-]>でタグ検索
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
@@ -668,7 +668,11 @@ nnoremap <silent> <Space>B :BuffergatorToggle<CR>
 repo = 'lambdalisue/gina.vim'
 on_cmd = ['Gina']
 hook_add = '''
+nmap <Space>gns :Gina status<CR>
+nmap <Space>gnb :Gina blame<CR>
 nmap <Space>gp :Gina push<CR>
+nmap <Space>gnc :Gina commit -m 'auto update'<CR>
+nmap <Space>gA :Gina add .<CR>
 '''
 hook_source = '''
 call gina#custom#command#option(
@@ -680,7 +684,8 @@ call gina#custom#command#option(
 [[plugins]]
 repo = 'cohama/agit.vim'
 on_cmd = ['Agit']
-hook_source = '''
+hook_add = '''
+nmap <Space>gl :Agit<CR>
 '''
 
 # lint & lsp & sources-------------------
