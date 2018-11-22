@@ -362,6 +362,13 @@ let g:matchup_transmute_enabled = 1
 repo = 'wellle/targets.vim'
 on_event = 'VimEnter'
 
+[[plugins]]
+repo = 'osyo-manga/vim-vigemo'
+on_map = '<Plug>(vigemo-search)'
+hook_add = '''
+nmap <Space>/ <Plug>(vigemo-search)
+'''
+
 # list-----------------------------------
 
 [[plugins]]
@@ -442,6 +449,9 @@ nnoremap <silent> <Space>l :Lines<CR>
 nnoremap <silent> <Space>e :MRUFilesCWD<CR>
 nnoremap <silent> <Space>. :DotFiles<CR>
 nnoremap <silent> <space>O :Outline<CR>
+nnoremap <silent> <space>M :Memo<CR>
+nnoremap <silent> <space>gb :BCommits<CR>
+nnoremap <silent> <space>gC :Commits<CR>
 " <C-]>でタグ検索
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 " <Space>]で使用箇所検索
@@ -455,7 +465,7 @@ imap <M-p> <plug>(fzf-complete-path)
 imap <c-x><c-j> <plug>(fzf-complete-file-ag)
 
 nmap <Space><tab> <plug>(fzf-maps-n)
-" imap <expr> <C-c> :execute "\<plug>\(fzf-maps-i)"
+imap jc <plug>(fzf-maps-i)
 xmap <Space><tab> <plug>(fzf-maps-x)
 omap <Space><tab> <plug>(fzf-maps-o)
 
@@ -655,19 +665,13 @@ nnoremap <silent> <Space>B :BuffergatorToggle<CR>
 # git------------------------------------
 
 [[plugins]]
-repo = 'tpope/vim-fugitive'
-on_cmd = ['Gstatus', 'Gdiff', 'Gremove', 'Gblame', 'Gitv']
-hook_add = '''
-nmap <silent> <Space>s :Gstatus<CR>
-nmap <silent> <Space>d :Gdiff<CR>
-nmap <silent> <Space>r :Gremove<CR>
-nmap <silent> <Space>h :Gblame<CR>
-'''
-
-[[plugins]]
 repo = 'lambdalisue/gina.vim'
 on_cmd = ['Gina']
-hook_add = '''
+hook_source = '''
+call gina#custom#command#option(
+ \ '/\%(status\|log\|reflog\)',
+ \ '--opener', 'split'
+ \)
 '''
 
 [[plugins]]
@@ -675,10 +679,6 @@ repo = 'cohama/agit.vim'
 on_cmd = ['Agit']
 hook_source = '''
 '''
-
-[[plugins]]
-repo = 'airblade/vim-gitgutter'
-on_event = 'VimEnter'
 
 # lint & lsp & sources-------------------
 
