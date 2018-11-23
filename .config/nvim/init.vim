@@ -196,9 +196,27 @@ nnoremap x "_x
 vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
-" ヤンクした後に末尾に移動
-nmap <C-t> `]
 nmap <M-p> o<ESC>p==
+
+" ヤンクした後に末尾に移動
+nmap <silent><C-t> :<C-u>call YankTextToggle()<CR>
+function! YankTextToggle()
+  let s:flag = b:yank_toggle_flag ? 1 : 0
+  if b:yank_toggle_flag != 0
+    execute 'normal `['
+    let b:yank_toggle_flag = 0
+  else
+    execute 'normal `]'
+    let b:yank_toggle_flag = 1
+  endif
+endfunction
+function! s:yank_toggle_flag() abort
+  let b:yank_toggle_flag = 0
+endfunction
+augroup YankStart
+  autocmd!
+  autocmd TextYankPost,TextChanged,InsertEnter * call s:yank_toggle_flag()
+augroup END
 
 " 選択範囲のインデントを連続して変更
 vnoremap < <gv
@@ -429,3 +447,49 @@ function! IsPhpOrHtml() abort
     return 0
   endif
 endfunction
+
+" test settings
+" 親ディレクトリを開く netrw有効なら便利かも
+" nnoremap <silent> <C-u> :execute 'e ' . ((strlen(bufname('')) == 0) ? '.' : '%:h')<CR>
+set lazyredraw
+vmap p <Plug>(operator-replace)
+" nnoremap <space>9 V%y<C-w>jGpkVGJ
+"--------------------------------------------
+"Absolutely fantastic function from stoeffel/.dotfiles which allows you to
+"repeat macros across a visual range
+"--------------------------------------------
+xnoremap @ :<C-u>call ExecuteMacroOverVisualRange()<CR>
+function! ExecuteMacroOverVisualRange()
+  echo "@".getcmdline()
+  execute ":'<,'>normal @".nr2char(getchar())
+endfunction
+
+" set working directory to the current buffer's directory
+nnoremap cd :lcd %:p:h<bar>pwd<cr>
+nnoremap cu :lcd ..<bar>pwd<cr>
+
+function! s:ctrl_u() abort "{{{ rsi ctrl-u, ctrl-w
+  if getcmdpos() > 1
+    let @- = getcmdline()[:getcmdpos()-2]
+  endif
+  return "\<C-U>"
+endfunction
+
+function! s:ctrl_w_before() abort
+  let s:cmdline = getcmdpos() > 1 ? getcmdline() : ""
+  return "\<C-W>"
+endfunction
+
+function! s:ctrl_w_after() abort
+  if strlen(s:cmdline) > 0
+    let @- = s:cmdline[(getcmdpos()-1) : (getcmdpos()-2)+(strlen(s:cmdline)-strlen(getcmdline()))]
+  endif
+  return ""
+endfunction
+
+cnoremap <expr> <C-U> <SID>ctrl_u()
+cnoremap <expr> <SID>(ctrl_w_before) <SID>ctrl_w_before()
+cnoremap <expr> <SID>(ctrl_w_after) <SID>ctrl_w_after()
+cmap   <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
+cnoremap        <C-Y> <C-R>-
+"--------------------------------------------

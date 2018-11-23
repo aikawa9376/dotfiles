@@ -61,7 +61,6 @@ let g:neosnippet#snippets_directory = '~/.config/nvim/snippets'
 
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
-depends = ['deoplete.nvim']
 on_ft = ['rust','javascript','python']
 rev = 'next'
 build = 'bash install.sh'
@@ -92,10 +91,6 @@ nnoremap <silent> <F2> :call LanguageClient_textDocument_rename()<CR>
 nnoremap <silent> <F3> :call LanguageClient_textDocument_references()<CR>
 nnoremap <silent> <M-m> :call LanguageClient_contextMenu()<CR>
 '''
-
-[[plugins]]
-repo = 'Shougo/denite.nvim'
-on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'Shougo/neosnippet-snippets'
