@@ -75,6 +75,14 @@ let g:loaded_netrwSettings     = 1
 let g:loaded_netrwFileHandlers = 1
 
 nmap <Space> <Leader>
+" nnoremap <nowait><Space> <Nop>
+" nnoremap <nowait><BS>    <Nop>
+" if !exists('g:mapleader')
+"   let g:mapleader = "\<Space>"
+" endif
+" if !exists('g:maplocalleader')
+"   let g:maplocalleader = "\<BS>"
+" endif
 
 noremap <Plug>(my-switch) <Nop>
 nmap <Leader>S <Plug>(my-switch)
@@ -501,3 +509,5 @@ nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
 
 " inoremap <expr> <C-l> fzf#complete(tmuxcomplete#list('lines', 0))
 " inoremap <expr> <M-w> fzf#complete(tmuxcomplete#list('words', 0))
+
+inoremap <C-o> <C-g>U<C-o>o
