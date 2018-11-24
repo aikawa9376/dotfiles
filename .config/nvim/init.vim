@@ -49,6 +49,7 @@ set list
 set undofile
 set undodir=$HOME/.config/nvim/undo/
 set listchars=tab:»-,extends:»,precedes:«,nbsp:%
+set splitbelow
 set updatetime=100
 set nofoldenable
 set foldmethod=indent
@@ -197,6 +198,7 @@ vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
 nmap <M-p> o<ESC>p==
+nmap gV `[v`]
 
 " ヤンクした後に末尾に移動
 nmap <silent><C-t> :<C-u>call YankTextToggle()<CR>
@@ -281,7 +283,6 @@ cnoremap <C-d> <Del>
 cnoremap <C-k> <C-o>D<Right>
 
 " terminal mode
-set splitbelow
 command! -nargs=* TERM split | resize20 | term <args>
 nmap <silent><F12> :<c-u>TERM<CR>
 tnoremap <silent><C-[> <C-\><C-n>
@@ -454,6 +455,7 @@ endfunction
 set lazyredraw
 vmap p <Plug>(operator-replace)
 " nnoremap <space>9 V%y<C-w>jGpkVGJ
+
 "--------------------------------------------
 "Absolutely fantastic function from stoeffel/.dotfiles which allows you to
 "repeat macros across a visual range
@@ -490,6 +492,12 @@ endfunction
 cnoremap <expr> <C-U> <SID>ctrl_u()
 cnoremap <expr> <SID>(ctrl_w_before) <SID>ctrl_w_before()
 cnoremap <expr> <SID>(ctrl_w_after) <SID>ctrl_w_after()
-cmap   <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
-cnoremap        <C-Y> <C-R>-
+cmap <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
+cnoremap <C-Y> <C-R>-
 "--------------------------------------------
+
+" override help command
+nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
+
+" inoremap <expr> <C-l> fzf#complete(tmuxcomplete#list('lines', 0))
+" inoremap <expr> <M-w> fzf#complete(tmuxcomplete#list('words', 0))
