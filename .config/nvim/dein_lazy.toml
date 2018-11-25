@@ -488,7 +488,8 @@ nnoremap <silent> <Leader>O :Outline<CR>
 nnoremap <silent> <Leader>M :Memo<CR>
 nnoremap <silent> <Leader>gc :BCommits<CR>
 nnoremap <silent> <Leader>gC :Commits<CR>
-nnoremap <silent> <Leader>t :TmuxSearch<CR>
+nnoremap <silent> <Leader>t :DirWordCompletions<CR>
+nnoremap <silent> <Leader>T :TmuxSearch<CR>
 " <C-]>でタグ検索
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 " <Leader>]で使用箇所検索
@@ -602,9 +603,20 @@ function! s:mru_files_for_cwd()
   \ ), 'fnamemodify(v:val, ":p:.")')
 endfunction
 
+" working dir word completions
+command! DirWordCompletions call fzf#run({
+  \  'source': s:dir_word_completion(),
+  \  'sink': 'edit',
+  \  'options': '-m -x +s --prompt=DirWords:',
+  \  'down': '40%'})
+
+function! s:dir_word_completion()
+  return  systemlist("rg --hidden -w -o '[A-Za-z0-9-_]+' | sed -e 's/^.*://g' | sort | uniq")
+endfunction
+
 command! -bang -nargs=* Memo
   \ call fzf#vim#grep(
-  \   'rg --column -n --hidden --ignore-case --no-heading --color=always ' .shellescape(<q-args>) . ' ~/.cache/junkfile/', 1,
+  \   'rg --column -n --hidden --ignore-case --color=always ' .shellescape(<q-args>) . ' ~/.cache/junkfile/', 1,
   \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%')
   \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden', '?'),
   \   <bang>0)

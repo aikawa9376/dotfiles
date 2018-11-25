@@ -252,6 +252,7 @@ inoremap <C-d> <C-g>U<Del>
 inoremap <C-k> <C-g>U<C-o>D<Right>
 inoremap <C-u> <C-g>U<C-o>d^
 inoremap <C-w> <C-g>U<C-o>db
+inoremap <C-o> <C-g>U<C-o>o
 
 " 文字選択・移動など
 nnoremap Y y$
@@ -507,7 +508,7 @@ cnoremap <C-Y> <C-R>-
 " override help command
 nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
 
+" use deoplete not need map
 " inoremap <expr> <C-l> fzf#complete(tmuxcomplete#list('lines', 0))
 " inoremap <expr> <M-w> fzf#complete(tmuxcomplete#list('words', 0))
 
-inoremap <C-o> <C-g>U<C-o>o
