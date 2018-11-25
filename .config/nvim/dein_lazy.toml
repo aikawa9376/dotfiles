@@ -337,14 +337,6 @@ call submode#enter_with('history', 'n', '', 'g;', 'g;zz')
 call submode#enter_with('history', 'n', '', 'g,', 'g,zz')
 call submode#map('history', 'n', '', ';', 'g;zz')
 call submode#map('history', 'n', '', ',', 'g,zz')
-" call submode#enter_with('hunk_f_history', 'n', '', ']c', ']czz')
-" call submode#enter_with('hunk_F_history', 'n', '', '[c', '[czz')
-" call submode#map('hunk_f_history', 'n', '', 'c', ']czz')
-" call submode#map('hunk_F_history', 'n', '', 'c', '[czz')
-" call submode#enter_with('ale_f_history', 'n', '', ']a', ']azz')
-" call submode#enter_with('ale_F_history', 'n', '', '[a', '[azz')
-" call submode#map('ale_f_history', 'n', '', 'a', ']azz')
-" call submode#map('ale_F_history', 'n', '', 'k', '[czz')
 call submode#enter_with('bufmove', 'n', '', '<C-w>+', '<C-w>+')
 call submode#enter_with('bufmove', 'n', '', '<C-w>-', '<C-w>-')
 call submode#enter_with('bufmove', 'n', '', '<C-w>>', '<C-w>>')
@@ -604,15 +596,20 @@ function! s:mru_files_for_cwd()
 endfunction
 
 " working dir word completions
-command! DirWordCompletions call fzf#run({
-  \  'source': s:dir_word_completion(),
+command! -nargs=* DirWordCompletions call fzf#run({
+  \  'source': s:dir_word_completion(<q-args>),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=DirWords:',
+  \  'options': '-m -x +s --prompt=DirWords:'.shellescape(<q-args>),
   \  'down': '40%'})
 
-function! s:dir_word_completion()
-  return  systemlist("rg --hidden -w -o '[A-Za-z0-9-_]+' | sed -e 's/^.*://g' | sort | uniq")
+function! s:dir_word_completion(word)
+  return  systemlist("rg --hidden -w -o '" . a:word . "[A-Za-z0-9-_]+' | sed -e 's/^.*://g' | sort | uniq")
 endfunction
+
+" imap <expr> 1 fzf#complete(s:dir_word_completion(a:000))
+" imap <expr> 1 fzf#complete(<SID>dir_word_completion('test'))
+imap <expr> 1 fzf#complete("rg --hidden -w -o '[A-Za-z0-9-_]+' \| sed -e 's/^.*://g' \| sort \| uniq")
+" imap <expr> 2 <SID>dir_word_completion('test')
 
 command! -bang -nargs=* Memo
   \ call fzf#vim#grep(
