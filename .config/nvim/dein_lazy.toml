@@ -234,10 +234,10 @@ autocmd MyAutoCmd ColorScheme * highlight Sneak ctermbg=0 ctermfg=15 cterm=under
 repo = 'terryma/vim-multiple-cursors'
 on_event = 'VimEnter'
 hook_add = '''
-function g:Multiple_cursors_before()
+function! g:Multiple_cursors_before()
   call deoplete#custom#buffer_option('auto_complete', v:false)
 endfunction
-function g:Multiple_cursors_after()
+function! g:Multiple_cursors_after()
   call deoplete#custom#buffer_option('auto_complete', v:true)
 endfunction
 '''
@@ -345,6 +345,11 @@ call submode#map('bufmove', 'n', '', '+', '<C-w>+')
 call submode#map('bufmove', 'n', '', '-', '<C-w>-')
 call submode#map('bufmove', 'n', '', '>', '<C-w>>')
 call submode#map('bufmove', 'n', '', '<', '<C-w><')
+call submode#enter_with('expand-region', 'nv', 'r', '<Space><Space>', '<Plug>(expand_region_expand)')
+call submode#map('expand-region', 'nv', 'r', '<Space>', '<Plug>(expand_region_expand)')
+call submode#map('expand-region', 'nv', 'r', 's', '<Plug>(expand_region_shrink)')
+call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
+call submode#map('block_move', 'n', '', '<M-[>', '<C-o>zz')
 '''
 
 [[plugins]]
@@ -480,10 +485,10 @@ nnoremap <silent> <Leader>O :Outline<CR>
 nnoremap <silent> <Leader>M :Memo<CR>
 nnoremap <silent> <Leader>gc :BCommits<CR>
 nnoremap <silent> <Leader>gC :Commits<CR>
-nnoremap <silent> <Leader>t :DirWordCompletions<CR>
-nnoremap <silent> <Leader>T :TmuxSearch<CR>
-" <C-]>でタグ検索
-nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
+nnoremap <silent> <Leader>T :DirWordCompletions<CR>
+nnoremap <silent> <Leader>t :TmuxSearch<CR>
+" <C-]>でタグ検索 TODO タグファイルが無ければもともとの機能に割り振る
+nnoremap <silent> <C-]> :call fzf#vim#tag(expand('<cword>'))<CR>
 " <Leader>]で使用箇所検索
 nnoremap <silent> <expr> <Leader>] ':Rg(' . expand('<cword>') . ')<CR>'
 nnoremap <silent> <Leader>p :YanksAfter<CR>
@@ -570,15 +575,6 @@ endfunction
 
 command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 
-command! -bang TmuxSearch call fzf#run(fzf#wrap('tmux', {
-    \ 'source':tmuxcomplete#list('words', 0),
-    \ 'sink*':function('<SID>fzf_insert_at_point'),
-    \ 'options': '--reverse +m -d "\t" --with-nth 1 -n 1 --ansi --prompt "Tmux> "'}, <bang>0))
-
-function! s:fzf_insert_at_point(s) abort
-  execute "put ='".a:s."'"
-endfunction
-
 " MRU handling, limited to current directory
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd(),
@@ -595,7 +591,24 @@ function! s:mru_files_for_cwd()
   \ ), 'fnamemodify(v:val, ":p:.")')
 endfunction
 
+command! -bang TmuxSearch call fzf#run(fzf#wrap('tmux', {
+    \ 'source':tmuxcomplete#list('words', 0),
+    \ 'sink*':function('<SID>fzf_insert_at_point'),
+    \ 'options': '--reverse +m -d "\t" --with-nth 1 -n 1 --ansi --prompt "Tmux> "'}, <bang>0))
+
+function! s:fzf_insert_at_point(s) abort
+  execute "put ='".a:s."'"
+endfunction
+
+function! s:fzf_last_word() abort
+  let prev_pos = col('.') - 1
+  let before_str = getline('.')[0:prev_pos]
+  let last_word = matchstr(before_str, '\m\(\k\+\)$')
+  return last_word
+endfunction
+
 " working dir word completions
+" TODO cword?
 command! -nargs=* DirWordCompletions call fzf#run({
   \  'source': s:dir_word_completion(<q-args>),
   \  'sink': 'edit',
@@ -606,17 +619,28 @@ function! s:dir_word_completion(word)
   return  systemlist("rg --hidden -w -o '" . a:word . "[A-Za-z0-9-_]+' | sed -e 's/^.*://g' | sort | uniq")
 endfunction
 
-" imap <expr> 1 fzf#complete(s:dir_word_completion(a:000))
-" imap <expr> 1 fzf#complete(<SID>dir_word_completion('test'))
-imap <expr> 1 fzf#complete("rg --hidden -w -o '[A-Za-z0-9-_]+' \| sed -e 's/^.*://g' \| sort \| uniq")
-" imap <expr> 2 <SID>dir_word_completion('test')
+imap <expr> <M-k> fzf#complete({
+    \ 'source': <SID>dir_word_completion(<SID>fzf_last_word()),
+    \ 'options': '-m -x +s --prompt=DirWord:',
+    \ 'down': '40%'})
 
-command! -bang -nargs=* Memo
-  \ call fzf#vim#grep(
-  \   'rg --column -n --hidden --ignore-case --color=always ' .shellescape(<q-args>) . ' ~/.cache/junkfile/', 1,
-  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%')
-  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden', '?'),
-  \   <bang>0)
+" use deoplete not need map
+" inoremap <expr> <C-l> fzf#complete({'source': tmuxcomplete#list('lines', 0)})
+" inoremap <expr> <M-w> fzf#complete({'source': tmuxcomplete#list('words', 0)})
+
+command! -nargs=* Memo call fzf#run({
+  \  'source': s:junk_file_list(),
+  \  'sink*': function('<SID>junk_file_sink'),
+  \  'options': '-m -x +s --prompt=Memo:'.shellescape(<q-args>),
+  \  'down': '40%'})
+
+function! s:junk_file_list()
+  return  systemlist("rg --column -n --hidden --ignore-case --color=always '' ~/.cache/junkfile/ | sed -e 's%/home/aikawa/.cache/junkfile/%%g'")
+endfunction
+
+function! s:junk_file_sink(line) abort
+  execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
+endfunction
 
 " YankRing fzf
 function! FZFYankList() abort

@@ -345,7 +345,7 @@ autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 
 " window操作系
 nmap <silent> \| :<c-u>vsplit<CR>
-nmap <silent> - :<c-u>split<CR>
+nmap <silent> - :<c-u>split<CR><C-w>k
 
 " 前回のカーソル位置からスタート
 augroup vimrcEx
@@ -384,7 +384,18 @@ augroup ctags
 augroup END
 
 " vimrcをスペースドットで開く
-nnoremap <Leader>, :<c-u>w<CR>:<c-u>source ~/.config/nvim/init.vim<CR>
+if has('vim_starting')
+  function s:reload_vimrc() abort
+    execute printf('source %s', $MYVIMRC)
+    if has('gui_running')
+      execute printf('source %s', $MYGVIMRC)
+    endif
+    redraw
+    echo printf('.vimrc/.gvimrc has reloaded (%s).', strftime('%c'))
+  endfunction
+endif
+nmap <silent> <Plug>(my-reload-vimrc) :<C-u>call <SID>reload_vimrc()<CR>
+nmap <Leader>, <Plug>(my-reload-vimrc)
 
 " 固有のvimrcを用意 .vimrc.local
 augroup vimrc-local
@@ -507,8 +518,3 @@ cnoremap <C-Y> <C-R>-
 
 " override help command
 nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
-
-" use deoplete not need map
-" inoremap <expr> <C-l> fzf#complete(tmuxcomplete#list('lines', 0))
-" inoremap <expr> <M-w> fzf#complete(tmuxcomplete#list('words', 0))
-
