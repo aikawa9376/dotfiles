@@ -331,6 +331,7 @@ nmap <C-s> <plug>(operator-replace)
 repo = 'thinca/vim-submode'
 on_event = 'VimEnter'
 hook_source = '''
+" set lazydrawでカーソルが飛ぶ
 let g:submode_timeoutlen = 5000
 let g:submode_keep_leaving_key = 1
 call submode#enter_with('history', 'n', '', 'g;', 'g;zz')
@@ -349,6 +350,7 @@ call submode#enter_with('expand-region', 'nv', 'r', '<Space><Space>', '<Plug>(ex
 call submode#map('expand-region', 'nv', 'r', '<Space>', '<Plug>(expand_region_expand)')
 call submode#map('expand-region', 'nv', 'r', 's', '<Plug>(expand_region_shrink)')
 call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
+call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
 call submode#map('block_move', 'n', '', '<M-[>', '<C-o>zz')
 '''
 
@@ -356,7 +358,7 @@ call submode#map('block_move', 'n', '', '<M-[>', '<C-o>zz')
 repo = 'tpope/vim-surround'
 on_event = 'VimEnter'
 hook_add = '''
-let g:surround_{char2nr("P")} = "<?php \r ?>""
+let g:surround_{char2nr("P")} = "<?php \r ?>"
 '''
 
 [[plugins]]
@@ -383,6 +385,8 @@ on_event = 'VimEnter'
 repo = 'andymass/vim-matchup'
 on_event = 'VimEnter'
 hook_add = '''
+" nmap <silent> <Plug>(matchup-z%-origin) :<C-u>call matchup#motion#jump_inside(0)<CR>zz
+" nmap <M-]> <Plug>(matchup-z%)zz
 autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
 let g:matchup_transmute_enabled = 1
 '''
@@ -401,6 +405,9 @@ nmap <Leader>/ <Plug>(vigemo-search)
 [[plugins]]
 repo = 'junegunn/vim-easy-align'
 on_event = 'VimEnter'
+hook_add = '''
+vmap <Enter> <Plug>(EasyAlign)
+'''
 
 # list-----------------------------------
 

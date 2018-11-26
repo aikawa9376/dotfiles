@@ -84,8 +84,8 @@ nmap <Space> <Leader>
 "   let g:maplocalleader = "\<BS>"
 " endif
 
-noremap <Plug>(my-switch) <Nop>
-nmap <Leader>S <Plug>(my-switch)
+noremap  <Plug>(my-switch) <Nop>
+nmap     <Leader>S <Plug>(my-switch)
 nnoremap <silent> <Plug>(my-switch)s :<C-u>setl spell! spell?<CR>
 nnoremap <silent> <Plug>(my-switch)l :<C-u>setl list! list?<CR>
 nnoremap <silent> <Plug>(my-switch)t :<C-u>setl expandtab! expandtab?<CR>
@@ -472,7 +472,6 @@ endfunction
 " test settings
 " 親ディレクトリを開く netrw有効なら便利かも
 " nnoremap <silent> <C-u> :execute 'e ' . ((strlen(bufname('')) == 0) ? '.' : '%:h')<CR>
-set lazyredraw
 vmap p <Plug>(operator-replace)
 " nnoremap <space>9 V%y<C-w>jGpkVGJ
 

@@ -35,6 +35,12 @@ nmap <silent> <Space>gb :Gblame -w<CR>
 
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
+hook_add = '''
+omap ih <Plug>GitGutterTextObjectInnerPending
+omap ah <Plug>GitGutterTextObjectOuterPending
+xmap ih <Plug>GitGutterTextObjectInnerVisual
+xmap ah <Plug>GitGutterTextObjectOuterVisual
+'''
 
 # design---------------------------------
 
