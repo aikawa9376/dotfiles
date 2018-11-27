@@ -227,6 +227,7 @@ map T <Plug>Sneak_T
 map <M-s> <Plug>Sneak_s
 map <M-S> <Plug>Sneak_S
 let g:sneak#s_next = 1
+let g:sneak#use_ic_scs = 1
 autocmd MyAutoCmd ColorScheme * highlight Sneak ctermbg=0 ctermfg=15 cterm=underline
 '''
 
@@ -265,7 +266,7 @@ repo = 'Lokaltog/vim-easymotion'
 on_map = '<Plug>(easymotion-s2)'
 hook_add = '''
 let g:EasyMotion_do_mapping = 0
-let g:EasyMotion_smartcase = 1
+let g:EasyMotion_smartcas = 1
 let g:EasyMotion_space_jump_first = 1
 nmap m <Plug>(easymotion-s2)
 '''
@@ -415,20 +416,22 @@ vmap <Enter> <Plug>(EasyAlign)
 repo = 'Shougo/defx.nvim'
 on_cmd = ['Defx']
 hook_add = '''
-nmap <silent><Leader>n :Defx -toggle -direction=topleft -split=vertical -winwidth=35<CR>
+nmap <silent><Space>n :Defx -toggle -direction=topleft -split=vertical -winwidth=35<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
 " Define mappings
 nnoremap <silent><buffer><expr> <CR>
-\ defx#do_action('open', 'wincmd w \| drop')
+\ defx#async_action('drop')
 nnoremap <silent><buffer><expr> c
 \ defx#do_action('copy')
+nnoremap <silent><buffer><expr> !
+\ defx#do_action('execute_command')
 nnoremap <silent><buffer><expr> m
 \ defx#do_action('move')
 nnoremap <silent><buffer><expr> p
 \ defx#do_action('paste')
 nnoremap <silent><buffer><expr> l
-\ defx#do_action('open')
+\ defx#async_action('open')
 nnoremap <silent><buffer><expr> E
 \ defx#do_action('open', 'vsplit')
 nnoremap <silent><buffer><expr> P
@@ -438,22 +441,26 @@ nnoremap <silent><buffer><expr> K
 nnoremap <silent><buffer><expr> N
 \ defx#do_action('new_file')
 nnoremap <silent><buffer><expr> d
-\ defx#do_action('remove')
+\ defx#do_action('remove_trash')
 nnoremap <silent><buffer><expr> r
 \ defx#do_action('rename')
 nnoremap <silent><buffer><expr> x
 \ defx#do_action('execute_system')
+nnoremap <silent><buffer><expr> >
+\ defx#do_action('toggle_ignored_files')
+nnoremap <silent><buffer><expr> .
+\ defx#do_action('repeat')
 nnoremap <silent><buffer><expr> yy
 \ defx#do_action('yank_path')
-nnoremap <silent><buffer><expr> .
-\ defx#do_action('toggle_ignored_files')
 nnoremap <silent><buffer><expr> h
 \ defx#do_action('cd', ['..'])
 nnoremap <silent><buffer><expr> ~
 \ defx#do_action('cd')
+nnoremap <silent><buffer><expr> \
+\ defx#do_action('cd', getcwd())
 nnoremap <silent><buffer><expr> q
 \ defx#do_action('quit')
-nnoremap <silent><buffer><expr> <Leader>
+nnoremap <silent><buffer><expr> <Space>
 \ defx#do_action('toggle_select') . 'j'
 nnoremap <silent><buffer><expr> *
 \ defx#do_action('toggle_select_all')
@@ -465,8 +472,9 @@ nnoremap <silent><buffer><expr> <C-l>
 \ defx#do_action('redraw')
 nnoremap <silent><buffer><expr> <C-g>
 \ defx#do_action('print')
-nnoremap <silent><buffer><expr> cd
-\ defx#do_action('change_vim_cwd')
+nnoremap <silent><buffer><expr> <Tab> winnr('$') != 1 ?
+\ ':<C-u>wincmd w<CR>' :
+\ ':<C-u>Defx -buffer-name=temp -split=vertical<CR>'
 endfunction
 '''
 
@@ -608,18 +616,18 @@ function! s:fzf_insert_at_point(s) abort
 endfunction
 
 function! s:fzf_last_word() abort
-  let prev_pos = col('.') - 1
+  " insert 2 normal 1
+  let prev_pos = col('.') - 2
   let before_str = getline('.')[0:prev_pos]
   let last_word = matchstr(before_str, '\m\(\k\+\)$')
   return last_word
 endfunction
 
 " working dir word completions
-" TODO cword?
 command! -nargs=* DirWordCompletions call fzf#run({
-  \  'source': s:dir_word_completion(<q-args>),
+  \  'source': s:dir_word_completion(s:fzf_last_word()),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=DirWords:'.shellescape(<q-args>),
+  \  'options': '-m -x +s --prompt=DirWords:'.shellescape(s:fzf_last_word()),
   \  'down': '40%'})
 
 function! s:dir_word_completion(word)

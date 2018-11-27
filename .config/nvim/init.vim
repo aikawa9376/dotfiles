@@ -322,6 +322,7 @@ inoremap <silent> jj <Esc>
 
 " ペーストモードを自動解除
 autocmd InsertLeave * set nopaste
+nnoremap Q q
 
 " ジャンプリストで中央に持ってくる
 nnoremap <C-o> <C-o>zz
