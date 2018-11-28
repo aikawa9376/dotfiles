@@ -808,7 +808,7 @@ let g:ale_javascript_prettier_use_local_config = 1
 " 設定を見直す必要あり
 let g:ale_php_phan_executable = 'vendor/bin/phan'
 let g:ale_html_tidy_options = '-config .tidyrc'
-" let g:ale_virtualtext_cursor = 1
+let g:ale_virtualtext_cursor = 1
 nnoremap <silent>]a :<C-u>ALENext<CR>
 nnoremap <silent>[a :<C-u>ALEPrevious<CR>
 '''
