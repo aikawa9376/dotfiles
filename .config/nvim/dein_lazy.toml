@@ -260,7 +260,6 @@ let g:expand_region_text_objects = {
       \ }
 '''
 
-
 [[plugins]]
 repo = 'Lokaltog/vim-easymotion'
 on_map = '<Plug>(easymotion-s2)'
@@ -408,6 +407,18 @@ repo = 'junegunn/vim-easy-align'
 on_event = 'VimEnter'
 hook_add = '''
 vmap <Enter> <Plug>(EasyAlign)
+'''
+
+[[plugins]]
+repo = 'aikawa9376/vim-anzu'
+on_event = 'VimEnter'
+hook_source = '''
+" mapping
+" silent_substitute -> virtualtext
+nmap <expr> n anzu#mode#mapexpr("n", "", "zz")
+nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
+nmap <expr> * anzu#mode#mapexpr("*", "", "zz")
+nmap <expr> # anzu#mode#mapexpr("#", "", "zz")
 '''
 
 # list-----------------------------------
@@ -741,7 +752,9 @@ nnoremap U :MundoToggle<CR>
 repo = 'brooth/far.vim'
 on_event = 'VimEnter'
 hook_add = '''
-let g:far#source = 'agnvim'
+" not work nvim(python-nvim?) version
+" let g:far#source = 'agnvim'
+let g:far#source = 'ag'
 '''
 
 [[plugins]]

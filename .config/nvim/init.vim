@@ -177,7 +177,7 @@ function! BufOnly(buffer, bang)
 endfunction
 
 " 検索をファイルの先頭へ循環しない
-set nowrapscan
+" set nowrapscan
 
 " 大文字小文字の区別なし
 set ignorecase
