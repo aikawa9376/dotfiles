@@ -752,6 +752,17 @@ nnoremap <silent> <Leader>B :BuffergatorToggle<CR>
 [[plugins]]
 repo = 'tpope/vim-dadbod'
 
+[[plugins]]
+repo = 'christoomey/vim-tmux-navigator'
+on_event = 'VimEnter'
+hook_add = '''
+let g:tmux_navigator_no_mappings = 1
+nnoremap  <C-w>l :TmuxNavigateLeft<CR>
+nnoremap  <C-w>j :TmuxNavigateDown<CR>
+nnoremap  <C-w>k :TmuxNavigateUp<CR>
+nnoremap  <C-w>h :TmuxNavigateRight<CR>
+'''
+
 # git------------------------------------
 
 [[plugins]]
