@@ -267,7 +267,7 @@ hook_add = '''
 let g:EasyMotion_do_mapping = 0
 let g:EasyMotion_smartcas = 1
 let g:EasyMotion_space_jump_first = 1
-nmap m <Plug>(easymotion-s2)
+nmap <C-Space> <Plug>(easymotion-s2)
 '''
 
 [[plugins]]
@@ -417,9 +417,12 @@ hook_source = '''
 " silent_substitute -> virtualtext
 nmap <expr> n anzu#mode#mapexpr("n", "", "zz")
 nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
-nmap <expr> * anzu#mode#mapexpr("*", "", "zz")
-nmap <expr> # anzu#mode#mapexpr("#", "", "zz")
+" nmap <expr> * anzu#mode#mapexpr("*", "", "zz")
+" nmap <expr> # anzu#mode#mapexpr("#", "", "zz")
 '''
+
+[[plugins]]
+repo = 'aikawa9376/vim-operator-swap'
 
 # list-----------------------------------
 
@@ -514,7 +517,7 @@ nnoremap <silent> <Leader>gC :Commits<CR>
 nnoremap <silent> <Leader>T :DirWordCompletions<CR>
 nnoremap <silent> <Leader>t :TmuxSearch<CR>
 " <C-]>でタグ検索 TODO タグファイルが無ければもともとの機能に割り振る
-nnoremap <silent> <C-]> :call fzf#vim#tag(expand('<cword>'))<CR>
+nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 " <Leader>]で使用箇所検索
 nnoremap <silent> <expr> <Leader>] ':Rg(' . expand('<cword>') . ')<CR>'
 nnoremap <silent> <Leader>p :YanksAfter<CR>

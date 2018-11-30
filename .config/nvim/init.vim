@@ -187,7 +187,15 @@ set smartcase
 set incsearch
 set inccommand=split
 set hlsearch
-nmap <silent> <Esc><Esc> :nohlsearch<CR>
+nmap <silent> <Esc><Esc> :<C-u>call HlTextToggle()<CR>
+nmap <Plug>(my-hltoggle) mz<Esc>:%s/\(<C-r>=expand("<cword>")<Cr>\)//gn<CR>`z
+function! HlTextToggle()
+  if v:hlsearch != 0
+    call feedkeys(":noh\<CR>")
+  else
+    call feedkeys("\<Plug>(my-hltoggle)")
+  endif
+endfunction
 
 " 検索後にジャンプした際に検索単語を画面中央に持ってくる
 nnoremap n nzz
@@ -518,3 +526,4 @@ cnoremap <C-Y> <C-R>-
 
 " override help command
 nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
+
