@@ -262,7 +262,7 @@ case ${OSTYPE} in
     alias fixd-p='/mnt/d/仕事/相川　設定など/app/pause.exe &'
     alias ql='~/c/Program\ Files/WindowsApps/21090PaddyXu.QuickLook_3.6.3.0_neutral__egxr34yet59cg/Package/QuickLook.exe'
     alias ep='explorer.exe `wslpath -w "$PWD"`'
-    alias cat='richpager -n'
+    alias rcat='richpager -n'
 esac
 
 if ((${+commands[nodejs]})); then

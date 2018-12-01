@@ -271,6 +271,17 @@ nmap <C-Space> <Plug>(easymotion-s2)
 '''
 
 [[plugins]]
+repo = 'haya14busa/incsearch.vim'
+depends = 'incsearch-fuzzy.vim'
+on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'haya14busa/incsearch-fuzzy.vim'
+hook_add = '''
+nmap <Leader>/ <Plug>(incsearch-fuzzy-/)
+'''
+
+[[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = [
 'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
@@ -399,7 +410,7 @@ on_event = 'VimEnter'
 repo = 'osyo-manga/vim-vigemo'
 on_map = '<Plug>(vigemo-search)'
 hook_add = '''
-nmap <Leader>/ <Plug>(vigemo-search)
+nmap <M-/> <Plug>(vigemo-search)
 '''
 
 [[plugins]]
@@ -529,7 +540,7 @@ imap <M-p> <plug>(fzf-complete-path)
 imap <c-x><c-j> <plug>(fzf-complete-file-ag)
 
 nmap <Leader><tab> <plug>(fzf-maps-n)
-imap jc <plug>(fzf-maps-i)
+imap j<tab> <plug>(fzf-maps-i)
 xmap <Leader><tab> <plug>(fzf-maps-x)
 omap <Leader><tab> <plug>(fzf-maps-o)
 
@@ -648,10 +659,13 @@ function! s:dir_word_completion(word)
   return  systemlist("rg --hidden -w -o '" . a:word . "[A-Za-z0-9-_]+' | sed -e 's/^.*://g' | sort | uniq")
 endfunction
 
-imap <expr> <M-k> fzf#complete({
+" imap <expr> <M-k> fzf#complete({
+imap <expr> <C-t> fzf#complete({
     \ 'source': <SID>dir_word_completion(<SID>fzf_last_word()),
     \ 'options': '-m -x +s --prompt=DirWord:',
     \ 'down': '40%'})
+
+" TODO make sepalete file and dir name completions
 
 " use deoplete not need map
 " inoremap <expr> <C-l> fzf#complete({'source': tmuxcomplete#list('lines', 0)})
@@ -712,8 +726,8 @@ let g:bookmark_prefer_fzf = 1
 nmap <Leader>mm <Plug>BookmarkToggle
 nmap <Leader>mi <Plug>BookmarkAnnotate
 nmap <Leader>ma <Plug>BookmarkShowAll
-nmap <Leader>mj <Plug>BookmarkNext
-nmap <Leader>mk <Plug>BookmarkPrev
+nmap ]b <Plug>BookmarkNext
+nmap [b <Plug>BookmarkPrev
 nmap <Leader>mc <Plug>BookmarkClear
 nmap <Leader>mx <Plug>BookmarkClearAll
 nmap <Leader>mkk <Plug>BookmarkMoveUp
@@ -741,7 +755,7 @@ on_event = 'VimEnter'
 repo = 'yegappan/mru'
 on_event = 'VimEnter'
 hook_add = '''
-let MRU_Max_Entries = 1000
+let g:MRU_Max_Entries = 1000
 '''
 
 [[plugins]]
