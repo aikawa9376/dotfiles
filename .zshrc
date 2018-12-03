@@ -116,6 +116,7 @@ export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_CTRL_T_OPTS='--preview "pygmentize -g  {}"'
 export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude  .git'
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
+export FZF_COMPLETION_TRIGGER=''
 export FZF_DEFAULT_OPTS='
 --height 40%
 --reverse
@@ -126,6 +127,8 @@ export FZF_DEFAULT_OPTS='
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
 '
 
+bindkey "^I" expand-or-complete
+bindkey "^[[Z" fzf-completion
 # -------------------------------------
 # 補完機能
 # -------------------------------------
@@ -273,6 +276,6 @@ alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
 alias -g to='$(destination_directories)'
 alias -g l='| less'
-alias fzf='fzf --preview "pygmentize -g  {}"'
+alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
 alias t='tmuximum'
