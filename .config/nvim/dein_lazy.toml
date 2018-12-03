@@ -271,6 +271,17 @@ nmap <C-Space> <Plug>(easymotion-s2)
 '''
 
 [[plugins]]
+repo = 'haya14busa/incsearch.vim'
+depends = 'incsearch-fuzzy.vim'
+on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'haya14busa/incsearch-fuzzy.vim'
+hook_add = '''
+nmap <Leader>/ <Plug>(incsearch-fuzzy-/)
+'''
+
+[[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = [
 'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
@@ -399,7 +410,7 @@ on_event = 'VimEnter'
 repo = 'osyo-manga/vim-vigemo'
 on_map = '<Plug>(vigemo-search)'
 hook_add = '''
-nmap <Leader>/ <Plug>(vigemo-search)
+nmap <M-/> <Plug>(vigemo-search)
 '''
 
 [[plugins]]
@@ -505,7 +516,7 @@ hook_add = '''
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
 nnoremap <silent> <Leader>f :Files<CR>
-nnoremap <silent> <Leader>b :Buffers<CR>
+nnoremap <silent> <Leader>b :NavBuffers<CR>
 nnoremap <silent> <Leader>a :Rg<CR>
 nnoremap <silent> <Leader>l :Lines<CR>
 nnoremap <silent> <Leader>e :MRUFilesCWD<CR>
@@ -529,9 +540,14 @@ imap <M-p> <plug>(fzf-complete-path)
 imap <c-x><c-j> <plug>(fzf-complete-file-ag)
 
 nmap <Leader><tab> <plug>(fzf-maps-n)
-imap jc <plug>(fzf-maps-i)
+imap j<tab> <plug>(fzf-maps-i)
 xmap <Leader><tab> <plug>(fzf-maps-x)
 omap <Leader><tab> <plug>(fzf-maps-o)
+
+let g:fzf_action = {
+  \ 'ctrl-t': 'tab split',
+  \ 'ctrl-x': 'split',
+  \ 'ctrl-v': 'vsplit' }
 
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
@@ -548,9 +564,14 @@ command! -bang -nargs=* Rg
 command! -bang Lines
   \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
 
+" ------------------------------------------------------------------
+" DotFiles EasySearch
+" ------------------------------------------------------------------
 command! DotFiles execute 'Files ~/dotfiles'
 
-" Outline handling,
+" ------------------------------------------------------------------
+" Outline handling
+" ------------------------------------------------------------------
 function! s:outline_format(lists)
   for list in a:lists
     let linenr = list[2][:len(list[2])-3]
@@ -604,6 +625,9 @@ endfunction
 
 command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 
+" ------------------------------------------------------------------
+" MRU Navigator
+" ------------------------------------------------------------------
 " MRU handling, limited to current directory
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd(),
@@ -620,6 +644,9 @@ function! s:mru_files_for_cwd()
   \ ), 'fnamemodify(v:val, ":p:.")')
 endfunction
 
+" ------------------------------------------------------------------
+" TmuxPane complete
+" ------------------------------------------------------------------
 command! -bang TmuxSearch call fzf#run(fzf#wrap('tmux', {
     \ 'source':tmuxcomplete#list('words', 0),
     \ 'sink*':function('<SID>fzf_insert_at_point'),
@@ -629,6 +656,13 @@ function! s:fzf_insert_at_point(s) abort
   execute "put ='".a:s."'"
 endfunction
 
+" use deoplete not need map
+" inoremap <expr> <C-l> fzf#complete({'source': tmuxcomplete#list('lines', 0)})
+" inoremap <expr> <M-w> fzf#complete({'source': tmuxcomplete#list('words', 0)})
+
+" ------------------------------------------------------------------
+" DirectoryWords Selector
+" ------------------------------------------------------------------
 function! s:fzf_last_word() abort
   " insert 2 normal 1
   let prev_pos = col('.') - 2
@@ -648,15 +682,17 @@ function! s:dir_word_completion(word)
   return  systemlist("rg --hidden -w -o '" . a:word . "[A-Za-z0-9-_]+' | sed -e 's/^.*://g' | sort | uniq")
 endfunction
 
-imap <expr> <M-k> fzf#complete({
+" imap <expr> <M-k> fzf#complete({
+imap <expr> <C-t> fzf#complete({
     \ 'source': <SID>dir_word_completion(<SID>fzf_last_word()),
     \ 'options': '-m -x +s --prompt=DirWord:',
     \ 'down': '40%'})
 
-" use deoplete not need map
-" inoremap <expr> <C-l> fzf#complete({'source': tmuxcomplete#list('lines', 0)})
-" inoremap <expr> <M-w> fzf#complete({'source': tmuxcomplete#list('words', 0)})
+" TODO make sepalete file and dir name completions
 
+" ------------------------------------------------------------------
+" JunkFile Navigator
+" ------------------------------------------------------------------
 command! -nargs=* Memo call fzf#run({
   \  'source': s:junk_file_list(),
   \  'sink*': function('<SID>junk_file_sink'),
@@ -671,7 +707,9 @@ function! s:junk_file_sink(line) abort
   execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
 endfunction
 
+" ------------------------------------------------------------------
 " YankRing fzf
+" ------------------------------------------------------------------
 function! FZFYankList() abort
   function! KeyValue(key, val)
     let line = join(a:val[0], '⏎')
@@ -702,6 +740,57 @@ command! YanksBefore call fzf#run(fzf#wrap('YanksBefore', {
 \ 'sink':    function('FZFYankHandler', ['P']),
 \ 'options': '--no-sort --prompt="Yanks-P> "',
 \ }))
+
+
+" ------------------------------------------------------------------
+" Buffer Navigator
+" ------------------------------------------------------------------
+function! s:bufopen(lines)
+  if len(a:lines) < 3
+    return
+  endif
+
+  if a:lines[1] == 'ctrl-d'
+    for w in range(2, len(a:lines) - 1)
+      let b = a:lines[w]
+      let index = matchstr(b, '^\[\([0-9a-f]\+\)\]')
+      execute('bwipeout ' . index[1:len(index)-2])
+    endfor
+    execute('NavBuffers ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+
+  if a:lines[1] == 'ctrl-b'
+    let index = matchstr(a:lines[2], '\[\zs[0-9]*\ze\]')
+    execute 'buffer' index
+    execute('NavBuffers ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+
+  let b = matchstr(a:lines[2], '\[\zs[0-9]*\ze\]')
+  let cmd = get(g:fzf_action, a:lines[1])
+  if !empty(cmd)
+    execute 'silent' cmd
+    execute 'buffer ' b
+    execute('NavBuffers ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+  execute 'buffer ' b
+endfunction
+
+command! -nargs=* NavBuffers
+  \ call fzf#vim#buffers(<q-args>, fzf#wrap('navbuffers', {
+  \ 'sink*':   function('<SID>bufopen'),
+  \ 'options': [
+  \   '-m', '-x', '--tiebreak=index', '--header-lines=1', '--ansi', '-d',
+  \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
+  \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
+  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v'],
+  \   'left': '20%',
+  \ }))
 '''
 
 [[plugins]]
@@ -712,8 +801,8 @@ let g:bookmark_prefer_fzf = 1
 nmap <Leader>mm <Plug>BookmarkToggle
 nmap <Leader>mi <Plug>BookmarkAnnotate
 nmap <Leader>ma <Plug>BookmarkShowAll
-nmap <Leader>mj <Plug>BookmarkNext
-nmap <Leader>mk <Plug>BookmarkPrev
+nmap ]b <Plug>BookmarkNext
+nmap [b <Plug>BookmarkPrev
 nmap <Leader>mc <Plug>BookmarkClear
 nmap <Leader>mx <Plug>BookmarkClearAll
 nmap <Leader>mkk <Plug>BookmarkMoveUp
@@ -741,7 +830,7 @@ on_event = 'VimEnter'
 repo = 'yegappan/mru'
 on_event = 'VimEnter'
 hook_add = '''
-let MRU_Max_Entries = 1000
+let g:MRU_Max_Entries = 1000
 '''
 
 [[plugins]]
@@ -781,10 +870,10 @@ repo = 'christoomey/vim-tmux-navigator'
 on_event = 'VimEnter'
 hook_add = '''
 let g:tmux_navigator_no_mappings = 1
-nnoremap  <C-w>l :TmuxNavigateLeft<CR>
-nnoremap  <C-w>j :TmuxNavigateDown<CR>
-nnoremap  <C-w>k :TmuxNavigateUp<CR>
-nnoremap  <C-w>h :TmuxNavigateRight<CR>
+nnoremap <silent><C-w>l :TmuxNavigateLeft<CR>
+nnoremap <silent><C-w>j :TmuxNavigateDown<CR>
+nnoremap <silent><C-w>k :TmuxNavigateUp<CR>
+nnoremap <silent><C-w>h :TmuxNavigateRight<CR>
 '''
 
 # git------------------------------------

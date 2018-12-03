@@ -25,6 +25,7 @@ mru() {
             | perl -pe 's/^(\/.*\/)(.*)$/\033[34m$1\033[m$2/' \
             | fzf --ansi --multi --query="$q" \
             --no-sort --exit-0 --prompt="MRU> " \
+            --preview "pygmentize -g  {}" \
             --print-query --expect=ctrl-v,ctrl-x,ctrl-l,ctrl-q,ctrl-r,"?"
             )"; do
         q="$(head -1 <<< "$cmd")"
@@ -97,6 +98,9 @@ reverse() {
   perl -e 'print reverse <>' ${@+"$@"}
 }
 
+# -------------------------------------
+# Directory suggest
+# -------------------------------------
 export ENHANCD_LOG="$ENHANCD_DIR/enhancd.log"
 destination_directories() {
     local -a d
@@ -126,6 +130,7 @@ destination_directories() {
             | perl -pe 's/^(\/.*)$/\033[34m$1\033[m/' \
             | fzf --ansi --multi --tac --query="$q" \
             --no-sort --exit-0 --prompt="destination-> " \
+            --preview 'tree -C {} | head -200' \
             --print-query --expect=ctrl-r,ctrl-y,ctrl-q \
             )"; do
         q="$(head -1 <<< "$cmd")"
@@ -152,6 +157,11 @@ destination_directories() {
         esac
     done
 }
+
+# -------------------------------------
+# Dust suggest
+# -------------------------------------
+# TODO
 
 # fzf git branch
 fbr() {
