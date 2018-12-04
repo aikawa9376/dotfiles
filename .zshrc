@@ -126,8 +126,6 @@ export FZF_DEFAULT_OPTS='
 --color dark,hl:34,hl+:40,bg+:235,fg+:15
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
 '
-bindkey '^I' expand-or-complete
-bindkey "^[[Z" fzf-completion
 
 bindkey "^I" expand-or-complete
 bindkey "^[[Z" fzf-completion
