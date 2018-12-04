@@ -798,7 +798,8 @@ command! -nargs=* NavBuffers
   \   '-m', '-x', '--tiebreak=index', '--header-lines=1', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
-  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v'],
+  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v',
+  \   '--preview-window', 'up:1:wrap', '--preview', 'echo {} | rev | cut -d "/" -f1 | rev'],
   \   'left': '20%',
   \ }))
 '''
