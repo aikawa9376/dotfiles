@@ -161,7 +161,43 @@ destination_directories() {
 # -------------------------------------
 # Dust suggest
 # -------------------------------------
-# TODO
+duster() {
+    local cmd q k res
+    local line make_dir
+    while : ${make_dir:=0}; cmd="$(
+            fzf --ansi --multi --tac --query="$q" \
+            --no-sort --exit-0 --prompt="duster-> " \
+            --preview "pygmentize -g  {}" \
+            --print-query --expect=ctrl-r,ctrl-y,ctrl-q,ctrl-d \
+            )"; do
+        q="$(head -1 <<< "$cmd")"
+        k="$(head -2 <<< "$cmd" | tail -1)"
+        res="$(sed '1,2d;/^$/d' <<< "$cmd")"
+        [ -z "$res" ] && continue
+        case "$k" in
+            ctrl-y)
+                let make_dir--
+                continue
+                ;;
+            ctrl-r)
+                let make_dir++
+                continue
+                ;;
+            ctrl-d)
+                eval '${${${(M)${+commands[gomi]}#1}:+gomi}:-rm} "${(@f)res}" 2>/dev/null'
+                continue
+                ;;
+            ctrl-q)
+                echo "${(@f)res}" >/dev/tty
+                break
+                ;;
+            *)
+                echo "${(@f)res}"
+                break
+                ;;
+        esac
+    done
+}
 
 # fzf git branch
 fbr() {

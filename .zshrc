@@ -19,7 +19,7 @@ zplug "b4b4r07/enhancd", use:init.sh
 # ゴミ箱機能
 zplug "b4b4r07/zsh-gomi", if:"which fzf"
 # finder
-zplug "b4b4r07/cli-finder"
+zplug "aikawa9376/cli-finder"
 # vim keybind fork
 # zplug "b4b4r07/zle-vimode"
 # git plugin
