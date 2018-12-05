@@ -1,4 +1,11 @@
 # -------------------------------------
+# utils
+# -------------------------------------
+has() {
+    type "${1:?too few arguments}" &>/dev/null
+}
+
+# -------------------------------------
 # MRU
 # -------------------------------------
 mru() {
@@ -80,7 +87,7 @@ HELP
                 fi
                 ;;
             ctrl-v)
-                vim -p "${(@f)res}" < /dev/tty > /dev/tty
+                nvim -p "${(@f)res}" < /dev/tty > /dev/tty
                 ;;
             ctrl-q)
                 echo "$res" < /dev/tty > /dev/tty

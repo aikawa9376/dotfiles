@@ -252,13 +252,15 @@ case ${OSTYPE} in
     alias ctags="`brew --prefix`/bin/ctags"
     alias ls='gls -GAFh --color=auto'
     # alias ls='gls -Gh --color=auto'
-    alias lsa='gls -GAFltrh --color=auto'
+    alias lsa='exa -aghHl --color=auto --time-style long-iso --sort=modified --reverse --group-directories-first'
+    alias lsg='exa -aghHl --git --color=auto --sort=modified --reverse --group-directories-first'
     alias ql='qlmanage -p "$@" >& /dev/null'
+    alias awk='gawk'
     ;;
   linux*)
     alias ls='ls -GAFltrh --color=auto'
-    alias lsa='exa -aghHl --color=auto --time-style long-iso'
-    alias lsg='exa -aghHl --git --color=auto --time-style long-iso'
+    alias lsa='exa -aghHl --color=auto --time-style long-iso --sort=modified --reverse --group-directories-first'
+    alias lsg='exa -aghHl --git --color=auto --sort=modified --reverse --group-directories-first'
     alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
     alias fixd-p='/mnt/d/仕事/相川　設定など/app/pause.exe &'
     alias ql='~/c/Program\ Files/WindowsApps/21090PaddyXu.QuickLook_3.6.3.0_neutral__egxr34yet59cg/Package/QuickLook.exe'
@@ -277,3 +279,6 @@ alias -g l='| less'
 alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
 alias t='tmuximum'
+
+# exa -Umaul --time-style long-iso --color=never --sort=created --reverse --group-directories-first
+# setting (choices: name, Name, size, extension, Extension, modified, accessed, created, inode, type, none)

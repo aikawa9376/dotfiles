@@ -91,7 +91,14 @@ do-enter() {
     fi
 
     print
-    /bin/ls -FGh --color=auto
+    case ${OSTYPE} in
+      darwin*)
+        /bin/ls -FGh
+        ;;
+      linux*)
+        /bin/ls -FGh --color=auto
+        ;;
+    esac
     if type precmd > /dev/null 2>&1; then
       precmd
     fi
