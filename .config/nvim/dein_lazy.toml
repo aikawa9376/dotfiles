@@ -265,7 +265,7 @@ repo = 'Lokaltog/vim-easymotion'
 on_map = '<Plug>(easymotion-s2)'
 hook_add = '''
 let g:EasyMotion_do_mapping = 0
-let g:EasyMotion_smartcas = 1
+let g:EasyMotion_smartcase = 1
 let g:EasyMotion_space_jump_first = 1
 nmap <C-Space> <Plug>(easymotion-s2)
 '''
@@ -693,7 +693,7 @@ imap <expr> <C-t> fzf#complete({
 " ------------------------------------------------------------------
 imap <expr> <C-_> fzf#complete({
     \ 'source': <SID>dir_file_completion(<SID>fzf_last_word()),
-    \ 'options': '-m -x +s --prompt=DirWord:',
+    \ 'options': '-m -x +s --prompt=DirFiles:',
     \ 'down': '40%'})
 
 function! s:dir_file_completion(word)
@@ -760,6 +760,13 @@ function! s:bufopen(lines)
     return
   endif
 
+  if a:lines[1] == 'ctrl-k'
+    execute('bwipeout')
+    execute('NavBuffers ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+
   if a:lines[1] == 'ctrl-d'
     for w in range(2, len(a:lines) - 1)
       let b = a:lines[w]
@@ -798,7 +805,7 @@ command! -nargs=* NavBuffers
   \   '-m', '-x', '--tiebreak=index', '--header-lines=1', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
-  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v',
+  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k',
   \   '--preview-window', 'up:1:wrap', '--preview', 'echo {} | rev | cut -d "/" -f1 | rev'],
   \   'left': '20%',
   \ }))

@@ -20,8 +20,6 @@ zplug "b4b4r07/enhancd", use:init.sh
 zplug "b4b4r07/zsh-gomi", if:"which fzf"
 # finder
 zplug "aikawa9376/cli-finder"
-# vim keybind fork
-# zplug "b4b4r07/zle-vimode"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # 256 coloer ???
