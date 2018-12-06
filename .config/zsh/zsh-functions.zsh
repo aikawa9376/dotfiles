@@ -177,7 +177,8 @@ duster() {
         [ "$order" = -F ] && d="ASC" || d="DESC"
         echo "${(F)d}" \
             | exa -Fa --sort="$sort" "$order" --group-directories-first \
-            | perl -pe 's/^(.*\/)(.*)$/\033[34m$1\033[m/' \
+            | perl -pe 's/^(.*\/)$/\033[34m$1\033[m/' \
+            | perl -pe 's/^(.*)[*@]$/$1/' \
             | fzf --ansi --multi --query="$q" \
             --header=":: $sort - $d" \
             --no-sort --exit-0 --prompt="duster-> " \
