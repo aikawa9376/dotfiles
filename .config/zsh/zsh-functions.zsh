@@ -170,38 +170,82 @@ destination_directories() {
 # -------------------------------------
 duster() {
     local cmd q k res
-    local line make_dir
-    while : ${make_dir:=0}; cmd="$(
-            fzf --ansi --multi --tac --query="$q" \
+    local line sort order d
+    sort="created"
+    order="--reverse"
+    while cmd="$(
+        [ "$order" = -F ] && d="ASC" || d="DESC"
+        echo "${(F)d}" \
+            | exa -Fa --sort="$sort" "$order" --group-directories-first \
+            | perl -pe 's/^(.*\/)(.*)$/\033[34m$1\033[m/' \
+            | fzf --ansi --multi --query="$q" \
+            --header=":: $sort - $d" \
             --no-sort --exit-0 --prompt="duster-> " \
             --preview "pygmentize -g  {}" \
-            --print-query --expect=ctrl-r,ctrl-y,ctrl-q,ctrl-d \
+            --print-query --expect=ctrl-s,ctrl-u,ctrl-e,enter,ctrl-r,ctrl-q,ctrl-d,"?","-" \
             )"; do
         q="$(head -1 <<< "$cmd")"
         k="$(head -2 <<< "$cmd" | tail -1)"
         res="$(sed '1,2d;/^$/d' <<< "$cmd")"
         [ -z "$res" ] && continue
         case "$k" in
-            ctrl-y)
-                let make_dir--
-                continue
-                ;;
-            ctrl-r)
-                let make_dir++
-                continue
-                ;;
-            ctrl-d)
+            "?")
+                cat <<HELP > /dev/tty
+keybind:
+  Enter  cange directory or echo selected
+  ctrl-s  size sort
+  ctrl-u  created sort
+  ctrl-e  modified sort
+  ctrl-d  remove files and dir
+  ctrl-q  echo select files or dir
+HELP
+            continue
+            ;;
+          "-")
+            cd -
+            continue
+            ;;
+          ctrl-s)
+            sort="size"
+            continue
+            ;;
+          ctrl-u)
+            sort="created"
+            continue
+            ;;
+          ctrl-e)
+            sort="modified"
+            continue
+            ;;
+          ctrl-r)
+            # -F is dammy
+            [ "$order" = -F ] && order="--reverse" || order="-F"
+            continue
+            ;;
+          ctrl-d)
+            read REPLY\?"you delete "${res}"? [y/n]"
+            case $REPLY in
+              '' | [Yy]* )
                 eval '${${${(M)${+commands[gomi]}#1}:+gomi}:-rm} "${(@f)res}" 2>/dev/null'
-                continue
                 ;;
-            ctrl-q)
-                echo "${(@f)res}" >/dev/tty
-                break
-                ;;
-            *)
-                echo "${(@f)res}"
-                break
-                ;;
+              [^Yy]* )
+                echo "no "${res}" delete!"
+            esac
+            continue
+            ;;
+          ctrl-q)
+            echo "${(@f)res}" >/dev/tty
+            break
+            ;;
+          *)
+            if [ -d ${res} ]; then
+              cd ${res}
+              continue
+            else
+              echo "${(@f)res}"
+              break
+            fi
+            ;;
         esac
     done
 }
