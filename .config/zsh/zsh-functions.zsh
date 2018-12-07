@@ -183,7 +183,7 @@ duster() {
             --header=":: $sort - $d" \
             --no-sort --exit-0 --prompt="duster-> " \
             --preview "pygmentize -g  {}" \
-            --print-query --expect=ctrl-s,ctrl-u,ctrl-e,enter,ctrl-r,ctrl-q,ctrl-d,"?","-" \
+            --print-query --expect=ctrl-s,ctrl-u,ctrl-e,enter,ctrl-r,ctrl-q,ctrl-d,ctrl-b,ctrl-v,"?","-" \
             )"; do
         q="$(head -1 <<< "$cmd")"
         k="$(head -2 <<< "$cmd" | tail -1)"
@@ -193,7 +193,9 @@ duster() {
             "?")
                 cat <<HELP > /dev/tty
 keybind:
-  Enter  cange directory or echo selected
+  Enter  change directory or echo selected
+  ctrl-b history back dir
+  -  history selected
   ctrl-s  size sort
   ctrl-u  created sort
   ctrl-e  modified sort
@@ -206,6 +208,10 @@ HELP
             cd -
             continue
             ;;
+          ctrl-b)
+            cd ../
+            continue
+            ;;
           ctrl-s)
             sort="size"
             continue
@@ -216,6 +222,10 @@ HELP
             ;;
           ctrl-e)
             sort="modified"
+            continue
+            ;;
+          ctrl-v)
+            nvim ${res}
             continue
             ;;
           ctrl-r)
