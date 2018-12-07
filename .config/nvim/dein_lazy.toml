@@ -279,7 +279,15 @@ function! s:config_easyfuzzymotion(...) abort
   \   'is_stay': 0
   \ }), get(a:, 1, {}))
 endfunction
+function! s:config_easymotion(...) abort
+  return extend(copy({
+  \   'keymap': {"/": "<Over>(incsearch)", "\<Space>": "\<CR>zz"},
+  \   'is_expr': 0,
+  \   'is_stay': 0
+  \ }), get(a:, 1, {}))
+endfunction
 noremap <silent><expr> <Space><Space> incsearch#go(<SID>config_easyfuzzymotion())
+noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
 '''
 
 [[plugins]]
@@ -357,7 +365,7 @@ let g:submode_timeoutlen = 5000
 let g:submode_keep_leaving_key = 1
 call submode#enter_with('history', 'n', '', 'g;', 'g;zz')
 call submode#enter_with('history', 'n', '', 'g,', 'g,zz')
-call submode#map('history', 'n', '', ';', 'g;zz')
+call submode#map('history', 'n', '', ';.;zz')
 call submode#map('history', 'n', '', ',', 'g,zz')
 call submode#enter_with('bufmove', 'n', '', '<C-w>+', '<C-w>+')
 call submode#enter_with('bufmove', 'n', '', '<C-w>-', '<C-w>-')

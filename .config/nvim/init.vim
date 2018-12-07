@@ -526,4 +526,6 @@ cnoremap <C-Y> <C-R>-
 
 " override help command
 nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
-
+" TODO toggle
+nnoremap <C-i> :call search ("^". matchstr (getline (line (".")+ 1), '\(\s*\)') ."\\S", 'b')<CR>^
+" nnoremap <C-j> :call search ("^". matchstr (getline (line (".")), '\(\s*\)') ."\\S")<CR>^
