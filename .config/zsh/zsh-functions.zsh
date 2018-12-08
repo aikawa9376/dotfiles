@@ -261,6 +261,128 @@ HELP
     done
 }
 
+# -------------------------------------
+# Finder
+# -------------------------------------
+finder() {
+  local cmd q k res
+  local CLI_FINDER_MODE CLI_FINDER_DIR
+  dir="${1:-$PWD}"
+  CLI_FINDER_MODE="tree"
+  CLI_FINDER_DIR="file"
+  while out="$(
+    if [[ $CLI_FINDER_MODE == "tree" ]]; then \
+      if [[ $CLI_FINDER_DIR == "file" ]]; then \
+        tree -a -C -I ".git" --charset=C $dir; \
+      else
+        tree -ad -C -I ".git" --charset=C $dir; \
+        fi
+      else \
+        (builtin cd $dir; \
+        find . -path '*.git*' -prune -o -print \
+        | while read line; do [ -d "$line" ] && echo "$line/" || echo "$line"; done \
+        | sed -e 's|^\./||;/^$/d' \
+        | perl -pe 's/^(.*\/)(.*)$/\033[34m$1\033[m$2/' \
+        ); \
+      fi \
+      | fzf --ansi --no-sort --reverse \
+      --height=100% \
+      --query="$q" --print-query --expect=ctrl-b,ctrl-v,ctrl-l,ctrl-r,ctrl-c,ctrl-i,ctrl-d,enter,"-"
+      )"; do
+
+      q="$(head -1 <<< "$out")"
+      k="$(head -2 <<< "$out" | tail -1)"
+      res="$(sed '1,2d;/^$/d' <<< "$out")"
+      [ -z "$res" ] && continue
+
+      t="$(
+      if [[ $CLI_FINDER_MODE == "tree" ]]; then
+        ok=0
+        arr=(${(@f)"$(tree -a -I ".git" --charset=C $dir)"})
+        for ((i=1; i<=$#arr; i++)); do
+          if [[ $arr[i] == $res ]]; then
+            n=$i
+            break
+          fi
+        done
+        arr=(${(@f)"$(tree -f -a -I ".git" --charset=C $dir)"})
+        perl -pe 's/^(( *(\||`)( |`|-)+)+)//' <<<$arr[n] \
+          | sed -e 's/ -> .*$//'
+      else
+        echo $dir/$res
+      fi
+      )"
+
+      case "$k" in
+        "-")
+          cd -
+          dir="${1:-$PWD}"
+          continue
+          ;;
+        ctrl-b)
+          cd ../
+          dir="${1:-$PWD}"
+          continue
+          ;;
+        ctrl-r)
+          if [[ $CLI_FINDER_MODE == "list" ]]; then
+            CLI_FINDER_MODE="tree"
+          else
+            CLI_FINDER_MODE="list"
+          fi
+          continue
+          ;;
+        ctrl-l)
+          if [[ -d $t ]]; then
+            {
+              ls -dl "$t"
+              ls -l "$t"
+            } | less
+          else
+            if (( $+commands[pygmentize] )); then
+              get_styles="from pygments.styles import get_all_styles
+              styles = list(get_all_styles())
+              print('\n'.join(styles))"
+              styles=( $(sed -e 's/^  *//g' <<<"$get_styles" | python) )
+              style=${${(M)styles:#solarized}:-default}
+              export LESSOPEN="| pygmentize -O style=$style -f console256 -g %s"
+            fi
+            less +Gg "$t"
+          fi
+          ;;
+        ctrl-d)
+          if [[ $CLI_FINDER_DIR == "directory" ]]; then
+            CLI_FINDER_DIR="file"
+          else
+            CLI_FINDER_DIR="directory"
+          fi
+          continue
+          ;;
+        ctrl-v)
+          vim "$t"
+          ;;
+        ctrl-c)
+          if (( $+commands[pbcopy] )); then
+            echo "$t" | tr -d '\n' | pbcopy
+          fi
+          break
+          ;;
+        ctrl-i)
+          ;;
+        *)
+          if [ -d $t ]; then
+            dir="$t"
+            cd "$t"
+            continue
+          else
+            echo "$t"
+            break
+          fi
+          ;;
+      esac
+    done
+  }
+
 # fzf git branch
 fbr() {
   local branches branch

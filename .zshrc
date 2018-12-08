@@ -18,8 +18,6 @@ zplug "supercrabtree/k"
 zplug "b4b4r07/enhancd", use:init.sh
 # ゴミ箱機能
 zplug "b4b4r07/zsh-gomi", if:"which fzf"
-# finder
-zplug "aikawa9376/cli-finder"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # 256 coloer ???
