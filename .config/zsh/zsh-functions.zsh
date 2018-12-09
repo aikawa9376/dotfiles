@@ -266,16 +266,17 @@ HELP
 # -------------------------------------
 finder() {
   local cmd q k res
-  local CLI_FINDER_MODE CLI_FINDER_DIR
+  local CLI_FINDER_MODE CLI_FINDER_DIR CLI_FINDER_LEVEL
   dir="${1:-$PWD}"
   CLI_FINDER_MODE="tree"
   CLI_FINDER_DIR="file"
+  CLI_FINDER_LEVEL="9"
   while out="$(
     if [[ $CLI_FINDER_MODE == "tree" ]]; then \
       if [[ $CLI_FINDER_DIR == "file" ]]; then \
-        tree -a -C -I ".git" --charset=C $dir; \
+        tree -a -C -I ".git" --dirsfirst -L $CLI_FINDER_LEVEL --charset=C $dir; \
       else
-        tree -ad -C -I ".git" --charset=C $dir; \
+        tree -ad -C -I ".git" --dirsfirst -L $CLI_FINDER_LEVEL --charset=C $dir; \
         fi
       else \
         (builtin cd $dir; \
@@ -287,7 +288,8 @@ finder() {
       fi \
       | fzf --ansi --no-sort --reverse \
       --height=100% \
-      --query="$q" --print-query --expect=ctrl-b,ctrl-v,ctrl-l,ctrl-r,ctrl-c,ctrl-i,ctrl-d,enter,"-"
+      --query="$q" --print-query \
+      --expect=ctrl-b,ctrl-v,ctrl-l,ctrl-r,ctrl-c,ctrl-i,ctrl-d,enter,"-","1","2","3","9"
       )"; do
 
       q="$(head -1 <<< "$out")"
@@ -317,6 +319,10 @@ finder() {
         "-")
           cd -
           dir="${1:-$PWD}"
+          continue
+          ;;
+        [1-9])
+          CLI_FINDER_LEVEL="$k"
           continue
           ;;
         ctrl-b)
