@@ -428,3 +428,15 @@ fadd() {
     fi
   done
 }
+
+winopen() {
+  local e n
+  if [[ -r "$1" ]]; then
+    n=$(wslpath -w <<< $(wslpath -a "$1"))
+    e=$(sed 's/^.*\.\([^\.]*\)$/\1/' <<< "$1")
+    echo $(n)
+    echo $(e)
+  else
+    echo 'not exists file'
+  fi
+}

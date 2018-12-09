@@ -178,8 +178,14 @@ export LS_COLORS='di=01;34:ln=35:so=32:pi=33:ex=04:bd=46;34:cd=43;34:su=41;30:sg
 #ファイル補完候補に色を付ける
 zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 
+# ディレクトリごとに区切る
+autoload -Uz select-word-style
+select-word-style default
+zstyle ':zle:*' word-chars ' /=;@:{}[]()<>,|.'
+zstyle ':zle:*' word-style unspecified
+
 #autosuggestions
-bindkey 'F' forward-word
+bindkey '^f' forward-word
 
 # -------------------------------------
 # 補正機能
@@ -267,17 +273,21 @@ case ${OSTYPE} in
     alias powerpoint='/mnt/c/Program Files/Microsoft Office/root/Office16/POWERPNT.EXE'
     alias ql='/mnt/c/Program\ Files/WindowsApps/21090PaddyXu.QuickLook_3.6.3.0_neutral__egxr34yet59cg/Package/QuickLook.exe'
     alias ep='explorer.exe `wslpath -w "$PWD"`'
-    alias rcat='richpager -n'
 esac
 
 if ((${+commands[nodejs]})); then
   alias node='nodejs'
 fi
 
+alias rcat='richpager -n'
+alias d='duster'
+alias f='finder'
 alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
 alias -g to='$(destination_directories)'
 alias -g l='| less'
+alias -g d='$(duster)'
+alias -g f='$(finder)'
 alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
 alias t='tmuximum'
