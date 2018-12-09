@@ -259,9 +259,13 @@ case ${OSTYPE} in
     alias ls='ls -GAFltrh --color=auto'
     alias lsa='exa -aghHl --color=auto --time-style long-iso --sort=modified --reverse --group-directories-first'
     alias lsg='exa -aghHl --git --color=auto --sort=modified --reverse --group-directories-first'
-    alias chrome='~/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
-    alias fixd-p='/mnt/d/仕事/相川　設定など/app/pause.exe &'
-    alias ql='~/c/Program\ Files/WindowsApps/21090PaddyXu.QuickLook_3.6.3.0_neutral__egxr34yet59cg/Package/QuickLook.exe'
+    alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
+    alias photoshop='/mnt/c/Program\ Files/Adobe/Adobe\ Photoshop\ CC\ 2018/Photoshop.exe'
+    alias illustrator='/mnt/c/Program\ Files/Adobe/Adobe\ Illustrator\ CC\ 2018/Support\ Files/Contents/Windows/Illustrator.exe'
+    alias excel='/mnt/c/Program Files/Microsoft Office/root/Office16/EXCEL.EXE'
+    alias word='/mnt/c/Program Files/Microsoft Office/root/Office16/WORDICON.EXE'
+    alias powerpoint='/mnt/c/Program Files/Microsoft Office/root/Office16/POWERPNT.EXE'
+    alias ql='/mnt/c/Program\ Files/WindowsApps/21090PaddyXu.QuickLook_3.6.3.0_neutral__egxr34yet59cg/Package/QuickLook.exe'
     alias ep='explorer.exe `wslpath -w "$PWD"`'
     alias rcat='richpager -n'
 esac
@@ -277,6 +281,5 @@ alias -g l='| less'
 alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
 alias t='tmuximum'
+# illustrator `wslpath -w $PWD/surf.ai`
 
-# exa -Umaul --time-style long-iso --color=never --sort=created --reverse --group-directories-first
-# setting (choices: name, Name, size, extension, Extension, modified, accessed, created, inode, type, none)
