@@ -22,6 +22,7 @@ case ${OSTYPE} in
     alias excel='/mnt/c/Program\ Files/Microsoft\ Office/root/Office16/EXCEL.EXE'
     alias word='/mnt/c/Program\ Files/Microsoft\ Office/root/Office16/WORDICON.EXE'
     alias powerpoint='/mnt/c/Program\ Files/Microsoft\ Office/root/Office16/POWERPNT.EXE'
+    alias everything='/mnt/d/apps/Everything/Everything.exe'
     # alias imageviewer='/mnt/c/Program\ Files/WindowsApps/Microsoft.Windows.Photos_2018.18091.17210.0_x64__8wekyb3d8bbwe/Microsoft.Photos.exe'
     # 定期的にパスが変わる Microsoft App以外からインストールしたほうがよいかも
     alias quicllook='/mnt/c/Program\ Files/WindowsApps/21090PaddyXu.QuickLook_3.6.4.0_neutral__egxr34yet59cg/Package/QuickLook.exe'

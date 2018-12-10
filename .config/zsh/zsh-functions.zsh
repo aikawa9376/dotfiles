@@ -470,10 +470,21 @@ winopen() {
 
 quickopen() {
   local n
+  n=$(convertPathWsl "$1")
+  echo "$n"
   if [[ -r "$1" ]]; then
-    n=$(wslpath -w "$1")
+    if [[ -d $(dirname $1) ]]; then
+      n=$(wslpath -w "$1")
+    else
+      n=$(wslpath -w $(wslpath -a "$1"))
+    fi
+    # n=$(wslpath -w "$1")
     quicllook "$n"
   else
     echo 'not exists file'
   fi
+}
+
+convertPathWsl() {
+  echo $(wslpath -w $(eadlink -e "$1"))
 }
