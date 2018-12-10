@@ -183,7 +183,7 @@ duster() {
             --header=":: $sort - $d" \
             --no-sort --exit-0 --prompt="duster-> " \
             --preview "pygmentize -g  {}" \
-            --print-query --expect=ctrl-s,ctrl-u,ctrl-e,enter,ctrl-r,ctrl-q,ctrl-d,ctrl-b,ctrl-v,"?","-" \
+            --print-query --expect=ctrl-s,ctrl-u,ctrl-e,enter,ctrl-r,ctrl-l,ctrl-d,ctrl-b,ctrl-v,"?","-" \
             )"; do
         q="$(head -1 <<< "$cmd")"
         k="$(head -2 <<< "$cmd" | tail -1)"
@@ -227,6 +227,9 @@ HELP
           ctrl-v)
             nvim ${res}
             continue
+            ;;
+          ctrl-l)
+            quickopen $(wslpath -a "${res}")
             ;;
           ctrl-r)
             # -F is dammy
@@ -289,7 +292,7 @@ finder() {
       | fzf --ansi --no-sort --reverse \
       --height=100% \
       --query="$q" --print-query \
-      --expect=ctrl-b,ctrl-v,ctrl-l,ctrl-r,ctrl-c,ctrl-i,ctrl-d,enter,"-","1","2","3","9"
+      --expect=ctrl-b,ctrl-v,ctrl-l,ctrl-r,ctrl-c,ctrl-i,ctrl-d,alt-q,enter,"-","1","2","3","9"
       )"; do
 
       q="$(head -1 <<< "$out")"
@@ -345,7 +348,9 @@ finder() {
               ls -l "$t"
             } | less
           else
-            if (( $+commands[pygmentize] )); then
+            if type "quickopen" 1>/dev/null 2>/dev/null | grep -q "function"; then
+              quickopen "$t"
+            else (( $+commands[pygmentize] ));
               get_styles="from pygments.styles import get_all_styles
               styles = list(get_all_styles())
               print('\n'.join(styles))"
@@ -353,7 +358,7 @@ finder() {
               style=${${(M)styles:#solarized}:-default}
               export LESSOPEN="| pygmentize -O style=$style -f console256 -g %s"
             fi
-            less +Gg "$t"
+            # less +Gg "$t"
           fi
           ;;
         ctrl-d)
@@ -432,10 +437,42 @@ fadd() {
 winopen() {
   local e n
   if [[ -r "$1" ]]; then
-    n=$(wslpath -w <<< $(wslpath -a "$1"))
-    e=$(sed 's/^.*\.\([^\.]*\)$/\1/' <<< "$1")
-    echo $(n)
-    echo $(e)
+    n=$(wslpath -w $(wslpath -a "$1"))
+    e=$(echo "$1" | sed 's/^.*\.\([^\.]*\)$/\1/')
+    case "$e" in
+      "ai")
+        illustrator "$n"
+        ;;
+      "psd")
+        photoshop "$n"
+        ;;
+      "pdf")
+        pdf "$n"
+        ;;
+      "jpg"|"png"|"gif")
+        quicllook "$n"
+        # imageviewer "$n"
+        ;;
+      "doc"|"docm"|"docx")
+        word "$n"
+        ;;
+      "xls"|"xlsx"|"xlsm"|"csv")
+        excel "$n"
+        ;;
+      "ppt"|"pptx"|"pps"|"ppsx")
+        powerpoint "$n"
+        ;;
+    esac
+  else
+    echo 'not exists file'
+  fi
+}
+
+quickopen() {
+  local n
+  if [[ -r "$1" ]]; then
+    n=$(wslpath -w "$1")
+    quicllook "$n"
   else
     echo 'not exists file'
   fi
