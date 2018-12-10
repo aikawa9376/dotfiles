@@ -229,7 +229,7 @@ HELP
             continue
             ;;
           ctrl-l)
-            quickopen $(wslpath -a "${res}")
+            quickopen ${res}
             ;;
           ctrl-r)
             # -F is dammy
@@ -440,7 +440,7 @@ winopen() {
     n=$(wslpath -w $(wslpath -a "$1"))
     e=$(echo "$1" | sed 's/^.*\.\([^\.]*\)$/\1/')
     case "$e" in
-      "ai")
+      "ai"|"eps")
         illustrator "$n"
         ;;
       "psd")
@@ -470,21 +470,14 @@ winopen() {
 
 quickopen() {
   local n
-  n=$(convertPathWsl "$1")
-  echo "$n"
   if [[ -r "$1" ]]; then
-    if [[ -d $(dirname $1) ]]; then
-      n=$(wslpath -w "$1")
-    else
-      n=$(wslpath -w $(wslpath -a "$1"))
-    fi
-    # n=$(wslpath -w "$1")
-    quicllook "$n"
+    n=$(convertPathWsl "$1")
+    quicklook "$n"
   else
     echo 'not exists file'
   fi
 }
 
 convertPathWsl() {
-  echo $(wslpath -w $(eadlink -e "$1"))
+  echo $(wslpath -m $(readlink -e "$1"))
 }
