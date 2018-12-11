@@ -281,7 +281,8 @@ function! s:config_easyfuzzymotion(...) abort
 endfunction
 function! s:config_easymotion(...) abort
   return extend(copy({
-  \   'keymap': {"/": "<Over>(incsearch)", "\<Space>": "\<CR>zz"},
+  \   'modules': [incsearch#config#easymotion#module()],
+  \   'keymap': {"\<C-Space>": "<Over>(easymotion)", "/": "<Over>(incsearch)", "\<Space>": "\<CR>zz"},
   \   'is_expr': 0,
   \   'is_stay': 0
   \ }), get(a:, 1, {}))

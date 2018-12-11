@@ -119,7 +119,7 @@ export FZF_DEFAULT_OPTS='
 --reverse
 --extended
 --ansi
---multi
+--bind alt-p:preview-up,alt-n:preview-down
 --color dark,hl:34,hl+:40,bg+:235,fg+:15
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
 '
