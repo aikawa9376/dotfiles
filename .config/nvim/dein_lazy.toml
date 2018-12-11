@@ -262,7 +262,7 @@ let g:expand_region_text_objects = {
 
 [[plugins]]
 repo = 'easymotion/vim-easymotion'
-depends = ['incsearch.vim', 'incsearch-fuzzy.vim', 'incsearch-easymotion.vim']
+depends = ['incsearch.vim', 'incsearch-fuzzy.vim', 'incsearch-migemo.vim', 'incsearch-easymotion.vim']
 on_event = 'VimEnter'
 hook_add = '''
 let g:EasyMotion_do_mapping = 0
@@ -298,6 +298,12 @@ repo = 'haya14busa/incsearch.vim'
 
 [[plugins]]
 repo = 'haya14busa/incsearch-fuzzy.vim'
+
+[[plugins]]
+repo = 'haya14busa/incsearch-migemo.vim'
+hook_add = '''
+nmap <M-/> <Plug>(incsearch-migemo-/)
+'''
 
 [[plugins]]
 repo = 'kana/vim-textobj-user'
@@ -423,13 +429,6 @@ let g:matchup_transmute_enabled = 1
 [[plugins]]
 repo = 'wellle/targets.vim'
 on_event = 'VimEnter'
-
-[[plugins]]
-repo = 'osyo-manga/vim-vigemo'
-on_map = '<Plug>(vigemo-search)'
-hook_add = '''
-nmap <M-/> <Plug>(vigemo-search)
-'''
 
 [[plugins]]
 repo = 'junegunn/vim-easy-align'
