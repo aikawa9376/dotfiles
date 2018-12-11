@@ -41,11 +41,9 @@ alias fnd='finder'
 alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
 alias -g to='$(destination_directories)'
-alias -g l='| less'
+alias -g le='| less'
 alias -g dust='$(duster)'
-alias -g find='$(finder)'
+alias -g fnd='$(finder)'
 alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
 alias t='tmuximum'
-# illustrator `wslpath -w $PWD/surf.ai`
-
