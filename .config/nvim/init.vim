@@ -213,6 +213,15 @@ nnoremap x "_x
 vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
+nnoremap dd :<C-u>call <SID>remove_line_brank()<CR>
+function! s:remove_line_brank()
+  if getline('.') == ""
+    .delete _
+  else
+    .delete
+  endif
+endfunction
+
 nmap <M-p> o<ESC>p==
 nmap gV `[v`]
 
@@ -245,6 +254,7 @@ nnoremap <Leader>i mzgg=G`z
 " ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
 " nnoremap <Leader><CR> $a<CR><Esc>
+nnoremap <Leader>s i<Space><ESC>
 nnoremap <M-d> mzo<ESC>`zj
 nnoremap <M-u> mzO<ESC>`zk
 
@@ -266,13 +276,17 @@ inoremap <C-o> <C-g>U<C-o>o
 nnoremap Y y$
 " nnoremap V v$
 nnoremap <C-h> ^
-nnoremap <C-l> $
+vnoremap <C-h> ^
+nnoremap <C-l> $l
+vnoremap <C-l> $l
 nnoremap <silent><C-g> :call cursor(0,strlen(getline("."))/2)<CR>
 nnoremap <C-e> 10<C-e>
 nnoremap <C-y> 10<C-y>
 " すごく移動する
 nnoremap <C-j> 10j
+vnoremap <C-j> 10j
 nnoremap <C-k> 10k
+vnoremap <C-k> 10k
 
 " gJで空白を削除する
 fun! JoinSpaceless()
@@ -526,6 +540,3 @@ cnoremap <C-Y> <C-R>-
 
 " override help command
 nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
-" TODO toggle
-nnoremap <C-i> :call search ("^". matchstr (getline (line (".")+ 1), '\(\s*\)') ."\\S", 'b')<CR>^
-" nnoremap <C-j> :call search ("^". matchstr (getline (line (".")), '\(\s*\)') ."\\S")<CR>^
