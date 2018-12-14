@@ -186,7 +186,7 @@ zstyle ':zle:*' word-chars ' /=;@:{}[]()<>,|.'
 zstyle ':zle:*' word-style unspecified
 
 #autosuggestions
-bindkey '^f' forward-word
+bindkey '^j' forward-word
 
 # -------------------------------------
 # 補正機能
