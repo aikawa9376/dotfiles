@@ -279,7 +279,7 @@ nnoremap <C-h> ^
 vnoremap <C-h> ^
 nnoremap <C-l> $l
 vnoremap <C-l> $l
-nnoremap <silent><C-g> :call cursor(0,strlen(getline("."))/2)<CR>
+nnoremap <silent><M-m> :call cursor(0,strlen(getline("."))/2)<CR>
 nnoremap <C-e> 10<C-e>
 nnoremap <C-y> 10<C-y>
 " すごく移動する
@@ -363,6 +363,7 @@ nmap <Leader>x :<c-u>bd<CR>
 nmap <Leader>q :<c-u>wq<CR>
 nmap <silent> <M-b> :bprevious<CR>
 nmap <silent> <M-f> :bnext<CR>
+nmap <silent> <C-g> <C-^>
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 
