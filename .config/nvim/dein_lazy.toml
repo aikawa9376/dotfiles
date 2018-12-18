@@ -91,7 +91,7 @@ nnoremap <silent> K :call LanguageClient_textDocument_hover()<CR>
 nnoremap <silent> gd :call LanguageClient_textDocument_definition()<CR>
 nnoremap <silent> <F2> :call LanguageClient_textDocument_rename()<CR>
 nnoremap <silent> <F3> :call LanguageClient_textDocument_references()<CR>
-nnoremap <silent> <M-m> :call LanguageClient_contextMenu()<CR>
+nnoremap <silent> <F11> :call LanguageClient_contextMenu()<CR>
 '''
 
 [[plugins]]
@@ -535,6 +535,7 @@ hook_add = '''
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
 nnoremap <silent> <Leader>f :Files<CR>
+nnoremap <silent> <Leader>gf :GFiles<CR>
 nnoremap <silent> <Leader>b :NavBuffers<CR>
 nnoremap <silent> <Leader>a :Rg<CR>
 nnoremap <silent> <Leader>l :Lines<CR>
