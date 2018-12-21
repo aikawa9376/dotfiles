@@ -363,7 +363,7 @@ nmap <Leader>x :<c-u>bd<CR>
 nmap <Leader>q :<c-u>wq<CR>
 nmap <silent> <M-b> :bprevious<CR>
 nmap <silent> <M-f> :bnext<CR>
-nmap <silent> <C-g> <C-^>
+nmap <silent> <C-g> mz<C-^>`zzz
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 
