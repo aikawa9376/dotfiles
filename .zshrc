@@ -200,6 +200,14 @@ setopt correct
 setopt auto_cd
 setopt auto_pushd
 
+# C-g でひとつ前のディレクトリへ
+function cdup() {
+  builtin cd -
+  zle reset-prompt
+}
+zle -N cdup
+bindkey '^g' cdup
+
 function agvim () {
   nvim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}')
 }

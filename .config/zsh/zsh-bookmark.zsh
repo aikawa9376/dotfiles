@@ -160,7 +160,7 @@ zle -N jump
 zle -N dmark
 zle -N fzm
 
-bindkey ${FZF_MARKS_JUMP:-'^g'} fzm
+bindkey ${FZF_MARKS_JUMP:-'^x'} fzm
 if [ "${FZF_MARKS_DMARK}" ]; then
     bindkey ${FZF_MARKS_DMARK} dmark
 fi

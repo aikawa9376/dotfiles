@@ -63,7 +63,8 @@ let g:neosnippet#snippets_directory = '~/.config/nvim/snippets'
 
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
-on_ft = ['rust','javascript','python']
+on_ft = ['rust','javascript','python', 'php']
+depends = ['LanguageServer-php-neovim']
 rev = 'next'
 build = 'bash install.sh'
 hook_add = '''
@@ -978,14 +979,17 @@ repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
-repo = 'padawan-php/deoplete-padawan'
-on_ft = ['php', 'phtml']
-build = 'composer install'
+repo = 'roxma/LanguageServer-php-neovim',
+build = 'composer install && composer run-script parse-stubs'
 
 # [[plugins]]
-# repo = 'roxma/LanguageServer-php-neovim',
-# on_event = 'VimEnter'
-# build = 'composer install && composer run-script parse-stubs'
+# repo = 'shawncplus/phpcomplete.vim',
+# on_ft = ['php', 'phtml']
+
+# [[plugins]]
+# repo = 'padawan-php/deoplete-padawan'
+# on_ft = ['php', 'phtml']
+# build = 'composer install'
 
 # javascript & typescript----------------
 
