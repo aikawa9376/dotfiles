@@ -454,6 +454,14 @@ nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
 [[plugins]]
 repo = 'aikawa9376/vim-operator-swap'
 
+[[plugins]]
+repo = 'luochen1990/rainbow'
+on_event = 'VimEnter'
+hook_add = '''
+nmap <silent> <F10> :RainbowToggle<CR>
+let g:rainbow_active = 1
+'''
+
 # list-----------------------------------
 
 [[plugins]]
@@ -604,7 +612,7 @@ function! s:outline_format(lists)
   for list in a:lists
     call map(list, "printf('%s', v:val)")
   endfor
-  retur a:lists
+  return a:lists
 endfunction
 
 function! s:outline_source(tag_cmds)
@@ -830,6 +838,22 @@ command! -nargs=* NavBuffers
   \   '--preview-window', 'up:1:wrap', '--preview', 'echo {} | rev | cut -d "/" -f1 | rev'],
   \   'left': '20%',
   \ }))
+
+" ------------------------------------------------------------------
+" ChangeList Navigator
+" ------------------------------------------------------------------
+" function! s:getChenges()
+"   let max  = histnr("@")
+"   let list = filter(map(range(1, max), 'histget("@", - v:val)'), '!empty(v:val)')
+"   let list = execute("changes")
+"   return list
+" endfunction
+"
+" command! -nargs=* ChangeListNav call fzf#run({
+"   \  'source': s:getChenges(),
+"   \  'sink': 'edit',
+"   \  'options': '-m -x +s --prompt=ChangeList:',
+"   \  'down': '40%'})
 '''
 
 [[plugins]]
@@ -886,6 +910,13 @@ hook_add = '''
 " not work nvim(python-nvim?) version
 " let g:far#source = 'agnvim'
 let g:far#source = 'ag'
+'''
+
+[[plugins]]
+repo = 'wincent/ferret'
+on_map = '<Plug>(FerretLack)'
+hook_add = '''
+nmap <Leader>r <Plug>(FerretLack)
 '''
 
 [[plugins]]

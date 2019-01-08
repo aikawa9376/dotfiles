@@ -434,6 +434,29 @@ fadd() {
   done
 }
 
+# git remove file
+frm() {
+  local out q n removefiles
+  while out=$(
+      git ls-files |
+      fzf-tmux --multi --exit-0 --expect=ctrl-d); do
+    q=$(head -1 <<< "$out")
+    n=$[$(wc -l <<< "$out") - 1]
+    removefiles=(`echo $(tail "-$n" <<< "$out")`)
+    [[ -z "$removefiles" ]] && continue
+    if [ "$q" = ctrl-d ]; then
+      git rm $removefiles
+    else
+      git rm --cached  $removefiles
+    fi
+  done
+}
+
+# process kill
+pskl() {
+  ps aux | fzf | awk '{ print \$2 }' | xargs kill -9
+}
+
 winopen() {
   local e n
   if [[ -r "$1" ]]; then
