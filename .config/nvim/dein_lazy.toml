@@ -842,18 +842,18 @@ command! -nargs=* NavBuffers
 " ------------------------------------------------------------------
 " ChangeList Navigator
 " ------------------------------------------------------------------
-" function! s:getChenges()
-"   let max  = histnr("@")
-"   let list = filter(map(range(1, max), 'histget("@", - v:val)'), '!empty(v:val)')
-"   let list = execute("changes")
-"   return list
-" endfunction
-"
-" command! -nargs=* ChangeListNav call fzf#run({
-"   \  'source': s:getChenges(),
-"   \  'sink': 'edit',
-"   \  'options': '-m -x +s --prompt=ChangeList:',
-"   \  'down': '40%'})
+function! s:getChenges()
+  let max  = histnr("@")
+  let list = filter(map(range(1, max), 'histget("@", - v:val)'), '!empty(v:val)')
+  let list = execute("changes")
+  return list
+endfunction
+
+command! -nargs=* ChangeListNav call fzf#run({
+  \  'source': s:getChenges(),
+  \  'sink': 'edit',
+  \  'options': '-m -x +s --prompt=ChangeList:',
+  \  'down': '40%'})
 '''
 
 [[plugins]]
