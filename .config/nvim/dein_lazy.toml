@@ -74,11 +74,11 @@ let g:LanguageClient_serverCommands = {
   \ 'javascript': ['javascript-typescript-stdio'],
   \ 'python': ['pyls'],
   \ }
-let g:LanguageClient_autoStart = 1 " NeoVim起動時にLSPを自動スタート
+let g:LanguageClient_autoStart = 1
 let g:LanguageClient_autoStop = 1
-let g:LanguageClient_diagnosticsEnable = 0 " シンタックスチェックをOFF
+let g:LanguageClient_diagnosticsEnable = 0
 let g:LanguageClient_changeThrottle = 1.5
-let g:LanguageClient_completionPreferTextEdit = 0  " should be 0
+let g:LanguageClient_completionPreferTextEdit = 0
 let g:LanguageClient_diagnosticsSignsMax = 0
 let g:LanguageClient_diagnosticsList = 'Disabled'
 let g:LanguageClient_hasSnippetSupport = 0
@@ -459,7 +459,7 @@ repo = 'luochen1990/rainbow'
 on_event = 'VimEnter'
 hook_add = '''
 nmap <silent> <F10> :RainbowToggle<CR>
-let g:rainbow_active = 1
+let g:rainbow_active = 0
 '''
 
 # list-----------------------------------
@@ -562,6 +562,8 @@ nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 nnoremap <silent> <expr> <Leader>] ':Rg(' . expand('<cword>') . ')<CR>'
 nnoremap <silent> <Leader>p :YanksAfter<CR>
 nnoremap <silent> <Leader>P :YanksBefore<CR>
+nnoremap <silent> <Leader>; :ChangeListNav<CR>
+nnoremap <silent> <Leader><C-o> :JumpListNav<CR>
 nnoremap <silent> q: :History:<CR>
 nnoremap <silent> q/ :History/<CR>
 
@@ -843,16 +845,63 @@ command! -nargs=* NavBuffers
 " ChangeList Navigator
 " ------------------------------------------------------------------
 function! s:getChenges()
-  let max  = histnr("@")
-  let list = filter(map(range(1, max), 'histget("@", - v:val)'), '!empty(v:val)')
-  let list = execute("changes")
+  let listtext = execute("changes")
+  let list = reverse(split(listtext, "\n"))
+  call remove(list, 0)
+  call remove(list, len(list) - 1)
   return list
+endfunction
+
+function! s:cursorMove(line)
+  let linelist = substitute(a:line[0],'\s\+',",","g")
+  execute "call cursor(" . split(linelist, ',')[1] . "," . split(linelist, ',')[2] . ")"
 endfunction
 
 command! -nargs=* ChangeListNav call fzf#run({
   \  'source': s:getChenges(),
-  \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=ChangeList:',
+  \  'sink*':   function('<SID>cursorMove'),
+  \  'options': '--reverse -m -x +s --ansi --prompt=ChangeList:',
+  \  'down': '40%'})
+
+" ------------------------------------------------------------------
+" JumpList Navigator
+" ------------------------------------------------------------------
+function! s:getjumps()
+  let listtext = execute("jumps")
+  let list = reverse(split(listtext, "\n"))
+  call remove(list, 0)
+  call remove(list, len(list) - 1)
+  return list
+endfunction
+
+function! s:cursorMove(line)
+  let linelist = substitute(a:line[0],'\s\+',",","g")
+  if filereadable(fnamemodify(split(linelist, ',')[3], ':p'))
+    execute "e " . fnamemodify(split(linelist, ',')[3], ':p')
+    execute "call cursor(" . split(linelist, ',')[1] . "," . split(linelist, ',')[2] . ")"
+  else
+    execute "call cursor(" . split(linelist, ',')[1] . "," . split(linelist, ',')[2] . ")"
+  endif
+endfunction
+
+command! -nargs=* JumpListNav call fzf#run({
+  \  'source': s:getjumps(),
+  \  'sink*':   function('<SID>cursorMove'),
+  \  'options': '--reverse -m -x +s --ansi --prompt=JumpList:',
+  \  'down': '40%'})
+
+" ------------------------------------------------------------------
+" ColorScheme Viewer
+" ------------------------------------------------------------------
+function! s:gethighlight()
+  let listtext = execute("highlight")
+  let list = split(listtext, "\n")
+  return list
+endfunction
+
+command! -nargs=* HighLight call fzf#run({
+  \  'source': s:gethighlight(),
+  \  'options': '--reverse -m -x +s --ansi --prompt=ColorScheme:',
   \  'down': '40%'})
 '''
 
@@ -908,8 +957,8 @@ repo = 'brooth/far.vim'
 on_event = 'VimEnter'
 hook_add = '''
 " not work nvim(python-nvim?) version
-" let g:far#source = 'agnvim'
-let g:far#source = 'ag'
+let g:far#source = 'agnvim'
+" let g:far#source = 'ag'
 '''
 
 [[plugins]]
@@ -985,16 +1034,19 @@ let g:ale_fixers['css'] = ['prettier']
 let g:ale_fixers['scss'] = ['prettier']
 let g:ale_fixers['php'] = ['prettier']
 let g:ale_linters = {}
-" let g:ale_linters['php'] = ['phan']
+let g:ale_linters['php'] = ['phan']
 " ファイル保存時に実行
 let g:ale_fix_on_save = 1
 let g:ale_lint_on_text_changed = 0
+let g:ale_sign_column_always = 1
 " ローカルの設定ファイルを考慮する
 let g:ale_javascript_prettier_use_local_config = 1
 " 設定を見直す必要あり
 let g:ale_php_phan_executable = 'vendor/bin/phan'
 let g:ale_html_tidy_options = '-config .tidyrc'
 let g:ale_virtualtext_cursor = 1
+autocmd MyAutoCmd ColorScheme * hi ALEWarning ctermfg=red guifg=red
+autocmd MyAutoCmd ColorScheme * hi ALEError ctermfg=magenta guifg=magenta
 nnoremap <silent>]a :<C-u>ALENext<CR>
 nnoremap <silent>[a :<C-u>ALEPrevious<CR>
 '''
