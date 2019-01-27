@@ -51,6 +51,14 @@ xmap ah <Plug>GitGutterTextObjectOuterVisual
 # design---------------------------------
 
 [[plugins]]
+repo = 'ryanoasis/vim-devicons'
+on_event = 'VimEnter'
+hook_add = '''
+let g:WebDevIconsUnicodeGlyphDoubleWidth = 1
+let g:WebDevIconsUnicodeDecorateFolderNodes = 1
+'''
+
+[[plugins]]
 repo = 'vim-airline/vim-airline'
 depends = ['vim-airline-themes']
 hook_add = '''

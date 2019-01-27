@@ -213,7 +213,7 @@ nnoremap x "_x
 vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
-nnoremap dd :<C-u>call <SID>remove_line_brank()<CR>
+nnoremap <silent> dd :<C-u>call <SID>remove_line_brank()<CR>
 function! s:remove_line_brank()
   if getline('.') == ""
     .delete _
@@ -418,7 +418,7 @@ augroup ctags
   autocmd BufWritePost * call s:execute_ctags()
 augroup END
 
-" vimrcをスペースドットで開く
+" vimrcをスペースドットで更新
 if has('vim_starting')
   function s:reload_vimrc() abort
     execute printf('source %s', $MYVIMRC)

@@ -466,9 +466,11 @@ let g:rainbow_active = 0
 
 [[plugins]]
 repo = 'Shougo/defx.nvim'
+depends = ['defx-icons', 'defx-git']
 on_cmd = ['Defx']
 hook_add = '''
-nmap <silent><Space>n :Defx -toggle -direction=topleft -split=vertical -winwidth=35<CR>
+nmap <silent><Space>n :Defx
+\ -toggle -direction=topleft -split=vertical -winwidth=35 -columns=git:icons:filename:type<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
 " Define mappings
@@ -529,6 +531,16 @@ nnoremap <silent><buffer><expr> <Tab> winnr('$') != 1 ?
 \ ':<C-u>Defx -buffer-name=temp -split=vertical<CR>'
 endfunction
 '''
+
+[[plugins]]
+repo = 'kristijanhusak/defx-icons'
+hook_add = '''
+let g:defx_icons_enable_syntax_highlight = 0
+let g:defx_icons_column_length = 1
+'''
+
+[[plugins]]
+repo = 'kristijanhusak/defx-git'
 
 [[plugins]]
 repo = 'junegunn/fzf'
@@ -901,7 +913,7 @@ endfunction
 
 command! -nargs=* HighLight call fzf#run({
   \  'source': s:gethighlight(),
-  \  'options': '--reverse -m -x +s --ansi --prompt=ColorScheme:',
+  \  'options': '--reverse -m -x +s --ansi --prompt=Highlight:',
   \  'down': '40%'})
 '''
 
