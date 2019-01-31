@@ -457,6 +457,18 @@ pskl() {
   ps aux | fzf | awk '{ print \$2 }' | xargs kill -9
 }
 
+# fdg - ghq
+fdg() {
+  local selected
+  selected=$(ghq list | fzf)
+
+  if [ "x$selected" != "x" ]; then
+    cd $(ghq root)/$selected
+  fi
+}
+zle -N fdg
+bindkey '^z' fdg
+
 winopen() {
   local e n
   if [[ -r "$1" ]]; then
@@ -504,3 +516,4 @@ quickopen() {
 convertPathWsl() {
   echo $(wslpath -m $(readlink -e "$1"))
 }
+

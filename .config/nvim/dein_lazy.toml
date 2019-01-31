@@ -233,15 +233,13 @@ autocmd MyAutoCmd ColorScheme * highlight Sneak ctermbg=0 ctermfg=15 cterm=under
 '''
 
 [[plugins]]
-repo = 'terryma/vim-multiple-cursors'
+repo = 'mg979/vim-visual-multi'
+rev = 'test'
 on_event = 'VimEnter'
 hook_add = '''
-function! g:Multiple_cursors_before()
-  call deoplete#custom#buffer_option('auto_complete', v:false)
-endfunction
-function! g:Multiple_cursors_after()
-  call deoplete#custom#buffer_option('auto_complete', v:true)
-endfunction
+let g:VM_leader = 'vm'
+let g:VM_theme = 'iceblue'
+let g:VM_cmdheight = 3
 '''
 
 [[plugins]]
@@ -431,13 +429,6 @@ let g:matchup_transmute_enabled = 1
 [[plugins]]
 repo = 'wellle/targets.vim'
 on_event = 'VimEnter'
-
-[[plugins]]
-repo = 'junegunn/vim-easy-align'
-on_event = 'VimEnter'
-hook_add = '''
-vmap <Enter> <Plug>(EasyAlign)
-'''
 
 [[plugins]]
 repo = 'aikawa9376/vim-anzu'

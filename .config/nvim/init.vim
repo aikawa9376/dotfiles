@@ -274,7 +274,8 @@ inoremap <C-o> <C-g>U<C-o>o
 
 " 文字選択・移動など
 nnoremap Y y$
-" nnoremap V v$
+nnoremap V v$
+nnoremap vv V
 nnoremap <C-h> ^
 vnoremap <C-h> ^
 nnoremap <C-l> $l
