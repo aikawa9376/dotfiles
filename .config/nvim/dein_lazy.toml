@@ -249,7 +249,7 @@ hook_add = '''
 nmap + <Plug>(expand_region_expand)
 vmap + <Plug>(expand_region_expand)
 let g:expand_region_text_objects = {
-      \ '$'  :0,
+      \ '$'   :0,
       \ 'i]'  :1,
       \ 'ib'  :1,
       \ 'iB'  :1,
@@ -429,6 +429,13 @@ let g:matchup_transmute_enabled = 1
 [[plugins]]
 repo = 'wellle/targets.vim'
 on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'junegunn/vim-easy-align'
+on_event = 'VimEnter'
+hook_add = '''
+vmap <Enter> <Plug>(EasyAlign)
+'''
 
 [[plugins]]
 repo = 'aikawa9376/vim-anzu'
