@@ -13,7 +13,7 @@ let g:deoplete#enable_at_startup = 1
 
 let s:deoplete_custom_option = {
       \ 'auto_complete': v:true,
-      \ 'auto_complete_delay': 5,
+      \ 'auto_complete_delay': 10,
       \ 'auto_refresh_delay': 30,
       \ 'camel_case': v:false,
       \ 'ignore_case': v:true,
@@ -792,7 +792,6 @@ command! YanksBefore call fzf#run(fzf#wrap('YanksBefore', {
 \ 'options': '--no-sort --prompt="Yanks-P> "',
 \ }))
 
-
 " ------------------------------------------------------------------
 " Buffer Navigator
 " ------------------------------------------------------------------
@@ -968,6 +967,7 @@ on_event = 'VimEnter'
 hook_add = '''
 " not work nvim(python-nvim?) version
 let g:far#source = 'agnvim'
+let g:far#auto_preview = 0
 " let g:far#source = 'ag'
 '''
 

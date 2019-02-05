@@ -52,6 +52,14 @@ eval `/usr/local/bin/wcwidth-cjk --sh-init`
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
 
+# local settings
+case ${OSTYPE} in
+  linux*)
+    # homebrew
+    export BREWPATH="/home/linuxbrew/.linuxbrew/bin"
+    export PATH="$BREWPATH:$PATH"
+esac
+
 stty stop undef
 # KEYTIMEOUT=1
 case $(uname -a) in

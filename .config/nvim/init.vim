@@ -213,13 +213,16 @@ nnoremap x "_x
 vnoremap x "_x
 nnoremap s "_s
 vnoremap s "_s
-nnoremap <silent> dd :<C-u>call <SID>remove_line_brank()<CR>
-function! s:remove_line_brank()
-  if getline('.') == ""
-    .delete _
-  else
-    .delete
-  endif
+nnoremap <silent> dd :<C-u>call <SID>remove_line_brank(v:count1)<CR>
+function! s:remove_line_brank(count)
+  for i in range(1, v:count1)
+    if getline('.') == ""
+      .delete _
+    else
+      .delete
+    endif
+  endfor
+  call repeat#set("dd", v:count1)
 endfunction
 
 nmap <M-p> o<ESC>p==
