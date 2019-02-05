@@ -5,7 +5,7 @@ repo = 'Shougo/deoplete.nvim'
 depends = [
 'neosnippet', 'context_filetype.vim', 'neco-syntax',
 'echodoc.vim', 'neoinclude.vim', 'FastFold', 'neopairs.vim',
-'tmux-complete.vim'
+'tmux-complete.vim', 'phpcd.vim'
 ]
 hook_source = '''
 " deoplete setup
@@ -31,6 +31,9 @@ call deoplete#custom#option(s:deoplete_custom_option)
 call deoplete#custom#source('tag', 'min_pattern_length', 2)
 call deoplete#custom#source('tmux-complete', 'min_pattern_length', 2)
 call deoplete#custom#source('padawan', 'mark', '[P]')
+
+let g:deoplete#ignore_sources = get(g:, 'deoplete#ignore_sources', {})
+let g:deoplete#ignore_sources.php = ['omni']
 
 " 戻れてもいいかもしれない
 autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
@@ -63,8 +66,7 @@ let g:neosnippet#snippets_directory = '~/.config/nvim/snippets'
 
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
-on_ft = ['rust','javascript','python', 'php']
-depends = ['LanguageServer-php-neovim']
+on_ft = ['rust','javascript','python']
 rev = 'next'
 build = 'bash install.sh'
 hook_add = '''
@@ -1072,8 +1074,8 @@ repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
-repo = 'roxma/LanguageServer-php-neovim',
-build = 'composer install && composer run-script parse-stubs'
+repo = 'lvht/phpcd.vim',
+build = 'composer install'
 
 # [[plugins]]
 # repo = 'shawncplus/phpcomplete.vim',
