@@ -469,6 +469,11 @@ fdg() {
 zle -N fdg
 bindkey '^z' fdg
 
+ghq-update()
+{
+  ghq list | sed -E 's/^[^\/]+\/(.+)/\1/' | xargs -n 1 -P 10 ghq get -u
+}
+
 winopen() {
   local e n
   if [[ -r "$1" ]]; then

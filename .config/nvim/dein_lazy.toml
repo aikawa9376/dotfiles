@@ -5,34 +5,36 @@ repo = 'Shougo/deoplete.nvim'
 depends = [
 'neosnippet', 'context_filetype.vim', 'neco-syntax',
 'echodoc.vim', 'neoinclude.vim', 'FastFold', 'neopairs.vim',
-'tmux-complete.vim', 'phpcd.vim'
+'tmux-complete.vim', 'phpcd.vim', 'neco-vim', 'deoplete-zsh'
 ]
 hook_source = '''
 " deoplete setup
 let g:deoplete#enable_at_startup = 1
 
 let s:deoplete_custom_option = {
-      \ 'auto_complete': v:true,
-      \ 'auto_complete_delay': 10,
-      \ 'auto_refresh_delay': 30,
-      \ 'camel_case': v:false,
-      \ 'ignore_case': v:true,
-      \ 'max_list': 100,
-      \ 'min_pattern_length': 1,
-      \ 'num_processes': 10,
-      \ 'on_insert_enter': v:true,
-      \ 'on_text_changed_i': v:true,
-      \ 'refresh_always': v:false,
-      \ 'skip_chars': ['(', ')', '[', ']'],
-      \ 'smart_case': v:true,
-      \ }
+  \ 'auto_complete'      : v:true,
+  \ 'auto_complete_delay': 5,
+  \ 'auto_refresh_delay' : 30,
+  \ 'camel_case'         : v:false,
+  \ 'ignore_case'        : v:true,
+  \ 'max_list'           : 100,
+  \ 'min_pattern_length' : 1,
+  \ 'num_processes'      : 10,
+  \ 'on_insert_enter'    : v:true,
+  \ 'on_text_changed_i'  : v:true,
+  \ 'refresh_always'     : v:false,
+  \ 'skip_chars'         : ['(', ')', '[', ']'],
+  \ 'smart_case'         : v:true,
+  \ }
 call deoplete#custom#option(s:deoplete_custom_option)
-
+call deoplete#custom#source('_', 'converter', ['auto_paren'])
+call deoplete#custom#source('neosnippet', 'rank', 1000)
+call deoplete#custom#source('neosnippet', 'max_candidates', 5)
+call deoplete#custom#source('neosnippet', 'max_pattern_length', 3)
 call deoplete#custom#source('tag', 'min_pattern_length', 2)
 call deoplete#custom#source('tmux-complete', 'min_pattern_length', 2)
-call deoplete#custom#source('padawan', 'mark', '[P]')
 
-let g:deoplete#ignore_sources = get(g:, 'deoplete#ignore_sources', {})
+let g:deoplete#ignore_sources     = get(g:, 'deoplete#ignore_sources', {})
 let g:deoplete#ignore_sources.php = ['omni']
 
 " 戻れてもいいかもしれない
@@ -48,20 +50,18 @@ on_ft = ['snippet']
 hook_source = '''
 " Snippet key-mappings.
 " Note: It must be "imap" and "smap".  It uses <Plug> mappings.
-imap <C-Space> <Plug>(neosnippet_expand_or_jump)
-smap <C-Space> <Plug>(neosnippet_expand_or_jump)
+imap <C-Space> <Plug>(neosnippet_jump_or_expand)
+smap <C-Space> <Plug>(neosnippet_jump_or_expand)
 xmap <C-Space> <Plug>(neosnippet_expand_target)
 
 let g:neosnippet#enable_completed_snippet = 1
-let g:neosnippet#expand_word_boundary = 1
+let g:neosnippet#expand_word_boundar      = 1
+let g:neosnippet#snippets_directory       = '~/.config/nvim/snippets'
 
 " For conceal markers.
 if has('conceal')
   set conceallevel=2 concealcursor=niv
 endif
-
-" add honza
-let g:neosnippet#snippets_directory = '~/.config/nvim/snippets'
 '''
 
 [[plugins]]
@@ -76,17 +76,17 @@ let g:LanguageClient_serverCommands = {
   \ 'javascript': ['javascript-typescript-stdio'],
   \ 'python': ['pyls'],
   \ }
-let g:LanguageClient_autoStart = 1
-let g:LanguageClient_autoStop = 1
-let g:LanguageClient_diagnosticsEnable = 0
-let g:LanguageClient_changeThrottle = 1.5
+let g:LanguageClient_autoStart                = 1
+let g:LanguageClient_autoStop                 = 1
+let g:LanguageClient_diagnosticsEnable        = 0
+let g:LanguageClient_changeThrottle           = 1.5
 let g:LanguageClient_completionPreferTextEdit = 0
-let g:LanguageClient_diagnosticsSignsMax = 0
-let g:LanguageClient_diagnosticsList = 'Disabled'
-let g:LanguageClient_hasSnippetSupport = 0
-let g:LanguageClient_waitOutputTimeout = 4
-let g:LanguageClient_loadSettings = 1
-let g:LanguageClient_settingsPath = '.lsp.json'
+let g:LanguageClient_diagnosticsSignsMax      = 0
+let g:LanguageClient_diagnosticsList          = 'Disabled'
+let g:LanguageClient_hasSnippetSupport        = 0
+let g:LanguageClient_waitOutputTimeout        = 4
+let g:LanguageClient_loadSettings             = 1
+let g:LanguageClient_settingsPath             = '.lsp.json'
 " let g:LanguageClient_loggingLevel = 'DEBUG'
 " let g:LanguageClient_loggingFile = '/tmp/LanguageClient.log'
 " let g:LanguageClient_serverStderr = '/tmp/LanguageServer.log'
@@ -110,41 +110,45 @@ if !exists('g:context_filetype#same_filetypes')
   let g:context_filetype#same_filetypes = {}
 endif
 let g:context_filetype#same_filetypes.php = 'phtml'
-let g:context_filetype#same_filetypes.php = 'html'
-let g:context_filetype#same_filetypes.html = 'php'
 let b:context_filetype_filetypes = context_filetype#default_filetypes()
 call extend(b:context_filetype_filetypes,
-      \ {'php' : [
-      \   {
-      \    'start':
-      \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
-      \    'end': '</script>', 'filetype': 'javascript',
-      \   },
-      \   {
-      \    'start':
-      \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
-      \    'end': '</script>', 'filetype': 'coffee',
-      \   },
-      \   {
-      \    'start':
-      \     '<script\%( [^>]*\)\?>',
-      \    'end': '</script>', 'filetype': 'javascript',
-      \   },
-      \   {
-      \    'start':
-      \     '<style\%( [^>]*\)\?>',
-      \    'end': '</style>', 'filetype': 'css',
-      \   },
-      \   {
-      \    'start':
-      \     '<[^>]\+ style=\([''"]\)',
-      \    'end': '\1', 'filetype': 'css',
-      \   },
-      \ ]})
+  \ {'php' : [
+  \   {
+  \    'start':
+  \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
+  \    'end': '</script>', 'filetype': 'javascript',
+  \   },
+  \   {
+  \    'start':
+  \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
+  \    'end': '</script>', 'filetype': 'coffee',
+  \   },
+  \   {
+  \    'start':
+  \     '<script\%( [^>]*\)\?>',
+  \    'end': '</script>', 'filetype': 'javascript',
+  \   },
+  \   {
+  \    'start':
+  \     '<style\%( [^>]*\)\?>',
+  \    'end': '</style>', 'filetype': 'css',
+  \   },
+  \   {
+  \    'start':
+  \     '<[^>]\+ style=\([''"]\)',
+  \    'end': '\1', 'filetype': 'css',
+  \   },
+  \ ]})
 '''
 
 [[plugins]]
 repo = 'Shougo/neco-syntax'
+
+[[plugins]]
+repo = 'Shougo/neco-vim'
+
+[[plugins]]
+repo = 'deoplete-plugins/deoplete-zsh'
 
 [[plugins]]
 repo = 'Shougo/echodoc.vim'
@@ -231,7 +235,7 @@ map <C-Space> <Plug>Sneak_s
 map <M-S> <Plug>Sneak_S
 let g:sneak#s_next = 1
 let g:sneak#use_ic_scs = 1
-autocmd MyAutoCmd ColorScheme * highlight Sneak ctermbg=0 ctermfg=15 cterm=underline
+autocmd MyAutoCmd ColorScheme * highligh Sneak ctermbg=0 ctermfg=15 cterm=underline
 '''
 
 [[plugins]]
@@ -433,13 +437,6 @@ repo = 'wellle/targets.vim'
 on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'junegunn/vim-easy-align'
-on_event = 'VimEnter'
-hook_add = '''
-vmap <Enter> <Plug>(EasyAlign)
-'''
-
-[[plugins]]
 repo = 'aikawa9376/vim-anzu'
 on_event = 'VimEnter'
 hook_source = '''
@@ -450,9 +447,6 @@ nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
 " nmap <expr> * anzu#mode#mapexpr("*", "", "zz")
 " nmap <expr> # anzu#mode#mapexpr("#", "", "zz")
 '''
-
-[[plugins]]
-repo = 'aikawa9376/vim-operator-swap'
 
 [[plugins]]
 repo = 'luochen1990/rainbow'
@@ -470,7 +464,8 @@ depends = ['defx-icons', 'defx-git']
 on_cmd = ['Defx']
 hook_add = '''
 nmap <silent><Space>n :Defx
-\ -toggle -direction=topleft -split=vertical -winwidth=35 -columns=git:icons:filename:type<CR>
+\ -toggle -resume=true -direction=topleft -split=vertical
+\ -winwidth=35 -columns=git:icons:filename:type<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
 " Define mappings
@@ -914,6 +909,36 @@ command! -nargs=* HighLight call fzf#run({
   \  'source': s:gethighlight(),
   \  'options': '--reverse -m -x +s --ansi --prompt=Highlight:',
   \  'down': '40%'})
+
+" ------------------------------------------------------------------
+" PHP Refactor Menu
+" ------------------------------------------------------------------
+function! s:getphprefmenu()
+  let menus = {
+      \ "Rename Local Variable" : "call PhpRenameLocalVariable()" ,
+      \ "Rename Class Variable" : "call PhpRenameClassVariable()" ,
+      \ "Rename Method" : "call PhpRenameMethod()" ,
+      \ "Extract Use" : "call PhpExtractUse()" ,
+      \ "Extract Const" : "call PhpExtractConst()" ,
+      \ "Extract Class Property" : "call PhpExtractClassProperty()" ,
+      \ "Extract Method" : "call PhpExtractMethod()" ,
+      \ "Create Property" : "call PhpCreateProperty()" ,
+      \ "Detect Unused Use Statements" : "call PhpDetectUnusedUseStatements()" ,
+      \ "Align Assigns" : "call PhpAlignAssigns()" ,
+      \ "Create setters and getters" : "call PhpCreateGetters()" ,
+      \ "Document all code" : "call PhpDocAll()" }
+  return menus
+endfunction
+
+function! s:getphprefsink(lines) abort
+  let menus = <SID>getphprefmenu()
+  execute menus[a:lines[0]]
+endfunction
+command! -nargs=* PhpRefactorringMenu call fzf#run({
+  \  'source': sort(keys(s:getphprefmenu())),
+  \  'sink*':   function('<SID>getphprefsink'),
+  \  'options': '--reverse -m -x +s --ansi --prompt=PhpRefactorMenu:',
+  \  'down': '20%'})
 '''
 
 [[plugins]]
@@ -985,15 +1010,6 @@ repo = 'Shougo/junkfile.vim'
 on_cmd = ['JunkfileOpen']
 
 [[plugins]]
-repo = 'jeetsukumaran/vim-buffergator'
-on_cmd = ['BuffergatorToggle']
-hook_add = '''
-let g:buffergator_vsplit_size = 35
-let g:buffergator_suppress_keymaps = 1
-nnoremap <silent> <Leader>B :BuffergatorToggle<CR>
-'''
-
-[[plugins]]
 repo = 'tpope/vim-dadbod'
 
 [[plugins]]
@@ -1039,26 +1055,38 @@ nmap <Leader>gl :Agit<CR>
 repo = 'w0rp/ale'
 on_event = 'VimEnter'
 hook_add = '''
-let g:ale_fixers = {}
-let g:ale_fixers['javascript'] = ['prettier']
-" let g:ale_fixers['html'] = ['tidy']
-let g:ale_fixers['css'] = ['prettier']
-let g:ale_fixers['scss'] = ['prettier']
-let g:ale_fixers['php'] = ['prettier']
-let g:ale_linters = {}
-let g:ale_linters['php'] = ['phan']
-" ファイル保存時に実行
-let g:ale_fix_on_save = 1
-let g:ale_lint_on_text_changed = 0
-let g:ale_sign_column_always = 1
-" ローカルの設定ファイルを考慮する
+" 有効にするformatter
+let g:ale_fixers = {
+\   'javascript': ['prettier'],
+\   'css'       : ['prettier'],
+\   'scss'      : ['prettier'],
+\}
+" 有効にするlinter
+let g:ale_linters = {
+\   'php'       : ['phan'],
+\   'javascript': ['eslint'],
+\}
+" エラー行に表示するマーク
+let g:ale_sign_error            = '⨉'
+let g:ale_sign_warning          = '⚠'
+let g:ale_fix_on_save           = 1
+let g:ale_lint_on_text_changed  = 0
+let g:ale_lint_on_insert_leave  = 1
+let g:ale_sign_column_always    = 1
+let g:ale_set_loclist           = 0
+let g:ale_set_quickfix          = 0
+let g:ale_open_list             = 0
+let g:ale_keep_list_window_open = 0
+let g:ale_virtualtext_cursor    = 1
+let g:ale_html_tidy_options     = '-config .tidyrc'
+let g:ale_echo_msg_format       = '[%linter%] %s [%severity%]'
+let g:ale_php_phan_executable   = 'vendor/bin/phan'
+let g:ale_php_phan_minimum_severity            = 10
 let g:ale_javascript_prettier_use_local_config = 1
-" 設定を見直す必要あり
-let g:ale_php_phan_executable = 'vendor/bin/phan'
-let g:ale_html_tidy_options = '-config .tidyrc'
-let g:ale_virtualtext_cursor = 1
-autocmd MyAutoCmd ColorScheme * hi ALEWarning ctermfg=red guifg=red
-autocmd MyAutoCmd ColorScheme * hi ALEError ctermfg=magenta guifg=magenta
+autocmd MyAutoCmd ColorScheme * hi ALEVirtualTextWarning ctermfg=3 guifg=3
+autocmd MyAutoCmd ColorScheme * hi ALEWarningSign ctermfg=3 guifg=3 ctermbg=0 guibg=0
+autocmd MyAutoCmd ColorScheme * hi ALEVirtualTextError ctermfg=red guifg=red
+autocmd MyAutoCmd ColorScheme * hi ALEErrorSign ctermfg=red guifg=red ctermbg=0 guibg=0
 nnoremap <silent>]a :<C-u>ALENext<CR>
 nnoremap <silent>[a :<C-u>ALEPrevious<CR>
 '''
@@ -1070,21 +1098,23 @@ repo = 'StanAngeloff/php.vim'
 on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
-repo = 'captbaritone/better-indent-support-for-php-with-html'
-on_ft = ['html', 'php', 'phtml']
-
-[[plugins]]
 repo = 'lvht/phpcd.vim',
 build = 'composer install'
 
-# [[plugins]]
-# repo = 'shawncplus/phpcomplete.vim',
-# on_ft = ['php', 'phtml']
+[[plugins]]
+repo = 'adoy/vim-php-refactoring-toolbox'
+on_ft = ['php', 'phtml']
+hook_add = '''
+let g:vim_php_refactoring_use_default_mapping = 0
+'''
 
-# [[plugins]]
-# repo = 'padawan-php/deoplete-padawan'
-# on_ft = ['php', 'phtml']
-# build = 'composer install'
+[[plugins]]
+repo = '2072/PHP-Indenting-for-VIm',
+on_ft = ['php', 'phtml']
+
+[[plugins]]
+repo = 'captbaritone/better-indent-support-for-php-with-html'
+on_ft = ['html', 'php', 'phtml']
 
 # javascript & typescript----------------
 
@@ -1092,6 +1122,10 @@ build = 'composer install'
 repo = 'mhartington/nvim-typescript'
 build = './install.sh'
 on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'HerringtonDarkholme/yats.vim'
+on_ft = ['ts', 'javascript']
 
 [[plugins]]
 repo = 'burnettk/vim-angular'

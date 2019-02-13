@@ -494,6 +494,7 @@ function! s:php_my_settings() abort
   inoremap <buffer> <M-=> =>
   nnoremap <buffer> <expr><F1> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
   nnoremap <buffer> <M-4> bi$<ESC>e
+  nnoremap <silent> <buffer> <F11> :PhpRefactorringMenu()<CR>
   " let b:match_words .= ',if.*(.*)\s{:selse\s{:},?php:?>,for:},if:endif,foreach:endforeach'
 endfunction
 
