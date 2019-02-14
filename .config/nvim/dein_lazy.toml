@@ -66,7 +66,9 @@ endif
 
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
-on_ft = ['rust','javascript','python']
+# on_ft = ['rust','javascript','python']
+on_ft = ['rust','javascript','python', 'php']
+depends = ['LanguageServer-phan-neovim']
 rev = 'next'
 build = 'bash install.sh'
 hook_add = '''
@@ -78,11 +80,12 @@ let g:LanguageClient_serverCommands = {
   \ }
 let g:LanguageClient_autoStart                = 1
 let g:LanguageClient_autoStop                 = 1
-let g:LanguageClient_diagnosticsEnable        = 0
+" let g:LanguageClient_diagnosticsEnable        = 0
+let g:LanguageClient_diagnosticsEnable        = 1
 let g:LanguageClient_changeThrottle           = 1.5
 let g:LanguageClient_completionPreferTextEdit = 0
-let g:LanguageClient_diagnosticsSignsMax      = 0
-let g:LanguageClient_diagnosticsList          = 'Disabled'
+" let g:LanguageClient_diagnosticsSignsMax      = 0
+" let g:LanguageClient_diagnosticsList          = 'Disabled'
 let g:LanguageClient_hasSnippetSupport        = 0
 let g:LanguageClient_waitOutputTimeout        = 4
 let g:LanguageClient_loadSettings             = 1
@@ -1063,7 +1066,7 @@ let g:ale_fixers = {
 \}
 " 有効にするlinter
 let g:ale_linters = {
-\   'php'       : ['phan'],
+\   'php'       : ['phan', 'php'],
 \   'javascript': ['eslint'],
 \}
 " エラー行に表示するマーク
@@ -1100,6 +1103,18 @@ on_ft = ['html', 'php', 'phtml']
 [[plugins]]
 repo = 'lvht/phpcd.vim',
 build = 'composer install'
+
+[[plugins]]
+repo = 'tysonandre/LanguageServer-phan-neovim',
+build = 'composer update'
+hook_add = '''
+let g:phan_analyzed_directory = './'
+let g:phan_analyze_only_on_save = 1
+let g:phan_additional_cli_flags = [
+  \'--strict-type-checking',
+  \'--plugin', 'InvokePHPNativeSyntaxCheckPlugin'
+  \]
+'''
 
 [[plugins]]
 repo = 'adoy/vim-php-refactoring-toolbox'
