@@ -66,9 +66,8 @@ endif
 
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
-# on_ft = ['rust','javascript','python']
 on_ft = ['rust','javascript','python', 'php']
-depends = ['LanguageServer-phan-neovim']
+# depends = ['LanguageServer-phan-neovim']
 rev = 'next'
 build = 'bash install.sh'
 hook_add = '''
@@ -80,12 +79,11 @@ let g:LanguageClient_serverCommands = {
   \ }
 let g:LanguageClient_autoStart                = 1
 let g:LanguageClient_autoStop                 = 1
-" let g:LanguageClient_diagnosticsEnable        = 0
-let g:LanguageClient_diagnosticsEnable        = 1
+let g:LanguageClient_diagnosticsEnable        = 0
 let g:LanguageClient_changeThrottle           = 1.5
 let g:LanguageClient_completionPreferTextEdit = 0
-" let g:LanguageClient_diagnosticsSignsMax      = 0
-" let g:LanguageClient_diagnosticsList          = 'Disabled'
+let g:LanguageClient_diagnosticsSignsMax      = 0
+let g:LanguageClient_diagnosticsList          = 'Disabled'
 let g:LanguageClient_hasSnippetSupport        = 0
 let g:LanguageClient_waitOutputTimeout        = 4
 let g:LanguageClient_loadSettings             = 1
@@ -246,9 +244,10 @@ repo = 'mg979/vim-visual-multi'
 rev = 'test'
 on_event = 'VimEnter'
 hook_add = '''
-let g:VM_leader = 'vm'
-let g:VM_theme = 'iceblue'
-let g:VM_cmdheight = 3
+let g:VM_cmdheight       = 1
+let g:VM_manual_infoline = 0
+let g:VM_leader          = 'vm'
+let g:VM_theme           = 'iceblue'
 '''
 
 [[plugins]]
@@ -820,7 +819,7 @@ function! s:bufopen(lines)
 
   if a:lines[1] == 'ctrl-b'
     let index = matchstr(a:lines[2], '\[\zs[0-9]*\ze\]')
-    execute 'buffer' index
+    execute 'buffer ' index
     execute('NavBuffers ' . a:lines[0])
     call feedkeys(":start\<CR>")
     return
@@ -829,7 +828,7 @@ function! s:bufopen(lines)
   let b = matchstr(a:lines[2], '\[\zs[0-9]*\ze\]')
   let cmd = get(g:fzf_action, a:lines[1])
   if !empty(cmd)
-    execute 'silent' cmd
+    execute 'silent ' cmd
     execute 'buffer ' b
     execute('NavBuffers ' . a:lines[0])
     call feedkeys(":start\<CR>")
@@ -1020,10 +1019,10 @@ repo = 'christoomey/vim-tmux-navigator'
 on_event = 'VimEnter'
 hook_add = '''
 let g:tmux_navigator_no_mappings = 1
-nnoremap <silent><C-w>l :TmuxNavigateLeft<CR>
+nnoremap <silent><C-w>h :TmuxNavigateLeft<CR>
 nnoremap <silent><C-w>j :TmuxNavigateDown<CR>
 nnoremap <silent><C-w>k :TmuxNavigateUp<CR>
-nnoremap <silent><C-w>h :TmuxNavigateRight<CR>
+nnoremap <silent><C-w>l :TmuxNavigateRight<CR>
 '''
 
 # git------------------------------------
@@ -1070,7 +1069,7 @@ let g:ale_linters = {
 \   'javascript': ['eslint'],
 \}
 " エラー行に表示するマーク
-let g:ale_sign_error            = '⨉'
+let g:ale_sign_error            = '❌'
 let g:ale_sign_warning          = '⚠'
 let g:ale_fix_on_save           = 1
 let g:ale_lint_on_text_changed  = 0
@@ -1084,7 +1083,7 @@ let g:ale_virtualtext_cursor    = 1
 let g:ale_html_tidy_options     = '-config .tidyrc'
 let g:ale_echo_msg_format       = '[%linter%] %s [%severity%]'
 let g:ale_php_phan_executable   = 'vendor/bin/phan'
-let g:ale_php_phan_minimum_severity            = 10
+let g:ale_php_phan_minimum_severity            = 5
 let g:ale_javascript_prettier_use_local_config = 1
 autocmd MyAutoCmd ColorScheme * hi ALEVirtualTextWarning ctermfg=3 guifg=3
 autocmd MyAutoCmd ColorScheme * hi ALEWarningSign ctermfg=3 guifg=3 ctermbg=0 guibg=0
@@ -1101,15 +1100,16 @@ repo = 'StanAngeloff/php.vim'
 on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
-repo = 'lvht/phpcd.vim',
+repo = 'lvht/phpcd.vim'
 build = 'composer install'
 
 [[plugins]]
-repo = 'tysonandre/LanguageServer-phan-neovim',
+repo = 'tysonandre/LanguageServer-phan-neovim'
 build = 'composer update'
 hook_add = '''
-let g:phan_analyzed_directory = './'
+let g:phan_analyzed_directory = '/mnt/d/workspace/new-hokushi/'
 let g:phan_analyze_only_on_save = 1
+let g:phan_enable_completion = 1
 let g:phan_additional_cli_flags = [
   \'--strict-type-checking',
   \'--plugin', 'InvokePHPNativeSyntaxCheckPlugin'
@@ -1124,7 +1124,7 @@ let g:vim_php_refactoring_use_default_mapping = 0
 '''
 
 [[plugins]]
-repo = '2072/PHP-Indenting-for-VIm',
+repo = '2072/PHP-Indenting-for-VIm'
 on_ft = ['php', 'phtml']
 
 [[plugins]]

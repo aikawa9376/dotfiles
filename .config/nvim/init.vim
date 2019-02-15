@@ -35,7 +35,6 @@ filetype on
 filetype plugin indent on
 syntax enable
 set t_Co=256
-
 set number
 set backspace=indent,eol,start
 set encoding=utf-8
@@ -49,6 +48,7 @@ set list
 set undofile
 set undodir=$HOME/.config/nvim/undo/
 set listchars=tab:»-,extends:»,precedes:«,nbsp:%
+set splitright
 set splitbelow
 set updatetime=100
 set nofoldenable
@@ -300,6 +300,7 @@ fun! JoinSpaceless()
         " When remove it!
         execute 'normal dw'
     endif
+    call repeat#set("gJ", v:count1)
 endfun
 nnoremap gJ :call JoinSpaceless()<CR>
 
@@ -383,7 +384,7 @@ augroup vimrc-auto-mkdir
 augroup END
 
 " window操作系
-nmap <silent> \| :<c-u>vsplit<CR>
+nmap <silent> \| :<c-u>vsplit<CR><C-w>h
 nmap <silent> - :<c-u>split<CR><C-w>k
 
 " 前回のカーソル位置からスタート
@@ -495,6 +496,7 @@ function! s:php_my_settings() abort
   nnoremap <buffer> <expr><F1> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
   nnoremap <buffer> <M-4> bi$<ESC>e
   nnoremap <silent> <buffer> <F11> :PhpRefactorringMenu()<CR>
+  nnoremap <silent> <buffer> gd gd
   " let b:match_words .= ',if.*(.*)\s{:selse\s{:},?php:?>,for:},if:endif,foreach:endforeach'
 endfunction
 
