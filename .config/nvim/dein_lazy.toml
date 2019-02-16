@@ -272,10 +272,10 @@ repo = 'easymotion/vim-easymotion'
 depends = ['incsearch.vim', 'incsearch-fuzzy.vim', 'incsearch-migemo.vim', 'incsearch-easymotion.vim']
 on_event = 'VimEnter'
 hook_add = '''
-let g:EasyMotion_do_mapping = 0
-let g:EasyMotion_smartcase = 1
+let g:EasyMotion_do_mapping       = 0
+let g:EasyMotion_smartcase        = 1
 let g:EasyMotion_space_jump_first = 1
-let g:incsearch#auto_nohlsearch = 1
+let g:incsearch#auto_nohlsearch   = 1
 " nmap <C-Space> <Plug>(easymotion-overwin-f2)
 function! s:config_easyfuzzymotion(...) abort
   return extend(copy({
@@ -395,6 +395,10 @@ call submode#map('expand-region', 'nv', 'r', '-', '<Plug>(expand_region_shrink)'
 call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
 call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
 call submode#map('block_move', 'n', '', '<M-[>', '<C-o>zz')
+call submode#enter_with('mini_yank', 'nv', 'r', 'p', '<Plug>(miniyank-autoput)')
+call submode#enter_with('mini_yank', 'nv', 'r', 'P', '<Plug>(miniyank-autoPut)')
+call submode#map('mini_yank', 'nv', 'r', '<C-n>', '<Plug>(miniyank-cycle)')
+call submode#map('mini_yank', 'nv', 'r', '<C-p>', '<Plug>(miniyank-cycleback)')
 '''
 
 [[plugins]]
@@ -965,10 +969,10 @@ repo = 'majutsushi/tagbar'
 on_cmd = ['TagbarToggle']
 hook_add = '''
 nnoremap <silent> <Leader>o :TagbarToggle<CR>
-let g:tagbar_autopreview = 1
-let g:tagbar_compact = 1
-let g:tagbar_autoshowtag = 1
-let g:tagbar_width = 40
+let g:tagbar_autopreview    = 1
+let g:tagbar_compact        = 1
+let g:tagbar_autoshowtag    = 1
+let g:tagbar_width          = 40
 let g:tagbar_previewwin_pos = 'rightbelow'
 '''
 
@@ -1033,9 +1037,9 @@ on_cmd = ['Gina']
 hook_add = '''
 nmap <Leader>gns :Gina status<CR>
 nmap <Leader>gnb :Gina blame<CR>
-nmap <Leader>gp :Gina push<CR>
+nmap <Leader>gp  :Gina push<CR>
 nmap <Leader>gnc :Gina commit -m 'auto update'<CR>
-nmap <Leader>gA :Gina add .<CR>
+nmap <Leader>gA  :Gina add .<CR>
 '''
 hook_source = '''
 call gina#custom#command#option(
@@ -1065,7 +1069,8 @@ let g:ale_fixers = {
 \}
 " 有効にするlinter
 let g:ale_linters = {
-\   'php'       : ['phan', 'php'],
+\   'php'       : ['psalm', 'php'],
+\   'vim'       : ['vint'],
 \   'javascript': ['eslint'],
 \}
 " エラー行に表示するマーク
@@ -1082,8 +1087,6 @@ let g:ale_keep_list_window_open = 0
 let g:ale_virtualtext_cursor    = 1
 let g:ale_html_tidy_options     = '-config .tidyrc'
 let g:ale_echo_msg_format       = '[%linter%] %s [%severity%]'
-let g:ale_php_phan_executable   = 'vendor/bin/phan'
-let g:ale_php_phan_minimum_severity            = 5
 let g:ale_javascript_prettier_use_local_config = 1
 autocmd MyAutoCmd ColorScheme * hi ALEVirtualTextWarning ctermfg=3 guifg=3
 autocmd MyAutoCmd ColorScheme * hi ALEWarningSign ctermfg=3 guifg=3 ctermbg=0 guibg=0
@@ -1107,9 +1110,9 @@ build = 'composer install'
 repo = 'tysonandre/LanguageServer-phan-neovim'
 build = 'composer update'
 hook_add = '''
-let g:phan_analyzed_directory = '/mnt/d/workspace/new-hokushi/'
+let g:phan_analyzed_directory   = '/mnt/d/workspace/new-hokushi/'
 let g:phan_analyze_only_on_save = 1
-let g:phan_enable_completion = 1
+let g:phan_enable_completion    = 1
 let g:phan_additional_cli_flags = [
   \'--strict-type-checking',
   \'--plugin', 'InvokePHPNativeSyntaxCheckPlugin'

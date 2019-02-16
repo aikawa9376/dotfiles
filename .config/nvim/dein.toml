@@ -2,13 +2,6 @@
 repo = 'Shougo/dein.vim'
 
 [[plugins]]
-repo = 'Shougo/deol.nvim'
-
-[[plugins]]
-repo = 'Shougo/vimproc'
-build = 'make'
-
-[[plugins]]
 repo = 'tpope/vim-obsession'
 
 [[plugins]]
