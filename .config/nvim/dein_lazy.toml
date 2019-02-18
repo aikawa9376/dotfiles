@@ -462,6 +462,10 @@ nmap <silent> <F10> :RainbowToggle<CR>
 let g:rainbow_active = 0
 '''
 
+[[plugins]]
+repo = 'chrisbra/unicode.vim'
+on_event = 'VimEnter'
+
 # list-----------------------------------
 
 [[plugins]]
@@ -1059,7 +1063,6 @@ nmap <Leader>gl :Agit<CR>
 
 [[plugins]]
 repo = 'w0rp/ale'
-on_event = 'VimEnter'
 hook_add = '''
 " 有効にするformatter
 let g:ale_fixers = {

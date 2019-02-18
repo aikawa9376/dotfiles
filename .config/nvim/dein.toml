@@ -14,12 +14,27 @@ let g:rooter_patterns = ['Session.vim', '.git/']
 repo = 'Yggdroot/indentLine'
 hook_add = '''
 let g:indentLine_faster = 1
+autocmd MyAutoCmd FileType help,defx,fzf IndentLinesToggle
 '''
 
 [[plugins]]
 repo = 'sheerun/vim-polyglot'
 hook_add = '''
 let g:jsx_ext_required = 1
+'''
+
+[[plugins]]
+repo = 'airblade/vim-gitgutter'
+hook_add = '''
+omap ih <Plug>GitGutterTextObjectInnerPending
+omap ah <Plug>GitGutterTextObjectOuterPending
+xmap ih <Plug>GitGutterTextObjectInnerVisual
+xmap ah <Plug>GitGutterTextObjectOuterVisual
+let g:gitgutter_sign_added = '➕'
+let g:gitgutter_sign_modified = '〰'
+let g:gitgutter_sign_removed = '➖'
+let g:gitgutter_sign_removed_first_line = '￦'
+let g:gitgutter_sign_modified_removed = '⌇'
 '''
 
 [[plugins]]
@@ -30,15 +45,6 @@ nmap <silent> <Space>gd :Gdiff<CR>
 nmap <silent> <Space>ga :Gwrite<CR>
 nmap <silent> <Space>gr :Gremove<CR>
 nmap <silent> <Space>gb :Gblame -w<CR>
-'''
-
-[[plugins]]
-repo = 'airblade/vim-gitgutter'
-hook_add = '''
-omap ih <Plug>GitGutterTextObjectInnerPending
-omap ah <Plug>GitGutterTextObjectOuterPending
-xmap ih <Plug>GitGutterTextObjectInnerVisual
-xmap ah <Plug>GitGutterTextObjectOuterVisual
 '''
 
 # design---------------------------------
@@ -53,16 +59,16 @@ let g:WebDevIconsUnicodeDecorateFolderNodes = 1
 
 [[plugins]]
 repo = 'vim-airline/vim-airline'
-depends = ['vim-airline-themes']
+depends = ['ale', 'vim-airline-themes']
 hook_add = '''
+set laststatus=2
 let g:airline_theme = 'solarized'
 let g:airline_powerline_fonts = 1
 let g:airline_enable_branch = 1
-let g:airline#extensions#ale#enabled = 1
+let g:airline#extensions#al#enabled = 1
 let g:airline_detect_whitespace=0
 let g:airline#extensions#whitespace#enabled = 0
 let g:Powerline_symbols = 'fancy'
-set laststatus=2
 
 if !exists('g:airline_symbols')
   let g:airline_symbols = {}
@@ -82,6 +88,7 @@ let g:airline_right_sep = '⮂'
 let g:airline_left_alt_sep = '⮁'
 let g:airline_right_alt_sep = '⮂'
 let g:airline_symbols.readonly = '⭤'
+let g:airline#extensions#obsession#indicator_text = '💾'
 
 let g:airline#extensions#tabline#enabled = 1
 let g:airline#extensions#tabline#fnamemod = ':t'
