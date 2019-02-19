@@ -70,7 +70,7 @@ repo = 'itchyny/lightline.vim'
 depends = ['lightline-bufferline']
 hook_add = '''
 let g:lightline = {
-  \ 'colorscheme': 'solarized',
+  \ 'colorscheme': 'nord',
   \ 'mode_map': {'c': 'NORMAL'},
   \ 'active': {
     \ 'left': [
@@ -80,8 +80,7 @@ let g:lightline = {
     \ 'right': [
         \ ['linter_checking', 'linter_ok', 'linter_errors', 'linter_warnings'],
         \ ['lineinfo'],
-        \ ['percent'],
-        \ ['filetype', 'fileencoding', 'charcode'],
+        \ ['filetype', 'fileencoding', 'charcode', 'obsession'],
         \ ['vm_modes'],
     \   ]
   \ },
@@ -90,8 +89,11 @@ let g:lightline = {
       \ ['buffers']
     \ ],
     \ 'right': [
-      \ ['close']
+      \ ['bufnum']
     \ ]
+  \ },
+  \ 'component': {
+    \ 'lineinfo': '☰ %2p%% %2l:%v'
   \ },
   \ 'component_function': {
     \ 'mode': 'g:lightline.mode',
@@ -105,6 +107,7 @@ let g:lightline = {
     \ 'gitgutter': 'MyGitGutter',
     \ 'vm_modes': 'g:lightline.vm_modes',
     \ 'vm_regions': 'g:lightline.vm_regions',
+    \ 'obsession': 'MyObsession',
     \ },
   \ 'component_expand': {
     \ 'linter_checking': 'lightline#ale#checking',
@@ -128,15 +131,16 @@ let g:lightline = {
   \ 'subseparator': {'left': "\u2b81", 'right': "\u2b83"}
 \ }
 
-function! LightlineTabFilename(n) abort
-  let buflist = tabpagebuflist(a:n)
-  let winnr = tabpagewinnr(a:n)
-  let _ = pathshorten(expand('#'.buflist[winnr - 1].':f'))
-  return _ !=# '' ? _ : '[No Name]'
-endfunction
-
 function! MyModified()
   return &ft =~ 'help\|vimfiler\|gundo' ? '' : &modified ? '+' : &modifiable ? '' : '-'
+endfunction
+
+function! MyObsession()
+  if exists('*ObsessionStatus')
+    return ObsessionStatus('💾', '')
+  else
+    return ''
+  endif
 endfunction
 
 function! MyReadonly()
@@ -231,8 +235,9 @@ endfun
 repo = 'maximbaz/lightline-ale'
 depends = ['ale']
 hook_add = '''
-let g:lightline#ale#indicator_warnings = '⚠ '
-let g:lightline#ale#indicator_errors = '❌'
+let g:lightline#ale#indicator_warnings = '⚠ :'
+let g:lightline#ale#indicator_errors = '❌:'
+let g:lightline#ale#indicator_ok = '🆗'
 '''
 
 [[plugins]]

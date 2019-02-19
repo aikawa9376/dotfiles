@@ -245,7 +245,7 @@ rev = 'test'
 on_event = 'VimEnter'
 hook_add = '''
 let g:VM_cmdheight       = 1
-let g:VM_manual_infoline = 0
+let g:VM_manual_infoline = 1
 let g:VM_leader          = 'vm'
 let g:VM_theme           = 'iceblue'
 '''
