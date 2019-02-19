@@ -845,15 +845,45 @@ function! s:bufopen(lines)
   execute 'buffer ' b
 endfunction
 
+function! s:strip(str)
+  return substitute(a:str, '^\s*\|\s*$', '', 'g')
+endfunction
+
+function! s:buflisted()
+  return filter(range(1, bufnr('$')), 'buflisted(v:val) && getbufvar(v:val, "&filetype") != "qf"')
+endfunction
+
+function! s:format_buffer(b)
+  let name = bufname(a:b)
+  let name = empty(name) ? '[No Name]' : fnamemodify(name, ":p:~:.")
+  let flag = a:b == bufnr('')  ? '%' :
+          \ (a:b == bufnr('#') ? '#' : ' ')
+  let modified = getbufvar(a:b, '&modified') ? ' [+]' : ''
+  let readonly = getbufvar(a:b, '&modifiable') ? '' : ' [RO]'
+  let extra = join(filter([modified, readonly], '!empty(v:val)'), '')
+  return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+  " return s:strip(printf("[%s] %s%s%s", a:b, flag, pathshorten(name), extra))
+endfunction
+
+function! s:buflisted_sorted()
+  return sort(s:buflisted(), 's:sort_buffers')
+endfunction
+
+function! s:sort_buffers(...)
+  let [b1, b2] = map(copy(a:000), 'get(g:fzf#vim#buffers, v:val, v:val)')
+  return b1 < b2 ? 1 : -1
+endfunction
+
 command! -nargs=* NavBuffers
   \ call fzf#vim#buffers(<q-args>, fzf#wrap('navbuffers', {
+  \ 'source':  map(s:buflisted_sorted(), 's:format_buffer(v:val)'),
   \ 'sink*':   function('<SID>bufopen'),
   \ 'options': [
   \   '-m', '-x', '--tiebreak=index', '--header-lines=1', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
   \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k',
-  \   '--preview-window', 'up:1:wrap', '--preview', 'echo {} | rev | cut -d "/" -f1 | rev'],
+  \   '--preview-window', 'up:1:wrap', '--preview', 'echo {} | sed -r "s%^.*<space>-<space>%%"'],
   \   'left': '20%',
   \ }))
 
