@@ -2,6 +2,10 @@
 repo = 'Shougo/dein.vim'
 
 [[plugins]]
+repo = 'Shougo/vimproc'
+build = 'make'
+
+[[plugins]]
 repo = 'tpope/vim-obsession'
 
 [[plugins]]
@@ -80,7 +84,7 @@ let g:lightline = {
     \ 'right': [
         \ ['linter_checking', 'linter_ok', 'linter_errors', 'linter_warnings'],
         \ ['lineinfo'],
-        \ ['filetype', 'fileencoding', 'charcode', 'obsession'],
+        \ ['filetype', 'fileencoding', 'charcode'],
         \ ['vm_modes'],
     \   ]
   \ },
@@ -89,46 +93,46 @@ let g:lightline = {
       \ ['buffers']
     \ ],
     \ 'right': [
-      \ ['bufnum']
+      \ ['obsession']
     \ ]
   \ },
   \ 'component': {
     \ 'lineinfo': '☰ %2p%% %2l:%v'
   \ },
   \ 'component_function': {
-    \ 'mode': 'g:lightline.mode',
-    \ 'modified': 'MyModified',
-    \ 'readonly': 'MyReadonly',
-    \ 'fugitive': 'MyFugitive',
-    \ 'filename': 'MyFilename',
-    \ 'filetype': 'MyFiletype',
-    \ 'fileencoding': 'MyFileencoding',
-    \ 'charcode': 'MyCharCode',
-    \ 'gitgutter': 'MyGitGutter',
-    \ 'vm_modes': 'g:lightline.vm_modes',
-    \ 'vm_regions': 'g:lightline.vm_regions',
-    \ 'obsession': 'MyObsession',
+    \ 'mode'           : 'g:lightline.mode',
+    \ 'modified'       : 'MyModified',
+    \ 'readonly'       : 'MyReadonly',
+    \ 'fugitive'       : 'MyFugitive',
+    \ 'filename'       : 'MyFilename',
+    \ 'filetype'       : 'MyFiletype',
+    \ 'fileencoding'   : 'MyFileencoding',
+    \ 'charcode'       : 'MyCharCode',
+    \ 'gitgutter'      : 'MyGitGutter',
+    \ 'vm_modes'       : 'g:lightline.vm_modes',
+    \ 'vm_regions'     : 'g:lightline.vm_regions',
+    \ 'obsession'      : 'MyObsession',
     \ },
   \ 'component_expand': {
     \ 'linter_checking': 'lightline#ale#checking',
-    \ 'linter_ok': 'lightline#ale#ok',
+    \ 'linter_ok'      : 'lightline#ale#ok',
     \ 'linter_warnings': 'lightline#ale#warnings',
-    \ 'linter_errors': 'lightline#ale#errors',
-    \ 'buffers': 'lightline#bufferline#buffers'
+    \ 'linter_errors'  : 'lightline#ale#errors',
+    \ 'buffers'        : 'lightline#bufferline#buffers'
   \ },
   \ 'component_type': {
     \ 'linter_checking': 'left',
-    \ 'linter_ok': 'left',
+    \ 'linter_ok'      : 'left',
     \ 'linter_warnings': 'warning',
-    \ 'linter_errors': 'error',
-    \ 'buffers': 'tabsel'
+    \ 'linter_errors'  : 'error',
+    \ 'buffers'        : 'tabsel'
   \ },
   \ 'component_function_visible_condition': {
-    \ 'vm_modes': 'g:lightline.VM()',
-    \ 'vm_regions': 'g:lightline.VM()',
+    \ 'vm_modes'       : 'g:lightline.VM()',
+    \ 'vm_regions'     : 'g:lightline.VM()',
   \ },
-  \ 'separator': {'left': "\u2b80", 'right': "\u2b82"},
-  \ 'subseparator': {'left': "\u2b81", 'right': "\u2b83"}
+  \ 'separator'        : {'left': "\u2b80", 'right': "\u2b82"},
+  \ 'subseparator'     : {'left': "\u2b81", 'right': "\u2b83"}
 \ }
 
 function! MyModified()

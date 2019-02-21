@@ -67,7 +67,6 @@ endif
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
 on_ft = ['rust','javascript','python', 'php']
-# depends = ['LanguageServer-phan-neovim']
 rev = 'next'
 build = 'bash install.sh'
 hook_add = '''
@@ -1138,19 +1137,6 @@ on_ft = ['html', 'php', 'phtml']
 [[plugins]]
 repo = 'lvht/phpcd.vim'
 build = 'composer install'
-
-[[plugins]]
-repo = 'tysonandre/LanguageServer-phan-neovim'
-build = 'composer update'
-hook_add = '''
-let g:phan_analyzed_directory   = '/mnt/d/workspace/new-hokushi/'
-let g:phan_analyze_only_on_save = 1
-let g:phan_enable_completion    = 1
-let g:phan_additional_cli_flags = [
-  \'--strict-type-checking',
-  \'--plugin', 'InvokePHPNativeSyntaxCheckPlugin'
-  \]
-'''
 
 [[plugins]]
 repo = 'adoy/vim-php-refactoring-toolbox'

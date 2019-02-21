@@ -559,3 +559,9 @@ cnoremap <C-Y> <C-R>-
 
 " override help command
 nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
+
+command! DiffOrig let g:diffline = line('.')
+  \ | vert new | set bt=nofile | r # | 0d_
+  \ | diffthis | :exe "norm! ".g:diffline."G"
+  \ | wincmd p | diffthis | wincmd p
+nnoremap <Leader>do :DiffOrig<cr>
