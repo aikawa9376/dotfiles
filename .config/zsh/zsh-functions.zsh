@@ -490,7 +490,7 @@ winopen() {
         pdf "$n"
         ;;
       "jpg"|"png"|"gif")
-        quicllook "$n"
+        quicklook "$n"
         # imageviewer "$n"
         ;;
       "doc"|"docm"|"docx")
