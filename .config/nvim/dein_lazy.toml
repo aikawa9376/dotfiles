@@ -1012,6 +1012,9 @@ let g:tagbar_previewwin_pos = 'rightbelow'
 [[plugins]]
 repo = 'junegunn/vim-peekaboo'
 on_event = 'VimEnter'
+hook_add = '''
+let g:peekaboo_delay = 1000
+'''
 
 [[plugins]]
 repo = 'yegappan/mru'

@@ -47,3 +47,23 @@ alias -g fnd='$(finder)'
 alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
 alias t='tmuximum'
+
+# -------------------------------------
+# ディレクトリ エイリアス
+# -------------------------------------
+function name_dir() # dir, name
+{
+  local dir=$1
+  local name=$2
+
+  if [ -d $dir ]; then
+    hash -d $name=$dir
+    return 0
+  else
+    return 1
+  fi
+}
+
+name_dir /mnt/d/workspace/ w
+name_dir /mnt/c/Users/aikaw/Desktop/ d
+name_dir /mnt/c/Users/aikaw/Downloads/ dl
