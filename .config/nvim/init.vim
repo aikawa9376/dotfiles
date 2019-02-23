@@ -14,7 +14,7 @@ let s:dein_repo_dir = s:dein_dir . '/repos/github.com/Shougo/dein.vim'
 if !isdirectory(s:dein_repo_dir)
   call system('git clone https://github.com/Shougo/dein.vim ' . shellescape(s:dein_repo_dir))
 endif
-let &runtimepath = s:dein_repo_dir .",". &runtimepath
+let &runtimepath = s:dein_repo_dir .','. &runtimepath
 " プラグイン読み込み＆キャッシュ作成
 let s:toml_file = fnamemodify(expand('<sfile>'), ':h').'/dein.toml'
 let s:toml_lazy_file = fnamemodify(expand('<sfile>'), ':h').'/dein_lazy.toml'
@@ -107,12 +107,12 @@ endfunction
 
 " Insertモードのときカーソルの形状を変更
 if has('unix')
-  if &term =~ "screen"
+  if &term =~ 'screen'
     let &t_ti.= "\eP\e[1 q\e\\"
     let &t_SI.= "\eP\e[5 q\e\\"
     let &t_EI.= "\eP\e[1 q\e\\"
     let &t_te.= "\eP\e[0 q\e\\"
-  elseif &term =~ "xterm"
+  elseif &term =~ 'xterm'
     let &t_ti.="\e[1 q"
     let &t_SI.="\e[5 q"
     let &t_EI.="\e[1 q"
@@ -146,7 +146,7 @@ function! BufOnly(buffer, bang)
   endif
   if buffer == -1
     echohl ErrorMsg
-    echomsg "No matching buffer for" a:buffer
+    echomsg 'No matching buffer for' a:buffer
     echohl None
     return
   endif
@@ -170,9 +170,9 @@ function! BufOnly(buffer, bang)
     let n = n+1
   endwhile
   if delete_count == 1
-    echomsg delete_count "buffer deleted"
+    echomsg delete_count 'buffer deleted'
   elseif delete_count > 1
-    echomsg delete_count "buffers deleted"
+    echomsg delete_count 'buffers deleted'
   endif
 endfunction
 
@@ -216,13 +216,13 @@ vnoremap s "_s
 nnoremap <silent> dd :<C-u>call <SID>remove_line_brank(v:count1)<CR>
 function! s:remove_line_brank(count)
   for i in range(1, v:count1)
-    if getline('.') == ""
+    if getline('.') == ''
       .delete _
     else
       .delete
     endif
   endfor
-  call repeat#set("dd", v:count1)
+  call repeat#set('dd', v:count1)
 endfunction
 
 nmap <M-p> o<ESC>p==
@@ -300,7 +300,7 @@ fun! JoinSpaceless()
         " When remove it!
         execute 'normal dw'
     endif
-    call repeat#set("gJ", v:count1)
+    call repeat#set('gJ', v:count1)
 endfun
 nnoremap gJ :call JoinSpaceless()<CR>
 
@@ -348,7 +348,7 @@ set wildmenu wildmode=list:full "コマンドモード補完
 inoremap <silent> jj <Esc>
 
 " ペーストモードを自動解除
-autocmd InsertLeave * set nopaste
+autocmd MyAutoCmd InsertLeave * set nopaste
 nnoremap Q q
 
 " ジャンプリストで中央に持ってくる
@@ -483,13 +483,13 @@ function! SetLeximaAddRule() abort
 
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#)', 'leave': 1})
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#"', 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': "\\%#'", "leave": 1})
+  call lexima#add_rule({'char': '<TAB>', 'at': "\\%#'", 'leave': 1})
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#]', 'leave': 1})
   call lexima#add_rule({'char': '<TAB>', 'at': '\%#}', 'leave': 1})
 endfunction
 
 " php用の設定はここ
-autocmd FileType php,phml call s:php_my_settings()
+autocmd MyAutoCmd FileType php,phml call s:php_my_settings()
 function! s:php_my_settings() abort
   inoremap <buffer> <M--> ->
   inoremap <buffer> <M-=> =>
@@ -523,7 +523,7 @@ vmap p <Plug>(operator-replace)
 "--------------------------------------------
 xnoremap @ :<C-u>call ExecuteMacroOverVisualRange()<CR>
 function! ExecuteMacroOverVisualRange()
-  echo "@".getcmdline()
+  echo '@'.getcmdline()
   execute ":'<,'>normal @".nr2char(getchar())
 endfunction
 
@@ -539,7 +539,7 @@ function! s:ctrl_u() abort "{{{ rsi ctrl-u, ctrl-w
 endfunction
 
 function! s:ctrl_w_before() abort
-  let s:cmdline = getcmdpos() > 1 ? getcmdline() : ""
+  let s:cmdline = getcmdpos() > 1 ? getcmdline() : ''
   return "\<C-W>"
 endfunction
 
@@ -547,7 +547,7 @@ function! s:ctrl_w_after() abort
   if strlen(s:cmdline) > 0
     let @- = s:cmdline[(getcmdpos()-1) : (getcmdpos()-2)+(strlen(s:cmdline)-strlen(getcmdline()))]
   endif
-  return ""
+  return ''
 endfunction
 
 cnoremap <expr> <C-U> <SID>ctrl_u()

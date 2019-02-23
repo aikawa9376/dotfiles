@@ -985,16 +985,16 @@ repo = 'mg979/vim-bookmarks'
 rev = 'fzf'
 hook_add = '''
 let g:bookmark_prefer_fzf = 1
-nmap <Leader>mm <Plug>BookmarkToggle
-nmap <Leader>mi <Plug>BookmarkAnnotate
-nmap <Leader>ma <Plug>BookmarkShowAll
 nmap ]b <Plug>BookmarkNext
 nmap [b <Plug>BookmarkPrev
-nmap <Leader>mc <Plug>BookmarkClear
-nmap <Leader>mx <Plug>BookmarkClearAll
+nmap <Leader>mm  <Plug>BookmarkToggle
+nmap <Leader>mi  <Plug>BookmarkAnnotate
+nmap <Leader>ma  <Plug>BookmarkShowAll
+nmap <Leader>mc  <Plug>BookmarkClear
+nmap <Leader>mx  <Plug>BookmarkClearAll
 nmap <Leader>mkk <Plug>BookmarkMoveUp
 nmap <Leader>mjj <Plug>BookmarkMoveDown
-nmap <Leader>mg <Plug>BookmarkMoveToLine
+nmap <Leader>mg  <Plug>BookmarkMoveToLine
 '''
 
 [[plugins]]
@@ -1076,11 +1076,11 @@ omap ih <Plug>GitGutterTextObjectInnerPending
 omap ah <Plug>GitGutterTextObjectOuterPending
 xmap ih <Plug>GitGutterTextObjectInnerVisual
 xmap ah <Plug>GitGutterTextObjectOuterVisual
-let g:gitgutter_sign_added = '➕'
-let g:gitgutter_sign_modified = '〰'
-let g:gitgutter_sign_removed = '➖'
+let g:gitgutter_sign_added              = '➕'
+let g:gitgutter_sign_modified           = '〰'
+let g:gitgutter_sign_removed            = '➖'
+let g:gitgutter_sign_modified_removed   = '⌇'
 let g:gitgutter_sign_removed_first_line = '￦'
-let g:gitgutter_sign_modified_removed = '⌇'
 '''
 
 [[plugins]]

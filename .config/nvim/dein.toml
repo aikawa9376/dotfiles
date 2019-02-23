@@ -11,7 +11,7 @@ repo = 'tpope/vim-obsession'
 [[plugins]]
 repo = 'airblade/vim-rooter'
 hook_add = '''
-let g:rooter_patterns = ['Session.vim', '.git/']
+let g:rooter_patterns = ['Session.vim', '.git/', '.vimrc.local']
 '''
 
 [[plugins]]
