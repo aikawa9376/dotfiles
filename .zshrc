@@ -269,3 +269,9 @@ setopt hist_no_store        # historyコマンドは履歴に登録しない
 # zle -N history-beginning-search-forward-end history-search-end
 bindkey "^P" history-substring-search-up
 bindkey "^N" history-substring-search-down
+
+# -------------------------------------
+# Xserver関係
+# -------------------------------------
+umask 022
+export DISPLAY=localhost:0.0
