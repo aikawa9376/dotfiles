@@ -27,6 +27,18 @@ let s:deoplete_custom_option = {
   \ 'smart_case'         : v:true,
   \ }
 call deoplete#custom#option(s:deoplete_custom_option)
+
+call deoplete#custom#option('sources', {
+  \ 'sql'  : ['sw', 'sw-omni', 'neosnippet'],
+  \ })
+
+call deoplete#custom#option('omni_patterns', {
+  \ 'java' : '[^. *\t]\.\w*',
+  \ 'html' : ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
+  \ 'xhtml': ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
+  \ 'xml'  : ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
+  \ })
+
 call deoplete#custom#source('_', 'converter', ['auto_paren'])
 call deoplete#custom#source('neosnippet', 'rank', 1000)
 call deoplete#custom#source('neosnippet', 'max_candidates', 5)
@@ -559,19 +571,20 @@ repo = 'junegunn/fzf.vim'
 hook_add = '''
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
-nnoremap <silent> <Leader>f :Files<CR>
+nnoremap <silent> <Leader>f  :Files<CR>
 nnoremap <silent> <Leader>gf :GFiles<CR>
-nnoremap <silent> <Leader>b :NavBuffers<CR>
-nnoremap <silent> <Leader>a :Rg<CR>
-nnoremap <silent> <Leader>l :Lines<CR>
-nnoremap <silent> <Leader>e :MRUFilesCWD<CR>
-nnoremap <silent> <Leader>. :DotFiles<CR>
-nnoremap <silent> <Leader>O :Outline<CR>
-nnoremap <silent> <Leader>M :Memo<CR>
+nnoremap <silent> <Leader>b  :NavBuffers<CR>
+nnoremap <silent> <Leader>a  :Rg<CR>
+nnoremap <silent> <Leader>l  :Lines<CR>
+nnoremap <silent> <Leader>e  :MRUFilesCWD<CR>
+nnoremap <silent> <Leader>dd :SWSqlFzfSelect<CR>
+nnoremap <silent> <Leader>.  :DotFiles<CR>
+nnoremap <silent> <Leader>O  :Outline<CR>
+nnoremap <silent> <Leader>M  :Memo<CR>
 nnoremap <silent> <Leader>gc :BCommits<CR>
 nnoremap <silent> <Leader>gC :Commits<CR>
-nnoremap <silent> <Leader>T :DirWordCompletions<CR>
-nnoremap <silent> <Leader>t :TmuxSearch<CR>
+nnoremap <silent> <Leader>T  :DirWordCompletions<CR>
+nnoremap <silent> <Leader>t  :TmuxSearch<CR>
 " <C-]>でタグ検索 TODO タグファイルが無ければもともとの機能に割り振る
 nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
 " <Leader>]で使用箇所検索
@@ -977,37 +990,6 @@ command! -nargs=* PhpRefactorringMenu call fzf#run({
   \  'sink*':   function('<SID>getphprefsink'),
   \  'options': '--reverse -m -x +s --ansi --prompt=PhpRefactorMenu:',
   \  'down': '20%'})
-
-" ------------------------------------------------------------------
-" WorkBench Menu
-" ------------------------------------------------------------------
-function! s:fzf_sw_profiles_accept(mode, str)
-    let command = sw#get_connect_command(a:str)
-    call sw#sqlwindow#connect_buffer('e', s:current_buffer)
-    call sw#sqlwindow#execute_macro(command)
-    let s:current_buffer = ''
-    if exists('s:position')
-        call setpos('.', s:position)
-    endif
-endfunction
-
-function! s:fzf_sw_profiles_init()
-    let profiles = sw#cache_get('profiles')
-    let result = []
-    for key in keys(profiles)
-        call add(result, key)
-    endfor
-    return result
-endfunction
-
-function! s:workbench()
-  return {
-    \ 'source':  s:fzf_sw_profiles_init(),
-    \ 'sink*':   function('s:fzf_sw_profiles_accept'),
-    \ 'options': '--reverse +m -d "\t" --with-nth 1 -n 1 --ansi --prompt "Database> "'}
-endfunction
-
-command! -bang DbConnect call fzf#run(fzf#wrap('Database', s:workbench(), <bang>0))
 '''
 
 [[plugins]]
@@ -1081,13 +1063,15 @@ repo = 'Shougo/junkfile.vim'
 on_cmd = ['JunkfileOpen']
 
 [[plugins]]
-repo = 'cosminadrianpopescu/vim-sql-workbench'
-on_cmd = ['SWSqlBufferConnect']
+repo = 'aikawa9376/vim-sql-workbench'
+on_cmd = ['SWSqlBufferConnect', 'SWSqlFzfSelect', 'SWDbExplorer']
 hook_add = '''
-let g:sw_sql_name_result_tab = 0
-let g:sw_exe        = '/home/aikawa/sql-workbench/sqlwbconsole.sh'
-let g:sw_cache      = '/home/aikawa/.sqlworkbench/cache'
-let g:sw_config_dir = '/home/aikawa/.sqlworkbench'
+let g:sw_sql_name_result_tab  = 0
+let g:sw_highlight_resultsets = 0
+let g:sw_sqlopen_command      = 'tabnew'
+let g:sw_config_dir           = '/home/aikawa/.sqlworkbench'
+let g:sw_cache                = '/home/aikawa/.sqlworkbench/cache'
+let g:sw_exe                  = '/home/aikawa/sql-workbench/sqlwbconsole.sh'
 '''
 
 [[plugins]]
@@ -1158,15 +1142,15 @@ nmap <Leader>gl :Agit<CR>
 [[plugins]]
 repo = 'itchyny/lightline.vim'
 on_event = 'VimEnter'
-depends = ['lightline-bufferline', 'lightline-ale']
+depends = ['lightline-bufferline', 'lightline-ale', 'lightline-colorscheme-nordplus']
 hook_add = '''
 let g:lightline = {
-  \ 'colorscheme': 'nord',
+  \ 'colorscheme': 'nordplus',
   \ 'mode_map': {'c': 'NORMAL'},
   \ 'active': {
     \ 'left': [
       \ ['mode', 'paste', 'spell', 'help'],
-      \ ['vm_regions', 'gitgutter', 'fugitive', 'filename'],
+      \ ['vm_regions', 'gitgutter', 'project', 'filename'],
     \ ],
     \ 'right': [
         \ ['linter_checking', 'linter_ok', 'linter_errors', 'linter_warnings'],
@@ -1180,17 +1164,17 @@ let g:lightline = {
       \ ['buffers']
     \ ],
     \ 'right': [
-      \ ['obsession']
+      \ ['obsession', 'workbench']
     \ ]
   \ },
   \ 'component': {
     \ 'lineinfo': '☰ %2p%% %2l:%v'
   \ },
   \ 'component_function': {
-    \ 'mode'           : 'g:lightline.mode',
+    \ 'mode'           : 'MyMode',
     \ 'modified'       : 'MyModified',
     \ 'readonly'       : 'MyReadonly',
-    \ 'fugitive'       : 'MyFugitive',
+    \ 'project'        : 'MyProject',
     \ 'filename'       : 'MyFilename',
     \ 'filetype'       : 'MyFiletype',
     \ 'fileencoding'   : 'MyFileencoding',
@@ -1199,6 +1183,7 @@ let g:lightline = {
     \ 'vm_modes'       : 'g:lightline.vm_modes',
     \ 'vm_regions'     : 'g:lightline.vm_regions',
     \ 'obsession'      : 'MyObsession',
+    \ 'workbench'      : 'MyWorkbench',
     \ },
   \ 'component_expand': {
     \ 'linter_checking': 'lightline#ale#checking',
@@ -1225,8 +1210,10 @@ let g:lightline = {
 function! MyMode()
   return  &ft == 'denite'    ? 'denite' :
         \ &ft == 'defx'      ? 'defx' :
+        \ &ft == 'fzf'       ? 'fzf' :
         \ &ft == 'mundo'     ? 'mundo' :
         \ &ft == 'MundoDiff' ? 'diff' :
+        \ g:lightline.VM()   ? g:lightline.vm_mode() :
         \ winwidth(0) > 60   ? g:lightline#mode() : ''
 endfunction
 
@@ -1242,6 +1229,19 @@ function! MyObsession()
   endif
 endfunction
 
+function! MyWorkbench()
+  if exists('*SWSqlLightLineProfile')
+    let s:db = SWSqlLightLineProfile()
+    if s:db != ''
+      return "\uf472" . ' ' . s:db
+    else
+      return ''
+    endif
+  else
+    return ''
+  endif
+endfunction
+
 function! MyReadonly()
   return &ft !~? 'help\|defx\|mundo' && &ro ? "\u2b64" : ''
 endfunction
@@ -1252,10 +1252,21 @@ function! MyFilename()
   \  &ft == 'denite'    ? denite#get_status_string() :
   \  &ft == 'mundo'     ? 'undo' :
   \  &ft == 'MundoDiff' ? 'preview' :
+  \  &ft == 'fzf'       ? 'search' :
   \  &ft == 'vimshell'  ? substitute(b:vimshell.current_dir,expand('~'),'~','') :
   \  '' != @%           ? @% : '[No Name]') .
   \ ('' != MyModified() ? ' ' . MyModified() : '')
-  endfunction
+endfunction
+
+function! MyRootDir()
+  if exists('*FindRootDirectory') && FindRootDirectory() != ''
+    let s:dir = FindRootDirectory()
+    let s:dir = split(s:dir, '/')
+    return "\ue5fe " . s:dir[len(s:dir) - 1]
+  else
+    return ''
+  endif
+endfunction
 
 function! MyFugitive()
   try
@@ -1266,6 +1277,19 @@ function! MyFugitive()
   catch
   endtry
   return ''
+endfunction
+
+function! MyProject()
+  let s:prod = ''
+  if MyFugitive() != ''
+    let s:prod = MyFugitive()
+  endif
+  if s:prod == ''
+    let s:prod = MyRootDir()
+  else
+    let s:prod = s:prod . ' ' . MyRootDir()
+  endif
+  return s:prod
 endfunction
 
 function! MyFiletype()
@@ -1299,12 +1323,10 @@ endfunction
 
 let g:lightline.VM = { -> exists("g:Vm") && g:Vm.is_active }
 
-fun! g:lightline.mode() dict
+fun! g:lightline.vm_mode() dict
   if g:lightline.VM()
     call lightline#link('v')
     return "V-MULTI"
-  else
-    return lightline#mode()
   endif
 endfun
 
@@ -1341,16 +1363,19 @@ let g:lightline#ale#indicator_warnings = '⚠ :'
 '''
 
 [[plugins]]
-repo = 'mengelbrecht/lightline-bufferline'
+repo = 'aikawa9376/lightline-bufferline'
 hook_add = '''
 set showtabline=2
 let g:lightline#bufferline#enable_devicons   = 1
 let g:lightline#bufferline#filename_modifier = ':t'
 let g:lightline#bufferline#show_number       = 1
 let g:lightline#bufferline#active_tab_hi     = 1
-let g:lightline#bufferline#shorten_path      = 0
+let g:lightline#bufferline#shorten_pat      = 0
 let g:lightline#bufferline#unnamed           = '[No Name]'
 '''
+
+[[plugins]]
+repo = 'aikawa9376/lightline-colorscheme-nordplus'
 
 # lint & lsp & sources-------------------
 

@@ -342,7 +342,7 @@ set softtabstop=2
 " 連続した空白に対してタブキーやバックスペースキーでカーソルが動く幅
 set autoindent "改行時に前の行のインデントを継続する
 set smartindent "改行時に入力された行の末尾に合わせて次の行のインデントを増減する
-set wildmenu wildmode=list:full "コマンドモード補完
+set wildmenu wildmode=list,full "コマンドモード補完
 
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
@@ -489,6 +489,7 @@ function! SetLeximaAddRule() abort
 endfunction
 
 " php用の設定はここ
+" TODO ftplutin setting
 autocmd MyAutoCmd FileType php,phml call s:php_my_settings()
 function! s:php_my_settings() abort
   inoremap <buffer> <M--> ->
@@ -509,6 +510,16 @@ function! IsPhpOrHtml() abort
   elseif fe == 'html'
     return 0
   endif
+endfunction
+
+" SQL用の設定はここ
+autocmd MyAutoCmd FileType sql call s:sql_my_settings()
+function! s:sql_my_settings() abort
+endfunction
+
+function! MySqlOmniFunc(findstart, base)
+  call sqlcomplete#Map('syntax')
+  call sqlcomplete#Complete(a:findstart, a:base)
 endfunction
 
 " test settings
