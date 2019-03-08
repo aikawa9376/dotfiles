@@ -1445,10 +1445,6 @@ let g:vim_php_refactoring_use_default_mapping = 0
 '''
 
 [[plugins]]
-repo = '2072/PHP-Indenting-for-VIm'
-on_ft = ['php', 'phtml']
-
-[[plugins]]
 repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
 

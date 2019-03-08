@@ -270,6 +270,15 @@ setopt hist_no_store        # historyコマンドは履歴に登録しない
 bindkey "^P" history-substring-search-up
 bindkey "^N" history-substring-search-down
 
+# コマンドラインスタック
+show_buffer_stack() {
+  POSTDISPLAY="
+  stack: $LBUFFER"
+  zle push-line-or-edit
+}
+zle -N show_buffer_stack
+bindkey -a 'q' show_buffer_stack
+
 # -------------------------------------
 # Xserver関係
 # -------------------------------------
