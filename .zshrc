@@ -46,7 +46,7 @@ export TERM='xterm-256color'
 export EDITOR='nvim'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
-eval `/usr/local/bin/wcwidth-cjk --sh-init`
+# eval `/usr/local/bin/wcwidth-cjk --sh-init`
 
 # go lang
 export GOPATH="$HOME/go"
@@ -273,5 +273,5 @@ bindkey "^N" history-substring-search-down
 # -------------------------------------
 # Xserver関係
 # -------------------------------------
-umask 022
-export DISPLAY=localhost:0.0
+# umask 022
+# export DISPLAY=localhost:0.0
