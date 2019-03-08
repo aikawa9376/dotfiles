@@ -198,6 +198,10 @@ imap <silent> <M-,> <C-y>,
 '''
 
 [[plugins]]
+repo = 'ap/vim-css-color'
+on_ft = ['css', 'scss']
+
+[[plugins]]
 repo = 'alvan/vim-closetag'
 on_event = 'InsertEnter'
 
