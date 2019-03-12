@@ -145,8 +145,6 @@ bindkey "^[[Z" fzf-completion
 # 補完機能の強化
 autoload -U compinit
 compinit
-#autoload predict-on
-#predict-on
 
 #補完に関するオプション
 setopt auto_param_slash      # ディレクトリ名の補完で末尾の / を自動的に付加し、次の補完に備える
@@ -156,23 +154,16 @@ setopt auto_menu             # 補完キー連打で順に補完候補を自動�
 setopt auto_param_keys       # カッコの対応などを自動的に補完
 setopt interactive_comments  # コマンドラインでも # 以降をコメントと見なす
 setopt magic_equal_subst     # コマンドラインの引数で --prefix=/usr などの = 以降でも補完できる
-
 setopt complete_in_word      # 語の途中でもカーソル位置で補完
 setopt always_last_prompt    # カーソル位置は保持したままファイル名一覧を順次その場で表示
-
 setopt print_eight_bit       # 日本語ファイル名等8ビットを通す
 setopt extended_glob         # 拡張グロブで補完(~とか^とか。例えばless *.txt~memo.txt ならmemo.txt 以外の *.txt にマッチ)
 setopt globdots              # 明確なドットの指定なしで.から始まるファイルをマッチ
-
 setopt list_packed           # リストを詰めて表示
-
-# fzf ** not working
-# bindkey "^I" menu-complete   # 展開する前に補完候補を出させる(Ctrl-iで補完するようにする)
+setopt menu_complete         # インクリメント検索をディフォルト表示
 
 # 補完候補を emacs kybind で選択出来るようにする
-zstyle ':completion:*:default' menu select=1
-# bindkey '^n' expand-or-complete
-# bindkey '^p' reverse-menu-complete
+zstyle ':completion:*:default' menu select interactive
 
 # 補完関数の表示を過剰にする編
 zstyle ':completion:*' verbose yes
@@ -193,13 +184,21 @@ export LS_COLORS='di=01;34:ln=35:so=32:pi=33:ex=04:bd=46;34:cd=43;34:su=41;30:sg
 zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 
 # ディレクトリごとに区切る
-autoload -Uz select-word-style
-select-word-style default
-zstyle ':zle:*' word-chars ' /=;@:{}[]()<>,|.'
-zstyle ':zle:*' word-style unspecified
+WORDCHARS='*?_-.[]~=&;!#$%^(){}<>'
 
+#keybind
+zmodload zsh/complist                                         # "bindkey -M menuselect"設定できるようにするため
+bindkey -M menuselect '^g' .send-break                        # send-break2回分の効果
+bindkey -M menuselect '^i' forward-char                       # 補完候補1つ右へ
+bindkey -M menuselect '^j' .accept-line                       # accept-line2回分の効果
+bindkey -M menuselect '^k' accept-and-infer-next-history      # 次の補完メニューを表示する
+bindkey -M menuselect '^n' down-line-or-history               # 補完候補1つ下へ
+bindkey -M menuselect '^p' up-line-or-history                 # 補完候補1つ上へ
+bindkey -M menuselect '^r' history-incremental-search-forward # 補完候補内インクリメンタルサーチ
 #autosuggestions
-bindkey '^j' forward-word
+bindkey '^[f' forward-word
+bindkey "^[u" undo
+bindkey "^[r" redo
 
 # -------------------------------------
 # 補正機能
@@ -264,9 +263,6 @@ setopt hist_ignore_space    # スペースから始まるコマンドを無視
 setopt share_history        # share command history data
 setopt hist_no_store        # historyコマンドは履歴に登録しない
 # コマンド履歴検索
-# autoload history-search-end
-# zle -N history-beginning-search-backward-end history-search-end
-# zle -N history-beginning-search-forward-end history-search-end
 bindkey "^P" history-substring-search-up
 bindkey "^N" history-substring-search-down
 
@@ -278,6 +274,10 @@ show_buffer_stack() {
 }
 zle -N show_buffer_stack
 bindkey -a 'q' show_buffer_stack
+
+# リネーム機能
+autoload -Uz zmv
+alias zmv='noglob zmv -W'
 
 # -------------------------------------
 # Xserver関係

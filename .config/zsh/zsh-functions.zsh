@@ -5,6 +5,10 @@ has() {
     type "${1:?too few arguments}" &>/dev/null
 }
 
+zmenu() {
+  print -rl -- ${(ko)commands} | fzf | (nohup ${SHELL:-"/bin/sh"} &) >/dev/null 2>&1
+}
+
 # -------------------------------------
 # MRU
 # -------------------------------------
