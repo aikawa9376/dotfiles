@@ -213,12 +213,14 @@ setopt auto_cd
 setopt auto_pushd
 
 # C-g でひとつ前のディレクトリへ
-function cdup() {
-  builtin cd -
-  zle reset-prompt
-}
+function cdup { zle push-line && LBUFFER='builtin cd -' && zle accept-line }
 zle -N cdup
 bindkey '^g' cdup
+
+# Alt-Gで上のディレクトリに移動できる
+function cd-up { zle push-line && LBUFFER='builtin cd ..' && zle accept-line }
+zle -N cd-up
+bindkey '^[g' cd-up
 
 function agvim () {
   nvim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}')
@@ -266,6 +268,11 @@ setopt hist_no_store        # historyコマンドは履歴に登録しない
 bindkey "^P" history-substring-search-up
 bindkey "^N" history-substring-search-down
 
+
+# -------------------------------------
+# キーバインディング
+# -------------------------------------
+
 # コマンドラインスタック
 show_buffer_stack() {
   POSTDISPLAY="
@@ -279,8 +286,29 @@ bindkey -a 'q' show_buffer_stack
 autoload -Uz zmv
 alias zmv='noglob zmv -W'
 
+# Ctrl-Dでシェルからログアウトしない
+setopt ignoreeof
+
+# Ctrl-[で直前コマンドの単語を挿入できる
+autoload -Uz smart-insert-last-word
+zstyle :insert-last-word match '*([[:alpha:]/\\]?|?[[:alpha:]/\\])*'
+zle -N insert-last-word smart-insert-last-word
+bindkey '^[' insert-last-word
+
 # -------------------------------------
 # Xserver関係
 # -------------------------------------
 # umask 022
 # export DISPLAY=localhost:0.0
+
+# -------------------------------------
+# ssh-agent
+# -------------------------------------
+if [ -f ~/.ssh-agent ]; then
+    . ~/.ssh-agent
+fi
+if [ -z "$SSH_AGENT_PID" ] || ! kill -0 $SSH_AGENT_PID; then
+    ssh-agent > ~/.ssh-agent
+    . ~/.ssh-agent
+fi
+ssh-add -l >& /dev/null || ssh-add
