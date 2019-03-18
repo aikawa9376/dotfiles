@@ -40,6 +40,7 @@ alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
 alias -g to='$(destination_directories)'
 alias -g le='| less'
+alias -g ff='| fzf'
 alias -g dust='$(duster)'
 alias -g fnd='$(finder)'
 alias -g pyg='"pygmentize -g  {}"'
@@ -64,5 +65,7 @@ function name_dir() # dir, name
 }
 
 name_dir /mnt/d/workspace/ w
+name_dir /home/aikawa/Desktop d
 name_dir /mnt/c/Users/aikaw/Desktop/ d
+name_dir /home/aikawa/Downloads dl
 name_dir /mnt/c/Users/aikaw/Downloads/ dl

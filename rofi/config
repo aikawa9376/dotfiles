@@ -1,0 +1,9 @@
+rofi.combi-modi:       window,drun,ssh
+rofi.theme:            Arc-Dark
+rofi.modi:             combi,run,ssh,drun,keys,window
+rofi.matching:         fuzzy
+rofi.sort:             true
+rofi.levenshtein-sort: true
+rofi.width:            30
+rofi.padding:          20
+rofi.font:             Noto Sans CJK JP 14

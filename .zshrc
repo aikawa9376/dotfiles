@@ -195,8 +195,8 @@ bindkey -M menuselect '^k' accept-and-infer-next-history      # 次の補完メ�
 bindkey -M menuselect '^n' down-line-or-history               # 補完候補1つ下へ
 bindkey -M menuselect '^p' up-line-or-history                 # 補完候補1つ上へ
 bindkey -M menuselect '^r' history-incremental-search-forward # 補完候補内インクリメンタルサーチ
-#autosuggestions
 bindkey '^[f' forward-word
+bindkey '^[b' backward-word
 bindkey "^[u" undo
 bindkey "^[r" redo
 
@@ -280,7 +280,7 @@ show_buffer_stack() {
   zle push-line-or-edit
 }
 zle -N show_buffer_stack
-bindkey -a 'q' show_buffer_stack
+bindkey '^s' show_buffer_stack
 
 # リネーム機能
 autoload -Uz zmv

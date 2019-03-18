@@ -279,6 +279,9 @@ inoremap <C-o> <C-g>U<C-o>o
 nnoremap Y y$
 nnoremap V v$
 nnoremap vv V
+nnoremap v mvv
+nnoremap d mvd
+nnoremap c mvc
 nnoremap <C-h> ^
 vnoremap <C-h> ^
 nnoremap <C-l> $l
@@ -399,29 +402,6 @@ nnoremap <M-,> mz$a,<ESC>`z
 
 " 補完系
 inoremap <C-l> <C-x><C-l>
-
-" ctags
-set tags=./tags,tags;$HOME
-function! s:execute_ctags() abort
-  " 探すタグファイル名
-  let tag_name = 'tags'
-  " ディレクトリを遡り、タグファイルを探し、パス取得
-  let tags_path = findfile(tag_name, '.;')
-  " タグファイルパスが見つからなかった場合
-  if tags_path ==# ''
-    return
-  endif
-  " タグファイルのディレクトリパスを取得
-  " `:p:h`の部分は、:h filename-modifiersで確認
-  let tags_dirpath = fnamemodify(tags_path, ':p:h')
-  " 見つかったタグファイルのディレクトリに移動して、ctagsをバックグラウンド実行（エラー出力破棄）
-  execute 'silent !cd' tags_dirpath '&& ctags -R -f' tag_name '2> /dev/null &'
-endfunction
-
-augroup ctags
-  autocmd!
-  autocmd BufWritePost * call s:execute_ctags()
-augroup END
 
 " vimrcをスペースドットで更新
 if has('vim_starting')

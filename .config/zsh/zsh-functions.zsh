@@ -104,6 +104,14 @@ HELP
         esac
     done
 }
+fzf-file-mru-widget() {
+  LBUFFER="${LBUFFER}$(mru)"
+  local ret=$?
+  zle reset-prompt
+  return $ret
+}
+zle -N fzf-file-mru-widget
+bindkey '^[e' fzf-file-mru-widget
 
 reverse() {
   perl -e 'print reverse <>' ${@+"$@"}
@@ -168,6 +176,14 @@ destination_directories() {
         esac
     done
 }
+fzf-dir-mru-widget() {
+  LBUFFER="${LBUFFER}$(destination_directories)"
+  local ret=$?
+  zle reset-prompt
+  return $ret
+}
+zle -N fzf-dir-mru-widget
+bindkey '^[d' fzf-dir-mru-widget
 
 # -------------------------------------
 # Dust suggest
@@ -469,6 +485,7 @@ fdg() {
   if [ "x$selected" != "x" ]; then
     cd $(ghq root)/$selected
   fi
+  zle accept-line
 }
 zle -N fdg
 bindkey '^z' fdg

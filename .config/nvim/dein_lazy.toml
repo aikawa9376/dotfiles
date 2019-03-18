@@ -5,7 +5,7 @@ repo = 'Shougo/deoplete.nvim'
 depends = [
 'neosnippet', 'context_filetype.vim', 'neco-syntax',
 'echodoc.vim', 'neoinclude.vim', 'FastFold', 'neopairs.vim',
-'tmux-complete.vim', 'phpcd.vim', 'neco-vim', 'deoplete-zsh'
+'tmux-complete.vim', 'neco-vim', 'deoplete-zsh'
 ]
 hook_source = '''
 " deoplete setup
@@ -13,16 +13,16 @@ let g:deoplete#enable_at_startup = 1
 
 let s:deoplete_custom_option = {
   \ 'auto_complete'      : v:true,
-  \ 'auto_complete_delay': 5,
-  \ 'auto_refresh_delay' : 30,
+  \ 'auto_complete_delay': 0,
+  \ 'auto_refresh_delay' : 20,
   \ 'camel_case'         : v:false,
   \ 'ignore_case'        : v:true,
   \ 'max_list'           : 100,
   \ 'min_pattern_length' : 1,
-  \ 'num_processes'      : 10,
+  \ 'num_processes'      : 0,
   \ 'on_insert_enter'    : v:true,
   \ 'on_text_changed_i'  : v:true,
-  \ 'refresh_always'     : v:false,
+  \ 'refresh_always'     : v:true,
   \ 'skip_chars'         : ['(', ')', '[', ']'],
   \ 'smart_case'         : v:true,
   \ }
@@ -45,9 +45,7 @@ call deoplete#custom#source('neosnippet', 'max_candidates', 5)
 call deoplete#custom#source('neosnippet', 'max_pattern_length', 3)
 call deoplete#custom#source('tag', 'min_pattern_length', 2)
 call deoplete#custom#source('tmux-complete', 'min_pattern_length', 2)
-
-let g:deoplete#ignore_sources     = get(g:, 'deoplete#ignore_sources', {})
-let g:deoplete#ignore_sources.php = ['omni']
+call deoplete#custom#source('padawan', 'max_candidates', 20)
 
 " 戻れてもいいかもしれない
 autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
@@ -78,7 +76,7 @@ endif
 
 [[plugins]]
 repo = 'autozimu/LanguageClient-neovim'
-on_ft = ['rust','javascript','python', 'php']
+on_ft = ['rust', 'javascript', 'python']
 rev = 'next'
 build = 'bash install.sh'
 hook_add = '''
@@ -495,7 +493,7 @@ autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
   " Define mappings
   nnoremap <silent><buffer><expr> <CR>
-  \ defx#do_action('open')
+  \ defx#do_action('drop')
   nnoremap <silent><buffer><expr> c
   \ defx#do_action('copy')
   nnoremap <silent><buffer><expr> m
@@ -561,8 +559,8 @@ endfunction
 [[plugins]]
 repo = 'kristijanhusak/defx-icons'
 hook_add = '''
-let g:defx_icons_enable_syntax_highlight = 0
-let g:defx_icons_column_length = 1
+let g:defx_icons_column_length           = 1
+let g:defx_icons_enable_syntax_highlight = 1
 '''
 
 [[plugins]]
@@ -587,6 +585,7 @@ nnoremap <silent> <Leader>b  :NavBuffers<CR>
 nnoremap <silent> <Leader>a  :Rg<CR>
 nnoremap <silent> <Leader>l  :Lines<CR>
 nnoremap <silent> <Leader>e  :MRUFilesCWD<CR>
+nnoremap <silent> <Leader>E  :MRUFiles<CR>
 nnoremap <silent> <Leader>dd :SWSqlFzfSelect<CR>
 nnoremap <silent> <Leader>.  :DotFiles<CR>
 nnoremap <silent> <Leader>O  :Outline<CR>
@@ -711,6 +710,22 @@ function! s:mru_files_for_cwd()
   return map(filter(
   \  systemlist("sed -n '2,$p' ~/.vim_mru_files"),
   \  "v:val =~ '^" . getcwd() . "' && v:val !~ '__Tagbar__\\|\\[YankRing]\\|fugitive:\\|NERD_tree\\|^/tmp/\\|.git/'"
+  \ ), 'fnamemodify(v:val, ":p:.")')
+endfunction
+
+" MRU handling, limited to current directory
+command! MRUFiles call fzf#run({
+  \  'source': s:mru_files_for_all(),
+  \  'sink': 'edit',
+  \  'options': '-m -x +s --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
+  \  'down': '40%'})
+
+" This relies on the yegappan/mru plugin for live MRU updating. Also relies on
+" the fact that you don't change the location of the file it uses as its cache.
+function! s:mru_files_for_all()
+  return map(filter(
+  \  systemlist("sed -n '2,$p' ~/.vim_mru_files"),
+  \  "v:val !~ '__Tagbar__\\|\\[YankRing]\\|fugitive:\\|NERD_tree\\|^/tmp/\\|.git/'"
   \ ), 'fnamemodify(v:val, ":p:.")')
 endfunction
 
@@ -1105,11 +1120,11 @@ omap ih <Plug>GitGutterTextObjectInnerPending
 omap ah <Plug>GitGutterTextObjectOuterPending
 xmap ih <Plug>GitGutterTextObjectInnerVisual
 xmap ah <Plug>GitGutterTextObjectOuterVisual
-let g:gitgutter_sign_added              = "\uf067 "
-let g:gitgutter_sign_modified           = '〰'
-let g:gitgutter_sign_removed            = "\uf00d "
-let g:gitgutter_sign_modified_removed   = '⌇'
-let g:gitgutter_sign_removed_first_line = '￦'
+let g:gitgutter_sign_added              = "\uf457 "
+let g:gitgutter_sign_modified           = "\uf459 "
+let g:gitgutter_sign_removed            = "\uf458 "
+let g:gitgutter_sign_modified_removed   = "\uf45a "
+let g:gitgutter_sign_removed_first_line = "\uf474 "
 '''
 
 [[plugins]]
@@ -1174,7 +1189,7 @@ let g:lightline = {
       \ ['buffers']
     \ ],
     \ 'right': [
-      \ ['obsession', 'workbench']
+      \ ['workbench', 'obsession']
     \ ]
   \ },
   \ 'component': {
@@ -1368,7 +1383,7 @@ endfun
 repo = 'maximbaz/lightline-ale'
 hook_add = '''
 let g:lightline#ale#indicator_ok       = ''
-let g:lightline#ale#indicator_errors   = "\uf00d :"
+let g:lightline#ale#indicator_errors   = "\uf057 :"
 let g:lightline#ale#indicator_warnings = "\uf071 :"
 '''
 
@@ -1380,7 +1395,7 @@ let g:lightline#bufferline#enable_devicons   = 1
 let g:lightline#bufferline#filename_modifier = ':t'
 let g:lightline#bufferline#show_number       = 1
 let g:lightline#bufferline#active_tab_hi     = 1
-let g:lightline#bufferline#shorten_pat      = 0
+let g:lightline#bufferline#shorten_pat       = 0
 let g:lightline#bufferline#unnamed           = '[No Name]'
 '''
 
@@ -1405,7 +1420,7 @@ let g:ale_linters = {
 \   'javascript': ['eslint'],
 \}
 " エラー行に表示するマーク
-let g:ale_sign_error            = "\uf00d"
+let g:ale_sign_error            = "\uf057"
 let g:ale_sign_warning          = "\uf071"
 let g:ale_fix_on_save           = 1
 let g:ale_lint_on_text_changed  = 0
@@ -1434,7 +1449,8 @@ repo = 'StanAngeloff/php.vim'
 on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
-repo = 'lvht/phpcd.vim'
+repo = 'padawan-php/deoplete-padawan'
+on_ft = ['php', 'phtml']
 build = 'composer install'
 
 [[plugins]]

@@ -105,7 +105,7 @@ function fzm {
         --select-1 \
         --tac)
     if [[ -z "$lines" ]]; then
-        zle && zle redraw-prompt
+        zle && zle accept-line
         return 1
     fi
 
@@ -131,7 +131,7 @@ function jump {
         perl -n -i -e "print unless /^${jumpline//\//\\/}\$/" "${bookmarks}"
         cd "${jumpdir}" && echo "${jumpline}" >> "${FZF_MARKS_FILE}"
     fi
-    zle && zle redraw-prompt
+    zle && zle accept-line
 }
 
 function dmark {
