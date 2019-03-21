@@ -65,7 +65,7 @@ function name_dir() # dir, name
 }
 
 name_dir /mnt/d/workspace/ w
-name_dir /home/aikawa/Desktop d
+name_dir /home/aikawa/Desktop/ d
 name_dir /mnt/c/Users/aikaw/Desktop/ d
-name_dir /home/aikawa/Downloads dl
+name_dir /home/aikawa/Downloads/ dl
 name_dir /mnt/c/Users/aikaw/Downloads/ dl

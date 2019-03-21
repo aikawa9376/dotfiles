@@ -4,8 +4,8 @@
 repo = 'Shougo/deoplete.nvim'
 depends = [
 'neosnippet', 'context_filetype.vim', 'neco-syntax',
-'echodoc.vim', 'neoinclude.vim', 'FastFold', 'neopairs.vim',
-'tmux-complete.vim', 'neco-vim', 'deoplete-zsh'
+'neoinclude.vim', 'FastFold', 'neopairs.vim',
+'tmux-complete.vim', 'phpcd.vim', 'neco-vim', 'deoplete-zsh'
 ]
 hook_source = '''
 " deoplete setup
@@ -45,7 +45,10 @@ call deoplete#custom#source('neosnippet', 'max_candidates', 5)
 call deoplete#custom#source('neosnippet', 'max_pattern_length', 3)
 call deoplete#custom#source('tag', 'min_pattern_length', 2)
 call deoplete#custom#source('tmux-complete', 'min_pattern_length', 2)
-call deoplete#custom#source('padawan', 'max_candidates', 20)
+call deoplete#custom#source('tmux-complete', 'max_candidates', 10)
+
+let g:deoplete#ignore_sources     = get(g:, 'deoplete#ignore_sources', {})
+let g:deoplete#ignore_sources.php = ['omni']
 
 " 戻れてもいいかもしれない
 autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
@@ -70,7 +73,8 @@ let g:neosnippet#snippets_directory       = '~/.config/nvim/snippets'
 
 " For conceal markers.
 if has('conceal')
-  set conceallevel=2 concealcursor=niv
+
+set conceallevel=2 concealcursor=niv
 endif
 '''
 
@@ -95,8 +99,6 @@ let g:LanguageClient_diagnosticsSignsMax      = 0
 let g:LanguageClient_diagnosticsList          = 'Disabled'
 let g:LanguageClient_hasSnippetSupport        = 0
 let g:LanguageClient_waitOutputTimeout        = 4
-let g:LanguageClient_loadSettings             = 1
-let g:LanguageClient_settingsPath             = '.lsp.json'
 " let g:LanguageClient_loggingLevel = 'DEBUG'
 " let g:LanguageClient_loggingFile = '/tmp/LanguageClient.log'
 " let g:LanguageClient_serverStderr = '/tmp/LanguageServer.log'
@@ -162,9 +164,10 @@ repo = 'deoplete-plugins/deoplete-zsh'
 
 [[plugins]]
 repo = 'Shougo/echodoc.vim'
-hook_add = '''
-let g:echodoc#enable_at_startup = 1
+on_event = 'CompleteDone'
+hook_source = '''
 let g:echodoc#type = 'virtual'
+call echodoc#enable()
 '''
 
 [[plugins]]
@@ -366,7 +369,7 @@ omap a? <Plug>(textobj-comment-big-a)
 repo = 'Chun-Yang/vim-textobj-chunk'
 
 [[plugins]]
-repo = 'akiyan/vim-textobj-php'
+repo = 'aikawa9376/vim-textobj-php'
 
 [[plugins]]
 repo = 'osyo-manga/vim-textobj-from_regexp'
@@ -380,7 +383,7 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'kana/vim-operator-replace'
 hook_add = '''
-nmap <C-s> <plug>(operator-replace)
+nmap <C-s> mv<plug>(operator-replace)
 '''
 
 [[plugins]]
@@ -412,6 +415,18 @@ call submode#enter_with('mini_yank', 'nv', 'r', 'p', '<Plug>(miniyank-autoput)')
 call submode#enter_with('mini_yank', 'nv', 'r', 'P', '<Plug>(miniyank-autoPut)')
 call submode#map('mini_yank', 'nv', 'r', '<C-n>', '<Plug>(miniyank-cycle)')
 call submode#map('mini_yank', 'nv', 'r', '<C-p>', '<Plug>(miniyank-cycleback)')
+call submode#enter_with('functionbrace', 'n', '', ']]', ']]')
+call submode#enter_with('functionbrace', 'n', '', '[[', '[[')
+call submode#map('functionbrace', 'n', '', ']', ']]')
+call submode#map('functionbrace', 'n', '', '[', '[[')
+call submode#enter_with('bufbrace', 'n', 's', ']b', ':bnext<CR>')
+call submode#enter_with('bufbrace', 'n', 's', '[b', ':bpreviou<CR>')
+call submode#map('bufbrace', 'n', 's', ']', ':bnext<CR>')
+call submode#map('bufbrace', 'n', 's', '[', ':bpreviou<CR>')
+call submode#enter_with('chunkbrace', 'n', 's', ']c', ':GitGutterNextHunk<CR>')
+call submode#enter_with('chunkbrace', 'n', 's', '[c', ':GitGutterPrevHunk<CR>')
+call submode#map('chunkbrace', 'n', 's', ']', ':GitGutterNextHunk<CR>')
+call submode#map('chunkbrace', 'n', 's', '[', ':GitGutterPrevHunk<CR>')
 '''
 
 [[plugins]]
@@ -568,7 +583,7 @@ repo = 'kristijanhusak/defx-git'
 
 [[plugins]]
 repo = 'junegunn/fzf'
-depends = ['fzf.vim', 'vim-bookmarks']
+depends = ['fzf.vim', 'vim-bookmarks', 'fzf-gitignore']
 path = '~/.fzf'
 build = './install --all'
 merged = 0
@@ -586,7 +601,7 @@ nnoremap <silent> <Leader>a  :Rg<CR>
 nnoremap <silent> <Leader>l  :Lines<CR>
 nnoremap <silent> <Leader>e  :MRUFilesCWD<CR>
 nnoremap <silent> <Leader>E  :MRUFiles<CR>
-nnoremap <silent> <Leader>dd :SWSqlFzfSelect<CR>
+nnoremap <silent> <Leader>df :SWSqlFzfSelect<CR>
 nnoremap <silent> <Leader>.  :DotFiles<CR>
 nnoremap <silent> <Leader>O  :Outline<CR>
 nnoremap <silent> <Leader>M  :Memo<CR>
@@ -1018,12 +1033,15 @@ command! -nargs=* PhpRefactorringMenu call fzf#run({
 '''
 
 [[plugins]]
+repo = 'fszymanski/fzf-gitignore'
+
+[[plugins]]
 repo = 'mg979/vim-bookmarks'
 rev = 'fzf'
 hook_add = '''
 let g:bookmark_prefer_fzf = 1
-nmap ]b <Plug>BookmarkNext
-nmap [b <Plug>BookmarkPrev
+nmap ]B <Plug>BookmarkNext
+nmap [B <Plug>BookmarkPrev
 nmap <Leader>mm  <Plug>BookmarkToggle
 nmap <Leader>mi  <Plug>BookmarkAnnotate
 nmap <Leader>ma  <Plug>BookmarkShowAll
@@ -1110,12 +1128,31 @@ nnoremap <silent><C-w>k :TmuxNavigateUp<CR>
 nnoremap <silent><C-w>l :TmuxNavigateRight<CR>
 '''
 
+[[plugins]]
+repo = 'ludovicchabant/vim-gutentags'
+# on_event = 'BufWritePost'
+on_event = 'VimEnter'
+hook_add = '''
+let g:gutentags_project_root = [
+ \ '.root', '.svn', '.git', '.project', '.vim.local',
+ \ 'package.json', 'composer.json'
+ \ ]
+let g:gutentags_ctags_tagfile = '.tags'
+let s:vim_tags = expand('~/.cache/tags')
+let g:gutentags_cache_dir = s:vim_tags
+" set tags+=gutentags_ctags_tagfile
+if !isdirectory(s:vim_tags)
+   silent! call mkdir(s:vim_tags, 'p')
+endif
+'''
+
 # git -----------------------------------
 
 [[plugins]]
 repo = 'airblade/vim-gitgutter'
 on_event = 'VimEnter'
 hook_add = '''
+nmap <silent><Leader>gq :GitGutterPreviewHunk<CR>
 omap ih <Plug>GitGutterTextObjectInnerPending
 omap ah <Plug>GitGutterTextObjectOuterPending
 xmap ih <Plug>GitGutterTextObjectInnerVisual
@@ -1161,6 +1198,11 @@ on_cmd = ['Agit']
 hook_add = '''
 nmap <Leader>gl :Agit<CR>
 '''
+
+[[plugins]]
+repo = 'rhysd/git-messenger.vim'
+on_cmd = ['GitMessenger']
+on_map = '<Plug>(git-messenger)'
 
 # status line ---------------------------
 
@@ -1442,6 +1484,15 @@ nnoremap <silent>]a :<C-u>ALENext<CR>
 nnoremap <silent>[a :<C-u>ALEPrevious<CR>
 '''
 
+# util ----------------------------------
+[[plugins]]
+repo = 'mhinz/vim-sayonara'
+on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'vim-scripts/BufOnly.vim'
+on_event = 'VimEnter'
+
 # php------------------------------------
 
 [[plugins]]
@@ -1449,8 +1500,7 @@ repo = 'StanAngeloff/php.vim'
 on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
-repo = 'padawan-php/deoplete-padawan'
-on_ft = ['php', 'phtml']
+repo = 'lvht/phpcd.vim'
 build = 'composer install'
 
 [[plugins]]

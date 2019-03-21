@@ -10,8 +10,8 @@ zplug "zsh-users/zsh-history-substring-search"
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 # autosuggestions
 zplug "zsh-users/zsh-autosuggestions"
-# anyframe
-zplug "mollifier/anyframe"
+# zaw
+zplug "zsh-users/zaw"
 # k
 zplug "supercrabtree/k"
 # enhancd
@@ -24,6 +24,8 @@ zplug "plugin/git", from:oh-my-zsh
 zplug "chrissicool/zsh-256color"
 # pair auto
 zplug "hlissner/zsh-autopair", defer:3
+# fzf-widgets
+zplug "ytet5uy4/fzf-widgets", if:"which fzf"
 # tmux fzf
 zplug "arks22/tmuximum", as:command
 # zplug selfupdate

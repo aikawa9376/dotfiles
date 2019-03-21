@@ -130,51 +130,7 @@ set autoread   " 外部でファイルに変更がされた場合は読みなお
 set nobackup   " ファイル保存時にバックアップファイルを作らない
 set noswapfile " ファイル編集中にスワップファイルを作らない
 set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバッファを開く
-nmap <Leader>z :Bonly<CR>
-command! -nargs=? -complete=buffer -bang Bonly
-    \ :call BufOnly('<args>', '<bang>')
-function! BufOnly(buffer, bang)
-  if a:buffer == ''
-    " No buffer provided, use the current buffer.
-    let buffer = bufnr('%')
-  elseif (a:buffer + 0) > 0
-    " A buffer number was provided.
-    let buffer = bufnr(a:buffer + 0)
-  else
-    " A buffer name was provided.
-    let buffer = bufnr(a:buffer)
-  endif
-  if buffer == -1
-    echohl ErrorMsg
-    echomsg 'No matching buffer for' a:buffer
-    echohl None
-    return
-  endif
-  let last_buffer = bufnr('$')
-  let delete_count = 0
-  let n = 1
-  while n <= last_buffer
-    if n != buffer && buflisted(n)
-      if a:bang == '' && getbufvar(n, '&modified')
-        echohl ErrorMsg
-        echomsg 'No write since last change for buffer'
-              \ n '(add ! to override)'
-        echohl None
-      else
-        silent exe 'bdel' . a:bang . ' ' . n
-        if ! buflisted(n)
-          let delete_count = delete_count+1
-        endif
-      endif
-    endif
-    let n = n+1
-  endwhile
-  if delete_count == 1
-    echomsg delete_count 'buffer deleted'
-  elseif delete_count > 1
-    echomsg delete_count 'buffers deleted'
-  endif
-endfunction
+nmap <Leader>z :BufOnly<CR>
 
 " 検索をファイルの先頭へ循環しない
 " set nowrapscan
@@ -223,6 +179,21 @@ function! s:remove_line_brank(count)
     endif
   endfor
   call repeat#set('dd', v:count1)
+endfunction
+
+nnoremap <silent> dD :<C-u>call <SID>remove_line_brank_all(v:count1)<CR>
+function! s:remove_line_brank_all(count)
+  for i in range(1, v:count1)
+    if getline('.') == ''
+      .delete _
+    else
+      .delete
+    endif
+  endfor
+  while getline('.') == ''
+      .delete _
+  endwhile
+  call repeat#set('dD', v:count1)
 endfunction
 
 nmap <M-p> o<ESC>p==
@@ -345,7 +316,9 @@ set softtabstop=2
 " 連続した空白に対してタブキーやバックスペースキーでカーソルが動く幅
 set autoindent "改行時に前の行のインデントを継続する
 set smartindent "改行時に入力された行の末尾に合わせて次の行のインデントを増減する
-set wildmenu wildmode=list,full "コマンドモード補完
+" set wildmenu wildmode=list,full "コマンドモード補完
+set wildoptions+=pum
+" set pumblend=99
 
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
@@ -479,6 +452,8 @@ function! s:php_my_settings() abort
   nnoremap <silent> <buffer> <F11> :PhpRefactorringMenu()<CR>
   nnoremap <silent> <buffer> gd gd
   " let b:match_words .= ',if.*(.*)\s{:selse\s{:},?php:?>,for:},if:endif,foreach:endforeach'
+  " 対象が多くなると遅くなる
+  execute('EchoDocDisable')
 endfunction
 
 function! IsPhpOrHtml() abort
