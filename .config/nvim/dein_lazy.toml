@@ -73,7 +73,6 @@ let g:neosnippet#snippets_directory       = '~/.config/nvim/snippets'
 
 " For conceal markers.
 if has('conceal')
-
 set conceallevel=2 concealcursor=niv
 endif
 '''
@@ -1031,9 +1030,6 @@ command! -nargs=* PhpRefactorringMenu call fzf#run({
   \  'options': '--reverse -m -x +s --ansi --prompt=PhpRefactorMenu:',
   \  'down': '20%'})
 '''
-
-[[plugins]]
-repo = 'fszymanski/fzf-gitignore'
 
 [[plugins]]
 repo = 'mg979/vim-bookmarks'
