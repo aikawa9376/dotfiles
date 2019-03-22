@@ -123,6 +123,18 @@ if has('unix')
   endif
 endif
 
+" auto fcitx
+let g:input_toggle = 1
+function! Fcitx2en()
+  let s:input_status = system("fcitx-remote")
+  if s:input_status == 2
+    let g:input_toggle = 1
+    let l:a = system("fcitx-remote -c")
+  endif
+endfunction
+"Leave Insert mode
+autocmd InsertLeave * call Fcitx2en()
+
 " ファイル処理関連の設定
 set confirm    " 保存されていないファイルがあるときは終了前に保存確認
 set hidden     " 保存されていないファイルがあるときでも別のファイルを開くことが出来る
@@ -322,6 +334,7 @@ set wildoptions+=pum
 
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
+inoremap <silent> っｊ <Esc>
 
 " ペーストモードを自動解除
 autocmd MyAutoCmd InsertLeave * set nopaste

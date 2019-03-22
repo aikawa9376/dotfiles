@@ -4,8 +4,9 @@
 repo = 'Shougo/deoplete.nvim'
 depends = [
 'neosnippet', 'context_filetype.vim', 'neco-syntax',
-'neoinclude.vim', 'FastFold', 'neopairs.vim',
-'tmux-complete.vim', 'phpcd.vim', 'neco-vim', 'deoplete-zsh'
+'neoinclude.vim', 'FastFold', 'neopairs.vim', 'deoplete-tabnine',
+'tmux-complete.vim', 'phpcd.vim', 'neco-vim', 'deoplete-zsh',
+'float-preview.nvim'
 ]
 hook_source = '''
 " deoplete setup
@@ -46,6 +47,7 @@ call deoplete#custom#source('neosnippet', 'max_pattern_length', 3)
 call deoplete#custom#source('tag', 'min_pattern_length', 2)
 call deoplete#custom#source('tmux-complete', 'min_pattern_length', 2)
 call deoplete#custom#source('tmux-complete', 'max_candidates', 10)
+call deoplete#custom#source('tabnine', 'rank', 80)
 
 let g:deoplete#ignore_sources     = get(g:, 'deoplete#ignore_sources', {})
 let g:deoplete#ignore_sources.php = ['omni']
@@ -75,6 +77,17 @@ let g:neosnippet#snippets_directory       = '~/.config/nvim/snippets'
 if has('conceal')
 set conceallevel=2 concealcursor=niv
 endif
+'''
+
+[[plugins]]
+repo = 'tbodt/deoplete-tabnine'
+build = './install.sh'
+
+[[plugins]]
+repo = 'ncm2/float-preview.nvim'
+on_event = 'VimEnter'
+hook_add = '''
+let g:float_preview#docked = 0
 '''
 
 [[plugins]]
@@ -333,7 +346,8 @@ repo = 'kana/vim-textobj-user'
 depends = [
 'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
 'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment',
-'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-chunk'
+'vim-textobj-between', 'vim-textobj-from_regexp',
+'vim-textobj-chunk', 'vim-textobj-space'
 ]
 on_event = 'VimEnter'
 
@@ -351,6 +365,9 @@ repo = 'thinca/vim-textobj-between'
 
 [[plugins]]
 repo = 'kana/vim-textobj-syntax'
+
+[[plugins]]
+repo = 'saihoooooooo/vim-textobj-space'
 
 [[plugins]]
 repo = 'glts/vim-textobj-comment'
@@ -582,7 +599,7 @@ repo = 'kristijanhusak/defx-git'
 
 [[plugins]]
 repo = 'junegunn/fzf'
-depends = ['fzf.vim', 'vim-bookmarks', 'fzf-gitignore']
+depends = ['fzf.vim', 'vim-bookmarks']
 path = '~/.fzf'
 build = './install --all'
 merged = 0
@@ -1126,7 +1143,6 @@ nnoremap <silent><C-w>l :TmuxNavigateRight<CR>
 
 [[plugins]]
 repo = 'ludovicchabant/vim-gutentags'
-# on_event = 'BufWritePost'
 on_event = 'VimEnter'
 hook_add = '''
 let g:gutentags_project_root = [
@@ -1136,7 +1152,6 @@ let g:gutentags_project_root = [
 let g:gutentags_ctags_tagfile = '.tags'
 let s:vim_tags = expand('~/.cache/tags')
 let g:gutentags_cache_dir = s:vim_tags
-" set tags+=gutentags_ctags_tagfile
 if !isdirectory(s:vim_tags)
    silent! call mkdir(s:vim_tags, 'p')
 endif
@@ -1481,9 +1496,6 @@ nnoremap <silent>[a :<C-u>ALEPrevious<CR>
 '''
 
 # util ----------------------------------
-[[plugins]]
-repo = 'mhinz/vim-sayonara'
-on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'vim-scripts/BufOnly.vim'
