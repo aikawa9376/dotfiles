@@ -48,7 +48,6 @@ export TERM='xterm-256color'
 export EDITOR='nvim'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
-# eval `/usr/local/bin/wcwidth-cjk --sh-init`
 
 # go lang
 export GOPATH="$HOME/go"
@@ -296,6 +295,8 @@ autoload -Uz smart-insert-last-word
 zstyle :insert-last-word match '*([[:alpha:]/\\]?|?[[:alpha:]/\\])*'
 zle -N insert-last-word smart-insert-last-word
 bindkey '^[' insert-last-word
+
+bindkey '^[x' zaw
 
 # -------------------------------------
 # Xserver関係
