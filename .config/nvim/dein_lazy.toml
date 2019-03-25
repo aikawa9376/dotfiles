@@ -518,7 +518,7 @@ depends = ['defx-icons', 'defx-git']
 on_cmd = ['Defx']
 hook_add = '''
 nmap <silent><Space>n :Defx
-\ -toggle -resume=true -direction=topleft -split=vertical
+\ -toggle -direction=topleft -split=vertical
 \ -winwidth=35 -columns=git:icons:filename:type<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
@@ -1292,7 +1292,7 @@ function! MyMode()
         \ &ft == 'mundo'     ? 'mundo' :
         \ &ft == 'MundoDiff' ? 'diff' :
         \ g:lightline.VM()   ? g:lightline.vm_mode() :
-        \ winwidth(0) > 60   ? g:lightline#mode() : ''
+        \ winwidth(0) > 20   ? g:lightline#mode() : ''
 endfunction
 
 function! MyModified()
@@ -1332,6 +1332,7 @@ function! MyFilename()
   \  &ft == 'MundoDiff' ? 'preview' :
   \  &ft == 'fzf'       ? 'search' :
   \  &ft == 'vimshell'  ? substitute(b:vimshell.current_dir,expand('~'),'~','') :
+  \  winwidth(0) < 100  ? expand("%:t") :
   \  '' != @%           ? @% : '[No Name]') .
   \ ('' != MyModified() ? ' ' . MyModified() : '')
 endfunction
@@ -1367,7 +1368,7 @@ function! MyProject()
   else
     let s:prod = s:prod . ' ' . MyRootDir()
   endif
-  return s:prod
+  return winwidth('.') > 100 ? s:prod : ''
 endfunction
 
 function! MyFiletype()
@@ -1381,7 +1382,7 @@ endfunction
 function! MyGitGutter()
   if ! exists('*GitGutterGetHunkSummary')
   \ || ! get(g:, 'gitgutter_enabled', 0)
-  \ || winwidth('.') <= 90
+  \ || winwidth('.') <= 100
     return ''
   endif
   let symbols = [
@@ -1396,7 +1397,7 @@ function! MyGitGutter()
       call add(ret, symbols[i] . hunks[i])
     endif
   endfor
-  return join(ret, ' ')
+  return winwidth('.') > 70 ? join(ret, ' ') : ''
 endfunction
 
 let g:lightline.VM = { -> exists("g:Vm") && g:Vm.is_active }
