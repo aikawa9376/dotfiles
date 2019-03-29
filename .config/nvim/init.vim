@@ -273,10 +273,10 @@ nnoremap <silent><M-m> :call cursor(0,strlen(getline("."))/2)<CR>
 nnoremap <C-e> 10<C-e>
 nnoremap <C-y> 10<C-y>
 " すごく移動する
-nnoremap <C-j> 10j
-vnoremap <C-j> 10j
-nnoremap <C-k> 10k
-vnoremap <C-k> 10k
+nnoremap <C-j> 3j
+vnoremap <C-j> 3j
+nnoremap <C-k> 3k
+vnoremap <C-k> 3k
 
 " gJで空白を削除する
 fun! JoinSpaceless()
@@ -544,3 +544,33 @@ command! DiffOrig let g:diffline = line('.')
   \ | diffthis | :exe "norm! ".g:diffline."G"
   \ | wincmd p | diffthis | wincmd p
 nnoremap <Leader>do :DiffOrig<cr>
+
+augroup vimrc-auto-cursorline
+  autocmd!
+  autocmd CursorMoved,CursorMovedI * call s:auto_cursorline('CursorMoved')
+  autocmd CursorHold,CursorHoldI * call s:auto_cursorline('CursorHold')
+  autocmd WinEnter * call s:auto_cursorline('WinEnter')
+  autocmd WinLeave * call s:auto_cursorline('WinLeave')
+
+  let s:cursorline_lock = 0
+  function! s:auto_cursorline(event)
+    if a:event ==# 'WinEnter'
+      setlocal cursorline
+      let s:cursorline_lock = 2
+    elseif a:event ==# 'WinLeave'
+      setlocal nocursorline
+    elseif a:event ==# 'CursorMoved'
+      if s:cursorline_lock
+        if 1 < s:cursorline_lock
+          let s:cursorline_lock = 1
+        else
+          setlocal nocursorline
+          let s:cursorline_lock = 0
+        endif
+      endif
+    elseif a:event ==# 'CursorHold'
+      setlocal cursorline
+      let s:cursorline_lock = 1
+    endif
+  endfunction
+augroup END
