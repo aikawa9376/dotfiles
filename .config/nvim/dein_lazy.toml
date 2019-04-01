@@ -1,197 +1,145 @@
 # shougo---------------------------------
 
 [[plugins]]
-repo = 'Shougo/deoplete.nvim'
-depends = [
-'neosnippet', 'context_filetype.vim', 'neco-syntax',
-'neoinclude.vim', 'FastFold', 'neopairs.vim', 'deoplete-tabnine',
-'tmux-complete.vim', 'phpcd.vim', 'neco-vim', 'deoplete-zsh',
-'float-preview.nvim'
-]
-hook_source = '''
-" deoplete setup
-let g:deoplete#enable_at_startup = 1
-
-let s:deoplete_custom_option = {
-  \ 'auto_complete'      : v:true,
-  \ 'auto_complete_delay': 0,
-  \ 'auto_refresh_delay' : 20,
-  \ 'camel_case'         : v:false,
-  \ 'ignore_case'        : v:true,
-  \ 'max_list'           : 100,
-  \ 'min_pattern_length' : 1,
-  \ 'num_processes'      : 0,
-  \ 'on_insert_enter'    : v:true,
-  \ 'on_text_changed_i'  : v:true,
-  \ 'refresh_always'     : v:true,
-  \ 'skip_chars'         : ['(', ')', '[', ']'],
-  \ 'smart_case'         : v:true,
-  \ }
-call deoplete#custom#option(s:deoplete_custom_option)
-
-call deoplete#custom#option('sources', {
-  \ 'sql'  : ['sw', 'sw-omni', 'neosnippet'],
-  \ })
-
-call deoplete#custom#option('omni_patterns', {
-  \ 'java' : '[^. *\t]\.\w*',
-  \ 'html' : ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
-  \ 'xhtml': ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
-  \ 'xml'  : ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
-  \ })
-
-call deoplete#custom#source('_', 'converter', ['auto_paren'])
-call deoplete#custom#source('neosnippet', 'rank', 1000)
-call deoplete#custom#source('neosnippet', 'max_candidates', 5)
-call deoplete#custom#source('neosnippet', 'max_pattern_length', 3)
-call deoplete#custom#source('tag', 'min_pattern_length', 2)
-call deoplete#custom#source('tmux-complete', 'min_pattern_length', 2)
-call deoplete#custom#source('tmux-complete', 'max_candidates', 10)
-call deoplete#custom#source('tabnine', 'rank', 80)
-
-let g:deoplete#ignore_sources     = get(g:, 'deoplete#ignore_sources', {})
-let g:deoplete#ignore_sources.php = ['omni']
-
-" 戻れてもいいかもしれない
-autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
-'''
-on_event = 'InsertEnter'
-
-[[plugins]]
-repo = 'Shougo/neosnippet'
-depends = ['neosnippet-snippets']
-on_event = 'InsertEnter'
-on_ft = ['snippet']
-hook_source = '''
-" Snippet key-mappings.
-" Note: It must be "imap" and "smap".  It uses <Plug> mappings.
-imap <C-Space> <Plug>(neosnippet_jump_or_expand)
-smap <C-Space> <Plug>(neosnippet_jump_or_expand)
-xmap <C-Space> <Plug>(neosnippet_expand_target)
-
-let g:neosnippet#enable_completed_snippet = 1
-let g:neosnippet#expand_word_boundar      = 1
-let g:neosnippet#snippets_directory       = '~/.config/nvim/snippets'
-
-" For conceal markers.
-if has('conceal')
-set conceallevel=2 concealcursor=niv
-endif
-'''
-
-[[plugins]]
-repo = 'tbodt/deoplete-tabnine'
-build = './install.sh'
-
-[[plugins]]
-repo = 'ncm2/float-preview.nvim'
+repo = 'neoclide/coc.nvim'
 on_event = 'VimEnter'
+build = 'coc#util#install()'
 hook_add = '''
-let g:float_preview#docked = 0
-'''
-
-[[plugins]]
-repo = 'autozimu/LanguageClient-neovim'
-on_ft = ['rust', 'javascript', 'python']
-rev = 'next'
-build = 'bash install.sh'
-hook_add = '''
+" if hidden is not set, TextEdit might fail.
 set hidden
-let g:LanguageClient_serverCommands = {
-  \ 'rust': ['~/.cargo/bin/rustup', 'run', 'stable', 'rls'],
-  \ 'javascript': ['javascript-typescript-stdio'],
-  \ 'python': ['pyls'],
-  \ }
-let g:LanguageClient_autoStart                = 1
-let g:LanguageClient_autoStop                 = 1
-let g:LanguageClient_diagnosticsEnable        = 0
-let g:LanguageClient_changeThrottle           = 1.5
-let g:LanguageClient_completionPreferTextEdit = 0
-let g:LanguageClient_diagnosticsSignsMax      = 0
-let g:LanguageClient_diagnosticsList          = 'Disabled'
-let g:LanguageClient_hasSnippetSupport        = 0
-let g:LanguageClient_waitOutputTimeout        = 4
-" let g:LanguageClient_loggingLevel = 'DEBUG'
-" let g:LanguageClient_loggingFile = '/tmp/LanguageClient.log'
-" let g:LanguageClient_serverStderr = '/tmp/LanguageServer.log'
-nnoremap <silent> K :call LanguageClient_textDocument_hover()<CR>
-nnoremap <silent> gd :call LanguageClient_textDocument_definition()<CR>
-nnoremap <silent> <F2> :call LanguageClient_textDocument_rename()<CR>
-nnoremap <silent> <F3> :call LanguageClient_textDocument_references()<CR>
-nnoremap <silent> <F11> :call LanguageClient_contextMenu()<CR>
-'''
 
-[[plugins]]
-repo = 'Shougo/neosnippet-snippets'
+" Better display for messages
+set cmdheight=2
+
+" Smaller updatetime for CursorHold & CursorHoldI
+set updatetime=300
+
+" don't give |ins-completion-menu| messages.
+set shortmess+=c
+
+" always show signcolumns
+set signcolumn=yes
+
+" Use tab for trigger completion with characters ahead and navigate.
+" Use command ':verbose imap <tab>' to make sure tab is not mapped by other plugin.
+inoremap <silent><expr> <TAB>
+      \ pumvisible() ? "\<C-n>" :
+      \ <SID>check_back_space() ? "\<TAB>" :
+      \ coc#refresh()
+inoremap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
+
+function! s:check_back_space() abort
+  let col = col('.') - 1
+  return !col || getline('.')[col - 1]  =~# '\s'
+endfunction
+
+" Use <c-space> for trigger completion.
+inoremap <silent><expr> <c-space> coc#refresh()
+
+" Use <cr> for confirm completion, `<C-g>u` means break undo chain at current position.
+" Coc only does snippet and additional edit on confirm.
+inoremap <expr> <cr> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
+
+noremap <silent><expr> <TAB>
+      \ pumvisible() ? coc#_select_confirm() :
+      \ coc#expandableOrJumpable() ? coc#rpc#request('doKeymap', ['snippets-expand-jump','']) :
+      \ <SID>check_back_space() ? "\<TAB>" :
+      \ coc#refresh()
+
+function! s:check_back_space() abort
+  let col = col('.') - 1
+  return !col || getline('.')[col - 1]  =~# '\s'
+endfunction
+
+let g:coc_snippet_next = '<tab>'
+
+" Use `[c` and `]c` for navigate diagnostics
+nmap <silent> [c <Plug>(coc-diagnostic-prev)
+nmap <silent> ]c <Plug>(coc-diagnostic-next)
+
+" Remap keys for gotos
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gy <Plug>(coc-type-definition)
+nmap <silent> gi <Plug>(coc-implementation)
+nmap <silent> gr <Plug>(coc-references)
+
+" Use K for show documentation in preview window
+nnoremap <silent> K :call <SID>show_documentation()<CR>
+
+function! s:show_documentation()
+  if &filetype == 'vim'
+    execute 'h '.expand('<cword>')
+  else
+    call CocAction('doHover')
+  endif
+endfunction
+
+" Highlight symbol under cursor on CursorHold
+autocmd CursorHold * silent call CocActionAsync('highlight')
+
+" Remap for rename current word
+nmap <leader>rn <Plug>(coc-rename)
+
+" Remap for format selected region
+vmap <leader>f  <Plug>(coc-format-selected)
+nmap <leader>f  <Plug>(coc-format-selected)
+
+augroup mygroup
+  autocmd!
+  " Setup formatexpr specified filetype(s).
+  autocmd FileType typescript,json setl formatexpr=CocAction('formatSelected')
+  " Update signature help on jump placeholder
+  autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
+augroup end
+
+" Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
+vmap <leader>a  <Plug>(coc-codeaction-selected)
+nmap <leader>a  <Plug>(coc-codeaction-selected)
+
+" Remap for do codeAction of current line
+nmap <leader>ac  <Plug>(coc-codeaction)
+" Fix autofix problem of current line
+nmap <leader>qf  <Plug>(coc-fix-current)
+
+" Use `:Format` for format current buffer
+command! -nargs=0 Format :call CocAction('format')
+
+" Use `:Fold` for fold current buffer
+command! -nargs=? Fold :call     CocAction('fold', <f-args>)
+
+" Add diagnostic info for https://github.com/itchyny/lightline.vim
+let g:lightline = {
+      \ 'colorscheme': 'wombat',
+      \ 'active': {
+      \   'left': [ [ 'mode', 'paste' ],
+      \             [ 'cocstatus', 'readonly', 'filename', 'modified' ] ]
+      \ },
+      \ 'component_function': {
+      \   'cocstatus': 'coc#status'
+      \ },
+      \ }
+
+" Using CocList
+" Show all diagnostics
+nnoremap <silent> <space>a  :<C-u>CocList diagnostics<cr>
+" Manage extensions
+nnoremap <silent> <space>e  :<C-u>CocList extensions<cr>
+" Show commands
+nnoremap <silent> <space>c  :<C-u>CocList commands<cr>
+" Find symbol of current document
+nnoremap <silent> <space>o  :<C-u>CocList outline<cr>
+" Search workspace symbols
+nnoremap <silent> <space>s  :<C-u>CocList -I symbols<cr>
+" Do default action for next item.
+nnoremap <silent> <space>j  :<C-u>CocNext<CR>
+" Do default action for previous item.
+nnoremap <silent> <space>k  :<C-u>CocPrev<CR>
+" Resume latest coc list
+nnoremap <silent> <space>p  :<C-u>CocListResume<CR>
+'''
 
 [[plugins]]
 repo = 'honza/vim-snippets'
-
-[[plugins]]
-repo = 'Shougo/context_filetype.vim'
-hook_source = '''
-if !exists('g:context_filetype#same_filetypes')
-  let g:context_filetype#same_filetypes = {}
-endif
-let g:context_filetype#same_filetypes.php = 'phtml'
-let b:context_filetype_filetypes = context_filetype#default_filetypes()
-call extend(b:context_filetype_filetypes,
-  \ {'php' : [
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'javascript',
-  \   },
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'coffee',
-  \   },
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'javascript',
-  \   },
-  \   {
-  \    'start':
-  \     '<style\%( [^>]*\)\?>',
-  \    'end': '</style>', 'filetype': 'css',
-  \   },
-  \   {
-  \    'start':
-  \     '<[^>]\+ style=\([''"]\)',
-  \    'end': '\1', 'filetype': 'css',
-  \   },
-  \ ]})
-'''
-
-[[plugins]]
-repo = 'Shougo/neco-syntax'
-
-[[plugins]]
-repo = 'Shougo/neco-vim'
-
-[[plugins]]
-repo = 'deoplete-plugins/deoplete-zsh'
-
-[[plugins]]
-repo = 'Shougo/echodoc.vim'
-on_event = 'CompleteDone'
-hook_source = '''
-let g:echodoc#type = 'virtual'
-call echodoc#enable()
-'''
-
-[[plugins]]
-repo = 'Shougo/neoinclude.vim'
-
-[[plugins]]
-repo = 'Shougo/neopairs.vim'
-hook_add = '''
-let g:neopairs#enable = 1
-'''
-[[plugins]]
-repo = 'wellle/tmux-complete.vim'
 
 [[plugins]]
 repo = 'konfekt/FastFold'
@@ -211,8 +159,11 @@ imap <silent> <M-,> <C-y>,
 '''
 
 [[plugins]]
-repo = 'ap/vim-css-color'
+repo = 'RRethy/vim-hexokinase'
 on_ft = ['css', 'scss']
+hook_add = '''
+let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
+'''
 
 [[plugins]]
 repo = 'alvan/vim-closetag'
@@ -1066,15 +1017,10 @@ nmap <Leader>mg  <Plug>BookmarkMoveToLine
 '''
 
 [[plugins]]
-repo = 'majutsushi/tagbar'
-on_cmd = ['TagbarToggle']
+repo = 'liuchengxu/vista.vim'
+on_cmd = ['Vista!!']
 hook_add = '''
-nnoremap <silent> <Leader>o :TagbarToggle<CR>
-let g:tagbar_autopreview    = 1
-let g:tagbar_compact        = 1
-let g:tagbar_autoshowtag    = 1
-let g:tagbar_width          = 40
-let g:tagbar_previewwin_pos = 'rightbelow'
+nnoremap <silent> <Leader>o :Vista!!<CR>
 '''
 
 [[plugins]]

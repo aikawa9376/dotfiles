@@ -464,9 +464,6 @@ function! s:php_my_settings() abort
   nnoremap <buffer> <M-4> bi$<ESC>e
   nnoremap <silent> <buffer> <F11> :PhpRefactorringMenu()<CR>
   nnoremap <silent> <buffer> gd gd
-  " let b:match_words .= ',if.*(.*)\s{:selse\s{:},?php:?>,for:},if:endif,foreach:endforeach'
-  " 対象が多くなると遅くなる
-  execute('EchoDocDisable')
 endfunction
 
 function! IsPhpOrHtml() abort
