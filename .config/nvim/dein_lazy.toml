@@ -1182,7 +1182,6 @@ let g:lightline = {
     \ ]
   \ },
   \ 'component': {
-    \ 'cocstatus': 'coc#status',
     \ 'lineinfo': '☰ %2p%% %2l:%v'
   \ },
   \ 'component_function': {
@@ -1199,6 +1198,7 @@ let g:lightline = {
     \ 'vm_regions'     : 'g:lightline.vm_regions',
     \ 'obsession'      : 'MyObsession',
     \ 'workbench'      : 'MyWorkbench',
+    \ 'cocstatus'      : 'coc#status',
     \ },
   \ 'component_expand': {
     \ 'buffers'        : 'lightline#bufferline#buffers'
