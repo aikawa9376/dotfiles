@@ -75,14 +75,6 @@ let g:loaded_netrwSettings     = 1
 let g:loaded_netrwFileHandlers = 1
 
 nmap <Space> <Leader>
-" nnoremap <nowait><Space> <Nop>
-" nnoremap <nowait><BS>    <Nop>
-" if !exists('g:mapleader')
-"   let g:mapleader = "\<Space>"
-" endif
-" if !exists('g:maplocalleader')
-"   let g:maplocalleader = "\<BS>"
-" endif
 
 noremap  <Plug>(my-switch) <Nop>
 nmap     <Leader>S <Plug>(my-switch)
@@ -360,6 +352,7 @@ nmap <silent> <M-f> :bnext<CR>
 nmap <silent> <C-g> mz<C-^>`zzz
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
+autocmd MyAutoCmd FileType help,qf nnoremap <buffer> <CR> <CR>
 autocmd MyAutoCmd FileType far_vim nnoremap <buffer> q <C-w>o:tabc<CR>
 augroup vimrc-auto-mkdir
   autocmd!

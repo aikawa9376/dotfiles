@@ -40,6 +40,10 @@ let g:WebDevIconsUnicodeDecorateFolderNodes = 1
 repo = 'altercation/vim-colors-solarized'
 hook_add = '''
 set background=dark
+" tab,expends,etc...
+autocmd MyAutoCmd ColorScheme * highlight NonText    ctermbg=None ctermfg=0 guibg=NONE guifg=None
+autocmd MyAutoCmd ColorScheme * highlight SpecialKey ctermbg=None ctermfg=0 guibg=NONE guifg=None
+
 autocmd MyAutoCmd ColorScheme * highlight Normal     ctermbg=none
 " pmu settings
 autocmd MyAutoCmd ColorScheme * highlight Pmenu      cterm=None ctermfg=111
