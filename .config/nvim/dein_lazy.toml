@@ -11,7 +11,7 @@ set shortmess+=c
 " always show signcolumns
 set signcolumn=yes
 
-noremap <silent><expr> <c-space>
+inoremap <silent><expr> <c-space>
   \ pumvisible() ? coc#_select_confirm() :
   \ coc#expandableOrJumpable() ? coc#rpc#request('doKeymap', ['snippets-expand-jump','']) :
   \ <SID>check_back_space() ? "\<c-space>" :
@@ -21,10 +21,6 @@ function! s:check_back_space() abort
   let col = col('.') - 1
   return !col || getline('.')[col - 1]  =~# '\s'
 endfunction
-
-" Use <cr> for confirm completion, `<C-g>u` means break undo chain at current position.
-" Coc only does snippet and additional edit on confirm.
-inoremap <expr> <c-space> pumvisible() ? "\<C-y>" : "\<C-g>u\<c-space>"
 
 let g:coc_snippet_next = '<c-space>'
 
@@ -127,6 +123,9 @@ repo = 'Shougo/neco-vim'
 [[plugins]]
 repo = 'Shougo/neosnippet'
 depends = ['neosnippet-snippets', 'vim-snippets']
+hook_source = '''
+let g:neosnippet#snippets_directory = '~/.cache/dein/repos/github.com/honza/vim-snippets/snippets'
+'''
 
 [[plugins]]
 repo = 'Shougo/neosnippet-snippets'
