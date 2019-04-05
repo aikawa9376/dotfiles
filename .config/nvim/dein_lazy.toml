@@ -11,6 +11,9 @@ set shortmess+=c
 " always show signcolumns
 set signcolumn=yes
 
+let g:coc_status_error_sign   = "\uf057 :"
+let g:coc_status_warning_sign = "\uf071 :"
+
 inoremap <silent><expr> <c-space>
   \ pumvisible() ? coc#_select_confirm() :
   \ coc#expandableOrJumpable() ? coc#rpc#request('doKeymap', ['snippets-expand-jump','']) :
