@@ -1,0 +1,8 @@
+{
+  "snippets.ultisnips.enable": false,
+  "snippets.snipmate.enable": false,
+  "css.colorDecorators.enable": false,
+  "scss.colorDecorators.enable": false,
+  "coc.preferences.colorSupport": false,
+  "diagnostic.refreshAfterSave": true
+}

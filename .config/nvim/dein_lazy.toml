@@ -95,9 +95,6 @@ nnoremap <silent> <space>cj  :<C-u>CocNext<CR>
 nnoremap <silent> <space>ck  :<C-u>CocPrev<CR>
 " Resume latest coc list
 nnoremap <silent> <space>cp  :<C-u>CocListResume<CR>
-
-" Setting json source
-" source ~/.config/nvim/coc-setting.vim
 '''
 
 [[plugins]]
@@ -123,6 +120,9 @@ repo = 'Shougo/neco-vim'
 [[plugins]]
 repo = 'Shougo/neosnippet'
 depends = ['neosnippet-snippets', 'vim-snippets']
+hook_add = '''
+let g:neosnippet#snippets_directory = '~/.cache/dein/repos/github.com/honza/vim-snippets/snippets/'
+'''
 
 [[plugins]]
 repo = 'Shougo/neosnippet-snippets'
