@@ -40,17 +40,19 @@ let g:WebDevIconsUnicodeDecorateFolderNodes = 1
 repo = 'icymind/NeoSolarized'
 hook_add = '''
 set termguicolors
+set background=dark
 set t_8f=^[[38;2;%lu;%lu;%lum
 set t_8b=^[[48;2;%lu;%lu;%lum
-set background=dark
 autocmd MyAutoCmd ColorScheme * highlight Normal     ctermbg=none
+" tab,expends,etc...
+autocmd MyAutoCmd ColorScheme * highlight NonText    ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
+autocmd MyAutoCmd ColorScheme * highlight SpecialKey ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
 " pmu settings
 autocmd MyAutoCmd ColorScheme * highlight Pmenu      cterm=None ctermfg=111  gui=None guifg=#87afff
 autocmd MyAutoCmd ColorScheme * highlight PmenuSbar  cterm=None ctermbg=None gui=None guibg=None
 autocmd MyAutoCmd ColorScheme * highlight PmenuThumb cterm=None ctermbg=23   gui=None guibg=#005f5f
 autocmd MyAutoCmd ColorScheme * highlight PmenuSel   cterm=None ctermfg=126  ctermbg=None gui=None guifg=#af0087 guibg=None
 colorscheme NeoSolarized
-" let g:solarized_termcolors=16
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0
 set winhighlight=Normal:Normal,NormalNC:notactivewindow
 '''
