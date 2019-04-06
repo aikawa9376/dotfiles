@@ -25,7 +25,7 @@ function! s:check_back_space() abort
   return !col || getline('.')[col - 1]  =~# '\s'
 endfunction
 
-let g:coc_snippet_next = '<c-space>'
+let g:coc_snippet_next = '<C-Space>'
 
 " Use `[c` and `]c` for navigate diagnostics
 nmap <silent> [a <Plug>(coc-diagnostic-prev)
@@ -67,13 +67,15 @@ augroup mygroup
 augroup end
 
 " Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
-vmap <leader>cas  <Plug>(coc-codeaction-selected)
-nmap <leader>cas  <Plug>(coc-codeaction-selected)
+vmap <leader>cda  <Plug>(coc-codeacactiontion-selected)
+nmap <leader>cda  <Plug>(coc-codeaction-selected)
 
 " Remap for do codeAction of current line
-nmap <leader>cac  <Plug>(coc-codeaction)
+nmap <leader>cd  <Plug>(coc-codeaction)
 " Fix autofix problem of current line
 nmap <leader>cq  <Plug>(coc-fix-current)
+" codelens
+nmap <leader>cl  <Plug>(coc-codelens-action)
 
 " Use `:Format` for format current buffer
 command! -nargs=0 Format :call CocAction('format')
@@ -124,7 +126,19 @@ repo = 'Shougo/neco-vim'
 repo = 'Shougo/neosnippet'
 depends = ['neosnippet-snippets', 'vim-snippets']
 hook_add = '''
-let g:neosnippet#snippets_directory = '~/.cache/dein/repos/github.com/honza/vim-snippets/snippets/'
+imap <C-Space> <Plug>(neosnippet_jump_or_expand)
+smap <C-Space> <Plug>(neosnippet_jump_or_expand)
+xmap <C-Space> <Plug>(neosnippet_expand_target)
+
+let g:neosnippet#enable_completed_snippet  = 1
+let g:neosnippet#expand_word_boundar       = 1
+let g:neosnippet#enable_auto_clear_markers = 0
+let g:neosnippet#snippets_directory        = '~/.cache/dein/repos/github.com/honza/vim-snippets/snippets/'
+
+" For conceal markers.
+if has('conceal')
+  set conceallevel=2 concealcursor=niv
+  endif
 '''
 
 [[plugins]]
@@ -203,7 +217,7 @@ on_event = 'VimEnter'
 hook_add = '''
 let g:VM_cmdheight       = 1
 let g:VM_manual_infoline = 1
-let g:VM_leader          = 'vm'
+let g:VM_leader          = '<Space>v'
 let g:VM_theme           = 'iceblue'
 '''
 
@@ -995,10 +1009,15 @@ nmap <Leader>mg  <Plug>BookmarkMoveToLine
 '''
 
 [[plugins]]
-repo = 'liuchengxu/vista.vim'
-on_cmd = ['Vista!!']
+repo = 'majutsushi/tagbar'
+on_cmd = ['TagbarToggle']
 hook_add = '''
-nnoremap <silent> <Leader>o :Vista!!<CR>
+nnoremap <silent> <Leader>o :TagbarToggle<CR>
+let g:tagbar_autopreview    = 1
+let g:tagbar_compact        = 1
+let g:tagbar_autoshowtag    = 1
+let g:tagbar_width          = 40
+let g:tagbar_previewwin_pos = 'rightbelow'
 '''
 
 [[plugins]]
