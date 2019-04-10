@@ -85,7 +85,7 @@ nmap <Space> <Leader>
 " endif
 
 noremap  <Plug>(my-switch) <Nop>
-nmap     <Leader>S <Plug>(my-switch)
+nmap     <Leader>t <Plug>(my-switch)
 nnoremap <silent> <Plug>(my-switch)s :<C-u>setl spell! spell?<CR>
 nnoremap <silent> <Plug>(my-switch)l :<C-u>setl list! list?<CR>
 nnoremap <silent> <Plug>(my-switch)t :<C-u>setl expandtab! expandtab?<CR>
@@ -93,6 +93,7 @@ nnoremap <silent> <Plug>(my-switch)w :<C-u>setl wrap! wrap?<CR>
 nnoremap <silent> <Plug>(my-switch)p :<C-u>setl paste! paste?<CR>
 nnoremap <silent> <Plug>(my-switch)b :<C-u>setl scrollbind! scrollbind?<CR>
 nnoremap <silent> <Plug>(my-switch)y :call <SID>toggle_syntax()<CR>
+nnoremap <silent> <Plug>(my-switch)n :call <SID>toggle_relativenumber()<CR>
 function! s:toggle_syntax() abort
   if exists('g:syntax_on')
     syntax off
@@ -102,6 +103,13 @@ function! s:toggle_syntax() abort
     syntax on
     redraw
     echo 'syntax on'
+  endif
+endfunction
+function! s:toggle_relativenumber() abort
+  if &relativenumber == 1
+     setlocal norelativenumber
+  else
+     setlocal relativenumber
   endif
 endfunction
 
@@ -338,7 +346,6 @@ inoremap <silent> っｊ <Esc>
 
 " ペーストモードを自動解除
 autocmd MyAutoCmd InsertLeave * set nopaste
-nnoremap Q q
 
 " ジャンプリストで中央に持ってくる
 nnoremap <C-o> <C-o>zz
@@ -359,6 +366,7 @@ nmap <silent> <M-b> :bprevious<CR>
 nmap <silent> <M-f> :bnext<CR>
 nmap <silent> <C-g> mz<C-^>`zzz
 " QuickFixおよびHelpでは q でバッファを閉じる
+autocmd MyAutoCmd FileType help,qf nnoremap <buffer> <CR> <CR>
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 autocmd MyAutoCmd FileType far_vim nnoremap <buffer> q <C-w>o:tabc<CR>
 augroup vimrc-auto-mkdir
@@ -491,6 +499,11 @@ endfunction
 " nnoremap <silent> <C-u> :execute 'e ' . ((strlen(bufname('')) == 0) ? '.' : '%:h')<CR>
 vmap p <Plug>(operator-replace)
 " nnoremap <space>9 V%y<C-w>jGpkVGJ
+
+augroup GitSpellCheck
+  autocmd!
+  autocmd FileType gitcommit setlocal spell
+augroup END
 
 "--------------------------------------------
 "Absolutely fantastic function from stoeffel/.dotfiles which allows you to

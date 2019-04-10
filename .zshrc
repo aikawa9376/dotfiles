@@ -223,12 +223,19 @@ function cd-up { zle push-line && LBUFFER='builtin cd ..' && zle accept-line }
 zle -N cd-up
 bindkey '^[g' cd-up
 
-function agvim () {
-  nvim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}')
+function rvim () {
+  selected_files=$(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') &&
+  nvim $selected_files
 }
 
-function fvim () {
-  nvim $(fzf $@)
+function fvim() {
+  if [[ $@ == '-a' ]]; then
+    files=$(fd) &&
+  else
+    files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
+  fi
+  selected_files=$(echo "$files" | fzf -m --preview 'head -100 {}') &&
+  nvim $selected_files
 }
 
 # -------------------------------------

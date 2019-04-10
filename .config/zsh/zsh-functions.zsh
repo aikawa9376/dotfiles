@@ -416,11 +416,10 @@ finder() {
 
 # fzf git branch
 fbr() {
-  local branches branch
-  branches=$(git branch --all | grep -v HEAD) &&
-  branch=$(echo "$branches" |
-           fzf-tmux -d $(( 2 + $(wc -l <<< "$branches") )) +m) &&
-  git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
+  git checkout
+  $(git branch -a | tr -d " " |
+    fzf --height 100% --prompt "CHECKOUT BRANCH>" --preview "git log --color=always {}" |
+    head -n 1 | sed -e "s/^\*\s*//g" | perl -pe "s/remotes\/origin\///g")
 }
 
 # fshow - git commit browser
@@ -441,7 +440,7 @@ fadd() {
   while out=$(
       git status --short |
       awk '{if (substr($0,2,1) !~ / /) print $2}' |
-      fzf-tmux --multi --exit-0 --expect=ctrl-d); do
+        fzf-tmux --multi --preview 'git diff {}' --exit-0 --expect=ctrl-d); do
     q=$(head -1 <<< "$out")
     n=$[$(wc -l <<< "$out") - 1]
     addfiles=(`echo $(tail "-$n" <<< "$out")`)
@@ -459,7 +458,7 @@ frm() {
   local out q n removefiles
   while out=$(
       git ls-files |
-      fzf-tmux --multi --exit-0 --expect=ctrl-d); do
+      fzf-tmux --multi --preview 'less {}' --exit-0 --expect=ctrl-d); do
     q=$(head -1 <<< "$out")
     n=$[$(wc -l <<< "$out") - 1]
     removefiles=(`echo $(tail "-$n" <<< "$out")`)
