@@ -343,6 +343,7 @@ set wildoptions+=pum
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
 inoremap <silent> っｊ <Esc>
+nnoremap <silent> <expr> っｊ Fcitx2en()
 
 " ペーストモードを自動解除
 autocmd MyAutoCmd InsertLeave * set nopaste

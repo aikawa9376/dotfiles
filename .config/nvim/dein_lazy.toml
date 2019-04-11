@@ -199,7 +199,7 @@ map <C-Space> <Plug>Sneak_s
 map <M-S> <Plug>Sneak_S
 let g:sneak#s_next = 1
 let g:sneak#use_ic_scs = 1
-autocmd MyAutoCmd ColorScheme * highligh Sneak ctermbg=0 ctermfg=15 cterm=underline
+autocmd MyAutoCmd ColorScheme * highligh Sneak ctermbg=0 ctermfg=15 cterm=underline guibg=0 guifg=15 gui=underline
 '''
 
 [[plugins]]
@@ -455,7 +455,7 @@ depends = ['defx-icons', 'defx-git']
 on_cmd = ['Defx']
 hook_add = '''
 nmap <silent><Space>n :Defx
-\ -toggle -direction=topleft -split=vertical
+\ -toggle -resume -direction=topleft -split=vertical
 \ -winwidth=35 -columns=git:icons:filename:type<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
@@ -1087,7 +1087,7 @@ let g:far#source       = 'agnvim'
 
 [[plugins]]
 repo = 'wincent/ferret'
-on_map = '<Plug>(FerretLack)'
+on_map = '<Plug>(FerretAck)'
 hook_add = '''
 nmap <Leader>r <Plug>(FerretAck)
 '''
@@ -1439,10 +1439,6 @@ repo = 'StanAngeloff/php.vim'
 on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
-repo = 'lvht/phpcd.vim'
-build = 'composer install'
-
-[[plugins]]
 repo = 'adoy/vim-php-refactoring-toolbox'
 on_ft = ['php', 'phtml']
 hook_add = '''
@@ -1454,11 +1450,6 @@ repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
 
 # javascript & typescript----------------
-
-[[plugins]]
-repo = 'mhartington/nvim-typescript'
-build = './install.sh'
-on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'HerringtonDarkholme/yats.vim'

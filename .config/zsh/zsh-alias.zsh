@@ -27,6 +27,7 @@ case ${OSTYPE} in
     alias ep='explorer.exe `wslpath -w "$PWD"`'
     alias wo='winopen'
     alias q='quickopen'
+    alias pdf='okular'
 esac
 
 if ((${+commands[nodejs]})); then
