@@ -53,7 +53,10 @@ autocmd MyAutoCmd ColorScheme * highlight PmenuSbar  cterm=None ctermbg=None gui
 autocmd MyAutoCmd ColorScheme * highlight PmenuThumb cterm=None ctermbg=23   gui=None guibg=#005f5f
 autocmd MyAutoCmd ColorScheme * highlight PmenuSel   cterm=None ctermfg=126  ctermbg=None gui=None guifg=#af0087 guibg=None
 colorscheme NeoSolarized
-autocmd MyAutoCmd ColorScheme * highlight link Pmenu Search
-autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642
+" search settings
+autocmd MyAutoCmd ColorScheme * highlight Search     cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
+autocmd MyAutoCmd ColorScheme * highlight IncSearch  cterm=None ctermfg=7 gui=bold,underline guifg=#b58900
+" activewin settings
+autocmd MyAutoCmd ColorScheme * highlight NormalNC   ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:notactivewindow
 '''

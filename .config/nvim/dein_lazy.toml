@@ -4,7 +4,8 @@
 repo = 'neoclide/coc.nvim'
 on_event = 'VimEnter'
 depends = ['coc-neoinclude', 'neosnippet', 'coc-neco']
-build = 'coc#util#rebuild()'
+marge = 0
+build = './install.sh nightly'
 hook_add = '''
 " don't give |ins-completion-menu| messages.
 set shortmess+=c
@@ -199,7 +200,7 @@ map <C-Space> <Plug>Sneak_s
 map <M-S> <Plug>Sneak_S
 let g:sneak#s_next = 1
 let g:sneak#use_ic_scs = 1
-autocmd MyAutoCmd ColorScheme * highligh Sneak ctermbg=0 ctermfg=15 cterm=underline guibg=0 guifg=15 gui=underline
+autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
 '''
 
 [[plugins]]
@@ -217,8 +218,6 @@ let g:VM_theme           = 'iceblue'
 repo = 'terryma/vim-expand-region'
 on_map = '<Plug>(expand_region_expand)'
 hook_add = '''
-nmap + <Plug>(expand_region_expand)
-vmap + <Plug>(expand_region_expand)
 let g:expand_region_text_objects = {
       \ '$'   :0,
       \ 'i]'  :1,
@@ -415,8 +414,6 @@ on_event = 'VimEnter'
 repo = 'andymass/vim-matchup'
 on_event = 'VimEnter'
 hook_add = '''
-" nmap <silent> <Plug>(matchup-z%-origin) :<C-u>call matchup#motion#jump_inside(0)<CR>zz
-" nmap <M-]> <Plug>(matchup-z%)zz
 autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
 let g:matchup_transmute_enabled = 1
 '''
@@ -429,8 +426,6 @@ on_event = 'VimEnter'
 repo = 'aikawa9376/vim-anzu'
 on_event = 'VimEnter'
 hook_source = '''
-" mapping
-" silent_substitute -> virtualtext
 nmap <expr> n anzu#mode#mapexpr("n", "", "zz")
 nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
 '''
@@ -442,10 +437,6 @@ hook_add = '''
 nmap <silent> <F10> :RainbowToggle<CR>
 let g:rainbow_active = 0
 '''
-
-[[plugins]]
-repo = 'chrisbra/unicode.vim'
-on_event = 'VimEnter'
 
 # list-----------------------------------
 
