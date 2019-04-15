@@ -149,6 +149,7 @@ nmap <silent> <C-u><C-t> :<C-u>Denite filetype<CR>
 nmap <silent> <C-u><C-f> :<C-u>Denite file_rec<CR>
 nmap <silent> <C-u><C-t> :<C-u>Denite tag<CR>
 nmap <silent> <C-u><C-l> :<C-u>Denite line<CR>
+nmap <silent> <C-u><C-b> :<C-u>Denite buffers<CR>
 nmap <silent> <C-u><C-g> :<C-u>Denite grep<CR>
 nmap <silent> <C-u><C-a> :<C-u>DeniteCursorWord grep<CR>
 nmap <silent> <C-u><C-e> :<C-u>Denite file_mru<CR>
@@ -181,10 +182,6 @@ call denite#custom#map(
   \ 'noremap'
   \)
 '''
-
-[[plugins]]
-repo = 'nixprime/cpsm'
-build = 'env PY3=ON ./install.sh'
 
 [[plugins]]
 repo = 'zacharied/denite-nerdfont'
