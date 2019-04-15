@@ -504,7 +504,7 @@ google() {
         opt='search?num=100'
         opt="${opt}&q=${str}"
     fi
-    Chrome http://www.google.co.jp/$opt
+    google-chrome-stable http://www.google.co.jp/$opt
 }
 
 winopen() {
