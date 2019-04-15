@@ -7,3 +7,4 @@ rofi.levenshtein-sort: true
 rofi.width:            30
 rofi.padding:          20
 rofi.font:             Noto Sans CJK JP 14
+rofi.kb-accept-entry:  Ctrl+m,Return
