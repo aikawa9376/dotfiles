@@ -583,3 +583,11 @@ augroup vimrc-auto-cursorline
     endif
   endfunction
 augroup END
+
+nmap <silent> <C-Space> :call <SID>google_search()<CR>
+function! s:google_search() abort
+  " 探すタグファイル名
+  let word = expand("<cword>")
+  echomsg string(word)
+  execute 'silent !google ' word ' 2> /dev/null &'
+endfunction
