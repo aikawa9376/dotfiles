@@ -652,15 +652,12 @@ let g:fzf_action = {
 
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-  \ {'options': "--preview 'pygmentize -g {}'"}))
-command! -bang -nargs=* Ag
-  \ call fzf#vim#ag(<q-args>, fzf#wrap('ag',
-  \ {'options': "--preview 'pygmentize -g $(cut -d: -f1 <<< {}) | sed -n $(cut -d: -f2 <<< {}),\\$p | head -".&lines."'"}))
+  \ {'options': "--preview-window right:wrap --preview 'pygmentize -g {}'"}))
 command! -bang -nargs=* Rg
   \ call fzf#vim#grep(
   \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
-  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%')
-  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden', '?'),
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang Lines
   \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
@@ -733,7 +730,7 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --preview "pygmentize -g {}"
+  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize -g {}"
   \              --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
@@ -750,7 +747,7 @@ endfunction
 command! MRUFiles call fzf#run({
   \  'source': s:mru_files_for_all(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --preview "pygmentize -g {}"
+  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize -g {}"
   \              --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 

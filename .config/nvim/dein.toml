@@ -44,6 +44,7 @@ set background=dark
 set t_8f=^[[38;2;%lu;%lu;%lum
 set t_8b=^[[48;2;%lu;%lu;%lum
 autocmd MyAutoCmd ColorScheme * highlight Normal     ctermbg=none guibg=none
+autocmd MyAutoCmd ColorScheme * highlight ErrorMsg   cterm=bold ctermfg=9 gui=bold guifg=#dc322f
 " tab,expends,etc...
 autocmd MyAutoCmd ColorScheme * highlight NonText    ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
 autocmd MyAutoCmd ColorScheme * highlight SpecialKey ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
