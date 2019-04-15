@@ -247,7 +247,7 @@ nnoremap <Leader>i mzgg=G`z
 
 " ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
-" nnoremap <Leader><CR> $a<CR><Esc>
+nnoremap <Leader><CR> $a<CR><Esc>
 nnoremap <Leader>s i<Space><ESC>
 nnoremap <M-d> mzo<ESC>`zj
 nnoremap <M-u> mzO<ESC>`zk

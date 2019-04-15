@@ -17,7 +17,7 @@ let g:coc_status_warning_sign = "\uf071 :"
 
 let g:coc_snippet_next = '<C-Space>'
 
-" Use `[c` and `]c` for navigate diagnostics
+" Use `[a` and `]a` for navigate diagnostics
 nmap <silent> [a <Plug>(coc-diagnostic-prev)
 nmap <silent> ]a <Plug>(coc-diagnostic-next)
 
@@ -160,12 +160,12 @@ nmap <silent> <Leader>u- :<C-u>Denite -resume -immediately -select=-1<CR>
 nmap <silent> <Leader>u<C-d> :<C-u>call denite#start([{'name': 'file_rec', 'args': ['~/dotfiles']}])<CR>
 nnoremap ml :<Cu>call denite#start([{'name': 'file_rec', 'args': [g:memolist_path]}])<CR>
 '''
-hook_post_sourc = '''
-call denite#cusom#var('file_rec', 'command', ['rg', '--files', '--hidden', '!.git'])
-call denite#cusom#var('grep', 'command', ['rg'])
-call denite#cusom#var('grep', 'recursive_opts', [])
-call denite#cusom#var('grep', 'pattern_opt', ['--regexp'])
-call denite#cusom#var('grep', 'default_opts', ['--vimgrep', '--no-heading'])
+hook_post_source = '''
+call denite#custom#var('file_rec', 'command', ['rg', '--files', '--hidden', '!.git'])
+call denite#custom#var('grep', 'command', ['rg'])
+call denite#custom#var('grep', 'recursive_opts', [])
+call denite#custom#var('grep', 'pattern_opt', ['--regexp'])
+call denite#custom#var('grep', 'default_opts', ['--vimgrep', '--no-heading'])
 call denite#custom#source('file_rec', 'matcher', ['matcher_fzf'])
 call denite#custom#map(
   \ 'insert',
@@ -438,6 +438,7 @@ repo = 'tpope/vim-surround'
 on_event = 'VimEnter'
 hook_add = '''
 let g:surround_{char2nr("P")} = "<?php \r ?>"
+let g:surround_{char2nr("H")} = "<!-- \r -->"
 '''
 
 [[plugins]]
@@ -732,7 +733,8 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
+  \  'options': '-m -x +s --preview "pygmentize -g {}"
+  \              --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
 " This relies on the yegappan/mru plugin for live MRU updating. Also relies on
@@ -748,7 +750,8 @@ endfunction
 command! MRUFiles call fzf#run({
   \  'source': s:mru_files_for_all(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
+  \  'options': '-m -x +s --preview "pygmentize -g {}"
+  \              --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
 " This relies on the yegappan/mru plugin for live MRU updating. Also relies on
@@ -1142,7 +1145,7 @@ let g:far#source       = 'agnvim'
 repo = 'wincent/ferret'
 on_map = '<Plug>(FerretAck)'
 hook_add = '''
-nmap <Leader>r <Plug>(FerretAck)
+nmap <Leader>rr <Plug>(FerretAck)
 '''
 
 [[plugins]]
