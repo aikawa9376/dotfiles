@@ -9,6 +9,7 @@ case ${OSTYPE} in
     alias lsg='exa -aghHl --git --color=auto --sort=modified --reverse --group-directories-first'
     alias ql='qlmanage -p "$@" >& /dev/null'
     alias awk='gawk'
+    alias dircolors='gdircolors'
     ;;
   linux*)
     alias ll='exa -aghHl --color=auto --time-style long-iso --sort=modified --reverse --group-directories-first'

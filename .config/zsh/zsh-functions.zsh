@@ -494,6 +494,19 @@ ghq-update()
   ghq list | sed -E 's/^[^\/]+\/(.+)/\1/' | xargs -n 1 -P 10 ghq get -u
 }
 
+# chrome search
+google() {
+    local str opt
+    if [ $# != 0 ]; then
+        for i in $*; do
+            str="$str${str:++}$i"
+        done
+        opt='search?num=100'
+        opt="${opt}&q=${str}"
+    fi
+    Chrome http://www.google.co.jp/$opt
+}
+
 winopen() {
   local e n
   if [[ -r "$1" ]]; then
