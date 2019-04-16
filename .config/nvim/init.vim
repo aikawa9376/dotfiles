@@ -176,10 +176,6 @@ endfunction
 " 検索後にジャンプした際に検索単語を画面中央に持ってくる
 nnoremap n nzz
 nnoremap N Nzz
-nnoremap * *zz
-nnoremap # #zz
-nnoremap g* g*zz
-nnoremap g# g#zz
 
 " スクロール時に表示を10行確保
 set scrolloff=10
@@ -387,7 +383,7 @@ nmap <silent> - :<c-u>split<CR><C-w>k
 " 前回のカーソル位置からスタート
 augroup vimrcEx
   au BufRead * if line("'\"") > 0 && line("'\"") <= line("$") |
-        \ exe "normal g`\"" | endif
+    \ exe "normal g`\"" | endif
 augroup END
 
 " 文末に○○を付ける
@@ -584,10 +580,26 @@ augroup vimrc-auto-cursorline
   endfunction
 augroup END
 
-nmap <silent> <C-Space> :call <SID>google_search()<CR>
+nmap <silent> <Space><Space> :call <SID>google_search()<CR>
+vmap <silent> <Space><Space> :call <SID>google_search()<CR>
 function! s:google_search() abort
-  " 探すタグファイル名
+  let vtext = s:get_visual_selection()
   let word = expand("<cword>")
+  if vtext != ''
+    let word = vtext
+  endif
   echomsg string(word)
-  execute 'silent !google ' word ' 2> /dev/null &'
+  execute 'silent !google-chrome-stable ' .
+   \ '"http://www.google.co.jp/search?num=100&q=' . word . '" 2> /dev/null &'
+endfunction
+function! s:get_visual_selection()
+    let [line_start, column_start] = getpos("'<")[1:2]
+    let [line_end, column_end] = getpos("'>")[1:2]
+    let lines = getline(line_start, line_end)
+    if len(lines) == 0
+        return ''
+    endif
+    let lines[-1] = lines[-1][: column_end - (&selection == 'inclusive' ? 1 : 2)]
+    let lines[0] = lines[0][column_start - 1:]
+    return join(lines, "\n")
 endfunction

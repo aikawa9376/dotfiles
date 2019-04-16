@@ -17,6 +17,9 @@ let g:coc_status_warning_sign = "\uf071 :"
 
 let g:coc_snippet_next = '<C-Space>'
 
+imap <silent><expr> <cr> pumvisible() ? coc#_select_confirm() : "\<C-g>u\<CR>"
+imap <silent><expr> <C-x><C-x> coc#refresh()
+
 " Use `[a` and `]a` for navigate diagnostics
 nmap <silent> [a <Plug>(coc-diagnostic-prev)
 nmap <silent> ]a <Plug>(coc-diagnostic-next)
@@ -57,7 +60,7 @@ augroup mygroup
 augroup end
 
 " Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
-vmap <leader>cda  <Plug>(coc-codeacactiontion-selected)
+vmap <leader>cda  <Plug>(coc-codeaction-selected)
 nmap <leader>cda  <Plug>(coc-codeaction-selected)
 
 " Remap for do codeAction of current line
@@ -116,8 +119,10 @@ repo = 'Shougo/neco-vim'
 repo = 'Shougo/neosnippet'
 depends = ['neosnippet-snippets', 'vim-snippets']
 hook_add = '''
-imap <expr> <C-Space> pumvisible() ? "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
-smap <expr> <C-Space> pumvisible() ? "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
+ima <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
+  \ ? "\<Plug>(neosnippet_jump)" : "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
+smap <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
+  \ ? "\<Plug>(neosnippet_jump)" : "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
 xmap <expr> <C-Space> pumvisible() ? "\<C-y>" : "\<Plug>(neosnippet_expand_target)"
 
 let g:neosnippet#enable_completed_snippet  = 1
@@ -221,10 +226,6 @@ vmap <C-_> <Plug>(caw:hatpos:toggle)
 '''
 
 [[plugins]]
-repo = 'thinca/vim-visualstar'
-on_event = 'VimEnter'
-
-[[plugins]]
 repo = 'bfredl/nvim-miniyank'
 on_event = 'VimEnter'
 hook_add = '''
@@ -281,7 +282,10 @@ let g:expand_region_text_objects = {
 
 [[plugins]]
 repo = 'easymotion/vim-easymotion'
-depends = ['incsearch.vim', 'incsearch-fuzzy.vim', 'incsearch-migemo.vim', 'incsearch-easymotion.vim']
+depends = [
+  'incsearch.vim', 'incsearch-fuzzy.vim',
+  'incsearch-migemo.vim', 'incsearch-easymotion.vim', 'vim-asterisk'
+]
 on_event = 'VimEnter'
 hook_add = '''
 let g:EasyMotion_do_mapping       = 0
@@ -306,8 +310,9 @@ function! s:config_easymotion(...) abort
   \   'is_stay': 0
   \ }), get(a:, 1, {}))
 endfunction
-noremap <silent><expr> <Space><Space> incsearch#go(<SID>config_easyfuzzymotion())
+noremap <silent><expr> <Leader>/ incsearch#go(<SID>config_easyfuzzymotion())
 noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
+noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
 '''
 
 [[plugins]]
@@ -318,6 +323,16 @@ repo = 'haya14busa/incsearch.vim'
 
 [[plugins]]
 repo = 'haya14busa/incsearch-fuzzy.vim'
+
+[[plugins]]
+repo = 'haya14busa/vim-asterisk'
+on_event = 'VimEnter'
+hook_add = '''
+map *   <Plug>(incsearch-nohl0)<Plug>(asterisk-z*)
+map g*  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz*)
+map #   <Plug>(incsearch-nohl0)<Plug>(asterisk-z#)
+map g#  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz#)
+'''
 
 [[plugins]]
 repo = 'haya14busa/incsearch-migemo.vim'
@@ -465,6 +480,8 @@ on_event = 'VimEnter'
 repo = 'andymass/vim-matchup'
 on_event = 'VimEnter'
 hook_add = '''
+nmap <C-Space> %
+vmap <C-Space> %
 autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
 let g:matchup_transmute_enabled = 1
 '''
@@ -510,12 +527,12 @@ on_cmd = ['Defx']
 hook_add = '''
 nmap <silent><Space>n :Defx
 \ -toggle -resume -direction=topleft -split=vertical
-\ -winwidth=35 -columns=git:icons:filename:type<CR>
+\ -winwidth=35 -columns=git:indent:icons:filename:type<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
   " Define mappings
   nnoremap <silent><buffer><expr> <CR>
-  \ defx#do_action('drop')
+  \ defx#do_action('drop') . '\<C-w>w'
   nnoremap <silent><buffer><expr> c
   \ defx#do_action('copy')
   nnoremap <silent><buffer><expr> m
@@ -615,7 +632,8 @@ nnoremap <silent> <Leader>f  m':Files<CR>
 nnoremap <silent> <Leader>gf m':GFiles<CR>
 nnoremap <silent> <Leader>b  m':NavBuffers<CR>
 nnoremap <silent> <Leader>a  m':Rg<CR>
-nnoremap <silent> <Leader>l  m':Lines<CR>
+nnoremap <silent> <Leader>l  m':BLines<CR>
+nnoremap <silent> <Leader>L  m':Lines<CR>
 nnoremap <silent> <Leader>e  m':MRUFilesCWD<CR>
 nnoremap <silent> <Leader>E  m':MRUFiles<CR>
 nnoremap <silent> <Leader>df :SWSqlFzfSelect<CR>
@@ -1195,6 +1213,8 @@ repo = 'airblade/vim-gitgutter'
 on_event = 'VimEnter'
 hook_add = '''
 nmap <silent><Leader>gq :GitGutterPreviewHunk<CR>
+nmap <silent><Leader>gh :GitGutterStageHunk<CR>
+nmap <silent><Leader>gu :GitGutterUndoHunk<CR>
 omap ih <Plug>GitGutterTextObjectInnerPending
 omap ah <Plug>GitGutterTextObjectOuterPending
 xmap ih <Plug>GitGutterTextObjectInnerVisual
@@ -1211,7 +1231,7 @@ repo = 'tpope/vim-fugitive'
 on_event = 'VimEnter'
 hook_add = '''
 nmap <silent> <Space>gs :Gstatus<CR>
-nmap <silent> <Space>gd :Gdiff<CR>
+nmap <silent> <Space>gd :Gdif<CR>
 nmap <silent> <Space>ga :Gwrite<CR>
 nmap <silent> <Space>gb :Gblame -w<CR>
 '''
