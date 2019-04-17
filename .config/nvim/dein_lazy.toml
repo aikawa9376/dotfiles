@@ -17,6 +17,7 @@ let g:coc_status_warning_sign = "\uf071 :"
 
 let g:coc_snippet_next = '<C-Space>'
 
+" TODO tab prev add
 imap <silent><expr> <cr> pumvisible() ? coc#_select_confirm() : "\<C-g>u\<CR>"
 imap <silent><expr> <C-x><C-x> coc#refresh()
 
@@ -514,7 +515,7 @@ nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
 repo = 'luochen1990/rainbow'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <silent> <F10> :RainbowToggle<CR>
+nmap <silent> <Plug>(my-switch)r :RainbowToggle<CR>
 let g:rainbow_active = 0
 '''
 
@@ -633,6 +634,7 @@ nnoremap <silent> <Leader>F  m':AllFiles<CR>
 nnoremap <silent> <Leader>gf m':GFiles<CR>
 nnoremap <silent> <Leader>b  m':NavBuffers<CR>
 nnoremap <silent> <Leader>a  m':Rg<CR>
+nnoremap <silent> <Leader>A  m':AllRg<CR>
 nnoremap <silent> <Leader>l  m':BLines<CR>
 nnoremap <silent> <Leader>L  m':Lines<CR>
 nnoremap <silent> <Leader>e  m':MRUFilesCWD<CR>
@@ -684,8 +686,16 @@ command! -bang -nargs=* Rg
   \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%:wrap')
   \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
+command! -bang -nargs=* AllRg
+  \ call fzf#vim#grep(
+  \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden:wrap', '?'),
+  \   <bang>0)
 command! -bang Lines
   \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
+command! -bang BLines
+  \ call fzf#vim#buffer_lines({'options': '--reverse --height 40%'}, <bang>0)
 
 " ------------------------------------------------------------------
 " DotFiles EasySearch
@@ -868,6 +878,7 @@ command! -nargs=* Gitignore call fzf#run({
   \  'down': '40%'})
 
 function! s:ignore_file_list()
+  " TODO cd and not git repo error
   return  systemlist("rg --column -n --hidden --ignore-case --color=always '' /.gitignore")
 endfunction
 

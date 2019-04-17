@@ -588,7 +588,6 @@ function! s:google_search() abort
   if vtext != ''
     let word = vtext
   endif
-  echomsg string(word)
   execute 'silent !google-chrome-stable ' .
    \ '"http://www.google.co.jp/search?num=100&q=' . word . '" 2> /dev/null &'
 endfunction

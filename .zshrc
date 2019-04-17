@@ -235,7 +235,7 @@ function fvim() {
   if [[ $@ == '-a' ]]; then
     files=$(fd -I --type file --follow --hidden --color=always --exclude  .git) &&
   else
-    files=$(fzf) &&
+    files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
   fi
   selected_files=$(echo "$files" | fzf -m --preview 'head -100 {}') &&
   nvim $selected_files
