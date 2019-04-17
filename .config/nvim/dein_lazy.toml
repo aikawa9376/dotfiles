@@ -875,6 +875,7 @@ function! s:ignore_file_sink(line) abort
   execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
 endfunction
 
+<<<<<<< HEAD
 command! -nargs=* AddGitignore call fzf#run({
   \  'source': <SID>dir_file_completion(''),
   \  'sink*': function('<SID>add_ignore_file_sink'),
@@ -885,6 +886,8 @@ function! s:add_ignore_file_sink(line) abort
   execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
 endfunction
 
+=======
+>>>>>>> 625e4bbdd54a0033a3a87b80f0a0711f4594ab89
 " ------------------------------------------------------------------
 " YankRing fzf
 " ------------------------------------------------------------------
