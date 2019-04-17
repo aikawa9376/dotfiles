@@ -629,6 +629,7 @@ hook_add = '''
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
 nnoremap <silent> <Leader>f  m':Files<CR>
+nnoremap <silent> <Leader>F  m':AllFiles<CR>
 nnoremap <silent> <Leader>gf m':GFiles<CR>
 nnoremap <silent> <Leader>b  m':NavBuffers<CR>
 nnoremap <silent> <Leader>a  m':Rg<CR>
@@ -671,6 +672,12 @@ let g:fzf_action = {
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
   \ {'options': "--preview-window right:wrap --preview 'pygmentize -g {}'"}))
+command! AllFiles call fzf#run({
+  \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
+  \  'sink': 'edit',
+  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize -g {}"
+  \              --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
+  \  'down': '40%'})
 command! -bang -nargs=* Rg
   \ call fzf#vim#grep(
   \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
@@ -848,6 +855,23 @@ function! s:junk_file_list()
 endfunction
 
 function! s:junk_file_sink(line) abort
+  execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
+endfunction
+
+" ------------------------------------------------------------------
+" Git Navigator
+" ------------------------------------------------------------------
+command! -nargs=* Gitignore call fzf#run({
+  \  'source': s:ignore_file_list(),
+  \  'sink*': function('<SID>ignore_file_sink'),
+  \  'options': '-m -x +s --prompt=Gitignore:'.shellescape(<q-args>),
+  \  'down': '40%'})
+
+function! s:ignore_file_list()
+  return  systemlist("rg --column -n --hidden --ignore-case --color=always '' /.gitignore")
+endfunction
+
+function! s:ignore_file_sink(line) abort
   execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
 endfunction
 
@@ -1224,6 +1248,7 @@ let g:gitgutter_sign_modified           = "\uf459 "
 let g:gitgutter_sign_removed            = "\uf458 "
 let g:gitgutter_sign_modified_removed   = "\uf45a "
 let g:gitgutter_sign_removed_first_line = "\uf474 "
+let g:gitgutter_grep_command = 'rg --hidden --follow --glob "!.git/*"'
 '''
 
 [[plugins]]
