@@ -17,7 +17,19 @@ let g:coc_status_warning_sign = "\uf071 :"
 
 let g:coc_snippet_next = '<C-Space>'
 
-" TODO tab prev add
+" Use tab for trigger completion with characters ahead and navigate.
+" Use command ':verbose imap <tab>' to make sure tab is not mapped by other plugin.
+imap <silent><expr> <TAB>
+      \ pumvisible() ? "\<C-n>" :
+      \ <SID>check_back_space() ? "\<TAB>" :
+      \ coc#refresh()
+imap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
+
+function! s:check_back_space() abort
+  let col = col('.') - 1
+  return !col || getline('.')[col - 1]  =~# '\s'
+endfunction
+
 imap <silent><expr> <cr> pumvisible() ? coc#_select_confirm() : "\<C-g>u\<CR>"
 imap <silent><expr> <C-x><C-x> coc#refresh()
 
@@ -532,66 +544,66 @@ nmap <silent><Space>n :Defx
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
   " Define mappings
-  nnoremap <silent><buffer><expr> <CR>
+  nnoremap <silent><buffer><expr><nowait> <CR>
   \ defx#do_action('drop') . '\<C-w>w'
-  nnoremap <silent><buffer><expr> c
+  nnoremap <silent><buffer><expr><nowait> c
   \ defx#do_action('copy')
-  nnoremap <silent><buffer><expr> m
+  nnoremap <silent><buffer><expr><nowait> m
   \ defx#do_action('move')
-  nnoremap <silent><buffer><expr> p
+  nnoremap <silent><buffer><expr><nowait> p
   \ defx#do_action('paste')
-  nnoremap <silent><buffer><expr> l
+  nnoremap <silent><buffer><expr><nowait> l
   \ defx#do_action('open')
-  nnoremap <silent><buffer><expr> E
+  nnoremap <silent><buffer><expr><nowait> E
   \ defx#do_action('open', 'vsplit')
-  nnoremap <silent><buffer><expr> P
+  nnoremap <silent><buffer><expr><nowait> P
   \ defx#do_action('open', 'pedit')
-  nnoremap <silent><buffer><expr> o
+  nnoremap <silent><buffer><expr><nowait> o
   \ defx#do_action('open_or_close_tree')
-  nnoremap <silent><buffer><expr> K
+  nnoremap <silent><buffer><expr><nowait> K
   \ defx#do_action('new_directory')
-  nnoremap <silent><buffer><expr> N
+  nnoremap <silent><buffer><expr><nowait> N
   \ defx#do_action('new_file')
-  nnoremap <silent><buffer><expr> M
+  nnoremap <silent><buffer><expr><nowait> M
   \ defx#do_action('new_multiple_files')
-  nnoremap <silent><buffer><expr> C
+  nnoremap <silent><buffer><expr><nowait> C
   \ defx#do_action('toggle_columns',
   \                'mark:filename:type:size:time')
-  nnoremap <silent><buffer><expr> S
+  nnoremap <silent><buffer><expr><nowait> S
   \ defx#do_action('toggle_sort', 'time')
-  nnoremap <silent><buffer><expr> d
+  nnoremap <silent><buffer><expr><nowait> d
   \ defx#do_action('remove')
-  nnoremap <silent><buffer><expr> r
+  nnoremap <silent><buffer><expr><nowait> r
   \ defx#do_action('rename')
-  nnoremap <silent><buffer><expr> !
+  nnoremap <silent><buffer><expr><nowait> !
   \ defx#do_action('execute_command')
-  nnoremap <silent><buffer><expr> x
+  nnoremap <silent><buffer><expr><nowait> x
   \ defx#do_action('execute_system')
-  nnoremap <silent><buffer><expr> yy
+  nnoremap <silent><buffer><expr><nowait> yy
   \ defx#do_action('yank_path')
-  nnoremap <silent><buffer><expr> .
+  nnoremap <silent><buffer><expr><nowait> .
   \ defx#do_action('toggle_ignored_files')
-  nnoremap <silent><buffer><expr> ;
+  nnoremap <silent><buffer><expr><nowait> ;
   \ defx#do_action('repeat')
-  nnoremap <silent><buffer><expr> h
+  nnoremap <silent><buffer><expr><nowait> h
   \ defx#do_action('cd', ['..'])
-  nnoremap <silent><buffer><expr> ~
+  nnoremap <silent><buffer><expr><nowait> ~
   \ defx#do_action('cd')
-  nnoremap <silent><buffer><expr> q
+  nnoremap <silent><buffer><expr><nowait> q
   \ defx#do_action('quit')
-  nnoremap <silent><buffer><expr> <Space>
+  nnoremap <silent><buffer><expr><nowait> <Space>
   \ defx#do_action('toggle_select') . 'j'
-  nnoremap <silent><buffer><expr> *
+  nnoremap <silent><buffer><expr><nowait> *
   \ defx#do_action('toggle_select_all')
-  nnoremap <silent><buffer><expr> j
+  nnoremap <silent><buffer><expr><nowait> j
   \ line('.') == line('$') ? 'gg' : 'j'
-  nnoremap <silent><buffer><expr> k
+  nnoremap <silent><buffer><expr><nowait> k
   \ line('.') == 1 ? 'G' : 'k'
-  nnoremap <silent><buffer><expr> <C-l>
+  nnoremap <silent><buffer><expr><nowait> <C-l>
   \ defx#do_action('redraw')
-  nnoremap <silent><buffer><expr> <C-g>
+  nnoremap <silent><buffer><expr><nowait> <C-g>
   \ defx#do_action('print')
-  nnoremap <silent><buffer><expr> cd
+  nnoremap <silent><buffer><expr><nowait> cd
   \ defx#do_action('change_vim_cwd')
 endfunction
 '''
@@ -647,9 +659,7 @@ nnoremap <silent> <Leader>gc m':BCommits<CR>
 nnoremap <silent> <Leader>gC m':Commits<CR>
 nnoremap <silent> <Leader>T  :DirWordCompletions<CR>
 nnoremap <silent> <Leader>tm :TmuxSearch<CR>
-" <C-]>でタグ検索 TODO タグファイルが無ければもともとの機能に割り振る
 nnoremap <silent> <C-]> m':call fzf#vim#tags(expand('<cword>'))<CR>
-" <Leader>]で使用箇所検索
 nnoremap <silent> <expr> <Leader>] "m':Rg(" . expand("<cword>") . ")<CR>"
 nnoremap <silent> <Leader>p :YanksAfter<CR>
 nnoremap <silent> <Leader>P :YanksBefore<CR>
@@ -878,8 +888,13 @@ command! -nargs=* Gitignore call fzf#run({
   \  'down': '40%'})
 
 function! s:ignore_file_list()
-  " TODO cd and not git repo error
-  return  systemlist("rg --column -n --hidden --ignore-case --color=always '' /.gitignore")
+  " depends vim rooter
+  if exists('*FindRootDirectory') && FindRootDirectory() != ''
+    let s:dir = FindRootDirectory()
+    return  systemlist("rg --column -n --hidden --ignore-case --color=always '' " . s:dir . "/.gitignore")
+  else
+    return 'no git repository'
+  endif
 endfunction
 
 function! s:ignore_file_sink(line) abort
@@ -1115,25 +1130,25 @@ command! -nargs=* PhpRefactorringMenu call fzf#run({
 " ------------------------------------------------------------------
 command! Fq FZFQuickfix
 command! FZFQuickfix call fzf#run({
-            \  'source':  Get_qf_text_list(),
-            \  'sink':    function('s:qf_sink'),
-            \  'options': '-m -x +s',
-            \  'down':    '40%'})
+  \  'source':  Get_qf_text_list(),
+  \  'sink':    function('s:qf_sink'),
+  \  'options': '-m -x +s',
+  \  'down':    '40%'})
 
 " QuickFix形式にqfListから文字列を生成する
 function! Get_qf_text_list()
-    let qflist = getqflist()
-    let textList = []
-    for i in qflist
-        if i.valid
-            let textList = add(textList, printf('%s|%d| %s',
-                \       bufname(i.bufnr),
-                \       i.lnum,
-                \       matchstr(i.text, '\s*\zs.*\S')
-                \   ))
-        endif
-    endfor
-    return textList
+  let qflist = getqflist()
+  let textList = []
+  for i in qflist
+    if i.valid
+      let textList = add(textList, printf('%s|%d| %s',
+        \  bufname(i.bufnr),
+        \  i.lnum,
+        \  matchstr(i.text, '\s*\zs.*\S')
+        \  ))
+    endif
+  endfor
+  return textList
 endfunction
 
 " QuickFix形式のstringからtabeに渡す

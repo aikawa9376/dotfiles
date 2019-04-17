@@ -261,6 +261,8 @@ inoremap <C-k> <C-g>U<C-o>D<Right>
 inoremap <C-u> <C-g>U<C-o>d^
 inoremap <C-w> <C-g>U<C-o>db
 inoremap <C-o> <C-g>U<C-o>o
+inoremap <M-f> <C-g>U<C-o>w
+inoremap <M-b> <C-g>U<C-o>b
 
 " 文字選択・移動など
 nnoremap Y y$
@@ -274,8 +276,6 @@ vnoremap <C-h> ^
 nnoremap <C-l> $l
 vnoremap <C-l> $l
 nnoremap <silent><M-m> :call cursor(0,strlen(getline("."))/2)<CR>
-nnoremap <C-e> 10<C-e>
-nnoremap <C-y> 10<C-y>
 " すごく移動する
 nnoremap <C-j> 3j
 vnoremap <C-j> 3j
@@ -363,8 +363,8 @@ nmap <silent> <M-b> :bnext<CR>
 nmap <silent> <C-g> mz<C-^>`zzz
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> <CR> <CR>
-autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
-autocmd MyAutoCmd FileType far_vim nnoremap <buffer> q <C-w>o:tabc<CR>
+autocmd MyAutoCmd FileType help,qf nnoremap <buffer><nowait> q <C-w>c:bnext<CR>
+autocmd MyAutoCmd FileType far_vim nnoremap <buffer><nowait> q <C-w>o:tabc<CR>
 augroup vimrc-auto-mkdir
   autocmd!
   autocmd BufWritePre * call s:auto_mkdir(expand('<afile>:p:h'), v:cmdbang)
@@ -451,11 +451,11 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'at': '\%#\n\s*"', 'char': '"', 'input': '"', 'delete': '"'})
   call lexima#add_rule({'char': '<C-h>', 'at': '"\%#"', 'delete': 1})
 
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#)', 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#"', 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': "\\%#'", 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#]', 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#}', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#)', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#"', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': "\\%#'", 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#]', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#}', 'leave': 1})
 endfunction
 
 " php用の設定はここ
