@@ -889,7 +889,7 @@ endfunction
 command! -nargs=* Gitignore call fzf#run({
   \  'source': s:ignore_file_list(),
   \  'sink*': function('<SID>ignore_file_sink'),
-  \  'options': '--prompt=Gitignore:'.shellescape(<q-args>) . ' -m -x +s  ' .
+  \  'options': '--prompt=Gitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
   \  '--header ":: Press C-D delete ignore lines" --print-query ' .
   \  '--expect ctrl-d,ctrl-m,ctrl-t',
   \  'down': '40%'})
@@ -942,7 +942,7 @@ endfunction
 command! -nargs=* AddGitignore call fzf#run({
   \  'source': <SID>dir_file_completion(''),
   \  'sink*': function('<SID>add_ignore_file_sink'),
-  \  'options': '--prompt=AllGitignore:'.shellescape(<q-args>) . ' -m -x +s  ' .
+  \  'options': '--prompt=AllGitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
   \  '--header ":: Press C-A add ignore lines" --print-query ' .
   \  '--expect ctrl-a,ctrl-t',
   \  'down': '40%'})
@@ -974,6 +974,33 @@ function! s:add_ignore_file_sink(lines) abort
   execute("Gina rm --cached " . fnamemodify(a:lines[2], ":p"))
   execute("silent !echo " . a:lines[2] . " >> " . s:dir . "/.gitignore")
 endfunction
+
+function s:override_gitfiles_sink(lines) abort
+  if len(a:lines) < 2
+    return
+  endif
+  if exists('*FindRootDirectory') && FindRootDirectory() != ''
+    let s:dir = FindRootDirectory()
+  else
+    return 'no git repository'
+  endif
+  if a:lines[0] == 'ctrl-d'
+    for w in range(1, len(a:lines) - 1)
+      execute("Gina rm --cached " . a:lines[w])
+    endfor
+    execute('GFiles')
+    call feedkeys(":start\<CR>")
+    return
+  endif
+  for w in range(1, len(a:lines) - 1)
+    execute("edit ". fnamemodify(a:lines[w], ":p"))
+  endfor
+endfunction
+
+command! -bang -nargs=? -complete=dir GFiles
+  \ call fzf#vim#gitfiles(<q-args>, fzf#wrap('fzf',
+  \ {'sink*': function('<SID>override_gitfiles_sink'),
+  \  'options': "-m -x +s --preview-window right:wrap --preview 'pygmentize -g {}' --expect ctrl-d"}))
 
 " ------------------------------------------------------------------
 " YankRing fzf
