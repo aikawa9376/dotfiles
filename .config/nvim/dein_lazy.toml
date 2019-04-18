@@ -891,7 +891,7 @@ command! -nargs=* Gitignore call fzf#run({
   \  'sink*': function('<SID>ignore_file_sink'),
   \  'options': '--prompt=Gitignore:'.shellescape(<q-args>) . ' -m -x +s  ' .
   \  '--header ":: Press C-D delete ignore lines" --print-query ' .
-  \  '--expect ctrl-d',
+  \  '--expect ctrl-d,ctrl-m,ctrl-t',
   \  'down': '40%'})
 
 function! s:ignore_file_list()
@@ -909,19 +909,34 @@ function! s:ignore_file_sink(lines)
     return
   endif
   let s:dir = FindRootDirectory()
-  " TODO add comment out key
-  " TODO add remove auto rm --cached
-  if a:lines[1] == 'ctrl-d'
+  if a:lines[1] == ''
+    let no= split(a:lines[2], ':')[0]
+    execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
+    return
+  elseif a:lines[1] == 'ctrl-d'
     for w in range(2, len(a:lines) - 1)
       let no= split(a:lines[w], ':')[0]
       execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
     endfor
-    execute('Gitignore ' . a:lines[0])
+  elseif a:lines[1] == 'ctrl-m'
+    for w in range(2, len(a:lines) - 1)
+      let no= split(a:lines[w], ':')[0]
+      let name = split(a:lines[w], ':')[2]
+      if name[0] == "#"
+        execute('silent !sed -i -e "' . no . 's/^\\#//" ' . s:dir . '/.gitignore &')
+      else
+        execute('silent !sed -i -e "' . no . 's/^/\\#/" ' . s:dir . '/.gitignore &')
+      endif
+    endfor
+  elseif a:lines[1] == 'ctrl-t'
+    execute('AddGitignore')
     call feedkeys(":start\<CR>")
     return
   endif
-  let no= split(a:lines[2], ':')[0]
-  execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
+  " execute("Gina add " . fnamemodify(a:lines[0], ":p"))
+  execute('Gitignore ' . a:lines[0])
+  call feedkeys(":start\<CR>")
+  return
 endfunction
 
 command! -nargs=* AddGitignore call fzf#run({
@@ -929,7 +944,7 @@ command! -nargs=* AddGitignore call fzf#run({
   \  'sink*': function('<SID>add_ignore_file_sink'),
   \  'options': '--prompt=AllGitignore:'.shellescape(<q-args>) . ' -m -x +s  ' .
   \  '--header ":: Press C-A add ignore lines" --print-query ' .
-  \  '--expect ctrl-a',
+  \  '--expect ctrl-a,ctrl-t',
   \  'down': '40%'})
 
 function! s:add_ignore_file_sink(lines) abort
@@ -946,11 +961,17 @@ function! s:add_ignore_file_sink(lines) abort
     for w in range(2, len(a:lines) - 1)
       let t = a:lines[w]
       execute("silent !echo " . t . " >> " . s:dir . "/.gitignore")
+      execute("Gina rm --cached " . fnamemodify(t, ":p"))
     endfor
     execute('AddGitignore ' . a:lines[0])
     call feedkeys(":start\<CR>")
     return
+  elseif a:lines[1] == 'ctrl-t'
+    execute('Gitignore')
+    call feedkeys(":start\<CR>")
+    return
   endif
+  execute("Gina rm --cached " . fnamemodify(a:lines[2], ":p"))
   execute("silent !echo " . a:lines[2] . " >> " . s:dir . "/.gitignore")
 endfunction
 
