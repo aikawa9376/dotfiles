@@ -858,7 +858,8 @@ imap <expr> <C-_> fzf#complete({
     \ 'down': '40%'})
 
 function! s:dir_file_completion(word)
-  return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | tr '/' '\n' | sort | uniq")
+  " return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | tr '/' '\n' | sort | uniq")
+  return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | sort | uniq")
 endfunction
 
 " ------------------------------------------------------------------
@@ -884,7 +885,9 @@ endfunction
 command! -nargs=* Gitignore call fzf#run({
   \  'source': s:ignore_file_list(),
   \  'sink*': function('<SID>ignore_file_sink'),
-  \  'options': '-m -x +s --prompt=Gitignore:'.shellescape(<q-args>),
+  \  'options': '--prompt=Gitignore:'.shellescape(<q-args>) . ' -m -x +s  ' .
+  \  '--header ":: Press C-D delete ignore lines" --print-query ' .
+  \  '--expect ctrl-d',
   \  'down': '40%'})
 
 function! s:ignore_file_list()
@@ -897,18 +900,52 @@ function! s:ignore_file_list()
   endif
 endfunction
 
-function! s:ignore_file_sink(line) abort
-  execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
+function! s:ignore_file_sink(lines)
+  if len(a:lines) < 3
+    return
+  endif
+  let s:dir = FindRootDirectory()
+  if a:lines[1] == 'ctrl-d'
+    for w in range(2, len(a:lines) - 1)
+      let no= split(a:lines[w], ':')[0]
+      execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
+    endfor
+    execute('Gitignore ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+  let no= split(a:lines[2], ':')[0]
+  execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
 endfunction
 
 command! -nargs=* AddGitignore call fzf#run({
   \  'source': <SID>dir_file_completion(''),
   \  'sink*': function('<SID>add_ignore_file_sink'),
-  \  'options': '-m -x +s --prompt=Addignore:'.shellescape(<q-args>),
+  \  'options': '--prompt=AllGitignore:'.shellescape(<q-args>) . ' -m -x +s  ' .
+  \  '--header ":: Press C-A add ignore lines" --print-query ' .
+  \  '--expect ctrl-a',
   \  'down': '40%'})
 
-function! s:add_ignore_file_sink(line) abort
-  execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
+function! s:add_ignore_file_sink(lines) abort
+  if len(a:lines) < 3
+    return
+  endif
+  if exists('*FindRootDirectory') && FindRootDirectory() != ''
+    let s:dir = FindRootDirectory()
+  else
+    return 'no git repository'
+  endif
+
+  if a:lines[1] == 'ctrl-a'
+    for w in range(2, len(a:lines) - 1)
+      let t = a:lines[w]
+      execute("silent !echo " . t . " >> " . s:dir . "/.gitignore")
+    endfor
+    execute('AddGitignore ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+  execute("silent !echo " . a:lines[2] . " >> " . s:dir . "/.gitignore")
 endfunction
 
 " ------------------------------------------------------------------
