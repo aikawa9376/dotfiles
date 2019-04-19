@@ -364,7 +364,7 @@ nmap <silent> <M-b> :bnext<CR>
 nmap <silent> <C-g> mz<C-^>`zzz
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> <CR> <CR>
-autocmd MyAutoCmd FileType help,qf nnoremap <buffer><nowait> q <C-w>c:bnext<CR>
+autocmd MyAutoCmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c:bnext<CR>
 autocmd MyAutoCmd FileType far_vim nnoremap <buffer><nowait> q <C-w>o:tabc<CR>
 augroup vimrc-auto-mkdir
   autocmd!
