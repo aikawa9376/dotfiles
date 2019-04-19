@@ -213,6 +213,7 @@ function! s:remove_line_brank_all(count)
 endfunction
 
 nmap <M-p> o<ESC>p==
+nmap <M-x> vy<ESC>
 nmap gV `[v`]
 
 " ヤンクした後に末尾に移動
@@ -263,6 +264,7 @@ inoremap <C-w> <C-g>U<C-o>db
 inoremap <C-o> <C-g>U<C-o>o
 inoremap <M-f> <C-g>U<C-o>w
 inoremap <M-b> <C-g>U<C-o>b
+inoremap <M-p> <C-g>U<C-o>P
 
 " 文字選択・移動など
 nnoremap Y y$
@@ -307,7 +309,6 @@ cnoremap <C-p> <Up>
 cnoremap <C-a> <Home>
 cnoremap <C-e> <End>
 cnoremap <C-d> <Del>
-" cnoremap <C-k> 20<Del>
 
 " terminal mode
 command! -nargs=* TERM split | resize20 | term <args>
@@ -346,10 +347,10 @@ nnoremap <silent> <expr> っｊ Fcitx2en()
 autocmd MyAutoCmd InsertLeave * set nopaste
 
 " ジャンプリストで中央に持ってくる
-nnoremap <C-o> <C-o>zz
-nnoremap <C-i> <C-i>zz
-nnoremap g; g;zz
-nnoremap g, g,zz
+" nnoremap <C-o> <C-o>zz
+" nnoremap <C-i> <C-i>zz
+" nnoremap g; g;zz
+" nnoremap g, g,zz
 nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz
 nnoremap <C-f> <C-f>zz
@@ -541,14 +542,27 @@ cmap <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
 cnoremap <C-Y> <C-R>-
 "--------------------------------------------
 
-" override help command
-nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
-
 command! DiffOrig let g:diffline = line('.')
   \ | vert new | set bt=nofile | r # | 0d_
   \ | diffthis | :exe "norm! ".g:diffline."G"
   \ | wincmd p | diffthis | wincmd p
 nnoremap <Leader>do :DiffOrig<cr>
+
+" override help command
+nmap <F1> :call <SID>help_override()<CR>
+vmap <F1> :call <SID>help_override()<CR>
+function! s:help_override() abort
+  let vtext = s:get_visual_selection()
+  let word = expand("<cword>")
+  if vtext != ''
+    let word = vtext
+  endif
+  try
+    execute 'silent help ' . word
+  catch
+    echo word . ' is no help text'
+  endtry
+endfunction
 
 nmap <silent> K :call <SID>google_search()<CR>
 vmap <silent> K :call <SID>google_search()<CR>

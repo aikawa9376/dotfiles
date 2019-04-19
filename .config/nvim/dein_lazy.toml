@@ -3,7 +3,7 @@
 [[plugins]]
 repo = 'neoclide/coc.nvim'
 on_event = 'VimEnter'
-depends = ['coc-neoinclude', 'neosnippet', 'coc-neco']
+depends = ['coc-neoinclude', 'neosnippet', 'coc-neco', 'coc-zsh']
 marge = 0
 build = './install.sh nightly'
 hook_add = '''
@@ -116,10 +116,10 @@ repo = 'jsfaint/coc-neoinclude'
 depends = ['neoinclude.vim']
 
 [[plugins]]
-repo = 'Shougo/neoinclude.vim'
+repo = 'tjdevries/coc-zsh'
 
 [[plugins]]
-repo = 'Shougo/neco-syntax'
+repo = 'Shougo/neoinclude.vim'
 
 [[plugins]]
 repo = 'neoclide/coc-neco'
@@ -309,16 +309,16 @@ let g:incsearch#auto_nohlsearch   = 1
 function! s:config_easyfuzzymotion(...) abort
   return extend(copy({
   \   'converters': [incsearch#config#fuzzy#converter()],
-  \   'modules': [incsearch#config#easymotion#module()],
-  \   'keymap': {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
-  \   'is_expr': 0,
-  \   'is_stay': 0
+  \   'modules'   : [incsearch#config#easymotion#module()],
+  \   'keymap'    : {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
+  \   'is_expr'   : 0,
+  \   'is_stay'   : 0
   \ }), get(a:, 1, {}))
 endfunction
 function! s:config_easymotion(...) abort
   return incsearch#util#deepextend(deepcopy({
   \   'modules': [incsearch#config#easymotion#module({'overwin': 1})],
-  \   'keymap': {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
+  \   'keymap' : {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
   \   'is_expr': 0,
   \   'is_stay': 0
   \ }), get(a:, 1, {}))
@@ -401,6 +401,30 @@ repo = 'aikawa9376/vim-textobj-php'
 
 [[plugins]]
 repo = 'osyo-manga/vim-textobj-from_regexp'
+hook_add = '''
+" 英数字 + _ を対象とした textobj
+omap <expr> i<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_.-]\+')
+omap <expr> a<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_:.-]\+')
+xmap <expr> i<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_.-]\+')
+xmap <expr> a<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_:.-]\+')
+" 英数字のみを対象とした textobj
+omap <expr> i<M-w> textobj#from_regexp#mapexpr('[A-Za-z0-9]\+')
+xmap <expr> i<M-w> textobj#from_regexp#mapexpr('[A-Za-z0-9]\+')
+" 左辺
+omap i<C-h> <Plug>(textobj-left-value)
+vmap i<C-h> <Plug>(textobj-left-value)
+omap <expr>  <Plug>(textobj-left-value)
+  \ textobj#from_regexp#mapexpr('^.\{-}\zs\k\+\ze\s*=.*$')
+vmap <expr>  <Plug>(textobj-left-value)
+  \ textobj#from_regexp#mapexpr('^.\{-}\zs\k\+\ze\s*=.*$')
+" 右辺
+omap i<C-l> <Plug>(textobj-right-value)
+vmap i<C-l> <Plug>(textobj-right-value)
+omap <expr> <Plug>(textobj-right-value)
+  \ textobj#from_regexp#mapexpr('^.\{-}=\s*\zs.*$')
+vmap <expr> <Plug>(textobj-right-value)
+  \ textobj#from_regexp#mapexpr('^.\{-}=\s*\zs.*$')
+'''
 
 [[plugins]]
 repo = 'kana/vim-operator-user'
