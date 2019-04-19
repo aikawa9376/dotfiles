@@ -47,7 +47,6 @@ alias -g dust='$(duster)'
 alias -g fnd='$(finder)'
 alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
-alias fi='fvim'
 alias cp='cp -r'
 alias t='tmuximum'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"

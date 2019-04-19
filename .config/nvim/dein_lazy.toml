@@ -163,7 +163,7 @@ repo = 'wellle/tmux-complete.vim'
 repo = 'Shougo/denite.nvim'
 depends = ['denite-nerdfont', 'denite_fzf_matcher']
 hook_add = '''
-nmap <silent> <Leader>uf :<C-u>Denite file/rec<CR>
+nmap <silent> <Leader>uf :<C-u>Denite -split="floating" file/rec<CR>
 nmap <silent> <Leader>ut :<C-u>Denite tag<CR>
 nmap <silent> <Leader>ul :<C-u>Denite line<CR>
 nmap <silent> <Leader>ub :<C-u>Denite buffer<CR>
@@ -493,9 +493,9 @@ on_event = 'VimEnter'
 repo = 'andymass/vim-matchup'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <C-Space> %
-vmap <C-Space> %
-nmap <M-w> <Plug>(matchup-z%)
+nmap <Space><Space> %
+vmap <Space><Space> %
+nmap <C-Space> <Plug>(matchup-z%)
 autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
 let g:matchup_transmute_enabled = 1
 '''
@@ -530,6 +530,13 @@ on_event = 'VimEnter'
 hook_add = '''
 nmap <silent> <Plug>(my-switch)r :RainbowToggle<CR>
 let g:rainbow_active = 0
+'''
+
+[[plugins]]
+repo = 'delphinus/vim-auto-cursorline'
+on_event = 'VimEnter'
+hook_add = '''
+let g:auto_cursorline_wait_ms = 500
 '''
 
 # list-----------------------------------
@@ -665,7 +672,7 @@ nnoremap <silent> <Leader>p :YanksAfter<CR>
 nnoremap <silent> <Leader>P :YanksBefore<CR>
 nnoremap <silent> <Leader>; :ChangeListNav<CR>
 nnoremap <silent> <Leader><C-o> :JumpListNav<CR>
-nnoremap <silent> <Leader>K :Helptags<CR>
+nnoremap <silent> <Leader>q :Helptags<CR>
 nnoremap <silent> <Leader>tt :BTags<CR>
 nnoremap <silent> <C-]> m':call fzf#vim#tags(expand('<cword>'))<CR>
 nnoremap <silent> <expr> <Leader>] "m':Rg(" . expand("<cword>") . ")<CR>"
@@ -685,14 +692,16 @@ let g:fzf_action = {
   \ 'ctrl-x': 'split',
   \ 'ctrl-v': 'vsplit' }
 
+let g:fzf_pygmentize_style = '-O style="solarizeddark" -f console256'
+
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-  \ {'options': "--preview-window right:wrap --preview 'pygmentize -g {}'"}))
+  \ {'options': "--preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . " -g {}'"}))
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
-  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize -g {}"
-  \              --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
+  \  'options': "-m -x +s --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . " -g {}'" .
+  \             ' --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 command! -bang -nargs=* Rg
   \ call fzf#vim#grep(
@@ -779,7 +788,7 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize -g {}"
+  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize ' . g:fzf_pygmentize_style . '  -g {}"
   \              --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
@@ -796,7 +805,7 @@ endfunction
 command! MRUFiles call fzf#run({
   \  'source': s:mru_files_for_all(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize -g {}"
+  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize ' . g:fzf_pygmentize_style . '  -g {}"
   \              --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
@@ -1000,7 +1009,7 @@ endfunction
 command! -bang -nargs=? -complete=dir GFiles
   \ call fzf#vim#gitfiles(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_gitfiles_sink'),
-  \  'options': "-m -x +s --preview-window right:wrap --preview 'pygmentize -g {}' --expect ctrl-d"}))
+  \  'options': "-m -x +s --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . "  -g {}' --expect ctrl-d"}))
 
 " ------------------------------------------------------------------
 " YankRing fzf
@@ -1271,7 +1280,7 @@ repo = 'majutsushi/tagbar'
 on_cmd = ['TagbarToggle']
 hook_add = '''
 nnoremap <silent> <Leader>o :TagbarToggle<CR>
-let g:tagbar_autopreview    = 1
+let g:tagbar_autopreview    = 0
 let g:tagbar_compact        = 1
 let g:tagbar_autoshowtag    = 1
 let g:tagbar_width          = 40

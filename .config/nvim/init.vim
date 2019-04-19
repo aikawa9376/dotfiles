@@ -268,6 +268,7 @@ inoremap <M-b> <C-g>U<C-o>b
 nnoremap Y y$
 nnoremap V v$
 nnoremap vv V
+nnoremap y mvy
 nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
@@ -306,7 +307,7 @@ cnoremap <C-p> <Up>
 cnoremap <C-a> <Home>
 cnoremap <C-e> <End>
 cnoremap <C-d> <Del>
-cnoremap <C-k> <C-o>D<Right>
+" cnoremap <C-k> 20<Del>
 
 " terminal mode
 command! -nargs=* TERM split | resize20 | term <args>
@@ -358,7 +359,6 @@ nnoremap <C-b> <C-b>zz
 nmap <Leader> <Nop>
 nmap <Leader>w :<c-u>w<CR>
 nmap <Leader>x :<c-u>bd<CR>
-nmap <Leader>q :<c-u>wq<CR>
 nmap <silent> <M-b> :bnext<CR>
 nmap <silent> <C-g> mz<C-^>`zzz
 " QuickFixおよびHelpでは q でバッファを閉じる
@@ -550,38 +550,8 @@ command! DiffOrig let g:diffline = line('.')
   \ | wincmd p | diffthis | wincmd p
 nnoremap <Leader>do :DiffOrig<cr>
 
-augroup vimrc-auto-cursorline
-  autocmd!
-  autocmd CursorMoved,CursorMovedI * call s:auto_cursorline('CursorMoved')
-  autocmd CursorHold,CursorHoldI * call s:auto_cursorline('CursorHold')
-  autocmd WinEnter * call s:auto_cursorline('WinEnter')
-  autocmd WinLeave * call s:auto_cursorline('WinLeave')
-
-  let s:cursorline_lock = 0
-  function! s:auto_cursorline(event)
-    if a:event ==# 'WinEnter'
-      setlocal cursorline
-      let s:cursorline_lock = 2
-    elseif a:event ==# 'WinLeave'
-      setlocal nocursorline
-    elseif a:event ==# 'CursorMoved'
-      if s:cursorline_lock
-        if 1 < s:cursorline_lock
-          let s:cursorline_lock = 1
-        else
-          setlocal nocursorline
-          let s:cursorline_lock = 0
-        endif
-      endif
-    elseif a:event ==# 'CursorHold'
-      setlocal cursorline
-      let s:cursorline_lock = 1
-    endif
-  endfunction
-augroup END
-
-nmap <silent> <Space><Space> :call <SID>google_search()<CR>
-vmap <silent> <Space><Space> :call <SID>google_search()<CR>
+nmap <silent> K :call <SID>google_search()<CR>
+vmap <silent> K :call <SID>google_search()<CR>
 function! s:google_search() abort
   let vtext = s:get_visual_selection()
   let word = expand("<cword>")

@@ -118,13 +118,14 @@ precmd () {
   print -P $left${(r:$padwidth:: :)}$right
 }
 
+let g:fzf_pygmentize_style = '-O style="solarizeddark" -f console256'
 # -------------------------------------
 # fzf
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='fd --type file --follow --hidden --color=always --exclude .git'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_CTRL_T_OPTS='--preview-window right:wrap --preview "pygmentize -g  {}"'
+export FZF_CTRL_T_OPTS='--preview-window right:wrap --preview "pygmentize -O style="solarizeddark" -f console256 -g  {}"'
 export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
 export FZF_COMPLETION_TRIGGER=''
