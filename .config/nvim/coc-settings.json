@@ -6,5 +6,18 @@
   "coc.preferences.colorSupport": false,
   "diagnostic.refreshAfterSave": true,
   "suggest.noselect": true,
-  "codeLens.enable": true
+  "codeLens.enable": true,
+  "list.insertMappings": {
+		"<C-l>": "do:refresh",
+		"<C-f>": "feedkeys:\\<C-f>",
+		"<C-b>": "feedkeys:\\<C-b>",
+		"<C-n>": "normal:j",
+		"<C-p>": "normal:k",
+		"<A-n>": "prompt:previous",
+		"<A-p>": "prompt:next",
+		"<C-e>": "action:e",
+	},
+	"list.normalMappings": {
+		"d": "action:delete"
+	}
 }

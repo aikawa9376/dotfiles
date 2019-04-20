@@ -39,9 +39,9 @@ nmap <silent> ]a <Plug>(coc-diagnostic-next)
 
 " Remap keys for gotos
 nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gr <Plug>(coc-references)
 nmap <silent> gy <Plug>(coc-type-definition)
 nmap <silent> gi <Plug>(coc-implementation)
-nmap <silent> gr <Plug>(coc-references)
 
 " Use K for show documentation in preview window
 nnoremap <silent> gk :call <SID>show_documentation()<CR>
@@ -61,8 +61,8 @@ autocmd CursorHold * silent call CocActionAsync('highlight')
 nmap <leader>rn <Plug>(coc-rename)
 
 " Remap for format selected region
-vmap <leader>cf  <Plug>(coc-format-selected)
 nmap <leader>cf  <Plug>(coc-format-selected)
+vmap <leader>cf  <Plug>(coc-format-selected)
 
 augroup mygroup
   autocmd!
@@ -92,20 +92,18 @@ command! -nargs=? Fold :call CocAction('fold', <f-args>)
 " Using CocList
 " Show all diagnostics
 nnoremap <silent> <space>ca  :<C-u>CocList diagnostics<cr>
-" Manage extensions
-nnoremap <silent> <space>ce  :<C-u>CocList extensions<cr>
-" Show commands
-nnoremap <silent> <space>cc  :<C-u>CocList commands<cr>
-" Find symbol of current document
-nnoremap <silent> <space>co  :<C-u>CocList outline<cr>
 " Search workspace symbols
 nnoremap <silent> <space>cs  :<C-u>CocList -I symbols<cr>
+" Find symbol of current document
+nnoremap <silent> <space>co  :<C-u>CocList outline<cr>
+" Show commands
+nnoremap <silent> <space>cm  :<C-u>CocList lists<cr>
 " Do default action for next item.
 nnoremap <silent> <space>cj  :<C-u>CocNext<CR>
 " Do default action for previous item.
 nnoremap <silent> <space>ck  :<C-u>CocPrev<CR>
 " Resume latest coc list
-nnoremap <silent> <space>cp  :<C-u>CocListResume<CR>
+nnoremap <silent> <space>cu  :<C-u>CocListResume<CR>
 '''
 
 [[plugins]]
@@ -132,7 +130,7 @@ repo = 'Shougo/neco-vim'
 repo = 'Shougo/neosnippet'
 depends = ['neosnippet-snippets', 'vim-snippets']
 hook_add = '''
-ima <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
+imap <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
   \ ? "\<Plug>(neosnippet_jump)" : "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
 smap <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
   \ ? "\<Plug>(neosnippet_jump)" : "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
@@ -158,52 +156,6 @@ on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'wellle/tmux-complete.vim'
-
-[[plugins]]
-repo = 'Shougo/denite.nvim'
-depends = ['denite-nerdfont', 'denite_fzf_matcher']
-hook_add = '''
-nmap <silent> <Leader>uf :<C-u>Denite -split="floating" file/rec<CR>
-nmap <silent> <Leader>ut :<C-u>Denite tag<CR>
-nmap <silent> <Leader>ul :<C-u>Denite line<CR>
-nmap <silent> <Leader>ub :<C-u>Denite buffer<CR>
-nmap <silent> <Leader>ug :<C-u>Denite grep<CR>
-nmap <silent> <Leader>ua :<C-u>DeniteCursorWord grep<CR>
-nmap <silent> <Leader>ue :<C-u>Denite file_mru<CR>
-nmap <silent> <Leader>up :<C-u>Denite neoyank<CR>
-nmap <silent> <Leader>un :<C-u>Denite nerdfont<CR>
-nmap <silent> <Leader>ur :<C-u>Denite -resume<CR>
-nmap <silent> <Leader>u; :<C-u>Denite -resume -immediately -select=+1<CR>
-nmap <silent> <Leader>u- :<C-u>Denite -resume -immediately -select=-1<CR>
-nmap <silent> <Leader>u<C-d> :<C-u>call denite#start([{'name': 'file_rec', 'args': ['~/dotfiles']}])<CR>
-nnoremap ml :<Cu>call denite#start([{'name': 'file_rec', 'args': [g:memolist_path]}])<CR>
-'''
-hook_post_source = '''
-call denite#custom#var('file_rec', 'command', ['rg', '--files', '--hidden', '!.git'])
-call denite#custom#var('grep', 'command', ['rg'])
-call denite#custom#var('grep', 'recursive_opts', [])
-call denite#custom#var('grep', 'pattern_opt', ['--regexp'])
-call denite#custom#var('grep', 'default_opts', ['--vimgrep', '--no-heading'])
-call denite#custom#source('file_rec', 'matcher', ['matcher_fzf'])
-call denite#custom#map(
-  \ 'insert',
-  \ '<C-j>',
-  \ '<denite:move_to_next_line>',
-  \ 'noremap'
-  \)
-call denite#custom#map(
-  \ 'insert',
-  \ '<C-k>',
-  \ '<denite:move_to_previous_line>',
-  \ 'noremap'
-  \)
-'''
-
-[[plugins]]
-repo = 'zacharied/denite-nerdfont'
-
-[[plugins]]
-repo = 'blankname/denite_fzf_matcher'
 
 # text-----------------------------------
 
@@ -359,7 +311,7 @@ depends = [
 'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
 'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment',
 'vim-textobj-between', 'vim-textobj-from_regexp',
-'vim-textobj-chunk', 'vim-textobj-space'
+'vim-textobj-chunk', 'vim-textobj-space', 'textobj-mbboundary.vim'
 ]
 on_event = 'VimEnter'
 
@@ -398,6 +350,16 @@ repo = 'Chun-Yang/vim-textobj-chunk'
 
 [[plugins]]
 repo = 'aikawa9376/vim-textobj-php'
+
+[[plugins]]
+repo = 'deton/textobj-mbboundary.vim'
+hook_add = '''
+let g:mbboundary_no_default_key_mappings = 1
+omap <silent> am <Plug>MBBoundaryTextObjA
+omap <silent> im <Plug>MBBoundaryTextObjI
+xmap <silent> am <Plug>MBBoundaryTextObjVA
+xmap <silent> im <Plug>MBBoundaryTextObjVI
+'''
 
 [[plugins]]
 repo = 'osyo-manga/vim-textobj-from_regexp'
