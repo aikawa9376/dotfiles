@@ -720,24 +720,24 @@ let g:fzf_pygmentize_style = '-O style="solarizeddark" -f console256'
 
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-  \ {'options': "--preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . " -g {}'"}))
+  \ {'options': "--no-unicode --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . " -g {}'"}))
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
-  \  'options': "-m -x +s --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . " -g {}'" .
-  \             ' --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
+  \  'options': "-m -x +s --no-unicode --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . " -g {}'" .
+  \             ' --no-unicode --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 command! -bang -nargs=* Rg
   \ call fzf#vim#grep(
   \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
-  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%:wrap')
-  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden:wrap', '?'),
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang -nargs=* AllRg
   \ call fzf#vim#grep(
   \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
-  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%:wrap')
-  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden:wrap', '?'),
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang Lines
   \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
@@ -813,7 +813,7 @@ command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd(),
   \  'sink': 'edit',
   \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize ' . g:fzf_pygmentize_style . '  -g {}"
-  \              --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
+  \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
 " This relies on the yegappan/mru plugin for live MRU updating. Also relies on
@@ -830,7 +830,7 @@ command! MRUFiles call fzf#run({
   \  'source': s:mru_files_for_all(),
   \  'sink': 'edit',
   \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize ' . g:fzf_pygmentize_style . '  -g {}"
-  \              --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
+  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
 " This relies on the yegappan/mru plugin for live MRU updating. Also relies on
@@ -1033,7 +1033,8 @@ endfunction
 command! -bang -nargs=? -complete=dir GFiles
   \ call fzf#vim#gitfiles(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_gitfiles_sink'),
-  \  'options': "-m -x +s --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . "  -g {}' --expect ctrl-d"}))
+  \  'options': "-m -x +s --no-unicode --preview-window
+  \  right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . "  -g {}' --expect ctrl-d"}))
 
 " ------------------------------------------------------------------
 " YankRing fzf
@@ -1151,7 +1152,7 @@ command! -nargs=* NavBuffers
   \   '-m', '-x', '--tiebreak=index', '--header-lines=1', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
-  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k',
+  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k', '--no-unicode',
   \   '--preview-window', 'up:1:wrap', '--preview', 'echo {} | sed -r "s%^.*<space>-<space>%%"'],
   \   'left': '20%',
   \ }))
