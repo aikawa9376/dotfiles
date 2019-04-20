@@ -118,7 +118,6 @@ precmd () {
   print -P $left${(r:$padwidth:: :)}$right
 }
 
-let g:fzf_pygmentize_style = '-O style="solarizeddark" -f console256'
 # -------------------------------------
 # fzf
 # -------------------------------------
@@ -240,8 +239,10 @@ function fvim() {
   else
     files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
   fi
-  selected_files=$(echo "$files" | fzf -m --preview 'head -100 {}') &&
-  nvim $selected_files
+  selected_files=$(echo "$files" | fzf -m --preview 'head -100 {}' | tr '\n' ' ') &&
+  # selected_files=$(echo "$files" | fzf -m --preview 'head -100 {}') &&
+
+  nvim $(echo "$selected_files")
 }
 
 # -------------------------------------
