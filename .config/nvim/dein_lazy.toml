@@ -529,6 +529,10 @@ repo = 'delphinus/vim-auto-cursorline'
 on_event = 'VimEnter'
 hook_add = '''
 let g:auto_cursorline_wait_ms = 500
+augroup cursorline-coc-setting
+  autocmd!
+  autocmd FileType list let g:auto_cursorline_wait_ms = 1
+augroup END
 '''
 
 # list-----------------------------------
