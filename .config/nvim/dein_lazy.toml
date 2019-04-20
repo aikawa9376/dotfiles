@@ -404,9 +404,9 @@ repo = 'osyo-manga/vim-textobj-from_regexp'
 hook_add = '''
 " 英数字 + _ を対象とした textobj
 omap <expr> i<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_.-]\+')
-omap <expr> a<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_:.-]\+')
+omap <expr> a<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_:.$-]\+')
 xmap <expr> i<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_.-]\+')
-xmap <expr> a<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_:.-]\+')
+xmap <expr> a<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_:.$-]\+')
 " 英数字のみを対象とした textobj
 omap <expr> i<M-w> textobj#from_regexp#mapexpr('[A-Za-z0-9]\+')
 xmap <expr> i<M-w> textobj#from_regexp#mapexpr('[A-Za-z0-9]\+')
@@ -520,7 +520,13 @@ hook_add = '''
 nmap <Space><Space> %
 vmap <Space><Space> %
 nmap <C-Space> <Plug>(matchup-z%)
-autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
+augroup matchup_setting
+  autocmd!
+  autocmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
+  " coc snippet conflict
+  autocmd InsertEnter * let g:matchup_matchparen_enabled = 0
+  autocmd InsertLeave * let g:matchup_matchparen_enabled = 1
+augroup END
 let g:matchup_transmute_enabled = 1
 '''
 
