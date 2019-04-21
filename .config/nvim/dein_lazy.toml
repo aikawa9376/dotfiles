@@ -95,7 +95,7 @@ nnoremap <silent> <space>ca  :<C-u>CocList diagnostics<cr>
 " Search workspace symbols
 nnoremap <silent> <space>cs  :<C-u>CocList -I symbols<cr>
 " Find symbol of current document
-nnoremap <silent> <space>co  :<C-u>CocList outline<cr>
+nnoremap <silent> <space>cO  :<C-u>CocList outline<cr>
 " Show commands
 nnoremap <silent> <space>cm  :<C-u>CocList lists<cr>
 " Do default action for next item.
@@ -105,9 +105,6 @@ nnoremap <silent> <space>ck  :<C-u>CocPrev<CR>
 " Resume latest coc list
 nnoremap <silent> <space>cu  :<C-u>CocListResume<CR>
 '''
-
-[[plugins]]
-repo = 'honza/vim-snippets'
 
 [[plugins]]
 repo = 'jsfaint/coc-neoinclude'
@@ -148,7 +145,24 @@ if has('conceal')
 '''
 
 [[plugins]]
+repo = 'honza/vim-snippets'
+
+[[plugins]]
 repo = 'Shougo/neosnippet-snippets'
+
+[[plugins]]
+repo = 'liuchengxu/vista.vim'
+on_cmd = ['Vista!!']
+hook_add = '''
+nnoremap <silent> <Leader>co :Vista!!<CR>
+nnoremap <silent> <Leader>c/ :Vista finder!<CR>
+let g:vista_close_on_jump  = 1
+let g:vista_fzf_preview    = ['right:50%']
+let g:vista#renderer#icons = {
+  \  "function": "\uf794",
+  \  "variable": "\uf71b",
+  \ }
+'''
 
 [[plugins]]
 repo = 'konfekt/FastFold'
@@ -648,7 +662,6 @@ hook_add = '''
 let g:fzf_buffers_jump = 1
 nnoremap <silent> <Leader>f  m':Files<CR>
 nnoremap <silent> <Leader>F  m':AllFiles<CR>
-" TODO git rm --cached key bind
 nnoremap <silent> <Leader>gf m':GFiles<CR>
 nnoremap <silent> <Leader>b  m':NavBuffers<CR>
 nnoremap <silent> <Leader>a  m':Rg<CR>
@@ -896,7 +909,7 @@ command! -nargs=* Gitignore call fzf#run({
   \  'source': s:ignore_file_list(),
   \  'sink*': function('<SID>ignore_file_sink'),
   \  'options': '--prompt=Gitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
-  \  '--header ":: Press C-D delete ignore lines" --print-query ' .
+  \  '--header ":: Press C-D:delete ignore lines C-t:toggle C-m:comment toggle" --print-query ' .
   \  '--expect ctrl-d,ctrl-m,ctrl-t',
   \  'down': '40%'})
 
@@ -949,8 +962,8 @@ command! -nargs=* AddGitignore call fzf#run({
   \  'source': <SID>dir_file_completion(''),
   \  'sink*': function('<SID>add_ignore_file_sink'),
   \  'options': '--prompt=AllGitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
-  \  '--header ":: Press C-A add ignore lines" --print-query ' .
-  \  '--expect ctrl-a,ctrl-t',
+  \  '--header ":: Press C-d:add ignore lines C-t:toggle" --print-query ' .
+  \  '--expect ctrl-d,ctrl-t',
   \  'down': '40%'})
 
 function! s:add_ignore_file_sink(lines) abort
@@ -963,7 +976,7 @@ function! s:add_ignore_file_sink(lines) abort
     return 'no git repository'
   endif
 
-  if a:lines[1] == 'ctrl-a'
+  if a:lines[1] == 'ctrl-d'
     for w in range(2, len(a:lines) - 1)
       let t = a:lines[w]
       execute("silent !echo " . t . " >> " . s:dir . "/.gitignore")
@@ -1006,8 +1019,9 @@ endfunction
 command! -bang -nargs=? -complete=dir GFiles
   \ call fzf#vim#gitfiles(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_gitfiles_sink'),
-  \  'options': "-m -x +s --no-unicode --preview-window
-  \  right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . "  -g {}' --expect ctrl-d"}))
+  \  'options': "-m -x +s --no-unicode
+  \  --header \":: Press C-d:rm cached\"
+  \  --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . "  -g {}' --expect ctrl-d"}))
 
 " ------------------------------------------------------------------
 " YankRing fzf
@@ -1284,15 +1298,6 @@ let g:tagbar_autoshowtag    = 1
 let g:tagbar_width          = 40
 let g:tagbar_previewwin_pos = 'rightbelow'
 '''
-
-# [[plugins]]
-# repo = 'liuchengxu/vista.vim'
-# on_cmd = ['Vista!!']
-# hook_add = '''
-# nnoremap <silent> <Leader>oo :Vista!!<CR>
-# let g:vista#renderer#enable_icon = 1
-# let g:vista_fzf_preview = ['right:50%']
-# '''
 
 [[plugins]]
 repo = 'junegunn/vim-peekaboo'
