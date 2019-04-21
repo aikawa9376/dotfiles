@@ -1285,6 +1285,15 @@ let g:tagbar_width          = 40
 let g:tagbar_previewwin_pos = 'rightbelow'
 '''
 
+# [[plugins]]
+# repo = 'liuchengxu/vista.vim'
+# on_cmd = ['Vista!!']
+# hook_add = '''
+# nnoremap <silent> <Leader>oo :Vista!!<CR>
+# let g:vista#renderer#enable_icon = 1
+# let g:vista_fzf_preview = ['right:50%']
+# '''
+
 [[plugins]]
 repo = 'junegunn/vim-peekaboo'
 on_event = 'VimEnter'
