@@ -525,13 +525,14 @@ let g:rainbow_active = 0
 '''
 
 [[plugins]]
-repo = 'delphinus/vim-auto-cursorline'
+repo = 'aikawa9376/vim-auto-cursorline'
 on_event = 'VimEnter'
 hook_add = '''
 let g:auto_cursorline_wait_ms = 500
 augroup cursorline-coc-setting
   autocmd!
-  autocmd FileType list let g:auto_cursorline_wait_ms = 1
+  autocmd FileType list let g:auto_cursorline_disable = 1
+  autocmd BufLeave list let g:auto_cursorline_disable = 0
 augroup END
 '''
 
@@ -1420,11 +1421,26 @@ nmap <Leader>gl :Agit<CR>
 '''
 
 [[plugins]]
-repo = 'rhysd/git-messenger.vim'
-on_map = '<Plug>(git-messenger)'
+repo = 'iamcco/sran.nvim'
+depends = 'git-p.nvim'
+on_event = 'VimEnter'
+build = 'yarn'
+
+[[plugins]]
+repo = 'aikawa9376/git-p.nvim'
+on_event = 'VimEnter'
 hook_add = '''
-nmap <Leader>gm <Plug>(git-messenger)
-let g:git_messenger_include_diff = 'current'
+let g:gitp_blame_virtual_text = 0
+nmap <Leader>gm <Plug>(git-p-diff-preview)
+nmap <Leader>tg :call <SID>git_p_virtual_toggle()<CR>
+autocmd MyAutoCmd ColorScheme * highlight link GitPBlameLine Delimiter
+function! s:git_p_virtual_toggle()
+  if g:gitp_blame_virtual_text == 1
+    let g:gitp_blame_virtual_text = 0
+  else
+    let g:gitp_blame_virtual_text = 1
+  endif
+endfunction
 '''
 
 # status line ---------------------------

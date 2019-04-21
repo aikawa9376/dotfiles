@@ -240,9 +240,12 @@ function fvim() {
     files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
   fi
   selected_files=$(echo "$files" | fzf -m --preview 'head -100 {}' | tr '\n' ' ') &&
-  # selected_files=$(echo "$files" | fzf -m --preview 'head -100 {}') &&
 
-  nvim $(echo "$selected_files")
+  if [[ $selected_files == '' ]]; then
+    return 0
+  else
+    nvim $(echo "$selected_files")
+  fi
 }
 
 # -------------------------------------
