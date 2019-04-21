@@ -348,10 +348,10 @@ nnoremap <silent> <expr> っｊ Fcitx2en()
 autocmd MyAutoCmd InsertLeave * set nopaste
 
 " ジャンプリストで中央に持ってくる
-" nnoremap <C-o> <C-o>zz
-" nnoremap <C-i> <C-i>zz
-" nnoremap g; g;zz
-" nnoremap g, g,zz
+nnoremap <c-o> <c-o>zz
+nnoremap <c-i> <c-o>zz
+nnoremap g; g;zz
+nnoremap g, g,zz
 nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz
 nnoremap <C-f> <C-f>zz
