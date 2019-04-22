@@ -133,6 +133,8 @@ export FZF_DEFAULT_OPTS='
 --reverse
 --extended
 --ansi
+--cycle
+--no-hscroll
 --history '$HOME'/.fzf/history
 --bind alt-k:preview-up,alt-j:preview-down,ctrl-n:down,ctrl-p:up
 --bind alt-p:previous-history,alt-n:next-history,ctrl-k:kill-line
