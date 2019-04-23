@@ -361,12 +361,14 @@ nnoremap <C-b> <C-b>zz
 nmap <Leader> <Nop>
 nmap <Leader>w :<c-u>w<CR>
 nmap <Leader>x :<c-u>bd<CR>
+nmap ZZ :<c-u>xa<CR>
 nmap <silent> <M-b> :bnext<CR>
 nmap <silent> <C-g> mz<C-^>`zzz
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> <CR> <CR>
-autocmd MyAutoCmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c:bnext<CR>
+autocmd MyAutoCmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
 autocmd MyAutoCmd FileType far_vim nnoremap <buffer><nowait> q <C-w>o:tabc<CR>
+autocmd MyAutoCmd FileType gitcommit nmap <buffer><nowait> q :<c-u>wq<CR>
 
 " qf enhanced
 augroup qf_enhanced
