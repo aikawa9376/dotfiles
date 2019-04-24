@@ -224,8 +224,8 @@ map t <Plug>Sneak_t
 map T <Plug>Sneak_T
 map ; <Plug>Sneak_;
 map , <Plug>Sneak_,
-map <M-f> <Plug>Sneak_s
-map <M-t> <Plug>Sneak_t
+map s <Plug>Sneak_s
+map S <Plug>Sneak_S
 nmap <expr> f sneak#is_sneaking() ? '<Plug>Sneak_;' : '<plug>Sneak_f'
 nmap <expr> F sneak#is_sneaking() ? '<Plug>Sneak_,' : '<plug>Sneak_F'
 let g:sneak#s_next = 1
@@ -249,14 +249,14 @@ repo = 'terryma/vim-expand-region'
 on_map = '<Plug>(expand_region_expand)'
 hook_add = '''
 let g:expand_region_text_objects = {
-      \ '$'   :0,
-      \ 'i]'  :1,
-      \ 'ib'  :1,
-      \ 'iB'  :1,
-      \ 'il'  :0,
-      \ 'ip'  :0,
-      \ 'ie'  :0,
-      \ }
+  \ '$'   :0,
+  \ 'i]'  :1,
+  \ 'ib'  :1,
+  \ 'iB'  :1,
+  \ 'il'  :0,
+  \ 'ip'  :0,
+  \ 'ie'  :0,
+  \ }
 '''
 
 [[plugins]]
@@ -409,10 +409,11 @@ on_map = '<plug>(operator-replace)'
 on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'kana/vim-operator-replace'
+repo = 'aikawa9376/vim-operator-replace'
 hook_add = '''
-nmap <C-s> mv<plug>(operator-replace)
-nmap <C-s><C-s> mv<plug>(operator-replace)$
+nmap <Leader>r mv<plug>(operator-replace)
+nmap yr mv<plug>(operator-replace_r)
+nmap <Leader>R mv<plug>(operator-replace)$
 '''
 
 [[plugins]]
@@ -547,7 +548,7 @@ let g:auto_cursorline_wait_ms = 500
 augroup cursorline-coc-setting
   autocmd!
   autocmd FileType list let g:auto_cursorline_disable = 1
-  autocmd BufLeave list let g:auto_cursorline_disable = 0
+  autocmd BufLeave * let g:auto_cursorline_disable = 0
 augroup END
 '''
 

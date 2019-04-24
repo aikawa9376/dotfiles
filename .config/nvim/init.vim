@@ -173,10 +173,6 @@ function! HlTextToggle()
   endif
 endfunction
 
-" 検索後にジャンプした際に検索単語を画面中央に持ってくる
-nnoremap n nzz
-nnoremap N Nzz
-
 " スクロール時に表示を10行確保
 set scrolloff=10
 
@@ -356,6 +352,9 @@ nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz
 nnoremap <C-f> <C-f>zz
 nnoremap <C-b> <C-b>zz
+" 検索後にジャンプした際に検索単語を画面中央に持ってくる
+nnoremap n nzz
+nnoremap N Nzz
 
 " ファイル操作系
 nmap <Leader> <Nop>
@@ -541,6 +540,8 @@ augroup END
 "Absolutely fantastic function from stoeffel/.dotfiles which allows you to
 "repeat macros across a visual range
 "--------------------------------------------
+" TMUXと干渉しているので実際は二回押す
+nmap <C-q> @q
 xnoremap @ :<C-u>call ExecuteMacroOverVisualRange()<CR>
 function! ExecuteMacroOverVisualRange()
   echo '@'.getcmdline()

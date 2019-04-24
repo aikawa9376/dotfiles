@@ -62,6 +62,8 @@ case ${OSTYPE} in
 esac
 
 stty stop undef
+stty start undef
+setopt no_flow_control
 # KEYTIMEOUT=1
 case $(uname -a) in
    *Microsoft*) unsetopt BG_NICE ;;
