@@ -561,7 +561,7 @@ on_cmd = ['Defx']
 hook_add = '''
 nmap <silent><Space>n :Defx
 \ -toggle -resume -direction=topleft -split=vertical
-\ -winwidth=35 -columns=git:indent:icons:filename:type<CR>
+\ -winwidth=35 -columns=indent:git:icons:filename:type<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
   " Define mappings
@@ -1320,7 +1320,7 @@ let g:MRU_Max_Entries = 5000
 repo = 'simnalamburt/vim-mundo'
 on_cmd = ['MundoToggle']
 hook_add = '''
-nnoremap U :MundoToggle<CR>
+nnoremap <silent> <Leader>u :MundoToggle<CR>
 '''
 
 [[plugins]]

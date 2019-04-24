@@ -179,8 +179,8 @@ set scrolloff=10
 " x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
 vnoremap x "_x
-nnoremap s "_s
-vnoremap s "_s
+nnoremap cl "_s
+vnoremap cl "_s
 nnoremap <silent> dd :<C-u>call <SID>remove_line_brank(v:count1)<CR>
 function! s:remove_line_brank(count)
   for i in range(1, v:count1)
@@ -271,6 +271,7 @@ nnoremap y mvy
 nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
+nnoremap <Leader>U `v
 nnoremap <C-h> ^
 vnoremap <C-h> ^
 nnoremap <C-l> $l
