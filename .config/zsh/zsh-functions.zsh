@@ -479,7 +479,7 @@ pskl() {
 # fdg - ghq
 fdg() {
   local selected
-  selected=$(ghq list | fzf)
+  selected=$(ghq list | fzf --preview 'tree -C $(ghq root)/{} | head -200')
 
   if [ "x$selected" != "x" ]; then
     cd $(ghq root)/$selected
