@@ -262,6 +262,8 @@ inoremap <C-o> <C-g>U<C-o>o
 inoremap <M-f> <C-g>U<C-o>w
 inoremap <M-b> <C-g>U<C-o>b
 inoremap <M-p> <C-g>U<C-o>P
+" TODO undoきれなくする
+inoremap <C-r> <ESC>vyi<C-r>"<Right>
 
 " 文字選択・移動など
 nnoremap Y y$
@@ -271,6 +273,7 @@ nnoremap y mvy
 nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
+nnoremap <M-x> vy
 nnoremap <Leader>U `v
 nnoremap <C-h> ^
 vnoremap <C-h> ^
@@ -428,6 +431,8 @@ nnoremap <M-,> mz$a,<ESC>`z
 
 " 補完系
 inoremap <C-l> <C-x><C-l>
+inoremap <M-n> <C-x><C-n>
+inoremap <M-p> <C-x><C-p>
 
 " vimrcをスペースドットで更新
 if has('vim_starting')
@@ -468,23 +473,18 @@ endfunction
 
 function! SetLeximaAddRule() abort
   call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': "'", 'input': "'"})
-  call lexima#add_rule({'at': "\\%#\\n\\s*'", 'char': "'", 'input': "'", 'delete': "'"})
   call lexima#add_rule({'char': '<C-h>', 'at': "'\\%#'", 'delete': 1})
 
   call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '{', 'input': '{'})
-  call lexima#add_rule({'at': '\%#\n\s*}', 'char': '}', 'input': '}', 'delete': '}'})
   call lexima#add_rule({'char': '<C-h>', 'at': '{\%#}', 'delete': 1})
 
   call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '[', 'input': '['})
-  call lexima#add_rule({'at': '\%#\n\s*\]', 'char': ']', 'input': ']', 'delete': ']'})
   call lexima#add_rule({'char': '<C-h>', 'at': '\[\%#\]', 'delete': 1})
 
   call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '(', 'input': '('})
-  call lexima#add_rule({'at': '\%#\n\s*)', 'char': ')', 'input': ')', 'delete': ')'})
   call lexima#add_rule({'char': '<C-h>', 'at': '(\%#)', 'delete': 1})
 
   call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '"', 'input': '"'})
-  call lexima#add_rule({'at': '\%#\n\s*"', 'char': '"', 'input': '"', 'delete': '"'})
   call lexima#add_rule({'char': '<C-h>', 'at': '"\%#"', 'delete': 1})
 
   call lexima#add_rule({'char': '<C-s>', 'at': '\%#)', 'leave': 1})
