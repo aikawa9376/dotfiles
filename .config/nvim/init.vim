@@ -209,7 +209,6 @@ function! s:remove_line_brank_all(count)
 endfunction
 
 nmap <M-p> o<ESC>p==
-nmap <M-x> vy<ESC>
 nmap gV `[v`]
 
 " ヤンクした後に末尾に移動
@@ -246,6 +245,15 @@ nnoremap <M-d> mzo<ESC>`zj
 nnoremap <M-u> mzO<ESC>`zk
 nnoremap X diw
 
+" インサートモード移行時に自動インデント
+function! IndentWithI()
+    if len(getline('.')) == 0
+        return "cc"
+    else
+        return "i"
+    endif
+endfunction
+nnoremap <expr> i IndentWithI()
 " インサートモードで bash 風キーマップ
 inoremap <C-a> <C-g>U<C-o>^
 inoremap <C-e> <C-g>U<C-o>$<C-g>U<Right>
@@ -262,8 +270,8 @@ inoremap <C-o> <C-g>U<C-o>o
 inoremap <M-f> <C-g>U<C-o>w
 inoremap <M-b> <C-g>U<C-o>b
 inoremap <M-p> <C-g>U<C-o>P
-" TODO undoきれなくする
-inoremap <C-v> <ESC>vyi<C-r>"<Right>
+" TODO undoきれなくする 関数？
+inoremap <C-v> <C-g>U<C-o>yh<C-g>U<C-r>"<C-g>U<Right>
 
 " 文字選択・移動など
 nnoremap Y y$
@@ -461,62 +469,6 @@ function! s:vimrc_local(loc)
   endfor
 endfunction
 
-" ここをTOMLに入れたい
-function! Syntax_range_dein() abort
-  let start = '^\s*hook_\%('.
-  \           'add\|source\|post_source\|post_update'.
-  \           '\)\s*=\s*%s'
-
-  call SyntaxRange#Include(printf(start, "'''"), "'''", 'vim', '')
-  call SyntaxRange#Include(printf(start, '"""'), '"""', 'vim', '')
-endfunction
-
-function! SetLeximaAddRule() abort
-  call lexima#add_rule({'char': "'", 'input_after': "'"})
-  call lexima#add_rule({'char': "'", 'at': "''\%#", 'input': "'''"})
-  call lexima#add_rule({'char': "'", 'at': "\\%#'''", 'leave': 3})
-  call lexima#add_rule({'char': "'", 'at': "\\%#.*[-0-9a-zA-Z_,:\"]", 'input': "'"})
-  call lexima#add_rule({'char': '<C-h>', 'at': "'\\%#'", 'delete': 1})
-  call lexima#add_rule({'char': '<CR>', 'at': "'''\%#'''", 'input_after': '<CR>'})
-
-  call lexima#add_rule({'char': '"', 'input_after': '"'})
-  call lexima#add_rule({'char': '"', 'at': "\\%#.*[-0-9a-zA-Z_,:']", 'input': '"'})
-  call lexima#add_rule({'char': '"', 'at': '"""\%#', 'input': '"""'})
-  call lexima#add_rule({'char': '"', 'at': '\%#"""', 'leave': 3})
-  call lexima#add_rule({'char': '<C-h>', 'at': '"\%#"', 'delete': 1})
-  call lexima#add_rule({'char': '<CR>', 'at': '"""\%#""")', 'input_after': '<CR>'})
-
-  call lexima#add_rule({'char': "{", 'input_after': "}"})
-  call lexima#add_rule({'char': '{', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '{'})
-  call lexima#add_rule({'char': '<C-h>', 'at': '{\%#}', 'delete': 1})
-  call lexima#add_rule({'char': '<CR>', 'at': '{\%#}', 'input_after': '<CR>'})
-  call lexima#add_rule({'char': '<Space>', 'at': '{\%#}', 'input_after': '<Space>'})
-  call lexima#add_rule({'char': '<BS>', 'at': '{ \%# }', 'delete': 1})
-
-  call lexima#add_rule({'char': "[", 'input_after': "]"})
-  call lexima#add_rule({'char': '[', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '['})
-  call lexima#add_rule({'char': '<C-h>', 'at': '\[\%#\]', 'delete': 1})
-  call lexima#add_rule({'char': '<CR>', 'at': '[\%#]', 'input_after': '<CR>'})
-  call lexima#add_rule({'char': '<Space>', 'at': '\[\%#]', 'input_after': '<Space>'})
-  call lexima#add_rule({'char': '<BS>', 'at': '\[ \%# ]', 'delete': 1})
-
-  call lexima#add_rule({'char': "(", 'input_after': ")"})
-  call lexima#add_rule({'char': '(', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '('})
-  call lexima#add_rule({'char': '<C-h>', 'at': '(\%#)', 'delete': 1})
-  call lexima#add_rule({'char': '<CR>', 'at': '(\%#)', 'input_after': '<CR>'})
-  call lexima#add_rule({'char': '<Space>', 'at': '(\%#)', 'input_after': '<Space>'})
-  call lexima#add_rule({'char': '<BS>', 'at': '( \%# )', 'delete': 1})
-
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%#)', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%#"', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': "\\%#'", 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%#]', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%#}', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%# )', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%# ]', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%# }', 'leave': 1})
-endfunction
-
 " php用の設定はここ
 " TODO ftplutin setting
 autocmd MyAutoCmd FileType php,phml call s:php_my_settings()
@@ -548,12 +500,6 @@ function! MySqlOmniFunc(findstart, base)
   call sqlcomplete#Map('syntax')
   call sqlcomplete#Complete(a:findstart, a:base)
 endfunction
-
-" test settings
-" 親ディレクトリを開く netrw有効なら便利かも
-" nnoremap <silent> <C-u> :execute 'e ' . ((strlen(bufname('')) == 0) ? '.' : '%:h')<CR>
-vmap p <Plug>(operator-replace)
-" nnoremap <space>9 V%y<C-w>jGpkVGJ
 
 augroup GitSpellCheck
   autocmd!
@@ -646,3 +592,66 @@ function! s:get_visual_selection()
     let lines[0] = lines[0][column_start - 1:]
     return join(lines, "\n")
 endfunction
+
+" ここをTOMLに入れたい
+function! Syntax_range_dein() abort
+  let start = '^\s*hook_\%('.
+  \           'add\|source\|post_source\|post_update'.
+  \           '\)\s*=\s*%s'
+
+  call SyntaxRange#Include(printf(start, "'''"), "'''", 'vim', '')
+  call SyntaxRange#Include(printf(start, '"""'), '"""', 'vim', '')
+endfunction
+
+function! SetLeximaAddRule() abort
+  call lexima#add_rule({'char': "'", 'input_after': "'"})
+  call lexima#add_rule({'char': "'", 'at': "''\%#", 'input': "'''"})
+  call lexima#add_rule({'char': "'", 'at': "\\%#.*[-0-9a-zA-Z_,:\"]", 'input': "'"})
+  call lexima#add_rule({'char': "'", 'at': "\\%#'''", 'leave': 3})
+  call lexima#add_rule({'char': '<C-h>', 'at': "'\\%#'", 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': "'''\%#'''", 'input_after': '<CR>'})
+
+  call lexima#add_rule({'char': '"', 'input_after': '"'})
+  call lexima#add_rule({'char': '"', 'at': "\\%#.*[-0-9a-zA-Z_,:']", 'input': '"'})
+  call lexima#add_rule({'char': '"', 'at': '"""\%#', 'input': '"""'})
+  call lexima#add_rule({'char': '"', 'at': '\%#"""', 'leave': 3})
+  call lexima#add_rule({'char': '<C-h>', 'at': '"\%#"', 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': '"""\%#""")', 'input_after': '<CR>'})
+
+  call lexima#add_rule({'char': "<", 'input_after': ">"})
+  call lexima#add_rule({'char': '<', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '<'})
+  call lexima#add_rule({'char': '<C-h>', 'at': '<\%#>', 'delete': 1})
+  call lexima#add_rule({'char': '<Space>', 'at': '<\%#>', 'input_after': '<Space>'})
+  call lexima#add_rule({'char': '<BS>', 'at': '< \%# >', 'delete': 1})
+
+  call lexima#add_rule({'char': "{", 'input_after': "}"})
+  call lexima#add_rule({'char': '{', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '{'})
+  call lexima#add_rule({'char': '<C-h>', 'at': '{\%#}', 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': '{\%#}', 'input_after': '<CR>'})
+  call lexima#add_rule({'char': '<Space>', 'at': '{\%#}', 'input_after': '<Space>'})
+  call lexima#add_rule({'char': '<BS>', 'at': '{ \%# }', 'delete': 1})
+
+  call lexima#add_rule({'char': "[", 'input_after': "]"})
+  call lexima#add_rule({'char': '[', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '['})
+  call lexima#add_rule({'char': '<C-h>', 'at': '\[\%#\]', 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': '[\%#]', 'input_after': '<CR>'})
+  call lexima#add_rule({'char': '<Space>', 'at': '\[\%#]', 'input_after': '<Space>'})
+  call lexima#add_rule({'char': '<BS>', 'at': '\[ \%# ]', 'delete': 1})
+
+  call lexima#add_rule({'char': "(", 'input_after': ")"})
+  call lexima#add_rule({'char': '(', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '('})
+  call lexima#add_rule({'char': '<C-h>', 'at': '(\%#)', 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': '(\%#)', 'input_after': '<CR>'})
+  call lexima#add_rule({'char': '<Space>', 'at': '(\%#)', 'input_after': '<Space>'})
+  call lexima#add_rule({'char': '<BS>', 'at': '( \%# )', 'delete': 1})
+
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#)', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#"', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': "\\%#'", 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#]', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#}', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%# )', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%# ]', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%# }', 'leave': 1})
+endfunction
+

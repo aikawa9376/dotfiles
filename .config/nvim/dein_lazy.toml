@@ -174,6 +174,30 @@ repo = 'wellle/tmux-complete.vim'
 # text-----------------------------------
 
 [[plugins]]
+repo = 'mattn/emmet-vim'
+on_ft = ['html', 'php', 'phtml', 'javascript']
+hook_add = '''
+let g:user_emmet_install_global        =  0
+let g:user_emmet_mode                  = 'iv'
+let g:user_emmet_expandabbr_key        = '<M-,>'
+let g:user_emmet_expandword_key        = '<M-e>w;'
+let g:user_emmet_update_tag            = '<M-e>u'
+let g:user_emmet_balancetaginward_key  = '<M-e>d'
+let g:user_emmet_balancetagoutward_key = '<M-e>D'
+let g:user_emmet_next_key              = '<M-e>n'
+let g:user_emmet_prev_key              = '<M-e>N'
+let g:user_emmet_imagesize_key         = '<M-e>i'
+let g:user_emmet_togglecomment_key     = '<M-e>/'
+let g:user_emmet_splitjointag_key      = '<M-e>j'
+let g:user_emmet_removetag_key         = '<M-e>k'
+let g:user_emmet_anchorizeurl_key      = '<M-e>a'
+let g:user_emmet_anchorizesummary_key  = '<M-e>A'
+let g:user_emmet_mergelines_key        = '<M-e>m'
+let g:user_emmet_codepretty_key        = '<M-e>c'
+autocmd MyAutoCmd FileType phtml,html,php,css EmmetInstall
+'''
+
+[[plugins]]
 repo = 'RRethy/vim-hexokinase'
 on_ft = ['css', 'scss']
 hook_add = '''
@@ -421,37 +445,33 @@ hook_add = '''
 nmap <Leader>r mv<plug>(operator-replace)
 nmap yr mv<plug>(operator-replace_r)
 nmap <Leader>R mv<plug>(operator-replace)$
+vmap p <Plug>(operator-replace)
+vmap P <Plug>(operator-replace_r)
 '''
 
 [[plugins]]
 repo = 'kana/vim-smartchr'
 on_event = 'InsertEnter'
 hook_add = '''
-" TODO lexima conflict
-"inoremap <expr> < search('^#include\%#', 'bcn')? ' <': smartchr#one_of(' < ', ' << ', '<')
-"inoremap <expr> > search('^#include <.*\%#', 'bcn')? '>': smartchr#one_of(' > ', ' >> ', '>')
 inoremap <expr> + smartchr#loop('+', ' + ', ' ++ ')
 inoremap <expr> - smartchr#loop('-', ' - ', ' -- ')
 inoremap <expr> * smartchr#loop('*', ' * ', ' ** ')
 inoremap <expr> / smartchr#loop('/', ' / ', ' // ')
 inoremap <expr> & smartchr#loop('&', ' & ', ' && ')
-inoremap <expr> % smartchr#loop('%', '%')
+inoremap <expr> % smartchr#loop('%', ' % ', ' %% ')
+inoremap <expr> > smartchr#loop('>', ' > ', ' >> ')
+inoremap <expr> < smartchr#loop('<', ' < ', ' << ')
 inoremap <expr> , smartchr#loop(',', ', ')
 " =の場合、単純な代入や比較演算子として入力する場合は前後にスペースをいれる。
 " 複合演算代入としての入力の場合は、直前のスペースを削除して=を入力
 inoremap <expr> = search('\(&\<bar><bar>\<bar>+\<bar>-\<bar>/\<bar>>\<bar><\) \%#', 'bcn')? '<bs>= '
 				\ : search('\(*\<bar>!\)\%#', 'bcn') ? '= '
-				\ : smartchr#one_of(' = ', ' == ', '=')
-" 下記の文字は連続して現れることがまれなので、二回続けて入力したら改行する
+				\ : smartchr#loop('=', ' = ', ' == ')
+" 下記の文字は連続して現れることがまれなので、二回続けて入力したらいろいろする
 inoremap <expr> } smartchr#one_of('}', '}<cr>')
-inoremap <expr> ; smartchr#one_of(';', ';<cr>')
+inoremap <expr> ; smartchr#loop(';', '$', '@')
 " 「->」は入力しづらいので、..で置換え
-inoremap <expr> ] smartchr#loop(']', '$', '@')
 inoremap <expr> . smartchr#loop('.', '->', '=>')
-" 行先頭での@入力で、プリプロセス命令文を入力
-inoremap <expr> @ search('^\(#.\+\)\?\%#','bcn')? smartchr#one_of('#define', '#include', '#ifdef', '#endif', '@'): '@'
-
-inoremap <expr> " search('^#include\%#', 'bcn')? ' "': '"'
 " if文直後の(は自動で間に空白を入れる
 inoremap <expr> ( search('\<\if\%#', 'bcn')? ' (': '('
 '''
@@ -504,6 +524,10 @@ call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
 call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
 call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
 call submode#map('quickbrace', 'n', 'r', '[', '<Plug>(qutefinger-prev)')
+call submode#enter_with('linterbrace', 'n', 's', '[a', ':call CocAction("diagnosticPrevious")<CR>')
+call submode#enter_with('linterbrace', 'n', 's', ']a', ':call CocAction("diagnosticNext")<CR>')
+call submode#map('linterbrace', 'n', 's', '[', ':call CocAction("diagnosticPrevious")<CR>')
+call submode#map('linterbrace', 'n', 's', ']', ':call CocAction("diagnosticNext")<CR>')
 '''
 
 [[plugins]]
@@ -666,8 +690,6 @@ function! s:defx_my_settings() abort
   \ defx#do_action('redraw')
   nnoremap <silent><buffer><expr><nowait> <C-g>
   \ defx#do_action('print')
-  nnoremap <silent><buffer><expr><nowait> cd
-  \ defx#do_action('change_vim_cwd')
 endfunction
 '''
 
