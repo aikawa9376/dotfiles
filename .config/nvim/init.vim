@@ -380,7 +380,7 @@ autocmd MyAutoCmd FileType help,qf nnoremap <buffer> <CR> <CR>
 autocmd MyAutoCmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
 autocmd MyAutoCmd FileType far_vim nnoremap <buffer><nowait> q <C-w>o:tabc<CR>
 autocmd MyAutoCmd FileType gitcommit nmap <buffer><nowait> q :<c-u>wq<CR>
-autocmd MyAutoCmd FileType gitcommit nmap <buffer><space>gp :<c-u>Gina push &&  wq<CR>
+autocmd MyAutoCmd FileType gitcommit nmap <buffer><space>gp :<c-u>Gina push:wq<CR>
 
 " qf enhanced
 augroup qf_enhanced
