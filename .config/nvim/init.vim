@@ -263,7 +263,7 @@ inoremap <M-f> <C-g>U<C-o>w
 inoremap <M-b> <C-g>U<C-o>b
 inoremap <M-p> <C-g>U<C-o>P
 " TODO undoきれなくする
-inoremap <C-r> <ESC>vyi<C-r>"<Right>
+inoremap <C-v> <ESC>vyi<C-r>"<Right>
 
 " 文字選択・移動など
 nnoremap Y y$
