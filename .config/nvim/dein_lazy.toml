@@ -1458,6 +1458,11 @@ omap ih <Plug>GitGutterTextObjectInnerPending
 omap ah <Plug>GitGutterTextObjectOuterPending
 xmap ih <Plug>GitGutterTextObjectInnerVisual
 xmap ah <Plug>GitGutterTextObjectOuterVisual
+let g:gitgutter_sign_added              = "\uf457 "
+let g:gitgutter_sign_modified           = "\uf459 "
+let g:gitgutter_sign_removed            = "\uf458 "
+let g:gitgutter_sign_modified_removed   = "\uf45a "
+let g:gitgutter_sign_removed_first_line = "\uf474 "
 let g:gitgutter_grep_command = 'rg --hidden --follow --glob "!.git/*"'
 '''
 hook_post_source = '''
