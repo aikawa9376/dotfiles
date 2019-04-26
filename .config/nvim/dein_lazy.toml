@@ -30,7 +30,7 @@ function! s:check_back_space() abort
   return !col || getline('.')[col - 1]  =~# '\s'
 endfunction
 
-imap <silent><expr> <cr> pumvisible() ? coc#_select_confirm() : "\<C-g>u\<CR>"
+imap <silent><expr> <cr> pumvisible() ? coc#_select_confirm() : "\<CR>"
 imap <silent><expr> <C-x><C-x> coc#refresh()
 
 " Use `[a` and `]a` for navigate diagnostics
