@@ -6,6 +6,9 @@
   "coc.preferences.colorSupport": false,
   "diagnostic.refreshAfterSave": true,
   "suggest.noselect": true,
+  "diagnostic.infoSign": "\uf449 ",
+  "diagnostic.hintSign": "\ufb24 ",
+  "diagnostic.errorSign": "\uf057 ",
   "codeLens.enable": true,
   "list.insertMappings": {
 		"<C-l>": "do:refresh",
