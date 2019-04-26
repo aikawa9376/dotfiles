@@ -52,9 +52,6 @@ set splitright
 set splitbelow
 set updatetime=100
 set nofoldenable
-set foldmethod=indent
-set foldcolumn=0
-set foldnestmax=1
 set nospell
 set spelllang=en,cjk
 
