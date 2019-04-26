@@ -212,7 +212,7 @@ on_event = 'InsertEnter'
 repo = 'inkarkat/vim-SyntaxRange'
 on_event = 'VimEnter'
 hook_post_source = '''
-autocmd MyAutoCmd BufEnter,BufRead,InsertLeave dein*.toml call Syntax_range_dein()
+autocmd MyAutoCmd FileType toml call Syntax_range_dein()
 '''
 
 [[plugins]]
@@ -446,7 +446,6 @@ nmap <Leader>r mv<plug>(operator-replace)
 nmap yr mv<plug>(operator-replace_r)
 nmap <Leader>R mv<plug>(operator-replace)$
 vmap p <Plug>(operator-replace)
-vmap P <Plug>(operator-replace_r)
 '''
 
 [[plugins]]
@@ -460,7 +459,7 @@ inoremap <expr> / smartchr#loop('/', ' / ', ' // ')
 inoremap <expr> & smartchr#loop('&', ' & ', ' && ')
 inoremap <expr> % smartchr#loop('%', ' % ', ' %% ')
 inoremap <expr> > smartchr#loop('>', ' > ', ' >> ')
-inoremap <expr> < smartchr#loop('<', ' < ', ' << ')
+inoremap <expr> < smartchr#loop('<', ' < ', ' <= ')
 inoremap <expr> , smartchr#loop(',', ', ')
 " =の場合、単純な代入や比較演算子として入力する場合は前後にスペースをいれる。
 " 複合演算代入としての入力の場合は、直前のスペースを削除して=を入力
@@ -1459,14 +1458,10 @@ omap ih <Plug>GitGutterTextObjectInnerPending
 omap ah <Plug>GitGutterTextObjectOuterPending
 xmap ih <Plug>GitGutterTextObjectInnerVisual
 xmap ah <Plug>GitGutterTextObjectOuterVisual
-let g:gitgutter_sign_added              = "\uf457 "
-let g:gitgutter_sign_modified           = "\uf459 "
-let g:gitgutter_sign_removed            = "\uf458 "
-let g:gitgutter_sign_modified_removed   = "\uf45a "
-let g:gitgutter_sign_removed_first_line = "\uf474 "
 let g:gitgutter_grep_command = 'rg --hidden --follow --glob "!.git/*"'
 '''
 hook_post_source = '''
+GitGutterEnable
 GitGutterSignsDisable
 '''
 
