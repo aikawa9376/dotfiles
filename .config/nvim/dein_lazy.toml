@@ -571,7 +571,6 @@ augroup matchup_setting
   autocmd InsertEnter * let g:matchup_matchparen_enabled = 0
   autocmd InsertLeave * let g:matchup_matchparen_enabled = 1
 augroup END
-let g:matchup_transmute_enabled = 1
 '''
 
 [[plugins]]
@@ -617,6 +616,12 @@ augroup cursorline-coc-setting
   autocmd BufLeave * let g:auto_cursorline_disable = 0
 augroup END
 '''
+
+[[plugins]]
+repo = 'AndrewRadev/tagalong.vim'
+
+[[plugins]]
+repo = 'AndrewRadev/splitjoin.vim'
 
 # list-----------------------------------
 
@@ -773,7 +778,7 @@ let g:fzf_pygmentize_style = '-O style="solarizeddark" -f console256'
 
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-  \ {'options': "--no-unicode --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . " -g {}'"}))
+  \ {'options': "--no-unicode --preview-window right:wrap --preview 'bat --style=numbers --color=always {}'"}))
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
