@@ -293,7 +293,7 @@ vnoremap <C-k> 3k
 
 " gJで空白を削除する
 fun! JoinSpaceless()
-    execute 'normal J'
+    execute 'normal gj'
     " Character under cursor is whitespace?
     if matchstr(getline('.'), '\%' . col('.') . 'c.') =~ '\s'
         " When remove it!
@@ -301,6 +301,7 @@ fun! JoinSpaceless()
     endif
     call repeat#set('gJ', v:count1)
 endfun
+nnoremap gj J
 nnoremap gJ :call JoinSpaceless()<CR>
 
 " j, k による移動を折り返されたテキストでも自然に振る舞うように変更
@@ -568,8 +569,8 @@ function! s:help_override() abort
   endtry
 endfunction
 
-nmap <silent> K :call <SID>google_search()<CR>
-vmap <silent> K :call <SID>google_search()<CR>
+nmap <silent> gK :call <SID>google_search()<CR>
+vmap <silent> gK :call <SID>google_search()<CR>
 function! s:google_search() abort
   let vtext = s:get_visual_selection()
   let word = expand("<cword>")

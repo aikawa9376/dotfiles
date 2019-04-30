@@ -282,11 +282,14 @@ repo = 'terryma/vim-expand-region'
 on_map = '<Plug>(expand_region_expand)'
 hook_add = '''
 let g:expand_region_text_objects = {
-  \ '$'   :0,
+  \ 'iw'  :0,
+  \ 'iW'  :0,
+  \ 'il'  :0,
+  \ 'ii'  :1,
   \ 'i]'  :1,
+  \ 'i}'  :1,
   \ 'ib'  :1,
   \ 'iB'  :1,
-  \ 'il'  :0,
   \ 'ip'  :0,
   \ 'ie'  :0,
   \ }
@@ -353,11 +356,19 @@ nmap <M-/> <Plug>(incsearch-migemo-/)
 '''
 
 [[plugins]]
+repo = 'haya14busa/vim-edgemotion'
+on_event = 'VimEnter'
+hook_add = '''
+map J <Plug>(edgemotion-j)
+map K <Plug>(edgemotion-k)
+'''
+
+[[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = [
 'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
 'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment',
-'vim-textobj-between', 'vim-textobj-from_regexp',
+'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-word-column',
 'vim-textobj-chunk', 'vim-textobj-space', 'textobj-mbboundary.vim'
 ]
 on_event = 'VimEnter'
@@ -379,6 +390,9 @@ repo = 'kana/vim-textobj-syntax'
 
 [[plugins]]
 repo = 'saihoooooooo/vim-textobj-space'
+
+[[plugins]]
+repo = 'rhysd/vim-textobj-word-column'
 
 [[plugins]]
 repo = 'glts/vim-textobj-comment'
@@ -440,7 +454,6 @@ repo = 'kana/vim-operator-user'
 depends = [
   'vim-operator-replace', 'vim-operator-sort'
 ]
-on_map = '<plug>(operator-replace)'
 on_event = 'VimEnter'
 
 [[plugins]]
@@ -481,6 +494,10 @@ inoremap <expr> ( search('\<\if\%#', 'bcn')? ' (': '('
 
 [[plugins]]
 repo = 'emonkak/vim-operator-sort'
+hook_add = '''
+nmap <Leader>to mv<plug>(operator-sort)
+vmap <Leader>to mv<Plug>(operator-sort)
+'''
 
 [[plugins]]
 repo = 'thinca/vim-submode'
@@ -501,9 +518,9 @@ call submode#map('bufmove', 'n', '', '+', '<C-w>+')
 call submode#map('bufmove', 'n', '', '-', '<C-w>-')
 call submode#map('bufmove', 'n', '', '>', '<C-w>>')
 call submode#map('bufmove', 'n', '', '<', '<C-w><')
-call submode#enter_with('expand-region', 'nv', 'r', '+', '<Plug>(expand_region_expand)')
-call submode#map('expand-region', 'nv', 'r', '+', '<Plug>(expand_region_expand)')
-call submode#map('expand-region', 'nv', 'r', '-', '<Plug>(expand_region_shrink)')
+call submode#enter_with('expand-region', 'nv', 'r', 'gw', '<Plug>(expand_region_expand)')
+call submode#map('expand-region', 'nv', 'r', 'w', '<Plug>(expand_region_expand)')
+call submode#map('expand-region', 'nv', 'r', 'W', '<Plug>(expand_region_shrink)')
 call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
 call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
 call submode#map('block_move', 'n', '', '<M-[>', '<C-o>zz')
@@ -568,6 +585,7 @@ hook_add = '''
 nmap <Space><Space> %
 vmap <Space><Space> %
 nmap <C-Space> <Plug>(matchup-z%)zz
+let g:matchup_transmute_enabled = 1
 augroup matchup_setting
   autocmd!
   autocmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
@@ -622,10 +640,14 @@ augroup END
 '''
 
 [[plugins]]
-repo = 'AndrewRadev/tagalong.vim'
-
-[[plugins]]
 repo = 'AndrewRadev/splitjoin.vim'
+on_cmd = ['SplitjoinJoin', 'SplitjoinSplit']
+hook_add = '''
+let g:splitjoin_split_mapping = ''
+let g:splitjoin_join_mapping = ''
+nmap <Leader>tj :SplitjoinJoin<cr>
+nmap <Leader>tJ :SplitjoinSplit<cr>
+'''
 
 # list-----------------------------------
 
