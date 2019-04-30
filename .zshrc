@@ -126,7 +126,7 @@ precmd () {
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='fd --type file --follow --hidden --color=always --exclude .git'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_CTRL_T_OPTS='--preview-window right:wrap --preview "bat --style=numbers --color=always {}"'
+export FZF_CTRL_T_OPTS='--preview-window right:wrap --preview "bat --style=changes --color=always {}"'
 export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
 export FZF_COMPLETION_TRIGGER=''
