@@ -48,6 +48,7 @@ export TERM='xterm-256color'
 export EDITOR='nvim'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
+export BAT_CONFIG_PATH="$HOME/.config/bat/conf"
 
 # go lang
 export GOPATH="$HOME/go"
@@ -243,7 +244,7 @@ function fvim() {
   else
     files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
   fi
-  selected_files=$(echo "$files" | fzf -m --preview 'head -100 {}' | tr '\n' ' ') &&
+  selected_files=$(echo "$files" | fzf -m --preview 'bat {}' | tr '\n' ' ') &&
 
   if [[ $selected_files == '' ]]; then
     return 0

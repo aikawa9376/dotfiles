@@ -778,15 +778,13 @@ let g:fzf_action = {
   \ 'ctrl-x': 'split',
   \ 'ctrl-v': 'vsplit' }
 
-let g:fzf_pygmentize_style = '-O style="solarizeddark" -f console256'
-
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-  \ {'options': "--no-unicode --preview-window right:wrap --preview 'bat --style=numbers --color=always {}'"}))
+  \ {'options': "--no-unicode --preview-window right:wrap --preview 'bat {}'"}))
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
-  \  'options': "-m -x +s --no-unicode --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . " -g {}'" .
+  \  'options': "-m -x +s --no-unicode --preview-window right:wrap --preview 'bat {}'" .
   \             ' --no-unicode --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 command! -bang -nargs=* Rg
@@ -874,7 +872,7 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize ' . g:fzf_pygmentize_style . '  -g {}"
+  \  'options': '-m -x +s --preview-window right:wrap --preview "bat {}"
   \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
@@ -891,7 +889,7 @@ endfunction
 command! MRUFiles call fzf#run({
   \  'source': s:mru_files_for_all(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --preview-window right:wrap --preview "pygmentize ' . g:fzf_pygmentize_style . '  -g {}"
+  \  'options': '-m -x +s --preview-window right:wrap --preview "bat {}"
   \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
@@ -1097,7 +1095,7 @@ command! -bang -nargs=? -complete=dir GFiles
   \ {'sink*': function('<SID>override_gitfiles_sink'),
   \  'options': "-m -x +s --no-unicode
   \  --header \":: Press C-d:rm cached\"
-  \  --preview-window right:wrap --preview 'pygmentize " . g:fzf_pygmentize_style . "  -g {}' --expect ctrl-d"}))
+  \  --preview-window right:wrap --preview 'bat {}' --expect ctrl-d"}))
 
 " ------------------------------------------------------------------
 " YankRing fzf
