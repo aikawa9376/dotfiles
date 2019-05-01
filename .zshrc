@@ -10,6 +10,8 @@ zplug "zsh-users/zsh-history-substring-search"
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 # autosuggestions
 zplug "zsh-users/zsh-autosuggestions"
+# autosuggestions yarn
+zplug "g-plane/zsh-yarn-autocompletions"
 # zaw
 zplug "zsh-users/zaw"
 # k
@@ -46,6 +48,7 @@ zplug load --verbose
 export PATH="/usr/local/bin:$PATH"
 export TERM='xterm-256color'
 export EDITOR='nvim'
+export PAGER='bat'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 export BAT_CONFIG_PATH="$HOME/.config/bat/conf"
