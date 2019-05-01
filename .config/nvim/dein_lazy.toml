@@ -720,6 +720,8 @@ function! s:defx_my_settings() abort
   \ defx#do_action('redraw')
   nnoremap <silent><buffer><expr><nowait> <C-g>
   \ defx#do_action('print')
+  nnoremap <silent><buffer><expr><nowait> <C-n>
+  \ ':<C-u>Defx -buffer-name=temp -split=split<CR>'
 endfunction
 '''
 

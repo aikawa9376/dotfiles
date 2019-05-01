@@ -206,7 +206,7 @@ function! s:remove_line_brank_all(count)
 endfunction
 
 nmap <M-p> o<ESC>p==
-nmap gV `[v`]
+nmap <silent><expr> gV '`['.strpart(getregtype(), 0, 1).'`]'
 
 " ヤンクした後に末尾に移動
 nmap <silent><C-t> :<C-u>call YankTextToggle()<CR>
@@ -365,6 +365,18 @@ nnoremap <C-b> <C-b>zz
 " 検索後にジャンプした際に検索単語を画面中央に持ってくる
 nnoremap n nzz
 nnoremap N Nzz
+
+" Improve scroll, credits: https://github.com/Shougo
+nnoremap <expr> zz (winline() == (winheight(0)+1) / 2) ?
+  \ 'zt' : (winline() == &scrolloff + 1) ? 'zb' : 'zz'
+noremap <expr> <C-f> max([winheight(0) - 2, 1])
+  \ ."\<C-d>".(line('w$') >= line('$') ? "L" : "H")
+noremap <expr> <C-b> max([winheight(0) - 2, 1])
+  \ ."\<C-u>".(line('w0') <= 1 ? "H" : "L")
+noremap <expr> <C-e> (line("w$") >= line('$') ? "j" : "3\<C-e>")
+noremap <expr> <C-y> (line("w0") <= 1         ? "k" : "3\<C-y>")
+
+
 
 " ファイル操作系
 nmap <Leader> <Nop>
@@ -654,3 +666,21 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': '<C-s>', 'at': '\%# }', 'leave': 1})
 endfunction
 
+command!
+      \ -nargs=+ -bang
+      \ -complete=command
+      \ Capture
+      \ call s:cmd_capture([<f-args>], <bang>0)
+
+function! C(cmd)
+  redir => result
+  silent execute a:cmd
+  redir END
+  return result
+endfunction
+
+function! s:cmd_capture(args, banged) "{{{
+  new
+  silent put =C(join(a:args))
+  1,2delete _
+endfunction
