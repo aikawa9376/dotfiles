@@ -206,7 +206,7 @@ function! s:remove_line_brank_all(count)
 endfunction
 
 nmap <M-p> o<ESC>p==
-nmap gV `[v`]
+nmap <silent><expr> gV '`['.strpart(getregtype(), 0, 1).'`]'
 
 " ヤンクした後に末尾に移動
 nmap <silent><C-t> :<C-u>call YankTextToggle()<CR>
@@ -654,3 +654,21 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': '<C-s>', 'at': '\%# }', 'leave': 1})
 endfunction
 
+command!
+      \ -nargs=+ -bang
+      \ -complete=command
+      \ Capture
+      \ call s:cmd_capture([<f-args>], <bang>0)
+
+function! C(cmd)
+  redir => result
+  silent execute a:cmd
+  redir END
+  return result
+endfunction
+
+function! s:cmd_capture(args, banged) "{{{
+  new
+  silent put =C(join(a:args))
+  1,2delete _
+endfunction

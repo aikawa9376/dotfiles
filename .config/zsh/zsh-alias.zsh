@@ -4,17 +4,17 @@
 case ${OSTYPE} in
   darwin*)
     alias ctags="`brew --prefix`/bin/ctags"
-    alias ll='exa -aghHl --color=auto --time-style long-iso --sort=modified --reverse --group-directories-first'
-    alias ls='gls -GAFh --color=auto'
-    alias lsg='exa -aghHl --git --color=auto --sort=modified --reverse --group-directories-first'
+    alias ll='exa -aghHl --color=always --time-style long-iso --sort=modified --reverse --group-directories-first'
+    alias ls='gls -GAFh --color=always'
+    alias lsg='exa -aghHl --git --color=always --sort=modified --reverse --group-directories-first'
     alias ql='qlmanage -p "$@" >& /dev/null'
     alias awk='gawk'
     alias dircolors='gdircolors'
     ;;
   linux*)
-    alias ll='exa -aghHl --color=auto --time-style long-iso --sort=modified --reverse --group-directories-first'
-    alias ls='ls -GAFltrh --color=auto'
-    alias lsg='exa -aghHl --git --color=auto --sort=modified --reverse --group-directories-first'
+    alias ll='exa -aghHl --color=always --time-style long-iso --sort=modified --reverse --group-directories-first'
+    alias ls='ls -GAFltrh --color=always'
+    alias lsg='exa -aghHl --git --color=always --sort=modified --reverse --group-directories-first'
     alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
     alias photoshop='/mnt/c/Program\ Files/Adobe/Adobe\ Photoshop\ CC\ 2018/Photoshop.exe'
     alias illustrator='/mnt/c/Program\ Files/Adobe/Adobe\ Illustrator\ CC\ 2018/Support\ Files/Contents/Windows/Illustrator.exe'
