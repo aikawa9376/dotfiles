@@ -366,10 +366,10 @@ map K <Plug>(edgemotion-k)
 [[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = [
-'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
-'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment',
+'vim-textobj-entire',  'vim-textobj-indent',      'vim-textobj-php',
+'vim-textobj-line',    'vim-textobj-syntax',      'vim-textobj-comment',
 'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-word-column',
-'vim-textobj-chunk', 'vim-textobj-space', 'textobj-mbboundary.vim'
+'vim-textobj-chunk',   'vim-textobj-space',       'textobj-mbboundary.vim'
 ]
 on_event = 'VimEnter'
 
