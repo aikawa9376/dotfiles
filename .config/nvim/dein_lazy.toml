@@ -462,6 +462,7 @@ hook_add = '''
 nmap <Leader>r mv<plug>(operator-replace)
 nmap yr mv<plug>(operator-replace_r)
 nmap <Leader>R mv<plug>(operator-replace)$
+nmap cr mv<plug>(operator-replace_R)
 vmap p <Plug>(operator-replace)
 '''
 
@@ -577,6 +578,17 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'matze/vim-move'
 on_event = 'VimEnter'
+hook_add = '''
+let g:move_map_keys = 0
+vmap <M-J> <Plug>MoveBlockDown
+vmap <M-K> <Plug>MoveBlockUp
+vmap <M-H> <Plug>MoveBlockLeft
+vmap <M-L> <Plug>MoveBlockRight
+nmap <M-J> <Plug>MoveLineDown
+nmap <M-K> <Plug>MoveLineUp
+nmap <M-H> <Plug>MoveCharLeft
+nmap <M-L> <Plug>MoveCharRight
+'''
 
 [[plugins]]
 repo = 'andymass/vim-matchup'

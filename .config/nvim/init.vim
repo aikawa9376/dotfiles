@@ -205,8 +205,25 @@ function! s:remove_line_brank_all(count)
   call repeat#set('dD', v:count1)
 endfunction
 
-nmap <M-p> o<ESC>p==
+nmap <silent>]p :<c-u>call YankLine('j')<CR>
+nmap <silent>[p :<c-u>call YankLine('k')<CR>
 nmap <silent><expr> gV '`['.strpart(getregtype(), 0, 1).'`]'
+function! s:YanksAfterIndent()
+  normal! gV=gV^
+endfunction
+function! YankLine(flag)
+  if a:flag == 'j'
+    let line = line('.')
+    let repeat = ']p'
+  else
+    let line = line('.') - 1
+    let repeat = '[p'
+  endif
+  call append(line, '')
+  execute 'normal! ' . a:flag . 'p'
+  call s:YanksAfterIndent()
+  call repeat#set(repeat, '')
+endfunction
 
 " ヤンクした後に末尾に移動
 nmap <silent><C-t> :<C-u>call YankTextToggle()<CR>
@@ -274,7 +291,8 @@ inoremap <C-v> <C-g>U<C-o>yh<C-g>U<C-r>"<C-g>U<Right>
 nnoremap Y y$
 nnoremap V v$
 nnoremap vv V
-nnoremap y mvy
+" mrは operator replace用
+nnoremap y mvmry
 nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
