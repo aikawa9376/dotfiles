@@ -613,8 +613,8 @@ endfunction
 " ここをTOMLに入れたい
 function! Syntax_range_dein() abort
   let start = '^\s*hook_\%('.
-  \           'add\|source\|post_source\|post_update'.
-  \           '\)\s*=\s*%s'
+  \  'add\|source\|post_source\|post_update'.
+  \  '\)\s*=\s*%s'
 
   call SyntaxRange#Include(printf(start, "'''"), "'''", 'vim', '')
   call SyntaxRange#Include(printf(start, '"""'), '"""', 'vim', '')
@@ -673,10 +673,10 @@ function! SetLeximaAddRule() abort
 endfunction
 
 command!
-      \ -nargs=+ -bang
-      \ -complete=command
-      \ Capture
-      \ call s:cmd_capture([<f-args>], <bang>0)
+  \ -nargs=+ -bang
+  \ -complete=command
+  \ Capture
+  \ call s:cmd_capture([<f-args>], <bang>0)
 
 function! C(cmd)
   redir => result
