@@ -647,8 +647,11 @@ let g:auto_cursorline_wait_ms = 500
 augroup cursorline-coc-setting
   autocmd!
   autocmd FileType list let g:auto_cursorline_disable = 1
-  autocmd BufLeave * let g:auto_cursorline_disable = 0
 augroup END
+function! EnhanCursor()
+  let g:auto_cursorline_disable = 0
+  bd
+endfunction
 '''
 
 [[plugins]]
