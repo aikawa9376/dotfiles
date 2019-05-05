@@ -307,7 +307,6 @@ let g:EasyMotion_do_mapping       = 0
 let g:EasyMotion_smartcase        = 1
 let g:EasyMotion_space_jump_first = 1
 let g:incsearch#auto_nohlsearch   = 1
-" nmap <C-Space> <Plug>(easymotion-overwin-f2)
 function! s:config_easyfuzzymotion(...) abort
   return extend(copy({
   \   'converters': [incsearch#config#fuzzy#converter()],
@@ -566,6 +565,9 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'tpope/vim-abolish'
 on_event = 'VimEnter'
+hook_add = '''
+let g:abolish_no_mappings = 1
+'''
 
 [[plugins]]
 repo = 'machakann/vim-highlightedyank'
