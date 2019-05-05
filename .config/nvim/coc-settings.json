@@ -22,5 +22,12 @@
 	},
 	"list.normalMappings": {
 		"d": "action:delete"
-	}
+	},
+  "languageserver": {
+    "efm": {
+      "command": "efm-langserver",
+      "args": [],
+      "filetypes": ["vim", "eruby", "markdown"]
+    }
+  }
 }
