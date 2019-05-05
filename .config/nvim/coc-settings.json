@@ -19,7 +19,7 @@
 		"<A-n>": "prompt:previous",
 		"<A-p>": "prompt:next",
 		"<C-e>": "action:e",
-		"<C-c>": "command:call EnhanCursor()",
+		"<C-c>": "command:call EnhanCursor()"
 	},
 	"list.normalMappings": {
 		"d": "action:delete"
