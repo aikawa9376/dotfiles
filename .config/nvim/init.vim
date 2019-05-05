@@ -283,7 +283,7 @@ inoremap <C-w> <C-g>U<C-o>db
 inoremap <C-o> <C-g>U<C-o>o
 inoremap <M-f> <C-g>U<C-o>w
 inoremap <M-b> <C-g>U<C-o>b
-inoremap <M-p> <C-g>U<C-o>P
+inoremap <M-P> <C-g>U<C-o>P
 " TODO undoきれなくする 関数？
 inoremap <C-v> <C-g>U<C-o>yh<C-g>U<C-r>"<C-g>U<Right>
 

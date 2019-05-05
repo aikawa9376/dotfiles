@@ -18,7 +18,8 @@
 		"<C-p>": "normal:k",
 		"<A-n>": "prompt:previous",
 		"<A-p>": "prompt:next",
-		"<C-e>": "action:e"
+		"<C-e>": "action:e",
+		"<C-c>": "command:call EnhanCursor()"
 	},
 	"list.normalMappings": {
 		"d": "action:delete"
