@@ -228,7 +228,6 @@ endfunction
 " ヤンクした後に末尾に移動
 nmap <silent><C-t> :<C-u>call YankTextToggle()<CR>
 function! YankTextToggle()
-  let s:flag = b:yank_toggle_flag ? 1 : 0
   if b:yank_toggle_flag != 0
     execute 'normal `['
     let b:yank_toggle_flag = 0
@@ -238,7 +237,7 @@ function! YankTextToggle()
   endif
 endfunction
 function! s:yank_toggle_flag() abort
-  let b:yank_toggle_flag = 0
+  let b:yank_toggle_flag = 1
 endfunction
 augroup YankStart
   autocmd!
@@ -304,10 +303,10 @@ nnoremap <C-l> $l
 vnoremap <C-l> $l
 nnoremap <silent><M-m> :call cursor(0,strlen(getline("."))/2)<CR>
 " すごく移動する
-nnoremap <C-j> 3j
-vnoremap <C-j> 3j
-nnoremap <C-k> 3k
-vnoremap <C-k> 3k
+nnoremap <C-j> 3gj
+vnoremap <C-j> 3gj
+nnoremap <C-k> 3gk
+vnoremap <C-k> 3gk
 
 " gJで空白を削除する
 fun! JoinSpaceless()
@@ -321,10 +320,6 @@ fun! JoinSpaceless()
 endfun
 nnoremap gj J
 nnoremap gJ :call JoinSpaceless()<CR>
-
-" j, k による移動を折り返されたテキストでも自然に振る舞うように変更
-nnoremap j gj
-nnoremap k gk
 
 " コマンドモードでemacs
 cnoremap <C-b> <Left>
