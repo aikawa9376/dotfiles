@@ -1831,6 +1831,10 @@ repo = 'aikawa9376/lightline-colorscheme-nordplus'
 repo = 'vim-scripts/BufOnly.vim'
 on_event = 'VimEnter'
 
+[[plugins]]
+repo = 'moll/vim-bbye'
+on_cmd = ['Bdelete', 'Bwipeout']
+
 # php------------------------------------
 
 [[plugins]]
