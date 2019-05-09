@@ -12,7 +12,7 @@ zmenu() {
 # ALT-I - Paste the selected entry from locate output into the command line
 fzf-locate-widget() {
   local selected
-  if selected=$(locate / | fzf -q "$LBUFFER"); then
+  if selected=$(lolcate / | fzf -q "$LBUFFER"); then
     LBUFFER=$selected
   fi
   zle redisplay

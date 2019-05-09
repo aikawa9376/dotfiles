@@ -10,6 +10,8 @@
   "diagnostic.hintSign": "\ufb24 ",
   "diagnostic.errorSign": "\uf057 ",
   "codeLens.enable": true,
+  "coc.source.tmuxcomplete.priority": 40,
+  "coc.source.neosnippet.priority": 50,
   "list.insertMappings": {
 		"<C-l>": "do:refresh",
 		"<C-f>": "feedkeys:\\<C-f>",

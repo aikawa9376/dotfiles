@@ -57,6 +57,10 @@ export BAT_CONFIG_PATH="$HOME/.config/bat/conf"
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
 
+# rust lang
+export RUSTPATH="$HOME/.cargo"
+export PATH="$RUSTPATH/bin:$PATH"
+
 # local settings
 case ${OSTYPE} in
   linux*)

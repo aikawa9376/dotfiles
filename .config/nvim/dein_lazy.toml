@@ -1033,8 +1033,8 @@ command! -nargs=* Gitignore call fzf#run({
   \  'source': s:ignore_file_list(),
   \  'sink*': function('<SID>ignore_file_sink'),
   \  'options': '--prompt=Gitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
-  \  '--header ":: Press C-D:delete ignore lines C-t:toggle C-m:comment toggle" --print-query ' .
-  \  '--expect ctrl-d,ctrl-m,ctrl-t',
+  \  '--header ":: Press C-x:delete ignore lines C-t:toggle C-m:comment toggle" --print-query ' .
+  \  '--expect ctrl-x,ctrl-m,ctrl-t',
   \  'down': '40%'})
 
 function! s:ignore_file_list()
@@ -1056,7 +1056,7 @@ function! s:ignore_file_sink(lines)
     let no= split(a:lines[2], ':')[0]
     execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
     return
-  elseif a:lines[1] == 'ctrl-d'
+  elseif a:lines[1] == 'ctrl-x'
     for w in range(2, len(a:lines) - 1)
       let no= split(a:lines[w], ':')[0]
       execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
@@ -1086,8 +1086,8 @@ command! -nargs=* AddGitignore call fzf#run({
   \  'source': <SID>dir_file_completion(''),
   \  'sink*': function('<SID>add_ignore_file_sink'),
   \  'options': '--prompt=AllGitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
-  \  '--header ":: Press C-d:add ignore lines C-t:toggle" --print-query ' .
-  \  '--expect ctrl-d,ctrl-t',
+  \  '--header ":: Press C-x:add ignore lines C-t:toggle" --print-query ' .
+  \  '--expect ctrl-x,ctrl-t',
   \  'down': '40%'})
 
 function! s:add_ignore_file_sink(lines) abort
@@ -1100,7 +1100,7 @@ function! s:add_ignore_file_sink(lines) abort
     return 'no git repository'
   endif
 
-  if a:lines[1] == 'ctrl-d'
+  if a:lines[1] == 'ctrl-x'
     for w in range(2, len(a:lines) - 1)
       let t = a:lines[w]
       execute("silent !echo " . t . " >> " . s:dir . "/.gitignore")
@@ -1127,7 +1127,7 @@ function s:override_gitfiles_sink(lines) abort
   else
     return 'no git repository'
   endif
-  if a:lines[0] == 'ctrl-d'
+  if a:lines[0] == 'ctrl-x'
     for w in range(1, len(a:lines) - 1)
       execute("Gina rm --cached " . a:lines[w])
     endfor
@@ -1144,7 +1144,7 @@ command! -bang -nargs=? -complete=dir GFiles
   \ call fzf#vim#gitfiles(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_gitfiles_sink'),
   \  'options': "-m -x +s --no-unicode
-  \  --header \":: Press C-d:rm cached\"
+  \  --header \":: Press C-x:rm cached\"
   \  --preview-window right:wrap --preview 'bat {}' --expect ctrl-d"}))
 
 " ------------------------------------------------------------------
