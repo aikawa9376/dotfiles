@@ -20,6 +20,17 @@ fzf-locate-widget() {
 zle     -N    fzf-locate-widget
 bindkey '\ei' fzf-locate-widget
 
+# ALT-I - Paste the selected entry from locate output into the command line
+fzf-locate-pwd-widget() {
+  local selected
+  if selected=$(lolcate $(pwd) | fzf -q "$LBUFFER"); then
+    LBUFFER=$selected
+  fi
+  zle redisplay
+}
+zle     -N    fzf-locate-pwd-widget
+bindkey '\eI' fzf-locate-pwd-widget
+
 # -------------------------------------
 # MRU
 # -------------------------------------

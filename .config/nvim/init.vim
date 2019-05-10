@@ -382,7 +382,8 @@ nnoremap N Nzz
 " ファイル操作系
 nmap <Leader> <Nop>
 nmap <Leader>w :<c-u>w<CR>
-nmap <Leader>x :<c-u>Bdelete<CR>
+nmap <silent> <Leader>x :<c-u>Bdelete<CR>
+nmap <silent> <Leader>X :<c-u>bd<CR>
 nmap ZZ :<c-u>xa<CR>
 nmap <silent> <M-b> :bnext<CR>
 nmap <silent> <C-g> mz<C-^>`zzz
