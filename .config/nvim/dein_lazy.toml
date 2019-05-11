@@ -1533,10 +1533,10 @@ GitGutterSignsDisable
 repo = 'tpope/vim-fugitive'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <silent> <Space>gs :Gstatus<CR>
-nmap <silent> <Space>gd :Gdiff<CR>
-nmap <silent> <Space>ga :Gwrite<CR>
-nmap <silent> <Space>gb :Gblame -w<CR>
+nmap <silent> <Leader>gs :Gstatus<CR>
+nmap <silent> <Leader>gd :Gdiff<CR>
+nmap <silent> <Leader>ga :Gwrite<CR>
+nmap <silent> <Leader>gb :Gblame -w<CR>
 '''
 
 [[plugins]]
@@ -1547,7 +1547,7 @@ nmap <silent> <Leader>gns :Gina status<CR>
 nmap <silent> <Leader>gnb :Gina blame<CR>
 nmap <silent> <Leader>gp  :Gina push<CR>
 nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
-nmap <silent> <Leader>gc  :Gina commit -m 'auto update'<CR>
+nmap <silent> <Leader>gm  :Gina commit -m 'auto update'<CR>
 nmap <silent> <Leader>gA  :bufdo! Gina add %<CR>
 '''
 hook_source = '''
