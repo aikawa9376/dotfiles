@@ -1243,29 +1243,29 @@ function! s:format_buffer(b)
   let modified = getbufvar(a:b, '&modified') ? ' [+]' : ''
   let readonly = getbufvar(a:b, '&modifiable') ? '' : ' [RO]'
   let extra = join(filter([modified, readonly], '!empty(v:val)'), '')
-  return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
-endfunction
-
-function! s:buflisted_sorted()
-  return sort(s:buflisted(), 's:sort_buffers')
+  if flag == '%'
+    return s:strip(printf("\033[38;2;102;204;0m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+  elseif flag == '#'
+    return s:strip(printf("\033[38;2;51;153;255m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+  else
+    return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+  endif
 endfunction
 
 function! s:sort_buffers(...)
-  let [b1, b2] = map(copy(a:000), 'get(g:fzf#vim#buffers, v:val, v:val)')
-  return b1 < b2 ? 1 : -1
+  return copy(a:000)
 endfunction
 
 command! -nargs=* NavBuffers
-  \ call fzf#vim#buffers(<q-args>, fzf#wrap('navbuffers', {
-  \ 'source':  map(s:buflisted_sorted(), 's:format_buffer(v:val)'),
+  \ call fzf#run(fzf#wrap('navbuffers', {
+  \ 'source':  map(s:buflisted(), 's:format_buffer(v:val)'),
   \ 'sink*':   function('<SID>bufopen'),
   \ 'options': [
-  \   '-m', '-x', '--tiebreak=index', '--header-lines=1', '--ansi', '-d',
+  \   '-m', '-x', '--tiebreak=index', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
-  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k', '--no-unicode',
-  \   '--preview-window', 'up:1:wrap', '--preview', 'echo {} | sed -r "s%^.*<space>-<space>%%"'],
-  \   'left': '20%',
+  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k', '--no-unicode'],
+  \   'up': '30%',
   \ }))
 
 " ------------------------------------------------------------------
@@ -1532,7 +1532,7 @@ repo = 'tpope/vim-fugitive'
 on_event = 'VimEnter'
 hook_add = '''
 nmap <silent> <Space>gs :Gstatus<CR>
-nmap <silent> <Space>gd :Gdif<CR>
+nmap <silent> <Space>gd :Gdiff<CR>
 nmap <silent> <Space>ga :Gwrite<CR>
 nmap <silent> <Space>gb :Gblame -w<CR>
 '''
@@ -1545,8 +1545,8 @@ nmap <silent> <Leader>gns :Gina status<CR>
 nmap <silent> <Leader>gnb :Gina blame<CR>
 nmap <silent> <Leader>gp  :Gina push<CR>
 nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
-nmap <silent> <Leader>gnc :Gina commit -m 'auto update'<CR>
-nmap <silent> <Leader>gA  :Gina add .<CR>
+nmap <silent> <Leader>gc  :Gina commit -m 'auto update'<CR>
+nmap <silent> <Leader>gA  :bufdo! Gina add %<CR>
 '''
 hook_source = '''
 call gina#custom#command#option(
