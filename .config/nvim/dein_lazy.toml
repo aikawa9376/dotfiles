@@ -158,10 +158,12 @@ repo = 'Shougo/neosnippet-snippets'
 repo = 'liuchengxu/vista.vim'
 on_cmd = ['Vista!!']
 hook_add = '''
-nnoremap <silent> <Leader>co :Vista coc<CR>
+nnoremap <silent> <Leader>co :Vista!!<CR>
 nnoremap <silent> <Leader>c/ :Vista finder coc<CR>
-let g:vista_close_on_jump  = 1
+let g:vista_echo_cursor_strategy = "floating_win"
+let g:vista_stay_on_open = 0
 let g:vista_fzf_preview    = ['right:50%']
+let g:vista_icon_indent = ["", " "]
 let g:vista#renderer#icons = {
   \  "function": "\uf794 ",
   \  "variable": "\uf71b ",

@@ -1,15 +1,16 @@
 {
+  "suggest.noselect": true,
   "snippets.ultisnips.enable": false,
   "snippets.snipmate.enable": true,
   "css.colorDecorators.enable": false,
   "scss.colorDecorators.enable": false,
-  "coc.preferences.colorSupport": false,
   "diagnostic.refreshAfterSave": true,
-  "suggest.noselect": true,
   "diagnostic.infoSign": "\uf449 ",
   "diagnostic.hintSign": "\ufb24 ",
   "diagnostic.errorSign": "\uf057 ",
+  "diagnostic.signOffset": 999999,
   "codeLens.enable": true,
+  "coc.preferences.colorSupport": false,
   "coc.source.tmuxcomplete.priority": 40,
   "coc.source.neosnippet.priority": 50,
   "list.insertMappings": {
