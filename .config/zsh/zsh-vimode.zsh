@@ -85,20 +85,33 @@ bindkey -M vicmd 'G'  end-of-line
 
 # Enter
 do-enter() {
+  if [[ -n $BUFFER ]]; then
+    zle accept-line
+    return $status
+  fi
+  print
+  if [[ -d .git ]]; then
+    if [[ -n "$(git status --short)" ]]; then
+      git status
+    fi
+  else
+    # do nothing
+  fi
+  zle reset-prompt
+}
+do-enter() {
     if [ -n "$BUFFER" ]; then
         zle accept-line
         return
     fi
-
     print
-    case ${OSTYPE} in
-      darwin*)
-        /bin/ls -FGh
-        ;;
-      linux*)
-        /bin/ls -FGh --color=auto
-        ;;
-    esac
+    if [[ -d .git ]]; then
+      if [[ -n "$(git status --short)" ]]; then
+        git status
+      fi
+    else
+      # do nothing
+    fi
     if type precmd > /dev/null 2>&1; then
       precmd
     fi
