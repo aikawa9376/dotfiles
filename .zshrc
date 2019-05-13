@@ -346,3 +346,9 @@ if [ -z "$SSH_AGENT_PID" ] || ! kill -0 $SSH_AGENT_PID; then
     . ~/.ssh-agent
 fi
 ssh-add -l >& /dev/null || ssh-add
+
+# -------------------------------------
+# enhancd
+# -------------------------------------
+ENHANCD_HOOK_AFTER_CD=ll
+ENHANCD_FILTER=fzf:fzy:peco
