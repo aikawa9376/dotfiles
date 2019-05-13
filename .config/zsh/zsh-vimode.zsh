@@ -94,6 +94,7 @@ do-enter() {
       if [[ -n "$(git status)" ]]; then
         git status -uno --short
       fi
+      print
     else
       # do nothing
       print
