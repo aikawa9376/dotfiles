@@ -253,6 +253,7 @@ function fvim() {
   else
     files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
   fi
+  # wraped function timg and bat?
   selected_files=$(echo "$files" | fzf -m --preview 'bat {}' | tr '\n' ' ') &&
 
   if [[ $selected_files == '' ]]; then
