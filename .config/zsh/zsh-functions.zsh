@@ -2,7 +2,7 @@
 # utils
 # -------------------------------------
 has() {
-    type "${1:?too few arguments}" &>/dev/null
+  type "${1:?too few arguments}" &>/dev/null
 }
 
 zmenu() {
@@ -30,6 +30,18 @@ fzf-locate-pwd-widget() {
 }
 zle     -N    fzf-locate-pwd-widget
 bindkey '\eI' fzf-locate-pwd-widget
+
+# ALT-r - ripgrep
+fzf-ripgrep-widget() {
+  local selected
+  if selected=$(rg --column --line-number --hidden --ignore-case --no-heading --color=always '' |
+    fzf --delimiter : --nth 4..); then
+    LBUFFER=$(echo $selected | awk -F':' '{print $1}')
+  fi
+  zle redisplay
+}
+zle     -N    fzf-ripgrep-widget
+bindkey '\ea' fzf-ripgrep-widget
 
 # -------------------------------------
 # MRU

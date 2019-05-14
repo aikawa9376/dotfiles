@@ -227,7 +227,7 @@ bindkey "^[r" redo
 setopt correct
 
 # -------------------------------------
-# ディレクト移動
+# ディレクトリ移動
 # -------------------------------------
 setopt auto_cd
 setopt auto_pushd
