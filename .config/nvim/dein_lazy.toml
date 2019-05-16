@@ -1547,7 +1547,7 @@ nmap <silent> <Leader>gns :Gina status<CR>
 nmap <silent> <Leader>gnb :Gina blame<CR>
 nmap <silent> <Leader>gp  :Gina push<CR>
 nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
-nmap <silent> <Leader>gm  :Gina commit -m 'auto update'<CR>
+nmap <silent> <Leader>gm  :Gina commit -m 'update'<CR>
 nmap <silent> <Leader>gA  :bufdo! Gina add %<CR>
 '''
 hook_source = '''

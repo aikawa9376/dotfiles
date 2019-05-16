@@ -13,7 +13,7 @@ zmenu() {
 fzf-locate-widget() {
   local selected
   if selected=$(lolcate / | fzf); then
-    LBUFFER=$selected
+    LBUFFER=${LBUFFER}$selected
   fi
   zle redisplay
 }
@@ -24,7 +24,7 @@ bindkey '\ei' fzf-locate-widget
 fzf-locate-pwd-widget() {
   local selected
   if selected=$(lolcate $(pwd) | fzf); then
-    LBUFFER=$selected
+    LBUFFER=${LBUFFER}$selected
   fi
   zle redisplay
 }
@@ -36,7 +36,7 @@ fzf-ripgrep-widget() {
   local selected
   if selected=$(rg --column --line-number --hidden --ignore-case --no-heading --color=always '' |
     fzf --delimiter : --nth 4..); then
-    LBUFFER=$(echo $selected | awk -F':' '{print $1}')
+    LBUFFER=${LBUFFER}$(echo $selected | awk -F':' '{print $1}')
   fi
   zle redisplay
 }
