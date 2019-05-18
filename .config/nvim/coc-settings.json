@@ -32,6 +32,12 @@
       "command": "efm-langserver",
       "args": [],
       "filetypes": ["vim", "eruby", "markdown"]
+    },
+    "golang": {
+      "command": "gopls",
+      "args": [],
+      "rootPatterns": ["go.mod", ".vim/", ".git/", ".hg/"],
+      "filetypes": ["go"]
     }
   }
 }

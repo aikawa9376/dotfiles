@@ -87,48 +87,11 @@ function loadlib() {
     source "$lib"
   fi
 }
+loadlib $ZCONFDIR/zsh-vcs.zsh
 loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-vimode.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
-
-# -------------------------------------
-# prompt
-# -------------------------------------
-autoload -Uz vcs_info
-setopt prompt_subst
-setopt combining_chars
-
-zstyle ':vcs_info:git:*' check-for-changes true
-zstyle ':vcs_info:git:*' unstagedstr '!'
-zstyle ':vcs_info:git:*' stagedstr '+'
-zstyle ':vcs_info:*' formats ' %c%u(%s:%b)'
-zstyle ':vcs_info:*' actionformats ' %c%u(%s:%b|%a)'
-
-precmd () {
-  # 1行あける
-  print
-  # バージョン管理されてた場合、ブランチ名
-  inside_git_repo="$(git rev-parse --is-inside-work-tree 2>/dev/null)"
-  if [ "$inside_git_repo" ]; then
-    vcs_info
-    psvar=()
-    LANG=jp_JP.UTF-8 vcs_info
-    [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
-    local left="%B%F{white}>>%B%F{blue}%~%f%b%B%F{green}%1(v|%1v|)%f%b"
-  else
-    local left="%B%F{white}>>%B%F{blue}%~%f%b"
-  fi
-  local right="%B%F{white}[%m:%B%F{yellow}%D %*%B%F{white}]"
-  # スペースの長さを計算
-  # テキストを装飾する場合、エスケープシーケンスをカウントしないようにします
-  local invisible='%([BSUbfksu]|([FK]|){*})'
-  local leftwidth=${#${(S%%)left//$~invisible/}}
-  local rightwidth=${#${(S%%)right//$~invisible/}}
-  local padwidth=$(($COLUMNS - ($leftwidth + $rightwidth) % $COLUMNS))
-
-  print -P $left${(r:$padwidth:: :)}$right
-}
 
 # -------------------------------------
 # fzf
