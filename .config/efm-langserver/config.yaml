@@ -8,6 +8,8 @@ languages:
   vim:
     lint-command: 'vint -'
     lint-stdin: true
+    lint-formats:
+      - '%f:%l:%c:%m'
 
   markdown:
     lint-command: 'markdownlint -s'
