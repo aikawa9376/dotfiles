@@ -35,7 +35,7 @@ bindkey '\eI' fzf-locate-pwd-widget
 fzf-ripgrep-widget() {
   local selected
   if selected=$(rg --column --line-number --hidden --ignore-case --no-heading --color=always '' |
-    fzf --delimiter : --nth 4..); then
+    fzf --ansi --delimiter : --nth 4.. --preview '$HOME/.config/zsh/preview.sh {}'); then
     LBUFFER=${LBUFFER}$(echo $selected | awk -F':' '{print $1}')
   fi
   zle redisplay

@@ -97,24 +97,36 @@ loadlib $ZCONFDIR/zsh-bookmark.zsh
 # fzf
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-export FZF_DEFAULT_COMMAND='fd --type file --follow --hidden --color=always --exclude .git'
+export FZF_DEFAULT_COMMAND='(fd --type file --follow --hidden --color=always --exclude .git) 2> /dev/null'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_CTRL_T_OPTS='--preview-window right:wrap --preview "bat --style=changes --color=always {}"'
+export FZF_CTRL_T_OPTS="$FZF_DEFAULT_PREVIEW"
+export FZF_CTRL_R_OPTS='--preview-window hidden'
 export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
+export FZF_DEFAULT_PREVIEW='--preview "
+  [[ -d {} ]]  &&
+  tree -C {}
+  [[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
+  timg -E -f1 -c1 -g $(( $COLUMNS / 2 - 4 ))x$(( $LINES * 2 )) {}
+  [[ -f {} && $(file --mime {}) =~ (^png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
+  echo {} is a binary file
+  (bat --style=changes --color=always {} ||
+   cat {}) 2> /dev/null | head -500"'
 export FZF_COMPLETION_TRIGGER=''
 export FZF_DEFAULT_OPTS='
 --height 40%
 --reverse
 --extended
---ansi
 --cycle
 --no-hscroll
+--inline-info
 --history '$HOME'/.fzf/history
 --bind alt-k:preview-up,alt-j:preview-down,ctrl-n:down,ctrl-p:up
 --bind alt-p:previous-history,alt-n:next-history,ctrl-k:kill-line
 --color dark,hl:34,hl+:40,bg+:235,fg+:15
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
+'$FZF_DEFAULT_PREVIEW'
+--preview-window right:wrap  --bind "?:toggle-preview"
 '
 
 bindkey "^I" expand-or-complete
@@ -217,7 +229,7 @@ function fvim() {
     files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
   fi
   # wraped function timg and bat?
-  selected_files=$(echo "$files" | fzf -m --preview 'bat {}' | tr '\n' ' ') &&
+  selected_files=$(echo "$files" | fzf -m | tr '\n' ' ') &&
 
   if [[ $selected_files == '' ]]; then
     return 0
