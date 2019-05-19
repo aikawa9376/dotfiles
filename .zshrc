@@ -103,9 +103,13 @@ export FZF_CTRL_T_OPTS="$FZF_DEFAULT_PREVIEW"
 export FZF_CTRL_R_OPTS='--preview-window hidden'
 export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
-export FZF_DEFAULT_PREVIEW='--preview "[[
-  $(file --mime {}) =~ binary ]] &&
-   timg -E -f1 -c1 -g $(( $COLUMNS / 2 - 4 ))x$(( $LINES * 2 )) {} ||
+export FZF_DEFAULT_PREVIEW='--preview "
+  [[ -d {} ]]  &&
+  tree -C {}
+  [[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
+  timg -E -f1 -c1 -g $(( $COLUMNS / 2 - 4 ))x$(( $LINES * 2 )) {}
+  [[ -f {} && $(file --mime {}) =~ (^png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
+  echo {} is a binary file
   (bat --style=changes --color=always {} ||
    cat {}) 2> /dev/null | head -500"'
 export FZF_COMPLETION_TRIGGER=''
