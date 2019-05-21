@@ -156,10 +156,10 @@ endif
 " auto fcitx
 let g:input_toggle = 1
 function! Fcitx2en()
-  let s:input_status = system("fcitx-remote")
+  let s:input_status = system('fcitx-remote')
   if s:input_status == 2
     let g:input_toggle = 1
-    let l:a = system("fcitx-remote -c")
+    let l:a = system('fcitx-remote -c')
   endif
 endfunction
 "Leave Insert mode
@@ -286,9 +286,9 @@ nnoremap X diw
 " インサートモード移行時に自動インデント
 function! IndentWithI()
     if len(getline('.')) == 0
-        return "cc"
+        return 'cc'
     else
-        return "i"
+        return 'i'
     endif
 endfunction
 nnoremap <expr> i IndentWithI()
@@ -596,7 +596,7 @@ nmap <F1> :call <SID>help_override()<CR>
 vmap <F1> :call <SID>help_override()<CR>
 function! s:help_override() abort
   let vtext = s:get_visual_selection()
-  let word = expand("<cword>")
+  let word = expand('<cword>')
   if vtext != ''
     let word = vtext
   endif
@@ -611,7 +611,7 @@ nmap <silent> gK :call <SID>google_search()<CR>
 vmap <silent> gK :call <SID>google_search()<CR>
 function! s:google_search() abort
   let vtext = s:get_visual_selection()
-  let word = expand("<cword>")
+  let word = expand('<cword>')
   if vtext != ''
     let word = vtext
   endif
@@ -705,7 +705,7 @@ function! C(cmd)
   return result
 endfunction
 
-function! s:cmd_capture(args, banged) "{{{
+function! s:cmd_capture(args, banged)
   new
   silent put =C(join(a:args))
   1,2delete _

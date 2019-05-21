@@ -1018,7 +1018,7 @@ endfunction
 command! -nargs=* Memo call fzf#run({
   \  'source': s:junk_file_list(),
   \  'sink*': function('<SID>junk_file_sink'),
-  \  'options': '-m -x +s --prompt=Memo:'.shellescape(<q-args>),
+  \  'options': '-m -x +s --ansi --preview-window hidden --prompt=Memo:'.shellescape(<q-args>),
   \  'down': '40%'})
 
 function! s:junk_file_list()
