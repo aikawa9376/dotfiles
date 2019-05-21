@@ -36,6 +36,7 @@ if ((${+commands[nodejs]})); then
 fi
 
 alias rcat='richpager -n'
+alias icat='kitty +kitten icat'
 alias dst='duster'
 alias fnd='finder'
 alias reload='exec $SHELL -1'

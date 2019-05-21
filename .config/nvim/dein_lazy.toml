@@ -322,7 +322,7 @@ function! s:config_easyfuzzymotion(...) abort
   return extend(copy({
   \   'converters': [incsearch#config#fuzzy#converter()],
   \   'modules'   : [incsearch#config#easymotion#module()],
-  \   'keymap'    : {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
+  \   'keymap'    : {"\<C-Space>": "<Over>(easymotion)"},
   \   'is_expr'   : 0,
   \   'is_stay'   : 0
   \ }), get(a:, 1, {}))
@@ -330,7 +330,7 @@ endfunction
 function! s:config_easymotion(...) abort
   return incsearch#util#deepextend(deepcopy({
   \   'modules': [incsearch#config#easymotion#module({'overwin': 1})],
-  \   'keymap' : {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
+  \   'keymap' : {"\<C-Space>": "<Over>(easymotion)"},
   \   'is_expr': 0,
   \   'is_stay': 0
   \ }), get(a:, 1, {}))
@@ -832,11 +832,11 @@ let g:fzf_action = {
 
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-  \ {'options': "--no-unicode"}))
+  \ {'options': "--ansi --no-unicode"}))
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
-  \  'options': "-m -x +s --no-unicode" .
+  \  'options': "-m -x +s --ansi --no-unicode" .
   \             ' --no-unicode --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 command! -bang -nargs=* Rg

@@ -99,7 +99,7 @@ loadlib $ZCONFDIR/zsh-bookmark.zsh
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='(fd --type file --follow --hidden --color=always --exclude .git) 2> /dev/null'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_CTRL_T_OPTS="$FZF_DEFAULT_PREVIEW"
+export FZF_CTRL_T_OPTS="--ansi $FZF_DEFAULT_PREVIEW"
 export FZF_CTRL_R_OPTS='--preview-window hidden'
 export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
 export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
@@ -107,7 +107,7 @@ export FZF_DEFAULT_PREVIEW='--preview "
   [[ -d {} ]]  &&
   tree -C {}
   [[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
-  timg -E -f1 -c1 -g $(( $COLUMNS / 2 - 4 ))x$(( $LINES * 2 )) {}
+  timg -g $(( $COLUMNS / 2 - 4 ))x$(( $LINES * 2 )) {}
   [[ -f {} && $(file --mime {}) =~ (^png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
   echo {} is a binary file
   (bat --style=changes --color=always {} ||
@@ -229,7 +229,7 @@ function fvim() {
     files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
   fi
   # wraped function timg and bat?
-  selected_files=$(echo "$files" | fzf -m | tr '\n' ' ') &&
+  selected_files=$(echo "$files" | fzf -m --ansi | tr '\n' ' ') &&
 
   if [[ $selected_files == '' ]]; then
     return 0
