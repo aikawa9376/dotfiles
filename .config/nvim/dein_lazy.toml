@@ -1246,11 +1246,11 @@ function! s:format_buffer(b)
   let readonly = getbufvar(a:b, '&modifiable') ? '' : ' [RO]'
   let extra = join(filter([modified, readonly], '!empty(v:val)'), '')
   if flag == '%'
-    return s:strip(printf("\033[38;2;102;204;0m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+    return s:strip(printf("\033[38;2;102;204;0m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/' , flag, extra))
   elseif flag == '#'
-    return s:strip(printf("\033[38;2;51;153;255m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+    return s:strip(printf("\033[38;2;51;153;255m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/', flag, extra))
   else
-    return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+    return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/', flag, extra))
   endif
 endfunction
 
@@ -1266,6 +1266,7 @@ command! -nargs=* NavBuffers
   \   '-m', '-x', '--tiebreak=index', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
+  \   '--preview-window', 'hidden',
   \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k', '--no-unicode'],
   \   'up': '30%',
   \ }))
