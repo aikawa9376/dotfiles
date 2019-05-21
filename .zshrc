@@ -102,7 +102,7 @@ export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_CTRL_T_OPTS="--ansi $FZF_DEFAULT_PREVIEW"
 export FZF_CTRL_R_OPTS='--preview-window hidden'
 export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
-export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
+export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_PREVIEW='--preview "
   [[ -d {} ]]  &&
   tree -C {}
