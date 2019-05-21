@@ -74,6 +74,7 @@ augroup mygroup
   autocmd ColorScheme * highligh CocWarningSign ctermfg=130 guifg=#ff922b guibg=#073642
   autocmd ColorScheme * highligh CocInfoSign    ctermfg=11  guifg=#fab005 guibg=#073642
   autocmd ColorScheme * highligh CocHintSign    ctermfg=12  guifg=#15aabf guibg=#073642
+  autocmd ColorScheme * highligh CocCodeLens    ctermfg=12  guifg=#15aabf
 augroup end
 
 " Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
@@ -322,7 +323,7 @@ function! s:config_easyfuzzymotion(...) abort
   return extend(copy({
   \   'converters': [incsearch#config#fuzzy#converter()],
   \   'modules'   : [incsearch#config#easymotion#module()],
-  \   'keymap'    : {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
+  \   'keymap'    : {"\<C-Space>": "<Over>(easymotion)"},
   \   'is_expr'   : 0,
   \   'is_stay'   : 0
   \ }), get(a:, 1, {}))
@@ -330,7 +331,7 @@ endfunction
 function! s:config_easymotion(...) abort
   return incsearch#util#deepextend(deepcopy({
   \   'modules': [incsearch#config#easymotion#module({'overwin': 1})],
-  \   'keymap' : {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
+  \   'keymap' : {"\<C-Space>": "<Over>(easymotion)"},
   \   'is_expr': 0,
   \   'is_stay': 0
   \ }), get(a:, 1, {}))
@@ -832,11 +833,11 @@ let g:fzf_action = {
 
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-  \ {'options': "--no-unicode"}))
+  \ {'options': "--ansi --no-unicode"}))
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
-  \  'options': "-m -x +s --no-unicode" .
+  \  'options': "-m -x +s --ansi --no-unicode" .
   \             ' --no-unicode --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 command! -bang -nargs=* Rg
@@ -852,9 +853,9 @@ command! -bang -nargs=* AllRg
   \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang Lines
-  \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
+  \ call fzf#vim#lines({'options': '--reverse --height 40% --preview-window hidden'}, <bang>0)
 command! -bang BLines
-  \ call fzf#vim#buffer_lines({'options': '--reverse --height 40%'}, <bang>0)
+  \ call fzf#vim#buffer_lines({'options': '--reverse --height 40% --preview-window hidden'}, <bang>0)
 
 " ------------------------------------------------------------------
 " DotFiles EasySearch
@@ -985,7 +986,7 @@ endfunction
 command! -nargs=* DirWordCompletions call fzf#run({
   \  'source': s:dir_word_completion(s:fzf_last_word()),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=DirWords:'.shellescape(s:fzf_last_word()),
+  \  'options': '-m -x +s --ansi --prompt=DirWords:'.shellescape(s:fzf_last_word()),
   \  'down': '40%'})
 
 function! s:dir_word_completion(word)
@@ -1003,7 +1004,7 @@ imap <expr> <C-t> fzf#complete({
 " ------------------------------------------------------------------
 imap <expr> <C-_> fzf#complete({
     \ 'source': <SID>dir_file_completion(<SID>fzf_last_word()),
-    \ 'options': '-m -x +s --prompt=DirFiles:',
+    \ 'options': '-m -x +s --ansi --prompt=DirFiles:',
     \ 'down': '40%'})
 
 function! s:dir_file_completion(word)
@@ -1036,7 +1037,7 @@ command! -nargs=* Gitignore call fzf#run({
   \  'sink*': function('<SID>ignore_file_sink'),
   \  'options': '--prompt=Gitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
   \  '--header ":: Press C-x:delete ignore lines C-t:toggle C-m:comment toggle" --print-query ' .
-  \  '--expect ctrl-x,ctrl-m,ctrl-t',
+  \  '--ansi --expect ctrl-x,ctrl-m,ctrl-t',
   \  'down': '40%'})
 
 function! s:ignore_file_list()
@@ -1089,7 +1090,7 @@ command! -nargs=* AddGitignore call fzf#run({
   \  'sink*': function('<SID>add_ignore_file_sink'),
   \  'options': '--prompt=AllGitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
   \  '--header ":: Press C-x:add ignore lines C-t:toggle" --print-query ' .
-  \  '--expect ctrl-x,ctrl-t',
+  \  '--ansi --expect ctrl-x,ctrl-t',
   \  'down': '40%'})
 
 function! s:add_ignore_file_sink(lines) abort
@@ -1147,7 +1148,7 @@ command! -bang -nargs=? -complete=dir GFiles
   \ {'sink*': function('<SID>override_gitfiles_sink'),
   \  'options': "-m -x +s --no-unicode
   \  --header \":: Press C-x:rm cached\"
-  \  --expect ctrl-d"}))
+  \  --expect ctrl-x"}))
 
 " ------------------------------------------------------------------
 " YankRing fzf
@@ -1246,11 +1247,11 @@ function! s:format_buffer(b)
   let readonly = getbufvar(a:b, '&modifiable') ? '' : ' [RO]'
   let extra = join(filter([modified, readonly], '!empty(v:val)'), '')
   if flag == '%'
-    return s:strip(printf("\033[38;2;102;204;0m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+    return s:strip(printf("\033[38;2;102;204;0m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/' , flag, extra))
   elseif flag == '#'
-    return s:strip(printf("\033[38;2;51;153;255m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+    return s:strip(printf("\033[38;2;51;153;255m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/', flag, extra))
   else
-    return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
+    return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/', flag, extra))
   endif
 endfunction
 
@@ -1266,6 +1267,7 @@ command! -nargs=* NavBuffers
   \   '-m', '-x', '--tiebreak=index', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
+  \   '--preview-window', 'hidden',
   \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k', '--no-unicode'],
   \   'up': '30%',
   \ }))
@@ -1546,8 +1548,10 @@ hook_add = '''
 nmap <silent> <Leader>gns :Gina status<CR>
 nmap <silent> <Leader>gnb :Gina blame<CR>
 nmap <silent> <Leader>gp  :Gina push<CR>
+nmap <silent> <Leader>gP  :Gina add -u \| Gina commit -m 'update' \| Gina push<CR>
 nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
 nmap <silent> <Leader>gm  :Gina commit -m 'update'<CR>
+nmap <silent> <Leader>gM  :Gina add -u \| Gina commit -m 'update'<CR>
 nmap <silent> <Leader>gA  :bufdo! Gina add %<CR>
 '''
 hook_source = '''

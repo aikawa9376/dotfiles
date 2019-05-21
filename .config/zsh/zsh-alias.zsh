@@ -36,13 +36,14 @@ if ((${+commands[nodejs]})); then
 fi
 
 alias rcat='richpager -n'
+alias icat='kitty +kitten icat'
 alias dst='duster'
 alias fnd='finder'
 alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
 alias -g to='$(destination_directories)'
 alias -g le='| less'
-alias -g ff='| fzf --ansi'
+alias -g ff='| fzf --ansi -m'
 alias -g bb='| bat'
 alias -g vv='| nvim'
 alias -g dust='$(duster)'
