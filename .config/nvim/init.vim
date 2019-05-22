@@ -318,7 +318,6 @@ nnoremap y mvmry
 nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
-nnoremap / mv/
 nnoremap : mv:
 nnoremap <M-x> vy
 nnoremap <Leader>U `v
