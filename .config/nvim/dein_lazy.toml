@@ -1551,7 +1551,7 @@ nmap <silent> <Leader>gp  :Gina push<CR>
 nmap <silent> <Leader>gP  :Gina add -u \| Gina commit -m 'update' \| Gina push<CR>
 nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
 nmap <silent> <Leader>gm  :Gina commit -m 'update'<CR>
-nmap <silent> <Leader>gM  :Gina add -u \| Gina commit -m 'update'<CR>
+nmap <Leader>gM  :Gina add -u \| Gina commit -m 'update'<CR>
 nmap <silent> <Leader>gA  :bufdo! Gina add %<CR>
 nmap <silent> <Leader>gau :Gina add -u<CR>
 command! -nargs=* GitAddCommit silent execute('
