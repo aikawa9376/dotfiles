@@ -61,8 +61,8 @@ autocmd CursorHold * silent call CocActionAsync('highlight')
 nmap <leader>rn <Plug>(coc-rename)
 
 " Remap for format selected region
-nmap <leader>cf  <Plug>(coc-format-selected)
-vmap <leader>cf  <Plug>(coc-format-selected)
+nmap <leader>cf <Plug>(coc-format-selected)
+vmap <leader>cf <Plug>(coc-format-selected)
 
 augroup mygroup
   autocmd!
@@ -1553,6 +1553,7 @@ nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
 nmap <silent> <Leader>gm  :Gina commit -m 'update'<CR>
 nmap <silent> <Leader>gM  :Gina add -u \| Gina commit -m 'update'<CR>
 nmap <silent> <Leader>gA  :bufdo! Gina add %<CR>
+nmap <silent> <Leader>gau :Gina add -u<CR>
 '''
 hook_source = '''
 call gina#custom#command#option(
