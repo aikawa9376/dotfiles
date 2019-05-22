@@ -1,6 +1,5 @@
-if !&compatible
-  set nocompatible
-endif
+set encoding=utf-8
+scriptencoding utf-8
 
 " reset augroup
 augroup MyAutoCmd
@@ -37,7 +36,6 @@ syntax enable
 set t_Co=256
 set number
 set backspace=indent,eol,start
-set encoding=utf-8
 set fileformats=unix,dos,mac
 set fileencodings=utf-8,sjis
 set ttimeoutlen=1
@@ -137,12 +135,12 @@ endfunction
 
 " Insertモードのときカーソルの形状を変更
 if has('unix')
-  if &term =~ 'screen'
+  if &term =~? 'screen'
     let &t_ti.= "\eP\e[1 q\e\\"
     let &t_SI.= "\eP\e[5 q\e\\"
     let &t_EI.= "\eP\e[1 q\e\\"
     let &t_te.= "\eP\e[0 q\e\\"
-  elseif &term =~ 'xterm'
+  elseif &term =~? 'xterm'
     let &t_ti.="\e[1 q"
     let &t_SI.="\e[5 q"
     let &t_EI.="\e[1 q"
@@ -163,7 +161,7 @@ function! Fcitx2en()
   endif
 endfunction
 "Leave Insert mode
-autocmd InsertLeave * call Fcitx2en()
+autocmd MyAutoCmd  InsertLeave * call Fcitx2en()
 
 " ファイル処理関連の設定
 set confirm    " 保存されていないファイルがあるときは終了前に保存確認
@@ -206,7 +204,7 @@ vnoremap cl "_s
 nnoremap <silent> dd :<C-u>call <SID>remove_line_brank(v:count1)<CR>
 function! s:remove_line_brank(count)
   for i in range(1, v:count1)
-    if getline('.') == ''
+    if getline('.') ==# ''
       .delete _
     else
       .delete
@@ -218,13 +216,13 @@ endfunction
 nnoremap <silent> dD :<C-u>call <SID>remove_line_brank_all(v:count1)<CR>
 function! s:remove_line_brank_all(count)
   for i in range(1, v:count1)
-    if getline('.') == ''
+    if getline('.') ==# ''
       .delete _
     else
       .delete
     endif
   endfor
-  while getline('.') == ''
+  while getline('.') ==# ''
       .delete _
   endwhile
   call repeat#set('dD', v:count1)
@@ -237,7 +235,7 @@ function! s:YanksAfterIndent()
   normal! gV=gV^
 endfunction
 function! YankLine(flag)
-  if a:flag == 'j'
+  if a:flag ==# 'j'
     let line = line('.')
     let repeat = ']p'
   else
@@ -332,12 +330,14 @@ nnoremap <C-j> 3gj
 vnoremap <C-j> 3gj
 nnoremap <C-k> 3gk
 vnoremap <C-k> 3gk
+nnoremap <M-l> i<Space><ESC><Right>
+nnoremap <M-h> x<Left>
 
 " gJで空白を削除する
 fun! JoinSpaceless()
     execute 'normal gj'
     " Character under cursor is whitespace?
-    if matchstr(getline('.'), '\%' . col('.') . 'c.') =~ '\s'
+    if matchstr(getline('.'), '\%' . col('.') . 'c.') =~? '\s'
         " When remove it!
         execute 'normal dw'
     endif
@@ -519,11 +519,11 @@ endfunction
 
 function! IsPhpOrHtml() abort
   let fe = &filetype
-  if fe == 'php'
+  if fe ==? 'php'
     return 1
-  elseif fe == 'phtml'
+  elseif fe ==? 'phtml'
     return 1
-  elseif fe == 'html'
+  elseif fe ==? 'html'
     return 0
   endif
 endfunction
@@ -597,7 +597,7 @@ vmap <F1> :call <SID>help_override()<CR>
 function! s:help_override() abort
   let vtext = s:get_visual_selection()
   let word = expand('<cword>')
-  if vtext != ''
+  if vtext !=# ''
     let word = vtext
   endif
   try
@@ -612,7 +612,7 @@ vmap <silent> gK :call <SID>google_search()<CR>
 function! s:google_search() abort
   let vtext = s:get_visual_selection()
   let word = expand('<cword>')
-  if vtext != ''
+  if vtext !=# ''
     let word = vtext
   endif
   execute 'silent !google-chrome-stable ' .
@@ -625,7 +625,7 @@ function! s:get_visual_selection()
     if len(lines) == 0
         return ''
     endif
-    let lines[-1] = lines[-1][: column_end - (&selection == 'inclusive' ? 1 : 2)]
+    let lines[-1] = lines[-1][: column_end - (&selection ==? 'inclusive' ? 1 : 2)]
     let lines[0] = lines[0][column_start - 1:]
     return join(lines, "\n")
 endfunction
@@ -655,27 +655,27 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': '<C-h>', 'at': '"\%#"', 'delete': 1})
   call lexima#add_rule({'char': '<CR>', 'at': '"""\%#""")', 'input_after': '<CR>'})
 
-  call lexima#add_rule({'char': "<", 'input_after': ">"})
+  call lexima#add_rule({'char': '<', 'input_after': '>'})
   call lexima#add_rule({'char': '<', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '<'})
   call lexima#add_rule({'char': '<C-h>', 'at': '<\%#>', 'delete': 1})
   call lexima#add_rule({'char': '<Space>', 'at': '<\%#>', 'input_after': '<Space>'})
   call lexima#add_rule({'char': '<BS>', 'at': '< \%# >', 'delete': 1})
 
-  call lexima#add_rule({'char': "{", 'input_after': "}"})
+  call lexima#add_rule({'char': '{', 'input_after': '}'})
   call lexima#add_rule({'char': '{', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '{'})
   call lexima#add_rule({'char': '<C-h>', 'at': '{\%#}', 'delete': 1})
   call lexima#add_rule({'char': '<CR>', 'at': '{\%#}', 'input_after': '<CR>'})
   call lexima#add_rule({'char': '<Space>', 'at': '{\%#}', 'input_after': '<Space>'})
   call lexima#add_rule({'char': '<BS>', 'at': '{ \%# }', 'delete': 1})
 
-  call lexima#add_rule({'char': "[", 'input_after': "]"})
+  call lexima#add_rule({'char': '[', 'input_after': ']'})
   call lexima#add_rule({'char': '[', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '['})
   call lexima#add_rule({'char': '<C-h>', 'at': '\[\%#\]', 'delete': 1})
   call lexima#add_rule({'char': '<CR>', 'at': '\[\%#\]', 'input_after': '<CR>'})
   call lexima#add_rule({'char': '<Space>', 'at': '\[\%#]', 'input_after': '<Space>'})
   call lexima#add_rule({'char': '<BS>', 'at': '\[ \%# ]', 'delete': 1})
 
-  call lexima#add_rule({'char': "(", 'input_after': ")"})
+  call lexima#add_rule({'char': '(', 'input_after': ')'})
   call lexima#add_rule({'char': '(', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '('})
   call lexima#add_rule({'char': '<C-h>', 'at': '(\%#)', 'delete': 1})
   call lexima#add_rule({'char': '<CR>', 'at': '(\%#)', 'input_after': '<CR>'})
