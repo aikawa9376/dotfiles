@@ -1554,7 +1554,9 @@ nmap <silent> <Leader>gm  :Gina commit -m 'update'<CR>
 nmap <silent> <Leader>gM  :Gina add -u \| Gina commit -m 'update'<CR>
 nmap <silent> <Leader>gA  :bufdo! Gina add %<CR>
 nmap <silent> <Leader>gau :Gina add -u<CR>
-command! -nargs=* GitAddCommit execute('
+command! -nargs=* GitAddCommit silent execute('
+  \ !git add -u && git commit -m ' . shellescape(<q-args>)) . '&'
+command! -nargs=* GitAddAmend silent execute('
   \ !git add -u && git commit --amend -m ' . shellescape(<q-args>)) . '&'
 '''
 hook_source = '''
