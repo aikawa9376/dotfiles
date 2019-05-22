@@ -511,6 +511,14 @@ function! s:vimrc_local(loc)
   endfor
 endfunction
 
+" html用の設定はここ
+augroup MyXML
+  autocmd!
+  autocmd Filetype xml inoremap <buffer> </ </<C-x><C-o>
+  autocmd Filetype html inoremap <buffer> </ </<C-x><C-o>
+  autocmd Filetype phtml inoremap <buffer> </ </<C-x><C-o>
+augroup END
+
 " php用の設定はここ
 " TODO ftplutin setting
 autocmd MyAutoCmd FileType php,phml call s:php_my_settings()
