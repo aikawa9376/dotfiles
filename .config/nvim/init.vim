@@ -318,6 +318,8 @@ nnoremap y mvmry
 nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
+nnoremap / mv/
+nnoremap : mv:
 nnoremap <M-x> vy
 nnoremap <Leader>U `v
 nnoremap <C-h> ^
@@ -331,7 +333,9 @@ vnoremap <C-j> 3gj
 nnoremap <C-k> 3gk
 vnoremap <C-k> 3gk
 nnoremap <M-l> i<Space><ESC><Right>
-nnoremap <M-h> x<Left>
+nnoremap <M-h> hx
+nnoremap <silent><M-j> j:call cursor(0,strlen(getline("."))/2)<CR>
+nnoremap <silent><M-k> k:call cursor(0,strlen(getline("."))/2)<CR>
 
 " gJで空白を削除する
 fun! JoinSpaceless()
