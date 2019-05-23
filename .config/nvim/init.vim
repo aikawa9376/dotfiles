@@ -513,7 +513,6 @@ augroup MyXML
 augroup END
 
 " php用の設定はここ
-" TODO ftplutin setting
 autocmd MyAutoCmd FileType php,phml call s:php_my_settings()
 function! s:php_my_settings() abort
   nnoremap <buffer> <expr><F1> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
