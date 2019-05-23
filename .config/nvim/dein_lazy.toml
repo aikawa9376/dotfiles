@@ -1,218 +1,215 @@
 # shougo---------------------------------
 
 [[plugins]]
-repo = 'Shougo/deoplete.nvim'
-depends = [
-'neosnippet', 'context_filetype.vim', 'neco-syntax',
-'neoinclude.vim', 'FastFold', 'neopairs.vim', 'deoplete-tabnine',
-'tmux-complete.vim', 'phpcd.vim', 'neco-vim', 'deoplete-zsh',
-'float-preview.nvim'
-]
-hook_source = '''
-" deoplete setup
-let g:deoplete#enable_at_startup = 1
-
-let s:deoplete_custom_option = {
-  \ 'auto_complete'      : v:true,
-  \ 'auto_complete_delay': 0,
-  \ 'auto_refresh_delay' : 20,
-  \ 'camel_case'         : v:false,
-  \ 'ignore_case'        : v:true,
-  \ 'max_list'           : 100,
-  \ 'min_pattern_length' : 1,
-  \ 'num_processes'      : 0,
-  \ 'on_insert_enter'    : v:true,
-  \ 'on_text_changed_i'  : v:true,
-  \ 'refresh_always'     : v:true,
-  \ 'skip_chars'         : ['(', ')', '[', ']'],
-  \ 'smart_case'         : v:true,
-  \ }
-call deoplete#custom#option(s:deoplete_custom_option)
-
-call deoplete#custom#option('sources', {
-  \ 'sql'  : ['sw', 'sw-omni', 'neosnippet'],
-  \ })
-
-call deoplete#custom#option('omni_patterns', {
-  \ 'java' : '[^. *\t]\.\w*',
-  \ 'html' : ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
-  \ 'xhtml': ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
-  \ 'xml'  : ['<', '</', '<[^>]*\s[[:alnum:]-]*'],
-  \ })
-
-call deoplete#custom#source('_', 'converter', ['auto_paren'])
-call deoplete#custom#source('neosnippet', 'rank', 1000)
-call deoplete#custom#source('neosnippet', 'max_candidates', 5)
-call deoplete#custom#source('neosnippet', 'max_pattern_length', 3)
-call deoplete#custom#source('tag', 'min_pattern_length', 2)
-call deoplete#custom#source('tmux-complete', 'min_pattern_length', 2)
-call deoplete#custom#source('tmux-complete', 'max_candidates', 10)
-call deoplete#custom#source('tabnine', 'rank', 80)
-
-let g:deoplete#ignore_sources     = get(g:, 'deoplete#ignore_sources', {})
-let g:deoplete#ignore_sources.php = ['omni']
-
-" 戻れてもいいかもしれない
-autocmd MyAutoCmd InsertLeave * NeoSnippetClearMarkers
-'''
-on_event = 'InsertEnter'
-
-[[plugins]]
-repo = 'Shougo/neosnippet'
-depends = ['neosnippet-snippets']
-on_event = 'InsertEnter'
-on_ft = ['snippet']
-hook_source = '''
-" Snippet key-mappings.
-" Note: It must be "imap" and "smap".  It uses <Plug> mappings.
-imap <C-Space> <Plug>(neosnippet_jump_or_expand)
-smap <C-Space> <Plug>(neosnippet_jump_or_expand)
-xmap <C-Space> <Plug>(neosnippet_expand_target)
-
-let g:neosnippet#enable_completed_snippet = 1
-let g:neosnippet#expand_word_boundar      = 1
-let g:neosnippet#snippets_directory       = '~/.config/nvim/snippets'
-
-" For conceal markers.
-if has('conceal')
-set conceallevel=2 concealcursor=niv
-endif
-'''
-
-[[plugins]]
-repo = 'tbodt/deoplete-tabnine'
-build = './install.sh'
-
-[[plugins]]
-repo = 'ncm2/float-preview.nvim'
+repo = 'neoclide/coc.nvim'
 on_event = 'VimEnter'
+depends = ['coc-neoinclude', 'neosnippet', 'coc-neco', 'coc-zsh']
+marge = 0
+build = './install.sh nightly'
 hook_add = '''
-let g:float_preview#docked = 0
+" don't give |ins-completion-menu| messages.
+set shortmess+=c
+" always show signcolumns
+set signcolumn=yes
+
+let g:coc_status_error_sign   = "\uf057 :"
+let g:coc_status_warning_sign = "\uf071 :"
+
+let g:coc_snippet_next = '<C-Space>'
+
+" Use tab for trigger completion with characters ahead and navigate.
+" Use command ':verbose imap <tab>' to make sure tab is not mapped by other plugin.
+imap <silent><expr> <TAB>
+      \ pumvisible() ? "\<C-n>" :
+      \ <SID>check_back_space() ? "\<TAB>" :
+      \ coc#refresh()
+imap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
+
+function! s:check_back_space() abort
+  let col = col('.') - 1
+  return !col || getline('.')[col - 1]  =~# '\s'
+endfunction
+
+imap <silent><expr> <cr> pumvisible() ? coc#_select_confirm() : "\<CR>"
+imap <silent><expr> <C-x><C-x> coc#refresh()
+
+" Use `[a` and `]a` for navigate diagnostics
+nmap <silent> [a <Plug>(coc-diagnostic-prev)
+nmap <silent> ]a <Plug>(coc-diagnostic-next)
+
+" Remap keys for gotos
+nmap <silent> gd <Plug>(coc-definition)
+nmap <silent> gr <Plug>(coc-references)
+nmap <silent> gy <Plug>(coc-type-definition)
+nmap <silent> gi <Plug>(coc-implementation)
+
+" Use K for show documentation in preview window
+nnoremap <silent> gk :call <SID>show_documentation()<CR>
+
+function! s:show_documentation()
+  if &filetype == 'vim'
+    execute 'h '.expand('<cword>')
+  else
+    call CocAction('doHover')
+  endif
+endfunction
+
+" Highlight symbol under cursor on CursorHold
+autocmd CursorHold * silent call CocActionAsync('highlight')
+
+" Remap for rename current word
+nmap <leader>rn <Plug>(coc-rename)
+
+" Remap for format selected region
+nmap <leader>cf <Plug>(coc-format-selected)
+vmap <leader>cf <Plug>(coc-format-selected)
+
+augroup mygroup
+  autocmd!
+  " Setup formatexpr specified filetype(s).
+  autocmd FileType typescript,json setl formatexpr=CocAction('formatSelected')
+  " Update signature help on jump placeholder
+  autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
+  autocmd ColorScheme * highligh CocErrorSign   ctermfg=9   guifg=#ff0000 guibg=#073642
+  autocmd ColorScheme * highligh CocWarningSign ctermfg=130 guifg=#ff922b guibg=#073642
+  autocmd ColorScheme * highligh CocInfoSign    ctermfg=11  guifg=#fab005 guibg=#073642
+  autocmd ColorScheme * highligh CocHintSign    ctermfg=12  guifg=#15aabf guibg=#073642
+  autocmd ColorScheme * highligh CocCodeLens    ctermfg=12  guifg=#15aabf
+augroup end
+
+" Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
+vmap <leader>cda  <Plug>(coc-codeaction-selected)
+nmap <leader>cda  <Plug>(coc-codeaction-selected)
+
+" Remap for do codeAction of current line
+nmap <leader>cd  <Plug>(coc-codeaction)
+" Fix autofix problem of current line
+nmap <leader>cq  <Plug>(coc-fix-current)
+" codelens
+nmap <leader>cl  <Plug>(coc-codelens-action)
+
+" Use `:Format` for format current buffer
+command! -nargs=0 Format :call CocAction('format')
+
+" Use `:Fold` for fold current buffer
+command! -nargs=? Fold :call CocAction('fold', <f-args>)
+
+" Using CocList
+" Show all diagnostics
+nnoremap <silent> <space>ca  :<C-u>CocList diagnostics<cr>
+" Search workspace symbols
+nnoremap <silent> <space>cs  :<C-u>CocList -I symbols<cr>
+" Find symbol of current document
+nnoremap <silent> <space>cO  :<C-u>CocList outline<cr>
+" Show commands
+nnoremap <silent> <space>cm  :<C-u>CocList lists<cr>
+" Do default action for next item.
+nnoremap <silent> <space>cj  :<C-u>CocNext<CR>
+" Do default action for previous item.
+nnoremap <silent> <space>ck  :<C-u>CocPrev<CR>
+" Resume latest coc list
+nnoremap <silent> <space>cu  :<C-u>CocListResume<CR>
 '''
 
 [[plugins]]
-repo = 'autozimu/LanguageClient-neovim'
-on_ft = ['rust', 'javascript', 'python']
-rev = 'next'
-build = 'bash install.sh'
-hook_add = '''
-set hidden
-let g:LanguageClient_serverCommands = {
-  \ 'rust': ['~/.cargo/bin/rustup', 'run', 'stable', 'rls'],
-  \ 'javascript': ['javascript-typescript-stdio'],
-  \ 'python': ['pyls'],
-  \ }
-let g:LanguageClient_autoStart                = 1
-let g:LanguageClient_autoStop                 = 1
-let g:LanguageClient_diagnosticsEnable        = 0
-let g:LanguageClient_changeThrottle           = 1.5
-let g:LanguageClient_completionPreferTextEdit = 0
-let g:LanguageClient_diagnosticsSignsMax      = 0
-let g:LanguageClient_diagnosticsList          = 'Disabled'
-let g:LanguageClient_hasSnippetSupport        = 0
-let g:LanguageClient_waitOutputTimeout        = 4
-" let g:LanguageClient_loggingLevel = 'DEBUG'
-" let g:LanguageClient_loggingFile = '/tmp/LanguageClient.log'
-" let g:LanguageClient_serverStderr = '/tmp/LanguageServer.log'
-nnoremap <silent> K :call LanguageClient_textDocument_hover()<CR>
-nnoremap <silent> gd :call LanguageClient_textDocument_definition()<CR>
-nnoremap <silent> <F2> :call LanguageClient_textDocument_rename()<CR>
-nnoremap <silent> <F3> :call LanguageClient_textDocument_references()<CR>
-nnoremap <silent> <F11> :call LanguageClient_contextMenu()<CR>
-'''
+repo = 'jsfaint/coc-neoinclude'
+depends = ['neoinclude.vim']
 
 [[plugins]]
-repo = 'Shougo/neosnippet-snippets'
-
-[[plugins]]
-repo = 'honza/vim-snippets'
-
-[[plugins]]
-repo = 'Shougo/context_filetype.vim'
-hook_source = '''
-if !exists('g:context_filetype#same_filetypes')
-  let g:context_filetype#same_filetypes = {}
-endif
-let g:context_filetype#same_filetypes.php = 'phtml'
-let b:context_filetype_filetypes = context_filetype#default_filetypes()
-call extend(b:context_filetype_filetypes,
-  \ {'php' : [
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\? type="text/javascript"\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'javascript',
-  \   },
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\? type="text/coffeescript"\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'coffee',
-  \   },
-  \   {
-  \    'start':
-  \     '<script\%( [^>]*\)\?>',
-  \    'end': '</script>', 'filetype': 'javascript',
-  \   },
-  \   {
-  \    'start':
-  \     '<style\%( [^>]*\)\?>',
-  \    'end': '</style>', 'filetype': 'css',
-  \   },
-  \   {
-  \    'start':
-  \     '<[^>]\+ style=\([''"]\)',
-  \    'end': '\1', 'filetype': 'css',
-  \   },
-  \ ]})
-'''
-
-[[plugins]]
-repo = 'Shougo/neco-syntax'
-
-[[plugins]]
-repo = 'Shougo/neco-vim'
-
-[[plugins]]
-repo = 'deoplete-plugins/deoplete-zsh'
-
-[[plugins]]
-repo = 'Shougo/echodoc.vim'
-on_event = 'CompleteDone'
-hook_source = '''
-let g:echodoc#type = 'virtual'
-call echodoc#enable()
-'''
+repo = 'tjdevries/coc-zsh'
 
 [[plugins]]
 repo = 'Shougo/neoinclude.vim'
 
 [[plugins]]
-repo = 'Shougo/neopairs.vim'
-hook_add = '''
-let g:neopairs#enable = 1
-'''
+repo = 'neoclide/coc-neco'
+depends = ['neco-vim']
+
 [[plugins]]
-repo = 'wellle/tmux-complete.vim'
+repo = 'Shougo/neco-vim'
+
+[[plugins]]
+repo = 'Shougo/neosnippet'
+depends = ['neosnippet-snippets', 'vim-snippets']
+hook_add = '''
+imap <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
+  \ ? "\<Plug>(neosnippet_jump)" : "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
+smap <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
+  \ ? "\<Plug>(neosnippet_jump)" : "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
+xmap <expr> <C-Space> pumvisible() ? "\<C-y>" : "\<Plug>(neosnippet_expand_target)"
+
+let g:neosnippet#enable_completed_snippet  = 1
+let g:neosnippet#expand_word_boundar       = 1
+let g:neosnippet#enable_auto_clear_markers = 1
+let g:neosnippet#snippets_directory        = '~/.cache/dein/repos/github.com/honza/vim-snippets/snippets/'
+
+" For conceal markers.
+if has('conceal')
+  set conceallevel=2 concealcursor=niv
+  endif
+'''
+
+[[plugins]]
+repo = 'honza/vim-snippets'
+
+[[plugins]]
+repo = 'Shougo/neosnippet-snippets'
+
+[[plugins]]
+repo = 'liuchengxu/vista.vim'
+on_cmd = ['Vista!!']
+hook_add = '''
+nnoremap <silent> <Leader>o  :Vista!!<CR>
+nnoremap <silent> <Leader>c/ :Vista finder<CR>
+let g:vista_stay_on_open         = 0
+let g:vista_fzf_preview          = ['right:50%']
+let g:vista_icon_indent          = ["", " "]
+let g:vista_echo_cursor_strategy = "floating_win"
+let g:vista#renderer#icons = {
+  \  "function": "\uf794 ",
+  \  "variable": "\uf71b ",
+  \ }
+'''
 
 [[plugins]]
 repo = 'konfekt/FastFold'
 on_event = 'VimEnter'
 
+[[plugins]]
+repo = 'wellle/tmux-complete.vim'
+
 # text-----------------------------------
 
 [[plugins]]
 repo = 'mattn/emmet-vim'
-# on_event = 'insertenter'
 on_ft = ['html', 'php', 'phtml', 'javascript']
 hook_add = '''
-let g:user_emmet_install_global = 0
-let g:user_emmet_mode='i'
+let g:user_emmet_install_global        =  0
+let g:user_emmet_mode                  = 'iv'
+let g:user_emmet_expandabbr_key        = '<M-,>'
+let g:user_emmet_expandword_key        = '<M-e>w;'
+let g:user_emmet_update_tag            = '<M-e>u'
+let g:user_emmet_balancetaginward_key  = '<M-e>d'
+let g:user_emmet_balancetagoutward_key = '<M-e>D'
+let g:user_emmet_next_key              = '<M-e>n'
+let g:user_emmet_prev_key              = '<M-e>N'
+let g:user_emmet_imagesize_key         = '<M-e>i'
+let g:user_emmet_togglecomment_key     = '<M-e>/'
+let g:user_emmet_splitjointag_key      = '<M-e>j'
+let g:user_emmet_removetag_key         = '<M-e>k'
+let g:user_emmet_anchorizeurl_key      = '<M-e>a'
+let g:user_emmet_anchorizesummary_key  = '<M-e>A'
+let g:user_emmet_mergelines_key        = '<M-e>m'
+let g:user_emmet_codepretty_key        = '<M-e>c'
 autocmd MyAutoCmd FileType phtml,html,php,css EmmetInstall
-imap <silent> <M-,> <C-y>,
 '''
 
 [[plugins]]
-repo = 'ap/vim-css-color'
+repo = 'RRethy/vim-hexokinase'
 on_ft = ['css', 'scss']
+hook_add = '''
+let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
+'''
 
 [[plugins]]
 repo = 'alvan/vim-closetag'
@@ -222,13 +219,18 @@ on_event = 'InsertEnter'
 repo = 'inkarkat/vim-SyntaxRange'
 on_event = 'VimEnter'
 hook_post_source = '''
-autocmd MyAutoCmd BufEnter,BufRead,InsertLeave dein*.toml call Syntax_range_dein()
+autocmd MyAutoCmd FileType toml call Syntax_range_dein()
 '''
 
 [[plugins]]
 repo = 'cohama/lexima.vim'
 on_event = 'InsertEnter'
-hook_post_source = 'call SetLeximaAddRule()'
+hook_add  =  '''
+let g:lexima_no_default_rules = 1
+'''
+hook_post_source = '''
+call SetLeximaAddRule()
+'''
 
 [[plugins]]
 repo = 'tyru/caw.vim'
@@ -237,10 +239,6 @@ hook_add = '''
 nmap <C-_> <Plug>(caw:hatpos:toggle)
 vmap <C-_> <Plug>(caw:hatpos:toggle)
 '''
-
-[[plugins]]
-repo = 'thinca/vim-visualstar'
-on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'bfredl/nvim-miniyank'
@@ -260,11 +258,15 @@ map f <Plug>Sneak_f
 map F <Plug>Sneak_F
 map t <Plug>Sneak_t
 map T <Plug>Sneak_T
-map <C-Space> <Plug>Sneak_s
-map <M-S> <Plug>Sneak_S
+map ; <Plug>Sneak_;
+map , <Plug>Sneak_,
+map s <Plug>Sneak_s
+map S <Plug>Sneak_S
+nmap <expr> f sneak#is_sneaking() ? '<Plug>Sneak_;' : '<plug>Sneak_f'
+nmap <expr> F sneak#is_sneaking() ? '<Plug>Sneak_,' : '<plug>Sneak_F'
 let g:sneak#s_next = 1
 let g:sneak#use_ic_scs = 1
-autocmd MyAutoCmd ColorScheme * highligh Sneak ctermbg=0 ctermfg=15 cterm=underline
+autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
 '''
 
 [[plugins]]
@@ -274,7 +276,7 @@ on_event = 'VimEnter'
 hook_add = '''
 let g:VM_cmdheight       = 1
 let g:VM_manual_infoline = 1
-let g:VM_leader          = 'vm'
+let g:VM_leader          = '<Space>v'
 let g:VM_theme           = 'iceblue'
 '''
 
@@ -282,48 +284,61 @@ let g:VM_theme           = 'iceblue'
 repo = 'terryma/vim-expand-region'
 on_map = '<Plug>(expand_region_expand)'
 hook_add = '''
-nmap + <Plug>(expand_region_expand)
-vmap + <Plug>(expand_region_expand)
 let g:expand_region_text_objects = {
-      \ '$'   :0,
-      \ 'i]'  :1,
-      \ 'ib'  :1,
-      \ 'iB'  :1,
-      \ 'il'  :0,
-      \ 'ip'  :0,
-      \ 'ie'  :0,
-      \ }
+  \ 'iw'  :0,
+  \ 'iW'  :0,
+  \ 'il'  :0,
+  \ 'ii'  :1,
+  \ 'i]'  :1,
+  \ 'i}'  :1,
+  \ 'ib'  :1,
+  \ 'iB'  :1,
+  \ 'ip'  :0,
+  \ 'ie'  :0,
+  \ }
+'''
+
+[[plugins]]
+repo = 'rhysd/accelerated-jk'
+on_event = 'VimEnter'
+hook_add = '''
+nmap j <Plug>(accelerated_jk_gj)
+nmap k <Plug>(accelerated_jk_gk)
+let g:accelerated_jk_acceleration_table = [15,35,50,74,97,119,141,178]
 '''
 
 [[plugins]]
 repo = 'easymotion/vim-easymotion'
-depends = ['incsearch.vim', 'incsearch-fuzzy.vim', 'incsearch-migemo.vim', 'incsearch-easymotion.vim']
+depends = [
+  'incsearch.vim', 'incsearch-fuzzy.vim',
+  'incsearch-migemo.vim', 'incsearch-easymotion.vim', 'vim-asterisk'
+]
 on_event = 'VimEnter'
 hook_add = '''
 let g:EasyMotion_do_mapping       = 0
 let g:EasyMotion_smartcase        = 1
 let g:EasyMotion_space_jump_first = 1
 let g:incsearch#auto_nohlsearch   = 1
-" nmap <C-Space> <Plug>(easymotion-overwin-f2)
 function! s:config_easyfuzzymotion(...) abort
   return extend(copy({
   \   'converters': [incsearch#config#fuzzy#converter()],
-  \   'modules': [incsearch#config#easymotion#module()],
-  \   'keymap': {"\<C-Space>": "<Over>(easymotion)", "\<Space>": "\<CR>zz"},
-  \   'is_expr': 0,
-  \   'is_stay': 0
+  \   'modules'   : [incsearch#config#easymotion#module()],
+  \   'keymap'    : {"\<C-Space>": "<Over>(easymotion)"},
+  \   'is_expr'   : 0,
+  \   'is_stay'   : 0
   \ }), get(a:, 1, {}))
 endfunction
 function! s:config_easymotion(...) abort
-  return extend(copy({
-  \   'modules': [incsearch#config#easymotion#module()],
-  \   'keymap': {"\<C-Space>": "<Over>(easymotion)", "/": "<Over>(incsearch)", "\<Space>": "\<CR>zz"},
+  return incsearch#util#deepextend(deepcopy({
+  \   'modules': [incsearch#config#easymotion#module({'overwin': 1})],
+  \   'keymap' : {"\<C-Space>": "<Over>(easymotion)"},
   \   'is_expr': 0,
   \   'is_stay': 0
   \ }), get(a:, 1, {}))
 endfunction
-noremap <silent><expr> <Space><Space> incsearch#go(<SID>config_easyfuzzymotion())
+noremap <silent><expr> <Leader>/ incsearch#go(<SID>config_easyfuzzymotion())
 noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
+noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
 '''
 
 [[plugins]]
@@ -336,18 +351,36 @@ repo = 'haya14busa/incsearch.vim'
 repo = 'haya14busa/incsearch-fuzzy.vim'
 
 [[plugins]]
+repo = 'haya14busa/vim-asterisk'
+on_event = 'VimEnter'
+hook_add = '''
+map *   <Plug>(incsearch-nohl0)<Plug>(asterisk-z*)
+map g*  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz*)
+map #   <Plug>(incsearch-nohl0)<Plug>(asterisk-z#)
+map g#  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz#)
+'''
+
+[[plugins]]
 repo = 'haya14busa/incsearch-migemo.vim'
 hook_add = '''
 nmap <M-/> <Plug>(incsearch-migemo-/)
 '''
 
 [[plugins]]
+repo = 'haya14busa/vim-edgemotion'
+on_event = 'VimEnter'
+hook_add = '''
+map J <Plug>(edgemotion-j)
+map K <Plug>(edgemotion-k)
+'''
+
+[[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = [
-'vim-textobj-entire', 'vim-textobj-indent', 'vim-textobj-php',
-'vim-textobj-line', 'vim-textobj-syntax', 'vim-textobj-comment',
-'vim-textobj-between', 'vim-textobj-from_regexp',
-'vim-textobj-chunk', 'vim-textobj-space'
+'vim-textobj-entire',  'vim-textobj-indent',      'vim-textobj-php',
+'vim-textobj-line',    'vim-textobj-syntax',      'vim-textobj-comment',
+'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-word-column',
+'vim-textobj-chunk',   'vim-textobj-space',       'textobj-mbboundary.vim'
 ]
 on_event = 'VimEnter'
 
@@ -370,6 +403,9 @@ repo = 'kana/vim-textobj-syntax'
 repo = 'saihoooooooo/vim-textobj-space'
 
 [[plugins]]
+repo = 'rhysd/vim-textobj-word-column'
+
+[[plugins]]
 repo = 'glts/vim-textobj-comment'
 hook_add = '''
 let g:textobj_comment_no_default_key_mappings = 1
@@ -388,18 +424,91 @@ repo = 'Chun-Yang/vim-textobj-chunk'
 repo = 'aikawa9376/vim-textobj-php'
 
 [[plugins]]
+repo = 'deton/textobj-mbboundary.vim'
+hook_add = '''
+let g:mbboundary_no_default_key_mappings = 1
+omap <silent> am <Plug>MBBoundaryTextObjA
+omap <silent> im <Plug>MBBoundaryTextObjI
+xmap <silent> am <Plug>MBBoundaryTextObjVA
+xmap <silent> im <Plug>MBBoundaryTextObjVI
+'''
+
+[[plugins]]
 repo = 'osyo-manga/vim-textobj-from_regexp'
+hook_add = '''
+" 英数字 + _ を対象とした textobj
+omap <expr> i<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_.-]\+')
+omap <expr> a<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_:.$-]\+')
+xmap <expr> i<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_.-]\+')
+xmap <expr> a<C-w> textobj#from_regexp#mapexpr('[0-9A-Za-z_:.$-]\+')
+" 英数字のみを対象とした textobj
+omap <expr> i<M-w> textobj#from_regexp#mapexpr('[A-Za-z0-9]\+')
+xmap <expr> i<M-w> textobj#from_regexp#mapexpr('[A-Za-z0-9]\+')
+" 左辺
+omap i<C-h> <Plug>(textobj-left-value)
+vmap i<C-h> <Plug>(textobj-left-value)
+omap <expr>  <Plug>(textobj-left-value)
+  \ textobj#from_regexp#mapexpr('^.\{-}\zs\k\+\ze\s*=.*$')
+vmap <expr>  <Plug>(textobj-left-value)
+  \ textobj#from_regexp#mapexpr('^.\{-}\zs\k\+\ze\s*=.*$')
+" 右辺
+omap i<C-l> <Plug>(textobj-right-value)
+vmap i<C-l> <Plug>(textobj-right-value)
+omap <expr> <Plug>(textobj-right-value)
+  \ textobj#from_regexp#mapexpr('^.\{-}=\s*\zs.*$')
+vmap <expr> <Plug>(textobj-right-value)
+  \ textobj#from_regexp#mapexpr('^.\{-}=\s*\zs.*$')
+'''
 
 [[plugins]]
 repo = 'kana/vim-operator-user'
-depends = ['vim-operator-replace']
-on_map = '<plug>(operator-replace)'
+depends = [
+  'vim-operator-replace', 'vim-operator-sort'
+]
 on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'kana/vim-operator-replace'
+repo = 'aikawa9376/vim-operator-replace'
 hook_add = '''
-nmap <C-s> mv<plug>(operator-replace)
+nmap <Leader>r mv<plug>(operator-replace)
+nmap yr mv<plug>(operator-replace_r)
+nmap <Leader>R mv<plug>(operator-replace)$
+nmap cr mv<plug>(operator-replace_R)
+vmap p <Plug>(operator-replace)
+'''
+
+[[plugins]]
+repo = 'kana/vim-smartchr'
+on_event = 'InsertEnter'
+hook_add = '''
+inoremap <expr> + smartchr#loop('+', ' + ', ' ++ ')
+inoremap <expr> - smartchr#loop('-', ' - ', ' -- ')
+inoremap <expr> * smartchr#loop('*', ' * ', ' ** ')
+inoremap <expr> / smartchr#loop('/', ' / ', ' // ')
+inoremap <expr> & smartchr#loop('&', ' & ', ' && ')
+inoremap <expr> % smartchr#loop('%', ' % ', ' %% ')
+inoremap <expr> > smartchr#loop('>', ' > ', ' >> ')
+inoremap <expr> < smartchr#loop('<', ' < ', ' <= ')
+inoremap <expr> , smartchr#loop(',', ', ')
+" =の場合、単純な代入や比較演算子として入力する場合は前後にスペースをいれる。
+" 複合演算代入としての入力の場合は、直前のスペースを削除して=を入力
+inoremap <expr> = search('\(&\<bar><bar>\<bar>+\<bar>-\<bar>/\<bar>>\<bar><\) \%#', 'bcn')? '<bs>= '
+  \ : search('\(*\<bar>!\)\%#', 'bcn') ? '= '
+  \ : smartchr#loop('=', ' = ', ' == ')
+" 下記の文字は連続して現れることがまれなので、二回続けて入力したらいろいろする
+inoremap <expr> } smartchr#one_of('}', '}<cr>')
+inoremap <expr> ; smartchr#loop(';', '$', '@')
+" 「->」は入力しづらいので、..で置換え
+inoremap <expr> . smartchr#loop('.', '->', '=>')
+" if文直後の(は自動で間に空白を入れる
+inoremap <expr> ( search('\<\if\%#', 'bcn')? ' (': '('
+'''
+
+[[plugins]]
+repo = 'emonkak/vim-operator-sort'
+hook_add = '''
+nmap <Leader>to mv<plug>(operator-sort)
+vmap <Leader>to mv<Plug>(operator-sort)
 '''
 
 [[plugins]]
@@ -421,9 +530,9 @@ call submode#map('bufmove', 'n', '', '+', '<C-w>+')
 call submode#map('bufmove', 'n', '', '-', '<C-w>-')
 call submode#map('bufmove', 'n', '', '>', '<C-w>>')
 call submode#map('bufmove', 'n', '', '<', '<C-w><')
-call submode#enter_with('expand-region', 'nv', 'r', '+', '<Plug>(expand_region_expand)')
-call submode#map('expand-region', 'nv', 'r', '+', '<Plug>(expand_region_expand)')
-call submode#map('expand-region', 'nv', 'r', '-', '<Plug>(expand_region_shrink)')
+call submode#enter_with('expand-region', 'nv', 'r', 'gw', '<Plug>(expand_region_expand)')
+call submode#map('expand-region', 'nv', 'r', 'w', '<Plug>(expand_region_expand)')
+call submode#map('expand-region', 'nv', 'r', 'W', '<Plug>(expand_region_shrink)')
 call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
 call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
 call submode#map('block_move', 'n', '', '<M-[>', '<C-o>zz')
@@ -443,6 +552,14 @@ call submode#enter_with('chunkbrace', 'n', 's', ']c', ':GitGutterNextHunk<CR>')
 call submode#enter_with('chunkbrace', 'n', 's', '[c', ':GitGutterPrevHunk<CR>')
 call submode#map('chunkbrace', 'n', 's', ']', ':GitGutterNextHunk<CR>')
 call submode#map('chunkbrace', 'n', 's', '[', ':GitGutterPrevHunk<CR>')
+call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
+call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
+call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
+call submode#map('quickbrace', 'n', 'r', '[', '<Plug>(qutefinger-prev)')
+call submode#enter_with('linterbrace', 'n', 's', '[a', ':call CocAction("diagnosticPrevious")<CR>')
+call submode#enter_with('linterbrace', 'n', 's', ']a', ':call CocAction("diagnosticNext")<CR>')
+call submode#map('linterbrace', 'n', 's', '[', ':call CocAction("diagnosticPrevious")<CR>')
+call submode#map('linterbrace', 'n', 's', ']', ':call CocAction("diagnosticNext")<CR>')
 '''
 
 [[plugins]]
@@ -450,6 +567,7 @@ repo = 'tpope/vim-surround'
 on_event = 'VimEnter'
 hook_add = '''
 let g:surround_{char2nr("P")} = "<?php \r ?>"
+let g:surround_{char2nr("H")} = "<!-- \r -->"
 '''
 
 [[plugins]]
@@ -459,6 +577,9 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'tpope/vim-abolish'
 on_event = 'VimEnter'
+hook_add = '''
+let g:abolish_no_mappings = 1
+'''
 
 [[plugins]]
 repo = 'machakann/vim-highlightedyank'
@@ -471,119 +592,165 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'matze/vim-move'
 on_event = 'VimEnter'
+hook_add = '''
+let g:move_map_keys = 0
+vmap <M-J> <Plug>MoveBlockDown
+vmap <M-K> <Plug>MoveBlockUp
+vmap <M-H> <Plug>MoveBlockLeft
+vmap <M-L> <Plug>MoveBlockRight
+nmap <M-J> <Plug>MoveLineDown
+nmap <M-K> <Plug>MoveLineUp
+nmap <M-H> <Plug>MoveCharLeft
+nmap <M-L> <Plug>MoveCharRight
+'''
 
 [[plugins]]
 repo = 'andymass/vim-matchup'
 on_event = 'VimEnter'
 hook_add = '''
-" nmap <silent> <Plug>(matchup-z%-origin) :<C-u>call matchup#motion#jump_inside(0)<CR>zz
-" nmap <M-]> <Plug>(matchup-z%)zz
-autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
+nmap <Space><Space> %
+vmap <Space><Space> %
+nmap <C-Space> <Plug>(matchup-z%)zz
 let g:matchup_transmute_enabled = 1
+augroup matchup_setting
+  autocmd!
+  autocmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
+  " coc snippet conflict
+  autocmd InsertEnter * let g:matchup_matchparen_enabled = 0
+  autocmd InsertLeave * let g:matchup_matchparen_enabled = 1
+augroup END
 '''
 
 [[plugins]]
 repo = 'wellle/targets.vim'
 on_event = 'VimEnter'
+hook_source = '''
+augroup targets_settind
+autocmd!
+autocmd User targets#mappings#user call targets#mappings#extend({
+  \ 'b': {'pair': [
+  \      {'o':'(', 'c':')'}, {'o':'[', 'c':']'},
+  \      {'o':'{', 'c':'}'}, {'o':'<', 'c':'>'}, {'o':'>', 'c':'<'}
+  \ ]},
+  \ 'q': {'quote': [{'d':"'"}, {'d':'"'}, {'d':'`'}]},
+  \ })
+augroup END
+'''
 
 [[plugins]]
 repo = 'aikawa9376/vim-anzu'
 on_event = 'VimEnter'
 hook_source = '''
-" mapping
-" silent_substitute -> virtualtext
 nmap <expr> n anzu#mode#mapexpr("n", "", "zz")
 nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
-" nmap <expr> * anzu#mode#mapexpr("*", "", "zz")
-" nmap <expr> # anzu#mode#mapexpr("#", "", "zz")
 '''
 
 [[plugins]]
 repo = 'luochen1990/rainbow'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <silent> <F10> :RainbowToggle<CR>
+nmap <silent> <Plug>(my-switch)r :RainbowToggle<CR>
 let g:rainbow_active = 0
 '''
 
 [[plugins]]
-repo = 'chrisbra/unicode.vim'
+repo = 'aikawa9376/vim-auto-cursorline'
 on_event = 'VimEnter'
+hook_add = '''
+let g:auto_cursorline_wait_ms = 500
+augroup cursorline-coc-setting
+  autocmd!
+  autocmd FileType list let g:auto_cursorline_disable = 1
+augroup END
+function! EnhanCursor()
+  let g:auto_cursorline_disable = 0
+  bd
+endfunction
+'''
+
+[[plugins]]
+repo = 'AndrewRadev/splitjoin.vim'
+on_cmd = ['SplitjoinJoin', 'SplitjoinSplit']
+hook_add = '''
+let g:splitjoin_split_mapping = ''
+let g:splitjoin_join_mapping = ''
+nmap <Leader>tj :SplitjoinJoin<cr>
+nmap <Leader>tJ :SplitjoinSplit<cr>
+'''
 
 # list-----------------------------------
 
 [[plugins]]
-repo = 'Shougo/defx.nvim'
+repo = 'shougo/defx.nvim'
 depends = ['defx-icons', 'defx-git']
 on_cmd = ['Defx']
 hook_add = '''
 nmap <silent><Space>n :Defx
-\ -toggle -direction=topleft -split=vertical
-\ -winwidth=35 -columns=git:icons:filename:type<CR>
+\ -toggle -resume -direction=topleft -split=vertical
+\ -winwidth=35 -columns=indent:git:icons:filename:type<CR>
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
   " Define mappings
-  nnoremap <silent><buffer><expr> <CR>
-  \ defx#do_action('drop')
-  nnoremap <silent><buffer><expr> c
+  nnoremap <silent><buffer><expr><nowait> <CR>
+  \ defx#do_action('drop') . '\<C-w>w'
+  nnoremap <silent><buffer><expr><nowait> c
   \ defx#do_action('copy')
-  nnoremap <silent><buffer><expr> m
+  nnoremap <silent><buffer><expr><nowait> m
   \ defx#do_action('move')
-  nnoremap <silent><buffer><expr> p
+  nnoremap <silent><buffer><expr><nowait> p
   \ defx#do_action('paste')
-  nnoremap <silent><buffer><expr> l
+  nnoremap <silent><buffer><expr><nowait> l
   \ defx#do_action('open')
-  nnoremap <silent><buffer><expr> E
+  nnoremap <silent><buffer><expr><nowait> E
   \ defx#do_action('open', 'vsplit')
-  nnoremap <silent><buffer><expr> P
+  nnoremap <silent><buffer><expr><nowait> P
   \ defx#do_action('open', 'pedit')
-  nnoremap <silent><buffer><expr> o
+  nnoremap <silent><buffer><expr><nowait> o
   \ defx#do_action('open_or_close_tree')
-  nnoremap <silent><buffer><expr> K
+  nnoremap <silent><buffer><expr><nowait> K
   \ defx#do_action('new_directory')
-  nnoremap <silent><buffer><expr> N
+  nnoremap <silent><buffer><expr><nowait> N
   \ defx#do_action('new_file')
-  nnoremap <silent><buffer><expr> M
+  nnoremap <silent><buffer><expr><nowait> M
   \ defx#do_action('new_multiple_files')
-  nnoremap <silent><buffer><expr> C
-  \ defx#do_action('toggle_columns',
-  \                'mark:filename:type:size:time')
-  nnoremap <silent><buffer><expr> S
+  nnoremap <silent><buffer><expr><nowait> C
+  \ defx#do_action('toggle_columns', 'size:time')
+  nnoremap <silent><buffer><expr><nowait> S
   \ defx#do_action('toggle_sort', 'time')
-  nnoremap <silent><buffer><expr> d
+  nnoremap <silent><buffer><expr><nowait> d
   \ defx#do_action('remove')
-  nnoremap <silent><buffer><expr> r
+  nnoremap <silent><buffer><expr><nowait> r
   \ defx#do_action('rename')
-  nnoremap <silent><buffer><expr> !
+  nnoremap <silent><buffer><expr><nowait> !
   \ defx#do_action('execute_command')
-  nnoremap <silent><buffer><expr> x
+  nnoremap <silent><buffer><expr><nowait> x
   \ defx#do_action('execute_system')
-  nnoremap <silent><buffer><expr> yy
+  nnoremap <silent><buffer><expr><nowait> yy
   \ defx#do_action('yank_path')
-  nnoremap <silent><buffer><expr> .
+  nnoremap <silent><buffer><expr><nowait> .
   \ defx#do_action('toggle_ignored_files')
-  nnoremap <silent><buffer><expr> ;
+  nnoremap <silent><buffer><expr><nowait> ;
   \ defx#do_action('repeat')
-  nnoremap <silent><buffer><expr> h
+  nnoremap <silent><buffer><expr><nowait> h
   \ defx#do_action('cd', ['..'])
-  nnoremap <silent><buffer><expr> ~
+  nnoremap <silent><buffer><expr><nowait> ~
   \ defx#do_action('cd')
-  nnoremap <silent><buffer><expr> q
+  nnoremap <silent><buffer><expr><nowait> q
   \ defx#do_action('quit')
-  nnoremap <silent><buffer><expr> <Space>
+  nnoremap <silent><buffer><expr><nowait> <Tab>
   \ defx#do_action('toggle_select') . 'j'
-  nnoremap <silent><buffer><expr> *
+  nnoremap <silent><buffer><expr><nowait> *
   \ defx#do_action('toggle_select_all')
-  nnoremap <silent><buffer><expr> j
+  nnoremap <silent><buffer><expr><nowait> j
   \ line('.') == line('$') ? 'gg' : 'j'
-  nnoremap <silent><buffer><expr> k
+  nnoremap <silent><buffer><expr><nowait> k
   \ line('.') == 1 ? 'G' : 'k'
-  nnoremap <silent><buffer><expr> <C-l>
+  nnoremap <silent><buffer><expr><nowait> <C-l>
   \ defx#do_action('redraw')
-  nnoremap <silent><buffer><expr> <C-g>
+  nnoremap <silent><buffer><expr><nowait> <C-g>
   \ defx#do_action('print')
-  nnoremap <silent><buffer><expr> cd
-  \ defx#do_action('change_vim_cwd')
+  nnoremap <silent><buffer><expr><nowait> <C-n>
+  \ ':<C-u>Defx -buffer-name=temp -split=split<CR>'
 endfunction
 '''
 
@@ -598,8 +765,19 @@ let g:defx_icons_enable_syntax_highlight = 1
 repo = 'kristijanhusak/defx-git'
 
 [[plugins]]
+repo = 'LeafCage/qutefinger.vim'
+on_event = 'VimEnter'
+hook_add = '''
+nmap Qz <Plug>(qutefinger-toggle-mode)
+nmap Qp <Plug>(qutefinger-older)
+nmap Qn <Plug>(qutefinger-newer)
+nmap Q  <Plug>(qutefinger-toggle-win)
+nmap QQ <Plug>(qutefinger-toggle-win)
+'''
+
+[[plugins]]
 repo = 'junegunn/fzf'
-depends = ['fzf.vim', 'vim-bookmarks']
+depends = ['fzf.vim', 'vim-bookmarks', 'tmux-complete.vim']
 path = '~/.fzf'
 build = './install --all'
 merged = 0
@@ -610,29 +788,33 @@ repo = 'junegunn/fzf.vim'
 hook_add = '''
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
-nnoremap <silent> <Leader>f  :Files<CR>
-nnoremap <silent> <Leader>gf :GFiles<CR>
-nnoremap <silent> <Leader>b  :NavBuffers<CR>
-nnoremap <silent> <Leader>a  :Rg<CR>
-nnoremap <silent> <Leader>l  :Lines<CR>
-nnoremap <silent> <Leader>e  :MRUFilesCWD<CR>
-nnoremap <silent> <Leader>E  :MRUFiles<CR>
+nnoremap <silent> <Leader>f  m':Files<CR>
+nnoremap <silent> <Leader>F  m':AllFiles<CR>
+nnoremap <silent> <Leader>gf m':GFiles<CR>
+nnoremap <silent> <Leader>gi m':Gitignore<CR>
+nnoremap <silent> <Leader>b  m':NavBuffers<CR>
+nnoremap <silent> <Leader>a  m':Rg<CR>
+nnoremap <silent> <Leader>A  m':AllRg<CR>
+nnoremap <silent> <Leader>l  m':BLines<CR>
+nnoremap <silent> <Leader>L  m':Lines<CR>
+nnoremap <silent> <Leader>e  m':MRUFilesCWD<CR>
+nnoremap <silent> <Leader>E  m':MRUFiles<CR>
 nnoremap <silent> <Leader>df :SWSqlFzfSelect<CR>
-nnoremap <silent> <Leader>.  :DotFiles<CR>
-nnoremap <silent> <Leader>O  :Outline<CR>
-nnoremap <silent> <Leader>M  :Memo<CR>
-nnoremap <silent> <Leader>gc :BCommits<CR>
-nnoremap <silent> <Leader>gC :Commits<CR>
+nnoremap <silent> <Leader>.  m':DotFiles<CR>
+nnoremap <silent> <Leader>O  m':Outline<CR>
+nnoremap <silent> <Leader>M  m':Memo<CR>
+nnoremap <silent> <Leader>gc m':BCommits<CR>
+nnoremap <silent> <Leader>gC m':Commits<CR>
 nnoremap <silent> <Leader>T  :DirWordCompletions<CR>
-nnoremap <silent> <Leader>t  :TmuxSearch<CR>
-" <C-]>でタグ検索 TODO タグファイルが無ければもともとの機能に割り振る
-nnoremap <silent> <C-]> :call fzf#vim#tags(expand('<cword>'))<CR>
-" <Leader>]で使用箇所検索
-nnoremap <silent> <expr> <Leader>] ':Rg(' . expand('<cword>') . ')<CR>'
+nnoremap <silent> <Leader>tm :TmuxSearch<CR>
 nnoremap <silent> <Leader>p :YanksAfter<CR>
 nnoremap <silent> <Leader>P :YanksBefore<CR>
 nnoremap <silent> <Leader>; :ChangeListNav<CR>
 nnoremap <silent> <Leader><C-o> :JumpListNav<CR>
+nnoremap <silent> <Leader>q :Helptags<CR>
+nnoremap <silent> <Leader>tt :BTags<CR>
+nnoremap <silent> <C-]> m':call fzf#vim#tags(expand('<cword>'))<CR>
+nnoremap <silent> <expr> <Leader>] "m':Rg(" . expand("<cword>") . ")<CR>"
 nnoremap <silent> q: :History:<CR>
 nnoremap <silent> q/ :History/<CR>
 
@@ -651,18 +833,29 @@ let g:fzf_action = {
 
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
-  \ {'options': "--preview 'pygmentize -g {}'"}))
-command! -bang -nargs=* Ag
-  \ call fzf#vim#ag(<q-args>, fzf#wrap('ag',
-  \ {'options': "--preview 'pygmentize -g $(cut -d: -f1 <<< {}) | sed -n $(cut -d: -f2 <<< {}),\\$p | head -".&lines."'"}))
+  \ {'options': "--ansi --no-unicode"}))
+command! AllFiles call fzf#run({
+  \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
+  \  'sink': 'edit',
+  \  'options': "-m -x +s --ansi --no-unicode" .
+  \             ' --no-unicode --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
+  \  'down': '40%'})
 command! -bang -nargs=* Rg
   \ call fzf#vim#grep(
   \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
-  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'up:60%')
-  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..'}, 'right:50%:hidden', '?'),
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
+  \   <bang>0)
+command! -bang -nargs=* AllRg
+  \ call fzf#vim#grep(
+  \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang Lines
-  \ call fzf#vim#lines({'options': '--reverse --height 40%'}, <bang>0)
+  \ call fzf#vim#lines({'options': '--reverse --height 40% --preview-window hidden'}, <bang>0)
+command! -bang BLines
+  \ call fzf#vim#buffer_lines({'options': '--reverse --height 40% --preview-window hidden'}, <bang>0)
 
 " ------------------------------------------------------------------
 " DotFiles EasySearch
@@ -732,7 +925,8 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
+  \  'options': '-m -x +s
+  \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
 " This relies on the yegappan/mru plugin for live MRU updating. Also relies on
@@ -748,7 +942,8 @@ endfunction
 command! MRUFiles call fzf#run({
   \  'source': s:mru_files_for_all(),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
+  \  'options': '-m -x +s
+  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 
 " This relies on the yegappan/mru plugin for live MRU updating. Also relies on
@@ -769,7 +964,7 @@ command! -bang TmuxSearch call fzf#run(fzf#wrap('tmux', {
     \ 'options': '--reverse +m -d "\t" --with-nth 1 -n 1 --ansi --prompt "Tmux> "'}, <bang>0))
 
 function! s:fzf_insert_at_point(s) abort
-  execute "put ='".a:s."'"
+  execute "put ='".a:s[0]."'"
 endfunction
 
 " use deoplete not need map
@@ -791,7 +986,7 @@ endfunction
 command! -nargs=* DirWordCompletions call fzf#run({
   \  'source': s:dir_word_completion(s:fzf_last_word()),
   \  'sink': 'edit',
-  \  'options': '-m -x +s --prompt=DirWords:'.shellescape(s:fzf_last_word()),
+  \  'options': '-m -x +s --ansi --prompt=DirWords:'.shellescape(s:fzf_last_word()),
   \  'down': '40%'})
 
 function! s:dir_word_completion(word)
@@ -809,11 +1004,12 @@ imap <expr> <C-t> fzf#complete({
 " ------------------------------------------------------------------
 imap <expr> <C-_> fzf#complete({
     \ 'source': <SID>dir_file_completion(<SID>fzf_last_word()),
-    \ 'options': '-m -x +s --prompt=DirFiles:',
+    \ 'options': '-m -x +s --ansi --prompt=DirFiles:',
     \ 'down': '40%'})
 
 function! s:dir_file_completion(word)
-  return  systemlist("fd --type file --follow --hidden --color=always --exclude .git '^" . a:word . "' | tr '/' '\n' | sort | uniq")
+  " return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | tr '/' '\n' | sort | uniq")
+  return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | sort | uniq")
 endfunction
 
 " ------------------------------------------------------------------
@@ -822,7 +1018,7 @@ endfunction
 command! -nargs=* Memo call fzf#run({
   \  'source': s:junk_file_list(),
   \  'sink*': function('<SID>junk_file_sink'),
-  \  'options': '-m -x +s --prompt=Memo:'.shellescape(<q-args>),
+  \  'options': '-m -x +s --ansi --preview-window hidden --prompt=Memo:'.shellescape(<q-args>),
   \  'down': '40%'})
 
 function! s:junk_file_list()
@@ -832,6 +1028,127 @@ endfunction
 function! s:junk_file_sink(line) abort
   execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
 endfunction
+
+" ------------------------------------------------------------------
+" Git Navigator
+" ------------------------------------------------------------------
+command! -nargs=* Gitignore call fzf#run({
+  \  'source': s:ignore_file_list(),
+  \  'sink*': function('<SID>ignore_file_sink'),
+  \  'options': '--prompt=Gitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
+  \  '--header ":: Press C-x:delete ignore lines C-t:toggle C-m:comment toggle" --print-query ' .
+  \  '--ansi --expect ctrl-x,ctrl-m,ctrl-t',
+  \  'down': '40%'})
+
+function! s:ignore_file_list()
+  " depends vim rooter
+  if exists('*FindRootDirectory') && FindRootDirectory() != ''
+    let s:dir = FindRootDirectory()
+    return  systemlist("rg --column -n --hidden --ignore-case --color=always '' " . s:dir . "/.gitignore")
+  else
+    return 'no git repository'
+  endif
+endfunction
+
+function! s:ignore_file_sink(lines)
+  if len(a:lines) < 3
+    return
+  endif
+  let s:dir = FindRootDirectory()
+  if a:lines[1] == ''
+    let no= split(a:lines[2], ':')[0]
+    execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
+    return
+  elseif a:lines[1] == 'ctrl-x'
+    for w in range(2, len(a:lines) - 1)
+      let no= split(a:lines[w], ':')[0]
+      execute("silent !sed -i -e '" . no . "d' " . s:dir . "/.gitignore &")
+    endfor
+  elseif a:lines[1] == 'ctrl-m'
+    for w in range(2, len(a:lines) - 1)
+      let no= split(a:lines[w], ':')[0]
+      let name = split(a:lines[w], ':')[2]
+      if name[0] == "#"
+        execute('silent !sed -i -e "' . no . 's/^\\#//" ' . s:dir . '/.gitignore &')
+      else
+        execute('silent !sed -i -e "' . no . 's/^/\\#/" ' . s:dir . '/.gitignore &')
+      endif
+    endfor
+  elseif a:lines[1] == 'ctrl-t'
+    execute('AddGitignore')
+    call feedkeys(":start\<CR>")
+    return
+  endif
+  " execute("Gina add " . fnamemodify(a:lines[0], ":p"))
+  execute('Gitignore ' . a:lines[0])
+  call feedkeys(":start\<CR>")
+  return
+endfunction
+
+command! -nargs=* AddGitignore call fzf#run({
+  \  'source': <SID>dir_file_completion(''),
+  \  'sink*': function('<SID>add_ignore_file_sink'),
+  \  'options': '--prompt=AllGitignore: --query '.shellescape(<q-args>) . ' -m -x +s  ' .
+  \  '--header ":: Press C-x:add ignore lines C-t:toggle" --print-query ' .
+  \  '--ansi --expect ctrl-x,ctrl-t',
+  \  'down': '40%'})
+
+function! s:add_ignore_file_sink(lines) abort
+  if len(a:lines) < 3
+    return
+  endif
+  if exists('*FindRootDirectory') && FindRootDirectory() != ''
+    let s:dir = FindRootDirectory()
+  else
+    return 'no git repository'
+  endif
+
+  if a:lines[1] == 'ctrl-x'
+    for w in range(2, len(a:lines) - 1)
+      let t = a:lines[w]
+      execute("silent !echo " . t . " >> " . s:dir . "/.gitignore")
+      execute("Gina rm --cached " . fnamemodify(t, ":p"))
+    endfor
+    execute('AddGitignore ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  elseif a:lines[1] == 'ctrl-t'
+    execute('Gitignore')
+    call feedkeys(":start\<CR>")
+    return
+  endif
+  execute("Gina rm --cached " . fnamemodify(a:lines[2], ":p"))
+  execute("silent !echo " . a:lines[2] . " >> " . s:dir . "/.gitignore")
+endfunction
+
+function s:override_gitfiles_sink(lines) abort
+  if len(a:lines) < 2
+    return
+  endif
+  if exists('*FindRootDirectory') && FindRootDirectory() != ''
+    let s:dir = FindRootDirectory()
+  else
+    return 'no git repository'
+  endif
+  if a:lines[0] == 'ctrl-x'
+    for w in range(1, len(a:lines) - 1)
+      execute("Gina rm --cached " . a:lines[w])
+    endfor
+    execute('GFiles')
+    call feedkeys(":start\<CR>")
+    return
+  endif
+  for w in range(1, len(a:lines) - 1)
+    execute("edit ". fnamemodify(a:lines[w], ":p"))
+  endfor
+endfunction
+
+command! -bang -nargs=? -complete=dir GFiles
+  \ call fzf#vim#gitfiles(<q-args>, fzf#wrap('fzf',
+  \ {'sink*': function('<SID>override_gitfiles_sink'),
+  \  'options': "-m -x +s --no-unicode
+  \  --header \":: Press C-x:rm cached\"
+  \  --expect ctrl-x"}))
 
 " ------------------------------------------------------------------
 " YankRing fzf
@@ -929,29 +1246,30 @@ function! s:format_buffer(b)
   let modified = getbufvar(a:b, '&modified') ? ' [+]' : ''
   let readonly = getbufvar(a:b, '&modifiable') ? '' : ' [RO]'
   let extra = join(filter([modified, readonly], '!empty(v:val)'), '')
-  return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':r'), flag, extra))
-endfunction
-
-function! s:buflisted_sorted()
-  return sort(s:buflisted(), 's:sort_buffers')
+  if flag == '%'
+    return s:strip(printf("\033[38;2;102;204;0m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/' , flag, extra))
+  elseif flag == '#'
+    return s:strip(printf("\033[38;2;51;153;255m[%s] %s - %s %s %s\033[0m", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/', flag, extra))
+  else
+    return s:strip(printf("[%s] %s - %s %s %s", a:b, fnamemodify(name, ':t'), fnamemodify(name, ':h') . '/', flag, extra))
+  endif
 endfunction
 
 function! s:sort_buffers(...)
-  let [b1, b2] = map(copy(a:000), 'get(g:fzf#vim#buffers, v:val, v:val)')
-  return b1 < b2 ? 1 : -1
+  return copy(a:000)
 endfunction
 
 command! -nargs=* NavBuffers
-  \ call fzf#vim#buffers(<q-args>, fzf#wrap('navbuffers', {
-  \ 'source':  map(s:buflisted_sorted(), 's:format_buffer(v:val)'),
+  \ call fzf#run(fzf#wrap('navbuffers', {
+  \ 'source':  map(s:buflisted(), 's:format_buffer(v:val)'),
   \ 'sink*':   function('<SID>bufopen'),
   \ 'options': [
-  \   '-m', '-x', '--tiebreak=index', '--header-lines=1', '--ansi', '-d',
+  \   '-m', '-x', '--tiebreak=index', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
-  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k',
-  \   '--preview-window', 'up:1:wrap', '--preview', 'echo {} | sed -r "s%^.*<space>-<space>%%"'],
-  \   'left': '20%',
+  \   '--preview-window', 'hidden',
+  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k', '--no-unicode'],
+  \   'up': '30%',
   \ }))
 
 " ------------------------------------------------------------------
@@ -1046,6 +1364,38 @@ command! -nargs=* PhpRefactorringMenu call fzf#run({
   \  'sink*':   function('<SID>getphprefsink'),
   \  'options': '--reverse -m -x +s --ansi --prompt=PhpRefactorMenu:',
   \  'down': '20%'})
+
+" ------------------------------------------------------------------
+" QuickFix
+" ------------------------------------------------------------------
+command! Fq FZFQuickfix
+command! FZFQuickfix call fzf#run({
+  \  'source':  Get_qf_text_list(),
+  \  'sink':    function('s:qf_sink'),
+  \  'options': '-m -x +s',
+  \  'down':    '40%'})
+
+" QuickFix形式にqfListから文字列を生成する
+function! Get_qf_text_list()
+  let qflist = getqflist()
+  let textList = []
+  for i in qflist
+    if i.valid
+      let textList = add(textList, printf('%s|%d| %s',
+        \  bufname(i.bufnr),
+        \  i.lnum,
+        \  matchstr(i.text, '\s*\zs.*\S')
+        \  ))
+    endif
+  endfor
+  return textList
+endfunction
+
+" QuickFix形式のstringからtabeに渡す
+function! s:qf_sink(line)
+    let parts = split(a:line, '\s')
+    execute 'tabe ' . parts[0]
+endfunction
 '''
 
 [[plugins]]
@@ -1069,11 +1419,11 @@ nmap <Leader>mg  <Plug>BookmarkMoveToLine
 repo = 'majutsushi/tagbar'
 on_cmd = ['TagbarToggle']
 hook_add = '''
-nnoremap <silent> <Leader>o :TagbarToggle<CR>
-let g:tagbar_autopreview    = 1
+" nnoremap <silent> <Leader>o :TagbarToggle<CR>
+let g:tagbar_autopreview    = 0
 let g:tagbar_compact        = 1
 let g:tagbar_autoshowtag    = 1
-let g:tagbar_width          = 40
+let g:tagbar_width          = 30
 let g:tagbar_previewwin_pos = 'rightbelow'
 '''
 
@@ -1095,7 +1445,7 @@ let g:MRU_Max_Entries = 5000
 repo = 'simnalamburt/vim-mundo'
 on_cmd = ['MundoToggle']
 hook_add = '''
-nnoremap U :MundoToggle<CR>
+nnoremap <silent> <Leader>u :MundoToggle<CR>
 '''
 
 [[plugins]]
@@ -1104,14 +1454,13 @@ on_event = 'VimEnter'
 hook_add = '''
 let g:far#auto_preview = 0
 let g:far#source       = 'agnvim'
-" let g:far#source = 'ag'
 '''
 
 [[plugins]]
 repo = 'wincent/ferret'
-on_map = '<Plug>(FerretLack)'
+on_map = '<Plug>(FerretAck)'
 hook_add = '''
-nmap <Leader>r <Plug>(FerretLack)
+nmap <Leader>rr <Plug>(FerretAck)
 '''
 
 [[plugins]]
@@ -1164,6 +1513,8 @@ repo = 'airblade/vim-gitgutter'
 on_event = 'VimEnter'
 hook_add = '''
 nmap <silent><Leader>gq :GitGutterPreviewHunk<CR>
+nmap <silent><Leader>gh :GitGutterStageHunk<CR>
+nmap <silent><Leader>gu :GitGutterUndoHunk<CR>
 omap ih <Plug>GitGutterTextObjectInnerPending
 omap ah <Plug>GitGutterTextObjectOuterPending
 xmap ih <Plug>GitGutterTextObjectInnerVisual
@@ -1173,28 +1524,40 @@ let g:gitgutter_sign_modified           = "\uf459 "
 let g:gitgutter_sign_removed            = "\uf458 "
 let g:gitgutter_sign_modified_removed   = "\uf45a "
 let g:gitgutter_sign_removed_first_line = "\uf474 "
+let g:gitgutter_grep_command = 'rg --hidden --follow --glob "!.git/*"'
+'''
+hook_post_source = '''
+GitGutterEnable
+GitGutterSignsDisable
 '''
 
 [[plugins]]
 repo = 'tpope/vim-fugitive'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <silent> <Space>gs :Gstatus<CR>
-nmap <silent> <Space>gd :Gdiff<CR>
-nmap <silent> <Space>ga :Gwrite<CR>
-nmap <silent> <Space>gr :Gremove<CR>
-nmap <silent> <Space>gb :Gblame -w<CR>
+nmap <silent> <Leader>gs :Gstatus<CR>
+nmap <silent> <Leader>gd :Gdiff<CR>
+nmap <silent> <Leader>ga :Gwrite<CR>
+nmap <silent> <Leader>gb :Gblame -w<CR>
 '''
 
 [[plugins]]
 repo = 'lambdalisue/gina.vim'
 on_cmd = ['Gina']
 hook_add = '''
-nmap <Leader>gns :Gina status<CR>
-nmap <Leader>gnb :Gina blame<CR>
-nmap <Leader>gp  :Gina push<CR>
-nmap <Leader>gnc :Gina commit -m 'auto update'<CR>
-nmap <Leader>gA  :Gina add .<CR>
+nmap <silent> <Leader>gns :Gina status<CR>
+nmap <silent> <Leader>gnb :Gina blame<CR>
+nmap <silent> <Leader>gp  :Gina push<CR>
+nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
+nmap <silent> <Leader>gm  :Gina commit -m 'update'<CR>
+nmap <silent> <Leader>gM  :GitAddCommit update<CR>
+nmap <silent> <Leader>gU  :GitAddAmend<Space>
+nmap <silent> <Leader>gA  :bufdo! Gina add %<CR>
+nmap <silent> <Leader>gz  :Gina add -u<CR>
+command! -nargs=* GitAddCommit silent execute('
+  \ !git add -u && git commit -m ' . shellescape(<q-args>)) . '&'
+command! -nargs=* GitAddAmend silent execute('
+  \ !git add -u && git commit --amend -m ' . shellescape(<q-args>)) . '&'
 '''
 hook_source = '''
 call gina#custom#command#option(
@@ -1211,16 +1574,44 @@ nmap <Leader>gl :Agit<CR>
 '''
 
 [[plugins]]
-repo = 'rhysd/git-messenger.vim'
-on_cmd = ['GitMessenger']
-on_map = '<Plug>(git-messenger)'
+repo = 'iamcco/sran.nvim'
+depends = 'git-p.nvim'
+on_event = 'VimEnter'
+build = 'yarn'
+
+[[plugins]]
+repo = 'iamcco/git-p.nvim'
+on_event = 'VimEnter'
+hook_add = '''
+let g:gitp_add_sign                    = "\uf457 "
+let g:gitp_modify_sign                 = "\uf459 "
+let g:gitp_delete_top_sign             = "\uf458 "
+let g:gitp_delete_bottom_sign          = "\uf45a "
+let g:gitp_delete_top_and_bottom_sign  = "\uf474 "
+let g:gitp_blame_virtual_text          = 0
+nmap gm <Plug>(git-p-diff-preview)
+nmap <Leader>tg :call <SID>git_p_virtual_toggle()<CR>
+function! s:git_p_virtual_toggle()
+  if g:gitp_blame_virtual_text == 1
+    let g:gitp_blame_virtual_text = 0
+  else
+    let g:gitp_blame_virtual_text = 1
+  endif
+endfunction
+autocmd MyAutoCmd ColorScheme * highlight link GitPBlameLine          Delimiter
+autocmd MyAutoCmd ColorScheme * highlight link GitPAdd                DiffAdd
+autocmd MyAutoCmd ColorScheme * highlight link GitPModify             DiffChange
+autocmd MyAutoCmd ColorScheme * highlight link GitPDeleteTop          DiffDelete
+autocmd MyAutoCmd ColorScheme * highlight link GitPDeleteBottom       DiffDelete
+autocmd MyAutoCmd ColorScheme * highlight link GitPDeleteTopAndBottom DiffDelete
+'''
 
 # status line ---------------------------
 
 [[plugins]]
 repo = 'itchyny/lightline.vim'
 on_event = 'VimEnter'
-depends = ['lightline-bufferline', 'lightline-ale', 'lightline-colorscheme-nordplus']
+depends = ['lightline-bufferline', 'lightline-colorscheme-nordplus']
 hook_add = '''
 let g:lightline = {
   \ 'colorscheme': 'nordplus',
@@ -1231,7 +1622,7 @@ let g:lightline = {
       \ ['vm_regions', 'gitgutter', 'project', 'filename'],
     \ ],
     \ 'right': [
-        \ ['linter_checking', 'linter_ok', 'linter_errors', 'linter_warnings'],
+        \ ['cocstatus'],
         \ ['lineinfo'],
         \ ['filetype', 'fileencoding', 'charcode'],
         \ ['vm_modes'],
@@ -1262,12 +1653,9 @@ let g:lightline = {
     \ 'vm_regions'     : 'g:lightline.vm_regions',
     \ 'obsession'      : 'MyObsession',
     \ 'workbench'      : 'MyWorkbench',
+    \ 'cocstatus'      : 'coc#status',
     \ },
   \ 'component_expand': {
-    \ 'linter_checking': 'lightline#ale#checking',
-    \ 'linter_ok'      : 'lightline#ale#ok',
-    \ 'linter_warnings': 'lightline#ale#warnings',
-    \ 'linter_errors'  : 'lightline#ale#errors',
     \ 'buffers'        : 'lightline#bufferline#buffers'
   \ },
   \ 'component_type': {
@@ -1434,14 +1822,6 @@ endfun
 '''
 
 [[plugins]]
-repo = 'maximbaz/lightline-ale'
-hook_add = '''
-let g:lightline#ale#indicator_ok       = ''
-let g:lightline#ale#indicator_errors   = "\uf057 :"
-let g:lightline#ale#indicator_warnings = "\uf071 :"
-'''
-
-[[plugins]]
 repo = 'aikawa9376/lightline-bufferline'
 hook_add = '''
 set showtabline=2
@@ -1456,61 +1836,21 @@ let g:lightline#bufferline#unnamed           = '[No Name]'
 [[plugins]]
 repo = 'aikawa9376/lightline-colorscheme-nordplus'
 
-# lint & lsp & sources-------------------
-
-[[plugins]]
-repo = 'w0rp/ale'
-hook_add = '''
-" 有効にするformatter
-let g:ale_fixers = {
-\   'javascript': ['prettier'],
-\   'css'       : ['prettier'],
-\   'scss'      : ['prettier'],
-\}
-" 有効にするlinter
-let g:ale_linters = {
-\   'php'       : ['psalm', 'php'],
-\   'vim'       : ['vint'],
-\   'javascript': ['eslint'],
-\}
-" エラー行に表示するマーク
-let g:ale_sign_error            = "\uf057"
-let g:ale_sign_warning          = "\uf071"
-let g:ale_fix_on_save           = 1
-let g:ale_lint_on_text_changed  = 0
-let g:ale_lint_on_insert_leave  = 1
-let g:ale_sign_column_always    = 1
-let g:ale_set_loclist           = 0
-let g:ale_set_quickfix          = 0
-let g:ale_open_list             = 0
-let g:ale_keep_list_window_open = 0
-let g:ale_virtualtext_cursor    = 1
-let g:ale_html_tidy_options     = '-config .tidyrc'
-let g:ale_echo_msg_format       = '[%linter%] %s [%severity%]'
-let g:ale_javascript_prettier_use_local_config = 1
-autocmd MyAutoCmd ColorScheme * hi ALEVirtualTextWarning ctermfg=3 guifg=3
-autocmd MyAutoCmd ColorScheme * hi ALEWarningSign ctermfg=3 guifg=3 ctermbg=0 guibg=0
-autocmd MyAutoCmd ColorScheme * hi ALEVirtualTextError ctermfg=red guifg=red
-autocmd MyAutoCmd ColorScheme * hi ALEErrorSign ctermfg=red guifg=red ctermbg=0 guibg=0
-nnoremap <silent>]a :<C-u>ALENext<CR>
-nnoremap <silent>[a :<C-u>ALEPrevious<CR>
-'''
-
 # util ----------------------------------
 
 [[plugins]]
 repo = 'vim-scripts/BufOnly.vim'
 on_event = 'VimEnter'
 
+[[plugins]]
+repo = 'moll/vim-bbye'
+on_cmd = ['Bdelete', 'Bwipeout']
+
 # php------------------------------------
 
 [[plugins]]
 repo = 'StanAngeloff/php.vim'
 on_ft = ['html', 'php', 'phtml']
-
-[[plugins]]
-repo = 'lvht/phpcd.vim'
-build = 'composer install'
 
 [[plugins]]
 repo = 'adoy/vim-php-refactoring-toolbox'
@@ -1524,11 +1864,6 @@ repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
 
 # javascript & typescript----------------
-
-[[plugins]]
-repo = 'mhartington/nvim-typescript'
-build = './install.sh'
-on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'HerringtonDarkholme/yats.vim'

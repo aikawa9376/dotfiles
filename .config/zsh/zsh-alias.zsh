@@ -4,16 +4,17 @@
 case ${OSTYPE} in
   darwin*)
     alias ctags="`brew --prefix`/bin/ctags"
-    alias ll='exa -aghHl --color=auto --time-style long-iso --sort=modified --reverse --group-directories-first'
-    alias ls='gls -GAFh --color=auto'
-    alias lsg='exa -aghHl --git --color=auto --sort=modified --reverse --group-directories-first'
+    alias ll='exa -aghHl --color=always --time-style long-iso --sort=modified --reverse --group-directories-first'
+    alias ls='gls -GAFh --color=always'
+    alias lsg='exa -aghHl --git --color=always --sort=modified --reverse --group-directories-first'
     alias ql='qlmanage -p "$@" >& /dev/null'
     alias awk='gawk'
+    alias dircolors='gdircolors'
     ;;
   linux*)
-    alias ll='exa -aghHl --color=auto --time-style long-iso --sort=modified --reverse --group-directories-first'
-    alias ls='ls -GAFltrh --color=auto'
-    alias lsg='exa -aghHl --git --color=auto --sort=modified --reverse --group-directories-first'
+    alias ll='exa -aghHl --color=always --time-style long-iso --sort=modified --reverse --group-directories-first'
+    alias ls='ls -GAFltrh --color=always'
+    alias lsg='exa -aghHl --git --color=always --sort=modified --reverse --group-directories-first'
     alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
     alias photoshop='/mnt/c/Program\ Files/Adobe/Adobe\ Photoshop\ CC\ 2018/Photoshop.exe'
     alias illustrator='/mnt/c/Program\ Files/Adobe/Adobe\ Illustrator\ CC\ 2018/Support\ Files/Contents/Windows/Illustrator.exe'
@@ -27,6 +28,7 @@ case ${OSTYPE} in
     alias ep='explorer.exe `wslpath -w "$PWD"`'
     alias wo='winopen'
     alias q='quickopen'
+    alias pdf='okular'
 esac
 
 if ((${+commands[nodejs]})); then
@@ -34,19 +36,28 @@ if ((${+commands[nodejs]})); then
 fi
 
 alias rcat='richpager -n'
+alias icat='kitty +kitten icat'
 alias dst='duster'
 alias fnd='finder'
+alias li='gwenview ./'
 alias reload='exec $SHELL -1'
 alias -g from='$(mru)'
 alias -g to='$(destination_directories)'
 alias -g le='| less'
-alias -g ff='| fzf'
+alias -g ff='| fzf --ansi -m'
+alias -g bb='| bat'
+alias -g vv='| nvim'
 alias -g dust='$(duster)'
 alias -g fnd='$(finder)'
 alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
+alias vv='fvim'
+alias vs='nvim -S'
 alias cp='cp -r'
+alias dp='dolphin ./'
 alias t='tmuximum'
+alias bat='bat --style="numbers,changes"'
+alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
 
 # -------------------------------------
 # ディレクトリ エイリアス

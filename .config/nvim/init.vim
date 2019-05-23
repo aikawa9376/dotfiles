@@ -1,6 +1,5 @@
-if !&compatible
-  set nocompatible
-endif
+set encoding=utf-8
+scriptencoding utf-8
 
 " reset augroup
 augroup MyAutoCmd
@@ -37,7 +36,6 @@ syntax enable
 set t_Co=256
 set number
 set backspace=indent,eol,start
-set encoding=utf-8
 set fileformats=unix,dos,mac
 set fileencodings=utf-8,sjis
 set ttimeoutlen=1
@@ -51,12 +49,34 @@ set listchars=tab:»-,extends:»,precedes:«,nbsp:%
 set splitright
 set splitbelow
 set updatetime=100
-set nofoldenable
-set foldmethod=indent
-set foldcolumn=0
-set foldnestmax=1  " maximum fold depth
 set nospell
 set spelllang=en,cjk
+set foldtext=Customfoldtext()
+
+function! Customfoldtext() abort
+  "get first non-blank line
+  let fs = v:foldstart
+  while getline(fs) =~# '^\s*$' | let fs = nextnonblank(fs + 1)
+  endwhile
+  if fs > v:foldend
+    let line = getline(v:foldstart)
+  else
+    let line = substitute(getline(fs), '\t', repeat(' ', &tabstop), 'g')
+  endif
+
+  let foldsymbol='+'
+  let repeatsymbol=''
+  let prefix = foldsymbol . ' '
+
+  let w = winwidth(0) - &foldcolumn - (&number ? 8 : 0)
+  let foldSize = 1 + v:foldend - v:foldstart
+  let foldSizeStr = ' ' . foldSize . ' lines '
+  let foldLevelStr = repeat('+--', v:foldlevel)
+  let lineCount = line('$')
+  let foldPercentage = printf('[%.1f', (foldSize*1.0)/lineCount*100) . '%] '
+  let expansionString = repeat(repeatsymbol, w - strwidth(prefix.foldSizeStr.line.foldLevelStr.foldPercentage))
+  return prefix . line . expansionString . foldSizeStr . foldPercentage . foldLevelStr
+endfunction
 
 let g:loaded_gzip              = 1
 let g:loaded_tar               = 1
@@ -77,7 +97,7 @@ let g:loaded_netrwFileHandlers = 1
 nmap <Space> <Leader>
 
 noremap  <Plug>(my-switch) <Nop>
-nmap     <Leader>S <Plug>(my-switch)
+nmap     <Leader>t <Plug>(my-switch)
 nnoremap <silent> <Plug>(my-switch)s :<C-u>setl spell! spell?<CR>
 nnoremap <silent> <Plug>(my-switch)l :<C-u>setl list! list?<CR>
 nnoremap <silent> <Plug>(my-switch)t :<C-u>setl expandtab! expandtab?<CR>
@@ -85,6 +105,7 @@ nnoremap <silent> <Plug>(my-switch)w :<C-u>setl wrap! wrap?<CR>
 nnoremap <silent> <Plug>(my-switch)p :<C-u>setl paste! paste?<CR>
 nnoremap <silent> <Plug>(my-switch)b :<C-u>setl scrollbind! scrollbind?<CR>
 nnoremap <silent> <Plug>(my-switch)y :call <SID>toggle_syntax()<CR>
+nnoremap <silent> <Plug>(my-switch)n :call <SID>toggle_relativenumber()<CR>
 function! s:toggle_syntax() abort
   if exists('g:syntax_on')
     syntax off
@@ -96,15 +117,22 @@ function! s:toggle_syntax() abort
     echo 'syntax on'
   endif
 endfunction
+function! s:toggle_relativenumber() abort
+  if &relativenumber == 1
+     setlocal norelativenumber
+  else
+     setlocal relativenumber
+  endif
+endfunction
 
 " Insertモードのときカーソルの形状を変更
 if has('unix')
-  if &term =~ 'screen'
+  if &term =~? 'screen'
     let &t_ti.= "\eP\e[1 q\e\\"
     let &t_SI.= "\eP\e[5 q\e\\"
     let &t_EI.= "\eP\e[1 q\e\\"
     let &t_te.= "\eP\e[0 q\e\\"
-  elseif &term =~ 'xterm'
+  elseif &term =~? 'xterm'
     let &t_ti.="\e[1 q"
     let &t_SI.="\e[5 q"
     let &t_EI.="\e[1 q"
@@ -118,14 +146,14 @@ endif
 " auto fcitx
 let g:input_toggle = 1
 function! Fcitx2en()
-  let s:input_status = system("fcitx-remote")
+  let s:input_status = system('fcitx-remote')
   if s:input_status == 2
     let g:input_toggle = 1
-    let l:a = system("fcitx-remote -c")
+    let l:a = system('fcitx-remote -c')
   endif
 endfunction
 "Leave Insert mode
-autocmd InsertLeave * call Fcitx2en()
+autocmd MyAutoCmd  InsertLeave * call Fcitx2en()
 
 " ファイル処理関連の設定
 set confirm    " 保存されていないファイルがあるときは終了前に保存確認
@@ -157,26 +185,18 @@ function! HlTextToggle()
   endif
 endfunction
 
-" 検索後にジャンプした際に検索単語を画面中央に持ってくる
-nnoremap n nzz
-nnoremap N Nzz
-nnoremap * *zz
-nnoremap # #zz
-nnoremap g* g*zz
-nnoremap g# g#zz
-
 " スクロール時に表示を10行確保
 set scrolloff=10
 
 " x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
 vnoremap x "_x
-nnoremap s "_s
-vnoremap s "_s
+nnoremap cl "_s
+vnoremap cl "_s
 nnoremap <silent> dd :<C-u>call <SID>remove_line_brank(v:count1)<CR>
 function! s:remove_line_brank(count)
   for i in range(1, v:count1)
-    if getline('.') == ''
+    if getline('.') ==# ''
       .delete _
     else
       .delete
@@ -188,25 +208,41 @@ endfunction
 nnoremap <silent> dD :<C-u>call <SID>remove_line_brank_all(v:count1)<CR>
 function! s:remove_line_brank_all(count)
   for i in range(1, v:count1)
-    if getline('.') == ''
+    if getline('.') ==# ''
       .delete _
     else
       .delete
     endif
   endfor
-  while getline('.') == ''
+  while getline('.') ==# ''
       .delete _
   endwhile
   call repeat#set('dD', v:count1)
 endfunction
 
-nmap <M-p> o<ESC>p==
-nmap gV `[v`]
+nmap <silent>]p :<c-u>call YankLine('j')<CR>
+nmap <silent>[p :<c-u>call YankLine('k')<CR>
+nmap <silent><expr> gV '`['.strpart(getregtype(), 0, 1).'`]'
+function! s:YanksAfterIndent()
+  normal! gV=gV^
+endfunction
+function! YankLine(flag)
+  if a:flag ==# 'j'
+    let line = line('.')
+    let repeat = ']p'
+  else
+    let line = line('.') - 1
+    let repeat = '[p'
+  endif
+  call append(line, '')
+  execute 'normal! ' . a:flag . 'p'
+  call s:YanksAfterIndent()
+  call repeat#set(repeat, '')
+endfunction
 
 " ヤンクした後に末尾に移動
 nmap <silent><C-t> :<C-u>call YankTextToggle()<CR>
 function! YankTextToggle()
-  let s:flag = b:yank_toggle_flag ? 1 : 0
   if b:yank_toggle_flag != 0
     execute 'normal `['
     let b:yank_toggle_flag = 0
@@ -216,7 +252,7 @@ function! YankTextToggle()
   endif
 endfunction
 function! s:yank_toggle_flag() abort
-  let b:yank_toggle_flag = 0
+  let b:yank_toggle_flag = 1
 endfunction
 augroup YankStart
   autocmd!
@@ -231,11 +267,21 @@ nnoremap <Leader>i mzgg=G`z
 
 " ノーマルモード中にEnterで改行
 nnoremap <CR> i<CR><Esc>
-" nnoremap <Leader><CR> $a<CR><Esc>
+nnoremap <Leader><CR> $a<CR><Esc>
 nnoremap <Leader>s i<Space><ESC>
 nnoremap <M-d> mzo<ESC>`zj
 nnoremap <M-u> mzO<ESC>`zk
+nnoremap X diw
 
+" インサートモード移行時に自動インデント
+function! IndentWithI()
+    if len(getline('.')) == 0
+        return 'cc'
+    else
+        return 'i'
+    endif
+endfunction
+nnoremap <expr> i IndentWithI()
 " インサートモードで bash 風キーマップ
 inoremap <C-a> <C-g>U<C-o>^
 inoremap <C-e> <C-g>U<C-o>$<C-g>U<Right>
@@ -249,42 +295,51 @@ inoremap <C-k> <C-g>U<C-o>D<Right>
 inoremap <C-u> <C-g>U<C-o>d^
 inoremap <C-w> <C-g>U<C-o>db
 inoremap <C-o> <C-g>U<C-o>o
+inoremap <M-f> <C-g>U<C-o>w
+inoremap <M-b> <C-g>U<C-o>b
+inoremap <M-P> <C-g>U<C-o>P
+" TODO undoきれなくする 関数？
+inoremap <C-v> <C-g>U<C-o>yh<C-g>U<C-r>"<C-g>U<Right>
 
 " 文字選択・移動など
 nnoremap Y y$
 nnoremap V v$
 nnoremap vv V
+" mrは operator replace用
+nnoremap y mvmry
 nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
+nnoremap : mv:
+nnoremap <M-x> vy
+nnoremap <Leader>U `v
 nnoremap <C-h> ^
 vnoremap <C-h> ^
 nnoremap <C-l> $l
 vnoremap <C-l> $l
 nnoremap <silent><M-m> :call cursor(0,strlen(getline("."))/2)<CR>
-nnoremap <C-e> 10<C-e>
-nnoremap <C-y> 10<C-y>
 " すごく移動する
-nnoremap <C-j> 3j
-vnoremap <C-j> 3j
-nnoremap <C-k> 3k
-vnoremap <C-k> 3k
+nnoremap <C-j> 3gj
+vnoremap <C-j> 3gj
+nnoremap <C-k> 3gk
+vnoremap <C-k> 3gk
+nnoremap <M-l> i<Space><ESC><Right>
+nnoremap <M-h> hx
+nnoremap <silent><M-j> j:call cursor(0,strlen(getline("."))/2)<CR>
+nnoremap <silent><M-k> k:call cursor(0,strlen(getline("."))/2)<CR>
 
 " gJで空白を削除する
 fun! JoinSpaceless()
-    execute 'normal J'
+    execute 'normal gj'
     " Character under cursor is whitespace?
-    if matchstr(getline('.'), '\%' . col('.') . 'c.') =~ '\s'
+    if matchstr(getline('.'), '\%' . col('.') . 'c.') =~? '\s'
         " When remove it!
         execute 'normal dw'
     endif
     call repeat#set('gJ', v:count1)
 endfun
+nnoremap gj J
 nnoremap gJ :call JoinSpaceless()<CR>
-
-" j, k による移動を折り返されたテキストでも自然に振る舞うように変更
-nnoremap j gj
-nnoremap k gk
 
 " コマンドモードでemacs
 cnoremap <C-b> <Left>
@@ -294,7 +349,6 @@ cnoremap <C-p> <Up>
 cnoremap <C-a> <Home>
 cnoremap <C-e> <End>
 cnoremap <C-d> <Del>
-cnoremap <C-k> <C-o>D<Right>
 
 " terminal mode
 command! -nargs=* TERM split | resize20 | term <args>
@@ -327,33 +381,71 @@ set wildoptions+=pum
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
 inoremap <silent> っｊ <Esc>
+nnoremap <silent> <expr> っｊ Fcitx2en()
 
 " ペーストモードを自動解除
 autocmd MyAutoCmd InsertLeave * set nopaste
-nnoremap Q q
 
 " ジャンプリストで中央に持ってくる
-nnoremap <C-o> <C-o>zz
-nnoremap <C-i> <C-i>zz
+nnoremap <c-o> <c-o>zz
+nnoremap <c-i> <c-o>zz
 nnoremap g; g;zz
 nnoremap g, g,zz
 nnoremap <C-u> <C-u>zz
 nnoremap <C-d> <C-d>zz
 nnoremap <C-f> <C-f>zz
 nnoremap <C-b> <C-b>zz
+" 検索後にジャンプした際に検索単語を画面中央に持ってくる
+nnoremap n nzz
+nnoremap N Nzz
 
 " ファイル操作系
 nmap <Leader> <Nop>
-nmap <Leader>w :<c-u>w<CR>
-nmap <Leader>x :<c-u>bd<CR>
-nmap <Leader>q :<c-u>wq<CR>
-nmap <silent> <M-b> :bprevious<CR>
-nmap <silent> <M-f> :bnext<CR>
+nmap <silent> <Leader>w :<c-u>w<CR>
+nmap <silent> <Leader>W :bufdo! w<CR>
+nmap <silent> <Leader>x :<c-u>Bdelete<CR>
+nmap <silent> <Leader>X :<c-u>bd<CR>
+nmap ZZ :<c-u>xa<CR>
+nmap <silent> <M-b> :bnext<CR>
 nmap <silent> <C-g> mz<C-^>`zzz
 " QuickFixおよびHelpでは q でバッファを閉じる
-autocmd MyAutoCmd FileType help,qf nnoremap <buffer> q <C-w>cbnext<CR>
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> <CR> <CR>
-autocmd MyAutoCmd FileType far_vim nnoremap <buffer> q <C-w>o:tabc<CR>
+autocmd MyAutoCmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
+autocmd MyAutoCmd FileType far_vim nnoremap <buffer><nowait> q <C-w>o:tabc<CR>
+autocmd MyAutoCmd FileType gitcommit nmap <buffer><nowait> q :<c-u>wq<CR>
+autocmd MyAutoCmd FileType fugitive nnoremap <buffer><Space>gp :<c-u>Gina push<CR><C-w>c
+
+" qf enhanced
+augroup qf_enhanced
+  autocmd!
+  autocmd FileType qf call s:qf_enhanced()
+  function! s:qf_enhanced()
+    nnoremap <buffer> p  <CR>zz<C-w>p
+    nnoremap <silent> <buffer> dd :call <SID>del_entry()<CR>
+    nnoremap <silent> <buffer> x :call <SID>del_entry()<CR>
+    vnoremap <silent> <buffer> d :call <SID>del_entry()<CR>
+    vnoremap <silent> <buffer> x :call <SID>del_entry()<CR>
+    nnoremap <silent> <buffer> u :<C-u>call <SID>undo_entry()<CR>
+  endfunction
+
+  function! s:undo_entry()
+    let history = get(w:, 'qf_history', [])
+    if !empty(history)
+      call setqflist(remove(history, -1), 'r')
+    endif
+  endfunction
+
+  function! s:del_entry() range
+    let qf = getqflist()
+    let history = get(w:, 'qf_history', [])
+    call add(history, copy(qf))
+    let w:qf_history = history
+    unlet! qf[a:firstline - 1 : a:lastline - 1]
+    call setqflist(qf, 'r')
+    execute a:firstline
+  endfunction
+augroup END
+
 augroup vimrc-auto-mkdir
   autocmd!
   autocmd BufWritePre * call s:auto_mkdir(expand('<afile>:p:h'), v:cmdbang)
@@ -372,7 +464,7 @@ nmap <silent> - :<c-u>split<CR><C-w>k
 " 前回のカーソル位置からスタート
 augroup vimrcEx
   au BufRead * if line("'\"") > 0 && line("'\"") <= line("$") |
-        \ exe "normal g`\"" | endif
+    \ exe "normal g`\"" | endif
 augroup END
 
 " 文末に○○を付ける
@@ -381,6 +473,8 @@ nnoremap <M-,> mz$a,<ESC>`z
 
 " 補完系
 inoremap <C-l> <C-x><C-l>
+inoremap <M-n> <C-x><C-n>
+inoremap <M-p> <C-x><C-p>
 
 " vimrcをスペースドットで更新
 if has('vim_starting')
@@ -409,66 +503,31 @@ function! s:vimrc_local(loc)
   endfor
 endfunction
 
-" ここをTOMLに入れたい
-function! Syntax_range_dein() abort
-  let start = '^\s*hook_\%('.
-  \           'add\|source\|post_source\|post_update'.
-  \           '\)\s*=\s*%s'
-
-  call SyntaxRange#Include(printf(start, "'''"), "'''", 'vim', '')
-  call SyntaxRange#Include(printf(start, '"""'), '"""', 'vim', '')
-endfunction
-
-function! SetLeximaAddRule() abort
-  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': "'", 'input': "'"})
-  call lexima#add_rule({'at': "\\%#\\n\\s*'", 'char': "'", 'input': "'", 'delete': "'"})
-  call lexima#add_rule({'char': '<C-h>', 'at': "'\\%#'", 'delete': 1})
-
-  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '{', 'input': '{'})
-  call lexima#add_rule({'at': '\%#\n\s*}', 'char': '}', 'input': '}', 'delete': '}'})
-  call lexima#add_rule({'char': '<C-h>', 'at': '{\%#}', 'delete': 1})
-
-  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '[', 'input': '['})
-  call lexima#add_rule({'at': '\%#\n\s*\]', 'char': ']', 'input': ']', 'delete': ']'})
-  call lexima#add_rule({'char': '<C-h>', 'at': '\[\%#\]', 'delete': 1})
-
-  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '(', 'input': '('})
-  call lexima#add_rule({'at': '\%#\n\s*)', 'char': ')', 'input': ')', 'delete': ')'})
-  call lexima#add_rule({'char': '<C-h>', 'at': '(\%#)', 'delete': 1})
-
-  call lexima#add_rule({'at': '\%#.*[-0-9a-zA-Z_,:]', 'char': '"', 'input': '"'})
-  call lexima#add_rule({'at': '\%#\n\s*"', 'char': '"', 'input': '"', 'delete': '"'})
-  call lexima#add_rule({'char': '<C-h>', 'at': '"\%#"', 'delete': 1})
-
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#)', 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#"', 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': "\\%#'", 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#]', 'leave': 1})
-  call lexima#add_rule({'char': '<TAB>', 'at': '\%#}', 'leave': 1})
-endfunction
+" html用の設定はここ
+augroup MyXML
+  autocmd!
+  autocmd Filetype xml inoremap <buffer> </ </<C-x><C-o>
+  autocmd Filetype html inoremap <buffer> </ </<C-x><C-o>
+  autocmd Filetype phtml inoremap <buffer> </ </<C-x><C-o>
+  autocmd Filetype php inoremap <buffer> </ </<C-x><C-o>
+augroup END
 
 " php用の設定はここ
 " TODO ftplutin setting
 autocmd MyAutoCmd FileType php,phml call s:php_my_settings()
 function! s:php_my_settings() abort
-  inoremap <buffer> <M--> ->
-  inoremap <buffer> <M-=> =>
   nnoremap <buffer> <expr><F1> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
   nnoremap <buffer> <M-4> bi$<ESC>e
   nnoremap <silent> <buffer> <F11> :PhpRefactorringMenu()<CR>
-  nnoremap <silent> <buffer> gd gd
-  " let b:match_words .= ',if.*(.*)\s{:selse\s{:},?php:?>,for:},if:endif,foreach:endforeach'
-  " 対象が多くなると遅くなる
-  execute('EchoDocDisable')
 endfunction
 
 function! IsPhpOrHtml() abort
   let fe = &filetype
-  if fe == 'php'
+  if fe ==? 'php'
     return 1
-  elseif fe == 'phtml'
+  elseif fe ==? 'phtml'
     return 1
-  elseif fe == 'html'
+  elseif fe ==? 'html'
     return 0
   endif
 endfunction
@@ -483,16 +542,17 @@ function! MySqlOmniFunc(findstart, base)
   call sqlcomplete#Complete(a:findstart, a:base)
 endfunction
 
-" test settings
-" 親ディレクトリを開く netrw有効なら便利かも
-" nnoremap <silent> <C-u> :execute 'e ' . ((strlen(bufname('')) == 0) ? '.' : '%:h')<CR>
-vmap p <Plug>(operator-replace)
-" nnoremap <space>9 V%y<C-w>jGpkVGJ
+augroup GitSpellCheck
+  autocmd!
+  autocmd FileType gitcommit setlocal spell
+augroup END
 
 "--------------------------------------------
 "Absolutely fantastic function from stoeffel/.dotfiles which allows you to
 "repeat macros across a visual range
 "--------------------------------------------
+" TMUXと干渉しているので実際は二回押す
+nmap <C-q> @q
 xnoremap @ :<C-u>call ExecuteMacroOverVisualRange()<CR>
 function! ExecuteMacroOverVisualRange()
   echo '@'.getcmdline()
@@ -529,41 +589,128 @@ cmap <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
 cnoremap <C-Y> <C-R>-
 "--------------------------------------------
 
-" override help command
-nnoremap <F1> <C-\><C-N>:help <C-R><C-W><CR>
-
 command! DiffOrig let g:diffline = line('.')
   \ | vert new | set bt=nofile | r # | 0d_
   \ | diffthis | :exe "norm! ".g:diffline."G"
   \ | wincmd p | diffthis | wincmd p
 nnoremap <Leader>do :DiffOrig<cr>
 
-augroup vimrc-auto-cursorline
-  autocmd!
-  autocmd CursorMoved,CursorMovedI * call s:auto_cursorline('CursorMoved')
-  autocmd CursorHold,CursorHoldI * call s:auto_cursorline('CursorHold')
-  autocmd WinEnter * call s:auto_cursorline('WinEnter')
-  autocmd WinLeave * call s:auto_cursorline('WinLeave')
+" override help command
+nmap <F1> :call <SID>help_override()<CR>
+vmap <F1> :call <SID>help_override()<CR>
+function! s:help_override() abort
+  let vtext = s:get_visual_selection()
+  let word = expand('<cword>')
+  if vtext !=# ''
+    let word = vtext
+  endif
+  try
+    execute 'silent help ' . word
+  catch
+    echo word . ' is no help text'
+  endtry
+endfunction
 
-  let s:cursorline_lock = 0
-  function! s:auto_cursorline(event)
-    if a:event ==# 'WinEnter'
-      setlocal cursorline
-      let s:cursorline_lock = 2
-    elseif a:event ==# 'WinLeave'
-      setlocal nocursorline
-    elseif a:event ==# 'CursorMoved'
-      if s:cursorline_lock
-        if 1 < s:cursorline_lock
-          let s:cursorline_lock = 1
-        else
-          setlocal nocursorline
-          let s:cursorline_lock = 0
-        endif
-      endif
-    elseif a:event ==# 'CursorHold'
-      setlocal cursorline
-      let s:cursorline_lock = 1
+nmap <silent> gK :call <SID>google_search()<CR>
+vmap <silent> gK :call <SID>google_search()<CR>
+function! s:google_search() abort
+  let vtext = s:get_visual_selection()
+  let word = expand('<cword>')
+  if vtext !=# ''
+    let word = vtext
+  endif
+  execute 'silent !google-chrome-stable ' .
+   \ '"http://www.google.co.jp/search?num=100&q=' . word . '" 2> /dev/null &'
+endfunction
+function! s:get_visual_selection()
+    let [line_start, column_start] = getpos("'<")[1:2]
+    let [line_end, column_end] = getpos("'>")[1:2]
+    let lines = getline(line_start, line_end)
+    if len(lines) == 0
+        return ''
     endif
-  endfunction
-augroup END
+    let lines[-1] = lines[-1][: column_end - (&selection ==? 'inclusive' ? 1 : 2)]
+    let lines[0] = lines[0][column_start - 1:]
+    return join(lines, "\n")
+endfunction
+
+" ここをTOMLに入れたい
+function! Syntax_range_dein() abort
+  let start = '^\s*hook_\%('.
+  \  'add\|source\|post_source\|post_update'.
+  \  '\)\s*=\s*%s'
+
+  call SyntaxRange#Include(printf(start, "'''"), "'''", 'vim', '')
+  call SyntaxRange#Include(printf(start, '"""'), '"""', 'vim', '')
+endfunction
+
+function! SetLeximaAddRule() abort
+  call lexima#add_rule({'char': "'", 'input_after': "'"})
+  call lexima#add_rule({'char': "'", 'at': "''\%#", 'input': "'''"})
+  call lexima#add_rule({'char': "'", 'at': "\\%#.*[-0-9a-zA-Z_,:\"]", 'input': "'"})
+  call lexima#add_rule({'char': "'", 'at': "\\%#'''", 'leave': 3})
+  call lexima#add_rule({'char': '<C-h>', 'at': "'\\%#'", 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': "'''\%#'''", 'input_after': '<CR>'})
+
+  call lexima#add_rule({'char': '"', 'input_after': '"'})
+  call lexima#add_rule({'char': '"', 'at': "\\%#.*[-0-9a-zA-Z_,:']", 'input': '"'})
+  call lexima#add_rule({'char': '"', 'at': '"""\%#', 'input': '"""'})
+  call lexima#add_rule({'char': '"', 'at': '\%#"""', 'leave': 3})
+  call lexima#add_rule({'char': '<C-h>', 'at': '"\%#"', 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': '"""\%#""")', 'input_after': '<CR>'})
+
+  call lexima#add_rule({'char': '<', 'input_after': '>'})
+  call lexima#add_rule({'char': '<', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '<'})
+  call lexima#add_rule({'char': '<C-h>', 'at': '<\%#>', 'delete': 1})
+  call lexima#add_rule({'char': '<Space>', 'at': '<\%#>', 'input_after': '<Space>'})
+  call lexima#add_rule({'char': '<BS>', 'at': '< \%# >', 'delete': 1})
+
+  call lexima#add_rule({'char': '{', 'input_after': '}'})
+  call lexima#add_rule({'char': '{', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '{'})
+  call lexima#add_rule({'char': '<C-h>', 'at': '{\%#}', 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': '{\%#}', 'input_after': '<CR>'})
+  call lexima#add_rule({'char': '<Space>', 'at': '{\%#}', 'input_after': '<Space>'})
+  call lexima#add_rule({'char': '<BS>', 'at': '{ \%# }', 'delete': 1})
+
+  call lexima#add_rule({'char': '[', 'input_after': ']'})
+  call lexima#add_rule({'char': '[', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '['})
+  call lexima#add_rule({'char': '<C-h>', 'at': '\[\%#\]', 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': '\[\%#\]', 'input_after': '<CR>'})
+  call lexima#add_rule({'char': '<Space>', 'at': '\[\%#]', 'input_after': '<Space>'})
+  call lexima#add_rule({'char': '<BS>', 'at': '\[ \%# ]', 'delete': 1})
+
+  call lexima#add_rule({'char': '(', 'input_after': ')'})
+  call lexima#add_rule({'char': '(', 'at': "\\%#.*[-0-9a-zA-Z_,:\"']", 'input': '('})
+  call lexima#add_rule({'char': '<C-h>', 'at': '(\%#)', 'delete': 1})
+  call lexima#add_rule({'char': '<CR>', 'at': '(\%#)', 'input_after': '<CR>'})
+  call lexima#add_rule({'char': '<Space>', 'at': '(\%#)', 'input_after': '<Space>'})
+  call lexima#add_rule({'char': '<BS>', 'at': '( \%# )', 'delete': 1})
+
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#)', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#"', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': "\\%#'", 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#]', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%#}', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%# )', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%# ]', 'leave': 1})
+  call lexima#add_rule({'char': '<C-s>', 'at': '\%# }', 'leave': 1})
+endfunction
+
+command!
+  \ -nargs=+ -bang
+  \ -complete=command
+  \ Capture
+  \ call s:cmd_capture([<f-args>], <bang>0)
+
+function! C(cmd)
+  redir => result
+  silent execute a:cmd
+  redir END
+  return result
+endfunction
+
+function! s:cmd_capture(args, banged)
+  new
+  silent put =C(join(a:args))
+  1,2delete _
+endfunction

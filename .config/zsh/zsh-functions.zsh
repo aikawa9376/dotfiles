@@ -2,12 +2,46 @@
 # utils
 # -------------------------------------
 has() {
-    type "${1:?too few arguments}" &>/dev/null
+  type "${1:?too few arguments}" &>/dev/null
 }
 
 zmenu() {
   print -rl -- ${(ko)commands} | fzf | (nohup ${SHELL:-"/bin/sh"} &) >/dev/null 2>&1
 }
+
+# ALT-I - Paste the selected entry from locate output into the command line
+fzf-locate-widget() {
+  local selected
+  if selected=$(lolcate / | fzf); then
+    LBUFFER=${LBUFFER}$selected
+  fi
+  zle redisplay
+}
+zle     -N    fzf-locate-widget
+bindkey '\ei' fzf-locate-widget
+
+# ALT-I - Paste the selected entry from locate output into the command line
+fzf-locate-pwd-widget() {
+  local selected
+  if selected=$(lolcate $(pwd) | fzf); then
+    LBUFFER=${LBUFFER}$selected
+  fi
+  zle redisplay
+}
+zle     -N    fzf-locate-pwd-widget
+bindkey '\eI' fzf-locate-pwd-widget
+
+# ALT-r - ripgrep
+fzf-ripgrep-widget() {
+  local selected
+  if selected=$(rg --column --line-number --hidden --ignore-case --no-heading --color=always '' |
+    fzf --ansi --delimiter : --nth 4.. --preview '$HOME/.config/zsh/preview.sh {}'); then
+    LBUFFER=${LBUFFER}$(echo $selected | awk -F':' '{print $1}')
+  fi
+  zle redisplay
+}
+zle     -N    fzf-ripgrep-widget
+bindkey '\ea' fzf-ripgrep-widget
 
 # -------------------------------------
 # MRU
@@ -416,11 +450,10 @@ finder() {
 
 # fzf git branch
 fbr() {
-  local branches branch
-  branches=$(git branch --all | grep -v HEAD) &&
-  branch=$(echo "$branches" |
-           fzf-tmux -d $(( 2 + $(wc -l <<< "$branches") )) +m) &&
-  git checkout $(echo "$branch" | sed "s/.* //" | sed "s#remotes/[^/]*/##")
+  git checkout
+  $(git branch -a | tr -d " " |
+    fzf --height 100% --prompt "CHECKOUT BRANCH>" --preview "git log --color=always {}" |
+    head -n 1 | sed -e "s/^\*\s*//g" | perl -pe "s/remotes\/origin\///g")
 }
 
 # fshow - git commit browser
@@ -441,7 +474,7 @@ fadd() {
   while out=$(
       git status --short |
       awk '{if (substr($0,2,1) !~ / /) print $2}' |
-      fzf-tmux --multi --exit-0 --expect=ctrl-d); do
+        fzf-tmux --multi --preview 'git diff {}' --exit-0 --expect=ctrl-d); do
     q=$(head -1 <<< "$out")
     n=$[$(wc -l <<< "$out") - 1]
     addfiles=(`echo $(tail "-$n" <<< "$out")`)
@@ -459,7 +492,7 @@ frm() {
   local out q n removefiles
   while out=$(
       git ls-files |
-      fzf-tmux --multi --exit-0 --expect=ctrl-d); do
+      fzf-tmux --multi --preview 'less {}' --exit-0 --expect=ctrl-d); do
     q=$(head -1 <<< "$out")
     n=$[$(wc -l <<< "$out") - 1]
     removefiles=(`echo $(tail "-$n" <<< "$out")`)
@@ -480,7 +513,7 @@ pskl() {
 # fdg - ghq
 fdg() {
   local selected
-  selected=$(ghq list | fzf)
+  selected=$(ghq list | fzf --preview 'tree -C $(ghq root)/{} | head -200')
 
   if [ "x$selected" != "x" ]; then
     cd $(ghq root)/$selected
@@ -493,6 +526,19 @@ bindkey '^z' fdg
 ghq-update()
 {
   ghq list | sed -E 's/^[^\/]+\/(.+)/\1/' | xargs -n 1 -P 10 ghq get -u
+}
+
+# chrome search
+google() {
+    local str opt
+    if [ $# != 0 ]; then
+        for i in $*; do
+            str="$str${str:++}$i"
+        done
+        opt='search?num=100'
+        opt="${opt}&q=${str}"
+    fi
+    google-chrome-stable http://www.google.co.jp/$opt
 }
 
 winopen() {

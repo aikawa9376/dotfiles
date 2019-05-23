@@ -89,16 +89,16 @@ do-enter() {
         zle accept-line
         return
     fi
-
     print
-    case ${OSTYPE} in
-      darwin*)
-        /bin/ls -FGh
-        ;;
-      linux*)
-        /bin/ls -FGh --color=auto
-        ;;
-    esac
+    if [[ -d .git ]]; then
+      if [[ -n "$(git status)" ]]; then
+        git status -uno --short
+      fi
+      print
+    else
+      # do nothing
+      print
+    fi
     if type precmd > /dev/null 2>&1; then
       precmd
     fi

@@ -10,6 +10,8 @@ zplug "zsh-users/zsh-history-substring-search"
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 # autosuggestions
 zplug "zsh-users/zsh-autosuggestions"
+# autosuggestions yarn
+zplug "g-plane/zsh-yarn-autocompletions"
 # zaw
 zplug "zsh-users/zaw"
 # k
@@ -18,6 +20,8 @@ zplug "supercrabtree/k"
 zplug "b4b4r07/enhancd", use:init.sh
 # ゴミ箱機能
 zplug "b4b4r07/zsh-gomi", if:"which fzf"
+# git plugin
+zplug "b4b4r07/git-br"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # 256 coloer ???
@@ -46,12 +50,18 @@ zplug load --verbose
 export PATH="/usr/local/bin:$PATH"
 export TERM='xterm-256color'
 export EDITOR='nvim'
+export PAGER='bat'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
+export BAT_CONFIG_PATH="$HOME/.config/bat/conf"
 
 # go lang
 export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
+
+# rust lang
+export RUSTPATH="$HOME/.cargo"
+export PATH="$RUSTPATH/bin:$PATH"
 
 # local settings
 case ${OSTYPE} in
@@ -62,6 +72,8 @@ case ${OSTYPE} in
 esac
 
 stty stop undef
+stty start undef
+setopt no_flow_control
 # KEYTIMEOUT=1
 case $(uname -a) in
    *Microsoft*) unsetopt BG_NICE ;;
@@ -75,67 +87,47 @@ function loadlib() {
     source "$lib"
   fi
 }
+loadlib $ZCONFDIR/zsh-vcs.zsh
 loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-vimode.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
 
 # -------------------------------------
-# prompt
-# -------------------------------------
-autoload -Uz vcs_info
-setopt prompt_subst
-setopt combining_chars
-
-zstyle ':vcs_info:git:*' check-for-changes true
-zstyle ':vcs_info:git:*' unstagedstr '!'
-zstyle ':vcs_info:git:*' stagedstr '+'
-zstyle ':vcs_info:*' formats ' %c%u(%s:%b)'
-zstyle ':vcs_info:*' actionformats ' %c%u(%s:%b|%a)'
-
-precmd () {
-  # 1行あける
-  print
-  # バージョン管理されてた場合、ブランチ名
-  inside_git_repo="$(git rev-parse --is-inside-work-tree 2>/dev/null)"
-  if [ "$inside_git_repo" ]; then
-    vcs_info
-    psvar=()
-    LANG=jp_JP.UTF-8 vcs_info
-    [[ -n "$vcs_info_msg_0_" ]] && psvar[1]="$vcs_info_msg_0_"
-    local left="%B%F{white}>>%B%F{blue}%~%f%b%B%F{green}%1(v|%1v|)%f%b"
-  else
-    local left="%B%F{white}>>%B%F{blue}%~%f%b"
-  fi
-  local right="%B%F{white}[%m:%B%F{yellow}%D %*%B%F{white}]"
-  # スペースの長さを計算
-  # テキストを装飾する場合、エスケープシーケンスをカウントしないようにします
-  local invisible='%([BSUbfksu]|([FK]|){*})'
-  local leftwidth=${#${(S%%)left//$~invisible/}}
-  local rightwidth=${#${(S%%)right//$~invisible/}}
-  local padwidth=$(($COLUMNS - ($leftwidth + $rightwidth) % $COLUMNS))
-
-  print -P $left${(r:$padwidth:: :)}$right
-}
-
-# -------------------------------------
 # fzf
 # -------------------------------------
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-export FZF_DEFAULT_COMMAND='fd --type file --follow --hidden --color=always --exclude  .git'
+export FZF_DEFAULT_COMMAND='(fd --type file --follow --hidden --color=always --exclude .git) 2> /dev/null'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_CTRL_T_OPTS='--preview "pygmentize -g  {}"'
-export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude  .git'
-export FZF_ALT_C_OPTS="--preview 'tree -C {} | head -200'"
+export FZF_CTRL_T_OPTS="--ansi $FZF_DEFAULT_PREVIEW"
+export FZF_CTRL_R_OPTS='--preview-window hidden'
+export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
+export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
+export FZF_DEFAULT_PREVIEW='--preview "
+  [[ -d {} ]]  &&
+  tree -C {}
+  [[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
+  timg -g $(( $COLUMNS / 2 - 4 ))x$(( $LINES * 2 )) {}
+  [[ -f {} && $(file --mime {}) =~ (^png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
+  echo {} is a binary file
+  (bat --style=changes --color=always {} ||
+   cat {}) 2> /dev/null | head -500"'
 export FZF_COMPLETION_TRIGGER=''
 export FZF_DEFAULT_OPTS='
 --height 40%
 --reverse
 --extended
---ansi
---bind alt-p:preview-up,alt-n:preview-down
+--cycle
+--no-hscroll
+--inline-info
+--tabstop=2
+--history '$HOME'/.fzf/history
+--bind alt-k:preview-up,alt-j:preview-down,ctrl-n:down,ctrl-p:up
+--bind alt-p:previous-history,alt-n:next-history,ctrl-k:kill-line
 --color dark,hl:34,hl+:40,bg+:235,fg+:15
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
+'$FZF_DEFAULT_PREVIEW'
+--preview-window right:wrap  --bind "?:toggle-preview"
 '
 
 bindkey "^I" expand-or-complete
@@ -180,7 +172,10 @@ zstyle ':completion:*:options' description 'yes'
 zstyle ':completion:*' group-name ''
 
 #LS_COLORSを設定しておく
-export LS_COLORS='di=01;34:ln=35:so=32:pi=33:ex=04:bd=46;34:cd=43;34:su=41;30:sg=46;30:tw=42;30:ow=04;01;34'
+export LS_COLORS="$(vivid generate ayu)"
+export EXA_COLORS='di=01;34:ln=35:so=32:pi=33:ex=04:bd=46;34:cd=43;34:su=41;30:sg=46;30:tw=42;30:ow=04;01;34'
+# eval $(dircolors $HOME/dotfiles/alacritty/dircolors.256dark)
+# eval $(dircolors $HOME/dotfiles/alacritty/dir_colors)
 #ファイル補完候補に色を付ける
 zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 
@@ -208,7 +203,7 @@ bindkey "^[r" redo
 setopt correct
 
 # -------------------------------------
-# ディレクト移動
+# ディレクトリ移動
 # -------------------------------------
 setopt auto_cd
 setopt auto_pushd
@@ -223,12 +218,25 @@ function cd-up { zle push-line && LBUFFER='builtin cd ..' && zle accept-line }
 zle -N cd-up
 bindkey '^[g' cd-up
 
-function agvim () {
-  nvim $(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}')
+function rvim () {
+  selected_files=$(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') &&
+  nvim $selected_files
 }
 
-function fvim () {
-  nvim $(fzf $@)
+function fvim() {
+  if [[ $@ == '-a' ]]; then
+    files=$(fd -I --type file --follow --hidden --color=always --exclude  .git) &&
+  else
+    files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
+  fi
+  # wraped function timg and bat?
+  selected_files=$(echo "$files" | fzf -m --ansi | tr '\n' ' ') &&
+
+  if [[ $selected_files == '' ]]; then
+    return 0
+  else
+    nvim $(echo "$selected_files")
+  fi
 }
 
 # -------------------------------------
@@ -315,3 +323,9 @@ if [ -z "$SSH_AGENT_PID" ] || ! kill -0 $SSH_AGENT_PID; then
     . ~/.ssh-agent
 fi
 ssh-add -l >& /dev/null || ssh-add
+
+# -------------------------------------
+# enhancd
+# -------------------------------------
+ENHANCD_HOOK_AFTER_CD=ll
+ENHANCD_FILTER=fzf:fzy:peco

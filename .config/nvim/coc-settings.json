@@ -1,0 +1,43 @@
+{
+  "suggest.noselect": true,
+  "snippets.ultisnips.enable": false,
+  "snippets.snipmate.enable": true,
+  "css.colorDecorators.enable": false,
+  "scss.colorDecorators.enable": false,
+  "diagnostic.refreshAfterSave": true,
+  "diagnostic.infoSign": "\uf449 ",
+  "diagnostic.hintSign": "\ufb24 ",
+  "diagnostic.errorSign": "\uf057 ",
+  "diagnostic.signOffset": 999999,
+  "codeLens.enable": true,
+  "coc.preferences.colorSupport": false,
+  "coc.source.tmuxcomplete.priority": 40,
+  "coc.source.neosnippet.priority": 50,
+  "list.insertMappings": {
+		"<C-l>": "do:refresh",
+		"<C-f>": "feedkeys:\\<C-f>",
+		"<C-b>": "feedkeys:\\<C-b>",
+		"<C-n>": "normal:j",
+		"<C-p>": "normal:k",
+		"<A-n>": "prompt:previous",
+		"<A-p>": "prompt:next",
+		"<C-e>": "action:e",
+		"<C-c>": "command:call EnhanCursor()"
+	},
+	"list.normalMappings": {
+		"d": "action:delete"
+	},
+  "languageserver": {
+    "efm": {
+      "command": "efm-langserver",
+      "args": [],
+      "filetypes": ["vim", "eruby", "markdown"]
+    },
+    "golang": {
+      "command": "gopls",
+      "args": [],
+      "rootPatterns": ["go.mod", ".vim/", ".git/", ".hg/"],
+      "filetypes": ["go"]
+    }
+  }
+}
