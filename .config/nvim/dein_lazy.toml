@@ -1435,6 +1435,10 @@ let g:peekaboo_delay = 1000
 '''
 
 [[plugins]]
+repo = 'severin-lemaignan/vim-minimap'
+on_cmd = 'Minimap'
+
+[[plugins]]
 repo = 'yegappan/mru'
 on_event = 'VimEnter'
 hook_add = '''
