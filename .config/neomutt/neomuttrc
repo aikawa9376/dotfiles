@@ -1,16 +1,15 @@
 set send_charset="iso-2022-jp:utf-8"
 
-source ~/Dropbox/mutt/passw:noh
-ord.rc
+source ~/pass/mutt/password.rc
 
-set folder = "imaps://imap.gmail.com:993"""
+set folder = "imaps://imap.gmail.com:993"
 set spoolfile = "+INBOX"
 set imap_check_subscribed
 set hostname = gmail.com
 set mail_check = 120
 set timeout = 300
 set imap_keepalive = 300
-set postponed = "+[GMail]/Drafts"""
+set postponed = "+[GMail]/Drafts"
 set record = "+[GMail]/Sent Mail"
 set header_cache=~/.mutt/cache/headers
 set message_cachedir=~/.mutt/cache/bodies
@@ -21,9 +20,9 @@ set include
 set sort = 'threads'
 set sort_aux = 'reverse-last-date-received'
 set auto_tag = yes
-ignore "Authentication-Results:"""
+ignore "Authentication-Results:"
 ignore "DomainKey-Signature:"
-ignore "DKIM-Signature:"""
+ignore "DKIM-Signature:"
 hdr_order Date From To Cc
 set pager_index_lines=8
 bind editor ^T complete
@@ -35,12 +34,12 @@ set mailcap_path = ~/.mutt/mailcap
 auto_view text/html
 
 # emacs
-#set editor="emacsclient -a \"\" -t"""
+#set editor="emacsclient -a \"\" -t"
 # vim
 set editor="vim"
 
 # notify-send
-set new_mail_command="notify-send --icon=mail-message-new 'New Email' '%n new messages, %u unread.' &"""
+set new_mail_command="notify-send --icon=mail-message-new 'New Email' '%n new messages, %u unread.' &"
 
 # alias
 set alias_file = "~/.mutt/aliases"
@@ -49,8 +48,8 @@ set reverse_alias = yes
 source $alias_file
 
 ## GooBook
-set query_command="goobook query '%s'"""
-macro index,pager a "<pipe-message>goobook add<return>" "add sender to google contacts"""
+set query_command="goobook query '%s'"
+macro index,pager a "<pipe-message>goobook add<return>" "add sender to google contacts"
 bind editor <Tab> complete-query
 
 # pager
@@ -62,18 +61,18 @@ unset markers
 
 # custom body highlights - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # highlight my name and other personally relevant strings
-#color body          color136        color234        "(ethan|schoonover)"""
+#color body          color136        color234        "(ethan|schoonover)"
 # custom index highlights - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 # messages which mention my name in the body
-#color index         color136        color234        "~b \"phil(_g|\!| gregory| gold)|pgregory\" !~N !~T !~F !~p !~P"""
-#color index         J_cream         color230        "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~N !~T !~F !~p !~P"""
-#color index         color136        color37         "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~T !~F !~p !~P"""
-#color index         color136        J_magent        "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~F !~p !~P"""
+#color index         color136        color234        "~b \"phil(_g|\!| gregory| gold)|pgregory\" !~N !~T !~F !~p !~P"
+#color index         J_cream         color230        "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~N !~T !~F !~p !~P"
+#color index         color136        color37         "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~T !~F !~p !~P"
+#color index         color136        J_magent        "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~F !~p !~P"
 ## messages which are in reference to my mails
-#color index         J_magent        color234        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" !~N !~T !~F !~p !~P"""
-#color index         J_magent        color230        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~N !~T !~F !~p !~P"""
-#color index         J_magent        color37         "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~T !~F !~p !~P"""
-#color index         J_magent        color160        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~F !~p !~P"""
+#color index         J_magent        color234        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" !~N !~T !~F !~p !~P"
+#color index         J_magent        color230        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~N !~T !~F !~p !~P"
+#color index         J_magent        color37         "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~T !~F !~p !~P"
+#color index         J_magent        color160        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~F !~p !~P"
 
 # for background in 16 color terminal, valid background colors include:
 # base03, bg, black, any of the non brights
@@ -102,39 +101,39 @@ mono  error         bold
 #color index         color160        color234        "~D(!~p|~p)"               # deleted
 #color index         color235        color234        ~F                         # flagged
 #color index         color166        color234        ~=                         # duplicate messages
-#color index         color240        color234        "~A!~N!~T!~p!~Q!~F!~D!~P"""  # the rest
+#color index         color240        color234        "~A!~N!~T!~p!~Q!~F!~D!~P"
 #color index         J_base          color234        "~A~N!~T!~p!~Q!~F!~D"      # the rest, new
-color index         color160        color234        "~A"""                        # all messages
+color index         color160        color234        "~A"
 color index         color166        color234        "~E"                        # expired messages
-color index         color33         color234        "~N"""                        # new messages
+color index         color33         color234        "~N"
 color index         color33         color234        "~O"                        # old messages
-color index         color61         color234        "~Q"""                        # messages that have been replied to
+color index         color61         color234        "~Q"
 color index         color240        color234        "~R"                        # read messages
-color index         color33         color234        "~U"""                        # unread messages
+color index         color33         color234        "~U"
 color index         color33         color234        "~U~$"                      # unread, unreferenced messages
-color index         color241        color234        "~v"""                        # messages part of a collapsed thread
+color index         color241        color234        "~v"
 color index         color241        color234        "~P"                        # messages from me
-color index         color37         color234        "~p!~F"""                     # messages to me
+color index         color37         color234        "~p!~F"
 color index         color37         color234        "~N~p!~F"                   # new messages to me
-color index         color37         color234        "~U~p!~F"""                   # unread messages to me
+color index         color37         color234        "~U~p!~F"
 color index         color240        color234        "~R~p!~F"                   # messages to me
-color index         color160        color234        "~F"""                        # flagged messages
+color index         color160        color234        "~F"
 color index         color160        color234        "~F~p"                      # flagged messages to me
-color index         color160        color234        "~N~F"""                      # new flagged messages
+color index         color160        color234        "~N~F"
 color index         color160        color234        "~N~F~p"                    # new flagged messages to me
-color index         color160        color234        "~U~F~p"""                    # new flagged messages to me
+color index         color160        color234        "~U~F~p"
 color index         color235        color160        "~D"                        # deleted messages
-color index         color245        color234        "~v~(!~N)"""                  # collapsed thread with no unread
+color index         color245        color234        "~v~(!~N)"
 color index         color136        color234        "~v~(~N)"                   # collapsed thread with some unread
-color index         color64         color234        "~N~v~(~N)"""                 # collapsed thread with unread parent
+color index         color64         color234        "~N~v~(~N)"
 # statusbg used to indicated flagged when foreground color shows other status
 # for collapsed thread
 color index         color160        color235        "~v~(~F)!~N"                # collapsed thread with flagged, no unread
-color index         color136        color235        "~v~(~F~N)"""                 # collapsed thread with some unread & flagged
+color index         color136        color235        "~v~(~F~N)"
 color index         color64         color235        "~N~v~(~F~N)"               # collapsed thread with unread parent & flagged
-color index         color64         color235        "~N~v~(~F)"""                 # collapsed thread with unread parent, no unread inside, but some flagged
+color index         color64         color235        "~N~v~(~F)"
 color index         color37         color235        "~v~(~p)"                   # collapsed thread with unread parent, no unread inside, some to me directly
-color index         color136        color160        "~v~(~D)"""                   # thread with deleted (doesn't differentiate between all or partial)
+color index         color136        color160        "~v~(~D)"
 #color index         color136        color234        "~(~N)"                    # messages in threads with some unread
 #color index         color64         color234        "~S"                       # superseded messages
 #color index         color160        color234        "~T"                       # tagged messages
@@ -203,4 +202,3 @@ color body          color160        color234        "([a-z][a-z0-9+-]*://(((([a-
 #folder-hook .                  "color status        J_black         J_status        "
 #folder-hook gmail/inbox        "color status        J_black         color136        "
 #folder-hook gmail/important    "color status        J_black         color136        "i
-''']))]])]))]])]))]]))>>
