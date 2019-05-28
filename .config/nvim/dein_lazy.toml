@@ -212,10 +212,6 @@ let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
 '''
 
 [[plugins]]
-repo = 'alvan/vim-closetag'
-on_event = 'InsertEnter'
-
-[[plugins]]
 repo = 'inkarkat/vim-SyntaxRange'
 on_event = 'VimEnter'
 hook_post_source = '''
@@ -379,8 +375,8 @@ repo = 'kana/vim-textobj-user'
 depends = [
 'vim-textobj-entire',  'vim-textobj-indent',      'vim-textobj-php',
 'vim-textobj-line',    'vim-textobj-syntax',      'vim-textobj-comment',
-'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-word-column',
-'vim-textobj-chunk',   'vim-textobj-space',       'textobj-mbboundary.vim'
+'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-space',
+'vim-textobj-chunk', 'textobj-mbboundary.vim', 'vim-textobj-conflict'
 ]
 on_event = 'VimEnter'
 
@@ -403,7 +399,7 @@ repo = 'kana/vim-textobj-syntax'
 repo = 'saihoooooooo/vim-textobj-space'
 
 [[plugins]]
-repo = 'rhysd/vim-textobj-word-column'
+repo = 'rhysd/vim-textobj-conflict'
 
 [[plugins]]
 repo = 'glts/vim-textobj-comment'
@@ -1416,27 +1412,11 @@ nmap <Leader>mg  <Plug>BookmarkMoveToLine
 '''
 
 [[plugins]]
-repo = 'majutsushi/tagbar'
-on_cmd = ['TagbarToggle']
-hook_add = '''
-" nnoremap <silent> <Leader>o :TagbarToggle<CR>
-let g:tagbar_autopreview    = 0
-let g:tagbar_compact        = 1
-let g:tagbar_autoshowtag    = 1
-let g:tagbar_width          = 30
-let g:tagbar_previewwin_pos = 'rightbelow'
-'''
-
-[[plugins]]
 repo = 'junegunn/vim-peekaboo'
 on_event = 'VimEnter'
 hook_add = '''
 let g:peekaboo_delay = 1000
 '''
-
-[[plugins]]
-repo = 'severin-lemaignan/vim-minimap'
-on_cmd = 'Minimap'
 
 [[plugins]]
 repo = 'yegappan/mru'
@@ -1453,16 +1433,9 @@ nnoremap <silent> <Leader>u :MundoToggle<CR>
 '''
 
 [[plugins]]
-repo = 'brooth/far.vim'
-on_event = 'VimEnter'
-hook_add = '''
-let g:far#auto_preview = 0
-let g:far#source       = 'agnvim'
-'''
-
-[[plugins]]
 repo = 'wincent/ferret'
 on_map = '<Plug>(FerretAck)'
+on_cmd = ['Ack', 'Back', 'Lack', 'Black']
 hook_add = '''
 nmap <Leader>rr <Plug>(FerretAck)
 '''
@@ -1853,10 +1826,6 @@ on_cmd = ['Bdelete', 'Bwipeout']
 # php------------------------------------
 
 [[plugins]]
-repo = 'StanAngeloff/php.vim'
-on_ft = ['html', 'php', 'phtml']
-
-[[plugins]]
 repo = 'adoy/vim-php-refactoring-toolbox'
 on_ft = ['php', 'phtml']
 hook_add = '''
@@ -1866,16 +1835,6 @@ let g:vim_php_refactoring_use_default_mapping = 0
 [[plugins]]
 repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
-
-# javascript & typescript----------------
-
-[[plugins]]
-repo = 'HerringtonDarkholme/yats.vim'
-on_ft = ['ts', 'javascript']
-
-[[plugins]]
-repo = 'burnettk/vim-angular'
-on_ft = ['javascript']
 
 # rust----------------------------------
 

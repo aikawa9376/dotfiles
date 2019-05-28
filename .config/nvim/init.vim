@@ -311,6 +311,7 @@ nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
 nnoremap : mv:
+nnoremap <C-v> mv<C-v>
 nnoremap <M-x> vy
 nnoremap <Leader>U `v
 nnoremap <C-h> ^
