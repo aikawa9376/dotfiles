@@ -2,7 +2,7 @@
 # VARIABLES – shown with their default values
 # --------------------------------------------------------------------------
 # Should the Sidebar be shown?
-set sidebar_visible = no
+set sidebar_visible = yes
 # Note: Some characters, e.g. Chinese, take up two columns each.
 set sidebar_width = 40
 # Should the mailbox paths be abbreviated?
@@ -26,3 +26,8 @@ bind index,pager \CP sidebar-prev                 # Ctrl-n to select next folder
 bind index,pager \CN sidebar-next                 # Ctrl-p to select previous folder
 bind index,pager \CI sidebar-open                 # Ctrl-i to open selected folder
 bind index,pager \CB sidebar-toggle-visible       # Ctrl-b to toggle visibility of the sidebar mail.
+
+color sidebar_divider        color241        default
+color sidebar_new            color33         default
+color sidebar_ordinary       color247        default
+color sidebar_flagged        color247        default
