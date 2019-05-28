@@ -65,27 +65,6 @@ bind editor <Tab> complete-query
 set pager_context = 3
 unset markers
 
-# make sure that you are using mutt linked against slang, not ncurses, or
-# suffer the consequences of weird color issues. use "mutt -v" to check this.
-
-# custom body highlights - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# highlight my name and other personally relevant strings
-#color body          color136        color234        "(ethan|schoonover)"
-# custom index highlights - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-# messages which mention my name in the body
-#color index         color136        color234        "~b \"phil(_g|\!| gregory| gold)|pgregory\" !~N !~T !~F !~p !~P"
-#color index         J_cream         color230        "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~N !~T !~F !~p !~P"
-#color index         color136        color37         "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~T !~F !~p !~P"
-#color index         color136        J_magent        "~b \"phil(_g|\!| gregory| gold)|pgregory\" ~F !~p !~P"
-## messages which are in reference to my mails
-#color index         J_magent        color234        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" !~N !~T !~F !~p !~P"
-#color index         J_magent        color230        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~N !~T !~F !~p !~P"
-#color index         J_magent        color37         "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~T !~F !~p !~P"
-#color index         J_magent        color160        "~x \"(mithrandir|aragorn)\\.aperiodic\\.net|thorin\\.hillmgt\\.com\" ~F !~p !~P"
-
-# for background in 16 color terminal, valid background colors include:
-# base03, bg, black, any of the non brights
-
 # basic colors - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 color normal        color241        color234
 color error         color160        color234
@@ -107,11 +86,6 @@ mono  error         bold
 
 # index - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-#color index         color160        color234        "~D(!~p|~p)"               # deleted
-#color index         color235        color234        ~F                         # flagged
-#color index         color166        color234        ~=                         # duplicate messages
-#color index         color240        color234        "~A!~N!~T!~p!~Q!~F!~D!~P"
-#color index         J_base          color234        "~A~N!~T!~p!~Q!~F!~D"      # the rest, new
 color index         color160        color234        "~A"
 color index         color166        color234        "~E"                        # expired messages
 color index         color33         color234        "~N"
@@ -143,10 +117,6 @@ color index         color64         color235        "~N~v~(~F~N)"               
 color index         color64         color235        "~N~v~(~F)"
 color index         color37         color235        "~v~(~p)"                   # collapsed thread with unread parent, no unread inside, some to me directly
 color index         color136        color160        "~v~(~D)"
-#color index         color136        color234        "~(~N)"                    # messages in threads with some unread
-#color index         color64         color234        "~S"                       # superseded messages
-#color index         color160        color234        "~T"                       # tagged messages
-#color index         color166        color160        "~="                       # duplicated messages
 
 # message headers - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
