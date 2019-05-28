@@ -1,3 +1,4 @@
+set charset="utf-8"
 set send_charset="iso-2022-jp:utf-8"
 
 source ~/personal/mutt.rc
