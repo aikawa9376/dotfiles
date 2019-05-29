@@ -547,11 +547,22 @@ augroup GitSpellCheck
   autocmd FileType gitcommit setlocal spell
 augroup END
 
+" neomutt用の設定はここ
+augroup NeomuttSetting
+  autocmd!
+  autocmd BufRead,BufNewFile,BufEnter *mutt-* call s:neomutt_my_settings()
+augroup END
+function! s:neomutt_my_settings() abort
+  nnoremap <buffer><nowait> <C-Space> :wq<CR>
+  nnoremap <buffer><nowait> q :xa<CR>
+  setlocal statusline=%#Normal#
+  Goyo
+endfunction
+
 "--------------------------------------------
 "Absolutely fantastic function from stoeffel/.dotfiles which allows you to
 "repeat macros across a visual range
 "--------------------------------------------
-" TMUXと干渉しているので実際は二回押す
 nmap <C-q> @q
 xnoremap @ :<C-u>call ExecuteMacroOverVisualRange()<CR>
 function! ExecuteMacroOverVisualRange()
