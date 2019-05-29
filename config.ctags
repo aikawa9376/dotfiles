@@ -3,6 +3,7 @@
 --exclude=*.min.css
 --exclude=*.map
 --exclude=vendor
+--exclude=dist
 --exclude=node_modules
 --exclude=yarn.lock
 --exclude=.git

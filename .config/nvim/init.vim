@@ -389,7 +389,7 @@ autocmd MyAutoCmd InsertLeave * set nopaste
 
 " ジャンプリストで中央に持ってくる
 nnoremap <c-o> <c-o>zz
-nnoremap <c-i> <c-o>zz
+nnoremap <c-i> <c-i>zz
 nnoremap g; g;zz
 nnoremap g, g,zz
 nnoremap <C-u> <C-u>zz
