@@ -14,6 +14,7 @@ set mail_check = 120
 set timeout = 300
 set imap_keepalive = 300
 set read_inc=1000
+set write_inc=1000
 # set postponed = "+[GMail]/下書き"
 # set record = "+[GMail]/送信済み"
 set header_cache=~/.neomutt/cache/headers
@@ -50,9 +51,11 @@ bind attach,index g first-entry
 bind attach,index G last-entry
 bind pager R group-reply
 bind attach,index R group-reply
+macro index L "<sync-mailbox><enter>"
+bind index <space>  collapse-thread
+bind pager E edit
 
-macro index e "<save-message>+[Gmail]/すべてのメール <enter><enter>" \
-"Archive"
+macro attach,index,pager e "<save-message>+[Gmail]/すべてのメール <enter><sync-mailbox><enter>" "Archive"
 
 # notify-send
 set new_mail_command="notify-send --icon=mail-message-new 'New Email' '%n new messages, %u unread.' &"
@@ -80,7 +83,6 @@ color message       color37         default
 color markers       color160        color254
 color attachment    color254        default
 color search        color61         default
-#color status        J_black         J_status
 color status        color247        color235
 color indicator     color255        color13
 color tree          color13         color255                                    # arrow in thread

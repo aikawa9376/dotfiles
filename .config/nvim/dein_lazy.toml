@@ -674,6 +674,10 @@ nmap <Leader>tj :SplitjoinJoin<cr>
 nmap <Leader>tJ :SplitjoinSplit<cr>
 '''
 
+[[plugins]]
+repo = 'junegunn/goyo.vim'
+on_cmd = ['Goyo']
+
 # list-----------------------------------
 
 [[plugins]]
