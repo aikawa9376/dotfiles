@@ -43,6 +43,13 @@ fzf-ripgrep-widget() {
 zle     -N    fzf-ripgrep-widget
 bindkey '\ea' fzf-ripgrep-widget
 
+left-word-copy() {
+LBUFFER=${LBUFFER}$(echo " ")$(echo ${LBUFFER} | rev | cut -f1 -d " " | rev)
+  zle redisplay
+}
+zle     -N    left-word-copy
+bindkey '^v'  left-word-copy
+
 # -------------------------------------
 # MRU
 # -------------------------------------
