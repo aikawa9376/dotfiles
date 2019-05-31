@@ -21,12 +21,14 @@ set header_cache=~/.neomutt/cache/headers
 set message_cachedir=~/.neomutt/cache/bodies
 set certificate_file=~/.config/neomutt/certificates
 set signature =~/personal/signature
+set sig_on_top = yes
 set move = no
 set beep = no
 set include
 set sort = 'threads'
 set sort_aux = 'reverse-last-date-received'
 set auto_tag = yes
+set fast_reply = yes
 ignore "Authentication-Results:"
 ignore "DomainKey-Signature:"
 ignore "DKIM-Signature:"
@@ -52,7 +54,6 @@ bind attach,index G last-entry
 bind pager R group-reply
 bind attach,index R group-reply
 macro index L "<sync-mailbox><enter>"
-bind index <space>  collapse-thread
 bind pager E edit
 
 macro attach,index,pager e "<save-message>+[Gmail]/すべてのメール <enter><sync-mailbox><enter>" "Archive"
