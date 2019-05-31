@@ -60,6 +60,10 @@ alias bat='bat --style="numbers,changes"'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
 
 # -------------------------------------
+# fasd
+# -------------------------------------
+
+# -------------------------------------
 # ディレクトリ エイリアス
 # -------------------------------------
 function name_dir() # dir, name

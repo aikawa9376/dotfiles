@@ -12,8 +12,8 @@ zplug "zsh-users/zsh-syntax-highlighting", defer:2
 zplug "zsh-users/zsh-autosuggestions"
 # autosuggestions yarn
 zplug "g-plane/zsh-yarn-autocompletions"
-# zaw
-zplug "zsh-users/zaw"
+# fasd
+zplug "plugins/fasd", from:oh-my-zsh, if:"(( $+commands[fasd] ))"
 # k
 zplug "supercrabtree/k"
 # enhancd

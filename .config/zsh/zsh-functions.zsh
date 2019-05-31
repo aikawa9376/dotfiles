@@ -44,11 +44,21 @@ zle     -N    fzf-ripgrep-widget
 bindkey '\ea' fzf-ripgrep-widget
 
 left-word-copy() {
-LBUFFER=${LBUFFER}$(echo " ")$(echo ${LBUFFER} | rev | cut -f1 -d " " | rev)
+  LBUFFER=${LBUFFER}$(echo " ")$(echo ${LBUFFER} | rev | cut -f1 -d " " | rev)
   zle redisplay
 }
 zle     -N    left-word-copy
 bindkey '^v'  left-word-copy
+
+choice-child-dir() {
+  local selected
+  if selected=$(fd --type d --follow --hidden --color=always --exclude .git | fzf --ansi); then
+    LBUFFER=${LBUFFER}$selected
+  fi
+  zle redisplay
+}
+zle     -N    choice-child-dir
+bindkey '^d'  choice-child-dir
 
 # -------------------------------------
 # MRU
