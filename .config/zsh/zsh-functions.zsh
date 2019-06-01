@@ -60,10 +60,20 @@ choice-child-dir() {
 zle     -N    choice-child-dir
 bindkey '^j'  choice-child-dir
 
+f-override() {
+  local selected
+  if selected=$(fasd -f | sed 's/^[0-9,.]* *//'); then
+    LBUFFER=${LBUFFER}$selected
+  fi
+  zle redisplay
+}
+zle     -N    f-override
+bindkey '\ee'  f-override
+
 z-override() {
   if [[ -z "$*" ]]; then
-    builtin cd "$(fasd_cd -d | fzf --preview-window=hidden
-    --query="$*" -1 -0 --no-sort --tac +m | sed 's/^[0-9,.]* *//')"
+    builtin cd "$(fasd_cd -d | fzf --preview-window=hidden --query="$*" -1 -0 --no-sort --tac +m |"\
+      "sed 's/^[0-9,.]* *//')"
   else
     fasd_cd -d "$*"
   fi
@@ -181,7 +191,7 @@ fzf-file-mru-widget() {
   return $ret
 }
 zle -N fzf-file-mru-widget
-bindkey '^[e' fzf-file-mru-widget
+bindkey '^[E' fzf-file-mru-widget
 
 reverse() {
   perl -e 'print reverse <>' ${@+"$@"}

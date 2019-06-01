@@ -304,8 +304,6 @@ zstyle :insert-last-word match '*([[:alpha:]/\\]?|?[[:alpha:]/\\])*'
 zle -N insert-last-word smart-insert-last-word
 bindkey '^[' insert-last-word
 
-bindkey '^[x' zaw
-
 # -------------------------------------
 # Xserver関係
 # -------------------------------------
