@@ -62,6 +62,13 @@ alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -
 # -------------------------------------
 # fasd
 # -------------------------------------
+alias a='fasd -a'        # any
+alias s='fasd -si'       # show / search / select
+alias d='fasd -d'        # directory
+alias f='fasd -f'        # file
+alias sd='fasd -sid'     # interactive directory selection
+alias sf='fasd -sif'     # interactive file selection
+alias z='z-override'     # cd, same functionality as j in autojump
 
 # -------------------------------------
 # ディレクトリ エイリアス

@@ -31,7 +31,7 @@ fzf-locate-pwd-widget() {
 zle     -N    fzf-locate-pwd-widget
 bindkey '\eI' fzf-locate-pwd-widget
 
-# ALT-r - ripgrep
+# ALT-a - ripgrep
 fzf-ripgrep-widget() {
   local selected
   if selected=$(rg --column --line-number --hidden --ignore-case --no-heading --color=always '' |
@@ -58,7 +58,26 @@ choice-child-dir() {
   zle redisplay
 }
 zle     -N    choice-child-dir
-bindkey '^d'  choice-child-dir
+bindkey '^j'  choice-child-dir
+
+z-override() {
+  if [[ -z "$*" ]]; then
+    builtin cd "$(fasd_cd -d | fzf --preview-window=hidden
+    --query="$*" -1 -0 --no-sort --tac +m | sed 's/^[0-9,.]* *//')"
+  else
+    fasd_cd -d "$*"
+  fi
+}
+
+fs() {
+  local -r fmt='#{session_id}:|#S|(#{session_attached} attached)'
+  { tmux display-message -p -F "$fmt" && tmux list-sessions -F "$fmt"; } \
+    | awk '!seen[$1]++' \
+    | column -t -s'|' \
+    | fzf --preview-window=hidden -q '$' --reverse --prompt 'switch session: ' -1 \
+    | cut -d':' -f1 \
+    | xargs tmux switch-client -t
+}
 
 # -------------------------------------
 # MRU

@@ -622,6 +622,9 @@ function! s:help_override() abort
   endtry
 endfunction
 
+nmap <Leader>rw :%s///g<Left><Left><Left>
+nmap <Leader>rW :%s/<c-r>=expand("<cword>")<cr>//g<Left><Left>
+
 nmap <silent> gK :call <SID>google_search()<CR>
 vmap <silent> gK :call <SID>google_search()<CR>
 function! s:google_search() abort
