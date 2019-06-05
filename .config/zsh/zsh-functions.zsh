@@ -62,7 +62,7 @@ bindkey '^j'  choice-child-dir
 
 f-override() {
   local selected
-  if selected=$(fasd -f | sed 's/^[0-9,.]* *//'); then
+  if selected=$(fasd -f | sed 's/^[0-9,.]* *//' | fzf --ansi --no-sort --tac +m); then
     LBUFFER=${LBUFFER}$selected
   fi
   zle redisplay
@@ -72,8 +72,7 @@ bindkey '\ee'  f-override
 
 z-override() {
   if [[ -z "$*" ]]; then
-    builtin cd "$(fasd_cd -d | fzf --preview-window=hidden --query="$*" -1 -0 --no-sort --tac +m |"\
-      "sed 's/^[0-9,.]* *//')"
+    builtin cd "$(fasd_cd -d | fzf --preview-window=hidden --query="$*" -1 -0 --no-sort --tac +m | sed 's/^[0-9,.]* *//')"
   else
     fasd_cd -d "$*"
   fi
@@ -117,7 +116,7 @@ mru() {
             | fzf --ansi --multi --query="$q" \
             --no-sort --exit-0 --prompt="MRU> " \
             --preview "pygmentize -g  {}" \
-            --print-query --expect=ctrl-v,ctrl-x,ctrl-l,ctrl-q,ctrl-r,"?"
+            --print-query --expect=ctrl-v,ctrl-x,ctrl-l,ctrl-q,ctrl-r
             )"; do
         q="$(head -1 <<< "$cmd")"
         k="$(head -2 <<< "$cmd" | tail -1)"
@@ -283,7 +282,7 @@ duster() {
             --header=":: $sort - $d" \
             --no-sort --exit-0 --prompt="duster-> " \
             --preview "pygmentize -g  {}" \
-            --print-query --expect=ctrl-s,ctrl-u,ctrl-e,enter,ctrl-r,ctrl-l,ctrl-d,ctrl-b,ctrl-v,"?","-" \
+            --print-query --expect=ctrl-s,ctrl-u,ctrl-e,enter,ctrl-r,ctrl-l,ctrl-d,ctrl-b,ctrl-v,"-" \
             )"; do
         q="$(head -1 <<< "$cmd")"
         k="$(head -2 <<< "$cmd" | tail -1)"

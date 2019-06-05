@@ -269,8 +269,8 @@ nnoremap <Leader>i mzgg=G`z
 nnoremap <CR> i<CR><Esc>
 nnoremap <Leader><CR> $a<CR><Esc>
 nnoremap <Leader>s i<Space><ESC>
-nnoremap <M-d> mzo<ESC>`zj
-nnoremap <M-u> mzO<ESC>`zk
+nnoremap ]<space> mzo<ESC>`zj
+nnoremap [<space> mzO<ESC>`zk
 nnoremap X diw
 
 " インサートモード移行時に自動インデント
@@ -328,6 +328,8 @@ nnoremap <M-l> i<Space><ESC><Right>
 nnoremap <M-h> hx
 nnoremap <silent><M-j> j:call cursor(0,strlen(getline("."))/2)<CR>
 nnoremap <silent><M-k> k:call cursor(0,strlen(getline("."))/2)<CR>
+nnoremap ]n ngn<ESC>
+nnoremap [n Ngn<ESC>
 
 " gJで空白を削除する
 fun! JoinSpaceless()

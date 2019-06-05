@@ -41,6 +41,7 @@ alias dst='duster'
 alias fnd='finder'
 alias li='gwenview ./'
 alias reload='exec $SHELL -1'
+alias reboot='tmux detach && reboot'
 alias -g from='$(mru)'
 alias -g to='$(destination_directories)'
 alias -g le='| less'
@@ -58,7 +59,7 @@ alias dp='dolphin ./'
 alias t='tmuximum'
 alias bat='bat --style="numbers,changes"'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
-
+alias pac="pacman -Sl | cut -d' ' -f2 | fzf -m --preview 'pacman -Si {1}'"
 # -------------------------------------
 # fasd
 # -------------------------------------

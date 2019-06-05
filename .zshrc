@@ -24,8 +24,6 @@ zplug "b4b4r07/zsh-gomi", if:"which fzf"
 zplug "b4b4r07/git-br"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
-# 256 coloer ???
-zplug "chrissicool/zsh-256color"
 # pair auto
 zplug "hlissner/zsh-autopair", defer:3
 # fzf-widgets
@@ -132,6 +130,8 @@ export FZF_DEFAULT_OPTS='
 
 bindkey "^I" expand-or-complete
 bindkey "^[[Z" fzf-completion
+bindkey '^X^F' fasd-complete-f  # C-x C-f to do fasd-complete-f (only files)
+bindkey '^X^D' fasd-complete-d  # C-x C-d to do fasd-complete-d (only directories)
 # -------------------------------------
 # 補完機能
 # -------------------------------------
