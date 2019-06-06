@@ -997,6 +997,19 @@ function! s:dir_word_completion(word)
   return  systemlist("rg --hidden -w -o '" . a:word . "[A-Za-z0-9-_]+' | sed -e 's/^.*://g' | sort | uniq")
 endfunction
 
+function! s:fzf_last_word_insert() abort
+  let height = (&lines - 3) / 2
+  let width = float2nr(&columns - (&columns * 2 / 10)) * 2 / 3
+  let opened_at = getpos('.')
+  let bottom_line = line('w0') + winheight(0) - 1
+
+  fzf#complete({
+      \ 'source': <SID>dir_word_completion(<SID>fzf_last_word()),
+      \ 'window': 'call OpenFloatingWin()',
+      \ 'options': '-m -x +s',
+      \ 'down': '40%'})
+endfunction
+
 " imap <expr> <M-k> fzf#complete({
 imap <expr> <C-t> fzf#complete({
     \ 'source': <SID>dir_word_completion(<SID>fzf_last_word()),
@@ -1405,18 +1418,64 @@ endfunction
 " ------------------------------------------------------------------
 " Floating window
 " ------------------------------------------------------------------
-function! OpenFloatingWin()
-let height = &lines - 3
-let width = float2nr(&columns - (&columns * 2 / 10))
-let col = float2nr((&columns - width) / 2)
+function! OpenFloatingWinCenter()
+  let height = &lines - 3
+  let width = float2nr(&columns - (&columns * 2 / 10))
+  let col = float2nr((&columns - width) / 2)
 
-let opts = {
-  \ 'relative': 'editor',
-  \ 'row': height * 0.3,
-  \ 'col': col + 30,
-  \ 'width': width * 2 / 3,
-  \ 'height': height / 2
-  \ }
+  let opts = {
+    \ 'relative': 'editor',
+    \ 'row': height * 0.3,
+    \ 'col': col + 30,
+    \ 'width': width * 2 / 3,
+    \ 'height': height / 2
+    \ }
+
+  let buf = nvim_create_buf(v:false, v:true)
+  let win = nvim_open_win(buf, v:true, opts)
+
+  call setwinvar(win, '&winhl', 'Normal:Pmenu')
+  IndentLinesToggle
+
+  setlocal
+    \ buftype=nofile
+    \ nobuflisted
+    \ bufhidden=hide
+    \ nonumber
+    \ norelativenumber
+    \ signcolumn=no
+endfunction
+
+function! OpenFloatingWin()
+  let height = (&lines - 3) / 2
+  let width = float2nr(&columns - (&columns * 2 / 10)) * 2 / 3
+  let opened_at = getpos('.')
+
+  let bottom_line = line('w0') + winheight(0) - 1
+  if opened_at[1] + height <= bottom_line
+    let vert = 'N'
+    let row = 1
+  else
+    let vert = 'S'
+    let row = 0
+  endif
+
+  if opened_at[2] + width <= &columns
+    let hor = 'W'
+    let col = 0
+  else
+    let hor = 'E'
+    let col = 1
+  endif
+
+  let opts = {
+    \ 'relative': 'cursor',
+    \ 'anchor': vert . hor,
+    \ 'row': row,
+    \ 'col': col,
+    \ 'width': width,
+    \ 'height': height,
+    \ }
 
   let buf = nvim_create_buf(v:false, v:true)
   let win = nvim_open_win(buf, v:true, opts)
