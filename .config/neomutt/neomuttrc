@@ -6,6 +6,7 @@ source ~/.config/neomutt/siderc
 
 unmailboxes *
 set folder = "imaps://imap.gmail.com:993"
+# set folder = "~/.neomutt/cache/offline"
 set spoolfile = "+INBOX"
 set imap_check_subscribed
 set hostname = gmail.com

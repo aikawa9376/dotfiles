@@ -52,6 +52,7 @@ export PAGER='bat'
 export WCWIDTH_CJK_LEGACY='yes'
 export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 export BAT_CONFIG_PATH="$HOME/.config/bat/conf"
+export RIPGREP_CONFIG_PATH="$HOME/.config/rg/conf"
 
 # go lang
 export GOPATH="$HOME/go"
