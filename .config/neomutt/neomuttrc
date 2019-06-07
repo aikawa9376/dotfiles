@@ -29,11 +29,12 @@ set sort = 'threads'
 set sort_aux = 'reverse-last-date-received'
 set auto_tag = yes
 set fast_reply = yes
+set edit_headers = yes
 ignore "Authentication-Results:"
 ignore "DomainKey-Signature:"
 ignore "DKIM-Signature:"
 hdr_order Date From To Cc
-set pager_index_lines=8
+set pager_index_lines=10
 bind editor ^T complete
 bind editor <space> noop
 

@@ -553,12 +553,16 @@ augroup END
 augroup NeomuttSetting
   autocmd!
   autocmd BufRead,BufNewFile,BufEnter *mutt-* call s:neomutt_my_settings()
+  autocmd BufRead *mutt-* call s:neomutt_feedkey()
 augroup END
 function! s:neomutt_my_settings() abort
   nnoremap <buffer><nowait> <C-Space> :wq<CR>
   nnoremap <buffer><nowait> q :xa<CR>
   setlocal statusline=%#Normal#
   Goyo
+endfunction
+function! s:neomutt_feedkey() abort
+  call feedkeys('j}o')
 endfunction
 
 "--------------------------------------------

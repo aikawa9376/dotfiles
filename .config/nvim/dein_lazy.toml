@@ -1266,6 +1266,7 @@ command! -nargs=* NavBuffers
   \ call fzf#run(fzf#wrap('navbuffers', {
   \ 'source':  map(s:buflisted(), 's:format_buffer(v:val)'),
   \ 'sink*':   function('<SID>bufopen'),
+  \ 'window': 'call OpenFloatingWinCenter()',
   \ 'options': [
   \   '-m', '-x', '--tiebreak=index', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
