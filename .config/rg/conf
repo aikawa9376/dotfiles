@@ -16,6 +16,7 @@ web:*.{html,css,js}*
 --glob=!*.jpeg
 --glob=!*.JPG
 --glob=!*.mv4
+--glob=!*.lock
 --glob=!*.min.*
 
 # Set the colors.
