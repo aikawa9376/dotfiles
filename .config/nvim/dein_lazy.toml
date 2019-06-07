@@ -997,33 +997,18 @@ function! s:dir_word_completion(word)
   return  systemlist("rg --hidden -w -o '" . a:word . "[A-Za-z0-9-_]+' | sed -e 's/^.*://g' | sort | uniq")
 endfunction
 
-function! s:fzf_last_word_insert() abort
-  let height = (&lines - 3) / 2
-  let width = float2nr(&columns - (&columns * 2 / 10)) * 2 / 3
-  let opened_at = getpos('.')
-  let bottom_line = line('w0') + winheight(0) - 1
-
-  fzf#complete({
-      \ 'source': <SID>dir_word_completion(<SID>fzf_last_word()),
-      \ 'window': 'call OpenFloatingWin()',
-      \ 'options': '-m -x +s',
-      \ 'down': '40%'})
-endfunction
-
-" imap <expr> <M-k> fzf#complete({
 imap <expr> <C-t> fzf#complete({
     \ 'source': <SID>dir_word_completion(<SID>fzf_last_word()),
     \ 'window': 'call OpenFloatingWin()',
-    \ 'options': '-m -x +s',
-    \ 'down': '40%'})
+    \ 'options': '-m -x +s --layout='.shellescape(<SID>open_floatingWin_fzf_layout())})
 
 " ------------------------------------------------------------------
 " Directory And FileName Selector
 " ------------------------------------------------------------------
 imap <expr> <C-_> fzf#complete({
     \ 'source': <SID>dir_file_completion(<SID>fzf_last_word()),
-    \ 'options': '-m -x +s --ansi --prompt=DirFiles:',
-    \ 'down': '40%'})
+    \ 'window': 'call OpenFloatingWin()',
+    \ 'options': '-m -x +s --layout='.shellescape(<SID>open_floatingWin_fzf_layout())})
 
 function! s:dir_file_completion(word)
   " return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | tr '/' '\n' | sort | uniq")
@@ -1444,6 +1429,20 @@ function! OpenFloatingWinCenter()
     \ nonumber
     \ norelativenumber
     \ signcolumn=no
+endfunction
+
+function! s:open_floatingWin_fzf_layout() abort
+  let height = (&lines - 3) / 2
+  let width = float2nr(&columns - (&columns * 2 / 10)) * 2 / 3
+  let opened_at = getpos('.')
+
+  let bottom_line = line('w0') + winheight(0) - 1
+  if opened_at[1] + height <= bottom_line
+    let layout = 'reverse'
+  else
+    let layout = 'default'
+  endif
+  return layout
 endfunction
 
 function! OpenFloatingWin()
