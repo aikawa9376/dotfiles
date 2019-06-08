@@ -1,0 +1,21 @@
+[general]
+ui = ttyui
+accounts = GMail
+pythonfile = ~/personal/.utf7.py
+
+[Account GMail]
+localrepository = Gmail-Local
+remoterepository = Gmail-Remote
+
+[Repository Gmail-Local]
+type = Maildir
+localfolders = ~/.neomutt/cache/offline/
+
+[Repository Gmail-Remote]
+type = Gmail
+realdelete = yes
+ssl = yes
+ssl_version = tls1_2
+sslcacertfile = /etc/ssl/certs/ca-certificates.crt
+maxconnections  = 5
+# nametrans = lambda foldername: foldername.decode('imap4-utf-7').encode('utf-8')
