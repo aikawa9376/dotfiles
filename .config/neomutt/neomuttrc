@@ -4,23 +4,35 @@ set send_charset="iso-2022-jp:utf-8"
 source ~/personal/mutt.rc
 source ~/.config/neomutt/siderc
 
-unmailboxes *
-set folder = "imaps://imap.gmail.com:993"
-# set folder = "~/.neomutt/cache/offline"
-set spoolfile = "+INBOX"
-set imap_check_subscribed
-set hostname = gmail.com
+set mbox_type   = Maildir
+set folder = "~/.neomutt/cache/offline"
+
+set spoolfile  = "+INBOX"
+set mbox       = "+[Gmail].すべてのメール"
+set postponed  = "+[Gmail].下書き"
+set record     = "+[Gmail].送信済みメール"
+# set mbox       = "+[Gmail].すべてのメール"
+# set postponed  = "+[Gmail].下書き"
+# set record     = "+[GMail].送信済みメール"
+mailboxes +INBOX
+# mailboxes +[Gmail].&MFkweTBmMG4w4TD8MOs-
+# mailboxes +[GMail].送信済みメール
+# mailboxes +[Gmail].下書き
+# mailboxes +[Gmail].&MLkwvzD8TtgwTQ-
+# mailboxes +[Gmail].迷惑メール
+mailboxes +[Gmail].すべてのメール
+mailboxes +[Gmail].送信済みメール
+mailboxes +[Gmail].下書き
+mailboxes +[Gmail].スター付き
+mailboxes +[Gmail].迷惑メール
+mailboxes +[Gmail].ゴミ箱
+mailboxes +task
+
 set sleep_time = 0
-set mail_check = 120
-set timeout = 300
-set imap_keepalive = 300
 set read_inc=1000
 set write_inc=1000
-# set postponed = "+[GMail]/下書き"
-# set record = "+[GMail]/送信済み"
 set header_cache=~/.neomutt/cache/headers
 set message_cachedir=~/.neomutt/cache/bodies
-set certificate_file=~/.config/neomutt/certificates
 set signature =~/personal/signature
 set sig_on_top = yes
 set move = no
@@ -31,9 +43,11 @@ set sort_aux = 'reverse-last-date-received'
 set auto_tag = yes
 set fast_reply = yes
 set edit_headers = yes
+
 ignore "Authentication-Results:"
 ignore "DomainKey-Signature:"
 ignore "DKIM-Signature:"
+
 hdr_order Date From To Cc
 set pager_index_lines=10
 bind editor ^T complete
@@ -55,19 +69,12 @@ bind attach,index g first-entry
 bind attach,index G last-entry
 bind pager R group-reply
 bind attach,index R group-reply
-macro index L "<sync-mailbox><enter>"
 bind pager E edit
 
-macro attach,index,pager e "<save-message>+[Gmail]/すべてのメール <enter><sync-mailbox><enter>" "Archive"
+bind attach,index,pager,compose q exit
 
 # notify-send
 set new_mail_command="notify-send --icon=mail-message-new 'New Email' '%n new messages, %u unread.' &"
-
-# alias
-# set alias_file = "~/.config/neomutt/aliases"
-# set sort_alias = alias
-# set reverse_alias = yes
-# source $alias_file
 
 ## GooBook
 set query_command="goobook query '%s'"
