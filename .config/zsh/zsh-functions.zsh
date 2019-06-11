@@ -265,6 +265,35 @@ zle -N fzf-dir-mru-widget
 bindkey '^[d' fzf-dir-mru-widget
 
 # -------------------------------------
+# Mail suggest notmuch
+# -------------------------------------
+notmuchfzf() {
+    local cmd q k res
+    local line make_dir
+    while : ${make_dir:=0}; cmd="$(
+        echo "${(F)d}" \
+            | notmuch search "$*" tag:archive \
+            | fzf --no-sort --prompt="mailArchive-> " \
+            --preview 'notmuch show $(echo {} | cut -f1 -d " ")' \
+            --print-query --expect=ctrl-y \
+            --bind 'ctrl-l:execute(less -f {})' \
+            )"; do
+        k="$(head -2 <<< "$cmd" | tail -1)"
+        res="$(sed '1,2d;/^$/d' <<< "$cmd")"
+        case "$k" in
+            ctrl-y)
+                $(echo "${res}") | copytex
+                continue
+                ;;
+            *)
+                notmuch show $(echo "${res}" | cut -f1 -d ' ') | bat
+                break
+                ;;
+        esac
+    done
+}
+
+# -------------------------------------
 # Dust suggest
 # -------------------------------------
 duster() {

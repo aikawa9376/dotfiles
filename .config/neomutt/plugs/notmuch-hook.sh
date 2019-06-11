@@ -10,4 +10,6 @@ notmuch tag -inbox +cron -- subject:'Cron'
 notmuch tag -inbox -unread +sent -- from:aikawa@tech-crunch.jp or from:aikawa9376@gmail.com
 # tag all messages from "other" as notify and remove tags inbox
 notmuch tag -inbox +notify -- not to:aikawa@tech-crunch.jp and not to:aikawa9376@gmail.com and not tag:sent and not tag:cron
+# tag all messages from "archive" as not unread
+notmuch tag -unread -- tag:archive or tag:notify
 
