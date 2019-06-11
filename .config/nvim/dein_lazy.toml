@@ -1433,7 +1433,7 @@ function! OpenFloatingWinCenter()
 endfunction
 
 function! s:open_floatingWin_fzf_layout() abort
-  let height = (&lines - 3) / 2
+  let height = 20
   let width = float2nr(&columns - (&columns * 2 / 10)) * 2 / 3
   let opened_at = getpos('.')
 
@@ -1447,7 +1447,7 @@ function! s:open_floatingWin_fzf_layout() abort
 endfunction
 
 function! OpenFloatingWin()
-  let height = (&lines - 3) / 2
+  let height = 20
   let width = float2nr(&columns - (&columns * 2 / 10)) * 2 / 3
   let opened_at = getpos('.')
 

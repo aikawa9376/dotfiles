@@ -30,7 +30,7 @@ path=/home/aikawa/.neomutt/cache/offline
 #
 [user]
 name=Masa
-primary_email=aikawa@tech-crunch.jp
+primary_email=aikawa@tech-crunch.jp;
 other_email=aikawa9376@gmail.com;
 
 # Configuration for "notmuch new"
@@ -48,7 +48,7 @@ other_email=aikawa9376@gmail.com;
 #		in the mail store.
 #
 [new]
-tags=inbox;
+tags=new
 ignore=
 
 # Search configuration

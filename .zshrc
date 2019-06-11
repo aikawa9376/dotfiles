@@ -47,6 +47,7 @@ zplug load --verbose
 # -------------------------------------
 export PATH="/usr/local/bin:$PATH"
 export TERM='xterm-256color'
+export XAPIAN_CJK_NGRAM=1
 export EDITOR='nvim'
 export PAGER='bat'
 export WCWIDTH_CJK_LEGACY='yes'

@@ -6,6 +6,7 @@ pythonfile = ~/personal/.utf7.py
 [Account GMail]
 localrepository = Gmail-Local
 remoterepository = Gmail-Remote
+postsynchook = ~/.config/neomutt/plugs/notmuch-hook.sh
 
 [Repository Gmail-Local]
 type = Maildir

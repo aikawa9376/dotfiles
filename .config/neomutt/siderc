@@ -31,3 +31,5 @@ color sidebar_divider        color241        default
 color sidebar_new            color33         default
 color sidebar_ordinary       color247        default
 color sidebar_flagged        color247        default
+
+# vim: syntax=neomuttrc

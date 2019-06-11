@@ -11,15 +11,7 @@ set spoolfile  = "+INBOX"
 set mbox       = "+[Gmail].すべてのメール"
 set postponed  = "+[Gmail].下書き"
 set record     = "+[Gmail].送信済みメール"
-# set mbox       = "+[Gmail].すべてのメール"
-# set postponed  = "+[Gmail].下書き"
-# set record     = "+[GMail].送信済みメール"
 mailboxes +INBOX
-# mailboxes +[Gmail].&MFkweTBmMG4w4TD8MOs-
-# mailboxes +[GMail].送信済みメール
-# mailboxes +[Gmail].下書き
-# mailboxes +[Gmail].&MLkwvzD8TtgwTQ-
-# mailboxes +[Gmail].迷惑メール
 mailboxes +[Gmail].すべてのメール
 mailboxes +[Gmail].送信済みメール
 mailboxes +[Gmail].下書き
@@ -28,7 +20,11 @@ mailboxes +[Gmail].迷惑メール
 mailboxes +[Gmail].ゴミ箱
 mailboxes +task
 
+# add notmuch virtual-mailboxes
+source ~/.config/neomutt/notmuch
+
 set sleep_time = 0
+set wait_key = no
 set read_inc=1000
 set write_inc=1000
 set header_cache=~/.neomutt/cache/headers
@@ -43,6 +39,9 @@ set sort_aux = 'reverse-last-date-received'
 set auto_tag = yes
 set fast_reply = yes
 set edit_headers = yes
+
+timeout-hook 'exec sync-mailbox'
+shutdown-hook 'exec sync-mailbox'
 
 ignore "Authentication-Results:"
 ignore "DomainKey-Signature:"
@@ -72,11 +71,12 @@ bind attach,index R group-reply
 bind pager E edit
 
 bind attach,index,pager,compose q exit
+macro attach,index,pager e "<save-message>+[Gmail].すべてのメール <enter><sync-mailbox><enter>" "Archive"
 
 # notify-send
 set new_mail_command="notify-send --icon=mail-message-new 'New Email' '%n new messages, %u unread.' &"
 
-## GooBook
+# GooBook
 set query_command="goobook query '%s'"
 macro index,pager a "<pipe-message>goobook add<return>" "add sender to google contacts"
 bind editor <Tab> complete-query
