@@ -44,7 +44,9 @@ zle     -N    fzf-ripgrep-widget
 bindkey '\ea' fzf-ripgrep-widget
 
 left-word-copy() {
-  LBUFFER=${LBUFFER}$(echo " ")$(echo ${LBUFFER} | rev | cut -f1 -d " " | rev)
+  local temp
+  temp=$(echo ${LBUFFER} | sed 's/ *$//')
+  LBUFFER=$(echo $temp)$(echo " ")$(echo $temp | rev | cut -f1 -d " " | rev)
   zle redisplay
 }
 zle     -N    left-word-copy
@@ -268,29 +270,13 @@ bindkey '^[d' fzf-dir-mru-widget
 # Mail suggest notmuch
 # -------------------------------------
 notmuchfzf() {
-    local cmd q k res
-    local line make_dir
-    while : ${make_dir:=0}; cmd="$(
-        echo "${(F)d}" \
-            | notmuch search "$*" tag:archive \
-            | fzf --no-sort --prompt="mailArchive-> " \
-            --preview 'notmuch show $(echo {} | cut -f1 -d " ")' \
-            --print-query --expect=ctrl-y \
-            --bind 'ctrl-l:execute(less -f {})' \
-            )"; do
-        k="$(head -2 <<< "$cmd" | tail -1)"
-        res="$(sed '1,2d;/^$/d' <<< "$cmd")"
-        case "$k" in
-            ctrl-y)
-                $(echo "${res}") | copytex
-                continue
-                ;;
-            *)
-                notmuch show $(echo "${res}" | cut -f1 -d ' ') | bat
-                break
-                ;;
-        esac
-    done
+    local id
+    id = $(notmuch search "$*" tag:archive \
+    | fzf --no-sort --prompt="mailArchive-> " \
+    --preview 'notmuch show $(echo {} | cut -f1 -d " ")' \
+    --bind 'ctrl-l:execute(notmuch show $(echo {} | cut -f1 -d " "))')
+
+    notmuch show $(echo "${id}" | cut -f1 -d ' ') | bat
 }
 
 # -------------------------------------
