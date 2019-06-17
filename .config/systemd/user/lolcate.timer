@@ -1,0 +1,9 @@
+[Unit]
+Description=lolcate sync timer
+
+[Timer]
+OnCalendar=12:00:00
+Unit=lolcate.service
+
+[Install]
+WantedBy=default.target

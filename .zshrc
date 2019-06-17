@@ -10,8 +10,6 @@ zplug "zsh-users/zsh-history-substring-search"
 zplug "zsh-users/zsh-syntax-highlighting", defer:2
 # autosuggestions
 zplug "zsh-users/zsh-autosuggestions"
-# autosuggestions yarn
-zplug "g-plane/zsh-yarn-autocompletions"
 # fasd
 zplug "plugins/fasd", from:oh-my-zsh, if:"(( $+commands[fasd] ))"
 # k
@@ -19,7 +17,7 @@ zplug "supercrabtree/k"
 # enhancd
 zplug "b4b4r07/enhancd", use:init.sh
 # ゴミ箱機能
-zplug "b4b4r07/zsh-gomi", if:"which fzf"
+zplug "aikawa9376/zsh-gomi", if:"which fzf"
 # git plugin
 zplug "b4b4r07/git-br"
 # git plugin

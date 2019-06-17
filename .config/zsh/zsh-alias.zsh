@@ -66,6 +66,13 @@ alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -
 alias pac="pacman -Sl | cut -d' ' -f2 | fzf -m --preview 'pacman -Si {1}'"
 
 # -------------------------------------
+# node
+# -------------------------------------
+alias gulp='npx gulp --no-color'
+alias ng='npx ng'
+alias clasp='npx clasp'
+
+# -------------------------------------
 # fasd
 # -------------------------------------
 alias a='fasd -a'        # any

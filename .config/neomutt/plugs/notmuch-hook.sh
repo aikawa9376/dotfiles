@@ -1,7 +1,7 @@
 #!/bin/sh
 notmuch new
 # retag all "archive" messages not "new" and "sent" and "notify"
-notmuch tag +archive -- not tag:inbox and not tag:new and not tag:sent and not tag:notify and not tag:cron and not tag:magazine
+notmuch tag +archive -- not tag:unread and not tag:new and not tag:sent and not tag:notify and not tag:cron and not tag:magazine
 # retag all "new" messages "inbox" and "unread"
 notmuch tag +inbox +unread -new -- tag:new
 # tag all subject in "Cron" as no tag

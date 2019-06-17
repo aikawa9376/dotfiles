@@ -1,0 +1,8 @@
+[Unit]
+Description=lolcate sync
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/aikawa/.cargo/bin/lolcate r-update
+TimeoutStartSec=5min30s
