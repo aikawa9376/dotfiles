@@ -127,13 +127,15 @@ export FZF_DEFAULT_OPTS='
 --color dark,hl:34,hl+:40,bg+:235,fg+:15
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
 '$FZF_DEFAULT_PREVIEW'
---preview-window right:wrap  --bind "?:toggle-preview"
+--preview-window right:wrap
+--bind "?:toggle-preview"
 '
 
 bindkey "^I" expand-or-complete
 bindkey "^[[Z" fzf-completion
 bindkey '^X^F' fasd-complete-f  # C-x C-f to do fasd-complete-f (only files)
 bindkey '^X^D' fasd-complete-d  # C-x C-d to do fasd-complete-d (only directories)
+
 # -------------------------------------
 # 補完機能
 # -------------------------------------
@@ -278,7 +280,6 @@ setopt hist_no_store        # historyコマンドは履歴に登録しない
 # コマンド履歴検索
 bindkey "^P" history-substring-search-up
 bindkey "^N" history-substring-search-down
-
 
 # -------------------------------------
 # キーバインディング

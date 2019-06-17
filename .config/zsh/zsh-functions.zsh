@@ -270,13 +270,26 @@ bindkey '^[d' fzf-dir-mru-widget
 # Mail suggest notmuch
 # -------------------------------------
 notmuchfzf() {
-    local id
-    id = $(notmuch search "$*" tag:archive \
+    local threadId
+    threadId=$(notmuch search "$*" tag:archive \
     | fzf --no-sort --prompt="mailArchive-> " \
-    --preview 'notmuch show $(echo {} | cut -f1 -d " ")' \
-    --bind 'ctrl-l:execute(notmuch show $(echo {} | cut -f1 -d " "))')
+    --preview 'notmuch show --entire-thread=false  $(echo {} | cut -f1 -d " ") \
+      | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
+      | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
+    --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)')
 
-    notmuch show $(echo "${id}" | cut -f1 -d ' ') | bat
+    notmuch show --entire-thread=false $(echo $threadId | cut -f1 -d ' ') | bat
+}
+notmuchfzfselect() {
+    notmuch search "$*" tag:archive \
+    | fzf --no-sort --prompt="mailArchive-> " \
+    --preview-window down:60% --height 100% \
+    --preview 'notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") \
+      | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
+      | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
+    --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)' \
+    --bind 'ctrl-v:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | nvim -R)' \
+    --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
 }
 
 # -------------------------------------

@@ -206,6 +206,7 @@ autocmd MyAutoCmd FileType phtml,html,php,css EmmetInstall
 
 [[plugins]]
 repo = 'RRethy/vim-hexokinase'
+frozen = 1
 on_ft = ['css', 'scss']
 hook_add = '''
 let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
