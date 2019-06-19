@@ -63,7 +63,7 @@ alias t='tmuximum'
 alias ml='notmuchfzfselect'
 alias bat='bat --style="numbers,changes"'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
-alias pac="pacman -Sl | cut -d' ' -f2 | fzf -m --preview 'pacman -Si {1}'"
+alias pac="yay -Sl | fzf -m --preview 'yay -Si {2}'"
 
 # -------------------------------------
 # node
