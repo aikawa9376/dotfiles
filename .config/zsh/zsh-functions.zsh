@@ -132,7 +132,8 @@ csvfzfviewer() {
     nl -n ln -w 1 -s "," "$*" | xsv cat rows \
     | fzf --no-sort --prompt="xsvpreview-> " \
       --preview-window right:30% --height 100% \
-      --preview 'echo {} | nl -n ln -w 1 -s "," | sed -r "s/,/\n/g" | bat -n' \
+      --preview 'xsv slice -s $(expr $(echo {} | cut -f1 -d ",") - 2) \
+        -e $(expr $(echo {} | cut -f1 -d ",") - 1) '$*'  | xsv flatten' \
       --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
 }
 
