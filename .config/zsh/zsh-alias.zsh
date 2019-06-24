@@ -64,6 +64,7 @@ alias ml='notmuchfzfselect'
 alias bat='bat --style="numbers,changes"'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
 alias pac="yay-selecter"
+alias csv="csvfzfviewer"
 
 # -------------------------------------
 # node

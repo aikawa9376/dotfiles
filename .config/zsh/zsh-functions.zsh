@@ -100,6 +100,44 @@ yay-selecter() {
 }
 
 # -------------------------------------
+# Mail suggest notmuch
+# -------------------------------------
+notmuchfzf() {
+    local threadId
+    threadId=$(notmuch search "$*" tag:archive \
+    | fzf --no-sort --prompt="mailArchive-> " \
+      --preview 'notmuch show --entire-thread=false  $(echo {} | cut -f1 -d " ") \
+        | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
+        | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
+      --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)')
+
+    notmuch show --entire-thread=false $(echo $threadId | cut -f1 -d ' ') | bat
+}
+notmuchfzfselect() {
+    notmuch search "$*" tag:archive \
+    | fzf --no-sort --prompt="mailArchive-> " \
+      --preview-window down:60% --height 100% \
+      --preview 'notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") \
+        | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
+        | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
+      --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)' \
+      --bind 'ctrl-v:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | nvim -R)' \
+      --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
+}
+
+# -------------------------------------
+# Mail suggest notmuch
+# -------------------------------------
+csvfzfviewer() {
+    nl -n ln -w 1 -s "," "$*" | xsv cat rows \
+    | fzf --no-sort --prompt="xsvpreview-> " \
+      --preview-window right:30% --height 100% \
+      --preview 'echo {} | nl -n ln -w 1 -s "," | sed -r "s/,/\n/g" | bat -n' \
+      --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
+}
+
+
+# -------------------------------------
 # MRU
 # -------------------------------------
 mru() {
@@ -274,32 +312,6 @@ fzf-dir-mru-widget() {
 }
 zle -N fzf-dir-mru-widget
 bindkey '^[d' fzf-dir-mru-widget
-
-# -------------------------------------
-# Mail suggest notmuch
-# -------------------------------------
-notmuchfzf() {
-    local threadId
-    threadId=$(notmuch search "$*" tag:archive \
-    | fzf --no-sort --prompt="mailArchive-> " \
-      --preview 'notmuch show --entire-thread=false  $(echo {} | cut -f1 -d " ") \
-        | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
-        | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
-      --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)')
-
-    notmuch show --entire-thread=false $(echo $threadId | cut -f1 -d ' ') | bat
-}
-notmuchfzfselect() {
-    notmuch search "$*" tag:archive \
-    | fzf --no-sort --prompt="mailArchive-> " \
-      --preview-window down:60% --height 100% \
-      --preview 'notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") \
-        | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
-        | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
-      --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)' \
-      --bind 'ctrl-v:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | nvim -R)' \
-      --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
-}
 
 # -------------------------------------
 # Dust suggest
