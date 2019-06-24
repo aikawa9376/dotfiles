@@ -63,7 +63,7 @@ alias t='tmuximum'
 alias ml='notmuchfzfselect'
 alias bat='bat --style="numbers,changes"'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
-alias pac="yay -Sl | fzf -m --preview 'yay -Si {2}'"
+alias pac="yay-selecter"
 
 # -------------------------------------
 # node
@@ -71,6 +71,17 @@ alias pac="yay -Sl | fzf -m --preview 'yay -Si {2}'"
 alias gulp='npx gulp --no-color'
 alias ng='npx ng'
 alias clasp='npx clasp'
+
+# -------------------------------------
+# docker
+# -------------------------------------
+alias dkp='docker pull'
+alias dkc='docker-compose'
+alias dkps='docker ps -a'
+alias dkri='docker-rmi'
+alias dkrm='docker-rm'
+alias dkst='docker-stop'
+alias dkat='docker-exec-bash'
 
 # -------------------------------------
 # fasd

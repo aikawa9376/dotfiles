@@ -90,6 +90,7 @@ loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-vimode.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
+loadlib $ZCONFDIR/zsh-docker.zsh
 
 # -------------------------------------
 # fzf

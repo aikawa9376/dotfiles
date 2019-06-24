@@ -68,9 +68,10 @@ bind index > vfolder-window-forward
 # virtual-mailboxes "Climbing" "notmuch://?query=climbing"
 # unvirtual-mailboxes { * | mailbox ...}
 virtual-mailboxes "archive" "notmuch://?query=tag:archive"
-virtual-mailboxes "notify" "notmuch://?query=tag:notify"
 virtual-mailboxes "sent" "notmuch://?query=tag:sent"
-virtual-mailboxes "unread" "notmuch://?query=tag:unread"
+virtual-mailboxes "notify" "notmuch://?query=tag:notify"
+virtual-mailboxes "magazine" "notmuch://?query=tag:magazine"
+# virtual-mailboxes "unread" "notmuch://?query=tag:unread"
 # --------------------------------------------------------------------------
 # MACROS – my utils
 # --------------------------------------------------------------------------

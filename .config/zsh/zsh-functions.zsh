@@ -90,6 +90,15 @@ fs() {
     | xargs tmux switch-client -t
 }
 
+yay-selecter() {
+  yay -Sl \
+  | fzf --preview 'yay -Si {2}' \
+    --bind 'ctrl-x:execute(yay -Sy --noconfirm $(echo {2}))' \
+    --bind 'alt-d:execute(yay -R --noconfirm $(echo {2}))' \
+    --bind 'ctrl-r:execute(yay -Sy)' \
+    --bind 'alt-c:execute(echo {2} | xclip -selection c)' \
+}
+
 # -------------------------------------
 # MRU
 # -------------------------------------
@@ -273,23 +282,23 @@ notmuchfzf() {
     local threadId
     threadId=$(notmuch search "$*" tag:archive \
     | fzf --no-sort --prompt="mailArchive-> " \
-    --preview 'notmuch show --entire-thread=false  $(echo {} | cut -f1 -d " ") \
-      | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
-      | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
-    --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)')
+      --preview 'notmuch show --entire-thread=false  $(echo {} | cut -f1 -d " ") \
+        | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
+        | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
+      --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)')
 
     notmuch show --entire-thread=false $(echo $threadId | cut -f1 -d ' ') | bat
 }
 notmuchfzfselect() {
     notmuch search "$*" tag:archive \
     | fzf --no-sort --prompt="mailArchive-> " \
-    --preview-window down:60% --height 100% \
-    --preview 'notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") \
-      | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
-      | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
-    --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)' \
-    --bind 'ctrl-v:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | nvim -R)' \
-    --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
+      --preview-window down:60% --height 100% \
+      --preview 'notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") \
+        | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
+        | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
+      --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)' \
+      --bind 'ctrl-v:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | nvim -R)' \
+      --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
 }
 
 # -------------------------------------

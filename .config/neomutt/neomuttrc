@@ -43,12 +43,11 @@ set edit_headers = yes
 timeout-hook 'exec sync-mailbox'
 shutdown-hook 'exec sync-mailbox'
 
-ignore "Authentication-Results:"
-ignore "DomainKey-Signature:"
-ignore "DKIM-Signature:"
+ignore *
+unignore date from subject to cc bcc
 
-hdr_order Date From To Cc
-set pager_index_lines=10
+hdr_order Date From To Cc bcc
+set pager_index_lines=30
 bind editor ^T complete
 bind editor <space> noop
 
@@ -71,7 +70,7 @@ bind attach,index R group-reply
 bind pager E edit
 
 bind attach,index,pager,compose q exit
-macro attach,index,pager e "<save-message>+[Gmail].すべてのメール <enter><sync-mailbox><enter>" "Archive"
+macro attach,index,pager e "<save-message>+[Gmail].すべてのメール<enter><sync-mailbox><enter>" "Archive"
 
 # notify-send
 set new_mail_command="notify-send --icon=mail-message-new 'New Email' '%n new messages, %u unread.' &"
