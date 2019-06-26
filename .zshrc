@@ -7,7 +7,7 @@ zplug "zsh-users/zsh-completions"
 # zsh-history-substring-search
 zplug "zsh-users/zsh-history-substring-search"
 # zsh-syntax-highlighting
-zplug "zsh-users/zsh-syntax-highlighting", defer:2
+zplug "zdharma/fast-syntax-highlighting"
 # autosuggestions
 zplug "zsh-users/zsh-autosuggestions"
 # fasd
@@ -23,7 +23,7 @@ zplug "b4b4r07/git-br"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # pair auto
-zplug "hlissner/zsh-autopair", defer:3
+zplug "hlissner/zsh-autopair", defer:2
 # fzf-widgets
 zplug "ytet5uy4/fzf-widgets", if:"which fzf"
 # tmux fzf
