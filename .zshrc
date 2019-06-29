@@ -12,18 +12,16 @@ zplug "zdharma/fast-syntax-highlighting"
 zplug "zsh-users/zsh-autosuggestions"
 # fasd
 zplug "plugins/fasd", from:oh-my-zsh, if:"(( $+commands[fasd] ))"
-# k
-zplug "supercrabtree/k"
 # enhancd
 zplug "b4b4r07/enhancd", use:init.sh
 # ゴミ箱機能
 zplug "aikawa9376/zsh-gomi", if:"which fzf"
-# git plugin
-zplug "b4b4r07/git-br"
+# abbr
+zplug "momo-lab/zsh-abbrev-alias"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # pair auto
-zplug "hlissner/zsh-autopair", defer:2
+zplug "hlissner/zsh-autopair"
 # fzf-widgets
 zplug "ytet5uy4/fzf-widgets", if:"which fzf"
 # tmux fzf
@@ -328,4 +326,5 @@ ssh-add -l >& /dev/null || ssh-add
 # enhancd
 # -------------------------------------
 ENHANCD_HOOK_AFTER_CD=ll
+ENHANCD_HYPHEN_NUM=30
 ENHANCD_FILTER=fzf:fzy:peco

@@ -42,16 +42,6 @@ alias fnd='finder'
 alias li='gwenview ./'
 alias reload='exec $SHELL -1'
 alias reboot='tmux detach && reboot'
-
-alias -g from='$(mru)'
-alias -g to='$(destination_directories)'
-alias -g le='| less'
-alias -g ff='| fzf --ansi -m'
-alias -g bb='| bat'
-alias -g vv='| nvim'
-alias -g dust='$(duster)'
-alias -g fnd='$(finder)'
-alias -g pyg='"pygmentize -g  {}"'
 alias vim='nvim'
 alias vv='fvim'
 alias vs='nvim -S'
@@ -65,6 +55,15 @@ alias bat='bat --style="numbers,changes"'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
 alias pac="yay-selecter"
 alias csv="csvfzfviewer"
+
+# -------------------------------------
+# git
+# -------------------------------------
+alias ggs='git status'
+alias gga='git add -u'
+alias ggas='git add -A'
+alias ggc='git commit -m "update"'
+alias ggp='git push'
 
 # -------------------------------------
 # node
@@ -96,6 +95,14 @@ alias sf='fasd -sif'     # interactive file selection
 alias z='z-override'     # cd, same functionality as j in autojump
 
 # -------------------------------------
+# 拡張子 エイリアス
+# -------------------------------------
+alias -s {gz,tar,zip,msi,rar,7z,rar}='unar' # archives less -> lsar
+alias -s {png,jpg,gif}='feh'
+alias -s {txt,md}='bat'
+alias -s {pdf}='okular'
+
+# -------------------------------------
 # ディレクトリ エイリアス
 # -------------------------------------
 function name_dir() # dir, name
@@ -116,3 +123,16 @@ name_dir /home/aikawa/Desktop/ d
 name_dir /mnt/c/Users/aikaw/Desktop/ d
 name_dir /home/aikawa/Downloads/ dl
 name_dir /mnt/c/Users/aikaw/Downloads/ dl
+
+# -------------------------------------
+# グローバル エイリアス
+# -------------------------------------
+abbrev-alias -g from='$(mru)'
+abbrev-alias -g to='$(destination_directories)'
+abbrev-alias -g le='| less'
+abbrev-alias -g ff='| fzf --ansi -m'
+abbrev-alias -g bb='| bat'
+abbrev-alias -g vo='| nvim'
+abbrev-alias -g dust='$(duster)'
+abbrev-alias -g fnd='$(finder)'
+abbrev-alias -g pyg='"pygmentize -g  {}"'

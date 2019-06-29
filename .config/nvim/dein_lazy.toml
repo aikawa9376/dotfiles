@@ -1009,7 +1009,7 @@ imap <expr> <C-t> fzf#complete({
 imap <expr> <C-_> fzf#complete({
     \ 'source': <SID>dir_file_completion(<SID>fzf_last_word()),
     \ 'window': 'call OpenFloatingWin()',
-    \ 'options': '-m -x +s --layout='.shellescape(<SID>open_floatingWin_fzf_layout())})
+    \ 'options': '-m -x +s --ansi --layout='.shellescape(<SID>open_floatingWin_fzf_layout())})
 
 function! s:dir_file_completion(word)
   " return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | tr '/' '\n' | sort | uniq")
