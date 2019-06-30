@@ -1,0 +1,17 @@
+/afs
+/media
+/net
+/sfs
+/tmp
+/udev
+/var/cache
+/var/lib/pacman/local
+/var/lock
+/var/run
+/var/spool
+/var/tmp
+nvim/undo
+.git
+.hg
+.svn
+.npm
