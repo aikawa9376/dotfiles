@@ -89,6 +89,8 @@ loadlib $ZCONFDIR/zsh-vimode.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
 loadlib $ZCONFDIR/zsh-docker.zsh
+loadlib /usr/share/fzf/key-bindings.zsh
+loadlib /usr/share/fzf/completion.zsh
 
 # -------------------------------------
 # fzf
