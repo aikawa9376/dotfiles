@@ -307,12 +307,6 @@ zle -N insert-last-word smart-insert-last-word
 bindkey '^[' insert-last-word
 
 # -------------------------------------
-# Xserver関係
-# -------------------------------------
-# umask 022
-# export DISPLAY=localhost:0.0
-
-# -------------------------------------
 # ssh-agent
 # -------------------------------------
 if [ -f ~/.ssh-agent ]; then
@@ -330,3 +324,8 @@ ssh-add -l >& /dev/null || ssh-add
 ENHANCD_HOOK_AFTER_CD=ll
 ENHANCD_HYPHEN_NUM=30
 ENHANCD_FILTER=fzf:fzy:peco
+
+# -------------------------------------
+# Xserver start
+# -------------------------------------
+[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx
