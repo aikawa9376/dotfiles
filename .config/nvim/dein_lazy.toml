@@ -1806,7 +1806,7 @@ function! MyRootDir()
   if exists('*FindRootDirectory') && FindRootDirectory() != ''
     let s:dir = FindRootDirectory()
     let s:dir = split(s:dir, '/')
-    return "\ue5fe " . s:dir[len(s:dir) - 1]
+    return "\uf812 \ue5fe " . s:dir[len(s:dir) - 1]
   else
     return ''
   endif

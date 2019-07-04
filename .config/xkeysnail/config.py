@@ -19,31 +19,50 @@ define_conditional_modmap(re.compile(r'Emacs'), {
 define_multipurpose_modmap({
     # Enter is enter when pressed and released. Control when held down.
     Key.ENTER: [Key.ENTER, Key.RIGHT_CTRL],
-    Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL]
+    Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL],
+    # Key.SPACE: [Key.SPACE, Key.LEFT_META],
 
     # Capslock is escape when pressed and released. Control when held down.
     # {Key.CAPSLOCK: [Key.ESC, Key.LEFT_CTRL]
     # To use this example, you can't remap capslock with define_modmap.
 })
 
+# Keybindings for Global
+define_keymap(None, {
+    # hhkb
+    K("Super-h"): with_mark(K("kpasterisk")),
+    K("Super-n"): with_mark(K("kpplus")),
+    K("Super-m"): with_mark(K("kpminus")),
+    K("Super-j"): with_mark(K("kpslash")),
+    K("Shift-esc"): with_mark(K("grave")),
+    K("Super-key_1"): with_mark(K("f1")),
+    K("Super-key_2"): with_mark(K("f2")),
+    K("Super-key_3"): with_mark(K("f3")),
+    K("Super-key_4"): with_mark(K("f4")),
+    K("Super-key_5"): with_mark(K("f5")),
+    K("Super-key_6"): with_mark(K("f6")),
+    K("Super-key_7"): with_mark(K("f7")),
+    K("Super-key_8"): with_mark(K("f8")),
+    K("Super-key_9"): with_mark(K("f9")),
+    K("Super-key_0"): with_mark(K("f10")),
+    K("Super-minus"): with_mark(K("f11")),
+    K("Super-equal"): with_mark(K("f12")),
+    K("Super-i"): with_mark(K("SYSRQ")),
+}, "Global")
 
 # Keybindings for Firefox/Chrome
 define_keymap(re.compile("Firefox|Google-chrome"), {
     # Ctrl+Alt+j/k to switch next/previous tab
-    K("C-Super-j"): K("C-TAB"),
-    K("C-Super-k"): K("C-Shift-TAB"),
-    # Type C-j to focus to the content
-    K("C-j"): K("C-f6"),
+    K("C-j"): K("C-TAB"),
+    K("C-k"): K("C-Shift-TAB"),
+    K("Super-t"): with_mark(K("C-t")),
+    K("Super-w"): with_mark(K("C-w")),
+    K("Super-r"): with_mark(K("C-r")),
+    K("C-Space"): K("C-f6"),
 }, "Firefox and Chrome")
 
-# Keybindings for Zeal https://github.com/zealdocs/zeal/
-define_keymap(re.compile("Zeal"), {
-    # Ctrl+s to focus search area
-    K("C-s"): K("C-k"),
-}, "Zeal")
-
 # Emacs-like keybindings in non-Emacs applications
-define_keymap(lambda wm_class: wm_class not in ("Alacritty"), {
+define_keymap(lambda wm_class: wm_class not in ("Alacritty", "Rofi"), {
     # Cursor
     K("C-b"): with_mark(K("left")),
     K("C-f"): with_mark(K("right")),
@@ -64,8 +83,8 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty"), {
     # Page up/down
     K("Super-l"): with_mark(K("page_up")),
     K("Super-dot"): with_mark(K("page_down")),
-    K("Super-l"): with_mark(K("Shift-page_up")),
-    K("Super-dot"): with_mark(K("Shift-page_down")),
+    K("Super-Shift-l"): with_mark(K("Shift-page_up")),
+    K("Super-Shift-dot"): with_mark(K("Shift-page_down")),
     # Beginning/End of file
     K("Super-k"): with_mark(K("home")),
     K("Super-comma"): with_mark(K("end")),
@@ -90,29 +109,11 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty"), {
     # Mark
     # K("C-space"): set_mark(True),
     K("C-o"): with_or_set_mark(K("C-right")),
+    K("C-q"): escape_next_key,
     # Search
     # K("C-s"): K("F3"),
     # K("C-r"): K("Shift-F3"),
     # K("Super-Shift-key_5"): K("C-h"),
     # Cancel
-    K("C-right_brace"): [K("esc"), set_mark(False)],
-    # Escape
-    K("C-q"): escape_next_key,
-    # C-x YYY
-    # K("C-x"): {
-    #     # C-x h (select all)
-    #     K("h"): [K("C-home"), K("C-a"), set_mark(True)],
-    #     # C-x C-f (open)
-    #     K("C-f"): K("C-o"),
-    #     # C-x C-s (save)
-    #     K("C-s"): K("C-s"),
-    #     # C-x k (kill tab)
-    #     K("k"): K("C-f4"),
-    #     # C-x C-c (exit)
-    #     K("C-c"): K("C-q"),
-    #     # cancel
-    #     K("C-g"): pass_through_key,
-    #     # C-x u (undo)
-    #     K("u"): [K("C-z"), set_mark(False)],
-    # }
+    K("C-left_brace"): [K("esc"), set_mark(False)],
 }, "Emacs-like keys")

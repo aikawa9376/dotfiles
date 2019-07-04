@@ -2,7 +2,7 @@
 # on Wed, 12 Sep 2018
 
 set -g status-justify "left"
-set -g status "on"
+# set -g status "on"
 set -g status-left-length "100"
 set -g pane-active-border-style fg="colour10"
 set -g status-style "none",bg="colour8"
