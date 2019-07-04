@@ -52,7 +52,7 @@ font-1 = "RictyDiminishedDiscord NF:size=12:heavy:fontformat=truetype;-2"
 
 modules-left = i3 xwindow
 modules-center = date
-modules-right = filesystem cpu memory wlan powermenu
+modules-right = filesystem cpu memory wlan pacman powermenu
 
 tray-position = right
 tray-padding = 2
@@ -151,45 +151,6 @@ label-visible = %index%
 label-visible-foreground = ${module/bspwm.label-empty-padding}
 label-visible-padding = ${module/bspwm.label-empty-padding}
 
-[module/mpd]
-type = internal/mpd
-
-format-online =
-
-label-song-maxlen = 25
-label-song-ellipsis = true
-
-icon-prev = 
-icon-seekb = 
-icon-stop = 
-icon-play = 
-icon-pause = 
-icon-next = 
-icon-seekf = 
-
-icon-random = 
-icon-repeat = 
-
-toggle-on-foreground = ${colors.primary}
-toggle-off-foreground = #66
-
-[module/backlight]
-type = internal/xbacklight
-
-format =
-label = BL
-
-bar-width = 10
-bar-indicator = │
-bar-indicator-foreground = #ff
-bar-indicator-font = 1
-bar-fill = ─
-bar-fill-font = 1
-bar-fill-foreground = #9f78e1
-bar-empty = ─
-bar-empty-font = 2
-bar-empty-foreground = ${colors.foreground-alt}
-
 [module/cpu]
 type = internal/cpu
 interval = 2
@@ -210,34 +171,14 @@ label = %percentage_used%%
 type = internal/network
 interface = wlp2s0
 interval = 3.0
+accumulate-stats = true
 
-format-connected = "直"
-format-connected-foreground = ${colors.foreground-alt}
+format-connected-prefix = "直 "
+format-connected-prefix-foreground = ${colors.foreground-alt}
 format-connected-underline = #9f78e1
 format-disconnected-underline = ${self.format-connected-underline}
 
-label-connected = %essid%
-label-disconnected = %ifname% disconnected
-label-disconnected-foreground = ${colors.foreground-alt}
-
-ramp-signal-0 = 
-ramp-signal-1 = 
-ramp-signal-2 = 
-ramp-signal-3 = 
-ramp-signal-4 = 
-ramp-signal-foreground = ${colors.foreground-alt}
-
-[module/eth]
-type = internal/network
-interface = eno1
-interval = 3.0
-
-format-connected-underline = #4ac237
-format-connected-prefix = " "
-format-connected-foreground-foreground = ${colors.foreground-alt}
-label-connected = %local_ip%
-
-format-disconnected-underline = ${self.format-connected-underline}
+label-connected = %essid%:%signal%
 label-disconnected = %ifname% disconnected
 label-disconnected-foreground = ${colors.foreground-alt}
 
@@ -257,80 +198,10 @@ format-underline = #3465A4
 
 label = %date% %time%
 
-[module/volume]
-type = internal/volume
-
-format-volume =
-label-volume = VOL
-label-volume-foreground = ${root.foreground}
-
-format-muted-prefix = " "
-format-muted-foreground = ${colors.foreground-alt}
-label-muted = sound muted
-
-bar-volume-width = 10
-bar-volume-foreground-0 = #55aa55
-bar-volume-foreground-1 = #55aa55
-bar-volume-foreground-2 = #55aa55
-bar-volume-foreground-3 = #55aa55
-bar-volume-foreground-4 = #55aa55
-bar-volume-foreground-5 = #f5a70a
-bar-volume-foreground-6 = #ff5555
-bar-volume-gradient = false
-bar-volume-indicator = │
-bar-volume-indicator-font = 2
-bar-volume-indicator-foreground = #ff
-bar-volume-fill = ─
-bar-volume-fill-font = 2
-bar-volume-empty = ─
-bar-volume-empty-font = 2
-bar-volume-empty-foreground = ${colors.foreground-alt}
-
-[module/battery]
-type = internal/battery
-battery = BAT0
-adapter = ADP1
-full-at = 98
-
-format-charging =
-format-charging-underline = #ffb52a
-
-format-discharging =
-format-discharging-underline = ${self.format-charging-underline}
-
-format-full-prefix = " "
-format-full-prefix-foreground = ${colors.foreground-alt}
-format-full-underline = ${self.format-charging-underline}
-
-ramp-capacity-0 = 
-ramp-capacity-1 = 
-ramp-capacity-2 = 
-ramp-capacity-foreground = ${colors.foreground-alt}
-
-animation-charging-0 = 
-animation-charging-1 = 
-animation-charging-2 = 
-animation-charging-foreground = ${colors.foreground-alt}
-animation-charging-framerate = 750
-
-[module/temperature]
-type = internal/temperature
-thermal-zone = 0
-warn-temperature = 60
-
-format = "a"
-format-underline = #ffffff
-format-warn = "b"
-format-warn-underline = ${self.format-underline}
-
-label = %temperature%
-label-warn = %temperature%
-label-warn-foreground = ${colors.secondary}
-
-ramp-0 = 
-ramp-1 = 
-ramp-2 = 
-ramp-foreground = ${colors.foreground-alt}
+[module/pacman]
+type = custom/script
+exec = $HOME/.config/polybar/scripts/updates-arch-combined.sh
+internal = 600
 
 [module/powermenu]
 type = custom/menu
