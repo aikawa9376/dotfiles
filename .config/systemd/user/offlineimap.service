@@ -4,5 +4,5 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/offlineimap -f INBOX -o -q -k Account_GMail:postsynchook= -u quiet
+ExecStart=/home/aikawa/dotfiles/.config/systemd/script/check-neomutt-offlineimap.sh
 TimeoutStartSec=2min30s

@@ -34,7 +34,7 @@ define_keymap(None, {
     K("Super-n"): with_mark(K("kpplus")),
     K("Super-m"): with_mark(K("kpminus")),
     K("Super-j"): with_mark(K("kpslash")),
-    K("Shift-esc"): with_mark(K("grave")),
+    K("Shift-esc"): with_mark(K("Shift-grave")),
     K("Super-key_1"): with_mark(K("f1")),
     K("Super-key_2"): with_mark(K("f2")),
     K("Super-key_3"): with_mark(K("f3")),
@@ -48,6 +48,10 @@ define_keymap(None, {
     K("Super-minus"): with_mark(K("f11")),
     K("Super-equal"): with_mark(K("f12")),
     K("Super-i"): with_mark(K("SYSRQ")),
+    K("C-Super-semicolon"): with_mark(K("left")),
+    K("C-Super-slash"): with_mark(K("down")),
+    K("C-Super-left_brace"): with_mark(K("up")),
+    K("C-Super-apostrophe"): with_mark(K("right")),
 }, "Global")
 
 # Keybindings for Firefox/Chrome
@@ -62,7 +66,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
 }, "Firefox and Chrome")
 
 # Emacs-like keybindings in non-Emacs applications
-define_keymap(lambda wm_class: wm_class not in ("Alacritty", "Rofi"), {
+define_keymap(lambda wm_class: wm_class not in ("Alacritty", "Rofi", "Kitty"), {
     # Cursor
     K("C-b"): with_mark(K("left")),
     K("C-f"): with_mark(K("right")),
@@ -74,12 +78,16 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty", "Rofi"), {
     K("C-Shift-p"): with_mark(K("Shift-up")),
     K("C-Shift-n"): with_mark(K("Shift-down")),
     K("C-Shift-h"): with_mark(K("Shift-backspace")),
+    K("C-i"): with_mark(K("tab")),
+    K("C-Shift-i"): with_mark(K("Shift-tab")),
     # Forward/Backward word
     K("Super-b"): with_mark(K("C-left")),
     K("Super-f"): with_mark(K("C-right")),
     # Beginning/End of line
     K("C-a"): with_mark(K("home")),
     K("C-e"): with_mark(K("end")),
+    K("C-Shift-a"): with_mark(K("Shift-home")),
+    K("C-Shift-e"): with_mark(K("Shift-end")),
     # Page up/down
     K("Super-l"): with_mark(K("page_up")),
     K("Super-dot"): with_mark(K("page_down")),
