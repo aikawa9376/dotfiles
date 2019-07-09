@@ -168,6 +168,11 @@ mode "resize" {
 
 bindsym $mod+Shift+r mode "resize"
 
+# application setting(float)
+for_window [class="insync"] floating enable, resize set 800 600
+for_window [class="Fcitx-config-gtk3"] floating enable, resize set 600 400
+for_window [class="mozc_tool"] floating enable, resize set 600 400
+
 # Start i3bar to display a workspace bar (plus the system information i3status
 # finds out, if available)
 bar {
@@ -176,9 +181,14 @@ bar {
         workspace_buttons no
 }
 
+# Start up scripts
+exec --no-startup-id sudo iw dev wlp2s0 set power_save off
 exec --no-startup-id sudo xkeysnail $HOME/.config/xkeysnail/config.py;
 exec --no-startup-id xset b off;
 exec --no-startup-id xset r rate 180 70;
 exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inverted --noprimary && xrandr --output DVI-I-1 --auto --below HDMI-0 --noprimary;
 exec --no-startup-id fcitx-autostart;
 exec --no-startup-id $HOME/.config/polybar/lanch.sh;
+exec --no-startup-id compton --config $HOME/.config/i3/compton.conf
+exec --no-startup-id hsetroot -solid '#000000'
+exec --no-startup-id insync start

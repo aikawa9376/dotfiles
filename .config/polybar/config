@@ -22,14 +22,12 @@ margin-bottom = 5
 
 [bar/example]
 top = true
-;monitor = ${env:MONITOR:HDMI-1}
 monitor = ${env:MONITOR:DP-0}
 width = 100%
 height = 34
 offset-x = 0
 offset-y = 0
 
-;background = ${urdb:color9}
 background = ${colors.background}
 foreground = ${colors.foreground}
 
@@ -52,24 +50,10 @@ font-1 = "RictyDiminishedDiscord NF:size=12:heavy:fontformat=truetype;-2"
 
 modules-left = i3 xwindow
 modules-center = date
-modules-right = filesystem insync cpu memory wlan pacman mozc powermenu
+modules-right = filesystem insync cpu memory wlan pacman inbox-imap mozc powermenu
 
 tray-position = right
 tray-padding = 2
-;tray-transparent = true
-;tray-background = #0063ff
-
-;wm-restack = bspwm
-;wm-restack = i3
-
-;override-redirect = true
-
-;scroll-up = bspwm-desknext
-;scroll-down = bspwm-deskprev
-
-;scroll-up = i3wm-wsnext
-;scroll-down = i3wm-wsprev
-
 
 [module/xwindow]
 type = internal/xwindow
@@ -94,37 +78,15 @@ label-indicator-underline = ${colors.secondary}
 
 [module/filesystem]
 type = internal/fs
-interval = 25
+interval = 60
 
 mount-0 = /
-;mount-1 = /home
-;mount-2 = /invalid/mountpoint
 format-mounted-prefix = " "
 format-mounted-prefix-foreground = ${colors.foreground-alt}
 format-mounted-underline = #30C352
 label-mounted = %mountpoint%:%percentage_free%%
 label-unmounted = %mountpoint%:not mounted
 label-unmounted-foreground = ${colors.foreground-alt}
-
-[module/bspwm]
-type = internal/bspwm
-ws-icon-default = x
-
-label-focused = %index%
-label-focused-background = ${colors.background-alt}
-label-focused-underline= ${colors.primary}
-label-focused-padding = 2
-
-label-occupied = %index%
-label-occupied-padding = 2
-
-label-urgent = %index%
-label-urgent-background = ${colors.alert}
-label-urgent-padding = 2
-
-label-empty = %index%
-label-empty-foreground = ${colors.foreground-alt}
-label-empty-padding = 2
 
 [module/i3]
 type = internal/i3
@@ -136,24 +98,24 @@ label-mode-foreground = #000
 label-mode-background = ${colors.primary}
 
 label-focused = %index%
-label-focused-background = ${module/bspwm.label-focused-background}
-label-focused-underline = ${module/bspwm.label-focused-underline}
-label-focused-padding = ${module/bspwm.label-focused-padding}
+label-focused-background = ${colors.background-alt}
+label-focused-underline = ${colors.primary}
+label-focused-padding = 2
 
 label-unfocused = %index%
-label-unfocused-padding = ${module/bspwm.label-occupied-padding}
+label-unfocused-padding = 2
 
 label-urgent = %index%!
 label-urgent-background = ${colors.alert}
-label-urgent-padding = ${module/bspwm.label-urgent-padding}
+label-urgent-padding = 2
 
 label-visible = %index%
-label-visible-foreground = ${module/bspwm.label-empty-padding}
-label-visible-padding = ${module/bspwm.label-empty-padding}
+label-visible-foreground = ${colors.foreground-alt}
+label-visible-padding = 2
 
 [module/cpu]
 type = internal/cpu
-interval = 2
+interval = 3
 format-prefix = " "
 format-prefix-foreground = ${colors.foreground-alt}
 format-underline = #d64937
@@ -161,7 +123,7 @@ label = %percentage%%
 
 [module/memory]
 type = internal/memory
-interval = 2
+interval = 3
 format-prefix = " "
 format-prefix-foreground = ${colors.foreground-alt}
 format-underline = #32bbc2
@@ -170,7 +132,7 @@ label = %percentage_used%%
 [module/wlan]
 type = internal/network
 interface = wlp2s0
-interval = 3.0
+interval = 60
 accumulate-stats = true
 
 format-connected-prefix = "直 "
@@ -201,7 +163,7 @@ label = %date% %time%
 [module/pacman]
 type = custom/script
 exec = $HOME/.config/polybar/scripts/updates-arch-combined.sh
-interval = 7200
+interval = 1800
 format-prefix = " "
 format-prefix-foreground = ${colors.foreground-alt}
 format-underline = #1994D1
@@ -219,6 +181,14 @@ type = custom/script
 exec = $HOME/.config/polybar/scripts/info-insync.sh
 interval = 10
 format-underline = #FF8B25
+
+[module/inbox-imap]
+type = custom/script
+exec = $HOME/.config/polybar/scripts/inbox-imap-shellnetrc.sh
+interval = 180
+format-prefix = " "
+format-prefix-foreground = ${colors.foreground-alt}
+format-underline = #FF0000
 
 [module/powermenu]
 type = custom/menu

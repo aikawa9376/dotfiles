@@ -99,6 +99,16 @@ yay-selecter() {
     --bind 'alt-c:execute(echo {2} | xclip -selection c)' \
 }
 
+gdopen() {
+  local n
+  if [[ -r "$1" ]]; then
+    n=$(readlink -f "$1")
+    insync open_in_gdrive "$n"
+  else
+    echo 'not exists file'
+  fi
+}
+
 # -------------------------------------
 # Mail suggest notmuch
 # -------------------------------------
@@ -683,4 +693,3 @@ quickopen() {
 convertPathWsl() {
   echo $(wslpath -m $(readlink -e "$1"))
 }
-

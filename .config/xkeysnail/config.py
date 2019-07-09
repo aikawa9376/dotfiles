@@ -124,4 +124,6 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty", "Rofi", "Kitty"), {
     # K("Super-Shift-key_5"): K("C-h"),
     # Cancel
     K("C-left_brace"): [K("esc"), set_mark(False)],
+    # Right Click
+    K("C-y"): with_mark(K("Shift-f10")),
 }, "Emacs-like keys")

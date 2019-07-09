@@ -45,6 +45,7 @@ alias reboot='tmux detach && reboot'
 alias vim='nvim'
 alias vv='fvim'
 alias vs='nvim -S'
+alias mutt='neomutt'
 alias cp='cp -r'
 alias g='gomi'
 alias mkdir='mkdir -p'
@@ -55,6 +56,7 @@ alias bat='bat --style="numbers,changes"'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
 alias pac="yay-selecter"
 alias csv="csvfzfviewer"
+alias trans="trans -b :ja"
 
 # -------------------------------------
 # git
@@ -100,7 +102,8 @@ alias z='z-override'     # cd, same functionality as j in autojump
 alias -s {gz,tar,zip,msi,rar,7z,rar}='unar' # archives less -> lsar
 alias -s {png,jpg,gif}='feh'
 alias -s {txt,md}='bat'
-alias -s {pdf}='okular'
+# alias -s {pdf}='okular'
+alias -s {gddoc,gdscript,gdsheet,gdslides,pptx,pdf,xls,xlsx,doc,docx,ai,psd}='gdopen'
 
 # -------------------------------------
 # ディレクトリ エイリアス
@@ -133,6 +136,7 @@ abbrev-alias -g le='| less'
 abbrev-alias -g ff='| fzf --ansi -m'
 abbrev-alias -g bb='| bat'
 abbrev-alias -g vo='| nvim'
+abbrev-alias -g trs="| trans -b :ja"
 abbrev-alias -g dust='$(duster)'
 abbrev-alias -g fnd='$(finder)'
 abbrev-alias -g pyg='"pygmentize -g  {}"'
