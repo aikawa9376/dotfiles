@@ -48,10 +48,16 @@ define_keymap(None, {
     K("Super-minus"): with_mark(K("f11")),
     K("Super-equal"): with_mark(K("f12")),
     K("Super-i"): with_mark(K("SYSRQ")),
-    K("C-Super-semicolon"): with_mark(K("left")),
-    K("C-Super-slash"): with_mark(K("down")),
-    K("C-Super-left_brace"): with_mark(K("up")),
-    K("C-Super-apostrophe"): with_mark(K("right")),
+    K("C-Super-h"): with_mark(K("left")),
+    K("C-Super-j"): with_mark(K("down")),
+    K("C-Super-k"): with_mark(K("up")),
+    K("C-Super-l"): with_mark(K("right")),
+    K("C-Super-n"): with_mark(K("C-down")),
+    K("C-Super-p"): with_mark(K("C-up")),
+    K("Super-Shift-h"): with_mark(K("Shift-left")),
+    K("Super-Shift-j"): with_mark(K("Shift-down")),
+    K("Super-Shift-k"): with_mark(K("Shift-up")),
+    K("Super-Shift-l"): with_mark(K("Shift-right")),
 }, "Global")
 
 # Keybindings for Firefox/Chrome

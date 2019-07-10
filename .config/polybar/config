@@ -52,8 +52,8 @@ modules-left = i3 xwindow
 modules-center = date
 modules-right = filesystem insync cpu memory wlan pacman inbox-imap mozc powermenu
 
-tray-position = right
-tray-padding = 2
+; tray-position = right
+; tray-padding = 2
 
 [module/xwindow]
 type = internal/xwindow

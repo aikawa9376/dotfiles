@@ -1553,7 +1553,7 @@ let g:sw_highlight_resultsets = 0
 let g:sw_sqlopen_command      = 'tabnew'
 let g:sw_config_dir           = '/home/aikawa/.sqlworkbench'
 let g:sw_cache                = '/home/aikawa/.sqlworkbench/cache'
-let g:sw_exe                  = '/home/aikawa/Applications/Sql-Workbench/sqlwbconsole.sh'
+let g:sw_exe                  = '/opt/SQLWorkbench/sqlwbconsole.sh'
 '''
 
 [[plugins]]

@@ -57,6 +57,7 @@ alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -
 alias pac="yay-selecter"
 alias csv="csvfzfviewer"
 alias trans="trans -b :ja"
+alias feh="feh -d -s"
 
 # -------------------------------------
 # git
