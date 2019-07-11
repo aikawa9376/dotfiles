@@ -61,5 +61,5 @@ autocmd MyAutoCmd ColorScheme * highlight Visual     cterm=None ctermfg=126 cter
 autocmd MyAutoCmd ColorScheme * highlight CursorLine ctermbg=0 guibg=#212121 guisp=#93a1a1
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC   ctermbg=0 guibg=#073642
-set winhighlight=Normal:Normal,NormalNC:notactivewindow
+set winhighlight=Normal:Normal,NormalNC:NormalNC
 '''

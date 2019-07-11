@@ -49,6 +49,10 @@ define_keymap(None, {
     K("Super-minus"): with_mark(K("f11")),
     K("Super-equal"): with_mark(K("f12")),
     K("Super-i"): with_mark(K("SYSRQ")),
+}, "Global")
+
+# Keybindings for Alacritty/kitty
+define_keymap(re.compile("Alacritty|kitty"), {
     K("RAlt-h"): with_mark(K("left")),
     K("RAlt-j"): with_mark(K("down")),
     K("RAlt-k"): with_mark(K("up")),
@@ -61,15 +65,14 @@ define_keymap(None, {
     K("RAlt-LSuper-j"): with_mark(K("Shift-down")),
     K("RAlt-LSuper-k"): with_mark(K("Shift-up")),
     K("RAlt-LSuper-l"): with_mark(K("Shift-right")),
-}, "Global")
+}, "Alacritty and kitty")
 
 # Keybindings for Firefox/Chrome
 define_keymap(re.compile("Firefox|Google-chrome"), {
-    # Ctrl+Alt+j/k to switch next/previous tab
-    K("C-l"): K("C-TAB"),
-    K("C-h"): K("C-Shift-TAB"),
-    K("C-j"): K("C-key_9"),
-    K("C-k"): K("C-key_1"),
+    K("RAlt-l"): K("C-TAB"),
+    K("RAlt-h"): K("C-Shift-TAB"),
+    K("RAlt-j"): K("C-key_9"),
+    K("RAlt-k"): K("C-key_1"),
     K("Super-t"): with_mark(K("C-t")),
     K("Super-w"): with_mark(K("C-w")),
     K("Super-r"): with_mark(K("C-r")),

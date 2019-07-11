@@ -5,6 +5,89 @@ has() {
   type "${1:?too few arguments}" &>/dev/null
 }
 
+left-word-copy() {
+  local temp
+  temp=$(echo ${LBUFFER} | sed 's/ *$//')
+  LBUFFER=$(echo $temp)$(echo " ")$(echo $temp | rev | cut -f1 -d " " | rev)
+  zle redisplay
+}
+zle     -N    left-word-copy
+bindkey '^v'  left-word-copy
+
+gdopen() {
+  local n
+  if [[ -r "$1" ]]; then
+    n=$(readlink -f "$1")
+    insync open_in_gdrive "$n"
+  else
+    echo 'not exists file'
+  fi
+}
+
+# chrome search
+google() {
+    local str opt
+    if [ $# != 0 ]; then
+        for i in $*; do
+            str="$str${str:++}$i"
+        done
+        opt='search?num=100'
+        opt="${opt}&q=${str}"
+    fi
+    google-chrome-stable http://www.google.co.jp/$opt
+}
+
+winopen() {
+  local e n
+  if [[ -r "$1" ]]; then
+    n=$(wslpath -w $(wslpath -a "$1"))
+    e=$(echo "$1" | sed 's/^.*\.\([^\.]*\)$/\1/')
+    case "$e" in
+      "ai"|"eps")
+        illustrator "$n"
+        ;;
+      "psd")
+        photoshop "$n"
+        ;;
+      "pdf")
+        pdf "$n"
+        ;;
+      "jpg"|"png"|"gif")
+        quicklook "$n"
+        # imageviewer "$n"
+        ;;
+      "doc"|"docm"|"docx")
+        word "$n"
+        ;;
+      "xls"|"xlsx"|"xlsm"|"csv")
+        excel "$n"
+        ;;
+      "ppt"|"pptx"|"pps"|"ppsx")
+        powerpoint "$n"
+        ;;
+    esac
+  else
+    echo 'not exists file'
+  fi
+}
+
+quickopen() {
+  local n
+  if [[ -r "$1" ]]; then
+    n=$(convertPathWsl "$1")
+    quicklook "$n"
+  else
+    echo 'not exists file'
+  fi
+}
+
+convertPathWsl() {
+  echo $(wslpath -m $(readlink -e "$1"))
+}
+
+# -------------------------------------
+# fzf utils
+# -------------------------------------
 zmenu() {
   print -rl -- ${(ko)commands} | fzf | (nohup ${SHELL:-"/bin/sh"} &) >/dev/null 2>&1
 }
@@ -42,15 +125,6 @@ fzf-ripgrep-widget() {
 }
 zle     -N    fzf-ripgrep-widget
 bindkey '\ea' fzf-ripgrep-widget
-
-left-word-copy() {
-  local temp
-  temp=$(echo ${LBUFFER} | sed 's/ *$//')
-  LBUFFER=$(echo $temp)$(echo " ")$(echo $temp | rev | cut -f1 -d " " | rev)
-  zle redisplay
-}
-zle     -N    left-word-copy
-bindkey '^v'  left-word-copy
 
 choice-child-dir() {
   local selected
@@ -99,16 +173,6 @@ yay-selecter() {
     --bind 'alt-c:execute(echo {2} | xclip -selection c)' \
 }
 
-gdopen() {
-  local n
-  if [[ -r "$1" ]]; then
-    n=$(readlink -f "$1")
-    insync open_in_gdrive "$n"
-  else
-    echo 'not exists file'
-  fi
-}
-
 rvim () {
   selected_files=$(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') &&
   nvim $selected_files
@@ -129,6 +193,96 @@ fvim() {
     nvim $(echo "$selected_files")
   fi
 }
+
+# fzf git branch
+fbr() {
+  git checkout
+  $(git branch -a | tr -d " " |
+    fzf --height 100% --prompt "CHECKOUT BRANCH>" --preview "git log --color=always {}" |
+    head -n 1 | sed -e "s/^\*\s*//g" | perl -pe "s/remotes\/origin\///g")
+}
+
+# fshow - git commit browser
+fshow() {
+  git log --graph --color=always \
+      --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
+  fzf --ansi --no-sort --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
+      --bind "ctrl-m:execute:
+                (grep -o '[a-f0-9]\{7\}' | head -1 |
+                xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
+                {}
+                FZF-EOF"
+}
+
+# git staging
+fadd() {
+  local out q n addfiles
+  while out=$(
+      git status --short |
+      awk '{if (substr($0,2,1) !~ / /) print $2}' |
+        fzf-tmux --multi --preview 'git diff {}' --exit-0 --expect=ctrl-d); do
+    q=$(head -1 <<< "$out")
+    n=$[$(wc -l <<< "$out") - 1]
+    addfiles=(`echo $(tail "-$n" <<< "$out")`)
+    [[ -z "$addfiles" ]] && continue
+    if [ "$q" = ctrl-d ]; then
+      git diff --color=always $addfiles | less -R
+    else
+      git add $addfiles
+    fi
+  done
+}
+
+# git remove file
+frm() {
+  local out q n removefiles
+  while out=$(
+      git ls-files |
+      fzf-tmux --multi --preview 'less {}' --exit-0 --expect=ctrl-d); do
+    q=$(head -1 <<< "$out")
+    n=$[$(wc -l <<< "$out") - 1]
+    removefiles=(`echo $(tail "-$n" <<< "$out")`)
+    [[ -z "$removefiles" ]] && continue
+    if [ "$q" = ctrl-d ]; then
+      git rm $removefiles
+    else
+      git rm --cached  $removefiles
+    fi
+  done
+}
+
+# process kill
+pskl() {
+  local pid
+  if [ "$UID" != "0" ]; then
+    pid=$(ps -f -u $UID | sed 1d | fzf -m | awk '{print $2}')
+  else
+    pid=$(ps -ef | sed 1d | fzf -m | awk '{print $2}')
+  fi
+
+  if [ "x$pid" != "x" ]
+  then
+    echo $pid | xargs kill -${1:-9}
+  fi
+}
+
+# fdg - ghq
+fdg() {
+  local selected
+  selected=$(ghq list | fzf --preview 'tree -C $(ghq root)/{} | head -200')
+
+  if [ "x$selected" != "x" ]; then
+    cd $(ghq root)/$selected
+  fi
+  zle accept-line
+}
+zle -N fdg
+bindkey '^z' fdg
+
+ghq-update() {
+  ghq list | sed -E 's/^[^\/]+\/(.+)/\1/' | xargs -n 1 -P 10 ghq get -u
+}
+
 
 # -------------------------------------
 # Mail suggest notmuch
@@ -442,284 +596,4 @@ HELP
             ;;
         esac
     done
-}
-
-# -------------------------------------
-# Finder
-# -------------------------------------
-finder() {
-  local cmd q k res
-  local CLI_FINDER_MODE CLI_FINDER_DIR CLI_FINDER_LEVEL
-  dir="${1:-$PWD}"
-  CLI_FINDER_MODE="tree"
-  CLI_FINDER_DIR="file"
-  CLI_FINDER_LEVEL="9"
-  while out="$(
-    if [[ $CLI_FINDER_MODE == "tree" ]]; then \
-      if [[ $CLI_FINDER_DIR == "file" ]]; then \
-        tree -a -C -I ".git" --dirsfirst -L $CLI_FINDER_LEVEL --charset=C $dir; \
-      else
-        tree -ad -C -I ".git" --dirsfirst -L $CLI_FINDER_LEVEL --charset=C $dir; \
-        fi
-      else \
-        (builtin cd $dir; \
-        find . -path '*.git*' -prune -o -print \
-        | while read line; do [ -d "$line" ] && echo "$line/" || echo "$line"; done \
-        | sed -e 's|^\./||;/^$/d' \
-        | perl -pe 's/^(.*\/)(.*)$/\033[34m$1\033[m$2/' \
-        ); \
-      fi \
-      | fzf --ansi --no-sort --reverse \
-      --height=100% \
-      --query="$q" --print-query \
-      --expect=ctrl-b,ctrl-v,ctrl-l,ctrl-r,ctrl-c,ctrl-i,ctrl-d,alt-q,enter,"-","1","2","3","9"
-      )"; do
-
-      q="$(head -1 <<< "$out")"
-      k="$(head -2 <<< "$out" | tail -1)"
-      res="$(sed '1,2d;/^$/d' <<< "$out")"
-      [ -z "$res" ] && continue
-
-      t="$(
-      if [[ $CLI_FINDER_MODE == "tree" ]]; then
-        ok=0
-        arr=(${(@f)"$(tree -a -I ".git" --charset=C $dir)"})
-        for ((i=1; i<=$#arr; i++)); do
-          if [[ $arr[i] == $res ]]; then
-            n=$i
-            break
-          fi
-        done
-        arr=(${(@f)"$(tree -f -a -I ".git" --charset=C $dir)"})
-        perl -pe 's/^(( *(\||`)( |`|-)+)+)//' <<<$arr[n] \
-          | sed -e 's/ -> .*$//'
-      else
-        echo $dir/$res
-      fi
-      )"
-
-      case "$k" in
-        "-")
-          cd -
-          dir="${1:-$PWD}"
-          continue
-          ;;
-        [1-9])
-          CLI_FINDER_LEVEL="$k"
-          continue
-          ;;
-        ctrl-b)
-          cd ../
-          dir="${1:-$PWD}"
-          continue
-          ;;
-        ctrl-r)
-          if [[ $CLI_FINDER_MODE == "list" ]]; then
-            CLI_FINDER_MODE="tree"
-          else
-            CLI_FINDER_MODE="list"
-          fi
-          continue
-          ;;
-        ctrl-l)
-          if [[ -d $t ]]; then
-            {
-              ls -dl "$t"
-              ls -l "$t"
-            } | less
-          else
-            if type "quickopen" 1>/dev/null 2>/dev/null | grep -q "function"; then
-              quickopen "$t"
-            else (( $+commands[pygmentize] ));
-              get_styles="from pygments.styles import get_all_styles
-              styles = list(get_all_styles())
-              print('\n'.join(styles))"
-              styles=( $(sed -e 's/^  *//g' <<<"$get_styles" | python) )
-              style=${${(M)styles:#solarized}:-default}
-              export LESSOPEN="| pygmentize -O style=$style -f console256 -g %s"
-            fi
-            # less +Gg "$t"
-          fi
-          ;;
-        ctrl-d)
-          if [[ $CLI_FINDER_DIR == "directory" ]]; then
-            CLI_FINDER_DIR="file"
-          else
-            CLI_FINDER_DIR="directory"
-          fi
-          continue
-          ;;
-        ctrl-v)
-          vim "$t"
-          ;;
-        ctrl-c)
-          if (( $+commands[pbcopy] )); then
-            echo "$t" | tr -d '\n' | pbcopy
-          fi
-          break
-          ;;
-        ctrl-i)
-          ;;
-        *)
-          if [ -d $t ]; then
-            dir="$t"
-            cd "$t"
-            continue
-          else
-            echo "$t"
-            break
-          fi
-          ;;
-      esac
-    done
-  }
-
-# fzf git branch
-fbr() {
-  git checkout
-  $(git branch -a | tr -d " " |
-    fzf --height 100% --prompt "CHECKOUT BRANCH>" --preview "git log --color=always {}" |
-    head -n 1 | sed -e "s/^\*\s*//g" | perl -pe "s/remotes\/origin\///g")
-}
-
-# fshow - git commit browser
-fshow() {
-  git log --graph --color=always \
-      --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
-  fzf --ansi --no-sort --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
-      --bind "ctrl-m:execute:
-                (grep -o '[a-f0-9]\{7\}' | head -1 |
-                xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
-                {}
-FZF-EOF"
-}
-
-# git staging
-fadd() {
-  local out q n addfiles
-  while out=$(
-      git status --short |
-      awk '{if (substr($0,2,1) !~ / /) print $2}' |
-        fzf-tmux --multi --preview 'git diff {}' --exit-0 --expect=ctrl-d); do
-    q=$(head -1 <<< "$out")
-    n=$[$(wc -l <<< "$out") - 1]
-    addfiles=(`echo $(tail "-$n" <<< "$out")`)
-    [[ -z "$addfiles" ]] && continue
-    if [ "$q" = ctrl-d ]; then
-      git diff --color=always $addfiles | less -R
-    else
-      git add $addfiles
-    fi
-  done
-}
-
-# git remove file
-frm() {
-  local out q n removefiles
-  while out=$(
-      git ls-files |
-      fzf-tmux --multi --preview 'less {}' --exit-0 --expect=ctrl-d); do
-    q=$(head -1 <<< "$out")
-    n=$[$(wc -l <<< "$out") - 1]
-    removefiles=(`echo $(tail "-$n" <<< "$out")`)
-    [[ -z "$removefiles" ]] && continue
-    if [ "$q" = ctrl-d ]; then
-      git rm $removefiles
-    else
-      git rm --cached  $removefiles
-    fi
-  done
-}
-
-# process kill
-pskl() {
-  local pid
-  if [ "$UID" != "0" ]; then
-    pid=$(ps -f -u $UID | sed 1d | fzf -m | awk '{print $2}')
-  else
-    pid=$(ps -ef | sed 1d | fzf -m | awk '{print $2}')
-  fi
-
-  if [ "x$pid" != "x" ]
-  then
-    echo $pid | xargs kill -${1:-9}
-  fi
-}
-
-# fdg - ghq
-fdg() {
-  local selected
-  selected=$(ghq list | fzf --preview 'tree -C $(ghq root)/{} | head -200')
-
-  if [ "x$selected" != "x" ]; then
-    cd $(ghq root)/$selected
-  fi
-  zle accept-line
-}
-zle -N fdg
-bindkey '^z' fdg
-
-ghq-update() {
-  ghq list | sed -E 's/^[^\/]+\/(.+)/\1/' | xargs -n 1 -P 10 ghq get -u
-}
-
-# chrome search
-google() {
-    local str opt
-    if [ $# != 0 ]; then
-        for i in $*; do
-            str="$str${str:++}$i"
-        done
-        opt='search?num=100'
-        opt="${opt}&q=${str}"
-    fi
-    google-chrome-stable http://www.google.co.jp/$opt
-}
-
-winopen() {
-  local e n
-  if [[ -r "$1" ]]; then
-    n=$(wslpath -w $(wslpath -a "$1"))
-    e=$(echo "$1" | sed 's/^.*\.\([^\.]*\)$/\1/')
-    case "$e" in
-      "ai"|"eps")
-        illustrator "$n"
-        ;;
-      "psd")
-        photoshop "$n"
-        ;;
-      "pdf")
-        pdf "$n"
-        ;;
-      "jpg"|"png"|"gif")
-        quicklook "$n"
-        # imageviewer "$n"
-        ;;
-      "doc"|"docm"|"docx")
-        word "$n"
-        ;;
-      "xls"|"xlsx"|"xlsm"|"csv")
-        excel "$n"
-        ;;
-      "ppt"|"pptx"|"pps"|"ppsx")
-        powerpoint "$n"
-        ;;
-    esac
-  else
-    echo 'not exists file'
-  fi
-}
-
-quickopen() {
-  local n
-  if [[ -r "$1" ]]; then
-    n=$(convertPathWsl "$1")
-    quicklook "$n"
-  else
-    echo 'not exists file'
-  fi
-}
-
-convertPathWsl() {
-  echo $(wslpath -m $(readlink -e "$1"))
 }
