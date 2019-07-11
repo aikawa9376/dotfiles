@@ -178,9 +178,6 @@ zstyle ':completion:*' group-name ''
 
 #LS_COLORSを設定しておく
 export LS_COLORS="$(vivid generate ayu)"
-# export EXA_COLORS='di=01;34:ln=35:so=32:pi=33:ex=04:bd=46;34:cd=43;34:su=41;30:sg=46;30:tw=42;30:ow=04;01;34'
-# eval $(dircolors $HOME/dotfiles/alacritty/dircolors.256dark)
-# eval $(dircolors $HOME/dotfiles/alacritty/dir_colors)
 #ファイル補完候補に色を付ける
 zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 

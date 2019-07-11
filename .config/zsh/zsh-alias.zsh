@@ -138,6 +138,6 @@ abbrev-alias -g ff='| fzf --ansi -m'
 abbrev-alias -g bb='| bat'
 abbrev-alias -g vo='| nvim'
 abbrev-alias -g trs="| trans -b :ja"
-abbrev-alias -g dust='$(duster)'
+abbrev-alias -g dst='$(duster)'
 abbrev-alias -g fnd='$(finder)'
 abbrev-alias -g pyg='"pygmentize -g  {}"'

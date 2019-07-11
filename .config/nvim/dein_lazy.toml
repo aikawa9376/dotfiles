@@ -109,6 +109,17 @@ nnoremap <silent> <space>cj  :<C-u>CocNext<CR>
 nnoremap <silent> <space>ck  :<C-u>CocPrev<CR>
 " Resume latest coc list
 nnoremap <silent> <space>cu  :<C-u>CocListResume<CR>
+
+" Git
+nmap gm <Plug>(coc-git-chunkinfo)
+nmap <Leader>tg :call <SID>git_p_virtual_toggle()<CR>
+function! s:git_p_virtual_toggle()
+  if g:gitp_blame_virtual_text == 1
+    let g:gitp_blame_virtual_text = 0
+  else
+    let g:gitp_blame_virtual_text = 1
+  endif
+endfunction
 '''
 
 [[plugins]]
@@ -549,10 +560,10 @@ call submode#enter_with('bufbrace', 'n', 's', ']b', ':bnext<CR>')
 call submode#enter_with('bufbrace', 'n', 's', '[b', ':bpreviou<CR>')
 call submode#map('bufbrace', 'n', 's', ']', ':bnext<CR>')
 call submode#map('bufbrace', 'n', 's', '[', ':bpreviou<CR>')
-call submode#enter_with('chunkbrace', 'n', 's', ']c', ':GitGutterNextHunk<CR>')
-call submode#enter_with('chunkbrace', 'n', 's', '[c', ':GitGutterPrevHunk<CR>')
-call submode#map('chunkbrace', 'n', 's', ']', ':GitGutterNextHunk<CR>')
-call submode#map('chunkbrace', 'n', 's', '[', ':GitGutterPrevHunk<CR>')
+call submode#enter_with('chunkbrace', 'n', 'r', ']c', '<Plug>(coc-git-nextchunk)')
+call submode#enter_with('chunkbrace', 'n', 'r', '[c', '<Plug>(coc-git-prevchunk)')
+call submode#map('chunkbrace', 'n', 'r', ']', '<Plug>(coc-git-nextchunk)')
+call submode#map('chunkbrace', 'n', 'r', '[', '<Plug>(coc-git-prevchunk)')
 call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
 call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
 call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
@@ -1648,39 +1659,6 @@ repo = 'cohama/agit.vim'
 on_cmd = ['Agit']
 hook_add = '''
 nmap <Leader>gl :Agit<CR>
-'''
-
-[[plugins]]
-repo = 'iamcco/sran.nvim'
-depends = 'git-p.nvim'
-on_event = 'VimEnter'
-build = 'yarn'
-
-[[plugins]]
-repo = 'iamcco/git-p.nvim'
-on_event = 'VimEnter'
-hook_add = '''
-let g:gitp_add_sign                    = "\uf457 "
-let g:gitp_modify_sign                 = "\uf459 "
-let g:gitp_delete_top_sign             = "\uf458 "
-let g:gitp_delete_bottom_sign          = "\uf45a "
-let g:gitp_delete_top_and_bottom_sign  = "\uf474 "
-let g:gitp_blame_virtual_text          = 0
-nmap gm <Plug>(git-p-diff-preview)
-nmap <Leader>tg :call <SID>git_p_virtual_toggle()<CR>
-function! s:git_p_virtual_toggle()
-  if g:gitp_blame_virtual_text == 1
-    let g:gitp_blame_virtual_text = 0
-  else
-    let g:gitp_blame_virtual_text = 1
-  endif
-endfunction
-autocmd MyAutoCmd ColorScheme * highlight link GitPBlameLine          Delimiter
-autocmd MyAutoCmd ColorScheme * highlight link GitPAdd                DiffAdd
-autocmd MyAutoCmd ColorScheme * highlight link GitPModify             DiffChange
-autocmd MyAutoCmd ColorScheme * highlight link GitPDeleteTop          DiffDelete
-autocmd MyAutoCmd ColorScheme * highlight link GitPDeleteBottom       DiffDelete
-autocmd MyAutoCmd ColorScheme * highlight link GitPDeleteTopAndBottom DiffDelete
 '''
 
 # status line ---------------------------

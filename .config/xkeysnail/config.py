@@ -20,7 +20,8 @@ define_multipurpose_modmap({
     # Enter is enter when pressed and released. Control when held down.
     Key.ENTER: [Key.ENTER, Key.RIGHT_CTRL],
     Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL],
-    # Key.SPACE: [Key.SPACE, Key.LEFT_META],
+    Key.TAB: [Key.TAB, Key.RIGHT_ALT],
+    Key.RIGHT_SHIFT: [Key.MUTE, Key.RIGHT_SHIFT],
 
     # Capslock is escape when pressed and released. Control when held down.
     # {Key.CAPSLOCK: [Key.ESC, Key.LEFT_CTRL]
@@ -48,23 +49,27 @@ define_keymap(None, {
     K("Super-minus"): with_mark(K("f11")),
     K("Super-equal"): with_mark(K("f12")),
     K("Super-i"): with_mark(K("SYSRQ")),
-    K("C-Super-h"): with_mark(K("left")),
-    K("C-Super-j"): with_mark(K("down")),
-    K("C-Super-k"): with_mark(K("up")),
-    K("C-Super-l"): with_mark(K("right")),
-    K("C-Super-n"): with_mark(K("C-down")),
-    K("C-Super-p"): with_mark(K("C-up")),
-    K("Super-Shift-h"): with_mark(K("Shift-left")),
-    K("Super-Shift-j"): with_mark(K("Shift-down")),
-    K("Super-Shift-k"): with_mark(K("Shift-up")),
-    K("Super-Shift-l"): with_mark(K("Shift-right")),
+    K("RAlt-h"): with_mark(K("left")),
+    K("RAlt-j"): with_mark(K("down")),
+    K("RAlt-k"): with_mark(K("up")),
+    K("RAlt-l"): with_mark(K("right")),
+    K("RAlt-n"): with_mark(K("C-down")),
+    K("RAlt-p"): with_mark(K("C-up")),
+    K("RAlt-o"): with_mark(K("C-right")),
+    K("RAlt-t"): with_mark(K("C-left")),
+    K("RAlt-LSuper-h"): with_mark(K("Shift-left")),
+    K("RAlt-LSuper-j"): with_mark(K("Shift-down")),
+    K("RAlt-LSuper-k"): with_mark(K("Shift-up")),
+    K("RAlt-LSuper-l"): with_mark(K("Shift-right")),
 }, "Global")
 
 # Keybindings for Firefox/Chrome
 define_keymap(re.compile("Firefox|Google-chrome"), {
     # Ctrl+Alt+j/k to switch next/previous tab
-    K("C-j"): K("C-TAB"),
-    K("C-k"): K("C-Shift-TAB"),
+    K("C-l"): K("C-TAB"),
+    K("C-h"): K("C-Shift-TAB"),
+    K("C-j"): K("C-key_9"),
+    K("C-k"): K("C-key_1"),
     K("Super-t"): with_mark(K("C-t")),
     K("Super-w"): with_mark(K("C-w")),
     K("Super-r"): with_mark(K("C-r")),
@@ -72,7 +77,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
 }, "Firefox and Chrome")
 
 # Emacs-like keybindings in non-Emacs applications
-define_keymap(lambda wm_class: wm_class not in ("Alacritty", "Rofi", "Kitty"), {
+define_keymap(lambda wm_class: wm_class not in ("Alacritty", "Rofi", "kitty"), {
     # Cursor
     K("C-b"): with_mark(K("left")),
     K("C-f"): with_mark(K("right")),

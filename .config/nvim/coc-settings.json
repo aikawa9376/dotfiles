@@ -13,6 +13,11 @@
   "coc.preferences.colorSupport": false,
   "coc.source.tmuxcomplete.priority": 40,
   "coc.source.neosnippet.priority": 50,
+  "git.addedSign.text": "\uf457 ",
+  "git.changedSign.text": "\uf459 ",
+  "git.changeRemovedSign.text": "\uf474 ",
+  "git.topRemovedSign.text": "\uf458 ",
+  "git.removedSign.text": "\uf474 ",
   "list.insertMappings": {
 		"<C-l>": "do:refresh",
 		"<C-f>": "feedkeys:\\<C-f>",
