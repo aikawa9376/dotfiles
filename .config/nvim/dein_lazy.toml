@@ -560,10 +560,10 @@ call submode#enter_with('bufbrace', 'n', 's', ']b', ':bnext<CR>')
 call submode#enter_with('bufbrace', 'n', 's', '[b', ':bpreviou<CR>')
 call submode#map('bufbrace', 'n', 's', ']', ':bnext<CR>')
 call submode#map('bufbrace', 'n', 's', '[', ':bpreviou<CR>')
-call submode#enter_with('chunkbrace', 'n', 'r', ']c', '<Plug>(coc-git-nextchunk)')
-call submode#enter_with('chunkbrace', 'n', 'r', '[c', '<Plug>(coc-git-prevchunk)')
-call submode#map('chunkbrace', 'n', 'r', ']', '<Plug>(coc-git-nextchunk)')
-call submode#map('chunkbrace', 'n', 'r', '[', '<Plug>(coc-git-prevchunk)')
+call submode#enter_with('chunkbrace', 'n', 's', ']c', ':CocAction coc-git-nextchunk<CR>')
+call submode#enter_with('chunkbrace', 'n', 's', '[c', ':CocAction coc-git-prevchunk<CR>')
+call submode#map('chunkbrace', 'n', 's', ']', 'CocAction coc-git-nextchunk<CR>')
+call submode#map('chunkbrace', 'n', 's', '[', 'CocAction coc-git-prevchunk<CR>')
 call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
 call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
 call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
@@ -1596,28 +1596,28 @@ endif
 
 # git -----------------------------------
 
-[[plugins]]
-repo = 'airblade/vim-gitgutter'
-on_event = 'VimEnter'
-hook_add = '''
-nmap <silent><Leader>gq :GitGutterPreviewHunk<CR>
-nmap <silent><Leader>gh :GitGutterStageHunk<CR>
-nmap <silent><Leader>gu :GitGutterUndoHunk<CR>
-omap ih <Plug>GitGutterTextObjectInnerPending
-omap ah <Plug>GitGutterTextObjectOuterPending
-xmap ih <Plug>GitGutterTextObjectInnerVisual
-xmap ah <Plug>GitGutterTextObjectOuterVisual
-let g:gitgutter_sign_added              = "\uf457 "
-let g:gitgutter_sign_modified           = "\uf459 "
-let g:gitgutter_sign_removed            = "\uf458 "
-let g:gitgutter_sign_modified_removed   = "\uf45a "
-let g:gitgutter_sign_removed_first_line = "\uf474 "
-let g:gitgutter_grep_command = 'rg --hidden --follow --glob "!.git/*"'
-'''
-hook_post_source = '''
-GitGutterEnable
-GitGutterSignsDisable
-'''
+# [[plugins]]
+# repo = 'airblade/vim-gitgutter'
+# on_event = 'VimEnter'
+# hook_add = '''
+# nmap <silent><Leader>gq :GitGutterPreviewHunk<CR>
+# nmap <silent><Leader>gh :GitGutterStageHunk<CR>
+# nmap <silent><Leader>gu :GitGutterUndoHunk<CR>
+# omap ih <Plug>GitGutterTextObjectInnerPending
+# omap ah <Plug>GitGutterTextObjectOuterPending
+# xmap ih <Plug>GitGutterTextObjectInnerVisual
+# xmap ah <Plug>GitGutterTextObjectOuterVisual
+# let g:gitgutter_sign_added              = "\uf457 "
+# let g:gitgutter_sign_modified           = "\uf459 "
+# let g:gitgutter_sign_removed            = "\uf458 "
+# let g:gitgutter_sign_modified_removed   = "\uf45a "
+# let g:gitgutter_sign_removed_first_line = "\uf474 "
+# let g:gitgutter_grep_command = 'rg --hidden --follow --glob "!.git/*"'
+# '''
+# hook_post_source = '''
+# GitGutterEnable
+# GitGutterSignsDisable
+# '''
 
 [[plugins]]
 repo = 'tpope/vim-fugitive'

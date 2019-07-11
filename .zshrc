@@ -220,27 +220,6 @@ function cd-up { zle push-line && LBUFFER='builtin cd ..' && zle accept-line }
 zle -N cd-up
 bindkey '^[g' cd-up
 
-function rvim () {
-  selected_files=$(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') &&
-  nvim $selected_files
-}
-
-function fvim() {
-  if [[ $@ == '-a' ]]; then
-    files=$(fd -I --type file --follow --hidden --color=always --exclude  .git) &&
-  else
-    files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
-  fi
-  # wraped function timg and bat?
-  selected_files=$(echo "$files" | fzf -m --ansi | tr '\n' ' ') &&
-
-  if [[ $selected_files == '' ]]; then
-    return 0
-  else
-    nvim $(echo "$selected_files")
-  fi
-}
-
 # -------------------------------------
 # コマンド履歴
 # -------------------------------------

@@ -109,6 +109,27 @@ gdopen() {
   fi
 }
 
+rvim () {
+  selected_files=$(ag $@ | fzf | awk -F : '{print "-c " $2 " " $1}') &&
+  nvim $selected_files
+}
+
+fvim() {
+  if [[ $@ == '-a' ]]; then
+    files=$(fd -I --type file --follow --hidden --color=always --exclude  .git) &&
+  else
+    files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
+  fi
+  # wraped function timg and bat?
+  selected_files=$(echo "$files" | fzf -m --ansi | tr '\n' ' ') &&
+
+  if [[ $selected_files == '' ]]; then
+    return 0
+  else
+    nvim $(echo "$selected_files")
+  fi
+}
+
 # -------------------------------------
 # Mail suggest notmuch
 # -------------------------------------
@@ -638,8 +659,7 @@ fdg() {
 zle -N fdg
 bindkey '^z' fdg
 
-ghq-update()
-{
+ghq-update() {
   ghq list | sed -E 's/^[^\/]+\/(.+)/\1/' | xargs -n 1 -P 10 ghq get -u
 }
 

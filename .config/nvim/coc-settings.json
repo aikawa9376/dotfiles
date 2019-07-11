@@ -8,7 +8,7 @@
   "diagnostic.infoSign": "\uf449 ",
   "diagnostic.hintSign": "\ufb24 ",
   "diagnostic.errorSign": "\uf057 ",
-  "diagnostic.signOffset": 999999,
+  "diagnostic.signOffset": 98,
   "codeLens.enable": true,
   "coc.preferences.colorSupport": false,
   "coc.source.tmuxcomplete.priority": 40,
@@ -18,6 +18,7 @@
   "git.changeRemovedSign.text": "\uf474 ",
   "git.topRemovedSign.text": "\uf458 ",
   "git.removedSign.text": "\uf474 ",
+  "git.signOffset": 99,
   "list.insertMappings": {
 		"<C-l>": "do:refresh",
 		"<C-f>": "feedkeys:\\<C-f>",
