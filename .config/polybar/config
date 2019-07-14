@@ -48,7 +48,7 @@ module-margin-right = 1
 font-0 = "RictyDiminishedDiscord NF:size=16:pixelsize=16:fontformat=truetype;0"
 font-1 = "RictyDiminishedDiscord NF:size=12:heavy:fontformat=truetype;-2"
 
-modules-left = i3 xwindow
+modules-left = i3 xwindow tmux
 modules-center = date
 modules-right = filesystem insync cpu memory wlan pacman inbox-imap mozc powermenu
 
@@ -81,7 +81,7 @@ mount-0 = /
 format-mounted-prefix = " "
 format-mounted-prefix-foreground = ${colors.foreground-alt}
 format-mounted-underline = #30C352
-label-mounted = %mountpoint%:%percentage_free%%
+label-mounted = %percentage_free%%
 label-unmounted = %mountpoint%:not mounted
 label-unmounted-foreground = ${colors.foreground-alt}
 
@@ -120,7 +120,7 @@ label = %percentage%%
 
 [module/memory]
 type = internal/memory
-interval = 3
+interval = 5
 format-prefix = " "
 format-prefix-foreground = ${colors.foreground-alt}
 format-underline = #32bbc2
@@ -143,7 +143,7 @@ label-disconnected-foreground = ${colors.foreground-alt}
 
 [module/date]
 type = internal/date
-interval = 5
+interval = 15
 
 date = "%Y-%m-%d"
 date-alt = " %Y-%m-%d"
@@ -156,6 +156,14 @@ format-prefix-foreground = ${colors.foreground-alt}
 format-underline = #3465A4
 
 label = %date% %time%
+
+[module/tmux]
+type = custom/script
+exec = $HOME/.config/polybar/scripts/info-tmux-sessions.sh
+interval = 2
+format-prefix = " "
+format-prefix-foreground = ${colors.foreground-alt}
+format-underline = #30C352
 
 [module/pacman]
 type = custom/script

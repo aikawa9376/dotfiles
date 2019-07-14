@@ -9,3 +9,5 @@ rofi.padding:          20
 rofi.font:             Noto Sans CJK JP 14
 rofi.kb-accept-entry:  Ctrl+m,Return
 rofi.kb-cancel:        Ctrl+c,Ctrl+bracketleft,Escape
+rofi.kb-mode-next:     Ctrl+Tab,XF86AudioMute
+rofi.kb-mode-prev:     Ctrl+Shift+Tab

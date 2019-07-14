@@ -42,6 +42,7 @@ alias fnd='finder'
 alias li='gwenview ./'
 alias reload='exec $SHELL -1'
 alias reboot='tmux detach && reboot'
+alias suspend="systemctl suspend"
 alias vim='nvim'
 alias vv='fvim'
 alias vs='nvim -S'
@@ -58,6 +59,7 @@ alias pac="yay-selecter"
 alias csv="csvfzfviewer"
 alias trans="trans -b :ja"
 alias feh="feh -d -s"
+alias ftpfs="curlftpfs"
 
 # -------------------------------------
 # git
@@ -100,7 +102,7 @@ alias z='z-override'     # cd, same functionality as j in autojump
 # -------------------------------------
 # 拡張子 エイリアス
 # -------------------------------------
-alias -s {gz,tar,zip,msi,rar,7z,rar}='unar' # archives less -> lsar
+alias -s {gz,tar,zip,msi,rar,7z,rar,xz}='unar' # archives less -> lsar
 alias -s {png,jpg,gif}='feh'
 alias -s {txt,md}='bat'
 # alias -s {pdf}='okular'
@@ -122,11 +124,8 @@ function name_dir() # dir, name
   fi
 }
 
-name_dir /mnt/d/workspace/ w
-name_dir /home/aikawa/Desktop/ d
-name_dir /mnt/c/Users/aikaw/Desktop/ d
-name_dir /home/aikawa/Downloads/ dl
-name_dir /mnt/c/Users/aikaw/Downloads/ dl
+name_dir /home/aikawa/d/workspace/ w
+name_dir /home/aikawa/d/googledrive/download/ d
 
 # -------------------------------------
 # グローバル エイリアス

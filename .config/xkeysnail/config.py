@@ -60,7 +60,8 @@ define_keymap(re.compile("Alacritty|kitty"), {
     K("RAlt-n"): with_mark(K("C-down")),
     K("RAlt-p"): with_mark(K("C-up")),
     K("RAlt-o"): with_mark(K("C-right")),
-    K("RAlt-t"): with_mark(K("C-left")),
+    K("RAlt-t"): with_mark(K("C-page_up")),
+    K("RAlt-LSuper-o"): with_mark(K("C-left")),
     K("RAlt-LSuper-h"): with_mark(K("Shift-left")),
     K("RAlt-LSuper-j"): with_mark(K("Shift-down")),
     K("RAlt-LSuper-k"): with_mark(K("Shift-up")),
@@ -73,6 +74,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
     K("RAlt-h"): K("C-Shift-TAB"),
     K("RAlt-j"): K("C-key_9"),
     K("RAlt-k"): K("C-key_1"),
+    K("RAlt-w"): K("C-w"),
     K("Super-t"): with_mark(K("C-t")),
     K("Super-w"): with_mark(K("C-w")),
     K("Super-r"): with_mark(K("C-r")),
@@ -80,7 +82,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
 }, "Firefox and Chrome")
 
 # Emacs-like keybindings in non-Emacs applications
-define_keymap(lambda wm_class: wm_class not in ("Alacritty", "Rofi", "kitty"), {
+define_keymap(lambda wm_class: wm_class not in ("Alacritty", "rofi", "kitty"), {
     # Cursor
     K("C-b"): with_mark(K("left")),
     K("C-f"): with_mark(K("right")),

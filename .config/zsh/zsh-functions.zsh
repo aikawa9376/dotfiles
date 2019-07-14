@@ -168,7 +168,7 @@ yay-selecter() {
   yay -Sl \
   | fzf --preview 'yay -Si {2}' \
     --bind 'ctrl-x:execute(yay -Sy --noconfirm $(echo {2}))' \
-    --bind 'alt-d:execute(yay -R --noconfirm $(echo {2}))' \
+    --bind 'alt-d:execute(yay -Rs --noconfirm $(echo {2}))' \
     --bind 'ctrl-r:execute(yay -Sy)' \
     --bind 'alt-c:execute(echo {2} | xclip -selection c)' \
 }

@@ -1,21 +1,18 @@
 #! /bin/sh
 
 if sessionlist=$(tmux ls); then
-    printf "# "
+
+    sessionnum=$(echo "$sessionlist" | wc -l)
+    sessionnow=$(echo "$sessionlist" | grep -n "(attached)" | sed -e 's/:.*//g')
 
     echo "$sessionlist" | while read -r line; do
         session=$(echo "$line" | cut -d ':' -f 1)
 
         if echo "$line" | grep -q "(attached)"; then
-            status="(a)"
-        else
-            status=""
+            printf "%s [%s:%s]" "$session" "$sessionnow" "$sessionnum"
         fi
-
-        printf "%s%s " "$session" "$status"
     done
 
-    printf "\n"
 else
-    printf "# none\n"
+    printf ""
 fi
