@@ -195,4 +195,4 @@ exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inver
 # exec --no-startup-id xrandr --setmonitor main auto DP-0,DVI-I-1,HDMI-0
 exec --no-startup-id fcitx-autostart;
 exec --no-startup-id $HOME/.config/polybar/lanch.sh;
-exec --no-startup-id insync start
+exec --no-startup-id insync start;

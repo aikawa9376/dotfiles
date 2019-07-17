@@ -1,6 +1,6 @@
 rofi.combi-modi:       window,tmux
 rofi.theme:            Arc-Dark
-rofi.modi:             combi,window,drun,tmux:/home/aikawa/.config/rofi/scripts/tmux.sh,keys
+rofi.modi:             combi,window,drun,tmux:/home/aikawa/.config/rofi/scripts/tmux.sh
 rofi.matching:         fuzzy
 rofi.sort:             true
 rofi.levenshtein-sort: true

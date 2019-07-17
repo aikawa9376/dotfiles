@@ -58,6 +58,8 @@ has_keymap() {
 }
 
 # Easy to escape
+# normal bind disabled
+bindkey -r '^['
 bindkey -M viins 'jj'  vi-cmd-mode
 has_keymap "vivis" && bindkey -M vivis 'jj' vi-visual-exit
 

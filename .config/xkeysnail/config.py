@@ -1,7 +1,18 @@
 # -*- coding: utf-8 -*-
 
 import re
+import subprocess
+
 from xkeysnail.transform import *
+
+# functions
+def esc_hack():
+    ime = subprocess.call('fcitx-remote')
+    if ime == 2:
+        subprocess.call('fcitx-remote -c')
+    else:
+        print('test')
+
 
 # [Global modemap] Change modifier keys as in xmodmap
 # define_modmap({

@@ -13,6 +13,7 @@
   "coc.preferences.colorSupport": false,
   "coc.source.tmuxcomplete.priority": 40,
   "coc.source.neosnippet.priority": 50,
+  "python.pythonPath": "python3",
   "list.insertMappings": {
 		"<C-l>": "do:refresh",
 		"<C-f>": "feedkeys:\\<C-f>",

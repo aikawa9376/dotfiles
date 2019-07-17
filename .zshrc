@@ -216,9 +216,15 @@ zle -N cdup
 bindkey '^g' cdup
 
 # Alt-Gで上のディレクトリに移動できる
-function cd-up { zle push-line && LBUFFER='builtin cd ..' && zle accept-line }
+# function cd-up { zle push-line && LBUFFER='builtin cd ..' && zle accept-line }
+function cd-up { zle push-line && LBUFFER='cd ..' && zle accept-line }
 zle -N cd-up
 bindkey '^[g' cd-up
+
+# Alt-jでディレクトリ履歴を移動できる
+function cd-hist { zle push-line && LBUFFER='cd -' && zle accept-line }
+zle -N cd-hist
+bindkey '^[j' cd-hist
 
 # -------------------------------------
 # コマンド履歴
@@ -282,7 +288,7 @@ setopt ignoreeof
 autoload -Uz smart-insert-last-word
 zstyle :insert-last-word match '*([[:alpha:]/\\]?|?[[:alpha:]/\\])*'
 zle -N insert-last-word smart-insert-last-word
-bindkey '^[' insert-last-word
+bindkey '^[p' insert-last-word
 
 # -------------------------------------
 # enhancd
