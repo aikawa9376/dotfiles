@@ -5,7 +5,8 @@ source ~/personal/mutt.rc
 source ~/.config/neomutt/siderc
 
 set mbox_type   = Maildir
-set folder = "~/.neomutt/cache/offline"
+# set folder = "imaps://imap.gmail.com:993"
+set folder = $XDG_CACHE_HOME/neomutt/cache/offline
 
 set spoolfile  = "+INBOX"
 set mbox       = "+[Gmail].すべてのメール"
@@ -21,14 +22,14 @@ mailboxes +[Gmail].ゴミ箱
 mailboxes +task
 
 # add notmuch virtual-mailboxes
-source ~/.config/neomutt/notmuch
+source $XDG_CONFIG_HOME/neomutt/notmuch
 
 set sleep_time = 0
 set wait_key = no
 set read_inc=1000
 set write_inc=1000
-set header_cache=~/.neomutt/cache/headers
-set message_cachedir=~/.neomutt/cache/bodies
+set header_cache=$XDG_CACHE_HOME/neomutt/cache/headers
+set message_cachedir=$XDG_CACHE_HOME/neomutt/cache/bodies
 set signature =~/personal/signature
 set sig_on_top = yes
 set move = no
@@ -50,6 +51,7 @@ hdr_order Date From To Cc bcc
 set pager_index_lines=30
 bind editor ^T complete
 bind editor <space> noop
+# bind editor ^ noop
 
 # mailcap
 alternative_order text/plain text/html *
@@ -71,6 +73,7 @@ bind pager E edit
 
 bind attach,index,pager,compose q exit
 macro attach,index,pager e "<save-message>+[Gmail].すべてのメール<enter><sync-mailbox><enter>" "Archive"
+macro attach,index,pager i "<shell-escape>offlineimap -f INBOX -o -q -k Account_GMail:postsynchook= -u quiet &<enter>" "sync INBOX"
 
 # notify-send
 set new_mail_command="notify-send --icon=mail-message-new 'New Email' '%n new messages, %u unread.' &"

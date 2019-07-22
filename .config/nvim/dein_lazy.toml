@@ -201,6 +201,7 @@ let g:user_emmet_anchorizeurl_key      = '<M-e>a'
 let g:user_emmet_anchorizesummary_key  = '<M-e>A'
 let g:user_emmet_mergelines_key        = '<M-e>m'
 let g:user_emmet_codepretty_key        = '<M-e>c'
+let g:user_emmet_imageencode_key       = '<M-e>I'
 autocmd MyAutoCmd FileType phtml,html,php,css EmmetInstall
 '''
 
@@ -856,6 +857,18 @@ command! -bang -nargs=* AllRg
   \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
   \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
   \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
+  \   <bang>0)
+command! -bang -nargs=* RgWithFile
+  \ call fzf#vim#grep(
+  \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--no-unicode'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--no-unicode'}, 'right:50%:hidden:wrap', '?'),
+  \   <bang>0)
+command! -bang -nargs=* AllRgWithFile
+  \ call fzf#vim#grep(
+  \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--no-unicode'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang Lines
   \ call fzf#vim#lines({'options': '--reverse --height 40% --preview-window hidden'}, <bang>0)

@@ -13,7 +13,7 @@ oauth_db_filename: ~/personal/.goobook_auth.json
 # usually the bundled default secret is used.
 ;client_secret_filename: ~/.goobook_client_secret.json
 
-cache_filename: ~/.neomutt/cache/contacts
+cache_filename: ~/.cache/neomutt/cache/contacts
 cache_expiry_hours: 24
 ;filter_groupless_contacts: yes
 

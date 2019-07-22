@@ -10,7 +10,7 @@ postsynchook = ~/.config/neomutt/plugs/notmuch-hook.sh
 
 [Repository Gmail-Local]
 type = Maildir
-localfolders = ~/.neomutt/cache/offline/
+localfolders = ~/.cache/neomutt/cache/offline/
 nametrans = lambda foldername: foldername.decode('utf-8').encode('imap4-utf-7')
 
 [Repository Gmail-Remote]

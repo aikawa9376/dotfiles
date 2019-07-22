@@ -46,7 +46,6 @@ define_keymap(None, {
     K("Super-n"): with_mark(K("kpplus")),
     K("Super-m"): with_mark(K("kpminus")),
     K("Super-j"): with_mark(K("kpslash")),
-    K("Shift-esc"): with_mark(K("Shift-grave")),
     K("Super-key_1"): with_mark(K("f1")),
     K("Super-key_2"): with_mark(K("f2")),
     K("Super-key_3"): with_mark(K("f3")),
@@ -60,6 +59,15 @@ define_keymap(None, {
     K("Super-minus"): with_mark(K("f11")),
     K("Super-equal"): with_mark(K("f12")),
     K("Super-i"): with_mark(K("SYSRQ")),
+    K("Super-l"): with_mark(K("page_up")),
+    K("Super-dot"): with_mark(K("page_down")),
+    K("Super-Shift-l"): with_mark(K("Shift-page_up")),
+    K("Super-Shift-dot"): with_mark(K("Shift-page_down")),
+    K("Super-k"): with_mark(K("home")),
+    K("Super-comma"): with_mark(K("end")),
+    K("Super-Shift-k"): with_mark(K("Shift-home")),
+    K("Super-Shift-comma"): with_mark(K("Shift-end")),
+    K("Shift-esc"): with_mark(K("Shift-grave")),
 }, "Global")
 
 # Keybindings for Alacritty/kitty
@@ -115,16 +123,6 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty", "rofi", "kitty"), {
     K("C-e"): with_mark(K("end")),
     K("C-Shift-a"): with_mark(K("Shift-home")),
     K("C-Shift-e"): with_mark(K("Shift-end")),
-    # Page up/down
-    K("Super-l"): with_mark(K("page_up")),
-    K("Super-dot"): with_mark(K("page_down")),
-    K("Super-Shift-l"): with_mark(K("Shift-page_up")),
-    K("Super-Shift-dot"): with_mark(K("Shift-page_down")),
-    # Beginning/End of file
-    K("Super-k"): with_mark(K("home")),
-    K("Super-comma"): with_mark(K("end")),
-    K("Super-Shift-k"): with_mark(K("Shift-home")),
-    K("Super-Shift-comma"): with_mark(K("Shift-end")),
     # Newline
     K("Super-a"): [K("C-home"), K("C-a"), set_mark(True)],
     K("C-m"): K("enter"),

@@ -91,12 +91,12 @@ alias dkat='docker-exec-bash'
 # -------------------------------------
 # fasd
 # -------------------------------------
-alias a='fasd -a'        # any
-alias s='fasd -si'       # show / search / select
-alias d='fasd -d'        # directory
-alias f='fasd -f'        # file
-alias sd='fasd -sid'     # interactive directory selection
-alias sf='fasd -sif'     # interactive file selection
+unalias a  # alias a='fasd -a'        # any
+unalias s  # alias s='fasd -si'       # show / search / select
+unalias d  # alias d='fasd -d'        # directory
+unalias f  # alias f='fasd -f'        # file
+unalias sd # alias sd='fasd -sid'     # interactive directory selection
+unalias sf # alias sf='fasd -sif'     # interactive file selection
 alias z='z-override'     # cd, same functionality as j in autojump
 
 # -------------------------------------

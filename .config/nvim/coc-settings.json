@@ -15,30 +15,41 @@
   "coc.source.neosnippet.priority": 50,
   "python.pythonPath": "python3",
   "list.insertMappings": {
-		"<C-l>": "do:refresh",
-		"<C-f>": "feedkeys:\\<C-f>",
-		"<C-b>": "feedkeys:\\<C-b>",
-		"<C-n>": "normal:j",
-		"<C-p>": "normal:k",
-		"<A-n>": "prompt:previous",
-		"<A-p>": "prompt:next",
-		"<C-e>": "action:e",
-		"<C-c>": "command:call EnhanCursor()"
-	},
-	"list.normalMappings": {
-		"d": "action:delete"
-	},
+    "<C-l>": "do:refresh",
+    "<C-f>": "feedkeys:\\<C-f>",
+    "<C-b>": "feedkeys:\\<C-b>",
+    "<C-n>": "normal:j",
+    "<C-p>": "normal:k",
+    "<A-n>": "prompt:previous",
+    "<A-p>": "prompt:next",
+    "<C-e>": "action:e",
+    "<C-c>": "command:call EnhanCursor()"
+  },
+  "list.normalMappings": {
+    "d": "action:delete"
+  },
   "languageserver": {
     "efm": {
       "command": "efm-langserver",
       "args": [],
-      "filetypes": ["vim", "eruby", "markdown"]
+      "filetypes": [
+        "vim",
+        "eruby",
+        "markdown"
+      ]
     },
     "golang": {
       "command": "gopls",
       "args": [],
-      "rootPatterns": ["go.mod", ".vim/", ".git/", ".hg/"],
-      "filetypes": ["go"]
+      "rootPatterns": [
+        "go.mod",
+        ".vim/",
+        ".git/",
+        ".hg/"
+      ],
+      "filetypes": [
+        "go"
+      ]
     }
   }
 }

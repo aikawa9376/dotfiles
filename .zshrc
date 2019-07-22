@@ -22,8 +22,6 @@ zplug "momo-lab/zsh-abbrev-alias"
 zplug "plugin/git", from:oh-my-zsh
 # pair auto
 zplug "hlissner/zsh-autopair"
-# fzf-widgets
-zplug "ytet5uy4/fzf-widgets", if:"which fzf"
 # tmux fzf
 zplug "arks22/tmuximum", as:command
 # zplug selfupdate
@@ -124,6 +122,7 @@ export FZF_DEFAULT_OPTS='
 --tabstop=2
 --history '$HOME'/.fzf/history
 --bind alt-k:preview-up,alt-j:preview-down,ctrl-n:down,ctrl-p:up
+--bind alt-a:toggle-all,home:top
 --bind alt-p:previous-history,alt-n:next-history,ctrl-k:kill-line
 --color dark,hl:34,hl+:40,bg+:235,fg+:15
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
@@ -290,11 +289,15 @@ zstyle :insert-last-word match '*([[:alpha:]/\\]?|?[[:alpha:]/\\])*'
 zle -N insert-last-word smart-insert-last-word
 bindkey '^[p' insert-last-word
 
+# tmuxでhomeとendが効かなくなる問題
+bindkey '\e[1~' beginning-of-line
+bindkey '\e[4~' end-of-line
+
 # -------------------------------------
 # enhancd
 # -------------------------------------
 ENHANCD_HOOK_AFTER_CD=ll
-ENHANCD_HYPHEN_NUM=30
+ENHANCD_HYPHEN_NUM=50
 ENHANCD_FILTER=fzf:fzy:peco
 
 # -------------------------------------
