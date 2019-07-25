@@ -4,5 +4,5 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/home/aikawa/.cargo/bin/lolcate r-update
+ExecStart=/home/aikawa/.cargo/bin/lolcate --update
 TimeoutStartSec=5min30s

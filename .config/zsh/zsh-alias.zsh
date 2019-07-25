@@ -87,6 +87,7 @@ alias dkri='docker-rmi'
 alias dkrm='docker-rm'
 alias dkst='docker-stop'
 alias dkat='docker-exec-bash'
+alias dkk='docker exec'
 
 # -------------------------------------
 # fasd

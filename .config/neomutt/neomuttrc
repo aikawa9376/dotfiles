@@ -72,7 +72,7 @@ bind attach,index R group-reply
 bind pager E edit
 
 bind attach,index,pager,compose q exit
-macro attach,index,pager e "<save-message>+[Gmail].すべてのメール<enter><sync-mailbox><enter>" "Archive"
+macro attach,index,pager e "<delete-message><sync-mailbox><enter>" "Archive"
 macro attach,index,pager i "<shell-escape>offlineimap -f INBOX -o -q -k Account_GMail:postsynchook= -u quiet &<enter>" "sync INBOX"
 
 # notify-send

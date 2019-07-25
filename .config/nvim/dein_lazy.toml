@@ -390,6 +390,12 @@ repo = 'kana/vim-textobj-line'
 
 [[plugins]]
 repo = 'kana/vim-textobj-indent'
+hook_add = '''
+xmap iF <Plug>(textobj-between-i)
+omap iF <Plug>(textobj-between-i)
+xmap aF <Plug>(textobj-between-a)
+omap aF <Plug>(textobj-between-a)
+'''
 
 [[plugins]]
 repo = 'thinca/vim-textobj-between'
@@ -858,13 +864,13 @@ command! -bang -nargs=* AllRg
   \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
   \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
-command! -bang -nargs=* RgWithFile
+command! -bang -nargs=* Rgf
   \ call fzf#vim#grep(
   \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
   \   <bang>0 ? fzf#vim#with_preview({'options': '--no-unicode'}, 'up:60%:wrap')
   \           : fzf#vim#with_preview({'options': '--no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
-command! -bang -nargs=* AllRgWithFile
+command! -bang -nargs=* Rgaf
   \ call fzf#vim#grep(
   \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
   \   <bang>0 ? fzf#vim#with_preview({'options': '--no-unicode'}, 'up:60%:wrap')

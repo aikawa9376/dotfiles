@@ -67,6 +67,7 @@ define_keymap(None, {
     K("Super-comma"): with_mark(K("end")),
     K("Super-Shift-k"): with_mark(K("Shift-home")),
     K("Super-Shift-comma"): with_mark(K("Shift-end")),
+    K("LC-Mute"): with_mark(K("Alt-Shift-Super-z")),
     K("Shift-esc"): with_mark(K("Shift-grave")),
 }, "Global")
 
@@ -96,7 +97,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
     K("RAlt-w"): K("C-w"),
     K("Super-t"): with_mark(K("C-t")),
     K("Super-w"): with_mark(K("C-w")),
-    K("Super-r"): with_mark(K("C-r")),
+    K("C-w"): with_mark(K("C-backspace")),
     K("C-Space"): K("C-f6"),
 }, "Firefox and Chrome")
 
@@ -138,6 +139,7 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty", "rofi", "kitty"), {
     K("C-u"): [K("Shift-home"), K("C-x"), set_mark(False)],
     # Undo
     K("Super-u"): [K("C-z"), set_mark(False)],
+    K("Super-r"): [K("C-r"), set_mark(False)],
     K("C-Shift-ro"): K("C-z"),
     # Mark
     # K("C-space"): set_mark(True),
