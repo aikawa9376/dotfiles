@@ -75,23 +75,6 @@ case $(uname -a) in
    *Microsoft*) unsetopt BG_NICE ;;
 esac
 
-# 外部ファイル読み込み
-export ZCONFDIR="$HOME/.config/zsh"
-function loadlib() {
-  lib=${1:?"You have to specify a library file"}
-  if [ -f "$lib" ];then #ファイルの存在を確認
-    source "$lib"
-  fi
-}
-loadlib $ZCONFDIR/zsh-vcs.zsh
-loadlib $ZCONFDIR/zsh-alias.zsh
-loadlib $ZCONFDIR/zsh-vimode.zsh
-loadlib $ZCONFDIR/zsh-functions.zsh
-loadlib $ZCONFDIR/zsh-bookmark.zsh
-loadlib $ZCONFDIR/zsh-docker.zsh
-loadlib /usr/share/fzf/key-bindings.zsh
-loadlib /usr/share/fzf/completion.zsh
-
 # -------------------------------------
 # fzf
 # -------------------------------------
@@ -220,6 +203,11 @@ function cd-up { zle push-line && LBUFFER='cd ..' && zle accept-line }
 zle -N cd-up
 bindkey '^[g' cd-up
 
+# Ctrl-jでディレクトリ履歴を移動できる
+function cd-jump { zle push-line && LBUFFER='cd' && zle accept-line }
+zle -N cd-jump
+bindkey '^j' cd-jump
+
 # Alt-jでディレクトリ履歴を移動できる
 function cd-hist { zle push-line && LBUFFER='cd -' && zle accept-line }
 zle -N cd-hist
@@ -292,6 +280,21 @@ bindkey '^[p' insert-last-word
 # tmuxでhomeとendが効かなくなる問題
 bindkey '\e[1~' beginning-of-line
 bindkey '\e[4~' end-of-line
+
+# 外部ファイル読み込み
+export ZCONFDIR="$HOME/.config/zsh"
+function loadlib() {
+  lib=${1:?"You have to specify a library file"}
+  if [ -f "$lib" ];then #ファイルの存在を確認
+    source "$lib"
+  fi
+}
+loadlib $ZCONFDIR/zsh-vcs.zsh
+loadlib $ZCONFDIR/zsh-alias.zsh
+loadlib $ZCONFDIR/zsh-vimode.zsh
+loadlib $ZCONFDIR/zsh-functions.zsh
+loadlib $ZCONFDIR/zsh-bookmark.zsh
+loadlib $ZCONFDIR/zsh-docker.zsh
 
 # -------------------------------------
 # enhancd

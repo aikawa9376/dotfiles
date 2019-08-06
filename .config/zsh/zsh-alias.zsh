@@ -41,7 +41,7 @@ alias dst='duster'
 alias fnd='finder'
 alias li='gwenview ./'
 alias reload='exec $SHELL -1'
-alias reboot='tmux detach && reboot'
+alias reboot='[ -n $(tmux ls | grep -n "attached") ] && reboot || tmux detach && reboot'
 alias suspend="systemctl suspend"
 alias vim='nvim'
 alias vv='fvim'
@@ -60,6 +60,9 @@ alias csv="csvfzfviewer"
 alias trans="trans -b :ja"
 alias feh="feh -d -s"
 alias ftpfs="curlftpfs"
+alias checkupdate="checkupdate && yay -Qum"
+alias wup="sudo systemctl start libvirtd && sudo mount /dev/sda5 /home/aikawa/win10"
+alias wdown="sudo systemctl stop libvirtd && sudo umount /home/aikawa/win10"
 
 # -------------------------------------
 # git

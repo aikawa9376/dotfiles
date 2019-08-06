@@ -126,16 +126,6 @@ fzf-ripgrep-widget() {
 zle     -N    fzf-ripgrep-widget
 bindkey '\ea' fzf-ripgrep-widget
 
-choice-child-dir() {
-  local selected
-  if selected=$(fd --type d --follow --hidden --color=always --exclude .git | fzf --ansi); then
-    LBUFFER=${LBUFFER}$selected
-  fi
-  zle redisplay
-}
-zle     -N    choice-child-dir
-bindkey '^j'  choice-child-dir
-
 f-override() {
   local selected
   if selected=$(fasd -f | sed 's/^[0-9,.]* *//' | fzf --ansi --no-sort --tac +m); then
@@ -283,6 +273,52 @@ ghq-update() {
   ghq list | sed -E 's/^[^\/]+\/(.+)/\1/' | xargs -n 1 -P 10 ghq get -u
 }
 
+# -------------------------------------
+# dig directories suggest
+# -------------------------------------
+dig_dir() {
+    local cmd q k res
+    sort="created"
+    while cmd="$(
+          fd --type d --follow --hidden --color=always --exclude .git \
+          | fzf --ansi --query="$q" --no-sort --exit-0 \
+          --bind 'alt-c:execute(echo {} | xclip -selection c)' \
+          --print-query --expect=ctrl-j,ctrl-b,ctrl-g,ctrl-d \
+          )"; do
+        q="$(head -1 <<< "$cmd")"
+        k="$(head -2 <<< "$cmd" | tail -1)"
+        res="$(sed '1,2d;/^$/d' <<< "$cmd")"
+        case "$k" in
+          ctrl-j)
+            cd ${res}
+            zle accept-line
+            continue
+            ;;
+          ctrl-g)
+            builtin cd -
+            zle accept-line
+            continue
+            ;;
+          ctrl-b)
+            builtin cd ../
+            zle accept-line
+            continue
+            ;;
+          ctrl-d)
+            cd ${res}
+            zle accept-line
+            break
+            ;;
+          *)
+            LBUFFER=${LBUFFER}${res}
+            break
+            ;;
+        esac
+    done
+    zle redisplay
+}
+zle     -N    dig_dir
+bindkey '\ec'  dig_dir
 
 # -------------------------------------
 # Mail suggest notmuch
@@ -321,7 +357,6 @@ csvfzfviewer() {
         -e $(expr $(echo {} | cut -f1 -d ",") - 1) '$*'  | xsv flatten' \
       --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
 }
-
 
 # -------------------------------------
 # MRU

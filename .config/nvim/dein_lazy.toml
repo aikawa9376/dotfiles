@@ -1899,7 +1899,7 @@ fun! g:lightline.vm_modes() dict
     let V = b:VM_Selection.Vars
     let m = v.mappings_enabled ? 'M' : 'm'
     let b = V.block_mode       ? 'B' : 'b'
-    let o = V.only_this_always ? 'O' : 'o'
+    let o = V.single_region    ? 'O' : 'o'
     let l = V.multiline        ? 'V' : 'v'
     return m.b.o.l
   endif
