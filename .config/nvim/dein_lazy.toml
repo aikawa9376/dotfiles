@@ -1916,6 +1916,13 @@ fun! g:lightline.vm_regions() dict
   return ''
 endfun
 '''
+hook_source = '''
+augroup mylightline
+  autocmd! FileType fzf
+  autocmd  FileType fzf set laststatus=0 noshowmode noruler
+    \| autocmd BufLeave <buffer> set laststatus=2 showmode ruler
+augroup END
+'''
 
 [[plugins]]
 repo = 'aikawa9376/lightline-bufferline'

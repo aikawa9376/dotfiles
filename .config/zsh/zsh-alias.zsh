@@ -35,7 +35,6 @@ if ((${+commands[nodejs]})); then
   alias node='nodejs'
 fi
 
-alias rcat='richpager -n'
 alias icat='kitty +kitten icat'
 alias dst='duster'
 alias fnd='finder'
@@ -61,6 +60,7 @@ alias trans="trans -b :ja"
 alias feh="feh -d -s"
 alias ftpfs="curlftpfs"
 alias checkupdate="checkupdate && yay -Qum"
+alias virsh="sudo virsh"
 alias wup="sudo systemctl start libvirtd && sudo mount /dev/sda5 /home/aikawa/win10"
 alias wdown="sudo systemctl stop libvirtd && sudo umount /home/aikawa/win10"
 

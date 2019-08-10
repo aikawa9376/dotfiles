@@ -89,7 +89,7 @@ convertPathWsl() {
 # fzf utils
 # -------------------------------------
 zmenu() {
-  print -rl -- ${(ko)commands} | fzf | (nohup ${SHELL:-"/bin/sh"} &) >/dev/null 2>&1
+  print -rl -- ${(ko)commands} | fzf --preview "man {}" | (nohup ${SHELL:-"/bin/sh"} &) >/dev/null 2>&1
 }
 
 # ALT-I - Paste the selected entry from locate output into the command line
@@ -245,14 +245,56 @@ frm() {
 pskl() {
   local pid
   if [ "$UID" != "0" ]; then
-    pid=$(ps -f -u $UID | sed 1d | fzf -m | awk '{print $2}')
+    pid=$(ps -f -u $UID | sed 1d | fzf -m --preview-window hidden | awk '{print $2}')
   else
-    pid=$(ps -ef | sed 1d | fzf -m | awk '{print $2}')
+    pid=$(ps -ef | sed 1d | fzf -m --preview-window hidden | awk '{print $2}')
   fi
 
   if [ "x$pid" != "x" ]
   then
     echo $pid | xargs kill -${1:-9}
+  fi
+}
+
+# virt & remmina list
+virtstart() {
+  local rmpath
+  rmpath='/home/aikawa/.local/share/remmina/'
+
+  [[ $(sudo systemctl is-active libvirtd) == 'inactive' ]] \
+    && sudo systemctl start libvirtd
+  [[ $(cat /proc/mounts) != *sda5* ]] \
+    && sudo mount /dev/sda5 /home/aikawa/win10
+  usleep 5000
+
+  sudo \virsh list --all | sed 1,2d \
+  | sed -e 's/^.*running.*$//g' \
+  | grep -v -e '^\s*#' -e '^\s*$' \
+  | fzf --preview-window hidden --exit-0 \
+  | awk '{print $2}' | (xargs -I@ sudo virsh start @ &&) | sleep 6
+
+  fd . $rmpath | sed -e 's/^.*\///g' \
+  | fzf --ansi --preview 'bat '$rmpath'/{}' \
+  | (xargs -I@ remmina -c $rmpath/@ >/dev/null 2>&1 &)
+}
+
+# virt stop
+virtstop() {
+  local ret
+  sudo \virsh list | sed 1,2d \
+  | grep -v -e '^\s*#' -e '^\s*$' \
+  | fzf --preview-window hidden --exit-0 \
+  | awk '{print $2}' | (xargs -I@ sudo virsh shutdown @ &&)
+
+  [[ -z $(sudo \virsh list | sed 1,2d | grep -v -e '^\s*#' -e '^\s*$') ]] && \
+    [[ $(sudo systemctl is-active libvirtd) != 'inactive' ]] \
+      && sudo systemctl stop libvirtd; killall remmina
+  if [[ $(cat /proc/mounts) == *sda5* ]]; then
+    sudo umount /home/aikawa/win10
+    while [ $? -ne 0 ]; do
+      sleep 1
+      sudo umount /home/aikawa/win10 >/dev/null 2>&1
+    done
   fi
 }
 
@@ -347,7 +389,7 @@ notmuchfzfselect() {
 }
 
 # -------------------------------------
-# Mail suggest notmuch
+# CSV viewer
 # -------------------------------------
 csvfzfviewer() {
     nl -n ln -w 1 -s "," "$*" | xsv cat rows \

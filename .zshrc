@@ -75,10 +75,25 @@ case $(uname -a) in
    *Microsoft*) unsetopt BG_NICE ;;
 esac
 
+# 外部ファイル読み込み
+export ZCONFDIR="$HOME/.config/zsh"
+function loadlib() {
+  lib=${1:?"You have to specify a library file"}
+  if [ -f "$lib" ];then #ファイルの存在を確認
+    source "$lib"
+  fi
+}
+loadlib $ZCONFDIR/zsh-vimode.zsh
+loadlib $HOME/.fzf.zsh
+loadlib $ZCONFDIR/zsh-vcs.zsh
+loadlib $ZCONFDIR/zsh-alias.zsh
+loadlib $ZCONFDIR/zsh-functions.zsh
+loadlib $ZCONFDIR/zsh-bookmark.zsh
+loadlib $ZCONFDIR/zsh-docker.zsh
+
 # -------------------------------------
 # fzf
 # -------------------------------------
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 export FZF_DEFAULT_COMMAND='(fd --type file --follow --hidden --color=always --exclude .git) 2> /dev/null'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_CTRL_T_OPTS="--ansi $FZF_DEFAULT_PREVIEW"
@@ -280,21 +295,6 @@ bindkey '^[p' insert-last-word
 # tmuxでhomeとendが効かなくなる問題
 bindkey '\e[1~' beginning-of-line
 bindkey '\e[4~' end-of-line
-
-# 外部ファイル読み込み
-export ZCONFDIR="$HOME/.config/zsh"
-function loadlib() {
-  lib=${1:?"You have to specify a library file"}
-  if [ -f "$lib" ];then #ファイルの存在を確認
-    source "$lib"
-  fi
-}
-loadlib $ZCONFDIR/zsh-vcs.zsh
-loadlib $ZCONFDIR/zsh-alias.zsh
-loadlib $ZCONFDIR/zsh-vimode.zsh
-loadlib $ZCONFDIR/zsh-functions.zsh
-loadlib $ZCONFDIR/zsh-bookmark.zsh
-loadlib $ZCONFDIR/zsh-docker.zsh
 
 # -------------------------------------
 # enhancd

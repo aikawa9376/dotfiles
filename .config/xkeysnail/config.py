@@ -97,9 +97,14 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
     K("RAlt-w"): K("C-w"),
     K("Super-t"): with_mark(K("C-t")),
     K("Super-w"): with_mark(K("C-w")),
-    K("C-w"): with_mark(K("C-backspace")),
-    K("C-Space"): K("C-f6"),
+    K("C-Space"): K("f6"),
+    K("C-o"): K("Alt-left"),
 }, "Firefox and Chrome")
+
+# Keybindings for remmina-win10
+define_keymap(re.compile("Remmina"), {
+    K("Super-e"): K("C-e"),
+}, "remmina")
 
 # Emacs-like keybindings in non-Emacs applications
 define_keymap(lambda wm_class: wm_class not in ("Alacritty", "rofi", "kitty"), {
@@ -109,6 +114,7 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty", "rofi", "kitty"), {
     K("C-p"): with_mark(K("up")),
     K("C-n"): with_mark(K("down")),
     K("C-h"): with_mark(K("backspace")),
+    K("C-w"): with_mark(K("C-backspace")),
     K("C-Shift-b"): with_mark(K("Shift-left")),
     K("C-Shift-f"): with_mark(K("Shift-right")),
     K("C-Shift-p"): with_mark(K("Shift-up")),
@@ -142,8 +148,8 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty", "rofi", "kitty"), {
     K("Super-r"): [K("C-r"), set_mark(False)],
     K("C-Shift-ro"): K("C-z"),
     # Mark
-    # K("C-space"): set_mark(True),
-    K("C-o"): with_or_set_mark(K("C-right")),
+    K("C-v"): set_mark(True),
+    # K("C-v"): with_or_set_mark(K("C-right")),
     K("C-q"): escape_next_key,
     # Search
     # K("C-s"): K("F3"),
