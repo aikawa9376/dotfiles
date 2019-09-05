@@ -61,8 +61,9 @@ alias feh="feh -d -s"
 alias ftpfs="curlftpfs"
 alias checkupdate="checkupdate && yay -Qum"
 alias virsh="sudo virsh"
-alias wup="sudo systemctl start libvirtd && sudo mount /dev/sda5 /home/aikawa/win10"
-alias wdown="sudo systemctl stop libvirtd && sudo umount /home/aikawa/win10"
+alias wup="virtstart"
+alias wdown="virtstop"
+alias i3wk="ps faux | grep '\_ i3' | head -n 1 | awk '{print $2}' | xargs kill -s SIGCONT"
 
 # -------------------------------------
 # git
@@ -134,6 +135,7 @@ name_dir /home/aikawa/d/googledrive/download/ d
 # -------------------------------------
 # グローバル エイリアス
 # -------------------------------------
+abbrev-alias --init
 abbrev-alias -g from='$(mru)'
 abbrev-alias -g to='$(destination_directories)'
 abbrev-alias -g le='| less'

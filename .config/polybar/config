@@ -48,9 +48,9 @@ module-margin-right = 1
 font-0 = "RictyDiminishedDiscord NF:size=16:pixelsize=16:fontformat=truetype;0"
 font-1 = "RictyDiminishedDiscord NF:size=12:heavy:fontformat=truetype;-2"
 
-modules-left = i3 xwindow tmux
+modules-left = i3 xwindow tmux docker
 modules-center = date
-modules-right = filesystem insync cpu memory wlan pacman inbox-imap mozc powermenu
+modules-right = filesystem insync cpu memory lan wlan pacman inbox-imap mozc powermenu
 
 [module/xwindow]
 type = internal/xwindow
@@ -126,20 +126,31 @@ format-prefix-foreground = ${colors.foreground-alt}
 format-underline = #32bbc2
 label = %percentage_used%%
 
+[module/lan]
+type = internal/network
+interface = enp5s0
+interval = 3
+accumulate-stats = false
+
+format-connected-prefix = " "
+format-connected-prefix-foreground = ${colors.foreground-alt}
+format-connected-underline = #9f78e1
+
+label-connected = %upspeed%:%downspeed%
+label-disconnected =
+
 [module/wlan]
 type = internal/network
 interface = wlp2s0
 interval = 60
-accumulate-stats = true
+accumulate-stats = false
 
 format-connected-prefix = "直 "
 format-connected-prefix-foreground = ${colors.foreground-alt}
 format-connected-underline = #9f78e1
-format-disconnected-underline = ${self.format-connected-underline}
 
 label-connected = %essid%:%signal%
-label-disconnected = %ifname% disconnected
-label-disconnected-foreground = ${colors.foreground-alt}
+label-disconnected =
 
 [module/date]
 type = internal/date
@@ -180,6 +191,14 @@ interval = 1
 format-prefix = " "
 format-prefix-foreground = ${colors.foreground-alt}
 format-underline = #FF8B25
+
+[module/docker]
+type = custom/script
+exec = $HOME/.config/polybar/scripts/info-docker.sh
+interval = 60
+format-prefix = " "
+format-prefix-foreground = ${colors.foreground-alt}
+format-underline = #1994D1
 
 [module/insync]
 type = custom/script

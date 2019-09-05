@@ -258,24 +258,43 @@ pskl() {
 
 # virt & remmina list
 virtstart() {
-  local rmpath
+  local rmpath flag
+  flag=9
   rmpath='/home/aikawa/.local/share/remmina/'
 
   [[ $(sudo systemctl is-active libvirtd) == 'inactive' ]] \
     && sudo systemctl start libvirtd
   [[ $(cat /proc/mounts) != *sda5* ]] \
     && sudo mount /dev/sda5 /home/aikawa/win10
-  usleep 5000
+
+  sudo \virsh list --all >/dev/null 2>&1
+  while [ $? -ne 0 ]; do
+    usleep 5000
+  done
 
   sudo \virsh list --all | sed 1,2d \
   | sed -e 's/^.*running.*$//g' \
   | grep -v -e '^\s*#' -e '^\s*$' \
   | fzf --preview-window hidden --exit-0 \
-  | awk '{print $2}' | (xargs -I@ sudo virsh start @ &&) | sleep 6
+  | awk '{print $2}' | (xargs -I@ sudo virsh start @ &&)
 
   fd . $rmpath | sed -e 's/^.*\///g' \
   | fzf --ansi --preview 'bat '$rmpath'/{}' \
   | (xargs -I@ remmina -c $rmpath/@ >/dev/null 2>&1 &)
+
+  while [ $flag -ne 0 ]; do
+    read REPLY\?"connect remmina? "${res}"? [y/n]"
+    case $REPLY in
+      '' | [Yy]* )
+        flag=0
+        ;;
+      [^Yy]* )
+        killall remmina
+        fd . $rmpath | sed -e 's/^.*\///g' \
+        | fzf --ansi --preview 'bat '$rmpath'/{}' \
+        | (xargs -I@ remmina -c $rmpath/@ >/dev/null 2>&1 &)
+    esac
+  done
 }
 
 # virt stop
@@ -284,13 +303,13 @@ virtstop() {
   sudo \virsh list | sed 1,2d \
   | grep -v -e '^\s*#' -e '^\s*$' \
   | fzf --preview-window hidden --exit-0 \
-  | awk '{print $2}' | (xargs -I@ sudo virsh shutdown @ &&)
+  | awk '{print $2}' | (xargs -I@ sudo virsh destroy @ &&)
 
   [[ -z $(sudo \virsh list | sed 1,2d | grep -v -e '^\s*#' -e '^\s*$') ]] && \
     [[ $(sudo systemctl is-active libvirtd) != 'inactive' ]] \
       && sudo systemctl stop libvirtd; killall remmina
   if [[ $(cat /proc/mounts) == *sda5* ]]; then
-    sudo umount /home/aikawa/win10
+    sudo umount /home/aikawa/win10 >/dev/null 2>&1
     while [ $? -ne 0 ]; do
       sleep 1
       sudo umount /home/aikawa/win10 >/dev/null 2>&1

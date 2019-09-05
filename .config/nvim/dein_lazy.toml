@@ -208,6 +208,7 @@ autocmd MyAutoCmd FileType phtml,html,php,css EmmetInstall
 [[plugins]]
 repo = 'RRethy/vim-hexokinase'
 frozen = 1
+build = 'make hexokinase'
 on_ft = ['css', 'scss']
 hook_add = '''
 let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
@@ -516,7 +517,7 @@ vmap <Leader>to mv<Plug>(operator-sort)
 '''
 
 [[plugins]]
-repo = 'thinca/vim-submode'
+repo = 'kana/vim-submode'
 on_event = 'VimEnter'
 hook_source = '''
 " set lazydrawでカーソルが飛ぶ
@@ -657,7 +658,7 @@ nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
 repo = 'luochen1990/rainbow'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <silent> <Plug>(my-switch)r :RainbowToggle<CR>
+nmap <silent> <plug>(my-switch)r :rainbowtoggle<cr>
 let g:rainbow_active = 0
 '''
 
@@ -682,8 +683,8 @@ on_cmd = ['SplitjoinJoin', 'SplitjoinSplit']
 hook_add = '''
 let g:splitjoin_split_mapping = ''
 let g:splitjoin_join_mapping = ''
-nmap <Leader>tj :SplitjoinJoin<cr>
-nmap <Leader>tJ :SplitjoinSplit<cr>
+nmap <plug>(my-switch)j :SplitjoinJoin<cr>
+nmap <plug>(my-switch)J :SplitjoinSplit<cr>
 '''
 
 [[plugins]]
@@ -1919,8 +1920,8 @@ endfun
 hook_source = '''
 augroup mylightline
   autocmd! FileType fzf
-  autocmd  FileType fzf set laststatus=0 noshowmode noruler
-    \| autocmd BufLeave <buffer> set laststatus=2 showmode ruler
+  autocmd  FileType fzf set laststatus=0
+    \| autocmd BufLeave <buffer> set laststatus=2
 augroup END
 '''
 

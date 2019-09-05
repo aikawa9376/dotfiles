@@ -16,14 +16,14 @@ zplug "plugins/fasd", from:oh-my-zsh, if:"(( $+commands[fasd] ))"
 zplug "b4b4r07/enhancd", use:init.sh
 # ゴミ箱機能
 zplug "aikawa9376/zsh-gomi", if:"which fzf"
-# abbr
-zplug "momo-lab/zsh-abbrev-alias"
 # git plugin
 zplug "plugin/git", from:oh-my-zsh
 # pair auto
 zplug "hlissner/zsh-autopair"
 # tmux fzf
 zplug "arks22/tmuximum", as:command
+# abbr
+zplug "momo-lab/zsh-abbrev-alias"
 # zplug selfupdate
 zplug 'zplug/zplug', hook-build:'zplug --self-manage'
 
@@ -306,4 +306,4 @@ ENHANCD_FILTER=fzf:fzy:peco
 # -------------------------------------
 # Xserver start
 # -------------------------------------
-[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx
+[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx i3

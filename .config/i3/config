@@ -182,12 +182,12 @@ for_window [window_role="pop-up"] floating enable
 for_window [window_role="task_dialog"] floating enable
 
 # Start up scripts
-exec --no-startup-id sudo iw dev wlp2s0 set power_save off
+# exec --no-startup-id sudo systemctl start dhcpcd@enp5s0.service;
+exec --no-startup-id sudo iw dev wlp2s0 set power_save off;
 exec --no-startup-id sudo xkeysnail $HOME/.config/xkeysnail/config.py;
-exec --no-startup-id xset b off;
-exec --no-startup-id xset r rate 180 70;
 exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inverted --noprimary && xrandr --output DVI-I-1 --auto --below HDMI-0 --noprimary;
-# exec --no-startup-id xrandr --setmonitor main auto DP-0,DVI-I-1,HDMI-0
 exec --no-startup-id fcitx-autostart;
 exec --no-startup-id $HOME/.config/polybar/lanch.sh;
 exec --no-startup-id insync start;
+exec --no-startup-id xset b off;
+exec --no-startup-id xset r rate 180 70;
