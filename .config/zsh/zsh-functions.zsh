@@ -270,6 +270,7 @@ virtstart() {
   sudo \virsh list --all >/dev/null 2>&1
   while [ $? -ne 0 ]; do
     usleep 5000
+    sudo \virsh list --all >/dev/null 2>&1
   done
 
   sudo \virsh list --all | sed 1,2d \

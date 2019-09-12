@@ -630,6 +630,7 @@ endfunction
 
 nmap <Leader>rw :%s///g<Left><Left><Left>
 nmap <Leader>rW :%s/<c-r>=expand("<cword>")<cr>//g<Left><Left>
+vmap <Space>rw y:%s/<c-r>"//g<Left><Left><Left>
 
 nmap <silent> gK :call <SID>google_search()<CR>
 vmap <silent> gK :call <SID>google_search()<CR>
