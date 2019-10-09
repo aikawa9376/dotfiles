@@ -23,6 +23,9 @@ def esc_hack():
 define_conditional_modmap(re.compile(r'Emacs'), {
     Key.RIGHT_CTRL: Key.ESC,
 })
+# define_conditional_modmap(re.compile(r'org.remmina.Remmina'), {
+#     Key.LEFT_META: Key.RIGHT_ALT,
+# })
 
 # [Multipurpose modmap] Give a key two meanings. A normal key when pressed and
 # released, and a modifier key when held down with another key. See Xcape,
@@ -102,8 +105,10 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
 }, "Firefox and Chrome")
 
 # Keybindings for remmina-win10
-define_keymap(re.compile("Remmina"), {
-    K("Super-e"): K("C-e"),
+define_keymap(re.compile("org.remmina.Remmina"), {
+    K("Alt-e"): K("Super-e"),
+    K("Alt-c"): K("C-c"),
+    K("Alt-v"): K("C-v"),
 }, "remmina")
 
 # Emacs-like keybindings in non-Emacs applications
@@ -125,6 +130,8 @@ define_keymap(lambda wm_class: wm_class not in ("Alacritty", "rofi", "kitty"), {
     # Forward/Backward word
     K("Super-b"): with_mark(K("C-left")),
     K("Super-f"): with_mark(K("C-right")),
+    K("RAlt-b"): with_mark(K("C-left")),
+    K("RAlt-f"): with_mark(K("C-right")),
     # Beginning/End of line
     K("C-a"): with_mark(K("home")),
     K("C-e"): with_mark(K("end")),

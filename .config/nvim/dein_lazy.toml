@@ -64,6 +64,12 @@ nmap <leader>rn <Plug>(coc-rename)
 nmap <leader>cf <Plug>(coc-format-selected)
 vmap <leader>cf <Plug>(coc-format-selected)
 
+" map function textobj
+xmap if <Plug>(coc-funcobj-i)
+xmap af <Plug>(coc-funcobj-a)
+omap if <Plug>(coc-funcobj-i)
+omap af <Plug>(coc-funcobj-a)
+
 augroup mygroup
   autocmd!
   " Setup formatexpr specified filetype(s).
@@ -1031,12 +1037,19 @@ imap <expr> <C-t> fzf#complete({
 " ------------------------------------------------------------------
 imap <expr> <C-_> fzf#complete({
     \ 'source': <SID>dir_file_completion(<SID>fzf_last_word()),
+    \ 'reducer': function('<SID>dir_file_sink'),
     \ 'window': 'call OpenFloatingWin()',
-    \ 'options': '-m -x +s --ansi --layout='.shellescape(<SID>open_floatingWin_fzf_layout())})
+    \ 'options': '-m -x +s --ansi --print-query --layout='.shellescape(<SID>open_floatingWin_fzf_layout())})
 
 function! s:dir_file_completion(word)
   " return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | tr '/' '\n' | sort | uniq")
   return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | sort | uniq")
+endfunction
+
+function! s:dir_file_sink(lines)
+  echomsg string(a:lines)
+  let rmpath = substitute(a:lines[1],'.\+'.a:lines[0],a:lines[0],'g')
+  return rmpath
 endfunction
 
 " ------------------------------------------------------------------
@@ -1444,7 +1457,7 @@ function! OpenFloatingWinCenter()
   let buf = nvim_create_buf(v:false, v:true)
   let win = nvim_open_win(buf, v:true, opts)
 
-  call setwinvar(win, '&winhl', 'Normal:Pmenu')
+  call setwinvar(win, '&winhl', 'Normal:Fmenu')
   IndentLinesToggle
 
   setlocal
@@ -1504,7 +1517,7 @@ function! OpenFloatingWin()
   let buf = nvim_create_buf(v:false, v:true)
   let win = nvim_open_win(buf, v:true, opts)
 
-  call setwinvar(win, '&winhl', 'Normal:Pmenu')
+  call setwinvar(win, '&winhl', 'Normal:Fmenu')
   IndentLinesToggle
 
   setlocal
@@ -1909,6 +1922,7 @@ let g:lightline#bufferline#filename_modifier = ':t'
 let g:lightline#bufferline#show_number       = 1
 let g:lightline#bufferline#active_tab_hi     = 1
 let g:lightline#bufferline#shorten_pat       = 0
+let g:lightline#bufferline#unicode_symbols   = 1
 let g:lightline#bufferline#unnamed           = '[No Name]'
 '''
 

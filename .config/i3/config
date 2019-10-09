@@ -174,7 +174,7 @@ assign [class="kitty"] $ws2
 assign [class="Remmina"] $ws3
 
 # application setting(float)
-for_window [class="insync"] floating enable, resize set 800 450
+for_window [class="insync"] floating enable, resize set 640 450
 for_window [class="Fcitx-config-gtk3"] floating enable, resize set 600 400
 for_window [class="mozc_tool"] floating enable, resize set 600 400
 for_window [class="feh"] floating enable, resize set 600 400

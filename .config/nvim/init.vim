@@ -320,10 +320,10 @@ nnoremap <C-l> $l
 vnoremap <C-l> $l
 nnoremap <silent><M-m> :call cursor(0,strlen(getline("."))/2)<CR>
 " すごく移動する
-nnoremap <C-j> 3gj
-vnoremap <C-j> 3gj
-nnoremap <C-k> 3gk
-vnoremap <C-k> 3gk
+nnoremap <C-j> }
+vnoremap <C-j> }
+nnoremap <C-k> {
+vnoremap <C-k> {
 nnoremap <M-l> i<Space><ESC><Right>
 nnoremap <M-h> hx
 nnoremap <silent><M-j> j:call cursor(0,strlen(getline("."))/2)<CR>
@@ -379,7 +379,8 @@ set autoindent "改行時に前の行のインデントを継続する
 set smartindent "改行時に入力された行の末尾に合わせて次の行のインデントを増減する
 " set wildmenu wildmode=list,full "コマンドモード補完
 set wildoptions+=pum
-" set pumblend=99
+set pumblend=20
+set winblend=20
 
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>
