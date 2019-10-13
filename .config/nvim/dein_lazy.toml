@@ -1062,7 +1062,22 @@ command! -nargs=* Memo call fzf#run({
   \  'down': '40%'})
 
 function! s:junk_file_list()
-  return  systemlist("rg --column -n --hidden --ignore-case --color=always '' ~/.cache/junkfile/ | sed -e 's%/home/aikawa/.cache/junkfile/%%g'")
+  let workdir = s:get_root_dir_for_junk()
+  return  systemlist("
+  \  rg --column -n --hidden --ignore-case --color=always '' $XDG_CACHE_HOME/junkfile/".workdir."/ |
+  \  sed -e 's%'$XDG_CACHE_HOME'/junkfile/".workdir."/%%g'
+  \  ")
+endfunction
+
+function! s:get_root_dir_for_junk()
+  " depends vim rooter
+  if exists('*FindRootDirectory') && FindRootDirectory() != ''
+    let s:dir = FindRootDirectory()
+    let s:dir = split(s:dir, '/')
+    return s:dir[len(s:dir) - 1]
+  else
+    return ''
+  endif
 endfunction
 
 function! s:junk_file_sink(line) abort
@@ -1531,7 +1546,7 @@ endfunction
 '''
 
 [[plugins]]
-repo = 'mg979/vim-bookmarks'
+repo = 'aikawa9376/vim-bookmarks'
 rev = 'fzf'
 hook_add = '''
 let g:bookmark_prefer_fzf = 1
@@ -1579,6 +1594,17 @@ nmap <Leader>rr <Plug>(FerretAck)
 [[plugins]]
 repo = 'Shougo/junkfile.vim'
 on_cmd = ['JunkfileOpen']
+hook_source = '''
+" depends vim rooter
+if exists('*FindRootDirectory') && FindRootDirectory() != ''
+  let s:dir = FindRootDirectory()
+  let s:dir = split(s:dir, '/')
+  let workdir = s:dir[len(s:dir) - 1] . '/'
+else
+  let workdir = ''
+endif
+let g:junkfile#directory = $XDG_CACHE_HOME.'/junkfile/'.workdir
+'''
 
 [[plugins]]
 repo = 'aikawa9376/vim-sql-workbench'
