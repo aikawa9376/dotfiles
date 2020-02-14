@@ -135,7 +135,15 @@ name_dir /home/aikawa/d/googledrive/download/ d
 # -------------------------------------
 # グローバル エイリアス
 # -------------------------------------
-abbrev-alias --init
+setopt extended_glob
+zle -N __abbrev_alias::magic_abbrev_expand
+zle -N __abbrev_alias::no_magic_abbrev_expand
+bindkey " "   __abbrev_alias::magic_abbrev_expand
+bindkey "^x " __abbrev_alias::no_magic_abbrev_expand
+zle -N __abbrev_alias::magic_abbrev_expand_and_insert
+zle -N __abbrev_alias::magic_abbrev_expand_and_accept_line
+bindkey " "    __abbrev_alias::magic_abbrev_expand_and_insert
+bindkey "^x "  __abbrev_alias::no_magic_abbrev_expand
 abbrev-alias -g from='$(mru)'
 abbrev-alias -g to='$(destination_directories)'
 abbrev-alias -g le='| less'

@@ -84,7 +84,8 @@ function loadlib() {
   fi
 }
 loadlib $ZCONFDIR/zsh-vimode.zsh
-loadlib $HOME/.fzf.zsh
+# loadlib $HOME/.fzf.zsh
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 loadlib $ZCONFDIR/zsh-vcs.zsh
 loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
