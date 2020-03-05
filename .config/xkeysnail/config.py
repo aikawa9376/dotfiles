@@ -13,19 +13,10 @@ def esc_hack():
     else:
         print('test')
 
-
-# [Global modemap] Change modifier keys as in xmodmap
-# define_modmap({
-#     Key.CAPSLOCK: Key.LEFT_CTRL
-# })
-
 # [Conditional modmap] Change modifier keys in certain applications
 define_conditional_modmap(re.compile(r'Emacs'), {
     Key.RIGHT_CTRL: Key.ESC,
 })
-# define_conditional_modmap(re.compile(r'org.remmina.Remmina'), {
-#     Key.LEFT_META: Key.RIGHT_ALT,
-# })
 
 # [Multipurpose modmap] Give a key two meanings. A normal key when pressed and
 # released, and a modifier key when held down with another key. See Xcape,
@@ -45,10 +36,6 @@ define_multipurpose_modmap({
 # Keybindings for Global
 define_keymap(None, {
     # hhkb
-    K("Super-h"): with_mark(K("kpasterisk")),
-    K("Super-n"): with_mark(K("kpplus")),
-    K("Super-m"): with_mark(K("kpminus")),
-    K("Super-j"): with_mark(K("kpslash")),
     K("Super-key_1"): with_mark(K("f1")),
     K("Super-key_2"): with_mark(K("f2")),
     K("Super-key_3"): with_mark(K("f3")),
@@ -61,6 +48,14 @@ define_keymap(None, {
     K("Super-key_0"): with_mark(K("f10")),
     K("Super-minus"): with_mark(K("f11")),
     K("Super-equal"): with_mark(K("f12")),
+}, "Global")
+
+define_keymap(lambda wm_class: wm_class not in ("org.remmina.Remmina"), {
+    # hhkb
+    K("Super-h"): with_mark(K("kpasterisk")),
+    K("Super-n"): with_mark(K("kpplus")),
+    K("Super-m"): with_mark(K("kpminus")),
+    K("Super-j"): with_mark(K("kpslash")),
     K("Super-i"): with_mark(K("SYSRQ")),
     K("Super-l"): with_mark(K("page_up")),
     K("Super-dot"): with_mark(K("page_down")),
@@ -72,7 +67,7 @@ define_keymap(None, {
     K("Super-Shift-comma"): with_mark(K("Shift-end")),
     K("LC-Mute"): with_mark(K("Alt-Shift-Super-z")),
     K("Shift-esc"): with_mark(K("Shift-grave")),
-}, "Global")
+}, "Global-notwin")
 
 # Keybindings for Alacritty/kitty
 define_keymap(re.compile("Alacritty|kitty"), {
@@ -104,15 +99,9 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
     K("C-o"): K("Alt-left"),
 }, "Firefox and Chrome")
 
-# Keybindings for remmina-win10
-define_keymap(re.compile("org.remmina.Remmina"), {
-    K("Alt-e"): K("Super-e"),
-    K("Alt-c"): K("C-c"),
-    K("Alt-v"): K("C-v"),
-}, "remmina")
-
 # Emacs-like keybindings in non-Emacs applications
-define_keymap(lambda wm_class: wm_class not in ("Alacritty", "rofi", "kitty"), {
+define_keymap(lambda wm_class: wm_class not in
+              ("Alacritty", "rofi", "kitty", "org.remmina.Remmina"), {
     # Cursor
     K("C-b"): with_mark(K("left")),
     K("C-f"): with_mark(K("right")),

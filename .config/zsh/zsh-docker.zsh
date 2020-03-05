@@ -79,7 +79,7 @@ docker-rm() {
 
 docker-rmi() {
   local image
-  image="$(docker images -a | sed -e '1d' | fzf --height 40% --reverse --preview-window hidden | awk '{print $3}')"
+  image="$(docker images | sed -e '1d' | fzf --height 40% --reverse --preview-window hidden | awk '{print $3}')"
   if [ -n "${image}" ]; then
     echo 'removing container image...'
     docker rmi ${image}

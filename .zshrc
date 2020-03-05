@@ -87,7 +87,8 @@ function loadlib() {
   fi
 }
 loadlib $ZCONFDIR/zsh-vimode.zsh
-loadlib $HOME/.fzf.zsh
+# loadlib $HOME/.fzf.zsh
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 loadlib $ZCONFDIR/zsh-vcs.zsh
 loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
@@ -136,7 +137,8 @@ export FZF_DEFAULT_OPTS='
 '
 
 bindkey "^I" expand-or-complete
-bindkey "^[[Z" fzf-completion
+# bindkey "^[[Z" fzf-completion
+bindkey "^ " fzf-completion
 bindkey '^X^F' fasd-complete-f  # C-x C-f to do fasd-complete-f (only files)
 bindkey '^X^D' fasd-complete-d  # C-x C-d to do fasd-complete-d (only directories)
 
