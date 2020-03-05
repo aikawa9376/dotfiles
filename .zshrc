@@ -14,6 +14,9 @@ zplug "zsh-users/zsh-autosuggestions"
 zplug "plugins/fasd", from:oh-my-zsh, if:"(( $+commands[fasd] ))"
 # enhancd
 zplug "b4b4r07/enhancd", use:init.sh
+# history
+zplug "b4b4r07/history", as:command, \
+  hook-build:"make && make install && cp -r misc/zsh ~/dotfiles/.config/zsh/history"
 # ゴミ箱機能
 zplug "aikawa9376/zsh-gomi", if:"which fzf"
 # git plugin
@@ -90,6 +93,9 @@ loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
 loadlib $ZCONFDIR/zsh-docker.zsh
+loadlib $ZCONFDIR/history/history.zsh
+loadlib $ZCONFDIR/history/keybind.zsh
+loadlib $ZCONFDIR/history/substring.zsh
 
 # -------------------------------------
 # fzf
@@ -265,6 +271,11 @@ setopt hist_no_store        # historyコマンドは履歴に登録しない
 # コマンド履歴検索
 bindkey "^P" history-substring-search-up
 bindkey "^N" history-substring-search-down
+
+# zsh-history
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd  "__history::history::add"
+add-zsh-hook preexec "__history::substring::reset"
 
 # -------------------------------------
 # キーバインディング

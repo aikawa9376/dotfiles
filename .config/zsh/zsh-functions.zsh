@@ -383,6 +383,48 @@ zle     -N    dig_dir
 bindkey '\ec'  dig_dir
 
 # -------------------------------------
+# hybrid history
+# -------------------------------------
+hybrid_history() {
+    local cmd k res num c c1 c2
+    c1="fc -rl 1 | \
+      fzf --preview-window=hidden -n2..,.. --tiebreak=index \
+      --ansi --no-sort --exit-0 \
+      --bind 'alt-c:execute(echo {} | xclip -selection c)' \
+      --print-query --expect=ctrl-r"
+
+    c2="command history search $ZSH_HISTORY_FILTER_OPTIONS"
+
+    c=$c1
+    while cmd="$(
+      eval $c
+          )"; do
+        k="$(head -2 <<< "$cmd" | tail -1)"
+        res="$(sed '1,2d;/^$/d' <<< "$cmd")"
+        case "$k" in
+          ctrl-r)
+            if [[ $c =~ "^fc" ]]; then
+              c=$c2
+              continue
+            fi
+            ;;
+          *)
+            if [[ $res ]]; then
+              num=$(echo "${res}")
+              zle vi-fetch-history -n $num
+            else
+              LBUFFER="$cmd"
+            fi
+            break
+            ;;
+        esac
+    done
+    zle redisplay
+}
+zle     -N    hybrid_history
+bindkey '^r'  hybrid_history
+
+# -------------------------------------
 # Mail suggest notmuch
 # -------------------------------------
 notmuchfzf() {

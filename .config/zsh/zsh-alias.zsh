@@ -64,6 +64,7 @@ alias virsh="sudo virsh"
 alias wup="virtstart"
 alias wdown="virtstop"
 alias i3wk="ps faux | grep '\_ i3' | head -n 1 | awk '{print $2}' | xargs kill -s SIGCONT"
+alias hs="command history"
 
 # -------------------------------------
 # git
