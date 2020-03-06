@@ -406,10 +406,10 @@ bindkey '\ec'  dig_dir
 # hybrid history
 # -------------------------------------
 hybrid_history() {
-    local cmd k res num c c1 c2
+    local cmd k res num c c1 c2 q
     c1="fc -rl 1 | \
       fzf --preview-window=hidden -n2..,.. --tiebreak=index \
-      --ansi --no-sort --exit-0 \
+      --ansi --query=${(qqq)LBUFFER} --no-sort --exit-0 \
       --bind 'alt-c:execute(echo {} | xclip -selection c)' \
       --print-query --expect=ctrl-r"
 
@@ -420,11 +420,16 @@ hybrid_history() {
       eval $c
           )"; do
         k="$(head -2 <<< "$cmd" | tail -1)"
+        q="$(head -1 <<< "$cmd")"
         res="$(sed '1,2d;/^$/d' <<< "$cmd")"
         case "$k" in
           ctrl-r)
             if [[ $c =~ "^fc" ]]; then
               c=$c2
+              if [[ -n "$q" ]]; then
+                c="$c --query "$q""
+              fi
+              zle redisplay
               continue
             fi
             ;;
@@ -434,6 +439,10 @@ hybrid_history() {
               zle vi-fetch-history -n $num
             else
               LBUFFER="$cmd"
+              if [[ -n $cmd ]]; then
+                BUFFER="$cmd"
+                CURSOR=$#BUFFER
+              fi
             fi
             break
             ;;
@@ -441,6 +450,7 @@ hybrid_history() {
     done
     zle redisplay
 }
+
 zle     -N    hybrid_history
 bindkey '^r'  hybrid_history
 
