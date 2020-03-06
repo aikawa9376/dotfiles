@@ -279,6 +279,16 @@ autoload -Uz add-zsh-hook
 add-zsh-hook precmd  "__history::history::add"
 add-zsh-hook preexec "__history::substring::reset"
 
+# TODO test 使いづらかったら消す
+ZSH_HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND="bg=magenta,fg=white,bold"
+ZSH_HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_NOT_FOUND="bg=red,fg=white,bold"
+ZSH_HISTORY_SUBSTRING_SEARCH_GLOBBING_FLAGS="i"
+
+zle -N "__history::keybind::arrow_up"
+bindkey "^P" "__history::keybind::arrow_up"
+zle -N "__history::keybind::arrow_down"
+bindkey "^N" "__history::keybind::arrow_down"
+
 # -------------------------------------
 # キーバインディング
 # -------------------------------------
