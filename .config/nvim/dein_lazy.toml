@@ -171,6 +171,9 @@ let g:vista_stay_on_open         = 0
 let g:vista_fzf_preview          = ['right:50%']
 let g:vista_icon_indent          = ["", " "]
 let g:vista_echo_cursor_strategy = "floating_win"
+let g:vista_ctags_cmd = {
+  \ "php": "ctags --format=2 --excmd=pattern --fields=nksSaf --sort=no --file-scope=yes --append=no -f-"
+  \ }
 let g:vista#renderer#icons = {
   \  "function": "\uf794 ",
   \  "variable": "\uf71b ",
