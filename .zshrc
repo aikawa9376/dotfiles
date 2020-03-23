@@ -14,26 +14,26 @@ autoload -Uz _zinit
 (( ${+_comps} )) && _comps[zinit]=_zinit
 
 # zsh-completions
-zinit ice wait'!0'; zinit load "zsh-users/zsh-completions"
+zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-completions"
 # zsh-history-substring-search
-zinit ice wait'!0'; zinit load "zsh-users/zsh-history-substring-search"
+zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-history-substring-search"
 # zsh-syntax-highlighting
-zinit ice wait'!0'; zinit load "zdharma/fast-syntax-highlighting"
+zinit ice wait'!0' lucid; zinit load "zdharma/fast-syntax-highlighting"
 # autosuggestions
-zinit ice wait'!0'; zinit load "zsh-users/zsh-autosuggestions"
+zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-autosuggestions"
+# ゴミ箱機能
+zinit ice wait'!0' lucid; zinit load "aikawa9376/zsh-gomi"
+# pair auto
+zinit ice wait'!0' lucid; zinit load "hlissner/zsh-autopair"
 # enhancd
 zinit ice wait'!0' atclone'rm -rf functions'
 zinit load "b4b4r07/enhancd"
-# history
-zinit ice wait'!0' as'program' atclone'cp -r misc/zsh ~/dotfiles/.config/zsh/history' make'install'
-zinit load "b4b4r07/history"
-# ゴミ箱機能
-zinit ice wait'!0'; zinit load "aikawa9376/zsh-gomi"
-# pair auto
-zinit ice wait'!0'; zinit load "hlissner/zsh-autopair"
 # tmux fzf
 zinit ice as"program" pick"tmuximum"
 zinit light "arks22/tmuximum"
+# history
+zinit ice as'program' multisrc'misc/zsh/{history,keybind}.zsh' make'install'
+zinit light "b4b4r07/history"
 # abbr
 zinit light "momo-lab/zsh-abbrev-alias"
 # fasd
@@ -96,8 +96,6 @@ loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
 loadlib $ZCONFDIR/zsh-docker.zsh
-loadlib $ZCONFDIR/history/history.zsh
-loadlib $ZCONFDIR/history/keybind.zsh
 loadlib $ZCONFDIR/history/substring.zsh
 
 # -------------------------------------

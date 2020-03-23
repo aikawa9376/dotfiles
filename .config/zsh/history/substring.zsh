@@ -8,8 +8,8 @@ __history::substring::search_begin()
     _history_substring_search_query_highlight=
 
     if [[ -z $BUFFER || $BUFFER != $_history_substring_search_result ]]; then
-        _history_substring_search_query=$BUFFER
-        _history_substring_search_query_escaped=${BUFFER//(#m)[\][()|\\*?#<>~^]/\\$MATCH}
+        _history_substring_search_query=$LBUFFER
+        _history_substring_search_query_escaped=${LBUFFER//(#m)[\][()|\\*?#<>~^]/\\$MATCH}
 
         _history_substring_search_matches=( ${(@f)"$(command history list \
             --filter-branch \
