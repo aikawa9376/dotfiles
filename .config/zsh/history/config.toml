@@ -1,6 +1,6 @@
 [core]
   editor = "nvim"
-  selectcmd = "fzf --ansi --preview-window hidden --multi:fzf --multi:peco"
+  selectcmd = "fzf --ansi --exit-0 --preview-window hidden --multi:fzf --multi:peco"
 
 [history]
   ignore_words = []
