@@ -1,0 +1,23 @@
+[core]
+  editor = "nvim"
+  selectcmd = "fzf --ansi --preview-window hidden --multi:fzf --multi:peco"
+
+[history]
+  ignore_words = []
+  use_color = true
+  path = "~/.config/history/history.ltsv"
+  backup_path = "~/.config/history/.backup/"
+
+[sync]
+  id = ""
+  token = "$GITHUB_TOKEN"
+  size = 100
+
+[screen]
+  filter_dir = true
+  filter_branch = false
+  filter_hostname = false
+  filter_status = false
+  columns = ["{{.Time}}", "{{.Status}}", "{{.Command}}"]
+  status_ok = " "
+  status_ng = "x"

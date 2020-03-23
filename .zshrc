@@ -1,43 +1,46 @@
 # -------------------------------------
-# zplug
+# zinit
 # -------------------------------------
-source ~/.zplug/init.zsh
-# zsh-completions
-zplug "zsh-users/zsh-completions"
-# zsh-history-substring-search
-zplug "zsh-users/zsh-history-substring-search"
-# zsh-syntax-highlighting
-zplug "zdharma/fast-syntax-highlighting"
-# autosuggestions
-zplug "zsh-users/zsh-autosuggestions"
-# fasd
-zplug "plugins/fasd", from:oh-my-zsh, if:"(( $+commands[fasd] ))"
-# enhancd
-zplug "b4b4r07/enhancd", use:init.sh
-# history
-zplug "b4b4r07/history", as:command, \
-  hook-build:"make && make install && cp -r misc/zsh ~/dotfiles/.config/zsh/history"
-# ゴミ箱機能
-zplug "aikawa9376/zsh-gomi", if:"which fzf"
-# git plugin
-zplug "plugin/git", from:oh-my-zsh
-# pair auto
-zplug "hlissner/zsh-autopair"
-# tmux fzf
-zplug "arks22/tmuximum", as:command
-# abbr
-zplug "momo-lab/zsh-abbrev-alias"
-# zplug selfupdate
-zplug 'zplug/zplug', hook-build:'zplug --self-manage'
-
-if ! zplug check --verbose; then
-  printf "Install? [y/N]: "
-  if read -q; then
-    echo; zplug install
-  fi
+### Added by Zinit's installer
+if [[ ! -f $HOME/.zinit/bin/zinit.zsh ]]; then
+    print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma/zinit)…%f"
+    command mkdir -p $HOME/.zinit
+    command git clone https://github.com/zdharma/zinit $HOME/.zinit/bin && \
+        print -P "%F{33}▓▒░ %F{34}Installation successful.%F" || \
+        print -P "%F{160}▓▒░ The clone has failed.%F"
 fi
-# プラグインを読み込み、コマンドにパスを通す
-zplug load --verbose
+source ~/.zinit/bin/zinit.zsh
+autoload -Uz _zinit
+(( ${+_comps} )) && _comps[zinit]=_zinit
+
+# zsh-completions
+zinit ice wait'!0'; zinit load "zsh-users/zsh-completions"
+# zsh-history-substring-search
+zinit ice wait'!0'; zinit load "zsh-users/zsh-history-substring-search"
+# zsh-syntax-highlighting
+zinit ice wait'!0'; zinit load "zdharma/fast-syntax-highlighting"
+# autosuggestions
+zinit ice wait'!0'; zinit load "zsh-users/zsh-autosuggestions"
+# enhancd
+zinit ice wait'!0' atclone'rm -rf functions'
+zinit load "b4b4r07/enhancd"
+# history
+zinit ice wait'!0' as'program' atclone'cp -r misc/zsh ~/dotfiles/.config/zsh/history' make'install'
+zinit load "b4b4r07/history"
+# ゴミ箱機能
+zinit ice wait'!0'; zinit load "aikawa9376/zsh-gomi"
+# pair auto
+zinit ice wait'!0'; zinit load "hlissner/zsh-autopair"
+# tmux fzf
+zinit ice as"program" pick"tmuximum"
+zinit light "arks22/tmuximum"
+# abbr
+zinit light "momo-lab/zsh-abbrev-alias"
+# fasd
+zinit ice if'[[ -n "$commands[fasd]" ]]'
+zinit snippet OMZ::plugins/fasd/fasd.plugin.zsh
+# git plugin
+zinit snippet OMZ::plugins/git/git.plugin.zsh
 
 # -------------------------------------
 # 基本設定
@@ -87,8 +90,7 @@ function loadlib() {
   fi
 }
 loadlib $ZCONFDIR/zsh-vimode.zsh
-# loadlib $HOME/.fzf.zsh
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+loadlib $HOME/.fzf.zsh
 loadlib $ZCONFDIR/zsh-vcs.zsh
 loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
@@ -137,8 +139,7 @@ export FZF_DEFAULT_OPTS='
 '
 
 bindkey "^I" expand-or-complete
-# bindkey "^[[Z" fzf-completion
-bindkey "^ " fzf-completion
+bindkey "^[[Z" fzf-completion
 bindkey '^X^F' fasd-complete-f  # C-x C-f to do fasd-complete-f (only files)
 bindkey '^X^D' fasd-complete-d  # C-x C-d to do fasd-complete-d (only directories)
 
