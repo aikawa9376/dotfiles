@@ -8,8 +8,8 @@ __history::substring::search_begin()
     _history_substring_search_query_highlight=
 
     if [[ -z $BUFFER || $BUFFER != $_history_substring_search_result ]]; then
-        _history_substring_search_query=$LBUFFER
-        _history_substring_search_query_escaped=${LBUFFER//(#m)[\][()|\\*?#<>~^]/\\$MATCH}
+        _history_substring_search_query=$BUFFER
+        _history_substring_search_query_escaped=${BUFFER//(#m)[\][()|\\*?#<>~^]/\\$MATCH}
 
         _history_substring_search_matches=( ${(@f)"$(command history list \
             --filter-branch \
@@ -59,6 +59,7 @@ __history::substring::search_end()
 __history::substring::history_up()
 {
     _history_substring_search_refresh_display=1
+    _zsh_autosuggest_widget_clear
 
     if (( $_history_substring_search_match_index > 0 )); then
         BUFFER=$_history_substring_search_matches[$_history_substring_search_match_index]
@@ -72,6 +73,7 @@ __history::substring::history_up()
 __history::substring::history_down()
 {
     _history_substring_search_refresh_display=1
+    _zsh_autosuggest_widget_clear
 
     if (( _history_substring_search_match_index < $#_history_substring_search_matches )); then
         (( _history_substring_search_match_index++ ))
