@@ -26,21 +26,34 @@ zinit ice wait'!0' lucid; zinit load "aikawa9376/zsh-gomi"
 # pair auto
 zinit ice wait'!0' lucid; zinit load "hlissner/zsh-autopair"
 # enhancd
-zinit ice wait'!0' atclone'rm -rf functions'
+zinit ice lucid wait'!0' atclone'rm -rf functions'
 zinit load "b4b4r07/enhancd"
 # tmux fzf
-zinit ice as"program" pick"tmuximum"
+zinit ice lucid as"program" pick"tmuximum"
 zinit light "arks22/tmuximum"
 # history
-zinit ice as'program' multisrc'misc/zsh/{history,keybind}.zsh' make'install'
+zinit ice lucid as'program' multisrc'misc/zsh/{history,keybind}.zsh' make'install'
 zinit light "b4b4r07/history"
 # abbr
+zinit ice lucid
 zinit light "momo-lab/zsh-abbrev-alias"
 # fasd
-zinit ice if'[[ -n "$commands[fasd]" ]]'
+zinit ice lucid if'[[ -n "$commands[fasd]" ]]'
 zinit snippet OMZ::plugins/fasd/fasd.plugin.zsh
 # git plugin
+zinit ice lucid
 zinit snippet OMZ::plugins/git/git.plugin.zsh
+
+# 外部ファイル読み込み
+export ZCONFDIR="$HOME/.config/zsh"
+zinit ice lucid; zinit snippet $ZCONFDIR/zsh-vimode.zsh
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+zinit ice lucid; zinit snippet $ZCONFDIR/zsh-vcs.zsh
+zinit ice lucid; zinit snippet $ZCONFDIR/zsh-alias.zsh
+zinit ice lucid; zinit snippet $ZCONFDIR/zsh-functions.zsh
+zinit ice lucid; zinit snippet $ZCONFDIR/zsh-bookmark.zsh
+zinit ice lucid; zinit snippet $ZCONFDIR/zsh-docker.zsh
+zinit ice lucid; zinit snippet $ZCONFDIR/history/substring.zsh
 
 # -------------------------------------
 # 基本設定
@@ -81,23 +94,6 @@ case $(uname -a) in
    *Microsoft*) unsetopt BG_NICE ;;
 esac
 
-# 外部ファイル読み込み
-export ZCONFDIR="$HOME/.config/zsh"
-function loadlib() {
-  lib=${1:?"You have to specify a library file"}
-  if [ -f "$lib" ];then #ファイルの存在を確認
-    source "$lib"
-  fi
-}
-loadlib $ZCONFDIR/zsh-vimode.zsh
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-loadlib $ZCONFDIR/zsh-vcs.zsh
-loadlib $ZCONFDIR/zsh-alias.zsh
-loadlib $ZCONFDIR/zsh-functions.zsh
-loadlib $ZCONFDIR/zsh-bookmark.zsh
-loadlib $ZCONFDIR/zsh-docker.zsh
-loadlib $ZCONFDIR/history/substring.zsh
-
 # -------------------------------------
 # fzf
 # -------------------------------------
@@ -137,7 +133,7 @@ export FZF_DEFAULT_OPTS='
 '
 
 bindkey "^I" expand-or-complete
-bindkey "^[[Z" fzf-completion
+bindkey "^ " fzf-completion
 bindkey '^X^F' fasd-complete-f  # C-x C-f to do fasd-complete-f (only files)
 bindkey '^X^D' fasd-complete-d  # C-x C-d to do fasd-complete-d (only directories)
 
