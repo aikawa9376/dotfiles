@@ -44,17 +44,6 @@ zinit snippet OMZ::plugins/fasd/fasd.plugin.zsh
 zinit ice lucid
 zinit snippet OMZ::plugins/git/git.plugin.zsh
 
-# 外部ファイル読み込み
-export ZCONFDIR="$HOME/.config/zsh"
-zinit ice lucid; zinit snippet $ZCONFDIR/zsh-vimode.zsh
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-zinit ice lucid; zinit snippet $ZCONFDIR/zsh-vcs.zsh
-zinit ice lucid; zinit snippet $ZCONFDIR/zsh-alias.zsh
-zinit ice lucid; zinit snippet $ZCONFDIR/zsh-functions.zsh
-zinit ice lucid; zinit snippet $ZCONFDIR/zsh-bookmark.zsh
-zinit ice lucid; zinit snippet $ZCONFDIR/zsh-docker.zsh
-zinit ice lucid; zinit snippet $ZCONFDIR/history/substring.zsh
-
 # -------------------------------------
 # 基本設定
 # -------------------------------------
@@ -93,6 +82,23 @@ setopt no_flow_control
 case $(uname -a) in
    *Microsoft*) unsetopt BG_NICE ;;
 esac
+
+# 外部ファイル読み込み
+export ZCONFDIR="$HOME/.config/zsh"
+function loadlib() {
+  lib=${1:?"You have to specify a library file"}
+  if [ -f "$lib" ];then #ファイルの存在を確認
+    source "$lib"
+  fi
+}
+loadlib $ZCONFDIR/zsh-vimode.zsh
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+loadlib $ZCONFDIR/zsh-vcs.zsh
+loadlib $ZCONFDIR/zsh-alias.zsh
+loadlib $ZCONFDIR/zsh-functions.zsh
+loadlib $ZCONFDIR/zsh-bookmark.zsh
+loadlib $ZCONFDIR/zsh-docker.zsh
+loadlib $ZCONFDIR/history/substring.zsh
 
 # -------------------------------------
 # fzf

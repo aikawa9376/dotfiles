@@ -65,6 +65,8 @@ alias wup="virtstart"
 alias wdown="virtstop"
 alias i3wk="ps faux | grep '\_ i3' | head -n 1 | awk '{print $2}' | xargs kill -s SIGCONT"
 alias hs="command history"
+alias zsup="abbrev-alias -g bb=''; zinit self-update;abbrev-alias -g bb='| bat'"
+alias zup="abbrev-alias -g bb=''; zinit update;abbrev-alias -g bb='| bat'"
 
 # -------------------------------------
 # git
