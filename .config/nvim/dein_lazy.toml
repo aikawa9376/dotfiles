@@ -1969,6 +1969,14 @@ on_event = 'VimEnter'
 repo = 'moll/vim-bbye'
 on_cmd = ['Bdelete', 'Bwipeout']
 
+[[plugins]]
+repo = 'skywind3000/asyncrun.vim'
+on_cmd = ['AsyncRun']
+
+[[plugins]]
+repo = 'skywind3000/asynctasks.vim'
+on_cmd = ['AsyncTask']
+
 # php------------------------------------
 
 [[plugins]]
