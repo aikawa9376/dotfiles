@@ -348,6 +348,7 @@ endfunction
 noremap <silent><expr> <Leader>/ incsearch#go(<SID>config_easyfuzzymotion())
 noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
 noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
+nmap <c-a> <Plug>(easymotion-bd-W)
 '''
 
 [[plugins]]
