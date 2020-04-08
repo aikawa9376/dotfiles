@@ -1962,6 +1962,14 @@ repo = 'aikawa9376/lightline-colorscheme-nordplus'
 # util ----------------------------------
 
 [[plugins]]
+repo = "puremourning/vimspector"
+on_ft = ["python", "php"]
+build = "./install_gadget.py --enable-python --force-enable-php"
+hook_add = '''
+let g:vimspector_enable_mappings = 'HUMAN'
+'''
+
+[[plugins]]
 repo = 'vim-scripts/BufOnly.vim'
 on_event = 'VimEnter'
 
