@@ -1,5 +1,6 @@
 {
   "suggest.noselect": true,
+  "suggest.enablePreselect": true,
   "snippets.ultisnips.enable": false,
   "snippets.snipmate.enable": true,
   "css.colorDecorators.enable": false,

@@ -84,15 +84,15 @@ augroup mygroup
 augroup end
 
 " Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
-vmap <leader>cda  <Plug>(coc-codeaction-selected)
-nmap <leader>cda  <Plug>(coc-codeaction-selected)
+vmap <leader>cda <Plug>(coc-codeaction-selected)
+nmap <leader>cda <Plug>(coc-codeaction-selected)
 
 " Remap for do codeAction of current line
-nmap <leader>cd  <Plug>(coc-codeaction)
+nmap <leader>cd <Plug>(coc-codeaction)
 " Fix autofix problem of current line
-nmap <leader>cq  <Plug>(coc-fix-current)
+nmap <leader>cq <Plug>(coc-fix-current)
 " codelens
-nmap <leader>cl  <Plug>(coc-codelens-action)
+nmap <leader>cl <Plug>(coc-codelens-action)
 
 " Use `:Format` for format current buffer
 command! -nargs=0 Format :call CocAction('format')
@@ -102,19 +102,19 @@ command! -nargs=? Fold :call CocAction('fold', <f-args>)
 
 " Using CocList
 " Show all diagnostics
-nnoremap <silent> <space>ca  :<C-u>CocList diagnostics<cr>
+nnoremap <silent> <space>ca :<C-u>CocList diagnostics<cr>
 " Search workspace symbols
-nnoremap <silent> <space>cs  :<C-u>CocList -I symbols<cr>
+nnoremap <silent> <space>cs :<C-u>CocList -I symbols<cr>
 " Find symbol of current document
-nnoremap <silent> <space>cO  :<C-u>CocList outline<cr>
+nnoremap <silent> <space>cO :<C-u>CocList outline<cr>
 " Show commands
-nnoremap <silent> <space>cm  :<C-u>CocList lists<cr>
+nnoremap <silent> <space>cm :<C-u>CocList lists<cr>
 " Do default action for next item.
-nnoremap <silent> <space>cj  :<C-u>CocNext<CR>
+nnoremap <silent> <space>cj :<C-u>CocNext<CR>
 " Do default action for previous item.
-nnoremap <silent> <space>ck  :<C-u>CocPrev<CR>
+nnoremap <silent> <space>ck :<C-u>CocPrev<CR>
 " Resume latest coc list
-nnoremap <silent> <space>cu  :<C-u>CocListResume<CR>
+nnoremap <silent> <space>cu :<C-u>CocListResume<CR>
 '''
 
 [[plugins]]
@@ -290,24 +290,6 @@ let g:VM_set_statusline  = 0
 '''
 
 [[plugins]]
-repo = 'terryma/vim-expand-region'
-on_map = '<Plug>(expand_region_expand)'
-hook_add = '''
-let g:expand_region_text_objects = {
-  \ 'iw'  :0,
-  \ 'iW'  :0,
-  \ 'il'  :0,
-  \ 'ii'  :1,
-  \ 'i]'  :1,
-  \ 'i}'  :1,
-  \ 'ib'  :1,
-  \ 'iB'  :1,
-  \ 'ip'  :0,
-  \ 'ie'  :0,
-  \ }
-'''
-
-[[plugins]]
 repo = 'rhysd/accelerated-jk'
 on_event = 'VimEnter'
 hook_add = '''
@@ -382,6 +364,9 @@ hook_add = '''
 map J <Plug>(edgemotion-j)
 map K <Plug>(edgemotion-k)
 '''
+
+[[plugins]]
+repo = 'kana/vim-niceblock'
 
 [[plugins]]
 repo = 'kana/vim-textobj-user'
@@ -702,6 +687,14 @@ nmap <plug>(my-switch)J :SplitjoinSplit<cr>
 [[plugins]]
 repo = 'junegunn/goyo.vim'
 on_cmd = ['Goyo']
+
+[[plugins]]
+repo = 'junegunn/vim-easy-align'
+on_map = '<Plug>(EasyAlign)'
+hook_add = '''
+xmap ga <Plug>(EasyAlign)
+nmap ga <Plug>(EasyAlign)
+'''
 
 # list-----------------------------------
 
@@ -1966,6 +1959,7 @@ repo = "puremourning/vimspector"
 on_ft = ["python", "php"]
 build = "./install_gadget.py --enable-python --force-enable-php"
 hook_add = '''
+nmap <silent> <F2> :call vimspector#Reset()<cr>
 let g:vimspector_enable_mappings = 'HUMAN'
 '''
 

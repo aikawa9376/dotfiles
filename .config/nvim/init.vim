@@ -635,6 +635,7 @@ vmap <Space>rw y:%s/<c-r>"//g<Left><Left><Left>
 
 nmap <silent> gK :call <SID>google_search()<CR>
 vmap <silent> gK :call <SID>google_search()<CR>
+vmap <silent> gg :call <SID>google_open()<CR>
 function! s:google_search() abort
   let vtext = s:get_visual_selection()
   let word = expand('<cword>')
@@ -643,6 +644,16 @@ function! s:google_search() abort
   endif
   execute 'silent !google-chrome-stable ' .
    \ '"http://www.google.co.jp/search?num=100&q=' . word . '" 2> /dev/null &'
+endfunction
+function! s:google_open() abort
+  let vtext = s:get_visual_selection()
+  if vtext =~ "^http"
+    let url = vtext
+  else
+    let url = "https://github.com/" . vtext
+  endif
+  execute 'silent !google-chrome-stable ' .
+   \ '"' . url . '" 2> /dev/null &'
 endfunction
 function! s:get_visual_selection()
     let [line_start, column_start] = getpos("'<")[1:2]
