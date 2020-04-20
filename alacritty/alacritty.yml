@@ -89,19 +89,25 @@ font:
   normal:
     family: RictyDiminishedDiscord NF
     # The `style` can be specified to pick a specific face.
-    #style: Regular
+    style: RegularForPowerline
 
   # Bold font face
   bold:
     family: RictyDiminishedDiscord NF
     # The `style` can be specified to pick a specific face.
-    #style: Bold
+    style: BoldForPowerline
 
   # Italic font face
   italic:
     family: RictyDiminishedDiscord NF
     # The `style` can be specified to pick a specific face.
-    #style: Italic
+    style: ObliqueForPowerline
+
+  # Bold Italic font face
+  bold_italic:
+    family: RictyDiminishedDiscord NF
+    # The `style` can be specified to pick a specific face.
+    style: Bold Oblique
 
   # Point size
   size: 16.0

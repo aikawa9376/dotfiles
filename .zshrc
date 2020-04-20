@@ -112,9 +112,7 @@ export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_PREVIEW='--preview "
   [[ -d {} ]]  &&
   tree -C {}
-  [[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
-  timg -g $(( $COLUMNS / 2 - 4 ))x$(( $LINES * 2 )) {}
-  [[ -f {} && $(file --mime {}) =~ (^png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
+  [[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
   echo {} is a binary file
   (bat --style=changes --color=always {} ||
    cat {}) 2> /dev/null | head -500"'
@@ -131,6 +129,7 @@ export FZF_DEFAULT_OPTS='
 --bind alt-k:preview-up,alt-j:preview-down,ctrl-n:down,ctrl-p:up
 --bind alt-a:toggle-all,home:top
 --bind alt-p:previous-history,alt-n:next-history,ctrl-k:kill-line
+--bind "alt-i:execute(feh {})"
 --color dark,hl:34,hl+:40,bg+:235,fg+:15
 --color info:108,prompt:109,spinner:108,pointer:168,marker:168
 '$FZF_DEFAULT_PREVIEW'

@@ -330,6 +330,8 @@ endfunction
 noremap <silent><expr> <Leader>/ incsearch#go(<SID>config_easyfuzzymotion())
 noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
 noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
+map <C-j> <Plug>(easymotion-w)
+map <C-k> <Plug>(easymotion-b)
 '''
 
 [[plugins]]
@@ -518,10 +520,10 @@ hook_source = '''
 " set lazydrawでカーソルが飛ぶ
 let g:submode_timeoutlen = 5000
 let g:submode_keep_leaving_key = 1
-call submode#enter_with('history', 'n', '', 'g;', 'g;zz')
-call submode#enter_with('history', 'n', '', 'g,', 'g,zz')
-call submode#map('history', 'n', '', ';', 'g;zz')
-call submode#map('history', 'n', '', ',', 'g,zz')
+call submode#enter_with('history', 'n', '', 'g;', 'g;')
+call submode#enter_with('history', 'n', '', 'g,', 'g,')
+call submode#map('history', 'n', '', ';', 'g;')
+call submode#map('history', 'n', '', ',', 'g,')
 call submode#enter_with('bufmove', 'n', '', '<C-w>+', '<C-w>+')
 call submode#enter_with('bufmove', 'n', '', '<C-w>-', '<C-w>-')
 call submode#enter_with('bufmove', 'n', '', '<C-w>>', '<C-w>>')
@@ -537,9 +539,9 @@ call submode#map('searchExU', 'n', '', 'n', 'NNgn<Esc>')
 call submode#enter_with('expand-region', 'nv', 'r', 'gw', '<Plug>(expand_region_expand)')
 call submode#map('expand-region', 'nv', 'r', 'w', '<Plug>(expand_region_expand)')
 call submode#map('expand-region', 'nv', 'r', 'W', '<Plug>(expand_region_shrink)')
-call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
-call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)zz')
-call submode#map('block_move', 'n', '', '<M-[>', '<C-o>zz')
+call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
+call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
+call submode#map('block_move', 'n', '', '<M-[>', '<C-o>')
 call submode#enter_with('mini_yank', 'nv', 'r', 'p', '<Plug>(miniyank-autoput)')
 call submode#enter_with('mini_yank', 'nv', 'r', 'P', '<Plug>(miniyank-autoPut)')
 call submode#map('mini_yank', 'nv', 'r', '<C-p>', '<Plug>(miniyank-cycle)')
@@ -614,7 +616,7 @@ on_event = 'VimEnter'
 hook_add = '''
 nmap <Space><Space> %
 vmap <Space><Space> %
-nmap <C-Space> <Plug>(matchup-z%)zz
+nmap <C-Space> <Plug>(matchup-z%)
 let g:matchup_transmute_enabled = 1
 let g:matchup_matchparen_offscreen = {'method': 'status_manual'}
 augroup matchup_setting
@@ -806,38 +808,39 @@ repo = 'junegunn/fzf.vim'
 hook_add = '''
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
-nnoremap <silent> <Leader>f  m':Files<CR>
-nnoremap <silent> <Leader>F  m':AllFiles<CR>
-nnoremap <silent> <Leader>gf m':GFiles<CR>
-nnoremap <silent> <Leader>gi m':Gitignore<CR>
-nnoremap <silent> <Leader>b  m':NavBuffers<CR>
-nnoremap <silent> <Leader>a  m':Rg<CR>
-nnoremap <silent> <Leader>A  m':AllRg<CR>
-nnoremap <silent> <Leader>l  m':BLines<CR>
-nnoremap <silent> <Leader>L  m':Lines<CR>
-nnoremap <silent> <Leader>e  m':MRUFilesCWD<CR>
-nnoremap <silent> <Leader>E  m':MRUFiles<CR>
-nnoremap <silent> <Leader>df :SWSqlFzfSelect<CR>
-nnoremap <silent> <Leader>.  m':DotFiles<CR>
-nnoremap <silent> <Leader>O  m':Outline<CR>
-nnoremap <silent> <Leader>M  m':Memo<CR>
-nnoremap <silent> <Leader>gc m':BCommits<CR>
-nnoremap <silent> <Leader>gC m':Commits<CR>
-nnoremap <silent> <Leader>T  :DirWordCompletions<CR>
-nnoremap <silent> <Leader>tm :TmuxSearch<CR>
-nnoremap <silent> <Leader>p :YanksAfter<CR>
-nnoremap <silent> <Leader>P :YanksBefore<CR>
-nnoremap <silent> <Leader>; :ChangeListNav<CR>
+nnoremap <silent> <Leader>f     m':Files<CR>
+nnoremap <silent> <Leader>F     m':AllFiles<CR>
+nnoremap <silent> <Leader><c-f> m':call FZFImagePreview()<CR>
+nnoremap <silent> <Leader>gf    m':GFiles<CR>
+nnoremap <silent> <Leader>gi    m':Gitignore<CR>
+nnoremap <silent> <Leader>b     m':NavBuffers<CR>
+nnoremap <silent> <Leader>a     m':Rg<CR>
+nnoremap <silent> <Leader>A     m':AllRg<CR>
+nnoremap <silent> <Leader>l     m':BLines<CR>
+nnoremap <silent> <Leader>L     m':Lines<CR>
+nnoremap <silent> <Leader>e     m':MRUFilesCWD<CR>
+nnoremap <silent> <Leader>E     m':MRUFiles<CR>
+nnoremap <silent> <Leader>df    :SWSqlFzfSelect<CR>
+nnoremap <silent> <Leader>.     m':DotFiles<CR>
+nnoremap <silent> <Leader>O     m':Outline<CR>
+nnoremap <silent> <Leader>M     m':Memo<CR>
+nnoremap <silent> <Leader>gc    m':BCommits<CR>
+nnoremap <silent> <Leader>gC    m':Commits<CR>
+nnoremap <silent> <Leader>T     :DirWordCompletions<CR>
+nnoremap <silent> <Leader>tm    :TmuxSearch<CR>
+nnoremap <silent> <Leader>p     :YanksAfter<CR>
+nnoremap <silent> <Leader>P     :YanksBefore<CR>
+nnoremap <silent> <Leader>;     :ChangeListNav<CR>
 nnoremap <silent> <Leader><C-o> :JumpListNav<CR>
-nnoremap <silent> <Leader>q :Helptags<CR>
-nnoremap <silent> <Leader>tt :BTags<CR>
-nnoremap <silent> <C-]> m':call fzf#vim#tags(expand('<cword>'))<CR>
-nnoremap <silent> <expr> <Leader>] "m':Rg(" . expand("<cword>") . ")<CR>"
+nnoremap <silent> <Leader>q     :Helptags<CR>
+nnoremap <silent> <Leader>tt    :BTags<CR>
+nnoremap <silent> <C-]>         m':call fzf#vim#tags(expand('<cword>'))<CR>
+nnoremap <silent> <expr>        <Leader>] "m':Rg(" . expand("<cword>") . ")<CR>"
 nnoremap <silent> q: :History:<CR>
 nnoremap <silent> q/ :History/<CR>
 
-imap <M-p> <plug>(fzf-complete-path)
-imap <c-x><c-j> <plug>(fzf-complete-file-ag)
+imap <c-j>p <plug>(fzf-complete-path)
+imap <c-j>l <plug>(fzf-complete-line)
 
 nmap <Leader><tab> <plug>(fzf-maps-n)
 imap j<tab> <plug>(fzf-maps-i)
@@ -1450,19 +1453,57 @@ function! s:qf_sink(line)
 endfunction
 
 " ------------------------------------------------------------------
+" Image Preview
+" ------------------------------------------------------------------
+function! FZFImagePreview()
+  call OpenFloatingWinFull()
+  call termopen('~/dotfiles/.config/zsh/ueberzogen/fzf-vim-preview.sh -m --height=100%',
+    \ {'on_exit': function('<SID>on_exit')})
+
+  startinsert
+
+  setlocal
+    \ nobuflisted
+    \ bufhidden=hide
+    \ nonumber
+    \ norelativenumber
+    \ signcolumn=no
+endfunction
+
+fun! s:on_exit(job_id, code, event) dict
+    if a:code == 0
+      let list = []
+      let count = 1
+      while getline(count) != ''
+        call add(list, getline(count))
+        let count += 1
+      endwhile
+      close
+      call s:callback('e', list)
+    endif
+endfun
+
+fun! s:callback(func, lines) abort
+  for item in a:lines
+    exe(a:func . " " . item)
+  endfor
+endfun
+
+" ------------------------------------------------------------------
 " Floating window
 " ------------------------------------------------------------------
 function! OpenFloatingWinCenter()
-  let height = &lines - 3
-  let width = float2nr(&columns - (&columns * 2 / 10))
-  let col = float2nr((&columns - width) / 2)
+  let height = float2nr(&lines / 2)
+  let width  = float2nr(&columns * 0.6)
+  let row    = float2nr((&lines - height) / 2)
+  let col    = float2nr((&columns - width) / 2)
 
   let opts = {
     \ 'relative': 'editor',
-    \ 'row': height * 0.3,
-    \ 'col': col + 30,
-    \ 'width': width * 2 / 3,
-    \ 'height': height / 2
+    \ 'row': row,
+    \ 'col': col,
+    \ 'width': width,
+    \ 'height': height
     \ }
 
   let buf = nvim_create_buf(v:false, v:true)
@@ -1480,18 +1521,31 @@ function! OpenFloatingWinCenter()
     \ signcolumn=no
 endfunction
 
-function! s:open_floatingWin_fzf_layout() abort
-  let height = 20
-  let width = float2nr(&columns - (&columns * 2 / 10)) * 2 / 3
-  let opened_at = getpos('.')
+function! OpenFloatingWinFull()
+  let height = &lines
+  let width = &columns
 
-  let bottom_line = line('w0') + winheight(0) - 1
-  if opened_at[1] + height <= bottom_line
-    let layout = 'reverse'
-  else
-    let layout = 'default'
-  endif
-  return layout
+  let opts = {
+    \ 'relative': 'editor',
+    \ 'col': float2nr(width * 0.05),
+    \ 'row': float2nr(height * 0.05),
+    \ 'width': float2nr(width * 0.9),
+    \ 'height': float2nr(height * 0.9)
+    \ }
+
+  let buf = nvim_create_buf(v:false, v:true)
+  let win = nvim_open_win(buf, v:true, opts)
+
+  call setwinvar(win, '&winhl', 'Normal:Fmenu')
+  IndentLinesToggle
+
+  setlocal
+    \ buftype=nofile
+    \ nobuflisted
+    \ bufhidden=hide
+    \ nonumber
+    \ norelativenumber
+    \ signcolumn=no
 endfunction
 
 function! OpenFloatingWin()
@@ -1538,6 +1592,20 @@ function! OpenFloatingWin()
     \ nonumber
     \ norelativenumber
     \ signcolumn=no
+endfunction
+
+function! s:open_floatingWin_fzf_layout() abort
+  let height = 20
+  let width = float2nr(&columns - (&columns * 2 / 10)) * 2 / 3
+  let opened_at = getpos('.')
+
+  let bottom_line = line('w0') + winheight(0) - 1
+  if opened_at[1] + height <= bottom_line
+    let layout = 'reverse'
+  else
+    let layout = 'default'
+  endif
+  return layout
 endfunction
 '''
 
@@ -1910,10 +1978,9 @@ fun! g:lightline.vm_modes() dict
     let v = g:Vm
     let V = b:VM_Selection.Vars
     let m = v.mappings_enabled ? 'M' : 'm'
-    let b = V.block_mode       ? 'B' : 'b'
     let o = V.single_region    ? 'O' : 'o'
     let l = V.multiline        ? 'V' : 'v'
-    return m.b.o.l
+    return m.o.l
   endif
   return ''
 endfun

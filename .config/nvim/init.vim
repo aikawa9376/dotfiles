@@ -320,10 +320,10 @@ nnoremap <C-l> $l
 vnoremap <C-l> $l
 nnoremap <silent><M-m> :call cursor(0,strlen(getline("."))/2)<CR>
 " すごく移動する
-nnoremap <C-j> }
-vnoremap <C-j> }
-nnoremap <C-k> {
-vnoremap <C-k> {
+" nnoremap <C-j> }
+" vnoremap <C-j> }
+" nnoremap <C-k> {
+" vnoremap <C-k> {
 nnoremap <M-l> i<Space><ESC><Right>
 nnoremap <M-h> hx
 nnoremap <silent><M-j> j:call cursor(0,strlen(getline("."))/2)<CR>
@@ -391,14 +391,14 @@ nnoremap <silent> <expr> っｊ Fcitx2en()
 autocmd MyAutoCmd InsertLeave * set nopaste
 
 " ジャンプリストで中央に持ってくる
-nnoremap <c-o> <c-o>zz
-nnoremap <c-i> <c-i>zz
-nnoremap g; g;zz
-nnoremap g, g,zz
-nnoremap <C-u> <C-u>zz
-nnoremap <C-d> <C-d>zz
-nnoremap <C-f> <C-f>zz
-nnoremap <C-b> <C-b>zz
+nnoremap <c-o> <c-o>
+nnoremap <c-i> <c-i>
+nnoremap g; g;
+nnoremap g, g,
+nnoremap <C-u> <C-u>
+nnoremap <C-d> <C-d>
+nnoremap <C-f> <C-f>
+nnoremap <C-b> <C-b>
 " 検索後にジャンプした際に検索単語を画面中央に持ってくる
 nnoremap n nzz
 nnoremap N Nzz
@@ -411,7 +411,7 @@ nmap <silent> <Leader>x :<c-u>Bdelete<CR>
 nmap <silent> <Leader>X :<c-u>bd<CR>
 nmap ZZ :<c-u>xa<CR>
 nmap <silent> <M-b> :bnext<CR>
-nmap <silent> <C-g> mz<C-^>`zzz
+nmap <silent> <C-g> mz<C-^>`z
 " QuickFixおよびHelpでは q でバッファを閉じる
 autocmd MyAutoCmd FileType help,qf nnoremap <buffer> <CR> <CR>
 autocmd MyAutoCmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c

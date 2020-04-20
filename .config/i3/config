@@ -194,4 +194,4 @@ exec --no-startup-id fcitx-autostart;
 exec --no-startup-id $HOME/.config/polybar/lanch.sh;
 exec --no-startup-id insync start;
 exec --no-startup-id xset b off;
-exec --no-startup-id xset r rate 180 70;
+exec --no-startup-id xset r rate 170 120;
