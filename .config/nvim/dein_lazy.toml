@@ -254,7 +254,7 @@ on_event = 'VimEnter'
 hook_add = '''
 map p <Plug>(miniyank-autoput)
 map P <Plug>(miniyank-autoPut)
-let g:miniyank_filename = $HOME."/.miniyank.mpack"
+let g:miniyank_filename = $XDG_CACHE_HOME."/nvim/.miniyank.mpack"
 let g:miniyank_maxitems = 100
 '''
 
@@ -376,7 +376,8 @@ depends = [
 'vim-textobj-entire',  'vim-textobj-indent',      'vim-textobj-php',
 'vim-textobj-line',    'vim-textobj-syntax',      'vim-textobj-comment',
 'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-space',
-'vim-textobj-chunk', 'textobj-mbboundary.vim', 'vim-textobj-conflict'
+'vim-textobj-chunk', 'textobj-mbboundary.vim', 'vim-textobj-conflict',
+'vim-textobj-forward'
 ]
 on_event = 'VimEnter'
 
@@ -424,6 +425,9 @@ repo = 'Chun-Yang/vim-textobj-chunk'
 
 [[plugins]]
 repo = 'aikawa9376/vim-textobj-php'
+
+[[plugins]]
+repo = 'aikawa9376/vim-textobj-forward'
 
 [[plugins]]
 repo = 'deton/textobj-mbboundary.vim'
@@ -956,36 +960,115 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 " ------------------------------------------------------------------
 " MRU handling, limited to current directory
 command! MRUFilesCWD call fzf#run({
-  \  'source': s:mru_files_for_cwd(),
-  \  'sink': 'edit',
+  \  'source': s:mru_files_for_cwd('file'),
+  \  'sink*': function('<SID>mru_file_sink'),
   \  'options': '-m -x +s
-  \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/',
+  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
+  \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
 
-" This relies on the yegappan/mru plugin for live MRU updating. Also relies on
-" the fact that you don't change the location of the file it uses as its cache.
-function! s:mru_files_for_cwd()
+command! MRUWritesCWD call fzf#run({
+  \  'source': s:mru_files_for_cwd('write'),
+  \  'sink*': function('<SID>mrw_file_sink'),
+  \  'options': '-m -x +s
+  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
+  \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
+  \  'down': '40%'})
+
+function! s:mru_files_for_cwd(flag)
   return map(filter(
-  \  systemlist("sed -n '2,$p' ~/.vim_mru_files"),
+  \  systemlist("sed -n '2,$p' $XDG_CACHE_HOME/neomru/" . a:flag),
   \  "v:val =~ '^" . getcwd() . "' && v:val !~ '__Tagbar__\\|\\[YankRing]\\|fugitive:\\|NERD_tree\\|^/tmp/\\|.git/'"
   \ ), 'fnamemodify(v:val, ":p:.")')
 endfunction
 
-" MRU handling, limited to current directory
 command! MRUFiles call fzf#run({
-  \  'source': s:mru_files_for_all(),
-  \  'sink': 'edit',
+  \  'source': s:mru_files_for_all('file'),
+  \  'sink*': function('<SID>mru_file_all_sink'),
   \  'options': '-m -x +s
-  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/',
+  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
+  \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
 
-" This relies on the yegappan/mru plugin for live MRU updating. Also relies on
-" the fact that you don't change the location of the file it uses as its cache.
-function! s:mru_files_for_all()
+command! MRUWrites call fzf#run({
+  \  'source': s:mru_files_for_all('write'),
+  \  'sink*': function('<SID>mrw_file_all_sink'),
+  \  'options': '-m -x +s
+  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
+  \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
+  \  'down': '40%'})
+
+function! s:mru_files_for_all(flag)
   return map(filter(
-  \  systemlist("sed -n '2,$p' ~/.vim_mru_files"),
+  \  systemlist("sed -n '2,$p' $XDG_CACHE_HOME/neomru/" . a:flag),
   \  "v:val !~ '__Tagbar__\\|\\[YankRing]\\|fugitive:\\|NERD_tree\\|^/tmp/\\|.git/'"
   \ ), 'fnamemodify(v:val, ":p:.")')
+endfunction
+
+" refactoring
+function! s:mru_file_sink(lines)
+  if len(a:lines) < 3
+    return
+  endif
+  let s:dir = FindRootDirectory()
+  if a:lines[1] == ''
+    for w in range(2, len(a:lines) - 1)
+      execute("edit " . a:lines[w])
+    endfor
+    return
+  elseif a:lines[1] == 'ctrl-t'
+    execute('MRUWritesCWD ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+endfunction
+function! s:mrw_file_sink(lines)
+  if len(a:lines) < 3
+    return
+  endif
+  let s:dir = FindRootDirectory()
+  if a:lines[1] == ''
+    for w in range(2, len(a:lines) - 1)
+      execute("edit " . a:lines[w])
+    endfor
+    return
+  elseif a:lines[1] == 'ctrl-t'
+    execute('MRUFilesCWD ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+endfunction
+function! s:mru_file_all_sink(lines)
+  if len(a:lines) < 3
+    return
+  endif
+  let s:dir = FindRootDirectory()
+  if a:lines[1] == ''
+    for w in range(2, len(a:lines) - 1)
+      execute("edit " . a:lines[w])
+    endfor
+    return
+  elseif a:lines[1] == 'ctrl-t'
+    execute('MRUWrites ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
+endfunction
+function! s:mrw_file_all_sink(lines)
+  if len(a:lines) < 3
+    return
+  endif
+  let s:dir = FindRootDirectory()
+  if a:lines[1] == ''
+    for w in range(2, len(a:lines) - 1)
+      execute("edit " . a:lines[w])
+    endfor
+    return
+  elseif a:lines[1] == 'ctrl-t'
+    execute('MRUFiles ' . a:lines[0])
+    call feedkeys(":start\<CR>")
+    return
+  endif
 endfunction
 
 " ------------------------------------------------------------------
@@ -1614,6 +1697,7 @@ repo = 'aikawa9376/vim-bookmarks'
 rev = 'fzf'
 hook_add = '''
 let g:bookmark_prefer_fzf = 1
+let g:bookmark_auto_save_file = $XDG_CACHE_HOME.'/nvim/.vim-bookmarks'
 nmap ]B <Plug>BookmarkNext
 nmap [B <Plug>BookmarkPrev
 nmap <Leader>mm  <Plug>BookmarkToggle
@@ -1634,10 +1718,11 @@ let g:peekaboo_delay = 1000
 '''
 
 [[plugins]]
-repo = 'yegappan/mru'
+repo = 'aikawa9376/neomru.vim'
+rev = 'mrw'
 on_event = 'VimEnter'
 hook_add = '''
-let g:MRU_Max_Entries = 5000
+" let g:neomru#file_mru_limit = 5000
 '''
 
 [[plugins]]
@@ -1806,10 +1891,11 @@ let g:lightline = {
   \ },
   \ 'tabline': {
     \ 'left': [
-      \ ['buffers']
+      \ ['buffers'],
+      \ ['autosave'],
     \ ],
     \ 'right': [
-      \ ['workbench', 'obsession']
+      \ ['workbench', 'obsession'],
     \ ]
   \ },
   \ 'component': {
@@ -1828,6 +1914,7 @@ let g:lightline = {
     \ 'vm_modes'       : 'g:lightline.vm_modes',
     \ 'vm_regions'     : 'g:lightline.vm_regions',
     \ 'obsession'      : 'MyObsession',
+    \ 'autosave'       : 'MyAutosave',
     \ 'workbench'      : 'MyWorkbench',
     \ 'cocstatus'      : 'coc#status',
     \ },
@@ -1866,6 +1953,14 @@ endfunction
 function! MyObsession()
   if exists('*ObsessionStatus')
     return ObsessionStatus("\uf0c7", '')
+  else
+    return ''
+  endif
+endfunction
+
+function! MyAutosave()
+  if g:autosave_enable
+    return "\uf14b"
   else
     return ''
   endif
@@ -2029,6 +2124,10 @@ hook_add = '''
 nmap <silent> <F2> :call vimspector#Reset()<cr>
 let g:vimspector_enable_mappings = 'HUMAN'
 '''
+
+[[plugins]]
+repo = 'aikawa9376/autosave.vim'
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'vim-scripts/BufOnly.vim'
