@@ -263,6 +263,7 @@ augroup END
 vnoremap < <gv
 vnoremap > >gv
 set smartindent
+set breakindent
 nnoremap <Leader>i mzgg=G`z
 
 " ノーマルモード中にEnterで改行
