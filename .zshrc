@@ -18,7 +18,8 @@ zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-completions"
 # zsh-history-substring-search
 zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-history-substring-search"
 # zsh-syntax-highlighting
-zinit ice wait'!0' lucid; zinit load "zdharma/fast-syntax-highlighting"
+zinit ice wait'!0' lucid atinit"zpcompinit; zpcdreplay"
+zinit load "zdharma/fast-syntax-highlighting"
 # autosuggestions
 zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-autosuggestions"
 # ゴミ箱機能
@@ -46,6 +47,8 @@ zinit snippet OMZ::plugins/git/git.plugin.zsh
 # fzf-tab
 zinit ice lucid
 zinit light "Aloxaf/fzf-tab"
+
+zinit ice wait'!0' lucid; zinit load "Aloxaf/fzf-tab"
 
 # -------------------------------------
 # 基本設定
