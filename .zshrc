@@ -43,6 +43,9 @@ zinit snippet OMZ::plugins/fasd/fasd.plugin.zsh
 # git plugin
 zinit ice lucid
 zinit snippet OMZ::plugins/git/git.plugin.zsh
+# fzf-tab
+zinit ice lucid
+zinit light "Aloxaf/fzf-tab"
 
 # -------------------------------------
 # 基本設定
@@ -137,8 +140,8 @@ export FZF_DEFAULT_OPTS='
 --bind "?:toggle-preview"
 '
 
-# bindkey "^I" expand-or-complete
-bindkey "^ " fzf-completion
+bindkey '^ ' fzf-completion
+bindkey '^I' fzf-tab-complete   # 実際は遅延読み込みのプラグインで設定されている
 bindkey '^X^F' fasd-complete-f  # C-x C-f to do fasd-complete-f (only files)
 bindkey '^X^D' fasd-complete-d  # C-x C-d to do fasd-complete-d (only directories)
 
@@ -165,48 +168,6 @@ setopt globdots              # 明確なドットの指定なしで.から始ま
 setopt list_packed           # リストを詰めて表示
 setopt menu_complete         # インクリメント検索をディフォルト表示
 
-# disable sort when completing options of any command
-zstyle ':completion:complete:*:options' sort false
-
-# use input as query string when completing zlua
-zstyle ':fzf-tab:complete:_zlua:*' query-string input
-
-# (experimental, may change in the future)
-# some boilerplate code to define the variable `extract` which will be used later
-# please remember to copy them
-local extract="
-# trim input(what you select)
-local in=\${\${\"\$(<{f})\"%\$'\0'*}#*\$'\0'}
-# get ctxt for current completion(some thing before or after the current word)
-local -A ctxt=(\"\${(@ps:\2:)CTXT}\")
-# real path
-local realpath=\${ctxt[IPREFIX]}\${ctxt[hpre]}\$in
-realpath=\${(Qe)~realpath}
-"
-
-# give a preview of commandline arguments when completing `kill`
-zstyle ':completion:*:*:*:*:processes' command "ps -u $USER -o pid,user,comm,cmd -w -w"
-zstyle ':fzf-tab:complete:kill:argument-rest' extra-opts --preview=$extract'ps --pid=$in[(w)1] -o cmd --no-headers -w -w' --preview-window=down:3:wrap
-
-# give a preview of directory by exa when completing cd
-zstyle ':fzf-tab:complete:cd:*' extra-opts --preview=$extract'exa -1 --color=always $realpath'
-
-zstyle ':fzf-tab:*' show-group brief
-zstyle ':fzf-tab:*' continuous-trigger 'ctrl-k'
-FZF_TAB_COMMAND=(
-    fzf
-    --ansi   # Enable ANSI color support, necessary for showing groups
-    --expect='$continuous_trigger' # For continuous completion
-    '--color=hl:$(( $#headers == 0 ? 108 : 255 ))'
-    --nth=2,3 --delimiter='\x00'  # Don't search prefix
-    --layout=reverse --height='${FZF_TMUX_HEIGHT:=75%}'
-    --tiebreak=begin -m --bind=change:top,ctrl-i:toggle+down --cycle
-    --preview-window hidden
-    '--query=$query'   # $query will be expanded to query string at runtime.
-    '--header-lines=$#headers' # $#headers will be expanded to lines of headers at runtime
-)
-zstyle ':fzf-tab:*' command $FZF_TAB_COMMAND
-
 # 補完候補を emacs kybind で選択出来るようにする
 zstyle ':completion:*:default' menu select interactive
 
@@ -228,9 +189,6 @@ export LS_COLORS="$(vivid generate ayu)"
 #ファイル補完候補に色を付ける
 zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 
-# ディレクトリごとに区切る
-WORDCHARS='*?_-.[]~=&;!#$%^(){}<>'
-
 #keybind
 zmodload zsh/complist                                         # "bindkey -M menuselect"設定できるようにするため
 bindkey -M menuselect '^g' .send-break                        # send-break2回分の効果
@@ -244,6 +202,26 @@ bindkey '^[f' forward-word
 bindkey '^[b' backward-word
 bindkey "^[u" undo
 bindkey "^[r" redo
+
+# fzf-tab settings
+zstyle ':fzf-tab:*' show-group brief
+zstyle ':fzf-tab:*' continuous-trigger 'ctrl-k'
+FZF_TAB_COMMAND=(
+    fzf
+    --ansi   # Enable ANSI color support, necessary for showing groups
+    --expect='$continuous_trigger' # For continuous completion
+    '--color=hl:$(( $#headers == 0 ? 108 : 255 ))'
+    --nth=2,3 --delimiter='\x00'  # Don't search prefix
+    --layout=reverse --height='${FZF_TMUX_HEIGHT:=75%}'
+    --tiebreak=begin -m --bind=change:top,ctrl-i:toggle+down --cycle
+    --preview-window hidden
+    '--query=$query'   # $query will be expanded to query string at runtime.
+    '--header-lines=$#headers' # $#headers will be expanded to lines of headers at runtime
+)
+zstyle ':fzf-tab:*' command $FZF_TAB_COMMAND
+
+# ディレクトリごとに区切る
+WORDCHARS='*?_-.[]~=&;!#$%^(){}<>'
 
 # -------------------------------------
 # 補正機能
