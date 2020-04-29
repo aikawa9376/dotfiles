@@ -45,9 +45,6 @@ zinit snippet OMZ::plugins/fasd/fasd.plugin.zsh
 zinit ice lucid
 zinit snippet OMZ::plugins/git/git.plugin.zsh
 # fzf-tab
-zinit ice lucid
-zinit light "Aloxaf/fzf-tab"
-
 zinit ice wait'!0' lucid; zinit load "Aloxaf/fzf-tab"
 
 # -------------------------------------
@@ -143,18 +140,14 @@ export FZF_DEFAULT_OPTS='
 --bind "?:toggle-preview"
 '
 
+bindkey '^I' expand-or-complete
 bindkey '^ ' fzf-completion
-bindkey '^I' fzf-tab-complete   # 実際は遅延読み込みのプラグインで設定されている
 bindkey '^X^F' fasd-complete-f  # C-x C-f to do fasd-complete-f (only files)
 bindkey '^X^D' fasd-complete-d  # C-x C-d to do fasd-complete-d (only directories)
 
 # -------------------------------------
 # 補完機能
 # -------------------------------------
-# 補完機能の強化
-autoload -U compinit
-compinit
-
 #補完に関するオプション
 setopt auto_param_slash      # ディレクトリ名の補完で末尾の / を自動的に付加し、次の補完に備える
 setopt mark_dirs             # ファイル名の展開でディレクトリにマッチした場合 末尾に / を付加
