@@ -2115,6 +2115,9 @@ let g:lightline#bufferline#unnamed           = '[No Name]'
 repo = 'aikawa9376/lightline-colorscheme-nordplus'
 
 # util ----------------------------------
+[[plugins]]
+repo = 'aikawa9376/util.vim'
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = "puremourning/vimspector"
