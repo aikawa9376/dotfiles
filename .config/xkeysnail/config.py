@@ -95,6 +95,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
     K("RAlt-w"): K("C-w"),
     K("Super-t"): with_mark(K("C-t")),
     K("Super-w"): with_mark(K("C-w")),
+    K("Super-Shift-r"): with_mark(K("C-Shift-r")),
     K("C-Space"): K("f6"),
     K("C-o"): K("Alt-left"),
 }, "Firefox and Chrome")

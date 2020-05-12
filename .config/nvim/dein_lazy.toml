@@ -963,7 +963,7 @@ command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd('file'),
   \  'sink*': function('<SID>mru_file_sink'),
   \  'options': '-m -x +s
-  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
+  \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
 
@@ -971,7 +971,7 @@ command! MRUWritesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd('write'),
   \  'sink*': function('<SID>mrw_file_sink'),
   \  'options': '-m -x +s
-  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
+  \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
 

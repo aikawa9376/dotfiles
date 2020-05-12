@@ -21,9 +21,6 @@ let g:indentLine_faster = 1
 autocmd MyAutoCmd FileType help,defx,fzf IndentLinesToggle
 '''
 
-# [[plugins]]
-# repo = 'lukas-reineke/indent-blankline.nvim'
-
 [[plugins]]
 repo = 'sheerun/vim-polyglot'
 hook_add = '''
@@ -48,6 +45,7 @@ set t_8f=^[[38;2;%lu;%lu;%lum
 set t_8b=^[[48;2;%lu;%lu;%lum
 autocmd MyAutoCmd ColorScheme * highlight Normal       ctermbg=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight ErrorMsg     cterm=bold ctermfg=9 gui=bold guifg=#dc322f
+autocmd MyAutoCmd ColorScheme * highlight SignColumn   ctermbg=0 guibg=#073642
 autocmd MyAutoCmd ColorScheme * highlight Comment      gui=italic
 autocmd MyAutoCmd ColorScheme * highlight StatusLine   cterm=none gui=none
 autocmd MyAutoCmd ColorScheme * highlight StatusLineNC cterm=none gui=none
