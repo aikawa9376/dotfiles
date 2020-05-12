@@ -103,6 +103,8 @@ set wildoptions+=pum
 set pumblend=20
 set winblend=20
 
+set foldtext=util#custom_fold_text()
+
 let g:loaded_gzip              = 1
 let g:loaded_tar               = 1
 let g:loaded_tarPlugin         = 1
@@ -161,7 +163,7 @@ nnoremap cl "_s
 vnoremap cl "_s
 
 nnoremap <silent> dd :<c-u>call util#remove_line_brank(v:count1)<cr>
-nnoremap <silent> dd :<c-u>call util#remove_line_brank_all(v:count1)<cr>
+nnoremap <silent> dD :<c-u>call util#remove_line_brank_all(v:count1)<cr>
 
 nmap <silent>]p :<c-u>call util#yank_line('j')<cr>
 nmap <silent>[p :<c-u>call util#yank_line('k')<CR>
@@ -236,17 +238,7 @@ nnoremap [n Ngn<ESC>
 nnoremap gj J
 nnoremap gJ :call util#join_space_less()<CR>
 
-" コマンドモードでemacs
-cnoremap <C-b> <Left>
-cnoremap <C-f> <Right>
-cnoremap <C-n> <Down>
-cnoremap <C-p> <Up>
-cnoremap <C-a> <Home>
-cnoremap <C-e> <End>
-cnoremap <C-d> <Del>
-
 " terminal mode
-command! -nargs=* TERM split | resize20 | term <args>
 nmap <silent><F12> :<c-u>TERM<CR>
 tnoremap <silent><C-[> <C-\><C-n>
 
@@ -302,6 +294,15 @@ xnoremap @ :<C-u>call util#execute_macro_visual_range()<CR>
 " set working directory to the current buffer's directory
 nnoremap cd :lcd %:p:h<bar>pwd<cr>
 nnoremap cu :lcd ..<bar>pwd<cr>
+
+" コマンドモードでemacs
+cnoremap <C-b> <Left>
+cnoremap <C-f> <Right>
+cnoremap <C-n> <Down>
+cnoremap <C-p> <Up>
+cnoremap <C-a> <Home>
+cnoremap <C-e> <End>
+cnoremap <C-d> <Del>
 
 cnoremap <expr> <C-U> util#ctrl_u()
 cnoremap <expr> <SID>(ctrl_w_before) util#ctrl_w_before()
