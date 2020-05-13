@@ -94,6 +94,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
     K("RAlt-k"): K("C-key_1"),
     K("RAlt-w"): K("C-w"),
     K("Super-t"): with_mark(K("C-t")),
+    K("Super-Shift-t"): with_mark(K("C-Shift-t")),
     K("Super-w"): with_mark(K("C-w")),
     K("Super-Shift-r"): with_mark(K("C-Shift-r")),
     K("C-Space"): K("f6"),

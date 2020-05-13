@@ -60,9 +60,6 @@ set nobackup   " ファイル保存時にバックアップファイルを作ら
 set noswapfile " ファイル編集中にスワップファイルを作らない
 set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバッファを開く
 
-" 検索をファイルの先頭へ循環しない
-" set nowrapscan
-
 " 大文字小文字の区別なし
 set ignorecase
 set smartcase
@@ -102,8 +99,6 @@ set smartindent "改行時に入力された行の末尾に合わせて次の行
 set wildoptions+=pum
 set pumblend=20
 set winblend=20
-
-set foldtext=util#custom_fold_text()
 
 let g:loaded_gzip              = 1
 let g:loaded_tar               = 1
@@ -149,12 +144,8 @@ nnoremap <silent> <Plug>(my-switch)t :<C-u>setl expandtab! expandtab?<CR>
 nnoremap <silent> <Plug>(my-switch)w :<C-u>setl wrap! wrap?<CR>
 nnoremap <silent> <Plug>(my-switch)p :<C-u>setl paste! paste?<CR>
 nnoremap <silent> <Plug>(my-switch)b :<C-u>setl scrollbind! scrollbind?<CR>
-nnoremap <silent> <Plug>(my-switch)y :call util#toggle_syntax()<CR>
-nnoremap <silent> <Plug>(my-switch)n :call util#toggle_relativenumber()<CR>
 
 nmap <Leader>z :BufOnly<CR>
-
-nmap <silent> <Esc><Esc> :<C-u>call util#hl_text_toggle()<CR>
 
 " x キー削除でデフォルトレジスタに入れない
 nnoremap x "_x
@@ -162,15 +153,7 @@ vnoremap x "_x
 nnoremap cl "_s
 vnoremap cl "_s
 
-nnoremap <silent> dd :<c-u>call util#remove_line_brank(v:count1)<cr>
-nnoremap <silent> dD :<c-u>call util#remove_line_brank_all(v:count1)<cr>
-
-nmap <silent>]p :<c-u>call util#yank_line('j')<cr>
-nmap <silent>[p :<c-u>call util#yank_line('k')<CR>
 nmap <silent><expr> gV '`['.strpart(getregtype(), 0, 1).'`]'
-
-" ヤンクした後に末尾に移動
-nmap <silent><C-t> :<C-u>call util#yank_text_toggle()<CR>
 
 " 選択範囲のインデントを連続して変更
 vnoremap < <gv
@@ -185,7 +168,6 @@ nnoremap ]<space> mzo<ESC>`zj
 nnoremap [<space> mzO<ESC>`zk
 nnoremap X diw
 
-nnoremap <expr> i util#indent_with_i()
 " インサートモードで bash 風キーマップ
 inoremap <C-a> <C-g>U<C-o>^
 inoremap <C-e> <C-g>U<C-o>$<C-g>U<Right>
@@ -223,11 +205,6 @@ vnoremap <C-h> ^
 nnoremap <C-l> $l
 vnoremap <C-l> $l
 nnoremap <silent><M-m> :call cursor(0,strlen(getline("."))/2)<CR>
-" すごく移動する
-" nnoremap <C-j> }
-" vnoremap <C-j> }
-" nnoremap <C-k> {
-" vnoremap <C-k> {
 nnoremap <M-l> i<Space><ESC><Right>
 nnoremap <M-h> hx
 nnoremap <silent><M-j> j:call cursor(0,strlen(getline("."))/2)<CR>
@@ -236,7 +213,6 @@ nnoremap ]n ngn<ESC>
 nnoremap [n Ngn<ESC>
 
 nnoremap gj J
-nnoremap gJ :call util#join_space_less()<CR>
 
 " terminal mode
 nmap <silent><F12> :<c-u>TERM<CR>
@@ -246,9 +222,6 @@ tnoremap <silent><C-[> <C-\><C-n>
 inoremap <silent> jj <Esc>
 inoremap <silent> っｊ <Esc>
 nnoremap <silent> <expr> っｊ Fcitx2en()
-
-" ペーストモードを自動解除
-autocmd MyAutoCmd InsertLeave * set nopaste
 
 " ジャンプリストで中央に持ってくる
 nnoremap <c-o> <c-o>
@@ -286,10 +259,7 @@ inoremap <C-l> <C-x><C-l>
 inoremap <M-n> <C-x><C-n>
 inoremap <M-p> <C-x><C-p>
 
-nmap <Leader>, :<C-u>call util#reload_vimrc()<CR>
-
 nmap <C-q> @q
-xnoremap @ :<C-u>call util#execute_macro_visual_range()<CR>
 
 " set working directory to the current buffer's directory
 nnoremap cd :lcd %:p:h<bar>pwd<cr>
@@ -304,23 +274,13 @@ cnoremap <C-a> <Home>
 cnoremap <C-e> <End>
 cnoremap <C-d> <Del>
 
-cnoremap <expr> <C-U> util#ctrl_u()
-cnoremap <expr> <SID>(ctrl_w_before) util#ctrl_w_before()
-cnoremap <expr> <SID>(ctrl_w_after) util#ctrl_w_after()
-cmap <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
 cnoremap <C-Y> <C-R>-
 
 " override help command
-nmap <F1> :call util#help_override()<CR>
-vmap <F1> :call util#help_override()<CR>
 
 nmap <Leader>rw :%s///g<Left><Left><Left>
 nmap <Leader>rW :%s/<c-r>=expand("<cword>")<cr>//g<Left><Left>
 vmap <Space>rw y:%s/<c-r>"//g<Left><Left><Left>
-
-nmap <silent> gK :call util#google_search()<CR>
-vmap <silent> gK :call util#google_search()<CR>
-vmap <silent> gg :call util#google_open()<CR>
 
 " ここをTOMLに入れたい
 function! Syntax_range_dein() abort
@@ -384,6 +344,9 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': '<C-s>', 'at': '\%# }', 'leave': 1})
 endfunction
 
+" ペーストモードを自動解除
+autocmd MyAutoCmd InsertLeave * set nopaste
+
 " 前回のカーソル位置からスタート
 augroup MyAutoCmd
   autocmd BufRead * if line("'\"") > 0 && line("'\"") <= line("$") |
@@ -406,7 +369,7 @@ augroup MyXML
 augroup END
 
 " php用の設定はここ
-autocmd MyAutoCmd FileType php,phml call s:php_my_settings()
+autocmd MyAutoCmd FileType php,phtml call s:php_my_settings()
 function! s:php_my_settings() abort
   nnoremap <buffer> <expr><F1> IsPhpOrHtml() ? ":set ft=html<CR>" : ":set ft=php<CR>"
   nnoremap <buffer> <M-4> bi$<ESC>e
