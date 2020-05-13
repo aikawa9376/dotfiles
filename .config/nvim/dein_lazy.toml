@@ -2118,6 +2118,30 @@ repo = 'aikawa9376/lightline-colorscheme-nordplus'
 [[plugins]]
 repo = 'aikawa9376/util.vim'
 on_event = 'VimEnter'
+hook_add = '''
+set foldtext=util#custom_fold_text()
+nmap <silent> <Esc><Esc> :<C-u>call util#hl_text_toggle()<CR>
+nmap <silent>]p :<c-u>call util#yank_line('j')<cr>
+nmap <silent>[p :<c-u>call util#yank_line('k')<CR>
+nmap <silent><C-t> :<C-u>call util#yank_text_toggle()<CR>
+nmap <Leader>, :<C-u>call util#reload_vimrc()<CR>
+vmap <F1> :call util#help_override()<CR>
+nmap <F1> :call util#help_override()<CR>
+vmap <silent> gK :call util#google_search()<CR>
+nmap <silent> gK :call util#google_search()<CR>
+vmap <silent> gg :call util#google_open()<CR>
+nnoremap <silent> <Plug>(my-switch)y :call util#toggle_syntax()<CR>
+nnoremap <silent> <Plug>(my-switch)n :call util#toggle_relativenumber()<CR>
+nnoremap <silent> dd :<c-u>call util#remove_line_brank(v:count1)<cr>
+nnoremap <silent> dD :<c-u>call util#remove_line_brank_all(v:count1)<cr>
+nnoremap <expr> i util#indent_with_i()
+nnoremap gJ :call util#join_space_less()<CR>
+xnoremap @ :<C-u>call util#execute_macro_visual_range()<CR>
+cnoremap <expr> <C-U> util#ctrl_u()
+cnoremap <expr> <SID>(ctrl_w_before) util#ctrl_w_before()
+cnoremap <expr> <SID>(ctrl_w_after) util#ctrl_w_after()
+cmap <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
+'''
 
 [[plugins]]
 repo = "puremourning/vimspector"
