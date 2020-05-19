@@ -44,7 +44,7 @@ set noshowmode
 set cursorline
 set list
 set undofile
-set undodir=$HOME/.config/nvim/undo/
+set undodir=$XDG_CACHE_HOME/nvim/undo/
 set listchars=tab:»-,extends:»,precedes:«,nbsp:%
 set splitright
 set splitbelow
@@ -53,11 +53,11 @@ set nospell
 set spelllang=en,cjk
 
 " ファイル処理関連の設定
-set confirm    " 保存されていないファイルがあるときは終了前に保存確認
-set hidden     " 保存されていないファイルがあるときでも別のファイルを開くことが出来る
-set autoread   " 外部でファイルに変更がされた場合は読みなおす
-set nobackup   " ファイル保存時にバックアップファイルを作らない
-set noswapfile " ファイル編集中にスワップファイルを作らない
+set confirm           " 保存されていないファイルがあるときは終了前に保存確認
+set hidden            " 保存されていないファイルがあるときでも別のファイルを開くことが出来る
+set autoread          " 外部でファイルに変更がされた場合は読みなおす
+set nobackup          " ファイル保存時にバックアップファイルを作らない
+set noswapfile        " ファイル編集中にスワップファイルを作らない
 set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバッファを開く
 
 " 大文字小文字の区別なし
@@ -88,13 +88,12 @@ set mouse=a
 
 " tab/indentの設定
 set shellslash
-set expandtab "タブ入力を複数の空白入力に置き換える
-set tabstop=2 "画面上でタブ文字が占める幅
-set shiftwidth=2 "自動インデントでずれる幅
+set expandtab    " タブ入力を複数の空白入力に置き換える
+set tabstop=2    " 画面上でタブ文字が占める幅
+set shiftwidth=2 " 自動インデントでずれる幅
 set softtabstop=2
-" 連続した空白に対してタブキーやバックスペースキーでカーソルが動く幅
-set autoindent "改行時に前の行のインデントを継続する
-set smartindent "改行時に入力された行の末尾に合わせて次の行のインデントを増減する
+set autoindent   " 改行時に前の行のインデントを継続する
+set smartindent  " 改行時に入力された行の末尾に合わせて次の行のインデントを増減する
 " set wildmenu wildmode=list,full "コマンドモード補完
 set wildoptions+=pum
 set pumblend=20
@@ -223,15 +222,6 @@ inoremap <silent> jj <Esc>
 inoremap <silent> っｊ <Esc>
 nnoremap <silent> <expr> っｊ Fcitx2en()
 
-" ジャンプリストで中央に持ってくる
-nnoremap <c-o> <c-o>
-nnoremap <c-i> <c-i>
-nnoremap g; g;
-nnoremap g, g,
-nnoremap <C-u> <C-u>
-nnoremap <C-d> <C-d>
-nnoremap <C-f> <C-f>
-nnoremap <C-b> <C-b>
 " 検索後にジャンプした際に検索単語を画面中央に持ってくる
 nnoremap n nzz
 nnoremap N Nzz

@@ -1,11 +1,10 @@
 # shougo---------------------------------
-
 [[plugins]]
 repo = 'neoclide/coc.nvim'
 on_event = 'VimEnter'
-depends = ['coc-neoinclude', 'neosnippet', 'coc-neco', 'coc-zsh']
+depends = ['neosnippet', 'coc-zsh']
 marge = 0
-build = 'yarn install --frozen-lockfile'
+rev = 'release'
 hook_add = '''
 " don't give |ins-completion-menu| messages.
 set shortmess+=c
@@ -118,21 +117,7 @@ nnoremap <silent> <space>cu :<C-u>CocListResume<CR>
 '''
 
 [[plugins]]
-repo = 'jsfaint/coc-neoinclude'
-depends = ['neoinclude.vim']
-
-[[plugins]]
 repo = 'tjdevries/coc-zsh'
-
-[[plugins]]
-repo = 'Shougo/neoinclude.vim'
-
-[[plugins]]
-repo = 'neoclide/coc-neco'
-depends = ['neco-vim']
-
-[[plugins]]
-repo = 'Shougo/neco-vim'
 
 [[plugins]]
 repo = 'Shougo/neosnippet'
@@ -225,7 +210,7 @@ let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
 
 [[plugins]]
 repo = 'inkarkat/vim-SyntaxRange'
-on_ft = ['toml']
+on_event = 'VimEnter'
 hook_post_source = '''
 autocmd MyAutoCmd FileType toml call Syntax_range_dein()
 '''
@@ -554,8 +539,8 @@ call submode#enter_with('functionbrace', 'n', '', ']]', ']]')
 call submode#enter_with('functionbrace', 'n', '', '[[', '[[')
 call submode#map('functionbrace', 'n', '', ']', ']]')
 call submode#map('functionbrace', 'n', '', '[', '[[')
-call submode#enter_with('bufbrace', 'n', 's', ']b', ':bnext<CR>')
-call submode#enter_with('bufbrace', 'n', 's', '[b', ':bpreviou<CR>')
+call submode#enter_with('bufbrace', 'n', 's', ']b', 'mz:bnext<CR>')
+call submode#enter_with('bufbrace', 'n', 's', '[b', 'mz:bpreviou<CR>')
 call submode#map('bufbrace', 'n', 's', ']', ':bnext<CR>')
 call submode#map('bufbrace', 'n', 's', '[', ':bpreviou<CR>')
 call submode#enter_with('chunkbrace', 'n', 's', ']c', ':GitGutterNextHunk<CR>')
@@ -1023,30 +1008,30 @@ repo = 'aikawa9376/lightline-colorscheme-nordplus'
 
 # util ----------------------------------
 [[plugins]]
-repo = 'aikawa9376/util.vim'
+repo = 'aikawa9376/myutil.vim'
 on_event = 'VimEnter'
 hook_add = '''
-set foldtext=util#custom_fold_text()
-nmap <silent> <Esc><Esc> :<C-u>call util#hl_text_toggle()<CR>
-nmap <silent>]p :<c-u>call util#yank_line('j')<cr>
-nmap <silent>[p :<c-u>call util#yank_line('k')<CR>
-nmap <silent><C-t> :<C-u>call util#yank_text_toggle()<CR>
-nmap <Leader>, :<C-u>call util#reload_vimrc()<CR>
-vmap <F1> :call util#help_override()<CR>
-nmap <F1> :call util#help_override()<CR>
-vmap <silent> gK :call util#google_search()<CR>
-nmap <silent> gK :call util#google_search()<CR>
-vmap <silent> gg :call util#google_open()<CR>
-nnoremap <silent> <Plug>(my-switch)y :call util#toggle_syntax()<CR>
-nnoremap <silent> <Plug>(my-switch)n :call util#toggle_relativenumber()<CR>
-nnoremap <silent> dd :<c-u>call util#remove_line_brank(v:count1)<cr>
-nnoremap <silent> dD :<c-u>call util#remove_line_brank_all(v:count1)<cr>
-nnoremap <expr> i util#indent_with_i()
-nnoremap gJ :call util#join_space_less()<CR>
-xnoremap @ :<C-u>call util#execute_macro_visual_range()<CR>
-cnoremap <expr> <C-U> util#ctrl_u()
-cnoremap <expr> <SID>(ctrl_w_before) util#ctrl_w_before()
-cnoremap <expr> <SID>(ctrl_w_after) util#ctrl_w_after()
+set foldtext=myutil#custom_fold_text()
+nmap <silent> <Esc><Esc> :<C-u>call myutil#hl_text_toggle()<CR>
+nmap <silent>]p :<c-u>call myutil#yank_line('j')<cr>
+nmap <silent>[p :<c-u>call myutil#yank_line('k')<CR>
+nmap <silent><C-t> :<C-u>call myutil#yank_text_toggle()<CR>
+nmap <Leader>, :<C-u>call myutil#reload_vimrc()<CR>
+vmap <F1> :call myutil#help_override()<CR>
+nmap <F1> :call myutil#help_override()<CR>
+vmap <silent> gK :call myutil#google_search()<CR>
+nmap <silent> gK :call myutil#google_search()<CR>
+vmap <silent> gg :call myutil#google_open()<CR>
+nnoremap <silent> <Plug>(my-switch)y :call myutil#toggle_syntax()<CR>
+nnoremap <silent> <Plug>(my-switch)n :call myutil#toggle_relativenumber()<CR>
+nnoremap <silent> dd :<c-u>call myutil#remove_line_brank(v:count1)<cr>
+nnoremap <silent> dD :<c-u>call myutil#remove_line_brank_all(v:count1)<cr>
+nnoremap <expr> i myutil#indent_with_i()
+nnoremap gJ :call myutil#join_space_less()<CR>
+xnoremap @ :<C-u>call myutil#execute_macro_visual_range()<CR>
+cnoremap <expr> <C-U> myutil#ctrl_u()
+cnoremap <expr> <SID>(ctrl_w_before) myutil#ctrl_w_before()
+cnoremap <expr> <SID>(ctrl_w_after) myutil#ctrl_w_after()
 cmap <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
 '''
 

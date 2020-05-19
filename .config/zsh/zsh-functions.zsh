@@ -421,7 +421,7 @@ hybrid_history() {
     local cmd k res num c c1 c2 q
     c1="fc -rl 1 | \
       fzf --preview-window=hidden -n2..,.. --tiebreak=index \
-      --ansi --query=${(qqq)LBUFFER} --no-sort --exit-0 \
+      --ansi --query=${(qqq)LBUFFER} --exit-0 \
       --bind 'alt-c:execute(echo {} | xclip -selection c)' \
       --print-query --expect=ctrl-r"
 
