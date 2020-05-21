@@ -44,8 +44,11 @@ zinit snippet OMZ::plugins/fasd/fasd.plugin.zsh
 # git plugin
 zinit ice lucid
 zinit snippet OMZ::plugins/git/git.plugin.zsh
-# fzf-tab
-zinit ice wait'!0' lucid; zinit load "Aloxaf/fzf-tab"
+# ls_colors plugin
+zinit ice atclone"dircolors -b LS_COLORS > clrs.zsh" \
+    atpull'%atclone' pick"clrs.zsh" nocompile'!' \
+    atload'zstyle ":completion:*" list-colors “${(s.:.)LS_COLORS}”'
+zinit light trapd00r/LS_COLORS
 
 # -------------------------------------
 # 基本設定
@@ -179,11 +182,6 @@ zstyle ':completion:*:options' description 'yes'
 # グループ名に空文字列を指定すると，マッチ対象のタグ名がグループ名に使われる。
 # したがって，すべての マッチ種別を別々に表示させたいなら以下のようにする
 zstyle ':completion:*' group-name ''
-
-#LS_COLORSを設定しておく
-export LS_COLORS="$(vivid generate ayu)"
-#ファイル補完候補に色を付ける
-zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
 
 #keybind
 zmodload zsh/complist                                         # "bindkey -M menuselect"設定できるようにするため
