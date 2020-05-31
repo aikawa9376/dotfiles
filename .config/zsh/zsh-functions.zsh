@@ -140,7 +140,7 @@ bindkey '\ea' fzf-ripgrep-widget
 
 f-override() {
   local selected
-  if selected=$(fasd -f | sed 's/^[0-9,.]* *//' | fzf --ansi --no-sort --tac +m); then
+  if selected=$(fasd -f | sed 's/^[0-9,.]* *//' | fzf --ansi --tac +m); then
     LBUFFER=${LBUFFER}$selected
   fi
   zle redisplay
@@ -150,7 +150,7 @@ bindkey '\ee'  f-override
 
 z-override() {
   if [[ -z "$*" ]]; then
-    builtin cd "$(fasd_cd -d | fzf --preview-window=hidden --query="$*" -1 -0 --no-sort --tac +m | sed 's/^[0-9,.]* *//')"
+    builtin cd "$(fasd_cd -d | fzf --preview-window=hidden --query="$*" -1 -0 --tac +m | sed 's/^[0-9,.]* *//')"
   else
     fasd_cd -d "$*"
   fi
@@ -208,7 +208,7 @@ fbr() {
 fshow() {
   git log --graph --color=always \
       --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
-  fzf --ansi --no-sort --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
+  fzf --ansi --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
       --bind "ctrl-m:execute:
                 (grep -o '[a-f0-9]\{7\}' | head -1 |
                 xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
@@ -375,7 +375,7 @@ dig_dir() {
     sort="created"
     while cmd="$(
           fd --type d --follow --hidden --color=always --exclude .git \
-          | fzf --ansi --query="$q" --no-sort --exit-0 \
+          | fzf --ansi --query="$q" --exit-0 \
           --bind 'alt-c:execute(echo {} | xclip -selection c)' \
           --print-query --expect=ctrl-j,ctrl-b,ctrl-g,ctrl-d \
           )"; do
@@ -472,7 +472,7 @@ bindkey '^r'  hybrid_history
 notmuchfzf() {
     local threadId
     threadId=$(notmuch search "$*" tag:archive \
-    | fzf --no-sort --prompt="mailArchive-> " \
+    | fzf --prompt="mailArchive-> " \
       --preview 'notmuch show --entire-thread=false  $(echo {} | cut -f1 -d " ") \
         | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
         | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
@@ -482,7 +482,7 @@ notmuchfzf() {
 }
 notmuchfzfselect() {
     notmuch search "$*" tag:archive \
-    | fzf --no-sort --prompt="mailArchive-> " \
+    | fzf --prompt="mailArchive-> " \
       --preview-window down:60% --height 100% \
       --preview 'notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") \
         | perl -pe "s/\n/<br>/g" | perl -pe "s/(<br>)+/<br>/g" \
@@ -497,7 +497,7 @@ notmuchfzfselect() {
 # -------------------------------------
 csvfzfviewer() {
     nl -n ln -w 1 -s "," "$*" | xsv cat rows \
-    | fzf --no-sort --prompt="xsvpreview-> " \
+    | fzf --prompt="xsvpreview-> " \
       --preview-window right:30% --height 100% \
       --preview 'xsv slice -s $(expr $(echo {} | cut -f1 -d ",") - 2) \
         -e $(expr $(echo {} | cut -f1 -d ",") - 1) '$*'  | xsv flatten' \
@@ -530,7 +530,7 @@ mru() {
             | awk '!a[$0]++' \
             | perl -pe 's/^(\/.*\/)(.*)$/\033[34m$1\033[m$2/' \
             | fzf --ansi --multi --query="$q" \
-            --no-sort --exit-0 --prompt="MRU> " \
+            --exit-0 --prompt="MRU> " \
             --preview "pygmentize -g  {}" \
             --print-query --expect=ctrl-v,ctrl-x,ctrl-l,ctrl-q,ctrl-r
             )"; do
@@ -643,7 +643,7 @@ destination_directories() {
             | reverse | awk '!a[$0]++' | reverse \
             | perl -pe 's/^(\/.*)$/\033[34m$1\033[m/' \
             | fzf --ansi --multi --tac --query="$q" \
-            --no-sort --exit-0 --prompt="destination-> " \
+            --exit-0 --prompt="destination-> " \
             --preview 'tree -C {} | head -200' \
             --print-query --expect=ctrl-r,ctrl-y,ctrl-q \
             )"; do
@@ -696,7 +696,7 @@ duster() {
             | perl -pe 's/^(.*)[*@]$/$1/' \
             | fzf --ansi --multi --query="$q" \
             --header=":: $sort - $d" \
-            --no-sort --exit-0 --prompt="duster-> " \
+            --exit-0 --prompt="duster-> " \
             --preview "pygmentize -g  {}" \
             --print-query --expect=ctrl-s,ctrl-u,ctrl-e,enter,ctrl-r,ctrl-l,ctrl-d,ctrl-b,ctrl-v,"-" \
             )"; do

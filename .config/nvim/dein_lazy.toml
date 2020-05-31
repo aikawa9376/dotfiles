@@ -354,15 +354,15 @@ map K <Plug>(edgemotion-k)
 
 [[plugins]]
 repo = 'kana/vim-niceblock'
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = [
-'vim-textobj-entire',  'vim-textobj-indent',      'vim-textobj-php',
-'vim-textobj-line',    'vim-textobj-syntax',      'vim-textobj-comment',
-'vim-textobj-between', 'vim-textobj-from_regexp', 'vim-textobj-space',
-'vim-textobj-chunk', 'textobj-mbboundary.vim', 'vim-textobj-conflict',
-'vim-textobj-forward'
+'vim-textobj-entire',     'vim-textobj-indent',      'vim-textobj-php',
+'vim-textobj-line',       'vim-textobj-syntax',      'vim-textobj-comment',
+'vim-textobj-between',    'vim-textobj-from_regexp', 'vim-textobj-chunk',
+'textobj-mbboundary.vim', 'vim-textobj-forward'
 ]
 on_event = 'VimEnter'
 
@@ -386,12 +386,6 @@ repo = 'thinca/vim-textobj-between'
 
 [[plugins]]
 repo = 'kana/vim-textobj-syntax'
-
-[[plugins]]
-repo = 'saihoooooooo/vim-textobj-space'
-
-[[plugins]]
-repo = 'rhysd/vim-textobj-conflict'
 
 [[plugins]]
 repo = 'glts/vim-textobj-comment'
@@ -1050,7 +1044,7 @@ on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'vim-scripts/BufOnly.vim'
-on_event = 'VimEnter'
+on_cmd = ['BufOnly']
 
 [[plugins]]
 repo = 'moll/vim-bbye'
@@ -1064,15 +1058,12 @@ on_cmd = ['AsyncRun']
 repo = 'skywind3000/asynctasks.vim'
 on_cmd = ['AsyncTask']
 
-# php------------------------------------
-
 [[plugins]]
-repo = 'adoy/vim-php-refactoring-toolbox'
-on_ft = ['php', 'phtml']
-hook_add = '''
-let g:vim_php_refactoring_use_default_mapping = 0
-'''
+repo = 'Shougo/vimproc'
+build = 'make'
+on_event = 'VimEnter'
 
+# php------------------------------------
 [[plugins]]
 repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']

@@ -263,8 +263,11 @@ cnoremap <C-p> <Up>
 cnoremap <C-a> <Home>
 cnoremap <C-e> <End>
 cnoremap <C-d> <Del>
-
 cnoremap <C-Y> <C-R>-
+if &wildoptions =~# "pum"
+  cnoremap <expr> <C-p> pumvisible() ? '<Left>' : '<C-p>'
+  cnoremap <expr> <C-n> pumvisible() ? '<Right>' : '<C-n>'
+endif
 
 " override help command
 

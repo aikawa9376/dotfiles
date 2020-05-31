@@ -376,7 +376,8 @@ function! s:get_root_dir_for_junk()
 endfunction
 
 function! s:junk_file_sink(line) abort
-  execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/" . split(a:line[0], ':')[0]
+  let workdir = s:get_root_dir_for_junk()
+  execute "edit +" . split(a:line[0], ':')[1] . " ~/.cache/junkfile/". workdir . '/' . split(a:line[0], ':')[0]
 endfunction
 
 " ------------------------------------------------------------------

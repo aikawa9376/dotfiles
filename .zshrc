@@ -38,6 +38,8 @@ zinit light "b4b4r07/history"
 # abbr
 zinit ice lucid
 zinit light "momo-lab/zsh-abbrev-alias"
+# fzf-tab
+zinit ice wait'!0' lucid; zinit load "Aloxaf/fzf-tab"
 # fasd
 zinit ice lucid if'[[ -n "$commands[fasd]" ]]'
 zinit snippet OMZ::plugins/fasd/fasd.plugin.zsh
@@ -47,7 +49,8 @@ zinit snippet OMZ::plugins/git/git.plugin.zsh
 # ls_colors plugin
 zinit ice atclone"dircolors -b LS_COLORS > clrs.zsh" \
     atpull'%atclone' pick"clrs.zsh" nocompile'!' \
-    atload'zstyle ":completion:*" list-colors “${(s.:.)LS_COLORS}”'
+    atload'export LS_COLORS=$(sed -E '\''s/;1:/:/g;s/(:di=[^:]*)/\1;1/'\'' <<<"$LS_COLORS"); \
+      zstyle ":completion:*" list-colors ${(s.:.)LS_COLORS}'
 zinit light trapd00r/LS_COLORS
 
 # -------------------------------------
@@ -131,6 +134,7 @@ export FZF_DEFAULT_OPTS='
 --no-hscroll
 --inline-info
 --tabstop=2
+--preview-window noborder
 --history '$HOME'/.fzf/history
 --bind alt-k:preview-up,alt-j:preview-down,ctrl-n:down,ctrl-p:up
 --bind alt-a:toggle-all,home:top
@@ -206,7 +210,7 @@ FZF_TAB_COMMAND=(
     --expect='$continuous_trigger' # For continuous completion
     '--color=hl:$(( $#headers == 0 ? 108 : 255 ))'
     --nth=2,3 --delimiter='\x00'  # Don't search prefix
-    --layout=reverse --height='${FZF_TMUX_HEIGHT:=75%}'
+    --layout=reverse --height 40%
     --tiebreak=begin -m --bind=change:top,ctrl-i:toggle+down --cycle
     --preview-window hidden
     '--query=$query'   # $query will be expanded to query string at runtime.

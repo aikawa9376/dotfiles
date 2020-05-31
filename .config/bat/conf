@@ -1,5 +1,5 @@
---theme="OneHalfDark"
---style="changes"
+--theme="Solarized (dark)"
+--style="numbers,changes"
 --color="always"
 --italic-text="always"
 --map-syntax .ignore:.gitignore

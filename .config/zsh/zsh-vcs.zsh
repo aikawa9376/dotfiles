@@ -166,6 +166,6 @@ function _update_vcs_info_msg() {
   local rightwidth=${#${(S%%)right//$~invisible/}}
   local padwidth=$(($COLUMNS - ($leftwidth + $rightwidth) % $COLUMNS))
 
-  print -P $left${(r:$padwidth:: :)}$right
+  print -P $left '\033[38;5;239m'${(r:$padwidth-2::･:)}'\033[0m' $right
 }
 add-zsh-hook precmd _update_vcs_info_msg
