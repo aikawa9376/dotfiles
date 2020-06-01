@@ -56,8 +56,8 @@ let g:lightline = {
     \ 'vm_modes'       : 'g:lightline.VM()',
     \ 'vm_regions'     : 'g:lightline.VM()',
   \ },
-  \ 'separator'        : {'left': "\u2b80", 'right': "\u2b82"},
-  \ 'subseparator'     : {'left': "\u2b81", 'right': "\u2b83"}
+  \ 'separator'        : {'left': "", 'right': ""},
+  \ 'subseparator'     : {'left': "", 'right': ""}
 \ }
 
 function! MyMode()
