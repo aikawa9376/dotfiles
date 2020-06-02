@@ -575,10 +575,6 @@ repo = 'machakann/vim-highlightedyank'
 on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'thirtythreeforty/lessspace.vim'
-on_event = 'VimEnter'
-
-[[plugins]]
 repo = 'matze/vim-move'
 on_event = 'VimEnter'
 hook_add = '''

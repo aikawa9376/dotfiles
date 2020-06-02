@@ -49,6 +49,8 @@ autocmd MyAutoCmd ColorScheme * highlight StatusLineNC cterm=none gui=none
 " tab,expends,etc...
 autocmd MyAutoCmd ColorScheme * highlight NonText      ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
 autocmd MyAutoCmd ColorScheme * highlight SpecialKey   ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
+autocmd MyAutoCmd ColorScheme * highlight EWhitespace  guifg=#586e75
+autocmd MyAutoCmd VimEnter,WinEnter * match EWhitespace / \+$/
 " pmu settings
 autocmd MyAutoCmd ColorScheme * highlight Pmenu        cterm=None ctermfg=111  gui=None guifg=#87afff
 autocmd MyAutoCmd ColorScheme * highlight PmenuSbar    cterm=None ctermbg=None gui=None guibg=None

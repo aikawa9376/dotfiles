@@ -35,6 +35,7 @@ filetype plugin indent on
 syntax enable
 set t_Co=256
 set number
+set fillchars+=vert:\ 
 set backspace=indent,eol,start
 set fileformats=unix,dos,mac
 set fileencodings=utf-8,sjis
@@ -45,7 +46,7 @@ set cursorline
 set list
 set undofile
 set undodir=$XDG_CACHE_HOME/nvim/undo/
-set listchars=tab:»-,extends:»,precedes:«,nbsp:%
+set listchars=tab:»-,extends:»,precedes:«,nbsp:%,trail:-
 set splitright
 set splitbelow
 set updatetime=100
@@ -303,38 +304,39 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': '<', 'input_after': '>'})
   call lexima#add_rule({'char': '<', 'at': "\\%#[-0-9a-zA-Z]", 'input': '<'})
   call lexima#add_rule({'char': '<C-h>', 'at': '<\%#>', 'delete': 1})
+  call lexima#add_rule({'char': '<C-h>', 'at': '< \%# >', 'delete': 1})
   call lexima#add_rule({'char': '<Space>', 'at': '<\%#>', 'input_after': '<Space>'})
-  call lexima#add_rule({'char': '<BS>', 'at': '< \%# >', 'delete': 1})
 
   call lexima#add_rule({'char': '{', 'input_after': '}'})
   call lexima#add_rule({'char': '{', 'at': "\\%#[-0-9a-zA-Z]", 'input': '{'})
   call lexima#add_rule({'char': '<C-h>', 'at': '{\%#}', 'delete': 1})
+  call lexima#add_rule({'char': '<C-h>', 'at': '{ \%# }', 'delete': 1})
   call lexima#add_rule({'char': '<CR>', 'at': '{\%#}', 'input_after': '<CR>'})
   call lexima#add_rule({'char': '<Space>', 'at': '{\%#}', 'input_after': '<Space>'})
-  call lexima#add_rule({'char': '<BS>', 'at': '{ \%# }', 'delete': 1})
 
   call lexima#add_rule({'char': '[', 'input_after': ']'})
   call lexima#add_rule({'char': '[', 'at': "\\%#[-0-9a-zA-Z]", 'input': '['})
   call lexima#add_rule({'char': '<C-h>', 'at': '\[\%#\]', 'delete': 1})
+  call lexima#add_rule({'char': '<C-h>', 'at': '\[ \%# \]', 'delete': 1})
   call lexima#add_rule({'char': '<CR>', 'at': '\[\%#\]', 'input_after': '<CR>'})
-  call lexima#add_rule({'char': '<Space>', 'at': '\[\%#]', 'input_after': '<Space>'})
-  call lexima#add_rule({'char': '<BS>', 'at': '\[ \%# ]', 'delete': 1})
+  call lexima#add_rule({'char': '<Space>', 'at': '\[\%#\]', 'input_after': '<Space>'})
 
   call lexima#add_rule({'char': '(', 'input_after': ')'})
   call lexima#add_rule({'char': '(', 'at': "\\%#[-0-9a-zA-Z]", 'input': '('})
   call lexima#add_rule({'char': '<C-h>', 'at': '(\%#)', 'delete': 1})
+  call lexima#add_rule({'char': '<C-h>', 'at': '( \%# )', 'delete': 1})
   call lexima#add_rule({'char': '<CR>', 'at': '(\%#)', 'input_after': '<CR>'})
   call lexima#add_rule({'char': '<Space>', 'at': '(\%#)', 'input_after': '<Space>'})
-  call lexima#add_rule({'char': '<BS>', 'at': '( \%# )', 'delete': 1})
 
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%#)', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%#"', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': "\\%#'", 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%#]', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%#}', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%# )', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%# ]', 'leave': 1})
-  call lexima#add_rule({'char': '<C-s>', 'at': '\%# }', 'leave': 1})
+  call lexima#add_rule({'char': ')', 'at': '\%#)', 'leave': 1})
+  call lexima#add_rule({'char': '"', 'at': '\%#"', 'leave': 1})
+  call lexima#add_rule({'char': "'", 'at': "\\%#'", 'leave': 1})
+  call lexima#add_rule({'char': ']', 'at': '\%#]', 'leave': 1})
+  call lexima#add_rule({'char': '}', 'at': '\%#}', 'leave': 1})
+  call lexima#add_rule({'char': '>', 'at': '\%#>', 'leave': 1})
+  call lexima#add_rule({'char': ')', 'at': '\%# )', 'leave': 2})
+  call lexima#add_rule({'char': ']', 'at': '\%# ]', 'leave': 2})
+  call lexima#add_rule({'char': '}', 'at': '\%# }', 'leave': 2})
 endfunction
 
 " ペーストモードを自動解除

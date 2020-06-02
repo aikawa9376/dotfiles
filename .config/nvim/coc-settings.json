@@ -1,5 +1,5 @@
 {
-  "suggest.noselect": true,
+  "suggest.noselect": false,
   "suggest.enablePreselect": true,
   "snippets.ultisnips.enable": false,
   "snippets.snipmate.enable": true,
