@@ -15,6 +15,7 @@
   "coc.source.tmuxcomplete.priority": 40,
   "coc.source.neosnippet.priority": 50,
   "python.pythonPath": "python3",
+  "vetur.validation.template": false,
   "list.insertMappings": {
     "<C-l>": "do:refresh",
     "<C-f>": "feedkeys:\\<C-f>",

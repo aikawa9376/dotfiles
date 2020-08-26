@@ -114,6 +114,11 @@ nnoremap <silent> <space>cj :<C-u>CocNext<CR>
 nnoremap <silent> <space>ck :<C-u>CocPrev<CR>
 " Resume latest coc list
 nnoremap <silent> <space>cu :<C-u>CocListResume<CR>
+
+" Filetype add
+let g:coc_filetype_map = {
+  \ 'blade': 'html',
+  \ }
 '''
 
 [[plugins]]
@@ -196,7 +201,7 @@ let g:user_emmet_anchorizesummary_key  = '<M-e>A'
 let g:user_emmet_mergelines_key        = '<M-e>m'
 let g:user_emmet_codepretty_key        = '<M-e>c'
 let g:user_emmet_imageencode_key       = '<M-e>I'
-autocmd MyAutoCmd FileType phtml,html,php,css EmmetInstall
+autocmd MyAutoCmd FileType phtml,html,php,blade,css EmmetInstall
 '''
 
 [[plugins]]
@@ -1005,6 +1010,7 @@ set foldtext=myutil#custom_fold_text()
 nmap <silent> <Esc><Esc> :<C-u>call myutil#hl_text_toggle()<CR>
 nmap <silent>]p :<c-u>call myutil#yank_line('j')<cr>
 nmap <silent>[p :<c-u>call myutil#yank_line('k')<CR>
+nmap <silent><M-p> :<c-u>call myutil#yank_remove_line()<CR>
 nmap <silent><C-t> :<C-u>call myutil#yank_text_toggle()<CR>
 nmap <Leader>, :<C-u>call myutil#reload_vimrc()<CR>
 vmap <F1> :call myutil#help_override()<CR>
@@ -1033,10 +1039,6 @@ hook_add = '''
 nmap <silent> <F2> :call vimspector#Reset()<cr>
 let g:vimspector_enable_mappings = 'HUMAN'
 '''
-
-[[plugins]]
-repo = 'aikawa9376/autosave.vim'
-on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'vim-scripts/BufOnly.vim'

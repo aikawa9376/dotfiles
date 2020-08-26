@@ -510,10 +510,7 @@ csvfzfviewer() {
 mru() {
     local -a f
     f=(
-    ~/.vim_mru_files(N)
-    ~/.unite/file_mru(N)
-    ~/.cache/ctrlp/mru/cache.txt(N)
-    ~/.frill(N)
+    ~/.cache/neomru/file(N)
     )
     if [[ $#f -eq 0 ]]; then
         echo "There is no available MRU Vim plugins" >&2
@@ -615,7 +612,7 @@ reverse() {
 # -------------------------------------
 # Directory suggest
 # -------------------------------------
-export ENHANCD_LOG="$ENHANCD_DIR/enhancd.log"
+export ENHANCD_LOG="/home/aikawa/.enhancd/enhancd.log"
 destination_directories() {
     local -a d
     if [[ -f $ENHANCD_LOG ]]; then
@@ -639,27 +636,19 @@ destination_directories() {
     local line make_dir
     while : ${make_dir:=0}; cmd="$(
         echo "${(F)d}" \
-            | while read line; do echo "${line:F:$make_dir:h}"; done \
+            | __enhancd::filter::exists \
             | reverse | awk '!a[$0]++' | reverse \
             | perl -pe 's/^(\/.*)$/\033[34m$1\033[m/' \
             | fzf --ansi --multi --tac --query="$q" \
-            --exit-0 --prompt="destination-> " \
+            --exit-0 --prompt="dir-> " \
             --preview 'tree -C {} | head -200' \
-            --print-query --expect=ctrl-r,ctrl-y,ctrl-q \
+            --print-query --expect=ctrl-q \
             )"; do
         q="$(head -1 <<< "$cmd")"
         k="$(head -2 <<< "$cmd" | tail -1)"
         res="$(sed '1,2d;/^$/d' <<< "$cmd")"
         [ -z "$res" ] && continue
         case "$k" in
-            ctrl-y)
-                let make_dir--
-                continue
-                ;;
-            ctrl-r)
-                let make_dir++
-                continue
-                ;;
             ctrl-q)
                 echo "${(@f)res}" >/dev/tty
                 break

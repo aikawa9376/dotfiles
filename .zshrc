@@ -207,19 +207,20 @@ zstyle ':fzf-tab:*' continuous-trigger 'ctrl-k'
 FZF_TAB_COMMAND=(
     fzf
     --ansi   # Enable ANSI color support, necessary for showing groups
-    --expect='$continuous_trigger' # For continuous completion
+    --expect='$continuous_trigger,$print_query' # For continuous completion
     '--color=hl:$(( $#headers == 0 ? 108 : 255 ))'
     --nth=2,3 --delimiter='\x00'  # Don't search prefix
     --layout=reverse --height 40%
     --tiebreak=begin -m --bind=change:top,ctrl-i:toggle+down --cycle
     --preview-window hidden
+    --print-query
     '--query=$query'   # $query will be expanded to query string at runtime.
     '--header-lines=$#headers' # $#headers will be expanded to lines of headers at runtime
 )
 zstyle ':fzf-tab:*' command $FZF_TAB_COMMAND
 
 # ディレクトリごとに区切る
-WORDCHARS='*?_-.[]~=&;!#$%^(){}<>'
+export WORDCHARS='*?_-.[]~$%^(){}<>'
 
 # -------------------------------------
 # 補正機能

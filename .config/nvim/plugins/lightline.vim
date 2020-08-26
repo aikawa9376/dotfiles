@@ -15,8 +15,7 @@ let g:lightline = {
   \ },
   \ 'tabline': {
     \ 'left': [
-      \ ['buffers'],
-      \ ['autosave'],
+      \ ['buffers']
     \ ],
     \ 'right': [
       \ ['workbench', 'obsession'],
@@ -38,7 +37,6 @@ let g:lightline = {
     \ 'vm_modes'       : 'g:lightline.vm_modes',
     \ 'vm_regions'     : 'g:lightline.vm_regions',
     \ 'obsession'      : 'MyObsession',
-    \ 'autosave'       : 'MyAutosave',
     \ 'workbench'      : 'MyWorkbench',
     \ 'cocstatus'      : 'coc#status',
     \ },
@@ -77,14 +75,6 @@ endfunction
 function! MyObsession()
   if exists('*ObsessionStatus')
     return ObsessionStatus("\uf0c7", '')
-  else
-    return ''
-  endif
-endfunction
-
-function! MyAutosave()
-  if g:autosave_enable
-    return "\uf14b"
   else
     return ''
   endif
@@ -183,7 +173,7 @@ function! MyGitGutter()
   return winwidth('.') > 70 ? join(ret, ' ') : ''
 endfunction
 
-let g:lightline.VM = { -> exists("g:Vm") && g:Vm.is_active }
+let g:lightline.VM = { -> exists("g:Vm") && g:Vm.buffer }
 
 fun! g:lightline.vm_mode() dict
   if g:lightline.VM()
