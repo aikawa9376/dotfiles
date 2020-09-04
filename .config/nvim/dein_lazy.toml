@@ -269,7 +269,7 @@ autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,und
 
 [[plugins]]
 repo = 'mg979/vim-visual-multi'
-rev = 'test'
+rev = 'master'
 on_event = 'VimEnter'
 hook_add = '''
 let g:VM_cmdheight       = 1
