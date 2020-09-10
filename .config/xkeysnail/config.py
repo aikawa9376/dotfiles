@@ -80,8 +80,7 @@ define_keymap(re.compile("Alacritty|kitty"), {
     K("RAlt-o"): with_mark(K("C-right")),
     K("RAlt-t"): with_mark(K("C-page_up")),
     K("RAlt-g"): with_mark(K("C-page_down")),
-    K("RAlt-d"): with_mark(K("Alt-down")),
-    K("RAlt-u"): with_mark(K("Alt-up")),
+    K("RAlt-right_brace"): with_mark(K("RAlt-key_0")),
     K("RAlt-LSuper-o"): with_mark(K("C-left")),
     K("RAlt-LSuper-h"): with_mark(K("Shift-left")),
     K("RAlt-LSuper-j"): with_mark(K("Shift-down")),
@@ -100,6 +99,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
     K("Super-Shift-t"): with_mark(K("C-Shift-t")),
     K("Super-w"): with_mark(K("C-w")),
     K("Super-Shift-r"): with_mark(K("C-Shift-r")),
+    K("Super-Shift-v"): with_mark(K("C-Shift-v")),
     K("C-Space"): K("f6"),
     K("C-o"): K("Alt-left"),
 }, "Firefox and Chrome")

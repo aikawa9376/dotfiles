@@ -7,8 +7,9 @@ has() {
 
 left-word-copy() {
   local temp
-  temp=$(echo ${LBUFFER} | sed 's/ *$//')
+  temp=$(echo ${LBUFFER} | sed 's/ *$//' | sed 's/\\ /@@@/g')
   LBUFFER=$(echo $temp)$(echo " ")$(echo $temp | rev | cut -f1 -d " " | rev)
+  LBUFFER=$(echo $LBUFFER | sed 's/@@@/\\ /g')
   zle redisplay
 }
 zle     -N    left-word-copy
