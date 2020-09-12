@@ -39,6 +39,8 @@ imap j<tab> <plug>(fzf-maps-i)
 xmap <Leader><tab> <plug>(fzf-maps-x)
 omap <Leader><tab> <plug>(fzf-maps-o)
 
+let g:fzf_layout = { 'down': '40%' }
+
 let g:fzf_action = {
   \ 'ctrl-t': 'tab split',
   \ 'ctrl-x': 'split',
