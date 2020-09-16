@@ -228,6 +228,15 @@ RWIN & l::Reload
     Return
 }
 
+#ifWinActive,ahk_class illustrator
+{
+  <^h::send_key("^h","{left}{Del}") ; イラレできかない
+}
+#ifWinActive,ahk_class Photoshop
+{
+  ^c::plus_shift("^{d}")
+}
+
 ; LWINとRWIN同時押しでスタートメニューが開く 副作用があるかも
 
 #ifWinActive,ahk_class CabinetWClass

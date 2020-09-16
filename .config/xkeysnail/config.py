@@ -24,13 +24,18 @@ define_conditional_modmap(re.compile(r'Emacs'), {
 define_multipurpose_modmap({
     # Enter is enter when pressed and released. Control when held down.
     Key.ENTER: [Key.ENTER, Key.RIGHT_CTRL],
-    Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL],
     Key.TAB: [Key.TAB, Key.RIGHT_ALT],
     Key.RIGHT_SHIFT: [Key.MUTE, Key.RIGHT_SHIFT],
+    Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL],
 
     # Capslock is escape when pressed and released. Control when held down.
     # {Key.CAPSLOCK: [Key.ESC, Key.LEFT_CTRL]
     # To use this example, you can't remap capslock with define_modmap.
+})
+
+define_conditional_multipurpose_modmap(lambda wm_class: wm_class in ("org.remmina.Remmina"), {
+    # define_multipurpose_modmapで設定されたものがwm_classを上書きする
+    Key.RIGHT_SHIFT: [Key.MUTE, Key.RIGHT_SHIFT],
 })
 
 # Keybindings for Global
