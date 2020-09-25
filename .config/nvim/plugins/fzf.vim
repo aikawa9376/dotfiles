@@ -1,23 +1,23 @@
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
-nnoremap <silent> <Leader>f     m':Files<CR>
-nnoremap <silent> <Leader>F     m':AllFiles<CR>
-nnoremap <silent> <Leader><c-f> m':call FZFImagePreview()<CR>
-nnoremap <silent> <Leader>gf    m':GFiles<CR>
-nnoremap <silent> <Leader>gi    m':Gitignore<CR>
-nnoremap <silent> <Leader>b     m':NavBuffers<CR>
-nnoremap <silent> <Leader>a     m':Rg<CR>
-nnoremap <silent> <Leader>A     m':AllRg<CR>
-nnoremap <silent> <Leader>l     m':BLines<CR>
-nnoremap <silent> <Leader>L     m':Lines<CR>
-nnoremap <silent> <Leader>e     m':MRUFilesCWD<CR>
-nnoremap <silent> <Leader>E     m':MRUFiles<CR>
+nnoremap <silent> <Leader>f     m`:Files<CR>
+nnoremap <silent> <Leader>F     m`:AllFiles<CR>
+nnoremap <silent> <Leader><c-f> m`:call FZFImagePreview()<CR>
+nnoremap <silent> <Leader>gf    m`:GFiles<CR>
+nnoremap <silent> <Leader>gi    m`:Gitignore<CR>
+nnoremap <silent> <Leader>b     m`:NavBuffers<CR>
+nnoremap <silent> <Leader>a     m`:Rg<CR>
+nnoremap <silent> <Leader>A     m`:AllRg<CR>
+nnoremap <silent> <Leader>l     m`:BLines<CR>
+nnoremap <silent> <Leader>L     m`:Lines<CR>
+nnoremap <silent> <Leader>e     m`:MRUFilesCWD<CR>
+nnoremap <silent> <Leader>E     m`:MRUFiles<CR>
 nnoremap <silent> <Leader>df    :SWSqlFzfSelect<CR>
-nnoremap <silent> <Leader>.     m':DotFiles<CR>
-nnoremap <silent> <Leader>O     m':Outline<CR>
-nnoremap <silent> <Leader>M     m':Memo<CR>
-nnoremap <silent> <Leader>gc    m':BCommits<CR>
-nnoremap <silent> <Leader>gC    m':Commits<CR>
+nnoremap <silent> <Leader>.     m`:DotFiles<CR>
+nnoremap <silent> <Leader>O     m`:Outline<CR>
+nnoremap <silent> <Leader>M     m`:Memo<CR>
+nnoremap <silent> <Leader>gc    m`:BCommits<CR>
+nnoremap <silent> <Leader>gC    m`:Commits<CR>
 nnoremap <silent> <Leader>T     :DirWordCompletions<CR>
 nnoremap <silent> <Leader>tm    :TmuxSearch<CR>
 nnoremap <silent> <Leader>p     :YanksAfter<CR>
@@ -98,8 +98,10 @@ endfunction
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_files_sink'),
-  \  'options': "--ansi -m -x --no-unicode
-  \  --expect ctrl-x"}))
+  \  'source': 'fd --type file --follow --hidden --color=always '.
+  \            '-E .git -E ''*.pdf'' -E ''*.png'' -E ''*.jpg''',
+  \  'options': '--ansi -m -x --no-unicode '.
+  \             '--expect ctrl-x'}))
 
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',

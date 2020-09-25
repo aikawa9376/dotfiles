@@ -106,7 +106,9 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
     K("Super-Shift-r"): with_mark(K("C-Shift-r")),
     K("Super-Shift-v"): with_mark(K("C-Shift-v")),
     K("C-Space"): K("f6"),
+    K("C-g"): [K("f10"), K("f10"), set_mark(False)],
     K("C-o"): K("Alt-left"),
+    K("C-j"): K("Alt-e"),
 }, "Firefox and Chrome")
 
 # Emacs-like keybindings in non-Emacs applications

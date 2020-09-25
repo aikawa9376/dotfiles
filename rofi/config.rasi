@@ -1,0 +1,13 @@
+configuration {
+	modi: "combi,window,drun,tmux:/home/aikawa/.config/rofi/scripts/tmux.sh";
+	width: 30;
+	font: "Noto Sans CJK JP 14";
+	padding: 20;
+	sort: true;
+	combi-modi: "window,tmux";
+	matching: "fuzzy";
+	theme: "Arc-Dark";
+	kb-accept-entry: "Ctrl+m,Return";
+	kb-mode-next: "Ctrl+Tab,XF86AudioMute";
+	kb-cancel: "Ctrl+c,Ctrl+bracketleft,Escape";
+}

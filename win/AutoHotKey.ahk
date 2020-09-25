@@ -92,7 +92,7 @@ send_key(original_key,replace_key)
 is_exp_edit(original_key,replace_key)
 {
   ControlGetFocus, focusedControl, A
-  if( focusedControl == "Edit1" || focusedControl == "NetUIHWND1" )
+  if( focusedControl == "Edit1" || focusedControl == "Edit2" || focusedControl == "NetUIHWND1" )
   {
     SendEvent, %original_key%
     Return

@@ -180,6 +180,10 @@ repo = 'wellle/tmux-complete.vim'
 # text-----------------------------------
 
 [[plugins]]
+repo = 'thirtythreeforty/lessspace.vim'
+on_event = 'VimEnter'
+
+[[plugins]]
 repo = 'mattn/emmet-vim'
 on_ft = ['html', 'php', 'phtml', 'javascript']
 hook_add = '''

@@ -197,6 +197,7 @@ nnoremap v mvv
 nnoremap d mvd
 nnoremap c mvc
 nnoremap : mv:
+nnoremap = mv=
 nnoremap <C-v> mv<C-v>
 nnoremap <M-x> vy
 nnoremap <Leader>U `v
@@ -215,7 +216,6 @@ nnoremap [n Ngn<ESC>
 nnoremap gj J
 
 " terminal mode
-nmap <silent><F12> :<c-u>TERM<CR>
 tnoremap <silent><C-[> <C-\><C-n>
 
 " 入力モード中に素早くJJと入力した場合はESCとみなす
@@ -235,7 +235,7 @@ nmap <silent> <Leader>x :<c-u>Bdelete<CR>
 nmap <silent> <Leader>X :<c-u>bd<CR>
 nmap ZZ :<c-u>xa<CR>
 nmap <silent> <M-b> :bnext<CR>
-nmap <silent> <C-g> mz<C-^>`z
+nmap <silent> <C-g> m`<C-^>
 
 " window操作系
 nmap <silent> \| :<c-u>vsplit<CR><C-w>h
