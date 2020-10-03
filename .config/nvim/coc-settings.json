@@ -1,8 +1,12 @@
 {
-  "suggest.noselect": false,
+  "suggest.noselect": true,
   "suggest.enablePreselect": true,
   "snippets.ultisnips.enable": false,
   "snippets.snipmate.enable": true,
+  "snippets.extends": {
+    "scss": ["css"],
+    "typescss": ["javascript"]
+  },
   "css.colorDecorators.enable": false,
   "scss.colorDecorators.enable": false,
   "diagnostic.refreshAfterSave": true,
@@ -13,7 +17,7 @@
   "codeLens.enable": true,
   "coc.preferences.colorSupport": false,
   "coc.source.tmuxcomplete.priority": 40,
-  "coc.source.neosnippet.priority": 50,
+  "snippets.priority": 90,
   "python.pythonPath": "python3",
   "vetur.validation.template": false,
   "list.insertMappings": {

@@ -86,9 +86,13 @@ function s:override_files_sink(lines) abort
     for w in range(1, len(a:lines) - 1)
       execute("silent !rm " . a:lines[w])
     endfor
-    execute('Files')
-    call feedkeys(":start\<CR>")
+    call feedkeys(":Files\<CR>")
     return
+  endif
+  if a:lines[0] == 'ctrl-v'
+    for w in range(1, len(a:lines) - 1)
+      execute("vsplit " . a:lines[w])
+    endfor
   endif
   for w in range(1, len(a:lines) - 1)
     execute("edit ". fnamemodify(a:lines[w], ":p"))
@@ -98,10 +102,10 @@ endfunction
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_files_sink'),
-  \  'source': 'fd --type file --follow --hidden --color=always '.
-  \            '-E .git -E ''*.pdf'' -E ''*.png'' -E ''*.jpg''',
+  \  'source': 'fd --type file --follow --hidden --color=always ' .
+  \            '-E .git -E ''*.pdf'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf''',
   \  'options': '--ansi -m -x --no-unicode '.
-  \             '--expect ctrl-x'}))
+  \             '--expect ctrl-x,ctrl-v'}))
 
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
@@ -186,7 +190,7 @@ command! MRUWritesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd('write'),
   \  'sink*': function('<SID>mrw_file_sink'),
   \  'options': '-m -x --ansi
-  \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/
+  \              --no-unicode --prompt=MRW:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
 
@@ -209,7 +213,7 @@ command! MRUWrites call fzf#run({
   \  'source': s:mru_files_for_all('write'),
   \  'sink*': function('<SID>mrw_file_all_sink'),
   \  'options': '-m -x --ansi
-  \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
+  \              --no-unicode --prompt=MRW_ALL:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
 
@@ -232,8 +236,7 @@ function! s:mru_file_sink(lines)
     endfor
     return
   elseif a:lines[1] == 'ctrl-t'
-    execute('MRUWritesCWD ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    call feedkeys(":MRUWritesCWD " . a:lines[0] . "\<CR>")
     return
   endif
 endfunction
@@ -248,8 +251,7 @@ function! s:mrw_file_sink(lines)
     endfor
     return
   elseif a:lines[1] == 'ctrl-t'
-    execute('MRUFilesCWD ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    call feedkeys(":MRUFilesCWD " . a:lines[0] . "\<CR>")
     return
   endif
 endfunction
@@ -264,8 +266,7 @@ function! s:mru_file_all_sink(lines)
     endfor
     return
   elseif a:lines[1] == 'ctrl-t'
-    execute('MRUWrites ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    call feedkeys(":MRUWrites " . a:lines[0] . "\<CR>")
     return
   endif
 endfunction
@@ -280,8 +281,7 @@ function! s:mrw_file_all_sink(lines)
     endfor
     return
   elseif a:lines[1] == 'ctrl-t'
-    execute('MRUFiles ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    call feedkeys(":MRUFiles " . a:lines[0] . "\<CR>")
     return
   endif
 endfunction
@@ -430,13 +430,11 @@ function! s:ignore_file_sink(lines)
       endif
     endfor
   elseif a:lines[1] == 'ctrl-t'
-    execute('AddGitignore')
-    call feedkeys(":start\<CR>")
+    call feedkeys(":AddGitignore\<CR>")
     return
   endif
   " execute("Gina add " . fnamemodify(a:lines[0], ":p"))
-  execute('Gitignore ' . a:lines[0])
-  call feedkeys(":start\<CR>")
+  call feedkeys(":Gitignore " . a:lines[0] . "\<CR>")
   return
 endfunction
 
@@ -464,12 +462,10 @@ function! s:add_ignore_file_sink(lines) abort
       execute("silent !echo " . t . " >> " . s:dir . "/.gitignore")
       execute("Gina rm --cached " . fnamemodify(t, ":p"))
     endfor
-    execute('AddGitignore ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    call feedkeys(":AddGitignore " . a:lines[0] . "\<CR>")
     return
   elseif a:lines[1] == 'ctrl-t'
-    execute('Gitignore')
-    call feedkeys(":start\<CR>")
+    call feedkeys(":Gitignore\<CR>")
     return
   endif
   execute("Gina rm --cached " . fnamemodify(a:lines[2], ":p"))
@@ -489,8 +485,7 @@ function s:override_gitfiles_sink(lines) abort
     for w in range(1, len(a:lines) - 1)
       execute("Gina rm --cached " . a:lines[w])
     endfor
-    execute('GFiles')
-    call feedkeys(":start\<CR>")
+    call feedkeys(':GFiles\<CR>')
     return
   endif
   for w in range(1, len(a:lines) - 1)
@@ -565,8 +560,7 @@ function! s:bufopen(lines)
 
   if a:lines[1] == 'ctrl-k'
     execute('bwipeout')
-    execute('NavBuffers ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    call feedkeys(":NavBuffers " . a:lines[0] . "\<CR>")
     return
   endif
 
@@ -576,16 +570,14 @@ function! s:bufopen(lines)
       let index = matchstr(b, '^\[\([0-9a-f]\+\)\]')
       execute('bwipeout ' . index[1:len(index)-2])
     endfor
-    execute('NavBuffers ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    call feedkeys(":NavBuffers " . a:lines[0] . "\<CR>")
     return
   endif
 
   if a:lines[1] == 'ctrl-b'
     let index = matchstr(a:lines[2], '\[\zs[0-9]*\ze\]')
-    execute 'buffer ' index
-    execute('NavBuffers ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    execute ('buffer ' . index)
+    call feedkeys(":NavBuffers " . a:lines[0] . "\<CR>")
     return
   endif
 
@@ -594,8 +586,7 @@ function! s:bufopen(lines)
   if !empty(cmd)
     execute 'silent ' cmd
     execute 'buffer ' b
-    execute('NavBuffers ' . a:lines[0])
-    call feedkeys(":start\<CR>")
+    call feedkeys(":NavBuffers " . a:lines[0] . "\<CR>")
     return
   endif
   execute 'buffer ' b

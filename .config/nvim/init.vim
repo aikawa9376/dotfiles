@@ -28,6 +28,8 @@ endif
 if has('vim_starting') && dein#check_install()
   call dein#install()
 endif
+" 高速アップデート用設定
+source $XDG_CONFIG_HOME/nvim/dein_key.vim
 
 " Required:
 filetype on
@@ -161,7 +163,7 @@ vnoremap > >gv
 nnoremap <Leader>i mzgg=G`z
 
 " ノーマルモード中にEnterで改行
-nnoremap <CR> i<CR><Esc>
+nnoremap <CR> i<CR><Esc>==
 nnoremap <Leader><CR> $a<CR><Esc>
 nnoremap <Leader>s i<Space><ESC>
 nnoremap ]<space> mzo<ESC>`zj
@@ -180,10 +182,9 @@ inoremap <C-d> <C-g>U<Del>
 inoremap <C-k> <C-g>U<C-o>D<Right>
 inoremap <C-u> <C-g>U<C-o>d^
 inoremap <C-w> <C-g>U<C-o>db
-inoremap <C-o> <C-g>U<C-o>o
 inoremap <M-f> <C-g>U<C-o>w
 inoremap <M-b> <C-g>U<C-o>b
-inoremap <M-P> <C-g>U<C-o>P
+inoremap <M-p> <C-g>U<C-o>P
 " TODO undoきれなくする 関数？
 inoremap <C-v> <C-g>U<C-o>yh<C-g>U<C-r>"<C-g>U<Right>
 
@@ -191,16 +192,16 @@ inoremap <C-v> <C-g>U<C-o>yh<C-g>U<C-r>"<C-g>U<Right>
 nnoremap Y y$
 nnoremap V v$
 nnoremap vv V
+nnoremap gV `[v`]
 " mrは operator replace用
-nnoremap y mvmry
-nnoremap v mvv
-nnoremap d mvd
-nnoremap c mvc
-nnoremap : mv:
-nnoremap = mv=
+nnoremap y m`mvmry
+nnoremap v m`mvv
+nnoremap d m`mvd
+nnoremap c m`mvc
+nnoremap : m`mv:
+nnoremap = m`mv=
 nnoremap <C-v> mv<C-v>
 nnoremap <M-x> vy
-nnoremap <Leader>U `v
 nnoremap <C-h> ^
 vnoremap <C-h> ^
 nnoremap <C-l> $l
@@ -247,8 +248,6 @@ nnoremap <M-,> mz$a,<ESC>`z
 
 " 補完系
 inoremap <C-l> <C-x><C-l>
-inoremap <M-n> <C-x><C-n>
-inoremap <M-p> <C-x><C-p>
 
 nmap <C-q> @q
 
@@ -328,6 +327,8 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': '<CR>', 'at': '(\%#)', 'input_after': '<CR>'})
   call lexima#add_rule({'char': '<Space>', 'at': '(\%#)', 'input_after': '<Space>'})
 
+  call lexima#add_rule({'char': '<CR>', 'at': '>\%#<', 'input_after': '<CR>'})
+
   call lexima#add_rule({'char': ')', 'at': '\%#)', 'leave': 1})
   call lexima#add_rule({'char': '"', 'at': '\%#"', 'leave': 1})
   call lexima#add_rule({'char': "'", 'at': "\\%#'", 'leave': 1})
@@ -337,6 +338,8 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': ')', 'at': '\%# )', 'leave': 2})
   call lexima#add_rule({'char': ']', 'at': '\%# ]', 'leave': 2})
   call lexima#add_rule({'char': '}', 'at': '\%# }', 'leave': 2})
+
+  inoremap <expr> <CR> pumvisible() ? coc#_select_confirm() : lexima#expand('<CR>', 'i')
 endfunction
 
 " ペーストモードを自動解除

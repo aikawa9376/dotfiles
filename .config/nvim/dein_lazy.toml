@@ -2,7 +2,7 @@
 [[plugins]]
 repo = 'neoclide/coc.nvim'
 on_event = 'VimEnter'
-depends = ['neosnippet', 'coc-zsh']
+depends = ['vim-snippets', 'coc-zsh']
 marge = 0
 rev = 'release'
 hook_add = '''
@@ -14,7 +14,21 @@ set signcolumn=yes
 let g:coc_status_error_sign   = "\uf057 :"
 let g:coc_status_warning_sign = "\uf071 :"
 
-let g:coc_snippet_next = '<C-Space>'
+" Snippets
+inoremap <silent><expr> <C-Space>
+      \ pumvisible() ? "\<C-y>" :
+      \ coc#expandableOrJumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" :
+      \ <SID>check_back_space() ? "\<C-Space>" :
+      \ coc#refresh()
+smap <C-Space> <Del>
+smap <C-d> <Del>
+let g:coc_snippet_next = '<C-j>'
+let g:coc_snippet_prev = '<C-k>'
+
+function! s:check_back_space() abort
+  let col = col('.') - 1
+  return !col || getline('.')[col - 1]  =~# '\s'
+endfunction
 
 " Use tab for trigger completion with characters ahead and navigate.
 " Use command ':verbose imap <tab>' to make sure tab is not mapped by other plugin.
@@ -24,12 +38,9 @@ imap <silent><expr> <TAB>
       \ coc#refresh()
 imap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
 
-function! s:check_back_space() abort
-  let col = col('.') - 1
-  return !col || getline('.')[col - 1]  =~# '\s'
-endfunction
+" Overwrite lexima
+imap <silent><expr> <CR> pumvisible() ? coc#_select_confirm() : "\<CR>"
 
-imap <silent><expr> <cr> pumvisible() ? coc#_select_confirm() : "\<CR>"
 imap <silent><expr> <C-x><C-x> coc#refresh()
 
 " Use `[a` and `]a` for navigate diagnostics
@@ -125,31 +136,7 @@ let g:coc_filetype_map = {
 repo = 'tjdevries/coc-zsh'
 
 [[plugins]]
-repo = 'Shougo/neosnippet'
-depends = ['neosnippet-snippets', 'vim-snippets']
-hook_add = '''
-imap <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
-  \ ? "\<Plug>(neosnippet_jump)" : "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
-smap <expr> <C-Space> pumvisible() ? neosnippet#jumpable()
-  \ ? "\<Plug>(neosnippet_jump)" : "\<C-y>" : "\<Plug>(neosnippet_jump_or_expand)"
-xmap <expr> <C-Space> pumvisible() ? "\<C-y>" : "\<Plug>(neosnippet_expand_target)"
-
-let g:neosnippet#enable_completed_snippet  = 1
-let g:neosnippet#expand_word_boundar       = 1
-let g:neosnippet#enable_auto_clear_markers = 1
-let g:neosnippet#snippets_directory        = '~/.cache/dein/repos/github.com/honza/vim-snippets/snippets/'
-
-" For conceal markers.
-if has('conceal')
-  set conceallevel=2 concealcursor=niv
-  endif
-'''
-
-[[plugins]]
 repo = 'honza/vim-snippets'
-
-[[plugins]]
-repo = 'Shougo/neosnippet-snippets'
 
 [[plugins]]
 repo = 'liuchengxu/vista.vim'
@@ -210,7 +197,6 @@ autocmd MyAutoCmd FileType phtml,html,php,blade,css EmmetInstall
 
 [[plugins]]
 repo = 'RRethy/vim-hexokinase'
-frozen = 1
 build = 'make hexokinase'
 on_ft = ['css', 'scss']
 hook_add = '''
@@ -246,8 +232,8 @@ vmap <C-_> <Plug>(caw:hatpos:toggle)
 repo = 'bfredl/nvim-miniyank'
 on_event = 'VimEnter'
 hook_add = '''
-map p <Plug>(miniyank-autoput)
-map P <Plug>(miniyank-autoPut)
+map p <Plug>(miniyank-autoput)=`]
+map P <Plug>(miniyank-autoPut)=`]
 let g:miniyank_filename = $XDG_CACHE_HOME."/nvim/.miniyank.mpack"
 let g:miniyank_maxitems = 100
 '''
@@ -538,6 +524,10 @@ call submode#enter_with('mini_yank', 'nv', 'r', 'p', '<Plug>(miniyank-autoput)')
 call submode#enter_with('mini_yank', 'nv', 'r', 'P', '<Plug>(miniyank-autoPut)')
 call submode#map('mini_yank', 'nv', 'r', '<C-p>', '<Plug>(miniyank-cycle)')
 call submode#map('mini_yank', 'nv', 'r', '<C-n>', '<Plug>(miniyank-cycleback)')
+call submode#map('mini_yank', 'nv', 'r', '<C-w>', '<Plug>(miniyank-tochar)')
+call submode#map('mini_yank', 'nv', 'r', '<C-l>', '<Plug>(miniyank-toline)')
+call submode#map('mini_yank', 'nv', 'r', '<C-b>', '<Plug>(miniyank-toblock)')
+call submode#map('mini_yank', 'n', '', '<C-f>', '=`]^')
 call submode#enter_with('functionbrace', 'n', '', ']]', ']]')
 call submode#enter_with('functionbrace', 'n', '', '[[', '[[')
 call submode#map('functionbrace', 'n', '', ']', ']]')
@@ -1012,9 +1002,9 @@ on_event = 'VimEnter'
 hook_add = '''
 set foldtext=myutil#custom_fold_text()
 nmap <silent> <Esc><Esc> :<C-u>call myutil#hl_text_toggle()<CR>
-nmap <silent>]p :<c-u>call myutil#yank_line('j')<cr>
-nmap <silent>[p :<c-u>call myutil#yank_line('k')<CR>
-nmap <silent><M-p> :<c-u>call myutil#yank_remove_line()<CR>
+nmap <silent>]p :<c-u>call myutil#yank_line('j')<CR>=`]^
+nmap <silent>[p :<c-u>call myutil#yank_line('k')<CR>=`]^
+nmap <silent><M-p> :<c-u>call myutil#yank_remove_line()<CR>=`]^
 nmap <silent><C-t> :<C-u>call myutil#yank_text_toggle()<CR>
 nmap <Leader>, :<C-u>call myutil#reload_vimrc()<CR>
 vmap <F1> :call myutil#help_override()<CR>

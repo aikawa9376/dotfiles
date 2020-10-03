@@ -183,9 +183,9 @@ rvim () {
 
 fvim() {
   if [[ $@ == '-a' ]]; then
-    files=$(fd -I --type file --follow --hidden --color=always --exclude  .git) &&
+    files=$(fd -I --type file --follow --hidden --color=always --exclude .git) &&
   else
-    files=$(fd --type file --follow --hidden --color=always --exclude  .git) &&
+    files=$(fd --type file --follow --hidden --color=always --exclude .git) &&
   fi
   # wraped function timg and bat?
   selected_files=$(echo "$files" | fzf -m --ansi | tr '\n' ' ') &&
