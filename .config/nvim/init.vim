@@ -137,6 +137,9 @@ if has('unix')
 endif
 
 nmap <Space> <Leader>
+vmap <Space> <Leader>
+xmap <Space> <Leader>
+omap <Space> <Leader>
 
 noremap  <Plug>(my-switch) <Nop>
 nmap     <Leader>t <Plug>(my-switch)
@@ -338,8 +341,6 @@ function! SetLeximaAddRule() abort
   call lexima#add_rule({'char': ')', 'at': '\%# )', 'leave': 2})
   call lexima#add_rule({'char': ']', 'at': '\%# ]', 'leave': 2})
   call lexima#add_rule({'char': '}', 'at': '\%# }', 'leave': 2})
-
-  inoremap <expr> <CR> pumvisible() ? coc#_select_confirm() : lexima#expand('<CR>', 'i')
 endfunction
 
 " ペーストモードを自動解除

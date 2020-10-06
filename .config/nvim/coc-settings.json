@@ -4,6 +4,7 @@
   "snippets.ultisnips.enable": false,
   "snippets.snipmate.enable": true,
   "snippets.extends": {
+    "php": ["html"],
     "scss": ["css"],
     "typescss": ["javascript"]
   },
