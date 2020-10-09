@@ -97,7 +97,7 @@ zmenu() {
 fzf-pictre-preview() {
   local selected
   if selected=$(fd --type file --follow --hidden --color=always --exclude .git 2> /dev/null |
-    $HOME/.config/zsh/ueberzogen/fzf-preview.sh); then
+    $HOME/.config/zsh/ueberzogen/fzf-preview.sh | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
   fi
   zle redisplay

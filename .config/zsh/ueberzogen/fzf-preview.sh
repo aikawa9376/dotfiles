@@ -7,7 +7,7 @@ function CREATE_PREVIEW {
     local cache_directory="${XDG_CACHE_HOME:-$HOME/.cache}"
     local cache_image_path="${cache_directory}/ranger/${path_sha1%% *-}.jpg"
     local text_preview=
-    
+
     # Wrong exit code if declared (local) & assigned at once..
     # https://github.com/ranger/ranger/blob/3f8e7c14103a6570b0e55fbcf84242c86f42a7cb/ranger/core/actions.py#L1187
     text_preview="$("${config_directory}/ranger/scope.sh" \
@@ -49,6 +49,6 @@ function CREATE_PREVIEW {
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     export -f CREATE_PREVIEW
-    $HOME/dotfiles/.config/zsh/ueberzogen/fzf-ueberzogen.sh --ansi --preview 'CREATE_PREVIEW {}' "$@"
+    $HOME/dotfiles/.config/zsh/ueberzogen/fzf-ueberzogen.sh --ansi --multi --preview 'CREATE_PREVIEW {}' "$@"
     ps aux | grep ueberzug | grep -v grep | awk '{ print "kill -9", $2 }' | sh
 fi
