@@ -54,6 +54,7 @@ set splitbelow
 set updatetime=100
 set nospell
 set spelllang=en,cjk
+set shortmess+=atc
 
 " ファイル処理関連の設定
 set confirm           " 保存されていないファイルがあるときは終了前に保存確認

@@ -941,8 +941,8 @@ on_cmd = ['Gina']
 hook_add = '''
 nmap <silent> <Leader>gns :Gina status<CR>
 nmap <silent> <Leader>gnb :Gina blame<CR>
-nmap <silent> <Leader>gp  :Gina push<CR>redraw<CR>
-" nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
+nmap <silent> <Leader>gp  :Gina push<CR>
+nmap <silent> <Leader>gr  :Gina rm --cached %<CR>
 nmap <silent> <Leader>gm  :Gina commit -m 'update'<CR>
 nmap <silent> <Leader>gM  :GitAddCommit update<CR>
 nmap <silent> <Leader>gU  :GitAddAmend<Space>
