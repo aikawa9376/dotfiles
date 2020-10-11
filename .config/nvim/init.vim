@@ -44,6 +44,7 @@ set fileencodings=utf-8,sjis
 set ttimeoutlen=1
 set completeopt=menuone
 set noshowmode
+set nomore
 set cursorline
 set list
 set undofile
