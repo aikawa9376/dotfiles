@@ -6,21 +6,13 @@ depends = ['vim-snippets', 'coc-zsh']
 marge = 0
 rev = 'release'
 hook_add = '''
-" don't give |ins-completion-menu| messages.
-set shortmess+=c
-" always show signcolumns
-set signcolumn=yes
-
 let g:coc_status_error_sign   = "\uf057 :"
 let g:coc_status_warning_sign = "\uf071 :"
 
 " Snippets
 inoremap <silent><expr> <C-Space>
-      \ pumvisible() ? coc#expandable() ? coc#_select_confirm() :
-      "\ coc#jumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" : coc#_select_confirm() :
-      \ coc#jumpable() ? coc#_select_confirm() : coc#_select_confirm() :
+      \ pumvisible() ? coc#_select_confirm() :
       \ coc#expandableOrJumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" :
-      \ <SID>check_back_space() ? "\<C-Space>" :
       \ coc#refresh()
 smap <C-Space> <Del>
 smap <C-d> <Del>
@@ -83,6 +75,10 @@ xmap if <Plug>(coc-funcobj-i)
 xmap af <Plug>(coc-funcobj-a)
 omap if <Plug>(coc-funcobj-i)
 omap af <Plug>(coc-funcobj-a)
+xmap iC <Plug>(coc-classobj-i)
+omap iC <Plug>(coc-classobj-i)
+xmap aC <Plug>(coc-classobj-a)
+omap aC <Plug>(coc-classobj-a)
 
 augroup mygroup
   autocmd!
@@ -98,11 +94,13 @@ augroup mygroup
 augroup end
 
 " Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
-vmap <leader>cda <Plug>(coc-codeaction-selected)
-nmap <leader>cda <Plug>(coc-codeaction-selected)
+vmap <leader>cd <Plug>(coc-codeaction-selected)
+nmap <leader>cd <Plug>(coc-codeaction-selected)
+vmap <leader>cdl ^<Plug>(coc-codeaction-selected)$
+nmap <leader>cdl ^<Plug>(coc-codeaction-selected)$
 
-" Remap for do codeAction of current line
-nmap <leader>cd <Plug>(coc-codeaction)
+" Remap for do codeAction of current buffer
+nmap <leader>cda <Plug>(coc-codeaction)
 " Fix autofix problem of current line
 nmap <leader>cq <Plug>(coc-fix-current)
 " codelens
@@ -116,24 +114,22 @@ command! -nargs=? Fold :call CocAction('fold', <f-args>)
 
 " Using CocList
 " Show all diagnostics
-nnoremap <silent> <space>ca :<C-u>CocList diagnostics<cr>
+nnoremap <silent> <space>ca :<C-u>CocFzfList diagnostics<cr>
 " Search workspace symbols
-nnoremap <silent> <space>cs :<C-u>CocList -I symbols<cr>
+nnoremap <silent> <space>cs :<C-u>CocFzfList -I symbols<cr>
 " Find symbol of current document
-nnoremap <silent> <space>cO :<C-u>CocList outline<cr>
+nnoremap <silent> <space>cO :<C-u>CocFzfList outline<cr>
 " Show commands
-nnoremap <silent> <space>cm :<C-u>CocList lists<cr>
-" Do default action for next item.
-nnoremap <silent> <space>cj :<C-u>CocNext<CR>
-" Do default action for previous item.
-nnoremap <silent> <space>ck :<C-u>CocPrev<CR>
+nnoremap <silent> <space>cm :<C-u>CocFzfList lists<cr>
 " Resume latest coc list
-nnoremap <silent> <space>cu :<C-u>CocListResume<CR>
+nnoremap <silent> <space>cu :<C-u>CocFzfListResume<CR>
 
 " Filetype add
 let g:coc_filetype_map = {
   \ 'blade': 'html',
   \ }
+
+let g:coc_disable_transparent_cursor = 1
 '''
 
 [[plugins]]
@@ -222,7 +218,9 @@ let g:lexima_no_default_rules = 1
 '''
 hook_post_source = '''
 call SetLeximaAddRule()
-" inoremap <expr> <CR> pumvisible() ? coc#_select_confirm() : lexima#expand('<LT>CR>', 'i')
+inoremap <expr> <CR> pumvisible() ? coc#expandable() ? coc#_select_confirm() :
+      \ coc#jumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" : coc#_select_confirm() :
+      \ lexima#expand('<LT>CR>', 'i')
 '''
 
 [[plugins]]
@@ -788,8 +786,16 @@ on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'junegunn/fzf.vim'
+depends = ['coc-fzf']
 hook_add = '''
 source $XDG_CONFIG_HOME/nvim/plugins/fzf.vim
+'''
+
+[[plugins]]
+repo = 'antoinemadec/coc-fzf'
+hook_add = '''
+let g:coc_fzf_preview = ''
+let g:coc_fzf_opts = []
 '''
 
 [[plugins]]

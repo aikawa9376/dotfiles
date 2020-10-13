@@ -55,12 +55,14 @@ set updatetime=100
 set nospell
 set spelllang=en,cjk
 set shortmess+=atc
+set signcolumn=yes
 
 " ファイル処理関連の設定
 set confirm           " 保存されていないファイルがあるときは終了前に保存確認
 set hidden            " 保存されていないファイルがあるときでも別のファイルを開くことが出来る
 set autoread          " 外部でファイルに変更がされた場合は読みなおす
 set nobackup          " ファイル保存時にバックアップファイルを作らない
+set nowritebackup     " ファイル保存時にバックアップファイルを作らない
 set noswapfile        " ファイル編集中にスワップファイルを作らない
 set switchbuf=useopen " 新しく開く代わりにすでに開いてあるバッファを開く
 
@@ -199,6 +201,7 @@ nnoremap vv V
 nnoremap gV `[v`]
 " mrは operator replace用
 nnoremap y m`mvmry
+vnoremap y m`mvmry
 nnoremap v m`mvv
 nnoremap d m`mvd
 nnoremap c m`mvc

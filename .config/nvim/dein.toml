@@ -14,7 +14,7 @@ let g:rooter_patterns = ['Session.vim', '.git/', '.vimrc.local']
 repo = 'Yggdroot/indentLine'
 hook_add = '''
 let g:indentLine_faster = 1
-autocmd MyAutoCmd FileType help,defx,fzf IndentLinesToggle
+autocmd MyAutoCmd FileType help,defx,fzf IndentLinesDisable
 '''
 
 [[plugins]]
