@@ -207,6 +207,7 @@ nnoremap d m`mvd
 nnoremap c m`mvc
 nnoremap : m`mv:
 nnoremap = m`mv=
+nnoremap i m`mvi
 nnoremap <C-v> mv<C-v>
 nnoremap <M-x> vy
 nnoremap <C-h> ^
@@ -357,8 +358,11 @@ augroup MyAutoCmd
   " QuickFixおよびHelpでは q でバッファを閉じる
   autocmd FileType help,qf nnoremap <buffer> <CR> <CR>
   autocmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
-  autocmd FileType far_vim nnoremap <buffer><nowait> q <C-w>o:tabc<CR>
+  autocmd FileType help,qf,fugitive,defx,vista nnoremap <buffer><nowait> <C-c> <C-w>c
+  autocmd FileType agit nnoremap <buffer><nowait> <C-c> <C-w>o:tabc<CR>
+  autocmd FileType Mundo nnoremap <buffer><nowait> <C-c> :bdelete<CR>:bdelete<CR>
   autocmd FileType gitcommit nmap <buffer><nowait> q :<c-u>wq<CR>
+  autocmd FileType gitcommit nmap <buffer><nowait> <C-c> :<c-u>wq<CR>
   autocmd FileType fugitive nnoremap <buffer><Space>gp :<c-u>Gina push<CR><C-w>c
 augroup END
 
@@ -405,3 +409,14 @@ endfunction
 function! s:neomutt_feedkey() abort
   call feedkeys('j}o')
 endfunction
+
+lua require'nvim-treesitter.configs'.setup {
+  ensure_installed = "all",
+  highlight = {
+    enable = true,
+    disable = { "c", "rust" },
+  },
+  indent = {
+    enable = true
+  }
+}

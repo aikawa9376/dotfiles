@@ -94,6 +94,11 @@ function s:override_files_sink(lines) abort
       execute("vsplit " . a:lines[w])
     endfor
   endif
+  if a:lines[0] == 'ctrl-q'
+    call setqflist(map(copy(a:lines), '{ "filename": v:val }'))
+    copen
+    cc
+  endif
   for w in range(1, len(a:lines) - 1)
     execute("edit ". fnamemodify(a:lines[w], ":p"))
   endfor
@@ -105,7 +110,7 @@ command! -bang -nargs=? -complete=dir Files
   \  'source': 'fd --type file --follow --hidden --color=always ' .
   \            '-E .git -E ''*.pdf'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf''',
   \  'options': '--ansi -m -x --no-unicode '.
-  \             '--expect ctrl-x,ctrl-v'}))
+  \             '--expect ctrl-x,ctrl-v,ctrl-q'}))
 
 command! AllFiles call fzf#run({
   \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
@@ -485,7 +490,7 @@ function s:override_gitfiles_sink(lines) abort
     for w in range(1, len(a:lines) - 1)
       execute("Gina rm --cached " . a:lines[w])
     endfor
-    call feedkeys(':GFiles\<CR>')
+    call feedkeys(":GFiles\<CR>")
     return
   endif
   for w in range(1, len(a:lines) - 1)

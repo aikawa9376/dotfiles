@@ -159,9 +159,9 @@ function! MyGitGutter()
     return ''
   endif
   let symbols = [
-    \ g:gitgutter_sign_added    . '',
-    \ g:gitgutter_sign_modified . '',
-    \ g:gitgutter_sign_removed  . ''
+    \ g:gitgutter_sign_added    . "\uf457 ",
+    \ g:gitgutter_sign_modified . "\uf459 ",
+    \ g:gitgutter_sign_removed  . "\uf458 "
   \ ]
   let hunks = GitGutterGetHunkSummary()
   let ret = []
@@ -170,7 +170,7 @@ function! MyGitGutter()
       call add(ret, symbols[i] . hunks[i])
     endif
   endfor
-  return winwidth('.') > 70 ? join(ret, ' ') : ''
+  return winwidth('.') > 70 ? substitute(join(ret, ' '), '・', '', 'g',) : ''
 endfunction
 
 let g:lightline.VM = { -> exists("g:Vm") && g:Vm.buffer }

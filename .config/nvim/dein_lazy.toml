@@ -64,7 +64,8 @@ endfunction
 autocmd CursorHold * silent call CocActionAsync('highlight')
 
 " Remap for rename current word
-nmap <leader>rn <Plug>(coc-rename)
+nmap <leader>cn <Plug>(coc-rename)
+nmap <leader>cr <Plug>(coc-refactor)
 
 " Remap for format selected region
 nmap <leader>cf <Plug>(coc-format-selected)
@@ -88,7 +89,7 @@ augroup mygroup
   autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
   autocmd ColorScheme * highligh CocErrorSign   ctermfg=9   guifg=#ff0000 guibg=none
   autocmd ColorScheme * highligh CocWarningSign ctermfg=130 guifg=#ff922b guibg=none
-  autocmd ColorScheme * highligh CocInfoSign    ctermfg=11  guifg=#fab005 guibg=none
+  autocmd ColorScheme * highligh CocInfoSign    ctermfg=11  guifg=#119e26 guibg=none
   autocmd ColorScheme * highligh CocHintSign    ctermfg=12  guifg=#15aabf guibg=none
   autocmd ColorScheme * highligh CocCodeLens    ctermfg=12  guifg=#15aabf
 augroup end
@@ -96,8 +97,8 @@ augroup end
 " Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
 vmap <leader>cd <Plug>(coc-codeaction-selected)
 nmap <leader>cd <Plug>(coc-codeaction-selected)
-vmap <leader>cdl ^<Plug>(coc-codeaction-selected)$
-nmap <leader>cdl ^<Plug>(coc-codeaction-selected)$
+vmap <leader>cdl <Plug>(coc-codeaction-line)
+nmap <leader>cdl <Plug>(coc-codeaction-line)
 
 " Remap for do codeAction of current buffer
 nmap <leader>cda <Plug>(coc-codeaction)
@@ -177,7 +178,7 @@ hook_add = '''
 let g:user_emmet_install_global        =  0
 let g:user_emmet_mode                  = 'iv'
 let g:user_emmet_expandabbr_key        = '<M-,>'
-let g:user_emmet_expandword_key        = '<M-e>w;'
+let g:user_emmet_expandword_key        = '<M-e>w'
 let g:user_emmet_update_tag            = '<M-e>u'
 let g:user_emmet_balancetaginward_key  = '<M-e>d'
 let g:user_emmet_balancetagoutward_key = '<M-e>D'
@@ -219,7 +220,7 @@ let g:lexima_no_default_rules = 1
 hook_post_source = '''
 call SetLeximaAddRule()
 inoremap <expr> <CR> pumvisible() ? coc#expandable() ? coc#_select_confirm() :
-      \ coc#jumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" : coc#_select_confirm() :
+      \ coc#jumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" : "\<C-y>" :
       \ lexima#expand('<LT>CR>', 'i')
 '''
 
@@ -778,7 +779,7 @@ nmap QQ <Plug>(qutefinger-toggle-win)
 
 [[plugins]]
 repo = 'junegunn/fzf'
-depends = ['fzf.vim', 'vim-bookmarks', 'tmux-complete.vim']
+depends = ['fzf.vim', 'vim-bookmarks', 'tmux-complete.vim', 'fzf-git.vim']
 path = '~/.fzf'
 build = './install --all'
 merged = 0
@@ -797,6 +798,9 @@ hook_add = '''
 let g:coc_fzf_preview = ''
 let g:coc_fzf_opts = []
 '''
+
+[[plugins]]
+repo = 'aikawa9376/fzf-git.vim'
 
 [[plugins]]
 repo = 'aikawa9376/vim-bookmarks'
@@ -914,18 +918,18 @@ omap ih <Plug>(GitGutterTextObjectInnerPending)
 omap ah <Plug>(GitGutterTextObjectOuterPending)
 xmap ih <Plug>(GitGutterTextObjectInnerVisual)
 xmap ah <Plug>(GitGutterTextObjectOuterVisual)
-let g:gitgutter_sign_added              = "\uf457 "
-let g:gitgutter_sign_modified           = "\uf459 "
-let g:gitgutter_sign_removed            = "\uf458 "
-let g:gitgutter_sign_modified_removed   = "\uf45a "
-let g:gitgutter_sign_removed_first_line = "\uf474 "
+let g:gitgutter_sign_added              = "・"
+let g:gitgutter_sign_modified           = "・"
+let g:gitgutter_sign_removed            = "・"
+let g:gitgutter_sign_modified_removed   = "・"
+let g:gitgutter_sign_removed_first_line = "・"
 let g:gitgutter_grep_command            = 'rg --hidden --follow --glob "!.git/*"'
 let g:gitgutter_diff_args               = '-w'
 let g:gitgutter_preview_win_floating    = 1
-autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#009900 guibg=#073642
-autocmd MyAutoCmd ColorScheme * highlight GitGutterChange       guifg=#bbbb00 guibg=#073642
-autocmd MyAutoCmd ColorScheme * highlight GitGutterDelete       guifg=#ff2222 guibg=#073642
-autocmd MyAutoCmd ColorScheme * highlight GitGutterChangeDelete guifg=#ff2222 guibg=#073642
+autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#009900 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterChange       guifg=#bbbb00 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterDelete       guifg=#ff2222 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterChangeDelete guifg=#ff2222 guibg=none
 '''
 hook_post_source = '''
 GitGutterEnable

@@ -24,6 +24,10 @@ let g:jsx_ext_required = 1
 '''
 
 # design---------------------------------
+[[plugins]]
+repo = 'nvim-treesitter/nvim-treesitter'
+hook_add = '''
+'''
 
 [[plugins]]
 repo = 'ryanoasis/vim-devicons'
