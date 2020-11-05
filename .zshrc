@@ -3,11 +3,11 @@
 # -------------------------------------
 ### Added by Zinit's installer
 if [[ ! -f $HOME/.zinit/bin/zinit.zsh ]]; then
-    print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma/zinit)…%f"
-    command mkdir -p $HOME/.zinit
-    command git clone https://github.com/zdharma/zinit $HOME/.zinit/bin && \
-        print -P "%F{33}▓▒░ %F{34}Installation successful.%F" || \
-        print -P "%F{160}▓▒░ The clone has failed.%F"
+  print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma/zinit)…%f"
+  command mkdir -p $HOME/.zinit
+  command git clone https://github.com/zdharma/zinit $HOME/.zinit/bin && \
+  print -P "%F{33}▓▒░ %F{34}Installation successful.%F" || \
+  print -P "%F{160}▓▒░ The clone has failed.%F"
 fi
 source ~/.zinit/bin/zinit.zsh
 autoload -Uz _zinit
@@ -48,9 +48,9 @@ zinit ice lucid
 zinit snippet OMZ::plugins/git/git.plugin.zsh
 # ls_colors plugin
 zinit ice atclone"dircolors -b LS_COLORS > clrs.zsh" \
-    atpull'%atclone' pick"clrs.zsh" nocompile'!' \
-    atload'export LS_COLORS=$(sed -E '\''s/;1:/:/g;s/(:di=[^:]*)/\1;1/'\'' <<<"$LS_COLORS"); \
-      zstyle ":completion:*" list-colors ${(s.:.)LS_COLORS}'
+atpull'%atclone' pick"clrs.zsh" nocompile'!' \
+atload'export LS_COLORS=$(sed -E '\''s/;1:/:/g;s/(:di=[^:]*)/\1;1/'\'' <<<"$LS_COLORS"); \
+zstyle ":completion:*" list-colors ${(s.:.)LS_COLORS}'
 zinit light trapd00r/LS_COLORS
 
 # -------------------------------------
@@ -79,9 +79,9 @@ export PATH="$RUSTPATH/bin:$PATH"
 # local settings
 case ${OSTYPE} in
   linux*)
-    # homebrew
-    export BREWPATH="/home/linuxbrew/.linuxbrew/bin"
-    export PATH="$BREWPATH:$PATH"
+  # homebrew
+  export BREWPATH="/home/linuxbrew/.linuxbrew/bin"
+  export PATH="$BREWPATH:$PATH"
 esac
 
 stty stop undef
@@ -89,7 +89,7 @@ stty start undef
 setopt no_flow_control
 # KEYTIMEOUT=1
 case $(uname -a) in
-   *Microsoft*) unsetopt BG_NICE ;;
+  *Microsoft*) unsetopt BG_NICE ;;
 esac
 
 # 外部ファイル読み込み
@@ -119,12 +119,12 @@ export FZF_CTRL_R_OPTS='--preview-window hidden --tiebreak index -s'
 export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
 export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_PREVIEW='--preview "
-  [[ -d {} ]]  &&
-  tree -C {}
-  [[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
-  echo {} is a binary file
-  (bat --style=changes --color=always {} ||
-   cat {}) 2> /dev/null | head -500"'
+[[ -d {} ]]  &&
+tree -C {}
+[[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
+echo {} is a binary file
+(bat --style=changes --color=always {} ||
+cat {}) 2> /dev/null | head -500"'
 export FZF_COMPLETION_TRIGGER=''
 export FZF_DEFAULT_OPTS='
 --height 40%
@@ -173,6 +173,8 @@ setopt menu_complete         # インクリメント検索をディフォルト�
 
 # 補完候補を emacs kybind で選択出来るようにする
 zstyle ':completion:*:default' menu select interactive
+zstyle ':completion:*' file-sort modification
+zstyle ':completion:complete:*:argument-rest' sort false
 
 # 補完関数の表示を過剰にする編
 zstyle ':completion:*' verbose yes
@@ -202,22 +204,20 @@ bindkey "^[u" undo
 bindkey "^[r" redo
 
 # fzf-tab settings
+FZF_TAB=(
+  --ansi --nth=2,3 --delimiter='\x00' --no-sort
+  --layout=reverse --height 40% --tiebreak=begin -m --print-query
+)
 zstyle ':fzf-tab:*' show-group brief
 zstyle ':fzf-tab:*' continuous-trigger 'ctrl-k'
-FZF_TAB_COMMAND=(
-    fzf
-    --ansi   # Enable ANSI color support, necessary for showing groups
-    --expect='$continuous_trigger,$print_query' # For continuous completion
-    '--color=hl:$(( $#headers == 0 ? 108 : 255 ))'
-    --nth=2,3 --delimiter='\x00'  # Don't search prefix
-    --layout=reverse --height 40%
-    --tiebreak=begin -m --bind=change:top,ctrl-i:toggle+down --cycle
-    --preview-window hidden
-    --print-query
-    '--query=$query'   # $query will be expanded to query string at runtime.
-    '--header-lines=$#headers' # $#headers will be expanded to lines of headers at runtime
-)
-zstyle ':fzf-tab:*' command $FZF_TAB_COMMAND
+zstyle ':fzf-tab:*' fzf-command fzf
+zstyle ':fzf-tab:*' fzf-flags $FZF_TAB
+zstyle ':fzf-tab:*' fzf-bindings 'ctrl-i:toggle+down' 'ctrl-a:toggle-all' 'change:top'
+zstyle ':fzf-tab:*' fzf-preview '[[ -d $realpath ]]  && tree -C $realpath
+[[ -f $realpath && $(file --mime $realpath) =~ (png|jpg|gif|ttf) && $(file --mime $realpath) =~ (^binary) ]] &&
+echo $realpath is a binary file
+(bat --style=changes --color=always $realpath ||
+cat $realpath) 2> /dev/null | head -500'
 
 # ディレクトリごとに区切る
 export WORDCHARS='*?_-.[]~$%^(){}<>'

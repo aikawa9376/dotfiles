@@ -1031,7 +1031,7 @@ nnoremap <silent> <Plug>(my-switch)y :call myutil#toggle_syntax()<CR>
 nnoremap <silent> <Plug>(my-switch)n :call myutil#toggle_relativenumber()<CR>
 nnoremap <silent> dd :<c-u>call myutil#remove_line_brank(v:count1)<cr>
 nnoremap <silent> dD :<c-u>call myutil#remove_line_brank_all(v:count1)<cr>
-nnoremap <expr> i myutil#indent_with_i()
+nnoremap <expr> i myutil#indent_with_i("m`mv")
 nnoremap gJ :call myutil#join_space_less()<CR>
 xnoremap @ :<C-u>call myutil#execute_macro_visual_range()<CR>
 cnoremap <expr> <C-U> myutil#ctrl_u()

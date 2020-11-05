@@ -94,7 +94,7 @@ zmenu() {
 }
 
 # ALT-I - Paste the selected entry from locate output into the command line
-fzf-pictre-preview() {
+fzf-picture-preview() {
   local selected
   if selected=$(fd --type file --follow --hidden --color=always --exclude .git 2> /dev/null |
     $HOME/.config/zsh/ueberzogen/fzf-preview.sh | tr '\n' ' '); then
@@ -102,8 +102,8 @@ fzf-pictre-preview() {
   fi
   zle redisplay
 }
-zle     -N    fzf-pictre-preview
-bindkey '^t' fzf-pictre-preview
+zle     -N    fzf-picture-preview
+bindkey '^t' fzf-picture-preview
 
 # ALT-I - Paste the selected entry from locate output into the command line
 fzf-locate-widget() {
