@@ -477,6 +477,10 @@ function! s:add_ignore_file_sink(lines) abort
   execute("silent !echo " . a:lines[2] . " >> " . s:dir . "/.gitignore")
 endfunction
 
+function! s:override_gitfiles_source()
+  return  systemlist("git ls-files | $XDG_CONFIG_HOME/nvim/bin/color-ls")
+endfunction
+
 function s:override_gitfiles_sink(lines) abort
   if len(a:lines) < 2
     return
@@ -500,8 +504,9 @@ endfunction
 
 command! -bang -nargs=? -complete=dir GFiles
   \ call fzf#vim#gitfiles(<q-args>, fzf#wrap('fzf',
-  \ {'sink*': function('<SID>override_gitfiles_sink'),
-  \  'options': "-m -x --no-unicode
+  \ {'source': <SID>override_gitfiles_source(),
+  \  'sink*': function('<SID>override_gitfiles_sink'),
+  \  'options': "-m -x --no-unicode --ansi
   \  --header \":: Press C-x:rm cached\"
   \  --expect ctrl-x"}))
 
@@ -1028,6 +1033,12 @@ function! s:open_floatingWin_fzf_layout() abort
   endif
   return layout
 endfunction
+
+" ------------------------------------------------------------------
+" Help tags
+" ------------------------------------------------------------------
+command! -bang -nargs=? -complete=dir Helptags
+  \ call fzf#vim#helptags({'options': []}, <bang>0)
 
 " ------------------------------------------------------------------
 " utils

@@ -161,8 +161,6 @@ vnoremap x "_x
 nnoremap cl "_s
 vnoremap cl "_s
 
-nmap <silent><expr> gV '`['.strpart(getregtype(), 0, 1).'`]'
-
 " 選択範囲のインデントを連続して変更
 vnoremap < <gv
 vnoremap > >gv
@@ -198,7 +196,8 @@ inoremap <C-v> <C-g>U<C-o>yh<C-g>U<C-r>"<C-g>U<Right>
 nnoremap Y y$
 nnoremap V v$
 nnoremap vv V
-nnoremap gV `[v`]
+" nnoremap gV `[v`]
+nnoremap <silent><expr> gV '`['.strpart(getregtype(), 0, 1).'`]'
 " mrは operator replace用
 nnoremap y m`mvmry
 vnoremap y m`mvmry
@@ -207,6 +206,7 @@ nnoremap d m`mvd
 nnoremap c m`mvc
 nnoremap : m`mv:
 nnoremap = m`mv=
+nnoremap =f mv`[=`]`v
 nnoremap <C-v> mv<C-v>
 nnoremap <M-x> vy
 nnoremap <C-h> ^

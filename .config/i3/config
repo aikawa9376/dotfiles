@@ -175,6 +175,7 @@ bindsym $mod+e mode "win-edit"
 
 # assign window
 assign [class="kitty"] $ws2
+assign [class="Luakit"] $ws2
 assign [class="Remmina"] $ws3
 
 # application setting(float)

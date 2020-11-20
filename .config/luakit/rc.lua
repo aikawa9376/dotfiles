@@ -71,8 +71,6 @@ local binds = require "binds"
 
 local settings = require "settings"
 require "settings_chrome"
-settings.window.home_page = "https://google.jp"
-settings.webview.enable_smooth_scrolling = true
 
 ----------------------------------
 -- Optional user script loading --
@@ -195,6 +193,7 @@ if pcall(function () lousy.util.find_config("userconf.lua") end) then
     require "userconf"
 end
 
+-- user added
 modes.add_binds("normal", {
     { "<Control-c>", "Copy selected text.", function ()
         luakit.selection.clipboard = luakit.selection.primary
@@ -202,6 +201,11 @@ modes.add_binds("normal", {
     { "d", "Scroll half page down.", function (w) w:scroll{ ypagerel =  0.5 } end },
     { "u", "Scroll half page up.", function (w) w:scroll{ ypagerel = -0.5 } end },
 })
+settings.webview.default_font_family = "Noto Sans CJK JP"
+settings.webview.sans_serif_font_family = "Noto Sans CJK JP"
+settings.webview.serif_font_family = "Noto Serif CJK JP"
+settings.window.home_page = "https://google.jp"
+settings.webview.enable_smooth_scrolling = true
 
 -----------------------------
 -- End user script loading --

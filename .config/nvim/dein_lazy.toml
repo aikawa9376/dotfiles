@@ -843,11 +843,16 @@ nnoremap <silent> <Leader>u :MundoToggle<CR>
 '''
 
 [[plugins]]
-repo = 'wincent/ferret'
-on_map = '<Plug>(FerretAck)'
-on_cmd = ['Ack', 'Back', 'Lack', 'Black']
+repo = 'brooth/far.vim'
+on_cmd = ['Far']
 hook_add = '''
-nmap <Leader>rr <Plug>(FerretAck)
+let g:far#source = 'rgnvim'
+let g:far#enable_undo = 1
+let g:far#cut_text_sign = '… '
+let g:far#multiline_sign = '⬎ '
+let g:far#auto_delete_replaced_buffers = 1
+nmap <Leader>rr :Far  /<Left><Left>
+nmap <Leader>rR :Far <C-R>=expand("<cword>")<cr>  /<Left><Left>
 '''
 
 [[plugins]]
@@ -866,15 +871,15 @@ let g:junkfile#directory = $XDG_CACHE_HOME.'/junkfile/'.workdir
 '''
 
 [[plugins]]
-repo = 'aikawa9376/vim-sql-workbench'
-on_cmd = ['SWSqlBufferConnect', 'SWSqlFzfSelect', 'SWDbExplorer']
+repo = 'tpope/vim-dadbod'
+
+[[plugins]]
+repo = 'kristijanhusak/vim-dadbod-ui'
+depends = ['vim-dadbod']
+on_cmd = ['DBUI']
 hook_add = '''
-let g:sw_sql_name_result_tab  = 0
-let g:sw_highlight_resultsets = 0
-let g:sw_sqlopen_command      = 'tabnew'
-let g:sw_config_dir           = '/home/aikawa/.sqlworkbench'
-let g:sw_cache                = '/home/aikawa/.sqlworkbench/cache'
-let g:sw_exe                  = '/opt/SQLWorkbench/sqlwbconsole.sh'
+let g:db_ui_use_nerd_fonts = 1
+let g:db_ui_win_position = 'right'
 '''
 
 [[plugins]]

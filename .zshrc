@@ -57,7 +57,7 @@ zinit light trapd00r/LS_COLORS
 # 基本設定
 # -------------------------------------
 export PATH="/usr/local/bin:$PATH"
-export TERM='xterm-256color'
+export TERM='tmux-256color'
 export XAPIAN_CJK_NGRAM=1
 export EDITOR='nvim'
 export PAGER='bat'
