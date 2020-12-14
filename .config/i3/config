@@ -193,6 +193,6 @@ exec --no-startup-id sudo xkeysnail $HOME/.config/xkeysnail/config.py;
 exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inverted --noprimary && xrandr --output DVI-I-1 --auto --below HDMI-0 --noprimary;
 exec --no-startup-id fcitx-autostart;
 exec --no-startup-id $HOME/.config/polybar/lanch.sh;
-exec --no-startup-id insync start;
+exec --no-startup-id insync-headless start;
 exec --no-startup-id xset b off;
 exec --no-startup-id xset r rate 170 120;

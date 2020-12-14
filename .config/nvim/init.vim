@@ -364,6 +364,8 @@ augroup MyAutoCmd
   autocmd FileType gitcommit nmap <buffer><nowait> q :<c-u>wq<CR>
   autocmd FileType gitcommit nmap <buffer><nowait> <C-c> :<c-u>wq<CR>
   autocmd FileType fugitive nnoremap <buffer><Space>gp :<c-u>Gina push<CR><C-w>c
+  autocmd FileType dbui,dbout,sql nnoremap <buffer><nowait> <C-c> :DBUIDelete<CR>
+  autocmd FileType dbui,dbout,sql nnoremap <buffer><nowait> q :DBUIDelete<CR>
 augroup END
 
 " html用の設定はここ

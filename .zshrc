@@ -205,14 +205,14 @@ bindkey "^[r" redo
 
 # fzf-tab settings
 FZF_TAB=(
-  --ansi --nth=2,3 --delimiter='\x00' --no-sort
+  --ansi --nth=2,3 --delimiter='\x00'
   --layout=reverse --height 40% --tiebreak=begin -m --print-query
 )
 zstyle ':fzf-tab:*' show-group brief
 zstyle ':fzf-tab:*' continuous-trigger 'ctrl-k'
 zstyle ':fzf-tab:*' fzf-command fzf
 zstyle ':fzf-tab:*' fzf-flags $FZF_TAB
-zstyle ':fzf-tab:*' fzf-bindings 'ctrl-i:toggle+down' 'ctrl-a:toggle-all' 'change:top'
+zstyle ':fzf-tab:*' fzf-bindings 'ctrl-i:toggle+down' 'alt-a:toggle-all' 'home:top'
 zstyle ':fzf-tab:*' fzf-preview '[[ -d $realpath ]]  && tree -C $realpath
 [[ -f $realpath && $(file --mime $realpath) =~ (png|jpg|gif|ttf) && $(file --mime $realpath) =~ (^binary) ]] &&
 echo $realpath is a binary file
