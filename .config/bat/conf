@@ -3,3 +3,4 @@
 --color="always"
 --italic-text="always"
 --map-syntax .ignore:.gitignore
+--paging="never"

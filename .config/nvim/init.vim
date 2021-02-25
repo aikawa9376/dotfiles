@@ -225,6 +225,9 @@ nnoremap gj J
 
 " terminal mode
 tnoremap <silent><C-[> <C-\><C-n>
+if exists(':terminal')
+  autocmd TermOpen * nnoremap <buffer> <silent><ESC> :close<CR>
+endif
 
 " 入力モード中に素早くJJと入力した場合はESCとみなす
 inoremap <silent> jj <Esc>

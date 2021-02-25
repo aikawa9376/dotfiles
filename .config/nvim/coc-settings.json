@@ -4,9 +4,10 @@
   "snippets.ultisnips.enable": false,
   "snippets.snipmate.enable": true,
   "snippets.extends": {
+    "jst": ["html"],
     "php": ["html"],
     "scss": ["css"],
-    "typescss": ["javascript"]
+    "typescript": ["javascript"]
   },
   "suggest.lowPrioritySourceLimit": 10,
   "css.colorDecorators.enable": false,
@@ -27,6 +28,7 @@
   "rust-analyzer.inlayHints.typeHintsSeparator": "‣ ",
   "rust-analyzer.inlayHints.maxLength": 100,
   "rust-analyzer.lens.methodReferences": true,
+  "rust-analyzer.updates.channel": "nightly",
   "list.insertMappings": {
     "<C-l>": "do:refresh",
     "<C-f>": "feedkeys:\\<C-f>",

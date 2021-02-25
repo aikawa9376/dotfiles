@@ -11,10 +11,13 @@ let g:rooter_patterns = ['Session.vim', '.git/', '.vimrc.local']
 '''
 
 [[plugins]]
-repo = 'Yggdroot/indentLine'
+repo = 'lukas-reineke/indent-blankline.nvim'
+rev = 'lua'
 hook_add = '''
 let g:indentLine_faster = 1
-autocmd MyAutoCmd FileType help,defx,fzf IndentLinesDisable
+let g:indent_blankline_bufname_exclude = ['README.md','term:.*']
+let g:indent_blankline_buftype_exclude = ['terminal']
+let g:indent_blankline_filetype_exclude = ['help,defx,fzf,fugitive']
 '''
 
 [[plugins]]
@@ -30,7 +33,7 @@ repo = 'nvim-treesitter/nvim-treesitter'
 hook_add = '''
 lua << EOF
 require'nvim-treesitter.configs'.setup {
-  ensure_installed = "all",
+  ensure_installed = { "rust", "html", "css", "python", "javascript", "typescript", "toml", "yaml", "json", "go", "lua", "vue" },
   highlight = {
     enable = true,
     disable = { "php" },
@@ -44,9 +47,9 @@ require'nvim-treesitter.configs'.setup {
       node_decremental = "gm",
     },
   },
-  indent = {
-    enable = true
-  }
+--  indent = {
+--    enable = true
+--  }
 }
 EOF
 '''
@@ -75,6 +78,7 @@ autocmd MyAutoCmd ColorScheme * highlight LineNr       ctermbg=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight Comment      gui=italic
 autocmd MyAutoCmd ColorScheme * highlight StatusLine   cterm=none gui=none
 autocmd MyAutoCmd ColorScheme * highlight StatusLineNC cterm=none gui=none
+autocmd MyAutoCmd ColorScheme * highlight Conceal      ctermfg=239 guifg=Grey30
 " tab,expends,etc...
 autocmd MyAutoCmd ColorScheme * highlight NonText      ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
 autocmd MyAutoCmd ColorScheme * highlight SpecialKey   ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440

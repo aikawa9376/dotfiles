@@ -35,3 +35,9 @@ command = "/home/aikawa/.config/coc/extensions/node_modules/coc-css/lib/server.j
 args = ["--stdio"]
 num_server_instances = 2
 always_prefer = false
+
+[language.rust]
+command = "/home/aikawa/.config/coc/extensions/node_modules/coc-rust-analyzer/lib/index.js"
+args = ["--stdio"]
+num_server_instances = 2
+always_prefer = false

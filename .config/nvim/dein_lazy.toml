@@ -87,18 +87,19 @@ augroup mygroup
   autocmd FileType typescript,json setl formatexpr=CocAction('formatSelected')
   " Update signature help on jump placeholder
   autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
-  autocmd ColorScheme * highligh CocErrorSign   ctermfg=9   guifg=#ff0000 guibg=none
-  autocmd ColorScheme * highligh CocWarningSign ctermfg=130 guifg=#ff922b guibg=none
-  autocmd ColorScheme * highligh CocInfoSign    ctermfg=11  guifg=#119e26 guibg=none
-  autocmd ColorScheme * highligh CocHintSign    ctermfg=12  guifg=#15aabf guibg=none
-  autocmd ColorScheme * highligh CocCodeLens    ctermfg=12  guifg=#586e75
-  autocmd ColorScheme * highligh CocRustTypeHint     ctermfg=12  guifg=#586e75
-  autocmd ColorScheme * highligh CocRustChainingHint ctermfg=12  guifg=#586e75
+  autocmd ColorScheme * highlight CocErrorSign   ctermfg=9   guifg=#ff0000 guibg=none
+  autocmd ColorScheme * highlight CocWarningSign ctermfg=130 guifg=#ff922b guibg=none
+  autocmd ColorScheme * highlight CocInfoSign    ctermfg=11  guifg=#119e26 guibg=none
+  autocmd ColorScheme * highlight CocHintSign    ctermfg=12  guifg=#15aabf guibg=none
+  autocmd ColorScheme * highlight CocCodeLens    ctermfg=12  guifg=#586e75
+  autocmd ColorScheme * highlight CocRustTypeHint     ctermfg=12  guifg=#586e75
+  autocmd ColorScheme * highlight CocRustChainingHint ctermfg=12  guifg=#586e75
 augroup end
 
 " Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
 vmap <leader>cd <Plug>(coc-codeaction-selected)
 nmap <leader>cd <Plug>(coc-codeaction-selected)
+nmap <leader>cdd <leader>cdiw
 vmap <leader>cdl <Plug>(coc-codeaction-line)
 nmap <leader>cdl <Plug>(coc-codeaction-line)
 
@@ -130,6 +131,7 @@ nnoremap <silent> <space>cu :<C-u>CocFzfListResume<CR>
 " Filetype add
 let g:coc_filetype_map = {
   \ 'blade': 'html',
+  \ 'jst': 'html',
   \ }
 
 let g:coc_disable_transparent_cursor = 1
@@ -175,7 +177,7 @@ on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'mattn/emmet-vim'
-on_ft = ['html', 'php', 'phtml', 'javascript', 'css', 'scss']
+on_ft = ['html', 'php', 'jst', 'phtml', 'javascript', 'css', 'scss']
 hook_add = '''
 let g:user_emmet_install_global        =  0
 let g:user_emmet_mode                  = 'iv'
@@ -318,6 +320,10 @@ noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
 noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
 map <C-j> <Plug>(easymotion-w)
 map <C-k> <Plug>(easymotion-b)
+autocmd User EasyMotionPromptBegin silent! CocDisable
+autocmd User EasyMotionPromptBegin silent! IndentBlanklineDisable
+autocmd User EasyMotionPromptEnd   silent! CocEnable
+autocmd User EasyMotionPromptEnd   silent! IndentBlanklineEnable
 '''
 
 [[plugins]]
@@ -375,15 +381,16 @@ repo = 'kana/vim-textobj-line'
 
 [[plugins]]
 repo = 'kana/vim-textobj-indent'
+
+[[plugins]]
+repo = 'thinca/vim-textobj-between'
 hook_add = '''
+let g:textobj_between_no_default_key_mappings = 1
 xmap iF <Plug>(textobj-between-i)
 omap iF <Plug>(textobj-between-i)
 xmap aF <Plug>(textobj-between-a)
 omap aF <Plug>(textobj-between-a)
 '''
-
-[[plugins]]
-repo = 'thinca/vim-textobj-between'
 
 [[plugins]]
 repo = 'kana/vim-textobj-syntax'
@@ -630,11 +637,45 @@ augroup END
 '''
 
 [[plugins]]
-repo = 'aikawa9376/vim-anzu'
+repo = 'kevinhwang91/nvim-hlslens'
 on_event = 'VimEnter'
+hook_add = '''
+autocmd MyAutoCmd ColorScheme * highlight link HlSearchLens CocRustTypeHint
+autocmd MyAutoCmd ColorScheme * highlight link HlSearchLensCur IncSearch
+'''
 hook_source = '''
-nmap <expr> n anzu#mode#mapexpr("n", "", "zz")
-nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
+nmap n <Plug>(incsearch-nohl-n)<Cmd>lua require('hlslens').start()<CR>
+nmap N <Plug>(incsearch-nohl-N)<Cmd>lua require('hlslens').start()<CR>
+lua <<EOF
+require('hlslens').setup({
+    override_line_lens = function(lnum, loc, idx, r_idx, count, hls_ns)
+        local sfw = vim.v.searchforward == 1
+        local indicator, text, chunks
+        local a_r_idx = math.abs(r_idx)
+        if a_r_idx > 1 then
+            indicator = string.format('%d%s', a_r_idx, sfw ~= (r_idx > 1) and '▲' or '▼')
+        elseif a_r_idx == 1 then
+            indicator = sfw ~= (r_idx == 1) and '▲' or '▼'
+        else
+            indicator = ''
+        end
+
+        if loc ~= 'c' then
+            text = string.format('[%s %d]', indicator, idx)
+            chunks = {{' ', 'Ignore'}, {text, 'HlSearchLens'}}
+        else
+            if indicator ~= '' then
+                text = string.format('[%s %d/%d]', indicator, idx, count)
+            else
+                text = string.format('[%d/%d]', idx, count)
+            end
+            chunks = {{' ', 'Ignore'}, {text, 'HlSearchLensCur'}}
+            vim.api.nvim_buf_clear_namespace(0, hls_ns, lnum - 1, lnum)
+        end
+        vim.api.nvim_buf_set_virtual_text(0, hls_ns, lnum - 1, chunks, {})
+    end
+})
+EOF
 '''
 
 [[plugins]]
