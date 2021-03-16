@@ -107,8 +107,9 @@ endfunction
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_files_sink'),
-  \  'source': 'fd --type file --follow --hidden --color=always ' .
-  \            '-E .git -E ''*.pdf'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf''',
+  \  'source': 'fd --follow --hidden --exclude .git --type f --print0 ' .
+  \            '-E .git -E ''*.pdf'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf''' .
+  \            '| xargs -0 exa -l -sold --color=never | sd ''.*[0-9:]{4,}\s'' '''' | xargs -0 -d "\n" exa -1 --color=always',
   \  'options': '--ansi -m -x --no-unicode '.
   \             '--expect ctrl-x,ctrl-v,ctrl-q'}))
 

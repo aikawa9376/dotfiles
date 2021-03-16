@@ -15,10 +15,23 @@ repo = 'lukas-reineke/indent-blankline.nvim'
 rev = 'lua'
 hook_add = '''
 let g:indentLine_faster = 1
+let g:indent_blankline_char = '▏'
+let g:indent_blankline_char_highlight = 'Conceal'
+let g:indent_blankline_show_first_indent_level = v:false
 let g:indent_blankline_bufname_exclude = ['README.md','term:.*']
 let g:indent_blankline_buftype_exclude = ['terminal']
 let g:indent_blankline_filetype_exclude = ['help,defx,fzf,fugitive']
+let g:indent_blankline_enabled = v:false
 '''
+
+# [[plugins]]
+# repo = 'Yggdroot/indentLine'
+# hook_add = '''
+# let g:indentLine_faster = 1
+# let g:indentLine_char = '▏'
+# autocmd MyAutoCmd FileType help,defx,fzf IndentLinesDisable
+# let g:indent_blankline_filetype_exclude = ['help,defx,fzf,fugitive']
+# '''
 
 [[plugins]]
 repo = 'sheerun/vim-polyglot'
