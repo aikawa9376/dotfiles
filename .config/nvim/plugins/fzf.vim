@@ -935,7 +935,6 @@ function! OpenFloatingWinCenter()
   let win = nvim_open_win(buf, v:true, opts)
 
   call setwinvar(win, '&winhl', 'Normal:Fmenu')
-  IndentBlanklineToggle
 
   setlocal
     \ buftype=nofile
@@ -962,7 +961,6 @@ function! OpenFloatingWinFull()
   let win = nvim_open_win(buf, v:true, opts)
 
   call setwinvar(win, '&winhl', 'Normal:Fmenu')
-  IndentBlanklineToggle
 
   setlocal
     \ buftype=nofile
@@ -1009,7 +1007,6 @@ function! OpenFloatingWin()
   let win = nvim_open_win(buf, v:true, opts)
 
   call setwinvar(win, '&winhl', 'Normal:Fmenu')
-  IndentBlanklineToggle
 
   setlocal
     \ buftype=nofile

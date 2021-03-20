@@ -321,9 +321,7 @@ noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
 map <C-j> <Plug>(easymotion-w)
 map <C-k> <Plug>(easymotion-b)
 autocmd User EasyMotionPromptBegin silent! CocDisable
-autocmd User EasyMotionPromptBegin silent! IndentBlanklineDisable
 autocmd User EasyMotionPromptEnd   silent! CocEnable
-autocmd User EasyMotionPromptEnd   silent! IndentBlanklineEnable
 '''
 
 [[plugins]]

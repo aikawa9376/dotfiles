@@ -11,27 +11,34 @@ let g:rooter_patterns = ['Session.vim', '.git/', '.vimrc.local']
 '''
 
 [[plugins]]
-repo = 'lukas-reineke/indent-blankline.nvim'
-rev = 'lua'
+repo = 'gelguy/wilder.nvim'
 hook_add = '''
-let g:indentLine_faster = 1
-let g:indent_blankline_char = '▏'
-let g:indent_blankline_char_highlight = 'Conceal'
-let g:indent_blankline_show_first_indent_level = v:false
-let g:indent_blankline_bufname_exclude = ['README.md','term:.*']
-let g:indent_blankline_buftype_exclude = ['terminal']
-let g:indent_blankline_filetype_exclude = ['help,defx,fzf,fugitive']
-let g:indent_blankline_enabled = v:false
-'''
+call wilder#enable_cmdline_enter()
+set wildcharm=<Tab>
+cmap <expr> <Tab> wilder#in_context() ? wilder#next() : "\<Tab>"
+cmap <expr> <S-Tab> wilder#in_context() ? wilder#previous() : "\<S-Tab>"
 
-# [[plugins]]
-# repo = 'Yggdroot/indentLine'
-# hook_add = '''
-# let g:indentLine_faster = 1
-# let g:indentLine_char = '▏'
-# autocmd MyAutoCmd FileType help,defx,fzf IndentLinesDisable
-# let g:indent_blankline_filetype_exclude = ['help,defx,fzf,fugitive']
-# '''
+call wilder#set_option('modes', [':'])
+
+call wilder#set_option('renderer', wilder#popupmenu_renderer({
+      \ 'highlighter': wilder#query_highlighter(),
+      \ 'winblend': 20,
+      \ 'right': ['', wilder#popupmenu_scrollbar({
+      \     'thumb_char': ' '
+      \   })]
+      \ }))
+
+call wilder#set_option('pipeline', [
+      \   wilder#branch(
+      \     wilder#cmdline_pipeline({
+      \       'fuzzy': 2,
+      \       'use_python': 1,
+      \       'engine': 're2',
+      \     }),
+      \   ),
+      \   wilder#result_draw_devicons(),
+      \ ])
+'''
 
 [[plugins]]
 repo = 'sheerun/vim-polyglot'
