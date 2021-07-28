@@ -250,10 +250,10 @@ let g:miniyank_maxitems = 100
 repo = 'justinmk/vim-sneak'
 on_event = 'VimEnter'
 hook_add = '''
-map f <Plug>Sneak_f
-map F <Plug>Sneak_F
-map t <Plug>Sneak_t
-map T <Plug>Sneak_T
+map n <Plug>Sneak_f
+map N <Plug>Sneak_F
+map n <Plug>Sneak_t
+map N <Plug>Sneak_T
 map ; <Plug>Sneak_;
 map , <Plug>Sneak_,
 map s <Plug>Sneak_s
@@ -635,45 +635,11 @@ augroup END
 '''
 
 [[plugins]]
-repo = 'kevinhwang91/nvim-hlslens'
+repo = 'aikawa9376/vim-anzu'
 on_event = 'VimEnter'
-hook_add = '''
-autocmd MyAutoCmd ColorScheme * highlight link HlSearchLens CocRustTypeHint
-autocmd MyAutoCmd ColorScheme * highlight link HlSearchLensCur IncSearch
-'''
 hook_source = '''
-nmap n <Plug>(incsearch-nohl-n)<Cmd>lua require('hlslens').start()<CR>
-nmap N <Plug>(incsearch-nohl-N)<Cmd>lua require('hlslens').start()<CR>
-lua <<EOF
-require('hlslens').setup({
-    override_line_lens = function(lnum, loc, idx, r_idx, count, hls_ns)
-        local sfw = vim.v.searchforward == 1
-        local indicator, text, chunks
-        local a_r_idx = math.abs(r_idx)
-        if a_r_idx > 1 then
-            indicator = string.format('%d%s', a_r_idx, sfw ~= (r_idx > 1) and '▲' or '▼')
-        elseif a_r_idx == 1 then
-            indicator = sfw ~= (r_idx == 1) and '▲' or '▼'
-        else
-            indicator = ''
-        end
-
-        if loc ~= 'c' then
-            text = string.format('[%s %d]', indicator, idx)
-            chunks = {{' ', 'Ignore'}, {text, 'HlSearchLens'}}
-        else
-            if indicator ~= '' then
-                text = string.format('[%s %d/%d]', indicator, idx, count)
-            else
-                text = string.format('[%d/%d]', idx, count)
-            end
-            chunks = {{' ', 'Ignore'}, {text, 'HlSearchLensCur'}}
-            vim.api.nvim_buf_clear_namespace(0, hls_ns, lnum - 1, lnum)
-        end
-        vim.api.nvim_buf_set_virtual_text(0, hls_ns, lnum - 1, chunks, {})
-    end
-})
-EOF
+nmap <expr> n anzu#mode#mapexpr("n", "", "zz")
+nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
 '''
 
 [[plugins]]
@@ -1098,6 +1064,48 @@ cmap <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
 '''
 
 [[plugins]]
+repo = 'gelguy/wilder.nvim'
+on_event = 'VimEnter'
+hook_source = '''
+call wilder#enable_cmdline_enter()
+set wildcharm=<Tab>
+cmap <expr> <C-n> wilder#in_context() ? wilder#next() : pumvisible() ? "\<Right>" : "\<C-n>"
+cmap <expr> <C-p> wilder#in_context() ? wilder#previous() : pumvisible() ? "\<Left>" : "\<C-p>"
+cmap <expr> <Tab> wilder#in_context() ? wilder#next() : "\<Tab>"
+cmap <expr> <S-Tab> wilder#in_context() ? wilder#previous() : "\<S-Tab>"
+
+call wilder#set_option('modes', [':'])
+
+call wilder#set_option('renderer', wilder#popupmenu_renderer({
+      \ 'highlighter': wilder#query_highlighter(),
+      \ 'winblend': 20,
+      \ 'right': ['', wilder#popupmenu_scrollbar({
+      \     'thumb_char': ' '
+      \   })]
+      \ }))
+
+call wilder#set_option('pipeline', [
+      \   wilder#branch(
+      \     [
+      \       wilder#check({_, x -> empty(x)}),
+      \       wilder#history(),
+      \     ],
+      \     wilder#python_file_finder_pipeline({
+      \       'file_command': ['rg', '--files'],
+      \       'dir_command': ['fd', '-tr'],
+      \       'filters': ['fuzzy_filter', 'difflib_sorter'],
+      \     }),
+      \     wilder#cmdline_pipeline({
+      \       'fuzzy': 2,
+      \       'use_python': 1,
+      \       'engine': 're2',
+      \     }),
+      \   ),
+      \   wilder#result_draw_devicons(),
+      \ ])
+'''
+
+[[plugins]]
 repo = "puremourning/vimspector"
 on_ft = ["python", "php"]
 build = "./install_gadget.py --enable-python --force-enable-php"
@@ -1126,6 +1134,35 @@ on_cmd = ['AsyncTask']
 repo = 'Shougo/vimproc'
 build = 'make'
 on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'nvim-treesitter/nvim-treesitter'
+if = 'has("nvim")'
+on_event = 'BufRead'
+hook_post_update = 'TSUpdate'
+hook_source = '''
+lua <<EOF
+require'nvim-treesitter.configs'.setup {
+  ensure_installed = { "rust", "html", "css", "python", "javascript", "typescript", "toml", "yaml", "json", "go", "lua", "vue", "php" },
+  highlight = {
+    enable = true,
+    disable = { "php" },
+  },
+  incremental_selection = {
+    enable = true,
+    keymaps = {
+      init_selection = "gp",
+      node_incremental = "g+",
+      scope_incremental = "gp",
+      node_decremental = "gm",
+    },
+  },
+}
+EOF
+'''
+
+[[plugins]]
+repo = 'nvim-treesitter/nvim-treesitter-refactor'
 
 # php------------------------------------
 [[plugins]]

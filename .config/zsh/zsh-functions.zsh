@@ -98,9 +98,7 @@ fzf-picture-preview() {
   local selected
   if selected=$(
     fd --follow --hidden --exclude .git --type f --print0 . |
-    xargs -0 exa -l -sold --color=never |
-    sd '.*[0-9:]{4,}\s' '' |
-    xargs -0 -d "\n" exa -1 --color=always 2> /dev/null |
+    xargs -0 exa -1 -sold --color=always 2> /dev/null |
     $HOME/.config/zsh/ueberzogen/fzf-preview.sh | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
   fi
@@ -191,15 +189,11 @@ fvim() {
   if [[ $@ == '-a' ]]; then
     files=$( \
     fd -I --follow --hidden --exclude .git --type f --print0 . | \
-    xargs -0 exa -l -sold --color=never | \
-    sd '.*[0-9:]{4,}\s' '' | \
-    xargs -0 -d "\n" exa -1 --color=always 2> /dev/null) &&
+    xargs -0 exa -1 -sold --color=always 2> /dev/null) &&
   else
     files=$( \
     fd --follow --hidden --exclude .git --type f --print0 . | \
-    xargs -0 exa -l -sold --color=never | \
-    sd '.*[0-9:]{4,}\s' '' | \
-    xargs -0 -d "\n" exa -1 --color=always 2> /dev/null) &&
+    xargs -0 exa -1 -sold --color=always 2> /dev/null) &&
   fi
   # wraped function timg and bat?
   selected_files=$(echo "$files" | fzf -m --ansi | tr '\n' ' ') &&

@@ -34,7 +34,6 @@ source $XDG_CONFIG_HOME/nvim/dein_key.vim
 " Required:
 filetype on
 filetype plugin indent on
-syntax enable
 set t_Co=256
 set number
 set fillchars+=vert:\ 
@@ -269,19 +268,12 @@ nnoremap cu :lcd ..<bar>pwd<cr>
 " コマンドモードでemacs
 cnoremap <C-b> <Left>
 cnoremap <C-f> <Right>
-cnoremap <C-n> <Down>
-cnoremap <C-p> <Up>
 cnoremap <C-a> <Home>
 cnoremap <C-e> <End>
 cnoremap <C-d> <Del>
 cnoremap <C-Y> <C-R>-
-if &wildoptions =~# "pum"
-  cnoremap <expr> <C-p> pumvisible() ? '<Left>' : '<C-p>'
-  cnoremap <expr> <C-n> pumvisible() ? '<Right>' : '<C-n>'
-endif
 
 " override help command
-
 nmap <Leader>rw :%s///g<Left><Left><Left>
 nmap <Leader>rW :%s/<c-r>=expand("<cword>")<cr>//g<Left><Left>
 vmap <Space>rw y:%s/<c-r>"//g<Left><Left><Left>
@@ -400,6 +392,9 @@ function! IsPhpOrHtml() abort
   endif
 endfunction
 
+" scss用の設定はここ
+autocmd FileType scss setl iskeyword+=@-@
+
 " neomutt用の設定はここ
 augroup NeomuttSetting
   autocmd!
@@ -415,3 +410,4 @@ endfunction
 function! s:neomutt_feedkey() abort
   call feedkeys('j}o')
 endfunction
+

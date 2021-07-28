@@ -11,36 +11,6 @@ let g:rooter_patterns = ['Session.vim', '.git/', '.vimrc.local']
 '''
 
 [[plugins]]
-repo = 'gelguy/wilder.nvim'
-hook_add = '''
-call wilder#enable_cmdline_enter()
-set wildcharm=<Tab>
-cmap <expr> <Tab> wilder#in_context() ? wilder#next() : "\<Tab>"
-cmap <expr> <S-Tab> wilder#in_context() ? wilder#previous() : "\<S-Tab>"
-
-call wilder#set_option('modes', [':'])
-
-call wilder#set_option('renderer', wilder#popupmenu_renderer({
-      \ 'highlighter': wilder#query_highlighter(),
-      \ 'winblend': 20,
-      \ 'right': ['', wilder#popupmenu_scrollbar({
-      \     'thumb_char': ' '
-      \   })]
-      \ }))
-
-call wilder#set_option('pipeline', [
-      \   wilder#branch(
-      \     wilder#cmdline_pipeline({
-      \       'fuzzy': 2,
-      \       'use_python': 1,
-      \       'engine': 're2',
-      \     }),
-      \   ),
-      \   wilder#result_draw_devicons(),
-      \ ])
-'''
-
-[[plugins]]
 repo = 'sheerun/vim-polyglot'
 hook_add = '''
 let g:jsx_ext_required = 1
@@ -48,35 +18,6 @@ let g:polyglot_disabled = ['autoindent']
 '''
 
 # design---------------------------------
-[[plugins]]
-repo = 'nvim-treesitter/nvim-treesitter'
-hook_add = '''
-lua << EOF
-require'nvim-treesitter.configs'.setup {
-  ensure_installed = { "rust", "html", "css", "python", "javascript", "typescript", "toml", "yaml", "json", "go", "lua", "vue" },
-  highlight = {
-    enable = true,
-    disable = { "php" },
-  },
-  incremental_selection = {
-    enable = true,
-    keymaps = {
-      init_selection = "gp",
-      node_incremental = "g+",
-      scope_incremental = "gp",
-      node_decremental = "gm",
-    },
-  },
---  indent = {
---    enable = true
---  }
-}
-EOF
-'''
-
-[[plugins]]
-repo = 'nvim-treesitter/nvim-treesitter-refactor'
-
 [[plugins]]
 repo = 'ryanoasis/vim-devicons'
 hook_add = '''
@@ -87,6 +28,7 @@ let g:WebDevIconsUnicodeDecorateFolderNodes = 1
 [[plugins]]
 repo = 'icymind/NeoSolarized'
 hook_add = '''
+syntax enable
 set termguicolors
 set background=dark
 set t_8f=^[[38;2;%lu;%lu;%lum
@@ -111,7 +53,6 @@ autocmd MyAutoCmd ColorScheme * highlight PmenuSbar    cterm=None ctermbg=None g
 autocmd MyAutoCmd ColorScheme * highlight PmenuThumb   cterm=None ctermbg=23   gui=None guibg=#005f5f
 autocmd MyAutoCmd ColorScheme * highlight PmenuSel     cterm=None ctermfg=126  ctermbg=None gui=None guifg=#af0087 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Fmenu        ctermfg=111 ctermbg=0 guifg=#87afff guibg=#002b36
-colorscheme NeoSolarized
 " search settings
 autocmd MyAutoCmd ColorScheme * highlight Search       cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
 autocmd MyAutoCmd ColorScheme * highlight IncSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900
@@ -122,4 +63,6 @@ autocmd MyAutoCmd ColorScheme * highlight CursorLineNr ctermbg=none guibg=none
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC     ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:NormalNC
+
+colorscheme NeoSolarized
 '''

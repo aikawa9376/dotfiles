@@ -109,7 +109,7 @@ command! -bang -nargs=? -complete=dir Files
   \ {'sink*': function('<SID>override_files_sink'),
   \  'source': 'fd --follow --hidden --exclude .git --type f --print0 ' .
   \            '-E .git -E ''*.pdf'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf''' .
-  \            '| xargs -0 exa -l -sold --color=never | sd ''.*[0-9:]{4,}\s'' '''' | xargs -0 -d "\n" exa -1 --color=always',
+  \            '| xargs -0 exa -1 -sold --color=always',
   \  'options': '--ansi -m -x --no-unicode '.
   \             '--expect ctrl-x,ctrl-v,ctrl-q'}))
 
@@ -1043,7 +1043,7 @@ command! -bang -nargs=? -complete=dir Helptags
 " ------------------------------------------------------------------
 function! s:color_filename(files) abort
   let files = copy(a:files)
-  let result = systemlist('echo -e "' . join(files, '\n') . '" | xargs -d "\n" exa --color=always')
+  let result = systemlist('echo -e "' . join(files, '\n') . '" | xargs -d "\n" $XDG_CONFIG_HOME/nvim/bin/color-ls')
 
   return result
 endfunction
