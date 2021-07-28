@@ -87,13 +87,6 @@ augroup mygroup
   autocmd FileType typescript,json setl formatexpr=CocAction('formatSelected')
   " Update signature help on jump placeholder
   autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
-  autocmd ColorScheme * highlight CocErrorSign   ctermfg=9   guifg=#ff0000 guibg=none
-  autocmd ColorScheme * highlight CocWarningSign ctermfg=130 guifg=#ff922b guibg=none
-  autocmd ColorScheme * highlight CocInfoSign    ctermfg=11  guifg=#119e26 guibg=none
-  autocmd ColorScheme * highlight CocHintSign    ctermfg=12  guifg=#15aabf guibg=none
-  autocmd ColorScheme * highlight CocCodeLens    ctermfg=12  guifg=#586e75
-  autocmd ColorScheme * highlight CocRustTypeHint     ctermfg=12  guifg=#586e75
-  autocmd ColorScheme * highlight CocRustChainingHint ctermfg=12  guifg=#586e75
 augroup end
 
 " Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
@@ -262,7 +255,6 @@ nmap <expr> f sneak#is_sneaking() ? '<Plug>Sneak_;' : '<plug>Sneak_f'
 nmap <expr> F sneak#is_sneaking() ? '<Plug>Sneak_,' : '<plug>Sneak_F'
 let g:sneak#s_next = 1
 let g:sneak#use_ic_scs = 1
-autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
 '''
 
 [[plugins]]
@@ -610,8 +602,6 @@ let g:matchup_transmute_enabled = 1
 let g:matchup_matchparen_offscreen = {'method': 'status_manual'}
 augroup matchup_setting
   autocmd!
-  autocmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
-  autocmd ColorScheme * hi MatchParen ctermfg=None guifg=None ctermbg=None guibg=None cterm=bold,underline gui=bold,underline
   " coc snippet conflict
   autocmd InsertEnter * let g:matchup_matchparen_enabled = 0
   autocmd InsertLeave * let g:matchup_matchparen_enabled = 1
@@ -949,10 +939,6 @@ let g:gitgutter_sign_removed_first_line = "・"
 let g:gitgutter_grep_command            = 'rg --hidden --follow --glob "!.git/*"'
 let g:gitgutter_diff_args               = '-w'
 let g:gitgutter_preview_win_floating    = 1
-autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#009900 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterChange       guifg=#bbbb00 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterDelete       guifg=#ff2222 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterChangeDelete guifg=#ff2222 guibg=none
 '''
 hook_post_source = '''
 GitGutterEnable

@@ -60,6 +60,25 @@ autocmd MyAutoCmd ColorScheme * highlight Visual       cterm=None ctermfg=126 ct
 autocmd MyAutoCmd ColorScheme * highlight CursorLine   ctermbg=0 guibg=#212121 guisp=#93a1a1
 autocmd MyAutoCmd ColorScheme * highlight CursorLineNr ctermbg=none guibg=none
 
+" plugins settiong
+autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#009900 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterChange       guifg=#bbbb00 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterDelete       guifg=#ff2222 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterChangeDelete guifg=#ff2222 guibg=none
+
+autocmd MyAutoCmd ColorScheme * highlight CocErrorSign   ctermfg=9   guifg=#ff0000 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight CocWarningSign ctermfg=130 guifg=#ff922b guibg=none
+autocmd MyAutoCmd ColorScheme * highlight CocInfoSign    ctermfg=11  guifg=#119e26 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight CocHintSign    ctermfg=12  guifg=#15aabf guibg=none
+autocmd MyAutoCmd ColorScheme * highlight CocCodeLens    ctermfg=12  guifg=#586e75
+autocmd MyAutoCmd ColorScheme * highlight CocRustTypeHint     ctermfg=12  guifg=#586e75
+autocmd MyAutoCmd ColorScheme * highlight CocRustChainingHint ctermfg=12  guifg=#586e75
+
+autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
+
+autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
+autocmd MyAutoCmd ColorScheme * hi MatchParen ctermfg=None guifg=None ctermbg=None guibg=None cterm=bold,underline gui=bold,underline
+
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC     ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:NormalNC
