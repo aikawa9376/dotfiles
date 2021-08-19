@@ -253,6 +253,16 @@ map s <Plug>Sneak_s
 map S <Plug>Sneak_S
 nmap <expr> f sneak#is_sneaking() ? '<Plug>Sneak_;' : '<plug>Sneak_f'
 nmap <expr> F sneak#is_sneaking() ? '<Plug>Sneak_,' : '<plug>Sneak_F'
+xmap f <Plug>Sneak_f
+xmap F <Plug>Sneak_F
+omap f <Plug>Sneak_f
+omap F <Plug>Sneak_F
+nmap <expr> t sneak#is_sneaking() ? '<Plug>Sneak_;' : '<plug>Sneak_t'
+nmap <expr> T sneak#is_sneaking() ? '<Plug>Sneak_,' : '<plug>Sneak_T'
+xmap t <Plug>Sneak_t
+xmap T <Plug>Sneak_T
+omap t <Plug>Sneak_t
+omap T <Plug>Sneak_T
 let g:sneak#s_next = 1
 let g:sneak#use_ic_scs = 1
 '''
