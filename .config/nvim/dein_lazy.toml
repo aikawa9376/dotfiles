@@ -223,7 +223,7 @@ inoremap <expr> <CR> pumvisible() ? coc#expandable() ? coc#_select_confirm() :
 
 [[plugins]]
 repo = 'tyru/caw.vim'
-on_map = '<Plug>(caw:hatpos:toggle)'
+on_event = 'VimEnter'
 hook_add = '''
 nmap <C-_> <Plug>(caw:hatpos:toggle)
 vmap <C-_> <Plug>(caw:hatpos:toggle)
