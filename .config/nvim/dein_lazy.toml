@@ -2,7 +2,7 @@
 [[plugins]]
 repo = 'neoclide/coc.nvim'
 on_event = 'VimEnter'
-depends = ['vim-snippets', 'coc-zsh']
+depends = ['vim-snippets', 'coc-zsh', 'coc-nvim-lua']
 marge = 0
 rev = 'release'
 hook_add = '''
@@ -137,6 +137,9 @@ repo = 'tjdevries/coc-zsh'
 repo = 'honza/vim-snippets'
 
 [[plugins]]
+repo = 'rafcamlet/coc-nvim-lua'
+
+[[plugins]]
 repo = 'liuchengxu/vista.vim'
 on_cmd = ['Vista!!']
 hook_add = '''
@@ -215,6 +218,7 @@ hook_add  =  '''
 let g:lexima_no_default_rules = 1
 '''
 hook_post_source = '''
+source $XDG_CONFIG_HOME/nvim/plugins/lexima.vim
 call SetLeximaAddRule()
 inoremap <expr> <CR> pumvisible() ? coc#expandable() ? coc#_select_confirm() :
       \ coc#jumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" : "\<C-y>" :
@@ -1137,24 +1141,7 @@ if = 'has("nvim")'
 on_event = 'BufRead'
 hook_post_update = 'TSUpdate'
 hook_source = '''
-lua <<EOF
-require'nvim-treesitter.configs'.setup {
-  ensure_installed = { "rust", "html", "css", "python", "javascript", "typescript", "toml", "yaml", "json", "go", "lua", "vue", "php" },
-  highlight = {
-    enable = true,
-    disable = { "php" },
-  },
-  incremental_selection = {
-    enable = true,
-    keymaps = {
-      init_selection = "gp",
-      node_incremental = "g+",
-      scope_incremental = "gp",
-      node_decremental = "gm",
-    },
-  },
-}
-EOF
+lua require('plugins.treesitter')
 '''
 
 [[plugins]]
