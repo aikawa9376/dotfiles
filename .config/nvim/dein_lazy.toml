@@ -1,143 +1,5 @@
-# shougo---------------------------------
-[[plugins]]
-repo = 'neoclide/coc.nvim'
-on_event = 'VimEnter'
-depends = ['vim-snippets', 'coc-zsh', 'coc-nvim-lua']
-marge = 0
-rev = 'release'
-hook_add = '''
-let g:coc_status_error_sign   = "\uf057 :"
-let g:coc_status_warning_sign = "\uf071 :"
-
-" Snippets
-inoremap <silent><expr> <C-Space>
-      \ pumvisible() ? coc#_select_confirm() :
-      \ coc#expandableOrJumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" :
-      \ coc#refresh()
-smap <C-Space> <Del>
-smap <C-d> <Del>
-let g:coc_snippet_next = '<C-j>'
-let g:coc_snippet_prev = '<C-k>'
-xmap <C-Space> <Plug>(coc-snippets-select)
-xmap <leader>x <Plug>(coc-convert-snippet)
-
-function! s:check_back_space() abort
-  let col = col('.') - 1
-  return !col || getline('.')[col - 1]  =~# '\s'
-endfunction
-
-" Use tab for trigger completion with characters ahead and navigate.
-" Use command ':verbose imap <tab>' to make sure tab is not mapped by other plugin.
-imap <silent><expr> <TAB>
-      \ pumvisible() ? "\<C-n>" :
-      \ <SID>check_back_space() ? "\<TAB>" :
-      \ coc#refresh()
-imap <expr><S-TAB> pumvisible() ? "\<C-p>" : "\<C-h>"
-
-" Overwrite lexima
-imap <silent><expr> <CR> pumvisible() ? "\<C-y>" : "\<CR>"
-
-imap <silent><expr> <C-x><C-x> coc#refresh()
-
-" Use `[a` and `]a` for navigate diagnostics
-nmap <silent> [a <Plug>(coc-diagnostic-prev)
-nmap <silent> ]a <Plug>(coc-diagnostic-next)
-
-" Remap keys for gotos
-nmap <silent> gd <Plug>(coc-definition)
-nmap <silent> gr <Plug>(coc-references)
-nmap <silent> gy <Plug>(coc-type-definition)
-nmap <silent> gi <Plug>(coc-implementation)
-
-" Use K for show documentation in preview window
-nnoremap <silent> gk :call <SID>show_documentation()<CR>
-
-function! s:show_documentation()
-  if &filetype == 'vim'
-    execute 'h '.expand('<cword>')
-  else
-    call CocAction('doHover')
-  endif
-endfunction
-
-" Highlight symbol under cursor on CursorHold
-autocmd CursorHold * silent call CocActionAsync('highlight')
-
-" Remap for rename current word
-nmap <leader>cn <Plug>(coc-rename)
-nmap <leader>cr <Plug>(coc-refactor)
-
-" Remap for format selected region
-nmap <leader>cf <Plug>(coc-format-selected)
-vmap <leader>cf <Plug>(coc-format-selected)
-
-" map function textobj
-xmap if <Plug>(coc-funcobj-i)
-xmap af <Plug>(coc-funcobj-a)
-omap if <Plug>(coc-funcobj-i)
-omap af <Plug>(coc-funcobj-a)
-xmap iC <Plug>(coc-classobj-i)
-omap iC <Plug>(coc-classobj-i)
-xmap aC <Plug>(coc-classobj-a)
-omap aC <Plug>(coc-classobj-a)
-
-augroup mygroup
-  autocmd!
-  " Setup formatexpr specified filetype(s).
-  autocmd FileType typescript,json setl formatexpr=CocAction('formatSelected')
-  " Update signature help on jump placeholder
-  autocmd User CocJumpPlaceholder call CocActionAsync('showSignatureHelp')
-augroup end
-
-" Remap for do codeAction of selected region, ex: `<leader>aap` for current paragraph
-vmap <leader>cd <Plug>(coc-codeaction-selected)
-nmap <leader>cd <Plug>(coc-codeaction-selected)
-nmap <leader>cdd <leader>cdiw
-vmap <leader>cdl <Plug>(coc-codeaction-line)
-nmap <leader>cdl <Plug>(coc-codeaction-line)
-
-" Remap for do codeAction of current buffer
-nmap <leader>cda <Plug>(coc-codeaction)
-" Fix autofix problem of current line
-nmap <leader>cq <Plug>(coc-fix-current)
-" codelens
-nmap <leader>cl <Plug>(coc-codelens-action)
-
-" Use `:Format` for format current buffer
-command! -nargs=0 Format :call CocAction('format')
-
-" Use `:Fold` for fold current buffer
-command! -nargs=? Fold :call CocAction('fold', <f-args>)
-
-" Using CocList
-" Show all diagnostics
-nnoremap <silent> <space>ca :<C-u>CocFzfList diagnostics<cr>
-" Search workspace symbols
-nnoremap <silent> <space>cs :<C-u>CocFzfList -I symbols<cr>
-" Find symbol of current document
-nnoremap <silent> <space>cO :<C-u>CocFzfList outline<cr>
-" Show commands
-nnoremap <silent> <space>cm :<C-u>CocFzfList lists<cr>
-" Resume latest coc list
-nnoremap <silent> <space>cu :<C-u>CocFzfListResume<CR>
-
-" Filetype add
-let g:coc_filetype_map = {
-  \ 'blade': 'html',
-  \ 'jst': 'html',
-  \ }
-
-let g:coc_disable_transparent_cursor = 1
-'''
-
-[[plugins]]
-repo = 'tjdevries/coc-zsh'
-
 [[plugins]]
 repo = 'honza/vim-snippets'
-
-[[plugins]]
-repo = 'rafcamlet/coc-nvim-lua'
 
 [[plugins]]
 repo = 'liuchengxu/vista.vim'
@@ -158,18 +20,14 @@ let g:vista#renderer#icons = {
   \ }
 '''
 
-[[plugins]]
-repo = 'konfekt/FastFold'
-on_event = 'VimEnter'
-
-[[plugins]]
-repo = 'wellle/tmux-complete.vim'
-
 # text-----------------------------------
 
 [[plugins]]
-repo = 'thirtythreeforty/lessspace.vim'
+repo = 'lewis6991/spaceless.nvim'
 on_event = 'VimEnter'
+hook_source = '''
+lua require'spaceless'.setup()
+'''
 
 [[plugins]]
 repo = 'mattn/emmet-vim'
@@ -790,7 +648,7 @@ nmap QQ <Plug>(qutefinger-toggle-win)
 
 [[plugins]]
 repo = 'junegunn/fzf'
-depends = ['fzf.vim', 'vim-bookmarks', 'tmux-complete.vim', 'fzf-git.vim']
+depends = ['fzf.vim', 'vim-bookmarks', 'fzf-git.vim']
 path = '~/.fzf'
 build = './install --all'
 merged = 0
