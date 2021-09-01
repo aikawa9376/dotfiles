@@ -1,32 +1,63 @@
+# lsp-----------------------------------
 [[plugins]]
-repo = 'honza/vim-snippets'
+repo = 'neovim/nvim-lspconfig'
+depends  = ['nvim-lspinstall']
+on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'liuchengxu/vista.vim'
-on_cmd = ['Vista!!']
-hook_add = '''
-nnoremap <silent> <Leader>o  :Vista!!<CR>
-nnoremap <silent> <Leader>c/ :Vista finder<CR>
-let g:vista_stay_on_open         = 0
-let g:vista_fzf_preview          = ['right:50%']
-let g:vista_icon_indent          = ["", " "]
-let g:vista_echo_cursor_strategy = "floating_win"
-let g:vista_ctags_cmd = {
-  \ "php": "ctags --format=2 --excmd=pattern --fields=nksSaf --sort=no --file-scope=yes --append=no -f-"
-  \ }
-let g:vista#renderer#icons = {
-  \  "function": "\uf794 ",
-  \  "variable": "\uf71b ",
-  \ }
+repo = 'kabouzeid/nvim-lspinstall'
+hook_source = '''
+lua require'plugins.nvim-lsp'
 '''
+
+[[plugins]]
+repo = 'hrsh7th/nvim-cmp'
+depends  = [
+  'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer',
+  'cmp_luasnip', 'friendly-snippets'
+]
+on_event = 'VimEnter'
+hook_source = '''
+lua require'plugins.nvim-cmp'
+'''
+
+[[plugins]]
+repo = 'hrsh7th/cmp-nvim-lsp'
+
+[[plugins]]
+repo = 'hrsh7th/cmp-buffer'
+
+[[plugins]]
+repo = 'saadparwaiz1/cmp_luasnip'
+
+[[plugins]]
+repo = 'L3MON4D3/LuaSnip'
+
+[[plugins]]
+repo = 'rafamadriz/friendly-snippets'
+
 
 # text-----------------------------------
 
 [[plugins]]
 repo = 'lewis6991/spaceless.nvim'
-on_event = 'VimEnter'
+on_event = 'InsertEnter'
 hook_source = '''
 lua require'spaceless'.setup()
+'''
+
+[[plugins]]
+repo = 'lukas-reineke/indent-blankline.nvim'
+on_event = 'VimEnter'
+hook_source = '''
+lua require("indent_blankline").setup { char = "▏", buftype_exclude = {"terminal"} }
+'''
+
+[[plugins]]
+repo = 'windwp/nvim-ts-autotag'
+on_event = 'VimEnter'
+hook_source = '''
+lua require('nvim-ts-autotag').setup()
 '''
 
 [[plugins]]
@@ -60,13 +91,6 @@ build = 'make hexokinase'
 on_ft = ['css', 'scss']
 hook_add = '''
 let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
-'''
-
-[[plugins]]
-repo = 'inkarkat/vim-SyntaxRange'
-on_event = 'VimEnter'
-hook_post_source = '''
-autocmd MyAutoCmd FileType toml call Syntax_range_dein()
 '''
 
 [[plugins]]
@@ -470,7 +494,6 @@ hook_add = '''
 nmap <Space><Space> %
 vmap <Space><Space> %
 nmap <C-Space> <Plug>(matchup-z%)
-let g:matchup_transmute_enabled = 1
 let g:matchup_matchparen_offscreen = {'method': 'status_manual'}
 augroup matchup_setting
   autocmd!
@@ -552,88 +575,30 @@ nmap ga <Plug>(EasyAlign)
 # list-----------------------------------
 
 [[plugins]]
-repo = 'shougo/defx.nvim'
-depends = ['defx-icons', 'defx-git']
-on_cmd = ['Defx']
+repo = 'liuchengxu/vista.vim'
+on_cmd = ['Vista!!']
 hook_add = '''
-nmap <silent><Space>n :Defx
-\ -toggle -resume -direction=topleft -split=vertical
-\ -winwidth=35 -columns=indent:git:icons:filename:type<CR>
-autocmd MyAutoCmd FileType defx call s:defx_my_settings()
-function! s:defx_my_settings() abort
-  " Define mappings
-  nnoremap <silent><buffer><expr><nowait> <CR>
-  \ defx#do_action('drop') . '\<C-w>w'
-  nnoremap <silent><buffer><expr><nowait> c
-  \ defx#do_action('copy')
-  nnoremap <silent><buffer><expr><nowait> m
-  \ defx#do_action('move')
-  nnoremap <silent><buffer><expr><nowait> p
-  \ defx#do_action('paste')
-  nnoremap <silent><buffer><expr><nowait> l
-  \ defx#do_action('open')
-  nnoremap <silent><buffer><expr><nowait> E
-  \ defx#do_action('open', 'vsplit')
-  nnoremap <silent><buffer><expr><nowait> P
-  \ defx#do_action('open', 'pedit')
-  nnoremap <silent><buffer><expr><nowait> o
-  \ defx#do_action('open_or_close_tree')
-  nnoremap <silent><buffer><expr><nowait> K
-  \ defx#do_action('new_directory')
-  nnoremap <silent><buffer><expr><nowait> N
-  \ defx#do_action('new_file')
-  nnoremap <silent><buffer><expr><nowait> M
-  \ defx#do_action('new_multiple_files')
-  nnoremap <silent><buffer><expr><nowait> C
-  \ defx#do_action('toggle_columns', 'size:time')
-  nnoremap <silent><buffer><expr><nowait> S
-  \ defx#do_action('toggle_sort', 'time')
-  nnoremap <silent><buffer><expr><nowait> d
-  \ defx#do_action('remove')
-  nnoremap <silent><buffer><expr><nowait> r
-  \ defx#do_action('rename')
-  nnoremap <silent><buffer><expr><nowait> !
-  \ defx#do_action('execute_command')
-  nnoremap <silent><buffer><expr><nowait> x
-  \ defx#do_action('execute_system')
-  nnoremap <silent><buffer><expr><nowait> yy
-  \ defx#do_action('yank_path')
-  nnoremap <silent><buffer><expr><nowait> .
-  \ defx#do_action('toggle_ignored_files')
-  nnoremap <silent><buffer><expr><nowait> ;
-  \ defx#do_action('repeat')
-  nnoremap <silent><buffer><expr><nowait> h
-  \ defx#do_action('cd', ['..'])
-  nnoremap <silent><buffer><expr><nowait> ~
-  \ defx#do_action('cd')
-  nnoremap <silent><buffer><expr><nowait> q
-  \ defx#do_action('quit')
-  nnoremap <silent><buffer><expr><nowait> <Tab>
-  \ defx#do_action('toggle_select') . 'j'
-  nnoremap <silent><buffer><expr><nowait> *
-  \ defx#do_action('toggle_select_all')
-  nnoremap <silent><buffer><expr><nowait> j
-  \ line('.') == line('$') ? 'gg' : 'j'
-  nnoremap <silent><buffer><expr><nowait> k
-  \ line('.') == 1 ? 'G' : 'k'
-  nnoremap <silent><buffer><expr><nowait> <C-l>
-  \ defx#do_action('redraw')
-  nnoremap <silent><buffer><expr><nowait> <C-g>
-  \ defx#do_action('print')
-  nnoremap <silent><buffer><expr><nowait> <C-n>
-  \ ':<C-u>Defx -buffer-name=temp -split=split<CR>'
-endfunction
+nnoremap <silent> <Leader>o  :Vista!!<CR>
+nnoremap <silent> <Leader>c/ :Vista finder<CR>
+let g:vista_stay_on_open         = 0
+let g:vista_fzf_preview          = ['right:50%']
+let g:vista_icon_indent          = ["", " "]
+let g:vista_echo_cursor_strategy = "floating_win"
+let g:vista_ctags_cmd = {
+  \ "php": "ctags --format=2 --excmd=pattern --fields=nksSaf --sort=no --file-scope=yes --append=no -f-"
+  \ }
+let g:vista#renderer#icons = {
+  \  "function": "\uf794 ",
+  \  "variable": "\uf71b ",
+  \ }
 '''
 
 [[plugins]]
-repo = 'kristijanhusak/defx-icons'
+repo = 'kyazdani42/nvim-tree.lua'
+on_cmd = ['NvimTreeToggle']
 hook_add = '''
-let g:defx_icons_column_length           = 1
-let g:defx_icons_enable_syntax_highlight = 1
+nnoremap <Space>n :NvimTreeToggle<CR>
 '''
-
-[[plugins]]
-repo = 'kristijanhusak/defx-git'
 
 [[plugins]]
 repo = 'LeafCage/qutefinger.vim'
@@ -648,7 +613,7 @@ nmap QQ <Plug>(qutefinger-toggle-win)
 
 [[plugins]]
 repo = 'junegunn/fzf'
-depends = ['fzf.vim', 'vim-bookmarks', 'fzf-git.vim']
+depends = ['fzf.vim', 'vim-bookmarks', 'fzf-git.vim', 'fzf-lsp.nvim']
 path = '~/.fzf'
 build = './install --all'
 merged = 0
@@ -656,16 +621,14 @@ on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'junegunn/fzf.vim'
-depends = ['coc-fzf']
 hook_add = '''
 source $XDG_CONFIG_HOME/nvim/plugins/fzf.vim
 '''
 
 [[plugins]]
-repo = 'antoinemadec/coc-fzf'
-hook_add = '''
-let g:coc_fzf_preview = ''
-let g:coc_fzf_opts = []
+repo = 'gfanto/fzf-lsp.nvim'
+hook_source = '''
+lua require'fzf_lsp'.setup()
 '''
 
 [[plugins]]
@@ -687,13 +650,6 @@ nmap <Leader>mx  <Plug>BookmarkClearAll
 nmap <Leader>mkk <Plug>BookmarkMoveUp
 nmap <Leader>mjj <Plug>BookmarkMoveDown
 nmap <Leader>mg  <Plug>BookmarkMoveToLine
-'''
-
-[[plugins]]
-repo = 'junegunn/vim-peekaboo'
-on_event = 'VimEnter'
-hook_add = '''
-let g:peekaboo_delay = 1000
 '''
 
 [[plugins]]

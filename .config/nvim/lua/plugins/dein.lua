@@ -29,7 +29,7 @@ if vim.call('dein#load_state', dein_dir) == 1 then
 end
 
 -- 不足プラグインの自動インストール
-if vim.fn.has('vim_starting') and vim.call('dein#check_install') == 1 then
+if vim.fn.has('vim_starting') == 1 and vim.call('dein#check_install') == 1 then
   vim.call('dein#install')
 end
 -- 高速アップデート用設定
