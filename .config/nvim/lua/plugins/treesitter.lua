@@ -2,7 +2,6 @@ require'nvim-treesitter.configs'.setup {
   ensure_installed = { "rust", "html", "css", "python", "javascript", "typescript", "toml", "yaml", "json", "go", "lua", "vue", "php" },
   highlight = {
     enable = true,
-    disable = { "php" },
   },
   incremental_selection = {
     enable = true,

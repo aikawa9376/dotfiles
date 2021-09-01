@@ -1,4 +1,5 @@
 let g:lightline = {
+  \ 'enable': {'tabline': 0},
   \ 'colorscheme': 'nordplus',
   \ 'mode_map': {'c': 'NORMAL'},
   \ 'active': {
@@ -12,14 +13,6 @@ let g:lightline = {
         \ ['filetype', 'fileencoding', 'charcode'],
         \ ['vm_modes'],
     \   ]
-  \ },
-  \ 'tabline': {
-    \ 'left': [
-      \ ['buffers']
-    \ ],
-    \ 'right': [
-      \ ['workbench', 'obsession'],
-    \ ]
   \ },
   \ 'component': {
     \ 'lineinfo': '☰ %2p%% %2l:%v'
@@ -40,9 +33,6 @@ let g:lightline = {
     \ 'workbench'      : 'MyWorkbench',
     \ 'cocstatus'      : 'coc#status',
     \ },
-  \ 'component_expand': {
-    \ 'buffers'        : 'lightline#bufferline#buffers'
-  \ },
   \ 'component_type': {
     \ 'linter_checking': 'left',
     \ 'linter_ok'      : 'left',

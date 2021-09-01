@@ -47,13 +47,6 @@ lua require'spaceless'.setup()
 '''
 
 [[plugins]]
-repo = 'lukas-reineke/indent-blankline.nvim'
-on_event = 'VimEnter'
-hook_source = '''
-lua require("indent_blankline").setup { char = "▏", buftype_exclude = {"terminal"} }
-'''
-
-[[plugins]]
 repo = 'windwp/nvim-ts-autotag'
 on_event = 'VimEnter'
 hook_source = '''
@@ -102,9 +95,6 @@ let g:lexima_no_default_rules = 1
 hook_post_source = '''
 source $XDG_CONFIG_HOME/nvim/plugins/lexima.vim
 call SetLeximaAddRule()
-inoremap <expr> <CR> pumvisible() ? coc#expandable() ? coc#_select_confirm() :
-      \ coc#jumpable() ? "\<C-r>=coc#rpc#request('doKeymap', ['snippets-expand-jump',''])\<CR>" : "\<C-y>" :
-      \ lexima#expand('<LT>CR>', 'i')
 '''
 
 [[plugins]]
@@ -495,12 +485,6 @@ nmap <Space><Space> %
 vmap <Space><Space> %
 nmap <C-Space> <Plug>(matchup-z%)
 let g:matchup_matchparen_offscreen = {'method': 'status_manual'}
-augroup matchup_setting
-  autocmd!
-  " coc snippet conflict
-  autocmd InsertEnter * let g:matchup_matchparen_enabled = 0
-  autocmd InsertLeave * let g:matchup_matchparen_enabled = 1
-augroup END
 '''
 
 [[plugins]]
@@ -528,12 +512,7 @@ nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
 '''
 
 [[plugins]]
-repo = 'luochen1990/rainbow'
-on_event = 'VimEnter'
-hook_add = '''
-nmap <silent> <plug>(my-switch)r :RainbowToggle<cr>
-let g:rainbow_active = 0
-'''
+repo = 'p00f/nvim-ts-rainbow'
 
 [[plugins]]
 repo = 'aikawa9376/vim-auto-cursorline'
@@ -815,11 +794,10 @@ nmap <Leader>gl :Agit<CR>
 '''
 
 # status line ---------------------------
-
 [[plugins]]
 repo = 'itchyny/lightline.vim'
 on_event = 'VimEnter'
-depends = ['lightline-bufferline', 'lightline-colorscheme-nordplus']
+depends = ['lightline-colorscheme-nordplus']
 hook_add = '''
 source $XDG_CONFIG_HOME/nvim/plugins/lightline.vim
 '''
@@ -832,16 +810,10 @@ augroup END
 '''
 
 [[plugins]]
-repo = 'aikawa9376/lightline-bufferline'
-hook_add = '''
-set showtabline=2
-let g:lightline#bufferline#enable_devicons   = 1
-let g:lightline#bufferline#filename_modifier = ':t'
-let g:lightline#bufferline#show_number       = 1
-let g:lightline#bufferline#active_tab_hi     = 1
-let g:lightline#bufferline#shorten_pat       = 0
-let g:lightline#bufferline#unicode_symbols   = 1
-let g:lightline#bufferline#unnamed           = '[No Name]'
+repo = 'akinsho/bufferline.nvim'
+on_event = 'VimEnter'
+hook_source = '''
+lua require'plugins.bufferline'
 '''
 
 [[plugins]]
