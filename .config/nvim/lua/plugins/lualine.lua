@@ -29,6 +29,14 @@ local conditions = {
       return false
     end
   end,
+  project = function()
+    ok = require("project_nvim.project").get_project_root()
+    if ok ~= nil then
+      return true
+    else
+      return false
+    end
+  end,
   check_git_workspace = function()
     local filepath = vim.fn.expand('%:p:h')
     local gitdir = vim.fn.finddir('.git', filepath .. ';')
@@ -70,6 +78,17 @@ local config = {
     lualine_x = {}
   }
 }
+
+local function split(inputstr, sep)
+  if sep == nil then
+    sep = "%s"
+  end
+  local t={}
+  for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+    table.insert(t, str)
+  end
+  return t
+end
 
 -- Inserts a component in lualine_c at left section
 local function ins_left(component)
@@ -130,6 +149,14 @@ ins_left {
   color_modified = colors.orange,
   color_removed = colors.red,
   condition = conditions.hide_in_width
+}
+
+ins_left {
+  function()
+    prod = split(require("project_nvim.project").get_project_root(), '/')
+    return prod[#prod]
+  end,
+  condition = conditions.project,
 }
 
 ins_left {

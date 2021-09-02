@@ -884,15 +884,6 @@ call wilder#set_option('pipeline', [
 '''
 
 [[plugins]]
-repo = "puremourning/vimspector"
-on_ft = ["python", "php"]
-build = "./install_gadget.py --enable-python --force-enable-php"
-hook_add = '''
-nmap <silent> <F2> :call vimspector#Reset()<cr>
-let g:vimspector_enable_mappings = 'HUMAN'
-'''
-
-[[plugins]]
 repo = 'vim-scripts/BufOnly.vim'
 on_cmd = ['BufOnly']
 

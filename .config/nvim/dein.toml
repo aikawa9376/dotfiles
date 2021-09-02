@@ -5,9 +5,9 @@ repo = 'Shougo/dein.vim'
 repo = 'tpope/vim-obsession'
 
 [[plugins]]
-repo = 'airblade/vim-rooter'
+repo = 'ahmedkhalf/project.nvim'
 hook_add = '''
-let g:rooter_patterns = ['Session.vim', '.git/', '.vimrc.local']
+lua require'plugins.project'
 '''
 
 # design---------------------------------
