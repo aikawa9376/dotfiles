@@ -14,7 +14,7 @@ lua require'plugins.nvim-lsp'
 repo = 'hrsh7th/nvim-cmp'
 depends  = [
   'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer',
-  'cmp_luasnip', 'friendly-snippets'
+  'cmp_luasnip', 'friendly-snippets', 'cmp-nvim-lua'
 ]
 on_event = 'VimEnter'
 hook_source = '''
@@ -26,6 +26,9 @@ repo = 'hrsh7th/cmp-nvim-lsp'
 
 [[plugins]]
 repo = 'hrsh7th/cmp-buffer'
+
+[[plugins]]
+repo = 'hrsh7th/cmp-nvim-lua'
 
 [[plugins]]
 repo = 'saadparwaiz1/cmp_luasnip'
@@ -196,8 +199,8 @@ endfunction
 noremap <silent><expr> <Leader>/ incsearch#go(<SID>config_easyfuzzymotion())
 noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
 noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
-map <C-j> <Plug>(easymotion-w)
-map <C-k> <Plug>(easymotion-b)
+nmap <C-j> <Plug>(easymotion-w)
+nmap <C-k> <Plug>(easymotion-b)
 autocmd User EasyMotionPromptBegin silent! CocDisable
 autocmd User EasyMotionPromptEnd   silent! CocEnable
 '''
@@ -738,11 +741,11 @@ omap ih <Plug>(GitGutterTextObjectInnerPending)
 omap ah <Plug>(GitGutterTextObjectOuterPending)
 xmap ih <Plug>(GitGutterTextObjectInnerVisual)
 xmap ah <Plug>(GitGutterTextObjectOuterVisual)
-let g:gitgutter_sign_added              = "・"
-let g:gitgutter_sign_modified           = "・"
-let g:gitgutter_sign_removed            = "・"
-let g:gitgutter_sign_modified_removed   = "・"
-let g:gitgutter_sign_removed_first_line = "・"
+let g:gitgutter_sign_added              = "▏"
+let g:gitgutter_sign_modified           = "▏"
+let g:gitgutter_sign_removed            = "▏"
+let g:gitgutter_sign_modified_removed   = "▏"
+let g:gitgutter_sign_removed_first_line = "▏"
 let g:gitgutter_grep_command            = 'rg --hidden --follow --glob "!.git/*"'
 let g:gitgutter_diff_args               = '-w'
 let g:gitgutter_preview_win_floating    = 1
@@ -795,18 +798,10 @@ nmap <Leader>gl :Agit<CR>
 
 # status line ---------------------------
 [[plugins]]
-repo = 'itchyny/lightline.vim'
+repo = 'hoob3rt/lualine.nvim'
 on_event = 'VimEnter'
-depends = ['lightline-colorscheme-nordplus']
-hook_add = '''
-source $XDG_CONFIG_HOME/nvim/plugins/lightline.vim
-'''
 hook_source = '''
-augroup mylightline
-  autocmd! FileType fzf
-  autocmd  FileType fzf set laststatus=0
-    \| autocmd BufLeave <buffer> set laststatus=2
-augroup END
+lua require'plugins.lualine'
 '''
 
 [[plugins]]
@@ -815,9 +810,6 @@ on_event = 'VimEnter'
 hook_source = '''
 lua require'plugins.bufferline'
 '''
-
-[[plugins]]
-repo = 'aikawa9376/lightline-colorscheme-nordplus'
 
 # util ----------------------------------
 [[plugins]]

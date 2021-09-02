@@ -5,8 +5,15 @@ vim.o.completeopt = 'menuone,noselect'
 local luasnip = require 'luasnip'
 require("luasnip/loaders/from_vscode").load()
 
+-- nvim-cmp utils
+local check_back_space = function()
+  local col = vim.fn.col('.') - 1
+  return col == 0 or vim.fn.getline('.'):sub(col, col):match('%s')
+end
+
 -- nvim-cmp setup
 local cmp = require 'cmp'
+local core = require 'cmp.core'
 cmp.setup {
   formatting = {
     format = function(entry, vim_item)
@@ -30,15 +37,49 @@ cmp.setup {
     ['<C-n>'] = cmp.mapping.select_next_item(),
     ['<C-d>'] = cmp.mapping.scroll_docs(-4),
     ['<C-f>'] = cmp.mapping.scroll_docs(4),
-    ['<CR>'] = cmp.mapping.complete(),
-    ['<C-e>'] = cmp.mapping.close(),
-    ['<C-Space>'] = cmp.mapping.confirm {
-      behavior = cmp.ConfirmBehavior.Replace,
-      select = true,
-    },
+    ['<CR>'] = cmp.mapping.close(),
+    ['<C-j>'] = function(fallback)
+      if luasnip.expand_or_jumpable() then
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-jump-next', true, true, true), '')
+      else
+        fallback()
+      end
+    end,
+    ['<C-k>'] = function(fallback)
+      if luasnip.jumpable(-1) then
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-jump-prev', true, true, true), '')
+      else
+        fallback()
+      end
+    end,
+    ['<C-Space>'] = function()
+      if vim.fn.pumvisible() == 0 then
+        if luasnip.expand_or_jumpable() then
+          vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-expand-or-jump', true, true, true), '')
+        else
+          core.complete(core.get_context({ reason = cmp.ContextReason.Manual }))
+          return true
+        end
+      elseif vim.fn.pumvisible() == 1 then
+        option = { behavior = cmp.ConfirmBehavior.Replace, select = true, }
+        local e = core.menu:get_selected_entry() or (option.select and core.menu:get_first_entry() or nil)
+        if e then
+          core.confirm(e, {
+            behavior = option.behavior,
+          }, function()
+            core.complete(core.get_context({ reason = cmp.ContextReason.TriggerOnly }))
+          end)
+          return true
+        else
+          return false
+        end
+      end
+    end,
     ['<Tab>'] = function(fallback)
       if vim.fn.pumvisible() == 1 then
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-n>', true, true, true), 'n')
+      elseif check_back_space() then
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Tab>', true, true, true), 'n')
       elseif luasnip.expand_or_jumpable() then
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-expand-or-jump', true, true, true), '')
       else
@@ -58,6 +99,8 @@ cmp.setup {
   sources = {
     { name = 'nvim_lsp' },
     { name = 'luasnip' },
+    { name = 'nvim_lua' },
     { name = 'buffer' },
   },
 }
+
