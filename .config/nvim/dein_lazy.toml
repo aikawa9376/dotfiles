@@ -201,8 +201,6 @@ noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
 noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
 nmap <C-j> <Plug>(easymotion-w)
 nmap <C-k> <Plug>(easymotion-b)
-autocmd User EasyMotionPromptBegin silent! CocDisable
-autocmd User EasyMotionPromptEnd   silent! CocEnable
 '''
 
 [[plugins]]
@@ -667,8 +665,8 @@ repo = 'Shougo/junkfile.vim'
 on_cmd = ['JunkfileOpen']
 hook_source = '''
 " depends vim rooter
-if exists('*FindRootDirectory') && FindRootDirectory() != ''
-  let s:dir = FindRootDirectory()
+if luaeval('type(require("project_nvim.project").get_project_root)') != 'nil' && luaeval('require("project_nvim.project").get_project_root()') != ''
+  let s:dir = luaeval('require("project_nvim.project").get_project_root()')
   let s:dir = split(s:dir, '/')
   let workdir = s:dir[len(s:dir) - 1] . '/'
 else
@@ -847,6 +845,13 @@ on_event = 'VimEnter'
 hook_source = '''
 call wilder#enable_cmdline_enter()
 set wildcharm=<Tab>
+
+" conflict incsearch
+autocmd MyAutoCmd User IncSearchEnter cunmap <C-n>
+autocmd MyAutoCmd User IncSearchEnter cunmap <C-p>
+autocmd MyAutoCmd User IncSearchLeave cmap <expr> <C-n> wilder#in_context() ? wilder#next() : pumvisible() ? "\<Right>" : "\<C-n>"
+autocmd MyAutoCmd User IncSearchLeave cmap <expr> <C-p> wilder#in_context() ? wilder#previous() : pumvisible() ? "\<Left>" : "\<C-p>"
+
 cmap <expr> <C-n> wilder#in_context() ? wilder#next() : pumvisible() ? "\<Right>" : "\<C-n>"
 cmap <expr> <C-p> wilder#in_context() ? wilder#previous() : pumvisible() ? "\<Left>" : "\<C-p>"
 cmap <expr> <Tab> wilder#in_context() ? wilder#next() : "\<Tab>"

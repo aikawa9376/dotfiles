@@ -5,7 +5,7 @@ local lualine = require 'lualine'
 
 -- Color table for highlights
 local colors = {
-  bg = '#043444',
+  bg = 'none',
   fg = '#E5E9F0',
   yellow = '#ECBE7B',
   cyan = '#008080',
@@ -154,7 +154,7 @@ ins_left {
 ins_left {
   function()
     prod = split(require("project_nvim.project").get_project_root(), '/')
-    return prod[#prod]
+    return ' ' .. prod[#prod]
   end,
   condition = conditions.project,
 }
@@ -230,7 +230,7 @@ ins_right {
 }
 
 ins_right {
-  function() return vim.fn.ObsessionStatus('uf0c7', '') end,
+  function() return vim.fn.ObsessionStatus('', '') end,
   condition = conditions.obsession,
 }
 -- Now don't forget to initialize lualine

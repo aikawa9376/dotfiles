@@ -376,8 +376,8 @@ endfunction
 
 function! s:get_root_dir_for_junk()
   " depends vim rooter
-  if exists('*FindRootDirectory') && FindRootDirectory() != ''
-    let s:dir = FindRootDirectory()
+  if luaeval('type(require("project_nvim.project").get_project_root)') != 'nil' && luaeval('require("project_nvim.project").get_project_root()') != ''
+    let s:dir = luaeval('require("project_nvim.project").get_project_root()')
     let s:dir = split(s:dir, '/')
     return s:dir[len(s:dir) - 1]
   else
