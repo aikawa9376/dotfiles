@@ -52,6 +52,6 @@ cmd([[
 augroup mylightline
   autocmd! FileType fzf
   autocmd  FileType fzf set laststatus=0
-  autocmd BufLeave <buffer> set laststatus=2
+  autocmd BufLeave * set laststatus=2
 augroup END
 ]])

@@ -20,8 +20,11 @@ local colors = {
 
 local conditions = {
   buffer_not_empty = function() return vim.fn.empty(vim.fn.expand('%:t')) ~= 1 end,
-  hide_in_width = function() return vim.fn.winwidth(0) > 80 end,
+  hide_in_width = function()
+    return vim.fn.empty(vim.fn.expand('%:t')) ~= 1 and vim.fn.winwidth(0) > 80
+  end,
   obsession = function()
+    if vim.fn.winwidth(0) < 80 then return false end
     ok = vim.fn.exists('*ObsessionStatus')
     if ok ~= 0 then
       return true
@@ -30,6 +33,7 @@ local conditions = {
     end
   end,
   project = function()
+    if vim.fn.winwidth(0) < 80 then return false end
     ok = require("project_nvim.project").get_project_root()
     if ok ~= nil then
       return true
@@ -38,6 +42,7 @@ local conditions = {
     end
   end,
   check_git_workspace = function()
+    if vim.fn.winwidth(0) < 80 then return false end
     local filepath = vim.fn.expand('%:p:h')
     local gitdir = vim.fn.finddir('.git', filepath .. ';')
     return gitdir and #gitdir > 0 and #gitdir < #filepath
@@ -95,9 +100,19 @@ local function ins_left(component)
   table.insert(config.sections.lualine_c, component)
 end
 
--- Inserts a component in lualine_x ot right section
+-- Inserts a component in lualine_x at right section
 local function ins_right(component)
   table.insert(config.sections.lualine_x, component)
+end
+
+-- Inserts a component in lualine_c at left section
+local function ins_inactive_left(component)
+  table.insert(config.inactive_sections.lualine_a, component)
+end
+
+-- Inserts a component in lualine_x at right section
+local function ins_inactive_right(component)
+  table.insert(config.inactive_sections.lualine_x, component)
 end
 
 ins_left {
@@ -132,23 +147,14 @@ ins_left {
     return require('lualine.utils.mode').get_mode()
   end,
   color = "LualineMode",
-  left_padding = 0
+  left_padding = 0,
+  condition = conditions.hide_in_width
 }
 
 ins_left {
   'branch',
   icon = '⭠',
   condition = conditions.check_git_workspace,
-}
-
-ins_left {
-  'diff',
-  -- Is it me or the symbol for modified us really weird
-  symbols = {added = ' ', modified = '柳', removed = ' '},
-  color_added = colors.green,
-  color_modified = colors.orange,
-  color_removed = colors.red,
-  condition = conditions.hide_in_width
 }
 
 ins_left {
@@ -182,7 +188,17 @@ ins_left {
     if string.len(file) == 0 then return '' end
     return format_file_size(file)
   end,
-  condition = conditions.buffer_not_empty
+  condition = conditions.hide_in_width
+}
+
+ins_left {
+  'diff',
+  -- Is it me or the symbol for modified us really weird
+  symbols = {added = ' ', modified = '柳', removed = ' '},
+  color_added = colors.green,
+  color_modified = colors.orange,
+  color_removed = colors.red,
+  condition = conditions.hide_in_width
 }
 
 ins_left {
@@ -197,10 +213,12 @@ ins_left {
 -- Add components to right sections
 ins_right {
   'filetype',
+  condition = conditions.hide_in_width,
 }
 
 ins_right {
   'fileformat',
+  condition = conditions.hide_in_width,
 }
 
 ins_right {
@@ -210,6 +228,7 @@ ins_right {
 
 ins_right {
   function() return [[☰ %2p%% %2l:%v]] end,
+  condition = conditions.hide_in_width,
 }
 
 ins_right {
@@ -227,11 +246,19 @@ ins_right {
     end
     return msg
   end,
+  condition = conditions.hide_in_width,
 }
 
 ins_right {
   function() return vim.fn.ObsessionStatus('', '') end,
   condition = conditions.obsession,
 }
+
+table.insert(config.inactive_sections.lualine_a, {
+  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. vim.fn.expand('%=') end,
+  condition = conditions.buffer_not_empty,
+  }
+)
+
 -- Now don't forget to initialize lualine
 lualine.setup(config)

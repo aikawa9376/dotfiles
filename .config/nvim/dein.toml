@@ -31,8 +31,8 @@ autocmd MyAutoCmd ColorScheme * highlight ErrorMsg     cterm=bold ctermfg=9 gui=
 autocmd MyAutoCmd ColorScheme * highlight SignColumn   ctermbg=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight LineNr       ctermbg=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight Comment      gui=italic
-autocmd MyAutoCmd ColorScheme * highlight StatusLine   cterm=none gui=none
-autocmd MyAutoCmd ColorScheme * highlight StatusLineNC cterm=none gui=none
+autocmd MyAutoCmd ColorScheme * highlight StatusLine   cterm=none gui=none guibg=none
+autocmd MyAutoCmd ColorScheme * highlight StatusLineNC cterm=none gui=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight Conceal      ctermfg=239 guifg=Grey30
 " tab,expends,etc...
 autocmd MyAutoCmd ColorScheme * highlight NonText      ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
@@ -53,19 +53,16 @@ autocmd MyAutoCmd ColorScheme * highlight Visual       cterm=None ctermfg=126 ct
 autocmd MyAutoCmd ColorScheme * highlight CursorLine   ctermbg=0 guibg=#212121 guisp=#93a1a1
 autocmd MyAutoCmd ColorScheme * highlight CursorLineNr ctermbg=none guibg=none
 
-" plugins settiong
-autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#009900 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterChange       guifg=#bbbb00 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterDelete       guifg=#ff2222 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterChangeDelete guifg=#ff2222 guibg=none
+" plugins setting
+autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#98be65 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterChange       guifg=#FF8800 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterDelete       guifg=#ec5f67 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterChangeDelete guifg=#ec5f67 guibg=none
 
-autocmd MyAutoCmd ColorScheme * highlight CocErrorSign   ctermfg=9   guifg=#ff0000 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight CocWarningSign ctermfg=130 guifg=#ff922b guibg=none
-autocmd MyAutoCmd ColorScheme * highlight CocInfoSign    ctermfg=11  guifg=#119e26 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight CocHintSign    ctermfg=12  guifg=#15aabf guibg=none
-autocmd MyAutoCmd ColorScheme * highlight CocCodeLens    ctermfg=12  guifg=#586e75
-autocmd MyAutoCmd ColorScheme * highlight CocRustTypeHint     ctermfg=12  guifg=#586e75
-autocmd MyAutoCmd ColorScheme * highlight CocRustChainingHint ctermfg=12  guifg=#586e75
+autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultHint        guifg=#98be65 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultError       guifg=#ec5f67 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultWarning     guifg=#FF8800 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultInformation guifg=#51afef guibg=none
 
 autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
 
