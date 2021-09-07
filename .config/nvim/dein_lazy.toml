@@ -755,7 +755,7 @@ GitGutterEnable
 repo = 'tpope/vim-fugitive'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <silent> <Leader>gs :Gstatus<CR>
+nmap <silent> <Leader>gs :Git<CR>
 nmap <silent> <Leader>gd :Gdiff<CR>
 nmap <silent> <Leader>ga :Gwrite<CR>
 nmap <silent> <Leader>gb :Gblame -w<CR>

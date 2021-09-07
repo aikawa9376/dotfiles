@@ -2,7 +2,6 @@
 vim.api.nvim_set_var('dein#lazy_rplugins', 1)
 vim.api.nvim_set_var('dein#enable_notification', 1)
 vim.api.nvim_set_var('dein#install_max_processes', 16)
-vim.api.nvim_set_var('dein#install_message_type', 'none')
 vim.api.nvim_set_var('dein#enable_notification', 1)
 
 local dein_dir = vim.env.HOME .. '/.cache/dein'
