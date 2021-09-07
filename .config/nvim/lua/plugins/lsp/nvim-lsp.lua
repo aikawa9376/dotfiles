@@ -14,16 +14,12 @@ end
 
 function init_setup(params, server)
   local settings = require'plugins.lsp.configs.settings'
-  local on_attachs = require'plugins.lsp.configs.on_attachs'
-
   if settings[server] then
-    table.insert(params, settings[server])
+    for k,v in pairs(settings[server]) do
+      params[k] = v
+    end
   end
-
-  if on_attachs[server] then
-    table.insert(params, settings[server])
-  end
-  return table
+  return params
 end
 
 setup_servers()
@@ -82,5 +78,5 @@ vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
   }
 )
 
-vim.cmd [[autocmd CursorHold,CursorHoldI * lua vim.lsp.diagnostic.show_line_diagnostics()]]
+vim.cmd [[autocmd CursorHold,CursorHoldI * lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })]]
 vim.cmd [[autocmd InsertLeave * lua vim.lsp.codelens.refresh()]]
