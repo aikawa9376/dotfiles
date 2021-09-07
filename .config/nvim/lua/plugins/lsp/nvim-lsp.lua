@@ -6,16 +6,24 @@ local function setup_servers()
   require'lspinstall'.setup()
   local servers = require'lspinstall'.installed_servers()
   for _, server in pairs(servers) do
-    require'lspconfig'[server].setup {
-      capabilities = capabilities,
-      -- TODO notwork
-      settings = {
-        html = {
-          autoClosingTags = false
-        }
-      }
-    }
+    require'lspconfig'[server].setup (
+      init_setup({capabilities = capabilities}, server)
+    )
   end
+end
+
+function init_setup(params, server)
+  local settings = require'plugins.lsp.configs.settings'
+  local on_attachs = require'plugins.lsp.configs.on_attachs'
+
+  if settings[server] then
+    table.insert(params, settings[server])
+  end
+
+  if on_attachs[server] then
+    table.insert(params, settings[server])
+  end
+  return table
 end
 
 setup_servers()
