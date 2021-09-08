@@ -14,7 +14,8 @@ lua require'plugins.lsp'
 repo = 'hrsh7th/nvim-cmp'
 depends  = [
   'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer',
-  'cmp_luasnip', 'friendly-snippets', 'cmp-nvim-lua'
+  'cmp_luasnip', 'friendly-snippets', 'cmp-path',
+  'cmp-tabnine'
 ]
 on_event = 'VimEnter'
 hook_source = '''
@@ -28,7 +29,11 @@ repo = 'hrsh7th/cmp-nvim-lsp'
 repo = 'hrsh7th/cmp-buffer'
 
 [[plugins]]
-repo = 'hrsh7th/cmp-nvim-lua'
+repo = 'hrsh7th/cmp-path'
+
+[[plugins]]
+repo = 'tzachar/cmp-tabnine'
+build = './install.sh'
 
 [[plugins]]
 repo = 'saadparwaiz1/cmp_luasnip'
@@ -433,10 +438,10 @@ call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
 call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
 call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
 call submode#map('quickbrace', 'n', 'r', '[', '<Plug>(qutefinger-prev)')
-call submode#enter_with('linterbrace', 'n', 's', '[a', ':call CocAction("diagnosticPrevious")<CR>')
-call submode#enter_with('linterbrace', 'n', 's', ']a', ':call CocAction("diagnosticNext")<CR>')
-call submode#map('linterbrace', 'n', 's', '[', ':call CocAction("diagnosticPrevious")<CR>')
-call submode#map('linterbrace', 'n', 's', ']', ':call CocAction("diagnosticNext")<CR>')
+call submode#enter_with('linterbrace', 'n', 's', '[a', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_line_diagnostics()<CR>')
+call submode#enter_with('linterbrace', 'n', 's', ']a', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_line_diagnostics()<CR>')
+call submode#map('linterbrace', 'n', 's', '[', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_line_diagnostics()<CR>')
+call submode#map('linterbrace', 'n', 's', ']', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_line_diagnostics()<CR>')
 '''
 
 [[plugins]]

@@ -77,6 +77,3 @@ vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
     signs = true,
   }
 )
-
-vim.cmd [[autocmd CursorHold,CursorHoldI * lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })]]
-vim.cmd [[autocmd InsertLeave * lua vim.lsp.codelens.refresh()]]

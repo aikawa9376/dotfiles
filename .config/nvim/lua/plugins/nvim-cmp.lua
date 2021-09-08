@@ -22,6 +22,7 @@ cmp.setup {
         buffer = "[B]",
         nvim_lsp = "[L]",
         luasnip = "[S]",
+        cmp_tabnine = "[T]",
         nvim_lua = "[Lu]",
       })[entry.source.name]
       return vim_item
@@ -100,7 +101,8 @@ cmp.setup {
     { name = 'nvim_lsp' },
     { name = 'luasnip' },
     { name = 'nvim_lua' },
-    { name = 'buffer' },
+    { name = 'cmp_tabnine' },
+    { name = 'path' },
   },
 }
 
