@@ -115,6 +115,17 @@ local function ins_inactive_right(component)
   table.insert(config.inactive_sections.lualine_x, component)
 end
 
+function changeName(name)
+  if(string.find(name, "term")) then
+    return 'TERM'
+  elseif(string.find(name, "defx")) then
+    return 'DEFX'
+  elseif(string.find(name, "vista")) then
+    return 'Symbols'
+  end
+  return name
+end
+
 ins_left {
   -- mode component
   function()
@@ -166,7 +177,7 @@ ins_left {
 }
 
 ins_left {
-  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. vim.fn.expand('%=') end,
+  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. changeName(vim.fn.expand('%=')) end,
   condition = conditions.buffer_not_empty,
 }
 
@@ -255,7 +266,7 @@ ins_right {
 }
 
 table.insert(config.inactive_sections.lualine_a, {
-  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. vim.fn.expand('%=') end,
+  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. changeName(vim.fn.expand('%=')) end,
   condition = conditions.buffer_not_empty,
   }
 )

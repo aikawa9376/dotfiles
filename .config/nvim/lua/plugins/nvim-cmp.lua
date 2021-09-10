@@ -62,7 +62,7 @@ cmp.setup {
           return true
         end
       elseif vim.fn.pumvisible() == 1 then
-        option = { behavior = cmp.ConfirmBehavior.Replace, select = true, }
+        local option = { behavior = cmp.ConfirmBehavior.Replace, select = true, }
         local e = core.menu:get_selected_entry() or (option.select and core.menu:get_first_entry() or nil)
         if e then
           core.confirm(e, {
@@ -105,4 +105,3 @@ cmp.setup {
     { name = 'path' },
   },
 }
-

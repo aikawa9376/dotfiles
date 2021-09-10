@@ -11,6 +11,10 @@ lua require'plugins.lsp'
 '''
 
 [[plugins]]
+repo = 'nvim-lua/plenary.nvim'
+on_event = ['VimEnter']
+
+[[plugins]]
 repo = 'hrsh7th/nvim-cmp'
 depends  = [
   'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer',
@@ -44,13 +48,20 @@ repo = 'L3MON4D3/LuaSnip'
 [[plugins]]
 repo = 'rafamadriz/friendly-snippets'
 
+[[plugins]]
+repo = 'kosayoda/nvim-lightbulb'
+on_event = 'VimEnter'
+hook_source = '''
+lua require'plugins.lightbulb'
+'''
+
 # text-----------------------------------
 
 [[plugins]]
-repo = 'lewis6991/spaceless.nvim'
+repo = 'cappyzawa/trim.nvim'
 on_event = 'InsertEnter'
 hook_source = '''
-lua require'spaceless'.setup()
+lua require'trim'.setup({})
 '''
 
 [[plugins]]
@@ -438,10 +449,10 @@ call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
 call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
 call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
 call submode#map('quickbrace', 'n', 'r', '[', '<Plug>(qutefinger-prev)')
-call submode#enter_with('linterbrace', 'n', 's', '[a', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_line_diagnostics()<CR>')
-call submode#enter_with('linterbrace', 'n', 's', ']a', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_line_diagnostics()<CR>')
-call submode#map('linterbrace', 'n', 's', '[', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_line_diagnostics()<CR>')
-call submode#map('linterbrace', 'n', 's', ']', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_line_diagnostics()<CR>')
+call submode#enter_with('linterbrace', 'n', 's', '[a', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })<CR>')
+call submode#enter_with('linterbrace', 'n', 's', ']a', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })<CR>')
+call submode#map('linterbrace', 'n', 's', '[', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })<CR>')
+call submode#map('linterbrace', 'n', 's', ']', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })<CR>')
 '''
 
 [[plugins]]
@@ -517,9 +528,6 @@ nmap <expr> N anzu#mode#mapexpr("N", "", "zz")
 '''
 
 [[plugins]]
-repo = 'p00f/nvim-ts-rainbow'
-
-[[plugins]]
 repo = 'aikawa9376/vim-auto-cursorline'
 on_event = 'VimEnter'
 hook_add = '''
@@ -582,9 +590,8 @@ repo = 'shougo/defx.nvim'
 depends = ['defx-icons', 'defx-git']
 on_cmd = ['Defx']
 hook_add = '''
-nmap <silent><Space>n :Defx
-\ -toggle -resume -direction=topleft -split=vertical
-\ -winwidth=30 -columns=indent:git:icons:filename:type<CR>
+nmap <silent><Space>n :Defx -search=`expand('%:p')`<CR>
+
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
   " Define mappings
@@ -622,8 +629,12 @@ function! s:defx_my_settings() abort
   \ defx#do_action('execute_command')
   nnoremap <silent><buffer><expr><nowait> x
   \ defx#do_action('execute_system')
+  nnoremap <silent><buffer><expr> P
+  \ defx#do_action('preview')
   nnoremap <silent><buffer><expr><nowait> yy
   \ defx#do_action('yank_path')
+  nnoremap <silent><buffer><expr><nowait> yY
+  \ defx#do_action('yank_path', ':t')
   nnoremap <silent><buffer><expr><nowait> .
   \ defx#do_action('toggle_ignored_files')
   nnoremap <silent><buffer><expr><nowait> ;
@@ -649,6 +660,33 @@ function! s:defx_my_settings() abort
   nnoremap <silent><buffer><expr><nowait> <C-n>
   \ ':<C-u>Defx -buffer-name=temp -split=split<CR>'
 endfunction
+
+" なぜvimenterで動くのか謎
+" 副作用がありそうな...
+augroup user_plugin_defx
+  autocmd!
+  autocmd VimEnter * Defx -no-focus
+  autocmd BufEnter * SyncDefx
+augroup END
+
+command! SyncDefx :call s:check_and_search_defx()
+function! s:check_and_search_defx()
+  if bufwinnr('defx') == 1
+    Defx -no-focus -no-toggle -search=`expand('%:p')`
+  endif
+endfunction
+'''
+hook_source = '''
+call defx#custom#option('_', {
+    \ 'columns': 'indent:git:icons:filename:type',
+    \ 'direction': 'topleft',
+    \ 'split': 'vertical',
+    \ 'floating_preview': 1,
+    \ 'show_ignored_files': 1,
+    \ 'winwidth': 30,
+    \ 'toggle': 1,
+    \ 'resume': 1,
+    \ })
 '''
 
 [[plugins]]
@@ -661,7 +699,6 @@ let g:defx_icons_enable_syntax_highlight = 1
 [[plugins]]
 repo = 'kristijanhusak/defx-git'
 
-
 [[plugins]]
 repo = 'LeafCage/qutefinger.vim'
 on_event = 'VimEnter'
@@ -671,6 +708,13 @@ nmap Qp <Plug>(qutefinger-older)
 nmap Qn <Plug>(qutefinger-newer)
 nmap Q  <Plug>(qutefinger-toggle-win)
 nmap QQ <Plug>(qutefinger-toggle-win)
+'''
+
+[[plugins]]
+repo = 'kevinhwang91/nvim-bqf'
+on_event = 'VimEnter'
+hook_source = '''
+lua require'plugins.bqf'
 '''
 
 [[plugins]]
@@ -730,16 +774,15 @@ nnoremap <silent> <Leader>u :MundoToggle<CR>
 '''
 
 [[plugins]]
-repo = 'brooth/far.vim'
-on_cmd = ['Far']
-hook_add = '''
-let g:far#source = 'rgnvim'
-let g:far#enable_undo = 1
-let g:far#cut_text_sign = '… '
-let g:far#multiline_sign = '⬎ '
-let g:far#auto_delete_replaced_buffers = 1
-nmap <Leader>rr :Far  /<Left><Left>
-nmap <Leader>rR :Far <C-R>=expand("<cword>")<cr>  /<Left><Left>
+repo = 'windwp/nvim-spectre'
+on_event = ['VimEnter']
+hook_source = '''
+"search current word
+nnoremap <leader>rr :lua require('spectre').open_visual({select_word=true})<CR>
+vnoremap <leader>rr :lua require('spectre').open_visual()<CR>
+"  search in current file
+nnoremap <leader>RR viw:lua require('spectre').open_file_search()<cr>
+lua require('spectre').setup({ line_sep_start = '', result_padding = '', line_sep  = '',})
 '''
 
 [[plugins]]
@@ -993,6 +1036,9 @@ on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter'
+depends = [
+  'nvim-treesitter-textobjects', 'playground'
+]
 if = 'has("nvim")'
 on_event = 'BufRead'
 hook_post_update = 'TSUpdate'
@@ -1002,6 +1048,12 @@ lua require('plugins.treesitter')
 
 [[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter-refactor'
+
+[[plugins]]
+repo = 'nvim-treesitter/nvim-treesitter-textobjects'
+
+[[plugins]]
+repo = 'nvim-treesitter/playground'
 
 # php------------------------------------
 [[plugins]]
