@@ -1,5 +1,6 @@
 -- completion
 local capabilities = vim.lsp.protocol.make_client_capabilities()
+local settings = require'plugins.lsp.configs.settings'
 capabilities = require('cmp_nvim_lsp').update_capabilities(capabilities)
 
 local function setup_servers()
@@ -9,15 +10,18 @@ local function setup_servers()
   local servers = require'lspinstall'.installed_servers()
   for _, server in pairs(servers) do
     require'lspconfig'[server].setup (
-      init_setup({capabilities = capabilities}, server)
+      init_setup({
+        capabilities = capabilities,
+        on_attach = settings.default
+      }, server)
     )
   end
 end
 
 function init_setup(params, server)
-  local settings = require'plugins.lsp.configs.settings'
-  if settings[server] then
-    for k,v in pairs(settings[server]) do
+  local update_setting = settings.configs
+  if update_setting[server] then
+    for k,v in pairs(update_setting[server]) do
       params[k] = v
     end
   end

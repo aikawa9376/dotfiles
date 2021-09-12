@@ -1,13 +1,16 @@
-local configs = {
+local M = {}
+
+M.configs = {
   html =  {
     settings = {
       html = {
         autoClosingTags = false
       }
     },
-    on_attach =  function(client, bufnr)
-      default(client, bufnr)
-    end,
+    -- update on_attach
+    -- on_attach =  function(client, bufnr)
+    --   M.default(client, bufnr)
+    -- end,
   },
   rust =  {
     settings = {
@@ -29,9 +32,6 @@ local configs = {
         }
       }
     },
-    on_attach =  function(client, bufnr)
-      default(client, bufnr)
-    end,
   },
   lua = {
     settings = {
@@ -51,13 +51,10 @@ local configs = {
         }
       }
     },
-    on_attach =  function(client, bufnr)
-      default(client, bufnr)
-    end,
   },
 }
 
-function default(client, bufnr)
+M.default = function(client, bufnr)
   local function buf_set_keymap(...) vim.api.nvim_buf_set_keymap(bufnr, ...) end
   local function buf_set_option(...) vim.api.nvim_buf_set_option(bufnr, ...) end
   local win_sytle = { border = "none",  focusable = false, silent = true }
@@ -146,4 +143,4 @@ function default(client, bufnr)
   -- require('plugins.lsp.utils').get_capabilities()
 end
 
-return configs
+return M
