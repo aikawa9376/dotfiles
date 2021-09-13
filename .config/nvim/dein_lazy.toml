@@ -733,9 +733,6 @@ source $XDG_CONFIG_HOME/nvim/plugins/fzf.vim
 
 [[plugins]]
 repo = 'gfanto/fzf-lsp.nvim'
-hook_source = '''
-lua require'fzf_lsp'.setup()
-'''
 
 [[plugins]]
 repo = 'aikawa9376/fzf-git.vim'

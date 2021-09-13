@@ -83,7 +83,7 @@ M.default = function(client, bufnr)
   vim.cmd [[command! ShowWorkspaceFolder lua print(vim.inspect(vim.lsp.buf.list_workspace_folders()))]]
 
   -- Autocmds.
-  vim.cmd [[autocmd MyAutoCmd BufWritePre <buffer> lua vim.lsp.buf.formatting_sync()]] -- sync? insert_leave?
+  vim.cmd [[autocmd MyAutoCmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]] -- sync? insert_leave?
   vim.cmd [[autocmd MyAutoCmd CursorHold * lua vim.lsp.diagnostic.show_line_diagnostics({ border = "none",  focusable = false })]]
   vim.cmd [[autocmd MyAutoCmd CursorHoldI * silent! lua vim.lsp.buf.signature_help()]]
   if client.resolved_capabilities['code_lens'] then

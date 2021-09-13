@@ -34,10 +34,34 @@ cmp.setup {
     end,
   },
   mapping = {
-    ['<C-p>'] = cmp.mapping.select_prev_item(),
-    ['<C-n>'] = cmp.mapping.select_next_item(),
-    ['<C-d>'] = cmp.mapping.scroll_docs(-4),
-    ['<C-f>'] = cmp.mapping.scroll_docs(4),
+    ['<C-p>'] = function(fallback)
+      if vim.fn.pumvisible() == 1 then
+        cmp.mapping.select_prev_item()
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Up>', true, true, true), 'n')
+      end
+    end,
+    ['<C-n>'] = function(fallback)
+      if vim.fn.pumvisible() == 1 then
+        cmp.mapping.select_next_item()
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Down>', true, true, true), 'n')
+      end
+    end,
+    ['<C-d>'] = function(fallback)
+      if vim.fn.pumvisible() == 1 then
+        cmp.mapping.scroll_docs(-4)
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Del>', true, true, true), 'n')
+      end
+    end,
+    ['<C-f>'] = function(fallback)
+      if vim.fn.pumvisible() == 1 then
+        cmp.mapping.scroll_docs(4)
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Right>', true, true, true), 'n')
+      end
+    end,
     ['<CR>'] = cmp.mapping.close(),
     ['<C-j>'] = function(fallback)
       if luasnip.expand_or_jumpable() then
