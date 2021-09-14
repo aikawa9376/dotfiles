@@ -7,7 +7,7 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'kabouzeid/nvim-lspinstall'
 hook_source = '''
-lua require'plugins.lsp'
+lua require'lsp'
 '''
 
 [[plugins]]
@@ -661,12 +661,9 @@ function! s:defx_my_settings() abort
   \ ':<C-u>Defx -buffer-name=temp -split=split<CR>'
 endfunction
 
-" なぜvimenterで動くのか謎
-" 副作用がありそうな...
 augroup user_plugin_defx
   autocmd!
-  autocmd VimEnter * Defx -no-focus
-  autocmd BufEnter * SyncDefx
+  autocmd CursorHold * SyncDefx
 augroup END
 
 command! SyncDefx :call s:check_and_search_defx()
@@ -1036,7 +1033,7 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter'
 depends = [
-  'nvim-treesitter-textobjects', 'playground'
+  'nvim-treesitter-textobjects', 'playground', 'nvim-ts-rainbow'
 ]
 if = 'has("nvim")'
 on_event = 'BufRead'
@@ -1053,6 +1050,9 @@ repo = 'nvim-treesitter/nvim-treesitter-textobjects'
 
 [[plugins]]
 repo = 'nvim-treesitter/playground'
+
+[[plugins]]
+repo = 'p00f/nvim-ts-rainbow'
 
 # php------------------------------------
 [[plugins]]

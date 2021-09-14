@@ -70,7 +70,7 @@ M.default = function(client, bufnr)
   buf_set_keymap('n', 'gi', '<cmd>Implementation<CR>', opts)
   buf_set_keymap('n', 'gy', '<cmd>TypeDefinition<CR>', opts)
   buf_set_keymap('n', 'gk', '<cmd>lua vim.lsp.buf.hover()<CR>', opts)
-  buf_set_keymap('n', '<leader>rn', '<cmd>lua Rename.rename()<CR>', opts)
+  buf_set_keymap('n', '<leader>rn', '<cmd>lua require("lsp.configs.rename").rename()<CR>', opts)
   buf_set_keymap('n', '<space>ca', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
 
   -- Commands.
@@ -93,36 +93,6 @@ M.default = function(client, bufnr)
   vim.lsp.handlers["textDocument/hover"] =  vim.lsp.with(vim.lsp.handlers.hover,  win_sytle )
   vim.lsp.handlers["textDocument/signatureHelp"] =  vim.lsp.with(vim.lsp.handlers.signature_help,  win_sytle )
 
-  -- rename settings
-  local function dorename(win)
-    local new_name = vim.trim(vim.fn.getline('.'))
-    vim.api.nvim_win_close(win, true)
-    vim.lsp.buf.rename(new_name)
-  end
-
-  local function rename()
-    local opts = {
-      relative = 'cursor', row = 1,
-      col = 0, width = 30,
-      height = 1, style = 'minimal'
-    }
-    local cword = vim.fn.expand('<cword>')
-    local buf = vim.api.nvim_create_buf(false, true)
-    local win = vim.api.nvim_open_win(buf, true, opts)
-    local fmt =  '<cmd>lua Rename.dorename(%d)<CR>'
-    vim.api.nvim_win_set_option(win, 'winhighlight', 'Normal:NormalFloat')
-
-    vim.api.nvim_buf_set_lines(buf, 0, -1, false, {cword})
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<CR>', string.format(fmt, win), {silent=true})
-    vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(win, true)<CR>' , {silent=true})
-    vim.api.nvim_win_set_cursor(win, {1, #cword})
-  end
-
-  _G.Rename = {
-    rename = rename,
-    dorename = dorename
-  }
-
   -- diagnostic settings
   local signs = { Error = " ", Warning = " ", Hint = " ", Information = " " }
 
@@ -140,7 +110,7 @@ M.default = function(client, bufnr)
   )
 
   -- show capabilities
-  -- require('plugins.lsp.utils').get_capabilities()
+  -- require('lsp.utils').get_capabilities()
 
   local util = require 'vim.lsp.util'
 
