@@ -32,13 +32,14 @@ set t_8b=^[[48;2;%lu;%lu;%lum
 autocmd MyAutoCmd ColorScheme * highlight Normal            ctermbg=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight NormalFloat       ctermbg=none guibg=#002936
 autocmd MyAutoCmd ColorScheme * highlight ErrorMsg          cterm=bold ctermfg=9 gui=bold guifg=#dc322f
-autocmd MyAutoCmd ColorScheme * highlight NvimInternalError cterm=bold ctermfg=9 gui=bold guifg=#dc322f
 autocmd MyAutoCmd ColorScheme * highlight SignColumn        ctermbg=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight LineNr            ctermbg=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight Comment           gui=italic
+autocmd MyAutoCmd ColorScheme * highlight QuickFixLine      cterm=None ctermfg=7 gui=bold,underline
 autocmd MyAutoCmd ColorScheme * highlight StatusLine        cterm=none gui=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight StatusLineNC      cterm=none gui=none guibg=none
 autocmd MyAutoCmd ColorScheme * highlight Conceal           ctermfg=239 guifg=Grey30
+autocmd MyAutoCmd ColorScheme * highlight NvimInternalError cterm=bold ctermfg=9 gui=bold guifg=#dc322f
 " tab,expends,etc...
 autocmd MyAutoCmd ColorScheme * highlight NonText      ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
 autocmd MyAutoCmd ColorScheme * highlight SpecialKey   ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
