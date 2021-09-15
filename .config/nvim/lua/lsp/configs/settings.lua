@@ -72,6 +72,7 @@ M.default = function(client, bufnr)
   buf_set_keymap('n', 'gk', '<cmd>lua vim.lsp.buf.hover()<CR>', opts)
   buf_set_keymap('n', '<leader>rn', '<cmd>lua require("lsp.configs.rename").rename()<CR>', opts)
   buf_set_keymap('n', '<space>ca', '<cmd>lua require"lsp.configs.codeaction".code_action()<CR>', opts)
+  buf_set_keymap('n', '<space>cl', '<cmd>lua require"lsp.configs.codelens".run()<CR>', opts)
 
   -- Commands.
   vim.cmd [[command! Format lua vim.lsp.buf.formatting()]]
@@ -90,7 +91,7 @@ M.default = function(client, bufnr)
   vim.cmd [[autocmd MyAutoCmd CursorHold * lua vim.lsp.diagnostic.show_line_diagnostics({ border = "none",  focusable = false })]]
   vim.cmd [[autocmd MyAutoCmd CursorHoldI * silent! lua vim.lsp.buf.signature_help()]]
   if client.resolved_capabilities['code_lens'] then
-    vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost * lua vim.lsp.codelens.refresh()]]
+    vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost * lua require"lsp.configs.codelens".refresh()]]
   end
 
   vim.lsp.handlers["textDocument/hover"] =  vim.lsp.with(vim.lsp.handlers.hover,  win_sytle )

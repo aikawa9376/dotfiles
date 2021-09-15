@@ -117,6 +117,7 @@ call SetLeximaAddRule()
 
 [[plugins]]
 repo = 'tyru/caw.vim'
+# rev = 'integrate-ts_context_commentstring'
 on_event = 'VimEnter'
 hook_add = '''
 nmap <C-_> <Plug>(caw:hatpos:toggle)
@@ -1033,7 +1034,8 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter'
 depends = [
-  'nvim-treesitter-textobjects', 'playground', 'nvim-ts-rainbow'
+  'nvim-treesitter-textobjects', 'playground', 'nvim-ts-rainbow',
+  'nvim-ts-context-commentstring'
 ]
 if = 'has("nvim")'
 on_event = 'BufRead'
@@ -1053,6 +1055,9 @@ repo = 'nvim-treesitter/playground'
 
 [[plugins]]
 repo = 'p00f/nvim-ts-rainbow'
+
+[[plugins]]
+repo = 'JoosepAlviste/nvim-ts-context-commentstring'
 
 # php------------------------------------
 [[plugins]]
