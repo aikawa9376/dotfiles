@@ -48,20 +48,8 @@ cmp.setup {
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Down>', true, true, true), 'n')
       end
     end,
-    ['<C-d>'] = function(fallback)
-      if vim.fn.pumvisible() == 1 then
-        cmp.mapping.scroll_docs(-4)
-      else
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Del>', true, true, true), 'n')
-      end
-    end,
-    ['<C-f>'] = function(fallback)
-      if vim.fn.pumvisible() == 1 then
-        cmp.mapping.scroll_docs(4)
-      else
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Right>', true, true, true), 'n')
-      end
-    end,
+    ['<M-d>'] = cmp.mapping.scroll_docs(-4),
+    ['<M-u>'] = cmp.mapping.scroll_docs(4),
     ['<CR>'] = cmp.mapping.close(),
     ['<C-j>'] = function(fallback)
       if luasnip.expand_or_jumpable() then
