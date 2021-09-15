@@ -14,28 +14,59 @@ local function code_action_request(params)
     for _, r in pairs(results) do
       vim.list_extend(actions, r.result or {})
     end
-    codeActionHandler(nil, actions, {bufnr=bufnr, method=method})
+    code_action_handler(nil, actions, {bufnr=bufnr, method=method})
   end)
 
   --see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
-  function codeActionHandler(_, result)
+  function code_action_handler(_, result)
     if result == nil or vim.tbl_isempty(result) then
       print("No code actions available")
       return
     end
 
+    open_action_float(result)
+  end
+
+  function get_titles_length(result)
     local option_strings = {"Code actions:"}
+    local length = 0
     for i, action in ipairs(result) do
       local title = action.title:gsub('\r\n', '\\r\\n')
       title = title:gsub('\n', '\\n')
-      table.insert(option_strings, string.format("%d. %s", i, title))
-    end
+      title = string.format("%d. %s", i, title)
+      table.insert(option_strings, title)
 
-    local choice = vim.fn.inputlist(option_strings)
-    if choice < 1 or choice > #result then
+      length = length < #title and #title or length
+    end
+    return option_strings, length
+  end
+
+  function open_action_float(result)
+    local title, length = get_titles_length(result)
+    local opts = {
+      relative = 'cursor', row = 1,
+      col = 0, width = length,
+      height = #title, style = 'minimal'
+    }
+    local buf = vim.api.nvim_create_buf(false, true)
+    local win = vim.api.nvim_open_win(buf, true, opts)
+
+    local fmt =  '<cmd>lua code_action_complete(%d)<CR>'
+    vim.api.nvim_buf_set_var(buf, 'code_action_result', result)
+    vim.api.nvim_win_set_option(win, 'winhighlight', 'Normal:NormalFloat')
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, title)
+    vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', string.format(fmt, win), {silent=true})
+    vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(win, true)<CR>' , {silent=true})
+  end
+
+  function code_action_complete(win)
+    local choice = vim.trim(vim.fn.getline('.'))
+    local index = tonumber(string.match(choice, "%d+"))
+    local result = vim.api.nvim_buf_get_var(buf, 'code_action_result')
+    if not index or index < 1 or index > #result then
       return
     end
-    local action_chosen = result[choice]
+    local action_chosen = result[index]
     -- textDocument/codeAction can return either Command[] or CodeAction[].
     -- If it is a CodeAction, it can have either an edit, a command or both.
     -- Edits should be executed first
@@ -49,6 +80,7 @@ local function code_action_request(params)
     else
       buf.execute_command(action_chosen)
     end
+    vim.api.nvim_win_close(win, true)
   end
 end
 
