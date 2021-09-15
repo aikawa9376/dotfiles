@@ -235,7 +235,6 @@ function! s:mru_file_sink(lines)
   if len(a:lines) < 3
     return
   endif
-  let s:dir = FindRootDirectory()
   if a:lines[1] == ''
     for w in range(2, len(a:lines) - 1)
       execute("edit " . a:lines[w])
@@ -250,7 +249,6 @@ function! s:mrw_file_sink(lines)
   if len(a:lines) < 3
     return
   endif
-  let s:dir = FindRootDirectory()
   if a:lines[1] == ''
     for w in range(2, len(a:lines) - 1)
       execute("edit " . a:lines[w])
@@ -265,7 +263,6 @@ function! s:mru_file_all_sink(lines)
   if len(a:lines) < 3
     return
   endif
-  let s:dir = FindRootDirectory()
   if a:lines[1] == ''
     for w in range(2, len(a:lines) - 1)
       execute("edit " . a:lines[w])
@@ -280,7 +277,6 @@ function! s:mrw_file_all_sink(lines)
   if len(a:lines) < 3
     return
   endif
-  let s:dir = FindRootDirectory()
   if a:lines[1] == ''
     for w in range(2, len(a:lines) - 1)
       execute("edit " . a:lines[w])
