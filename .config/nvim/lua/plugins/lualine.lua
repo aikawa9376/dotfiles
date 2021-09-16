@@ -2,6 +2,8 @@
 -- Author: shadmansaleh
 -- Credit: glepnir
 local lualine = require 'lualine'
+local lsp_status = require('lsp-status')
+lsp_status.register_progress()
 
 -- Color table for highlights
 local colors = {
@@ -262,8 +264,6 @@ ins_right {
 
 ins_right {
   function()
-    local lsp_status = require('lsp-status')
-    lsp_status.register_progress()
     spinner_frames = {'⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'}
     message = lsp_status.messages()[1]
     local resutl = ''
@@ -289,15 +289,6 @@ ins_right {
   end,
   condition = conditions.hide_in_width,
 }
--- { {
---     message = "44/57 (generators)",
---     name = 1,
---     percentage = 77,
---     progress = true,
---     spinner = 46,
---     title = "Indexing"
---   } }
--- {
 
 ins_right {
   function() return vim.fn.ObsessionStatus('', '') end,
