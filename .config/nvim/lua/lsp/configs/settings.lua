@@ -115,6 +115,8 @@ M.default = function(client, bufnr)
 
   -- show capabilities
   -- require('lsp.utils').get_capabilities()
+
+  vim.cmd [[command! -bang -nargs=? WSTtest lua require("lsp.configs.fzf").workspace_symbol(<bang>0, <q-args>)]]
 end
 
 return M

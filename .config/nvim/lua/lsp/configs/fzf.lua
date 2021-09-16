@@ -53,22 +53,6 @@ local function extract_result(results_lsp)
   end
 end
 
-local function call_sync(method, params, opts, handler)
-  params = params or {}
-  opts = opts or {}
-  local bufnr = vim.api.nvim_get_current_buf()
-  local results_lsp, err = vim.lsp.buf_request_sync(
-    bufnr, method, params, opts.timeout or g.fzf_lsp_timeout
-  )
-
-  local ctx = {
-    method = method,
-    bufnr = bufnr,
-    client_id = results_lsp and next(results_lsp) or nil,
-  }
-  handler(err, extract_result(results_lsp), ctx, nil)
-end
-
 local function check_capabilities(feature, client_id)
   local clients = vim.lsp.buf_get_clients(client_id or 0)
 
@@ -442,23 +426,6 @@ local function document_symbol_handler(bang, err, result, ctx, _)
   fzf_locations(bang, "", "Document Symbols", lines, true)
 end
 
-local function workspace_symbol_handler(bang, err, result, ctx, _)
-  if err ~= nil then
-    perror(err)
-    return
-  end
-
-  if not result or vim.tbl_isempty(result) then
-    print("Workspace Symbol not found")
-    return
-  end
-
-  local lines = lines_from_locations(
-    vim.lsp.util.symbols_to_items(result, ctx.bufnr), true
-  )
-  fzf_locations(bang, "", "Workspace Symbols", lines, false)
-end
-
 local function incoming_calls_handler(bang, err, result, ctx, config)
   local results = call_hierarchy_handler_from(
     err, result, ctx, config, "Incoming calls not found"
@@ -543,17 +510,6 @@ function M.document_symbol(bang, opts)
   local params = vim.lsp.util.make_position_params()
   call_sync(
     "textDocument/documentSymbol", params, opts, partial(document_symbol_handler, bang)
-  )
-end
-
-function M.workspace_symbol(bang, opts)
-  if not check_capabilities("workspace_symbol") then
-    return
-  end
-
-  local params = {query = opts.query or ''}
-  call_sync(
-    "workspace/symbol", params, opts, partial(workspace_symbol_handler, bang)
   )
 end
 
@@ -751,5 +707,112 @@ M.setup = function(opts)
   vim.lsp.handlers["callHierarchy/outgoingCalls"] = mk_handler(M.outgoing_calls_handler)
 end
 -- }}}
+
+local function call_sync(method, params, opts, handler)
+  params = params or {}
+  opts = opts or {}
+  local bufnr = vim.api.nvim_get_current_buf()
+  local results_lsp, err = vim.lsp.buf_request_sync(
+    bufnr, method, params, opts.timeout or g.fzf_lsp_timeout
+  )
+
+  local ctx = {
+    method = method,
+    bufnr = bufnr,
+    client_id = results_lsp and next(results_lsp) or nil,
+  }
+  handler(err, extract_result(results_lsp), ctx, nil)
+end
+
+local function fzf_symbol_locations(bang, prompt, header, source, infile)
+  local preview_cmd = (infile and
+    (bin.preview .. " " .. fn.expand("%") .. ":{}") or
+    (bin.preview .. " {}")
+  )
+
+  local change_script = vim.env.XDG_CONFIG_HOME .. '/nvim/bin/get_workspace_symbols.py'
+
+  local options = {
+    "--prompt", header .. ">",
+    "--ansi",
+    "--multi",
+    "--bind", "ctrl-a:select-all,ctrl-d:deselect-all,change:reload:" .. change_script,
+  }
+
+  if g.fzf_lsp_action and not vim.tbl_isempty(g.fzf_lsp_action) then
+    vim.list_extend(
+      options, {"--expect", table.concat(vim.tbl_keys(g.fzf_lsp_action), ",")}
+    )
+  end
+
+  if g.fzf_lsp_preview_window then
+    if #g.fzf_lsp_preview_window == 0 then
+      g.fzf_lsp_preview_window = {"hidden"}
+    end
+
+    vim.list_extend(options, {"--preview-window", g.fzf_lsp_preview_window[1]})
+    if #g.fzf_lsp_preview_window > 1 then
+      local preview_bindings = {}
+      for i=2, #g.fzf_lsp_preview_window, 1 do
+        table.insert(preview_bindings, g.fzf_lsp_preview_window[i] .. ":toggle-preview")
+      end
+      vim.list_extend(options, {"--bind", table.concat(preview_bindings, ",")})
+    end
+  end
+
+  vim.list_extend(options, {"--preview", preview_cmd})
+  fzf_run(fzf_wrap("fzf_lsp", {
+    source = source,
+    sink = partial(common_sink, infile),
+    options = options,
+  }, bang))
+end
+
+local function workspace_symbol_handler(bang, err, result, ctx, _)
+  if err ~= nil then
+    perror(err)
+    return
+  end
+
+  if not result or vim.tbl_isempty(result) then
+    print("Workspace Symbol not found")
+    return
+  end
+
+  local lines = lines_from_locations(
+    vim.lsp.util.symbols_to_items(result, ctx.bufnr), true
+  )
+  fzf_symbol_locations(bang, "", "Workspace Symbols", lines, false)
+end
+
+function M.workspace_symbol(bang, opts)
+  if not check_capabilities("workspace_symbol") then
+    return
+  end
+
+  local params = {query = opts.query or ''}
+  call_sync(
+    "workspace/symbol", params, opts, partial(workspace_symbol_handler, bang)
+  )
+end
+
+function M.get_workspace_synbols_sync(query)
+  local params = {query = query or ''}
+  local bufnr = vim.api.nvim_get_current_buf()
+  local results_lsp, err = vim.lsp.buf_request_sync(
+    bufnr, "workspace/symbol", params, 3000
+  )
+  if err then
+    print("ERROR: " .. tostring(err))
+    return
+  end
+
+  return results_lsp[1].result
+  -- for k, v in pairs( results_lsp[1].result ) do
+  --   -- block
+  --   print(vim.inspect(k))
+  --   print(vim.inspect(v))
+  -- end
+end
 
 return M
