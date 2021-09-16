@@ -14,6 +14,9 @@ local function code_action_request(params)
     for _, r in pairs(results) do
       vim.list_extend(actions, r.result or {})
     end
+    -- ここは自作ハンドラーを作って持ち回ったほうが良いかもしれない
+    -- 言語ごとに処理に特徴があるため typescriptなど独自だから差し替えたい
+    -- vim.lsp.handlers[method](nil, actions, {bufnr=bufnr, method=method})
     code_action_handler(nil, actions, {bufnr=bufnr, method=method})
   end)
 

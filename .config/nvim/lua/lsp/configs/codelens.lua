@@ -125,6 +125,8 @@ function execute_lens(lens, bufnr, client_id)
   local client = vim.lsp.get_client_by_id(client_id)
   assert(client, 'Client is required to execute lens, client_id=' .. client_id)
   client.request('workspace/executeCommand', lens.command, function(...)
+    -- 共通エラー処理のためのハンドラーらしい Gkeepに書いた
+    -- Nvim見に行くと空だけどびっくりしないように
     local result = vim.lsp.handlers['workspace/executeCommand'](...)
     M.refresh()
     return result
