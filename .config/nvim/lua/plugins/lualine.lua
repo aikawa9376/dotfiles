@@ -261,6 +261,45 @@ ins_right {
 }
 
 ins_right {
+  function()
+    local lsp_status = require('lsp-status')
+    lsp_status.register_progress()
+    spinner_frames = {'⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'}
+    message = lsp_status.messages()[1]
+    local resutl = ''
+    if not message then
+      return ''
+    end
+    if message.name then
+      result = '[' .. vim.lsp.get_client_by_id(message.name).name .. ']'
+    end
+    if message.spinner then
+      result = result .. spinner_frames[(message.spinner % #spinner_frames) + 1]
+    end
+    if message.title then
+      result = result .. ' ' .. message.title
+    end
+    if message.message then
+      result = result .. ' ' .. message.message
+    end
+    if message.percentage then
+      result = result .. '(' .. message.percentage .. '%%)'
+    end
+    return result
+  end,
+  condition = conditions.hide_in_width,
+}
+-- { {
+--     message = "44/57 (generators)",
+--     name = 1,
+--     percentage = 77,
+--     progress = true,
+--     spinner = 46,
+--     title = "Indexing"
+--   } }
+-- {
+
+ins_right {
   function() return vim.fn.ObsessionStatus('', '') end,
   condition = conditions.obsession,
 }

@@ -62,7 +62,7 @@ cmp.setup {
       if luasnip.jumpable(-1) then
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-jump-prev', true, true, true), '')
       else
-        fallback()
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<C-o>D<Right>', true, true, true), 'n')
       end
     end,
     ['<C-Space>'] = function()

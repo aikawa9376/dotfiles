@@ -1,7 +1,7 @@
 # lsp-----------------------------------
 [[plugins]]
 repo = 'neovim/nvim-lspconfig'
-depends  = ['nvim-lspinstall']
+depends  = ['nvim-lspinstall', 'lsp-status.nvim']
 on_event = 'VimEnter'
 
 [[plugins]]
@@ -9,6 +9,9 @@ repo = 'kabouzeid/nvim-lspinstall'
 hook_source = '''
 lua require'lsp'
 '''
+
+[[plugins]]
+repo = 'nvim-lua/lsp-status.nvim'
 
 [[plugins]]
 repo = 'nvim-lua/plenary.nvim'
