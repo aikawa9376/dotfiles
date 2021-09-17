@@ -1,4 +1,5 @@
 local vim, fn, api, g = vim, vim.fn, vim.api, vim.g
+local script_path = vim.env.XDG_CACHE_HOME .. '/dein/repos/github.com/junegunn/fzf.vim/bin/preview.sh'
 
 local M = {}
 
@@ -156,7 +157,8 @@ function M.workspace_symbol(opts)
 
   local options = {
     "--prompt", header .. ">",
-    "--ansi", "--phony", "--multi", '-q', query,
+    "--ansi", "--phony", "--multi", '-q', query, "--delimiter", ":",
+    '--preview-window', 'right:+{-2}-4',
     "--bind", "ctrl-a:select-all,ctrl-d:deselect-all,change:reload:" .. reload_command,
   }
 
@@ -181,7 +183,7 @@ function M.workspace_symbol(opts)
     end
   end
 
-  vim.list_extend(options, {"--preview", 'bat {3} --highlight-line {4}'})
+  vim.list_extend(options, {"--preview", script_path .. " {-3}:{-2}"})
   fzf_run(fzf_wrap("fzf_lsp", {
     source = initial_command,
     sink = partial(common_sink, false),
