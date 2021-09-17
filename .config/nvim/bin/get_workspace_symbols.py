@@ -74,9 +74,8 @@ parser.add_argument(
 args = parser.parse_args()
 
 nvim = attach('socket', path=args.socket)
+items = nvim.exec_lua('return require("lsp.configs.fzf").get_workspace_synbols_sync(...)', args.query, args.bufnr)
 
-items = nvim.call('CocAction', 'getWorkspaceSymbols', args.query,
-                  int(args.bufnr))
 if items is None or len(items) == 0:
     exit(0)
 
