@@ -132,21 +132,14 @@ local function common_sink(infile, lines)
   end
 end
 
-function M.workspace_symbol(bang, opts)
+function M.workspace_symbol(opts)
   if not check_capabilities("workspace_symbol") then
     return
   end
 
-  local query = opts.query or ''
+  local query = opts or ''
   local header = 'Workspace Symbols'
 
-  -- command:python3 /home/aikawa/.cache/dein/repos/github.com/antoinemadec/coc-fzf/script/get_workspace_symbols.py %s %s %s %s %s %s %s %s
-  -- ws_symbols_opts:
-  -- query:
-  -- ansi_typedef:'^[[38;2;181;137;0mSTRING^[[m'
-  -- ansi_comment:'^[[38;2;88;110;117mSTRING^[[m'
-  -- ansi_ignore:'^[[30mSTRING^[[m'
-  -- symbol_excludes:"[]"
   local change_script = vim.env.XDG_CONFIG_HOME ..
     '/nvim/bin/get_workspace_symbols.py %s %s %s %s %s %s %s %s'
   local ansi_typedef = "'\x1b[38;2;181;137;0mSTRING\x1b[m'"
@@ -154,9 +147,6 @@ function M.workspace_symbol(bang, opts)
   local ansi_ignore ="'\x1b[30mSTRING\x1b[m'"
   local symbol_excludes = "'[]'"
 
-  -- let initial_command = printf(command_fmt,
-  --       \ join(ws_symbols_opts), v:servername, bufnr(), "'" . initial_query . "'",
-  --       \ ansi_typedef, ansi_comment, ansi_ignore, symbol_excludes)
   local initial_command = string.format(change_script,
     '', vim.v.servername, vim.api.nvim_get_current_buf(), "'" .. query .. "'",
     ansi_typedef, ansi_comment, ansi_ignore, symbol_excludes)
@@ -166,8 +156,7 @@ function M.workspace_symbol(bang, opts)
 
   local options = {
     "--prompt", header .. ">",
-    "--ansi",
-    "--multi",
+    "--ansi", "--phony", "--multi", '-q', query,
     "--bind", "ctrl-a:select-all,ctrl-d:deselect-all,change:reload:" .. reload_command,
   }
 
@@ -192,13 +181,12 @@ function M.workspace_symbol(bang, opts)
     end
   end
 
-  print(initial_command)
-  vim.list_extend(options, {"--preview", "bat"})
+  vim.list_extend(options, {"--preview", 'bat {3} --highlight-line {4}'})
   fzf_run(fzf_wrap("fzf_lsp", {
     source = initial_command,
     sink = partial(common_sink, false),
     options = options,
-  }, bang))
+  }))
 
 end
 
@@ -213,11 +201,6 @@ function M.get_workspace_synbols_sync(query, bufnr)
   end
 
   return results_lsp[1].result
-  -- for k, v in pairs( results_lsp[1].result ) do
-  --   -- block
-  --   print(vim.inspect(k))
-  --   print(vim.inspect(v))
-  -- end
 end
 
 return M
