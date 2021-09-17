@@ -453,10 +453,10 @@ call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
 call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
 call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
 call submode#map('quickbrace', 'n', 'r', '[', '<Plug>(qutefinger-prev)')
-call submode#enter_with('linterbrace', 'n', 's', '[a', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })<CR>')
-call submode#enter_with('linterbrace', 'n', 's', ']a', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })<CR>')
-call submode#map('linterbrace', 'n', 's', '[', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })<CR>')
-call submode#map('linterbrace', 'n', 's', ']', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_line_diagnostics({ focusable = false })<CR>')
+call submode#enter_with('linterbrace', 'n', 's', '[a', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })<CR>')
+call submode#enter_with('linterbrace', 'n', 's', ']a', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })<CR>')
+call submode#map('linterbrace', 'n', 's', '[', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })<CR>')
+call submode#map('linterbrace', 'n', 's', ']', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })<CR>')
 '''
 
 [[plugins]]

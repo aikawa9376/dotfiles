@@ -76,9 +76,9 @@ M.default = function(client, bufnr)
 
   -- Commands.
   vim.cmd [[command! Format lua vim.lsp.buf.formatting()]]
-  vim.cmd [[command! DiagnosticPrevious lua vim.lsp.diagnostic.goto_prev()]]
-  vim.cmd [[command! DiagnosticNext lua vim.lsp.diagnostic.goto_next()]]
-  vim.cmd [[command! DiagnosticQf lua vim.lsp.diagnostic.set_loclist()]]
+  vim.cmd [[command! DiagnosticPrevious lua vim.diagnostic.goto_prev()]]
+  vim.cmd [[command! DiagnosticNext lua vim.diagnostic.goto_next()]]
+  vim.cmd [[command! DiagnosticQf lua vim.diagnostic.set_loclist()]]
   vim.cmd [[command! AddWorkspaceFolder vim.lsp.buf.add_workspace_folder()]]
   vim.cmd [[command! RemoveWorkspaceFolder vim.lsp.buf.remove_workspace_folder()]]
   vim.cmd [[command! ShowWorkspaceFolder lua print(vim.inspect(vim.lsp.buf.list_workspace_folders()))]]
@@ -88,7 +88,7 @@ M.default = function(client, bufnr)
 
   -- Autocmds.
   vim.cmd [[autocmd MyAutoCmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]] -- sync? insert_leave?
-  vim.cmd [[autocmd MyAutoCmd CursorHold * lua vim.lsp.diagnostic.show_line_diagnostics({ border = "none",  focusable = false })]]
+  vim.cmd [[autocmd MyAutoCmd CursorHold * lua vim.lsp.diagnostic.show_position_diagnostics({ border = "none",  focusable = false })]]
   vim.cmd [[autocmd MyAutoCmd CursorHoldI * silent! lua vim.lsp.buf.signature_help()]]
   if client.resolved_capabilities['code_lens'] then
     vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost * lua require"lsp.configs.codelens".refresh()]]
@@ -116,7 +116,7 @@ M.default = function(client, bufnr)
   -- show capabilities
   -- require('lsp.utils').get_capabilities()
 
-  vim.cmd [[command! -bang -nargs=? WSTtest lua require("lsp.configs.fzf").workspace_symbol(<bang>0, <q-args>)]]
+  vim.cmd [[command! -bang -nargs=? WSTtest lua require("lsp.configs.fzf").workspace_symbol(<q-args>)]]
 end
 
 return M
