@@ -85,6 +85,7 @@ M.default = function(client, bufnr)
 
   vim.cmd [[command! IncomingCall lua require"lsp.configs.callhierarchy".incoming_calls()]]
   vim.cmd [[command! OutGoingCall lua require"lsp.configs.callhierarchy".outgoing_calls()]]
+  vim.cmd [[command! -bang -nargs=? WorkspaceSymbol lua require("lsp.configs.workspacesymbol").workspace_symbol(<q-args>)]]
 
   -- Autocmds.
   vim.cmd [[autocmd MyAutoCmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]] -- sync? insert_leave?
@@ -98,10 +99,10 @@ M.default = function(client, bufnr)
   vim.lsp.handlers["textDocument/signatureHelp"] =  vim.lsp.with(vim.lsp.handlers.signature_help,  win_sytle )
 
   -- diagnostic settings
-  local signs = { Error = " ", Warning = " ", Hint = " ", Information = " " }
+  local signs = { Error = " ", Warn = " ", Hint = " ", Info = " " }
 
   for type, icon in pairs(signs) do
-    local hl = "LspDiagnosticsSign" .. type
+    local hl = "DiagnosticSign" .. type
     vim.fn.sign_define(hl, { text = '', texthl = '', numhl = hl })
   end
 
@@ -115,8 +116,6 @@ M.default = function(client, bufnr)
 
   -- show capabilities
   -- require('lsp.utils').get_capabilities()
-
-  vim.cmd [[command! -bang -nargs=? WSTtest lua require("lsp.configs.fzf").workspace_symbol(<q-args>)]]
 end
 
 return M

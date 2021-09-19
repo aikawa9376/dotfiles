@@ -3,7 +3,14 @@ vim.o.completeopt = 'menuone,noselect'
 
 -- luasnip setup
 local luasnip = require 'luasnip'
-require("luasnip/loaders/from_vscode").load()
+require("snippets")
+vim.api.nvim_set_keymap("i", "<M-j>", "<Plug>luasnip-jump-next", {})
+vim.api.nvim_set_keymap("s", "<M-j>", "<Plug>luasnip-jump-next", {})
+vim.api.nvim_set_keymap("i", "<M-k>", "<Plug>luasnip-jump-prev", {})
+vim.api.nvim_set_keymap("s", "<M-k>", "<Plug>luasnip-jump-prev", {})
+vim.api.nvim_set_keymap("i", "<M-e>", "<Plug>luasnip-next-choice", {})
+vim.api.nvim_set_keymap("s", "<M-e>", "<Plug>luasnip-next-choice", {})
+vim.api.nvim_set_keymap('s', '<C-Space>', '<Plug>luasnip-expand-or-jump', {})
 
 -- nvim-cmp utils
 local check_back_space = function()
@@ -17,6 +24,7 @@ local core = require 'cmp.core'
 cmp.setup {
   formatting = {
     format = function(entry, vim_item)
+      vim_item.kind = require('lspkind').presets.default[vim_item.kind]
       -- set a name for each source
       vim_item.menu = ({
         buffer = "[B]",
@@ -51,20 +59,6 @@ cmp.setup {
     ['<M-d>'] = cmp.mapping.scroll_docs(-4),
     ['<M-u>'] = cmp.mapping.scroll_docs(4),
     ['<CR>'] = cmp.mapping.close(),
-    ['<C-j>'] = function(fallback)
-      if luasnip.expand_or_jumpable() then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-jump-next', true, true, true), '')
-      else
-        fallback()
-      end
-    end,
-    ['<C-k>'] = function(fallback)
-      if luasnip.jumpable(-1) then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-jump-prev', true, true, true), '')
-      else
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<C-o>D<Right>', true, true, true), 'n')
-      end
-    end,
     ['<C-Space>'] = function()
       if vim.fn.pumvisible() == 0 then
         if luasnip.expand_or_jumpable() then
@@ -86,26 +80,6 @@ cmp.setup {
         else
           return false
         end
-      end
-    end,
-    ['<Tab>'] = function(fallback)
-      if vim.fn.pumvisible() == 1 then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-n>', true, true, true), 'n')
-      elseif check_back_space() then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Tab>', true, true, true), 'n')
-      elseif luasnip.expand_or_jumpable() then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-expand-or-jump', true, true, true), '')
-      else
-        fallback()
-      end
-    end,
-    ['<S-Tab>'] = function(fallback)
-      if vim.fn.pumvisible() == 1 then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-p>', true, true, true), 'n')
-      elseif luasnip.jumpable(-1) then
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-jump-prev', true, true, true), '')
-      else
-        fallback()
       end
     end,
   },

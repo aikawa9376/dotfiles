@@ -22,7 +22,7 @@ repo = 'hrsh7th/nvim-cmp'
 depends  = [
   'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer',
   'cmp_luasnip', 'friendly-snippets', 'cmp-path',
-  'cmp-tabnine'
+  'cmp-tabnine', 'lspkind-nvim'
 ]
 on_event = 'VimEnter'
 hook_source = '''
@@ -57,6 +57,9 @@ on_event = 'VimEnter'
 hook_source = '''
 lua require'plugins.lightbulb'
 '''
+
+[[plugins]]
+repo = 'onsails/lspkind-nvim'
 
 # text-----------------------------------
 
@@ -788,8 +791,8 @@ repo = 'Shougo/junkfile.vim'
 on_cmd = ['JunkfileOpen']
 hook_source = '''
 " depends vim rooter
-if luaeval('type(require("project_nvim.project").get_project_root)') != 'nil' && luaeval('require("project_nvim.project").get_project_root()') != ''
-  let s:dir = luaeval('require("project_nvim.project").get_project_root()')
+if exists('*FindRootDirectory') && FindRootDirectory() != ''
+  let s:dir = FindRootDirectory()
   let s:dir = split(s:dir, '/')
   let workdir = s:dir[len(s:dir) - 1] . '/'
 else

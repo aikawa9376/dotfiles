@@ -97,6 +97,3 @@ map('n', 'ZZ', ':<c-u>xa<CR>', { noremap = true, silent = true })
 map('n', '<M-b>', ':bnext<CR>', { noremap = true, silent = true })
 map('n', '<C-g>', 'm`<C-^>', { noremap = true, silent = true })
 map('t', '<C-[>', '<C-\\><C-n>', { noremap = true, silent = true })
-
--- nvim-cmp mapping
-map('s', '<C-Space>', ' <BS>', { noremap = true })

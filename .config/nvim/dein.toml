@@ -8,6 +8,9 @@ repo = 'tpope/vim-obsession'
 repo = 'ahmedkhalf/project.nvim'
 hook_add = '''
 lua require'plugins.project'
+function FindRootDirectory()
+  return luaeval('require("project_nvim.project").get_project_root()')
+endfunction
 '''
 
 [[plugins]]
