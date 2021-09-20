@@ -113,6 +113,7 @@ M.default = function(client, bufnr)
       signs = true,
     }
   )
+  require('lsp.configs.fzf').setup()
 
   -- show capabilities
   -- require('lsp.utils').get_capabilities()

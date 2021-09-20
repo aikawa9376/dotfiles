@@ -3,10 +3,7 @@ local vim, fn, api, g = vim, vim.fn, vim.api, vim.g
 local M = {}
 
 -- binary paths {{{
-local __file = debug.getinfo(1, "S").source:match("@(.*)$")
-assert(__file ~= nil)
-local bin_dir = fn.fnamemodify(__file, ":p:h:h") .. "/bin"
-local bin = { preview = (bin_dir .. "/preview.sh") }
+local bin = vim.env.XDG_CACHE_HOME .. '/dein/repos/github.com/junegunn/fzf.vim/bin/preview.sh'
 -- }}}
 
 -- utility functions {{{
@@ -112,16 +109,15 @@ local function lines_from_locations(locations, include_filename)
       return ""
     end
   end)
-
   local lines = {}
   for _, loc in ipairs(locations) do
     table.insert(lines, (
-        fnamemodify(loc['filename'])
+        "\x1b[38;2;102;204;0m" .. fnamemodify(loc['filename']) .. "\x1b[0m"
         .. loc["lnum"]
         .. ":"
         .. loc["col"]
         .. ": "
-        .. vim.trim(loc["text"])
+        .. "\x1b[38;2;181;137;0m" .. vim.trim(loc["text"]) .. "\x1b[0m"
     ))
   end
 
@@ -258,13 +254,14 @@ end
 
 local function fzf_locations(bang, prompt, header, source, infile)
   local preview_cmd = (infile and
-    (bin.preview .. " " .. fn.expand("%") .. ":{}") or
-    (bin.preview .. " {}")
+    (bin .. " " .. fn.expand("%") .. ":{}") or
+    (bin .. " {+1}:{+2}")
   )
+  print(vim.inspect(preview_cmd))
   local options = {
-    "--prompt", prompt .. ">",
-    "--header", header,
-    "--ansi",
+    "--prompt", header .. " >",
+    "--ansi", "--delimiter", ":",
+    "--preview-window", "right:+{2}-4",
     "--multi",
     "--bind", "ctrl-a:select-all,ctrl-d:deselect-all",
   }
@@ -315,8 +312,7 @@ local function fzf_code_actions(bang, prompt, header, actions)
       source = lines,
       sink = sink_fn,
       options = {
-        "--prompt", prompt .. ">",
-        "--header", header,
+        "--prompt", header .. " >",
         "--ansi",
       }
   }, bang))
@@ -634,7 +630,15 @@ M.document_symbol_handler = partial(document_symbol_handler, 0)
 -- Lua SETUP {{{
 M.setup = function(opts)
   opts = opts or {}
-
+  vim.cmd [[command! -bang Definition lua require("lsp.configs.fzf").definition(<bang>0)]]
+  vim.cmd [[command! -bang Declaration lua require("lsp.configs.fzf").declaration(<bang>0)]]
+  vim.cmd [[command! -bang TypeDefinition lua require("lsp.configs.fzf").type_definition(<bang>0)]]
+  vim.cmd [[command! -bang Implementation lua require("lsp.configs.fzf").implementation(<bang>0)]]
+  vim.cmd [[command! -bang References lua require("lsp.configs.fzf").references(<bang>0)]]
+  vim.cmd [[command! -bang DocumentSymbol lua require("lsp.configs.fzf").document_symbol(<bang>0)]]
+  vim.cmd [[command! -bang CodeAction lua require("lsp.configs.fzf").code_action(<bang>0)]]
+  vim.cmd [[command! -bang RangeCodeAction lua require("lsp.configs.fzf").range_code_action(<bang>0)]]
+  -- vim.cmd [[command! -bang Diagnostic_all lua require("lsp.configs.fzf").diagnostic_all(<bang>0)]]
 end
 -- }}}
 
