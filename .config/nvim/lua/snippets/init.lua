@@ -411,7 +411,8 @@ ls.snippets = {
       t({ "", "\\end{itemize}" }),
     }),
   },
-  scss = require('snippets.scss')
+  scss = require('snippets.scss'),
+  lua = require('snippets.lua')
 }
 
 -- autotriggered snippets have to be defined in a separate table, luasnip.autosnippets.
