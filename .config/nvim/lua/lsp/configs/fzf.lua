@@ -505,21 +505,19 @@ function M.range_code_action(bang, opts)
   )
 end
 
-function M.diagnostic(bang, opts)
-  opts = opts or {}
+function M.diagnostic(bang, all, severity, severity_limit)
 
-  local bufnr = opts.bufnr or api.nvim_get_current_buf()
-  local show_all = bufnr == "*"
+  local bufnr = api.nvim_get_current_buf()
 
   local buffer_diags
-  if show_all then
+  if all then
     buffer_diags = vim.lsp.diagnostic.get_all()
   else
     buffer_diags = vim.lsp.diagnostic.get(bufnr)
   end
 
-  local severity = opts.severity
-  local severity_limit = opts.severity_limit
+  local severity = severity
+  local severity_limit = severity_limit
 
   local items = {}
   local get_diag_item = function(bufnr, diag)
@@ -544,7 +542,7 @@ function M.diagnostic(bang, opts)
     local pos = diag.range.start
     local row = pos.line
     local col = vim.lsp.util.character_offset(bufnr, row, pos.character)
-    local filename = show_all and vim.api.nvim_buf_get_name(bufnr) or nil
+    local filename = all and vim.api.nvim_buf_get_name(bufnr) or nil
 
     return {
       filename = filename,
@@ -554,10 +552,11 @@ function M.diagnostic(bang, opts)
       type = vim.lsp.protocol.DiagnosticSeverity[diag.severity or
         vim.lsp.protocol.DiagnosticSeverity.Error]
     }
+
   end
 
   local entries = {}
-  if show_all then
+  if all then
     for bufnr, diag_list in pairs(buffer_diags) do
       local tmp = {}
       for _, diag in ipairs(diag_list) do
@@ -576,7 +575,7 @@ function M.diagnostic(bang, opts)
   end
 
   local fnamemodify = (function (filename)
-    if filename ~= nil and show_all then
+    if filename ~= nil and all then
       return fn.fnamemodify(filename, ":~:.") .. ":"
     else
       return ""
@@ -586,13 +585,14 @@ function M.diagnostic(bang, opts)
   for i, e in ipairs(items) do
     entries[i] = (
       fnamemodify(e["filename"])
+      .. ':'
       .. e["lnum"]
       .. ':'
       .. e["col"]
       .. ':'
-      .. e["type"]
+      .. "\x1b[38;2;102;204;0m" .. e["type"] .. "\x1b[0m"
       .. ': '
-      .. e["text"]:gsub("%s", " ")
+      .. "\x1b[38;2;181;137;0m" .. e["text"]:gsub("%s", " ") .. "\x1b[0m"
     )
   end
 
@@ -601,7 +601,7 @@ function M.diagnostic(bang, opts)
     return
   end
 
-  fzf_locations(bang, "", "Diagnostics", entries, not show_all)
+  fzf_locations(bang, "", "Diagnostics", entries, not all)
 end
 -- }}}
 
@@ -638,7 +638,8 @@ M.setup = function(opts)
   vim.cmd [[command! -bang DocumentSymbol lua require("lsp.configs.fzf").document_symbol(<bang>0)]]
   vim.cmd [[command! -bang CodeAction lua require("lsp.configs.fzf").code_action(<bang>0)]]
   vim.cmd [[command! -bang RangeCodeAction lua require("lsp.configs.fzf").range_code_action(<bang>0)]]
-  -- vim.cmd [[command! -bang Diagnostic_all lua require("lsp.configs.fzf").diagnostic_all(<bang>0)]]
+  vim.cmd [[command! -bang Diagnostics lua require("lsp.configs.fzf").diagnostic(<bang>0)]]
+  vim.cmd [[command! -bang DiagnosticsAll lua require("lsp.configs.fzf").diagnostic(<bang>0, true)]]
 end
 -- }}}
 
