@@ -112,12 +112,12 @@ local function lines_from_locations(locations, include_filename)
   local lines = {}
   for _, loc in ipairs(locations) do
     table.insert(lines, (
-        "\x1b[38;2;102;204;0m" .. fnamemodify(loc['filename']) .. "\x1b[0m"
+        "\x1b[38;2;181;137;0m" .. vim.trim(loc["text"]) .. "\x1b[0m"
+        .. ": "
+        .. "\x1b[38;2;102;204;0m" .. fnamemodify(loc['filename']) .. "\x1b[0m"
         .. loc["lnum"]
         .. ":"
         .. loc["col"]
-        .. ": "
-        .. "\x1b[38;2;181;137;0m" .. vim.trim(loc["text"]) .. "\x1b[0m"
     ))
   end
 
@@ -254,14 +254,14 @@ end
 
 local function fzf_locations(bang, prompt, header, source, infile)
   local preview_cmd = (infile and
-    (bin .. " " .. fn.expand("%") .. ":{}") or
-    (bin .. " {+1}:{+2}")
+    (bin .. " " .. fn.expand("%") .. ":{-2}") or
+    (bin .. " {-3}:{-2}")
   )
   print(vim.inspect(preview_cmd))
   local options = {
     "--prompt", header .. " >",
     "--ansi", "--delimiter", ":",
-    "--preview-window", "right:+{2}-4",
+    "--preview-window", "right:+{-2}-4",
     "--multi",
     "--bind", "ctrl-a:select-all,ctrl-d:deselect-all",
   }
@@ -576,7 +576,7 @@ function M.diagnostic(bang, all, severity, severity_limit)
 
   local fnamemodify = (function (filename)
     if filename ~= nil and all then
-      return fn.fnamemodify(filename, ":~:.") .. ":"
+      return fn.fnamemodify(filename, ":~:.") .. ':'
     else
       return ""
     end
@@ -584,15 +584,14 @@ function M.diagnostic(bang, all, severity, severity_limit)
 
   for i, e in ipairs(items) do
     entries[i] = (
-      fnamemodify(e["filename"])
+      "\x1b[38;2;102;204;0m" .. e["type"] .. "\x1b[0m"
       .. ':'
+      .. "\x1b[38;2;181;137;0m" .. e["text"]:gsub("%s", " ") .. "\x1b[0m"
+      .. ':'
+      .. fnamemodify(e["filename"])
       .. e["lnum"]
       .. ':'
       .. e["col"]
-      .. ':'
-      .. "\x1b[38;2;102;204;0m" .. e["type"] .. "\x1b[0m"
-      .. ': '
-      .. "\x1b[38;2;181;137;0m" .. e["text"]:gsub("%s", " ") .. "\x1b[0m"
     )
   end
 
