@@ -43,15 +43,15 @@ cmp.setup {
   },
   mapping = {
     ['<C-p>'] = function(fallback)
-      if cmp.visible() then
-        cmp.select_prev_item()
+      if vim.fn.pumvisible() == 1 then
+        cmp.mapping.select_prev_item()
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Up>', true, true, true), 'n')
       end
     end,
     ['<C-n>'] = function(fallback)
-      if cmp.visible() then
-        cmp.select_next_item()
+      if vim.fn.pumvisible() == 1 then
+        cmp.mapping.select_next_item()
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Down>', true, true, true), 'n')
       end
