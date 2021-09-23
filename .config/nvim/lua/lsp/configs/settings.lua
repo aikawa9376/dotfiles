@@ -78,7 +78,7 @@ M.default = function(client, bufnr)
   vim.cmd [[command! Format lua vim.lsp.buf.formatting()]]
   vim.cmd [[command! DiagnosticPrevious lua vim.diagnostic.goto_prev()]]
   vim.cmd [[command! DiagnosticNext lua vim.diagnostic.goto_next()]]
-  vim.cmd [[command! DiagnosticQf lua vim.diagnostic.set_loclist()]]
+  vim.cmd [[command! DiagnosticQf lua vim.diagnostic.setloclist()]]
   vim.cmd [[command! AddWorkspaceFolder vim.lsp.buf.add_workspace_folder()]]
   vim.cmd [[command! RemoveWorkspaceFolder vim.lsp.buf.remove_workspace_folder()]]
   vim.cmd [[command! ShowWorkspaceFolder lua print(vim.inspect(vim.lsp.buf.list_workspace_folders()))]]
@@ -92,7 +92,7 @@ M.default = function(client, bufnr)
   vim.cmd [[autocmd MyAutoCmd CursorHold * lua vim.lsp.diagnostic.show_position_diagnostics({ border = "none",  focusable = false })]]
   vim.cmd [[autocmd MyAutoCmd CursorHoldI * silent! lua vim.lsp.buf.signature_help()]]
   if client.resolved_capabilities['code_lens'] then
-    vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost * lua require"lsp.configs.codelens".refresh()]]
+    vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost <buffer> lua require"lsp.configs.codelens".refresh()]]
   end
 
   vim.lsp.handlers["textDocument/hover"] =  vim.lsp.with(vim.lsp.handlers.hover,  win_sytle )

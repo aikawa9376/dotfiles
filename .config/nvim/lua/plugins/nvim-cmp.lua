@@ -20,7 +20,6 @@ end
 
 -- nvim-cmp setup
 local cmp = require 'cmp'
-local core = require 'cmp.core'
 cmp.setup {
   formatting = {
     format = function(entry, vim_item)
@@ -42,16 +41,16 @@ cmp.setup {
     end,
   },
   mapping = {
-    ['<C-p>'] = function(fallback)
-      if vim.fn.pumvisible() == 1 then
-        cmp.mapping.select_prev_item()
+    ['<C-p>'] = function()
+      if cmp.visible() then
+        cmp.select_prev_item()
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Up>', true, true, true), 'n')
       end
     end,
-    ['<C-n>'] = function(fallback)
-      if vim.fn.pumvisible() == 1 then
-        cmp.mapping.select_next_item()
+    ['<C-n>'] = function()
+      if cmp.visible() then
+        cmp.select_next_item()
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Down>', true, true, true), 'n')
       end
@@ -60,33 +59,24 @@ cmp.setup {
     ['<M-u>'] = cmp.mapping.scroll_docs(4),
     ['<CR>'] = cmp.mapping.close(),
     ['<C-Space>'] = function()
-      if vim.fn.pumvisible() == 0 then
+      if not cmp.visible() then
         if luasnip.expand_or_jumpable() then
           vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>luasnip-expand-or-jump', true, true, true), '')
         else
-          core.complete(core.get_context({ reason = cmp.ContextReason.Manual }))
-          return true
+          cmp.complete()
         end
-      elseif vim.fn.pumvisible() == 1 then
+      elseif cmp.visible() then
         local option = { behavior = cmp.ConfirmBehavior.Replace, select = true, }
-        local e = core.menu:get_selected_entry() or (option.select and core.menu:get_first_entry() or nil)
-        if e then
-          core.confirm(e, {
-            behavior = option.behavior,
-          }, function()
-            core.complete(core.get_context({ reason = cmp.ContextReason.TriggerOnly }))
-          end)
-          return true
-        else
-          return false
-        end
+        cmp.confirm(option)
       end
     end,
+  },
+  experimental = {
+    ghost_text = true
   },
   sources = {
     { name = 'nvim_lsp' },
     { name = 'luasnip' },
-    { name = 'nvim_lua' },
     { name = 'cmp_tabnine' },
     { name = 'path' },
   },

@@ -412,6 +412,7 @@ ls.snippets = {
     }),
   },
   scss = require('snippets.scss'),
+  toml = require('snippets.toml'),
   lua = require('snippets.lua')
 }
 

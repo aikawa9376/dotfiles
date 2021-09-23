@@ -78,6 +78,13 @@ autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,und
 autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
 autocmd MyAutoCmd ColorScheme * hi MatchParen ctermfg=None guifg=None ctermbg=None guibg=None cterm=bold,underline gui=bold,underline
 
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatch      gui=bold guifg=#87afff
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatchFuzzy guifg=#839496
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbr           guifg=#87afff
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrDeprecated gui=strikethrough guifg=#2e3440
+autocmd MyAutoCmd ColorScheme * hi CmpItemKind           guifg=#dc322f
+autocmd MyAutoCmd ColorScheme * hi CmpItemMenu           guifg=#87afff
+
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC     ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:NormalNC
