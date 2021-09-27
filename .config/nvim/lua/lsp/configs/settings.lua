@@ -12,6 +12,18 @@ M.configs = {
     --   M.default(client, bufnr)
     -- end,
   },
+  typescript =  {
+    on_attach =  function(client, bufnr)
+      M.default(client, bufnr)
+      local ts_utils = require("nvim-lsp-ts-utils")
+      ts_utils.setup {
+        update_imports_on_move = true,
+        require_confirmation_on_move = true,
+        enable_import_on_completion = true,
+      }
+      ts_utils.setup_client(client)
+    end,
+  },
   rust =  {
     settings = {
       ['rust-analyzer'] = {
@@ -32,6 +44,20 @@ M.configs = {
         }
       }
     },
+    on_attach =  function(client, bufnr)
+      require('rust-tools.config').setup()
+      vim.cmd "command! RustSetInlayHints :lua require('rust-tools.inlay_hints').set_inlay_hints()"
+      vim.cmd "command! RustDisableInlayHints :lua require('rust-tools.inlay_hints').disable_inlay_hints()"
+      vim.cmd "command! RustToggleInlayHints :lua require('rust-tools.inlay_hints').toggle_inlay_hints()"
+      vim.cmd "command! RustExpandMacro :lua require('rust-tools.expand_macro').expand_macro()"
+      vim.cmd "command! RustJoinLines :lua require('rust-tools.join_lines').join_lines()"
+      vim.cmd "command! RustHoverActions :lua require('rust-tools.hover_actions').hover_actions()"
+      vim.cmd "command! RustMoveItemDown :lua require('rust-tools.move_item').move_item()"
+      vim.cmd "command! RustMoveItemUp :lua require('rust-tools.move_item').move_item(true)"
+      vim.cmd "command! RustOpenCargo :lua require('rust-tools.open_cargo_toml').open_cargo_toml()"
+      vim.cmd "command! RustRunnables :lua require('rust-tools.runnables').runnables()"
+      M.default(client, bufnr)
+    end,
   },
   lua = {
     settings = {
@@ -64,11 +90,11 @@ M.default = function(client, bufnr)
 
   -- Mappings.
   local opts = { noremap=true, silent=true }
-  buf_set_keymap('n', 'gr', '<cmd>References<CR>', opts)
-  buf_set_keymap('n', 'gd', '<cmd>Definition<CR>', opts)
-  buf_set_keymap('n', 'gD', '<cmd>Declaration<CR>', opts)
-  buf_set_keymap('n', 'gi', '<cmd>Implementation<CR>', opts)
-  buf_set_keymap('n', 'gy', '<cmd>TypeDefinition<CR>', opts)
+  buf_set_keymap('n', 'gr', 'm`<cmd>References<CR>', opts)
+  buf_set_keymap('n', 'gd', 'm`<cmd>Definition<CR>', opts)
+  buf_set_keymap('n', 'gD', 'm`<cmd>Declaration<CR>', opts)
+  buf_set_keymap('n', 'gi', 'm`<cmd>Implementation<CR>', opts)
+  buf_set_keymap('n', 'gy', 'm`<cmd>TypeDefinition<CR>', opts)
   buf_set_keymap('n', 'gk', '<cmd>lua vim.lsp.buf.hover()<CR>', opts)
   buf_set_keymap('n', '<leader>rn', '<cmd>lua require("lsp.configs.rename").rename()<CR>', opts)
   buf_set_keymap('n', '<space>ca', '<cmd>lua require"lsp.configs.codeaction".code_action()<CR>', opts)
@@ -91,8 +117,13 @@ M.default = function(client, bufnr)
   vim.cmd [[autocmd MyAutoCmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]] -- sync? insert_leave?
   vim.cmd [[autocmd MyAutoCmd CursorHold * lua vim.lsp.diagnostic.show_position_diagnostics({ border = "none",  focusable = false })]]
   vim.cmd [[autocmd MyAutoCmd CursorHoldI * silent! lua vim.lsp.buf.signature_help()]]
-  if client.resolved_capabilities['code_lens'] then
+  if client.resolved_capabilities.code_lens then
     vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost <buffer> lua require"lsp.configs.codelens".refresh()]]
+  end
+  if client.resolved_capabilities.document_highlight then
+    vim.cmd [[autocmd CursorHold  <buffer> lua vim.lsp.buf.document_highlight()]]
+    vim.cmd [[autocmd CursorHoldI <buffer> lua vim.lsp.buf.document_highlight()]]
+    vim.cmd [[autocmd CursorMoved <buffer> lua vim.lsp.buf.clear_references()]]
   end
 
   vim.lsp.handlers["textDocument/hover"] =  vim.lsp.with(vim.lsp.handlers.hover,  win_sytle )
