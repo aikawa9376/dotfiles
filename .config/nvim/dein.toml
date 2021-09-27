@@ -32,20 +32,20 @@ set termguicolors
 set background=dark
 set t_8f=^[[38;2;%lu;%lu;%lum
 set t_8b=^[[48;2;%lu;%lu;%lum
-autocmd MyAutoCmd ColorScheme * highlight Normal            ctermbg=none guibg=none
-autocmd MyAutoCmd ColorScheme * highlight NormalFloat       ctermbg=none guibg=#002936
+autocmd MyAutoCmd ColorScheme * highlight Normal            ctermbg=None guibg=None
+autocmd MyAutoCmd ColorScheme * highlight NormalFloat       ctermbg=None guibg=#002936
 autocmd MyAutoCmd ColorScheme * highlight ErrorMsg          cterm=bold ctermfg=9 gui=bold guifg=#dc322f
-autocmd MyAutoCmd ColorScheme * highlight SignColumn        ctermbg=none guibg=none
-autocmd MyAutoCmd ColorScheme * highlight LineNr            ctermbg=none guibg=none
+autocmd MyAutoCmd ColorScheme * highlight SignColumn        ctermbg=None guibg=None
+autocmd MyAutoCmd ColorScheme * highlight LineNr            ctermbg=None guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Comment           gui=italic
 autocmd MyAutoCmd ColorScheme * highlight QuickFixLine      cterm=None ctermfg=7 gui=bold,underline
-autocmd MyAutoCmd ColorScheme * highlight StatusLine        cterm=none gui=none guibg=none
-autocmd MyAutoCmd ColorScheme * highlight StatusLineNC      cterm=none gui=none guibg=none
+autocmd MyAutoCmd ColorScheme * highlight StatusLine        cterm=None gui=None guibg=None
+autocmd MyAutoCmd ColorScheme * highlight StatusLineNC      cterm=None gui=None guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Conceal           ctermfg=239 guifg=Grey30
 autocmd MyAutoCmd ColorScheme * highlight NvimInternalError cterm=bold ctermfg=9 gui=bold guifg=#dc322f
 " tab,expends,etc...
-autocmd MyAutoCmd ColorScheme * highlight NonText      ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
-autocmd MyAutoCmd ColorScheme * highlight SpecialKey   ctermbg=None ctermfg=0 guibg=NONE guifg=#2E3440
+autocmd MyAutoCmd ColorScheme * highlight NonText      ctermbg=None ctermfg=0 guibg=None guifg=#2E3440
+autocmd MyAutoCmd ColorScheme * highlight SpecialKey   ctermbg=None ctermfg=0 guibg=None guifg=#2E3440
 autocmd MyAutoCmd ColorScheme * highlight EndOfBuffer  guifg=#002B36
 autocmd MyAutoCmd ColorScheme * highlight EWhitespace  guifg=#586e75
 autocmd MyAutoCmd VimEnter,WinEnter * match EWhitespace / \+$/
@@ -58,35 +58,48 @@ autocmd MyAutoCmd ColorScheme * highlight Fmenu        ctermfg=111 ctermbg=0 gui
 " search settings
 autocmd MyAutoCmd ColorScheme * highlight Search       cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
 autocmd MyAutoCmd ColorScheme * highlight IncSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900
-autocmd MyAutoCmd ColorScheme * highlight Visual       cterm=None ctermfg=126 ctermbg=8 gui=None guifg=#af0087 guibg=#000000
+autocmd MyAutoCmd ColorScheme * highlight Visual       cterm=None ctermfg=None ctermbg=8 gui=None guifg=None guibg=#163356
 autocmd MyAutoCmd ColorScheme * highlight CursorLine   ctermbg=0 guibg=#212121 guisp=#93a1a1
-autocmd MyAutoCmd ColorScheme * highlight CursorLineNr ctermbg=none guibg=none
+autocmd MyAutoCmd ColorScheme * highlight CursorLineNr ctermbg=None guibg=None
 
 " plugins setting
-autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#98be65 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterChange       guifg=#FF8800 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterDelete       guifg=#ec5f67 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight GitGutterChangeDelete guifg=#ec5f67 guibg=none
+autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#98be65 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight GitGutterChange       guifg=#FF8800 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight GitGutterDelete       guifg=#ec5f67 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight GitGutterChangeDelete guifg=#ec5f67 guibg=None
 
-autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultHint        guifg=#98be65 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultError       guifg=#ec5f67 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultWarning     guifg=#FF8800 guibg=none
-autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultInformation guifg=#51afef guibg=none
+autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultHint        guifg=#98be65 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultError       guifg=#ec5f67 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultWarning     guifg=#FF8800 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultInformation guifg=#51afef guibg=None
 
 autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
 
-autocmd MyAutoCmd ColorScheme * hi MatchWord ctermfg=None guifg=None cterm=underline gui=underline
+autocmd MyAutoCmd ColorScheme * hi MatchWord  ctermfg=None guifg=None cterm=underline gui=underline
 autocmd MyAutoCmd ColorScheme * hi MatchParen ctermfg=None guifg=None ctermbg=None guibg=None cterm=bold,underline gui=bold,underline
 
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatch      gui=bold guifg=#87afff
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatchFuzzy guifg=#839496
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbr           guifg=#87afff
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrDeprecated gui=strikethrough guifg=#2e3440
 autocmd MyAutoCmd ColorScheme * hi CmpItemKind           guifg=#dc322f
 autocmd MyAutoCmd ColorScheme * hi CmpItemMenu           guifg=#87afff
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbr           guifg=#87afff
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatch      gui=bold guifg=#87afff
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatchFuzzy guifg=#839496
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrDeprecated gui=strikethrough guifg=#2e3440
+
+autocmd MyAutoCmd ColorScheme * hi DiffDelete            gui=None guifg=None guibg=#341C28
+autocmd MyAutoCmd ColorScheme * hi DiffAdd               gui=None guifg=None guibg=#23384C
+autocmd MyAutoCmd ColorScheme * hi DiffChange            gui=None guifg=None guibg=#33406B
+autocmd MyAutoCmd ColorScheme * hi DiffText              gui=None guifg=None guibg=#232C4C
+autocmd MyAutoCmd ColorScheme * hi DiffviewDiffDelete    guibg=None guifg=#094b5c
+
+autocmd MyAutoCmd ColorScheme * hi LspReferenceRead      gui=bold ctermbg=239 guibg=#073642
+autocmd MyAutoCmd ColorScheme * hi LspReferenceText      gui=bold ctermbg=239 guibg=#073642
+autocmd MyAutoCmd ColorScheme * hi LspReferenceWrite     gui=bold,italic ctermbg=243 guibg=#073642
+
+autocmd MyAutoCmd ColorScheme * hi LspCodeLens           guifg=#586e75
+autocmd MyAutoCmd ColorScheme * hi LspCodeLensSeparator  guifg=#586e75
 
 " activewin settings
-autocmd MyAutoCmd ColorScheme * highlight NormalNC     ctermbg=0 guibg=#073642
+autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:NormalNC
 
 colorscheme NeoSolarized

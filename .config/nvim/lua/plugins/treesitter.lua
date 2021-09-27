@@ -1,5 +1,6 @@
 require'nvim-treesitter.configs'.setup {
-  ensure_installed = { "rust", "html", "css", "python", "javascript", "typescript", "toml", "yaml", "json", "go", "lua", "vue", "php" },
+  ensure_installed = { "rust", "html", "css", "python", "javascript",
+    "typescript", "toml", "yaml", "json", "go", "lua", "vue", "php" },
   highlight = {
     enable = true,
   },
@@ -23,8 +24,8 @@ require'nvim-treesitter.configs'.setup {
         -- You can use the capture groups defined in textobjects.scm
         ["af"] = "@function.outer",
         ["if"] = "@function.inner",
-        ["ac"] = "@class.outer",
-        ["ic"] = "@class.inner",
+        ["aC"] = "@class.outer",
+        ["iC"] = "@class.inner",
 
         -- Or you can define your own textobjects like this
         ["iF"] = {
@@ -46,6 +47,9 @@ require'nvim-treesitter.configs'.setup {
   context_commentstring = {
     enable = true,
     enable_autocmd = false,
+    config = {
+      toml = '# %s'
+    }
   },
   matchup = {
     enable = true

@@ -1,6 +1,6 @@
 local opt = vim.o
 
-opt.fillchars = opt.fillchars .. 'vert: '
+opt.fillchars = opt.fillchars .. 'vert: ,diff:╱'
 opt.encoding='utf-8'
 opt.number = true
 opt.backspace = 'indent,eol,start'

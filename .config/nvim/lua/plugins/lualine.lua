@@ -230,12 +230,15 @@ ins_right {
 }
 
 ins_right {
-  'fileformat',
-  condition = conditions.hide_in_width,
-}
-
-ins_right {
-  'o:encoding', -- option component same as &encoding in viml
+  function()
+    local fileFormat = {
+      unix = ' ',
+      dos = ' ',
+      mac = ' '
+    }
+    local icon = fileFormat[vim.bo.fileformat]
+    return icon .. [[%{strlen(&fenc)?&fenc:&enc}]]
+  end,
   condition = conditions.hide_in_width,
 }
 

@@ -36,6 +36,25 @@ local function mk_handler(fn)
 end
 -- }}}
 
+local function unique (tbl)
+    local check = {}
+    local res = {}
+
+    for i, v in ipairs(tbl) do
+        if not(check[v]) then
+            check[v] = true
+            res[1+#res] = v
+        end
+    end
+
+    for k, v in pairs (tbl) do
+        if not (type(k)=="number" and k%1==0) then
+            res[k] = v
+        end
+    end
+    return res
+end
+
 -- LSP utility {{{
 local function extract_result(results_lsp)
   if results_lsp then
@@ -263,7 +282,6 @@ local function fzf_locations(bang, prompt, header, source, infile)
     "--ansi", "--delimiter", ":",
     "--preview-window", "right:+{2}-4",
     "--multi",
-    "--bind", "ctrl-a:select-all,ctrl-d:deselect-all",
   }
 
   if g.fzf_lsp_action and not vim.tbl_isempty(g.fzf_lsp_action) then
@@ -289,7 +307,7 @@ local function fzf_locations(bang, prompt, header, source, infile)
 
   vim.list_extend(options, {"--preview", preview_cmd})
   fzf_run(fzf_wrap("fzf_lsp", {
-    source = source,
+    source = unique(source),
     sink = partial(common_sink, infile),
     options = options,
   }, bang))

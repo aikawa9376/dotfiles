@@ -36,7 +36,7 @@ local function code_action_request(params)
     for i, action in ipairs(result) do
       local title = action.title:gsub('\r\n', '\\r\\n')
       title = title:gsub('\n', '\\n')
-      title = string.format("%d. %s", i, title)
+      title = string.format("%d. %s [%s]", i, title, action.kind)
       table.insert(option_strings, title)
 
       length = length < #title and #title or length
