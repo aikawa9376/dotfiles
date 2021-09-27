@@ -1,6 +1,6 @@
 #! /bin/sh
 
-isMozc=$(fcitx-remote)
+isMozc=$(fcitx5-remote)
 
 if [[ $isMozc == 2 ]]; then
   echo "MOZC"

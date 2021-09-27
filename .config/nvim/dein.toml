@@ -32,6 +32,7 @@ set termguicolors
 set background=dark
 set t_8f=^[[38;2;%lu;%lu;%lum
 set t_8b=^[[48;2;%lu;%lu;%lum
+
 autocmd MyAutoCmd ColorScheme * highlight Normal            ctermbg=None guibg=None
 autocmd MyAutoCmd ColorScheme * highlight NormalFloat       ctermbg=None guibg=#002936
 autocmd MyAutoCmd ColorScheme * highlight ErrorMsg          cterm=bold ctermfg=9 gui=bold guifg=#dc322f

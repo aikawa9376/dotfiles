@@ -7,9 +7,9 @@ from xkeysnail.transform import *
 
 # functions
 def esc_hack():
-    ime = subprocess.call('fcitx-remote')
+    ime = subprocess.call('fcitx5-remote')
     if ime == 2:
-        subprocess.call('fcitx-remote -c')
+        subprocess.call('fcitx5-remote -c')
     else:
         print('test')
 

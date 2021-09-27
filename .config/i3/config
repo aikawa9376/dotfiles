@@ -47,7 +47,7 @@ bindsym $mod+q kill
 bindsym XF86AudioMute exec --no-startup-id rofi -show combi
 bindsym Mod1+v exec --no-startup-id rofi -show drun
 bindsym Mod1+s exec --no-startup-id $HOME/.config/i3/layout_manager.sh
-bindsym $mod+space exec --no-startup-id $HOME/.xbindkeys_sh/alacritty-chrome-toggle.sh
+bindsym $mod+space exec --no-startup-id $HOME/.xbindkeys_sh/kitty-chrome-toggle.sh
 # There also is the (new) i3-dmenu-desktop which only displays applications
 # shipping a .desktop file. It is a wrapper around dmenu, so you need that
 # installed.
@@ -174,7 +174,7 @@ mode "win-edit" {
 bindsym $mod+e mode "win-edit"
 
 # assign window
-assign [class="kitty"] $ws2
+assign [class="Alacritty"] $ws2
 assign [class="Luakit"] $ws2
 assign [class="Remmina"] $ws3
 
@@ -191,7 +191,7 @@ for_window [window_role="task_dialog"] floating enable
 exec --no-startup-id sudo iw dev wlp2s0 set power_save off;
 exec --no-startup-id sudo xkeysnail $HOME/.config/xkeysnail/config.py;
 exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inverted --noprimary && xrandr --output DVI-I-1 --auto --below HDMI-0 --noprimary;
-exec --no-startup-id fcitx-autostart;
+exec --no-startup-id fcitx5;
 exec --no-startup-id $HOME/.config/polybar/lanch.sh;
 exec --no-startup-id insync-headless start;
 exec --no-startup-id xset b off;
