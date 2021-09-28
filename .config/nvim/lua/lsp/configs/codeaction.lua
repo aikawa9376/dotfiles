@@ -20,17 +20,7 @@ local function code_action_request(params)
     code_action_handler(nil, actions, {bufnr=bufnr, method=method})
   end)
 
-  --see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
-  function code_action_handler(_, result, ctx)
-    if result == nil or vim.tbl_isempty(result) then
-      print("No code actions available")
-      return
-    end
-
-    open_action_float(result, ctx)
-  end
-
-  function get_titles_length(result)
+  local function get_titles_length(result)
     local option_strings = {"Code actions:"}
     local length = 0
     for i, action in ipairs(result) do
@@ -44,7 +34,7 @@ local function code_action_request(params)
     return option_strings, length
   end
 
-  function open_action_float(result, ctx)
+  local function open_action_float(result, ctx)
     local title, length = get_titles_length(result)
     local opts = {
       relative = 'cursor', row = 1,
@@ -63,7 +53,7 @@ local function code_action_request(params)
     vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(win, true)<CR>' , {silent=true})
   end
 
-  function code_action_complete(win)
+  local function code_action_complete(win)
     local choice = vim.trim(vim.fn.getline('.'))
     local index = tonumber(string.match(choice, "%d+"))
     local result = vim.api.nvim_buf_get_var(buf, 'code_action_result')
@@ -87,6 +77,16 @@ local function code_action_request(params)
         buf.execute_command(command)
       end
     end
+  end
+
+  --see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
+  function code_action_handler(_, result, ctx)
+    if result == nil or vim.tbl_isempty(result) then
+      print("No code actions available")
+      return
+    end
+
+    open_action_float(result, ctx)
   end
 end
 
