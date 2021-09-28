@@ -99,6 +99,14 @@ autocmd MyAutoCmd ColorScheme * hi LspReferenceWrite     gui=bold,italic ctermbg
 autocmd MyAutoCmd ColorScheme * hi LspCodeLens           guifg=#586e75
 autocmd MyAutoCmd ColorScheme * hi LspCodeLensSeparator  guifg=#586e75
 
+autocmd MyAutoCmd ColorScheme * hi WilderPoppupMenuAccent        guisp=#87afff
+autocmd MyAutoCmd ColorScheme * hi WilderPopupMenuSelectedAccent guisp=#87afff
+
+autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineError cterm=undercurl gui=undercurl guisp=Red
+autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineWarn  cterm=undercurl gui=undercurl guisp=Orange
+autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineInfo  cterm=undercurl gui=undercurl guisp=LightBlue
+autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineHint  cterm=undercurl gui=undercurl guisp=LightGrey
+
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:NormalNC
