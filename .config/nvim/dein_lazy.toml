@@ -886,9 +886,9 @@ nmap <silent> <Leader>gs :Git<CR>
 nmap <silent> <Leader>gd :Gdiff<CR>
 nmap <silent> <Leader>ga :Gwrite<CR>
 nmap <silent> <Leader>gb :Git blame -w<CR>
-nmap <silent> <Leader>gp :Git push<CR>
-nmap <silent> <Leader>gr :Git rm --cached %<CR>
-nmap <silent> <Leader>gm :Git commit -m 'update'<CR>
+nmap <silent> <Leader>gp :Git! push<CR>
+nmap <silent> <Leader>gr :Git! rm --cached %<CR>
+nmap <silent> <Leader>gm :Git! commit -m 'update'<CR>
 nmap <silent> <Leader>gM  :GitAddCommit update<CR>
 nmap <silent> <Leader>gU  :GitAddAmend<Space>
 command! -nargs=* GitAddCommit silent execute('

@@ -19,7 +19,7 @@ augroup MyAutoCmd
   autocmd FileType Mundo nnoremap <buffer><nowait> <C-c> :bdelete<CR>:bdelete<CR>
   autocmd FileType gitcommit nmap <buffer><nowait> q :<c-u>wq<CR>
   autocmd FileType gitcommit nmap <buffer><nowait> <C-c> :<c-u>wq<CR>
-  autocmd FileType fugitive nnoremap <buffer><Space>gp :<c-u>Gina push<CR><C-w>c
+  autocmd FileType fugitive nnoremap <buffer><Space>gp :<c-u>Git! push<CR><C-w>c
   autocmd FileType dbui,dbout,sql nnoremap <buffer><nowait> <C-c> :DBUIDelete<CR>
   autocmd FileType dbui,dbout,sql nnoremap <buffer><nowait> q :DBUIDelete<CR>
   autocmd FileType DiffviewFiles,DiffviewFileHistory nnoremap <buffer><nowait> q :DiffviewClose<CR>
@@ -40,6 +40,6 @@ cmd([[
 augroup mylightline
   autocmd! FileType fzf
   autocmd  FileType fzf set laststatus=0
-  autocmd BufLeave * set laststatus=2
+  autocmd  BufLeave * set laststatus=2
 augroup END
 ]])

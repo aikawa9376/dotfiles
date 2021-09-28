@@ -462,7 +462,7 @@ function! s:add_ignore_file_sink(lines) abort
     for w in range(2, len(a:lines) - 1)
       let t = a:lines[w]
       execute("silent !echo " . t . " >> " . s:dir . "/.gitignore")
-      execute("Gina rm --cached " . fnamemodify(t, ":p"))
+      execute("Git rm --cached " . fnamemodify(t, ":p"))
     endfor
     call feedkeys(":AddGitignore " . a:lines[0] . "\<CR>")
     return
@@ -470,7 +470,7 @@ function! s:add_ignore_file_sink(lines) abort
     call feedkeys(":Gitignore\<CR>")
     return
   endif
-  execute("Gina rm --cached " . fnamemodify(a:lines[2], ":p"))
+  execute("Git rm --cached " . fnamemodify(a:lines[2], ":p"))
   execute("silent !echo " . a:lines[2] . " >> " . s:dir . "/.gitignore")
 endfunction
 
@@ -489,7 +489,7 @@ function s:override_gitfiles_sink(lines) abort
   endif
   if a:lines[0] == 'ctrl-x'
     for w in range(1, len(a:lines) - 1)
-      execute("Gina rm --cached " . a:lines[w])
+      execute("Git rm --cached " . a:lines[w])
     endfor
     call feedkeys(":GFiles\<CR>")
     return
