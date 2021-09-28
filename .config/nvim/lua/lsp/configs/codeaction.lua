@@ -21,13 +21,13 @@ local function code_action_request(params)
   end)
 
   --see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
-  function code_action_handler(_, result)
+  function code_action_handler(_, result, ctx)
     if result == nil or vim.tbl_isempty(result) then
       print("No code actions available")
       return
     end
 
-    open_action_float(result)
+    open_action_float(result, ctx)
   end
 
   function get_titles_length(result)
@@ -44,7 +44,7 @@ local function code_action_request(params)
     return option_strings, length
   end
 
-  function open_action_float(result)
+  function open_action_float(result, ctx)
     local title, length = get_titles_length(result)
     local opts = {
       relative = 'cursor', row = 1,
@@ -56,6 +56,7 @@ local function code_action_request(params)
 
     local fmt =  '<cmd>lua code_action_complete(%d)<CR>'
     vim.api.nvim_buf_set_var(buf, 'code_action_result', result)
+    vim.api.nvim_buf_set_var(buf, 'code_action_ctx', ctx)
     vim.api.nvim_win_set_option(win, 'winhighlight', 'Normal:NormalFloat')
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, title)
     vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', string.format(fmt, win), {silent=true})
@@ -66,24 +67,26 @@ local function code_action_request(params)
     local choice = vim.trim(vim.fn.getline('.'))
     local index = tonumber(string.match(choice, "%d+"))
     local result = vim.api.nvim_buf_get_var(buf, 'code_action_result')
+    local ctx = vim.api.nvim_buf_get_var(buf, 'code_action_ctx')
     if not index or index < 1 or index > #result then
       return
     end
-    local action_chosen = result[index]
-    -- textDocument/codeAction can return either Command[] or CodeAction[].
-    -- If it is a CodeAction, it can have either an edit, a command or both.
-    -- Edits should be executed first
-    if action_chosen.edit or type(action_chosen.command) == "table" then
-      if action_chosen.edit then
-        util.apply_workspace_edit(action_chosen.edit)
-      end
-      if type(action_chosen.command) == "table" then
-        buf.execute_command(action_chosen.command)
-      end
-    else
-      buf.execute_command(action_chosen)
-    end
+    local action = result[index]
+    -- ここでウインドウを閉じないと関連のrequestがbufの関係でエラーになる
     vim.api.nvim_win_close(win, true)
+
+    if action.edit then
+      util.apply_workspace_edit(action.edit)
+    end
+    if action.command then
+      local command = type(action.command) == 'table' and action.command or action
+      local fn = vim.lsp.commands[command.command]
+      if fn then
+        fn(command, ctx)
+      else
+        buf.execute_command(command)
+      end
+    end
   end
 end
 
@@ -94,7 +97,10 @@ end
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
 function M.code_action(context)
   validate { context = { context, 't', true } }
-  context = context or { diagnostics = vim.lsp.diagnostic.get_line_diagnostics() }
+  context = context or {}
+  if not context.diagnostics then
+    context.diagnostics = vim.lsp.diagnostic.get_line_diagnostics()
+  end
   local params = util.make_range_params()
   params.context = context
   code_action_request(params)
