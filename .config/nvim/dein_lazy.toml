@@ -671,6 +671,7 @@ endfunction
 augroup user_plugin_defx
   autocmd!
   autocmd CursorHold * SyncDefx
+  autocmd FileType defx setlocal nonumber
 augroup END
 
 command! SyncDefx :call s:check_and_search_defx()
