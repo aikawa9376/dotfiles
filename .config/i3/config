@@ -46,6 +46,7 @@ bindsym $mod+q kill
 # start dmenu (a program launcher)
 bindsym XF86AudioMute exec --no-startup-id rofi -show combi
 bindsym Mod1+v exec --no-startup-id rofi -show drun
+bindsym Ctrl+semicolon exec --no-startup-id copyq toggle
 bindsym Mod1+s exec --no-startup-id $HOME/.config/i3/layout_manager.sh
 bindsym $mod+space exec --no-startup-id $HOME/.xbindkeys_sh/kitty-chrome-toggle.sh
 # There also is the (new) i3-dmenu-desktop which only displays applications
@@ -180,8 +181,9 @@ assign [class="Remmina"] $ws3
 
 # application setting(float)
 for_window [class="insync"] floating enable, resize set 640 450
-for_window [class="Fcitx-config-gtk3"] floating enable, resize set 600 400
+for_window [class="fcitx5-config-qt"] floating enable, resize set 600 400
 for_window [class="mozc_tool"] floating enable, resize set 600 400
+for_window [class="copyq"] floating enable
 for_window [class="feh"] floating enable, resize set 600 400
 for_window [window_role="pop-up"] floating enable
 for_window [window_role="task_dialog"] floating enable
@@ -192,7 +194,6 @@ exec --no-startup-id sudo iw dev wlp2s0 set power_save off;
 exec --no-startup-id sudo xkeysnail $HOME/.config/xkeysnail/config.py;
 exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inverted --noprimary && xrandr --output DVI-I-1 --auto --below HDMI-0 --noprimary;
 exec --no-startup-id fcitx5;
+exec --no-startup-id copyq;
 exec --no-startup-id $HOME/.config/polybar/lanch.sh;
 exec --no-startup-id insync-headless start;
-exec --no-startup-id xset b off;
-exec --no-startup-id xset r rate 170 120;
