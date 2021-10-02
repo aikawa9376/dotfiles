@@ -87,8 +87,8 @@ alias clasp='npx clasp'
 # docker
 # -------------------------------------
 alias dkp='docker pull'
-alias dkc='docker-compose'
-alias dkr='docker-compose run --rm'
+alias dkc='docker compose'
+alias dkr='docker compose run --rm'
 alias dkps='docker ps -a'
 alias dkri='docker-rmi'
 alias dkrm='docker-rm'
