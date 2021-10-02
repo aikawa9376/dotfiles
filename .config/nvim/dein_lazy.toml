@@ -432,13 +432,13 @@ call submode#map('expand-region', 'nv', 'r', 'W', '<Plug>(expand_region_shrink)'
 call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
 call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
 call submode#map('block_move', 'n', '', '<M-[>', '<C-o>')
-call submode#enter_with('mini_yank', 'nv', 'r', 'p', '<Plug>(miniyank-autoput)')
-call submode#enter_with('mini_yank', 'nv', 'r', 'P', '<Plug>(miniyank-autoPut)')
-call submode#map('mini_yank', 'nv', 'r', '<C-p>', '<Plug>(miniyank-cycle)')
-call submode#map('mini_yank', 'nv', 'r', '<C-n>', '<Plug>(miniyank-cycleback)')
-call submode#map('mini_yank', 'nv', 'r', '<C-w>', '<Plug>(miniyank-tochar)')
-call submode#map('mini_yank', 'nv', 'r', '<C-l>', '<Plug>(miniyank-toline)')
-call submode#map('mini_yank', 'nv', 'r', '<C-b>', '<Plug>(miniyank-toblock)')
+call submode#enter_with('mini_yank', 'nx', 'r', 'p', '<Plug>(miniyank-autoput)')
+call submode#enter_with('mini_yank', 'nx', 'r', 'P', '<Plug>(miniyank-autoPut)')
+call submode#map('mini_yank', 'nx', 'r', '<C-p>', '<Plug>(miniyank-cycle)')
+call submode#map('mini_yank', 'nx', 'r', '<C-n>', '<Plug>(miniyank-cycleback)')
+call submode#map('mini_yank', 'nx', 'r', '<C-w>', '<Plug>(miniyank-tochar)')
+call submode#map('mini_yank', 'nx', 'r', '<C-l>', '<Plug>(miniyank-toline)')
+call submode#map('mini_yank', 'nx', 'r', '<C-b>', '<Plug>(miniyank-toblock)')
 call submode#map('mini_yank', 'n', '', '<C-f>', '=`]^')
 call submode#enter_with('functionbrace', 'n', '', ']]', ']]')
 call submode#enter_with('functionbrace', 'n', '', '[[', '[[')
@@ -1028,6 +1028,13 @@ on_cmd = ['AsyncTask']
 repo = 'Shougo/vimproc'
 build = 'make'
 on_event = 'VimEnter'
+
+[[plugins]]
+repo = 'ii14/exrc.vim'
+on_event = 'VimEnter'
+hook_add = '''
+let g:exrc#names = ['.vimrc.local', '.exrc.lua']
+'''
 
 [[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter'

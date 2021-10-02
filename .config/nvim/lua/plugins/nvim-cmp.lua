@@ -11,6 +11,7 @@ vim.api.nvim_set_keymap("s", "<M-k>", "<Plug>luasnip-jump-prev", {})
 vim.api.nvim_set_keymap("i", "<M-e>", "<Plug>luasnip-next-choice", {})
 vim.api.nvim_set_keymap("s", "<M-e>", "<Plug>luasnip-next-choice", {})
 vim.api.nvim_set_keymap('s', '<C-Space>', '<Plug>luasnip-expand-or-jump', {})
+vim.api.nvim_set_keymap('s', 'p', 'p', { noremap = true })
 
 -- nvim-cmp utils
 local check_back_space = function()
