@@ -27,7 +27,7 @@ local conditions = {
   end,
   obsession = function()
     if vim.fn.winwidth(0) < 80 then return false end
-    ok = vim.fn.exists('*ObsessionStatus')
+    local ok = vim.fn.exists('*ObsessionStatus')
     if ok ~= 0 then
       return true
     else
@@ -36,7 +36,7 @@ local conditions = {
   end,
   project = function()
     if vim.fn.winwidth(0) < 80 then return false end
-    ok = require("project_nvim.project").get_project_root()
+    local ok = require("project_nvim.project").get_project_root()
     if ok ~= nil then
       return true
     else
@@ -173,7 +173,9 @@ ins_left {
 ins_left {
   function()
     prod = split(require("project_nvim.project").get_project_root(), '/')
-    return ' ' .. prod[#prod]
+    if next(prod) then
+      return ' ' .. prod[#prod]
+    end
   end,
   condition = conditions.project,
 }
