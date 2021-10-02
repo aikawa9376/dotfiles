@@ -114,9 +114,11 @@ M.default = function(client, bufnr)
   vim.cmd [[command! -bang -nargs=? WorkspaceSymbol lua require("lsp.configs.workspacesymbol").workspace_symbol(<q-args>)]]
 
   -- Autocmds.
-  vim.cmd [[autocmd MyAutoCmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]] -- sync? insert_leave?
   vim.cmd [[autocmd MyAutoCmd CursorHold * lua vim.lsp.diagnostic.show_position_diagnostics({ border = "none",  focusable = false })]]
   vim.cmd [[autocmd MyAutoCmd CursorHoldI * silent! lua vim.lsp.buf.signature_help()]]
+  if not vim.g.auto_format_disabled then
+    vim.cmd [[autocmd MyAutoCmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]] -- sync? insert_leave?
+  end
   if client.resolved_capabilities.code_lens then
     vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost <buffer> lua require"lsp.configs.codelens".refresh()]]
   end
