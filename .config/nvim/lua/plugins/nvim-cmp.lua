@@ -82,3 +82,5 @@ cmp.setup {
     { name = 'path' },
   },
 }
+
+require('cmp.config').get().experimental.ghost_text.hl_group = 'LineNr'
