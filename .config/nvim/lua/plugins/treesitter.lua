@@ -1,5 +1,5 @@
 require'nvim-treesitter.configs'.setup {
-  ensure_installed = { "rust", "html", "css", "python", "javascript",
+  ensure_installed = { "rust", "html", "twig", "css", "python", "javascript",
     "typescript", "toml", "yaml", "json", "go", "lua", "vue", "php" },
   highlight = {
     enable = true,
@@ -58,3 +58,9 @@ require'nvim-treesitter.configs'.setup {
     enable = true,
   }
 }
+
+local parser_config = require "nvim-treesitter.parsers".get_parser_configs()
+local html = parser_config.html
+html.used_by = { "html_tags", "twig" }
+parser_config.html = nil
+parser_config.html = html
