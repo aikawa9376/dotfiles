@@ -102,10 +102,15 @@ autocmd MyAutoCmd ColorScheme * hi LspCodeLensSeparator  guifg=#586e75
 autocmd MyAutoCmd ColorScheme * hi WilderPoppupMenuAccent        guisp=#87afff
 autocmd MyAutoCmd ColorScheme * hi WilderPopupMenuSelectedAccent guisp=#87afff
 
-autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineError cterm=undercurl gui=undercurl guisp=Red
-autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineWarn  cterm=undercurl gui=undercurl guisp=Orange
-autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineInfo  cterm=undercurl gui=undercurl guisp=LightBlue
-autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineHint  cterm=undercurl gui=undercurl guisp=LightGrey
+autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineError cterm=undercurl gui=undercurl guisp=#ec5f67
+autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineWarn  cterm=undercurl gui=undercurl guisp=#ECBE7B
+autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineInfo  cterm=undercurl gui=undercurl guisp=#008080
+autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineHint  cterm=undercurl gui=undercurl guisp=#98be65
+
+autocmd MyAutoCmd ColorScheme * hi DiagnosticError  guifg=#ec5f67
+autocmd MyAutoCmd ColorScheme * hi DiagnosticWarn   guifg=#ECBE7B
+autocmd MyAutoCmd ColorScheme * hi DiagnosticInfo   guifg=#008080
+autocmd MyAutoCmd ColorScheme * hi DiagnosticHint   guifg=#98be65
 
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642
