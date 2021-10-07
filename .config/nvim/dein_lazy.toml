@@ -80,7 +80,7 @@ lua require'trim'.setup({disable = {}})
 
 [[plugins]]
 repo = 'mattn/emmet-vim'
-on_ft = ['html', 'php', 'jst', 'phtml', 'javascript', 'css', 'scss']
+on_ft = ['html', 'php', 'jst', 'twig', 'phtml', 'javascript', 'css', 'scss']
 hook_add = '''
 let g:user_emmet_install_global        =  0
 let g:user_emmet_mode                  = 'iv'
@@ -100,7 +100,7 @@ let g:user_emmet_anchorizesummary_key  = '<M-e>A'
 let g:user_emmet_mergelines_key        = '<M-e>m'
 let g:user_emmet_codepretty_key        = '<M-e>c'
 let g:user_emmet_imageencode_key       = '<M-e>I'
-autocmd MyAutoCmd FileType phtml,html,php,blade,css,scss EmmetInstall
+autocmd MyAutoCmd FileType phtml,html,php,blade,css,scss,twig EmmetInstall
 '''
 
 [[plugins]]
@@ -127,7 +127,7 @@ repo = 'tyru/caw.vim'
 on_event = 'VimEnter'
 hook_add = '''
 nmap <C-_> <Plug>(caw:hatpos:toggle)
-vmap <C-_> <Plug>(caw:hatpos:toggle)
+xmap <C-_> <Plug>(caw:hatpos:toggle)
 '''
 
 [[plugins]]
@@ -144,14 +144,14 @@ let g:miniyank_maxitems = 100
 repo = 'justinmk/vim-sneak'
 on_event = 'VimEnter'
 hook_add = '''
-map n <Plug>Sneak_f
-map N <Plug>Sneak_F
-map n <Plug>Sneak_t
-map N <Plug>Sneak_T
-map ; <Plug>Sneak_;
-map , <Plug>Sneak_,
-map s <Plug>Sneak_s
-map S <Plug>Sneak_S
+nmap ; <Plug>Sneak_;
+nmap , <Plug>Sneak_,
+xmap ; <Plug>Sneak_;
+xmap , <Plug>Sneak_,
+nmap s <Plug>Sneak_s
+nmap S <Plug>Sneak_S
+nmap s <Plug>Sneak_s
+nmap S <Plug>Sneak_S
 nmap <expr> f sneak#is_sneaking() ? '<Plug>Sneak_;' : '<plug>Sneak_f'
 nmap <expr> F sneak#is_sneaking() ? '<Plug>Sneak_,' : '<plug>Sneak_F'
 xmap f <Plug>Sneak_f
@@ -238,10 +238,14 @@ repo = 'haya14busa/incsearch-fuzzy.vim'
 repo = 'haya14busa/vim-asterisk'
 on_event = 'VimEnter'
 hook_add = '''
-map *   <Plug>(incsearch-nohl0)<Plug>(asterisk-z*)
-map g*  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz*)
-map #   <Plug>(incsearch-nohl0)<Plug>(asterisk-z#)
-map g#  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz#)
+nmap *   <Plug>(incsearch-nohl0)<Plug>(asterisk-z*)
+nmap g*  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz*)
+nmap #   <Plug>(incsearch-nohl0)<Plug>(asterisk-z#)
+nmap g#  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz#)
+vmap *   <Plug>(incsearch-nohl0)<Plug>(asterisk-z*)
+vmap g*  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz*)
+vmap #   <Plug>(incsearch-nohl0)<Plug>(asterisk-z#)
+vmap g#  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz#)
 '''
 
 [[plugins]]
@@ -338,17 +342,17 @@ omap <expr> i<M-w> textobj#from_regexp#mapexpr('[A-Za-z0-9]\+')
 xmap <expr> i<M-w> textobj#from_regexp#mapexpr('[A-Za-z0-9]\+')
 " 左辺
 omap i<C-h> <Plug>(textobj-left-value)
-vmap i<C-h> <Plug>(textobj-left-value)
+xmap i<C-h> <Plug>(textobj-left-value)
 omap <expr>  <Plug>(textobj-left-value)
   \ textobj#from_regexp#mapexpr('^.\{-}\zs\k\+\ze\s*=.*$')
-vmap <expr>  <Plug>(textobj-left-value)
+xmap <expr>  <Plug>(textobj-left-value)
   \ textobj#from_regexp#mapexpr('^.\{-}\zs\k\+\ze\s*=.*$')
 " 右辺
 omap i<C-l> <Plug>(textobj-right-value)
-vmap i<C-l> <Plug>(textobj-right-value)
+xmap i<C-l> <Plug>(textobj-right-value)
 omap <expr> <Plug>(textobj-right-value)
   \ textobj#from_regexp#mapexpr('^.\{-}=\s*\zs.*$')
-vmap <expr> <Plug>(textobj-right-value)
+xmap <expr> <Plug>(textobj-right-value)
   \ textobj#from_regexp#mapexpr('^.\{-}=\s*\zs.*$')
 '''
 
@@ -366,7 +370,7 @@ nmap <Leader>r mv<plug>(operator-replace)
 nmap yr mv<plug>(operator-replace_r)
 nmap <Leader>R mv<plug>(operator-replace)$
 nmap cr mv<plug>(operator-replace_R)
-vmap p <Plug>(operator-replace)
+xmap p <Plug>(operator-replace)
 '''
 
 [[plugins]]
@@ -400,7 +404,7 @@ inoremap <expr> ( search('\<\if\%#', 'bcn')? ' (': '('
 repo = 'emonkak/vim-operator-sort'
 hook_add = '''
 nmap <Leader>to mv<plug>(operator-sort)
-vmap <Leader>to mv<Plug>(operator-sort)
+xmap <Leader>to mv<Plug>(operator-sort)
 '''
 
 [[plugins]]
@@ -426,9 +430,6 @@ call submode#enter_with('searchExD', 'n', '', ']n', 'ngn<Esc>')
 call submode#enter_with('searchExU', 'n', '', '[n', 'Ngn<Esc>')
 call submode#map('searchExD', 'n', '', 'n', 'ngn<Esc>')
 call submode#map('searchExU', 'n', '', 'n', 'NNgn<Esc>')
-call submode#enter_with('expand-region', 'nv', 'r', 'gw', '<Plug>(expand_region_expand)')
-call submode#map('expand-region', 'nv', 'r', 'w', '<Plug>(expand_region_expand)')
-call submode#map('expand-region', 'nv', 'r', 'W', '<Plug>(expand_region_shrink)')
 call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
 call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
 call submode#map('block_move', 'n', '', '<M-[>', '<C-o>')
@@ -490,10 +491,10 @@ repo = 'matze/vim-move'
 on_event = 'VimEnter'
 hook_add = '''
 let g:move_map_keys = 0
-vmap <M-J> <Plug>MoveBlockDown
-vmap <M-K> <Plug>MoveBlockUp
-vmap <M-H> <Plug>MoveBlockLeft
-vmap <M-L> <Plug>MoveBlockRight
+xmap <M-J> <Plug>MoveBlockDown
+xmap <M-K> <Plug>MoveBlockUp
+xmap <M-H> <Plug>MoveBlockLeft
+xmap <M-L> <Plug>MoveBlockRight
 nmap <M-J> <Plug>MoveLineDown
 nmap <M-K> <Plug>MoveLineUp
 nmap <M-H> <Plug>MoveCharLeft
@@ -505,7 +506,7 @@ repo = 'andymass/vim-matchup'
 on_event = 'VimEnter'
 hook_add = '''
 nmap <Space><Space> %
-vmap <Space><Space> %
+xmap <Space><Space> %
 nmap <C-Space> <Plug>(matchup-z%)
 let g:matchup_matchparen_offscreen = {'method': 'status_manual'}
 '''
@@ -782,7 +783,7 @@ on_event = ['VimEnter']
 hook_source = '''
 "search current word
 nnoremap <leader>rr :lua require('spectre').open_visual({select_word=true})<CR>
-vnoremap <leader>rr :lua require('spectre').open_visual()<CR>
+xnoremap <leader>rr :lua require('spectre').open_visual()<CR>
 "  search in current file
 nnoremap <leader>rR viw:lua require('spectre').open_file_search()<cr>
 lua require('spectre').setup({ line_sep_start = '', result_padding = '', line_sep  = '',})
@@ -940,11 +941,11 @@ nmap <silent>[p :<c-u>call myutil#yank_line('k')<CR>=`]^
 nmap <silent><M-p> :<c-u>call myutil#yank_remove_line()<CR>=`]^
 nmap <silent><C-t> :<C-u>call myutil#yank_text_toggle()<CR>
 nmap <Leader>, :<C-u>call myutil#reload_vimrc()<CR>
-vmap <F1> :call myutil#help_override()<CR>
+xmap <F1> :call myutil#help_override()<CR>
 nmap <F1> :call myutil#help_override()<CR>
-vmap <silent> gK :call myutil#google_search()<CR>
+xmap <silent> gK :call myutil#google_search()<CR>
 nmap <silent> gK :call myutil#google_search()<CR>
-vmap <silent> gg :call myutil#google_open()<CR>
+xmap <silent> gg :call myutil#google_open()<CR>
 nnoremap <silent> <Plug>(my-switch)y :call myutil#toggle_syntax()<CR>
 nnoremap <silent> <Plug>(my-switch)n :call myutil#toggle_relativenumber()<CR>
 nnoremap <silent> dd :<c-u>call myutil#remove_line_brank(v:count1)<cr>
@@ -1048,6 +1049,23 @@ on_event = 'BufRead'
 hook_post_update = 'TSUpdate'
 hook_source = '''
 lua require('plugins.treesitter')
+'''
+
+[[plugins]]
+repo = 'akinsho/toggleterm.nvim'
+on_cmd = 'ToggleTerm'
+hook_add = '''
+nnoremap <silent><F12> <Cmd>exe v:count1 . "ToggleTerm"<CR><BS>
+tnoremap <silent><F12> <Esc><Cmd>exe v:count1 . "ToggleTerm"<CR>
+function! TermForceCloseAll() abort
+  let term_bufs = filter(range(1, bufnr('$')), 'getbufvar(v:val, "&buftype") == "terminal"')
+  for t in term_bufs
+    execute "bd! " t
+  endfor
+endfunction
+'''
+hook_source = '''
+lua require("toggleterm").setup{}
 '''
 
 [[plugins]]
