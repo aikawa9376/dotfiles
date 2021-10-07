@@ -95,6 +95,7 @@ function s:override_files_sink(lines) abort
     endfor
   endif
   if a:lines[0] == 'ctrl-q'
+    call remove(a:lines, 0)
     call setqflist(map(copy(a:lines), '{ "filename": v:val }'))
     copen
     cc
@@ -588,6 +589,17 @@ function! s:bufopen(lines)
     return
   endif
 
+  if a:lines[1] == 'ctrl-q'
+    let returnArr = []
+    for w in range(2, len(a:lines) - 1)
+      let split = split(a:lines[w], ' ')
+      call add(returnArr, split[3] . split[1])
+    endfor
+    call setqflist(map(copy(returnArr), '{ "filename": v:val }'))
+    copen
+    cc
+  endif
+
   let b = matchstr(a:lines[2], '\[\zs[0-9]*\ze\]')
   let cmd = get(g:fzf_action, a:lines[1])
   if !empty(cmd)
@@ -638,7 +650,7 @@ command! -nargs=* NavBuffers
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
   \   '--preview-window', 'hidden',
-  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k', '--no-unicode'],
+  \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k,ctrl-q', '--no-unicode'],
   \   'up': '30%',
   \ }))
 
