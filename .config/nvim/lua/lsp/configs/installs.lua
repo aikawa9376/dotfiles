@@ -18,8 +18,8 @@ require'lspinstall/servers'.angular = config
 -- emmet hack
 require'lspinstall/servers'.emmet = {
   default_config = {
-    cmd = {'./node_modules/.bin/emmet-ls', '--stdio'};
-    filetypes = {'html', 'css'};
+    cmd = {'./node_modules/.bin/ls_emmet', '--stdio'};
+    filetypes = {'html', 'css', 'scss', 'twig', 'php'};
     root_dir = function(fname)
       return vim.loop.cwd()
     end;
@@ -27,6 +27,6 @@ require'lspinstall/servers'.emmet = {
   };
   install_script = [[
   ! test -f package.json && npm init -y --scope=lspinstall || true
-  npm install emmet-ls
+  npm install ls_emmet
   ]];
 }
