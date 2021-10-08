@@ -20,13 +20,13 @@ on_event = ['VimEnter']
 
 [[plugins]]
 repo = 'hrsh7th/nvim-cmp'
-rev = 'custom-menu'
 on_event = 'VimEnter'
 depends  = [
   'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer',
   'cmp_luasnip', 'friendly-snippets', 'cmp-path',
   'cmp-tabnine', 'lspkind-nvim'
 ]
+
 hook_source = '''
 lua require'plugins.nvim-cmp'
 '''
