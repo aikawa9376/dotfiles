@@ -81,6 +81,8 @@ function open_action_float(result, bufnr, options)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, title)
   vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', string.format(fmt, win, buf), {silent=true})
   vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(win, true)<CR>' , {silent=true})
+  vim.api.nvim_buf_set_keymap(buf, 'n', '<C-n>', '<DOWN>' , {silent=true})
+  vim.api.nvim_buf_set_keymap(buf, 'n', '<C-p>', '<UP>' , {silent=true})
 end
 
 function get_titles_length(result)
