@@ -123,11 +123,10 @@ call SetLeximaAddRule()
 '''
 
 [[plugins]]
-repo = 'tyru/caw.vim'
+repo = 'numToStr/Comment.nvim'
 on_event = 'VimEnter'
-hook_add = '''
-nmap <C-_> <Plug>(caw:hatpos:toggle)
-xmap <C-_> <Plug>(caw:hatpos:toggle)
+hook_source = '''
+lua require'plugins.comment'
 '''
 
 [[plugins]]
