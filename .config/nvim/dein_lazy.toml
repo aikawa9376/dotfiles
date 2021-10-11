@@ -1038,6 +1038,18 @@ let g:exrc#names = ['.vimrc.local', '.exrc.lua']
 '''
 
 [[plugins]]
+repo = 'monaqa/dial.nvim'
+on_event = 'VimEnter'
+hook_source = '''
+nmap <C-a> <Plug>(dial-increment)
+nmap <C-x> <Plug>(dial-decrement)
+xmap <C-a> <Plug>(dial-increment)
+xmap <C-x> <Plug>(dial-decrement)
+xmap g<C-a> <Plug>(dial-increment-additional)
+xmap g<C-x> <Plug>(dial-decrement-additional)
+'''
+
+[[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter'
 depends = [
   'nvim-treesitter-textobjects', 'playground', 'nvim-ts-rainbow',
