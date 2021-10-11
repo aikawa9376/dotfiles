@@ -33,7 +33,6 @@ local function get_titles_length(result)
   local option_strings = {"Code actions:"}
   local length = 0
   for i, action in ipairs(result) do
-    action = action[2]
     local title = action.title:gsub('\r\n', '\\r\\n')
     title = title:gsub('\n', '\\n')
     title = string.format("%d. %s [%s]", i, title, action.kind)
@@ -61,45 +60,6 @@ local function open_action_float(result, ctx)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, title)
   vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', string.format(fmt, win), {silent=true})
   vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(win, true)<CR>' , {silent=true})
-end
-
-local function float_ui_select(items, opts, on_choice)
-  local title, length = get_titles_length(items)
-  local w_opts = {
-    relative = 'cursor', row = 1,
-    col = 0, width = length,
-    height = #title, style = 'minimal'
-  }
-  local buf = vim.api.nvim_create_buf(false, true)
-  local win = vim.api.nvim_open_win(buf, true, w_opts)
-
-  local fmt =  '<cmd>lua code_action_complete(%d)<CR>'
-  vim.api.nvim_buf_set_var(buf, 'code_action_result', result)
-  vim.api.nvim_buf_set_var(buf, 'code_action_ctx', ctx)
-  vim.api.nvim_win_set_option(win, 'winhighlight', 'Normal:NormalFloat')
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, title)
-  vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', string.format(fmt, win), {silent=true})
-  vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(win, true)<CR>' , {silent=true})
-  vim.api.nvim_buf_attach(buf, false, {
-    on_lines = function()
-      local choice = vim.trim(vim.fn.getline('.'))
-      local index = tonumber(string.match(choice, "%d+"))
-      print(index)
-      -- vim.api.nvim_win_close(win, true)
-      if index < 1 or index > #items then
-        on_choice(nil, nil)
-      else
-        on_choice(items[index], index)
-      end
-    end,
-  })
-
-  -- local choice = vim.fn.inputlist(choices)
-  -- if choice < 1 or choice > #items then
-  --   on_choice(nil, nil)
-  -- else
-  --   on_choice(items[choice], choice)
-  -- end
 end
 
 --see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
@@ -137,7 +97,6 @@ end
 ---@param context: (table, optional) Valid `CodeActionContext` object
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_codeAction
 function M.code_action(context)
-  vim.ui.select = float_ui_select
   validate { context = { context, 't', true } }
   context = context or {}
   if not context.diagnostics then
