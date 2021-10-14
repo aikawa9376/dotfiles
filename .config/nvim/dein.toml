@@ -82,8 +82,8 @@ autocmd MyAutoCmd ColorScheme * hi MatchParen ctermfg=None guifg=None ctermbg=No
 autocmd MyAutoCmd ColorScheme * hi CmpItemKind           guifg=#dc322f
 autocmd MyAutoCmd ColorScheme * hi CmpItemMenu           guifg=#87afff
 autocmd MyAutoCmd ColorScheme * hi CmpItemAbbr           guifg=#87afff
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatch      gui=bold guifg=#87afff
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatchFuzzy guifg=#839496
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatch      guifg=#E5E9F0
+autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatchFuzzy guifg=#abadb2
 autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrDeprecated gui=strikethrough guifg=#2e3440
 
 autocmd MyAutoCmd ColorScheme * hi DiffDelete            gui=None guifg=None guibg=#341C28
