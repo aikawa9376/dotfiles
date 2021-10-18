@@ -24,7 +24,7 @@ on_event = 'VimEnter'
 depends  = [
   'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer',
   'cmp_luasnip', 'friendly-snippets', 'cmp-path',
-  'cmp-tabnine', 'lspkind-nvim'
+  'cmp-tabnine', 'compe-tmux', 'lspkind-nvim'
 ]
 
 hook_source = '''
@@ -39,6 +39,10 @@ repo = 'hrsh7th/cmp-buffer'
 
 [[plugins]]
 repo = 'hrsh7th/cmp-path'
+
+[[plugins]]
+repo = 'andersevenrud/compe-tmux'
+rev = 'cmp'
 
 [[plugins]]
 repo = 'tzachar/cmp-tabnine'
