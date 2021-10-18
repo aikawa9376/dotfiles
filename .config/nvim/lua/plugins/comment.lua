@@ -52,3 +52,6 @@ require('Comment').setup{
   ---@type function|nil
   post_hook = nil,
 }
+
+vim.api.nvim_set_keymap('x', '<C-_>', '<ESC><CMD>lua ___comment_gc(vim.fn.visualmode())<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('x', '<space><C-_>', '<ESC><CMD>lua ___comment_gb(vim.fn.visualmode())<CR>', { noremap = true, silent = true })
