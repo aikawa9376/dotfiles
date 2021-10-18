@@ -24,7 +24,7 @@ local cmp = require 'cmp'
 cmp.setup {
   formatting = {
     format = function(entry, vim_item)
-      vim_item.kind = require('lspkind').presets.default[vim_item.kind]
+      -- vim_item.kind = require('lspkind').presets.default[vim_item.kind]
       -- set a name for each source
       vim_item.menu = ({
         buffer = "[B]",
@@ -32,6 +32,7 @@ cmp.setup {
         luasnip = "[S]",
         cmp_tabnine = "[T]",
         nvim_lua = "[Lu]",
+        tmux = "[M]",
       })[entry.source.name]
       return vim_item
     end,
@@ -80,6 +81,11 @@ cmp.setup {
     { name = 'luasnip' },
     { name = 'cmp_tabnine' },
     { name = 'path' },
+    { name = 'tmux',
+      keyword_length = 3,
+      max_item_count = 5,
+      -- opts = { all_panes = true } --ちょっと遅い
+    },
   },
   sorting = {
     comparators = {
