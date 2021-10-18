@@ -33,10 +33,11 @@ define_multipurpose_modmap({
     # To use this example, you can't remap capslock with define_modmap.
 })
 
-define_conditional_multipurpose_modmap(lambda wm_class: wm_class in ("org.remmina.Remmina"), {
-    # define_multipurpose_modmapで設定されたものがwm_classを上書きする
-    Key.RIGHT_SHIFT: [Key.MUTE, Key.RIGHT_SHIFT],
-})
+# define_conditional_multipurpose_modmap(lambda wm_class: wm_class in ("org.remmina.Remmina|Rofi"), {
+#     # define_multipurpose_modmapで設定されたものがwm_classを上書きする
+#     Key.RIGHT_SHIFT: [Key.MUTE, Key.RIGHT_SHIFT],
+#     Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL],
+# })
 
 # Keybindings for Global
 define_keymap(None, {
@@ -55,7 +56,7 @@ define_keymap(None, {
     K("Super-equal"): with_mark(K("f12")),
 }, "Global")
 
-define_keymap(lambda wm_class: wm_class not in ("org.remmina.Remmina"), {
+define_keymap(lambda wm_class: wm_class not in ("org.remmina.Remmina|Rofi"), {
     # hhkb
     K("Super-h"): with_mark(K("kpasterisk")),
     K("Super-n"): with_mark(K("kpplus")),
@@ -73,6 +74,16 @@ define_keymap(lambda wm_class: wm_class not in ("org.remmina.Remmina"), {
     K("LC-Mute"): with_mark(K("Alt-Shift-Super-z")),
     K("Shift-esc"): with_mark(K("Shift-grave")),
 }, "Global-notwin")
+
+# Keybindings for Rofi
+define_keymap(re.compile("Rofi"), {
+    K("Mute"): K("C-Tab"),
+}, "Rofi")
+
+# Keybindings for copyq
+define_keymap(re.compile("copyq"), {
+    K("C-m"): K("C-enter"),
+}, "copyq")
 
 # Keybindings for Alacritty/kitty
 define_keymap(re.compile("Alacritty|kitty"), {
@@ -113,7 +124,7 @@ define_keymap(re.compile("Firefox|Google-chrome"), {
 
 # Emacs-like keybindings in non-Emacs applications
 define_keymap(lambda wm_class: wm_class not in
-              ("Alacritty", "rofi", "kitty", "org.remmina.Remmina"), {
+        ("Alacritty|Rofi|kitty|org.remmina.Remmina"), {
     # Cursor
     K("C-b"): with_mark(K("left")),
     K("C-f"): with_mark(K("right")),
