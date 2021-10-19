@@ -6,6 +6,30 @@ SetKeyDelay 0
 #InstallKeybdHook
 #UseHook
 
+$Control::
+  if SandS_guard = True   ;スペースキーガード
+      return
+  SandS_guard = True      ;スペースキーにガードをかける
+  Send,{LControl Down}    ;シフトキーを仮想的に押し下げる
+  ifNotEqual SandS_key    ;既に入力済みの場合は抜ける
+      return
+  SandS_key=
+  Input,SandS_key,L1 V    ;1文字入力を受け付け（入力有無判定用）
+return
+
+$Control up::             ;スペース解放時
+  input                   ;既存のInputコマンドの終了
+  if SandS_guard = False  ;ガードがかかってなかった場合（修飾キー＋Spaceのリリース）
+      return
+  SandS_guard = False     ;スペースキーガードを外す
+  Send,{LControl Up}      ;シフトキー解放
+  ifEqual SandS_key       ;SandS文字入力なし
+      Send,{ESC}          ;スペースを発射
+  SandS_key=
+return
+
+LControl & n::send_key("^n","{Down}")
+
 plus_all(original_key) {
   IF GetKeyState("Shift", "p")
   {
@@ -42,7 +66,7 @@ plus_shift(original_key) {
   Return
 }
 
-; Applications you want to disable emacs-like keybindings
+                                      ; Applications you want to disable emacs-like keybindings
 ; (Please comment out applications you don't use)
 is_target()
 {
