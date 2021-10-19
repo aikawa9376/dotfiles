@@ -120,7 +120,7 @@ M.default = function(client, bufnr)
     vim.cmd [[autocmd MyAutoCmd BufWritePre <buffer> lua vim.lsp.buf.formatting_seq_sync()]] -- sync? insert_leave?
   end
   if client.resolved_capabilities.code_lens then
-    vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost <buffer> lua require"lsp.configs.codelens".refresh()]]
+    vim.cmd [[autocmd MyAutoCmd InsertLeave,BufWritePost <buffer> lua vim.lsp.codelens.refresh()]]
   end
   if client.resolved_capabilities.document_highlight then
     vim.cmd [[autocmd CursorHold  <buffer> lua vim.lsp.buf.document_highlight()]]
