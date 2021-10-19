@@ -33,11 +33,10 @@ define_multipurpose_modmap({
     # To use this example, you can't remap capslock with define_modmap.
 })
 
-# define_conditional_multipurpose_modmap(lambda wm_class: wm_class in ("org.remmina.Remmina|Rofi"), {
-#     # define_multipurpose_modmapで設定されたものがwm_classを上書きする
-#     Key.RIGHT_SHIFT: [Key.MUTE, Key.RIGHT_SHIFT],
-#     Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL],
-# })
+define_conditional_multipurpose_modmap(lambda wm_class: wm_class in ("org.remmina.Remmina"), {
+    # define_multipurpose_modmapで設定されたものがwm_classを上書きする
+    Key.RIGHT_SHIFT: [Key.MUTE, Key.RIGHT_SHIFT],
+})
 
 # Keybindings for Global
 define_keymap(None, {
@@ -150,7 +149,7 @@ define_keymap(lambda wm_class: wm_class not in
     K("C-Shift-a"): with_mark(K("Shift-home")),
     K("C-Shift-e"): with_mark(K("Shift-end")),
     # Newline
-    K("Super-a"): [K("C-home"), K("C-a"), set_mark(True)],
+    K("Super-a"): [K("C-home"), K("C-a"), set_mark(False)],
     K("C-m"): K("enter"),
     # Copy
     K("Super-x"): [K("C-x"), set_mark(False)],
