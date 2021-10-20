@@ -1,8 +1,8 @@
 require'nvim-treesitter.configs'.setup {
-  ensure_installed = { "rust", "html", "twig", "css", "python", "javascript",
-    "typescript", "toml", "yaml", "json", "go", "lua", "vue", "php", "bash" },
+  ensure_installed = "all",
   highlight = {
     enable = true,
+    additional_vim_regex_highlight = false,
   },
   incremental_selection = {
     enable = true,
