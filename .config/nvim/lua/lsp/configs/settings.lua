@@ -98,7 +98,7 @@ M.default = function(client, bufnr)
   buf_set_keymap('n', 'gk', '<cmd>lua vim.lsp.buf.hover()<CR>', opts)
   buf_set_keymap('n', '<leader>rn', '<cmd>lua require("lsp.configs.rename").rename()<CR>', opts)
   buf_set_keymap('n', '<space>ca', '<cmd>lua vim.lsp.buf.code_action()<CR>', opts)
-  buf_set_keymap('n', '<space>cl', '<cmd>lua require"lsp.configs.codelens".run()<CR>', opts)
+  buf_set_keymap('n', '<space>cl', '<cmd>lua vim.lsp.codelens.run()<CR>', opts)
 
   -- Commands.
   vim.cmd [[command! Format lua vim.lsp.buf.formatting()]]

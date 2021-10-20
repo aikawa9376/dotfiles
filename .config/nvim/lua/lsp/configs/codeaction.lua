@@ -20,8 +20,13 @@ end
 local function get_titles_length(result, prompt, format_item)
   local option_strings = {prompt or 'Code actions:'}
   local length = 0
+  local title
   for i, action in ipairs(result) do
-    title = string.format("%d. %s [%s]", i, format_item(action), action.kind)
+    if #action > 1 then
+      title = string.format("%d. %s [%s]", i, format_item(action), action[2].kind)
+    else
+      title = string.format("%d. %s", i, format_item(action))
+    end
     table.insert(option_strings, title)
 
     length = length < #title and #title or length
