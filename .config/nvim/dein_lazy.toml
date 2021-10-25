@@ -601,7 +601,7 @@ repo = 'shougo/defx.nvim'
 depends = ['defx-icons', 'defx-git']
 on_cmd = ['Defx']
 hook_add = '''
-nmap <silent><Space>n :Defx -search=`expand('%:p')`<CR>
+nmap <silent><Space>n :Defx -search-recursive=`expand('%:p')`<CR>
 
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
@@ -681,7 +681,7 @@ augroup END
 command! SyncDefx :call s:check_and_search_defx()
 function! s:check_and_search_defx()
   if bufwinnr('defx') == 1
-    Defx -no-focus -no-toggle -search=`expand('%:p')`
+    Defx -no-focus -no-toggle -search-recursive=`expand('%:p')`
   endif
 endfunction
 '''
@@ -919,7 +919,7 @@ nmap <Leader>gl :Agit<CR>
 
 # status line ---------------------------
 [[plugins]]
-repo = 'hoob3rt/lualine.nvim'
+repo = 'nvim-lualine/lualine.nvim'
 on_event = 'VimEnter'
 hook_source = '''
 lua require'plugins.lualine'
