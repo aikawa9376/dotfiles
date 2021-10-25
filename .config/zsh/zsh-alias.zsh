@@ -95,6 +95,7 @@ alias dkrm='docker-rm'
 alias dkst='docker-stop'
 alias dkat='docker-exec-bash'
 alias dkk='docker exec'
+alias dkur='docker run --rm -v /etc/group:/etc/group:ro -v /etc/passwd:/etc/passwd:ro -u $(id -u $USER):$(id -g $USER)'
 
 # -------------------------------------
 # fasd
