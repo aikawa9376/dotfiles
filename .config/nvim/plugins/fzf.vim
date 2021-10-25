@@ -109,7 +109,9 @@ command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_files_sink'),
   \  'source': 'fd --follow --hidden --exclude .git --type f --print0 ' .
-  \            '-E .git -E ''*.pdf'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf''' .
+  \            '-E .git -E ''*.psd'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf'' ' .
+  \            '-E ''*.ai'' -E ''*.jfif'' -E ''*.jpeg'' -E ''*.gif'' ' .
+  \            '-E ''*.eps'' -E ''*.svg'' -E ''*.JPEG'' -E ''*.mp4'' ' .
   \            '| xargs -0 exa -1 -sold --color=always',
   \  'options': '--ansi -m -x --no-unicode '.
   \             '--expect ctrl-x,ctrl-v,ctrl-q'}))
