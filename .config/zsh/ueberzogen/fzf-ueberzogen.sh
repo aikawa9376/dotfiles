@@ -21,7 +21,6 @@ declare -r -x DEFAULT_PREVIEW_POSITION="right"
 declare -r -x UEBERZUG_FIFO="$(mktemp --dry-run --suffix "fzf-$$-ueberzug")"
 declare -r -x PREVIEW_ID="preview"
 
-
 function STORE_TERMINAL_SIZE_IN {
     # Usage: STORE_TERMINAL_SIZE_IN
     #           lines_variable columns_variable
@@ -29,7 +28,6 @@ function STORE_TERMINAL_SIZE_IN {
     < <(</dev/tty stty size) \
         read "$1" "$2"
 }
-
 
 function STORE_FZF_HEIGHT_IN {
     # Usage: STORE_FZF_HEIGHT_IN
@@ -53,7 +51,6 @@ function STORE_FZF_HEIGHT_IN {
                         ? fzf_min_height : _fzf_height_lines))
 }
 
-
 function STORE_FZF_OFFSET_IN {
     # Usage: STORE_FZF_OFFSET_IN
     #           fzf_offset_y_variable
@@ -72,7 +69,6 @@ function STORE_FZF_OFFSET_IN {
     ((_fzf_offset_y=_fzf_offset_y < fzf_start_offset_y
                     ? _fzf_offset_y : fzf_start_offset_y))
 }
-
 
 function STORE_PREVIEW_POSITION_IN {
     # Usage: STORE_PREVIEW_POSITION_IN
@@ -105,7 +101,6 @@ function STORE_PREVIEW_POSITION_IN {
     esac
 }
 
-
 function DRAW_PREVIEW {
     # Usage: DRAW_PREVIEW path
     local -A add_preview_command=( \
@@ -115,19 +110,16 @@ function DRAW_PREVIEW {
     ADD_PLACEMENT add_preview_command
 }
 
-
 function CLEAR_PREVIEW {
     # Usage: CLEAR_PREVIEW
     REMOVE_PLACEMENT "${PREVIEW_ID}"
 }
-
 
 function IDENTITY_RECT {
     # Usage: IDENTITY_RECT
     #           placement_rect_variable
     [[ $# -ne 1 ]] && return 1
 }
-
 
 function ADD_PLACEMENT {
     # Usage: ADD_PLACEMENT
@@ -168,7 +160,6 @@ function ADD_PLACEMENT {
         declare -p "${_add_command_nameref}"
 }
 
-
 function REMOVE_PLACEMENT {
     # Usage: REMOVE_PLACEMENT placement-id
     [[ $# -ne 1 ]] && return 1
@@ -177,10 +168,8 @@ function REMOVE_PLACEMENT {
         [action]=remove [identifier]="${1}")
 }
 
-
 function is_option_key [[ "${@}" =~ ^(\-.*|\+.*) ]]
 function is_key_value [[ "${@}" == *=* ]]
-
 
 function store_options_map_in {
     # Usage: store_options_map_in
@@ -205,7 +194,6 @@ function store_options_map_in {
     done
 }
 
-
 function process_options {
     # Usage: process_options command-line-arguments
     local -a "default_options=(${FZF_DEFAULT_OPTS})"
@@ -226,7 +214,6 @@ function process_options {
     declare -g -r -x FZF_MIN_HEIGHT="${mapped_options[--min-height]:-10}"
 }
 
-
 function store_cursor_position_in {
     # Usage: store_cursor_pos_in
     #           y_variable x_variable
@@ -236,7 +223,6 @@ function store_cursor_position_in {
         IFS='[;' \
         read -p $'\e[6n' -d R -rs _ "${1}" "${2}" _
 }
-
 
 function start_ueberzug {
     # Usage: start_ueberzug
@@ -248,7 +234,6 @@ function start_ueberzug {
         exec
 }
 
-
 function finalise {
     # Usage: finalise
     3>&- \
@@ -258,7 +243,6 @@ function finalise {
     &>/dev/null \
         kill $(jobs -p)
 }
-
 
 function print_on_winch {
     # Usage: print_on_winch text
@@ -276,7 +260,6 @@ function print_on_winch {
             }' \
             "${@}" &
 }
-
 
 function export_functions {
     # Usage: export_functions
