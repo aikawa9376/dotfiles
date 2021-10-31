@@ -1,7 +1,7 @@
 require('bufferline').setup {
   options = {
     numbers = function(opts)
-      return string.format('%s', opts.ordinal)
+      return string.format('%s', opts.id)
     end,
     close_command = "bdelete! %d",       -- can be a string | function, see "Mouse actions"
     right_mouse_command = "bdelete! %d", -- can be a string | function, see "Mouse actions"
