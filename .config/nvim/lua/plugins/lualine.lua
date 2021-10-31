@@ -225,9 +225,14 @@ ins_left {
   color_info = colors.cyan
 }
 
+-- TODO いきなりスローに
 -- Add components to right sections
+-- ins_right {
+--   'filetype',
+--   condition = conditions.hide_in_width,
+-- }
 ins_right {
-  'filetype',
+  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. vim.o.filetype end,
   condition = conditions.hide_in_width,
 }
 
