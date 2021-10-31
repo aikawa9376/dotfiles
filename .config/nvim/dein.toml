@@ -52,7 +52,7 @@ autocmd MyAutoCmd ColorScheme * highlight EWhitespace  guifg=#586e75
 autocmd MyAutoCmd VimEnter,WinEnter * match EWhitespace / \+$/
 " pmu settings
 autocmd MyAutoCmd ColorScheme * highlight Pmenu        cterm=None ctermfg=111  gui=None guifg=#87afff
-autocmd MyAutoCmd ColorScheme * highlight PmenuSbar    cterm=None ctermbg=None gui=None guibg=None
+autocmd MyAutoCmd ColorScheme * highlight PmenuSbar    cterm=None ctermbg=None gui=None guibg=#073642
 autocmd MyAutoCmd ColorScheme * highlight PmenuThumb   cterm=None ctermbg=23   gui=None guibg=#005f5f
 autocmd MyAutoCmd ColorScheme * highlight PmenuSel     cterm=None ctermfg=126  ctermbg=None gui=None guifg=#af0087 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Fmenu        ctermfg=111 ctermbg=0 guifg=#87afff guibg=#002b36
