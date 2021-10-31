@@ -14,7 +14,6 @@ local m = require("luasnip.extras").match
 local n = require("luasnip.extras").nonempty
 local dl = require("luasnip.extras").dynamic_lambda
 local types = require("luasnip.util.types")
-local conds = require("luasnip.extras.conditions")
 
 local is_url = function(args, state)
   local register = vim.api.nvim_eval('@*')

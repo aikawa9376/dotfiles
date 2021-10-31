@@ -14,7 +14,6 @@ local m = require("luasnip.extras").match
 local n = require("luasnip.extras").nonempty
 local dl = require("luasnip.extras").dynamic_lambda
 local types = require("luasnip.util.types")
-local conds = require("luasnip.extras.conditions")
 
 local scss = {
   -- rec_ls is self-referencing. That makes this snippet 'infinite' eg. have as many
