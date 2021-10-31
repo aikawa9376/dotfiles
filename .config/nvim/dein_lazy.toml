@@ -272,10 +272,10 @@ on_event = 'VimEnter'
 [[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = [
-'vim-textobj-entire',     'vim-textobj-indent',      'vim-textobj-php',
-'vim-textobj-line',       'vim-textobj-syntax',      'vim-textobj-comment',
-'vim-textobj-between',    'vim-textobj-from_regexp', 'vim-textobj-chunk',
-'textobj-mbboundary.vim', 'vim-textobj-forward'
+  'vim-textobj-entire',     'vim-textobj-indent',      'vim-textobj-php',
+  'vim-textobj-line',       'vim-textobj-syntax',      'vim-textobj-comment',
+  'vim-textobj-between',    'vim-textobj-from_regexp', 'vim-textobj-chunk',
+  'textobj-mbboundary.vim', 'vim-textobj-forward'
 ]
 on_event = 'VimEnter'
 
@@ -411,59 +411,11 @@ xmap <Leader>to mv<Plug>(operator-sort)
 '''
 
 [[plugins]]
-repo = 'kana/vim-submode'
+repo = 'Iron-E/nvim-libmodal'
 on_event = 'VimEnter'
 hook_source = '''
-" set lazydrawでカーソルが飛ぶ
-let g:submode_timeoutlen = 5000
-let g:submode_keep_leaving_key = 1
-call submode#enter_with('history', 'n', '', 'g;', 'g;')
-call submode#enter_with('history', 'n', '', 'g,', 'g,')
-call submode#map('history', 'n', '', ';', 'g;')
-call submode#map('history', 'n', '', ',', 'g,')
-call submode#enter_with('bufmove', 'n', '', '<C-w>+', '<C-w>+')
-call submode#enter_with('bufmove', 'n', '', '<C-w>-', '<C-w>-')
-call submode#enter_with('bufmove', 'n', '', '<C-w>>', '<C-w>>')
-call submode#enter_with('bufmove', 'n', '', '<C-w><', '<C-w><')
-call submode#map('bufmove', 'n', '', '+', '<C-w>+')
-call submode#map('bufmove', 'n', '', '-', '<C-w>-')
-call submode#map('bufmove', 'n', '', '>', '<C-w>>')
-call submode#map('bufmove', 'n', '', '<', '<C-w><')
-call submode#enter_with('searchExD', 'n', '', ']n', 'ngn<Esc>')
-call submode#enter_with('searchExU', 'n', '', '[n', 'Ngn<Esc>')
-call submode#map('searchExD', 'n', '', 'n', 'ngn<Esc>')
-call submode#map('searchExU', 'n', '', 'n', 'NNgn<Esc>')
-call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
-call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
-call submode#map('block_move', 'n', '', '<M-[>', '<C-o>')
-call submode#enter_with('mini_yank', 'nx', 'r', 'p', '<Plug>(miniyank-autoput)')
-call submode#enter_with('mini_yank', 'nx', 'r', 'P', '<Plug>(miniyank-autoPut)')
-call submode#map('mini_yank', 'nx', 'r', '<C-p>', '<Plug>(miniyank-cycle)')
-call submode#map('mini_yank', 'nx', 'r', '<C-n>', '<Plug>(miniyank-cycleback)')
-call submode#map('mini_yank', 'nx', 'r', '<C-w>', '<Plug>(miniyank-tochar)')
-call submode#map('mini_yank', 'nx', 'r', '<C-l>', '<Plug>(miniyank-toline)')
-call submode#map('mini_yank', 'nx', 'r', '<C-b>', '<Plug>(miniyank-toblock)')
-call submode#map('mini_yank', 'n', '', '<C-f>', '=`]^')
-call submode#enter_with('functionbrace', 'n', '', ']]', ']]')
-call submode#enter_with('functionbrace', 'n', '', '[[', '[[')
-call submode#map('functionbrace', 'n', '', ']', ']]')
-call submode#map('functionbrace', 'n', '', '[', '[[')
-call submode#enter_with('bufbrace', 'n', 's', ']b', 'mz:bnext<CR>')
-call submode#enter_with('bufbrace', 'n', 's', '[b', 'mz:bpreviou<CR>')
-call submode#map('bufbrace', 'n', 's', ']', ':bnext<CR>')
-call submode#map('bufbrace', 'n', 's', '[', ':bpreviou<CR>')
-call submode#enter_with('chunkbrace', 'n', 's', ']c', ':GitGutterNextHunk<CR>')
-call submode#enter_with('chunkbrace', 'n', 's', '[c', ':GitGutterPrevHunk<CR>')
-call submode#map('chunkbrace', 'n', 's', ']', ':GitGutterNextHunk<CR>')
-call submode#map('chunkbrace', 'n', 's', '[', ':GitGutterPrevHunk<CR>')
-call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
-call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
-call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
-call submode#map('quickbrace', 'n', 'r', '[', '<Plug>(qutefinger-prev)')
-call submode#enter_with('linterbrace', 'n', 's', '[a', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })<CR>')
-call submode#enter_with('linterbrace', 'n', 's', ']a', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })<CR>')
-call submode#map('linterbrace', 'n', 's', '[', ':DiagnosticPrevious<CR>:lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })<CR>')
-call submode#map('linterbrace', 'n', 's', ']', ':DiagnosticNext<CR>:lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })<CR>')
+let g:libmodalTimeouts = 1
+lua require'plugins.libmodal'
 '''
 
 [[plugins]]
@@ -846,14 +798,14 @@ repo = 'ludovicchabant/vim-gutentags'
 on_event = 'VimEnter'
 hook_add = '''
 let g:gutentags_project_root = [
- \ '.root', '.svn', '.git', '.project', '.vim.local',
- \ 'package.json', 'composer.json'
- \ ]
+  \ '.root', '.svn', '.git', '.project', '.vim.local',
+  \ 'package.json', 'composer.json'
+  \ ]
 let g:gutentags_ctags_tagfile = '.tags'
 let s:vim_tags = expand('~/.cache/tags')
 let g:gutentags_cache_dir = s:vim_tags
 if !isdirectory(s:vim_tags)
-   silent! call mkdir(s:vim_tags, 'p')
+  silent! call mkdir(s:vim_tags, 'p')
 endif
 '''
 
@@ -984,7 +936,7 @@ call wilder#set_option('modes', [':'])
 
 call wilder#set_option('renderer', wilder#popupmenu_renderer({
       \ 'highlighter': wilder#query_highlighter(),
-      \ 'winblend': 20,
+      \ 'winblend': 10,
       \ 'reverse': 1,
       \ 'right': ['', wilder#popupmenu_scrollbar({
       \     'thumb_char': ' '
