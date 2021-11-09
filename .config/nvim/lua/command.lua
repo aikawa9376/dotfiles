@@ -39,7 +39,7 @@ endif
 cmd([[
 augroup mylightline
   autocmd! FileType fzf
-  autocmd  FileType fzf set laststatus=0
-  autocmd  BufLeave * set laststatus=2
+  autocmd  FileType fzf set laststatus=0 noshowmode noruler noshowcmd
+  autocmd  BufLeave * set laststatus=2 showmode ruler showcmd
 augroup END
 ]])
