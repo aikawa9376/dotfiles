@@ -184,12 +184,19 @@ let g:VM_set_statusline  = 0
 '''
 
 [[plugins]]
-repo = 'rhysd/accelerated-jk'
+repo = 'xiyaowong/accelerated-jk.nvim'
 on_event = 'VimEnter'
-hook_add = '''
-nmap j <Plug>(accelerated_jk_gj)
-nmap k <Plug>(accelerated_jk_gk)
-let g:accelerated_jk_acceleration_table = [15,35,50,74,97,119,141,178]
+hook_source = '''
+ lua require('accelerated-jk').setup {acceleration_table = {35,97,141,212,314,414,514,614}}
+'''
+
+[[plugins]]
+repo = 'phaazon/hop.nvim'
+on_event = 'VimEnter'
+hook_source = '''
+lua require'hop'.setup()
+nmap <C-j> :HopWordAC<CR>
+nmap <C-k> :HopWordBC<CR>
 '''
 
 [[plugins]]
