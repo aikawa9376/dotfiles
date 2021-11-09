@@ -3,9 +3,9 @@
 # -------------------------------------
 ### Added by Zinit's installer
 if [[ ! -f $HOME/.zinit/bin/zinit.zsh ]]; then
-  print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma/zinit)…%f"
+  print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma-continuum/zinit)…%f"
   command mkdir -p $HOME/.zinit
-  command git clone https://github.com/zdharma/zinit $HOME/.zinit/bin && \
+  command git clone https://github.com/zdharma-continuum/zinit $HOME/.zinit/bin && \
   print -P "%F{33}▓▒░ %F{34}Installation successful.%F" || \
   print -P "%F{160}▓▒░ The clone has failed.%F"
 fi
@@ -19,7 +19,7 @@ zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-completions"
 zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-history-substring-search"
 # zsh-syntax-highlighting
 zinit ice wait'!0' lucid atinit"zpcompinit; zpcdreplay"
-zinit load "zdharma/fast-syntax-highlighting"
+zinit load "zdharma-continuum/fast-syntax-highlighting"
 # autosuggestions
 zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-autosuggestions"
 # ゴミ箱機能
@@ -27,7 +27,7 @@ zinit ice wait'!0' lucid; zinit load "aikawa9376/zsh-gomi"
 # pair auto
 zinit ice wait'!0' lucid; zinit load "hlissner/zsh-autopair"
 # enhancd
-zinit ice lucid wait'!0' atclone'rm -rf functions'
+zinit ice lucid wait'!0' atclone'rm -rf functions/*.fish'
 zinit load "b4b4r07/enhancd"
 # tmux fzf
 zinit ice lucid as"program" pick"tmuximum"
