@@ -101,3 +101,6 @@ map('t', '<M-j>', '<M-j>', { noremap = true, silent = true })
 map('t', '<M-k>', '<M-k>', { noremap = true, silent = true })
 map('t', '<M-d>', '<M-d>', { noremap = true, silent = true })
 map('t', '<M-c>', '<M-c>', { noremap = true, silent = true })
+
+map('n', 'n', ":lua require('plugins.searchcount').search_count('n')<CR>", { noremap = true, silent = true })
+map('n', 'N', ":lua require('plugins.searchcount').search_count('N')<CR>", { noremap = true, silent = true })
