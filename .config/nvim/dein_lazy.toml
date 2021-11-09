@@ -409,6 +409,10 @@ inoremap <expr> . smartchr#loop('.', '->', '=>')
 " if文直後の(は自動で間に空白を入れる
 inoremap <expr> ( search('\<\if\%#', 'bcn')? ' (': '('
 '''
+[plugins.ftplugin]
+lua = '''
+inoremap <expr> . smartchr#loop('.', '..', '->', '=>')
+'''
 
 [[plugins]]
 repo = 'emonkak/vim-operator-sort'
