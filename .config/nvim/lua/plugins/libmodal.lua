@@ -5,8 +5,10 @@ local prefix
 
 local function generateFunc(layer)
   local start = function()
-    layer:enter()
-    vim.o.timeoutlen = 0
+    if not layer:isActive() then
+      layer:enter()
+      vim.o.timeoutlen = 0
+    end
   end
   local exit = function()
     layer:exit()
@@ -30,8 +32,8 @@ local function generateEndKeymap(layer, func, ignore)
   local keys = {
     'a','b','c','d','e','f','g','h','i',
     'j','k','l','m','n','o','p','q','r',
-    's','t','u','v','w','x','y','z', ';',
-    ':', ',', '/', ''
+    's','t','u','v','w','x','y','z',';',
+    ':',',','/',''
   }
   if ignore then
     keys = ignoreList(keys, ignore)
@@ -134,6 +136,7 @@ _G[startFunc..prefix], _G[exitFunc..prefix] = generateFunc(windowMoveLayer)
 generateEndKeymap(windowMoveLayer, exitFunc..prefix)
 vim.api.nvim_set_keymap('n', '<C-w>+', '<C-w>+:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', '<C-w>-', '<C-w>-:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
+
 vim.api.nvim_set_keymap('n', '<C-w>>', '<C-w>>:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', '<C-w><', '<C-w><:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
 
@@ -265,13 +268,13 @@ vim.api.nvim_set_keymap('n', 'P', '<Plug>(miniyank-autoPut):lua ' .. startFunc .
 -- Modes
 --
 
-local modeFuncText = ':let g:auto_cursorline_disable = 1<CR>:set cursorline<CR>'
+local modeFuncText = ':let g:auto_cursorline_disable = 1<CR>:set cursorline cursorcolumn<CR>'
 local function isEnterkey(input, ignore)
   local keys = {
     'a','b','c','d','e','f','g','h','i',
     'j','k','l','m','n','o','p','q','r',
-    's','t','u','v','w','x','y','z', ';',
-    ':', ',', '/', ''
+    's','t','u','v','w','x','y','z',';',
+    ':',',','/',''
   }
   if ignore then
     keys = ignoreList(keys, ignore)
@@ -298,6 +301,7 @@ function BufferMode()
   elseif isEnterkey(userInput) then
     vim.api.nvim_set_var('bufferModeExit', true)
     vim.api.nvim_command('let g:auto_cursorline_disable = 0')
+    vim.api.nvim_command("set nocursorcolumn")
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(userInput,true,false,true),'m',true)
   end
 end
@@ -322,6 +326,7 @@ function QuickFixMode()
   elseif isEnterkey(userInput) then
     vim.api.nvim_set_var('quickfixModeExit', true)
     vim.api.nvim_command('let g:auto_cursorline_disable = 0')
+    vim.api.nvim_command("set nocursorcolumn")
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(userInput,true,false,true),'m',true)
   end
 end
