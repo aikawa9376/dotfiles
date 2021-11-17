@@ -77,8 +77,6 @@ autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultError       guifg
 autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultWarning     guifg=#FF8800 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultInformation guifg=#51afef guibg=None
 
-autocmd MyAutoCmd ColorScheme * highligh Sneak cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
-
 autocmd MyAutoCmd ColorScheme * hi MatchWord  ctermfg=None guifg=None cterm=underline gui=underline
 autocmd MyAutoCmd ColorScheme * hi MatchParen ctermfg=None guifg=None ctermbg=None guibg=None cterm=bold,underline gui=bold,underline
 
@@ -114,6 +112,16 @@ autocmd MyAutoCmd ColorScheme * hi DiagnosticError  guifg=#ec5f67
 autocmd MyAutoCmd ColorScheme * hi DiagnosticWarn   guifg=#ECBE7B
 autocmd MyAutoCmd ColorScheme * hi DiagnosticInfo   guifg=#008080
 autocmd MyAutoCmd ColorScheme * hi DiagnosticHint   guifg=#98be65
+
+autocmd MyAutoCmd ColorScheme * hi LightspeedGreyWash               guifg=#777777
+autocmd MyAutoCmd ColorScheme * hi LightspeedMaskedChar             guifg=#51afef
+autocmd MyAutoCmd ColorScheme * hi LightspeedUnlabeledMatch         gui=bold guifg=#f3ecec
+autocmd MyAutoCmd ColorScheme * hi LightspeedLabel                  gui=bold,underline guifg=#ff2f87
+autocmd MyAutoCmd ColorScheme * hi LightspeedLabelOverlapped        guifg=#777777 guibg=None
+autocmd MyAutoCmd ColorScheme * hi LightspeedLabelDistant           gui=bold,underline guifg=#a9a1e1
+autocmd MyAutoCmd ColorScheme * hi LightspeedLabelDistantOverlapped guifg=#777777 guibg=None
+autocmd MyAutoCmd ColorScheme * hi LightspeedOneCharMatch           gui=bold,underline guifg=#f00077
+autocmd MyAutoCmd ColorScheme * hi LightspeedShortcut               gui=bold,underline guifg=#ECBE7B guibg=f00077
 
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642

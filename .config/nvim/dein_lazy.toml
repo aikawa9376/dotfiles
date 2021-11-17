@@ -1,11 +1,11 @@
 # lsp-----------------------------------
 [[plugins]]
 repo = 'neovim/nvim-lspconfig'
-depends  = ['nvim-lspinstall', 'lsp-status.nvim']
+depends  = ['nvim-lsp-installer', 'lsp-status.nvim']
 on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'kabouzeid/nvim-lspinstall'
+repo = 'williamboman/nvim-lsp-installer'
 hook_source = '''
 lua require'lsp'
 '''
@@ -26,7 +26,6 @@ depends  = [
   'cmp_luasnip', 'friendly-snippets', 'cmp-path',
   'cmp-tabnine', 'compe-tmux', 'lspkind-nvim'
 ]
-
 hook_source = '''
 lua require'plugins.nvim-cmp'
 '''
@@ -144,31 +143,25 @@ let g:miniyank_maxitems = 100
 '''
 
 [[plugins]]
-repo = 'justinmk/vim-sneak'
+repo = 'ggandor/lightspeed.nvim'
 on_event = 'VimEnter'
-hook_add = '''
-nmap ; <Plug>Sneak_;
-nmap , <Plug>Sneak_,
-xmap ; <Plug>Sneak_;
-xmap , <Plug>Sneak_,
-nmap s <Plug>Sneak_s
-nmap S <Plug>Sneak_S
-nmap s <Plug>Sneak_s
-nmap S <Plug>Sneak_S
-nmap <expr> f sneak#is_sneaking() ? '<Plug>Sneak_;' : '<plug>Sneak_f'
-nmap <expr> F sneak#is_sneaking() ? '<Plug>Sneak_,' : '<plug>Sneak_F'
-xmap f <Plug>Sneak_f
-xmap F <Plug>Sneak_F
-omap f <Plug>Sneak_f
-omap F <Plug>Sneak_F
-nmap <expr> t sneak#is_sneaking() ? '<Plug>Sneak_;' : '<plug>Sneak_t'
-nmap <expr> T sneak#is_sneaking() ? '<Plug>Sneak_,' : '<plug>Sneak_T'
-xmap t <Plug>Sneak_t
-xmap T <Plug>Sneak_T
-omap t <Plug>Sneak_t
-omap T <Plug>Sneak_T
-let g:sneak#s_next = 1
-let g:sneak#use_ic_scs = 1
+hook_source = '''
+lua << EOF
+require'lightspeed'.setup {
+    jump_to_first_match = true,
+    limit_ft_matches = 100,
+    jump_on_partial_input_safety_timeout = 5000,
+    exit_after_idle_msecs = { labeled = nil, unlabeled = nil },
+    cycle_group_fwd_key = '<Tab>',
+    labels = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+              "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+              "u", "v", "w", "x", "y", "z", "z", ".", "'", "/"}
+}
+EOF
+autocmd User LightspeedSxEnter nmap ; <Plug>Lightspeed_;_sx
+autocmd User LightspeedSxEnter nmap , <Plug>Lightspeed_,_sx
+autocmd User LightspeedFtEnter nmap ; <Plug>Lightspeed_;_ft
+autocmd User LightspeedFtEnter nmap , <Plug>Lightspeed_,_ft
 '''
 
 [[plugins]]
@@ -195,73 +188,27 @@ repo = 'phaazon/hop.nvim'
 on_event = 'VimEnter'
 hook_source = '''
 lua require'hop'.setup()
-nmap <C-j> :HopWordAC<CR>
-nmap <C-k> :HopWordBC<CR>
+nmap <silent><C-j> :HopWordAC<CR>
+nmap <silent><C-k> :HopWordBC<CR>
 '''
 
 [[plugins]]
-repo = 'easymotion/vim-easymotion'
-depends = [
-  'incsearch.vim', 'incsearch-fuzzy.vim',
-  'incsearch-migemo.vim', 'incsearch-easymotion.vim', 'vim-asterisk'
-]
-on_event = 'VimEnter'
-hook_add = '''
-let g:EasyMotion_do_mapping       = 0
-let g:EasyMotion_smartcase        = 1
-let g:EasyMotion_space_jump_first = 1
-let g:incsearch#auto_nohlsearch   = 1
-function! s:config_easyfuzzymotion(...) abort
-  return extend(copy({
-  \   'converters': [incsearch#config#fuzzy#converter()],
-  \   'modules'   : [incsearch#config#easymotion#module()],
-  \   'keymap'    : {"\<C-Space>": "<Over>(easymotion)"},
-  \   'is_expr'   : 0,
-  \   'is_stay'   : 0
-  \ }), get(a:, 1, {}))
-endfunction
-function! s:config_easymotion(...) abort
-  return incsearch#util#deepextend(deepcopy({
-  \   'modules': [incsearch#config#easymotion#module({'overwin': 1})],
-  \   'keymap' : {"\<C-Space>": "<Over>(easymotion)"},
-  \   'is_expr': 0,
-  \   'is_stay': 0
-  \ }), get(a:, 1, {}))
-endfunction
-noremap <silent><expr> <Leader>/ incsearch#go(<SID>config_easyfuzzymotion())
-noremap <silent><expr> / incsearch#go(<SID>config_easymotion())
-noremap <silent><expr> ? incsearch#go(<SID>config_easymotion())
-nmap <C-j> <Plug>(easymotion-w)
-nmap <C-k> <Plug>(easymotion-b)
-'''
-
-[[plugins]]
-repo = 'haya14busa/incsearch-easymotion.vim'
-
-[[plugins]]
-repo = 'haya14busa/incsearch.vim'
-
-[[plugins]]
-repo = 'haya14busa/incsearch-fuzzy.vim'
+repo = 'haya14busa/is.vim'
+depends = ['vim-asterisk']
+on_event = 'CmdlineEnter'
 
 [[plugins]]
 repo = 'haya14busa/vim-asterisk'
 on_event = 'VimEnter'
 hook_add = '''
-nmap *   <Plug>(incsearch-nohl0)<Plug>(asterisk-z*)
-nmap g*  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz*)
-nmap #   <Plug>(incsearch-nohl0)<Plug>(asterisk-z#)
-nmap g#  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz#)
-vmap *   <Plug>(incsearch-nohl0)<Plug>(asterisk-z*)
-vmap g*  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz*)
-vmap #   <Plug>(incsearch-nohl0)<Plug>(asterisk-z#)
-vmap g#  <Plug>(incsearch-nohl0)<Plug>(asterisk-gz#)
-'''
-
-[[plugins]]
-repo = 'haya14busa/incsearch-migemo.vim'
-hook_add = '''
-nmap <M-/> <Plug>(incsearch-migemo-/)
+nmap *   <Plug>(is-nohl-1)<Plug>(asterisk-z*)
+nmap g*  <Plug>(is-nohl-1)<Plug>(asterisk-gz*)
+nmap #   <Plug>(is-nohl-1)<Plug>(asterisk-z#)
+nmap g#  <Plug>(is-nohl-1)<Plug>(asterisk-gz#)
+vmap *   <Plug>(is-nohl-1)<Plug>(asterisk-z*)
+vmap g*  <Plug>(is-nohl-1)<Plug>(asterisk-gz*)
+vmap #   <Plug>(is-nohl-1)<Plug>(asterisk-z#)
+vmap g#  <Plug>(is-nohl-1)<Plug>(asterisk-gz#)
 '''
 
 [[plugins]]
@@ -270,6 +217,15 @@ on_event = 'VimEnter'
 hook_add = '''
 map J <Plug>(edgemotion-j)
 map K <Plug>(edgemotion-k)
+'''
+
+[[plugins]]
+repo = 'rhysd/migemo-search.vim'
+on_event = 'CmdlineEnter'
+hook_add = '''
+if executable('cmigemo')
+  cnoremap <expr><C-Space> migemosearch#replace_search_word()."\<CR>"
+endif
 '''
 
 [[plugins]]
@@ -740,11 +696,11 @@ nnoremap <silent> <Leader>u :MundoToggle<CR>
 repo = 'windwp/nvim-spectre'
 on_event = ['VimEnter']
 hook_source = '''
-"search current word
-nnoremap <leader>rr :lua require('spectre').open_visual({select_word=true})<CR>
-xnoremap <leader>rr :lua require('spectre').open_visual()<CR>
-"  search in current file
-nnoremap <leader>rR viw:lua require('spectre').open_file_search()<cr>
+" search current word
+nnoremap <silent><leader>rr :lua require('spectre').open_visual({select_word=true})<CR>
+xnoremap <silent><leader>rr :lua require('spectre').open_visual()<CR>
+" search in current file
+nnoremap <silent><leader>rR viw:lua require('spectre').open_file_search()<cr>
 lua require('spectre').setup({ line_sep_start = '', result_padding = '', line_sep  = '',})
 '''
 
@@ -851,8 +807,8 @@ nmap <silent> <Leader>gb :Git blame -w<CR>
 nmap <silent> <Leader>gp :Git! push<CR>
 nmap <silent> <Leader>gr :Git! rm --cached %<CR>
 nmap <silent> <Leader>gm :Git! commit -m 'update'<CR>
-nmap <silent> <Leader>gM  :GitAddCommit update<CR>
-nmap <silent> <Leader>gU  :GitAddAmend<Space>
+nmap <silent> <Leader>gM :GitAddCommit update<CR>
+nmap <silent> <Leader>gU :GitAddAmend<Space>
 command! -nargs=* GitAddCommit silent execute('
   \ !git add -u && git commit -m ' . shellescape(<q-args>)) . '&'
 command! -nargs=* GitAddAmend silent execute('
@@ -870,7 +826,7 @@ lua require'plugins.diffview'
 repo = 'cohama/agit.vim'
 on_cmd = ['Agit']
 hook_add = '''
-nmap <Leader>gl :Agit<CR>
+nmap <silent><Leader>gl :Agit<CR>
 '''
 
 # status line ---------------------------
@@ -900,8 +856,8 @@ nmap <silent>[p :<c-u>call myutil#yank_line('k')<CR>=`]^
 nmap <silent><M-p> :<c-u>call myutil#yank_remove_line()<CR>=`]^
 nmap <silent><C-t> :<C-u>call myutil#yank_text_toggle()<CR>
 nmap <Leader>, :<C-u>call myutil#reload_vimrc()<CR>
-xmap <F1> :call myutil#help_override()<CR>
-nmap <F1> :call myutil#help_override()<CR>
+xmap <silent><F1> :call myutil#help_override()<CR>
+nmap <silent><F1> :call myutil#help_override()<CR>
 xmap <silent> gK :call myutil#google_search()<CR>
 nmap <silent> gK :call myutil#google_search()<CR>
 xmap <silent> gg :call myutil#google_open()<CR>
@@ -910,8 +866,8 @@ nnoremap <silent> <Plug>(my-switch)n :call myutil#toggle_relativenumber()<CR>
 nnoremap <silent> dd :<c-u>call myutil#remove_line_brank(v:count1)<cr>
 nnoremap <silent> dD :<c-u>call myutil#remove_line_brank_all(v:count1)<cr>
 nnoremap <expr> i myutil#indent_with_i("m`mv")
-nnoremap gJ :call myutil#join_space_less()<CR>
-xnoremap @ :<C-u>call myutil#execute_macro_visual_range()<CR>
+nnoremap <silent>gJ :call myutil#join_space_less()<CR>
+xnoremap <silent>@ :<C-u>call myutil#execute_macro_visual_range()<CR>
 cnoremap <expr> <C-U> myutil#ctrl_u()
 cnoremap <expr> <SID>(ctrl_w_before) myutil#ctrl_w_before()
 cnoremap <expr> <SID>(ctrl_w_after) myutil#ctrl_w_after()
@@ -936,12 +892,13 @@ cmap <expr> <C-n> wilder#in_context() ? wilder#previous() : pumvisible() ? "\<Le
 cmap <expr> <Tab> wilder#in_context() ? wilder#next() : "\<Tab>"
 cmap <expr> <S-Tab> wilder#in_context() ? wilder#previous() : "\<S-Tab>"
 
-call wilder#set_option('modes', [':'])
+call wilder#set_option('modes', [':', '/', '?'])
 
 call wilder#set_option('renderer', wilder#popupmenu_renderer({
       \ 'highlighter': wilder#query_highlighter(),
       \ 'winblend': 10,
       \ 'reverse': 1,
+      \ 'apply_incsearch_fix': v:true,
       \ 'right': ['', wilder#popupmenu_scrollbar({
       \     'thumb_char': ' '
       \   })]
@@ -963,6 +920,9 @@ call wilder#set_option('pipeline', [
       \       'language': 'python',
       \       'engine': 're2',
       \       'sorter': wilder#python_difflib_sorter(),
+      \     }),
+      \     wilder#python_search_pipeline({
+      \       'pattern': 'fuzzy',
       \     }),
       \   ),
       \   wilder#result_draw_devicons(),
