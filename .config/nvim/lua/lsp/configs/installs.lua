@@ -1,32 +1,54 @@
 -- angular hack
-local config = require"lspinstall/util".extract_config("angularls")
+-- local config = require"lspinstall/util".extract_config("angularls")
+local lspconfig = require "lspconfig"
+local configs = require "lspconfig/configs"
+local servers = require "nvim-lsp-installer.servers"
+local server = require "nvim-lsp-installer.server"
+local npm = require "nvim-lsp-installer.installers.npm"
+local root_dir, executable_path, default_probe_dir
 
-local cmd = { "./node_modules/.bin/ngserver", "--stdio", "--tsProbeLocations",  "./node_modules", "--ngProbeLocations", "./node_modules" }
-
-config.default_config.cmd = cmd
-config.default_config.on_new_config = function(new_config, new_root_dir)
-    new_config.cmd = cmd
-end
-
-config.install_script = [[
-  ! test -f package.json && npm init -y --scope=lspinstall || true
-  npm install @angular/language-server @angular/language-service typescript
-  ]]
-
-require'lspinstall/servers'.angular = config
-
--- emmet hack
-require'lspinstall/servers'.emmet = {
+root_dir = server.get_server_root_path('ls_emmet')
+executable_path = npm.executable(root_dir, "ls_emmet")
+configs['ls_emmet'] = {
   default_config = {
-    cmd = {'./node_modules/.bin/ls_emmet', '--stdio'};
     filetypes = {'html', 'css', 'scss', 'twig', 'php'};
-    root_dir = function(fname)
-      return vim.loop.cwd()
-    end;
-    settings = {};
-  };
-  install_script = [[
-  ! test -f package.json && npm init -y --scope=lspinstall || true
-  npm install ls_emmet
-  ]];
+    root_dir = lspconfig.util.root_pattern ".git",
+  },
 }
+local ls_emmet = server.Server:new {
+-- require'lspinstall/servers'.emmet = {
+  name = 'ls_emmet',
+  installer = npm.packages { "ls_emmet" },
+  root_dir = root_dir,
+  default_options = {
+    cmd = {executable_path, '--stdio'};
+  };
+}
+servers.register(ls_emmet)
+
+root_dir = server.get_server_root_path('angularls')
+executable_path = npm.executable(root_dir, "ngserver")
+default_probe_dir = root_dir .. '/node_modules'
+configs['angularls'] = {
+  default_config = {
+    filetypes = { "typescript", "html" },
+    root_dir = lspconfig.util.root_pattern ".git",
+  },
+}
+local new_anglar = server.Server:new {
+  name = 'angularls',
+  languages = { "angular" },
+  installer = npm.packages { "@angular/language-server", "typescript" },
+  root_dir = root_dir;
+  default_options = {
+    cmd = {
+        executable_path,
+        "--stdio",
+        "--tsProbeLocations",
+        default_probe_dir,
+        "--ngProbeLocations",
+        default_probe_dir,
+    },
+  },
+}
+servers.register(new_anglar)

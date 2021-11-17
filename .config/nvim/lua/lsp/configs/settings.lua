@@ -12,7 +12,7 @@ M.configs = {
     --   M.default(client, bufnr)
     -- end,
   },
-  typescript =  {
+  tsserver =  {
     on_attach =  function(client, bufnr)
       M.default(client, bufnr)
       local ts_utils = require("nvim-lsp-ts-utils")
@@ -24,7 +24,7 @@ M.configs = {
       ts_utils.setup_client(client)
     end,
   },
-  rust =  {
+  ['rust_analyzer'] =  {
     settings = {
       ['rust-analyzer'] = {
         completion = {
@@ -59,7 +59,7 @@ M.configs = {
       M.default(client, bufnr)
     end,
   },
-  lua = {
+  sumneko_lua = {
     settings = {
       Lua = {
         diagnostics = {
@@ -118,7 +118,7 @@ M.default = function(client, bufnr)
     augroup LspDefaults
       autocmd!
       autocmd CursorHold <buffer> lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })
-      autocmd CursorHoldI <buffer> silent! lua vim.lsp.buf.signature_help()
+      autocmd CursorHoldI <buffer> silent! lua vim.lsp.buf.signature_help({ focusable = false, silent = true})
     augroup END
     ]]
   if not vim.g.auto_format_disabled then
