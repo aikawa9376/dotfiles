@@ -268,7 +268,6 @@ vim.api.nvim_set_keymap('n', 'P', '<Plug>(miniyank-autoPut):lua ' .. startFunc .
 -- Modes
 --
 
-local modeFuncText = ':let g:auto_cursorline_disable = 1<CR>:set cursorline cursorcolumn<CR>'
 local function isEnterkey(input, ignore)
   local keys = {
     'a','b','c','d','e','f','g','h','i',
@@ -287,6 +286,21 @@ local function isEnterkey(input, ignore)
   return false
 end
 
+_G.LibmodalMarkId = nil
+local function set_extmark()
+  if LibmodalMarkId then
+    vim.api.nvim_eval("matchdelete(".. LibmodalMarkId .. ")")
+  end
+  local line_num = vim.fn.line(".")
+  local col_num = vim.fn.col(".")
+  LibmodalMarkId = vim.api.nvim_eval("matchadd('Cursor', printf('\\%%%dl\\%%%dc', " .. line_num .. ", " .. col_num .. "))")
+end
+
+function _G.set_extmark_and_modal_var(flag)
+  set_extmark()
+  vim.api.nvim_set_var(flag .. "ModeExit", 0)
+end
+
 function BufferMode()
   -- Append to the input history, the latest button press.
   local userInput = string.char(
@@ -296,21 +310,23 @@ function BufferMode()
 
   if userInput == ']' then
     vim.api.nvim_command("bnext")
+    set_extmark()
   elseif userInput == '[' then
     vim.api.nvim_command("bprev")
+    set_extmark()
   elseif isEnterkey(userInput) then
     vim.api.nvim_set_var('bufferModeExit', true)
-    vim.api.nvim_command('let g:auto_cursorline_disable = 0')
-    vim.api.nvim_command("set nocursorcolumn")
+    vim.api.nvim_eval("matchdelete(".. LibmodalMarkId .. ")")
+    LibmodalMarkId = nil
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(userInput,true,false,true),'m',true)
   end
 end
 
 -- Enter the mode.
 vim.api.nvim_set_keymap('n', ']b',
-  modeFuncText .. ':bnext<CR>:lua vim.api.nvim_set_var("bufferModeExit", 0)<CR>:lua require("libmodal").mode.enter("Buffer", BufferMode, true)<CR>', {})
+  ':bnext<CR>:lua set_extmark_and_modal_var("buffer")<CR>:lua require("libmodal").mode.enter("Buffer", BufferMode, true)<CR>', {})
 vim.api.nvim_set_keymap('n', '[b',
-  modeFuncText .. ':bprev<CR>:lua vim.api.nvim_set_var("bufferModeExit", 0)<CR>:lua require("libmodal").mode.enter("Buffer", BufferMode, true)<CR>', {})
+  ':bprev<CR>:lua set_extmark_and_modal_var("buffer")<CR>:lua require("libmodal").mode.enter("Buffer", BufferMode, true)<CR>', {})
 
 function QuickFixMode()
   -- Append to the input history, the latest button press.
@@ -321,18 +337,20 @@ function QuickFixMode()
 
   if userInput == ']' then
     vim.api.nvim_command("call qutefinger#next()")
+    set_extmark()
   elseif userInput == '[' then
     vim.api.nvim_command("call qutefinger#prev()")
+    set_extmark()
   elseif isEnterkey(userInput) then
     vim.api.nvim_set_var('quickfixModeExit', true)
-    vim.api.nvim_command('let g:auto_cursorline_disable = 0')
-    vim.api.nvim_command("set nocursorcolumn")
+    vim.api.nvim_eval("matchdelete(".. LibmodalMarkId .. ")")
+    LibmodalMarkId = nil
     vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(userInput,true,false,true),'m',true)
   end
 end
 
 -- Enter the mode.
 vim.api.nvim_set_keymap('n', ']q',
-  modeFuncText .. ':call qutefinger#next()<CR>:lua vim.api.nvim_set_var("quickfixModeExit", 0)<CR>:lua require("libmodal").mode.enter("QuickFix", QuickFixMode, true)<CR>', {})
+  ':call qutefinger#next()<CR>:lua set_extmark_and_modal_var("quickfix")<CR>:lua require("libmodal").mode.enter("QuickFix", QuickFixMode, true)<CR>', {})
 vim.api.nvim_set_keymap('n', '[q',
-  modeFuncText .. ':call qutefinger#prev()<CR>:lua vim.api.nvim_set_var("quickfixModeExit", 0)<CR>:lua require("libmodal").mode.enter("QuickFix", QuickFixMode, true)<CR>', {})
+  ':call qutefinger#prev()<CR>:lua set_extmark_and_modal_var("quickfix")<CR>:lua require("libmodal").mode.enter("QuickFix", QuickFixMode, true)<CR>', {})
