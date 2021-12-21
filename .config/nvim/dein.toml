@@ -37,7 +37,7 @@ set t_8f=^[[38;2;%lu;%lu;%lum
 set t_8b=^[[48;2;%lu;%lu;%lum
 
 autocmd MyAutoCmd ColorScheme * highlight Normal            ctermbg=None guibg=None
-autocmd MyAutoCmd ColorScheme * highlight NormalFloat       ctermbg=None guibg=#002936
+autocmd MyAutoCmd ColorScheme * highlight NormalFloat       ctermbg=None guibg=#002b36
 autocmd MyAutoCmd ColorScheme * highlight ErrorMsg          cterm=bold ctermfg=9 gui=bold guifg=#dc322f
 autocmd MyAutoCmd ColorScheme * highlight SignColumn        ctermbg=None guibg=None
 autocmd MyAutoCmd ColorScheme * highlight LineNr            ctermbg=None guibg=None
@@ -76,6 +76,7 @@ autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultHint        guifg
 autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultError       guifg=#ec5f67 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultWarning     guifg=#FF8800 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight LspDiagnosticsDefaultInformation guifg=#51afef guibg=None
+autocmd MyAutoCmd ColorScheme * highlight LspSignatureActiveParameter gui=underline,bold
 
 autocmd MyAutoCmd ColorScheme * hi MatchWord  ctermfg=None guifg=None cterm=underline gui=underline
 autocmd MyAutoCmd ColorScheme * hi MatchParen ctermfg=None guifg=None ctermbg=None guibg=None cterm=bold,underline gui=bold,underline
@@ -121,7 +122,7 @@ autocmd MyAutoCmd ColorScheme * hi LightspeedLabelOverlapped        guifg=#77777
 autocmd MyAutoCmd ColorScheme * hi LightspeedLabelDistant           gui=bold,underline guifg=#a9a1e1
 autocmd MyAutoCmd ColorScheme * hi LightspeedLabelDistantOverlapped guifg=#777777 guibg=None
 autocmd MyAutoCmd ColorScheme * hi LightspeedOneCharMatch           gui=bold,underline guifg=#f00077
-autocmd MyAutoCmd ColorScheme * hi LightspeedShortcut               gui=bold,underline guifg=#ECBE7B guibg=f00077
+autocmd MyAutoCmd ColorScheme * hi LightspeedShortcut               gui=bold,underline guifg=#ECBE7B
 
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642
