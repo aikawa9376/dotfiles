@@ -185,14 +185,20 @@ repo = 'phaazon/hop.nvim'
 on_event = 'VimEnter'
 hook_source = '''
 lua require'hop'.setup()
-nmap <silent><C-j> :HopWordAC<CR>
-nmap <silent><C-k> :HopWordBC<CR>
+nmap s <Nop>
+xmap s <Nop>
+nnoremap <silent>sj :HopWordAC<CR>
+nnoremap <silent>sk :HopWordBC<CR>
+nnoremap <silent>sl :HopLineStart<CR>
+nnoremap <silent>sf :HopChar1AC<CR>
+nnoremap <silent>sF :HopChar1BC<CR>
+nnoremap <silent>ss :HopChar2<CR>
 '''
 
 [[plugins]]
 repo = 'haya14busa/is.vim'
 depends = ['vim-asterisk']
-on_event = 'CmdlineEnter'
+on_event = 'VimEnter'
 
 [[plugins]]
 repo = 'haya14busa/vim-asterisk'

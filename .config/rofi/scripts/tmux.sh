@@ -35,4 +35,4 @@ if (( $FOUND == 0 )); then
 	exit 1
 fi
 
-xdotool search --onlyvisible --class "Alacritty" windowactivate
+xdotool search --onlyvisible --class "kitty" windowactivate

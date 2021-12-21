@@ -96,6 +96,7 @@ cmp.setup {
       cmp.config.compare.sort_text,
       cmp.config.compare.length,
       cmp.config.compare.order,
+      cmp.config.compare.recently_used,
     }
   },
   preselect = cmp.PreselectMode.Item

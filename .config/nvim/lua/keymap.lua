@@ -97,6 +97,7 @@ map('n', 'ZZ', ':call TermForceCloseAll()<CR>:<c-u>xa<CR>', { noremap = true, si
 map('n', '<M-b>', ':bnext<CR>', { noremap = true, silent = true })
 map('n', '<C-g>', 'm`<C-^>', { noremap = true, silent = true })
 map('t', '<C-[>', '<C-\\><C-n>', { noremap = true, silent = true })
+-- map('t', '<C-w><c-w>', '<C-\\><C-n><C-w><c-w>', { noremap = true, silent = true })
 map('t', '<M-j>', '<M-j>', { noremap = true, silent = true })
 map('t', '<M-k>', '<M-k>', { noremap = true, silent = true })
 map('t', '<M-d>', '<M-d>', { noremap = true, silent = true })
@@ -104,3 +105,4 @@ map('t', '<M-c>', '<M-c>', { noremap = true, silent = true })
 
 map('n', 'n', ":lua require('plugins.searchcount').search_count('n')<CR>", { noremap = true, silent = true })
 map('n', 'N', ":lua require('plugins.searchcount').search_count('N')<CR>", { noremap = true, silent = true })
+map('n', 'S', ":WorkspaceSymbol<CR>", { noremap = true, silent = true })

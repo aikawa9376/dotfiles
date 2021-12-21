@@ -50,4 +50,5 @@ opt.wildmode = 'list,full'
 opt.wildoptions = opt.wildoptions .. ',pum'
 opt.pumblend = 10
 opt.winblend = 10
+opt.pumheight = 20
 -- opt.shellslash = true

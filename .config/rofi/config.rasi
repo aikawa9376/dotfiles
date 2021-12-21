@@ -6,8 +6,8 @@ configuration {
 	sort: true;
 	combi-modi: "window,tmux";
 	matching: "fuzzy";
-	theme: "solarized_alternate";
 	kb-accept-entry: "Ctrl+m,Return";
 	kb-mode-next: "Ctrl+Tab,XF86AudioMute";
 	kb-cancel: "Ctrl+c,Ctrl+bracketleft,Escape";
 }
+@theme "solarized_alternate"
