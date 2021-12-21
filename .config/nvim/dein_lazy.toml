@@ -146,22 +146,19 @@ let g:miniyank_maxitems = 100
 repo = 'ggandor/lightspeed.nvim'
 on_event = 'VimEnter'
 hook_source = '''
-lua << EOF
-require'lightspeed'.setup {
-    jump_to_first_match = true,
-    limit_ft_matches = 100,
-    jump_on_partial_input_safety_timeout = 5000,
-    exit_after_idle_msecs = { labeled = nil, unlabeled = nil },
-    cycle_group_fwd_key = '<Tab>',
-    labels = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
-              "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
-              "u", "v", "w", "x", "y", "z", "z", ".", "'", "/"}
-}
-EOF
+lua require('plugins.lightspeed')
+nmap <C-j> <plug>Lightspeed_s
+nmap <C-k> <plug>Lightspeed_S
+vmap <C-j> <plug>Lightspeed_s
+vmap <C-k> <plug>Lightspeed_S
 autocmd User LightspeedSxEnter nmap ; <Plug>Lightspeed_;_sx
 autocmd User LightspeedSxEnter nmap , <Plug>Lightspeed_,_sx
 autocmd User LightspeedFtEnter nmap ; <Plug>Lightspeed_;_ft
 autocmd User LightspeedFtEnter nmap , <Plug>Lightspeed_,_ft
+autocmd User LightspeedSxEnter xmap ; <Plug>Lightspeed_;_sx
+autocmd User LightspeedSxEnter xmap , <Plug>Lightspeed_,_sx
+autocmd User LightspeedFtEnter xmap ; <Plug>Lightspeed_;_ft
+autocmd User LightspeedFtEnter xmap , <Plug>Lightspeed_,_ft
 '''
 
 [[plugins]]
