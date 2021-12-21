@@ -117,8 +117,8 @@ M.default = function(client, bufnr)
   vim.cmd [[
     augroup LspDefaults
       autocmd!
-      autocmd CursorHold <buffer> lua vim.lsp.diagnostic.show_position_diagnostics({ focusable = false })
-      autocmd CursorHoldI <buffer> silent! lua vim.lsp.buf.signature_help({ focusable = false, silent = true})
+      autocmd CursorHold <buffer> lua vim.diagnostic.open_float(0, { scope = 'cursor',  focusable = false })
+      autocmd CursorHoldI <buffer> silent! lua vim.lsp.buf.signature_help()
     augroup END
     ]]
   if not vim.g.auto_format_disabled then
@@ -141,15 +141,15 @@ M.default = function(client, bufnr)
     vim.cmd [[
       augroup LspHighlight
         autocmd!
-        autocmd CursorHold  * lua vim.lsp.buf.document_highlight()
-        autocmd CursorHoldI * lua vim.lsp.buf.document_highlight()
-        autocmd CursorMoved * lua vim.lsp.buf.clear_references()
+        autocmd CursorHold  <buffer> lua vim.lsp.buf.document_highlight()
+        autocmd CursorHoldI <buffer> lua vim.lsp.buf.document_highlight()
+        autocmd CursorMoved <buffer> lua vim.lsp.buf.clear_references()
       augroup END
     ]]
   end
 
-  vim.lsp.handlers["textDocument/hover"] =  vim.lsp.with(vim.lsp.handlers.hover, {})
-  vim.lsp.handlers["textDocument/signatureHelp"] =  vim.lsp.with(vim.lsp.handlers.signature_help, {})
+  vim.lsp.handlers["textDocument/hover"] =  vim.lsp.with(vim.lsp.handlers.hover, { border = "none" })
+  vim.lsp.handlers["textDocument/signatureHelp"] =  vim.lsp.with(vim.lsp.handlers.signature_help, win_sytle)
 
   -- diagnostic settings
   local signs = { Error = " ", Warn = " ", Hint = " ", Info = " " }
