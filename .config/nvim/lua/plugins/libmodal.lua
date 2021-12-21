@@ -33,13 +33,17 @@ local function generateEndKeymap(layer, func, ignore)
     'a','b','c','d','e','f','g','h','i',
     'j','k','l','m','n','o','p','q','r',
     's','t','u','v','w','x','y','z',';',
-    ':',',','/',''
+    ':',',','/','', ' '
   }
   if ignore then
     keys = ignoreList(keys, ignore)
   end
   for _, key in pairs(keys) do
-    layer:map( 'n', key, ':lua ' .. func .. '()<CR>' .. key, {['noremap'] = true, ['silent']  = true})
+    if key == '' then
+      layer:map( 'n', key, ':lua ' .. func .. '()<CR>', {['noremap'] = true, ['silent']  = true})
+    else
+      layer:map( 'n', key, ':lua ' .. func .. '()<CR>:call feedkeys("' .. key .. '")<CR>', {['noremap'] = true, ['silent']  = true})
+    end
   end
 end
 
@@ -268,24 +272,6 @@ vim.api.nvim_set_keymap('n', 'P', '<Plug>(miniyank-autoPut):lua ' .. startFunc .
 -- Modes
 --
 
-local function isEnterkey(input, ignore)
-  local keys = {
-    'a','b','c','d','e','f','g','h','i',
-    'j','k','l','m','n','o','p','q','r',
-    's','t','u','v','w','x','y','z',';',
-    ':',',','/',''
-  }
-  if ignore then
-    keys = ignoreList(keys, ignore)
-  end
-  for _, key in pairs(keys) do
-    if key == input then
-      return true
-    end
-  end
-  return false
-end
-
 _G.LibmodalMarkId = nil
 local function set_extmark()
   if LibmodalMarkId then
@@ -314,7 +300,7 @@ function BufferMode()
   elseif userInput == '[' then
     vim.api.nvim_command("bprev")
     set_extmark()
-  elseif isEnterkey(userInput) then
+  else
     vim.api.nvim_set_var('bufferModeExit', true)
     vim.api.nvim_eval("matchdelete(".. LibmodalMarkId .. ")")
     LibmodalMarkId = nil
@@ -341,7 +327,7 @@ function QuickFixMode()
   elseif userInput == '[' then
     vim.api.nvim_command("call qutefinger#prev()")
     set_extmark()
-  elseif isEnterkey(userInput) then
+  else
     vim.api.nvim_set_var('quickfixModeExit', true)
     vim.api.nvim_eval("matchdelete(".. LibmodalMarkId .. ")")
     LibmodalMarkId = nil

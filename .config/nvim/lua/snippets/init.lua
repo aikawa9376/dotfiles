@@ -27,11 +27,13 @@ ls.config.set_config({
       },
     },
   },
+  delete_check_events = "TextChanged",
+  region_check_events = "InsertEnter",
+  enable_autosnippets = true,
   -- treesitter-hl has 100, use something higher (default is 200).
   ext_base_prio = 300,
   -- minimal increase in priority.
   ext_prio_increase = 1,
-  enable_autosnippets = true,
 })
 
 -- args is a table, where 1 is the text in Placeholder 1, 2 the text in
