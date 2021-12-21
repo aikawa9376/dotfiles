@@ -112,11 +112,11 @@ loadlib $ZCONFDIR/history/substring.zsh
 # -------------------------------------
 # fzf
 # -------------------------------------
-export FZF_DEFAULT_COMMAND='(fd --type file --follow --hidden --color=always --exclude .git) 2> /dev/null'
+export FZF_DEFAULT_COMMAND='(fd --strip-cwd-prefix --type file --follow --hidden --color=always --exclude .git) 2> /dev/null'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_CTRL_T_OPTS="--ansi $FZF_DEFAULT_PREVIEW"
 export FZF_CTRL_R_OPTS='--preview-window hidden --tiebreak index -s'
-export FZF_ALT_C_COMMAND='fd --type directory --follow --hidden --color=always --exclude .git'
+export FZF_ALT_C_COMMAND='fd --strip-cwd-prefix --type directory --follow --hidden --color=always --exclude .git'
 export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_PREVIEW='--preview "
 [[ -d {} ]]  &&

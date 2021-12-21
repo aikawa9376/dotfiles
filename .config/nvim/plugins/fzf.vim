@@ -30,6 +30,7 @@ nnoremap <silent> <C-]>         m':call fzf#vim#tags(expand('<cword>'))<CR>
 nnoremap <silent> <expr>        <Leader>] "m':Rg(" . expand("<cword>") . ")<CR>"
 nnoremap <silent> q: :History:<CR>
 nnoremap <silent> q/ :History/<CR>
+nnoremap <silent> s<Space>      m`:NavBuffers<CR>
 
 imap <c-j>p <plug>(fzf-complete-path)
 imap <c-j>l <plug>(fzf-complete-line)
@@ -108,7 +109,7 @@ endfunction
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_files_sink'),
-  \  'source': 'fd --follow --hidden --exclude .git --type f --print0 ' .
+  \  'source': 'fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 ' .
   \            '-E .git -E ''*.psd'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf'' ' .
   \            '-E ''*.ai'' -E ''*.jfif'' -E ''*.jpeg'' -E ''*.gif'' ' .
   \            '-E ''*.eps'' -E ''*.svg'' -E ''*.JPEG'' -E ''*.mp4'' ' .
@@ -117,7 +118,7 @@ command! -bang -nargs=? -complete=dir Files
   \             '--expect ctrl-x,ctrl-v,ctrl-q'}))
 
 command! AllFiles call fzf#run({
-  \  'source': 'fd -I --type file --follow --hidden --color=always --exclude .git',
+  \  'source': 'fd --strip-cwd-prefix -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
   \  'options': "-m -x --ansi --no-unicode" .
   \             ' --no-unicode --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
@@ -347,7 +348,7 @@ imap <expr> <C-_> fzf#complete({
 
 function! s:dir_file_completion(word)
   " return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | tr '/' '\n' | sort | uniq")
-  return  systemlist("fd --follow --hidden --color=always --exclude .git '^" . a:word . "' | sort | uniq")
+  return  systemlist("fd --strip-cwd-prefix --follow --hidden --color=always --exclude .git '^" . a:word . "' | sort | uniq")
 endfunction
 
 function! s:dir_file_sink(lines)

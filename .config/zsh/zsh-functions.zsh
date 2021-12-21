@@ -97,7 +97,7 @@ zmenu() {
 fzf-picture-preview() {
   local selected
   if selected=$(
-    fd --follow --hidden --exclude .git --type f --print0 . |
+    fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . |
     xargs -0 exa -1 -sold --color=always 2> /dev/null |
     $HOME/.config/zsh/ueberzogen/fzf-preview.sh | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
@@ -188,11 +188,11 @@ rvim () {
 fvim() {
   if [[ $@ == '-a' ]]; then
     files=$( \
-    fd -I --follow --hidden --exclude .git --type f --print0 . | \
+    fd --strip-cwd-prefix -I --follow --hidden --exclude .git --type f --print0 . | \
     xargs -0 exa -1 -sold --color=always 2> /dev/null) &&
   else
     files=$( \
-    fd --follow --hidden --exclude .git --type f --print0 . | \
+    fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . | \
     xargs -0 exa -1 -sold --color=always 2> /dev/null) &&
   fi
   # wraped function timg and bat?
@@ -383,7 +383,7 @@ dig_dir() {
     local cmd q k res
     sort="created"
     while cmd="$(
-          fd --type d --follow --hidden --color=always --exclude .git \
+          fd --strip-cwd-prefix --type d --follow --hidden --color=always --exclude .git \
           | fzf --ansi --query="$q" --exit-0 \
           --bind 'alt-c:execute(echo {} | xclip -selection c)' \
           --print-query --expect=ctrl-j,ctrl-b,ctrl-g,ctrl-d \
