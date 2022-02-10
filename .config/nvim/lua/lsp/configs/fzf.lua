@@ -185,16 +185,16 @@ local function location_handler(err, locations, ctx, _, error_message)
 
   if vim.tbl_islist(locations) then
     if #locations == 1 then
-      vim.lsp.util.jump_to_location(locations[1])
+      vim.lsp.util.jump_to_location(locations[1], 'utf-8')
 
       return
     end
   else
-    vim.lsp.util.jump_to_location(locations)
+    vim.lsp.util.jump_to_location(locations, 'utf-8')
   end
 
   return lines_from_locations(
-    vim.lsp.util.locations_to_items(locations, ctx.bufnr), true
+    vim.lsp.util.locations_to_items(locations, 'utf-8'), true
   )
 end
 -- }}}
@@ -404,7 +404,7 @@ local function references_handler(bang, err, result, ctx, _)
   end
 
   local lines = lines_from_locations(
-    vim.lsp.util.locations_to_items(result, ctx.bufnr), true
+    vim.lsp.util.locations_to_items(result, 'utf-8'), true
   )
   fzf_locations(bang, "", "References", lines, false)
 end

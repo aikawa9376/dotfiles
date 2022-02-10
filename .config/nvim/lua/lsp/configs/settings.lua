@@ -45,17 +45,6 @@ M.configs = {
       }
     },
     on_attach =  function(client, bufnr)
-      require('rust-tools.config').setup()
-      vim.cmd "command! RustSetInlayHints :lua require('rust-tools.inlay_hints').set_inlay_hints()"
-      vim.cmd "command! RustDisableInlayHints :lua require('rust-tools.inlay_hints').disable_inlay_hints()"
-      vim.cmd "command! RustToggleInlayHints :lua require('rust-tools.inlay_hints').toggle_inlay_hints()"
-      vim.cmd "command! RustExpandMacro :lua require('rust-tools.expand_macro').expand_macro()"
-      vim.cmd "command! RustJoinLines :lua require('rust-tools.join_lines').join_lines()"
-      vim.cmd "command! RustHoverActions :lua require('rust-tools.hover_actions').hover_actions()"
-      vim.cmd "command! RustMoveItemDown :lua require('rust-tools.move_item').move_item()"
-      vim.cmd "command! RustMoveItemUp :lua require('rust-tools.move_item').move_item(true)"
-      vim.cmd "command! RustOpenCargo :lua require('rust-tools.open_cargo_toml').open_cargo_toml()"
-      vim.cmd "command! RustRunnables :lua require('rust-tools.runnables').runnables()"
       M.default(client, bufnr)
     end,
   },
@@ -117,8 +106,7 @@ M.default = function(client, bufnr)
   vim.cmd [[
     augroup LspDefaults
       autocmd!
-      autocmd CursorHold <buffer> lua vim.diagnostic.open_float(0, { scope = 'cursor',  focusable = false })
-      autocmd CursorHoldI <buffer> silent! lua vim.lsp.buf.signature_help()
+      autocmd CursorHold <buffer> lua vim.diagnostic.open_float({ scope = 'cursor',  focusable = false })
     augroup END
     ]]
   if not vim.g.auto_format_disabled then
@@ -138,14 +126,7 @@ M.default = function(client, bufnr)
     ]]
   end
   if client.resolved_capabilities.document_highlight then
-    vim.cmd [[
-      augroup LspHighlight
-        autocmd!
-        autocmd CursorHold  <buffer> lua vim.lsp.buf.document_highlight()
-        autocmd CursorHoldI <buffer> lua vim.lsp.buf.document_highlight()
-        autocmd CursorMoved <buffer> lua vim.lsp.buf.clear_references()
-      augroup END
-    ]]
+    require 'illuminate'.on_attach(client)
   end
 
   vim.lsp.handlers["textDocument/hover"] =  vim.lsp.with(vim.lsp.handlers.hover, { border = "none" })
@@ -168,6 +149,14 @@ M.default = function(client, bufnr)
   )
   require('lsp.configs.fzf').setup()
   require('lsp.configs.codeaction').setup()
+
+  require "lsp_signature".on_attach({
+    bind = true, -- This is mandatory, otherwise border config won't get registered.
+    hint_enable = false,
+    handler_opts = {
+      border = "none"
+    }
+  }, bufnr)
 
   -- show capabilities
   -- require('lsp.utils').get_capabilities()

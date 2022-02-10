@@ -53,7 +53,7 @@ local function float_ui_select(items, opts, on_choice)
   vim.api.nvim_win_set_option(win, 'winhighlight', 'Normal:NormalFloat')
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, title)
   vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', string.format(fmt, win), {silent=true})
-  vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(win, true)<CR>' , {silent=true})
+  vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(' .. win .. ', true)<CR>' , {silent=true})
   vim.api.nvim_buf_set_keymap(buf, 'n', '<C-n>', '<DOWN>' , {silent=true})
   vim.api.nvim_buf_set_keymap(buf, 'n', '<C-p>', '<UP>' , {silent=true})
 end

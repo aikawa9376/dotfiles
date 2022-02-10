@@ -29,14 +29,6 @@ require'nvim-treesitter.configs'.setup {
         ["if"] = "@function.inner",
         ["aC"] = "@class.outer",
         ["iC"] = "@class.inner",
-
-        -- Or you can define your own textobjects like this
-        ["iF"] = {
-          python = "(function_definition) @function",
-          cpp = "(function_definition) @function",
-          c = "(function_definition) @function",
-          java = "(method_declaration) @function",
-        },
       },
     },
   },
@@ -59,7 +51,10 @@ require'nvim-treesitter.configs'.setup {
   },
   autotag = {
     enable = true,
-  }
+  },
+  yati = {
+    enable = true
+  },
 }
 
 local parser_config = require "nvim-treesitter.parsers".get_parser_configs()

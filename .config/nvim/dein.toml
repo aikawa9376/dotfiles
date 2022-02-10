@@ -16,9 +16,6 @@ endfunction
 [[plugins]]
 repo = 'farmergreg/vim-lastplace'
 
-[[plugins]]
-repo = 'nathom/filetype.nvim'
-
 # design---------------------------------
 [[plugins]]
 repo = 'ryanoasis/vim-devicons'
@@ -35,6 +32,9 @@ set termguicolors
 set background=dark
 set t_8f=^[[38;2;%lu;%lu;%lum
 set t_8b=^[[48;2;%lu;%lu;%lum
+
+autocmd FocusGained * hi Normal ctermbg=None guibg=#002b36
+autocmd FocusLost   * hi Normal ctermbg=None guibg=None
 
 autocmd MyAutoCmd ColorScheme * highlight Normal            ctermbg=None guibg=None
 autocmd MyAutoCmd ColorScheme * highlight NormalFloat       ctermbg=None guibg=#002b36
@@ -103,6 +103,8 @@ autocmd MyAutoCmd ColorScheme * hi LspCodeLensSeparator  guifg=#586e75
 
 autocmd MyAutoCmd ColorScheme * hi WilderPoppupMenuAccent        guisp=#87afff
 autocmd MyAutoCmd ColorScheme * hi WilderPopupMenuSelectedAccent guisp=#87afff
+
+autocmd MyAutoCmd ColorScheme * hi FidgetTask            guifg=#586e75
 
 autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineError cterm=undercurl gui=undercurl guisp=#ec5f67
 autocmd MyAutoCmd ColorScheme * hi DiagnosticUnderlineWarn  cterm=undercurl gui=undercurl guisp=#ECBE7B

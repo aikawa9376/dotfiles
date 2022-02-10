@@ -33,6 +33,7 @@ cmp.setup {
         cmp_tabnine = "[T]",
         nvim_lua = "[Lu]",
         tmux = "[M]",
+        copilot = "[C]",
       })[entry.source.name]
       return vim_item
     end,
@@ -57,6 +58,10 @@ cmp.setup {
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Down>', true, true, true), 'n')
       end
     end,
+    ['<C-e>'] = function ()
+      cmp.abort()
+      vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<C-o>$<C-g>U<Right>', true, true, true), 'n')
+    end,
     ['<M-d>'] = cmp.mapping.scroll_docs(-4),
     ['<M-u>'] = cmp.mapping.scroll_docs(4),
     ['<CR>'] = cmp.mapping.close(),
@@ -79,6 +84,7 @@ cmp.setup {
   sources = {
     { name = 'nvim_lsp' },
     { name = 'luasnip' },
+    { name = 'copilot' },
     { name = 'cmp_tabnine' },
     { name = 'path' },
     { name = 'tmux',

@@ -2,8 +2,6 @@
 -- Author: shadmansaleh
 -- Credit: glepnir
 local lualine = require 'lualine'
-local lsp_status = require('lsp-status')
-lsp_status.register_progress()
 
 -- Color table for highlights
 local colors = {
@@ -268,34 +266,6 @@ ins_right {
       end
     end
     return msg
-  end,
-  condition = conditions.hide_in_width,
-}
-
-ins_right {
-  function()
-    spinner_frames = {'⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷'}
-    message = lsp_status.messages()[1]
-    local resutl = ''
-    if not message then
-      return ''
-    end
-    if message.name then
-      result = '[' .. vim.lsp.get_client_by_id(message.name).name .. ']'
-    end
-    if message.spinner then
-      result = result .. spinner_frames[(message.spinner % #spinner_frames) + 1]
-    end
-    if message.title then
-      result = result .. ' ' .. message.title
-    end
-    if message.message then
-      result = result .. ' ' .. message.message
-    end
-    if message.percentage then
-      result = result .. '(' .. message.percentage .. '%%)'
-    end
-    return result
   end,
   condition = conditions.hide_in_width,
 }

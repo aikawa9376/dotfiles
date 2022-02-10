@@ -21,7 +21,7 @@ function M.rename()
 
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, {cword})
   vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', string.format(fmt, win), {silent=true})
-  vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(win, true)<CR>' , {silent=true})
+  vim.api.nvim_buf_set_keymap(buf, 'n', '<ESC>', ':lua vim.api.nvim_win_close(' .. win .. ', true)<CR>' , {silent=true})
   vim.api.nvim_win_set_cursor(win, {1, #cword})
 end
 

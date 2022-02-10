@@ -53,5 +53,5 @@ require('Comment').setup{
   post_hook = nil,
 }
 
-vim.api.nvim_set_keymap('x', '<C-_>', '<ESC><CMD>lua require("Comment.api").gc(vim.fn.visualmode())<CR>', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('x', '<space><C-_>', '<ESC><CMD>lua require("Comment.api").gb(vim.fn.visualmode())<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('x', '<C-_>', '<ESC><CMD>lua require("Comment.api").toggle_linewise_op(vim.fn.visualmode())<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('x', '<space><C-_>', '<ESC><CMD>lua require("Comment.api").toggle_blockwise_op(vim.fn.visualmode())<CR>', { noremap = true, silent = true })

@@ -102,8 +102,8 @@ local hitoryMoveLayer = libmodal.Layer.new({
       ['noremap'] = true,
       ['silent'] = true,
     }
-  }
-})
+      }
+  })
 prefix = 'Hitory'
 _G[startFunc..prefix], _G[exitFunc..prefix] = generateFunc(hitoryMoveLayer)
 generateEndKeymap(hitoryMoveLayer, exitFunc..prefix, {';', ','})
@@ -255,6 +255,11 @@ local yankMoveLayer = libmodal.Layer.new({
       ['noremap'] = true,
       ['silent'] = true,
     },
+    ['<C-t>'] = {
+      ['rhs'] = ':call myutil#yank_text_toggle()<CR>',
+      ['noremap'] = true,
+      ['silent'] = true,
+    },
     ['<C-f>'] = {
       ['rhs'] = '=`]^',
       ['noremap'] = true,
@@ -265,8 +270,8 @@ local yankMoveLayer = libmodal.Layer.new({
 prefix = 'Yank'
 _G[startFunc..prefix], _G[exitFunc..prefix] = generateFunc(yankMoveLayer)
 generateEndKeymap(yankMoveLayer, exitFunc..prefix)
-vim.api.nvim_set_keymap('n', 'p', '<Plug>(miniyank-autoput):lua ' .. startFunc .. prefix .. '()<CR>', {})
-vim.api.nvim_set_keymap('n', 'P', '<Plug>(miniyank-autoPut):lua ' .. startFunc .. prefix .. '()<CR>', {})
+vim.api.nvim_set_keymap('n', 'p', '<Plug>(miniyank-autoput):lua ' .. startFunc .. prefix .. '()<CR>', { silent = true })
+vim.api.nvim_set_keymap('n', 'P', '<Plug>(miniyank-autoPut):lua ' .. startFunc .. prefix .. '()<CR>', { silent = true })
 
 --
 -- Modes
@@ -310,9 +315,9 @@ end
 
 -- Enter the mode.
 vim.api.nvim_set_keymap('n', ']b',
-  ':bnext<CR>:lua set_extmark_and_modal_var("buffer")<CR>:lua require("libmodal").mode.enter("Buffer", BufferMode, true)<CR>', {})
+  ':bnext<CR>:lua set_extmark_and_modal_var("buffer")<CR>:lua require("libmodal").mode.enter("Buffer", BufferMode, true)<CR>', { silent = true })
 vim.api.nvim_set_keymap('n', '[b',
-  ':bprev<CR>:lua set_extmark_and_modal_var("buffer")<CR>:lua require("libmodal").mode.enter("Buffer", BufferMode, true)<CR>', {})
+  ':bprev<CR>:lua set_extmark_and_modal_var("buffer")<CR>:lua require("libmodal").mode.enter("Buffer", BufferMode, true)<CR>', { silent = true })
 
 function QuickFixMode()
   -- Append to the input history, the latest button press.
@@ -337,6 +342,6 @@ end
 
 -- Enter the mode.
 vim.api.nvim_set_keymap('n', ']q',
-  ':call qutefinger#next()<CR>:lua set_extmark_and_modal_var("quickfix")<CR>:lua require("libmodal").mode.enter("QuickFix", QuickFixMode, true)<CR>', {})
+  ':call qutefinger#next()<CR>:lua set_extmark_and_modal_var("quickfix")<CR>:lua require("libmodal").mode.enter("QuickFix", QuickFixMode, true)<CR>', { silent = true })
 vim.api.nvim_set_keymap('n', '[q',
-  ':call qutefinger#prev()<CR>:lua set_extmark_and_modal_var("quickfix")<CR>:lua require("libmodal").mode.enter("QuickFix", QuickFixMode, true)<CR>', {})
+  ':call qutefinger#prev()<CR>:lua set_extmark_and_modal_var("quickfix")<CR>:lua require("libmodal").mode.enter("QuickFix", QuickFixMode, true)<CR>', { silent = true })
