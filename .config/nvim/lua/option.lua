@@ -1,7 +1,7 @@
 local opt = vim.o
 
-opt.fillchars = opt.fillchars .. 'vert: ,diff:╱'
-opt.encoding='utf-8'
+opt.fillchars = opt.fillchars .. 'horiz: ,horizup: ,horizdown: ,vertleft: ,vertright: ,vert: ,diff:╱'
+opt.encoding = 'utf-8'
 opt.number = true
 opt.backspace = 'indent,eol,start'
 opt.fileformats = 'unix,dos,mac'
@@ -12,7 +12,7 @@ opt.cursorline = true
 opt.list = true
 opt.undofile = true
 opt.undodir = vim.env.XDG_CACHE_HOME .. '/nvim/undo/'
-opt.listchars='tab:»-,extends:»,precedes:«,nbsp:%,trail:-'
+opt.listchars = 'tab:»-,extends:»,precedes:«,nbsp:%,trail:-'
 opt.splitright = true
 opt.splitbelow = true
 opt.updatetime = 100
@@ -43,6 +43,7 @@ opt.expandtab = true
 opt.tabstop = 2
 opt.shiftwidth = 2
 opt.softtabstop = 2
+opt.laststatus = 3
 opt.autoindent = true
 opt.smartindent = true
 opt.wildmenu = true
@@ -51,6 +52,7 @@ opt.wildoptions = opt.wildoptions .. ',pum'
 opt.pumblend = 10
 opt.winblend = 10
 opt.pumheight = 20
+opt.cmdheight = 0
 -- opt.shellslash = true
 
 vim.api.nvim_set_var('do_filetype_lua', 1)

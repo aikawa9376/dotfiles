@@ -14,7 +14,10 @@ endfunction
 '''
 
 [[plugins]]
-repo = 'farmergreg/vim-lastplace'
+repo = 'ethanholz/nvim-lastplace'
+hook_add = '''
+lua require'nvim-lastplace'.setup{}
+'''
 
 # design---------------------------------
 [[plugins]]

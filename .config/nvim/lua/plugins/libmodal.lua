@@ -110,40 +110,6 @@ generateEndKeymap(hitoryMoveLayer, exitFunc..prefix, {';', ','})
 vim.api.nvim_set_keymap('n', 'g;', 'g;:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', 'g,', 'g,:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
 
--- win_move
-local windowMoveLayer = libmodal.Layer.new({
-  ['n'] = {
-    ['+'] = {
-      ['rhs'] = '<C-w>+',
-      ['noremap'] = true,
-      ['silent'] = true,
-    },
-    ['-'] = {
-      ['rhs'] = '<C-w>-',
-      ['noremap'] = true,
-      ['silent'] = true,
-    },
-    ['>'] = {
-      ['rhs'] = '<C-w>>',
-      ['noremap'] = true,
-      ['silent'] = true,
-    },
-    ['<'] = {
-      ['rhs'] = '<C-w><',
-      ['noremap'] = true,
-      ['silent'] = true,
-    },
-  }
-})
-prefix = 'Window'
-_G[startFunc..prefix], _G[exitFunc..prefix] = generateFunc(windowMoveLayer)
-generateEndKeymap(windowMoveLayer, exitFunc..prefix)
-vim.api.nvim_set_keymap('n', '<C-w>+', '<C-w>+:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('n', '<C-w>-', '<C-w>-:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
-
-vim.api.nvim_set_keymap('n', '<C-w>>', '<C-w>>:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('n', '<C-w><', '<C-w><:lua ' .. startFunc .. prefix .. '()<CR>', { noremap = true, silent = true })
-
 -- chunk_move
 local chunkMoveLayer = libmodal.Layer.new({
   ['n'] = {

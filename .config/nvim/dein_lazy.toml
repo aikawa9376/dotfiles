@@ -10,18 +10,39 @@ hook_source = '''
 lua require'lsp'
 '''
 
+# [[plugins]]
+# repo = 'jose-elias-alvarez/null-ls.nvim'
+# on_event = 'VimEnter'
+# hook_source = '''
+# lua << EOF
+# require("null-ls").setup({
+#   debug = true,
+#   sources = {
+#     require("null-ls").builtins.formatting.prettier,
+#   },
+# })
+# EOF
+# '''
+
 [[plugins]]
 repo = 'nvim-lua/plenary.nvim'
 depends = ['nvim-lsp-ts-utils', 'rust-tools.nvim']
 on_event = ['VimEnter']
 
 [[plugins]]
+repo = 'stevearc/dressing.nvim'
+on_event = 'VimEnter'
+hook_source = '''
+lua require'plugins.dressing'
+'''
+
+[[plugins]]
 repo = 'hrsh7th/nvim-cmp'
 on_event = 'VimEnter'
 depends  = [
-  'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer',
+  'cmp-nvim-lsp', 'LuaSnip', 'cmp-buffer', 'cmp-rg',
   'cmp_luasnip', 'friendly-snippets', 'cmp-path',
-  'cmp-tabnine', 'cmp-tmux', 'lspkind-nvim', 'cmp-copilot'
+  'cmp-tabnine', 'cmp-tmux', 'lspkind-nvim'
 ]
 hook_source = '''
 lua require'plugins.nvim-cmp'
@@ -39,8 +60,27 @@ repo = 'hrsh7th/cmp-path'
 [[plugins]]
 repo = 'andersevenrud/cmp-tmux'
 
-[[plugins]]
-repo = 'hrsh7th/cmp-copilot'
+# [[plugins]]
+# repo = 'Maan2003/lsp_lines.nvim'
+# on_event = 'VimEnter'
+# hook_source = '''
+# lua require("lsp_lines").register_lsp_virtual_lines()
+# '''
+
+# [[plugins]]
+# repo = 'zbirenbaum/copilot-cmp'
+#
+# [[plugins]]
+# repo = 'zbirenbaum/copilot.lua'
+# depends = ['copilot-cmp']
+# on_event = 'InsertEnter'
+# hook_source = '''
+# lua << EOF
+# vim.schedule(function() require("copilot").setup({
+# plugin_manager_path = '/home/aikawa/.cache/dein/repos/github.com/zbirenbaum'
+# }) end)
+# EOF
+# '''
 
 [[plugins]]
 repo = 'tzachar/cmp-tabnine'
@@ -48,6 +88,9 @@ build = './install.sh'
 
 [[plugins]]
 repo = 'saadparwaiz1/cmp_luasnip'
+
+[[plugins]]
+repo = 'lukas-reineke/cmp-rg'
 
 [[plugins]]
 repo = 'L3MON4D3/LuaSnip'
@@ -80,7 +123,7 @@ repo = 'RRethy/vim-illuminate'
 on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'aikawa9376/fidget.nvim'
+repo = 'j-hui/fidget.nvim'
 on_event = 'VimEnter'
 hook_source = '''
 lua << EOF
@@ -96,15 +139,12 @@ EOF
 '''
 
 [[plugins]]
-repo = 'ray-x/lsp_signature.nvim'
+repo = 'lukas-reineke/lsp-format.nvim'
 on_event = 'VimEnter'
 
 [[plugins]]
-repo = 'github/copilot.vim'
+repo = 'ray-x/lsp_signature.nvim'
 on_event = 'VimEnter'
-hook_add = '''
-let g:copilot_no_tab_map = v:true
-'''
 
 # text-----------------------------------
 
@@ -117,7 +157,11 @@ lua require'trim'.setup({disable = {}})
 
 [[plugins]]
 repo = 'mattn/emmet-vim'
-on_ft = ['html', 'php', 'jst', 'twig', 'phtml', 'javascript', 'css', 'scss']
+on_ft = [
+  'html', 'php', 'jst', 'twig',
+  'phtml', 'javascript', 'css', 'scss',
+  'typescriptreact', 'javascriptreact'
+]
 hook_add = '''
 let g:user_emmet_install_global        =  0
 let g:user_emmet_mode                  = 'iv'
@@ -137,7 +181,7 @@ let g:user_emmet_anchorizesummary_key  = '<M-e>A'
 let g:user_emmet_mergelines_key        = '<M-e>m'
 let g:user_emmet_codepretty_key        = '<M-e>c'
 let g:user_emmet_imageencode_key       = '<M-e>I'
-autocmd MyAutoCmd FileType phtml,html,php,blade,css,scss,twig EmmetInstall
+autocmd MyAutoCmd FileType phtml,html,php,blade,css,scss,twig,typescriptreact,javascriptreact EmmetInstall
 '''
 
 [[plugins]]
@@ -152,6 +196,7 @@ let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
 repo = 'cohama/lexima.vim'
 on_event = 'InsertEnter'
 hook_add  =  '''
+let g:lexima_map_escape = ''
 let g:lexima_no_default_rules = 1
 '''
 hook_post_source = '''
@@ -221,12 +266,12 @@ hook_source = '''
 lua require'hop'.setup()
 nmap s <Nop>
 xmap s <Nop>
-nnoremap <silent>sj :HopWordAC<CR>
-nnoremap <silent>sk :HopWordBC<CR>
-nnoremap <silent>sl :HopLineStart<CR>
-nnoremap <silent>sf :HopChar1AC<CR>
-nnoremap <silent>sF :HopChar1BC<CR>
-nnoremap <silent>ss :HopChar2<CR>
+nnoremap <silent>sj <cmd>HopWordAC<CR>
+nnoremap <silent>sk <cmd>HopWordBC<CR>
+nnoremap <silent>sl <cmd>HopLineStart<CR>
+nnoremap <silent>sf <cmd>HopChar1AC<CR>
+nnoremap <silent>sF <cmd>HopChar1BC<CR>
+nnoremap <silent>ss <cmd>HopChar2<CR>
 '''
 
 [[plugins]]
@@ -415,12 +460,51 @@ xmap <Leader>to mv<Plug>(operator-sort)
 '''
 
 [[plugins]]
-repo = 'aikawa9376/nvim-libmodal'
-rev = 'layer-hold'
+repo = 'kana/vim-submode'
 on_event = 'VimEnter'
 hook_source = '''
-let g:libmodalTimeouts = 1
-lua require'plugins.libmodal'
+" set lazydrawでカーソルが飛ぶ
+let g:submode_timeoutlen = 5000
+let g:submode_keep_leaving_key = 1
+call submode#enter_with('history', 'n', '', 'g;', 'g;')
+call submode#enter_with('history', 'n', '', 'g,', 'g,')
+call submode#map('history', 'n', '', ';', 'g;')
+call submode#map('history', 'n', '', ',', 'g,')
+call submode#enter_with('searchExD', 'n', '', ']n', 'ngn<Esc>')
+call submode#enter_with('searchExU', 'n', '', '[n', 'Ngn<Esc>')
+call submode#map('searchExD', 'n', '', 'n', 'ngn<Esc>')
+call submode#map('searchExU', 'n', '', 'n', 'NNgn<Esc>')
+call submode#enter_with('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
+call submode#map('block_move', 'n', 'r', '<M-]>', '<Plug>(matchup-z%)')
+call submode#map('block_move', 'n', '', '<M-[>', '<C-o>')
+call submode#enter_with('mini_yank', 'nx', 'r', 'p', '<Plug>(miniyank-autoput)')
+call submode#enter_with('mini_yank', 'nx', 'r', 'P', '<Plug>(miniyank-autoPut)')
+call submode#map('mini_yank', 'nx', 'r', '<C-p>', '<Plug>(miniyank-cycle)')
+call submode#map('mini_yank', 'nx', 'r', '<C-n>', '<Plug>(miniyank-cycleback)')
+call submode#map('mini_yank', 'nx', 'r', '<C-w>', '<Plug>(miniyank-tochar)')
+call submode#map('mini_yank', 'nx', 'r', '<C-l>', '<Plug>(miniyank-toline)')
+call submode#map('mini_yank', 'nx', 'r', '<C-b>', '<Plug>(miniyank-toblock)')
+call submode#map('mini_yank', 'n', '', '<C-f>', '=`]^')
+call submode#enter_with('functionbrace', 'n', '', ']]', ']]')
+call submode#enter_with('functionbrace', 'n', '', '[[', '[[')
+call submode#map('functionbrace', 'n', '', ']', ']]')
+call submode#map('functionbrace', 'n', '', '[', '[[')
+call submode#enter_with('bufbrace', 'n', 's', ']b', 'mz<cmd>bnext<CR>')
+call submode#enter_with('bufbrace', 'n', 's', '[b', 'mz<cmd>bpreviou<CR>')
+call submode#map('bufbrace', 'n', 's', ']', '<cmd>bnext<CR>')
+call submode#map('bufbrace', 'n', 's', '[', '<cmd>bpreviou<CR>')
+call submode#enter_with('chunkbrace', 'n', 's', ']c', '<cmd>GitGutterNextHunk<CR>')
+call submode#enter_with('chunkbrace', 'n', 's', '[c', '<cmd>GitGutterPrevHunk<CR>')
+call submode#map('chunkbrace', 'n', 's', ']', '<cmd>GitGutterNextHunk<CR>')
+call submode#map('chunkbrace', 'n', 's', '[', '<cmd>GitGutterPrevHunk<CR>')
+call submode#enter_with('quickbrace', 'n', 'r', ']q', '<Plug>(qutefinger-next)')
+call submode#enter_with('quickbrace', 'n', 'r', '[q', '<Plug>(qutefinger-prev)')
+call submode#map('quickbrace', 'n', 'r', ']', '<Plug>(qutefinger-next)')
+call submode#map('quickbrace', 'n', 'r', '[', '<Plug>(qutefinger-prev)')
+call submode#enter_with('linterbrace', 'n', 's', '[a', "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>")
+call submode#enter_with('linterbrace', 'n', 's', ']a', "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>")
+call submode#map('linterbrace', 'n', 's', '[', "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>")
+call submode#map('linterbrace', 'n', 's', ']', "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>")
 '''
 
 [[plugins]]
@@ -508,8 +592,8 @@ on_cmd = ['SplitjoinJoin', 'SplitjoinSplit']
 hook_add = '''
 let g:splitjoin_split_mapping = ''
 let g:splitjoin_join_mapping = ''
-nmap <plug>(my-switch)j :SplitjoinJoin<cr>
-nmap <plug>(my-switch)J :SplitjoinSplit<cr>
+nmap <plug>(my-switch)j <cmd>SplitjoinJoin<cr>
+nmap <plug>(my-switch)J <cmd>SplitjoinSplit<cr>
 '''
 
 [[plugins]]
@@ -530,8 +614,8 @@ nmap ga <Plug>(EasyAlign)
 repo = 'liuchengxu/vista.vim'
 on_cmd = ['Vista!!']
 hook_add = '''
-nnoremap <silent> <Leader>o  :Vista!!<CR>
-nnoremap <silent> <Leader>c/ :Vista finder<CR>
+nnoremap <silent> <Leader>o  <cmd>Vista!!<CR>
+nnoremap <silent> <Leader>c/ <cmd>Vista finder<CR>
 let g:vista_stay_on_open         = 0
 let g:vista_fzf_preview          = ['right:50%']
 let g:vista_icon_indent          = ["", " "]
@@ -551,7 +635,7 @@ depends = ['defx-icons', 'defx-git']
 on_cmd = ['Defx']
 hook_add = '''
 let g:defx_trak_directory = 1
-nmap <silent><Space>n :Defx -search-recursive=`expand('%:p')`<CR>
+nmap <silent><Space>n <cmd>Defx -search-recursive=`expand('%:p')`<CR>
 
 autocmd MyAutoCmd FileType defx call s:defx_my_settings()
 function! s:defx_my_settings() abort
@@ -620,6 +704,8 @@ function! s:defx_my_settings() abort
   \ defx#do_action('print')
   nnoremap <silent><buffer><expr><nowait> <C-n>
   \ ':<C-u>Defx -buffer-name=temp -split=split<CR>'
+  nnoremap <silent><buffer><expr><nowait> <Space>n
+  \ ':<C-u>Defx -close<CR>'
 endfunction
 
 augroup user_plugin_defx
@@ -727,18 +813,18 @@ hook_add = '''
 repo = 'simnalamburt/vim-mundo'
 on_cmd = ['MundoToggle']
 hook_add = '''
-nnoremap <silent> <Leader>u :MundoToggle<CR>
+nnoremap <silent> <Leader>u <cmd>MundoToggle<CR>
 '''
 
 [[plugins]]
-repo = 'windwp/nvim-spectre'
+repo = 'nvim-pack/nvim-spectre'
 on_event = ['VimEnter']
 hook_source = '''
 " search current word
-nnoremap <silent><leader>rr :lua require('spectre').open_visual({select_word=true})<CR>
-xnoremap <silent><leader>rr :lua require('spectre').open_visual()<CR>
+nnoremap <silent><leader>rr <cmd>lua require('spectre').open_visual({select_word=true})<CR>
+xnoremap <silent><leader>rr <cmd>lua require('spectre').open_visual()<CR>
 " search in current file
-nnoremap <silent><leader>rR viw:lua require('spectre').open_file_search()<cr>
+nnoremap <silent><leader>rR viw<cmd>lua require('spectre').open_file_search()<cr>
 lua require('spectre').setup({ line_sep_start = '', result_padding = '', line_sep  = '',})
 '''
 
@@ -798,14 +884,14 @@ require("tmux").setup({
         resize_step_y = 3,
     }
 })
-vim.api.nvim_set_keymap("n", "<C-w>h", ":lua require('tmux').move_left()<cr>", { silent = true })
-vim.api.nvim_set_keymap("n", "<C-w>j", ":lua require('tmux').move_bottom()<cr>", { silent = true })
-vim.api.nvim_set_keymap("n", "<C-w>k", ":lua require('tmux').move_top()<cr>", { silent = true })
-vim.api.nvim_set_keymap("n", "<C-w>l", ":lua require('tmux').move_right()<cr>", { silent = true })
-vim.api.nvim_set_keymap("n", "<C-w><", ":lua require('tmux').resize_left()<cr>", { silent = true })
-vim.api.nvim_set_keymap("n", "<C-w>+", ":lua require('tmux').resize_bottom()<cr>", { silent = true })
-vim.api.nvim_set_keymap("n", "<C-w>-", ":lua require('tmux').resize_top()<cr>", { silent = true })
-vim.api.nvim_set_keymap("n", "<C-w>>", ":lua require('tmux').resize_right()<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<C-w>h", "<cmd>lua require('tmux').move_left()<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<C-w>j", "<cmd>lua require('tmux').move_bottom()<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<C-w>k", "<cmd>lua require('tmux').move_top()<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<C-w>l", "<cmd>lua require('tmux').move_right()<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<C-w><", "<cmd>lua require('tmux').resize_left()<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<C-w>+", "<cmd>lua require('tmux').resize_bottom()<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<C-w>-", "<cmd>lua require('tmux').resize_top()<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<C-w>>", "<cmd>lua require('tmux').resize_right()<cr>", { silent = true })
 EOF
 '''
 
@@ -831,10 +917,10 @@ endif
 repo = 'airblade/vim-gitgutter'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <silent>gm :GitGutterPreviewHunk<CR>
-nmap <silent><Leader>gh :GitGutterStageHunk<CR>
-nmap <silent><Leader>gu :GitGutterUndoHunk<CR>
-nmap zhf :GitGutterFold<CR>
+nmap <silent>gm <cmd>GitGutterPreviewHunk<CR>
+nmap <silent><Leader>gh <cmd>GitGutterStageHunk<CR>
+nmap <silent><Leader>gu <cmd>GitGutterUndoHunk<CR>
+nmap zhf <cmd>GitGutterFold<CR>
 omap ih <Plug>(GitGutterTextObjectInnerPending)
 omap ah <Plug>(GitGutterTextObjectOuterPending)
 xmap ih <Plug>(GitGutterTextObjectInnerVisual)
@@ -856,15 +942,15 @@ GitGutterEnable
 repo = 'tpope/vim-fugitive'
 on_event = 'VimEnter'
 hook_add = '''
-nmap <silent> <Leader>gs :Git<CR>
-nmap <silent> <Leader>gd :Gdiff<CR>
-nmap <silent> <Leader>ga :Gwrite<CR>
-nmap <silent> <Leader>gb :Git blame -w<CR>
-nmap <silent> <Leader>gp :Git! push<CR>
-nmap <silent> <Leader>gr :Git! rm --cached %<CR>
-nmap <silent> <Leader>gm :Git! commit -m 'update'<CR>
-nmap <silent> <Leader>gM :GitAddCommit update<CR>
-nmap <silent> <Leader>gU :GitAddAmend<Space>
+nmap <silent> <Leader>gs <cmd>Git<CR>
+nmap <silent> <Leader>gd <cmd>Gdiff<CR>
+nmap <silent> <Leader>ga <cmd>Gwrite<CR>
+nmap <silent> <Leader>gb <cmd>Git blame -w<CR>
+nmap <silent> <Leader>gp <cmd>Git! push<CR>
+nmap <silent> <Leader>gr <cmd>Git! rm --cached %<CR>
+nmap <silent> <Leader>gm <cmd>Git! commit -m 'update'<CR>
+nmap <silent> <Leader>gM <cmd>GitAddCommit update<CR>
+nmap <silent> <Leader>gU <cmd>GitAddAmend<Space>
 command! -nargs=* GitAddCommit silent execute('
   \ !git add -u && git commit -m ' . shellescape(<q-args>)) . '&'
 command! -nargs=* GitAddAmend silent execute('
@@ -882,7 +968,7 @@ lua require'plugins.diffview'
 repo = 'cohama/agit.vim'
 on_cmd = ['Agit']
 hook_add = '''
-nmap <silent><Leader>gl :Agit<CR>
+nmap <silent><Leader>gl <cmd>Agit<CR>
 '''
 
 # status line ---------------------------
@@ -906,24 +992,24 @@ repo = 'aikawa9376/myutil.vim'
 on_event = 'VimEnter'
 hook_add = '''
 set foldtext=myutil#custom_fold_text()
-nmap <silent> gl :<C-u>call myutil#hl_text_toggle()<CR>
-nmap <silent>]p :<c-u>call myutil#yank_line('j')<CR>=`]^
-nmap <silent>[p :<c-u>call myutil#yank_line('k')<CR>=`]^
-nmap <silent><M-p> :<c-u>call myutil#yank_remove_line()<CR>=`]^
-nmap <silent><C-t> :<C-u>call myutil#yank_text_toggle()<CR>
-nmap <Leader>, :<C-u>call myutil#reload_vimrc()<CR>
-xmap <silent><F1> :call myutil#help_override()<CR>
-nmap <silent><F1> :call myutil#help_override()<CR>
-xmap <silent> gK :call myutil#google_search()<CR>
-nmap <silent> gK :call myutil#google_search()<CR>
-xmap <silent> gg :call myutil#google_open()<CR>
-nnoremap <silent> <Plug>(my-switch)y :call myutil#toggle_syntax()<CR>
-nnoremap <silent> <Plug>(my-switch)n :call myutil#toggle_relativenumber()<CR>
-nnoremap <silent> dd :<c-u>call myutil#remove_line_brank(v:count1)<cr>
-nnoremap <silent> dD :<c-u>call myutil#remove_line_brank_all(v:count1)<cr>
+nmap <silent> gl <cmd>call myutil#hl_text_toggle()<CR>
+nmap <silent>]p <cmd>call myutil#yank_line('j')<CR>=`]^
+nmap <silent>[p <cmd>call myutil#yank_line('k')<CR>=`]^
+nmap <silent><M-p> <cmd>call myutil#yank_remove_line()<CR>=`]^
+nmap <silent><C-t> <cmd>call myutil#yank_text_toggle()<CR>
+nmap <Leader>, <cmd>call myutil#reload_vimrc()<CR>
+xmap <silent><F1> <cmd>call myutil#help_override()<CR>
+nmap <silent><F1> <cmd>call myutil#help_override()<CR>
+xmap <silent> gK <cmd>call myutil#google_search()<CR>
+nmap <silent> gK <cmd>call myutil#google_search()<CR>
+xmap <silent> gg <cmd>call myutil#google_open()<CR>
+nnoremap <silent> <Plug>(my-switch)y <cmd>call myutil#toggle_syntax()<CR>
+nnoremap <silent> <Plug>(my-switch)n <cmd>call myutil#toggle_relativenumber()<CR>
+nnoremap <silent> dd <cmd>call myutil#remove_line_brank(v:count1)<cr>
+nnoremap <silent> dD <cmd>call myutil#remove_line_brank_all(v:count1)<cr>
 nnoremap <expr> i myutil#indent_with_i("m`mv")
-nnoremap <silent>gJ :call myutil#join_space_less()<CR>
-xnoremap <silent>@ :<C-u>call myutil#execute_macro_visual_range()<CR>
+nnoremap <silent>gJ <cmd>call myutil#join_space_less()<CR>
+xnoremap <silent>@ <cmd>call myutil#execute_macro_visual_range()<CR>
 cnoremap <expr> <C-U> myutil#ctrl_u()
 cnoremap <expr> <SID>(ctrl_w_before) myutil#ctrl_w_before()
 cnoremap <expr> <SID>(ctrl_w_after) myutil#ctrl_w_after()
@@ -1014,6 +1100,27 @@ let g:exrc#names = ['.vimrc.local', '.exrc.lua']
 '''
 
 [[plugins]]
+repo = 'prettier/vim-prettier'
+build = 'yarn install --frozen-lockfile --production'
+on_ft = [
+  'javascript', 'typescript', 'css', 'less', 'scss',
+  'json', 'graphql', 'markdown', 'vue', 'svelte', 'yaml', 'html'
+  'typescriptreact', 'javascriptreact'
+]
+hook_add = '''
+let g:prettier#config#single_quote = 'true'
+let g:prettier#config#semi = 'false'
+let g:prettier#config#trailing_comma = 'none'
+let g:prettier#quickfix_enabled = 0
+'''
+hook_source = '''
+augroup prettierDefaults
+  autocmd!
+  autocmd BufWritePre * PrettierAsync
+augroup END
+'''
+
+[[plugins]]
 repo = 'monaqa/dial.nvim'
 on_event = 'VimEnter'
 hook_source = '''
@@ -1046,13 +1153,21 @@ lua require("toggleterm").setup{}
 repo = 'nvim-treesitter/nvim-treesitter'
 depends = [
   'nvim-treesitter-textobjects', 'playground', 'nvim-ts-rainbow',
-  'nvim-ts-context-commentstring', 'nvim-ts-autotag', 'nvim-yati'
+  'nvim-ts-context-commentstring', 'nvim-ts-autotag', 'nvim-yati',
+  'hlargs.nvim', 'nvim-treehopper'
 ]
 if = 'has("nvim")'
 on_event = 'BufRead'
 hook_post_update = 'TSUpdate'
 hook_source = '''
 lua require('plugins.treesitter')
+'''
+
+[[plugins]]
+repo = 'mfussenegger/nvim-treehopper'
+hook_source = '''
+omap     <silent> ir <cmd>lua require('tsht').nodes()<CR>
+vnoremap <silent> ir <cmd>lua require('tsht').nodes()<CR>
 '''
 
 [[plugins]]
@@ -1076,10 +1191,47 @@ repo = 'windwp/nvim-ts-autotag'
 [[plugins]]
 repo = 'yioneko/nvim-yati'
 
+[[plugins]]
+repo = 'm-demare/hlargs.nvim'
+hook_source = '''
+lua require 'hlargs'.setup()
+'''
+
+# [[plugins]]
+# repo = 'yamatsum/nvim-cursorline'
+# on_event = 'VimEnter'
+# hook_source = '''
+# lua << EOF
+# require('nvim-cursorline').setup {
+#   cursorline = {
+#     enable = true,
+#     timeout = 1000,
+#     number = false,
+#   },
+#   cursorword = {
+#     enable = false,
+#   }
+# }
+# EOF
+# '''
+
 # php------------------------------------
 [[plugins]]
 repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
+
+# javascript-----------------------------
+[[plugins]]
+repo = 'heavenshell/vim-jsdoc'
+build = 'make install'
+on_ft = ['javascritpt', 'typescriptreact', 'javascriptreact']
+hook_source = '''
+let g:jsdoc_allow_input_prompt = 0
+let g:jsdoc_input_description = 1
+let g:jsdoc_param_description_separator = ': '
+let g:jsdoc_additional_descriptions = 1
+let g:jsdoc_enable_es6 = 1
+'''
 
 # rust----------------------------------
 

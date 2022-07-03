@@ -1,36 +1,36 @@
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
-nnoremap <silent> <Leader>f     m`:Files<CR>
-nnoremap <silent> <Leader>F     m`:AllFiles<CR>
-nnoremap <silent> <Leader><c-f> m`:call FZFImagePreview()<CR>
-nnoremap <silent> <Leader>gf    m`:GFiles<CR>
-nnoremap <silent> <Leader>gi    m`:Gitignore<CR>
-nnoremap <silent> <Leader>b     m`:NavBuffers<CR>
-nnoremap <silent> <Leader>a     m`:Rg<CR>
-nnoremap <silent> <Leader>A     m`:AllRg<CR>
-nnoremap <silent> <Leader>l     m`:BLines<CR>
-nnoremap <silent> <Leader>L     m`:Lines<CR>
-nnoremap <silent> <Leader>e     m`:MRUFilesCWD<CR>
-nnoremap <silent> <Leader>E     m`:MRUFiles<CR>
-nnoremap <silent> <Leader>df    :SWSqlFzfSelect<CR>
-nnoremap <silent> <Leader>.     m`:DotFiles<CR>
-nnoremap <silent> <Leader>O     m`:Outline<CR>
-nnoremap <silent> <Leader>M     m`:Memo<CR>
-nnoremap <silent> <Leader>gc    m`:BCommits<CR>
-nnoremap <silent> <Leader>gC    m`:Commits<CR>
-nnoremap <silent> <Leader>T     :DirWordCompletions<CR>
-nnoremap <silent> <Leader>tm    :TmuxSearch<CR>
-nnoremap <silent> <Leader>p     :YanksAfter<CR>
-nnoremap <silent> <Leader>P     :YanksBefore<CR>
-nnoremap <silent> <Leader>;     :ChangeListNav<CR>
-nnoremap <silent> <Leader><C-o> :JumpListNav<CR>
-nnoremap <silent> <Leader>q     :Helptags<CR>
-nnoremap <silent> <Leader>tt    :BTags<CR>
-nnoremap <silent> <C-]>         m':call fzf#vim#tags(expand('<cword>'))<CR>
-nnoremap <silent> <expr>        <Leader>] "m':Rg(" . expand("<cword>") . ")<CR>"
-nnoremap <silent> q: :History:<CR>
-nnoremap <silent> q/ :History/<CR>
-nnoremap <silent> s<Space>      m`:NavBuffers<CR>
+nnoremap <silent> <Leader>f     m`<cmd>Files<CR>
+nnoremap <silent> <Leader>F     m`<cmd>AllFiles<CR>
+nnoremap <silent> <Leader><c-f> m`<cmd>call FZFImagePreview()<CR>
+nnoremap <silent> <Leader>gf    m`<cmd>GFiles<CR>
+nnoremap <silent> <Leader>gi    m`<cmd>Gitignore<CR>
+nnoremap <silent> <Leader>b     m`<cmd>NavBuffers<CR>
+nnoremap <silent> <Leader>a     m`<cmd>Rg<CR>
+nnoremap <silent> <Leader>A     m`<cmd>AllRg<CR>
+nnoremap <silent> <Leader>l     m`<cmd>BLines<CR>
+nnoremap <silent> <Leader>L     m`<cmd>Lines<CR>
+nnoremap <silent> <Leader>e     m`<cmd>MRUFilesCWD<CR>
+nnoremap <silent> <Leader>E     m`<cmd>MRUFiles<CR>
+nnoremap <silent> <Leader>df    <cmd>SWSqlFzfSelect<CR>
+nnoremap <silent> <Leader>.     m`<cmd>DotFiles<CR>
+nnoremap <silent> <Leader>O     m`<cmd>Outline<CR>
+nnoremap <silent> <Leader>M     m`<cmd>Memo<CR>
+nnoremap <silent> <Leader>gc    m`<cmd>BCommits<CR>
+nnoremap <silent> <Leader>gC    m`<cmd>Commits<CR>
+nnoremap <silent> <Leader>T     <cmd>DirWordCompletions<CR>
+nnoremap <silent> <Leader>tm    <cmd>TmuxSearch<CR>
+nnoremap <silent> <Leader>p     <cmd>YanksAfter<CR>
+nnoremap <silent> <Leader>P     <cmd>YanksBefore<CR>
+nnoremap <silent> <Leader>;     <cmd>ChangeListNav<CR>
+nnoremap <silent> <Leader><C-o> <cmd>JumpListNav<CR>
+nnoremap <silent> <Leader>q     <cmd>Helptags<CR>
+nnoremap <silent> <Leader>tt    <cmd>BTags<CR>
+nnoremap <silent> <C-]>         m'<cmd>call fzf#vim#tags(expand('<cword>'))<CR>
+nnoremap <silent> <expr>        <Leader>] "m'<cmd>Rg(" . expand("<cword>") . ")<CR>"
+nnoremap <silent> q: <cmd>History:<CR>
+nnoremap <silent> q/ <cmd>History/<CR>
+nnoremap <silent> s<Space>      m`<cmd>NavBuffers<CR>
 
 imap <c-j>p <plug>(fzf-complete-path)
 imap <c-j>l <plug>(fzf-complete-line)
@@ -49,25 +49,25 @@ let g:fzf_action = {
 
 command! -bang -nargs=* Rg
   \ call fzf#vim#grep(
-  \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git '.shellescape(<q-args>), 1,
   \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
   \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang -nargs=* AllRg
   \ call fzf#vim#grep(
-  \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always --glob=!.git '.shellescape(<q-args>), 1,
   \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
   \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang -nargs=* Rgf
   \ call fzf#vim#grep(
-  \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git '.shellescape(<q-args>), 1,
   \   <bang>0 ? fzf#vim#with_preview({'options': '--no-unicode'}, 'up:60%:wrap')
   \           : fzf#vim#with_preview({'options': '--no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang -nargs=* Rgaf
   \ call fzf#vim#grep(
-  \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always '.shellescape(<q-args>), 1,
+  \   'rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always --glob=!.git '.shellescape(<q-args>), 1,
   \   <bang>0 ? fzf#vim#with_preview({'options': '--no-unicode'}, 'up:60%:wrap')
   \           : fzf#vim#with_preview({'options': '--no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
@@ -87,7 +87,7 @@ function s:override_files_sink(lines) abort
     for w in range(1, len(a:lines) - 1)
       execute("silent !rm " . a:lines[w])
     endfor
-    call feedkeys(":Files\<CR>")
+    call feedkeys("\<cmd>Files\<CR>")
     return
   endif
   if a:lines[0] == 'ctrl-v'
@@ -191,7 +191,7 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd('file'),
   \  'sink*': function('<SID>mru_file_sink'),
-  \  'options': '-m -x --ansi
+  \  'options': '-m -x --ansi --tiebreak=index
   \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
@@ -199,7 +199,7 @@ command! MRUFilesCWD call fzf#run({
 command! MRUWritesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd('write'),
   \  'sink*': function('<SID>mrw_file_sink'),
-  \  'options': '-m -x --ansi
+  \  'options': '-m -x --ansi --tiebreak=index
   \              --no-unicode --prompt=MRW:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
@@ -214,7 +214,7 @@ endfunction
 command! MRUFiles call fzf#run({
   \  'source': s:mru_files_for_all('file'),
   \  'sink*': function('<SID>mru_file_all_sink'),
-  \  'options': '-m -x --ansi
+  \  'options': '-m -x --ansi --tiebreak=index
   \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
@@ -222,7 +222,7 @@ command! MRUFiles call fzf#run({
 command! MRUWrites call fzf#run({
   \  'source': s:mru_files_for_all('write'),
   \  'sink*': function('<SID>mrw_file_all_sink'),
-  \  'options': '-m -x --ansi
+  \  'options': '-m -x --ansi --tiebreak=index
   \              --no-unicode --prompt=MRW_ALL:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
@@ -245,7 +245,7 @@ function! s:mru_file_sink(lines)
     endfor
     return
   elseif a:lines[1] == 'ctrl-t'
-    call feedkeys(":MRUWritesCWD " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>MRUWritesCWD " . a:lines[0] . "\<CR>")
     return
   endif
 endfunction
@@ -259,7 +259,7 @@ function! s:mrw_file_sink(lines)
     endfor
     return
   elseif a:lines[1] == 'ctrl-t'
-    call feedkeys(":MRUFilesCWD " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>MRUFilesCWD " . a:lines[0] . "\<CR>")
     return
   endif
 endfunction
@@ -273,7 +273,7 @@ function! s:mru_file_all_sink(lines)
     endfor
     return
   elseif a:lines[1] == 'ctrl-t'
-    call feedkeys(":MRUWrites " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>MRUWrites " . a:lines[0] . "\<CR>")
     return
   endif
 endfunction
@@ -287,7 +287,7 @@ function! s:mrw_file_all_sink(lines)
     endfor
     return
   elseif a:lines[1] == 'ctrl-t'
-    call feedkeys(":MRUFiles " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>MRUFiles " . a:lines[0] . "\<CR>")
     return
   endif
 endfunction
@@ -436,11 +436,11 @@ function! s:ignore_file_sink(lines)
       endif
     endfor
   elseif a:lines[1] == 'ctrl-t'
-    call feedkeys(":AddGitignore\<CR>")
+    call feedkeys("\<cmd>AddGitignore\<CR>")
     return
   endif
   " execute("Gina add " . fnamemodify(a:lines[0], ":p"))
-  call feedkeys(":Gitignore " . a:lines[0] . "\<CR>")
+  call feedkeys("\<cmd>Gitignore " . a:lines[0] . "\<CR>")
   return
 endfunction
 
@@ -468,10 +468,10 @@ function! s:add_ignore_file_sink(lines) abort
       execute("silent !echo " . t . " >> " . s:dir . "/.gitignore")
       execute("Git rm --cached " . fnamemodify(t, ":p"))
     endfor
-    call feedkeys(":AddGitignore " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>AddGitignore " . a:lines[0] . "\<CR>")
     return
   elseif a:lines[1] == 'ctrl-t'
-    call feedkeys(":Gitignore\<CR>")
+    call feedkeys("\<cmd>Gitignore\<CR>")
     return
   endif
   execute("Git rm --cached " . fnamemodify(a:lines[2], ":p"))
@@ -495,7 +495,7 @@ function s:override_gitfiles_sink(lines) abort
     for w in range(1, len(a:lines) - 1)
       execute("Git rm --cached " . a:lines[w])
     endfor
-    call feedkeys(":GFiles\<CR>")
+    call feedkeys("\<cmd>GFiles\<CR>")
     return
   endif
   for w in range(1, len(a:lines) - 1)
@@ -571,7 +571,7 @@ function! s:bufopen(lines)
 
   if a:lines[1] == 'ctrl-k'
     execute('bwipeout')
-    call feedkeys(":NavBuffers " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>NavBuffers " . a:lines[0] . "\<CR>")
     return
   endif
 
@@ -581,14 +581,14 @@ function! s:bufopen(lines)
       let index = matchstr(b, '^\[\([0-9a-f]\+\)\]')
       execute('bwipeout ' . index[1:len(index)-2])
     endfor
-    call feedkeys(":NavBuffers " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>NavBuffers " . a:lines[0] . "\<CR>")
     return
   endif
 
   if a:lines[1] == 'ctrl-b'
     let index = matchstr(a:lines[2], '\[\zs[0-9]*\ze\]')
     execute ('buffer ' . index)
-    call feedkeys(":NavBuffers " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>NavBuffers " . a:lines[0] . "\<CR>")
     return
   endif
 
@@ -608,7 +608,7 @@ function! s:bufopen(lines)
   if !empty(cmd)
     execute 'silent ' cmd
     execute 'buffer ' b
-    call feedkeys(":NavBuffers " . a:lines[0] . "\<CR>")
+    call feedkeys("\<cmd>NavBuffers " . a:lines[0] . "\<CR>")
     return
   endif
   execute 'buffer ' b

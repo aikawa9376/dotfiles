@@ -57,8 +57,5 @@ require'nvim-treesitter.configs'.setup {
   },
 }
 
-local parser_config = require "nvim-treesitter.parsers".get_parser_configs()
-local html = parser_config.html
-html.used_by = { "html_tags", "twig" }
-parser_config.html = nil
-parser_config.html = html
+local parser_config = require "nvim-treesitter.parsers".filetype_to_parsername
+parser_config.twig = "html"

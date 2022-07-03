@@ -75,6 +75,8 @@ alias gga='git add -u'
 alias ggas='git add -A'
 alias ggc='git commit -m "update"'
 alias ggp='git push'
+alias gl='fshow'
+alias gb='fbr'
 
 # -------------------------------------
 # node

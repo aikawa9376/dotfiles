@@ -15,32 +15,27 @@ local n = require("luasnip.extras").nonempty
 local dl = require("luasnip.extras").dynamic_lambda
 local types = require("luasnip.util.types")
 
-local is_url = function(args, state)
-  local register = vim.api.nvim_eval('@*')
-  if string.match(register, '.-%/.-') then
-    return sn(nil, i(1, register))
-  else
-    return sn(nil, i(1))
-  end
-end
-
-local lua = {
-  s("plug", {
-    t({"[[plugins]]", ""}),
-    t("repo = '"),
-    d(1, is_url, {}),
-    t("'"),
+local javascript = {
+  s("af", {
+    t("const "), i(1), t(" = ("), i(2), t({") => {", ""}),
+    t("\t"), i(3),
+    t({"", "}"}),
   }),
-  s('hook_add', {
-    t({"hook_add = '''", ""}),
-    i(1),
-    t({"", "'''"})
+  s("cf", {
+    t("("), i(1), t({") => {", ""}),
+    t("\t"), i(2),
+    t({"", "}"}),
   }),
-  s('hook_source', {
-    t({"hook_source = '''", ""}),
-    i(1),
-    t({"", "'''"})
-  })
+  s("ci", {
+    t("("), i(1), t(") => {"),
+    t("\t"), i(2), t("}"),
+  }),
+  s("cls", {
+    t("className={styles"), i(1), t("}"),
+  }),
+  s("cli", {
+    t("className={`${styles"), i(1), t("}`}"),
+  }),
 }
 
-return lua
+return javascript

@@ -207,22 +207,28 @@ fvim() {
 
 # fzf git branch
 fbr() {
-  git checkout
-  $(git branch -a | tr -d " " |
-    fzf --height 100% --prompt "CHECKOUT BRANCH>" --preview "git log --color=always {}" |
-    head -n 1 | sed -e "s/^\*\s*//g" | perl -pe "s/remotes\/origin\///g")
+  target_br=$(
+    git branch -a |
+      fzf --exit-0 --layout=reverse --info=hidden --no-multi --preview-window="right,65%" --prompt="CHECKOUT BRANCH > " --preview="echo {} | tr -d ' *' | xargs git log --decorate --abbrev-commit --format=format:'%C(blue)%h%C(reset) - %C(green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset) %C(yellow)%d%C(reset)' --color=always" |
+      head -n 1 |
+      perl -pe "s/\s//g; s/\*//g; s/remotes\/origin\///g"
+  )
+  if [ -n "$target_br" ]; then
+    git switch $target_br
+  fi
 }
 
 # fshow - git commit browser
 fshow() {
-  git log --graph --color=always \
-      --format="%C(auto)%h%d %s %C(black)%C(bold)%cr" "$@" |
-  fzf --ansi --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
+  git log --graph --date=short --all --color=always \
+      --format="%C(auto)%h %s%d %C(dim)(%cd) %cn" "$@" |
+  fzf --ansi --height 100% --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
       --bind "ctrl-m:execute:
                 (grep -o '[a-f0-9]\{7\}' | head -1 |
                 xargs -I % sh -c 'git show --color=always % | less -R') << 'FZF-EOF'
                 {}
-                FZF-EOF"
+                FZF-EOF" \
+      --preview "echo {} | grep -o '[a-f0-9]\{7\}' | head -1 | xargs -I % sh -c 'git diff --color %^ %'"
 }
 
 # git staging

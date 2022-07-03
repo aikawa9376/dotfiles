@@ -90,7 +90,7 @@ local function check_capabilities(feature, client_id)
 
   local supported_client = false
   for _, client in pairs(clients) do
-    supported_client = client.resolved_capabilities[feature]
+    supported_client = client.server_capabilities[feature]
     if supported_client then goto continue end
   end
 
@@ -429,7 +429,7 @@ end
 
 -- COMMANDS {{{
 function M.definition(bang, opts)
-  if not check_capabilities("goto_definition") then
+  if not check_capabilities("definitionProvider") then
     return
   end
 
@@ -440,7 +440,7 @@ function M.definition(bang, opts)
 end
 
 function M.declaration(bang, opts)
-  if not check_capabilities("declaration") then
+  if not check_capabilities("declarationProvider") then
     return
   end
 
@@ -451,7 +451,7 @@ function M.declaration(bang, opts)
 end
 
 function M.type_definition(bang, opts)
-  if not check_capabilities("type_definition") then
+  if not check_capabilities("typeDefinitionProvider") then
     return
   end
 
@@ -462,7 +462,7 @@ function M.type_definition(bang, opts)
 end
 
 function M.implementation(bang, opts)
-  if not check_capabilities("implementation") then
+  if not check_capabilities("implementationProvider") then
     return
   end
 
@@ -473,7 +473,7 @@ function M.implementation(bang, opts)
 end
 
 function M.references(bang, opts)
-  if not check_capabilities("find_references") then
+  if not check_capabilities("referencesProvider") then
     return
   end
 
@@ -485,7 +485,7 @@ function M.references(bang, opts)
 end
 
 function M.document_symbol(bang, opts)
-  if not check_capabilities("document_symbol") then
+  if not check_capabilities("documentSymbolProvider") then
     return
   end
 
@@ -496,7 +496,7 @@ function M.document_symbol(bang, opts)
 end
 
 function M.code_action(bang, opts)
-  if not check_capabilities("code_action") then
+  if not check_capabilities("codeActionProvider") then
     return
   end
 

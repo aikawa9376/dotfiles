@@ -24,7 +24,7 @@ local cmp = require 'cmp'
 cmp.setup {
   formatting = {
     format = function(entry, vim_item)
-      -- vim_item.kind = require('lspkind').presets.default[vim_item.kind]
+      vim_item.kind = require('lspkind').presets.default[vim_item.kind]
       -- set a name for each source
       vim_item.menu = ({
         buffer = "[B]",
@@ -32,6 +32,7 @@ cmp.setup {
         luasnip = "[S]",
         cmp_tabnine = "[T]",
         nvim_lua = "[Lu]",
+        rg = "[R]",
         tmux = "[M]",
         copilot = "[C]",
       })[entry.source.name]
@@ -86,6 +87,9 @@ cmp.setup {
     { name = 'luasnip' },
     { name = 'copilot' },
     { name = 'cmp_tabnine' },
+    { name = 'rg',
+      keyword_length = 3,
+    },
     { name = 'path' },
     { name = 'tmux',
       keyword_length = 3,
@@ -95,17 +99,19 @@ cmp.setup {
   },
   sorting = {
     comparators = {
-      cmp.config.compare.offset,
       cmp.config.compare.exact,
       cmp.config.compare.score,
       cmp.config.compare.kind,
-      cmp.config.compare.sort_text,
-      cmp.config.compare.length,
-      cmp.config.compare.order,
+      cmp.config.compare.locality,
+      cmp.config.compare.scopes,
       cmp.config.compare.recently_used,
+      cmp.config.compare.length,
+      cmp.config.compare.offset,
+      cmp.config.compare.sort_text,
+      cmp.config.compare.order,
     }
   },
-  preselect = cmp.PreselectMode.Item
+  preselect = cmp.PreselectMode.Item,
 }
 
 require('cmp.config').get().experimental.ghost_text.hl_group = 'LineNr'
