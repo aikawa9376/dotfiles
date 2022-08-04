@@ -17,7 +17,6 @@ zstyle ':vcs_info:*' actionformats ' (%s:%b)' '%m' '<!%a>'
 zstyle ':vcs_info:(svn|bzr):*' branchformat '%b:r%r'
 zstyle ':vcs_info:bzr:*' use-simple true
 
-
 if is-at-least 4.3.10; then
   # git 用のフォーマット
   # git のときはステージしているかどうかを表示
@@ -28,6 +27,16 @@ fi
 
 # hooks 設定
 if is-at-least 4.3.11; then
+
+  function check_master_branch() {
+    if [[ `git branch | grep 'master'` =~ 'master' ]] ; then
+      echo 'master'
+      return
+    fi
+    echo 'main'
+    return
+  }
+
   # git のときはフック関数を設定する
 
   # formats '(%s)-[%b]' '%c%u %m' , actionformats '(%s)-[%b]' '%c%u %m' '<!%a>'
@@ -81,13 +90,9 @@ if is-at-least 4.3.11; then
     if [[ "$1" != "1" ]]; then
       return 0
     fi
-    if [[ "${hook_com[branch]}" != "master" ]]; then
-      # master ブランチでない場合は何もしない
-      return 0
-    fi
-    # push していないコミット数を取得する
     local ahead
-    ahead=$(command git rev-list origin/master..master 2>/dev/null \
+    # push していないコミット数を取得する
+    ahead=$(command git rev-list origin/${hook_com[branch]}..${hook_com[branch]} 2>/dev/null \
       | wc -l \
       | tr -d ' ')
     if [[ "$ahead" -gt 0 ]]; then
@@ -101,18 +106,20 @@ if is-at-least 4.3.11; then
   # 現在のブランチ上でまだ master にマージしていないコミットの件数を
   # (mN) という形式で misc (%m) に表示
   function +vi-git-nomerge-branch() {
+    local master_branch=`check_master_branch`
+
     # zstyle formats, actionformats の2番目のメッセージのみ対象にする
     if [[ "$1" != "1" ]]; then
       return 0
     fi
 
-    if [[ "${hook_com[branch]}" == "master" ]]; then
+    if [[ "${hook_com[branch]}" == "${master_branch}" ]]; then
       # master ブランチの場合は何もしない
       return 0
     fi
 
     local nomerged
-    nomerged=$(command git rev-list master..${hook_com[branch]} 2>/dev/null | wc -l | tr -d ' ')
+    nomerged=$(command git rev-list origin/${master_branch}..${hook_com[branch]} 2>/dev/null | wc -l | tr -d ' ')
 
     if [[ "$nomerged" -gt 0 ]] ; then
       # misc (%m) に追加

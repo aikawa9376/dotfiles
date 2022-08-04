@@ -70,13 +70,16 @@ alias zup="abbrev-alias -g bb=''; zinit update;abbrev-alias -g bb='| bat'"
 # -------------------------------------
 # git
 # -------------------------------------
-alias ggs='git status'
-alias gga='git add -u'
-alias ggas='git add -A'
-alias ggc='git commit -m "update"'
-alias ggp='git push'
-alias gl='fshow'
-alias gb='fbr'
+abbrev-alias -g ggs='git status'
+abbrev-alias -g gga='git add -u'
+abbrev-alias -g ggas='git add -A'
+abbrev-alias -g ggc='git commit -m "update"'
+abbrev-alias -g ggp='git push'
+abbrev-alias -g gl='fshow'
+abbrev-alias -g gf='git fetch'
+abbrev-alias -g gm='git merge'
+abbrev-alias -g gb='fbr'
+abbrev-alias -g gco='git checkout'
 
 # -------------------------------------
 # node

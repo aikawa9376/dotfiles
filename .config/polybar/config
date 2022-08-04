@@ -50,7 +50,7 @@ font-1 = "RictyDiminishedDiscord NF:size=12:heavy:fontformat=truetype;-2"
 
 modules-left = i3 xwindow tmux docker
 modules-center = date
-modules-right = filesystem insync cpu memory lan wlan pacman inbox-imap mozc powermenu
+modules-right = filesystem insync cpu memory lan wlan vpn pacman inbox-imap mozc powermenu
 
 [module/xwindow]
 type = internal/xwindow
@@ -151,6 +151,14 @@ format-connected-underline = #9f78e1
 
 label-connected = %essid%:%signal%
 label-disconnected =
+
+[module/vpn]
+type = custom/script
+exec = $HOME/.config/polybar/scripts/vpnstatus.sh
+interval = 5
+format-prefix = "嬨 "
+format-prefix-foreground = ${colors.foreground-alt}
+format-underline = #FF8B25
 
 [module/date]
 type = internal/date

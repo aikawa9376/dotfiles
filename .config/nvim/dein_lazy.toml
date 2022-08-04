@@ -1220,6 +1220,10 @@ lua require 'hlargs'.setup()
 repo = 'captbaritone/better-indent-support-for-php-with-html'
 on_ft = ['html', 'php', 'phtml']
 
+[[plugins]]
+repo = 'jwalton512/vim-blade'
+on_ft = ['php']
+
 # javascript-----------------------------
 [[plugins]]
 repo = 'heavenshell/vim-jsdoc'
