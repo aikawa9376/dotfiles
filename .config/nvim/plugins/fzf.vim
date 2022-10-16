@@ -114,13 +114,13 @@ command! -bang -nargs=? -complete=dir Files
   \            '-E ''*.ai'' -E ''*.jfif'' -E ''*.jpeg'' -E ''*.gif'' ' .
   \            '-E ''*.eps'' -E ''*.svg'' -E ''*.JPEG'' -E ''*.mp4'' ' .
   \            '| xargs -0 exa -1 -sold --color=always',
-  \  'options': '--ansi -m -x --no-unicode '.
+  \  'options': '--ansi -m -x --no-unicode --tiebreak=index '.
   \             '--expect ctrl-x,ctrl-v,ctrl-q'}))
 
 command! AllFiles call fzf#run({
   \  'source': 'fd --strip-cwd-prefix -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
-  \  'options': "-m -x --ansi --no-unicode" .
+  \  'options': "-m -x --ansi --no-unicode --tiebreak=index" .
   \             ' --no-unicode --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 " ------------------------------------------------------------------
@@ -652,7 +652,7 @@ command! -nargs=* NavBuffers
   \   '-m', '-x', '--tiebreak=index', '--ansi', '-d',
   \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
-  \   '--preview-window', 'hidden',
+  \   '--delimiter', ' ', '--preview', 'bat {4}{2}', '--preview-window', 'hidden',
   \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k,ctrl-q', '--no-unicode'],
   \   'up': '30%',
   \ }))

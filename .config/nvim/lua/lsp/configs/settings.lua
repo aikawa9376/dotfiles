@@ -37,7 +37,7 @@ M.configs = {
       ts_utils.setup_client(client)
     end,
   },
-  ['rust_analyzer'] = {
+  rust_analyzer = {
     settings = {
       ['rust-analyzer'] = {
         completion = {
@@ -96,6 +96,7 @@ M.configs = {
         autoFixOnFormat = true,
       }
     },
+    filetypes = { "css", "less", "scss", "sugarss", "wxss" }
   },
   angularls = {
     filetypes = { "html", "typescript" }
@@ -116,6 +117,7 @@ M.default = function(client, bufnr)
   local opts = { noremap = true, silent = true }
   buf_set_keymap('n', 'gr', 'm`<cmd>References<CR>', opts)
   buf_set_keymap('n', 'gd', 'm`<cmd>Definition<CR>', opts)
+  buf_set_keymap('n', 'gsd', 'm`<cmd>vsplit | Definition<CR>', opts)
   buf_set_keymap('n', 'gD', 'm`<cmd>Declaration<CR>', opts)
   buf_set_keymap('n', 'gi', 'm`<cmd>Implementation<CR>', opts)
   buf_set_keymap('n', 'gy', 'm`<cmd>TypeDefinition<CR>', opts)
@@ -146,13 +148,13 @@ M.default = function(client, bufnr)
     augroup END
     ]]
   if not vim.g.auto_format_disabled and client.server_capabilities.documentFormattingProvider then
-    -- require "lsp-format".on_attach(client)
-    vim.cmd [[
-      augroup LspFormat
-        autocmd!
-        autocmd BufWritePre <buffer> lua vim.lsp.buf.format()
-      augroup END
-    ]] -- sync? insert_leave?
+    require "lsp-format".on_attach(client)
+    -- vim.cmd [[
+    --   augroup LspFormat
+    --     autocmd!
+    --     autocmd BufWritePre <buffer> lua vim.lsp.buf.format()
+    --   augroup END
+    -- ]] -- sync? insert_leave?
   end
   if client.server_capabilities.codeLensProvideren then
     vim.cmd [[
@@ -192,6 +194,10 @@ M.default = function(client, bufnr)
       border = "rounded"
     }
   }, bufnr)
+
+  -- if client.server_capabilities.inlayHintProvider then
+  --   require("lsp-inlayhints").on_attach(client, bufnr)
+  -- end
 
   -- show capabilities
   -- require('lsp.utils').get_capabilities()

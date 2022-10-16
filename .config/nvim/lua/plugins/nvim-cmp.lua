@@ -35,7 +35,14 @@ cmp.setup {
         rg = "[R]",
         tmux = "[M]",
         copilot = "[C]",
+        nvim_lsp_document_symbol = '[D]',
+        cmdline_history = '[H]',
       })[entry.source.name]
+      local label = vim_item.abbr
+      local truncated_label = vim.fn.strcharpart(label, 0, 80)
+      if truncated_label ~= label then
+        vim_item.abbr = truncated_label .. '…'
+      end
       return vim_item
     end,
   },
@@ -47,19 +54,27 @@ cmp.setup {
   mapping = {
     ['<C-p>'] = function()
       if cmp.visible() then
-        cmp.select_prev_item()
+        if cmp.core.view.custom_entries_view:is_direction_top_down() then
+          cmp.select_prev_item()
+        else
+          cmp.select_next_item()
+        end
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Up>', true, true, true), 'n')
       end
     end,
     ['<C-n>'] = function()
       if cmp.visible() then
-        cmp.select_next_item()
+        if cmp.core.view.custom_entries_view:is_direction_top_down() then
+          cmp.select_next_item()
+        else
+          cmp.select_prev_item()
+        end
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<Down>', true, true, true), 'n')
       end
     end,
-    ['<C-e>'] = function ()
+    ['<C-e>'] = function()
       cmp.abort()
       vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-g>U<C-o>$<C-g>U<Right>', true, true, true), 'n')
     end,
@@ -97,6 +112,11 @@ cmp.setup {
       -- opts = { all_panes = true } --ちょっと遅い
     },
   },
+  view = {
+    entries = {
+      selection_order = 'bottom_up'
+    }
+  },
   sorting = {
     comparators = {
       cmp.config.compare.exact,
@@ -113,5 +133,26 @@ cmp.setup {
   },
   preselect = cmp.PreselectMode.Item,
 }
+
+-- Use buffer source for `/` (if you enabled `native_menu`, this won't work anymore).
+cmp.setup.cmdline({ '/', '?' }, {
+  mapping = cmp.mapping.preset.cmdline(),
+  sources = {
+    -- { name = 'fuzzy_buffer' },
+    { name = 'nvim_lsp_document_symbol' },
+    { name = 'buffer' },
+    { name = 'cmdline_history' },
+    { name = 'buffer-lines' },
+  }
+})
+
+-- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
+cmp.setup.cmdline(':', {
+  mapping = cmp.mapping.preset.cmdline(),
+  sources = cmp.config.sources({
+    { name = 'cmdline_history' },
+    { name = 'cmdline' },
+  })
+})
 
 require('cmp.config').get().experimental.ghost_text.hl_group = 'LineNr'

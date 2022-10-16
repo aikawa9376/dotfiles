@@ -1,4 +1,4 @@
-require('Comment').setup{
+require('Comment').setup {
   ---Add a space b/w comment and the line
   ---@type boolean
   padding = true,
@@ -41,11 +41,23 @@ require('Comment').setup{
   ---Pre-hook, called before commenting the line
   ---@type function|nil
   pre_hook = function(ctx)
-    local u = require('Comment.utils')
-    if ctx.ctype == u.ctype.line and ctx.cmotion == u.cmotion.line then
-      -- Only comment when we are doing linewise comment and up-down motion
-      return require('ts_context_commentstring.internal').calculate_commentstring()
+    local U = require('Comment.utils')
+
+    -- Determine whether to use linewise or blockwise commentstring
+    local type = ctx.ctype == U.ctype.linewise and '__default' or '__multiline'
+
+    -- Determine the location where to calculate commentstring from
+    local location = nil
+    if ctx.ctype == U.ctype.blockwise then
+      location = require('ts_context_commentstring.utils').get_cursor_location()
+    elseif ctx.cmotion == U.cmotion.v or ctx.cmotion == U.cmotion.V then
+      location = require('ts_context_commentstring.utils').get_visual_start_location()
     end
+
+    return require('ts_context_commentstring.internal').calculate_commentstring({
+      key = type,
+      location = location,
+    })
   end,
 
   ---Post-hook, called after commenting is done
@@ -53,5 +65,7 @@ require('Comment').setup{
   post_hook = nil,
 }
 
-vim.api.nvim_set_keymap('x', '<C-_>', '<ESC><CMD>lua require("Comment.api").toggle_linewise_op(vim.fn.visualmode())<CR>', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('x', '<space><C-_>', '<ESC><CMD>lua require("Comment.api").toggle_blockwise_op(vim.fn.visualmode())<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('x', '<C-_>', '<ESC><CMD>lua require("Comment.api").toggle.linewise(vim.fn.visualmode())<CR>'
+  , { noremap = true, silent = true })
+vim.api.nvim_set_keymap('x', '<space><C-_>',
+  '<ESC><CMD>lua require("Comment.api").toggle.blockwise(vim.fn.visualmode())<CR>', { noremap = true, silent = true })

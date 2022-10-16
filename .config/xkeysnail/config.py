@@ -26,6 +26,7 @@ define_multipurpose_modmap({
     Key.ENTER: [Key.ENTER, Key.RIGHT_CTRL],
     Key.TAB: [Key.TAB, Key.RIGHT_ALT],
     Key.RIGHT_SHIFT: [Key.MUTE, Key.RIGHT_SHIFT],
+    Key.LEFT_SHIFT: [Key.RIGHT_META, Key.LEFT_SHIFT],
     Key.LEFT_CTRL: [Key.ESC, Key.LEFT_CTRL],
 
     # Capslock is escape when pressed and released. Control when held down.

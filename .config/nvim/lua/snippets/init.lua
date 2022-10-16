@@ -177,6 +177,8 @@ ls.add_snippets(nil, {
   scss = require('snippets.scss'),
   toml = require('snippets.toml'),
   lua = require('snippets.lua'),
+  php = require('snippets.php'),
+  blade = require('snippets.blade'),
   javascript = require('snippets.javascript')
 })
 
@@ -202,7 +204,8 @@ ls.filetype_set("cpp", { "c" })
 ]]
 
 require("luasnip/loaders/from_vscode").load()
+require("luasnip.loaders.from_snipmate").load()
 
 -- filetype hack
-ls.filetype_extend("typescriptreact", {"html", "javascript"})
-ls.filetype_extend("typescript", {"javascript"})
+ls.filetype_extend("typescriptreact", { "html", "javascript" })
+ls.filetype_extend("typescript", { "javascript" })

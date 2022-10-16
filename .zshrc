@@ -134,6 +134,7 @@ export FZF_DEFAULT_OPTS='
 --no-hscroll
 --inline-info
 --tabstop=2
+--tiebreak=chunk,index
 --preview-window noborder
 --history '$HOME'/.fzf/history
 --bind alt-k:preview-up,alt-j:preview-down,ctrl-n:down,ctrl-p:up

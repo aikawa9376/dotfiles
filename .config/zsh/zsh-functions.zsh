@@ -196,7 +196,7 @@ fvim() {
     xargs -0 exa -1 -sold --color=always 2> /dev/null) &&
   fi
   # wraped function timg and bat?
-  selected_files=$(echo "$files" | fzf -m --ansi | tr '\n' ' ') &&
+  selected_files=$(echo "$files" | fzf -m --ansi --tiebreak=index | tr '\n' ' ') &&
 
   if [[ $selected_files == '' ]]; then
     return 0

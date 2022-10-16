@@ -1,22 +1,16 @@
 require('dressing').setup({
   input = {
     -- relative = "cursor",
-    -- border = "single",
+    -- border = "none",
     -- override = function(conf)
     --   print(vim.inspect(conf))
     --   return conf
     -- end,
   },
   select = {
-    backend = {"builtin"},
-    -- builtin = {
-      -- anchor = "none",
-      -- border = "none",
-      -- relative = "cursor",
-      -- override = function(conf)
-      --   print(vim.inspect(conf))
-      --   return conf
-      -- end,
-    -- }
+    backend = { "builtin" },
+    builtin = {
+      relative = "cursor",
+    }
   }
 })
