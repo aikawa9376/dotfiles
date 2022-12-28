@@ -52,7 +52,7 @@ opt.wildoptions = opt.wildoptions .. ',pum'
 opt.pumblend = 10
 opt.winblend = 10
 opt.pumheight = 20
--- opt.cmdheight = 0
+opt.cmdheight = 0
 -- opt.shellslash = true
 
 vim.api.nvim_set_var('do_filetype_lua', 1)

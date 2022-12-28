@@ -140,9 +140,9 @@ cmp.setup.cmdline({ '/', '?' }, {
   sources = {
     -- { name = 'fuzzy_buffer' },
     { name = 'nvim_lsp_document_symbol' },
-    { name = 'buffer' },
     { name = 'cmdline_history' },
-    { name = 'buffer-lines' },
+    { name = 'buffer' },
+    -- { name = 'buffer-lines' },
   }
 })
 

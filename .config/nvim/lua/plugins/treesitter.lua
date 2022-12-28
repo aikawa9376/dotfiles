@@ -39,7 +39,7 @@ require 'nvim-treesitter.configs'.setup {
     -- colors = {}, -- table of hex strings
     -- termcolors = {} -- table of colour name strings
   },
-  context_commentstring = {
+  Context_commentstring = {
     enable = true,
     enable_autocmd = false,
     config = {
@@ -53,7 +53,7 @@ require 'nvim-treesitter.configs'.setup {
     enable = true,
   },
   yati = {
-    enable = true
+    enable = false
   },
 }
 

@@ -220,8 +220,14 @@ fbr() {
 
 # fshow - git commit browser
 fshow() {
-  git log --graph --date=short --all --color=always \
-      --format="%C(auto)%h %s%d %C(dim)(%cd) %cn" "$@" |
+  local flag
+  if [[ $# = 0 ]]; then
+    flag='--all'
+  else
+    flag=$(git rev-parse --abbrev-ref HEAD)
+  fi
+  git log --graph --date=short --color=always "$flag" \
+      --format="%C(auto)%h %s%d %C(dim)(%cd) %cn" |
   fzf --ansi --height 100% --reverse --tiebreak=index --bind=ctrl-s:toggle-sort \
       --bind "ctrl-m:execute:
                 (grep -o '[a-f0-9]\{7\}' | head -1 |

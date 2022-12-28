@@ -298,7 +298,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     process_options "${@}"
     # print the redraw key twice as there's a run condition we can't circumvent
     # (we can't know the time fzf finished redrawing it's layout)
-    print_on_winch "${REDRAW_KEY}${REDRAW_KEY}"
+    # print_on_winch "${REDRAW_KEY}${REDRAW_KEY}"
     start_ueberzug
 
     export_functions

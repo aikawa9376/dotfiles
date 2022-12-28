@@ -1,4 +1,4 @@
-[[plugins]]
+﻿[[plugins]]
 repo = 'Shougo/dein.vim'
 
 [[plugins]]
@@ -28,8 +28,8 @@ let g:WebDevIconsUnicodeDecorateFolderNodes = 1
 '''
 
 # defx(filer)と相性悪すぎ
-[[plugins]]
-repo = 'rbtnn/vim-ambiwidth'
+# [[plugins]]
+# repo = 'rbtnn/vim-ambiwidth'
 
 [[plugins]]
 repo = 'tpope/vim-abolish'
@@ -136,6 +136,8 @@ autocmd MyAutoCmd ColorScheme * hi DiagnosticWarn   guifg=#ECBE7B
 autocmd MyAutoCmd ColorScheme * hi DiagnosticInfo   guifg=#008080
 autocmd MyAutoCmd ColorScheme * hi DiagnosticHint   guifg=#98be65
 
+autocmd MyAutoCmd ColorScheme * hi TSNodeKey                        gui=bold,underline guifg=#ff2f87
+
 autocmd MyAutoCmd ColorScheme * hi LightspeedGreyWash               guifg=#777777
 autocmd MyAutoCmd ColorScheme * hi LightspeedMaskedChar             guifg=#51afef
 autocmd MyAutoCmd ColorScheme * hi LightspeedUnlabeledMatch         gui=bold guifg=#f3ecec
@@ -145,6 +147,10 @@ autocmd MyAutoCmd ColorScheme * hi LightspeedLabelDistant           gui=bold,und
 autocmd MyAutoCmd ColorScheme * hi LightspeedLabelDistantOverlapped guifg=#777777 guibg=None
 autocmd MyAutoCmd ColorScheme * hi LightspeedOneCharMatch           gui=bold,underline guifg=#f00077
 autocmd MyAutoCmd ColorScheme * hi LightspeedShortcut               gui=bold,underline guifg=#ECBE7B
+
+autocmd MyAutoCmd ColorScheme * hi NeoTreeCursorLine                gui=bold
+
+autocmd MyAutoCmd ColorScheme * hi NvimSurroundHighlight            gui=bold guifg=#ff2f87
 
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642

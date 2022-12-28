@@ -105,6 +105,16 @@ define_keymap(re.compile("Alacritty|kitty"), {
 }, "Alacritty and kitty")
 
 # Keybindings for Firefox/Chrome
+define_keymap(re.compile("Vivaldi-stable"), {
+    K("RAlt-w"): K("C-w"),
+    K("Super-t"): with_mark(K("C-t")),
+    K("Super-Shift-t"): with_mark(K("C-Shift-t")),
+    K("Super-w"): with_mark(K("C-w")),
+    K("Super-Shift-r"): with_mark(K("C-Shift-r")),
+    K("Super-Shift-v"): with_mark(K("C-Shift-v")),
+}, "Vivaldi")
+
+# Keybindings for Firefox/Chrome
 define_keymap(re.compile("Firefox|Google-chrome"), {
     K("RAlt-l"): K("C-TAB"),
     K("RAlt-h"): K("C-Shift-TAB"),

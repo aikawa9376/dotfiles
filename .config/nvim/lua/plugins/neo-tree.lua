@@ -105,7 +105,7 @@ require("neo-tree").setup({
       ["r"] = "rename",
       ["p"] = "paste_from_clipboard",
       ["y"] = "copy_to_clipboard",
-      ["x"] = "cut_to_clipboard", -- takes text input for destination, also accepts the optional config.show_path option like "add".
+      ["m"] = "cut_to_clipboard", -- takes text input for destination, also accepts the optional config.show_path option like "add".
       ["q"] = "close_window",
       ["R"] = "refresh",
       ["?"] = "show_help",
@@ -113,11 +113,11 @@ require("neo-tree").setup({
       [">"] = "next_source",
       ["c"] = function(state)
         local node = state.tree:get_node()
-        vim.fn.setreg('', node.name, 'c')
+        vim.fn.setreg('+', node.name, 'c')
       end,
       ["C"] = function(state)
         local node = state.tree:get_node()
-        vim.fn.setreg('', node.path, 'c')
+        vim.fn.setreg('+', node.path, 'c')
       end,
     }
   },
@@ -149,6 +149,15 @@ require("neo-tree").setup({
     follow_current_file = false, -- This will find and focus the file in the active buffer every
     -- time the current file is changed while the tree is open.
     group_empty_dirs = false, -- when true, empty folders will be grouped together
+    find_args = { -- you can specify extra args to pass to the find command.
+      fd = {
+        "--exclude", ".git",
+        "--exclude", "node_modules",
+        "--exclude", ".next",
+        "--exclude", "dist",
+        "--exclude", "vendor",
+      }
+    },
     hijack_netrw_behavior = "open_default", -- netrw disabled, opening a directory opens neo-tree
     -- in whatever position is specified in window.position
     -- "open_current",  -- netrw disabled, opening a directory opens within the
@@ -167,9 +176,10 @@ require("neo-tree").setup({
         ["<bs>"] = "navigate_up",
         ["."] = "set_root",
         ["H"] = "toggle_hidden",
-        ["/"] = "fuzzy_finder",
+        ["/"] = "none",
+        ["f"] = "fuzzy_finder",
         ["D"] = "fuzzy_finder_directory",
-        ["f"] = "filter_on_submit",
+        ["F"] = "filter_on_submit",
         ["<c-x>"] = "clear_filter",
         ["[g"] = "prev_git_modified",
         ["]g"] = "next_git_modified",
@@ -202,7 +212,46 @@ require("neo-tree").setup({
         ["gg"] = "git_commit_and_push",
       }
     }
-  }
+  },
+  event_handlers = {
+    {
+      event = "neo_tree_window_after_open",
+      handler = function()
+        vim.api.nvim_set_var('auto_cursorline_disable', 1)
+      end,
+    },
+    {
+      event = "neo_tree_window_after_close",
+      handler = function()
+        vim.api.nvim_set_var('auto_cursorline_disable', 0)
+      end,
+    }
+  },
+  source_selector = {
+    winbar = true, -- toggle to show selector on winbar
+    statusline = false, -- toggle to show selector on statusline
+    show_scrolled_off_parent_node = false, -- boolean
+    tab_labels = { -- table
+      filesystem = "  Files ", -- string | nil
+      buffers = "  Bufs ", -- string | nil
+      git_status = "  Git ", -- string | nil
+      diagnostics = " 裂Diagnos ", -- string | nil
+    },
+    content_layout = "start", -- string
+    tabs_layout = "equal", -- string
+    truncation_character = "…", -- string
+    tabs_min_width = nil, -- int | nil
+    tabs_max_width = nil, -- int | nil
+    padding = 0, -- int | { left: int, right: int }
+    separator = { left = "", right = "" }, -- string | { left: string, right: string, override: string | nil }
+    separator_active = nil, -- string | { left: string, right: string, override: string | nil } | nil
+    show_separator_on_edge = false, -- boolean
+    highlight_tab = "NormalNC", -- string
+    highlight_tab_active = "NeoTreeTabActive", -- string
+    highlight_background = "NormalNC", -- string
+    highlight_separator = "NormalNC", -- string
+    highlight_separator_active = "NeoTreeTabActive", -- string
+  },
 })
 
 vim.api.nvim_set_keymap('n', '<space>n', '<Cmd>Neotree reveal toggle<CR>', { noremap = true, silent = true })

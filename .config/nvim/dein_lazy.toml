@@ -50,7 +50,7 @@ repo = 'hrsh7th/nvim-cmp'
 on_event = ['InsertEnter', 'CursorHold']
 depends  = [
   'nvim-lspconfig', 'null-ls.nvim', 'noice.nvim',
-  'LuaSnip', 'cmp-nvim-lsp', 'lsp-format.nvim', 'lspkind-nvim',
+  'LuaSnip', 'friendly-snippets', 'cmp-nvim-lsp', 'lsp-format.nvim', 'lspkind-nvim',
   'lsp-inlayhints.nvim', 'lsp_signature.nvim', 'vim-illuminate'
 ]
 lua_source = '''
@@ -64,7 +64,7 @@ repo = 'hrsh7th/cmp-nvim-lsp'
 repo = 'hrsh7th/cmp-buffer'
 on_event = ['InsertEnter']
 depends  = [
-  'cmp-rg', 'cmp_luasnip', 'friendly-snippets', 'cmp-path',
+  'cmp-rg', 'cmp_luasnip', 'cmp-path',
   'cmp-tabnine', 'cmp-tmux', 'vim-snippets'
 ]
 
@@ -84,8 +84,7 @@ repo = 'dmitmel/cmp-cmdline-history'
 repo = 'hrsh7th/cmp-cmdline'
 on_event = 'CmdlineEnter'
 depends  = [
-  'cmp-cmdline-history', 'cmp-cmdline', 'cmp-nvim-lsp-document-symbol',
-  'nvim-cmp-buffer-lines'
+  'cmp-cmdline-history', 'cmp-cmdline', 'cmp-nvim-lsp-document-symbol'
 ]
 
 [[plugins]]
@@ -156,21 +155,21 @@ lua require('rust-tools.config').setup()
 [[plugins]]
 repo = 'RRethy/vim-illuminate'
 
-[[plugins]]
-repo = 'j-hui/fidget.nvim'
-on_event = 'VimEnter'
-hook_source = '''
-lua << EOF
-require"fidget".setup{
-  fmt = {
-    stack_upwards = false,
-  },
-  text = {
-    spinner = "dots",
-  },
-}
-EOF
-'''
+# [[plugins]]
+# repo = 'j-hui/fidget.nvim'
+# on_event = 'VimEnter'
+# hook_source = '''
+# lua << EOF
+# require"fidget".setup{
+#   fmt = {
+#     stack_upwards = false,
+#   },
+#   text = {
+#     spinner = "dots",
+#   },
+# }
+# EOF
+# '''
 
 [[plugins]]
 repo = 'ray-x/lsp_signature.nvim'
@@ -192,7 +191,8 @@ require("notify").setup({
     vim.api.nvim_win_set_config(win, { focusable = false })
   end,
   max_width = 100,
-  top_down = false
+  top_down = false,
+  background_colour = '#002b36'
 })
 '''
 
@@ -201,28 +201,85 @@ repo = 'folke/noice.nvim'
 depends = ['nui.nvim', 'nvim-notify']
 lua_source = '''
   require("noice").setup({
-      cmdline = {
-        view = "cmdline_popup", -- view for rendering the cmdline. Change to `cmdline` to get a classic cmdline at the bottom
-        opts = { buf_options = { filetype = "vim" } }, -- enable syntax highlighting in the cmdline
-        icons =
-        {
-          ["/"] = { icon = "", hl_group = "DiagnosticWarn" },
-          ["?"] = { icon = "", hl_group = "DiagnosticWarn" },
-          [":"] = { icon = "", hl_group = "DiagnosticInfo", firstc = false },
+    cmdline = {
+      view = "cmdline_popup", -- view for rendering the cmdline. Change to `cmdline` to get a classic cmdline at the bottom
+      opts = { buf_options = { filetype = "vim" } }, -- enable syntax highlighting in the cmdline
+      icons =
+      {
+        ["/"] = { icon = "", hl_group = "DiagnosticWarn" },
+        ["?"] = { icon = "", hl_group = "DiagnosticWarn" },
+        [":"] = { icon = "", hl_group = "DiagnosticInfo", firstc = false },
+      },
+    },
+    popupmenu = {
+      enabled = true, -- disable if you use something like cmp-cmdline
+      ---@type 'nui'|'cmp'
+      backend = "cmp", -- backend to use to show regular cmdline completions
+      -- You can specify options for nui under `config.views.popupmenu`
+    },
+    history = {
+      -- options for the message history that you get with `:Noice`
+      view = "split",
+      opts = { enter = true },
+      filter = { event = "msg_show", ["not"] = { kind = { "search_count", "echo" } } },
+    },
+    lsp = {
+      progress = {
+        enabled = true,
+        -- Lsp Progress is formatted using the builtins for lsp_progress. See config.format.builtin
+        -- See the section on formatting for more details on how to customize.
+        --- @type NoiceFormat|string
+        format = "lsp_progress",
+        --- @type NoiceFormat|string
+        format_done = "lsp_progress_done",
+        throttle = 1000 / 30, -- frequency to update lsp progress message
+        view = "mini",
+      },
+      override = {
+        -- override the default lsp markdown formatter with Noice
+        ["vim.lsp.util.convert_input_to_markdown_lines"] = false,
+        -- override the lsp markdown formatter with Noice
+        ["vim.lsp.util.stylize_markdown"] = false,
+        -- override cmp documentation with Noice (needs the other options to work)
+        ["cmp.entry.get_documentation"] = false,
+      },
+      hover = {
+        enabled = false,
+        view = nil, -- when nil, use defaults from documentation
+        ---@type NoiceViewOptions
+        opts = {}, -- merged with defaults from documentation
+      },
+      signature = {
+        enabled = false,
+        auto_open = {
+          enabled = true,
+          trigger = true, -- Automatically show signature help when typing a trigger character from the LSP
+          luasnip = true, -- Will open signature help when jumping to Luasnip insert nodes
+          throttle = 50, -- Debounce lsp signature help request by 50ms
+        },
+        view = nil, -- when nil, use defaults from documentation
+        ---@type NoiceViewOptions
+        opts = {}, -- merged with defaults from documentation
+      },
+      message = {
+        -- Messages shown by lsp servers
+        enabled = true,
+        view = "notify",
+        opts = {},
+      },
+      -- defaults for hover and signature help
+      documentation = {
+        view = "hover",
+        ---@type NoiceViewOptions
+        opts = {
+          lang = "markdown",
+          replace = true,
+          render = "plain",
+          format = { "{message}" },
+          win_options = { concealcursor = "n", conceallevel = 3 },
         },
       },
-      popupmenu = {
-        enabled = true, -- disable if you use something like cmp-cmdline
-        ---@type 'nui'|'cmp'
-        backend = "cmp", -- backend to use to show regular cmdline completions
-        -- You can specify options for nui under `config.views.popupmenu`
-      },
-      history = {
-        -- options for the message history that you get with `:Noice`
-        view = "split",
-        opts = { enter = true },
-        filter = { event = "msg_show", ["not"] = { kind = { "search_count", "echo" } } },
-      },
+    },
   })
 '''
 
@@ -300,8 +357,8 @@ EOF
 [[plugins]]
 repo = 'cappyzawa/trim.nvim'
 on_event = 'InsertEnter'
-hook_source = '''
-lua require'trim'.setup({disable = {}})
+lua_source = '''
+require'trim'.setup({disable = {"markdown"}})
 '''
 
 [[plugins]]
@@ -611,6 +668,19 @@ inoremap <expr> ( search('\<\if\%#', 'bcn')? ' (': '('
 lua = '''
 inoremap <expr> . smartchr#loop('.', '..', '->', '=>')
 '''
+javascript = '''
+inoremap <expr> . smartchr#loop('.', '..', '->', '=>')
+'''
+typescript = '''
+inoremap <expr> = search('\(&\<bar><bar>\<bar>+\<bar>-\<bar>/\<bar>>\<bar><\) \%#', 'bcn')? '<bs>= '
+  \ : search('\(*\<bar>!\)\%#', 'bcn') ? '= '
+  \ : smartchr#loop('=', ' = ', ' == ', ' === ', ' !== ')
+'''
+typescriptreact = '''
+inoremap <expr> = search('\(&\<bar><bar>\<bar>+\<bar>-\<bar>/\<bar>>\<bar><\) \%#', 'bcn')? '<bs>= '
+  \ : search('\(*\<bar>!\)\%#', 'bcn') ? '= '
+  \ : smartchr#loop('=', ' = ', ' == ', ' === ', ' !== ')
+'''
 
 [[plugins]]
 repo = 'emonkak/vim-operator-sort'
@@ -640,12 +710,37 @@ lua_source = '''
 require'plugins.hydra'
 '''
 
+# [[plugins]]
+# repo = 'tpope/vim-surround'
+# on_event = 'CursorMoved'
+# hook_add = '''
+# let g:surround_{char2nr("P")} = "<?php \r ?>"
+# let g:surround_{char2nr("H")} = "<!-- \r -->"
+# '''
+
 [[plugins]]
-repo = 'tpope/vim-surround'
+repo = 'kylechui/nvim-surround'
 on_event = 'CursorMoved'
-hook_add = '''
-let g:surround_{char2nr("P")} = "<?php \r ?>"
-let g:surround_{char2nr("H")} = "<!-- \r -->"
+lua_source = '''
+require("nvim-surround").setup({
+  surrounds = {
+    [")"] = {
+      change = {
+          replacement = { "a(", ")a" },
+      },
+    },
+    ["}"] = {
+      change = {
+          replacement = { "{", "}" },
+      },
+    },
+  },
+  aliases = {
+    ["b"] = { ")", "}", "]", ">" },
+    ["q"] = { '"', "'", "`" },
+    ["s"] = { "}", "]", ")", ">", '"', "'", "`" },
+  },
+})
 '''
 
 [[plugins]]
@@ -1373,9 +1468,11 @@ require('plugins.treesitter')
 
 [[plugins]]
 repo = 'mfussenegger/nvim-treehopper'
+lua_source = '''
+require("tsht").config.ft_to_parser.typescriptreact = "tsx"
+'''
 hook_source = '''
-omap     <silent> ir <cmd>lua require('tsht').nodes()<CR>
-vnoremap <silent> ir <cmd>lua require('tsht').nodes()<CR>
+omap <silent> <space> :<C-U>lua require('tsht').nodes()<CR>
 '''
 
 [[plugins]]
@@ -1401,8 +1498,21 @@ repo = 'yioneko/nvim-yati'
 
 [[plugins]]
 repo = 'm-demare/hlargs.nvim'
-hook_source = '''
-lua require 'hlargs'.setup()
+lua_source = '''
+require 'hlargs'.setup({
+  hl_priority = 150
+})
+'''
+
+[[plugins]]
+repo = 'kwkarlwang/bufjump.nvim'
+on_event = 'CursorMoved'
+lua_source = '''
+require("bufjump").setup({
+    forward = "<M-i>",
+    backward = "<M-o>",
+    on_success = nil
+})
 '''
 
 # [[plugins]]

@@ -132,6 +132,7 @@ export FZF_DEFAULT_OPTS='
 --extended
 --cycle
 --no-hscroll
+--no-separator
 --inline-info
 --tabstop=2
 --tiebreak=chunk,index
@@ -344,6 +345,7 @@ bindkey '\e[4~' end-of-line
 # -------------------------------------
 ENHANCD_HOOK_AFTER_CD=ll
 ENHANCD_HYPHEN_NUM=50
+ENHANCD_COMPLETION_BEHAVIOR=list
 ENHANCD_FILTER=fzf:fzy:peco
 
 # -------------------------------------

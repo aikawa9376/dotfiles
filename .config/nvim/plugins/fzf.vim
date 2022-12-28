@@ -109,7 +109,7 @@ endfunction
 command! -bang -nargs=? -complete=dir Files
   \ call fzf#vim#files(<q-args>, fzf#wrap('fzf',
   \ {'sink*': function('<SID>override_files_sink'),
-  \  'source': 'fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 ' .
+  \  'source': 'fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . ' .
   \            '-E .git -E ''*.psd'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf'' ' .
   \            '-E ''*.ai'' -E ''*.jfif'' -E ''*.jpeg'' -E ''*.gif'' ' .
   \            '-E ''*.eps'' -E ''*.svg'' -E ''*.JPEG'' -E ''*.mp4'' ' .
