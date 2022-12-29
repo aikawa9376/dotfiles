@@ -152,6 +152,8 @@ autocmd MyAutoCmd ColorScheme * hi NeoTreeCursorLine                gui=bold
 
 autocmd MyAutoCmd ColorScheme * hi NvimSurroundHighlight            gui=bold guifg=#ff2f87
 
+autocmd MyAutoCmd ColorScheme * hi LspInlayHint                     guifg=#586e75
+
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:NormalNC

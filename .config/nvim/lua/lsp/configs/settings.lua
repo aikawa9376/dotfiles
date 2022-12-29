@@ -13,28 +13,37 @@ M.configs = {
     end,
   },
   tsserver = {
-    init_options = {
-      hostInfo = "neovim",
-      preferences = {
-        includeInlayParameterNameHints = "none",
-        includeInlayParameterNameHintsWhenArgumentMatchesName = false,
-        includeInlayFunctionParameterTypeHints = false,
-        includeInlayVariableTypeHints = true,
-        includeInlayPropertyDeclarationTypeHints = true,
-        includeInlayFunctionLikeReturnTypeHints = true,
-        includeInlayEnumMemberValueHints = true,
+    settings = {
+      typescript = {
+        inlayHints = {
+          includeInlayParameterNameHints = 'all',
+          includeInlayParameterNameHintsWhenArgumentMatchesName = true,
+          includeInlayFunctionParameterTypeHints = true,
+          includeInlayVariableTypeHints = true,
+          includeInlayPropertyDeclarationTypeHints = true,
+          includeInlayFunctionLikeReturnTypeHints = true,
+          includeInlayEnumMemberValueHints = true,
+        }
       },
+      javascript = {
+        inlayHints = {
+          includeInlayParameterNameHints = 'all',
+          includeInlayParameterNameHintsWhenArgumentMatchesName = false,
+          includeInlayFunctionParameterTypeHints = true,
+          includeInlayVariableTypeHints = true,
+          includeInlayPropertyDeclarationTypeHints = true,
+          includeInlayFunctionLikeReturnTypeHints = true,
+          includeInlayEnumMemberValueHints = true,
+        }
+      }
+    },
+    go_to_source_definition = {
+      fallback = true, -- fall back to standard LSP definition on failure
     },
     on_attach = function(client, bufnr)
+      require("lsp-inlayhints").on_attach(client, bufnr)
       client.server_capabilities.documentFormattingProvider = false
       M.default(client, bufnr)
-      local ts_utils = require("nvim-lsp-ts-utils")
-      ts_utils.setup {
-        update_imports_on_move = true,
-        require_confirmation_on_move = true,
-        enable_import_on_completion = true,
-      }
-      ts_utils.setup_client(client)
     end,
   },
   rust_analyzer = {
@@ -64,6 +73,9 @@ M.configs = {
   sumneko_lua = {
     settings = {
       Lua = {
+        hint = {
+          enable = true
+        },
         diagnostics = {
           globals = { 'vim' }
         },
@@ -79,6 +91,10 @@ M.configs = {
         }
       }
     },
+    on_attach = function(client, bufnr)
+      require("lsp-inlayhints").on_attach(client, bufnr)
+      M.default(client, bufnr)
+    end,
   },
   eslint = {
     settings = {

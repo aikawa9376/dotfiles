@@ -20,7 +20,15 @@ local function setup_servers()
   local lsp_installer = require("mason-lspconfig")
 
   lsp_installer.setup_handlers({ function(server)
-    if server == "rust_analyzer" then
+    if server == "tsserver" then
+      require("typescript").setup({
+        server = init_setup({
+          capabilities = capabilities,
+          on_attach = settings.default
+        }, server)
+      })
+
+    elseif server == "rust_analyzer" then
       require("rust-tools").setup({
         tools = {
           inlay_hints = {

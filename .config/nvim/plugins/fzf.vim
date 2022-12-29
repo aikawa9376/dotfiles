@@ -352,7 +352,6 @@ function! s:dir_file_completion(word)
 endfunction
 
 function! s:dir_file_sink(lines)
-  echomsg string(a:lines)
   let rmpath = substitute(a:lines[1],'.\+'.a:lines[0],a:lines[0],'g')
   return rmpath
 endfunction
@@ -534,7 +533,6 @@ function! FZFYankHandler(opt, line) abort
 endfunction
 
 function! FZFYankInsertHandler(line) abort
-  echom string(a:line[0])
   let yank = substitute(a:line[0], '\d\+\s', '', '')
   let yank = substitute(yank, '⏎\s\+', '⏎', 'g')
   let yank = substitute(yank, '⏎', '\r', 'g')
