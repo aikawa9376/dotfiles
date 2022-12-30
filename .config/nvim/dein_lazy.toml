@@ -48,7 +48,7 @@ lua require'plugins.dressing'
 repo = 'hrsh7th/nvim-cmp'
 on_event = ['InsertEnter', 'CursorHold']
 depends  = [
-  'nvim-lspconfig', 'null-ls.nvim', 'noice.nvim',
+  'nvim-lspconfig', 'null-ls.nvim', 'noice.nvim', 'nvim-autopairs'
   'LuaSnip', 'friendly-snippets', 'cmp-nvim-lsp', 'lsp-format.nvim', 'lspkind-nvim',
   'lsp-inlayhints.nvim', 'lsp_signature.nvim', 'vim-illuminate', 'dressing.nvim'
 ]
@@ -61,7 +61,7 @@ repo = 'hrsh7th/cmp-nvim-lsp'
 
 [[plugins]]
 repo = 'hrsh7th/cmp-buffer'
-on_event = ['InsertEnter']
+on_event = ['InsertEnter', 'CmdLineEnter']
 depends  = [
   'cmp-rg', 'cmp_luasnip', 'cmp-path',
   'cmp-tabnine', 'cmp-tmux', 'vim-snippets'
@@ -177,6 +177,19 @@ repo = 'ray-x/lsp_signature.nvim'
 repo = 'lvimuser/lsp-inlayhints.nvim'
 lua_source = '''
 require("lsp-inlayhints").setup()
+'''
+
+[[plugins]]
+repo = 'ThePrimeagen/refactoring.nvim'
+on_lua = 'refactoring.nvim'
+lua_source = '''
+require('refactoring').setup({})
+vim.api.nvim_set_keymap(
+    "v",
+    "<leader>rf",
+    ":lua require('refactoring').select_refactor()<CR>",
+    { noremap = true, silent = true, expr = false }
+)
 '''
 
 [[plugins]]
@@ -355,6 +368,19 @@ EOF
 repo = 'cseickel/diagnostic-window.nvim'
 on_cmd = 'DiagWindowShow'
 
+[[plugins]]
+repo = 'lukas-reineke/indent-blankline.nvim'
+on_event = 'CursorMoved'
+lua_source = '''
+require("indent_blankline").setup {
+  char = "",
+  char_blankline = "",
+  context_char = "│",
+  context_char_blankline = "│",
+  show_current_context = true,
+}
+'''
+
 # text-----------------------------------
 
 [[plugins]]
@@ -415,7 +441,6 @@ let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
 
 [[plugins]]
 repo = 'windwp/nvim-autopairs'
-on_event = 'InsertEnter'
 hook_source = '''
 lua require'plugins.autopairs'
 '''

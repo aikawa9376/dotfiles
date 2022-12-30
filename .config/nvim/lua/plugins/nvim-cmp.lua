@@ -134,24 +134,36 @@ cmp.setup {
   preselect = cmp.PreselectMode.Item,
 }
 
+local cmdline_mapping = cmp.mapping.preset.cmdline()
+
+cmdline_mapping["<M-p>"] = {
+  c = function()
+    vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-p>', true, true, true), 'n')
+  end
+}
+cmdline_mapping["<M-n>"] = {
+  c = function()
+    vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-n>', true, true, true), 'n')
+  end
+}
 -- Use buffer source for `/` (if you enabled `native_menu`, this won't work anymore).
 cmp.setup.cmdline({ '/', '?' }, {
-  mapping = cmp.mapping.preset.cmdline(),
+  mapping = cmdline_mapping,
   sources = {
     -- { name = 'fuzzy_buffer' },
+    { name = 'buffer' },
     { name = 'nvim_lsp_document_symbol' },
     { name = 'cmdline_history' },
-    { name = 'buffer' },
     -- { name = 'buffer-lines' },
   }
 })
 
 -- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
 cmp.setup.cmdline(':', {
-  mapping = cmp.mapping.preset.cmdline(),
+  mapping = cmdline_mapping,
   sources = cmp.config.sources({
-    { name = 'cmdline_history' },
     { name = 'cmdline' },
+    { name = 'cmdline_history' },
   })
 })
 

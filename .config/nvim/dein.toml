@@ -154,6 +154,8 @@ autocmd MyAutoCmd ColorScheme * hi NvimSurroundHighlight            gui=bold gui
 
 autocmd MyAutoCmd ColorScheme * hi LspInlayHint                     guifg=#586e75
 
+autocmd MyAutoCmd ColorScheme * hi IndentBlanklineContextChar       guifg=#073642
+
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:NormalNC

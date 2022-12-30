@@ -11,6 +11,8 @@ require("null-ls").setup({
     }),
     require("null-ls").builtins.formatting.blade_formatter,
     require("null-ls").builtins.formatting.sql_formatter,
+    require("null-ls").builtins.formatting.stylua,
+    -- require("null-ls").builtins.code_actions.refactoring
     -- require("typescript.extensions.null-ls.code-actions"),
   },
   on_attach = function(client, bufnr)
