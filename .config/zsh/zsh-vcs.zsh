@@ -165,7 +165,7 @@ function _update_vcs_info_msg() {
   else
     local left="%B%F{white}>>%B%F{blue}%~%f%b"
   fi
-  local right="%B%F{white}[%m:%B%F{yellow}%D %*%B%F{white}]"
+  local right="%B%F{gray}[%m:%B%F{yellow}%D %*%B%F{gray}]"
   # スペースの長さを計算
   # テキストを装飾する場合、エスケープシーケンスをカウントしないようにします
   local invisible='%([BSUbfksu]|([FK]|){*})'

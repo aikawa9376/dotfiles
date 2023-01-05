@@ -52,15 +52,15 @@ set background=dark
 set t_8f=^[[38;2;%lu;%lu;%lum
 set t_8b=^[[48;2;%lu;%lu;%lum
 
-autocmd FocusGained * hi Normal ctermbg=None guibg=#002b36
-autocmd FocusLost   * hi Normal ctermbg=None guibg=None
+autocmd FocusGained * hi Normal ctermbg=None guibg=#002b36 guifg=#839496
+autocmd FocusLost   * hi Normal ctermbg=None guibg=None guifg=#839496
 
-autocmd MyAutoCmd ColorScheme * highlight Normal            ctermbg=None guibg=None
+autocmd MyAutoCmd ColorScheme * highlight Normal            ctermbg=None guibg=None guifg=#839496
 autocmd MyAutoCmd ColorScheme * highlight NormalFloat       ctermbg=None guibg=#002b36
 autocmd MyAutoCmd ColorScheme * highlight ErrorMsg          cterm=bold ctermfg=9 gui=bold guifg=#dc322f
 autocmd MyAutoCmd ColorScheme * highlight SignColumn        ctermbg=None guibg=None
-autocmd MyAutoCmd ColorScheme * highlight LineNr            ctermbg=None guibg=None
-autocmd MyAutoCmd ColorScheme * highlight Comment           gui=italic
+autocmd MyAutoCmd ColorScheme * highlight LineNr            ctermbg=None guibg=None guifg=#586e75
+autocmd MyAutoCmd ColorScheme * highlight Comment           gui=italic guifg=#586e75
 autocmd MyAutoCmd ColorScheme * highlight QuickFixLine      cterm=None ctermfg=7 gui=bold,underline
 autocmd MyAutoCmd ColorScheme * highlight StatusLine        cterm=None gui=None guibg=None
 autocmd MyAutoCmd ColorScheme * highlight StatusLineNC      cterm=None gui=None guibg=None
@@ -73,7 +73,7 @@ autocmd MyAutoCmd ColorScheme * highlight EndOfBuffer  guifg=#002B36
 autocmd MyAutoCmd ColorScheme * highlight EWhitespace  guifg=#586e75
 autocmd MyAutoCmd VimEnter,WinEnter * match EWhitespace / \+$/
 " pmu settings
-autocmd MyAutoCmd ColorScheme * highlight Pmenu        cterm=None ctermfg=111  gui=None guifg=#87afff
+autocmd MyAutoCmd ColorScheme * highlight Pmenu        cterm=None ctermfg=111  gui=None guifg=#87afff guibg=#073642
 autocmd MyAutoCmd ColorScheme * highlight PmenuSbar    cterm=None ctermbg=None gui=None guibg=#073642
 autocmd MyAutoCmd ColorScheme * highlight PmenuThumb   cterm=None ctermbg=23   gui=None guibg=#005f5f
 autocmd MyAutoCmd ColorScheme * highlight PmenuSel     cterm=None ctermfg=126  ctermbg=None gui=None guifg=#af0087 guibg=None
@@ -82,9 +82,9 @@ autocmd MyAutoCmd ColorScheme * highlight Fmenu        ctermfg=111 ctermbg=0 gui
 autocmd MyAutoCmd ColorScheme * highlight Search       cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
 autocmd MyAutoCmd ColorScheme * highlight CurSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900
 autocmd MyAutoCmd ColorScheme * highlight IncSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900
-autocmd MyAutoCmd ColorScheme * highlight Visual       cterm=None ctermfg=None ctermbg=8 gui=None guifg=None guibg=#163356
+autocmd MyAutoCmd ColorScheme * highlight Visual       cterm=None ctermfg=None ctermbg=8 gui=None guifg=None guibg=#20436e
 autocmd MyAutoCmd ColorScheme * highlight CursorLine   ctermbg=0 guibg=#073642 guisp=#93a1a1
-autocmd MyAutoCmd ColorScheme * highlight CursorLineNr ctermbg=None guibg=None
+autocmd MyAutoCmd ColorScheme * highlight CursorLineNr ctermbg=None guibg=None guifg=#93a1a1
 
 " plugins setting
 autocmd MyAutoCmd ColorScheme * highlight GitGutterAdd          guifg=#98be65 guibg=None

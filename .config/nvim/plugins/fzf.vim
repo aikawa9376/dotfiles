@@ -47,6 +47,11 @@ let g:fzf_action = {
   \ 'ctrl-x': 'split',
   \ 'ctrl-v': 'vsplit' }
 
+let g:fzf_colors = {
+  \ 'fg+': ['fg', 'CursorLine', 'CursorColumn', 'Normal'],
+  \ 'bg+': ['bg', 'Normal', 'CursorLine'],
+  \ }
+
 command! -bang -nargs=* Rg
   \ call fzf#vim#grep(
   \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git '.shellescape(<q-args>), 1,

@@ -378,6 +378,26 @@ require("indent_blankline").setup {
   context_char = "│",
   context_char_blankline = "│",
   show_current_context = true,
+  context_patterns = {
+    "class",
+    "^func",
+    "method",
+    "^if",
+    "while",
+    "for",
+    "with",
+    "try",
+    "except",
+    "arguments",
+    "argument_list",
+    "object",
+    "dictionary",
+    "element",
+    "table",
+    "tuple",
+    "arrow_function",
+    "do_block",
+  }
 }
 '''
 
@@ -1287,11 +1307,18 @@ lua require'plugins.diffview'
 '''
 
 [[plugins]]
-repo = 'cohama/agit.vim'
-on_cmd = ['Agit']
+repo = 'kdheepak/lazygit.nvim'
+on_lua = ['lazygit.nvim']
 hook_add = '''
-nmap <silent><Leader>gl <cmd>Agit<CR>
+nmap <silent><Leader>gl <cmd>LazyGit<CR>
 '''
+
+# [[plugins]]
+# repo = 'cohama/agit.vim'
+# on_cmd = ['Agit']
+# hook_add = '''
+# nmap <silent><Leader>gl <cmd>Agit<CR>
+# '''
 
 [[plugins]]
 repo = 'rhysd/git-messenger.vim'
@@ -1501,6 +1528,7 @@ require("tsht").config.ft_to_parser.typescriptreact = "tsx"
 '''
 hook_source = '''
 omap <silent> <space> :<C-U>lua require('tsht').nodes()<CR>
+vmap <silent> <space>h :<C-U>lua require('tsht').nodes()<CR>
 '''
 
 [[plugins]]
