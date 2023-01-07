@@ -48,7 +48,7 @@ lua require'plugins.dressing'
 repo = 'hrsh7th/nvim-cmp'
 on_event = ['InsertEnter', 'CursorHold']
 depends  = [
-  'nvim-lspconfig', 'null-ls.nvim', 'noice.nvim', 'nvim-autopairs'
+  'nvim-lspconfig', 'null-ls.nvim', 'noice.nvim', 'lualine.nvim' 'nvim-autopairs'
   'LuaSnip', 'friendly-snippets', 'cmp-nvim-lsp', 'lsp-format.nvim', 'lspkind-nvim',
   'lsp-inlayhints.nvim', 'lsp_signature.nvim', 'vim-illuminate', 'dressing.nvim'
 ]
@@ -1252,7 +1252,6 @@ let g:git_messenger_floating_win_opts = { 'border': 'single' }
 # status line ---------------------------
 [[plugins]]
 repo = 'nvim-lualine/lualine.nvim'
-on_event = 'CursorMoved'
 lua_source = '''
 require'plugins.lualine'
 '''

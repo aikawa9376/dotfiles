@@ -1,31 +1,35 @@
 -- Eviline config for lualine
 -- Author: shadmansaleh
 -- Credit: glepnir
-local lualine = require 'lualine'
+local lualine = require("lualine")
 
 -- Color table for highlights
 local colors = {
-  bg = 'none',
-  fg = '#E5E9F0',
-  yellow = '#ECBE7B',
-  cyan = '#008080',
-  darkblue = '#081633',
-  green = '#98be65',
-  orange = '#FF8800',
-  violet = '#a9a1e1',
-  magenta = '#c678dd',
-  blue = '#51afef',
-  red = '#ec5f67'
+  bg = "none",
+  fg = "#E5E9F0",
+  yellow = "#ECBE7B",
+  cyan = "#008080",
+  darkblue = "#081633",
+  green = "#98be65",
+  orange = "#FF8800",
+  violet = "#a9a1e1",
+  magenta = "#c678dd",
+  blue = "#51afef",
+  red = "#ec5f67",
 }
 
 local conditions = {
-  buffer_not_empty = function() return vim.fn.empty(vim.fn.expand('%:t')) ~= 1 end,
+  buffer_not_empty = function()
+    return vim.fn.empty(vim.fn.expand("%:t")) ~= 1
+  end,
   hide_in_width = function()
-    return vim.fn.empty(vim.fn.expand('%:t')) ~= 1 and vim.fn.winwidth(0) > 80
+    return vim.fn.empty(vim.fn.expand("%:t")) ~= 1 and vim.fn.winwidth(0) > 80
   end,
   obsession = function()
-    if vim.fn.winwidth(0) < 80 then return false end
-    local ok = vim.fn.exists('*ObsessionStatus')
+    if vim.fn.winwidth(0) < 80 then
+      return false
+    end
+    local ok = vim.fn.exists("*ObsessionStatus")
     if ok ~= 0 then
       return true
     else
@@ -33,7 +37,9 @@ local conditions = {
     end
   end,
   project = function()
-    if vim.fn.winwidth(0) < 80 then return false end
+    if vim.fn.winwidth(0) < 80 then
+      return false
+    end
     local ok = require("project_nvim.project").get_project_root()
     if ok ~= nil then
       return true
@@ -42,11 +48,21 @@ local conditions = {
     end
   end,
   check_git_workspace = function()
-    if vim.fn.winwidth(0) < 80 then return false end
-    local filepath = vim.fn.expand('%:p:h')
-    local gitdir = vim.fn.finddir('.git', filepath .. ';')
+    if vim.fn.winwidth(0) < 80 then
+      return false
+    end
+    local filepath = vim.fn.expand("%:p:h")
+    local gitdir = vim.fn.finddir(".git", filepath .. ";")
     return gitdir and #gitdir > 0 and #gitdir < #filepath
-  end
+  end,
+  recording = function()
+    local modeName = require("noice").api.status.mode.get()
+    if modeName ~= nil and string.find(modeName, "recording") == 1 then
+      return true
+    else
+      return false
+    end
+  end,
 }
 
 -- Config
@@ -59,10 +75,10 @@ local config = {
       -- We are going to use lualine_c an lualine_x as left and
       -- right section. Both are highlighted by c theme .  So we
       -- are just setting default looks o statusline
-      normal = {c = {fg = colors.fg, bg = colors.bg}},
-      inactive = {c = {fg = colors.fg, bg = colors.bg}}
+      normal = { c = { fg = colors.fg, bg = colors.bg } },
+      inactive = { c = { fg = colors.fg, bg = colors.bg } },
     },
-    globalstatus = true
+    globalstatus = true,
   },
   sections = {
     -- these are to remove the defaults
@@ -72,7 +88,7 @@ local config = {
     lualine_z = {},
     -- These will be filled later
     lualine_c = {},
-    lualine_x = {}
+    lualine_x = {},
   },
   inactive_sections = {
     -- these are to remove the defaults
@@ -81,16 +97,16 @@ local config = {
     lualine_y = {},
     lualine_z = {},
     lualine_c = {},
-    lualine_x = {}
-  }
+    lualine_x = {},
+  },
 }
 
 local function split(inputstr, sep)
   if sep == nil then
     sep = "%s"
   end
-  local t={}
-  for str in string.gmatch(inputstr, "([^"..sep.."]+)") do
+  local t = {}
+  for str in string.gmatch(inputstr, "([^" .. sep .. "]+)") do
     table.insert(t, str)
   end
   return t
@@ -117,17 +133,17 @@ local function ins_inactive_right(component)
 end
 
 function changeName(name)
-  if(string.find(name, "term")) then
-    return 'TERM'
-  elseif(string.find(name, "defx")) then
-    return 'DEFX'
-  elseif(string.find(name, "vista")) then
-    return 'Symbols'
+  if string.find(name, "term") then
+    return "TERM"
+  elseif string.find(name, "defx") then
+    return "DEFX"
+  elseif string.find(name, "vista") then
+    return "Symbols"
   end
   return name
 end
 
-ins_left {
+ins_left({
   -- mode component
   function()
     -- auto change color according to neovims mode
@@ -135,13 +151,13 @@ ins_left {
       n = colors.red,
       i = colors.green,
       v = colors.blue,
-      [''] = colors.blue,
+      [""] = colors.blue,
       V = colors.blue,
       c = colors.magenta,
       no = colors.red,
       s = colors.orange,
       S = colors.orange,
-      [''] = colors.orange,
+      [""] = colors.orange,
       ic = colors.yellow,
       R = colors.violet,
       Rv = colors.violet,
@@ -149,80 +165,84 @@ ins_left {
       ce = colors.red,
       r = colors.cyan,
       rm = colors.cyan,
-      ['r?'] = colors.cyan,
-      ['!'] = colors.red,
-      t = colors.red
+      ["r?"] = colors.cyan,
+      ["!"] = colors.red,
+      t = colors.red,
     }
-    vim.api.nvim_command(
-    'hi! LualineMode guifg=' .. mode_color[vim.fn.mode()] .. " guibg=" ..
-      colors.bg .. " gui=bold")
-    return require('lualine.utils.mode').get_mode()
+    vim.api.nvim_command("hi! LualineMode guifg=" .. mode_color[vim.fn.mode()] .. " guibg=" .. colors.bg .. " gui=bold")
+    return require("lualine.utils.mode").get_mode()
   end,
   color = "LualineMode",
   left_padding = 0,
-  condition = conditions.hide_in_width
-}
+  condition = conditions.hide_in_width,
+})
 
-ins_left {
-  'branch',
-  icon = '⭠',
+ins_left({
+  "branch",
+  icon = "⭠",
   condition = conditions.check_git_workspace,
-}
+})
 
-ins_left {
+ins_left({
   function()
-    prod = split(require("project_nvim.project").get_project_root(), '/')
+    prod = split(require("project_nvim.project").get_project_root(), "/")
     if next(prod) then
-      return ' ' .. prod[#prod]
+      return " " .. prod[#prod]
     end
   end,
   condition = conditions.project,
-}
+})
 
-ins_left {
-  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. changeName(vim.fn.expand('%=')) end,
+ins_left({
+  function()
+    return vim.fn.WebDevIconsGetFileTypeSymbol() .. " " .. changeName(vim.fn.expand("%="))
+  end,
   condition = conditions.buffer_not_empty,
-}
+})
 
-ins_left {
+ins_left({
   -- filesize component
   function()
     local function format_file_size(file)
       local size = vim.fn.getfsize(file)
-      if size <= 0 then return '' end
-      local sufixes = {'b', 'k', 'm', 'g'}
+      if size <= 0 then
+        return ""
+      end
+      local sufixes = { "b", "k", "m", "g" }
       local i = 1
       while size > 1024 do
         size = size / 1024
         i = i + 1
       end
-      return string.format('%.1f%s', size, sufixes[i])
+      return string.format("%.1f%s", size, sufixes[i])
     end
-    local file = vim.fn.expand('%:p')
-    if string.len(file) == 0 then return '' end
+    local file = vim.fn.expand("%:p")
+    if string.len(file) == 0 then
+      return ""
+    end
     return format_file_size(file)
   end,
-  condition = conditions.hide_in_width
-}
+  condition = conditions.hide_in_width,
+})
 
-ins_left {
-  'diff',
+ins_left({
+  "diff",
   -- Is it me or the symbol for modified us really weird
-  symbols = {added = ' ', modified = '柳', removed = ' '},
+  symbols = { added = " ", modified = "柳", removed = " " },
   color_added = colors.green,
   color_modified = colors.orange,
   color_removed = colors.red,
-  condition = conditions.hide_in_width
-}
+  condition = conditions.hide_in_width,
+})
 
-ins_left {
-  'diagnostics',
-  sources = {'nvim_diagnostic'},
-  symbols = {error = ' ', warn = ' ', info = ' '},
+ins_left({
+  "diagnostics",
+  sources = { "nvim_diagnostic" },
+  symbols = { error = " ", warn = " ", info = " " },
   color_error = colors.red,
   color_warn = colors.yellow,
-  color_info = colors.cyan
-}
+  color_info = colors.cyan,
+})
 
 -- TODO いきなりスローに
 -- Add components to right sections
@@ -230,57 +250,59 @@ ins_left {
 --   'filetype',
 --   condition = conditions.hide_in_width,
 -- }
-ins_right {
-  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. vim.o.filetype end,
-  condition = conditions.hide_in_width,
-}
+ins_right({
+  require("noice").api.statusline.mode.get,
+  cond = conditions.recording,
+  color = { fg = "#ff9e64" },
+})
 
-ins_right {
+ins_right({
   function()
-    local fileFormat = {
-      unix = ' ',
-      dos = ' ',
-      mac = ' '
-    }
-    local icon = fileFormat[vim.bo.fileformat]
-    return icon .. [[%{strlen(&fenc)?&fenc:&enc}]]
+    return vim.fn.WebDevIconsGetFileTypeSymbol() .. " " .. vim.o.filetype
   end,
   condition = conditions.hide_in_width,
-}
+})
 
-ins_right {
-  function() return [[☰ %2p%% %2l:%v]] end,
+ins_right({
+  function()
+    return [[☰ %2p%% %2l:%v]]
+  end,
   condition = conditions.hide_in_width,
-}
+})
 
-ins_right {
+ins_right({
   -- Lsp server name .
   function()
-    local msg = ''
-    local buf_ft = vim.api.nvim_buf_get_option(0, 'filetype')
+    local msg = ""
+    local buf_ft = vim.api.nvim_buf_get_option(0, "filetype")
     local clients = vim.lsp.get_active_clients()
-    if next(clients) == nil then return msg end
+    if next(clients) == nil then
+      return msg
+    end
     for _, client in ipairs(clients) do
       local filetypes = client.config.filetypes
       if filetypes and vim.fn.index(filetypes, buf_ft) ~= -1 then
-        return ' '
+        return " "
       end
     end
     return msg
   end,
   condition = conditions.hide_in_width,
-}
+})
 
-ins_right {
-  function() return vim.fn.ObsessionStatus('', '') end,
+ins_right({
+  function()
+    return vim.fn.ObsessionStatus("", "")
+  end,
   condition = conditions.obsession,
-}
+})
 
 table.insert(config.inactive_sections.lualine_a, {
-  function() return vim.fn.WebDevIconsGetFileTypeSymbol() .. ' ' .. changeName(vim.fn.expand('%=')) end,
+  function()
+    return vim.fn.WebDevIconsGetFileTypeSymbol() .. " " .. changeName(vim.fn.expand("%="))
+  end,
   condition = conditions.buffer_not_empty,
-  }
-)
+})
 
 -- Now don't forget to initialize lualine
 lualine.setup(config)

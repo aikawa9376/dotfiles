@@ -1,4 +1,4 @@
-require 'nvim-treesitter.configs'.setup {
+require("nvim-treesitter.configs").setup({
   ensure_installed = "all",
   highlight = {
     enable = true,
@@ -14,7 +14,7 @@ require 'nvim-treesitter.configs'.setup {
     },
   },
   indent = {
-    enable = true
+    enable = true,
   },
   textobjects = {
     select = {
@@ -43,19 +43,19 @@ require 'nvim-treesitter.configs'.setup {
     enable = true,
     enable_autocmd = false,
     config = {
-      toml = '# %s',
-    }
+      toml = "# %s",
+    },
   },
   matchup = {
-    enable = true
+    enable = true,
   },
   autotag = {
     enable = true,
   },
   yati = {
-    enable = false
+    enable = false,
   },
-}
+})
 
-local parser_config = require "nvim-treesitter.parsers".filetype_to_parsername
+local parser_config = require("nvim-treesitter.parsers").filetype_to_parsername
 parser_config.twig = "html"
