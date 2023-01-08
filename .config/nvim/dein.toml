@@ -9,7 +9,7 @@ repo = 'ahmedkhalf/project.nvim'
 hook_add = '''
 lua require'plugins.project'
 function FindRootDirectory()
-  return luaeval('require("project_nvim.project").get_project_root()')
+return luaeval('require("project_nvim.project").get_project_root()')
 endfunction
 '''
 
@@ -44,7 +44,7 @@ let g:exrc#names = ['.vimrc.local', '.exrc.lua']
 '''
 
 [[plugins]]
-repo = 'icymind/NeoSolarized'
+repo = 'EdenEast/nightfox.nvim'
 hook_add = '''
 syntax enable
 set termguicolors
@@ -79,9 +79,9 @@ autocmd MyAutoCmd ColorScheme * highlight PmenuThumb   cterm=None ctermbg=23   g
 autocmd MyAutoCmd ColorScheme * highlight PmenuSel     cterm=None ctermfg=126  ctermbg=None gui=None guifg=#af0087 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Fmenu        ctermfg=111 ctermbg=0 guifg=#87afff guibg=#002b36
 " search settings
-autocmd MyAutoCmd ColorScheme * highlight Search       cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5
-autocmd MyAutoCmd ColorScheme * highlight CurSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900
-autocmd MyAutoCmd ColorScheme * highlight IncSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900
+autocmd MyAutoCmd ColorScheme * highlight Search       cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight CurSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight IncSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Visual       cterm=None ctermfg=None ctermbg=8 gui=None guifg=None guibg=#20436e
 autocmd MyAutoCmd ColorScheme * highlight CursorLine   ctermbg=0 guibg=#073642 guisp=#93a1a1
 autocmd MyAutoCmd ColorScheme * highlight CursorLineNr ctermbg=None guibg=None guifg=#93a1a1
@@ -100,13 +100,6 @@ autocmd MyAutoCmd ColorScheme * highlight LspSignatureActiveParameter gui=underl
 
 autocmd MyAutoCmd ColorScheme * hi MatchWord  ctermfg=None guifg=None cterm=underline gui=underline
 autocmd MyAutoCmd ColorScheme * hi MatchParen ctermfg=None guifg=None ctermbg=None guibg=None cterm=bold,underline gui=bold,underline
-
-autocmd MyAutoCmd ColorScheme * hi CmpItemKind           guifg=#dc322f
-autocmd MyAutoCmd ColorScheme * hi CmpItemMenu           guifg=#87afff
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbr           guifg=#87afff
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatch      guifg=#E5E9F0
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrMatchFuzzy guifg=#abadb2
-autocmd MyAutoCmd ColorScheme * hi CmpItemAbbrDeprecated gui=strikethrough guifg=#2e3440
 
 autocmd MyAutoCmd ColorScheme * hi DiffDelete            gui=None guifg=None guibg=#341C28
 autocmd MyAutoCmd ColorScheme * hi DiffAdd               gui=None guifg=None guibg=#23384C
@@ -154,11 +147,15 @@ autocmd MyAutoCmd ColorScheme * hi NvimSurroundHighlight            gui=bold gui
 
 autocmd MyAutoCmd ColorScheme * hi LspInlayHint                     guifg=#586e75
 
+" linkしているのになぜかNoiceVirtualTextで使えない
+autocmd MyAutoCmd ColorScheme * hi NoiceVirtualText                 guibg=None
+autocmd MyAutoCmd ColorScheme * hi DiagnosticVirtualTextInfo        guibg=None
+
 autocmd MyAutoCmd ColorScheme * hi IndentBlanklineContextChar       guifg=#073642
 
 " activewin settings
 autocmd MyAutoCmd ColorScheme * highlight NormalNC ctermbg=0 guibg=#073642
 set winhighlight=Normal:Normal,NormalNC:NormalNC
 
-colorscheme NeoSolarized
+lua require"plugins.nightfox"
 '''
