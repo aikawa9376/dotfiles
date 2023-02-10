@@ -33,7 +33,7 @@ repo = 'lukas-reineke/lsp-format.nvim'
 lua_source = '''
 require("lsp-format").setup {
   blade = {
-     exclude = { "intelephense" }
+    exclude = { "intelephense" }
   }
 }
 '''
@@ -215,73 +215,52 @@ lua_source = '''
 require'plugins.noice'
 '''
 
+# [[plugins]]
+# repo = 'luukvbaal/statuscol.nvim'
+# on_event = 'VimEnter'
+# lua_source = '''
+# local builtin = require("statuscol.builtin")
+# require("statuscol").setup({
+#   separator = false,     -- separator between line number and buffer text ("│" or extra " " padding)
+#   -- Builtin line number string options for ScLn() segment
+#   thousands = false,     -- or line number thousands separator string ("." / ",")
+#   relculright = false,   -- whether to right-align the cursor line number with 'relativenumber' set
+#   -- Custom line number string options for ScLn() segment
+#   lnumfunc = nil,        -- custom function called by ScLn(), should return a string
+#   reeval = false,        -- whether or not the string returned by lnumfunc should be reevaluated
+#   -- Custom fold column string options for ScFc() segment
+#   foldfunc = nil,        -- nil for "%C" segment, "builtin" for builtin function, or custom function
+#                          -- called by ScFc(), should return a string
+#   -- Builtin 'statuscolumn' options
+#   setopt = false,        -- whether to set the 'statuscolumn', providing builtin click actions
+#   order = "FSNs",        -- order of the fold, sign, line number and separator segments
+#   ft_ignore = nil,       -- lua table with filetypes for which 'statuscolumn' will be unset
+#   -- Click actions
+#   Lnum                   = builtin.lnum_click,
+#   FoldClose              = builtin.foldclose_click,
+#   FoldOpen               = builtin.foldopen_click,
+#   FoldOther              = builtin.foldother_click,
+#   DapBreakpointRejected  = builtin.toggle_breakpoint,
+#   DapBreakpoint          = builtin.toggle_breakpoint,
+#   DapBreakpointCondition = builtin.toggle_breakpoint,
+#   DiagnosticSignError    = builtin.diagnostic_click,
+#   DiagnosticSignHint     = builtin.diagnostic_click,
+#   DiagnosticSignInfo     = builtin.diagnostic_click,
+#   DiagnosticSignWarn     = builtin.diagnostic_click,
+#   GitSignsTopdelete      = builtin.gitsigns_click,
+#   GitSignsUntracked      = builtin.gitsigns_click,
+#   GitSignsAdd            = builtin.gitsigns_click,
+#   GitSignsChangedelete   = builtin.gitsigns_click,
+#   GitSignsDelete         = builtin.gitsigns_click
+# })
+# vim.o.statuscolumn = "%@v:lua.ScFa@%C%T%@v:lua.ScLa@%s%T@v:lua.ScNa@%=%{v:lua.ScLn()}%T"
+# '''
+
 [[plugins]]
 repo = 'b0o/incline.nvim'
 on_event = 'CursorMoved'
-hook_source = '''
-lua << EOF
-  require('incline').setup {
-    debounce_threshold = {
-      falling = 50,
-      rising = 10
-    },
-    hide = {
-      cursorline = false,
-      focused_win = false,
-      only_win = false
-    },
-    highlight = {
-      groups = {
-        InclineNormal = {
-          default = true,
-          group = "NormalFloat"
-        },
-        InclineNormalNC = {
-          default = true,
-          group = "NormalFloat"
-        }
-      }
-    },
-    ignore = {
-      buftypes = "special",
-      filetypes = {},
-      floating_wins = true,
-      unlisted_buffers = true,
-      wintypes = "special"
-    },
-    render = "basic",
-    window = {
-      margin = {
-        horizontal = 1,
-        vertical = 1
-      },
-      options = {
-        signcolumn = "no",
-        wrap = false
-      },
-      padding = 1,
-      padding_char = " ",
-      placement = {
-        horizontal = "right",
-        vertical = "top"
-      },
-      width = "fit",
-      winhighlight = {
-        active = {
-          EndOfBuffer = "None",
-          Normal = "InclineNormal",
-          Search = "None"
-        },
-        inactive = {
-          EndOfBuffer = "None",
-          Normal = "InclineNormalNC",
-          Search = "None"
-        }
-      },
-      zindex = 50
-    }
-  }
-EOF
+lua_source = '''
+require'plugins.incline'
 '''
 
 [[plugins]]
@@ -319,6 +298,38 @@ require("indent_blankline").setup {
     "do_block",
   }
 }
+'''
+
+# [[plugins]]
+# repo = 'glepnir/lspsaga.nvim'
+# on_event = 'BufRead'
+# lua_source = '''
+# require("lspsaga").setup({})
+# '''
+
+[[plugins]]
+repo = 'ThePrimeagen/harpoon'
+on_event = 'CursorMoved'
+lua_source = '''
+require("harpoon").setup({
+  menu = {
+    title = '',
+    width = vim.api.nvim_win_get_width(0) - 60,
+    borderchars = { '', '', '', '', '', '', '', '' },
+  },
+  global_settings = {
+    save_on_toggle = false,
+    save_on_change = true,
+    enter_on_sendcmd = false,
+    tmux_autoclose_window = false,
+    excluded_filetypes = { "harpoon" },
+    mark_branch = false,
+  }
+})
+vim.api.nvim_set_keymap("n", "mm", "<cmd>lua require('harpoon.mark').add_file()<CR>", { silent = true })
+vim.api.nvim_set_keymap("n", ";", "<cmd>lua require('harpoon.ui').toggle_quick_menu()<CR>", { silent = true })
+vim.api.nvim_set_keymap("n", "]e", "<cmd>lua require('harpoon.ui').nav_next()<CR>", { silent = true })
+vim.api.nvim_set_keymap("n", "[e", "<cmd>lua require('harpoon.ui').nav_prev()<CR>", { silent = true })
 '''
 
 # text-----------------------------------
@@ -359,12 +370,43 @@ let g:user_emmet_imageencode_key       = '<M-e>I'
 autocmd MyAutoCmd FileType phtml,html,php,blade,css,scss,twig,typescriptreact,javascriptreact EmmetInstall
 '''
 
+# [[plugins]]
+# repo = 'RRethy/vim-hexokinase'
+# build = 'make hexokinase'
+# on_ft = ['css', 'scss']
+# hook_add = '''
+# let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
+# '''
+
 [[plugins]]
-repo = 'RRethy/vim-hexokinase'
-build = 'make hexokinase'
-on_ft = ['css', 'scss']
-hook_add = '''
-let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
+repo = 'NvChad/nvim-colorizer.lua'
+# on_lua = 'nvim-colorizer.lua'
+on_event = 'CursorMoved'
+lua_source = '''
+require("colorizer").setup {
+  filetypes = { "*" },
+  user_default_options = {
+    RGB = true, -- #RGB hex codes
+    RRGGBB = true, -- #RRGGBB hex codes
+    names = false, -- "Name" codes like Blue or blue
+    RRGGBBAA = false, -- #RRGGBBAA hex codes
+    AARRGGBB = false, -- 0xAARRGGBB hex codes
+    rgb_fn = true, -- CSS rgb() and rgba() functions
+    hsl_fn = true, -- CSS hsl() and hsla() functions
+    css = false, -- Enable all CSS features: rgb_fn, hsl_fn, names, RGB, RRGGBB
+    css_fn = true, -- Enable all CSS *functions*: rgb_fn, hsl_fn
+    -- Available modes for `mode`: foreground, background,  virtualtext
+    mode = "virtualtext", -- Set the display mode.
+    -- Available methods are false / true / "normal" / "lsp" / "both"
+    -- True is same as normal
+    tailwind = true, -- Enable tailwind colors
+    -- parsers can contain values used in |user_default_options|
+    sass = { enable = true, parsers = { css }, }, -- Enable sass colors
+    virtualtext = "■",
+  },
+  -- all the sub-options of filetypes apply to buftypes
+  buftypes = {},
+}
 '''
 
 # [[plugins]]
@@ -402,23 +444,58 @@ let g:miniyank_filename = $XDG_CACHE_HOME."/nvim/.miniyank.mpack"
 let g:miniyank_maxitems = 100
 '''
 
+# [[plugins]]
+# repo = 'ggandor/lightspeed.nvim'
+# on_event = 'CursorMoved'
+# hook_source = '''
+# lua require('plugins.lightspeed')
+# nmap <C-j> <plug>Lightspeed_s
+# nmap <C-k> <plug>Lightspeed_S
+# vmap <C-j> <plug>Lightspeed_s
+# vmap <C-k> <plug>Lightspeed_S
+# autocmd User LightspeedSxEnter nmap ; <Plug>Lightspeed_;_sx
+# autocmd User LightspeedSxEnter nmap , <Plug>Lightspeed_,_sx
+# autocmd User LightspeedFtEnter nmap ; <Plug>Lightspeed_;_ft
+# autocmd User LightspeedFtEnter nmap , <Plug>Lightspeed_,_ft
+# autocmd User LightspeedSxEnter xmap ; <Plug>Lightspeed_;_sx
+# autocmd User LightspeedSxEnter xmap , <Plug>Lightspeed_,_sx
+# autocmd User LightspeedFtEnter xmap ; <Plug>Lightspeed_;_ft
+# autocmd User LightspeedFtEnter xmap , <Plug>Lightspeed_,_ft
+# '''
+
 [[plugins]]
-repo = 'ggandor/lightspeed.nvim'
+repo = 'ggandor/leap.nvim'
+depends = ['flit.nvim']
+on_event = 'CursorMoved'
+lua_source = '''
+require('plugins.leap')
+'''
+
+[[plugins]]
+repo = 'ggandor/flit.nvim'
+
+# バッファでignoreしたりできないので開発進むまでquick-scopeを
+# [[plugins]]
+# repo = 'jinh0/eyeliner.nvim'
+# on_event = 'CursorMoved'
+# lua_source = '''
+# require('eyeliner').setup ({
+#   -- highlight_on_key = true, -- this must be set to true for dimming to work!
+#   dim = true,
+# })
+# require('eyeliner').disable()
+# '''
+
+[[plugins]]
+repo = 'unblevable/quick-scope'
 on_event = 'CursorMoved'
 hook_source = '''
-lua require('plugins.lightspeed')
-nmap <C-j> <plug>Lightspeed_s
-nmap <C-k> <plug>Lightspeed_S
-vmap <C-j> <plug>Lightspeed_s
-vmap <C-k> <plug>Lightspeed_S
-autocmd User LightspeedSxEnter nmap ; <Plug>Lightspeed_;_sx
-autocmd User LightspeedSxEnter nmap , <Plug>Lightspeed_,_sx
-autocmd User LightspeedFtEnter nmap ; <Plug>Lightspeed_;_ft
-autocmd User LightspeedFtEnter nmap , <Plug>Lightspeed_,_ft
-autocmd User LightspeedSxEnter xmap ; <Plug>Lightspeed_;_sx
-autocmd User LightspeedSxEnter xmap , <Plug>Lightspeed_,_sx
-autocmd User LightspeedFtEnter xmap ; <Plug>Lightspeed_;_ft
-autocmd User LightspeedFtEnter xmap , <Plug>Lightspeed_,_ft
+let g:qs_hi_priority = 20
+let g:qs_ignorecase = 1
+let g:qs_filetype_blacklist = [
+ \ 'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
+ \ 'DressingSelect', 'mason', 'fugitiveblame',
+ \ 'vista', 'qf', 'fzf', 'noice', 'lazygit' ]
 '''
 
 [[plugins]]
@@ -1258,7 +1335,7 @@ require'plugins.lualine'
 
 [[plugins]]
 repo = 'akinsho/bufferline.nvim'
-on_event = 'CursorMoved'
+on_event = 'CursorHold'
 lua_source = '''
 require'plugins.bufferline'
 '''
@@ -1422,8 +1499,15 @@ function! TermForceCloseAll() abort
   endfor
 endfunction
 '''
-hook_source = '''
-lua require("toggleterm").setup{}
+lua_source = '''
+require("toggleterm").setup {
+  highlights = {
+    Normal = {
+      guibg = "#002b36"
+    }
+  },
+  shade_terminals = false
+}
 '''
 
 [[plugins]]
@@ -1460,7 +1544,7 @@ repo = 'nvim-treesitter/nvim-treesitter-textobjects'
 repo = 'nvim-treesitter/playground'
 
 [[plugins]]
-repo = 'p00f/nvim-ts-rainbow'
+repo = 'mrjones2014/nvim-ts-rainbow'
 
 [[plugins]]
 repo = 'JoosepAlviste/nvim-ts-context-commentstring'
@@ -1515,7 +1599,7 @@ on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
 repo = 'jwalton512/vim-blade'
-on_ft = ['php']
+on_ft = ['php', 'blade']
 
 # javascript-----------------------------
 [[plugins]]

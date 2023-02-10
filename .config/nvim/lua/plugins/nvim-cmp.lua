@@ -97,10 +97,11 @@ cmp.setup({
   experimental = {
     ghost_text = true,
   },
-  sources = {
-    { name = "nvim_lsp" },
-    { name = "luasnip" },
-    { name = "copilot" },
+  sources = cmp.config.sources({
+    { name = "nvim_lsp", max_item_count = 20 },
+    { name = "luasnip", max_item_count = 20 },
+    -- { name = "copilot" },
+    { name = "buffer", max_item_count = 3 },
     { name = "cmp_tabnine" },
     { name = "rg", keyword_length = 3 },
     { name = "path" },
@@ -110,10 +111,22 @@ cmp.setup({
       max_item_count = 5,
       -- opts = { all_panes = true } --ちょっと遅い
     },
-  },
+  }),
   view = {
     entries = {
       selection_order = "bottom_up",
+    },
+  },
+  window = {
+    documentation = {
+      border = { "┌", "─", "┐", "│", "┘", "─", "└", "│" },
+      winhighlight = "Normal:CmpPmenu,FloatBorder:LspInlayHint,CursorLine:PmenuSel,Search:None",
+    },
+    completion = {
+      -- border = { "┌", "─", "┐", "│", "┘", "─", "└", "│" },
+      -- winhighlight = "Normal:CmpPmenu,FloatBorder:CmpPmenuBorder,CursorLine:PmenuSel,Search:None",
+      -- col_offset = 0,
+      -- side_padding = 0,
     },
   },
   sorting = {
@@ -148,13 +161,14 @@ cmdline_mapping["<M-n>"] = {
 -- Use buffer source for `/` (if you enabled `native_menu`, this won't work anymore).
 cmp.setup.cmdline({ "/", "?" }, {
   mapping = cmdline_mapping,
-  sources = {
+  sources = cmp.config.sources({
     -- { name = 'fuzzy_buffer' },
     { name = "buffer" },
+  }, {
     { name = "nvim_lsp_document_symbol" },
     { name = "cmdline_history" },
     -- { name = 'buffer-lines' },
-  },
+  }),
 })
 
 -- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
@@ -162,6 +176,8 @@ cmp.setup.cmdline(":", {
   mapping = cmdline_mapping,
   sources = cmp.config.sources({
     { name = "cmdline" },
+    { name = "path" },
+  }, {
     { name = "cmdline_history" },
   }),
 })

@@ -66,6 +66,9 @@ alias i3wk='ps faux | grep "\_ i3" | head -n 1 | awk "{print \$2}" | xargs kill 
 alias hs="command history"
 alias zsup="abbrev-alias -g bb=''; zinit self-update;abbrev-alias -g bb='| bat'"
 alias zup="abbrev-alias -g bb=''; zinit update;abbrev-alias -g bb='| bat'"
+alias clp="gpick -o -s -c color_web_hex | xclip -sel c"
+alias clpr="gpick -o -s -c color_css_rgb | xclip -sel c"
+alias lg="lazygit"
 
 # -------------------------------------
 # git

@@ -6,14 +6,14 @@ cmd([[
   augroup END
 ]])
 
-cmd('filetype plugin indent on')
-cmd('autocmd MyAutoCmd InsertLeave * set nopaste')
+cmd("filetype plugin indent on")
+cmd("autocmd MyAutoCmd InsertLeave * set nopaste")
 
 cmd([[
 augroup MyAutoCmd
   autocmd FileType help,qf nnoremap <buffer> <CR> <CR>
   autocmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
-  autocmd FileType help,qf,fugitive,defx,vista nnoremap <buffer><nowait> <C-c> <C-w>c
+  autocmd FileType help,qf,fugitive,defx,vista,neo-tree nnoremap <buffer><nowait> <C-c> <C-w>c
   autocmd FileType far nnoremap <buffer><nowait> <C-c> :bdelete<cr>
   autocmd FileType agit nnoremap <buffer><nowait> <C-c> <C-w>o:tabc<CR>
   autocmd FileType Mundo nnoremap <buffer><nowait> <C-c> :bdelete<CR>:bdelete<CR>

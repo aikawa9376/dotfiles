@@ -27,7 +27,7 @@ let g:WebDevIconsUnicodeGlyphDoubleWidth = 1
 let g:WebDevIconsUnicodeDecorateFolderNodes = 1
 '''
 
-# defx(filer)と相性悪すぎ
+# filer pluginと相性悪すぎ
 # [[plugins]]
 # repo = 'rbtnn/vim-ambiwidth'
 
@@ -66,6 +66,13 @@ autocmd MyAutoCmd ColorScheme * highlight StatusLine        cterm=None gui=None 
 autocmd MyAutoCmd ColorScheme * highlight StatusLineNC      cterm=None gui=None guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Conceal           ctermfg=239 guifg=Grey30
 autocmd MyAutoCmd ColorScheme * highlight NvimInternalError cterm=bold ctermfg=9 gui=bold guifg=#dc322f
+autocmd MyAutoCmd ColorScheme * highlight UnderLined        gui=none
+autocmd MyAutoCmd ColorScheme * highlight Todo              guifg=#81a1c1 guibg=None gui=bold
+autocmd MyAutoCmd ColorScheme * highlight @text.todo        guifg=#81a1c1 guibg=None gui=bold
+autocmd MyAutoCmd ColorScheme * highlight @text.note        guifg=#81a1c1 guibg=None gui=bold
+autocmd MyAutoCmd ColorScheme * highlight @text.warning     guifg=#ebcb8b guibg=None gui=bold
+autocmd MyAutoCmd ColorScheme * highlight @text.danger      guifg=#bf616a guibg=None gui=bold
+
 " tab,expends,etc...
 autocmd MyAutoCmd ColorScheme * highlight NonText      ctermbg=None ctermfg=0 guibg=None guifg=#2E3440
 autocmd MyAutoCmd ColorScheme * highlight SpecialKey   ctermbg=None ctermfg=0 guibg=None guifg=#2E3440
@@ -146,6 +153,9 @@ autocmd MyAutoCmd ColorScheme * hi NeoTreeCursorLine                gui=bold
 autocmd MyAutoCmd ColorScheme * hi NvimSurroundHighlight            gui=bold guifg=#ff2f87
 
 autocmd MyAutoCmd ColorScheme * hi LspInlayHint                     guifg=#586e75
+
+autocmd MyAutoCmd ColorScheme * hi QuickScopePrimary                guifg=#afff5f gui=bold
+autocmd MyAutoCmd ColorScheme * hi QuickScopeSecondary              guifg=#5fffff gui=bold
 
 " linkしているのになぜかNoiceVirtualTextで使えない
 autocmd MyAutoCmd ColorScheme * hi NoiceVirtualText                 guibg=None

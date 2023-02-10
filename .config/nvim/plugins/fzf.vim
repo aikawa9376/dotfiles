@@ -55,8 +55,8 @@ let g:fzf_colors = {
 command! -bang -nargs=* Rg
   \ call fzf#vim#grep(
   \   'rg --column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git '.shellescape(<q-args>), 1,
-  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'up:60%:wrap')
-  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4.. --no-unicode'}, 'right:50%:hidden:wrap', '?'),
+  \   <bang>0 ? fzf#vim#with_preview({'options': '--delimiter : --nth 4..,1 --no-unicode'}, 'up:60%:wrap')
+  \           : fzf#vim#with_preview({'options': '--delimiter : --nth 4..,1 --no-unicode'}, 'right:50%:hidden:wrap', '?'),
   \   <bang>0)
 command! -bang -nargs=* AllRg
   \ call fzf#vim#grep(
@@ -653,9 +653,9 @@ command! -nargs=* NavBuffers
   \ 'window': 'call OpenFloatingWinCenter()',
   \ 'options': [
   \   '-m', '-x', '--tiebreak=index', '--ansi', '-d',
-  \   '\t', '-n', '2,1..2', '--prompt', 'Buf> ', '--query', <q-args>,
+  \   '\t', '-n', '2,4', '--prompt', 'Buf> ', '--query', <q-args>,
   \   '--header', ':: Press C-D Del C-b Preview And Default Key Working',
-  \   '--delimiter', ' ', '--preview', 'bat {4}{2}', '--preview-window', 'hidden',
+  \   '--delimiter', ' ', '--preview', 'bat --style=changes --color=always  {4}{2}', '--preview-window', 'hidden',
   \   '--print-query', '--expect=ctrl-d,ctrl-b,ctrl-x,ctrl-v,ctrl-k,ctrl-q', '--no-unicode'],
   \   'up': '30%',
   \ }))
