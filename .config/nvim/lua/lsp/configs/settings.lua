@@ -70,7 +70,7 @@ M.configs = {
       M.default(client, bufnr)
     end,
   },
-  sumneko_lua = {
+  lua_ls = {
     settings = {
       Lua = {
         hint = {
@@ -192,7 +192,7 @@ M.default = function(client, bufnr)
     ]])
   end
   if client.server_capabilities.documentHighlightProvider then
-    require("illuminate").on_attach(client)
+    -- require("illuminate").on_attach(client)
   end
 
   vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded" })

@@ -115,64 +115,63 @@ bindsym $mod+Escape restart
 
 # edit window (you can also use the mouse for that)
 mode "win-edit" {
-        # change focus
-        bindsym $mod+semicolon focus left
-        bindsym $mod+slash focus down
-        bindsym $mod+bracketleft focus up
-        bindsym $mod+apostrophe focus right
+  # change focus
+  bindsym $mod+semicolon focus left
+  bindsym $mod+slash focus down
+  bindsym $mod+bracketleft focus up
+  bindsym $mod+apostrophe focus right
 
-        # resize window
-        bindsym $mod+Shift+semicolon resize shrink width 5 px or 5 ppt
-        bindsym $mod+Shift+slash resize grow height 5 px or 5 ppt
-        bindsym $mod+Shift+bracketleft resize shrink height 5 px or 5 ppt
-        bindsym $mod+Shift+apostrophe resize grow width 5 px or 5 ppt
+  # resize window
+  bindsym $mod+Shift+semicolon resize shrink width 5 px or 5 ppt
+  bindsym $mod+Shift+slash resize grow height 5 px or 5 ppt
+  bindsym $mod+Shift+bracketleft resize shrink height 5 px or 5 ppt
+  bindsym $mod+Shift+apostrophe resize grow width 5 px or 5 ppt
 
-        # move focused window
-        bindsym $mod+Ctrl+semicolon move left
-        bindsym $mod+Ctrl+slash move down
-        bindsym $mod+Ctrl+bracketleft move up
-        bindsym $mod+Ctrl+apostrophe move right
+  # move focused window
+  bindsym $mod+Ctrl+semicolon move left
+  bindsym $mod+Ctrl+slash move down
+  bindsym $mod+Ctrl+bracketleft move up
+  bindsym $mod+Ctrl+apostrophe move right
 
-        # screen move focused window
-        bindsym $mod+Ctrl+l move workspace to output left
-        bindsym $mod+Ctrl+j move workspace to output down
-        bindsym $mod+Ctrl+k move workspace to output up
-        bindsym $mod+Ctrl+h move workspace to output right
+  # screen move focused window
+  bindsym $mod+Ctrl+l move workspace to output left
+  bindsym $mod+Ctrl+j move workspace to output down
+  bindsym $mod+Ctrl+k move workspace to output up
+  bindsym $mod+Ctrl+h move workspace to output right
 
-        # switch to workspace
-        bindsym F1 workspace $ws1
-        bindsym F2 workspace $ws2
-        bindsym F3 workspace $ws3
-        bindsym F4 workspace $ws4
-        bindsym F5 workspace $ws5
-        bindsym F6 workspace $ws6
-        bindsym F7 workspace $ws7
-        bindsym F8 workspace $ws8
-        bindsym F9 workspace $ws9
-        bindsym F10 workspace $ws10
+  # switch to workspace
+  bindsym F1 workspace $ws1
+  bindsym F2 workspace $ws2
+  bindsym F3 workspace $ws3
+  bindsym F4 workspace $ws4
+  bindsym F5 workspace $ws5
+  bindsym F6 workspace $ws6
+  bindsym F7 workspace $ws7
+  bindsym F8 workspace $ws8
+  bindsym F9 workspace $ws9
+  bindsym F10 workspace $ws10
 
-        # move focused container to workspace
-        bindsym $mod+Shift+1 move container to workspace $ws1
-        bindsym $mod+Shift+2 move container to workspace $ws2
-        bindsym $mod+Shift+3 move container to workspace $ws3
-        bindsym $mod+Shift+4 move container to workspace $ws4
-        bindsym $mod+Shift+5 move container to workspace $ws5
-        bindsym $mod+Shift+6 move container to workspace $ws6
-        bindsym $mod+Shift+7 move container to workspace $ws7
-        bindsym $mod+Shift+8 move container to workspace $ws8
-        bindsym $mod+Shift+9 move container to workspace $ws9
-        bindsym $mod+Shift+0 move container to workspace $ws10
+# move focused container to workspace
+  bindsym $mod+Shift+1 move container to workspace $ws1
+  bindsym $mod+Shift+2 move container to workspace $ws2
+  bindsym $mod+Shift+3 move container to workspace $ws3
+  bindsym $mod+Shift+4 move container to workspace $ws4
+  bindsym $mod+Shift+5 move container to workspace $ws5
+  bindsym $mod+Shift+6 move container to workspace $ws6
+  bindsym $mod+Shift+7 move container to workspace $ws7
+  bindsym $mod+Shift+8 move container to workspace $ws8
+  bindsym $mod+Shift+9 move container to workspace $ws9
+  bindsym $mod+Shift+0 move container to workspace $ws10
 
-        bindsym $mod+Ctrl+1 move workspace to output DP-0
-        bindsym $mod+Ctrl+2 move workspace to output DVI-I-1
-        bindsym $mod+Ctrl+3 move workspace to output HDMI-0
+  bindsym $mod+Ctrl+1 move workspace to output DP-0
+  bindsym $mod+Ctrl+2 move workspace to output DVI-I-1
+  bindsym $mod+Ctrl+3 move workspace to output HDMI-0
 
-        # back to normal: Enter or Escape or $mod+r
-        bindsym Return mode "default"
-        bindsym Escape mode "default"
-        bindsym Ctrl+bracketleft mode "default"
-        bindsym $mod+e mode "default"
-
+  # back to normal: Enter or Escape or $mod+r
+  bindsym Return mode "default"
+  bindsym Escape mode "default"
+  bindsym Ctrl+bracketleft mode "default"
+  bindsym $mod+e mode "default"
 }
 
 bindsym $mod+e mode "win-edit"
@@ -189,6 +188,7 @@ for_window [class="nm-connection-editor"] floating enable, resize set 800 600
 for_window [class="mozc_tool"] floating enable, resize set 600 400
 for_window [class="copyq"] floating enable
 for_window [class="feh"] floating enable, resize set 600 400
+for_window [class="SimpleScreenRecorder"] floating enable, resize set 600 400
 for_window [window_role="pop-up"] floating enable; move position center
 for_window [class="Google-chrome" title="^.*?hidden tab.*$"] move scratchpad
 # for_window [window_role="browser"] floating enable move position 4610 46
