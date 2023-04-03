@@ -84,6 +84,8 @@ abbrev-alias -g gf='git fetch'
 abbrev-alias -g gm='git merge'
 abbrev-alias -g gb='fbr'
 abbrev-alias -g gco='git checkout'
+# git hub
+abbrev-alias -g ghp='gh pr list | fzf --preview "gh pr view {1}; echo -e \"\n\"; gh pr diff --color=always {1}" | awk '\''{print $1}'\'' | xargs gh issue view --web'
 
 # -------------------------------------
 # node

@@ -107,6 +107,7 @@ loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
 loadlib $ZCONFDIR/zsh-docker.zsh
+loadlib $ZCONFDIR/zsh-openai.zsh
 loadlib $ZCONFDIR/history/substring.zsh
 
 # -------------------------------------

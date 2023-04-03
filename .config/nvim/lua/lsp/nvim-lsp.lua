@@ -1,8 +1,8 @@
 -- completion
-local nvim_lsp = require('lspconfig')
+local nvim_lsp = require("lspconfig")
 local capabilities = vim.lsp.protocol.make_client_capabilities()
-local settings = require 'lsp.configs.settings'
-capabilities = require 'cmp_nvim_lsp'.default_capabilities(capabilities)
+local settings = require("lsp.configs.settings")
+capabilities = require("cmp_nvim_lsp").default_capabilities(capabilities)
 
 require("mason").setup()
 
@@ -19,48 +19,28 @@ end
 local function setup_servers()
   local lsp_installer = require("mason-lspconfig")
 
-  lsp_installer.setup_handlers({ function(server)
-    if server == "tsserver" then
-      require("typescript").setup({
-        server = init_setup({
+  lsp_installer.setup_handlers({
+    function(server)
+      if server == "tsserver" then
+        require("typescript").setup({
+          server = init_setup({
+            capabilities = capabilities,
+            on_attach = settings.default,
+          }, server),
+        })
+      elseif server == "rust_analyzer" then
+        require("rust-tools").setup(init_setup({
           capabilities = capabilities,
-          on_attach = settings.default
-        }, server)
-      })
-
-    elseif server == "rust_analyzer" then
-      require("rust-tools").setup({
-        tools = {
-          inlay_hints = {
-            auto = true,
-            show_variable_name = true,
-          },
-          hover_actions = {
-            border = {
-              { "", "FloatBorder" }, { "", "FloatBorder" },
-              { "", "FloatBorder" }, { "", "FloatBorder" },
-              { "", "FloatBorder" }, { "", "FloatBorder" },
-              { "", "FloatBorder" }, { "", "FloatBorder" }
-            },
-          },
-        }
-      })
-
-      nvim_lsp[server].setup(
-        init_setup({
+          on_attach = settings.default,
+        }, server))
+      else
+        nvim_lsp[server].setup(init_setup({
           capabilities = capabilities,
-          on_attach = settings.default
-        }, server)
-      )
-    else
-      nvim_lsp[server].setup(
-        init_setup({
-          capabilities = capabilities,
-          on_attach = settings.default
-        }, server)
-      )
-    end
-  end })
+          on_attach = settings.default,
+        }, server))
+      end
+    end,
+  })
 end
 
 setup_servers()

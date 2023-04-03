@@ -47,6 +47,24 @@ M.configs = {
     end,
   },
   rust_analyzer = {
+    tools = {
+      inlay_hints = {
+        auto = true,
+        show_variable_name = true,
+      },
+      hover_actions = {
+        border = {
+          { "", "FloatBorder" },
+          { "", "FloatBorder" },
+          { "", "FloatBorder" },
+          { "", "FloatBorder" },
+          { "", "FloatBorder" },
+          { "", "FloatBorder" },
+          { "", "FloatBorder" },
+          { "", "FloatBorder" },
+        },
+      },
+    },
     settings = {
       ["rust-analyzer"] = {
         completion = {
@@ -66,9 +84,11 @@ M.configs = {
         },
       },
     },
-    on_attach = function(client, bufnr)
-      M.default(client, bufnr)
-    end,
+    server = {
+      on_attach = function(client, bufnr)
+        M.default(client, bufnr)
+      end,
+    },
   },
   lua_ls = {
     settings = {

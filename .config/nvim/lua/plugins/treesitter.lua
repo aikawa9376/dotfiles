@@ -57,5 +57,4 @@ require("nvim-treesitter.configs").setup({
   },
 })
 
-local parser_config = require("nvim-treesitter.parsers").filetype_to_parsername
-parser_config.twig = "html"
+-- vim.treesitter.language.register("html", "twig")

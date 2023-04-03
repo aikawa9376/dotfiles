@@ -16,7 +16,7 @@ require("neo-tree").setup({
   --   end , -- this sorts files and directories descendantly
   default_component_configs = {
     container = {
-      enable_character_fade = true
+      enable_character_fade = true,
     },
     indent = {
       indent_size = 2,
@@ -39,7 +39,7 @@ require("neo-tree").setup({
       -- The next two settings are only a fallback, if you use nvim-web-devicons and configure default icons there
       -- then these will never be used.
       default = "*",
-      highlight = "NeoTreeFileIcon"
+      highlight = "NeoTreeFileIcon",
     },
     modified = {
       symbol = "[+]",
@@ -53,17 +53,17 @@ require("neo-tree").setup({
     git_status = {
       symbols = {
         -- Change type
-        added     = "", -- or "✚", but this is redundant info if you use git_status_colors on the name
-        modified  = "", -- or "", but this is redundant info if you use git_status_colors on the name
-        deleted   = "✖", -- this can only be used in the git_status source
-        renamed   = "", -- this can only be used in the git_status source
+        added = "", -- or "✚", but this is redundant info if you use git_status_colors on the name
+        modified = "", -- or "", but this is redundant info if you use git_status_colors on the name
+        deleted = "✖", -- this can only be used in the git_status source
+        renamed = "", -- this can only be used in the git_status source
         -- Status type
         untracked = "",
-        ignored   = "",
-        unstaged  = "",
-        staged    = "",
-        conflict  = "",
-      }
+        ignored = "",
+        unstaged = "",
+        staged = "",
+        conflict = "",
+      },
     },
   },
   window = {
@@ -97,8 +97,8 @@ require("neo-tree").setup({
         "add",
         -- some commands may take optional config options, see `:h neo-tree-mappings` for details
         config = {
-          show_path = "none" -- "none", "relative", "absolute"
-        }
+          show_path = "none", -- "none", "relative", "absolute"
+        },
       },
       ["K"] = "add_directory", -- also accepts the optional config.show_path option like "add".
       ["d"] = "delete",
@@ -113,13 +113,13 @@ require("neo-tree").setup({
       [">"] = "next_source",
       ["c"] = function(state)
         local node = state.tree:get_node()
-        vim.fn.setreg('+', node.name, 'c')
+        vim.fn.setreg("+", node.name, "c")
       end,
       ["C"] = function(state)
         local node = state.tree:get_node()
-        vim.fn.setreg('+', node.path, 'c')
+        vim.fn.setreg("+", node.path, "c")
       end,
-    }
+    },
   },
   nesting_rules = {},
   filesystem = {
@@ -149,14 +149,20 @@ require("neo-tree").setup({
     follow_current_file = false, -- This will find and focus the file in the active buffer every
     -- time the current file is changed while the tree is open.
     group_empty_dirs = false, -- when true, empty folders will be grouped together
+    find_command = "fd",
     find_args = { -- you can specify extra args to pass to the find command.
       fd = {
-        "--exclude", ".git",
-        "--exclude", "node_modules",
-        "--exclude", ".next",
-        "--exclude", "dist",
-        "--exclude", "vendor",
-      }
+        "--exclude",
+        ".git",
+        "--exclude",
+        "node_modules",
+        "--exclude",
+        ".next",
+        "--exclude",
+        "dist",
+        "--exclude",
+        "vendor",
+      },
     },
     hijack_netrw_behavior = "open_default", -- netrw disabled, opening a directory opens neo-tree
     -- in whatever position is specified in window.position
@@ -168,8 +174,8 @@ require("neo-tree").setup({
     commands = {
       copy_file_name = function(state)
         local node = state.tree:get_node()
-        vim.fn.setreg('*', node.name, 'c')
-      end
+        vim.fn.setreg("*", node.name, "c")
+      end,
     },
     window = {
       mappings = {
@@ -183,8 +189,8 @@ require("neo-tree").setup({
         ["<c-x>"] = "clear_filter",
         ["[g"] = "prev_git_modified",
         ["]g"] = "next_git_modified",
-      }
-    }
+      },
+    },
   },
   buffers = {
     follow_current_file = true, -- This will find and focus the file in the active buffer every
@@ -196,36 +202,36 @@ require("neo-tree").setup({
         ["bd"] = "buffer_delete",
         ["<bs>"] = "navigate_up",
         ["."] = "set_root",
-      }
+      },
     },
   },
   git_status = {
     window = {
       position = "float",
       mappings = {
-        ["A"]  = "git_add_all",
+        ["A"] = "git_add_all",
         ["gu"] = "git_unstage_file",
         ["ga"] = "git_add_file",
         ["gr"] = "git_revert_file",
         ["gc"] = "git_commit",
         ["gp"] = "git_push",
         ["gg"] = "git_commit_and_push",
-      }
-    }
+      },
+    },
   },
   event_handlers = {
     {
       event = "neo_tree_window_after_open",
       handler = function()
-        vim.api.nvim_set_var('auto_cursorline_disable', 1)
+        vim.api.nvim_set_var("auto_cursorline_disable", 1)
       end,
     },
     {
       event = "neo_tree_window_after_close",
       handler = function()
-        vim.api.nvim_set_var('auto_cursorline_disable', 0)
+        vim.api.nvim_set_var("auto_cursorline_disable", 0)
       end,
-    }
+    },
   },
   source_selector = {
     winbar = true, -- toggle to show selector on winbar
@@ -254,4 +260,4 @@ require("neo-tree").setup({
   },
 })
 
-vim.api.nvim_set_keymap('n', '<space>n', '<Cmd>Neotree reveal toggle<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap("n", "<space>n", "<Cmd>Neotree reveal toggle<CR>", { noremap = true, silent = true })
