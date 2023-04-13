@@ -197,7 +197,7 @@ RWIN & l::Reload
   }
   return
 
-#IfWinActive,ahk_class mintty
+#IfWinActive,ahk_class CASCADIA_HOSTING_WINDOW_CLASS
 {
   !g::
     WinGet, original, , A
@@ -292,7 +292,7 @@ RWIN & l::Reload
   +l::is_excel_edit("+l","+{Right}")
 }
 
-#ifWinNotActive,ahk_class mintty
+#ifWinNotActive,ahk_class CASCADIA_HOSTING_WINDOW_CLASS
 {
   LWIN & x::plus_shift("^{x}")
   LWIN & c::plus_shift("^{c}")
