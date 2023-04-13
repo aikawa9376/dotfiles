@@ -1138,7 +1138,7 @@ let g:vista#renderer#icons = {
 
 [[plugins]]
 repo = 'nvim-neo-tree/neo-tree.nvim'
-rev = '245cf1e68840defcc75a16297740f6203f5a045d'
+# rev = '245cf1e68840defcc75a16297740f6203f5a045d'
 on_cmd = 'Neotree'
 depends = ['nvim-web-devicons', 'nui.nvim']
 hook_add = '''

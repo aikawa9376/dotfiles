@@ -27,17 +27,17 @@ cmp.setup({
       vim_item.kind = require("lspkind").presets.default[vim_item.kind]
       -- set a name for each source
       vim_item.menu = ({
-            buffer = "[B]",
-            nvim_lsp = "[L]",
-            luasnip = "[S]",
-            cmp_tabnine = "[T]",
-            nvim_lua = "[Lu]",
-            rg = "[R]",
-            tmux = "[M]",
-            copilot = "[C]",
-            nvim_lsp_document_symbol = "[D]",
-            cmdline_history = "[H]",
-          })[entry.source.name]
+        buffer = "[B]",
+        nvim_lsp = "[L]",
+        luasnip = "[S]",
+        cmp_tabnine = "[T]",
+        nvim_lua = "[Lu]",
+        rg = "[R]",
+        tmux = "[M]",
+        copilot = "[C]",
+        nvim_lsp_document_symbol = "[D]",
+        cmdline_history = "[H]",
+      })[entry.source.name]
       local label = vim_item.abbr
       local truncated_label = vim.fn.strcharpart(label, 0, 80)
       if truncated_label ~= label then
@@ -78,7 +78,7 @@ cmp.setup({
       cmp.abort()
       vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<C-g>U<C-o>$<C-g>U<Right>", true, true, true), "n")
     end,
-    ["<M-d>"] = cmp.mapping.scroll_docs( -4),
+    ["<M-d>"] = cmp.mapping.scroll_docs(-4),
     ["<M-u>"] = cmp.mapping.scroll_docs(4),
     ["<CR>"] = cmp.mapping.close(),
     ["<C-Space>"] = function()
@@ -98,12 +98,12 @@ cmp.setup({
     ghost_text = true,
   },
   sources = cmp.config.sources({
-    { name = "nvim_lsp",   max_item_count = 20 },
-    { name = "luasnip",    max_item_count = 20 },
+    { name = "nvim_lsp", max_item_count = 20 },
+    { name = "luasnip", max_item_count = 20 },
     -- { name = "copilot" },
-    { name = "buffer",     max_item_count = 3 },
+    { name = "buffer", max_item_count = 3 },
     { name = "cmp_tabnine" },
-    { name = "rg",         keyword_length = 3 },
+    { name = "rg", keyword_length = 3 },
     { name = "path" },
     {
       name = "tmux",
