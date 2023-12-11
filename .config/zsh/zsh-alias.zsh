@@ -4,9 +4,9 @@
 case ${OSTYPE} in
   darwin*)
     alias ctags="`brew --prefix`/bin/ctags"
-    alias ll='exa -aghHl --color=always --time-style long-iso --sort=modified --reverse --group-directories-first'
+    alias ll='eza -aghHl --color=always --time-style long-iso --sort=modified --reverse --group-directories-first'
     alias ls='gls -GAFh --color=always'
-    alias lsg='exa -aghHl --git --color=always --sort=modified --reverse --group-directories-first'
+    alias lsg='eza -aghHl --git --color=always --sort=modified --reverse --group-directories-first'
     alias ql='qlmanage -p "$@" >& /dev/null'
     alias awk='gawk'
     alias dircolors='gdircolors'
@@ -53,7 +53,7 @@ alias dp='dolphin ./'
 alias t='tmuximum'
 alias ml='notmuchfzfselect'
 alias grk="git log --name-only --oneline | grep -v ' ' | sort | uniq -c | sort -r"
-alias pac="yay-selecter"
+alias pac="paru-selecter"
 alias csv="csvfzfviewer"
 alias trans="trans -b :ja"
 alias feh="feh -d -s"
@@ -107,17 +107,6 @@ alias dkst='docker-stop'
 alias dkat='docker-exec-bash'
 alias dkk='docker exec'
 alias dkur='docker run --rm -v /etc/group:/etc/group:ro -v /etc/passwd:/etc/passwd:ro -u $(id -u $USER):$(id -g $USER)'
-
-# -------------------------------------
-# fasd
-# -------------------------------------
-unalias a  # alias a='fasd -a'        # any
-unalias s  # alias s='fasd -si'       # show / search / select
-unalias d  # alias d='fasd -d'        # directory
-unalias f  # alias f='fasd -f'        # file
-unalias sd # alias sd='fasd -sid'     # interactive directory selection
-unalias sf # alias sf='fasd -sif'     # interactive file selection
-alias z='z-override'     # cd, same functionality as j in autojump
 
 # -------------------------------------
 # 拡張子 エイリアス

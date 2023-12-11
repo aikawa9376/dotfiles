@@ -96,6 +96,7 @@ cmp.setup({
   },
   experimental = {
     ghost_text = true,
+    hl_group = "LineNr"
   },
   sources = cmp.config.sources({
     { name = "nvim_lsp", max_item_count = 20 },
@@ -181,5 +182,3 @@ cmp.setup.cmdline(":", {
     { name = "cmdline_history" },
   }),
 })
-
-require("cmp.config").get().experimental.ghost_text.hl_group = "LineNr"

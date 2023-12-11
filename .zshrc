@@ -33,16 +33,13 @@ zinit load "b4b4r07/enhancd"
 zinit ice lucid as"program" pick"tmuximum"
 zinit light "arks22/tmuximum"
 # history
-zinit ice lucid as'program' multisrc'misc/zsh/{history,keybind}.zsh' make'install'
+zinit ice lucid as'program' multisrc'misc/zsh/{history,keybind}.zsh'
 zinit light "b4b4r07/history"
 # abbr
 zinit ice lucid
 zinit light "momo-lab/zsh-abbrev-alias"
 # fzf-tab
 zinit ice wait'!0' lucid; zinit load "Aloxaf/fzf-tab"
-# fasd
-zinit ice lucid if'[[ -n "$commands[fasd]" ]]'
-zinit snippet OMZ::plugins/fasd/fasd.plugin.zsh
 # git plugin
 zinit ice lucid
 zinit snippet OMZ::plugins/git/git.plugin.zsh
@@ -67,6 +64,7 @@ export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_CACHE_HOME="$HOME/.cache"
 export BAT_CONFIG_PATH="$XDG_CONFIG_HOME/bat/conf"
 export RIPGREP_CONFIG_PATH="$XDG_CONFIG_HOME/rg/conf"
+export NODE_REPL_HISTORY="$XDG_CACHE_HOME/node/history"
 
 # go lang
 export GOPATH="$HOME/go"
@@ -108,6 +106,7 @@ loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
 loadlib $ZCONFDIR/zsh-docker.zsh
 loadlib $ZCONFDIR/zsh-openai.zsh
+loadlib $ZCONFDIR/zsh-completion.zsh
 loadlib $ZCONFDIR/history/substring.zsh
 
 # -------------------------------------
@@ -116,7 +115,7 @@ loadlib $ZCONFDIR/history/substring.zsh
 export FZF_DEFAULT_COMMAND='(fd --strip-cwd-prefix --type file --follow --hidden --color=always --exclude .git) 2> /dev/null'
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_CTRL_T_OPTS="--ansi $FZF_DEFAULT_PREVIEW"
-export FZF_CTRL_R_OPTS='--preview-window hidden --tiebreak index -s'
+export FZF_CTRL_R_OPTS='--preview-window hidden --tiebreak=history'
 export FZF_ALT_C_COMMAND='fd --strip-cwd-prefix --type directory --follow --hidden --color=always --exclude .git'
 export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_PREVIEW='--preview "
@@ -138,7 +137,7 @@ export FZF_DEFAULT_OPTS='
 --tabstop=2
 --tiebreak=chunk,index
 --preview-window noborder
---history '$HOME'/.fzf/history
+--history '$HOME'/.config/fzf/history
 --bind alt-k:preview-up,alt-j:preview-down,ctrl-n:down,ctrl-p:up
 --bind alt-a:toggle-all,home:top
 --bind alt-p:previous-history,alt-n:next-history,ctrl-k:kill-line
@@ -152,8 +151,6 @@ export FZF_DEFAULT_OPTS='
 
 bindkey '^I' expand-or-complete
 bindkey '^ ' fzf-completion
-bindkey '^X^F' fasd-complete-f  # C-x C-f to do fasd-complete-f (only files)
-bindkey '^X^D' fasd-complete-d  # C-x C-d to do fasd-complete-d (only directories)
 
 # -------------------------------------
 # 補完機能
@@ -229,7 +226,7 @@ export WORDCHARS='*?_-.[]~$%^(){}<>'
 # 補正機能
 # -------------------------------------
 # 入力しているコマンド名が間違っている場合にもしかして：を出す。
-setopt correct
+# setopt correct
 
 # -------------------------------------
 # ディレクトリ移動
@@ -244,17 +241,17 @@ bindkey '^g' cdup
 
 # Alt-Gで上のディレクトリに移動できる
 # function cd-up { zle push-line && LBUFFER='builtin cd ..' && zle accept-line }
-function cd-up { zle push-line && LBUFFER='cd ..' && zle accept-line }
+function cd-up { zle push-line && LBUFFER='ecd ..' && zle accept-line }
 zle -N cd-up
 bindkey '^[g' cd-up
 
 # Ctrl-jでディレクトリ履歴を移動できる
-function cd-jump { zle push-line && LBUFFER='cd' && zle accept-line }
+function cd-jump { zle push-line && LBUFFER='ecd' && zle accept-line }
 zle -N cd-jump
 bindkey '^j' cd-jump
 
 # Alt-jでディレクトリ履歴を移動できる
-function cd-hist { zle push-line && LBUFFER='cd -' && zle accept-line }
+function cd-hist { zle push-line && LBUFFER='ecd -' && zle accept-line }
 zle -N cd-hist
 bindkey '^[j' cd-hist
 
@@ -346,7 +343,7 @@ bindkey '\e[4~' end-of-line
 # -------------------------------------
 ENHANCD_HOOK_AFTER_CD=ll
 ENHANCD_HYPHEN_NUM=50
-ENHANCD_COMPLETION_BEHAVIOR=list
+ENHANCD_COMMAND=ecd
 ENHANCD_FILTER=fzf:fzy:peco
 
 # -------------------------------------

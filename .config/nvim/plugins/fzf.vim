@@ -118,14 +118,14 @@ command! -bang -nargs=? -complete=dir Files
   \            '-E .git -E ''*.psd'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf'' ' .
   \            '-E ''*.ai'' -E ''*.jfif'' -E ''*.jpeg'' -E ''*.gif'' ' .
   \            '-E ''*.eps'' -E ''*.svg'' -E ''*.JPEG'' -E ''*.mp4'' ' .
-  \            '| xargs -0 exa -1 -sold --color=always',
-  \  'options': '--ansi -m -x --no-unicode --tiebreak=index '.
+  \            '| xargs -0 eza -1 -sold --color=always',
+  \  'options': '--ansi -m -x --no-unicode --scheme=history '.
   \             '--expect ctrl-x,ctrl-v,ctrl-q'}))
 
 command! AllFiles call fzf#run({
   \  'source': 'fd --strip-cwd-prefix -I --type file --follow --hidden --color=always --exclude .git',
   \  'sink': 'edit',
-  \  'options': "-m -x --ansi --no-unicode --tiebreak=index" .
+  \  'options': "-m -x --ansi --no-unicode --scheme=history" .
   \             ' --no-unicode --prompt=AllFiles:'.shellescape(pathshorten(getcwd())).'/',
   \  'down': '40%'})
 " ------------------------------------------------------------------
@@ -196,7 +196,7 @@ command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 command! MRUFilesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd('file'),
   \  'sink*': function('<SID>mru_file_sink'),
-  \  'options': '-m -x --ansi --tiebreak=index
+  \  'options': '-m -x --ansi --scheme=history
   \              --no-unicode --prompt=MRU:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
@@ -204,7 +204,7 @@ command! MRUFilesCWD call fzf#run({
 command! MRUWritesCWD call fzf#run({
   \  'source': s:mru_files_for_cwd('write'),
   \  'sink*': function('<SID>mrw_file_sink'),
-  \  'options': '-m -x --ansi --tiebreak=index
+  \  'options': '-m -x --ansi --scheme=history
   \              --no-unicode --prompt=MRW:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
@@ -219,7 +219,7 @@ endfunction
 command! MRUFiles call fzf#run({
   \  'source': s:mru_files_for_all('file'),
   \  'sink*': function('<SID>mru_file_all_sink'),
-  \  'options': '-m -x --ansi --tiebreak=index
+  \  'options': '-m -x --ansi --scheme=history
   \              --no-unicode --prompt=MRU_ALL:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})
@@ -227,7 +227,7 @@ command! MRUFiles call fzf#run({
 command! MRUWrites call fzf#run({
   \  'source': s:mru_files_for_all('write'),
   \  'sink*': function('<SID>mrw_file_all_sink'),
-  \  'options': '-m -x --ansi --tiebreak=index
+  \  'options': '-m -x --ansi --scheme=history
   \              --no-unicode --prompt=MRW_ALL:'.shellescape(pathshorten(getcwd())).'/
   \              --expect ctrl-t --header ":: Press C-t:toggle mru or mrw" --print-query',
   \  'down': '40%'})

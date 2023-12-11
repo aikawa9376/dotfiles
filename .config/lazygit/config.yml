@@ -14,7 +14,7 @@ gui:
 refresher:
   refreshInterval: 3
 os:
-  editCommand: 'nvim'
+  edit: 'nvim'
 keybinding:
   universal:
     quit: 'Z'

@@ -98,7 +98,7 @@ fzf-picture-preview() {
   local selected
   if selected=$(
     fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . |
-    xargs -0 exa -1 -sold --color=always 2> /dev/null |
+    xargs -0 eza -1 -sold --color=always 2> /dev/null |
     $HOME/.config/zsh/ueberzogen/fzf-preview.sh | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
   fi
@@ -171,12 +171,12 @@ fs() {
     | xargs tmux switch-client -t
 }
 
-yay-selecter() {
-  yay -Sl \
-  | fzf --preview 'yay -Si {2}' \
-    --bind 'ctrl-x:execute(yay -Sy --noconfirm $(echo {2}))' \
-    --bind 'alt-d:execute(yay -Rs --noconfirm $(echo {2}))' \
-    --bind 'ctrl-r:execute(yay -Sy)' \
+paru-selecter() {
+  paru -Sl \
+  | fzf --ansi --preview 'paru -Si {2}' \
+    --bind 'ctrl-x:execute(paru -Sy --noconfirm $(echo {2}))' \
+    --bind 'alt-d:execute(paru -Rs --noconfirm $(echo {2}))' \
+    --bind 'ctrl-r:execute(paru -Sy)' \
     --bind 'alt-c:execute(echo {2} | xclip -selection c)' \
 }
 
@@ -189,14 +189,14 @@ fvim() {
   if [[ $@ == '-a' ]]; then
     files=$( \
     fd --strip-cwd-prefix -I --follow --hidden --exclude .git --type f --print0 . | \
-    xargs -0 exa -1 -sold --color=always 2> /dev/null) &&
+    xargs -0 eza -1 -sold --color=always 2> /dev/null) &&
   else
     files=$( \
     fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . | \
-    xargs -0 exa -1 -sold --color=always 2> /dev/null) &&
+    xargs -0 eza -1 -sold --color=always 2> /dev/null) &&
   fi
   # wraped function timg and bat?
-  selected_files=$(echo "$files" | fzf -m --ansi --tiebreak=index | tr '\n' ' ') &&
+  selected_files=$(echo "$files" | fzf -m --ansi --scheme=history | tr '\n' ' ') &&
 
   if [[ $selected_files == '' ]]; then
     return 0
@@ -354,7 +354,7 @@ virtstop() {
 # fdg - ghq
 fdg() {
   local selected
-  selected=$(ghq list | fzf --preview 'tree -C $(ghq root)/{} | head -200')
+  selected=$(ghq list | fzf --preview --scheme=history 'tree -C $(ghq root)/{} | head -200')
 
   if [ "x$selected" != "x" ]; then
     cd $(ghq root)/$selected
@@ -385,7 +385,7 @@ ghistory() {
     "select substr(title, 1, $cols), url
      from urls order by last_visit_time desc" |
   awk -F $sep '{printf "%-'$cols's  \x1b[36m%s\x1b[m\n", $1, $2}' |
-  fzf --ansi --multi | sed 's#.*\(https*://\)#\1#' | xargs $open > /dev/null 2> /dev/null
+  fzf --ansi --multi --scheme=history | sed 's#.*\(https*://\)#\1#' | xargs $open > /dev/null 2> /dev/null
 }
 
 # -------------------------------------
@@ -441,7 +441,7 @@ bindkey '\ec'  dig_dir
 hybrid_history() {
     local cmd k res num c c1 c2 q
     c1="fc -rl 1 | \
-      fzf --preview-window=hidden -n2..,.. --tiebreak=index \
+      fzf --preview-window=hidden -n2..,.. --scheme=history \
       --ansi --query=${(qqq)LBUFFER} --exit-0 \
       --bind 'alt-c:execute(echo {} | xclip -selection c)' \
       --print-query --expect=ctrl-r"
@@ -547,7 +547,7 @@ mru() {
             | while read line; do [ "$make_dir" -eq 1 ] && echo "${line:h}/" || echo "$line"; done \
             | awk '!a[$0]++' \
             | perl -pe 's/^(\/.*\/)(.*)$/\033[34m$1\033[m$2/' \
-            | fzf --ansi --multi --query="$q" \
+            | fzf --ansi --multi --query="$q" --tiebreak=history  \
             --exit-0 --prompt="MRU> " \
             --preview "pygmentize -g  {}" \
             --print-query --expect=ctrl-v,ctrl-x,ctrl-l,ctrl-q,ctrl-r
@@ -701,7 +701,7 @@ duster() {
     while cmd="$(
         [ "$order" = -F ] && d="ASC" || d="DESC"
         echo "${(F)d}" \
-            | exa -Fa --sort="$sort" "$order" --group-directories-first \
+            | eza -Fa --sort="$sort" "$order" --group-directories-first \
             | perl -pe 's/^(.*\/)$/\033[34m$1\033[m/' \
             | perl -pe 's/^(.*)[*@]$/$1/' \
             | fzf --ansi --multi --query="$q" \

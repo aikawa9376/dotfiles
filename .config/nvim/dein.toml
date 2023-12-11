@@ -21,15 +21,7 @@ lua require'nvim-lastplace'.setup{}
 
 # design---------------------------------
 [[plugins]]
-repo = 'ryanoasis/vim-devicons'
-hook_add = '''
-let g:WebDevIconsUnicodeGlyphDoubleWidth = 1
-let g:WebDevIconsUnicodeDecorateFolderNodes = 1
-'''
-
-# filer pluginと相性悪すぎ
-# [[plugins]]
-# repo = 'rbtnn/vim-ambiwidth'
+repo = 'kyazdani42/nvim-web-devicons'
 
 [[plugins]]
 repo = 'tpope/vim-abolish'
@@ -137,16 +129,6 @@ autocmd MyAutoCmd ColorScheme * hi DiagnosticInfo   guifg=#008080
 autocmd MyAutoCmd ColorScheme * hi DiagnosticHint   guifg=#98be65
 
 autocmd MyAutoCmd ColorScheme * hi TSNodeKey                        gui=bold,underline guifg=#ff2f87
-
-autocmd MyAutoCmd ColorScheme * hi LightspeedGreyWash               guifg=#777777
-autocmd MyAutoCmd ColorScheme * hi LightspeedMaskedChar             guifg=#51afef
-autocmd MyAutoCmd ColorScheme * hi LightspeedUnlabeledMatch         gui=bold guifg=#f3ecec
-autocmd MyAutoCmd ColorScheme * hi LightspeedLabel                  gui=bold,underline guifg=#ff2f87
-autocmd MyAutoCmd ColorScheme * hi LightspeedLabelOverlapped        guifg=#777777 guibg=None
-autocmd MyAutoCmd ColorScheme * hi LightspeedLabelDistant           gui=bold,underline guifg=#a9a1e1
-autocmd MyAutoCmd ColorScheme * hi LightspeedLabelDistantOverlapped guifg=#777777 guibg=None
-autocmd MyAutoCmd ColorScheme * hi LightspeedOneCharMatch           gui=bold,underline guifg=#f00077
-autocmd MyAutoCmd ColorScheme * hi LightspeedShortcut               gui=bold,underline guifg=#ECBE7B
 
 autocmd MyAutoCmd ColorScheme * hi NeoTreeCursorLine                gui=bold
 

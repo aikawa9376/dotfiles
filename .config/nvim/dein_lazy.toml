@@ -424,7 +424,7 @@ vim.api.nvim_set_keymap("n", "[e", "<cmd>lua require('harpoon.ui').nav_prev()<CR
 repo = 'cappyzawa/trim.nvim'
 on_event = 'InsertEnter'
 lua_source = '''
-require'trim'.setup({disable = {"markdown"}})
+require'trim'.setup({fb_blocklist = {"markdown"}})
 '''
 
 [[plugins]]
@@ -1140,16 +1140,13 @@ let g:vista#renderer#icons = {
 repo = 'nvim-neo-tree/neo-tree.nvim'
 # rev = '245cf1e68840defcc75a16297740f6203f5a045d'
 on_cmd = 'Neotree'
-depends = ['nvim-web-devicons', 'nui.nvim']
+depends = ['nui.nvim']
 hook_add = '''
 nnoremap <silent><space>n <Cmd>Neotree reveal toggle<CR>
 '''
 lua_source = '''
 require("plugins.neo-tree")
 '''
-
-[[plugins]]
-repo = 'kyazdani42/nvim-web-devicons'
 
 [[plugins]]
 repo = 'LeafCage/qutefinger.vim'
@@ -1172,8 +1169,7 @@ require'plugins.bqf'
 [[plugins]]
 repo = 'junegunn/fzf'
 depends = ['fzf.vim', 'vim-bookmarks', 'fzf-git.vim', 'fzf-lsp.nvim']
-path = '~/.fzf'
-build = './install --all'
+path = '~/.config/fzf'
 merged = 0
 on_event = 'CusorMoved'
 
@@ -1600,7 +1596,7 @@ require("toggleterm").setup {
 [[plugins]]
 repo = 'nvim-treesitter/nvim-treesitter'
 depends = [
-  'nvim-treesitter-textobjects', 'playground', 'nvim-ts-rainbow',
+  'nvim-treesitter-textobjects', 'playground', 'rainbow-delimiters.nvim',
   'nvim-ts-context-commentstring', 'nvim-ts-autotag', 'nvim-yati',
   'hlargs.nvim', 'nvim-treehopper'
 ]
@@ -1631,7 +1627,10 @@ repo = 'nvim-treesitter/nvim-treesitter-textobjects'
 repo = 'nvim-treesitter/playground'
 
 [[plugins]]
-repo = 'mrjones2014/nvim-ts-rainbow'
+repo = 'HiPhish/rainbow-delimiters.nvim'
+lua_source = '''
+require('rainbow-delimiters.setup').setup{}
+'''
 
 [[plugins]]
 repo = 'JoosepAlviste/nvim-ts-context-commentstring'

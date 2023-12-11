@@ -208,11 +208,11 @@ format-prefix = " "
 format-prefix-foreground = ${colors.foreground-alt}
 format-underline = #1994D1
 
-[module/insync]
-type = custom/script
-exec = $HOME/.config/polybar/scripts/info-insync.sh
-interval = 10
-format-underline = #FF8B25
+# [module/insync]
+# type = custom/script
+# exec = $HOME/.config/polybar/scripts/info-insync.sh
+# interval = 10
+# format-underline = #FF8B25
 
 [module/inbox-imap]
 type = custom/script

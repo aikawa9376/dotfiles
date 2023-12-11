@@ -21,7 +21,7 @@ set $mod mod4
 # Font for window titles. Will also be used by the bar unless a different font
 # is used in the bar {} block below.
 # font pango:monospace 8
-font pango:Noto Sans Mono 12
+font pango:Noto Sans Mono CJK JP 12
 
 # This font is widely installed, provides lots of unicode glyphs, right-to-left
 # text rendering and scalability on retina/hidpi displays (thanks to pango).
@@ -48,7 +48,7 @@ bindsym XF86AudioMute exec --no-startup-id rofi -show combi -normal-window
 bindsym Mod1+v exec --no-startup-id rofi -show drun -normal-window
 bindsym Ctrl+semicolon exec --no-startup-id copyq toggle
 bindsym Mod1+s exec --no-startup-id $HOME/.config/i3/layout_manager.sh
-bindsym $mod+space exec --no-startup-id "i3wk; $HOME/.xbindkeys_sh/kitty-vivaldi-toggle.sh"
+bindsym $mod+space exec --no-startup-id "i3wk; $HOME/.config/xdotool/kitty-vivaldi-toggle.sh"
 # There also is the (new) i3-dmenu-desktop which only displays applications
 # shipping a .desktop file. It is a wrapper around dmenu, so you need that
 # installed.
@@ -196,11 +196,15 @@ for_window [window_role="task_dialog"] floating enable
 for_window [class="Rofi"] floating enable
 
 # Start up scripts
-# exec --no-startup-id sudo systemctl start dhcpcd@enp5s0.service;
-exec --no-startup-id sudo iw dev wlp2s0 set power_save off;
-exec --no-startup-id sudo xkeysnail $HOME/.config/xkeysnail/config.py;
+exec --no-startup-id xhost +SI:localuser:root
+exec --no-startup-id sudo xremap $HOME/.config/xremap/config.yml --watch
+
 exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inverted --noprimary && xrandr --output DVI-I-1 --auto --below HDMI-0 --noprimary;
 exec --no-startup-id fcitx5;
 exec --no-startup-id copyq;
+# exec --no-startup-id insync-headless start;
 exec --no-startup-id $HOME/.config/polybar/lanch.sh;
-exec --no-startup-id insync-headless start;
+
+exec --no-startup-id sudo systemctl start dhcpcd@enp5s0.service;
+exec --no-startup-id sudo systemctl start docker;
+exec --no-startup-id sudo systemctl start sshd;

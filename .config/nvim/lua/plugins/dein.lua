@@ -31,5 +31,3 @@ end
 if vim.fn.has('vim_starting') == 1 and vim.call('dein#check_install') == 1 then
   vim.call('dein#install')
 end
--- 高速アップデート用設定
-vim.cmd('source $XDG_CONFIG_HOME/nvim/dein_key.vim')

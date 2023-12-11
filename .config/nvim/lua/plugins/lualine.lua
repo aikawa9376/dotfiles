@@ -195,7 +195,7 @@ ins_left({
 
 ins_left({
   function()
-    return vim.fn.WebDevIconsGetFileTypeSymbol() .. " " .. changeName(vim.fn.expand("%="))
+    return require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype) .. " " .. changeName(vim.fn.expand("%="))
   end,
   condition = conditions.buffer_not_empty,
 })
@@ -257,8 +257,22 @@ ins_right({
 })
 
 ins_right({
+  'fileformat',
+  symbols = {
+    unix = '', -- e712
+    dos = '',  -- e70f
+    mac = '',  -- e711
+  }
+})
+
+ins_right({
   function()
-    return vim.fn.WebDevIconsGetFileTypeSymbol() .. " " .. vim.o.filetype
+    icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
+    if (icon == nil) then
+      return  vim.o.filetype
+    else
+      return  icon .. " " .. vim.o.filetype
+    end
   end,
   condition = conditions.hide_in_width,
 })
@@ -299,7 +313,12 @@ ins_right({
 
 table.insert(config.inactive_sections.lualine_a, {
   function()
-    return vim.fn.WebDevIconsGetFileTypeSymbol() .. " " .. changeName(vim.fn.expand("%="))
+    icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
+    if (icon == nil) then
+      return  changeName(vim.fn.expand("%="))
+    else
+      return  icon .. " " .. changeName(vim.fn.expand("%="))
+    end
   end,
   condition = conditions.buffer_not_empty,
 })

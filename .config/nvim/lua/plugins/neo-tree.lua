@@ -1,11 +1,10 @@
-vim.cmd([[ let g:neo_tree_remove_legacy_commands = 1 ]])
-
 require("neo-tree").setup({
   close_if_last_window = false, -- Close Neo-tree if it is the last window left in the tab
   popup_border_style = "rounded",
   enable_git_status = true,
   enable_diagnostics = true,
   sort_case_insensitive = false, -- used when sorting files and directories in the tree
+  use_default_mappings = false,
   sort_function = nil, -- use a custom function for sorting files and directories in the tree
   -- sort_function = function (a,b)
   --       if a.type == b.type then
@@ -76,7 +75,7 @@ require("neo-tree").setup({
     mappings = {
       ["o"] = {
         "toggle_node",
-        nowait = false, -- disable `nowait` if you have existing combos starting with this char that you want to use
+        nowait = true, -- disable `nowait` if you have existing combos starting with this char that you want to use
       },
       ["<2-LeftMouse>"] = "open",
       ["<cr>"] = "open",
@@ -146,6 +145,10 @@ require("neo-tree").setup({
         --".null-ls_*",
       },
     },
+    follow_current_file = {
+      enabled = false, -- This will find and focus the file in the active buffer every time
+      leave_dirs_open = false, -- `false` closes auto expanded dirs, such as with `:Neotree reveal`
+    },
     follow_current_file = false, -- This will find and focus the file in the active buffer every
     -- time the current file is changed while the tree is open.
     group_empty_dirs = false, -- when true, empty folders will be grouped together
@@ -193,7 +196,10 @@ require("neo-tree").setup({
     },
   },
   buffers = {
-    follow_current_file = true, -- This will find and focus the file in the active buffer every
+    follow_current_file = {
+      enabled = true, -- This will find and focus the file in the active buffer every time
+      leave_dirs_open = false, -- `false` closes auto expanded dirs, such as with `:Neotree reveal`
+    },
     -- time the current file is changed while the tree is open.
     group_empty_dirs = true, -- when true, empty folders will be grouped together
     show_unloaded = true,
@@ -237,11 +243,23 @@ require("neo-tree").setup({
     winbar = true, -- toggle to show selector on winbar
     statusline = false, -- toggle to show selector on statusline
     show_scrolled_off_parent_node = false, -- boolean
-    tab_labels = { -- table
-      filesystem = "  Files ", -- string | nil
-      buffers = "  Bufs ", -- string | nil
-      git_status = "  Git ", -- string | nil
-      diagnostics = " 裂Diagnos ", -- string | nil
+    sources = { -- table
+      {
+        source = "filesystem",
+        display_name = "  Files "
+      }, -- string | nil
+      {
+        source = "buffers",
+        display_name = "  Bufs "
+      }, -- string | nil
+      {
+        source = "git_status",
+        display_name = "  Git "
+      }, -- string | nil
+      {
+        source = "diagnostics",
+        display_name = " 裂Diagnos "
+      } -- string | nil
     },
     content_layout = "start", -- string
     tabs_layout = "equal", -- string
@@ -260,4 +278,4 @@ require("neo-tree").setup({
   },
 })
 
-vim.api.nvim_set_keymap("n", "<space>n", "<Cmd>Neotree reveal toggle<CR>", { noremap = true, silent = true })
+vim.api.nvim_set_keymap("n", "'space'n", "<Cmd>Neotree reveal toggle<CR>", { noremap = true, silent = true })

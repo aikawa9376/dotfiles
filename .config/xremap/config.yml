@@ -1,0 +1,139 @@
+modmap:
+  - name: Global
+    remap:
+      Ctrl_L:
+        held: Ctrl_L
+        alone: Esc
+      Shift_R:
+        held: Shift_R
+        alone: Mute
+
+keymap:
+  - name: Global
+    remap:
+      Super-1: F1
+      Super-2: F2
+      Super-3: F3
+      Super-4: F4
+      Super-5: F5
+      Super-6: F6
+      Super-7: F7
+      Super-8: F8
+      Super-9: F9
+      Super-0: F10
+      Super-Minus: F11
+      Super-Equal: F12
+  - name: Only Rofi
+    application:
+      only: Rofi
+    remap:
+      Mute: C-tab
+  - name: Not Rofi
+    application:
+      not: [org.remmina.Remmina, Rofi]
+    remap:
+      Super-h: kpasterisk
+      Super-h: kpplus
+      Super-m: kpminus
+      Super-j: slash
+      Super-i: SYSRQ
+      Super-l: pageup
+      Super-dot: pagedown
+      Super-Shift-l: Shift-pageup
+      Super-Shift-dot: Shift-pagedown
+      Super-k: home
+      Super-comma: end
+      Super-Shift-k: Shift-home
+      Super-Shift-comma: Shift-end
+      Shift-esc: Shift-grave
+  - name: Only Copyq
+    application:
+      only: copyq
+    remap:
+      C-m: C-Enter
+  - name: Only Kitty
+    application:
+      only: [Alacritty, kitty]
+    remap:
+      # Alt_R-h: left
+      # Alt_R-j: down
+      # Alt_R-k: up
+      # Alt_R-l: right
+      # Alt_R-n: C-down
+      # Alt_R-p: C-up
+      Alt_R-o: C-right
+      Alt_R-t: C-pageup
+      Alt_R-g: C-pagedown
+      Alt_R-rightbrace: Alt_R-0
+      Alt_R-Super_L-o: C-left
+      # Alt_R-Super_L-h: Shift-left
+      # Alt_R-Super_L-j: Shift-down
+      # Alt_R-Super_L-k: Shift-up
+      # Alt_R-Super_L-l: Shift-right
+  - name: Only vivaldi
+    application:
+      only: Vivaldi-stable
+    remap:
+      Alt_R-w: C-w
+      Super-t: C-t
+      Super-Shift-t: C-Shift-t
+      Super-w: C-w
+      Super-Shift-r: C-Shift-r
+      Super-Shift-v: C-Shift-v
+  - name: Not Other
+    application:
+      not: [Alacritty, Rofi, kitty, org.remmina.Remmina]
+    remap:
+      # Cursor
+      C-b: left
+      C-f: right
+      C-p: up
+      C-n: down
+      C-h: backspace
+      C-w: C-backspace
+      C-Shift-b: Shift-left
+      C-Shift-f: Shift-right
+      C-Shift-p: Shift-up
+      C-Shift-n: Shift-down
+      C-Shift-h: Shift-backspace
+      C-i: tab
+      C-Shift-i: Shift-tab
+      # Forward/Backward word
+      Super-b: C-left
+      Super-f: C-right
+      Alt_R-b: C-left
+      Alt_R-f: C-right
+      # Beginning/End of line
+      C-a: home
+      C-e: end
+      C-Shift-a: Shift-home
+      C-Shift-e: Shift-end
+      # Newline
+      Super-a: [C-home, C-a]
+      C-m: Enter
+      # Copy
+      Super-x: C-x
+      Super-c: C-c
+      Super-v: C-v
+      # Delete
+      C-d: delete
+      Super-d: C-delete
+      # Kill line
+      C-k: [Shift-end, C-x]
+      C-u: [Shift-home, C-x]
+      # Undo
+      Super-u: [C-z]
+      Super-r: [C-r]
+      C-Shift-ro: C-z
+      # Mark
+      # K("C-v"): set_mark(True),
+      # K("C-v"): with_or_set_mark(K("C-right")),
+      C-q: { escape_next_key: true }
+      # Search
+      # K("C-s"): K("F3"),
+      # K("C-r"): K("Shift-F3"),
+      # K("Super-Shift-key_5"): K("C-h"),
+      # Cancel
+      C-leftbrace: esc
+      # Right Click
+      C-y: Shift-f10
