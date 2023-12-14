@@ -2,14 +2,22 @@
 # zinit
 # -------------------------------------
 ### Added by Zinit's installer
-if [[ ! -f $HOME/.zinit/bin/zinit.zsh ]]; then
+declare -A ZINIT
+export ZINIT[HOME_DIR]="${XDG_DATA_HOME:-${HOME}/.config}/zinit"
+export ZINIT[BIN_DIR]="$ZINIT[HOME_DIR]/bin"
+export ZINIT[MAN_DIR]="$ZINIT[HOME_DIR]/man"
+export ZINIT[PLUGINS_DIR]="$ZINIT[HOME_DIR]/plugins"
+export ZINIT[COMPLETIONS_DIR]="$ZINIT[HOME_DIR]/completions"
+export ZINIT[SNIPPETS_DIR]="$ZINIT[HOME_DIR]/snippets"
+
+if [[ ! -f $ZINIT[HOME_DIR]/bin/zinit.zsh ]]; then
   print -P "%F{33}▓▒░ %F{220}Installing DHARMA Initiative Plugin Manager (zdharma-continuum/zinit)…%f"
-  command mkdir -p $HOME/.zinit
-  command git clone https://github.com/zdharma-continuum/zinit $HOME/.zinit/bin && \
+  command mkdir -p $ZINIT[HOME_DIR]
+  command git clone https://github.com/zdharma-continuum/zinit $ZINIT[HOME_DIR]/bin && \
   print -P "%F{33}▓▒░ %F{34}Installation successful.%F" || \
   print -P "%F{160}▓▒░ The clone has failed.%F"
 fi
-source ~/.zinit/bin/zinit.zsh
+source $ZINIT[HOME_DIR]/bin/zinit.zsh
 autoload -Uz _zinit
 (( ${+_comps} )) && _comps[zinit]=_zinit
 
@@ -71,8 +79,10 @@ export GOPATH="$HOME/go"
 export PATH="$GOPATH/bin:$PATH"
 
 # rust lang
-export RUSTPATH="$HOME/.cargo"
+export RUSTPATH="$HOME/rust/.cargo"
 export PATH="$RUSTPATH/bin:$PATH"
+export RUSTUP_HOME="$HOME/rust/.rustup"
+export CARGO_HOME="$HOME/rust.cargo"
 
 # local settings
 case ${OSTYPE} in
@@ -121,8 +131,11 @@ export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_PREVIEW='--preview "
 [[ -d {} ]]  &&
 tree -C {}
-[[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) && $(file --mime {}) =~ (^binary) ]] &&
+[[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
+kitty icat --clear --transfer-mode=memory --stdin=no --place=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES}@0x0 {}
+[[ $(file --mime {}) =~ (^binary) ]] &&
 echo {} is a binary file
+[[ -f {} && ! $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
 (bat --style=changes --color=always {} ||
 cat {}) 2> /dev/null | head -500"'
 export FZF_COMPLETION_TRIGGER=''
@@ -341,11 +354,17 @@ bindkey '\e[4~' end-of-line
 # -------------------------------------
 # enhancd
 # -------------------------------------
-ENHANCD_HOOK_AFTER_CD=ll
+ENHANCD_DIR=~/.config/enhancd
 ENHANCD_HYPHEN_NUM=50
 ENHANCD_COMMAND=ecd
 ENHANCD_FILTER=fzf:fzy:peco
 
+chpwd() {
+  if [[ $(pwd) != $HOME ]]; then;
+    __enhancd::cd::after
+    ll
+  fi
+}
 # -------------------------------------
 # Xserver start
 # -------------------------------------

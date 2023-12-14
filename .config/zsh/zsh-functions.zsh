@@ -99,7 +99,7 @@ fzf-picture-preview() {
   if selected=$(
     fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . |
     xargs -0 eza -1 -sold --color=always 2> /dev/null |
-    $HOME/.config/zsh/ueberzogen/fzf-preview.sh | tr '\n' ' '); then
+    fzf --ansi | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
   fi
   zle redisplay
@@ -354,7 +354,7 @@ virtstop() {
 # fdg - ghq
 fdg() {
   local selected
-  selected=$(ghq list | fzf --preview --scheme=history 'tree -C $(ghq root)/{} | head -200')
+  selected=$(ghq list | fzf --scheme=history --preview 'tree -C $(ghq root)/{} | head -200')
 
   if [ "x$selected" != "x" ]; then
     cd $(ghq root)/$selected
@@ -633,7 +633,7 @@ reverse() {
 # -------------------------------------
 # Directory suggest
 # -------------------------------------
-export ENHANCD_LOG="/home/aikawa/.enhancd/enhancd.log"
+export ENHANCD_LOG="/home/aikawa/.config/enhancd/enhancd.log"
 destination_directories() {
     local -a d
     if [[ -f $ENHANCD_LOG ]]; then

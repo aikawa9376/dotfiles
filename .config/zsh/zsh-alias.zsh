@@ -12,9 +12,9 @@ case ${OSTYPE} in
     alias dircolors='gdircolors'
     ;;
   linux*)
-    alias ll='exa -aghHl --color=always --time-style long-iso --sort=modified --reverse --group-directories-first'
+    alias ll='eza -aghHl --color=always --time-style long-iso --sort=modified --reverse --group-directories-first'
     alias ls='ls -GAFltrh --color=always'
-    alias lsg='exa -aghHl --git --color=always --sort=modified --reverse --group-directories-first'
+    alias lsg='eza -aghHl --git --color=always --sort=modified --reverse --group-directories-first'
     alias chrome='/mnt/c/Program\ Files\ \(x86\)/Google/Chrome/Application/chrome.exe'
     alias photoshop='/mnt/c/Program\ Files/Adobe/Adobe\ Photoshop\ CC\ 2018/Photoshop.exe'
     alias illustrator='/mnt/c/Program\ Files/Adobe/Adobe\ Illustrator\ CC\ 2018/Support\ Files/Contents/Windows/Illustrator.exe'
@@ -69,6 +69,10 @@ alias zup="abbrev-alias -g bb=''; zinit update;abbrev-alias -g bb='| bat'"
 alias clp="gpick -o -s -c color_web_hex | xclip -sel c"
 alias clpr="gpick -o -s -c color_css_rgb | xclip -sel c"
 alias lg="lazygit"
+
+alias cd-="ecd -"
+alias cd.="ecd ."
+alias cd..="ecd .."
 
 # -------------------------------------
 # git
@@ -158,3 +162,4 @@ abbrev-alias -g trs="| trans -b :ja"
 abbrev-alias -g dst='$(duster)'
 abbrev-alias -g fnd='$(finder)'
 abbrev-alias -g pyg='"pygmentize -g  {}"'
+abbrev-alias -g hh='~/'

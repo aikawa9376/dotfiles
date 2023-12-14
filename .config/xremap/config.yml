@@ -119,8 +119,8 @@ keymap:
       C-d: delete
       Super-d: C-delete
       # Kill line
-      C-k: [Shift-end, C-x]
-      C-u: [Shift-home, C-x]
+      C-k: [Shift-end, delete]
+      C-u: [Shift-home, delete]
       # Undo
       Super-u: [C-z]
       Super-r: [C-r]

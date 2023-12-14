@@ -19,7 +19,7 @@ lua require'lsp'
 # '''
 
 [[plugins]]
-repo = 'jose-elias-alvarez/null-ls.nvim'
+repo = 'nvimtools/none-ls.nvim'
 lua_source = '''
 require'plugins.null-ls'
 '''
@@ -48,7 +48,7 @@ lua require'plugins.dressing'
 repo = 'hrsh7th/nvim-cmp'
 on_event = ['InsertEnter', 'CursorHold']
 depends  = [
-  'nvim-lspconfig', 'null-ls.nvim', 'noice.nvim', 'lualine.nvim' 'nvim-autopairs'
+  'nvim-lspconfig', 'none-ls.nvim', 'noice.nvim', 'lualine.nvim' 'nvim-autopairs'
   'LuaSnip', 'friendly-snippets', 'cmp-nvim-lsp', 'lsp-format.nvim', 'lspkind-nvim',
   'lsp-inlayhints.nvim', 'lsp_signature.nvim', 'vim-illuminate', 'dressing.nvim'
 ]
@@ -353,38 +353,86 @@ require'plugins.incline'
 repo = 'cseickel/diagnostic-window.nvim'
 on_cmd = 'DiagWindowShow'
 
-[[plugins]]
-repo = 'lukas-reineke/indent-blankline.nvim'
-on_event = 'CursorMoved'
-lua_source = '''
-require("indent_blankline").setup {
-  char = "",
-  char_blankline = "",
-  context_char = "│",
-  context_char_blankline = "│",
-  show_current_context = true,
-  context_patterns = {
-    "class",
-    "^func",
-    "method",
-    "^if",
-    "while",
-    "for",
-    "with",
-    "try",
-    "except",
-    "arguments",
-    "argument_list",
-    "object",
-    "dictionary",
-    "element",
-    "table",
-    "tuple",
-    "arrow_function",
-    "do_block",
-  }
-}
-'''
+# [[plugins]]
+# repo = 'lukas-reineke/indent-blankline.nvim'
+# on_event = 'CursorMoved'
+# lua_source = '''
+# require("indent_blankline").setup {
+#   char = "",
+#   char_blankline = "",
+#   context_char = "│",
+#   context_char_blankline = "│",
+#   show_current_context = true,
+#   context_patterns = {
+#     "class",
+#     "^func",
+#     "method",
+#     "^if",
+#     "while",
+#     "for",
+#     "with",
+#     "try",
+#     "except",
+#     "arguments",
+#     "argument_list",
+#     "object",
+#     "dictionary",
+#     "element",
+#     "table",
+#     "tuple",
+#     "arrow_function",
+#     "do_block",
+#   }
+# }
+# '''
+
+# 良さげだけどbaggy
+# [[plugins]]
+# repo = 'shellRaining/hlchunk.nvim'
+# on_event = 'UIEnter'
+# lua_source = '''
+# require("hlchunk").setup ({
+#     chunk = {
+#         enable = true,
+#         notify = false,
+#         use_treesitter = true,
+#         chars = {
+#             horizontal_line = "─",
+#             vertical_line = "│",
+#             left_top = "╭",
+#             left_bottom = "╰",
+#             right_arrow = ">",
+#         },
+#         style = {
+#             { fg = "#806d9c" },
+#             { fg = "#c21f30" }, -- this fg is used to highlight wrong chunk
+#         },
+#         textobject = "",
+#         max_file_size = 1024 * 1024,
+#         error_sign = false,
+#     },
+#
+#     indent = {
+#         enable = false,
+#     },
+#
+#     line_num = {
+#         enable = false,
+#         use_treesitter = false,
+#         style = "#806d9c",
+#     },
+#
+#     blank = {
+#         enable = false,
+#         chars = {
+#             "․",
+#         },
+#         style = {
+#             vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.hlID("Whitespace")), "fg", "gui"),
+#         },
+#     },
+# })
+# '''
 
 # [[plugins]]
 # repo = 'glepnir/lspsaga.nvim'
