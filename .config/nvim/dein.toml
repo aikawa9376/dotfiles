@@ -128,6 +128,15 @@ autocmd MyAutoCmd ColorScheme * hi DiagnosticWarn   guifg=#ECBE7B
 autocmd MyAutoCmd ColorScheme * hi DiagnosticInfo   guifg=#008080
 autocmd MyAutoCmd ColorScheme * hi DiagnosticHint   guifg=#98be65
 
+" delimiter
+autocmd MyAutoCmd ColorScheme * hi RainbowDelimiterRed     guifg=#d84f76
+autocmd MyAutoCmd ColorScheme * hi RainbowDelimiterYellow  guifg=#e6a852
+autocmd MyAutoCmd ColorScheme * hi RainbowDelimiterBlue    guifg=#4a869c
+autocmd MyAutoCmd ColorScheme * hi RainbowDelimiterOrange  guifg=#d6746f
+autocmd MyAutoCmd ColorScheme * hi RainbowDelimiterGreen   guifg=#8aa872
+autocmd MyAutoCmd ColorScheme * hi RainbowDelimiterViolet  guifg=#d871a6
+autocmd MyAutoCmd ColorScheme * hi RainbowDelimiterCyan    guifg=#7bb8c1
+
 autocmd MyAutoCmd ColorScheme * hi TSNodeKey                        gui=bold,underline guifg=#ff2f87
 
 autocmd MyAutoCmd ColorScheme * hi NeoTreeCursorLine                gui=bold

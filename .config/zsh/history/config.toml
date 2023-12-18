@@ -1,17 +1,17 @@
 [core]
   editor = "nvim"
-  selectcmd = "fzf --ansi --exit-0 --preview-window hidden --multi:fzf --multi:peco"
+  selectcmd = "fzf --ansi --exit-0 --scheme=history --preview-window hidden --multi:fzf --multi:peco"
+  tomlfile = "/home/aikawa/.config/history/config.toml"
 
 [history]
+  path = "/home/aikawa/.config/history/history.ltsv"
+  backup_path = "/home/aikawa/.config/history/.backup"
   ignore_words = []
-  use_color = true
-  path = "~/.config/history/history.ltsv"
-  backup_path = "~/.config/history/.backup/"
-
-[sync]
-  id = ""
-  token = "$GITHUB_TOKEN"
-  size = 100
+  use_color = false
+  [history.sync]
+    id = ""
+    token = "$GITHUB_TOKEN"
+    size = 100
 
 [screen]
   filter_dir = true

@@ -1677,7 +1677,17 @@ repo = 'nvim-treesitter/playground'
 [[plugins]]
 repo = 'HiPhish/rainbow-delimiters.nvim'
 lua_source = '''
-require('rainbow-delimiters.setup').setup{}
+require('rainbow-delimiters.setup').setup{
+  highlight = {
+    'RainbowDelimiterBlue',
+    'RainbowDelimiterGreen',
+    'RainbowDelimiterViolet',
+    'RainbowDelimiterYellow',
+    'RainbowDelimiterOrange',
+    'RainbowDelimiterCyan',
+    'RainbowDelimiterRed',
+  },
+}
 '''
 
 [[plugins]]

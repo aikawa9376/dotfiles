@@ -1,9 +1,9 @@
 modmap:
   - name: Global
     remap:
-      Ctrl_L:
-        held: Ctrl_L
-        alone: Esc
+      # Ctrl_L:
+      #   held: Ctrl_L
+      #   alone: Esc
       Shift_R:
         held: Shift_R
         alone: Mute
@@ -101,6 +101,7 @@ keymap:
       # Forward/Backward word
       Super-b: C-left
       Super-f: C-right
+      Super-Shift-f: Super-Shift-f
       Alt_R-b: C-left
       Alt_R-f: C-right
       # Beginning/End of line
