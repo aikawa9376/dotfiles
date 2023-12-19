@@ -110,7 +110,7 @@ keymap:
       C-Shift-a: Shift-home
       C-Shift-e: Shift-end
       # Newline
-      Super-a: [C-home, C-a]
+      Super-a: C-a
       C-m: Enter
       # Copy
       Super-x: C-x
