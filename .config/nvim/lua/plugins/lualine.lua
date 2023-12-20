@@ -179,7 +179,7 @@ ins_left({
 
 ins_left({
   "branch",
-  icon = "⭠",
+  icon = "",
   condition = conditions.check_git_workspace,
 })
 

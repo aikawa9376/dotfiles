@@ -14,7 +14,7 @@ require("nvim-treesitter.configs").setup({
     },
   },
   indent = {
-    enable = true,
+    enable = false,
   },
   textobjects = {
     select = {
@@ -46,7 +46,15 @@ require("nvim-treesitter.configs").setup({
     enable = true,
   },
   yati = {
-    enable = false,
+    enable = true,
+    default_lazy = true,
+    default_fallback = function(lnum, computed, bufnr)
+      if vim.tbl_contains(tm_fts, vim.bo[bufnr].filetype) then
+        return require('tmindent').get_indent(lnum, bufnr) + computed
+      end
+      -- or any other fallback methods
+      return require('nvim-yati.fallback').vim_auto(lnum, computed, bufnr)
+    end,
   },
 })
 

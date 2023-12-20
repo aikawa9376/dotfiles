@@ -98,7 +98,7 @@ fzf-picture-preview() {
   local selected
   if selected=$(
     fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . |
-    xargs -0 eza -1 -sold --color=always 2> /dev/null |
+    xargs -0 eza -1 -sold --color=always --no-quotes 2> /dev/null |
     fzf --ansi | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
   fi
@@ -174,7 +174,7 @@ fs() {
 paru-selecter() {
   paru -Sl \
   | fzf --ansi --preview 'paru -Si {2}' \
-    --bind 'ctrl-x:execute(paru -Sy --noconfirm $(echo {2}))' \
+    --bind 'ctrl-i:execute(paru -Sy --noconfirm $(echo {2}))' \
     --bind 'alt-d:execute(paru -Rs --noconfirm $(echo {2}))' \
     --bind 'ctrl-r:execute(paru -Sy)' \
     --bind 'alt-c:execute(echo {2} | xclip -selection c)' \
@@ -189,11 +189,11 @@ fvim() {
   if [[ $@ == '-a' ]]; then
     files=$( \
     fd --strip-cwd-prefix -I --follow --hidden --exclude .git --type f --print0 . | \
-    xargs -0 eza -1 -sold --color=always 2> /dev/null) &&
+    xargs -0 eza -1 --no-quotes -sold --color=always --no-quotes 2> /dev/null) &&
   else
     files=$( \
     fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . | \
-    xargs -0 eza -1 -sold --color=always 2> /dev/null) &&
+    xargs -0 eza -1 -sold --no-quotes --color=always --no-quotes 2> /dev/null) &&
   fi
   # wraped function timg and bat?
   selected_files=$(echo "$files" | fzf -m --ansi --scheme=history | tr '\n' ' ') &&

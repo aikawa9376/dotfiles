@@ -118,7 +118,7 @@ command! -bang -nargs=? -complete=dir Files
   \            '-E .git -E ''*.psd'' -E ''*.png'' -E ''*.jpg'' -E ''*.pdf'' ' .
   \            '-E ''*.ai'' -E ''*.jfif'' -E ''*.jpeg'' -E ''*.gif'' ' .
   \            '-E ''*.eps'' -E ''*.svg'' -E ''*.JPEG'' -E ''*.mp4'' ' .
-  \            '| xargs -0 eza -1 -sold --color=always',
+  \            '| xargs -0 eza -1 -sold --color=always --no-quotes',
   \  'options': '--ansi -m -x --no-unicode --scheme=history '.
   \             '--expect ctrl-x,ctrl-v,ctrl-q'}))
 

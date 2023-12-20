@@ -89,94 +89,94 @@ depends  = [
 [[plugins]]
 repo = 'amarakon/nvim-cmp-buffer-lines'
 
-[[plugins]]
-repo = 'jackMort/ChatGPT.nvim'
-depends = ['plenary.nvim', 'nui.nvim', 'telescope.nvim']
-on_cmd = ['ChatGPT']
-hook_source = '''
-lua << EOF
-require("chatgpt").setup(
-  {
-    welcome_message = WELCOME_MESSAGE,
-    loading_text = "loading",
-    question_sign = "", -- you can use emoji if you want e.g. 🙂
-    answer_sign = "ﮧ", -- 🤖
-    max_line_length = 120,
-    yank_register = "+",
-    chat_layout = {
-      relative = "editor",
-      position = "50%",
-      size = {
-        height = "80%",
-        width = "80%",
-      },
-    },
-    settings_window = {
-      border = {
-        style = "rounded",
-        text = {
-          top = " Settings ",
-        },
-      },
-    },
-    chat_window = {
-      filetype = "chatgpt",
-      border = {
-        highlight = "FloatBorder",
-        style = "rounded",
-        text = {
-          top = " ChatGPT ",
-        },
-      },
-    },
-    chat_input = {
-      prompt = "  ",
-      border = {
-        highlight = "FloatBorder",
-        style = "rounded",
-        text = {
-          top_align = "center",
-          top = " Prompt ",
-        },
-      },
-    },
-    openai_params = {
-      model = "gpt-3.5-turbo",
-      frequency_penalty = 0,
-      presence_penalty = 0,
-      max_tokens = 300,
-      temperature = 0,
-      top_p = 1,
-      n = 1,
-    },
-    openai_edit_params = {
-      model = "code-davinci-edit-001",
-      temperature = 0,
-      top_p = 1,
-      n = 1,
-    },
-    keymaps = {
-      close = { "<C-c>" },
-      submit = "<C-Space>",
-      yank_last = "<C-y>",
-      yank_last_code = "<C-k>",
-      scroll_up = "<C-u>",
-      scroll_down = "<C-d>",
-      toggle_settings = "<C-o>",
-      new_session = "<C-n>",
-      cycle_windows = "<Tab>",
-      -- in the Sessions pane
-      select_session = "<Space>",
-      rename_session = "r",
-      delete_session = "d",
-    },
-  }
-)
-EOF
-'''
-
-[[plugins]]
-repo = 'nvim-telescope/telescope.nvim'
+# [[plugins]]
+# repo = 'jackMort/ChatGPT.nvim'
+# depends = ['plenary.nvim', 'nui.nvim', 'telescope.nvim']
+# on_cmd = ['ChatGPT']
+# hook_source = '''
+# lua << EOF
+# require("chatgpt").setup(
+#   {
+#     welcome_message = WELCOME_MESSAGE,
+#     loading_text = "loading",
+#     question_sign = "", -- you can use emoji if you want e.g. 🙂
+#     answer_sign = "ﮧ", -- 🤖
+#     max_line_length = 120,
+#     yank_register = "+",
+#     chat_layout = {
+#       relative = "editor",
+#       position = "50%",
+#       size = {
+#         height = "80%",
+#         width = "80%",
+#       },
+#     },
+#     settings_window = {
+#       border = {
+#         style = "rounded",
+#         text = {
+#           top = " Settings ",
+#         },
+#       },
+#     },
+#     chat_window = {
+#       filetype = "chatgpt",
+#       border = {
+#         highlight = "FloatBorder",
+#         style = "rounded",
+#         text = {
+#           top = " ChatGPT ",
+#         },
+#       },
+#     },
+#     chat_input = {
+#       prompt = "  ",
+#       border = {
+#         highlight = "FloatBorder",
+#         style = "rounded",
+#         text = {
+#           top_align = "center",
+#           top = " Prompt ",
+#         },
+#       },
+#     },
+#     openai_params = {
+#       model = "gpt-3.5-turbo",
+#       frequency_penalty = 0,
+#       presence_penalty = 0,
+#       max_tokens = 300,
+#       temperature = 0,
+#       top_p = 1,
+#       n = 1,
+#     },
+#     openai_edit_params = {
+#       model = "code-davinci-edit-001",
+#       temperature = 0,
+#       top_p = 1,
+#       n = 1,
+#     },
+#     keymaps = {
+#       close = { "<C-c>" },
+#       submit = "<C-Space>",
+#       yank_last = "<C-y>",
+#       yank_last_code = "<C-k>",
+#       scroll_up = "<C-u>",
+#       scroll_down = "<C-d>",
+#       toggle_settings = "<C-o>",
+#       new_session = "<C-n>",
+#       cycle_windows = "<Tab>",
+#       -- in the Sessions pane
+#       select_session = "<Space>",
+#       rename_session = "r",
+#       delete_session = "d",
+#     },
+#   }
+# )
+# EOF
+# '''
+#
+# [[plugins]]
+# repo = 'nvim-telescope/telescope.nvim'
 
 # [[plugins]]
 # repo = 'Maan2003/lsp_lines.nvim'
@@ -441,30 +441,30 @@ on_cmd = 'DiagWindowShow'
 # require("lspsaga").setup({})
 # '''
 
-[[plugins]]
-repo = 'ThePrimeagen/harpoon'
-on_event = 'CursorMoved'
-lua_source = '''
-require("harpoon").setup({
-  menu = {
-    title = '',
-    width = vim.api.nvim_win_get_width(0) - 60,
-    borderchars = { '', '', '', '', '', '', '', '' },
-  },
-  global_settings = {
-    save_on_toggle = false,
-    save_on_change = true,
-    enter_on_sendcmd = false,
-    tmux_autoclose_window = false,
-    excluded_filetypes = { "harpoon" },
-    mark_branch = false,
-  }
-})
-vim.api.nvim_set_keymap("n", "mm", "<cmd>lua require('harpoon.mark').add_file()<CR>", { silent = true })
-vim.api.nvim_set_keymap("n", ";", "<cmd>lua require('harpoon.ui').toggle_quick_menu()<CR>", { silent = true })
-vim.api.nvim_set_keymap("n", "]e", "<cmd>lua require('harpoon.ui').nav_next()<CR>", { silent = true })
-vim.api.nvim_set_keymap("n", "[e", "<cmd>lua require('harpoon.ui').nav_prev()<CR>", { silent = true })
-'''
+# [[plugins]]
+# repo = 'ThePrimeagen/harpoon'
+# on_event = 'CursorMoved'
+# lua_source = '''
+# require("harpoon").setup({
+#   menu = {
+#     title = '',
+#     width = vim.api.nvim_win_get_width(0) - 60,
+#     borderchars = { '', '', '', '', '', '', '', '' },
+#   },
+#   global_settings = {
+#     save_on_toggle = false,
+#     save_on_change = true,
+#     enter_on_sendcmd = false,
+#     tmux_autoclose_window = false,
+#     excluded_filetypes = { "harpoon" },
+#     mark_branch = false,
+#   }
+# })
+# vim.api.nvim_set_keymap("n", "mm", "<cmd>lua require('harpoon.mark').add_file()<CR>", { silent = true })
+# vim.api.nvim_set_keymap("n", ";", "<cmd>lua require('harpoon.ui').toggle_quick_menu()<CR>", { silent = true })
+# vim.api.nvim_set_keymap("n", "]e", "<cmd>lua require('harpoon.ui').nav_next()<CR>", { silent = true })
+# vim.api.nvim_set_keymap("n", "[e", "<cmd>lua require('harpoon.ui').nav_prev()<CR>", { silent = true })
+# '''
 
 # text-----------------------------------
 
@@ -1646,7 +1646,7 @@ repo = 'nvim-treesitter/nvim-treesitter'
 depends = [
   'nvim-treesitter-textobjects', 'playground', 'rainbow-delimiters.nvim',
   'nvim-ts-context-commentstring', 'nvim-ts-autotag', 'nvim-yati',
-  'hlargs.nvim', 'nvim-treehopper'
+  'hlargs.nvim', 'nvim-treehopper', 'vim-tmindent'
 ]
 if = 'has("nvim")'
 on_event = 'BufRead'
@@ -1692,12 +1692,31 @@ require('rainbow-delimiters.setup').setup{
 
 [[plugins]]
 repo = 'JoosepAlviste/nvim-ts-context-commentstring'
+lua_source = '''
+vim.g.skip_ts_context_commentstring_module = true
+require('ts_context_commentstring').setup {
+  enable_autocmd = false,
+}
+'''
 
 [[plugins]]
 repo = 'windwp/nvim-ts-autotag'
 
 [[plugins]]
 repo = 'yioneko/nvim-yati'
+
+[[plugins]]
+repo = 'yioneko/vim-tmindent'
+lua_source = '''
+enables = {
+  "lua", "vim", "html", "vue", "javascript",
+  "typescript", "typescriptreact", "javascriptreact"
+}
+require('tmindent').setup({
+  enabled = function() return vim.tbl_contains(enables, vim.bo.filetype) end,
+  use_treesitter = function() return true end, -- used to detect different langauge region and comments
+})
+'''
 
 [[plugins]]
 repo = 'm-demare/hlargs.nvim'
