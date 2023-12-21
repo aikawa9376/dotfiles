@@ -99,7 +99,7 @@ fzf-picture-preview() {
   if selected=$(
     fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . |
     xargs -0 eza -1 -sold --color=always --no-quotes 2> /dev/null |
-    fzf --ansi | tr '\n' ' '); then
+    fzf --ansi | sed 's/ /\\ /g' | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
   fi
   zle redisplay
