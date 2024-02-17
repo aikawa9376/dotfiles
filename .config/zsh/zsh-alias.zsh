@@ -142,8 +142,8 @@ function name_dir() # dir, name
   fi
 }
 
-name_dir /home/aikawa/d/workspace/ w
-name_dir /home/aikawa/d/googledrive/download/ d
+name_dir /home/aikawa/workspace/ w
+name_dir /home/aikawa/gdrive/download/ d
 
 # -------------------------------------
 # グローバル エイリアス

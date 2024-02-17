@@ -216,6 +216,8 @@ Hydra({
       "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>" },
     { '[',
       "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>" },
+    { '<C-Space>',
+      "<cmd>Lspsaga diagnostic_jump_next<CR>", { exit = true } },
   }
 })
 Hydra({
@@ -234,5 +236,7 @@ Hydra({
       "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>" },
     { '[',
       "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>" },
+    { '<C-Space>',
+      "<cmd>Lspsaga diagnostic_jump_prev<CR>", { exit = true } },
   }
 })

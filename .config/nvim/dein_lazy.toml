@@ -81,9 +81,9 @@ repo = 'dmitmel/cmp-cmdline-history'
 
 [[plugins]]
 repo = 'hrsh7th/cmp-cmdline'
-on_event = 'CmdlineEnter'
+on_event = ['InsertEnter', 'CmdLineEnter']
 depends  = [
-  'cmp-cmdline-history', 'cmp-cmdline', 'cmp-nvim-lsp-document-symbol'
+  'cmp-cmdline-history', 'cmp-nvim-lsp-document-symbol'
 ]
 
 [[plugins]]
@@ -301,47 +301,6 @@ lua_source = '''
 require'plugins.noice'
 '''
 
-# [[plugins]]
-# repo = 'luukvbaal/statuscol.nvim'
-# on_event = 'VimEnter'
-# lua_source = '''
-# local builtin = require("statuscol.builtin")
-# require("statuscol").setup({
-#   separator = false,     -- separator between line number and buffer text ("│" or extra " " padding)
-#   -- Builtin line number string options for ScLn() segment
-#   thousands = false,     -- or line number thousands separator string ("." / ",")
-#   relculright = false,   -- whether to right-align the cursor line number with 'relativenumber' set
-#   -- Custom line number string options for ScLn() segment
-#   lnumfunc = nil,        -- custom function called by ScLn(), should return a string
-#   reeval = false,        -- whether or not the string returned by lnumfunc should be reevaluated
-#   -- Custom fold column string options for ScFc() segment
-#   foldfunc = nil,        -- nil for "%C" segment, "builtin" for builtin function, or custom function
-#                          -- called by ScFc(), should return a string
-#   -- Builtin 'statuscolumn' options
-#   setopt = false,        -- whether to set the 'statuscolumn', providing builtin click actions
-#   order = "FSNs",        -- order of the fold, sign, line number and separator segments
-#   ft_ignore = nil,       -- lua table with filetypes for which 'statuscolumn' will be unset
-#   -- Click actions
-#   Lnum                   = builtin.lnum_click,
-#   FoldClose              = builtin.foldclose_click,
-#   FoldOpen               = builtin.foldopen_click,
-#   FoldOther              = builtin.foldother_click,
-#   DapBreakpointRejected  = builtin.toggle_breakpoint,
-#   DapBreakpoint          = builtin.toggle_breakpoint,
-#   DapBreakpointCondition = builtin.toggle_breakpoint,
-#   DiagnosticSignError    = builtin.diagnostic_click,
-#   DiagnosticSignHint     = builtin.diagnostic_click,
-#   DiagnosticSignInfo     = builtin.diagnostic_click,
-#   DiagnosticSignWarn     = builtin.diagnostic_click,
-#   GitSignsTopdelete      = builtin.gitsigns_click,
-#   GitSignsUntracked      = builtin.gitsigns_click,
-#   GitSignsAdd            = builtin.gitsigns_click,
-#   GitSignsChangedelete   = builtin.gitsigns_click,
-#   GitSignsDelete         = builtin.gitsigns_click
-# })
-# vim.o.statuscolumn = "%@v:lua.ScFa@%C%T%@v:lua.ScLa@%s%T@v:lua.ScNa@%=%{v:lua.ScLn()}%T"
-# '''
-
 [[plugins]]
 repo = 'b0o/incline.nvim'
 on_event = 'CursorMoved'
@@ -434,12 +393,50 @@ on_cmd = 'DiagWindowShow'
 # })
 # '''
 
-# [[plugins]]
-# repo = 'glepnir/lspsaga.nvim'
-# on_event = 'BufRead'
-# lua_source = '''
-# require("lspsaga").setup({})
-# '''
+[[plugins]]
+repo = 'nvimdev/lspsaga.nvim'
+on_cmd = 'Lspsaga'
+lua_source = '''
+require("lspsaga").setup({
+  symbol_in_winbar = {
+    enable = false
+  },
+  lightbulb = {
+    enable = false
+  },
+  callhierarchy = {
+    layout = 'normal'
+  },
+})
+'''
+
+[[plugins]]
+repo = 'hedyhli/outline.nvim'
+on_cmd = 'Outline'
+lua_source = '''
+require("outline").setup {
+  outline_window = {
+    width = 20,
+    focus_on_open = false,
+  },
+  symbol_folding = {
+    -- Depth past which nodes will be folded by default. Set to false to unfold all on open.
+    autofold_depth = false,
+    -- When to auto unfold nodes
+    auto_unfold = {
+      -- Auto unfold currently hovered symbol
+      hovered = true,
+      -- Auto fold when the root level only has this many nodes.
+      -- Set true for 1 node, false for 0.
+      only = true,
+    },
+    markers = { '', '' },
+  },
+}
+'''
+hook_add = '''
+nnoremap <leader>o <cmd>Outline<CR>
+'''
 
 # [[plugins]]
 # repo = 'ThePrimeagen/harpoon'
@@ -464,6 +461,13 @@ on_cmd = 'DiagWindowShow'
 # vim.api.nvim_set_keymap("n", ";", "<cmd>lua require('harpoon.ui').toggle_quick_menu()<CR>", { silent = true })
 # vim.api.nvim_set_keymap("n", "]e", "<cmd>lua require('harpoon.ui').nav_next()<CR>", { silent = true })
 # vim.api.nvim_set_keymap("n", "[e", "<cmd>lua require('harpoon.ui').nav_prev()<CR>", { silent = true })
+# '''
+
+# [[plugins]]
+# repo = 'marcomayer/calltree.nvim'
+# on_event = 'CursorHold'
+# lua_source = '''
+# require('calltree').setup({})
 # '''
 
 # text-----------------------------------
@@ -1031,24 +1035,24 @@ require('neogen').setup {
 
 # list-----------------------------------
 
-[[plugins]]
-repo = 'liuchengxu/vista.vim'
-on_cmd = ['Vista!!']
-hook_add = '''
-nnoremap <silent> <Leader>o  <cmd>Vista!!<CR>
-nnoremap <silent> <Leader>c/ <cmd>Vista finder<CR>
-let g:vista_stay_on_open         = 0
-let g:vista_fzf_preview          = ['right:50%']
-let g:vista_icon_indent          = ["", " "]
-let g:vista_echo_cursor_strategy = "floating_win"
-let g:vista_ctags_cmd = {
-  \ "php": "ctags --format=2 --excmd=pattern --fields=nksSaf --sort=no --file-scope=yes --append=no -f-"
-  \ }
-let g:vista#renderer#icons = {
-  \  "function": "\uf794 ",
-  \  "variable": "\uf71b ",
-  \ }
-'''
+# [[plugins]]
+# repo = 'liuchengxu/vista.vim'
+# on_cmd = ['Vista!!']
+# hook_add = '''
+# nnoremap <silent> <Leader>o  <cmd>Vista!!<CR>
+# nnoremap <silent> <Leader>c/ <cmd>Vista finder<CR>
+# let g:vista_stay_on_open         = 0
+# let g:vista_fzf_preview          = ['right:50%']
+# let g:vista_icon_indent          = ["", " "]
+# let g:vista_echo_cursor_strategy = "floating_win"
+# let g:vista_ctags_cmd = {
+#   \ "php": "ctags --format=2 --excmd=pattern --fields=nksSaf --sort=no --file-scope=yes --append=no -f-"
+#   \ }
+# let g:vista#renderer#icons = {
+#   \  "function": "\uf794 ",
+#   \  "variable": "\uf71b ",
+#   \ }
+# '''
 
 # [[plugins]]
 # repo = 'shougo/defx.nvim'
@@ -1259,11 +1263,33 @@ hook_add = '''
 " let g:neomru#file_mru_limit = 5000
 '''
 
+# mundoのほうが好きだけどしょうがない
 [[plugins]]
-repo = 'simnalamburt/vim-mundo'
-on_cmd = ['MundoToggle']
-hook_add = '''
-nnoremap <silent> <Leader>u <cmd>MundoToggle<CR>
+repo = 'jiaoshijie/undotree'
+on_event = ['CursorHold']
+depends = 'plenary.nvim'
+lua_source = '''
+require('undotree').setup({
+  float_diff = false,  -- using float window previews diff, set this `true` will disable layout option
+  layout = "left_left_bottom", -- "left_bottom", "left_left_bottom"
+  position = "left", -- "right", "bottom"
+  ignore_filetype = { 'undotree', 'undotreeDiff', 'qf', 'TelescopePrompt', 'spectre_panel', 'tsplayground' },
+  window = {
+    winblend = 30,
+    width = 30,
+  },
+  keymaps = {
+    ['j'] = "move_next",
+    ['k'] = "move_prev",
+    ['gj'] = "move2parent",
+    ['J'] = "move_change_next",
+    ['K'] = "move_change_prev",
+    ['<cr>'] = "action_enter",
+    ['p'] = "enter_diffbuf",
+    ['q'] = "quit",
+  },
+})
+vim.keymap.set('n', '<leader>u', require('undotree').toggle, { noremap = true, silent = true })
 '''
 
 [[plugins]]

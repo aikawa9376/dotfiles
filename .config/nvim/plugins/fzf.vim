@@ -14,7 +14,7 @@ nnoremap <silent> <Leader>e     m`<cmd>MRUFilesCWD<CR>
 nnoremap <silent> <Leader>E     m`<cmd>MRUFiles<CR>
 nnoremap <silent> <Leader>df    <cmd>SWSqlFzfSelect<CR>
 nnoremap <silent> <Leader>.     m`<cmd>DotFiles<CR>
-nnoremap <silent> <Leader>O     m`<cmd>Outline<CR>
+nnoremap <silent> <Leader>O     m`<cmd>OutLine<CR>
 nnoremap <silent> <Leader>M     m`<cmd>Memo<CR>
 nnoremap <silent> <Leader>gc    m`<cmd>BCommits<CR>
 nnoremap <silent> <Leader>gC    m`<cmd>Commits<CR>
@@ -187,7 +187,7 @@ function! s:outline(...)
     \ 'options': '--reverse +m -d "\t" --with-nth 1 -n 1 --ansi --prompt "Outline> "'}
 endfunction
 
-command! -bang Outline call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
+command! -bang OutLine call fzf#run(fzf#wrap('outline', s:outline(), <bang>0))
 
 " ------------------------------------------------------------------
 " MRU Navigator

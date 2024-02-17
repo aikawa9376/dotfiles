@@ -199,7 +199,8 @@ for_window [class="Rofi"] floating enable
 exec --no-startup-id xhost +SI:localuser:root
 exec --no-startup-id sudo xremap $HOME/.config/xremap/config.yml --watch
 
-exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inverted --noprimary && xrandr --output DVI-I-1 --auto --below HDMI-0 --noprimary;
+# exec --no-startup-id xrandr --output HDMI-0 --auto --left-of DP-0 --rotate inverted --noprimary && xrandr --output DVI-I-1 --auto --below HDMI-0 --noprimary;
+exec --no-startup-id xrandr --output DVI-I-1 --auto --below DP-0 --noprimary && xrandr --output HDMI-0 --auto --right-of DVI-I-1 --noprimary;
 exec --no-startup-id fcitx5;
 exec --no-startup-id copyq;
 exec --no-startup-id insync start;
