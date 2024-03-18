@@ -1,5 +1,9 @@
 # lsp-----------------------------------
 [[plugins]]
+repo = 'Almo7aya/openingh.nvim'
+on_event = ['VimEnter']
+
+[[plugins]]
 repo = 'neovim/nvim-lspconfig'
 depends  = ['mason.nvim', 'mason-lspconfig.nvim']
 
@@ -64,7 +68,7 @@ repo = 'hrsh7th/cmp-buffer'
 on_event = ['InsertEnter', 'CmdLineEnter']
 depends  = [
   'cmp-rg', 'cmp_luasnip', 'cmp-path',
-  'cmp-tabnine', 'cmp-tmux', 'vim-snippets'
+  'cmp-tmux', 'vim-snippets'
 ]
 
 [[plugins]]
@@ -185,20 +189,26 @@ repo = 'amarakon/nvim-cmp-buffer-lines'
 # lua require("lsp_lines").register_lsp_virtual_lines()
 # '''
 
-# [[plugins]]
-# repo = 'zbirenbaum/copilot-cmp'
-#
-# [[plugins]]
-# repo = 'zbirenbaum/copilot.lua'
-# depends = ['copilot-cmp']
-# on_event = 'InsertEnter'
-# hook_source = '''
-# lua << EOF
-# vim.schedule(function() require("copilot").setup({
-# plugin_manager_path = '/home/aikawa/.cache/dein/repos/github.com/zbirenbaum'
-# }) end)
-# EOF
-# '''
+[[plugins]]
+repo = 'zbirenbaum/copilot-cmp'
+hook_source = '''
+lua << EOF
+  require("copilot_cmp").setup()
+EOF
+'''
+
+[[plugins]]
+repo = 'zbirenbaum/copilot.lua'
+depends = ['copilot-cmp']
+on_event = 'InsertEnter'
+hook_source = '''
+lua << EOF
+require("copilot").setup({
+  suggestion = { enabled = false },
+  panel = { enabled = false },
+})
+EOF
+'''
 
 [[plugins]]
 repo = 'tzachar/cmp-tabnine'
@@ -652,7 +662,7 @@ let g:VM_set_statusline  = 0
 repo = 'xiyaowong/accelerated-jk.nvim'
 on_event = 'CursorMoved'
 hook_source = '''
- lua require('accelerated-jk').setup {acceleration_table = {35,97,141,212,314,414,514,614}}
+ lua require('accelerated-jk').setup {acceleration_table = {3,10,20,35,97,141,212,314,414,514,614}}
 '''
 
 [[plugins]]
@@ -892,6 +902,9 @@ on_event = 'CursorMoved'
 lua_source = '''
 require'plugins.hydra'
 '''
+
+[[plugins]]
+repo = 'tpope/vim-rhubarb'
 
 # [[plugins]]
 # repo = 'tpope/vim-surround'
@@ -1371,21 +1384,21 @@ vim.api.nvim_set_keymap("n", "<C-w>-", "<cmd>lua require('tmux').resize_top()<cr
 vim.api.nvim_set_keymap("n", "<C-w>>", "<cmd>lua require('tmux').resize_right()<cr>", { silent = true })
 '''
 
-[[plugins]]
-repo = 'ludovicchabant/vim-gutentags'
-on_event = 'CursorMoved'
-hook_add = '''
-let g:gutentags_project_root = [
-  \ '.root', '.svn', '.git', '.project', '.vim.local',
-  \ 'package.json', 'composer.json'
-  \ ]
-let g:gutentags_ctags_tagfile = '.tags'
-let s:vim_tags = expand('~/.cache/tags')
-let g:gutentags_cache_dir = s:vim_tags
-if !isdirectory(s:vim_tags)
-  silent! call mkdir(s:vim_tags, 'p')
-endif
-'''
+# [[plugins]]
+# repo = 'ludovicchabant/vim-gutentags'
+# on_event = 'CursorMoved'
+# hook_add = '''
+# let g:gutentags_project_root = [
+#   \ '.root', '.svn', '.git', '.project', '.vim.local',
+#   \ 'package.json', 'composer.json'
+#   \ ]
+# let g:gutentags_ctags_tagfile = '.tags'
+# let s:vim_tags = expand('~/.cache/tags')
+# let g:gutentags_cache_dir = s:vim_tags
+# if !isdirectory(s:vim_tags)
+#   silent! call mkdir(s:vim_tags, 'p')
+# endif
+# '''
 
 # git -----------------------------------
 
@@ -1433,6 +1446,7 @@ GitGutterEnable
 
 [[plugins]]
 repo = 'tpope/vim-fugitive'
+depends = "vim-rhubarb"
 on_cmd = [
   "Git", "Gdiff", "Gwrite",
   "GitAddCommit", "GitAddAmend"

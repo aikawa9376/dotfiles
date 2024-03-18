@@ -118,13 +118,18 @@ alias dkk='docker exec'
 alias dkur='docker run --rm -v /etc/group:/etc/group:ro -v /etc/passwd:/etc/passwd:ro -u $(id -u $USER):$(id -g $USER)'
 
 # -------------------------------------
-# 拡張子 エイリアス
+=======
+# fasd
 # -------------------------------------
-alias -s {gz,tar,zip,msi,rar,7z,rar,xz}='unar' # archives less -> lsar
-alias -s {png,jpg,gif}='feh'
-alias -s {txt,md}='bat'
-# alias -s {pdf}='okular'
-alias -s {gddoc,gdscript,gdsheet,gdslides,pptx,pdf,xls,xlsx,doc,docx,ai,psd}='gdopen'
+# unalias a  # alias a='fasd -a'        # any
+# unalias s  # alias s='fasd -si'       # show / search / select
+# unalias d  # alias d='fasd -d'        # directory
+# unalias f  # alias f='fasd -f'        # file
+# unalias sd # alias sd='fasd -sid'     # interactive directory selection
+# unalias sf # alias sf='fasd -sif'     # interactive file selection
+# alias z='z-override'     # cd, same functionality as j in autojump
+
+# -------------------------------------
 
 # -------------------------------------
 # ディレクトリ エイリアス
@@ -148,23 +153,22 @@ name_dir /home/aikawa/gdrive/download/ d
 # -------------------------------------
 # グローバル エイリアス
 # -------------------------------------
-setopt extended_glob
-zle -N __abbrev_alias::magic_abbrev_expand
-zle -N __abbrev_alias::no_magic_abbrev_expand
-bindkey " "   __abbrev_alias::magic_abbrev_expand
-bindkey "^x " __abbrev_alias::no_magic_abbrev_expand
-zle -N __abbrev_alias::magic_abbrev_expand_and_insert
-zle -N __abbrev_alias::magic_abbrev_expand_and_accept_line
-bindkey " "    __abbrev_alias::magic_abbrev_expand_and_insert
-bindkey "^x "  __abbrev_alias::no_magic_abbrev_expand
-abbrev-alias -g from='$(mru)'
-abbrev-alias -g to='$(destination_directories)'
-abbrev-alias -g le='| less'
-abbrev-alias -g ff='| fzf --ansi -m'
-abbrev-alias -g bb='| bat'
-abbrev-alias -g vo='| nvim'
-abbrev-alias -g trs="| trans -b :ja"
-abbrev-alias -g dst='$(duster)'
-abbrev-alias -g fnd='$(finder)'
-abbrev-alias -g pyg='"pygmentize -g  {}"'
-abbrev-alias -g hh='~/'
+# setopt extended_glob
+# zle -N __abbrev_alias::magic_abbrev_expand
+# zle -N __abbrev_alias::no_magic_abbrev_expand
+# bindkey " "   __abbrev_alias::magic_abbrev_expand
+# bindkey "^x " __abbrev_alias::no_magic_abbrev_expand
+# zle -N __abbrev_alias::magic_abbrev_expand_and_insert
+# zle -N __abbrev_alias::magic_abbrev_expand_and_accept_line
+# bindkey " "    __abbrev_alias::magic_abbrev_expand_and_insert
+# bindkey "^x "  __abbrev_alias::no_magic_abbrev_expand
+# abbrev-alias -g from='$(mru)'
+# abbrev-alias -g to='$(destination_directories)'
+# abbrev-alias -g le='| less'
+# abbrev-alias -g ff='| fzf --ansi -m'
+# abbrev-alias -g bb='| bat'
+# abbrev-alias -g vo='| nvim'
+# abbrev-alias -g trs="| trans -b :ja"
+# abbrev-alias -g dst='$(duster)'
+# abbrev-alias -g fnd='$(finder)'
+# abbrev-alias -g pyg='"pygmentize -g  {}"'

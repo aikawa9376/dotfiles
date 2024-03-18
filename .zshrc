@@ -35,7 +35,7 @@ zinit ice wait'!0' lucid; zinit load "aikawa9376/zsh-gomi"
 # pair auto
 zinit ice wait'!0' lucid; zinit load "hlissner/zsh-autopair"
 # enhancd
-zinit ice lucid wait'!0' atclone'rm -rf functions/*.fish'
+zinit ice lucid wait'!0'
 zinit load "b4b4r07/enhancd"
 # tmux fzf
 zinit ice lucid as"program" pick"tmuximum"
@@ -364,9 +364,4 @@ chpwd() {
     __enhancd::cd::after
     ll
   fi
-}
-# -------------------------------------
-# Xserver start
-# -------------------------------------
-[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx i3
-xset r rate 150 230; xset b off
+eval $(thefuck --alias)

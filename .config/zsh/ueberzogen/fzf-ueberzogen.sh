@@ -14,7 +14,7 @@
 
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
-readonly BASH_BINARY="$(which bash)"
+readonly BASH_BINARY="/usr/sbin/bash"
 readonly REDRAW_COMMAND="toggle-preview+toggle-preview"
 readonly REDRAW_KEY="ctrl-l"
 declare -r -x DEFAULT_PREVIEW_POSITION="right"

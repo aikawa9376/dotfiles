@@ -3,7 +3,7 @@ local vim, fn, api, g = vim, vim.fn, vim.api, vim.g
 local M = {}
 
 -- binary paths {{{
-local bin = vim.env.XDG_CACHE_HOME .. '/dein/repos/github.com/junegunn/fzf.vim/bin/preview.sh'
+local bin ='/root/.cache/dein/repos/github.com/junegunn/fzf.vim/bin/preview.sh'
 -- }}}
 
 -- utility functions {{{

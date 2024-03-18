@@ -6,29 +6,111 @@ SetKeyDelay 0
 #InstallKeybdHook
 #UseHook
 
-$Control::
-  if SandS_guard = True   ;スペースキーガード
+$LControl::
+  if LControl_guard = True   ;スペースキーガード
       return
-  SandS_guard = True      ;スペースキーにガードをかける
+  LControl_guard = True      ;スペースキーにガードをかける
   Send,{LControl Down}    ;シフトキーを仮想的に押し下げる
-  ifNotEqual SandS_key    ;既に入力済みの場合は抜ける
+  ifNotEqual LControl_key    ;既に入力済みの場合は抜ける
       return
-  SandS_key=
-  Input,SandS_key,L1 V    ;1文字入力を受け付け（入力有無判定用）
+  LControl_key=
+  Input,LControl_key,L1 V    ;1文字入力を受け付け（入力有無判定用）
 return
 
-$Control up::             ;スペース解放時
+$LControl up::             ;スペース解放時
   input                   ;既存のInputコマンドの終了
-  if SandS_guard = False  ;ガードがかかってなかった場合（修飾キー＋Spaceのリリース）
+  if LControl_guard = False  ;ガードがかかってなかった場合（修飾キー＋Spaceのリリース）
       return
-  SandS_guard = False     ;スペースキーガードを外す
+  LControl_guard = False     ;スペースキーガードを外す
   Send,{LControl Up}      ;シフトキー解放
-  ifEqual SandS_key       ;SandS文字入力なし
+  ifEqual LControl_key       ;LControl文字入力なし
       Send,{ESC}          ;スペースを発射
-  SandS_key=
+      IME_SET(0)
+  LControl_key=
 return
 
-LControl & n::send_key("^n","{Down}")
+$RShift::
+  if RShift_guard = True   ;スペースキーガード
+      return
+  RShift_guard = True      ;スペースキーにガードをかける
+  Send,{RShift Down}    ;シフトキーを仮想的に押し下げる
+  ifNotEqual RShift_key    ;既に入力済みの場合は抜ける
+      return
+  RShift_key=
+  Input,RShift_key,L1 V    ;1文字入力を受け付け（入力有無判定用）
+return
+
+$RShift up::             ;スペース解放時
+  input                   ;既存のInputコマンドの終了
+  if RShift_guard = False  ;ガードがかかってなかった場合（修飾キー＋Spaceのリリース）
+      return
+  RShift_guard = False     ;スペースキーガードを外す
+  Send,{RShift Up}      ;シフトキー解放
+  ifEqual RShift_key       ;RShift文字入力なし
+      Send,^+{Space}          ;スペースを発射
+  RShift_key=
+return
+
+$LShift::
+  if LShift_guard = True   ;スペースキーガード
+      return
+  LShift_guard = True      ;スペースキーにガードをかける
+  Send,{LShift Down}    ;シフトキーを仮想的に押し下げる
+  ifNotEqual LShift_key    ;既に入力済みの場合は抜ける
+      return
+  LShift_key=
+  Input,LShift_key,L1 V    ;1文字入力を受け付け（入力有無判定用）
+return
+
+$LShift up::             ;スペース解放時
+  input                   ;既存のInputコマンドの終了
+  if LShift_guard = False  ;ガードがかかってなかった場合（修飾キー＋Spaceのリリース）
+      return
+  LShift_guard = False     ;スペースキーガードを外す
+  Send,{LShift Up}      ;シフトキー解放
+  ifEqual LShift_key       ;LShift文字入力なし
+      IME_SET(1)
+  LShift_key=
+return
+
+$Tab::
+  if Tab_guard = True   ;スペースキーガード
+      return
+  Tab_guard = True      ;スペースキーにガードをかける
+  Send,{RAlt Down}    ;シフトキーを仮想的に押し下げる
+  ifNotEqual Tab_key    ;既に入力済みの場合は抜ける
+      return
+  Tab_key=
+  Input,Tab_key,L1 V    ;1文字入力を受け付け（入力有無判定用）
+return
+
+$Tab up::             ;スペース解放時
+  input                   ;既存のInputコマンドの終了
+  if Tab_guard = False  ;ガードがかかってなかった場合（修飾キー＋Spaceのリリース）
+      return
+  Tab_guard = False     ;スペースキーガードを外す
+  Send,{RAlt Up}      ;シフトキー解放
+  ifEqual Tab_key       ;Tab文字入力なし
+      Send,{Tab}          ;スペースを発射
+  Tab_key=
+return
+
+IME_SET(SetSts, WinTitle="A")    {
+  ControlGet,hwnd,HWND,,,%WinTitle%
+  if  (WinActive(WinTitle)) {
+    ptrSize := !A_PtrSize ? 4 : A_PtrSize
+      VarSetCapacity(stGTI, cbSize:=4+4+(PtrSize*6)+16, 0)
+      NumPut(cbSize, stGTI,  0, "UInt")   ; DWORD   cbSize;
+      hwnd := DllCall("GetGUIThreadInfo", Uint,0, Uint,&stGTI)
+      ? NumGet(stGTI,8+PtrSize,"UInt") : hwnd
+  }
+
+  return DllCall("SendMessage"
+    , UInt, DllCall("imm32\ImmGetDefaultIMEWnd", Uint,hwnd)
+    , UInt, 0x0283  ;Message : WM_IME_CONTROL
+    ,  Int, 0x006   ;wParam  : IMC_SETOPENSTATUS
+    ,  Int, SetSts) ;lParam  : 0 or 1
+}
 
 plus_all(original_key) {
   IF GetKeyState("Shift", "p")
@@ -66,7 +148,7 @@ plus_shift(original_key) {
   Return
 }
 
-                                      ; Applications you want to disable emacs-like keybindings
+; Applications you want to disable emacs-like keybindings
 ; (Please comment out applications you don't use)
 is_target()
 {
@@ -153,9 +235,32 @@ is_excel_edit(original_key,replace_key)
   Return
 }
 
+;----------------------------------------------------------------
+;  ブラウザとターミナルをトグル
+;----------------------------------------------------------------
+toggle_b_to_t()
+{
+  WinGetClass, focusedControl, A
+  if( focusedControl == "CASCADIA_HOSTING_WINDOW_CLASS")
+  {
+    WinActivate, ahk_exe  vivaldi.exe
+    Return
+  }
+  if( focusedControl == "Chrome_WidgetWin_1" )
+  {
+    WinActivate, ahk_exe WindowsTerminal.exe
+    Return
+  }
+  WinActivate, ahk_exe WindowsTerminal.exe
+  Return
+}
+LWIN & Space::toggle_b_to_t()
+
 ;LControl::LAlt
 LWIN::SendEvent, {vk1D}  ;左Windowsキー to 無変換キー
 RWIN::SendEvent, {vk1C}  ;右Windowsキー to 変換キー
+
+; LControl & RShift::SendEvent, !{ESC}
 
 LWIN & 1::plus_all("{F1}")
 LWIN & 2::plus_all("{F2}")
@@ -188,6 +293,8 @@ RWIN & q::winclose A
 RWIN & l::Reload
 >+ESC::send_key("<+ESC","{~}")
 
+^;::Send,#v
+
 >!c::
   WinGet, original, , A
   if( ErrorLevel == 0 )
@@ -199,6 +306,46 @@ RWIN & l::Reload
 
 #IfWinActive,ahk_class CASCADIA_HOSTING_WINDOW_CLASS
 {
+  Tab & Space::send_key("Tab", "!b")
+  ; Tab & j::send_key("Tab","{Down}")
+  Tab & j::
+    If GetKeyState("LWIN", "p") {
+      send_key("Tab","!{Down}")
+    } else {
+      send_key("Tab","{Down}")
+    }
+    return
+  Tab & k::
+    If GetKeyState("LWIN", "p") {
+      send_key("Tab","!{Up}")
+    } else {
+      send_key("Tab","{Up}")
+    }
+    return
+  Tab & l::
+    If GetKeyState("LWIN", "p") {
+      send_key("Tab","!{Right}")
+    } else {
+      send_key("Tab","{Right}")
+    }
+    return
+  Tab & h::
+    If GetKeyState("LWIN", "p") {
+      send_key("Tab","!{Left}")
+    } else {
+      send_key("Tab","{Left}")
+    }
+    return
+  Tab & p::send_key("Tab", "^{Up}")
+  Tab & n::send_key("Tab", "^{Down}")
+
+  ; Tab & #j::send_key("Tab","#{Down}")
+  ; Tab & #k::send_key("Tab","#{Up}")
+  ; Tab & #l::send_key("Tab","#{Left}")
+  ; Tab & #h::send_key("Tab","#{Right}")
+
+  LWIN & v::plus_shift("+{Insert}")
+
   !g::
     WinGet, original, , A
     Process, Exist, chrome.exe
@@ -296,7 +443,6 @@ RWIN & l::Reload
 {
   LWIN & x::plus_shift("^{x}")
   LWIN & c::plus_shift("^{c}")
-  LWIN & v::plus_shift("^{v}")
   LWIN & s::plus_shift("^{s}")
   LWIN & o::plus_shift("^{o}")
   LWIN & p::plus_shift("^{p}")
@@ -309,6 +455,8 @@ RWIN & l::Reload
   LWIN & u::plus_shift("^{z}")
   LWIN & y::plus_shift("^{y}")
   LWIN & r::plus_shift("^{r}")
+
+  LWIN & v::plus_shift("^{v}")
 
   ;================================================================
   ;ctrlキーバインド
@@ -336,6 +484,10 @@ RWIN & l::Reload
   <^+a::send_key("^+a","+{Home}")
   <^e::send_key("^e","{End}")
   <^+e::send_key("^+e","+{End}")
+
+  <^c::send_key("^+c","+{ESC}")
+  <^i::send_key("^i","{Tab}")
+  <^+i::send_key("^+i","+{Tab}")
 
   ;----------------------------------------------------------------
   ;編集系

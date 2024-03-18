@@ -12,7 +12,7 @@ opt.completeopt = "menuone"
 opt.cursorline = true
 opt.list = true
 opt.undofile = true
-opt.undodir = vim.env.XDG_CACHE_HOME .. "/nvim/undo/"
+opt.undodir = "/root/.cache/nvim/undo/"
 opt.listchars = "tab:»-,extends:»,precedes:«,nbsp:%,trail:-"
 opt.splitright = true
 opt.splitbelow = true
@@ -38,7 +38,6 @@ opt.smartindent = true
 opt.breakindent = true
 opt.scrolloff = 10
 opt.virtualedit = "onemore"
-opt.clipboard = "unnamed,unnamedplus"
 opt.mouse = "a"
 opt.expandtab = true
 opt.tabstop = 2
@@ -55,6 +54,22 @@ opt.wildoptions = opt.wildoptions .. ",pum"
 opt.pumheight = 20
 opt.cmdheight = 0
 -- opt.shellslash = true
+
+vim.opt.clipboard = 'unnamedplus'
+-- if vim.fn.has("wsl") then
+--   vim.g.clipboard = {
+--     name = "win32yank-wsl",
+--     copy = {
+--       ["+"] = "win32yank.exe -i --crlf",
+--       ["*"] = "win32yank.exe -i --crlf"
+--     },
+--     paste = {
+--       ["+"] = "win32yank.exe -o --crlf",
+--       ["*"] = "win32yank.exe -o --crlf"
+--     },
+--     cache_enable = 0,
+--   }
+-- end
 
 vim.api.nvim_set_var("do_filetype_lua", 1)
 vim.api.nvim_set_var("did_load_filetypes", 0)

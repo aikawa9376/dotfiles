@@ -36,6 +36,11 @@ local php = {
     t({ "", "}" }),
   }),
   s("E", {
+    t("\\Illuminate\\Support\\Facades\\Log::debug('"),
+    i(1, "here"),
+    t("', [])); "),
+  }),
+  s("EE", {
     t("throw new \\Exception(var_export("),
     i(1, "here"),
     t(", true)); "),

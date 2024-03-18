@@ -1,0 +1,16 @@
+lastupdatecheck: 0
+recentrepos:
+- /root/projects/doujin-local-develop/sources/ec/ec
+- /root/projects/doujin-local-develop/sources/ec/partsmap-dojin
+- /root/projects/backup/doujin-local-develop/sources/ec/ec
+- /root/projects/doujin-local-develop
+- /root/projects/tasks/scripts/sync
+- /root/projects/doujin-local-develop/sources/ec/partsmap-dojin-react
+- /root/projects/tasks/scripts/search
+- /root/projects/doujin-local-develop/sources/admin/doujin-admin
+- /root/projects/tasks/system
+- /root/projects/doujin-local-develop/sources/ec/ec.docker
+startuppopupversion: 5
+customcommandshistory: []
+hidecommandlog: false
+ignorewhitespaceindiffview: true
