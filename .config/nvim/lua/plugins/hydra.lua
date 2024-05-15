@@ -7,6 +7,7 @@ Hydra({
   mode = 'n',
   body = ']b',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.cmd 'bnext'
@@ -22,6 +23,7 @@ Hydra({
   mode = 'n',
   body = '[b',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.cmd 'bpreviou'
@@ -38,6 +40,7 @@ Hydra({
   mode = 'n',
   body = 'g;',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(vim.api.nvim_replace_termcodes('g;', true, true, true), 'n')
@@ -53,6 +56,7 @@ Hydra({
   mode = 'n',
   body = 'g,',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(vim.api.nvim_replace_termcodes('g,', true, true, true), 'n')
@@ -69,6 +73,7 @@ Hydra({
   mode = { 'n', 'x' },
   body = 'p',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
@@ -89,6 +94,7 @@ Hydra({
   mode = { 'n', 'x' },
   body = 'P',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
@@ -110,6 +116,7 @@ Hydra({
   mode = 'n',
   body = ']n',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
@@ -125,6 +132,7 @@ Hydra({
   mode = 'n',
   body = '[n',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
@@ -141,6 +149,7 @@ Hydra({
   mode = 'n',
   body = ']c',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.cmd 'GitGutterNextHunk'
@@ -156,6 +165,7 @@ Hydra({
   mode = 'n',
   body = '[c',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.cmd 'GitGutterPrevHunk'
@@ -172,6 +182,7 @@ Hydra({
   mode = 'n',
   body = ']q',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
@@ -188,6 +199,7 @@ Hydra({
   mode = 'n',
   body = '[q',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
@@ -205,6 +217,7 @@ Hydra({
   mode = 'n',
   body = ']a',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       diagnostic.goto_next({ float = false })
@@ -225,6 +238,7 @@ Hydra({
   mode = 'n',
   body = '[a',
   config = {
+    hint = false,
     invoke_on_body = true,
     on_enter = function()
       diagnostic.goto_prev({ float = false })

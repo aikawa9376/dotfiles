@@ -1795,6 +1795,14 @@ require("bufjump").setup({
 # EOF
 # '''
 
+[[plugins]]
+repo = 'linrongbin16/gitlinker.nvim'
+on_event = 'CursorMoved'
+lua_source = '''
+require'plugins.gitlinker'
+'''
+
+
 # php------------------------------------
 [[plugins]]
 repo = 'captbaritone/better-indent-support-for-php-with-html'
