@@ -636,16 +636,44 @@ let g:qs_filetype_blacklist = [
  \ 'vista', 'qf', 'fzf', 'noice', 'lazygit' ]
 '''
 
+# [[plugins]]
+# repo = 'mg979/vim-visual-multi'
+# rev = 'master'
+# on_event = 'CursorMoved'
+# hook_add = '''
+# let g:VM_cmdheight       = 1
+# let g:VM_manual_infoline = 1
+# let g:VM_leader          = '<Space>v'
+# let g:VM_theme           = 'iceblue'
+# let g:VM_set_statusline  = 0
+# '''
+
 [[plugins]]
-repo = 'mg979/vim-visual-multi'
-rev = 'master'
+repo = 'smoka7/multicursors.nvim'
 on_event = 'CursorMoved'
-hook_add = '''
-let g:VM_cmdheight       = 1
-let g:VM_manual_infoline = 1
-let g:VM_leader          = '<Space>v'
-let g:VM_theme           = 'iceblue'
-let g:VM_set_statusline  = 0
+lua_source = '''
+local extend = require("multicursors.extend_mode")
+require('multicursors').setup {
+  hint_config = false,
+  normal_keys = {
+    -- to change default lhs of key mapping change the key
+    ["j"] = {
+      method = function()
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('j', true, true, true), 'n', false)
+      end,
+      opts = {}
+    },
+    ["k"] = {
+      method = function()
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('k', true, true, true), 'n', false)
+      end,
+      opts = {}
+    },
+  }
+}
+vim.keymap.set('n', '<C-n>', '<Cmd>MCstart<CR>', { noremap = true, silent = true })
+vim.keymap.set('n', '<Space>vc', '<Cmd>MCunderCursor<CR>', { noremap = true, silent = true })
+vim.keymap.set('x', '<C-n>', '<Cmd>MCvisual<CR>', { noremap = true, silent = true })
 '''
 
 [[plugins]]
@@ -991,13 +1019,35 @@ endfunction
 '''
 
 [[plugins]]
-repo = 'AndrewRadev/splitjoin.vim'
-on_cmd = ['SplitjoinJoin', 'SplitjoinSplit']
-hook_add = '''
-let g:splitjoin_split_mapping = ''
-let g:splitjoin_join_mapping = ''
-nmap <plug>(my-switch)j <cmd>SplitjoinJoin<cr>
-nmap <plug>(my-switch)J <cmd>SplitjoinSplit<cr>
+repo = 'Wansmer/treesj'
+on_cmd = ['Split']
+lua_source = '''
+local tsj = require('treesj')
+
+tsj.setup({
+  ---@type boolean Use default keymaps (<space>m - toggle, <space>j - join, <space>s - split)
+  use_default_keymaps = false,
+  ---@type boolean Node with syntax error will not be formatted
+  check_syntax_error = true,
+  ---If line after join will be longer than max value,
+  ---@type number If line after join will be longer than max value, node will not be formatted
+  max_join_length = 120,
+  ---Cursor behavior:
+  ---hold - cursor follows the node/place on which it was called
+  ---start - cursor jumps to the first symbol of the node being formatted
+  ---end - cursor jumps to the last symbol of the node being formatted
+  ---@type 'hold'|'start'|'end'
+  cursor_behavior = 'hold',
+  ---@type boolean Notify about possible problems or not
+  notify = true,
+  ---@type boolean Use `dot` for repeat action
+  dot_repeat = true,
+  ---@type nil|function Callback for treesj error handler. func (err_text, level, ...other_text)
+  on_error = nil,
+  ---@type table Presets for languages
+  -- langs = {}, -- See the default presets in lua/treesj/langs
+})
+vim.api.nvim_create_user_command('Split', tsj.toggle, {})
 '''
 
 [[plugins]]
@@ -1633,14 +1683,52 @@ on_event = 'CmdlineEnter'
 
 [[plugins]]
 repo = 'monaqa/dial.nvim'
-on_map = {n = '<Plug>', {x = '<Plug>'}
-hook_source = '''
-nmap <C-a> <Plug>(dial-increment)
-nmap <C-x> <Plug>(dial-decrement)
-xmap <C-a> <Plug>(dial-increment)
-xmap <C-x> <Plug>(dial-decrement)
-xmap g<C-a> <Plug>(dial-increment-additional)
-xmap g<C-x> <Plug>(dial-decrement-additional)
+on_event = 'CursorMoved'
+lua_source = '''
+local augend = require("dial.augend")
+require("dial.config").augends:register_group{
+  -- default augends used when no group name is specified
+  default = {
+    augend.integer.alias.decimal, -- nonnegative decimal number (0, 1, 2, 3, ...)
+    augend.integer.alias.hex, -- nonnegative hex number  (0x01, 0x1a1f, etc.)
+    augend.constant.alias.bool, -- boolean value (true <-> false)
+    augend.date.alias["%Y/%m/%d"], -- date (2022/02/18, etc.)
+    augend.date.alias["%m/%d/%Y"], -- date (02/19/2022)
+    -- augend.date.alias["%m-%d-%Y"], -- date (02-19-2022)
+    -- augend.date.alias["%Y-%m-%d"], -- date (02-19-2022)
+    augend.date.new({
+      pattern = "%m.%d.%Y",
+      default_kind = "day",
+      only_valid = true,
+      word = false,
+    }),
+    augend.misc.alias.markdown_header,
+  }
+}
+vim.keymap.set("n", "<C-a>", function()
+    require("dial.map").manipulate("increment", "normal")
+end)
+vim.keymap.set("n", "<C-x>", function()
+    require("dial.map").manipulate("decrement", "normal")
+end)
+vim.keymap.set("n", "g<C-a>", function()
+    require("dial.map").manipulate("increment", "gnormal")
+end)
+vim.keymap.set("n", "g<C-x>", function()
+    require("dial.map").manipulate("decrement", "gnormal")
+end)
+vim.keymap.set("v", "<C-a>", function()
+    require("dial.map").manipulate("increment", "visual")
+end)
+vim.keymap.set("v", "<C-x>", function()
+    require("dial.map").manipulate("decrement", "visual")
+end)
+vim.keymap.set("v", "g<C-a>", function()
+    require("dial.map").manipulate("increment", "gvisual")
+end)
+vim.keymap.set("v", "g<C-x>", function()
+    require("dial.map").manipulate("decrement", "gvisual")
+end)
 '''
 
 [[plugins]]
@@ -1787,7 +1875,6 @@ on_event = 'CursorMoved'
 lua_source = '''
 require'plugins.gitlinker'
 '''
-
 
 # php------------------------------------
 [[plugins]]
