@@ -60,6 +60,10 @@ bindsym $mod+slash focus down
 bindsym $mod+bracketleft focus up
 bindsym $mod+apostrophe focus right
 
+# cycle outputs
+bindsym Mod1+Tab workspace next
+bindsym Mod1+Shift+Tab workspace prev
+
 # alternatively, you can use the cursor keys:
 # bindsym $mod+Left focus left
 # bindsym $mod+Down focus down

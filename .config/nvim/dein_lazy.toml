@@ -48,7 +48,7 @@ lua require'plugins.dressing'
 repo = 'hrsh7th/nvim-cmp'
 on_event = ['InsertEnter', 'CursorHold']
 depends  = [
-  'nvim-lspconfig', 'none-ls.nvim', 'noice.nvim', 'lualine.nvim' 'nvim-autopairs'
+  'nvim-lspconfig', 'none-ls.nvim', 'noice.nvim', 'lualine.nvim' 'nvim-insx'
   'LuaSnip', 'friendly-snippets', 'cmp-nvim-lsp', 'lsp-format.nvim', 'lspkind-nvim',
   'lsp-inlayhints.nvim', 'lsp_signature.nvim', 'vim-illuminate', 'dressing.nvim'
 ]
@@ -363,24 +363,21 @@ on_cmd = 'DiagWindowShow'
 #             right_arrow = ">",
 #         },
 #         style = {
-#             { fg = "#806d9c" },
-#             { fg = "#c21f30" }, -- this fg is used to highlight wrong chunk
+#             { fg = "#094b5c" },
+#             { fg = "#073642" }, -- this fg is used to highlight wrong chunk
 #         },
 #         textobject = "",
 #         max_file_size = 1024 * 1024,
 #         error_sign = false,
 #     },
-#
 #     indent = {
 #         enable = false,
 #     },
-#
 #     line_num = {
 #         enable = false,
 #         use_treesitter = false,
 #         style = "#806d9c",
 #     },
-#
 #     blank = {
 #         enable = false,
 #         chars = {
@@ -559,10 +556,33 @@ require("colorizer").setup {
 # call SetLeximaAddRule()
 # '''
 
+# [[plugins]]
+# repo = 'windwp/nvim-autopairs'
+# hook_source = '''
+# lua require'plugins.autopairs'
+# '''
+
 [[plugins]]
-repo = 'windwp/nvim-autopairs'
-hook_source = '''
-lua require'plugins.autopairs'
+repo = 'hrsh7th/nvim-insx'
+lua_source = '''
+require('insx.preset.standard').setup()
+'''
+
+[[plugins]]
+repo = 'hrsh7th/nvim-automa'
+on_event = 'CursorMoved'
+lua_source = '''
+local automa = require('automa')
+automa.setup({
+  mapping = {
+    ['.'] = {
+      queries = {
+        -- wide-range dot-repeat definition.
+        automa.query_v1({ '!n(h,j,k,l)+' }),
+      }
+    },
+  }
+})
 '''
 
 [[plugins]]
@@ -1703,6 +1723,10 @@ require("dial.config").augends:register_group{
       word = false,
     }),
     augend.misc.alias.markdown_header,
+    augend.constant.alias.ja_weekday,
+    augend.constant.alias.ja_weekday_full,
+    -- augend.paren.alias.brackets,
+    -- augend.paren.alias.quote,
   }
 }
 vim.keymap.set("n", "<C-a>", function()
