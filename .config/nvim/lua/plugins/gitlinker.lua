@@ -180,7 +180,7 @@ require('gitlinker').setup({
   debug = false,
 
   -- write logs to console(command line)
-  console_log = true,
+  console_log = false,
 
   -- write logs to file
   file_log = false,
