@@ -390,22 +390,27 @@ on_cmd = 'DiagWindowShow'
 # })
 # '''
 
-[[plugins]]
-repo = 'nvimdev/lspsaga.nvim'
-on_cmd = 'Lspsaga'
-lua_source = '''
-require("lspsaga").setup({
-  symbol_in_winbar = {
-    enable = false
-  },
-  lightbulb = {
-    enable = false
-  },
-  callhierarchy = {
-    layout = 'normal'
-  },
-})
-'''
+# [[plugins]]
+# repo = 'nvimdev/lspsaga.nvim'
+# on_event = 'CursorMoved'
+# lua_source = '''
+# require("lspsaga").setup({
+#   symbol_in_winbar = {
+#     enable = false
+#   },
+#   lightbulb = {
+#     enable = true,
+#     sign = false,
+#     virtualtext = true,
+#   },
+#   callhierarchy = {
+#     layout = 'normal'
+#   },
+#   ui = {
+#     code_action = 'A'
+#   }
+# })
+# '''
 
 [[plugins]]
 repo = 'hedyhli/outline.nvim'

@@ -167,10 +167,10 @@ M.default = function(client, bufnr)
   buf_set_keymap("n", "<space>ca", "<cmd>lua vim.lsp.buf.code_action()<CR>", opts)
   buf_set_keymap("n", "<space>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", opts)
   buf_set_keymap(
-    "n",
-    "gq",
-    "<cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = true })<cr>",
-    opts
+  "n",
+  "gq",
+  "<cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = true })<cr>",
+  opts
   )
 
   -- Commands.
@@ -184,16 +184,16 @@ M.default = function(client, bufnr)
   vim.cmd([[command! IncomingCall lua require"lsp.configs.callhierarchy".incoming_calls()]])
   vim.cmd([[command! OutGoingCall lua require"lsp.configs.callhierarchy".outgoing_calls()]])
   vim.cmd(
-    [[command! -bang -nargs=? WorkspaceSymbol lua require("lsp.configs.workspacesymbol").workspace_symbol(<q-args>)]]
+  [[command! -bang -nargs=? WorkspaceSymbol lua require("lsp.configs.workspacesymbol").workspace_symbol(<q-args>)]]
   )
 
   -- Autocmds.
   vim.cmd([[
-    augroup LspDefaults
-      autocmd!
-      " autocmd CursorHold * lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })
-    augroup END
-    ]])
+  augroup LspDefaults
+  autocmd!
+  " autocmd CursorHold * lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })
+  augroup END
+  ]])
   if not vim.g.auto_format_disabled and client.server_capabilities.documentFormattingProvider then
     require("lsp-format").on_attach(client)
     -- vim.cmd [[
@@ -205,10 +205,10 @@ M.default = function(client, bufnr)
   end
   if client.server_capabilities.codeLensProvideren then
     vim.cmd([[
-      augroup LspCodeLens
-        autocmd!
-        autocmd InsertLeave,BufWritePost <buffer> lua vim.lsp.codelens.refresh()
-      augroup END
+    augroup LspCodeLens
+    autocmd!
+    autocmd InsertLeave,BufWritePost <buffer> lua vim.lsp.codelens.refresh()
+    augroup END
     ]])
   end
   if client.server_capabilities.documentHighlightProvider then
@@ -218,18 +218,25 @@ M.default = function(client, bufnr)
   vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded" })
 
   -- diagnostic settings
-  local signs = { Error = " ", Warn = " ", Hint = " ", Info = " " }
-
-  for type, icon in pairs(signs) do
-    local hl = "DiagnosticSign" .. type
-    vim.fn.sign_define(hl, { text = "", texthl = "", numhl = hl })
-  end
-
   vim.diagnostic.config({
     float = {
       source = "always",
     },
     virtual_text = false,
+    signs = {
+      text = {
+        [vim.diagnostic.severity.E] = "",
+        [vim.diagnostic.severity.W] = "",
+        [vim.diagnostic.severity.I] = "",
+        [vim.diagnostic.severity.N] = ""
+      },
+      numhl = {
+        [vim.diagnostic.severity.E] = "DiagnosticSignError",
+        [vim.diagnostic.severity.W] = "DiagnosticSignWarn",
+        [vim.diagnostic.severity.I] = "DiagnosticSignInfo",
+        [vim.diagnostic.severity.N] = "DiagnosticSignHint"
+      }
+    },
   })
 
   require("lsp.configs.fzf").setup()
