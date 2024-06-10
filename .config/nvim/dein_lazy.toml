@@ -979,9 +979,10 @@ require("nvim-surround").setup({
 })
 '''
 
-[[plugins]]
-repo = 'tpope/vim-repeat'
-on_event = 'CursorMoved'
+# update keybindings for nvim-automa
+# [[plugins]]
+# repo = 'tpope/vim-repeat'
+# on_event = 'CursorMoved'
 
 [[plugins]]
 repo = 'machakann/vim-highlightedyank'
