@@ -131,7 +131,7 @@ export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_PREVIEW='--preview "
 [[ -d {} ]]  &&
 tree -C {}
-[[ -f {} && $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
+[[ -f {} && $(file --mime {}) =~ (png|jpg|jpeg|gif|ttf) ]] &&
 kitty icat --clear --transfer-mode=memory --stdin=no --place=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES}@0x0 {}
 [[ $(file --mime {}) =~ (^binary) ]] &&
 echo {} is a binary file

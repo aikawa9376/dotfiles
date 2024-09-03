@@ -804,3 +804,10 @@ HELP
         esac
     done
 }
+
+rtmux() {
+	cd ~/.local/share/tmux/resurrect/ || exit # Your save path
+	find . | sort | tail -n 1 | xargs rm
+	find . -printf "%f\n" | sort | tail -n 1 | xargs -I {} ln -sf {} last
+	cd - || exit
+}
