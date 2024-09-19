@@ -30,7 +30,7 @@ cmp.setup({
         buffer = "[B]",
         nvim_lsp = "[L]",
         luasnip = "[S]",
-        cmp_tabnine = "[T]",
+        -- cmp_tabnine = "[T]",
         nvim_lua = "[Lu]",
         rg = "[R]",
         tmux = "[M]",
@@ -82,7 +82,10 @@ cmp.setup({
     ["<M-u>"] = cmp.mapping.scroll_docs(4),
     ["<CR>"] = cmp.mapping.close(),
     ["<C-Space>"] = function()
-      if not cmp.visible() then
+      local copilot = require 'copilot.suggestion'
+      if copilot.is_visible() then
+        copilot.accept()
+      elseif not cmp.visible() then
         if luasnip.expand_or_jumpable() then
           vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<Plug>luasnip-expand-or-jump", true, true, true), "")
         else

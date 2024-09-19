@@ -210,9 +210,9 @@ require("copilot").setup({
 EOF
 '''
 
-[[plugins]]
-repo = 'tzachar/cmp-tabnine'
-build = './install.sh'
+# [[plugins]]
+# repo = 'tzachar/cmp-tabnine'
+# build = './install.sh'
 
 [[plugins]]
 repo = 'saadparwaiz1/cmp_luasnip'
@@ -477,6 +477,89 @@ nnoremap <leader>o <cmd>Outline<CR>
 # require('calltree').setup({})
 # '''
 
+[[plugins]]
+repo = 'yetone/avante.nvim'
+on_event = 'CursorMoved'
+depends = ['nui.nvim', 'dressing.nvim', 'plenary.nvim', 'copilot.lua']
+lua_source = '''
+require'avante_lib'.load()
+require'avante'.setup({
+  ---@alias Provider "claude" | "openai" | "azure" | "gemini" | "cohere" | "copilot" | string
+  provider = "copilot", -- Recommend using Claude
+  auto_suggestions_provider = "copilot", -- Since auto-suggestions are a high-frequency operation and therefore expensive, it is recommended to specify an inexpensive provider or even a free provider: copilot
+  behaviour = {
+    auto_suggestions = false, -- Experimental stage
+    auto_set_highlight_group = true,
+    auto_set_keymaps = true,
+    auto_apply_diff_after_generation = false,
+    support_paste_from_clipboard = false,
+  },
+  mappings = {
+    --- @class AvanteConflictMappings
+    diff = {
+      ours = "co",
+      theirs = "ct",
+      all_theirs = "ca",
+      both = "cb",
+      cursor = "cc",
+      next = "]x",
+      prev = "[x",
+    },
+    suggestion = {
+      accept = "<M-l>",
+      next = "<M-]>",
+      prev = "<M-[>",
+      dismiss = "<C-]>",
+    },
+    jump = {
+      next = "]]",
+      prev = "[[",
+    },
+    submit = {
+      normal = "<CR>",
+      insert = "<C-s>",
+    },
+    ask = "<leader>cc",
+    edit = "<leader>ce",
+    refresh = "<leader>cr",
+    toggle = {
+      default = "<leader>ct",
+      debug = "<leader>cd",
+      hint = "<leader>ch",
+      suggestion = "<leader>cs",
+    },
+    sidebar = {
+      switch_windows = "<Tab>",
+      reverse_switch_windows = "<S-Tab>",
+    },
+  },
+  hints = { enabled = true },
+  windows = {
+    ---@type "right" | "left" | "top" | "bottom"
+    position = "right", -- the position of the sidebar
+    wrap = true, -- similar to vim.o.wrap
+    width = 30, -- default % based on available width
+    sidebar_header = {
+      align = "center", -- left, center, right for title
+      rounded = true,
+    },
+  },
+  highlights = {
+    ---@type AvanteConflictHighlights
+    diff = {
+      current = "DiffText",
+      incoming = "DiffAdd",
+    },
+  },
+  --- @class AvanteConflictUserConfig
+  diff = {
+    autojump = true,
+    ---@type string | fun(): any
+    list_opener = "copen",
+  },
+})
+'''
+
 # text-----------------------------------
 
 [[plugins]]
@@ -523,36 +606,36 @@ autocmd MyAutoCmd FileType phtml,html,php,blade,css,scss,twig,typescriptreact,ja
 # let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
 # '''
 
-[[plugins]]
-repo = 'NvChad/nvim-colorizer.lua'
-# on_lua = 'nvim-colorizer.lua'
-on_event = 'CursorMoved'
-lua_source = '''
-require("colorizer").setup {
-  filetypes = { "*", "!fugitive", "!noice" },
-  user_default_options = {
-    RGB = true, -- #RGB hex codes
-    RRGGBB = true, -- #RRGGBB hex codes
-    names = false, -- "Name" codes like Blue or blue
-    RRGGBBAA = false, -- #RRGGBBAA hex codes
-    AARRGGBB = false, -- 0xAARRGGBB hex codes
-    rgb_fn = true, -- CSS rgb() and rgba() functions
-    hsl_fn = true, -- CSS hsl() and hsla() functions
-    css = false, -- Enable all CSS features: rgb_fn, hsl_fn, names, RGB, RRGGBB
-    css_fn = true, -- Enable all CSS *functions*: rgb_fn, hsl_fn
-    -- Available modes for `mode`: foreground, background,  virtualtext
-    mode = "virtualtext", -- Set the display mode.
-    -- Available methods are false / true / "normal" / "lsp" / "both"
-    -- True is same as normal
-    tailwind = true, -- Enable tailwind colors
-    -- parsers can contain values used in |user_default_options|
-    sass = { enable = true, parsers = { css }, }, -- Enable sass colors
-    virtualtext = "■",
-  },
-  -- all the sub-options of filetypes apply to buftypes
-  buftypes = { "*", "!prompt", "!popup" },
-}
-'''
+# [[plugins]]
+# repo = 'NvChad/nvim-colorizer.lua'
+# # on_lua = 'nvim-colorizer.lua'
+# on_event = 'CursorMoved'
+# lua_source = '''
+# require("colorizer").setup {
+#   filetypes = { "*", "!fugitive", "!noice" },
+#   user_default_options = {
+#     RGB = true, -- #RGB hex codes
+#     RRGGBB = true, -- #RRGGBB hex codes
+#     names = false, -- "Name" codes like Blue or blue
+#     RRGGBBAA = false, -- #RRGGBBAA hex codes
+#     AARRGGBB = false, -- 0xAARRGGBB hex codes
+#     rgb_fn = true, -- CSS rgb() and rgba() functions
+#     hsl_fn = true, -- CSS hsl() and hsla() functions
+#     css = false, -- Enable all CSS features: rgb_fn, hsl_fn, names, RGB, RRGGBB
+#     css_fn = true, -- Enable all CSS *functions*: rgb_fn, hsl_fn
+#     -- Available modes for `mode`: foreground, background,  virtualtext
+#     mode = "virtualtext", -- Set the display mode.
+#     -- Available methods are false / true / "normal" / "lsp" / "both"
+#     -- True is same as normal
+#     tailwind = true, -- Enable tailwind colors
+#     -- parsers can contain values used in |user_default_options|
+#     sass = { enable = true, parsers = { css }, }, -- Enable sass colors
+#     virtualtext = "■",
+#   },
+#   -- all the sub-options of filetypes apply to buftypes
+#   buftypes = { "*", "!prompt", "!popup" },
+# }
+# '''
 
 # [[plugins]]
 # repo = 'cohama/lexima.vim'
@@ -1492,6 +1575,8 @@ let g:gitgutter_sign_removed_first_line = "▏"
 let g:gitgutter_grep_command            = 'rg --hidden --follow --glob "!.git/*"'
 let g:gitgutter_diff_args               = '-w'
 let g:gitgutter_preview_win_floating    = 1
+let g:gitgutter_highlight_linenrs       = 0
+let g:gitgutter_sign_priority           = 5
 '''
 hook_post_source = '''
 GitGutterEnable
@@ -1921,6 +2006,10 @@ on_ft = ['html', 'php', 'phtml']
 
 [[plugins]]
 repo = 'jwalton512/vim-blade'
+on_ft = ['php', 'blade']
+
+[[plugins]]
+repo = 'RicardoRamirezR/blade-nav.nvim'
 on_ft = ['php', 'blade']
 
 # javascript-----------------------------
