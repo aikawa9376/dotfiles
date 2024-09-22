@@ -71,15 +71,14 @@ leap.opts.special_keys = {
   multi_revert = ",",
 }
 
-vim.api.nvim_set_hl(0, "LeapLabelPrimary", { fg = "#B9FA71", bold = true })
-vim.api.nvim_set_hl(0, "LeapLabelSecondary", { fg = "#B9FA71", bold = true })
+leap.opts.highlight_unlabeled_phase_one_targets = true
+vim.api.nvim_set_hl(0, "LeapLabel", { fg = "#B9FA71", bold = true })
 vim.api.nvim_set_hl(0, "LeapBackdrop", { fg = "#777777" })
 vim.api.nvim_set_hl(0, "LeapMatch", {
   fg = "white", -- for light themes, set to 'black' or similar
   bold = true,
   nocombine = true,
 })
-leap.opts.highlight_unlabeled_phase_one_targets = true
 
 vim.keymap.set({ "n", "x", "o" }, "<C-j>", "<Plug>(leap-forward-to)")
 vim.keymap.set({ "n", "x", "o" }, "<C-k>", "<Plug>(leap-backward-to)")

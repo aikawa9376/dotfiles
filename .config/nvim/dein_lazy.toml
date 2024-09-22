@@ -764,6 +764,7 @@ let g:qs_filetype_blacklist = [
 [[plugins]]
 repo = 'smoka7/multicursors.nvim'
 on_event = 'CursorMoved'
+depends = 'hydra.nvim'
 lua_source = '''
 local extend = require("multicursors.extend_mode")
 require('multicursors').setup {
@@ -1028,7 +1029,8 @@ xmap <Leader>to mv<Plug>(operator-sort)
 # '''
 
 [[plugins]]
-repo = 'anuvyklack/hydra.nvim'
+# repo = 'nvimtools/hydra.nvim'
+repo = 'Cathyprime/hydra.nvim'
 on_event = 'CursorMoved'
 lua_source = '''
 require'plugins.hydra'
