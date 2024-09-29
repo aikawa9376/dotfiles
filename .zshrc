@@ -369,4 +369,3 @@ chpwd() {
 # Xserver start
 # -------------------------------------
 [[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx i3
-xset r rate 150 230; xset b off

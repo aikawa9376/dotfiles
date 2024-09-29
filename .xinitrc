@@ -69,4 +69,6 @@ export QT_IM_MODULE=fcitx
 export XMODIFIERS=@im=fcitx
 export GLFW_IM_MODULE=ibus
 
+xset r rate 150 230
+
 exec $(get_session)
