@@ -61,14 +61,10 @@ leap.opts.substitute_chars = {}
 leap.opts.safe_labels = safe_labels
 leap.opts.labels = labels
 leap.opts.special_keys = {
-  repeat_search = "<C-space>",
-  next_phase_one_target = ";",
-  next_target = { ";" },
-  prev_target = { "," },
+  next_target = { "<C-j>" },
+  prev_target = { "<C-k>" },
   next_group = "<space>",
   prev_group = "<tab>",
-  multi_accept = ";",
-  multi_revert = ",",
 }
 
 leap.opts.highlight_unlabeled_phase_one_targets = true
@@ -82,6 +78,10 @@ vim.api.nvim_set_hl(0, "LeapMatch", {
 
 vim.keymap.set({ "n", "x", "o" }, "<C-j>", "<Plug>(leap-forward-to)")
 vim.keymap.set({ "n", "x", "o" }, "<C-k>", "<Plug>(leap-backward-to)")
+
+vim.keymap.set({'n', 'o'}, 's;', function ()
+  require('leap.remote').action()
+end)
 
 require("flit").setup({
   keys = { f = "f", F = "F", t = "t", T = "T" },
