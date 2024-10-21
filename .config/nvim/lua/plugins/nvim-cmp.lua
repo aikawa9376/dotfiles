@@ -55,9 +55,9 @@ cmp.setup({
     ["<C-p>"] = function()
       if cmp.visible() then
         if cmp.core.view.custom_entries_view:is_direction_top_down() then
-          cmp.select_prev_item()
+          cmp.select_prev_item({ behavior = cmp.SelectBehavior })
         else
-          cmp.select_next_item()
+          cmp.select_next_item({ behavior = cmp.SelectBehavior })
         end
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<C-g>U<Up>", true, true, true), "n")
@@ -66,9 +66,9 @@ cmp.setup({
     ["<C-n>"] = function()
       if cmp.visible() then
         if cmp.core.view.custom_entries_view:is_direction_top_down() then
-          cmp.select_next_item()
+          cmp.select_next_item({ behavior = cmp.SelectBehavior })
         else
-          cmp.select_prev_item()
+          cmp.select_prev_item({ behavior = cmp.SelectBehavior })
         end
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<C-g>U<Down>", true, true, true), "n")

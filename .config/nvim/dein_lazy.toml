@@ -312,6 +312,25 @@ require'plugins.incline'
 repo = 'cseickel/diagnostic-window.nvim'
 on_cmd = 'DiagWindowShow'
 
+[[plugins]]
+repo = 'FabijanZulj/blame.nvim'
+on_event = 'CursorMoved'
+lua_source = '''
+require'blame'.setup({
+  date_format = "%Y/%m/%d %H:%M:%S",
+  blame_options = nil,
+  mappings = {
+      commit_info = "i",
+      stack_push = "p",
+      stack_pop = "<S-p>",
+      show_commit = "<CR>",
+      close = { "<esc>", "q" },
+  }
+})
+
+vim.keymap.set('n', '<Leader>gb', '<cmd>BlameToggle<CR>', { silent = true })
+'''
+
 # [[plugins]]
 # repo = 'lukas-reineke/indent-blankline.nvim'
 # on_event = 'CursorMoved'
@@ -1370,18 +1389,57 @@ require('undotree').setup({
 vim.keymap.set('n', '<leader>u', require('undotree').toggle, { noremap = true, silent = true })
 '''
 
+# [[plugins]]
+# repo = 'nvim-pack/nvim-spectre'
+# on_lua = 'spectre'
+# lua_source = '''
+# require('spectre').setup({ line_sep_start = '', result_padding = '', line_sep  = '',})
+# '''
+# hook_add = '''
+# " search current word
+# nnoremap <silent><leader>rr <cmd>lua require('spectre').open_visual({select_word=true})<CR>
+# xnoremap <silent><leader>rr <cmd>lua require('spectre').open_visual()<CR>
+# " search in current file
+# nnoremap <silent><leader>rR viw<cmd>lua require('spectre').open_file_search()<cr>
+# '''
+
 [[plugins]]
-repo = 'nvim-pack/nvim-spectre'
-on_lua = 'spectre'
+repo = 'MagicDuck/grug-far.nvim'
+on_lua = 'grug-far'
+on_event = 'CursorMoved'
 lua_source = '''
-require('spectre').setup({ line_sep_start = '', result_padding = '', line_sep  = '',})
-'''
-hook_add = '''
-" search current word
-nnoremap <silent><leader>rr <cmd>lua require('spectre').open_visual({select_word=true})<CR>
-xnoremap <silent><leader>rr <cmd>lua require('spectre').open_visual()<CR>
-" search in current file
-nnoremap <silent><leader>rR viw<cmd>lua require('spectre').open_file_search()<cr>
+require('grug-far').setup({
+  engines = {
+    ripgrep = {
+      extraArgs = '--hidden',
+    }
+  },
+  keymaps = {
+    replace = { n = '<localleader>r' },
+    qflist = { n = '<localleader>q' },
+    syncLocations = { n = '<localleader>s' },
+    syncLine = { n = '<localleader>l' },
+    close = { n = 'q' },
+    historyOpen = { n = '<localleader>t' },
+    historyAdd = { n = '<localleader>a' },
+    refresh = { n = '<localleader>f' },
+    openLocation = { n = '<localleader>o' },
+    openNextLocation = { n = '<down>' },
+    openPrevLocation = { n = '<up>' },
+    gotoLocation = { n = '<enter>' },
+    pickHistoryEntry = { n = '<enter>' },
+    abort = { n = '<localleader>b' },
+    help = { n = 'g?' },
+    toggleShowCommand = { n = '<localleader>p' },
+    swapEngine = { n = '<localleader>e' },
+    previewLocation = { n = '<localleader>i' },
+    swapReplacementInterpreter = { n = '<localleader>x' },
+  },
+});
+
+vim.api.nvim_set_keymap("n", "<leader>rr", "<cmd>lua require('grug-far').open({ transient = true })<cr>", { silent = true })
+vim.api.nvim_set_keymap("n", "<leader>rR", "<cmd>lua require('grug-far').open({ transient = true, prefills = { search = vim.fn.expand('<cword>') } })<cr>", { silent = true })
+vim.api.nvim_set_keymap("x", "<leader>rr", "<cmd>lua require('grug-far').with_visual_selection({ transient = true })<cr>", { silent = true })
 '''
 
 [[plugins]]
@@ -1521,7 +1579,6 @@ hook_add = '''
 nmap <silent> <Leader>gs <cmd>Git<CR>
 nmap <silent> <Leader>gd <cmd>Gdiff<CR>
 nmap <silent> <Leader>ga <cmd>Gwrite<CR>
-nmap <silent> <Leader>gb <cmd>Git blame -w<CR>
 nmap <silent> <Leader>gp <cmd>Git! push<CR>
 nmap <silent> <Leader>gr <cmd>Git! rm --cached %<CR>
 nmap <silent> <Leader>gm <cmd>Git! commit -m 'update'<CR>
