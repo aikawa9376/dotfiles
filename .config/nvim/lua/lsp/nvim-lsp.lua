@@ -21,23 +21,27 @@ local function setup_servers()
 
   lsp_installer.setup_handlers({
     function(server)
-      if server == "tsserver" then
-        require("typescript").setup({
-          server = init_setup({
+      if server == "ts_ls" then
+        require("typescript-tools").setup(
+          init_setup({
             capabilities = capabilities,
             on_attach = settings.default,
-          }, server),
-        })
+          }, server)
+        )
       elseif server == "rust_analyzer" then
-        require("rust-tools").setup(init_setup({
-          capabilities = capabilities,
-          on_attach = settings.default,
-        }, server))
+        require("rust-tools").setup(
+          init_setup({
+            capabilities = capabilities,
+            on_attach = settings.default,
+          }, server)
+        )
       else
-        nvim_lsp[server].setup(init_setup({
-          capabilities = capabilities,
-          on_attach = settings.default,
-        }, server))
+        nvim_lsp[server].setup(
+          init_setup({
+            capabilities = capabilities,
+            on_attach = settings.default,
+          }, server)
+        )
       end
     end,
   })

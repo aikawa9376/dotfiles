@@ -50,7 +50,7 @@ on_event = ['InsertEnter', 'CursorHold']
 depends  = [
   'nvim-lspconfig', 'none-ls.nvim', 'noice.nvim', 'lualine.nvim' 'nvim-insx'
   'LuaSnip', 'friendly-snippets', 'cmp-nvim-lsp', 'lsp-format.nvim', 'lspkind-nvim',
-  'lsp-inlayhints.nvim', 'lsp_signature.nvim', 'vim-illuminate', 'dressing.nvim'
+  'inlay-hints.nvim', 'lsp_signature.nvim', 'vim-illuminate', 'dressing.nvim'
 ]
 lua_source = '''
 require'plugins.nvim-cmp'
@@ -230,8 +230,8 @@ lua require'plugins.lightbulb'
 repo = 'onsails/lspkind-nvim'
 
 [[plugins]]
-repo = 'jose-elias-alvarez/typescript.nvim'
-on_lua = 'typescript'
+repo = 'pmizio/typescript-tools.nvim'
+on_lua = 'typescript-tools'
 
 [[plugins]]
 repo = 'simrat39/rust-tools.nvim'
@@ -260,9 +260,9 @@ repo = 'RRethy/vim-illuminate'
 repo = 'ray-x/lsp_signature.nvim'
 
 [[plugins]]
-repo = 'lvimuser/lsp-inlayhints.nvim'
+repo = 'MysticalDevil/inlay-hints.nvim'
 lua_source = '''
-require("lsp-inlayhints").setup()
+require("inlay-hints").setup()
 '''
 
 [[plugins]]
@@ -560,8 +560,8 @@ require("colorizer").setup {
     -- True is same as normal
     tailwind = true, -- Enable tailwind colors
     -- parsers can contain values used in |user_default_options|
-    sass = { enable = true, parsers = { css }, }, -- Enable sass colors
-    virtualtext = "■",
+    sass = { enable = false, parsers = { css }, }, -- Enable sass colors
+    virtualtext = "●",
   },
   -- all the sub-options of filetypes apply to buftypes
   buftypes = { "*", "!prompt", "!popup" },

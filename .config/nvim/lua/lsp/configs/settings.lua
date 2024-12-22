@@ -12,7 +12,7 @@ M.configs = {
       M.default(client, bufnr)
     end,
   },
-  tsserver = {
+  ts_ls = {
     settings = {
       typescript = {
         inlayHints = {
@@ -36,12 +36,21 @@ M.configs = {
           includeInlayEnumMemberValueHints = true,
         },
       },
+      tsserver_file_preferences = {
+        includeInlayParameterNameHints = "all",
+        includeInlayParameterNameHintsWhenArgumentMatchesName = true,
+        includeInlayFunctionParameterTypeHints = true,
+        includeInlayVariableTypeHints = true,
+        includeInlayVariableTypeHintsWhenTypeMatchesName = false,
+        includeInlayPropertyDeclarationTypeHints = true,
+        includeInlayFunctionLikeReturnTypeHints = true,
+        includeInlayEnumMemberValueHints = true,
+      }
     },
     go_to_source_definition = {
       fallback = true, -- fall back to standard LSP definition on failure
     },
     on_attach = function(client, bufnr)
-      require("lsp-inlayhints").on_attach(client, bufnr)
       client.server_capabilities.documentFormattingProvider = false
       M.default(client, bufnr)
     end,
@@ -112,7 +121,6 @@ M.configs = {
       },
     },
     on_attach = function(client, bufnr)
-      require("lsp-inlayhints").on_attach(client, bufnr)
       client.server_capabilities.documentFormattingProvider = false
       M.default(client, bufnr)
     end,
@@ -126,6 +134,7 @@ M.configs = {
       client.server_capabilities.documentFormattingProvider = true
     end,
   },
+
   stylelint_lsp = {
     settings = {
       stylelintplus = {
@@ -249,9 +258,9 @@ M.default = function(client, bufnr)
     },
   }, bufnr)
 
-  -- if client.server_capabilities.inlayHintProvider then
-  --   require("lsp-inlayhints").on_attach(client, bufnr)
-  -- end
+  if client.server_capabilities.inlayHintProvider then
+    require("inlay-hints").on_attach(client, bufnr)
+  end
 
   -- show capabilities
   -- require('lsp.utils').get_capabilities()
