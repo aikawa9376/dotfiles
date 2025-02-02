@@ -279,7 +279,7 @@ ins_right({
 
 ins_right({
   function()
-    return [[☰ %2p%% %2l:%v]]
+    return [[ %2p%% %2l:%v]]
   end,
   condition = conditions.hide_in_width,
 })

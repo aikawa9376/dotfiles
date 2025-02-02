@@ -1317,7 +1317,13 @@ require'plugins.bqf'
 
 [[plugins]]
 repo = 'junegunn/fzf'
-depends = ['fzf.vim', 'vim-bookmarks', 'fzf-git.vim', 'fzf-lsp.nvim']
+depends = [
+  'fzf.vim',
+  'vim-bookmarks',
+  'fzf-git.vim',
+  'fzf-lsp.nvim',
+  'fzf-lua'
+]
 path = '~/.config/fzf'
 merged = 0
 on_event = 'CusorMoved'
@@ -1326,6 +1332,18 @@ on_event = 'CusorMoved'
 repo = 'junegunn/fzf.vim'
 hook_add = '''
 source $XDG_CONFIG_HOME/nvim/plugins/fzf.vim
+'''
+
+[[plugins]]
+repo = 'ibhagwan/fzf-lua'
+lua_source=  '''
+require('fzf-lua').setup({
+  fzf_opts = {},
+  keymap = {
+    fzf = {}
+  },
+  winopts = {}
+})
 '''
 
 [[plugins]]

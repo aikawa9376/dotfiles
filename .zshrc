@@ -82,7 +82,7 @@ export PATH="$GOPATH/bin:$PATH"
 export RUSTPATH="$HOME/rust/.cargo"
 export PATH="$RUSTPATH/bin:$PATH"
 export RUSTUP_HOME="$HOME/rust/.rustup"
-export CARGO_HOME="$HOME/rust.cargo"
+export CARGO_HOME="$HOME/rust/.cargo"
 
 # local settings
 case ${OSTYPE} in

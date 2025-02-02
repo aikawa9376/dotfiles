@@ -214,3 +214,4 @@ exec --no-startup-id $HOME/.config/polybar/lanch.sh;
 exec --no-startup-id sudo systemctl start dhcpcd@enp5s0.service;
 exec --no-startup-id sudo systemctl start docker;
 exec --no-startup-id sudo systemctl start sshd;
+exec --no-startup-id sudo timedatectl set-time "$(curl -s http://www.openspc2.org/data/date/full.txt | tr '\n' ' ' | awk '{printf "%s-%02d-%02d %02d:%02d:%02d\n", $1, $2, $3, $5, $6, $4}')"
