@@ -1322,7 +1322,8 @@ depends = [
   'vim-bookmarks',
   'fzf-git.vim',
   'fzf-lsp.nvim',
-  'fzf-lua'
+  'fzf-lua',
+  'render-markdown.nvim'
 ]
 path = '~/.config/fzf'
 merged = 0
@@ -1336,15 +1337,12 @@ source $XDG_CONFIG_HOME/nvim/plugins/fzf.vim
 
 [[plugins]]
 repo = 'ibhagwan/fzf-lua'
-lua_source=  '''
-require('fzf-lua').setup({
-  fzf_opts = {},
-  keymap = {
-    fzf = {}
-  },
-  winopts = {}
-})
+lua_source = '''
+require'plugins.fzf-lua'
 '''
+
+[[plugins]]
+repo = 'MeanderingProgrammer/render-markdown.nvim'
 
 [[plugins]]
 repo = 'gfanto/fzf-lsp.nvim'

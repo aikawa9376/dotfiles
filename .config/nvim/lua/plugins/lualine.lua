@@ -185,7 +185,7 @@ ins_left({
 
 ins_left({
   function()
-    prod = split(require("project_nvim.project").get_project_root(), "/")
+    local prod = split(require("project_nvim.project").get_project_root(), "/")
     if next(prod) then
       return " " .. prod[#prod]
     end
@@ -195,7 +195,12 @@ ins_left({
 
 ins_left({
   function()
-    return require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype) .. " " .. changeName(vim.fn.expand("%="))
+    local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
+    if (icon == nil) then
+      return  changeName(vim.fn.expand("%="))
+    else
+      return icon .. " " .. changeName(vim.fn.expand("%="))
+    end
   end,
   condition = conditions.buffer_not_empty,
 })
