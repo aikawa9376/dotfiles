@@ -38,12 +38,13 @@ require('bufferline').setup {
     end,
     -- NOTE: this will be called a lot so don't do any heavy processing here
     custom_filter = function(buf_number)
-      -- filter out filetypes you don't want to see
-      if vim.bo[buf_number].filetype ~= "<i-dont-want-to-see-this>" then
+      -- filter out by buffer name
+      if vim.fn.match(vim.fn.bufname(buf_number), "term") == -1 then
         return true
       end
-      -- filter out by buffer name
-      if vim.fn.bufname(buf_number) ~= "<buffer-name-I-dont-want>" then
+      -- filter out filetypes you don't want to see
+      if vim.bo[buf_number].filetype ~= "fzf" then
+        print(vim.inspect(vim.bo[buf_number].filetype))
         return true
       end
       -- filter out based on arbitrary rules
@@ -51,6 +52,7 @@ require('bufferline').setup {
       if vim.fn.getcwd() == "<work-repo>" and vim.bo[buf_number].filetype ~= "wiki" then
         return true
       end
+      return false
     end,
     offsets = { { filetype = "NvimTree", text = "File Explorer", text_align = "left" } },
     show_buffer_icons = true, -- disable filetype icons for buffers

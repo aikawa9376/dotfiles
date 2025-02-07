@@ -158,28 +158,29 @@ M.default = function(client, bufnr)
     vim.api.nvim_buf_set_option(bufnr, ...)
   end
 
-  local win_style = { border = "rounded", focusable = false, silent = true }
+  local win_style = "{ border = \"rounded\", focusable = false, silent = true }"
 
   -- Enable completion triggered by <c-x><c-o>
   buf_set_option("omnifunc", "v:lua.vim.lsp.omnifunc")
 
   -- Mappings.
   local opts = { noremap = true, silent = true }
-  buf_set_keymap("n", "gr", "m`<cmd>References<CR>", opts)
-  buf_set_keymap("n", "gd", "m`<cmd>Definition<CR>", opts)
-  buf_set_keymap("n", "gsd", "m`<cmd>vsplit | Definition<CR>", opts)
-  buf_set_keymap("n", "gD", "m`<cmd>Declaration<CR>", opts)
-  buf_set_keymap("n", "gi", "m`<cmd>Implementation<CR>", opts)
-  buf_set_keymap("n", "gy", "m`<cmd>TypeDefinition<CR>", opts)
-  buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover()<CR>", opts)
+  buf_set_keymap("n", "gr", "m`:FzfLua lsp_references<CR>", opts)
+  buf_set_keymap("n", "gR", "m`:FzfLua lsp_finder<CR>", opts)
+  buf_set_keymap("n", "gd", "m`:FzfLua lsp_definitions<CR>", opts)
+  buf_set_keymap("n", "gsd", "m`:vsplit | FzfLua lsp_definitions<CR>", opts)
+  buf_set_keymap("n", "gD", "m`:FzfLua lsp_declarations<CR>", opts)
+  buf_set_keymap("n", "gi", "m`:FzfLua lsp_implementations<CR>", opts)
+  buf_set_keymap("n", "gy", "m`:FzfLua lsp_typedefs<CR>", opts)
+  buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover(" .. win_style .. ")<CR>", opts)
   buf_set_keymap("n", "<leader>rn", "<cmd>lua vim.lsp.buf.rename()<CR>", opts)
-  buf_set_keymap("n", "<space>ca", "<cmd>lua vim.lsp.buf.code_action()<CR>", opts)
+  buf_set_keymap("n", "<space>ca", ":FzfLua lsp_code_actions<CR>", opts)
   buf_set_keymap("n", "<space>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", opts)
   buf_set_keymap(
-  "n",
-  "gq",
-  "<cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = true })<cr>",
-  opts
+    "n",
+    "gq",
+    "<cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = true })<cr>",
+    opts
   )
 
   -- Commands.
@@ -190,11 +191,9 @@ M.default = function(client, bufnr)
   vim.cmd([[command! RemoveWorkspaceFolder vim.lsp.buf.remove_workspace_folder()]])
   vim.cmd([[command! ShowWorkspaceFolder lua print(vim.inspect(vim.lsp.buf.list_workspace_folders()))]])
 
-  vim.cmd([[command! IncomingCall lua require"lsp.configs.callhierarchy".incoming_calls()]])
-  vim.cmd([[command! OutGoingCall lua require"lsp.configs.callhierarchy".outgoing_calls()]])
-  vim.cmd(
-  [[command! -bang -nargs=? WorkspaceSymbol lua require("lsp.configs.workspacesymbol").workspace_symbol(<q-args>)]]
-  )
+  vim.cmd([[command! IncomingCall FzfLua lsp_incoming_calls]])
+  vim.cmd([[command! OutGoingCall FzfLua lsp_outgoing_calls]])
+  vim.cmd([[command! -bang -nargs=? WorkspaceSymbol FzfLua lsp_live_workspace_symbols]])
 
   -- Autocmds.
   vim.cmd([[
@@ -214,17 +213,15 @@ M.default = function(client, bufnr)
   end
   if client.server_capabilities.codeLensProvideren then
     vim.cmd([[
-    augroup LspCodeLens
-    autocmd!
-    autocmd InsertLeave,BufWritePost <buffer> lua vim.lsp.codelens.refresh()
-    augroup END
+      augroup LspCodeLens
+        autocmd!
+        autocmd InsertLeave,BufWritePost <buffer> lua vim.lsp.codelens.refresh()
+      augroup END
     ]])
   end
   if client.server_capabilities.documentHighlightProvider then
     -- require("illuminate").on_attach(client)
   end
-
-  vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, { border = "rounded" })
 
   -- diagnostic settings
   vim.diagnostic.config({

@@ -1,17 +1,17 @@
 " fzfからファイルにジャンプできるようにする
 let g:fzf_buffers_jump = 1
-nnoremap <silent> <Leader>f     m`<cmd>Files<CR>
-nnoremap <silent> <Leader>F     m`<cmd>AllFiles<CR>
+" nnoremap <silent> <Leader>f     m`<cmd>Files<CR>
+" nnoremap <silent> <Leader>F     m`<cmd>AllFiles<CR>
 nnoremap <silent> <Leader><c-f> m`<cmd>call FZFImagePreview()<CR>
-nnoremap <silent> <Leader>gf    m`<cmd>GFiles<CR>
+" nnoremap <silent> <Leader>gf    m`<cmd>GFiles<CR>
 nnoremap <silent> <Leader>gi    m`<cmd>Gitignore<CR>
-nnoremap <silent> <Leader>b     m`<cmd>NavBuffers<CR>
-nnoremap <silent> <Leader>a     m`<cmd>Rg<CR>
-nnoremap <silent> <Leader>A     m`<cmd>AllRg<CR>
-nnoremap <silent> <Leader>l     m`<cmd>BLines<CR>
-nnoremap <silent> <Leader>L     m`<cmd>Lines<CR>
-nnoremap <silent> <Leader>e     m`<cmd>MRUFilesCWD<CR>
-nnoremap <silent> <Leader>E     m`<cmd>MRUFiles<CR>
+" nnoremap <silent> <Leader>b     m`<cmd>NavBuffers<CR>
+" nnoremap <silent> <Leader>a     m`<cmd>Rg<CR>
+" nnoremap <silent> <Leader>A     m`<cmd>AllRg<CR>
+" nnoremap <silent> <Leader>l     m`<cmd>BLines<CR>
+" nnoremap <silent> <Leader>L     m`<cmd>Lines<CR>
+" nnoremap <silent> <Leader>e     m`<cmd>MRUFilesCWD<CR>
+" nnoremap <silent> <Leader>E     m`<cmd>MRUFiles<CR>
 nnoremap <silent> <Leader>df    <cmd>SWSqlFzfSelect<CR>
 nnoremap <silent> <Leader>.     m`<cmd>DotFiles<CR>
 nnoremap <silent> <Leader>O     m`<cmd>OutLine<CR>
@@ -24,12 +24,12 @@ nnoremap <silent> <Leader>p     <cmd>YanksAfter<CR>
 nnoremap <silent> <Leader>P     <cmd>YanksBefore<CR>
 nnoremap <silent> <Leader>;     <cmd>ChangeListNav<CR>
 nnoremap <silent> <Leader><C-o> <cmd>JumpListNav<CR>
-nnoremap <silent> <Leader>q     <cmd>Helptags<CR>
+" nnoremap <silent> <Leader>q     <cmd>Helptags<CR>
 nnoremap <silent> <Leader>tt    <cmd>BTags<CR>
 nnoremap <silent> <C-]>         m'<cmd>call fzf#vim#tags(expand('<cword>'))<CR>
 nnoremap <silent> <expr>        <Leader>] "m'<cmd>Rg(" . expand("<cword>") . ")<CR>"
-nnoremap <silent> q: <cmd>History:<CR>
-nnoremap <silent> q/ <cmd>History/<CR>
+" nnoremap <silent> q: <cmd>History:<CR>
+" nnoremap <silent> q/ <cmd>History/<CR>
 nnoremap <silent> s<Space>      m`<cmd>NavBuffers<CR>
 
 imap <c-j>p <plug>(fzf-complete-path)

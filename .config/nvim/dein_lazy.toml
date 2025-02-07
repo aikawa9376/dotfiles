@@ -1327,7 +1327,7 @@ depends = [
 ]
 path = '~/.config/fzf'
 merged = 0
-on_event = 'CusorMoved'
+on_event = 'CursorHold'
 
 [[plugins]]
 repo = 'junegunn/fzf.vim'

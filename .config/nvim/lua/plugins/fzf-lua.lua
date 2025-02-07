@@ -1,47 +1,54 @@
 local fzf_lua = require("fzf-lua")
 
+-- ------------------------------------------------------------------
+-- default settings
+-- ------------------------------------------------------------------
+
 fzf_lua.setup {
   winopts = {
-    split = "belowright new",
-    height = 0.3,
+    split = "botright new | resize " .. tostring(math.floor(vim.o.lines * 0.4)),
+    height = 0.4,
     border = "none",
     preview = {
       -- default = "bat",
       title = false,
+      wrap = false,
       border = "noborder",
       layout = "horizontal",
-      wrap = "nowrap",
       horizontal = "right:50%",
-      hidden = "nohidden",
+      hidden = false,
       scrollbar = false,
+      winopts = {
+        -- signcolumn = "yes"
+      }
     },
+  },
+  hls = {
+    preview_normal = "NormalFloat",
+    backdrop = "FzfLuaPreviewNormal"
   },
   keymap = {
     builtin = {
-      true,
+      ["?"] = "toggle-preview",
       ["<M-j>"] = "preview-down",
       ["<M-K>"] = "preview-up",
-      ["ctrl-n"] = "down",
-      ["ctrl-p"] = "up",
-      ["alt-a"] = "toggle-all",
-      ["home"] = "top",
-      ["alt-p"] = "previous-history",
-      ["alt-n"] = "next-history",
-      ["ctrl-k"] = "kill-line",
-      ["alt-i"] = "execute(feh {})",
-      ["?"] = "toggle-preview",
     },
     fzf = {
-      true,
-      ["ctrl-k"] = "preview-up",
-      ["ctrl-j"] = "preview-down",
+      ["F4"] = "toggle-preview",
+      ["alt-k"] = "preview-up",
+      ["alt-j"] = "preview-down",
       ["ctrl-n"] = "down",
       ["ctrl-p"] = "up",
+      ["home"] = "top",
+      ["alt-n"] = "next-history",
+      ["alt-p"] = "previous-history",
+      ["ctrl-k"] = "kill-line",
     },
   },
   fzf_opts = {
     ["--reverse"] = "",
     ["--cycle"] = "",
+    ["--info"] = "inline",
     ["--no-hscroll"] = "",
     ["--no-separator"] = "",
     ["--tabstop"] = "2",
@@ -55,28 +62,277 @@ fzf_lua.setup {
     fd_opts = "--type d --hidden --color=always --exclude .git",
     preview_cmd = "tree -C {} | head -200",
   },
+  buffers = {
+    fn_pre_win = function(opts)
+      opts.winopts.split = nil
+      opts.winopts.height = 0.6
+      opts.winopts.width = 0.6
+      opts.winopts.row = 0.5
+    end
+  },
+  lsp = {
+    includeDeclaration = false,
+    jump_to_single_result = true,
+    ignore_current_line = true,
+    finder = {
+      includeDeclaration = false,
+      ignore_current_line = true,
+      jump_to_single_result = false,
+    }
+  }
 }
 
-_G.fzf_files = function(opts)
-  opts = opts or {}
-  opts.prompt = "Directories> "
-  opts.fn_transform = function(x)
-    return fzf_lua.utils.ansi_codes.magenta(x)
+local defaultActions = {
+  ["enter"] = fzf_lua.actions.file_edit,
+  ["ctrl-s"] = fzf_lua.actions.file_split,
+  ["ctrl-v"] = fzf_lua.actions.file_vsplit,
+}
+
+vim.api.nvim_set_keymap('n', '<Leader>gf', 'm`:FzfLua git_files<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>gc', 'm`:FzfLua git_commits<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>gC', 'm`:FzfLua git_bcommits<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>b', 'm`:FzfLua buffers<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>l', 'm`:FzfLua blines<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>L', 'm`:FzfLua lines<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>q', 'm`:FzfLua helptags<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', 'q:', 'm`:FzfLua command_history<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', 'q/', 'm`:FzfLua search_history<CR>', { noremap = true, silent = true })
+
+-- ------------------------------------------------------------------
+-- Utils
+-- ------------------------------------------------------------------
+
+local getHomeName = function()
+  local path = vim.fn.getcwd()
+  local home_path = vim.fn.fnamemodify(path, ":~")
+
+  if #home_path > 20 then
+    home_path = vim.fn.pathshorten(home_path)
   end
-  opts.actions = {
-    ['default'] = function(selected)
-      vim.cmd("cd " .. selected[1])
-    end
+
+  return home_path
+end
+
+local colorFilename = function(files)
+  local cmd = 'echo -e "' .. table.concat(files, '\n') .. '" | xargs -d "\n" $XDG_CONFIG_HOME/nvim/bin/color-ls'
+  local handle = io.popen(cmd)
+  if handle then
+    local result = handle:read("*all")
+    handle:close()
+    return vim.split(result, "\n", { trimempty = true })
+  end
+  return {}
+end
+
+local function removeUnicodeUtf8(str)
+  str = str:gsub("[\194-\244][\128-\191]*", "")
+  return str
+end
+
+-- ------------------------------------------------------------------
+-- Files Enhanced
+-- ------------------------------------------------------------------
+
+local getFileOpt = function ()
+  local opts = {}
+  opts.prompt = getHomeName() .. ' >'
+  opts.previewer = "builtin"
+  opts.actions = vim.tbl_deep_extend("force", defaultActions, {
+    ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
+    ['ctrl-x'] = {
+      function(selected)
+        for _, f in ipairs(selected) do
+          print("deleting:", f)
+          vim.fn.delete(removeUnicodeUtf8(f))
+        end
+      end,
+      fzf_lua.actions.resume
+    }
+  })
+  opts.file_icons = true
+  opts.git_icons = true
+  opts.fn_transform = function(x)
+    return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
+  end
+  opts.fzf_opts = {
+    ["--multi"] = "",
+    ["--scheme"] = "history",
+    ["--no-unicode"] = "",
   }
+
+  return opts
+end
+
+_G.fzf_files = function(opts)
   fzf_lua.fzf_exec(
     "fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . " ..
     "-E .git -E '*.psd' -E '*.png' -E '*.jpg' -E '*.pdf' " ..
     "-E '*.ai' -E '*.jfif' -E '*.jpeg' -E '*.gif' " ..
     "-E '*.eps' -E '*.svg' -E '*.JPEG' -E '*.mp4' | " ..
     "xargs -0 eza -1 -sold --color=always --no-quotes",
-    opts
+    getFileOpt()
   )
 end
 
--- map our provider to a user command ':Directories'
+_G.fzf_all_files = function(opts)
+  fzf_lua.fzf_exec(
+    "fd --strip-cwd-prefix -I --type file --follow --hidden --color=always --exclude .git",
+    getFileOpt()
+  )
+end
+
 vim.cmd([[command! -nargs=* FilesLua lua _G.fzf_files()]])
+vim.cmd([[command! -nargs=* AllFilesLua lua _G.fzf_all_files()]])
+vim.api.nvim_set_keymap('n', '<Leader>f', 'm`:lua _G.fzf_files()<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>F', 'm`:lua _G.fzf_all_files()<CR>', { noremap = true, silent = true })
+
+-- ------------------------------------------------------------------
+-- RG grep
+-- ------------------------------------------------------------------
+
+local getRipgrepOpts = function (isAll)
+  isAll = isAll == nil and true or isAll
+
+  local opts = {}
+  opts.prompt = '>'
+  opts.previewer = "builtin"
+  opts.winopts = {
+    preview = {
+      hidden = true
+    }
+  }
+  opts.actions = vim.tbl_deep_extend("force", defaultActions, {
+    ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
+  })
+  opts.file_icons = true
+  opts.fn_transform = function(x)
+    return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
+  end
+  -- opts.fn_pre_win = function(_)
+  --   vim.keymap.set("t", "?", "<F4>", { noremap = true, silent = true })
+  -- end
+  opts.fzf_opts = {
+    ["--multi"] = "",
+    ["--no-unicode"] = "",
+  }
+
+  if isAll then
+    opts.fzf_opts["--delimiter"] = ":"
+    opts.fzf_opts["--nth"] = "4..,1"
+  else
+    opts.fzf_opts["--delimiter"] = ":"
+    opts.fzf_opts["--nth"] = "4.."
+  end
+
+  return opts
+end
+
+_G.fzf_ripgrep = function(args)
+  fzf_lua.fzf_exec(
+    "rg --column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git " .. vim.fn.shellescape(args),
+    getRipgrepOpts()
+  )
+end
+
+_G.fzf_ripgrep_text = function(args)
+  fzf_lua.fzf_exec(
+    "rg --column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git " .. vim.fn.shellescape(args),
+    getRipgrepOpts(false)
+  )
+end
+
+_G.fzf_all_ripgrep = function(args)
+  fzf_lua.fzf_exec(
+    "rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always --glob=!.git " .. vim.fn.shellescape(args),
+    getRipgrepOpts()
+  )
+end
+
+vim.cmd([[command! -nargs=* RgLua lua _G.fzf_ripgrep(<q-args>)]])
+vim.cmd([[command! -nargs=* RgTextLua lua _G.fzf_ripgrep_text(<q-args>)]])
+vim.cmd([[command! -nargs=* AllRgLua lua _G.fzf_all_ripgrep(<q-args>)]])
+vim.api.nvim_set_keymap('n', '<Leader>a', 'm`:lua _G.fzf_ripgrep("")<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>A', 'm`:lua _G.fzf_all_ripgrep("")<CR>', { noremap = true, silent = true })
+
+-- ------------------------------------------------------------------
+-- MRU Navigator
+-- ------------------------------------------------------------------
+
+local getMruOpts = function (func, name)
+  local opts = {}
+  opts.prompt = name .. " " .. getHomeName() .. ' >'
+  opts.previewer = "builtin"
+  opts.actions = vim.tbl_deep_extend("force", defaultActions, {
+    ["ctrl-t"] = { function() func() end },
+    ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
+  })
+  opts.file_icons = true
+  opts.fn_transform = function(x)
+    return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
+  end
+  opts.fzf_opts = {
+    ["--multi"] = "",
+    ["--scheme"] = "history",
+    ["--no-unicode"] = "",
+  }
+
+  return opts
+end
+
+-- MRU ファイルを取得する関数
+local mruFilesForCwd = function(flag, notCwd)
+  notCwd = notCwd or false
+
+  local result = vim.fn.systemlist("sed -n '2,$p' $XDG_CACHE_HOME/neomru/" .. flag)
+  local cwd = vim.fn.getcwd()
+
+  return vim.fn.map(vim.fn.filter(
+        result,
+        function(_, val)
+          return (val:match("^" .. cwd) or notCwd) and not val:match("__Tagbar__|\\[YankRing]|fugitive:|NERD_tree|^/tmp/|.git")
+        end
+      ),
+      function(_, val) return vim.fn.fnamemodify(val, ":p:.") end
+    )
+end
+
+_G.fzf_mru_files = function(opts)
+  fzf_lua.fzf_exec(
+    colorFilename(mruFilesForCwd("file", true)),
+    getMruOpts(_G.fzf_mrw_files, "MRU ALL")
+  )
+end
+
+_G.fzf_mrw_files = function(opts)
+  fzf_lua.fzf_exec(
+    colorFilename(mruFilesForCwd("write", true)),
+    getMruOpts(_G.fzf_mru_files, "MRW ALL")
+  )
+end
+
+_G.fzf_mru_files_cwd = function(opts)
+  fzf_lua.fzf_exec(
+    colorFilename(mruFilesForCwd("file")),
+    getMruOpts(_G.fzf_mrw_files_cwd, "MRU")
+  )
+end
+
+_G.fzf_mrw_files_cwd = function(opts)
+  fzf_lua.fzf_exec(
+    colorFilename(mruFilesForCwd("write")),
+    getMruOpts(_G.fzf_mru_files_cwd, "MRW")
+  )
+end
+
+vim.cmd([[command! -nargs=* MruFilesCdwLua lua _G.fzf_mru_files_cwd()]])
+vim.cmd([[command! -nargs=* MrwWritesCdwLua lua _G.fzf_mrw_files_cwd()]])
+vim.cmd([[command! -nargs=* MruFilesLua lua _G.fzf_mru_files()]])
+vim.cmd([[command! -nargs=* MrwWritesLua lua _G.fzf_mrw_files()]])
+vim.api.nvim_set_keymap('n', '<Leader>e', 'm`:lua _G.fzf_mru_files_cwd()<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>E', 'm`:lua _G.fzf_mru_files()<CR>', { noremap = true, silent = true })
+
+-- ------------------------------------------------------------------
+-- lsp settings
+-- ------------------------------------------------------------------
+
+-- in /home/aikawa/dotfiles/.config/nvim/lua/lsp/configs/settings.lua
