@@ -22,6 +22,7 @@ opt.spell = false
 opt.spelllang = "en,cjk"
 opt.shortmess = opt.shortmess .. "atc"
 opt.signcolumn = "yes"
+opt.statuscolumn = "%C%l%s"
 opt.confirm = true
 opt.hidden = true
 opt.autoread = true

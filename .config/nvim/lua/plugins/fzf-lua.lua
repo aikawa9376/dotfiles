@@ -22,6 +22,13 @@ fzf_lua.setup {
         -- signcolumn = "yes"
       }
     },
+    treesitter = {
+      enabled = true,
+      fzf_colors = {
+        ["hl"] = "red:reverse",
+        ["hl+"] = "red:reverse",
+      }
+    },
   },
   hls = {
     preview_normal = "NormalFloat",
@@ -30,8 +37,8 @@ fzf_lua.setup {
   keymap = {
     builtin = {
       ["?"] = "toggle-preview",
-      ["<M-j>"] = "preview-down",
       ["<M-K>"] = "preview-up",
+      ["<M-j>"] = "preview-down",
     },
     fzf = {
       ["F4"] = "toggle-preview",
@@ -199,7 +206,14 @@ local getRipgrepOpts = function (isAll)
   opts.winopts = {
     preview = {
       hidden = true
-    }
+    },
+    -- treesitter = {
+    --   enabled = true,
+    --   fzf_colors = {
+    --     ["hl"] = "red:reverse",
+    --     ["hl+"] = "red:reverse",
+    --   }
+    -- },
   }
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
@@ -266,10 +280,6 @@ local getMruOpts = function (func, name)
     ["ctrl-t"] = { function() func() end },
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
   })
-  opts.file_icons = true
-  opts.fn_transform = function(x)
-    return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
-  end
   opts.fzf_opts = {
     ["--multi"] = "",
     ["--scheme"] = "history",

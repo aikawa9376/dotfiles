@@ -245,8 +245,6 @@ M.default = function(client, bufnr)
     },
   })
 
-  require("lsp.configs.fzf").setup()
-
   require("lsp_signature").on_attach({
     bind = true, -- This is mandatory, otherwise border config won't get registered.
     hint_enable = false,

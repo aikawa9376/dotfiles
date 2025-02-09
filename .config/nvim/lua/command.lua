@@ -13,6 +13,9 @@ cmd([[
 augroup MyAutoCmd
   autocmd FileType help,qf nnoremap <buffer> <CR> <CR>
   autocmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
+  autocmd FileType fugitiveblame let @q="gq"
+  autocmd FileType fugitiveblame nmap <buffer><nowait> q @q
+  autocmd FileType fugitiveblame nmap <buffer><nowait> <BS> <C-w><C-w><M-o><Leader>gb
   autocmd FileType noice nnoremap <buffer><nowait> <ESC> <C-w>c
   autocmd FileType help,qf,fugitive,defx,vista,neo-tree, nnoremap <buffer><nowait> <C-c> <C-w>c
   autocmd FileType far nnoremap <buffer><nowait> <C-c> :bdelete<cr>
@@ -44,3 +47,20 @@ augroup mylightline
   autocmd  BufLeave * set laststatus=3 showmode ruler showcmd
 augroup END
 ]])
+
+-- 空文字の場合レジスタに入れない
+vim.api.nvim_create_autocmd("TextYankPost", {
+  callback = function()
+    local reg = vim.v.register  -- 現在のレジスタ
+    local yanked_text = vim.fn.getreg(reg)  -- レジスタの内容
+
+    if yanked_text:match("^%s*$") then
+      -- 空白のみなら明示的に削除
+      local yank = vim.fn["miniyank#read"]()[1]
+        and vim.fn["miniyank#read"]()[1][1]
+        and vim.fn["miniyank#read"]()[1][1][1]
+        or ""
+      vim.fn.setreg(reg, yank)
+    end
+  end
+})

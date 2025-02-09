@@ -312,25 +312,6 @@ require'plugins.incline'
 repo = 'cseickel/diagnostic-window.nvim'
 on_cmd = 'DiagWindowShow'
 
-[[plugins]]
-repo = 'FabijanZulj/blame.nvim'
-on_event = 'CursorMoved'
-lua_source = '''
-require'blame'.setup({
-  date_format = "%Y/%m/%d %H:%M:%S",
-  blame_options = nil,
-  mappings = {
-      commit_info = "i",
-      stack_push = "p",
-      stack_pop = "<S-p>",
-      show_commit = "<CR>",
-      close = { "<esc>", "q" },
-  }
-})
-
-vim.keymap.set('n', '<Leader>gb', '<cmd>BlameToggle<CR>', { silent = true })
-'''
-
 # [[plugins]]
 # repo = 'lukas-reineke/indent-blankline.nvim'
 # on_event = 'CursorMoved'
@@ -1321,7 +1302,6 @@ depends = [
   'fzf.vim',
   'vim-bookmarks',
   'fzf-git.vim',
-  'fzf-lsp.nvim',
   'fzf-lua',
   'render-markdown.nvim'
 ]
@@ -1553,11 +1533,11 @@ omap ih <Plug>(GitGutterTextObjectInnerPending)
 omap ah <Plug>(GitGutterTextObjectOuterPending)
 xmap ih <Plug>(GitGutterTextObjectInnerVisual)
 xmap ah <Plug>(GitGutterTextObjectOuterVisual)
-let g:gitgutter_sign_added              = "▏"
-let g:gitgutter_sign_modified           = "▏"
-let g:gitgutter_sign_removed            = "▏"
-let g:gitgutter_sign_modified_removed   = "▏"
-let g:gitgutter_sign_removed_first_line = "▏"
+let g:gitgutter_sign_added              = "▕"
+let g:gitgutter_sign_modified           = "▕"
+let g:gitgutter_sign_removed            = "▕"
+let g:gitgutter_sign_modified_removed   = "▕"
+let g:gitgutter_sign_removed_first_line = "▕"
 let g:gitgutter_grep_command            = 'rg --hidden --follow --glob "!.git/*"'
 let g:gitgutter_diff_args               = '-w'
 let g:gitgutter_preview_win_floating    = 1
@@ -1588,13 +1568,14 @@ GitGutterEnable
 [[plugins]]
 repo = 'tpope/vim-fugitive'
 on_cmd = [
-  "Git", "Gdiff", "Gwrite",
+  "Git", "Gdiff", "Gwrite", "Gdiffsplit",
   "GitAddCommit", "GitAddAmend"
 ]
 hook_add = '''
 nmap <silent> <Leader>gs <cmd>Git<CR>
-nmap <silent> <Leader>gd <cmd>Gdiff<CR>
+nmap <silent> <Leader>gd <cmd>Gdiffsplit<CR>
 nmap <silent> <Leader>ga <cmd>Gwrite<CR>
+nmap <silent> <Leader>gb <cmd>Git blame -w --date=format:'%Y-%m-%d %H:%M'<CR>
 nmap <silent> <Leader>gp <cmd>Git! push<CR>
 nmap <silent> <Leader>gr <cmd>Git! rm --cached %<CR>
 nmap <silent> <Leader>gm <cmd>Git! commit -m 'update'<CR>
@@ -1606,9 +1587,29 @@ command! -nargs=* GitAddAmend silent execute('
   \ !git add -u && git commit --amend -m ' . shellescape(<q-args>)) . '&'
 '''
 
+# [[plugins]]
+# repo = 'FabijanZulj/blame.nvim'
+# on_event = 'CursorMoved'
+# lua_source = '''
+# require'blame'.setup({
+#   date_format = "%Y/%m/%d %H:%M:%S",
+#   blame_options = nil,
+#   mappings = {
+#       commit_info = "i",
+#       stack_push = "p",
+#       stack_pop = "<S-p>",
+#       show_commit = "<CR>",
+#       close = { "<esc>", "q" },
+#   }
+# })
+# '''
+
 [[plugins]]
 repo = 'sindrets/diffview.nvim'
-on_cmd = ['DiffviewOpen']
+on_cmd = ['DiffviewOpen', 'DiffviewFileHistory']
+hook_add = '''
+nnoremap <Leader>gH <cmd>DiffviewFileHistory%<CR>
+'''
 hook_source = '''
 lua require'plugins.diffview'
 '''
@@ -1952,8 +1953,8 @@ repo = 'kwkarlwang/bufjump.nvim'
 on_event = 'CursorMoved'
 lua_source = '''
 require("bufjump").setup({
-    forward = "<M-i>",
-    backward = "<M-o>",
+    forward_key = "<M-i>",
+    backward_key = "<M-o>",
     on_success = nil
 })
 '''

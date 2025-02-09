@@ -3,7 +3,7 @@ local cb = require'diffview.config'.diffview_callback
 require'diffview'.setup {
   diff_binaries = false,    -- Show diffs for binaries
   enhanced_diff_hl = true, -- See ':h diffview-config-enhanced_diff_hl'
-  use_icons = false,         -- Requires nvim-web-devicons
+  use_icons = true,         -- Requires nvim-web-devicons
   icons = {                 -- Only applies when use_icons is true.
     folder_closed = "",
     folder_open = "",
@@ -13,9 +13,11 @@ require'diffview'.setup {
     fold_open = "",
   },
   file_panel = {
-    position = "bottom",            -- One of 'left', 'right', 'top', 'bottom'
-    width = 35,                   -- Only applies when position is 'left' or 'right'
-    height = 10,                  -- Only applies when position is 'top' or 'bottom'
+    win_config = {
+      position = "bottom",            -- One of 'left', 'right', 'top', 'bottom'
+      width = 35,                   -- Only applies when position is 'left' or 'right'
+      height = 10,                  -- Only applies when position is 'top' or 'bottom'
+    },
     listing_style = "tree",       -- One of 'list' or 'tree'
     tree_options = {              -- Only applies when listing_style is 'tree'
       flatten_dirs = true,
@@ -23,12 +25,21 @@ require'diffview'.setup {
     }
   },
   file_history_panel = {
-    position = "bottom",
-    width = 35,
-    height = 16,
+    win_config = {
+      position = "bottom",
+      width = 35,
+      height = 16,
+    },
     log_options = {
-      max_count = 256,      -- Limit the number of commits
-      follow = false,       -- Follow renames (only for single file)
+      git = {
+        single_file = {
+          max_count = 256,      -- Limit the number of commits
+          follow = false,       -- Follow renames (only for single file)
+        },
+        multi_file = {
+          max_count = 128,      -- Limit the number of commits
+        },
+      },
       all = false,          -- Include all refs under 'refs/' including HEAD
       merges = false,       -- List only merge commits
       no_merges = false,    -- List no merge commits
@@ -47,6 +58,7 @@ require'diffview'.setup {
       ["<C-w>gf"]    = cb("goto_file_tab"),      -- Open the file in a new tabpage
       ["<leader>e"]  = cb("focus_files"),        -- Bring focus to the files panel
       ["<leader>b"]  = cb("toggle_files"),       -- Toggle the files panel.
+      ["q"]          = cb("close"),
     },
     file_panel = {
       ["j"]             = cb("next_entry"),           -- Bring the cursor to the next file entry
@@ -76,7 +88,7 @@ require'diffview'.setup {
       ["<C-d>"]         = cb("open_in_diffview"),   -- Open the entry under the cursor in a diffview
       ["zR"]            = cb("open_all_folds"),
       ["zM"]            = cb("close_all_folds"),
-    ["j"]             = cb("next_entry"),
+      ["j"]             = cb("next_entry"),
       ["<down>"]        = cb("next_entry"),
       ["k"]             = cb("prev_entry"),
       ["<up>"]          = cb("prev_entry"),
