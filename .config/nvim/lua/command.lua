@@ -56,11 +56,8 @@ vim.api.nvim_create_autocmd("TextYankPost", {
 
     if yanked_text:match("^%s*$") then
       -- 空白のみなら明示的に削除
-      local yank = vim.fn["miniyank#read"]()[1]
-        and vim.fn["miniyank#read"]()[1][1]
-        and vim.fn["miniyank#read"]()[1][1][1]
-        or ""
-      vim.fn.setreg(reg, yank)
+      local yank = require("yanky.history").first() or ""
+      vim.fn.setreg("+", yank)
     end
   end
 })

@@ -77,16 +77,15 @@ Hydra({
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
-        vim.api.nvim_replace_termcodes('<Plug>(miniyank-autoput)', true, true, true), 'n')
+        vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentAfter)', true, true, true), 'n')
     end
   },
   heads = {
-    { '<C-p>', '<Plug>(miniyank-cycle)' },
-    { '<C-n>', '<Plug>(miniyank-cycleback)' },
-    { '<C-w>', '<Plug>(miniyank-tochar)' },
-    { '<C-l>', '<Plug>(miniyank-toline)' },
-    { '<C-b>', '<Plug>(miniyank-toblock)' },
-    { '<C-f>', '=`]^' },
+    { '<C-p>', '<Plug>(YankyPreviousEntry)' },
+    { '<C-n>', '<Plug>(YankyNextEntry)' },
+    { '<C-w>', 'u<Plug>(YankyPutAfterCharwise)' },
+    { '<C-l>', 'u<Plug>(YankyPutIndentAfterFilter)' },
+    { '<C-b>', 'u<Plug>(YankyPutAfterBlockwise)' },
   }
 })
 Hydra({
@@ -98,16 +97,15 @@ Hydra({
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
-        vim.api.nvim_replace_termcodes('<Plug>(miniyank-autoPut)', true, true, true), 'n')
+        vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentAfter)', true, true, true), 'n')
     end
   },
   heads = {
-    { '<C-p>', '<Plug>(miniyank-cycle)' },
-    { '<C-n>', '<Plug>(miniyank-cycleback)' },
-    { '<C-w>', '<Plug>(miniyank-tochar)' },
-    { '<C-l>', '<Plug>(miniyank-toline)' },
-    { '<C-b>', '<Plug>(miniyank-toblock)' },
-    { '<C-f>', '=`]^' },
+    { '<C-p>', '<Plug>(YankyPreviousEntry)' },
+    { '<C-n>', '<Plug>(YankyNextEntry)' },
+    { '<C-w>', 'u<Plug>(YankyPutBeforeCharwise)' },
+    { '<C-l>', 'u<Plug>(YankyPutIndentBeforeFilter)' },
+    { '<C-b>', 'u<Plug>(YankyPutBeforeBlockwise)' },
   }
 })
 

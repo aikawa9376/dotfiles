@@ -12,12 +12,6 @@ hook_source = '''
 lua require'lsp'
 '''
 
-# [[plugins]]
-# repo = 'williamboman/nvim-lsp-installer'
-# hook_source = '''
-# lua require'lsp'
-# '''
-
 [[plugins]]
 repo = 'nvimtools/none-ls.nvim'
 lua_source = '''
@@ -90,102 +84,6 @@ depends  = [
 repo = 'amarakon/nvim-cmp-buffer-lines'
 
 # [[plugins]]
-# repo = 'jackMort/ChatGPT.nvim'
-# depends = ['plenary.nvim', 'nui.nvim', 'telescope.nvim']
-# on_cmd = ['ChatGPT']
-# hook_source = '''
-# lua << EOF
-# require("chatgpt").setup(
-#   {
-#     welcome_message = WELCOME_MESSAGE,
-#     loading_text = "loading",
-#     question_sign = "", -- you can use emoji if you want e.g. 🙂
-#     answer_sign = "ﮧ", -- 🤖
-#     max_line_length = 120,
-#     yank_register = "+",
-#     chat_layout = {
-#       relative = "editor",
-#       position = "50%",
-#       size = {
-#         height = "80%",
-#         width = "80%",
-#       },
-#     },
-#     settings_window = {
-#       border = {
-#         style = "rounded",
-#         text = {
-#           top = " Settings ",
-#         },
-#       },
-#     },
-#     chat_window = {
-#       filetype = "chatgpt",
-#       border = {
-#         highlight = "FloatBorder",
-#         style = "rounded",
-#         text = {
-#           top = " ChatGPT ",
-#         },
-#       },
-#     },
-#     chat_input = {
-#       prompt = "  ",
-#       border = {
-#         highlight = "FloatBorder",
-#         style = "rounded",
-#         text = {
-#           top_align = "center",
-#           top = " Prompt ",
-#         },
-#       },
-#     },
-#     openai_params = {
-#       model = "gpt-3.5-turbo",
-#       frequency_penalty = 0,
-#       presence_penalty = 0,
-#       max_tokens = 300,
-#       temperature = 0,
-#       top_p = 1,
-#       n = 1,
-#     },
-#     openai_edit_params = {
-#       model = "code-davinci-edit-001",
-#       temperature = 0,
-#       top_p = 1,
-#       n = 1,
-#     },
-#     keymaps = {
-#       close = { "<C-c>" },
-#       submit = "<C-Space>",
-#       yank_last = "<C-y>",
-#       yank_last_code = "<C-k>",
-#       scroll_up = "<C-u>",
-#       scroll_down = "<C-d>",
-#       toggle_settings = "<C-o>",
-#       new_session = "<C-n>",
-#       cycle_windows = "<Tab>",
-#       -- in the Sessions pane
-#       select_session = "<Space>",
-#       rename_session = "r",
-#       delete_session = "d",
-#     },
-#   }
-# )
-# EOF
-# '''
-#
-# [[plugins]]
-# repo = 'nvim-telescope/telescope.nvim'
-
-# [[plugins]]
-# repo = 'Maan2003/lsp_lines.nvim'
-# on_event = 'VimEnter'
-# hook_source = '''
-# lua require("lsp_lines").register_lsp_virtual_lines()
-# '''
-
-# [[plugins]]
 # repo = 'zbirenbaum/copilot-cmp'
 #
 # [[plugins]]
@@ -239,22 +137,6 @@ on_lua = 'rust-tools'
 
 [[plugins]]
 repo = 'RRethy/vim-illuminate'
-
-# [[plugins]]
-# repo = 'j-hui/fidget.nvim'
-# on_event = 'VimEnter'
-# hook_source = '''
-# lua << EOF
-# require"fidget".setup{
-#   fmt = {
-#     stack_upwards = false,
-#   },
-#   text = {
-#     spinner = "dots",
-#   },
-# }
-# EOF
-# '''
 
 [[plugins]]
 repo = 'ray-x/lsp_signature.nvim'
@@ -312,105 +194,50 @@ require'plugins.incline'
 repo = 'cseickel/diagnostic-window.nvim'
 on_cmd = 'DiagWindowShow'
 
-# [[plugins]]
-# repo = 'lukas-reineke/indent-blankline.nvim'
-# on_event = 'CursorMoved'
-# lua_source = '''
-# require("indent_blankline").setup {
-#   char = "",
-#   char_blankline = "",
-#   context_char = "│",
-#   context_char_blankline = "│",
-#   show_current_context = true,
-#   context_patterns = {
-#     "class",
-#     "^func",
-#     "method",
-#     "^if",
-#     "while",
-#     "for",
-#     "with",
-#     "try",
-#     "except",
-#     "arguments",
-#     "argument_list",
-#     "object",
-#     "dictionary",
-#     "element",
-#     "table",
-#     "tuple",
-#     "arrow_function",
-#     "do_block",
-#   }
-# }
-# '''
-
 # 良さげだけどbaggy
-# [[plugins]]
-# repo = 'shellRaining/hlchunk.nvim'
-# on_event = 'UIEnter'
-# lua_source = '''
-# require("hlchunk").setup ({
-#     chunk = {
-#         enable = true,
-#         notify = false,
-#         use_treesitter = true,
-#         chars = {
-#             horizontal_line = "─",
-#             vertical_line = "│",
-#             left_top = "╭",
-#             left_bottom = "╰",
-#             right_arrow = ">",
-#         },
-#         style = {
-#             { fg = "#094b5c" },
-#             { fg = "#073642" }, -- this fg is used to highlight wrong chunk
-#         },
-#         textobject = "",
-#         max_file_size = 1024 * 1024,
-#         error_sign = false,
-#     },
-#     indent = {
-#         enable = false,
-#     },
-#     line_num = {
-#         enable = false,
-#         use_treesitter = false,
-#         style = "#806d9c",
-#     },
-#     blank = {
-#         enable = false,
-#         chars = {
-#             "․",
-#         },
-#         style = {
-#             vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.hlID("Whitespace")), "fg", "gui"),
-#         },
-#     },
-# })
-# '''
-
-# [[plugins]]
-# repo = 'nvimdev/lspsaga.nvim'
-# on_event = 'CursorMoved'
-# lua_source = '''
-# require("lspsaga").setup({
-#   symbol_in_winbar = {
-#     enable = false
-#   },
-#   lightbulb = {
-#     enable = true,
-#     sign = false,
-#     virtualtext = true,
-#   },
-#   callhierarchy = {
-#     layout = 'normal'
-#   },
-#   ui = {
-#     code_action = 'A'
-#   }
-# })
-# '''
+[[plugins]]
+repo = 'shellRaining/hlchunk.nvim'
+on_event = 'UIEnter'
+lua_source = '''
+require("hlchunk").setup ({
+    chunk = {
+        enable = true,
+        notify = false,
+        use_treesitter = true,
+        chars = {
+            horizontal_line = "─",
+            vertical_line = "│",
+            left_top = "╭",
+            left_bottom = "╰",
+            right_arrow = ">",
+        },
+        style = {
+            { fg = "#094b5c" },
+            { fg = "#073642" }, -- this fg is used to highlight wrong chunk
+        },
+        textobject = "",
+        max_file_size = 1024 * 1024,
+        error_sign = false,
+    },
+    indent = {
+        enable = false,
+    },
+    line_num = {
+        enable = false,
+        use_treesitter = false,
+        style = "#806d9c",
+    },
+    blank = {
+        enable = false,
+        chars = {
+            "․",
+        },
+        style = {
+            vim.fn.synIDattr(vim.fn.synIDtrans(vim.fn.hlID("Whitespace")), "fg", "gui"),
+        },
+    },
+})
+'''
 
 [[plugins]]
 repo = 'hedyhli/outline.nvim'
@@ -439,38 +266,6 @@ require("outline").setup {
 hook_add = '''
 nnoremap <leader>o <cmd>Outline<CR>
 '''
-
-# [[plugins]]
-# repo = 'ThePrimeagen/harpoon'
-# on_event = 'CursorMoved'
-# lua_source = '''
-# require("harpoon").setup({
-#   menu = {
-#     title = '',
-#     width = vim.api.nvim_win_get_width(0) - 60,
-#     borderchars = { '', '', '', '', '', '', '', '' },
-#   },
-#   global_settings = {
-#     save_on_toggle = false,
-#     save_on_change = true,
-#     enter_on_sendcmd = false,
-#     tmux_autoclose_window = false,
-#     excluded_filetypes = { "harpoon" },
-#     mark_branch = false,
-#   }
-# })
-# vim.api.nvim_set_keymap("n", "mm", "<cmd>lua require('harpoon.mark').add_file()<CR>", { silent = true })
-# vim.api.nvim_set_keymap("n", ";", "<cmd>lua require('harpoon.ui').toggle_quick_menu()<CR>", { silent = true })
-# vim.api.nvim_set_keymap("n", "]e", "<cmd>lua require('harpoon.ui').nav_next()<CR>", { silent = true })
-# vim.api.nvim_set_keymap("n", "[e", "<cmd>lua require('harpoon.ui').nav_prev()<CR>", { silent = true })
-# '''
-
-# [[plugins]]
-# repo = 'marcomayer/calltree.nvim'
-# on_event = 'CursorHold'
-# lua_source = '''
-# require('calltree').setup({})
-# '''
 
 # text-----------------------------------
 
@@ -509,14 +304,6 @@ let g:user_emmet_codepretty_key        = '<M-e>c'
 let g:user_emmet_imageencode_key       = '<M-e>I'
 autocmd MyAutoCmd FileType phtml,html,php,blade,css,scss,twig,typescriptreact,javascriptreact EmmetInstall
 '''
-
-# [[plugins]]
-# repo = 'RRethy/vim-hexokinase'
-# build = 'make hexokinase'
-# on_ft = ['css', 'scss']
-# hook_add = '''
-# let g:Hexokinase_ftAutoload = ['css', 'scss', 'sass', 'xml']
-# '''
 
 [[plugins]]
 repo = 'NvChad/nvim-colorizer.lua'
@@ -561,12 +348,6 @@ require("colorizer").setup {
 # call SetLeximaAddRule()
 # '''
 
-# [[plugins]]
-# repo = 'windwp/nvim-autopairs'
-# hook_source = '''
-# lua require'plugins.autopairs'
-# '''
-
 [[plugins]]
 repo = 'hrsh7th/nvim-insx'
 lua_source = '''
@@ -597,34 +378,22 @@ lua_source = '''
 require'plugins.comment'
 '''
 
-[[plugins]]
-repo = 'bfredl/nvim-miniyank'
-on_map = {n = '<Plug>', x = '<Plug>', o = '<Plug>'}
-hook_add = '''
-map p <Plug>(miniyank-autoput)=`]
-map P <Plug>(miniyank-autoPut)=`]
-let g:miniyank_filename = $XDG_CACHE_HOME."/nvim/.miniyank.mpack"
-let g:miniyank_maxitems = 100
-'''
-
 # [[plugins]]
-# repo = 'ggandor/lightspeed.nvim'
-# on_event = 'CursorMoved'
-# hook_source = '''
-# lua require('plugins.lightspeed')
-# nmap <C-j> <plug>Lightspeed_s
-# nmap <C-k> <plug>Lightspeed_S
-# vmap <C-j> <plug>Lightspeed_s
-# vmap <C-k> <plug>Lightspeed_S
-# autocmd User LightspeedSxEnter nmap ; <Plug>Lightspeed_;_sx
-# autocmd User LightspeedSxEnter nmap , <Plug>Lightspeed_,_sx
-# autocmd User LightspeedFtEnter nmap ; <Plug>Lightspeed_;_ft
-# autocmd User LightspeedFtEnter nmap , <Plug>Lightspeed_,_ft
-# autocmd User LightspeedSxEnter xmap ; <Plug>Lightspeed_;_sx
-# autocmd User LightspeedSxEnter xmap , <Plug>Lightspeed_,_sx
-# autocmd User LightspeedFtEnter xmap ; <Plug>Lightspeed_;_ft
-# autocmd User LightspeedFtEnter xmap , <Plug>Lightspeed_,_ft
+# repo = 'bfredl/nvim-miniyank'
+# on_map = {n = '<Plug>', x = '<Plug>', o = '<Plug>'}
+# hook_add = '''
+# map p <Plug>(miniyank-autoput)=`]
+# map P <Plug>(miniyank-autoPut)=`]
+# let g:miniyank_filename = $XDG_CACHE_HOME."/nvim/.miniyank.mpack"
+# let g:miniyank_maxitems = 100
 # '''
+
+[[plugins]]
+repo = 'gbprod/yanky.nvim'
+on_event = 'CursorMoved'
+lua_source = '''
+require'plugins.yanky'
+'''
 
 [[plugins]]
 repo = 'ggandor/leap.nvim'
@@ -637,29 +406,32 @@ require('plugins.leap')
 [[plugins]]
 repo = 'ggandor/flit.nvim'
 
-# バッファでignoreしたりできないので開発進むまでquick-scopeを
-# [[plugins]]
-# repo = 'jinh0/eyeliner.nvim'
-# on_event = 'CursorMoved'
-# lua_source = '''
-# require('eyeliner').setup ({
-#   -- highlight_on_key = true, -- this must be set to true for dimming to work!
-#   dim = true,
-# })
-# require('eyeliner').disable()
-# '''
-
 [[plugins]]
-repo = 'unblevable/quick-scope'
+repo = 'jinh0/eyeliner.nvim'
 on_event = 'CursorMoved'
-hook_source = '''
-let g:qs_hi_priority = 20
-let g:qs_ignorecase = 1
-let g:qs_filetype_blacklist = [
- \ 'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
- \ 'DressingSelect', 'mason', 'fugitiveblame',
- \ 'vista', 'qf', 'fzf', 'noice', 'lazygit' ]
+lua_source = '''
+require('eyeliner').setup ({
+  highlight_on_key = true,
+  dim = true,
+  disabled_filetypes = {
+    'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
+    'DressingSelect', 'mason', 'fugitiveblame',
+    'vista', 'qf', 'fzf', 'noice', 'lazygit'
+  }
+})
 '''
+
+# [[plugins]]
+# repo = 'unblevable/quick-scope'
+# on_event = 'CursorMoved'
+# hook_source = '''
+# let g:qs_hi_priority = 20
+# let g:qs_ignorecase = 1
+# let g:qs_filetype_blacklist = [
+#  \ 'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
+#  \ 'DressingSelect', 'mason', 'fugitiveblame',
+#  \ 'vista', 'qf', 'fzf', 'noice', 'lazygit' ]
+# '''
 
 # [[plugins]]
 # repo = 'mg979/vim-visual-multi'
@@ -926,20 +698,6 @@ nmap <Leader>to mv<plug>(operator-sort)
 xmap <Leader>to mv<Plug>(operator-sort)
 '''
 
-# [[plugins]]
-# repo = 'kana/vim-submode'
-# on_event = 'VimEnter'
-# hook_source = '''
-# " set lazydrawでカーソルが飛ぶ
-# let g:submode_timeoutlen = 5000
-# let g:submode_keep_leaving_key = 1
-#
-# call submode#enter_with('linterbrace', 'n', 's', '[a', "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>")
-# call submode#enter_with('linterbrace', 'n', 's', ']a', "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>")
-# call submode#map('linterbrace', 'n', 's', '[', "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>")
-# call submode#map('linterbrace', 'n', 's', ']', "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>")
-# '''
-
 [[plugins]]
 # repo = 'nvimtools/hydra.nvim'
 repo = 'Cathyprime/hydra.nvim'
@@ -947,14 +705,6 @@ on_event = 'CursorMoved'
 lua_source = '''
 require'plugins.hydra'
 '''
-
-# [[plugins]]
-# repo = 'tpope/vim-surround'
-# on_event = 'CursorMoved'
-# hook_add = '''
-# let g:surround_{char2nr("P")} = "<?php \r ?>"
-# let g:surround_{char2nr("H")} = "<!-- \r -->"
-# '''
 
 [[plugins]]
 repo = 'kylechui/nvim-surround'
@@ -1113,159 +863,6 @@ require('neogen').setup {
 
 # list-----------------------------------
 
-# [[plugins]]
-# repo = 'liuchengxu/vista.vim'
-# on_cmd = ['Vista!!']
-# hook_add = '''
-# nnoremap <silent> <Leader>o  <cmd>Vista!!<CR>
-# nnoremap <silent> <Leader>c/ <cmd>Vista finder<CR>
-# let g:vista_stay_on_open         = 0
-# let g:vista_fzf_preview          = ['right:50%']
-# let g:vista_icon_indent          = ["", " "]
-# let g:vista_echo_cursor_strategy = "floating_win"
-# let g:vista_ctags_cmd = {
-#   \ "php": "ctags --format=2 --excmd=pattern --fields=nksSaf --sort=no --file-scope=yes --append=no -f-"
-#   \ }
-# let g:vista#renderer#icons = {
-#   \  "function": "\uf794 ",
-#   \  "variable": "\uf71b ",
-#   \ }
-# '''
-
-# [[plugins]]
-# repo = 'shougo/defx.nvim'
-# depends = ['defx-icons', 'defx-git']
-# on_cmd = ['Defx']
-# hook_add = '''
-# let g:defx_trak_directory = 1
-# nmap <silent><Space>n <cmd>Defx -search-recursive=`expand('%:p')`<CR>
-#
-# autocmd MyAutoCmd FileType defx call s:defx_my_settings()
-# function! s:defx_my_settings() abort
-#   " Define mappings
-#   nnoremap <silent><buffer><expr><nowait> <CR>
-#   \ defx#do_action('drop') . '\<C-w>w'
-#   nnoremap <silent><buffer><expr><nowait> c
-#   \ defx#do_action('copy')
-#   nnoremap <silent><buffer><expr><nowait> m
-#   \ defx#do_action('move')
-#   nnoremap <silent><buffer><expr><nowait> p
-#   \ defx#do_action('paste')
-#   nnoremap <silent><buffer><expr><nowait> E
-#   \ defx#do_action('open', 'vsplit')
-#   nnoremap <silent><buffer><expr><nowait> P
-#   \ defx#do_action('open', 'pedit')
-#   nnoremap <silent><buffer><expr><nowait> o
-#   \ defx#do_action('open_or_close_tree')
-#   nnoremap <silent><buffer><expr><nowait> K
-#   \ defx#do_action('new_directory')
-#   nnoremap <silent><buffer><expr><nowait> N
-#   \ defx#do_action('new_file')
-#   nnoremap <silent><buffer><expr><nowait> M
-#   \ defx#do_action('new_multiple_files')
-#   nnoremap <silent><buffer><expr><nowait> C
-#   \ defx#do_action('toggle_columns', 'size:time')
-#   nnoremap <silent><buffer><expr><nowait> S
-#   \ defx#do_action('toggle_sort', 'time')
-#   nnoremap <silent><buffer><expr><nowait> d
-#   \ defx#do_action('remove')
-#   nnoremap <silent><buffer><expr><nowait> r
-#   \ defx#do_action('rename')
-#   nnoremap <silent><buffer><expr><nowait> !
-#   \ defx#do_action('execute_command')
-#   nnoremap <silent><buffer><expr><nowait> x
-#   \ defx#do_action('execute_system')
-#   nnoremap <silent><buffer><expr> P
-#   \ defx#do_action('preview')
-#   nnoremap <silent><buffer><expr><nowait> yy
-#   \ defx#do_action('yank_path')
-#   nnoremap <silent><buffer><expr><nowait> yY
-#   \ defx#do_action('yank_path', ':t')
-#   nnoremap <silent><buffer><expr><nowait> .
-#   \ defx#do_action('toggle_ignored_files')
-#   nnoremap <silent><buffer><expr><nowait> ;
-#   \ defx#do_action('repeat')
-#   nnoremap <silent><buffer><expr><nowait> ~
-#   \ defx#do_action('cd')
-#   nnoremap <silent><buffer><expr><nowait> q
-#   \ defx#do_action('quit')
-#   nnoremap <silent><buffer><expr><nowait> <Tab>
-#   \ defx#do_action('toggle_select') . 'j'
-#   nnoremap <silent><buffer><expr><nowait> *
-#   \ defx#do_action('toggle_select_all')
-#   nnoremap <silent><buffer><expr><nowait> j
-#   \ line('.') == line('$') ? 'gg' : 'j'
-#   nnoremap <silent><buffer><expr><nowait> k
-#   \ line('.') == 1 ? 'G' : 'k'
-#   nnoremap <silent><buffer><expr><nowait> <C-l>
-#   \ defx#do_action('redraw')
-#   nnoremap <silent><buffer><expr><nowait> <C-g>
-#   \ defx#do_action('print')
-#   nnoremap <silent><buffer><expr><nowait> <C-n>
-#   \ ':<C-u>Defx -buffer-name=temp -split=split<CR>'
-#   nnoremap <silent><buffer><expr><nowait> <Space>n
-#   \ ':<C-u>Defx -close<CR>'
-# endfunction
-#
-# augroup user_plugin_defx
-#   autocmd!
-#   autocmd CursorHold * SyncDefx
-#   autocmd FileType defx setlocal nonumber
-# augroup END
-#
-# command! SyncDefx :call s:check_and_search_defx()
-# function! s:check_and_search_defx()
-#   if bufwinnr('defx') == 1 && &filetype != 'defx' && g:defx_trak_directory == 1
-#     Defx -no-focus -no-toggle -search-recursive=`expand('%:p')`
-#   endif
-# endfunction
-# '''
-# hook_source = '''
-# call defx#custom#option('_', {
-#     \ 'columns': 'indent:git:icons:filename:type',
-#     \ 'direction': 'topleft',
-#     \ 'split': 'vertical',
-#     \ 'floating_preview': 1,
-#     \ 'show_ignored_files': 1,
-#     \ 'winwidth': 30,
-#     \ 'toggle': 1,
-#     \ 'resume': 1,
-#     \ })
-# call defx#custom#column('git', 'column_length', 2)
-# '''
-#
-# [[plugins]]
-# repo = 'kristijanhusak/defx-icons'
-# hook_add = '''
-# let g:defx_icons_column_length           = 2
-# let g:defx_icons_enable_syntax_highlight = 1
-# '''
-#
-# [[plugins]]
-# repo = 'kristijanhusak/defx-git'
-
-# [[plugins]]
-# repo = 'kyazdani42/nvim-tree.lua'
-# on_event = 'VimEnter'
-# rev = 'nightly'
-# depends = ['nvim-web-devicons']
-# hook_source = '''
-# nmap <silent><Space>n <cmd>NvimTreeFindFileToggle<CR>
-# lua << EOF
-# require("nvim-tree").setup{
-#   renderer = {
-#     icons = {
-#       git_placement = 'after',
-#       padding = '',
-#       show = {
-#         folder_arrow = false,
-#       }
-#     }
-#   }
-# }
-# EOF
-# '''
-
 [[plugins]]
 repo = 'nvim-neo-tree/neo-tree.nvim'
 # rev = '245cf1e68840defcc75a16297740f6203f5a045d'
@@ -1323,9 +920,6 @@ require'plugins.fzf-lua'
 
 [[plugins]]
 repo = 'MeanderingProgrammer/render-markdown.nvim'
-
-[[plugins]]
-repo = 'gfanto/fzf-lsp.nvim'
 
 [[plugins]]
 repo = 'aikawa9376/fzf-git.vim'
@@ -1569,7 +1163,7 @@ GitGutterEnable
 repo = 'tpope/vim-fugitive'
 on_cmd = [
   "Git", "Gdiff", "Gwrite", "Gdiffsplit",
-  "GitAddCommit", "GitAddAmend"
+  "Gedit", "GitAddCommit", "GitAddAmend"
 ]
 hook_add = '''
 nmap <silent> <Leader>gs <cmd>Git<CR>
@@ -1620,13 +1214,6 @@ on_lua = ['lazygit.nvim']
 hook_add = '''
 nmap <silent><Leader>gl <cmd>LazyGit<CR>
 '''
-
-# [[plugins]]
-# repo = 'cohama/agit.vim'
-# on_cmd = ['Agit']
-# hook_add = '''
-# nmap <silent><Leader>gl <cmd>Agit<CR>
-# '''
 
 [[plugins]]
 repo = 'rhysd/git-messenger.vim'
@@ -1688,61 +1275,6 @@ cnoremap <expr> <SID>(ctrl_w_after) myutil#ctrl_w_after()
 cmap <script> <C-W> <SID>(ctrl_w_before)<SID>(ctrl_w_after)
 '''
 
-# [[plugins]]
-# repo = 'gelguy/wilder.nvim'
-# on_event = 'VimEnter'
-# hook_source = '''
-# call wilder#enable_cmdline_enter()
-# set wildcharm=<Tab>
-#
-# " conflict incsearch
-# autocmd MyAutoCmd User IncSearchEnter cunmap <C-n>
-# autocmd MyAutoCmd User IncSearchEnter cunmap <C-p>
-# autocmd MyAutoCmd User IncSearchLeave cmap <expr> <C-p> wilder#in_context() ? wilder#next() : pumvisible() ? "\<Right>" : "\<C-p>"
-# autocmd MyAutoCmd User IncSearchLeave cmap <expr> <C-n> wilder#in_context() ? wilder#previous() : pumvisible() ? "\<Left>" : "\<C-p>"
-#
-# cmap <expr> <C-p> wilder#in_context() ? wilder#next() : pumvisible() ? "\<Right>" : "\<C-p>"
-# cmap <expr> <C-n> wilder#in_context() ? wilder#previous() : pumvisible() ? "\<Left>" : "\<C-p>"
-# cmap <expr> <Tab> wilder#in_context() ? wilder#next() : "\<Tab>"
-# cmap <expr> <S-Tab> wilder#in_context() ? wilder#previous() : "\<S-Tab>"
-#
-# call wilder#set_option('modes', [':', '/', '?'])
-#
-# call wilder#set_option('renderer', wilder#popupmenu_renderer({
-#       \ 'highlighter': wilder#query_highlighter(),
-#       \ 'winblend': 10,
-#       \ 'reverse': 1,
-#       \ 'apply_incsearch_fix': v:true,
-#       \ 'right': ['', wilder#popupmenu_scrollbar({
-#       \     'thumb_char': ' '
-#       \   })]
-#       \ }))
-#
-# call wilder#set_option('pipeline', [
-#       \   wilder#branch(
-#       \     [
-#       \       wilder#check({_, x -> empty(x)}),
-#       \       wilder#history(),
-#       \     ],
-#       \     wilder#python_file_finder_pipeline({
-#       \       'file_command': ['rg', '--files'],
-#       \       'dir_command': ['fd', '-tr'],
-#       \       'filters': ['fuzzy_filter', 'difflib_sorter'],
-#       \     }),
-#       \     wilder#cmdline_pipeline({
-#       \       'fuzzy': 2,
-#       \       'language': 'python',
-#       \       'engine': 're2',
-#       \       'sorter': wilder#python_difflib_sorter(),
-#       \     }),
-#       \     wilder#python_search_pipeline({
-#       \       'pattern': 'fuzzy',
-#       \     }),
-#       \   ),
-#       \   wilder#result_draw_devicons(),
-#       \ ])
-# '''
-
 [[plugins]]
 repo = 'vim-scripts/BufOnly.vim'
 on_cmd = ['BufOnly']
@@ -1758,32 +1290,6 @@ on_cmd = ['AsyncRun']
 [[plugins]]
 repo = 'skywind3000/asynctasks.vim'
 on_cmd = ['AsyncTask']
-
-[[plugins]]
-repo = 'Shougo/vimproc'
-build = 'make'
-on_event = 'CmdlineEnter'
-
-# [[plugins]]
-# repo = 'prettier/vim-prettier'
-# build = 'yarn install --frozen-lockfile --production'
-# on_ft = [
-#   'javascript', 'typescript', 'css', 'less', 'scss',
-#   'json', 'graphql', 'markdown', 'vue', 'svelte', 'yaml', 'html'
-#   'typescriptreact', 'javascriptreact'
-# ]
-# hook_add = '''
-# let g:prettier#config#single_quote = 'true'
-# let g:prettier#config#semi = 'false'
-# let g:prettier#config#trailing_comma = 'none'
-# let g:prettier#quickfix_enabled = 0
-# '''
-# hook_source = '''
-# augroup prettierDefaults
-#   autocmd!
-#   autocmd BufWritePre * PrettierAsync
-# augroup END
-# '''
 
 [[plugins]]
 repo = 'monaqa/dial.nvim'
@@ -1958,24 +1464,6 @@ require("bufjump").setup({
     on_success = nil
 })
 '''
-
-# [[plugins]]
-# repo = 'yamatsum/nvim-cursorline'
-# on_event = 'VimEnter'
-# hook_source = '''
-# lua << EOF
-# require('nvim-cursorline').setup {
-#   cursorline = {
-#     enable = true,
-#     timeout = 1000,
-#     number = false,
-#   },
-#   cursorword = {
-#     enable = false,
-#   }
-# }
-# EOF
-# '''
 
 [[plugins]]
 repo = 'linrongbin16/gitlinker.nvim'

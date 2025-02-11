@@ -52,7 +52,7 @@ require'diffview'.setup {
     -- tabpage is a Diffview.
     view = {
       ["<tab>"]      = cb("select_next_entry"),  -- Open the diff for the next file
-      ["<s-tab>"]    = cb("select_prev_entry"),  -- Open the diff for the previous file
+      ["<C-h>"]      = cb("select_prev_entry"),  -- Open the diff for the previous file
       ["gf"]         = cb("goto_file"),          -- Open the file in a new split in previous tabpage
       ["<C-w><C-f>"] = cb("goto_file_split"),    -- Open the file in a new split
       ["<C-w>gf"]    = cb("goto_file_tab"),      -- Open the file in a new tabpage
@@ -74,7 +74,7 @@ require'diffview'.setup {
       ["X"]             = cb("restore_entry"),        -- Restore entry to the state on the left side.
       ["R"]             = cb("refresh_files"),        -- Update stats and entries in the file list.
       ["<tab>"]         = cb("select_next_entry"),
-      ["<s-tab>"]       = cb("select_prev_entry"),
+      ["<C-h>"]         = cb("select_prev_entry"),
       ["gf"]            = cb("goto_file"),
       ["<C-w><C-f>"]    = cb("goto_file_split"),
       ["<C-w>gf"]       = cb("goto_file_tab"),
@@ -96,7 +96,7 @@ require'diffview'.setup {
       ["o"]             = cb("select_entry"),
       ["<2-LeftMouse>"] = cb("select_entry"),
       ["<tab>"]         = cb("select_next_entry"),
-      ["<s-tab>"]       = cb("select_prev_entry"),
+      ["<C-h>"]         = cb("select_prev_entry"),
       ["gf"]            = cb("goto_file"),
       ["<C-w><C-f>"]    = cb("goto_file_split"),
       ["<C-w>gf"]       = cb("goto_file_tab"),

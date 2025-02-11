@@ -90,7 +90,7 @@ fzf_lua.setup {
 }
 
 local defaultActions = {
-  ["enter"] = fzf_lua.actions.file_edit,
+  ["enter"] = fzf_lua.actions.file_edit_or_qf,
   ["ctrl-s"] = fzf_lua.actions.file_split,
   ["ctrl-v"] = fzf_lua.actions.file_vsplit,
 }
@@ -134,6 +134,10 @@ end
 local function removeUnicodeUtf8(str)
   str = str:gsub("[\194-\244][\128-\191]*", "")
   return str
+end
+
+local function escapePattern(text)
+  return text:gsub("([().%+%-*?[^$])", "%%%1")
 end
 
 -- ------------------------------------------------------------------
@@ -294,7 +298,7 @@ local mruFilesForCwd = function(flag, notCwd)
   notCwd = notCwd or false
 
   local result = vim.fn.systemlist("sed -n '2,$p' $XDG_CACHE_HOME/neomru/" .. flag)
-  local cwd = vim.fn.getcwd()
+  local cwd = escapePattern(vim.fn.getcwd())
 
   return vim.fn.map(vim.fn.filter(
         result,

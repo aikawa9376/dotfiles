@@ -145,8 +145,8 @@ autocmd MyAutoCmd ColorScheme * hi NvimSurroundHighlight            gui=bold gui
 
 autocmd MyAutoCmd ColorScheme * hi LspInlayHint                     guifg=#586e75
 
-autocmd MyAutoCmd ColorScheme * hi QuickScopePrimary                guifg=#afff5f gui=bold
-autocmd MyAutoCmd ColorScheme * hi QuickScopeSecondary              guifg=#5fffff gui=bold
+autocmd MyAutoCmd ColorScheme * hi EyelinerPrimary                guifg=#afff5f gui=bold
+autocmd MyAutoCmd ColorScheme * hi EyelinerSecondary              guifg=#5fffff gui=bold
 
 " linkしているのになぜかNoiceVirtualTextで使えない
 autocmd MyAutoCmd ColorScheme * hi NoiceVirtualText                 guibg=None
