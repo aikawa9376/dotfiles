@@ -3,6 +3,32 @@ local fzf_lua = require("fzf-lua")
 -- ------------------------------------------------------------------
 -- default settings
 -- ------------------------------------------------------------------
+--
+local defaultActions = {
+  ["enter"] = fzf_lua.actions.file_edit,
+  ["ctrl-s"] = fzf_lua.actions.file_split,
+  ["ctrl-v"] = fzf_lua.actions.file_vsplit,
+}
+
+local middleFloatWinOpts = {
+  border = "rounded",
+  height = 0.6,
+  width = 0.6,
+  row = 0.5,
+  preview = {
+    border = "rounded"
+  }
+}
+
+local fullFloatWinOpts = {
+  border = "rounded",
+  height = 0.9,
+  width = 0.9,
+  row = 0.5,
+  preview = {
+    border = "rounded"
+  }
+}
 
 fzf_lua.setup {
   winopts = {
@@ -70,29 +96,21 @@ fzf_lua.setup {
     preview_cmd = "tree -C {} | head -200",
   },
   buffers = {
+    winopts = middleFloatWinOpts,
     fn_pre_win = function(opts)
       opts.winopts.split = nil
-      opts.winopts.height = 0.6
-      opts.winopts.width = 0.6
-      opts.winopts.row = 0.5
     end
   },
   lsp = {
     includeDeclaration = false,
-    jump_to_single_result = true,
+    jump1 = true,
     ignore_current_line = true,
     finder = {
       includeDeclaration = false,
       ignore_current_line = true,
-      jump_to_single_result = false,
+      jump1 = false,
     }
   }
-}
-
-local defaultActions = {
-  ["enter"] = fzf_lua.actions.file_edit_or_qf,
-  ["ctrl-s"] = fzf_lua.actions.file_split,
-  ["ctrl-v"] = fzf_lua.actions.file_vsplit,
 }
 
 vim.api.nvim_set_keymap('n', '<Leader>gf', 'm`:FzfLua git_files<CR>', { noremap = true, silent = true })
@@ -220,6 +238,7 @@ local getRipgrepOpts = function (isAll)
     -- },
   }
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
+    ["enter"] = fzf_lua.actions.file_edit_or_qf,
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
   })
   opts.file_icons = true
@@ -346,7 +365,89 @@ vim.api.nvim_set_keymap('n', '<Leader>e', 'm`:lua _G.fzf_mru_files_cwd()<CR>', {
 vim.api.nvim_set_keymap('n', '<Leader>E', 'm`:lua _G.fzf_mru_files()<CR>', { noremap = true, silent = true })
 
 -- ------------------------------------------------------------------
+-- harpoon
+-- ------------------------------------------------------------------
+
+local convertHarpoonItem = function (itemString)
+  local table = vim.split(itemString, ":")
+  return {
+    value = table[1],
+    context = {
+      row = tonumber(table[2]),
+      col = tonumber(table[3])
+    }
+  }
+end
+
+local setAnsi = function(texts)
+  return vim.tbl_map(function (text)
+    local s = vim.split(text, ":")
+    s[1] = "\27[38;2;115;218;202m" .. s[1] .. "\27[0m"
+    return table.concat(s, ":")
+  end, texts)
+end
+
+_G.fzf_harpoon = function(winopts)
+  local harpoon = require("harpoon")
+  winopts = winopts or fullFloatWinOpts
+
+  fzf_lua.fzf_exec(
+    setAnsi(harpoon:list("multiple"):display()),
+    {
+      prompt = "Harpoon >",
+      previewer = "builtin",
+      actions =   vim.tbl_deep_extend("force", defaultActions, {
+        ["ctrl-d"] = {
+          function(selected)
+            for _, t in ipairs(selected) do
+              harpoon:list("multiple"):remove(convertHarpoonItem(t))
+            end
+            _G.fzf_harpoon()
+          end
+        },
+        ["ctrl-t"] = { function() _G.fzf_harpoon(fullFloatWinOpts) end },
+        ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
+      }),
+      fzf_opts = {
+        ["--multi"] = "",
+        ["--scheme"] = "history",
+        ["--no-unicode"] = "",
+      },
+      winopts =  winopts,
+      fn_pre_win = function(opts)
+        opts.winopts.split = nil
+
+        -- bufferだけに影響が収まるのか未調査
+        harpoon:extend({
+          REMOVE = function(obj)
+            local reindexed_items = {}
+            local keys = {}
+
+            for k in pairs(obj.list.items) do
+              if type(k) == "number" then
+                table.insert(keys, k)
+              end
+            end
+            table.sort(keys)
+
+            for _, k in ipairs(keys) do
+              table.insert(reindexed_items, obj.list.items[k])
+            end
+
+            obj.list.items = reindexed_items
+            obj.list._length = #reindexed_items
+          end
+        })
+      end
+    }
+  )
+end
+
+vim.cmd([[command! -nargs=* HarpoonLua lua _G.fzf_harpoon()]])
+vim.keymap.set("n", "mx", "<cmd>HarpoonLua<CR>")
+
+-- ------------------------------------------------------------------
 -- lsp settings
 -- ------------------------------------------------------------------
 
--- in /home/aikawa/dotfiles/.config/nvim/lua/lsp/configs/settings.lua
+-- in /home/g;aikawa/dotfiles/.config/nvim/lua/lsp/configs/settings.lua

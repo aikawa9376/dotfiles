@@ -97,7 +97,7 @@ Hydra({
     invoke_on_body = true,
     on_enter = function()
       vim.fn.feedkeys(
-        vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentAfter)', true, true, true), 'n')
+        vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentBefore)', true, true, true), 'n')
     end
   },
   heads = {

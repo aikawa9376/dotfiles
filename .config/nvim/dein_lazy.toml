@@ -894,6 +894,15 @@ require'plugins.bqf'
 '''
 
 [[plugins]]
+repo = 'ThePrimeagen/harpoon'
+rev = 'harpoon2'
+depends = [ 'fzf-lua' ]
+on_event = 'CursorMoved'
+lua_source = '''
+require'plugins.harpoon'
+'''
+
+[[plugins]]
 repo = 'junegunn/fzf'
 depends = [
   'fzf.vim',
