@@ -137,6 +137,14 @@ on_lua = 'rust-tools'
 
 [[plugins]]
 repo = 'RRethy/vim-illuminate'
+lua_source = '''
+require('illuminate').configure({
+  filetypes_denylist = {
+    'fugitive',
+    'harpoon',
+  },
+})
+'''
 
 [[plugins]]
 repo = 'ray-x/lsp_signature.nvim'
