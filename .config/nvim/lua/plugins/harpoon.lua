@@ -4,6 +4,22 @@ local HarpoonGroup = require("harpoon.autocmd")
 -- local Path = require("plenary.path")
 -- local extensions = require("harpoon.extensions");
 
+local ns_id = vim.api.nvim_create_namespace("FileNameHighlightNS")
+
+local FileNameHighlight = function(bufnr, highlight)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+  for i, line in ipairs(lines) do
+    local colon_index = line:find(":")
+    if colon_index then
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
+        end_col = colon_index - 1,
+        hl_group = highlight,
+      })
+    end
+  end
+end
+
 local selectFunc = function(list_item)
   if list_item == nil then
     return
@@ -76,6 +92,8 @@ harpoon:extend({
     print('ADD: ' .. obj.item.value)
   end,
   UI_CREATE = function(obj)
+    FileNameHighlight(obj.bufnr, "LspDiagnosticsDefaultHint")
+
     local baseSettings = vim.api.nvim_win_get_config(obj.win_id)
     local updateSettings = vim.tbl_deep_extend("force", baseSettings, {
       row = math.floor((vim.o.lines - baseSettings.height) / 5),
@@ -86,7 +104,7 @@ harpoon:extend({
       group = HarpoonGroup,
       callback = function()
         local previewArea = vim.o.lines - (updateSettings.row + updateSettings.height)
-        preview({
+        preview(obj, {
           row = updateSettings.row + updateSettings.height + 2,
           height = math.floor(previewArea * 0.8)
         })
