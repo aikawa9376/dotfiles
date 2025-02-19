@@ -77,7 +77,11 @@ local function open_preview(parent, float_opts)
 
   if prev_row ~= tonumber(item[2]) then
     api.nvim_buf_call(preview_buf, function()
-      vim.cmd("silent! read " .. vim.fn.fnameescape(item[1]))
+      local lines = vim.fn.readfile(vim.fn.fnameescape(item[1]))
+      if type(lines) == "table" then
+        -- バッファに内容を設定する（既存の内容を完全に置き換える）
+        vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
+      end
       vim.cmd("doautocmd BufRead " .. vim.fn.fnameescape(item[1]))
     end)
 
