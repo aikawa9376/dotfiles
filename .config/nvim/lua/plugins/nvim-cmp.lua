@@ -96,7 +96,7 @@ cmp.setup({
           cmp.complete()
         end
       elseif cmp.visible() then
-        local option = { behavior = cmp.ConfirmBehavior.Replace, select = true }
+        local option = { behavior = cmp.ConfirmBehavior.Insert, select = true }
         cmp.confirm(option)
       end
     end,
