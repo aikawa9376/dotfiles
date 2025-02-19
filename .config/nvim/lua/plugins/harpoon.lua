@@ -65,21 +65,21 @@ local selectFunc = function(list_item)
 end
 
 harpoon:setup({
-    multiple = {
-      equals = function(list_item_a, list_item_b)
-          if list_item_a == nil and list_item_b == nil then
-              return true
-          elseif list_item_a == nil or list_item_b == nil then
-              return false
-          end
-          return list_item_a.value == list_item_b.value
-            and list_item_a.context.row == list_item_b.context.row
-      end,
-      display = function(item)
-        return item.value .. ":" .. item.context.row .. ":" .. item.context.col
-      end,
-      select = function(list_item,_, _) selectFunc(list_item) end,
-      BufLeave = function() end
+  multiple = {
+    equals = function(list_item_a, list_item_b)
+      if list_item_a == nil and list_item_b == nil then
+        return true
+      elseif list_item_a == nil or list_item_b == nil then
+        return false
+      end
+      return list_item_a.value == list_item_b.value
+      and list_item_a.context.row == list_item_b.context.row
+    end,
+    display = function(item)
+      return item.value .. ":" .. item.context.row .. ":" .. item.context.col
+    end,
+    select = function(list_item,_, _) selectFunc(list_item) end,
+    BufLeave = function() end
   },
   settings = {
     save_on_toggle = true,
