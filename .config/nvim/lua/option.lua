@@ -12,7 +12,7 @@ opt.completeopt = "menuone"
 opt.cursorline = true
 opt.list = true
 opt.undofile = true
-opt.undodir = vim.env.XDG_CACHE_HOME .. "/nvim/undo/"
+opt.undodir = "/root/.cache/nvim/undo/"
 opt.listchars = "tab:»-,extends:»,precedes:«,nbsp:%,trail:-"
 opt.splitright = true
 opt.splitbelow = true
@@ -39,7 +39,7 @@ opt.smartindent = true
 opt.breakindent = true
 opt.scrolloff = 10
 opt.virtualedit = "onemore"
-opt.clipboard = "unnamed,unnamedplus"
+-- opt.clipboard = "unnamed,unnamedplus"
 opt.mouse = "a"
 opt.expandtab = true
 opt.tabstop = 2
@@ -56,6 +56,8 @@ opt.wildoptions = opt.wildoptions .. ",pum"
 opt.pumheight = 20
 opt.cmdheight = 0
 -- opt.shellslash = true
+
+vim.opt.clipboard = 'unnamedplus'
 
 vim.api.nvim_set_var("do_filetype_lua", 1)
 vim.api.nvim_set_var("did_load_filetypes", 0)

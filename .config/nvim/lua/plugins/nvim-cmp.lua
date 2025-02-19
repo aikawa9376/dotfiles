@@ -80,7 +80,14 @@ cmp.setup({
     end,
     ["<M-d>"] = cmp.mapping.scroll_docs(-4),
     ["<M-u>"] = cmp.mapping.scroll_docs(4),
-    ["<CR>"] = cmp.mapping.close(),
+    ["<CR>"] = function()
+      if cmp.visible() then
+        local option = { behavior = cmp.ConfirmBehavior.Insert, select = true }
+        cmp.confirm(option)
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, true, true), "n")
+      end
+    end,
     ["<C-Space>"] = function()
       if not cmp.visible() then
         if luasnip.expand_or_jumpable() then
@@ -101,17 +108,17 @@ cmp.setup({
   sources = cmp.config.sources({
     { name = "nvim_lsp", max_item_count = 20 },
     { name = "luasnip", max_item_count = 20 },
-    -- { name = "copilot" },
+    { name = "copilot" },
     { name = "buffer", max_item_count = 3 },
-    { name = "cmp_tabnine" },
+    -- { name = "cmp_tabnine" },
     { name = "rg", keyword_length = 3 },
     { name = "path" },
-    {
-      name = "tmux",
-      keyword_length = 3,
-      max_item_count = 5,
-      -- opts = { all_panes = true } --ちょっと遅い
-    },
+    -- {
+    --   name = "tmux",
+    --   keyword_length = 3,
+    --   max_item_count = 5,
+    --   -- opts = { all_panes = true } --ちょっと遅い
+    -- },
   }),
   view = {
     entries = {

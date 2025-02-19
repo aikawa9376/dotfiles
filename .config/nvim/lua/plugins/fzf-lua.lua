@@ -103,12 +103,12 @@ fzf_lua.setup {
   },
   lsp = {
     includeDeclaration = false,
-    jump1 = true,
+    jump_to_single_result = true,
     ignore_current_line = true,
     finder = {
       includeDeclaration = false,
       ignore_current_line = true,
-      jump1 = false,
+      jump_to_single_result = false,
     }
   }
 }
@@ -241,10 +241,10 @@ local getRipgrepOpts = function (isAll)
     ["enter"] = fzf_lua.actions.file_edit_or_qf,
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
   })
-  opts.file_icons = true
-  opts.fn_transform = function(x)
-    return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
-  end
+  -- opts.file_icons = true
+  -- opts.fn_transform = function(x)
+  --   return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
+  -- end
   -- opts.fn_pre_win = function(_)
   --   vim.keymap.set("t", "?", "<F4>", { noremap = true, silent = true })
   -- end

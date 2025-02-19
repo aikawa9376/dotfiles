@@ -12,6 +12,12 @@ M.configs = {
       M.default(client, bufnr)
     end,
   },
+  intelphense = {
+    on_attach = function(client, bufnr)
+      client.server.capabilities.documentFormattingProvider = false
+      M.default(client, bufnr)
+    end,
+  },
   ts_ls = {
     settings = {
       typescript = {
@@ -245,13 +251,13 @@ M.default = function(client, bufnr)
     },
   })
 
-  require("lsp_signature").on_attach({
-    bind = true, -- This is mandatory, otherwise border config won't get registered.
-    hint_enable = false,
-    handler_opts = {
-      border = "rounded",
-    },
-  }, bufnr)
+  -- require("lsp_signature").on_attach({
+  --   bind = true, -- This is mandatory, otherwise border config won't get registered.
+  --   hint_enable = false,
+  --   handler_opts = {
+  --     border = "rounded",
+  --   },
+  -- }, bufnr)
 
   if client.server_capabilities.inlayHintProvider then
     require("inlay-hints").on_attach(client, bufnr)

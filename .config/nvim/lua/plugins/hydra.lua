@@ -218,7 +218,7 @@ Hydra({
     hint = false,
     invoke_on_body = true,
     on_enter = function()
-      diagnostic.goto_next({ float = false })
+      diagnostic.goto_next({ popup = { enabled = false } })
       diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor', focusable = false })
     end
   },
@@ -239,7 +239,7 @@ Hydra({
     hint = false,
     invoke_on_body = true,
     on_enter = function()
-      diagnostic.goto_prev({ float = false })
+      diagnostic.goto_prev({ popup = { enabled = false } })
       diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor', focusable = false })
     end
   },

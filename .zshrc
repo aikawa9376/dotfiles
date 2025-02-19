@@ -117,6 +117,7 @@ loadlib $ZCONFDIR/zsh-bookmark.zsh
 loadlib $ZCONFDIR/zsh-docker.zsh
 loadlib $ZCONFDIR/zsh-openai.zsh
 loadlib $ZCONFDIR/zsh-completion.zsh
+loadlib $ZCONFDIR/zsh-zoxide.zsh
 loadlib $ZCONFDIR/history/substring.zsh
 
 # -------------------------------------
@@ -365,7 +366,4 @@ chpwd() {
     ll
   fi
 }
-# -------------------------------------
-# Xserver start
-# -------------------------------------
-[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx i3
+eval $(thefuck --alias)

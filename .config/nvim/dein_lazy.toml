@@ -30,6 +30,16 @@ require("lsp-format").setup {
     exclude = { "intelephense" }
   }
 }
+vim.cmd 'FormatDisable'
+vim.api.nvim_create_user_command(
+  'Fmt',
+  function()
+    vim.cmd 'FormatEnable'
+    vim.cmd 'Format'
+    vim.cmd 'FormatDisable'
+  end,
+  {}
+)
 '''
 
 [[plugins]]
@@ -58,7 +68,7 @@ repo = 'hrsh7th/cmp-buffer'
 on_event = ['InsertEnter', 'CmdLineEnter']
 depends  = [
   'cmp-rg', 'cmp_luasnip', 'cmp-path',
-  'cmp-tabnine', 'cmp-tmux', 'vim-snippets'
+  'cmp-tmux', 'vim-snippets'
 ]
 
 [[plugins]]
@@ -83,24 +93,28 @@ depends  = [
 [[plugins]]
 repo = 'amarakon/nvim-cmp-buffer-lines'
 
-# [[plugins]]
-# repo = 'zbirenbaum/copilot-cmp'
-#
-# [[plugins]]
-# repo = 'zbirenbaum/copilot.lua'
-# depends = ['copilot-cmp']
-# on_event = 'InsertEnter'
-# hook_source = '''
-# lua << EOF
-# vim.schedule(function() require("copilot").setup({
-# plugin_manager_path = '/home/aikawa/.cache/dein/repos/github.com/zbirenbaum'
-# }) end)
-# EOF
-# '''
+[[plugins]]
+repo = 'zbirenbaum/copilot-cmp'
+hook_source = '''
+lua require("copilot_cmp").setup()
+'''
 
 [[plugins]]
-repo = 'tzachar/cmp-tabnine'
-build = './install.sh'
+repo = 'zbirenbaum/copilot.lua'
+depends = ['copilot-cmp']
+on_event = 'InsertEnter'
+hook_source = '''
+lua << EOF
+require("copilot").setup({
+  suggestion = { enabled = false },
+
+})
+EOF
+'''
+
+# [[plugins]]
+# repo = 'tzachar/cmp-tabnine'
+# build = './install.sh'
 
 [[plugins]]
 repo = 'saadparwaiz1/cmp_luasnip'
@@ -117,12 +131,12 @@ repo = 'rafamadriz/friendly-snippets'
 [[plugins]]
 repo = 'honza/vim-snippets'
 
-[[plugins]]
-repo = 'kosayoda/nvim-lightbulb'
-on_event = 'CursorMoved'
-hook_source = '''
-lua require'plugins.lightbulb'
-'''
+# [[plugins]]
+# repo = 'kosayoda/nvim-lightbulb'
+# on_event = 'CursorMoved'
+# hook_source = '''
+# lua require'plugins.lightbulb'
+# '''
 
 [[plugins]]
 repo = 'onsails/lspkind-nvim'
@@ -267,6 +281,90 @@ hook_add = '''
 nnoremap <leader>o <cmd>Outline<CR>
 '''
 
+
+[[plugins]]
+repo = 'yetone/avante.nvim'
+on_event = 'CursorMoved'
+depends = ['nui.nvim', 'dressing.nvim', 'plenary.nvim', 'copilot.lua']
+lua_source = '''
+require'avante_lib'.load()
+require'avante'.setup({
+  ---@alias Provider "claude" | "openai" | "azure" | "gemini" | "cohere" | "copilot" | string
+  provider = "copilot", -- Recommend using Claude
+  auto_suggestions_provider = "copilot",
+  behaviour = {
+    auto_suggestions = false, -- Experimental stage
+    auto_set_highlight_group = true,
+    auto_set_keymaps = true,
+    auto_apply_diff_after_generation = false,
+    support_paste_from_clipboard = false,
+  },
+  mappings = {
+    --- @class AvanteConflictMappings
+    diff = {
+      ours = "co",
+      theirs = "ct",
+      all_theirs = "ca",
+      both = "cb",
+      cursor = "cc",
+      next = "]x",
+      prev = "[x",
+    },
+    suggestion = {
+      accept = "<M-l>",
+      next = "<M-]>",
+      prev = "<M-[>",
+      dismiss = "<C-]>",
+    },
+    jump = {
+      next = "]]",
+      prev = "[[",
+    },
+    submit = {
+      normal = "<CR>",
+      insert = "<C-s>",
+    },
+    ask = "<leader>cc",
+    edit = "<leader>ce",
+    refresh = "<leader>cr",
+    toggle = {
+      default = "<leader>ct",
+      debug = "<leader>cd",
+      hint = "<leader>ch",
+      suggestion = "<leader>cs",
+    },
+    sidebar = {
+      switch_windows = "<Tab>",
+      reverse_switch_windows = "<S-Tab>",
+    },
+  },
+  hints = { enabled = true },
+  windows = {
+    ---@type "right" | "left" | "top" | "bottom"
+    position = "right", -- the position of the sidebar
+    wrap = true, -- similar to vim.o.wrap
+    width = 30, -- default % based on available width
+    sidebar_header = {
+      align = "center", -- left, center, right for title
+      rounded = true,
+    },
+  },
+  highlights = {
+    ---@type AvanteConflictHighlights
+    diff = {
+      current = "DiffText",
+      incoming = "DiffAdd",
+    },
+  },
+  --- @class AvanteConflictUserConfig
+  diff = {
+    autojump = true,
+    ---@type string | fun(): any
+    list_opener = "copen",
+  },
+})
+'''
+
 # text-----------------------------------
 
 [[plugins]]
@@ -406,20 +504,20 @@ require('plugins.leap')
 [[plugins]]
 repo = 'ggandor/flit.nvim'
 
-[[plugins]]
-repo = 'jinh0/eyeliner.nvim'
-on_event = 'CursorMoved'
-lua_source = '''
-require('eyeliner').setup ({
-  highlight_on_key = true,
-  dim = true,
-  disabled_filetypes = {
-    'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
-    'DressingSelect', 'mason', 'fugitiveblame',
-    'vista', 'qf', 'fzf', 'noice', 'lazygit'
-  }
-})
-'''
+# [[plugins]]
+# repo = 'jinh0/eyeliner.nvim'
+# on_event = 'CursorMoved'
+# lua_source = '''
+# require('eyeliner').setup ({
+#   highlight_on_key = true,
+#   dim = true,
+#   disabled_filetypes = {
+#     'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
+#     'DressingSelect', 'mason', 'fugitiveblame',
+#     'vista', 'qf', 'fzf', 'noice', 'lazygit'
+#   }
+# })
+# '''
 
 # [[plugins]]
 # repo = 'unblevable/quick-scope'
@@ -478,7 +576,7 @@ vim.keymap.set('x', '<C-n>', '<Cmd>MCvisual<CR>', { noremap = true, silent = tru
 repo = 'xiyaowong/accelerated-jk.nvim'
 on_event = 'CursorMoved'
 hook_source = '''
- lua require('accelerated-jk').setup {acceleration_table = {35,97,141,212,314,414,514,614}}
+ lua require('accelerated-jk').setup {acceleration_table = {3,10,20,35,97,141,212,314,414,514,614}}
 '''
 
 [[plugins]]
@@ -1106,21 +1204,21 @@ vim.api.nvim_set_keymap("n", "<C-w>-", "<cmd>lua require('tmux').resize_top()<cr
 vim.api.nvim_set_keymap("n", "<C-w>>", "<cmd>lua require('tmux').resize_right()<cr>", { silent = true })
 '''
 
-[[plugins]]
-repo = 'ludovicchabant/vim-gutentags'
-on_event = 'CursorMoved'
-hook_add = '''
-let g:gutentags_project_root = [
-  \ '.root', '.svn', '.git', '.project', '.vim.local',
-  \ 'package.json', 'composer.json'
-  \ ]
-let g:gutentags_ctags_tagfile = '.tags'
-let s:vim_tags = expand('~/.cache/tags')
-let g:gutentags_cache_dir = s:vim_tags
-if !isdirectory(s:vim_tags)
-  silent! call mkdir(s:vim_tags, 'p')
-endif
-'''
+# [[plugins]]
+# repo = 'ludovicchabant/vim-gutentags'
+# on_event = 'CursorMoved'
+# hook_add = '''
+# let g:gutentags_project_root = [
+#   \ '.root', '.svn', '.git', '.project', '.vim.local',
+#   \ 'package.json', 'composer.json'
+#   \ ]
+# let g:gutentags_ctags_tagfile = '.tags'
+# let s:vim_tags = expand('~/.cache/tags')
+# let g:gutentags_cache_dir = s:vim_tags
+# if !isdirectory(s:vim_tags)
+#   silent! call mkdir(s:vim_tags, 'p')
+# endif
+# '''
 
 # git -----------------------------------
 
