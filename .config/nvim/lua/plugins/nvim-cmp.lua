@@ -80,7 +80,14 @@ cmp.setup({
     end,
     ["<M-d>"] = cmp.mapping.scroll_docs(-4),
     ["<M-u>"] = cmp.mapping.scroll_docs(4),
-    ["<CR>"] = cmp.mapping.close(),
+    ["<CR>"] = function()
+      if cmp.visible() then
+        local option = { behavior = cmp.ConfirmBehavior.Replace, select = true }
+        cmp.confirm(option)
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, true, true), "n")
+      end
+    end,
     ["<C-Space>"] = function()
       if not cmp.visible() then
         if luasnip.expand_or_jumpable() then
@@ -89,7 +96,7 @@ cmp.setup({
           cmp.complete()
         end
       elseif cmp.visible() then
-        local option = { behavior = cmp.ConfirmBehavior.Replace, select = true }
+        local option = { behavior = cmp.ConfirmBehavior.Insert, select = true }
         cmp.confirm(option)
       end
     end,
