@@ -289,7 +289,6 @@ hook_add = '''
 nnoremap <leader>o <cmd>Outline<CR>
 '''
 
-
 [[plugins]]
 repo = 'yetone/avante.nvim'
 on_event = 'CursorMoved'
@@ -994,9 +993,16 @@ nmap QQ <Plug>(qutefinger-toggle-win)
 
 [[plugins]]
 repo = 'kevinhwang91/nvim-bqf'
-on_event = 'CursorMoved'
+on_ft = "qf"
 lua_source = '''
 require'plugins.bqf'
+'''
+
+[[plugins]]
+repo = 'stevearc/quicker.nvim'
+on_ft = "qf"
+lua_source = '''
+require'quicker'.setup()
 '''
 
 [[plugins]]
@@ -1014,8 +1020,7 @@ depends = [
   'fzf.vim',
   'vim-bookmarks',
   'fzf-git.vim',
-  'fzf-lua',
-  'render-markdown.nvim'
+  'fzf-lua'
 ]
 path = '~/.config/fzf'
 merged = 0
@@ -1035,6 +1040,12 @@ require'plugins.fzf-lua'
 
 [[plugins]]
 repo = 'MeanderingProgrammer/render-markdown.nvim'
+on_ft = ['markdown', 'Avante', 'fzf']
+lua_source = '''
+require'render-markdown'.setup({
+  opts = { 'markdown', 'Avante' }
+})
+'''
 
 [[plugins]]
 repo = 'aikawa9376/fzf-git.vim'

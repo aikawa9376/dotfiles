@@ -3,6 +3,39 @@ local Hydra = require('hydra')
 local diagnostic = require('vim.diagnostic')
 
 Hydra({
+  name = 'Harpoon',
+  mode = 'n',
+  body = 'mf',
+  config = {
+    hint = false,
+    invoke_on_body = true,
+    on_enter = function()
+      require("harpoon"):list("multiple"):prev()
+    end
+  },
+  heads = {
+    { 'f', '<cmd>lua require("harpoon"):list("multiple"):prev()<CR>' },
+    { 'b', '<cmd>lua require("harpoon"):list("multiple"):next()<CR>' },
+  }
+})
+Hydra({
+  name = 'Harpoon',
+  mode = 'n',
+  body = 'mb',
+  config = {
+    hint = false,
+    invoke_on_body = true,
+    on_enter = function()
+      require("harpoon"):list("multiple"):next()
+    end
+  },
+  heads = {
+  { 'f', '<cmd>lua require("harpoon"):list("multiple"):prev()<CR>' },
+  { 'b', '<cmd>lua require("harpoon"):list("multiple"):next()<CR>' },
+  }
+})
+
+Hydra({
   name = 'Buffer',
   mode = 'n',
   body = ']b',
