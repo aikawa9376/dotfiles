@@ -152,6 +152,10 @@ cmp.setup({
     },
   },
   preselect = cmp.PreselectMode.Item,
+  performance = {
+    debounce = 0, -- default is 60ms
+    throttle = 0, -- default is 30ms
+  },
 })
 
 local cmdline_mapping = cmp.mapping.preset.cmdline()
