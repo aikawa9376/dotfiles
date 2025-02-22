@@ -1049,20 +1049,7 @@ require'plugins.fzf-lua'
 repo = 'MeanderingProgrammer/render-markdown.nvim'
 on_ft = ['markdown', 'Avante', 'fzf']
 lua_source = '''
-require'render-markdown'.setup({
-  file_types = { 'markdown', 'Avante', 'fzf' },
-  heading = {
-    sign = false,
-    position = "inline",
-    icons = { '①  ', '②  ', '③  ', '④  ', '⑤  ', '⑥  ' },
-  },
-  code = {
-    sign = false,
-    above = "",
-    below = "",
-    disable_background = { 'diff' },
-  },
-})
+require'plugins.render_markdown'
 '''
 
 [[plugins]]

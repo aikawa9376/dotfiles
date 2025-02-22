@@ -15,7 +15,7 @@ require("project_nvim").setup {
 
   -- Table of lsp clients to ignore by name
   -- eg: { "efm", ... }
-  ignore_lsp = { "sumneko_lua" },
+  ignore_lsp = { "lua_ls" },
 
   -- Show hidden files in telescope
   show_hidden = false,
