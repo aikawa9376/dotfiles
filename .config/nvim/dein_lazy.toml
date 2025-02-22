@@ -526,17 +526,17 @@ repo = 'ggandor/flit.nvim'
 # })
 # '''
 
-# [[plugins]]
-# repo = 'unblevable/quick-scope'
-# on_event = 'CursorMoved'
-# hook_source = '''
-# let g:qs_hi_priority = 20
-# let g:qs_ignorecase = 1
-# let g:qs_filetype_blacklist = [
-#  \ 'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
-#  \ 'DressingSelect', 'mason', 'fugitiveblame',
-#  \ 'vista', 'qf', 'fzf', 'noice', 'lazygit' ]
-# '''
+[[plugins]]
+repo = 'unblevable/quick-scope'
+on_event = 'CursorMoved'
+hook_source = '''
+let g:qs_hi_priority = 20
+let g:qs_ignorecase = 1
+let g:qs_filetype_blacklist = [
+ \ 'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
+ \ 'DressingSelect', 'mason', 'fugitiveblame',
+ \ 'vista', 'qf', 'fzf', 'noice', 'lazygit' ]
+'''
 
 # [[plugins]]
 # repo = 'mg979/vim-visual-multi'
