@@ -586,6 +586,13 @@ hook_source = '''
  lua require('accelerated-jk').setup {acceleration_table = {3,10,20,35,97,141,212,314,414,514,614}}
 '''
 
+# [[plugins]]
+# repo = 'sphamba/smear-cursor.nvim'
+# on_event = 'CursorMoved'
+# hook_source = '''
+#  lua require('smear_cursor').enabled = false
+# '''
+
 [[plugins]]
 repo = 'phaazon/hop.nvim'
 on_cmd = [
@@ -1043,7 +1050,18 @@ repo = 'MeanderingProgrammer/render-markdown.nvim'
 on_ft = ['markdown', 'Avante', 'fzf']
 lua_source = '''
 require'render-markdown'.setup({
-  opts = { 'markdown', 'Avante' }
+  file_types = { 'markdown', 'Avante', 'fzf' },
+  heading = {
+    sign = false,
+    position = "inline",
+    icons = { '①  ', '②  ', '③  ', '④  ', '⑤  ', '⑥  ' },
+  },
+  code = {
+    sign = false,
+    above = "",
+    below = "",
+    disable_background = { 'diff' },
+  },
 })
 '''
 

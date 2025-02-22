@@ -82,7 +82,7 @@ cmp.setup({
     ["<M-u>"] = cmp.mapping.scroll_docs(4),
     ["<CR>"] = function()
       if cmp.visible() then
-        local option = { behavior = cmp.ConfirmBehavior.Insert, select = true }
+        local option = { behavior = cmp.ConfirmBehavior.Replace, select = true }
         cmp.confirm(option)
       else
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, true, true), "n")
