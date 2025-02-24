@@ -78,7 +78,7 @@ autocmd MyAutoCmd ColorScheme * highlight PmenuThumb   cterm=None ctermbg=23   g
 autocmd MyAutoCmd ColorScheme * highlight PmenuSel     cterm=None ctermfg=126  ctermbg=None gui=None guifg=#af0087 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Fmenu        ctermfg=111 ctermbg=0 guifg=#87afff guibg=#002b36
 " search settings
-autocmd MyAutoCmd ColorScheme * highlight Search       cterm=None ctermfg=7 gui=bold,underline guifg=#eee8d5 guibg=None
+autocmd MyAutoCmd ColorScheme * highlight Search       cterm=None ctermfg=7 gui=bold,underline guifg=#CFC8B8 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight CurSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight IncSearch    cterm=None ctermfg=7 gui=bold,underline guifg=#b58900 guibg=None
 autocmd MyAutoCmd ColorScheme * highlight Visual       cterm=None ctermfg=None ctermbg=8 gui=None guifg=None guibg=#20436e

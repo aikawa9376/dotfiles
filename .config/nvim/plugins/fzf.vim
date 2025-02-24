@@ -16,14 +16,14 @@ nnoremap <silent> <Leader>df    <cmd>SWSqlFzfSelect<CR>
 nnoremap <silent> <Leader>.     m`<cmd>DotFiles<CR>
 nnoremap <silent> <Leader>O     m`<cmd>OutLine<CR>
 nnoremap <silent> <Leader>M     m`<cmd>Memo<CR>
-nnoremap <silent> <Leader>gc    m`<cmd>BCommits<CR>
-nnoremap <silent> <Leader>gC    m`<cmd>Commits<CR>
+" nnoremap <silent> <Leader>gc    m`<cmd>BCommits<CR>
+" nnoremap <silent> <Leader>gC    m`<cmd>Commits<CR>
 nnoremap <silent> <Leader>T     <cmd>DirWordCompletions<CR>
 nnoremap <silent> <Leader>tm    <cmd>TmuxSearch<CR>
 nnoremap <silent> <Leader>p     <cmd>YanksAfter<CR>
 nnoremap <silent> <Leader>P     <cmd>YanksBefore<CR>
-nnoremap <silent> <Leader>;     <cmd>ChangeListNav<CR>
-nnoremap <silent> <Leader><C-o> <cmd>JumpListNav<CR>
+" nnoremap <silent> <Leader>;     <cmd>ChangeListNav<CR>
+" nnoremap <silent> <Leader><C-o> <cmd>JumpListNav<CR>
 " nnoremap <silent> <Leader>q     <cmd>Helptags<CR>
 nnoremap <silent> <Leader>tt    <cmd>BTags<CR>
 nnoremap <silent> <C-]>         m'<cmd>call fzf#vim#tags(expand('<cword>'))<CR>
