@@ -120,6 +120,8 @@ vim.api.nvim_set_keymap('n', '<Leader>b', 'm`:FzfLua buffers<CR>', { noremap = t
 vim.api.nvim_set_keymap('n', '<Leader>l', 'm`:FzfLua blines<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', '<Leader>L', 'm`:FzfLua lines<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', '<Leader>q', 'm`:FzfLua helptags<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader><C-o>', 'm`:FzfLua jumps<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>;', 'm`:FzfLua changes<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', 'q:', 'm`:FzfLua command_history<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', 'q/', 'm`:FzfLua search_history<CR>', { noremap = true, silent = true })
 
@@ -147,6 +149,17 @@ local colorFilename = function(files)
     return vim.split(result, "\n", { trimempty = true })
   end
   return {}
+end
+
+local function getRootDir()
+  -- Vim Rooter の `FindRootDirectory` に依存
+  if vim.fn.exists("*FindRootDirectory") == 1 and vim.fn.FindRootDirectory() ~= "" then
+    local dir = vim.fn.FindRootDirectory()
+    local parts = vim.split(dir, "/", { plain = true })
+    return parts[#parts]
+  else
+    return ""
+  end
 end
 
 local function removeUnicodeUtf8(str)
@@ -445,6 +458,65 @@ end
 
 vim.cmd([[command! -nargs=* HarpoonLua lua _G.fzf_harpoon()]])
 vim.keymap.set("n", "mx", "<cmd>HarpoonLua<CR>")
+
+-- ------------------------------------------------------------------
+-- JunkFile
+-- ------------------------------------------------------------------
+
+local getJunkFileOpt = function ()
+  local workDir = vim.fn.expand("$XDG_CACHE_HOME") .. "/junkfile/" .. getRootDir() .. "/"
+  local opts = {}
+  opts.prompt = 'Memo >'
+  opts.previewer = "builtin"
+  opts.actions = vim.tbl_deep_extend("force", defaultActions, {
+    ["enter"] = {
+      function(selected)
+        local parts = vim.split(
+          removeUnicodeUtf8(selected[1]),
+          ":",
+          { plain = true }
+        )
+        local file = parts[1]
+        local row = tonumber(parts[2]) or 1
+        local col = tonumber(parts[3]) or 1
+        vim.cmd("edit " .. vim.fn.fnameescape(workDir .. file))
+        vim.api.nvim_win_set_cursor(0, { row, col - 1 }) -- Neovim のカーソル移動
+      end
+    },
+    ['ctrl-x'] = {
+      function(selected)
+        print("deleting:", selected)
+        vim.fn.delete(removeUnicodeUtf8(workDir .. selected))
+      end,
+      fzf_lua.actions.resume
+    }
+  })
+  opts.file_icons = true
+  opts.git_icons = true
+  opts.fn_transform = function(x)
+    return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
+  end
+  opts.fzf_opts = {
+    ["--multi"] = "",
+    ["--ansi"] = "",
+    ["--no-unicode"] = "",
+  }
+
+  return opts
+end
+
+_G.fzf_junkfiles = function(opts)
+  local junkDir = vim.fn.expand("$XDG_CACHE_HOME") .. "/junkfile/" .. getRootDir() .. "/"
+
+  fzf_lua.fzf_exec(
+    "rg --column -n --hidden --ignore-case --color=always '' " .. junkDir ..
+    " | sed -e 's%" .. junkDir .. "%%g'",
+    getJunkFileOpt()
+  )
+end
+
+vim.cmd([[command! -nargs=* FilesLua lua _G.fzf_junkfiles()]])
+vim.api.nvim_set_keymap('n', '<Leader>m', 'm`:lua _G.fzf_junkfiles()<CR>', { noremap = true, silent = true })
 
 -- ------------------------------------------------------------------
 -- lsp settings

@@ -1004,7 +1004,6 @@ require'plugins.harpoon'
 repo = 'junegunn/fzf'
 depends = [
   'fzf.vim',
-  'vim-bookmarks',
   'fzf-git.vim',
   'fzf-lua'
 ]
@@ -1033,24 +1032,6 @@ require'plugins.render_markdown'
 
 [[plugins]]
 repo = 'aikawa9376/fzf-git.vim'
-
-[[plugins]]
-repo = 'aikawa9376/vim-bookmarks'
-rev = 'fzf'
-hook_add = '''
-let g:bookmark_prefer_fzf = 1
-let g:bookmark_auto_save_file = $XDG_CACHE_HOME.'/nvim/.vim-bookmarks'
-nmap ]B <Plug>BookmarkNext
-nmap [B <Plug>BookmarkPrev
-nmap <Leader>mm  <Plug>BookmarkToggle
-nmap <Leader>mi  <Plug>BookmarkAnnotate
-nmap <Leader>ma  <Plug>BookmarkShowAll
-nmap <Leader>mc  <Plug>BookmarkClear
-nmap <Leader>mx  <Plug>BookmarkClearAll
-nmap <Leader>mkk <Plug>BookmarkMoveUp
-nmap <Leader>mjj <Plug>BookmarkMoveDown
-nmap <Leader>mg  <Plug>BookmarkMoveToLine
-'''
 
 [[plugins]]
 repo = 'aikawa9376/neomru.vim'
@@ -1150,11 +1131,12 @@ hook_source = '''
 if exists('*FindRootDirectory') && FindRootDirectory() != ''
   let s:dir = FindRootDirectory()
   let s:dir = split(s:dir, '/')
-  let workdir = s:dir[len(s:dir) - 1] . '/'
+  let workdir = '/' . s:dir[len(s:dir) - 1]
 else
   let workdir = ''
 endif
-let g:junkfile#directory = $XDG_CACHE_HOME.'/junkfile/'.workdir
+command! -nargs=0 JunkfileOpen call junkfile#open_immediately('%d.txt'->strftime())
+let g:junkfile#directory = $XDG_CACHE_HOME.'/junkfile'.workdir
 '''
 
 [[plugins]]
@@ -1246,7 +1228,7 @@ let g:gitgutter_grep_command            = 'rg --hidden --follow --glob "!.git/*"
 let g:gitgutter_diff_args               = '-w'
 let g:gitgutter_preview_win_floating    = 1
 let g:gitgutter_highlight_linenrs       = 0
-let g:gitgutter_sign_priority           = 5
+let g:gitgutter_sign_priority           = 10
 '''
 hook_post_source = '''
 GitGutterEnable
