@@ -26,7 +26,7 @@ require('Comment').setup {
     ---line-comment toggle
     line = '<C-_>',
     ---block-comment toggle
-    block = '<space><C-_>',
+    block = '<Leader><C-_>',
   },
 
   ---LHS of line and block comment operator-mode mapping in NORMAL/VISUAL mode
@@ -67,5 +67,5 @@ require('Comment').setup {
 
 vim.api.nvim_set_keymap('x', '<C-_>', '<ESC><CMD>lua require("Comment.api").toggle.linewise(vim.fn.visualmode())<CR>'
   , { noremap = true, silent = true })
-vim.api.nvim_set_keymap('x', '<space><C-_>',
+vim.api.nvim_set_keymap('x', '<Leader><C-_>',
   '<ESC><CMD>lua require("Comment.api").toggle.blockwise(vim.fn.visualmode())<CR>', { noremap = true, silent = true })
