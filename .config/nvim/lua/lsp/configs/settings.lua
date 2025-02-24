@@ -174,8 +174,8 @@ M.default = function(client, bufnr)
   buf_set_keymap("n", "gy", "m`:FzfLua lsp_typedefs<CR>", opts)
   buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover(" .. win_style .. ")<CR>", opts)
   buf_set_keymap("n", "<leader>rn", "<cmd>lua vim.lsp.buf.rename()<CR>", opts)
-  buf_set_keymap("n", "<space>ca", ":FzfLua lsp_code_actions<CR>", opts)
-  buf_set_keymap("n", "<space>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", opts)
+  buf_set_keymap("n", "<Leader>ca", ":FzfLua lsp_code_actions<CR>", opts)
+  buf_set_keymap("n", "<Leader>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", opts)
   buf_set_keymap(
     "n",
     "gq",

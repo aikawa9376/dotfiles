@@ -960,7 +960,7 @@ repo = 'nvim-neo-tree/neo-tree.nvim'
 on_cmd = 'Neotree'
 depends = ['nui.nvim']
 hook_add = '''
-nnoremap <silent><space>n <Cmd>Neotree reveal toggle<CR>
+nnoremap <silent><Leader>n <Cmd>Neotree reveal toggle<CR>
 '''
 lua_source = '''
 require("plugins.neo-tree")
@@ -1284,7 +1284,7 @@ nmap <silent> <Leader>gp <cmd>Git! push<CR>
 nmap <silent> <Leader>gr <cmd>Git! rm --cached %<CR>
 nmap <silent> <Leader>gm <cmd>Git! commit -m 'update'<CR>
 nmap <silent> <Leader>gM <cmd>GitAddCommit update<CR>
-nmap <silent> <Leader>gU <cmd>GitAddAmend<Space>
+nmap <silent> <Leader>gU <cmd>GitAddAmend<CR>
 command! -nargs=* GitAddCommit silent execute('
   \ !git add -u && git commit -m ' . shellescape(<q-args>)) . '&'
 command! -nargs=* GitAddAmend silent execute('
@@ -1499,8 +1499,8 @@ lua_source = '''
 -- require("tsht").config.ft_to_parser.typescriptreact = "tsx"
 '''
 hook_source = '''
-omap <silent> <space> :<C-U>lua require('tsht').nodes()<CR>
-vmap <silent> <space>h :<C-U>lua require('tsht').nodes()<CR>
+omap <silent> <Leader> :<C-U>lua require('tsht').nodes()<CR>
+vmap <silent> <Leader>h :<C-U>lua require('tsht').nodes()<CR>
 '''
 
 [[plugins]]
