@@ -121,7 +121,7 @@ vim.api.nvim_set_keymap('n', '<Leader>l', 'm`:FzfLua blines<CR>', { noremap = tr
 vim.api.nvim_set_keymap('n', '<Leader>L', 'm`:FzfLua lines<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', '<Leader>q', 'm`:FzfLua helptags<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', '<Leader><C-o>', 'm`:FzfLua jumps<CR>', { noremap = true, silent = true })
-vim.api.nvim_set_keymap('n', '<Leader>;', 'm`:FzfLua changes<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader><C-c>', 'm`:FzfLua changes<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', 'q:', 'm`:FzfLua command_history<CR>', { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', 'q/', 'm`:FzfLua search_history<CR>', { noremap = true, silent = true })
 
@@ -169,6 +169,15 @@ end
 
 local function escapePattern(text)
   return text:gsub("([().%+%-*?[^$])", "%%%1")
+end
+
+local function addPrefixAction(action, prefix)
+  return function(selected, opts)
+    for i, v in ipairs(selected) do
+      selected[i] = prefix .. removeUnicodeUtf8(v)
+    end
+    action(selected, opts)
+  end
 end
 
 -- ------------------------------------------------------------------
@@ -302,6 +311,7 @@ vim.cmd([[command! -nargs=* RgLua lua _G.fzf_ripgrep(<q-args>)]])
 vim.cmd([[command! -nargs=* RgTextLua lua _G.fzf_ripgrep_text(<q-args>)]])
 vim.cmd([[command! -nargs=* AllRgLua lua _G.fzf_all_ripgrep(<q-args>)]])
 vim.api.nvim_set_keymap('n', '<Leader>a', 'm`:lua _G.fzf_ripgrep("")<CR>', { noremap = true, silent = true })
+vim.api.nvim_set_keymap('n', '<Leader>;', "m`:lua _G.fzf_ripgrep(vim.fn.expand('<cword>'))<CR>", { noremap = true, silent = true })
 vim.api.nvim_set_keymap('n', '<Leader>A', 'm`:lua _G.fzf_all_ripgrep("")<CR>', { noremap = true, silent = true })
 
 -- ------------------------------------------------------------------
@@ -465,24 +475,22 @@ vim.keymap.set("n", "mx", "<cmd>HarpoonLua<CR>")
 
 local getJunkFileOpt = function ()
   local workDir = vim.fn.expand("$XDG_CACHE_HOME") .. "/junkfile/" .. getRootDir() .. "/"
+  local previewer = require("fzf-lua.previewer.builtin").buffer_or_file:extend()
+  function previewer:new(o, opts, fzf_win)
+    previewer.super.new(self, o, opts, fzf_win)
+    setmetatable(self, previewer)
+    return self
+  end
+  function previewer:parse_entry(entry_str)
+    local path = require "fzf-lua.path"
+    return path.entry_to_file(workDir .. removeUnicodeUtf8(entry_str))
+  end
+
   local opts = {}
   opts.prompt = 'Memo >'
-  opts.previewer = "builtin"
+  opts.previewer = previewer
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
-    ["enter"] = {
-      function(selected)
-        local parts = vim.split(
-          removeUnicodeUtf8(selected[1]),
-          ":",
-          { plain = true }
-        )
-        local file = parts[1]
-        local row = tonumber(parts[2]) or 1
-        local col = tonumber(parts[3]) or 1
-        vim.cmd("edit " .. vim.fn.fnameescape(workDir .. file))
-        vim.api.nvim_win_set_cursor(0, { row, col - 1 }) -- Neovim のカーソル移動
-      end
-    },
+    ["enter"] = addPrefixAction(fzf_lua.actions.file_edit, workDir),
     ['ctrl-x'] = {
       function(selected)
         print("deleting:", selected)
