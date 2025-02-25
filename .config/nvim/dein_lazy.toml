@@ -1135,7 +1135,7 @@ if exists('*FindRootDirectory') && FindRootDirectory() != ''
 else
   let workdir = ''
 endif
-command! -nargs=0 JunkfileOpen call junkfile#open_immediately('%d.txt'->strftime())
+command! -nargs=0 JunkfileOpen call junkfile#open_immediately('%d.md'->strftime())
 let g:junkfile#directory = $XDG_CACHE_HOME.'/junkfile'.workdir
 '''
 
