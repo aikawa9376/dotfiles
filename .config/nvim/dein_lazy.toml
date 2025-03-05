@@ -202,6 +202,13 @@ require'plugins.incline'
 repo = 'cseickel/diagnostic-window.nvim'
 on_cmd = 'DiagWindowShow'
 
+[[plugins]]
+repo = 'rachartier/tiny-inline-diagnostic.nvim'
+on_event = 'CursorMoved'
+lua_source = '''
+require'plugins.tiny-inline-diagnostic'
+'''
+
 # 良さげだけどbaggy
 [[plugins]]
 repo = 'shellRaining/hlchunk.nvim'
@@ -572,25 +579,25 @@ hook_source = '''
  lua require('accelerated-jk').setup {acceleration_table = {35,97,141,212,314,414,514,614}}
 '''
 
-[[plugins]]
-repo = 'phaazon/hop.nvim'
-on_cmd = [
-  'HopWordAC', 'HopWordBC', 'HopLineStart',
-  'HopChar1AC', 'HopChar1BC', 'HopChar2'
-]
-hook_add = '''
-nmap s <Nop>
-xmap s <Nop>
-nnoremap <silent>sj <cmd>HopWordAC<CR>
-nnoremap <silent>sk <cmd>HopWordBC<CR>
-nnoremap <silent>sl <cmd>HopLineStart<CR>
-nnoremap <silent>sf <cmd>HopChar1AC<CR>
-nnoremap <silent>sF <cmd>HopChar1BC<CR>
-nnoremap <silent>ss <cmd>HopChar2<CR>
-'''
-hook_source = '''
-lua require'hop'.setup()
-'''
+# [[plugins]]
+# repo = 'phaazon/hop.nvim'
+# on_cmd = [
+#   'HopWordAC', 'HopWordBC', 'HopLineStart',
+#   'HopChar1AC', 'HopChar1BC', 'HopChar2'
+# ]
+# hook_add = '''
+# nmap s <Nop>
+# xmap s <Nop>
+# nnoremap <silent>sj <cmd>HopWordAC<CR>
+# nnoremap <silent>sk <cmd>HopWordBC<CR>
+# nnoremap <silent>sl <cmd>HopLineStart<CR>
+# nnoremap <silent>sf <cmd>HopChar1AC<CR>
+# nnoremap <silent>sF <cmd>HopChar1BC<CR>
+# nnoremap <silent>ss <cmd>HopChar2<CR>
+# '''
+# hook_source = '''
+# lua require'hop'.setup()
+# '''
 
 [[plugins]]
 repo = 'haya14busa/is.vim'
@@ -632,23 +639,20 @@ repo = 'kana/vim-niceblock'
 on_map = {x = '<Plug>'}
 
 [[plugins]]
+repo = 'chrisgrieser/nvim-various-textobjs'
+on_event = 'CursorMoved'
+lua_source = '''
+require'plugins.various-textobjs'
+'''
+
+[[plugins]]
 repo = 'kana/vim-textobj-user'
 depends = [
-  'vim-textobj-entire',     'vim-textobj-indent',      'vim-textobj-php',
-  'vim-textobj-line',       'vim-textobj-syntax',      'vim-textobj-comment',
+  'vim-textobj-php',        'vim-textobj-syntax',      'vim-textobj-comment',
   'vim-textobj-between',    'vim-textobj-from_regexp', 'vim-textobj-chunk',
-  'textobj-mbboundary.vim', 'vim-textobj-forward'
+  'textobj-mbboundary.vim',
 ]
 on_event = 'CursorMoved'
-
-[[plugins]]
-repo = 'kana/vim-textobj-entire'
-
-[[plugins]]
-repo = 'kana/vim-textobj-line'
-
-[[plugins]]
-repo = 'kana/vim-textobj-indent'
 
 [[plugins]]
 repo = 'thinca/vim-textobj-between'
@@ -680,9 +684,6 @@ repo = 'Chun-Yang/vim-textobj-chunk'
 
 [[plugins]]
 repo = 'aikawa9376/vim-textobj-php'
-
-[[plugins]]
-repo = 'aikawa9376/vim-textobj-forward'
 
 [[plugins]]
 repo = 'deton/textobj-mbboundary.vim'
@@ -721,22 +722,36 @@ xmap <expr> <Plug>(textobj-right-value)
   \ textobj#from_regexp#mapexpr('^.\{-}=\s*\zs.*$')
 '''
 
-[[plugins]]
-repo = 'kana/vim-operator-user'
-depends = [
-  'vim-operator-replace', 'vim-operator-sort'
-]
-on_event = 'CursorMoved'
+# [[plugins]]
+# repo = 'kana/vim-operator-user'
+# depends = [
+#   'vim-operator-replace', 'vim-operator-sort'
+# ]
+# on_event = 'CursorMoved'
 
 [[plugins]]
-repo = 'aikawa9376/vim-operator-replace'
-hook_add = '''
-nmap <Leader>r mv<plug>(operator-replace)
-nmap yr mv<plug>(operator-replace_r)
-nmap <Leader>R mv<plug>(operator-replace)$
-nmap cr mv<plug>(operator-replace_R)
-xmap p <Plug>(operator-replace)
+repo = 'gbprod/substitute.nvim'
+on_event = 'CursorMoved'
+lua_source = '''
+require'plugins.substitute'
 '''
+
+# [[plugins]]
+# repo = 'aikawa9376/vim-operator-replace'
+# hook_add = '''
+# nmap <Leader>r mv<plug>(operator-replace)
+# nmap yr mv<plug>(operator-replace_r)
+# nmap <Leader>R mv<plug>(operator-replace)$
+# nmap cr mv<plug>(operator-replace_R)
+# xmap p <Plug>(operator-replace)
+# '''
+
+# [[plugins]]
+# repo = 'emonkak/vim-operator-sort'
+# hook_add = '''
+# nmap <Leader>to mv<plug>(operator-sort)
+# xmap <Leader>to mv<Plug>(operator-sort)
+# '''
 
 [[plugins]]
 repo = 'kana/vim-smartchr'
@@ -780,13 +795,6 @@ typescriptreact = '''
 inoremap <expr> = search('\(&\<bar><bar>\<bar>+\<bar>-\<bar>/\<bar>>\<bar><\) \%#', 'bcn')? '<bs>= '
   \ : search('\(*\<bar>!\)\%#', 'bcn') ? '= '
   \ : smartchr#loop('=', ' = ', ' == ', ' === ', ' !== ')
-'''
-
-[[plugins]]
-repo = 'emonkak/vim-operator-sort'
-hook_add = '''
-nmap <Leader>to mv<plug>(operator-sort)
-xmap <Leader>to mv<Plug>(operator-sort)
 '''
 
 [[plugins]]
@@ -856,21 +864,21 @@ nmap <C-Space> <Plug>(matchup-z%)
 let g:matchup_matchparen_offscreen = {'method': 'status_manual'}
 '''
 
-[[plugins]]
-repo = 'wellle/targets.vim'
-on_event = 'CursorMoved'
-hook_source = '''
-augroup targets_settind
-autocmd!
-autocmd User targets#mappings#user call targets#mappings#extend({
-  \ 'b': {'pair': [
-  \      {'o':'(', 'c':')'}, {'o':'[', 'c':']'},
-  \      {'o':'{', 'c':'}'}, {'o':'<', 'c':'>'}, {'o':'>', 'c':'<'}
-  \ ]},
-  \ 'q': {'quote': [{'d':"'"}, {'d':'"'}, {'d':'`'}]},
-  \ })
-augroup END
-'''
+# [[plugins]]
+# repo = 'wellle/targets.vim'
+# on_event = 'CursorMoved'
+# hook_source = '''
+# augroup targets_settind
+# autocmd!
+# autocmd User targets#mappings#user call targets#mappings#extend({
+#   \ 'b': {'pair': [
+#   \      {'o':'(', 'c':')'}, {'o':'[', 'c':']'},
+#   \      {'o':'{', 'c':'}'}, {'o':'<', 'c':'>'}, {'o':'>', 'c':'<'}
+#   \ ]},
+#   \ 'q': {'quote': [{'d':"'"}, {'d':'"'}, {'d':'`'}]},
+#   \ })
+# augroup END
+# '''
 
 [[plugins]]
 repo = 'aikawa9376/vim-auto-cursorline'
@@ -1005,7 +1013,8 @@ repo = 'junegunn/fzf'
 depends = [
   'fzf.vim',
   'fzf-git.vim',
-  'fzf-lua'
+  'fzf-lua',
+  'advanced-git-search.nvim'
 ]
 path = '~/.config/fzf'
 merged = 0
@@ -1271,6 +1280,12 @@ command! -nargs=* GitAddCommit silent execute('
   \ !git add -u && git commit -m ' . shellescape(<q-args>)) . '&'
 command! -nargs=* GitAddAmend silent execute('
   \ !git add -u && git commit --amend -m ' . shellescape(<q-args>)) . '&'
+'''
+
+[[plugins]]
+repo = 'aaronhallaert/advanced-git-search.nvim'
+lua_source = '''
+require("advanced_git_search.fzf").setup({})
 '''
 
 # [[plugins]]

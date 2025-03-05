@@ -109,8 +109,12 @@ Hydra({
     hint = false,
     invoke_on_body = true,
     on_enter = function()
-      vim.fn.feedkeys(
-        vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentAfter)', true, true, true), 'n')
+      local is_visual = vim.fn.mode():match("v")
+      if is_visual then
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('"_d<Plug>(YankyPutIndentAfter)', true, true, true), 'n')
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentAfter)', true, true, true), 'n')
+      end
     end
   },
   heads = {
@@ -129,8 +133,12 @@ Hydra({
     hint = false,
     invoke_on_body = true,
     on_enter = function()
-      vim.fn.feedkeys(
-        vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentBefore)', true, true, true), 'n')
+      local is_visual = vim.fn.mode():match("v")
+      if is_visual then
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('"_d<Plug>(YankyPutIndentBefore)', true, true, true), 'n')
+      else
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentBefore)', true, true, true), 'n')
+      end
     end
   },
   heads = {
