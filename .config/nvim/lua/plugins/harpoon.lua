@@ -27,7 +27,6 @@ local function currentLineExist()
   local current_entry = current_bufname .. ":" .. current_pos[1] .. ":" .. current_pos[2]
 
   local list = harpoon:list("multiple"):display()
-  print(vim.inspect(current_entry))
   for _, entry in ipairs(list) do
     if (entry == current_entry) then
       return true

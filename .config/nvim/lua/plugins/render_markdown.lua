@@ -52,17 +52,19 @@ require'render-markdown'.setup({
     render_modes = false,
     position = 'inline',
     unchecked = {
-      icon = ' ',
+      icon = '󰄱 ',
       highlight = 'RenderMarkdownUnchecked',
       scope_highlight = nil,
     },
     checked = {
-      icon = ' ',
+      icon = '󰱒 ',
       highlight = 'RenderMarkdownChecked',
       scope_highlight = nil,
     },
     custom = {
       todo = { raw = '[-]', rendered = ' ', highlight = 'RenderMarkdownTodo', scope_highlight = nil },
+      unchecked = { raw = '[ ]', rendered = '󰄱 ', highlight = 'RenderMarkdownUnChecked', scope_highlight = nil },
+      checked = { raw = '[x]', rendered = '󰱒 ', highlight = 'RenderMarkdownChecked', scope_highlight = nil },
     },
   },
 })
