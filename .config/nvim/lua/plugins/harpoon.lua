@@ -99,6 +99,18 @@ harpoon:extend({
       row = math.floor((vim.o.lines - baseSettings.height) / 5),
     })
     vim.api.nvim_win_set_config(obj.win_id, updateSettings)
+    vim.keymap.set(
+      "n",
+      "j",
+      function() if vim.fn.line('.') == vim.fn.line('$') then vim.cmd("normal! gg") else vim.cmd("normal! gj") end end,
+      { noremap = true, silent = true, buffer = obj.bufnr }
+    )
+    vim.keymap.set(
+      "n",
+      "k",
+      function() if vim.fn.line('.') == 1 then vim.cmd("normal! G") else vim.cmd("normal! gk") end end,
+      { noremap = true, silent = true, buffer = obj.bufnr }
+    )
     vim.api.nvim_create_autocmd("CursorMoved", {
       buffer = obj.bufnr,
       group = HarpoonGroup,
