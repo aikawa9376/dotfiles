@@ -14,6 +14,9 @@ vim.api.nvim_set_hl(0, "RenderMarkdownH4Bg", { bg = "NONE", bold = true })
 vim.api.nvim_set_hl(0, "RenderMarkdownH5Bg", { bg = "NONE", bold = true })
 vim.api.nvim_set_hl(0, "RenderMarkdownH6Bg", { bg = "NONE", bold = true })
 
+vim.api.nvim_set_hl(0, "RenderMarkdownUnchecked", { fg = "#abb2bf", bg = "NONE", bold = true })
+vim.api.nvim_set_hl(0, "RenderMarkdownChecked", { fg = "#98c379", bg = "NONE", bold = true })
+
 vim.api.nvim_set_hl(0, "RenderMarkdownCode", { bg = "#073642" })
 
 require'render-markdown'.setup({
@@ -43,5 +46,23 @@ require'render-markdown'.setup({
     above = '▄',
     below = '▀',
     disable_background = { 'diff' },
+  },
+  checkbox = {
+    enabled = true,
+    render_modes = false,
+    position = 'inline',
+    unchecked = {
+      icon = ' ',
+      highlight = 'RenderMarkdownUnchecked',
+      scope_highlight = nil,
+    },
+    checked = {
+      icon = ' ',
+      highlight = 'RenderMarkdownChecked',
+      scope_highlight = nil,
+    },
+    custom = {
+      todo = { raw = '[-]', rendered = ' ', highlight = 'RenderMarkdownTodo', scope_highlight = nil },
+    },
   },
 })
