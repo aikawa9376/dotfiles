@@ -1,5 +1,6 @@
 local harpoon = require("harpoon")
 local preview = require("plugins.harpoon_preview")
+local harpoon_icon = require("plugins.harpoon_icon")
 local HarpoonGroup = require("harpoon.autocmd")
 -- local Path = require("plenary.path")
 -- local extensions = require("harpoon.extensions");
@@ -20,10 +21,35 @@ local FileNameHighlight = function(bufnr, highlight)
   end
 end
 
+local function currentLineExist()
+  local current_bufname = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":.")
+  local current_pos = vim.api.nvim_win_get_cursor(0)
+  local current_entry = current_bufname .. ":" .. current_pos[1] .. ":" .. current_pos[2]
+
+  local list = harpoon:list("multiple"):display()
+  print(vim.inspect(current_entry))
+  for _, entry in ipairs(list) do
+    if (entry == current_entry) then
+      return true
+    end
+  end
+
+  return false
+end
+
+local toggleHarpoon = function()
+  if currentLineExist() then
+    harpoon:list("multiple"):remove()
+  else
+    harpoon:list("multiple"):prepend()
+  end
+end
+
 local selectFunc = function(list_item)
   if list_item == nil then
     return
   end
+  currentLineExist()
 
   local bufnr = vim.fn.bufnr("^" ..list_item.value .. "$")
   local set_position = false
@@ -64,30 +90,10 @@ local selectFunc = function(list_item)
   })
 end
 
-harpoon:setup({
-    multiple = {
-      equals = function(list_item_a, list_item_b)
-          if list_item_a == nil and list_item_b == nil then
-              return true
-          elseif list_item_a == nil or list_item_b == nil then
-              return false
-          end
-          return list_item_a.value == list_item_b.value
-            and list_item_a.context.row == list_item_b.context.row
-      end,
-      display = function(item)
-        return item.value .. ":" .. item.context.row .. ":" .. item.context.col
-      end,
-      select = function(list_item,_, _) selectFunc(list_item) end,
-      BufLeave = function() end
-  },
-  settings = {
-    save_on_toggle = true,
-    sync_on_ui_close = true,
-  },
-})
-
 harpoon:extend({
+  SETUP_CALLED = function(_)
+    harpoon_icon.setup()
+  end,
   ADD = function(obj)
     print('ADD: ' .. obj.item.value)
   end,
@@ -99,6 +105,7 @@ harpoon:extend({
       row = math.floor((vim.o.lines - baseSettings.height) / 5),
     })
     vim.api.nvim_win_set_config(obj.win_id, updateSettings)
+
     vim.keymap.set(
       "n",
       "j",
@@ -111,6 +118,7 @@ harpoon:extend({
       function() if vim.fn.line('.') == 1 then vim.cmd("normal! G") else vim.cmd("normal! gk") end end,
       { noremap = true, silent = true, buffer = obj.bufnr }
     )
+
     vim.api.nvim_create_autocmd("CursorMoved", {
       buffer = obj.bufnr,
       group = HarpoonGroup,
@@ -137,10 +145,33 @@ harpoon:extend({
   end
 })
 
+harpoon:setup({
+    multiple = {
+      equals = function(list_item_a, list_item_b)
+          if list_item_a == nil and list_item_b == nil then
+              return true
+          elseif list_item_a == nil or list_item_b == nil then
+              return false
+          end
+          return list_item_a.value == list_item_b.value
+            and list_item_a.context.row == list_item_b.context.row
+      end,
+      display = function(item)
+        return item.value .. ":" .. item.context.row .. ":" .. item.context.col
+      end,
+      select = function(list_item,_, _) selectFunc(list_item) end,
+      BufLeave = function() end
+  },
+  settings = {
+    save_on_toggle = true,
+    sync_on_ui_close = true,
+  },
+})
+
 -- vim.keymap.set("n", "mm", function() harpoon:list():add() end)
 vim.keymap.set("n", "mm", function() harpoon.ui:toggle_quick_menu(harpoon:list("multiple")) end)
 -- vim.keymap.set("n", "md", function() print(vim.inspect(harpoon:list())) end)
-vim.keymap.set("n", "ma", function() harpoon:list("multiple"):prepend() end)
+vim.keymap.set("n", "ma", function() toggleHarpoon() end)
 vim.keymap.set("n", "mf", function() harpoon:list("multiple"):next() end)
 vim.keymap.set("n", "mb", function() harpoon:list("multiple"):prev() end)
 vim.keymap.set("n", "md", function() print(vim.inspect(harpoon:list("multiple"))) end)
