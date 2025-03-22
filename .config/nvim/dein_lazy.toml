@@ -299,6 +299,7 @@ nnoremap <leader>o <cmd>Outline<CR>
 [[plugins]]
 repo = 'yetone/avante.nvim'
 on_event = 'CursorMoved'
+build = 'make'
 depends = ['nui.nvim', 'dressing.nvim', 'plenary.nvim', 'copilot.lua']
 lua_source = '''
 require'avante_lib'.load()
@@ -341,18 +342,29 @@ require'avante'.setup({
     ask = "<leader>cc",
     edit = "<leader>ce",
     refresh = "<leader>cr",
+    focus = "<leader>cf",
     toggle = {
       default = "<leader>ct",
       debug = "<leader>cd",
       hint = "<leader>ch",
       suggestion = "<leader>cs",
+      repomap = "<leader>cR",
     },
     sidebar = {
       switch_windows = "<Tab>",
       reverse_switch_windows = "<S-Tab>",
     },
+    files = {
+      add_current = "<leader>ca", -- Add current buffer to selected files
+    },
+    select_model = "<leader>c?", -- Select model command,
   },
   hints = { enabled = true },
+  file_selector = {
+    provider = "fzf",
+    -- Options override for custom providers
+    provider_opts = {},
+  },
   windows = {
     ---@type "right" | "left" | "top" | "bottom"
     position = "right", -- the position of the sidebar
