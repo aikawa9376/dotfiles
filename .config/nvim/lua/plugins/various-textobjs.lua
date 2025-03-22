@@ -98,6 +98,16 @@ local function select_paragraph(flag)
   end
 end
 
+local function overrideAnyBracket(scope)
+  local patterns = {
+    ["()"] = "(%().-(%))",
+    ["[]"] = "(%[).-(%])",
+    ["{}"] = "({).-(})",
+    ["<>"] = "(<).-(>)",
+  }
+  require("various-textobjs.textobjs.charwise.core").selectClosestTextobj(patterns, scope, 5)
+end
+
 vim.keymap.set({ "o", "x" }, "ai", function()
   if vim.fn.indent(".") == 0 then
     select_paragraph("outer")
@@ -112,14 +122,16 @@ vim.keymap.set({ "o", "x" }, "ii", function()
     textobjs.indentation("inner", "inner")
   end
 end)
--- vim.keymap.set({ "o", "x" }, "ii", '<cmd>lua require("various-textobjs").indentation("inner", "inner")<CR>')
+vim.keymap.set({ "o", "x" }, "ae", '<cmd>lua require("various-textobjs").subword("outer")<CR>')
+vim.keymap.set({ "o", "x" }, "ie", '<cmd>lua require("various-textobjs").subword("inner")<CR>')
 vim.keymap.set({ "o", "x" }, "al", '<cmd>lua require("various-textobjs").lineCharacterwise()<CR>')
 vim.keymap.set({ "o", "x" }, "il", '<cmd>lua require("various-textobjs").lineCharacterwise()<CR>')
 vim.keymap.set({ "o", "x" }, "aq", '<cmd>lua require("various-textobjs").anyQuote("outer")<CR>')
 vim.keymap.set({ "o", "x" }, "iq", '<cmd>lua require("various-textobjs").anyQuote("inner")<CR>')
-vim.keymap.set({ "o", "x" }, "ab", '<cmd>lua require("various-textobjs").anyBracket("outer")<CR>')
-vim.keymap.set({ "o", "x" }, "ib", '<cmd>lua require("various-textobjs").anyBracket("inner")<CR>')
+vim.keymap.set({ "o", "x" }, "ab", function() overrideAnyBracket("outer") end)
+vim.keymap.set({ "o", "x" }, "ib", function() overrideAnyBracket("inner") end)
 vim.keymap.set({ "o", "x" }, "B", '<cmd>lua require("various-textobjs").toNextClosingBracket()<CR>')
 vim.keymap.set({ "o", "x" }, "Q", '<cmd>lua require("various-textobjs").toNextQuotationMark()<CR>')
 vim.keymap.set({ "o", "x" }, "E", '<cmd>lua require("various-textobjs").entireBuffer()<CR>')
 vim.keymap.set({ "o", "x" }, "D", '<cmd>lua require("various-textobjs").diagnostic()<CR>')
+vim.keymap.set({ "o", "x" }, "L", '<cmd>lua require("various-textobjs").lastChange()<CR>')

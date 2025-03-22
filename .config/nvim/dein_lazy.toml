@@ -106,6 +106,21 @@ on_event = 'InsertEnter'
 hook_source = '''
 lua << EOF
 require("copilot").setup({
+  suggestion = {
+    enabled = true,
+  }
+})
+EOF
+'''
+
+[[plugins]]
+
+repo = 'zbirenbaum/copilot.lua'
+depends = ['copilot-cmp']
+on_event = 'InsertEnter'
+hook_source = '''
+lua << EOF
+require("copilot").setup({
   suggestion = { enabled = false },
 
 })
@@ -354,6 +369,12 @@ require'avante'.setup({
       switch_windows = "<Tab>",
       reverse_switch_windows = "<S-Tab>",
     },
+    files = {
+      add_current = "<leader>ca", -- Add current buffer to selected files
+    },
+    select_model = "<leader>c?", -- Select model command,
+  },
+  hints = { enabled = true },
     files = {
       add_current = "<leader>ca", -- Add current buffer to selected files
     },
