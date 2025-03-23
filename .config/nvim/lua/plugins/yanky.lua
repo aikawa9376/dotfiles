@@ -27,7 +27,7 @@ return {
     },
     highlight = {
       on_put = false,
-      on_yank = false,
+      on_yank = true,
       timer = 500,
     },
     preserve_cursor_position = {

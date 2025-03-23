@@ -53,4 +53,11 @@ return {
       { "<Leader>gl", "<cmd>LazyGit<CR>", silent = true }
     }
   },
+  {
+    "aaronhallaert/advanced-git-search.nvim",
+    cmd = { "AdvancedGitSearch" },
+    config = function ()
+      require("advanced_git_search.fzf").setup({})
+    end
+  },
 }
