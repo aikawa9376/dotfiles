@@ -61,3 +61,13 @@ vim.api.nvim_create_autocmd("TextYankPost", {
     end
   end
 })
+
+vim.api.nvim_create_user_command("TermForceCloseAll", function()
+  local term_bufs = vim.tbl_filter(function(buf)
+    return vim.api.nvim_get_option_value("buftype", { buf = buf }) == "terminal"
+  end, vim.api.nvim_list_bufs())
+
+  for _, t in ipairs(term_bufs) do
+    vim.cmd("bd! " .. t)
+  end
+end, {})
