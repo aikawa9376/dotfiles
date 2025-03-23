@@ -2,26 +2,8 @@ return {
   "numToStr/Comment.nvim",
   keys = {
     { "<C-_>", mode = { "n" } },
-    {
-      "<C-_>",
-      function ()
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<ESC>", true, false, true), "n", false)
-        local mode = vim.fn.visualmode()
-        require("Comment.api").toggle.linewise(mode)
-      end,
-      mode = { "x" },
-      silent = true
-    },
-    {
-      "<Leader><C-_>",
-      function ()
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<ESC>", true, false, true), "n", false)
-        local mode = vim.fn.visualmode()
-        require("Comment.api").toggle.blockwise(mode)
-      end,
-      mode = { "x" },
-      silent = true
-    }
+    { "<C-_>", "<ESC><CMD>lua require(\"Comment.api\").toggle.linewise(vim.fn.visualmode())<CR>", mode = { "x" }, silent = true },
+    { "<Leader><C-_>", "<ESC><CMD>lua require(\"Comment.api\").toggle.blockwise(vim.fn.visualmode())<CR>", mode = { "x" }, silent = true },
   },
   opts = {
     ---Add a space b/w comment and the line

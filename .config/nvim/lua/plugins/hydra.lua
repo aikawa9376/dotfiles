@@ -1,6 +1,7 @@
 return {
-  "Cathyprime/hydra.nvim",
+  "aikawa9376/hydra.nvim",
   event = "VeryLazy",
+  branch = "error-fix",
   config = function ()
     local Hydra = require('hydra')
     -- 何故かrequreしないと存在が無い
