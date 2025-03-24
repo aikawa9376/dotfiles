@@ -7,6 +7,13 @@ return {
     -- 何故かrequreしないと存在が無い
     local diagnostic = require('vim.diagnostic')
 
+    -- undo-glow用
+    local ugOpts = require("undo-glow.utils").merge_command_opts("UgPaste", {})
+    local pasteWithGlow = function (key)
+      require("undo-glow").highlight_changes(ugOpts)
+      vim.fn.feedkeys(vim.api.nvim_replace_termcodes(key, true, true, true), 'n')
+    end
+
     Hydra({
       name = 'Harpoon',
       mode = 'n',
@@ -116,9 +123,9 @@ return {
         on_enter = function()
           local is_visual = vim.fn.mode():match("v")
           if is_visual then
-            vim.fn.feedkeys(vim.api.nvim_replace_termcodes('"_d<Plug>(YankyPutIndentAfter)', true, true, true), 'n')
+            pasteWithGlow('"_d<Plug>(YankyPutIndentAfter)')
           else
-            vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentAfter)', true, true, true), 'n')
+            pasteWithGlow('<Plug>(YankyPutIndentAfter)')
           end
         end
       },
@@ -140,9 +147,9 @@ return {
         on_enter = function()
           local is_visual = vim.fn.mode():match("v")
           if is_visual then
-            vim.fn.feedkeys(vim.api.nvim_replace_termcodes('"_d<Plug>(YankyPutIndentBefore)', true, true, true), 'n')
+            pasteWithGlow('"_d<Plug>(YankyPutIndentBefore)')
           else
-            vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>(YankyPutIndentBefore)', true, true, true), 'n')
+            pasteWithGlow('<Plug>(YankyPutIndentBefore)')
           end
         end
       },
