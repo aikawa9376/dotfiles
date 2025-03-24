@@ -1,6 +1,6 @@
 return {
   "kristijanhusak/vim-dadbod-ui",
-  dependency = "tpope/vim-dadbod",
+  dependencies = "tpope/vim-dadbod",
   cmd = "DBUI",
   init = function ()
     vim.g.db_ui_use_nerd_fonts = 1
