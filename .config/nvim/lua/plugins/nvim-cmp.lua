@@ -21,7 +21,6 @@ return {
 
     -- luasnip setup
     local luasnip = require("luasnip")
-    require("luasnip.loaders.from_vscode").lazy_load()
     require("snippets")
     vim.api.nvim_set_keymap("i", "<M-j>", "<Plug>luasnip-jump-next", {})
     vim.api.nvim_set_keymap("s", "<M-j>", "<Plug>luasnip-jump-next", {})

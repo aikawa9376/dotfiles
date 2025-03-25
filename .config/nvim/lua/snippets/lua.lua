@@ -23,6 +23,16 @@ local lua = {
     i(1, "property here"),
     t("))"),
   }),
+  s('config', {
+    t({"config = function ()", ""}),
+    d(1, function() return sn(nil, { t({"  "}), i(1) }) end),
+    t({"", "end"})
+  }),
+  s('init', {
+    t({"init = function ()", ""}),
+    d(1, function() return sn(nil, { t({"  "}), i(1) }) end),
+    t({"", "end"})
+  }),
 }
 
 return lua

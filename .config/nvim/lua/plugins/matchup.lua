@@ -1,6 +1,5 @@
 return {
   "andymass/vim-matchup",
-  event = "VeryLazy",
   keys = {
     { "<Space><Space>", "%", mode = { "n", "x" } },
     { "<C-Space>", "<Plug>(matchup-z%)", mode = { "n", "x" } },

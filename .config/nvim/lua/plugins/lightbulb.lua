@@ -1,6 +1,6 @@
 return {
   "kosayoda/nvim-lightbulb",
-  event = "VeryLazy",
+  event = "LspAttach",
   config = function ()
     vim.cmd [[ autocmd CursorHold,CursorHoldI * lua LightBulbFunction() ]]
     vim.api.nvim_command('highlight LightBulbVirtualText guifg=#ECBE7B guibg=None')

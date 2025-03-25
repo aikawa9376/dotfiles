@@ -1,6 +1,6 @@
 return {
   "rcarriga/nvim-notify",
-  event = "VeryLazy",
+  lazy = true,
   opts = {
     on_open = function (win)
       vim.api.nvim_win_set_config(win, { focusable = false })

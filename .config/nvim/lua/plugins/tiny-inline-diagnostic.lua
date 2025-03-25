@@ -1,6 +1,6 @@
 return {
   "rachartier/tiny-inline-diagnostic.nvim",
-  event = "VeryLazy",
+  event = "LspAttach",
   opts = {
     -- Style preset for diagnostic messages
     -- Available options:
