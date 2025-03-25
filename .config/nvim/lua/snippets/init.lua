@@ -191,11 +191,6 @@ ls.autosnippets = {
   },
 }
 
--- in a lua file: search lua-, then c-, then all-snippets.
-ls.filetype_extend("lua", { "c" })
--- in a cpp file: search c-snippets, then all-snippets only (no cpp-snippets!!).
-ls.filetype_set("cpp", { "c" })
-
 --[[
 -- Beside defining your own snippets you can also load snippets from "vscode-like" packages
 -- that expose snippets in json files, for example <https://github.com/rafamadriz/friendly-snippets>.
@@ -203,9 +198,13 @@ ls.filetype_set("cpp", { "c" })
 -- will need to extend the table yourself instead of setting a new one.
 ]]
 
-require("luasnip/loaders/from_vscode").load()
-require("luasnip.loaders.from_snipmate").load()
+require("luasnip.loaders.from_vscode").lazy_load()
+-- require("luasnip.loaders.from_snipmate").load()
 
 -- filetype hack
+-- in a lua file: search lua-, then c-, then all-snippets.
+ls.filetype_extend("lua", { "c" })
+-- in a cpp file: search c-snippets, then all-snippets only (no cpp-snippets!!).
+ls.filetype_set("cpp", { "c" })
 ls.filetype_extend("typescriptreact", { "html", "javascript" })
 ls.filetype_extend("typescript", { "javascript" })

@@ -73,7 +73,7 @@ require("lazy").setup({
     { import = "plugins.incline" },
     { import = "plugins.undo-glow" },
     { import = "plugins.nvim-cmp" },
-    { "neovim/nvim-lspconfig", lazy = true, init = function () require"lsp" end, },
+    { "neovim/nvim-lspconfig", event = "BufReadPre", config = function () require"lsp" end, },
     { "williamboman/mason.nvim", lazy = true },
     { "williamboman/mason-lspconfig.nvim", lazy = true },
     { "zbirenbaum/copilot.lua", lazy = true },
@@ -96,5 +96,20 @@ require("lazy").setup({
     { "cseickel/diagnostic-window.nvim", cmd = { "DiagWindowShow" } },
     { "vim-scripts/BufOnly.vim", cmd = { "BufOnly" } },
     { "moll/vim-bbye", cmd = { "Bdelete", "Bwipeout" } },
+  },
+  performance = {
+    rtp = {
+      ---@type string[] list any plugins you want to disable here
+      disabled_plugins = {
+        "gzip",
+        "matchit",
+        "matchparen",
+        "netrwPlugin",
+        "tarPlugin",
+        "tohtml",
+        "tutor",
+        "zipPlugin",
+      },
+    },
   },
 })
