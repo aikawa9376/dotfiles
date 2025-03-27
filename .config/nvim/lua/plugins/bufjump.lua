@@ -1,6 +1,9 @@
 return {
   "kwkarlwang/bufjump.nvim",
-  event = "VeryLazy",
+  keys = {
+    { "<M-i>" },
+    { "<M-o>" }
+  },
   opts = {
     forward_key = "<M-i>",
     backward_key = "<M-o>",

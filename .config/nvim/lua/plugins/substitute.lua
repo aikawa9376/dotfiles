@@ -1,6 +1,5 @@
 return {
   "gbprod/substitute.nvim",
-  event = "VeryLazy",
   keys = {
     { "s", function() require('substitute').operator({ modifiers = { 'reindent' } }) end, mode = { "n" }, noremap = true, },
     { "ss", function() require('substitute').line({ modifiers = { 'reindent' } }) end, mode = { "n" }, noremap = true, },

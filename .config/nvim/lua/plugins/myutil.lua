@@ -17,8 +17,8 @@ return {
     vim.keymap.set("n", "gJ", "<cmd>call myutil#join_space_less()<CR>", { silent = true })
     vim.keymap.set("x", "@", "<cmd>call myutil#execute_macro_visual_range()<CR>", { silent = true })
     vim.keymap.set("c", "<C-U>", "myutil#ctrl_u()", { expr = true })
-    vim.keymap.set("c", "<SID>(ctrl_w_before)", "myutil#ctrl_w_before()", { expr = true })
-    vim.keymap.set("c", "<SID>(ctrl_w_after)", "myutil#ctrl_w_after()", { expr = true })
-    vim.api.nvim_set_keymap("c", "<C-W>", "<SID>(ctrl_w_before)<SID>(ctrl_w_after)", { script = true })
+    vim.keymap.set("c", "<C-W>", function()
+      return vim.fn["myutil#ctrl_w_before"]() .. vim.fn["myutil#ctrl_w_after"]()
+    end, { expr = true })
   end
 }
