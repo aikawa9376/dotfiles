@@ -1,7 +1,40 @@
 return {
   "ThePrimeagen/harpoon",
   branch = "harpoon2",
-  event = "VeryLazy",
+  keys = function(_, keys)
+    local function currentLineExist()
+      local current_bufname = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":.")
+      local current_pos = vim.api.nvim_win_get_cursor(0)
+      local current_entry = current_bufname .. ":" .. current_pos[1] .. ":" .. current_pos[2]
+
+      local list = require"harpoon":list("multiple"):display()
+      for _, entry in ipairs(list) do
+        if (entry == current_entry) then
+          return true
+        end
+      end
+
+      return false
+    end
+
+    local toggleHarpoon = function()
+      if currentLineExist() then
+        require"harpoon":list("multiple"):remove()
+      else
+        require"harpoon":list("multiple"):prepend()
+      end
+    end
+
+    local mappings = {
+      { "mm", function() require"harpoon".ui:toggle_quick_menu(require"harpoon":list("multiple")) end, mode = "n" },
+      { "ma", function() toggleHarpoon() end, mode = "n" },
+      { "mf", function() require"harpoon":list("multiple"):next() end, mode = "n" },
+      { "mb", function() require"harpoon":list("multiple"):prev() end, mode = "n" },
+      { "md", function() print(vim.inspect(require"harpoon":list("multiple"))) end, mode = "n" }
+    }
+    mappings = vim.tbl_filter(function(m) return m[1] and #m[1] > 0 end, mappings)
+    return vim.list_extend(mappings, keys)
+  end,
   config = function ()
     local harpoon = require("harpoon")
     local preview = require("plugins.harpoon_preview")
@@ -26,34 +59,10 @@ return {
       end
     end
 
-    local function currentLineExist()
-      local current_bufname = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":.")
-      local current_pos = vim.api.nvim_win_get_cursor(0)
-      local current_entry = current_bufname .. ":" .. current_pos[1] .. ":" .. current_pos[2]
-
-      local list = harpoon:list("multiple"):display()
-      for _, entry in ipairs(list) do
-        if (entry == current_entry) then
-          return true
-        end
-      end
-
-      return false
-    end
-
-    local toggleHarpoon = function()
-      if currentLineExist() then
-        harpoon:list("multiple"):remove()
-      else
-        harpoon:list("multiple"):prepend()
-      end
-    end
-
     local selectFunc = function(list_item)
       if list_item == nil then
         return
       end
-      currentLineExist()
 
       local bufnr = vim.fn.bufnr("^" ..list_item.value .. "$")
       local set_position = false
@@ -150,34 +159,26 @@ return {
     })
 
     harpoon:setup({
-        multiple = {
-          equals = function(list_item_a, list_item_b)
-              if list_item_a == nil and list_item_b == nil then
-                  return true
-              elseif list_item_a == nil or list_item_b == nil then
-                  return false
-              end
-              return list_item_a.value == list_item_b.value
-                and list_item_a.context.row == list_item_b.context.row
-          end,
-          display = function(item)
-            return item.value .. ":" .. item.context.row .. ":" .. item.context.col
-          end,
-          select = function(list_item,_, _) selectFunc(list_item) end,
-          BufLeave = function() end
+      multiple = {
+        equals = function(list_item_a, list_item_b)
+          if list_item_a == nil and list_item_b == nil then
+            return true
+          elseif list_item_a == nil or list_item_b == nil then
+            return false
+          end
+          return list_item_a.value == list_item_b.value
+            and list_item_a.context.row == list_item_b.context.row
+        end,
+        display = function(item)
+          return item.value .. ":" .. item.context.row .. ":" .. item.context.col
+        end,
+        select = function(list_item,_, _) selectFunc(list_item) end,
+        BufLeave = function() end
       },
       settings = {
         save_on_toggle = true,
         sync_on_ui_close = true,
       },
     })
-
-    -- vim.keymap.set("n", "mm", function() harpoon:list():add() end)
-    vim.keymap.set("n", "mm", function() harpoon.ui:toggle_quick_menu(harpoon:list("multiple")) end)
-    -- vim.keymap.set("n", "md", function() print(vim.inspect(harpoon:list())) end)
-    vim.keymap.set("n", "ma", function() toggleHarpoon() end)
-    vim.keymap.set("n", "mf", function() harpoon:list("multiple"):next() end)
-    vim.keymap.set("n", "mb", function() harpoon:list("multiple"):prev() end)
-    vim.keymap.set("n", "md", function() print(vim.inspect(harpoon:list("multiple"))) end)
   end
 }
