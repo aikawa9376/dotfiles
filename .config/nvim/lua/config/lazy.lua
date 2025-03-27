@@ -88,6 +88,7 @@ require("lazy").setup({
     { "MysticalDevil/inlay-hints.nvim", lazy = true },
     { "pmizio/typescript-tools.nvim", lazy = true },
     { "simrat39/rust-tools.nvim", lazy = true },
+    { "3rd/image.nvim", lazy = true },
     { "honza/vim-snippets", event = "VeryLazy" },
     { "kana/vim-niceblock", event = "VeryLazy" },
     { "stevearc/quicker.nvim", ft = "qf", config = true },

@@ -112,7 +112,6 @@ local getFileOpt = function ()
     return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
   end
   opts.fzf_opts = {
-    ["-x"] = "",
     ["--multi"] = "",
     ["--scheme"] = "history",
     ["--no-unicode"] = "",
@@ -229,7 +228,6 @@ local getMruOpts = function (func, name)
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
   })
   opts.fzf_opts = {
-    ["-x"] = "",
     ["--multi"] = "",
     ["--scheme"] = "history",
     ["--no-unicode"] = "",
