@@ -1,7 +1,7 @@
 return {
   "Shougo/junkfile.vim",
   cmd = "JunkfileOpen",
-  init = function ()
+  config = function ()
     local workdir
     if vim.fn.exists('*FindRootDirectory') == 1 and vim.fn.FindRootDirectory() ~= '' then
       local dir = vim.fn.FindRootDirectory()
