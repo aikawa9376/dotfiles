@@ -10,6 +10,15 @@ return {
     opts = { fb_blocklist = {"markdown"} },
   },
   {
+    "kiyoon/treesitter-indent-object.nvim",
+    keys = {
+      { "ac", function() require'treesitter_indent_object.textobj'.select_indent_outer() end, mode = {"x", "o"} },
+      { "ac", function() require'treesitter_indent_object.textobj'.select_indent_outer(true) end, mode = {"x", "o"} },
+      { "ic", function() require'treesitter_indent_object.textobj'.select_indent_inner() end, mode = {"x", "o"} },
+      { "ic", function() require'treesitter_indent_object.textobj'.select_indent_inner(true, 'V') end, mode = {"x", "o"} },
+    },
+  },
+  {
     "xiyaowong/accelerated-jk.nvim",
     event = "VeryLazy",
     opts = { acceleration_table = {35,97,141,212,314,414,514,614} },

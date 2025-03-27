@@ -11,21 +11,53 @@ return {
       {
         opts.mappings.ask,
         function() require("avante.api").ask() end,
-        desc = "avante: ask",
         mode = { "n", "v" },
       },
       {
         opts.mappings.refresh,
         function() require("avante.api").refresh() end,
-        desc = "avante: refresh",
         mode = "v",
       },
       {
         opts.mappings.edit,
         function() require("avante.api").edit() end,
-        desc = "avante: edit",
         mode = { "n", "v" },
       },
+      {
+        "<Leader>cL",
+        function ()
+          require"plugins.avante_util".avante_code_readability_analysis()
+        end,
+        mode = { "n" },
+      },
+      {
+        "<Leader>cl",
+        function ()
+          require"plugins.avante_util".avante_optimize_code()
+        end,
+        mode = { "v" },
+      },
+      {
+        "<Leader>cf",
+        function ()
+          require"plugins.avante_util".avante_fix_bugs()
+        end,
+        mode = { "v" },
+      },
+      {
+        "<Leader>cs",
+        function ()
+          require"plugins.avante_util".avante_add_docstring()
+        end,
+        mode = { "v" },
+      },
+      {
+        "<Leader>cT",
+        function ()
+          require"plugins.avante_util".avante_add_tests()
+        end,
+        mode = { "v" },
+      }
     }
     mappings = vim.tbl_filter(function(m) return m[1] and #m[1] > 0 end, mappings)
     return vim.list_extend(mappings, keys)
@@ -65,6 +97,9 @@ return {
       submit = {
         normal = "<CR>",
         insert = "<C-s>",
+      },
+      cancel = {
+        normal = { "<C-s>" }
       },
       ask = "<leader>cc",
       edit = "<leader>ce",
