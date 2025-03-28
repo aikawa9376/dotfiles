@@ -40,8 +40,6 @@ return {
       cmp.setup({
         formatting = {
           format = function(entry, vim_item)
-            vim_item.kind = require("lspkind").presets.default[vim_item.kind]
-            -- set a name for each source
             vim_item.menu = ({
               buffer = "[B]",
               nvim_lsp = "[L]",
@@ -59,6 +57,8 @@ return {
             if truncated_label ~= label then
               vim_item.abbr = truncated_label .. "…"
             end
+            local icon = require("lspkind").presets.default[vim_item.kind] or ""
+            vim_item.abbr = icon .. " " .. vim_item.abbr
             return vim_item
           end,
         },
@@ -189,24 +189,29 @@ return {
       -- Use buffer source for `/` (if you enabled `native_menu`, this won't work anymore).
       cmp.setup.cmdline({ "/", "?" }, {
         mapping = cmdline_mapping,
-        sources = cmp.config.sources({
-          { name = "buffer" },
-        }, {
+        sources = cmp.config.sources(
+          {
+            { name = "buffer" },
+          },
+          {
             { name = "nvim_lsp_document_symbol" },
             { name = "cmdline_history" },
-          }),
+          }
+        ),
       })
 
       -- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
       cmp.setup.cmdline(":", {
         mapping = cmdline_mapping,
-        sources = cmp.config.sources({
-          { name = "cmdline" },
-          { name = "path" },
-        }, {
+        sources = cmp.config.sources(
+          {
+            { name = "cmdline" },
+            { name = "path" },
+          },
+          {
             { name = "cmdline_history" },
           }),
-      })
+        })
     end
   }
 }

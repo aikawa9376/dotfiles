@@ -1,8 +1,9 @@
 -- completion
 local nvim_lsp = require("lspconfig")
 local capabilities = vim.lsp.protocol.make_client_capabilities()
-local settings = require("lsp.configs.settings")
+-- capabilities = require('blink.cmp').get_lsp_capabilities(capabilities)
 capabilities = require("cmp_nvim_lsp").default_capabilities(capabilities)
+local settings = require("lsp.configs.settings")
 
 require("mason").setup()
 
