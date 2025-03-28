@@ -160,11 +160,11 @@ M.default = function(client, bufnr)
     vim.api.nvim_buf_set_keymap(bufnr, ...)
   end
 
-  local function buf_set_option(...)
-    vim.api.nvim_buf_set_option(bufnr, ...)
+  local function buf_set_option(name, value)
+    vim.api.nvim_set_option_value(name, value, { buf = bufnr })
   end
 
-  local win_style = "{ border = \"rounded\", focusable = false, silent = true }"
+  -- vim.o.winborder =  { "╔", "═" ,"╗", "║", "╝", "═", "╚", "║" }
 
   -- Enable completion triggered by <c-x><c-o>
   buf_set_option("omnifunc", "v:lua.vim.lsp.omnifunc")
@@ -178,7 +178,7 @@ M.default = function(client, bufnr)
   buf_set_keymap("n", "gD", "m`:FzfLua lsp_declarations<CR>", opts)
   buf_set_keymap("n", "gi", "m`:FzfLua lsp_implementations<CR>", opts)
   buf_set_keymap("n", "gy", "m`:FzfLua lsp_typedefs<CR>", opts)
-  buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover(" .. win_style .. ")<CR>", opts)
+  buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover()<CR>", opts)
   buf_set_keymap("n", "<leader>rn", "<cmd>lua vim.lsp.buf.rename()<CR>", opts)
   buf_set_keymap("n", "<Leader>ca", ":FzfLua lsp_code_actions<CR>", opts)
   buf_set_keymap("n", "<Leader>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", opts)
@@ -196,75 +196,61 @@ M.default = function(client, bufnr)
   vim.cmd([[command! AddWorkspaceFolder vim.lsp.buf.add_workspace_folder()]])
   vim.cmd([[command! RemoveWorkspaceFolder vim.lsp.buf.remove_workspace_folder()]])
   vim.cmd([[command! ShowWorkspaceFolder lua print(vim.inspect(vim.lsp.buf.list_workspace_folders()))]])
-
   vim.cmd([[command! IncomingCall FzfLua lsp_incoming_calls]])
   vim.cmd([[command! OutGoingCall FzfLua lsp_outgoing_calls]])
   vim.cmd([[command! -bang -nargs=? WorkspaceSymbol FzfLua lsp_live_workspace_symbols]])
 
-  -- Autocmds.
-  vim.cmd([[
-  augroup LspDefaults
-  autocmd!
-  " autocmd CursorHold * lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })
-  augroup END
-  ]])
+  -- features
   if not vim.g.auto_format_disabled and client.server_capabilities.documentFormattingProvider then
     require("lsp-format").on_attach(client)
-    -- vim.cmd [[
-    --   augroup LspFormat
-    --     autocmd!
-    --     autocmd BufWritePre <buffer> lua vim.lsp.buf.format()
-    --   augroup END
-    -- ]] -- sync? insert_leave?
   end
-  if client.server_capabilities.codeLensProvideren then
-    vim.cmd([[
-      augroup LspCodeLens
-        autocmd!
-        autocmd InsertLeave,BufWritePost <buffer> lua vim.lsp.codelens.refresh()
-      augroup END
-    ]])
-  end
-  if client.server_capabilities.documentHighlightProvider then
-    -- require("illuminate").on_attach(client)
+  if client.server_capabilities.codeLensProvider then
+    vim.lsp.codelens.refresh()
+    vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "InsertLeave" }, {
+      buffer = bufnr,
+      callback = vim.lsp.codelens.refresh,
+    })
   end
 
-  -- diagnostic settings
-  vim.diagnostic.config({
-    float = {
-      source = "always",
-    },
-    virtual_text = false,
-    signs = {
-      text = {
-        [vim.diagnostic.severity.E] = "",
-        [vim.diagnostic.severity.W] = "",
-        [vim.diagnostic.severity.I] = "",
-        [vim.diagnostic.severity.N] = ""
+  if client.capabilities.textDocument.publishDiagnostics then
+    -- diagnostic settings
+    vim.diagnostic.config({
+      virtual_text = false,
+      float = {
+        border = "rounded",
+        focusable = false
       },
-      numhl = {
-        [vim.diagnostic.severity.E] = "DiagnosticSignError",
-        [vim.diagnostic.severity.W] = "DiagnosticSignWarn",
-        [vim.diagnostic.severity.I] = "DiagnosticSignInfo",
-        [vim.diagnostic.severity.N] = "DiagnosticSignHint"
-      }
-    },
-  })
+      signs = {
+        priority = 100,
+        text = {
+          [vim.diagnostic.severity.E] = "",
+          [vim.diagnostic.severity.W] = "",
+          [vim.diagnostic.severity.I] = "",
+          [vim.diagnostic.severity.N] = ""
+        },
+        numhl = {
+          [vim.diagnostic.severity.E] = "DiagnosticSignError",
+          [vim.diagnostic.severity.W] = "DiagnosticSignWarn",
+          [vim.diagnostic.severity.I] = "DiagnosticSignInfo",
+          [vim.diagnostic.severity.N] = "DiagnosticSignHint"
+        }
+      },
+    })
+  end
 
-  -- require("lsp_signature").on_attach({
-  --   bind = true, -- This is mandatory, otherwise border config won't get registered.
-  --   hint_enable = false,
-  --   handler_opts = {
-  --     border = "rounded",
-  --   },
-  -- }, bufnr)
+  -- if client.server_capabilities.publishDiagnosticsProvider then
+    require("lsp_signature").on_attach({
+      bind = true, -- This is mandatory, otherwise border config won't get registered.
+      hint_enable = false,
+      handler_opts = {
+        border = "rounded",
+      },
+    }, bufnr)
+  -- end
 
   if client.server_capabilities.inlayHintProvider then
-    require("inlay-hints").on_attach(client, bufnr)
+    vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
   end
-
-  -- show capabilities
-  -- require('lsp.utils').get_capabilities()
 end
 
 return M

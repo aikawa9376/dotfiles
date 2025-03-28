@@ -31,18 +31,11 @@ return {
     vim.api.nvim_set_keymap("s", "<C-Space>", "<Plug>luasnip-expand-or-jump", {})
     vim.api.nvim_set_keymap("s", "p", "p", { noremap = true })
 
-    -- nvim-cmp utils
-    local check_back_space = function()
-      local col = vim.fn.col(".") - 1
-      return col == 0 or vim.fn.getline("."):sub(col, col):match("%s")
-    end
-
     -- nvim-cmp setup
     local cmp = require("cmp")
     cmp.setup({
       formatting = {
         format = function(entry, vim_item)
-          vim_item.kind = require("lspkind").presets.default[vim_item.kind]
           -- set a name for each source
           vim_item.menu = ({
             buffer = "[B]",
@@ -61,6 +54,8 @@ return {
           if truncated_label ~= label then
             vim_item.abbr = truncated_label .. "…"
           end
+          local icon = require("lspkind").presets.default[vim_item.kind] or ""
+          vim_item.abbr = icon .. " " .. vim_item.abbr
           return vim_item
         end,
       },
@@ -191,25 +186,29 @@ return {
     -- Use buffer source for `/` (if you enabled `native_menu`, this won't work anymore).
     cmp.setup.cmdline({ "/", "?" }, {
       mapping = cmdline_mapping,
-      sources = cmp.config.sources({
-        -- { name = 'fuzzy_buffer' },
-        { name = "buffer" },
-      }, {
-        { name = "nvim_lsp_document_symbol" },
-        { name = "cmdline_history" },
-        -- { name = 'buffer-lines' },
-      }),
+      sources = cmp.config.sources(
+        {
+          -- { name = 'fuzzy_buffer' },
+          { name = "buffer" },
+        },
+        {
+          { name = "nvim_lsp_document_symbol" },
+          { name = "cmdline_history" },
+          -- { name = 'buffer-lines' },
+        }),
     })
 
     -- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
     cmp.setup.cmdline(":", {
       mapping = cmdline_mapping,
-      sources = cmp.config.sources({
-        { name = "cmdline" },
-        { name = "path" },
-      }, {
-        { name = "cmdline_history" },
-      }),
+      sources = cmp.config.sources(
+        {
+          { name = "cmdline" },
+          { name = "path" },
+        },
+        {
+          { name = "cmdline_history" },
+        }),
     })
   end
 }
