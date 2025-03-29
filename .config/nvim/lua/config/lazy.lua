@@ -72,6 +72,7 @@ require("lazy").setup({
     { import = "plugins.others" },
     { import = "plugins.incline" },
     { import = "plugins.undo-glow" },
+    -- { import = "plugins.blink" },
     { import = "plugins.nvim-cmp" },
     { "neovim/nvim-lspconfig", event = "BufReadPre", config = function () require"lsp" end, },
     { "williamboman/mason.nvim", lazy = true },
