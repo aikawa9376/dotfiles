@@ -158,7 +158,7 @@ M.default = function(client, bufnr)
     vim.api.nvim_set_option_value(name, value, { buf = bufnr })
   end
 
-  -- vim.o.winborder =  { "╔", "═" ,"╗", "║", "╝", "═", "╚", "║" }
+  -- vim.o.winborder = "rounded"
 
   -- Enable completion triggered by <c-x><c-o>
   buf_set_option("omnifunc", "v:lua.vim.lsp.omnifunc")
@@ -172,7 +172,7 @@ M.default = function(client, bufnr)
   buf_set_keymap("n", "gD", "m`:FzfLua lsp_declarations<CR>", opts)
   buf_set_keymap("n", "gi", "m`:FzfLua lsp_implementations<CR>", opts)
   buf_set_keymap("n", "gy", "m`:FzfLua lsp_typedefs<CR>", opts)
-  buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover()<CR>", opts)
+  buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover({ border = 'rounded', focusable = false })<CR>", opts)
   buf_set_keymap("n", "<leader>rn", "<cmd>lua vim.lsp.buf.rename()<CR>", opts)
   buf_set_keymap("n", "<Leader>ca", ":FzfLua lsp_code_actions<CR>", opts)
   buf_set_keymap("n", "<Leader>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", opts)
@@ -232,7 +232,7 @@ M.default = function(client, bufnr)
     })
   end
 
-  if client.server_capabilities.publishDiagnosticsProvider then
+  if client.server_capabilities.signatureHelpProvider then
     require("lsp_signature").on_attach({
       bind = true, -- This is mandatory, otherwise border config won't get registered.
       hint_enable = false,

@@ -1,5 +1,6 @@
 return {
   "ibhagwan/fzf-lua",
+  cmd = { "FzfLua" },
   keys = {
     { "<Leader>gf", 'm`:FzfLua git_files<CR>', mode = { "n" }, silent = true },
     { "<Leader>gc", 'm`:FzfLua git_commits<CR>', mode = { "n" }, noremap = true, silent = true },

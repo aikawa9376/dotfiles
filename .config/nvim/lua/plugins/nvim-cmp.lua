@@ -14,9 +14,6 @@ return {
     "hrsh7th/nvim-cmp",
     event = { "InsertEnter", "CmdlineEnter" },
     config = function ()
-      -- Set completeopt to have a better completion experience
-      vim.o.completeopt = "menuone,noselect"
-
       -- luasnip setup
       local luasnip = require("luasnip")
       require("snippets")
@@ -28,12 +25,6 @@ return {
       vim.api.nvim_set_keymap("s", "<M-e>", "<Plug>luasnip-next-choice", {})
       vim.api.nvim_set_keymap("s", "<C-Space>", "<Plug>luasnip-expand-or-jump", {})
       vim.api.nvim_set_keymap("s", "p", "p", { noremap = true })
-
-      -- nvim-cmp utils
-      local check_back_space = function()
-        local col = vim.fn.col(".") - 1
-        return col == 0 or vim.fn.getline("."):sub(col, col):match("%s")
-      end
 
       -- nvim-cmp setup
       local cmp = require("cmp")
@@ -174,18 +165,28 @@ return {
         },
       })
 
-      local cmdline_mapping = cmp.mapping.preset.cmdline()
+      local cmdline_mapping = cmp.mapping.preset.cmdline({
+        ["<M-p>"] = {
+          c = function()
+            vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<C-p>", true, true, true), "n")
+          end,
+        },
+        ["<M-n>"] = {
+          c = function()
+            vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<C-n>", true, true, true), "n")
+          end,
+        },
+        ["<C-Space>"] = {
+          c = function(fallback)
+            if cmp.visible() then
+              cmp.confirm({ select = true })
+            else
+              fallback()
+            end
+          end,
+        },
+      })
 
-      cmdline_mapping["<M-p>"] = {
-        c = function()
-          vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<C-p>", true, true, true), "n")
-        end,
-      }
-      cmdline_mapping["<M-n>"] = {
-        c = function()
-          vim.fn.feedkeys(vim.api.nvim_replace_termcodes("<C-n>", true, true, true), "n")
-        end,
-      }
       -- Use buffer source for `/` (if you enabled `native_menu`, this won't work anymore).
       cmp.setup.cmdline({ "/", "?" }, {
         mapping = cmdline_mapping,
@@ -203,6 +204,9 @@ return {
       -- Use cmdline & path source for ':' (if you enabled `native_menu`, this won't work anymore).
       cmp.setup.cmdline(":", {
         mapping = cmdline_mapping,
+        completion = {
+          completeopt = 'menu,menuone,noselect',
+        },
         sources = cmp.config.sources(
           {
             { name = "cmdline" },

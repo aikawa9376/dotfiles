@@ -86,23 +86,6 @@ return {
       vim.g.skip_ts_context_commentstring_module = true
     end
   },
-  {
-    "mfussenegger/nvim-treehopper",
-    keys = {
-      {
-        "<Leader>",
-        function () require('tsht').nodes() end,
-        mode = { "o" },
-        silent = true,
-      },
-      {
-        "<Leader>h",
-        function () require('tsht').nodes() end,
-        mode = { "x" },
-        silent = true,
-      }
-    },
-  },
   { "nvim-treesitter/nvim-treesitter-refactor", lazy = true },
   { "nvim-treesitter/playground", lazy = true },
 }
