@@ -14,20 +14,9 @@ return {
     "hrsh7th/nvim-cmp",
     event = { "InsertEnter", "CmdlineEnter" },
     config = function ()
-      -- luasnip setup
-      local luasnip = require("luasnip")
-      require("snippets")
-      vim.api.nvim_set_keymap("i", "<M-j>", "<Plug>luasnip-jump-next", {})
-      vim.api.nvim_set_keymap("s", "<M-j>", "<Plug>luasnip-jump-next", {})
-      vim.api.nvim_set_keymap("i", "<M-k>", "<Plug>luasnip-jump-prev", {})
-      vim.api.nvim_set_keymap("s", "<M-k>", "<Plug>luasnip-jump-prev", {})
-      vim.api.nvim_set_keymap("i", "<M-e>", "<Plug>luasnip-next-choice", {})
-      vim.api.nvim_set_keymap("s", "<M-e>", "<Plug>luasnip-next-choice", {})
-      vim.api.nvim_set_keymap("s", "<C-Space>", "<Plug>luasnip-expand-or-jump", {})
-      vim.api.nvim_set_keymap("s", "p", "p", { noremap = true })
-
       -- nvim-cmp setup
       local cmp = require("cmp")
+      local luasnip = require("luasnip")
       cmp.setup({
         formatting = {
           format = function(entry, vim_item)
@@ -55,7 +44,7 @@ return {
         },
         snippet = {
           expand = function(args)
-            require("luasnip").lsp_expand(args.body)
+            luasnip.lsp_expand(args.body)
           end,
         },
         mapping = {
@@ -185,6 +174,16 @@ return {
             end
           end,
         },
+        -- ["<C-j>"] = {
+        --   c = function()
+        --     cmp.select_next_item { behavior = cmp.SelectBehavior.Insert }
+        --   end,
+        -- },
+        -- ["<C-k>"] = {
+        --   c = function()
+        --     cmp.select_prev_item { behavior = cmp.SelectBehavior.Insert }
+        --   end,
+        -- },
       })
 
       -- Use buffer source for `/` (if you enabled `native_menu`, this won't work anymore).

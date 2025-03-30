@@ -69,4 +69,13 @@ return {
       require("advanced_git_search.fzf").setup({})
     end
   },
+  {
+    "folke/lazydev.nvim",
+    ft = "lua",
+    opts = {
+      library = {
+        "lazy.nvim",
+      }
+    }
+  }
 }

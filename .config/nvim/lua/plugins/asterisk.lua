@@ -2,6 +2,8 @@ return {
   "haya14busa/vim-asterisk",
   dependencies = "haya14busa/is.vim",
   keys = {
+    { "/" },
+    { "?" },
     {
       "n",
       function ()

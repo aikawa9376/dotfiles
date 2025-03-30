@@ -47,7 +47,7 @@ local getHomeName = function()
 end
 
 local colorFilename = function(files)
-  local cmd = 'echo -e "' .. table.concat(files, '\n') .. '" | xargs -d "\n" $XDG_CONFIM_HOME/nvim/bin/color-ls'
+  local cmd = 'echo -e "' .. table.concat(files, '\n') .. '" | xargs -d "\n" $XDG_CONFIG_HOME/nvim/bin/color-ls'
   local handle = io.popen(cmd)
   if handle then
     local result = handle:read("*all")
@@ -112,6 +112,8 @@ local getFileOpt = function ()
     return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
   end
   opts.fzf_opts = {
+    ["-x"] = "",
+    ["--no-sort"] = "",
     ["--multi"] = "",
     ["--scheme"] = "history",
     ["--no-unicode"] = "",
@@ -228,6 +230,8 @@ local getMruOpts = function (func, name)
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
   })
   opts.fzf_opts = {
+    ["-x"] = "",
+    ["--no-sort"] = "",
     ["--multi"] = "",
     ["--scheme"] = "history",
     ["--no-unicode"] = "",
