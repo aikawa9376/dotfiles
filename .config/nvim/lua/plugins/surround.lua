@@ -1,6 +1,11 @@
 return {
   "kylechui/nvim-surround",
-  event = "VeryLazy",
+  keys = {
+    { "ys", mode = { "n" } },
+    { "cs", mode = { "n" } },
+    { "ds", mode = { "n" } },
+    { "S", mode = { "x" } },
+  },
   opts = {
     surrounds = {
       [")"] = {

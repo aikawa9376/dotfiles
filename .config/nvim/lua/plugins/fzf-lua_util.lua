@@ -113,9 +113,9 @@ local getFileOpt = function ()
   end
   opts.fzf_opts = {
     ["-x"] = "",
-    ["--no-sort"] = "",
     ["--multi"] = "",
     ["--scheme"] = "history",
+    ["--tiebreak"] = "index",
     ["--no-unicode"] = "",
   }
 
@@ -231,8 +231,8 @@ local getMruOpts = function (func, name)
   })
   opts.fzf_opts = {
     ["-x"] = "",
-    ["--no-sort"] = "",
     ["--multi"] = "",
+    ["--tiebreak"] = "index",
     ["--scheme"] = "history",
     ["--no-unicode"] = "",
   }

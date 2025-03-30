@@ -1,6 +1,6 @@
 return {
   "NvChad/nvim-colorizer.lua",
-  event = "VeryLazy",
+  event = "BufReadPre",
   opts = {
     filetypes = { "*", "!fugitive", "!noice" },
     user_default_options = {

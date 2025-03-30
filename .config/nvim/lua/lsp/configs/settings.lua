@@ -232,6 +232,7 @@ M.default = function(client, bufnr)
     })
   end
 
+  -- use blink.cmp
   -- if client.server_capabilities.signatureHelpProvider then
   --   require("lsp_signature").on_attach({
   --     bind = true, -- This is mandatory, otherwise border config won't get registered.
