@@ -118,12 +118,6 @@ M.configs = {
           version = "LuaJIT",
           path = vim.split(package.path, ";"),
         },
-        workspace = {
-          library = {
-            [vim.fn.expand("$VIMRUNTIME/lua")] = true,
-            [vim.fn.expand("$VIMRUNTIME/lua/vim/lsp")] = true,
-          },
-        },
       },
     },
     on_attach = function(client, bufnr)
@@ -238,14 +232,14 @@ M.default = function(client, bufnr)
     })
   end
 
-  -- if client.server_capabilities.publishDiagnosticsProvider then
-    require("lsp_signature").on_attach({
-      bind = true, -- This is mandatory, otherwise border config won't get registered.
-      hint_enable = false,
-      handler_opts = {
-        border = "rounded",
-      },
-    }, bufnr)
+  -- if client.server_capabilities.signatureHelpProvider then
+  --   require("lsp_signature").on_attach({
+  --     bind = true, -- This is mandatory, otherwise border config won't get registered.
+  --     hint_enable = false,
+  --     handler_opts = {
+  --       border = "rounded",
+  --     },
+  --   }, bufnr)
   -- end
 
   if client.server_capabilities.inlayHintProvider then

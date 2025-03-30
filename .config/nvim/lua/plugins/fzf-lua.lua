@@ -20,7 +20,9 @@ return {
       width = 0.6,
       row = 0.5,
       preview = {
-        border = "rounded"
+        border = "rounded",
+        layout = "horizontal",
+        horizontal = "down:40%"
       }
     }
 
