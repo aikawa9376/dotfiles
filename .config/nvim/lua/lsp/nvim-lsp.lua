@@ -3,15 +3,15 @@ local nvim_lsp = require("lspconfig")
 local capabilities = vim.lsp.protocol.make_client_capabilities()
 
 -- Try to load 'blink.cmp' module
-local blink_cmp_loaded, blink_cmp = pcall(require, 'blink.cmp')
-if blink_cmp_loaded then
-  capabilities = blink_cmp.get_lsp_capabilities(capabilities)
-else
-  local cmp_nvim_lsp_loaded, cmp_nvim_lsp = pcall(require, 'cmp_nvim_lsp')
-  if cmp_nvim_lsp_loaded then
-    capabilities = cmp_nvim_lsp.default_capabilities(capabilities)
-  end
-end
+-- local blink_cmp_loaded, blink_cmp = pcall(require, 'blink.cmp')
+-- if blink_cmp_loaded then
+--   capabilities = blink_cmp.get_lsp_capabilities(capabilities)
+-- else
+--   local cmp_nvim_lsp_loaded, cmp_nvim_lsp = pcall(require, 'cmp_nvim_lsp')
+--   if cmp_nvim_lsp_loaded then
+--     capabilities = cmp_nvim_lsp.default_capabilities(capabilities)
+--   end
+-- end
 
 local settings = require("lsp.configs.settings")
 

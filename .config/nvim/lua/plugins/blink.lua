@@ -1,10 +1,13 @@
 return {
-  { "mikavilpas/blink-ripgrep.nvim", event = "InsertEnter" },
-  { "rafamadriz/friendly-snippets", event = "InsertEnter" },
+  { 'mikavilpas/blink-ripgrep.nvim', event = 'InsertEnter' },
+  { 'rafamadriz/friendly-snippets', event = 'InsertEnter' },
+  { 'dmitmel/cmp-cmdline-history', event = 'CmdlineEnter' },
+  { 'Kaiser-Yang/blink-cmp-avante', ft = 'Avante' },
+  { 'hrsh7th/cmp-nvim-lsp-document-symbol', event = 'CmdlineEnter' },
   {
     'saghen/blink.cmp',
-    version = '*', -- バイナリをダウンロードする場合
-    event = { "InsertEnter", "CmdlineEnter" },
+    event = { 'InsertEnter', 'CmdlineEnter' },
+    build = 'cargo build --release',
     ---@module 'blink.cmp'
     ---@type blink.cmp.Config
     opts = {
@@ -35,8 +38,8 @@ return {
         ---@diagnostic disable-next-line: assign-type-mismatch
         sources = function()
           local type = vim.fn.getcmdtype()
-          if type == '/' or type == '?' then return { 'buffer' } end
-          if type == ':' or type == '@' then return { 'cmdline' } end
+          if type == '/' or type == '?' then return { 'document_symbol', 'buffer' } end
+          if type == ':' or type == '@' then return { 'cmdline', 'history' } end
           return {}
         end,
       },
@@ -58,8 +61,6 @@ return {
               else
                 return cmp.show()
               end
-            elseif cmp.snippet_active() then
-              return cmp.accept()
             else
               return cmp.select_and_accept()
             end
@@ -76,6 +77,7 @@ return {
           end,
           'fallback',
         },
+        -- ['<Tab>'] = { 'snippet_forward', 'fallback' },
         ['<C-c>'] = { 'cancel', 'fallback' },
         ['<C-p>'] = {
           function (cmp)
@@ -162,26 +164,37 @@ return {
           },
         }
       },
-
-      -- Default list of enabled providers defined so that you can extend it
-      -- elsewhere in your config, without redefining it, due to `opts_extend`
       sources = {
-        default = { 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep'  },
+        default = { 'avante', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep' },
         per_filetype = {},
         providers = {
           lsp = {
+            name = "[L]",
             fallbacks = {}
           },
+          snippets = {
+            name = "[S]"
+          },
+          path = {
+            name = "[S]"
+          },
+          buffer = {
+            name = "[B]",
+            score_offset = -15,
+          },
           lazydev = {
-            name = "LazyDev",
+            name = "[D]",
             module = "lazydev.integrations.blink",
             -- make lazydev completions top priority (see `:h blink.cmp`)
             score_offset = 100,
           },
+          cmdline = {
+            name = "[C]"
+          },
           ripgrep = {
             module = "blink-ripgrep",
-            name = "Ripgrep",
-            score_offset = -10,
+            name = "[R]",
+            score_offset = -20,
             ---@module "blink-ripgrep"
             ---@type blink-ripgrep.Options
             opts = {
@@ -193,16 +206,36 @@ return {
               search_casing = "--ignore-case",
             },
           },
+          history = {
+            name = '[H]',
+            score_offset = -15,
+            module = 'blink.compat.source',
+            opts = {
+              cmp_name = 'cmdline_history'
+            }
+          },
+          document_symbol = {
+            name = '[S]',
+            score_offset = -15,
+            module = 'blink.compat.source',
+            opts = {
+              cmp_name = 'nvim_lsp_document_symbol'
+            }
+          },
+          avante = {
+            module = 'blink-cmp-avante',
+            name = '[A]',
+          }
         },
       },
       fuzzy = {
         implementation = "prefer_rust_with_warning",
         sorts = {
-          "exact",
           "score",
+          "sort_text",
           "kind",
           "label",
-          "sort_text",
+          "exact",
         }
       },
       snippets = { preset = 'luasnip' },
