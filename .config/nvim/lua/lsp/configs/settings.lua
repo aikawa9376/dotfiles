@@ -110,6 +110,8 @@ M.configs = {
       Lua = {
         hint = {
           enable = true,
+          arrayIndex = "Disable",
+          semicolon = "Disable"
         },
         diagnostics = {
           globals = { "vim" },
