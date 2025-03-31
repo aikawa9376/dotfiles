@@ -46,6 +46,8 @@ return {
   {
     "LeafCage/qutefinger.vim",
     keys = {
+      { "<Plug>(qutefinger-prev)" },
+      { "<Plug>(qutefinger-next)" },
       { "Q", "<Plug>(qutefinger-toggle-win)", silent = true },
       { "QQ", "<Plug>(qutefinger-toggle-win)", silent = true }
     }
