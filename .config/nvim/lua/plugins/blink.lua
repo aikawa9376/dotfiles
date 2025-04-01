@@ -143,7 +143,8 @@ return {
         },
         menu = {
           min_width = 20,
-          max_height = 20,
+          -- TODO 逆方向モード実装まで
+          max_height = 10,
           draw = {
             columns = {
               { "kind_icon" },

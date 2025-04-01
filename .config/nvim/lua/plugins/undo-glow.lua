@@ -23,7 +23,7 @@ return {
         hl_color = { bg = "#325B5B" }, -- Dark muted cyan
       },
       search = {
-        hl_color = { fg = "#5C475C" }, -- Dark muted purple
+        hl_color = { fg = "#5C475C", bg = "NONE" }, -- Dark muted purple
       },
       comment = {
         hl_color = { bg = "#7A5A3D" }, -- Dark muted orange
