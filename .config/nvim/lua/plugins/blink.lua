@@ -146,6 +146,7 @@ return {
         },
         menu = {
           min_width = 20,
+          -- TODO 逆方向モード実装まで
           max_height = 10,
           draw = {
             columns = {
