@@ -2,7 +2,9 @@ return {
   { 'mikavilpas/blink-ripgrep.nvim', event = 'InsertEnter' },
   { 'rafamadriz/friendly-snippets', event = 'InsertEnter' },
   { 'dmitmel/cmp-cmdline-history', event = 'CmdlineEnter' },
-  { 'Kaiser-Yang/blink-cmp-avante', ft = 'Avante' },
+  { 'Kaiser-Yang/blink-cmp-avante', ft = 'AvanteInput' },
+  { 'fang2hou/blink-copilot', event = 'InsertEnter' },
+  { 'zbirenbaum/copilot.lua', event = 'InsertEnter', config = true },
   { 'hrsh7th/cmp-nvim-lsp-document-symbol', event = 'CmdlineEnter' },
   {
     'saghen/blink.cmp',
@@ -34,6 +36,7 @@ return {
             'fallback',
           },
           ['<C-c>'] = { 'cancel', 'fallback' },
+          ['<C-e>'] = { 'fallback' },
         },
         ---@diagnostic disable-next-line: assign-type-mismatch
         sources = function()
@@ -166,8 +169,10 @@ return {
         }
       },
       sources = {
-        default = { 'avante', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep' },
-        per_filetype = {},
+        default = { 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep' },
+        per_filetype = {
+          AvanteInput = { 'avante', 'buffer', 'ripgrep' },
+        },
         providers = {
           lsp = {
             name = "[L]",
@@ -226,7 +231,16 @@ return {
           avante = {
             module = 'blink-cmp-avante',
             name = '[A]',
-          }
+          },
+          copilot = {
+            name = "[C]",
+            module = "blink-copilot",
+            score_offset = 100,
+            async = true,
+            opts = {
+              max_completions = 3,  -- Override global max_completions
+            }
+          },
         },
       },
       fuzzy = {
