@@ -123,7 +123,7 @@ return {
         on_enter = function()
           local is_visual = vim.fn.mode():match("v")
           if is_visual then
-            pasteWithGlow('"_d<Plug>(YankyPutIndentAfter)')
+            pasteWithGlow('"_d<Plug>(YankyPutIndentBefore)')
           else
             pasteWithGlow('<Plug>(YankyPutIndentAfter)')
           end
