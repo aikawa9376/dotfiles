@@ -197,9 +197,10 @@ M.default = function(client, bufnr)
   vim.cmd([[command! -bang -nargs=? WorkspaceSymbol FzfLua lsp_live_workspace_symbols]])
 
   -- features
-  if not vim.g.auto_format_disabled and client.server_capabilities.documentFormattingProvider then
-    require("lsp-format").on_attach(client)
-  end
+  -- if not vim.g.auto_format_disabled and client.server_capabilities.documentFormattingProvider then
+  --   require("lsp-format").on_attach(client, bufnr)
+  -- end
+
   if client.server_capabilities.codeLensProvider then
     vim.lsp.codelens.refresh()
     vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "InsertLeave" }, {

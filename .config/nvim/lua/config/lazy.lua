@@ -18,7 +18,8 @@ require("lazy").setup({
   spec = {
     { import = "plugins.nightfox" },
     { import = "plugins.project" },
-    { import = "plugins.null-ls" },
+    { import = "plugins.conform"},
+    { import = "plugins.lint"},
     { import = "plugins.dressing" },
     { import = "plugins.lightbulb" },
     { import = "plugins.illuminate" },
@@ -73,6 +74,7 @@ require("lazy").setup({
     { import = "plugins.others" },
     { import = "plugins.incline" },
     { import = "plugins.undo-glow" },
+    { import = "plugins.neotest" },
     { import = "plugins.luasnip" },
     { import = "plugins.blink" },
     -- { import = "plugins.nvim-cmp" },

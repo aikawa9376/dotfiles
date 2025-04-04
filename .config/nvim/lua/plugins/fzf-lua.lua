@@ -91,7 +91,7 @@ return {
         ["--no-hscroll"] = "",
         ["--no-separator"] = "",
         ["--tabstop"] = "2",
-        ["--tiebreak"] = "chunk,index",
+        ["--tiebreak"] = "index",
         ["--color"] = "dark,hl:34,hl+:40,bg+:235,fg+:15,info:108,prompt:109,spinner:108,pointer:168,marker:168",
       },
       files = {
