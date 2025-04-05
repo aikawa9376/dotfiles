@@ -8,7 +8,20 @@ return {
       --  head_icon, head_background, head_border, code_language, code_background, code_border
       --  dash, bullet, check_icon, check_scope, quote, table_border, callout, link, sign
       ignore = {
+        head_icon = true,
+        head_background = true,
+        head_border = true,
+        code_language = true,
         code_background = true,
+        code_border = true,
+        dash = true,
+        bullet = true,
+        check_icon = true,
+        check_scope = true,
+        quote = true,
+        table_border = true,
+        callout = true,
+        link = true,
         sign = true,
       },
     },
@@ -49,6 +62,9 @@ return {
         checked = { raw = '[x]', rendered = '󰱒 ', highlight = 'RenderMarkdownChecked', scope_highlight = nil },
       },
     },
+    completions = {
+      blink = { enabled = true },
+    }
   },
   init = function ()
     -- H1 ～ H6 のフォアグラウンド（文字色）と背景色の設定

@@ -8,6 +8,7 @@ return {
     },
     build = ":TSUpdate",
     config = function ()
+      ---@diagnostic disable: missing-fields
       require("nvim-treesitter.configs").setup({
         ensure_installed = "all",
         highlight = {

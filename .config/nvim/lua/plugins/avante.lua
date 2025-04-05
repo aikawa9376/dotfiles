@@ -24,6 +24,11 @@ return {
         mode = { "n", "v" },
       },
       {
+        opts.mappings.stop,
+        function() require("avante.api").stop() end,
+        mode = { "n", "v", "i" },
+      },
+      {
         "<Leader>cL",
         function ()
           require"plugins.avante_util".avante_code_readability_analysis()
@@ -99,12 +104,14 @@ return {
         insert = "<C-s>",
       },
       cancel = {
-        normal = { "<C-s>" }
+        normal = { "<C-c>" },
+        insert = { "<C-c>" },
       },
       ask = "<leader>cc",
       edit = "<leader>ce",
       refresh = "<leader>cr",
       focus = "<leader>cf",
+      stop = "<leader>cC",
       toggle = {
         default = "<leader>ct",
         debug = "<leader>cd",

@@ -4,8 +4,6 @@ return {
   branch = "error-fix",
   config = function ()
     local Hydra = require('hydra')
-    -- 何故かrequreしないと存在が無い
-    local diagnostic = require('vim.diagnostic')
 
     -- undo-glow用
     local ugOpts = require("undo-glow.utils").merge_command_opts("UgPaste", {})
@@ -271,8 +269,8 @@ return {
         hint = false,
         invoke_on_body = true,
         on_enter = function()
-          diagnostic.goto_next({ float = false })
-          diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor', focusable = false })
+          vim.diagnostic.jump({ count = 1, float = true })
+          vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor', focusable = false })
         end
       },
       heads = {
@@ -292,8 +290,8 @@ return {
         hint = false,
         invoke_on_body = true,
         on_enter = function()
-          diagnostic.goto_prev({ float = false })
-          diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor', focusable = false })
+          vim.diagnostic.jump({ count = -1, float = true })
+          vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor', focusable = false })
         end
       },
       heads = {

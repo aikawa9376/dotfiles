@@ -154,8 +154,6 @@ M.default = function(client, bufnr)
     vim.api.nvim_set_option_value(name, value, { buf = bufnr })
   end
 
-  -- vim.o.winborder = "rounded"
-
   -- Enable completion triggered by <c-x><c-o>
   buf_set_option("omnifunc", "v:lua.vim.lsp.omnifunc")
 

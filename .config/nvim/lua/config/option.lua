@@ -57,5 +57,7 @@ opt.pumheight = 20
 opt.cmdheight = 0
 -- opt.shellslash = true
 
+-- opt.winborder = "rounded"
+
 vim.api.nvim_set_var("do_filetype_lua", 1)
 vim.api.nvim_set_var("did_load_filetypes", 0)
