@@ -58,6 +58,7 @@ opt.cmdheight = 0
 -- opt.shellslash = true
 
 vim.opt.clipboard = 'unnamedplus'
+-- opt.winborder = "rounded"
 
 vim.api.nvim_set_var("do_filetype_lua", 1)
 vim.api.nvim_set_var("did_load_filetypes", 0)

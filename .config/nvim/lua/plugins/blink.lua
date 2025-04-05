@@ -25,6 +25,7 @@ return {
           menu = { auto_show = true },
         },
         keymap = {
+          ['<CR>'] = { 'select_accept_and_enter', 'fallback' },
           ['<C-space>'] = {
             function(cmp)
               if not cmp.is_visible() then
