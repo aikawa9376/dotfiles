@@ -251,7 +251,7 @@ return {
           "sort_text",
           "kind",
           "label",
-          "exact",
+          -- "exact",
         }
       },
       snippets = { preset = 'luasnip' },

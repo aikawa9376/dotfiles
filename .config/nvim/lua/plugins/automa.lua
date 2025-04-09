@@ -1,6 +1,6 @@
 return {
   "hrsh7th/nvim-automa",
-  event = "VeryLazy",
+  keys = { '.' },
   config = function ()
     require('automa').setup({
       mapping = {
