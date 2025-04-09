@@ -32,7 +32,7 @@ require("lazy").setup({
     { import = "plugins.avante" },
     { import = "plugins.colorizer" },
     { import = "plugins.insx" },
-    { import = "plugins.automa" },
+    -- { import = "plugins.automa" },
     { import = "plugins.comment" },
     { import = "plugins.yanky" },
     { import = "plugins.flash" },
@@ -73,7 +73,10 @@ require("lazy").setup({
     { import = "plugins.others" },
     { import = "plugins.incline" },
     { import = "plugins.undo-glow" },
+    { import = "plugins.trouble" },
     { import = "plugins.neotest" },
+    { import = "plugins.overseer" },
+    { import = "plugins.resession" },
     { import = "plugins.luasnip" },
     { import = "plugins.blink" },
     -- { import = "plugins.nvim-cmp" },
@@ -95,6 +98,7 @@ require("lazy").setup({
     { "honza/vim-snippets", event = "VeryLazy" },
     { "kana/vim-niceblock", event = "VeryLazy" },
     { "stevearc/quicker.nvim", ft = "qf", config = true },
+    { "akinsho/git-conflict.nvim", config = true },
     { "aikawa9376/vim-auto-cursorline", event = "VeryLazy" },
     { "aikawa9376/neomru.vim", event = "VeryLazy" },
     { "cseickel/diagnostic-window.nvim", cmd = { "DiagWindowShow" } },
@@ -103,7 +107,6 @@ require("lazy").setup({
   },
   performance = {
     rtp = {
-      ---@type string[] list any plugins you want to disable here
       disabled_plugins = {
         "gzip",
         "matchit",

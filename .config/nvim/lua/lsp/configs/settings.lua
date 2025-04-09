@@ -201,32 +201,6 @@ M.default = function(client, bufnr)
     })
   end
 
-  if client.capabilities.textDocument.publishDiagnostics then
-    -- diagnostic settings
-    vim.diagnostic.config({
-      virtual_text = false,
-      float = {
-        border = "rounded",
-        focusable = false
-      },
-      signs = {
-        priority = 100,
-        text = {
-          [vim.diagnostic.severity.E] = "",
-          [vim.diagnostic.severity.W] = "",
-          [vim.diagnostic.severity.I] = "",
-          [vim.diagnostic.severity.N] = ""
-        },
-        numhl = {
-          [vim.diagnostic.severity.E] = "DiagnosticSignError",
-          [vim.diagnostic.severity.W] = "DiagnosticSignWarn",
-          [vim.diagnostic.severity.I] = "DiagnosticSignInfo",
-          [vim.diagnostic.severity.N] = "DiagnosticSignHint"
-        }
-      },
-    })
-  end
-
   -- use blink.cmp
   -- if client.server_capabilities.signatureHelpProvider then
   --   require("lsp_signature").on_attach({

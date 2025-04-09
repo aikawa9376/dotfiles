@@ -11,10 +11,20 @@ return {
       -- end,
     },
     select = {
-      backend = { "builtin" },
+      backend = { "fzf_lua", "fzf", "builtin"  },
       builtin = {
         relative = "cursor",
-      }
+      },
+      fzf_lua = {
+        winopts = {
+          border = "rounded",
+          height = 0.4,
+          width = 0.6,
+          row = 0.5,
+          preview = nil,
+          split = false,
+        },
+      },
     }
   }
 }

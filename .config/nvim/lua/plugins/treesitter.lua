@@ -61,6 +61,13 @@ return {
   },
   { "m-demare/hlargs.nvim", event = "VeryLazy", opts = { hl_priority = 150 } },
   {
+    "David-Kunz/treesitter-unit",
+    keys = {
+      { "iu", function () require"treesitter-unit".select() end, mode = { "o" } },
+      { "au", function () require"treesitter-unit".select(true) end, mode = { "o" } }
+    }
+  },
+  {
     "HiPhish/rainbow-delimiters.nvim",
     event = "VeryLazy",
     config = function()
