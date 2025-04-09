@@ -2,7 +2,7 @@ return {
   'stevearc/conform.nvim',
   cmd = { "Format", "ConformInfo" },
   keys = {
-    { "gf", function () vim.cmd("Format") end, mode = { "n", "x" } },
+    { "ge", function () vim.cmd("Format") end, mode = { "n", "x" } },
   },
   ---@module "conform"
   ---@type conform.setupOpts

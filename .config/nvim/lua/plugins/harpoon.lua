@@ -28,8 +28,9 @@ return {
     local mappings = {
       { "mm", function() require"harpoon".ui:toggle_quick_menu(require"harpoon":list("multiple")) end, mode = "n" },
       { "ma", function() toggleHarpoon() end, mode = "n" },
-      { "mf", function() require"harpoon":list("multiple"):next() end, mode = "n" },
-      { "mb", function() require"harpoon":list("multiple"):prev() end, mode = "n" },
+      -- setting hydra
+      -- { "mf", function() require"harpoon":list("multiple"):next() end, mode = "n" },
+      -- { "mb", function() require"harpoon":list("multiple"):prev() end, mode = "n" },
       { "md", function() print(vim.inspect(require"harpoon":list("multiple"))) end, mode = "n" }
     }
     mappings = vim.tbl_filter(function(m) return m[1] and #m[1] > 0 end, mappings)

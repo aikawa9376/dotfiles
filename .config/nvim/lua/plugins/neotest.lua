@@ -23,24 +23,41 @@ return {
       },
     },
     dependencies = { { 'nvim-neotest/nvim-nio', lazy = true } },
-    opts = {
-      adapters = {},
-      status = {
-        enabled = true,
-        signs = false,
-        virtual_text = true
-      },
-      summary = {
-        mappings = {
-          expand = "o",
-          expand_all = "O",
-          run = "<CR>",
-          output = "p",
-          short = "S",
+    config = function ()
+      require'neotest'.setup({
+        consumers = {
+          ---@diagnostic disable-next-line: assign-type-mismatch
+          overseer = require("neotest.consumers.overseer"),
         },
-      },
-
-    } -- no adapters registered on initial setup
+        strategies = {
+          overseer = {
+            components = {
+              { "open_output", focus = false, direction = "dock" },
+              "default",
+            },
+          }
+        },
+        overseer = {
+          enabled = true,
+          force_default = true,
+        },
+        adapters = {},
+        status = {
+          enabled = true,
+          signs = false,
+          virtual_text = true
+        },
+        summary = {
+          mappings = {
+            expand = "o",
+            expand_all = "O",
+            run = "<CR>",
+            output = "p",
+            short = "S",
+          },
+        },
+      })
+    end,
   },
   {
     'olimorris/neotest-phpunit',

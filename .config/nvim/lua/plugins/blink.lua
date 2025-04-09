@@ -25,13 +25,13 @@ return {
           menu = { auto_show = true },
         },
         keymap = {
-          ['<CR>'] = { 'select_accept_and_enter', 'fallback' },
+          ['<CR>'] = { 'accept_and_enter', 'fallback' },
           ['<C-space>'] = {
             function(cmp)
               if not cmp.is_visible() then
                 return cmp.show()
               else
-                return cmp.select_and_accept()
+                return cmp.select_accept_and_enter()
               end
             end,
             'fallback',
@@ -173,6 +173,7 @@ return {
         default = { 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep' },
         per_filetype = {
           AvanteInput = { 'avante', 'buffer', 'ripgrep' },
+          sql = {  'buffer', 'snippets' },
         },
         providers = {
           lsp = {
@@ -215,7 +216,7 @@ return {
           },
           history = {
             name = '[H]',
-            score_offset = -15,
+            score_offset = -20,
             module = 'blink.compat.source',
             opts = {
               cmp_name = 'cmdline_history'
@@ -236,7 +237,7 @@ return {
           copilot = {
             name = "[C]",
             module = "blink-copilot",
-            score_offset = 100,
+            score_offset = 0,
             async = true,
             opts = {
               max_completions = 3,  -- Override global max_completions
@@ -251,7 +252,7 @@ return {
           "sort_text",
           "kind",
           "label",
-          "exact",
+          -- "exact",
         }
       },
       snippets = { preset = 'luasnip' },

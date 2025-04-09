@@ -24,8 +24,8 @@ return {
         end
       },
       heads = {
-        { 'f', '<cmd>lua require("harpoon"):list("multiple"):prev()<CR>' },
-        { 'b', '<cmd>lua require("harpoon"):list("multiple"):next()<CR>' },
+        { 'f', '<cmd>lua require("harpoon"):list("multiple"):prev({ ui_nav_wrap = true })<CR>' },
+        { 'b', '<cmd>lua require("harpoon"):list("multiple"):next({ ui_nav_wrap = true })<CR>' },
       }
     })
     Hydra({
@@ -40,8 +40,8 @@ return {
         end
       },
       heads = {
-        { 'f', '<cmd>lua require("harpoon"):list("multiple"):prev()<CR>' },
-        { 'b', '<cmd>lua require("harpoon"):list("multiple"):next()<CR>' },
+        { 'f', '<cmd>lua require("harpoon"):list("multiple"):prev({ ui_nav_wrap = true })<CR>' },
+        { 'b', '<cmd>lua require("harpoon"):list("multiple"):next({ ui_nav_wrap = true })<CR>' },
       }
     })
 
