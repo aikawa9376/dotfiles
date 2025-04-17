@@ -32,6 +32,12 @@ vim.diagnostic.handlers.signs = {
     bufnr = vim._resolve_bufnr(bufnr)
     opts = opts or {}
 
+    local ns = vim.diagnostic.get_namespace(namespace)
+    if not ns.user_data.sign_ns then
+      ns.user_data.sign_ns =
+        vim.api.nvim_create_namespace(string.format('nvim.%s.diagnostic.signs', ns.name))
+    end
+
     -- 10 is the default sign priority when none is explicitly specified
     local priority = opts.signs and opts.signs.priority or 10
 
@@ -42,7 +48,7 @@ vim.diagnostic.handlers.signs = {
 
     for _, diagnostic in ipairs(diagnostics) do
       if diagnostic.lnum <= line_count then
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, diagnostic.lnum, 0, {
+        vim.api.nvim_buf_set_extmark(bufnr, ns.user_data.sign_ns, diagnostic.lnum, 0, {
           number_hl_group = numhl[diagnostic.severity],
           line_hl_group = linehl[diagnostic.severity],
           priority = priority,
@@ -51,8 +57,9 @@ vim.diagnostic.handlers.signs = {
     end
   end,
   hide = function(namespace, bufnr)
-    if vim.api.nvim_buf_is_valid(bufnr) then
-      vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
+    local ns = vim.diagnostic.get_namespace(namespace)
+    if ns.user_data.sign_ns and vim.api.nvim_buf_is_valid(bufnr) then
+      vim.api.nvim_buf_clear_namespace(bufnr, ns.user_data.sign_ns, 0, -1)
     end
   end,
 }

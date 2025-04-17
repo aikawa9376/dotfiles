@@ -1,6 +1,6 @@
 return {
   "airblade/vim-gitgutter",
-  event = "VeryLazy",
+  event = "BufReadPre",
   keys = {
   { "gm", "<cmd>GitGutterPreviewHunk<CR>", silent = true  },
   { "<Leader>gh", "<cmd>GitGutterStageHunk<CR>", silent = true  },

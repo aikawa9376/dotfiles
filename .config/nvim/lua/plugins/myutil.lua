@@ -1,6 +1,6 @@
 return {
   "aikawa9376/myutil.vim",
-  event = "VeryLazy",
+  event = "BufRead",
   init = function ()
     vim.opt.foldtext = "myutil#custom_fold_text()"
     vim.keymap.set("n", "gl", "<cmd>call myutil#hl_text_toggle()<CR>", { silent = true })

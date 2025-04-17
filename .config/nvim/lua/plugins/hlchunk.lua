@@ -1,6 +1,6 @@
 return {
   "shellRaining/hlchunk.nvim",
-  event = "VeryLazy",
+  event = "BufReadPre",
   opts = {
     chunk = {
       enable = true,

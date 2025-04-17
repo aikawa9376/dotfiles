@@ -1,7 +1,7 @@
 return {
   {
     "nvim-treesitter/nvim-treesitter",
-    event = "VeryLazy",
+    event = "BufReadPre",
     dependencies = {
       "nvim-treesitter/nvim-treesitter-textobjects" ,
       "windwp/nvim-ts-autotag"
@@ -59,7 +59,7 @@ return {
       })
     end
   },
-  { "m-demare/hlargs.nvim", event = "VeryLazy", opts = { hl_priority = 150 } },
+  { "m-demare/hlargs.nvim", event = "BufReadPre", opts = { hl_priority = 150 } },
   {
     "David-Kunz/treesitter-unit",
     keys = {
@@ -69,7 +69,7 @@ return {
   },
   {
     "HiPhish/rainbow-delimiters.nvim",
-    event = "VeryLazy",
+    event = "BufReadPre",
     config = function()
       require('rainbow-delimiters.setup').setup{
         highlight = {

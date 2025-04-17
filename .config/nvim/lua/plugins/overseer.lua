@@ -4,7 +4,6 @@ return {
     "stevearc/dressing.nvim",
   },
   cmd = { 'OverseerRun', 'OverseerToggle' },
-  opts = {},
   opts = {
     template_dirs = { 'tasks', 'overseer.template' },
     templates = {
