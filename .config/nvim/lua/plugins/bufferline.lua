@@ -1,6 +1,6 @@
 return {
   "akinsho/bufferline.nvim",
-  event = "VeryLazy",
+  event = "BufReadPre",
   opts = {
     options = {
       numbers = function(opts)

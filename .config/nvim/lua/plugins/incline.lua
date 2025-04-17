@@ -1,6 +1,6 @@
 return {
   "b0o/incline.nvim",
-  event = "VeryLazy",
+  event = "BufReadPre",
   opts = {
     debounce_threshold = {
       falling = 50,

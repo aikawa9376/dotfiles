@@ -6,7 +6,7 @@ return {
       vim.api.nvim_win_set_config(win, { focusable = false })
     end,
     max_width = 100,
-    top_down = false,
+    top_down = true,
     background_colour = '#002b36'
   }
 }

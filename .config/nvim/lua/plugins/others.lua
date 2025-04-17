@@ -1,12 +1,7 @@
 return {
   {
-    "lukas-reineke/lsp-format.nvim",
-    lazy= true,
-    opts = { blade = { exclude = { "intelephense" } } },
-  },
-  {
     "cappyzawa/trim.nvim",
-    event = "VeryLazy",
+    event = "BufReadPre",
     opts = { fb_blocklist = {"markdown"} },
   },
   {
@@ -22,6 +17,7 @@ return {
     "xiyaowong/accelerated-jk.nvim",
     event = "VeryLazy",
     opts = { acceleration_table = {35,97,141,212,314,414,514,614} },
+    event = "BufReadPre",
   },
   {
     "ii14/exrc.vim",
@@ -29,12 +25,12 @@ return {
   },
   {
     "tpope/vim-abolish",
-    event = "VeryLazy",
+    event = "BufReadPre",
     init = function () vim.g.abolish_no_mappings = 1 end,
   },
   {
     "markonm/traces.vim",
-    event = "VeryLazy",
+    event = "BufReadPre",
     init = function () vim.g.traces_abolish_integration = 1 end,
   },
   {

@@ -60,12 +60,7 @@ return {
         return gitdir and #gitdir > 0 and #gitdir < #filepath
       end,
       recording = function()
-        local modeName = require("noice").api.status.mode.get()
-        if modeName ~= nil and string.find(modeName, "recording") == 1 then
-          return true
-        else
-          return false
-        end
+        return vim.fn.reg_recording() ~= ""
       end,
     }
 
@@ -136,7 +131,7 @@ return {
       table.insert(config.inactive_sections.lualine_x, component)
     end
 
-    function changeName(name)
+    local changeName = function (name)
       if string.find(name, "term") then
         return "TERM"
       elseif string.find(name, "defx") then
@@ -260,7 +255,9 @@ return {
     --   condition = conditions.hide_in_width,
     -- }
     ins_right({
-      require("noice").api.statusline.mode.get,
+      function ()
+        return vim.fn.reg_recording() .. ' recording'
+      end,
       cond = conditions.recording,
       color = { fg = "#ff9e64" },
     })
@@ -276,7 +273,7 @@ return {
 
     ins_right({
       function()
-        icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
+        local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
         if (icon == nil) then
           return  vim.o.filetype
         else
@@ -322,7 +319,7 @@ return {
 
     table.insert(config.inactive_sections.lualine_a, {
       function()
-        icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
+        local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
         if (icon == nil) then
           return  changeName(vim.fn.expand("%="))
         else

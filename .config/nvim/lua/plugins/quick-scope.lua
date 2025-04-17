@@ -1,6 +1,6 @@
 return {
   "unblevable/quick-scope",
-  event = "VeryLazy",
+  event = "BufReadPre",
   init = function ()
     vim.g.qs_hi_priority = 20
     vim.g.qs_ignorecase = 1
