@@ -200,13 +200,20 @@ return {
       config = {
         hint = false,
         invoke_on_body = true,
-        on_enter = function()
-          vim.cmd 'GitGutterNextHunk'
-        end
+        on_key = function() vim.wait(50) end,
+        on_enter = function () require"gitsigns".nav_hunk('next') end
       },
       heads = {
-        { ']', '<cmd>GitGutterNextHunk<CR>' },
-        { '[', '<cmd>GitGutterPrevHunk<CR>' },
+        { ']', function ()
+          if vim.wo.diff then return ']c' end
+          vim.schedule(function() require"gitsigns".nav_hunk('next') end)
+          return '<Ignore>'
+        end },
+        { '[', function ()
+          if vim.wo.diff then return '[c' end
+          vim.schedule(function() require"gitsigns".nav_hunk('prev') end)
+          return '<Ignore>'
+        end },
       }
     })
     Hydra({
@@ -216,13 +223,20 @@ return {
       config = {
         hint = false,
         invoke_on_body = true,
-        on_enter = function()
-          vim.cmd 'GitGutterPrevHunk'
-        end
+        on_key = function() vim.wait(50) end,
+        on_enter = function () require"gitsigns".nav_hunk('prev') end
       },
       heads = {
-        { ']', '<cmd>GitGutterNextHunk<CR>' },
-        { '[', '<cmd>GitGutterPrevHunk<CR>' },
+        { ']', function ()
+          if vim.wo.diff then return ']c' end
+          vim.schedule(function() require"gitsigns".nav_hunk('next') end)
+          return '<Ignore>'
+        end },
+        { '[', function ()
+          if vim.wo.diff then return '[c' end
+          vim.schedule(function() require"gitsigns".nav_hunk('prev') end)
+          return '<Ignore>'
+        end },
       }
     })
 
@@ -233,14 +247,41 @@ return {
       config = {
         hint = false,
         invoke_on_body = true,
+        on_key = function()
+          if require"trouble".is_open() then
+            vim.wait(50)
+          end
+        end,
         on_enter = function()
-          vim.fn.feedkeys(
-            vim.api.nvim_replace_termcodes('<Plug>(qutefinger-next)', true, true, true), 'n')
+          if require"trouble".is_open() then
+            vim.schedule(function() require("trouble").next({ jump = true }) end)
+            return '<Ignore>'
+          else
+            vim.fn.feedkeys(
+              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-next)', true, true, true), 'n')
+          end
         end
       },
       heads = {
-        { ']', '<Plug>(qutefinger-next)' },
-        { '[', '<Plug>(qutefinger-prev)' },
+        { ']', function ()
+          if require"trouble".is_open() then
+            vim.schedule(function() require("trouble").next({ jump = true }) end)
+            return '<Ignore>'
+          else
+            -- vim.api.nvim_feedkeys('<Plug>(qutefinger-next)', 'n', true)
+            vim.fn.feedkeys(
+              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-next)', true, true, true), 'n')
+          end
+        end },
+        { '[', function ()
+          if require"trouble".is_open() then
+            vim.schedule(function() require("trouble").prev({ jump = true }) end)
+            return '<Ignore>'
+          else
+            vim.fn.feedkeys(
+              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-prev)', true, true, true), 'n')
+          end
+        end }
       }
     })
     Hydra({
@@ -250,14 +291,41 @@ return {
       config = {
         hint = false,
         invoke_on_body = true,
+        on_key = function()
+          if require"trouble".is_open() then
+            vim.wait(50)
+          end
+        end,
         on_enter = function()
-          vim.fn.feedkeys(
-            vim.api.nvim_replace_termcodes('<Plug>(qutefinger-prev)', true, true, true), 'n')
+          if require"trouble".is_open() then
+            vim.schedule(function() require("trouble").prev({ jump = true }) end)
+            return '<Ignore>'
+          else
+            vim.fn.feedkeys(
+              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-prev)', true, true, true), 'n')
+          end
         end
       },
       heads = {
-        { ']', '<Plug>(qutefinger-next)' },
-        { '[', '<Plug>(qutefinger-prev)' },
+        { ']', function ()
+          if require"trouble".is_open() then
+            vim.schedule(function() require("trouble").next({ jump = true }) end)
+            return '<Ignore>'
+          else
+            -- vim.api.nvim_feedkeys('<Plug>(qutefinger-next)', 'n', true)
+            vim.fn.feedkeys(
+              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-next)', true, true, true), 'n')
+          end
+        end },
+        { '[', function ()
+          if require"trouble".is_open() then
+            vim.schedule(function() require("trouble").prev({ jump = true }) end)
+            return '<Ignore>'
+          else
+            vim.fn.feedkeys(
+              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-prev)', true, true, true), 'n')
+          end
+        end }
       }
     })
 
@@ -270,14 +338,14 @@ return {
         invoke_on_body = true,
         on_enter = function()
           vim.diagnostic.jump({ count = 1, float = true })
-          vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor', focusable = false })
+          vim.diagnostic.open_float(nil, {  scope = 'cursor', focusable = false })
         end
       },
       heads = {
         { ']',
-          "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>" },
+          "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
         { '[',
-          "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>" },
+          "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
         { '<C-Space>',
           "<cmd>Lspsaga diagnostic_jump_next<CR>", { exit = true } },
       }
@@ -291,14 +359,14 @@ return {
         invoke_on_body = true,
         on_enter = function()
           vim.diagnostic.jump({ count = -1, float = true })
-          vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor', focusable = false })
+          vim.diagnostic.open_float(nil, {  scope = 'cursor', focusable = false })
         end
       },
       heads = {
         { ']',
-          "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>" },
+          "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
         { '[',
-          "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = false })<CR>" },
+          "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
         { '<C-Space>',
           "<cmd>Lspsaga diagnostic_jump_prev<CR>", { exit = true } },
       }

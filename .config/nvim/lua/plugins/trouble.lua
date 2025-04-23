@@ -20,26 +20,6 @@ return {
         })
       end
     },
-    {
-      "<M-j>",
-      function ()
-        if require("trouble").is_open() then
-          require("trouble").next({ jump = true })
-        else
-          vim.cmd("bnext")
-        end
-      end
-    },
-    {
-      "<M-k>",
-      function ()
-        if require("trouble").is_open() then
-          require("trouble").prev({ jump = true })
-        else
-          vim.cmd("bprev")
-        end
-      end
-    }
   },
   config = true,
   otps = {},

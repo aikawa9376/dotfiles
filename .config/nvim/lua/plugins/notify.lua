@@ -3,7 +3,7 @@ return {
   lazy = true,
   opts = {
     on_open = function (win)
-      vim.api.nvim_win_set_config(win, { focusable = false })
+      vim.api.nvim_win_set_config(win, { border = 'single', focusable = false  })
     end,
     max_width = 100,
     top_down = true,

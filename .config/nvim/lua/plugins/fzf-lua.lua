@@ -90,16 +90,16 @@ return {
     },
     buffers = {
       winopts = {
-      border = "rounded",
-      height = 0.6,
-      width = 0.6,
-      row = 0.5,
-      preview = {
-        border = "rounded",
-        layout = "horizontal",
-        horizontal = "down:40%"
-      }
-    },
+        border = "single",
+        height = 0.6,
+        width = 0.6,
+        row = 0.5,
+        preview = {
+          border = "single",
+          layout = "horizontal",
+          horizontal = "down:40%"
+        }
+      },
       fn_pre_win = function(opts)
         opts.winopts.split = nil
       end

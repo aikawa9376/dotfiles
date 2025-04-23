@@ -43,7 +43,6 @@ local function open_preview(parent, float_opts)
     row = math.floor((vim.o.lines - math.floor(vim.o.lines * 0.62569)) / 2),
     col = math.floor((vim.o.columns - math.floor(vim.o.columns * 0.62569)) / 2),
     style = "minimal",
-    border = "rounded",
     focusable = false,
   }, float_opts)
 
