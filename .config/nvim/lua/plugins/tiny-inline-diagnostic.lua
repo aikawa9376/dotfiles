@@ -31,7 +31,7 @@ return {
       show_source = false,
 
       -- Use icons defined in the diagnostic configuration
-      use_icons_from_diagnostic = false,
+      use_icons_from_diagnostic = true,
 
       -- Set the arrow icon to the same color as the first diagnostic severity
       set_arrow_to_diag_color = false,

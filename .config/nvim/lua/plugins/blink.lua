@@ -138,14 +138,12 @@ return {
         documentation = {
           auto_show = true,
           auto_show_delay_ms = 300,
-          window = {
-            border = 'rounded'
-          }
         },
         ghost_text = {
           enabled = true,
         },
         menu = {
+          border = 'none',
           min_width = 20,
           -- TODO 逆方向モード実装まで
           max_height = 10,
@@ -262,9 +260,6 @@ return {
           enabled = true,
           show_on_insert = true
         },
-        window = {
-          border = 'rounded'
-        }
       }
     },
     opts_extend = { "sources.default" }

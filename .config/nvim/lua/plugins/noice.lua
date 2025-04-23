@@ -4,7 +4,14 @@ return {
   opts = {
     cmdline = {
       view = "cmdline_popup", -- view for rendering the cmdline. Change to `cmdline` to get a classic cmdline at the bottom
-      opts = { buf_options = { filetype = "vim" } }, -- enable syntax highlighting in the cmdline
+      opts = {
+        buf_options = {
+          filetype = "vim",
+        },
+        border = {
+          style = "single",
+        },
+      }, -- enable syntax highlighting in the cmdline
       format = {
         -- conceal: (default=true) This will hide the text in the cmdline that matches the pattern.
         -- view: (default is cmdline view)

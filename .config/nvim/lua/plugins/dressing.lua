@@ -17,7 +17,6 @@ return {
       },
       fzf_lua = {
         winopts = {
-          border = "rounded",
           height = 0.4,
           width = 0.6,
           row = 0.5,

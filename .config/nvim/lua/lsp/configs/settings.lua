@@ -179,7 +179,7 @@ M.default = function(client, bufnr)
   buf_set_keymap(
     "n",
     "gq",
-    "<cmd>lua vim.diagnostic.open_float(nil, { border = 'rounded', scope = 'cursor',  focusable = true })<cr>",
+    "<cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = true })<cr>",
     opts
   )
 
@@ -213,7 +213,7 @@ M.default = function(client, bufnr)
   --     bind = true, -- This is mandatory, otherwise border config won't get registered.
   --     hint_enable = false,
   --     handler_opts = {
-  --       border = "rounded",
+  --       border = "single",
   --     },
   --   }, bufnr)
   -- end
