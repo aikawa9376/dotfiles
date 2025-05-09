@@ -4,6 +4,7 @@ return {
     { "<Leader>n", "<Cmd>Neotree reveal toggle<CR>", silent = true }
   },
   opts = {
+    popup_border_style = "",
     close_if_last_window = false, -- Close Neo-tree if it is the last window left in the tab
     enable_git_status = true,
     enable_diagnostics = true,
@@ -247,6 +248,12 @@ return {
           vim.api.nvim_set_var("auto_cursorline_disable", 0)
         end,
       },
+    },
+    sources = {
+      "filesystem",
+      "buffers",
+      "git_status",
+      "document_symbols",
     },
     source_selector = {
       winbar = true, -- toggle to show selector on winbar
