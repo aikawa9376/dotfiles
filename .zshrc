@@ -100,6 +100,11 @@ case $(uname -a) in
   *Microsoft*) unsetopt BG_NICE ;;
 esac
 
+# Load secret environment variables
+if [ -f "$HOME/.secrets" ]; then
+    source "$HOME/.secrets"
+fi
+
 # 外部ファイル読み込み
 export ZCONFDIR="$HOME/.config/zsh"
 function loadlib() {
