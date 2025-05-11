@@ -1,11 +1,5 @@
 ---@type vim.lsp.Config
 return {
-  tools = {
-    inlay_hints = {
-      auto = true,
-      show_variable_name = true,
-    },
-  },
   settings = {
     ["rust-analyzer"] = {
       completion = {
@@ -25,10 +19,7 @@ return {
       },
     },
   },
-  server = {
-    on_attach = function(client, bufnr)
-      require('lsp.default').settings(client, bufnr)
-    end,
-  },
-
+  on_attach = function(client, bufnr)
+    require('lsp.default').settings(client, bufnr)
+  end,
 }
