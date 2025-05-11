@@ -145,6 +145,12 @@ return {
         align = "center", -- left, center, right for title
         rounded = true,
       },
+      edit = {
+        border = 'single'
+      },
+      ask = {
+        border = 'single'
+      }
     },
     highlights = {
       ---@type AvanteConflictHighlights

@@ -1,6 +1,6 @@
 return {
   "pmizio/typescript-tools.nvim",
-  filetype = { "javascript", "typescript", "typescriptreact", "typescript.tsx"  },
+  ft = { "javascript", "typescript", "typescriptreact", "typescript.tsx" },
   config = function ()
     require("typescript-tools").setup({
       settings = {
