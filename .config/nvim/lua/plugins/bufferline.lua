@@ -45,16 +45,11 @@ return {
         if vim.fn.match(vim.fn.bufname(buf_number), "term") == -1 then
           return true
         end
-        -- filter out filetypes you don't want to see
-        if vim.bo[buf_number].filetype ~= "fzf" then
-          return true
-        end
         -- filter out based on arbitrary rules
         -- e.g. filter out vim wiki buffer from tabline in your work repo
         if vim.fn.getcwd() == "<work-repo>" and vim.bo[buf_number].filetype ~= "wiki" then
           return true
         end
-        return false
       end,
       offsets = { { filetype = "NvimTree", text = "File Explorer", text_align = "left" } },
       show_buffer_icons = true, -- disable filetype icons for buffers
