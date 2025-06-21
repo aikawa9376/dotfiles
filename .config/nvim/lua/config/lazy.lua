@@ -79,6 +79,7 @@ require("lazy").setup({
     { import = "plugins.neotest" },
     { import = "plugins.overseer" },
     { import = "plugins.resession" },
+    { import = "plugins.kulala" },
     { import = "plugins.octo" },
     { import = "plugins.typescript-tools" },
     { import = "plugins.luasnip" },

@@ -38,7 +38,7 @@ return {
       local bufname = a.nvim_buf_get_name(props.buf)
       local res = bufname ~= "" and vim.fn.substitute(vim.fn.fnamemodify(bufname, ":p"), vim.fn.getcwd(), "", "g")
         or "[No Name]"
-      if a.nvim_buf_get_option(props.buf, "modified") then
+      if vim.bo[props.buf].modified then
         res = res .. " [+]"
       end
       return res
