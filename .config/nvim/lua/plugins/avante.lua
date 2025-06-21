@@ -70,6 +70,24 @@ return {
   opts = {
     ---@alias Provider "claude" | "openai" | "azure" | "gemini" | "cohere" | "copilot" | string
     provider = "copilot", -- Recommend using Claude
+    mode = "legacy",
+    providers = {
+      copilot = {
+        model = "claude-3.5-sonnet",
+        endpoint = "https://api.githubcopilot.com",
+        allow_insecure = false,
+        timeout = 10 * 60 * 1000,
+        max_completion_tokens = 1000000,
+        reasoning_effort = "high",
+        extra_request_body = {
+          temperature = 0,
+        },
+        disable_tools = {
+          "python",
+          -- "replace_in_file",
+        },
+      },
+    },
     auto_suggestions_provider = "copilot",
     behaviour = {
       auto_suggestions = false, -- Experimental stage
@@ -77,6 +95,10 @@ return {
       auto_set_keymaps = false,
       auto_apply_diff_after_generation = false,
       support_paste_from_clipboard = false,
+    },
+    web_search_engine = {
+      provider = "tavily", -- tavily, serpapi, searchapi, google, kagi, brave, or searxng
+      proxy = nil, -- proxy support, e.g., http://127.0.0.1:7890
     },
     mappings = {
       --- @class AvanteConflictMappings
@@ -149,7 +171,8 @@ return {
         border = 'single'
       },
       ask = {
-        border = 'single'
+        border = 'single',
+        start_insert = false,
       }
     },
     highlights = {
