@@ -156,6 +156,7 @@ return {
             },
             components = {
               label = {
+                width = { fill = true, max = 35 },
                 text = function(ctx)
                   return require("colorful-menu").blink_components_text(ctx)
                 end,
@@ -171,7 +172,9 @@ return {
         default = { 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep' },
         per_filetype = {
           AvanteInput = { 'avante', 'buffer', 'ripgrep' },
-          sql = {  'buffer', 'snippets' },
+          sql = { 'buffer', 'snippets' },
+          text = { 'buffer', 'ripgrep' },
+          markdown = { 'buffer', 'ripgrep' }
         },
         providers = {
           lsp = {
