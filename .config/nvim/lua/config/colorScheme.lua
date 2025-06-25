@@ -102,19 +102,19 @@ vim.api.nvim_create_autocmd("ColorScheme", {
   callback = apply_colorscheme
 })
 
-vim.api.nvim_create_autocmd("FocusGained", {
-  pattern = "*",
-  callback = function()
-    set_highlight("Normal", { bg = "#002b36", fg = "#839496" })
-  end
-})
-
-vim.api.nvim_create_autocmd("FocusLost", {
-  pattern = "*",
-  callback = function()
-    set_highlight("Normal", { bg = "None", fg = "#839496" })
-  end
-})
+-- vim.api.nvim_create_autocmd("FocusGained", {
+--   pattern = "*",
+--   callback = function()
+--     set_highlight("Normal", { bg = "#002b36", fg = "#839496" })
+--   end
+-- })
+--
+-- vim.api.nvim_create_autocmd("FocusLost", {
+--   pattern = "*",
+--   callback = function()
+--     set_highlight("Normal", { bg = "None", fg = "#839496" })
+--   end
+-- })
 
 vim.api.nvim_create_autocmd({ "VimEnter", "WinEnter" }, {
   callback = function()
