@@ -428,6 +428,36 @@ end
 vim.cmd([[command! -nargs=* JunkFilesLua lua require"plugins.fzf-lua_util".fzf_junkfiles()]])
 
 -- ------------------------------------------------------------------
+-- loravel.nvim override
+-- ------------------------------------------------------------------
+
+M.fzf_laravel = function(winopts)
+  if vim.g.filetype ~= "php" and vim.g.filetype ~= "blade" then
+    if _G.laravel_nvim and _G.laravel_nvim.is_laravel_project then
+      local navigate = require('laravel.navigate')
+      if navigate.is_laravel_navigation_context() then
+        -- This is a Laravel-specific context, try Laravel navigation
+        local success = pcall(navigate.goto_laravel_string)
+        if success then
+          return -- Laravel navigation succeeded
+        end
+      end
+    end
+
+    -- Default to LSP definition for everything else
+    if vim.lsp.buf.definition then
+      require("fzf-lua.cmd").run_command('lsp_definitions')
+    else
+      vim.notify('No LSP definition available', vim.log.levels.WARN)
+    end
+  else
+    require("fzf-lua.cmd").run_command('lsp_definitions')
+  end
+end
+
+vim.cmd([[command! -nargs=* LaravelLua lua require"plugins.fzf-lua_util".fzf_laravel()]])
+
+-- ------------------------------------------------------------------
 -- lsp settings
 -- ------------------------------------------------------------------
 

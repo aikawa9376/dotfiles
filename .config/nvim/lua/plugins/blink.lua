@@ -175,7 +175,8 @@ return {
           AvanteInput = { 'avante', 'buffer', 'ripgrep' },
           sql = { 'buffer', 'snippets' },
           text = { 'buffer', 'ripgrep' },
-          markdown = { 'buffer', 'ripgrep' }
+          markdown = { 'buffer', 'ripgrep' },
+          php = {  'copilot', 'lazydev', 'lsp', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep'  },
         },
         providers = {
           lsp = {
@@ -244,6 +245,11 @@ return {
             opts = {
               max_completions = 3,  -- Override global max_completions
             }
+          },
+          laravel = {
+            name = "[L]",
+            score_offset = -3000,
+            module = "laravel.blink_source",
           },
         },
       },

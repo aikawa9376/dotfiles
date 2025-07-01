@@ -12,11 +12,18 @@ M.settings = function(client, bufnr)
   -- Enable completion triggered by <c-x><c-o>
   buf_set_option("omnifunc", "v:lua.vim.lsp.omnifunc")
 
+  -- disable default lsp keybindings
+  vim.keymap.set("n", "grr", "<Nop>", { buffer = bufnr, silent = true })
+  vim.keymap.set("n", "grn", "<Nop>", { buffer = bufnr, silent = true })
+  vim.keymap.set("n", "gra", "<Nop>", { buffer = bufnr, silent = true })
+  vim.keymap.set("n", "gri", "<Nop>", { buffer = bufnr, silent = true })
+
   -- Mappings.
   local opts = { noremap = true, silent = true }
   buf_set_keymap("n", "gr", "m`:FzfLua lsp_references<CR>", opts)
   buf_set_keymap("n", "gR", "m`:FzfLua lsp_finder<CR>", opts)
-  buf_set_keymap("n", "gd", "m`:FzfLua lsp_definitions<CR>", opts)
+  -- buf_set_keymap("n", "gd", "m`:FzfLua lsp_definitions<CR>", opts)
+  buf_set_keymap("n", "gd", "m`:lua require'plugins.fzf-lua_util'.fzf_laravel()<CR>", opts)
   buf_set_keymap("n", "gsd", "m`:vsplit | FzfLua lsp_definitions<CR>", opts)
   buf_set_keymap("n", "gD", "m`:FzfLua lsp_declarations<CR>", opts)
   buf_set_keymap("n", "gi", "m`:FzfLua lsp_implementations<CR>", opts)

@@ -18,6 +18,11 @@ return {
     --           return a.type > b.type
     --       end
     --   end , -- this sorts files and directories descendantly
+    -- sources = {
+    --   "filesystem",
+    --   "buffers",
+    --   "document_symbols",
+    -- },
     default_component_configs = {
       container = {
         enable_character_fade = true,
@@ -196,6 +201,25 @@ return {
           ["<c-x>"] = "clear_filter",
           ["[g"] = "prev_git_modified",
           ["]g"] = "next_git_modified",
+        },
+        fuzzy_finder_mappings = {
+          ["<down>"] = "move_cursor_down",
+          ["<C-n>"] = "move_cursor_down",
+          ["<up>"] = "move_cursor_up",
+          ["<C-p>"] = "move_cursor_up",
+          ["<esc>"] = "close",
+          ["<S-CR>"] = "close_keep_filter",
+          ["<C-CR>"] = "close_clear_filter",
+          ["<C-w>"] = { "<C-S-w>", raw = true },
+          {
+            n = {
+              ["j"] = "move_cursor_down",
+              ["k"] = "move_cursor_up",
+              ["<S-CR>"] = "close_keep_filter",
+              ["<C-CR>"] = "close_clear_filter",
+              ["<esc>"] = "close",
+            }
+          },
         },
       },
     },

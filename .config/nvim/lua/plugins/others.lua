@@ -75,5 +75,13 @@ return {
         "lazy.nvim",
       }
     }
+  },
+  {
+    "adibhanna/laravel.nvim",
+    ft = { "php", "blade" },
+    opts = {
+      notifications = false,
+      keymaps = false,
+    },
   }
 }
