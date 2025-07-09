@@ -1,9 +1,9 @@
 return {
   "gbprod/substitute.nvim",
   keys = {
-    { "s", function() require('substitute').operator({ modifiers = { 'reindent' } }) end, mode = { "n" }, noremap = true, },
+    { "s", function() require('substitute').operator() end, mode = { "n" }, noremap = true, },
     { "ss", function() require('substitute').line({ modifiers = { 'reindent' } }) end, mode = { "n" }, noremap = true, },
-    { "S", function() require('substitute').eol({ modifiers = { 'reindent' } }) end, mode = { "n" }, noremap = true, },
+    { "S", function() require('substitute').eol() end, mode = { "n" }, noremap = true, },
     { "<leader>s", function() require('substitute.range').operator() end, mode = { "n" }, noremap = true, },
     { "<leader>s", function() require('substitute.range').visual() end, mode = { "x" }, noremap = true, },
     { "<leader>ss", function() require('substitute.range').word() end, mode = { "n" }, noremap = true, },
