@@ -14,4 +14,6 @@ gui:
 refresher:
   refreshInterval: 3
 os:
-  edit: 'nvim-remote'
+  edit: 'nvim {{filename}}'
+
+promptToReturnFromSubprocess: false

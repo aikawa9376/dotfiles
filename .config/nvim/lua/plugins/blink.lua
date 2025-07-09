@@ -38,7 +38,7 @@ return {
             'fallback',
           },
           ['<C-c>'] = { 'cancel', 'fallback' },
-          ['<C-e>'] = { 'fallback' },
+          ['<C-e>'] = false,
         },
         ---@diagnostic disable-next-line: assign-type-mismatch
         sources = function()
@@ -175,7 +175,7 @@ return {
           AvanteInput = { 'avante', 'buffer', 'ripgrep' },
           sql = { 'buffer', 'snippets' },
           text = { 'buffer', 'ripgrep' },
-          markdown = { 'buffer', 'ripgrep' },
+          markdown = { 'buffer', 'ripgrep', 'snippets' },
           php = {  'copilot', 'lazydev', 'lsp', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep'  },
         },
         providers = {
@@ -216,6 +216,12 @@ return {
               project_root_fallback = true,
               search_casing = "--ignore-case",
             },
+            transform_items = function(_, items)
+              for _, item in ipairs(items) do
+                item.kind_name = 'text'
+              end
+              return items
+            end,
           },
           history = {
             name = '[H]',
