@@ -15,9 +15,8 @@ return {
   },
   {
     "xiyaowong/accelerated-jk.nvim",
-    event = "VeryLazy",
-    opts = { acceleration_table = {35,97,141,212,314,414,514,614} },
     event = "BufReadPre",
+    opts = { acceleration_table = {35,97,141,212,314,414,514,614} },
   },
   {
     "ii14/exrc.vim",
