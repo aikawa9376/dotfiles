@@ -93,6 +93,24 @@ return {
         require("various-textobjs.textobjs.charwise.core").selectClosestTextobj(patterns, scope, 10)
       end
 
+      local function yank_line_diagnostics()
+        local diagnostics = vim.diagnostic.get(0, { lnum = vim.fn.line('.') - 1 })
+
+        if vim.tbl_isempty(diagnostics) then
+          vim.notify("No diagnostics on current line.", vim.log.levels.INFO)
+          return
+        end
+
+        local messages = {}
+        for _, d in ipairs(diagnostics) do
+          table.insert(messages, d.message)
+        end
+        local full_message = table.concat(messages, "\n")
+
+        vim.fn.setreg('+', full_message)
+        vim.notify("Yanked " .. #messages .. " diagnostic(s).")
+      end
+
       local mappings = {
         {
           "ai",
@@ -126,7 +144,8 @@ return {
         { "Q", function() require"various-textobjs".toNextQuotationMark() end, mode = { "o", "x" } },
         { "E", function() require"various-textobjs".entireBuffer() end, mode = { "o", "x" } },
         { "D", function() require"various-textobjs".diagnostic() end, mode = { "o", "x" } },
-        { "L", function() require"various-textobjs".lastChange() end, mode = { "o", "x" } }
+        { "L", function() require"various-textobjs".lastChange() end, mode = { "o", "x" } },
+        { "yD", function() yank_line_diagnostics() end, mode = { "n" } },
       }
       mappings = vim.tbl_filter(function(m) return m[1] and #m[1] > 0 end, mappings)
       return vim.list_extend(mappings, keys)

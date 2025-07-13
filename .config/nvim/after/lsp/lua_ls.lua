@@ -20,5 +20,4 @@ return {
     client.server_capabilities.documentFormattingProvider = false
     require('lsp.default').settings(client, bufnr)
   end,
-
 }
