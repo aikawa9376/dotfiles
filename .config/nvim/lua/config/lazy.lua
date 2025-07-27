@@ -58,6 +58,7 @@ require("lazy").setup({
     { import = "plugins.time-machine" },
     { import = "plugins.grug-far" },
     { import = "plugins.junkfile" },
+    -- { import = "plugins.guess-indent" },
     { import = "plugins.dbee" },
     { import = "plugins.tmux" },
     -- { import = "plugins.gitgutter" },

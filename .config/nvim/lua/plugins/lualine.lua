@@ -139,6 +139,18 @@ return {
       elseif string.find(name, "vista") then
         return "Symbols"
       end
+      -- なぜかgdなどでファイル名が絶対パスで表示されるので
+      local cwd = vim.fn.getcwd()
+      if cwd and name then
+        local cwd_pattern = cwd
+        if not cwd:match("/$") then
+          cwd_pattern = cwd .. "/"
+        end
+        cwd_pattern = cwd_pattern:gsub("([%.%-%+%[%]%(%)%$%^%%%?%*])", "%%%1")
+
+        name = name:gsub(cwd_pattern, "")
+        name = name:gsub("^/", "")
+      end
       return name
     end
 
