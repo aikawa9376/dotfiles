@@ -72,6 +72,7 @@ local function open_preview(parent, float_opts)
       preview_buf,
       false
     ) end, { buffer = parent.bufnr })
+    prev_row = nil
   end
 
   if prev_row ~= tonumber(item[2]) then

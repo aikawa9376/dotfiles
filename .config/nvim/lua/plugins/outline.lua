@@ -10,7 +10,7 @@ return {
     },
     symbol_folding = {
       -- Depth past which nodes will be folded by default. Set to false to unfold all on open.
-      autofold_depth = false,
+      autofold_depth = 1,
       -- When to auto unfold nodes
       auto_unfold = {
         -- Auto unfold currently hovered symbol
