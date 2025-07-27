@@ -6,8 +6,8 @@ return {
     { "<Leader>gh", function () require"gitsigns".stage_hunk() end },
     { "<Leader>gu", function () require"gitsigns".reset_hunk() end },
     { "<Leader>gi", function () require"gitsigns".toggle_current_line_blame() end },
-    { "ih", function () require"gitsigns".select_hunk() end, mode = { "o" } },
-    { "ah", function () require"gitsigns".select_hunk() end, mode = { "o" } },
+    { "ih", function () require"gitsigns".select_hunk() end, mode = { "o", "x" } },
+    { "ah", function () require"gitsigns".select_hunk() end, mode = { "o", "x" } },
   },
   opts = {
     signs = {

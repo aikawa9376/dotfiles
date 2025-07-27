@@ -2,7 +2,7 @@ return {
   "tpope/vim-fugitive",
   cmd = {
     "Git", "Gdiff", "Gwrite", "Gdiffsplit",
-    "Gedit", "GitAddCommit", "GitAddAmend"
+    "Gedit", "GitAddCommit", "GitAddAmend", "Gcd"
   },
   keys = {
   { "<Leader>gs", "<cmd>Git<CR>", silent = true },

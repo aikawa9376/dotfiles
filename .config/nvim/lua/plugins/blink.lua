@@ -169,13 +169,13 @@ return {
         }
       },
       sources = {
-        default = { 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep' },
+        default = { 'lsp', 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep' },
         per_filetype = {
           AvanteInput = { 'avante', 'buffer', 'ripgrep' },
           sql = { 'buffer', 'snippets' },
           text = { 'buffer', 'ripgrep' },
           markdown = { 'buffer', 'ripgrep', 'snippets' },
-          php = {  'copilot', 'lazydev', 'lsp', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep'  },
+          php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep'  },
         },
         providers = {
           lsp = {
@@ -183,14 +183,14 @@ return {
             fallbacks = {}
           },
           snippets = {
-            name = "[S]"
+            name = "[S]",
           },
           path = {
             name = "[S]"
           },
           buffer = {
             name = "[B]",
-            score_offset = -15,
+            score_offset = -5,
           },
           lazydev = {
             name = "[D]",
@@ -245,7 +245,6 @@ return {
           copilot = {
             name = "[C]",
             module = "blink-copilot",
-            score_offset = 0,
             async = true,
             opts = {
               max_completions = 3,  -- Override global max_completions
@@ -253,7 +252,7 @@ return {
           },
           laravel = {
             name = "[L]",
-            score_offset = -3000,
+            score_offset = -2005,
             module = "laravel.blink_source",
           },
         },
@@ -261,10 +260,21 @@ return {
       fuzzy = {
         implementation = "prefer_rust_with_warning",
         sorts = {
+          function (a, b)
+            if require"blink.cmp".get_context().get_keyword() == "" then
+              return nil
+            end
+            if a.kind_name == "Copilot" and b.client_name ~= nil then
+              return false
+            end
+            if a.client_name ~= nil and b.kind_name == "Copilot" then
+              return true
+            end
+          end,
           "score",
           "sort_text",
-          "kind",
-          "label",
+          -- "kind",
+          -- "label",
           -- "exact",
         }
       },

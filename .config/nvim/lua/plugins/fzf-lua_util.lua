@@ -12,6 +12,7 @@ local defaultActions = {
 }
 
 local middleFloatWinOpts = {
+  split = false,
   border = "single",
   height = 0.6,
   width = 0.6,
@@ -22,6 +23,7 @@ local middleFloatWinOpts = {
 }
 
 local fullFloatWinOpts = {
+  split = false,
   border = "single",
   height = 0.9,
   width = 0.9,
@@ -92,6 +94,7 @@ end
 
 local getFileOpt = function ()
   local opts = {}
+  opts.multiprocess = false
   opts.prompt = getHomeName() .. ' >'
   opts.previewer = "builtin"
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
@@ -151,6 +154,7 @@ local getRipgrepOpts = function (isAll)
   isAll = isAll == nil and true or isAll
 
   local opts = {}
+  opts.multiprocess = false
   opts.prompt = '>'
   opts.previewer = "builtin"
   opts.winopts = {
@@ -340,9 +344,7 @@ M.fzf_harpoon = function(winopts)
         ["--no-unicode"] = "",
       },
       winopts =  winopts,
-      fn_pre_win = function(opts)
-        opts.winopts.split = nil
-
+      winopts_fn= function(opts)
         -- bufferだけに影響が収まるのか未調査
         harpoon:extend({
           REMOVE = function(obj)
@@ -389,6 +391,7 @@ local getJunkFileOpt = function ()
   end
 
   local opts = {}
+  opts.multiprocess = false
   opts.prompt = 'Memo >'
   opts.previewer = previewer
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
