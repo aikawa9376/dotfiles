@@ -60,7 +60,7 @@ return {
     },
     config = function ()
       vim.g.lazygit_use_custom_config_file_path = 1
-      vim.g.lazygit_config_file_path = '$XDG_CONFIG_HOME/lazygit/config_nvim.yml'
+      vim.g.lazygit_config_file_path = os.getenv("XDG_CONFIG_HOME") .. "/lazygit/config_nvim.yml"
     end
   },
   {

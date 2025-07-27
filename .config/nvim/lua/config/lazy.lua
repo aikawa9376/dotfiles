@@ -62,7 +62,7 @@ require("lazy").setup({
     { import = "plugins.tmux" },
     -- { import = "plugins.gitgutter" },
     { import = "plugins.gitsigns" },
-    { import = "plugins.fugitive" },
+    { import = "plugins.fugitive" }, -- 5cfbc35aa8381f3e199be248fbb94b05c16f82ff
     { import = "plugins.diffview" },
     { import = "plugins.lualine" },
     { import = "plugins.bufferline" },

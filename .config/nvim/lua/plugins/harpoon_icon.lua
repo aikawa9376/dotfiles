@@ -5,7 +5,7 @@ local M = {}
 
 -- デフォルト設定
 local default_config = {
-  icon = " ",
+  icon = "󰛢",
   nearest_entry = true,
   icon_position = "eol",  -- "eol" または "signcolumn"
 }
@@ -26,7 +26,7 @@ local function move_cursor_to_nearest_entry(cx)
 
   for line_number, entry in ipairs(cx.contents) do
     local file, row = entry:match("([^:]+):(%d+):(%d+)")
-    if not string.find(cx.current_file, file, 1, true) then
+    if file == nil or not string.find(cx.current_file, file, 1, true) then
       goto continue
     end
 
@@ -100,7 +100,7 @@ end
 M.set_current_buffer_icon = function(cx, config)
   for line_number, entry in pairs(cx.contents) do
     local file = entry:match("([^:]+):(%d+):(%d+)")
-    if string.find(cx.current_file, file, 1, true) then
+    if file ~= nil and string.find(cx.current_file, file, 1, true) then
       -- highlight the harpoon menu line that corresponds to the current buffer
       vim.api.nvim_buf_set_extmark(cx.bufnr, HarpoonIconNS, line_number - 1,  0, {
         virt_text = {{config.icon, "DiagnosticError"}},  -- アイコンとハイライトグループ

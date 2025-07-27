@@ -90,6 +90,7 @@ return {
     },
     buffers = {
       winopts = {
+        split = false,
         border = "single",
         height = 0.6,
         width = 0.6,
@@ -100,9 +101,6 @@ return {
           horizontal = "down:40%"
         }
       },
-      fn_pre_win = function(opts)
-        opts.winopts.split = nil
-      end
     },
     lsp = {
       includeDeclaration = false,

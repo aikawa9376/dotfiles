@@ -11,7 +11,7 @@ local function get_current_file()
     local file_path = vim.fn.expand(line)
     local item = vim.split(file_path, ":")
     if vim.fn.filereadable(item[1]) == 0 then
-        print("ファイルが存在しません: " .. item[1])
+        -- print("ファイルが存在しません: " .. item[1])
         return
     end
     return item
@@ -28,9 +28,13 @@ end
 
 local function previewWinMove(win_id, bufnr, direction)
   local pos = vim.api.nvim_win_get_cursor(win_id)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
   local new_row = pos[1] + (direction and 1 or -1)
+
+  if new_row < 1 or new_row > line_count then return end
+
   vim.api.nvim_win_set_cursor(win_id, { new_row, pos[2] })
-  highlight_cursor(bufnr, new_row)
+  highlight_cursor(bufnr, new_row - 1)
 end
 
 -- プレビューを開く関数
