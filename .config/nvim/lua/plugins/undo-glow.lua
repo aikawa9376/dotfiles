@@ -1,6 +1,6 @@
 return {
   "y3owk1n/undo-glow.nvim",
-  lazy = true,
+  event = "BufRead",
   ---@type UndoGlow.Config
   opts = {
     animation = {

@@ -3,7 +3,7 @@ return {
   ft = { 'markdown', 'Avante', 'fzf' },
   opts = {
     anti_conceal = {
-      enabled = true,
+      enabled = false,
       -- ignored. Possible keys are:
       --  head_icon, head_background, head_border, code_language, code_background, code_border
       --  dash, bullet, check_icon, check_scope, quote, table_border, callout, link, sign
