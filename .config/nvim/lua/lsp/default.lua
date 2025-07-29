@@ -77,6 +77,10 @@ M.settings = function(client, bufnr)
   if client.server_capabilities.inlayHintProvider then
     vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
   end
+
+  if client.server_capabilities.colorProvider then
+    vim.lsp.document_color.enable(false, bufnr)
+  end
 end
 
 return M
