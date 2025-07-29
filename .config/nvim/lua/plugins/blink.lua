@@ -148,6 +148,7 @@ return {
           min_width = 20,
           -- TODO 逆方向モード実装まで
           max_height = 10,
+          order = { n = 'bottom_up', s = 'top_down' },
           draw = {
             columns = {
               { "kind_icon" },
@@ -209,12 +210,14 @@ return {
             ---@module "blink-ripgrep"
             ---@type blink-ripgrep.Options
             opts = {
+              backend = {
+                context_size = 5,
+                max_filesize = "1M",
+                project_root_fallback = true,
+                search_casing = "--ignore-case",
+              },
               prefix_min_len = 3,
-              context_size = 5,
-              max_filesize = "1M",
               project_root_marker = ".git",
-              project_root_fallback = true,
-              search_casing = "--ignore-case",
             },
             transform_items = function(_, items)
               for _, item in ipairs(items) do
