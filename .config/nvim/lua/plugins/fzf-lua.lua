@@ -21,6 +21,7 @@ return {
     { "<Leader>e", function () require"plugins.fzf-lua_util".fzf_mru_files_cwd() end, silent = true },
     { "<Leader>E", function () require"plugins.fzf-lua_util".fzf_mru_files() end, silent = true },
     { "<Leader>m", function () require"plugins.fzf-lua_util".fzf_junkfiles() end, silent = true },
+    { "<Leader>d", function () require"plugins.fzf-lua_util".fzf_dirs({}) end, silent = true },
     { "mx", function () require"plugins.fzf-lua_util".fzf_harpoon() end, silent = true }
   },
   opts = {

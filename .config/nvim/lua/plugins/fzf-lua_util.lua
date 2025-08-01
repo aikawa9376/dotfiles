@@ -147,6 +147,41 @@ vim.cmd([[command! -nargs=* FilesLua lua require"plugins.fzf-lua_util".fzf_files
 vim.cmd([[command! -nargs=* AllFilesLua lua require"plugins.fzf-lua_util".fzf_all_files()]])
 
 -- ------------------------------------------------------------------
+-- Directories Enhanced
+-- ------------------------------------------------------------------
+
+local getDirOpt = function ()
+  local opts = {}
+  opts.prompt = 'Directories >'
+  -- opts.previewer = "builtin"
+  opts.actions =  {
+    ["enter"] = {
+      function (selected)
+        vim.cmd('TermForceCloseAll')
+        vim.cmd('Oil ' .. selected[1])
+      end
+    },
+  }
+  opts.fzf_opts = {
+    ["-x"] = "",
+    ["--multi"] = "",
+    ["--scheme"] = "history",
+    ["--tiebreak"] = "index",
+    ["--no-unicode"] = "",
+  }
+  opts.winopts = middleFloatWinOpts
+
+  return opts
+end
+
+M.fzf_dirs = function(opts)
+  fzf_lua.fzf_exec(
+    "fd --strip-cwd-prefix --type directory --follow --hidden --color=always --exclude .git",
+    getDirOpt()
+  )
+end
+
+-- ------------------------------------------------------------------
 -- RM grep
 -- ------------------------------------------------------------------
 
@@ -173,7 +208,7 @@ local getRipgrepOpts = function (isAll)
     ["enter"] = fzf_lua.actions.file_edit_or_qf,
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
   })
-  opts.file_icons = true
+  opts.file_icons = false
   opts.fn_transform = function(x)
     return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
   end
