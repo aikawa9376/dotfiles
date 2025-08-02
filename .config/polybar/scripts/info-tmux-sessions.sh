@@ -1,6 +1,8 @@
 #! /bin/sh
 
-if sessionlist=$(tmux ls); then
+if ! ps aux | grep -v grep | grep -q tmux; then
+    printf ""
+elif sessionlist=$(tmux ls 2>/dev/null); then
     windowlist=$(tmux lsw)
 
     sessionnum=$(echo "$sessionlist" | wc -l)
@@ -17,7 +19,6 @@ if sessionlist=$(tmux ls); then
             printf "%s-%s [%s:%s][%s:%s]" "$session" "$window" "$windownow" "$windownum" "$sessionnow" "$sessionnum"
         fi
     done
-
 else
     printf ""
 fi

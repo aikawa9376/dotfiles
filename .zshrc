@@ -62,7 +62,7 @@ zinit light trapd00r/LS_COLORS
 # 基本設定
 # -------------------------------------
 export PATH="/usr/local/bin:$PATH"
-export TERM='tmux-256color'
+export TERM='xterm-kitty'
 export XAPIAN_CJK_NGRAM=1
 export EDITOR='nvim'
 export PAGER='bat'
@@ -375,3 +375,10 @@ chpwd() {
 # Xserver start
 # -------------------------------------
 [[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx i3
+
+# -------------------------------------
+# tmux start
+# -------------------------------------
+if [[ "$TERM" == "xterm-kitty" && -z "$TMUX" ]]; then
+  tmux  start-server || tmux new-session -d
+fi

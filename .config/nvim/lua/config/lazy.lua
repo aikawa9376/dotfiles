@@ -76,6 +76,7 @@ require("lazy").setup({
     { import = "plugins.others" },
     { import = "plugins.incline" },
     { import = "plugins.undo-glow" },
+    { import = "plugins.kitty-scrollback" },
     { import = "plugins.trouble" },
     { import = "plugins.neotest" },
     { import = "plugins.overseer" },

@@ -161,6 +161,13 @@ local getDirOpt = function ()
         vim.cmd('Oil ' .. selected[1])
       end
     },
+    ["ctrl-s"] = {
+      function (selected)
+        vim.cmd('TermForceCloseAll')
+        vim.cmd('vsplit')
+        vim.cmd('Oil ' .. selected[1])
+      end
+    }
   }
   opts.fzf_opts = {
     ["-x"] = "",
@@ -179,6 +186,70 @@ M.fzf_dirs = function(opts)
     "fd --strip-cwd-prefix --type directory --follow --hidden --color=always --exclude .git",
     getDirOpt()
   )
+end
+
+local function path_distance_score(base, target)
+  local function split(path)
+    return vim.tbl_filter(function(p) return p ~= "" end, vim.split(path, '/'))
+  end
+
+  local base_parts = split(vim.fn.fnamemodify(base, ':p'))
+  local target_parts = split(vim.fn.fnamemodify(target, ':p'))
+
+  local common = 0
+  for i = 1, math.min(#base_parts, #target_parts) do
+    if base_parts[i] == target_parts[i] then
+      common = common + 1
+    else
+      break
+    end
+  end
+
+  return (#base_parts - common) + (#target_parts - common)
+end
+
+M.fzf_dirs_smart = function(opts)
+  local current_file = vim.api.nvim_buf_get_name(0)
+  local base_dir = vim.fn.fnamemodify(current_file ~= "" and current_file or vim.fn.getcwd(), ":p:h")
+  if type(base_dir) == "string" and base_dir:find("^oil://") then
+    base_dir = base_dir:gsub("^oil://", "")
+  end
+  print(vim.inspect(base_dir))
+
+  -- fdでディレクトリ取得
+  require('plenary.job'):new({
+    command = "fd",
+    args = {
+      "--strip-cwd-prefix",
+      "--type", "directory",
+      "--follow",
+      "--hidden",
+      "--color", "never",
+      "--exclude", ".git",
+    },
+    cwd = vim.fn.getcwd(),
+    on_exit = function(j, return_val)
+      if return_val ~= 0 then
+        vim.schedule(function()
+          vim.notify("fd failed", vim.log.levels.ERROR)
+        end)
+        return
+      end
+
+      local dirs = j:result()
+
+      table.sort(dirs, function(a, b)
+        return path_distance_score(base_dir, a) < path_distance_score(base_dir, b)
+      end)
+
+      vim.schedule(function()
+        fzf_lua.fzf_exec(
+          colorFilename(dirs),
+          getDirOpt()
+        )
+      end)
+    end
+  }):start()
 end
 
 -- ------------------------------------------------------------------
