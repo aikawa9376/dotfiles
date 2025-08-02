@@ -86,5 +86,15 @@ return {
       notifications = false,
       keymaps = false,
     },
+  },
+  {
+    "mikesmithgh/kitty-scrollback.nvim",
+    cmd = {
+      'KittyScrollbackGenerateKittens',
+      'KittyScrollbackCheckHealth',
+      'KittyScrollbackGenerateCommandLineEditing',
+    },
+    event = { 'User KittyScrollbackLaunch' },
+    opts = {}
   }
 }

@@ -18,7 +18,7 @@ return {
       ["<Leader>w"] = { function ()
         require"oil".save()
       end, opts = { nowait = true }, mode = "n" },
-      ["<c-d>"] = { function () require"plugins.fzf-lua_util".fzf_dirs() end, mode = "n" }
+      ["<c-d>"] = { function () require"plugins.fzf-lua_util".fzf_dirs_smart() end, mode = "n" }
     }
   },
   init = function()
