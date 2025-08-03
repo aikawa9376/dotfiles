@@ -61,7 +61,7 @@ require("lazy").setup({
     { import = "plugins.guess-indent" },
     { import = "plugins.dbee" },
     { import = "plugins.tmux" },
-    -- { import = "plugins.gitgutter" },
+    { import = "plugins.snack" },
     { import = "plugins.gitsigns" },
     { import = "plugins.fugitive" }, -- 5cfbc35aa8381f3e199be248fbb94b05c16f82ff
     { import = "plugins.diffview" },
@@ -98,7 +98,6 @@ require("lazy").setup({
     { "MunifTanjim/nui.nvim", lazy = true },
     { "ethanholz/nvim-lastplace", config = true },
     { "nvim-lua/plenary.nvim", lazy = true },
-    { "3rd/image.nvim", lazy = true, commit = "21909e3"},
     { "xzbdmw/colorful-menu.nvim", lazy = true },
     { "Saghen/blink.compat", lazy = true },
     { "honza/vim-snippets", event = "InsertEnter" },
@@ -109,8 +108,6 @@ require("lazy").setup({
     { "aikawa9376/vim-auto-cursorline", event = "BufRead" },
     { "aikawa9376/neomru.vim", event = "BufReadPre" },
     { "cseickel/diagnostic-window.nvim", cmd = { "DiagWindowShow" } },
-    { "vim-scripts/BufOnly.vim", cmd = { "BufOnly" } },
-    { "moll/vim-bbye", cmd = { "Bdelete", "Bwipeout" } },
   },
   performance = {
     rtp = {

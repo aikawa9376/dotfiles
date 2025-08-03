@@ -60,10 +60,11 @@ local colorFilename = function(files)
 end
 
 local function getRootDir()
-  -- Vim Rooter の `FindRootDirectory` に依存
-  if vim.fn.exists("*FindRootDirectory") == 1 and vim.fn.FindRootDirectory() ~= "" then
-    local dir = vim.fn.FindRootDirectory()
-    local parts = vim.split(dir, "/", { plain = true })
+  local project = require("project_nvim.project")
+  local rootDir = pcall(project.get_project_root)
+
+  if rootDir ~= "" then
+    local parts = vim.split(project.get_project_root(), "/", { plain = true })
     return parts[#parts]
   else
     return ""
@@ -153,7 +154,13 @@ vim.cmd([[command! -nargs=* AllFilesLua lua require"plugins.fzf-lua_util".fzf_al
 local getDirOpt = function ()
   local opts = {}
   opts.prompt = 'Directories >'
-  -- opts.previewer = "builtin"
+  opts.preview = {
+    type = "cmd",
+    fn = function (items)
+      -- print(vim.inspect(item[0]))
+      return string.format("tree -C %s", items[1])
+    end
+  }
   opts.actions =  {
     ["enter"] = {
       function (selected)
@@ -175,6 +182,7 @@ local getDirOpt = function ()
     ["--scheme"] = "history",
     ["--tiebreak"] = "index",
     ["--no-unicode"] = "",
+    ["--preview-window"] = "noborder"
   }
   opts.winopts = middleFloatWinOpts
 
@@ -214,7 +222,6 @@ M.fzf_dirs_smart = function(opts)
   if type(base_dir) == "string" and base_dir:find("^oil://") then
     base_dir = base_dir:gsub("^oil://", "")
   end
-  print(vim.inspect(base_dir))
 
   -- fdでディレクトリ取得
   require('plenary.job'):new({

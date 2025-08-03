@@ -5,11 +5,25 @@ return {
   config = function()
     local delay_ms = 1000
     local timer = nil
+    local excluded_filetypes = {
+      -- "oil",
+      "fugitive",
+    }
 
     local augroup = vim.api.nvim_create_augroup("ToggleRelativeNumber", { clear = true })
 
+    local function is_excluded_filetype()
+      local current_ft = vim.bo.filetype
+      for _, ft in ipairs(excluded_filetypes) do
+        if current_ft == ft then
+          return true
+        end
+      end
+      return false
+    end
+
     local function enable_relative_number()
-      if vim.wo.relativenumber == false and vim.wo.number then
+      if vim.wo.relativenumber == false and vim.wo.number and not is_excluded_filetype() then
         vim.opt.relativenumber = true
       end
     end

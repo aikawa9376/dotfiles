@@ -94,7 +94,7 @@ return {
           "toggle_preview",
           config = {
             use_float = true,
-            use_image_nvim = true,
+            use_snacks_image = true,
           },
         },
         ["S"] = "open_split",
