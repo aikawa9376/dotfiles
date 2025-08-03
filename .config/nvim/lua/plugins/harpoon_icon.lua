@@ -84,12 +84,12 @@ M.set_buffer_icon = function(config)
     -- バッファ名が一致する場合にのみアイコンを設定
     if current_bufname == file then
       if config.icon_position == "signcolumn" then
-        vim.fn.sign_define("HarpoonIcon", { text = config.icon, texthl = "DiagnosticError" })
+        vim.fn.sign_define("HarpoonIcon", { text = config.icon, texthl = "DevIconQt" })
         vim.fn.sign_place(0, "HarpoonGroup", "HarpoonIcon", bufnr, { lnum = row - 1 })
       else
         -- アイコンを行末に設定
         vim.api.nvim_buf_set_extmark(bufnr, HarpoonIconNS, row - 1, col - 0, {
-          virt_text = {{config.icon, "DiagnosticError"}},  -- アイコンとハイライトグループ
+          virt_text = {{config.icon, "DevIconQt"}},  -- アイコンとハイライトグループ
           virt_text_pos = config.icon_position,
         })
       end
@@ -103,7 +103,7 @@ M.set_current_buffer_icon = function(cx, config)
     if file ~= nil and string.find(cx.current_file, file, 1, true) then
       -- highlight the harpoon menu line that corresponds to the current buffer
       vim.api.nvim_buf_set_extmark(cx.bufnr, HarpoonIconNS, line_number - 1,  0, {
-        virt_text = {{config.icon, "DiagnosticError"}},  -- アイコンとハイライトグループ
+        virt_text = {{config.icon, "DevIconQt"}},  -- アイコンとハイライトグループ
         virt_text_pos = "eol",  -- 行末にアイコンを配置
       })
     end

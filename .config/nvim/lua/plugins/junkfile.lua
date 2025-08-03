@@ -3,8 +3,11 @@ return {
   cmd = "JunkfileOpen",
   init = function ()
     local workdir
-    if vim.fn.exists('*FindRootDirectory') == 1 and vim.fn.FindRootDirectory() ~= '' then
-      local dir = vim.fn.FindRootDirectory()
+    local project = require("project_nvim.project")
+    local rootDir = pcall(project.get_project_root)
+
+    if rootDir then
+      local dir = project.get_project_root()
       local dir_parts = vim.split(dir, '/')
       workdir = '/' .. dir_parts[#dir_parts]
     else

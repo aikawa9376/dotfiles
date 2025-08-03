@@ -5,11 +5,12 @@ return {
     local function currentLineExist()
       local current_bufname = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":.")
       local current_pos = vim.api.nvim_win_get_cursor(0)
-      local current_entry = current_bufname .. ":" .. current_pos[1] .. ":" .. current_pos[2]
+      local current_entry = current_bufname .. ":" .. current_pos[1]
 
       local list = require"harpoon":list("multiple"):display()
       for _, entry in ipairs(list) do
-        if (entry == current_entry) then
+        local entry_until_line = entry:gsub(":%d+$", "")
+        if (entry_until_line == current_entry) then
           return true
         end
       end

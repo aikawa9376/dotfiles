@@ -44,9 +44,5 @@ return {
       -- telescope
       datapath = vim.fn.stdpath("data"),
     }
-
-    vim.api.nvim_create_user_command('FindRootDirectory', function()
-      print(require("project_nvim.project").get_project_root())
-    end, {})
   end
 }
