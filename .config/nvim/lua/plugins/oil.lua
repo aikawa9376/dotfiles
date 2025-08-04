@@ -14,10 +14,18 @@ return {
       show_hidden = true,
     },
     keymaps = {
-      ["q"] = { "actions.close", opts = { nowait = true }, mode = "n" },
-      ["<Leader>w"] = { function ()
-        require"oil".save()
-      end, opts = { nowait = true }, mode = "n" },
+      ["q"] = {
+        function()
+          for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+            if vim.bo[bufnr].filetype == "oil" and vim.fn.bufwinnr(bufnr) ~= -1 then
+              vim.api.nvim_buf_delete(bufnr, { force = true })
+            end
+          end
+        end,
+        mode = "n",
+        nowait = true
+      },
+      ["<Leader>w"] = { function () require"oil".save() end, nowait = true, mode = "n" },
       ["<c-d>"] = { function () require"plugins.fzf-lua_util".fzf_dirs_smart() end, mode = "n" }
     }
   },
