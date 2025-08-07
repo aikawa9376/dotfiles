@@ -21,8 +21,8 @@ return {
       ["lua"] = {
         { ".", {'.', '..', '->', '=>'}, { loop = true } },
       },
-      ["javascript|typescript|typescriptreact"] = {
-        { "=", {'=', ' = ', ' == ', ' === ', ' !== '}, { loop = true } },
+      ["javascript|typescript|typescriptreact|php"] = {
+        { "=", {'=', ' = ', ' == ', '!=', ' === ', ' !== '}, { loop = true } },
       },
     },
   }

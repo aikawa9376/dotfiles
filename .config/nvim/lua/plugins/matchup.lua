@@ -1,7 +1,7 @@
 return {
   "andymass/vim-matchup",
+  event = "BufRead",
   keys = {
-    { "<Space><Space>", "%", mode = { "n", "x" } },
     { "<C-Space>", "<Plug>(matchup-z%)", mode = { "n", "x" } },
   },
   init = function ()

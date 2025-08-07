@@ -2,7 +2,8 @@ return {
   "sindrets/diffview.nvim",
   cmd = { 'DiffviewOpen', 'DiffviewFileHistory' },
   keys = {
-    { "<Leader>gH", "<cmd>DiffviewFileHistory%<CR>", silent = true }
+    { "<Leader>gH", "<cmd>DiffviewFileHistory%<CR>", silent = true },
+    { "<Leader>gD", ":DiffviewOpen origin/develop -- %" }
   },
   config = function ()
     local cb = require'diffview.config'.diffview_callback
