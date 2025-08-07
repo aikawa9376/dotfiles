@@ -67,6 +67,7 @@ require("lazy").setup({
     { import = "plugins.diffview" },
     { import = "plugins.lualine" },
     { import = "plugins.bufferline" },
+    { import = "plugins.goto-preview" },
     { import = "plugins.myutil" },
     { import = "plugins.dial" },
     { import = "plugins.toggleterm" },

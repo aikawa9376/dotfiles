@@ -78,6 +78,7 @@ return {
       ["--info"] = "inline",
       ["--no-hscroll"] = "",
       ["--no-separator"] = "",
+      ["--scrollbar"] = "▕",
       ["--tabstop"] = "2",
       ["--tiebreak"] = "chunk,index",
       ["--color"] = "dark,hl:34,hl+:40,bg+:235,fg+:15,info:108,prompt:109,spinner:108,pointer:168,marker:168",
