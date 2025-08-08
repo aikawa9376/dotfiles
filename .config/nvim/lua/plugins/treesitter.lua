@@ -42,6 +42,16 @@ return {
               ["ia"] = "@parameter.inner",
             },
           },
+          move = {
+            enable = true,
+            set_jump = true,
+            goto_next_start = {
+              ["]]"] = "@function.outer",
+            },
+            goto_previous_start = {
+              ["[["] = "@function.outer",
+            },
+          },
         },
         context_commentstring = {
           enable = true,

@@ -34,6 +34,11 @@ return {
       vim.keymap.set('n', '<CR>', function()
         open_preview_in_buffer()
       end, { buffer = bufnr, silent = true, nowait = true, desc = "Open in buffer" })
+
+      vim.api.nvim_set_option_value('number', false, { scope = 'local' })
+    end,
+    post_close_hook = function()
+      vim.api.nvim_set_option_value('number', true, { scope = 'local' })
     end,
   }
 }
