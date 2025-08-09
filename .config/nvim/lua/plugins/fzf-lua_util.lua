@@ -286,7 +286,7 @@ local getRipgrepOpts = function (isAll)
     ["enter"] = fzf_lua.actions.file_edit_or_qf,
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
   })
-  opts.file_icons = false
+  opts.file_icons = true
   opts.fn_transform = function(x)
     return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
   end
