@@ -73,6 +73,7 @@ require("lazy").setup({
     { import = "plugins.treesitter" },
     { import = "plugins.bufjump" },
     { import = "plugins.gitlinker" },
+    { import = "plugins.mcphub" },
     { import = "plugins.others" },
     { import = "plugins.incline" },
     { import = "plugins.undo-glow" },
