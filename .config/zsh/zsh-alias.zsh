@@ -121,7 +121,7 @@ alias dkur='docker run --rm -v /etc/group:/etc/group:ro -v /etc/passwd:/etc/pass
 # 拡張子 エイリアス
 # -------------------------------------
 alias -s {gz,tar,zip,msi,rar,7z,rar,xz}='unar' # archives less -> lsar
-alias -s {png,jpg,gif}='feh'
+alias -s {png,jpg,gif}='icat'
 alias -s {txt,md}='bat'
 # alias -s {pdf}='okular'
 alias -s {gddoc,gdscript,gdsheet,gdslides,pptx,pdf,xls,xlsx,doc,docx,ai,psd}='gdopen'

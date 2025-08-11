@@ -79,7 +79,7 @@ M.settings = function(client, bufnr)
   end
 
   if client.server_capabilities.colorProvider then
-    vim.lsp.document_color.enable(false, bufnr)
+    vim.lsp.document_color.enable(false, bufnr, { style = "foreground" })
   end
 end
 
