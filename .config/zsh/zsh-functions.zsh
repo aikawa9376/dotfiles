@@ -369,18 +369,27 @@ ghq-update() {
 }
 
 ghistory() {
-  local cols sep google_history open
+  local cols sep history_file open
   cols=$(( COLUMNS / 3 ))
   sep='{::}'
 
   if [ "$(uname)" = "Darwin" ]; then
-    google_history="$HOME/Library/Application Support/Google/Chrome/Default/History"
+    history_file="$HOME/Library/Application Support/Google/Chrome/Default/History"
     open=open
   else
-    google_history="$HOME/.config/google-chrome/Default/History"
+    # Try Google Chrome first, then fallback to Vivaldi
+    if [ -f "$HOME/.config/google-chrome/Default/History" ]; then
+      history_file="$HOME/.config/google-chrome/Default/History"
+    elif [ -f "$HOME/.config/vivaldi/Default/History" ]; then
+      history_file="$HOME/.config/vivaldi/Default/History"
+    else
+      echo "No browser history file found"
+      return 1
+    fi
     open=xdg-open
   fi
-  cp -f "$google_history" /tmp/h
+
+  cp -f "$history_file" /tmp/h
   sqlite3 -separator $sep /tmp/h \
     "select substr(title, 1, $cols), url
      from urls order by last_visit_time desc" |
