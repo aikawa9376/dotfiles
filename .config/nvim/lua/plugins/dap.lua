@@ -11,13 +11,18 @@ return {
     },
     config = function()
       local dap = require("dap")
-      dap.set_log_level('TRACE')
+      local dapui = require("dapui")
+      local daptxt = require("nvim-dap-virtual-text")
+
+      dap.defaults.fallback.switchbuf = 'usevisible,usetab,uselast'
 
       -- PHP adapter
       dap.adapters.php = {
         type = 'executable',
-        command = 'node',
-        args = { os.getenv('HOME') .. '/.local/share/nvim/mason/packages/php-debug-adapter/extension/out/php-debug-adapter.js' },
+        command = 'sh',
+        args = {
+          vim.fn.exepath("php-debug-adapter"),
+        },
       }
 
       dap.configurations.php = {
@@ -25,44 +30,52 @@ return {
           type = 'php',
           request = 'launch',
           name = 'Listen for Xdebug',
-          port = 9003,
+          port = 9001,
           pathMappings = {
-            ["/var/www/html"] = "${workspaceFolder}"
+            ["/var/www/html"] = vim.fn.getcwd()
           }
         },
       }
+
+      vim.fn.sign_define("DapBreakpoint", { text = "", texthl = "", linehl = "", numhl = "" })
+      vim.fn.sign_define("DapBreakpointRejected", { text = "󰉥", texthl = "", linehl = "", numhl = "", })
+      vim.fn.sign_define("DapLogPoint", { text = "", texthl = "", linehl = "", numhl = "" })
+      vim.fn.sign_define("DapStopped", { text = "", texthl = "", linehl = "", numhl = "" })
+
+      dapui.setup()
+      daptxt.setup({})
+
+      dap.listeners.before.attach.dapui_config = function()
+        dapui.open()
+      end
+      dap.listeners.before.launch.dapui_config = function()
+        dapui.open()
+      end
+      dap.listeners.before.terminate.override = function()
+        dapui.close()
+      end
+      dap.listeners.before.disconnect.override = function()
+        dapui.close()
+      end
+      dap.listeners.after.terminate.override = function()
+        daptxt.refresh()
+      end
+      dap.listeners.after.disconnect.override = function()
+        daptxt.refresh()
+      end
     end,
   },
   {
     "rcarriga/nvim-dap-ui",
     lazy = true,
-    config = function()
-      local dapui = require("dapui")
-      dapui.setup()
-
-      local dap = require("dap")
-      dap.listeners.after.event_initialized["dapui_config"] = function()
-        dapui.open()
-      end
-      dap.listeners.before.event_terminated["dapui_config"] = function()
-        dapui.close()
-      end
-      dap.listeners.before.event_exited["dapui_config"] = function()
-        dapui.close()
-      end
-    end,
-    init = function()
-      vim.api.nvim_create_user_command("DapuiToggle", function()
-        require("dapui").toggle()
-      end, {})
-      vim.api.nvim_create_user_command("DapuiEval", function()
-        require("dapui").eval()
-      end, {})
-    end,
   },
   {
     "theHamsta/nvim-dap-virtual-text",
-    cmd = { "DapVirtualTextToggle" },
-    config = true,
+    lazy = true,
+    opts = {
+      display_callback = function(variable, buf, stackframe, node, options)
+        return ':' .. variable.value:gsub("%s+", " ")
+      end,
+    }
   }
 }
