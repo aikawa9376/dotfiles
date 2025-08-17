@@ -82,10 +82,6 @@ return {
         extra_request_body = {
           temperature = 0,
         },
-        disable_tools = {
-          "python",
-          -- "replace_in_file",
-        },
       },
     },
     auto_suggestions_provider = "copilot",
@@ -100,6 +96,16 @@ return {
       provider = "tavily", -- tavily, serpapi, searchapi, google, kagi, brave, or searxng
       proxy = nil, -- proxy support, e.g., http://127.0.0.1:7890
     },
+    system_prompt = function()
+      local hub = require("mcphub").get_hub_instance()
+      return hub and hub:get_active_servers_prompt() or ""
+    end,
+    -- Using function prevents requiring mcphub before it's loaded
+    custom_tools = function()
+      return {
+        require("mcphub.extensions.avante").mcp_tool(),
+      }
+    end,
     mappings = {
       --- @class AvanteConflictMappings
       diff = {
