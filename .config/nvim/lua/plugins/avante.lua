@@ -29,6 +29,11 @@ return {
         mode = { "n", "v", "i" },
       },
       {
+        opts.mappings.focus,
+        function() require("avante.api").focus() end,
+        mode = { "n" },
+      },
+      {
         "<Leader>cL",
         function ()
           require"plugins.avante_util".avante_code_readability_analysis()
@@ -81,10 +86,6 @@ return {
         reasoning_effort = "high",
         extra_request_body = {
           temperature = 0,
-        },
-        disable_tools = {
-          "python",
-          -- "replace_in_file",
         },
       },
     },
