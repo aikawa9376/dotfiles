@@ -1,82 +1,76 @@
 return {
   {
     "nvim-treesitter/nvim-treesitter",
-    event = "BufReadPre",
-    dependencies = {
-      "nvim-treesitter/nvim-treesitter-textobjects" ,
-      "windwp/nvim-ts-autotag"
-    },
+    lazy = true,
+    branch = "main",
     build = ":TSUpdate",
-    config = function ()
-      ---@diagnostic disable: missing-fields
-      require("nvim-treesitter.configs").setup({
-        ensure_installed = "all",
-        highlight = {
-          enable = true,
-          additional_vim_regex_highlight = false,
-        },
-        incremental_selection = {
-          enable = true,
-          keymaps = {
-            init_selection = "gp",
-            node_incremental = "g+",
-            scope_incremental = "gp",
-            node_decremental = "gm",
-          },
-        },
-        indent = {
-          enable = true,
-        },
-        textobjects = {
-          select = {
-            enable = true,
-            -- Automatically jump forward to textobj, similar to targets.vim
-            lookahead = true,
-            keymaps = {
-              -- You can use the capture groups defined in textobjects.scm
-              ["af"] = "@function.outer",
-              ["if"] = "@function.inner",
-              ["aC"] = "@class.outer",
-              ["iC"] = "@class.inner",
-              ["aa"] = "@parameter.outer",
-              ["ia"] = "@parameter.inner",
-            },
-          },
-          move = {
-            enable = true,
-            set_jump = true,
-            goto_next_start = {
-              ["]]"] = "@function.outer",
-            },
-            goto_previous_start = {
-              ["[["] = "@function.outer",
-            },
-          },
-        },
-        context_commentstring = {
-          enable = true,
-          enable_autocmd = false,
-          config = {
-            toml = "# %s",
-          },
-        },
-        matchup = {
-          enable = true,
-        },
-        autotag = {
-          enable = true,
-        },
+    init = function ()
+      vim.api.nvim_create_autocmd("FileType", {
+        -- NOTICE: need treesitter-cli
+        group = vim.api.nvim_create_augroup("vim-treesitter-start", {}),
+        callback = function(ctx)
+          vim.treesitter.language.register('bash', { 'sh', 'zsh' })
+
+          local lang = vim.treesitter.language.get_lang(ctx.match)
+          local has_parser = pcall(vim.treesitter.language.inspect, lang)
+
+          if not has_parser then
+            return
+          end
+
+          local _, ts = pcall(require, "nvim-treesitter")
+
+          vim.schedule(function()
+            ts.install(lang):wait()
+            vim.treesitter.start(ctx.buf)
+            vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+            vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          end)
+        end,
       })
     end
   },
-  { "m-demare/hlargs.nvim", event = "BufReadPre", opts = { hl_priority = 150 } },
   {
-    "David-Kunz/treesitter-unit",
+    "nvim-treesitter-textobjects",
+    branch = "main",
     keys = {
-      { "iu", function () require"treesitter-unit".select() end, mode = { "o" } },
-      { "au", function () require"treesitter-unit".select(true) end, mode = { "o" } }
-    }
+      { "af", function ()
+        require"nvim-treesitter-textobjects.select".select_textobject("@function.outer", "textobjects")
+      end, mode = { "o" } },
+      { "if", function ()
+        require"nvim-treesitter-textobjects.select".select_textobject("@function.inner", "textobjects")
+      end, mode = { "o" } },
+      { "aC", function ()
+        require"nvim-treesitter-textobjects.select".select_textobject("@class.outer", "textobjects")
+      end, mode = { "o" } },
+      { "iC", function ()
+        require"nvim-treesitter-textobjects.select".select_textobject("@class.inner", "textobjects")
+      end, mode = { "o" } },
+      { "aa", function ()
+        require"nvim-treesitter-textobjects.select".select_textobject("@parameter.outer", "textobjects")
+      end, mode = { "o" } },
+      { "ia", function ()
+        require"nvim-treesitter-textobjects.select".select_textobject("@parameter.inner", "textobjects")
+      end, mode = { "o" } },
+      { "]]", function ()
+        require"nvim-treesitter-textobjects.move".goto_next_start("@function.outer", "textobjects")
+      end },
+      { "[[", function ()
+        require"nvim-treesitter-textobjects.move".goto_previous_start("@function.outer", "textobjects")
+      end }
+    },
+    opts = {
+      select = {
+        lookahead = true,
+      },
+      move = {
+        set_jumps = true,
+      }
+    },
+    config = true,
   },
+  { "windwp/nvim-ts-autotag", event = "BufReadPre", config = true },
+  { "m-demare/hlargs.nvim", event = "BufReadPre", opts = { hl_priority = 150 } },
   {
     "HiPhish/rainbow-delimiters.nvim",
     event = "BufReadPre",
