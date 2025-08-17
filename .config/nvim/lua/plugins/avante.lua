@@ -29,6 +29,11 @@ return {
         mode = { "n", "v", "i" },
       },
       {
+        opts.mappings.focus,
+        function() require("avante.api").focus() end,
+        mode = { "n" },
+      },
+      {
         "<Leader>cL",
         function ()
           require"plugins.avante_util".avante_code_readability_analysis()
