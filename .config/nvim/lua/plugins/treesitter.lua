@@ -18,13 +18,12 @@ return {
             return
           end
 
-          local _, ts = pcall(require, "nvim-treesitter")
-
           vim.schedule(function()
-            ts.install(lang):wait()
-            vim.treesitter.start(ctx.buf)
-            vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
-            vim.bo[ctx.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+            require"nvim-treesitter".install(lang):wait()
+            if pcall(vim.treesitter.start) then
+              vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
+              vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+            end
           end)
         end,
       })
