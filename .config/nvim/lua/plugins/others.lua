@@ -1,22 +1,13 @@
 return {
   {
     "cappyzawa/trim.nvim",
-    event = "BufReadPre",
+    event = "BufRead",
     opts = { fb_blocklist = {"markdown"} },
   },
   {
-    "kiyoon/treesitter-indent-object.nvim",
-    keys = {
-      { "ac", function() require'treesitter_indent_object.textobj'.select_indent_outer() end, mode = {"x", "o"} },
-      { "ac", function() require'treesitter_indent_object.textobj'.select_indent_outer(true) end, mode = {"x", "o"} },
-      { "ic", function() require'treesitter_indent_object.textobj'.select_indent_inner() end, mode = {"x", "o"} },
-      { "ic", function() require'treesitter_indent_object.textobj'.select_indent_inner(true, 'V') end, mode = {"x", "o"} },
-    },
-  },
-  {
     "xiyaowong/accelerated-jk.nvim",
-    event = "BufReadPre",
     opts = { acceleration_table = {35,97,141,212,314,414,514,614} },
+    event = "BufRead",
   },
   {
     "ii14/exrc.vim",
@@ -24,7 +15,7 @@ return {
   },
   {
     "tpope/vim-abolish",
-    event = "BufReadPre",
+    event = "BufRead",
     init = function () vim.g.abolish_no_mappings = 1 end,
   },
   {

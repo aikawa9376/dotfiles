@@ -5,12 +5,12 @@ return {
     branch = "main",
     build = ":TSUpdate",
     init = function ()
+      vim.treesitter.language.register('bash', { 'sh', 'zsh' })
+
       vim.api.nvim_create_autocmd("FileType", {
         -- NOTICE: need treesitter-cli
         group = vim.api.nvim_create_augroup("vim-treesitter-start", {}),
         callback = function(ctx)
-          vim.treesitter.language.register('bash', { 'sh', 'zsh' })
-
           local lang = vim.treesitter.language.get_lang(ctx.match)
           local has_parser = pcall(vim.treesitter.language.inspect, lang)
 
@@ -24,7 +24,7 @@ return {
             ts.install(lang):wait()
             vim.treesitter.start(ctx.buf)
             vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
-            vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+            vim.bo[ctx.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
           end)
         end,
       })

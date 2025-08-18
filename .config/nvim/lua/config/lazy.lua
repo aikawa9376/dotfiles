@@ -92,15 +92,7 @@ require("lazy").setup({
     { import = "plugins.blink" },
     -- { import = "plugins.nvim-cmp" },
     { "neovim/nvim-lspconfig", event = "BufReadPre", config = function () require"lsp" end, },
-    {
-      "mason-org/mason.nvim",
-      lazy = true,
-      opts = {
-        ensure_installed = {
-          "php-debug-adapter",
-        },
-      },
-    },
+    { "mason-org/mason.nvim", lazy = true },
     -- { "williamboman/mason-lspconfig.nvim", lazy = true },
     { "rafamadriz/friendly-snippets", lazy = true },
     -- { "onsails/lspkind-nvim", lazy = true },

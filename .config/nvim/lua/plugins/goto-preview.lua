@@ -72,19 +72,28 @@ return {
         end
       end
 
+      local resetKeyMaps = function ()
+        vim.keymap.del('n', '<C-o>', { buffer = bufnr })
+        vim.keymap.del('n', 'q', { buffer = bufnr })
+        vim.keymap.del('n', '<Esc>', { buffer = bufnr })
+        vim.keymap.del('n', '<CR>', { buffer = bufnr })
+      end
 
       vim.keymap.set('n', '<C-o>', '<C-w>c', { buffer = bufnr })
 
       vim.keymap.set('n', 'q', function()
         require("goto-preview").close_all_win()
+        resetKeyMaps()
       end, { buffer = bufnr, silent = true, nowait = true, desc = "Close preview" })
 
       vim.keymap.set('n', '<Esc>', function()
         require("goto-preview").close_all_win()
+        resetKeyMaps()
       end, { buffer = bufnr, silent = true, nowait = true, desc = "Close preview" })
 
       vim.keymap.set('n', '<CR>', function()
         open_preview_in_buffer()
+        resetKeyMaps()
       end, { buffer = bufnr, silent = true, nowait = true, desc = "Open in buffer" })
 
       vim.api.nvim_set_option_value('number', false, { scope = 'local' })
