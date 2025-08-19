@@ -3,7 +3,12 @@ return {
   event = "BufReadPre",
   keys = {
     { "gm", function () require"gitsigns".preview_hunk() end },
-    { "<Leader>gh", function () require"gitsigns".stage_hunk() end },
+    { "<Leader>ga", function () require"gitsigns".stage_hunk() end },
+    {
+      "<Leader>ga",
+      function () require"gitsigns".stage_hunk({vim.fn.line("v"), vim.fn.line(".")}) end,
+      mode = { "x" },
+    },
     { "<Leader>gu", function () require"gitsigns".reset_hunk() end },
     { "<Leader>gi", function () require"gitsigns".toggle_current_line_blame() end },
     { "ih", function () require"gitsigns".select_hunk() end, mode = { "o", "x" } },

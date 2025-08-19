@@ -1,8 +1,7 @@
 return {
   "rmagatti/goto-preview",
   keys = {
-    ---@diagnostic disable-next-line: missing-parameter
-    { "<space><space>", function () require('goto-preview').goto_preview_definition() end }
+    { "<space><space>", function () require('goto-preview').goto_preview_definition({}) end }
   },
   opts = {
     default_mappings = false,
