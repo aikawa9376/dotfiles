@@ -35,22 +35,22 @@ return {
     keys = {
       { "af", function ()
         require"nvim-treesitter-textobjects.select".select_textobject("@function.outer", "textobjects")
-      end, mode = { "o" } },
+      end, mode = { "o", "x" } },
       { "if", function ()
         require"nvim-treesitter-textobjects.select".select_textobject("@function.inner", "textobjects")
-      end, mode = { "o" } },
+      end, mode = { "o", "x" } },
       { "aC", function ()
         require"nvim-treesitter-textobjects.select".select_textobject("@class.outer", "textobjects")
-      end, mode = { "o" } },
+      end, mode = { "o", "x" } },
       { "iC", function ()
         require"nvim-treesitter-textobjects.select".select_textobject("@class.inner", "textobjects")
-      end, mode = { "o" } },
+      end, mode = { "o", "x" } },
       { "aa", function ()
         require"nvim-treesitter-textobjects.select".select_textobject("@parameter.outer", "textobjects")
-      end, mode = { "o" } },
+      end, mode = { "o", "x" } },
       { "ia", function ()
         require"nvim-treesitter-textobjects.select".select_textobject("@parameter.inner", "textobjects")
-      end, mode = { "o" } },
+      end, mode = { "o", "x" } },
       { "]]", function ()
         require"nvim-treesitter-textobjects.move".goto_next_start("@function.outer", "textobjects")
       end },

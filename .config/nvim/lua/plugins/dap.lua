@@ -47,15 +47,27 @@ return {
 
       dap.listeners.before.attach.dapui_config = function()
         dapui.open()
+        vim.keymap.set("x", "<Space><Space>", function () require"dapui".eval() end)
       end
       dap.listeners.before.launch.dapui_config = function()
         dapui.open()
+        vim.keymap.set("x", "<Space><Space>", function () require"dapui".eval() end)
       end
       dap.listeners.before.terminate.override = function()
         dapui.close()
+        vim.keymap.set(
+          "n",
+          "<Space><Space>",
+          function () require('goto-preview').goto_preview_definition({}) end
+        )
       end
       dap.listeners.before.disconnect.override = function()
         dapui.close()
+        vim.keymap.set(
+          "n",
+          "<Space><Space>",
+          function () require('goto-preview').goto_preview_definition({}) end
+        )
       end
       dap.listeners.after.terminate.override = function()
         daptxt.refresh()
