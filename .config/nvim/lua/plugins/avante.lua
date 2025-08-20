@@ -78,7 +78,7 @@ return {
     mode = "legacy",
     providers = {
       copilot = {
-        model = "claude-3.5-sonnet",
+        model = "gpt-5-mini",
         endpoint = "https://api.githubcopilot.com",
         allow_insecure = false,
         timeout = 10 * 60 * 1000,
