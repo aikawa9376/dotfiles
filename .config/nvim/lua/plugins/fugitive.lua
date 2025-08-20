@@ -6,7 +6,6 @@ return {
   },
   keys = {
     { "<Leader>gs", "<cmd>Git<CR>", silent = true },
-    { "<Leader>gd", "<cmd>Gdiffsplit<CR>", silent = true },
     { "<Leader>ga", "<cmd>Gwrite<CR>", silent = true },
     { "<Leader>gb", "<cmd>Git blame -w --date=format:'%Y-%m-%d %H:%M'<CR>", silent = true },
     { "<Leader>gp", "<cmd>Git! push<CR>", silent = true },
