@@ -87,6 +87,7 @@ local function open_preview(parent, float_opts)
         vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
       end
       vim.cmd("doautocmd BufRead " .. vim.fn.fnameescape(item[1]))
+      pcall(vim.treesitter.start,preview_buf)
     end)
 
     api.nvim_win_set_cursor(preview_win, { tonumber(item[2]), tonumber(item[3]) })

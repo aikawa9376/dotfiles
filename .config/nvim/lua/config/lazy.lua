@@ -87,6 +87,7 @@ require("lazy").setup({
     { import = "plugins.octo" },
     { import = "plugins.oil" },
     { import = "plugins.relativenumber" },
+    { import = "plugins.diff-dim" },
     { import = "plugins.typescript-tools" },
     { import = "plugins.luasnip" },
     { import = "plugins.blink" },
