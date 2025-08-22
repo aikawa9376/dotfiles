@@ -1,4 +1,3 @@
-require('config.setup')
 require('config.command')
 require('config.option')
 require('config.keymap')

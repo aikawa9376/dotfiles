@@ -81,6 +81,9 @@ M.settings = function(client, bufnr)
   if client.server_capabilities.colorProvider then
     vim.lsp.document_color.enable(false, bufnr, { style = "foreground" })
   end
+
+  -- diagnostic settings
+  require"lsp.diagnostic".settings()
 end
 
 return M
