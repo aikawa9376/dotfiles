@@ -121,5 +121,3 @@ vim.api.nvim_create_autocmd({ "VimEnter", "WinEnter" }, {
     vim.cmd([[match EWhitespace / \+$/]])
   end
 })
-
-vim.opt.winhighlight = "Normal:Normal,NormalNC:NormalNC"
