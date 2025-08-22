@@ -19,7 +19,7 @@ M.settings = function(client, bufnr)
   vim.keymap.set("n", "gri", "<Nop>", { buffer = bufnr, silent = true })
 
   -- Mappings.
-  local opts = { noremap = true, silent = true }
+  local opts = { noremap = true, silent = true, nowait = true }
   buf_set_keymap("n", "gr", "m`:FzfLua lsp_references<CR>", opts)
   buf_set_keymap("n", "gR", "m`:FzfLua lsp_finder<CR>", opts)
   -- buf_set_keymap("n", "gd", "m`:FzfLua lsp_definitions<CR>", opts)
