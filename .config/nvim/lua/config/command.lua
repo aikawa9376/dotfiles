@@ -1,15 +1,13 @@
-local cmd = vim.cmd
-
-cmd([[
+vim.cmd([[
   augroup MyAutoCmd
     autocmd!
   augroup END
 ]])
 
-cmd("filetype plugin indent on")
-cmd("autocmd MyAutoCmd InsertLeave * set nopaste")
+vim.cmd("filetype plugin indent on")
+vim.cmd("autocmd MyAutoCmd InsertLeave * set nopaste")
 
-cmd([[
+vim.cmd([[
 augroup MyAutoCmd
   autocmd FileType help,qf nnoremap <buffer> <CR> <CR>
   autocmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
@@ -34,13 +32,13 @@ augroup END
 ]])
 
 -- terminal mode
-cmd([[
+vim.cmd([[
 if exists(':terminal')
   autocmd TermOpen * nnoremap <buffer> <silent><ESC> :close<CR>
 endif
 ]])
 
-cmd([[
+vim.cmd([[
 augroup mylightline
   autocmd! FileType fzf
   autocmd  FileType fzf set laststatus=0 noshowmode noruler noshowcmd
@@ -61,3 +59,13 @@ vim.api.nvim_create_autocmd("TextYankPost", {
     end
   end
 })
+
+vim.api.nvim_create_user_command("TermForceCloseAll", function()
+  local term_bufs = vim.tbl_filter(function(buf)
+    return vim.api.nvim_get_option_value("buftype", { buf = buf }) == "terminal"
+  end, vim.api.nvim_list_bufs())
+
+  for _, t in ipairs(term_bufs) do
+    vim.cmd("bd! " .. t)
+  end
+end, {})
