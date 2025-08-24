@@ -260,7 +260,7 @@ M.fzf_dirs_smart = function(opts)
 end
 
 -- ------------------------------------------------------------------
--- RM grep
+-- RG grep
 -- ------------------------------------------------------------------
 
 local getRipgrepOpts = function (isAll)
@@ -333,6 +333,56 @@ end
 vim.cmd([[command! -nargs=* RgLua lua require"plugins.fzf-lua_util".fzf_ripgrep(<q-args>)]])
 vim.cmd([[command! -nargs=* RgTextLua lua require"plugins.fzf-lua_util".fzf_ripgrep_text(<q-args>)]])
 vim.cmd([[command! -nargs=* AllRgLua lua require"plugins.fzf-lua_util".fzf_all_ripgrep(<q-args>)]])
+
+-- ------------------------------------------------------------------
+-- Ast grep
+-- ------------------------------------------------------------------
+--
+local getAstGrepOpts = function ()
+  local opts = {}
+  opts.prompt = '>'
+  opts.previewer = "builtin"
+  opts.winopts = {
+    preview = {
+      hidden = false
+    },
+  }
+  opts.actions = vim.tbl_deep_extend("force", defaultActions, {
+    ["enter"] = fzf_lua.actions.file_edit_or_qf,
+    ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
+  })
+  opts.fzf_opts = {
+    ["--multi"] = "",
+    ["--no-unicode"] = "",
+  }
+
+  opts.fzf_opts["--delimiter"] = ":"
+  opts.fzf_opts["--with-nth"] = "{3..}"
+
+  return opts
+end
+
+M.fzf_ast_grep = function(args)
+  local lang = args[1] or vim.bo.filetype
+  fzf_lua.fzf_live(
+    "ast-grep --color always --no-ignore hidden --lang " .. lang ..
+    " --heading always --pattern <query> 2>/dev/null | " ..
+    "awk '!/│/ { filename=$0; print \"││\"filename } /│/ { print filename\"│\"$0 }' | sed 's/│/:/g'",
+    getAstGrepOpts()
+      )
+end
+
+M.fzf_ast_grep_txt = function(args)
+  local lang = args[1] or vim.bo.filetype
+  fzf_lua.fzf_live(
+    "ast-grep --color always --no-ignore hidden --lang " .. lang ..
+    " --pattern <query> 2>/dev/null",
+    getAstGrepOpts()
+      )
+end
+
+vim.cmd([[command! -nargs=* AstGrepLua lua require"plugins.fzf-lua_util".fzf_ast_grep(<q-args>)]])
+vim.cmd([[command! -nargs=* AstGrepTxtLua lua require"plugins.fzf-lua_util".fzf_ast_grep_txt(<q-args>)]])
 
 -- ------------------------------------------------------------------
 -- MRU Navigator
