@@ -195,7 +195,7 @@ fvim() {
     fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . | \
     xargs -0 eza -1 -sold --no-quotes --color=always --no-quotes 2> /dev/null) &&
   fi
-  # wraped function timg and bat?
+
   selected_files=$(echo "$files" | fzf -m --ansi --scheme=history | tr '\n' ' ') &&
 
   if [[ $selected_files == '' ]]; then
@@ -204,6 +204,36 @@ fvim() {
     nvim $(echo "$selected_files")
   fi
 }
+
+f_history_toggle() {
+  initial_list=$(atuin search --reverse --cmd-only | awk '!seen[$0]++')
+  # atuin history dedup --before now --dupkeep=1 履歴の重複を削除
+
+  local history_command
+  history_command=$(
+    echo "$initial_list" | fzf \
+      --prompt="global >" \
+      --query="${LBUFFER}" \
+      --tiebreak=index \
+      --preview="echo {} | bat --style=plain --language=sh --color=always" \
+      --preview-window hidden \
+      --bind 'ctrl-r:transform:[[ ! $FZF_PROMPT =~ dir ]] &&
+              echo "change-prompt(dir >)+reload(atuin search -c . --reverse --cmd-only | awk \"!seen[\\\$0]++\")" ||
+              echo "change-prompt(global >)+reload(atuin search --reverse --cmd-only | awk \"!seen[\\\$0]++\")"'
+  )
+
+  if [[ $? -ne 0 ]]; then
+    zle redisplay
+    return 0
+  fi
+
+  BUFFER="$history_command"
+  CURSOR=$#BUFFER
+  zle redisplay
+}
+
+zle -N f_history_toggle_widget f_history_toggle
+bindkey '^R' f_history_toggle_widget
 
 # fzf git branch
 fbr() {
@@ -510,7 +540,7 @@ hybrid_history() {
 }
 
 zle     -N    hybrid_history
-bindkey '^r'  hybrid_history
+# bindkey '^r'  hybrid_history
 
 # -------------------------------------
 # Mail suggest notmuch

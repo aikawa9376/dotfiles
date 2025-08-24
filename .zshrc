@@ -40,9 +40,6 @@ zinit load "b4b4r07/enhancd"
 # tmux fzf
 zinit ice lucid as"program" pick"tmuximum"
 zinit light "arks22/tmuximum"
-# history
-zinit ice lucid as'program' multisrc'misc/zsh/{history,keybind}.zsh'
-zinit light "b4b4r07/history"
 # abbr
 zinit ice lucid
 zinit light "momo-lab/zsh-abbrev-alias"
@@ -57,6 +54,11 @@ atpull'%atclone' pick"clrs.zsh" nocompile'!' \
 atload'export LS_COLORS=$(sed -E '\''s/;1:/:/g;s/(:di=[^:]*)/\1;1/'\'' <<<"$LS_COLORS"); \
 zstyle ":completion:*" list-colors ${(s.:.)LS_COLORS}'
 zinit light trapd00r/LS_COLORS
+# history
+zinit ice as"command" from"gh-r" bpick"atuin-*.tar.gz" mv"atuin*/atuin -> atuin" \
+atclone"./atuin init zsh > init.zsh; ./atuin gen-completions --shell zsh > _atuin" \
+atpull"%atclone" src"init.zsh"
+zinit light atuinsh/atuin
 
 # -------------------------------------
 # 基本設定
@@ -307,24 +309,9 @@ setopt hist_ignore_all_dups # ignore duplication command history list
 setopt hist_ignore_space    # スペースから始まるコマンドを無視
 setopt share_history        # share command history data
 setopt hist_no_store        # historyコマンドは履歴に登録しない
-# コマンド履歴検索
-bindkey "^P" history-substring-search-up
-bindkey "^N" history-substring-search-down
-
-# zsh-history
-autoload -Uz add-zsh-hook
-add-zsh-hook precmd  "__history::history::add"
-add-zsh-hook preexec "__history::substring::reset"
-
-# TODO test 使いづらかったら消す
 ZSH_HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND="bg=magenta,fg=white,bold"
 ZSH_HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_NOT_FOUND="bg=red,fg=white,bold"
 ZSH_HISTORY_SUBSTRING_SEARCH_GLOBBING_FLAGS="i"
-
-zle -N "__history::keybind::arrow_up"
-bindkey "^P" "__history::keybind::arrow_up"
-zle -N "__history::keybind::arrow_down"
-bindkey "^N" "__history::keybind::arrow_down"
 
 # -------------------------------------
 # キーバインディング
