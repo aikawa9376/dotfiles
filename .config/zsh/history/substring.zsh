@@ -1,98 +1,68 @@
-#!/bin/zsh
+# --- グローバル変数 ---
+typeset -g CUSTOM_HIST_INDEX
+typeset -g CUSTOM_HIST_PREV_BUFFER
+typeset -g CUSTOM_HIST_MATCHES
 
-__history::substring::search_begin()
-{
-    setopt localoptions extendedglob
-
-    _history_substring_search_refresh_display=0
-    _history_substring_search_query_highlight=
-
-    if [[ -z $BUFFER || $BUFFER != $_history_substring_search_result ]]; then
-        _history_substring_search_query=$BUFFER
-        _history_substring_search_query_escaped=${BUFFER//(#m)[\][()|\\*?#<>~^]/\\$MATCH}
-
-        _history_substring_search_matches=( ${(@f)"$(command history list \
-            --filter-branch \
-            --filter-dir \
-            --columns "{{.Command}}" \
-            --query "$_history_substring_search_query_escaped")"}
-        )
-        if [[ $#_history_substring_search_matches -eq 0 ]]; then
-            _history_substring_search_matches=()
-        fi
-
-        _history_substring_search_matches_count=$#_history_substring_search_matches
-
-        if [[ $WIDGET == history-substring-search-up ]]; then
-            _history_substring_search_match_index=$(( _history_substring_search_matches_count + 1 ))
-        else
-            _history_substring_search_match_index=$_history_substring_search_matches_count
-        fi
+# --- 前方向 Ctrl+P ---
+function custom-history-backward() {
+  if [[ -n $BUFFER && $CUSTOM_HIST_PREV_BUFFER != $BUFFER ]]; then
+    # TODO: オリジナル作る atuin search $BUFFER みたいな
+    history-substring-search-up
+  else
+    if ! [[ -n $CUSTOM_HIST_MATCHES ]]; then
+      # Zshヒストリーから部分一致を取得
+      local hist_all=("${(@f)$(atuin search -c . --cmd-only)}")
+      CUSTOM_HIST_MATCHES=()
+      for cmd in "${hist_all[@]}"; do
+        CUSTOM_HIST_MATCHES+=("$cmd")
+      done
     fi
+
+    if [[ ${#CUSTOM_HIST_MATCHES[@]} -eq 0 ]]; then return; fi
+    if [[ -z $CUSTOM_HIST_INDEX ]]; then
+      CUSTOM_HIST_INDEX=${#CUSTOM_HIST_MATCHES[@]}+1
+    fi
+
+    if (( CUSTOM_HIST_INDEX > 1 )); then
+      (( CUSTOM_HIST_INDEX-- ))
+      BUFFER=${CUSTOM_HIST_MATCHES[CUSTOM_HIST_INDEX]}
+      CUSTOM_HIST_PREV_BUFFER=$BUFFER
+      CURSOR=${#BUFFER}
+    fi
+  fi
 }
 
-__history::substring::search_end()
-{
-    setopt localoptions extendedglob
+# --- 後方向 Ctrl+N ---
+function custom-history-forward() {
+  if [[ -n $BUFFER && $CUSTOM_HIST_PREV_BUFFER != $BUFFER ]]; then
+    history-substring-search-down
+  else
+    if [[ -z $CUSTOM_HIST_INDEX ]]; then return; fi
 
-    _history_substring_search_result=$BUFFER
-
-    if (( $_history_substring_search_refresh_display == 1 )); then
-        region_highlight=()
-        CURSOR=$#BUFFER
-    fi
-
-    # highlight command line using zsh-syntax-highlighting
-    if (( $+functions[_zsh_highlight] )); then
-        _zsh_highlight
-    fi
-
-    # highlight the search query inside the command line
-    if [[ -n $_history_substring_search_query_highlight && -n $_history_substring_search_query ]]; then
-        : ${(S)BUFFER##(#m$HISTORY_SUBSTRING_SEARCH_GLOBBING_FLAGS)($_history_substring_search_query##)}
-        local begin=$(( MBEGIN - 1 ))
-        local end=$(( begin + $#_history_substring_search_query ))
-        region_highlight+=("$begin $end $_history_substring_search_query_highlight")
-    fi
-}
-
-__history::substring::history_up()
-{
-    _history_substring_search_refresh_display=1
-    _zsh_autosuggest_widget_clear
-
-    if (( $_history_substring_search_match_index > 0 )); then
-        BUFFER=$_history_substring_search_matches[$_history_substring_search_match_index]
-        _history_substring_search_query_highlight=$HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND
-        (( _history_substring_search_match_index-- ))
+    if (( CUSTOM_HIST_INDEX < ${#CUSTOM_HIST_MATCHES[@]} )); then
+      (( CUSTOM_HIST_INDEX++ ))
+      BUFFER=${CUSTOM_HIST_MATCHES[CUSTOM_HIST_INDEX]}
+      CUSTOM_HIST_PREV_BUFFER=$BUFFER
     else
-        __history::substring::not_found
+      CUSTOM_HIST_INDEX=
     fi
+    CURSOR=${#BUFEER}
+  fi
 }
 
-__history::substring::history_down()
-{
-    _history_substring_search_refresh_display=1
-    _zsh_autosuggest_widget_clear
-
-    if (( _history_substring_search_match_index < $#_history_substring_search_matches )); then
-        (( _history_substring_search_match_index++ ))
-        BUFFER=$_history_substring_search_matches[$_history_substring_search_match_index]
-        _history_substring_search_query_highlight=$HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_FOUND
-    else
-        BUFFER=$_history_substring_search_old_buffer
-        _history_substring_search_query_highlight=
-    fi
+function custom-precmd-reset-history() {
+  CUSTOM_HIST_INDEX=
+  CUSTOM_HIST_PREV_BUFFER=
+  CUSTOM_HIST_MATCHES=()
 }
 
-__history::substring::not_found()
-{
-    _history_substring_search_old_buffer=$BUFFER
-    BUFFER=$_history_substring_search_query
-    _history_substring_search_query_highlight=$HISTORY_SUBSTRING_SEARCH_HIGHLIGHT_NOT_FOUND
-}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd custom-precmd-reset-history
 
-__history::substring::reset()
-{
-    _history_substring_search_result=
-}
+# --- ZLE widget登録 ---
+zle -N custom-history-backward
+zle -N custom-history-forward
+
+# --- キーバインド ---
+bindkey '^P' custom-history-backward
+bindkey '^N' custom-history-forward
