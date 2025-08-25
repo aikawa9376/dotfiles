@@ -160,7 +160,6 @@ name_dir /home/aikawa/gdrive/download/ d
 # 略語展開 syntax
 # -------------------------------------
 local abbr_alias_file="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/abbr_aliases.zsh"
-zle_highlight=('paste:none')
 
 if command -v abbr >/dev/null 2>&1; then
   mkdir -p "$(dirname "$abbr_alias_file")"

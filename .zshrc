@@ -26,7 +26,8 @@ zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-completions"
 # zsh-history-substring-search
 zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-history-substring-search"
 # zsh-syntax-highlighting
-zinit ice wait'!0' lucid; zinit load "zdharma-continuum/fast-syntax-highlighting"
+zinit ice wait'!0' lucid atload"fast-theme $XDG_CONFIG_HOME/zsh/fsh/overlay&> /dev/null"
+zinit load "zdharma-continuum/fast-syntax-highlighting"
 # autosuggestions
 zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-autosuggestions"
 # ゴミ箱機能
@@ -124,6 +125,9 @@ loadlib $ZCONFDIR/zsh-docker.zsh
 loadlib $ZCONFDIR/zsh-openai.zsh
 loadlib $ZCONFDIR/zsh-completion.zsh
 loadlib $ZCONFDIR/history/substring.zsh
+
+# highlight調整
+zle_highlight=('paste:none')
 
 # -------------------------------------
 # fzf
