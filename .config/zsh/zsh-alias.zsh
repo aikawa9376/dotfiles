@@ -64,8 +64,8 @@ alias wup="virtstart"
 alias wdown="virtstop"
 alias i3wk='ps faux | grep "\_ i3" | head -n 1 | awk "{print \$2}" | xargs kill -s SIGCONT'
 alias hs="command history"
-alias zsup="abbrev-alias -g bb=''; zinit self-update;abbrev-alias -g bb='| bat'"
-alias zup="abbrev-alias -g bb=''; zinit update;abbrev-alias -g bb='| bat'"
+alias zsup="zinit self-update"
+alias zup="zinit update"
 alias clp="gpick -o -s -c color_web_hex | xclip -sel c"
 alias clpr="gpick -o -s -c color_css_rgb | xclip -sel c"
 alias lg="lazygit"
@@ -77,19 +77,18 @@ alias cd..="ecd .."
 # -------------------------------------
 # git
 # -------------------------------------
-abbrev-alias -g ggs='git status'
-abbrev-alias -g gga='git add -u'
-abbrev-alias -g ggas='git add -A'
-abbrev-alias -g ggc='git commit -m "update"'
-abbrev-alias -g ggp='git push'
-abbrev-alias -g gl='fshow'
-abbrev-alias -g gll='fshow branch'
-abbrev-alias -g gf='git fetch'
-abbrev-alias -g gm='git merge'
-abbrev-alias -g gb='fbr'
-abbrev-alias -g gco='git checkout'
+abbr -S --quiet ggs='git status'
+abbr -S --quiet gga='git add -u'
+abbr -S --quiet ggas='git add -A'
+abbr -S --quiet ggc='git commit -m "update"'
+abbr -S --quiet ggp='git push'
+abbr -S --quiet gl='fshow'
+abbr -S --quiet gll='fshow branch'
+abbr -S --quiet gf='git fetch'
+abbr -S --quiet gm='git merge'
+abbr -S --quiet gb='fbr'
+abbr -S --quiet gco='git checkout'
 # git hub
-abbrev-alias -g ghp='gh pr list | fzf --preview "gh pr view {1}; echo -e \"\n\"; gh pr diff --color=always {1}" | awk '\''{print $1}'\'' | xargs gh issue view --web'
 
 # -------------------------------------
 # node
@@ -106,16 +105,27 @@ alias sail='./vendor/bin/sail'
 # -------------------------------------
 # docker
 # -------------------------------------
-alias dkp='docker pull'
-alias dkc='docker compose'
-alias dkr='docker compose run --rm'
-alias dkps='docker ps -a'
-alias dkri='docker-rmi'
-alias dkrm='docker-rm'
-alias dkst='docker-stop'
-alias dkat='docker-exec-bash'
-alias dkk='docker exec'
-alias dkur='docker run --rm -v /etc/group:/etc/group:ro -v /etc/passwd:/etc/passwd:ro -u $(id -u $USER):$(id -g $USER)'
+abbr -S --quiet dkp='docker pull'
+abbr -S --quiet dkc='docker compose'
+abbr -S --quiet dku='docker compose run % -d'
+abbr -S --quiet dkd='docker compose down'
+abbr -S --quiet dkr='docker compose run --rm'
+abbr -S --quiet dkps='docker ps -a'
+abbr -S --quiet dkri='docker-rmi'
+abbr -S --quiet dkrm='docker-rm'
+abbr -S --quiet dkst='docker-stop'
+abbr -S --quiet dkat='docker-exec-bash'
+abbr -S --quiet dkk='docker exec'
+abbr -S --quiet dkur='docker run --rm -v /etc/group:/etc/group:ro -v /etc/passwd:/etc/passwd:ro -u $(id -u $USER):$(id -g $USER)'
+
+# -------------------------------------
+# グローバル エイリアス
+# -------------------------------------
+abbr -S --quiet -g le='| less'
+abbr -S --quiet -g ff='| fzf --ansi -m'
+abbr -S --quiet -g ba='| bat'
+abbr -S --quiet -g vo='| nvim'
+abbr -S --quiet -g hh='~/'
 
 # -------------------------------------
 # 拡張子 エイリアス
@@ -145,26 +155,17 @@ function name_dir() # dir, name
 name_dir /home/aikawa/workspace/ w
 name_dir /home/aikawa/gdrive/download/ d
 
+
 # -------------------------------------
-# グローバル エイリアス
+# 略語展開 syntax
 # -------------------------------------
-# setopt extended_glob
-# zle -N __abbrev_alias::magic_abbrev_expand
-# zle -N __abbrev_alias::no_magic_abbrev_expand
-# bindkey " "   __abbrev_alias::magic_abbrev_expand
-# bindkey "^x " __abbrev_alias::no_magic_abbrev_expand
-# zle -N __abbrev_alias::magic_abbrev_expand_and_insert
-# zle -N __abbrev_alias::magic_abbrev_expand_and_accept_line
-# bindkey " "    __abbrev_alias::magic_abbrev_expand_and_insert
-# bindkey "^x "  __abbrev_alias::no_magic_abbrev_expand
-# abbrev-alias -g from='$(mru)'
-# abbrev-alias -g to='$(destination_directories)'
-# abbrev-alias -g le='| less'
-# abbrev-alias -g ff='| fzf --ansi -m'
-# abbrev-alias -g bb='| bat'
-# abbrev-alias -g vo='| nvim'
-# abbrev-alias -g trs="| trans -b :ja"
-# abbrev-alias -g dst='$(duster)'
-# abbrev-alias -g fnd='$(finder)'
-# abbrev-alias -g pyg='"pygmentize -g  {}"'
-# abbrev-alias -g hh='~/'
+local abbr_alias_file="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/abbr_aliases.zsh"
+zle_highlight=('paste:none')
+
+if command -v abbr >/dev/null 2>&1; then
+  mkdir -p "$(dirname "$abbr_alias_file")"
+  abbr export-aliases -g > "$abbr_alias_file"
+  # なぜか全てに -g がついてしまうので置換 明らかにバグなのでそのうち直るはず
+  abbr export-aliases -r | sed 's/alias -g/alias/' >> "$abbr_alias_file"
+  source "$abbr_alias_file"
+fi
