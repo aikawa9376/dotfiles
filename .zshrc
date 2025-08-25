@@ -26,8 +26,7 @@ zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-completions"
 # zsh-history-substring-search
 zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-history-substring-search"
 # zsh-syntax-highlighting
-zinit ice wait'!0' lucid atinit"zpcompinit; zpcdreplay"
-zinit load "zdharma-continuum/fast-syntax-highlighting"
+zinit ice wait'!0' lucid; zinit load "zdharma-continuum/fast-syntax-highlighting"
 # autosuggestions
 zinit ice wait'!0' lucid; zinit load "zsh-users/zsh-autosuggestions"
 # ゴミ箱機能
@@ -42,7 +41,7 @@ zinit ice lucid as"program" pick"tmuximum"
 zinit light "arks22/tmuximum"
 # abbr
 zinit ice lucid
-zinit light "momo-lab/zsh-abbrev-alias"
+zinit light "olets/zsh-abbr"
 # fzf-tab
 zinit ice wait'!0' lucid; zinit load "Aloxaf/fzf-tab"
 # git plugin
@@ -175,6 +174,8 @@ bindkey '^ ' fzf-completion
 # -------------------------------------
 # 補完機能
 # -------------------------------------
+autoload -Uz compinit; compinit
+
 #補完に関するオプション
 setopt auto_param_slash      # ディレクトリ名の補完で末尾の / を自動的に付加し、次の補完に備える
 setopt mark_dirs             # ファイル名の展開でディレクトリにマッチした場合 末尾に / を付加
@@ -362,6 +363,11 @@ chpwd() {
 # Xserver start
 # -------------------------------------
 [[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx i3
+
+# -------------------------------------
+# abbr
+# -------------------------------------
+ABBR_SET_EXPANSION_CURSOR=1
 
 # -------------------------------------
 # tmux start
