@@ -18,6 +18,10 @@ function custom-history-backward() {
       done
     fi
 
+    if ! [[ -n $BUFFER ]]; then
+      CUSTOM_HIST_INDEX=
+    fi
+
     if [[ ${#CUSTOM_HIST_MATCHES[@]} -eq 0 ]]; then return; fi
     if [[ -z $CUSTOM_HIST_INDEX ]]; then
       CUSTOM_HIST_INDEX=${#CUSTOM_HIST_MATCHES[@]}+1
