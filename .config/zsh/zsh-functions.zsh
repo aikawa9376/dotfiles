@@ -207,14 +207,22 @@ fvim() {
 
 f_history_toggle() {
   local initial_list=$(atuin search --reverse --format "{time}/{command}" | awk '!seen[$0]++')
+
+  local dir; local prompt
+  local is_gitdir=$(git rev-parse --is-inside-work-tree)
+  if [[ $is_gitdir == 'true' ]]; then
+    prompt="git"
+    dir="atuin search --filter-mode workspace --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+  else
+    prompt="dir"
+    dir="atuin search --filter-mode directory --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+  fi
   local global="atuin search --reverse  --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
-  local dir="atuin search -c . --reverse  --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
-  # atuin history dedup --before now --dupkeep=1 履歴の重複を削除
 
   local delete="date -d {1} +%s | xargs -I $ sqlite3 ~/.local/share/atuin/history.db \\\"delete from history where timestamp like '$%'\\\""
   local update="date -d {1} +%s "
-  update+="| xargs -I $ sqlite3 ~/.local/share/atuin/history.db "
-  update+="\\\"update history set timestamp = CAST((julianday() - 2440587.5) * 86400000000000 AS INTEGER) where timestamp like '$%'\\\""
+        update+="| xargs -I $ sqlite3 ~/.local/share/atuin/history.db "
+        update+="\\\"update history set timestamp = CAST((julianday() - 2440587.5) * 86400000000000 AS INTEGER) where timestamp like '$%'\\\""
   # local ctrls='/usr/bin/zsh -c "'$update'"'
 
   local history_command
@@ -223,25 +231,27 @@ f_history_toggle() {
       --prompt="global >" \
       --query="${LBUFFER}" \
       --tiebreak=index \
-      --preview="echo {} | bat --style=plain --language=sh --color=always" \
+      --preview="echo {} | sed 's|/|\n|' | bat --style=plain --language=sh --color=always" \
       --delimiter=/ \
       --with-nth=2.. \
       --preview-window hidden \
-      --bind 'ctrl-r:transform:[[ ! $FZF_PROMPT =~ dir ]] &&
-              echo "change-prompt(dir >)+reload('$dir')" ||
+      --bind 'ctrl-r:transform:[[ $FZF_PROMPT =~ global ]] &&
+              echo "change-prompt('$prompt' >)+reload('$dir')" ||
               echo "change-prompt(global >)+reload('$global')"' \
-      --bind 'ctrl-s:transform:[[ $FZF_PROMPT =~ dir ]] &&
-              echo "execute-silent('$update')+reload('$dir')" ||
-              echo "execute-silent('$update')+reload('$global')"' \
-      --bind 'ctrl-x:transform:[[ $FZF_PROMPT =~ dir ]] &&
-              echo "execute-silent('$delete')+reload('$dir')" ||
-              echo "execute-silent('$delete')+reload('$global')"' \
+      --bind 'ctrl-s:transform:[[ $FZF_PROMPT =~ global ]] &&
+              echo "execute-silent('$update')+reload('$global')" ||
+              echo "execute-silent('$update')+reload('$dir')"' \
+      --bind 'ctrl-x:transform:[[ $FZF_PROMPT =~ global ]] &&
+              echo "execute-silent('$delete')+reload('$global')" ||
+              echo "execute-silent('$delete')+reload('$dir')"' \
       | cut -d'/' -f2-
   )
 
   if [[ $? -ne 0 || -z "$history_command" ]]; then
-      zle redisplay
-      return 0
+    atuin history dedup --before now --dupkeep=1 &> /dev/null
+    atuin history prune &> /dev/null
+    zle redisplay
+    return 0
   fi
 
   BUFFER="$history_command"

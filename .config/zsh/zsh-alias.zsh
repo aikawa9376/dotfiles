@@ -107,7 +107,7 @@ alias sail='./vendor/bin/sail'
 # -------------------------------------
 abbr -S --quiet dkp='docker pull'
 abbr -S --quiet dkc='docker compose'
-abbr -S --quiet dku='docker compose run % -d'
+abbr -S --quiet dku='docker compose up % -d'
 abbr -S --quiet dkd='docker compose down'
 abbr -S --quiet dkr='docker compose run --rm'
 abbr -S --quiet dkps='docker ps -a'
@@ -116,6 +116,7 @@ abbr -S --quiet dkrm='docker-rm'
 abbr -S --quiet dkst='docker-stop'
 abbr -S --quiet dkat='docker-exec-bash'
 abbr -S --quiet dkk='docker exec'
+abbr -S --quiet dks='docker container stats'
 abbr -S --quiet dkur='docker run --rm -v /etc/group:/etc/group:ro -v /etc/passwd:/etc/passwd:ro -u $(id -u $USER):$(id -g $USER)'
 
 # -------------------------------------
