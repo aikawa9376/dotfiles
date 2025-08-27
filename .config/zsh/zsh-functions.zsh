@@ -207,20 +207,15 @@ fvim() {
 
 f_history_toggle() {
   local initial_list=$(atuin search --reverse --format "{time}/{command}" | awk '!seen[$0]++')
+  local global="atuin search --reverse  --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+  local dir="atuin search -c . --reverse  --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
   # atuin history dedup --before now --dupkeep=1 履歴の重複を削除
 
-  local sqlite="date -d {1} +%s | xargs -I $ sqlite3 ~/.local/share/atuin/history.db \\\"delete from history where timestamp like '$%'\\\""
-  local ctrl_x="/usr/bin/zsh -c \"${sqlite}\""
-
-  local fzf_bind_opts="ctrl-x:execute-silent(${ctrl_x})+"
-  # local fzf_bind_opts='ctrl-x:transform:[[ ! $FZF_PROMPT =~ dir ]] &&
-  #                      echo "execute-silent('$ctrl_x')+reload(atuin search --reverse  --format \"{time}/{command}\" | awk \"!seen[\\\$0]++\")" ||
-  #                      echo "execute-silent('$ctrl_x')+reload(atuin search --reverse  --format \"{time}/{command}\" | awk \"!seen[\\\$0]++\")",'
-
-  fzf_bind_opts+='change-prompt(global >)+reload(/usr/bin/zsh -c "atuin search --reverse  --format \"{time}/{command}\" | awk \"!seen[\\\$0]++\""),'
-  fzf_bind_opts+='ctrl-r:transform:[[ ! $FZF_PROMPT =~ dir ]] &&
-                  echo "change-prompt(dir >)+reload(atuin search -c . --reverse  --format \"{time}/{command}\" | awk \"!seen[\\\$0]++\")" ||
-                  echo "change-prompt(global >)+reload(atuin search --reverse  --format \"{time}/{command}\" | awk \"!seen[\\\$0]++\")"'
+  local delete="date -d {1} +%s | xargs -I $ sqlite3 ~/.local/share/atuin/history.db \\\"delete from history where timestamp like '$%'\\\""
+  local update="date -d {1} +%s "
+  update+="| xargs -I $ sqlite3 ~/.local/share/atuin/history.db "
+  update+="\\\"update history set timestamp = CAST((julianday() - 2440587.5) * 86400000000000 AS INTEGER) where timestamp like '$%'\\\""
+  # local ctrls='/usr/bin/zsh -c "'$update'"'
 
   local history_command
   history_command=$(
@@ -232,7 +227,15 @@ f_history_toggle() {
       --delimiter=/ \
       --with-nth=2.. \
       --preview-window hidden \
-      --bind $fzf_bind_opts \
+      --bind 'ctrl-r:transform:[[ ! $FZF_PROMPT =~ dir ]] &&
+              echo "change-prompt(dir >)+reload('$dir')" ||
+              echo "change-prompt(global >)+reload('$global')"' \
+      --bind 'ctrl-s:transform:[[ $FZF_PROMPT =~ dir ]] &&
+              echo "execute-silent('$update')+reload('$dir')" ||
+              echo "execute-silent('$update')+reload('$global')"' \
+      --bind 'ctrl-x:transform:[[ $FZF_PROMPT =~ dir ]] &&
+              echo "execute-silent('$delete')+reload('$dir')" ||
+              echo "execute-silent('$delete')+reload('$global')"' \
       | cut -d'/' -f2-
   )
 
