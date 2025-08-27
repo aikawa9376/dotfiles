@@ -155,16 +155,12 @@ function name_dir() # dir, name
 name_dir /home/aikawa/workspace/ w
 name_dir /home/aikawa/gdrive/download/ d
 
-
 # -------------------------------------
 # 略語展開 syntax
 # -------------------------------------
-local abbr_alias_file="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/abbr_aliases.zsh"
-
 if command -v abbr >/dev/null 2>&1; then
-  mkdir -p "$(dirname "$abbr_alias_file")"
-  abbr export-aliases -g > "$abbr_alias_file"
-  # なぜか全てに -g がついてしまうので置換 明らかにバグなのでそのうち直るはず
-  abbr export-aliases -r | sed 's/alias -g/alias/' >> "$abbr_alias_file"
-  source "$abbr_alias_file"
+  source <(
+    abbr export-aliases -g
+    abbr export-aliases -r | sed 's/alias -g/alias/'
+  )
 fi
