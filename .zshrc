@@ -278,11 +278,6 @@ function cd-up { zle push-line && LBUFFER='ecd ..' && zle accept-line }
 zle -N cd-up
 bindkey '^[g' cd-up
 
-# Ctrl-jでディレクトリ履歴を移動できる
-function cd-jump { zle push-line && LBUFFER='ecd' && zle accept-line }
-zle -N cd-jump
-bindkey '^j' cd-jump
-
 # Alt-jでディレクトリ履歴を移動できる
 function cd-hist { zle push-line && LBUFFER='ecd -' && zle accept-line }
 zle -N cd-hist
