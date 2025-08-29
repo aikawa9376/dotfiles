@@ -10,12 +10,14 @@ function custom-history-backward() {
     history-substring-search-up
   else
     if ! [[ -n $CUSTOM_HIST_MATCHES ]]; then
-      # Zshヒストリーから部分一致を取得
-      local hist_all=("${(@f)$(atuin search -c . --cmd-only)}")
-      CUSTOM_HIST_MATCHES=()
-      for cmd in "${hist_all[@]}"; do
-        CUSTOM_HIST_MATCHES+=("$cmd")
-      done
+      local hist_all
+      local is_gitdir=$(git rev-parse --is-inside-work-tree 2>/dev/null)
+      if [[ $is_gitdir == 'true' ]]; then
+        hist_all=("${(@f)$(atuin search --filter-mode workspace --cmd-only)}")
+      else
+        hist_all=("${(@f)$(atuin search --filter-mode directory --cmd-only)}")
+      fi
+      CUSTOM_HIST_MATCHES=("${hist_all[@]}")
     fi
 
     if ! [[ -n $BUFFER ]]; then
@@ -50,7 +52,7 @@ function custom-history-forward() {
     else
       CUSTOM_HIST_INDEX=
     fi
-    CURSOR=${#BUFEER}
+    CURSOR=${#BUFFER}
   fi
 }
 

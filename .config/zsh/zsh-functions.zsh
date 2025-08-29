@@ -209,7 +209,7 @@ f_history_toggle() {
   local initial_list=$(atuin search --reverse --format "{time}/{command}" | awk '!seen[$0]++')
 
   local dir; local prompt
-  local is_gitdir=$(git rev-parse --is-inside-work-tree)
+  local is_gitdir=$(git rev-parse --is-inside-work-tree 2>/dev/null)
   if [[ $is_gitdir == 'true' ]]; then
     prompt="git"
     dir="atuin search --filter-mode workspace --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
@@ -219,11 +219,11 @@ f_history_toggle() {
   fi
   local global="atuin search --reverse  --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
 
+  # 本来はdelete_timeとかで倫理削除なので不具合起きたら変更してもいいかも
   local delete="date -d {1} +%s | xargs -I $ sqlite3 ~/.local/share/atuin/history.db \\\"delete from history where timestamp like '$%'\\\""
   local update="date -d {1} +%s "
         update+="| xargs -I $ sqlite3 ~/.local/share/atuin/history.db "
         update+="\\\"update history set timestamp = CAST((julianday() - 2440587.5) * 86400000000000 AS INTEGER) where timestamp like '$%'\\\""
-  # local ctrls='/usr/bin/zsh -c "'$update'"'
 
   local history_command
   history_command=$(
@@ -265,10 +265,15 @@ bindkey '^R' f_history_toggle_widget
 # fzf git branch
 fbr() {
   target_br=$(
-    git branch -a |
-      fzf --exit-0 --layout=reverse --info=hidden --no-multi --preview-window="right,65%" --prompt="CHECKOUT BRANCH > " --preview="echo {} | tr -d ' *' | xargs git log --decorate --abbrev-commit --format=format:'%C(blue)%h%C(reset) - %C(green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset) %C(yellow)%d%C(reset)' --color=always" |
-      head -n 1 |
-      perl -pe "s/\s//g; s/\*//g; s/remotes\/origin\///g"
+    git branch -a | fzf --exit-0 \
+        --layout=reverse \
+        --info=hidden \
+        --no-multi \
+        --preview-window="right,65%" \
+        --prompt="CHECKOUT BRANCH > " \
+        --preview="echo {} | tr -d ' *' | xargs git log --decorate --abbrev-commit --format=format:'%C(blue)%h%C(reset) - %C(green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset) %C(yellow)%d%C(reset)' --color=always" |
+    head -n 1 |
+    perl -pe 's/\s//g; s/\*//g; s/remotes\/origin\///g'
   )
   if [ -n "$target_br" ]; then
     git switch $target_br
@@ -522,11 +527,11 @@ bindkey '\ec'  dig_dir
 # -------------------------------------
 hybrid_history() {
     local cmd k res num c c1 c2 q
-    c1="fc -rl 1 | \
-      fzf --preview-window=hidden -n2..,.. --scheme=history \
-      --ansi --query=${(qqq)LBUFFER} --exit-0 \
-      --bind 'alt-c:execute(echo {} | xclip -selection c)' \
-      --print-query --expect=ctrl-r"
+    c1="fc -rl 1 |"
+    c1+="fzf --preview-window=hidden -n2..,.. --scheme=history "
+    c1+="--ansi --query=${(qqq)LBUFFER} --exit-0 "
+    c1+="--bind 'alt-c:execute(echo {} | xclip -selection c)'"
+    c1+="--print-query --expect=ctrl-r"
 
     c2="command history search $ZSH_HISTORY_FILTER_OPTIONS"
 
@@ -677,14 +682,6 @@ HELP
                     less "${(@f)res}" < /dev/tty > /dev/tty
                 fi
                 ;;
-            ctrl-x)
-                if [[ ${(j: :)ok} == ${(j: :)${(@f)res}} ]]; then
-                    eval '${${${(M)${+commands[gomi]}#1}:+gomi}:-rm} "${(@f)res}" 2>/dev/null'
-                    ok=()
-                else
-                    ok=("${(@f)res}")
-                fi
-                ;;
             ctrl-v)
                 nvim -p "${(@f)res}" < /dev/tty > /dev/tty
                 ;;
@@ -715,11 +712,52 @@ reverse() {
 # -------------------------------------
 # Directory suggest
 # -------------------------------------
+enhancd_useful() {
+  local -a result
+  result=("${(@f)$(__enhancd::history::list | fzf --tiebreak=index --multi --expect=ctrl-a)}")
+
+  if [[ -z "$result" ]]; then
+    zle reset-prompt
+    return
+  fi
+
+  local key
+  local -a dirs
+
+  if [[ "${result[1]}" == "ctrl-a" ]]; then
+    key="ctrl-a"
+    dirs=("${(@)result[2,-1]}")
+  else
+    key="enter"
+    dirs=("${(@)result}")
+  fi
+
+  case "$key" in
+    ctrl-a)
+      local dir_string="${(j: :)dirs}"
+      LBUFFER+=${dir_string//$'\r'/}
+      zle reset-prompt
+      ;;
+    *)
+      local target_dir=${dirs[-1]//$'\r'/}
+      if [[ -n "$target_dir" ]]; then
+        cd ${target_dir}
+        zle send-break
+      fi
+      ;;
+  esac
+}
+
+zle -N enhancd_useful
+bindkey '^j' enhancd_useful
+
 export ENHANCD_LOG="/home/aikawa/.config/enhancd/enhancd.log"
 destination_directories() {
     local -a d
     if [[ -f $ENHANCD_LOG ]]; then
-        d=("${(@f)"$(<$ENHANCD_LOG)"}")
+        while IFS= read -r line; do
+          d+=("$line")
+        done < "$ENHANCD_LOG"
     else
         d=(
         ${GOPATH%%:*}/src/github.com/**/*~**/*\.git/**(N-/)
@@ -769,8 +807,8 @@ fzf-dir-mru-widget() {
   zle reset-prompt
   return $ret
 }
-zle -N fzf-dir-mru-widget
-bindkey '^[d' fzf-dir-mru-widget
+# zle -N fzf-dir-mru-widget
+# bindkey '^[d' fzf-dir-mru-widget
 
 # -------------------------------------
 # Dust suggest
