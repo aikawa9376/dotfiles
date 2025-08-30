@@ -1,7 +1,7 @@
 return {
-  "diff-dim.lua",
-  dir = os.getenv("XDG_CONFIG_HOME") .. "/nvim/lua/plugins/",
-  commands = "DiffDim",
+  "diff-dim",
+  dir = os.getenv("XDG_CONFIG_HOME") .. "/nvim/lua/plugins/diff-dim",
+  cmd = "DiffDim",
   config = function()
     local ns_id = vim.api.nvim_create_namespace("DimNonDiffLines")
 

@@ -206,18 +206,18 @@ fvim() {
 }
 
 f_history_toggle() {
-  local initial_list=$(atuin search --reverse --format "{time}/{command}" | awk '!seen[$0]++')
+  local initial_list=$(atuin search --exclude-exit 127 --reverse --format "{time}/{command}" | awk '!seen[$0]++')
 
   local dir; local prompt
   local is_gitdir=$(git rev-parse --is-inside-work-tree 2>/dev/null)
   if [[ $is_gitdir == 'true' ]]; then
     prompt="git"
-    dir="atuin search --filter-mode workspace --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+    dir="atuin search --exclude-exit 127 --filter-mode workspace --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
   else
     prompt="dir"
-    dir="atuin search --filter-mode directory --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+    dir="atuin search --exclude-exit 127 --filter-mode directory --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
   fi
-  local global="atuin search --reverse  --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+  local global="atuin search --exclude-exit 127 --reverse  --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
 
   # 本来はdelete_timeとかで倫理削除なので不具合起きたら変更してもいいかも
   local delete="date -d {1} +%s | xargs -I $ sqlite3 ~/.local/share/atuin/history.db \\\"delete from history where timestamp like '$%'\\\""
@@ -244,12 +244,12 @@ f_history_toggle() {
       --bind 'ctrl-x:transform:[[ $FZF_PROMPT =~ global ]] &&
               echo "execute-silent('$delete')+reload('$global')" ||
               echo "execute-silent('$delete')+reload('$dir')"' \
+      --bind 'ctrl-e:execute-silent(printf {2} | xclip -selection c)' \
       | cut -d'/' -f2-
   )
 
   if [[ $? -ne 0 || -z "$history_command" ]]; then
     atuin history dedup --before now --dupkeep=1 &> /dev/null
-    atuin history prune &> /dev/null
     zle redisplay
     return 0
   fi
@@ -714,7 +714,16 @@ reverse() {
 # -------------------------------------
 enhancd_useful() {
   local -a result
-  result=("${(@f)$(__enhancd::history::list | fzf --tiebreak=index --multi --expect=ctrl-a)}")
+  result=(
+    ${$(
+      __enhancd::history::list |
+      awk -F/ '{OFS="/"; $NF="\x1b[1;34m"$NF"\x1b[0m"} 1' |
+      fzf --tiebreak=index \
+        --multi --ansi \
+        --expect=ctrl-a \
+        --bind 'ctrl-e:execute-silent(printf {} | xclip -selection c -in)'
+    )}
+  )
 
   if [[ -z "$result" ]]; then
     zle reset-prompt
