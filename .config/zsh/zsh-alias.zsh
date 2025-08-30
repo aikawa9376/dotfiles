@@ -161,7 +161,7 @@ name_dir /home/aikawa/gdrive/download/ d
 # -------------------------------------
 if command -v abbr >/dev/null 2>&1; then
   source <(
-    abbr export-aliases -g
-    abbr export-aliases -r | sed 's/alias -g/alias/'
+    abbr export-aliases -g 2>/dev/null
+    abbr export-aliases -r 2>/dev/null | sed 's/alias -g/alias/'
   )
 fi

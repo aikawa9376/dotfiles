@@ -1,6 +1,6 @@
 return {
-  "relativenumber.lua",
-  dir = os.getenv("XDG_CONFIG_HOME") .. "/nvim/lua/plugins/",
+  "relativenumber",
+  dir = os.getenv("XDG_CONFIG_HOME") .. "/nvim/lua/plugins/relativenumber",
   event = "BufRead",
   config = function()
     local delay_ms = 1000
