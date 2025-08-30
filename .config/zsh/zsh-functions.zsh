@@ -244,6 +244,7 @@ f_history_toggle() {
       --bind 'ctrl-x:transform:[[ $FZF_PROMPT =~ global ]] &&
               echo "execute-silent('$delete')+reload('$global')" ||
               echo "execute-silent('$delete')+reload('$dir')"' \
+      --bind 'ctrl-e:execute-silent(printf {2} | xclip -selection c)' \
       | cut -d'/' -f2-
   )
 
@@ -714,7 +715,15 @@ reverse() {
 # -------------------------------------
 enhancd_useful() {
   local -a result
-  result=("${(@f)$(__enhancd::history::list | fzf --tiebreak=index --multi --expect=ctrl-a)}")
+  result=(
+    ${$(
+      __enhancd::history::list |
+        fzf --tiebreak=index \
+          --multi \
+          --expect=ctrl-a \
+          --bind 'ctrl-e:execute-silent(printf {} | xclip -selection c -in)'
+    )}
+  )
 
   if [[ -z "$result" ]]; then
     zle reset-prompt
