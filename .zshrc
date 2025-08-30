@@ -134,7 +134,6 @@ loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
 loadlib $ZCONFDIR/zsh-docker.zsh
-loadlib $ZCONFDIR/zsh-openai.zsh
 loadlib $ZCONFDIR/zsh-completion.zsh
 loadlib $ZCONFDIR/zsh-zoxide.zsh
 loadlib $ZCONFDIR/history/substring.zsh
@@ -245,8 +244,9 @@ bindkey "^[r" redo
 
 # fzf-tab settings
 FZF_TAB=(
-  --ansi --nth=2,3 --delimiter='\x00'
-  --layout=reverse --height 40% --tiebreak=begin -m --print-query
+  --ansi --info 'inline' --nth=2,3 --delimiter='\x00'
+  --preview-window 'noborder' --layout=reverse --height 40%
+  --tiebreak=begin -m --print-query --no-separator --bind "?:toggle-preview"
 )
 zstyle ':fzf-tab:*' show-group brief
 zstyle ':fzf-tab:*' continuous-trigger 'ctrl-k'
