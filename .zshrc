@@ -67,6 +67,11 @@ zinit as="command" lucid from="gh-r" for \
 id-as="mise" mv="mise* -> mise" atclone="./mise* completion zsh > _mise" \
 atpull="%atclone" atload='eval "$(mise activate zsh)"' \
 jdx/mise
+# prompt
+zinit ice as"command" from"gh-r" \
+atclone"./starship init zsh > init.zsh; ./starship completions zsh > _starship" \
+atpull"%atclone" src"init.zsh"
+zinit light starship/starship
 
 # -------------------------------------
 # 基本設定
@@ -83,6 +88,7 @@ export XDG_CACHE_HOME="$HOME/.cache"
 export BAT_CONFIG_PATH="$XDG_CONFIG_HOME/bat/conf"
 export RIPGREP_CONFIG_PATH="$XDG_CONFIG_HOME/rg/conf"
 export NODE_REPL_HISTORY="$XDG_CACHE_HOME/node/history"
+export STARSHIP_CONFIG="$XDG_CONFIG_HOME/starship/starship.toml"
 
 # go lang
 export GOPATH="$HOME/go"
@@ -123,9 +129,8 @@ function loadlib() {
     source "$lib"
   fi
 }
-loadlib $ZCONFDIR/zsh-vimode.zsh
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-loadlib $ZCONFDIR/zsh-vcs.zsh
+loadlib $ZCONFDIR/zsh-keybind.zsh
 loadlib $ZCONFDIR/zsh-alias.zsh
 loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
@@ -134,6 +139,11 @@ loadlib $ZCONFDIR/zsh-completion.zsh
 loadlib $ZCONFDIR/history/substring.zsh
 
 # highlight調整
+zle_highlight=('paste:none')
+
+# -------------------------------------
+# highlight
+# -------------------------------------
 zle_highlight=('paste:none')
 
 # -------------------------------------
