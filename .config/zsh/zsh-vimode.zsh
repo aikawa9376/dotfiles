@@ -7,14 +7,15 @@ autoload -Uz add-zsh-hook
 autoload -Uz terminfo
 autoload -Uz is-at-least
 
-terminfo_down_sc=$terminfo[cud1]$terminfo[cuu1]$terminfo[sc]$terminfo[cud1]
 left_down_prompt_preexec() {
-    print -rn -- $terminfo[el]
+    # print -rn -- $terminfo[el]
 }
 add-zsh-hook preexec left_down_prompt_preexec
 
 function zle-keymap-select zle-line-init zle-line-finish
 {
+    local before=$PROMPT
+
     case $KEYMAP in
         main|viins)
             PROMPT_2="$fg[cyan]-- INSERT --$reset_color"
@@ -27,8 +28,8 @@ function zle-keymap-select zle-line-init zle-line-finish
             ;;
     esac
 
-    PROMPT="%{$terminfo_down_sc$PROMPT_2$terminfo[rc]%}%(?.%{${fg[green]}%}.%{${fg[red]}%})${MY_PROMPT:-[%n]}%{${reset_color}%}%# "
-    zle reset-prompt
+    # PROMPT="%{$terminfo_down_sc$PROMPT_2$terminfo[rc]%}${PROMPT}%}"
+    PROMPT="$before%{$terminfo[sc]$terminfo[cud1]%}${PROMPT_2}%{$terminfo[rc]%}"
 }
 
 zle -N zle-line-init

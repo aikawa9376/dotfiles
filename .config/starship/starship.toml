@@ -1,6 +1,7 @@
 format = '''
 $directory$git_branch$git_status$git_commit$fill $all\[$hostname:$time\]
 $username$character'''
+add_newline = true
 
 [time]
 disabled = false
@@ -27,6 +28,7 @@ format = '[$ssh_symbol](bold blue)[$hostname](bold green)'
 disabled = false
 
 [git_branch]
+symbol = ''
 style = 'bold green'
 format = '[$symbol$branch(:$remote_branch)]($style) '
 
@@ -38,13 +40,17 @@ behind = '⇣${count}'
 
 [cmd_duration]
 min_time = 5000
-format = '[⌛ $duration](bold yellow) '
+format = '[⌛$duration](bold yellow) '
 
 [line_break]
 disabled = true
 
 [php]
-format = '[🐘 $version](147 bold) '
+format = '[🐘$version](147 bold) '
+
+[python]
+format = '[$symbol$version](style) '
+symbol = '🐍'
 
 [erlang]
 symbol = "ⓔ "
@@ -54,7 +60,7 @@ format = '[$symbol$version](bold green) '
 symbol = "[⬢](bold green) "
 
 [pulumi]
-symbol = "🧊 "
+symbol = "🧊"
 
 [typst]
 symbol = "t "

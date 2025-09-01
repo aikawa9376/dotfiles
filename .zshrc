@@ -138,9 +138,6 @@ loadlib $ZCONFDIR/zsh-docker.zsh
 loadlib $ZCONFDIR/zsh-completion.zsh
 loadlib $ZCONFDIR/history/substring.zsh
 
-# highlight調整
-zle_highlight=('paste:none')
-
 # -------------------------------------
 # highlight
 # -------------------------------------
