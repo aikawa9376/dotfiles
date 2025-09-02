@@ -67,10 +67,12 @@ id-as="mise" mv="mise* -> mise" atclone="./mise* completion zsh > _mise" \
 atpull="%atclone" atload='eval "$(mise activate zsh)"' \
 jdx/mise
 # prompt
-zinit ice as"command" from"gh-r" \
-atclone"./starship init zsh > init.zsh; ./starship completions zsh > _starship" \
-atpull"%atclone" src"init.zsh"
-zinit light starship/starship
+zinit ice depth=1;
+zinit light romkatv/powerlevel10k
+# zinit ice as"command" from"gh-r" \
+# atclone"./starship init zsh > init.zsh; ./starship completions zsh > _starship" \
+# atpull"%atclone" src"init.zsh"
+# zinit light starship/starship
 
 # -------------------------------------
 # 基本設定
@@ -128,6 +130,7 @@ function loadlib() {
     source "$lib"
   fi
 }
+
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 loadlib $ZCONFDIR/zsh-keybind.zsh
 loadlib $ZCONFDIR/zsh-alias.zsh
@@ -135,7 +138,7 @@ loadlib $ZCONFDIR/zsh-functions.zsh
 loadlib $ZCONFDIR/zsh-bookmark.zsh
 loadlib $ZCONFDIR/zsh-docker.zsh
 loadlib $ZCONFDIR/zsh-completion.zsh
-loadlib $ZCONFDIR/zsh-zoxide.zsh
+loadlib $ZCONFDIR/zsh-prompt.zsh
 loadlib $ZCONFDIR/history/substring.zsh
 
 # -------------------------------------
@@ -369,7 +372,7 @@ ENHANCD_FILTER=fzf:fzy:peco
 chpwd() {
   if [[ $(pwd) != $HOME ]]; then;
     __enhancd::cd::after
-    ll
+    eza -aghHl --color=always --no-quotes --time-style long-iso --sort=modified --reverse --group-directories-first
   fi
 }
 eval $(thefuck --alias)
@@ -383,5 +386,5 @@ ABBR_SET_EXPANSION_CURSOR=1
 # tmux start
 # -------------------------------------
 if [[ "$TERM" == "xterm-kitty" && -z "$TMUX" ]]; then
-  tmux  start-server || tmux new-session -d
+  (tmux start-server || tmux new-session -d) >/dev/null 2>&1 &!
 fi
