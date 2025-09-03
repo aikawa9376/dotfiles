@@ -20,7 +20,6 @@ function prompt_user() {
 ### host ###
 function prompt_host() {
   # ★★★ SSH接続中のみホスト名を表示する設定 ★★★
-  # もし常にホスト名を表示したい場合は、下の1行を削除してください
   # [[ -n "$SSH_CLIENT" ]] || return
 
   # アイコンや色を自由にカスタマイズ
@@ -29,4 +28,21 @@ function prompt_host() {
 
   # %m はzshで「ホスト名」を意味する特別な文字列です
   p10k segment -f "$host_color" -i "$host_icon" -t "%m"
+}
+
+### dokcer ###
+typeset -g POWERLEVEL9K_DOCKER_FOREGROUND=blue
+function prompt_docker() {
+  # Dockerアイコンと色を設定
+  local docker_icon=''
+  local docker_color='33'
+
+  # Dockerコンテナ数を取得
+  local container_count=$(docker ps -q 2>/dev/null | wc -l)
+
+  # コンテナ数が取得できない場合は何も表示しない
+  [[ -z "$container_count" || "$container_count" -eq 0 ]] && return
+
+  # p10kセグメントを定義
+  p10k segment -f "$docker_color" -i "$docker_icon" -t "$container_count"
 }

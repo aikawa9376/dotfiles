@@ -132,11 +132,13 @@ bindkey '\eI' fzf-locate-pwd-widget
 # ALT-a - ripgrep
 fzf-ripgrep-widget() {
   local selected
-  if selected=$(rg --column --line-number --hidden --ignore-case --no-heading --color=always '' |
-    fzf --ansi --delimiter : --nth 4.. \
+  if selected=$(rg --column --line-number --glob=!.git --hidden --ignore-case --sort modified --no-heading --color=always '' |
+    fzf --ansi --delimiter : --nth 4..,1 --tac \
     --preview 'bat --style=numbers --color=always --highlight-line {2} {1}' \
     --preview-window +{2}-/2); then
-    LBUFFER=${LBUFFER}$(echo $selected | awk -F':' '{print $1}')
+    local file=$(echo $selected | awk -F':' '{print $1}')
+    local line=$(echo $selected | awk -F':' '{print $2}')
+    nvim +$line $file
   fi
   zle redisplay
 }

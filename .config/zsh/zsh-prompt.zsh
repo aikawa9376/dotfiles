@@ -42,6 +42,7 @@
   typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=(
     # =========================[ Line #1 ]=========================
     # status                  # exit code of the last command
+    docker                  # custom coutainer count
     command_execution_time  # duration of the last command
     direnv                  # direnv status (https://direnv.net/)
     virtualenv              # python virtual environment (https://docs.python.org/3/library/venv.html)
@@ -72,6 +73,7 @@
     time                    # current time
     # =========================[ Line #2 ]=========================
     newline
+    # status                  # exit code of the last command
     # ip                    # ip address and bandwidth usage for a specified network interface
     # public_ip             # public IP address
     # proxy                 # system-wide http/https/ftp proxy
@@ -88,7 +90,7 @@
 
   # Basic style options that define the overall look of your prompt. You probably don't want to
   # change them.
-  typeset -g POWERLEVEL9K_FOREGROUND=255                         # default text color
+  typeset -g POWERLEVEL9K_FOREGROUND=#CFC8B8                     # default text color
   typeset -g POWERLEVEL9K_BACKGROUND=                            # transparent background
   typeset -g POWERLEVEL9K_{LEFT,RIGHT}_{LEFT,RIGHT}_WHITESPACE=  # no surrounding whitespace
   typeset -g POWERLEVEL9K_{LEFT,RIGHT}_SUBSEGMENT_SEPARATOR=' '  # separate segments with a space
@@ -188,8 +190,14 @@
   done
 }
 
-function p10k-on-pre-prompt() { p10k display '1'=show '2/left/time'=hide }
-function p10k-on-post-prompt() { p10k display '1'=hide '2/left/time'=show '2/left/user'=hide}
+function p10k-on-pre-prompt() {
+  p10k display '1'=show '2/left/user'=show \
+  '2/left/time'=hide '2/right/status'=hide '2/gap'=hide
+}
+function p10k-on-post-prompt() {
+  p10k display '1'=hide '2/left/user'=hide \
+  '2/left/time'=show '2/right/status'=show '2/gap'=show
+}
 
 function padding_bottom() {
   zle && return
