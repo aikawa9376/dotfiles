@@ -87,6 +87,29 @@ convertPathWsl() {
 }
 
 # -------------------------------------
+# empty enter
+# -------------------------------------
+do-enter() {
+    if [ -n "$BUFFER" ]; then
+        zle accept-line
+        return
+    fi
+    if [[ -d .git ]]; then
+      if [[ -n "$(git status --porcelain)" ]]; then
+        BUFFER='git status -uno --short'
+        zle accept-line
+        return
+      fi
+      zle accept-line
+    else
+      zle accept-line
+    fi
+    zle reset-prompt
+}
+zle -N do-enter
+bindkey '^m' do-enter
+
+# -------------------------------------
 # fzf utils
 # -------------------------------------
 zmenu() {

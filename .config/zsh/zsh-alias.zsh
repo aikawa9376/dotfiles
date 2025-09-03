@@ -126,7 +126,8 @@ abbr -S --quiet -g le='| less'
 abbr -S --quiet -g ff='| fzf --ansi -m'
 abbr -S --quiet -g ba='| bat'
 abbr -S --quiet -g vo='| nvim'
-abbr -S --quiet -g hh='~/'
+abbr -S --quiet -g te='| tail -n 100'
+abbr -S --quiet -g hh='~/%'
 
 # -------------------------------------
 # 拡張子 エイリアス

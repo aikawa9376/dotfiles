@@ -84,7 +84,6 @@ export XAPIAN_CJK_NGRAM=1
 export EDITOR='nvim'
 export PAGER='bat'
 export WCWIDTH_CJK_LEGACY='yes'
-export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_CACHE_HOME="$HOME/.cache"
 export BAT_CONFIG_PATH="$XDG_CONFIG_HOME/bat/conf"
@@ -262,6 +261,10 @@ zstyle ':fzf-tab:*' fzf-preview '[[ -d $realpath ]]  && tree -C $realpath
 echo $realpath is a binary file
 (bat --style=changes --color=always $realpath ||
 cat $realpath) 2> /dev/null | head -500'
+
+# zsh-autosuggestions
+export ZSH_AUTOSUGGEST_STRATEGY=(history completion)
+export ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE="fg=cyan"
 
 # ディレクトリごとに区切る
 export WORDCHARS='*?_-.[]~$%^(){}<>'
