@@ -286,7 +286,6 @@ zle -N cdup
 bindkey '^g' cdup
 
 # Alt-Gで上のディレクトリに移動できる
-# function cd-up { zle push-line && LBUFFER='builtin cd ..' && zle accept-line }
 function cd-up { zle push-line && LBUFFER='ecd ..' && zle accept-line }
 zle -N cd-up
 bindkey '^[g' cd-up
@@ -375,10 +374,10 @@ ENHANCD_FILTER=fzf:fzy:peco
 chpwd() {
   if [[ $(pwd) != $HOME ]]; then;
     __enhancd::cd::after
+    cp -f "$ENHANCD_DIR/enhancd.log" "/tmp/enhancd_$(date +'%Y%m%d').log"
     eza -aghHl --color=always --no-quotes --time-style long-iso --sort=modified --reverse --group-directories-first
   fi
 }
-eval $(thefuck --alias)
 
 # -------------------------------------
 # abbr
