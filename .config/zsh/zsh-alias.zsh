@@ -79,7 +79,6 @@ alias cd..="ecd .."
 # -------------------------------------
 abbr -S --quiet ggs='git status'
 abbr -S --quiet gga='git add -u'
-abbr -S --quiet ggp='git pull'
 abbr -S --quiet ggas='git add -A'
 abbr -S --quiet ggc='git commit -m "update"'
 abbr -S --quiet ggp='git push'

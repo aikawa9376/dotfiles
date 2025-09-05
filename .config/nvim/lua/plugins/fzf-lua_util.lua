@@ -231,7 +231,7 @@ M.fzf_dirs_smart = function(opts)
       "--type", "directory",
       "--follow",
       "--hidden",
-      "--color", "never",
+      "--color", "always",
       "--exclude", ".git",
     },
     cwd = vim.fn.getcwd(),
@@ -251,7 +251,7 @@ M.fzf_dirs_smart = function(opts)
 
       vim.schedule(function()
         fzf_lua.fzf_exec(
-          colorFilename(dirs),
+          dirs,
           getDirOpt()
         )
       end)
@@ -381,6 +381,7 @@ M.fzf_ast_grep_txt = function(args)
       )
 end
 
+fzf_lua.ast_grep = M.fzf_ast_grep
 vim.cmd([[command! -nargs=* AstGrepLua lua require"plugins.fzf-lua_util".fzf_ast_grep(<q-args>)]])
 vim.cmd([[command! -nargs=* AstGrepTxtLua lua require"plugins.fzf-lua_util".fzf_ast_grep_txt(<q-args>)]])
 
@@ -592,6 +593,53 @@ M.fzf_junkfiles = function(opts)
 end
 
 vim.cmd([[command! -nargs=* JunkFilesLua lua require"plugins.fzf-lua_util".fzf_junkfiles()]])
+
+-- ------------------------------------------------------------------
+-- font/emoji settings
+-- ------------------------------------------------------------------
+--
+local getIconOpts = function (name)
+  local opts = {}
+  opts.prompt = name .. ' >'
+  opts.actions = vim.tbl_deep_extend("force", defaultActions, {
+    ["enter"] = function (selected, _)
+      if #selected == 1 then
+        local griff = vim.fn.split(selected[1], ":")[1]
+        vim.api.nvim_put({griff}, 'c', true, true)
+      else
+        vim.notify('Please select only one item.', vim.log.levels.WARN)
+      end
+    end,
+  })
+  opts.fzf_opts = {
+    ["-x"] = "",
+    ["--multi"] = "",
+    ["--preview-window"] = "hidden",
+    ["--tiebreak"] = "chunk",
+    ["--ansi"] = true,
+  }
+
+  return opts
+end
+
+M.fzf_nerd_fonts = function(opts)
+  fzf_lua.fzf_exec(
+    require"sources.nerdfont".get(),
+    getIconOpts('NerdFonts')
+  )
+end
+
+M.fzf_emoji = function(opts)
+  fzf_lua.fzf_exec(
+    require"sources.emoji".get(),
+    getIconOpts('Emoji')
+  )
+end
+
+fzf_lua.nerd_fonts = M.fzf_nerd_fonts
+fzf_lua.emoji = M.fzf_emoji
+vim.cmd([[command! -nargs=* NerdFontLua lua require"plugins.fzf-lua_util".fzf_nerd_fonts()]])
+vim.cmd([[command! -nargs=* EmojiLua lua require"plugins.fzf-lua_util".fzf_emoji()]])
 
 -- ------------------------------------------------------------------
 -- loravel.nvim override
