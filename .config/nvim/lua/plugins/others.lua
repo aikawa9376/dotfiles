@@ -88,5 +88,12 @@ return {
     },
     event = { 'User KittyScrollbackLaunch' },
     opts = {}
+  },
+  {
+    "uga-rosa/translate.nvim",
+    cmd = { "Translate" },
+    keys = {
+      { "T", "<cmd>Translate ja<CR>", mode = "x", silent = true }
+    },
   }
 }

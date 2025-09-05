@@ -250,6 +250,7 @@ FZF_TAB=(
   --ansi --info 'inline' --nth=2,3 --delimiter='\x00'
   --preview-window 'noborder' --layout=reverse --height 40%
   --tiebreak=begin -m --print-query --no-separator --bind "?:toggle-preview"
+  --bind alt-k:preview-up,alt-j:preview-down
 )
 zstyle ':fzf-tab:*' show-group brief
 zstyle ':fzf-tab:*' continuous-trigger 'ctrl-k'

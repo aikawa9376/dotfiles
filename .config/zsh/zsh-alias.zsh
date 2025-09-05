@@ -79,6 +79,7 @@ alias cd..="ecd .."
 # -------------------------------------
 abbr -S --quiet ggs='git status'
 abbr -S --quiet gga='git add -u'
+abbr -S --quiet ggp='git pull'
 abbr -S --quiet ggas='git add -A'
 abbr -S --quiet ggc='git commit -m "update"'
 abbr -S --quiet ggp='git push'
@@ -107,7 +108,7 @@ alias sail='./vendor/bin/sail'
 # -------------------------------------
 abbr -S --quiet dkp='docker pull'
 abbr -S --quiet dkc='docker compose'
-abbr -S --quiet dku='docker compose up % -d'
+abbr -S --quiet dku='docker compose up% -d'
 abbr -S --quiet dkd='docker compose down'
 abbr -S --quiet dkr='docker compose run --rm'
 abbr -S --quiet dkps='docker ps -a'
