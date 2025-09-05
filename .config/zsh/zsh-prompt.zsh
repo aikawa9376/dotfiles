@@ -73,6 +73,7 @@
     time                    # current time
     # =========================[ Line #2 ]=========================
     newline
+    # status                # exit code of the last command
     # ip                    # ip address and bandwidth usage for a specified network interface
     # public_ip             # public IP address
     # proxy                 # system-wide http/https/ftp proxy
