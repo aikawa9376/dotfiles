@@ -157,12 +157,14 @@ export FZF_ALT_C_COMMAND='fd --strip-cwd-prefix --type directory --follow --hidd
 export FZF_ALT_C_OPTS="--ansi --preview 'tree -C {} | head -200'"
 export FZF_DEFAULT_PREVIEW='--preview "
 [[ -d {} ]]  &&
-tree -C {}
-[[ -f {} && $(file --mime {}) =~ (png|jpg|jpeg|gif|ttf) ]] &&
-kitty icat --clear --transfer-mode=memory --stdin=no --place=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES}@0x0 {}
-[[ $(file --mime {}) =~ (^binary) ]] &&
-echo {} is a binary file
-[[ -f {} && ! $(file --mime {}) =~ (png|jpg|gif|ttf) ]] &&
+{tree -C {};exit;}
+[[ -f {} && $(file --mime {}) =~ \\\\\\.(png|jpg|jpeg|gif|ttf) ]] &&
+{kitty icat --clear --transfer-mode=memory --stdin=no --place=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES}@0x0 {};exit;}
+[[ -f {} && $(file --mime {}) =~ (\\\\\\.pdf) ]] &&
+{$XDG_CONFIG_HOME/zsh/sh/pdf.sh {} | kitty icat --clear --transfer-mode=memory --place=${FZF_PREVIEW_COLUMNS}x${FZF_PREVIEW_LINES}@0x0;exit;}
+[[ $(file --mime {}) =~ binary ]] &&
+{echo {} is a binary file;exit;}
+[[ -f {} ]] &&
 (bat --style=changes --color=always {} ||
 cat {}) 2> /dev/null | head -500"'
 export FZF_COMPLETION_TRIGGER=''

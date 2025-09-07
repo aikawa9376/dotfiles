@@ -199,10 +199,10 @@ fs() {
 paru-selecter() {
   paru -Sl \
   | fzf --ansi --preview 'paru -Si {2}' \
-    --bind 'ctrl-i:execute(paru -Sy --noconfirm $(echo {2}))' \
-    --bind 'alt-d:execute(paru -Rs --noconfirm $(echo {2}))' \
-    --bind 'ctrl-r:execute(paru -Sy)' \
-    --bind 'alt-c:execute(echo {2} | xclip -selection c)' \
+    --bind 'ctrl-i:execute(paru -Sy --noconfirm $(echo {2}))+reload(paru -Sl)' \
+    --bind 'alt-d:execute(paru -Rs --noconfirm $(echo {2}))+reload(paru -Sl)' \
+    --bind 'ctrl-r:execute(paru -Sy)+reload(paru -Sl)' \
+    --bind 'alt-c:execute(echo {2} | xclip -selection c)+reload(paru -Sl)' \
 }
 
 rvim () {
@@ -252,7 +252,7 @@ f_history_toggle() {
 
   local history_command
   history_command=$(
-    echo "$initial_list" | fzf \
+    echo -E "$initial_list" | fzf \
       --prompt="global >" \
       --query="${LBUFFER}" \
       --tiebreak=index \

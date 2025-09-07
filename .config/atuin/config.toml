@@ -110,7 +110,7 @@ invert = true
 ## https://docs.rs/regex/latest/regex/#syntax
 history_filter = [
   "^git status -uno --short$", "^ll$", "^vv$", "^t$",
-  "^builtin cd -$", "^lg$", "^reload$"
+  "^builtin cd -$", "^lg$", "^reload$", "^suspend$"
 ]
 
 ## prevent commands run with cwd matching any of these regexes from being written

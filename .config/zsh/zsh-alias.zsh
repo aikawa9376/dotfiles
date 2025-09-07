@@ -74,6 +74,9 @@ alias cd-="ecd -"
 alias cd.="ecd ."
 alias cd..="ecd .."
 
+abbr -S --quiet icat='kitty +kitten icat'
+abbr -S --quiet tp='tspin'
+
 # -------------------------------------
 # git
 # -------------------------------------
@@ -127,6 +130,7 @@ abbr -S --quiet -g ff='| fzf --ansi -m'
 abbr -S --quiet -g ba='| bat'
 abbr -S --quiet -g vo='| nvim'
 abbr -S --quiet -g te='| tail -n 100'
+abbr -S --quiet -g tp='| tspin'
 abbr -S --quiet -g hh='~/%'
 
 # -------------------------------------
