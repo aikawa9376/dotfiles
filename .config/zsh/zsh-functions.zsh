@@ -991,7 +991,7 @@ function ftmux_resurrect() {
 function br {
     local cmd cmd_file code
     cmd_file=$(mktemp)
-    if broot --outcmd "$cmd_file" "$@"; then
+    if broot --cmd ":toggle_preview" --outcmd "$cmd_file" "$@"; then
         cmd=$(<"$cmd_file")
         command rm -f "$cmd_file"
         eval "$cmd"
