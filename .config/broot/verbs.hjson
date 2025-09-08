@@ -121,22 +121,42 @@ verbs: [
 
     # A popular set of shortcuts for going up and down:
     #
-    # {
-    #     key: ctrl-k
-    #     execution: ":line_up"
-    # }
-    # {
-    #     key: ctrl-j
-    #     execution: ":line_down"
-    # }
-    # {
-    #     key: ctrl-u
-    #     execution: ":page_up"
-    # }
-    # {
-    #     key: ctrl-d
-    #     execution: ":page_down"
-    # }
+    {
+        key: ctrl-p
+        execution: ":line_up"
+    }
+    {
+        key: ctrl-n
+        execution: ":line_down"
+    }
+    {
+        key: ctrl-f
+        execution: ":input_go_right"
+    }
+    {
+        key: ctrl-b
+        execution: ":input_go_left"
+    }
+    {
+        key: ctrl-u
+        execution: ":page_up"
+    }
+    {
+        key: ctrl-d
+        execution: ":page_down"
+    }
+    {
+        key: ctrl-h
+        execution: ":input_del_char_left"
+    }
+    {
+        key: ctrl-u
+        execution: ":input_del_char_below"
+    }
+    {
+        key: ctrl-k
+        execution: ":input_del_word_right"
+    }
 
     # If you develop using git, you might like to often switch
     # to the git status filter:
@@ -158,4 +178,3 @@ verbs: [
     #     leave_broot: false
     # }
 ]
-
