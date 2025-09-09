@@ -87,13 +87,13 @@ verbs: [
 
     # This verb lets you launch a terminal on ctrl-T
     # (on exit you'll be back in broot)
-    {
-        invocation: terminal
-        key: ctrl-t
-        execution: "$SHELL"
-        set_working_dir: true
-        leave_broot: false
-    }
+    # {
+    #     invocation: terminal
+    #     key: ctrl-t
+    #     execution: "$SHELL"
+    #     set_working_dir: true
+    #     leave_broot: false
+    # }
 
     # Here's an example of a verb needing the shell capabilities.
     # It copies all children of the currently selected directory
@@ -156,6 +156,22 @@ verbs: [
     {
         key: ctrl-k
         execution: ":input_del_word_right"
+    }
+    {
+        key: ctrl-t
+        cmd: ":toggle_dates;:toggle_perm;:toggle_sizes;:toggle_counts"
+    }
+    {
+        key: |
+        execution: ":panel_right"
+    }
+    {
+        key: shift-l
+        execution: ":panel_right"
+    }
+    {
+        key: shift-h
+        execution: ":panel_left"
     }
 
     # If you develop using git, you might like to often switch
