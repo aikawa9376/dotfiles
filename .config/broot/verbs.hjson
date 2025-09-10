@@ -70,7 +70,7 @@ verbs: [
     # allows verbs to stay unexecuted until you hit enter
     {
         invocation: "backup {version}"
-        key: ctrl-b
+        key: alt-b
         leave_broot: false
         auto_exec: false
         execution: "cp -r {file} {parent}/{file-stem}-{version}{file-dot-extension}"
@@ -138,12 +138,8 @@ verbs: [
         execution: ":input_go_left"
     }
     {
-        key: ctrl-u
-        execution: ":page_up"
-    }
-    {
         key: ctrl-d
-        execution: ":page_down"
+        cmd: ":input_go_right;:input_del_char_left"
     }
     {
         key: ctrl-h
@@ -151,7 +147,7 @@ verbs: [
     }
     {
         key: ctrl-u
-        execution: ":input_del_char_below"
+        execution: ":input_clear"
     }
     {
         key: ctrl-k
@@ -163,7 +159,7 @@ verbs: [
     }
     {
         key: |
-        execution: ":panel_right"
+        execution: ":focus!"
     }
     {
         key: shift-l
