@@ -162,11 +162,11 @@ verbs: [
         execution: ":focus!"
     }
     {
-        key: shift-l
+        key: Right
         execution: ":panel_right"
     }
     {
-        key: shift-h
+        key: Left
         execution: ":panel_left"
     }
 
