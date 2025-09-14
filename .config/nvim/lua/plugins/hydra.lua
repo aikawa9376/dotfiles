@@ -194,6 +194,53 @@ return {
     })
 
     Hydra({
+      name = 'Jump',
+      mode = 'n',
+      body = ']j',
+      config = {
+        hint = false,
+        invoke_on_body = true,
+        on_key = function() vim.wait(50) end,
+        on_enter = function () require('bufjump').forward() end
+      },
+      heads = {
+        { ']', function ()
+          if vim.wo.diff then return ']c' end
+          vim.schedule(function() require('bufjump').forward() end)
+          return '<Ignore>'
+        end },
+        { '[', function ()
+          if vim.wo.diff then return '[c' end
+          vim.schedule(function() require('bufjump').backward() end)
+          return '<Ignore>'
+        end },
+      }
+    })
+    Hydra({
+      name = 'Jump',
+      mode = 'n',
+      body = '[j',
+      config = {
+        hint = false,
+        invoke_on_body = true,
+        on_key = function() vim.wait(50) end,
+        on_enter = function () require('bufjump').backward() end
+      },
+      heads = {
+        { ']', function ()
+          if vim.wo.diff then return ']c' end
+          vim.schedule(function() require('bufjump').forward() end)
+          return '<Ignore>'
+        end },
+        { '[', function ()
+          if vim.wo.diff then return '[c' end
+          vim.schedule(function() require('bufjump').backward() end)
+          return '<Ignore>'
+        end },
+      }
+    })
+
+    Hydra({
       name = 'Chunk',
       mode = 'n',
       body = ']c',

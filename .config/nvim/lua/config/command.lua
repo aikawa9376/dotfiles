@@ -46,20 +46,6 @@ augroup mylightline
 augroup END
 ]])
 
--- 空文字の場合レジスタに入れない
-vim.api.nvim_create_autocmd("TextYankPost", {
-  callback = function()
-    local reg = vim.v.register  -- 現在のレジスタ
-    local yanked_text = vim.fn.getreg(reg)  -- レジスタの内容
-
-    if yanked_text:match("^%s*$") then
-      -- 空白のみなら明示的に削除
-      local yank = require("yanky.history").first() or ""
-      vim.fn.setreg("+", yank)
-    end
-  end
-})
-
 vim.api.nvim_create_user_command("TermForceCloseAll", function()
   local term_bufs = vim.tbl_filter(function(buf)
     return vim.api.nvim_get_option_value("buftype", { buf = buf }) == "terminal"
