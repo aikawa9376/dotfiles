@@ -121,21 +121,29 @@ verbs: [
 
     # A popular set of shortcuts for going up and down:
     #
+    # {
+    #     key: ctrl-p
+    #     execution: ":line_up"
+    # }
+    # {
+    #     key: ctrl-n
+    #     execution: ":line_down"
+    # }
+    # {
+    #     key: ctrl-f
+    #     execution: ":input_go_right"
+    # }
+    # {
+    #     key: ctrl-b
+    #     execution: ":input_go_left"
+    # }
     {
-        key: ctrl-p
-        execution: ":line_up"
+        key: ctrl-a
+        execution: ":input_go_to_start"
     }
     {
-        key: ctrl-n
-        execution: ":line_down"
-    }
-    {
-        key: ctrl-f
-        execution: ":input_go_right"
-    }
-    {
-        key: ctrl-b
-        execution: ":input_go_left"
+        key: ctrl-e
+        execution: ":input_go_to_end"
     }
     {
         key: ctrl-d
@@ -168,6 +176,26 @@ verbs: [
     {
         key: Left
         execution: ":panel_left"
+    }
+    {
+        key: s
+        cmd: ":toggle_stage;:line_down"
+    }
+    {
+        key: c
+        cmd: ":ccp"
+    }
+    {
+        key: m
+        cmd: ":mvp"
+    }
+    {
+        key: ctrl-space
+        cmd: ":escape"
+    }
+    {
+        key: ctrl-p
+        cmd: ":toggle_preview"
     }
 
     # If you develop using git, you might like to often switch

@@ -36,5 +36,27 @@ return {
     textobj = {
       enabled = true,
     },
-  }
+  },
+  init = function ()
+    -- 空文字の場合レジスタに入れない
+    vim.api.nvim_create_autocmd("TextYankPost", {
+      callback = function()
+        local reg = vim.v.register  -- 現在のレジスタ
+        local yanked_text = vim.fn.getreg(reg)  -- レジスタの内容
+
+        if yanked_text:match("^%s*$") then
+          local prev_yank = require("yanky.history").first()
+
+          if prev_yank and prev_yank.regcontents then
+            vim.fn.setreg("+", prev_yank.regcontents)
+          end
+        else
+          -- require("yanky.history").push({
+          --   regcontents = yanked_text,
+          --   regtype = "y",
+          -- })
+        end
+      end
+    })
+  end
 }
