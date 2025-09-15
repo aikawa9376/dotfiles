@@ -42,7 +42,7 @@ return {
           return nil
         end
 
-        local project_root = require("project_nvim.project").get_project_root()
+        local project_root = require("project.api").get_project_root()
 
         if project_root ~= nil then
           return vim.fn.fnamemodify(fullpath, ":." .. project_root)

@@ -44,7 +44,7 @@ return {
         if vim.fn.winwidth(0) < 80 then
           return false
         end
-        local ok = require("project_nvim.project").get_project_root()
+        local ok = require("project.project").get_project_root()
         if ok ~= nil then
           return true
         else
@@ -196,7 +196,7 @@ return {
 
     ins_left({
       function()
-        local prod = split(require("project_nvim.project").get_project_root(), "/")
+        local prod = split(require("project.api").get_project_root(), "/")
         if next(prod) then
           return " " .. prod[#prod]
         end
