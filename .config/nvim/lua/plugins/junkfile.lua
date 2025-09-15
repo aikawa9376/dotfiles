@@ -3,7 +3,7 @@ return {
   cmd = "JunkfileOpen",
   config = function ()
     local workdir
-    local project = require("project_nvim.project")
+    local project = require("project.api")
     local rootDir = pcall(project.get_project_root)
 
     if rootDir then
