@@ -88,6 +88,7 @@ require("lazy").setup({
     { import = "plugins.oil" },
     -- { import = "plugins.relativenumber" },
     { import = "plugins.diff-dim" },
+    { import = "plugins.linediff" },
     { import = "plugins.typescript-tools" },
     { import = "plugins.luasnip" },
     { import = "plugins.blink" },
