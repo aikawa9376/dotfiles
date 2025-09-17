@@ -203,8 +203,8 @@ function M.setup()
   vim.api.nvim_create_user_command('LinediffPick', linediff_pick, {})
 
   vim.api.nvim_create_user_command('LinediffRegister', function(opts)
-    diff_register(opts.args, opts.line1, opts.line2)
-  end, { range = true, nargs = 1 })
+    local reg = (opts.args == nil or opts.args == '') and '+' or opts.args; diff_register(reg, opts.line1, opts.line2)
+  end, { range = true, nargs = '?'})
 
   -- mappings
   function M.linediff_op(wise)
