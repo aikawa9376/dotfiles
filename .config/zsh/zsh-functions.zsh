@@ -94,7 +94,7 @@ do-enter() {
         zle accept-line
         return
     fi
-    if [[ -d .git ]]; then
+    if [[ -d .git || -f .git ]]; then
       if [[ -n "$(git status --porcelain)" ]]; then
         BUFFER='git status -uno --short'
         zle accept-line
@@ -122,7 +122,7 @@ fzf-picture-preview() {
   if selected=$(
     fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . |
     xargs -0 eza -1 -sold --color=always --no-quotes 2> /dev/null |
-    fzf --ansi | sed 's/ /\\ /g' | tr '\n' ' '); then
+    fzf --ansi --multi | sed 's/ /\\ /g' | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
   fi
   zle redisplay
@@ -991,7 +991,7 @@ function ftmux_resurrect() {
 function br {
     local cmd cmd_file code
     cmd_file=$(mktemp)
-    if broot --cmd "" --outcmd "$cmd_file" "$@"; then
+    if broot --cmd ":sort_by_type" --outcmd "$cmd_file" "$@"; then
         cmd=$(<"$cmd_file")
         command rm -f "$cmd_file"
         eval "$cmd"
