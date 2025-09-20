@@ -108,7 +108,7 @@ require("lazy").setup({
     { "mrcjkb/rustaceanvim", ft = "rust" },
     { "akinsho/git-conflict.nvim", config = true },
     { "aikawa9376/vim-auto-cursorline", event = "BufRead" },
-    { "aikawa9376/neomru.vim", event = "BufReadPre" },
+    { "aikawa9376/neomru.vim", branch = "mrw", event = "BufReadPre" },
     { "cseickel/diagnostic-window.nvim", cmd = { "DiagWindowShow" } },
   },
   performance = {

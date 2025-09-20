@@ -1,6 +1,6 @@
 return {
   "nvim-lualine/lualine.nvim",
-  event = "VeryLazy",
+  event = "BufReadPre",
   config = function ()
     -- Eviline config for lualine
     -- Author: shadmansaleh
