@@ -1,26 +1,30 @@
 return {
-  "smoka7/multicursors.nvim",
-  keys = {
-    { "<C-n>", "<Cmd>MCstart<CR>", mode = { "n" }, silent = true },
-    { "<C-n>", "<Cmd>MCvisual<CR>", mode = { "x" }, silent = true },
-    { "<Leader>vc", "<Cmd>MCunderCursor<CR>", mode = { "n" }, silent = true },
-  },
-  opts = {
-    hint_config = false,
-    normal_keys = {
-      -- to change default lhs of key mapping change the key
-      ["j"] = {
-        method = function()
-          vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('j', true, true, true), 'n', false)
-        end,
-        opts = {}
-      },
-      ["k"] = {
-        method = function()
-          vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('k', true, true, true), 'n', false)
-        end,
-        opts = {}
-      },
+  "jake-stewart/multicursor.nvim",
+  keys = function(_, keys)
+    local mappings = {
+      { "M", function() require("multicursor-nvim").visualToCursors() end, mode = { "x" }, },
+      { "<leader>m", function() require("multicursor-nvim").matchAllAddCursors() end, mode = { "x" }, },
     }
-  }
+    mappings = vim.tbl_filter(function(m) return m[1] and #m[1] > 0 end, mappings)
+    return vim.list_extend(mappings, keys)
+  end,
+  config = function ()
+    local mc = require("multicursor-nvim")
+    mc.setup()
+    mc.addKeymapLayer(function(layerSet)
+      -- Enable and clear cursors using escape.
+      layerSet({"n", "x"}, "M", function()
+        if not mc.cursorsEnabled() then
+          mc.enableCursors()
+        else
+          mc.clearCursors()
+        end
+      end)
+      layerSet({"n", "x"}, "<leader>a", mc.alignCursors)
+      layerSet({"n", "x"}, "<C-p>", mc.prevCursor)
+      layerSet({"n", "x"}, "<C-n>", mc.nextCursor)
+      layerSet({"n", "x"}, "<C-d>", mc.deleteCursor)
+      layerSet({"n", "x"}, "<C-q>", mc.toggleCursor)
+    end)
+  end
 }
