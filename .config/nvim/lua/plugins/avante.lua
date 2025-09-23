@@ -67,6 +67,13 @@ return {
           require"plugins.avante_util".avante_add_tests()
         end,
         mode = { "v" },
+      },
+      {
+        "<Leader>cA",
+        function ()
+          require("avante.api").zen_mode()
+        end,
+        mode = { "n" }
       }
     }
     mappings = vim.tbl_filter(function(m) return m[1] and #m[1] > 0 end, mappings)
@@ -86,6 +93,18 @@ return {
         reasoning_effort = "high",
         extra_request_body = {
           temperature = 0,
+        },
+      },
+    },
+    {
+      acp_providers = {
+        ["gemini-cli"] = {
+          command = "gemini",
+          args = { "--experimental-acp" },
+          env = {
+            NODE_NO_WARNINGS = "1",
+            -- GEMINI_API_KEY = os.getenv("GEMINI_API_KEY"),
+          },
         },
       },
     },

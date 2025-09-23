@@ -69,6 +69,7 @@ alias zup="zinit update"
 alias clp="gpick -o -s -c color_web_hex | xclip -sel c"
 alias clpr="gpick -o -s -c color_css_rgb | xclip -sel c"
 alias lg="lazygit"
+alias avante='nvim -c "lua vim.defer_fn(function()require(\"avante.api\").zen_mode()end, 100)"'
 
 alias cd-="ecd -"
 alias cd.="ecd ."

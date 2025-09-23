@@ -20,6 +20,7 @@ return {
       editor = {
         mappings = {
           { key = "<CR>", mode = "v", action = "run_selection" },
+          { key = "<CR>", mode = "n", action = "run_under_cursor" },
           { key = "<Leader><CR>", mode = "n", action = "run_file" },
         }
       }
