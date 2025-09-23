@@ -98,7 +98,7 @@ require("lazy").setup({
     { "rafamadriz/friendly-snippets", lazy = true },
     { "kyazdani42/nvim-web-devicons", lazy = true },
     { "MunifTanjim/nui.nvim", lazy = true },
-    { "ethanholz/nvim-lastplace", config = true },
+    { "ethanholz/nvim-lastplace", config = true, event = "BufReadPre" },
     { "nvim-lua/plenary.nvim", lazy = true },
     { "xzbdmw/colorful-menu.nvim", lazy = true },
     { "Saghen/blink.compat", lazy = true },
