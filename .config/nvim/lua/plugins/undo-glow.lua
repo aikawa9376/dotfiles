@@ -1,39 +1,6 @@
 return {
   "y3owk1n/undo-glow.nvim",
   event = "BufRead",
-  ---@type UndoGlow.Config
-  opts = {
-    animation = {
-      enabled = true,
-      duration = 300,
-      animtion_type = "zoom",
-      window_scoped = true,
-    },
-    highlights = {
-      undo = {
-        hl_color = { bg = "#693232" }, -- Dark muted red
-      },
-      redo = {
-        hl_color = { bg = "#2F4640" }, -- Dark muted green
-      },
-      yank = {
-        hl_color = { bg = "#7A683A" }, -- Dark muted yellow
-      },
-      paste = {
-        hl_color = { bg = "#325B5B" }, -- Dark muted cyan
-      },
-      search = {
-        hl_color = { fg = "#5C475C", bg = "NONE" }, -- Dark muted purple
-      },
-      comment = {
-        hl_color = { bg = "#7A5A3D" }, -- Dark muted orange
-      },
-      cursor = {
-        hl_color = { bg = "#793D54" }, -- Dark muted pink
-      },
-    },
-    priority = 2048 * 3,
-  },
   keys = {
     {
       "u",
@@ -45,7 +12,7 @@ return {
       noremap = true,
     },
     {
-      "U",
+      "<C-r>",
       function()
         require("undo-glow").redo()
       end,
@@ -88,7 +55,40 @@ return {
       noremap = true,
     },
   },
-  init = function()
+  config = function()
+    ---@type UndoGlow.Config
+    require("undo-glow").setup({
+      animation = {
+        enabled = true,
+        duration = 300,
+        animtion_type = "zoom",
+        window_scoped = true,
+      },
+      highlights = {
+        undo = {
+          hl_color = { bg = "#693232" }, -- Dark muted red
+        },
+        redo = {
+          hl_color = { bg = "#2F4640" }, -- Dark muted green
+        },
+        yank = {
+          hl_color = { bg = "#7A683A" }, -- Dark muted yellow
+        },
+        paste = {
+          hl_color = { bg = "#325B5B" }, -- Dark muted cyan
+        },
+        search = {
+          hl_color = { fg = "#5C475C", bg = "NONE" }, -- Dark muted purple
+        },
+        comment = {
+          hl_color = { bg = "#7A5A3D" }, -- Dark muted orange
+        },
+        cursor = {
+          hl_color = { bg = "#793D54" }, -- Dark muted pink
+        },
+      },
+      priority = 2048 * 3,
+    })
     vim.api.nvim_create_autocmd("TextYankPost", {
       desc = "Highlight when yanking (copying) text",
       callback = function()
@@ -132,7 +132,7 @@ return {
       end,
     })
 
-    vim.api.nvim_create_autocmd("CmdLineLeave", {
+    vim.api.nvim_create_autocmd("CmdlineLeave", {
       pattern = { "/", "?" },
       desc = "Highlight when search cmdline leave",
       callback = function()
