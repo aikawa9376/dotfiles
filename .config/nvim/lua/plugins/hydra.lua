@@ -1,7 +1,6 @@
 return {
-  "aikawa9376/hydra.nvim",
+  "nvimtools/hydra.nvim",
   event = "BufReadPre",
-  branch = "error-fix",
   config = function ()
     local Hydra = require('hydra')
 
