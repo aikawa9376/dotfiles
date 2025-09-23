@@ -183,10 +183,14 @@ return {
       select_model = "<leader>c?", -- Select model command,
     },
     hints = { enabled = true },
-    file_selector = {
-      provider = "fzf",
-      -- Options override for custom providers
-      provider_opts = {},
+    selector = {
+      provider = "fzf_lua",
+      provider_opts = {
+        prompt = "select:",
+        fzf_opts = {
+          ["--multi"] = "",
+        },
+      },
     },
     windows = {
       ---@type "right" | "left" | "top" | "bottom"
