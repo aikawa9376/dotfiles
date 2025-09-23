@@ -390,9 +390,9 @@ return {
       },
       heads = {
         { ']',
-          "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
+          "<cmd>lua vim.diagnostic.jump({count = 1, float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
         { '[',
-          "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
+          "<cmd>lua vim.diagnostic.jump({count = -1, float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
         { '<C-Space>',
           "<cmd>Lspsaga diagnostic_jump_next<CR>", { exit = true } },
       }
@@ -411,9 +411,9 @@ return {
       },
       heads = {
         { ']',
-          "<cmd>lua vim.diagnostic.goto_next({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
+          "<cmd>lua vim.diagnostic.jump({count = 1, float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
         { '[',
-          "<cmd>lua vim.diagnostic.goto_prev({float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
+          "<cmd>lua vim.diagnostic.jump({count = -1, float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
         { '<C-Space>',
           "<cmd>Lspsaga diagnostic_jump_prev<CR>", { exit = true } },
       }

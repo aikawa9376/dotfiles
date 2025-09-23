@@ -61,10 +61,10 @@ end
 
 local function getRootDir()
   local project = require("project.api")
-  local rootDir = pcall(project.get_project_root)
+  local rootDir = project.get_project_root()
 
   if rootDir ~= "" then
-    local parts = vim.split(project.get_project_root(), "/", { plain = true })
+    local parts = vim.split(rootDir, "/", { plain = true })
     return parts[#parts]
   else
     return ""
@@ -231,7 +231,6 @@ M.fzf_dirs_smart = function(opts)
       "--type", "directory",
       "--follow",
       "--hidden",
-      "--color", "always",
       "--exclude", ".git",
     },
     cwd = vim.fn.getcwd(),
@@ -248,6 +247,8 @@ M.fzf_dirs_smart = function(opts)
       table.sort(dirs, function(a, b)
         return path_distance_score(base_dir, a) < path_distance_score(base_dir, b)
       end)
+
+      dirs = #dirs > 1000 and dirs or colorFilename(dirs)
 
       vim.schedule(function()
         fzf_lua.fzf_exec(

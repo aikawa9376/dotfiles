@@ -40,8 +40,8 @@ M.settings = function(client, bufnr)
   )
 
   -- Commands.
-  vim.cmd([[command! DiagnosticPrevious lua vim.diagnostic.goto_prev()]])
-  vim.cmd([[command! DiagnosticNext lua vim.diagnostic.goto_next()]])
+  vim.cmd([[command! DiagnosticPrevious lua vim.diagnostic.jump({count = -1})]])
+  vim.cmd([[command! DiagnosticNext lua vim.diagnostic.jump({count = 1})]])
   vim.cmd([[command! DiagnosticQf lua vim.diagnostic.setloclist()]])
   vim.cmd([[command! AddWorkspaceFolder vim.lsp.buf.add_workspace_folder()]])
   vim.cmd([[command! RemoveWorkspaceFolder vim.lsp.buf.remove_workspace_folder()]])
