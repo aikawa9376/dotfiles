@@ -90,6 +90,7 @@ require("lazy").setup({
     -- { import = "plugins.relativenumber" },
     { import = "plugins.diff-dim" },
     { import = "plugins.linediff" },
+    { import = "plugins.quick-toggle" },
     { import = "plugins.typescript-tools" },
     { import = "plugins.luasnip" },
     { import = "plugins.blink" },

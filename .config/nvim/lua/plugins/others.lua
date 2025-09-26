@@ -30,15 +30,6 @@ return {
     }
   },
   {
-    "LeafCage/qutefinger.vim",
-    keys = {
-      { "<Plug>(qutefinger-prev)" },
-      { "<Plug>(qutefinger-next)" },
-      { "Q", "<Plug>(qutefinger-toggle-win)", silent = true },
-      { "QQ", "<Plug>(qutefinger-toggle-win)", silent = true }
-    }
-  },
-  {
     "rhysd/git-messenger.vim",
     keys = {
       { "g<space>", "<Plug>(git-messenger)", silent = true },

@@ -303,8 +303,8 @@ return {
             vim.schedule(function() require("trouble").next({ jump = true }) end)
             return '<Ignore>'
           else
-            vim.fn.feedkeys(
-              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-next)', true, true, true), 'n')
+            require("quick-toggle").next_item()
+            return '<Ignore>'
           end
         end
       },
@@ -314,9 +314,8 @@ return {
             vim.schedule(function() require("trouble").next({ jump = true }) end)
             return '<Ignore>'
           else
-            -- vim.api.nvim_feedkeys('<Plug>(qutefinger-next)', 'n', true)
-            vim.fn.feedkeys(
-              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-next)', true, true, true), 'n')
+            require("quick-toggle").next_item()
+            return '<Ignore>'
           end
         end },
         { '[', function ()
@@ -324,8 +323,8 @@ return {
             vim.schedule(function() require("trouble").prev({ jump = true }) end)
             return '<Ignore>'
           else
-            vim.fn.feedkeys(
-              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-prev)', true, true, true), 'n')
+            require("quick-toggle").previous_item()
+            return '<Ignore>'
           end
         end }
       }
@@ -347,8 +346,8 @@ return {
             vim.schedule(function() require("trouble").prev({ jump = true }) end)
             return '<Ignore>'
           else
-            vim.fn.feedkeys(
-              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-prev)', true, true, true), 'n')
+            require("quick-toggle").previous_item()
+            return '<Ignore>'
           end
         end
       },
@@ -358,9 +357,8 @@ return {
             vim.schedule(function() require("trouble").next({ jump = true }) end)
             return '<Ignore>'
           else
-            -- vim.api.nvim_feedkeys('<Plug>(qutefinger-next)', 'n', true)
-            vim.fn.feedkeys(
-              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-next)', true, true, true), 'n')
+            require("quick-toggle").next_item()
+            return '<Ignore>'
           end
         end },
         { '[', function ()
@@ -368,8 +366,8 @@ return {
             vim.schedule(function() require("trouble").prev({ jump = true }) end)
             return '<Ignore>'
           else
-            vim.fn.feedkeys(
-              vim.api.nvim_replace_termcodes('<Plug>(qutefinger-prev)', true, true, true), 'n')
+            require("quick-toggle").previous_item()
+            return '<Ignore>'
           end
         end }
       }
