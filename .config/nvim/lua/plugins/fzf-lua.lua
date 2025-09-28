@@ -112,7 +112,24 @@ return {
         includeDeclaration = false,
         ignore_current_line = true,
         jump1 = false,
-      }
+      },
+      code_actions = {
+        prompt = 'Code Actions > ',
+        silent = true,
+        winopts = {
+          split = false,
+          border = "single",
+          height = 0.6,
+          width = 0.6,
+          row = 0.5,
+          preview = {
+            border = "single",
+            layout = "horizontal",
+            horizontal = "down:40%"
+          }
+        },
+      },
+
     }
   },
 }
