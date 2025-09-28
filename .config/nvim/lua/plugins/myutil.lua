@@ -1,24 +1,56 @@
 return {
-  "aikawa9376/myutil.vim",
+  "aikawa9376/utilities.lua",
   keys = {
-    { "gl", "<cmd>call myutil#hl_text_toggle()<CR>", mode = "n", silent = true, desc = "myutil: toggle highlight text" },
-    { "]p", "<cmd>call myutil#yank_line('j')<CR>=`]^", mode = "n", silent = true, desc = "myutil: yank line down" },
-    { "[p", "<cmd>call myutil#yank_line('k')<CR>=`]^", mode = "n", silent = true, desc = "myutil: yank line up" },
-    { "<M-p>", "<cmd>call myutil#yank_remove_line()<CR>=`]^", mode = "n", silent = true, desc = "myutil: yank and remove line" },
-    { "<C-t>", "<cmd>call myutil#yank_text_toggle()<CR>", mode = "n", silent = true, desc = "myutil: toggle yank text" },
-    { "<Leader>,", "<cmd>call myutil#reload_vimrc()<CR>", mode = "n", silent = true, desc = "myutil: reload vimrc" },
-    { "<Plug>(my-switch)y", "<cmd>call myutil#toggle_syntax()<CR>", mode = "n", silent = true, desc = "myutil: toggle syntax (plug)" },
-    { "<Plug>(my-switch)n", "<cmd>call myutil#toggle_relativenumber()<CR>", mode = "n", silent = true, desc = "myutil: toggle relativenumber (plug)" },
-    { "dd", "<cmd>call myutil#remove_line_brank(v:count1)<CR>", mode = "n", silent = true, desc = "myutil: remove line (brank) single" },
-    { "dD", "<cmd>call myutil#remove_line_brank_all(v:count1)<CR>", mode = "n", silent = true, desc = "myutil: remove line (brank) all" },
-    { "i", function() return vim.fn['myutil#indent_with_i']("m`mv") end, mode = "n", expr = true, desc = "myutil: indent with i (expr)" },
-    { "gJ", "<cmd>call myutil#join_space_less()<CR>", mode = "n", silent = true, desc = "myutil: join with less space" },
-    { "@", "<cmd>call myutil#execute_macro_visual_range()<CR>", mode = "x", silent = true, desc = "myutil: execute macro on visual range" },
-    { "<C-U>", function() return vim.fn['myutil#ctrl_u']() end, mode = "c", expr = true, desc = "myutil: ctrl-u in cmdline" },
-    { "<C-W>", function() return vim.fn["myutil#ctrl_w_before"]() .. vim.fn["myutil#ctrl_w_after"]() end, mode = "c", expr = true, desc = "myutil: ctrl-w in cmdline" },
+    { "gl", function() require"utilities".hl_text_toggle() end, mode = "n" },
+    { "]p", function() require"utilities".yank_line('j') end, mode = "n" },
+    { "[p", function() require"utilities".yank_line('k') end, mode = "n" },
+    { "<M-p>", function() require"utilities".yank_remove_line() end, mode = "n" },
+    { "<C-t>", function() require"utilities".yank_text_toggle() end, mode = "n" },
+    { "<Leader>,", function() require"utilities".yank_text_toggle() end, mode = "n" },
+    { "dd", function() require"utilities".remove_line_brank(vim.v.count1) end, mode = "n" },
+    { "dD", function() require"utilities".remove_line_brank_all(vim.v.count1) end, mode = "n" },
+    { "i", function() return require "utilities".indent_with_i("m`mv") end, mode = "n", expr = true },
+    { "gJ", function() require"utilities".join_space_less() end, mode = "n" },
+    { "@", function() require"utilities".execute_macro_visual_range() end, mode = "x" },
+    { "<C-K>", function() require"utilities".ctrl_k() end, mode = "c" },
   },
-  init = function ()
+  cmd = { "Capture" },
+  config = function ()
     -- keep foldtext initialization in init
-    vim.opt.foldtext = "myutil#custom_fold_text()"
+    -- vim.opt.foldtext = require"utilities".custom_fold_text()
+
+    -- autocmd
+    local group = vim.api.nvim_create_augroup('myutil', { clear = true })
+
+    vim.api.nvim_create_autocmd('FileType', {
+      pattern = 'gitcommit',
+      command = 'setlocal spell',
+      group = group,
+    })
+
+    vim.api.nvim_create_autocmd('BufWritePre', {
+      pattern = '*',
+      callback = function()
+        require"utilities".auto_mkdir(vim.fn.expand('<afile>:p:h'), vim.v.cmdbang)
+      end,
+      group = group,
+    })
+
+    vim.api.nvim_create_autocmd({'TextYankPost', 'TextChanged', 'InsertEnter'}, {
+      pattern = '*',
+      callback = function()
+        require"utilities".yank_toggle_flag()
+      end,
+      group = group,
+    })
+
+    -- ex command
+    vim.api.nvim_create_user_command(
+      'Capture',
+      function(opts)
+        require"utilities".cmd_capture(opts)
+      end,
+      { nargs = '+', bang = true, complete = 'command' }
+    )
   end
 }
