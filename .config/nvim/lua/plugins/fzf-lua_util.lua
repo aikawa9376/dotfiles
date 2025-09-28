@@ -4,7 +4,7 @@ local fzf_lua = require("fzf-lua")
 -- ------------------------------------------------------------------
 -- default settings
 -- ------------------------------------------------------------------
---
+
 local defaultActions = {
   ["enter"] = fzf_lua.actions.file_edit,
   ["ctrl-s"] = fzf_lua.actions.file_split,
