@@ -11,8 +11,7 @@ vim.cmd([[
 augroup MyAutoCmd
   autocmd FileType help,qf nnoremap <buffer> <CR> <CR>
   autocmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
-  autocmd FileType fugitiveblame let @q="gq"
-  autocmd FileType fugitiveblame nmap <buffer><nowait> q @q
+  autocmd FileType fugitiveblame nmap <buffer><nowait> q gq
   autocmd FileType fugitiveblame nmap <buffer><nowait> <BS> <C-w><C-w><M-o><Leader>gb
   autocmd FileType noice nnoremap <buffer><nowait> <ESC> <C-w>c
   autocmd FileType help,qf,fugitive,defx,vista,neo-tree, nnoremap <buffer><nowait> <C-c> <C-w>c
