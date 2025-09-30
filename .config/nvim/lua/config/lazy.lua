@@ -95,6 +95,7 @@ require("lazy").setup({
     { import = "plugins.typescript-tools" },
     { import = "plugins.luasnip" },
     { import = "plugins.blink" },
+    { import = "plugins.recorder" },
     { "neovim/nvim-lspconfig", event = "BufReadPre", config = function () require"lsp" end, },
     { "mason-org/mason.nvim", lazy = true },
     { "rafamadriz/friendly-snippets", lazy = true },
