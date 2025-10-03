@@ -128,18 +128,19 @@ end
 
 M.fzf_files = function(opts)
   fzf_lua.fzf_exec(
-    "fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . " ..
+    "fd --strip-cwd-prefix --follow --hidden --exclude .git --type f . " ..
     "-E .git -E '*.psd' -E '*.png' -E '*.jpg' -E '*.pdf' " ..
     "-E '*.ai' -E '*.jfif' -E '*.jpeg' -E '*.gif' " ..
     "-E '*.eps' -E '*.svg' -E '*.JPEM' -E '*.mp4' | " ..
-    "xargs -0 eza -1 -sold --color=always --no-quotes",
+    "eza -1 -sold --color=always --no-quotes",
     getFileOpt()
   )
 end
 
 M.fzf_all_files = function(opts)
   fzf_lua.fzf_exec(
-    "fd --strip-cwd-prefix -I --type file --follow --hidden --color=always --exclude .git",
+    "fd --strip-cwd-prefix -I --type file --follow --hidden --exclude .git | " ..
+    "eza -1 -sold --color=always --no-quotes",
     getFileOpt()
   )
 end
@@ -370,7 +371,7 @@ M.fzf_ast_grep = function(args)
     " --heading always --pattern <query> 2>/dev/null | " ..
     "awk '!/│/ { filename=$0; print \"││\"filename } /│/ { print filename\"│\"$0 }' | sed 's/│/:/g'",
     getAstGrepOpts()
-      )
+  )
 end
 
 M.fzf_ast_grep_txt = function(args)
@@ -379,7 +380,7 @@ M.fzf_ast_grep_txt = function(args)
     "ast-grep --color always --no-ignore hidden --lang " .. lang ..
     " --pattern <query> 2>/dev/null",
     getAstGrepOpts()
-      )
+  )
 end
 
 fzf_lua.ast_grep = M.fzf_ast_grep
