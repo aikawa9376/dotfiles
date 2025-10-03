@@ -86,5 +86,15 @@ return {
     keys = {
       { "T", "<cmd>Translate ja<CR>", mode = "x", silent = true }
     },
+  },
+  {
+    "aikawa9376/phprefactoring.nvim",
+    branch = "feat/treesitter-main-support",
+    cmd = {
+      "PHPExtractVariable", "PHPExtractMethod", "PHPExtractClass", "PHPExtractInterface",
+      "PHPIntroduceConstant", "PHPIntroduceField", "PHPIntroduceParameter", "PHPChangeSignature",
+      "PHPPullMembersUp", "PHPRenameVariable", "PHPRenameMethod", "PHPRenameClass",
+    },
+    config = true
   }
 }
