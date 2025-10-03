@@ -120,8 +120,8 @@ zmenu() {
 fzf-picture-preview() {
   local selected
   if selected=$(
-    fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . |
-    xargs -0 eza -1 -sold --color=always --no-quotes 2> /dev/null |
+    fd --strip-cwd-prefix --follow --hidden --exclude .git --type f . |
+    eza -1 -sold --color=always --no-quotes 2> /dev/null |
     fzf --ansi --multi | sed 's/ /\\ /g' | tr '\n' ' '); then
     LBUFFER=${LBUFFER}$selected
   fi
@@ -213,12 +213,12 @@ rvim () {
 fvim() {
   if [[ $@ == '-a' ]]; then
     files=$( \
-    fd --strip-cwd-prefix -I --follow --hidden --exclude .git --type f --print0 . | \
-    xargs -0 eza -1 --no-quotes -sold --color=always --no-quotes 2> /dev/null) &&
+    fd --strip-cwd-prefix -I --follow --hidden --exclude .git --type f . | \
+    eza -1 --no-quotes -sold --color=always --no-quotes 2> /dev/null) &&
   else
     files=$( \
-    fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . | \
-    xargs -0 eza -1 -sold --no-quotes --color=always --no-quotes 2> /dev/null) &&
+    fd --strip-cwd-prefix --follow --hidden --exclude .git --type f . | \
+    eza -1 -sold --no-quotes --color=always --no-quotes 2> /dev/null) &&
   fi
 
   selected_files=$(echo "$files" | fzf -m --ansi --scheme=history | tr '\n' ' ') &&
