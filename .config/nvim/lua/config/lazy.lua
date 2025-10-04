@@ -30,6 +30,7 @@ require("lazy").setup({
     { import = "plugins.hlchunk" },
     { import = "plugins.outline" },
     { import = "plugins.avante" },
+    -- { import = "plugins.sidekick" },
     { import = "plugins.colorizer" },
     { import = "plugins.insx" },
     -- { import = "plugins.automa" },

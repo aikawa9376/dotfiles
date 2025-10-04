@@ -14,7 +14,7 @@ return {
     { "@", function() require"utilities".execute_macro_visual_range() end, mode = "x" },
     { "<C-K>", function() require"utilities".ctrl_k() end, mode = "c" },
   },
-  cmd = { "Capture" },
+  cmd = { "Capture", "Diff" },
   config = function ()
     -- keep foldtext initialization in init
     -- vim.opt.foldtext = require"utilities".custom_fold_text()
@@ -52,5 +52,16 @@ return {
       end,
       { nargs = '+', bang = true, complete = 'command' }
     )
+
+    vim.api.nvim_create_user_command('Diff', function(opts)
+      local args = {}
+      if opts and opts.fargs and #opts.fargs > 0 then
+        args[1] = table.concat(opts.fargs, ' ')
+      end
+      require('gitsigns').diffthis(unpack(args))
+    end, {
+        nargs = '*' ,
+        complete = require"utilities".get_git_completions
+      })
   end
 }
