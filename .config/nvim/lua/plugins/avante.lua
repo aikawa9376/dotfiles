@@ -85,7 +85,9 @@ return {
     mode = "legacy",
     providers = {
       copilot = {
-        model = "gpt-5-mini",
+        -- model = "gpt-5",
+        model = "claude-sonnet-4",
+        -- model = "gpt-5-mini",
         endpoint = "https://api.githubcopilot.com",
         allow_insecure = false,
         timeout = 10 * 60 * 1000,
@@ -174,8 +176,8 @@ return {
       sidebar = {
         switch_windows = "<Tab>",
         reverse_switch_windows = "<S-Tab>",
-        close = { "<ESC>", "q" },
-        close_from_input = { normal = "<ESC><ESC>", insert = "<C-d>" }
+        close = { "q" },
+        close_from_input = { normal = "q", insert = "<C-d>" }
       },
       files = {
         add_current = "<leader>ca", -- Add current buffer to selected files
