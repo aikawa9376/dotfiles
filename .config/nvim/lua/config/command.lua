@@ -23,8 +23,7 @@ augroup MyAutoCmd
   autocmd FileType fugitive nnoremap <buffer><Space>gp :<c-u>Git! push<CR><C-w>c
   autocmd FileType dbui,dbout,sql nnoremap <buffer><nowait> <C-c> :DBUIDelete<CR>
   autocmd FileType dbui,dbout,sql nnoremap <buffer><nowait> q :DBUIDelete<CR>
-  autocmd FileType DiffviewFiles,DiffviewFileHistory nnoremap <buffer><nowait> q :DiffviewClose<CR>
-  autocmd FileType DiffviewFiles,DiffviewFileHistory nnoremap <buffer><nowait> <C-c> :DiffviewClose<CR>
+  autocmd FileType Avante,AvanteInput,AvanteSelectedFiles nnoremap <buffer><nowait><silent> q :AvanteToggle<CR>
   autocmd FileType spectre_panel nnoremap <buffer><nowait> q <C-w>c
   autocmd FileType spectre_panel nnoremap <buffer><nowait> <C-c> <C-w>c
 augroup END

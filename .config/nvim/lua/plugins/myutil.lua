@@ -36,13 +36,32 @@ return {
       group = group,
     })
 
-    vim.api.nvim_create_autocmd({'TextYankPost', 'TextChanged', 'InsertEnter'}, {
-      pattern = '*',
-      callback = function()
-        require"utilities".yank_toggle_flag()
-      end,
-      group = group,
-    })
+    vim.api.nvim_create_autocmd({
+      'TextYankPost',
+      'TextChanged',
+      'InsertEnter',
+    }, {
+        pattern = '*',
+        callback = function()
+          require"utilities".yank_toggle_flag()
+        end,
+        group = group,
+      })
+
+    vim.api.nvim_create_autocmd({
+      'InsertLeave',
+      'WinLeave',
+      'BufEnter',
+      'CmdlineLeave',
+      'FocusGained',
+      'VimResume'
+    }, {
+        pattern = '*',
+        callback = function()
+          require"utilities".fcitx2en()
+        end,
+        group = group,
+      })
 
     -- ex command
     vim.api.nvim_create_user_command(
@@ -53,13 +72,15 @@ return {
       { nargs = '+', bang = true, complete = 'command' }
     )
 
-    vim.api.nvim_create_user_command('Diff', function(opts)
-      local args = {}
-      if opts and opts.fargs and #opts.fargs > 0 then
-        args[1] = table.concat(opts.fargs, ' ')
-      end
-      require('gitsigns').diffthis(unpack(args))
-    end, {
+    vim.api.nvim_create_user_command(
+      'Diff',
+      function(opts)
+        local args = {}
+        if opts and opts.fargs and #opts.fargs > 0 then
+          args[1] = table.concat(opts.fargs, ' ')
+        end
+        require('gitsigns').diffthis(unpack(args))
+      end, {
         nargs = '*' ,
         complete = require"utilities".get_git_completions
       })
