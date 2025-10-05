@@ -174,8 +174,8 @@ return {
       sidebar = {
         switch_windows = "<Tab>",
         reverse_switch_windows = "<S-Tab>",
-        close = { "<ESC>", "q" },
-        close_from_input = { normal = "<ESC><ESC>", insert = "<C-d>" }
+        close = { "q" },
+        close_from_input = { normal = "q", insert = "<C-d>" }
       },
       files = {
         add_current = "<leader>ca", -- Add current buffer to selected files
