@@ -2,7 +2,7 @@ return {
   "sindrets/diffview.nvim",
   cmd = { 'DiffviewOpen', 'DiffviewFileHistory' },
   keys = {
-    { "<Leader>gH", "<cmd>DiffviewFileHistory%<CR>", silent = true },
+    { "<Leader>gH", ":DiffviewFileHistory %<CR>", mode= { "n", "x" }, silent = true },
     { "<Leader>gD", ":DiffviewOpen origin/develop -- %" }
   },
   opts = {

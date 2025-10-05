@@ -6,7 +6,7 @@ return {
     { "[p", function() require"utilities".yank_line('k') end, mode = "n" },
     { "<M-p>", function() require"utilities".yank_remove_line() end, mode = "n" },
     { "<C-t>", function() require"utilities".yank_text_toggle() end, mode = "n" },
-    { "<Leader>,", function() require"utilities".yank_text_toggle() end, mode = "n" },
+    { "<Leader>,", function() require"utilities".reload_vimrc() end, mode = "n" },
     { "dd", function() require"utilities".remove_line_brank(vim.v.count1) end, mode = "n" },
     { "dD", function() require"utilities".remove_line_brank_all(vim.v.count1) end, mode = "n" },
     { "i", function() return require "utilities".indent_with_i("m`mv") end, mode = "n", expr = true },
