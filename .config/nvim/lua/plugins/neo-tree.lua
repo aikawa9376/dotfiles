@@ -164,19 +164,11 @@ return {
         },
       },
     },
-    event_handlers = {
-      {
-        event = "neo_tree_window_after_open",
-        handler = function()
-          vim.api.nvim_set_var("auto_cursorline_disable", 1)
-        end,
-      },
-      {
-        event = "neo_tree_window_after_close",
-        handler = function()
-          vim.api.nvim_set_var("auto_cursorline_disable", 0)
-        end,
-      },
+    sources = {
+      "filesystem",
+      "buffers",
+      "git_status",
+      "document_symbols",
     },
     source_selector = {
       winbar = true,
