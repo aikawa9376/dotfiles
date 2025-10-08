@@ -57,6 +57,8 @@ opt.pumheight = 20
 opt.cmdheight = 0
 -- opt.shellslash = true
 opt.foldenable = false
+opt.wrap = true
+opt.linebreak = true
 
 opt.winborder = 'single'
 
