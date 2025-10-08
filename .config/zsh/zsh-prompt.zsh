@@ -191,12 +191,13 @@
 }
 
 function p10k-on-pre-prompt() {
-  p10k display '1'=show '2/left/user'=show \
-  '2/left/time'=hide '2/right/status'=hide '2/gap'=hide
+  p10k display '1'=show '2/left/time'=hide '2/left/user'=show
 }
 function p10k-on-post-prompt() {
-  p10k display '1'=hide '2/left/user'=hide \
-  '2/left/time'=show '2/right/status'=show '2/gap'=show
+  if [[ $PWD == ${_last_dir} ]]; then
+    p10k display '1'=hide '2/left/time'=show '2/left/user'=hide
+  fi
+  typeset -g _last_dir=$PWD
 }
 
 function padding_bottom() {

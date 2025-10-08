@@ -12,6 +12,11 @@ return {
         height = 10
       },
     },
+    hooks = {
+      diff_buf_win_enter = function(_, winid, _)
+        vim.wo[winid].wrap = false
+      end,
+    },
     key_bindings = {
       disable_defaults = false, -- Disable the default keymaps
       view = {

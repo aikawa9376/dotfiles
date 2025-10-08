@@ -55,6 +55,7 @@
   "neogen": { "branch": "main", "commit": "d7f9461727751fb07f82011051338a9aba07581d" },
   "neomru.vim": { "branch": "mrw", "commit": "6ad76cf2153a653cc8994ff8d363b8b4330fb24c" },
   "neotest": { "branch": "master", "commit": "2cf3544fb55cdd428a9a1b7154aea9c9823426e8" },
+  "neotest-jest": { "branch": "main", "commit": "2f657403aabab7d68eaa2cb9181dc4bb7fdd8a08" },
   "neotest-phpunit": { "branch": "main", "commit": "234d00428bbd40e48852e60437f79214142e31e4" },
   "nightfox.nvim": { "branch": "main", "commit": "ba47d4b4c5ec308718641ba7402c143836f35aa9" },
   "noice.nvim": { "branch": "main", "commit": "0427460c2d7f673ad60eb02b35f5e9926cf67c59" },
