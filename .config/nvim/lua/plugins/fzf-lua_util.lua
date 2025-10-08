@@ -128,18 +128,19 @@ end
 
 M.fzf_files = function(opts)
   fzf_lua.fzf_exec(
-    "fd --strip-cwd-prefix --follow --hidden --exclude .git --type f --print0 . " ..
+    "fd --strip-cwd-prefix --follow --hidden --exclude .git --type f . " ..
     "-E .git -E '*.psd' -E '*.png' -E '*.jpg' -E '*.pdf' " ..
     "-E '*.ai' -E '*.jfif' -E '*.jpeg' -E '*.gif' " ..
     "-E '*.eps' -E '*.svg' -E '*.JPEM' -E '*.mp4' | " ..
-    "xargs -0 eza -1 -sold --color=always --no-quotes",
+    "eza -1 -sold --color=always --no-quotes",
     getFileOpt()
   )
 end
 
 M.fzf_all_files = function(opts)
   fzf_lua.fzf_exec(
-    "fd --strip-cwd-prefix -I --type file --follow --hidden --color=always --exclude .git",
+    "fd --strip-cwd-prefix -I --type file --follow --hidden --exclude .git | " ..
+      "eza -1 -sold --color=always --no-quotes",
     getFileOpt()
   )
 end

@@ -190,8 +190,15 @@
   done
 }
 
-function p10k-on-pre-prompt() { p10k display '1'=show '2/left/time'=hide '2/left/user'=show }
-function p10k-on-post-prompt() { p10k display '1'=hide '2/left/time'=show '2/left/user'=hide}
+function p10k-on-pre-prompt() {
+  p10k display '1'=show '2/left/time'=hide '2/left/user'=show
+}
+function p10k-on-post-prompt() {
+  if [[ $PWD == ${_last_dir} ]]; then
+    p10k display '1'=hide '2/left/time'=show '2/left/user'=hide
+  fi
+  typeset -g _last_dir=$PWD
+}
 
 function padding_bottom() {
   zle && return
