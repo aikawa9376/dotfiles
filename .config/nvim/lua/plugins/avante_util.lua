@@ -38,5 +38,35 @@ M.avante_optimize_code = function () prefill_edit_window(avante_optimize_code) e
 M.avante_fix_bugs = function () prefill_edit_window(avante_fix_bugs) end
 M.avante_add_docstring = function () prefill_edit_window(avante_add_docstring) end
 M.avante_add_tests = function () prefill_edit_window( avante_add_tests) end
+M.avante_switch_provider = function()
+  local ok, plugin = pcall(require, "lazy.core.plugin")
+  local ok2, config = pcall(require, "lazy.core.config")
+  if not (ok and ok2) then
+    vim.notify("lazy.nvim not available", vim.log.levels.ERROR)
+    return
+  end
+
+  local avante_config = config.spec.plugins["avante.nvim"]
+  local opts = plugin.values(avante_config, "opts", false)
+  local providers = type(opts) == "table" and opts.providers or nil
+
+  if type(providers) ~= "table" or vim.tbl_isempty(providers) then
+    vim.notify("No providers configured for avante.nvim", vim.log.levels.WARN)
+    return
+  end
+
+  local choices = vim.tbl_keys(providers)
+  table.sort(choices)
+
+  -- pcall(require, "dressing")
+
+  vim.ui.select(choices, { prompt = "Select Avante provider:" }, function(choice)
+    if not choice then return end
+    local ok3, err = pcall(require("avante.api").switch_provider, choice)
+    if not ok3 then
+      vim.notify("Failed to switch provider: " .. tostring(err), vim.log.levels.ERROR)
+    end
+  end)
+end
 
 return M

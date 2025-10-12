@@ -22,6 +22,7 @@ return {
           row = 0.5,
           preview = nil,
           split = false,
+          border = "single"
         },
       },
     }

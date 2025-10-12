@@ -20,7 +20,6 @@ require("lazy").setup({
     { import = "plugins.project" },
     { import = "plugins.conform"},
     { import = "plugins.lint"},
-    { import = "plugins.dressing" },
     { import = "plugins.lightbulb" },
     { import = "plugins.illuminate" },
     { import = "plugins.refactoring" },
@@ -110,7 +109,6 @@ require("lazy").setup({
     { "kana/vim-niceblock", event = "BufRead" },
     { "stevearc/quicker.nvim", ft = "qf", config = true },
     { "mrcjkb/rustaceanvim", ft = "rust" },
-    { "aikawa9376/auto-cursorline.nvim", event = "BufRead", config = true },
     { "aikawa9376/neomru.vim", branch = "mrw", event = "BufReadPre" },
     { "cseickel/diagnostic-window.nvim", cmd = { "DiagWindowShow" } },
   },
@@ -130,4 +128,7 @@ require("lazy").setup({
       },
     },
   },
+  ui = {
+    border = "single"
+  }
 })
