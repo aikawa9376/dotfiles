@@ -8,6 +8,7 @@ end
 local function apply_colorscheme()
   set_highlight("Normal", { fg = "#839496", bg = "None" })
   set_highlight("NormalFloat", { bg = "#002b36" })
+  set_highlight("FloatTitle", { bg = "#002b36" })
   set_highlight("NormalNC", { bg = "#073642" })
   set_highlight("ErrorMsg", { bold = true, fg = "#dc322f" })
   set_highlight("SignColumn", { bg = "None" })
@@ -103,6 +104,7 @@ local function apply_colorscheme()
   set_highlight("DiagnosticVirtualTextInfo", { bg = "NONE" })
   set_highlight("IndentBlanklineContextChar", { fg = "#073642" })
   set_highlight("AvanteSidebarNormal", { fg = "#839496", bg = "None" })
+  set_highlight("AvantePromptInput", { bg = "#002b36" })
 end
 
 vim.api.nvim_create_autocmd("ColorScheme", {

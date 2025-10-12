@@ -98,6 +98,13 @@ return {
     },
   },
   {
+    "aikawa9376/auto-cursorline.nvim",
+    event = "BufRead",
+    opts = {
+      disabled_filetypes_no_cursorline = { "AvantePromptInput", "TelescopePrompt", "terminal", "qf" },
+    }
+  },
+  {
     "aikawa9376/phprefactoring.nvim",
     branch = "feat/treesitter-main-support",
     cmd = {

@@ -8,73 +8,19 @@ return {
     require("lazy.core.plugin").values(require("lazy.core.config").spec.plugins["avante.nvim"], "opts", false)
 
     local mappings = {
-      {
-        opts.mappings.ask,
-        function() require("avante.api").ask() end,
-        mode = { "n", "v" },
-      },
-      {
-        opts.mappings.refresh,
-        function() require("avante.api").refresh() end,
-        mode = "v",
-      },
-      {
-        opts.mappings.edit,
-        function() require("avante.api").edit() end,
-        mode = { "n", "v" },
-      },
-      {
-        opts.mappings.stop,
-        function() require("avante.api").stop() end,
-        mode = { "n", "v", "i" },
-      },
-      {
-        opts.mappings.focus,
-        function() require("avante.api").focus() end,
-        mode = { "n" },
-      },
-      {
-        "<Leader>cL",
-        function ()
-          require"plugins.avante_util".avante_code_readability_analysis()
-        end,
-        mode = { "n" },
-      },
-      {
-        "<Leader>cl",
-        function ()
-          require"plugins.avante_util".avante_optimize_code()
-        end,
-        mode = { "v" },
-      },
-      {
-        "<Leader>cf",
-        function ()
-          require"plugins.avante_util".avante_fix_bugs()
-        end,
-        mode = { "v" },
-      },
-      {
-        "<Leader>cs",
-        function ()
-          require"plugins.avante_util".avante_add_docstring()
-        end,
-        mode = { "v" },
-      },
-      {
-        "<Leader>cT",
-        function ()
-          require"plugins.avante_util".avante_add_tests()
-        end,
-        mode = { "v" },
-      },
-      {
-        "<Leader>cA",
-        function ()
-          require("avante.api").zen_mode()
-        end,
-        mode = { "n" }
-      }
+      { opts.mappings.ask, function() require("avante.api").ask() end, mode = { "n", "v" } },
+      { opts.mappings.refresh, function() require("avante.api").refresh() end, mode = "v" },
+      { opts.mappings.edit, function() require("avante.api").edit() end, mode = { "n", "v" } },
+      { opts.mappings.stop, function() require("avante.api").stop() end, mode = { "n", "v", "i" } },
+      { opts.mappings.focus, function() require("avante.api").focus() end, mode = { "n" } },
+      { opts.mappings.select_model, function() require"plugins.avante_util".avante_switch_provider() end, mode = { "n" } },
+      { opts.mappings.select_history, function() require("avante.api").select_history() end, mode = { "n" } },
+      { "<Leader>cL", function () require"plugins.avante_util".avante_code_readability_analysis() end, mode = { "n" } },
+      { "<Leader>cl", function () require"plugins.avante_util".avante_optimize_code() end, mode = { "v" } },
+      { "<Leader>cf", function () require"plugins.avante_util".avante_fix_bugs() end, mode = { "v" } },
+      { "<Leader>cs", function () require"plugins.avante_util".avante_add_docstring() end, mode = { "v" } },
+      { "<Leader>cT", function () require"plugins.avante_util".avante_add_tests() end, mode = { "v" } },
+      { "<Leader>cA", function () require("avante.api").zen_mode() end, mode = { "n" } }
     }
     mappings = vim.tbl_filter(function(m) return m[1] and #m[1] > 0 end, mappings)
     return vim.list_extend(mappings, keys)
@@ -85,9 +31,7 @@ return {
     mode = "legacy",
     providers = {
       copilot = {
-        -- model = "gpt-5",
-        model = "claude-sonnet-4",
-        -- model = "gpt-5-mini",
+        model = "gpt-5-mini",
         endpoint = "https://api.githubcopilot.com",
         allow_insecure = false,
         timeout = 10 * 60 * 1000,
@@ -96,6 +40,14 @@ return {
         extra_request_body = {
           temperature = 0,
         },
+      },
+      copilot_claude = {
+        __inherited_from = "copilot",
+        model = "claude-sonnet-4.5",
+      },
+      copilot_gpt5 = {
+        __inherited_from = "copilot",
+        model = "gpt-5",
       },
     },
     {
@@ -132,8 +84,8 @@ return {
         require("mcphub.extensions.avante").mcp_tool(),
       }
     end,
+    --- @class AvanteConflictMappings
     mappings = {
-      --- @class AvanteConflictMappings
       diff = {
         ours = "co",
         theirs = "ct",
@@ -169,7 +121,7 @@ return {
       toggle = {
         default = "<leader>ct",
         debug = "<leader>cd",
-        hint = "<leader>ch",
+        hint = "<leader>cq",
         suggestion = "<leader>cs",
         repomap = "<leader>cR",
       },
@@ -177,12 +129,13 @@ return {
         switch_windows = "<Tab>",
         reverse_switch_windows = "<S-Tab>",
         close = { "q" },
-        close_from_input = { normal = "q", insert = "<C-d>" }
+        close_from_input = { normal = "q", insert = "<Nop>" }
       },
       files = {
         add_current = "<leader>ca", -- Add current buffer to selected files
       },
-      select_model = "<leader>c?", -- Select model command,
+      select_model = "<leader>cm", -- Select model command,
+      select_history = "<leader>ch", -- Select history command
     },
     hints = { enabled = true },
     selector = {
