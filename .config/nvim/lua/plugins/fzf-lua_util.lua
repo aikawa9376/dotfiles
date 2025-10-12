@@ -2,6 +2,17 @@ local M = {}
 local fzf_lua = require("fzf-lua")
 
 -- ------------------------------------------------------------------
+-- init vim.ui.select
+-- ------------------------------------------------------------------
+fzf_lua.register_ui_select(function (opts)
+  opts.winopts = {
+    height = 0.4, width = 0.6, row = 0.5,
+    preview = nil, split = false, border = "single"
+  }
+  return opts
+end)
+
+-- ------------------------------------------------------------------
 -- default settings
 -- ------------------------------------------------------------------
 
