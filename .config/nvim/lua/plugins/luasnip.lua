@@ -32,17 +32,7 @@ return {
       ext_prio_increase = 1,
     })
 
-    ls.add_snippets(nil, {
-      all = require('snippets.common'),
-      scss = require('snippets.scss'),
-      toml = require('snippets.toml'),
-      lua = require('snippets.lua'),
-      php = require('snippets.php'),
-      blade = require('snippets.blade'),
-      javascript = require('snippets.javascript')
-    })
-
-
+    require("luasnip.loaders.from_lua").load({ paths = "./lua/snippets" })
     require("luasnip.loaders.from_vscode").lazy_load()
     -- require("luasnip.loaders.from_snipmate").load()
 
