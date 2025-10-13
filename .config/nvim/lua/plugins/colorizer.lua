@@ -19,7 +19,7 @@ return {
       -- True is same as normal
       tailwind = true, -- Enable tailwind colors
       -- parsers can contain values used in |user_default_options|
-      sass = { enable = false, parsers = { css }, }, -- Enable sass colors
+      sass = { enable = false, parsers = { 'css' }, }, -- Enable sass colors
       virtualtext = "●",
     },
     -- all the sub-options of filetypes apply to buftypes

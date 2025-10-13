@@ -105,7 +105,6 @@ require("lazy").setup({
     { "nvim-lua/plenary.nvim", lazy = true },
     { "xzbdmw/colorful-menu.nvim", lazy = true },
     { "Saghen/blink.compat", lazy = true },
-    { "honza/vim-snippets", event = "InsertEnter" },
     { "kana/vim-niceblock", event = "BufRead" },
     { "stevearc/quicker.nvim", ft = "qf", config = true },
     { "mrcjkb/rustaceanvim", ft = "rust" },
