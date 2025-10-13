@@ -5,28 +5,8 @@ return {
   { 'Kaiser-Yang/blink-cmp-avante', ft = 'AvanteInput' },
   { 'fang2hou/blink-copilot', event = 'InsertEnter' },
   { 'hrsh7th/cmp-nvim-lsp-document-symbol', event = 'CmdlineEnter' },
-  {
-    'zbirenbaum/copilot.lua',
-    -- dependencies = { 'copilotlsp-nvim/copilot-lsp' },
-    event = 'InsertEnter',
-    opts = {
-      -- nes = {
-      --   enabled = true,
-      --   auto_trigger = true,
-      --   keymap = {
-      --     accept_and_goto = "<leader>p",
-      --     accept = false,
-      --     dismiss = "<Esc>",
-      --   },
-      -- },
-      -- logger = {
-      --   -- file_log_level = vim.log.levels.TRACE,
-      --   -- print_log_level = vim.log.levels.WARN,
-      --   -- trace_lsp = "verbose",
-      --   log_lsp_messages = true,
-      --   -- trace_lsp_progress = true,
-      -- },
-    }
+  { 'copilotlsp-nvim/copilot-lsp', lazy = true,
+    opts = { nes = { distance_threshold = 100, clear_on_large_distance = false, } }
   },
   {
     'saghen/blink.cmp',
