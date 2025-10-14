@@ -195,7 +195,7 @@ return {
     Hydra({
       name = 'Jump',
       mode = 'n',
-      body = ']j',
+      body = ']o',
       config = {
         hint = false,
         invoke_on_body = true,
@@ -204,21 +204,17 @@ return {
       },
       heads = {
         { ']', function ()
-          if vim.wo.diff then return ']c' end
-          vim.schedule(function() require('bufjump').forward() end)
-          return '<Ignore>'
+          require('bufjump').forward()
         end },
         { '[', function ()
-          if vim.wo.diff then return '[c' end
-          vim.schedule(function() require('bufjump').backward() end)
-          return '<Ignore>'
+          require('bufjump').backward()
         end },
       }
     })
     Hydra({
       name = 'Jump',
       mode = 'n',
-      body = '[j',
+      body = '[o',
       config = {
         hint = false,
         invoke_on_body = true,
@@ -227,14 +223,11 @@ return {
       },
       heads = {
         { ']', function ()
-          if vim.wo.diff then return ']c' end
-          vim.schedule(function() require('bufjump').forward() end)
-          return '<Ignore>'
+           require('bufjump').forward()
         end },
         { '[', function ()
           if vim.wo.diff then return '[c' end
-          vim.schedule(function() require('bufjump').backward() end)
-          return '<Ignore>'
+           require('bufjump').backward()
         end },
       }
     })

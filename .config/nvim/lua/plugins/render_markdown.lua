@@ -62,6 +62,10 @@ return {
         checked = { raw = '[x]', rendered = '󰱒 ', highlight = 'RenderMarkdownChecked', scope_highlight = nil },
       },
     },
+    bullet = {
+      render_modes = true,
+      icons = { '' , '', '', '' },
+    },
     completions = {
       lsp = { enabled = true },
       blink = { enabled = true },
@@ -84,8 +88,18 @@ return {
     vim.api.nvim_set_hl(0, "RenderMarkdownH5Bg", { bg = "NONE", bold = true })
     vim.api.nvim_set_hl(0, "RenderMarkdownH6Bg", { bg = "NONE", bold = true })
 
+    -- RenderMarkdownQuote1 ～ Quote6: follow heading colors (参考: heading)
+    vim.api.nvim_set_hl(0, "RenderMarkdownQuote1", { fg = "#61afef", bg = "NONE", italic = true })
+    vim.api.nvim_set_hl(0, "RenderMarkdownQuote2", { fg = "#e5c07b", bg = "NONE", italic = true })
+    vim.api.nvim_set_hl(0, "RenderMarkdownQuote3", { fg = "#98c379", bg = "NONE", italic = true })
+    vim.api.nvim_set_hl(0, "RenderMarkdownQuote4", { fg = "#56b6c2", bg = "NONE", italic = true })
+    vim.api.nvim_set_hl(0, "RenderMarkdownQuote5", { fg = "#c678dd", bg = "NONE", italic = true })
+    vim.api.nvim_set_hl(0, "RenderMarkdownQuote6", { fg = "#abb2bf", bg = "NONE", italic = true })
+
     vim.api.nvim_set_hl(0, "RenderMarkdownUnchecked", { fg = "#abb2bf", bg = "NONE", bold = true })
     vim.api.nvim_set_hl(0, "RenderMarkdownChecked", { fg = "#98c379", bg = "NONE", bold = true })
+
+    vim.api.nvim_set_hl(0, "RenderMarkdownBullet", { fg = "#98c379" })
 
     vim.api.nvim_set_hl(0, "RenderMarkdownCode", { bg = "#073642" })
   end
