@@ -7,8 +7,8 @@ return {
     { "<M-o>" }
   },
   opts = {
-    -- forward_key = "]j",
-    -- backward_key = "[j",
+    -- forward_key = "]o",
+    -- backward_key = "[o",
     forward_same_buf_key = "<M-i>",
     backward_same_buf_key = "<M-o>",
     on_success = nil
