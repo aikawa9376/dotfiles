@@ -40,8 +40,8 @@ return {
     opts = {
       disable_diagnostics = true,
       highlights = {
-        incoming = 'DiffAdd',
-        current = 'DiffDelete',
+        incoming = 'ConflictIncoming',
+        current = 'ConflictCurrent',
       }
     }
   },
