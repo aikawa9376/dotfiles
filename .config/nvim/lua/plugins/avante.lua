@@ -9,7 +9,7 @@ return {
 
     local mappings = {
       { opts.mappings.ask, function() require("avante.api").ask() end, mode = { "n", "v" } },
-      { opts.mappings.refresh, function() require("avante.api").refresh() end, mode = "v" },
+      { opts.mappings.refresh, function() require("avante.api").ask({ new_chat = true }) end, mode = { "n", "v" } },
       { opts.mappings.edit, function() require("avante.api").edit() end, mode = { "n", "v" } },
       { opts.mappings.stop, function() require("avante.api").stop() end, mode = { "n", "v", "i" } },
       { opts.mappings.focus, function() require("avante.api").focus() end, mode = { "n" } },
@@ -117,7 +117,7 @@ return {
       edit = "<leader>ce",
       refresh = "<leader>cr",
       focus = "<leader>cf",
-      stop = "<leader>cC",
+      stop = "<leader>cx",
       toggle = {
         default = "<leader>ct",
         debug = "<leader>cd",
