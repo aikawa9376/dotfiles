@@ -17,7 +17,7 @@ return {
         { fg = "#094b5c" },
         { fg = "#073642" }, -- this fg is used to highlight wrong chunk
       },
-      textobject = "ic",
+      textobject = "u",
       max_file_size = 1024 * 1024,
       error_sign = false,
     },

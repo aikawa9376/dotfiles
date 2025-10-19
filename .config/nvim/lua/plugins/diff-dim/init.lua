@@ -53,26 +53,6 @@ return {
       vim.api.nvim_buf_clear_namespace(0, ns_id, 0, -1)
     end
 
-    -- 補完用の関数を定義
-    local function git_revision_complete(arg_lead, cmd_line, cursor_pos)
-      local branches = vim.fn.systemlist("git for-each-ref --format='%(refname:short)' refs/heads")
-      local tags = vim.fn.systemlist("git for-each-ref --format='%(refname:short)' refs/tags")
-      local others = { "HEAD", "index" }
-
-      local all_candidates = {}
-      for _, item in ipairs(branches) do table.insert(all_candidates, item) end
-      for _, item in ipairs(tags) do table.insert(all_candidates, item) end
-      for _, item in ipairs(others) do table.insert(all_candidates, item) end
-
-      local filtered_candidates = {}
-      for _, candidate in ipairs(all_candidates) do
-        if candidate:find(arg_lead, 1, true) == 1 then
-          table.insert(filtered_candidates, candidate)
-        end
-      end
-      return filtered_candidates
-    end
-
     vim.api.nvim_create_user_command("DiffDim", function(args)
       if args.fargs[1] == "clear" then
         clear_marks()
@@ -90,7 +70,7 @@ return {
       end
     end, {
         nargs = '?',
-        complete = git_revision_complete,
+        complete = require"utilities".get_git_completions,
       })
   end
 }

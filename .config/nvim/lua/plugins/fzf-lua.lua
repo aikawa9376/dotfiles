@@ -42,13 +42,6 @@ return {
           -- signcolumn = "yes"
         }
       },
-      treesitter = {
-        enabled = true,
-        fzf_colors = {
-          ["hl"] = "red:reverse",
-          ["hl+"] = "red:reverse",
-        }
-      },
     },
     hls = {
       preview_normal = "NormalFloat",
@@ -81,7 +74,7 @@ return {
       ["--scrollbar"] = "▕",
       ["--tabstop"] = "2",
       ["--tiebreak"] = "chunk,index",
-      ["--color"] = "dark,hl:34,hl+:40,bg+:235,fg+:15,info:108,prompt:109,spinner:108,pointer:168,marker:168",
+      -- ["--color"] = "dark,hl:34,hl+:40,bg+:235,fg+:15,info:108,prompt:109,spinner:108,pointer:168,marker:168",
     },
     files = {
       fd_opts = "--type f --hidden --color=always --exclude .git",
