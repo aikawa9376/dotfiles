@@ -276,71 +276,59 @@ end
 -- RG grep
 -- ------------------------------------------------------------------
 
-local getRipgrepOpts = function (isAll)
-  isAll = isAll == nil and true or isAll
+local getRipgrepOpts = function (isText, isAll)
+  isText = isText == nil and false or isText
+  isAll = isAll == nil and false or isAll
 
   local opts = {}
-  opts.multiprocess = false
   opts.prompt = '>'
   opts.previewer = "builtin"
+  opts.no_header_i = true
+  opts.RIPGREP_CONFIG_PATH = vim.env.RIPGREP_CONFIG_PATH
   opts.winopts = {
     preview = {
       hidden = true
     },
-    -- treesitter = {
-    --   enabled = true,
-    --   fzf_colors = {
-    --     ["hl"] = "red:reverse",
-    --     ["hl+"] = "red:reverse",
-    --   }
-    -- },
+    treesitter = {
+      enabled = true,
+    },
   }
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
     ["enter"] = fzf_lua.actions.file_edit_or_qf,
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
   })
-  opts.file_icons = true
-  opts.fn_transform = function(x)
-    return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
-  end
-  -- opts.fn_pre_win = function(_)
-  --   vim.keymap.set("t", "?", "<F4>", { noremap = true, silent = true })
-  -- end
   opts.fzf_opts = {
     ["--multi"] = "",
     ["--no-unicode"] = "",
   }
 
-  if isAll then
+  if isText then
     opts.fzf_opts["--delimiter"] = ":"
-    opts.fzf_opts["--nth"] = "4..,1"
+    opts.fzf_opts["--nth"] = "-1"
   else
     opts.fzf_opts["--delimiter"] = ":"
-    opts.fzf_opts["--nth"] = "4.."
+    opts.fzf_opts["--nth"] = "-1,1..-2"
+  end
+
+  if isAll then
+    opts.rg_opts = "--column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always --glob=!.git "
+  else
+    opts.rg_opts = "--column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git "
   end
 
   return opts
 end
 
 M.fzf_ripgrep = function(args)
-  fzf_lua.fzf_exec(
-    "rg --column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git " .. vim.fn.shellescape(args),
-    getRipgrepOpts()
-  )
+  fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts()))
 end
 
 M.fzf_ripgrep_text = function(args)
-  fzf_lua.fzf_exec(
-    "rg --column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git " .. vim.fn.shellescape(args),
-    getRipgrepOpts(false)
-  )
+  fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(true)))
 end
 
 M.fzf_all_ripgrep = function(args)
-  fzf_lua.fzf_exec(
-    "rg --column --line-number --no-ignore --hidden --ignore-case --no-heading --color=always --glob=!.git " .. vim.fn.shellescape(args),
-    getRipgrepOpts()
-  )
+    fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(false, true)))
 end
 
 vim.cmd([[command! -nargs=* RgLua lua require"plugins.fzf-lua_util".fzf_ripgrep(<q-args>)]])
@@ -688,6 +676,6 @@ vim.cmd([[command! -nargs=* LaravelLua lua require"plugins.fzf-lua_util".fzf_lar
 -- lsp settings
 -- ------------------------------------------------------------------
 
--- in /home/g;aikawa/dotfiles/.config/nvim/lua/lsp/configs/settings.lua
+-- in /home/aikawa/dotfiles/.config/nvim/lua/lsp/default.lua
 
 return M

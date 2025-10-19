@@ -6,5 +6,8 @@ return {
     templates = {
       'builtin'
     },
+    task_list = {
+      bindings = { ["q"] = false, },
+    },
   },
 }
