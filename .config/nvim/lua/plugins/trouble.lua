@@ -22,5 +22,5 @@ return {
     },
   },
   config = true,
-  otps = {},
+  opts = {},
 }

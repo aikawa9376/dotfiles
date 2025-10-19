@@ -15,17 +15,12 @@ augroup MyAutoCmd
   autocmd FileType fugitiveblame nmap <buffer><nowait> <BS> <C-w><C-w><M-o><Leader>gb
   autocmd FileType noice nnoremap <buffer><nowait> <ESC> <C-w>c
   autocmd FileType help,qf,fugitive,defx,vista,neo-tree, nnoremap <buffer><nowait> <C-c> <C-w>c
-  autocmd FileType far nnoremap <buffer><nowait> <C-c> :bdelete<cr>
-  autocmd FileType agit nnoremap <buffer><nowait> <C-c> <C-w>o:tabc<CR>
-  autocmd FileType Mundo nnoremap <buffer><nowait> <C-c> :bdelete<CR>:bdelete<CR>
   autocmd FileType gitcommit nmap <buffer><nowait> q :<c-u>wq<CR>
   autocmd FileType gitcommit nmap <buffer><nowait> <C-c> :<c-u>wq<CR>
   autocmd FileType fugitive nnoremap <buffer><Space>gp :<c-u>Git! push<CR><C-w>c
-  autocmd FileType dbui,dbout,sql nnoremap <buffer><nowait> <C-c> :DBUIDelete<CR>
-  autocmd FileType dbui,dbout,sql nnoremap <buffer><nowait> q :DBUIDelete<CR>
   autocmd FileType Avante,AvanteInput,AvanteSelectedFiles nnoremap <buffer><nowait><silent> q :AvanteToggle<CR>
-  autocmd FileType spectre_panel nnoremap <buffer><nowait> q <C-w>c
-  autocmd FileType spectre_panel nnoremap <buffer><nowait> <C-c> <C-w>c
+  autocmd FileType AvantePromptInput nnoremap <buffer> <ESC> <C-w>c
+  autocmd FileType OverseerList nnoremap <buffer><nowait><silent> q :OverseerClose<CR>
 augroup END
 ]])
 
