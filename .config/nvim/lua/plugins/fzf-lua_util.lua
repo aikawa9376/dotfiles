@@ -355,10 +355,9 @@ local getAstGrepOpts = function ()
   opts.fzf_opts = {
     ["--multi"] = "",
     ["--no-unicode"] = "",
+    ["--delimiter"] = ":",
+    ["--with-nth"] = "{3..}",
   }
-
-  opts.fzf_opts["--delimiter"] = ":"
-  opts.fzf_opts["--with-nth"] = "{3..}"
 
   return opts
 end

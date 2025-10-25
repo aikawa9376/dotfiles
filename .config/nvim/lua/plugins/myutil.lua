@@ -87,7 +87,10 @@ return {
         if opts and opts.fargs and #opts.fargs > 0 then
           args[1] = table.concat(opts.fargs, ' ')
         end
-        require('gitsigns').diffthis(unpack(args))
+        vim.schedule(function()
+          vim.cmd('tabnew ' .. vim.fn.expand('%:p'))
+          require('gitsigns').diffthis(unpack(args))
+        end)
       end, {
         nargs = '*' ,
         complete = require"utilities".get_git_completions
