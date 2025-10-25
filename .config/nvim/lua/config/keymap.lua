@@ -95,21 +95,3 @@ vim.keymap.set("t", "<M-k>", "<M-k>", { silent = true })
 vim.keymap.set("t", "<M-d>", "<M-d>", { silent = true })
 vim.keymap.set("t", "<M-c>", "<M-c>", { silent = true })
 vim.keymap.set("n", "S", "<cmd>WorkspaceSymbol<CR>", { silent = true })
-vim.keymap.set('x', '<leader>@', function()
-  local start_pos = vim.fn.getpos('v')
-  local end_pos = vim.fn.getpos('.')
-  local sline = tonumber(start_pos[2]) or vim.fn.line('.')
-  local eline = tonumber(end_pos[2]) or sline
-  if sline > eline then sline, eline = eline, sline end
-
-  local bufname = vim.api.nvim_buf_get_name(0)
-  local relpath = vim.fn.fnamemodify(bufname, ':.')
-  if relpath == '' then
-    relpath = vim.fn.expand('%:t')
-  end
-  local text = relpath .. ':' .. sline .. '-' .. eline
-
-  vim.fn.setreg('+', text)
-  vim.fn.setreg('"', text)
-  vim.notify('Copied: ' .. text, vim.log.levels.INFO)
-end, { noremap = true, silent = true, desc = "Copy selection range as filename:start-end" })
