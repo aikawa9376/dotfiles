@@ -36,7 +36,7 @@ return {
       group = au,
     })
 
-    vim.keymap.set("n", "<Tab>", function()
+    vim.keymap.set("n", "<leader>p", function()
       local bufnr = vim.api.nvim_get_current_buf()
       local state = vim.b[bufnr].nes_state
       local nes = require("copilot-lsp.nes")
