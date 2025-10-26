@@ -1,43 +1,88 @@
-vim.cmd([[
-  augroup MyAutoCmd
-    autocmd!
-  augroup END
-]])
+local MyAutoCmd = vim.api.nvim_create_augroup("MyAutoCmd", { clear = true })
 
 vim.cmd("filetype plugin indent on")
-vim.cmd("autocmd MyAutoCmd InsertLeave * set nopaste")
 
-vim.cmd([[
-augroup MyAutoCmd
-  autocmd FileType help,qf nnoremap <buffer> <CR> <CR>
-  autocmd FileType help,qf,fugitive nnoremap <buffer><nowait> q <C-w>c
-  autocmd FileType fugitiveblame nmap <buffer><nowait> q gq
-  autocmd FileType fugitiveblame nmap <buffer><nowait> <BS> <C-w><C-w><M-o><Leader>gb
-  autocmd FileType noice nnoremap <buffer><nowait> <ESC> <C-w>c
-  autocmd FileType help,qf,fugitive,defx,vista,neo-tree, nnoremap <buffer><nowait> <C-c> <C-w>c
-  autocmd FileType gitcommit nmap <buffer><nowait> q :<c-u>wq<CR>
-  autocmd FileType gitcommit nmap <buffer><nowait> <C-c> :<c-u>wq<CR>
-  autocmd FileType fugitive nnoremap <buffer><Space>gp :<c-u>Git! push<CR><C-w>c
-  autocmd FileType Avante,AvanteInput,AvanteSelectedFiles nnoremap <buffer><nowait><silent> q :AvanteToggle<CR>
-  autocmd FileType AvantePromptInput nnoremap <buffer> <ESC> <C-w>c
-  autocmd FileType OverseerList nnoremap <buffer><nowait><silent> q :OverseerClose<CR>
-augroup END
-]])
+vim.api.nvim_create_autocmd("InsertLeave", {
+  group = MyAutoCmd,
+  pattern = "*",
+  callback = function()
+    vim.o.paste = false
+  end,
+})
+
+-- lualine for fzf
+vim.api.nvim_create_autocmd("FileType", {
+  group = MyAutoCmd,
+  pattern = "fzf",
+  callback = function()
+    vim.opt.laststatus = 0
+    vim.opt.showmode = false
+    vim.opt.ruler = false
+    vim.opt.showcmd = false
+  end,
+})
+vim.api.nvim_create_autocmd("BufLeave", {
+  group = MyAutoCmd,
+  pattern = "*",
+  callback = function()
+    vim.opt.laststatus = 3
+    vim.opt.showmode = true
+    vim.opt.ruler = true
+    vim.opt.showcmd = true
+  end,
+})
 
 -- terminal mode
-vim.cmd([[
-if exists(':terminal')
-  autocmd TermOpen * nnoremap <buffer> <silent><ESC> :close<CR>
-endif
-]])
+if vim.fn.exists(":terminal") == 2 then
+  vim.api.nvim_create_autocmd("TermOpen", {
+    group = MyAutoCmd,
+    pattern = "*",
+    callback = function(ev)
+      local bufnr = ev.buf or 0
+      vim.keymap.set("n", "<ESC>", ":close<CR>", { buffer = bufnr, silent = true, nowait = true })
+    end,
+  })
+end
 
-vim.cmd([[
-augroup mylightline
-  autocmd! FileType fzf
-  autocmd  FileType fzf set laststatus=0 noshowmode noruler noshowcmd
-  autocmd  BufLeave * set laststatus=3 showmode ruler showcmd
-augroup END
-]])
+-- diff mode settings
+vim.api.nvim_create_autocmd('OptionSet', {
+  group = MyAutoCmd,
+  pattern = 'diff',
+  callback = function(ev)
+    if vim.wo.diff then
+      vim.api.nvim_set_hl(ev.buf, "NormalNC", { bg = "None" })
+      vim.diagnostic.enable(false, { bufnr = ev.buf })
+      vim.keymap.set('n', 'q', ':tabclose<CR>', { buffer = ev.buf, nowait = true, silent = true })
+    else
+      vim.api.nvim_set_hl(ev.buf, "NormalNC", { bg = "#073642" })
+    end
+  end,
+})
+
+local function ft_keymap(filetypes, mode, lhs, rhs, opts)
+  opts = opts or {}
+  vim.api.nvim_create_autocmd('FileType', {
+    group = MyAutoCmd,
+    pattern = filetypes,
+    callback = function(ev)
+      local map_opts = vim.tbl_extend('force', { buffer = ev.buf }, opts)
+      vim.keymap.set(mode, lhs, rhs, map_opts)
+    end,
+  })
+end
+
+ft_keymap({ 'help', 'qf' }, 'n', '<CR>', '<CR>')
+ft_keymap({ 'help', 'qf', 'fugitive' }, 'n', 'q', '<C-w>c', { nowait = true })
+ft_keymap('fugitiveblame', 'n', 'q', 'gq', { nowait = true, remap = true })
+ft_keymap('fugitiveblame', 'n', '<BS>', '<C-w><C-w>[o<Leader>gb', { nowait = true, remap = true })
+ft_keymap('noice', 'n', '<ESC>', '<C-w>c', { nowait = true })
+ft_keymap({ 'help', 'qf', 'fugitive', 'defx', 'vista', 'neo-tree' }, 'n', '<C-c>', '<C-w>c', { nowait = true })
+ft_keymap('gitcommit', 'n', 'q', ':<c-u>wq<CR>', { nowait = true })
+ft_keymap('gitcommit', 'n', '<C-c>', ':<c-u>wq<CR>', { nowait = true })
+ft_keymap('fugitive', 'n', '<Space>gp', ':<c-u>Git! push<CR><C-w>c')
+ft_keymap({ 'Avante', 'AvanteInput', 'AvanteSelectedFiles' }, 'n', 'q', ':AvanteToggle<CR>', { nowait = true, silent = true })
+ft_keymap('AvantePromptInput', 'n', '<ESC>', '<C-w>c')
+ft_keymap('OverseerList', 'n', 'q', ':OverseerClose<CR>', { nowait = true, silent = true })
 
 vim.api.nvim_create_user_command("TermForceCloseAll", function()
   local term_bufs = vim.tbl_filter(function(buf)

@@ -12,6 +12,8 @@ return {
     { "i", function() return require "utilities".indent_with_i("m`mv") end, mode = "n", expr = true },
     { "gJ", function() require"utilities".join_space_less() end, mode = "n" },
     { "<C-K>", function() require"utilities".ctrl_k() end, mode = "c" },
+    { "<leader>@", function() require"utilities".copy_line_path() end, mode = "x" },
+    { "<Leader>gd", function () vim.cmd("Diff") end },
     { "<Leader>x",
       function ()
         if vim.fn.tabpagenr('$') > 1 then
