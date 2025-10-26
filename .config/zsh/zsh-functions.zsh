@@ -1001,3 +1001,59 @@ function br {
         return "$code"
     fi
 }
+
+# -------------------------------------
+# GitHub
+# -------------------------------------
+
+# コミットSHAから関連するPRのURL一覧を表示する
+pr-url() {
+  # ghコマンドとリポジトリのチェック
+  local repo
+  repo=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)
+  if [ -z "$repo" ]; then
+    echo "Error: Not a GitHub repository or 'gh' is not installed/authenticated." >&2
+    return 1
+  fi
+
+  # SHAの解決
+  local sha
+  sha=$(git rev-parse "${1:-HEAD}" 2>/dev/null)
+  if [ -z "$sha" ]; then
+    echo "Error: Invalid commit SHA or revision: ${1:-HEAD}" >&2
+    return 1
+  fi
+
+  # APIを叩いてURLを取得
+  gh api "repos/$repo/commits/$sha/pulls" -q ".[].html_url"
+}
+
+# コミットSHAから関連するPRをブラウザで開く
+pr-open() {
+  local repo
+  repo=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)
+  if [ -z "$repo" ]; then
+    echo "Error: Not a GitHub repository or 'gh' is not installed/authenticated." >&2
+    return 1
+  fi
+
+  local sha
+  sha=$(git rev-parse "${1:-HEAD}" 2>/dev/null)
+  if [ -z "$sha" ]; then
+    echo "Error: Invalid commit SHA or revision: ${1:-HEAD}" >&2
+    return 1
+  fi
+
+  # 最初のPR番号を取得
+  local num
+  num=$(gh api "repos/$repo/commits/$sha/pulls" -q ".[0].number")
+
+  if [ -z "$num" ] || [ "$num" = "null" ]; then
+    echo "No associated PR found for $sha" >&2
+    return 1
+  fi
+
+  # gh pr view でブラウザを開く
+  echo "Opening PR #$num in browser..."
+  gh pr view "$num" --web
+}
