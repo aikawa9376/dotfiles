@@ -15,6 +15,50 @@ return {
   config = function()
     local group = vim.api.nvim_create_augroup('fugitive_custom', { clear = true })
 
+    _G.fugitive_foldtext = function ()
+      local line = vim.fn.getline(vim.v.foldstart)
+      local filename = line:match("^diff %-%-git [ab]/(.+) [ab]/") or line:match("^(%S+)") or "folding"
+
+      local icon, icon_hl = " ", "Normal"
+      local ok, devicons = pcall(require, 'nvim-web-devicons')
+      if ok then
+        local file_icon, hl = devicons.get_icon(filename, vim.fn.fnamemodify(filename, ":e"), { default = true })
+        if file_icon then
+          icon, icon_hl = file_icon, hl or "Normal"
+        end
+      end
+
+      local added, removed, changed = 0, 0, 0
+      for i = vim.v.foldstart, vim.v.foldend do
+        local l = vim.fn.getline(i)
+        if l:match("^%+[^%+]") then
+          added = added + 1
+        elseif l:match("^%-[^%-]") then
+          removed = removed + 1
+        elseif l:match("^~") then
+          changed = changed + 1
+        end
+      end
+
+      local result = {{ icon .. " ", icon_hl }, { filename, icon_hl }}
+      if added > 0 then table.insert(result, { " +" .. added, "GitSignsAdd" }) end
+      if changed > 0 then table.insert(result, { " ~" .. changed, "GitSignsChange" }) end
+      if removed > 0 then table.insert(result, { " -" .. removed, "GitSignsDelete" }) end
+
+      return result
+    end
+
+    vim.api.nvim_create_autocmd('FileType', {
+      group = group,
+      pattern = "git",
+      callback = function()
+        vim.opt_local.foldmethod = "syntax"
+        vim.opt_local.foldlevel = 0
+        vim.opt_local.foldenable = true
+        vim.opt_local.foldtext = "v:lua.fugitive_foldtext()"
+      end,
+    })
+
     vim.api.nvim_create_autocmd('FileType', {
       group = group,
       pattern = 'fugitiveblame',
