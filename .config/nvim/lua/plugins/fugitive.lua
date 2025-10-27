@@ -78,7 +78,7 @@ return {
           local existing_buf = vim.fn.bufnr(fugitive_path)
 
           vim.cmd(existing_buf ~= -1 and 'tabedit #' .. existing_buf or 'tabedit ' .. fugitive_path)
-          vim.cmd.Gvdiffsplit(commit:match('^0+$') and '' or commit)
+          vim.cmd(commit:match('^0+$') and 'Gvdiffsplit' or 'Gvdiffsplit ' .. commit)
 
           local found_line = 1
           local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
