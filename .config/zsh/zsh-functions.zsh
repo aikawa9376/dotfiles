@@ -1006,54 +1006,62 @@ function br {
 # GitHub
 # -------------------------------------
 
-# コミットSHAから関連するPRのURL一覧を表示する
 pr-url() {
-  # ghコマンドとリポジトリのチェック
-  local repo
-  repo=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)
-  if [ -z "$repo" ]; then
-    echo "Error: Not a GitHub repository or 'gh' is not installed/authenticated." >&2
+  local remote_url hostname repo sha
+  remote_url=$(git config --get remote.origin.url 2>/dev/null)
+
+  if [[ "$remote_url" =~ ^https?://([^/]+)/(.+) ]]; then
+    hostname="${match[1]}"
+    repo="${match[2]}"
+  elif [[ "$remote_url" =~ ^[^@]+@([^:]+):(.+) ]]; then
+    hostname="${match[1]}"
+    repo="${match[2]}"
+  else
+    echo "Error: Could not parse git remote URL" >&2
     return 1
   fi
 
-  # SHAの解決
-  local sha
+  repo="${repo%.git}"
   sha=$(git rev-parse "${1:-HEAD}" 2>/dev/null)
+
   if [ -z "$sha" ]; then
     echo "Error: Invalid commit SHA or revision: ${1:-HEAD}" >&2
     return 1
   fi
 
-  # APIを叩いてURLを取得
-  gh api "repos/$repo/commits/$sha/pulls" -q ".[].html_url"
+  gh api --hostname "$hostname" "repos/$repo/commits/$sha/pulls" -q ".[].html_url"
 }
 
-# コミットSHAから関連するPRをブラウザで開く
 pr-open() {
-  local repo
-  repo=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null)
-  if [ -z "$repo" ]; then
-    echo "Error: Not a GitHub repository or 'gh' is not installed/authenticated." >&2
+  local remote_url hostname repo sha num
+  remote_url=$(git config --get remote.origin.url 2>/dev/null)
+
+  if [[ "$remote_url" =~ ^https?://([^/]+)/(.+) ]]; then
+    hostname="${match[1]}"
+    repo="${match[2]}"
+  elif [[ "$remote_url" =~ ^[^@]+@([^:]+):(.+) ]]; then
+    hostname="${match[1]}"
+    repo="${match[2]}"
+  else
+    echo "Error: Could not parse git remote URL" >&2
     return 1
   fi
 
-  local sha
+  repo="${repo%.git}"
   sha=$(git rev-parse "${1:-HEAD}" 2>/dev/null)
+
   if [ -z "$sha" ]; then
     echo "Error: Invalid commit SHA or revision: ${1:-HEAD}" >&2
     return 1
   fi
 
-  # 最初のPR番号を取得
-  local num
-  num=$(gh api "repos/$repo/commits/$sha/pulls" -q ".[0].number")
+  num=$(gh api --hostname "$hostname" "repos/$repo/commits/$sha/pulls" -q ".[0].number")
 
   if [ -z "$num" ] || [ "$num" = "null" ]; then
     echo "No associated PR found for $sha" >&2
     return 1
   fi
 
-  # gh pr view でブラウザを開く
   echo "Opening PR #$num in browser..."
-  gh pr view "$num" --web
+  gh pr view --hostname "$hostname" "$num" --web
 }
