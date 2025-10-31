@@ -19,36 +19,44 @@ M.settings = function(client, bufnr)
   vim.keymap.set("n", "gri", "<Nop>", { buffer = bufnr, silent = true })
 
   -- Mappings.
-  local opts = { noremap = true, silent = true, nowait = true }
-  buf_set_keymap("n", "gr", "m`:FzfLua lsp_references<CR>", opts)
-  buf_set_keymap("n", "gR", "m`:FzfLua lsp_finder<CR>", opts)
-  -- buf_set_keymap("n", "gd", "m`:FzfLua lsp_definitions<CR>", opts)
-  buf_set_keymap("n", "gd", "m`:lua require'plugins.fzf-lua_util'.fzf_laravel()<CR>", opts)
-  buf_set_keymap("n", "gsd", "m`:vsplit | FzfLua lsp_definitions<CR>", opts)
-  buf_set_keymap("n", "gD", "m`:FzfLua lsp_declarations<CR>", opts)
-  buf_set_keymap("n", "gi", "m`:FzfLua lsp_implementations<CR>", opts)
-  buf_set_keymap("n", "gy", "m`:FzfLua lsp_typedefs<CR>", opts)
-  buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover()<CR>", opts)
-  buf_set_keymap("n", "<leader>rn", "<cmd>lua vim.lsp.buf.rename()<CR>", opts)
-  buf_set_keymap("n", "<Leader>ca", ":FzfLua lsp_code_actions<CR>", opts)
-  buf_set_keymap("n", "<Leader>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", opts)
+  local keyopts = { noremap = true, silent = true, nowait = true }
+  buf_set_keymap("n", "gr", "m`:FzfLua lsp_references<CR>", keyopts)
+  buf_set_keymap("n", "gR", "m`:FzfLua lsp_finder<CR>", keyopts)
+  -- buf_set_keymap("n", "gd", "m`:FzfLua lsp_definitions<CR>", keyopts)
+  buf_set_keymap("n", "gd", "m`:lua require'plugins.fzf-lua_util'.fzf_laravel()<CR>", keyopts)
+  buf_set_keymap("n", "gsd", "m`:vsplit | FzfLua lsp_definitions<CR>", keyopts)
+  buf_set_keymap("n", "gD", "m`:FzfLua lsp_declarations<CR>", keyopts)
+  buf_set_keymap("n", "gi", "m`:FzfLua lsp_implementations<CR>", keyopts)
+  buf_set_keymap("n", "gy", "m`:FzfLua lsp_typedefs<CR>", keyopts)
+  buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover()<CR>", keyopts)
+  buf_set_keymap("n", "<leader>rn", "<cmd>lua vim.lsp.buf.rename()<CR>", keyopts)
+  buf_set_keymap("n", "<Leader>ca", ":FzfLua lsp_code_actions<CR>", keyopts)
+  buf_set_keymap("n", "<Leader>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", keyopts)
   buf_set_keymap(
     "n",
     "gq",
     "<cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = true })<cr>",
-    opts
+    keyopts
   )
 
   -- Commands.
-  vim.cmd([[command! DiagnosticPrevious lua vim.diagnostic.jump({count = -1})]])
-  vim.cmd([[command! DiagnosticNext lua vim.diagnostic.jump({count = 1})]])
-  vim.cmd([[command! DiagnosticQf lua vim.diagnostic.setloclist()]])
-  vim.cmd([[command! AddWorkspaceFolder vim.lsp.buf.add_workspace_folder()]])
-  vim.cmd([[command! RemoveWorkspaceFolder vim.lsp.buf.remove_workspace_folder()]])
-  vim.cmd([[command! ShowWorkspaceFolder lua print(vim.inspect(vim.lsp.buf.list_workspace_folders()))]])
-  vim.cmd([[command! IncomingCall FzfLua lsp_incoming_calls]])
-  vim.cmd([[command! OutGoingCall FzfLua lsp_outgoing_calls]])
-  vim.cmd([[command! -bang -nargs=? WorkspaceSymbol FzfLua lsp_live_workspace_symbols]])
+  vim.api.nvim_create_user_command("DiagnosticPrevious", function() vim.diagnostic.jump({ count = -1 }) end, {})
+  vim.api.nvim_create_user_command("DiagnosticNext", function() vim.diagnostic.jump({ count = 1 }) end, {})
+  vim.api.nvim_create_user_command("DiagnosticQf", function() vim.diagnostic.setloclist() end, {})
+  vim.api.nvim_create_user_command("AddWorkspaceFolder", function() vim.lsp.buf.add_workspace_folder() end, {})
+  vim.api.nvim_create_user_command("RemoveWorkspaceFolder", function() vim.lsp.buf.remove_workspace_folder() end, {})
+  vim.api.nvim_create_user_command("ShowWorkspaceFolder", function() print(vim.inspect(vim.lsp.buf.list_workspace_folders())) end, {})
+  vim.api.nvim_create_user_command("IncomingCall", function() vim.cmd("FzfLua lsp_incoming_calls") end, {})
+  vim.api.nvim_create_user_command("OutGoingCall", function() vim.cmd("FzfLua lsp_outgoing_calls") end, {})
+  vim.api.nvim_create_user_command("WorkspaceSymbol",
+    function(opts) vim.cmd("FzfLua lsp_live_workspace_symbols " .. opts.args or "" .. opts.bang and "!" or "") end,
+    { bang = true, nargs = "?" }
+  )
+  vim.api.nvim_create_user_command("InlayToggle", function()
+    local buf = vim.api.nvim_get_current_buf()
+    local enabled = vim.lsp.inlay_hint.is_enabled({ buf = buf })
+    vim.lsp.inlay_hint.enable(not enabled, { buf = buf })
+  end, {})
 
   -- features
   -- if not vim.g.auto_format_disabled and client.server_capabilities.documentFormattingProvider then
@@ -76,6 +84,8 @@ M.settings = function(client, bufnr)
 
   if client.server_capabilities.inlayHintProvider then
     vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
+    -- Temporary processing
+    vim.cmd('InlayToggle')
   end
 
   if client.server_capabilities.colorProvider then
