@@ -59,22 +59,6 @@ vim.api.nvim_create_autocmd('OptionSet', {
   end,
 })
 
--- disable diagnostics for fugitive buffers
-vim.api.nvim_create_autocmd('BufEnter', {
-  group = MyAutoCmd,
-  pattern = '*',
-  callback = function(ev)
-    local bufname = vim.api.nvim_buf_get_name(ev.buf)
-    local is_fugitive = bufname:match('^fugitive://')
-
-    if is_fugitive then
-      vim.diagnostic.enable(false, { bufnr = ev.buf })
-    else
-      vim.diagnostic.enable(true, { bufnr = ev.buf })
-    end
-  end,
-})
-
 -- Filetype-specific keymaps
 local function ft_keymap(filetypes, mode, lhs, rhs, opts)
   opts = opts or {}
@@ -92,11 +76,11 @@ ft_keymap({ 'help', 'qf' }, 'n', '<CR>', '<CR>')
 ft_keymap({ 'help', 'qf', 'fugitive' }, 'n', 'q', '<C-w>c', { nowait = true })
 ft_keymap('fugitiveblame', 'n', 'q', 'gq', { nowait = true, remap = true })
 ft_keymap('fugitiveblame', 'n', '<BS>', '<C-w><C-w>[o<Leader>gb', { nowait = true, remap = true })
-ft_keymap({ 'fugitiveblame', 'git' }, 'n', '<CR>', 'O', { nowait = true, remap = true })
-ft_keymap({ 'fugitiveblame', 'git' }, 'n', 'o', 'za', { nowait = true, remap = true })
 ft_keymap('git', 'n', ']]', ']c', { nowait = true, remap = true })
 ft_keymap('git', 'n', '[[', '[c', { nowait = true, remap = true })
 ft_keymap('git', 'n', 'q', '<leader>x', { nowait = true, remap = true })
+ft_keymap('git', 'n', 'o', 'za', { nowait = true, remap = true })
+ft_keymap({ 'fugitiveblame', 'git' }, 'n', '<CR>', '<Plug>fugitive:O', { nowait = true, remap = true })
 ft_keymap('noice', 'n', '<ESC>', '<C-w>c', { nowait = true })
 ft_keymap({ 'help', 'qf', 'fugitive', 'defx', 'vista', 'neo-tree' }, 'n', '<C-c>', '<C-w>c', { nowait = true })
 ft_keymap('gitcommit', 'n', 'q', ':<c-u>wq<CR>', { nowait = true })

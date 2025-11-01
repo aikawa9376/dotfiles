@@ -19,3 +19,16 @@ end
 
 -- 読み込めたlspを有効化
 vim.lsp.enable(lsp_names)
+
+-- lspを有効化させたくない場合はここで設定
+local base_start = vim.lsp.start
+---@diagnostic disable-next-line: duplicate-set-field
+vim.lsp.start = function(...)
+  local _, opt = unpack({ ... })
+  if opt and opt.bufnr then
+    if vim.b[opt.bufnr].fugitive_type then
+      return
+    end
+  end
+  base_start(...)
+end

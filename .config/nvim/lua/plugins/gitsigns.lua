@@ -26,7 +26,6 @@ return {
     signs_staged = {
       add          = { text = '▕' },
       change       = { text = '▕' },
-      -- delete       = { text = '▕' },
       delete       = { text = '_', show_count = true },
       topdelete    = { text = '‾', show_count = true },
       changedelete = { text = '▕' },
