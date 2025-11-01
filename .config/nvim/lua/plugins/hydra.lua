@@ -240,17 +240,26 @@ return {
         hint = false,
         invoke_on_body = true,
         on_key = function() vim.wait(50) end,
-        on_enter = function () require"gitsigns".nav_hunk('next') end
+        on_enter = function ()
+          local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
+          require"gitsigns".nav_hunk('next', is_fugitive and { target = 'all' } or {})
+        end
       },
       heads = {
         { ']', function ()
           if vim.wo.diff then return ']c' end
-          vim.schedule(function() require"gitsigns".nav_hunk('next') end)
+          vim.schedule(function()
+            local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
+            require"gitsigns".nav_hunk('next', is_fugitive and { target = 'all' } or {})
+          end)
           return '<Ignore>'
         end },
         { '[', function ()
           if vim.wo.diff then return '[c' end
-          vim.schedule(function() require"gitsigns".nav_hunk('prev') end)
+          vim.schedule(function()
+            local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
+            require"gitsigns".nav_hunk('prev', is_fugitive and { target = 'all' } or {})
+          end)
           return '<Ignore>'
         end },
       }
@@ -263,17 +272,26 @@ return {
         hint = false,
         invoke_on_body = true,
         on_key = function() vim.wait(50) end,
-        on_enter = function () require"gitsigns".nav_hunk('prev') end
+        on_enter = function ()
+          local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
+          require"gitsigns".nav_hunk('prev', is_fugitive and { target = 'all' } or {})
+        end
       },
       heads = {
         { ']', function ()
           if vim.wo.diff then return ']c' end
-          vim.schedule(function() require"gitsigns".nav_hunk('next') end)
+          vim.schedule(function()
+            local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
+            require"gitsigns".nav_hunk('next', is_fugitive and { target = 'all' } or {})
+          end)
           return '<Ignore>'
         end },
         { '[', function ()
           if vim.wo.diff then return '[c' end
-          vim.schedule(function() require"gitsigns".nav_hunk('prev') end)
+          vim.schedule(function()
+            local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
+            require"gitsigns".nav_hunk('prev', is_fugitive and { target = 'all' } or {})
+          end)
           return '<Ignore>'
         end },
       }
