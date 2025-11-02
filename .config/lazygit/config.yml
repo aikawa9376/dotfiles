@@ -1,7 +1,7 @@
 git:
-  paging:
-    colorArg: always
-    pager: delta --dark --paging=never
+  pagers:
+    - colorArg: always
+      pager: delta --dark --paging=never
 gui:
   sidePanelWidth: 0.25
   timeFormat: '2006-01-02 15:04:05'
@@ -15,5 +15,4 @@ refresher:
   refreshInterval: 3
 os:
   edit: 'nvim {{filename}}'
-
 promptToReturnFromSubprocess: false
