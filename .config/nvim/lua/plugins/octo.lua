@@ -24,8 +24,6 @@ return {
       return hostname, repo
     end
 
-    local hostname = parse_git_remote()
-
     vim.api.nvim_create_user_command("OctoPrFromSha", function(opts)
       local sha = opts.args ~= "" and opts.args or vim.fn.expand("<cword>")
       sha = sha and sha:gsub("^%s+", ""):gsub("%s+$", "")

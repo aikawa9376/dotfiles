@@ -1,13 +1,12 @@
 return {
   "nvim-lualine/lualine.nvim",
   event = "BufReadPre",
-  config = function ()
-    -- Eviline config for lualine
-    -- Author: shadmansaleh
-    -- Credit: glepnir
+  config = function()
     local lualine = require("lualine")
 
-    -- Color table for highlights
+    --------------------------------------------------------------------
+    -- 1. 色定義 (Color Definitions)
+    --------------------------------------------------------------------
     local colors = {
       bg = "none",
       fg = "#E5E9F0",
@@ -22,6 +21,13 @@ return {
       red = "#ec5f67",
     }
 
+    vim.api.nvim_set_hl(0, "LualineGitAdded",   { fg = colors.green,  bg = colors.bg, bold = true })
+    vim.api.nvim_set_hl(0, "LualineGitChanged", { fg = colors.yellow, bg = colors.bg, bold = true })
+    vim.api.nvim_set_hl(0, "LualineGitRemoved", { fg = colors.red,    bg = colors.bg, bold = true })
+
+    --------------------------------------------------------------------
+    -- 2. 表示条件 (Conditions)
+    --------------------------------------------------------------------
     local conditions = {
       buffer_not_empty = function()
         return vim.fn.empty(vim.fn.expand("%:t")) ~= 1
@@ -33,23 +39,17 @@ return {
         if vim.fn.winwidth(0) < 80 then
           return false
         end
-        local ok = vim.fn.exists("*ObsessionStatus")
-        if ok ~= 0 then
-          return true
-        else
-          return false
-        end
+        return vim.fn.exists("*ObsessionStatus") == 1
       end,
       project = function()
         if vim.fn.winwidth(0) < 80 then
           return false
         end
-        local ok = require("project.project").get_project_root()
-        if ok ~= nil then
-          return true
-        else
+        local ok = pcall(require, "project.project")
+        if not ok then
           return false
         end
+        return require("project.project").get_project_root() ~= nil
       end,
       check_git_workspace = function()
         if vim.fn.winwidth(0) < 80 then
@@ -64,74 +64,17 @@ return {
       end,
     }
 
-    -- Config
-    local config = {
-      options = {
-        -- Disable sections and component separators
-        component_separators = "",
-        section_separators = "",
-        theme = {
-          -- We are going to use lualine_c an lualine_x as left and
-          -- right section. Both are highlighted by c theme .  So we
-          -- are just setting default looks o statusline
-          normal = { c = { fg = colors.fg, bg = colors.bg } },
-          inactive = { c = { fg = colors.fg, bg = colors.bg } },
-        },
-        globalstatus = true,
-      },
-      sections = {
-        -- these are to remove the defaults
-        lualine_a = {},
-        lualine_b = {},
-        lualine_y = {},
-        lualine_z = {},
-        -- These will be filled later
-        lualine_c = {},
-        lualine_x = {},
-      },
-      inactive_sections = {
-        -- these are to remove the defaults
-        lualine_a = {},
-        lualine_v = {},
-        lualine_y = {},
-        lualine_z = {},
-        lualine_c = {},
-        lualine_x = {},
-      },
-    }
+    --------------------------------------------------------------------
+    -- 3. ヘルパー関数 (Helper Functions)
+    --------------------------------------------------------------------
 
-    local function split(inputstr, sep)
-      if sep == nil then
-        sep = "%s"
+    --- ファイル名を整形する (特殊バッファ名の変換、相対パス化)
+    local function changeName(name)
+      if name == "" or name == nil then
+        return ""
       end
-      local t = {}
-      for str in string.gmatch(inputstr, "([^" .. sep .. "]+)") do
-        table.insert(t, str)
-      end
-      return t
-    end
 
-    -- Inserts a component in lualine_c at left section
-    local function ins_left(component)
-      table.insert(config.sections.lualine_c, component)
-    end
-
-    -- Inserts a component in lualine_x at right section
-    local function ins_right(component)
-      table.insert(config.sections.lualine_x, component)
-    end
-
-    -- Inserts a component in lualine_c at left section
-    local function ins_inactive_left(component)
-      table.insert(config.inactive_sections.lualine_a, component)
-    end
-
-    -- Inserts a component in lualine_x at right section
-    local function ins_inactive_right(component)
-      table.insert(config.inactive_sections.lualine_x, component)
-    end
-
-    local changeName = function (name)
+      -- 特殊バッファ名の処理
       if string.find(name, "term") then
         return "TERM"
       elseif string.find(name, "defx") then
@@ -139,209 +82,298 @@ return {
       elseif string.find(name, "vista") then
         return "Symbols"
       end
-      -- なぜかgdなどでファイル名が絶対パスで表示されるので
-      local cwd = vim.fn.getcwd()
-      if cwd and name then
-        local cwd_pattern = cwd
-        if not cwd:match("/$") then
-          cwd_pattern = cwd .. "/"
-        end
-        cwd_pattern = cwd_pattern:gsub("([%.%-%+%[%]%(%)%$%^%%%?%*])", "%%%1")
 
-        name = name:gsub(cwd_pattern, "")
-        name = name:gsub("^/", "")
-      end
+      -- ファイル名をカレントディレクトリからの相対パスに変換
+      name = vim.fn.fnamemodify(name, ":.")
       return name
     end
 
-    ins_left({
-      -- mode component
-      function()
-        -- auto change color according to neovims mode
-        local mode_color = {
-          n = colors.red,
-          i = colors.green,
-          v = colors.blue,
-          ["␖"] = colors.blue,
-          V = colors.blue,
-          c = colors.magenta,
-          no = colors.red,
-          s = colors.orange,
-          S = colors.orange,
-          ["␓"] = colors.orange,
-          ic = colors.yellow,
-          R = colors.violet,
-          Rv = colors.violet,
-          cv = colors.red,
-          ce = colors.red,
-          r = colors.cyan,
-          rm = colors.cyan,
-          ["r?"] = colors.cyan,
-          ["!"] = colors.red,
-          t = colors.red,
-        }
-        vim.api.nvim_command("hi! LualineMode guifg=" .. mode_color[vim.fn.mode()] .. " guibg=" .. colors.bg .. " gui=bold")
-        return require("lualine.utils.mode").get_mode()
-      end,
-      color = "LualineMode",
-      left_padding = 0,
-      condition = conditions.hide_in_width,
-    })
+    --- ファイルサイズをフォーマットする
+    local function format_file_size(file)
+      local size = vim.fn.getfsize(file)
+      if size <= 0 then
+        return ""
+      end
+      local sufixes = { "b", "k", "m", "g" }
+      local i = 1
+      while size > 1024 do
+        size = size / 1024
+        i = i + 1
+      end
+      return string.format("%.1f%s", size, sufixes[i])
+    end
 
-    ins_left({
-      "branch",
-      icon = "",
-      condition = conditions.check_git_workspace,
-    })
+    --------------------------------------------------------------------
+    -- 4. Lualine 本体設定 (Lualine Setup)
+    --------------------------------------------------------------------
+    lualine.setup({
+      options = {
+        component_separators = "",
+        section_separators = "",
+        theme = {
+          -- cセクション（中央）をメインに使うため、デフォルトの背景を透明に
+          normal = { c = { fg = colors.fg, bg = colors.bg } },
+          inactive = { c = { fg = colors.fg, bg = colors.bg } },
+        },
+        globalstatus = true,
+      },
 
-    ins_left({
-      function()
-        local prod = split(require("project.api").get_project_root(), "/")
-        if next(prod) then
-          return " " .. prod[#prod]
-        end
-      end,
-      condition = conditions.project,
-    })
+      ----------------------------------------
+      -- アクティブウィンドウのセクション (Active Sections)
+      ----------------------------------------
+      sections = {
+        -- デフォルトセクションを無効化
+        lualine_a = {},
+        lualine_b = {},
+        lualine_y = {},
+        lualine_z = {},
 
-    ins_left({
-      function()
-        local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
-        if (icon == nil) then
-          return  changeName(vim.fn.expand("%="))
-        else
-          return icon .. " " .. changeName(vim.fn.expand("%="))
-        end
-      end,
-      condition = conditions.buffer_not_empty,
-    })
+        -- 左側 (lualine_c)
+        lualine_c = {
+          -- 1. モード
+          {
+            function()
+              -- auto change color according to neovims mode
+              local mode_color = {
+                n = colors.red,
+                i = colors.green,
+                v = colors.blue,
+                ["␖"] = colors.blue,
+                V = colors.blue,
+                c = colors.magenta,
+                no = colors.red,
+                s = colors.orange,
+                S = colors.orange,
+                ["␓"] = colors.orange,
+                ic = colors.yellow,
+                R = colors.violet,
+                Rv = colors.violet,
+                cv = colors.red,
+                ce = colors.red,
+                r = colors.cyan,
+                rm = colors.cyan,
+                ["r?"] = colors.cyan,
+                ["!"] = colors.red,
+                t = colors.red,
+              }
+              vim.api.nvim_command(
+                "hi! LualineMode guifg=" .. mode_color[vim.fn.mode()] .. " guibg=" .. colors.bg .. " gui=bold"
+              )
+              return require("lualine.utils.mode").get_mode()
+            end,
+            color = "LualineMode",
+            left_padding = 0,
+            cond = conditions.hide_in_width,
+          },
 
-    ins_left({
-      -- filesize component
-      function()
-        local function format_file_size(file)
-          local size = vim.fn.getfsize(file)
-          if size <= 0 then
-            return ""
-          end
-          local sufixes = { "b", "k", "m", "g" }
-          local i = 1
-          while size > 1024 do
-            size = size / 1024
-            i = i + 1
-          end
-          return string.format("%.1f%s", size, sufixes[i])
-        end
-        local file = vim.fn.expand("%:p")
-        if string.len(file) == 0 then
-          return ""
-        end
-        return format_file_size(file)
-      end,
-      condition = conditions.hide_in_width,
-    })
+          -- 2. Gitブランチ
+          {
+            "branch",
+            icon = "",
+            cond = conditions.check_git_workspace,
+          },
 
-    ins_left({
-      "diff",
-      -- Is it me or the symbol for modified us really weird
-      symbols = { added = " ", modified = "柳", removed = " " },
-      color_added = colors.green,
-      color_modified = colors.orange,
-      color_removed = colors.red,
-      condition = conditions.hide_in_width,
-    })
+          -- 3. プロジェクト名
+          {
+            function()
+              local root = require("project.api").get_project_root()
+              if root then
+                -- パスの末尾（プロジェクト名）のみ表示
+                return " " .. vim.fn.fnamemodify(root, ":t")
+              end
+              return ""
+            end,
+            cond = conditions.project,
+          },
 
-    ins_left({
-      "diagnostics",
-      sources = { "nvim_diagnostic" },
-      symbols = { error = " ", warn = " ", info = " " },
-      color_error = colors.red,
-      color_warn = colors.yellow,
-      color_info = colors.cyan,
-    })
+          -- 4. ファイル名
+          {
+            function()
+              local filename = changeName(vim.fn.expand("%="))
+              if filename == "" then
+                return ""
+              end
+              local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
+              if (icon == nil) then
+                return filename
+              else
+                return icon .. " " .. filename
+              end
+            end,
+            cond = conditions.buffer_not_empty,
+          },
 
-    -- TODO いきなりスローに
-    -- Add components to right sections
-    -- ins_right {
-    --   'filetype',
-    --   condition = conditions.hide_in_width,
-    -- }
-    ins_right({
-      function ()
-        return vim.fn.reg_recording() .. ' recording'
-      end,
-      cond = conditions.recording,
-      color = { fg = "#ff9e64" },
-    })
+          -- 5. ファイルサイズ
+          {
+            function()
+              local file = vim.fn.expand("%:p")
+              if string.len(file) == 0 then
+                return ""
+              end
+              return format_file_size(file)
+            end,
+            cond = conditions.hide_in_width,
+          },
 
-    ins_right({
-      'fileformat',
-      symbols = {
-        unix = '', -- e712
-        dos = '',  -- e70f
-        mac = '',  -- e711
-      }
-    })
+          -- 6. Git Diff (single component with colored parts)
+          {
+            function()
+              local gitsigns = vim.b.gitsigns_status_dict
+              local parts = {}
 
-    ins_right({
-      function()
-        local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
-        if (icon == nil) then
-          return  vim.o.filetype
-        else
-          return  icon .. " " .. vim.o.filetype
-        end
-      end,
-      condition = conditions.hide_in_width,
-    })
+              if gitsigns then
+                if gitsigns.added and gitsigns.added > 0 then
+                  parts[#parts+1] = "%#LualineGitAdded# " .. gitsigns.added .. "%*"
+                end
+                if gitsigns.changed and gitsigns.changed > 0 then
+                  parts[#parts+1] = "%#LualineGitChanged# " .. gitsigns.changed .. "%*"
+                end
+                if gitsigns.removed and gitsigns.removed > 0 then
+                  parts[#parts+1] = "%#LualineGitRemoved# " .. gitsigns.removed .. "%*"
+                end
+                if #parts > 0 then
+                  return table.concat(parts, " ")
+                end
+              end
 
-    ins_right({
-      function()
-        return [[ %2p%% %2l:%v]]
-      end,
-      condition = conditions.hide_in_width,
-    })
+              -- fugitive fallback: --numstat の added/removed を取得
+              local bufname = vim.fn.bufname()
+              if bufname:match("^fugitive://") then
+                local sha, filepath = bufname:match("fugitive://.*%.git//(%x+)/(.*)")
+                if sha and filepath then
+                  local cmd = string.format("git -C %s diff --numstat %s^ %s -- %s",
+                    vim.fn.shellescape(vim.fn.FugitiveWorkTree()),
+                    sha, sha, filepath)
+                  local output = vim.fn.system(cmd)
+                  if vim.v.shell_error == 0 and output ~= "" then
+                    local added, removed = output:match("^(%d+)%s+(%d+)")
+                    if (added and tonumber(added) > 0) or (removed and tonumber(removed) > 0) then
+                      local fparts = {}
+                      if added and tonumber(added) > 0 then
+                        fparts[#fparts+1] = "%#LualineGitAdded# " .. added .. "%*"
+                      end
+                      if removed and tonumber(removed) > 0 then
+                        fparts[#fparts+1] = "%#LualineGitRemoved# " .. removed .. "%*"
+                      end
+                      return table.concat(fparts, " ")
+                    end
+                  end
+                end
+              end
 
-    ins_right({
-      -- Lsp server name .
-      function()
-        local msg = ""
-        local buf_ft = vim.nvim_get_option_value("filetype", { buf =  0})
-        local clients = vim.lsp.active_clients()
-        if next(clients) == nil then
-          return msg
-        end
-        for _, client in ipairs(clients) do
-          local filetypes = client.config.filetypes
-          if filetypes and vim.fn.index(filetypes, buf_ft) ~= -1 then
-            return " "
-          end
-        end
-        return msg
-      end,
-      condition = conditions.hide_in_width,
-    })
+              return ""
+            end,
+            cond = conditions.hide_in_width,
+          },
 
-    ins_right({
-      function()
-        return vim.fn.ObsessionStatus("", "")
-      end,
-      condition = conditions.obsession,
-    })
+          -- 7. LSP Diagnostics
+          {
+            "diagnostics",
+            sources = { "nvim_diagnostic" },
+            symbols = { error = " ", warn = " ", info = " " },
+            color_error = colors.red,
+            color_warn = colors.yellow,
+            color_info = colors.cyan,
+          },
+        },
 
-    table.insert(config.inactive_sections.lualine_a, {
-      function()
-        local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
-        if (icon == nil) then
-          return  changeName(vim.fn.expand("%="))
-        else
-          return  icon .. " " .. changeName(vim.fn.expand("%="))
-        end
-      end,
-      condition = conditions.buffer_not_empty,
-    })
+        -- 右側 (lualine_x)
+        lualine_x = {
+          -- 1. マクロ記録中
+          {
+            function()
+              return vim.fn.reg_recording() .. " recording"
+            end,
+            cond = conditions.recording,
+            color = { fg = "#ff9e64" },
+          },
 
-    -- Now don't forget to initialize lualine
-    lualine.setup(config)
-  end
+          -- 2. ファイルフォーマット (LF/CRLF)
+          {
+            "fileformat",
+            symbols = {
+              unix = "", -- e712
+              dos = "", -- e70f
+              mac = "", -- e711
+            },
+          },
+
+          -- 3. ファイルタイプ
+          {
+            function()
+              local ft = vim.o.filetype
+              if ft == "" or ft == nil then
+                return ""
+              end
+              local icon = require("nvim-web-devicons").get_icon_by_filetype(ft)
+              if (icon == nil) then
+                return ft
+              else
+                return icon .. " " .. ft
+              end
+            end,
+            cond = conditions.hide_in_width,
+          },
+
+          -- 4. カーソル位置
+          {
+            function()
+              return [[ %2p%% %2l:%v]]
+            end,
+            cond = conditions.hide_in_width,
+          },
+
+          -- 5. LSPステータス
+          {
+            function()
+              local clients = vim.lsp.get_clients({ bufnr = 0 })
+              if next(clients) ~= nil then
+                return " "
+              end
+
+              return ""
+            end,
+            cond = conditions.hide_in_width,
+          },
+
+          -- 6. Obsession ステータス
+          {
+            function()
+              return vim.fn.ObsessionStatus("", "")
+            end,
+            cond = conditions.obsession,
+          },
+        },
+      },
+
+      ----------------------------------------
+      -- 非アクティブウィンドウのセクション (Inactive Sections)
+      ----------------------------------------
+      inactive_sections = {
+        lualine_a = {
+          -- 非アクティブ時はファイル名のみ表示 (元の設定を維持)
+          {
+            function()
+              local filename = changeName(vim.fn.expand("%="))
+              if filename == "" then
+                return ""
+              end
+              local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
+              if (icon == nil) then
+                return filename
+              else
+                return icon .. " " .. filename
+              end
+            end,
+            cond = conditions.buffer_not_empty,
+          },
+        },
+        lualine_b = {},
+        lualine_c = {},
+        lualine_x = {},
+        lualine_y = {},
+        lualine_z = {},
+      },
+    })
+  end,
 }
