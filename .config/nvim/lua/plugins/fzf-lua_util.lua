@@ -296,6 +296,20 @@ local getRipgrepOpts = function (isText, isAll)
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
     ["enter"] = fzf_lua.actions.file_edit_or_qf,
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
+    ["ctrl-O"] = {
+      exec_silent = true,
+      fn = function (selected)
+        if not selected or #selected == 0 then return end
+        local entry = require('fzf-lua.path').entry_to_file(selected[1])
+
+        if not entry.path or entry.path == "" then
+          vim.notify("fzf-lua: No valid path selected", vim.log.levels.WARN)
+          return
+        end
+
+        vim.cmd("tabedit +" .. entry.line .. " " .. entry.path)
+      end
+    },
   })
   opts.fzf_opts = {
     ["--multi"] = "",
@@ -328,7 +342,7 @@ M.fzf_ripgrep_text = function(args)
 end
 
 M.fzf_all_ripgrep = function(args)
-    fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(false, true)))
+  fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(false, true)))
 end
 
 vim.cmd([[command! -nargs=* RgLua lua require"plugins.fzf-lua_util".fzf_ripgrep(<q-args>)]])

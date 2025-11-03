@@ -44,6 +44,26 @@ if vim.fn.exists(":terminal") == 2 then
   })
 end
 
+-- terminal fzf only feature
+vim.api.nvim_create_autocmd("BufEnter", {
+  group = MyAutoCmd,
+  pattern = "*",
+  callback = function()
+    if vim.bo.buftype == 'terminal' and vim.bo.filetype == 'fzf' then
+      vim.cmd("startinsert")
+    end
+
+    -- terminal fzf-lua exec_silent hack
+    local last_filetype = vim.fn.getbufvar(vim.fn.bufnr('#'), '&filetype', '')
+    if last_filetype == 'fzf' then
+      vim.o.number = true
+      vim.o.numberwidth = 1
+      vim.o.signcolumn = "yes"
+      vim.o.statuscolumn = "%C%l%s"
+    end
+  end,
+})
+
 -- diff mode settings
 vim.api.nvim_create_autocmd('OptionSet', {
   group = MyAutoCmd,
