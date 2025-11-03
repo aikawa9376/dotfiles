@@ -88,7 +88,7 @@ vim.keymap.set("n", "ZZ", "<cmd>TermForceCloseAll<CR><cmd>xa<CR>", { silent = tr
 vim.keymap.set("n", "<M-b>", "<cmd>bnext<CR>", { silent = true })
 vim.keymap.set("n", "<C-g>", "m`<C-^>", { silent = true })
 -- map('t', '<C-[>', '<C-\\><C-n>', { remap = true, silent = true })
-vim.keymap.set("t", "<C-_>", "<C-\\><C-n>", { silent = true })
+vim.keymap.set("t", "<C-Space>", "<C-\\><C-n>", { silent = true })
 -- map('t', '<C-w><c-w>', '<C-\\><C-n><C-w><c-w>', { remap = true, silent = true })
 -- vim.keymap.set("t", "<M-j>", "<M-j>", { silent = true })
 -- vim.keymap.set("t", "<M-k>", "<M-k>", { silent = true })

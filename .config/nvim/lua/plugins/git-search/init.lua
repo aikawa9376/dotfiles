@@ -8,9 +8,14 @@ return {
     local actions = require("fzf-lua.actions")
 
     local M = {}
+    M._search_pat = ""
+    M._ns = vim.api.nvim_create_namespace("GitSearchPreviewNS")
+
+    -- Set up custom highlight for search matches
+    vim.api.nvim_set_hl(0, "GitSearchMatch", { bg = "#2d5016", fg = "#a6e22e", bold = true })
 
     -- Constants
-    local LOG_FORMAT = "--color --format='%C(yellow)%h%C(reset) %C(blue)%as%C(reset) %C(green)%an%C(reset) %C(dim)_%C(reset) %s'"
+    local LOG_FORMAT = "--color --format='%C(yellow)%h%C(reset) %C(blue)%as%C(reset) %C(dim)_%C(reset) %s %C(green)%an%C(reset)'"
 
     -- Helper functions
     local function get_relative_path(bufnr)
@@ -32,35 +37,144 @@ return {
       return hash
     end
 
+    -- fzf-lua builtin previewer for git show
+    local function create_git_show_previewer(filepath)
+      local Previewer = require("fzf-lua.previewer.builtin").buffer_or_file:extend()
+
+      function Previewer:new(o, opts, fzf_win)
+        Previewer.super.new(self, o, opts, fzf_win)
+        setmetatable(self, Previewer)
+        return self
+      end
+
+      function Previewer:populate_preview_buf(entry_str)
+        if not self.win or not self.win:validate_preview() then return end
+
+        local commit_hash = parse_commit_line(entry_str or "")
+        if not commit_hash then return end
+
+        -- Build git show command
+        local cmd = "git show --no-color " .. commit_hash
+        if filepath and filepath ~= "" then
+          cmd = cmd .. " -- " .. vim.fn.shellescape(filepath)
+        end
+
+        -- Execute command and get output
+        local handle = io.popen(cmd .. " 2>/dev/null")
+        local output = handle and handle:read("*a") or ""
+        if handle then handle:close() end
+
+        -- Split output into lines
+        local lines = {}
+        for s in (output .. "\n"):gmatch("(.-)\n") do
+          table.insert(lines, s)
+        end
+
+        -- Set buffer content
+        local tmpbuf = self:get_tmp_buffer()
+        vim.api.nvim_buf_set_lines(tmpbuf, 0, -1, false, lines)
+        vim.bo[tmpbuf].filetype = "git"
+        self:set_preview_buf(tmpbuf)
+
+        -- Search and highlight matches in diff content lines
+        local first_match_line = 1
+        local pat = M._search_pat or ""
+
+        if pat ~= "" then
+          local function is_diff_content(line)
+            return line:match("^[+-][^+-]")
+          end
+
+          -- Clear previous highlights
+          vim.api.nvim_buf_clear_namespace(tmpbuf, M._ns, 0, -1)
+
+          -- Find first match and highlight all matches
+          for i, line in ipairs(lines) do
+            if is_diff_content(line) then
+              local start_pos = 1
+              while true do
+                local s, e = line:find(pat, start_pos, true)
+                if not s then break end
+
+                -- Record first match line
+                if first_match_line == 1 then
+                  first_match_line = i
+                end
+
+                -- Add highlight using extmark
+                vim.api.nvim_buf_set_extmark(tmpbuf, M._ns, i - 1, s - 1, {
+                  end_col = e,
+                  hl_group = "GitSearchMatch",
+                })
+
+                start_pos = e + 1
+              end
+            end
+          end
+        end
+
+        -- Center on first match and disable cursorline
+        self:preview_buf_post({ filetype = "git", do_not_cache = true, line = first_match_line, col = 1 })
+
+        vim.schedule(function()
+          if self.win and self.win.preview_winid and vim.api.nvim_win_is_valid(self.win.preview_winid) then
+            vim.wo[self.win.preview_winid].cursorline = false
+            -- Hide cursor in preview window by making it transparent
+            vim.api.nvim_win_set_hl_ns(self.win.preview_winid, M._ns)
+            vim.api.nvim_set_hl(M._ns, "Cursor", { blend = 100 })
+          end
+        end)
+      end
+
+      return Previewer
+    end
+
     -- Common actions
     local common_actions = {
-      ["ctrl-d"] = function(selected, opts)
-        if not selected or #selected == 0 then return end
-        local commit_hash = parse_commit_line(selected[1])
-        if not commit_hash then return end
-        local filepath = opts and opts.filepath or get_relative_path()
-        if filepath and filepath ~= "" then
-          vim.cmd("DiffviewOpen " .. commit_hash .. "~.." .. commit_hash .. " -- " .. filepath)
-        else
-          vim.cmd("DiffviewOpen " .. commit_hash .. "~.." .. commit_hash)
+      ["ctrl-d"] = {
+        exec_silent = true,
+        fn = function(selected, opts)
+          if not selected or #selected == 0 then return end
+          local commit_hash = parse_commit_line(selected[1])
+          if not commit_hash then return end
+          local filepath = opts and opts.filepath
+          if filepath and filepath ~= "" then
+            vim.cmd("tabedit | DiffviewOpen " .. commit_hash .. "~.." .. commit_hash .. " -- " .. filepath)
+            vim.cmd("tabNext | bwipeout")
+          else
+            vim.cmd("tabedit | DiffviewOpen " .. commit_hash .. "~.." .. commit_hash)
+            vim.cmd("tabNext | bwipeout")
+          end
         end
-        fzf.resume()
-      end,
-      ["ctrl-o"] = function(selected)
-        local commit_hash = parse_commit_line(selected[1])
-        if not commit_hash then return end
-        vim.cmd("OctoPrFromSha " .. commit_hash)
-        fzf.resume()
-      end,
-      ["ctrl-y"] = function(selected)
-        if not selected or #selected == 0 then return end
-        local commit_hash = parse_commit_line(selected[1])
-        if not commit_hash then return end
-        vim.fn.setreg("+", commit_hash)
-        vim.fn.setreg("*", commit_hash)
-        vim.notify("Copied commit hash: " .. commit_hash, vim.log.levels.INFO)
-        fzf.resume()
-      end,
+      },
+      ["ctrl-o"] = {
+        exec_silent = true,
+        fn = function(selected)
+          local commit_hash = parse_commit_line(selected[1])
+          if not commit_hash then return end
+          vim.cmd("OctoPrFromSha " .. commit_hash)
+        end
+      },
+      ["ctrl-y"] = {
+        exec_silent = true,
+        fn = function(selected)
+          if not selected or #selected == 0 then return end
+          local commit_hash = parse_commit_line(selected[1])
+          if not commit_hash then return end
+          vim.fn.setreg("+", commit_hash)
+          vim.fn.setreg("*", commit_hash)
+          vim.notify("Copied commit hash: " .. commit_hash, vim.log.levels.INFO)
+        end
+      },
+      ["default"] = {
+        exec_silent = true,
+        fn = function(selected)
+          if not selected or #selected == 0 then return end
+          local commit_hash = parse_commit_line(selected[1])
+          if not commit_hash then return end
+          vim.cmd("tabedit | silent! Gedit " .. commit_hash)
+        end
+      },
       ["ctrl-q"] = function(selected)
         if not selected or #selected == 0 then return end
         local qf_list = {}
@@ -109,28 +223,46 @@ return {
       return (type(query_tbl) == "table" and query_tbl[1]) or query_tbl or ""
     end
 
-    local function build_preview_command(filepath)
-      local file_filter = filepath and (" -- " .. vim.fn.shellescape(filepath)) or ""
+    local function build_log_command(query_tbl, follow)
+      local query = normalize_query(query_tbl)
+      local prompt, author = split_query_author(query)
+      M._search_pat = prompt or ""
 
-      return table.concat({
-        "sh -c 'q={q}; pat=\"${q%%@*}\"; ",
-        "if [ -z \"$pat\" ]; then ",
-        "  git show --color=always {1}" .. file_filter .. "; ",
-        "else ",
-        "  diff=$(git show --color=always {1}" .. file_filter .. "); ",
-        "  matched=$(echo \"$diff\" | rg --pcre2 -n --color=never \"^(?:\\x1B\\[[0-9;]*m)*[\\+\\-](?!(?:\\x1B\\[[0-9;]*m)*[\\+\\-]).*?$pat\" | head -1 | cut -d: -f1); ",
-        "  if [ -n \"$matched\" ]; then ",
-        "    context=$((matched > 10 ? matched - 10 : 1)); ",
-        "    echo \"$diff\" | tail -n +$context | rg --pcre2 --passthru ",
-        "      --colors 'match:fg:yellow' --colors 'match:style:bold' --color=always ",
-        "      \"^(?:\\x1B\\[[0-9;]*m)*[\\+\\-](?![\\+\\-]).*?\\K$pat\"; ",
-        "  else ",
-        "    echo \"$diff\" | rg --pcre2 --passthru ",
-        "      --colors 'match:fg:yellow' --colors 'match:style:bold' --color=always ",
-        "      \"^(?:\\x1B\\[[0-9;]*m)*[\\+\\-](?![\\+\\-]).*?\\K$pat\"; ",
-        "  fi; ",
-        "fi'",
-      }, "")
+      local cmd = "GIT_PAGER=cat git log " .. LOG_FORMAT
+      if prompt and prompt ~= "" then
+        if prompt:sub(1, 1) == "#" then
+          local grep_prompt = prompt:sub(2)
+          cmd = cmd .. " --grep=" .. vim.fn.shellescape(grep_prompt)
+        else
+          cmd = cmd .. " -G " .. vim.fn.shellescape(prompt) .. " --pickaxe-all"
+        end
+      end
+      if author and author ~= "" then
+        cmd = cmd .. " " .. vim.fn.shellescape("--author=" .. author)
+      end
+      cmd = cmd .. follow
+      return cmd
+    end
+
+    local function build_grep_log_command(query, extra_args, follow)
+      local prompt, author = split_query_author(query)
+      M._search_pat = prompt or ""
+
+      local cmd = "git log " .. (extra_args or "") .. " " .. LOG_FORMAT
+
+      if prompt and prompt ~= "" then
+        cmd = cmd .. " -s -i --grep=" .. vim.fn.shellescape(prompt)
+      end
+
+      if author and author ~= "" then
+        cmd = cmd .. " --author=" .. vim.fn.shellescape(author)
+      end
+
+      if follow and follow ~= "" then
+        cmd = cmd .. " " .. follow
+      end
+
+      return cmd
     end
 
     -- Public functions
@@ -141,32 +273,13 @@ return {
       local follow = filepath and (" --follow -- " .. vim.fn.shellescape(filepath)) or ""
 
       fzf.fzf_live(function(query_tbl)
-        local query = normalize_query(query_tbl)
-        local prompt, author = split_query_author(query)
-
-        local cmd = "GIT_PAGER=cat git log " .. LOG_FORMAT
-        if prompt and prompt ~= "" then
-          cmd = cmd .. " -G " .. vim.fn.shellescape(prompt) .. " --pickaxe-all"
-        end
-        if author and author ~= "" then
-          cmd = cmd .. " " .. vim.fn.shellescape("--author=" .. author)
-        end
-        cmd = cmd .. follow
-        return cmd
+        return build_log_command(query_tbl, follow)
       end, {
           prompt = "Log Content (use @ for author)> ",
           exec_empty_query = true,
           fzf_opts = { ["--multi"] = true },
-          preview = build_preview_command(filepath),
-          actions = vim.tbl_extend("force", common_actions, {
-            ["default"] = function(selected)
-              if not selected or #selected == 0 then return end
-              local commit_hash = parse_commit_line(selected[1])
-              if commit_hash then
-                vim.cmd("Gedit " .. commit_hash)
-              end
-            end,
-          }),
+          previewer = create_git_show_previewer(filepath),
+          actions = common_actions,
         })
     end
 
@@ -187,35 +300,14 @@ return {
 
       fzf.fzf_live(function(query)
         query = normalize_query(query)
-        local prompt, author = split_query_author(query)
-
-        local cmd = "git log " .. LOG_FORMAT
-
-        if prompt and prompt ~= "" then
-          cmd = cmd .. " -s -i --grep=" .. vim.fn.shellescape(prompt)
-        end
-
-        if author and author ~= "" then
-          cmd = cmd .. " --author=" .. vim.fn.shellescape(author)
-        end
-
-        cmd = cmd .. " --follow -- " .. vim.fn.shellescape(filepath)
-
-        return cmd
+        local follow = " --follow -- " .. vim.fn.shellescape(filepath)
+        return build_grep_log_command(query, nil, follow)
       end, {
           prompt = "Commit Message (use @ for author)> ",
           exec_empty_query = true,
           fzf_opts = { ["--multi"] = true },
-          preview = "git show --color {1} -- " .. vim.fn.shellescape(filepath),
-          actions = vim.tbl_extend("force", common_actions, {
-            ["default"] = function(selected)
-              if not selected or #selected == 0 then return end
-              local commit_hash = parse_commit_line(selected[1])
-              if commit_hash then
-                vim.cmd("Gedit " .. commit_hash)
-              end
-            end,
-          }),
+          previewer = create_git_show_previewer(filepath),
+          actions = common_actions,
         })
     end
 
@@ -241,35 +333,16 @@ return {
 
       fzf.fzf_live(function(query)
         query = normalize_query(query)
-        local prompt, author = split_query_author(query)
-
-        local cmd = "git log " .. location .. " --no-patch " .. LOG_FORMAT
-
-        if prompt and prompt ~= "" then
-          cmd = cmd .. " -s -i --grep=" .. vim.fn.shellescape(prompt)
-        end
-
-        if author and author ~= "" then
-          cmd = cmd .. " --author=" .. vim.fn.shellescape(author)
-        end
-
-        return cmd
+        local extra_args = location .. " --no-patch"
+        return build_grep_log_command(query, extra_args, nil)
       end, {
           prompt = "Line History (use @ for author)> ",
           exec_empty_query = true,
           multiprocess = false,
           func_async_callback = false,
           fzf_opts = { ["--multi"] = true },
-          preview = "git show --color {1} -- " .. vim.fn.shellescape(filepath),
-          actions = vim.tbl_extend("force", common_actions, {
-            ["default"] = function(selected)
-              if not selected or #selected == 0 then return end
-              local commit_hash = parse_commit_line(selected[1])
-              if commit_hash then
-                vim.cmd("Gedit " .. commit_hash)
-              end
-            end,
-          }),
+          previewer = create_git_show_previewer(filepath),
+          actions = common_actions,
         })
     end
 
@@ -289,13 +362,7 @@ return {
         prompt = "Diff Branch> ",
         func_async_callback = false,
         preview = "git diff --color {1} -- " .. vim.fn.shellescape(filepath),
-        actions = {
-          ["default"] = function(selected)
-            if not selected or #selected == 0 then return end
-            local branch = selected[1]:match("^%s*(.-)%s*$")
-            vim.cmd("DiffviewOpen " .. branch .. " -- " .. filepath)
-          end,
-        },
+        actions = common_actions,
       })
     end
 
