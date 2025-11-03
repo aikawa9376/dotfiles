@@ -57,13 +57,6 @@ return {
     end
   },
   {
-    "aaronhallaert/advanced-git-search.nvim",
-    cmd = { "AdvancedGitSearch" },
-    config = function ()
-      require("advanced_git_search.fzf").setup({})
-    end
-  },
-  {
     "folke/lazydev.nvim",
     ft = "lua",
     opts = {
