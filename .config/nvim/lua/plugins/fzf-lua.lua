@@ -3,8 +3,6 @@ return {
   cmd = { "FzfLua" },
   keys = {
     { "<Leader>gf", 'm`:FzfLua git_files<CR>', mode = { "n" }, silent = true },
-    { "<Leader>gc", 'm`:FzfLua git_commits<CR>', mode = { "n" }, noremap = true, silent = true },
-    { "<Leader>gC", 'm`:FzfLua git_bcommits<CR>', mode = { "n" }, noremap = true, silent = true },
     { "<Leader>b", 'm`:FzfLua buffers<CR>', mode = { "n" }, noremap = true, silent = true },
     { "<Leader>l", 'm`:FzfLua blines<CR>', mode = { "n" }, noremap = true, silent = true },
     { "<Leader>L", 'm`:FzfLua lines<CR>', mode = { "n" }, noremap = true, silent = true },
