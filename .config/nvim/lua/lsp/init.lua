@@ -23,12 +23,17 @@ vim.lsp.enable(lsp_names)
 -- lspを有効化させたくない場合はここで設定
 local base_start = vim.lsp.start
 ---@diagnostic disable-next-line: duplicate-set-field
-vim.lsp.start = function(...)
-  local _, opt = unpack({ ... })
-  if opt and opt.bufnr then
-    if vim.b[opt.bufnr].fugitive_type then
+vim.lsp.start = function(config, opts)
+  if opts and opts.bufnr then
+    -- fugitive系のbufferの場合はスキップ
+    if vim.b[opts.bufnr].fugitive_type then
+      return
+    end
+    -- このバッファに対して同じLSPが既にアタッチされている場合はスキップ
+    local clients = vim.lsp.get_clients({ bufnr = opts.bufnr, name = config.name })
+    if #clients > 0 then
       return
     end
   end
-  base_start(...)
+  base_start(config, opts)
 end
