@@ -115,9 +115,9 @@ local common_actions = {
       if not selected or #selected == 0 then return end
       local commit_hash = parse_commit_line(selected[1])
       if not commit_hash then return end
-      local filepath = opts and opts.filepath
-      if filepath and filepath ~= "" then
-        vim.cmd("tabedit | DiffviewOpen " .. commit_hash .. "~.." .. commit_hash .. " -- " .. filepath)
+      local file_path = opts and opts.file_path
+      if file_path and file_path ~= "" then
+        vim.cmd('tabedit | DiffviewOpen ' .. commit_hash .. '~..' .. commit_hash .. ' --selected-file=' .. file_path)
         vim.cmd("tabNext | bwipeout")
       else
         vim.cmd("tabedit | DiffviewOpen " .. commit_hash .. "~.." .. commit_hash)
@@ -146,11 +146,25 @@ local common_actions = {
   },
   ["default"] = {
     exec_silent = true,
-    fn = function(selected)
+    fn = function(selected, opts)
       if not selected or #selected == 0 then return end
       local commit_hash = parse_commit_line(selected[1])
       if not commit_hash then return end
+      local file_path = opts and opts.file_path
+
       vim.cmd("tabedit | silent! Gedit " .. commit_hash)
+      if file_path then
+        vim.schedule(function()
+          local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+          for i, line in ipairs(lines) do
+            if line:match("^diff %-%-git [ab]/" .. vim.pesc(file_path) .. " ") then
+              vim.api.nvim_win_set_cursor(0, {i, 0})
+              vim.cmd("normal! zO")
+              break
+            end
+          end
+        end)
+      end
     end
   },
   ["ctrl-q"] = function(selected)
@@ -244,16 +258,17 @@ end
 function M.search_log_content(opts)
   opts = opts or {}
   local bufnr = vim.api.nvim_get_current_buf()
-  local filepath = opts.file_scoped and get_relative_path(bufnr) or nil
-  local follow = filepath and (" --follow -- " .. vim.fn.shellescape(filepath)) or ""
+  local file_path = opts.file_scoped and get_relative_path(bufnr) or nil
+  local follow = file_path and (" --follow -- " .. vim.fn.shellescape(file_path)) or ""
 
   fzf.fzf_live(function(query_tbl)
     return build_log_command(query_tbl, follow)
   end, {
       prompt = "Log Content (use @ for author)> ",
       exec_empty_query = true,
+      file_path = file_path,
       fzf_opts = { ["--multi"] = true },
-      previewer = create_git_show_previewer(filepath),
+      previewer = create_git_show_previewer(file_path),
       actions = common_actions,
     })
 end
@@ -345,10 +360,10 @@ function M.changed_on_branch(opts)
   local get_base_cmd = [[
     git show-branch | \
     sed "s/].*//" | \
-    grep "*" | \
+    grep "\*" | \
     grep -v "$(git rev-parse --abbrev-ref HEAD)" | \
     head -n1 | \
-    sed "s/^.*[ /"
+    sed "s/^.*\[//"
   ]]
 
   local handle = io.popen(get_base_cmd)
@@ -365,81 +380,90 @@ function M.changed_on_branch(opts)
   end
 
   local cmd = "git diff --name-only --cached --diff-filter=ACMR --merge-base " .. base_branch
+              .. " | awk -F/ '{OFS=\"/\"; $NF=\"\x1b[1;34m\"$NF\"\x1b[0m\"} 1'"
 
   fzf.fzf_exec(cmd, {
-    prompt = "Changed Files> ",
+    prompt = "changed from \x1b[92m" .. base_branch .. "\x1b[0m > ",
     func_async_callback = false,
     preview = "git diff --color --merge-base " .. base_branch .. " -- {1}",
     actions = {
       ["default"] = actions.file_edit,
+      ["ctrl-d"] = {
+        exec_silent = true,
+        fn = function(selected)
+          if not selected or #selected == 0 then return end
+          vim.cmd("tabedit | silent! Gedit " .. selected[1])
+          vim.cmd("Gvdiffsplit " .. base_branch)
+        end
+      },
     },
   })
 end
 
 function M.setup()
-    vim.api.nvim_create_user_command("GitSearch", function(args)
-        local cmd = args.fargs[1]
-        if cmd == "log" then
-          M.search_log_content()
-        elseif cmd == "log_file" then
-          M.search_log_content_file()
-        elseif cmd == "diff_file" then
-          M.diff_commit_file()
-        elseif cmd == "diff_line" then
-          M.diff_commit_line(args)
-        elseif cmd == "branch" then
-          M.diff_branch_file()
-        elseif cmd == "changed" then
-          M.changed_on_branch()
-        else
-          fzf.fzf_exec({
-            "log - Search in repo log content (code changes)",
-            "log_file - Search in file log content (code changes)",
-            "diff_file - Diff file with commit (by commit message)",
-            "diff_line - Diff selected lines history (by commit message)",
-            "branch - Diff current file with branch",
-            "changed - Show files changed on current branch",
-          }, {
-              prompt = "Git Search> ",
-              actions = {
-                ["default"] = function(selected)
-                  if not selected or #selected == 0 then return end
-                  local command = selected[1]:match("^([%w_]+)")
-                  if command == "log" then
-                    M.search_log_content()
-                  elseif command == "log_file" then
-                    M.search_log_content_file()
-                  elseif command == "diff_file" then
-                    M.diff_commit_file()
-                  elseif command == "diff_line" then
-                    M.diff_commit_line({})
-                  elseif command == "branch" then
-                    M.diff_branch_file()
-                  elseif command == "changed" then
-                    M.changed_on_branch()
-                  end
-                end,
-              },
-            })
-        end
-      end, {
-          nargs = "?",
-          range = true,
-          complete = function(ArgLead, CmdLine, CursorPos)
-            local commands = { "log", "log_file", "diff_file", "diff_line", "branch", "changed" }
-            if ArgLead == "" then
-              return commands
-            end
-            local matches = {}
-            for _, cmd in ipairs(commands) do
-              if cmd:find("^" .. ArgLead) then
-                table.insert(matches, cmd)
+  vim.api.nvim_create_user_command("GitSearch", function(args)
+    local cmd = args.fargs[1]
+    if cmd == "log" then
+      M.search_log_content()
+    elseif cmd == "log_file" then
+      M.search_log_content_file()
+    elseif cmd == "diff_file" then
+      M.diff_commit_file()
+    elseif cmd == "diff_line" then
+      M.diff_commit_line(args)
+    elseif cmd == "branch" then
+      M.diff_branch_file()
+    elseif cmd == "changed" then
+      M.changed_on_branch()
+    else
+      fzf.fzf_exec({
+        "\x1b[92mlog\x1b[0m - Search in repo log content (code changes)",
+        "\x1b[92mlog_file\x1b[0m - Search in file log content (code changes)",
+        "\x1b[92mdiff_file\x1b[0m - Diff file with commit (by commit message)",
+        "\x1b[92mdiff_line\x1b[0m - Diff selected lines history (by commit message)",
+        "\x1b[92mbranch\x1b[0m - Diff current file with branch",
+        "\x1b[92mchanged\x1b[0m - Show files changed on current branch",
+      }, {
+          prompt = "Git Search> ",
+          actions = {
+            ["default"] = function(selected)
+              if not selected or #selected == 0 then return end
+              local command = selected[1]:match("^([%w_]+)")
+              if command == "log" then
+                M.search_log_content()
+              elseif command == "log_file" then
+                M.search_log_content_file()
+              elseif command == "diff_file" then
+                M.diff_commit_file()
+              elseif command == "diff_line" then
+                M.diff_commit_line({})
+              elseif command == "branch" then
+                M.diff_branch_file()
+              elseif command == "changed" then
+                M.changed_on_branch()
               end
-            end
-            return matches
-          end,
-          desc = "Git search commands with fzf-lua",
+            end,
+          },
         })
-  end
+    end
+  end, {
+      nargs = "?",
+      range = true,
+      complete = function(ArgLead, CmdLine, CursorPos)
+        local commands = { "log", "log_file", "diff_file", "diff_line", "branch", "changed" }
+        if ArgLead == "" then
+          return commands
+        end
+        local matches = {}
+        for _, cmd in ipairs(commands) do
+          if cmd:find("^" .. ArgLead) then
+            table.insert(matches, cmd)
+          end
+        end
+        return matches
+      end,
+      desc = "Git search commands with fzf-lua",
+    })
+end
 
 return M

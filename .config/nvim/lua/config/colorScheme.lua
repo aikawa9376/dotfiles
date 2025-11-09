@@ -107,6 +107,7 @@ local function apply_colorscheme()
   set_highlight("IndentBlanklineContextChar", { fg = "#073642" })
   set_highlight("AvanteSidebarNormal", { fg = "#839496", bg = "None" })
   set_highlight("AvantePromptInput", { bg = "#002b36" })
+  set_highlight("AvanteSidebarNormal", { fg = "#acadae" })
   set_highlight("CopilotLspNesAdd", { bg = "#005f5f" })
   set_highlight("CopilotLspNesDelete", { bg = "#23384C" })
 end
