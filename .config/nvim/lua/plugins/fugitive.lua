@@ -148,7 +148,8 @@ return {
         end
 
         local function get_commit()
-          return vim.api.nvim_buf_get_name(ev.buf):match('fugitive://.*%.git//(%x+)$')
+          local result = vim.fn.FugitiveParse(vim.api.nvim_buf_get_name(ev.buf))
+          return result and result[1] or nil
         end
 
         -- Flogウィンドウのハイライト設定
@@ -290,10 +291,11 @@ return {
     -- ------------------------------------------------------------------
     vim.api.nvim_create_autocmd('BufReadPost', {
       group = group,
-      pattern = 'fugitive://*',
+      pattern = 'fugitive://*/*.git//*/**',
       callback = function(ev)
-        local bufname = vim.api.nvim_buf_get_name(ev.buf)
-        local commit, filepath = bufname:match('fugitive://.*%.git//(%x+)/(.+)$')
+        local parse = vim.fn.FugitiveParse(vim.api.nvim_buf_get_name(ev.buf))
+        if not parse or not parse[1] then return end
+        local commit, filepath = parse[1]:match('^(%x+):(.+)$')
         if not commit or not filepath then return end
 
         vim.keymap.set('n', 'p', function()
@@ -359,7 +361,7 @@ return {
     })
 
     -- ------------------------------------------------------------------
-    -- fugitive blob settings
+    -- fugitive command settings
     -- ------------------------------------------------------------------
     vim.api.nvim_create_user_command('GeditHeadAtFile', function()
       local filepath = vim.fn.expand('%:.')
@@ -388,7 +390,6 @@ return {
         return
       end
 
-      ---@diagnostic disable: redefined-local
       vim.schedule(function()
         local fugitive_path = vim.fn.FugitiveFind(latest_commit)
         local existing_buf = vim.fn.bufnr(fugitive_path)
