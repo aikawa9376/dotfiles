@@ -12,8 +12,10 @@ for file, ftype in vim.fs.dir(dirname) do
   if ftype == 'file' and vim.endswith(file, '.lua') and file ~= 'init.lua' then
     -- 拡張子を除いてlsp名を作る
     local lsp_name = file:sub(1, -5) -- fname without '.lua'
-    -- 読み込む
-    table.insert(lsp_names, lsp_name)
+    -- LSPが実行可能かチェック
+    if vim.fn.executable(lsp_name) == 1 then
+      table.insert(lsp_names, lsp_name)
+    end
   end
 end
 
