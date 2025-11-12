@@ -94,7 +94,7 @@ require("lazy").setup({
     { import = "plugins.linediff" },
     { import = "plugins.quick-toggle" },
     { import = "plugins.buffer-position" },
-    { import = "plugins.typescript-tools" },
+    { import = "plugins.vtsls" },
     { import = "plugins.luasnip" },
     { import = "plugins.blink" },
     { import = "plugins.recorder" },
