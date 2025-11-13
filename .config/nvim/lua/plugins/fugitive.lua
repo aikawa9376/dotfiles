@@ -19,10 +19,121 @@ return {
     -- ------------------------------------------------------------------
     -- fugitive blame view settings
     -- ------------------------------------------------------------------
+
+    local function setup_blame_gradients()
+      local colors = {
+        { name = 'FugitiveBlameDate0', fg = '#98be65' },  -- 緑（最新）
+        { name = 'FugitiveBlameDate1', fg = '#a8be65' },
+        { name = 'FugitiveBlameDate2', fg = '#b8be65' },
+        { name = 'FugitiveBlameDate3', fg = '#c8be65' },
+        { name = 'FugitiveBlameDate4', fg = '#d8be65' },
+        { name = 'FugitiveBlameDate5', fg = '#e8be65' },
+        { name = 'FugitiveBlameDate6', fg = '#f8be65' },
+        { name = 'FugitiveBlameDate7', fg = '#f8ae55' },
+        { name = 'FugitiveBlameDate8', fg = '#f89e45' },
+        { name = 'FugitiveBlameDate9', fg = '#f88e35' },
+        { name = 'FugitiveBlameDate10', fg = '#f87e25' },
+        { name = 'FugitiveBlameDate11', fg = '#f86e15' },
+        { name = 'FugitiveBlameDate12', fg = '#ec5f67' }, -- 赤（古い）
+      }
+      for _, color in ipairs(colors) do
+        vim.api.nvim_set_hl(0, color.name, { fg = color.fg })
+      end
+    end
+    setup_blame_gradients()
+
+    -- グラデーションモード: 'absolute' または 'relative'
+    vim.g.fugitive_blame_gradient_mode = vim.g.fugitive_blame_gradient_mode or 'absolute'
+
+    local function apply_blame_gradient(bufnr)
+      local ns_id = vim.api.nvim_create_namespace('fugitive_blame_gradient')
+      vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+
+      if vim.g.fugitive_blame_gradient_mode == 'absolute' then
+        -- 絶対モード: 現在の日付から何ヶ月前かで判定
+        local now = os.time()
+
+        for idx, line in ipairs(lines) do
+          local date_start, date_end = line:find('%d%d%d%d%-%d%d%-%d%d %d%d:%d%d')
+          if date_start then
+            local y, m, d, h, min = line:match('(%d%d%d%d)%-(%d%d)%-(%d%d) (%d%d):(%d%d)')
+            if y then
+              local commit_time = os.time({year=tonumber(y), month=tonumber(m), day=tonumber(d), hour=tonumber(h), min=tonumber(min)})
+              local diff_months = math.floor((now - commit_time) / (30 * 24 * 60 * 60))
+
+              -- 2ヶ月ごとに色を変える（0-24ヶ月を13段階に）
+              local color_idx = math.min(math.floor(diff_months / 2), 12)
+
+              vim.api.nvim_buf_set_extmark(bufnr, ns_id, idx - 1, date_start - 1, {
+                end_col = date_end,
+                hl_group = 'FugitiveBlameDate' .. color_idx,
+              })
+            end
+          end
+        end
+      else
+        -- 相対モード: ファイル内の最古と最新の日付を基準に
+        local dates = {}
+
+        for _, line in ipairs(lines) do
+          local date = line:match('%d%d%d%d%-%d%d%-%d%d')
+          if date then
+            table.insert(dates, date)
+          end
+        end
+
+        table.sort(dates)
+        local oldest_date = dates[1]
+        local newest_date = dates[#dates]
+
+        if oldest_date and newest_date then
+          local function date_to_days(date_str)
+            local y, m, d = date_str:match('(%d%d%d%d)%-(%d%d)%-(%d%d)')
+            return tonumber(y) * 365 + tonumber(m) * 30 + tonumber(d)
+          end
+
+          local oldest_days = date_to_days(oldest_date)
+          local newest_days = date_to_days(newest_date)
+          local range = newest_days - oldest_days
+
+          for idx, line in ipairs(lines) do
+            local date_start, date_end = line:find('%d%d%d%d%-%d%d%-%d%d %d%d:%d%d')
+            if date_start then
+              local date = line:match('%d%d%d%d%-%d%d%-%d%d')
+              local days = date_to_days(date)
+
+              local color_idx
+              if range == 0 then
+                color_idx = 0
+              else
+                local ratio = (days - oldest_days) / range
+                color_idx = math.floor((1 - ratio) * 12)
+              end
+
+              vim.api.nvim_buf_set_extmark(bufnr, ns_id, idx - 1, date_start - 1, {
+                end_col = date_end,
+                hl_group = 'FugitiveBlameDate' .. color_idx,
+              })
+            end
+          end
+        end
+      end
+    end
+
     vim.api.nvim_create_autocmd('FileType', {
       group = group,
       pattern = 'fugitiveblame',
       callback = function(ev)
+        apply_blame_gradient(ev.buf)
+
+        vim.keymap.set('n', 'c', function()
+          vim.g.fugitive_blame_gradient_mode = vim.g.fugitive_blame_gradient_mode == 'absolute' and 'relative' or 'absolute'
+          apply_blame_gradient(ev.buf)
+          print('Blame gradient mode: ' .. vim.g.fugitive_blame_gradient_mode)
+        end, { buffer = ev.buf, nowait = true, silent = true })
+
         vim.keymap.set('n', 'd', function()
           local commit = vim.api.nvim_get_current_line():match('^(%x+)')
           if not commit then return end
