@@ -2,19 +2,133 @@ return {
   "tpope/vim-fugitive",
   cmd = {
     "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit",
-    "Gedit", "Gcd", "Gclog", "GeditHeadAtFile",
+    "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit"
   },
   keys = {
     { "<Leader>gs", "<cmd>Git<CR>", silent = true },
     { "<Leader>gg", "<cmd>GeditHeadAtFile<CR>", silent = true },
     { "<Leader>gb", "<cmd>Git blame -w --date=format:'%Y-%m-%d %H:%M'<CR>", silent = true },
-    { "<Leader>gp", "<cmd>Git! push<CR>", silent = true },
+    { "<Leader>gp", "<cmd>Git! push --force-with-lease<CR>", silent = true },
     { "<Leader>gr", "<cmd>Git! rm --cached %<CR>", silent = true },
-    { "<Leader>gm", "<cmd>Git! commit -m 'update'<CR>", silent = true },
+    { "<Leader>gM", "<cmd>Git! commit -m 'tmp'<CR>", silent = true },
     { "<Leader>gA", "<cmd>Gwrite<CR>", silent = true },
   },
   config = function()
     local group = vim.api.nvim_create_augroup('fugitive_custom', { clear = true })
+
+    -- ------------------------------------------------------------------
+    -- fugitive status view settings
+    -- ------------------------------------------------------------------
+    vim.api.nvim_create_autocmd('FileType', {
+      group = group,
+      pattern = 'fugitive',
+      callback = function(ev)
+        -- 行番号を非表示
+        vim.opt_local.number = false
+        vim.opt_local.relativenumber = false
+
+        -- カーソル位置から上に遡ってファイル名を探す
+        local function get_filepath_at_cursor()
+          local current_line = vim.api.nvim_win_get_cursor(0)[1]
+          for lnum = current_line, 1, -1 do
+            local line = vim.api.nvim_buf_get_lines(ev.buf, lnum - 1, lnum, false)[1]
+            if line then
+              local match = line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
+              if match then return match end
+            end
+          end
+        end
+
+        vim.keymap.set('n', 'dd', function()
+          local file_path = get_filepath_at_cursor()
+          if not file_path then
+            print('No file found')
+            return
+          end
+
+          -- 現在のカーソル位置から上に遡って@@ 行を探す
+          local target_line = nil
+          local current_line = vim.api.nvim_win_get_cursor(0)[1]
+          local hunk_line = nil
+
+          for lnum = current_line, 1, -1 do
+            local line = vim.api.nvim_buf_get_lines(ev.buf, lnum - 1, lnum, false)[1]
+            if line then
+              -- @@ -97,6 +97,8 @@ のような形式から行番号を抽出
+              local line_num = line:match('^@@ %-(%d+)')
+              if line_num then
+                hunk_line = lnum
+                target_line = tonumber(line_num)
+                break
+              end
+              -- ファイル名の行に到達したら停止
+              if line:match('^[MADRCU?!][MADRCU?!]? (.+)$') then
+                break
+              end
+            end
+          end
+
+          -- @@行からの距離を計算して行番号を調整（-行は除外）
+          if target_line and hunk_line then
+            local offset = 0
+            for lnum = hunk_line + 1, current_line do
+              local line = vim.api.nvim_buf_get_lines(ev.buf, lnum - 1, lnum, false)[1]
+              if line and not line:match('^%-') then
+                offset = offset + 1
+              end
+            end
+            target_line = target_line + offset - 1
+          end
+
+          local fugitive_path = vim.fn.FugitiveFind(':' .. file_path)
+          vim.cmd('tabedit ' .. vim.fn.fnameescape(fugitive_path))
+
+          vim.schedule(function()
+            vim.cmd('Gvdiffsplit')
+
+            -- @@ 行から計算した行番号にカーソルを移動
+            if target_line then
+              vim.schedule(function()
+                local buf_line_count = vim.api.nvim_buf_line_count(0)
+                target_line = math.min(target_line, buf_line_count)
+                vim.api.nvim_win_set_cursor(0, {target_line, 0})
+                vim.cmd('normal! zz')
+              end)
+            end
+          end)
+        end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Open file diff in new tab' })
+
+        -- deviconsでファイル名に色とアイコンを付ける
+        local ok, devicons = pcall(require, 'nvim-web-devicons')
+        if ok then
+          local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
+          vim.api.nvim_buf_clear_namespace(ev.buf, ns_id, 0, -1)
+
+          local lines = vim.api.nvim_buf_get_lines(ev.buf, 0, -1, false)
+          for idx, line in ipairs(lines) do
+            local filepath = line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
+            if filepath then
+              local icon, icon_hl = devicons.get_icon(filepath, vim.fn.fnamemodify(filepath, ":e"), { default = true })
+              if icon and icon_hl then
+                -- ファイル名全体に色を適用
+                local filename_start = line:find(filepath, 1, true)
+                if filename_start then
+                  vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, filename_start - 1, {
+                    end_col = filename_start - 1 + #filepath,
+                    hl_group = icon_hl,
+                  })
+                  -- virtual textでアイコンをファイル名の直前に表示
+                  vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, filename_start - 1, {
+                    virt_text = {{ icon .. ' ', icon_hl }},
+                    virt_text_pos = 'inline',
+                  })
+                end
+              end
+            end
+          end
+        end
+      end,
+    })
 
     -- ------------------------------------------------------------------
     -- fugitive blame view settings
@@ -22,19 +136,19 @@ return {
 
     local function setup_blame_gradients()
       local colors = {
-        { name = 'FugitiveBlameDate0', fg = '#98be65' },  -- 緑（最新）
-        { name = 'FugitiveBlameDate1', fg = '#a8be65' },
-        { name = 'FugitiveBlameDate2', fg = '#b8be65' },
-        { name = 'FugitiveBlameDate3', fg = '#c8be65' },
-        { name = 'FugitiveBlameDate4', fg = '#d8be65' },
-        { name = 'FugitiveBlameDate5', fg = '#e8be65' },
-        { name = 'FugitiveBlameDate6', fg = '#f8be65' },
-        { name = 'FugitiveBlameDate7', fg = '#f8ae55' },
-        { name = 'FugitiveBlameDate8', fg = '#f89e45' },
-        { name = 'FugitiveBlameDate9', fg = '#f88e35' },
-        { name = 'FugitiveBlameDate10', fg = '#f87e25' },
-        { name = 'FugitiveBlameDate11', fg = '#f86e15' },
-        { name = 'FugitiveBlameDate12', fg = '#ec5f67' }, -- 赤（古い）
+        { name = 'FugitiveBlameDate0', fg = '#50c878' },  -- 緑（最新）より明るく
+        { name = 'FugitiveBlameDate1', fg = '#70cd80' },
+        { name = 'FugitiveBlameDate2', fg = '#90d288' },
+        { name = 'FugitiveBlameDate3', fg = '#b0d790' },
+        { name = 'FugitiveBlameDate4', fg = '#d0dc98' },
+        { name = 'FugitiveBlameDate5', fg = '#f0e1a0' },
+        { name = 'FugitiveBlameDate6', fg = '#ffc580' },
+        { name = 'FugitiveBlameDate7', fg = '#ffb060' },
+        { name = 'FugitiveBlameDate8', fg = '#ff9b40' },
+        { name = 'FugitiveBlameDate9', fg = '#ff8620' },
+        { name = 'FugitiveBlameDate10', fg = '#ff7100' },
+        { name = 'FugitiveBlameDate11', fg = '#e85040' },
+        { name = 'FugitiveBlameDate12', fg = '#d03030' }, -- 赤（古い）より濃く
       }
       for _, color in ipairs(colors) do
         vim.api.nvim_set_hl(0, color.name, { fg = color.fg })
@@ -504,7 +618,8 @@ return {
       vim.schedule(function()
         local fugitive_path = vim.fn.FugitiveFind(latest_commit)
         local existing_buf = vim.fn.bufnr(fugitive_path)
-        vim.cmd(existing_buf ~= -1 and 'tabedit #' .. existing_buf or 'tabedit | silent! Gedit ' .. latest_commit)
+        local is_listed = existing_buf ~= -1 and vim.fn.getbufvar(existing_buf, '&buflisted') == 1 or false
+        vim.cmd(existing_buf ~= -1 and is_listed and 'tabedit #' .. existing_buf or 'tabedit | silent! Gedit ' .. latest_commit)
 
         vim.schedule(function()
           local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
