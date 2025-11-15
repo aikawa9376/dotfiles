@@ -1,7 +1,7 @@
 return {
   "tpope/vim-fugitive",
   cmd = {
-    "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit",
+    "G", "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit",
     "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit"
   },
   keys = {
@@ -508,6 +508,11 @@ return {
           vim.fn.setreg('"', short_commit)
           print('Copied: ' .. short_commit)
         end, { buffer = ev.buf, nowait = true, silent = true })
+
+        vim.keymap.set('n', 'R', function()
+          local cursor_commit = vim.api.nvim_get_current_line():match('^(%x+)')
+          vim.cmd('G reset --mixed ' .. cursor_commit)
+        end, { buffer = ev.buf, nowait = true, silent = true })
       end,
     })
 
@@ -518,7 +523,8 @@ return {
       group = group,
       pattern = 'fugitive://*/*.git//*/**',
       callback = function(ev)
-        local parse = vim.fn.FugitiveParse(vim.api.nvim_buf_get_name(ev.buf))
+        local bufname = vim.api.nvim_buf_get_name(ev.buf)
+        local parse = vim.fn.FugitiveParse(bufname)
         if not parse or not parse[1] then return end
         local commit, filepath = parse[1]:match('^(%x+):(.+)$')
         if not commit or not filepath then return end
@@ -580,6 +586,127 @@ return {
           vim.cmd('tabedit %')
           vim.cmd('Gvdiffsplit!')
         end, { buffer = ev.buf, nowait = true, silent = true })
+
+        -- du: blobの選択行の変更を打ち消してコミット履歴を書き換え、変更をステージング
+        vim.keymap.set('v', 'du', function()
+          vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
+          local start_line = vim.fn.line("'<")
+          local end_line = vim.fn.line("'>")
+
+          if start_line == 0 or end_line == 0 then
+            print('Invalid line selection')
+            return
+          end
+
+          local parent_lines = vim.fn.systemlist('git show ' .. commit .. '^:' .. vim.fn.shellescape(filepath) .. ' 2>/dev/null')
+          if vim.v.shell_error ~= 0 then parent_lines = {} end
+
+          local commit_lines = vim.api.nvim_buf_get_lines(ev.buf, start_line - 1, end_line, false)
+
+          local patch_lines = {
+            'diff --git a/' .. filepath .. ' b/' .. filepath,
+            'index 0000000..0000000 100644',
+            '--- a/' .. filepath,
+            '+++ b/' .. filepath,
+          }
+
+          local has_changes = false
+          for i = start_line, end_line do
+            local parent_line = parent_lines[i] or ''
+            local commit_line = commit_lines[i - start_line + 1] or ''
+            if commit_line ~= parent_line then
+              table.insert(patch_lines, '@@ -' .. i .. ',1 +' .. i .. ',1 @@')
+              table.insert(patch_lines, '-' .. commit_line)
+              table.insert(patch_lines, '+' .. parent_line)
+              has_changes = true
+            end
+          end
+
+          if not has_changes then
+            print('No changes to revert')
+            return
+          end
+
+          local patch_file = vim.fn.tempname()
+          local f = io.open(patch_file, 'w')
+          if not f then return end
+          f:write(table.concat(patch_lines, '\n') .. '\n')
+          f:close()
+
+          local git_dir = vim.fn.FugitiveWorkTree()
+
+          -- Step 1: インタラクティブリベースで対象コミットを編集モードに
+          local rebase_cmd = 'cd ' .. vim.fn.shellescape(git_dir) ..
+            " && GIT_SEQUENCE_EDITOR=\"sed -i '/" .. commit:sub(1,7) .. "/s/^pick/edit/'\" git rebase -i " .. commit .. '^ 2>&1'
+          local rebase_result = vim.fn.system(rebase_cmd)
+
+          if not rebase_result:match('Stopped at') then
+            print('Rebase failed: ' .. rebase_result:sub(1, 100))
+            os.remove(patch_file)
+            return
+          end
+
+          -- Step 2: パッチを適用してコミットから変更を削除
+          local apply_cmd = 'cd ' .. vim.fn.shellescape(git_dir) ..
+            ' && git apply --unidiff-zero ' .. vim.fn.shellescape(patch_file) ..
+            ' && git add ' .. vim.fn.shellescape(filepath) ..
+            ' && git commit --amend --no-edit 2>&1'
+          local apply_result = vim.fn.system(apply_cmd)
+
+          if vim.v.shell_error ~= 0 then
+            print('Apply failed (conflict?): ' .. apply_result:sub(1, 100))
+            vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
+            os.remove(patch_file)
+            return
+          end
+
+          -- Step 3: リベース継続
+          local continue_result = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --continue 2>&1')
+
+          if not (continue_result:match('Successfully rebased') or vim.v.shell_error == 0) then
+            print('Rebase continue failed (conflict?): ' .. continue_result:sub(1, 100))
+            vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
+            os.remove(patch_file)
+            return
+          end
+
+          -- Step 4: ワーキングツリーをクリーンな状態にリセット
+          vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git checkout HEAD -- ' .. vim.fn.shellescape(filepath))
+
+          -- Step 5: 削除した変更をインデックスに復元（逆パッチを適用）
+          local forward_patch_lines = {}
+          for _, line in ipairs(patch_lines) do
+            if line:match('^%-') and not line:match('^%-%-%-') then
+              table.insert(forward_patch_lines, '+' .. line:sub(2))
+            elseif line:match('^%+') and not line:match('^%+%+%+') then
+              table.insert(forward_patch_lines, '-' .. line:sub(2))
+            else
+              table.insert(forward_patch_lines, line)
+            end
+          end
+
+          local forward_patch_file = vim.fn.tempname()
+          local f2 = io.open(forward_patch_file, 'w')
+          if f2 then
+            f2:write(table.concat(forward_patch_lines, '\n') .. '\n')
+            f2:close()
+
+            local restore_cmd = 'cd ' .. vim.fn.shellescape(git_dir) ..
+              ' && git apply --unidiff-zero ' .. vim.fn.shellescape(forward_patch_file) ..
+              ' && git add ' .. vim.fn.shellescape(filepath) .. ' 2>&1'
+            local restore_result = vim.fn.system(restore_cmd)
+            os.remove(forward_patch_file)
+
+            if vim.v.shell_error == 0 then
+              print('Reverted ' .. (end_line - start_line + 1) .. ' lines in ' .. commit:sub(1,7) .. ' and staged')
+            else
+              print('Staging failed: ' .. restore_result:sub(1, 80))
+            end
+          end
+
+          os.remove(patch_file)
+          vim.cmd('checktime')
+        end, { buffer = ev.buf, silent = true, desc = 'Revert lines and stage' })
 
         vim.keymap.set('n', 'q', function() vim.cmd('tabclose') end, { buffer = ev.buf, nowait = true, silent = true })
       end,
