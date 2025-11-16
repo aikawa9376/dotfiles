@@ -110,6 +110,135 @@ function M.setup(group)
   -- グラデーションモード: 'absolute' または 'relative'
   vim.g.fugitive_blame_gradient_mode = vim.g.fugitive_blame_gradient_mode or 'absolute'
 
+  local preview_state = {
+    win = nil,
+    buf = nil,
+    augroup = nil,
+    blame_bufnr = nil,
+    last_commit = nil,
+  }
+
+  local function close_preview_window()
+    if preview_state.win and vim.api.nvim_win_is_valid(preview_state.win) then
+      vim.api.nvim_win_close(preview_state.win, true)
+    end
+    if preview_state.buf and vim.api.nvim_buf_is_valid(preview_state.buf) then
+      vim.api.nvim_buf_delete(preview_state.buf, { force = true })
+    end
+    if preview_state.augroup then
+      vim.api.nvim_del_augroup_by_id(preview_state.augroup)
+    end
+    preview_state.win = nil
+    preview_state.buf = nil
+    preview_state.augroup = nil
+    preview_state.blame_bufnr = nil
+    preview_state.last_commit = nil
+  end
+
+  local function update_preview()
+    local blame_bufnr = preview_state.blame_bufnr
+    if not blame_bufnr or not vim.api.nvim_buf_is_valid(blame_bufnr) then
+      close_preview_window()
+      return
+    end
+
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    local line = vim.api.nvim_buf_get_lines(blame_bufnr, cursor_pos[1] - 1, cursor_pos[1], false)[1]
+    if not line then
+      return
+    end
+
+    local commit = line:match('^(%x+)')
+    if not commit or commit == preview_state.last_commit then
+      return
+    end
+    preview_state.last_commit = commit
+
+    local file_path = vim.api.nvim_buf_get_name(preview_state.source_bufnr)
+    if not file_path or file_path == '' then
+      close_preview_window()
+      return
+    end
+
+    local content
+    if commit:match('^0+$') then
+      content = vim.fn.systemlist('git diff -- ' .. vim.fn.shellescape(file_path))
+    else
+      content = vim.fn.systemlist('git show ' .. commit .. ' -- ' .. vim.fn.shellescape(file_path))
+    end
+
+    if not preview_state.buf or not vim.api.nvim_buf_is_valid(preview_state.buf) then
+      close_preview_window()
+      return
+    end
+
+    vim.api.nvim_set_option_value('modifiable', true, { buf = preview_state.buf })
+    vim.api.nvim_buf_set_lines(preview_state.buf, 0, -1, false, content)
+    vim.api.nvim_set_option_value('modifiable', false, { buf = preview_state.buf })
+  end
+
+  local function open_preview_window(blame_bufnr)
+    -- Get the source buffer by temporarily switching windows
+    local original_win = vim.api.nvim_get_current_win()
+    vim.cmd.wincmd('p')
+    preview_state.source_bufnr = vim.api.nvim_get_current_buf()
+    vim.api.nvim_set_current_win(original_win)
+
+    if not preview_state.source_bufnr or not vim.api.nvim_buf_is_valid(preview_state.source_bufnr) then
+      print("Could not determine source buffer for blame.")
+      return
+    end
+
+    preview_state.blame_bufnr = blame_bufnr
+    preview_state.buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_set_option_value('buftype', 'nofile', { buf = preview_state.buf })
+    vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = preview_state.buf })
+    vim.api.nvim_set_option_value('filetype', 'diff', { buf = preview_state.buf })
+
+    local width = math.floor(vim.o.columns * 0.6)
+    local height = math.floor(vim.o.lines * 0.8)
+    local row = math.floor((vim.o.lines - height) / 2)
+    local col = math.floor((vim.o.columns - width) / 2)
+
+    preview_state.win = vim.api.nvim_open_win(preview_state.buf, false, {
+      relative = 'editor',
+      width = width,
+      height = height,
+      row = row,
+      col = col,
+      style = 'minimal',
+      border = 'rounded',
+      focusable = false,
+    })
+
+    vim.keymap.set('n', 'q', close_preview_window, { buffer = preview_state.buf })
+
+    preview_state.augroup = vim.api.nvim_create_augroup('FugitiveBlamePreview', { clear = true })
+
+    local debounce_timer
+    local debounced_update = function()
+      if debounce_timer then
+        vim.fn.timer_stop(debounce_timer)
+      end
+      debounce_timer = vim.fn.timer_start(100, function()
+        vim.schedule(update_preview)
+      end)
+    end
+
+    vim.api.nvim_create_autocmd('CursorMoved', {
+      group = preview_state.augroup,
+      buffer = blame_bufnr,
+      callback = debounced_update,
+    })
+    vim.api.nvim_create_autocmd({ 'BufWinLeave', 'BufUnload' }, {
+      group = preview_state.augroup,
+      buffer = blame_bufnr,
+      callback = close_preview_window,
+    })
+
+    update_preview()
+  end
+
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
     pattern = 'fugitiveblame',
@@ -121,6 +250,14 @@ function M.setup(group)
         apply_blame_gradient(ev.buf)
         print('Blame gradient mode: ' .. vim.g.fugitive_blame_gradient_mode)
       end, { buffer = ev.buf, nowait = true, silent = true })
+
+      vim.keymap.set('n', 'p', function()
+        if preview_state.win then
+          close_preview_window()
+        else
+          open_preview_window(ev.buf)
+        end
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = "Toggle blame preview" })
 
       vim.keymap.set('n', 'd', function()
         local commit = vim.api.nvim_get_current_line():match('^(%x+)')
