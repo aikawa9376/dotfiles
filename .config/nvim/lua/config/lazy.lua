@@ -63,6 +63,7 @@ require("lazy").setup({
     { import = "plugins.snack" },
     { import = "plugins.gitsigns" },
     { import = "plugins.fugitive" },
+    { import = "plugins.fugitive-extension" },
     { import = "plugins.flog" },
     { import = "plugins.diffview" },
     { import = "plugins.lualine" },
