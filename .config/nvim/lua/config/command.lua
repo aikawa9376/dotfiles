@@ -73,6 +73,8 @@ vim.api.nvim_create_autocmd('OptionSet', {
       vim.api.nvim_set_hl(ev.buf, "NormalNC", { bg = "None" })
       vim.diagnostic.enable(false, { bufnr = ev.buf })
       vim.keymap.set('n', 'q', ':tabclose<CR>', { buffer = ev.buf, nowait = true, silent = true })
+      vim.keymap.set("n", "]]", function() vim.cmd('Gitsigns next_hunk') end, { buffer = ev.buf, nowait = true, silent = true })
+      vim.keymap.set("n", "[[", function() vim.cmd('Gitsigns prev_hunk') end, { buffer = ev.buf, nowait = true, silent = true })
     else
       vim.api.nvim_set_hl(ev.buf, "NormalNC", { bg = "#073642" })
     end
