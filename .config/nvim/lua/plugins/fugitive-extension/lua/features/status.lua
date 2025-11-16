@@ -113,6 +113,30 @@ function M.setup(group)
           end
         end
       end
+
+      -- Flog integration
+      vim.keymap.set('n', '<C-Space>', function()
+        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+          vim.api.nvim_win_close(vim.g.flog_win, false)
+          vim.g.flog_win = nil
+          vim.g.flog_bufnr = nil
+        else
+          local current_win = vim.api.nvim_get_current_win()
+          vim.cmd("Flogsplit -open-cmd=vertical\\ rightbelow\\ 60vsplit")
+          vim.g.flog_bufnr = vim.api.nvim_get_current_buf()
+          vim.g.flog_win = vim.api.nvim_get_current_win()
+
+          utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
+          vim.api.nvim_set_current_win(current_win)
+        end
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Toggle Flog window' })
+
+      vim.keymap.set('n', 'q', function()
+        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+          vim.api.nvim_win_close(vim.g.flog_win, true)
+        end
+        vim.cmd('q')
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Close status and Flog window' })
     end,
   })
 end

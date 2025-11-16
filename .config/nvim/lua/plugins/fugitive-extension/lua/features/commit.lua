@@ -80,49 +80,8 @@ function M.setup(group)
     group = group,
     pattern = 'git',
     callback = function(ev)
-      -- Flogウィンドウのハイライト設定
-      local function setup_flog_window(win, bufnr)
-        vim.wo[win].wrap = false
-        vim.wo[win].number = false
-        vim.wo[win].relativenumber = false
-        vim.wo[win].signcolumn = 'no'
-        vim.wo[win].cursorline = false
-        vim.wo[win].winhighlight = 'NormalNC:Normal'
-
-        -- qでタブごと閉じる
-        vim.keymap.set('n', 'q', function()
-          vim.cmd('tabclose')
-        end, { buffer = bufnr, nowait = true, silent = true })
-      end
-
-      -- Flogハイライト更新
       local function update_flog_highlight()
-        if not (vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) and vim.g.flog_bufnr and vim.api.nvim_buf_is_valid(vim.g.flog_bufnr)) then
-          return
-        end
-
-        local commit = utils.get_commit(ev.buf)
-        if not commit then
-          return
-        end
-
-        local ns_id = vim.api.nvim_create_namespace('GeditHeadAtFileHighlight')
-        vim.api.nvim_buf_clear_namespace(vim.g.flog_bufnr, ns_id, 0, -1)
-        local lines = vim.api.nvim_buf_get_lines(vim.g.flog_bufnr, 0, -1, false)
-        for idx, line in ipairs(lines) do
-          if line:match(commit:sub(1, 7)) then
-            vim.api.nvim_buf_set_extmark(vim.g.flog_bufnr, ns_id, idx - 1, 0, {
-              end_col = #line,
-              hl_group = 'Search',
-              hl_mode = 'combine',
-            })
-            vim.api.nvim_win_call(vim.g.flog_win, function()
-              vim.api.nvim_win_set_cursor(vim.g.flog_win, { idx, 0 })
-              vim.cmd('normal! zt5k')
-            end)
-            break
-          end
-        end
+        utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, utils.get_commit(ev.buf))
       end
 
       -- BufEnter時にハイライト更新
@@ -145,7 +104,7 @@ function M.setup(group)
           vim.g.flog_bufnr = vim.api.nvim_get_current_buf()
           vim.g.flog_win = vim.api.nvim_get_current_win()
 
-          setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
+          utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
           update_flog_highlight()
           vim.api.nvim_set_current_win(current_win)
         end
