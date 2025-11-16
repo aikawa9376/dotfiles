@@ -85,11 +85,6 @@ function M.setup(group)
           return
         end
 
-        local parent_lines = vim.fn.systemlist('git show ' .. commit .. '^:' .. vim.fn.shellescape(filepath) .. ' 2>/dev/null')
-        if vim.v.shell_error ~= 0 then
-          parent_lines = {}
-        end
-
         local commit_lines = vim.api.nvim_buf_get_lines(ev.buf, start_line - 1, end_line, false)
 
         local patch_lines = {
@@ -97,23 +92,12 @@ function M.setup(group)
           'index 0000000..0000000 100644',
           '--- a/' .. filepath,
           '+++ b/' .. filepath,
+          '@@ -' .. start_line .. ',' .. (end_line - start_line + 1) .. ' +' .. start_line .. ',0 @@',
         }
 
-        local has_changes = false
         for i = start_line, end_line do
-          local parent_line = parent_lines[i] or ''
           local commit_line = commit_lines[i - start_line + 1] or ''
-          if commit_line ~= parent_line then
-            table.insert(patch_lines, '@@ -' .. i .. ',1 +' .. i .. ',1 @@')
-            table.insert(patch_lines, '-' .. commit_line)
-            table.insert(patch_lines, '+' .. parent_line)
-            has_changes = true
-          end
-        end
-
-        if not has_changes then
-          print('No changes to revert')
-          return
+          table.insert(patch_lines, '-' .. commit_line)
         end
 
         local patch_file = vim.fn.tempname()
@@ -161,15 +145,17 @@ function M.setup(group)
         vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git checkout HEAD -- ' .. vim.fn.shellescape(filepath))
 
         -- Step 5: 削除した変更をインデックスに復元（逆パッチを適用）
-        local forward_patch_lines = {}
-        for _, line in ipairs(patch_lines) do
-          if line:match('^%-') and not line:match('^%-%-%-') then
-            table.insert(forward_patch_lines, '+' .. line:sub(2))
-          elseif line:match('^%+') and not line:match('^%+%+%+') then
-            table.insert(forward_patch_lines, '-' .. line:sub(2))
-          else
-            table.insert(forward_patch_lines, line)
-          end
+        local forward_patch_lines = {
+          'diff --git a/' .. filepath .. ' b/' .. filepath,
+          'index 0000000..0000000 100644',
+          '--- a/' .. filepath,
+          '+++ b/' .. filepath,
+          '@@ -' .. start_line .. ',0 +' .. start_line .. ',' .. (end_line - start_line + 1) .. ' @@',
+        }
+
+        for i = start_line, end_line do
+          local commit_line = commit_lines[i - start_line + 1] or ''
+          table.insert(forward_patch_lines, '+' .. commit_line)
         end
 
         local forward_patch_file = vim.fn.tempname()
