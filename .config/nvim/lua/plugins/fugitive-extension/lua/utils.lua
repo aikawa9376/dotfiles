@@ -53,7 +53,7 @@ function M.highlight_flog_commit(flog_bufnr, flog_win, commit_sha)
   if not (flog_win and vim.api.nvim_win_is_valid(flog_win) and flog_bufnr and vim.api.nvim_buf_is_valid(flog_bufnr)) then
     return
   end
-  if not commit_sha then
+  if not commit_sha or commit_sha == "" then
     return
   end
 
