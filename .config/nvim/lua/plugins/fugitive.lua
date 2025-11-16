@@ -8,10 +8,43 @@ return {
     { "<Leader>gs", "<cmd>Git<CR>", silent = true },
     { "<Leader>gg", "<cmd>GeditHeadAtFile<CR>", silent = true },
     { "<Leader>gb", "<cmd>Git blame -w --date=format:'%Y-%m-%d %H:%M'<CR>", silent = true },
-    { "<Leader>gp", "<cmd>Git! push --force-with-lease<CR>", silent = true },
     { "<Leader>gr", "<cmd>Git! rm --cached %<CR>", silent = true },
     { "<Leader>gM", "<cmd>Git! commit -m 'tmp'<CR>", silent = true },
     { "<Leader>gA", "<cmd>Gwrite<CR>", silent = true },
+    { "<Leader>gp", function()
+      vim.notify("Pushing...", vim.log.levels.INFO)
+      local output_lines = {}
+      vim.fn.jobstart("git push --force-with-lease", {
+        on_exit = function(_, exit_code)
+          vim.schedule(function()
+            local message = table.concat(output_lines, "\n")
+            if exit_code == 0 then
+              vim.notify("Push successful\n" .. message, vim.log.levels.INFO)
+            else
+              vim.notify("Push failed\n" .. message, vim.log.levels.ERROR)
+            end
+          end)
+        end,
+        on_stdout = function(_, data)
+          if data then
+            for _, line in ipairs(data) do
+              if line and line ~= "" then
+                table.insert(output_lines, line)
+              end
+            end
+          end
+        end,
+        on_stderr = function(_, data)
+          if data then
+            for _, line in ipairs(data) do
+              if line and line ~= "" then
+                table.insert(output_lines, line)
+              end
+            end
+          end
+        end,
+      })
+    end, silent = true },
   },
   config = function()
     local group = vim.api.nvim_create_augroup('fugitive_custom', { clear = true })
@@ -106,6 +139,20 @@ return {
 
           local lines = vim.api.nvim_buf_get_lines(ev.buf, 0, -1, false)
           for idx, line in ipairs(lines) do
+            -- "Staged"という文字列を緑色にする
+            if line:match('^Staged') then
+              vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, 0, {
+                end_col = 6,
+                hl_group = 'GitSignsAdd',
+              })
+            -- "Unpulled"という文字列をオレンジ色にする
+            elseif line:match('^Unpulled') then
+              vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, 0, {
+                end_col = 8,
+                hl_group = 'GitSignsChange',
+              })
+            end
+
             local filepath = line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
             if filepath then
               local icon, icon_hl = devicons.get_icon(filepath, vim.fn.fnamemodify(filepath, ":e"), { default = true })
@@ -174,7 +221,13 @@ return {
           if date_start then
             local y, m, d, h, min = line:match('(%d%d%d%d)%-(%d%d)%-(%d%d) (%d%d):(%d%d)')
             if y then
-              local commit_time = os.time({year=tonumber(y), month=tonumber(m), day=tonumber(d), hour=tonumber(h), min=tonumber(min)})
+              local commit_time = os.time({
+                year = tonumber(y) or 0,
+                month = tonumber(m) or 1,
+                day = tonumber(d) or 1,
+                hour = tonumber(h) or 0,
+                min = tonumber(min) or 0,
+              })
               local diff_months = math.floor((now - commit_time) / (30 * 24 * 60 * 60))
 
               -- 2ヶ月ごとに色を変える（0-24ヶ月を13段階に）
@@ -746,7 +799,17 @@ return {
         local fugitive_path = vim.fn.FugitiveFind(latest_commit)
         local existing_buf = vim.fn.bufnr(fugitive_path)
         local is_listed = existing_buf ~= -1 and vim.fn.getbufvar(existing_buf, '&buflisted') == 1 or false
-        vim.cmd(existing_buf ~= -1 and is_listed and 'tabedit #' .. existing_buf or 'tabedit | silent! Gedit ' .. latest_commit)
+
+        if existing_buf ~= -1 and is_listed then
+          vim.cmd('tabedit #' .. existing_buf)
+        else
+          vim.cmd('tabedit')
+          local noname_buf = vim.api.nvim_get_current_buf()
+          vim.cmd('Gedit ' .. latest_commit)
+          if vim.api.nvim_buf_is_valid(noname_buf) and vim.api.nvim_get_current_buf() ~= noname_buf then
+            vim.api.nvim_buf_delete(noname_buf, { force = true })
+          end
+        end
 
         vim.schedule(function()
           local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
