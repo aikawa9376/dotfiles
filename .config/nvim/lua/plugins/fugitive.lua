@@ -25,6 +25,7 @@ return {
               vim.notify("Push failed\n" .. message, vim.log.levels.ERROR)
             end
           end)
+          vim.fn['fugitive#ReloadStatus']()
         end,
         on_stdout = function(_, data)
           if data then
