@@ -60,6 +60,52 @@ function M.setup()
       end)
     end)
   end, {})
+
+  local function git_push()
+    -- fugitiveバッファのgitディレクトリを取得
+    local git_dir = vim.fn.FugitiveGitDir()
+    if git_dir == '' then
+      vim.notify("Not in a git repository", vim.log.levels.ERROR)
+      return
+    end
+    local work_tree = vim.fn.fnamemodify(git_dir, ':h')
+
+    vim.notify("Pushing...", vim.log.levels.INFO)
+    local output_lines = {}
+    vim.fn.jobstart("git -C " .. vim.fn.shellescape(work_tree) .. " push --force-with-lease", {
+      on_exit = function(_, exit_code)
+        vim.schedule(function()
+          local message = table.concat(output_lines, "\n")
+          if exit_code == 0 then
+            vim.notify("Push successful\n" .. message, vim.log.levels.INFO)
+          else
+            vim.notify("Push failed\n" .. message, vim.log.levels.ERROR)
+          end
+        end)
+        vim.fn['fugitive#ReloadStatus']()
+      end,
+      on_stdout = function(_, data)
+        if data then
+          for _, line in ipairs(data) do
+            if line and line ~= "" then
+              table.insert(output_lines, line)
+            end
+          end
+        end
+      end,
+      on_stderr = function(_, data)
+        if data then
+          for _, line in ipairs(data) do
+            if line and line ~= "" then
+              table.insert(output_lines, line)
+            end
+          end
+        end
+      end,
+    })
+  end
+
+  vim.api.nvim_create_user_command("GitPush", git_push, {})
 end
 
 return M
