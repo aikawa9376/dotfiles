@@ -140,6 +140,14 @@ function M.setup(group)
 
       -- カーソル行のコミットを一つ前のコミットにfixupする
       vim.keymap.set('n', '<Leader>cf', function()
+        -- fugitiveバッファのgitディレクトリを取得
+        local git_dir = vim.fn.FugitiveGitDir()
+        if git_dir == '' then
+          print('Error: Not in a git repository')
+          return
+        end
+        local work_tree = vim.fn.fnamemodify(git_dir, ':h')
+
         local current_line = vim.api.nvim_get_current_line()
         -- コミットハッシュを抽出（Unpushedセクションのコミット行から）
         local commit_hash = current_line:match('^(%x+)')
@@ -150,7 +158,7 @@ function M.setup(group)
         end
 
         -- 一つ前のコミットハッシュを取得
-        local parent_commit_hash = vim.fn.system('git rev-parse ' .. commit_hash .. '^'):gsub('%s+$', '')
+        local parent_commit_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. commit_hash .. '^'):gsub('%s+$', '')
         if vim.v.shell_error ~= 0 then
           print('Error: Failed to get parent commit')
           return
@@ -175,7 +183,7 @@ function M.setup(group)
           vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
 
           -- GIT_SEQUENCE_EDITORでrebaseを実行
-          local result = vim.fn.system('GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git rebase -i ' .. vim.fn.shellescape(parent_commit_hash .. '^'))
+          local result = vim.fn.system('GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(parent_commit_hash .. '^'))
           vim.fn.delete(tmpfile)
 
           if vim.v.shell_error ~= 0 then
