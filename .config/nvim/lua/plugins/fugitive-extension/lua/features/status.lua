@@ -146,7 +146,14 @@ function M.setup(group)
           print('Error: Not in a git repository')
           return
         end
-        local work_tree = vim.fn.fnamemodify(git_dir, ':h')
+
+        local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+        local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+
+        if vim.v.shell_error ~= 0 then
+          vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
+          return
+        end
 
         local current_line = vim.api.nvim_get_current_line()
         -- コミットハッシュを抽出（Unpushedセクションのコミット行から）

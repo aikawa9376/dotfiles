@@ -12,7 +12,8 @@ return {
     { "i", function() return require "utilities".indent_with_i("m`mv") end, mode = "n", expr = true },
     { "gJ", function() require"utilities".join_space_less() end, mode = "n" },
     { "<C-K>", function() require"utilities".ctrl_k() end, mode = "c" },
-    { "<leader>@", function() require"utilities".copy_line_path() end, mode = "x" },
+    { "y@", function() require"utilities".copy_git_root_relative_path(true) end, mode = "n" },
+    { "<leader>@", function() require"utilities".copy_line_path(true) end, mode = "x" },
     { "<Leader>gd", function () vim.cmd("Diff") end },
     { "<Leader>x",
       function ()
