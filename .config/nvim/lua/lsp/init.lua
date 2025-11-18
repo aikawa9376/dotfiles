@@ -3,8 +3,8 @@ require("mason").setup()
 -- このファイルの存在するディレクトリ
 local dirname = vim.fn.stdpath('config') .. '/after/lsp'
 
--- 設定したlspを保存する配列
-local lsp_names = {}
+-- 設定したlspを保存する配列 cmd扱いじゃないものは最初に追加
+local lsp_names = {'copilot'}
 
 -- 同一ディレクトリのファイルをループ
 for file, ftype in vim.fs.dir(dirname) do
