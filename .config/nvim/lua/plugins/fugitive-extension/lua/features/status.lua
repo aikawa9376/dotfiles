@@ -97,6 +97,14 @@ function M.setup(group)
 
         local filepath = line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
         if filepath then
+          local status = line:sub(1, 1)
+
+          if status == 'A' then
+            vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, 0, { end_col = 1, hl_group = 'GitSignsAdd' })
+          elseif status == 'D' then
+            vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, 0, { end_col = 1, hl_group = 'GitSignsDelete' })
+          end
+
           local icon, icon_hl = utils.get_devicon(filepath)
           -- ファイル名全体に色を適用
           local filename_start = line:find(filepath, 1, true)
@@ -204,6 +212,9 @@ function M.setup(group)
           print('Error: Failed to create temp script')
         end
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Fixup commit under cursor into its parent' })
+
+      -- all close
+      vim.keymap.set('n', 'R', function() vim.cmd('e!') end, { buffer = ev.buf, silent = true })
     end,
   })
 end

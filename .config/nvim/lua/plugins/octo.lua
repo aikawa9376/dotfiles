@@ -59,11 +59,11 @@ return {
       local function open_pr(pr_number)
         local pr_url = ("https://%s/%s/pull/%s"):format(hostname, repo, pr_number)
 
-        if hostname ~= "github.com" then
-          vim.fn.setreg("+", pr_url)
-          vim.notify("PR URL copied to clipboard: " .. pr_url, vim.log.levels.INFO)
-          return
-        end
+        -- if hostname ~= "github.com" then
+        --   vim.fn.setreg("+", pr_url)
+        --   vim.notify("PR URL copied to clipboard: " .. pr_url, vim.log.levels.INFO)
+        --   return
+        -- end
 
         vim.cmd("tabnew")
         local ok = pcall(vim.cmd, ("Octo pr edit %s %s"):format(pr_number, repo))

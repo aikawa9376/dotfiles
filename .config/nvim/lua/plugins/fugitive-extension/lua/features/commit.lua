@@ -80,6 +80,40 @@ function M.setup(group)
     group = group,
     pattern = 'git',
     callback = function(ev)
+      -- Highlight diff paths
+      local ns_id = vim.api.nvim_create_namespace('git_diff_path_highlight')
+
+      local function apply_diff_highlights()
+        vim.api.nvim_buf_clear_namespace(ev.buf, ns_id, 0, -1)
+
+        local lines = vim.api.nvim_buf_get_lines(ev.buf, 0, -1, false)
+        for idx, line in ipairs(lines) do
+          if line:match('^diff') then
+            local prefix_a = 'diff --git a/'
+            local path1_start_col_0based = #prefix_a
+
+            local b_start_1based, _ = line:find(' b/', #prefix_a + 1)
+
+            if b_start_1based then
+              local path1_end_col_0based = b_start_1based - 1
+
+              vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, path1_start_col_0based, {
+                end_col = path1_end_col_0based,
+                hl_group = 'GitSignsChange',
+              })
+
+              local path2_start_col_0based = b_start_1based + #' b/' - 1
+              vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, path2_start_col_0based, {
+                end_col = #line,
+                hl_group = 'GitSignsAdd',
+              })
+            end
+          end
+        end
+      end
+
+      apply_diff_highlights()
+
       local function update_flog_highlight()
         utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, utils.get_commit(ev.buf))
       end
@@ -181,10 +215,13 @@ function M.setup(group)
         print('Copied: ' .. short_commit)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
-      vim.keymap.set('n', 'R', function()
+      vim.keymap.set('n', '<Leader>R', function()
         local cursor_commit = vim.api.nvim_get_current_line():match('^(%x+)')
         vim.cmd('G reset --mixed ' .. cursor_commit)
       end, { buffer = ev.buf, nowait = true, silent = true })
+
+      -- all close
+      vim.keymap.set('n', 'R', function() vim.cmd('e!') end, { buffer = ev.buf, silent = true })
     end,
   })
 end
