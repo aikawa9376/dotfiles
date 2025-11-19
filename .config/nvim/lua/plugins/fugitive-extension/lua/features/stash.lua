@@ -66,7 +66,15 @@ function M.setup(group)
       -- Let fugitive know how to find the git object on each line
       vim.b[bufnr].fugitive_object_pattern = [[\v(stash@\{[0-9]+\})]]
 
-      vim.keymap.set('n', '<CR>', function()
+      vim.keymap.set('n', 'A', function()
+        local stash_ref = get_stash_ref()
+        if stash_ref then
+          vim.cmd('Git stash apply ' .. stash_ref)
+          refresh_stash_list(bufnr)
+        end
+      end, { buffer = bufnr, silent = true, desc = "Apply stash" })
+
+      vim.keymap.set('n', 'P', function()
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Git stash pop ' .. stash_ref)
@@ -74,7 +82,7 @@ function M.setup(group)
         end
       end, { buffer = bufnr, silent = true, desc = "Pop stash" })
 
-      vim.keymap.set('n', 'D', function()
+      vim.keymap.set('n', 'X', function()
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Git stash drop ' .. stash_ref)
@@ -90,12 +98,12 @@ function M.setup(group)
         end
       end, { buffer = bufnr, silent = true, desc = "Open stash diff in new tab" })
 
-      vim.keymap.set('n', 'p', function()
+      vim.keymap.set('n', '<CR>', function()
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Gvsplit ' .. stash_ref)
         end
-      end, { buffer = bufnr, silent = true, desc = "Open stash diff in new tab" })
+      end, { buffer = bufnr, silent = true, desc = "Open stash diff in split buffer" })
 
       -- Set buffer options
       vim.opt_local.number = false
