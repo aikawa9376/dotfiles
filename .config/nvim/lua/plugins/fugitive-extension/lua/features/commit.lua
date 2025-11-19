@@ -147,9 +147,13 @@ function M.setup(group)
       -- d: Diffview
       vim.keymap.set('n', 'd', function()
         local commit = utils.get_commit(ev.buf)
+        if commit == '' then
+          commit = vim.api.nvim_get_current_line():match('^(%x+)')
+        end
         if not commit then
           return
         end
+
         local filepath = utils.get_filepath_at_cursor(ev.buf)
 
         vim.schedule(function()
