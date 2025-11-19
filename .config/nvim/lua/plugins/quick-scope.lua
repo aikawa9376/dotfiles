@@ -6,7 +6,7 @@ return {
     vim.g.qs_ignorecase = 1
     vim.g.qs_filetype_blacklist = {
       'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
-      'DressingSelect', 'mason', 'fugitiveblame',
+      'DressingSelect', 'mason', 'fugitiveblame', 'git',
       'vista', 'qf', 'fzf', 'noice', 'lazygit'
     }
   end
