@@ -143,7 +143,7 @@ function M.setup(group)
         if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
           vim.api.nvim_win_close(vim.g.flog_win, true)
         end
-        vim.cmd('q')
+        require"utilities".smart_close()
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Close status and Flog window' })
 
       -- カーソル行のコミットを一つ前のコミットにfixupする
