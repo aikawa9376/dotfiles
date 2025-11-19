@@ -139,13 +139,6 @@ function M.setup(group)
         end
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Toggle Flog window' })
 
-      vim.keymap.set('n', 'q', function()
-        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
-          vim.api.nvim_win_close(vim.g.flog_win, true)
-        end
-        require"utilities".smart_close()
-      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Close status and Flog window' })
-
       -- カーソル行のコミットを一つ前のコミットにfixupする
       vim.keymap.set('n', '<Leader>cf', function()
         -- fugitiveバッファのgitディレクトリを取得
@@ -206,15 +199,25 @@ function M.setup(group)
           else
             print('Fixup completed: ' .. commit_hash:sub(1, 7) .. ' -> ' .. parent_commit_hash:sub(1, 7))
             -- ステータスを更新
-            vim.cmd('edit')
+            vim.fn['fugitive#ReloadStatus']()
           end
         else
           print('Error: Failed to create temp script')
         end
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Fixup commit under cursor into its parent' })
 
+      vim.keymap.set('n', 'q', function()
+        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+          vim.api.nvim_win_close(vim.g.flog_win, true)
+        end
+        require"utilities".smart_close()
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Close status and Flog window' })
+
       -- all close
-      vim.keymap.set('n', 'R', function() vim.cmd('e!') end, { buffer = ev.buf, silent = true })
+      vim.keymap.set('n', 'R', function()
+        vim.cmd('e!')
+        vim.cmd('normal gU')
+      end, { buffer = ev.buf, silent = true })
     end,
   })
 end
