@@ -7,6 +7,7 @@ function M.setup()
   require('features.blame').setup(group)
   require('features.commit').setup(group)
   require('features.blob').setup(group)
+  require('features.stash').setup(group)
   require('features.commands').setup()
 end
 
