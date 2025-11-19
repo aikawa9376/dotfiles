@@ -1,6 +1,10 @@
 local M = {}
 local utils = require("utils")
 
+local float_win = nil
+local float_buf = nil
+local is_navigating = false
+
 _G.fugitive_foldtext = function()
   local line = vim.fn.getline(vim.v.foldstart)
   local filename = line:match("^diff %-%-git [ab]/(.+) [ab]/") or line:match("^(%S+)") or "folding"
@@ -165,6 +169,90 @@ function M.setup(group)
         end)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
+      -- C: コミット概要をフロートウィンドウで表示
+      local function update_commit_info_float(commit)
+        if not float_buf or not vim.api.nvim_buf_is_valid(float_buf) then
+          return
+        end
+        -- Use git show with custom format to get pre-formatted date
+        local command = "git show -s --date=format:'%Y-%m-%d %H:%M' --format='tree %T%nparent %P%nauthor %an <%ae> %ad%ncommitter %cn <%ce> %ad%n%n%B' " .. vim.fn.shellescape(commit)
+        local commit_info = vim.fn.systemlist(command)
+        if vim.v.shell_error ~= 0 then
+          return
+        end
+
+        -- Trim trailing empty lines from the output
+        while #commit_info > 0 and commit_info[#commit_info] == '' do
+          table.remove(commit_info)
+        end
+
+        vim.bo[float_buf].modifiable = true
+        vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, commit_info)
+        vim.bo[float_buf].modifiable = false
+
+        if float_win and vim.api.nvim_win_is_valid(float_win) then
+          local line_count = #commit_info
+          local height = math.min(line_count, vim.o.lines - 4)
+          vim.api.nvim_win_set_height(float_win, height)
+        end
+      end
+
+      vim.api.nvim_create_autocmd('BufLeave', {
+        buffer = ev.buf,
+        callback = function()
+          if is_navigating then
+            return
+          end
+          if float_win and vim.api.nvim_win_is_valid(float_win) then
+            vim.api.nvim_win_close(float_win, true)
+            float_win = nil
+            float_buf = nil
+          end
+        end,
+      })
+
+      -- K: コミット概要をフロートウィンドウで表示
+      vim.keymap.set('n', 'C', function()
+        local commit = utils.get_commit(ev.buf)
+        if not commit then
+          print('No commit found')
+          return
+        end
+
+        if float_win and vim.api.nvim_win_is_valid(float_win) then
+          vim.api.nvim_win_close(float_win, true)
+          float_win = nil
+          float_buf = nil
+          return
+        end
+
+        float_buf = vim.api.nvim_create_buf(false, true)
+        vim.bo[float_buf].modifiable = false
+        vim.bo[float_buf].filetype = 'git'
+
+        local width = math.min(80, vim.o.columns - 4)
+        local height = math.min(30, vim.o.lines - 4)
+        local col = vim.o.columns - width - 4
+        local row = 2
+
+        float_win = vim.api.nvim_open_win(float_buf, false, {
+          relative = 'editor',
+          width = width,
+          height = height,
+          col = col,
+          row = row,
+          style = 'minimal',
+          border = 'single',
+          title = ' Commit Info ',
+          title_pos = 'center',
+        })
+
+        update_commit_info_float(commit)
+
+        vim.api.nvim_set_option_value('wrap', false, { win = float_win })
+        vim.api.nvim_set_option_value('cursorline', false, { win = float_win })
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Show commit info in float window' })
+
       -- p: 前のコミット
       vim.keymap.set('n', 'p', function()
         local commit = utils.get_commit(ev.buf)
@@ -182,8 +270,13 @@ function M.setup(group)
           return
         end
 
+        local prev_commit = result[1]
+        is_navigating = true
         vim.schedule(function()
-          vim.cmd('Gedit ' .. result[1])
+          vim.cmd('Gedit ' .. prev_commit)
+          if float_win and vim.api.nvim_win_is_valid(float_win) then
+            update_commit_info_float(prev_commit)
+          end
           vim.schedule(function()
             local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
             for i, line in ipairs(lines) do
@@ -193,6 +286,7 @@ function M.setup(group)
                 break
               end
             end
+            is_navigating = false
           end)
         end)
       end, { buffer = ev.buf, nowait = true, silent = true })
