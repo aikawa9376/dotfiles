@@ -136,17 +136,33 @@ function M.setup(group)
           vim.api.nvim_win_close(vim.g.flog_win, false)
           vim.g.flog_win = nil
           vim.g.flog_bufnr = nil
+          vim.g.flog_opener_bufnr = nil
         else
           local current_win = vim.api.nvim_get_current_win()
           vim.cmd("Flogsplit -open-cmd=vertical\\ rightbelow\\ 60vsplit")
           vim.g.flog_bufnr = vim.api.nvim_get_current_buf()
           vim.g.flog_win = vim.api.nvim_get_current_win()
+          vim.g.flog_opener_bufnr = ev.buf
 
           utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
           update_flog_highlight()
           vim.api.nvim_set_current_win(current_win)
         end
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Toggle Flog window' })
+
+      vim.api.nvim_create_autocmd('BufUnload', {
+        buffer = ev.buf,
+        callback = function(args)
+          if vim.g.flog_opener_bufnr and vim.g.flog_opener_bufnr == args.buf then
+            if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+              vim.api.nvim_win_close(vim.g.flog_win, true)
+              vim.g.flog_win = nil
+              vim.g.flog_bufnr = nil
+              vim.g.flog_opener_bufnr = nil
+            end
+          end
+        end,
+      })
 
       -- d: Diffview
       vim.keymap.set('n', 'd', function()

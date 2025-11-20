@@ -113,6 +113,79 @@ function M.setup()
   end
 
   vim.api.nvim_create_user_command("GitPush", git_push, {})
+
+  local function git_cherry_pick(opts)
+    local reg_char = opts.reg or ''
+    local reg_name = reg_char == '' and '""' or '"' .. reg_char .. '"'
+
+    local hashes_str = vim.fn.getreg(reg_char)
+
+    if hashes_str == nil or hashes_str == '' then
+      vim.notify('Register ' .. reg_name .. ' is empty.', vim.log.levels.WARN)
+      return
+    end
+
+    -- Sanitize hashes string: replace newlines with spaces and trim whitespace.
+    hashes_str = vim.fn.trim((hashes_str:gsub('[\r\n]+', ' ')))
+
+    if hashes_str == '' then
+      vim.notify('Register ' .. reg_name .. ' contains only whitespace.', vim.log.levels.WARN)
+      return
+    end
+
+    -- fugitiveバッファのgitディレクトリを取得
+    local git_dir = vim.fn.FugitiveGitDir()
+    if git_dir == '' then
+      vim.notify("Not in a git repository", vim.log.levels.ERROR)
+      return
+    end
+
+    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
+      return
+    end
+
+    vim.notify("Cherry-picking: " .. hashes_str, vim.log.levels.INFO)
+
+    local output_lines = {}
+    local cmd = "git -C " .. vim.fn.shellescape(work_tree) .. " cherry-pick " .. hashes_str
+    vim.fn.jobstart(cmd, {
+      on_exit = function(_, exit_code)
+        vim.schedule(function()
+          local message = table.concat(output_lines, "\n")
+          if exit_code == 0 then
+            vim.notify("Cherry-pick successful\n" .. message, vim.log.levels.INFO)
+          else
+            vim.notify("Cherry-pick failed\n" .. message, vim.log.levels.ERROR)
+          end
+        end)
+        vim.fn['fugitive#ReloadStatus']()
+      end,
+      on_stdout = function(_, data)
+        if data then
+          for _, line in ipairs(data) do
+            if line and line ~= "" then
+              table.insert(output_lines, line)
+            end
+          end
+        end
+      end,
+      on_stderr = function(_, data)
+        if data then
+          for _, line in ipairs(data) do
+            if line and line ~= "" then
+              table.insert(output_lines, line)
+            end
+          end
+        end
+      end,
+    })
+  end
+
+  vim.api.nvim_create_user_command("GCherryPick", git_cherry_pick, { register = true })
 end
 
 return M

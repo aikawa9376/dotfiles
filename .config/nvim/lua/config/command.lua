@@ -114,7 +114,7 @@ ft_keymap('git', 'n', '[[', '<Cmd>silent! normal! zc<CR>[/<Cmd>normal! zo<CR>', 
 ft_keymap('git', 'n', 'o', 'za', { nowait = true, remap = true })
 ft_keymap('git', 'n', 'i', '<Plug>fugitive:)zt', { nowait = true, remap = true })
 ft_keymap({ 'fugitiveblame', 'git' }, 'n', '<CR>', '<Plug>fugitive:O', { nowait = true, remap = true })
-ft_keymap({ 'git', 'fugitivestash' }, 'n', 'q', function () require"utilities".smart_close() end, { nowait = true, remap = true })
+ft_keymap({ 'git', 'fugitivestash', 'fugitivebranch' }, 'n', 'q', function () require"utilities".smart_close() end, { nowait = true, remap = true })
 ft_keymap('noice', 'n', '<ESC>', '<C-w>c', { nowait = true })
 ft_keymap({ 'help', 'qf', 'fugitive', 'defx', 'vista', 'neo-tree' }, 'n', '<C-c>', '<C-w>c', { nowait = true })
 ft_keymap('gitcommit', 'n', 'q', ':<c-u>wq<CR>', { nowait = true })

@@ -17,6 +17,6 @@ return {
     { "g<space>d", "<cmd>G diff<CR>", silent = true },
     { "g<space>r", "<cmd>G reflog<CR>", silent = true },
     { "g<space>s", "<cmd>G show<CR>", silent = true },
-    { "g<space>b", "<cmd>G branch -vv --all<CR>", silent = true },
+    { "g<space>b", "<cmd>Gbranch<CR>", silent = true },
   },
 }
