@@ -1,6 +1,6 @@
 return {
   "pwntester/octo.nvim",
-  cmd = { "Octo", "OctoPrFromSha" },
+  cmd = { "Octo", "OctoPrFromSha", "OctoPrFromBranch" },
   config = function ()
     require"octo".setup({
       picker = "fzf-lua"
@@ -77,6 +77,54 @@ return {
         open_pr(pr_numbers[1])
       else
         vim.ui.select(pr_numbers, { prompt = "Select PR" }, function(choice)
+          if choice then open_pr(choice) end
+        end)
+      end
+    end, { nargs = "?" })
+
+    vim.api.nvim_create_user_command("OctoPrFromBranch", function(opts)
+      local branch_name = opts.args
+      if branch_name == "" then
+        branch_name = vim.system({'git', 'rev-parse', '--abbrev-ref', 'HEAD'}, {text = true}):wait().stdout
+      end
+      branch_name = vim.fn.trim(branch_name)
+
+      if not branch_name or branch_name == "" then
+        vim.notify("Could not determine branch name.", vim.log.levels.WARN)
+        return
+      end
+
+      local hostname, repo = parse_git_remote()
+
+      local out = vim.system({
+        "gh", "pr", "list", "--head", branch_name, "--json", "number", "-q", ".[].number"
+      }, { text = true }):wait().stdout or ""
+
+      local pr_numbers = {}
+      for n in out:gmatch("%d+") do
+        table.insert(pr_numbers, n)
+      end
+
+      if #pr_numbers == 0 then
+        vim.notify("No associated PRs for branch " .. branch_name, vim.log.levels.WARN)
+        return
+      end
+
+      local function open_pr(pr_number)
+        local pr_url = ("https://%s/%s/pull/%s"):format(hostname, repo, pr_number)
+
+        vim.cmd("tabnew")
+        local ok = pcall(vim.cmd, ("Octo pr edit %s %s"):format(pr_number, repo))
+        if not ok then
+          vim.fn.setreg("+", pr_url)
+          vim.notify("Octo failed. URL copied to clipboard: " .. pr_url, vim.log.levels.WARN)
+        end
+      end
+
+      if #pr_numbers == 1 then
+        open_pr(pr_numbers[1])
+      else
+        vim.ui.select(pr_numbers, { prompt = "Select PR for branch " .. branch_name }, function(choice)
           if choice then open_pr(choice) end
         end)
       end

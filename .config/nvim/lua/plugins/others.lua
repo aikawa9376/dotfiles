@@ -32,7 +32,7 @@ return {
   {
     "rhysd/git-messenger.vim",
     keys = {
-      { "g<space>", "<Plug>(git-messenger)", silent = true },
+      { "g<space><space>", "<Plug>(git-messenger)", silent = true },
     }
   },
   {

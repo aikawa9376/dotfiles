@@ -1,0 +1,457 @@
+local M = {}
+
+local function get_ahead_behind(branch, upstream)
+  if not upstream or upstream == '' then
+    return 0, 0
+  end
+
+  local result = vim.fn.system(string.format('git rev-list --left-right --count %s...%s 2>/dev/null', branch, upstream))
+  if vim.v.shell_error ~= 0 then
+    return 0, 0
+  end
+
+  local ahead, behind = result:match('(%d+)%s+(%d+)')
+  return tonumber(ahead) or 0, tonumber(behind) or 0
+end
+
+local function get_branch_list()
+  local local_branches = vim.fn.systemlist("git for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(contents:subject)' refs/heads/")
+  local remote_branches = vim.fn.systemlist("git for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(contents:subject)' refs/remotes/")
+
+  if vim.v.shell_error ~= 0 then
+    return {}
+  end
+
+  -- Combine local branches first, then remote branches
+  local raw_branches = {}
+  for _, line in ipairs(local_branches) do
+    table.insert(raw_branches, line)
+  end
+  for _, line in ipairs(remote_branches) do
+    -- Skip "origin" alone (origin/HEAD symref)
+    local branch = line:match('^[* ]?|([^|]+)')
+    if branch ~= 'origin' then
+      table.insert(raw_branches, line)
+    end
+  end
+
+  -- First pass: collect all data
+  local branches = {}
+  local max_branch_len = 0
+  local max_push_len = 0
+  local max_subject_len = 0
+
+  for _, line in ipairs(raw_branches) do
+    local head, branch, upstream, subject = line:match('^([* ]?)|(.-)|(.-)|(.*)')
+    if branch then
+      local ahead, behind = get_ahead_behind(branch, upstream)
+
+      local push_info = ''
+      if ahead > 0 then
+        push_info = push_info .. string.format('↑%d', ahead)
+      end
+      if behind > 0 then
+        push_info = push_info .. (push_info ~= '' and ' ' or '') .. string.format('↓%d', behind)
+      end
+
+      local upstream_str = upstream ~= '' and string.format('[%s]', upstream) or ''
+
+      table.insert(branches, {
+        head = head == '*' and '* ' or '  ',
+        branch = branch,
+        push_info = push_info,
+        subject = subject,
+        upstream_str = upstream_str,
+      })
+
+      max_branch_len = math.max(max_branch_len, vim.fn.strdisplaywidth(branch))
+      max_push_len = math.max(max_push_len, vim.fn.strdisplaywidth(push_info))
+      max_subject_len = math.max(max_subject_len, vim.fn.strdisplaywidth(subject))
+    end
+  end
+
+  -- Second pass: format with calculated widths
+  -- Cap widths to avoid string.format limits (max 99)
+  max_branch_len = math.min(max_branch_len, 50)
+  max_push_len = math.min(max_push_len, 20)
+  max_subject_len = 50  -- Fixed width for subject
+
+  -- Helper function to pad string based on display width
+  local function pad_right(str, width)
+    local display_width = vim.fn.strdisplaywidth(str)
+    if display_width >= width then
+      return str
+    end
+    return str .. string.rep(' ', width - display_width)
+  end
+
+  local formatted = {}
+  for _, b in ipairs(branches) do
+    -- Combine branch name with push info
+    local branch_block = b.branch
+    if b.push_info ~= '' then
+      branch_block = branch_block .. ' ' .. b.push_info
+    end
+
+    -- Truncate subject if too long
+    local subject = b.subject
+    if vim.fn.strdisplaywidth(subject) > max_subject_len then
+      subject = vim.fn.strcharpart(subject, 0, max_subject_len - 3) .. '...'
+    end
+
+    local line = b.head .. pad_right(branch_block, max_branch_len) .. '  ' .. pad_right(subject, max_subject_len)
+    -- Add upstream if exists, otherwise trim trailing spaces
+    if b.upstream_str ~= '' then
+      line = line .. '  ' .. b.upstream_str
+    else
+      line = line:gsub('%s+$', '')
+    end
+    table.insert(formatted, line)
+  end
+
+  return formatted
+end
+
+local function get_branch_name_from_line(line)
+  line = line or vim.api.nvim_get_current_line()
+  -- Extract branch name (after * or spaces, before first double space)
+  local branch = line:match('^[* ]%s*(%S+)')
+  return branch
+end
+
+local function refresh_branch_list(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
+
+  local branch_output = get_branch_list()
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
+
+  vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
+
+  vim.notify("Branch list refreshed", vim.log.levels.INFO)
+end
+
+
+local function delete_branches(bufnr, branches)
+  if #branches == 0 then
+    vim.notify("No branches to delete", vim.log.levels.WARN)
+    return
+  end
+
+  local branch_list = table.concat(branches, ", ")
+  local confirm = vim.fn.confirm(
+    string.format("Delete %d branch(es)?\n%s", #branches, branch_list),
+    "&Yes\n&No",
+    2
+  )
+
+  if confirm ~= 1 then
+    return
+  end
+
+  local deleted = {}
+  local failed = {}
+
+  for _, branch in ipairs(branches) do
+    -- Skip current branch (with *)
+    if branch:match('^%*') then
+      table.insert(failed, branch .. " (current branch)")
+    else
+      -- Try to delete branch
+      local result = vim.fn.system(string.format('git branch -d %s 2>&1', branch))
+      if vim.v.shell_error ~= 0 then
+        -- If normal delete fails, ask for force delete
+        if result:match("not fully merged") then
+          local force_confirm = vim.fn.confirm(
+            string.format("Branch '%s' is not fully merged. Force delete?", branch),
+            "&Yes\n&No",
+            2
+          )
+          if force_confirm == 1 then
+            result = vim.fn.system(string.format('git branch -D %s 2>&1', branch))
+            if vim.v.shell_error == 0 then
+              table.insert(deleted, branch)
+            else
+              table.insert(failed, branch .. " (" .. result:gsub("\n", "") .. ")")
+            end
+          else
+            table.insert(failed, branch .. " (cancelled)")
+          end
+        else
+          table.insert(failed, branch .. " (" .. result:gsub("\n", "") .. ")")
+        end
+      else
+        table.insert(deleted, branch)
+      end
+    end
+  end
+
+  -- Show results
+  if #deleted > 0 then
+    vim.notify(string.format("Deleted: %s", table.concat(deleted, ", ")), vim.log.levels.INFO)
+  end
+  if #failed > 0 then
+    vim.notify(string.format("Failed: %s", table.concat(failed, ", ")), vim.log.levels.WARN)
+  end
+
+  -- Refresh the list
+  vim.defer_fn(function()
+    refresh_branch_list(bufnr)
+  end, 100)
+end
+
+local function checkout_branch(bufnr)
+  local branch = get_branch_name_from_line()
+  if not branch then
+    vim.notify("No branch found on this line", vim.log.levels.WARN)
+    return
+  end
+
+  -- Remove remotes/ prefix if present
+  local checkout_name = branch:gsub('^origin/', '')
+
+  vim.cmd('Git checkout ' .. checkout_name)
+
+  -- Refresh the branch list after checkout
+  vim.defer_fn(function()
+    refresh_branch_list(bufnr)
+  end, 200)
+end
+
+local function rename_branch(bufnr)
+  local old_name = get_branch_name_from_line()
+  if not old_name then
+    vim.notify("No branch found on this line", vim.log.levels.WARN)
+    return
+  end
+
+  -- Can't rename remote branches directly.
+  if old_name:match('^origin/') then
+    vim.notify("Cannot rename remote branches directly.", vim.log.levels.WARN)
+    return
+  end
+
+  local new_name = vim.fn.input('Rename ' .. old_name .. ' to: ', old_name)
+  vim.cmd('redraw') -- Clear the prompt.
+
+  if new_name == nil or new_name == '' or new_name == old_name then
+    vim.notify("Rename cancelled.", vim.log.levels.INFO)
+    return
+  end
+
+  local cmd = string.format("git branch -m %s %s", vim.fn.shellescape(old_name), vim.fn.shellescape(new_name))
+  local result = vim.fn.system(cmd)
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to rename branch: " .. vim.fn.trim(result), vim.log.levels.ERROR)
+  else
+    vim.notify(string.format("Renamed branch %s to %s", old_name, new_name), vim.log.levels.INFO)
+    vim.defer_fn(function()
+      refresh_branch_list(bufnr)
+    end, 100)
+  end
+end
+
+local function open_branch_list()
+  local branch_output = get_branch_list()
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
+    return
+  end
+
+  if #branch_output == 0 then
+    vim.notify("No branches found.", vim.log.levels.INFO)
+    return
+  end
+
+  vim.cmd('botright split fugitive-branch://')
+  local bufnr = vim.api.nvim_get_current_buf()
+
+  -- Set modifiable before setting lines
+  vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
+
+  vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
+  vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
+  vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
+  vim.wo[vim.api.nvim_get_current_win()].wrap = false
+  vim.bo[bufnr].filetype = 'fugitivebranch'
+  vim.bo[bufnr].modifiable = false
+end
+
+function M.setup(group)
+  vim.api.nvim_create_user_command('Gbranch', open_branch_list, {
+    bang = false,
+    desc = "Open git branch list",
+  })
+
+  vim.api.nvim_create_autocmd('FileType', {
+    group = group,
+    pattern = 'fugitivebranch',
+    callback = function(ev)
+      local bufnr = ev.buf
+
+      -- Add checkout keymap
+      vim.keymap.set('n', 'coo', function()
+        checkout_branch(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Checkout branch" })
+
+      vim.keymap.set('n', '<CR>', function()
+        local branch = get_branch_name_from_line()
+        if not branch then
+          vim.notify("No branch found on this line", vim.log.levels.WARN)
+          return
+        end
+        vim.cmd('Gedit ' .. branch)
+      end, { buffer = bufnr, silent = true, desc = "Gedit branch" })
+
+      vim.keymap.set('n', 'r', function()
+        refresh_branch_list(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Refresh branch list" })
+
+      -- Add cherrypick keymap
+      vim.keymap.set('n', 'cP', function()
+        -- flog copy register uses +
+        vim.cmd('GCherryPick +')
+        refresh_branch_list(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "cherrypick branch" })
+
+      -- Add git push keymap
+      vim.keymap.set('n', '<Leader>gp', function()
+        vim.cmd('GitPush')
+        refresh_branch_list(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "cherrypick branch" })
+
+      -- Add Octo pr show keymap
+      vim.keymap.set('n', 'O', function()
+        local branch = get_branch_name_from_line()
+        if branch then
+          vim.cmd('OctoPrFromBranch '.. branch)
+        end
+      end, { buffer = bufnr, silent = true, desc = "Open PR for branch" })
+
+      -- bw: Rename branch
+      vim.keymap.set('n', 'bw', function()
+        rename_branch(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Rename branch" })
+
+      -- X: Delete branch(es)
+      vim.keymap.set('n', 'X', function()
+        local branch = get_branch_name_from_line()
+        if branch then
+          delete_branches(bufnr, {branch})
+        end
+      end, { buffer = bufnr, silent = true, desc = "Delete branch" })
+
+      vim.keymap.set('v', 'X', function()
+        local start_line = vim.fn.line('v')
+        local end_line = vim.fn.line('.')
+        if start_line > end_line then
+          start_line, end_line = end_line, start_line
+        end
+
+        local branches = {}
+        for i = start_line, end_line do
+          local line = vim.fn.getline(i)
+          local branch = get_branch_name_from_line(line)
+          if branch then
+            table.insert(branches, branch)
+          end
+        end
+
+        delete_branches(bufnr, branches)
+      end, { buffer = bufnr, silent = true, desc = "Delete branches" })
+
+      -- <C-Space>: Flog window toggle for current branch
+      vim.keymap.set('n', '<C-Space>', function()
+        local branch = get_branch_name_from_line()
+        if not branch then
+          vim.notify("No branch found on this line", vim.log.levels.WARN)
+          return
+        end
+
+        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+          vim.api.nvim_win_close(vim.g.flog_win, false)
+          vim.g.flog_win = nil
+          vim.g.flog_bufnr = nil
+          vim.g.flog_branch_bufnr = nil
+        else
+          local current_win = vim.api.nvim_get_current_win()
+          vim.cmd(string.format("Flogsplit -open-cmd=vertical\\ rightbelow\\ 60vsplit -rev=%s", branch))
+          vim.g.flog_bufnr = vim.api.nvim_get_current_buf()
+          vim.g.flog_win = vim.api.nvim_get_current_win()
+          vim.g.flog_branch_bufnr = bufnr
+
+          local utils = require("utils")
+          utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
+          vim.api.nvim_set_current_win(current_win)
+        end
+      end, { buffer = bufnr, nowait = true, silent = true, desc = 'Toggle Flog graph for branch' })
+
+      -- Update Flog on cursor move if Flog window is open
+      vim.api.nvim_create_autocmd('CursorMoved', {
+        buffer = bufnr,
+        callback = function()
+          if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) and vim.g.flog_branch_bufnr == bufnr then
+            local branch = get_branch_name_from_line()
+            if branch then
+              local current_win = vim.api.nvim_get_current_win()
+
+              -- Close old Flog window
+              vim.api.nvim_win_close(vim.g.flog_win, false)
+
+              -- Open new Flog with new branch
+              vim.cmd(string.format("Flogsplit -open-cmd=vertical\\ rightbelow\\ 60vsplit -rev=%s", branch))
+              vim.g.flog_bufnr = vim.api.nvim_get_current_buf()
+              vim.g.flog_win = vim.api.nvim_get_current_win()
+
+              local utils = require("utils")
+              utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
+              vim.api.nvim_set_current_win(current_win)
+            end
+          end
+        end,
+      })
+
+      vim.api.nvim_create_autocmd('BufUnload', {
+        buffer = bufnr,
+        callback = function(args)
+          if vim.g.flog_branch_bufnr and vim.g.flog_branch_bufnr == args.buf then
+            if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+              vim.api.nvim_win_close(vim.g.flog_win, true)
+              vim.g.flog_win = nil
+              vim.g.flog_bufnr = nil
+              vim.g.flog_branch_bufnr = nil
+            end
+          end
+        end,
+      })
+
+      -- Set buffer options
+      vim.opt_local.number = false
+      vim.opt_local.relativenumber = false
+      vim.opt_local.signcolumn = 'no'
+
+      -- Setup syntax highlighting for branch names
+      vim.cmd([[
+        syntax clear
+        syntax match FugitiveBranchName /^\s*\*\?\s*\zs\S\+/
+        syntax match FugitiveBranchCurrent /^\s*\*\s*\zs\S\+/
+        highlight default link FugitiveBranchName Directory
+        highlight default link FugitiveBranchCurrent String
+      ]])
+
+      -- Load fugitive's default mappings
+      vim.defer_fn(function()
+        if vim.api.nvim_buf_is_valid(bufnr) then
+          vim.cmd('runtime! ftplugin/git.vim ftplugin/git_*.vim after/ftplugin/git.vim')
+        end
+      end, 10)
+    end,
+  })
+end
+
+return M
