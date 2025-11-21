@@ -96,7 +96,6 @@ end
 
 ft_keymap({ 'help', 'qf' }, 'n', '<CR>', '<CR>')
 ft_keymap({ 'help', 'qf', 'fugitive' }, 'n', 'q', '<C-w>c', { nowait = true })
-ft_keymap('fugitive', 'n', '<Space>gp', ':<c-u>Git! push<CR><C-w>c')
 ft_keymap('fugitive', 'n', 'o', '<Plug>fugitive:=')
 ft_keymap('fugitive', 'n', 'i', '<Plug>fugitive:izt')
 ft_keymap('fugitive', 'n', 's', '<Plug>fugitive:-', { nowait = true })

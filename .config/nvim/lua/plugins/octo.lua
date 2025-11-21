@@ -97,7 +97,7 @@ return {
       local hostname, repo = parse_git_remote()
 
       local out = vim.system({
-        "gh", "pr", "list", "--head", branch_name, "--json", "number", "-q", ".[].number"
+        "gh", "pr", "list", "--head", branch_name, "--state", "all", "--json", "number", "-q", ".[].number"
       }, { text = true }):wait().stdout or ""
 
       local pr_numbers = {}
