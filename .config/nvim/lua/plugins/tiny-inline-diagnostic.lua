@@ -1,6 +1,7 @@
 return {
   "rachartier/tiny-inline-diagnostic.nvim",
-  event = "BufReadPre",
+  event = "BufRead",
+  config = true,
   opts = {
     preset = "minimal",
     options = {

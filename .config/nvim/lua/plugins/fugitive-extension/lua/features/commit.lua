@@ -29,16 +29,16 @@ _G.fugitive_foldtext = function()
   end
 
   local added, removed, changed = 0, 0, 0
-      for i = vim.v.foldstart, vim.v.foldend do
-        local l = vim.fn.getline(i)
-        if l:match("^%+[^%+]") then
-          added = added + 1
-        elseif l:match("^%-[^%-]") then
-          removed = removed + 1
-        elseif l:match("^~") then
-          changed = changed + 1
-        end
-      end
+  for i = vim.v.foldstart, vim.v.foldend do
+    local l = vim.fn.getline(i)
+    if l:match("^%+[^%+]") then
+      added = added + 1
+    elseif l:match("^%-[^%-]") then
+      removed = removed + 1
+    elseif l:match("^~") then
+      changed = changed + 1
+    end
+  end
   local result = {}
 
   if is_deleted then
@@ -164,6 +164,12 @@ function M.setup(group)
               vim.g.flog_opener_bufnr = nil
             end
           end
+
+          if float_win and vim.api.nvim_win_is_valid(float_win) then
+            vim.api.nvim_win_close(float_win, true)
+            float_win = nil
+            float_buf = nil
+          end
         end,
       })
 
@@ -216,21 +222,6 @@ function M.setup(group)
         end
       end
 
-      vim.api.nvim_create_autocmd('BufLeave', {
-        buffer = ev.buf,
-        callback = function()
-          if is_navigating then
-            return
-          end
-          -- Only close float window, don't touch flog window
-          if float_win and vim.api.nvim_win_is_valid(float_win) then
-            vim.api.nvim_win_close(float_win, true)
-            float_win = nil
-            float_buf = nil
-          end
-        end,
-      })
-
       -- K: コミット概要をフロートウィンドウで表示
       vim.keymap.set('n', 'C', function()
         local commit = utils.get_commit(ev.buf)
@@ -273,7 +264,7 @@ function M.setup(group)
         vim.api.nvim_set_option_value('cursorline', false, { win = float_win })
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Show commit info in float window' })
 
-      -- p: 前のコミット
+      -- p: カーソル位置ファイルの前のコミット
       vim.keymap.set('n', 'p', function()
         local commit = utils.get_commit(ev.buf)
         if not commit then
@@ -311,6 +302,15 @@ function M.setup(group)
             end
             is_navigating = false
           end)
+        end)
+      end, { buffer = ev.buf, nowait = true, silent = true })
+
+      -- ~: 前のコミット
+      vim.keymap.set('n', '~', function()
+        is_navigating = true
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>fugitive:~', true, false, true), 'n')
+        vim.schedule(function()
+          is_navigating = false
         end)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
