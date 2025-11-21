@@ -32,6 +32,90 @@ return {
         vim.api.nvim_set_hl(0, 'flogDate', { fg = '#7bb8c1' })
         -- ブランチ/タグ - マゼンタ
         vim.api.nvim_set_hl(0, 'flogRef', { fg = '#d871a6' })
+
+        -- X: Drop commits (works with visual selection)
+        vim.keymap.set({'n', 'v'}, 'X', function()
+          local mode = vim.fn.mode()
+          local commits = {}
+
+          if mode == 'v' or mode == 'V' or mode == '\22' then
+            -- Visual mode - get commits from each selected line
+            local saved_cursor = vim.api.nvim_win_get_cursor(0)
+            local start_pos = vim.fn.getpos('v')
+            local end_pos = vim.fn.getpos('.')
+            local start_line = math.min(start_pos[2], end_pos[2])
+            local end_line = math.max(start_pos[2], end_pos[2])
+
+            -- Exit visual mode first
+            vim.cmd('normal! \27')
+
+            -- Get hash for each line in selection
+            for line = start_line, end_line do
+              vim.api.nvim_win_set_cursor(0, {line, 0})
+              local hash = vim.fn['flog#Format']("%H")
+              if hash and hash ~= '' and not vim.tbl_contains(commits, hash) then
+                table.insert(commits, hash)
+              end
+            end
+
+            -- Restore cursor
+            vim.api.nvim_win_set_cursor(0, saved_cursor)
+          else
+            -- Normal mode - get current commit
+            local format_cmd = vim.fn['flog#Format']("%H")
+            table.insert(commits, format_cmd)
+          end
+
+          if #commits == 0 then
+            vim.notify('No commits found', vim.log.levels.WARN)
+            return
+          end
+
+          -- Confirm drop
+          local commit_str = #commits > 1
+            and string.format('%s ... %s (%d commits)', commits[1]:sub(1,7), commits[#commits]:sub(1,7), #commits)
+            or commits[1]:sub(1,7)
+          local confirm = vim.fn.confirm(
+            string.format('Drop %d commit(s)?\n%s', #commits, commit_str),
+            '&Yes\n&No',
+            2
+          )
+
+          if confirm ~= 1 then
+            return
+          end
+
+          -- Execute git rebase to drop commits
+          -- Get current branch name
+          local current_branch = vim.fn.system('git rev-parse --abbrev-ref HEAD'):gsub('\n', '')
+
+          if current_branch == 'HEAD' then
+            vim.notify('Cannot drop commits in detached HEAD state', vim.log.levels.ERROR)
+            return
+          end
+
+          local cmd
+          if #commits == 1 then
+            cmd = string.format('git rebase --onto %s^ %s %s', commits[1], commits[1], current_branch)
+          else
+            -- For multiple commits: rebase onto the commit before first, skipping up to last
+            cmd = string.format('git rebase --onto %s^ %s %s', commits[#commits], commits[1], current_branch)
+          end
+
+          vim.notify('Executing: ' .. cmd, vim.log.levels.INFO)
+          vim.notify('Dropping commits: ' .. commit_str, vim.log.levels.INFO)
+
+          local output = vim.fn.system(cmd)
+          if vim.v.shell_error ~= 0 then
+            vim.notify('Failed to drop commits:\n' .. output, vim.log.levels.ERROR)
+          else
+            vim.notify('Successfully dropped commits\nOutput: ' .. output, vim.log.levels.INFO)
+            -- Force reload flog
+            vim.schedule(function()
+              vim.cmd('normal u')
+            end)
+          end
+        end, { buffer = true, silent = true, desc = 'Drop commit(s)' })
       end,
     })
 
