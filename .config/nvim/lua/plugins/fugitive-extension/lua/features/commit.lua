@@ -153,6 +153,9 @@ function M.setup(group)
       vim.api.nvim_create_autocmd('BufUnload', {
         buffer = ev.buf,
         callback = function(args)
+          if is_navigating then
+            return
+          end
           if vim.g.flog_opener_bufnr and vim.g.flog_opener_bufnr == args.buf then
             if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
               vim.api.nvim_win_close(vim.g.flog_win, true)
@@ -219,6 +222,7 @@ function M.setup(group)
           if is_navigating then
             return
           end
+          -- Only close float window, don't touch flog window
           if float_win and vim.api.nvim_win_is_valid(float_win) then
             vim.api.nvim_win_close(float_win, true)
             float_win = nil
@@ -290,6 +294,9 @@ function M.setup(group)
         is_navigating = true
         vim.schedule(function()
           vim.cmd('Gedit ' .. prev_commit)
+          -- Update flog_opener_bufnr to the new buffer
+          vim.g.flog_opener_bufnr = vim.api.nvim_get_current_buf()
+          update_flog_highlight()
           if float_win and vim.api.nvim_win_is_valid(float_win) then
             update_commit_info_float(prev_commit)
           end
@@ -332,6 +339,17 @@ function M.setup(group)
       vim.keymap.set('n', '<Leader>R', function()
         local cursor_commit = vim.api.nvim_get_current_line():match('^(%x+)')
         vim.cmd('G reset --mixed ' .. cursor_commit)
+      end, { buffer = ev.buf, nowait = true, silent = true })
+
+      -- q: Close window and flog window
+      vim.keymap.set('n', 'q', function()
+        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+          vim.api.nvim_win_close(vim.g.flog_win, false)
+          vim.g.flog_win = nil
+          vim.g.flog_bufnr = nil
+          vim.g.flog_opener_bufnr = nil
+        end
+        require"utilities".smart_close()
       end, { buffer = ev.buf, nowait = true, silent = true })
 
       -- all close

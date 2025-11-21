@@ -72,7 +72,7 @@ local function get_branch_list()
 
   -- Second pass: format with calculated widths
   -- Cap widths to avoid string.format limits (max 99)
-  max_branch_len = math.min(max_branch_len, 50)
+  max_branch_len = math.min(max_branch_len, 70)
   max_push_len = math.min(max_push_len, 20)
   max_subject_len = 50  -- Fixed width for subject
 
@@ -96,7 +96,20 @@ local function get_branch_list()
     -- Truncate subject if too long
     local subject = b.subject
     if vim.fn.strdisplaywidth(subject) > max_subject_len then
-      subject = vim.fn.strcharpart(subject, 0, max_subject_len - 3) .. '...'
+      -- Truncate by display width instead of character count
+      local truncated = ''
+      local width = 0
+      local target_width = max_subject_len - 3
+      local chars = vim.fn.split(subject, '\\zs')
+      for _, char in ipairs(chars) do
+        local char_width = vim.fn.strdisplaywidth(char)
+        if width + char_width > target_width then
+          break
+        end
+        truncated = truncated .. char
+        width = width + char_width
+      end
+      subject = truncated .. '...'
     end
 
     local line = b.head .. pad_right(branch_block, max_branch_len) .. '  ' .. pad_right(subject, max_subject_len)
@@ -315,19 +328,31 @@ function M.setup(group)
       -- Add cherrypick keymap
       vim.keymap.set('n', 'cP', function()
         -- flog copy register uses +
-        vim.cmd('GCherryPick +')
-        refresh_branch_list(bufnr)
+        local commands = require('features.commands')
+        commands.git_cherry_pick({
+          reg = '+',
+          on_complete = function()
+            refresh_branch_list(bufnr)
+          end
+        })
       end, { buffer = bufnr, silent = true, desc = "cherrypick branch" })
 
       -- Add git push keymap
       vim.keymap.set('n', '<Leader>gp', function()
-        vim.cmd('GitPush')
-        refresh_branch_list(bufnr)
-      end, { buffer = bufnr, silent = true, desc = "cherrypick branch" })
+        local commands = require('features.commands')
+        commands.git_push({
+          on_complete = function()
+            refresh_branch_list(bufnr)
+          end
+        })
+      end, { buffer = bufnr, silent = true, desc = "git push" })
 
       -- Add Octo pr show keymap
       vim.keymap.set('n', 'O', function()
         local branch = get_branch_name_from_line()
+        if branch then
+          branch = branch:gsub('^origin/', '')
+        end
         if branch then
           vim.cmd('OctoPrFromBranch '.. branch)
         end

@@ -61,7 +61,10 @@ function M.setup()
     end)
   end, {})
 
-  local function git_push()
+  local function git_push(opts)
+    opts = opts or {}
+    local on_complete = opts.on_complete
+
     -- fugitiveバッファのgitディレクトリを取得
     local git_dir = vim.fn.FugitiveGitDir()
     if git_dir == '' then
@@ -88,6 +91,9 @@ function M.setup()
           else
             vim.notify("Push failed\n" .. message, vim.log.levels.ERROR)
           end
+          if on_complete then
+            on_complete(exit_code)
+          end
         end)
         vim.fn['fugitive#ReloadStatus']()
       end,
@@ -112,10 +118,13 @@ function M.setup()
     })
   end
 
-  vim.api.nvim_create_user_command("GitPush", git_push, {})
+  vim.api.nvim_create_user_command("GitPush", function()
+    git_push({})
+  end, {})
 
   local function git_cherry_pick(opts)
     local reg_char = opts.reg or ''
+    local on_complete = opts.on_complete
     local reg_name = reg_char == '' and '""' or '"' .. reg_char .. '"'
 
     local hashes_str = vim.fn.getreg(reg_char)
@@ -126,7 +135,13 @@ function M.setup()
     end
 
     -- Sanitize hashes string: replace newlines with spaces and trim whitespace.
-    hashes_str = vim.fn.trim((hashes_str:gsub('[\r\n]+', ' ')))
+    local hashes_list = vim.split(vim.fn.trim(hashes_str), '[\r\n]+')
+    -- Reverse the order for correct cherry-pick sequence
+    local reversed_hashes = {}
+    for i = #hashes_list, 1, -1 do
+      table.insert(reversed_hashes, hashes_list[i])
+    end
+    hashes_str = vim.fn.trim(table.concat(reversed_hashes, ' '))
 
     if hashes_str == '' then
       vim.notify('Register ' .. reg_name .. ' contains only whitespace.', vim.log.levels.WARN)
@@ -161,6 +176,9 @@ function M.setup()
           else
             vim.notify("Cherry-pick failed\n" .. message, vim.log.levels.ERROR)
           end
+          if on_complete then
+            on_complete(exit_code)
+          end
         end)
         vim.fn['fugitive#ReloadStatus']()
       end,
@@ -185,7 +203,13 @@ function M.setup()
     })
   end
 
-  vim.api.nvim_create_user_command("GCherryPick", git_cherry_pick, { register = true })
+  vim.api.nvim_create_user_command("GCherryPick", function(cmd_opts)
+    git_cherry_pick({ reg = cmd_opts.reg })
+  end, { register = true })
+
+  -- Export functions for use in other modules
+  M.git_push = git_push
+  M.git_cherry_pick = git_cherry_pick
 end
 
 return M
