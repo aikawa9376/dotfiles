@@ -268,6 +268,63 @@ local function rename_branch(bufnr)
   end
 end
 
+local function duplicate_branch(bufnr)
+  local old_name = get_branch_name_from_line()
+  if not old_name then
+    vim.notify("No branch found on this line", vim.log.levels.WARN)
+    return
+  end
+
+  -- Default: remove origin/ from remote branches for the default new name
+  local default_new_name = old_name:gsub('^origin/', '') .. '-copy'
+  local new_name = vim.fn.input('Duplicate ' .. old_name .. ' to: ', default_new_name)
+  vim.cmd('redraw') -- Clear the prompt.
+
+  if new_name == nil or new_name == '' or new_name == old_name then
+    vim.notify("Duplicate cancelled.", vim.log.levels.INFO)
+    return
+  end
+
+  -- Do not allow creating a new branch name that begins with the remote prefix
+  if new_name:match('^origin/') then
+    vim.notify("Please specify a local branch name (no remote prefixes).", vim.log.levels.WARN)
+    return
+  end
+
+  -- If a local branch with the target name exists, ask to overwrite
+  vim.fn.system(string.format('git rev-parse --verify --quiet refs/heads/%s 2>/dev/null', vim.fn.shellescape(new_name)))
+  if vim.v.shell_error == 0 then
+    local overwrite = vim.fn.confirm(
+      string.format("Local branch '%s' already exists. Overwrite?", new_name),
+      "&Yes\n&No",
+      2
+    )
+    if overwrite ~= 1 then
+      vim.notify("Duplicate cancelled.", vim.log.levels.INFO)
+      return
+    end
+    local del_result = vim.fn.system(string.format('git branch -D %s 2>&1', vim.fn.shellescape(new_name)))
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Failed to delete existing branch: " .. vim.fn.trim(del_result), vim.log.levels.ERROR)
+      return
+    end
+  end
+
+  -- Create a new local branch pointing to the same commit as `old_name`.
+  -- `old_name` may be local (e.g., "main") or remote (e.g., "origin/main")
+  local cmd = string.format('git branch %s %s 2>&1', vim.fn.shellescape(new_name), vim.fn.shellescape(old_name))
+  local result = vim.fn.system(cmd)
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to duplicate branch: " .. vim.fn.trim(result), vim.log.levels.ERROR)
+  else
+    vim.notify(string.format("Duplicated branch %s to %s", old_name, new_name), vim.log.levels.INFO)
+    vim.defer_fn(function()
+      refresh_branch_list(bufnr)
+    end, 100)
+  end
+end
+
 local function open_branch_list()
   local branch_output = get_branch_list()
   if vim.v.shell_error ~= 0 then
@@ -362,6 +419,11 @@ function M.setup(group)
       vim.keymap.set('n', 'bw', function()
         rename_branch(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Rename branch" })
+
+      -- bd: Duplicate branch (prompt for a new name and create local branch from selected one)
+      vim.keymap.set('n', 'cod', function()
+        duplicate_branch(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Duplicate branch" })
 
       -- X: Delete branch(es)
       vim.keymap.set('n', 'X', function()
