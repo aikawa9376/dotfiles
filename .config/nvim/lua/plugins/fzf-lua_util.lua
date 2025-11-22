@@ -100,6 +100,45 @@ local function addPrefixAction(action, prefix)
   end
 end
 
+local function copySelectedPathsToRegisterWithAt(selected)
+  if not selected or #selected == 0 then
+    vim.notify("No selection to copy", vim.log.levels.WARN)
+    return
+  end
+
+  local entry_to_file = require("fzf-lua.path").entry_to_file
+  local items = {}
+
+  for _, s in ipairs(selected) do
+    local ok, entry = pcall(entry_to_file, s)
+    local path = nil
+    if ok and entry and entry.path and entry.path ~= "" then
+      path = entry.path
+    else
+      path = removeUnicodeUtf8(s)
+    end
+
+    if path and path ~= "" then
+      table.insert(items, '@' .. path)
+    end
+  end
+
+  if #items == 0 then
+    vim.notify("No valid path to copy", vim.log.levels.WARN)
+    return
+  end
+
+  local joined = table.concat(items, "\n")
+  vim.fn.setreg('+', joined, 'l')
+  vim.fn.setreg('\"', joined, 'l')
+
+  if #items == 1 then
+    vim.notify("Copied: " .. items[1], vim.log.levels.INFO)
+  else
+    vim.notify("Copied " .. tostring(#items) .. " paths to register +", vim.log.levels.INFO)
+  end
+end
+
 -- ------------------------------------------------------------------
 -- Files Enhanced
 -- ------------------------------------------------------------------
@@ -119,7 +158,10 @@ local getFileOpt = function ()
         end
       end,
       fzf_lua.actions.resume
-    }
+    },
+    ["ctrl-a"] = function(selected)
+      copySelectedPathsToRegisterWithAt(selected)
+    end,
   })
   opts.file_icons = true
   opts.git_icons = true

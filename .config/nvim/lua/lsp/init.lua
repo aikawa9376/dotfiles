@@ -3,8 +3,8 @@ require("mason").setup()
 -- このファイルの存在するディレクトリ
 local dirname = vim.fn.stdpath('config') .. '/after/lsp'
 
--- 設定したlspを保存する配列 cmd扱いじゃないものは最初に追加
-local lsp_names = {'copilot'}
+-- 設定したlspを保存する配列
+local lsp_names = {}
 
 -- 同一ディレクトリのファイルをループ
 for file, ftype in vim.fs.dir(dirname) do
@@ -15,7 +15,7 @@ for file, ftype in vim.fs.dir(dirname) do
     -- lspconfigから実際のコマンド名を取得
     local ok, config = pcall(require, 'lspconfig.configs.' .. lsp_name)
     local cmd = ok and config.default_config and config.default_config.cmd
-    if cmd and vim.fn.executable(cmd[1]) == 1 then
+    if not ok or (cmd and vim.fn.executable(cmd[1]) == 1) then
       table.insert(lsp_names, lsp_name)
     end
   end

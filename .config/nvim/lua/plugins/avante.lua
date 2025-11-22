@@ -31,7 +31,7 @@ return {
     mode = "legacy",
     providers = {
       copilot = {
-        model = "gpt-5-mini",
+        model = "oswe-vscode-prime",
         endpoint = "https://api.githubcopilot.com",
         allow_insecure = false,
         timeout = 10 * 60 * 1000,

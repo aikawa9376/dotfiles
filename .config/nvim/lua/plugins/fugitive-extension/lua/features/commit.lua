@@ -285,8 +285,6 @@ function M.setup(group)
         is_navigating = true
         vim.schedule(function()
           vim.cmd('Gedit ' .. prev_commit)
-          -- Update flog_opener_bufnr to the new buffer
-          vim.g.flog_opener_bufnr = vim.api.nvim_get_current_buf()
           update_flog_highlight()
           if float_win and vim.api.nvim_win_is_valid(float_win) then
             update_commit_info_float(prev_commit)

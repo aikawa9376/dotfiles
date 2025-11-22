@@ -7,7 +7,7 @@ return {
     vim.g.qs_filetype_blacklist = {
       'neo-tree', 'help', 'fugitive', 'harpoon', 'DiffviewFiles',
       'DressingSelect', 'mason', 'fugitiveblame', 'git',
-      'vista', 'qf', 'fzf', 'noice', 'lazygit'
+      'vista', 'qf', 'fzf', 'noice', 'lazygit', 'Avante'
     }
   end
 }
