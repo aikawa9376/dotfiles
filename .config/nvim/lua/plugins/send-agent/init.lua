@@ -14,6 +14,7 @@ return {
   cmd = {
     "SendAgentScratch",
     "SendAgentToggle",
+    "SendAgentHistory",
     "SendAgentClose",
     "Claude",
     "Codex",

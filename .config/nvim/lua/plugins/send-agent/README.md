@@ -77,6 +77,48 @@ send-agent の `setup(opts)` で指定可能です。主なデフォルト:
 - `setup_keymaps` を `false` にして、キーは `plugins/send-agent/init.lua`（lazy.nvim の keys）に寄せるのが推奨です。
 - `cache` を有効にすると、スクラッチバッファを自動的にキャッシュ保存してくれます（詳細は下記）。
 
+## prompts（非対話式・プロンプトハンドラ）
+
+send-agent は「interactive_agents」（tmux を使う対話式）に加え、非対話型のプロンプトハンドラ（prompts）をサポートしています。prompts は `require("send-agent").setup(opts)` の `prompts` テーブルに、エージェント名をキーとするコールバック関数を設定することで利用可能です。`M.send()` や `M.send_buffer_and_clear()` は、`interactive_agents` に該当しないエージェント名が指定されている場合、`prompts` テーブルに定義されたコールバックを呼び出します。`gen` は特別扱いで、`M.send()` で追加のプロンプト入力を要求して `context.prompt` に格納してから `prompts["gen"]` を呼びます。
+
+context のフィールド:
+- `filename` : 対象バッファのファイル名
+- `text`     : 送信対象の本文テキスト（バッファ全体または選択）
+- `filetype` : ファイルタイプ
+- `selection`: 選択テキスト（該当する場合）
+- `prompt`   : `gen` の場合にユーザが入力した追加プロンプト（任意）
+
+prompts の実装例（非同期 HTTP を `curl` で叩いて結果を別バッファに表示）:
+
+```lua
+prompts = {
+  my_agent = function(context)
+    local cmd = { "curl", "-s", "https://api.example.com/llm", "-d", context.text }
+    vim.fn.jobstart(cmd, {
+      stdout_buffered = true,
+      on_stdout = function(_, data, _)
+        if not data or #data == 0 then return end
+        vim.schedule(function()
+          local bufnr = vim.api.nvim_create_buf(false, true)
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, data)
+          vim.api.nvim_set_current_buf(bufnr)
+        end)
+      end,
+      on_stderr = function(_, data, _)
+        if data and #data > 0 then
+          vim.schedule(function()
+            vim.notify(table.concat(data, "\n"))
+          end)
+        end
+      end,
+    })
+  end,
+
+  gen = function(context)
+    -- context.prompt を組み合わせて API に送るなど、任意に処理を実装します。
+  end,
+}
+
 ---
 
 ## キャッシュ（スクラッチの保存）
@@ -97,6 +139,7 @@ send-agent の `setup(opts)` で指定可能です。主なデフォルト:
 - SendAgentScratch — スクラッチ入力バッファを開く
 - SendAgentToggle — スクラッチの toggle
 - SendAgentClose — スクラッチを閉じる
+- SendAgentHistory — キャッシュに保存された履歴ログを UI で選択してバッファで開く（引数にファイル名を渡すと直接開けます）
 - Claude, Codex, Gemini, Copilot, Cursor — 対話型エージェントを直接開始するコマンド（lazy の cmd で読み込む）
 
 ---
