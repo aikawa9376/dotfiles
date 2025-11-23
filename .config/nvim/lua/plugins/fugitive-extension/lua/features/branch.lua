@@ -325,6 +325,32 @@ local function duplicate_branch(bufnr)
   end
 end
 
+local function create_worktree()
+  local branch = get_branch_name_from_line()
+  if not branch then
+    vim.notify("No branch found on this line", vim.log.levels.WARN)
+    return
+  end
+
+  local worktree_name = branch:gsub('^origin/', '')
+  local worktree_path = vim.fn.input('Worktree path for ' .. branch .. ': ', '../' .. worktree_name)
+  vim.cmd('redraw') -- Clear the prompt.
+
+  if worktree_path == nil or worktree_path == '' then
+    vim.notify("Worktree creation cancelled.", vim.log.levels.INFO)
+    return
+  end
+
+  local cmd = string.format("git worktree add %s %s", vim.fn.shellescape(worktree_path), vim.fn.shellescape(branch))
+  local result = vim.fn.system(cmd)
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to create worktree: " .. vim.fn.trim(result), vim.log.levels.ERROR)
+  else
+    vim.notify(string.format("Created worktree for '%s' at %s", branch, worktree_path), vim.log.levels.INFO)
+  end
+end
+
 local function open_branch_list()
   local branch_output = get_branch_list()
   if vim.v.shell_error ~= 0 then
@@ -424,6 +450,11 @@ function M.setup(group)
       vim.keymap.set('n', 'cod', function()
         duplicate_branch(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Duplicate branch" })
+
+      -- cot: Create worktree from branch
+      vim.keymap.set('n', 'cot', function()
+        create_worktree()
+      end, { buffer = bufnr, silent = true, desc = "Create worktree from branch" })
 
       -- X: Delete branch(es)
       vim.keymap.set('n', 'X', function()
