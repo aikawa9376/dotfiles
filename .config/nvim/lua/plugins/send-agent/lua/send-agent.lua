@@ -252,6 +252,7 @@ function M.setup(opts)
       nav_down = "<Down>",
     },
     cache = { enabled = true, dir = vim.fn.stdpath("cache") .. "/send-agent", debounce_ms = 1500 },
+    send_number_keys_to_agent = true,
   }
 
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
@@ -503,7 +504,7 @@ function M.register_scratch_keymaps(bufnr, opts)
   safe_set("n", keys.close or "q", function()
     window.close()
     if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-      vim.api.nvim_buf_delete(bufnr, { force = true })
+      vim.api.nvim_buf_delete(bufnr, { force = true, nowait = true })
     end
     M.open_agent = nil
     if agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id and not reuse then
@@ -560,6 +561,45 @@ function M.register_scratch_keymaps(bufnr, opts)
     if pane then tmux.send_keys(pane, { "Down" }) end
     if vim.api.nvim_buf_is_valid(bufnr) then vim.cmd("startinsert") end
   end, { desc = "Send Down to agent pane (insert mode)" })
+
+  if M.opts.send_number_keys_to_agent then
+    local function send_number_to_agent(number)
+      if M.open_agent and M.sessions[M.open_agent] and M.sessions[M.open_agent].pane_id then
+        if tmux.pane_exists(M.sessions[M.open_agent].pane_id) then
+          agent_name = M.open_agent
+          pane_id = M.sessions[agent_name].pane_id
+        end
+      end
+
+      if not agent_name then
+        local active_agents = get_active_agents()
+        if #active_agents == 1 then
+          agent_name = active_agents[1]
+          pane_id = M.sessions[agent_name].pane_id
+        end
+      end
+
+      if pane_id then
+        tmux.send_keys(pane_id, { tostring(number) })
+      else
+        -- Fallback to default Neovim behavior if no unambiguous agent is found.
+        vim.api.nvim_feedkeys(tostring(number), "n", false)
+      end
+    end
+
+    local function create_keymap_func(number)
+      return function()
+        send_number_to_agent(number)
+      end
+    end
+
+    for i = 0, 9 do
+      safe_set("n", tostring(i),
+        create_keymap_func(i)
+      , { desc = "Send " .. i .. " to agent" })
+    end
+  end
+
 end
 
 -- Helper to send text to a pane and optionally kill it after a delay.
@@ -611,6 +651,45 @@ end
 function M.toggle_session(agent_name)
   local function _toggle(chosen)
     if not chosen or chosen == "" then return end
+
+    local initial_input = nil
+    local current_mode = vim.fn.mode()
+    if current_mode:match("[vV\\x16]") then
+      local text = util.get_visual_selection()
+      -- If selection was lost, try to reselect with 'gv' and fetch again
+      if not text or #text == 0 then
+        vim.cmd("silent! normal! gv")
+        text = util.get_visual_selection()
+      end
+
+      if text and #text > 0 then
+        local start_pos = vim.fn.getpos("'<")
+        local end_pos = vim.fn.getpos("'>")
+        local start_line = start_pos[2]
+        local end_line = end_pos[2]
+        local file_path = vim.api.nvim_buf_get_name(0)
+        if file_path and file_path ~= "" then
+          file_path = vim.fn.fnamemodify(file_path, ":.")
+        end
+
+        local location_str = ""
+        if file_path and file_path ~= "" and start_line > 0 and end_line > 0 then
+          if start_line == end_line then
+            location_str = string.format("@%s:%d", file_path, start_line)
+          else
+            location_str = string.format("@%s:%d-%d", file_path, start_line, end_line)
+          end
+        end
+
+        if location_str ~= "" then
+          initial_input = location_str
+        end
+      end
+
+      -- Exit visual mode
+      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
+    end
+
     -- If the floating input is already open for this agent, close it.
     if M.open_agent == chosen and window.is_open() then
       local bufnr = window.get_bufnr()
@@ -619,11 +698,14 @@ function M.toggle_session(agent_name)
         vim.api.nvim_buf_delete(bufnr, { force = true })
       end
       M.open_agent = nil
-      return
+      -- if there is no input to show, just close and exit
+      if not initial_input then
+        return
+      end
     end
 
     -- Otherwise, start an interactive session (reuse = true by default).
-    M.start_interactive_session({ agent_name = chosen, reuse = true })
+    M.start_interactive_session({ agent_name = chosen, reuse = true, initial_input = initial_input })
   end
 
   resolve_target_agent(agent_name, nil, _toggle)
