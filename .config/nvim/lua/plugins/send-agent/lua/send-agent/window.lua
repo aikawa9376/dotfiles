@@ -1,6 +1,6 @@
 local M = {}
 
-local winid_in = nil
+local winid = nil
 local float_autocmd_group_id = nil
 local float_original_opts = nil
 local float_is_focused = false
@@ -22,16 +22,16 @@ function M.open_float(bufnr, opts)
     height = height,
     border = "single",
     style = "minimal",
-    title = " send ai argent ",
-    title_pos = 'center',
+    title = opts.title or "send-agent",
+    title_pos = "center",
   }
 
-  if not winid_in or not vim.api.nvim_win_is_valid(winid_in) then
-    winid_in = vim.api.nvim_open_win(bufnr, true, win_opts)
+  if not winid or not vim.api.nvim_win_is_valid(winid) then
+    winid = vim.api.nvim_open_win(bufnr, true, win_opts)
   else
     -- If window exists, just set buffer and focus
-    vim.api.nvim_win_set_buf(winid_in, bufnr)
-    vim.api.nvim_set_current_win(winid_in)
+    vim.api.nvim_win_set_buf(winid, bufnr)
+    vim.api.nvim_set_current_win(winid)
   end
 
   -- Setup focus-change behavior for floating window:
@@ -55,7 +55,7 @@ function M.open_float(bufnr, opts)
   float_is_focused = true
 
   local function shrink_float()
-    if not winid_in or not vim.api.nvim_win_is_valid(winid_in) then return end
+    if not winid or not vim.api.nvim_win_is_valid(winid) then return end
     local cols = vim.o.columns
     local lines = vim.o.lines
     -- Small size and place in bottom-right corner
@@ -74,21 +74,21 @@ function M.open_float(bufnr, opts)
       title = float_original_opts.title,
       title_pos = float_original_opts.title_pos,
     }
-    pcall(function() vim.api.nvim_win_set_config(winid_in, cfg) end)
+    pcall(function() vim.api.nvim_win_set_config(winid, cfg) end)
   end
 
-  local function restore_float()
-    if not winid_in or not vim.api.nvim_win_is_valid(winid_in) then return end
-    pcall(function() vim.api.nvim_win_set_config(winid_in, float_original_opts) end)
+    local function restore_float()
+    if not winid or not vim.api.nvim_win_is_valid(winid) then return end
+    pcall(function() vim.api.nvim_win_set_config(winid, float_original_opts) end)
   end
 
-  local gid = vim.api.nvim_create_augroup("SendAgentFloat" .. tostring(winid_in), { clear = true })
+  local gid = vim.api.nvim_create_augroup("SendAgentFloat" .. tostring(winid), { clear = true })
   float_autocmd_group_id = gid
   vim.api.nvim_create_autocmd("WinEnter", {
     group = gid,
     callback = function()
       local curr = vim.api.nvim_get_current_win()
-      if curr == winid_in then
+      if curr == winid then
         -- When floating window regains focus, restore original position/size and enter insert.
         if not float_is_focused then
           restore_float()
@@ -105,14 +105,12 @@ function M.open_float(bufnr, opts)
     end,
   })
 
-  vim.wo[winid_in].rnu = false
-  vim.wo[winid_in].number = false
-  vim.wo[winid_in].cursorline = true
-  vim.wo[winid_in].wrap = true
+  vim.wo[winid].rnu = false
+  vim.wo[winid].number = false
+  vim.wo[winid].cursorline = true
+  vim.wo[winid].wrap = true
 
   vim.cmd("startinsert") -- Start in insert mode
-
-  return winid_in
 end
 
 function M.open_vsplit(bufnr, opts)
@@ -126,22 +124,22 @@ function M.open_vsplit(bufnr, opts)
   end
   local width = math.floor(vim.o.columns * 0.5)
 
-  if winid_in and vim.api.nvim_win_is_valid(winid_in) then
-    vim.api.nvim_win_set_buf(winid_in, bufnr)
-    vim.api.nvim_set_current_win(winid_in)
+  if winid and vim.api.nvim_win_is_valid(winid) then
+    vim.api.nvim_win_set_buf(winid, bufnr)
+    vim.api.nvim_set_current_win(winid)
   else
     vim.cmd("vsplit")
-    vim.api.nvim_win_set_width(0, width)
-    winid_in = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_buf(winid_in, bufnr)
+    vim.api.nvim_win_set_width(vim.api.nvim_get_current_win(), width)
+    winid = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_buf(winid, bufnr)
   end
 
-  vim.wo[winid_in].rnu = false
-  vim.wo[winid_in].number = false
-  vim.wo[winid_in].cursorline = true
-  vim.wo[winid_in].wrap = true
+  vim.wo[winid].rnu = false
+  vim.wo[winid].number = false
+  vim.wo[winid].cursorline = true
+  vim.wo[winid].wrap = true
   vim.cmd("startinsert")
-  return winid_in
+  return winid
 end
 
 function M.open(bufnr, opts)
@@ -156,9 +154,9 @@ function M.open(bufnr, opts)
 end
 
 function M.close()
-  if winid_in and vim.api.nvim_win_is_valid(winid_in) then
-    vim.api.nvim_win_close(winid_in, true)
-    winid_in = nil
+  if winid and vim.api.nvim_win_is_valid(winid) then
+    vim.api.nvim_win_close(winid, true)
+    winid = nil
   end
 
   if float_autocmd_group_id then
@@ -170,12 +168,12 @@ function M.close()
 end
 
 function M.is_open()
-  return winid_in and vim.api.nvim_win_is_valid(winid_in)
+  return winid and vim.api.nvim_win_is_valid(winid)
 end
 
 function M.get_bufnr()
-  if winid_in and vim.api.nvim_win_is_valid(winid_in) then
-    return vim.api.nvim_win_get_buf(winid_in)
+  if winid and vim.api.nvim_win_is_valid(winid) then
+    return vim.api.nvim_win_get_buf(winid)
   end
   return nil
 end

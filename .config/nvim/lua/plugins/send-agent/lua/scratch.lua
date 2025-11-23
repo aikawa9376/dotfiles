@@ -17,6 +17,7 @@ local function ensure_buffer(filetype, initial_content)
   if not bufnr_in or not vim.api.nvim_buf_is_valid(bufnr_in) then
     bufnr_in = vim.api.nvim_create_buf(false, true)
     vim.bo[bufnr_in].bufhidden = "wipe"
+    vim.bo[bufnr_in].buflisted = false
     vim.bo[bufnr_in].modifiable = true
     vim.bo[bufnr_in].buftype = "nofile"
     vim.bo[bufnr_in].filetype = filetype or "markdown"

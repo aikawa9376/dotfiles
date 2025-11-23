@@ -1,6 +1,7 @@
 local M = {}
 local DEFAULT_SUBMIT_DELAY_MS = 600
 local DEFAULT_SUBMIT_RETRY = 1
+local util = require("send-agent.util")
 
 -- Run tmux command asynchronously using jobstart; fallback to a synchronous
 -- system call. This wrapper validates opts and captures jobstart errors.
@@ -161,11 +162,7 @@ function M.set_buffer(text, on_done, opts)
   local debug = opts.debug or false
   local tmpfile = vim.fn.tempname()
   -- Normalize CRLF -> LF and ensure trailing newline so tmux paste processes the input consistently.
-  local normalized_text = tostring(text or "")
-  normalized_text = normalized_text:gsub("\r\n", "\n")
-  if not normalized_text:match("\n$") then
-    normalized_text = normalized_text .. "\n"
-  end
+  local normalized_text = util.normalize_text(text)
   -- Write raw text to file to avoid an extra blank line caused by writefile(vim.split(...))
   local f = assert(io.open(tmpfile, "wb"))
   f:write(normalized_text)
@@ -224,28 +221,12 @@ function M.paste_and_submit(target_pane, text, submit_keys, opts)
   local debug = opts.debug or false
 
   -- Normalize text and ensure trailing newline; this mirrors M.set_buffer behavior.
-  local normalized_text = tostring(text or "")
-  normalized_text = normalized_text:gsub("\r\n", "\n")
-  if not normalized_text:match("\n$") then
-    normalized_text = normalized_text .. "\n"
-  end
+  local normalized_text = util.normalize_text(text)
 
   -- Helper: determine if submit key list contains an enter-equivalent
   local function _contains_enter(keys)
-    if not keys then return false end
-    if type(keys) == "string" then keys = { keys } end
-    if type(keys) ~= "table" then return false end
-    for _, k in ipairs(keys) do
-      local s = tostring(k)
-      if s == "C-m" or s == "Enter" or s == "<CR>" or s == "\r" or s == "Return" or s == "<C-CR>" or s == "<CR>" then
-        return true
-      end
-      local ls = s:lower()
-      if ls == "enter" or ls == "<cr>" or ls == "<c-m>" then
-        return true
-      end
-    end
-    return false
+    -- use util helper, keeps logic centralized and consistent
+    return util.contains_enter_key(keys)
   end
 
   -- schedule submit function (may be called from paste on_done callback or fallback)

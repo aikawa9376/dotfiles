@@ -1,8 +1,37 @@
 local M = {}
 
+local function normalize_text(text)
+  -- Normalize CRLF -> LF and ensure trailing newline
+  local s = tostring(text or "")
+  s = s:gsub("\r\n", "\n")
+  if not s:match("\n$") then
+    s = s .. "\n"
+  end
+  return s
+end
+
+local function contains_enter_key(keys)
+  -- Detect whether a list/string of keys contains an "enter"/submit equivalent,
+  -- e.g. "C-m", "<CR>", "Enter", "Return".
+  if not keys then return false end
+  if type(keys) == "string" then keys = { keys } end
+  if type(keys) ~= "table" then return false end
+  for _, k in ipairs(keys) do
+    local s = tostring(k)
+    local ls = s:lower()
+    if s == "C-m" or s == "Enter" or s == "<CR>" or s == "\r" or s == "Return" or ls == "<cr>" or ls == "<c-m>" then
+      return true
+    end
+  end
+  return false
+end
+
+M.normalize_text = normalize_text
+M.contains_enter_key = contains_enter_key
+
 -- Robustly get visual selection text:
--- Prefer reading the '< and '> marks directly if available; otherwise, fall back to yum
--- register-based yanking method (maintains user's registers).
+-- Prefer reading the '< and '> marks directly if available; otherwise, fall back to a
+-- yank-based selection while keeping the user's unnamed register intact.
 function M.get_visual_selection()
   -- First try to use marks '< and '>
   local sp = vim.fn.getpos("'<")
