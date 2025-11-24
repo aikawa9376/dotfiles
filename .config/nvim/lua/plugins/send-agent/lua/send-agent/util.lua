@@ -33,7 +33,7 @@ M.contains_enter_key = contains_enter_key
 -- Prefer reading the '< and '> marks directly if available; otherwise, fall back to a
 -- yank-based selection while keeping the user's unnamed register intact.
 function M.get_visual_selection()
-  -- First try to use marks '< and '>
+  -- First try to use marks '< and '>'
   local sp = vim.fn.getpos("'<")
   local ep = vim.fn.getpos("'>")
   -- sp and ep are tables: [bufnum, lnum, col, off]
@@ -63,8 +63,8 @@ function M.get_visual_selection()
   end
 
   -- Fallback to yank-to-register logic (preserve unnamed register)
-  local ok, saved_reg = pcall(vim.fn.getreg, '"')
-  local ok2, saved_regtype = pcall(vim.fn.getregtype, '"')
+  local _, saved_reg = pcall(vim.fn.getreg, '"')
+  local _, saved_regtype = pcall(vim.fn.getregtype, '"')
 
   local mode = vim.fn.mode()
   if mode:match("[vV\\x16]") then
@@ -76,6 +76,30 @@ function M.get_visual_selection()
   local content = vim.fn.getreg('z') or ""
   pcall(vim.fn.setreg, '"', saved_reg or "", saved_regtype or "")
   return content
+end
+
+function M.git_root_for_path(path)
+  path = path or vim.api.nvim_buf_get_name(0)
+  if not path or path == "" then path = vim.fn.getcwd() end
+  local cwd = vim.fn.fnamemodify(path, ":p:h")
+  local cmd = "git -C " .. vim.fn.shellescape(cwd) .. " rev-parse --show-toplevel 2>/dev/null"
+  local ok, out = pcall(vim.fn.systemlist, cmd)
+  if ok and out and #out > 0 and out[1] and out[1] ~= "" then
+    return out[1]
+  end
+  return nil
+end
+
+function M.git_branch_for_path(path)
+  path = path or vim.api.nvim_buf_get_name(0)
+  if not path or path == "" then path = vim.fn.getcwd() end
+  local cwd = vim.fn.fnamemodify(path, ":p:h")
+  local cmd = "git -C " .. vim.fn.shellescape(cwd) .. " rev-parse --abbrev-ref HEAD 2>/dev/null"
+  local ok, out = pcall(vim.fn.systemlist, cmd)
+  if ok and out and #out > 0 and out[1] and out[1] ~= "" then
+    return out[1]
+  end
+  return nil
 end
 
 return M

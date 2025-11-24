@@ -55,6 +55,24 @@ end
 local tmux = require("send-agent.tmux")
 local window = require("send-agent.window")
 local util = require("send-agent.util")
+local transforms = require("send-agent.transforms")
+local builtin_backend = require("send-agent.builtin")
+local backends = { tmux = tmux, builtin = builtin_backend }
+
+local function resolve_backend_for_agent(agent_name, agent_cfg)
+  local backend_name = nil
+  if agent_cfg and agent_cfg.backend then
+    backend_name = agent_cfg.backend
+  elseif M.sessions[agent_name] and M.sessions[agent_name].backend then
+    backend_name = M.sessions[agent_name].backend
+  elseif M.opts and M.opts.backend then
+    backend_name = M.opts.backend
+  else
+    backend_name = "tmux"
+  end
+  local backend_mod = backends[backend_name] or tmux
+  return backend_name, backend_mod
+end
 
 -- Cache helpers for saving scratch buffer content per project branch and root.
 -- Default cache directory is <stdpath("cache")>/send-agent
@@ -64,34 +82,6 @@ local function sanitize_filename_component(s)
   -- Replace path separators and whitespace with hyphens; keep alnum, underscore and dash.
   s = s:gsub("[^%w-_]+", "-")
   return s
-end
-
-local function git_root_for_path(path)
-  path = path or vim.api.nvim_buf_get_name(0)
-  if not path or path == "" then
-    path = vim.fn.getcwd()
-  end
-  local cwd = vim.fn.fnamemodify(path, ":p:h")
-  local cmd = "git -C " .. vim.fn.shellescape(cwd) .. " rev-parse --show-toplevel 2>/dev/null"
-  local ok, out = pcall(vim.fn.systemlist, cmd)
-  if ok and out and #out > 0 and out[1] and out[1] ~= "" then
-    return out[1]
-  end
-  return nil
-end
-
-local function git_branch_for_path(path)
-  path = path or vim.api.nvim_buf_get_name(0)
-  if not path or path == "" then
-    path = vim.fn.getcwd()
-  end
-  local cwd = vim.fn.fnamemodify(path, ":p:h")
-  local cmd = "git -C " .. vim.fn.shellescape(cwd) .. " rev-parse --abbrev-ref HEAD 2>/dev/null"
-  local ok, out = pcall(vim.fn.systemlist, cmd)
-  if ok and out and #out > 0 and out[1] and out[1] ~= "" then
-    return out[1]
-  end
-  return nil
 end
 
 local function get_cache_dir()
@@ -105,9 +95,9 @@ end
 local function build_cache_filename(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
-  local root = git_root_for_path(bufn) or vim.fn.getcwd()
+  local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
   local rootname = vim.fn.fnamemodify(root, ":t") or "root"
-  local branch = git_branch_for_path(bufn) or "no-branch"
+  local branch = util.git_branch_for_path(bufn) or "no-branch"
   local date = os.date("%Y-%m-%d")
   return sanitize_filename_component(branch) .. "-" .. sanitize_filename_component(rootname) .. "-" .. date .. ".log"
 end
@@ -246,6 +236,7 @@ function M.setup(opts)
         submit_delay = 600,
         submit_retry = 1,
         is_vertical = false,
+        backend = "tmux",
       }
       return {
         Claude = vim.tbl_deep_extend("force", base, { cmd = "claude" }),
@@ -256,6 +247,7 @@ function M.setup(opts)
       }
     end)(),
     window_type = "float",
+    backend = "tmux",
     -- Default delay (ms) to wait after paste before sending submit keys; and retry count
     submit_delay = 600,
     submit_retry = 1,
@@ -263,7 +255,7 @@ function M.setup(opts)
     -- Controls whether the floating input buffer is closed after a submit.
     close_on_send = true,
     -- Default send keys (insert and normal mode). Users can override in setup opts.
-    send_key_insert = "<C-CR>",
+    send_key_insert = "<C-s>",
     send_key_normal = "<CR>",
     -- Whether we register default keymaps automatically. Prefer central mapping in init.lua.
     setup_keymaps = false,
@@ -293,8 +285,8 @@ function M.setup(opts)
   M._configured = true
 
   -- Helper to create commands safely
-  local function try_create_user_command(name, fn, opts)
-    pcall(function() vim.api.nvim_create_user_command(name, fn, opts) end)
+  local function try_create_user_command(name, fn, cmd_opts)
+    pcall(function() vim.api.nvim_create_user_command(name, fn, cmd_opts) end)
   end
 
   -- Register convenience scratch starter command
@@ -397,10 +389,12 @@ local function get_active_agents()
   local active = {}
   for name, s in pairs(M.sessions or {}) do
     if s and s.pane_id and s.pane_id ~= "" then
-      if tmux and type(tmux.pane_exists) == "function" then
-        if tmux.pane_exists(s.pane_id) then table.insert(active, name) end
+      local backend_name = s.backend or (M.opts and M.opts.backend) or "tmux"
+      local backend_mod = backends[backend_name] or tmux
+      if backend_mod and type(backend_mod.pane_exists) == "function" then
+        if backend_mod.pane_exists(s.pane_id) then table.insert(active, name) end
       else
-        -- If tmux.pane_exists isn't available, consider session table as the source of truth.
+        -- If pane_exists isn't available on this backend, consider the session table as truth.
         table.insert(active, name)
       end
     end
@@ -464,17 +458,27 @@ M.get_active_agents = get_active_agents
 M.resolve_target_agent = resolve_target_agent
 
 local function ensure_session(agent_name, agent_cfg, reuse, on_ready)
-  if reuse and M.sessions[agent_name] and M.sessions[agent_name].pane_id and M.sessions[agent_name].pane_id ~= "" and tmux.pane_exists(M.sessions[agent_name].pane_id) then
-    on_ready(M.sessions[agent_name].pane_id)
-    return
-  end
+  local backend_name = (agent_cfg and agent_cfg.backend) or (M.sessions[agent_name] and M.sessions[agent_name].backend) or (M.opts and M.opts.backend) or "tmux"
+  local backend_mod = backends[backend_name] or tmux
 
-  tmux.split(agent_cfg.cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, function(pane_id)
-    if not pane_id or pane_id == "" then
-      vim.notify("Failed to create tmux pane for agent " .. tostring(agent_name), vim.log.levels.ERROR)
+  if reuse and M.sessions[agent_name] and M.sessions[agent_name].pane_id and M.sessions[agent_name].pane_id ~= "" then
+    if backend_mod and type(backend_mod.pane_exists) == "function" then
+      if backend_mod.pane_exists(M.sessions[agent_name].pane_id) then
+        on_ready(M.sessions[agent_name].pane_id)
+        return
+      end
+    else
+      on_ready(M.sessions[agent_name].pane_id)
       return
     end
-    M.sessions[agent_name] = { pane_id = pane_id, last_output = "" }
+  end
+
+  backend_mod.split(agent_cfg.cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, function(pane_id)
+    if not pane_id or pane_id == "" then
+      vim.notify("Failed to create pane for agent " .. tostring(agent_name), vim.log.levels.ERROR)
+      return
+    end
+    M.sessions[agent_name] = { pane_id = pane_id, last_output = "", backend = backend_name }
     on_ready(pane_id)
   end)
 end
@@ -493,10 +497,15 @@ function M.register_scratch_keymaps(bufnr, opts)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
 
+  local source_bufnr = opts.source_bufnr or opts.origin_bufnr or vim.api.nvim_get_current_buf()
+
   local agent_name = opts.agent_name
   local agent_cfg = opts.agent_cfg or (agent_name and get_interactive_agent(agent_name) or nil)
   local pane_id = opts.pane_id
   local reuse = opts.reuse ~= false
+
+  local backend_name = (agent_cfg and agent_cfg.backend) or (agent_name and M.sessions[agent_name] and M.sessions[agent_name].backend) or (M.opts and M.opts.backend) or "tmux"
+  local backend_mod = backends[backend_name] or tmux
 
   -- Merge keymap settings: defaults -> agent-specific -> per-call overrides
   local keys = {}
@@ -513,11 +522,6 @@ function M.register_scratch_keymaps(bufnr, opts)
     pcall(function() vim.keymap.set(mode, lhs, rhs, map_opt) end)
   end
 
-  local function safe_set_modes(modes, lhs, rhs, mapopts)
-    local map_opt = vim.tbl_deep_extend("force", { buffer = bufnr, noremap = true, silent = true }, mapopts or {})
-    pcall(function() vim.keymap.set(modes, lhs, rhs, map_opt) end)
-  end
-
   local function get_pane()
     return pane_id or (agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id) or nil
   end
@@ -528,46 +532,50 @@ function M.register_scratch_keymaps(bufnr, opts)
     if insert_wrap and vim.fn.mode():sub(1,1) == "i" then
       vim.cmd("stopinsert")
     end
-    tmux.send_keys(p, { key })
+    backend_mod.send_keys(p, { key })
     if insert_wrap and vim.api.nvim_buf_is_valid(bufnr) then
       vim.cmd("startinsert")
     end
   end
 
-  local function send_from_buf(close_after)
-    local pane = pane_id or (agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id) or nil
-    if not pane or pane == "" then
-      -- fallback to generic prompt API
-      M.send_buffer_and_clear(agent_name, bufnr)
-      return
-    end
-    local content = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local text = table.concat(content, "\n")
-    if text and #text > 0 then
-      local submit_keys = (agent_cfg and agent_cfg.submit_keys) or ((agent_name and get_interactive_agent(agent_name) and get_interactive_agent(agent_name).submit_keys) or nil)
-      local submit_delay = (agent_cfg and agent_cfg.submit_delay) or (M.opts and M.opts.submit_delay) or 600
-      local submit_retry = (agent_cfg and agent_cfg.submit_retry) or (M.opts and M.opts.submit_retry) or 1
-      -- Save scratch content to cache on send
-      write_scratch_to_cache(bufnr)
-      tmux.paste_and_submit(pane, text, submit_keys, {
-        submit_delay = submit_delay,
-        submit_retry = submit_retry,
-        debug = M.opts.debug,
-      })
-      pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
-      if close_after or M.opts.close_on_send then
-        window.close()
-        if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-          vim.api.nvim_buf_delete(bufnr, { force = true })
-        end
-        M.open_agent = nil
-        if agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id and not reuse then
-          tmux.kill_pane(M.sessions[agent_name].pane_id)
-          M.sessions[agent_name] = nil
+    local function send_from_buf(close_after)
+      local pane = pane_id or (agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id) or nil
+      if not pane or pane == "" then
+        -- fallback to generic prompt API
+        M.send_buffer_and_clear(agent_name, bufnr)
+        return
+      end
+      local content = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      local text = table.concat(content, "\n")
+      -- Expand placeholders before sending (use source_bufnr information)
+      local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr, scratch_bufnr = bufnr })
+      text = expanded_text or text
+
+      if text and #text > 0 then
+        local submit_keys = (agent_cfg and agent_cfg.submit_keys) or ((agent_name and get_interactive_agent(agent_name) and get_interactive_agent(agent_name).submit_keys) or nil)
+        local submit_delay = (agent_cfg and agent_cfg.submit_delay) or (M.opts and M.opts.submit_delay) or 600
+        local submit_retry = (agent_cfg and agent_cfg.submit_retry) or (M.opts and M.opts.submit_retry) or 1
+        -- Save scratch content to cache on send
+        write_scratch_to_cache(bufnr)
+        backend_mod.paste_and_submit(pane, text, submit_keys, {
+          submit_delay = submit_delay,
+          submit_retry = submit_retry,
+          debug = M.opts.debug,
+        })
+        pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
+        if close_after or M.opts.close_on_send then
+          window.close()
+          if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+            vim.api.nvim_buf_delete(bufnr, { force = true })
+          end
+          M.open_agent = nil
+          if agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id and not reuse then
+            backend_mod.kill_pane(M.sessions[agent_name].pane_id)
+            M.sessions[agent_name] = nil
+          end
         end
       end
     end
-  end
 
   -- Close mapping
   safe_set("n", keys.close or "q", function()
@@ -577,14 +585,14 @@ function M.register_scratch_keymaps(bufnr, opts)
     end
     M.open_agent = nil
     if agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id and not reuse then
-      tmux.kill_pane(M.sessions[agent_name].pane_id)
+      backend_mod.kill_pane(M.sessions[agent_name].pane_id)
       M.sessions[agent_name] = nil
     end
   end, { nowait = true, desc = "Close input buffer"  })
 
   -- Submit mappings (normal / insert)
   safe_set("n", M.opts.send_key_normal or "<CR>", function() send_from_buf() end, { desc = "Submit from buffer" })
-  safe_set("i", M.opts.send_key_insert or "<C-CR>", function()
+  safe_set("i", M.opts.send_key_insert or "<C-s>", function()
     vim.cmd("stopinsert")
     send_from_buf()
     if vim.api.nvim_buf_is_valid(bufnr) then vim.cmd("startinsert") end
@@ -601,11 +609,11 @@ function M.register_scratch_keymaps(bufnr, opts)
   -- Scroll mappings
   safe_set("n", keys.scroll_up or "<C-u>", function()
     local pane = pane_id or (agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id)
-    if pane then tmux.scroll_up(pane) end
+    if pane then backend_mod.scroll_up(pane) end
   end, { desc = "Scroll agent pane up" })
   safe_set("n", keys.scroll_down or "<C-d>", function()
     local pane = pane_id or (agent_name and M.sessions[agent_name] and M.sessions[agent_name].pane_id)
-    if pane then tmux.scroll_down(pane) end
+    if pane then backend_mod.scroll_down(pane) end
   end, { desc = "Scroll agent pane down" })
 
   -- Navigation keys
@@ -634,7 +642,7 @@ function M.register_scratch_keymaps(bufnr, opts)
       end
 
       if p then
-        tmux.send_keys(p, { tostring(number) })
+        backend_mod.send_keys(p, { tostring(number) })
       else
         -- Fallback to default Neovim behavior if no unambiguous agent is found.
         vim.api.nvim_feedkeys(tostring(number), "n", false)
@@ -650,7 +658,7 @@ function M.register_scratch_keymaps(bufnr, opts)
     for i = 0, 9 do
       safe_set("n", tostring(i),
         create_keymap_func(i)
-      , { desc = "Send " .. i .. " to agent" })
+        , { desc = "Send " .. i .. " to agent" })
     end
   end
 
@@ -658,12 +666,19 @@ end
 
 -- Helper to send text to a pane and optionally kill it after a delay.
 -- Used for one-shot commands.
-local function send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse)
+local function send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse, source_bufnr)
   if not text or text == "" then
     return
   end
 
-  tmux.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
+  -- Expand placeholders in one-shot input before sending.
+  local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr or vim.api.nvim_get_current_buf() })
+  text = expanded_text or text
+
+  local backend_name = (agent_cfg and agent_cfg.backend) or (M.sessions[agent_name] and M.sessions[agent_name].backend) or (M.opts and M.opts.backend) or "tmux"
+  local backend_mod = backends[backend_name] or tmux
+
+  backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
     submit_delay = agent_cfg.submit_delay or M.opts.submit_delay,
     submit_retry = agent_cfg.submit_retry or M.opts.submit_retry,
 
@@ -673,18 +688,100 @@ local function send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, re
   -- For one-shot (non-interactive) sends, kill the pane after a delay if it's not meant to be reused.
   vim.defer_fn(function()
     if not reuse then
-      tmux.kill_pane(pane_id)
+      backend_mod.kill_pane(pane_id)
       M.sessions[agent_name] = nil
     end
   end, agent_cfg.capture_delay or 800)
+end
+
+function M.send_to_cli(agent_name, text, opts)
+  opts = opts or {}
+  if not text or #text == 0 then
+    vim.notify("send_to_cli: text is empty", vim.log.levels.ERROR)
+    return
+  end
+
+  -- Expand placeholders before sending (use a source_bufnr hint if provided).
+  local source_bufnr = (opts and opts.source_bufnr) or vim.api.nvim_get_current_buf()
+  local expanded_text, meta = transforms.expand(text, { source_bufnr = source_bufnr })
+  text = expanded_text or text
+
+  -- Determine the agent_name if not provided
+  if not agent_name or agent_name == "" then
+    if M.open_agent and M.open_agent ~= "" then
+      agent_name = M.open_agent
+    else
+      local bufnr = vim.api.nvim_get_current_buf()
+      local ft = vim.bo[bufnr].filetype
+      local settings = (M.opts and M.opts.filetype_settings) and (M.opts.filetype_settings[ft] or M.opts.filetype_settings["*"]) or nil
+      if settings and settings.agent then agent_name = settings.agent end
+    end
+  end
+
+  if not agent_name or agent_name == "" then
+    resolve_target_agent(nil, nil, function(chosen)
+      if not chosen or chosen == "" then
+        vim.notify("send_to_cli: no agent available for sending", vim.log.levels.ERROR)
+        return
+      end
+      M.send_to_cli(chosen, text, opts)
+    end)
+    return
+  end
+
+  local agent_cfg = get_interactive_agent(agent_name)
+  -- Interactive (cli) agents: ensure a pane and send to it.
+  if agent_cfg then
+    local reuse = opts.reuse ~= false
+    ensure_session(agent_name, agent_cfg, reuse, function(pane_id)
+      if not pane_id or pane_id == "" then
+        vim.notify("send_to_cli: failed to obtain pane for " .. tostring(agent_name), vim.log.levels.ERROR)
+        return
+      end
+      write_scratch_to_cache()
+      local _, backend_mod = resolve_backend_for_agent(agent_name, agent_cfg)
+      backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
+        submit_delay = agent_cfg.submit_delay or M.opts.submit_delay,
+        submit_retry = agent_cfg.submit_retry or M.opts.submit_retry,
+        debug = M.opts.debug,
+      })
+      if not reuse then
+        vim.defer_fn(function()
+          backend_mod.kill_pane(pane_id)
+          M.sessions[agent_name] = nil
+        end, agent_cfg.capture_delay or 800)
+      end
+    end)
+    return
+  end
+
+  -- Non-interactive handlers (prompts)
+  local p = M.opts and M.opts.prompts and M.opts.prompts[agent_name] or nil
+  if p then
+    local bufnr = vim.api.nvim_get_current_buf()
+    local filename = vim.api.nvim_buf_get_name(bufnr) or ""
+    local ft = vim.bo[bufnr].filetype or ""
+    local context = { filename = filename, text = text, filetype = ft, selection = text }
+    -- Add diagnostics to context if available
+    if meta and meta.diagnostics and #meta.diagnostics > 0 then
+      context.diagnostics = meta.diagnostics
+    end
+    write_scratch_to_cache(bufnr)
+    p(context)
+    return
+  end
+
+  vim.notify("send_to_cli: agent " .. tostring(agent_name) .. " is not configured", vim.log.levels.ERROR)
 end
 
 function M.close_session(agent_name)
   if not agent_name or agent_name == "" then
     return
   end
-  if M.sessions[agent_name] and M.sessions[agent_name].pane_id and M.sessions[agent_name].pane_id ~= "" then
-    tmux.kill_pane(M.sessions[agent_name].pane_id)
+  local s = M.sessions[agent_name]
+  if s and s.pane_id and s.pane_id ~= "" then
+    local backend_mod = backends[s.backend] or tmux
+    backend_mod.kill_pane(s.pane_id)
   end
   M.sessions[agent_name] = nil
 end
@@ -693,7 +790,8 @@ end
 function M.close_all_sessions()
   for name, s in pairs(M.sessions) do
     if s and s.pane_id and s.pane_id ~= "" then
-      tmux.kill_pane(s.pane_id)
+      local backend_mod = backends[s.backend] or tmux
+      backend_mod.kill_pane(s.pane_id)
     end
     M.sessions[name] = nil
   end
@@ -782,6 +880,7 @@ function M.start_interactive_session(opts)
   end
 
   local agent_cfg = get_interactive_agent(agent_name)
+  local origin_bufnr = opts.source_bufnr or opts.origin_bufnr or vim.api.nvim_get_current_buf()
   if not agent_cfg then
     vim.notify("interactive agent " .. tostring(agent_name) .. " is not configured", vim.log.levels.ERROR)
     return
@@ -792,7 +891,7 @@ function M.start_interactive_session(opts)
   ensure_session(agent_name, agent_cfg, reuse, function(pane_id)
     -- Handle one-shot sends where no input scratch buffer is opened.
     if opts.open_input == false then
-      send_and_close_if_needed(agent_name, pane_id, opts.initial_input, agent_cfg, reuse)
+      send_and_close_if_needed(agent_name, pane_id, opts.initial_input, agent_cfg, reuse, origin_bufnr)
       return
     end
 
@@ -807,10 +906,8 @@ function M.start_interactive_session(opts)
       if M.attach_cache_to_buf then M.attach_cache_to_buf(bufnr) end
     end)
 
-
-
-    -- Register buffer-local scratch keymaps
-    M.register_scratch_keymaps(bufnr, { agent_name = agent_name, agent_cfg = agent_cfg, pane_id = pane_id, reuse = reuse })
+    -- Register buffer-local scratch keymaps (include source/origin buffer so placeholders resolve correctly)
+    M.register_scratch_keymaps(bufnr, { agent_name = agent_name, agent_cfg = agent_cfg, pane_id = pane_id, reuse = reuse, source_bufnr = origin_bufnr })
 
     M.open_agent = agent_name
     window.open(bufnr, { window_type = M.opts.window_type })
@@ -822,26 +919,14 @@ function M.start_interactive_session(opts)
 
     -- Send an initial input if provided.
     if opts.initial_input and opts.initial_input ~= "" then
-      tmux.paste_and_submit(pane_id, opts.initial_input, agent_cfg.submit_keys, {
+      local _, backend_mod = resolve_backend_for_agent(agent_name, agent_cfg)
+      backend_mod.paste_and_submit(pane_id, opts.initial_input, agent_cfg.submit_keys, {
         submit_delay = agent_cfg.submit_delay or M.opts.submit_delay,
         submit_retry = agent_cfg.submit_retry or M.opts.submit_retry,
         debug = M.opts.debug,
       })
     end
   end)
-end
-
--- Send direct one-shot text to the interactive agent (creates or reuses a tmux pane, sends, and may keep it).
--- Default to reuse existing sessions for better UX (previously false).
-function M.send_to_cli(agent_name, text)
-  if not agent_name or agent_name == "" then
-    resolve_target_agent(nil, nil, function(chosen)
-      if not chosen then return end
-      M.start_interactive_session({ agent_name = chosen, initial_input = text, reuse = true, open_input = false })
-    end)
-    return
-  end
-  M.start_interactive_session({ agent_name = agent_name, initial_input = text, reuse = true, open_input = false })
 end
 
 -- Send the contents of a buffer to the specified agent and clear the buffer.
@@ -863,12 +948,16 @@ function M.send_buffer_and_clear(agent_name, bufnr)
     return
   end
 
+  -- Expand placeholders before sending using the send buffer as the source buffer (makes {buffer} behave sensibly).
+  local expanded_text, meta = transforms.expand(text, { source_bufnr = bufnr })
+  text = expanded_text or text
+
   -- determine agent_name if not specified
   if not agent_name or agent_name == "" then
     if M.open_agent and M.open_agent ~= "" then
       agent_name = M.open_agent
     else
-      local ft = vim.api.nvim_buf_get_option(bufnr, "filetype")
+      local ft = vim.bo[bufnr].filetype
       local settings = (M.opts and M.opts.filetype_settings) and (M.opts.filetype_settings[ft] or M.opts.filetype_settings["*"]) or nil
       if settings and settings.agent then
         agent_name = settings.agent
@@ -889,7 +978,7 @@ function M.send_buffer_and_clear(agent_name, bufnr)
   end
 
   local agent_cfg = get_interactive_agent(agent_name)
-  if agent_cfg then
+      if agent_cfg then
     -- For interactive agents (tmux-based), ensure a pane then paste/submit.
     ensure_session(agent_name, agent_cfg, true, function(pane_id)
       if not pane_id or pane_id == "" then
@@ -898,7 +987,9 @@ function M.send_buffer_and_clear(agent_name, bufnr)
       end
       -- Save scratch content to cache on send
       write_scratch_to_cache(bufnr)
-      tmux.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
+      local backend_name = (agent_cfg and agent_cfg.backend) or (M.sessions[agent_name] and M.sessions[agent_name].backend) or (M.opts and M.opts.backend) or "tmux"
+      local backend_mod = backends[backend_name] or tmux
+      backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
         submit_delay = agent_cfg.submit_delay or M.opts.submit_delay,
         submit_retry = agent_cfg.submit_retry or M.opts.submit_retry,
 
@@ -915,6 +1006,10 @@ function M.send_buffer_and_clear(agent_name, bufnr)
     local filename = vim.api.nvim_buf_get_name(bufnr) or ""
     local ft = vim.bo[bufnr].filetype or ""
     local context = { filename = filename, text = text, filetype = ft, selection = text }
+    -- Add diagnostics meta to context if available (useful to prompts)
+    if meta and meta.diagnostics and #meta.diagnostics > 0 then
+      context.diagnostics = meta.diagnostics
+    end
     -- Save scratch content to cache on send (prompts / non-interactive)
     write_scratch_to_cache(bufnr)
     p(context)
@@ -955,6 +1050,13 @@ function M.send(text)
     filetype = ft,
     selection = text,
   }
+
+  -- Expand placeholders and compute diagnostics metadata for the context
+  local expanded_text, meta = transforms.expand(context.text, { source_bufnr = vim.api.nvim_get_current_buf() })
+  context.text = expanded_text or context.text
+  if meta and meta.diagnostics and #meta.diagnostics > 0 then
+    context.diagnostics = meta.diagnostics
+  end
 
   local agent = settings.agent
   -- If agent exists as an interactive (tmux/CLI) agent, send via the CLI integration

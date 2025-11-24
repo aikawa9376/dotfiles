@@ -77,6 +77,38 @@ send-agent の `setup(opts)` で指定可能です。主なデフォルト:
 - `setup_keymaps` を `false` にして、キーは `plugins/send-agent/init.lua`（lazy.nvim の keys）に寄せるのが推奨です。
 - `cache` を有効にすると、スクラッチバッファを自動的にキャッシュ保存してくれます（詳細は下記）。
 
+### バックエンド（backend）の切り替え
+
+send-agent では、対話式セッションの「バックエンド」として `tmux` と `builtin` の 2 種類をサポートしています。
+
+- `tmux` バックエンド: tmux のペインを作成して対話セッションを管理します（デフォルト）。
+- `builtin` バックエンド: Neovim 内のバッファを擬似ペインとして利用します（tmux を使いたくないときの代替手段）。
+
+バックエンドはグローバル（全エージェントの既定）で設定することも、各エージェント設定で個別に上書きすることも可能です。
+
+- グローバル設定（全エージェントの既定）:
+
+```lua
+require("send-agent").setup({
+  backend = "builtin", -- "tmux" または "builtin"
+})
+
+### バックエンド（backend）の切り替え
+
+send-agent では、対話式セッションの「バックエンド」として `tmux` と `builtin` の 2 種類をサポートしています。
+
+- `tmux` バックエンド: tmux のペインを作成して対話セッションを管理します（デフォルト）。
+- `builtin` バックエンド: Neovim 内のバッファを擬似ペインとして利用します（tmux を使いたくないときの代替手段）。
+
+バックエンドはグローバル（全エージェントの既定）で設定することも、各エージェント設定で個別に上書きすることも可能です。
+
+- グローバル設定（全エージェントの既定）:
+
+```lua
+require("send-agent").setup({
+  backend = "builtin", -- "tmux" または "builtin"
+})
+
 ## prompts（非対話式・プロンプトハンドラ）
 
 send-agent は「interactive_agents」（tmux を使う対話式）に加え、非対話型のプロンプトハンドラ（prompts）をサポートしています。prompts は `require("send-agent").setup(opts)` の `prompts` テーブルに、エージェント名をキーとするコールバック関数を設定することで利用可能です。`M.send()` や `M.send_buffer_and_clear()` は、`interactive_agents` に該当しないエージェント名が指定されている場合、`prompts` テーブルに定義されたコールバックを呼び出します。`gen` は特別扱いで、`M.send()` で追加のプロンプト入力を要求して `context.prompt` に格納してから `prompts["gen"]` を呼びます。
