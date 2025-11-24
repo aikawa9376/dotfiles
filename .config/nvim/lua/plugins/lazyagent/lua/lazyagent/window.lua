@@ -18,7 +18,7 @@ local function _ensure_bufnr(bufnr, opts)
     pcall(function()
       vim.bo[bufnr].bufhidden = "wipe"
       vim.bo[bufnr].buftype = "nofile"
-      vim.bo[bufnr].filetype = (opts and opts.filetype) or "markdown"
+      vim.bo[bufnr].filetype = (opts and opts.filetype) or "lazyagent"
       vim.bo[bufnr].modifiable = true
     end)
   end

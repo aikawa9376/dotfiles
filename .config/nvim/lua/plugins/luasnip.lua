@@ -37,6 +37,7 @@ return {
     -- require("luasnip.loaders.from_snipmate").load()
 
     ls.filetype_set("cpp", { "c" })
+    ls.filetype_set("lazyagent", { "markdown" })
     ls.filetype_extend("lua", { "c" })
     ls.filetype_extend("typescriptreact", { "html", "javascript" })
     ls.filetype_extend("typescript", { "javascript" })

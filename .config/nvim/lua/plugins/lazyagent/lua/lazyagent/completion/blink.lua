@@ -1,6 +1,6 @@
 -- blink.cmp source for lazyagent token completions.
 -- Exposes a blink.cmp source module that returns token suggestions like:
---   {buffer}, {buffer_abs}, {buffers}, {buffers_abs}, {git_root}, {git_branch}, {diagnostics}
+--   #buffer, #buffer_abs, #buffers, #buffers_abs, #git_root, #git_branch, #diagnostics
 -- The source uses lazyagent.transforms for previews/documentation.
 --
 -- Usage (blink.cmp config):
@@ -16,7 +16,7 @@ if not ok_transforms then
   local noop = {}
   function noop.new(_) return setmetatable({}, { __index = noop }) end
   function noop:enabled() return false end
-  function noop:get_trigger_characters() return { "{" } end
+  function noop:get_trigger_characters() return { "#" } end
   function noop:get_completions(_, cb) cb({ items = {}, is_incomplete_forward = false, is_incomplete_backward = false }) end
   return noop
 end
@@ -48,18 +48,18 @@ function source:enabled(ctx)
 
   if vim.b[bufnr] and vim.b[bufnr].lazyagent_source_bufnr then return true end
   local ft = vim.bo[bufnr].filetype or ""
-  if ft == "markdown" or ft == "text" then return true end
+  if ft == "markdown" or ft == "text" or ft == "lazyagent" then return true end
   return false
 end
 
 -- Trigger characters: start token with '{'
 function source:get_trigger_characters()
-  return { "{" }
+  return { "#" }
 end
 
-local function make_item(tok, ctx, bufnr)
-  local label = "{" .. tok.name .. "}"
-  local insert_text = label
+local function make_item(tok, _, bufnr)
+  local label = "#" .. tok.name
+  local insert_text = label .. " "
 
   -- Resolve preview/documentation using transforms.preview_token with best-effort source bufnr
   local opts = { source_bufnr = bufnr }
@@ -125,7 +125,7 @@ function source:resolve(item, callback)
 end
 
 -- Optional: handle execution after accept; default behavior is fine.
-function source:execute(ctx, item, callback, default_implementation)
+function source:execute(_, _, callback, default_implementation)
   default_implementation()
   callback()
 end

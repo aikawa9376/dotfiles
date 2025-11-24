@@ -177,11 +177,12 @@ return {
           AvanteInput = { 'avante', 'buffer', 'ripgrep' },
           sql = { 'buffer', 'snippets' },
           text = { 'buffer', 'ripgrep' },
-          markdown = { 'buffer', 'ripgrep', 'snippets', 'lazyagent' },
+          markdown = { 'buffer', 'ripgrep', 'snippets' },
+          lazyagent = { 'buffer', 'ripgrep', 'snippets', 'lazyagent' },
           php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep'  },
         },
         providers = {
-          ["lazyagent"] = {
+          lazyagent = {
             name = '[SA]',
             module = 'lazyagent.completion.blink',
           },

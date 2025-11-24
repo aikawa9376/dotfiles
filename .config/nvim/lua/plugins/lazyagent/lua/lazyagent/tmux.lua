@@ -2,6 +2,7 @@ local M = {}
 local DEFAULT_SUBMIT_DELAY_MS = 600
 local DEFAULT_SUBMIT_RETRY = 1
 local util = require("lazyagent.util")
+local state = require("logic.state")
 
 -- Run tmux command asynchronously using jobstart; fallback to a synchronous
 -- system call. This wrapper validates opts and captures jobstart errors.
@@ -72,8 +73,10 @@ end
 function M.split(command, size, is_vertical, on_split)
   -- create the pane in the background (don't switch focus) and print the pane id
   local args = { "split-window", "-d", "-P", "-F", "#{pane_id}" }
+  -- 'is_vertical' here should match builtin/vsplit behavior (side-by-side).
+  -- In tmux, side-by-side splits are created with '-h' (horizontal flag).
   if is_vertical then
-    table.insert(args, "-v")
+    table.insert(args, "-h")
   end
   if size then
     table.insert(args, "-p")
@@ -129,8 +132,54 @@ function M.pane_exists(pane_id)
   return false
 end
 
--- Send keys to a tmux pane (keys is an array of strings)
-function M.send_keys(target_pane, keys)
+-- Attempt to exit tmux copy-mode on the target pane.
+-- Tries the canonical `-X cancel` first (preferred), falling back to a keystroke
+-- send (Escape) if the `-X` form isn't supported by the tmux on the user's system.
+function M.exit_copy_mode(target_pane, on_done)
+  on_done = on_done or function() end
+  if not target_pane or target_pane == "" then
+    on_done(false)
+    return false
+  end
+
+  local ok, _ = run({ "send-keys", "-t", target_pane, "-X", "cancel" }, {
+    on_exit = function(_, code, _)
+      vim.schedule(function()
+        if code == nil or code == 0 then
+          on_done(true)
+        else
+          on_done(false)
+        end
+      end)
+    end,
+  })
+
+  if not ok then
+    -- If run couldn't start a job, fall back synchronously.
+    run({ "send-keys", "-t", target_pane, "Escape" })
+    on_done(false)
+  end
+
+  return true
+end
+
+-- Send keys to a tmux pane (keys is an array of strings).
+-- If opts.skip_exit_copy_mode is not true and tmux_auto_exit_copy_mode is enabled in config,
+-- attempt to exit tmux copy-mode first before sending the requested keys.
+function M.send_keys(target_pane, keys, opts)
+  opts = opts or {}
+  if not keys then return end
+  if type(keys) ~= "table" then keys = { keys } end
+
+  -- Optionally auto-exit copy-mode before sending acceptance/submit keys (e.g., Enter/C-m).
+  -- Only attempt to exit copy-mode when the key(s) being sent include an enter-equivalent.
+  if not (opts and opts.skip_exit_copy_mode) and state and state.opts and state.opts.tmux_auto_exit_copy_mode and util.contains_enter_key(keys) then
+    M.exit_copy_mode(target_pane, function()
+      M.send_keys(target_pane, keys, vim.tbl_extend("force", opts or {}, { skip_exit_copy_mode = true }))
+    end)
+    return
+  end
+
   local args = { "send-keys", "-t", target_pane }
   for _, key in ipairs(keys) do
     table.insert(args, key)
