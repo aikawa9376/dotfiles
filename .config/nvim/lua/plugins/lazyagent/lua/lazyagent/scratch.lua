@@ -1,11 +1,11 @@
 local M = {}
-local window = require("send-agent.window")
+local window = require("lazyagent.window")
 
-if not vim.g.send_agent_scratch_deprecation_shown then
+if not vim.g.lazyagent_scratch_deprecation_shown then
   vim.schedule(function()
-    vim.notify("send-agent.scratch is deprecated and will be removed in a future version; use send-agent.window or SendAgentToggle instead", vim.log.levels.INFO)
+    vim.notify("lazyagent.scratch is deprecated and will be removed in a future version; use lazyagent.window or LazyAgentToggle instead", vim.log.levels.INFO)
   end)
-  vim.g.send_agent_scratch_deprecation_shown = true
+  vim.g.lazyagent_scratch_deprecation_shown = true
 end
 
 -- Compatibility layer: keep a minimal API that forwards to the new window-based
@@ -33,7 +33,7 @@ local function ensure_buffer(filetype, initial_content)
 
     -- Attach cache saving for scratch buffers (if the main module provides it).
     pcall(function()
-      local sa = require("send-agent")
+      local sa = require("lazyagent")
       if sa and sa.attach_cache_to_buf then
         sa.attach_cache_to_buf(bufnr_in)
       end
@@ -52,7 +52,7 @@ function M.open(opts)
   -- Register buffer-local scratch keymaps so standalone scratch buffers also get
   -- the default key bindings (no tmux pane).
   pcall(function()
-    local sa = require("send-agent")
+    local sa = require("lazyagent")
     if sa and sa.register_scratch_keymaps then
       sa.register_scratch_keymaps(bufnr, { scratch_keymaps = opts.scratch_keymaps })
     end

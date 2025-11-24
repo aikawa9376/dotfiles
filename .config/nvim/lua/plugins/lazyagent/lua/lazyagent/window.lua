@@ -44,7 +44,7 @@ function M.open_float(bufnr, opts)
     height = height,
     border = "single",
     style = "minimal",
-    title = opts.title or " send-agent ",
+    title = opts.title or " lazyagent ",
     title_pos = "center",
   }
 
@@ -104,7 +104,7 @@ function M.open_float(bufnr, opts)
     pcall(function() vim.api.nvim_win_set_config(winid, float_original_opts) end)
   end
 
-  local gid = vim.api.nvim_create_augroup("SendAgentFloat" .. tostring(winid), { clear = true })
+  local gid = vim.api.nvim_create_augroup("LazyAgentFloat" .. tostring(winid), { clear = true })
   float_autocmd_group_id = gid
   vim.api.nvim_create_autocmd("WinEnter", {
     group = gid,
@@ -115,7 +115,9 @@ function M.open_float(bufnr, opts)
         if not float_is_focused then
           restore_float()
           float_is_focused = true
-          pcall(function() vim.cmd("startinsert") end)
+          if opts and opts.start_in_insert_on_focus then
+            pcall(function() vim.cmd("startinsert") end)
+          end
         end
       else
         -- When focus moves away, shrink and move it to the bottom-right.
@@ -132,7 +134,9 @@ function M.open_float(bufnr, opts)
   vim.wo[winid].cursorline = true
   vim.wo[winid].wrap = true
 
-  vim.cmd("startinsert") -- Start in insert mode
+  if opts and opts.start_in_insert_on_focus then
+    vim.cmd("startinsert") -- Start in insert mode
+  end
 end
 
 function M.open_vsplit(bufnr, opts)
@@ -161,7 +165,9 @@ function M.open_vsplit(bufnr, opts)
   vim.wo[winid].number = false
   vim.wo[winid].cursorline = true
   vim.wo[winid].wrap = true
-  vim.cmd("startinsert")
+  if opts and opts.start_in_insert_on_focus then
+    vim.cmd("startinsert")
+  end
   return winid
 end
 

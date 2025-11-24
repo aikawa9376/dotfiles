@@ -1,4 +1,4 @@
--- Transformation utilities for send-agent: token expansion, git context, and diagnostics.
+-- Transformation utilities for lazyagent: token expansion, git context, and diagnostics.
 -- Provides M.expand(text, opts) which replaces tokens in `text` with contextual values.
 -- Known tokens:
 --  - {buffer}      -> "@<path>" (path relative to git root or cwd)
@@ -9,7 +9,7 @@
 --  - {git_branch}  -> git branch name for the source buffer
 --  - {diagnostics} -> fenced diagnostics code block formatted for prompts
 local M = {}
-local util = require("send-agent.util")
+local util = require("lazyagent.util")
 
 local severity_names = {}
 if vim and vim.diagnostic and vim.diagnostic.severity then
@@ -36,6 +36,21 @@ local function get_rel_to_root_path(bufnr)
     if rel and rel ~= "" then return rel end
   end
   return vim.fn.fnamemodify(abs, ":.")
+end
+
+-- If the buffer is a scratchpad, use the alternate buffer instead.
+local function get_target_bufnr(bufnr)
+  local target_bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if vim.api.nvim_buf_is_valid(target_bufnr) then
+    local buftype = vim.api.nvim_get_option_value("buftype", { buf = target_bufnr })
+    if buftype == "nofile" then
+      local alt_buf = vim.fn.bufnr("#")
+      if alt_buf > 0 and alt_buf ~= target_bufnr and vim.api.nvim_buf_is_valid(alt_buf) then
+        target_bufnr = alt_buf
+      end
+    end
+  end
+  return target_bufnr
 end
 
 local function gather_diagnostics(bufnr)
@@ -77,7 +92,7 @@ local function list_buffers_text(opts)
   for _, b in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_valid(b) then
       -- Mimic bufferline defaults: include "listed" buffers only unless explicitly asked.
-      if include_unlisted or vim.api.nvim_buf_get_option(b, "buflisted") then
+      if include_unlisted or vim.api.nvim_get_option_value("buflisted", { buf = b }) then
         local name = vim.api.nvim_buf_get_name(b) or ""
         if name ~= "" then
           local path = absolute and (get_abs_path(b) or name) or (get_rel_to_root_path(b) or name)
@@ -92,7 +107,7 @@ end
 local function replace_token(token, opts, meta)
   opts = opts or {}
   meta = meta or {}
-  local source_bufnr = opts.source_bufnr or opts.origin_bufnr or vim.api.nvim_get_current_buf()
+  local source_bufnr = get_target_bufnr(opts.source_bufnr or opts.origin_bufnr)
 
   if token == "buffer" then
     local rel = get_rel_to_root_path(source_bufnr) or (get_abs_path(source_bufnr) or "")
@@ -147,5 +162,54 @@ function M.expand(text, opts)
   if not ok then expanded = tostring(text) end
   return expanded, meta
 end
+
+-- Token definitions used by completion/preview providers
+local token_definitions = {
+  { name = "buffer", desc = "Path to the source buffer (relative to git root if available), prefixed with '@'." },
+  { name = "buffer_abs", desc = "Absolute path of the source buffer." },
+  { name = "buffers", desc = "Newline-separated list of listed buffers with @ prefix (relative paths by default)." },
+  { name = "buffers_abs", desc = "Newline-separated list of listed buffers with @ prefix (absolute paths)." },
+  { name = "git_root", desc = "Repository root path for the source buffer (git)." },
+  { name = "git_branch", desc = "Git branch name for the source buffer." },
+  { name = "diagnostics", desc = "Fenced diagnostics code block formatted for prompts (````diagnostics````)." },
+}
+
+-- Return a copy of the available tokens so callers can't mutate the original list.
+function M.available_tokens()
+  return vim.deepcopy(token_definitions)
+end
+
+function M.token_description(name)
+  for _, t in ipairs(token_definitions) do
+    if t.name == name then return t.desc end
+  end
+  return nil
+end
+
+-- Preview a single token (returns expanded string and meta like M.expand does).
+-- token: token without braces (e.g. "buffer")
+-- opts: same opts passed to M.expand (e.g. { source_bufnr = bufnr })
+function M.preview_token(token, opts)
+  opts = opts or {}
+  local meta = {}
+  local ok, val = pcall(function() return replace_token(token, opts, meta) end)
+  if not ok then val = "" end
+  return val, meta
+end
+
+-- Auto-register nvim-cmp source if cmp is present in the environment.
+-- The implementation of the cmp source is located in:
+-- lua/lazyagent/cmp/transforms/cmp.lua (it registers itself on load).
+local function try_register_cmp()
+  local ok, _ = pcall(require, "cmp")
+  if not ok then return end
+  local ok2, src = pcall(require, "lazyagent.cmp.transforms.cmp")
+  if ok2 and src and type(src.register) == "function" then
+    -- The source module exposes .register as a convenience; call it safely.
+    pcall(src.register)
+  end
+end
+
+pcall(try_register_cmp)
 
 return M

@@ -1,7 +1,7 @@
 local M = {}
 local DEFAULT_SUBMIT_DELAY_MS = 600
 local DEFAULT_SUBMIT_RETRY = 1
-local util = require("send-agent.util")
+local util = require("lazyagent.util")
 
 -- Run tmux command asynchronously using jobstart; fallback to a synchronous
 -- system call. This wrapper validates opts and captures jobstart errors.
@@ -156,7 +156,7 @@ function M.scroll_down(target_pane)
   M.send_keys(target_pane, { "PageDown" })
 end
 
--- Save a text into tmux buffer name 'send-agent-tmp'
+-- Save a text into tmux buffer name 'lazyagent-tmp'
 function M.set_buffer(text, on_done, opts)
   opts = opts or {}
   local debug = opts.debug or false
@@ -172,7 +172,7 @@ function M.set_buffer(text, on_done, opts)
       pcall(vim.notify, "tmux.set_buffer: wrote buffer to " .. tmpfile, vim.log.levels.DEBUG)
     end)
   end
-  run({ "load-buffer", "-b", "send-agent-tmp", tmpfile }, {
+  run({ "load-buffer", "-b", "lazyagent-tmp", tmpfile }, {
     on_exit = function()
       if debug then
         vim.schedule(function()
@@ -190,7 +190,7 @@ end
 function M.paste(target_pane, opts)
   opts = opts or {}
   local on_done = opts.on_done
-  local args = { "paste-buffer", "-b", "send-agent-tmp", "-t", target_pane }
+  local args = { "paste-buffer", "-b", "lazyagent-tmp", "-t", target_pane }
   local ok, ret = run(args, {
     on_exit = function(_, _, _)
       if on_done then
