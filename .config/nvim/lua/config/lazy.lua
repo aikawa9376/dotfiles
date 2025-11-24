@@ -86,7 +86,7 @@ require("lazy").setup({
     { import = "plugins.overseer" },
     { import = "plugins.resession" },
     { import = "plugins.kulala" },
-    { import = "plugins.send-agent" },
+    { import = "plugins.lazyagent" },
     { import = "plugins.octo" },
     { import = "plugins.oil" },
     { import = "plugins.spider" },

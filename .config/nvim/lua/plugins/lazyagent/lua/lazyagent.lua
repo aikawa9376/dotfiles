@@ -52,11 +52,11 @@ function M.register_keymaps(maps)
   end
 end
 
-local tmux = require("send-agent.tmux")
-local window = require("send-agent.window")
-local util = require("send-agent.util")
-local transforms = require("send-agent.transforms")
-local builtin_backend = require("send-agent.builtin")
+local tmux = require("lazyagent.tmux")
+local window = require("lazyagent.window")
+local util = require("lazyagent.util")
+local transforms = require("lazyagent.transforms")
+local builtin_backend = require("lazyagent.builtin")
 local backends = { tmux = tmux, builtin = builtin_backend }
 
 local function resolve_backend_for_agent(agent_name, agent_cfg)
@@ -75,7 +75,7 @@ local function resolve_backend_for_agent(agent_name, agent_cfg)
 end
 
 -- Cache helpers for saving scratch buffer content per project branch and root.
--- Default cache directory is <stdpath("cache")>/send-agent
+-- Default cache directory is <stdpath("cache")>/lazyagent
 local function sanitize_filename_component(s)
   if not s then return "" end
   s = tostring(s)
@@ -85,7 +85,7 @@ local function sanitize_filename_component(s)
 end
 
 local function get_cache_dir()
-  local dir = (M.opts and M.opts.cache and M.opts.cache.dir) or (vim.fn.stdpath("cache") .. "/send-agent")
+  local dir = (M.opts and M.opts.cache and M.opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
   if vim.fn.isdirectory(dir) == 0 then
     vim.fn.mkdir(dir, "p")
   end
@@ -140,7 +140,7 @@ local function attach_cache_autocmds(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
   if not (M.opts and M.opts.cache and M.opts.cache.enabled) then return end
-  local gid = vim.api.nvim_create_augroup("SendAgentScratchCache-" .. tostring(bufnr), { clear = true })
+  local gid = vim.api.nvim_create_augroup("LazyAgentScratchCache-" .. tostring(bufnr), { clear = true })
   local debounce_ms = (M.opts.cache and M.opts.cache.debounce_ms) or 1000
   local scheduled = false
   local function schedule_write()
@@ -191,7 +191,7 @@ end
 function M.open_history()
   local entries = list_cache_files()
   if not entries or #entries == 0 then
-    vim.notify("SendAgentHistory: no cache history found in " .. get_cache_dir(), vim.log.levels.INFO)
+    vim.notify("LazyAgentHistory: no cache history found in " .. get_cache_dir(), vim.log.levels.INFO)
     return
   end
 
@@ -200,7 +200,7 @@ function M.open_history()
     table.insert(choices, e.name .. " (" .. os.date("%Y-%m-%d %H:%M:%S", e.mtime or 0) .. ")")
   end
 
-  vim.ui.select(choices, { prompt = "Open send-agent history:" }, function(choice, idx)
+  vim.ui.select(choices, { prompt = "Open lazyagent history:" }, function(choice, idx)
     if not choice or not idx then return end
     local entry = entries[idx]
     if entry and entry.path then
@@ -246,6 +246,7 @@ function M.setup(opts)
         Cursor = vim.tbl_deep_extend("force", base, { cmd = "cursor-agent" }),
       }
     end)(),
+    start_in_insert_on_focus = false,
     window_type = "float",
     backend = "tmux",
     -- Default delay (ms) to wait after paste before sending submit keys; and retry count
@@ -273,7 +274,7 @@ function M.setup(opts)
       nav_up = "<Up>",
       nav_down = "<Down>",
     },
-    cache = { enabled = true, dir = vim.fn.stdpath("cache") .. "/send-agent", debounce_ms = 1500 },
+    cache = { enabled = true, dir = vim.fn.stdpath("cache") .. "/lazyagent", debounce_ms = 1500 },
     send_number_keys_to_agent = true,
   }
 
@@ -290,7 +291,7 @@ function M.setup(opts)
   end
 
   -- Register convenience scratch starter command
-  try_create_user_command("SendAgentScratch", function(cmdargs)
+  try_create_user_command("LazyAgentScratch", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
     resolve_target_agent(explicit, nil, function(chosen)
       if not chosen then return end
@@ -298,7 +299,7 @@ function M.setup(opts)
     end)
   end, { nargs = "?", desc = "Open a scratch buffer for sending instructions to AI agent" })
 
-  try_create_user_command("SendAgentClose", function(cmdargs)
+  try_create_user_command("LazyAgentClose", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
     resolve_target_agent(explicit, nil, function(chosen)
       if not chosen then return end
@@ -306,7 +307,7 @@ function M.setup(opts)
     end)
   end, { nargs = "?", desc = "Close an agent tmux pane by name (optional agent name)" })
 
-  try_create_user_command("SendAgentToggle", function(cmdargs)
+  try_create_user_command("LazyAgentToggle", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
     resolve_target_agent(explicit, nil, function(chosen)
       if not chosen then return end
@@ -314,8 +315,8 @@ function M.setup(opts)
     end)
   end, { nargs = "?", desc = "Toggle the floating agent input buffer (open/close)" })
 
-  -- User command to open history logs saved by send-agent (from cache).
-  try_create_user_command("SendAgentHistory", function(cmdargs)
+  -- User command to open history logs saved by lazyagent (from cache).
+  try_create_user_command("LazyAgentHistory", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
     if explicit then
       local dir = get_cache_dir()
@@ -323,12 +324,12 @@ function M.setup(opts)
       if vim.fn.filereadable(path) == 1 then
         vim.cmd("edit " .. vim.fn.fnameescape(path))
       else
-        vim.notify("SendAgentHistory: file not found: " .. path, vim.log.levels.ERROR)
+        vim.notify("LazyAgentHistory: file not found: " .. path, vim.log.levels.ERROR)
       end
       return
     end
     M.open_history()
-  end, { nargs = "?", desc = "Open a send-agent cache history file. If no arg is provided, pick from UI." })
+  end, { nargs = "?", desc = "Open a lazyagent cache history file. If no arg is provided, pick from UI." })
 
   -- Register commands for each interactive agent
   if M.opts.interactive_agents then
@@ -369,13 +370,13 @@ function M.setup(opts)
 
   -- Close all agent sessions on Quit/Exit
   pcall(function()
-    local group = vim.api.nvim_create_augroup("SendAgentCleanup", { clear = true })
+    local group = vim.api.nvim_create_augroup("LazyAgentCleanup", { clear = true })
     vim.api.nvim_create_autocmd("VimLeavePre", {
       group = group,
       callback = function()
         M.close_all_sessions()
       end,
-      desc = "Close send-agent tmux sessions on exit",
+      desc = "Close lazyagent tmux sessions on exit",
     })
   end)
 end
@@ -918,14 +919,14 @@ function M.start_interactive_session(opts)
     end
 
     -- Send an initial input if provided.
-    if opts.initial_input and opts.initial_input ~= "" then
-      local _, backend_mod = resolve_backend_for_agent(agent_name, agent_cfg)
-      backend_mod.paste_and_submit(pane_id, opts.initial_input, agent_cfg.submit_keys, {
-        submit_delay = agent_cfg.submit_delay or M.opts.submit_delay,
-        submit_retry = agent_cfg.submit_retry or M.opts.submit_retry,
-        debug = M.opts.debug,
-      })
-    end
+    -- if opts.initial_input and opts.initial_input ~= "" then
+    --   local _, backend_mod = resolve_backend_for_agent(agent_name, agent_cfg)
+    --   backend_mod.paste_and_submit(pane_id, opts.initial_input, agent_cfg.submit_keys, {
+    --     submit_delay = agent_cfg.submit_delay or M.opts.submit_delay,
+    --     submit_retry = agent_cfg.submit_retry or M.opts.submit_retry,
+    --     debug = M.opts.debug,
+    --   })
+    -- end
   end)
 end
 

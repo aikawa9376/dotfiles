@@ -1,7 +1,7 @@
 local M = {}
 local DEFAULT_SUBMIT_DELAY_MS = 600
 local DEFAULT_SUBMIT_RETRY = 1
-local util = require("send-agent.util")
+local util = require("lazyagent.util")
 
 -- Minimal builtin backend implementation using Neovim terminals/buffers:
 -- pane_id will be represented as the buffer number string for terminal buffers,
