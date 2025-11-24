@@ -59,11 +59,11 @@ function M.open(opts)
   end)
 end
 
-function M.open_output(opts)
+function M.open_output(_)
   -- No-op: results are shown in tmux pane.
 end
 
-function M.append_output(text)
+function M.append_output(_)
   -- No-op for compatibility
 end
 

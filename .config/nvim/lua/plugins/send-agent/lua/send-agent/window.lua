@@ -5,8 +5,30 @@ local float_autocmd_group_id = nil
 local float_original_opts = nil
 local float_is_focused = false
 
+local function _ensure_bufnr(bufnr, opts)
+  -- Normalize accepting either (bufnr, opts) or (opts) as the first parameter.
+  if type(bufnr) == "table" and opts == nil then
+    opts = bufnr
+    bufnr = nil
+  end
+
+  -- If the caller didn't pass a valid buffer, create a scratch buffer to avoid nvim_open_win assertion errors.
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    bufnr = vim.api.nvim_create_buf(false, true)
+    pcall(function()
+      vim.bo[bufnr].bufhidden = "wipe"
+      vim.bo[bufnr].buftype = "nofile"
+      vim.bo[bufnr].filetype = (opts and opts.filetype) or "markdown"
+      vim.bo[bufnr].modifiable = true
+    end)
+  end
+
+  return bufnr, opts
+end
+
 function M.open_float(bufnr, opts)
-  opts = opts or {}
+  -- Ensure we always get a valid buffer and canonical opts table.
+  bufnr, opts = _ensure_bufnr(bufnr, opts or {})
 
   -- Center the floating window
   local width = math.floor(vim.o.columns * 0.6)
@@ -22,7 +44,7 @@ function M.open_float(bufnr, opts)
     height = height,
     border = "single",
     style = "minimal",
-    title = opts.title or "send-agent",
+    title = opts.title or " send-agent ",
     title_pos = "center",
   }
 
@@ -93,7 +115,7 @@ function M.open_float(bufnr, opts)
         if not float_is_focused then
           restore_float()
           float_is_focused = true
-          pcall(vim.cmd, "startinsert")
+          pcall(function() vim.cmd("startinsert") end)
         end
       else
         -- When focus moves away, shrink and move it to the bottom-right.
@@ -114,7 +136,8 @@ function M.open_float(bufnr, opts)
 end
 
 function M.open_vsplit(bufnr, opts)
-  opts = opts or {}
+  -- Ensure we always get a valid buffer and canonical opts table.
+  bufnr, opts = _ensure_bufnr(bufnr, opts or {})
   -- If a float autocmd group is active, clear it as we are switching to vsplit mode.
   if float_autocmd_group_id then
     pcall(vim.api.nvim_del_augroup_by_id, float_autocmd_group_id)
@@ -143,7 +166,12 @@ function M.open_vsplit(bufnr, opts)
 end
 
 function M.open(bufnr, opts)
-  opts = opts or {}
+  -- Accept either (bufnr, opts) or (opts) calling style and ensure a valid buffer/opts.
+  if type(bufnr) == "table" and opts == nil then
+    opts = bufnr
+    bufnr = nil
+  end
+  bufnr, opts = _ensure_bufnr(bufnr, opts or {})
   local window_type = opts.window_type or "float"
 
   if window_type == "vsplit" then

@@ -192,7 +192,7 @@ function M.paste(target_pane, opts)
   local on_done = opts.on_done
   local args = { "paste-buffer", "-b", "send-agent-tmp", "-t", target_pane }
   local ok, ret = run(args, {
-    on_exit = function(jobid, code, event)
+    on_exit = function(_, _, _)
       if on_done then
         vim.schedule_wrap(on_done)(true)
       end
@@ -269,7 +269,7 @@ function M.capture_pane(target_pane, on_output)
   local args = { "capture-pane", "-J", "-p", "-t", target_pane }
   local collected = {}
   run(args, {
-    on_stdout = function(jobid, data)
+    on_stdout = function(_, data)
       if not data then return end
       local esc = string.char(27)
       for _, d in ipairs(data) do
