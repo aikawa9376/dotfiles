@@ -1,12 +1,12 @@
 return {
   "MeanderingProgrammer/render-markdown.nvim",
-  ft = { 'markdown', 'Avante', 'fzf' },
+  ft = { 'markdown', 'Avante', 'fzf', 'lazyagent' },
   opts = {
     -- restart_highlighter = true,
     anti_conceal = {
       enabled = false,
     },
-    file_types = { 'markdown', 'Avante', 'fzf' },
+    file_types = { 'markdown', 'Avante', 'fzf', 'lazyagent' },
     heading = {
       sign = false,
       position = "inline",

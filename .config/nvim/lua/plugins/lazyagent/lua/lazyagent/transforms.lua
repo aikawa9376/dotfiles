@@ -1,13 +1,13 @@
 -- Transformation utilities for lazyagent: token expansion, git context, and diagnostics.
 -- Provides M.expand(text, opts) which replaces tokens in `text` with contextual values.
 -- Known tokens:
---  - {buffer}      -> "@<path>" (path relative to git root or cwd)
---  - {buffer_abs}  -> absolute path of the source buffer
---  - {buffers}     -> newline-separated list of "bufferline"-equivalent buffers (listed buffers) with "@" prefix
---  - {buffers_abs} -> newline-separated list of bufferline-equivalent buffers, absolute paths with "@" prefix
---  - {git_root}    -> repository root path for the source buffer (git)
---  - {git_branch}  -> git branch name for the source buffer
---  - {diagnostics} -> fenced diagnostics code block formatted for prompts
+--  - #buffer      -> "@<path>" (path relative to git root or cwd)
+--  - #buffer_abs  -> absolute path of the source buffer
+--  - #buffers     -> newline-separated list of "bufferline"-equivalent buffers (listed buffers) with "@" prefix
+--  - #buffers_abs -> newline-separated list of bufferline-equivalent buffers, absolute paths with "@" prefix
+--  - #git_root    -> repository root path for the source buffer (git)
+--  - #git_branch  -> git branch name for the source buffer
+--  - #diagnostics -> fenced diagnostics code block formatted for prompts
 local M = {}
 local util = require("lazyagent.util")
 
@@ -42,6 +42,13 @@ end
 local function get_target_bufnr(bufnr)
   local target_bufnr = bufnr or vim.api.nvim_get_current_buf()
   if vim.api.nvim_buf_is_valid(target_bufnr) then
+    -- If this buffer is a lazyagent scratch, prefer an explicit source buffer mapping
+    -- set on the scratch buffer as vim.b[bufnr].lazyagent_source_bufnr.
+    local src = vim.b[target_bufnr] and vim.b[target_bufnr].lazyagent_source_bufnr
+    if src and src > 0 and vim.api.nvim_buf_is_valid(src) then
+      return src
+    end
+
     local buftype = vim.api.nvim_get_option_value("buftype", { buf = target_bufnr })
     if buftype == "nofile" then
       local alt_buf = vim.fn.bufnr("#")
@@ -104,6 +111,27 @@ local function list_buffers_text(opts)
   return table.concat(parts, "\n")
 end
 
+-- External transforms: allow third-party files (transforms-*.lua) or runtime
+-- registration to provide additional token transforms.
+local external_transforms = {}
+
+local function register_external_transform(t)
+  if not t or type(t) ~= "table" then
+    if vim and vim.notify then pcall(vim.notify, "lazyagent.transforms: invalid transform (not a table)", vim.log.levels.WARN) end
+    return nil
+  end
+  if not t.name or type(t.name) ~= "string" then
+    if vim and vim.notify then pcall(vim.notify, "lazyagent.transforms: transform must have a string 'name' field", vim.log.levels.WARN) end
+    return nil
+  end
+  if not t.trans or (type(t.trans) ~= "string" and type(t.trans) ~= "function") then
+    if vim and vim.notify then pcall(vim.notify, "lazyagent.transforms: transform 'trans' must be a string or function for " .. t.name, vim.log.levels.WARN) end
+    return nil
+  end
+  external_transforms[t.name] = { desc = t.desc or "", trans = t.trans }
+  return external_transforms[t.name]
+end
+
 local function replace_token(token, opts, meta)
   opts = opts or {}
   meta = meta or {}
@@ -146,8 +174,27 @@ local function replace_token(token, opts, meta)
     return "```diagnostics\n" .. diagnostics_to_text(diags) .. "\n```"
   end
 
+  -- Allow externally registered transforms to handle custom tokens (either string or function).
+  local ext = external_transforms[token]
+  if ext then
+    if type(ext.trans) == "function" then
+      local ok, val = pcall(ext.trans, opts, meta, token)
+      if not ok then return "" end
+      if type(val) == "string" then
+        local ok2, expanded = pcall(function() return M.expand(val, opts) end)
+        if ok2 and expanded then return expanded end
+        return val
+      end
+      return tostring(val or "")
+    elseif type(ext.trans) == "string" then
+      local ok, expanded = pcall(function() return M.expand(ext.trans, opts) end)
+      if ok then return expanded end
+      return ext.trans
+    end
+  end
+
   -- Unknown token: preserve original form to avoid surprising replacements.
-  return "{" .. token .. "}"
+  return "#" .. token
 end
 
 function M.expand(text, opts)
@@ -155,7 +202,7 @@ function M.expand(text, opts)
   local meta = {}
   if not text then return "", meta end
   local ok, expanded = pcall(function()
-    return tostring(text):gsub("{(.-)}", function(tok)
+    return tostring(text):gsub("#([%w_%-]+)", function(tok)
       return replace_token(tok, opts, meta)
     end)
   end)
@@ -174,15 +221,102 @@ local token_definitions = {
   { name = "diagnostics", desc = "Fenced diagnostics code block formatted for prompts (````diagnostics````)." },
 }
 
+-- Public helpers to register external transforms at runtime.
+function M.register_transform(t)
+  return register_external_transform(t)
+end
+
+function M.register_transforms(list)
+  if not list or type(list) ~= "table" then return nil end
+  for _, tr in ipairs(list) do
+    register_external_transform(tr)
+  end
+end
+
+-- Find potential transform files on runtime path (eg. transforms-source.lua), and project-root lazygit.lua
+-- This will look for transforms-*.lua on runtimepath and also include lazily-defined
+-- `lazygit.lua` files located at repository roots discovered by `util.git_root_for_path`.
+local function find_external_transform_files()
+  local files = vim.api.nvim_get_runtime_file("lua/**/lazyagent/transforms-*.lua", true) or {}
+
+  -- Deduplicate results
+  local seen = {}
+  for _, p in ipairs(files) do seen[p] = true end
+
+  -- Collect git roots (current buf, cwd, and all buffer filepaths)
+  local roots = {}
+  local function try_add_root_from_path(path)
+    if not path or path == "" then return end
+    local root = util.git_root_for_path(path)
+    if root and root ~= "" then roots[root] = true end
+  end
+
+  -- Current buffer and cwd
+  try_add_root_from_path(vim.api.nvim_buf_get_name(0))
+  try_add_root_from_path(vim.fn.getcwd())
+
+  -- All valid buffers
+  for _, b in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(b) then
+      local name = vim.api.nvim_buf_get_name(b) or ""
+      if name ~= "" then try_add_root_from_path(name) end
+    end
+  end
+
+  -- Check for lazygit.lua under each root
+  for root, _ in pairs(roots) do
+    if root and root ~= "" then
+      local candidate = root .. "/lazygit.lua"
+      -- vim.fn.filereadable returns 1 if file is readable
+      if vim.fn.filereadable(candidate) == 1 and not seen[candidate] then
+        table.insert(files, candidate)
+        seen[candidate] = true
+      end
+    end
+  end
+
+  return files
+end
+
+-- Safely load and register any transforms exposed by files found on runtime path.
+local function try_load_external_transforms()
+  local files = find_external_transform_files()
+  if not files or #files == 0 then return end
+  for _, f in ipairs(files) do
+    local ok, res = pcall(function() return dofile(f) end)
+    if not ok then
+      if vim and vim.notify then pcall(vim.notify, "lazyagent.transforms: failed to load " .. f .. ": " .. tostring(res), vim.log.levels.WARN) end
+    else
+      -- The file may return a single transform {name, desc, trans} or an array of them.
+      if type(res) == "table" then
+        if res.name and res.trans then
+          register_external_transform(res)
+        else
+          for _, it in ipairs(res) do
+            if type(it) == "table" and it.name and it.trans then register_external_transform(it) end
+          end
+        end
+      end
+      -- If the file registers transforms itself via M.register_transform, it will be handled
+      -- already because the file executed; nothing else to do.
+    end
+  end
+end
+
 -- Return a copy of the available tokens so callers can't mutate the original list.
 function M.available_tokens()
-  return vim.deepcopy(token_definitions)
+  local tokens = vim.deepcopy(token_definitions)
+  for name, t in pairs(external_transforms) do
+    table.insert(tokens, { name = name, desc = t.desc or "" })
+  end
+  return tokens
 end
 
 function M.token_description(name)
   for _, t in ipairs(token_definitions) do
     if t.name == name then return t.desc end
   end
+  if external_transforms[name] then return external_transforms[name].desc end
   return nil
 end
 
@@ -211,5 +345,8 @@ local function try_register_cmp()
 end
 
 pcall(try_register_cmp)
+
+-- Discover any runtime-provided transforms (files named transforms-*.lua)
+pcall(try_load_external_transforms)
 
 return M

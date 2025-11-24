@@ -19,7 +19,7 @@ end
 -- Show token completions only when a token-like prefix is being typed:
 -- Trigger when '{' is typed.
 function source.get_trigger_characters()
-  return { "{" }
+  return { "#" }
 end
 
 -- Determine if the source should be available in the current buffer.
@@ -30,13 +30,13 @@ function source.is_available(self)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end
   if vim.b[bufnr] and vim.b[bufnr].lazyagent_source_bufnr then return true end
   local ft = vim.bo[bufnr].filetype or ""
-  if ft == "markdown" or ft == "text" then return true end
+  if ft == "markdown" or ft == "text" or ft == "lazyagent" then return true end
   return false
 end
 
 -- Create a single completion item for token.
 local function make_item(tok, params)
-  local label = "{" .. tok.name .. "}"
+  local label = "#" .. tok.name
   local insert_text = label
 
   local preview, meta = transforms.preview_token(tok.name, { source_bufnr = vim.api.nvim_get_current_buf() })

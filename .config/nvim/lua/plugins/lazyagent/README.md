@@ -55,8 +55,8 @@ lazyagent の `setup(opts)` で指定可能です。主なデフォルト:
     Gemini = {
       cmd = "gemini",
       pane_size = 30,
-      scratch_filetype = "markdown",
-      submit_keys = { "C-m" },
+      scratch_filetype = "lazyagent",
+      submit_keys = { "C-m" }, -- tmux-style key; "<CR>" and "<c-m>" are accepted and normalized for convenience
       capture_delay = 800,
     },
     -- Claude, Codex など
@@ -92,6 +92,29 @@ lazyagent では、対話式セッションの「バックエンド」として 
 require("lazyagent").setup({
   backend = "builtin", -- "tmux" または "builtin"
 })
+```
+
+- setup 時に custom backend モジュールのマッピングを渡す（文字列としてモジュールパス or モジュールオブジェクトを渡せます）：
+
+```lua
+require("lazyagent").setup({
+  backend = "builtin",
+  backends = { mybackend = "my.lazyagent.backend" },
+})
+```
+
+- runtime でバックエンドを登録・切り替える API（より簡単に backend を扱うために追加）:
+
+```lua
+-- register backend at runtime (module object)
+require("lazyagent").register_backend("mybackend", require("my.lazyagent.backend"))
+-- set global backend
+require("lazyagent").set_default_backend("mybackend")
+-- set per-agent override in runtime-config
+require("lazyagent").set_agent_backend("Gemini", "mybackend")
+```
+
+（注）set_default_backend / set_agent_backend は既存のセッションを自動的に再起動・移行しません。必要に応じて既存 TMUX セッションを close して開き直すか、再接続する前提でご利用ください。
 
 ### バックエンド（backend）の切り替え
 
@@ -108,6 +131,7 @@ lazyagent では、対話式セッションの「バックエンド」として 
 require("lazyagent").setup({
   backend = "builtin", -- "tmux" または "builtin"
 })
+```
 
 ## prompts（非対話式・プロンプトハンドラ）
 
@@ -150,8 +174,7 @@ prompts = {
     -- context.prompt を組み合わせて API に送るなど、任意に処理を実装します。
   end,
 }
-
----
+```
 
 ## キャッシュ（スクラッチの保存）
 

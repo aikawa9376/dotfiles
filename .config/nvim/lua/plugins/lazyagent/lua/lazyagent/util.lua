@@ -26,13 +26,13 @@ local function contains_enter_key(keys)
   return false
 end
 
-M.normalize_text = normalize_text
-M.contains_enter_key = contains_enter_key
+  M.normalize_text = normalize_text
+  M.contains_enter_key = contains_enter_key
 
--- Robustly get visual selection text:
--- Prefer reading the '< and '> marks directly if available; otherwise, fall back to a
--- yank-based selection while keeping the user's unnamed register intact.
-function M.get_visual_selection()
+  -- Robustly get visual selection text:
+  -- Prefer reading the '< and '>' marks directly if available; otherwise, fall back to a
+  -- yank-based selection while keeping the user's unnamed register intact.
+  function M.get_visual_selection()
   -- First try to use marks '< and '>'
   local sp = vim.fn.getpos("'<")
   local ep = vim.fn.getpos("'>")

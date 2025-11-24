@@ -12,6 +12,7 @@ return {
     "SendAgentScratch",
     "SendAgentToggle",
     "SendAgentHistory",
+    "SendAgentHistoryList",
     "SendAgentClose",
     "Claude",
     "Codex",
