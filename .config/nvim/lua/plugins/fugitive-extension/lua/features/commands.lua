@@ -207,6 +207,63 @@ function M.setup()
     git_cherry_pick({ reg = cmd_opts.reg })
   end, { register = true })
 
+  function M.fixup_commit(commit_hash)
+    if not commit_hash or commit_hash == '' then
+      vim.notify('No commit hash provided', vim.log.levels.ERROR)
+      return
+    end
+
+    local git_dir = vim.fn.FugitiveGitDir()
+    if git_dir == '' then
+      vim.notify('Not in a git repository', vim.log.levels.ERROR)
+      return
+    end
+
+    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
+      return
+    end
+
+    -- Get the parent commit hash
+    local parent_commit_hash_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. commit_hash .. '^'
+    local parent_commit_hash = vim.fn.trim(vim.fn.system(parent_commit_hash_cmd))
+    if vim.v.shell_error ~= 0 then
+      vim.notify('Failed to get parent commit for ' .. commit_hash, vim.log.levels.ERROR)
+      return
+    end
+
+    -- Create a temporary script file
+    local tmpfile = vim.fn.tempname()
+    local short_commit_hash = commit_hash:sub(1, 7)
+    local script_content = string.format('#!/bin/sh\nsed -i \'s/^pick %s/fixup %s/\' "$1"\n', short_commit_hash, short_commit_hash)
+
+    local f = io.open(tmpfile, 'w')
+    if not f then
+      vim.notify('Failed to create temp script', vim.log.levels.ERROR)
+      return
+    end
+
+    f:write(script_content)
+    f:close()
+    vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
+
+    -- Run rebase with GIT_SEQUENCE_EDITOR
+    local rebase_cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(parent_commit_hash .. '^')
+    local result = vim.fn.system(rebase_cmd)
+    vim.fn.delete(tmpfile)
+
+    if vim.v.shell_error ~= 0 then
+      vim.notify('Rebase failed: ' .. result, vim.log.levels.ERROR)
+    else
+      vim.notify('Fixup completed: ' .. short_commit_hash .. ' -> ' .. parent_commit_hash:sub(1, 7))
+      -- Reload status if the fugitive buffer is open
+      vim.fn['fugitive#ReloadStatus']()
+    end
+  end
+
   -- Export functions for use in other modules
   M.git_push = git_push
   M.git_cherry_pick = git_cherry_pick
