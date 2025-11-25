@@ -8,7 +8,6 @@ local agent_logic = require("logic.agent")
 local backend_logic = require("logic.backend")
 local cache_logic = require("logic.cache")
 local transforms = require("lazyagent.transforms")
-local window = require("lazyagent.window")
 local util = require("lazyagent.util")
 
 -- Helper to send text to a pane and optionally kill it after a delay.
@@ -30,10 +29,15 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
 
   local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
 
+  local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
+  local _move_to_end = (_send_mode == "append")
+  local _use_bracketed_paste = (agent_cfg and agent_cfg.use_bracketed_paste) or (state.opts and state.opts.use_bracketed_paste)
   backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
     submit_delay = agent_cfg.submit_delay or state.opts.submit_delay,
     submit_retry = agent_cfg.submit_retry or state.opts.submit_retry,
     debug = state.opts.debug,
+    move_to_end = _move_to_end,
+    use_bracketed_paste = _use_bracketed_paste,
   })
 
   -- For one-shot (non-interactive) sends, kill the pane after a delay if it's not meant to be reused.
@@ -96,10 +100,15 @@ function M.send_to_cli(agent_name, text, opts)
       end
       cache_logic.write_scratch_to_cache()
       local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+      local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
+      local _move_to_end = (_send_mode == "append")
+      local _use_bracketed_paste = (agent_cfg and agent_cfg.use_bracketed_paste) or (state.opts and state.opts.use_bracketed_paste)
       backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
         submit_delay = agent_cfg.submit_delay or state.opts.submit_delay,
         submit_retry = agent_cfg.submit_retry or state.opts.submit_retry,
         debug = state.opts.debug,
+        move_to_end = _move_to_end,
+        use_bracketed_paste = _use_bracketed_paste,
       })
       if not reuse then
         vim.defer_fn(function()

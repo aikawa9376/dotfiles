@@ -164,6 +164,8 @@ function M.paste_and_submit(target_pane, text, submit_keys, opts)
   submit_keys = submit_keys or { "C-m" }
   local submit_delay = opts.submit_delay or DEFAULT_SUBMIT_DELAY_MS
   local submit_retry = opts.submit_retry or DEFAULT_SUBMIT_RETRY
+  local move_to_end = opts.move_to_end or false
+  local use_bracketed_paste = opts.use_bracketed_paste or false
 
   local normalized_text = util.normalize_text(text)
   local bufnr = to_bufnum(target_pane)
@@ -171,8 +173,23 @@ function M.paste_and_submit(target_pane, text, submit_keys, opts)
 
   local jobid = term_job_for_buf(bufnr)
   if jobid then
-    -- Prefer to send as a single string to terminal
+    local esc = string.char(27)
+    -- Move to end of current line/input prior to paste when requested
+    if move_to_end then
+      -- ASCII Ctrl-E (0x05) is commonly used to move to end in shells/readline
+      pcall(vim.fn.chansend, jobid, string.char(5))
+    end
+
+    -- Wrap with bracketed paste sequences if requested.
+    if use_bracketed_paste then
+      pcall(vim.fn.chansend, jobid, esc .. "[200~")
+    end
+
     pcall(vim.fn.chansend, jobid, normalized_text)
+
+    if use_bracketed_paste then
+      pcall(vim.fn.chansend, jobid, esc .. "[201~")
+    end
 
     -- If submit key includes an enter-equivalent, prefer sending a carriage-return (CR)
     -- rather than a newline. Use retry/delay to improve reliability with slow terminals.

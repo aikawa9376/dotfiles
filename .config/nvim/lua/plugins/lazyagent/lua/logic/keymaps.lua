@@ -92,7 +92,7 @@ function M.register_scratch_keymaps(bufnr, opts)
   local pane_id = opts.pane_id
   local reuse = opts.reuse ~= false
 
-  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
 
   -- Merge keymap settings: defaults -> agent-specific -> per-call overrides
   local keys = {}
@@ -146,10 +146,15 @@ function M.register_scratch_keymaps(bufnr, opts)
         local submit_retry = (agent_cfg and agent_cfg.submit_retry) or (state.opts and state.opts.submit_retry) or 1
         -- Save scratch content to cache on send
         cache_logic.write_scratch_to_cache(bufnr)
+        local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
+        local _move_to_end = (_send_mode == "append")
+        local _use_bracketed_paste = (agent_cfg and agent_cfg.use_bracketed_paste) or (state.opts and state.opts.use_bracketed_paste)
         backend_mod.paste_and_submit(pane, text, submit_keys, {
           submit_delay = submit_delay,
           submit_retry = submit_retry,
           debug = state.opts.debug,
+          move_to_end = _move_to_end,
+          use_bracketed_paste = _use_bracketed_paste,
         })
         pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
         if close_after or state.opts.close_on_send then
@@ -220,10 +225,45 @@ function M.register_scratch_keymaps(bufnr, opts)
     send_key_to_pane("Down", true)
   end, { desc = "Send Down to agent pane (insert mode)" })
 
-  -- Escape mapping (normal and insert modes)
-  -- safe_set("n", keys.esc or "<Esc>", function()
-  --   send_key_to_pane("Escape", false)
-  -- end, { desc = "Send Escape to agent pane" })
+  -- Escape mapping (normal)
+  safe_set("n", keys.esc or "<Esc>", function()
+    send_key_to_pane("Escape", false)
+  end, { desc = "Send Escape to agent pane" })
+
+  -- clear mapping: attempt to clear the agent pane's input (tmux / builtin)
+  local function clear_agent_pane_input(insert_wrap)
+    -- Determine pane id (explicit or session-based)
+    local p = get_pane()
+    if not p or p == "" then
+      -- fallback: if exactly one active agent is running, target its pane
+      local active_agents = agent_logic.get_active_agents()
+      if #active_agents == 1 then
+        p = state.sessions[active_agents[1]] and state.sessions[active_agents[1]].pane_id or nil
+      end
+    end
+
+    if not p or p == "" then return end
+
+    if insert_wrap and vim.fn.mode():sub(1,1) == "i" then
+      vim.cmd("stopinsert")
+    end
+
+    -- For tmux backend, send 'C-u' (tmux translates this to ctrl-u).
+    -- For builtin or other backends (non-tmux), send the literal ASCII ctrl-u char.
+    if backend_name == "tmux" then
+      backend_mod.send_keys(p, { "C-u" })
+    else
+      backend_mod.send_keys(p, { string.char(21) })
+    end
+
+    if insert_wrap and vim.api.nvim_buf_is_valid(bufnr) then
+      vim.cmd("startinsert")
+    end
+  end
+
+  safe_set("n", keys.clear or "c<space>d", function()
+    clear_agent_pane_input(false)
+  end, { desc = "Clear agent pane input" })
 
   if state.opts.send_number_keys_to_agent then
     local function send_number_to_agent(number)

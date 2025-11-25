@@ -268,6 +268,8 @@ function M.paste_and_submit(target_pane, text, submit_keys, opts)
   local submit_delay = opts.submit_delay or DEFAULT_SUBMIT_DELAY_MS
   local submit_retry = opts.submit_retry or DEFAULT_SUBMIT_RETRY
   local debug = opts.debug or false
+  local move_to_end = opts.move_to_end or false
+  local use_bracketed_paste = opts.use_bracketed_paste or false
 
   -- Normalize text and ensure trailing newline; this mirrors M.set_buffer behavior.
   local normalized_text = util.normalize_text(text)
@@ -295,16 +297,33 @@ function M.paste_and_submit(target_pane, text, submit_keys, opts)
     end
   end
 
+  local function maybe_move_to_end()
+    if move_to_end then
+      -- The tmux 'send-keys' C-e should place the cursor at end of line for most shells
+      M.send_keys(target_pane, { "C-e" })
+    end
+  end
+
+  local esc = string.char(27)
+  local start_br = esc .. "[200~"
+  local end_br = esc .. "[201~"
+
   M.set_buffer(normalized_text, function()
+    maybe_move_to_end()
+    if use_bracketed_paste then M.send_keys(target_pane, { start_br }) end
     -- Attempt to paste; if paste returns false, fallback to send-keys -l
     local pasted = M.paste(target_pane, {
       on_done = function()
+        if use_bracketed_paste then M.send_keys(target_pane, { end_br }) end
         schedule_submits()
       end,
     })
     if not pasted then
-      -- fallback: send text directly via send-keys -l if buffer load/paste fails
-      run({ "send-keys", "-t", target_pane, "-l", normalized_text })
+      if use_bracketed_paste then
+        run({ "send-keys", "-t", target_pane, "-l", start_br .. normalized_text .. end_br })
+      else
+        run({ "send-keys", "-t", target_pane, "-l", normalized_text })
+      end
       schedule_submits()
     end
   end, { debug = debug })

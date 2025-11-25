@@ -20,5 +20,16 @@ return {
     "Copilot",
     "Cursor",
   },
-  opts = {}
+    opts = {
+      scratch_keymaps = {
+        close = "q",
+        send_and_clear = "<C-Space>",
+        scroll_up = "<C-u>",
+        scroll_down = "<C-d>",
+        nav_up = "<Up>",
+        nav_down = "<Down>",
+        esc = "<C-c>",
+        clear = "c<space>d",
+      },
+    }
 }
