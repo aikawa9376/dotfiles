@@ -69,8 +69,16 @@ function M.setup(opts)
       nav_up = "<Up>",
       nav_down = "<Down>",
       esc = "<Esc>",
+      clear = "c<space>d",
     },
     cache = { enabled = true, dir = vim.fn.stdpath("cache") .. "/lazyagent", debounce_ms = 1500 },
+    -- How new content is merged into existing agent input:
+    -- - "append": move cursor to end of agent's input and append content before submitting.
+    -- - "replace": wipe existing input and paste-the-new content.
+    send_mode = "append",
+    -- If true, wrap pasted blocks with the terminal "bracketed paste" control chars
+    -- to preserve pasted content as one operation in supported terminals.
+    use_bracketed_paste = true,
     send_number_keys_to_agent = true,
   }
 
