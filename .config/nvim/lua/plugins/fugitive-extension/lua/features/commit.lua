@@ -1,5 +1,6 @@
 local M = {}
 local utils = require("utils")
+local commands = require("features.commands")
 
 local float_win = nil
 local float_buf = nil
@@ -333,6 +334,20 @@ function M.setup(group)
         vim.fn.setreg('"', short_commit)
         print('Copied: ' .. short_commit)
       end, { buffer = ev.buf, nowait = true, silent = true })
+
+      -- <Leader>cf: 現在のコミットを一つ前のコミットにfixupする
+      vim.keymap.set('n', '<Leader>cf', function()
+        local current_line = vim.api.nvim_get_current_line()
+        -- コミットハッシュを抽出（Unpushedセクションのコミット行から）
+        local commit_hash = current_line:match('^(%x+)')
+
+        if not commit_hash then
+          vim.notify('No commit found at cursor', vim.log.levels.WARN)
+          return
+        end
+        commands.fixup_commit(commit_hash)
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Fixup this commit into its parent' })
+
 
       vim.keymap.set('n', '<Leader>R', function()
         local cursor_commit = vim.api.nvim_get_current_line():match('^(%x+)')
