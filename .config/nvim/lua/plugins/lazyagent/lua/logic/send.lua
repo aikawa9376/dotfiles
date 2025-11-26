@@ -62,7 +62,7 @@ function M.send_to_cli(agent_name, text, opts)
 
   -- Expand placeholders before sending (use a source_bufnr hint if provided).
   local source_bufnr = (opts and opts.source_bufnr) or vim.api.nvim_get_current_buf()
-  local expanded_text, meta = transforms.expand(text, { source_bufnr = source_bufnr })
+  local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr })
   text = expanded_text or text
 
   -- Determine the agent_name if not provided
@@ -126,14 +126,15 @@ function M.send_to_cli(agent_name, text, opts)
     local bufnr = vim.api.nvim_get_current_buf()
     local filename = vim.api.nvim_buf_get_name(bufnr) or ""
     local ft = vim.bo[bufnr].filetype or ""
-    local context = { filename = filename, text = text, filetype = ft, selection = text }
-    -- Add diagnostics to context if available
-    if meta and meta.diagnostics and #meta.diagnostics > 0 then
-      context.diagnostics = meta.diagnostics
-    end
-    cache_logic.write_scratch_to_cache(bufnr)
-    p(context)
-    return
+      local context = { filename = filename, text = text, filetype = ft, selection = text }
+      -- Add diagnostics to context if available
+      local diags = transforms.gather_diagnostics(source_bufnr)
+      if diags and #diags > 0 then
+        context.diagnostics = diags
+      end
+      cache_logic.write_scratch_to_cache(bufnr)
+      p(context)
+      return
   end
 
   vim.notify("send_to_cli: agent " .. tostring(agent_name) .. " is not configured", vim.log.levels.ERROR)
@@ -159,7 +160,7 @@ function M.send_buffer_and_clear(agent_name, bufnr)
   end
 
   -- Expand placeholders before sending using the send buffer as the source buffer (makes {buffer} behave sensibly).
-  local expanded_text, meta = transforms.expand(text, { source_bufnr = bufnr })
+  local expanded_text, _ = transforms.expand(text, { source_bufnr = bufnr })
   text = expanded_text or text
 
   -- determine agent_name if not specified
@@ -215,9 +216,10 @@ function M.send_buffer_and_clear(agent_name, bufnr)
     local filename = vim.api.nvim_buf_get_name(bufnr) or ""
     local ft = vim.bo[bufnr].filetype or ""
     local context = { filename = filename, text = text, filetype = ft, selection = text }
-    -- Add diagnostics meta to context if available (useful to prompts)
-    if meta and meta.diagnostics and #meta.diagnostics > 0 then
-      context.diagnostics = meta.diagnostics
+    -- Add diagnostics to context if available (useful to prompts)
+    local diags = transforms.gather_diagnostics(bufnr)
+    if diags and #diags > 0 then
+      context.diagnostics = diags
     end
     -- Save scratch content to cache on send (prompts / non-interactive)
     cache_logic.write_scratch_to_cache(bufnr)
@@ -265,10 +267,11 @@ function M.send(text)
   }
 
   -- Expand placeholders and compute diagnostics metadata for the context
-  local expanded_text, meta = transforms.expand(context.text, { source_bufnr = vim.api.nvim_get_current_buf() })
+  local expanded_text, _ = transforms.expand(context.text, { source_bufnr = vim.api.nvim_get_current_buf() })
   context.text = expanded_text or context.text
-  if meta and meta.diagnostics and #meta.diagnostics > 0 then
-    context.diagnostics = meta.diagnostics
+  local diags = transforms.gather_diagnostics(vim.api.nvim_get_current_buf())
+  if diags and #diags > 0 then
+    context.diagnostics = diags
   end
 
   local agent_name = settings.agent

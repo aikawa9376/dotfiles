@@ -37,7 +37,7 @@ function M.default_keymaps()
       Copilot = "c",
       Cursor = "r",
     }
-    for name in pairs(state.opts.interactive_agents) do
+    for _, name in ipairs(agent_logic.available_agents()) do
       local suffix = agent_suffix_map[name] or string.sub(string.lower(name), 1, 1)
       table.insert(maps, {
         mode = "n",
@@ -125,51 +125,82 @@ function M.register_scratch_keymaps(bufnr, opts)
     end
   end
 
-    local function send_from_buf(close_after)
-      local pane = pane_id or (agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id) or nil
-      if not pane or pane == "" then
-        -- fallback to generic prompt API
-        send_logic.send_buffer_and_clear(agent_name, bufnr)
-        return
-      end
-      local content = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-      local text = table.concat(content, "\n")
-      -- Expand placeholders before sending (use source_bufnr information)
-      local transforms = require("lazyagent.transforms") -- require here to avoid circular dependency
-      local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr, scratch_bufnr = bufnr })
-      text = expanded_text or text
+  local function send_from_buf(close_after)
+    local pane = pane_id or (agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id) or nil
+    if not pane or pane == "" then
+      -- fallback to generic prompt API
+      send_logic.send_buffer_and_clear(agent_name, bufnr)
+      return
+    end
+    local content = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local text = table.concat(content, "\n")
+    -- Expand placeholders before sending (use source_bufnr information)
+    local transforms = require("lazyagent.transforms") -- require here to avoid circular dependency
+    local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr, scratch_bufnr = bufnr })
+    text = expanded_text or text
 
-      if text and #text > 0 then
-        local cache_logic = require("logic.cache") -- require here to avoid circular dependency
-        local submit_keys = (agent_cfg and agent_cfg.submit_keys) or ((agent_name and agent_logic.get_interactive_agent(agent_name) and agent_logic.get_interactive_agent(agent_name).submit_keys) or nil)
-        local submit_delay = (agent_cfg and agent_cfg.submit_delay) or (state.opts and state.opts.submit_delay) or 600
-        local submit_retry = (agent_cfg and agent_cfg.submit_retry) or (state.opts and state.opts.submit_retry) or 1
-        -- Save scratch content to cache on send
-        cache_logic.write_scratch_to_cache(bufnr)
-        local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
-        local _move_to_end = (_send_mode == "append")
-        local _use_bracketed_paste = (agent_cfg and agent_cfg.use_bracketed_paste) or (state.opts and state.opts.use_bracketed_paste)
-        backend_mod.paste_and_submit(pane, text, submit_keys, {
-          submit_delay = submit_delay,
-          submit_retry = submit_retry,
-          debug = state.opts.debug,
-          move_to_end = _move_to_end,
-          use_bracketed_paste = _use_bracketed_paste,
-        })
-        pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
-        if close_after or state.opts.close_on_send then
-          window.close()
-          if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-            vim.api.nvim_buf_delete(bufnr, { force = true })
-          end
-          state.open_agent = nil
-          if agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id and not reuse then
-            local session_logic = require("logic.session") -- require here to avoid circular dependency
-            session_logic.close_session(agent_name)
-          end
+    if text and #text > 0 then
+      local cache_logic = require("logic.cache") -- require here to avoid circular dependency
+      local submit_keys = (agent_cfg and agent_cfg.submit_keys) or ((agent_name and agent_logic.get_interactive_agent(agent_name) and agent_logic.get_interactive_agent(agent_name).submit_keys) or nil)
+      local submit_delay = (agent_cfg and agent_cfg.submit_delay) or (state.opts and state.opts.submit_delay) or 600
+      local submit_retry = (agent_cfg and agent_cfg.submit_retry) or (state.opts and state.opts.submit_retry) or 1
+      -- Save scratch content to cache on send
+      cache_logic.write_scratch_to_cache(bufnr)
+      local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
+      local _move_to_end = (_send_mode == "append")
+      local _use_bracketed_paste = (agent_cfg and agent_cfg.use_bracketed_paste) or (state.opts and state.opts.use_bracketed_paste)
+      backend_mod.paste_and_submit(pane, text, submit_keys, {
+        submit_delay = submit_delay,
+        submit_retry = submit_retry,
+        debug = state.opts.debug,
+        move_to_end = _move_to_end,
+        use_bracketed_paste = _use_bracketed_paste,
+      })
+      pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
+      if close_after or state.opts.close_on_send then
+        window.close()
+        if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+          vim.api.nvim_buf_delete(bufnr, { force = true })
+        end
+        state.open_agent = nil
+        if agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id and not reuse then
+          local session_logic = require("logic.session") -- require here to avoid circular dependency
+          session_logic.close_session(agent_name)
         end
       end
     end
+  end
+
+  -- clear mapping: attempt to clear the agent pane's input (tmux / builtin)
+  local function clear_agent_pane_input(insert_wrap)
+    -- Determine pane id (explicit or session-based)
+    local p = get_pane()
+    if not p or p == "" then
+      -- fallback: if exactly one active agent is running, target its pane
+      local active_agents = agent_logic.get_active_agents()
+      if #active_agents == 1 then
+        p = state.sessions[active_agents[1]] and state.sessions[active_agents[1]].pane_id or nil
+      end
+    end
+
+    if not p or p == "" then return end
+
+    if insert_wrap and vim.fn.mode():sub(1,1) == "i" then
+      vim.cmd("stopinsert")
+    end
+
+    -- For tmux backend, send 'C-u', 'C-h' (tmux translates this to ctrl-u).
+    -- For builtin or other backends (non-tmux), send the literal ASCII ctrl-u char.
+    if backend_name == "tmux" then
+      backend_mod.send_keys(p, { "C-u", "C-h" })
+    else
+      backend_mod.send_keys(p, { string.char(21) })
+    end
+
+    if insert_wrap and vim.api.nvim_buf_is_valid(bufnr) then
+      vim.cmd("startinsert")
+    end
+  end
 
   -- Close mapping
   safe_set("n", keys.close or "q", function()
@@ -227,39 +258,12 @@ function M.register_scratch_keymaps(bufnr, opts)
 
   -- Escape mapping (normal)
   safe_set("n", keys.esc or "<Esc>", function()
-    send_key_to_pane("Escape", false)
-  end, { desc = "Send Escape to agent pane" })
-
-  -- clear mapping: attempt to clear the agent pane's input (tmux / builtin)
-  local function clear_agent_pane_input(insert_wrap)
-    -- Determine pane id (explicit or session-based)
-    local p = get_pane()
-    if not p or p == "" then
-      -- fallback: if exactly one active agent is running, target its pane
-      local active_agents = agent_logic.get_active_agents()
-      if #active_agents == 1 then
-        p = state.sessions[active_agents[1]] and state.sessions[active_agents[1]].pane_id or nil
-      end
-    end
-
-    if not p or p == "" then return end
-
-    if insert_wrap and vim.fn.mode():sub(1,1) == "i" then
-      vim.cmd("stopinsert")
-    end
-
-    -- For tmux backend, send 'C-u' (tmux translates this to ctrl-u).
-    -- For builtin or other backends (non-tmux), send the literal ASCII ctrl-u char.
-    if backend_name == "tmux" then
-      backend_mod.send_keys(p, { "C-u" })
+    if (agent_name == "Cursor") then
+      send_key_to_pane("<C-c>", false)
     else
-      backend_mod.send_keys(p, { string.char(21) })
+      send_key_to_pane("Escape", false)
     end
-
-    if insert_wrap and vim.api.nvim_buf_is_valid(bufnr) then
-      vim.cmd("startinsert")
-    end
-  end
+  end, { desc = "Send Escape to agent pane" })
 
   safe_set("n", keys.clear or "c<space>d", function()
     clear_agent_pane_input(false)
