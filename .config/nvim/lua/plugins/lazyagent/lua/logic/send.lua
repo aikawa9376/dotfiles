@@ -40,13 +40,13 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
     use_bracketed_paste = _use_bracketed_paste,
   })
 
-  -- For one-shot (non-interactive) sends, kill the pane after a delay if it's not meant to be reused.
+  -- For one-shot (non-interactive) sends, close the session after a delay if it's not meant to be reused.
+  local session_logic = require("logic.session")
   vim.defer_fn(function()
     if not reuse then
-      backend_mod.kill_pane(pane_id)
-      state.sessions[agent_name] = nil
+      session_logic.close_session(agent_name)
     end
-  end, agent_cfg.capture_delay or 800)
+  end, (agent_cfg and agent_cfg.capture_delay) or (state.opts and state.opts.capture_delay) or 800)
 end
 
 -- Sends text to a CLI agent (interactive agent pane).
@@ -110,11 +110,11 @@ function M.send_to_cli(agent_name, text, opts)
         move_to_end = _move_to_end,
         use_bracketed_paste = _use_bracketed_paste,
       })
+      local session_logic = require("logic.session")
       if not reuse then
         vim.defer_fn(function()
-          backend_mod.kill_pane(pane_id)
-          state.sessions[agent_name] = nil
-        end, agent_cfg.capture_delay or 800)
+          session_logic.close_session(agent_name)
+        end, (agent_cfg and agent_cfg.capture_delay) or (state.opts and state.opts.capture_delay) or 800)
       end
     end)
     return
@@ -154,10 +154,6 @@ function M.send_buffer_and_clear(agent_name, bufnr)
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local text = table.concat(lines, "\n")
-  if not text or #text == 0 then
-    vim.notify("send_buffer_and_clear: buffer is empty", vim.log.levels.INFO)
-    return
-  end
 
   -- Expand placeholders before sending using the send buffer as the source buffer (makes {buffer} behave sensibly).
   local expanded_text, _ = transforms.expand(text, { source_bufnr = bufnr })
@@ -200,6 +196,12 @@ function M.send_buffer_and_clear(agent_name, bufnr)
       -- Save scratch content to cache on send
       cache_logic.write_scratch_to_cache(bufnr)
       local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+
+      if not text or #text == 0 then
+        backend_mod.send_keys(pane_id, { "Enter" })
+        return
+      end
+
       backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
         submit_delay = agent_cfg.submit_delay or state.opts.submit_delay,
         submit_retry = agent_cfg.submit_retry or state.opts.submit_retry,

@@ -334,7 +334,7 @@ end
 -- Capture the content of a tmux pane and return the text to on_output callback.
 function M.capture_pane(target_pane, on_output)
   -- Use -J to join wrapped lines and ensure a better-looking capture.
-  local args = { "capture-pane", "-J", "-p", "-t", target_pane }
+  local args = { "capture-pane", "-J", "-p", "-S", "-", "-t", target_pane }
   local collected = {}
   run(args, {
     on_stdout = function(_, data)
