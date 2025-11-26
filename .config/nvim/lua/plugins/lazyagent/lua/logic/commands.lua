@@ -6,6 +6,7 @@ local state = require("logic.state")
 local agent_logic = require("logic.agent")
 local session_logic = require("logic.session")
 local cache_logic = require("logic.cache")
+local backend_logic = require("logic.backend")
 
 -- Helper to create commands safely
 local function try_create_user_command(name, fn, cmd_opts)
@@ -96,6 +97,23 @@ function M.setup_commands()
     vim.notify("LazyAgentHistory: no cache history found for current buffer", vim.log.levels.INFO)
   end, { nargs = "?", desc = "Open a lazyagent cache history file here." })
 
+  -- Open a running agent's pane capture into a buffer for inspection.
+  try_create_user_command("LazyAgentOpenConversation", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    agent_logic.resolve_target_agent(explicit, nil, function(chosen)
+      if not chosen or chosen == "" then return end
+
+      local session = state.sessions[chosen]
+      if not session or not session.pane_id or session.pane_id == "" then
+        vim.notify("LazyAgentOpenConversation: no active session found for '" .. tostring(chosen) .. "'", vim.log.levels.ERROR)
+        return
+      end
+
+      -- Reuse centralized capture implementation (session logic)
+      session_logic.capture_and_save_session(chosen, true)
+    end)
+  end, { nargs = "?", desc = "Open the live pane capture for a running interactive agent in a buffer." })
+
   -- Register commands for each interactive agent
   if state.opts.interactive_agents then
     for _, name in ipairs(agent_logic.available_agents()) do
@@ -123,11 +141,11 @@ function M.setup_commands()
           })
         end)
       end, {
-          nargs = "?",
-          desc = "Start interactive agent: " .. name,
-        })
-    end
+      nargs = "?",
+      desc = "Start interactive agent: " .. name,
+    })
   end
+end
 end
 
 return M

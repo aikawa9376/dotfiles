@@ -58,6 +58,8 @@ function M.setup(opts)
     submit_retry = 1,
     debug = false,
     close_on_send = true,
+    save_conversation_on_close = true,
+    open_conversation_on_save = false,
     send_key_insert = "<C-s>",
     send_key_normal = "<CR>",
     setup_keymaps = false,

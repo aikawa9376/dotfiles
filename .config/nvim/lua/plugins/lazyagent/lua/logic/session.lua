@@ -42,6 +42,58 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   end)
 end
 
+--- Captures and saves the conversation text for the given agent's session.
+-- @param agent_name (string) The name of the agent.
+-- @param open_file (boolean) If true, open the saved file in a buffer after saving.
+-- @param on_done (function|nil) Optional callback invoked after capture is saved (receives path).
+function M.capture_and_save_session(agent_name, open_file, on_done)
+  on_done = on_done or function() end
+  if not agent_name or agent_name == "" then
+    on_done()
+    return false
+  end
+
+  local s = state.sessions[agent_name]
+  if not s or not s.pane_id or s.pane_id == "" then
+    on_done()
+    return false
+  end
+
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+  if not backend_mod or type(backend_mod.capture_pane) ~= "function" then
+    on_done()
+    return false
+  end
+
+  backend_mod.capture_pane(s.pane_id, function(text)
+    vim.schedule(function()
+      if not text or text == "" then
+        vim.notify("LazyAgentOpenConversation: captured pane was empty for agent '" .. tostring(agent_name) .. "'", vim.log.levels.INFO)
+        on_done()
+        return
+      end
+
+      local lines = vim.split(text, "\n")
+      local cache_logic = require("logic.cache")
+      local dir = cache_logic.get_cache_dir()
+      local sanitized = tostring(agent_name):gsub("[^%w-_]+", "-")
+      local filename = sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
+      local path = dir .. "/" .. filename
+
+      pcall(vim.fn.writefile, lines, path)
+
+      if open_file then
+        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        vim.cmd("setlocal nowrap")
+      end
+
+      on_done(path)
+    end)
+  end)
+
+  return true
+end
+
 ---
 -- Closes a specific agent's session.
 -- @param agent_name (string) The name of the agent.
@@ -50,8 +102,29 @@ function M.close_session(agent_name)
     return
   end
   local s = state.sessions[agent_name]
-  if s and s.pane_id and s.pane_id ~= "" then
-    local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+  if not s or not s.pane_id or s.pane_id == "" then
+    state.sessions[agent_name] = nil
+    return
+  end
+
+  local agent_cfg = agent_logic.get_interactive_agent(agent_name)
+  local save_conv = (agent_cfg and agent_cfg.save_conversation_on_close) or (state.opts and state.opts.save_conversation_on_close)
+  local open_conv = (agent_cfg and agent_cfg.open_conversation_on_save) or (state.opts and state.opts.open_conversation_on_save)
+
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+
+  if save_conv and backend_mod and type(backend_mod.capture_pane) == "function" then
+    M.capture_and_save_session(agent_name, open_conv, function()
+      local _, backend_mod2 = backend_logic.resolve_backend_for_agent(agent_name, nil)
+      if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
+        backend_mod2.kill_pane(s.pane_id)
+      end
+      state.sessions[agent_name] = nil
+    end)
+    return
+  end
+
+  if backend_mod and type(backend_mod.kill_pane) == "function" then
     backend_mod.kill_pane(s.pane_id)
   end
   state.sessions[agent_name] = nil
@@ -62,10 +135,27 @@ end
 function M.close_all_sessions()
   for name, s in pairs(state.sessions) do
     if s and s.pane_id and s.pane_id ~= "" then
+      local agent_cfg = agent_logic.get_interactive_agent(name)
+      local save_conv = (agent_cfg and agent_cfg.save_conversation_on_close) or (state.opts and state.opts.save_conversation_on_close)
+      local open_conv = (agent_cfg and agent_cfg.open_conversation_on_save) or (state.opts and state.opts.open_conversation_on_save)
       local _, backend_mod = backend_logic.resolve_backend_for_agent(name, nil)
-      backend_mod.kill_pane(s.pane_id)
+      if save_conv and backend_mod and type(backend_mod.capture_pane) == "function" then
+        M.capture_and_save_session(name, open_conv, function()
+          local _, backend_mod2 = backend_logic.resolve_backend_for_agent(name, nil)
+          if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
+            backend_mod2.kill_pane(s.pane_id)
+          end
+          state.sessions[name] = nil
+        end)
+      else
+        if backend_mod and type(backend_mod.kill_pane) == "function" then
+          backend_mod.kill_pane(s.pane_id)
+        end
+        state.sessions[name] = nil
+      end
+    else
+      state.sessions[name] = nil
     end
-    state.sessions[name] = nil
   end
 end
 
