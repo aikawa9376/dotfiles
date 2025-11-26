@@ -5,6 +5,7 @@
 --  - #buffer_abs  -> absolute path of the source buffer
 --  - #buffers     -> newline-separated list of "bufferline"-equivalent buffers (listed buffers) with "@" prefix
 --  - #buffers_abs -> newline-separated list of bufferline-equivalent buffers, absolute paths with "@" prefix
+--  - #directory   -> Directory of the source buffer (relative to git root if available), prefixed with '@'.
 --  - #git_root    -> repository root path for the source buffer (git)
 --  - #git_branch  -> git branch name for the source buffer
 --  - #diagnostics -> fenced diagnostics code block formatted for prompts
@@ -157,6 +158,19 @@ local function replace_token(token, opts, meta)
     return list_buffers_text(_opts)
   end
 
+  if token == "directory" then
+    local abs = get_abs_path(source_bufnr) or vim.fn.getcwd()
+    if not abs or abs == "" then return "" end
+    local dir = vim.fn.fnamemodify(abs, ":h")
+    if not dir or dir == "" then return "" end
+    local root = util.git_root_for_path(abs)
+    if root and #root > 0 and dir:sub(1, #root) == root then
+      local rel = dir:sub(#root + 2) -- remove trailing slash
+      if rel and rel ~= "" then return "@" .. rel end
+    end
+    return dir
+  end
+
   if token == "git_root" then
     local a = get_abs_path(source_bufnr) or vim.fn.getcwd()
     return util.git_root_for_path(a) or ""
@@ -169,7 +183,7 @@ local function replace_token(token, opts, meta)
 
   if token == "diagnostics" then
     local diags = gather_diagnostics(source_bufnr)
-    meta.diagnostics = diags
+
     if not diags or #diags == 0 then return "" end
     return "```diagnostics\n" .. diagnostics_to_text(diags) .. "\n```"
   end
@@ -216,6 +230,7 @@ local token_definitions = {
   { name = "buffer_abs", desc = "Absolute path of the source buffer." },
   { name = "buffers", desc = "Newline-separated list of listed buffers with @ prefix (relative paths by default)." },
   { name = "buffers_abs", desc = "Newline-separated list of listed buffers with @ prefix (absolute paths)." },
+  { name = "directory", desc = "Directory of the source buffer (relative to git root if available), prefixed with '@'." },
   { name = "git_root", desc = "Repository root path for the source buffer (git)." },
   { name = "git_branch", desc = "Git branch name for the source buffer." },
   { name = "diagnostics", desc = "Fenced diagnostics code block formatted for prompts (````diagnostics````)." },
@@ -233,11 +248,17 @@ function M.register_transforms(list)
   end
 end
 
+-- Public helper to gather diagnostics for a buffer.
+-- Use this instead of depending on transforms' return `meta` object.
+function M.gather_diagnostics(bufnr)
+  return gather_diagnostics(bufnr)
+end
+
 -- Find potential transform files on runtime path (eg. transforms-source.lua), and project-root lazygit.lua
 -- This will look for transforms-*.lua on runtimepath and also include lazily-defined
 -- `lazygit.lua` files located at repository roots discovered by `util.git_root_for_path`.
 local function find_external_transform_files()
-  local files = vim.api.nvim_get_runtime_file("lua/**/lazyagent/transforms-*.lua", true) or {}
+  local files = vim.api.nvim_get_runtime_file("lua/**/lazyagent/transforms/*.lua", true) or {}
 
   -- Deduplicate results
   local seen = {}

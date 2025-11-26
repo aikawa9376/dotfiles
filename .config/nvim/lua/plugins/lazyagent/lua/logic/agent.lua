@@ -18,15 +18,16 @@ function M.get_active_agents()
   local active = {}
   for name, s in pairs(state.sessions or {}) do
     if s and s.pane_id and s.pane_id ~= "" then
-      local _, backend_mod = backend.resolve_backend_for_agent(name, nil)
-      if backend_mod and type(backend_mod.pane_exists) == "function" then
-        if backend_mod.pane_exists(s.pane_id) then table.insert(active, name) end
-      else
-        -- If pane_exists isn't available on this backend, consider the session table as truth.
-        table.insert(active, name)
+        local _, backend_mod = backend.resolve_backend_for_agent(name, nil)
+        if backend_mod and type(backend_mod.pane_exists) == "function" then
+          if backend_mod.pane_exists(s.pane_id) then table.insert(active, name) end
+        else
+          -- If pane_exists isn't available on this backend, consider the session table as truth.
+          table.insert(active, name)
+        end
       end
     end
-  end
+    table.sort(active)
   return active
 end
 
@@ -60,8 +61,7 @@ function M.resolve_target_agent(explicit, hint, callback)
   end
 
   -- No active agents
-  local available = {}
-  for k, _ in pairs(state.opts.interactive_agents or {}) do table.insert(available, k) end
+  local available = M.available_agents()
 
   -- If a hint (e.g. command name) is provided and valid, use it directly.
   if hint and hint ~= "" and state.opts.interactive_agents and state.opts.interactive_agents[hint] then
@@ -82,6 +82,15 @@ function M.resolve_target_agent(explicit, hint, callback)
   vim.ui.select(available, { prompt = "Choose agent to start:" }, function(choice)
     if choice and choice ~= "" then callback(choice) end
   end)
+end
+
+--- Returns an alphabetically sorted list of configured interactive agent names.
+-- Using a stable, sorted list ensures UI/select and keymap registration order is deterministic.
+function M.available_agents()
+  local available = {}
+  for k, _ in pairs(state.opts.interactive_agents or {}) do table.insert(available, k) end
+  table.sort(available)
+  return available
 end
 
 return M

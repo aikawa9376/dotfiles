@@ -40,6 +40,7 @@ local function build_cache_filename(bufnr)
 end
 
 --- Writes the content of a scratch buffer to a cache file.
+-- The newest entry will be written to the top of the cache file so it appears first.
 -- @param bufnr (number|nil) The buffer number (defaults to current).
 function M.write_scratch_to_cache(bufnr)
   if not (state.opts and state.opts.cache and state.opts.cache.enabled) then
@@ -72,7 +73,16 @@ function M.write_scratch_to_cache(bufnr)
   for _, h in ipairs(header) do table.insert(to_write, h) end
   for _, l in ipairs(content) do table.insert(to_write, l) end
   table.insert(to_write, "") -- newline
-  pcall(vim.fn.writefile, to_write, path, "a")
+
+  -- Prepend the new content so the newest entries appear at the top of the cache file.
+  local existing = {}
+  if vim.fn.filereadable(path) == 1 then
+    existing = vim.fn.readfile(path) or {}
+  end
+  local merged = {}
+  for _, l in ipairs(to_write) do table.insert(merged, l) end
+  for _, l in ipairs(existing) do table.insert(merged, l) end
+  pcall(vim.fn.writefile, merged, path)
 end
 
 --- Attaches autocmds to a buffer for automatic cache saving.

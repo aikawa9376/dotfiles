@@ -98,7 +98,8 @@ function M.setup_commands()
 
   -- Register commands for each interactive agent
   if state.opts.interactive_agents then
-    for name, agent_opts in pairs(state.opts.interactive_agents) do
+    for _, name in ipairs(agent_logic.available_agents()) do
+      local agent_opts = state.opts.interactive_agents[name]
       try_create_user_command(name, function(cmdargs)
         local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
         if explicit then
