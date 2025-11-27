@@ -32,7 +32,7 @@ function M.open_float(bufnr, opts)
 
   -- Center the floating window
   local width = math.floor(vim.o.columns * 0.6)
-  local height = math.floor(vim.o.lines * 0.5)
+  local height = math.floor(vim.o.lines * (opts.is_vertical and 0.5 or 0.3))
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
@@ -82,7 +82,7 @@ function M.open_float(bufnr, opts)
     local lines = vim.o.lines
     -- Small size and place in bottom-right corner
     local w = math.max(10, math.floor(cols * 0.25))
-    local h = math.max(3, math.floor(lines * 0.2))
+    local h = math.max(3, math.floor(lines * (opts.is_vertical and 0.2 or 0.1)))
     local r = math.max(0, lines - h - 2)
     local c = math.max(0, cols - w)
     local cfg = {
@@ -99,7 +99,7 @@ function M.open_float(bufnr, opts)
     pcall(function() vim.api.nvim_win_set_config(winid, cfg) end)
   end
 
-    local function restore_float()
+  local function restore_float()
     if not winid or not vim.api.nvim_win_is_valid(winid) then return end
     pcall(function() vim.api.nvim_win_set_config(winid, float_original_opts) end)
   end
