@@ -10,6 +10,25 @@ local keymaps_logic = require("logic.keymaps")
 local send_logic = require("logic.send")
 local util = require("lazyagent.util")
 local window = require("lazyagent.window")
+local ok_watch, watch = pcall(require, "lazyagent.watch")
+
+local function maybe_disable_watchers()
+  if not ok_watch or not watch or type(watch.disable) ~= "function" then return end
+  local cnt = 0
+  for _, s in pairs(state.sessions or {}) do
+    if s and s.pane_id and s.pane_id ~= "" then
+      -- Default to 'watch enabled' for backward compatibility when flag is nil.
+      local should_watch = s.watch_enabled
+      if should_watch == nil then should_watch = true end
+      if should_watch then
+        cnt = cnt + 1
+      end
+    end
+  end
+  if cnt == 0 then
+    pcall(watch.disable)
+  end
+end
 
 ---
 -- Ensures a backend session (e.g., a tmux pane) exists for the agent.
@@ -21,6 +40,19 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
 
   if reuse and state.sessions[agent_name] and state.sessions[agent_name].pane_id and state.sessions[agent_name].pane_id ~= "" then
+    -- If the caller provided a watch preference, update the existing session's watch flag.
+    if agent_cfg and agent_cfg.watch ~= nil then
+      state.sessions[agent_name].watch_enabled = agent_cfg.watch
+      -- If this session now wants watching enabled, ensure watchers are enabled.
+      if state.sessions[agent_name].watch_enabled and ok_watch and watch and type(watch.enable) == "function" then
+        pcall(watch.enable)
+      end
+      -- If this session no longer wants watching, check whether to disable watchers globally.
+      if not state.sessions[agent_name].watch_enabled then
+        maybe_disable_watchers()
+      end
+    end
+
     if backend_mod and type(backend_mod.pane_exists) == "function" then
       if backend_mod.pane_exists(state.sessions[agent_name].pane_id) then
         on_ready(state.sessions[agent_name].pane_id)
@@ -37,7 +69,16 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       vim.notify("Failed to create pane for agent " .. tostring(agent_name), vim.log.levels.ERROR)
       return
     end
-    state.sessions[agent_name] = { pane_id = pane_id, last_output = "", backend = backend_name }
+
+        -- Determine this session's watch preference (default true)
+        local watch_enabled_val = true
+        if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
+
+        state.sessions[agent_name] = { pane_id = pane_id, last_output = "", backend = backend_name, watch_enabled = watch_enabled_val }
+        -- If this session requested watchers, enable them.
+        if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
+          pcall(watch.enable)
+        end
     on_ready(pane_id)
   end)
 end
@@ -104,6 +145,7 @@ function M.close_session(agent_name)
   local s = state.sessions[agent_name]
   if not s or not s.pane_id or s.pane_id == "" then
     state.sessions[agent_name] = nil
+    maybe_disable_watchers()
     return
   end
 
@@ -120,6 +162,7 @@ function M.close_session(agent_name)
         backend_mod2.kill_pane(s.pane_id)
       end
       state.sessions[agent_name] = nil
+      maybe_disable_watchers()
     end)
     return
   end
@@ -128,6 +171,7 @@ function M.close_session(agent_name)
     backend_mod.kill_pane(s.pane_id)
   end
   state.sessions[agent_name] = nil
+  maybe_disable_watchers()
 end
 
 ---
@@ -156,6 +200,9 @@ function M.close_all_sessions()
     else
       state.sessions[name] = nil
     end
+  end
+  if ok_watch and watch and type(watch.disable) == "function" then
+    pcall(watch.disable)
   end
 end
 
@@ -235,6 +282,8 @@ end
 --   - initial_input (string): Initial text for the scratch buffer.
 function M.start_interactive_session(opts)
   opts = opts or {}
+  -- The 'watch' option controls whether file-system watchers should be used for this session (default true).
+  -- We will enable watchers only after the session is created (so we can inspect agent_cfg/opts).
   local agent_name = opts.agent_name or opts.name
   if not agent_name or agent_name == "" then
     -- If caller didn't provide an explicit agent name, use resolve_target_agent to select one.
