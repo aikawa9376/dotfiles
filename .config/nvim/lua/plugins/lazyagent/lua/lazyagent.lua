@@ -72,8 +72,15 @@ function M.setup(opts)
       nav_down = "<Down>",
       esc = "<Esc>",
       clear = "c<space>d",
+      history_next = "c<space>d",
+      history_prev = "c<space>p",
     },
-    cache = { enabled = true, dir = vim.fn.stdpath("cache") .. "/lazyagent", debounce_ms = 1500 },
+    cache = {
+      enabled = true,
+      dir = vim.fn.stdpath("cache") .. "/lazyagent",
+      debounce_ms = 1500,
+      max_history = 100,
+    },
     -- How new content is merged into existing agent input:
     -- - "append": move cursor to end of agent's input and append content before submitting.
     -- - "replace": wipe existing input and paste-the-new content.

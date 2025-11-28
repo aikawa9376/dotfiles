@@ -8,6 +8,7 @@ local agent_logic = require("logic.agent")
 local backend_logic = require("logic.backend")
 local send_logic = require("logic.send")
 local window = require("lazyagent.window")
+local cache_logic = require("logic.cache")
 
 ---
 -- Defines default keymap descriptors for the plugin.
@@ -140,7 +141,6 @@ function M.register_scratch_keymaps(bufnr, opts)
     text = expanded_text or text
 
     if text and #text > 0 then
-      local cache_logic = require("logic.cache") -- require here to avoid circular dependency
       local submit_keys = (agent_cfg and agent_cfg.submit_keys) or ((agent_name and agent_logic.get_interactive_agent(agent_name) and agent_logic.get_interactive_agent(agent_name).submit_keys) or nil)
       local submit_delay = (agent_cfg and agent_cfg.submit_delay) or (state.opts and state.opts.submit_delay) or 600
       local submit_retry = (agent_cfg and agent_cfg.submit_retry) or (state.opts and state.opts.submit_retry) or 1
@@ -299,6 +299,58 @@ function M.register_scratch_keymaps(bufnr, opts)
         , { desc = "Send " .. i .. " to agent" })
     end
   end
+
+  -- Navigate to older entry (scratch buffer) - default: keys.history_prev or <leader>h,
+  safe_set("n", keys.history_prev or "c<space>p", function()
+    local list_buf = cache_logic.get_history_list_buf_for_target(bufnr)
+    local entries = cache_logic.read_history_entries(list_buf) or {}
+    if not entries or #entries == 0 then
+      vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
+      return
+    end
+    local cur = vim.b[bufnr].lazyagent_history_idx or 0
+    local next_idx = cur + 1
+    if next_idx > #entries then
+      vim.notify("LazyAgentHistory: already at oldest entry", vim.log.levels.INFO)
+      return
+    end
+    local ok, total = cache_logic.apply_history_entry_to_target_buf(bufnr, next_idx)
+    if ok then
+      vim.notify("LazyAgentHistory: applied " .. tostring(next_idx) .. "/" .. tostring(total), vim.log.levels.INFO)
+    else
+      if total == 0 then
+        vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
+      else
+        vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
+      end
+    end
+  end, { desc = "Apply older cached history to scratch buffer" })
+
+  -- Navigate to newer entry (scratch buffer) - default: keys.history_next or <leader>h.
+  safe_set("n", keys.history_next or "c<space>n", function()
+    local list_buf = cache_logic.get_history_list_buf_for_target(bufnr)
+    local entries = cache_logic.read_history_entries(list_buf) or {}
+    if not entries or #entries == 0 then
+      vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
+      return
+    end
+    local cur = vim.b[bufnr].lazyagent_history_idx or 0
+    if cur <= 1 then
+      vim.notify("LazyAgentHistory: already at latest entry", vim.log.levels.INFO)
+      return
+    end
+    local next_idx = cur - 1
+    local ok, total = cache_logic.apply_history_entry_to_target_buf(bufnr, next_idx)
+    if ok then
+      vim.notify("LazyAgentHistory: applied " .. tostring(next_idx) .. "/" .. tostring(total), vim.log.levels.INFO)
+    else
+      if total == 0 then
+        vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
+      else
+        vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
+      end
+    end
+  end, { desc = "Apply newer cached history to scratch buffer" })
 end
 
 return M
