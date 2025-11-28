@@ -27,6 +27,10 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
   local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr or vim.api.nvim_get_current_buf() })
   text = expanded_text or text
 
+  -- Persist the one-shot content to the cache (if configured). Use the source_bufnr supplied
+  -- by the caller so this write does not rely on the currently focused buffer.
+  pcall(function() cache_logic.write_scratch_to_cache(source_bufnr) end)
+
   local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
 
   local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
@@ -98,7 +102,7 @@ function M.send_to_cli(agent_name, text, opts)
         vim.notify("send_to_cli: failed to obtain pane for " .. tostring(agent_name), vim.log.levels.ERROR)
         return
       end
-      cache_logic.write_scratch_to_cache()
+      cache_logic.write_scratch_to_cache(source_bufnr)
       local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
       local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
       local _move_to_end = (_send_mode == "append")

@@ -325,11 +325,6 @@ function M.start_interactive_session(opts)
     vim.bo[bufnr].filetype = agent_cfg.scratch_filetype or "lazyagent"
     -- Record the source/origin buffer so transforms and completion can resolve context.
     pcall(function() vim.b[bufnr].lazyagent_source_bufnr = origin_bufnr end)
-    -- Attach cache auto-save to this buffer (if enabled).
-    pcall(function()
-      local cache_logic = require("logic.cache")
-      if cache_logic.attach_cache_to_buf then cache_logic.attach_cache_to_buf(bufnr) end
-    end)
 
     -- Register buffer-local scratch keymaps (include source/origin buffer so placeholders resolve correctly)
     keymaps_logic.register_scratch_keymaps(bufnr, { agent_name = agent_name, agent_cfg = agent_cfg, pane_id = pane_id, reuse = reuse, source_bufnr = origin_bufnr })

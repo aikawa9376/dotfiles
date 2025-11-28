@@ -6,7 +6,6 @@ local state = require("logic.state")
 local agent_logic = require("logic.agent")
 local session_logic = require("logic.session")
 local cache_logic = require("logic.cache")
-local backend_logic = require("logic.backend")
 
 -- Helper to create commands safely
 local function try_create_user_command(name, fn, cmd_opts)
@@ -76,11 +75,11 @@ function M.setup_commands()
       bufnr = src_buf
     end
 
-    -- Try today's file first
-    local filename_today = cache_logic.build_cache_filename(bufnr)
-    local path_today = dir .. "/" .. filename_today
-    if vim.fn.filereadable(path_today) == 1 then
-      vim.cmd("edit " .. vim.fn.fnameescape(path_today))
+    -- Try current branch/project history file first
+    local filename = cache_logic.build_cache_filename(bufnr)
+    local path = dir .. "/" .. filename
+    if vim.fn.filereadable(path) == 1 then
+      vim.cmd("edit " .. vim.fn.fnameescape(path))
       return
     end
 
@@ -141,11 +140,11 @@ function M.setup_commands()
           })
         end)
       end, {
-      nargs = "?",
-      desc = "Start interactive agent: " .. name,
-    })
+          nargs = "?",
+          desc = "Start interactive agent: " .. name,
+        })
+    end
   end
-end
 end
 
 return M
