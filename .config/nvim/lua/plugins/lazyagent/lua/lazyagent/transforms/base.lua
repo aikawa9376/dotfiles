@@ -58,5 +58,10 @@ return {
     name = "changelog",
     desc = "Produce a concise commit message or changelog entry summarizing changes",
     trans = "- Summarize the intended or actual changes into a short commit message (one-line subject and 1–2 sentence body) and a changelog bullet point that explains the motivation and effect of the change."
+  },
+  {
+    name = "commit",
+    desc = "Commit staged changes with a descriptive message",
+    trans = "- Stage all changes and commit them with a concise and descriptive message, following project conventions."
   }
 }

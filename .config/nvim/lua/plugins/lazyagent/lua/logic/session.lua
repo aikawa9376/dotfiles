@@ -12,6 +12,38 @@ local util = require("lazyagent.util")
 local window = require("lazyagent.window")
 local ok_watch, watch = pcall(require, "lazyagent.watch")
 
+local function compute_launch_cmd(agent_cfg)
+  -- Convert agent_cfg.cmd/cmd_yolo (string or table) to a single string suitable
+  -- for backends and append/replace YOLO flags when requested.
+  local function join_cmd_parts(cmd)
+    if not cmd then return nil end
+    if type(cmd) == "table" then
+      local quoted = {}
+      for _, part in ipairs(cmd) do
+        table.insert(quoted, vim.fn.shellescape(tostring(part)))
+      end
+      return table.concat(quoted, " ")
+    end
+    return tostring(cmd)
+  end
+
+  local base_cmd = agent_cfg and agent_cfg.cmd or nil
+  local agent_yolo_flag = (agent_cfg and agent_cfg.yolo_flag) or (state.opts and state.opts.yolo_flag)
+  local use_yolo = agent_cfg and agent_cfg.yolo or false
+
+  -- Priority:
+  -- 1) If yolo requested and agent_yolo_flag exists and base_cmd exists, append the flag to the base command
+  -- 2) Fall back to base_cmd if present
+  if use_yolo and agent_yolo_flag and base_cmd then
+    local bc = join_cmd_parts(base_cmd)
+    if bc and bc ~= "" then
+      return bc .. " " .. tostring(agent_yolo_flag)
+    end
+  end
+
+  return join_cmd_parts(base_cmd)
+end
+
 local function maybe_disable_watchers()
   if not ok_watch or not watch or type(watch.disable) ~= "function" then return end
   local cnt = 0
@@ -38,6 +70,7 @@ end
 -- @param on_ready (function) Callback to execute with the pane_id when ready.
 function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+  local requested_launch_cmd = compute_launch_cmd(agent_cfg)
 
   if reuse and state.sessions[agent_name] and state.sessions[agent_name].pane_id and state.sessions[agent_name].pane_id ~= "" then
     -- If the caller provided a watch preference, update the existing session's watch flag.
@@ -53,18 +86,23 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       end
     end
 
-    if backend_mod and type(backend_mod.pane_exists) == "function" then
-      if backend_mod.pane_exists(state.sessions[agent_name].pane_id) then
+    -- If an existing session was launched with a different command, don't reuse it.
+    if state.sessions[agent_name].launch_cmd and requested_launch_cmd and state.sessions[agent_name].launch_cmd ~= requested_launch_cmd then
+      -- Intentionally don't reuse; fall through to create a new session
+    else
+      if backend_mod and type(backend_mod.pane_exists) == "function" then
+        if backend_mod.pane_exists(state.sessions[agent_name].pane_id) then
+          on_ready(state.sessions[agent_name].pane_id)
+          return
+        end
+      else
         on_ready(state.sessions[agent_name].pane_id)
         return
       end
-    else
-      on_ready(state.sessions[agent_name].pane_id)
-      return
     end
   end
 
-  backend_mod.split(agent_cfg.cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, function(pane_id)
+  backend_mod.split(requested_launch_cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, function(pane_id)
     if not pane_id or pane_id == "" then
       vim.notify("Failed to create pane for agent " .. tostring(agent_name), vim.log.levels.ERROR)
       return
@@ -74,7 +112,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         local watch_enabled_val = true
         if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
 
-        state.sessions[agent_name] = { pane_id = pane_id, last_output = "", backend = backend_name, watch_enabled = watch_enabled_val }
+        state.sessions[agent_name] = { pane_id = pane_id, last_output = "", backend = backend_name, watch_enabled = watch_enabled_val, launch_cmd = requested_launch_cmd }
         -- If this session requested watchers, enable them.
         if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
           pcall(watch.enable)
@@ -302,14 +340,19 @@ function M.start_interactive_session(opts)
   local agent_cfg = vim.tbl_deep_extend("force", base_agent_cfg or {}, opts or {})
   local origin_bufnr = opts.source_bufnr or opts.origin_bufnr or vim.api.nvim_get_current_buf()
 
-  -- Require an interactive agent configuration with a 'cmd' to start an interactive session
-  if not (agent_cfg and agent_cfg.cmd) then
-    vim.notify("interactive agent " .. tostring(agent_name) .. " is not configured", vim.log.levels.ERROR)
+  -- Determine whether a launch command is available for this agent (cmd, cmd_yolo, or yolo flag)
+  local has_launch = agent_cfg and (agent_cfg.cmd or agent_cfg.cmd_yolo or agent_cfg.yolo_flag or (state.opts and state.opts.yolo_flag))
+  if not has_launch then
+    vim.notify("interactive agent " .. tostring(agent_name) .. " is not configured with a launch command", vim.log.levels.ERROR)
     return
   end
 
-  -- Default to reuse sessions unless explicitly disabled
+  -- Default to reuse sessions unless explicitly disabled. If the agent requests YOLO
+  -- (agent_cfg.yolo = true), default to NOT reusing sessions unless the caller explicitly set opts.reuse.
   local reuse = opts.reuse ~= false
+  if opts.reuse == nil and agent_cfg and agent_cfg.yolo then
+    reuse = false
+  end
   M.ensure_session(agent_name, agent_cfg, reuse, function(pane_id)
     -- Handle one-shot sends where no input scratch buffer is opened.
     if opts.open_input == false then
@@ -336,6 +379,8 @@ function M.start_interactive_session(opts)
     else
       open_opts.start_in_insert_on_focus = (state.opts and state.opts.start_in_insert_on_focus) or false
     end
+    open_opts.is_vertical = agent_cfg.is_vertical or false
+
     window.open(bufnr, open_opts)
 
     -- Set initial content if provided

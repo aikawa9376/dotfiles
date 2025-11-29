@@ -31,8 +31,8 @@ function M.open_float(bufnr, opts)
   bufnr, opts = _ensure_bufnr(bufnr, opts or {})
 
   -- Center the floating window
-  local width = math.floor(vim.o.columns * 0.6)
-  local height = math.floor(vim.o.lines * (opts.is_vertical and 0.5 or 0.3))
+  local width = math.floor(vim.o.columns * (opts.is_vertical and 0.6 or 0.5))
+  local height = math.floor(vim.o.lines * (opts.is_vertical and 0.3 or 0.5))
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
@@ -81,8 +81,8 @@ function M.open_float(bufnr, opts)
     local cols = vim.o.columns
     local lines = vim.o.lines
     -- Small size and place in bottom-right corner
-    local w = math.max(10, math.floor(cols * 0.25))
-    local h = math.max(3, math.floor(lines * (opts.is_vertical and 0.2 or 0.1)))
+    local w = math.max(10, math.floor(cols * (opts.is_vertical and 0.2 or 0.2)))
+    local h = math.max(3, math.floor(lines * (opts.is_vertical and 0.1 or 0.2)))
     local r = math.max(0, lines - h - 2)
     local c = math.max(0, cols - w)
     local cfg = {
