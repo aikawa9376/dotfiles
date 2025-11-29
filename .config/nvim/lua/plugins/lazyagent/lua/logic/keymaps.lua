@@ -11,64 +11,6 @@ local window = require("lazyagent.window")
 local cache_logic = require("logic.cache")
 
 ---
--- Defines default keymap descriptors for the plugin.
--- @return (table) A list of keymap descriptors.
-function M.default_keymaps()
-  local maps = {
-    {
-      mode = "v",
-      lhs = "<leader>sa",
-      rhs = function() send_logic.send_visual() end,
-      opts = { noremap = true, silent = true, desc = "Send Visual to Agent" },
-    },
-    {
-      mode = "n",
-      lhs = "<leader>sl",
-      rhs = function() send_logic.send_line() end,
-      opts = { noremap = true, silent = true, desc = "Send Line to Agent" },
-    },
-  }
-
-  -- Add agent-start shortcuts for configured interactive agents (if any).
-  if state.opts and state.opts.interactive_agents then
-    local agent_suffix_map = {
-      Claude = "a",
-      Codex = "x",
-      Gemini = "g",
-      Copilot = "c",
-      Cursor = "r",
-    }
-    for _, name in ipairs(agent_logic.available_agents()) do
-      local suffix = agent_suffix_map[name] or string.sub(string.lower(name), 1, 1)
-      table.insert(maps, {
-        mode = "n",
-        lhs = "<leader>sa" .. suffix,
-        rhs = "<cmd>" .. name .. "<cr>",
-        opts = { noremap = true, silent = true, desc = "Start " .. name .. " Agent" },
-      })
-    end
-  end
-
-  return maps
-end
-
----
--- Registers a list of keymap descriptors.
--- If no maps are provided, default_keymaps() will be called.
--- @param maps (table|nil) A list of keymap descriptors.
-function M.register_keymaps(maps)
-  maps = maps or M.default_keymaps()
-  for _, m in ipairs(maps) do
-    local mode = m.mode or "n"
-    local rhs = m.rhs
-    local lhs = m.lhs
-    local opts = m.opts or {}
-    -- Use pcall in case the rhs is a string (command) or a function; vim.keymap.set handles both.
-    pcall(function() vim.keymap.set(mode, lhs, rhs, opts) end)
-  end
-end
-
----
 -- Registers buffer-local keymaps used for scratch buffers.
 -- @param bufnr (number) The buffer number to register keymaps for.
 -- @param opts (table) Options for keymap registration, including:
@@ -216,8 +158,8 @@ function M.register_scratch_keymaps(bufnr, opts)
   end, { nowait = true, desc = "Close input buffer"  })
 
   -- Submit mappings (normal / insert)
-  safe_set("n", state.opts.send_key_normal or "<CR>", function() send_from_buf() end, { desc = "Submit from buffer" })
-  safe_set("i", state.opts.send_key_insert or "<C-s>", function()
+  safe_set("n", keys.send_key_normal or "<CR>", function() send_from_buf() end, { desc = "Submit from buffer" })
+  safe_set("i", keys.send_key_insert or "<C-s>", function()
     vim.cmd("stopinsert")
     send_from_buf()
     if vim.api.nvim_buf_is_valid(bufnr) then vim.cmd("startinsert") end

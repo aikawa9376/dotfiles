@@ -4,7 +4,6 @@
 local M = require("logic.state")
 
 local cache_logic = require("logic.cache")
-local keymaps_logic = require("logic.keymaps")
 local commands_logic = require("logic.commands")
 local agent_logic = require("logic.agent")
 local session_logic = require("logic.session")
@@ -37,17 +36,35 @@ function M.setup(opts)
       local base = {
         pane_size = 30,
         scratch_filetype = "lazyagent",
-        submit_keys = { "C-m" },
-        submit_delay = 600,
-        submit_retry = 1,
-        is_vertical = false,
+        -- Edit here to override agent-specific settings
+        -- submit_keys = { "C-m" },
+        -- submit_delay = 600,
+        -- submit_retry = 1,
+        is_vertical = true,
+        yolo = false,
+        yolo_flag = nil,
       }
       return {
-        Claude = vim.tbl_deep_extend("force", base, { cmd = "claude" }),
-        Codex = vim.tbl_deep_extend("force", base, { cmd = "codex", pane_size = 40 }),
-        Gemini = vim.tbl_deep_extend("force", base, { cmd = "gemini" }),
-        Copilot = vim.tbl_deep_extend("force", base, { cmd = "copilot" }),
-        Cursor = vim.tbl_deep_extend("force", base, { cmd = "cursor-agent" }),
+        Claude = vim.tbl_deep_extend("force", base, {
+          cmd = "claude",
+          yolo_flag = "--dangerously-skip-permissions",
+        }),
+        Codex = vim.tbl_deep_extend("force", base, {
+          cmd = "codex",
+          yolo_flag = "--full-auto",
+        }),
+        Gemini = vim.tbl_deep_extend("force", base, {
+          cmd = "gemini",
+          yolo_flag = "--yolo",
+        }),
+        Copilot = vim.tbl_deep_extend("force", base, {
+          cmd = "copilot",
+          yolo_flag = "--allow-all-tools",
+        }),
+        Cursor = vim.tbl_deep_extend("force", base, {
+          cmd = "cursor-agent",
+          yolo_flag = "--no-confirm",
+        }),
       }
     end)(),
     start_in_insert_on_focus = false,
@@ -60,19 +77,18 @@ function M.setup(opts)
     close_on_send = true,
     save_conversation_on_close = true,
     open_conversation_on_save = false,
-    send_key_insert = "<C-s>",
-    send_key_normal = "<CR>",
-    setup_keymaps = false,
     scratch_keymaps = {
       close = "q",
       send_and_clear = "<C-Space>",
+      send_key_insert = "<C-s>",
+      send_key_normal = "<CR>",
       scroll_up = "<C-u>",
       scroll_down = "<C-d>",
       nav_up = "<Up>",
       nav_down = "<Down>",
       esc = "<Esc>",
       clear = "c<space>d",
-      history_next = "c<space>d",
+      history_next = "c<space>n",
       history_prev = "c<space>p",
     },
     cache = {
@@ -118,11 +134,6 @@ function M.setup(opts)
 
   -- Register user commands
   commands_logic.setup_commands()
-
-  -- If enabled, register default keymaps after all options are available.
-  if M.opts.setup_keymaps then
-    keymaps_logic.register_keymaps()
-  end
 
   -- Close all agent sessions on Quit/Exit
   pcall(function()
