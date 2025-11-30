@@ -160,7 +160,7 @@ local getFileOpt = function (cwd)
       end,
       fzf_lua.actions.resume
     },
-    ["ctrl-a"] = function(selected)
+    ["ctrl-s"] = function(selected)
       copySelectedPathsToRegisterWithAt(selected)
     end,
   })

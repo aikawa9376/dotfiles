@@ -745,7 +745,7 @@ enhancd_useful() {
       awk -F/ '{OFS="/"; $NF="\x1b[1;34m"$NF"\x1b[0m"} 1' |
       fzf --tiebreak=index \
         --multi --ansi \
-        --expect=ctrl-a \
+        --expect=ctrl-s \
         --bind 'ctrl-e:execute-silent(printf {} | xclip -selection c -in)'
     )}
   )
@@ -758,8 +758,8 @@ enhancd_useful() {
   local key
   local -a dirs
 
-  if [[ "${result[1]}" == "ctrl-a" ]]; then
-    key="ctrl-a"
+  if [[ "${result[1]}" == "ctrl-s" ]]; then
+    key="ctrl-s"
     dirs=("${(@)result[2,-1]}")
   else
     key="enter"
@@ -767,7 +767,7 @@ enhancd_useful() {
   fi
 
   case "$key" in
-    ctrl-a)
+    ctrl-s)
       local dir_string="${(j: :)dirs}"
       LBUFFER+=${dir_string//$'\r'/}
       zle reset-prompt

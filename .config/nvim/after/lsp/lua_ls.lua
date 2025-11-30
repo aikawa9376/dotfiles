@@ -10,6 +10,10 @@ return {
       diagnostics = {
         globals = { "vim" },
       },
+      -- very slow and very use resource
+      codeLens = {
+        enable = false,
+      },
       runtime = {
         version = "LuaJIT",
         path = vim.split(package.path, ";"),
