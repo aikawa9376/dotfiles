@@ -143,9 +143,10 @@ end
 -- Files Enhanced
 -- ------------------------------------------------------------------
 
-local getFileOpt = function ()
+local getFileOpt = function (cwd)
   local opts = {}
   opts.multiprocess = false
+  opts.cwd = vim.fn.fnamemodify(cwd or vim.fn.getcwd(), ":p")
   opts.prompt = getHomeName() .. ' >'
   opts.previewer = "builtin"
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
@@ -198,8 +199,38 @@ M.fzf_all_files = function(opts)
   )
 end
 
+M.fzf_files_for_dir = function(dir)
+  local search_dir
+  if dir and vim.fn.isdirectory(dir) == 1 then
+    search_dir = dir
+  else
+    local current_file_dir = vim.fn.expand('%:p:h')
+    if current_file_dir ~= '' and vim.fn.isdirectory(current_file_dir) == 1 then
+      search_dir = current_file_dir
+    else
+      search_dir = vim.loop.cwd()
+    end
+  end
+
+  search_dir = vim.fn.fnamemodify(search_dir, ":p")
+
+  local fd_cmd = "fd --strip-cwd-prefix --follow --hidden --exclude .git --type f"
+  local exclusions = " -E .git -E '*.psd' -E '*.png' -E '*.jpg' -E '*.pdf' " ..
+    "-E '*.ai' -E '*.jfif' -E '*.jpeg' -E '*.gif' " ..
+    "-E '*.eps' -E '*.svg' -E '*.JPEM' -E '*.mp4'"
+  local full_cmd = "cd " .. vim.fn.shellescape(search_dir) .. " && " ..
+    fd_cmd .. exclusions .. " | " ..
+    "eza -1 -sold --color=always --no-quotes"
+
+  fzf_lua.fzf_exec(
+    full_cmd,
+    getFileOpt(search_dir)
+  )
+end
+
 vim.cmd([[command! -nargs=* FilesLua lua require"plugins.fzf-lua_util".fzf_files()]])
 vim.cmd([[command! -nargs=* AllFilesLua lua require"plugins.fzf-lua_util".fzf_all_files()]])
+vim.cmd([[command! -nargs=* CurrentFilesLua lua require"plugins.fzf-lua_util".fzf_files_for_dir()]])
 
 -- ------------------------------------------------------------------
 -- Directories Enhanced
@@ -227,6 +258,12 @@ local getDirOpt = function ()
         vim.cmd('TermForceCloseAll')
         vim.cmd('vsplit')
         vim.cmd('Oil ' .. selected[1])
+      end
+    },
+    ["ctrl-t"] = {
+      function(selected)
+        vim.cmd('TermForceCloseAll')
+        require('plugins.fzf-lua_util').fzf_files_for_dir(selected[1])
       end
     }
   }
