@@ -120,9 +120,9 @@ return {
         on_enter = function()
           local is_visual = vim.fn.mode():match("v")
           if is_visual then
-            pasteWithGlow('"_d<Plug>(YankyPutIndentBefore)')
+            pasteWithGlow('"_d<Plug>(YankyPutBefore)')
           else
-            pasteWithGlow('<Plug>(YankyPutIndentAfter)')
+            pasteWithGlow('<Plug>(YankyPutAfter)')
           end
         end
       },
@@ -144,9 +144,9 @@ return {
         on_enter = function()
           local is_visual = vim.fn.mode():match("v")
           if is_visual then
-            pasteWithGlow('"_d<Plug>(YankyPutIndentBefore)')
+            pasteWithGlow('"_d<Plug>(YankyPutBefore)')
           else
-            pasteWithGlow('<Plug>(YankyPutIndentBefore)')
+            pasteWithGlow('<Plug>(YankyPutBefore)')
           end
         end
       },
