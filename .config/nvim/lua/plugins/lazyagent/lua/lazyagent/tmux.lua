@@ -2,7 +2,7 @@ local M = {}
 local DEFAULT_SUBMIT_DELAY_MS = 600
 local DEFAULT_SUBMIT_RETRY = 1
 local util = require("lazyagent.util")
-local state = require("logic.state")
+local state = require("lazyagent.logic.state")
 
 -- Run tmux command asynchronously using jobstart; fallback to a synchronous
 -- system call. This wrapper validates opts and captures jobstart errors.

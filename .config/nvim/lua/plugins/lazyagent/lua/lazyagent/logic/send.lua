@@ -3,10 +3,10 @@
 -- whether interactive (CLI) or non-interactive (prompts).
 local M = {}
 
-local state = require("logic.state")
-local agent_logic = require("logic.agent")
-local backend_logic = require("logic.backend")
-local cache_logic = require("logic.cache")
+local state = require("lazyagent.logic.state")
+local agent_logic = require("lazyagent.logic.agent")
+local backend_logic = require("lazyagent.logic.backend")
+local cache_logic = require("lazyagent.logic.cache")
 local transforms = require("lazyagent.transforms")
 local util = require("lazyagent.util")
 
@@ -45,7 +45,7 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
   })
 
   -- For one-shot (non-interactive) sends, close the session after a delay if it's not meant to be reused.
-  local session_logic = require("logic.session")
+  local session_logic = require("lazyagent.logic.session")
   vim.defer_fn(function()
     if not reuse then
       session_logic.close_session(agent_name)
@@ -96,7 +96,7 @@ function M.send_to_cli(agent_name, text, opts)
   -- Interactive (cli) agents: ensure a pane and send to it.
   if agent_cfg then
     local reuse = opts.reuse ~= false
-    local session_logic = require("logic.session") -- require here to avoid circular dependency
+    local session_logic = require("lazyagent.logic.session") -- require here to avoid circular dependency
     session_logic.ensure_session(agent_name, agent_cfg, reuse, function(pane_id)
       if not pane_id or pane_id == "" then
         vim.notify("send_to_cli: failed to obtain pane for " .. tostring(agent_name), vim.log.levels.ERROR)
@@ -114,7 +114,7 @@ function M.send_to_cli(agent_name, text, opts)
         move_to_end = _move_to_end,
         use_bracketed_paste = _use_bracketed_paste,
       })
-      local session_logic = require("logic.session")
+      local session_logic = require("lazyagent.logic.session")
       if not reuse then
         vim.defer_fn(function()
           session_logic.close_session(agent_name)
@@ -191,7 +191,7 @@ function M.send_buffer_and_clear(agent_name, bufnr)
   local agent_cfg = agent_logic.get_interactive_agent(agent_name)
   if agent_cfg then
     -- For interactive agents (tmux-based), ensure a pane then paste/submit.
-    local session_logic = require("logic.session") -- require here to avoid circular dependency
+    local session_logic = require("lazyagent.logic.session") -- require here to avoid circular dependency
     session_logic.ensure_session(agent_name, agent_cfg, true, function(pane_id)
       if not pane_id or pane_id == "" then
         vim.notify("send_buffer_and_clear: failed to obtain pane for " .. tostring(agent_name), vim.log.levels.ERROR)

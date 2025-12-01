@@ -2,10 +2,10 @@
 -- This module contains functions for registering user commands.
 local M = {}
 
-local state = require("logic.state")
-local agent_logic = require("logic.agent")
-local session_logic = require("logic.session")
-local cache_logic = require("logic.cache")
+local state = require("lazyagent.logic.state")
+local agent_logic = require("lazyagent.logic.agent")
+local session_logic = require("lazyagent.logic.session")
+local cache_logic = require("lazyagent.logic.cache")
 
 -- Helper to create commands safely
 local function try_create_user_command(name, fn, cmd_opts)

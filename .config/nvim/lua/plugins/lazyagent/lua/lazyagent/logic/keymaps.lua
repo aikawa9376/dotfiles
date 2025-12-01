@@ -3,12 +3,12 @@
 -- for scratch buffers.
 local M = {}
 
-local state = require("logic.state")
-local agent_logic = require("logic.agent")
-local backend_logic = require("logic.backend")
-local send_logic = require("logic.send")
+local state = require("lazyagent.logic.state")
+local agent_logic = require("lazyagent.logic.agent")
+local backend_logic = require("lazyagent.logic.backend")
+local send_logic = require("lazyagent.logic.send")
 local window = require("lazyagent.window")
-local cache_logic = require("logic.cache")
+local cache_logic = require("lazyagent.logic.cache")
 
 ---
 -- Registers buffer-local keymaps used for scratch buffers.
@@ -106,7 +106,7 @@ function M.register_scratch_keymaps(bufnr, opts)
         end
         state.open_agent = nil
         if agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id and not reuse then
-          local session_logic = require("logic.session") -- require here to avoid circular dependency
+          local session_logic = require("lazyagent.logic.session") -- require here to avoid circular dependency
           session_logic.close_session(agent_name)
         end
       end
@@ -131,12 +131,18 @@ function M.register_scratch_keymaps(bufnr, opts)
       vim.cmd("stopinsert")
     end
 
-    -- For tmux backend, send 'C-u', 'C-h' (tmux translates this to ctrl-u).
+    -- For tmux backend, send 'C-e', 'C-u', 'C-h' (tmux translates this to ctrl-u).
     -- For builtin or other backends (non-tmux), send the literal ASCII ctrl-u char.
     if backend_name == "tmux" then
-      backend_mod.send_keys(p, { "C-u", "C-h" })
+      -- backend_mod.send_keys(p, { "C-e", "C-u", "C-h" })
+      backend_mod.send_keys(p, { "C-e" })
+      vim.wait(25)
+      backend_mod.send_keys(p, { "C-u" })
+      vim.wait(25)
+      backend_mod.send_keys(p, { "C-h" })
     else
-      backend_mod.send_keys(p, { string.char(21) })
+      -- ASCII 5 is C-e, 21 is C-u
+      backend_mod.send_keys(p, { string.char(5), string.char(21) })
     end
 
     if insert_wrap and vim.api.nvim_buf_is_valid(bufnr) then
@@ -152,7 +158,7 @@ function M.register_scratch_keymaps(bufnr, opts)
     end
     state.open_agent = nil
     if agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id and not reuse then
-      local session_logic = require("logic.session") -- require here to avoid circular dependency
+      local session_logic = require("lazyagent.logic.session") -- require here to avoid circular dependency
       session_logic.close_session(agent_name)
     end
   end, { nowait = true, desc = "Close input buffer"  })
@@ -166,7 +172,9 @@ function M.register_scratch_keymaps(bufnr, opts)
   end, { desc = "Submit from insert mode" })
 
   -- Send & clear (scratch)
-  safe_set("n", keys.send_and_clear or "<C-Space>", function() send_logic.send_buffer_and_clear(agent_name, bufnr) end, { desc = "Send buffer and clear (scratch)" })
+  safe_set("n", keys.send_and_clear or "<C-Space>", function()
+    send_logic.send_buffer_and_clear(agent_name, bufnr)
+  end, { desc = "Send buffer and clear (scratch)" })
   safe_set("i", keys.send_and_clear or "<C-Space>", function()
     vim.cmd("stopinsert")
     send_logic.send_buffer_and_clear(agent_name, bufnr)
