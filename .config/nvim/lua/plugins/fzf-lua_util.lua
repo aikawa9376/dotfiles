@@ -739,9 +739,11 @@ vim.cmd([[command! -nargs=* EmojiLua lua require"plugins.fzf-lua_util".fzf_emoji
 -- lazyagent
 -- ------------------------------------------------------------------
 
-local getAgentOpts = function ()
+local getAgentOpts = function (cacheDir)
   local opts = {}
   opts.prompt = 'lazyagent >'
+  opts.previewer = "builtin"
+  opts.cwd = cacheDir
   opts.fzf_opts = {
     ["-x"] = "",
     ["--multi"] = "",
@@ -751,14 +753,16 @@ local getAgentOpts = function ()
   return opts
 end
 
--- M.fzf_lazyagent = function()
---   fzf_lua.fzf_exec(
---     require"lazyagent".get(),
---     getAgentOpts()
---   )
--- end
---
--- vim.cmd([[command! -nargs=* LaravelLua lua require"plugins.fzf-lua_util".fzf_laravel()]])
+M.fzf_lazyagent = function()
+  local cacheDir, conversations = require"lazyagent.logic.cache".list_cache_Conversation()
+
+  fzf_lua.fzf_exec(
+    conversations,
+    getAgentOpts(cacheDir)
+  )
+end
+
+vim.cmd([[command! -nargs=* LazyAgentLua lua require"plugins.fzf-lua_util".fzf_lazyagent()]])
 
 -- ------------------------------------------------------------------
 -- loravel.nvim override
