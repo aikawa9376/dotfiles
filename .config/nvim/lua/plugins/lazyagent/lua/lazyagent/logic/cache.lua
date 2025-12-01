@@ -1,7 +1,7 @@
 -- logic/cache.lua
 local M = {}
 
-local state = require("logic.state")
+local state = require("lazyagent.logic.state")
 local util = require("lazyagent.util")
 
 --- Sanitizes a string to be used as a filename component.
@@ -192,6 +192,37 @@ local function list_cache_files()
   -- Sort by newest first
   table.sort(entries, function(a, b) return (a.mtime or 0) > (b.mtime or 0) end)
   return entries
+end
+
+--- Lists all cache Conversation files, sorted by modification time (newest first).
+-- @return (table) entries: list of { name, path, mtime }, choices: list of strings suitable for vim.ui.select
+function M.list_cache_Conversation()
+  local dir = get_cache_dir()
+  if not dir or vim.fn.isdirectory(dir) == 0 then
+    return {}, {}
+  end
+
+  local raw = vim.fn.readdir(dir) or {}
+  local raws = {}
+  local entries = {}
+
+  for _, f in ipairs(raw) do
+    local fname_lower = (f or ""):lower()
+    -- Match filenames like "<agent>-conversation-2024-... .log" (case-insensitive)
+    if fname_lower:match("%-conversation%-.+%.log$") then
+      local path = dir .. "/" .. f
+      local mtime = vim.fn.getftime(path) or 0
+      table.insert(raws, { name = f, path = path, mtime = mtime })
+    end
+  end
+
+  table.sort(raws, function(a, b) return (a.mtime or 0) > (b.mtime or 0) end)
+
+  for _, e in ipairs(raws) do
+    table.insert(entries, e.name)
+  end
+
+  return M.get_cache_dir(), entries
 end
 
 --- Opens the agent history in a selection UI.

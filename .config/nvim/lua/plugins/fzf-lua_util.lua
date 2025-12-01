@@ -690,7 +690,7 @@ vim.cmd([[command! -nargs=* JunkFilesLua lua require"plugins.fzf-lua_util".fzf_j
 -- ------------------------------------------------------------------
 -- font/emoji settings
 -- ------------------------------------------------------------------
---
+
 local getIconOpts = function (name)
   local opts = {}
   opts.prompt = name .. ' >'
@@ -733,6 +733,31 @@ fzf_lua.nerd_fonts = M.fzf_nerd_fonts
 fzf_lua.emoji = M.fzf_emoji
 vim.cmd([[command! -nargs=* NerdFontLua lua require"plugins.fzf-lua_util".fzf_nerd_fonts()]])
 vim.cmd([[command! -nargs=* EmojiLua lua require"plugins.fzf-lua_util".fzf_emoji()]])
+
+-- ------------------------------------------------------------------
+-- lazyagent
+-- ------------------------------------------------------------------
+
+local getAgentOpts = function ()
+  local opts = {}
+  opts.prompt = 'lazyagent >'
+  opts.fzf_opts = {
+    ["-x"] = "",
+    ["--multi"] = "",
+    ["--ansi"] = true,
+  }
+
+  return opts
+end
+
+-- M.fzf_lazyagent = function()
+--   fzf_lua.fzf_exec(
+--     require"lazyagent".get(),
+--     getAgentOpts()
+--   )
+-- end
+--
+-- vim.cmd([[command! -nargs=* LaravelLua lua require"plugins.fzf-lua_util".fzf_laravel()]])
 
 -- ------------------------------------------------------------------
 -- loravel.nvim override

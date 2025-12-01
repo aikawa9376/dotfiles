@@ -1,7 +1,7 @@
 -- logic/backend.lua
 local M = {}
 
-local state = require("logic.state")
+local state = require("lazyagent.logic.state")
 local tmux = require("lazyagent.tmux")
 local builtin_backend = require("lazyagent.builtin")
 

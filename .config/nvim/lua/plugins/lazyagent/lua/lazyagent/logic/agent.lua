@@ -2,8 +2,8 @@
 -- This module handles agent resolution and management.
 local M = {}
 
-local state = require("logic.state")
-local backend = require("logic.backend")
+local state = require("lazyagent.logic.state")
+local backend = require("lazyagent.logic.backend")
 
 --- Gets the configuration for a specific interactive agent.
 -- @param agent (string) The name of the agent.

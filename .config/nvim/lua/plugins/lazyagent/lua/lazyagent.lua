@@ -1,14 +1,14 @@
 -- lazyagent.lua - Main entry point for the LazyAgent plugin.
 -- This file orchestrates the various modules that comprise the plugin's functionality.
 
-local M = require("logic.state")
+local M = require("lazyagent.logic.state")
 
-local cache_logic = require("logic.cache")
-local commands_logic = require("logic.commands")
-local agent_logic = require("logic.agent")
-local session_logic = require("logic.session")
-local send_logic = require("logic.send")
-local backend_logic = require("logic.backend")
+local cache_logic = require("lazyagent.logic.cache")
+local commands_logic = require("lazyagent.logic.commands")
+local agent_logic = require("lazyagent.logic.agent")
+local session_logic = require("lazyagent.logic.session")
+local send_logic = require("lazyagent.logic.send")
+local backend_logic = require("lazyagent.logic.backend")
 
 -- Expose public API from logic modules through the main M table
 M.open_history = cache_logic.open_history

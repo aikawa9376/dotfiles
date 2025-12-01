@@ -3,11 +3,11 @@
 -- starting, stopping, and toggling interactive sessions.
 local M = {}
 
-local state = require("logic.state")
-local agent_logic = require("logic.agent")
-local backend_logic = require("logic.backend")
-local keymaps_logic = require("logic.keymaps")
-local send_logic = require("logic.send")
+local state = require("lazyagent.logic.state")
+local agent_logic = require("lazyagent.logic.agent")
+local backend_logic = require("lazyagent.logic.backend")
+local keymaps_logic = require("lazyagent.logic.keymaps")
+local send_logic = require("lazyagent.logic.send")
 local util = require("lazyagent.util")
 local window = require("lazyagent.window")
 local ok_watch, watch = pcall(require, "lazyagent.watch")
@@ -153,7 +153,7 @@ function M.capture_and_save_session(agent_name, open_file, on_done)
       end
 
       local lines = vim.split(text, "\n")
-      local cache_logic = require("logic.cache")
+      local cache_logic = require("lazyagent.logic.cache")
       local dir = cache_logic.get_cache_dir()
       local sanitized = tostring(agent_name):gsub("[^%w-_]+", "-")
       local filename = sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
