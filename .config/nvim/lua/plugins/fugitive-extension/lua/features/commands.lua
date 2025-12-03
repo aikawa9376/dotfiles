@@ -1,5 +1,71 @@
 local M = {}
 
+local float_win = nil
+local float_buf = nil
+
+function M.close_commit_info_float()
+  if float_win and vim.api.nvim_win_is_valid(float_win) then
+    vim.api.nvim_win_close(float_win, true)
+    float_win = nil
+    float_buf = nil
+  end
+end
+
+function M.show_commit_info_float(commit, toggle)
+  if float_win and vim.api.nvim_win_is_valid(float_win) then
+    if toggle then
+      M.close_commit_info_float()
+      return
+    end
+  else
+    float_buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[float_buf].modifiable = false
+    vim.bo[float_buf].filetype = 'git'
+
+    local width = math.min(80, vim.o.columns - 4)
+    local height = math.min(30, vim.o.lines - 4)
+    local col = vim.o.columns - width - 4
+    local row = 2
+
+    float_win = vim.api.nvim_open_win(float_buf, false, {
+      relative = 'editor',
+      width = width,
+      height = height,
+      col = col,
+      row = row,
+      style = 'minimal',
+      border = 'single',
+      title = ' Commit Info ',
+      title_pos = 'center',
+    })
+
+    vim.api.nvim_set_option_value('wrap', false, { win = float_win })
+    vim.api.nvim_set_option_value('cursorline', false, { win = float_win })
+  end
+
+  -- Use git show with custom format to get pre-formatted date
+  local command = "git show -s --date=format:'%Y-%m-%d %H:%M' --format='tree %T%nparent %P%nauthor %an <%ae> %ad%ncommitter %cn <%ce> %ad%n%n%B' " .. vim.fn.shellescape(commit)
+  local commit_info = vim.fn.systemlist(command)
+
+  if vim.v.shell_error == 0 then
+    -- Trim trailing empty lines from the output
+    while #commit_info > 0 and commit_info[#commit_info] == '' do
+      table.remove(commit_info)
+    end
+
+    vim.bo[float_buf].modifiable = true
+    vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, commit_info)
+    vim.bo[float_buf].modifiable = false
+
+    local line_count = #commit_info
+    local win_height = math.min(line_count, vim.o.lines - 4)
+    vim.api.nvim_win_set_height(float_win, win_height)
+  end
+
+  vim.api.nvim_set_option_value('wrap', false, { win = float_win })
+  vim.api.nvim_set_option_value('cursorline', false, { win = float_win })
+end
+
 function M.setup()
   vim.api.nvim_create_user_command('GeditHeadAtFile', function()
     local filepath = vim.fn.expand('%:.')
@@ -207,7 +273,7 @@ function M.setup()
     git_cherry_pick({ reg = cmd_opts.reg })
   end, { register = true })
 
-  function M.fixup_commit(commit_hash)
+  function M.fixup_commit(commit_hash, on_complete)
     if not commit_hash or commit_hash == '' then
       vim.notify('No commit hash provided', vim.log.levels.ERROR)
       return
@@ -261,6 +327,139 @@ function M.setup()
       vim.notify('Fixup completed: ' .. short_commit_hash .. ' -> ' .. parent_commit_hash:sub(1, 7))
       -- Reload status if the fugitive buffer is open
       vim.fn['fugitive#ReloadStatus']()
+      if on_complete then
+        vim.schedule(on_complete)
+      end
+    end
+  end
+
+  function M.reload_log()
+    local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    if vim.fn.exists('*fugitive#Reload') == 1 then
+      vim.fn['fugitive#Reload']()
+    else
+      vim.cmd('edit')
+    end
+    pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
+  end
+
+  function M.move_commit(current_commit, target_commit, direction, on_complete)
+    if not current_commit or current_commit == '' or not target_commit or target_commit == '' then
+      vim.notify('Invalid commits', vim.log.levels.WARN)
+      return
+    end
+
+    local current_branch = vim.fn.system('git rev-parse --abbrev-ref HEAD'):gsub('\n', '')
+    if current_branch == 'HEAD' then
+      vim.notify('Cannot move commits in detached HEAD state', vim.log.levels.ERROR)
+      return
+    end
+
+    -- Determine the base commit for rebase (parent of the older commit)
+    local base_commit
+    local is_ancestor = vim.fn.system(string.format('git merge-base --is-ancestor %s %s', current_commit, target_commit))
+    if vim.v.shell_error == 0 then
+      base_commit = current_commit .. '^'
+    else
+      base_commit = target_commit .. '^'
+    end
+
+    -- Create awk script - simplest approach
+    local tmpfile = vim.fn.tempname()
+    local script = string.format([[
+#!/bin/bash
+awk '
+/^pick %s/ { line1=NR; save1=$0; next }
+/^pick %s/ { line2=NR; save2=$0; next }
+{ lines[NR]=$0 }
+END {
+  for (i=1; i<=NR+2; i++) {
+    if (i==line1) print save2
+    else if (i==line2) print save1
+    else if (lines[i]) print lines[i]
+  }
+}
+' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+]], current_commit:sub(1,7), target_commit:sub(1,7))
+
+    local debug_script = string.format([[
+#!/bin/bash
+echo "[DEBUG] Original todo:" > /tmp/rebase-debug.log
+cat "$1" >> /tmp/rebase-debug.log
+%s
+echo "[DEBUG] Modified todo:" >> /tmp/rebase-debug.log
+cat "$1" >> /tmp/rebase-debug.log
+]], script)
+
+    local f = io.open(tmpfile, 'w')
+    f:write(debug_script)
+    f:close()
+    vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
+
+    local cmd = string.format('GIT_SEQUENCE_EDITOR=%s git rebase -i %s', vim.fn.shellescape(tmpfile), base_commit)
+    local output = vim.fn.system(cmd)
+    vim.fn.delete(tmpfile)
+    
+    if vim.v.shell_error ~= 0 then
+      vim.notify('Failed to swap commits:\n' .. output, vim.log.levels.ERROR)
+    else
+      vim.notify('Successfully swapped commits', vim.log.levels.INFO)
+      if on_complete then
+        vim.schedule(on_complete)
+      else
+        M.reload_log()
+      end
+    end
+  end
+
+  function M.drop_commits(commits)
+    if not commits or #commits == 0 then return end
+
+    local git_dir = vim.fn.FugitiveGitDir()
+    if git_dir == '' then
+      vim.notify('Not in a git repository', vim.log.levels.ERROR)
+      return
+    end
+
+    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+
+    -- Sort commits to find the oldest one (last in chronological order)
+    local commits_args = table.concat(commits, " ")
+    local sort_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-list --no-walk --date-order ' .. commits_args
+    local sorted_commits = vim.fn.systemlist(sort_cmd)
+    
+    if vim.v.shell_error ~= 0 or #sorted_commits == 0 then
+        vim.notify('Failed to process commits', vim.log.levels.ERROR)
+        return
+    end
+    
+    -- The last one in rev-list output (date-order) is the oldest
+    local oldest_commit = sorted_commits[#sorted_commits]
+
+    -- Construct sed command to delete lines
+    local sed_expr = ""
+    for _, commit in ipairs(commits) do
+        local short = commit:sub(1, 7)
+        sed_expr = sed_expr .. " -e '/^pick " .. short .. "/d'"
+    end
+
+    local tmpfile = vim.fn.tempname()
+    local f = io.open(tmpfile, 'w')
+    f:write('#!/bin/sh\n')
+    f:write('sed -i' .. sed_expr .. ' "$1"\n')
+    f:close()
+    vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
+
+    local rebase_cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(oldest_commit .. '^')
+    local result = vim.fn.system(rebase_cmd)
+    vim.fn.delete(tmpfile)
+
+    if vim.v.shell_error ~= 0 then
+      vim.notify('Drop failed: ' .. result, vim.log.levels.ERROR)
+    else
+      vim.notify('Dropped ' .. #commits .. ' commit(s)')
+      M.reload_log()
     end
   end
 

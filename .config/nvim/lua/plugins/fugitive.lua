@@ -13,7 +13,7 @@ return {
     { "<Leader>gM", "<cmd>Git! commit -m 'tmp'<CR>", silent = true },
     { "<Leader>gA", "<cmd>Gwrite<CR>", silent = true },
     { "<Leader>gp", "<cmd>GitPush<CR>", silent = true },
-    { "g<space>l", "<cmd>G log --oneline<CR>", silent = true },
+    { "g<space>l", "<cmd>FugitiveLog<CR>", silent = true },
     { "g<space>d", "<cmd>G diff<CR>", silent = true },
     { "g<space>r", "<cmd>G reflog<CR>", silent = true },
     { "g<space>s", "<cmd>G show<CR>", silent = true },

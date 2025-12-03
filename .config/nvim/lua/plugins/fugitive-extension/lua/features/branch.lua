@@ -503,7 +503,7 @@ function M.setup(group)
           vim.g.flog_win = vim.api.nvim_get_current_win()
           vim.g.flog_branch_bufnr = bufnr
 
-          local utils = require("utils")
+          local utils = require("fugitive_utils")
           utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
           vim.api.nvim_set_current_win(current_win)
         end
@@ -526,7 +526,7 @@ function M.setup(group)
               vim.g.flog_bufnr = vim.api.nvim_get_current_buf()
               vim.g.flog_win = vim.api.nvim_get_current_win()
 
-              local utils = require("utils")
+              local utils = require("fugitive_utils")
               utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
               vim.api.nvim_set_current_win(current_win)
             end

@@ -9,6 +9,7 @@ function M.setup()
   require('features.blob').setup(group)
   require('features.stash').setup(group)
   require('features.branch').setup(group)
+  require('features.log').setup(group)
   require('features.commands').setup()
 end
 
