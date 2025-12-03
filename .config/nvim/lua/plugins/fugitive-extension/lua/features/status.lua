@@ -111,7 +111,7 @@ local function ensure_stash_section(bufnr, ns_stash)
   local new_lines = {}
   table.insert(new_lines, 'Stashes: (' .. tostring(#stash_list) .. ')')
   for _, sline in ipairs(stash_list) do
-    table.insert(new_lines, '  ' .. sline)
+    table.insert(new_lines, sline)
   end
 
       if header_idx then
