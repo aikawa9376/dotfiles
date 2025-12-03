@@ -1,5 +1,5 @@
 local M = {}
-local utils = require("utils")
+local utils = require("fugitive_utils")
 local commands = require("features.commands")
 
 -- Helper: Get the repository top-level path (work tree) from Fugitive's git dir.
