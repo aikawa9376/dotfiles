@@ -129,6 +129,21 @@ function M.setup(group)
         end,
       })
 
+      -- Update flog highlight and commit info float on cursor movement.
+      -- We only update the float if it already exists (create_if_missing=false).
+      vim.api.nvim_create_autocmd('CursorMoved', {
+        buffer = ev.buf,
+        callback = function()
+          vim.schedule(function()
+            update_flog_highlight()
+            local commit = utils.get_commit(ev.buf) or vim.api.nvim_get_current_line():match('^(%x+)')
+            if commit and commit ~= '' then
+              commands.show_commit_info_float(commit, false, false)
+            end
+          end)
+        end,
+      })
+
       -- <C-Space>: Flogウィンドウトグル
       vim.keymap.set('n', '<C-Space>', function()
         if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
@@ -197,7 +212,7 @@ function M.setup(group)
           return
         end
 
-        commands.show_commit_info_float(commit, true)
+        commands.show_commit_info_float(commit, true, true)
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Show commit info in float window' })
 
       -- p: カーソル位置ファイルの前のコミット
@@ -222,7 +237,7 @@ function M.setup(group)
         vim.schedule(function()
           vim.cmd('Gedit ' .. prev_commit)
           utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, prev_commit)
-          commands.show_commit_info_float(prev_commit, false)
+          commands.show_commit_info_float(prev_commit, false, false)
           vim.schedule(function()
             local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
             for i, line in ipairs(lines) do
@@ -242,6 +257,24 @@ function M.setup(group)
         is_navigating = true
         vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>fugitive:~', true, false, true), 'n')
         vim.schedule(function()
+          is_navigating = false
+        end)
+      end, { buffer = ev.buf, nowait = true, silent = true })
+
+      -- <C-o>: Jump back (original behavior) and update flog highlight + commit float if open.
+      -- We explicitly do not create a float if it's not already open.
+      vim.keymap.set('n', '<C-o>', function()
+        is_navigating = true
+        -- Do the original <C-o> jump
+        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-o>', true, false, true), 'n')
+        vim.schedule(function()
+          -- We need to check the current buffer after the jump
+          local curr_buf = vim.api.nvim_get_current_buf()
+          local commit = utils.get_commit(curr_buf) or vim.api.nvim_get_current_line():match('^(%x+)')
+          if commit and commit ~= '' then
+            utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, commit)
+            commands.show_commit_info_float(commit, false, false)
+          end
           is_navigating = false
         end)
       end, { buffer = ev.buf, nowait = true, silent = true })

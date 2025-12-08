@@ -148,7 +148,7 @@ function M.setup(group)
           return
         end
 
-        commands.show_commit_info_float(commit, true)
+        commands.show_commit_info_float(commit, true, true)
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Show commit info in float window' })
 
       -- O: Octo PR
@@ -333,6 +333,8 @@ function M.setup(group)
              local commit = vim.api.nvim_get_current_line():match('^(%x+)')
              if commit then
                 utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, commit)
+                -- Update commit info float only if it already exists (no creation)
+                commands.show_commit_info_float(commit, false, false)
              end
           end
         end,

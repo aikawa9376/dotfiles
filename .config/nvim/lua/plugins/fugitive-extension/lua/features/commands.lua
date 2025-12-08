@@ -11,13 +11,21 @@ function M.close_commit_info_float()
   end
 end
 
-function M.show_commit_info_float(commit, toggle)
+function M.show_commit_info_float(commit, toggle, create_if_missing)
+  local create = create_if_missing == nil and true or create_if_missing
+  -- If no commit provided, do nothing
+  if not commit or commit == '' then
+    return
+  end
   if float_win and vim.api.nvim_win_is_valid(float_win) then
     if toggle then
       M.close_commit_info_float()
       return
     end
   else
+    if not create then
+      return
+    end
     float_buf = vim.api.nvim_create_buf(false, true)
     vim.bo[float_buf].modifiable = false
     vim.bo[float_buf].filetype = 'git'
@@ -399,7 +407,7 @@ cat "$1" >> /tmp/rebase-debug.log
     local cmd = string.format('GIT_SEQUENCE_EDITOR=%s git rebase -i %s', vim.fn.shellescape(tmpfile), base_commit)
     local output = vim.fn.system(cmd)
     vim.fn.delete(tmpfile)
-    
+
     if vim.v.shell_error ~= 0 then
       vim.notify('Failed to swap commits:\n' .. output, vim.log.levels.ERROR)
     else
@@ -428,12 +436,12 @@ cat "$1" >> /tmp/rebase-debug.log
     local commits_args = table.concat(commits, " ")
     local sort_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-list --no-walk --date-order ' .. commits_args
     local sorted_commits = vim.fn.systemlist(sort_cmd)
-    
+
     if vim.v.shell_error ~= 0 or #sorted_commits == 0 then
         vim.notify('Failed to process commits', vim.log.levels.ERROR)
         return
     end
-    
+
     -- The last one in rev-list output (date-order) is the oldest
     local oldest_commit = sorted_commits[#sorted_commits]
 

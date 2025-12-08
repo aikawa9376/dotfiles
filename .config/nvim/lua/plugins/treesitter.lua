@@ -30,7 +30,7 @@ return {
     end
   },
   {
-    "nvim-treesitter-textobjects",
+    "nvim-treesitter/nvim-treesitter-textobjects",
     branch = "main",
     keys = {
       { "af", function ()
