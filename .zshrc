@@ -103,10 +103,9 @@ export CARGO_HOME="$HOME/rust/.cargo"
 
 # local settings
 case ${OSTYPE} in
-  linux*)
-  # homebrew
-  export BREWPATH="/home/linuxbrew/.linuxbrew/bin"
-  export PATH="$BREWPATH:$PATH"
+  darwin*)
+  export PATH="/opt/homebrew/opt/gnu-sed/libexec/gnubin:$PATH"
+  export PATH="/opt/homebrew/opt/findutils/libexec/gnubin:$PATH"
 esac
 
 stty stop undef
