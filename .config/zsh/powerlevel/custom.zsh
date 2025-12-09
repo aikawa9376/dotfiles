@@ -37,8 +37,8 @@ function prompt_docker() {
   local docker_icon=''
   local docker_color='33'
 
-  # Dockerコンテナ数を取得
-  local container_count=$(docker compose ps -q 2>/dev/null | wc -l)
+  # Dockerコンテナ数を取得（awkで余分な空白なし）
+  local container_count=$(docker compose ps -q 2>/dev/null | awk 'END{print NR}')
 
   # コンテナ数が取得できない場合は何も表示しない
   [[ -z "$container_count" || "$container_count" -eq 0 ]] && return

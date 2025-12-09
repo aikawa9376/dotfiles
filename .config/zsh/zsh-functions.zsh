@@ -116,6 +116,61 @@ zmenu() {
   print -rl -- ${(ko)commands} | fzf --preview "man {}" | (nohup ${SHELL:-"/bin/sh"} &) >/dev/null 2>&1
 }
 
+switch-dev-hosts() {
+  local -a host_files
+  host_files=(/etc/dev_hosts/*(.N:t) /etc/dev_hosts/*.host(.N:t))
+
+  if (( ${#host_files} == 0 )); then
+    echo "/etc/dev_hosts に .hosts ファイルがありません" >&2
+    return 1
+  fi
+
+  local choice
+  choice=$(
+    printf '%s\n' "${host_files[@]}" |
+      fzf --prompt="hosts> " --preview "sed -n '1,200p' /etc/dev_hosts/{}" --height=80% --layout=reverse
+  ) || return
+
+  [[ -z "$choice" ]] && return 1
+
+  if sudo cp "/etc/dev_hosts/$choice" /etc/hosts; then
+    # DNS キャッシュを可能ならフラッシュ
+    case "$(uname -s)" in
+      Darwin)
+        sudo dscacheutil -flushcache 2>/dev/null
+        sudo killall -HUP mDNSResponder 2>/dev/null
+        sudo killall -HUP mDNSResponderHelper 2>/dev/null
+        sudo killall -HUP configd 2>/dev/null
+        ;;
+      Linux)
+        if command -v resolvectl >/dev/null 2>&1; then
+          sudo resolvectl flush-caches
+        elif command -v systemd-resolve >/dev/null 2>&1; then
+          sudo systemd-resolve --flush-caches
+        elif command -v nscd >/dev/null 2>&1; then
+          sudo systemctl restart nscd 2>/dev/null || sudo service nscd restart 2>/dev/null
+        elif command -v dnsmasq >/dev/null 2>/dev/null; then
+          sudo systemctl restart dnsmasq 2>/dev/null || sudo service dnsmasq restart 2>/dev/null
+        fi
+        ;;
+    esac
+    # chrome://net-internals/#sockets をクリップボードへ
+    if command -v pbcopy >/dev/null 2>&1; then
+      print -rn -- "chrome://net-internals/#sockets" | pbcopy
+    elif command -v wl-copy >/dev/null 2>&1; then
+      print -rn -- "chrome://net-internals/#sockets" | wl-copy
+    elif command -v xclip >/dev/null 2>&1; then
+      print -rn -- "chrome://net-internals/#sockets" | xclip -selection clipboard
+    elif command -v xsel >/dev/null 2>&1; then
+      print -rn -- "chrome://net-internals/#sockets" | xsel --clipboard --input
+    fi
+    echo "hosts switched -> $choice"
+  else
+    echo "hosts switch failed: $choice" >&2
+    return 1
+  fi
+}
+
 # ALT-I - Paste the selected entry from locate output into the command line
 fzf-picture-preview() {
   local selected
