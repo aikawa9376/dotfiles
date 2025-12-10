@@ -3,6 +3,37 @@ local M = {}
 local float_win = nil
 local float_buf = nil
 
+-- Worktree cleanliness helper
+local function apply_auto_stash(work_tree)
+  -- Check if worktree is dirty
+  local status = vim.fn.systemlist("git -C " .. vim.fn.shellescape(work_tree) .. " status --porcelain")
+  if vim.v.shell_error ~= 0 then
+    vim.notify("git status failed; skipping auto-stash", vim.log.levels.WARN)
+    return false
+  end
+  if #status == 0 then
+    return false
+  end
+
+  local msg = "fugitive-ext auto-stash"
+  vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash push -u -k -m " .. vim.fn.shellescape(msg))
+  if vim.v.shell_error ~= 0 then
+    vim.notify("auto-stash failed; aborting command", vim.log.levels.ERROR)
+    return nil
+  end
+  vim.notify("Auto-stashed dirty worktree", vim.log.levels.INFO)
+  return true
+end
+
+local function pop_auto_stash(work_tree)
+  vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash pop --index --quiet")
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Auto-stash pop failed; please pop manually", vim.log.levels.ERROR)
+  else
+    vim.notify("Auto-stash popped", vim.log.levels.INFO)
+  end
+end
+
 function M.close_commit_info_float()
   if float_win and vim.api.nvim_win_is_valid(float_win) then
     vim.api.nvim_win_close(float_win, true)
@@ -239,11 +270,15 @@ function M.setup()
 
     vim.notify("Cherry-picking: " .. hashes_str, vim.log.levels.INFO)
 
+    local stashed = apply_auto_stash(work_tree)
+    if stashed == nil then return end
+
     local output_lines = {}
     local cmd = "git -C " .. vim.fn.shellescape(work_tree) .. " cherry-pick " .. hashes_str
     vim.fn.jobstart(cmd, {
       on_exit = function(_, exit_code)
         vim.schedule(function()
+          if stashed then pop_auto_stash(work_tree) end
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
             vim.notify("Cherry-pick successful\n" .. message, vim.log.levels.INFO)
@@ -301,10 +336,14 @@ function M.setup()
       return
     end
 
+    local stashed = apply_auto_stash(work_tree)
+    if stashed == nil then return end
+
     -- Get the parent commit hash
     local parent_commit_hash_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. commit_hash .. '^'
     local parent_commit_hash = vim.fn.trim(vim.fn.system(parent_commit_hash_cmd))
     if vim.v.shell_error ~= 0 then
+      if stashed then pop_auto_stash(work_tree) end
       vim.notify('Failed to get parent commit for ' .. commit_hash, vim.log.levels.ERROR)
       return
     end
@@ -328,6 +367,8 @@ function M.setup()
     local rebase_cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(parent_commit_hash .. '^')
     local result = vim.fn.system(rebase_cmd)
     vim.fn.delete(tmpfile)
+
+    if stashed then pop_auto_stash(work_tree) end
 
     if vim.v.shell_error ~= 0 then
       vim.notify('Rebase failed: ' .. result, vim.log.levels.ERROR)
@@ -372,6 +413,9 @@ function M.setup()
       base_commit = target_commit .. '^'
     end
 
+    local stashed = apply_auto_stash(work_tree)
+    if stashed == nil then return end
+
     -- Create awk script - simplest approach
     local tmpfile = vim.fn.tempname()
     local script = string.format([[
@@ -408,6 +452,8 @@ cat "$1" >> /tmp/rebase-debug.log
     local output = vim.fn.system(cmd)
     vim.fn.delete(tmpfile)
 
+    if stashed then pop_auto_stash(work_tree) end
+
     if vim.v.shell_error ~= 0 then
       vim.notify('Failed to swap commits:\n' .. output, vim.log.levels.ERROR)
     else
@@ -432,12 +478,16 @@ cat "$1" >> /tmp/rebase-debug.log
     local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
     local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
 
+    local stashed = apply_auto_stash(work_tree)
+    if stashed == nil then return end
+
     -- Sort commits to find the oldest one (last in chronological order)
     local commits_args = table.concat(commits, " ")
     local sort_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-list --no-walk --date-order ' .. commits_args
     local sorted_commits = vim.fn.systemlist(sort_cmd)
 
     if vim.v.shell_error ~= 0 or #sorted_commits == 0 then
+        if stashed then pop_auto_stash(work_tree) end
         vim.notify('Failed to process commits', vim.log.levels.ERROR)
         return
     end
@@ -462,6 +512,8 @@ cat "$1" >> /tmp/rebase-debug.log
     local rebase_cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(oldest_commit .. '^')
     local result = vim.fn.system(rebase_cmd)
     vim.fn.delete(tmpfile)
+
+    if stashed then pop_auto_stash(work_tree) end
 
     if vim.v.shell_error ~= 0 then
       vim.notify('Drop failed: ' .. result, vim.log.levels.ERROR)
