@@ -9,6 +9,13 @@ local backend_logic = require("lazyagent.logic.backend")
 local send_logic = require("lazyagent.logic.send")
 local window = require("lazyagent.window")
 local cache_logic = require("lazyagent.logic.cache")
+local config = require("lazyagent.logic.config")
+
+local function restart_insert_if_valid(bufnr)
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    vim.cmd("startinsert")
+  end
+end
 
 ---
 -- Registers buffer-local keymaps used for scratch buffers.
@@ -63,9 +70,7 @@ function M.register_scratch_keymaps(bufnr, opts)
       vim.cmd("stopinsert")
     end
     backend_mod.send_keys(p, { key })
-    if insert_wrap and vim.api.nvim_buf_is_valid(bufnr) then
-      vim.cmd("startinsert")
-    end
+    if insert_wrap then restart_insert_if_valid(bufnr) end
   end
 
   local function send_from_buf(close_after)
@@ -83,14 +88,14 @@ function M.register_scratch_keymaps(bufnr, opts)
     text = expanded_text or text
 
     if text and #text > 0 then
-      local submit_keys = (agent_cfg and agent_cfg.submit_keys) or ((agent_name and agent_logic.get_interactive_agent(agent_name) and agent_logic.get_interactive_agent(agent_name).submit_keys) or nil)
-      local submit_delay = (agent_cfg and agent_cfg.submit_delay) or (state.opts and state.opts.submit_delay) or 600
-      local submit_retry = (agent_cfg and agent_cfg.submit_retry) or (state.opts and state.opts.submit_retry) or 1
+      local submit_keys = config.pref(agent_cfg, "submit_keys", nil)
+      local submit_delay = config.pref(agent_cfg, "submit_delay", 600)
+      local submit_retry = config.pref(agent_cfg, "submit_retry", 1)
       -- Save scratch content to cache on send
       cache_logic.write_scratch_to_cache(bufnr)
-      local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
+      local _send_mode = config.pref(agent_cfg, "send_mode", nil)
       local _move_to_end = (_send_mode == "append")
-      local _use_bracketed_paste = (agent_cfg and agent_cfg.use_bracketed_paste) or (state.opts and state.opts.use_bracketed_paste)
+      local _use_bracketed_paste = config.pref(agent_cfg, "use_bracketed_paste", nil)
       backend_mod.paste_and_submit(pane, text, submit_keys, {
         submit_delay = submit_delay,
         submit_retry = submit_retry,
@@ -145,9 +150,7 @@ function M.register_scratch_keymaps(bufnr, opts)
       backend_mod.send_keys(p, { string.char(5), string.char(21) })
     end
 
-    if insert_wrap and vim.api.nvim_buf_is_valid(bufnr) then
-      vim.cmd("startinsert")
-    end
+    if insert_wrap then restart_insert_if_valid(bufnr) end
   end
 
   -- Close mapping
@@ -168,7 +171,7 @@ function M.register_scratch_keymaps(bufnr, opts)
   safe_set("i", keys.send_key_insert or "<C-s>", function()
     vim.cmd("stopinsert")
     send_from_buf()
-    if vim.api.nvim_buf_is_valid(bufnr) then vim.cmd("startinsert") end
+    restart_insert_if_valid(bufnr)
   end, { desc = "Submit from insert mode" })
 
   -- Send & clear (scratch)
@@ -178,7 +181,7 @@ function M.register_scratch_keymaps(bufnr, opts)
   safe_set("i", keys.send_and_clear or "<C-Space>", function()
     vim.cmd("stopinsert")
     send_logic.send_buffer_and_clear(agent_name, bufnr)
-    if vim.api.nvim_buf_is_valid(bufnr) then vim.cmd("startinsert") end
+    restart_insert_if_valid(bufnr)
   end, { desc = "Send buffer and clear (insert mode)" })
 
   -- Scroll mappings
@@ -209,7 +212,7 @@ function M.register_scratch_keymaps(bufnr, opts)
   -- Escape mapping (normal)
   safe_set("n", keys.esc or "<Esc>", function()
     if (agent_name == "Cursor") then
-      send_key_to_pane("<C-c>", false)
+      send_key_to_pane("C-c", false)
     else
       send_key_to_pane("Escape", false)
     end
@@ -274,6 +277,7 @@ function M.register_scratch_keymaps(bufnr, opts)
         vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
       end
     end
+    restart_insert_if_valid(bufnr)
   end, { desc = "Apply older cached history to scratch buffer" })
 
   -- Navigate to newer entry (scratch buffer) - default: keys.history_next or <leader>h.
@@ -300,6 +304,7 @@ function M.register_scratch_keymaps(bufnr, opts)
         vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
       end
     end
+    restart_insert_if_valid(bufnr)
   end, { desc = "Apply newer cached history to scratch buffer" })
 end
 

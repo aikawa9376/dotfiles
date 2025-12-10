@@ -5,7 +5,7 @@ local float_autocmd_group_id = nil
 local float_original_opts = nil
 local float_is_focused = false
 
-local function _ensure_bufnr(bufnr, opts)
+local function ensure_scratch_buffer(bufnr, opts)
   -- Normalize accepting either (bufnr, opts) or (opts) as the first parameter.
   if type(bufnr) == "table" and opts == nil then
     opts = bufnr
@@ -23,12 +23,27 @@ local function _ensure_bufnr(bufnr, opts)
     end)
   end
 
+  -- Keep a reference to the source buffer when provided so downstream logic
+  -- (transforms/completion) can resolve context consistently.
+  if opts and opts.source_bufnr then
+    pcall(function() vim.b[bufnr].lazyagent_source_bufnr = opts.source_bufnr end)
+  end
+
   return bufnr, opts
 end
 
+local function apply_window_defaults(id)
+  vim.wo[id].rnu = false
+  vim.wo[id].number = false
+  vim.wo[id].cursorline = true
+  vim.wo[id].wrap = true
+end
+
+M.ensure_scratch_buffer = ensure_scratch_buffer
+
 function M.open_float(bufnr, opts)
   -- Ensure we always get a valid buffer and canonical opts table.
-  bufnr, opts = _ensure_bufnr(bufnr, opts or {})
+  bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
 
   -- Center the floating window
   local width = math.floor(vim.o.columns * (opts.is_vertical and 0.6 or 0.5))
@@ -129,10 +144,7 @@ function M.open_float(bufnr, opts)
     end,
   })
 
-  vim.wo[winid].rnu = false
-  vim.wo[winid].number = false
-  vim.wo[winid].cursorline = true
-  vim.wo[winid].wrap = true
+  apply_window_defaults(winid)
 
   if opts and opts.start_in_insert_on_focus then
     vim.cmd("startinsert") -- Start in insert mode
@@ -141,7 +153,7 @@ end
 
 function M.open_vsplit(bufnr, opts)
   -- Ensure we always get a valid buffer and canonical opts table.
-  bufnr, opts = _ensure_bufnr(bufnr, opts or {})
+  bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
   -- If a float autocmd group is active, clear it as we are switching to vsplit mode.
   if float_autocmd_group_id then
     pcall(vim.api.nvim_del_augroup_by_id, float_autocmd_group_id)
@@ -161,10 +173,7 @@ function M.open_vsplit(bufnr, opts)
     vim.api.nvim_win_set_buf(winid, bufnr)
   end
 
-  vim.wo[winid].rnu = false
-  vim.wo[winid].number = false
-  vim.wo[winid].cursorline = true
-  vim.wo[winid].wrap = true
+  apply_window_defaults(winid)
   if opts and opts.start_in_insert_on_focus then
     vim.cmd("startinsert")
   end
@@ -177,7 +186,7 @@ function M.open(bufnr, opts)
     opts = bufnr
     bufnr = nil
   end
-  bufnr, opts = _ensure_bufnr(bufnr, opts or {})
+  bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
   local window_type = opts.window_type or "float"
 
   if window_type == "vsplit" then

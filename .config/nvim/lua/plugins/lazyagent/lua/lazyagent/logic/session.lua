@@ -255,34 +255,23 @@ function M.toggle_session(agent_name)
     local initial_input = nil
     local current_mode = vim.fn.mode()
     if current_mode:match("[vV\x16]") then
-      local text = util.get_visual_selection()
-      -- If selection was lost, try to reselect with 'gv' and fetch again
-      if not text or #text == 0 then
-        vim.cmd("silent! normal! gv")
-        text = util.get_visual_selection()
+      -- Capture marks as soon as possible to avoid losing location info.
+      local start_pos = vim.fn.getpos("'<")
+      local end_pos = vim.fn.getpos("'>")
+      local start_line = start_pos[2]
+      local end_line = end_pos[2]
+
+      local file_path = vim.api.nvim_buf_get_name(0)
+      if file_path and file_path ~= "" then
+        file_path = vim.fn.fnamemodify(file_path, ":.")
       end
 
-      if text and #text > 0 then
-        local start_pos = vim.fn.getpos("'<")
-        local end_pos = vim.fn.getpos("'>")
-        local start_line = start_pos[2]
-        local end_line = end_pos[2]
-        local file_path = vim.api.nvim_buf_get_name(0)
-        if file_path and file_path ~= "" then
-          file_path = vim.fn.fnamemodify(file_path, ":.")
-        end
-
-        local location_str = ""
-        if file_path and file_path ~= "" and start_line > 0 and end_line > 0 then
-          if start_line == end_line then
-            location_str = string.format("@%s:%d", file_path, start_line)
-          else
-            location_str = string.format("@%s:%d-%d", file_path, start_line, end_line)
-          end
-        end
-
-        if location_str ~= "" then
-          initial_input = location_str
+      -- Build location header even if selection text is empty; user only wants path+range.
+      if file_path and file_path ~= "" and start_line > 0 and end_line > 0 then
+        if start_line == end_line then
+          initial_input = string.format("@%s:%d", file_path, start_line)
+        else
+          initial_input = string.format("@%s:%d-%d", file_path, start_line, end_line)
         end
       end
 
@@ -361,13 +350,10 @@ function M.start_interactive_session(opts)
     end
 
     -- Create an input buffer and open it in a floating window.
-    local bufnr = vim.api.nvim_create_buf(false, true)
-    vim.bo[bufnr].bufhidden = "wipe"
-    vim.bo[bufnr].modifiable = true
-    vim.bo[bufnr].buftype = "nofile"
-    vim.bo[bufnr].filetype = agent_cfg.scratch_filetype or "lazyagent"
-    -- Record the source/origin buffer so transforms and completion can resolve context.
-    pcall(function() vim.b[bufnr].lazyagent_source_bufnr = origin_bufnr end)
+    local bufnr = window.ensure_scratch_buffer(nil, {
+      filetype = agent_cfg.scratch_filetype or "lazyagent",
+      source_bufnr = origin_bufnr,
+    })
 
     -- Register buffer-local scratch keymaps (include source/origin buffer so placeholders resolve correctly)
     keymaps_logic.register_scratch_keymaps(bufnr, { agent_name = agent_name, agent_cfg = agent_cfg, pane_id = pane_id, reuse = reuse, source_bufnr = origin_bufnr })

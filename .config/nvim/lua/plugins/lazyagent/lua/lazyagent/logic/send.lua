@@ -9,6 +9,7 @@ local backend_logic = require("lazyagent.logic.backend")
 local cache_logic = require("lazyagent.logic.cache")
 local transforms = require("lazyagent.transforms")
 local util = require("lazyagent.util")
+local config = require("lazyagent.logic.config")
 
 -- Helper to send text to a pane and optionally kill it after a delay.
 -- Used for one-shot commands.
@@ -33,12 +34,12 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
 
   local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
 
-  local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
+  local _send_mode = config.pref(agent_cfg, "send_mode", nil)
   local _move_to_end = (_send_mode == "append")
-  local _use_bracketed_paste = (agent_cfg and agent_cfg.use_bracketed_paste) or (state.opts and state.opts.use_bracketed_paste)
+  local _use_bracketed_paste = config.pref(agent_cfg, "use_bracketed_paste", nil)
   backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
-    submit_delay = agent_cfg.submit_delay or state.opts.submit_delay,
-    submit_retry = agent_cfg.submit_retry or state.opts.submit_retry,
+    submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
+    submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
     debug = state.opts.debug,
     move_to_end = _move_to_end,
     use_bracketed_paste = _use_bracketed_paste,
@@ -50,7 +51,7 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
     if not reuse then
       session_logic.close_session(agent_name)
     end
-  end, (agent_cfg and agent_cfg.capture_delay) or (state.opts and state.opts.capture_delay) or 800)
+  end, config.pref(agent_cfg, "capture_delay", 800))
 end
 
 -- Sends text to a CLI agent (interactive agent pane).
@@ -104,12 +105,12 @@ function M.send_to_cli(agent_name, text, opts)
       end
       cache_logic.write_scratch_to_cache(source_bufnr)
       local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
-      local _send_mode = (agent_cfg and agent_cfg.send_mode) or (state.opts and state.opts.send_mode)
+      local _send_mode = config.pref(agent_cfg, "send_mode", nil)
       local _move_to_end = (_send_mode == "append")
-      local _use_bracketed_paste = (agent_cfg and agent_cfg.use_bracketed_paste) or (state.opts and state.opts.use_bracketed_paste)
+      local _use_bracketed_paste = config.pref(agent_cfg, "use_bracketed_paste", nil)
       backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
-        submit_delay = agent_cfg.submit_delay or state.opts.submit_delay,
-        submit_retry = agent_cfg.submit_retry or state.opts.submit_retry,
+        submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
+        submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
         debug = state.opts.debug,
         move_to_end = _move_to_end,
         use_bracketed_paste = _use_bracketed_paste,
@@ -118,7 +119,7 @@ function M.send_to_cli(agent_name, text, opts)
       if not reuse then
         vim.defer_fn(function()
           session_logic.close_session(agent_name)
-        end, (agent_cfg and agent_cfg.capture_delay) or (state.opts and state.opts.capture_delay) or 800)
+        end, config.pref(agent_cfg, "capture_delay", 800))
       end
     end)
     return
@@ -207,8 +208,8 @@ function M.send_buffer_and_clear(agent_name, bufnr)
       end
 
       backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
-        submit_delay = agent_cfg.submit_delay or state.opts.submit_delay,
-        submit_retry = agent_cfg.submit_retry or state.opts.submit_retry,
+        submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
+        submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
         debug = state.opts.debug,
       })
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
