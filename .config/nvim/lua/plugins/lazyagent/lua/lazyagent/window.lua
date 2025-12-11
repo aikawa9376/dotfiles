@@ -37,6 +37,7 @@ local function apply_window_defaults(id)
   vim.wo[id].number = false
   vim.wo[id].cursorline = true
   vim.wo[id].wrap = true
+  pcall(function() vim.wo[id].winfixbuf = true end)
 end
 
 M.ensure_scratch_buffer = ensure_scratch_buffer
