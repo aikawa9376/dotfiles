@@ -413,6 +413,15 @@ function M.setup()
       base_commit = target_commit .. '^'
     end
 
+    local git_dir = vim.fn.FugitiveGitDir()
+    if git_dir == '' then
+      vim.notify('Not in a git repository', vim.log.levels.ERROR)
+      return
+    end
+
+    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+
     local stashed = apply_auto_stash(work_tree)
     if stashed == nil then return end
 
