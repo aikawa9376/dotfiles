@@ -7,21 +7,21 @@ local currentOverlay = nil
 
 local function flashWindow(win)
     if not win then return end
-    
+
     -- 前回のオーバーレイが残っていたら削除
     if currentOverlay then
         currentOverlay:delete()
         currentOverlay = nil
     end
-    
+
     -- ウィンドウの位置とサイズを取得
     local winFrame = win:frame()
     local screen = win:screen()
     local screenFrame = screen:frame()
-    
+
     -- ウィンドウの上に暗いオーバーレイを作成
     local overlay = hs.canvas.new(screenFrame)
-    
+
     -- ウィンドウ部分だけを暗くする
     overlay[1] = {
         type = "rectangle",
@@ -34,14 +34,14 @@ local function flashWindow(win)
             h = winFrame.h
         }
     }
-    
+
     -- ウィンドウの上に表示
     overlay:level(hs.canvas.windowLevels.overlay)
     overlay:show()
-    
+
     -- 現在のオーバーレイとして保存
     currentOverlay = overlay
-    
+
     -- 0.1秒後に消す（一瞬暗くなって戻る = 光って見える）
     hs.timer.doAfter(0.1, function()
         if overlay then

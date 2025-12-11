@@ -2,7 +2,7 @@ return {
   {
     name = "report",
     desc = "Generate a report of the current state",
-    trans = "- Summarize in Markdown."
+    trans = "- Summarize in Markdown file."
   },
   {
     name = "analysis",

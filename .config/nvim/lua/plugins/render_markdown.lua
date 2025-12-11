@@ -50,7 +50,14 @@ return {
     completions = {
       lsp = { enabled = true },
       blink = { enabled = true },
-    }
+    },
+    overrides = {
+      filetype = {
+        lazyagent = {
+          render_modes = { 'n', 'c', 't' },
+        },
+      },
+    },
   },
   init = function ()
     -- H1 ～ H6 のフォアグラウンド（文字色）と背景色の設定
