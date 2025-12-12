@@ -351,6 +351,94 @@ local function create_worktree()
   end
 end
 
+local function fetch_all(bufnr)
+  vim.notify("Fetching...", vim.log.levels.INFO)
+  vim.fn.jobstart("git fetch --all --prune", {
+    on_exit = function(_, exit_code)
+      if exit_code == 0 then
+        vim.notify("Fetch complete", vim.log.levels.INFO)
+        vim.schedule(function()
+          refresh_branch_list(bufnr)
+        end)
+      else
+        vim.notify("Fetch failed", vim.log.levels.ERROR)
+      end
+    end
+  })
+end
+
+local function pull_branch(bufnr)
+  local branch = get_branch_name_from_line()
+  if not branch then
+    vim.notify("No branch found on this line", vim.log.levels.WARN)
+    return
+  end
+
+  -- Check if branch is current
+  local current_branch = vim.fn.trim(vim.fn.system("git branch --show-current"))
+  if branch ~= current_branch then
+    vim.notify("Cannot pull: " .. branch .. " is not checked out.", vim.log.levels.WARN)
+    return
+  end
+
+  -- Check upstream
+  vim.fn.system("git rev-parse --abbrev-ref " .. vim.fn.shellescape(branch) .. "@{u}")
+  local has_upstream = (vim.v.shell_error == 0)
+
+  local args = ""
+  if not has_upstream then
+    local upstream = vim.fn.input('Pull from (e.g. origin main): ')
+    vim.cmd('redraw')
+    if upstream and upstream ~= '' then
+       args = " " .. upstream
+    else
+       return
+    end
+  end
+
+  local commands = require('features.commands')
+  local git_dir = vim.fn.FugitiveGitDir()
+  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+
+  local stashed = commands.apply_auto_stash(work_tree)
+  if stashed == nil then return end
+
+  vim.notify("Pulling...", vim.log.levels.INFO)
+  local output_lines = {}
+  vim.fn.jobstart("git -C " .. vim.fn.shellescape(work_tree) .. " pull" .. args, {
+    on_stdout = function(_, data)
+      if data then
+        for _, line in ipairs(data) do
+          if line and line ~= "" then
+            table.insert(output_lines, line)
+          end
+        end
+      end
+    end,
+    on_stderr = function(_, data)
+      if data then
+        for _, line in ipairs(data) do
+          if line and line ~= "" then
+            table.insert(output_lines, line)
+          end
+        end
+      end
+    end,
+    on_exit = function(_, exit_code)
+      vim.schedule(function()
+        if stashed then commands.pop_auto_stash(work_tree) end
+        local message = table.concat(output_lines, "\n")
+        if exit_code == 0 then
+          vim.notify("Pull successful\n" .. message, vim.log.levels.INFO)
+          refresh_branch_list(bufnr)
+        else
+          vim.notify("Pull failed\n" .. message, vim.log.levels.ERROR)
+        end
+      end)
+    end
+  })
+end
+
 local function open_branch_list()
   local branch_output = get_branch_list()
   if vim.v.shell_error ~= 0 then
@@ -463,6 +551,16 @@ function M.setup(group)
           delete_branches(bufnr, {branch})
         end
       end, { buffer = bufnr, silent = true, desc = "Delete branch" })
+
+      -- f: Fetch
+      vim.keymap.set('n', 'f', function()
+        fetch_all(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Fetch all" })
+
+      -- p: Pull
+      vim.keymap.set('n', 'p', function()
+        pull_branch(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Pull branch" })
 
       vim.keymap.set('v', 'X', function()
         local start_line = vim.fn.line('v')
