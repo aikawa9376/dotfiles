@@ -3,7 +3,7 @@ local M = {}
 function M.setup(group)
   vim.api.nvim_create_autocmd('BufReadPost', {
     group = group,
-    pattern = 'fugitive://*/*.git//*/**',
+    pattern = 'fugitive://*',
     callback = function(ev)
       local bufname = vim.api.nvim_buf_get_name(ev.buf)
       local parse = vim.fn.FugitiveParse(bufname)
