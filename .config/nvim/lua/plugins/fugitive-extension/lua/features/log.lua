@@ -15,6 +15,12 @@ local function apply_highlights(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local is_pushed = false
 
+  -- If HEAD is behind or up-to-date with upstream, start as pushed
+  vim.fn.system('git merge-base --is-ancestor HEAD @{u} 2>/dev/null')
+  if vim.v.shell_error == 0 then
+    is_pushed = true
+  end
+
   for i, line in ipairs(lines) do
     -- タブ区切り: hash <tab> subject <tab> refs
     local hash, subject, refs = line:match("^([^\t]+)\t([^\t]*)\t(.*)$")
