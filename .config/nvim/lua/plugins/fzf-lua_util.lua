@@ -265,6 +265,12 @@ local getDirOpt = function ()
         vim.cmd('TermForceCloseAll')
         require('plugins.fzf-lua_util').fzf_files_for_dir(selected[1])
       end
+    },
+    ["ctrl-y"] = {
+      function(selected)
+        vim.cmd('TermForceCloseAll')
+        copySelectedPathsToRegisterWithAt(selected)
+      end
     }
   }
   opts.fzf_opts = {
