@@ -69,7 +69,17 @@ function M.resolve_target_agent(explicit, hint, callback)
     return
   end
 
+  -- Check for default agent
+  for _, name in ipairs(available) do
+    local cfg = state.opts.interactive_agents[name]
+    if cfg and cfg.default then
+      callback(name)
+      return
+    end
+  end
+
   if #available == 0 then
+    vim.notify("No available agents found. Please install agent CLI tools.", vim.log.levels.WARN)
     callback(nil)
     return
   end
@@ -88,7 +98,11 @@ end
 -- Using a stable, sorted list ensures UI/select and keymap registration order is deterministic.
 function M.available_agents()
   local available = {}
-  for k, _ in pairs(state.opts.interactive_agents or {}) do table.insert(available, k) end
+  for k, cfg in pairs(state.opts.interactive_agents or {}) do
+    if cfg.cmd and vim.fn.executable(cfg.cmd) == 1 then
+      table.insert(available, k)
+    end
+  end
   table.sort(available)
   return available
 end

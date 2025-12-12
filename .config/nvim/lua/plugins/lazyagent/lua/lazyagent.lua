@@ -43,6 +43,7 @@ function M.setup(opts)
         is_vertical = true,
         yolo = false,
         yolo_flag = nil,
+        default = false,
       }
       return {
         Claude = vim.tbl_deep_extend("force", base, {

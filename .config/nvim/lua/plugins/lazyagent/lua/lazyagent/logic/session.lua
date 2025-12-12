@@ -8,7 +8,6 @@ local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local keymaps_logic = require("lazyagent.logic.keymaps")
 local send_logic = require("lazyagent.logic.send")
-local util = require("lazyagent.util")
 local window = require("lazyagent.window")
 local ok_watch, watch = pcall(require, "lazyagent.watch")
 
