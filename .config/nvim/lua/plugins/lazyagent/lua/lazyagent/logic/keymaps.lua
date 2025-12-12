@@ -261,8 +261,24 @@ function M.register_scratch_keymaps(bufnr, opts)
       vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
       return
     end
+
+    -- If the buffer is empty (or whitespace only), start from the latest entry (1).
+    -- This handles the case where the buffer was cleared after sending (idx=1 but content is empty).
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local is_empty = true
+    for _, line in ipairs(lines) do
+      if line:match("%S") then
+        is_empty = false
+        break
+      end
+    end
+
     local cur = vim.b[bufnr].lazyagent_history_idx or 0
     local next_idx = cur + 1
+    if is_empty then
+      next_idx = 1
+    end
+
     if next_idx > #entries then
       vim.notify("LazyAgentHistory: already at oldest entry", vim.log.levels.INFO)
       return
@@ -277,7 +293,7 @@ function M.register_scratch_keymaps(bufnr, opts)
         vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
       end
     end
-    restart_insert_if_valid(bufnr)
+    -- restart_insert_if_valid(bufnr)
   end, { desc = "Apply older cached history to scratch buffer" })
 
   -- Navigate to newer entry (scratch buffer) - default: keys.history_next or <leader>h.
@@ -304,7 +320,7 @@ function M.register_scratch_keymaps(bufnr, opts)
         vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
       end
     end
-    restart_insert_if_valid(bufnr)
+    -- restart_insert_if_valid(bufnr)
   end, { desc = "Apply newer cached history to scratch buffer" })
 end
 
