@@ -29,7 +29,7 @@ return {
     },
     interactive_agents = {
       Gemini = { yolo = true },
-      Copilot = { yolo = true },
+      Copilot = { yolo = true, default = true },
     }
   }
 }
