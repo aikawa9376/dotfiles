@@ -535,6 +535,8 @@ cat "$1" >> /tmp/rebase-debug.log
   -- Export functions for use in other modules
   M.git_push = git_push
   M.git_cherry_pick = git_cherry_pick
+  M.apply_auto_stash = apply_auto_stash
+  M.pop_auto_stash = pop_auto_stash
 end
 
 return M
