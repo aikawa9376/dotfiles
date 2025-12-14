@@ -47,11 +47,11 @@ local function get_branch_list()
       local ahead, behind = get_ahead_behind(branch, upstream)
 
       local push_info = ''
+      if behind > 0 then
+        push_info = push_info .. string.format('↓%d', behind)
+      end
       if ahead > 0 then
         push_info = push_info .. string.format('↑%d', ahead)
-      end
-      if behind > 0 then
-        push_info = push_info .. (push_info ~= '' and ' ' or '') .. string.format('↓%d', behind)
       end
 
       local upstream_str = upstream ~= '' and string.format('[%s]', upstream) or ''

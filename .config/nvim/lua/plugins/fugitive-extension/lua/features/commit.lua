@@ -138,7 +138,7 @@ function M.setup(group)
             update_flog_highlight()
             local commit = utils.get_commit(ev.buf) or vim.api.nvim_get_current_line():match('^(%x+)')
             if commit and commit ~= '' then
-              commands.show_commit_info_float(commit, false, false)
+              commands.schedule_update_preview(commit)
             end
           end)
         end,

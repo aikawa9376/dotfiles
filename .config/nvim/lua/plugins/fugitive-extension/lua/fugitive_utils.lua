@@ -22,6 +22,9 @@ end
 
 ---@return string|nil
 function M.get_commit(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
   local result = vim.fn.FugitiveParse(vim.api.nvim_buf_get_name(bufnr))
   return result and result[1] or nil
 end

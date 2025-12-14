@@ -532,6 +532,227 @@ cat "$1" >> /tmp/rebase-debug.log
     end
   end
 
+  -- Preview helpers ------------------------------------------------------
+  local preview_win = nil
+  local preview_buf = nil
+  local preview_commit = nil
+  local preview_update_timer = nil
+  local preview_update_pending_commit = nil
+
+  local function open_with_fugitive(win, commit)
+    local ok, _ = pcall(function()
+      vim.api.nvim_set_current_win(win)
+      vim.cmd('keepalt keepjumps silent Gedit ' .. commit)
+    end)
+    if not ok then
+      return nil
+    end
+    return vim.api.nvim_win_get_buf(win)
+  end
+
+  function M.is_preview_open()
+    return preview_win and vim.api.nvim_win_is_valid(preview_win)
+  end
+
+  function M.close_preview()
+    if preview_win and vim.api.nvim_win_is_valid(preview_win) then
+      pcall(vim.api.nvim_win_close, preview_win, true)
+    end
+    preview_win = nil
+    preview_commit = nil
+    preview_buf = nil
+    if preview_update_timer then
+      pcall(vim.fn.timer_stop, preview_update_timer)
+      preview_update_timer = nil
+      preview_update_pending_commit = nil
+    end
+  end
+
+  -- Load a commit into a plain scratch buffer using git show. Returns true on success.
+  local function load_commit_into_buf(commit, buf)
+    if not (commit and commit ~= '') then return false end
+    if not buf or not vim.api.nvim_buf_is_valid(buf) then return false end
+
+    -- Determine work tree if possible
+    local git_dir = vim.fn.FugitiveGitDir()
+    local work_tree = nil
+    if git_dir and git_dir ~= '' then
+      local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+      work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+      if vim.v.shell_error ~= 0 then
+        work_tree = nil
+      end
+    end
+
+    local cmd
+    if work_tree then
+      cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' show --no-color ' .. vim.fn.shellescape(commit)
+    else
+      cmd = 'git show --no-color ' .. vim.fn.shellescape(commit)
+    end
+
+    local lines = vim.fn.systemlist(cmd)
+    if vim.v.shell_error ~= 0 or not lines or #lines == 0 then
+      return false
+    end
+
+    local ok, err = pcall(function()
+      vim.bo[buf].modifiable = true
+      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+      vim.bo[buf].modifiable = false
+    end)
+    if not ok then
+      return false
+    end
+
+    return true
+  end
+
+  function M.open_preview_window(commit)
+    if not commit or commit == '' then
+      return
+    end
+
+    local current_win = vim.api.nvim_get_current_win()
+
+    local function finalize_preview(buf)
+      vim.api.nvim_set_option_value('buflisted', false, { buf = buf })
+      vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = buf })
+      vim.api.nvim_set_option_value('swapfile', false, { buf = buf })
+      vim.api.nvim_set_option_value('winfixwidth', true, { win = preview_win })
+      local current_ft = vim.api.nvim_get_option_value('filetype', { buf = buf })
+      if current_ft ~= 'git' then
+        vim.api.nvim_set_option_value('filetype', 'git', { buf = buf })
+        vim.api.nvim_exec_autocmds('FileType', { buffer = buf })
+      end
+      pcall(vim.api.nvim_win_set_cursor, preview_win, {1, 0})
+      if vim.api.nvim_win_is_valid(current_win) then
+        vim.api.nvim_set_current_win(current_win)
+      end
+      preview_commit = commit
+    end
+
+    -- Reuse existing preview window if present
+    if preview_win and vim.api.nvim_win_is_valid(preview_win) then
+      local prev_buf = preview_buf or vim.api.nvim_win_get_buf(preview_win)
+      if not vim.api.nvim_buf_is_valid(prev_buf) then
+        prev_buf = nil
+        preview_buf = nil
+      end
+
+      local buf_from_fugitive = open_with_fugitive(preview_win, commit)
+      if buf_from_fugitive and vim.api.nvim_buf_is_valid(buf_from_fugitive) then
+        finalize_preview(buf_from_fugitive)
+        preview_buf = buf_from_fugitive
+        return
+      end
+
+      -- If there's an existing buffer, try to overwrite it with git show
+      if prev_buf then
+        local ok = load_commit_into_buf(commit, prev_buf)
+        if ok then
+          finalize_preview(prev_buf)
+          preview_buf = prev_buf
+          return
+        end
+      end
+
+      -- Create a new buffer and set it into the preview window
+      local new_buf = vim.api.nvim_create_buf(false, true)
+      local ok_set = pcall(vim.api.nvim_win_set_buf, preview_win, new_buf)
+      if not ok_set then
+        M.close_preview()
+        return
+      end
+
+      local ok = load_commit_into_buf(commit, new_buf)
+      if not ok then
+        -- Restore previous buffer if possible
+        if prev_buf and vim.api.nvim_buf_is_valid(prev_buf) then
+          pcall(vim.api.nvim_win_set_buf, preview_win, prev_buf)
+          finalize_preview(prev_buf)
+          preview_buf = prev_buf
+        else
+          M.close_preview()
+        end
+        return
+      end
+
+      finalize_preview(new_buf)
+      preview_buf = new_buf
+      return
+    end
+
+    -- Open split and populate buffer (reuse the buffer created by :new to avoid stray [No Name] buffers)
+    vim.cmd('vertical rightbelow new')
+    preview_win = vim.api.nvim_get_current_win()
+    local buf = vim.api.nvim_get_current_buf()
+
+    local buf_from_fugitive = open_with_fugitive(preview_win, commit)
+    local ok = buf_from_fugitive and vim.api.nvim_buf_is_valid(buf_from_fugitive)
+    if ok then
+      buf = buf_from_fugitive
+    else
+      ok = load_commit_into_buf(commit, buf)
+    end
+
+    if not ok then
+      local buf_to_delete = buf
+      M.close_preview()
+      if buf_to_delete and vim.api.nvim_buf_is_valid(buf_to_delete) then
+        pcall(vim.api.nvim_buf_delete, buf_to_delete, { force = true })
+      end
+      if vim.api.nvim_win_is_valid(current_win) then
+        vim.api.nvim_set_current_win(current_win)
+      end
+      return
+    end
+
+    finalize_preview(buf)
+    preview_buf = buf
+  end
+
+  function M.update_preview(commit)
+    if not M.is_preview_open() then return end
+    if not commit or commit == '' then
+      return
+    end
+    if preview_commit == commit then
+      return
+    end
+
+    -- Use git show to load the commit; open_preview_window will reuse the window/buffer.
+    M.open_preview_window(commit)
+  end
+
+  function M.toggle_preview(commit)
+    if M.is_preview_open() then
+      M.close_preview()
+      return false
+    end
+    if not commit or commit == '' then
+      return false
+    end
+    M.open_preview_window(commit)
+    return true
+  end
+
+  function M.schedule_update_preview(commit)
+    preview_update_pending_commit = commit
+    if preview_update_timer then
+      pcall(vim.fn.timer_stop, preview_update_timer)
+      preview_update_timer = nil
+    end
+    preview_update_timer = vim.fn.timer_start(120, function()
+      preview_update_timer = nil
+      local to_commit = preview_update_pending_commit
+      preview_update_pending_commit = nil
+      vim.schedule(function()
+        M.update_preview(to_commit)
+      end)
+    end)
+  end
+
   -- Export functions for use in other modules
   M.git_push = git_push
   M.git_cherry_pick = git_cherry_pick
