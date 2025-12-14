@@ -118,22 +118,36 @@ zmenu() {
 
 switch-dev-hosts() {
   local -a host_files
-  host_files=(/etc/dev_hosts/*(.N:t) /etc/dev_hosts/*.host(.N:t))
+  # (D)を含めて隠しファイル(.hostsなど)も対象にする
+  host_files=(/etc/dev_hosts/*(D.N:t))
 
   if (( ${#host_files} == 0 )); then
-    echo "/etc/dev_hosts に .hosts ファイルがありません" >&2
+    echo "/etc/dev_hosts にファイルがありません" >&2
     return 1
+  fi
+
+  local current_host="unknown"
+  if [[ -L /etc/hosts ]]; then
+    local real_path=$(readlink /etc/hosts)
+    local real_name=${real_path##*/}
+    if [[ "$real_name" == ".hosts" ]]; then
+      current_host="common"
+    else
+      current_host="${real_name%.hosts}"
+    fi
   fi
 
   local choice
   choice=$(
     printf '%s\n' "${host_files[@]}" |
-      fzf --prompt="hosts> " --preview "sed -n '1,200p' /etc/dev_hosts/{}" --height=80% --layout=reverse
+      fzf --prompt="hosts [${current_host}]> " \
+          --preview "sed -n '1,200p' /etc/dev_hosts/{}" \
+          --height=80% --layout=reverse
   ) || return
 
   [[ -z "$choice" ]] && return 1
 
-  if sudo cp "/etc/dev_hosts/$choice" /etc/hosts; then
+  if sudo ln -sf "/etc/dev_hosts/$choice" /etc/hosts; then
     # DNS キャッシュを可能ならフラッシュ
     case "$(uname -s)" in
       Darwin)
