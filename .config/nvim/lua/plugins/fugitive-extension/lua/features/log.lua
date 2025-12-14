@@ -13,25 +13,21 @@ local function apply_highlights(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local is_pushed = false
 
-  -- If HEAD is behind or up-to-date with upstream, start as pushed
-  vim.fn.system('git merge-base --is-ancestor HEAD @{u} 2>/dev/null')
-  if vim.v.shell_error == 0 then
-    is_pushed = true
+  -- Get list of unpushed commit hashes
+  local unpushed_output = vim.fn.systemlist("git log HEAD --not --remotes --format='%h'")
+  local unpushed_commits = {}
+  for _, hash in ipairs(unpushed_output) do
+    unpushed_commits[hash] = true
   end
 
   for i, line in ipairs(lines) do
     -- タブ区切り: hash <tab> subject <tab> refs
-    local hash, subject, refs = line:match("^([^\t]+)\t([^\t]*)\t(.*)$")
+    local hash = line:match("^([^\t]+)")
 
-    -- マッチしない場合はスキップ（あるいは空文字で処理）
     if hash then
-      if refs and (refs:match("origin/") or refs:match("remotes/")) then
-        is_pushed = true
-      end
-
-      local hl_group = is_pushed and "Directory" or "GitSignsChangeDelete"
+      local is_unpushed = unpushed_commits[hash]
+      local hl_group = is_unpushed and "@text.danger" or "Directory"
 
       vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
         end_col = #hash,
@@ -275,37 +271,57 @@ function M.setup(group)
           return
         end
 
-        -- Execute git rebase to drop commits
-        -- Get current branch name
-        local current_branch = vim.fn.system('git rev-parse --abbrev-ref HEAD'):gsub('\n', '')
+        commands.drop_commits(commits)
+      end, { buffer = ev.buf, silent = true, desc = "Drop commit(s)" })
 
-        if current_branch == 'HEAD' then
-          vim.notify('Cannot drop commits in detached HEAD state', vim.log.levels.ERROR)
+      -- cw: Reword commit
+      vim.keymap.set('n', 'cw', function()
+        local commit = utils.get_commit(ev.buf)
+        if not commit or commit == '' then
+          commit = vim.api.nvim_get_current_line():match('^(%x+)')
+        end
+        if not commit then
+          vim.notify('No commit found', vim.log.levels.WARN)
           return
         end
 
-        local cmd
-        if #commits == 1 then
-          cmd = string.format('git rebase --onto %s^ %s %s', commits[1], commits[1], current_branch)
-        else
-          -- For multiple commits: rebase onto the commit before first, skipping up to last
-          cmd = string.format('git rebase --onto %s^ %s %s', commits[#commits], commits[1], current_branch)
-        end
+        -- Get current subject for default value
+        local line = vim.api.nvim_get_current_line()
+        local subject = line:match("^[^\t]+\t([^\t]*)") or ""
 
-        vim.notify('Executing: ' .. cmd, vim.log.levels.INFO)
-        vim.notify('Dropping commits: ' .. commit_str, vim.log.levels.INFO)
+        vim.ui.input({ prompt = 'New commit message: ', default = subject }, function(input)
+          if input and input ~= subject then
+            commands.reword_commit(commit, input, function()
+              refresh_log_list(ev.buf)
+            end)
+          end
+        end)
+      end, { buffer = ev.buf, silent = true, desc = "Reword commit" })
 
-        local output = vim.fn.system(cmd)
-        if vim.v.shell_error ~= 0 then
-          vim.notify('Failed to drop commits:\n' .. output, vim.log.levels.ERROR)
-        else
-          vim.notify('Successfully dropped commits', vim.log.levels.INFO)
-          -- Reload log
-          vim.schedule(function()
-            refresh_log_list(ev.buf)
-          end)
+      -- <C-p>: Toggle preview
+      vim.keymap.set('n', '<C-p>', function()
+        local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+        commands.toggle_preview(commit)
+      end, { buffer = ev.buf, silent = true, desc = "Toggle commit preview" })
+
+      -- Update preview on cursor move (debounced)
+      vim.api.nvim_create_autocmd('CursorMoved', {
+        buffer = ev.buf,
+        callback = function()
+          if commands.is_preview_open() then
+            local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+            commands.schedule_update_preview(commit)
+          end
         end
-      end, { buffer = ev.buf, silent = true, desc = "Drop commit(s)" })
+      })
+
+      -- Close preview on buffer unload
+      vim.api.nvim_create_autocmd('BufUnload', {
+          buffer = ev.buf,
+          callback = function()
+              commands.close_preview()
+          end
+      })
 
       -- <C-Space>: Flogウィンドウトグル
       vim.keymap.set('n', '<C-Space>', function()

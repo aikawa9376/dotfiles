@@ -10,6 +10,7 @@ function M.setup()
   require('features.stash').setup(group)
   require('features.branch').setup(group)
   require('features.log').setup(group)
+  require('features.reflog').setup(group)
   require('features.commands').setup()
 end
 

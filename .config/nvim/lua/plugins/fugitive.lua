@@ -15,7 +15,7 @@ return {
     { "g<space>p", "<cmd>GitPush<CR>", silent = true },
     { "g<space>l", "<cmd>FugitiveLog<CR>", silent = true },
     { "g<space>d", "<cmd>G diff<CR>", silent = true },
-    { "g<space>r", "<cmd>G reflog<CR>", silent = true },
+    { "g<space>r", "<cmd>Greflog<CR>", silent = true },
     { "g<space>s", "<cmd>G show<CR>", silent = true },
     { "g<space>b", "<cmd>Gbranch<CR>", silent = true },
   },
