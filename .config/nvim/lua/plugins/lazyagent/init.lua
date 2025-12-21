@@ -14,6 +14,7 @@ return {
   cmd = {
     "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
     "LazyAgentHistoryList", "LazyAgentClose", "LazyAgentOpenConversation",
+    "LazyAgentResumeConversation",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {

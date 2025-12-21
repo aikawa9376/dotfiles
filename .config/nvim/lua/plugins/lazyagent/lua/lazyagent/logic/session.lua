@@ -8,6 +8,7 @@ local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local keymaps_logic = require("lazyagent.logic.keymaps")
 local send_logic = require("lazyagent.logic.send")
+local cache_logic = require("lazyagent.logic.cache")
 local window = require("lazyagent.window")
 local ok_watch, watch = pcall(require, "lazyagent.watch")
 
@@ -152,10 +153,10 @@ function M.capture_and_save_session(agent_name, open_file, on_done)
       end
 
       local lines = vim.split(text, "\n")
-      local cache_logic = require("lazyagent.logic.cache")
       local dir = cache_logic.get_cache_dir()
+      local prefix = cache_logic.build_cache_prefix()
       local sanitized = tostring(agent_name):gsub("[^%w-_]+", "-")
-      local filename = sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
+      local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
       local path = dir .. "/" .. filename
 
       pcall(vim.fn.writefile, lines, path)
@@ -295,6 +296,55 @@ function M.toggle_session(agent_name)
   end
 
   agent_logic.resolve_target_agent(agent_name, nil, _toggle)
+end
+
+---
+-- Resume a conversation from a saved conversation log by loading it into a new scratch buffer.
+-- Prompts the user to select a snapshot file and an agent (if not provided), then opens a session
+-- with the snapshot content preloaded.
+-- @param agent_name (string|nil) The name of the agent to use.
+function M.resume_conversation(agent_name)
+  local dir, choices = cache_logic.list_cache_Conversation()
+  if not choices or #choices == 0 then
+    local msg = "LazyAgentResume: no conversation snapshots found"
+    if dir then msg = msg .. " in " .. dir end
+    vim.notify(msg, vim.log.levels.INFO)
+    return
+  end
+
+  local function start_with_path(path)
+    if vim.fn.filereadable(path) == 0 then
+      vim.notify("LazyAgentResume: file not found: " .. path, vim.log.levels.ERROR)
+      return
+    end
+
+    local rel_path = vim.fn.fnamemodify(path, ":.")
+    if not rel_path or rel_path == "" then rel_path = path end
+    local content = "@" .. rel_path
+
+    local function start_for_agent(chosen_agent)
+      if not chosen_agent or chosen_agent == "" then return end
+      M.start_interactive_session({ agent_name = chosen_agent, reuse = true, initial_input = content })
+    end
+
+    if agent_name and agent_name ~= "" then
+      start_for_agent(agent_name)
+    else
+      agent_logic.resolve_target_agent(nil, nil, start_for_agent)
+    end
+  end
+
+  vim.ui.select(choices, {
+    prompt = "Resume LazyAgent conversation:",
+    -- fzf-lua ui.select: show file preview from cache dir
+    previewer = "builtin",
+    cwd = dir,
+  }, function(selected, idx)
+    local choice = (idx and choices and choices[idx]) or selected
+    if not choice or choice == "" then return end
+    local path = ((dir or ""):gsub("/$", "")) .. "/" .. choice
+    start_with_path(path)
+  end)
 end
 
 ---

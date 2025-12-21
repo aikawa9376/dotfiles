@@ -54,6 +54,12 @@ function M.setup_commands()
     cache_logic.open_history()
   end, { nargs = "?", desc = "Open a lazyagent cache history file. If no arg is provided, pick from UI." })
 
+  -- Resume a conversation from a saved snapshot and preload it into a new session scratch buffer.
+  try_create_user_command("LazyAgentResumeConversation", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.resume_conversation(explicit)
+  end, { nargs = "?", desc = "Select a saved conversation log and start a session with it preloaded." })
+
   -- User command to open history logs saved by lazyagent (from cache).
   try_create_user_command("LazyAgentHistory", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
