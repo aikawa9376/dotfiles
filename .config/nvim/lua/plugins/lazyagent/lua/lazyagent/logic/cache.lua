@@ -106,8 +106,8 @@ local function build_cache_filename(bufnr)
   local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
   local rootname = vim.fn.fnamemodify(root, ":t") or "root"
   local branch = util.git_branch_for_path(bufn) or "no-branch"
-  -- Keep history per branch+project (no date-based splitting); allow max_history to manage size.
-  return sanitize_filename_component(branch) .. "-" .. sanitize_filename_component(rootname) .. "-history.log"
+  -- Keep history per project+branch (no date-based splitting); allow max_history to manage size.
+  return sanitize_filename_component(rootname) .. "-" .. sanitize_filename_component(branch) .. "-history.log"
 end
 
 --- Writes the content of a scratch buffer to a cache file.
@@ -354,7 +354,7 @@ local function build_cache_prefix(bufnr)
   local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
   local rootname = vim.fn.fnamemodify(root, ":t") or "root"
   local branch = util.git_branch_for_path(bufn) or "no-branch"
-  return sanitize_filename_component(branch) .. "-" .. sanitize_filename_component(rootname) .. "-"
+  return sanitize_filename_component(rootname) .. "-" .. sanitize_filename_component(branch) .. "-"
 end
 M.build_cache_prefix = build_cache_prefix
 

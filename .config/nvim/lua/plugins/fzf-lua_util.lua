@@ -5,9 +5,31 @@ local fzf_lua = require("fzf-lua")
 -- init vim.ui.select
 -- ------------------------------------------------------------------
 fzf_lua.register_ui_select(function (opts)
+  -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
+  if opts.previewer == "builtin" then
+    opts.previewer = {
+      _ctor = function()
+        local Parent = require("fzf-lua.previewer.builtin").buffer_or_file
+        local Previewer = Parent:extend()
+        function Previewer:parse_entry(entry_str)
+          local cleaned = tostring(entry_str):gsub("^%s*%d+%.%s*", "")
+          return Parent.parse_entry(self, cleaned)
+        end
+        return Previewer
+      end,
+    }
+  end
+
   opts.winopts = {
-    height = 0.4, width = 0.6, row = 0.5,
-    preview = nil, split = false, border = "single"
+    height = 0.4,
+    width = 0.6,
+    row = 0.5,
+    split = false,
+    border = "single",
+    preview = {
+      border = "single",
+      hidden = true
+    }
   }
   return opts
 end)
