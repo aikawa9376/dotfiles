@@ -254,11 +254,11 @@ function M.toggle_session(agent_name)
     local initial_input = nil
     local current_mode = vim.fn.mode()
     if current_mode:match("[vV\x16]") then
-      -- Capture marks as soon as possible to avoid losing location info.
-      local start_pos = vim.fn.getpos("'<")
-      local end_pos = vim.fn.getpos("'>")
-      local start_line = start_pos[2]
-      local end_line = end_pos[2]
+      -- Use current Visual start mark ('v') and cursor to avoid stale '<'/'>' marks.
+      local start_pos = vim.fn.getpos("v") -- {bufnum, lnum, col, off}
+      local cursor = vim.api.nvim_win_get_cursor(0) -- {lnum, col}
+      local start_line = start_pos and start_pos[2] or nil
+      local end_line = cursor and cursor[1] or nil
 
       local file_path = vim.api.nvim_buf_get_name(0)
       if file_path and file_path ~= "" then
@@ -274,8 +274,6 @@ function M.toggle_session(agent_name)
         end
       end
 
-      -- Exit visual mode
-      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
     end
 
     -- If the floating input is already open for this agent, close it.
@@ -370,7 +368,11 @@ function M.start_interactive_session(opts)
 
     -- Set initial content if provided
     if opts.initial_input and opts.initial_input ~= "" then
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(opts.initial_input, "\n"))
+      vim.schedule(function()
+        if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+          vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(opts.initial_input, "\n"))
+        end
+      end)
     end
   end)
 end
