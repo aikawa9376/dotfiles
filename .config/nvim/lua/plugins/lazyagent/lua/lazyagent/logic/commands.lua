@@ -37,7 +37,13 @@ function M.setup_commands()
       if not chosen then return end
       session_logic.toggle_session(chosen)
     end)
-  end, { nargs = "?", desc = "Toggle the floating agent input buffer (open/close)" })
+  end, {
+      nargs = "?",
+      desc = "Toggle the floating agent input buffer (open/close)",
+      complete = function()
+        return agent_logic.available_agents()
+      end,
+    })
 
   -- User command to open history logs saved by lazyagent (from cache).
   try_create_user_command("LazyAgentHistoryList", function(cmdargs)
