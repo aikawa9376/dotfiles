@@ -313,6 +313,17 @@ function M.setup(group)
           vim.cmd('Gvsplit ' .. ref)
           return
         end
+        local file_path = utils.get_filepath_at_cursor(ev.buf)
+        if file_path then
+          local work_tree = get_fugitive_work_tree()
+          if work_tree then
+            local abs_path = vim.fn.fnamemodify(work_tree .. '/' .. file_path, ':p')
+            if vim.fn.isdirectory(abs_path) == 1 then
+              pcall(vim.cmd, 'Oil ' .. vim.fn.fnameescape(abs_path))
+              return
+            end
+          end
+        end
         vim.api.nvim_feedkeys(
           vim.api.nvim_replace_termcodes("<Plug>fugitive:<cr>", true, false, true),
           'm',

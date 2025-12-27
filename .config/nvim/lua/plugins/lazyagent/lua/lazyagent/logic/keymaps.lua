@@ -155,7 +155,8 @@ function M.register_scratch_keymaps(bufnr, opts)
 
   -- Close mapping
   safe_set("n", keys.close or "q", function()
-    window.close()
+    local closed = window.close()
+    if not closed then return end
     if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end
