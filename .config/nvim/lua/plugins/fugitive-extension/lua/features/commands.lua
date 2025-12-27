@@ -3,6 +3,26 @@ local M = {}
 local float_win = nil
 local float_buf = nil
 
+local reflog_redo_stack = {}
+
+local function get_work_tree_from_fugitive()
+  local git_dir = vim.fn.FugitiveGitDir()
+  if git_dir == '' then
+    vim.notify("Not in a git repository", vim.log.levels.ERROR)
+    return nil
+  end
+
+  local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+  local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+
+  if vim.v.shell_error ~= 0 or work_tree == '' then
+    vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
+    return nil
+  end
+
+  return work_tree
+end
+
 -- Worktree cleanliness helper
 local function apply_auto_stash(work_tree)
   -- Check if worktree is dirty
@@ -32,6 +52,28 @@ local function pop_auto_stash(work_tree)
   else
     vim.notify("Auto-stash popped", vim.log.levels.INFO)
   end
+end
+
+local function hard_reset_to_commit(work_tree, commit)
+  if not commit or commit == '' then
+    vim.notify("No commit to reset to", vim.log.levels.WARN)
+    return false
+  end
+
+  local stashed = apply_auto_stash(work_tree)
+  if stashed == nil then return false end
+
+  local cmd = "git -C " .. vim.fn.shellescape(work_tree) .. " reset --hard " .. vim.fn.shellescape(commit)
+  local output = vim.fn.system(cmd)
+
+  if stashed then pop_auto_stash(work_tree) end
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Reset failed: " .. output, vim.log.levels.ERROR)
+    return false
+  end
+
+  return true
 end
 
 function M.close_commit_info_float()
@@ -315,6 +357,63 @@ function M.setup()
   vim.api.nvim_create_user_command("GCherryPick", function(cmd_opts)
     git_cherry_pick({ reg = cmd_opts.reg })
   end, { register = true })
+
+  local function reflog_undo()
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
+
+    local prev_commit = vim.fn.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse --verify --quiet HEAD@{1}'))
+    if prev_commit == '' or vim.v.shell_error ~= 0 then
+      vim.notify('No older reflog entries', vim.log.levels.WARN)
+      return
+    end
+
+    local current_commit = vim.fn.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse HEAD'))
+    if current_commit == '' or vim.v.shell_error ~= 0 then
+      vim.notify('Failed to resolve current HEAD', vim.log.levels.ERROR)
+      return
+    end
+    local ok = hard_reset_to_commit(work_tree, prev_commit)
+    if not ok then return end
+
+    table.insert(reflog_redo_stack, current_commit)
+    vim.notify(string.format('Moved HEAD to %s (was %s)', prev_commit:sub(1, 7), current_commit:sub(1, 7)), vim.log.levels.INFO)
+    M.reload_log()
+  end
+
+  local function reflog_redo()
+    if #reflog_redo_stack == 0 then
+      vim.notify('Nothing to redo', vim.log.levels.WARN)
+      return
+    end
+
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
+
+    local target_commit = table.remove(reflog_redo_stack)
+    local current_commit = vim.fn.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse HEAD'))
+    if current_commit == '' or vim.v.shell_error ~= 0 then
+      vim.notify('Failed to resolve current HEAD', vim.log.levels.ERROR)
+      table.insert(reflog_redo_stack, target_commit)
+      return
+    end
+    local ok = hard_reset_to_commit(work_tree, target_commit)
+    if not ok then
+      table.insert(reflog_redo_stack, target_commit)
+      return
+    end
+
+    vim.notify(string.format('Redo to %s (was %s)', target_commit:sub(1, 7), current_commit:sub(1, 7)), vim.log.levels.INFO)
+    M.reload_log()
+  end
+
+  vim.api.nvim_create_user_command("UndoFugitive", function()
+    reflog_undo()
+  end, {})
+
+  vim.api.nvim_create_user_command("RedoFugitive", function()
+    reflog_redo()
+  end, {})
 
   function M.fixup_commit(commit_hash, on_complete)
     if not commit_hash or commit_hash == '' then
@@ -756,6 +855,8 @@ cat "$1" >> /tmp/rebase-debug.log
   -- Export functions for use in other modules
   M.git_push = git_push
   M.git_cherry_pick = git_cherry_pick
+  M.reflog_undo = reflog_undo
+  M.reflog_redo = reflog_redo
   M.apply_auto_stash = apply_auto_stash
   M.pop_auto_stash = pop_auto_stash
 end
