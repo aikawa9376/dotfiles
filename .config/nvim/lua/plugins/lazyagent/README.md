@@ -195,7 +195,10 @@ prompts = {
 - LazyAgentToggle — スクラッチの toggle
 - LazyAgentClose — スクラッチを閉じる
 - LazyAgentHistory — キャッシュに保存された履歴ログを UI で選択してバッファで開く（引数にファイル名を渡すと直接開けます）
+- LazyAgentSummary — プロジェクト/ブランチごとの summary Markdown を UI で選択し、開く/パスをコピーする（引数に `copy` を渡すとコピーのみ）
 - Claude, Codex, Gemini, Copilot, Cursor — 対話型エージェントを直接開始するコマンド（lazy の cmd で読み込む）
+
+- `#report`（`- Summarize in Markdown file.`）トークンを使うと、`stdpath("cache")/lazyagent/summary/<project>-<branch>-<slug>.md` というプレフィックスを提示します（プロジェクト・ブランチ部分はプラグインで付与、slug は AI に選ばせる）。AI 側でそのパスに Markdown を作成/追記してください。`LazyAgentSummary` で既存の summary を開いたりパスをコピーできます。
 
 ---
 

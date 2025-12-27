@@ -6,6 +6,7 @@ local state = require("lazyagent.logic.state")
 local agent_logic = require("lazyagent.logic.agent")
 local session_logic = require("lazyagent.logic.session")
 local cache_logic = require("lazyagent.logic.cache")
+local summary_logic = require("lazyagent.logic.summary")
 
 -- Helper to create commands safely
 local function try_create_user_command(name, fn, cmd_opts)
@@ -118,6 +119,11 @@ function M.setup_commands()
       session_logic.capture_and_save_session(chosen, true)
     end)
   end, { nargs = "?", desc = "Open the live pane capture for a running interactive agent in a buffer." })
+
+  try_create_user_command("LazyAgentSummary", function(cmdargs)
+    local action = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    summary_logic.pick(action)
+  end, { nargs = "?", desc = "Open or copy a lazyagent summary file (action: open|copy, default asks)." })
 
   -- Register commands for each interactive agent
   if state.opts.interactive_agents then
