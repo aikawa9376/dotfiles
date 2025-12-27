@@ -180,6 +180,15 @@ function M.close_session(agent_name)
   if not agent_name or agent_name == "" then
     return
   end
+
+  if state.open_agent == agent_name then
+    local bufnr = window.get_bufnr()
+    if window.close() and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end
+    state.open_agent = nil
+  end
+
   local s = state.sessions[agent_name]
   if not s or not s.pane_id or s.pane_id == "" then
     state.sessions[agent_name] = nil
