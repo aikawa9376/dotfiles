@@ -2,7 +2,8 @@ return {
   "tpope/vim-fugitive",
   cmd = {
     "G", "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit", "Gstash",
-    "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit", "GitPush"
+    "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit", "GitPush",
+    "Gworktree", "Gbranch", "FugitiveLog"
   },
   dependencies = "fugitive-extension",
   keys = {
