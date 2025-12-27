@@ -11,6 +11,7 @@ function M.setup()
   require('features.branch').setup(group)
   require('features.log').setup(group)
   require('features.reflog').setup(group)
+  require('features.worktree').setup(group)
   require('features.commands').setup()
 end
 
