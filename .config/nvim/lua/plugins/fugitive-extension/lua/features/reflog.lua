@@ -1,6 +1,7 @@
 local M = {}
 local utils = require("fugitive_utils")
 local commands = require("features.commands")
+local help = require("features.help")
 
 local function get_reflog_list()
   local cmd = "git reflog --pretty=format:'%h%x09%gd%x09%gs' -n 1000"
@@ -33,6 +34,19 @@ local function open_reflog_list()
   vim.opt_local.list = false
 end
 
+local function show_reflog_help()
+  help.show('Reflog buffer keys', {
+    'g?     show this help',
+    'd      Diffview commit',
+    'C      commit info float',
+    '<C-y>  copy short hash',
+    '<C-p>  toggle commit preview',
+    'R      reload reflog',
+    '<CR>   open in fugitive (:G edit)',
+    'q      close buffer',
+  })
+end
+
 function M.setup(group)
   vim.api.nvim_create_user_command('Greflog', open_reflog_list, {
     bang = false,
@@ -46,6 +60,10 @@ function M.setup(group)
       -- Syntax highlighting
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false
+
+      vim.keymap.set('n', 'g?', function()
+        show_reflog_help()
+      end, { buffer = ev.buf, silent = true, desc = "Help" })
       vim.cmd([[
         syntax match FugitiveReflogHash /^[^\t]\+/
         syntax match FugitiveReflogSelector /\t[^\t]*/

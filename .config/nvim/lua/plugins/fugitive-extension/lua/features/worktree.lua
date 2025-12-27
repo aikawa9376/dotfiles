@@ -1,4 +1,5 @@
 local M = {}
+local help = require("features.help")
 
 local function get_work_tree()
   local git_dir = vim.fn.FugitiveGitDir()
@@ -345,6 +346,19 @@ local function add_worktree(bufnr)
   end)
 end
 
+local function show_worktree_help()
+  help.show('Worktree buffer keys', {
+    'g?     show this help',
+    '<CR>   open worktree in tab (:tcd)',
+    'o      open worktree in this window (:lcd)',
+    'a      add worktree',
+    'd      remove worktree (prompt/force as needed)',
+    'p      prune worktrees',
+    'r      refresh list',
+    'q      close buffer',
+  })
+end
+
 function M.setup(group)
   vim.api.nvim_create_user_command('Gworktree', open_worktree_list, {
     bang = false,
@@ -370,6 +384,10 @@ function M.setup(group)
       vim.opt_local.relativenumber = false
       vim.opt_local.signcolumn = 'no'
       vim.opt_local.list = false
+
+      vim.keymap.set('n', 'g?', function()
+        show_worktree_help()
+      end, { buffer = bufnr, silent = true, desc = "Help" })
 
       vim.keymap.set('n', '<CR>', function()
         open_worktree(entry_at_cursor(bufnr), 'tab')

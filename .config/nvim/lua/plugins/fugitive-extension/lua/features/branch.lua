@@ -1,4 +1,5 @@
 local M = {}
+local help = require("features.help")
 
 local function get_ahead_behind(branch, upstream)
   if not upstream or upstream == '' then
@@ -466,6 +467,25 @@ local function open_branch_list()
   vim.bo[bufnr].modifiable = false
 end
 
+local function show_branch_help()
+  help.show('Branch buffer keys', {
+    'g?          show this help',
+    '<CR>        Gedit branch',
+    'coo         checkout branch',
+    'r           refresh list',
+    'cP          cherry-pick register (+)',
+    '<Leader>gp  git push',
+    'O           open PR (Octo)',
+    'bw          rename branch',
+    'cod         duplicate branch',
+    'cot         create worktree',
+    'X (n/V)     delete branch(es)',
+    'f           fetch --all --prune',
+    'p           pull current branch',
+    '<C-Space>   toggle Flog graph',
+  })
+end
+
 function M.setup(group)
   vim.api.nvim_create_user_command('Gbranch', open_branch_list, {
     bang = false,
@@ -477,6 +497,10 @@ function M.setup(group)
     pattern = 'fugitivebranch',
     callback = function(ev)
       local bufnr = ev.buf
+
+      vim.keymap.set('n', 'g?', function()
+        show_branch_help()
+      end, { buffer = bufnr, silent = true, desc = "Help" })
 
       -- Add checkout keymap
       vim.keymap.set('n', 'coo', function()
