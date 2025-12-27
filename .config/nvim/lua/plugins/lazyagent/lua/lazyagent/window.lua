@@ -1,4 +1,5 @@
 local M = {}
+local cache_logic = require("lazyagent.logic.cache")
 
 local winid = nil
 local float_autocmd_group_id = nil
@@ -197,7 +198,40 @@ function M.open(bufnr, opts)
   end
 end
 
-function M.close()
+local function buffer_has_content(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  local ok, lines = pcall(vim.api.nvim_buf_get_lines, bufnr, 0, -1, false)
+  if not ok or not lines then
+    return false
+  end
+  for _, l in ipairs(lines) do
+    if l and l:match("%S") then
+      return true
+    end
+  end
+  return false
+end
+
+function M.close(opts)
+  opts = opts or {}
+  local bufnr = winid and vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) or nil
+
+  if not (opts.force) and buffer_has_content(bufnr) then
+    local choice = vim.fn.confirm(
+      "Scratch buffer has content. Close?",
+      "&Yes\n&No\n&Save to history",
+      3
+    )
+    if choice == 2 or choice == 0 then
+      return false
+    end
+    if choice == 3 then
+      pcall(cache_logic.write_scratch_to_cache, bufnr)
+    end
+  end
+
   if winid and vim.api.nvim_win_is_valid(winid) then
     vim.api.nvim_win_close(winid, true)
     winid = nil
@@ -209,6 +243,7 @@ function M.close()
   end
   float_original_opts = nil
   float_is_focused = false
+  return true
 end
 
 function M.is_open()
