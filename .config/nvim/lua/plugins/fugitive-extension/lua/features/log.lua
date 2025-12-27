@@ -1,6 +1,7 @@
 local M = {}
 local utils = require("fugitive_utils")
 local commands = require("features.commands")
+local help = require("features.help")
 
 local function get_commit_at_line(bufnr, lnum)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
@@ -73,6 +74,21 @@ local function open_log_list()
   apply_highlights(bufnr)
 end
 
+local function show_log_help()
+  help.show('Log buffer keys', {
+    'g?          show this help',
+    'd           Diffview commit (or file if detected)',
+    'C           commit info float',
+    'O           Octo PR from commit',
+    '<C-y>       copy short hash',
+    '<Leader>cf  fixup commit into parent',
+    '<M-j>/<M-k> move commit down/up',
+    'X (n/V)     drop commit(s)',
+    'cw          reword commit',
+    '<C-p>       toggle commit preview',
+  })
+end
+
 function M.setup(group)
   vim.api.nvim_create_user_command('FugitiveLog', open_log_list, {
     bang = false,
@@ -96,6 +112,10 @@ function M.setup(group)
       -- Syntax highlighting
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false
+
+      vim.keymap.set('n', 'g?', function()
+        show_log_help()
+      end, { buffer = ev.buf, silent = true, desc = "Help" })
       vim.cmd([[
         syntax match FugitiveLogHash /^[^\t]\+/
         syntax match FugitiveLogSubject /\t[^\t]*/

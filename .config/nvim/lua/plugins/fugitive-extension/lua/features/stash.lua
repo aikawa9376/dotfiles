@@ -1,4 +1,5 @@
 local M = {}
+local help = require("features.help")
 
 local function get_stash_list()
   return vim.fn.systemlist("git stash list")
@@ -51,6 +52,18 @@ local function open_stash_list()
   vim.bo[bufnr].modifiable = false
 end
 
+local function show_stash_help()
+  help.show('Stash buffer keys', {
+    'g?     show this help',
+    'A      apply stash',
+    'P      pop stash',
+    'X      drop stash',
+    'O      open stash diff in tab',
+    '<CR>   open stash diff in split',
+    'q      close buffer',
+  })
+end
+
 function M.setup(group)
   vim.api.nvim_create_user_command('Gstash', open_stash_list, {
     bang = false,
@@ -62,6 +75,10 @@ function M.setup(group)
     pattern = 'fugitivestash',
     callback = function(ev)
       local bufnr = ev.buf
+
+      vim.keymap.set('n', 'g?', function()
+        show_stash_help()
+      end, { buffer = bufnr, silent = true, desc = "Help" })
 
       -- Let fugitive know how to find the git object on each line
       vim.b[bufnr].fugitive_object_pattern = [[\v(stash@\{[0-9]+\})]]
