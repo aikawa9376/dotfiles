@@ -4,6 +4,43 @@ local M = {}
 
 local state = require("lazyagent.logic.state")
 local backend = require("lazyagent.logic.backend")
+local completion_cache = {}
+
+local function load_default_completions(agent_name)
+  local key = agent_name and agent_name:lower() or ""
+  if completion_cache[key] then return completion_cache[key] end
+  if key == "" then return {} end
+
+  local modnames = {
+    "lazyagent.completion.agents." .. key,
+    "lazyagent.completion." .. key,
+  }
+
+  for _, modname in ipairs(modnames) do
+    local ok, mod = pcall(require, modname)
+    if ok and type(mod) == "table" then
+      completion_cache[key] = mod
+      return mod
+    end
+  end
+
+  completion_cache[key] = {}
+  return completion_cache[key]
+end
+
+local function list_fd_paths()
+  if vim.fn.executable("fd") ~= 1 then return {} end
+  local cmd = { "fd", "--type", "f", "--type", "d", "--max-results", "120", "--strip-cwd-prefix", "." }
+  local ok, out = pcall(vim.fn.systemlist, cmd)
+  if not ok or not out then return {} end
+  local items = {}
+  for _, line in ipairs(out) do
+    if line and line ~= "" then
+      table.insert(items, { label = "@" .. line, desc = "Path" })
+    end
+  end
+  return items
+end
 
 --- Gets the configuration for a specific interactive agent.
 -- @param agent (string) The name of the agent.
@@ -105,6 +142,70 @@ function M.available_agents()
   end
   table.sort(available)
   return available
+end
+
+local function normalize_completion_list(list)
+  local out = {}
+  if type(list) ~= "table" then return out end
+  local seen = {}
+
+  local function to_entry(v)
+    if type(v) == "string" then
+      return { label = v, desc = "" }
+    end
+    if type(v) == "table" then
+      local label = v.label or v.text or v[1]
+      local desc = v.desc or v.description or v[2] or ""
+      if label and label ~= "" then
+        return { label = label, desc = desc }
+      end
+    end
+    return nil
+  end
+
+  for _, v in ipairs(list) do
+    local entry = to_entry(v)
+    if entry and entry.label and not seen[entry.label] then
+      seen[entry.label] = true
+      table.insert(out, entry)
+    end
+  end
+  return out
+end
+
+function M.get_scratch_completions(agent_name)
+  if not agent_name or agent_name == "" then
+    -- Fallback to default agent if configured.
+    local available = M.available_agents()
+    if #available > 0 then agent_name = available[1] end
+  end
+
+  local cfg = M.get_interactive_agent(agent_name)
+  local provider = cfg and cfg.scratch_completions
+  local defaults = load_default_completions(agent_name)
+  local provided = {}
+  if provider then
+    local ok, val = pcall(function()
+      if type(provider) == "function" then
+        return provider(cfg)
+      end
+        return provider
+      end)
+    if ok and type(val) == "table" then
+      provided = val
+    end
+  end
+
+  local res = vim.tbl_deep_extend("force", {}, defaults or {}, provided or {})
+  res.slash = normalize_completion_list(res.slash or {})
+  -- Replace @ completions with fd-based file/dir list (common across agents).
+  local fd_paths = list_fd_paths()
+  if fd_paths and #fd_paths > 0 then
+    res.at = fd_paths
+  else
+    res.at = {}
+  end
+  return res
 end
 
 return M

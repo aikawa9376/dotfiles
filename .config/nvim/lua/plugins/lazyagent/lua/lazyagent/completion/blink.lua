@@ -11,6 +11,8 @@
 --   }
 -- }
 local ok_transforms, transforms = pcall(require, "lazyagent.transforms")
+local ok_agent, agent_logic = pcall(require, "lazyagent.logic.agent")
+local ok_state, state = pcall(require, "lazyagent.logic.state")
 if not ok_transforms then
   -- If lazyagent transforms cannot be loaded, provide a noop source that returns no items.
   local noop = {}
@@ -46,7 +48,7 @@ function source:enabled(ctx)
   local bufnr = (ctx and ctx.bufnr) or vim.api.nvim_get_current_buf()
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end
 
-  if vim.b[bufnr] and vim.b[bufnr].lazyagent_source_bufnr then return true end
+  if vim.b[bufnr] and (vim.b[bufnr].lazyagent_source_bufnr or vim.b[bufnr].lazyagent_agent) then return true end
   local ft = vim.bo[bufnr].filetype or ""
   if ft == "markdown" or ft == "text" or ft == "lazyagent" then return true end
   return false
@@ -54,7 +56,11 @@ end
 
 -- Trigger characters: start token with '{'
 function source:get_trigger_characters()
-  return { "#" }
+  return { "#", "/", "@", "{" }
+end
+
+function source:get_keyword_pattern()
+  return "[#/@][A-Za-z0-9_%.%-/]*"
 end
 
 local function make_item(tok, _, bufnr)
@@ -90,9 +96,76 @@ local function make_item(tok, _, bufnr)
   return item
 end
 
+local function make_custom_item(prefix_char, text, desc)
+  local label = text:match("^" .. vim.pesc(prefix_char)) and text or (prefix_char .. text)
+  return {
+    label = label,
+    filterText = label:gsub("^" .. vim.pesc(prefix_char), ""),
+    insertText = label .. " ",
+    kind = types.CompletionItemKind.Text,
+    documentation = { kind = "markdown", value = desc or "" },
+  }
+end
+
+local function current_agent(bufnr)
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) and vim.b[bufnr] and vim.b[bufnr].lazyagent_agent then
+    return vim.b[bufnr].lazyagent_agent
+  end
+  if ok_state and state and state.open_agent then return state.open_agent end
+  return nil
+end
+
+local function parse_entry(entry, prefix_char)
+  if type(entry) == "string" then
+    return entry, nil
+  end
+  if type(entry) == "table" then
+    local label = entry.label or entry.text or entry[1]
+    local desc = entry.desc or entry.description or entry[2]
+    if label then
+      if not label:match("^" .. vim.pesc(prefix_char)) then
+        label = prefix_char .. label
+      end
+      return label, desc
+    end
+  end
+  return nil, nil
+end
+
 -- Return completions: blink.cmp will do keyword filtering; we return all tokens.
 function source:get_completions(ctx, callback)
   local bufnr = (ctx and ctx.bufnr) or vim.api.nvim_get_current_buf()
+
+  local function line_before_cursor()
+    if ctx and ctx.line and ctx.col then
+      return ctx.line:sub(1, math.max(0, ctx.col - 1))
+    end
+    local ok_cur, pos = pcall(vim.api.nvim_win_get_cursor, 0)
+    local ok_line, line = pcall(vim.api.nvim_get_current_line)
+    if ok_cur and ok_line and pos and line then
+      local col = pos[2] or 0
+      return line:sub(1, col)
+    end
+    return ""
+  end
+
+  local line_to_cursor = line_before_cursor()
+  local token_prefix = line_to_cursor:match("{([%w_%-%./]*)$") or line_to_cursor:match("#([%w_%-%./]*)$") or nil
+  local slash_prefix = line_to_cursor:match("/([%w_%-%./]*)$") or nil
+  local at_prefix = line_to_cursor:match("@([%w_%-%./]*)$") or nil
+
+  -- If the last character is a trigger but prefix detection failed, treat as empty prefix to force suggestions.
+  local last_char = line_to_cursor:sub(-1)
+  if not token_prefix and not slash_prefix and not at_prefix then
+    if last_char == "#" or last_char == "{" then token_prefix = "" end
+    if last_char == "/" then slash_prefix = "" end
+    if last_char == "@" then at_prefix = "" end
+  end
+
+  if not token_prefix and not slash_prefix and not at_prefix then
+    callback({ items = {}, is_incomplete_forward = false, is_incomplete_backward = false })
+    return function() end
+  end
 
   -- Prefer a persisted origin/source if this is a scratch buffer
   local source_buf = nil
@@ -104,8 +177,40 @@ function source:get_completions(ctx, callback)
 
   local tokens = transforms.available_tokens() or {}
   local items = {}
-  for _, tok in ipairs(tokens) do
-    table.insert(items, make_item(tok, ctx, source_buf))
+  if token_prefix then
+    for _, tok in ipairs(tokens) do
+      if tok.name:sub(1, #token_prefix) == token_prefix then
+        table.insert(items, make_item(tok, ctx, source_buf))
+      end
+    end
+  end
+
+  local agent = ok_agent and current_agent(bufnr) or nil
+  if agent and ok_agent then
+    local comps = agent_logic.get_scratch_completions(agent)
+    if slash_prefix then
+      for _, v in ipairs(comps.slash or {}) do
+        local label, desc = parse_entry(v, "/")
+        if label then
+          local key = label:gsub("^/", "")
+          if key:sub(1, #slash_prefix) == slash_prefix then
+            table.insert(items, make_custom_item("/", label, desc or ("LazyAgent / command for " .. agent)))
+          end
+        end
+      end
+    end
+
+    if at_prefix then
+      for _, v in ipairs(comps.at or {}) do
+        local label, desc = parse_entry(v, "@")
+        if label then
+          local key = label:gsub("^@", "")
+          if key:sub(1, #at_prefix) == at_prefix then
+            table.insert(items, make_custom_item("@", label, desc or ("LazyAgent @ item for " .. agent)))
+          end
+        end
+      end
+    end
   end
 
   -- Return items and indicate not-requesting incremental updates by default.

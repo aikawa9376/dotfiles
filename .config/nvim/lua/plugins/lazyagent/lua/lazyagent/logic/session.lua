@@ -410,6 +410,7 @@ function M.start_interactive_session(opts)
       filetype = agent_cfg.scratch_filetype or "lazyagent",
       source_bufnr = origin_bufnr,
     })
+    pcall(function() vim.b[bufnr].lazyagent_agent = agent_name end)
 
     -- Register buffer-local scratch keymaps (include source/origin buffer so placeholders resolve correctly)
     keymaps_logic.register_scratch_keymaps(bufnr, { agent_name = agent_name, agent_cfg = agent_cfg, pane_id = pane_id, reuse = reuse, source_bufnr = origin_bufnr })
