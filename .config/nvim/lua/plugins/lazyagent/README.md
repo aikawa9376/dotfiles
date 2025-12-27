@@ -58,6 +58,12 @@ lazyagent の `setup(opts)` で指定可能です。主なデフォルト:
       scratch_filetype = "lazyagent",
       submit_keys = { "C-m" }, -- tmux-style key; "<CR>" and "<c-m>" are accepted and normalized for convenience
       capture_delay = 800,
+      -- スクラッチ補完（/ や @ 用）を追加したい場合は scratch_completions を指定してください。
+      -- 文字列配列、または配列を返す関数を渡せます。
+      -- scratch_completions = {
+      --   slash = { "/help", "/agents" },
+      --   at = { "@docs", "@manual" },
+      -- },
     },
     -- Claude, Codex など
   },
