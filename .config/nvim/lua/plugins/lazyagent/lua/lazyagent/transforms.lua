@@ -11,6 +11,7 @@
 --  - #diagnostics -> fenced diagnostics code block formatted for prompts
 local M = {}
 local util = require("lazyagent.util")
+local summary = require("lazyagent.logic.summary")
 
 local severity_names = {}
 if vim and vim.diagnostic and vim.diagnostic.severity then
@@ -136,6 +137,8 @@ end
 local function replace_token(token, opts, meta)
   opts = opts or {}
   meta = meta or {}
+  meta.used_tokens = meta.used_tokens or {}
+  meta.used_tokens[token] = (meta.used_tokens[token] or 0) + 1
   local source_bufnr = get_target_bufnr(opts.source_bufnr or opts.origin_bufnr)
 
   if token == "buffer" then
@@ -186,6 +189,22 @@ local function replace_token(token, opts, meta)
 
     if not diags or #diags == 0 then return "" end
     return "```diagnostics\n" .. diagnostics_to_text(diags) .. "\n```"
+  end
+
+  if token == "report" then
+    local dir = summary.summary_dir()
+    local prefix = summary.summary_prefix(source_bufnr)
+    local example = summary.example_summary_path(source_bufnr)
+    meta.summary_dir = dir
+    meta.summary_prefix = prefix
+    local instructions = "- Summarize in Markdown file.\n"
+      .. "- Choose a concise, hyphenated slug for this task (e.g., feature-x or bug-123).\n"
+      .. "- Write (create if missing) the summary to: "
+      .. prefix .. "<slug>.md\n"
+      .. "- Example path: " .. example .. "\n"
+      .. "- Preserve existing content and append a new section with a timestamp and latest notes.\n"
+      .. "- Include paths or commands worth revisiting."
+    return instructions
   end
 
   -- Allow externally registered transforms to handle custom tokens (either string or function).

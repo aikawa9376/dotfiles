@@ -1,10 +1,5 @@
 return {
   {
-    name = "report",
-    desc = "Generate a report of the current state",
-    trans = "- Summarize in Markdown file."
-  },
-  {
     name = "analysis",
     desc = "Analyze the current state and provide insights",
     trans = "- Analyze the current changes and provide concise insights or next steps."
