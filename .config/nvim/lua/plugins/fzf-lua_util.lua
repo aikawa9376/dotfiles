@@ -2,39 +2,6 @@ local M = {}
 local fzf_lua = require("fzf-lua")
 
 -- ------------------------------------------------------------------
--- init vim.ui.select
--- ------------------------------------------------------------------
-fzf_lua.register_ui_select(function (opts)
-  -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
-  if opts.previewer == "builtin" then
-    opts.previewer = {
-      _ctor = function()
-        local Parent = require("fzf-lua.previewer.builtin").buffer_or_file
-        local Previewer = Parent:extend()
-        function Previewer:parse_entry(entry_str)
-          local cleaned = tostring(entry_str):gsub("^%s*%d+%.%s*", "")
-          return Parent.parse_entry(self, cleaned)
-        end
-        return Previewer
-      end,
-    }
-  end
-
-  opts.winopts = {
-    height = 0.4,
-    width = 0.6,
-    row = 0.5,
-    split = false,
-    border = "single",
-    preview = {
-      border = "single",
-      hidden = true
-    }
-  }
-  return opts
-end)
-
--- ------------------------------------------------------------------
 -- default settings
 -- ------------------------------------------------------------------
 
@@ -160,6 +127,63 @@ local function copySelectedPathsToRegisterWithAt(selected)
     vim.notify("Copied " .. tostring(#items) .. " paths to register +", vim.log.levels.INFO)
   end
 end
+
+local function extract_path_from_entry(entry_str)
+  local function try_match(s)
+    local patterns = {
+      "([%w%._%+%-/\\~]+%.[%w%d]+:%d+:%d+)",
+      "([%w%._%+%-/\\~]+%.[%w%d]+:%d+)",
+      "([%w%._%+%-/\\~]+%.[%w%d]+)",
+      "([%w%._%+%-/\\~]+)",
+    }
+    for _, pat in ipairs(patterns) do
+      local m = s:match(pat)
+      if m then return vim.trim(m) end
+    end
+    return nil
+  end
+
+  local raw = tostring(entry_str or "")
+  local matched = try_match(raw)
+  if matched then return matched end
+  local stripped = raw:gsub("^%s*%d+%.%s*", "")
+  matched = try_match(stripped)
+  if matched then return matched end
+  return vim.trim(stripped)
+end
+
+-- ------------------------------------------------------------------
+-- init vim.ui.select
+-- ------------------------------------------------------------------
+fzf_lua.register_ui_select(function (opts)
+  -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
+  if opts.previewer == "builtin" then
+    opts.previewer = {
+      _ctor = function()
+        local Parent = require("fzf-lua.previewer.builtin").buffer_or_file
+        local Previewer = Parent:extend()
+        function Previewer:parse_entry(entry_str)
+          local path = extract_path_from_entry(entry_str)
+          return Parent.parse_entry(self, path)
+        end
+        return Previewer
+      end,
+    }
+  end
+
+  opts.winopts = {
+    height = 0.4,
+    width = 0.6,
+    row = 0.5,
+    split = false,
+    border = "single",
+    preview = {
+      border = "single",
+      hidden = true
+    }
+  }
+  return opts
+end)
 
 -- ------------------------------------------------------------------
 -- Files Enhanced
