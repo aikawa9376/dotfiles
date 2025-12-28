@@ -415,6 +415,100 @@ function M.setup()
     reflog_redo()
   end, {})
 
+  function M.reword_commit(commit_hash, new_message, on_complete)
+    if not commit_hash or commit_hash == '' then
+      vim.notify('No commit hash provided', vim.log.levels.ERROR)
+      return
+    end
+    if not new_message or new_message == '' then
+      vim.notify('New commit message is empty', vim.log.levels.WARN)
+      return
+    end
+
+    local git_dir = vim.fn.FugitiveGitDir()
+    if git_dir == '' then
+      vim.notify('Not in a git repository', vim.log.levels.ERROR)
+      return
+    end
+
+    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
+      return
+    end
+
+    local stashed = apply_auto_stash(work_tree)
+    if stashed == nil then return end
+
+    local short_commit_hash = commit_hash:sub(1, 7)
+
+    -- Sequence editor: mark target commit for reword
+    local seq_file = vim.fn.tempname()
+    local seq_script = string.format('#!/bin/sh\nsed -i "s/^pick %s/reword %s/" "$1"\n', short_commit_hash, short_commit_hash)
+    local f_seq = io.open(seq_file, 'w')
+    if not f_seq then
+      if stashed then pop_auto_stash(work_tree) end
+      vim.notify('Failed to create sequence editor script', vim.log.levels.ERROR)
+      return
+    end
+    f_seq:write(seq_script)
+    f_seq:close()
+    vim.fn.system('chmod +x ' .. vim.fn.shellescape(seq_file))
+
+    -- Editor script: replace message with provided text
+    local msg_file = vim.fn.tempname()
+    local f_msg = io.open(msg_file, 'w')
+    if not f_msg then
+      if stashed then pop_auto_stash(work_tree) end
+      vim.fn.delete(seq_file)
+      vim.notify('Failed to create message file', vim.log.levels.ERROR)
+      return
+    end
+    f_msg:write(new_message .. '\n')
+    f_msg:close()
+
+    local editor_file = vim.fn.tempname()
+    local editor_script = string.format('#!/bin/sh\ncat %s > "$1"\n', vim.fn.shellescape(msg_file))
+    local f_editor = io.open(editor_file, 'w')
+    if not f_editor then
+      if stashed then pop_auto_stash(work_tree) end
+      vim.fn.delete(seq_file)
+      vim.fn.delete(msg_file)
+      vim.notify('Failed to create editor script', vim.log.levels.ERROR)
+      return
+    end
+    f_editor:write(editor_script)
+    f_editor:close()
+    vim.fn.system('chmod +x ' .. vim.fn.shellescape(editor_file))
+
+    local rebase_cmd = string.format(
+      'GIT_SEQUENCE_EDITOR=%s GIT_EDITOR=%s git -C %s rebase -i %s',
+      vim.fn.shellescape(seq_file),
+      vim.fn.shellescape(editor_file),
+      vim.fn.shellescape(work_tree),
+      vim.fn.shellescape(commit_hash .. '^')
+    )
+
+    local result = vim.fn.system(rebase_cmd)
+
+    vim.fn.delete(seq_file)
+    vim.fn.delete(editor_file)
+    vim.fn.delete(msg_file)
+    if stashed then pop_auto_stash(work_tree) end
+
+    if vim.v.shell_error ~= 0 then
+      vim.notify('Reword failed: ' .. result, vim.log.levels.ERROR)
+    else
+      vim.notify('Reworded commit ' .. short_commit_hash)
+      vim.fn['fugitive#ReloadStatus']()
+      if on_complete then
+        vim.schedule(on_complete)
+      end
+    end
+  end
+
   function M.fixup_commit(commit_hash, on_complete)
     if not commit_hash or commit_hash == '' then
       vim.notify('No commit hash provided', vim.log.levels.ERROR)
