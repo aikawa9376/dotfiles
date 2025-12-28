@@ -253,6 +253,7 @@ local token_definitions = {
   { name = "git_root", desc = "Repository root path for the source buffer (git)." },
   { name = "git_branch", desc = "Git branch name for the source buffer." },
   { name = "diagnostics", desc = "Fenced diagnostics code block formatted for prompts (````diagnostics````)." },
+  { name = "report", desc = "Instructions for creating or updating a Markdown summary/report file using the project's summary directory and filename prefix." },
 }
 
 -- Public helpers to register external transforms at runtime.
