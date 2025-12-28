@@ -45,11 +45,11 @@ return {
         if vim.fn.winwidth(0) < 80 then
           return false
         end
-        local ok = pcall(require, "project.project")
+        local ok = pcall(require, "project.api")
         if not ok then
           return false
         end
-        return require("project.project").get_project_root() ~= nil
+        return require("project.api").get_project_root() ~= nil
       end,
       check_git_workspace = function()
         if vim.fn.winwidth(0) < 80 then
