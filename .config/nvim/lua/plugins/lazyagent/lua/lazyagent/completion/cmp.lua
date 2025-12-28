@@ -72,14 +72,15 @@ local function make_item(tok, params)
   return item
 end
 
-local function make_custom_item(prefix_char, text, desc, kind)
+local function make_custom_item(prefix_char, text, desc, kind, doc)
   local label = text:match("^" .. vim.pesc(prefix_char)) and text or (prefix_char .. text)
   return {
     label = label,
     insertText = label,
     filterText = label:gsub("^" .. vim.pesc(prefix_char), ""),
     kind = kind,
-    documentation = { kind = "markdown", value = desc or "" },
+    documentation = { kind = "markdown", value = doc or desc or "" },
+    detail = desc or "",
   }
 end
 
@@ -93,19 +94,20 @@ end
 
 local function parse_entry(entry, prefix_char)
   if type(entry) == "string" then
-    return entry, nil
+    return entry, nil, nil
   end
   if type(entry) == "table" then
     local label = entry.label or entry.text or entry[1]
     local desc = entry.desc or entry.description or entry[2]
+    local doc = entry.doc or entry.documentation
     if label then
       if not label:match("^" .. vim.pesc(prefix_char)) then
         label = prefix_char .. label
       end
-      return label, desc
+      return label, desc, doc
     end
   end
-  return nil, nil
+  return nil, nil, nil
 end
 
 -- Complete calls: called by cmp when completion is needed.
@@ -138,11 +140,11 @@ function source.complete(self, params, callback)
 
     if slash_prefix then
       for _, v in ipairs(comps.slash or {}) do
-        local label, desc = parse_entry(v, "/")
+        local label, desc, doc = parse_entry(v, "/")
         if label then
           local key = label:gsub("^/", "")
           if key:sub(1, #slash_prefix) == slash_prefix then
-            table.insert(items, make_custom_item("/", label, desc or ("LazyAgent / command for " .. agent), kind))
+            table.insert(items, make_custom_item("/", label, desc or ("LazyAgent / command for " .. agent), kind, doc))
           end
         end
       end
@@ -150,11 +152,11 @@ function source.complete(self, params, callback)
 
     if at_prefix then
       for _, v in ipairs(comps.at or {}) do
-        local label, desc = parse_entry(v, "@")
+        local label, desc, doc = parse_entry(v, "@")
         if label then
           local key = label:gsub("^@", "")
           if key:sub(1, #at_prefix) == at_prefix then
-            table.insert(items, make_custom_item("@", label, desc or ("LazyAgent @ item for " .. agent), kind))
+            table.insert(items, make_custom_item("@", label, desc or ("LazyAgent @ item for " .. agent), kind, doc))
           end
         end
       end

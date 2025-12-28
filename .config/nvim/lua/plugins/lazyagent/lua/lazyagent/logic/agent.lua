@@ -4,6 +4,7 @@ local M = {}
 
 local state = require("lazyagent.logic.state")
 local backend = require("lazyagent.logic.backend")
+local path_completions = require("lazyagent.logic.path_completions")
 local completion_cache = {}
 
 local function load_default_completions(agent_name)
@@ -26,20 +27,6 @@ local function load_default_completions(agent_name)
 
   completion_cache[key] = {}
   return completion_cache[key]
-end
-
-local function list_fd_paths()
-  if vim.fn.executable("fd") ~= 1 then return {} end
-  local cmd = { "fd", "--type", "f", "--type", "d", "--max-results", "120", "--strip-cwd-prefix", "." }
-  local ok, out = pcall(vim.fn.systemlist, cmd)
-  if not ok or not out then return {} end
-  local items = {}
-  for _, line in ipairs(out) do
-    if line and line ~= "" then
-      table.insert(items, { label = "@" .. line, desc = "Path" })
-    end
-  end
-  return items
 end
 
 --- Gets the configuration for a specific interactive agent.
@@ -199,7 +186,7 @@ function M.get_scratch_completions(agent_name)
   local res = vim.tbl_deep_extend("force", {}, defaults or {}, provided or {})
   res.slash = normalize_completion_list(res.slash or {})
   -- Replace @ completions with fd-based file/dir list (common across agents).
-  local fd_paths = list_fd_paths()
+  local fd_paths = path_completions.list_fd_paths()
   if fd_paths and #fd_paths > 0 then
     res.at = fd_paths
   else
