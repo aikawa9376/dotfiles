@@ -45,11 +45,12 @@ return {
         if vim.fn.winwidth(0) < 80 then
           return false
         end
-        local ok = pcall(require, "project.api")
-        if not ok then
+        local ok, project_api = pcall(require, "project.api")
+        if not ok or not project_api.get_project_root then
           return false
         end
-        return require("project.api").get_project_root() ~= nil
+        local ok_root, root = pcall(project_api.get_project_root)
+        return ok_root and root ~= nil
       end,
       check_git_workspace = function()
         if vim.fn.winwidth(0) < 80 then
@@ -176,8 +177,12 @@ return {
           -- 3. プロジェクト名
           {
             function()
-              local root = require("project.api").get_project_root()
-              if root then
+              local ok, project_api = pcall(require, "project.api")
+              if not ok or not project_api.get_project_root then
+                return ""
+              end
+              local ok_root, root = pcall(project_api.get_project_root)
+              if ok_root and root then
                 -- パスの末尾（プロジェクト名）のみ表示
                 return " " .. vim.fn.fnamemodify(root, ":t")
               end
