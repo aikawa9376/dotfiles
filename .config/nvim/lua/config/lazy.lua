@@ -87,6 +87,7 @@ require("lazy").setup({
     { import = "plugins.resession" },
     { import = "plugins.kulala" },
     { import = "plugins.lazyagent" },
+    { import = "plugins.lazyconflict" },
     { import = "plugins.octo" },
     { import = "plugins.oil" },
     { import = "plugins.spider" },

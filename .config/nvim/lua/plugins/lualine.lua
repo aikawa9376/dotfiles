@@ -280,6 +280,14 @@ return {
             color_warn = colors.yellow,
             color_info = colors.cyan,
           },
+
+          -- 8. conflict
+          {
+            function()
+              return require("lazyconflict").statusline()
+            end,
+            color = { fg = "#ff2f87" },
+          }
         },
 
         -- 右側 (lualine_x)
