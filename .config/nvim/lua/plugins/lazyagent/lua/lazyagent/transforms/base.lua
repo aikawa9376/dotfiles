@@ -58,5 +58,10 @@ return {
     name = "commit",
     desc = "Commit staged changes with a descriptive message",
     trans = "- Stage all changes and commit them with a concise and descriptive message, following project conventions."
+  },
+  {
+    name = "diffstyle-code",
+    desc = "Propose changes using git conflict markers",
+    trans = "- Do not apply changes directly. Instead, insert git conflict markers (<<<<<<<, =======, >>>>>>>) into the file to show the proposed changes (incoming) against the current code (current). This allows the user to review and resolve the changes using a conflict resolution tool."
   }
 }

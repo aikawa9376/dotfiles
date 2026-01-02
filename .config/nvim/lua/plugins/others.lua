@@ -36,16 +36,6 @@ return {
     }
   },
   {
-    "akinsho/git-conflict.nvim",
-    opts = {
-      disable_diagnostics = true,
-      highlights = {
-        incoming = 'ConflictIncoming',
-        current = 'ConflictCurrent',
-      }
-    }
-  },
-  {
     "kdheepak/lazygit.nvim",
     keys = {
       { "<Leader>gl", "<cmd>LazyGit<CR>", silent = true }
