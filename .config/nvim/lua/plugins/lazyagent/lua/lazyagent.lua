@@ -9,6 +9,7 @@ local agent_logic = require("lazyagent.logic.agent")
 local session_logic = require("lazyagent.logic.session")
 local send_logic = require("lazyagent.logic.send")
 local backend_logic = require("lazyagent.logic.backend")
+local status_logic = require("lazyagent.logic.status")
 
 -- Expose public API from logic modules through the main M table
 M.open_history = cache_logic.open_history
@@ -19,6 +20,7 @@ M.close_all_sessions = session_logic.close_all_sessions
 M.toggle_session = session_logic.toggle_session
 M.send_visual = send_logic.send_visual
 M.send_line = send_logic.send_line
+M.status = status_logic.get_status
 
 --- Sets up the LazyAgent plugin with user-defined options.
 -- @param opts (table|nil) User options to merge with defaults.
@@ -34,7 +36,7 @@ function M.setup(opts)
     },
     interactive_agents = (function()
       local base = {
-        pane_size = 30,
+        pane_size = "60", -- Default to fixed 60 cells width
         scratch_filetype = "lazyagent",
         -- Edit here to override agent-specific settings
         -- submit_keys = { "C-m" },
@@ -106,6 +108,7 @@ function M.setup(opts)
     -- to preserve pasted content as one operation in supported terminals.
     use_bracketed_paste = true,
     send_number_keys_to_agent = true,
+    resume = false,
   }
 
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
@@ -142,7 +145,7 @@ function M.setup(opts)
     vim.api.nvim_create_autocmd("VimLeavePre", {
       group = group,
       callback = function()
-        session_logic.close_all_sessions()
+        session_logic.close_all_sessions(true)
       end,
       desc = "Close lazyagent tmux sessions on exit",
     })

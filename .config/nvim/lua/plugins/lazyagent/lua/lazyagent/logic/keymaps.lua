@@ -65,11 +65,30 @@ function M.register_scratch_keymaps(bufnr, opts)
 
   local function send_key_to_pane(key, insert_wrap)
     local p = get_pane()
+    local mod = backend_mod
+
+    if not p or p == "" then
+      -- fallback: if exactly one active agent is running, target its pane
+      local active_agents = agent_logic.get_active_agents()
+      if #active_agents == 1 then
+        local name = active_agents[1]
+        p = state.sessions[name] and state.sessions[name].pane_id or nil
+        -- Resolve backend for this agent
+        local _, m = backend_logic.resolve_backend_for_agent(name, nil)
+        mod = m
+      end
+    end
+
+    -- vim.notify(string.format("DEBUG: send_key key=%s pane=%s backend=%s", key, tostring(p), backend_name), vim.log.levels.INFO)
+    -- if agent_name and state.sessions[agent_name] then
+    --   vim.notify("DEBUG: state.sessions[" .. agent_name .. "] = " .. vim.inspect(state.sessions[agent_name]), vim.log.levels.INFO)
+    -- end
+
     if not p then return end
     if insert_wrap and vim.fn.mode():sub(1,1) == "i" then
       vim.cmd("stopinsert")
     end
-    backend_mod.send_keys(p, { key })
+    mod.send_keys(p, { key })
     if insert_wrap then restart_insert_if_valid(bufnr) end
   end
 
@@ -176,13 +195,30 @@ function M.register_scratch_keymaps(bufnr, opts)
   end, { desc = "Submit from insert mode" })
 
   -- Send & clear (scratch)
+  local function smart_send(insert_mode)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local has_content = false
+    for _, line in ipairs(lines) do
+      if line:match("%S") then
+        has_content = true
+        break
+      end
+    end
+
+    if has_content then
+      if insert_mode then vim.cmd("stopinsert") end
+      send_logic.send_buffer_and_clear(agent_name, bufnr)
+      if insert_mode then restart_insert_if_valid(bufnr) end
+    else
+      send_key_to_pane("Enter", insert_mode)
+    end
+  end
+
   safe_set("n", keys.send_and_clear or "<C-Space>", function()
-    send_logic.send_buffer_and_clear(agent_name, bufnr)
+    smart_send(false)
   end, { desc = "Send buffer and clear (scratch)" })
   safe_set("i", keys.send_and_clear or "<C-Space>", function()
-    vim.cmd("stopinsert")
-    send_logic.send_buffer_and_clear(agent_name, bufnr)
-    restart_insert_if_valid(bufnr)
+    smart_send(true)
   end, { desc = "Send buffer and clear (insert mode)" })
 
   -- Scroll mappings
@@ -323,6 +359,18 @@ function M.register_scratch_keymaps(bufnr, opts)
     end
     -- restart_insert_if_valid(bufnr)
   end, { desc = "Apply newer cached history to scratch buffer" })
+
+  -- Custom mappings for user request (C-j/k for navigation, C-Space for Enter)
+  safe_set("n", "<C-j>", function() 
+    -- vim.notify("DEBUG: C-j pressed", vim.log.levels.INFO)
+    send_key_to_pane("Down", false) 
+  end, { desc = "Send Down" })
+  safe_set("i", "<C-j>", function() 
+    -- vim.notify("DEBUG: C-j (insert) pressed", vim.log.levels.INFO)
+    send_key_to_pane("Down", true) 
+  end, { desc = "Send Down (insert)" })
+  safe_set("n", "<C-k>", function() send_key_to_pane("Up", false) end, { desc = "Send Up" })
+  safe_set("i", "<C-k>", function() send_key_to_pane("Up", true) end, { desc = "Send Up (insert)" })
 end
 
 return M
