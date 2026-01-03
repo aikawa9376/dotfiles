@@ -472,7 +472,7 @@ local function show_branch_help()
     'g?          show this help',
     '<CR>        Gedit branch',
     'coo         checkout branch',
-    'r           refresh list',
+    'R           refresh list',
     'cP          cherry-pick register (+)',
     '<Leader>gp  git push',
     'O           open PR (Octo)',
@@ -516,7 +516,7 @@ function M.setup(group)
         vim.cmd('Gedit ' .. branch)
       end, { buffer = bufnr, silent = true, desc = "Gedit branch" })
 
-      vim.keymap.set('n', 'r', function()
+      vim.keymap.set('n', 'R', function()
         refresh_branch_list(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Refresh branch list" })
 

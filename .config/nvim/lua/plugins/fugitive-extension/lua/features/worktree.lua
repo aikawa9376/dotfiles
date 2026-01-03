@@ -354,7 +354,7 @@ local function show_worktree_help()
     'a      add worktree',
     'd      remove worktree (prompt/force as needed)',
     'p      prune worktrees',
-    'r      refresh list',
+    'R      refresh list',
     'q      close buffer',
   })
 end
@@ -409,7 +409,7 @@ function M.setup(group)
         add_worktree(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Add worktree" })
 
-      vim.keymap.set('n', 'r', function()
+      vim.keymap.set('n', 'R', function()
         refresh_worktree_list(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Refresh list" })
 
