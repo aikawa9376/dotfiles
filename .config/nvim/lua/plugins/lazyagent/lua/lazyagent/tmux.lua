@@ -3,6 +3,7 @@ local DEFAULT_SUBMIT_DELAY_MS = 600
 local DEFAULT_SUBMIT_RETRY = 1
 local util = require("lazyagent.util")
 local state = require("lazyagent.logic.state")
+local POOL_SESSION = "lazyagent-pool"
 
 -- Run tmux command asynchronously using jobstart; fallback to a synchronous
 -- system call. This wrapper validates opts and captures jobstart errors.
@@ -79,8 +80,25 @@ function M.split(command, size, is_vertical, on_split)
     table.insert(args, "-h")
   end
   if size then
-    table.insert(args, "-p")
-    table.insert(args, tostring(size))
+    local s = tostring(size)
+    if s:match("%%$") then
+      table.insert(args, "-p")
+      table.insert(args, s:gsub("%%$", ""))
+    elseif type(size) == "number" and size <= 100 then
+       -- Heuristic: numbers <= 100 are likely percentages (legacy behavior)
+       -- unless user explicitly wants cells, they should use string "80" or number > 100?
+       -- But user wants to set fixed value.
+       -- Let's assume if it's a number, it's percentage for backward compat, 
+       -- UNLESS we change the default config to string "30%".
+       -- But the user said "fixed value".
+       -- Let's support string input without % as absolute.
+       table.insert(args, "-p")
+       table.insert(args, s)
+    else
+       -- String without % or number > 100 -> absolute lines/cells
+       table.insert(args, "-l")
+       table.insert(args, s)
+    end
   end
   if command and #command > 0 then
     table.insert(args, command)
@@ -191,6 +209,159 @@ function M.kill_pane(target_pane)
   run({ "kill-pane", "-t", target_pane })
 end
 
+function M.kill_pane_sync(target_pane)
+  local cmd = "tmux kill-pane -t " .. vim.fn.shellescape(target_pane)
+  vim.fn.system(cmd)
+end
+
+function M.get_pane_info(target_pane, on_info)
+  run({ "display-message", "-p", "-F", "#{pane_width},#{pane_height}", "-t", target_pane }, {
+    on_stdout = function(_, data)
+      if data and data[1] then
+        local w, h = data[1]:match("^(%d+),(%d+)$")
+        if w and h and on_info then
+          on_info({ width = tonumber(w), height = tonumber(h) })
+        end
+      end
+    end
+  })
+end
+
+function M.break_pane(target_pane)
+  -- Check synchronously to avoid race conditions during rapid calls
+  local cmd_check = { "tmux", "has-session", "-t", POOL_SESSION }
+  local ok = pcall(vim.fn.system, table.concat(cmd_check, " "))
+  local exists = (vim.v.shell_error == 0)
+
+  if not exists then
+    -- Create pool synchronously to ensure it exists for subsequent calls
+    -- Capture dummy pane ID to kill it later
+    local out = vim.fn.system({ "tmux", "new-session", "-d", "-s", POOL_SESSION, "-P", "-F", "#{pane_id}" })
+    local dummy_id = out:gsub("%s+", "")
+    vim.fn.system({ "tmux", "set-option", "-t", POOL_SESSION, "status", "off" })
+
+    -- Join agent pane (async)
+    run({ "join-pane", "-d", "-s", target_pane, "-t", POOL_SESSION }, {
+      on_exit = function()
+        -- Kill the dummy pane now that the agent is safely in the pool
+        if dummy_id and dummy_id ~= "" then
+          run({ "kill-pane", "-t", dummy_id })
+        end
+      end
+    })
+  else
+    -- Pool exists, just join
+    run({ "join-pane", "-d", "-s", target_pane, "-t", POOL_SESSION })
+  end
+end
+
+function M.break_pane_sync(target_pane)
+  local cmd_check = "tmux has-session -t " .. POOL_SESSION
+  pcall(vim.fn.system, cmd_check)
+  local exists = (vim.v.shell_error == 0)
+
+  if not exists then
+    local out = vim.fn.system("tmux new-session -d -s " .. POOL_SESSION .. " -P -F '#{pane_id}'")
+    local dummy_id = out:gsub("%s+", "")
+    vim.fn.system("tmux set-option -t " .. POOL_SESSION .. " status off")
+    
+    vim.fn.system("tmux join-pane -d -s " .. vim.fn.shellescape(target_pane) .. " -t " .. POOL_SESSION)
+    
+    if dummy_id and dummy_id ~= "" then
+      vim.fn.system("tmux kill-pane -t " .. dummy_id)
+    end
+  else
+    vim.fn.system("tmux join-pane -d -s " .. vim.fn.shellescape(target_pane) .. " -t " .. POOL_SESSION)
+  end
+end
+
+function M.join_pane(target_pane, size, is_vertical, on_done)
+  -- tmux join-pane [-bdfhIv] [-l size] [-s src-pane] [-t dst-pane]
+  -- Try putting size options BEFORE source/target options
+  
+  local args = { "join-pane", "-d" }
+  
+  if is_vertical then
+    table.insert(args, "-h")
+  end
+  
+  if size then
+    local s = tostring(size)
+    if s ~= "" then
+      -- If it looks like a percentage, use -p, otherwise -l
+      if s:match("%%$") or type(size) == "number" then
+         table.insert(args, "-p")
+         table.insert(args, s:gsub("%%$", ""))
+      else
+         table.insert(args, "-l")
+         table.insert(args, s)
+      end
+    end
+  end
+
+  table.insert(args, "-s")
+  table.insert(args, target_pane)
+  
+  local retrying = false
+  run(args, {
+    on_stderr = function(_, data)
+      if data then
+        local msg = table.concat(data, "")
+        if msg and msg ~= "" then
+          -- If join-pane fails with size, fallback to resize-pane method
+          if msg:match("size") or msg:match("usage") or msg:match("too many arguments") then
+             retrying = true
+             -- vim.notify("LazyAgent: join-pane failed (" .. msg .. "), retrying without size...", vim.log.levels.WARN)
+             -- Retry without size argument
+             M.join_pane(target_pane, nil, is_vertical, function(ok)
+                if ok and size then
+                   -- If join succeeded, try to resize explicitly
+                   local resize_args = { "resize-pane", "-t", target_pane }
+                   
+                   -- Note: is_vertical in lazyagent means side-by-side (vsplit), which corresponds to tmux -h.
+                   -- For side-by-side, we want to adjust width (-x).
+                   if is_vertical then
+                      table.insert(resize_args, "-x")
+                   else
+                      table.insert(resize_args, "-y")
+                   end
+                   
+                   local s = tostring(size)
+                   if s:match("%%$") then
+                      table.insert(resize_args, s)
+                   elseif type(size) == "number" and size <= 100 then
+                      table.insert(resize_args, s .. "%")
+                   else
+                      table.insert(resize_args, s)
+                   end
+                   
+                   -- Add a small delay before resizing to ensure layout has settled
+                   vim.defer_fn(function()
+                     run(resize_args, {
+                        on_exit = function()
+                           if on_done then on_done(true) end
+                        end
+                     })
+                   end, 100) -- Increased delay slightly to 100ms
+                else
+                   if on_done then on_done(ok) end
+                end
+             end)
+             return
+          else
+             vim.notify("LazyAgent join-pane error: " .. msg, vim.log.levels.ERROR)
+          end
+        end
+      end
+    end,
+    on_exit = function(_, code)
+      if not retrying and on_done then
+        vim.schedule(function() on_done(code == 0) end)
+      end
+    end,
+  })
+end
+
 function M.copy_mode(target_pane)
   run({ "copy-mode", "-t", target_pane })
 end
@@ -203,6 +374,11 @@ end
 function M.scroll_down(target_pane)
   M.copy_mode(target_pane)
   M.send_keys(target_pane, { "PageDown" })
+end
+
+function M.cleanup_if_idle()
+  -- No-op: tmux handles session destruction automatically when the last pane is removed.
+  -- We rely on prune_dummy_pane to remove the placeholder pane once a real agent pane enters the pool.
 end
 
 -- Save a text into tmux buffer name 'lazyagent-tmp'
@@ -360,6 +536,25 @@ function M.capture_pane(target_pane, on_output)
       end
     end,
   })
+end
+
+function M.capture_pane_sync(target_pane)
+  local args = { "capture-pane", "-J", "-p", "-S", "-", "-t", target_pane }
+  local cmd_arr = vim.list_extend({ "tmux" }, args)
+  local cmd_str = table.concat(vim.tbl_map(function(s) return vim.fn.shellescape(tostring(s)) end, cmd_arr), " ")
+  local ok, lines = pcall(vim.fn.systemlist, cmd_str)
+  if not ok or type(lines) ~= "table" then return "" end
+
+  local collected = {}
+  local esc = string.char(27)
+  for _, d in ipairs(lines) do
+    if d and d ~= "" then
+      if not d:match(esc .. "P.*kitty") then
+        table.insert(collected, d)
+      end
+    end
+  end
+  return table.concat(collected, "\n")
 end
 
 return M

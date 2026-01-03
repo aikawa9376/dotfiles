@@ -25,7 +25,24 @@ function M.setup_commands()
 
   try_create_user_command("LazyAgentClose", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
-    agent_logic.resolve_target_agent(explicit, nil, function(chosen)
+    
+    if explicit then
+      session_logic.close_session(explicit)
+      return
+    end
+
+    local active = agent_logic.get_active_agents()
+    if #active == 0 then
+      vim.notify("LazyAgentClose: no active agents found", vim.log.levels.INFO)
+      return
+    end
+
+    if #active == 1 then
+      session_logic.close_session(active[1])
+      return
+    end
+
+    vim.ui.select(active, { prompt = "Choose agent to close:" }, function(chosen)
       if not chosen then return end
       session_logic.close_session(chosen)
     end)
@@ -40,6 +57,17 @@ function M.setup_commands()
   end, {
       nargs = "?",
       desc = "Toggle the floating agent input buffer (open/close)",
+      complete = function()
+        return agent_logic.available_agents()
+      end,
+    })
+
+  try_create_user_command("LazyAgentRestart", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.restart_session(explicit)
+  end, {
+      nargs = "?",
+      desc = "Restart an agent session (close and reopen)",
       complete = function()
         return agent_logic.available_agents()
       end,

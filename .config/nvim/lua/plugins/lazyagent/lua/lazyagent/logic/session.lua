@@ -10,6 +10,7 @@ local keymaps_logic = require("lazyagent.logic.keymaps")
 local send_logic = require("lazyagent.logic.send")
 local cache_logic = require("lazyagent.logic.cache")
 local window = require("lazyagent.window")
+local persistence = require("lazyagent.logic.persistence")
 local ok_watch, watch = pcall(require, "lazyagent.watch")
 
 local function compute_launch_cmd(agent_cfg)
@@ -72,7 +73,76 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
   local requested_launch_cmd = compute_launch_cmd(agent_cfg)
 
+  -- Check for persisted session if resume is enabled
+  local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
+  if resume_enabled and not (state.sessions[agent_name] and state.sessions[agent_name].pane_id) then
+    local persisted_pane = persistence.get_session(agent_name)
+    if persisted_pane and persisted_pane ~= "" then
+      -- Verify if pane still exists
+      if backend_mod and type(backend_mod.pane_exists) == "function" and backend_mod.pane_exists(persisted_pane) then
+        -- Restore session state
+        local watch_enabled_val = true
+        if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
+        state.sessions[agent_name] = { 
+          pane_id = persisted_pane, 
+          last_output = "", 
+          backend = backend_name, 
+          watch_enabled = watch_enabled_val, 
+          launch_cmd = requested_launch_cmd,
+          hidden = true, -- Assume hidden/detached if we are restoring it
+          cwd = vim.fn.getcwd()
+        }
+        -- If it was hidden, we need to join it? ensure_session logic below handles reuse/hidden.
+        -- Just setting state.sessions[agent_name] is enough to trigger the reuse logic block below.
+      else
+        -- Invalid persisted session, clean it up
+        persistence.remove_session(agent_name)
+      end
+    end
+  end
+
   if reuse and state.sessions[agent_name] and state.sessions[agent_name].pane_id and state.sessions[agent_name].pane_id ~= "" then
+    -- If the session was hidden, restore it (join-pane)
+    if state.sessions[agent_name].hidden then
+      if backend_mod and type(backend_mod.join_pane) == "function" then
+        local size_arg = agent_cfg.pane_size or 30
+        -- Ignore last_size for now to enforce consistent sizing with initial launch
+        -- if state.sessions[agent_name].last_size then
+        --   if agent_cfg.is_vertical then
+        --     if state.sessions[agent_name].last_size.width then
+        --       size_arg = tostring(state.sessions[agent_name].last_size.width)
+        --     end
+        --   else
+        --     if state.sessions[agent_name].last_size.height then
+        --       size_arg = tostring(state.sessions[agent_name].last_size.height)
+        --     end
+        --   end
+        -- end
+        
+        backend_mod.join_pane(state.sessions[agent_name].pane_id, size_arg, agent_cfg.is_vertical or false, function(success)
+          if success then
+            state.sessions[agent_name].hidden = false
+            -- Wait a bit for tmux to resize and vim to update its dimensions before opening the window
+            vim.defer_fn(function()
+               on_ready(state.sessions[agent_name].pane_id)
+            end, 50)
+          else
+             -- If join failed, we might be in a bad state.
+             -- But we shouldn't set hidden=false, so next time we try again.
+             -- We should probably still call on_ready? No, if join failed, the pane is not visible.
+             -- But if we don't call on_ready, the user gets stuck.
+             -- Let's try to call on_ready anyway, maybe the user can see the error and retry.
+             -- But if hidden is true, ensure_session logic might loop?
+             -- No, ensure_session is called once.
+             -- If we return here, the agent window opens but is empty (no pane attached).
+             vim.notify("LazyAgent: failed to restore session pane", vim.log.levels.ERROR)
+             on_ready(state.sessions[agent_name].pane_id)
+          end
+        end)
+        return
+      end
+    end
+
     -- If the caller provided a watch preference, update the existing session's watch flag.
     if agent_cfg and agent_cfg.watch ~= nil then
       state.sessions[agent_name].watch_enabled = agent_cfg.watch
@@ -112,12 +182,22 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         local watch_enabled_val = true
         if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
 
-        state.sessions[agent_name] = { pane_id = pane_id, last_output = "", backend = backend_name, watch_enabled = watch_enabled_val, launch_cmd = requested_launch_cmd }
+        state.sessions[agent_name] = { pane_id = pane_id, last_output = "", backend = backend_name, watch_enabled = watch_enabled_val, launch_cmd = requested_launch_cmd, cwd = vim.fn.getcwd() }
         -- If this session requested watchers, enable them.
         if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
           pcall(watch.enable)
         end
-    on_ready(pane_id)
+        
+        -- Persist session if resume is enabled
+        local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
+        if resume_enabled then
+          persistence.update_session(agent_name, pane_id, state.sessions[agent_name].cwd)
+        end
+
+    -- Wait a bit for tmux to resize and vim to update its dimensions before opening the window
+    vim.defer_fn(function()
+      on_ready(pane_id)
+    end, 200)
   end)
 end
 
@@ -174,6 +254,30 @@ function M.capture_and_save_session(agent_name, open_file, on_done)
 end
 
 ---
+-- Restarts a specific agent's session.
+-- @param agent_name (string) The name of the agent.
+function M.restart_session(agent_name)
+  local function _restart(chosen)
+    if not chosen or chosen == "" then return end
+    
+    -- Close existing session
+    M.close_session(chosen)
+    
+    -- Start new session (reuse=false to force new pane)
+    -- We use a small delay to ensure cleanup is processed
+    vim.defer_fn(function()
+      M.start_interactive_session({ agent_name = chosen, reuse = false })
+    end, 100)
+  end
+
+  if agent_name and agent_name ~= "" then
+    _restart(agent_name)
+  else
+    agent_logic.resolve_target_agent(nil, nil, _restart)
+  end
+end
+
+---
 -- Closes a specific agent's session.
 -- @param agent_name (string) The name of the agent.
 function M.close_session(agent_name)
@@ -218,31 +322,79 @@ function M.close_session(agent_name)
     backend_mod.kill_pane(s.pane_id)
   end
   state.sessions[agent_name] = nil
+  persistence.remove_session(agent_name, s.cwd)
   maybe_disable_watchers()
+
+  if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
+    pcall(backend_mod.cleanup_if_idle)
+  end
 end
 
 ---
 -- Closes all active agent sessions.
-function M.close_all_sessions()
+function M.close_all_sessions(sync)
+  local seen_backends = {}
   for name, s in pairs(state.sessions) do
     if s and s.pane_id and s.pane_id ~= "" then
       local agent_cfg = agent_logic.get_interactive_agent(name)
       local save_conv = (agent_cfg and agent_cfg.save_conversation_on_close) or (state.opts and state.opts.save_conversation_on_close)
       local open_conv = (agent_cfg and agent_cfg.open_conversation_on_save) or (state.opts and state.opts.open_conversation_on_save)
       local _, backend_mod = backend_logic.resolve_backend_for_agent(name, nil)
-      if save_conv and backend_mod and type(backend_mod.capture_pane) == "function" then
-        M.capture_and_save_session(name, open_conv, function()
-          local _, backend_mod2 = backend_logic.resolve_backend_for_agent(name, nil)
-          if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
-            backend_mod2.kill_pane(s.pane_id)
+      if backend_mod then seen_backends[backend_mod] = true end
+
+      if sync then
+        local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
+        
+        if save_conv and backend_mod and type(backend_mod.capture_pane_sync) == "function" then
+           local text = backend_mod.capture_pane_sync(s.pane_id)
+           if text and text ~= "" then
+              local lines = vim.split(text, "\n")
+              local dir = cache_logic.get_cache_dir()
+              local prefix = cache_logic.build_cache_prefix()
+              local sanitized = tostring(name):gsub("[^%w-_]+", "-")
+              local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
+              local path = dir .. "/" .. filename
+              pcall(vim.fn.writefile, lines, path)
+           end
+        end
+        
+        if resume_enabled then
+          -- If resume is enabled, do NOT kill the pane.
+          -- Instead, ensure it is detached/hidden (break_pane) so it doesn't clutter the current window.
+          -- Since we are exiting, we might not need to break_pane if the parent tmux window is closing anyway,
+          -- but if we are in a shared tmux session, we should probably move it to the pool.
+          if not s.hidden then
+             if backend_mod and type(backend_mod.break_pane_sync) == "function" then
+                backend_mod.break_pane_sync(s.pane_id)
+             elseif backend_mod and type(backend_mod.break_pane) == "function" then
+                -- Fallback to async if sync not available (might fail on exit)
+                backend_mod.break_pane(s.pane_id)
+             end
           end
-          state.sessions[name] = nil
-        end)
-      else
-        if backend_mod and type(backend_mod.kill_pane) == "function" then
-          backend_mod.kill_pane(s.pane_id)
+        else
+          if backend_mod and type(backend_mod.kill_pane_sync) == "function" then
+             backend_mod.kill_pane_sync(s.pane_id)
+          elseif backend_mod and type(backend_mod.kill_pane) == "function" then
+             backend_mod.kill_pane(s.pane_id)
+          end
+          persistence.remove_session(name, s.cwd)
         end
         state.sessions[name] = nil
+      else
+        if save_conv and backend_mod and type(backend_mod.capture_pane) == "function" then
+          M.capture_and_save_session(name, open_conv, function()
+            local _, backend_mod2 = backend_logic.resolve_backend_for_agent(name, nil)
+            if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
+              backend_mod2.kill_pane(s.pane_id)
+            end
+            state.sessions[name] = nil
+          end)
+        else
+          if backend_mod and type(backend_mod.kill_pane) == "function" then
+            backend_mod.kill_pane(s.pane_id)
+          end
+          state.sessions[name] = nil
+        end
       end
     else
       state.sessions[name] = nil
@@ -251,6 +403,12 @@ function M.close_all_sessions()
   if ok_watch and watch and type(watch.disable) == "function" then
     pcall(watch.disable)
   end
+
+   for backend_mod, _ in pairs(seen_backends) do
+     if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
+       pcall(backend_mod.cleanup_if_idle)
+     end
+   end
 end
 
 ---
@@ -294,6 +452,27 @@ function M.toggle_session(agent_name)
         vim.api.nvim_buf_delete(bufnr, { force = true })
       end
       state.open_agent = nil
+
+      -- Hide the tmux pane (break-pane)
+      if state.sessions[chosen] and state.sessions[chosen].pane_id then
+        local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen, nil)
+        if backend_mod and type(backend_mod.break_pane) == "function" then
+          -- Try to save size before breaking
+          if type(backend_mod.get_pane_info) == "function" then
+            backend_mod.get_pane_info(state.sessions[chosen].pane_id, function(info)
+              if info then
+                state.sessions[chosen].last_size = info
+              end
+              backend_mod.break_pane(state.sessions[chosen].pane_id)
+              state.sessions[chosen].hidden = true
+            end)
+          else
+            backend_mod.break_pane(state.sessions[chosen].pane_id)
+            state.sessions[chosen].hidden = true
+          end
+        end
+      end
+
       -- if there is no input to show, just close and exit
       if not initial_input then
         return

@@ -18,6 +18,8 @@ return {
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
+    backend = "tmux",
+    resume = true,
     scratch_keymaps = {
       close = "q",
       send_and_clear = "<C-Space>",
