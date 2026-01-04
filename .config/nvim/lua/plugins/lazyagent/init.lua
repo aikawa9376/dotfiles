@@ -14,12 +14,13 @@ return {
   cmd = {
     "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
     "LazyAgentHistoryList", "LazyAgentClose", "LazyAgentOpenConversation",
-    "LazyAgentResumeConversation", "LazyAgentSummary",
+    "LazyAgentResumeConversation", "LazyAgentSummary", "LazyAgentRestore",
+    "LazyAgentDetach",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
     backend = "tmux",
-    resume = true,
+    resume = false,
     scratch_keymaps = {
       close = "q",
       send_and_clear = "<C-Space>",

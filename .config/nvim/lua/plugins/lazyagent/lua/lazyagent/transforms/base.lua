@@ -5,6 +5,11 @@ return {
     trans = "- Analyze the current changes and provide concise insights or next steps."
   },
   {
+    name = "ask",
+    desc = "Ask a question about the code without requesting changes",
+    trans = "- This is a question, not a request for code changes. Please explain the code or investigate the issue as requested."
+  },
+  {
     name = "refactor",
     desc = "Refactor code across a path or the entire repository while preserving behavior",
     trans = "- Refactor selected code to improve readability, remove duplication, and improve naming while preserving behavior.\n- If a filename or directory path is provided after the token, restrict the refactor to that path; if no path is provided, operate on the entire repository (git root)."
