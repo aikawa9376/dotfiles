@@ -73,9 +73,10 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
   local requested_launch_cmd = compute_launch_cmd(agent_cfg)
 
-  -- Check for persisted session if resume is enabled
-  local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
-  if resume_enabled and not (state.sessions[agent_name] and state.sessions[agent_name].pane_id) then
+  -- Check for persisted session.
+  -- Even if resume is disabled globally, if a persisted session exists (e.g. explicitly Detached),
+  -- we should try to restore it.
+  if not (state.sessions[agent_name] and state.sessions[agent_name].pane_id) then
     local persisted_pane = persistence.get_session(agent_name)
     if persisted_pane and persisted_pane ~= "" then
       -- Verify if pane still exists
@@ -343,7 +344,7 @@ function M.close_all_sessions(sync)
       if backend_mod then seen_backends[backend_mod] = true end
 
       if sync then
-        local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
+        local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume) or (s and s.force_resume)
         
         if save_conv and backend_mod and type(backend_mod.capture_pane_sync) == "function" then
            local text = backend_mod.capture_pane_sync(s.pane_id)
@@ -533,6 +534,61 @@ function M.resume_conversation(agent_name)
     local path = ((dir or ""):gsub("/$", "")) .. "/" .. choice
     start_with_path(path)
   end)
+end
+
+---
+-- Detaches an agent session, persisting it for later restoration even if resume is disabled globally.
+-- @param agent_name (string|nil) The name of the agent.
+function M.detach_session(agent_name)
+  local function _detach(chosen)
+    if not chosen or chosen == "" then return end
+
+    local s = state.sessions[chosen]
+    if not s or not s.pane_id then
+      vim.notify("LazyAgentDetach: no active session for '" .. chosen .. "'", vim.log.levels.WARN)
+      return
+    end
+
+    -- Mark for persistence so close_all_sessions won't kill it
+    s.force_resume = true
+    persistence.update_session(chosen, s.pane_id, s.cwd)
+
+    -- Close the floating window if it's open for this agent
+    if state.open_agent == chosen and window.is_open() then
+      local bufnr = window.get_bufnr()
+      window.close()
+      if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end
+      state.open_agent = nil
+    end
+
+    -- Hide the pane (break_pane)
+    if not s.hidden then
+      local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen, nil)
+      if backend_mod and type(backend_mod.break_pane) == "function" then
+        -- Try to save size before breaking
+        if type(backend_mod.get_pane_info) == "function" then
+          backend_mod.get_pane_info(s.pane_id, function(info)
+            if info then
+              s.last_size = info
+            end
+            backend_mod.break_pane(s.pane_id)
+            s.hidden = true
+            vim.notify("Agent '" .. chosen .. "' detached and persisted.", vim.log.levels.INFO)
+          end)
+        else
+          backend_mod.break_pane(s.pane_id)
+          s.hidden = true
+          vim.notify("Agent '" .. chosen .. "' detached and persisted.", vim.log.levels.INFO)
+        end
+      end
+    else
+      vim.notify("Agent '" .. chosen .. "' is already detached.", vim.log.levels.INFO)
+    end
+  end
+
+  agent_logic.resolve_target_agent(agent_name, nil, _detach)
 end
 
 ---

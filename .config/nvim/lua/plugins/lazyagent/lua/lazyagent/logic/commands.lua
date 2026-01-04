@@ -73,6 +73,31 @@ function M.setup_commands()
       end,
     })
 
+  try_create_user_command("LazyAgentRestore", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    agent_logic.resolve_target_agent(explicit, nil, function(chosen)
+      if not chosen then return end
+      session_logic.start_interactive_session({ agent_name = chosen, reuse = true, resume = true })
+    end)
+  end, {
+      nargs = "?",
+      desc = "Restore a persisted agent session even if resume is disabled in config",
+      complete = function()
+        return agent_logic.available_agents()
+      end,
+    })
+
+  try_create_user_command("LazyAgentDetach", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.detach_session(explicit)
+  end, {
+      nargs = "?",
+      desc = "Detach and persist an agent session (keep alive in background)",
+      complete = function()
+        return agent_logic.available_agents()
+      end,
+    })
+
   -- User command to open history logs saved by lazyagent (from cache).
   try_create_user_command("LazyAgentHistoryList", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
