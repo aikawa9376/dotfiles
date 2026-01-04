@@ -4,11 +4,12 @@ local M = {}
 ---@param title string
 ---@param lines string[]
 function M.show(title, lines)
+  local parent_win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
-  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-  vim.api.nvim_buf_set_option(buf, 'swapfile', false)
-  vim.api.nvim_buf_set_option(buf, 'filetype', 'fugitivehelp')
+  vim.bo[buf].buftype = 'nofile'
+  vim.bo[buf].bufhidden = 'wipe'
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].filetype = 'fugitivehelp'
 
   local content = {}
   if title and title ~= '' then
@@ -43,6 +44,29 @@ function M.show(title, lines)
   vim.keymap.set('n', 'q', function()
     if win and vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
+    end
+  end, { buffer = buf, nowait = true, silent = true })
+
+  vim.keymap.set('n', '<CR>', function()
+    local line = vim.api.nvim_get_current_line()
+    local key = line:match('^%s*(%S+)')
+    if not key then return end
+
+    -- Handle multiple keys separated by /
+    if key:find('/') then
+      key = vim.split(key, '/')[1]
+    end
+
+    -- Close help window
+    if win and vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+
+    -- Execute key in parent window
+    if parent_win and vim.api.nvim_win_is_valid(parent_win) then
+      vim.api.nvim_set_current_win(parent_win)
+      local term_key = vim.api.nvim_replace_termcodes(key, true, false, true)
+      vim.api.nvim_feedkeys(term_key, 'm', false)
     end
   end, { buffer = buf, nowait = true, silent = true })
 end
