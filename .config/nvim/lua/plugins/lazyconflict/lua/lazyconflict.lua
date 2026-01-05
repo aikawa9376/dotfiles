@@ -603,6 +603,11 @@ function M.check(opts)
   end
 
   -- "git" モード (デフォルト): git diff --diff-filter=U で競合ファイルを取得
+  if #vim.fs.find(".git", { path = cwd, upward = true }) == 0 then
+    set_conflicts({})
+    return
+  end
+
   local files = {}
   local stderr_git = {}
   state.git_job = fn.jobstart({ "git", "diff", "--name-only", "--diff-filter=U" }, {
