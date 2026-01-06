@@ -42,13 +42,10 @@ function M.get_active_agents()
   local active = {}
   for name, s in pairs(state.sessions or {}) do
     if s and s.pane_id and s.pane_id ~= "" then
-        local _, backend_mod = backend.resolve_backend_for_agent(name, nil)
-        if backend_mod and type(backend_mod.pane_exists) == "function" then
-          if backend_mod.pane_exists(s.pane_id) then table.insert(active, name) end
-        else
-          -- If pane_exists isn't available on this backend, consider the session table as truth.
-          table.insert(active, name)
-        end
+        -- Optimization: Do not check backend.pane_exists(s.pane_id) synchronously here.
+        -- It causes lualine to lag/blink because it runs `tmux list-panes` on every redraw.
+        -- We assume state.sessions is accurate enough for status line display.
+        table.insert(active, name)
       end
     end
     table.sort(active)

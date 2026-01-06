@@ -151,6 +151,22 @@ local function replace_token(token, opts, meta)
     return get_abs_path(source_bufnr) or ""
   end
 
+  if token == "cursor" then
+    local path = get_rel_to_root_path(source_bufnr) or get_abs_path(source_bufnr) or ""
+    -- Try to find a window displaying this buffer to get live cursor
+    local winid = vim.fn.bufwinid(source_bufnr)
+    if winid ~= -1 then
+      local cursor = vim.api.nvim_win_get_cursor(winid)
+      return string.format("@%s:%d:%d", path, cursor[1], cursor[2] + 1)
+    end
+    -- Fallback: try last cursor position mark
+    local mark = vim.api.nvim_buf_get_mark(source_bufnr, '"')
+    if mark and mark[1] > 0 then
+       return string.format("@%s:%d:%d", path, mark[1], mark[2] + 1)
+    end
+    return "@" .. path
+  end
+
   if token == "buffers" then
     return list_buffers_text(opts)
   end
@@ -234,12 +250,15 @@ function M.expand(text, opts)
   opts = opts or {}
   local meta = {}
   if not text then return "", meta end
+
+  -- First, expand tokens matching pattern #token
   local ok, expanded = pcall(function()
     return tostring(text):gsub("#([%w_%-]+)", function(tok)
       return replace_token(tok, opts, meta)
     end)
   end)
   if not ok then expanded = tostring(text) end
+
   return expanded, meta
 end
 
@@ -249,6 +268,7 @@ local token_definitions = {
   { name = "buffer_abs", desc = "Absolute path of the source buffer." },
   { name = "buffers", desc = "Newline-separated list of listed buffers with @ prefix (relative paths by default)." },
   { name = "buffers_abs", desc = "Newline-separated list of listed buffers with @ prefix (absolute paths)." },
+  { name = "cursor", desc = "Path to the source buffer, prefixed with '@' and including line and column (e.g., @path:line:col)." },
   { name = "directory", desc = "Directory of the source buffer (relative to git root if available), prefixed with '@'." },
   { name = "git_root", desc = "Repository root path for the source buffer (git)." },
   { name = "git_branch", desc = "Git branch name for the source buffer." },

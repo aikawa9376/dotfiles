@@ -50,6 +50,22 @@ function M.open_float(bufnr, opts)
   -- Center the floating window
   local width = math.floor(vim.o.columns * (opts.is_vertical and 0.6 or 0.5))
   local height = math.floor(vim.o.lines * (opts.is_vertical and 0.3 or 0.5))
+  
+  -- Apply specific window overrides if provided
+  if opts.window_opts then
+     if opts.window_opts.width_ratio then
+        width = math.floor(vim.o.columns * opts.window_opts.width_ratio)
+     elseif opts.window_opts.width then
+        width = opts.window_opts.width
+     end
+     
+     if opts.window_opts.height_ratio then
+        height = math.floor(vim.o.lines * opts.window_opts.height_ratio)
+     elseif opts.window_opts.height then
+        height = opts.window_opts.height
+     end
+  end
+
   local row = math.floor((vim.o.lines - height) / 2)
   local col = math.floor((vim.o.columns - width) / 2)
 
@@ -255,6 +271,16 @@ function M.get_bufnr()
     return vim.api.nvim_win_get_buf(winid)
   end
   return nil
+end
+
+function M.set_title(title)
+  if winid and vim.api.nvim_win_is_valid(winid) then
+    local config = vim.api.nvim_win_get_config(winid)
+    if config.relative ~= "" then
+       config.title = title
+       pcall(vim.api.nvim_win_set_config, winid, config)
+    end
+  end
 end
 
 return M

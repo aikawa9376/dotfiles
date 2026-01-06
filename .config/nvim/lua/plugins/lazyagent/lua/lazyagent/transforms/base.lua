@@ -68,5 +68,10 @@ return {
     name = "diffstyle-code",
     desc = "Propose changes using git conflict markers",
     trans = "- Do not apply changes directly. Instead, insert git conflict markers (<<<<<<<, =======, >>>>>>>) into the file to show the proposed changes (incoming) against the current code (current). This allows the user to review and resolve the changes using a conflict resolution tool."
+  },
+  {
+    name = "small-fix",
+    desc = "Request a small, targeted fix with minimal scope",
+    trans = "- Make minimal changes to correct the issue. Avoid refactoring, style changes, or modifying unrelated code. Keep the scope of the change as small as possible."
   }
 }

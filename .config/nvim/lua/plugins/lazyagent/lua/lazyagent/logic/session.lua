@@ -103,8 +103,28 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   end
 
   if reuse and state.sessions[agent_name] and state.sessions[agent_name].pane_id and state.sessions[agent_name].pane_id ~= "" then
+    -- If stay_hidden is requested (Instant Mode) and session is NOT hidden, hide it.
+    if agent_cfg.stay_hidden and not state.sessions[agent_name].hidden then
+       if backend_mod and type(backend_mod.break_pane) == "function" then
+          backend_mod.break_pane(state.sessions[agent_name].pane_id)
+          state.sessions[agent_name].hidden = true
+       end
+    end
+
     -- If the session was hidden, restore it (join-pane)
     if state.sessions[agent_name].hidden then
+      -- If stay_hidden is explicitly true, or if it's nil (default) and we are in instant mode, keep it hidden.
+      -- If stay_hidden is explicitly false (e.g. toggle/open), we proceed to join (show) it.
+      local should_keep_hidden = agent_cfg.stay_hidden
+      if should_keep_hidden == nil and state.sessions[agent_name].mode == "instant" then
+         should_keep_hidden = true
+      end
+
+      if should_keep_hidden then
+         on_ready(state.sessions[agent_name].pane_id)
+         return
+      end
+
       if backend_mod and type(backend_mod.join_pane) == "function" then
         local size_arg = agent_cfg.pane_size or 30
         -- Ignore last_size for now to enforce consistent sizing with initial launch
@@ -123,6 +143,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         backend_mod.join_pane(state.sessions[agent_name].pane_id, size_arg, agent_cfg.is_vertical or false, function(success)
           if success then
             state.sessions[agent_name].hidden = false
+            state.sessions[agent_name].mode = nil
             -- Wait a bit for tmux to resize and vim to update its dimensions before opening the window
             vim.defer_fn(function()
                on_ready(state.sessions[agent_name].pane_id)
@@ -173,33 +194,65 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
     end
   end
 
-  backend_mod.split(requested_launch_cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, function(pane_id)
-    if not pane_id or pane_id == "" then
-      vim.notify("Failed to create pane for agent " .. tostring(agent_name), vim.log.levels.ERROR)
-      return
+  local split_opts
+  split_opts = {
+    on_split = function(pane_id)
+      if not pane_id or pane_id == "" then
+        vim.notify("Failed to create pane for agent " .. tostring(agent_name), vim.log.levels.ERROR)
+        return
+      end
+
+      -- Determine this session's watch preference (default true)
+      local watch_enabled_val = true
+      if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
+
+      -- Determine initial mode (e.g. "instant" if stay_hidden is requested)
+      local mode = nil
+      if agent_cfg and agent_cfg.stay_hidden then mode = "instant" end
+      if agent_cfg and agent_cfg.mode then mode = agent_cfg.mode end
+
+      state.sessions[agent_name] = { 
+        pane_id = pane_id, 
+        last_output = "", 
+        backend = backend_name, 
+        watch_enabled = watch_enabled_val, 
+        launch_cmd = requested_launch_cmd, 
+        cwd = vim.fn.getcwd(),
+        hidden = (agent_cfg.stay_hidden == true),
+        mode = mode
+      }
+      -- If this session requested watchers, enable them.
+      if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
+        pcall(watch.enable)
+      end
+      
+      -- Persist session if resume is enabled
+      local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
+      if resume_enabled then
+        persistence.update_session(agent_name, pane_id, state.sessions[agent_name].cwd)
+      end
+
+      -- If stay_hidden is requested (Instant Mode), and we didn't use target_session (fallback),
+      -- ensure it's moved to pool.
+      if agent_cfg.stay_hidden and not split_opts.target_session then
+         if backend_mod and type(backend_mod.break_pane) == "function" then
+            backend_mod.break_pane(pane_id)
+            state.sessions[agent_name].hidden = true
+         end
+      end
+
+      -- Wait a bit for tmux to resize and vim to update its dimensions before opening the window
+      vim.defer_fn(function()
+        on_ready(pane_id)
+      end, 200)
     end
+  }
 
-        -- Determine this session's watch preference (default true)
-        local watch_enabled_val = true
-        if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
+  if agent_cfg.stay_hidden then
+     split_opts.target_session = "lazyagent-pool"
+  end
 
-        state.sessions[agent_name] = { pane_id = pane_id, last_output = "", backend = backend_name, watch_enabled = watch_enabled_val, launch_cmd = requested_launch_cmd, cwd = vim.fn.getcwd() }
-        -- If this session requested watchers, enable them.
-        if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
-          pcall(watch.enable)
-        end
-        
-        -- Persist session if resume is enabled
-        local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
-        if resume_enabled then
-          persistence.update_session(agent_name, pane_id, state.sessions[agent_name].cwd)
-        end
-
-    -- Wait a bit for tmux to resize and vim to update its dimensions before opening the window
-    vim.defer_fn(function()
-      on_ready(pane_id)
-    end, 200)
-  end)
+  backend_mod.split(requested_launch_cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, split_opts)
 end
 
 --- Captures and saves the conversation text for the given agent's session.
@@ -481,10 +534,54 @@ function M.toggle_session(agent_name)
     end
 
     -- Otherwise, start an interactive session (reuse = true by default).
-    M.start_interactive_session({ agent_name = chosen, reuse = true, initial_input = initial_input })
+    M.start_interactive_session({ agent_name = chosen, reuse = true, initial_input = initial_input, stay_hidden = false })
   end
 
   agent_logic.resolve_target_agent(agent_name, nil, _toggle)
+end
+
+---
+-- Opens an "Instant" window for the agent.
+-- The agent runs in the background (hidden/pool), and the window is used for quick interactions.
+-- @param agent_name (string|nil) The name of the agent.
+function M.open_instant(agent_name)
+  local function _open(chosen)
+    if not chosen or chosen == "" then return end
+
+    -- If the floating input is already open for this agent, focus it.
+    if state.open_agent == chosen and window.is_open() then
+       local bufnr = window.get_bufnr()
+       if bufnr then
+          local winid = vim.fn.bufwinid(bufnr)
+          if winid ~= -1 then
+             vim.api.nvim_set_current_win(winid)
+             vim.cmd("startinsert")
+             return
+          end
+       end
+    end
+
+    -- Start session with stay_hidden=true
+    M.start_interactive_session({ 
+      agent_name = chosen, 
+      reuse = true, 
+      stay_hidden = true,
+      mode = "instant",
+      title = " " .. chosen .. " (Instant) ",
+      -- Minimal window for instant mode
+      window_opts = {
+         height = 3,
+         width_ratio = 0.4, 
+      }
+    })
+    
+    -- Mark session as instant mode
+    if state.sessions[chosen] then
+       state.sessions[chosen].mode = "instant"
+    end
+  end
+
+  agent_logic.resolve_target_agent(agent_name, nil, _open)
 end
 
 ---
@@ -658,6 +755,14 @@ function M.start_interactive_session(opts)
       open_opts.start_in_insert_on_focus = (state.opts and state.opts.start_in_insert_on_focus) or false
     end
     open_opts.is_vertical = agent_cfg.is_vertical or false
+    
+    -- Pass specific window overrides (size, etc)
+    if opts.window_opts then
+       open_opts.window_opts = opts.window_opts
+    end
+    if opts.title then
+       open_opts.title = opts.title
+    end
 
     window.open(bufnr, open_opts)
 

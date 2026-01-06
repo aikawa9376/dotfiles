@@ -10,6 +10,8 @@ local cache_logic = require("lazyagent.logic.cache")
 local transforms = require("lazyagent.transforms")
 local util = require("lazyagent.util")
 local config = require("lazyagent.logic.config")
+local window = require("lazyagent.window")
+local status = require("lazyagent.logic.status")
 
 -- Helper to send text to a pane and optionally kill it after a delay.
 -- Used for one-shot commands.
@@ -213,6 +215,9 @@ function M.send_buffer_and_clear(agent_name, bufnr)
         debug = state.opts.debug,
       })
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
+
+      -- Monitor if instant mode or hidden
+      status.start_monitor(agent_name, pane_id, backend_mod)
     end)
     return
   end

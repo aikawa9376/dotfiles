@@ -18,6 +18,7 @@ M.send_to_cli = send_logic.send_to_cli
 M.close_session = session_logic.close_session
 M.close_all_sessions = session_logic.close_all_sessions
 M.toggle_session = session_logic.toggle_session
+M.open_instant = session_logic.open_instant
 M.send_visual = send_logic.send_visual
 M.send_line = send_logic.send_line
 M.status = status_logic.get_status
@@ -109,6 +110,10 @@ function M.setup(opts)
     use_bracketed_paste = true,
     send_number_keys_to_agent = true,
     resume = false,
+    -- Options specific to Instant Mode
+    instant_mode = {
+      append_text = nil, -- e.g. " #translate"
+    },
   }
 
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})

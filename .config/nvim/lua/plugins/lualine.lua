@@ -352,7 +352,6 @@ return {
           -- 6. al-agent ステータス
           {
             require("lazyagent").status,
-            cond = function() return require("lazyagent").status() ~= nil end,
           },
 
           -- 7. Obsession ステータス
