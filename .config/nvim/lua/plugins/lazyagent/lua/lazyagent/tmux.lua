@@ -5,6 +5,22 @@ local util = require("lazyagent.util")
 local state = require("lazyagent.logic.state")
 local POOL_SESSION = "lazyagent-pool"
 
+-- Ensure the pool session exists.
+function M.ensure_pool()
+  local cmd_check = { "tmux", "has-session", "-t", POOL_SESSION }
+  pcall(vim.fn.system, table.concat(cmd_check, " "))
+  local exists = (vim.v.shell_error == 0)
+
+  if not exists then
+    -- Create pool synchronously
+    local out = vim.fn.system({ "tmux", "new-session", "-d", "-s", POOL_SESSION, "-P", "-F", "#{pane_id}" })
+    local dummy_id = out:gsub("%s+", "")
+    vim.fn.system({ "tmux", "set-option", "-t", POOL_SESSION, "status", "off" })
+    return dummy_id -- Return dummy id to kill if needed
+  end
+  return nil
+end
+
 -- Run tmux command asynchronously using jobstart; fallback to a synchronous
 -- system call. This wrapper validates opts and captures jobstart errors.
 local function run(args, opts)
@@ -71,9 +87,27 @@ local function run(args, opts)
 end
 
 -- Split a new tmux pane and return the pane id through on_split callback.
-function M.split(command, size, is_vertical, on_split)
+function M.split(command, size, is_vertical, on_split_or_opts)
+  local on_split = on_split_or_opts
+  local opts = {}
+  if type(on_split_or_opts) == "table" then
+     opts = on_split_or_opts
+     on_split = opts.on_split
+  end
+
   -- create the pane in the background (don't switch focus) and print the pane id
   local args = { "split-window", "-d", "-P", "-F", "#{pane_id}" }
+  
+  local dummy_id_to_kill = nil
+  -- If target session provided (e.g. pool), ensure it exists and target it
+  if opts.target_session then
+     if opts.target_session == POOL_SESSION then
+        dummy_id_to_kill = M.ensure_pool()
+     end
+     table.insert(args, "-t")
+     table.insert(args, opts.target_session)
+  end
+
   -- 'is_vertical' here should match builtin/vsplit behavior (side-by-side).
   -- In tmux, side-by-side splits are created with '-h' (horizontal flag).
   if is_vertical then
@@ -122,6 +156,9 @@ function M.split(command, size, is_vertical, on_split)
       end
     end,
     on_exit = function()
+      if dummy_id_to_kill and pane_id ~= "" then
+         run({ "kill-pane", "-t", dummy_id_to_kill })
+      end
       if on_split and pane_id ~= "" then
         -- schedule on_split on the main loop
         vim.schedule_wrap(on_split)(pane_id)
@@ -229,49 +266,25 @@ end
 
 function M.break_pane(target_pane)
   -- Check synchronously to avoid race conditions during rapid calls
-  local cmd_check = { "tmux", "has-session", "-t", POOL_SESSION }
-  local ok = pcall(vim.fn.system, table.concat(cmd_check, " "))
-  local exists = (vim.v.shell_error == 0)
-
-  if not exists then
-    -- Create pool synchronously to ensure it exists for subsequent calls
-    -- Capture dummy pane ID to kill it later
-    local out = vim.fn.system({ "tmux", "new-session", "-d", "-s", POOL_SESSION, "-P", "-F", "#{pane_id}" })
-    local dummy_id = out:gsub("%s+", "")
-    vim.fn.system({ "tmux", "set-option", "-t", POOL_SESSION, "status", "off" })
-
-    -- Join agent pane (async)
-    run({ "join-pane", "-d", "-s", target_pane, "-t", POOL_SESSION }, {
-      on_exit = function()
-        -- Kill the dummy pane now that the agent is safely in the pool
-        if dummy_id and dummy_id ~= "" then
-          run({ "kill-pane", "-t", dummy_id })
-        end
+  local dummy_id = M.ensure_pool()
+  
+  -- Join agent pane (async)
+  run({ "join-pane", "-d", "-s", target_pane, "-t", POOL_SESSION }, {
+    on_exit = function()
+      -- Kill the dummy pane now that the agent is safely in the pool
+      if dummy_id and dummy_id ~= "" then
+        run({ "kill-pane", "-t", dummy_id })
       end
-    })
-  else
-    -- Pool exists, just join
-    run({ "join-pane", "-d", "-s", target_pane, "-t", POOL_SESSION })
-  end
+    end
+  })
 end
 
 function M.break_pane_sync(target_pane)
-  local cmd_check = "tmux has-session -t " .. POOL_SESSION
-  pcall(vim.fn.system, cmd_check)
-  local exists = (vim.v.shell_error == 0)
-
-  if not exists then
-    local out = vim.fn.system("tmux new-session -d -s " .. POOL_SESSION .. " -P -F '#{pane_id}'")
-    local dummy_id = out:gsub("%s+", "")
-    vim.fn.system("tmux set-option -t " .. POOL_SESSION .. " status off")
-    
-    vim.fn.system("tmux join-pane -d -s " .. vim.fn.shellescape(target_pane) .. " -t " .. POOL_SESSION)
-    
-    if dummy_id and dummy_id ~= "" then
-      vim.fn.system("tmux kill-pane -t " .. dummy_id)
-    end
-  else
-    vim.fn.system("tmux join-pane -d -s " .. vim.fn.shellescape(target_pane) .. " -t " .. POOL_SESSION)
+  local dummy_id = M.ensure_pool()
+  vim.fn.system("tmux join-pane -d -s " .. vim.fn.shellescape(target_pane) .. " -t " .. POOL_SESSION)
+  
+  if dummy_id and dummy_id ~= "" then
+    vim.fn.system("tmux kill-pane -t " .. dummy_id)
   end
 end
 

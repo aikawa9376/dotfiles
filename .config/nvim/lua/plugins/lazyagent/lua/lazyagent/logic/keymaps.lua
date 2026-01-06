@@ -106,6 +106,24 @@ function M.register_scratch_keymaps(bufnr, opts)
     local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr, scratch_bufnr = bufnr })
     text = expanded_text or text
 
+     -- Append custom tag if configured AND in instant mode
+    local s = agent_name and state.sessions[agent_name]
+    if s and s.mode == "instant" then
+       local append_text = (state.opts and state.opts.instant_mode and state.opts.instant_mode.append_text) or nil
+       if append_text and append_text ~= "" then
+          -- Expand tokens in append_text (e.g., #translate)
+          local expanded_append = transforms.expand(append_text, { source_bufnr = source_bufnr, scratch_bufnr = bufnr })
+          append_text = expanded_append or append_text
+
+          -- Ensure we append nicely (with space if needed, avoid double space)
+          if not text:match("%s$") and not append_text:match("^%s") then
+             text = text .. " " .. append_text
+          else
+             text = text .. append_text
+          end
+       end
+    end
+
     if text and #text > 0 then
       local submit_keys = config.pref(agent_cfg, "submit_keys", nil)
       local submit_delay = config.pref(agent_cfg, "submit_delay", 600)
@@ -123,6 +141,11 @@ function M.register_scratch_keymaps(bufnr, opts)
         use_bracketed_paste = _use_bracketed_paste,
       })
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
+
+      -- Start monitoring for completion (spinner/loader) if appropriate
+      local status_logic = require("lazyagent.logic.status")
+      status_logic.start_monitor(agent_name, pane, backend_mod)
+
       if close_after or state.opts.close_on_send then
         window.close()
         if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
@@ -289,6 +312,26 @@ function M.register_scratch_keymaps(bufnr, opts)
         , { desc = "Send " .. i .. " to agent" })
     end
   end
+
+  -- Stack (save and clear) current scratch buffer content to history
+  safe_set("n", keys.stack or "c<space>s", function()
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local has_content = false
+    for _, line in ipairs(lines) do
+      if line:match("%S") then
+        has_content = true
+        break
+      end
+    end
+
+    if has_content then
+      cache_logic.write_scratch_to_cache(bufnr)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {})
+      vim.notify("Stacked to history", vim.log.levels.INFO)
+    else
+      vim.notify("Buffer empty", vim.log.levels.INFO)
+    end
+  end, { desc = "Stack (save and clear) scratch buffer" })
 
   -- Navigate to older entry (scratch buffer) - default: keys.history_prev or <leader>h,
   safe_set("n", keys.history_prev or "c<space>p", function()

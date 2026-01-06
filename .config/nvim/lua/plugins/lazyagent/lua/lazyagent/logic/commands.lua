@@ -25,7 +25,7 @@ function M.setup_commands()
 
   try_create_user_command("LazyAgentClose", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
-    
+
     if explicit then
       session_logic.close_session(explicit)
       return
@@ -57,6 +57,17 @@ function M.setup_commands()
   end, {
       nargs = "?",
       desc = "Toggle the floating agent input buffer (open/close)",
+      complete = function()
+        return agent_logic.available_agents()
+      end,
+    })
+
+  try_create_user_command("LazyAgentInstant", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.open_instant(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open an instant query window for an agent (runs in background pool)",
       complete = function()
         return agent_logic.available_agents()
       end,
@@ -119,6 +130,26 @@ function M.setup_commands()
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
     session_logic.resume_conversation(explicit)
   end, { nargs = "?", desc = "Select a saved conversation log and start a session with it preloaded." })
+
+  try_create_user_command("LazyAgentStack", function(cmdargs)
+    local bufnr = vim.api.nvim_get_current_buf()
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local has_content = false
+    for _, line in ipairs(lines) do
+      if line:match("%S") then
+        has_content = true
+        break
+      end
+    end
+
+    if has_content then
+      cache_logic.write_scratch_to_cache(bufnr)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {})
+      vim.notify("LazyAgentStack: content stacked to history", vim.log.levels.INFO)
+    else
+      vim.notify("LazyAgentStack: buffer is empty", vim.log.levels.INFO)
+    end
+  end, { nargs = 0, desc = "Stack (save and clear) current scratch buffer content to history" })
 
   -- User command to open history logs saved by lazyagent (from cache).
   try_create_user_command("LazyAgentHistory", function(cmdargs)
@@ -196,6 +227,7 @@ function M.setup_commands()
             reuse = true,
             pane_size = agent_opts.pane_size,
             scratch_filetype = agent_opts.scratch_filetype,
+            stay_hidden = false,
           })
           return
         end
@@ -208,6 +240,7 @@ function M.setup_commands()
             reuse = true,
             pane_size = agent_opts.pane_size,
             scratch_filetype = agent_opts.scratch_filetype,
+            stay_hidden = false,
           })
         end)
       end, {

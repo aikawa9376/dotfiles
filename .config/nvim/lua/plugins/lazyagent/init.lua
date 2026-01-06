@@ -9,13 +9,19 @@ return {
       mode = { "n", "x" },
       desc = "Toggle AI Agent",
     },
+    {
+      "c<space>i",
+      function() require("lazyagent").open_instant() end,
+      mode = { "n", "x" },
+      desc = "Instant AI Agent",
+    },
   },
   -- Also load the plugin when these user commands are executed
   cmd = {
     "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
     "LazyAgentHistoryList", "LazyAgentClose", "LazyAgentOpenConversation",
     "LazyAgentResumeConversation", "LazyAgentSummary", "LazyAgentRestore",
-    "LazyAgentDetach",
+    "LazyAgentDetach", "LazyAgentInstant",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
@@ -34,6 +40,10 @@ return {
     interactive_agents = {
       Gemini = { yolo = true },
       Copilot = { yolo = true, default = true },
-    }
+    },
+    instant_mode = {
+      append_text = " #cursor #small-fix", -- e.g. " #translate"
+    },
+
   }
 }
