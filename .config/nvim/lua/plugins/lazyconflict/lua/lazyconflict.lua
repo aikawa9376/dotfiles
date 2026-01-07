@@ -324,9 +324,7 @@ end
 local function apply_highlights(bufnr, info, regions)
   -- info は存在確認用。ハイライトは実際のバッファ内容から構築する。
   api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-  if not info or not info.items then
-    return
-  end
+
   regions = regions or M.build_regions(bufnr)
   if not regions or #regions == 0 then
     clear_keymaps(bufnr)
@@ -386,7 +384,7 @@ function M.apply_buffer(bufnr)
 
   -- Gitでコンフリクトとして検知されていないファイルなら、
   -- 全行スキャン(build_regions)を避けて即座にクリーンアップ
-  if not info then
+  if not info and state.config.detection.mode == "git" then
     apply_highlights(bufnr, nil)
     clear_keymaps(bufnr)
     return
@@ -400,7 +398,7 @@ function M.apply_buffer(bufnr)
     return
   end
 
-  if not info or not info.items or #info.items == 0 then
+  if state.config.detection.mode == "git" and (not info or not info.items or #info.items == 0) then
     apply_highlights(bufnr, nil, regions)
     clear_keymaps(bufnr)
     return

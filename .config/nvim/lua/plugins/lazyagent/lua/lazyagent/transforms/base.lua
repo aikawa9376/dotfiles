@@ -72,6 +72,6 @@ return {
   {
     name = "small-fix",
     desc = "Request a small, targeted fix with minimal scope",
-    trans = "- Make minimal changes to correct the issue. Avoid refactoring, style changes, or modifying unrelated code. Keep the scope of the change as small as possible."
+    trans = "- Make minimal changes to correct the issue. Avoid refactoring, style changes, or modifying unrelated code. Keep the scope of the change as small as possible. This is a light fix intended to be finished within 5 seconds. Prioritize speed."
   }
 }
