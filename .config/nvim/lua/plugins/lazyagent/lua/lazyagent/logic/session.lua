@@ -84,15 +84,19 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         -- Restore session state
         local watch_enabled_val = true
         if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
-        state.sessions[agent_name] = { 
-          pane_id = persisted_pane, 
-          last_output = "", 
-          backend = backend_name, 
-          watch_enabled = watch_enabled_val, 
+        state.sessions[agent_name] = {
+          pane_id = persisted_pane,
+          last_output = "",
+          backend = backend_name,
+          watch_enabled = watch_enabled_val,
           launch_cmd = requested_launch_cmd,
           hidden = true, -- Assume hidden/detached if we are restoring it
           cwd = vim.fn.getcwd()
         }
+        -- If this session requested watchers, enable them.
+        if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
+          pcall(watch.enable)
+        end
         -- If it was hidden, we need to join it? ensure_session logic below handles reuse/hidden.
         -- Just setting state.sessions[agent_name] is enough to trigger the reuse logic block below.
       else
@@ -139,7 +143,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         --     end
         --   end
         -- end
-        
+
         backend_mod.join_pane(state.sessions[agent_name].pane_id, size_arg, agent_cfg.is_vertical or false, function(success)
           if success then
             state.sessions[agent_name].hidden = false
@@ -168,14 +172,16 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
     -- If the caller provided a watch preference, update the existing session's watch flag.
     if agent_cfg and agent_cfg.watch ~= nil then
       state.sessions[agent_name].watch_enabled = agent_cfg.watch
-      -- If this session now wants watching enabled, ensure watchers are enabled.
-      if state.sessions[agent_name].watch_enabled and ok_watch and watch and type(watch.enable) == "function" then
-        pcall(watch.enable)
-      end
-      -- If this session no longer wants watching, check whether to disable watchers globally.
-      if not state.sessions[agent_name].watch_enabled then
-        maybe_disable_watchers()
-      end
+    end
+
+    -- Ensure watchers are enabled if this session wants them.
+    if state.sessions[agent_name].watch_enabled and ok_watch and watch and type(watch.enable) == "function" then
+      pcall(watch.enable)
+    end
+
+    -- If this session no longer wants watching, check whether to disable watchers globally.
+    if not state.sessions[agent_name].watch_enabled then
+      maybe_disable_watchers()
     end
 
     -- If an existing session was launched with a different command, don't reuse it.
@@ -211,12 +217,12 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       if agent_cfg and agent_cfg.stay_hidden then mode = "instant" end
       if agent_cfg and agent_cfg.mode then mode = agent_cfg.mode end
 
-      state.sessions[agent_name] = { 
-        pane_id = pane_id, 
-        last_output = "", 
-        backend = backend_name, 
-        watch_enabled = watch_enabled_val, 
-        launch_cmd = requested_launch_cmd, 
+      state.sessions[agent_name] = {
+        pane_id = pane_id,
+        last_output = "",
+        backend = backend_name,
+        watch_enabled = watch_enabled_val,
+        launch_cmd = requested_launch_cmd,
         cwd = vim.fn.getcwd(),
         hidden = (agent_cfg.stay_hidden == true),
         mode = mode
@@ -225,7 +231,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
         pcall(watch.enable)
       end
-      
+
       -- Persist session if resume is enabled
       local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
       if resume_enabled then
@@ -313,10 +319,10 @@ end
 function M.restart_session(agent_name)
   local function _restart(chosen)
     if not chosen or chosen == "" then return end
-    
+
     -- Close existing session
     M.close_session(chosen)
-    
+
     -- Start new session (reuse=false to force new pane)
     -- We use a small delay to ensure cleanup is processed
     vim.defer_fn(function()
@@ -398,7 +404,7 @@ function M.close_all_sessions(sync)
 
       if sync then
         local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume) or (s and s.force_resume)
-        
+
         if save_conv and backend_mod and type(backend_mod.capture_pane_sync) == "function" then
            local text = backend_mod.capture_pane_sync(s.pane_id)
            if text and text ~= "" then
@@ -411,7 +417,7 @@ function M.close_all_sessions(sync)
               pcall(vim.fn.writefile, lines, path)
            end
         end
-        
+
         if resume_enabled then
           -- If resume is enabled, do NOT kill the pane.
           -- Instead, ensure it is detached/hidden (break_pane) so it doesn't clutter the current window.
@@ -562,19 +568,19 @@ function M.open_instant(agent_name)
     end
 
     -- Start session with stay_hidden=true
-    M.start_interactive_session({ 
-      agent_name = chosen, 
-      reuse = true, 
+    M.start_interactive_session({
+      agent_name = chosen,
+      reuse = true,
       stay_hidden = true,
       mode = "instant",
       title = " " .. chosen .. " (Instant) ",
       -- Minimal window for instant mode
       window_opts = {
          height = 3,
-         width_ratio = 0.4, 
+         width_ratio = 0.4,
       }
     })
-    
+
     -- Mark session as instant mode
     if state.sessions[chosen] then
        state.sessions[chosen].mode = "instant"
@@ -755,7 +761,7 @@ function M.start_interactive_session(opts)
       open_opts.start_in_insert_on_focus = (state.opts and state.opts.start_in_insert_on_focus) or false
     end
     open_opts.is_vertical = agent_cfg.is_vertical or false
-    
+
     -- Pass specific window overrides (size, etc)
     if opts.window_opts then
        open_opts.window_opts = opts.window_opts
