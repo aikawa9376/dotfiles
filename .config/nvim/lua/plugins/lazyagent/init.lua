@@ -42,7 +42,7 @@ return {
       Copilot = { yolo = true, default = true },
     },
     instant_mode = {
-      append_text = " #cursor #small-fix", -- e.g. " #translate"
+      append_text = " #cursor #small-fix #diffstyle-code", -- e.g. " #translate"
     },
 
   }
