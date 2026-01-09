@@ -113,16 +113,29 @@ local common_actions = {
     exec_silent = true,
     fn = function(selected, opts)
       if not selected or #selected == 0 then return end
-      local commit_hash = parse_commit_line(selected[1])
-      if not commit_hash then return end
       local file_path = opts and opts.file_path
-      if file_path and file_path ~= "" then
-        vim.cmd('tabedit | DiffviewOpen ' .. commit_hash .. '~..' .. commit_hash .. ' --selected-file=' .. file_path)
-        vim.cmd("tabNext | bwipeout")
-      else
-        vim.cmd("tabedit | DiffviewOpen " .. commit_hash .. "~.." .. commit_hash)
-        vim.cmd("tabNext | bwipeout")
+      local range
+
+      if #selected > 1 then
+        local newer = parse_commit_line(selected[1])
+        local older = parse_commit_line(selected[#selected])
+        if newer and older then
+          range = older .. ".." .. newer
+        end
       end
+
+      if not range then
+        local commit_hash = parse_commit_line(selected[1])
+        if not commit_hash then return end
+        range = commit_hash .. "~.." .. commit_hash
+      end
+
+      local cmd = "tabedit | DiffviewOpen " .. range
+      if file_path and file_path ~= "" then
+        cmd = cmd .. " --selected-file=" .. file_path
+      end
+      vim.cmd(cmd)
+      vim.cmd("tabNext | bwipeout")
     end
   },
   ["ctrl-o"] = {

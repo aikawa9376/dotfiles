@@ -214,13 +214,13 @@ format-underline = #1994D1
 # interval = 10
 # format-underline = #FF8B25
 
-[module/inbox-imap]
-type = custom/script
-exec = $HOME/.config/polybar/scripts/inbox-imap-shellnetrc.sh
-interval = 180
-format-prefix = " "
-format-prefix-foreground = ${colors.foreground-alt}
-format-underline = #FF0000
+; [module/inbox-imap]
+; type = custom/script
+; exec = $HOME/.config/polybar/scripts/inbox-imap-shellnetrc.sh
+; interval = 180
+; format-prefix = " "
+; format-prefix-foreground = ${colors.foreground-alt}
+; format-underline = #FF0000
 
 [module/powermenu]
 type = custom/menu
