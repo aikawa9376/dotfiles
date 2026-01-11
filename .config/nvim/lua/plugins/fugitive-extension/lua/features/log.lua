@@ -82,6 +82,7 @@ local function show_log_help()
     'O           Octo PR from commit',
     '<C-y>       copy short hash',
     '<Leader>cf  fixup commit into parent',
+    'cf          fixup/reword commit with index',
     '<M-j>/<M-k> move commit down/up',
     'X (n/V)     drop commit(s)',
     'cw          reword commit',
@@ -215,6 +216,19 @@ function M.setup(group)
           refresh_log_list(ev.buf)
         end)
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Fixup commit under cursor into its parent' })
+
+      -- cf: Fixup/Reword commit with index
+      vim.keymap.set('n', 'cf', function()
+        local commit = utils.get_commit(ev.buf)
+        if not commit or commit == '' then
+          commit = vim.api.nvim_get_current_line():match('^(%x+)')
+        end
+        if not commit then
+          vim.notify('No commit found', vim.log.levels.WARN)
+          return
+        end
+        commands.mix_index_with_input(commit)
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Fixup/Reword commit under cursor with index' })
 
       -- <M-j>: Move commit down
       vim.keymap.set('n', '<M-j>', function()

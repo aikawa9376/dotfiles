@@ -475,18 +475,28 @@ function M.setup(group)
         end
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Toggle Flog window' })
 
-      -- カーソル行のコミットを一つ前のコミットにfixupする
+      -- カーソル行のコミットを一つ前のコミットにfixupする (Leader cf)
       vim.keymap.set('n', '<Leader>cf', function()
         local current_line = vim.api.nvim_get_current_line()
-        -- コミットハッシュを抽出（Unpushedセクションのコミット行から）
+        local commit_hash = current_line:match('^(%x+)')
+        if not commit_hash then
+          vim.notify('No commit found at cursor', vim.log.levels.WARN)
+          return
+        end
+        commands.fixup_commit(commit_hash)
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Squash commit under cursor into its parent' })
+
+      -- 現在のインデックスをカーソル行のコミットに混ぜる (cf)
+      vim.keymap.set('n', 'cf', function()
+        local current_line = vim.api.nvim_get_current_line()
         local commit_hash = current_line:match('^(%x+)')
 
         if not commit_hash then
           vim.notify('No commit found at cursor', vim.log.levels.WARN)
           return
         end
-        commands.fixup_commit(commit_hash)
-      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Fixup commit under cursor into its parent' })
+        commands.mix_index_with_input(commit_hash)
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Fixup/Reword commit under cursor with index' })
 
       vim.keymap.set('n', 'q', function()
         if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
