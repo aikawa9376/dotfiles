@@ -36,7 +36,7 @@ local function apply_auto_stash(work_tree)
   end
 
   local msg = "fugitive-ext auto-stash"
-  vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash push -u -k -m " .. vim.fn.shellescape(msg))
+  vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash push -u -m " .. vim.fn.shellescape(msg))
   if vim.v.shell_error ~= 0 then
     vim.notify("auto-stash failed; aborting command", vim.log.levels.ERROR)
     return nil
@@ -575,6 +575,115 @@ function M.setup()
     end
   end
 
+  function M.mix_index(commit_hash, on_complete, new_message)
+    if not commit_hash or commit_hash == '' then
+      vim.notify('No commit hash provided', vim.log.levels.ERROR)
+      return
+    end
+
+    local git_dir = vim.fn.FugitiveGitDir()
+    if git_dir == '' then
+      vim.notify('Not in a git repository', vim.log.levels.ERROR)
+      return
+    end
+
+    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
+    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Could not determine work tree", vim.log.levels.ERROR)
+      return
+    end
+
+    -- Check if there are staged changes
+    local has_staged = vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' diff --cached --quiet')
+    -- exit_code is 1 if there are differences (dirty), 0 if clean
+    local is_clean = (vim.v.shell_error == 0)
+
+    local allow_empty = ''
+    if is_clean then
+       if not new_message or new_message == '' then
+          vim.notify("No staged changes to fixup", vim.log.levels.WARN)
+          return
+       end
+       allow_empty = ' --allow-empty'
+    end
+
+    -- 1. Create the fixup/amend commit using the index
+    -- Note: 'git commit --fixup=amend:<commit> -m <msg>' is not supported.
+    -- We must manually construct the commit message for autosquash if we have a new message.
+    
+    local commit_cmd = ''
+    local msg_file = nil
+    
+    if new_message and new_message ~= '' then
+       -- Get the subject of the target commit for "amend!" prefix
+       local subject_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' log -1 --format=%s ' .. commit_hash
+       local subject = vim.fn.trim(vim.fn.system(subject_cmd))
+       
+       if vim.v.shell_error ~= 0 then
+          vim.notify("Failed to get commit subject", vim.log.levels.ERROR)
+          return
+       end
+       
+       -- Construct message: "amend! <subject>\n\n<new_message>"
+       msg_file = vim.fn.tempname()
+       local f = io.open(msg_file, 'w')
+       if not f then return end
+       -- 'amend!' prefix triggers fixup -C (reword) in autosquash
+       f:write('amend! ' .. subject .. '\n\n' .. new_message)
+       f:close()
+       
+       commit_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' commit ' .. allow_empty .. ' -F ' .. vim.fn.shellescape(msg_file)
+    else
+       -- Standard fixup (no message change)
+       commit_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' commit ' .. allow_empty .. ' --fixup=' .. commit_hash
+    end
+
+    local commit_res = vim.fn.system(commit_cmd)
+    
+    if msg_file then vim.fn.delete(msg_file) end
+    
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Commit failed: " .. commit_res, vim.log.levels.ERROR)
+      return
+    end
+
+    -- 2. Auto stash unstaged changes
+    local stashed = apply_auto_stash(work_tree)
+    if stashed == nil then return end -- Error in stashing
+
+    -- 3. Rebase --autosquash
+    local parent_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. commit_hash .. '^'
+    local parent_hash = vim.fn.trim(vim.fn.system(parent_cmd))
+
+    local rebase_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i --autosquash ' .. vim.fn.shellescape(parent_hash)
+
+    rebase_cmd = 'GIT_SEQUENCE_EDITOR=: ' .. rebase_cmd
+
+    local rebase_res = vim.fn.system(rebase_cmd)
+
+    if stashed then pop_auto_stash(work_tree) end
+
+    if vim.v.shell_error ~= 0 then
+       vim.notify("Rebase failed: " .. rebase_res, vim.log.levels.ERROR)
+    else
+       vim.notify("Mix/Fixup completed for " .. commit_hash:sub(1,7))
+       vim.fn['fugitive#ReloadStatus']()
+       if on_complete then vim.schedule(on_complete) end
+    end
+  end
+
+  function M.mix_index_with_input(commit_hash)
+    if not commit_hash then
+       vim.notify('No commit provided', vim.log.levels.WARN)
+       return
+    end
+    vim.ui.input({ prompt = 'Commit message (empty to keep, cancel to abort): ' }, function(input)
+       if input == nil then return end -- Cancelled
+       M.mix_index(commit_hash, nil, input)
+    end)
+  end
+
   function M.reload_log()
     local cursor_pos = vim.api.nvim_win_get_cursor(0)
     if vim.fn.exists('*fugitive#Reload') == 1 then
@@ -585,7 +694,7 @@ function M.setup()
     pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
   end
 
-  function M.move_commit(current_commit, target_commit, direction, on_complete)
+  function M.move_commit(current_commit, target_commit, on_complete)
     if not current_commit or current_commit == '' or not target_commit or target_commit == '' then
       vim.notify('Invalid commits', vim.log.levels.WARN)
       return
@@ -599,7 +708,6 @@ function M.setup()
 
     -- Determine the base commit for rebase (parent of the older commit)
     local base_commit
-    local is_ancestor = vim.fn.system(string.format('git merge-base --is-ancestor %s %s', current_commit, target_commit))
     if vim.v.shell_error == 0 then
       base_commit = current_commit .. '^'
     else
