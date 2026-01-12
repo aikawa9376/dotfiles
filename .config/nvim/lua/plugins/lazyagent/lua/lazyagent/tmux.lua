@@ -97,7 +97,7 @@ function M.split(command, size, is_vertical, on_split_or_opts)
 
   -- create the pane in the background (don't switch focus) and print the pane id
   local args = { "split-window", "-d", "-P", "-F", "#{pane_id}" }
-  
+
   local dummy_id_to_kill = nil
   -- If target session provided (e.g. pool), ensure it exists and target it
   if opts.target_session then
@@ -122,7 +122,7 @@ function M.split(command, size, is_vertical, on_split_or_opts)
        -- Heuristic: numbers <= 100 are likely percentages (legacy behavior)
        -- unless user explicitly wants cells, they should use string "80" or number > 100?
        -- But user wants to set fixed value.
-       -- Let's assume if it's a number, it's percentage for backward compat, 
+       -- Let's assume if it's a number, it's percentage for backward compat,
        -- UNLESS we change the default config to string "30%".
        -- But the user said "fixed value".
        -- Let's support string input without % as absolute.
@@ -267,7 +267,7 @@ end
 function M.break_pane(target_pane)
   -- Check synchronously to avoid race conditions during rapid calls
   local dummy_id = M.ensure_pool()
-  
+
   -- Join agent pane (async)
   run({ "join-pane", "-d", "-s", target_pane, "-t", POOL_SESSION }, {
     on_exit = function()
@@ -282,7 +282,7 @@ end
 function M.break_pane_sync(target_pane)
   local dummy_id = M.ensure_pool()
   vim.fn.system("tmux join-pane -d -s " .. vim.fn.shellescape(target_pane) .. " -t " .. POOL_SESSION)
-  
+
   if dummy_id and dummy_id ~= "" then
     vim.fn.system("tmux kill-pane -t " .. dummy_id)
   end
@@ -291,13 +291,13 @@ end
 function M.join_pane(target_pane, size, is_vertical, on_done)
   -- tmux join-pane [-bdfhIv] [-l size] [-s src-pane] [-t dst-pane]
   -- Try putting size options BEFORE source/target options
-  
+
   local args = { "join-pane", "-d" }
-  
+
   if is_vertical then
     table.insert(args, "-h")
   end
-  
+
   if size then
     local s = tostring(size)
     if s ~= "" then
@@ -314,7 +314,7 @@ function M.join_pane(target_pane, size, is_vertical, on_done)
 
   table.insert(args, "-s")
   table.insert(args, target_pane)
-  
+
   local retrying = false
   run(args, {
     on_stderr = function(_, data)
@@ -330,7 +330,7 @@ function M.join_pane(target_pane, size, is_vertical, on_done)
                 if ok and size then
                    -- If join succeeded, try to resize explicitly
                    local resize_args = { "resize-pane", "-t", target_pane }
-                   
+
                    -- Note: is_vertical in lazyagent means side-by-side (vsplit), which corresponds to tmux -h.
                    -- For side-by-side, we want to adjust width (-x).
                    if is_vertical then
@@ -338,7 +338,7 @@ function M.join_pane(target_pane, size, is_vertical, on_done)
                    else
                       table.insert(resize_args, "-y")
                    end
-                   
+
                    local s = tostring(size)
                    if s:match("%%$") then
                       table.insert(resize_args, s)
@@ -347,7 +347,7 @@ function M.join_pane(target_pane, size, is_vertical, on_done)
                    else
                       table.insert(resize_args, s)
                    end
-                   
+
                    -- Add a small delay before resizing to ensure layout has settled
                    vim.defer_fn(function()
                      run(resize_args, {
@@ -380,13 +380,11 @@ function M.copy_mode(target_pane)
 end
 
 function M.scroll_up(target_pane)
-  M.copy_mode(target_pane)
-  M.send_keys(target_pane, { "PageUp" })
+  run({ "copy-mode", "-u", "-t", target_pane })
 end
 
 function M.scroll_down(target_pane)
-  M.copy_mode(target_pane)
-  M.send_keys(target_pane, { "PageDown" })
+  run({ "send-keys", "-t", target_pane, "-X", "page-down" })
 end
 
 function M.cleanup_if_idle()
