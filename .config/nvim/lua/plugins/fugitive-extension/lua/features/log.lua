@@ -134,6 +134,18 @@ function M.setup(group)
         end
       })
 
+      -- Auto-refresh on specific events (FugitiveChanged)
+      vim.api.nvim_create_autocmd('User', {
+        pattern = 'FugitiveChanged',
+        -- Listen globally, but only update this buffer
+        callback = function()
+          if vim.api.nvim_buf_is_valid(ev.buf) then
+             refresh_log_list(ev.buf)
+          end
+        end,
+      })
+
+
       -- Load fugitive's default mappings
       vim.cmd('runtime! ftplugin/git.vim ftplugin/git_*.vim after/ftplugin/git.vim')
 
