@@ -690,6 +690,17 @@ function M.setup(group)
           vim.cmd('runtime! ftplugin/git.vim ftplugin/git_*.vim after/ftplugin/git.vim')
         end
       end, 10)
+
+      -- Auto-refresh on specific events (FugitiveChanged)
+      vim.api.nvim_create_autocmd('User', {
+        pattern = 'FugitiveChanged',
+        -- Listen globally, but only update this buffer
+        callback = function()
+          if vim.api.nvim_buf_is_valid(bufnr) then
+             refresh_branch_list(bufnr)
+          end
+        end,
+      })
     end,
   })
 end

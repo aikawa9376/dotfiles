@@ -235,6 +235,7 @@ function M.setup()
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
             vim.notify("Push successful\n" .. message, vim.log.levels.INFO)
+            vim.cmd('doautocmd User FugitiveChanged')
           else
             vim.notify("Push failed\n" .. message, vim.log.levels.ERROR)
           end
@@ -324,6 +325,7 @@ function M.setup()
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
             vim.notify("Cherry-pick successful\n" .. message, vim.log.levels.INFO)
+            vim.cmd('doautocmd User FugitiveChanged')
           else
             vim.notify("Cherry-pick failed\n" .. message, vim.log.levels.ERROR)
           end
@@ -611,20 +613,20 @@ function M.setup()
     -- 1. Create the fixup/amend commit using the index
     -- Note: 'git commit --fixup=amend:<commit> -m <msg>' is not supported.
     -- We must manually construct the commit message for autosquash if we have a new message.
-    
+
     local commit_cmd = ''
     local msg_file = nil
-    
+
     if new_message and new_message ~= '' then
        -- Get the subject of the target commit for "amend!" prefix
        local subject_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' log -1 --format=%s ' .. commit_hash
        local subject = vim.fn.trim(vim.fn.system(subject_cmd))
-       
+
        if vim.v.shell_error ~= 0 then
           vim.notify("Failed to get commit subject", vim.log.levels.ERROR)
           return
        end
-       
+
        -- Construct message: "amend! <subject>\n\n<new_message>"
        msg_file = vim.fn.tempname()
        local f = io.open(msg_file, 'w')
@@ -632,7 +634,7 @@ function M.setup()
        -- 'amend!' prefix triggers fixup -C (reword) in autosquash
        f:write('amend! ' .. subject .. '\n\n' .. new_message)
        f:close()
-       
+
        commit_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' commit ' .. allow_empty .. ' -F ' .. vim.fn.shellescape(msg_file)
     else
        -- Standard fixup (no message change)
@@ -640,9 +642,9 @@ function M.setup()
     end
 
     local commit_res = vim.fn.system(commit_cmd)
-    
+
     if msg_file then vim.fn.delete(msg_file) end
-    
+
     if vim.v.shell_error ~= 0 then
       vim.notify("Commit failed: " .. commit_res, vim.log.levels.ERROR)
       return
