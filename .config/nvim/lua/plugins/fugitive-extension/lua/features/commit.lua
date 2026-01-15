@@ -288,6 +288,14 @@ function M.setup(group)
         vim.cmd('OctoPrFromSha ' .. commit)
       end, { buffer = ev.buf, nowait = true, silent = true, noremap = true })
 
+      -- gf: カーソル位置のファイルを開く
+      vim.keymap.set('n', 'gf', function()
+        local filepath = utils.get_filepath_at_cursor(ev.buf)
+        if filepath then
+          vim.cmd('edit ' .. filepath)
+        end
+      end, { buffer = ev.buf, nowait = true, silent = true })
+
       -- Ctrl-y: コミットハッシュをクリップボードにコピー
       vim.keymap.set('n', '<C-y>', function()
         local commit = utils.get_commit(ev.buf)
