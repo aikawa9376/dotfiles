@@ -696,7 +696,7 @@ function M.setup()
     pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
   end
 
-  function M.move_commit(current_commit, target_commit, on_complete)
+  function M.move_commit(current_commit, target_commit, direction, on_complete)
     if not current_commit or current_commit == '' or not target_commit or target_commit == '' then
       vim.notify('Invalid commits', vim.log.levels.WARN)
       return
@@ -710,10 +710,10 @@ function M.setup()
 
     -- Determine the base commit for rebase (parent of the older commit)
     local base_commit
-    if vim.v.shell_error == 0 then
-      base_commit = current_commit .. '^'
-    else
+    if direction == 'down' then
       base_commit = target_commit .. '^'
+    else
+      base_commit = current_commit .. '^'
     end
 
     local git_dir = vim.fn.FugitiveGitDir()
