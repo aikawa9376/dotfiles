@@ -296,6 +296,24 @@ function M.setup(group)
         end
       end, { buffer = ev.buf, nowait = true, silent = true })
 
+      -- gq: ファイル一覧をQuickfixに追加
+      vim.keymap.set('n', 'gq', function()
+        local lines = vim.api.nvim_buf_get_lines(ev.buf, 0, -1, false)
+        local qf_list = {}
+        for _, line in ipairs(lines) do
+          local filepath = line:match('^diff %-%-git [ab]/(.+) [ab]/')
+          if filepath then
+            table.insert(qf_list, { filename = filepath, lnum = 1 })
+          end
+        end
+        if #qf_list > 0 then
+          vim.fn.setqflist(qf_list)
+          vim.cmd('copen')
+        else
+          print('No files found')
+        end
+      end, { buffer = ev.buf, nowait = true, silent = true })
+
       -- Ctrl-y: コミットハッシュをクリップボードにコピー
       vim.keymap.set('n', '<C-y>', function()
         local commit = utils.get_commit(ev.buf)
