@@ -458,7 +458,7 @@ local function open_branch_list()
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
-  vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
+  vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.wo[vim.api.nvim_get_current_win()].wrap = false
   vim.bo[bufnr].filetype = 'fugitivebranch'
@@ -488,6 +488,21 @@ function M.setup(group)
   vim.api.nvim_create_user_command('Gbranch', open_branch_list, {
     bang = false,
     desc = "Open git branch list",
+  })
+
+  -- fugitive://スキームと同様に、fugitive-branch://スキームもファイルとして扱わないように設定する
+  -- これによりセッション復元時などのE212エラー（ディレクトリへの書き込み試行）を防ぐ
+  vim.api.nvim_create_autocmd({ 'BufReadCmd', 'BufNewFile' }, {
+    group = group,
+    pattern = 'fugitive-branch://*',
+    callback = function(ev)
+      local bufnr = ev.buf
+      vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
+      vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
+      vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
+      vim.bo[bufnr].filetype = 'fugitivebranch'
+      refresh_branch_list(bufnr)
+    end,
   })
 
   vim.api.nvim_create_autocmd('FileType', {
