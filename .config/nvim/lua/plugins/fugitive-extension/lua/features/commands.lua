@@ -41,7 +41,6 @@ local function apply_auto_stash(work_tree)
     vim.notify("auto-stash failed; aborting command", vim.log.levels.ERROR)
     return nil
   end
-  vim.notify("Auto-stashed dirty worktree", vim.log.levels.INFO)
   return true
 end
 
@@ -49,8 +48,6 @@ local function pop_auto_stash(work_tree)
   vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash pop --index --quiet")
   if vim.v.shell_error ~= 0 then
     vim.notify("Auto-stash pop failed; please pop manually", vim.log.levels.ERROR)
-  else
-    vim.notify("Auto-stash popped", vim.log.levels.INFO)
   end
 end
 
@@ -227,14 +224,13 @@ function M.setup()
       return
     end
 
-    vim.notify("Pushing...", vim.log.levels.INFO)
     local output_lines = {}
     vim.fn.jobstart("git -C " .. vim.fn.shellescape(work_tree) .. " push --force-with-lease", {
       on_exit = function(_, exit_code)
         vim.schedule(function()
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
-            vim.notify("Push successful\n" .. message, vim.log.levels.INFO)
+            vim.notify("Push successful", vim.log.levels.INFO)
             vim.cmd('doautocmd User FugitiveChanged')
           else
             vim.notify("Push failed\n" .. message, vim.log.levels.ERROR)
@@ -311,8 +307,6 @@ function M.setup()
       return
     end
 
-    vim.notify("Cherry-picking: " .. hashes_str, vim.log.levels.INFO)
-
     local stashed = apply_auto_stash(work_tree)
     if stashed == nil then return end
 
@@ -324,7 +318,7 @@ function M.setup()
           if stashed then pop_auto_stash(work_tree) end
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
-            vim.notify("Cherry-pick successful\n" .. message, vim.log.levels.INFO)
+            vim.notify("Cherry-pick successful", vim.log.levels.INFO)
             vim.cmd('doautocmd User FugitiveChanged')
           else
             vim.notify("Cherry-pick failed\n" .. message, vim.log.levels.ERROR)
@@ -379,7 +373,6 @@ function M.setup()
     if not ok then return end
 
     table.insert(reflog_redo_stack, current_commit)
-    vim.notify(string.format('Moved HEAD to %s (was %s)', prev_commit:sub(1, 7), current_commit:sub(1, 7)), vim.log.levels.INFO)
     M.reload_log()
   end
 
@@ -405,7 +398,7 @@ function M.setup()
       return
     end
 
-    vim.notify(string.format('Redo to %s (was %s)', target_commit:sub(1, 7), current_commit:sub(1, 7)), vim.log.levels.INFO)
+    vim.notify(string.format('Redo to %s', target_commit:sub(1, 7)), vim.log.levels.INFO)
     M.reload_log()
   end
 
@@ -503,7 +496,6 @@ function M.setup()
     if vim.v.shell_error ~= 0 then
       vim.notify('Reword failed: ' .. result, vim.log.levels.ERROR)
     else
-      vim.notify('Reworded commit ' .. short_commit_hash)
       vim.fn['fugitive#ReloadStatus']()
       if on_complete then
         vim.schedule(on_complete)
@@ -568,7 +560,6 @@ function M.setup()
     if vim.v.shell_error ~= 0 then
       vim.notify('Rebase failed: ' .. result, vim.log.levels.ERROR)
     else
-      vim.notify('Fixup completed: ' .. short_commit_hash .. ' -> ' .. parent_commit_hash:sub(1, 7))
       -- Reload status if the fugitive buffer is open
       vim.fn['fugitive#ReloadStatus']()
       if on_complete then
@@ -669,7 +660,6 @@ function M.setup()
     if vim.v.shell_error ~= 0 then
        vim.notify("Rebase failed: " .. rebase_res, vim.log.levels.ERROR)
     else
-       vim.notify("Mix/Fixup completed for " .. commit_hash:sub(1,7))
        vim.fn['fugitive#ReloadStatus']()
        if on_complete then vim.schedule(on_complete) end
     end
@@ -769,7 +759,6 @@ cat "$1" >> /tmp/rebase-debug.log
     if vim.v.shell_error ~= 0 then
       vim.notify('Failed to swap commits:\n' .. output, vim.log.levels.ERROR)
     else
-      vim.notify('Successfully swapped commits', vim.log.levels.INFO)
       if on_complete then
         vim.schedule(on_complete)
       else
@@ -830,7 +819,6 @@ cat "$1" >> /tmp/rebase-debug.log
     if vim.v.shell_error ~= 0 then
       vim.notify('Drop failed: ' .. result, vim.log.levels.ERROR)
     else
-      vim.notify('Dropped ' .. #commits .. ' commit(s)')
       M.reload_log()
     end
   end
