@@ -137,9 +137,9 @@ function M.setup(group)
       -- Auto-refresh on specific events (FugitiveChanged)
       vim.api.nvim_create_autocmd('User', {
         pattern = 'FugitiveChanged',
-        -- Listen globally, but only update this buffer
+        -- Listen globally, but only update this buffer if it is visible
         callback = function()
-          if vim.api.nvim_buf_is_valid(ev.buf) then
+          if vim.api.nvim_buf_is_valid(ev.buf) and vim.fn.bufwinnr(ev.buf) ~= -1 then
              refresh_log_list(ev.buf)
           end
         end,
