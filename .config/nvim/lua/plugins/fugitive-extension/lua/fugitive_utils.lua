@@ -9,12 +9,22 @@ function M.get_filepath_at_cursor(bufnr)
       -- For fugitive status buffer
       local status_match = line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
       if status_match then
+        -- Handle rename "R old -> new"
+        local old, new = status_match:match('^(.+) %-> (.+)$')
+        if new then
+          return new
+        end
         return status_match
       end
       -- For git commit buffer
       local commit_match = line:match('^diff %-%-git [ab]/(.+) [ab]/')
       if commit_match then
         return commit_match
+      end
+      -- For rename in diff output
+      local rename_to = line:match('^rename to (.+)$')
+      if rename_to then
+        return rename_to
       end
     end
   end
