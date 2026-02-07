@@ -64,6 +64,8 @@ _G.fugitive_foldtext = function()
     table.insert(result, { " -" .. removed, "GitSignsDelete" })
   end
 
+  table.insert(result, { " ", "Normal" })
+
   return result
 end
 
@@ -87,10 +89,26 @@ function M.setup(group)
       local ns_id = vim.api.nvim_create_namespace('git_diff_path_highlight')
 
       local function apply_diff_highlights()
+        if not vim.api.nvim_buf_is_valid(ev.buf) then
+          return
+        end
         vim.api.nvim_buf_clear_namespace(ev.buf, ns_id, 0, -1)
 
         local lines = vim.api.nvim_buf_get_lines(ev.buf, 0, -1, false)
         for idx, line in ipairs(lines) do
+          if line:match('^diff') or line:match('^@') then
+            local win_width = vim.api.nvim_win_get_width(0)
+            local line_len = vim.fn.strdisplaywidth(line)
+            local pad = win_width - line_len - 1
+            if pad > 0 then
+              vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, 0, {
+                virt_text = {{ " " .. string.rep("·", pad), "Comment" }},
+                virt_text_pos = 'eol',
+                hl_mode = 'combine',
+              })
+            end
+          end
+
           if line:match('^diff') then
             local prefix_a = 'diff --git a/'
             local path1_start_col_0based = #prefix_a
@@ -117,7 +135,18 @@ function M.setup(group)
 
       apply_diff_highlights()
 
+      vim.api.nvim_create_autocmd({ 'BufEnter', 'TextChanged' }, {
+        buffer = ev.buf,
+        callback = function()
+          vim.schedule(apply_diff_highlights)
+        end,
+      })
+
+      -- Enable syntax highlighting for diffs
+      require('features.syntax_highlight').attach(ev.buf)
+
       local function update_flog_highlight()
+        if not vim.api.nvim_buf_is_valid(ev.buf) then return end
         utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, utils.get_commit(ev.buf))
       end
 
@@ -135,6 +164,7 @@ function M.setup(group)
         buffer = ev.buf,
         callback = function()
           vim.schedule(function()
+            if not vim.api.nvim_buf_is_valid(ev.buf) then return end
             update_flog_highlight()
             local commit = utils.get_commit(ev.buf) or vim.api.nvim_get_current_line():match('^(%x+)')
             if commit and commit ~= '' then
