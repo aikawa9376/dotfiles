@@ -438,6 +438,97 @@ local function pull_branch(bufnr)
   })
 end
 
+local function pull_branch_under_cursor(bufnr)
+  local branch = get_branch_name_from_line()
+  if not branch then
+    vim.notify("No branch found on this line", vim.log.levels.WARN)
+    return
+  end
+
+  local current_branch = vim.fn.trim(vim.fn.system("git branch --show-current"))
+
+  if branch == current_branch then
+    pull_branch(bufnr)
+    return
+  end
+
+  -- Check upstream
+  vim.fn.system("git rev-parse --abbrev-ref " .. vim.fn.shellescape(branch) .. "@{u}")
+  local has_upstream = (vim.v.shell_error == 0)
+
+  local args = ""
+  if not has_upstream then
+    local upstream = vim.fn.input('Pull ' .. branch .. ' from (e.g. origin main): ')
+    vim.cmd('redraw')
+    if upstream and upstream ~= '' then
+       args = " " .. upstream
+    else
+       return
+    end
+  end
+
+  local commands = require('features.commands')
+  local git_dir = vim.fn.FugitiveGitDir()
+  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+
+  local stashed = commands.apply_auto_stash(work_tree)
+  if stashed == nil then return end
+
+  -- Checkout target branch
+  local out = vim.fn.system("git checkout " .. vim.fn.shellescape(branch) .. " 2>&1")
+  if vim.v.shell_error ~= 0 then
+    vim.notify("Failed to checkout " .. branch .. ": " .. out, vim.log.levels.ERROR)
+    if stashed then commands.pop_auto_stash(work_tree) end
+    return
+  end
+
+  -- vim.notify("Pulling " .. branch .. "...", vim.log.levels.INFO)
+  local output_lines = {}
+  vim.fn.jobstart("git -C " .. vim.fn.shellescape(work_tree) .. " pull" .. args, {
+    on_stdout = function(_, data)
+      if data then
+        for _, line in ipairs(data) do
+          if line and line ~= "" then
+            table.insert(output_lines, line)
+          end
+        end
+      end
+    end,
+    on_stderr = function(_, data)
+      if data then
+        for _, line in ipairs(data) do
+          if line and line ~= "" then
+            table.insert(output_lines, line)
+          end
+        end
+      end
+    end,
+    on_exit = function(_, exit_code)
+      vim.schedule(function()
+        local message = table.concat(output_lines, "\n")
+        local pull_success = (exit_code == 0)
+
+        -- Checkout back to original branch
+        local co_out = vim.fn.system("git checkout " .. vim.fn.shellescape(current_branch) .. " 2>&1")
+        if vim.v.shell_error ~= 0 then
+           vim.notify("Pull " .. (pull_success and "succeeded" or "failed") .. " but could not switch back to " .. current_branch .. "\n" .. co_out .. "\n\nPull output:\n" .. message, vim.log.levels.ERROR)
+           -- Do not pop stash if we are on the wrong branch
+           return
+        end
+
+        if stashed then commands.pop_auto_stash(work_tree) end
+
+        if pull_success then
+          -- vim.notify("Pulled " .. branch .. "\n" .. message, vim.log.levels.INFO)
+          refresh_branch_list(bufnr)
+        else
+          vim.notify("Pull failed for " .. branch .. "\n" .. message, vim.log.levels.ERROR)
+        end
+      end)
+    end
+  })
+end
+
 local function open_branch_list()
   local branch_output = get_branch_list()
   if vim.v.shell_error ~= 0 then
@@ -480,6 +571,7 @@ local function show_branch_help()
     'X (n/V)     delete branch(es)',
     'f           fetch --all --prune',
     'p           pull current branch',
+    'P           pull branch under cursor',
     '<C-Space>   toggle Flog graph',
   })
 end
@@ -598,6 +690,11 @@ function M.setup(group)
       vim.keymap.set('n', 'p', function()
         pull_branch(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Pull branch" })
+
+      -- P: Pull branch under cursor
+      vim.keymap.set('n', 'P', function()
+        pull_branch_under_cursor(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Pull branch under cursor" })
 
       vim.keymap.set('v', 'X', function()
         local start_line = vim.fn.line('v')
