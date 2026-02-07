@@ -395,6 +395,9 @@ function M.setup(group)
       local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
       vim.api.nvim_buf_clear_namespace(ev.buf, ns_id, 0, -1)
 
+      -- Enable syntax highlighting for diffs
+      require('features.syntax_highlight').attach(ev.buf)
+
       local lines = vim.api.nvim_buf_get_lines(ev.buf, 0, -1, false)
       for idx, line in ipairs(lines) do
         -- "Staged"という文字列を緑色にする
