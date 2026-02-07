@@ -57,6 +57,11 @@ M.settings = function(client, bufnr)
     local enabled = vim.lsp.inlay_hint.is_enabled({ buf = buf })
     vim.lsp.inlay_hint.enable(not enabled, { buf = buf })
   end, {})
+  vim.api.nvim_create_user_command("CodeLensToggle", function()
+    local buf = vim.api.nvim_get_current_buf()
+    local enabled = vim.lsp.inlay_hint.is_enabled({ buf = buf })
+    vim.lsp.codelens.enable(not enabled, { buf = buf })
+  end, {})
 
   -- features
   -- if not vim.g.auto_format_disabled and client.server_capabilities.documentFormattingProvider then
@@ -64,11 +69,7 @@ M.settings = function(client, bufnr)
   -- end
 
   if client.server_capabilities.codeLensProvider then
-    vim.lsp.codelens.refresh()
-    vim.api.nvim_create_autocmd({ "BufEnter", "CursorHold", "InsertLeave" }, {
-      buffer = bufnr,
-      callback = vim.lsp.codelens.refresh,
-    })
+    vim.lsp.codelens.enable(true, { bufnr = bufnr })
   end
 
   -- use blink.cmp
