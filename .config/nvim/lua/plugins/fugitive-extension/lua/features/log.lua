@@ -199,19 +199,52 @@ function M.setup(group)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
       -- Ctrl-y: Copy commit hash
-      vim.keymap.set('n', '<C-y>', function()
-        local commit = utils.get_commit(ev.buf)
-        if not commit or commit == '' then
-          commit = vim.api.nvim_get_current_line():match('^(%x+)')
+      vim.keymap.set({'n', 'x'}, '<C-y>', function()
+        local mode = vim.fn.mode()
+        if mode == 'v' or mode == 'V' or mode == '\22' then
+          -- Visual mode logic
+          local _, csrow, _, _ = unpack(vim.fn.getpos("."))
+          local _, ssrow, _, _ = unpack(vim.fn.getpos("v"))
+          local start_line = math.min(csrow, ssrow)
+          local end_line = math.max(csrow, ssrow)
+
+          local lines = vim.api.nvim_buf_get_lines(ev.buf, start_line - 1, end_line, false)
+          local hashes = {}
+          for _, line in ipairs(lines) do
+            local commit = line:match('^(%x+)')
+            if commit then
+              table.insert(hashes, commit:sub(1, 7))
+            end
+          end
+
+          if #hashes == 0 then
+            vim.notify('No commits found in selection', vim.log.levels.WARN)
+            return
+          end
+
+          -- Join with newline for commands.lua compatibility
+          local joined = table.concat(hashes, '\n')
+          vim.fn.setreg('+', joined)
+          vim.fn.setreg('"', joined)
+          print('Copied ' .. #hashes .. ' commits')
+
+          -- Exit visual mode
+          vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', false)
+        else
+          -- Normal mode logic
+          local commit = utils.get_commit(ev.buf)
+          if not commit or commit == '' then
+            commit = vim.api.nvim_get_current_line():match('^(%x+)')
+          end
+          if not commit then
+            print('No commit found')
+            return
+          end
+          local short_commit = commit:sub(1, 7)
+          vim.fn.setreg('+', short_commit)
+          vim.fn.setreg('"', short_commit)
+          print('Copied: ' .. short_commit)
         end
-        if not commit then
-          print('No commit found')
-          return
-        end
-        local short_commit = commit:sub(1, 7)
-        vim.fn.setreg('+', short_commit)
-        vim.fn.setreg('"', short_commit)
-        print('Copied: ' .. short_commit)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
       -- <Leader>cf: Fixup commit
