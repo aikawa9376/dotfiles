@@ -1,6 +1,18 @@
 local M = {}
 local help = require("features.help")
 
+_G.fugitive_branch_completion = function(arg_lead, cmd_line, cursor_pos)
+  local branches = vim.fn.systemlist("git branch -a --format='%(refname:short)'")
+  if vim.v.shell_error ~= 0 then return {} end
+  local matches = {}
+  for _, b in ipairs(branches) do
+    if b:match(arg_lead) then
+      table.insert(matches, b)
+    end
+  end
+  return matches
+end
+
 local function get_ahead_behind(branch, upstream)
   if not upstream or upstream == '' then
     return 0, 0
@@ -529,6 +541,106 @@ local function pull_branch_under_cursor(bufnr)
   })
 end
 
+local function rebase_with_stash_fetch(bufnr)
+  local commands = require('features.commands')
+  local git_dir = vim.fn.FugitiveGitDir()
+  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+
+  -- Detect default branch
+  local default_branch = "origin/main"
+  local handle = io.popen("git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null")
+  if handle then
+    local result = handle:read("*a")
+    handle:close()
+    if result and result ~= "" then
+      default_branch = result:gsub("refs/remotes/", ""):gsub("\n", "")
+    end
+  end
+
+  local target = vim.fn.input('Rebase on: ', default_branch, 'customlist,v:lua.fugitive_branch_completion')
+  vim.cmd('redraw')
+  if target == '' then return end
+
+  -- Auto stash
+  local stashed = commands.apply_auto_stash(work_tree)
+  if stashed == nil then return end
+
+  local cmd = string.format("git fetch && git rebase %s", vim.fn.shellescape(target))
+
+  vim.notify("Running: " .. cmd, vim.log.levels.INFO)
+
+  local output_lines = {}
+  vim.fn.jobstart(cmd, {
+    on_stdout = function(_, data)
+      if data then
+        for _, line in ipairs(data) do
+          if line ~= "" then table.insert(output_lines, line) end
+        end
+      end
+    end,
+    on_stderr = function(_, data)
+      if data then
+        for _, line in ipairs(data) do
+          if line ~= "" then table.insert(output_lines, line) end
+        end
+      end
+    end,
+    on_exit = function(_, exit_code)
+      vim.schedule(function()
+        local message = table.concat(output_lines, "\n")
+        if exit_code == 0 then
+          if stashed then
+             local pop_ok = commands.pop_auto_stash(work_tree)
+             if not pop_ok then
+                vim.notify("Rebase successful, but stash pop failed.", vim.log.levels.WARN)
+             else
+                vim.notify("Rebase successful.", vim.log.levels.INFO)
+             end
+          else
+             vim.notify("Rebase successful.", vim.log.levels.INFO)
+          end
+          refresh_branch_list(bufnr)
+        else
+          vim.notify("Rebase failed.\n" .. message, vim.log.levels.ERROR)
+          if stashed then
+            vim.notify("Note: Changes were stashed. Resolve rebase conflicts, then run 'git stash pop'.", vim.log.levels.WARN)
+          end
+        end
+      end)
+    end
+  })
+end
+
+local function merge_branch_under_cursor(bufnr)
+  local branch = get_branch_name_from_line()
+  if not branch then
+    vim.notify("No branch found on this line", vim.log.levels.WARN)
+    return
+  end
+
+  local current_branch = vim.fn.trim(vim.fn.system("git branch --show-current"))
+  if branch == current_branch then
+    vim.notify("Cannot merge current branch into itself", vim.log.levels.WARN)
+    return
+  end
+
+  local confirm = vim.fn.confirm(
+    string.format("Merge branch '%s' into '%s'?", branch, current_branch),
+    "&Yes\n&No",
+    2
+  )
+
+  if confirm ~= 1 then
+    return
+  end
+
+  vim.cmd('Git merge ' .. branch)
+
+  vim.defer_fn(function()
+    refresh_branch_list(bufnr)
+  end, 500)
+end
+
 local function open_branch_list()
   local branch_output = get_branch_list()
   if vim.v.shell_error ~= 0 then
@@ -572,6 +684,8 @@ local function show_branch_help()
     'f           fetch --all --prune',
     'p           pull current branch',
     'P           pull branch under cursor',
+    'cmm         merge branch under cursor',
+    'r<Space>    stash -> fetch -> rebase',
     '<C-Space>   toggle Flog graph',
   })
 end
@@ -580,6 +694,16 @@ function M.setup(group)
   vim.api.nvim_create_user_command('Gbranch', open_branch_list, {
     bang = false,
     desc = "Open git branch list",
+  })
+
+  vim.api.nvim_create_autocmd('FileType', {
+    group = group,
+    pattern = 'fugitive',
+    callback = function(ev)
+      vim.keymap.set('n', 'B', function()
+        vim.cmd('Gbranch')
+      end, { buffer = ev.buf, silent = true, desc = "Open git branch list" })
+    end
   })
 
   -- fugitive://スキームと同様に、fugitive-branch://スキームもファイルとして扱わないように設定する
@@ -695,6 +819,16 @@ function M.setup(group)
       vim.keymap.set('n', 'P', function()
         pull_branch_under_cursor(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Pull branch under cursor" })
+
+      -- r<Space>: Stash, Fetch, Rebase
+      vim.keymap.set('n', 'r<Space>', function()
+        rebase_with_stash_fetch(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Stash, Fetch, Rebase" })
+
+      -- cmm: Merge branch under cursor
+      vim.keymap.set('n', 'cmm', function()
+        merge_branch_under_cursor(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Merge branch under cursor" })
 
       vim.keymap.set('v', 'X', function()
         local start_line = vim.fn.line('v')
