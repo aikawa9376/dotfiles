@@ -395,6 +395,64 @@ function M.setup(group)
       local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
       vim.api.nvim_buf_clear_namespace(ev.buf, ns_id, 0, -1)
 
+      -- Smart Continue/Skip/Abort for Rebase, Cherry-pick, Merge, Revert
+      local function get_git_dir()
+        return vim.fn.FugitiveGitDir()
+      end
+
+      local function perform_continue()
+        local git_dir = get_git_dir()
+        if not git_dir or git_dir == '' then return end
+
+        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then
+          vim.cmd("Git rebase --continue")
+        elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then
+          vim.cmd("Git cherry-pick --continue")
+        elseif vim.fn.filereadable(git_dir .. "/MERGE_HEAD") == 1 then
+          vim.cmd("Git merge --continue")
+        elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then
+          vim.cmd("Git revert --continue")
+        else
+          vim.notify("No rebase, cherry-pick, merge, or revert in progress.", vim.log.levels.WARN)
+        end
+      end
+
+      local function perform_skip()
+        local git_dir = get_git_dir()
+        if not git_dir or git_dir == '' then return end
+
+        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then
+          vim.cmd("Git rebase --skip")
+        elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then
+          vim.cmd("Git cherry-pick --skip")
+        elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then
+          vim.cmd("Git revert --skip")
+        else
+          vim.notify("Skip not applicable.", vim.log.levels.WARN)
+        end
+      end
+
+      local function perform_abort()
+        local git_dir = get_git_dir()
+        if not git_dir or git_dir == '' then return end
+
+        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then
+          vim.cmd("Git rebase --abort")
+        elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then
+          vim.cmd("Git cherry-pick --abort")
+        elseif vim.fn.filereadable(git_dir .. "/MERGE_HEAD") == 1 then
+          vim.cmd("Git merge --abort")
+        elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then
+          vim.cmd("Git revert --abort")
+        else
+          vim.notify("No operation to abort.", vim.log.levels.WARN)
+        end
+      end
+
+      vim.keymap.set('n', 'rr', perform_continue, { buffer = ev.buf, silent = true, desc = "Continue rebase/cherry-pick/merge" })
+      vim.keymap.set('n', 'rs', perform_skip, { buffer = ev.buf, silent = true, desc = "Skip commit in rebase/cherry-pick" })
+      vim.keymap.set('n', 'ra', perform_abort, { buffer = ev.buf, silent = true, desc = "Abort rebase/cherry-pick/merge" })
+
       -- Enable syntax highlighting for diffs
       require('features.syntax_highlight').attach(ev.buf)
 
