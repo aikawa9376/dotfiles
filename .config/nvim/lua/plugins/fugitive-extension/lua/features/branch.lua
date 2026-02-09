@@ -860,6 +860,16 @@ function M.setup(group)
         delete_branches(bufnr, branches)
       end, { buffer = bufnr, silent = true, desc = "Delete branches" })
 
+      -- L: Open log for branch under cursor
+      vim.keymap.set('n', 'L', function()
+        local branch = get_branch_name_from_line()
+        if not branch then
+          vim.notify("No branch found on this line", vim.log.levels.WARN)
+          return
+        end
+        vim.cmd("FugitiveLog " .. branch)
+      end, { buffer = bufnr, silent = true, desc = "Open log for branch" })
+
       -- <C-Space>: Flog window toggle for current branch
       vim.keymap.set('n', '<C-Space>', function()
         local branch = get_branch_name_from_line()
