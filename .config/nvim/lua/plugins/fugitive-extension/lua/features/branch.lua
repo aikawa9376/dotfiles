@@ -237,7 +237,18 @@ local function checkout_branch(bufnr)
   -- Remove remotes/ prefix if present
   local checkout_name = branch:gsub('^origin/', '')
 
+  local commands = require('features.commands')
+  local git_dir = vim.fn.FugitiveGitDir()
+  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+
+  local stashed = commands.apply_auto_stash(work_tree)
+  if stashed == nil then return end
+
   vim.cmd('Git checkout ' .. checkout_name)
+
+  if stashed then
+    commands.pop_auto_stash(work_tree)
+  end
 
   -- Refresh the branch list after checkout
   vim.defer_fn(function()
