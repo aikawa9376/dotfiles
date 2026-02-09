@@ -15,11 +15,48 @@ local function apply_highlights(bufnr)
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
-  -- Get list of unpushed commit hashes
-  local unpushed_output = vim.fn.systemlist("git log HEAD --not --remotes --format='%h'")
+  -- Get list of unpushed/diverged commit hashes
+  local args = vim.b[bufnr].fugitive_log_args or "HEAD"
+  if args == "" then args = "HEAD" end
+  local target = vim.fn.trim(args)
+  
+  local current_branch = vim.fn.system("git rev-parse --abbrev-ref HEAD"):gsub("\n", "")
+  local diverged_commits = {}
   local unpushed_commits = {}
-  for _, hash in ipairs(unpushed_output) do
-    unpushed_commits[hash] = true
+  local cmd_diverged = nil
+  local cmd_unpushed = nil
+
+  if target == "HEAD" or target == current_branch then
+    -- If viewing current branch, compare against upstream for unpushed (Red)
+    local upstream = vim.fn.system("git rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
+    if vim.v.shell_error == 0 and upstream ~= "" then
+      cmd_unpushed = "git log " .. target .. " --not " .. upstream .. " --format='%h'"
+    end
+  else
+    -- If viewing another branch:
+    -- 1. Compare against HEAD (current branch) for diverged (Orange)
+    cmd_diverged = "git log " .. target .. " --not HEAD --format='%h'"
+    
+    -- 2. Compare against its own upstream for unpushed (Red)
+    -- This handles the case where we view a branch that has unpushed commits relative to ITS upstream
+    local upstream = vim.fn.system("git rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
+    if vim.v.shell_error == 0 and upstream ~= "" then
+      cmd_unpushed = "git log " .. target .. " --not " .. upstream .. " --format='%h'"
+    end
+  end
+
+  if cmd_diverged then
+    local output = vim.fn.systemlist(cmd_diverged)
+    for _, hash in ipairs(output) do
+      diverged_commits[hash] = true
+    end
+  end
+
+  if cmd_unpushed then
+    local output = vim.fn.systemlist(cmd_unpushed)
+    for _, hash in ipairs(output) do
+      unpushed_commits[hash] = true
+    end
   end
 
   for i, line in ipairs(lines) do
@@ -27,8 +64,13 @@ local function apply_highlights(bufnr)
     local hash = line:match("^([^\t]+)")
 
     if hash then
-      local is_unpushed = unpushed_commits[hash]
-      local hl_group = is_unpushed and "@text.danger" or "Directory"
+      local hl_group = "Directory" -- Default blueish
+      
+      if unpushed_commits[hash] then
+        hl_group = "@text.danger" -- Red for unpushed
+      elseif diverged_commits[hash] then
+        hl_group = "Constant" -- Orange for diverged (but pushed)
+      end
 
       vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
         end_col = #hash,
@@ -38,8 +80,12 @@ local function apply_highlights(bufnr)
   end
 end
 
-local function get_log_list()
-  local cmd = "git log --pretty=format:'%h%x09%s%x09%d' --abbrev-commit -n 1000"
+local function get_log_list(bufnr)
+  local args = ""
+  if bufnr then
+    args = vim.b[bufnr].fugitive_log_args or ""
+  end
+  local cmd = "git log --pretty=format:'%h%x09%s%x09%d' --abbrev-commit -n 1000 " .. args
   return vim.fn.systemlist(cmd)
 end
 
@@ -50,7 +96,7 @@ local function refresh_log_list(bufnr)
 
   vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
 
-  local log_output = get_log_list()
+  local log_output = get_log_list(bufnr)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, log_output)
 
   vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
@@ -58,10 +104,11 @@ local function refresh_log_list(bufnr)
   apply_highlights(bufnr)
 end
 
-local function open_log_list()
+local function open_log_list(opts)
   -- %d (ref names) を取得して未プッシュ判定に使用する
   -- タブ区切り: hash <tab> subject <tab> refs
-  local cmd = "log --pretty=format:'%h%x09%s%x09%d' --abbrev-commit -n 1000"
+  local args = opts and opts.args or ""
+  local cmd = "log --pretty=format:'%h%x09%s%x09%d' --abbrev-commit -n 1000 " .. args
   vim.cmd('Git ' .. cmd)
 
   local bufnr = vim.api.nvim_get_current_buf()
@@ -70,6 +117,8 @@ local function open_log_list()
   vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.opt_local.list = false
+
+  vim.b[bufnr].fugitive_log_args = args
 
   apply_highlights(bufnr)
 end
@@ -93,6 +142,7 @@ end
 function M.setup(group)
   vim.api.nvim_create_user_command('FugitiveLog', open_log_list, {
     bang = false,
+    nargs = '*',
     desc = "Open git log list",
   })
 
