@@ -65,12 +65,14 @@ function M.setup(group)
         show_reflog_help()
       end, { buffer = ev.buf, silent = true, desc = "Help" })
       vim.cmd([[
-        syntax match FugitiveReflogHash /^[^\t]\+/
-        syntax match FugitiveReflogSelector /\t[^\t]*/
-        syntax match FugitiveReflogSubject /\t[^\t]*$/
-        highlight default link FugitiveReflogHash Identifier
-        highlight default link FugitiveReflogSelector Type
-        highlight default link FugitiveReflogSubject String
+        syntax match FugitiveReflogHash /^[^\t]\+/ nextgroup=FugitiveReflogSep1
+        syntax match FugitiveReflogSep1 /\t/ contained nextgroup=FugitiveReflogSelector
+        syntax match FugitiveReflogSelector /[^\t]\+/ contained nextgroup=FugitiveReflogSep2
+        syntax match FugitiveReflogSep2 /\t/ contained nextgroup=FugitiveReflogSubject
+        syntax match FugitiveReflogSubject /.*/ contained
+
+        highlight default link FugitiveReflogHash String
+        highlight default link FugitiveReflogSelector Directory
       ]])
 
       -- Load fugitive's default mappings
