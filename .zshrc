@@ -55,7 +55,7 @@ atload'export LS_COLORS=$(sed -E '\''s/;1:/:/g;s/(:di=[^:]*)/\1;1/'\'' <<<"$LS_C
 zstyle ":completion:*" list-colors ${(s.:.)LS_COLORS}'
 zinit light trapd00r/LS_COLORS
 # history
-zinit ice as"command" from"gh-r" bpick"atuin-*.tar.gz" mv"atuin*/atuin -> atuin" \
+zinit ice as"command" from"gh-r" bpick"atuin-x86*.tar.gz" mv"atuin*/atuin -> atuin" \
 atclone"./atuin init zsh > init.zsh; ./atuin gen-completions --shell zsh > _atuin" \
 atpull"%atclone" src"init.zsh"
 zinit light atuinsh/atuin
