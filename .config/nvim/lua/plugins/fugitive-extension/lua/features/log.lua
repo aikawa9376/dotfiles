@@ -19,7 +19,7 @@ local function apply_highlights(bufnr)
   local args = vim.b[bufnr].fugitive_log_args or "HEAD"
   if args == "" then args = "HEAD" end
   local target = vim.fn.trim(args)
-  
+
   local current_branch = vim.fn.system("git rev-parse --abbrev-ref HEAD"):gsub("\n", "")
   local diverged_commits = {}
   local unpushed_commits = {}
@@ -36,7 +36,7 @@ local function apply_highlights(bufnr)
     -- If viewing another branch:
     -- 1. Compare against HEAD (current branch) for diverged (Orange)
     cmd_diverged = "git log " .. target .. " --not HEAD --format='%h'"
-    
+
     -- 2. Compare against its own upstream for unpushed (Red)
     -- This handles the case where we view a branch that has unpushed commits relative to ITS upstream
     local upstream = vim.fn.system("git rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
@@ -60,12 +60,12 @@ local function apply_highlights(bufnr)
   end
 
   for i, line in ipairs(lines) do
-    -- タブ区切り: hash <tab> subject <tab> refs
+    -- タブ区切り: hash <tab> date <tab> subject <tab> author <tab> refs
     local hash = line:match("^([^\t]+)")
 
     if hash then
-      local hl_group = "Directory" -- Default blueish
-      
+      local hl_group = "String" -- Default string-ish
+
       if unpushed_commits[hash] then
         hl_group = "@text.danger" -- Red for unpushed
       elseif diverged_commits[hash] then
@@ -85,7 +85,7 @@ local function get_log_list(bufnr)
   if bufnr then
     args = vim.b[bufnr].fugitive_log_args or ""
   end
-  local cmd = "git log --pretty=format:'%h%x09%s%x09%d' --abbrev-commit -n 1000 " .. args
+  local cmd = "git log --pretty=format:'%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
   return vim.fn.systemlist(cmd)
 end
 
@@ -106,9 +106,9 @@ end
 
 local function open_log_list(opts)
   -- %d (ref names) を取得して未プッシュ判定に使用する
-  -- タブ区切り: hash <tab> subject <tab> refs
+  -- タブ区切り: hash <tab> date <tab> subject <tab> author <tab> refs
   local args = opts and opts.args or ""
-  local cmd = "log --pretty=format:'%h%x09%s%x09%d' --abbrev-commit -n 1000 " .. args
+  local cmd = "log --pretty=format:'%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
   vim.cmd('Git ' .. cmd)
 
   local bufnr = vim.api.nvim_get_current_buf()
@@ -163,14 +163,24 @@ function M.setup(group)
       -- Syntax highlighting
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false
+      vim.opt_local.tabstop = 1
 
       vim.keymap.set('n', 'g?', function()
         show_log_help()
       end, { buffer = ev.buf, silent = true, desc = "Help" })
       vim.cmd([[
-        syntax match FugitiveLogHash /^[^\t]\+/
-        syntax match FugitiveLogSubject /\t[^\t]*/
-        syntax match FugitiveLogRefs /\t[^\t]*$/
+        syntax match FugitiveLogHash /^[^\t]\+/ nextgroup=FugitiveLogSep1
+        syntax match FugitiveLogSep1 /\t/ contained nextgroup=FugitiveLogDate
+        syntax match FugitiveLogDate /[^\t]\+/ contained nextgroup=FugitiveLogSep2
+        syntax match FugitiveLogSep2 /\t/ contained nextgroup=FugitiveLogSubject
+        syntax match FugitiveLogSubject /[^\t]\+/ contained nextgroup=FugitiveLogSep3
+        syntax match FugitiveLogSep3 /\t/ contained nextgroup=FugitiveLogAuthor
+        syntax match FugitiveLogAuthor /[^\t]\+/ contained nextgroup=FugitiveLogSep4
+        syntax match FugitiveLogSep4 /\t/ contained nextgroup=FugitiveLogRefs
+        syntax match FugitiveLogRefs /.*/ contained
+
+        highlight default link FugitiveLogDate Directory
+        highlight default link FugitiveLogAuthor Type
         highlight default link FugitiveLogRefs Comment
       ]])
 
@@ -416,7 +426,8 @@ function M.setup(group)
 
         -- Get current subject for default value
         local line = vim.api.nvim_get_current_line()
-        local subject = line:match("^[^\t]+\t([^\t]*)") or ""
+        -- Hash <tab> Date <tab> Subject <tab> ...
+        local subject = line:match("^[^\t]+\t[^\t]+\t([^\t]*)") or ""
 
         vim.ui.input({ prompt = 'New commit message: ', default = subject }, function(input)
           if input and input ~= subject then
@@ -505,8 +516,13 @@ function M.setup(group)
       -- R: Reload
       vim.keymap.set('n', 'R', function() commands.reload_log() end, { buffer = ev.buf, silent = true, desc = "Reload log" })
 
-      -- <CR>: fugitive:O
-      vim.keymap.set('n', '<CR>', '<Plug>fugitive:O', { buffer = ev.buf, silent = true })
+      -- <CR>: Open commit in new tab
+      vim.keymap.set('n', '<CR>', function()
+        local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+        if commit then
+          vim.cmd('tab Git show ' .. commit)
+        end
+      end, { buffer = ev.buf, silent = true, desc = "Open commit in tab" })
 
       -- Clean up float window on unload
       vim.api.nvim_create_autocmd('BufUnload', {
