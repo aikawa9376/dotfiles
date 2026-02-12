@@ -389,6 +389,35 @@ local function fetch_all(bufnr)
   })
 end
 
+local function handle_pull_error(work_tree, message, args, on_success)
+  if message:match("Not possible to fast%-forward") or message:match("diverged") or message:match("Need to specify how to reconcile") then
+    local choice = vim.fn.confirm("Pull failed: Diverged branches.\nHow do you want to proceed?", "&Rebase\n&Merge (Commit)\n&Abort", 3)
+    if choice == 1 then -- Rebase
+      local cmd = "git -C " .. vim.fn.shellescape(work_tree) .. " pull --rebase" .. args
+      local out = vim.fn.system(cmd)
+      if vim.v.shell_error == 0 then
+        vim.notify("Pull --rebase successful.", vim.log.levels.INFO)
+        if on_success then on_success() end
+        return true
+      else
+        return false, "Pull --rebase failed:\n" .. out
+      end
+    elseif choice == 2 then -- Merge
+      local cmd = "git -C " .. vim.fn.shellescape(work_tree) .. " pull --no-ff" .. args
+      local out = vim.fn.system(cmd)
+      if vim.v.shell_error == 0 then
+        vim.notify("Pull --no-ff successful.", vim.log.levels.INFO)
+        if on_success then on_success() end
+        return true
+      else
+        return false, "Pull --no-ff failed:\n" .. out
+      end
+    end
+    return true -- Handled (aborted or attempted)
+  end
+  return false -- Not handled
+end
+
 local function pull_branch(bufnr)
   local branch = get_branch_name_from_line()
   if not branch then
@@ -451,10 +480,18 @@ local function pull_branch(bufnr)
         if stashed then commands.pop_auto_stash(work_tree) end
         local message = table.concat(output_lines, "\n")
         if exit_code == 0 then
-          -- vim.notify("Pull successful\n" .. message, vim.log.levels.INFO)
           refresh_branch_list(bufnr)
         else
-          vim.notify("Pull failed\n" .. message, vim.log.levels.ERROR)
+          local handled, err_msg = handle_pull_error(work_tree, message, args, function()
+             refresh_branch_list(bufnr)
+          end)
+          if handled then
+             if err_msg then
+                vim.notify(err_msg, vim.log.levels.ERROR)
+             end
+          else
+             vim.notify("Pull failed\n" .. message, vim.log.levels.ERROR)
+          end
         end
       end)
     end
@@ -542,10 +579,18 @@ local function pull_branch_under_cursor(bufnr)
         if stashed then commands.pop_auto_stash(work_tree) end
 
         if pull_success then
-          -- vim.notify("Pulled " .. branch .. "\n" .. message, vim.log.levels.INFO)
           refresh_branch_list(bufnr)
         else
-          vim.notify("Pull failed for " .. branch .. "\n" .. message, vim.log.levels.ERROR)
+          local handled, err_msg = handle_pull_error(work_tree, message, args, function()
+             refresh_branch_list(bufnr)
+          end)
+          if handled then
+             if err_msg then
+                vim.notify(err_msg, vim.log.levels.ERROR)
+             end
+          else
+             vim.notify("Pull failed for " .. branch .. "\n" .. message, vim.log.levels.ERROR)
+          end
         end
       end)
     end
