@@ -54,6 +54,36 @@ local function pop_auto_stash(work_tree)
   return true
 end
 
+local function handle_cherry_pick_error(work_tree, message)
+  if message:match("The previous cherry%-pick is now empty") or message:match("nothing to commit") then
+    local choice = vim.fn.confirm("Cherry-pick empty/skip needed.\nSkip this commit?", "&Yes (Skip)\n&No", 1)
+    if choice == 1 then
+      local out = vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " cherry-pick --skip")
+      if vim.v.shell_error == 0 then
+        vim.notify("Cherry-pick --skip successful.", vim.log.levels.INFO)
+        return true, nil, true -- Handled, No error, Pop stash
+      else
+        return true, "Cherry-pick --skip failed:\n" .. out, false -- Handled, Error, Don't pop
+      end
+    end
+    return true, "User cancelled skip. Please resolve manually.", false
+  elseif message:match("error: could not apply") or message:match("conflict") or message:match("after resolving the conflicts") then
+     local choice = vim.fn.confirm("Cherry-pick conflict.\nHow to proceed?", "&Abort\n&Resolve Manually", 2)
+     if choice == 1 then
+         local out = vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " cherry-pick --abort")
+         if vim.v.shell_error == 0 then
+             vim.notify("Cherry-pick aborted.", vim.log.levels.INFO)
+             return true, nil, true -- Handled, Aborted, Pop stash
+         else
+             return true, "Cherry-pick --abort failed:\n" .. out, false
+         end
+     else
+        return true, "Conflict detected. Please resolve conflicts.\nNote: Auto-stash is kept. Run 'git stash pop' after resolving.", false
+     end
+  end
+  return false, nil, true -- Not handled, Default behavior (Pop stash?)
+end
+
 local function hard_reset_to_commit(work_tree, commit)
   if not commit or commit == '' then
     vim.notify("No commit to reset to", vim.log.levels.WARN)
@@ -318,13 +348,21 @@ function M.setup()
     vim.fn.jobstart(cmd, {
       on_exit = function(_, exit_code)
         vim.schedule(function()
-          if stashed then pop_auto_stash(work_tree) end
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
+            if stashed then pop_auto_stash(work_tree) end
             vim.notify("Cherry-pick successful", vim.log.levels.INFO)
             vim.cmd('doautocmd User FugitiveChanged')
           else
-            vim.notify("Cherry-pick failed\n" .. message, vim.log.levels.ERROR)
+            local handled, err_msg, should_pop = handle_cherry_pick_error(work_tree, message)
+            if handled then
+               if should_pop and stashed then pop_auto_stash(work_tree) end
+               if err_msg then vim.notify(err_msg, vim.log.levels.WARN) end
+               vim.cmd('doautocmd User FugitiveChanged')
+            else
+               if stashed then pop_auto_stash(work_tree) end
+               vim.notify("Cherry-pick failed\n" .. message, vim.log.levels.ERROR)
+            end
           end
           if on_complete then
             on_complete(exit_code)
