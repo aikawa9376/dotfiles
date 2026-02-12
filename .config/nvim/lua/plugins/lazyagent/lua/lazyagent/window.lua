@@ -158,6 +158,13 @@ function M.open_float(bufnr, opts)
           shrink_float()
           float_is_focused = false
         end
+
+        -- Update the source buffer to the current buffer if we are in a normal buffer
+        local current_buf = vim.api.nvim_get_current_buf()
+        -- Ensure we are not tracking the lazyagent buffer itself, nor special buffers
+        if current_buf ~= bufnr and vim.api.nvim_buf_is_valid(current_buf) and vim.bo[current_buf].buftype == "" then
+           pcall(function() vim.b[bufnr].lazyagent_source_bufnr = current_buf end)
+        end
       end
     end,
   })
