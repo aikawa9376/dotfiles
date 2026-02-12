@@ -552,12 +552,7 @@ local function pull_branch_under_cursor(bufnr)
   })
 end
 
-local function rebase_with_stash_fetch(bufnr)
-  local commands = require('features.commands')
-  local git_dir = vim.fn.FugitiveGitDir()
-  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
-
-  -- Detect default branch
+local function get_default_origin_head()
   local default_branch = "origin/main"
   local handle = io.popen("git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null")
   if handle then
@@ -567,8 +562,16 @@ local function rebase_with_stash_fetch(bufnr)
       default_branch = result:gsub("refs/remotes/", ""):gsub("\n", "")
     end
   end
+  return default_branch
+end
 
-  local target = vim.fn.input('Rebase on: ', default_branch, 'customlist,v:lua.fugitive_branch_completion')
+local function rebase_with_stash_fetch(bufnr, default_target)
+  local commands = require('features.commands')
+  local git_dir = vim.fn.FugitiveGitDir()
+  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+
+  local target_default = default_target or get_default_origin_head()
+  local target = vim.fn.input('Rebase on: ', target_default, 'customlist,v:lua.fugitive_branch_completion')
   vim.cmd('redraw')
   if target == '' then return end
 
@@ -622,30 +625,13 @@ local function rebase_with_stash_fetch(bufnr)
   })
 end
 
-local function merge_branch_under_cursor(bufnr)
-  local branch = get_branch_name_from_line()
-  if not branch then
-    vim.notify("No branch found on this line", vim.log.levels.WARN)
-    return
-  end
+local function merge_with_input(bufnr, default_target)
+  local target_default = default_target or get_default_origin_head()
+  local target = vim.fn.input('Merge: ', target_default, 'customlist,v:lua.fugitive_branch_completion')
+  vim.cmd('redraw')
+  if target == '' then return end
 
-  local current_branch = vim.fn.trim(vim.fn.system("git branch --show-current"))
-  if branch == current_branch then
-    vim.notify("Cannot merge current branch into itself", vim.log.levels.WARN)
-    return
-  end
-
-  local confirm = vim.fn.confirm(
-    string.format("Merge branch '%s' into '%s'?", branch, current_branch),
-    "&Yes\n&No",
-    2
-  )
-
-  if confirm ~= 1 then
-    return
-  end
-
-  vim.cmd('Git merge ' .. branch)
+  vim.cmd('Git merge ' .. target)
 
   vim.defer_fn(function()
     refresh_branch_list(bufnr)
@@ -695,8 +681,8 @@ local function show_branch_help()
     'f           fetch --all --prune',
     'p           pull current branch',
     'P           pull branch under cursor',
-    'cmm         merge branch under cursor',
-    'r<Space>    stash -> fetch -> rebase',
+    'm<Space>    merge branch (input)',
+    'r<Space>    stash -> fetch -> rebase (input)',
     '<C-Space>   toggle Flog graph',
   })
 end
@@ -833,13 +819,17 @@ function M.setup(group)
 
       -- r<Space>: Stash, Fetch, Rebase
       vim.keymap.set('n', 'r<Space>', function()
-        rebase_with_stash_fetch(bufnr)
+        local branch = get_branch_name_from_line()
+        if not branch then branch = nil end
+        rebase_with_stash_fetch(bufnr, branch)
       end, { buffer = bufnr, silent = true, desc = "Stash, Fetch, Rebase" })
 
-      -- cmm: Merge branch under cursor
-      vim.keymap.set('n', 'cmm', function()
-        merge_branch_under_cursor(bufnr)
-      end, { buffer = bufnr, silent = true, desc = "Merge branch under cursor" })
+      -- m<Space>: Merge
+      vim.keymap.set('n', 'm<Space>', function()
+        local branch = get_branch_name_from_line()
+        if not branch then branch = nil end
+        merge_with_input(bufnr, branch)
+      end, { buffer = bufnr, silent = true, desc = "Merge branch" })
 
       vim.keymap.set('v', 'X', function()
         local start_line = vim.fn.line('v')

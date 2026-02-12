@@ -48,7 +48,10 @@ local function pop_auto_stash(work_tree)
   vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash pop --index --quiet")
   if vim.v.shell_error ~= 0 then
     vim.notify("Auto-stash pop failed; please pop manually", vim.log.levels.ERROR)
+    return false
   end
+  pcall(vim.fn['fugitive#ReloadStatus'])
+  return true
 end
 
 local function hard_reset_to_commit(work_tree, commit)
