@@ -3,6 +3,7 @@ return {
   { 'rafamadriz/friendly-snippets', event = 'InsertEnter' },
   { 'dmitmel/cmp-cmdline-history', event = 'CmdlineEnter' },
   { 'Kaiser-Yang/blink-cmp-avante', ft = 'AvanteInput' },
+  { 'mgalliou/blink-cmp-tmux', ft = 'lazyagent' },
   { 'fang2hou/blink-copilot', event = 'InsertEnter' },
   { 'hrsh7th/cmp-nvim-lsp-document-symbol', event = 'CmdlineEnter' },
   { 'copilotlsp-nvim/copilot-lsp', lazy = true,
@@ -178,7 +179,7 @@ return {
           sql = { 'buffer', 'snippets' },
           text = { 'buffer', 'ripgrep' },
           markdown = { 'buffer', 'ripgrep', 'snippets' },
-          lazyagent = { 'buffer', 'ripgrep', 'snippets', 'lazyagent' },
+          lazyagent = { 'buffer', 'ripgrep', 'tmux', 'lazyagent' },
           php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep'  },
         },
         providers = {
@@ -264,6 +265,11 @@ return {
             name = "[L]",
             score_offset = -2005,
             module = "laravel.blink_source",
+          },
+          tmux = {
+            module = "blink-cmp-tmux",
+            name = "tmux",
+            score_offset = -15,
           },
         },
       },
