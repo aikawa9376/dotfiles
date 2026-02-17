@@ -610,6 +610,38 @@ local function get_default_origin_head()
   return default_branch
 end
 
+local function diff_against_default(bufnr)
+  local branch = get_branch_name_from_line()
+  if not branch then
+    vim.notify("No branch found on this line", vim.log.levels.WARN)
+    return
+  end
+
+  local default_branch = get_default_origin_head()
+  
+  -- Notify and fetch
+  vim.notify("Fetching origin...", vim.log.levels.INFO)
+  
+  -- Use jobstart for async fetch
+  vim.fn.jobstart("git fetch origin", {
+    on_exit = function(_, exit_code)
+      if exit_code ~= 0 then
+        vim.notify("Fetch failed", vim.log.levels.ERROR)
+        return
+      end
+      
+      -- Open Diffview in a scheduled callback to ensure we are in the right context
+      vim.schedule(function()
+        -- Compare default_branch...branch (3 dots for merge base diff - GitHub PR style)
+        -- The user said "origin and github equivalent diff", so origin/main...branch
+        local diff_cmd = "DiffviewOpen " .. default_branch .. "..." .. branch
+        vim.cmd(diff_cmd)
+        vim.notify("Opened diff: " .. default_branch .. "..." .. branch, vim.log.levels.INFO)
+      end)
+    end
+  })
+end
+
 local function rebase_with_stash_fetch(bufnr, default_target)
   local commands = require('features.commands')
   local git_dir = vim.fn.FugitiveGitDir()
@@ -726,6 +758,7 @@ local function show_branch_help()
     'f           fetch --all --prune',
     'p           pull current branch',
     'P           pull branch under cursor',
+    'D           diff against origin/default (PR view)',
     'm<Space>    merge branch (input)',
     'r<Space>    stash -> fetch -> rebase (input)',
     '<C-Space>   toggle Flog graph',
@@ -861,6 +894,11 @@ function M.setup(group)
       vim.keymap.set('n', 'P', function()
         pull_branch_under_cursor(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Pull branch under cursor" })
+
+      -- D: Diff against default branch
+      vim.keymap.set('n', 'D', function()
+        diff_against_default(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Diff against default branch" })
 
       -- r<Space>: Stash, Fetch, Rebase
       vim.keymap.set('n', 'r<Space>', function()
