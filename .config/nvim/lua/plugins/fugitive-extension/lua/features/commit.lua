@@ -4,6 +4,29 @@ local commands = require("features.commands")
 
 local is_navigating = false
 
+local function get_commit_from_buffer(bufnr)
+  local commit = utils.get_commit(bufnr)
+
+  if not commit or commit == '' then
+    local line = vim.api.nvim_get_current_line()
+    commit = line:match('^commit (%x+)') or line:match('^(%x%x%x%x%x%x%x+)')
+  end
+
+  if not commit then
+     local lnum = vim.fn.line('.')
+     while lnum > 0 do
+       local l = vim.fn.getline(lnum)
+       local c = l:match('^commit (%x+)')
+       if c then
+         commit = c
+         break
+       end
+       lnum = lnum - 1
+     end
+  end
+  return commit
+end
+
 _G.fugitive_foldtext = function()
   local line = vim.fn.getline(vim.v.foldstart)
   local filename = line:match("^diff %-%-git [ab]/(.+) [ab]/") or line:match("^(%S+)") or "folding"
@@ -215,10 +238,8 @@ function M.setup(group)
 
       -- d: Diffview
       vim.keymap.set('n', 'd', function()
-        local commit = utils.get_commit(ev.buf)
-        if commit == '' then
-          commit = vim.api.nvim_get_current_line():match('^(%x+)')
-        end
+        local commit = get_commit_from_buffer(ev.buf)
+
         if not commit then
           return
         end
@@ -236,7 +257,8 @@ function M.setup(group)
 
       -- C: コミット概要をフロートウィンドウで表示
       vim.keymap.set('n', 'C', function()
-        local commit = utils.get_commit(ev.buf)
+        local commit = get_commit_from_buffer(ev.buf)
+
         if not commit then
           print('No commit found')
           return
@@ -247,7 +269,7 @@ function M.setup(group)
 
       -- p: カーソル位置ファイルの前のコミット
       vim.keymap.set('n', 'p', function()
-        local commit = utils.get_commit(ev.buf)
+        local commit = get_commit_from_buffer(ev.buf)
         if not commit then
           return
         end
@@ -311,7 +333,7 @@ function M.setup(group)
 
       -- O: Octo PR
       vim.keymap.set('n', 'O', function()
-        local commit = utils.get_commit(ev.buf)
+        local commit = get_commit_from_buffer(ev.buf)
         if not commit then
           return
         end
@@ -346,7 +368,7 @@ function M.setup(group)
 
       -- Ctrl-y: コミットハッシュをクリップボードにコピー
       vim.keymap.set('n', '<C-y>', function()
-        local commit = utils.get_commit(ev.buf)
+        local commit = get_commit_from_buffer(ev.buf)
         if not commit then
           print('No commit found')
           return
@@ -355,25 +377,6 @@ function M.setup(group)
         vim.fn.setreg('+', short_commit)
         vim.fn.setreg('"', short_commit)
         print('Copied: ' .. short_commit)
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- <Leader>cf: 現在のコミットを一つ前のコミットにfixupする
-      vim.keymap.set('n', '<Leader>cf', function()
-        local current_line = vim.api.nvim_get_current_line()
-        -- コミットハッシュを抽出（Unpushedセクションのコミット行から）
-        local commit_hash = current_line:match('^(%x+)')
-
-        if not commit_hash then
-          vim.notify('No commit found at cursor', vim.log.levels.WARN)
-          return
-        end
-        commands.fixup_commit(commit_hash)
-      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Fixup this commit into its parent' })
-
-
-      vim.keymap.set('n', '<Leader>R', function()
-        local cursor_commit = vim.api.nvim_get_current_line():match('^(%x+)')
-        vim.cmd('G reset --mixed ' .. cursor_commit)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
       -- q: Close window and flog window
