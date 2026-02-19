@@ -28,8 +28,8 @@ local function get_ahead_behind(branch, upstream)
 end
 
 local function get_branch_list()
-  local local_branches = vim.fn.systemlist("git for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(contents:subject)' refs/heads/")
-  local remote_branches = vim.fn.systemlist("git for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(contents:subject)' refs/remotes/")
+  local local_branches = vim.fn.systemlist("git for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
+  local remote_branches = vim.fn.systemlist("git for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
 
   if vim.v.shell_error ~= 0 then
     return {}
@@ -53,11 +53,17 @@ local function get_branch_list()
   local max_branch_len = 0
   local max_push_len = 0
   local max_subject_len = 0
+  local max_date_len = 0
+  local max_author_len = 0
 
   for _, line in ipairs(raw_branches) do
-    local head, branch, upstream, subject = line:match('^([* ]?)|(.-)|(.-)|(.*)')
+    local head, branch, upstream, date, author, subject = line:match('^([* ]?)|(.-)|(.-)|(.-)|(.-)|(.*)')
     if branch then
-      local ahead, behind = get_ahead_behind(branch, upstream)
+      local ahead, behind = 0, 0
+      -- Only calculate ahead/behind for local branches
+      if not branch:match('^origin/') then
+         ahead, behind = get_ahead_behind(branch, upstream)
+      end
 
       local push_info = ''
       if behind > 0 then
@@ -69,25 +75,42 @@ local function get_branch_list()
 
       local upstream_str = upstream ~= '' and string.format('[%s]', upstream) or ''
 
+      -- Shorten relative date
+      date = date:gsub(',.*', '') -- Keep only the first part
+      date = date:gsub(' ago', '')
+      date = date:gsub(' years?', 'y')
+      date = date:gsub(' months?', 'mo')
+      date = date:gsub(' weeks?', 'w')
+      date = date:gsub(' days?', 'd')
+      date = date:gsub(' hours?', 'h')
+      date = date:gsub(' minutes?', 'm')
+      date = date:gsub(' seconds?', 's')
+
       table.insert(branches, {
         head = head == '*' and '* ' or '  ',
         branch = branch,
         push_info = push_info,
         subject = subject,
         upstream_str = upstream_str,
+        date = date,
+        author = author,
       })
 
       max_branch_len = math.max(max_branch_len, vim.fn.strdisplaywidth(branch))
       max_push_len = math.max(max_push_len, vim.fn.strdisplaywidth(push_info))
       max_subject_len = math.max(max_subject_len, vim.fn.strdisplaywidth(subject))
+      max_date_len = math.max(max_date_len, vim.fn.strdisplaywidth(date))
+      max_author_len = math.max(max_author_len, vim.fn.strdisplaywidth(author))
     end
   end
 
   -- Second pass: format with calculated widths
   -- Cap widths to avoid string.format limits (max 99)
-  max_branch_len = math.min(max_branch_len, 70)
+  max_branch_len = math.min(max_branch_len, 50)
   max_push_len = math.min(max_push_len, 20)
-  max_subject_len = 50  -- Fixed width for subject
+  max_subject_len = 40  -- Fixed width for subject
+  max_date_len = math.min(max_date_len, 6)
+  max_author_len = math.min(max_author_len, 15)
 
   -- Helper function to pad string based on display width
   local function pad_right(str, width)
@@ -125,7 +148,7 @@ local function get_branch_list()
       subject = truncated .. '...'
     end
 
-    local line = b.head .. pad_right(branch_block, max_branch_len) .. '  ' .. pad_right(subject, max_subject_len)
+    local line = b.head .. pad_right(branch_block, max_branch_len) .. '  ' .. pad_right(b.date, max_date_len) .. '  ' .. pad_right(b.author, max_author_len) .. '  ' .. pad_right(subject, max_subject_len)
     -- Add upstream if exists, otherwise trim trailing spaces
     if b.upstream_str ~= '' then
       line = line .. '  ' .. b.upstream_str
@@ -618,10 +641,10 @@ local function diff_against_default(bufnr)
   end
 
   local default_branch = get_default_origin_head()
-  
+
   -- Notify and fetch
   vim.notify("Fetching origin...", vim.log.levels.INFO)
-  
+
   -- Use jobstart for async fetch
   vim.fn.jobstart("git fetch origin", {
     on_exit = function(_, exit_code)
@@ -629,7 +652,7 @@ local function diff_against_default(bufnr)
         vim.notify("Fetch failed", vim.log.levels.ERROR)
         return
       end
-      
+
       -- Open Diffview in a scheduled callback to ensure we are in the right context
       vim.schedule(function()
         -- Compare default_branch...branch (3 dots for merge base diff - GitHub PR style)
