@@ -13,12 +13,13 @@ _G.fugitive_branch_completion = function(arg_lead, cmd_line, cursor_pos)
   return matches
 end
 
-local function get_ahead_behind(branch, upstream)
+local function get_ahead_behind(branch, upstream, cmd_prefix)
   if not upstream or upstream == '' then
     return 0, 0
   end
 
-  local result = vim.fn.system(string.format('git rev-list --left-right --count %s...%s 2>/dev/null', branch, upstream))
+  cmd_prefix = cmd_prefix or 'git '
+  local result = vim.fn.system(string.format('%srev-list --left-right --count %s...%s 2>/dev/null', cmd_prefix, branch, upstream))
   if vim.v.shell_error ~= 0 then
     return 0, 0
   end
@@ -28,13 +29,29 @@ local function get_ahead_behind(branch, upstream)
 end
 
 local function get_branch_list()
-  local local_branches = vim.fn.systemlist("git for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
-  local remote_branches = vim.fn.systemlist("git for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
+  local cmd_prefix = "git "
+  -- Use buffer context for git command to handle submodules and worktrees correctly
+  local current_file = vim.api.nvim_buf_get_name(0)
+  if current_file ~= "" and not current_file:match("^fugitive://") then
+    local current_dir = vim.fn.fnamemodify(current_file, ":p:h")
+    cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(current_dir))
+  else
+    local git_dir = vim.fn.FugitiveGitDir()
+    if git_dir ~= "" then
+      local work_tree = vim.fn.systemlist(string.format("git --git-dir=%s rev-parse --show-toplevel 2>/dev/null", vim.fn.shellescape(git_dir)))[1]
+      if work_tree and work_tree ~= "" then
+         cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(work_tree))
+      end
+    end
+  end
+
+  local local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
+  local remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
 
   if vim.v.shell_error ~= 0 then
     return {}
   end
-
+  
   -- Combine local branches first, then remote branches
   local raw_branches = {}
   for _, line in ipairs(local_branches) do
@@ -43,11 +60,11 @@ local function get_branch_list()
   for _, line in ipairs(remote_branches) do
     -- Skip "origin" alone (origin/HEAD symref)
     local branch = line:match('^[* ]?|([^|]+)')
-    if branch ~= 'origin' then
+    if branch and branch ~= 'origin' then
       table.insert(raw_branches, line)
     end
   end
-
+  
   -- First pass: collect all data
   local branches = {}
   local max_branch_len = 0
@@ -62,7 +79,8 @@ local function get_branch_list()
       local ahead, behind = 0, 0
       -- Only calculate ahead/behind for local branches
       if not branch:match('^origin/') then
-         ahead, behind = get_ahead_behind(branch, upstream)
+         -- Pass cmd_prefix to use correct git context for rev-list
+         ahead, behind = get_ahead_behind(branch, upstream, cmd_prefix)
       end
 
       local push_info = ''
@@ -112,13 +130,45 @@ local function get_branch_list()
   max_date_len = math.min(max_date_len, 6)
   max_author_len = math.min(max_author_len, 15)
 
-  -- Helper function to pad string based on display width
+  -- Helper function to pad string based on display width and truncate if necessary
   local function pad_right(str, width)
     local display_width = vim.fn.strdisplaywidth(str)
-    if display_width >= width then
+    
+    if display_width > width then
+      -- Truncate string to fit width
+      local truncated = ''
+      local current_width = 0
+      
+      -- If width is very small, we might just return empty or partial
+      if width <= 3 then
+         local chars = vim.fn.split(str, '\\zs')
+         for _, char in ipairs(chars) do
+            local w = vim.fn.strdisplaywidth(char)
+            if current_width + w > width then break end
+            truncated = truncated .. char
+            current_width = current_width + w
+         end
+         return truncated .. string.rep(' ', width - current_width)
+      end
+
+      -- Reserve space for '...'
+      local target_width = width - 3
+      local chars = vim.fn.split(str, '\\zs')
+      
+      for _, char in ipairs(chars) do
+        local char_width = vim.fn.strdisplaywidth(char)
+        if current_width + char_width > target_width then
+          break
+        end
+        truncated = truncated .. char
+        current_width = current_width + char_width
+      end
+      return truncated .. '...' .. string.rep(' ', width - (current_width + 3))
+    elseif display_width == width then
       return str
+    else
+      return str .. string.rep(' ', width - display_width)
     end
-    return str .. string.rep(' ', width - display_width)
   end
 
   local formatted = {}
@@ -128,25 +178,9 @@ local function get_branch_list()
     if b.push_info ~= '' then
       branch_block = branch_block .. ' ' .. b.push_info
     end
-
-    -- Truncate subject if too long
+    
     local subject = b.subject
-    if vim.fn.strdisplaywidth(subject) > max_subject_len then
-      -- Truncate by display width instead of character count
-      local truncated = ''
-      local width = 0
-      local target_width = max_subject_len - 3
-      local chars = vim.fn.split(subject, '\\zs')
-      for _, char in ipairs(chars) do
-        local char_width = vim.fn.strdisplaywidth(char)
-        if width + char_width > target_width then
-          break
-        end
-        truncated = truncated .. char
-        width = width + char_width
-      end
-      subject = truncated .. '...'
-    end
+    local author = b.author
 
     local line = b.head .. pad_right(branch_block, max_branch_len) .. '  ' .. pad_right(b.date, max_date_len) .. '  ' .. pad_right(b.author, max_author_len) .. '  ' .. pad_right(subject, max_subject_len)
     -- Add upstream if exists, otherwise trim trailing spaces
