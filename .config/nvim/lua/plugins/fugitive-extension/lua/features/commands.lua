@@ -837,21 +837,34 @@ cat "$1" >> /tmp/rebase-debug.log
     -- The last one in rev-list output (date-order) is the oldest
     local oldest_commit = sorted_commits[#sorted_commits]
 
-    -- Construct sed command to delete lines
-    local sed_expr = ""
-    for _, commit in ipairs(commits) do
-        local short = commit:sub(1, 7)
-        sed_expr = sed_expr .. " -e '/^pick " .. short .. "/d'"
+    -- Check if oldest commit has a parent
+    local has_parent = vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. oldest_commit .. '^ 2>/dev/null')
+    local rebase_base = oldest_commit .. '^'
+    
+    if vim.v.shell_error ~= 0 then
+      -- No parent (root commit). Need --root option.
+      rebase_base = '--root'
     end
 
     local tmpfile = vim.fn.tempname()
     local f = io.open(tmpfile, 'w')
+    if not f then
+       if stashed then pop_auto_stash(work_tree) end
+       vim.notify('Failed to create temp file', vim.log.levels.ERROR)
+       return
+    end
+
     f:write('#!/bin/sh\n')
-    f:write('sed -i' .. sed_expr .. ' "$1"\n')
+    -- Use sed to delete lines matching the commits
+    for _, commit in ipairs(commits) do
+        local short = commit:sub(1, 7)
+        -- Match any command (pick, reword, etc) followed by the hash
+        f:write('sed -i "/^[a-z]\\+ ' .. short .. '/d" "$1"\n')
+    end
     f:close()
     vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
 
-    local rebase_cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(oldest_commit .. '^')
+    local rebase_cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(rebase_base)
     local result = vim.fn.system(rebase_cmd)
     vim.fn.delete(tmpfile)
 
