@@ -292,18 +292,25 @@ local function apply_fade_highlight(bufnr, truncated_info)
       })
     elseif mode == 'right' then
       -- Apply fade effect to the last few characters (right side)
+      local line_content = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1]
+      local line_len = line_content and #line_content or 0
+      local end_col = math.min(col + len, line_len)
+
       -- Last char: Very faint (NonText)
-      local end_col = col + len
-      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, end_col - 1, {
-        end_col = end_col,
-        hl_group = "NonText",
-      })
+      if end_col > 0 then
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, line, end_col - 1, {
+          end_col = end_col,
+          hl_group = "NonText",
+        })
+      end
 
       -- 2nd to last char: Faint (Comment)
-      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, end_col - 2, {
-        end_col = end_col - 1,
-        hl_group = "Comment",
-      })
+      if end_col > 1 then
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, line, end_col - 2, {
+          end_col = end_col - 1,
+          hl_group = "Comment",
+        })
+      end
     end
   end
 end
