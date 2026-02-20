@@ -151,7 +151,7 @@ local function get_branch_list()
             truncated = truncated .. char
             current_width = current_width + w
          end
-         return truncated .. string.rep(' ', width - current_width), 'right'
+         return truncated .. string.rep(' ', width - current_width), truncate_mode or 'right', #truncated
       end
 
       local chars = vim.fn.split(str, '\\zs')
@@ -169,8 +169,8 @@ local function get_branch_list()
           current_width = current_width + char_width
         end
         return table.concat(collected) .. string.rep(' ', width - current_width), 'left', #table.concat(collected)
-      else
-        -- Truncate from right (default): "long-branch-na" (no ellipsis)
+      elseif truncate_mode == 'right' then
+        -- Truncate from right: "long-branch-na" (no ellipsis)
         for _, char in ipairs(chars) do
           local char_width = vim.fn.strdisplaywidth(char)
           if current_width + char_width > width then
@@ -180,6 +180,18 @@ local function get_branch_list()
           current_width = current_width + char_width
         end
         return truncated .. string.rep(' ', width - current_width), 'right', #truncated
+      else
+        -- Truncate from right (legacy/default): "long-branch..." (with ellipsis)
+        local target_width = width - 3
+        for _, char in ipairs(chars) do
+          local char_width = vim.fn.strdisplaywidth(char)
+          if current_width + char_width > target_width then
+            break
+          end
+          truncated = truncated .. char
+          current_width = current_width + char_width
+        end
+        return truncated .. '...' .. string.rep(' ', width - (current_width + 3)), nil, #truncated + 3
       end
     elseif display_width == width then
       return str, nil, #str
@@ -203,7 +215,7 @@ local function get_branch_list()
     local branch_str, truncated_branch_mode, branch_content_len = pad_right(branch_block, max_branch_len, 'left')
     local date_str, _ = pad_right(b.date, max_date_len)
     local author_str, truncated_author_mode, author_content_len = pad_right(b.author, max_author_len, 'right')
-    local subject_str, _ = pad_right(subject, max_subject_len)
+    local subject_str, truncated_subject_mode, subject_content_len = pad_right(subject, max_subject_len, 'right')
 
     local line = b.head .. branch_str .. '  ' .. date_str .. '  ' .. author_str .. '  ' .. subject_str
 
@@ -232,6 +244,17 @@ local function get_branch_list()
         col_start = author_col,
         text_len = author_content_len,
         mode = truncated_author_mode
+      })
+    end
+
+    if truncated_subject_mode then
+      -- head + branch + 2 spaces + date + 2 spaces + author + 2 spaces
+      local subject_col = #b.head + #branch_str + 2 + #date_str + 2 + #author_str + 2
+      table.insert(truncated_info, {
+        line = #formatted - 1,
+        col_start = subject_col,
+        text_len = subject_content_len,
+        mode = truncated_subject_mode
       })
     end
   end
