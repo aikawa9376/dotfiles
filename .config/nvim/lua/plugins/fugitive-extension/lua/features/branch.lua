@@ -127,14 +127,14 @@ local function get_branch_list()
 
   -- Second pass: format with calculated widths
   -- Cap widths to avoid string.format limits (max 99)
-  max_branch_len = math.min(max_branch_len, 50)
+  max_branch_len = math.min(max_branch_len, 40)
   max_push_len = math.min(max_push_len, 20)
   max_subject_len = 40  -- Fixed width for subject
   max_date_len = math.min(max_date_len, 6)
   max_author_len = math.min(max_author_len, 15)
 
   -- Helper function to pad string based on display width and truncate if necessary
-  local function pad_right(str, width, truncate_left)
+  local function pad_right(str, width, truncate_mode)
     local display_width = vim.fn.strdisplaywidth(str)
 
     if display_width > width then
@@ -151,14 +151,12 @@ local function get_branch_list()
             truncated = truncated .. char
             current_width = current_width + w
          end
-         return truncated .. string.rep(' ', width - current_width)
+         return truncated .. string.rep(' ', width - current_width), 'right'
       end
 
-      -- Reserve space for '...'
-      local target_width = width - 3
       local chars = vim.fn.split(str, '\\zs')
 
-      if truncate_left then
+      if truncate_mode == 'left' then
         -- Truncate from left: "ong-branch-name" (no ellipsis)
         local collected = {}
         for i = #chars, 1, -1 do
@@ -170,23 +168,23 @@ local function get_branch_list()
           table.insert(collected, 1, char)
           current_width = current_width + char_width
         end
-        return table.concat(collected) .. string.rep(' ', width - current_width), true
+        return table.concat(collected) .. string.rep(' ', width - current_width), 'left', #table.concat(collected)
       else
-        -- Truncate from right (default): "long-branch-na..."
+        -- Truncate from right (default): "long-branch-na" (no ellipsis)
         for _, char in ipairs(chars) do
           local char_width = vim.fn.strdisplaywidth(char)
-          if current_width + char_width > target_width then
+          if current_width + char_width > width then
             break
           end
           truncated = truncated .. char
           current_width = current_width + char_width
         end
-        return truncated .. '...' .. string.rep(' ', width - (current_width + 3)), true
+        return truncated .. string.rep(' ', width - current_width), 'right', #truncated
       end
     elseif display_width == width then
-      return str, false
+      return str, nil, #str
     else
-      return str .. string.rep(' ', width - display_width), false
+      return str .. string.rep(' ', width - display_width), nil, #str
     end
   end
 
@@ -202,13 +200,13 @@ local function get_branch_list()
     local subject = b.subject
     local author = b.author
 
-    local branch_str, truncated_branch = pad_right(branch_block, max_branch_len, true)
+    local branch_str, truncated_branch_mode, branch_content_len = pad_right(branch_block, max_branch_len, 'left')
     local date_str, _ = pad_right(b.date, max_date_len)
-    local author_str, _ = pad_right(b.author, max_author_len)
+    local author_str, truncated_author_mode, author_content_len = pad_right(b.author, max_author_len, 'right')
     local subject_str, _ = pad_right(subject, max_subject_len)
-    
+
     local line = b.head .. branch_str .. '  ' .. date_str .. '  ' .. author_str .. '  ' .. subject_str
-    
+
     -- Add upstream if exists, otherwise trim trailing spaces
     if b.upstream_str ~= '' then
       line = line .. '  ' .. b.upstream_str
@@ -216,12 +214,24 @@ local function get_branch_list()
       line = line:gsub('%s+$', '')
     end
     table.insert(formatted, line)
-    
-    if truncated_branch then
+
+    if truncated_branch_mode then
       table.insert(truncated_info, {
         line = #formatted - 1, -- 0-indexed
         col_start = #b.head,
-        text = branch_str
+        text_len = branch_content_len,
+        mode = truncated_branch_mode
+      })
+    end
+
+    if truncated_author_mode then
+      -- head + branch + 2 spaces + date + 2 spaces
+      local author_col = #b.head + #branch_str + 2 + #date_str + 2
+      table.insert(truncated_info, {
+        line = #formatted - 1,
+        col_start = author_col,
+        text_len = author_content_len,
+        mode = truncated_author_mode
       })
     end
   end
@@ -241,16 +251,37 @@ local function apply_fade_highlight(bufnr, truncated_info)
   for _, info in ipairs(truncated_info) do
     local line = info.line
     local col = info.col_start
-    
-    -- Apply fade effect to the first few characters
-    -- 1st char: Very faint (NonText or Ignore)
-    vim.api.nvim_buf_add_highlight(bufnr, ns_id, "Ignore", line, col, col + 1)
-    
-    -- 2nd char: Faint (Comment)
-    vim.api.nvim_buf_add_highlight(bufnr, ns_id, "Comment", line, col + 1, col + 2)
-    
-    -- 3rd char: Slightly faint (SpecialComment or folded) - optional, skip to normal
-    -- vim.api.nvim_buf_add_highlight(bufnr, ns_id, "SpecialKey", line, col + 2, col + 3)
+    local len = info.text_len
+    local mode = info.mode
+
+    if mode == 'left' then
+      -- Apply fade effect to the first few characters (left side)
+      -- 1st char: Very faint (NonText)
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, col, {
+        end_col = col + 1,
+        hl_group = "NonText",
+      })
+
+      -- 2nd char: Faint (Comment)
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, col + 1, {
+        end_col = col + 2,
+        hl_group = "Comment",
+      })
+    elseif mode == 'right' then
+      -- Apply fade effect to the last few characters (right side)
+      -- Last char: Very faint (NonText)
+      local end_col = col + len
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, end_col - 1, {
+        end_col = end_col,
+        hl_group = "NonText",
+      })
+
+      -- 2nd to last char: Faint (Comment)
+      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, end_col - 2, {
+        end_col = end_col - 1,
+        hl_group = "Comment",
+      })
+    end
   end
 end
 
