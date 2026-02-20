@@ -134,7 +134,7 @@ local function get_branch_list()
   max_author_len = math.min(max_author_len, 15)
 
   -- Helper function to pad string based on display width and truncate if necessary
-  local function pad_right(str, width)
+  local function pad_right(str, width, truncate_left)
     local display_width = vim.fn.strdisplaywidth(str)
 
     if display_width > width then
@@ -158,15 +158,31 @@ local function get_branch_list()
       local target_width = width - 3
       local chars = vim.fn.split(str, '\\zs')
 
-      for _, char in ipairs(chars) do
-        local char_width = vim.fn.strdisplaywidth(char)
-        if current_width + char_width > target_width then
-          break
+      if truncate_left then
+        -- Truncate from left: "...ong-branch-name"
+        local collected = {}
+        for i = #chars, 1, -1 do
+          local char = chars[i]
+          local char_width = vim.fn.strdisplaywidth(char)
+          if current_width + char_width > target_width then
+            break
+          end
+          table.insert(collected, 1, char)
+          current_width = current_width + char_width
         end
-        truncated = truncated .. char
-        current_width = current_width + char_width
+        return '...' .. table.concat(collected) .. string.rep(' ', width - (current_width + 3))
+      else
+        -- Truncate from right (default): "long-branch-na..."
+        for _, char in ipairs(chars) do
+          local char_width = vim.fn.strdisplaywidth(char)
+          if current_width + char_width > target_width then
+            break
+          end
+          truncated = truncated .. char
+          current_width = current_width + char_width
+        end
+        return truncated .. '...' .. string.rep(' ', width - (current_width + 3))
       end
-      return truncated .. '...' .. string.rep(' ', width - (current_width + 3))
     elseif display_width == width then
       return str
     else
@@ -185,7 +201,7 @@ local function get_branch_list()
     local subject = b.subject
     local author = b.author
 
-    local line = b.head .. pad_right(branch_block, max_branch_len) .. '  ' .. pad_right(b.date, max_date_len) .. '  ' .. pad_right(b.author, max_author_len) .. '  ' .. pad_right(subject, max_subject_len)
+    local line = b.head .. pad_right(branch_block, max_branch_len, true) .. '  ' .. pad_right(b.date, max_date_len) .. '  ' .. pad_right(b.author, max_author_len) .. '  ' .. pad_right(subject, max_subject_len)
     -- Add upstream if exists, otherwise trim trailing spaces
     if b.upstream_str ~= '' then
       line = line .. '  ' .. b.upstream_str
@@ -195,10 +211,25 @@ local function get_branch_list()
     table.insert(formatted, line)
   end
 
-  return formatted
+  local branch_names = {}
+  for i, b in ipairs(branches) do
+    branch_names[i] = b.branch
+  end
+
+  return formatted, branch_names
 end
 
 local function get_branch_name_from_line(line)
+  if not line then
+    -- If no line provided, use current cursor line and lookup in buffer variable
+    local bufnr = vim.api.nvim_get_current_buf()
+    local cursor_line = vim.fn.line('.')
+    local branch_map = vim.b[bufnr].branch_map
+    if branch_map and branch_map[cursor_line] then
+      return branch_map[cursor_line]
+    end
+  end
+
   line = line or vim.api.nvim_get_current_line()
   -- Extract branch name (after * or spaces, before first double space)
   local branch = line:match('^[* ]%s*(%S+)')
@@ -212,8 +243,9 @@ local function refresh_branch_list(bufnr)
 
   vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
 
-  local branch_output = get_branch_list()
+  local branch_output, branch_names = get_branch_list()
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
+  vim.b[bufnr].branch_map = branch_names
 
   vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
 end
@@ -776,7 +808,7 @@ local function merge_with_input(bufnr, default_target)
 end
 
 local function open_branch_list()
-  local branch_output = get_branch_list()
+  local branch_output, branch_names = get_branch_list()
   if vim.v.shell_error ~= 0 then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
@@ -797,6 +829,7 @@ local function open_branch_list()
   -- Set modifiable before setting lines
   vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
+  vim.b[bufnr].branch_map = branch_names
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
