@@ -54,7 +54,7 @@ local function get_branch_list()
   if vim.v.shell_error ~= 0 then
     return {}
   end
-  
+
   -- Combine local branches first, then remote branches
   local raw_branches = {}
   for _, line in ipairs(local_branches) do
@@ -67,7 +67,7 @@ local function get_branch_list()
       table.insert(raw_branches, line)
     end
   end
-  
+
   -- First pass: collect all data
   local branches = {}
   local max_branch_len = 0
@@ -136,12 +136,12 @@ local function get_branch_list()
   -- Helper function to pad string based on display width and truncate if necessary
   local function pad_right(str, width)
     local display_width = vim.fn.strdisplaywidth(str)
-    
+
     if display_width > width then
       -- Truncate string to fit width
       local truncated = ''
       local current_width = 0
-      
+
       -- If width is very small, we might just return empty or partial
       if width <= 3 then
          local chars = vim.fn.split(str, '\\zs')
@@ -157,7 +157,7 @@ local function get_branch_list()
       -- Reserve space for '...'
       local target_width = width - 3
       local chars = vim.fn.split(str, '\\zs')
-      
+
       for _, char in ipairs(chars) do
         local char_width = vim.fn.strdisplaywidth(char)
         if current_width + char_width > target_width then
@@ -181,7 +181,7 @@ local function get_branch_list()
     if b.push_info ~= '' then
       branch_block = branch_block .. ' ' .. b.push_info
     end
-    
+
     local subject = b.subject
     local author = b.author
 
@@ -799,7 +799,7 @@ local function open_branch_list()
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
-  vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
+  vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.wo[vim.api.nvim_get_current_win()].wrap = false
   vim.bo[bufnr].filetype = 'fugitivebranch'
@@ -853,7 +853,7 @@ function M.setup(group)
     callback = function(ev)
       local bufnr = ev.buf
       vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
-      vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
+      vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
       vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
       vim.bo[bufnr].filetype = 'fugitivebranch'
       refresh_branch_list(bufnr)
