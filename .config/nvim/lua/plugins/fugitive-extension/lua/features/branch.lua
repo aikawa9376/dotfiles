@@ -32,7 +32,10 @@ local function get_branch_list()
   local cmd_prefix = "git "
   -- Use buffer context for git command to handle submodules and worktrees correctly
   local current_file = vim.api.nvim_buf_get_name(0)
-  if current_file ~= "" and not current_file:match("^fugitive://") then
+  if current_file:match("^fugitive%-branch://") then
+    local path = current_file:sub(#"fugitive-branch://" + 1)
+    cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(path))
+  elseif current_file ~= "" and not current_file:match("^fugitive://") then
     local current_dir = vim.fn.fnamemodify(current_file, ":p:h")
     cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(current_dir))
   else
@@ -784,7 +787,11 @@ local function open_branch_list()
     return
   end
 
-  vim.cmd('botright split fugitive-branch://')
+  local git_dir = vim.fn.FugitiveGitDir()
+  if git_dir == "" then
+    git_dir = vim.fn.getcwd() -- Fallback if not in git repo, though get_branch_list check above should prevent this
+  end
+  vim.cmd('botright split fugitive-branch://' .. git_dir)
   local bufnr = vim.api.nvim_get_current_buf()
 
   -- Set modifiable before setting lines
