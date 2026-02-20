@@ -159,18 +159,18 @@ local function get_branch_list()
       local chars = vim.fn.split(str, '\\zs')
 
       if truncate_left then
-        -- Truncate from left: "...ong-branch-name"
+        -- Truncate from left: "ong-branch-name" (no ellipsis)
         local collected = {}
         for i = #chars, 1, -1 do
           local char = chars[i]
           local char_width = vim.fn.strdisplaywidth(char)
-          if current_width + char_width > target_width then
+          if current_width + char_width > width then
             break
           end
           table.insert(collected, 1, char)
           current_width = current_width + char_width
         end
-        return '...' .. table.concat(collected) .. string.rep(' ', width - (current_width + 3))
+        return table.concat(collected) .. string.rep(' ', width - current_width), true
       else
         -- Truncate from right (default): "long-branch-na..."
         for _, char in ipairs(chars) do
@@ -181,17 +181,18 @@ local function get_branch_list()
           truncated = truncated .. char
           current_width = current_width + char_width
         end
-        return truncated .. '...' .. string.rep(' ', width - (current_width + 3))
+        return truncated .. '...' .. string.rep(' ', width - (current_width + 3)), true
       end
     elseif display_width == width then
-      return str
+      return str, false
     else
-      return str .. string.rep(' ', width - display_width)
+      return str .. string.rep(' ', width - display_width), false
     end
   end
 
   local formatted = {}
-  for _, b in ipairs(branches) do
+  local truncated_info = {}
+  for i, b in ipairs(branches) do
     -- Combine branch name with push info
     local branch_block = b.branch
     if b.push_info ~= '' then
@@ -201,7 +202,13 @@ local function get_branch_list()
     local subject = b.subject
     local author = b.author
 
-    local line = b.head .. pad_right(branch_block, max_branch_len, true) .. '  ' .. pad_right(b.date, max_date_len) .. '  ' .. pad_right(b.author, max_author_len) .. '  ' .. pad_right(subject, max_subject_len)
+    local branch_str, truncated_branch = pad_right(branch_block, max_branch_len, true)
+    local date_str, _ = pad_right(b.date, max_date_len)
+    local author_str, _ = pad_right(b.author, max_author_len)
+    local subject_str, _ = pad_right(subject, max_subject_len)
+    
+    local line = b.head .. branch_str .. '  ' .. date_str .. '  ' .. author_str .. '  ' .. subject_str
+    
     -- Add upstream if exists, otherwise trim trailing spaces
     if b.upstream_str ~= '' then
       line = line .. '  ' .. b.upstream_str
@@ -209,6 +216,14 @@ local function get_branch_list()
       line = line:gsub('%s+$', '')
     end
     table.insert(formatted, line)
+    
+    if truncated_branch then
+      table.insert(truncated_info, {
+        line = #formatted - 1, -- 0-indexed
+        col_start = #b.head,
+        text = branch_str
+      })
+    end
   end
 
   local branch_names = {}
@@ -216,7 +231,27 @@ local function get_branch_list()
     branch_names[i] = b.branch
   end
 
-  return formatted, branch_names
+  return formatted, branch_names, truncated_info
+end
+
+local function apply_fade_highlight(bufnr, truncated_info)
+  local ns_id = vim.api.nvim_create_namespace('fugitive_branch_fade')
+  vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+
+  for _, info in ipairs(truncated_info) do
+    local line = info.line
+    local col = info.col_start
+    
+    -- Apply fade effect to the first few characters
+    -- 1st char: Very faint (NonText or Ignore)
+    vim.api.nvim_buf_add_highlight(bufnr, ns_id, "Ignore", line, col, col + 1)
+    
+    -- 2nd char: Faint (Comment)
+    vim.api.nvim_buf_add_highlight(bufnr, ns_id, "Comment", line, col + 1, col + 2)
+    
+    -- 3rd char: Slightly faint (SpecialComment or folded) - optional, skip to normal
+    -- vim.api.nvim_buf_add_highlight(bufnr, ns_id, "SpecialKey", line, col + 2, col + 3)
+  end
 end
 
 local function get_branch_name_from_line(line)
@@ -243,9 +278,10 @@ local function refresh_branch_list(bufnr)
 
   vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
 
-  local branch_output, branch_names = get_branch_list()
+  local branch_output, branch_names, truncated_info = get_branch_list()
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
   vim.b[bufnr].branch_map = branch_names
+  apply_fade_highlight(bufnr, truncated_info)
 
   vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
 end
@@ -808,7 +844,7 @@ local function merge_with_input(bufnr, default_target)
 end
 
 local function open_branch_list()
-  local branch_output, branch_names = get_branch_list()
+  local branch_output, branch_names, truncated_info = get_branch_list()
   if vim.v.shell_error ~= 0 then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
@@ -830,6 +866,7 @@ local function open_branch_list()
   vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
   vim.b[bufnr].branch_map = branch_names
+  apply_fade_highlight(bufnr, truncated_info)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
