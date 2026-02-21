@@ -2,20 +2,61 @@ return {
   "lazyagent",
   dir = os.getenv("XDG_CONFIG_HOME") .. "/nvim/lua/plugins/lazyagent",
   -- Use lazy.nvim key mappings to load plugin when keys are used
-  keys = {
-    {
-      "c<space><space>",
-      function() require("lazyagent").toggle_session() end,
+  keys = (function()
+    local keys = {
+      {
+        "c<space><space>",
+        function() require("lazyagent").toggle_session() end,
+        mode = { "n", "x" },
+        desc = "Toggle AI Agent",
+      },
+      {
+        "c<space>i",
+        function() require("lazyagent").open_instant() end,
+        mode = { "n", "x" },
+        desc = "Instant AI Agent",
+      },
+      {
+        "c<space><cr>",
+        function() require("lazyagent").send_enter() end,
+        mode = { "n", "x" },
+        desc = "Send Enter to Agent",
+      },
+      {
+        "c<space>n",
+        function() require("lazyagent").send_down() end,
+        mode = { "n", "x" },
+        desc = "Send Down to Agent",
+      },
+      {
+        "c<space>p",
+        function() require("lazyagent").send_up() end,
+        mode = { "n", "x" },
+        desc = "Send Up to Agent",
+      },
+    }
+    for i = 0, 9 do
+      table.insert(keys, {
+        "c<space>" .. i,
+        function() require("lazyagent").send_key(tostring(i)) end,
+        mode = { "n", "x" },
+        desc = "Send " .. i .. " to Agent",
+      })
+    end
+    table.insert(keys, {
+      "c<space><C-c>",
+      function() require("lazyagent").send_interrupt() end,
       mode = { "n", "x" },
-      desc = "Toggle AI Agent",
-    },
-    {
-      "c<space>i",
-      function() require("lazyagent").open_instant() end,
+      desc = "Send Ctrl-C to Agent",
+    })
+    table.insert(keys, {
+      "c<space>d",
+      function() require("lazyagent").clear_input() end,
       mode = { "n", "x" },
-      desc = "Instant AI Agent",
-    },
-  },
+      desc = "Clear Agent Input",
+    })
+    return keys
+  end)(),
   -- Also load the plugin when these user commands are executed
   cmd = {
     "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",

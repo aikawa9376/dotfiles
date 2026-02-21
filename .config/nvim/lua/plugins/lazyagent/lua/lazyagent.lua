@@ -22,7 +22,15 @@ M.open_instant = session_logic.open_instant
 M.send_visual = send_logic.send_visual
 M.send_line = send_logic.send_line
 M.status = status_logic.get_status
+M.send_enter = send_logic.send_enter
+M.send_down = send_logic.send_down
+M.send_up = send_logic.send_up
+M.send_key = send_logic.send_key
+M.send_interrupt = send_logic.send_interrupt
+M.send_raw_keys = send_logic.send_raw_keys
+M.clear_input = send_logic.clear_input
 
+--- Sets up the LazyAgent plugin with user-defined options.
 --- Sets up the LazyAgent plugin with user-defined options.
 -- @param opts (table|nil) User options to merge with defaults.
 function M.setup(opts)
