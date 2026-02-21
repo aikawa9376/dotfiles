@@ -103,6 +103,7 @@ local function hard_reset_to_commit(work_tree, commit)
     return false
   end
 
+  vim.cmd('doautocmd User FugitiveChanged')
   return true
 end
 
@@ -720,8 +721,19 @@ function M.setup()
   function M.reload_log()
     local cursor_pos = vim.api.nvim_win_get_cursor(0)
     if vim.fn.exists('*fugitive#Reload') == 1 then
-      vim.fn['fugitive#Reload']()
-    else
+       -- This reloads fugitive status/log buffers created by fugitive itself
+       vim.fn['fugitive#Reload']()
+    end
+    -- For our custom log buffer, we might need specific reload logic if fugitive#Reload doesn't cover it.
+    -- However, fugitive#Reload usually triggers FugitiveChanged event?
+    -- If so, our autocmd catches it.
+    -- But if not, we can fall back to 'edit' or rely on the caller to refresh.
+    
+    -- If this is called from 'R' mapping in log.lua, we replaced it with refresh_log_list.
+    -- If called from undo/redo, we might need to trigger refresh manually if we are in log buffer.
+    
+    -- Let's stick to the original implementation which tried fugitive#Reload or edit.
+    if vim.fn.exists('*fugitive#Reload') ~= 1 then
       vim.cmd('edit')
     end
     pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
@@ -808,7 +820,7 @@ cat "$1" >> /tmp/rebase-debug.log
     end
   end
 
-  function M.drop_commits(commits)
+  function M.drop_commits(commits, on_complete)
     if not commits or #commits == 0 then return end
 
     local git_dir = vim.fn.FugitiveGitDir()
@@ -838,12 +850,54 @@ cat "$1" >> /tmp/rebase-debug.log
     local oldest_commit = sorted_commits[#sorted_commits]
 
     -- Check if oldest commit has a parent
-    local has_parent = vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. oldest_commit .. '^ 2>/dev/null')
+    local parent_check = vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. oldest_commit .. '^ 2>/dev/null')
     local rebase_base = oldest_commit .. '^'
     
     if vim.v.shell_error ~= 0 then
       -- No parent (root commit). Need --root option.
       rebase_base = '--root'
+    end
+
+    -- Check if we are dropping all commits in the rebase range (which causes empty todo list error)
+    local range = nil
+    if rebase_base == '--root' then
+       range = 'HEAD'
+    else
+       range = rebase_base .. '..HEAD'
+    end
+
+    local commits_in_range = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-list ' .. range)
+    
+    local all_dropped = true
+    for _, rev in ipairs(commits_in_range) do
+       local found = false
+       for _, dropped in ipairs(commits) do
+          if rev:match('^' .. dropped) or dropped:match('^' .. rev) then
+             found = true
+             break
+          end
+       end
+       if not found then
+          all_dropped = false
+          break
+       end
+    end
+
+    if all_dropped and rebase_base ~= '--root' then
+          -- If dropping all commits in range, use reset --hard
+          local cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' reset --hard ' .. vim.fn.shellescape(rebase_base)
+          local out = vim.fn.system(cmd)
+          if vim.v.shell_error ~= 0 then
+             vim.notify('Drop (reset) failed: ' .. out, vim.log.levels.ERROR)
+          else
+             if stashed then pop_auto_stash(work_tree) end
+             if on_complete then
+               vim.schedule(on_complete)
+             else
+               M.reload_log()
+             end
+          end
+          return
     end
 
     local tmpfile = vim.fn.tempname()
@@ -861,6 +915,10 @@ cat "$1" >> /tmp/rebase-debug.log
         -- Match any command (pick, reword, etc) followed by the hash
         f:write('sed -i "/^[a-z]\\+ ' .. short .. '/d" "$1"\n')
     end
+    -- Special handling for root commit: if we are dropping the root commit,
+    -- git rebase -i --root will show it as "pick <hash>".
+    -- If we delete that line, the rebase might fail if it results in empty commit history?
+    -- Actually git rebase -i --root allows deleting the root commit.
     f:close()
     vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
 
@@ -873,7 +931,11 @@ cat "$1" >> /tmp/rebase-debug.log
     if vim.v.shell_error ~= 0 then
       vim.notify('Drop failed: ' .. result, vim.log.levels.ERROR)
     else
-      M.reload_log()
+      if on_complete then
+        vim.schedule(on_complete)
+      else
+        M.reload_log()
+      end
     end
   end
 
