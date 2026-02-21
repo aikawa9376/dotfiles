@@ -410,7 +410,9 @@ function M.setup(group)
           return
         end
 
-        commands.drop_commits(commits)
+        commands.drop_commits(commits, function()
+          refresh_log_list(ev.buf)
+        end)
       end, { buffer = ev.buf, silent = true, desc = "Drop commit(s)" })
 
       -- cw: Reword commit
@@ -514,7 +516,10 @@ function M.setup(group)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
       -- R: Reload
-      vim.keymap.set('n', 'R', function() commands.reload_log() end, { buffer = ev.buf, silent = true, desc = "Reload log" })
+      vim.keymap.set('n', 'R', function()
+        refresh_log_list(ev.buf)
+        vim.notify("Log refreshed", vim.log.levels.INFO)
+      end, { buffer = ev.buf, silent = true, desc = "Reload log" })
 
       -- <CR>: Open commit in new tab
       vim.keymap.set('n', '<CR>', function()
