@@ -334,4 +334,131 @@ function M.send_line()
   M.send(text)
 end
 
+function M.send_key(key)
+  local active_agents = agent_logic.get_active_agents()
+  if #active_agents == 0 then
+    vim.notify("No active agent found", vim.log.levels.INFO)
+    return
+  end
+  
+  -- If there's an open agent (scratch buffer focused or last used), prefer it
+  local target_agent = state.open_agent
+  if not target_agent or not state.sessions[target_agent] then
+     target_agent = active_agents[1]
+  end
+
+  local session = state.sessions[target_agent]
+  if not session or not session.pane_id then return end
+  
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
+  if key == "C-c" then
+    backend_mod.send_keys(session.pane_id, { "C-c" })
+  elseif key:match("^%d$") then
+    -- Send digits as literal keys (-l) to avoid tmux interpreting them weirdly or if special handling is needed
+    -- We use a special flag "--literal" that our modified tmux.send_keys understands to inject -l
+    backend_mod.send_keys(session.pane_id, { "--literal", key })
+  else
+    backend_mod.send_keys(session.pane_id, { key })
+  end
+end
+
+function M.send_enter()
+  local active_agents = agent_logic.get_active_agents()
+  if #active_agents == 0 then
+    -- vim.notify("No active agent found", vim.log.levels.INFO)
+    return
+  end
+
+  local target_agent = state.open_agent
+  if not target_agent or not state.sessions[target_agent] then
+     target_agent = active_agents[1]
+  end
+
+  local session = state.sessions[target_agent]
+  if not session or not session.pane_id then return end
+
+  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
+  if backend_name == "tmux" then
+    -- 0D is CR (Enter)
+    backend_mod.run({ "send-keys", "-t", session.pane_id, "-H", "0D" })
+    -- Fallback to piping raw bytes if hex mode fails/ignored
+    -- local cmd = "printf '\\x0d' | tmux load-buffer - && tmux paste-buffer -d -t " .. session.pane_id
+    -- vim.fn.system(cmd)
+  else
+    M.send_key("Enter")
+  end
+end
+
+function M.send_down()
+  M.send_key("Down")
+end
+
+function M.send_up()
+  M.send_key("Up")
+end
+
+function M.send_interrupt()
+  M.send_key("C-c")
+end
+
+function M.send_raw_keys(keys)
+  local active_agents = agent_logic.get_active_agents()
+  if #active_agents == 0 then
+    -- vim.notify("No active agent found", vim.log.levels.INFO)
+    return
+  end
+
+  -- If there's an open agent (scratch buffer focused or last used), prefer it
+  local target_agent = state.open_agent
+  if not target_agent or not state.sessions[target_agent] then
+     target_agent = active_agents[1]
+  end
+
+  local session = state.sessions[target_agent]
+  if not session or not session.pane_id then return end
+
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
+  backend_mod.send_keys(session.pane_id, keys)
+end
+
+function M.clear_input()
+  local active_agents = agent_logic.get_active_agents()
+  if #active_agents == 0 then
+    vim.notify("No active agent found", vim.log.levels.INFO)
+    return
+  end
+  
+  -- If there's an open agent (scratch buffer focused or last used), prefer it
+  local target_agent = state.open_agent
+  if not target_agent or not state.sessions[target_agent] then
+     target_agent = active_agents[1]
+  end
+
+  local session = state.sessions[target_agent]
+  if not session or not session.pane_id then return end
+  
+  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
+  
+  if backend_name == "tmux" then
+    -- Send hex codes for control keys to ensure they bypass TUI input filters
+    -- Use printf and load-buffer/paste-buffer trick to force raw byte injection
+    -- because send-keys (even with -H) can be intercepted by some TUI layers.
+    -- We construct a sequence for C-e (05), C-u (15), BS (7F)
+    -- local raw_cmd = "printf '\\x05\\x15\\x7f' | tmux load-buffer - && tmux paste-buffer -d -t " .. session.pane_id
+    for _ = 1, 20 do
+      backend_mod.run({ "send-keys", "-t", session.pane_id, "-H", "05" })
+      vim.wait(5)
+      backend_mod.run({ "send-keys", "-t", session.pane_id, "-H", "15" })
+      vim.wait(5)
+      backend_mod.run({ "send-keys", "-t", session.pane_id, "-H", "7F" })
+      vim.wait(5)
+    end
+  else
+    -- ASCII 5 is C-e, 21 is C-u, 8 is Backspace
+    for _ = 1, 20 do
+      backend_mod.send_keys(session.pane_id, { string.char(5), string.char(21), string.char(8) })
+    end
+  end
+end
+
 return M

@@ -179,21 +179,56 @@ function M.register_scratch_keymaps(bufnr, opts)
     end
 
     -- For tmux backend, send 'C-e', 'C-u', 'C-h' (tmux translates this to ctrl-u).
-    -- For builtin or other backends (non-tmux), send the literal ASCII ctrl-u char.
+    -- Actually, to clear input completely, sending Ctrl-C is often more reliable if supported.
+    -- But Ctrl-C might kill the process if no input.
+    -- So let's stick to C-e (end), C-u (kill-line).
+    -- Repeating it 20 times to clear multiline pastes.
     if backend_name == "tmux" then
-      -- backend_mod.send_keys(p, { "C-e", "C-u", "C-h" })
-      backend_mod.send_keys(p, { "C-e" })
-      vim.wait(25)
-      backend_mod.send_keys(p, { "C-u" })
-      vim.wait(25)
-      backend_mod.send_keys(p, { "C-h" })
+      -- Reverting to the simple loop with Backspace as requested by the user.
+      -- They reported that Copilot's behavior was weird with other methods,
+      -- and preferred the behavior where it simply looped C-h (Backspace).
+      -- Previous logic was: C-e, C-u, BSpace.
+      for _ = 1, 20 do
+        backend_mod.send_keys(p, { "C-e" })
+        vim.wait(5)
+        backend_mod.send_keys(p, { "C-u" })
+        vim.wait(5)
+        backend_mod.send_keys(p, { "BSpace" })
+        vim.wait(5)
+      end
     else
-      -- ASCII 5 is C-e, 21 is C-u
-      backend_mod.send_keys(p, { string.char(5), string.char(21) })
+      -- ASCII 5 is C-e, 21 is C-u, 8 is Backspace
+      for _ = 1, 20 do
+        backend_mod.send_keys(p, { string.char(5), string.char(21), string.char(8) })
+      end
     end
 
     if insert_wrap then restart_insert_if_valid(bufnr) end
   end
+
+  safe_set("n", keys.interrupt or "c<space><C-c>", function()
+    local p = get_pane()
+    local mod = backend_mod
+    
+    if not p or p == "" then
+       -- fallback: if exactly one active agent is running, target its pane
+       local active_agents = agent_logic.get_active_agents()
+       if #active_agents == 1 then
+         local name = active_agents[1]
+         p = state.sessions[name] and state.sessions[name].pane_id or nil
+         -- Resolve backend for this agent
+         local _, m = backend_logic.resolve_backend_for_agent(name, nil)
+         mod = m
+       end
+    end
+
+    if p then
+       mod.send_keys(p, { "C-c" })
+       vim.notify("Sent Ctrl-C to agent", vim.log.levels.INFO)
+    else
+       vim.notify("No active agent pane found to interrupt", vim.log.levels.WARN)
+    end
+  end, { desc = "Send Ctrl-C (interrupt) to agent" })
 
   -- Close mapping
   safe_set("n", keys.close or "q", function()

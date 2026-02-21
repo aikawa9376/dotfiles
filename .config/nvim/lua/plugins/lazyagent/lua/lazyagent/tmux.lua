@@ -86,6 +86,10 @@ local function run(args, opts)
   return false
 end
 
+function M.run(args, opts)
+  return run(args, opts)
+end
+
 -- Split a new tmux pane and return the pane id through on_split callback.
 function M.split(command, size, is_vertical, on_split_or_opts)
   local on_split = on_split_or_opts
@@ -230,14 +234,29 @@ function M.send_keys(target_pane, keys, opts)
   -- Only attempt to exit copy-mode when the key(s) being sent include an enter-equivalent.
   if not (opts and opts.skip_exit_copy_mode) and state and state.opts and state.opts.tmux_auto_exit_copy_mode and util.contains_enter_key(keys) then
     M.exit_copy_mode(target_pane, function()
-      M.send_keys(target_pane, keys, vim.tbl_extend("force", opts or {}, { skip_exit_copy_mode = true }))
+      -- M.send_keys(target_pane, keys, vim.tbl_extend("force", opts or {}, { skip_exit_copy_mode = true }))
+      -- Direct send to avoid recursion issue if something goes wrong
+      local args = { "send-keys", "-t", target_pane }
+      for _, key in ipairs(keys) do
+        -- Check if key is a special literal flag
+        if key == "--literal" then
+           table.insert(args, "-l")
+        else
+           table.insert(args, key)
+        end
+      end
+      run(args)
     end)
     return
   end
 
   local args = { "send-keys", "-t", target_pane }
   for _, key in ipairs(keys) do
-    table.insert(args, key)
+    if key == "--literal" then
+       table.insert(args, "-l")
+    else
+       table.insert(args, key)
+    end
   end
   run(args)
 end
