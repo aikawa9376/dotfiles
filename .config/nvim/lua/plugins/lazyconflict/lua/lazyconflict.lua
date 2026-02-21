@@ -185,7 +185,6 @@ local function set_conflicts(entries)
     table.sort(info.items, function(a, b)
       return a.lnum < b.lnum
     end)
-    -- マーカー行数ではなく、コンフリクトブロック数（<<<<<<< の数）をカウント
     local count = 0
     for _, item in ipairs(info.items) do
       if item.text:match("^<<<<<<<") then
@@ -194,6 +193,14 @@ local function set_conflicts(entries)
     end
     total = total + count
   end
+  
+  -- Merge with existing buffer-local detections if mode is git but we found markers locally
+  -- Actually, let's just use the git results as base.
+  -- The issue is that apply_buffer might run AFTER set_conflicts clears it,
+  -- so apply_buffer will restore it if markers exist.
+  -- But set_conflicts clears everything first.
+  -- That's fine as long as apply_all_buffers runs right after.
+  
   state.conflicts = by_file
   state.total = total
   M.apply_all_buffers()
@@ -272,6 +279,9 @@ local function set_keymaps(bufnr)
     return
   end
   if state.buf_keymaps[bufnr] then
+    -- Even if keymaps are already set, we might need to re-apply if they were cleared externally or if we want to ensure they exist.
+    -- But usually checking buf_keymaps is enough to avoid duplicate work.
+    -- However, if diagnostics disabling logic needs to run again, we should check that too.
     return
   end
   if state.config.disable_diagnostics then
@@ -382,9 +392,27 @@ function M.apply_buffer(bufnr)
   end
   local info = with_conflict_info(bufnr)
 
-  -- Gitでコンフリクトとして検知されていないファイルなら、
-  -- 全行スキャン(build_regions)を避けて即座にクリーンアップ
-  if not info and state.config.detection.mode == "git" then
+  -- Performance optimization:
+  -- If git mode is enabled and git explicitly says "no conflicts in this file" (info is nil),
+  -- AND the file is large, we might want to skip full scan.
+  -- However, to support "fugitive just updated the file but git status is lagging", we need to scan.
+  -- A compromise: scan only if file size is reasonable, or if we have reason to suspect a conflict?
+  -- 
+  -- Better approach:
+  -- We can check if the buffer contains conflict markers using a faster method than full parse?
+  -- But build_regions IS the parser.
+  --
+  -- Let's re-enable the early return BUT with a check for "is this likely a conflict file?"
+  -- If the file was not in conflict list from git, AND it wasn't in our manual conflict list, maybe we can skip?
+  -- But the whole point was to catch it BEFORE git reports it.
+  
+  -- Optimization: If the buffer is large (e.g. > 5000 lines) and not in git's conflict list, 
+  -- we can skip the check to avoid lag on every TextChanged.
+  local line_count = api.nvim_buf_line_count(bufnr)
+  if not info and line_count > 10000 then
+    -- For EXTREMELY large files, skip unless git says it has conflicts.
+    -- search() is fast, but context switching to buffer context might add overhead.
+    -- Let's bump limit to 10k lines.
     apply_highlights(bufnr, nil)
     clear_keymaps(bufnr)
     return
@@ -398,10 +426,70 @@ function M.apply_buffer(bufnr)
     return
   end
 
+  -- Even if git doesn't report it yet, if we found markers in the buffer, we should treat it as a conflict.
+  -- Even if git reported conflicts, let's update them with live buffer state to keep statusline real-time
+  if regions and #regions > 0 then
+    local path = get_buf_path(bufnr)
+    if path and path ~= "" then
+      local new_items = {}
+      for _, r in ipairs(regions) do
+        table.insert(new_items, { lnum = r.start, text = "<<<<<<<" })
+        if r.base then
+          table.insert(new_items, { lnum = r.base, text = "|||||||" })
+        end
+        table.insert(new_items, { lnum = r.sep, text = "=======" })
+        table.insert(new_items, { lnum = r.finish, text = ">>>>>>>" })
+      end
+      
+      -- Update state.conflicts with live data
+      state.conflicts[path] = { file = path, items = new_items }
+      
+      -- Recalculate total
+      local total = 0
+      for _, f_info in pairs(state.conflicts) do
+         local f_count = 0
+         for _, item in ipairs(f_info.items or {}) do
+           if item.text:match("^<<<<<<<") then
+             f_count = f_count + 1
+           end
+         end
+         total = total + f_count
+      end
+      state.total = total
+      
+      -- Update info reference since we modified state.conflicts
+      info = state.conflicts[path]
+    end
+  elseif info and state.config.detection.mode == "git" then
+    -- If no regions found in buffer but git thinks there are, it means we resolved them locally but git hasn't updated yet.
+    -- We should clear this file from state.conflicts to update statusline immediately.
+    local path = get_buf_path(bufnr)
+    if path and state.conflicts[path] then
+      state.conflicts[path] = nil
+      -- Recalculate total
+      local total = 0
+      for _, f_info in pairs(state.conflicts) do
+         local f_count = 0
+         for _, item in ipairs(f_info.items or {}) do
+           if item.text:match("^<<<<<<<") then
+             f_count = f_count + 1
+           end
+         end
+         total = total + f_count
+      end
+      state.total = total
+      info = nil
+    end
+  end
+
   if state.config.detection.mode == "git" and (not info or not info.items or #info.items == 0) then
-    apply_highlights(bufnr, nil, regions)
-    clear_keymaps(bufnr)
-    return
+    -- If we have regions (markers) in the buffer, we proceed to enable keymaps.
+    -- Otherwise, we clear keymaps.
+    if not regions or #regions == 0 then
+      apply_highlights(bufnr, nil, regions)
+      clear_keymaps(bufnr)
+      return
+    end
   end
   apply_highlights(bufnr, info, regions)
   set_keymaps(bufnr)
@@ -758,6 +846,20 @@ function M.populate_quickfix(opts)
 end
 
 function M.build_regions(bufnr)
+  -- Optimization: Use nvim_buf_call to efficiently check for markers using Vim's search()
+  -- This avoids allocating Lua strings for all lines if no conflict exists.
+  local has_marker = false
+  if api.nvim_buf_is_valid(bufnr) then
+    -- Using pcall to avoid errors if buffer is not valid or other issues
+    pcall(api.nvim_buf_call, bufnr, function()
+      has_marker = fn.search("^<<<<<<<", "nw") > 0
+    end)
+  end
+
+  if not has_marker then
+    return {}
+  end
+
   local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local regions = {}
   local i = 1
@@ -1012,7 +1114,7 @@ function M.setup(opts)
   if state.config.detection.auto then
     local group = ensure_augroup()
     api.nvim_clear_autocmds({ group = group })
-    api.nvim_create_autocmd(state.config.detection.autocmds, {
+    api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "FocusGained", "TextChanged", "FileChangedShellPost" }, {
       group = group,
       callback = function()
         state.debounced_check()
