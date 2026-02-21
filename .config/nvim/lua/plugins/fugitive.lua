@@ -19,5 +19,8 @@ return {
     { "g<space>r", "<cmd>Greflog<CR>", silent = true },
     { "g<space>s", "<cmd>G show<CR>", silent = true },
     { "g<space>b", "<cmd>Gbranch<CR>", silent = true },
+    { "g<space>L", function() vim.cmd(
+      'FugitiveLog -- ' .. vim.fn.expand('%')
+    ) end, silent = true, desc = "Log for current file" },
   },
 }
