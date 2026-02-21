@@ -97,6 +97,11 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
           pcall(watch.enable)
         end
+        -- Configure pane options (e.g. refocus_on_send) for the restored pane.
+        if backend_mod and type(backend_mod.configure_pane) == "function" then
+          local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
+          backend_mod.configure_pane(persisted_pane, { refocus_on_send = refocus })
+        end
         -- If it was hidden, we need to join it? ensure_session logic below handles reuse/hidden.
         -- Just setting state.sessions[agent_name] is enough to trigger the reuse logic block below.
       else
@@ -230,6 +235,12 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       -- If this session requested watchers, enable them.
       if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
         pcall(watch.enable)
+      end
+
+      -- Configure pane options (e.g. refocus_on_send) so send_keys/paste_and_submit behave correctly.
+      if backend_mod and type(backend_mod.configure_pane) == "function" then
+        local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
+        backend_mod.configure_pane(pane_id, { refocus_on_send = refocus })
       end
 
       -- Persist session if resume is enabled
@@ -380,6 +391,9 @@ function M.close_session(agent_name)
 
   if backend_mod and type(backend_mod.kill_pane) == "function" then
     backend_mod.kill_pane(s.pane_id)
+  end
+  if backend_mod and type(backend_mod.clear_pane_config) == "function" then
+    backend_mod.clear_pane_config(s.pane_id)
   end
   state.sessions[agent_name] = nil
   persistence.remove_session(agent_name, s.cwd)

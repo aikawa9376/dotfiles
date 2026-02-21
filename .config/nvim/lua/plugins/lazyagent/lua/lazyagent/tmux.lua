@@ -5,6 +5,20 @@ local util = require("lazyagent.util")
 local state = require("lazyagent.logic.state")
 local POOL_SESSION = "lazyagent-pool"
 
+-- Per-pane options (keyed by pane_id).  Currently supports:
+--   refocus_on_send (bool): send \e[I (focus-in) before pasting/sending keys so that
+--     TUI apps using focus events resume active input handling after a focus-out.
+local pane_config = {}
+
+function M.configure_pane(pane_id, opts)
+  if not pane_id or pane_id == "" then return end
+  pane_config[pane_id] = opts or {}
+end
+
+function M.clear_pane_config(pane_id)
+  if pane_id then pane_config[pane_id] = nil end
+end
+
 -- Ensure the pool session exists.
 function M.ensure_pool()
   local cmd_check = { "tmux", "has-session", "-t", POOL_SESSION }
@@ -229,6 +243,13 @@ function M.send_keys(target_pane, keys, opts)
   opts = opts or {}
   if not keys then return end
   if type(keys) ~= "table" then keys = { keys } end
+
+  -- If this pane requires refocus: send \e[I (focus-in) synchronously so that TUI apps
+  -- that pause input handling on focus-out (e.g. Copilot/Bubble Tea) resume before keys arrive.
+  local pcfg = pane_config[target_pane] or {}
+  if pcfg.refocus_on_send then
+    pcall(vim.fn.system, { "tmux", "send-keys", "-t", target_pane, "-l", "\x1b[I" })
+  end
 
   -- Optionally auto-exit copy-mode before sending acceptance/submit keys (e.g., Enter/C-m).
   -- Only attempt to exit copy-mode when the key(s) being sent include an enter-equivalent.
@@ -515,6 +536,16 @@ function M.paste_and_submit(target_pane, text, submit_keys, opts)
   local end_br = esc .. "[201~"
 
   M.set_buffer(normalized_text, function()
+    -- Exit copy mode synchronously before pasting so text reaches the running program,
+    -- not the scrollback buffer. No-op (non-zero exit) when not in copy mode.
+    if state.opts and state.opts.tmux_auto_exit_copy_mode then
+      pcall(vim.fn.system, { "tmux", "send-keys", "-t", target_pane, "-X", "cancel" })
+    end
+    -- Send focus-in event (\e[I) so TUI apps that paused input on focus-out resume.
+    local pcfg = pane_config[target_pane] or {}
+    if pcfg.refocus_on_send then
+      pcall(vim.fn.system, { "tmux", "send-keys", "-t", target_pane, "-l", "\x1b[I" })
+    end
     maybe_move_to_end()
     if use_bracketed_paste then M.send_keys(target_pane, { start_br }) end
     -- Attempt to paste; if paste returns false, fallback to send-keys -l

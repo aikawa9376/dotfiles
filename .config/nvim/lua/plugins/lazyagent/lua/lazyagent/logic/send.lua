@@ -377,16 +377,9 @@ function M.send_enter()
   local session = state.sessions[target_agent]
   if not session or not session.pane_id then return end
 
-  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
-  if backend_name == "tmux" then
-    -- 0D is CR (Enter)
-    backend_mod.run({ "send-keys", "-t", session.pane_id, "-H", "0D" })
-    -- Fallback to piping raw bytes if hex mode fails/ignored
-    -- local cmd = "printf '\\x0d' | tmux load-buffer - && tmux paste-buffer -d -t " .. session.pane_id
-    -- vim.fn.system(cmd)
-  else
-    M.send_key("Enter")
-  end
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
+  -- Use send_keys so copy-mode exit logic (tmux_auto_exit_copy_mode) applies.
+  backend_mod.send_keys(session.pane_id, { "Enter" })
 end
 
 function M.send_down()

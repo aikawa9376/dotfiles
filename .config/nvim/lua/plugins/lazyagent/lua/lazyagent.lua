@@ -72,6 +72,9 @@ function M.setup(opts)
         Copilot = vim.tbl_deep_extend("force", base, {
           cmd = "copilot",
           yolo_flag = "--allow-all-tools",
+          -- Copilot's TUI (Bubble Tea) pauses input handling after a focus-out event.
+          -- Sending \e[I (focus-in) before each send restores normal input processing.
+          refocus_on_send = true,
         }),
         Cursor = vim.tbl_deep_extend("force", base, {
           cmd = "cursor-agent",
