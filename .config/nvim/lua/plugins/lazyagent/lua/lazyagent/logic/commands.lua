@@ -215,6 +215,21 @@ function M.setup_commands()
     summary_logic.pick(action)
   end, { nargs = "?", desc = "Open or copy a lazyagent summary file (action: open|copy, default asks)." })
 
+  -- Attach nvim to an already-running tmux pane (e.g. after nvim restart).
+  -- Usage: LazyAgentAttach [AgentName [%pane_id]]
+  try_create_user_command("LazyAgentAttach", function(cmdargs)
+    local args = vim.split((cmdargs and cmdargs.args or ""), "%s+", { trimempty = true })
+    local agent = args[1] or nil
+    local pane  = args[2] or nil
+    session_logic.attach_session(agent, pane)
+  end, {
+    nargs = "*",
+    desc = "Attach a running tmux pane to an agent session (usage: LazyAgentAttach [AgentName [pane_id]])",
+    complete = function()
+      return agent_logic.available_agents()
+    end,
+  })
+
   -- Register commands for each interactive agent
   if state.opts.interactive_agents then
     for _, name in ipairs(agent_logic.available_agents()) do

@@ -62,7 +62,7 @@ return {
     "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
     "LazyAgentHistoryList", "LazyAgentClose", "LazyAgentOpenConversation",
     "LazyAgentResumeConversation", "LazyAgentSummary", "LazyAgentRestore",
-    "LazyAgentDetach", "LazyAgentInstant",
+    "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {

@@ -798,4 +798,108 @@ function M.start_interactive_session(opts)
 end
 
 
+---
+-- Attaches nvim to an already-running tmux pane (e.g. after nvim was restarted).
+-- Lists all live tmux panes, lets the user pick one, then registers it as an agent session.
+-- @param agent_name (string|nil) Pre-select the agent name; if nil the user is prompted.
+-- @param pane_id    (string|nil) Pre-select the pane ID;   if nil the user is prompted.
+function M.attach_session(agent_name, pane_id)
+  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name or "", nil)
+
+  -- Collect live panes via `tmux list-panes -a`
+  local function list_panes()
+    local fmt = "#{pane_id}\t#{pane_current_command}\t#{session_name}:#{window_name}"
+    local ok, lines = pcall(vim.fn.systemlist, "tmux list-panes -a -F " .. vim.fn.shellescape(fmt))
+    if not ok or not lines then return {} end
+    local panes = {}
+    for _, line in ipairs(lines) do
+      local id, cmd, loc = line:match("^([^\t]+)\t([^\t]*)\t(.*)$")
+      if id and id ~= "" then
+        table.insert(panes, { id = id, cmd = cmd or "", loc = loc or "" })
+      end
+    end
+    return panes
+  end
+
+  local function do_attach(chosen_agent, chosen_pane_id)
+    if not chosen_agent or chosen_agent == "" then
+      vim.notify("LazyAgentAttach: no agent selected", vim.log.levels.WARN)
+      return
+    end
+    if not chosen_pane_id or chosen_pane_id == "" then
+      vim.notify("LazyAgentAttach: no pane selected", vim.log.levels.WARN)
+      return
+    end
+
+    -- Verify pane is still alive
+    if backend_mod and type(backend_mod.pane_exists) == "function" then
+      if not backend_mod.pane_exists(chosen_pane_id) then
+        vim.notify("LazyAgentAttach: pane " .. chosen_pane_id .. " not found", vim.log.levels.ERROR)
+        return
+      end
+    end
+
+    local agent_cfg = agent_logic.get_interactive_agent(chosen_agent) or {}
+    state.sessions[chosen_agent] = {
+      pane_id = chosen_pane_id,
+      last_output = "",
+      backend = backend_name,
+      watch_enabled = (agent_cfg.watch ~= false),
+      launch_cmd = nil, -- unknown; launched externally
+      cwd = vim.fn.getcwd(),
+      hidden = true, -- treat as detached until user opens scratch
+      force_resume = true,
+    }
+
+    -- Persist so the pairing survives future restarts too
+    persistence.update_session(chosen_agent, chosen_pane_id, vim.fn.getcwd())
+
+    vim.notify(
+      "LazyAgentAttach: agent '" .. chosen_agent .. "' attached to pane " .. chosen_pane_id,
+      vim.log.levels.INFO
+    )
+
+    -- Open scratch buffer so the user can immediately interact
+    M.start_interactive_session({ agent_name = chosen_agent, reuse = true })
+  end
+
+  local function pick_pane_then_attach(chosen_agent)
+    if pane_id and pane_id ~= "" then
+      do_attach(chosen_agent, pane_id)
+      return
+    end
+
+    local panes = list_panes()
+    if not panes or #panes == 0 then
+      vim.notify("LazyAgentAttach: no running tmux panes found", vim.log.levels.WARN)
+      return
+    end
+
+    local items = {}
+    for _, p in ipairs(panes) do
+      table.insert(items, string.format("%-12s  %-20s  %s", p.id, p.cmd, p.loc))
+    end
+
+    vim.ui.select(items, { prompt = "Select tmux pane to attach to agent '" .. chosen_agent .. "':" }, function(sel, idx)
+      if not sel or not idx then return end
+      do_attach(chosen_agent, panes[idx].id)
+    end)
+  end
+
+  -- Resolve agent name first, then pick pane
+  if agent_name and agent_name ~= "" then
+    pick_pane_then_attach(agent_name)
+  else
+    local agents = agent_logic.available_agents()
+    if not agents or #agents == 0 then
+      vim.notify("LazyAgentAttach: no interactive agents configured", vim.log.levels.WARN)
+      return
+    end
+    vim.ui.select(agents, { prompt = "Select agent to attach:" }, function(chosen)
+      if not chosen then return end
+      pick_pane_then_attach(chosen)
+    end)
+  end
+end
+
 return M
