@@ -65,34 +65,17 @@ end
 
 local function make_item(tok, _, bufnr)
   local label = "#" .. tok.name
-  local insert_text = label .. " "
-
-  -- Resolve preview/documentation using transforms.preview_token with best-effort source bufnr
-  local opts = { source_bufnr = bufnr }
-  local ok, preview = pcall(function() return transforms.preview_token(tok.name, opts) end)
-  local doc_value = ""
-  if ok and preview and preview ~= "" then
-    -- transforms.preview_token may return a fenced block already, use as-is.
-    if preview:match("^```") then
-      doc_value = preview
-    else
-      doc_value = "```text\n" .. preview .. "\n```"
-    end
-  else
-    doc_value = tok.desc or ""
-  end
-
   local item = {
     label = label,
-    -- Let blink.cmp fuzzy caret match on the value inside braces; including braces may be fine,
-    -- but filterText without braces helps matching 'buffers' with keyword 'buf'.
     filterText = tok.name,
-    insertText = insert_text,
+    insertText = label .. " ",
     kind = types.CompletionItemKind.Text,
-    documentation = { kind = "markdown", value = doc_value },
+    -- Populated lazily in source:resolve to avoid blocking on # input
+    documentation = { kind = "markdown", value = tok.desc or "" },
     detail = tok.desc or "",
+    -- Stash metadata needed for deferred preview
+    data = { token_name = tok.name, source_bufnr = bufnr },
   }
-
   return item
 end
 
@@ -226,8 +209,17 @@ function source:get_completions(ctx, callback)
   return function() end
 end
 
--- Optional: resolve can be used to lazily attach documentation before the doc popup
+-- Lazily compute preview/documentation only when the user hovers over an item
 function source:resolve(item, callback)
+  local data = item.data
+  if data and data.token_name and transforms then
+    local opts = { source_bufnr = data.source_bufnr }
+    local ok, preview = pcall(function() return transforms.preview_token(data.token_name, opts) end)
+    if ok and preview and preview ~= "" then
+      local doc_value = preview:match("^```") and preview or ("```text\n" .. preview .. "\n```")
+      item = vim.tbl_deep_extend("force", item, { documentation = { kind = "markdown", value = doc_value } })
+    end
+  end
   callback(item)
 end
 
