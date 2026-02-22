@@ -80,6 +80,27 @@ local function apply_highlights(bufnr)
   end
 end
 
+local function apply_log_syntax(bufnr)
+  vim.api.nvim_buf_call(bufnr, function()
+    vim.cmd([[
+      syntax clear
+      syntax match FugitiveLogHash /^[^\t]\+/ nextgroup=FugitiveLogSep1
+      syntax match FugitiveLogSep1 /\t/ contained nextgroup=FugitiveLogDate
+      syntax match FugitiveLogDate /[^\t]\+/ contained nextgroup=FugitiveLogSep2
+      syntax match FugitiveLogSep2 /\t/ contained nextgroup=FugitiveLogSubject
+      syntax match FugitiveLogSubject /[^\t]\+/ contained nextgroup=FugitiveLogSep3
+      syntax match FugitiveLogSep3 /\t/ contained nextgroup=FugitiveLogAuthor
+      syntax match FugitiveLogAuthor /[^\t]\+/ contained nextgroup=FugitiveLogSep4
+      syntax match FugitiveLogSep4 /\t/ contained nextgroup=FugitiveLogRefs
+      syntax match FugitiveLogRefs /.*/ contained
+
+      highlight default link FugitiveLogDate Directory
+      highlight default link FugitiveLogAuthor Type
+      highlight default link FugitiveLogRefs Comment
+    ]])
+  end)
+end
+
 local function get_log_list(bufnr)
   local args = ""
   if bufnr then
@@ -102,6 +123,7 @@ local function refresh_log_list(bufnr)
   vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
 
   apply_highlights(bufnr)
+  apply_log_syntax(bufnr)
 end
 
 local function open_log_list(opts)
@@ -160,6 +182,7 @@ function M.setup(group)
     group = group,
     pattern = 'fugitivelog',
     callback = function(ev)
+      local buf_group = vim.api.nvim_create_augroup('fugitive_log_buf_' .. ev.buf, { clear = true })
       -- Syntax highlighting
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false
@@ -168,35 +191,23 @@ function M.setup(group)
       vim.keymap.set('n', 'g?', function()
         show_log_help()
       end, { buffer = ev.buf, silent = true, desc = "Help" })
-      vim.cmd([[
-        syntax match FugitiveLogHash /^[^\t]\+/ nextgroup=FugitiveLogSep1
-        syntax match FugitiveLogSep1 /\t/ contained nextgroup=FugitiveLogDate
-        syntax match FugitiveLogDate /[^\t]\+/ contained nextgroup=FugitiveLogSep2
-        syntax match FugitiveLogSep2 /\t/ contained nextgroup=FugitiveLogSubject
-        syntax match FugitiveLogSubject /[^\t]\+/ contained nextgroup=FugitiveLogSep3
-        syntax match FugitiveLogSep3 /\t/ contained nextgroup=FugitiveLogAuthor
-        syntax match FugitiveLogAuthor /[^\t]\+/ contained nextgroup=FugitiveLogSep4
-        syntax match FugitiveLogSep4 /\t/ contained nextgroup=FugitiveLogRefs
-        syntax match FugitiveLogRefs /.*/ contained
-
-        highlight default link FugitiveLogDate Directory
-        highlight default link FugitiveLogAuthor Type
-        highlight default link FugitiveLogRefs Comment
-      ]])
-
+      apply_log_syntax(ev.buf)
       apply_highlights(ev.buf)
 
       -- Re-apply highlights on reload
       vim.api.nvim_create_autocmd('BufReadPost', {
         buffer = ev.buf,
+        group = buf_group,
         callback = function()
           apply_highlights(ev.buf)
+          apply_log_syntax(ev.buf)
         end
       })
 
       -- Auto-refresh on specific events (FugitiveChanged)
       vim.api.nvim_create_autocmd('User', {
         pattern = 'FugitiveChanged',
+        group = buf_group,
         -- Listen globally, but only update this buffer if it is visible
         callback = function()
           if vim.api.nvim_buf_is_valid(ev.buf) and vim.fn.bufwinnr(ev.buf) ~= -1 then
@@ -449,6 +460,7 @@ function M.setup(group)
       -- Update preview on cursor move (debounced)
       vim.api.nvim_create_autocmd('CursorMoved', {
         buffer = ev.buf,
+        group = buf_group,
         callback = function()
           if commands.is_preview_open() then
             local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
@@ -460,6 +472,7 @@ function M.setup(group)
       -- Close preview on buffer unload
       vim.api.nvim_create_autocmd('BufUnload', {
           buffer = ev.buf,
+          group = buf_group,
           callback = function()
               commands.close_preview()
           end
@@ -492,6 +505,7 @@ function M.setup(group)
       -- Update Flog highlight on cursor move
       vim.api.nvim_create_autocmd('CursorMoved', {
         buffer = ev.buf,
+        group = buf_group,
         callback = function()
           if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
              local commit = vim.api.nvim_get_current_line():match('^(%x+)')
@@ -532,8 +546,10 @@ function M.setup(group)
       -- Clean up float window on unload
       vim.api.nvim_create_autocmd('BufUnload', {
         buffer = ev.buf,
+        group = buf_group,
         callback = function()
           commands.close_commit_info_float()
+          pcall(vim.api.nvim_del_augroup_by_id, buf_group)
         end,
       })
     end,

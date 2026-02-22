@@ -315,6 +315,18 @@ local function apply_fade_highlight(bufnr, truncated_info)
   end
 end
 
+local function apply_branch_syntax(bufnr)
+  vim.api.nvim_buf_call(bufnr, function()
+    vim.cmd([[
+      syntax clear
+      syntax match FugitiveBranchName /^\s*\*\?\s*\zs\S\+/
+      syntax match FugitiveBranchCurrent /^\s*\*\s*\zs\S\+/
+      highlight default link FugitiveBranchName Directory
+      highlight default link FugitiveBranchCurrent String
+    ]])
+  end)
+end
+
 local function get_branch_name_from_line(line)
   if not line then
     -- If no line provided, use current cursor line and lookup in buffer variable
@@ -343,6 +355,7 @@ local function refresh_branch_list(bufnr)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
   vim.b[bufnr].branch_map = branch_names
   apply_fade_highlight(bufnr, truncated_info)
+  apply_branch_syntax(bufnr)
 
   vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
 end
@@ -996,6 +1009,7 @@ function M.setup(group)
     pattern = 'fugitivebranch',
     callback = function(ev)
       local bufnr = ev.buf
+      local buf_group = vim.api.nvim_create_augroup('fugitive_branch_buf_' .. bufnr, { clear = true })
 
       vim.keymap.set('n', 'g?', function()
         show_branch_help()
@@ -1167,6 +1181,7 @@ function M.setup(group)
       -- Update Flog on cursor move if Flog window is open
       vim.api.nvim_create_autocmd('CursorMoved', {
         buffer = bufnr,
+        group = buf_group,
         callback = function()
           if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) and vim.g.flog_branch_bufnr == bufnr then
             local branch = get_branch_name_from_line()
@@ -1191,6 +1206,7 @@ function M.setup(group)
 
       vim.api.nvim_create_autocmd('BufUnload', {
         buffer = bufnr,
+        group = buf_group,
         callback = function(args)
           if vim.g.flog_branch_bufnr and vim.g.flog_branch_bufnr == args.buf then
             if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
@@ -1209,13 +1225,7 @@ function M.setup(group)
       vim.opt_local.signcolumn = 'no'
 
       -- Setup syntax highlighting for branch names
-      vim.cmd([[
-        syntax clear
-        syntax match FugitiveBranchName /^\s*\*\?\s*\zs\S\+/
-        syntax match FugitiveBranchCurrent /^\s*\*\s*\zs\S\+/
-        highlight default link FugitiveBranchName Directory
-        highlight default link FugitiveBranchCurrent String
-      ]])
+      apply_branch_syntax(bufnr)
 
       -- Load fugitive's default mappings
       vim.defer_fn(function()
@@ -1227,6 +1237,7 @@ function M.setup(group)
       -- Auto-refresh on specific events (FugitiveChanged)
       vim.api.nvim_create_autocmd('User', {
         pattern = 'FugitiveChanged',
+        group = buf_group,
         -- Listen globally, but only update this buffer if it is visible
         callback = function()
           if vim.api.nvim_buf_is_valid(bufnr) and vim.fn.bufwinnr(bufnr) ~= -1 then
