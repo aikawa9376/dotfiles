@@ -207,6 +207,98 @@ local function replace_token(token, opts, meta)
     return "```diagnostics\n" .. diagnostics_to_text(diags) .. "\n```"
   end
 
+  if token == "selection" then
+    local ok1, mark_s = pcall(vim.api.nvim_buf_get_mark, source_bufnr, "<")
+    local ok2, mark_e = pcall(vim.api.nvim_buf_get_mark, source_bufnr, ">")
+    if not ok1 or not ok2 or not mark_s or not mark_e then return "" end
+    local sl, el = mark_s[1], mark_e[1]
+    if sl == 0 and el == 0 then return "" end
+    local lines = vim.api.nvim_buf_get_lines(source_bufnr, sl - 1, el, false)
+    if not lines or #lines == 0 then return "" end
+    if #lines == 1 then
+      lines[1] = lines[1]:sub(mark_s[2] + 1, mark_e[2] + 1)
+    else
+      lines[1] = lines[1]:sub(mark_s[2] + 1)
+      lines[#lines] = lines[#lines]:sub(1, mark_e[2] + 1)
+    end
+    local ft = vim.bo[source_bufnr] and vim.bo[source_bufnr].filetype or ""
+    return "```" .. ft .. "\n" .. table.concat(lines, "\n") .. "\n```"
+  end
+
+  if token == "git_diff" or token == "git_staged" then
+    local a = get_abs_path(source_bufnr) or vim.fn.getcwd()
+    local root = util.git_root_for_path(a) or vim.fn.getcwd()
+    local cmd = "git -C " .. vim.fn.shellescape(root)
+      .. (token == "git_staged" and " diff --staged" or " diff HEAD")
+    local result = vim.fn.systemlist(cmd)
+    if not result or #result == 0 then return "" end
+    return "```diff\n" .. table.concat(result, "\n") .. "\n```"
+  end
+
+  if token == "quickfix" then
+    local qflist = vim.fn.getqflist()
+    if not qflist or #qflist == 0 then return "" end
+    local lines = {}
+    for _, item in ipairs(qflist) do
+      local fname = (item.bufnr and item.bufnr > 0) and vim.api.nvim_buf_get_name(item.bufnr) or (item.filename or "")
+      table.insert(lines, string.format("%s:%d:%d: %s", fname, item.lnum or 0, item.col or 0, item.text or ""))
+    end
+    return "```quickfix\n" .. table.concat(lines, "\n") .. "\n```"
+  end
+
+  if token == "lsp_hover" then
+    local winid = vim.fn.bufwinid(source_bufnr)
+    if winid == -1 then return "" end
+    local cursor = vim.api.nvim_win_get_cursor(winid)
+    local params = {
+      textDocument = { uri = vim.uri_from_bufnr(source_bufnr) },
+      position = { line = cursor[1] - 1, character = cursor[2] },
+    }
+    local ok, results = pcall(vim.lsp.buf_request_sync, source_bufnr, "textDocument/hover", params, 2000)
+    if not ok or not results then return "" end
+    for _, res in pairs(results) do
+      if res.result and res.result.contents then
+        local c = res.result.contents
+        local val = (type(c) == "table" and c.value) or (type(c) == "string" and c) or nil
+        if val and val ~= "" then return "```\n" .. val .. "\n```" end
+      end
+    end
+    return ""
+  end
+
+  if token == "symbol" then
+    local winid = vim.fn.bufwinid(source_bufnr)
+    if winid == -1 then return "" end
+    local cursor = vim.api.nvim_win_get_cursor(winid)
+    -- Try treesitter: walk up to the nearest function/class node
+    local ok, result = pcall(function()
+      local node = vim.treesitter.get_node({ bufnr = source_bufnr, pos = { cursor[1] - 1, cursor[2] } })
+      if not node then return nil end
+      local function_types = {
+        "function_declaration", "function_definition", "method_definition",
+        "method_declaration", "class_declaration", "class_definition",
+        "arrow_function", "function_expression", "local_function",
+        "decorated_definition", "impl_item", "function_item",
+      }
+      local cur = node
+      while cur do
+        local ntype = cur:type()
+        for _, ft in ipairs(function_types) do
+          if ntype == ft then
+            local sr, _, er, _ = cur:range()
+            local lines = vim.api.nvim_buf_get_lines(source_bufnr, sr, er + 1, false)
+            local filetype = vim.bo[source_bufnr] and vim.bo[source_bufnr].filetype or ""
+            return "```" .. filetype .. "\n" .. table.concat(lines, "\n") .. "\n```"
+          end
+        end
+        cur = cur:parent()
+      end
+      return nil
+    end)
+    if ok and result then return result end
+    return ""
+  end
+
   if token == "report" then
     local dir = summary.summary_dir()
     local prefix = summary.summary_prefix(source_bufnr)
@@ -273,6 +365,12 @@ local token_definitions = {
   { name = "git_root", desc = "Repository root path for the source buffer (git)." },
   { name = "git_branch", desc = "Git branch name for the source buffer." },
   { name = "diagnostics", desc = "Fenced diagnostics code block formatted for prompts (````diagnostics````)." },
+  { name = "selection", desc = "Last visual selection from the source buffer as a fenced code block." },
+  { name = "git_diff", desc = "Output of `git diff HEAD` for the source buffer's repository as a fenced diff block." },
+  { name = "git_staged", desc = "Output of `git diff --staged` for the source buffer's repository as a fenced diff block." },
+  { name = "quickfix", desc = "Current quickfix list entries as a fenced quickfix block." },
+  { name = "lsp_hover", desc = "LSP hover information at the cursor position in the source buffer." },
+  { name = "symbol", desc = "Nearest enclosing function/class node (via treesitter) at the cursor position." },
   { name = "report", desc = "Instructions for creating or updating a Markdown summary/report file using the project's summary directory and filename prefix." },
 }
 
