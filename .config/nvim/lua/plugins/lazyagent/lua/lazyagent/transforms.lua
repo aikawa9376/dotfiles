@@ -299,6 +299,22 @@ local function replace_token(token, opts, meta)
     return ""
   end
 
+  -- #history: @-reference to the latest conversation log for the current project+branch.
+  if token == "history" then
+    local ok_cache, cache_logic = pcall(require, "lazyagent.logic.cache")
+    if not ok_cache then return "" end
+    local dir, entries = cache_logic.list_cache_Conversation()
+    if not dir or not entries or #entries == 0 then return "" end
+    local prefix = cache_logic.build_cache_prefix(source_bufnr)
+    -- Find the most recent file matching this project+branch prefix
+    for _, name in ipairs(entries) do
+      if name:lower():sub(1, #prefix) == prefix:lower() then
+        return "@" .. dir .. "/" .. name
+      end
+    end
+    return ""
+  end
+
   if token == "report" then
     local dir = summary.summary_dir()
     local prefix = summary.summary_prefix(source_bufnr)
@@ -372,6 +388,7 @@ local token_definitions = {
   { name = "lsp_hover", desc = "LSP hover information at the cursor position in the source buffer." },
   { name = "symbol", desc = "Nearest enclosing function/class node (via treesitter) at the cursor position." },
   { name = "report", desc = "Instructions for creating or updating a Markdown summary/report file using the project's summary directory and filename prefix." },
+  { name = "history", desc = "@ reference to the latest conversation log file for the current project+branch." },
 }
 
 -- Public helpers to register external transforms at runtime.

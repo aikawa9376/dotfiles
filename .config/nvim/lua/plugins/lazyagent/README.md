@@ -206,6 +206,7 @@ prompts = {
 - Claude, Codex, Gemini, Copilot, Cursor — 対話型エージェントを直接開始するコマンド（lazy の cmd で読み込む）
 
 - `#report`（`- Summarize in Markdown file.`）トークンを使うと、`stdpath("cache")/lazyagent/summary/<project>-<branch>-<slug>.md` というプレフィックスを提示します（プロジェクト・ブランチ部分はプラグインで付与、slug は AI に選ばせる）。AI 側でそのパスに Markdown を作成/追記してください。`LazyAgentSummary` で既存の summary を開いたりパスをコピーできます。
+- `#history` トークンを使うと、現在のプロジェクト+ブランチに対応する最新の会話ログファイルを `@ファイル` として自動参照します。前回の会話内容を AI に引き継がせたい場合に使います。
 
 ---
 
