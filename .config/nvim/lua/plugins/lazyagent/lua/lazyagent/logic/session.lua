@@ -640,6 +640,23 @@ function M.resume_conversation(agent_name)
     end
   end
 
+  -- Sort choices: files matching the current project+branch prefix come first.
+  local prefix = (cache_logic.build_cache_prefix and cache_logic.build_cache_prefix()) or ""
+  if prefix ~= "" then
+    local matched, rest = {}, {}
+    for _, c in ipairs(choices) do
+      if c:lower():sub(1, #prefix) == prefix:lower() then
+        table.insert(matched, c)
+      else
+        table.insert(rest, c)
+      end
+    end
+    -- Rebuild choices with matches first
+    choices = {}
+    for _, c in ipairs(matched) do table.insert(choices, c) end
+    for _, c in ipairs(rest) do table.insert(choices, c) end
+  end
+
   vim.ui.select(choices, {
     prompt = "Resume LazyAgent conversation:",
     -- fzf-lua ui.select: show file preview from cache dir
