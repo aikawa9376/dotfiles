@@ -19,6 +19,7 @@ M.close_session = session_logic.close_session
 M.close_all_sessions = session_logic.close_all_sessions
 M.toggle_session = session_logic.toggle_session
 M.open_instant = session_logic.open_instant
+M.attach_session = session_logic.attach_session
 M.send_visual = send_logic.send_visual
 M.send_line = send_logic.send_line
 M.status = status_logic.get_status
