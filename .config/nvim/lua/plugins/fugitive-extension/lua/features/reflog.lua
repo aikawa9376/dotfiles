@@ -42,6 +42,7 @@ local function show_reflog_help()
     '<C-y>  copy short hash',
     '<C-p>  toggle commit preview',
     'R      reload reflog',
+    '<Leader>R  reset --mixed to commit',
     '<CR>   open in fugitive (:G edit)',
     'q      close buffer',
   })
@@ -99,7 +100,7 @@ function M.setup(group)
             vim.cmd('DiffviewOpen ' .. commit .. '^..' .. commit)
           end
         end)
-      end, { buffer = ev.buf, nowait = true, silent = true })
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Diffview commit' })
 
       -- C: Show commit info
       vim.keymap.set('n', 'C', function()
@@ -161,6 +162,19 @@ function M.setup(group)
         commands.close_commit_info_float()
         require"utilities".smart_close()
       end, { buffer = ev.buf, nowait = true, silent = true })
+
+      -- <Leader>R: reset --mixed
+      vim.keymap.set('n', '<Leader>R', function()
+        local commit = vim.api.nvim_get_current_line():match('^(%x+)')
+        if not commit or commit == '' then
+          vim.notify('No commit found', vim.log.levels.WARN)
+          return
+        end
+        local confirm = vim.fn.confirm('git reset --mixed ' .. commit .. '?', '&Yes\n&No', 2)
+        if confirm == 1 then
+          vim.cmd('G reset --mixed ' .. commit)
+        end
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'git reset --mixed to commit' })
 
       -- R: Reload
       vim.keymap.set('n', 'R', function()

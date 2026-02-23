@@ -966,7 +966,7 @@ local function show_branch_help()
     'f           fetch --all --prune',
     'p           pull current branch',
     'P           pull branch under cursor',
-    'D           diff against origin/default (PR view)',
+    'd           diff against origin/default (PR view)',
     'm<Space>    merge branch (input)',
     'r<Space>    stash -> fetch -> rebase (input)',
     '<C-Space>   toggle Flog graph',
@@ -1105,7 +1105,7 @@ function M.setup(group)
       end, { buffer = bufnr, silent = true, desc = "Pull branch under cursor" })
 
       -- D: Diff against default branch
-      vim.keymap.set('n', 'D', function()
+      vim.keymap.set('n', 'd', function()
         diff_against_default(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Diff against default branch" })
 

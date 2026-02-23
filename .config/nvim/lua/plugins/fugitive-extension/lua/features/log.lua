@@ -158,6 +158,7 @@ local function show_log_help()
     'X (n/V)     drop commit(s)',
     'cw          reword commit',
     '<C-p>       toggle commit preview',
+    '<Leader>R   reset --mixed to commit',
   })
 end
 
@@ -528,6 +529,19 @@ function M.setup(group)
         commands.close_commit_info_float()
         require"utilities".smart_close()
       end, { buffer = ev.buf, nowait = true, silent = true })
+
+      -- <Leader>R: reset --mixed
+      vim.keymap.set('n', '<Leader>R', function()
+        local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+        if not commit or commit == '' then
+          vim.notify('No commit found', vim.log.levels.WARN)
+          return
+        end
+        local confirm = vim.fn.confirm('git reset --mixed ' .. commit .. '?', '&Yes\n&No', 2)
+        if confirm == 1 then
+          vim.cmd('G reset --mixed ' .. commit)
+        end
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'git reset --mixed to commit' })
 
       -- R: Reload
       vim.keymap.set('n', 'R', function()
