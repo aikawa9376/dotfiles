@@ -173,7 +173,8 @@ function M.write_scratch_to_cache(bufnr)
   end
 end
 
---- Lists all cache files, sorted by modification time (newest first).
+--- Lists all history cache files, sorted by modification time (newest first).
+-- Only returns files matching the "-history.log" pattern.
 -- @return (table) A list of cache file entries.
 local function list_cache_files()
   local dir = get_cache_dir()
@@ -183,7 +184,7 @@ local function list_cache_files()
   local raw = vim.fn.readdir(dir) or {}
   local entries = {}
   for _, f in ipairs(raw) do
-    if f:match("%.log$") then
+    if f:match("%-history%.log$") then
       local path = dir .. "/" .. f
       local mtime = vim.fn.getftime(path) or 0
       table.insert(entries, { name = f, path = path, mtime = mtime })
@@ -194,38 +195,25 @@ local function list_cache_files()
   return entries
 end
 
---- Lists all cache Conversation files, sorted by modification time (newest first).
--- @return (table) entries: list of { name, path, mtime }, choices: list of strings suitable for vim.ui.select
-function M.list_cache_Conversation()
+--- Lists all conversation capture files, sorted by modification time (newest first).
+-- Only returns files matching the "-conversation-*.log" pattern.
+-- @return (table) A list of cache file entries { name, path, mtime }.
+local function list_conversation_files()
   local dir = get_cache_dir()
-  if not dir or vim.fn.isdirectory(dir) == 0 then
-    return {}, {}
-  end
-
+  if not dir or vim.fn.isdirectory(dir) == 0 then return {} end
   local raw = vim.fn.readdir(dir) or {}
-  local raws = {}
   local entries = {}
-
   for _, f in ipairs(raw) do
-    local fname_lower = (f or ""):lower()
-    -- Match filenames like "<agent>-conversation-2024-... .log" (case-insensitive)
-    if fname_lower:match("%-conversation%-.+%.log$") then
+    if f:lower():match("%-conversation%-.+%.log$") then
       local path = dir .. "/" .. f
-      local mtime = vim.fn.getftime(path) or 0
-      table.insert(raws, { name = f, path = path, mtime = mtime })
+      table.insert(entries, { name = f, path = path, mtime = vim.fn.getftime(path) or 0 })
     end
   end
-
-  table.sort(raws, function(a, b) return (a.mtime or 0) > (b.mtime or 0) end)
-
-  for _, e in ipairs(raws) do
-    table.insert(entries, e.name)
-  end
-
-  return M.get_cache_dir(), entries
+  table.sort(entries, function(a, b) return (a.mtime or 0) > (b.mtime or 0) end)
+  return entries
 end
 
---- Opens the agent history in a selection UI.
+--- Opens the agent history in a selection UI with file preview (fzf-lua compatible).
 function M.open_history()
   local entries = list_cache_files()
   if not entries or #entries == 0 then
@@ -233,20 +221,52 @@ function M.open_history()
     return
   end
 
+  local dir = get_cache_dir()
   local choices = {}
   for _, e in ipairs(entries) do
-    table.insert(choices, e.name .. " (" .. os.date("%Y-%m-%d %H:%M:%S", e.mtime or 0) .. ")")
+    table.insert(choices, e.name)
   end
 
-  vim.ui.select(choices, { prompt = "Open lazyagent history:" }, function(choice, idx)
-    if not choice or not idx then return end
-    local entry = entries[idx]
-    if entry and entry.path then
-      vim.schedule(function()
-        -- Open the selected file into a buffer
-        vim.cmd("edit " .. vim.fn.fnameescape(entry.path))
-      end)
-    end
+  vim.ui.select(choices, {
+    prompt = "Open lazyagent history:",
+    previewer = "builtin",
+    cwd = dir,
+  }, function(selected, idx)
+    local choice = (idx and choices[idx]) or selected
+    if not choice or choice == "" then return end
+    local path = dir:gsub("/$", "") .. "/" .. choice
+    vim.schedule(function()
+      vim.cmd("edit " .. vim.fn.fnameescape(path))
+    end)
+  end)
+end
+
+--- Opens the agent conversation captures in a selection UI with file preview (fzf-lua compatible).
+function M.open_conversations()
+  local entries = list_conversation_files()
+  if not entries or #entries == 0 then
+    vim.notify("LazyAgentConversation: no conversation captures found in " .. get_cache_dir(), vim.log.levels.INFO)
+    return
+  end
+
+  local dir = get_cache_dir()
+  local choices = {}
+  for _, e in ipairs(entries) do
+    table.insert(choices, e.name)
+  end
+
+  vim.ui.select(choices, {
+    prompt = "Open conversation capture:",
+    previewer = "builtin",
+    cwd = dir,
+  }, function(selected, idx)
+    local choice = (idx and choices[idx]) or selected
+    if not choice or choice == "" then return end
+    local path = dir:gsub("/$", "") .. "/" .. choice
+    vim.schedule(function()
+      vim.cmd("edit " .. vim.fn.fnameescape(path))
+      vim.cmd("setlocal nowrap")
+    end)
   end)
 end
 
@@ -254,6 +274,7 @@ end
 M.get_cache_dir = get_cache_dir
 M.build_cache_filename = build_cache_filename
 M.list_cache_files = list_cache_files
+M.list_conversation_files = list_conversation_files
 
 local function get_cache_path(bufnr)
   return get_cache_dir() .. "/" .. build_cache_filename(bufnr)
