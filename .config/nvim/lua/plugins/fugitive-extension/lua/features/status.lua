@@ -332,7 +332,7 @@ function M.setup(group)
       end
       vim.keymap.set('n', '<CR>', map_CR, { buffer = ev.buf, nowait = true, silent = true, desc = 'Open stash diff in split buffer' })
 
-      vim.keymap.set('n', 'dd', function()
+      vim.keymap.set('n', 'd', function()
         local file_path = utils.get_filepath_at_cursor(ev.buf)
         if not file_path then
           print('No file found')

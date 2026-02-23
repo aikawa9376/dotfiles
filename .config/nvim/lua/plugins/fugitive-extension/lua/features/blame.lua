@@ -251,7 +251,7 @@ function M.setup(group)
         print('Blame gradient mode: ' .. vim.g.fugitive_blame_gradient_mode)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
-      vim.keymap.set('n', 'p', function()
+      vim.keymap.set('n', '<C-p>', function()
         if preview_state.win then
           close_preview_window()
         else

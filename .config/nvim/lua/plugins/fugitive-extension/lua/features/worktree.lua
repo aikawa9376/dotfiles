@@ -352,7 +352,7 @@ local function show_worktree_help()
     '<CR>   open worktree in tab (:tcd)',
     'o      open worktree in this window (:lcd)',
     'a      add worktree',
-    'd      remove worktree (prompt/force as needed)',
+    'X      remove worktree (prompt/force as needed)',
     'p      prune worktrees',
     'R      refresh list',
     'q      close buffer',
@@ -397,7 +397,7 @@ function M.setup(group)
         open_worktree(entry_at_cursor(bufnr), 'window')
       end, { buffer = bufnr, silent = true, desc = "Open worktree in this window" })
 
-      vim.keymap.set('n', 'd', function()
+      vim.keymap.set('n', 'X', function()
         remove_worktree(bufnr, false)
       end, { buffer = bufnr, silent = true, desc = "Remove worktree" })
 
