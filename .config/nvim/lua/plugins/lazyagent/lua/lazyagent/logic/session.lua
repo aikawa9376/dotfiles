@@ -60,6 +60,9 @@ local function maybe_disable_watchers()
   end
   if cnt == 0 then
     pcall(watch.disable)
+    if type(watch.stop_follow) == "function" then
+      pcall(watch.stop_follow)
+    end
   end
 end
 
@@ -96,6 +99,14 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         -- If this session requested watchers, enable them.
         if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
           pcall(watch.enable)
+        end
+        -- If auto_follow is configured, start following file changes in cwd.
+        local follow_mode = (agent_cfg and agent_cfg.auto_follow) or (state.opts and state.opts.auto_follow)
+        if follow_mode and ok_watch and watch and type(watch.start_follow) == "function" then
+          pcall(watch.start_follow, {
+            mode = (type(follow_mode) == "string") and follow_mode or "split",
+            dir = vim.fn.getcwd(),
+          })
         end
         -- Configure pane options (e.g. refocus_on_send) for the restored pane.
         if backend_mod and type(backend_mod.configure_pane) == "function" then
@@ -235,6 +246,15 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       -- If this session requested watchers, enable them.
       if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
         pcall(watch.enable)
+      end
+
+      -- If auto_follow is configured, start following file changes in cwd.
+      local follow_mode = (agent_cfg and agent_cfg.auto_follow) or (state.opts and state.opts.auto_follow)
+      if follow_mode and ok_watch and watch and type(watch.start_follow) == "function" then
+        pcall(watch.start_follow, {
+          mode = (type(follow_mode) == "string") and follow_mode or "split",
+          dir = vim.fn.getcwd(),
+        })
       end
 
       -- Configure pane options (e.g. refocus_on_send) so send_keys/paste_and_submit behave correctly.

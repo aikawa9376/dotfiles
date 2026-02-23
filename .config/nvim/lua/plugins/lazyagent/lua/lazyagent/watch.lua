@@ -423,6 +423,169 @@ end
 -- Backwards-compatible alias used earlier (keep per-directory M.stop)
 -- Keep M.stop (per-directory) and M.stop_all (stop all) distinct to avoid surprising behavior.
 
+-- Auto-follow: automatically open/focus files edited by external tools (e.g. AI agents).
+-- Tries event-driven watchers first (inotifywait on Linux, fswatch on macOS),
+-- then falls back to find-based polling. A single dedicated split is maintained.
+-- mode = "split" → maintain a dedicated split window (default)
+-- mode = "jump"  → replace current window
+-- Usage: M.start_follow({ dir = "/path", mode = "split"|"jump" })
+--        M.stop_follow()
+local _follow_job   = nil   -- jobstart id for event-driven watcher
+local _follow_timer = nil   -- uv timer used only for polling fallback
+local _follow_marker = nil  -- temp file for find -newer (polling only)
+local _follow_running = false -- guard against concurrent poll runs
+local _follow_opts  = {}
+local _follow_win   = nil   -- dedicated split window for "split" mode
+
+local function follow_open_file(changed_path)
+  changed_path = vim.fn.fnamemodify(changed_path, ":p"):gsub("/$", "")
+
+  local basename = vim.fn.fnamemodify(changed_path, ":t")
+  if basename == "" or basename:sub(1, 1) == "." then return end
+
+  -- Only follow regular files.
+  local stat = uv.fs_stat(changed_path)
+  if not stat or stat.type ~= "file" then return end
+
+  -- If already visible, focus that window.
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    local name = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p"):gsub("/$", "")
+    if name == changed_path then
+      vim.api.nvim_set_current_win(win)
+      return
+    end
+  end
+
+  if (_follow_opts.mode or "split") == "jump" then
+    pcall(vim.cmd, "edit " .. vim.fn.fnameescape(changed_path))
+  else
+    -- Reuse the dedicated split window; create one if needed.
+    if _follow_win and vim.api.nvim_win_is_valid(_follow_win) then
+      vim.api.nvim_set_current_win(_follow_win)
+      pcall(vim.cmd, "edit " .. vim.fn.fnameescape(changed_path))
+    else
+      pcall(vim.cmd, "split " .. vim.fn.fnameescape(changed_path))
+      _follow_win = vim.api.nvim_get_current_win()
+    end
+  end
+end
+
+-- Event-driven backend: inotifywait (Linux).
+local function start_inotifywait(watch_dir)
+  local job = vim.fn.jobstart({
+    "inotifywait", "-m", "-r", "-q",
+    "-e", "close_write,moved_to,create",
+    "--exclude", "(\\.git|node_modules|__pycache__)",
+    "--format", "%w%f",
+    watch_dir,
+  }, {
+    on_stdout = function(_, data)
+      if not data then return end
+      vim.schedule(function()
+        for _, fpath in ipairs(data) do
+          if fpath ~= "" then follow_open_file(fpath) end
+        end
+      end)
+    end,
+  })
+  return job > 0 and job or nil
+end
+
+-- Event-driven backend: fswatch (macOS / Linux).
+local function start_fswatch(watch_dir)
+  local job = vim.fn.jobstart({
+    "fswatch", "-r",
+    "--event", "Updated", "--event", "MovedTo",
+    "--exclude", "\\.git", "--exclude", "node_modules",
+    watch_dir,
+  }, {
+    on_stdout = function(_, data)
+      if not data then return end
+      vim.schedule(function()
+        for _, fpath in ipairs(data) do
+          if fpath ~= "" then follow_open_file(fpath) end
+        end
+      end)
+    end,
+  })
+  return job > 0 and job or nil
+end
+
+-- Polling fallback: find -newer marker (works everywhere, higher CPU).
+local function start_polling(watch_dir, interval_ms)
+  local marker = vim.fn.tempname()
+  vim.fn.writefile({}, marker)
+  _follow_marker = marker
+
+  local exclude = "-not \\( -path '*/.git/*' -o -path '*/node_modules/*' -o -path '*/__pycache__/*' \\)"
+  local cmd = string.format(
+    "find %s -type f -newer %s %s 2>/dev/null",
+    vim.fn.shellescape(watch_dir), vim.fn.shellescape(marker), exclude
+  )
+
+  local timer = uv.new_timer()
+  _follow_timer = timer
+  timer:start(interval_ms, interval_ms, vim.schedule_wrap(function()
+    if _follow_running then return end
+    _follow_running = true
+    vim.system({ "sh", "-c", cmd }, { text = true }, function(result)
+      vim.schedule(function()
+        _follow_running = false
+        vim.fn.writefile({}, marker)
+        if not result or (result.stdout or "") == "" then return end
+        for _, fpath in ipairs(vim.split(vim.trim(result.stdout), "\n", { trimempty = true })) do
+          follow_open_file(fpath)
+        end
+      end)
+    end)
+  end))
+end
+
+function M.start_follow(opts)
+  opts = opts or {}
+  local watch_dir = abs_path(opts.dir or vim.fn.getcwd())
+  if not watch_dir then return false end
+
+  M.stop_follow()
+  _follow_opts = { mode = opts.mode or "split", dir = watch_dir }
+
+  -- Prefer event-driven; fall back to polling.
+  if vim.fn.executable("inotifywait") == 1 then
+    _follow_job = start_inotifywait(watch_dir)
+  elseif vim.fn.executable("fswatch") == 1 then
+    _follow_job = start_fswatch(watch_dir)
+  end
+  if not _follow_job then
+    start_polling(watch_dir, opts.interval_ms or 1000)
+  end
+
+  return true
+end
+
+function M.stop_follow()
+  if _follow_job then
+    pcall(vim.fn.jobstop, _follow_job)
+    _follow_job = nil
+  end
+  if _follow_timer then
+    pcall(function() _follow_timer:stop() end)
+    pcall(function() _follow_timer:close() end)
+    _follow_timer = nil
+  end
+  if _follow_marker then
+    pcall(vim.fn.delete, _follow_marker)
+    _follow_marker = nil
+  end
+  _follow_opts  = {}
+  _follow_win   = nil
+  _follow_running = false
+end
+
+function M.is_following()
+  return _follow_job ~= nil or _follow_timer ~= nil
+end
+
 -- List server watchers.
 function M.list()
   local out = {}
