@@ -209,10 +209,9 @@ function M.setup(group)
       vim.api.nvim_create_autocmd('User', {
         pattern = 'FugitiveChanged',
         group = buf_group,
-        -- Listen globally, but only update this buffer if it is visible
         callback = function()
-          if vim.api.nvim_buf_is_valid(ev.buf) and vim.fn.bufwinnr(ev.buf) ~= -1 then
-             refresh_log_list(ev.buf)
+          if vim.api.nvim_buf_is_valid(ev.buf) then
+            refresh_log_list(ev.buf)
           end
         end,
       })
