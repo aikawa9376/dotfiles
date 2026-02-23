@@ -92,6 +92,202 @@ _G.fugitive_foldtext = function()
   return result
 end
 
+-- Helpers for X: discard diff changes from commit
+local function get_diff_context_at_line(bufnr, lnum)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local on_file_header = (lines[lnum] or ''):match('^diff %-%-git') ~= nil
+  local filepath, file_lnum = nil, nil
+  for i = lnum, 1, -1 do
+    local p = lines[i]:match('^diff %-%-git [ab]/(.+) [ab]/')
+    if p then filepath, file_lnum = p, i; break end
+  end
+  local hunk_start = nil
+  if not on_file_header then
+    for i = lnum, 1, -1 do
+      if lines[i]:match('^@@') then hunk_start = i; break end
+      if lines[i]:match('^diff %-%-git') then break end
+    end
+  end
+  return filepath, file_lnum, on_file_header, hunk_start, lines
+end
+
+local function collect_file_patch(lines, file_lnum)
+  local result = {}
+  for i = file_lnum, #lines do
+    if i > file_lnum and lines[i]:match('^diff %-%-git') then break end
+    table.insert(result, lines[i])
+  end
+  return result
+end
+
+local function collect_hunk_patch(lines, file_lnum, hunk_start)
+  local result = {}
+  for i = file_lnum, hunk_start - 1 do
+    local l = lines[i]
+    if l:match('^diff %-%-git') or l:match('^index ') or l:match('^old mode')
+      or l:match('^new mode') or l:match('^new file') or l:match('^deleted file')
+      or l:match('^rename') or l:match('^similarity')
+      or l:match('^%-%-%-') or l:match('^%+%+%+') then
+      table.insert(result, l)
+    end
+  end
+  table.insert(result, lines[hunk_start])
+  for i = hunk_start + 1, #lines do
+    local l = lines[i]
+    if l:match('^@@') or l:match('^diff %-%-git') then break end
+    table.insert(result, l)
+  end
+  return result
+end
+
+-- Build a patch that individually reverses only the selected +/- lines (zero-context hunks)
+local function build_partial_reverse_patch(filepath, lines, hunk_start, sel_start, sel_end)
+  local header = lines[hunk_start]
+  local old_s, new_s = header:match('^@@ %-(%d+),?%d* %+(%d+),?%d* @@')
+  if not old_s then return nil end
+  local old_cur, new_cur = tonumber(old_s), tonumber(new_s)
+  local sub_hunks = {}
+  for i = hunk_start + 1, #lines do
+    local l = lines[i]
+    if l:match('^@@') or l:match('^diff %-%-git') then break end
+    local prefix, content = l:sub(1, 1), l:sub(2)
+    local in_sel = (i >= sel_start and i <= sel_end)
+    if prefix == ' ' then
+      old_cur, new_cur = old_cur + 1, new_cur + 1
+    elseif prefix == '-' then
+      if in_sel then
+        -- Add back the deleted line at the current position in the new (commit) file
+        table.insert(sub_hunks, '@@ -' .. new_cur .. ',0 +' .. new_cur .. ',1 @@')
+        table.insert(sub_hunks, '+' .. content)
+      end
+      old_cur = old_cur + 1
+    elseif prefix == '+' then
+      if in_sel then
+        -- Remove the added line at the current position in the new (commit) file
+        table.insert(sub_hunks, '@@ -' .. new_cur .. ',1 +' .. new_cur .. ',0 @@')
+        table.insert(sub_hunks, '-' .. content)
+      end
+      new_cur = new_cur + 1
+    end
+  end
+  if #sub_hunks == 0 then return nil end
+  local patch = {
+    'diff --git a/' .. filepath .. ' b/' .. filepath,
+    '--- a/' .. filepath,
+    '+++ b/' .. filepath,
+  }
+  vim.list_extend(patch, sub_hunks)
+  return patch
+end
+
+local function commit_auto_stash(work_tree)
+  local status = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(work_tree) .. ' status --porcelain')
+  if vim.v.shell_error ~= 0 then
+    vim.notify('git status failed; skipping auto-stash', vim.log.levels.WARN)
+    return false
+  end
+  if #status == 0 then return false end
+  vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree)
+    .. ' stash push -u -k -m ' .. vim.fn.shellescape('fugitive-ext commit auto-stash'))
+  if vim.v.shell_error ~= 0 then
+    vim.notify('auto-stash failed; aborting', vim.log.levels.ERROR)
+    return nil
+  end
+  vim.notify('Auto-stashed dirty worktree', vim.log.levels.INFO)
+  return true
+end
+
+local function commit_auto_pop(work_tree)
+  vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' stash pop --index --quiet')
+  if vim.v.shell_error ~= 0 then
+    vim.notify('Auto-stash pop failed; please pop manually', vim.log.levels.ERROR)
+  else
+    vim.notify('Auto-stash popped', vim.log.levels.INFO)
+  end
+end
+
+-- Run git rebase -i (stop at commit), apply/reverse the patch, amend, then continue
+local function apply_patch_and_amend(git_dir, commit, filepath, patch_lines, use_reverse)
+  local patch_file = vim.fn.tempname()
+  local f = io.open(patch_file, 'w')
+  if not f then
+    vim.notify('Failed to create temp file', vim.log.levels.ERROR)
+    return false
+  end
+  f:write(table.concat(patch_lines, '\n') .. '\n')
+  f:close()
+
+  local rebase_cmd = 'cd ' .. vim.fn.shellescape(git_dir)
+    .. " && GIT_SEQUENCE_EDITOR=\"sed -i '/" .. commit:sub(1, 7)
+    .. "/s/^pick/edit/'\" git rebase -i " .. commit .. '^ 2>&1'
+  local out = vim.fn.system(rebase_cmd)
+  if not out:match('Stopped at') then
+    vim.notify('Rebase failed: ' .. out:sub(1, 120), vim.log.levels.ERROR)
+    os.remove(patch_file)
+    return false
+  end
+
+  local rev = use_reverse and '--reverse ' or ''
+  out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir)
+    .. ' && git apply ' .. rev .. '--unidiff-zero ' .. vim.fn.shellescape(patch_file)
+    .. ' && git add ' .. vim.fn.shellescape(filepath)
+    .. ' && git commit --amend --allow-empty --no-edit 2>&1')
+  if vim.v.shell_error ~= 0 then
+    vim.notify('Apply failed: ' .. out:sub(1, 120), vim.log.levels.ERROR)
+    vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
+    os.remove(patch_file)
+    return false
+  end
+
+  out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && GIT_EDITOR=true git rebase --continue 2>&1')
+  if not (out:match('Successfully rebased') or vim.v.shell_error == 0) then
+    vim.notify('Rebase continue failed: ' .. out:sub(1, 120), vim.log.levels.ERROR)
+    vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
+    os.remove(patch_file)
+    return false
+  end
+
+  os.remove(patch_file)
+  return true
+end
+
+-- Post-discard: stash pop, check empty commit, reload buffer
+local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, stashed)
+  local ok = apply_patch_and_amend(git_dir, commit, filepath, patch, use_reverse)
+  if stashed then commit_auto_pop(git_dir) end
+  vim.cmd('checktime')
+  if not ok then return end
+
+  local new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir)
+    .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
+
+  -- Check if commit became empty
+  local diff_out = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(git_dir)
+    .. ' diff-tree --no-commit-id -r ' .. new_hash .. ' 2>/dev/null')
+  if #diff_out == 0 and new_hash ~= '' then
+    if vim.fn.confirm(
+      'Commit ' .. new_hash:sub(1, 7) .. ' is now empty. Drop it?',
+      '&Yes\n&No', 1
+    ) == 1 then
+      vim.fn.system('cd ' .. vim.fn.shellescape(git_dir)
+        .. " && GIT_SEQUENCE_EDITOR=\"sed -i '1s/^pick/drop/'\" GIT_EDITOR=true git rebase -i HEAD^ 2>&1")
+      vim.notify('Dropped empty commit ' .. new_hash:sub(1, 7), vim.log.levels.INFO)
+      vim.cmd('silent! doautocmd User FugitiveChanged')
+      vim.cmd('checktime')
+      vim.schedule(function() require('utilities').smart_close() end)
+      return
+    end
+  end
+
+  vim.notify(string.format('Discarded %s from %s', scope, commit:sub(1, 7)), vim.log.levels.INFO)
+  -- Trigger log buffer refresh via standard fugitive event
+  vim.cmd('silent! doautocmd User FugitiveChanged')
+  -- Reload the buffer to reflect the amended commit
+  if new_hash ~= '' then
+    vim.schedule(function() vim.cmd('Gedit ' .. new_hash) end)
+  end
+end
+
 function M.setup(group)
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
@@ -378,6 +574,68 @@ function M.setup(group)
         vim.fn.setreg('"', short_commit)
         print('Copied: ' .. short_commit)
       end, { buffer = ev.buf, nowait = true, silent = true })
+
+      -- X: Discard diff changes from commit (hunk / file / visual selection)
+      vim.keymap.set('n', 'X', function()
+        local lnum = vim.fn.line('.')
+        local filepath, file_lnum, on_file_header, hunk_start, lines =
+          get_diff_context_at_line(ev.buf, lnum)
+        if not filepath or (not on_file_header and not hunk_start) then
+          vim.notify('Not in a diff section', vim.log.levels.WARN)
+          return
+        end
+        local commit = get_commit_from_buffer(ev.buf)
+        if not commit then
+          vim.notify('No commit found', vim.log.levels.WARN)
+          return
+        end
+        local scope = on_file_header and 'file' or 'hunk'
+        if vim.fn.confirm(
+          string.format('Discard %s changes from commit %s?', scope, commit:sub(1, 7)),
+          '&Yes\n&No', 2
+        ) ~= 1 then return end
+        local git_dir = vim.fn.FugitiveWorkTree()
+        local stashed = commit_auto_stash(git_dir)
+        if stashed == nil then return end
+        local patch
+        if on_file_header then
+          patch = collect_file_patch(lines, file_lnum)
+        else
+          patch = collect_hunk_patch(lines, file_lnum, hunk_start)
+        end
+        do_discard(git_dir, commit, filepath, patch, true, scope, stashed)
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Discard diff changes from commit' })
+
+      vim.keymap.set('v', 'X', function()
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
+        local sel_start = vim.fn.line("'<")
+        local sel_end   = vim.fn.line("'>")
+        local filepath, _, _, hunk_start, lines =
+          get_diff_context_at_line(ev.buf, sel_start)
+        if not filepath or not hunk_start then
+          vim.notify('No hunk in selection', vim.log.levels.WARN)
+          return
+        end
+        local commit = get_commit_from_buffer(ev.buf)
+        if not commit then
+          vim.notify('No commit found', vim.log.levels.WARN)
+          return
+        end
+        if vim.fn.confirm(
+          string.format('Discard selected changes from commit %s?', commit:sub(1, 7)),
+          '&Yes\n&No', 2
+        ) ~= 1 then return end
+        local git_dir = vim.fn.FugitiveWorkTree()
+        local stashed = commit_auto_stash(git_dir)
+        if stashed == nil then return end
+        local patch = build_partial_reverse_patch(filepath, lines, hunk_start, sel_start, sel_end)
+        if not patch then
+          vim.notify('No diff lines in selection', vim.log.levels.WARN)
+          if stashed then commit_auto_pop(git_dir) end
+          return
+        end
+        do_discard(git_dir, commit, filepath, patch, false, 'selection', stashed)
+      end, { buffer = ev.buf, silent = true, desc = 'Discard selected diff changes from commit' })
 
       -- q: Close window and flog window
       vim.keymap.set('n', 'q', function()
