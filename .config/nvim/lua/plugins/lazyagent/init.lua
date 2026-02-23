@@ -85,6 +85,14 @@ return {
     instant_mode = {
       append_text = " #cursor #small-fix #diffstyle-code", -- e.g. " #translate"
     },
-
+    -- auto_follow: automatically open/focus files edited by the AI agent.
+    -- "split" = dedicated split window (default), "jump" = replace current window.
+    --
+    -- NOTE: inotifywait (Linux) を強く推奨します。インストールすると find ポーリングの代わりに
+    --       イベント駆動で動作し、CPU 負荷がほぼゼロになります。
+    --   Arch:   sudo pacman -S inotify-tools
+    --   Ubuntu: sudo apt install inotify-tools
+    --   macOS:  brew install fswatch  (fswatch を使用)
+    auto_follow = "split",
   }
 }

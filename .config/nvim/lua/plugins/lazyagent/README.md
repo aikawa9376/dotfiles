@@ -253,3 +253,17 @@ prompts = {
 - Gemini などの CLI が端末に対してフォーカスを奪う場合は、起動コマンド側のオプションや端末実装に依存します。lazyagent は `-d`（バックグラウンド分割）で tmux ペインを作り、焦点は基本的に Neovim のままにします。
 
 ---
+
+## auto_follow の依存パッケージ
+
+`auto_follow` オプションを使う場合、`inotifywait`（Linux）または `fswatch`（macOS）のインストールを**強く推奨**します。
+インストールすると `find` ポーリングの代わりにイベント駆動で動作し、CPU 負荷がほぼゼロになります。
+未インストールでも動作しますが、1 秒ごとに `find` サブプロセスを生成するポーリング方式にフォールバックします。
+
+| OS | パッケージ | インストール |
+|----|-----------|-------------|
+| Arch Linux | `inotify-tools` | `sudo pacman -S inotify-tools` |
+| Ubuntu / Debian | `inotify-tools` | `sudo apt install inotify-tools` |
+| macOS | `fswatch` | `brew install fswatch` |
+
+---
