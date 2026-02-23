@@ -118,12 +118,29 @@ function M.setup_commands()
       if vim.fn.filereadable(path) == 1 then
         vim.cmd("edit " .. vim.fn.fnameescape(path))
       else
-        vim.notify("LazyAgentHistory: file not found: " .. path, vim.log.levels.ERROR)
+        vim.notify("LazyAgentHistoryList: file not found: " .. path, vim.log.levels.ERROR)
       end
       return
     end
     cache_logic.open_history()
-  end, { nargs = "?", desc = "Open a lazyagent cache history file. If no arg is provided, pick from UI." })
+  end, { nargs = "?", desc = "Open a lazyagent history file (scratch logs). If no arg is provided, pick from UI." })
+
+  -- User command to open conversation captures saved by LazyAgentOpenConversation.
+  try_create_user_command("LazyAgentConversationList", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    local dir = cache_logic.get_cache_dir()
+    if explicit then
+      local path = dir .. "/" .. explicit
+      if vim.fn.filereadable(path) == 1 then
+        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        vim.cmd("setlocal nowrap")
+      else
+        vim.notify("LazyAgentConversationList: file not found: " .. path, vim.log.levels.ERROR)
+      end
+      return
+    end
+    cache_logic.open_conversations()
+  end, { nargs = "?", desc = "Open a lazyagent conversation capture. If no arg is provided, pick from UI." })
 
   -- Resume a conversation from a saved snapshot and preload it into a new session scratch buffer.
   try_create_user_command("LazyAgentResumeConversation", function(cmdargs)

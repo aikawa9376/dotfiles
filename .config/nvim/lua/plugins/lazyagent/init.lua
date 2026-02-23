@@ -55,14 +55,20 @@ return {
       mode = { "n", "x" },
       desc = "Clear Agent Input",
     })
+    table.insert(keys, {
+      "c<space>l",
+      function() vim.cmd("LazyAgentOpenConversation") end,
+      mode = { "n", "x" },
+      desc = "Open Agent Conversation",
+    })
     return keys
   end)(),
   -- Also load the plugin when these user commands are executed
   cmd = {
     "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
-    "LazyAgentHistoryList", "LazyAgentClose", "LazyAgentOpenConversation",
-    "LazyAgentResumeConversation", "LazyAgentSummary", "LazyAgentRestore",
-    "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
+    "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
+    "LazyAgentOpenConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
+    "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {

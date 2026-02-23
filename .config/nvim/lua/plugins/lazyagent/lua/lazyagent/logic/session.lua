@@ -630,13 +630,13 @@ end
 -- with the snapshot content preloaded.
 -- @param agent_name (string|nil) The name of the agent to use.
 function M.resume_conversation(agent_name)
-  local dir, choices = cache_logic.list_cache_Conversation()
-  if not choices or #choices == 0 then
-    local msg = "LazyAgentResume: no conversation snapshots found"
-    if dir then msg = msg .. " in " .. dir end
-    vim.notify(msg, vim.log.levels.INFO)
+  local entries = cache_logic.list_conversation_files()
+  if not entries or #entries == 0 then
+    vim.notify("LazyAgentResume: no conversation snapshots found in " .. cache_logic.get_cache_dir(), vim.log.levels.INFO)
     return
   end
+
+  local dir = cache_logic.get_cache_dir()
 
   local function start_with_path(path)
     if vim.fn.filereadable(path) == 0 then
@@ -660,33 +660,32 @@ function M.resume_conversation(agent_name)
     end
   end
 
-  -- Sort choices: files matching the current project+branch prefix come first.
+  -- Build choices from entries; sort so current project+branch prefix comes first.
   local prefix = (cache_logic.build_cache_prefix and cache_logic.build_cache_prefix()) or ""
+  local choices = {}
   if prefix ~= "" then
     local matched, rest = {}, {}
-    for _, c in ipairs(choices) do
-      if c:lower():sub(1, #prefix) == prefix:lower() then
-        table.insert(matched, c)
+    for _, e in ipairs(entries) do
+      if e.name:lower():sub(1, #prefix) == prefix:lower() then
+        table.insert(matched, e.name)
       else
-        table.insert(rest, c)
+        table.insert(rest, e.name)
       end
     end
-    -- Rebuild choices with matches first
-    choices = {}
-    for _, c in ipairs(matched) do table.insert(choices, c) end
-    for _, c in ipairs(rest) do table.insert(choices, c) end
+    for _, n in ipairs(matched) do table.insert(choices, n) end
+    for _, n in ipairs(rest)    do table.insert(choices, n) end
+  else
+    for _, e in ipairs(entries) do table.insert(choices, e.name) end
   end
 
   vim.ui.select(choices, {
     prompt = "Resume LazyAgent conversation:",
-    -- fzf-lua ui.select: show file preview from cache dir
     previewer = "builtin",
     cwd = dir,
   }, function(selected, idx)
-    local choice = (idx and choices and choices[idx]) or selected
+    local choice = (idx and choices[idx]) or selected
     if not choice or choice == "" then return end
-    local path = ((dir or ""):gsub("/$", "")) .. "/" .. choice
-    start_with_path(path)
+    start_with_path(dir:gsub("/$", "") .. "/" .. choice)
   end)
 end
 
