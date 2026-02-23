@@ -271,8 +271,34 @@ function M.setup(group)
         local target_line = vim.api.nvim_buf_get_lines(0, line_num - 1, line_num, false)[1]
         vim.cmd.wincmd('p')
 
+        -- Resolve the path the file had at commit^ (handles renames/moves)
+        local function resolve_path_at_commit_parent(cmt, cur_path)
+          vim.fn.system('git cat-file -e ' .. vim.fn.shellescape(cmt .. '^:' .. cur_path) .. ' 2>/dev/null')
+          if vim.v.shell_error == 0 then
+            return cur_path
+          end
+          local log_lines = vim.fn.systemlist(
+            'git log --follow --format=COMMIT:%H --name-status -- ' .. vim.fn.shellescape(cur_path)
+          )
+          local in_commit = false
+          for _, line in ipairs(log_lines) do
+            local sha = line:match('^COMMIT:(%x+)$')
+            if sha then
+              in_commit = (sha:sub(1, #cmt) == cmt or cmt:sub(1, #sha) == sha)
+            elseif in_commit and line ~= '' then
+              local old = line:match('^R%d*\t(.+)\t.+$')
+              if old then return old end
+              local path = line:match('^[MAD]\t(.+)$')
+              if path then return path end
+              in_commit = false
+            end
+          end
+          return cur_path
+        end
+
+        local resolved_path = commit:match('^0+$') and file_path or resolve_path_at_commit_parent(commit, file_path)
         local rev = commit:match('^0+$') and ':' or commit .. '^:'
-        local fugitive_path = vim.fn.FugitiveFind(rev .. file_path)
+        local fugitive_path = vim.fn.FugitiveFind(rev .. resolved_path)
         local existing_buf = vim.fn.bufnr(fugitive_path)
 
         vim.cmd(existing_buf ~= -1 and 'tabedit #' .. existing_buf or 'tabedit ' .. fugitive_path)
