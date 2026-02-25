@@ -144,7 +144,7 @@ function M.register_scratch_keymaps(bufnr, opts)
 
       -- Start monitoring for completion (spinner/loader) if appropriate
       local status_logic = require("lazyagent.logic.status")
-      status_logic.start_monitor(agent_name, pane, backend_mod)
+      if not (state.opts and state.opts.mcp_mode) then status_logic.start_monitor(agent_name) end
 
       if close_after or state.opts.close_on_send then
         window.close()

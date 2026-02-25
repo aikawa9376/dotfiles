@@ -31,7 +31,107 @@ M.send_interrupt = send_logic.send_interrupt
 M.send_raw_keys = send_logic.send_raw_keys
 M.clear_input = send_logic.clear_input
 
---- Sets up the LazyAgent plugin with user-defined options.
+-- Write MCP config into each agent's settings file so they auto-connect.
+-- Writes lazyagent MCP config into agent settings files (JSON) and generates
+-- agent-specific markdown context files in the cache directory.
+-- Agents are launched with a per-agent flag (e.g. --include-directories) pointing
+-- to the cache dir so they pick up the markdown file automatically.
+-- The source instructions live in `<cache>/lazyagent.md` (user-editable).
+-- Called once after the MCP server is ready; rewrites on every nvim start.
+local function default_instructions_content()
+  -- Try multiple known locations for an external default_instructions.md
+  local paths = {}
+  -- 1) directory of this module
+  pcall(function()
+    local info = debug.getinfo(default_instructions_content, "S")
+    local src = info and info.source
+    if src and src:sub(1,1) == "@" then src = src:sub(2) end
+    local dir = src and src:match("(.*/)")
+    if dir then table.insert(paths, dir .. "default_instructions.md") end
+  end)
+  -- 2) fallback to standard config path layout
+  pcall(function()
+    table.insert(paths, vim.fn.stdpath("config") .. "/lua/plugins/lazyagent/lua/lazyagent/default_instructions.md")
+  end)
+  -- 3) fallback to cache dir (unlikely but harmless)
+  pcall(function()
+    table.insert(paths, vim.fn.stdpath("cache") .. "/lazyagent/default_instructions.md")
+  end)
+
+  for _, md in ipairs(paths) do
+    local f = io.open(md, "r")
+    if f then
+      local s = f:read("*a")
+      f:close()
+      if s and s ~= "" then return s end
+    end
+  end
+
+  return ""
+end
+
+local function write_mcp_configs(url, opts)
+  local cache_dir = (opts and opts.cache and opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
+  vim.fn.mkdir(cache_dir, "p")
+
+  local instructions = default_instructions_content()
+
+  -- Write per-agent cache directories under <cache>/agents/<agent>/
+  -- Each agent gets only the files it actually reads:
+  --   All agents : AGENTS.md  (Copilot: via COPILOT_CUSTOM_INSTRUCTIONS_DIRS; Gemini: source for system.md)
+  --   Copilot    : mcp-config.json (merged with user config, passed via --additional-mcp-config)
+  for name, _ in pairs((opts and opts.interactive_agents) or {}) do
+    local lname = string.lower(name)
+    local agent_dir = cache_dir .. "/agents/" .. lname
+    pcall(vim.fn.mkdir, agent_dir, "p")
+
+    -- AGENTS.md: primary instruction file for all agents
+    if instructions ~= "" then
+      local fa = io.open(agent_dir .. "/AGENTS.md", "w")
+      if fa then fa:write(instructions); fa:close() end
+    end
+
+    -- Copilot: merge user's existing mcp-config.json entries with lazyagent MCP server
+    if lname == "copilot" then
+      local candidates = {}
+      local cop_env = vim.fn.expand("$COPILOT_CONFIG_DIR")
+      if cop_env and cop_env ~= "$COPILOT_CONFIG_DIR" and cop_env ~= "" then
+        table.insert(candidates, cop_env .. "/mcp-config.json")
+      end
+      table.insert(candidates, vim.fn.expand("~/.config/.copilot/mcp-config.json"))
+      table.insert(candidates, vim.fn.expand("~/.config/copilot/mcp-config.json"))
+      table.insert(candidates, vim.fn.expand("~/.copilot/mcp-config.json"))
+
+      local merged = {}
+      for _, p in ipairs(candidates) do
+        local fh = io.open(p, "r")
+        if fh then
+          local ok, parsed = pcall(vim.fn.json_decode, fh:read("*a"))
+          fh:close()
+          if ok and type(parsed) == "table" then
+            for k, v in pairs(parsed) do
+              if type(v) == "table" and type(merged[k]) == "table" then
+                for kk, vv in pairs(v) do merged[k][kk] = vv end
+              else
+                merged[k] = v
+              end
+            end
+          end
+        end
+      end
+
+      merged.mcpServers = merged.mcpServers or {}
+      merged.mcpServers.lazyagent = {
+        type = ((opts and opts._mcp_type) or "http"),
+        url = (((opts and opts._mcp_type) == "unix") and ("unix:" .. url) or url),
+      }
+
+      local cm = io.open(agent_dir .. "/mcp-config.json", "w")
+      if cm then cm:write(vim.fn.json_encode(merged)); cm:close() end
+    end
+  end
+end
+
 --- Sets up the LazyAgent plugin with user-defined options.
 -- @param opts (table|nil) User options to merge with defaults.
 function M.setup(opts)
@@ -122,6 +222,19 @@ function M.setup(opts)
     use_bracketed_paste = true,
     send_number_keys_to_agent = true,
     resume = false,
+    -- MCP mode: start a Streamable HTTP MCP server inside Neovim.
+    -- Agents that support MCP can connect to it to get LSP diagnostics,
+    -- buffer contents, and signal task completion (notify_done/notify_waiting).
+    -- Set to true and configure your agent to connect to LAZYAGENT_MCP_URL.
+    mcp_mode = true,
+    -- Text sent to the agent pane on first launch when mcp_mode is enabled.
+    -- Instructs the agent to call notify_done/notify_waiting via MCP.
+    -- Overridable per-agent via interactive_agents[name].initial_send.
+    -- Set to false or "" to disable for all agents (default: false, use file-based approach instead).
+    mcp_initial_send = false,
+    -- Delay (ms) before sending initial_send after agent launch (default 3000).
+    -- Increase if your agent CLI takes longer to start.
+    initial_send_delay = 3000,
     -- Options specific to Instant Mode
     instant_mode = {
       append_text = nil, -- e.g. " #translate"
@@ -167,6 +280,161 @@ function M.setup(opts)
       desc = "Close lazyagent tmux sessions on exit",
     })
   end)
+
+  -- Helper: cleanup stale sockets and persisted sessions on startup
+  local function cleanup_stale_resources(opts)
+    local uv = vim.loop
+    local cache_dir = (opts and opts.cache and opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
+
+    -- 1) Clean stale unix sockets in XDG_RUNTIME_DIR/lazyagent
+    local runtime = os.getenv("XDG_RUNTIME_DIR") or vim.fn.stdpath("state")
+    local sock_dir = runtime .. "/lazyagent"
+    if vim.fn.isdirectory(sock_dir) == 1 then
+      local ok, entries = pcall(vim.fn.readdir, sock_dir)
+      if ok and type(entries) == "table" then
+        for _, f in ipairs(entries) do
+          if f:match("^lazyagent%-.*%.sock$") then
+            local path = sock_dir .. "/" .. f
+            local st = uv.fs_stat(path)
+            if not st then
+              pcall(function() vim.loop.fs_unlink(path) end)
+            else
+              -- Remove sockets older than 24h (likely stale)
+              if (os.time() - st.mtime) > 24 * 3600 then
+                pcall(function() vim.loop.fs_unlink(path) end)
+              end
+            end
+          end
+        end
+      end
+    end
+
+    -- 2) Clean persisted tmux sessions that no longer exist
+    local persistence = require("lazyagent.logic.persistence")
+    local backend_logic = require("lazyagent.logic.backend")
+    local data = persistence.load()
+    for key, pane_id in pairs(data) do
+      local agent_name, cwd = key:match("^(.-)::(.+)$")
+      if agent_name then
+        local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+        local exists = false
+        if backend_mod and type(backend_mod.pane_exists) == "function" then
+          local ok, res = pcall(backend_mod.pane_exists, pane_id)
+          exists = ok and (res == true)
+        end
+        if not exists then
+          persistence.remove_session(agent_name, cwd)
+        end
+      end
+    end
+
+    -- 3) Remove stale files from agent cache dirs that are no longer generated
+    local uv2 = vim.loop
+    local agents_dir = cache_dir .. "/agents"
+    if vim.fn.isdirectory(agents_dir) == 1 then
+      local ok_a, agent_dirs = pcall(vim.fn.readdir, agents_dir)
+      if ok_a and type(agent_dirs) == "table" then
+        for _, aname in ipairs(agent_dirs) do
+          local apath = agents_dir .. "/" .. aname
+          -- <NAME>.md (e.g. COPILOT.md, GEMINI.md) replaced by AGENTS.md
+          pcall(function() uv2.fs_unlink(apath .. "/" .. string.upper(aname) .. ".md") end)
+          -- lazyagent.mcp.json no longer generated
+          pcall(function() uv2.fs_unlink(apath .. "/lazyagent.mcp.json") end)
+        end
+      end
+    end
+    -- Remove root-level cache files that are no longer generated
+    pcall(function() uv2.fs_unlink(cache_dir .. "/lazyagent.mcp.json") end)
+    pcall(function() uv2.fs_unlink(cache_dir .. "/lazyagent-system-defaults.json") end)
+  end
+
+  -- Start MCP server if mcp_mode is enabled
+  if M.opts.mcp_mode then
+    -- Run startup cleanup to avoid accumulating stale sockets/persistence
+    pcall(function() cleanup_stale_resources(M.opts) end)
+
+    local mcp_server = require("lazyagent.mcp.server")
+    local start_opts = {}
+    local ok_unix = (vim.loop and vim.loop.os_uname and vim.loop.os_uname().sysname ~= "Windows_NT")
+
+    -- Auto-assign a per-session fixed TCP port by default to provide a 1:1 HTTP endpoint
+    -- (helps CLIs like Copilot that prefer an explicit HTTP URL). Falls back to a unix
+    -- socket if TCP port allocation fails or on Windows.
+    local function allocate_port()
+      local s = vim.loop.new_tcp()
+      local ok, err = pcall(function() s:bind("127.0.0.1", 0) end)
+      if not ok then
+        pcall(function() s:close() end)
+        return nil
+      end
+      local addr = s:getsockname()
+      local port = addr and addr.port
+      pcall(function() s:close() end)
+      return port
+    end
+
+    if M.opts and M.opts.mcp_fixed_port and type(M.opts.mcp_fixed_port) == "number" then
+      start_opts.port = M.opts.mcp_fixed_port
+    else
+      if ok_unix then
+        local port = allocate_port()
+        if port then
+          start_opts.port = port
+        else
+          local runtime = os.getenv("XDG_RUNTIME_DIR") or vim.fn.stdpath("state")
+          local dir = runtime .. "/lazyagent"
+          pcall(vim.fn.mkdir, dir, "p")
+          start_opts.sock_path = dir .. "/lazyagent-" .. tostring(vim.fn.getpid()) .. ".sock"
+        end
+      end
+    end
+
+    if start_opts.port then start_opts.sock_path = nil end
+
+    local uv = vim.loop
+    local sig_int, sig_term
+    local function register_signal_handlers(mcp_stop)
+      if not uv.new_signal then return end
+      sig_int = uv.new_signal()
+      sig_term = uv.new_signal()
+      sig_int:start("sigint", function() pcall(mcp_stop) end)
+      sig_term:start("sigterm", function() pcall(mcp_stop) end)
+    end
+
+    mcp_server.start(function(addr)
+      if type(addr) == "number" then
+        M.opts._mcp_url = "http://127.0.0.1:" .. addr .. "/mcp"
+        M.opts._mcp_type = "http"
+      else
+        M.opts._mcp_url = addr
+        M.opts._mcp_type = "unix"
+      end
+      local disp = (M.opts._mcp_type == "http") and M.opts._mcp_url or ("unix:" .. M.opts._mcp_url)
+      vim.notify("[lazyagent] MCP server ready on " .. tostring(disp), vim.log.levels.INFO)
+      write_mcp_configs(M.opts._mcp_url, M.opts)
+
+      -- Register signal handlers that will stop the MCP server on SIGINT/SIGTERM
+      register_signal_handlers(function() pcall(mcp_server.stop) end)
+    end, start_opts)
+
+    pcall(function()
+      vim.api.nvim_create_autocmd("VimLeavePre", {
+        group = vim.api.nvim_create_augroup("LazyAgentMCPCleanup", { clear = true }),
+        callback = function()
+          -- Stop server and remove any socket files
+          pcall(function() mcp_server.stop() end)
+          -- Close active sessions
+          pcall(function() require("lazyagent.logic.session").close_all_sessions(true) end)
+          -- Stop signal watchers if any
+          pcall(function()
+            if sig_int and type(sig_int.stop) == "function" then sig_int:stop() end
+            if sig_term and type(sig_term.stop) == "function" then sig_term:stop() end
+          end)
+        end,
+        desc = "Stop lazyagent MCP server on exit",
+      })
+    end)
+  end
 end
 
 return M

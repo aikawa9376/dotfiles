@@ -33,17 +33,16 @@ local function compute_launch_cmd(agent_cfg)
   local agent_yolo_flag = (agent_cfg and agent_cfg.yolo_flag) or (state.opts and state.opts.yolo_flag)
   local use_yolo = agent_cfg and agent_cfg.yolo or false
 
-  -- Priority:
-  -- 1) If yolo requested and agent_yolo_flag exists and base_cmd exists, append the flag to the base command
-  -- 2) Fall back to base_cmd if present
+  -- Build base command string
+  local cmd_str
   if use_yolo and agent_yolo_flag and base_cmd then
     local bc = join_cmd_parts(base_cmd)
     if bc and bc ~= "" then
-      return bc .. " " .. tostring(agent_yolo_flag)
+      cmd_str = bc .. " " .. tostring(agent_yolo_flag)
     end
   end
-
-  return join_cmd_parts(base_cmd)
+  cmd_str = cmd_str or join_cmd_parts(base_cmd)
+  return cmd_str
 end
 
 local function maybe_disable_watchers()
@@ -279,6 +278,23 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
          end
       end
 
+      -- Send initial_send text after agent startup if configured.
+      -- Uses agent_cfg.initial_send if set; falls back to opts.mcp_initial_send when mcp_mode is on.
+      -- Only fires on new sessions (not reused ones), with a startup delay to let the CLI initialize.
+      local init_send = (agent_cfg and agent_cfg.initial_send)
+        or (state.opts and state.opts.mcp_mode and state.opts.mcp_initial_send)
+      if init_send and init_send ~= "" then
+        local delay_ms = (agent_cfg and agent_cfg.initial_send_delay) or (state.opts and state.opts.initial_send_delay) or 3000
+        vim.defer_fn(function()
+          local s = state.sessions[agent_name]
+          if not s or not s.pane_id then return end
+          local _, bmod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+          if bmod and type(bmod.paste_and_submit) == "function" then
+            bmod.paste_and_submit(s.pane_id, init_send, agent_cfg.submit_keys, {})
+          end
+        end, delay_ms)
+      end
+
       -- Wait a bit for tmux to resize and vim to update its dimensions before opening the window
       vim.defer_fn(function()
         on_ready(pane_id)
@@ -290,7 +306,110 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
      split_opts.target_session = "lazyagent-pool"
   end
 
-  backend_mod.split(requested_launch_cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, split_opts)
+  local function do_split()
+    split_opts.env = split_opts.env or {}
+    -- Inject MCP URL into agent environment
+    if state.opts and state.opts.mcp_mode and state.opts._mcp_url then
+      split_opts.env.LAZYAGENT_MCP_URL = state.opts._mcp_url
+    end
+    local launch_cmd = requested_launch_cmd
+    if state.opts and state.opts.mcp_mode then
+      local cache_dir = (state.opts.cache and state.opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
+      local agent_cache_dir = cache_dir .. "/agents/" .. string.lower(agent_name or "")
+      pcall(vim.fn.mkdir, agent_cache_dir, "p")
+
+      local is_gemini = (agent_name == "Gemini")
+        or (agent_cfg and agent_cfg.cmd and tostring(agent_cfg.cmd):lower():match("gemini"))
+
+      -- Gemini: write system-defaults.json (MCP config) and system.md (instructions) via env vars
+      if is_gemini then
+        if state.opts._mcp_type == "http" and state.opts._mcp_url then
+          local write_url = state.opts._mcp_url
+          local gem_entry = { mcpServers = { lazyagent = { url = write_url, httpUrl = write_url, type = "http" } } }
+          local sys_path = agent_cache_dir .. "/system-defaults.json"
+          local function try_read(p)
+            local fh = io.open(p, "r")
+            if not fh then return nil end
+            local ok, parsed = pcall(vim.fn.json_decode, fh:read("*a"))
+            fh:close()
+            if ok and type(parsed) == "table" then return parsed end
+            return nil
+          end
+          local g_system = try_read("/etc/gemini-cli/system-defaults.json")
+          local sys_data
+          if g_system then
+            sys_data = {}
+            local user_default = try_read(vim.fn.expand("~/.gemini/settings.json"))
+            for k,v in pairs(g_system) do sys_data[k]=v end
+            if user_default then for k,v in pairs(user_default) do sys_data[k]=v end end
+            sys_data.mcpServers = sys_data.mcpServers or {}
+            for k,v in pairs(gem_entry.mcpServers) do sys_data.mcpServers[k]=v end
+            if sys_data.general and type(sys_data.general) == "table" then
+              sys_data.general.disableAutoUpdate = nil
+              sys_data.general.disableUpdateNag = nil
+            end
+          else
+            sys_data = { mcpServers = gem_entry.mcpServers }
+          end
+          local fw = io.open(sys_path, "w")
+          if fw then fw:write(vim.fn.json_encode(sys_data)); fw:close() end
+          split_opts.env.GEMINI_CLI_SYSTEM_DEFAULTS_PATH = sys_path
+        end
+
+        do
+          local function read_text(p)
+            local fh = io.open(p, "r")
+            if not fh then return nil end
+            local s = fh:read("*a")
+            fh:close()
+            return s
+          end
+          -- Prefer user-placed AGENTS.md in agent cache dir, fallback to packaged default
+          local agent_md = read_text(agent_cache_dir .. "/AGENTS.md") or ""
+          local existing_sys = read_text(agent_cache_dir .. "/system.md") or ""
+          local sys_content
+          if agent_md ~= "" then
+            sys_content = agent_md
+          else
+            sys_content = (existing_sys ~= "" and existing_sys) or (read_text(cache_dir .. "/default_instructions.md") or "")
+          end
+          local system_md_path = agent_cache_dir .. "/system.md"
+          local sf = io.open(system_md_path, "w")
+          if sf then sf:write(sys_content); sf:close() end
+          vim.notify(string.format("[lazyagent] wrote system.md -> %s (%d bytes)", system_md_path, #sys_content), vim.log.levels.DEBUG)
+          split_opts.env.GEMINI_SYSTEM_MD = system_md_path
+        end
+      end
+
+      -- Copilot: point to agent cache dir for mcp-config.json and AGENTS.md
+      if agent_name == "Copilot" or (agent_cfg and agent_cfg.cmd and tostring(agent_cfg.cmd):match("copilot")) then
+        split_opts.env.COPILOT_CONFIG_DIR = agent_cache_dir
+        split_opts.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = agent_cache_dir
+        launch_cmd = (launch_cmd or "") .. " --additional-mcp-config " .. vim.fn.shellescape("@" .. agent_cache_dir .. "/mcp-config.json")
+      end
+    end
+    backend_mod.split(launch_cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, split_opts)
+  end
+
+  -- If mcp_mode is enabled but the server is not ready yet, wait for it before launching the agent
+  if state.opts and state.opts.mcp_mode and not state.opts._mcp_url then
+    local max_attempts = 50 -- up to 5 seconds (50 * 100ms)
+    local attempts = 0
+    local function wait_for_mcp()
+      attempts = attempts + 1
+      if state.opts._mcp_url then
+        do_split()
+      elseif attempts < max_attempts then
+        vim.defer_fn(wait_for_mcp, 100)
+      else
+        vim.notify("[lazyagent] MCP server did not become ready in time; launching agent without MCP URL", vim.log.levels.WARN)
+        do_split()
+      end
+    end
+    wait_for_mcp()
+  else
+    do_split()
+  end
 end
 
 --- Captures and saves the conversation text for the given agent's session.
