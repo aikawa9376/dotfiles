@@ -85,7 +85,7 @@ return {
       clear = "c<space>d",
     },
     interactive_agents = {
-      Gemini = { yolo = true },
+      Gemini = { yolo = true, mcp_context_dir_flag = "--include-directories" },
       Copilot = { yolo = true, default = true },
     },
     instant_mode = {
@@ -99,6 +99,10 @@ return {
     --   Arch:   sudo pacman -S inotify-tools
     --   Ubuntu: sudo apt install inotify-tools
     --   macOS:  brew install fswatch  (fswatch を使用)
-    auto_follow = "split",
+    -- auto_follow = "split",
+    -- MCP server: Gemini CLI (and Claude Code) can use lazyagent tools
+    -- (get_diagnostics, get_buffer, notify_done, etc.) via HTTP MCP.
+    -- Port is fixed so Gemini's ~/.gemini/settings.json stays valid across restarts.
+    mcp_mode = true,
   }
 }

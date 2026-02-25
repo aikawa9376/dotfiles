@@ -152,6 +152,13 @@ function M.split(command, size, is_vertical, on_split_or_opts)
        table.insert(args, s)
     end
   end
+  -- Inject extra environment variables via tmux -e KEY=VAL (must come before command)
+  if opts.env and type(opts.env) == "table" then
+    for k, v in pairs(opts.env) do
+      table.insert(args, "-e")
+      table.insert(args, k .. "=" .. tostring(v))
+    end
+  end
   if command and #command > 0 then
     table.insert(args, command)
   end

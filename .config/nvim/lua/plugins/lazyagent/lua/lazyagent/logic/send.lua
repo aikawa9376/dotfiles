@@ -216,8 +216,8 @@ function M.send_buffer_and_clear(agent_name, bufnr)
       })
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
 
-      -- Monitor if instant mode or hidden
-      status.start_monitor(agent_name, pane_id, backend_mod)
+      -- Start status monitor (spinner in statusline while agent is thinking)
+      if not (state.opts and state.opts.mcp_mode) then status.start_monitor(agent_name) end
     end)
     return
   end

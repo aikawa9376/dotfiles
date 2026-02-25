@@ -18,7 +18,6 @@ local function check_and_animate()
      if not animation_timer then
         animation_timer = vim.loop.new_timer()
         animation_timer:start(100, 100, vim.schedule_wrap(function()
-           -- Check again inside loop
            local still_active = false
            for _, s in pairs(state.sessions or {}) do
               if s.monitor_timer then
@@ -26,7 +25,6 @@ local function check_and_animate()
                  break
               end
            end
-
            if still_active then
               require("lualine").refresh()
            else
@@ -35,7 +33,6 @@ local function check_and_animate()
                  animation_timer:close()
                  animation_timer = nil
               end
-              -- Final redraw to clear spinner
               require("lualine").refresh()
            end
         end))
@@ -68,28 +65,55 @@ function M.get_status()
   local status_parts = {}
   for _, name in ipairs(active) do
     local icon = icons[name] or icons.Default
-
-    -- Check if session has active monitor timer (implies running/thinking in instant mode)
     local s = state.sessions[name]
     if s and s.monitor_timer then
-       -- Simple spinner based on time (50ms per frame)
        local frame_idx = math.floor(vim.loop.now() / 50) % #spinner_frames + 1
        icon = icon .. " " .. spinner_frames[frame_idx]
+    elseif s and s.agent_status == "waiting" then
+       icon = icon .. " ?"
     end
-
     table.insert(status_parts, icon)
   end
 
   return table.concat(status_parts, " ")
 end
 
-function M.start_monitor(agent_name, pane_id, backend_mod)
+-- ────────────────────────────────────────────────
+-- MCP-callable state transitions
+-- ────────────────────────────────────────────────
+
+local function stop_monitor_timer(s)
+  if s.monitor_timer then
+    pcall(function() s.monitor_timer:stop(); s.monitor_timer:close() end)
+    s.monitor_timer = nil
+  end
+end
+
+-- Mark an agent as idle (called by MCP notify_done tool or internally)
+function M.set_idle(agent_name)
+  local s = state.sessions[agent_name]
+  if not s then return end
+  stop_monitor_timer(s)
+  s.agent_status = "idle"
+  require("lazyagent.window").set_title(" " .. agent_name .. " (Idle) ")
+  pcall(function() require("lualine").refresh() end)
+end
+
+-- Mark an agent as waiting for input (called by MCP notify_waiting tool)
+function M.set_waiting(agent_name, msg)
+  local s = state.sessions[agent_name]
+  if not s then return end
+  stop_monitor_timer(s)
+  s.agent_status = "waiting"
+  require("lazyagent.window").set_title(" " .. agent_name .. " (" .. (msg or "Waiting...") .. ") ")
+  pcall(function() require("lualine").refresh() end)
+end
+
+function M.start_monitor(agent_name)
   local s = state.sessions[agent_name]
   if not s then return end
 
-  -- Only start monitor if in instant mode or hidden (background task)
-  if not (s.mode == "instant" or s.hidden) then return end
-
+  s.agent_status = "thinking"
   require("lazyagent.window").set_title(" " .. agent_name .. " (Thinking...) ")
 
   if s.monitor_timer then
@@ -100,36 +124,21 @@ function M.start_monitor(agent_name, pane_id, backend_mod)
 
   local timer = vim.loop.new_timer()
   s.monitor_timer = timer
-  -- Trigger status animation
   check_and_animate()
 
-  local last_content = ""
-  local stable_count = 0
+  -- Spinner stops when agent calls notify_done via MCP.
+  -- Safety timeout stops it after ~5 minutes if notify_done is never called.
+  local ticks = 0
 
-  timer:start(500, 500, vim.schedule_wrap(function()
+  timer:start(1000, 1000, vim.schedule_wrap(function()
     if not state.sessions[agent_name] then
-      if timer then pcall(function() timer:stop(); timer:close() end) end
+      pcall(function() timer:stop(); timer:close() end)
       return
     end
-
-    backend_mod.capture_pane(pane_id, function(text)
-      if text == last_content then
-        stable_count = stable_count + 1
-      else
-        stable_count = 0
-        last_content = text
-      end
-
-      if stable_count >= 2 then -- 1 second stable
-        require("lazyagent.window").set_title(" " .. agent_name .. " (Idle) ")
-        if timer then
-          pcall(function() timer:stop(); timer:close() end)
-          if state.sessions[agent_name] then state.sessions[agent_name].monitor_timer = nil end
-          -- Refresh status to clear spinner
-          require("lualine").refresh()
-        end
-      end
-    end)
+    ticks = ticks + 1
+    if ticks >= 300 then -- ~5 minute hard timeout
+      M.set_idle(agent_name)
+    end
   end))
 end
 
