@@ -327,10 +327,35 @@ function M.capture_and_save_session(agent_name, open_file, on_done)
       local dir = cache_logic.get_cache_dir()
       local prefix = cache_logic.build_cache_prefix()
       local sanitized = tostring(agent_name):gsub("[^%w-_]+", "-")
-      local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
-      local path = dir .. "/" .. filename
+
+      -- Avoid creating duplicate or nearly identical files for the same session.
+      -- If we have a previous save path and the content is unchanged or just extended, reuse it.
+      local path = s.last_save_path
+      local reuse_path = false
+      if path and s.last_save_content then
+        -- Check if current lines start with exactly the same content as previous save
+        if #lines >= #s.last_save_content then
+          local match = true
+          for i, l in ipairs(s.last_save_content) do
+            if l ~= lines[i] then
+              match = false
+              break
+            end
+          end
+          if match then
+            reuse_path = true
+          end
+        end
+      end
+
+      if not reuse_path or not path then
+        local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
+        path = dir .. "/" .. filename
+      end
 
       pcall(vim.fn.writefile, lines, path)
+      s.last_save_path = path
+      s.last_save_content = lines
 
       if open_file then
         vim.cmd("edit " .. vim.fn.fnameescape(path))
@@ -446,9 +471,32 @@ function M.close_all_sessions(sync)
               local dir = cache_logic.get_cache_dir()
               local prefix = cache_logic.build_cache_prefix()
               local sanitized = tostring(name):gsub("[^%w-_]+", "-")
-              local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
-              local path = dir .. "/" .. filename
+
+              -- Comparison logic for sync save (on exit)
+              local path = s.last_save_path
+              local reuse_path = false
+              if path and s.last_save_content then
+                -- Reuse if current lines start with previous content
+                if #lines >= #s.last_save_content then
+                   local match = true
+                   for i, l in ipairs(s.last_save_content) do
+                      if l ~= lines[i] then
+                         match = false
+                         break
+                      end
+                   end
+                   if match then reuse_path = true end
+                end
+              end
+
+              if not reuse_path or not path then
+                local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
+                path = dir .. "/" .. filename
+              end
+
               pcall(vim.fn.writefile, lines, path)
+              s.last_save_path = path
+              s.last_save_content = lines
            end
         end
 
