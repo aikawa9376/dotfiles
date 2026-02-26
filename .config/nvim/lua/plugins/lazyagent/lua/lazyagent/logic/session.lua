@@ -325,7 +325,7 @@ function M.capture_and_save_session(agent_name, open_file, on_done)
       end
 
       local lines = vim.split(text, "\n")
-      local dir = cache_logic.get_cache_dir()
+      local dir = cache_logic.get_conversation_dir()
       local prefix = cache_logic.build_cache_prefix()
       local sanitized = tostring(agent_name):gsub("[^%w-_]+", "-")
 
@@ -469,7 +469,7 @@ function M.close_all_sessions(sync)
            local text = backend_mod.capture_pane_sync(s.pane_id)
            if text and text ~= "" then
               local lines = vim.split(text, "\n")
-              local dir = cache_logic.get_cache_dir()
+              local dir = cache_logic.get_conversation_dir()
               local prefix = cache_logic.build_cache_prefix()
               local sanitized = tostring(name):gsub("[^%w-_]+", "-")
 
@@ -681,11 +681,11 @@ end
 function M.resume_conversation(agent_name)
   local entries = cache_logic.list_conversation_files()
   if not entries or #entries == 0 then
-    vim.notify("LazyAgentResume: no conversation snapshots found in " .. cache_logic.get_cache_dir(), vim.log.levels.INFO)
+    vim.notify("LazyAgentResume: no conversation snapshots found in " .. cache_logic.get_conversation_dir(), vim.log.levels.INFO)
     return
   end
 
-  local dir = cache_logic.get_cache_dir()
+  local dir = cache_logic.get_conversation_dir()
 
   local function start_with_path(path)
     if vim.fn.filereadable(path) == 0 then
