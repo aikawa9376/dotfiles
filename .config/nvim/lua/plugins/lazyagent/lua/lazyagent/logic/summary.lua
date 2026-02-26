@@ -148,7 +148,7 @@ local function select_action(entry, action)
 
     local win = vim.api.nvim_get_current_win()
     pcall(vim.api.nvim_set_option_value, "winfixbuf", false, { scope = "win", win = win })
-    vim.cmd("edit " .. vim.fn.fnameescape(entry.path))
+    util.open_in_normal_win(entry.path)
   end)
 end
 

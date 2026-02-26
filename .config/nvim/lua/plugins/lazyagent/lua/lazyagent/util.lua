@@ -102,4 +102,54 @@ function M.git_branch_for_path(path)
   return nil
 end
 
+function M.open_in_normal_win(path, opts)
+  opts = opts or {}
+  if not path or path == "" then return false end
+  local target = nil
+
+  -- Prefer the previously focused normal window recorded by the lazyagent scratch buffer
+  local ok_win, winmod = pcall(require, "lazyagent.window")
+  if ok_win and winmod and type(winmod.get_scratch_bufnr) == "function" then
+    local s_buf = winmod.get_scratch_bufnr()
+    if s_buf and vim.api.nvim_buf_is_valid(s_buf) then
+      local prev = vim.b[s_buf] and vim.b[s_buf].lazyagent_prev_win
+      if prev and vim.api.nvim_win_is_valid(prev) then
+        target = prev
+      end
+    end
+  end
+
+  -- Fallback: find first normal window
+  if not target then
+    for _, w in ipairs(vim.api.nvim_list_wins()) do
+      local ok, b = pcall(vim.api.nvim_win_get_buf, w)
+      if ok and b then
+        local ok2, bt = pcall(vim.api.nvim_buf_get_option, b, "buftype")
+        if ok2 and (bt == "" or bt == "acwrite") then
+          target = w
+          break
+        end
+      end
+    end
+  end
+
+  -- If none found, create a new split below
+  if not target or not vim.api.nvim_win_is_valid(target) then
+    pcall(function()
+      vim.cmd("belowright split")
+      target = vim.api.nvim_get_current_win()
+    end)
+  end
+
+  if target and vim.api.nvim_win_is_valid(target) then
+    pcall(vim.api.nvim_set_current_win, target)
+  end
+
+  pcall(vim.cmd, "edit " .. vim.fn.fnameescape(path))
+  if opts.line and target and vim.api.nvim_win_is_valid(target) then
+    pcall(vim.api.nvim_win_set_cursor, target, { opts.line, 0 })
+  end
+  return true
+end
+
 return M

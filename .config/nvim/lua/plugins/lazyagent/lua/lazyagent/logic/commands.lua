@@ -6,6 +6,7 @@ local state = require("lazyagent.logic.state")
 local agent_logic = require("lazyagent.logic.agent")
 local session_logic = require("lazyagent.logic.session")
 local cache_logic = require("lazyagent.logic.cache")
+local util = require("lazyagent.util")
 local summary_logic = require("lazyagent.logic.summary")
 
 -- Helper to create commands safely
@@ -116,7 +117,7 @@ function M.setup_commands()
     if explicit then
       local path = dir .. "/" .. explicit
       if vim.fn.filereadable(path) == 1 then
-        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        util.open_in_normal_win(path)
       else
         vim.notify("LazyAgentHistoryList: file not found: " .. path, vim.log.levels.ERROR)
       end
@@ -132,7 +133,7 @@ function M.setup_commands()
     if explicit then
       local path = dir .. "/" .. explicit
       if vim.fn.filereadable(path) == 1 then
-        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        util.open_in_normal_win(path)
         vim.cmd("setlocal nowrap")
       else
         vim.notify("LazyAgentConversationList: file not found: " .. path, vim.log.levels.ERROR)
@@ -175,7 +176,7 @@ function M.setup_commands()
     if explicit then
       local path = dir .. "/" .. explicit
       if vim.fn.filereadable(path) == 1 then
-        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        util.open_in_normal_win(path)
       else
         vim.notify("LazyAgentHistory: file not found: " .. path, vim.log.levels.ERROR)
       end
@@ -193,7 +194,7 @@ function M.setup_commands()
     local filename = cache_logic.build_cache_filename(bufnr)
     local path = dir .. "/" .. filename
     if vim.fn.filereadable(path) == 1 then
-      vim.cmd("edit " .. vim.fn.fnameescape(path))
+      util.open_in_normal_win(path)
       return
     end
 
@@ -202,7 +203,7 @@ function M.setup_commands()
     local prefix = cache_logic.build_cache_prefix(bufnr)
     for _, e in ipairs(entries) do
       if e.name:match("^" .. prefix .. ".*%.log$") then
-        vim.cmd("edit " .. vim.fn.fnameescape(e.path))
+        util.open_in_normal_win(e.path)
         return
       end
     end

@@ -11,6 +11,7 @@ local send_logic = require("lazyagent.logic.send")
 local cache_logic = require("lazyagent.logic.cache")
 local window = require("lazyagent.window")
 local persistence = require("lazyagent.logic.persistence")
+local util = require("lazyagent.util")
 local ok_watch, watch = pcall(require, "lazyagent.watch")
 
 local function compute_launch_cmd(agent_cfg)
@@ -358,7 +359,7 @@ function M.capture_and_save_session(agent_name, open_file, on_done)
       s.last_save_content = lines
 
       if open_file then
-        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        util.open_in_normal_win(path)
         vim.cmd("setlocal nowrap")
       end
 
