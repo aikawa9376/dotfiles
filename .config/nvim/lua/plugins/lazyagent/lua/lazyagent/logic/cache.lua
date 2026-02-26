@@ -26,6 +26,22 @@ local function get_cache_dir()
   return dir
 end
 
+local function get_history_dir()
+  local dir = get_cache_dir() .. "/history"
+  if vim.fn.isdirectory(dir) == 0 then
+    vim.fn.mkdir(dir, "p")
+  end
+  return dir
+end
+
+local function get_conversation_dir()
+  local dir = get_cache_dir() .. "/conversation"
+  if vim.fn.isdirectory(dir) == 0 then
+    vim.fn.mkdir(dir, "p")
+  end
+  return dir
+end
+
 --- Helper: parse history entries from a cache file (newer-first).
 -- Expects a timestamp header line in the format "YYYY-MM-DD HH:MM:SS".
 -- Each entry is represented as a table: { ts = string|nil, content = { <lines> } }.
@@ -128,7 +144,7 @@ function M.write_scratch_to_cache(bufnr)
     return
   end
 
-  local dir = get_cache_dir()
+  local dir = get_history_dir()
   local filename = build_cache_filename(bufnr)
   local path = dir .. "/" .. filename
 
@@ -177,7 +193,7 @@ end
 -- Only returns files matching the "-history.log" pattern.
 -- @return (table) A list of cache file entries.
 local function list_cache_files()
-  local dir = get_cache_dir()
+  local dir = get_history_dir()
   if not dir or vim.fn.isdirectory(dir) == 0 then
     return {}
   end
@@ -199,7 +215,7 @@ end
 -- Only returns files matching the "-conversation-*.log" pattern.
 -- @return (table) A list of cache file entries { name, path, mtime }.
 local function list_conversation_files()
-  local dir = get_cache_dir()
+  local dir = get_conversation_dir()
   if not dir or vim.fn.isdirectory(dir) == 0 then return {} end
   local raw = vim.fn.readdir(dir) or {}
   local entries = {}
@@ -217,11 +233,11 @@ end
 function M.open_history()
   local entries = list_cache_files()
   if not entries or #entries == 0 then
-    vim.notify("LazyAgentHistory: no cache history found in " .. get_cache_dir(), vim.log.levels.INFO)
+    vim.notify("LazyAgentHistory: no cache history found in " .. get_history_dir(), vim.log.levels.INFO)
     return
   end
 
-  local dir = get_cache_dir()
+  local dir = get_history_dir()
   local choices = {}
   for _, e in ipairs(entries) do
     table.insert(choices, e.name)
@@ -245,11 +261,11 @@ end
 function M.open_conversations()
   local entries = list_conversation_files()
   if not entries or #entries == 0 then
-    vim.notify("LazyAgentConversation: no conversation captures found in " .. get_cache_dir(), vim.log.levels.INFO)
+    vim.notify("LazyAgentConversation: no conversation captures found in " .. get_conversation_dir(), vim.log.levels.INFO)
     return
   end
 
-  local dir = get_cache_dir()
+  local dir = get_conversation_dir()
   local choices = {}
   for _, e in ipairs(entries) do
     table.insert(choices, e.name)
@@ -272,12 +288,13 @@ end
 
 -- Expose helpers for other modules to locate cache files and prefixes.
 M.get_cache_dir = get_cache_dir
+M.get_conversation_dir = get_conversation_dir
 M.build_cache_filename = build_cache_filename
 M.list_cache_files = list_cache_files
 M.list_conversation_files = list_conversation_files
 
 local function get_cache_path(bufnr)
-  return get_cache_dir() .. "/" .. build_cache_filename(bufnr)
+  return get_history_dir() .. "/" .. build_cache_filename(bufnr)
 end
 M.get_cache_path = get_cache_path
 
