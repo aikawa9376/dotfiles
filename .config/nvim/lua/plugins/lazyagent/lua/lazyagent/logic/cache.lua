@@ -236,7 +236,7 @@ function M.open_history()
     if not choice or choice == "" then return end
     local path = dir:gsub("/$", "") .. "/" .. choice
     vim.schedule(function()
-      vim.cmd("edit " .. vim.fn.fnameescape(path))
+      util.open_in_normal_win(path)
     end)
   end)
 end
@@ -264,7 +264,7 @@ function M.open_conversations()
     if not choice or choice == "" then return end
     local path = dir:gsub("/$", "") .. "/" .. choice
     vim.schedule(function()
-      vim.cmd("edit " .. vim.fn.fnameescape(path))
+      util.open_in_normal_win(path)
       vim.cmd("setlocal nowrap")
     end)
   end)

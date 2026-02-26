@@ -2,6 +2,7 @@ local M = {}
 local cache_logic = require("lazyagent.logic.cache")
 
 local winid = nil
+local scratch_bufnr = nil
 local float_autocmd_group_id = nil
 local float_original_opts = nil
 local float_is_focused = false
@@ -17,10 +18,33 @@ local function ensure_scratch_buffer(bufnr, opts)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     bufnr = vim.api.nvim_create_buf(false, true)
     pcall(function()
-      vim.bo[bufnr].bufhidden = "wipe"
+      vim.bo[bufnr].bufhidden = "hide"
       vim.bo[bufnr].buftype = "nofile"
       vim.bo[bufnr].filetype = (opts and opts.filetype) or "lazyagent"
       vim.bo[bufnr].modifiable = true
+    end)
+
+    -- Remember this scratch buffer so we can restore it if another file is opened here.
+    scratch_bufnr = bufnr
+    pcall(function() vim.b[bufnr].lazyagent_is_scratch = true end)
+
+    -- Provide buffer-local :edit / :e that open files in the last non-special window
+    pcall(function()
+      vim.api.nvim_buf_create_user_command(bufnr, "edit", function(cmd)
+        local path = cmd.args or ""
+        if path and path ~= "" then
+          local util = require("lazyagent.util")
+          util.open_in_normal_win(vim.fn.expand(path))
+        end
+      end, { nargs = "?", complete = "file" })
+
+      vim.api.nvim_buf_create_user_command(bufnr, "e", function(cmd)
+        local path = cmd.args or ""
+        if path and path ~= "" then
+          local util = require("lazyagent.util")
+          util.open_in_normal_win(vim.fn.expand(path))
+        end
+      end, { nargs = "?", complete = "file" })
     end)
   end
 
@@ -46,6 +70,11 @@ M.ensure_scratch_buffer = ensure_scratch_buffer
 function M.open_float(bufnr, opts)
   -- Ensure we always get a valid buffer and canonical opts table.
   bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
+  -- Record the previously focused normal window so we can restore files opened here.
+  pcall(function()
+    local prev_win = vim.api.nvim_get_current_win()
+    pcall(function() vim.b[bufnr].lazyagent_prev_win = prev_win end)
+  end)
 
   -- Center the floating window
   local width = math.floor(vim.o.columns * (opts.is_vertical and 0.6 or 0.5))
@@ -280,6 +309,14 @@ function M.get_bufnr()
   return nil
 end
 
+function M.get_winid()
+  return winid
+end
+
+function M.get_scratch_bufnr()
+  return scratch_bufnr
+end
+
 function M.set_title(title)
   if winid and vim.api.nvim_win_is_valid(winid) then
     local config = vim.api.nvim_win_get_config(winid)
@@ -289,5 +326,63 @@ function M.set_title(title)
     end
   end
 end
+
+-- Redirect files accidentally opened in the scratch window to the last normal window.
+pcall(function()
+  local group = vim.api.nvim_create_augroup("LazyAgentRedirectOpen", { clear = true })
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = group,
+    callback = function(args)
+      pcall(function()
+        local win = args.win or vim.api.nvim_get_current_win()
+        if not win or win == 0 then return end
+        if winid == nil or not vim.api.nvim_win_is_valid(winid) then return end
+        if win ~= winid then return end
+        local buf = args.buf or vim.api.nvim_get_current_buf()
+        if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
+        -- Skip if it's the scratch buffer
+        if vim.api.nvim_buf_get_option(buf, "filetype") == "lazyagent" then return end
+        -- Only handle buffers with a real filename
+        local name = vim.api.nvim_buf_get_name(buf) or ""
+        if name == "" then return end
+        -- Find a normal window to move the buffer into
+        local target = nil
+        for _, w in ipairs(vim.api.nvim_list_wins()) do
+          if w ~= win then
+            local b = vim.api.nvim_win_get_buf(w)
+            if b and vim.api.nvim_buf_is_valid(b) then
+              local bt = vim.api.nvim_buf_get_option(b, "buftype")
+              if bt == "" then
+                target = w
+                break
+              end
+            end
+          end
+        end
+        if not target then
+          -- create a split and use it
+          pcall(function()
+            vim.api.nvim_set_current_win(win)
+            vim.cmd("belowright split")
+            target = vim.api.nvim_get_current_win()
+          end)
+        end
+        if not target then return end
+        -- move the new file buffer to the target window
+        pcall(function() vim.api.nvim_win_set_buf(target, buf) end)
+        -- restore the scratch buffer in the lazyagent window
+        if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
+          pcall(function() vim.api.nvim_win_set_buf(win, scratch_bufnr) end)
+        else
+          -- recreate scratch if missing
+          local nb = ensure_scratch_buffer(nil, { filetype = "lazyagent" })
+          pcall(function() vim.api.nvim_win_set_buf(win, nb) end)
+        end
+        -- focus the file in the target window
+        pcall(function() vim.api.nvim_set_current_win(target) end)
+      end)
+    end,
+  })
+end)
 
 return M
