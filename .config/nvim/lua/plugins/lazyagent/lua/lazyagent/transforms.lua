@@ -315,6 +315,21 @@ local function replace_token(token, opts, meta)
     return ""
   end
 
+  if token == "lazyagent-rule" then
+    local src = debug.getinfo(1, "S").source:sub(2)
+    local dir = src:match("^(.+/lazyagent)/")
+    if dir then
+      local path = dir .. "/default_instructions.md"
+      local f = io.open(path, "r")
+      if f then
+        local content = f:read("*a")
+        f:close()
+        return vim.trim(content)
+      end
+    end
+    return ""
+  end
+
   if token == "report" then
     local dir = summary.summary_dir()
     local prefix = summary.summary_prefix(source_bufnr)
@@ -389,6 +404,7 @@ local token_definitions = {
   { name = "symbol", desc = "Nearest enclosing function/class node (via treesitter) at the cursor position." },
   { name = "report", desc = "Instructions for creating or updating a Markdown summary/report file using the project's summary directory and filename prefix." },
   { name = "history", desc = "@ reference to the latest conversation log file for the current project+branch." },
+  { name = "lazyagent-rule", desc = "Inject the lazyagent default instructions (default_instructions.md)." },
 }
 
 -- Public helpers to register external transforms at runtime.
