@@ -156,6 +156,7 @@ local function show_log_help()
     'cf          fixup/reword commit with index',
     '<M-j>/<M-k> move commit down/up',
     'X (n/V)     drop commit(s)',
+    'gr (n/V)    revert commit(s)',
     'cw          reword commit',
     '<C-p>       toggle commit preview',
     '<Leader>R   reset --mixed to commit',
@@ -541,6 +542,47 @@ function M.setup(group)
           vim.cmd('G reset --mixed ' .. commit)
         end
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'git reset --mixed to commit' })
+
+      -- gr: Revert commit(s)
+      vim.keymap.set({'n', 'v'}, 'gr', function()
+        local mode = vim.fn.mode()
+        local commits = {}
+
+        if mode == 'v' or mode == 'V' or mode == '\22' then
+          local start_pos = vim.fn.getpos('v')
+          local end_pos = vim.fn.getpos('.')
+          local start_line = math.min(start_pos[2], end_pos[2])
+          local end_line = math.max(start_pos[2], end_pos[2])
+          vim.cmd('normal! \27')
+          for line = start_line, end_line do
+            local commit = get_commit_at_line(ev.buf, line)
+            if commit and commit ~= '' and not vim.tbl_contains(commits, commit) then
+              table.insert(commits, commit)
+            end
+          end
+        else
+          local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+          if commit then table.insert(commits, commit) end
+        end
+
+        if #commits == 0 then
+          vim.notify('No commits found', vim.log.levels.WARN)
+          return
+        end
+
+        local commit_str = #commits > 1
+          and string.format('%s ... %s (%d commits)', commits[1]:sub(1,7), commits[#commits]:sub(1,7), #commits)
+          or commits[1]:sub(1,7)
+        local confirm = vim.fn.confirm(
+          string.format('Revert %d commit(s)?\n%s', #commits, commit_str),
+          '&Yes\n&No', 2
+        )
+        if confirm ~= 1 then return end
+
+        commands.revert_commits(commits, function()
+          refresh_log_list(ev.buf)
+        end)
+      end, { buffer = ev.buf, silent = true, desc = 'Revert commit(s)' })
 
       -- R: Reload
       vim.keymap.set('n', 'R', function()

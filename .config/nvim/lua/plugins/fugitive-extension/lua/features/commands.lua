@@ -939,6 +939,38 @@ cat "$1" >> /tmp/rebase-debug.log
     end
   end
 
+  -- Revert commits -------------------------------------------------------
+  function M.revert_commits(commits, on_complete)
+    if not commits or #commits == 0 then return end
+
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
+
+    local results = {}
+    for _, commit in ipairs(commits) do
+      -- Detect merge commit (more than one parent)
+      local parent_count = vim.fn.system(
+        'git -C ' .. vim.fn.shellescape(work_tree) .. ' cat-file -p ' .. commit .. ' | grep -c "^parent "'
+      )
+      local extra = (tonumber(parent_count) or 0) >= 2 and ' -m 1' or ''
+
+      local cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' revert --no-edit' .. extra .. ' ' .. commit
+      local out = vim.fn.system(cmd)
+      if vim.v.shell_error ~= 0 then
+        table.insert(results, 'revert ' .. commit:sub(1, 7) .. ' failed: ' .. out)
+      end
+    end
+
+    if #results > 0 then
+      vim.notify(table.concat(results, '\n'), vim.log.levels.ERROR)
+    else
+      vim.notify('Reverted ' .. #commits .. ' commit(s)', vim.log.levels.INFO)
+      if on_complete then
+        vim.schedule(on_complete)
+      end
+    end
+  end
+
   -- Preview helpers ------------------------------------------------------
   local preview_win = nil
   local preview_buf = nil
