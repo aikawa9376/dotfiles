@@ -41,17 +41,17 @@ M.clear_input = send_logic.clear_input
 local function default_instructions_content()
   -- Try multiple known locations for an external default_instructions.md
   local paths = {}
-  -- 1) directory of this module
+  -- 1) resources/ subdir of this module's directory
   pcall(function()
     local info = debug.getinfo(default_instructions_content, "S")
     local src = info and info.source
     if src and src:sub(1,1) == "@" then src = src:sub(2) end
     local dir = src and src:match("(.*/)")
-    if dir then table.insert(paths, dir .. "default_instructions.md") end
+    if dir then table.insert(paths, dir .. "lazyagent/resources/default_instructions.md") end
   end)
   -- 2) fallback to standard config path layout
   pcall(function()
-    table.insert(paths, vim.fn.stdpath("config") .. "/lua/plugins/lazyagent/lua/lazyagent/default_instructions.md")
+    table.insert(paths, vim.fn.stdpath("config") .. "/lua/plugins/lazyagent/lua/lazyagent/resources/default_instructions.md")
   end)
   -- 3) fallback to cache dir (unlikely but harmless)
   pcall(function()
@@ -68,6 +68,30 @@ local function default_instructions_content()
   end
 
   return ""
+end
+
+-- Resolve directory of this module (→ .../lua/) for locating hook templates
+local _module_dir = (function()
+  local info = debug.getinfo(1, "S")
+  local src = info and info.source
+  if src and src:sub(1, 1) == "@" then src = src:sub(2) end
+  return (src and src:match("(.*/)" )) or ""
+end)()
+
+-- Copy hook scripts from source templates into agent_dir/hooks/
+local function copy_hook_scripts(agent_dir)
+  local src_dir = _module_dir .. "lazyagent/resources/hooks"
+  pcall(vim.fn.mkdir, agent_dir .. "/hooks", "p")
+  for _, name in ipairs({ "notify-start.sh", "notify-done.sh", "open-file.sh" }) do
+    local fh = io.open(src_dir .. "/" .. name, "r")
+    if fh then
+      local content = fh:read("*a")
+      fh:close()
+      local fw = io.open(agent_dir .. "/hooks/" .. name, "w")
+      if fw then fw:write(content); fw:close() end
+      os.execute("chmod +x " .. vim.fn.shellescape(agent_dir .. "/hooks/" .. name))
+    end
+  end
 end
 
 local function write_mcp_configs(url, opts)
@@ -128,6 +152,47 @@ local function write_mcp_configs(url, opts)
 
       local cm = io.open(agent_dir .. "/mcp-config.json", "w")
       if cm then cm:write(vim.fn.json_encode(merged)); cm:close() end
+
+      -- Write MCP URL for hook scripts (read at runtime by the scripts)
+      local mcp_url = (opts and opts._mcp_url) or url
+      local fu = io.open(agent_dir .. "/mcp.url", "w")
+      if fu then fu:write(mcp_url); fu:close() end
+
+      -- plugin.json (required entry point for --plugin-dir; hooks.json is the actual hook config)
+      local fp = io.open(agent_dir .. "/plugin.json", "w")
+      if fp then
+        fp:write(vim.fn.json_encode({
+          name = "lazyagent-hooks",
+          description = "LazyAgent Neovim integration hooks",
+          version = "0.0.1",
+          hooks = "hooks.json",
+        }))
+        fp:close()
+      end
+
+      -- Copy hook scripts from source templates
+      copy_hook_scripts(agent_dir)
+
+      -- hooks.json
+      local hooks_json = vim.fn.json_encode({
+        version = 1,
+        hooks = {
+          userPromptSubmitted = { { type = "command", bash = "./hooks/notify-start.sh", timeoutSec = 10 } },
+          agentStop            = { { type = "command", bash = "./hooks/notify-done.sh",  timeoutSec = 10 } },
+          postToolUse          = { { type = "command", bash = "./hooks/open-file.sh",    timeoutSec = 10 } },
+        },
+      })
+      local fj = io.open(agent_dir .. "/hooks.json", "w")
+      if fj then fj:write(hooks_json); fj:close() end
+
+    elseif lname == "gemini" then
+      -- Write MCP URL for hook scripts (read at runtime by the scripts)
+      local mcp_url = (opts and opts._mcp_url) or url
+      local fu = io.open(agent_dir .. "/mcp.url", "w")
+      if fu then fu:write(mcp_url); fu:close() end
+
+      -- Copy hook scripts from source templates
+      copy_hook_scripts(agent_dir)
     end
   end
 end

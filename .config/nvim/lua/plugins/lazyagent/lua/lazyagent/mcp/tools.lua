@@ -395,6 +395,66 @@ M.list = {
     end,
   },
   {
+    name = "open_last_changed",
+    description = "Open the most recently modified file in the current project (detected via git) and jump to the changed line. Call this after editing files.",
+    inputSchema = { type = "object", properties = {} },
+    handler = function(_params)
+      local cwd = vim.fn.getcwd()
+
+      -- Get changed files from git status
+      local files = vim.fn.systemlist(
+        "git -C " .. vim.fn.shellescape(cwd) .. " status --short 2>/dev/null | awk '{print $NF}'"
+      )
+      if not files or #files == 0 then
+        return nil, { code = -32602, message = "No changed files found in " .. cwd }
+      end
+
+      -- Pick most recently modified by mtime
+      local newest_mtime, newest_path = 0, nil
+      for _, rel in ipairs(files) do
+        local abs = cwd .. "/" .. rel
+        local mtime = vim.fn.getftime(abs)
+        if mtime > newest_mtime then
+          newest_mtime = mtime
+          newest_path = abs
+        end
+      end
+      if not newest_path then
+        return nil, { code = -32602, message = "Could not resolve file path" }
+      end
+
+      -- Find changed line from git diff hunk header
+      local diff = vim.fn.systemlist(
+        "git -C " .. vim.fn.shellescape(cwd)
+        .. " diff --unified=0 -- " .. vim.fn.shellescape(newest_path)
+        .. " 2>/dev/null | grep '^@@' | tail -1"
+      )
+      local line = 1
+      if diff and #diff > 0 then
+        local m = diff[1]:match("%+(%d+)")
+        if m then line = tonumber(m) end
+      end
+
+      -- Focus a normal (non-lazyagent) window BEFORE opening the file,
+      -- so vim.cmd("edit") doesn't land in the scratch window.
+      local _, target_win = current_buf()
+      if target_win then
+        pcall(vim.api.nvim_set_current_win, target_win)
+      end
+
+      -- Open file and jump to line
+      vim.cmd("edit " .. vim.fn.fnameescape(newest_path))
+      local bufnr = vim.fn.bufnr(newest_path)
+      -- Refresh target_win in case it changed after edit
+      for _, w in ipairs(vim.api.nvim_list_wins()) do
+        if vim.api.nvim_win_get_buf(w) == bufnr then target_win = w; break end
+      end
+      pcall(vim.api.nvim_win_set_cursor, target_win or vim.api.nvim_get_current_win(), { line, 0 })
+
+      return { success = true, path = newest_path, line = line }
+    end,
+  },
+  {
     name = "write_to_buffer",
     description = "Append or replace content in the current Neovim buffer (or a specified scratch buffer).",
     inputSchema = {
