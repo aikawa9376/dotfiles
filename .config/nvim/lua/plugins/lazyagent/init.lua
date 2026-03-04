@@ -104,5 +104,11 @@ return {
     -- (get_diagnostics, get_buffer, notify_done, etc.) via HTTP MCP.
     -- Port is fixed so Gemini's ~/.gemini/settings.json stays valid across restarts.
     mcp_mode = true,
+    hooks = {
+      open_on_edit = false,
+      quickfix_on_edit = true,
+      git_checkpoint_on_done = false,
+      notify_on_done = true,
+    }
   }
 }

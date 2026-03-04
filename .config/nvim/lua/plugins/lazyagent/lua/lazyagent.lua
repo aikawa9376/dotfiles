@@ -300,6 +300,17 @@ function M.setup(opts)
     -- Delay (ms) before sending initial_send after agent launch (default 3000).
     -- Increase if your agent CLI takes longer to start.
     initial_send_delay = 3000,
+    -- Hook behaviour (requires mcp_mode = true; ignored otherwise):
+    hooks = {
+      -- Open the most recently changed file after each agent edit tool.
+      open_on_edit = true,
+      -- Populate quickfix with all git-changed files in real-time on each agent edit.
+      quickfix_on_edit = true,
+      -- Show a vim.notify summary of changed files when the agent finishes a turn.
+      notify_on_done = true,
+      -- Automatically create a git commit checkpoint when the agent finishes a turn.
+      git_checkpoint_on_done = false,
+    },
     -- Options specific to Instant Mode
     instant_mode = {
       append_text = nil, -- e.g. " #translate"

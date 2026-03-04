@@ -248,6 +248,42 @@ function M.setup_commands()
     end,
   })
 
+  -- Toggle hooks flags at runtime
+  -- Usage: LazyAgentHooks [flag] (no arg = show current status)
+  -- Flags: open_on_edit | quickfix_on_edit | notify_on_done | git_checkpoint_on_done
+  try_create_user_command("LazyAgentHooks", function(cmdargs)
+    local flag = cmdargs and cmdargs.args ~= "" and cmdargs.args or nil
+    local hopts = state.opts and state.opts.hooks
+    if not hopts then
+      vim.notify("LazyAgentHooks: hooks not configured", vim.log.levels.WARN)
+      return
+    end
+    if flag then
+      if hopts[flag] == nil then
+        vim.notify("LazyAgentHooks: unknown flag '" .. flag .. "'", vim.log.levels.WARN)
+        return
+      end
+      hopts[flag] = not hopts[flag]
+      vim.notify("LazyAgentHooks: " .. flag .. " = " .. tostring(hopts[flag]), vim.log.levels.INFO)
+    else
+      local lines = {}
+      for k, v in pairs(hopts) do
+        table.insert(lines, string.format("  %-30s %s", k, tostring(v)))
+      end
+      table.sort(lines)
+      vim.notify("LazyAgentHooks:\n" .. table.concat(lines, "\n"), vim.log.levels.INFO)
+    end
+  end, {
+    nargs = "?",
+    desc = "Toggle or show lazyagent hook flags (open_on_edit, quickfix_on_edit, notify_on_done, git_checkpoint_on_done)",
+    complete = function()
+      local hopts = state.opts and state.opts.hooks or {}
+      local keys = {}
+      for k in pairs(hopts) do table.insert(keys, k) end
+      return keys
+    end,
+  })
+
   -- Register commands for each interactive agent
   if state.opts.interactive_agents then
     for _, name in ipairs(agent_logic.available_agents()) do

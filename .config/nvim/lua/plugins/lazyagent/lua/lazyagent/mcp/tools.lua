@@ -5,6 +5,24 @@
 local M = {}
 local state = require("lazyagent.logic.state")
 
+-- Return git-changed files in cwd modified at or after `since` (os.time()).
+-- If since is nil, returns all changed files.
+local function changed_files_since(cwd, since)
+  local all = vim.fn.systemlist(
+    "git -C " .. vim.fn.shellescape(cwd) .. " status --short 2>/dev/null | awk '{print $NF}'"
+  )
+  if not all or #all == 0 then return {} end
+  if not since then return all end
+  local result = {}
+  for _, rel in ipairs(all) do
+    local abs = cwd .. "/" .. rel
+    if vim.fn.getftime(abs) >= since then
+      table.insert(result, rel)
+    end
+  end
+  return result
+end
+
 -- Helper: get the "current" code buffer and its window, skipping lazyagent scratch buffers.
 -- Prefers the buffer tracked as lazyagent_source_bufnr (the last code buffer focused before
 -- switching to the lazyagent window), then falls back to the first visible normal buffer.
@@ -62,6 +80,26 @@ M.list = {
           if s.monitor_timer then status.set_idle(aname) end
         end
       end
+      local hopts = (state.opts and state.opts.hooks) or {}
+      local cwd = vim.fn.getcwd()
+      -- Notify changed files summary
+      if hopts.notify_on_done ~= false then
+        local files = changed_files_since(cwd, state._hook_turn_start)
+        if files and #files > 0 then
+          local label = #files == 1 and "1 file changed" or (#files .. " files changed")
+          local names = table.concat(vim.tbl_map(function(f) return vim.fn.fnamemodify(f, ":t") end, files), ", ")
+          vim.notify(label .. ": " .. names, vim.log.levels.INFO, { title = "Agent done" })
+        end
+      end
+      -- git checkpoint
+      if hopts.git_checkpoint_on_done then
+        vim.fn.system(
+          "git -C " .. vim.fn.shellescape(cwd)
+          .. " diff --quiet 2>/dev/null || git -C " .. vim.fn.shellescape(cwd)
+          .. " add -A && git -C " .. vim.fn.shellescape(cwd)
+          .. " commit -m 'chore: agent checkpoint' --no-verify 2>/dev/null"
+        )
+      end
       return { success = true }
     end,
   },
@@ -109,6 +147,14 @@ M.list = {
         for aname, _ in pairs(state.sessions or {}) do
           pcall(function() status.start_monitor(aname) end)
         end
+      end
+      -- Record turn start time for filtering hook file lists to this turn only
+      state._hook_turn_start = os.time()
+      -- Reset quickfix state at the start of each turn
+      local hopts = (state.opts and state.opts.hooks) or {}
+      if hopts.quickfix_on_edit ~= false then
+        state._qf_items = {}
+        vim.fn.setqflist({}, "r", { title = "Agent turn", items = {} })
       end
       return { success = true }
     end,
@@ -399,28 +445,39 @@ M.list = {
     description = "Open the most recently modified file in the current project (detected via git) and jump to the changed line. Call this after editing files.",
     inputSchema = { type = "object", properties = {} },
     handler = function(_params)
+      local hopts = (state.opts and state.opts.hooks) or {}
       local cwd = vim.fn.getcwd()
 
-      -- Get changed files from git status
-      local files = vim.fn.systemlist(
-        "git -C " .. vim.fn.shellescape(cwd) .. " status --short 2>/dev/null | awk '{print $NF}'"
-      )
+      -- Get files changed during this agent turn
+      local files = changed_files_since(cwd, state._hook_turn_start)
       if not files or #files == 0 then
-        return nil, { code = -32602, message = "No changed files found in " .. cwd }
+        return { success = false, message = "No changed files found in " .. cwd }
       end
 
-      -- Pick most recently modified by mtime
-      local newest_mtime, newest_path = 0, nil
+      -- Build set of paths already in quickfix this turn
+      state._qf_items = state._qf_items or {}
+      local in_qf = {}
+      for _, item in ipairs(state._qf_items) do
+        in_qf[item.filename] = true
+      end
+
+      -- Among files NOT yet in quickfix, pick the one with highest mtime
+      -- (>= so last-in-list wins on tie, giving progress across hook calls)
+      local newest_mtime, newest_path = -1, nil
       for _, rel in ipairs(files) do
         local abs = cwd .. "/" .. rel
-        local mtime = vim.fn.getftime(abs)
-        if mtime > newest_mtime then
-          newest_mtime = mtime
-          newest_path = abs
+        if not in_qf[abs] then
+          local mtime = vim.fn.getftime(abs)
+          if mtime >= newest_mtime then
+            newest_mtime = mtime
+            newest_path = abs
+          end
         end
       end
+
+      -- All files already registered this turn – nothing to do
       if not newest_path then
-        return nil, { code = -32602, message = "Could not resolve file path" }
+        return { success = true, message = "All changed files already in quickfix" }
       end
 
       -- Find changed line from git diff hunk header
@@ -433,6 +490,16 @@ M.list = {
       if diff and #diff > 0 then
         local m = diff[1]:match("%+(%d+)")
         if m then line = tonumber(m) end
+      end
+
+      -- Append to quickfix (dedup handled via in_qf above)
+      if hopts.quickfix_on_edit ~= false then
+        table.insert(state._qf_items, { filename = newest_path, lnum = line, col = 1, text = "agent edited" })
+        vim.fn.setqflist({}, "r", { title = "Agent turn", items = state._qf_items })
+      end
+
+      if hopts.open_on_edit == false then
+        return { success = true, path = newest_path, line = line }
       end
 
       -- Focus a normal (non-lazyagent) window BEFORE opening the file,
