@@ -65,7 +65,7 @@ return {
   end)(),
   -- Also load the plugin when these user commands are executed
   cmd = {
-    "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
+    "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
     "LazyAgentOpenConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
