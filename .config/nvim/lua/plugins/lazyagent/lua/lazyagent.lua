@@ -193,6 +193,58 @@ local function write_mcp_configs(url, opts)
 
       -- Copy hook scripts from source templates
       copy_hook_scripts(agent_dir)
+
+    elseif lname == "cursor" then
+      local mcp_url = (opts and opts._mcp_url) or url
+
+      -- Write mcp.url for hook scripts
+      local fu = io.open(agent_dir .. "/mcp.url", "w")
+      if fu then fu:write(mcp_url); fu:close() end
+
+      -- Copy shared hook scripts
+      copy_hook_scripts(agent_dir)
+
+      -- Merge lazyagent entry into ~/.cursor/mcp.json for this session
+      local cursor_cfg_path = vim.fn.expand("~/.cursor/mcp.json")
+      local cfg = {}
+      local fh = io.open(cursor_cfg_path, "r")
+      if fh then
+        local ok, parsed = pcall(vim.fn.json_decode, fh:read("*a"))
+        fh:close()
+        if ok and type(parsed) == "table" then cfg = parsed end
+      end
+      cfg.mcpServers = cfg.mcpServers or {}
+      cfg.mcpServers.lazyagent = { url = mcp_url, type = "http" }
+      local fw = io.open(cursor_cfg_path, "w")
+      if fw then fw:write(vim.fn.json_encode(cfg)); fw:close() end
+
+      -- Merge lazyagent hooks into ~/.cursor/hooks.json
+      -- Cursor reads hooks.json from ~/.cursor/ and [project]/.cursor/
+      -- We use the global one so it works regardless of project.
+      local hooks_cfg_path = vim.fn.expand("~/.cursor/hooks.json")
+      local hcfg = {}
+      local hf = io.open(hooks_cfg_path, "r")
+      if hf then
+        local ok, parsed = pcall(vim.fn.json_decode, hf:read("*a"))
+        hf:close()
+        if ok and type(parsed) == "table" then hcfg = parsed end
+      end
+      hcfg.version = 1
+      hcfg.hooks = hcfg.hooks or {}
+      -- beforeSubmitPrompt → notify_start
+      local start_cmd = agent_dir .. "/hooks/notify-start.sh"
+      hcfg.hooks.beforeSubmitPrompt = hcfg.hooks.beforeSubmitPrompt or {}
+      table.insert(hcfg.hooks.beforeSubmitPrompt, { command = start_cmd, id = "lazyagent-notify-start" })
+      -- afterFileEdit → open_last_changed
+      local edit_cmd = agent_dir .. "/hooks/open-file.sh"
+      hcfg.hooks.afterFileEdit = hcfg.hooks.afterFileEdit or {}
+      table.insert(hcfg.hooks.afterFileEdit, { command = edit_cmd, id = "lazyagent-open-file" })
+      -- stop → notify_done
+      local done_cmd = agent_dir .. "/hooks/notify-done.sh"
+      hcfg.hooks.stop = hcfg.hooks.stop or {}
+      table.insert(hcfg.hooks.stop, { command = done_cmd, id = "lazyagent-notify-done" })
+      local hfw = io.open(hooks_cfg_path, "w")
+      if hfw then hfw:write(vim.fn.json_encode(hcfg)); hfw:close() end
     end
   end
 end

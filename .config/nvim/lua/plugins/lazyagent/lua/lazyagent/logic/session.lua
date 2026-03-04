@@ -531,6 +531,42 @@ function M.restart_session(agent_name)
   end
 end
 
+-- Removes lazyagent entries from agent-managed external config files (e.g. Cursor's mcp.json/hooks.json).
+local function cleanup_agent_external_configs(agent_name)
+  if string.lower(agent_name) ~= "cursor" then return end
+  local function remove_lazyagent_from(path)
+    local fh = io.open(path, "r")
+    if not fh then return end
+    local ok, cfg = pcall(vim.fn.json_decode, fh:read("*a"))
+    fh:close()
+    if not (ok and type(cfg) == "table") then return end
+    local changed = false
+    if type(cfg.mcpServers) == "table" and cfg.mcpServers.lazyagent then
+      cfg.mcpServers.lazyagent = nil
+      changed = true
+    end
+    if type(cfg.hooks) == "table" then
+      for event, entries in pairs(cfg.hooks) do
+        if type(entries) == "table" then
+          local filtered = vim.tbl_filter(function(e)
+            return not (type(e) == "table" and type(e.id) == "string" and e.id:match("^lazyagent%-"))
+          end, entries)
+          if #filtered ~= #entries then
+            cfg.hooks[event] = #filtered > 0 and filtered or nil
+            changed = true
+          end
+        end
+      end
+    end
+    if changed then
+      local fw = io.open(path, "w")
+      if fw then fw:write(vim.fn.json_encode(cfg)); fw:close() end
+    end
+  end
+  remove_lazyagent_from(vim.fn.expand("~/.cursor/mcp.json"))
+  remove_lazyagent_from(vim.fn.expand("~/.cursor/hooks.json"))
+end
+
 ---
 -- Closes a specific agent's session.
 -- @param agent_name (string) The name of the agent.
@@ -568,6 +604,7 @@ function M.close_session(agent_name)
       end
       state.sessions[agent_name] = nil
       maybe_disable_watchers()
+      cleanup_agent_external_configs(agent_name)
     end)
     return
   end
@@ -581,6 +618,9 @@ function M.close_session(agent_name)
   state.sessions[agent_name] = nil
   persistence.remove_session(agent_name, s.cwd)
   maybe_disable_watchers()
+
+  -- Cursor: remove lazyagent from ~/.cursor/mcp.json and ~/.cursor/hooks.json on session close
+  cleanup_agent_external_configs(agent_name)
 
   if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
     pcall(backend_mod.cleanup_if_idle)
