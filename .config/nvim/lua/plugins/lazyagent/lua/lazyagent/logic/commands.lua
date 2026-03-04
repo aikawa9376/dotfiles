@@ -63,6 +63,20 @@ function M.setup_commands()
       end,
     })
 
+  try_create_user_command("LazyAgent", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    agent_logic.resolve_target_agent(explicit, nil, function(chosen)
+      if not chosen then return end
+      session_logic.toggle_session(chosen)
+    end)
+  end, {
+      nargs = "?",
+      desc = "Toggle the floating agent input buffer (open/close)",
+      complete = function()
+        return agent_logic.available_agents()
+      end,
+    })
+
   try_create_user_command("LazyAgentInstant", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
     session_logic.open_instant(explicit)
