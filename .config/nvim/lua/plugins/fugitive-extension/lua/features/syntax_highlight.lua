@@ -1,5 +1,9 @@
 local M = {}
 
+-- 'lazygit': similarity-based line pairing (current behavior)
+-- 'github':  sequential line pairing (old[i] <-> new[i])
+M.config = { word_diff_style = 'lazygit' }
+
 local PRIORITY_BG = 200
 local PRIORITY_SYNTAX = 210
 
@@ -370,7 +374,46 @@ end
 function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
   if #group_old == 0 or #group_new == 0 then return end
 
-  -- Calculate similarity for all pairs
+  -- Apply word-level highlights for a matched old/new line pair
+  local function highlight_pair(old_text, new_text, old_line_idx, new_line_idx)
+    local diffs = Utils.compute_word_diffs(old_text, new_text)
+    local old_highlights = {}
+    local new_highlights = {}
+
+    for _, d in ipairs(diffs) do
+      if d[1] then table.insert(old_highlights, { d[1], d[2] }) end
+      if d[3] then table.insert(new_highlights, { d[3], d[4] }) end
+    end
+
+    old_highlights = Utils.merge_ranges(old_highlights, old_text)
+    new_highlights = Utils.merge_ranges(new_highlights, new_text)
+
+    for _, r in ipairs(old_highlights) do
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, old_line_idx, r[1], {
+        end_col = r[2] + 1,
+        hl_group = 'FugitiveExtDeleteText',
+        priority = PRIORITY_SYNTAX + 150
+      })
+    end
+
+    for _, r in ipairs(new_highlights) do
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, new_line_idx, r[1], {
+        end_col = r[2] + 1,
+        hl_group = 'FugitiveExtAddText',
+        priority = PRIORITY_SYNTAX + 150
+      })
+    end
+  end
+
+  -- GitHub style: sequential pairing (old[i] <-> new[i])
+  if M.config.word_diff_style == 'github' then
+    for i = 1, math.min(#group_old, #group_new) do
+      highlight_pair(group_old[i], group_new[i], group_old_lines[i], group_new_lines[i])
+    end
+    return
+  end
+
+  -- Lazygit style: similarity-based pairing (default)
   local candidates = {}
   local MAX_INDEX_DIST = 4
 
@@ -416,39 +459,10 @@ function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old
     if not used_old[cand.old_idx] and not used_new[cand.new_idx] then
       used_old[cand.old_idx] = true
       used_new[cand.new_idx] = true
-
-      local old_text = group_old[cand.old_idx]
-      local new_text = group_new[cand.new_idx]
-      local old_line_idx = group_old_lines[cand.old_idx]
-      local new_line_idx = group_new_lines[cand.new_idx]
-
-      local diffs = Utils.compute_word_diffs(old_text, new_text)
-      local old_highlights = {}
-      local new_highlights = {}
-
-      for _, d in ipairs(diffs) do
-        if d[1] then table.insert(old_highlights, { d[1], d[2] }) end
-        if d[3] then table.insert(new_highlights, { d[3], d[4] }) end
-      end
-
-      old_highlights = Utils.merge_ranges(old_highlights, old_text)
-      new_highlights = Utils.merge_ranges(new_highlights, new_text)
-
-      for _, r in ipairs(old_highlights) do
-         pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, old_line_idx, r[1], {
-           end_col = r[2] + 1,
-           hl_group = 'FugitiveExtDeleteText',
-           priority = PRIORITY_SYNTAX + 150
-         })
-      end
-
-      for _, r in ipairs(new_highlights) do
-         pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, new_line_idx, r[1], {
-           end_col = r[2] + 1,
-           hl_group = 'FugitiveExtAddText',
-           priority = PRIORITY_SYNTAX + 150
-         })
-      end
+      highlight_pair(
+        group_old[cand.old_idx], group_new[cand.new_idx],
+        group_old_lines[cand.old_idx], group_new_lines[cand.new_idx]
+      )
     end
   end
 end
