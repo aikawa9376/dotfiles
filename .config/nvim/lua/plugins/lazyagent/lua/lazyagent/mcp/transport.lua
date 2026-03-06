@@ -14,6 +14,7 @@ local state = require("lazyagent.logic.state")
 
 M._server = nil
 M.port = nil
+M._sse_clients = {}  -- registered SSE (GET /events) connections
 
 -- Find a free TCP port on localhost
 local function find_free_port(cb)
@@ -83,6 +84,35 @@ local function sse_event(data, event_type)
   return out .. "\n"
 end
 
+-- Push a JSON event to all connected SSE clients.
+-- Must be called from vim.schedule context (or any context where vim.fn is safe).
+function M.push_event(data)
+  if #M._sse_clients == 0 then return end
+  local ok_enc, json = pcall(vim.fn.json_encode, data)
+  if not ok_enc then return end
+  local msg = sse_event(json, "message")
+  for i = #M._sse_clients, 1, -1 do
+    local ok = pcall(function() M._sse_clients[i]:write(msg) end)
+    if not ok then table.remove(M._sse_clients, i) end
+  end
+end
+
+-- Load the web UI HTML once (lazy, cached)
+local _webui_html = nil
+local function get_webui_html()
+  if _webui_html then return _webui_html end
+  local script_path = debug.getinfo(1, "S").source:sub(2)
+  local dir = script_path:match("(.*/)") or "./"
+  local f = io.open(dir .. "webui.html", "r")
+  if f then
+    _webui_html = f:read("*a")
+    f:close()
+  else
+    _webui_html = "<!DOCTYPE html><html><body>webui.html not found</body></html>"
+  end
+  return _webui_html
+end
+
 -- Handle a single client connection
 local function handle_client(client, dispatcher)
   local buf = ""
@@ -117,6 +147,28 @@ local function handle_client(client, dispatcher)
       end
 
       if req.path ~= "/mcp" then
+        -- Serve the web UI on GET /
+        if req.method == "GET" and (req.path == "/" or req.path == "/ui") then
+          local html = get_webui_html()
+          client:write(http_response("200 OK", "text/html; charset=utf-8", html))
+          client:shutdown(function() client:close() end)
+          return
+        end
+        -- SSE event stream for real-time push notifications
+        if req.method == "GET" and req.path == "/events" then
+          local header = table.concat({
+            "HTTP/1.1 200 OK",
+            "Content-Type: text/event-stream",
+            "Cache-Control: no-cache",
+            "Access-Control-Allow-Origin: *",
+            "Connection: keep-alive",
+            "", "",
+          }, "\r\n")
+          client:write(header)
+          client:write(": connected\n\n")
+          table.insert(M._sse_clients, client)
+          return  -- keep connection alive; push_event() writes to it later
+        end
         client:write(http_response("404 Not Found", "text/plain", "Not Found"))
         client:shutdown(function() client:close() end)
         return
@@ -189,15 +241,16 @@ function M.start(dispatcher, on_ready, opts)
   opts = opts or {}
   local fixed_port = opts.port and opts.port ~= 0 and opts.port or nil
   local sock_path = opts.sock_path
+  local host = opts.host or "127.0.0.1"
 
   local function do_listen_tcp(port)
     M.port = port
     M.sock_path = nil
 
     local server = uv.new_tcp()
-    local ok, err = pcall(function() server:bind("127.0.0.1", port) end)
+    local ok, err = pcall(function() server:bind(host, port) end)
     if not ok then
-      vim.notify("[lazyagent MCP] bind error on port " .. port .. ": " .. tostring(err), vim.log.levels.ERROR)
+      vim.notify("[lazyagent MCP] bind error on " .. host .. ":" .. port .. ": " .. tostring(err), vim.log.levels.ERROR)
       return
     end
     server:listen(128, function(lerr)
@@ -212,7 +265,7 @@ function M.start(dispatcher, on_ready, opts)
     M._server = server
 
     if state.opts and state.opts.debug then
-      vim.notify("[lazyagent MCP] Listening on http://127.0.0.1:" .. port .. "/mcp", vim.log.levels.INFO)
+      vim.notify("[lazyagent MCP] Listening on http://" .. host .. ":" .. port .. "/mcp", vim.log.levels.INFO)
     end
 
     if on_ready then on_ready(port) end
@@ -265,6 +318,11 @@ function M.start(dispatcher, on_ready, opts)
 end
 
 function M.stop()
+  -- Close all SSE connections
+  for _, client in ipairs(M._sse_clients) do
+    pcall(function() client:shutdown(function() client:close() end) end)
+  end
+  M._sse_clients = {}
   if M._server then
     pcall(function() M._server:close() end)
     M._server = nil

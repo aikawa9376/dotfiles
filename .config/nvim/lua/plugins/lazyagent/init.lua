@@ -104,6 +104,10 @@ return {
     -- (get_diagnostics, get_buffer, notify_done, etc.) via HTTP MCP.
     -- Port is fixed so Gemini's ~/.gemini/settings.json stays valid across restarts.
     mcp_mode = true,
+    -- mcp_host: set to "0.0.0.0" to expose the MCP server (and web UI) to the local network.
+    -- Access the web UI at http://<your-ip>:<port>/ from any device on the same network.
+    -- Default is "127.0.0.1" (localhost only).
+    mcp_host = "0.0.0.0",
     hooks = {
       open_on_edit = false,
       quickfix_on_edit = true,
