@@ -606,8 +606,9 @@ function M.capture_pane(target_pane, on_output)
   })
 end
 
-function M.capture_pane_sync(target_pane)
-  local args = { "capture-pane", "-J", "-p", "-S", "-", "-t", target_pane }
+function M.capture_pane_sync(target_pane, max_lines)
+  local start = max_lines and ("-" .. tostring(max_lines)) or "-"
+  local args = { "capture-pane", "-J", "-p", "-S", start, "-t", target_pane }
   local cmd_arr = vim.list_extend({ "tmux" }, args)
   local cmd_str = table.concat(vim.tbl_map(function(s) return vim.fn.shellescape(tostring(s)) end, cmd_arr), " ")
   local ok, lines = pcall(vim.fn.systemlist, cmd_str)

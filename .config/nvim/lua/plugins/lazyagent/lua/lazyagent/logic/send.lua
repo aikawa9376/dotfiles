@@ -39,6 +39,7 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
   local _send_mode = config.pref(agent_cfg, "send_mode", nil)
   local _move_to_end = (_send_mode == "append")
   local _use_bracketed_paste = config.pref(agent_cfg, "use_bracketed_paste", nil)
+  if text:match("^/") then _use_bracketed_paste = false end
   backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
     submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
     submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
@@ -110,6 +111,9 @@ function M.send_to_cli(agent_name, text, opts)
       local _send_mode = config.pref(agent_cfg, "send_mode", nil)
       local _move_to_end = (_send_mode == "append")
       local _use_bracketed_paste = config.pref(agent_cfg, "use_bracketed_paste", nil)
+      -- Slash commands must not be wrapped in bracketed paste; CLIs treat bracketed
+      -- paste as literal text and won't recognise the leading "/" as a command prefix.
+      if text:match("^/") then _use_bracketed_paste = false end
       backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
         submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
         submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),

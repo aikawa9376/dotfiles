@@ -97,6 +97,14 @@ function M.set_idle(agent_name)
   s.agent_status = "idle"
   require("lazyagent.window").set_title(" " .. agent_name .. " (Idle) ")
   pcall(function() require("lualine").refresh() end)
+  pcall(function()
+    local transport = require("lazyagent.mcp.transport")
+    local capture = nil
+    if s.pane_id then
+      capture = require("lazyagent.tmux").capture_pane_sync(s.pane_id, 300)
+    end
+    transport.push_event({ event = "done", agent = agent_name, capture = capture })
+  end)
 end
 
 -- Mark an agent as waiting for input (called by MCP notify_waiting tool)
@@ -107,6 +115,15 @@ function M.set_waiting(agent_name, msg)
   s.agent_status = "waiting"
   require("lazyagent.window").set_title(" " .. agent_name .. " (" .. (msg or "Waiting...") .. ") ")
   pcall(function() require("lualine").refresh() end)
+  pcall(function()
+    local capture = nil
+    if s.pane_id then
+      capture = require("lazyagent.tmux").capture_pane_sync(s.pane_id, 300)
+    end
+    require("lazyagent.mcp.transport").push_event({
+      event = "waiting", agent = agent_name, message = msg or "Waiting...", capture = capture,
+    })
+  end)
 end
 
 function M.start_monitor(agent_name)
@@ -115,6 +132,9 @@ function M.start_monitor(agent_name)
 
   s.agent_status = "thinking"
   require("lazyagent.window").set_title(" " .. agent_name .. " (Thinking...) ")
+  pcall(function()
+    require("lazyagent.mcp.transport").push_event({ event = "start", agent = agent_name })
+  end)
 
   if s.monitor_timer then
     pcall(function() s.monitor_timer:stop() end)
@@ -127,7 +147,6 @@ function M.start_monitor(agent_name)
   check_and_animate()
 
   -- Spinner stops when agent calls notify_done via MCP.
-  -- Safety timeout stops it after ~5 minutes if notify_done is never called.
   local ticks = 0
 
   timer:start(1000, 1000, vim.schedule_wrap(function()
@@ -136,9 +155,6 @@ function M.start_monitor(agent_name)
       return
     end
     ticks = ticks + 1
-    if ticks >= 300 then -- ~5 minute hard timeout
-      M.set_idle(agent_name)
-    end
   end))
 end
 

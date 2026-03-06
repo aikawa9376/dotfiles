@@ -519,6 +519,11 @@ function M.setup(opts)
 
     if start_opts.port then start_opts.sock_path = nil end
 
+    -- If mcp_host is set (e.g. "0.0.0.0" for LAN access), pass it through
+    if M.opts.mcp_host then
+      start_opts.host = M.opts.mcp_host
+    end
+
     local uv = vim.loop
     local sig_int, sig_term
     local function register_signal_handlers(mcp_stop)

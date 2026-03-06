@@ -1,5 +1,5 @@
 #!/bin/bash
-MCP_URL=$(cat "$(dirname "$0")/../mcp.url" 2>/dev/null)
+MCP_URL=${LAZYAGENT_MCP_URL:-$(cat "$(dirname "$0")/../mcp.url" 2>/dev/null)}
 [ -z "$MCP_URL" ] && printf '{}' && exit 0
 input=$(cat)
 tool=$(printf '%s' "$input" | jq -r '.toolName // .tool_name // .hook_event_name // empty' 2>/dev/null)

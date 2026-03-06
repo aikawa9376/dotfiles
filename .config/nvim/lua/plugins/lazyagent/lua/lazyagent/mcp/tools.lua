@@ -72,10 +72,11 @@ M.list = {
     handler = function(params)
       local status = require("lazyagent.logic.status")
       local name = params.agent_name
+
+      -- set_idle now handles SSE push internally via status.lua
       if name then
         status.set_idle(name)
       else
-        -- stop all active monitors
         for aname, s in pairs(state.sessions or {}) do
           if s.monitor_timer then status.set_idle(aname) end
         end
@@ -118,6 +119,7 @@ M.list = {
       local status = require("lazyagent.logic.status")
       local name = params.agent_name
       local msg = params.message or "Waiting..."
+      -- set_waiting now handles SSE push internally via status.lua
       if name then
         status.set_waiting(name, msg)
       else
@@ -141,6 +143,7 @@ M.list = {
     handler = function(params)
       local status = require("lazyagent.logic.status")
       local name = params.agent_name
+      -- start_monitor now handles SSE push internally via status.lua
       if name then
         status.start_monitor(name)
       else
@@ -650,6 +653,137 @@ M.list = {
       end
       handle:close()
       return { pattern = params.pattern, path = path, results = results, count = #results }
+    end,
+  },
+  -- ── Remote / WebUI tools ─────────────────────────────────────────
+  {
+    name = "send_key",
+    description = "Send a special key (Up, Down, Enter, Escape, C-c, etc.) to the active agent's terminal pane.",
+    inputSchema = {
+      type = "object",
+      properties = {
+        key = { type = "string", description = "Key to send: 'Up', 'Down', 'Enter', 'Escape', 'C-c', etc." },
+        agent_name = { type = "string", description = "Agent name. Defaults to the current open agent." },
+      },
+      required = { "key" },
+    },
+    handler = function(params)
+      local key = params.key
+      if not key or key == "" then
+        return nil, { code = -32602, message = "'key' is required" }
+      end
+      local agent_name = params.agent_name
+      if agent_name and agent_name ~= "" then
+        local backend_logic = require("lazyagent.logic.backend")
+        local s = state.sessions[agent_name]
+        if not s or not s.pane_id then
+          return nil, { code = -32602, message = "No pane for agent: " .. agent_name }
+        end
+        local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+        backend_mod.send_keys(s.pane_id, { key })
+      else
+        local send = require("lazyagent.logic.send")
+        if key == "Enter" then
+          send.send_enter()
+        elseif key == "Up" then
+          send.send_up()
+        elseif key == "Down" then
+          send.send_down()
+        else
+          send.send_key(key)
+        end
+      end
+      return { success = true }
+    end,
+  },
+  {
+    name = "send_to_agent",
+    description = "Send a text prompt to an interactive agent (CLI session). Starts or reuses the agent session.",
+    inputSchema = {
+      type = "object",
+      properties = {
+        text = { type = "string", description = "The prompt/text to send." },
+        agent_name = { type = "string", description = "Agent name (e.g. 'Copilot'). Defaults to the current open agent." },
+      },
+      required = { "text" },
+    },
+    handler = function(params)
+      if not params.text or #params.text == 0 then
+        return nil, { code = -32602, message = "'text' is required" }
+      end
+      local send = require("lazyagent.logic.send")
+      send.send_to_cli(params.agent_name or "", params.text)
+      return { success = true }
+    end,
+  },
+  {
+    name = "get_agent_status",
+    description = "Get the current status of all configured interactive agents (thinking/idle/waiting/no_session).",
+    inputSchema = {
+      type = "object",
+      properties = {
+        agent_name = { type = "string", description = "Agent name to query. If omitted, returns all configured agents." },
+      },
+      required = {},
+    },
+    handler = function(params)
+      local agents = {}
+      if params.agent_name and params.agent_name ~= "" then
+        local s = state.sessions[params.agent_name]
+        table.insert(agents, {
+          name   = params.agent_name,
+          status = s and (s.agent_status or "idle") or "no_session",
+        })
+      else
+        -- All configured interactive agents
+        for name, _ in pairs((state.opts and state.opts.interactive_agents) or {}) do
+          local s = state.sessions[name]
+          table.insert(agents, {
+            name   = name,
+            status = s and (s.agent_status or "idle") or "no_session",
+          })
+        end
+        -- Also include sessions that exist but are not in config
+        for name, s in pairs(state.sessions or {}) do
+          local seen = false
+          for _, a in ipairs(agents) do
+            if a.name == name then seen = true; break end
+          end
+          if not seen then
+            table.insert(agents, { name = name, status = s.agent_status or "idle" })
+          end
+        end
+        table.sort(agents, function(a, b) return a.name < b.name end)
+      end
+      return { agents = agents }
+    end,
+  },
+  {
+    name = "get_terminal_capture",
+    description = "Get a plain-text capture of an agent's terminal pane (tmux scrollback).",
+    inputSchema = {
+      type = "object",
+      properties = {
+        agent_name = { type = "string", description = "Agent name. Defaults to the current open agent or first active session." },
+      },
+      required = {},
+    },
+    handler = function(params)
+      local name = params.agent_name
+      if not name or name == "" then name = state.open_agent end
+      if not name then
+        for n, _ in pairs(state.sessions or {}) do name = n; break end
+      end
+      if not name then
+        return nil, { code = -32602, message = "No active agent session" }
+      end
+      local s = state.sessions[name]
+      if not s or not s.pane_id then
+        return nil, { code = -32602, message = "No pane for agent: " .. tostring(name) }
+      end
+      local tmux = require("lazyagent.tmux")
+      local text = tmux.capture_pane_sync(s.pane_id)
+      return { agent_name = name, text = text }
     end,
   },
 }
