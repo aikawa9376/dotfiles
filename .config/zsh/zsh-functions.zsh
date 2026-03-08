@@ -237,6 +237,83 @@ fzf-ripgrep-widget() {
 zle     -N    fzf-ripgrep-widget
 bindkey '\ea' fzf-ripgrep-widget
 
+# ALT-G - live ripgrep with migemo (per-keystroke reload)
+_fgr_rmigemo="${XDG_CONFIG_HOME:-$HOME/.config}/nvim/bin/rmigemo"
+_fgr_rg_opts="--column --line-number --hidden --ignore-case --no-heading --color=always --glob=!.git"
+
+# rg with migemo expansion: rg-migemo [rg-options] -- {query}
+rg-migemo() {
+  local -a rg_args
+  local query="" found_sep=false arg
+
+  for arg in "$@"; do
+    if $found_sep; then
+      query="$arg"
+    elif [[ "$arg" == "--" ]]; then
+      found_sep=true
+    else
+      rg_args+=("$arg")
+    fi
+  done
+
+  # No '--': treat last arg as query
+  if ! $found_sep && (( ${#rg_args} > 0 )); then
+    query="${rg_args[-1]}"
+    rg_args=("${rg_args[@]:0:$((${#rg_args}-1))}")
+  fi
+
+  [[ -z "$query" ]] && return 0
+
+  if [[ -x "$_fgr_rmigemo" ]]; then
+    local migemo
+    migemo="$("$_fgr_rmigemo" -q -w "$query" -e oniguruma 2>/dev/null)"
+    if [[ $? -eq 0 && -n "$migemo" ]]; then
+      rg "${rg_args[@]}" -e "$migemo"
+      return
+    fi
+  fi
+
+  rg "${rg_args[@]}" -- "$query"
+}
+
+# Standalone function: fgr [initial-query]
+fgr() {
+  # fzf reload runs in a subprocess: generate a temp script from the function body
+  local tmpscript
+  tmpscript=$(mktemp "${TMPDIR:-/tmp}/rg-migemo.XXXXXX")
+  cat > "$tmpscript" <<EOF
+#!/usr/bin/env zsh
+_fgr_rmigemo="${_fgr_rmigemo}"
+$(functions rg-migemo)
+rg-migemo "\$@"
+EOF
+  chmod +x "$tmpscript"
+  trap "rm -f '${tmpscript}'" EXIT INT TERM
+
+  local selected
+  selected=$(
+    FZF_DEFAULT_COMMAND="" \
+    fzf --ansi --disabled \
+      --bind "start:reload:'${tmpscript}' ${_fgr_rg_opts} -- {q}" \
+      --bind "change:reload:'${tmpscript}' ${_fgr_rg_opts} -- {q}" \
+      --delimiter ':' --nth '4..,1' \
+      --query "${1:-}" \
+      --preview 'bat --style=numbers --color=always --highlight-line {2} {1}' \
+      --preview-window '+{2}-/2'
+  ) || return
+  local file=${selected%%:*}
+  local line=$(echo "$selected" | cut -d: -f2)
+  [[ -n "$file" ]] && nvim +"$line" "$file"
+}
+
+# ALT-G zle widget: opens fgr and redisplays prompt
+fzf-migemo-grep-widget() {
+  fgr
+  zle redisplay
+}
+zle     -N    fzf-migemo-grep-widget
+bindkey '\eg' fzf-migemo-grep-widget
+
 f-override() {
   local selected
   if selected=$(fasd -f | sed 's/^[0-9,.]* *//' | fzf --ansi --tac +m); then
