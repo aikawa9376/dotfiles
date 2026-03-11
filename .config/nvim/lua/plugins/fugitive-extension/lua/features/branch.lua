@@ -28,18 +28,19 @@ local function get_ahead_behind(branch, upstream, cmd_prefix)
   return tonumber(ahead) or 0, tonumber(behind) or 0
 end
 
-local function get_branch_list()
+local function get_branch_list(bufnr)
   local cmd_prefix = "git "
-  -- Use buffer context for git command to handle submodules and worktrees correctly
-  local current_file = vim.api.nvim_buf_get_name(0)
-  if current_file:match("^fugitive%-branch://") then
-    local path = current_file:sub(#"fugitive-branch://" + 1)
+  -- Use the branch buffer's context (not current buffer) for git command,
+  -- to avoid using a wrong context when FugitiveChanged fires from another tab/buffer.
+  local buf_file = bufnr and vim.api.nvim_buf_get_name(bufnr) or vim.api.nvim_buf_get_name(0)
+  if buf_file:match("^fugitive%-branch://") then
+    local path = buf_file:sub(#"fugitive-branch://" + 1)
     cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(path))
-  elseif current_file ~= "" and not current_file:match("^fugitive://") then
-    local current_dir = vim.fn.fnamemodify(current_file, ":p:h")
+  elseif buf_file ~= "" and not buf_file:match("^fugitive://") then
+    local current_dir = vim.fn.fnamemodify(buf_file, ":p:h")
     cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(current_dir))
   else
-    local git_dir = vim.fn.FugitiveGitDir()
+    local git_dir = bufnr and vim.fn.FugitiveGitDir(bufnr) or vim.fn.FugitiveGitDir()
     if git_dir ~= "" then
       local work_tree = vim.fn.systemlist(string.format("git --git-dir=%s rev-parse --show-toplevel 2>/dev/null", vim.fn.shellescape(git_dir)))[1]
       if work_tree and work_tree ~= "" then
@@ -52,7 +53,7 @@ local function get_branch_list()
   local remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
 
   if vim.v.shell_error ~= 0 then
-    return {}
+    return {}, {}, {}
   end
 
   -- Combine local branches first, then remote branches
@@ -271,7 +272,7 @@ local function apply_fade_highlight(bufnr, truncated_info)
   local ns_id = vim.api.nvim_create_namespace('fugitive_branch_fade')
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
-  for _, info in ipairs(truncated_info) do
+  for _, info in ipairs(truncated_info or {}) do
     local line = info.line
     local col = info.col_start
     local len = info.text_len
@@ -351,7 +352,7 @@ local function refresh_branch_list(bufnr)
 
   vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
 
-  local branch_output, branch_names, truncated_info = get_branch_list()
+  local branch_output, branch_names, truncated_info = get_branch_list(bufnr)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
   vim.b[bufnr].branch_map = branch_names
   apply_fade_highlight(bufnr, truncated_info)
