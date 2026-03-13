@@ -329,6 +329,10 @@ function M.setup(opts)
       dir = vim.fn.stdpath("cache") .. "/lazyagent",
       debounce_ms = 1500,
       max_history = 100,
+      -- Automatically delete conversation log files older than this duration on startup.
+      -- Format: "<number><unit>" where unit is h (hours), d (days), w (weeks), m (months).
+      -- Set to nil or "" to disable.
+      conversation_retention = "30d",
     },
     -- How new content is merged into existing agent input:
     -- - "append": move cursor to end of agent's input and append content before submitting.
@@ -480,6 +484,8 @@ function M.setup(opts)
   if M.opts.mcp_mode then
     -- Run startup cleanup to avoid accumulating stale sockets/persistence
     pcall(function() cleanup_stale_resources(M.opts) end)
+    -- Purge old conversation logs based on retention setting
+    pcall(function() cache_logic.purge_old_conversations() end)
 
     local mcp_server = require("lazyagent.mcp.server")
     local start_opts = {}
