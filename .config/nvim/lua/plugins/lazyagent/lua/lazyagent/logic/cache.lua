@@ -286,6 +286,45 @@ function M.open_conversations()
   end)
 end
 
+--- Parses a retention duration string into seconds.
+-- Supports: "3h" (hours), "7d" (days), "2w" (weeks), "1m" (months = 30 days).
+-- @param s (string) Duration string, e.g. "30d", "3h".
+-- @return (number|nil) Duration in seconds, or nil if unparseable.
+local function parse_retention_seconds(s)
+  if not s or s == "" then return nil end
+  local n, unit = tostring(s):match("^(%d+)([hdwm])$")
+  if not n then return nil end
+  n = tonumber(n)
+  if unit == "h" then return n * 3600
+  elseif unit == "d" then return n * 86400
+  elseif unit == "w" then return n * 7 * 86400
+  elseif unit == "m" then return n * 30 * 86400
+  end
+end
+
+--- Deletes conversation log files older than the configured retention period.
+-- Reads opts.cache.conversation_retention (e.g. "30d", "3h"). No-op if not set.
+function M.purge_old_conversations()
+  local retention_str = state.opts and state.opts.cache and state.opts.cache.conversation_retention
+  local max_age = parse_retention_seconds(retention_str)
+  if not max_age or max_age <= 0 then return end
+
+  local dir = get_conversation_dir()
+  if vim.fn.isdirectory(dir) == 0 then return end
+
+  local now = os.time()
+  local raw = vim.fn.readdir(dir) or {}
+  for _, f in ipairs(raw) do
+    if f:lower():match("%-conversation%-.+%.log$") then
+      local path = dir .. "/" .. f
+      local mtime = vim.fn.getftime(path)
+      if mtime > 0 and (now - mtime) > max_age then
+        pcall(vim.fn.delete, path)
+      end
+    end
+  end
+end
+
 -- Expose helpers for other modules to locate cache files and prefixes.
 M.get_cache_dir = get_cache_dir
 M.get_conversation_dir = get_conversation_dir
