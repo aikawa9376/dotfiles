@@ -36,7 +36,7 @@ require("lazy").setup({
     { import = "plugins.comment" },
     { import = "plugins.yanky" },
     { import = "plugins.flash" },
-    { import = "plugins.flash-migemo" },
+    { import = "plugins.migemo" },
     { import = "plugins.flash-scope" },
     -- { import = "plugins.quick-scope" },
     { import = "plugins.multicursors" },

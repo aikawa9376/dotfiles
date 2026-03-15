@@ -19,6 +19,7 @@ return {
     { "<Leader>e", function () require"plugins.fzf-lua_util".fzf_mru_files_cwd() end, silent = true },
     { "<Leader>E", function () require"plugins.fzf-lua_util".fzf_mru_files() end, silent = true },
     { "<Leader>m", function () require"plugins.fzf-lua_util".fzf_junkfiles() end, silent = true },
+    { "<Leader>M", function () require"plugins.fzf-lua_util".fzf_ripgrep_migemo() end, silent = true, desc = "Migemo grep" },
     { "<Leader>d", function () require"plugins.fzf-lua_util".fzf_dirs_smart({}) end, silent = true },
     { "mx", function () require"plugins.fzf-lua_util".fzf_harpoon() end, silent = true }
   },
