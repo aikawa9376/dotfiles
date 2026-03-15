@@ -480,6 +480,17 @@ vim.cmd([[command! -nargs=* RgLua lua require"plugins.fzf-lua_util".fzf_ripgrep(
 vim.cmd([[command! -nargs=* RgTextLua lua require"plugins.fzf-lua_util".fzf_ripgrep_text(<q-args>)]])
 vim.cmd([[command! -nargs=* AllRgLua lua require"plugins.fzf-lua_util".fzf_all_ripgrep(<q-args>)]])
 
+-- Migemo grep: prompt for romaji, convert to migemo pattern, then grep
+M.fzf_ripgrep_migemo = function()
+  vim.ui.input({ prompt = "Migemo grep> " }, function(input)
+    if not input or input == "" then return end
+    local pattern = require("migemo").pattern(input, "egrep") or input
+    fzf_lua.grep(vim.tbl_deep_extend("force", { search = pattern, no_esc = true }, getRipgrepOpts()))
+  end)
+end
+
+vim.cmd([[command! MigemoRg lua require"plugins.fzf-lua_util".fzf_ripgrep_migemo()]])
+
 -- ------------------------------------------------------------------
 -- Ast grep
 -- ------------------------------------------------------------------

@@ -1,5 +1,6 @@
 return {
   "rhysd/migemo-search.vim",
+  enabled = false, -- replaced by flash-migemo's <C-Space> keymap
   keys = {
     {
       "<C-Space>",
