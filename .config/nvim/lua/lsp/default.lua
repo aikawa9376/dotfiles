@@ -54,13 +54,13 @@ M.settings = function(client, bufnr)
   )
   vim.api.nvim_create_user_command("InlayToggle", function()
     local buf = vim.api.nvim_get_current_buf()
-    local enabled = vim.lsp.inlay_hint.is_enabled({ buf = buf })
-    vim.lsp.inlay_hint.enable(not enabled, { buf = buf })
+    local enabled = vim.lsp.inlay_hint.is_enabled({ bufnr = buf })
+    vim.lsp.inlay_hint.enable(not enabled, { bufnr = buf })
   end, {})
   vim.api.nvim_create_user_command("CodeLensToggle", function()
     local buf = vim.api.nvim_get_current_buf()
-    local enabled = vim.lsp.inlay_hint.is_enabled({ buf = buf })
-    vim.lsp.codelens.enable(not enabled, { buf = buf })
+    local enabled = vim.lsp.codelens.is_enabled({ bufnr = buf })
+    vim.lsp.codelens.enable(not enabled, { bufnr = buf })
   end, {})
 
   -- features
@@ -90,7 +90,7 @@ M.settings = function(client, bufnr)
   end
 
   if client.server_capabilities.colorProvider then
-    vim.lsp.document_color.enable(false, bufnr, { style = "foreground" })
+    vim.lsp.document_color.enable(false, { bufnr = bufnr }, { style = "foreground" })
   end
 
   -- diagnostic settings

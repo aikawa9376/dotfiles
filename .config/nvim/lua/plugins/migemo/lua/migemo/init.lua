@@ -46,21 +46,21 @@ function M.setup()
   require("flash.config").search.mode = function(pattern)
     return M.pattern(pattern, "vim") or flash_exact(pattern)
   end
+end
 
-  -- <A-m> in / and ? search: convert romaji to migemo pattern, execute, and skip history
-  vim.keymap.set("c", "<A-m>", function()
-    local cmd_type = vim.fn.getcmdtype()
-    if cmd_type ~= "/" and cmd_type ~= "?" then return end
-    local input = vim.fn.getcmdline()
-    if input == "" then return end
-    local result = M.pattern(input, "vim")
-    if not result then return end
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
-    vim.schedule(function()
-      vim.cmd((cmd_type == "/" and "/" or "?") .. result)
-      vim.fn.histdel("search", -1)
-    end)
-  end, { silent = true, desc = "Migemo search (no history)" })
+--- Convert current / or ? command-line input to a Migemo search and skip history.
+function M.search_no_history()
+  local cmd_type = vim.fn.getcmdtype()
+  if cmd_type ~= "/" and cmd_type ~= "?" then return end
+  local input = vim.fn.getcmdline()
+  if input == "" then return end
+  local result = M.pattern(input, "vim")
+  if not result then return end
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Esc>", true, false, true), "n", true)
+  vim.schedule(function()
+    vim.cmd((cmd_type == "/" and "/" or "?") .. result)
+    vim.fn.histdel("search", -1)
+  end)
 end
 
 return M

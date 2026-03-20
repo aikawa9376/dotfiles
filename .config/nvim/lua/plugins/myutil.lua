@@ -13,6 +13,7 @@ return {
     { "gJ", function() require"utilities".join_space_less() end, mode = "n" },
     { "<C-K>", function() require"utilities".ctrl_k() end, mode = "c" },
     { "y@", function() require"utilities".copy_git_root_relative_path(true) end, mode = "n" },
+    { "<F12>", function() require"utilities".toggle_tmux_popup_terminal() end, mode = "n" },
     { "<leader>@", function() require"utilities".copy_line_path(true) end, mode = "x" },
     { "<Leader>gd", function () vim.cmd("Diff") end },
     { "<Leader>x",
