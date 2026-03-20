@@ -15,8 +15,8 @@ gui:
 refresher:
   refreshInterval: 3
 os:
-  edit: '[ -z "$NVIM" ] && (nvim -- {{filename}}) || (nvim --server "$NVIM" --remote-send "<C-\><C-N>:TermForceCloseAll<CR>:e "{{filename}}"<CR>")'
-  editAtLine: '[ -z "$NVIM" ] && (nvim +{{line}} -- {{filename}}) || (nvim --server "$NVIM" --remote-send "<C-\><C-N>:TermForceCloseAll<CR>:e "{{filename}}"<CR>:{{line}}<CR>")'
-  openDirInEditor: '[ -z "$NVIM" ] && (nvim -- {{dir}}) || (nvim --server "$NVIM" --remote-send "<C-\><C-N>:TermForceCloseAll<CR>:Oil {{dir}}<CR>"'
+  edit: '[ -z "$NVIM" ] && (nvim -- {{filename}}) || (nvim --server "$NVIM" --remote-send "<C-\><C-N>:e "{{filename}}"<CR>")'
+  editAtLine: '[ -z "$NVIM" ] && (nvim +{{line}} -- {{filename}}) || (nvim --server "$NVIM" --remote-send "<C-\><C-N>:e "{{filename}}"<CR>:{{line}}<CR>")'
+  openDirInEditor: '[ -z "$NVIM" ] && (nvim -- {{dir}}) || (nvim --server "$NVIM" --remote-send "<C-\><C-N>:Oil {{dir}}<CR>"'
 
 # promptToReturnFromSubprocess: false
