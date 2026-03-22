@@ -52,8 +52,9 @@ local function get_branch_list(bufnr)
   local local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
   local remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
 
-  if vim.v.shell_error ~= 0 then
-    return {}, {}, {}
+  local git_ok = vim.v.shell_error == 0
+  if not git_ok then
+    return {}, {}, {}, false
   end
 
   -- Combine local branches first, then remote branches
@@ -265,7 +266,7 @@ local function get_branch_list(bufnr)
     branch_names[i] = b.branch
   end
 
-  return formatted, branch_names, truncated_info
+  return formatted, branch_names, truncated_info, true
 end
 
 local function apply_fade_highlight(bufnr, truncated_info)
@@ -919,8 +920,8 @@ local function merge_with_input(bufnr, default_target)
 end
 
 local function open_branch_list()
-  local branch_output, branch_names, truncated_info = get_branch_list()
-  if vim.v.shell_error ~= 0 then
+  local branch_output, branch_names, truncated_info, ok = get_branch_list()
+  if not ok then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
   end
