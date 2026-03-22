@@ -80,6 +80,8 @@ local function escapePattern(text)
   return text:gsub("([().%+%-*?[^$])", "%%%1")
 end
 
+local get_parent_git_root = require"utilities".get_parent_git_root
+
 local function addPrefixAction(action, prefix)
   return function(selected, opts)
     for i, v in ipairs(selected) do
@@ -191,8 +193,10 @@ end)
 
 local getFileOpt = function (cwd)
   local opts = {}
+  local current_cwd = vim.fn.fnamemodify(cwd or vim.fn.getcwd(), ":p"):gsub("/$", "")
+
+  opts.cwd = current_cwd
   opts.multiprocess = false
-  opts.cwd = vim.fn.fnamemodify(cwd or vim.fn.getcwd(), ":p")
   opts.prompt = getHomeName() .. ' >'
   opts.previewer = "builtin"
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
@@ -208,6 +212,25 @@ local getFileOpt = function (cwd)
     },
     ["ctrl-s"] = function(selected)
       copySelectedPathsToRegisterWithAt(selected)
+    end,
+    ["ctrl-t"] = function(selected, opts)
+      local state = M._parent_toggle
+      if state and state.parent == current_cwd then
+        M._parent_toggle = nil
+        state.reopen(state.origin)
+      else
+        local parent = get_parent_git_root(current_cwd)
+        if not parent then
+          fzf_lua.actions.resume(selected, opts)
+          return
+        end
+        M._parent_toggle = {
+          origin = current_cwd,
+          parent = parent,
+          reopen = function(dir) M.fzf_files_for_dir(dir) end,
+        }
+        M.fzf_files_for_dir(parent)
+      end
     end,
   })
   opts.file_icons = true
@@ -403,12 +426,15 @@ end
 -- RG grep
 -- ------------------------------------------------------------------
 
-local getRipgrepOpts = function (isText, isAll)
+local getRipgrepOpts = function (isText, isAll, cwd)
   isText = isText == nil and false or isText
   isAll = isAll == nil and false or isAll
 
+  local current_cwd = vim.fn.fnamemodify(cwd or vim.fn.getcwd(), ":p"):gsub("/$", "")
+
   local opts = {}
   opts.prompt = '>'
+  opts.cwd = current_cwd
   opts.previewer = "builtin"
   opts.no_header_i = true
   opts.RIPGREP_CONFIG_PATH = vim.env.RIPGREP_CONFIG_PATH
@@ -437,6 +463,25 @@ local getRipgrepOpts = function (isText, isAll)
         vim.cmd("tabedit +" .. entry.line .. " " .. entry.path)
       end
     },
+    ["ctrl-t"] = function(selected, opts)
+      local state = M._parent_toggle
+      if state and state.parent == current_cwd then
+        M._parent_toggle = nil
+        state.reopen(state.origin)
+      else
+        local parent = get_parent_git_root(current_cwd)
+        if not parent then
+          fzf_lua.actions.resume(selected, opts)
+          return
+        end
+        M._parent_toggle = {
+          origin = current_cwd,
+          parent = parent,
+          reopen = function(dir) M.fzf_ripgrep_for_dir(dir, isText, isAll) end,
+        }
+        M.fzf_ripgrep_for_dir(parent, isText, isAll)
+      end
+    end,
   })
   opts.fzf_opts = {
     ["--multi"] = "",
@@ -462,6 +507,10 @@ end
 
 M.fzf_ripgrep = function(args)
   fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts()))
+end
+
+M.fzf_ripgrep_for_dir = function(dir, isText, isAll)
+  fzf_lua.grep(vim.tbl_deep_extend("force", { search = "" }, getRipgrepOpts(isText, isAll, dir)))
 end
 
 M.fzf_ripgrep_text = function(args)
