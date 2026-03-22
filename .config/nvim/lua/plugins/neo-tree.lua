@@ -3,194 +3,216 @@ return {
   keys = {
     { "<Leader>n", "<Cmd>Neotree reveal toggle<CR>", silent = true }
   },
-  opts = {
-    popup_border_style = "",
-    use_default_mappings = false,
-    default_component_configs = {
-      modified = {
-        symbol = "[+]",
-        highlight = "NeoTreeModified",
+  opts = function()
+    local neotree_toggle_state = nil
+
+    local get_parent_git_root = require"utilities".get_parent_git_root
+
+    return {
+      popup_border_style = "",
+      use_default_mappings = false,
+      default_component_configs = {
+        modified = {
+          symbol = "[+]",
+          highlight = "NeoTreeModified",
+        },
+        git_status = {
+          symbols = {
+            -- Change type
+            added = "", -- or "✚", but this is redundant info if you use git_status_colors on the name
+            modified = "", -- or "", but this is redundant info if you use git_status_colors on the name
+            deleted = "✖", -- this can only be used in the git_status source
+            renamed = "", -- this can only be used in the git_status source
+            -- Status type
+            untracked = "",
+            ignored = "",
+            unstaged = "",
+            staged = "",
+            conflict = "",
+          },
+        },
+      },
+      window = {
+        width = 30,
+        mappings = {
+          ["o"] = {
+            "toggle_node",
+            nowait = true, -- disable `nowait` if you have existing combos starting with this char that you want to use
+          },
+          ["<2-LeftMouse>"] = "open",
+          ["<cr>"] = "open",
+          ["<esc>"] = "revert_preview",
+          ["P"] = {
+            "toggle_preview",
+            config = {
+              use_float = true,
+              use_snacks_image = true,
+            },
+          },
+          ["S"] = "open_split",
+          ["s"] = "open_vsplit",
+          ["t"] = "open_tabnew",
+          ["w"] = "open_with_window_picker",
+          ["z"] = "close_all_nodes",
+          ["a"] = {
+            "add",
+            config = {
+              show_path = "none",
+            },
+          },
+          ["K"] = "add_directory",
+          ["d"] = "delete",
+          ["r"] = "rename",
+          ["p"] = "paste_from_clipboard",
+          ["y"] = "copy_to_clipboard",
+          ["m"] = "cut_to_clipboard",
+          ["q"] = "close_window",
+          ["R"] = "refresh",
+          ["?"] = "show_help",
+          ["<"] = "prev_source",
+          [">"] = "next_source",
+          ["c"] = function(state)
+            local node = state.tree:get_node()
+            vim.fn.setreg("+", node.name, "c")
+          end,
+          ["C"] = function(state)
+            local node = state.tree:get_node()
+            vim.fn.setreg("+", node.path, "c")
+          end,
+        },
+      },
+      filesystem = {
+        filtered_items = {
+          visible = false,
+          hide_dotfiles = false,
+          hide_gitignored = false,
+          hide_hidden = false,
+        },
+        -- time the current file is changed while the tree is open.
+        find_command = "fd",
+        find_args = { -- you can specify extra args to pass to the find command.
+          fd = {
+            "--exclude",
+            ".git",
+            "--exclude",
+            "node_modules",
+            "--exclude",
+            ".next",
+            "--exclude",
+            "dist",
+            "--exclude",
+            "vendor",
+          },
+        },
+        use_libuv_file_watcher = true,
+        commands = {
+          copy_file_name = function(state)
+            local node = state.tree:get_node()
+            vim.fn.setreg("*", node.name, "c")
+          end,
+          toggle_parent_git_root = function(state)
+            local norm = function(p) return vim.fn.fnamemodify(p, ":p"):gsub("/$", "") end
+            local current_root = norm(state.path)
+
+            if neotree_toggle_state and norm(neotree_toggle_state.parent) == current_root then
+              local origin = neotree_toggle_state.origin
+              neotree_toggle_state = nil
+              vim.cmd("Neotree filesystem dir=" .. vim.fn.fnameescape(origin))
+            else
+              local parent = get_parent_git_root(current_root)
+              if not parent then return end
+              neotree_toggle_state = { origin = current_root, parent = parent }
+              vim.cmd("Neotree filesystem dir=" .. vim.fn.fnameescape(parent))
+            end
+          end,
+        },
+        window = {
+          mappings = {
+            ["<bs>"] = "navigate_up",
+            ["."] = "set_root",
+            ["H"] = "toggle_hidden",
+            ["/"] = "none",
+            ["f"] = "fuzzy_finder",
+            ["D"] = "fuzzy_finder_directory",
+            ["F"] = "filter_on_submit",
+            ["<c-x>"] = "clear_filter",
+            ["[g"] = "prev_git_modified",
+            ["]g"] = "next_git_modified",
+            ["<C-t>"] = "toggle_parent_git_root",
+          },
+          fuzzy_finder_mappings = {
+            ["<down>"] = "move_cursor_down",
+            ["<C-n>"] = "move_cursor_down",
+            ["<up>"] = "move_cursor_up",
+            ["<C-p>"] = "move_cursor_up",
+            ["<esc>"] = "close",
+            ["<S-CR>"] = "close_keep_filter",
+            ["<C-CR>"] = "close_clear_filter",
+            ["<C-w>"] = { "<C-S-w>", raw = true },
+            {
+              n = {
+                ["j"] = "move_cursor_down",
+                ["k"] = "move_cursor_up",
+                ["<S-CR>"] = "close_keep_filter",
+                ["<C-CR>"] = "close_clear_filter",
+                ["<esc>"] = "close",
+              }
+            },
+          },
+        },
+      },
+      buffers = {
+        show_unloaded = true,
+        window = {
+          mappings = {
+            ["bd"] = "buffer_delete",
+            ["<bs>"] = "navigate_up",
+            ["."] = "set_root",
+          },
+        },
       },
       git_status = {
-        symbols = {
-          -- Change type
-          added = "", -- or "✚", but this is redundant info if you use git_status_colors on the name
-          modified = "", -- or "", but this is redundant info if you use git_status_colors on the name
-          deleted = "✖", -- this can only be used in the git_status source
-          renamed = "", -- this can only be used in the git_status source
-          -- Status type
-          untracked = "",
-          ignored = "",
-          unstaged = "",
-          staged = "",
-          conflict = "",
-        },
-      },
-    },
-    window = {
-      width = 30,
-      mappings = {
-        ["o"] = {
-          "toggle_node",
-          nowait = true, -- disable `nowait` if you have existing combos starting with this char that you want to use
-        },
-        ["<2-LeftMouse>"] = "open",
-        ["<cr>"] = "open",
-        ["<esc>"] = "revert_preview",
-        ["P"] = {
-          "toggle_preview",
-          config = {
-            use_float = true,
-            use_snacks_image = true,
+        window = {
+          position = "float",
+          mappings = {
+            ["A"] = "git_add_all",
+            ["gu"] = "git_unstage_file",
+            ["ga"] = "git_add_file",
+            ["gr"] = "git_revert_file",
+            ["gc"] = "git_commit",
+            ["gp"] = "git_push",
+            ["gg"] = "git_commit_and_push",
           },
         },
-        ["S"] = "open_split",
-        ["s"] = "open_vsplit",
-        ["t"] = "open_tabnew",
-        ["w"] = "open_with_window_picker",
-        ["z"] = "close_all_nodes",
-        ["a"] = {
-          "add",
-          config = {
-            show_path = "none",
-          },
-        },
-        ["K"] = "add_directory",
-        ["d"] = "delete",
-        ["r"] = "rename",
-        ["p"] = "paste_from_clipboard",
-        ["y"] = "copy_to_clipboard",
-        ["m"] = "cut_to_clipboard",
-        ["q"] = "close_window",
-        ["R"] = "refresh",
-        ["?"] = "show_help",
-        ["<"] = "prev_source",
-        [">"] = "next_source",
-        ["c"] = function(state)
-          local node = state.tree:get_node()
-          vim.fn.setreg("+", node.name, "c")
-        end,
-        ["C"] = function(state)
-          local node = state.tree:get_node()
-          vim.fn.setreg("+", node.path, "c")
-        end,
       },
-    },
-    filesystem = {
-      filtered_items = {
-        visible = false,
-        hide_dotfiles = false,
-        hide_gitignored = false,
-        hide_hidden = false,
+      sources = {
+        "filesystem",
+        "buffers",
+        "git_status",
+        "document_symbols",
       },
-      -- time the current file is changed while the tree is open.
-      find_command = "fd",
-      find_args = { -- you can specify extra args to pass to the find command.
-        fd = {
-          "--exclude",
-          ".git",
-          "--exclude",
-          "node_modules",
-          "--exclude",
-          ".next",
-          "--exclude",
-          "dist",
-          "--exclude",
-          "vendor",
-        },
-      },
-      use_libuv_file_watcher = true,
-      commands = {
-        copy_file_name = function(state)
-          local node = state.tree:get_node()
-          vim.fn.setreg("*", node.name, "c")
-        end,
-      },
-      window = {
-        mappings = {
-          ["<bs>"] = "navigate_up",
-          ["."] = "set_root",
-          ["H"] = "toggle_hidden",
-          ["/"] = "none",
-          ["f"] = "fuzzy_finder",
-          ["D"] = "fuzzy_finder_directory",
-          ["F"] = "filter_on_submit",
-          ["<c-x>"] = "clear_filter",
-          ["[g"] = "prev_git_modified",
-          ["]g"] = "next_git_modified",
-        },
-        fuzzy_finder_mappings = {
-          ["<down>"] = "move_cursor_down",
-          ["<C-n>"] = "move_cursor_down",
-          ["<up>"] = "move_cursor_up",
-          ["<C-p>"] = "move_cursor_up",
-          ["<esc>"] = "close",
-          ["<S-CR>"] = "close_keep_filter",
-          ["<C-CR>"] = "close_clear_filter",
-          ["<C-w>"] = { "<C-S-w>", raw = true },
+      source_selector = {
+        winbar = true,
+        sources = { -- table
           {
-            n = {
-              ["j"] = "move_cursor_down",
-              ["k"] = "move_cursor_up",
-              ["<S-CR>"] = "close_keep_filter",
-              ["<C-CR>"] = "close_clear_filter",
-              ["<esc>"] = "close",
-            }
-          },
+            source = "filesystem",
+            display_name = "  Files "
+          }, -- string | nil
+          {
+            source = "buffers",
+            display_name = "  Bufs "
+          }, -- string | nil
+          {
+            source = "git_status",
+            display_name = "  Git "
+          }, -- string | nil
+          {
+            source = "diagnostics",
+            display_name = " 裂Diagnos "
+          } -- string | nil
         },
-      },
-    },
-    buffers = {
-      show_unloaded = true,
-      window = {
-        mappings = {
-          ["bd"] = "buffer_delete",
-          ["<bs>"] = "navigate_up",
-          ["."] = "set_root",
-        },
-      },
-    },
-    git_status = {
-      window = {
-        position = "float",
-        mappings = {
-          ["A"] = "git_add_all",
-          ["gu"] = "git_unstage_file",
-          ["ga"] = "git_add_file",
-          ["gr"] = "git_revert_file",
-          ["gc"] = "git_commit",
-          ["gp"] = "git_push",
-          ["gg"] = "git_commit_and_push",
-        },
-      },
-    },
-    sources = {
-      "filesystem",
-      "buffers",
-      "git_status",
-      "document_symbols",
-    },
-    source_selector = {
-      winbar = true,
-      sources = { -- table
-        {
-          source = "filesystem",
-          display_name = "  Files "
-        }, -- string | nil
-        {
-          source = "buffers",
-          display_name = "  Bufs "
-        }, -- string | nil
-        {
-          source = "git_status",
-          display_name = "  Git "
-        }, -- string | nil
-        {
-          source = "diagnostics",
-          display_name = " 裂Diagnos "
-        } -- string | nil
-      },
-      separator = { left = "", right = "" }, -- string | { left: string, right: string, override: string | nil }
+        separator = { left = "", right = "" }, -- string | { left: string, right: string, override: string | nil }
+      }
     }
-  }
+  end
 }
