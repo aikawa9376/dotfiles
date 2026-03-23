@@ -219,17 +219,18 @@ local getFileOpt = function (cwd)
         M._parent_toggle = nil
         state.reopen(state.origin)
       else
-        local parent = get_parent_git_root(current_cwd)
-        if not parent then
-          fzf_lua.actions.resume(selected, opts)
-          return
-        end
-        M._parent_toggle = {
-          origin = current_cwd,
-          parent = parent,
-          reopen = function(dir) M.fzf_files_for_dir(dir) end,
-        }
-        M.fzf_files_for_dir(parent)
+        get_parent_git_root(current_cwd, function(parent)
+          if not parent then
+            fzf_lua.actions.resume(selected, opts)
+            return
+          end
+          M._parent_toggle = {
+            origin = current_cwd,
+            parent = parent,
+            reopen = function(dir) M.fzf_files_for_dir(dir) end,
+          }
+          M.fzf_files_for_dir(parent)
+        end)
       end
     end,
   })
@@ -469,17 +470,18 @@ local getRipgrepOpts = function (isText, isAll, cwd)
         M._parent_toggle = nil
         state.reopen(state.origin)
       else
-        local parent = get_parent_git_root(current_cwd)
-        if not parent then
-          fzf_lua.actions.resume(selected, opts)
-          return
-        end
-        M._parent_toggle = {
-          origin = current_cwd,
-          parent = parent,
-          reopen = function(dir) M.fzf_ripgrep_for_dir(dir, isText, isAll) end,
-        }
-        M.fzf_ripgrep_for_dir(parent, isText, isAll)
+        get_parent_git_root(current_cwd, function(parent)
+          if not parent then
+            fzf_lua.actions.resume(selected, opts)
+            return
+          end
+          M._parent_toggle = {
+            origin = current_cwd,
+            parent = parent,
+            reopen = function(dir) M.fzf_ripgrep_for_dir(dir, isText, isAll) end,
+          }
+          M.fzf_ripgrep_for_dir(parent, isText, isAll)
+        end)
       end
     end,
   })

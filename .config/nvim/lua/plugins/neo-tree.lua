@@ -119,10 +119,11 @@ return {
               neotree_toggle_state = nil
               vim.cmd("Neotree filesystem dir=" .. vim.fn.fnameescape(origin))
             else
-              local parent = get_parent_git_root(current_root)
-              if not parent then return end
-              neotree_toggle_state = { origin = current_root, parent = parent }
-              vim.cmd("Neotree filesystem dir=" .. vim.fn.fnameescape(parent))
+              get_parent_git_root(current_root, function(parent)
+                if not parent then return end
+                neotree_toggle_state = { origin = current_root, parent = parent }
+                vim.cmd("Neotree filesystem dir=" .. vim.fn.fnameescape(parent))
+              end)
             end
           end,
         },
