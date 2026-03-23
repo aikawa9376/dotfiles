@@ -37,9 +37,8 @@ local fullFloatWinOpts = {
 -- Utils
 -- ------------------------------------------------------------------
 
-local getHomeName = function()
-  local path = vim.fn.getcwd()
-  local home_path = vim.fn.fnamemodify(path, ":~")
+local getHomeName = function(path)
+  local home_path = vim.fn.fnamemodify(path or vim.fn.getcwd(), ":~")
 
   if #home_path > 20 then
     home_path = vim.fn.pathshorten(home_path)
@@ -81,6 +80,31 @@ local function escapePattern(text)
 end
 
 local get_parent_git_root = require"utilities".get_parent_git_root
+
+local function setup_parent_toggle(opts, current_cwd, parent_git_root, reopen_fn)
+  local state = M._parent_toggle
+  local can_toggle_or_go_parent = (state and state.parent == current_cwd) or parent_git_root
+
+  opts.actions = opts.actions or {}
+  opts.actions["ctrl-t"] = can_toggle_or_go_parent and function(selected, fzf_opts)
+    if state and state.parent == current_cwd then
+      M._parent_toggle = nil
+      state.reopen(state.origin)
+    elseif parent_git_root then
+      M._parent_toggle = {
+        origin = current_cwd,
+        parent = parent_git_root,
+        reopen = reopen_fn,
+      }
+      reopen_fn(parent_git_root)
+    end
+  end or false
+
+  if not can_toggle_or_go_parent then
+    opts.fzf_opts = opts.fzf_opts or {}
+    opts.fzf_opts["--bind"] = "ctrl-t:ignore"
+  end
+end
 
 local function addPrefixAction(action, prefix)
   return function(selected, opts)
@@ -191,14 +215,22 @@ end)
 -- Files Enhanced
 -- ------------------------------------------------------------------
 
-local getFileOpt = function (cwd)
+local getFileOpt = function (cwd, parent_git_root)
   local opts = {}
   local current_cwd = vim.fn.fnamemodify(cwd or vim.fn.getcwd(), ":p"):gsub("/$", "")
 
   opts.cwd = current_cwd
   opts.multiprocess = false
-  opts.prompt = getHomeName() .. ' >'
+  opts.prompt = getHomeName(current_cwd) .. ' >'
   opts.previewer = "builtin"
+  opts.fzf_opts = {
+    ["-x"] = "",
+    ["--multi"] = "",
+    ["--scheme"] = "history",
+    ["--tiebreak"] = "index",
+    ["--no-unicode"] = "",
+  }
+
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
     ['ctrl-x'] = {
@@ -213,60 +245,44 @@ local getFileOpt = function (cwd)
     ["ctrl-s"] = function(selected)
       copySelectedPathsToRegisterWithAt(selected)
     end,
-    ["ctrl-t"] = function(selected, opts)
-      local state = M._parent_toggle
-      if state and state.parent == current_cwd then
-        M._parent_toggle = nil
-        state.reopen(state.origin)
-      else
-        get_parent_git_root(current_cwd, function(parent)
-          if not parent then
-            fzf_lua.actions.resume(selected, opts)
-            return
-          end
-          M._parent_toggle = {
-            origin = current_cwd,
-            parent = parent,
-            reopen = function(dir) M.fzf_files_for_dir(dir) end,
-          }
-          M.fzf_files_for_dir(parent)
-        end)
-      end
-    end,
   })
+
+  setup_parent_toggle(opts, current_cwd, parent_git_root, function(dir)
+    M.fzf_files_for_dir(dir)
+  end)
+
   opts.file_icons = true
   opts.git_icons = true
   opts.fn_transform = function(x)
     return fzf_lua.make_entry.file(x, {file_icons=true, color_icons=true})
   end
-  opts.fzf_opts = {
-    ["-x"] = "",
-    ["--multi"] = "",
-    ["--scheme"] = "history",
-    ["--tiebreak"] = "index",
-    ["--no-unicode"] = "",
-  }
 
   return opts
 end
 
 M.fzf_files = function(opts)
-  fzf_lua.fzf_exec(
-    "fd --strip-cwd-prefix --follow --hidden --exclude .git --type f . " ..
-    "-E .git -E '*.psd' -E '*.png' -E '*.jpg' -E '*.pdf' " ..
-    "-E '*.ai' -E '*.jfif' -E '*.jpeg' -E '*.gif' " ..
-    "-E '*.eps' -E '*.svg' -E '*.JPEM' -E '*.mp4' | " ..
-    "eza -1 -sold --color=always --no-quotes",
-    getFileOpt()
-  )
+  local cwd = vim.fn.getcwd()
+  get_parent_git_root(cwd, function(parent)
+    fzf_lua.fzf_exec(
+      "fd --strip-cwd-prefix --follow --hidden --exclude .git --type f . " ..
+      "-E .git -E '*.psd' -E '*.png' -E '*.jpg' -E '*.pdf' " ..
+      "-E '*.ai' -E '*.jfif' -E '*.jpeg' -E '*.gif' " ..
+      "-E '*.eps' -E '*.svg' -E '*.JPEM' -E '*.mp4' | " ..
+      "eza -1 -sold --color=always --no-quotes",
+      getFileOpt(cwd, parent)
+    )
+  end)
 end
 
 M.fzf_all_files = function(opts)
-  fzf_lua.fzf_exec(
-    "fd --strip-cwd-prefix -I --type file --follow --hidden --exclude .git | " ..
-    "eza -1 -sold --color=always --no-quotes",
-    getFileOpt()
-  )
+  local cwd = vim.fn.getcwd()
+  get_parent_git_root(cwd, function(parent)
+    fzf_lua.fzf_exec(
+      "fd --strip-cwd-prefix -I --type file --follow --hidden --exclude .git | " ..
+      "eza -1 -sold --color=always --no-quotes",
+      getFileOpt(cwd, parent)
+    )
+  end)
 end
 
 M.fzf_files_for_dir = function(dir)
@@ -292,10 +308,12 @@ M.fzf_files_for_dir = function(dir)
     fd_cmd .. exclusions .. " | " ..
     "eza -1 -sold --color=always --no-quotes"
 
-  fzf_lua.fzf_exec(
-    full_cmd,
-    getFileOpt(search_dir)
-  )
+  get_parent_git_root(search_dir, function(parent)
+    fzf_lua.fzf_exec(
+      full_cmd,
+      getFileOpt(search_dir, parent)
+    )
+  end)
 end
 
 vim.cmd([[command! -nargs=* FilesLua lua require"plugins.fzf-lua_util".fzf_files()]])
@@ -427,7 +445,7 @@ end
 -- RG grep
 -- ------------------------------------------------------------------
 
-local getRipgrepOpts = function (isText, isAll, cwd)
+local getRipgrepOpts = function (isText, isAll, cwd, parent_git_root)
   isText = isText == nil and false or isText
   isAll = isAll == nil and false or isAll
 
@@ -447,6 +465,11 @@ local getRipgrepOpts = function (isText, isAll, cwd)
       enabled = false,
     },
   }
+  opts.fzf_opts = {
+    ["--multi"] = "",
+    ["--no-unicode"] = "",
+  }
+
   opts.actions = vim.tbl_deep_extend("force", defaultActions, {
     ["enter"] = fzf_lua.actions.file_edit_or_qf,
     ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
@@ -464,31 +487,11 @@ local getRipgrepOpts = function (isText, isAll, cwd)
         vim.cmd("tabedit +" .. entry.line .. " " .. entry.path)
       end
     },
-    ["ctrl-t"] = function(selected, opts)
-      local state = M._parent_toggle
-      if state and state.parent == current_cwd then
-        M._parent_toggle = nil
-        state.reopen(state.origin)
-      else
-        get_parent_git_root(current_cwd, function(parent)
-          if not parent then
-            fzf_lua.actions.resume(selected, opts)
-            return
-          end
-          M._parent_toggle = {
-            origin = current_cwd,
-            parent = parent,
-            reopen = function(dir) M.fzf_ripgrep_for_dir(dir, isText, isAll) end,
-          }
-          M.fzf_ripgrep_for_dir(parent, isText, isAll)
-        end)
-      end
-    end,
   })
-  opts.fzf_opts = {
-    ["--multi"] = "",
-    ["--no-unicode"] = "",
-  }
+
+  setup_parent_toggle(opts, current_cwd, parent_git_root, function(dir)
+    M.fzf_ripgrep_for_dir(dir, isText, isAll)
+  end)
 
   if isText then
     opts.fzf_opts["--delimiter"] = ":"
@@ -508,19 +511,30 @@ local getRipgrepOpts = function (isText, isAll, cwd)
 end
 
 M.fzf_ripgrep = function(args)
-  fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts()))
+  local cwd = vim.fn.getcwd()
+  get_parent_git_root(cwd, function(parent)
+    fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(nil, nil, cwd, parent)))
+  end)
 end
 
 M.fzf_ripgrep_for_dir = function(dir, isText, isAll)
-  fzf_lua.grep(vim.tbl_deep_extend("force", { search = "" }, getRipgrepOpts(isText, isAll, dir)))
+  get_parent_git_root(dir, function(parent)
+    fzf_lua.grep(vim.tbl_deep_extend("force", { search = "" }, getRipgrepOpts(isText, isAll, dir, parent)))
+  end)
 end
 
 M.fzf_ripgrep_text = function(args)
-  fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(true)))
+  local cwd = vim.fn.getcwd()
+  get_parent_git_root(cwd, function(parent)
+    fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(true, nil, cwd, parent)))
+  end)
 end
 
 M.fzf_all_ripgrep = function(args)
-  fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(false, true)))
+  local cwd = vim.fn.getcwd()
+  get_parent_git_root(cwd, function(parent)
+    fzf_lua.grep(vim.tbl_deep_extend("force", { search = args }, getRipgrepOpts(false, true, cwd, parent)))
+  end)
 end
 
 vim.cmd([[command! -nargs=* RgLua lua require"plugins.fzf-lua_util".fzf_ripgrep(<q-args>)]])
@@ -532,7 +546,10 @@ M.fzf_ripgrep_migemo = function()
   vim.ui.input({ prompt = "Migemo grep> " }, function(input)
     if not input or input == "" then return end
     local pattern = require("migemo").pattern(input, "egrep") or input
-    fzf_lua.grep(vim.tbl_deep_extend("force", { search = pattern, no_esc = true }, getRipgrepOpts()))
+    local cwd = vim.fn.getcwd()
+    get_parent_git_root(cwd, function(parent)
+      fzf_lua.grep(vim.tbl_deep_extend("force", { search = pattern, no_esc = true }, getRipgrepOpts(nil, nil, cwd, parent)))
+    end)
   end)
 end
 
