@@ -360,6 +360,9 @@ function M.setup(opts)
     -- Tunable via `interrupt_attempts` and `interrupt_interval_ms` in setup(opts).
     interrupt_attempts = 3,
     interrupt_interval_ms = 40,
+    -- How long (ms) to wait after sending interrupts for the agent process to exit
+    -- before forcefully killing the pane. Increase on slow CLIs. Default: 2000ms
+    post_interrupt_wait_ms = 2000,
     -- Hook behaviour (requires mcp_mode = true; ignored otherwise):
     hooks = {
       -- Open the most recently changed file after each agent edit tool.

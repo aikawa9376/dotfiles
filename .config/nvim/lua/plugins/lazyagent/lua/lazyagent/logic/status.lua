@@ -105,6 +105,13 @@ function M.set_idle(agent_name)
     end
     transport.push_event({ event = "done", agent = agent_name, capture = capture })
   end)
+
+  -- Execute and clear any pending on_idle callback for this agent
+  if s.on_idle_callback then
+    local cb = s.on_idle_callback
+    s.on_idle_callback = nil
+    vim.schedule(cb)
+  end
 end
 
 -- Mark an agent as waiting for input (called by MCP notify_waiting tool)

@@ -40,6 +40,9 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
   local _move_to_end = (_send_mode == "append")
   local _use_bracketed_paste = config.pref(agent_cfg, "use_bracketed_paste", nil)
   if text:match("^/") then _use_bracketed_paste = false end
+  -- Start status monitor (spinner in statusline while agent is thinking)
+  status.start_monitor(agent_name)
+
   backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
     submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
     submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
@@ -48,13 +51,11 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
     use_bracketed_paste = _use_bracketed_paste,
   })
 
-  -- For one-shot (non-interactive) sends, close the session after a delay if it's not meant to be reused.
+  -- For one-shot (non-interactive) sends, close the session after its turn is finished (status becomes idle or waiting).
   local session_logic = require("lazyagent.logic.session")
-  vim.defer_fn(function()
-    if not reuse then
-      session_logic.close_session(agent_name)
-    end
-  end, config.pref(agent_cfg, "capture_delay", 800))
+  if not reuse then
+    session_logic.close_session(agent_name)
+  end
 end
 
 -- Sends text to a CLI agent (interactive agent pane).
@@ -114,6 +115,9 @@ function M.send_to_cli(agent_name, text, opts)
       -- Slash commands must not be wrapped in bracketed paste; CLIs treat bracketed
       -- paste as literal text and won't recognise the leading "/" as a command prefix.
       if text:match("^/") then _use_bracketed_paste = false end
+      -- Start status monitor (spinner in statusline while agent is thinking)
+      status.start_monitor(agent_name)
+
       backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
         submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
         submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
@@ -121,11 +125,11 @@ function M.send_to_cli(agent_name, text, opts)
         move_to_end = _move_to_end,
         use_bracketed_paste = _use_bracketed_paste,
       })
+
+      -- For one-shot (non-interactive) sends, close the session after its turn is finished (status becomes idle or waiting).
       local session_logic = require("lazyagent.logic.session")
       if not reuse then
-        vim.defer_fn(function()
-          session_logic.close_session(agent_name)
-        end, config.pref(agent_cfg, "capture_delay", 800))
+        session_logic.close_session(agent_name)
       end
     end)
     return
@@ -221,7 +225,8 @@ function M.send_buffer_and_clear(agent_name, bufnr)
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
 
       -- Start status monitor (spinner in statusline while agent is thinking)
-      if not (state.opts and state.opts.mcp_mode) then status.start_monitor(agent_name) end
+      -- We start it here locally; agents using MCP will subsequently call notify_done when finished.
+      status.start_monitor(agent_name)
     end)
     return
   end

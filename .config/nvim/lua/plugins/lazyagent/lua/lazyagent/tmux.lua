@@ -626,4 +626,16 @@ function M.capture_pane_sync(target_pane, max_lines)
   return table.concat(collected, "\n")
 end
 
+function M.get_pane_pid(target_pane)
+  if not target_pane or target_pane == "" then return nil end
+  local cmd_arr = { "tmux", "display-message", "-p", "-F", "#{pane_pid}", "-t", target_pane }
+  local cmd = table.concat(vim.tbl_map(function(s) return vim.fn.shellescape(tostring(s)) end, cmd_arr), " ")
+  local ok, lines = pcall(vim.fn.systemlist, cmd)
+  if not ok or not lines or type(lines) ~= "table" or #lines == 0 then return nil end
+  local line = lines[1]:gsub("^%s*(.-)%s*$", "%1")
+  local pid = tonumber(line)
+  if pid and pid > 0 then return pid end
+  return nil
+end
+
 return M
