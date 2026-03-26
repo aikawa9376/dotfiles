@@ -14,6 +14,31 @@ local persistence = require("lazyagent.logic.persistence")
 local util = require("lazyagent.util")
 local ok_watch, watch = pcall(require, "lazyagent.watch")
 
+-- Helper: best-effortly send several interrupt signals (Ctrl-C) to a pane
+-- before killing it. Some backends (tmux) accept the literal "C-c" token;
+-- builtin terminal needs the actual ASCII ETX (0x03). The behaviour and
+-- timing can be tuned via state.opts.interrupt_attempts and
+-- state.opts.interrupt_interval_ms.
+local function send_interrupts_before_kill(agent_name, pane_id, backend_mod, sync)
+  local backend_name = nil
+  pcall(function()
+    backend_name = (select(1, backend_logic.resolve_backend_for_agent(agent_name or "", nil)))
+  end)
+  local attempts = (state.opts and state.opts.interrupt_attempts) or 3
+  local interval_ms = (state.opts and state.opts.interrupt_interval_ms) or 40
+  if not pane_id or pane_id == "" then return end
+  if not backend_mod or type(backend_mod.send_keys) ~= "function" then return end
+  local key = "C-c"
+  if backend_name == "builtin" then
+    key = string.char(3)
+  end
+  for i = 1, attempts do
+    pcall(backend_mod.send_keys, pane_id, { key })
+    -- short blocking wait so the target process can process the signal
+    pcall(vim.wait, interval_ms)
+  end
+end
+
 local function compute_launch_cmd(agent_cfg)
   -- Convert agent_cfg.cmd/cmd_yolo (string or table) to a single string suitable
   -- for backends and append/replace YOLO flags when requested.
@@ -600,6 +625,7 @@ function M.close_session(agent_name)
     M.capture_and_save_session(agent_name, open_conv, function()
       local _, backend_mod2 = backend_logic.resolve_backend_for_agent(agent_name, nil)
       if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
+        pcall(send_interrupts_before_kill, agent_name, s.pane_id, backend_mod2, false)
         backend_mod2.kill_pane(s.pane_id)
       end
       state.sessions[agent_name] = nil
@@ -610,6 +636,7 @@ function M.close_session(agent_name)
   end
 
   if backend_mod and type(backend_mod.kill_pane) == "function" then
+    pcall(send_interrupts_before_kill, agent_name, s.pane_id, backend_mod, false)
     backend_mod.kill_pane(s.pane_id)
   end
   if backend_mod and type(backend_mod.clear_pane_config) == "function" then
@@ -693,8 +720,10 @@ function M.close_all_sessions(sync)
           end
         else
           if backend_mod and type(backend_mod.kill_pane_sync) == "function" then
+             pcall(send_interrupts_before_kill, name, s.pane_id, backend_mod, true)
              backend_mod.kill_pane_sync(s.pane_id)
           elseif backend_mod and type(backend_mod.kill_pane) == "function" then
+             pcall(send_interrupts_before_kill, name, s.pane_id, backend_mod, false)
              backend_mod.kill_pane(s.pane_id)
           end
           persistence.remove_session(name, s.cwd)
@@ -705,12 +734,14 @@ function M.close_all_sessions(sync)
           M.capture_and_save_session(name, open_conv, function()
             local _, backend_mod2 = backend_logic.resolve_backend_for_agent(name, nil)
             if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
+              pcall(send_interrupts_before_kill, name, s.pane_id, backend_mod2, false)
               backend_mod2.kill_pane(s.pane_id)
             end
             state.sessions[name] = nil
           end)
         else
           if backend_mod and type(backend_mod.kill_pane) == "function" then
+            pcall(send_interrupts_before_kill, name, s.pane_id, backend_mod, false)
             backend_mod.kill_pane(s.pane_id)
           end
           state.sessions[name] = nil

@@ -356,6 +356,10 @@ function M.setup(opts)
     -- Delay (ms) before sending initial_send after agent launch (default 3000).
     -- Increase if your agent CLI takes longer to start.
     initial_send_delay = 3000,
+    -- Best-effort interrupts: send Ctrl-C to agent panes before killing them when closing Neovim.
+    -- Tunable via `interrupt_attempts` and `interrupt_interval_ms` in setup(opts).
+    interrupt_attempts = 3,
+    interrupt_interval_ms = 40,
     -- Hook behaviour (requires mcp_mode = true; ignored otherwise):
     hooks = {
       -- Open the most recently changed file after each agent edit tool.
