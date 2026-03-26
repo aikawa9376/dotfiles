@@ -71,6 +71,20 @@ function M.pane_exists(pane_id)
   return vim.api.nvim_buf_is_valid(bufnr)
 end
 
+-- Return the OS pid of the terminal job attached to the buffer (if available).
+-- Returns nil when not applicable. This mirrors the tmux.get_pane_pid helper.
+function M.get_pane_pid(target_pane)
+  local bufnr = to_bufnum(target_pane)
+  if not bufnr then return nil end
+  local jobid = term_job_for_buf(bufnr)
+  if not jobid then return nil end
+  local ok, pid = pcall(vim.fn.jobpid, jobid)
+  if ok and pid and type(pid) == "number" and pid > 0 then
+    return pid
+  end
+  return nil
+end
+
 function M.send_keys(target_pane, keys)
   local bufnr = to_bufnum(target_pane)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end

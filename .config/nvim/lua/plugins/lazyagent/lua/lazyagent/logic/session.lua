@@ -34,9 +34,120 @@ local function send_interrupts_before_kill(agent_name, pane_id, backend_mod, syn
   end
   for i = 1, attempts do
     pcall(backend_mod.send_keys, pane_id, { key })
-    -- short blocking wait so the target process can process the signal
-    pcall(vim.wait, interval_ms)
+    -- When non-sync, use vim.wait with event processing so MCP server can still
+    -- receive 'done' signals if the CLI reacts to C-c by finishing gracefully.
+    pcall(vim.wait, interval_ms, function() return false end, 10, not sync)
   end
+end
+
+-- Wait for the pane's foreground process to exit (best-effort).
+-- Returns true if the process exited within timeout_ms; false otherwise.
+local function wait_for_pane_process_exit(agent_name, pane_id, backend_mod, timeout_ms, sync)
+  timeout_ms = timeout_ms or ((state.opts and state.opts.post_interrupt_wait_ms) or 2000)
+  local poll_interval = math.max(40, ((state.opts and state.opts.interrupt_interval_ms) or 40))
+  local elapsed = 0
+  if not pane_id or pane_id == "" then return false end
+
+  local function pane_process_alive()
+    -- Try backend-specific pid function first
+    if backend_mod and type(backend_mod.get_pane_pid) == "function" then
+      local ok, pid = pcall(backend_mod.get_pane_pid, pane_id)
+      if ok and pid and tonumber(pid) then
+        local ok_stat, stat = pcall(vim.loop.fs_stat, "/proc/" .. tostring(pid))
+        if ok_stat and stat then
+          return true
+        else
+          return false
+        end
+      end
+    end
+    -- Fallback: if pane no longer exists, treat as process exited
+    if backend_mod and type(backend_mod.pane_exists) == "function" then
+      local ok2, exists = pcall(backend_mod.pane_exists, pane_id)
+      if not ok2 then return true end
+      return exists == true
+    end
+    -- Unknown backend: assume still alive to avoid skipping kill
+    return true
+  end
+
+  -- If pane already gone, consider process exited
+  if backend_mod and type(backend_mod.pane_exists) == "function" then
+     local ok0, exists0 = pcall(backend_mod.pane_exists, pane_id)
+     if not ok0 or not exists0 then return true end
+  end
+
+  while elapsed < timeout_ms do
+    local alive = true
+    local ok, res = pcall(pane_process_alive)
+    if ok then alive = res else alive = true end
+    if not alive then return true end
+    -- Use vim.wait with event processing (fourth arg true) when NOT in sync-exit mode,
+    -- allowing the MCP server to receive 'notify_done' while we are polling.
+    pcall(vim.wait, poll_interval, function() return false end, 10, not sync)
+    elapsed = elapsed + poll_interval
+  end
+
+  return false
+end
+
+local function maybe_kill_pane(agent_name, pane_id, backend_mod, use_sync)
+  -- Send interrupts and wait briefly for the agent process to exit. If it does not
+  -- exit within the configured timeout, fallback to killing the pane (sync if
+  -- requested and supported by the backend).
+  pcall(send_interrupts_before_kill, agent_name, pane_id, backend_mod, use_sync)
+  local ok_wait, exited = pcall(wait_for_pane_process_exit, agent_name, pane_id, backend_mod, (state.opts and state.opts.post_interrupt_wait_ms) or 2000, use_sync)
+  if not ok_wait or not exited then
+    if use_sync and backend_mod and type(backend_mod.kill_pane_sync) == "function" then
+      backend_mod.kill_pane_sync(pane_id)
+    elseif backend_mod and type(backend_mod.kill_pane) == "function" then
+      backend_mod.kill_pane(pane_id)
+    end
+  end
+end
+
+-- Wait for agent to reach "idle" status before proceeding with closing it.
+-- @param agent_name (string) Agent name.
+-- @param on_ready (function) Callback to invoke when idle or timeout.
+local function wait_for_idle_before_close(agent_name, on_ready)
+  local s = state.sessions[agent_name]
+  if not s then
+    on_ready()
+    return
+  end
+
+  -- If the pane/process has already exited, we don't need to wait for idle status.
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+  if backend_mod and type(backend_mod.pane_exists) == "function" then
+    local ok, exists = pcall(backend_mod.pane_exists, s.pane_id)
+    if ok and not exists then
+      on_ready()
+      return
+    end
+  end
+
+  if s.agent_status ~= "thinking" then
+    on_ready()
+    return
+  end
+
+  -- Max 5 seconds for graceful completion before we give up and interrupt it.
+  local timeout = 5000
+  local timer = vim.loop.new_timer()
+  local done = false
+
+  local function finish()
+    if done then return end
+    done = true
+    if timer then
+      pcall(function() timer:stop(); timer:close() end)
+    end
+    s.on_idle_callback = nil
+    on_ready()
+  end
+
+  s.on_idle_callback = finish
+  timer:start(timeout, 0, vim.schedule_wrap(finish))
 end
 
 local function compute_launch_cmd(agent_cfg)
@@ -90,6 +201,8 @@ local function maybe_disable_watchers()
     end
   end
 end
+
+M.wait_for_idle_before_close = wait_for_idle_before_close
 
 ---
 -- Ensures a backend session (e.g., a tmux pane) exists for the agent.
@@ -615,43 +728,49 @@ function M.close_session(agent_name)
     return
   end
 
-  local agent_cfg = agent_logic.get_interactive_agent(agent_name)
-  local save_conv = (agent_cfg and agent_cfg.save_conversation_on_close) or (state.opts and state.opts.save_conversation_on_close)
-  local open_conv = (agent_cfg and agent_cfg.open_conversation_on_save) or (state.opts and state.opts.open_conversation_on_save)
+  -- Wait for the agent to finish its current turn before killing it.
+  -- This ensures any pending file edits or tool calls finish, and the final capture is complete.
+  wait_for_idle_before_close(agent_name, function()
+    -- Re-fetch session state as it might have changed during wait
+    local s2 = state.sessions[agent_name]
+    if not s2 or not s2.pane_id or s2.pane_id == "" then return end
 
-  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+    local agent_cfg = agent_logic.get_interactive_agent(agent_name)
+    local save_conv = (agent_cfg and agent_cfg.save_conversation_on_close) or (state.opts and state.opts.save_conversation_on_close)
+    local open_conv = (agent_cfg and agent_cfg.open_conversation_on_save) or (state.opts and state.opts.open_conversation_on_save)
 
-  if save_conv and backend_mod and type(backend_mod.capture_pane) == "function" then
-    M.capture_and_save_session(agent_name, open_conv, function()
-      local _, backend_mod2 = backend_logic.resolve_backend_for_agent(agent_name, nil)
-      if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
-        pcall(send_interrupts_before_kill, agent_name, s.pane_id, backend_mod2, false)
-        backend_mod2.kill_pane(s.pane_id)
-      end
-      state.sessions[agent_name] = nil
-      maybe_disable_watchers()
-      cleanup_agent_external_configs(agent_name)
-    end)
-    return
-  end
+    local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
 
-  if backend_mod and type(backend_mod.kill_pane) == "function" then
-    pcall(send_interrupts_before_kill, agent_name, s.pane_id, backend_mod, false)
-    backend_mod.kill_pane(s.pane_id)
-  end
-  if backend_mod and type(backend_mod.clear_pane_config) == "function" then
-    backend_mod.clear_pane_config(s.pane_id)
-  end
-  state.sessions[agent_name] = nil
-  persistence.remove_session(agent_name, s.cwd)
-  maybe_disable_watchers()
+    if save_conv and backend_mod and type(backend_mod.capture_pane) == "function" then
+      M.capture_and_save_session(agent_name, open_conv, function()
+        local _, backend_mod2 = backend_logic.resolve_backend_for_agent(agent_name, nil)
+        if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
+          maybe_kill_pane(agent_name, s2.pane_id, backend_mod2, false)
+        end
+        state.sessions[agent_name] = nil
+        maybe_disable_watchers()
+        cleanup_agent_external_configs(agent_name)
+      end)
+      return
+    end
 
-  -- Cursor: remove lazyagent from ~/.cursor/mcp.json and ~/.cursor/hooks.json on session close
-  cleanup_agent_external_configs(agent_name)
+    if backend_mod and type(backend_mod.kill_pane) == "function" then
+      maybe_kill_pane(agent_name, s2.pane_id, backend_mod, false)
+    end
+    if backend_mod and type(backend_mod.clear_pane_config) == "function" then
+      backend_mod.clear_pane_config(s2.pane_id)
+    end
+    state.sessions[agent_name] = nil
+    persistence.remove_session(agent_name, s2.cwd)
+    maybe_disable_watchers()
 
-  if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
-    pcall(backend_mod.cleanup_if_idle)
-  end
+    -- Cursor: remove lazyagent from ~/.cursor/mcp.json and ~/.cursor/hooks.json on session close
+    cleanup_agent_external_configs(agent_name)
+
+    if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
+      pcall(backend_mod.cleanup_if_idle)
+    end
+  end)
 end
 
 ---
@@ -720,11 +839,9 @@ function M.close_all_sessions(sync)
           end
         else
           if backend_mod and type(backend_mod.kill_pane_sync) == "function" then
-             pcall(send_interrupts_before_kill, name, s.pane_id, backend_mod, true)
-             backend_mod.kill_pane_sync(s.pane_id)
+             maybe_kill_pane(name, s.pane_id, backend_mod, true)
           elseif backend_mod and type(backend_mod.kill_pane) == "function" then
-             pcall(send_interrupts_before_kill, name, s.pane_id, backend_mod, false)
-             backend_mod.kill_pane(s.pane_id)
+             maybe_kill_pane(name, s.pane_id, backend_mod, false)
           end
           persistence.remove_session(name, s.cwd)
         end
@@ -734,15 +851,13 @@ function M.close_all_sessions(sync)
           M.capture_and_save_session(name, open_conv, function()
             local _, backend_mod2 = backend_logic.resolve_backend_for_agent(name, nil)
             if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
-              pcall(send_interrupts_before_kill, name, s.pane_id, backend_mod2, false)
-              backend_mod2.kill_pane(s.pane_id)
+              maybe_kill_pane(name, s.pane_id, backend_mod2, false)
             end
             state.sessions[name] = nil
           end)
         else
           if backend_mod and type(backend_mod.kill_pane) == "function" then
-            pcall(send_interrupts_before_kill, name, s.pane_id, backend_mod, false)
-            backend_mod.kill_pane(s.pane_id)
+            maybe_kill_pane(name, s.pane_id, backend_mod, false)
           end
           state.sessions[name] = nil
         end
