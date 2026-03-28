@@ -280,7 +280,7 @@ function M.setup(group)
     vim.keymap.set('n', 'p', function() prune_worktrees(b) end, { buffer = b })
     vim.keymap.set('n', 'a', function() add_worktree(b) end, { buffer = b })
     vim.keymap.set('n', 'R', function() refresh_worktree_list(b) end, { buffer = b })
-    vim.keymap.set('n', 'q', ':bd<CR>', { buffer = b, nowait = true })
+    vim.keymap.set('n', 'q', ':bd<CR>', { buffer = b, nowait = true, silent = true })
   end })
 end
 

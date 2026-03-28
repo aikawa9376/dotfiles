@@ -5,55 +5,73 @@ return {
     local lualine = require("lualine")
 
     --------------------------------------------------------------------
-    -- 1. Git情報キャッシュ (Git Info Cache)
+    -- 1. Git情報非同期キャッシュ (Git Info Cache)
     --------------------------------------------------------------------
     local git_cache = {}
 
-    local function update_git_cache()
-      local bufnr = vim.api.nvim_get_current_buf()
+    local function update_git_cache(bufnr)
+      bufnr = bufnr or vim.api.nvim_get_current_buf()
+      if not vim.api.nvim_buf_is_valid(bufnr) then return end
 
-      -- Check if inside work tree
-      vim.fn.system('git rev-parse --is-inside-work-tree 2>/dev/null')
-      local is_git = (vim.v.shell_error == 0)
-
-      if not is_git then
+      local bufname = vim.api.nvim_buf_get_name(bufnr)
+      if bufname == "" or bufname:match("^%a+://") then
         git_cache[bufnr] = { is_git = false }
         return
       end
 
-      -- Get branch
-      local branch = vim.trim(vim.fn.system('git branch --show-current 2>/dev/null'))
+      local dir = vim.fn.fnamemodify(bufname, ":h")
+      if vim.fn.isdirectory(dir) == 0 then dir = vim.fn.getcwd() end
 
-      -- Get toplevel and icon info
-      local toplevel = vim.trim(vim.fn.system('git rev-parse --show-toplevel 2>/dev/null'))
-      local is_worktree = toplevel:match("/%.worktree/") ~= nil
+      -- 1つのコマンドで必要な情報を一括取得
+      local cmd = string.format("git -C %s rev-parse --is-inside-work-tree --show-toplevel --git-common-dir --abbrev-ref HEAD 2>/dev/null", vim.fn.shellescape(dir))
+      local output = vim.fn.system(cmd)
 
-      -- Get project name from common dir
-      local name = vim.fn.fnamemodify(toplevel, ":t")
-      local common_dir = vim.trim(vim.fn.system('git rev-parse --git-common-dir 2>/dev/null'))
-      if vim.v.shell_error == 0 and common_dir ~= "" then
-        local abs_common = vim.fn.fnamemodify(common_dir, ':p'):gsub("/+$", "")
-        local main_root = vim.fn.fnamemodify(abs_common, ':h')
-        name = vim.fn.fnamemodify(main_root, ":t")
+      if vim.v.shell_error ~= 0 then
+        git_cache[bufnr] = { is_git = false }
+      else
+        local lines = vim.split(output, "\n", { trimempty = true })
+        if #lines >= 4 then
+          local toplevel = lines[2]
+          local common_dir = lines[3]
+
+          -- common-dir ( .git の場所 ) を基準にプロジェクト名を特定
+          local abs_common = common_dir
+          if not (common_dir:sub(1,1) == "/" or common_dir:match("^%a:")) then
+            abs_common = dir:gsub("/+$", "") .. "/" .. common_dir
+          end
+
+          -- 末尾のスラッシュを除去して親ディレクトリを取得
+          local repo_root = vim.fn.fnamemodify(vim.fn.fnamemodify(abs_common, ":p"):gsub("/+$", ""), ":h")
+
+          git_cache[bufnr] = {
+            is_git = lines[1] == "true",
+            branch = lines[4],
+            is_worktree = toplevel:match("/%.worktree/") ~= nil,
+            project_name = vim.fn.fnamemodify(repo_root, ":t"),
+          }
+        else
+          git_cache[bufnr] = { is_git = false }
+        end
       end
 
-      git_cache[bufnr] = {
-        is_git = true,
-        branch = branch,
-        is_worktree = is_worktree,
-        project_name = name,
-      }
+      vim.schedule(function() lualine.refresh() end)
     end
 
-    -- Update cache on important events
-    vim.api.nvim_create_autocmd({ "BufEnter", "FocusGained", "DirChanged", "BufWritePost" }, {
-      callback = function()
-        update_git_cache()
-      end,
+    -- イベントに応じてキャッシュを更新
+    vim.api.nvim_create_autocmd({ "BufEnter", "FocusGained", "DirChanged" }, {
+      callback = function(ev) update_git_cache(ev.buf) end,
     })
 
+    -- バッファ削除時にキャッシュをクリア
+    vim.api.nvim_create_autocmd("BufDelete", {
+      callback = function(ev) git_cache[ev.buf] = nil end,
+    })
+
+    -- 起動時の初期更新
+    update_git_cache()
+
     --------------------------------------------------------------------
-    -- 2. 色定義 (Color Definitions)
+    -- 2. 色定義
     --------------------------------------------------------------------
     local colors = {
       bg = "none",
@@ -73,56 +91,23 @@ return {
     vim.api.nvim_set_hl(0, "LualineGitChanged", { fg = colors.yellow, bg = colors.bg, bold = true })
     vim.api.nvim_set_hl(0, "LualineGitRemoved", { fg = colors.red,    bg = colors.bg, bold = true })
 
-    --------------------------------------------------------------------
-    -- 3. 表示条件 (Conditions)
-    --------------------------------------------------------------------
     local conditions = {
-      buffer_not_empty = function()
-        return vim.fn.empty(vim.fn.expand("%:t")) ~= 1
-      end,
-      hide_in_width = function()
-        return vim.fn.empty(vim.fn.expand("%:t")) ~= 1 and vim.fn.winwidth(0) > 80
-      end,
-      obsession = function()
-        return vim.fn.winwidth(0) >= 80 and vim.fn.exists("*ObsessionStatus") == 1
-      end,
+      buffer_not_empty = function() return vim.fn.empty(vim.fn.expand("%:t")) ~= 1 end,
+      hide_in_width = function() return vim.fn.winwidth(0) > 80 end,
+      obsession = function() return vim.fn.winwidth(0) >= 80 and vim.fn.exists("*ObsessionStatus") == 1 end,
       project = function()
-        if vim.fn.winwidth(0) < 80 then return false end
         local bufnr = vim.api.nvim_get_current_buf()
-        return git_cache[bufnr] ~= nil and git_cache[bufnr].project_name ~= nil
+        return vim.fn.winwidth(0) > 80 and git_cache[bufnr] and git_cache[bufnr].project_name ~= nil
       end,
       check_git_workspace = function()
-        if vim.fn.winwidth(0) < 80 then return false end
         local bufnr = vim.api.nvim_get_current_buf()
-        return git_cache[bufnr] and git_cache[bufnr].is_git
+        return vim.fn.winwidth(0) > 80 and git_cache[bufnr] and git_cache[bufnr].is_git
       end,
-      recording = function()
-        return vim.fn.reg_recording() ~= ""
-      end,
+      recording = function() return vim.fn.reg_recording() ~= "" end,
     }
 
     --------------------------------------------------------------------
-    -- 4. ヘルパー関数 (Helper Functions)
-    --------------------------------------------------------------------
-    local function changeName(name)
-      if name == "" or name == nil then return "" end
-      if string.find(name, "term") then return "TERM"
-      elseif string.find(name, "defx") then return "DEFX"
-      elseif string.find(name, "vista") then return "Symbols" end
-      return vim.fn.fnamemodify(name, ":.")
-    end
-
-    local function format_file_size(file)
-      local size = vim.fn.getfsize(file)
-      if size <= 0 then return "" end
-      local sufixes = { "b", "k", "m", "g" }
-      local i = 1
-      while size > 1024 do size = size / 1024; i = i + 1 end
-      return string.format("%.1f%s", size, sufixes[i])
-    end
-
-    --------------------------------------------------------------------
-    -- 5. Lualine 本体設定 (Lualine Setup)
+    -- 3. Lualine Setup
     --------------------------------------------------------------------
     lualine.setup({
       options = {
@@ -134,15 +119,9 @@ return {
         },
         globalstatus = true,
       },
-
       sections = {
-        lualine_a = {},
-        lualine_b = {},
-        lualine_y = {},
-        lualine_z = {},
-
+        lualine_a = {}, lualine_b = {}, lualine_y = {}, lualine_z = {},
         lualine_c = {
-          -- 1. モード
           {
             function()
               local mode_color = {
@@ -159,8 +138,6 @@ return {
             left_padding = 0,
             cond = conditions.hide_in_width,
           },
-
-          -- 2. Gitブランチ
           {
             function()
               local bufnr = vim.api.nvim_get_current_buf()
@@ -169,56 +146,40 @@ return {
             icon = "",
             cond = conditions.check_git_workspace,
           },
-
-          -- 3. プロジェクト名
           {
             function()
               local bufnr = vim.api.nvim_get_current_buf()
               local cache = git_cache[bufnr]
               if not cache or not cache.project_name then return "" end
-              local icon = cache.is_worktree and " " or " "
-              return icon .. cache.project_name
+              return (cache.is_worktree and "󰙅 " or " ") .. cache.project_name
             end,
             cond = conditions.project,
           },
-
-          -- 4. ファイル名
           {
             function()
-              local filename = changeName(vim.fn.expand("%="))
-              if filename == "" then return "" end
+              local name = vim.fn.expand("%=")
+              if name == "" then return "" end
+              if string.find(name, "term") then name = "TERM"
+              elseif string.find(name, "defx") then name = "DEFX"
+              elseif string.find(name, "vista") then name = "Symbols"
+              else name = vim.fn.fnamemodify(name, ":.") end
               local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
-              return (icon or "") .. " " .. filename
+              return (icon or "") .. " " .. name
             end,
             cond = conditions.buffer_not_empty,
           },
-
-          -- 5. ファイルサイズ
-          {
-            function()
-              local file = vim.fn.expand("%:p")
-              return (string.len(file) > 0) and format_file_size(file) or ""
-            end,
-            cond = conditions.hide_in_width,
-          },
-
-          -- 6. Git Diff
           {
             function()
               local gitsigns = vim.b.gitsigns_status_dict
+              if not gitsigns then return "" end
               local parts = {}
-              if gitsigns then
-                if gitsigns.added and gitsigns.added > 0 then parts[#parts+1] = "%#LualineGitAdded# " .. gitsigns.added .. "%*" end
-                if gitsigns.changed and gitsigns.changed > 0 then parts[#parts+1] = "%#LualineGitChanged# " .. gitsigns.changed .. "%*" end
-                if gitsigns.removed and gitsigns.removed > 0 then parts[#parts+1] = "%#LualineGitRemoved# " .. gitsigns.removed .. "%*" end
-                if #parts > 0 then return table.concat(parts, " ") end
-              end
-              return ""
+              if gitsigns.added and gitsigns.added > 0 then parts[#parts+1] = "%#LualineGitAdded# " .. gitsigns.added .. "%*" end
+              if gitsigns.changed and gitsigns.changed > 0 then parts[#parts+1] = "%#LualineGitChanged# " .. gitsigns.changed .. "%*" end
+              if gitsigns.removed and gitsigns.removed > 0 then parts[#parts+1] = "%#LualineGitRemoved# " .. gitsigns.removed .. "%*" end
+              return table.concat(parts, " ")
             end,
             cond = conditions.hide_in_width,
           },
-
-          -- 7. LSP Diagnostics
           {
             "diagnostics",
             sources = { "nvim_diagnostic" },
@@ -227,8 +188,6 @@ return {
             color_warn = colors.yellow,
             color_info = colors.cyan,
           },
-
-          -- 8. conflict
           {
             function()
               local ok, conflict = pcall(require, "lazyconflict")
@@ -237,7 +196,6 @@ return {
             color = { fg = "#ff2f87" },
           }
         },
-
         lualine_x = {
           { function() return vim.fn.reg_recording() .. " recording" end, cond = conditions.recording, color = { fg = "#ff9e64" } },
           { "fileformat", symbols = { unix = "", dos = "", mac = "" } },
@@ -262,15 +220,14 @@ return {
           { function() return vim.fn.ObsessionStatus("", "") end, cond = conditions.obsession },
         },
       },
-
       inactive_sections = {
         lualine_a = {
           {
             function()
-              local filename = changeName(vim.fn.expand("%="))
-              if filename == "" then return "" end
+              local name = vim.fn.expand("%=")
+              if name == "" then return "" end
               local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)
-              return (icon or "") .. " " .. filename
+              return (icon or "") .. " " .. vim.fn.fnamemodify(name, ":.")
             end,
             cond = conditions.buffer_not_empty,
           },
