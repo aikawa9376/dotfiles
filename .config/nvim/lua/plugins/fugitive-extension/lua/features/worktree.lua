@@ -107,7 +107,7 @@ local function apply_highlights(bufnr)
       local is_primary = root_abs and entry.path and vim.fn.fnamemodify(entry.path, ':p') == root_abs
       local head = entry.head and entry.head:sub(1, 7)
       local branch = entry.branch and (entry.branch ~= '' and entry.branch or '(detached)')
-      local flag_str = line:match('%[(.+)%]') -- locked,prunable,bare
+      local flag_str = line:match('%[(.+)%]')
 
       if is_primary and path then
         add_range(line, path, 'DiagnosticOk', idx)
@@ -119,19 +119,9 @@ local function apply_highlights(bufnr)
         add_range(line, head, 'Number', idx)
       end
       if flag_str then
-        -- highlight individual flags
         for flag in flag_str:gmatch('[^,]+') do
-          local hl = nil
-          if flag:match('locked') then
-            hl = 'DiagnosticWarn'
-          elseif flag:match('prunable') then
-            hl = 'DiagnosticHint'
-          elseif flag:match('bare') then
-            hl = 'DiagnosticInfo'
-          end
-          if hl then
-            add_range(line, flag, hl, idx)
-          end
+          local hl = flag:match('locked') and 'DiagnosticWarn' or (flag:match('prunable') and 'DiagnosticHint' or 'DiagnosticInfo')
+          add_range(line, flag, hl, idx)
         end
       end
     end
@@ -180,6 +170,7 @@ local function open_worktree_list()
   local bufnr = vim.api.nvim_get_current_buf()
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
+  vim.api.nvim_set_option_value('buflisted', false, { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.bo[bufnr].filetype = 'fugitiveworktree'
@@ -199,19 +190,131 @@ local function entry_at_cursor(bufnr)
   return entries[idx]
 end
 
-local function open_worktree(entry, target)
+local function get_primary_worktree(any_path)
+  local output = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(any_path) .. ' worktree list --porcelain')
+  if #output > 0 and output[1]:match('^worktree ') then
+    return vim.fn.fnamemodify(output[1]:sub(10), ':p')
+  end
+  return nil
+end
+
+local function get_default_branch(repo_path)
+  local res = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(repo_path) .. ' symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null')
+  if vim.v.shell_error == 0 and #res > 0 then
+    local branch = res[1]:gsub('^origin/', '')
+    if branch ~= '' then return branch end
+  end
+  for _, b in ipairs({ 'main', 'master' }) do
+    vim.fn.system('git -C ' .. vim.fn.shellescape(repo_path) .. ' rev-parse --verify --quiet ' .. b)
+    if vim.v.shell_error == 0 then return b end
+  end
+  return 'main'
+end
+
+local function perform_sync(base_dir, target_head, target_path)
+  local base_dir_abs = vim.fn.fnamemodify(base_dir, ':p')
+  local target_path_abs = vim.fn.fnamemodify(target_path, ':p')
+  local is_target_primary = target_path_abs == base_dir_abs
+
+  -- Stash changes in primary if any
+  local status = vim.fn.system('git -C ' .. vim.fn.shellescape(base_dir) .. ' status --porcelain')
+  if status ~= '' then
+    vim.fn.system('git -C ' .. vim.fn.shellescape(base_dir) .. ' stash push -u -m "Auto-stash before manual sync"')
+    vim.notify("Primary worktree: changes stashed.", vim.log.levels.INFO)
+  end
+
+  if is_target_primary then
+    -- Reset primary to default branch
+    local def_branch = get_default_branch(base_dir)
+    vim.fn.system('git -C ' .. vim.fn.shellescape(base_dir) .. ' checkout ' .. vim.fn.shellescape(def_branch))
+    vim.notify("Primary worktree synced to default branch: " .. def_branch, vim.log.levels.INFO)
+  else
+    -- Sync primary to target's HEAD (detached)
+    vim.fn.system('git -C ' .. vim.fn.shellescape(base_dir) .. ' checkout --detach ' .. vim.fn.shellescape(target_head))
+    vim.notify("Primary worktree synced to: " .. target_head:sub(1,7), vim.log.levels.INFO)
+  end
+end
+
+local function sync_primary_to_entry(bufnr)
+  local entry = entry_at_cursor(bufnr)
+  if not entry or not entry.path then return end
+
+  local base_dir = get_primary_worktree(entry.path)
+  if not base_dir then
+    vim.notify("Could not identify primary worktree.", vim.log.levels.ERROR)
+    return
+  end
+
+  perform_sync(base_dir, entry.head, entry.path)
+end
+
+function M.sync_current_worktree_to_primary()
+  local work_tree = get_work_tree()
+  if not work_tree then
+    vim.notify("Not in a git repository", vim.log.levels.ERROR)
+    return
+  end
+
+  local base_dir = get_primary_worktree(work_tree)
+  if not base_dir then
+    vim.notify("Could not identify primary worktree.", vim.log.levels.ERROR)
+    return
+  end
+
+  local head = vim.fn.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse HEAD'))
+  perform_sync(base_dir, head, work_tree)
+end
+
+local function get_session_name_for_path(path)
+  local branch = vim.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(path) .. ' branch --show-current'))
+  local name = vim.fn.fnamemodify(path, ':p'):gsub('/$', '')
+  if vim.v.shell_error == 0 and branch ~= "" then
+    return name .. '-' .. branch
+  else
+    return name
+  end
+end
+
+local function open_worktree(entry, _)
   if not entry or not entry.path then
     return
   end
 
-  if target == 'tab' then
-    vim.cmd('tabnew')
-    vim.cmd('tcd ' .. vim.fn.fnameescape(entry.path))
-  else
-    vim.cmd('lcd ' .. vim.fn.fnameescape(entry.path))
+  local resession_ok, resession = pcall(require, "resession")
+  
+  -- 1. Save current session before switching
+  if resession_ok then
+    local current_session = get_session_name_for_path(vim.fn.getcwd())
+    pcall(resession.save, current_session, { dir = "dirsession", notify = false })
   end
 
-  vim.cmd('G')
+  local target_path = vim.fn.fnamemodify(entry.path, ':p'):gsub('/$', '')
+  local target_session = get_session_name_for_path(target_path)
+
+  -- 2. Clear all buffers to get a "fresh" state
+  vim.cmd('silent! %bwipeout!')
+
+  -- 3. Global CD to the new worktree
+  vim.cmd('cd ' .. vim.fn.fnameescape(target_path))
+
+  -- 4. Load session if exists, otherwise start with Fugitive
+  local loaded = false
+  if resession_ok then
+    local sessions = resession.list({ dir = "dirsession" })
+    local exists = false
+    for _, s in ipairs(sessions) do
+      if s == target_session then exists = true; break end
+    end
+
+    if exists then
+      local ok = pcall(resession.load, target_session, { dir = "dirsession", notify = false })
+      loaded = ok
+    end
+  end
+
+  if not loaded then
+    vim.cmd('G')
+  end
 end
 
 local function remove_worktree(bufnr, force)
@@ -295,62 +398,65 @@ local function add_worktree(bufnr)
     return
   end
 
-  local current_branch = vim.fn.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(root) .. ' branch --show-current'))
-  local default_path = vim.fn.fnamemodify(root .. '/..', ':p')
-  default_path = default_path .. (current_branch ~= '' and current_branch or 'worktree')
+  local primary_root = get_primary_worktree(root) or root
+  local project_name = vim.fn.fnamemodify(primary_root, ':t')
+  local worktree_base = vim.fn.expand('~/.worktree/' .. project_name)
 
-  vim.ui.input({ prompt = 'Worktree path: ', default = default_path }, function(path)
-    if not path or path == '' then return end
-    vim.ui.input({ prompt = 'Branch (existing or new): ', default = current_branch }, function(branch)
-      if not branch or branch == '' then
-        vim.notify("Branch is required", vim.log.levels.WARN)
-        return
-      end
+  vim.ui.input({ prompt = 'Worktree name (branch name): ' }, function(name)
+    if not name or name == '' then return end
+    local path = worktree_base .. '/' .. name
+    local branch = name
 
-      vim.fn.system('git -C ' .. vim.fn.shellescape(root) .. ' rev-parse --verify --quiet ' .. vim.fn.shellescape('refs/heads/' .. branch))
-      local exists = vim.v.shell_error == 0
+    vim.fn.system('git -C ' .. vim.fn.shellescape(root) .. ' rev-parse --verify --quiet ' .. vim.fn.shellescape('refs/heads/' .. branch))
+    local exists = vim.v.shell_error == 0
 
-      local cmd_parts = {
-        'git',
-        '-C',
-        vim.fn.shellescape(root),
-        'worktree',
-        'add',
-        vim.fn.shellescape(path),
-      }
+    local cmd_parts = { 'git', '-C', vim.fn.shellescape(root), 'worktree', 'add' }
 
-      if exists then
-        table.insert(cmd_parts, vim.fn.shellescape(branch))
-      else
-        local start_point = vim.fn.input('Start point (default HEAD): ')
-        vim.cmd('redraw')
-        if not start_point or start_point == '' then
-          start_point = 'HEAD'
-        end
-        table.insert(cmd_parts, '-b ' .. vim.fn.shellescape(branch))
-        table.insert(cmd_parts, vim.fn.shellescape(start_point))
-      end
+    if exists then
+      table.insert(cmd_parts, vim.fn.shellescape(path))
+      table.insert(cmd_parts, vim.fn.shellescape(branch))
+    else
+      table.insert(cmd_parts, '-b ' .. vim.fn.shellescape(branch))
+      table.insert(cmd_parts, vim.fn.shellescape(path))
+      table.insert(cmd_parts, 'HEAD')
+    end
 
-      local cmd = table.concat(cmd_parts, ' ')
-      local output = vim.fn.system(cmd)
-      if vim.v.shell_error ~= 0 then
-        vim.notify("Failed to add worktree: " .. vim.fn.trim(output), vim.log.levels.ERROR)
-        return
-      end
+    local cmd = table.concat(cmd_parts, ' ')
+    local output = vim.fn.system(cmd)
+    if vim.v.shell_error ~= 0 then
+      vim.notify("Failed to add worktree: " .. vim.fn.trim(output), vim.log.levels.ERROR)
+      return
+    end
 
-      vim.notify("Added worktree at " .. vim.fn.fnamemodify(path, ':~'), vim.log.levels.INFO)
-      if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-        refresh_worktree_list(bufnr)
-      end
-    end)
+    vim.notify(string.format("Added worktree '%s' at %s", branch, vim.fn.fnamemodify(path, ':~')), vim.log.levels.INFO)
+    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      refresh_worktree_list(bufnr)
+    end
   end)
 end
+function M.get_summary(work_tree)
+  local entries = parse_worktrees(work_tree)
+  if #entries <= 1 then return nil end
+
+  local lines = {}
+  table.insert(lines, 'Worktrees: (' .. tostring(#entries) .. ')')
+  for _, wt in ipairs(entries) do
+    local branch = wt.branch and wt.branch ~= '' and wt.branch or '(detached)'
+    local head = wt.head and wt.head:sub(1, 7) or '???????'
+    local path = vim.fn.fnamemodify(wt.path, ':~')
+    -- Left aligned for status summary
+    table.insert(lines, string.format('%s  %s  %s', path, branch, head))
+  end
+  return lines
+end
+
 
 local function show_worktree_help()
   help.show('Worktree buffer keys', {
     'g?     show this help',
     '<CR>   open worktree in tab (:tcd)',
     'o      open worktree in this window (:lcd)',
+    'ws     sync primary worktree to this entry',
     'a      add worktree',
     'X      remove worktree (prompt/force as needed)',
     'p      prune worktrees',
@@ -365,6 +471,12 @@ function M.setup(group)
     desc = "Open git worktree list",
   })
 
+  vim.api.nvim_create_user_command('GworktreeSync', function()
+    M.sync_current_worktree_to_primary()
+  end, {
+    desc = "Sync primary worktree to current worktree state",
+  })
+
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
     pattern = 'fugitive',
@@ -372,6 +484,10 @@ function M.setup(group)
       vim.keymap.set('n', 'W', function()
         vim.cmd('Gworktree')
       end, { buffer = ev.buf, silent = true, desc = "Open worktree list" })
+
+      vim.keymap.set('n', 'gs', function()
+        M.sync_current_worktree_to_primary()
+      end, { buffer = ev.buf, silent = true, desc = "Sync primary worktree to current" })
     end,
   })
 
@@ -396,6 +512,10 @@ function M.setup(group)
       vim.keymap.set('n', 'o', function()
         open_worktree(entry_at_cursor(bufnr), 'window')
       end, { buffer = bufnr, silent = true, desc = "Open worktree in this window" })
+
+      vim.keymap.set('n', 'gs', function()
+        sync_primary_to_entry(bufnr)
+      end, { buffer = bufnr, silent = true, desc = "Sync primary to selected entry" })
 
       vim.keymap.set('n', 'X', function()
         remove_worktree(bufnr, false)

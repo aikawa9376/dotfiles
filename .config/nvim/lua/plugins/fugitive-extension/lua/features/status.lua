@@ -35,11 +35,49 @@ local function stash_ref_from_line(line)
   return line:match('stash@%{%d+%}')
 end
 
--- Find the insertion point (after the last non-empty line) for the Stashes block.
-local function find_insert_point(lines)
-  -- Insert stash section at the bottom of the status buffer, after the last
-  -- non-empty line. This ensures the stash block never ends up inserted in
-  -- the middle of a section (e.g., between the Unstaged header and files).
+-- Find and remove all custom sections (Worktrees and Stashes) from the buffer.
+local function remove_custom_sections(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local ranges = {}
+  local i = 1
+  while i <= #lines do
+    local line = lines[i]
+    if line:match('^Worktrees:') or line:match('^Stashes:') then
+      local start_idx = i
+      -- Include one blank line above the header if it exists
+      if start_idx > 1 and lines[start_idx - 1] == '' then
+        start_idx = start_idx - 1
+      end
+
+      i = i + 1
+      -- Collect all following lines that belong to this section or are trailing blanks
+      while i <= #lines do
+        local l = lines[i]
+        if l == '' then
+          i = i + 1
+        elseif line:match('^Worktrees:') and l:match('^[%~%/]') then
+          i = i + 1
+        elseif line:match('^Stashes:') and l:match('^%s+stash@') then
+          i = i + 1
+        else
+          break
+        end
+      end
+      table.insert(ranges, { start_idx, i - 1 })
+    else
+      i = i + 1
+    end
+  end
+
+  -- Delete ranges in reverse order to keep indices valid
+  for r = #ranges, 1, -1 do
+    vim.api.nvim_buf_set_lines(bufnr, ranges[r][1] - 1, ranges[r][2], false, {})
+  end
+end
+
+-- Find the insertion point (after the last non-empty line) for the dynamic blocks.
+local function find_insert_point(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   for i = #lines, 1, -1 do
     local l = lines[i]
     if l and l ~= '' then
@@ -49,17 +87,19 @@ local function find_insert_point(lines)
   return #lines + 1
 end
 
--- Ensure stash section exists and is updated for the provided buffer.
--- Accepts a namespace id (ns_stash) for stash extmarks/highlight updates.
-local function ensure_stash_section(bufnr, ns_stash)
+-- Main function to refresh all custom sections (Worktree summary and Stashes)
+local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
 
-  local stash_list = get_stash_list()
-  local cur_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local work_tree = get_fugitive_work_tree()
+  if not work_tree then return end
 
-  -- Avoid "W10: Warning: Changing a readonly file" messages by temporarily
-  -- making buffer writable (and clearing readonly) while we update the
-  -- content, and restore the original flags before returning.
+  -- Data collection
+  local worktree_mod = require("features.worktree")
+  local worktree_summary = worktree_mod.get_summary(work_tree)
+  local stash_list = get_stash_list()
+
+  -- Buffer flags
   local prev_modifiable = vim.bo[bufnr].modifiable
   local prev_readonly = vim.bo[bufnr].readonly
   if not prev_modifiable or prev_readonly then
@@ -67,121 +107,72 @@ local function ensure_stash_section(bufnr, ns_stash)
     vim.bo[bufnr].readonly = false
   end
 
-  -- find existing header if present
-  local header_idx = nil
-  for i, ln in ipairs(cur_lines) do
-    if ln:match('^Stashes:') then
-      header_idx = i
-      break
-    end
+  -- Step 1: Clean up existing ones
+  remove_custom_sections(bufnr)
+
+  -- Step 2: Build new block
+  local final_lines = {}
+  
+  -- Add Worktrees if any
+  if worktree_summary and #worktree_summary > 0 then
+    table.insert(final_lines, '') -- Leading spacer
+    for _, l in ipairs(worktree_summary) do table.insert(final_lines, l) end
   end
 
-  if not stash_list or #stash_list == 0 then
-    if header_idx then
-      -- remove section (header + stash entries)
-      local end_idx = header_idx
-      for j = header_idx + 1, #cur_lines do
-        local l = cur_lines[j]
-        -- stop when first non-stash line found
-        if not l or l == '' then
-          -- Include trailing blank line when removing so we don't leave duplicates.
-          end_idx = j
-          break
-        end
-        if not l:match('^%s+stash@') then
-          end_idx = j - 1
-          break
-        end
-      end
-      -- If the loop completed without finding a non-stash line, remove through EOF.
-      if end_idx == header_idx then
-        end_idx = #cur_lines
-      end
-      vim.api.nvim_buf_set_lines(bufnr, header_idx - 1, end_idx, false, {})
-    end
-    -- Restore original buffer flags if we changed them earlier.
-    if not prev_modifiable or prev_readonly then
-      vim.bo[bufnr].modifiable = prev_modifiable
-      vim.bo[bufnr].readonly = prev_readonly
-    end
-    return
+  -- Add Stashes if any
+  if stash_list and #stash_list > 0 then
+    table.insert(final_lines, '') -- Spacer before stash
+    table.insert(final_lines, 'Stashes: (' .. #stash_list .. ')')
+    for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
   end
 
-  -- build the new stash section
-  local new_lines = {}
-  table.insert(new_lines, 'Stashes: (' .. tostring(#stash_list) .. ')')
-  for _, sline in ipairs(stash_list) do
-    table.insert(new_lines, sline)
+  -- Step 3: Insert at the bottom
+  if #final_lines > 0 then
+    local insert_idx = find_insert_point(bufnr)
+    vim.api.nvim_buf_set_lines(bufnr, insert_idx - 1, insert_idx - 1, false, final_lines)
   end
 
-      if header_idx then
-          -- replace old block
-          local end_idx = header_idx
-          for j = header_idx + 1, #cur_lines do
-            local l = cur_lines[j]
-            if not l or l == '' then
-              -- include trailing blank line in the removal range to avoid producing
-              -- duplicate blank lines after re-inserting the stash section.
-              end_idx = j
-              break
-            end
-            if not l:match('^%s+stash@') then
-              end_idx = j - 1
-              break
-            end
-          end
-
-      -- If the loop completed without finding a non-stash line, the stash section runs to EOF.
-      if end_idx == header_idx then
-        end_idx = #cur_lines
-      end
-
-    -- If the header does not have a blank line above it, add one so it doesn't
-    -- visually touch the section above.
-    if header_idx > 1 and cur_lines[header_idx - 1] ~= '' then
-      table.insert(new_lines, 1, '')
-    end
-
-    -- Add a trailing separator only when there are lines after the stash section.
-    if end_idx < #cur_lines then
-      table.insert(new_lines, '')
-    end
-
-    vim.api.nvim_buf_set_lines(bufnr, header_idx - 1, end_idx, false, new_lines)
-  else
-    local insert_idx = find_insert_point(cur_lines)
-
-    -- Advance past existing blank lines so stash won't be inserted before them.
-    while insert_idx <= #cur_lines and cur_lines[insert_idx] == '' do
-      insert_idx = insert_idx + 1
-    end
-
-    -- Ensure there's a single blank line between the previous content and the stash block.
-    if insert_idx > 1 and cur_lines[insert_idx - 1] ~= '' then
-      table.insert(new_lines, 1, '')
-    end
-
-    -- Only append a trailing blank if the stash block will be followed by additional content.
-    if insert_idx <= #cur_lines then
-      table.insert(new_lines, '')
-    end
-
-    vim.api.nvim_buf_set_lines(bufnr, insert_idx - 1, insert_idx - 1, false, new_lines)
-  end
-  vim.bo[bufnr].modifiable = false
-
-  -- clear existing stash extmarks in this buffer and mark the new ones
+  -- Step 4: Highlighting
+  vim.api.nvim_buf_clear_namespace(bufnr, ns_worktree, 0, -1)
   vim.api.nvim_buf_clear_namespace(bufnr, ns_stash, 0, -1)
+  
   local lines_after = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local in_worktree = false
+  local in_stash = false
+  local current_wt_abs = vim.fn.fnamemodify(work_tree, ':p')
+
   for i, l in ipairs(lines_after) do
-    if l:match('^Stashes:') then
+    if l:match('^Worktrees:') then
+      -- Use DiagnosticOk for a deeper green header
+      vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'DiagnosticOk' })
+      in_worktree = true
+      in_stash = false
+    elseif l:match('^Stashes:') then
       vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsChange' })
-    elseif l:match('^%s+stash@') then
-      vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsAdd' })
+      in_worktree = false
+      in_stash = true
+    elseif in_worktree then
+      -- Parse path from the beginning of line
+      local path_part = l:match('^(%S+)')
+      if path_part then
+        local abs_p = vim.fn.fnamemodify(path_part, ':p'):gsub('/$', '')
+        local target_abs = current_wt_abs:gsub('/$', '')
+        if abs_p == target_abs then
+          -- Highlight ONLY the current worktree name
+          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #path_part, hl_group = 'GitSignsAdd' })
+        end
+      else
+        in_worktree = false
+      end
+    elseif in_stash then
+      if l:match('^%s+stash@') then
+        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsAdd' })
+      else
+        in_stash = false
+      end
     end
   end
 
-  -- Restore original buffer flags if we changed them earlier.
   if not prev_modifiable or prev_readonly then
     vim.bo[bufnr].modifiable = prev_modifiable
     vim.bo[bufnr].readonly = prev_readonly
@@ -226,14 +217,23 @@ function M.setup(group)
       vim.opt_local.number = false
       vim.opt_local.relativenumber = false
 
-      -- Stash section integration (inserts a "Stashes: N" block directly in the fugitive status buffer)
+      -- Section integration
       local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
+      local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
 
-      -- Ensure stash section is present initially and refresh on enter
-      ensure_stash_section(ev.buf, ns_stash)
+      local function refresh()
+        refresh_status_sections(ev.buf, ns_worktree, ns_stash)
+      end
+
+      -- Initial refresh
+      refresh()
+
+      -- Buffer-local autocmd to prevent accumulation
+      local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. ev.buf, { clear = true })
       vim.api.nvim_create_autocmd('BufEnter', {
+        group = bufgroupt,
         buffer = ev.buf,
-        callback = function() vim.schedule(function() ensure_stash_section(ev.buf, ns_stash) end) end,
+        callback = function() vim.schedule(refresh) end,
       })
 
       -- Stash-specific mappings that only act if the cursor is within the Stashes header or
@@ -245,7 +245,7 @@ function M.setup(group)
           if not ref then vim.notify('No stash at cursor', vim.log.levels.WARN) return end
           vim.cmd('Git stash apply ' .. ref)
           vim.fn['fugitive#ReloadStatus']()
-          vim.schedule(function() ensure_stash_section(ev.buf, ns_stash) end)
+          vim.schedule(refresh)
           return
         end
         vim.api.nvim_feedkeys(
@@ -262,7 +262,7 @@ function M.setup(group)
           if not ref then vim.notify('No stash at cursor', vim.log.levels.WARN) return end
           vim.cmd('Git stash pop ' .. ref)
           vim.fn['fugitive#ReloadStatus']()
-          vim.schedule(function() ensure_stash_section(ev.buf, ns_stash) end)
+          vim.schedule(refresh)
           return
         end
         vim.api.nvim_feedkeys(
@@ -279,7 +279,7 @@ function M.setup(group)
           if not ref then vim.notify('No stash at cursor', vim.log.levels.WARN) return end
           vim.cmd('Git stash drop ' .. ref)
           vim.fn['fugitive#ReloadStatus']()
-          vim.schedule(function() ensure_stash_section(ev.buf, ns_stash) end)
+          vim.schedule(refresh)
           return
         end
         vim.api.nvim_feedkeys(
@@ -476,12 +476,6 @@ function M.setup(group)
             end_col = 9,
             hl_group = 'GitSignsDelete',
           })
-        -- "Stashes" ヘッダをハイライト
-        elseif line:match('^Stashes:') then
-          vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, 0, {
-            end_col = #line,
-            hl_group = 'GitSignsChange',
-          })
         end
 
         local filepath = line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
@@ -509,14 +503,6 @@ function M.setup(group)
               })
             end
           end
-
-        -- Highlight stash entry lines (e.g., "  stash@{0}: ...")
-        if line:match('^%s*stash@%{%d+%}') then
-          vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, 0, {
-            end_col = #line,
-            hl_group = 'GitSignsAdd',
-          })
-        end
       end
 
       -- Flog integration
