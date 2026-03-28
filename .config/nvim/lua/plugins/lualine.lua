@@ -56,9 +56,8 @@ return {
         if vim.fn.winwidth(0) < 80 then
           return false
         end
-        local filepath = vim.fn.expand("%:p:h")
-        local gitdir = vim.fn.finddir(".git", filepath .. ";")
-        return gitdir and #gitdir > 0 and #gitdir < #filepath
+        vim.fn.system('git rev-parse --is-inside-work-tree 2>/dev/null')
+        return vim.v.shell_error == 0
       end,
       recording = function()
         return vim.fn.reg_recording() ~= ""
@@ -169,7 +168,13 @@ return {
 
           -- 2. Gitブランチ
           {
-            "branch",
+            function()
+              local branch = vim.fn.system('git branch --show-current 2>/dev/null')
+              if vim.v.shell_error == 0 then
+                return vim.trim(branch)
+              end
+              return ""
+            end,
             icon = "",
             cond = conditions.check_git_workspace,
           },
@@ -183,8 +188,29 @@ return {
               end
               local ok_root, root = pcall(project_api.get_project_root)
               if ok_root and root then
-                -- パスの末尾（プロジェクト名）のみ表示
-                return " " .. vim.fn.fnamemodify(root, ":t")
+                local icon = " "
+                local name = vim.fn.fnamemodify(root, ":t")
+
+                -- Check git information for worktree handling
+                local toplevel = vim.fn.trim(vim.fn.system('git rev-parse --show-toplevel 2>/dev/null'))
+                if vim.v.shell_error == 0 then
+                  -- Icon change for worktrees
+                  if toplevel:match("/%.worktree/") then
+                    icon = "󰙅 "
+                  end
+
+                  -- Try to get the common (main) repository name
+                  local common_dir = vim.fn.trim(vim.fn.system('git rev-parse --git-common-dir 2>/dev/null'))
+                  if vim.v.shell_error == 0 and common_dir ~= "" then
+                    -- Ensure absolute path and remove trailing slash to get the parent correctly
+                    local abs_common = vim.fn.fnamemodify(common_dir, ':p'):gsub("/+$", "")
+                    -- abs_common is now something like /path/to/repo/.git
+                    local main_root = vim.fn.fnamemodify(abs_common, ':h')
+                    name = vim.fn.fnamemodify(main_root, ":t")
+                  end
+                end
+
+                return icon .. name
               end
               return ""
             end,
@@ -246,21 +272,24 @@ return {
               if bufname:match("^fugitive://") then
                 local sha, filepath = bufname:match("fugitive://.*%.git//(%x+)/(.*)")
                 if sha and filepath then
-                  local cmd = string.format("git -C %s diff --numstat %s^ %s -- %s",
-                    vim.fn.shellescape(vim.fn.FugitiveWorkTree()),
-                    sha, sha, filepath)
-                  local output = vim.fn.system(cmd)
-                  if vim.v.shell_error == 0 and output ~= "" then
-                    local added, removed = output:match("^(%d+)%s+(%d+)")
-                    if (added and tonumber(added) > 0) or (removed and tonumber(removed) > 0) then
-                      local fparts = {}
-                      if added and tonumber(added) > 0 then
-                        fparts[#fparts+1] = "%#LualineGitAdded# " .. added .. "%*"
+                  local toplevel = vim.fn.trim(vim.fn.system("git rev-parse --show-toplevel 2>/dev/null"))
+                  if vim.v.shell_error == 0 and toplevel ~= "" then
+                    local cmd = string.format("git -C %s diff --numstat %s^ %s -- %s",
+                      vim.fn.shellescape(toplevel),
+                      sha, sha, filepath)
+                    local output = vim.fn.system(cmd)
+                    if vim.v.shell_error == 0 and output ~= "" then
+                      local added, removed = output:match("^(%d+)%s+(%d+)")
+                      if (added and tonumber(added) > 0) or (removed and tonumber(removed) > 0) then
+                        local fparts = {}
+                        if added and tonumber(added) > 0 then
+                          fparts[#fparts+1] = "%#LualineGitAdded# " .. added .. "%*"
+                        end
+                        if removed and tonumber(removed) > 0 then
+                          fparts[#fparts+1] = "%#LualineGitRemoved# " .. removed .. "%*"
+                        end
+                        return table.concat(fparts, " ")
                       end
-                      if removed and tonumber(removed) > 0 then
-                        fparts[#fparts+1] = "%#LualineGitRemoved# " .. removed .. "%*"
-                      end
-                      return table.concat(fparts, " ")
                     end
                   end
                 end
