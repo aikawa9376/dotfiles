@@ -23,10 +23,6 @@ return {
             if pcall(vim.treesitter.start) then
               vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
               vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
-
-              -- 読み込み順が重要なpluginはここで読み込む
-              local ok, lib = pcall(require, "rainbow-delimiters.lib")
-              if ok then lib.attach(0) end
             end
           end)
         end,
@@ -79,9 +75,6 @@ return {
     event = "BufReadPre",
     config = function()
       require('rainbow-delimiters.setup').setup{
-        condition = function(bufnr)
-          return vim.treesitter.highlighter.active[bufnr] ~= nil
-        end,
         highlight = {
           'RainbowDelimiterBlue',
           'RainbowDelimiterGreen',
