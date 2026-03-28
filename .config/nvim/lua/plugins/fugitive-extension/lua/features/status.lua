@@ -42,7 +42,7 @@ local function remove_custom_sections(bufnr)
   local i = 1
   while i <= #lines do
     local line = lines[i]
-    if line:match('^Worktrees:') or line:match('^Stashes:') then
+    if line:match('^Worktrees') or line:match('^Stashes') then
       local start_idx = i
       -- Include one blank line above the header if it exists
       if start_idx > 1 and lines[start_idx - 1] == '' then
@@ -55,9 +55,9 @@ local function remove_custom_sections(bufnr)
         local l = lines[i]
         if l == '' then
           i = i + 1
-        elseif line:match('^Worktrees:') and l:match('^[%~%/]') then
+        elseif line:match('^Worktrees') and l:match('^[%~%/]') then
           i = i + 1
-        elseif line:match('^Stashes:') and l:match('^%s+stash@') then
+        elseif line:match('^Stashes') and l:match('^%s+stash@') then
           i = i + 1
         else
           break
@@ -122,7 +122,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
   -- Add Stashes if any
   if stash_list and #stash_list > 0 then
     table.insert(final_lines, '') -- Spacer before stash
-    table.insert(final_lines, 'Stashes: (' .. #stash_list .. ')')
+    table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
     for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
   end
 
@@ -142,24 +142,41 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
   local current_wt_abs = vim.fn.fnamemodify(work_tree, ':p')
 
   for i, l in ipairs(lines_after) do
-    if l:match('^Worktrees:') then
+    if l:match('^Worktrees') then
       -- Use DiagnosticOk for a deeper green header
       vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'DiagnosticOk' })
       in_worktree = true
       in_stash = false
-    elseif l:match('^Stashes:') then
+    elseif l:match('^Stashes') then
       vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsChange' })
       in_worktree = false
       in_stash = true
     elseif in_worktree then
-      -- Parse path from the beginning of line
       local path_part = l:match('^(%S+)')
       if path_part then
         local abs_p = vim.fn.fnamemodify(path_part, ':p'):gsub('/$', '')
         local target_abs = current_wt_abs:gsub('/$', '')
-        if abs_p == target_abs then
-          -- Highlight ONLY the current worktree name
-          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #path_part, hl_group = 'GitSignsAdd' })
+        
+        -- Find positions for highlighting
+        local s_path, e_path = l:find(path_part, 1, true)
+        local rest = l:sub(e_path + 1)
+        local branch_part = rest:match('%s+(%S+)')
+        local head_part = rest:match('%s+%S+%s+(%S+)')
+
+        -- 1. Path highlight (DiagnosticOk for current, Directory for others)
+        local path_hl = (abs_p == target_abs) and 'DiagnosticOk' or 'Directory'
+        vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_path - 1, { end_col = e_path, hl_group = path_hl })
+        
+        -- 2. Branch highlight (Type - Yellow/Greenish)
+        if branch_part then
+          local s_br, e_br = l:find(branch_part, e_path + 1, true)
+          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_br - 1, { end_col = e_br, hl_group = 'Type' })
+          
+          -- 3. Head highlight (Comment - subtle Grey)
+          if head_part then
+            local s_hd, e_hd = l:find(head_part, e_br + 1, true)
+            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_hd - 1, { end_col = e_hd, hl_group = 'Comment' })
+          end
         end
       else
         in_worktree = false
@@ -196,9 +213,9 @@ local function is_cursor_in_stash_area()
     return true
   end
 
-  -- If the cursor is on the header line "Stashes: N", consider stash area when the cursor
-  -- is on or after the "Stashes:" text.
-  local s, _ = line:find('Stashes:')
+  -- If the cursor is on the header line "Stashes N", consider stash area when the cursor
+  -- is on or after the "Stashes" text.
+  local s, _ = line:find('Stashes')
   if s then
     if (col + 1) >= s then
       return true
@@ -206,6 +223,20 @@ local function is_cursor_in_stash_area()
   end
 
   return false
+end
+
+-- Return true if the cursor is in the Worktrees area.
+local function is_cursor_in_worktree_area()
+  local line = vim.api.nvim_get_current_line()
+  if line:match('^Worktrees') then return true end
+  if line:match('^[%~%/]') then return true end
+  return false
+end
+
+-- Extract worktree path from current line.
+local function get_worktree_path_at_cursor()
+  local line = vim.api.nvim_get_current_line()
+  return line:match('^(%S+)')
 end
 
 function M.setup(group)
@@ -274,6 +305,16 @@ function M.setup(group)
       vim.keymap.set('n', 'P', map_P, { buffer = ev.buf, nowait = true, silent = true, desc = 'Pop stash under cursor' })
 
       map_X = function()
+        if is_cursor_in_worktree_area() then
+          local path = get_worktree_path_at_cursor()
+          if path then
+            if require("features.worktree").remove_worktree_path(path) then
+              vim.fn['fugitive#ReloadStatus']()
+              vim.schedule(refresh)
+            end
+            return
+          end
+        end
         if is_cursor_in_stash_area() then
           local ref = get_stash_ref_at_cursor(ev.buf)
           if not ref then vim.notify('No stash at cursor', vim.log.levels.WARN) return end
@@ -288,7 +329,7 @@ function M.setup(group)
           true
         )
       end
-      vim.keymap.set('n', 'X', map_X, { buffer = ev.buf, nowait = true, silent = true, desc = 'Drop stash under cursor' })
+      vim.keymap.set('n', 'X', map_X, { buffer = ev.buf, nowait = true, silent = true, desc = 'Drop item under cursor' })
 
       map_O = function()
         if is_cursor_in_stash_area() then
@@ -307,6 +348,13 @@ function M.setup(group)
       vim.keymap.set('n', 'O', map_O, { buffer = ev.buf, nowait = true, silent = true, desc = 'Open stash diff in new tab' })
 
       map_CR = function()
+        if is_cursor_in_worktree_area() then
+          local path = get_worktree_path_at_cursor()
+          if path then
+            require("features.worktree").open_worktree_path(path)
+            return
+          end
+        end
         if is_cursor_in_stash_area() then
           local ref = get_stash_ref_at_cursor(ev.buf)
           if not ref then vim.notify('No stash at cursor', vim.log.levels.WARN) return end
@@ -330,7 +378,7 @@ function M.setup(group)
           true
         )
       end
-      vim.keymap.set('n', '<CR>', map_CR, { buffer = ev.buf, nowait = true, silent = true, desc = 'Open stash diff in split buffer' })
+      vim.keymap.set('n', '<CR>', map_CR, { buffer = ev.buf, nowait = true, silent = true, desc = 'Open item at cursor' })
 
       vim.keymap.set('n', 'd', function()
         local file_path = utils.get_filepath_at_cursor(ev.buf)
