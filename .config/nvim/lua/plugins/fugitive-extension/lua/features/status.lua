@@ -25,20 +25,28 @@ local function remove_custom_sections(bufnr)
   local i = 1
   while i <= #lines do
     local line = lines[i]
-    if line:match('^Worktrees') or line:match('^Stashes') then
+    -- カスタムセクションのヘッダーを検知
+    if line:match('^Worktrees %(') or line:match('^Stashes %(') then
       local start_idx = i
+      -- 直前の空行も含める
       if start_idx > 1 and lines[start_idx - 1] == '' then start_idx = start_idx - 1 end
-      i = i + 1
-      while i <= #lines do
-        local l = lines[i]
-        if l == '' then i = i + 1
-        elseif line:match('^Worktrees') and l:match('^[%~%/]') then i = i + 1
-        elseif line:match('^Stashes') and l:match('^%s+stash@') then i = i + 1
+
+      -- セクションの終わり（次のヘッダーまたは空行の連続後、またはバッファ末尾）までを削除範囲とする
+      local end_idx = i
+      while end_idx < #lines do
+        local next_line = lines[end_idx + 1]
+        -- セクションに含まれる可能性のある行のパターン
+        if next_line == '' or
+           next_line:match('^[~/]') or next_line:match('^stash@') or
+           next_line:match('^Worktrees %(') or next_line:match('^Stashes %(') then
+          end_idx = end_idx + 1
         else break end
       end
-      table.insert(ranges, { start_idx, i - 1 })
+      table.insert(ranges, { start_idx, end_idx })
+      i = end_idx + 1
     else i = i + 1 end
   end
+  -- 後ろから順に削除
   for r = #ranges, 1, -1 do
     vim.api.nvim_buf_set_lines(bufnr, ranges[r][1] - 1, ranges[r][2], false, {})
   end
@@ -98,26 +106,47 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
       vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsChange' })
       in_worktree, in_stash = false, true
     elseif in_worktree then
+      -- 形式: [path]  [branch]  [head] [sync_icon]
       local p_part = l:match('^(%S+)')
       if p_part then
         local s_p, e_p = l:find(p_part, 1, true)
-        local rest = l:sub(e_p + 1)
-        local br_part = rest:match('%s+(%S+)')
-        local hd_part = rest:match('%s+%S+%s+(%S+)')
         local path_hl = (vim.fn.fnamemodify(p_part, ':p'):gsub('/+$', '') == current_wt_abs) and 'DiagnosticOk' or 'Directory'
         vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_p - 1, { end_col = e_p, hl_group = path_hl })
+
+        -- ブランチ
+        local br_part = l:sub(e_p + 1):match('%s+(%S+)')
+        local s_b, e_b
         if br_part then
-          local s_b, e_b = l:find(br_part, e_p + 1, true)
+          s_b, e_b = l:find(br_part, e_p + 1, true)
           vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_b - 1, { end_col = e_b, hl_group = 'Type' })
-          if hd_part then
-            local s_h, e_h = l:find(hd_part, e_b + 1, true)
-            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_h - 1, { end_col = e_h, hl_group = 'Comment' })
-          end
         end
-      else in_worktree = false end
+
+        -- ハッシュ
+        local hd_part = l:sub((e_b or e_p) + 1):match('%s+(%S+)')
+        local s_h, e_h
+        if hd_part then
+          s_h, e_h = l:find(hd_part, (e_b or e_p) + 1, true)
+          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_h - 1, { end_col = e_h, hl_group = 'Comment' })
+        end
+
+        -- 同期アイコン (一番右)
+        local icon_str = '󰚰'
+        local icon_pos, icon_end = l:find(icon_str, (e_h or e_b or e_p), true)
+        if icon_pos then
+          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, icon_pos - 1, { end_col = icon_end, hl_group = 'DiagnosticOk' })
+        end
+      else
+        if l ~= '' then in_worktree = false end
+      end
+
     elseif in_stash then
-      if l:match('^%s+stash@') then
-        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsAdd' })
+      local ref = stash_ref_from_line(l)
+      if ref then
+        local s, e = l:find(ref, 1, true)
+        -- stash@{n} の部分を強調
+        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, s - 1, { end_col = e, hl_group = 'GitSignsAdd' })
+        -- それ以降（メッセージ部分）をコメント色に
+        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, e, { end_col = #l, hl_group = 'Comment' })
       else in_stash = false end
     end
   end
@@ -139,11 +168,12 @@ end
 
 local function is_cursor_in_worktree_area()
   local line = vim.api.nvim_get_current_line()
-  return line:match('^Worktrees') or line:match('^[%~%/]')
+  return line:match('^Worktrees') or line:match('^[~/]')
 end
 
 local function get_worktree_path_at_cursor()
-  return vim.api.nvim_get_current_line():match('^(%S+)')
+  local line = vim.api.nvim_get_current_line()
+  return line:match('^(%S+)')
 end
 
 function M.setup(group)
@@ -295,6 +325,7 @@ function M.setup(group)
         end
       end, { buffer = b, nowait = true, silent = true })
 
+      -- Smart Close
       vim.keymap.set('n', 'q', function()
         if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then vim.api.nvim_win_close(vim.g.flog_win, true) end
         require"utilities".smart_close()

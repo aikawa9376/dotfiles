@@ -22,39 +22,56 @@ return {
       local dir = vim.fn.fnamemodify(bufname, ":h")
       if vim.fn.isdirectory(dir) == 0 then dir = vim.fn.getcwd() end
 
-      -- 1つのコマンドで必要な情報を一括取得
+      -- 非同期で git 情報を取得してブロッキング（ちらつき）を回避
       local cmd = string.format("git -C %s rev-parse --is-inside-work-tree --show-toplevel --git-common-dir --abbrev-ref HEAD 2>/dev/null", vim.fn.shellescape(dir))
-      local output = vim.fn.system(cmd)
+      
+      vim.fn.jobstart(cmd, {
+        stdout_buffered = true,
+        on_stdout = function(_, data)
+          if not data or #data < 4 or data[1] == "" then
+            git_cache[bufnr] = { is_git = false }
+          else
+            local is_git = data[1] == "true"
+            if not is_git then
+              git_cache[bufnr] = { is_git = false }
+            else
+              local toplevel = data[2]
+              local common_dir = data[3]
+              local branch = data[4]
 
-      if vim.v.shell_error ~= 0 then
-        git_cache[bufnr] = { is_git = false }
-      else
-        local lines = vim.split(output, "\n", { trimempty = true })
-        if #lines >= 4 then
-          local toplevel = lines[2]
-          local common_dir = lines[3]
+              -- common-dir ( .git の場所 ) を基準にプロジェクト名を特定
+              local abs_common = common_dir
+              if not (common_dir:sub(1,1) == "/" or common_dir:match("^%a:")) then
+                abs_common = dir:gsub("/+$", "") .. "/" .. common_dir
+              end
 
-          -- common-dir ( .git の場所 ) を基準にプロジェクト名を特定
-          local abs_common = common_dir
-          if not (common_dir:sub(1,1) == "/" or common_dir:match("^%a:")) then
-            abs_common = dir:gsub("/+$", "") .. "/" .. common_dir
+              -- 末尾のスラッシュを除去して親ディレクトリを取得
+              local repo_root = vim.fn.fnamemodify(vim.fn.fnamemodify(abs_common, ":p"):gsub("/+$", ""), ":h")
+              
+              local is_worktree = toplevel:match("/%.worktree/") ~= nil
+              local sync_status = ""
+              
+              -- ワークツリーの場合は同期状態を確認
+              if is_worktree then
+                local ok, wt = pcall(require, "features.worktree")
+                if ok and wt and type(wt.lualine_sync_status) == "function" then
+                  sync_status = wt.lualine_sync_status()
+                end
+              end
+
+              git_cache[bufnr] = {
+                is_git = true,
+                branch = branch,
+                is_worktree = is_worktree,
+                project_name = vim.fn.fnamemodify(repo_root, ":t"),
+                repo_root = repo_root,
+                sync_status = sync_status,
+              }
+            end
           end
-
-          -- 末尾のスラッシュを除去して親ディレクトリを取得
-          local repo_root = vim.fn.fnamemodify(vim.fn.fnamemodify(abs_common, ":p"):gsub("/+$", ""), ":h")
-
-          git_cache[bufnr] = {
-            is_git = lines[1] == "true",
-            branch = lines[4],
-            is_worktree = toplevel:match("/%.worktree/") ~= nil,
-            project_name = vim.fn.fnamemodify(repo_root, ":t"),
-          }
-        else
-          git_cache[bufnr] = { is_git = false }
-        end
-      end
-
-      vim.schedule(function() lualine.refresh() end)
+          vim.schedule(function() lualine.refresh() end)
+        end,
+      })
     end
 
     -- イベントに応じてキャッシュを更新
@@ -66,6 +83,10 @@ return {
     vim.api.nvim_create_autocmd("BufDelete", {
       callback = function(ev) git_cache[ev.buf] = nil end,
     })
+
+    -- 追加のイベント: 保存や Fugitive の変更でキャッシュを更新
+    vim.api.nvim_create_autocmd("BufWritePost", { callback = function() update_git_cache() end })
+    vim.api.nvim_create_autocmd("User", { pattern = "FugitiveChanged", callback = function() update_git_cache() end })
 
     -- 起動時の初期更新
     update_git_cache()
@@ -154,6 +175,16 @@ return {
               return (cache.is_worktree and "󰙅 " or " ") .. cache.project_name
             end,
             cond = conditions.project,
+          },
+          -- Worktree sync marker (separate component)
+          {
+            function()
+              local bufnr = vim.api.nvim_get_current_buf()
+              local status = git_cache[bufnr] and git_cache[bufnr].sync_status
+              return (status and status ~= "") and (status .. " ") or ""
+            end,
+            cond = conditions.project,
+            padding = { left = 0, right = 1 }
           },
           {
             function()

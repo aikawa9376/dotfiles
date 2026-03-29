@@ -789,14 +789,7 @@ END {
 ' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
 ]], current_commit:sub(1,7), target_commit:sub(1,7))
 
-    local debug_script = string.format([[
-#!/bin/bash
-echo "[DEBUG] Original todo:" > /tmp/rebase-debug.log
-cat "$1" >> /tmp/rebase-debug.log
-%s
-echo "[DEBUG] Modified todo:" >> /tmp/rebase-debug.log
-cat "$1" >> /tmp/rebase-debug.log
-]], script)
+    local debug_script = script
 
     local f = io.open(tmpfile, 'w')
     f:write(debug_script)
