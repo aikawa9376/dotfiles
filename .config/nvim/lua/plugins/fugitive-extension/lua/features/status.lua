@@ -92,7 +92,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
 
   for i, l in ipairs(lines_after) do
     if l:match('^Worktrees') then
-      vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'DiagnosticOk' })
+      vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterViolet' })
       in_worktree, in_stash = true, false
     elseif l:match('^Stashes') then
       vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsChange' })
