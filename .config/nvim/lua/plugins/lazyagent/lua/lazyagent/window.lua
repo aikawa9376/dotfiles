@@ -79,7 +79,7 @@ function M.open_float(bufnr, opts)
   -- Center the floating window
   local width = math.floor(vim.o.columns * (opts.is_vertical and 0.6 or 0.5))
   local height = math.floor(vim.o.lines * (opts.is_vertical and 0.3 or 0.5))
-  
+
   -- Apply specific window overrides if provided
   if opts.window_opts then
      if opts.window_opts.width_ratio then
@@ -87,7 +87,7 @@ function M.open_float(bufnr, opts)
      elseif opts.window_opts.width then
         width = opts.window_opts.width
      end
-     
+
      if opts.window_opts.height_ratio then
         height = math.floor(vim.o.lines * opts.window_opts.height_ratio)
      elseif opts.window_opts.height then
@@ -271,11 +271,12 @@ function M.close(opts)
   local bufnr = winid and vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) or nil
 
   if not (opts.force) and buffer_has_content(bufnr) then
-    local choice = vim.fn.confirm(
+    local raw_choice = vim.fn.confirm(
       "Scratch buffer has content. Close?",
       "&Yes\n&No\n&Save to history",
       3
     )
+    local choice = tonumber(raw_choice) or 0
     if choice == 2 or choice == 0 then
       return false
     end
@@ -334,14 +335,20 @@ pcall(function()
     group = group,
     callback = function(args)
       pcall(function()
-        local win = args.win or vim.api.nvim_get_current_win()
+        local win = vim.api.nvim_get_current_win()
+        if type(args) == "table" then
+          local aw = args["win"]
+          if aw and aw ~= 0 then
+            win = aw
+          end
+        end
         if not win or win == 0 then return end
         if winid == nil or not vim.api.nvim_win_is_valid(winid) then return end
         if win ~= winid then return end
         local buf = args.buf or vim.api.nvim_get_current_buf()
         if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
         -- Skip if it's the scratch buffer
-        if vim.api.nvim_buf_get_option(buf, "filetype") == "lazyagent" then return end
+        if vim.bo[buf].filetype == "lazyagent" then return end
         -- Only handle buffers with a real filename
         local name = vim.api.nvim_buf_get_name(buf) or ""
         if name == "" then return end
@@ -351,7 +358,7 @@ pcall(function()
           if w ~= win then
             local b = vim.api.nvim_win_get_buf(w)
             if b and vim.api.nvim_buf_is_valid(b) then
-              local bt = vim.api.nvim_buf_get_option(b, "buftype")
+              local bt = vim.bo[b].buftype
               if bt == "" then
                 target = w
                 break
