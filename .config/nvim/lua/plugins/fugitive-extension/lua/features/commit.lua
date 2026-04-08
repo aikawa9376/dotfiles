@@ -206,6 +206,183 @@ local function commit_auto_pop(work_tree)
   end
 end
 
+local function cleanup_view_file(path)
+  if path then
+    os.remove(path)
+  end
+end
+
+local function clamp_line(line, max_line)
+  return math.max(1, math.min(line, math.max(max_line, 1)))
+end
+
+local function find_file_header_line(lines, filepath)
+  if not filepath then
+    return nil
+  end
+
+  local pattern = '^diff %-%-git [ab]/' .. vim.pesc(filepath) .. ' [ab]/'
+  for i, line in ipairs(lines) do
+    if line:match(pattern) then
+      return i
+    end
+  end
+end
+
+local function find_file_end_line(lines, file_lnum)
+  if not file_lnum then
+    return #lines
+  end
+
+  for i = file_lnum + 1, #lines do
+    if lines[i]:match('^diff %-%-git') then
+      return i - 1
+    end
+  end
+
+  return #lines
+end
+
+local function find_hunk_header_line(lines, file_lnum, hunk_header)
+  if not file_lnum or not hunk_header then
+    return nil
+  end
+
+  for i = file_lnum + 1, #lines do
+    local line = lines[i]
+    if line:match('^diff %-%-git') then
+      break
+    end
+    if line == hunk_header then
+      return i
+    end
+  end
+end
+
+local function find_hunk_end_line(lines, hunk_lnum)
+  if not hunk_lnum then
+    return #lines
+  end
+
+  for i = hunk_lnum + 1, #lines do
+    local line = lines[i]
+    if line:match('^@@') or line:match('^diff %-%-git') then
+      return i - 1
+    end
+  end
+
+  return #lines
+end
+
+local function open_file_fold(file_lnum)
+  if not file_lnum or vim.fn.foldclosed(file_lnum) == -1 then
+    return false
+  end
+
+  return pcall(vim.cmd, ('silent! %dfoldopen!'):format(file_lnum))
+end
+
+local function save_commit_view_state(bufnr)
+  local win = vim.api.nvim_get_current_win()
+  local lnum = vim.api.nvim_win_get_cursor(win)[1]
+  local filepath, file_lnum, _on_file_header, hunk_start, lines = get_diff_context_at_line(bufnr, lnum)
+  local state = {
+    win = win,
+    view = vim.fn.winsaveview(),
+    view_file = vim.fn.tempname(),
+    filepath = filepath,
+    file_offset = file_lnum and (lnum - file_lnum) or nil,
+    hunk_header = hunk_start and lines[hunk_start] or nil,
+    hunk_offset = hunk_start and (lnum - hunk_start) or nil,
+  }
+
+  local ok = pcall(function()
+    vim.api.nvim_win_call(win, function()
+      vim.cmd('silent! mkview! ' .. vim.fn.fnameescape(state.view_file))
+    end)
+  end)
+
+  if not ok then
+    cleanup_view_file(state.view_file)
+    state.view_file = nil
+  end
+
+  return state
+end
+
+local function restore_commit_view_state(state)
+  if not state then
+    return
+  end
+
+  if not vim.api.nvim_win_is_valid(state.win) then
+    cleanup_view_file(state.view_file)
+    return
+  end
+
+  vim.api.nvim_win_call(state.win, function()
+    if state.view_file then
+      pcall(vim.cmd, 'silent! loadview ' .. vim.fn.fnameescape(state.view_file))
+    end
+
+    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local max_line = math.max(#lines, 1)
+    local target_line = clamp_line(state.view.lnum or 1, max_line)
+    local file_lnum = find_file_header_line(lines, state.filepath)
+
+    if file_lnum then
+      local hunk_lnum = find_hunk_header_line(lines, file_lnum, state.hunk_header)
+      if hunk_lnum and state.hunk_offset then
+        target_line = clamp_line(
+          math.min(hunk_lnum + state.hunk_offset, find_hunk_end_line(lines, hunk_lnum)),
+          max_line
+        )
+      elseif state.file_offset then
+        target_line = clamp_line(
+          math.min(file_lnum + state.file_offset, find_file_end_line(lines, file_lnum)),
+          max_line
+        )
+      else
+        target_line = clamp_line(file_lnum, max_line)
+      end
+    end
+
+    local view = vim.deepcopy(state.view)
+    local screen_offset = math.max((state.view.lnum or 1) - (state.view.topline or 1), 0)
+    view.lnum = target_line
+    view.topline = clamp_line(target_line - screen_offset, max_line)
+    pcall(vim.fn.winrestview, view)
+
+    local opened = open_file_fold(file_lnum)
+    pcall(vim.cmd, 'silent! normal! zv')
+    if opened then
+      pcall(vim.fn.winrestview, view)
+    end
+  end)
+
+  cleanup_view_file(state.view_file)
+end
+
+local function reopen_commit_preserving_view(new_hash, state)
+  if new_hash == '' then
+    restore_commit_view_state(state)
+    return
+  end
+
+  vim.schedule(function()
+    local ok, err = pcall(vim.cmd, 'Gedit ' .. new_hash)
+    if not ok then
+      cleanup_view_file(state and state.view_file or nil)
+      vim.notify('Failed to reopen commit: ' .. err, vim.log.levels.ERROR)
+      return
+    end
+
+    vim.schedule(function()
+      restore_commit_view_state(state)
+    end)
+  end)
+end
+
 -- Run git rebase -i (stop at commit), apply/reverse the patch, amend, then continue
 local function apply_patch_and_amend(git_dir, commit, filepath, patch_lines, use_reverse)
   local patch_file = vim.fn.tempname()
@@ -253,10 +430,14 @@ end
 
 -- Post-discard: stash pop, check empty commit, reload buffer
 local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, stashed)
+  local view_state = save_commit_view_state(vim.api.nvim_get_current_buf())
   local ok = apply_patch_and_amend(git_dir, commit, filepath, patch, use_reverse)
   if stashed then commit_auto_pop(git_dir) end
-  vim.cmd('checktime')
-  if not ok then return end
+  if not ok then
+    vim.cmd('checktime')
+    restore_commit_view_state(view_state)
+    return
+  end
 
   local new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir)
     .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
@@ -274,6 +455,7 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
       vim.notify('Dropped empty commit ' .. new_hash:sub(1, 7), vim.log.levels.INFO)
       vim.cmd('silent! doautocmd User FugitiveChanged')
       vim.cmd('checktime')
+      cleanup_view_file(view_state.view_file)
       vim.schedule(function() require('utilities').smart_close() end)
       return
     end
@@ -283,9 +465,7 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
   -- Trigger log buffer refresh via standard fugitive event
   vim.cmd('silent! doautocmd User FugitiveChanged')
   -- Reload the buffer to reflect the amended commit
-  if new_hash ~= '' then
-    vim.schedule(function() vim.cmd('Gedit ' .. new_hash) end)
-  end
+  reopen_commit_preserving_view(new_hash, view_state)
 end
 
 function M.setup(group)
