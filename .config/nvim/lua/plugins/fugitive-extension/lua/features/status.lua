@@ -227,7 +227,7 @@ function M.setup(group)
           end
         end
       end
-      vim.schedule(apply_icons)
+      apply_icons()
 
       local function perform_continue()
         local git_dir = vim.fn.FugitiveGitDir()
