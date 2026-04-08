@@ -307,7 +307,16 @@ function M.setup(group)
         if f then
           local wt = get_fugitive_work_tree()
           local abs = wt and vim.fn.fnamemodify(wt .. '/' .. f, ':p') or nil
-          if abs and vim.fn.isdirectory(abs) == 1 then pcall(vim.cmd, 'Oil ' .. vim.fn.fnameescape(abs)); return end
+          -- Only open Oil when cursor is directly on the status line for that path
+          local cur_line = vim.api.nvim_get_current_line()
+          local cur_match = cur_line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
+          if cur_match then
+            local _, new = cur_match:match('^(.+) %-> (.+)$')
+            cur_match = new or cur_match
+          end
+          if abs and cur_match == f and vim.fn.isdirectory(abs) == 1 then
+            pcall(vim.cmd, 'Oil ' .. vim.fn.fnameescape(abs)); return
+          end
         end
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:<cr>", true, false, true), 'm', true)
       end, { buffer = b, nowait = true, silent = true })
