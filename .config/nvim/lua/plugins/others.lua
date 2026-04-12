@@ -6,7 +6,7 @@ return {
   },
   {
     "xiyaowong/accelerated-jk.nvim",
-    opts = { acceleration_table = {35,97,141,212,314,414,514,614} },
+    opts = { acceleration_table = {97,212,414,614} },
     event = "BufRead",
   },
   {
