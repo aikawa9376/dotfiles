@@ -14,6 +14,10 @@ local function try_create_user_command(name, fn, cmd_opts)
   pcall(function() vim.api.nvim_create_user_command(name, fn, cmd_opts) end)
 end
 
+local function available_acp_agents()
+  return agent_logic.available_acp_agents()
+end
+
 function M.setup_commands()
   -- Register convenience scratch starter command
   try_create_user_command("LazyAgentScratch", function(cmdargs)
@@ -97,6 +101,33 @@ function M.setup_commands()
       complete = function()
         return agent_logic.available_agents()
       end,
+    })
+
+  try_create_user_command("LazyAgentACPConfig", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.pick_acp_config(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP config picker for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPModel", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.pick_acp_model(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP model picker for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPMode", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.pick_acp_mode(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP mode picker for an ACP-enabled agent",
+      complete = available_acp_agents,
     })
 
   try_create_user_command("LazyAgentRestore", function(cmdargs)

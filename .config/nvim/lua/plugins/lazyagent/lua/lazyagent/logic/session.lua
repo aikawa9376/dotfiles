@@ -4,6 +4,7 @@
 local M = {}
 
 local state = require("lazyagent.logic.state")
+local acp_logic = require("lazyagent.logic.acp")
 local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local keymaps_logic = require("lazyagent.logic.keymaps")
@@ -92,6 +93,22 @@ local function wait_for_pane_process_exit(agent_name, pane_id, backend_mod, time
 end
 
 local function maybe_kill_pane(agent_name, pane_id, backend_mod, use_sync)
+  local backend_name = nil
+  pcall(function()
+    backend_name = (select(1, backend_logic.resolve_backend_for_agent(agent_name or "", nil)))
+  end)
+
+  if acp_logic.is_acp_backend(backend_name) then
+    pcall(send_interrupts_before_kill, agent_name, pane_id, backend_mod, use_sync)
+    pcall(vim.wait, math.max(40, ((state.opts and state.opts.interrupt_interval_ms) or 40)), function() return false end, 10, not use_sync)
+    if use_sync and backend_mod and type(backend_mod.kill_pane_sync) == "function" then
+      backend_mod.kill_pane_sync(pane_id)
+    elseif backend_mod and type(backend_mod.kill_pane) == "function" then
+      backend_mod.kill_pane(pane_id)
+    end
+    return
+  end
+
   -- Send interrupts and wait briefly for the agent process to exit. If it does not
   -- exit within the configured timeout, fallback to killing the pane (sync if
   -- requested and supported by the backend).
@@ -150,35 +167,56 @@ local function wait_for_idle_before_close(agent_name, on_ready)
   timer:start(timeout, 0, vim.schedule_wrap(finish))
 end
 
-local function compute_launch_cmd(agent_cfg)
-  -- Convert agent_cfg.cmd/cmd_yolo (string or table) to a single string suitable
-  -- for backends and append/replace YOLO flags when requested.
-  local function join_cmd_parts(cmd)
-    if not cmd then return nil end
-    if type(cmd) == "table" then
-      local quoted = {}
-      for _, part in ipairs(cmd) do
-        table.insert(quoted, vim.fn.shellescape(tostring(part)))
-      end
-      return table.concat(quoted, " ")
-    end
-    return tostring(cmd)
+local function serialize_launch_command(command)
+  if type(command) == "table" then
+    return vim.json.encode(command)
   end
+  return tostring(command or "")
+end
 
-  local base_cmd = agent_cfg and agent_cfg.cmd or nil
-  local agent_yolo_flag = (agent_cfg and agent_cfg.yolo_flag) or (state.opts and state.opts.yolo_flag)
-  local use_yolo = agent_cfg and agent_cfg.yolo or false
+local function backend_supports_persistence(backend_name)
+  return not acp_logic.is_acp_backend(backend_name)
+end
 
-  -- Build base command string
-  local cmd_str
-  if use_yolo and agent_yolo_flag and base_cmd then
-    local bc = join_cmd_parts(base_cmd)
-    if bc and bc ~= "" then
-      cmd_str = bc .. " " .. tostring(agent_yolo_flag)
-    end
+local function merge_env(base, extra)
+  local merged = vim.tbl_extend("force", {}, base or {})
+  for key, value in pairs(extra or {}) do
+    merged[key] = value
   end
-  cmd_str = cmd_str or join_cmd_parts(base_cmd)
-  return cmd_str
+  return merged
+end
+
+local function resolve_source_bufnr(agent_cfg)
+  local bufnr = agent_cfg and (agent_cfg.source_bufnr or agent_cfg.origin_bufnr) or nil
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    return bufnr
+  end
+  return vim.api.nvim_get_current_buf()
+end
+
+local function resolve_root_dir(agent_cfg)
+  local source_bufnr = resolve_source_bufnr(agent_cfg)
+  local source_path = vim.api.nvim_buf_get_name(source_bufnr)
+  return util.git_root_for_path(source_path) or vim.fn.getcwd()
+end
+
+local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts)
+  local root_dir = resolve_root_dir(agent_cfg)
+  local env = merge_env(agent_cfg and agent_cfg.env, split_opts.env)
+
+  return {
+    agent_name = agent_name,
+    agent_cfg = agent_cfg,
+    command = launch_spec.command,
+    source_bufnr = resolve_source_bufnr(agent_cfg),
+    source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
+    cwd = root_dir,
+    root_dir = root_dir,
+    env = env,
+    auto_permission = acp_logic.resolve(agent_name, agent_cfg).auto_permission,
+    default_mode = acp_logic.resolve(agent_name, agent_cfg).default_mode,
+    initial_model = acp_logic.resolve(agent_name, agent_cfg).initial_model,
+  }
 end
 
 local function maybe_disable_watchers()
@@ -204,6 +242,30 @@ end
 
 M.wait_for_idle_before_close = wait_for_idle_before_close
 
+local function resolve_acp_target_agent(agent_name, callback)
+  if agent_name and agent_name ~= "" then
+    callback(agent_name)
+    return
+  end
+
+  local available = agent_logic.available_acp_agents()
+  if #available == 0 then
+    vim.notify("LazyAgentACP: no ACP-enabled agents are configured", vim.log.levels.WARN)
+    return
+  end
+
+  if #available == 1 then
+    callback(available[1])
+    return
+  end
+
+  vim.ui.select(available, { prompt = "Choose ACP agent:" }, function(choice)
+    if choice and choice ~= "" then
+      callback(choice)
+    end
+  end)
+end
+
 ---
 -- Ensures a backend session (e.g., a tmux pane) exists for the agent.
 -- @param agent_name (string) The name of the agent.
@@ -211,13 +273,23 @@ M.wait_for_idle_before_close = wait_for_idle_before_close
 -- @param reuse (boolean) Whether to reuse an existing session if available.
 -- @param on_ready (function) Callback to execute with the pane_id when ready.
 function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
+  local launch_spec, launch_err = agent_logic.resolve_launch_spec(agent_name, agent_cfg)
+  local existing_session = state.sessions[agent_name]
+  if not launch_spec and not (existing_session and existing_session.pane_id) then
+    vim.notify("LazyAgent: " .. tostring(launch_err or "launch command is not configured"), vim.log.levels.ERROR)
+    return
+  end
+
   local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
-  local requested_launch_cmd = compute_launch_cmd(agent_cfg)
+  local requested_launch_cmd = launch_spec and launch_spec.command or nil
+  local requested_launch_key = serialize_launch_command(requested_launch_cmd)
 
   -- Check for persisted session.
   -- Even if resume is disabled globally, if a persisted session exists (e.g. explicitly Detached),
   -- we should try to restore it.
-  if not (state.sessions[agent_name] and state.sessions[agent_name].pane_id) then
+  if backend_supports_persistence(backend_name)
+    and not (state.sessions[agent_name] and state.sessions[agent_name].pane_id)
+  then
     local persisted_pane = persistence.get_session(agent_name)
     if persisted_pane and persisted_pane ~= "" then
       -- Verify if pane still exists
@@ -230,7 +302,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
           last_output = "",
           backend = backend_name,
           watch_enabled = watch_enabled_val,
-          launch_cmd = requested_launch_cmd,
+          launch_cmd = requested_launch_key,
           hidden = true, -- Assume hidden/detached if we are restoring it
           cwd = vim.fn.getcwd()
         }
@@ -284,6 +356,13 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       end
 
       if backend_mod and type(backend_mod.join_pane) == "function" then
+        if backend_mod and type(backend_mod.configure_pane) == "function" then
+          local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
+          backend_mod.configure_pane(state.sessions[agent_name].pane_id, {
+            refocus_on_send = refocus,
+            source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
+          })
+        end
         local size_arg = agent_cfg.pane_size or 30
         -- Ignore last_size for now to enforce consistent sizing with initial launch
         -- if state.sessions[agent_name].last_size then
@@ -339,14 +418,21 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
     end
 
     -- If an existing session was launched with a different command, don't reuse it.
-    if state.sessions[agent_name].launch_cmd and requested_launch_cmd and state.sessions[agent_name].launch_cmd ~= requested_launch_cmd then
+    if state.sessions[agent_name].launch_cmd and requested_launch_key and state.sessions[agent_name].launch_cmd ~= requested_launch_key then
       -- Intentionally don't reuse; fall through to create a new session
     else
-      if backend_mod and type(backend_mod.pane_exists) == "function" then
-        if backend_mod.pane_exists(state.sessions[agent_name].pane_id) then
-          on_ready(state.sessions[agent_name].pane_id)
-          return
-        end
+        if backend_mod and type(backend_mod.pane_exists) == "function" then
+          if backend_mod.pane_exists(state.sessions[agent_name].pane_id) then
+            if backend_mod and type(backend_mod.configure_pane) == "function" then
+              local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
+              backend_mod.configure_pane(state.sessions[agent_name].pane_id, {
+                refocus_on_send = refocus,
+                source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
+              })
+            end
+            on_ready(state.sessions[agent_name].pane_id)
+            return
+          end
       else
         on_ready(state.sessions[agent_name].pane_id)
         return
@@ -376,8 +462,8 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         last_output = "",
         backend = backend_name,
         watch_enabled = watch_enabled_val,
-        launch_cmd = requested_launch_cmd,
-        cwd = vim.fn.getcwd(),
+        launch_cmd = requested_launch_key,
+        cwd = resolve_root_dir(agent_cfg),
         hidden = (agent_cfg.stay_hidden == true),
         mode = mode
       }
@@ -398,12 +484,15 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       -- Configure pane options (e.g. refocus_on_send) so send_keys/paste_and_submit behave correctly.
       if backend_mod and type(backend_mod.configure_pane) == "function" then
         local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
-        backend_mod.configure_pane(pane_id, { refocus_on_send = refocus })
+        backend_mod.configure_pane(pane_id, {
+          refocus_on_send = refocus,
+          source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
+        })
       end
 
       -- Persist session if resume is enabled
       local resume_enabled = (agent_cfg and agent_cfg.resume) or (state.opts and state.opts.resume)
-      if resume_enabled then
+      if resume_enabled and backend_supports_persistence(backend_name) then
         persistence.update_session(agent_name, pane_id, state.sessions[agent_name].cwd)
       end
 
@@ -419,8 +508,10 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       -- Send initial_send text after agent startup if configured.
       -- Uses agent_cfg.initial_send if set; falls back to opts.mcp_initial_send when mcp_mode is on.
       -- Only fires on new sessions (not reused ones), with a startup delay to let the CLI initialize.
-      local init_send = (agent_cfg and agent_cfg.initial_send)
-        or (state.opts and state.opts.mcp_mode and state.opts.mcp_initial_send)
+      local init_send = agent_cfg and agent_cfg.initial_send
+      if not acp_logic.is_acp_backend(backend_name) then
+        init_send = init_send or (state.opts and state.opts.mcp_mode and state.opts.mcp_initial_send)
+      end
       if init_send and init_send ~= "" then
         local delay_ms = (agent_cfg and agent_cfg.initial_send_delay) or (state.opts and state.opts.initial_send_delay) or 3000
         vim.defer_fn(function()
@@ -446,10 +537,18 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
 
   local function do_split()
     split_opts.env = split_opts.env or {}
+
+    if acp_logic.is_acp_backend(backend_name) then
+      split_opts.acp = build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts)
+      backend_mod.split(nil, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, split_opts)
+      return
+    end
+
     -- Inject MCP URL into agent environment
     if state.opts and state.opts.mcp_mode and state.opts._mcp_url then
       split_opts.env.LAZYAGENT_MCP_URL = state.opts._mcp_url
     end
+
     local launch_cmd = requested_launch_cmd
     if state.opts and state.opts.mcp_mode then
       local cache_dir = (state.opts.cache and state.opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
@@ -548,7 +647,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   end
 
   -- If mcp_mode is enabled but the server is not ready yet, wait for it before launching the agent
-  if state.opts and state.opts.mcp_mode and not state.opts._mcp_url then
+  if not acp_logic.is_acp_backend(backend_name) and state.opts and state.opts.mcp_mode and not state.opts._mcp_url then
     local max_attempts = 50 -- up to 5 seconds (50 * 100ms)
     local attempts = 0
     local function wait_for_mcp()
@@ -824,7 +923,7 @@ function M.close_all_sessions(sync)
            end
         end
 
-        if resume_enabled then
+        if resume_enabled and backend_supports_persistence(s.backend) then
           -- If resume is enabled, do NOT kill the pane.
           -- Instead, ensure it is detached/hidden (break_pane) so it doesn't clutter the current window.
           -- Since we are exiting, we might not need to break_pane if the parent tmux window is closing anyway,
@@ -1074,9 +1173,14 @@ function M.detach_session(agent_name)
       return
     end
 
-    -- Mark for persistence so close_all_sessions won't kill it
-    s.force_resume = true
-    persistence.update_session(chosen, s.pane_id, s.cwd)
+    local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen, nil)
+    local persistable = backend_supports_persistence(s.backend)
+
+    if persistable then
+      -- Mark for persistence so close_all_sessions won't kill it
+      s.force_resume = true
+      persistence.update_session(chosen, s.pane_id, s.cwd)
+    end
 
     -- Close the floating window if it's open for this agent
     if state.open_agent == chosen and window.is_open() then
@@ -1090,7 +1194,6 @@ function M.detach_session(agent_name)
 
     -- Hide the pane (break_pane)
     if not s.hidden then
-      local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen, nil)
       if backend_mod and type(backend_mod.break_pane) == "function" then
         -- Try to save size before breaking
         if type(backend_mod.get_pane_info) == "function" then
@@ -1100,12 +1203,14 @@ function M.detach_session(agent_name)
             end
             backend_mod.break_pane(s.pane_id)
             s.hidden = true
-            vim.notify("Agent '" .. chosen .. "' detached and persisted.", vim.log.levels.INFO)
+            local label = persistable and "detached and persisted" or "detached for this Neovim session"
+            vim.notify("Agent '" .. chosen .. "' " .. label .. ".", vim.log.levels.INFO)
           end)
         else
           backend_mod.break_pane(s.pane_id)
           s.hidden = true
-          vim.notify("Agent '" .. chosen .. "' detached and persisted.", vim.log.levels.INFO)
+          local label = persistable and "detached and persisted" or "detached for this Neovim session"
+          vim.notify("Agent '" .. chosen .. "' " .. label .. ".", vim.log.levels.INFO)
         end
       end
     else
@@ -1114,6 +1219,46 @@ function M.detach_session(agent_name)
   end
 
   agent_logic.resolve_target_agent(agent_name, nil, _detach)
+end
+
+function M.pick_acp_config(agent_name, category)
+  resolve_acp_target_agent(agent_name, function(chosen)
+    if not chosen or chosen == "" then
+      return
+    end
+
+    local agent_cfg = agent_logic.get_interactive_agent(chosen)
+    if not agent_cfg then
+      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not configured", vim.log.levels.WARN)
+      return
+    end
+
+    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(chosen, agent_cfg)
+    if not acp_logic.is_acp_backend(backend_name) then
+      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not using ACP", vim.log.levels.WARN)
+      return
+    end
+
+    M.ensure_session(chosen, agent_cfg, true, function(pane_id)
+      if not pane_id or pane_id == "" then
+        vim.notify("LazyAgentACP: failed to obtain a session for '" .. tostring(chosen) .. "'", vim.log.levels.ERROR)
+        return
+      end
+      if not backend_mod or type(backend_mod.show_config_picker) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose config pickers", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_config_picker(pane_id, category)
+    end)
+  end)
+end
+
+function M.pick_acp_model(agent_name)
+  M.pick_acp_config(agent_name, "model")
+end
+
+function M.pick_acp_mode(agent_name)
+  M.pick_acp_config(agent_name, "mode")
 end
 
 ---
@@ -1144,11 +1289,16 @@ function M.start_interactive_session(opts)
   -- like pane_size, is_vertical, and scratch_filetype.
   local agent_cfg = vim.tbl_deep_extend("force", base_agent_cfg or {}, opts or {})
   local origin_bufnr = opts.source_bufnr or opts.origin_bufnr or vim.api.nvim_get_current_buf()
+  local origin_winid = opts.source_winid or opts.origin_winid or vim.api.nvim_get_current_win()
+  agent_cfg.source_bufnr = origin_bufnr
+  agent_cfg.origin_bufnr = origin_bufnr
+  agent_cfg.source_winid = origin_winid
+  agent_cfg.origin_winid = origin_winid
 
-  -- Determine whether a launch command is available for this agent (cmd, cmd_yolo, or yolo flag)
-  local has_launch = agent_cfg and (agent_cfg.cmd or agent_cfg.cmd_yolo or agent_cfg.yolo_flag or (state.opts and state.opts.yolo_flag))
-  if not has_launch then
-    vim.notify("interactive agent " .. tostring(agent_name) .. " is not configured with a launch command", vim.log.levels.ERROR)
+  local launch_spec, launch_err = agent_logic.resolve_launch_spec(agent_name, agent_cfg)
+  local has_running_session = state.sessions[agent_name] and state.sessions[agent_name].pane_id
+  if not launch_spec and not has_running_session then
+    vim.notify("interactive agent " .. tostring(agent_name) .. ": " .. tostring(launch_err or "launch command is not configured"), vim.log.levels.ERROR)
     return
   end
 
@@ -1183,6 +1333,7 @@ function M.start_interactive_session(opts)
       open_opts.start_in_insert_on_focus = (state.opts and state.opts.start_in_insert_on_focus) or false
     end
     open_opts.is_vertical = agent_cfg.is_vertical or false
+    open_opts.parent_winid = origin_winid
 
     -- Pass specific window overrides (size, etc)
     if opts.window_opts then
@@ -1212,8 +1363,6 @@ end
 -- @param agent_name (string|nil) Pre-select the agent name; if nil the user is prompted.
 -- @param pane_id    (string|nil) Pre-select the pane ID;   if nil the user is prompted.
 function M.attach_session(agent_name, pane_id)
-  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name or "", nil)
-
   -- Collect live panes via `tmux list-panes -a`
   local function list_panes()
     local fmt = "#{pane_id}\t#{pane_current_command}\t#{session_name}:#{window_name}"
@@ -1236,6 +1385,12 @@ function M.attach_session(agent_name, pane_id)
     end
     if not chosen_pane_id or chosen_pane_id == "" then
       vim.notify("LazyAgentAttach: no pane selected", vim.log.levels.WARN)
+      return
+    end
+
+    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(chosen_agent, nil)
+    if acp_logic.is_acp_backend(backend_name) then
+      vim.notify("LazyAgentAttach: ACP sessions cannot be reattached after Neovim restart", vim.log.levels.WARN)
       return
     end
 

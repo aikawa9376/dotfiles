@@ -133,20 +133,25 @@ function M.register_scratch_keymaps(bufnr, opts)
       local _send_mode = config.pref(agent_cfg, "send_mode", nil)
       local _move_to_end = (_send_mode == "append")
       local _use_bracketed_paste = config.pref(agent_cfg, "use_bracketed_paste", nil)
-      backend_mod.paste_and_submit(pane, text, submit_keys, {
+      local submit_result = backend_mod.paste_and_submit(pane, text, submit_keys, {
         submit_delay = submit_delay,
         submit_retry = submit_retry,
         debug = state.opts.debug,
         move_to_end = _move_to_end,
         use_bracketed_paste = _use_bracketed_paste,
       })
+      if submit_result == false then
+        return
+      end
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
 
       -- Start monitoring for completion (spinner/loader) if appropriate
       local status_logic = require("lazyagent.logic.status")
-      if not (state.opts and state.opts.mcp_mode) then status_logic.start_monitor(agent_name) end
+      if submit_result == true and not (state.opts and state.opts.mcp_mode) then
+        status_logic.start_monitor(agent_name)
+      end
 
-      if close_after or state.opts.close_on_send then
+      if submit_result == true and (close_after or state.opts.close_on_send) then
         window.close()
         if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
           vim.api.nvim_buf_delete(bufnr, { force = true })

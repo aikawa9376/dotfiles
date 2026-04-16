@@ -4,6 +4,7 @@
 
 local M = {}
 local state = require("lazyagent.logic.state")
+local backend_logic = require("lazyagent.logic.backend")
 
 -- Return git-changed files in cwd modified at or after `since` (os.time()).
 -- If since is nil, returns all changed files.
@@ -781,8 +782,11 @@ M.list = {
       if not s or not s.pane_id then
         return nil, { code = -32602, message = "No pane for agent: " .. tostring(name) }
       end
-      local tmux = require("lazyagent.tmux")
-      local text = tmux.capture_pane_sync(s.pane_id)
+      local _, backend_mod = backend_logic.resolve_backend_for_agent(name, nil)
+      if not backend_mod or type(backend_mod.capture_pane_sync) ~= "function" then
+        return nil, { code = -32602, message = "Backend does not support capture for agent: " .. tostring(name) }
+      end
+      local text = backend_mod.capture_pane_sync(s.pane_id)
       return { agent_name = name, text = text }
     end,
   },

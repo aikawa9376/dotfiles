@@ -69,10 +69,17 @@ return {
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
     "LazyAgentOpenConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
+    "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
     backend = "tmux",
+    acp = {
+      enabled = true,
+      view = "buffer",
+      -- default_mode = "bypassPermissions", -- prefer provider mode when available
+      auto_permission = "allow_always",
+    },
     resume = false,
     scratch_keymaps = {
       close = "q",
@@ -100,9 +107,9 @@ return {
     --   Ubuntu: sudo apt install inotify-tools
     --   macOS:  brew install fswatch  (fswatch を使用)
     -- auto_follow = "split",
-    -- MCP server: Gemini CLI (and Claude Code) can use lazyagent tools
-    -- (get_diagnostics, get_buffer, notify_done, etc.) via HTTP MCP.
-    -- Port is fixed so Gemini's ~/.gemini/settings.json stays valid across restarts.
+    -- MCP server for non-ACP / legacy agent integrations.
+    -- ACP mode itself no longer depends on this path; if all configured agents use ACP,
+    -- lazyagent skips starting the MCP server even when this stays true.
     mcp_mode = true,
     -- mcp_host: set to "0.0.0.0" to expose the MCP server (and web UI) to the local network.
     -- Access the web UI at http://<your-ip>:<port>/ from any device on the same network.

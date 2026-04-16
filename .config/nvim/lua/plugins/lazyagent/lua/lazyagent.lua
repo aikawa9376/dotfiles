@@ -20,6 +20,9 @@ M.close_all_sessions = session_logic.close_all_sessions
 M.toggle_session = session_logic.toggle_session
 M.open_instant = session_logic.open_instant
 M.attach_session = session_logic.attach_session
+M.pick_acp_config = session_logic.pick_acp_config
+M.pick_acp_model = session_logic.pick_acp_model
+M.pick_acp_mode = session_logic.pick_acp_mode
 M.send_visual = send_logic.send_visual
 M.send_line = send_logic.send_line
 M.status = status_logic.get_status
@@ -272,6 +275,7 @@ function M.setup(opts)
         is_vertical = true,
         yolo = false,
         yolo_flag = nil,
+        acp = nil,
         default = false,
       }
       return {
@@ -285,10 +289,13 @@ function M.setup(opts)
         }),
         Gemini = vim.tbl_deep_extend("force", base, {
           cmd = "gemini",
+          acp_cmd = { "gemini", "--acp" },
+          acp_cmd_fallbacks = { { "gemini", "--experimental-acp" } },
           yolo_flag = "--yolo",
         }),
         Copilot = vim.tbl_deep_extend("force", base, {
           cmd = "copilot",
+          acp_cmd = { "copilot", "--acp" },
           yolo_flag = "--yolo --allow-all-tools",
           -- Copilot's TUI (Bubble Tea) pauses input handling after a focus-out event.
           -- Sending \e[I (focus-in) before each send restores normal input processing.
@@ -296,6 +303,11 @@ function M.setup(opts)
         }),
         Cursor = vim.tbl_deep_extend("force", base, {
           cmd = "cursor-agent",
+          acp_cmd = { "cursor-agent", "acp" },
+          acp_cmd_fallbacks = {
+            { "agent", "acp" },
+            { "cursor-agent", "--acp" },
+          },
           yolo_flag = "--yolo",
         }),
       }
@@ -303,6 +315,13 @@ function M.setup(opts)
     start_in_insert_on_focus = false,
     window_type = "float",
     backend = "tmux",
+    acp = {
+      enabled = false,
+      view = "tmux",
+      auto_permission = nil,
+      default_mode = nil,
+      initial_model = nil,
+    },
     tmux_auto_exit_copy_mode = true,
     submit_delay = 600,
     submit_retry = 1,
@@ -381,6 +400,24 @@ function M.setup(opts)
   }
 
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
+
+  local function should_start_mcp_server()
+    if not M.opts.mcp_mode then
+      return false
+    end
+
+    local acp_logic = require("lazyagent.logic.acp")
+    local agents = M.opts.interactive_agents or {}
+    local has_agents = false
+    for name, cfg in pairs(agents) do
+      has_agents = true
+      if not acp_logic.resolve(name, cfg).enabled then
+        return true
+      end
+    end
+
+    return not has_agents
+  end
 
   -- Register any backend modules passed through setup opts (backends[name]={module} OR backends[name]="lua.module.path")
   if M.opts.backends and type(M.opts.backends) == "table" then
@@ -487,8 +524,8 @@ function M.setup(opts)
     pcall(function() uv2.fs_unlink(cache_dir .. "/lazyagent-system-defaults.json") end)
   end
 
-  -- Start MCP server if mcp_mode is enabled
-  if M.opts.mcp_mode then
+  -- Start MCP server only when non-ACP agents still need it.
+  if should_start_mcp_server() then
     -- Run startup cleanup to avoid accumulating stale sockets/persistence
     pcall(function() cleanup_stale_resources(M.opts) end)
     -- Purge old conversation logs based on retention setting
@@ -580,6 +617,9 @@ function M.setup(opts)
         desc = "Stop lazyagent MCP server on exit",
       })
     end)
+  elseif M.opts.mcp_mode then
+    M.opts._mcp_url = nil
+    M.opts._mcp_type = nil
   end
 end
 
