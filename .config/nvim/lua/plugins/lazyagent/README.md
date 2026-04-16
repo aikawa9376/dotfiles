@@ -1,6 +1,6 @@
 # lazyagent.nvim
 
-選択テキストや現在行を、設定した「エージェント」（Lua関数または外部CLI）に送信するNeovimプラグインです。CLI 連携には tmux を使った対話型エージェント（例: Gemini / Claude / Codex / Copilot / Cursor）をサポートします。スクラッチ入力バッファ、キャッシュ保存、lazy.nvim 互換のキー読み込みを備えています。
+選択テキストや現在行を、設定した「エージェント」（Lua関数または外部CLI）に送信するNeovimプラグインです。CLI 連携には tmux を使った対話型エージェント（例: Gemini / Claude / Codex / Copilot / Cursor）をサポートし、必要なら ACP (Agent Client Protocol) を opt-in で利用できます。スクラッチ入力バッファ、キャッシュ保存、lazy.nvim 互換のキー読み込みを備えています。
 
 主な機能
 - ビジュアル選択や現在行のテキストをエージェントへ送信
@@ -51,13 +51,14 @@ lazyagent の `setup(opts)` で指定可能です。主なデフォルト:
 {
   filetype_settings = { ["*"] = { agent = "Gemini" } },
   prompts = { default_agent = function(context) ... end },
-  interactive_agents = {
-    Gemini = {
-      cmd = "gemini",
-      pane_size = 30,
-      scratch_filetype = "lazyagent",
-      submit_keys = { "C-m" }, -- tmux-style key; "<CR>" and "<c-m>" are accepted and normalized for convenience
-      capture_delay = 800,
+    interactive_agents = {
+      Gemini = {
+        cmd = "gemini",
+        acp_cmd = { "gemini", "--acp" },
+        pane_size = 30,
+        scratch_filetype = "lazyagent",
+        submit_keys = { "C-m" }, -- tmux-style key; "<CR>" and "<c-m>" are accepted and normalized for convenience
+        capture_delay = 800,
       -- スクラッチ補完（/ や @ 用）を追加したい場合は scratch_completions を指定してください。
       -- 文字列配列、または配列を返す関数を渡せます。
       -- scratch_completions = {
@@ -66,9 +67,13 @@ lazyagent の `setup(opts)` で指定可能です。主なデフォルト:
       -- },
     },
     -- Claude, Codex など
-  },
-  window_type = "float", -- または "vsplit"
-  close_on_send = true, -- 送信後に float を閉じるか
+    },
+    window_type = "float", -- または "vsplit"
+    acp = {
+      enabled = false,
+      view = "tmux", -- "tmux" または "buffer"
+    },
+    close_on_send = true, -- 送信後に float を閉じるか
   send_key_insert = "<C-CR>",
   send_key_normal = "<CR>",
   setup_keymaps = false, -- true にするとプラグイン側がデフォルトキーを登録します
@@ -85,9 +90,11 @@ lazyagent の `setup(opts)` で指定可能です。主なデフォルト:
 
 ### バックエンド（backend）の切り替え
 
-lazyagent では、対話式セッションの「バックエンド」として `tmux` と `builtin` の 2 種類をサポートしています。
+lazyagent では、対話式セッションの「バックエンド」として `tmux` / `tmux_acp` / `buffer_acp` / `builtin` をサポートしています。
 
 - `tmux` バックエンド: tmux のペインを作成して対話セッションを管理します（デフォルト）。
+- `tmux_acp` バックエンド: tmux の transcript ペインを維持したまま、ACP(JSON-RPC) で agent と通信します。
+- `buffer_acp` バックエンド: transcript を Neovim buffer/split に表示したまま、ACP(JSON-RPC) で agent と通信します。
 - `builtin` バックエンド: Neovim 内のバッファを擬似ペインとして利用します（tmux を使いたくないときの代替手段）。
 
 バックエンドはグローバル（全エージェントの既定）で設定することも、各エージェント設定で個別に上書きすることも可能です。
@@ -96,9 +103,59 @@ lazyagent では、対話式セッションの「バックエンド」として 
 
 ```lua
 require("lazyagent").setup({
-  backend = "builtin", -- "tmux" または "builtin"
+  backend = "builtin", -- "tmux" / "tmux_acp" / "buffer_acp" / "builtin"
 })
 ```
+
+### ACP モード
+
+既存の使い勝手はそのままに、`acp.enabled = true` を立てたときだけ ACP 対応 agent を起動できます。表示先は `acp.view = "tmux"` または `"buffer"` で切り替えます。
+
+```lua
+require("lazyagent").setup({
+  acp = {
+    enabled = true,
+    view = "buffer",
+    default_mode = "bypassPermissions",
+    auto_permission = "allow_always",
+  },
+  interactive_agents = {
+    Gemini = { acp_cmd = { "gemini", "--acp" } },
+    Copilot = { acp_cmd = { "copilot", "--acp" } },
+    Cursor = {
+      acp_cmd = { "cursor-agent", "acp" },
+      acp_cmd_fallbacks = {
+        { "agent", "acp" },
+        { "cursor-agent", "--acp" },
+      },
+    },
+  },
+})
+```
+
+- デフォルトは `false` なので、既存の tmux ベース運用は変わりません。
+- `acp.view = "tmux"` なら `tmux_acp`、`acp.view = "buffer"` なら `buffer_acp` が選ばれます。
+- 最高権限寄りで始めたい場合は、まず provider が expose している mode を `acp.default_mode` で指定するのが本命です。agentic.nvim と同じく、`"bypassPermissions"` のような mode がある provider ではこちらを優先してください。
+- `acp.auto_permission = "allow_always"` は fallback としては有効ですが、provider mode を切り替えられない場合の補助です。`yolo = true` だけでは ACP permission は暗黙で `allow_once` までに留めています。
+- `interactive_agents.<name>.acp = false` を付けると、global ACP 有効時でもその agent だけ従来 backend を使えます。
+- `interactive_agents.<name>.acp = { enabled = true, view = "tmux" }` のように agent 単位で view を上書きできます。
+- `acp.default_mode` / `acp.initial_model` は session ready 後に自動で適用します。agent 単位では `interactive_agents.<name>.acp = { default_mode = "...", initial_model = "..." }` や旧式 alias の `acp_default_mode` / `acp_initial_model` も使えます。
+- ACP でも scratch / cache / `#history` / `#report` はそのまま使えます。会話保存は tmux pane ではなく transcript から取ります。
+- ACP セッションは lazyagent の独自 MCP server に依存しません。status 更新や permission 応答後の monitor 再開、編集後の open-last-changed も Neovim 側で直接処理します。
+- ACP の scratch `/` 補完は agent が `available_commands_update` で advertise した command に加えて、lazyagent 側の `/config` `/model` `/mode` `/new` を出します。
+- `/model` `/mode` `/config` は ACP に plain text として送らず、Neovim の `vim.ui.select` で local selector を開きます。provider 側の picker UI をそのまま再現するのではなく、agentic.nvim 寄りの挙動です。
+- `:LazyAgentACPConfig` `:LazyAgentACPModel` `:LazyAgentACPMode` でも同じ selector を開けます。
+- ACP で agent から質問や確認が来た場合は、通常どおり scratch buffer から返信してください。generic な質問 picker は使わず、protocol で構造化されている permission request だけを picker で扱います。
+- advertise されていないその他の `/...` は plain prompt text として送られます。
+- `buffer` view では transcript 末尾に薄い footer 行を実バッファとして保ち、`Thinking...` / `Waiting...` などの進行中ステータスを独立行で表示します。footer メタ情報はその下に 2 行空けて、transcript size、provider/version、current model/mode、reasoning、model usage 倍率（Copilot が expose している場合）、MCP server 数、slash command 数、embedded context 対応をまとめて表示します。
+- この footer は transcript window 幅に合わせて折り返され、更新時は末尾が見えるように view を調整します。
+- footer/statusline/float は使わず、会話バッファ自身の末尾に情報を寄せるので、window focus や globalstatus 設定に影響されません。
+- `mcp_mode` は ACP では必須ではありません。true のままでも、全 agent が ACP で動く構成なら lazyagent の MCP server は起動せず、非 ACP agent がいる場合だけ起動します。
+- ACP でも global/scratch の特殊キー送信は使えます。`C-c` は現在の turn を cancel し、数字キーはその数字をそのまま prompt として送信します。`Up` / `Down` は transcript を半画面ずつ scroll し、`Escape` は最下部へ戻って follow を再開します。
+- `buffer_acp` の split は `winfixwidth` / `winfixheight` を使ってサイズを固定するので、ファイラーなど別ウィンドウを開いても transcript pane が広がりにくくなっています。
+- `Remaining reqs.` や loaded skill 数のような値は、provider が ACP で expose していない限り表示しません。現状の Copilot ACP ではそこまでは取得できません。
+- transcript は `tmux` / `buffer` のどちらでも Nerd Font アイコン付きの section block で表示され、`User` / `Assistant` / `System` / `Tool` などの境目を追いやすくしています。
+- `LazyAgentAttach` / 永続 resume は ACP セッションでは未対応です。
 
 - setup 時に custom backend モジュールのマッピングを渡す（文字列としてモジュールパス or モジュールオブジェクトを渡せます）：
 
@@ -124,9 +181,11 @@ require("lazyagent").set_agent_backend("Gemini", "mybackend")
 
 ### バックエンド（backend）の切り替え
 
-lazyagent では、対話式セッションの「バックエンド」として `tmux` と `builtin` の 2 種類をサポートしています。
+lazyagent では、対話式セッションの「バックエンド」として `tmux` / `tmux_acp` / `buffer_acp` / `builtin` をサポートしています。
 
 - `tmux` バックエンド: tmux のペインを作成して対話セッションを管理します（デフォルト）。
+- `tmux_acp` バックエンド: tmux transcript を残しつつ ACP で agent と通信します。
+- `buffer_acp` バックエンド: transcript を Neovim buffer に表示したまま ACP で agent と通信します。
 - `builtin` バックエンド: Neovim 内のバッファを擬似ペインとして利用します（tmux を使いたくないときの代替手段）。
 
 バックエンドはグローバル（全エージェントの既定）で設定することも、各エージェント設定で個別に上書きすることも可能です。
@@ -135,7 +194,7 @@ lazyagent では、対話式セッションの「バックエンド」として 
 
 ```lua
 require("lazyagent").setup({
-  backend = "builtin", -- "tmux" または "builtin"
+  backend = "builtin", -- "tmux" / "tmux_acp" / "buffer_acp" / "builtin"
 })
 ```
 
@@ -202,7 +261,10 @@ prompts = {
 - LazyAgentClose — スクラッチを閉じる
 - LazyAgentHistory — キャッシュに保存された履歴ログを UI で選択してバッファで開く（引数にファイル名を渡すと直接開けます）
 - LazyAgentSummary — プロジェクト/ブランチごとの summary Markdown を UI で選択し、開く/パスをコピーする（引数に `copy` を渡すとコピーのみ）
-- LazyAgentAttach — nvim 再起動後などに、すでに起動している tmux ペインをエージェントセッションとして再接続する。引数なしで実行するとエージェント選択→ペイン選択の UI が表示される。`LazyAgentAttach Claude %7` のようにエージェント名とペイン ID を直接渡すこともできる。
+- LazyAgentAttach — nvim 再起動後などに、すでに起動している tmux ペインをエージェントセッションとして再接続する。引数なしで実行するとエージェント選択→ペイン選択の UI が表示される。`LazyAgentAttach Claude %7` のようにエージェント名とペイン ID を直接渡すこともできる。ACP セッションの再接続には未対応。
+- LazyAgentACPConfig — ACP セッションの config option selector を開く（model/mode 以外の option も含む）
+- LazyAgentACPModel — ACP セッションの model selector を開く
+- LazyAgentACPMode — ACP セッションの mode selector を開く
 - Claude, Codex, Gemini, Copilot, Cursor — 対話型エージェントを直接開始するコマンド（lazy の cmd で読み込む）
 
 - `#report`（`- Summarize in Markdown file.`）トークンを使うと、`stdpath("cache")/lazyagent/summary/<project>-<branch>-<slug>.md` というプレフィックスを提示します（プロジェクト・ブランチ部分はプラグインで付与、slug は AI に選ばせる）。AI 側でそのパスに Markdown を作成/追記してください。`LazyAgentSummary` で既存の summary を開いたりパスをコピーできます。
@@ -232,6 +294,8 @@ prompts = {
   指定バッファ（省略時は現在のバッファ）の全内容を指定エージェントに送信し、送信後にバッファを空にします。スクラッチのフロートは閉じません（interactive agent / prompt agent の両方に対応）。
 - `require("lazyagent").send_and_clear(agent_name)`:
   `send_buffer_and_clear()` の便利ラッパーで、現在のバッファを対象に送信・クリアを行います。
+- `require("lazyagent").pick_acp_config(agent_name)` / `.pick_acp_model(agent_name)` / `.pick_acp_mode(agent_name)`:
+  ACP セッション用の local selector を開きます。agent 名を省略すると ACP 有効な agent から選択します。
 - `require("lazyagent").close_session(agent_name)` / `.close_all_sessions()`:
   1 つのセッション、もしくは全セッションを閉じる
 

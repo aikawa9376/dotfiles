@@ -1,8 +1,21 @@
 local M = {}
 local agent_logic = require("lazyagent.logic.agent")
+local backend_logic = require("lazyagent.logic.backend")
 local state = require("lazyagent.logic.state")
 
 local animation_timer = nil
+
+local function refresh_transcript_footers()
+  pcall(function()
+    require("lazyagent.acp.view_buffer").refresh_all_footers()
+  end)
+end
+
+local function refresh_ui()
+  pcall(function() require("lualine").refresh() end)
+  pcall(vim.cmd, "redrawstatus")
+  refresh_transcript_footers()
+end
 
 -- Start animation loop if any session is in monitoring mode
 local function check_and_animate()
@@ -24,26 +37,27 @@ local function check_and_animate()
                  still_active = true
                  break
               end
-           end
-           if still_active then
-              require("lualine").refresh()
-           else
-              if animation_timer then
-                 animation_timer:stop()
-                 animation_timer:close()
-                 animation_timer = nil
-              end
-              require("lualine").refresh()
-           end
-        end))
-     end
+            end
+            if still_active then
+               refresh_ui()
+            else
+               if animation_timer then
+                  animation_timer:stop()
+                  animation_timer:close()
+                  animation_timer = nil
+               end
+               refresh_ui()
+             end
+          end))
+      end
   else
-     if animation_timer then
+      if animation_timer then
         animation_timer:stop()
-        animation_timer:close()
-        animation_timer = nil
-     end
-  end
+         animation_timer:close()
+         animation_timer = nil
+       end
+      refresh_ui()
+    end
 end
 
 local icons = {
@@ -89,20 +103,29 @@ local function stop_monitor_timer(s)
   end
 end
 
+local function capture_for_session(agent_name, session)
+  if not session or not session.pane_id then
+    return nil
+  end
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+  if not backend_mod or type(backend_mod.capture_pane_sync) ~= "function" then
+    return nil
+  end
+  return backend_mod.capture_pane_sync(session.pane_id, 300)
+end
+
 -- Mark an agent as idle (called by MCP notify_done tool or internally)
 function M.set_idle(agent_name)
   local s = state.sessions[agent_name]
   if not s then return end
   stop_monitor_timer(s)
   s.agent_status = "idle"
+  s.agent_status_message = "Ready"
   require("lazyagent.window").set_title(" " .. agent_name .. " (Idle) ")
-  pcall(function() require("lualine").refresh() end)
+  refresh_ui()
   pcall(function()
     local transport = require("lazyagent.mcp.transport")
-    local capture = nil
-    if s.pane_id then
-      capture = require("lazyagent.tmux").capture_pane_sync(s.pane_id, 300)
-    end
+    local capture = capture_for_session(agent_name, s)
     transport.push_event({ event = "done", agent = agent_name, capture = capture })
   end)
 
@@ -120,13 +143,11 @@ function M.set_waiting(agent_name, msg)
   if not s then return end
   stop_monitor_timer(s)
   s.agent_status = "waiting"
+  s.agent_status_message = msg or "Waiting..."
   require("lazyagent.window").set_title(" " .. agent_name .. " (" .. (msg or "Waiting...") .. ") ")
-  pcall(function() require("lualine").refresh() end)
+  refresh_ui()
   pcall(function()
-    local capture = nil
-    if s.pane_id then
-      capture = require("lazyagent.tmux").capture_pane_sync(s.pane_id, 300)
-    end
+    local capture = capture_for_session(agent_name, s)
     require("lazyagent.mcp.transport").push_event({
       event = "waiting", agent = agent_name, message = msg or "Waiting...", capture = capture,
     })
@@ -138,10 +159,12 @@ function M.start_monitor(agent_name)
   if not s then return end
 
   s.agent_status = "thinking"
+  s.agent_status_message = "Thinking..."
   require("lazyagent.window").set_title(" " .. agent_name .. " (Thinking...) ")
   pcall(function()
     require("lazyagent.mcp.transport").push_event({ event = "start", agent = agent_name })
   end)
+  refresh_ui()
 
   if s.monitor_timer then
     pcall(function() s.monitor_timer:stop() end)

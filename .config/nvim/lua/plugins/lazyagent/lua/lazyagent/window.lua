@@ -65,6 +65,56 @@ local function apply_window_defaults(id)
   -- pcall(function() vim.wo[id].winfixbuf = true end)
 end
 
+local function is_normal_window(win)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return false
+  end
+  local ok, config = pcall(vim.api.nvim_win_get_config, win)
+  return ok and config and config.relative == ""
+end
+
+local function resolve_parent_window(opts)
+  local requested = opts and (opts.parent_winid or opts.source_winid or opts.origin_winid) or nil
+  if is_normal_window(requested) then
+    return requested
+  end
+
+  local current = vim.api.nvim_get_current_win()
+  if is_normal_window(current) then
+    return current
+  end
+
+  return nil
+end
+
+local function resolve_window_area(opts)
+  local parent = resolve_parent_window(opts)
+  if parent then
+    local pos = vim.api.nvim_win_get_position(parent)
+    return {
+      row = pos[1],
+      col = pos[2],
+      width = vim.api.nvim_win_get_width(parent),
+      height = vim.api.nvim_win_get_height(parent),
+      parent_winid = parent,
+    }
+  end
+
+  return {
+    row = 0,
+    col = 0,
+    width = vim.o.columns,
+    height = vim.o.lines,
+    parent_winid = nil,
+  }
+end
+
+local function clamp_size_to_area(width, height, area)
+  width = math.max(10, math.min(width, math.max(10, area.width - 2)))
+  height = math.max(3, math.min(height, math.max(3, area.height - 2)))
+  return width, height
+end
+
 M.ensure_scratch_buffer = ensure_scratch_buffer
 
 function M.open_float(bufnr, opts)
@@ -72,31 +122,35 @@ function M.open_float(bufnr, opts)
   bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
   -- Record the previously focused normal window so we can restore files opened here.
   pcall(function()
-    local prev_win = vim.api.nvim_get_current_win()
+    local prev_win = resolve_parent_window(opts) or vim.api.nvim_get_current_win()
     pcall(function() vim.b[bufnr].lazyagent_prev_win = prev_win end)
   end)
 
-  -- Center the floating window
-  local width = math.floor(vim.o.columns * (opts.is_vertical and 0.6 or 0.5))
-  local height = math.floor(vim.o.lines * (opts.is_vertical and 0.3 or 0.5))
+  local area = resolve_window_area(opts)
+
+  -- Center the floating window relative to the source/parent window when available.
+  local width = math.floor(area.width * (opts.is_vertical and 0.6 or 0.5))
+  local height = math.floor(area.height * (opts.is_vertical and 0.3 or 0.5))
 
   -- Apply specific window overrides if provided
   if opts.window_opts then
-     if opts.window_opts.width_ratio then
-        width = math.floor(vim.o.columns * opts.window_opts.width_ratio)
-     elseif opts.window_opts.width then
-        width = opts.window_opts.width
-     end
+    if opts.window_opts.width_ratio then
+      width = math.floor(area.width * opts.window_opts.width_ratio)
+    elseif opts.window_opts.width then
+      width = opts.window_opts.width
+    end
 
-     if opts.window_opts.height_ratio then
-        height = math.floor(vim.o.lines * opts.window_opts.height_ratio)
-     elseif opts.window_opts.height then
-        height = opts.window_opts.height
-     end
+    if opts.window_opts.height_ratio then
+      height = math.floor(area.height * opts.window_opts.height_ratio)
+    elseif opts.window_opts.height then
+      height = opts.window_opts.height
+    end
   end
 
-  local row = math.floor((vim.o.lines - height) / 2)
-  local col = math.floor((vim.o.columns - width) / 2)
+  width, height = clamp_size_to_area(width, height, area)
+
+  local row = area.row + math.floor((area.height - height) / 2)
+  local col = area.col + math.floor((area.width - width) / 2)
 
   local win_opts = {
     relative = "editor",
@@ -140,13 +194,13 @@ function M.open_float(bufnr, opts)
 
   local function shrink_float()
     if not winid or not vim.api.nvim_win_is_valid(winid) then return end
-    local cols = vim.o.columns
-    local lines = vim.o.lines
+    local shrink_area = resolve_window_area(opts)
     -- Small size and place in bottom-right corner
-    local w = math.max(10, math.floor(cols * (opts.is_vertical and 0.2 or 0.2)))
-    local h = math.max(3, math.floor(lines * (opts.is_vertical and 0.1 or 0.2)))
-    local r = math.max(0, lines - h - 2)
-    local c = math.max(0, cols - w)
+    local w = math.max(10, math.floor(shrink_area.width * 0.2))
+    local h = math.max(3, math.floor(shrink_area.height * (opts.is_vertical and 0.1 or 0.2)))
+    w, h = clamp_size_to_area(w, h, shrink_area)
+    local r = shrink_area.row + math.max(0, shrink_area.height - h)
+    local c = shrink_area.col + math.max(0, shrink_area.width - w)
     local cfg = {
       relative = "editor",
       row = r,
@@ -208,6 +262,10 @@ end
 function M.open_vsplit(bufnr, opts)
   -- Ensure we always get a valid buffer and canonical opts table.
   bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
+  pcall(function()
+    local prev_win = resolve_parent_window(opts) or vim.api.nvim_get_current_win()
+    pcall(function() vim.b[bufnr].lazyagent_prev_win = prev_win end)
+  end)
   -- If a float autocmd group is active, clear it as we are switching to vsplit mode.
   if float_autocmd_group_id then
     pcall(vim.api.nvim_del_augroup_by_id, float_autocmd_group_id)
@@ -215,12 +273,17 @@ function M.open_vsplit(bufnr, opts)
     float_original_opts = nil
     float_is_focused = false
   end
-  local width = math.floor(vim.o.columns * 0.5)
+  local area = resolve_window_area(opts)
+  local width = math.max(10, math.floor(area.width * 0.5))
 
   if winid and vim.api.nvim_win_is_valid(winid) then
     vim.api.nvim_win_set_buf(winid, bufnr)
     vim.api.nvim_set_current_win(winid)
   else
+    local parent = resolve_parent_window(opts)
+    if parent then
+      pcall(vim.api.nvim_set_current_win, parent)
+    end
     vim.cmd("vsplit")
     vim.api.nvim_win_set_width(vim.api.nvim_get_current_win(), width)
     winid = vim.api.nvim_get_current_win()

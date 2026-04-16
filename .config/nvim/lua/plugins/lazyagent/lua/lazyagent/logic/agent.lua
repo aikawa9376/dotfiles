@@ -3,9 +3,49 @@
 local M = {}
 
 local state = require("lazyagent.logic.state")
-local backend = require("lazyagent.logic.backend")
+local acp_logic = require("lazyagent.logic.acp")
+local acp_local_commands = require("lazyagent.acp.local_commands")
 local path_completions = require("lazyagent.logic.path_completions")
 local completion_cache = {}
+local is_list = vim.islist or vim.tbl_islist
+
+local function join_cmd_parts(cmd)
+  if not cmd then return nil end
+  if type(cmd) == "table" then
+    local quoted = {}
+    for _, part in ipairs(cmd) do
+      table.insert(quoted, vim.fn.shellescape(tostring(part)))
+    end
+    return table.concat(quoted, " ")
+  end
+  return tostring(cmd)
+end
+
+local function first_executable(cmd)
+  if type(cmd) == "table" then
+    return cmd[1] and tostring(cmd[1]) or nil
+  end
+  if type(cmd) == "string" then
+    return cmd:match("^%s*([^%s]+)")
+  end
+  return nil
+end
+
+local function add_command_candidates(out, spec)
+  if not spec then return end
+  if type(spec) == "table" and is_list(spec) and type(spec[1]) == "table" then
+    for _, nested in ipairs(spec) do
+      add_command_candidates(out, nested)
+    end
+    return
+  end
+  table.insert(out, spec)
+end
+
+local function command_is_available(spec)
+  local exe = first_executable(spec)
+  return exe ~= nil and exe ~= "" and vim.fn.executable(exe) == 1
+end
 
 local function load_default_completions(agent_name)
   local key = agent_name and agent_name:lower() or ""
@@ -34,6 +74,84 @@ end
 -- @return (table|nil) The agent's configuration table, or nil if not found.
 function M.get_interactive_agent(agent)
   return state.opts.interactive_agents and state.opts.interactive_agents[agent] or nil
+end
+
+function M.use_acp(agent_name, agent_cfg)
+  return acp_logic.enabled(agent_name, agent_cfg)
+end
+
+function M.resolve_acp_command(agent_name, agent_cfg)
+  local cfg = agent_cfg or M.get_interactive_agent(agent_name) or {}
+  local candidates = {}
+  add_command_candidates(candidates, cfg.acp_cmd)
+  add_command_candidates(candidates, cfg.acp_cmd_fallbacks)
+
+  for _, candidate in ipairs(candidates) do
+    if command_is_available(candidate) then
+      return vim.deepcopy(candidate)
+    end
+  end
+
+  local primary = candidates[1]
+  if primary then
+    return nil, "ACP command not found: " .. tostring(first_executable(primary) or primary)
+  end
+
+  return nil, "ACP command is not configured"
+end
+
+function M.compute_cli_launch_cmd(agent_cfg)
+  local base_cmd = agent_cfg and agent_cfg.cmd or nil
+  local agent_yolo_flag = (agent_cfg and agent_cfg.yolo_flag) or (state.opts and state.opts.yolo_flag)
+  local use_yolo = agent_cfg and agent_cfg.yolo or false
+
+  local cmd_str
+  if use_yolo and agent_yolo_flag and base_cmd then
+    local joined = join_cmd_parts(base_cmd)
+    if joined and joined ~= "" then
+      cmd_str = joined .. " " .. tostring(agent_yolo_flag)
+    end
+  end
+
+  return cmd_str or join_cmd_parts(base_cmd)
+end
+
+function M.resolve_launch_spec(agent_name, agent_cfg)
+  if M.use_acp(agent_name, agent_cfg) then
+    local acp_cmd, err = M.resolve_acp_command(agent_name, agent_cfg)
+    if not acp_cmd then
+      return nil, err
+    end
+    local backend_name = acp_logic.backend_name(agent_name, agent_cfg) or "tmux_acp"
+    return {
+      backend = backend_name,
+      mode = "acp",
+      command = acp_cmd,
+    }
+  end
+
+  local cmd = M.compute_cli_launch_cmd(agent_cfg)
+  if not cmd or cmd == "" then
+    return nil, "Launch command is not configured"
+  end
+
+  return {
+    backend = (agent_cfg and agent_cfg.backend) or nil,
+    mode = "cli",
+    command = cmd,
+  }
+end
+
+function M.is_agent_available(agent_name, agent_cfg)
+  local cfg = agent_cfg or M.get_interactive_agent(agent_name)
+  if not cfg then return false end
+
+  if M.use_acp(agent_name, cfg) then
+    local acp_cmd = M.resolve_acp_command(agent_name, cfg)
+    return acp_cmd ~= nil
+  end
+
+  return cfg.cmd and command_is_available(cfg.cmd) or false
 end
 
 --- Gets a list of agents with active sessions (e.g., running tmux panes).
@@ -120,11 +238,22 @@ end
 function M.available_agents()
   local available = {}
   for k, cfg in pairs(state.opts.interactive_agents or {}) do
-    if cfg.cmd and vim.fn.executable(cfg.cmd) == 1 then
+    if M.is_agent_available(k, cfg) then
       table.insert(available, k)
     end
   end
   table.sort(available)
+  return available
+end
+
+function M.available_acp_agents()
+  local available = {}
+  for _, name in ipairs(M.available_agents()) do
+    local cfg = M.get_interactive_agent(name)
+    if M.use_acp(name, cfg) then
+      table.insert(available, name)
+    end
+  end
   return available
 end
 
@@ -140,8 +269,9 @@ local function normalize_completion_list(list)
     if type(v) == "table" then
       local label = v.label or v.text or v[1]
       local desc = v.desc or v.description or v[2] or ""
+      local doc = v.doc or v.documentation or v[3]
       if label and label ~= "" then
-        return { label = label, desc = desc }
+        return { label = label, desc = desc, doc = doc }
       end
     end
     return nil
@@ -165,6 +295,7 @@ function M.get_scratch_completions(agent_name)
   end
 
   local cfg = M.get_interactive_agent(agent_name)
+  local use_acp = M.use_acp(agent_name, cfg)
   local provider = cfg and cfg.scratch_completions
   local defaults = load_default_completions(agent_name)
   local provided = {}
@@ -181,7 +312,22 @@ function M.get_scratch_completions(agent_name)
   end
 
   local res = vim.tbl_deep_extend("force", {}, defaults or {}, provided or {})
-  res.slash = normalize_completion_list(res.slash or {})
+  local running = agent_name and state.sessions and state.sessions[agent_name] or nil
+  if use_acp then
+    local local_slash = normalize_completion_list(acp_local_commands.entries())
+    local explicit_slash = normalize_completion_list((provided and provided.slash) or {})
+    local dynamic_slash = {}
+    if running and type(running.acp_available_commands) == "table" then
+      dynamic_slash = vim.deepcopy(running.acp_available_commands)
+    end
+    res.slash = normalize_completion_list(vim.list_extend(vim.list_extend(local_slash, dynamic_slash), explicit_slash))
+  else
+    local dynamic_slash = {}
+    if running and type(running.acp_available_commands) == "table" then
+      dynamic_slash = vim.deepcopy(running.acp_available_commands)
+    end
+    res.slash = normalize_completion_list(vim.list_extend(dynamic_slash, res.slash or {}))
+  end
   -- Replace @ completions with fd-based file/dir list (common across agents).
   local fd_paths = path_completions.list_fd_paths()
   if fd_paths and #fd_paths > 0 then

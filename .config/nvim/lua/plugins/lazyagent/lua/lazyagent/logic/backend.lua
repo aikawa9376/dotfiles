@@ -2,10 +2,18 @@
 local M = {}
 
 local state = require("lazyagent.logic.state")
+local acp_logic = require("lazyagent.logic.acp")
 local tmux = require("lazyagent.tmux")
 local builtin_backend = require("lazyagent.builtin")
+local buffer_acp = require("lazyagent.buffer_acp")
+local tmux_acp = require("lazyagent.tmux_acp")
 
-state.backends = { tmux = tmux, builtin = builtin_backend }
+state.backends = {
+  tmux = tmux,
+  builtin = builtin_backend,
+  tmux_acp = tmux_acp,
+  buffer_acp = buffer_acp,
+}
 
 --- Resolves the backend module for a given agent.
 -- The backend can be specified at multiple levels, with agent-specific
@@ -14,6 +22,15 @@ state.backends = { tmux = tmux, builtin = builtin_backend }
 -- @param agent_cfg (table|nil) The agent's configuration table.
 -- @return (string, table) The name and module of the resolved backend.
 function M.resolve_backend_for_agent(agent_name, agent_cfg)
+  local acp_backend = acp_logic.backend_name(agent_name, agent_cfg)
+  if acp_backend then
+    local backend_mod = state.backends[acp_backend]
+    if backend_mod then
+      return acp_backend, backend_mod
+    end
+    return "tmux_acp", state.backends.tmux_acp or tmux_acp
+  end
+
   -- Precedence:
   -- 1. explicit agent_cfg.backend (per-agent setting passed to the call / agent config)
   -- 2. existing session backend (for running sessions)

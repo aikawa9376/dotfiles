@@ -40,20 +40,20 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
   local _move_to_end = (_send_mode == "append")
   local _use_bracketed_paste = config.pref(agent_cfg, "use_bracketed_paste", nil)
   if text:match("^/") then _use_bracketed_paste = false end
-  -- Start status monitor (spinner in statusline while agent is thinking)
-  status.start_monitor(agent_name)
-
-  backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
+  local submit_result = backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
     submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
     submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
     debug = state.opts.debug,
     move_to_end = _move_to_end,
     use_bracketed_paste = _use_bracketed_paste,
   })
+  if submit_result == true then
+    status.start_monitor(agent_name)
+  end
 
   -- For one-shot (non-interactive) sends, close the session after its turn is finished (status becomes idle or waiting).
   local session_logic = require("lazyagent.logic.session")
-  if not reuse then
+  if submit_result == true and not reuse then
     session_logic.close_session(agent_name)
   end
 end
@@ -115,20 +115,20 @@ function M.send_to_cli(agent_name, text, opts)
       -- Slash commands must not be wrapped in bracketed paste; CLIs treat bracketed
       -- paste as literal text and won't recognise the leading "/" as a command prefix.
       if text:match("^/") then _use_bracketed_paste = false end
-      -- Start status monitor (spinner in statusline while agent is thinking)
-      status.start_monitor(agent_name)
-
-      backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
+      local submit_result = backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
         submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
         submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
         debug = state.opts.debug,
         move_to_end = _move_to_end,
         use_bracketed_paste = _use_bracketed_paste,
       })
+      if submit_result == true then
+        status.start_monitor(agent_name)
+      end
 
       -- For one-shot (non-interactive) sends, close the session after its turn is finished (status becomes idle or waiting).
       local session_logic = require("lazyagent.logic.session")
-      if not reuse then
+      if submit_result == true and not reuse then
         session_logic.close_session(agent_name)
       end
     end)
@@ -217,16 +217,21 @@ function M.send_buffer_and_clear(agent_name, bufnr)
         return
       end
 
-      backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
+      local submit_result = backend_mod.paste_and_submit(pane_id, text, agent_cfg.submit_keys, {
         submit_delay = config.pref(agent_cfg, "submit_delay", state.opts.submit_delay),
         submit_retry = config.pref(agent_cfg, "submit_retry", state.opts.submit_retry),
         debug = state.opts.debug,
       })
+      if submit_result == false then
+        return
+      end
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
 
       -- Start status monitor (spinner in statusline while agent is thinking)
       -- We start it here locally; agents using MCP will subsequently call notify_done when finished.
-      status.start_monitor(agent_name)
+      if submit_result == true then
+        status.start_monitor(agent_name)
+      end
     end)
     return
   end
