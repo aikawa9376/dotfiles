@@ -203,6 +203,7 @@ end
 local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts)
   local root_dir = resolve_root_dir(agent_cfg)
   local env = merge_env(agent_cfg and agent_cfg.env, split_opts.env)
+  local acp = acp_logic.resolve(agent_name, agent_cfg)
 
   return {
     agent_name = agent_name,
@@ -213,9 +214,13 @@ local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_op
     cwd = root_dir,
     root_dir = root_dir,
     env = env,
-    auto_permission = acp_logic.resolve(agent_name, agent_cfg).auto_permission,
-    default_mode = acp_logic.resolve(agent_name, agent_cfg).default_mode,
-    initial_model = acp_logic.resolve(agent_name, agent_cfg).initial_model,
+    auto_permission = acp.auto_permission,
+    default_mode = acp.default_mode,
+    initial_model = acp.initial_model,
+    buffer_background = acp.buffer_background,
+    buffer_inactive_background = acp.buffer_inactive_background,
+    permission_rules = acp.permission_rules,
+    auto_switch = acp.auto_switch,
   }
 end
 
@@ -263,6 +268,176 @@ local function resolve_acp_target_agent(agent_name, callback)
     if choice and choice ~= "" then
       callback(choice)
     end
+  end)
+end
+
+local function with_acp_session(agent_name, callback)
+  resolve_acp_target_agent(agent_name, function(chosen)
+    if not chosen or chosen == "" then
+      return
+    end
+
+    local agent_cfg = agent_logic.get_interactive_agent(chosen)
+    if not agent_cfg then
+      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not configured", vim.log.levels.WARN)
+      return
+    end
+
+    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(chosen, agent_cfg)
+    if not acp_logic.is_acp_backend(backend_name) then
+      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not using ACP", vim.log.levels.WARN)
+      return
+    end
+
+    M.ensure_session(chosen, agent_cfg, true, function(pane_id)
+      if not pane_id or pane_id == "" then
+        vim.notify("LazyAgentACP: failed to obtain a session for '" .. tostring(chosen) .. "'", vim.log.levels.ERROR)
+        return
+      end
+      callback(chosen, pane_id, backend_mod, agent_cfg)
+    end)
+  end)
+end
+
+local function resolve_active_acp_session(agent_name, callback)
+  callback = callback or function() end
+
+  local function is_active_acp(name)
+    local session = state.sessions[name]
+    if not session or not session.pane_id or session.pane_id == "" then
+      return false
+    end
+
+    local backend_name = select(1, backend_logic.resolve_backend_for_agent(name, agent_logic.get_interactive_agent(name)))
+    return acp_logic.is_acp_backend(backend_name)
+  end
+
+  if agent_name and agent_name ~= "" then
+    if not is_active_acp(agent_name) then
+      vim.notify("LazyAgentConversation: no active ACP session found for '" .. tostring(agent_name) .. "'", vim.log.levels.WARN)
+      return
+    end
+    callback(agent_name)
+    return
+  end
+
+  local active = {}
+  for _, name in ipairs(agent_logic.get_active_agents()) do
+    if is_active_acp(name) then
+      table.insert(active, name)
+    end
+  end
+
+  if #active == 0 then
+    vim.notify("LazyAgentConversation: no active ACP sessions found", vim.log.levels.INFO)
+    return
+  end
+
+  if #active == 1 then
+    callback(active[1])
+    return
+  end
+
+  vim.ui.select(active, { prompt = "Choose ACP agent conversation to save:" }, function(choice)
+    if choice and choice ~= "" then
+      callback(choice)
+    end
+  end)
+end
+
+local function lines_start_with(lines, prefix)
+  lines = lines or {}
+  prefix = prefix or {}
+  if #prefix > #lines then
+    return false
+  end
+  for idx = 1, #prefix do
+    if lines[idx] ~= prefix[idx] then
+      return false
+    end
+  end
+  return true
+end
+
+local function merge_conversation_lines(previous, current)
+  previous = previous or {}
+  current = current or {}
+
+  if #previous == 0 then
+    return vim.deepcopy(current)
+  end
+  if #current == 0 then
+    return vim.deepcopy(previous)
+  end
+  if lines_start_with(current, previous) then
+    return vim.deepcopy(current)
+  end
+  if lines_start_with(previous, current) then
+    return vim.deepcopy(previous)
+  end
+
+  local overlap = math.min(#previous, #current)
+  while overlap > 0 do
+    local matched = true
+    for idx = 1, overlap do
+      if previous[#previous - overlap + idx] ~= current[idx] then
+        matched = false
+        break
+      end
+    end
+    if matched then
+      break
+    end
+    overlap = overlap - 1
+  end
+
+  local merged = vim.deepcopy(previous)
+  for idx = overlap + 1, #current do
+    merged[#merged + 1] = current[idx]
+  end
+  return merged
+end
+
+local function persist_conversation_capture(agent_name, session, lines, opts)
+  opts = opts or {}
+
+  local dir = cache_logic.get_conversation_dir()
+  local prefix = cache_logic.build_cache_prefix()
+  local sanitized = tostring(agent_name):gsub("[^%w-_]+", "-")
+  local path = session.last_save_path
+  local saved_lines = lines
+  local reuse_path = false
+
+  if path and session.last_save_content then
+    if lines_start_with(lines, session.last_save_content) then
+      reuse_path = true
+    elseif opts.merge_with_last_save then
+      reuse_path = true
+      saved_lines = merge_conversation_lines(session.last_save_content, lines)
+    end
+  end
+
+  if not reuse_path or not path then
+    local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
+    path = dir .. "/" .. filename
+  end
+
+  pcall(vim.fn.writefile, saved_lines, path)
+  session.last_save_path = path
+  session.last_save_content = saved_lines
+  return path, saved_lines
+end
+
+function M.reopen_acp_window(agent_name)
+  resolve_acp_target_agent(agent_name, function(chosen)
+    if not chosen or chosen == "" then
+      return
+    end
+    M.start_interactive_session({
+      agent_name = chosen,
+      reuse = true,
+      stay_hidden = false,
+    })
   end)
 end
 
@@ -333,6 +508,18 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   end
 
   if reuse and state.sessions[agent_name] and state.sessions[agent_name].pane_id and state.sessions[agent_name].pane_id ~= "" then
+    if acp_logic.is_acp_backend(backend_name)
+      and backend_name == "buffer_acp"
+      and not state.sessions[agent_name].hidden
+      and backend_mod
+      and type(backend_mod.get_pane_info) == "function"
+    then
+      local pane_info = backend_mod.get_pane_info(state.sessions[agent_name].pane_id)
+      if not pane_info then
+        state.sessions[agent_name].hidden = true
+      end
+    end
+
     -- If stay_hidden is requested (Instant Mode) and session is NOT hidden, hide it.
     if agent_cfg.stay_hidden and not state.sessions[agent_name].hidden then
        if backend_mod and type(backend_mod.break_pane) == "function" then
@@ -456,6 +643,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       local mode = nil
       if agent_cfg and agent_cfg.stay_hidden then mode = "instant" end
       if agent_cfg and agent_cfg.mode then mode = agent_cfg.mode end
+      local resolved_acp = acp_logic.resolve(agent_name, agent_cfg)
 
       state.sessions[agent_name] = {
         pane_id = pane_id,
@@ -464,6 +652,8 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         watch_enabled = watch_enabled_val,
         launch_cmd = requested_launch_key,
         cwd = resolve_root_dir(agent_cfg),
+        buffer_background = resolved_acp.buffer_background,
+        buffer_inactive_background = resolved_acp.buffer_inactive_background,
         hidden = (agent_cfg.stay_hidden == true),
         mode = mode
       }
@@ -671,7 +861,8 @@ end
 -- @param agent_name (string) The name of the agent.
 -- @param open_file (boolean) If true, open the saved file in a buffer after saving.
 -- @param on_done (function|nil) Optional callback invoked after capture is saved (receives path).
-function M.capture_and_save_session(agent_name, open_file, on_done)
+function M.capture_and_save_session(agent_name, open_file, on_done, opts)
+  opts = opts or {}
   on_done = on_done or function() end
   if not agent_name or agent_name == "" then
     on_done()
@@ -693,44 +884,15 @@ function M.capture_and_save_session(agent_name, open_file, on_done)
   backend_mod.capture_pane(s.pane_id, function(text)
     vim.schedule(function()
       if not text or text == "" then
-        vim.notify("LazyAgentOpenConversation: captured pane was empty for agent '" .. tostring(agent_name) .. "'", vim.log.levels.INFO)
+        vim.notify("LazyAgentConversation: captured conversation was empty for agent '" .. tostring(agent_name) .. "'", vim.log.levels.INFO)
         on_done()
         return
       end
 
       local lines = vim.split(text, "\n")
-      local dir = cache_logic.get_conversation_dir()
-      local prefix = cache_logic.build_cache_prefix()
-      local sanitized = tostring(agent_name):gsub("[^%w-_]+", "-")
-
-      -- Avoid creating duplicate or nearly identical files for the same session.
-      -- If we have a previous save path and the content is unchanged or just extended, reuse it.
-      local path = s.last_save_path
-      local reuse_path = false
-      if path and s.last_save_content then
-        -- Check if current lines start with exactly the same content as previous save
-        if #lines >= #s.last_save_content then
-          local match = true
-          for i, l in ipairs(s.last_save_content) do
-            if l ~= lines[i] then
-              match = false
-              break
-            end
-          end
-          if match then
-            reuse_path = true
-          end
-        end
-      end
-
-      if not reuse_path or not path then
-        local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
-        path = dir .. "/" .. filename
-      end
-
-      pcall(vim.fn.writefile, lines, path)
-      s.last_save_path = path
-      s.last_save_content = lines
+      local path = persist_conversation_capture(agent_name, s, lines, {
+        merge_with_last_save = opts.merge_with_last_save,
+      })
 
       if open_file then
         util.open_in_normal_win(path)
@@ -849,7 +1011,9 @@ function M.close_session(agent_name)
         state.sessions[agent_name] = nil
         maybe_disable_watchers()
         cleanup_agent_external_configs(agent_name)
-      end)
+      end, {
+        merge_with_last_save = s2.merge_conversation_on_next_save,
+      })
       return
     end
 
@@ -891,36 +1055,10 @@ function M.close_all_sessions(sync)
            local text = backend_mod.capture_pane_sync(s.pane_id)
            if text and text ~= "" then
               local lines = vim.split(text, "\n")
-              local dir = cache_logic.get_conversation_dir()
-              local prefix = cache_logic.build_cache_prefix()
-              local sanitized = tostring(name):gsub("[^%w-_]+", "-")
-
-              -- Comparison logic for sync save (on exit)
-              local path = s.last_save_path
-              local reuse_path = false
-              if path and s.last_save_content then
-                -- Reuse if current lines start with previous content
-                if #lines >= #s.last_save_content then
-                   local match = true
-                   for i, l in ipairs(s.last_save_content) do
-                      if l ~= lines[i] then
-                         match = false
-                         break
-                      end
-                   end
-                   if match then reuse_path = true end
-                end
-              end
-
-              if not reuse_path or not path then
-                local filename = prefix .. sanitized .. "-conversation-" .. os.date("%Y-%m-%d-%H%M%S") .. ".log"
-                path = dir .. "/" .. filename
-              end
-
-              pcall(vim.fn.writefile, lines, path)
-              s.last_save_path = path
-              s.last_save_content = lines
-           end
+              persist_conversation_capture(name, s, lines, {
+                merge_with_last_save = s.merge_conversation_on_next_save,
+              })
+            end
         end
 
         if resume_enabled and backend_supports_persistence(s.backend) then
@@ -953,7 +1091,9 @@ function M.close_all_sessions(sync)
               maybe_kill_pane(name, s.pane_id, backend_mod2, false)
             end
             state.sessions[name] = nil
-          end)
+          end, {
+            merge_with_last_save = s.merge_conversation_on_next_save,
+          })
         else
           if backend_mod and type(backend_mod.kill_pane) == "function" then
             maybe_kill_pane(name, s.pane_id, backend_mod, false)
@@ -1222,34 +1362,12 @@ function M.detach_session(agent_name)
 end
 
 function M.pick_acp_config(agent_name, category)
-  resolve_acp_target_agent(agent_name, function(chosen)
-    if not chosen or chosen == "" then
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_config_picker) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose config pickers", vim.log.levels.WARN)
       return
     end
-
-    local agent_cfg = agent_logic.get_interactive_agent(chosen)
-    if not agent_cfg then
-      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not configured", vim.log.levels.WARN)
-      return
-    end
-
-    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(chosen, agent_cfg)
-    if not acp_logic.is_acp_backend(backend_name) then
-      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not using ACP", vim.log.levels.WARN)
-      return
-    end
-
-    M.ensure_session(chosen, agent_cfg, true, function(pane_id)
-      if not pane_id or pane_id == "" then
-        vim.notify("LazyAgentACP: failed to obtain a session for '" .. tostring(chosen) .. "'", vim.log.levels.ERROR)
-        return
-      end
-      if not backend_mod or type(backend_mod.show_config_picker) ~= "function" then
-        vim.notify("LazyAgentACP: backend does not expose config pickers", vim.log.levels.WARN)
-        return
-      end
-      backend_mod.show_config_picker(pane_id, category)
-    end)
+    backend_mod.show_config_picker(pane_id, category)
   end)
 end
 
@@ -1259,6 +1377,87 @@ end
 
 function M.pick_acp_mode(agent_name)
   M.pick_acp_config(agent_name, "mode")
+end
+
+function M.pick_acp_commands(agent_name)
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_command_palette) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose a command palette", vim.log.levels.WARN)
+      return
+    end
+    backend_mod.show_command_palette(pane_id)
+  end)
+end
+
+function M.show_acp_tool_timeline(agent_name)
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_tool_timeline) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose a tool timeline", vim.log.levels.WARN)
+      return
+    end
+    backend_mod.show_tool_timeline(pane_id)
+  end)
+end
+
+function M.pick_acp_resources(agent_name)
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_resource_browser) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose a resource browser", vim.log.levels.WARN)
+      return
+    end
+    backend_mod.show_resource_browser(pane_id)
+  end)
+end
+
+function M.show_acp_capabilities(agent_name)
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_capabilities) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose a capability report", vim.log.levels.WARN)
+      return
+    end
+    backend_mod.show_capabilities(pane_id)
+  end)
+end
+
+function M.save_conversation_checkpoint(agent_name)
+  resolve_active_acp_session(agent_name, function(chosen)
+    local session = state.sessions[chosen]
+    if not session or not session.pane_id or session.pane_id == "" then
+      vim.notify("LazyAgentConversation: no active ACP session found for '" .. tostring(chosen) .. "'", vim.log.levels.WARN)
+      return
+    end
+
+    local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen, agent_logic.get_interactive_agent(chosen))
+    if not backend_mod or type(backend_mod.capture_pane) ~= "function" then
+      vim.notify("LazyAgentConversation: backend cannot capture this ACP session", vim.log.levels.WARN)
+      return
+    end
+    if type(backend_mod.clear_transcript) ~= "function" then
+      vim.notify("LazyAgentConversation: backend cannot clear this ACP transcript", vim.log.levels.WARN)
+      return
+    end
+
+    M.capture_and_save_session(chosen, false, function(path)
+      if not path or path == "" then
+        return
+      end
+
+      local current = state.sessions[chosen]
+      if not current or not current.pane_id or current.pane_id == "" then
+        return
+      end
+
+      if not backend_mod.clear_transcript(current.pane_id) then
+        vim.notify("LazyAgentConversation: saved conversation but failed to clear ACP transcript", vim.log.levels.ERROR)
+        return
+      end
+
+      current.merge_conversation_on_next_save = true
+      vim.notify("LazyAgentConversation: saved conversation to " .. path .. " and cleared ACP transcript", vim.log.levels.INFO)
+    end, {
+      merge_with_last_save = session.merge_conversation_on_next_save,
+    })
+  end)
 end
 
 ---

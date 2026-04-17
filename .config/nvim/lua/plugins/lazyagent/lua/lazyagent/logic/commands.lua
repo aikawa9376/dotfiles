@@ -130,6 +130,51 @@ function M.setup_commands()
       complete = available_acp_agents,
     })
 
+  try_create_user_command("LazyAgentACPReopen", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.reopen_acp_window(explicit)
+  end, {
+      nargs = "?",
+      desc = "Reopen the ACP transcript window for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPCommands", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.pick_acp_commands(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP slash command palette for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPTools", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.show_acp_tool_timeline(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP tool call timeline for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPResources", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.pick_acp_resources(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP resource browser for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPCapabilities", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.show_acp_capabilities(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP capability summary for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
   try_create_user_command("LazyAgentRestore", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
     agent_logic.resolve_target_agent(explicit, nil, function(chosen)
@@ -187,6 +232,12 @@ function M.setup_commands()
     end
     cache_logic.open_conversations()
   end, { nargs = "?", desc = "Open a lazyagent conversation capture. If no arg is provided, pick from UI." })
+
+  -- Save the active ACP conversation snapshot and clear the live transcript buffer.
+  try_create_user_command("LazyAgentConversation", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.save_conversation_checkpoint(explicit)
+  end, { nargs = "?", desc = "Save the active ACP conversation and clear its live transcript buffer." })
 
   -- Resume a conversation from a saved snapshot and preload it into a new session scratch buffer.
   try_create_user_command("LazyAgentResumeConversation", function(cmdargs)

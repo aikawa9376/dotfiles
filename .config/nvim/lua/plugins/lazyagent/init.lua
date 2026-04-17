@@ -67,9 +67,10 @@ return {
   cmd = {
     "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
-    "LazyAgentOpenConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
+    "LazyAgentOpenConversation", "LazyAgentConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
-    "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode",
+    "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPReopen",
+    "LazyAgentACPCommands", "LazyAgentACPTools", "LazyAgentACPResources", "LazyAgentACPCapabilities",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
@@ -77,8 +78,12 @@ return {
     acp = {
       enabled = true,
       view = "buffer",
+      -- buffer_background = "#002b36",
+      -- buffer_inactive_background = "#073642",
       -- default_mode = "bypassPermissions", -- prefer provider mode when available
       auto_permission = "allow_always",
+      buffer_background = "none",
+      buffer_inactive_background = "none",
     },
     resume = false,
     scratch_keymaps = {
@@ -88,7 +93,8 @@ return {
       scroll_down = "<C-d>",
       nav_up = "<C-k>",
       nav_down = "<C-j>",
-      esc = "<C-c>",
+      interrupt = "<C-c>",
+      esc = "<Esc>",
       adjust_line = "<C-l>",
       clear = "c<space>d",
     },

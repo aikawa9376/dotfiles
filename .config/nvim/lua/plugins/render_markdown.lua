@@ -54,6 +54,7 @@ return {
     overrides = {
       filetype = {
         lazyagent = {
+          debounce = 300,
           render_modes = { 'n', 'c', 't' },
         },
       },
