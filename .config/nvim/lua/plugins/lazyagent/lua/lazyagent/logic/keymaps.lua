@@ -63,33 +63,65 @@ function M.register_scratch_keymaps(bufnr, opts)
     return pane_id or (agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id) or nil
   end
 
-  local function send_key_to_pane(key, insert_wrap)
-    local p = get_pane()
-    local mod = backend_mod
+  local function resolve_target()
+    local resolved_agent = agent_name
+    local resolved_pane = get_pane()
+    local resolved_backend = backend_name
+    local resolved_mod = backend_mod
 
-    if not p or p == "" then
-      -- fallback: if exactly one active agent is running, target its pane
+    if (not resolved_pane or resolved_pane == "") and resolved_agent and state.sessions[resolved_agent] then
+      resolved_pane = state.sessions[resolved_agent].pane_id or nil
+    end
+
+    if not resolved_pane or resolved_pane == "" then
       local active_agents = agent_logic.get_active_agents()
       if #active_agents == 1 then
-        local name = active_agents[1]
-        p = state.sessions[name] and state.sessions[name].pane_id or nil
-        -- Resolve backend for this agent
-        local _, m = backend_logic.resolve_backend_for_agent(name, nil)
-        mod = m
+        resolved_agent = active_agents[1]
+        resolved_pane = state.sessions[resolved_agent] and state.sessions[resolved_agent].pane_id or nil
       end
     end
 
-    -- vim.notify(string.format("DEBUG: send_key key=%s pane=%s backend=%s", key, tostring(p), backend_name), vim.log.levels.INFO)
-    -- if agent_name and state.sessions[agent_name] then
-    --   vim.notify("DEBUG: state.sessions[" .. agent_name .. "] = " .. vim.inspect(state.sessions[agent_name]), vim.log.levels.INFO)
-    -- end
+    if resolved_agent then
+      resolved_backend, resolved_mod = backend_logic.resolve_backend_for_agent(resolved_agent, nil)
+    end
 
-    if not p then return end
-    if insert_wrap and vim.fn.mode():sub(1,1) == "i" then
+    if not resolved_mod or not resolved_pane or resolved_pane == "" then
+      return nil, nil, nil, nil
+    end
+
+    return resolved_agent, resolved_pane, resolved_backend, resolved_mod
+  end
+
+  local function with_insert_wrap(insert_wrap, callback)
+    local should_restart = insert_wrap and vim.fn.mode():sub(1, 1) == "i"
+    if should_restart then
       vim.cmd("stopinsert")
     end
-    mod.send_keys(p, { key })
-    if insert_wrap then restart_insert_if_valid(bufnr) end
+    local result = callback()
+    if should_restart then
+      restart_insert_if_valid(bufnr)
+    end
+    return result
+  end
+
+  local function buffer_has_content(target_bufnr)
+    local lines = vim.api.nvim_buf_get_lines(target_bufnr, 0, -1, false)
+    for _, line in ipairs(lines) do
+      if line:match("%S") then
+        return true
+      end
+    end
+    return false
+  end
+
+  local function send_key_to_pane(key, insert_wrap)
+    local _, resolved_pane, _, resolved_mod = resolve_target()
+    if not resolved_pane then
+      return
+    end
+    with_insert_wrap(insert_wrap, function()
+      resolved_mod.send_keys(resolved_pane, { key })
+    end)
   end
 
   local function send_from_buf(close_after)
@@ -165,74 +197,29 @@ function M.register_scratch_keymaps(bufnr, opts)
     end
   end
 
-  -- clear mapping: attempt to clear the agent pane's input (tmux / builtin)
-  local function clear_agent_pane_input(insert_wrap)
-    -- Determine pane id (explicit or session-based)
-    local p = get_pane()
-    if not p or p == "" then
-      -- fallback: if exactly one active agent is running, target its pane
-      local active_agents = agent_logic.get_active_agents()
-      if #active_agents == 1 then
-        p = state.sessions[active_agents[1]] and state.sessions[active_agents[1]].pane_id or nil
-      end
+  local function interrupt_agent(insert_wrap)
+    local resolved_agent, resolved_pane, resolved_backend, resolved_mod = resolve_target()
+    if not resolved_pane then
+      vim.notify("No active agent pane found to interrupt", vim.log.levels.WARN)
+      return
     end
 
-    if not p or p == "" then return end
-
-    if insert_wrap and vim.fn.mode():sub(1,1) == "i" then
-      vim.cmd("stopinsert")
-    end
-
-    -- For tmux backend, send 'C-e', 'C-u', 'C-h' (tmux translates this to ctrl-u).
-    -- Actually, to clear input completely, sending Ctrl-C is often more reliable if supported.
-    -- But Ctrl-C might kill the process if no input.
-    -- So let's stick to C-e (end), C-u (kill-line).
-    -- Repeating it 20 times to clear multiline pastes.
-    if backend_name == "tmux" then
-      -- Reverting to the simple loop with Backspace as requested by the user.
-      -- They reported that Copilot's behavior was weird with other methods,
-      -- and preferred the behavior where it simply looped C-h (Backspace).
-      -- Previous logic was: C-e, C-u, BSpace.
-      for _ = 1, 20 do
-        backend_mod.send_keys(p, { "C-e" })
-        vim.wait(5)
-        backend_mod.send_keys(p, { "C-u" })
-        vim.wait(5)
-        backend_mod.send_keys(p, { "BSpace" })
-        vim.wait(5)
-      end
-    else
-      -- ASCII 5 is C-e, 21 is C-u, 8 is Backspace
-      for _ = 1, 20 do
-        backend_mod.send_keys(p, { string.char(5), string.char(21), string.char(8) })
-      end
-    end
-
-    if insert_wrap then restart_insert_if_valid(bufnr) end
+    with_insert_wrap(insert_wrap, function()
+      send_logic.send_interrupt({
+        agent_name = resolved_agent,
+        pane_id = resolved_pane,
+        backend_name = resolved_backend,
+        backend_mod = resolved_mod,
+        silent = true,
+      })
+    end)
   end
 
-  safe_set("n", keys.interrupt or "c<space><C-c>", function()
-    local p = get_pane()
-    local mod = backend_mod
-    
-    if not p or p == "" then
-       -- fallback: if exactly one active agent is running, target its pane
-       local active_agents = agent_logic.get_active_agents()
-       if #active_agents == 1 then
-         local name = active_agents[1]
-         p = state.sessions[name] and state.sessions[name].pane_id or nil
-         -- Resolve backend for this agent
-         local _, m = backend_logic.resolve_backend_for_agent(name, nil)
-         mod = m
-       end
-    end
-
-    if p then
-       mod.send_keys(p, { "C-c" })
-       vim.notify("Sent Ctrl-C to agent", vim.log.levels.INFO)
-    else
-       vim.notify("No active agent pane found to interrupt", vim.log.levels.WARN)
-    end
+  safe_set("n", keys.interrupt or "<C-c>", function()
+    interrupt_agent(false)
+  end, { desc = "Send Ctrl-C (interrupt) to agent" })
+  safe_set("i", keys.interrupt or "<C-c>", function()
+    interrupt_agent(true)
   end, { desc = "Send Ctrl-C (interrupt) to agent" })
 
   -- Close mapping
@@ -259,19 +246,10 @@ function M.register_scratch_keymaps(bufnr, opts)
 
   -- Send & clear (scratch)
   local function smart_send(insert_mode)
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local has_content = false
-    for _, line in ipairs(lines) do
-      if line:match("%S") then
-        has_content = true
-        break
-      end
-    end
-
-    if has_content then
-      if insert_mode then vim.cmd("stopinsert") end
-      send_logic.send_buffer_and_clear(agent_name, bufnr)
-      if insert_mode then restart_insert_if_valid(bufnr) end
+    if buffer_has_content(bufnr) then
+      with_insert_wrap(insert_mode, function()
+        send_logic.send_buffer_and_clear(agent_name, bufnr)
+      end)
     else
       send_key_to_pane("Enter", insert_mode)
     end
@@ -310,22 +288,8 @@ function M.register_scratch_keymaps(bufnr, opts)
   end, { desc = "Send Down to agent pane (insert mode)" })
 
   local function resume_follow()
-    local p = get_pane()
-    local mod = backend_mod
-    local resolved_backend = backend_name
-
-    if not p or p == "" then
-      local active_agents = agent_logic.get_active_agents()
-      if #active_agents == 1 then
-        local name = active_agents[1]
-        p = state.sessions[name] and state.sessions[name].pane_id or nil
-        local resolved_name, m = backend_logic.resolve_backend_for_agent(name, nil)
-        resolved_backend = resolved_name
-        mod = m
-      end
-    end
-
-    if not p then
+    local _, resolved_pane, resolved_backend, resolved_mod = resolve_target()
+    if not resolved_pane then
       vim.notify("No active agent pane found", vim.log.levels.WARN)
       return
     end
@@ -335,16 +299,12 @@ function M.register_scratch_keymaps(bufnr, opts)
       return
     end
 
-    mod.send_keys(p, { "Escape" })
+    resolved_mod.send_keys(resolved_pane, { "Escape" })
   end
 
   -- Escape mapping (normal)
   safe_set("n", keys.esc or "<Esc>", function()
-    if (agent_name == "Cursor") then
-      send_key_to_pane("C-c", false)
-    else
-      send_key_to_pane("Escape", false)
-    end
+    send_key_to_pane("Escape", false)
   end, { desc = "Send Escape to agent pane" })
 
   if keys.adjust_line then
@@ -354,7 +314,17 @@ function M.register_scratch_keymaps(bufnr, opts)
   end
 
   safe_set("n", keys.clear or "c<space>d", function()
-    clear_agent_pane_input(false)
+    local resolved_agent, resolved_pane, resolved_backend, resolved_mod = resolve_target()
+    if not resolved_pane then
+      return
+    end
+    send_logic.clear_input({
+      agent_name = resolved_agent,
+      pane_id = resolved_pane,
+      backend_name = resolved_backend,
+      backend_mod = resolved_mod,
+      silent = true,
+    })
   end, { desc = "Clear agent pane input" })
 
   if state.opts.send_number_keys_to_agent then
@@ -390,16 +360,7 @@ function M.register_scratch_keymaps(bufnr, opts)
 
   -- Stack (save and clear) current scratch buffer content to history
   safe_set("n", keys.stack or "c<space>s", function()
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local has_content = false
-    for _, line in ipairs(lines) do
-      if line:match("%S") then
-        has_content = true
-        break
-      end
-    end
-
-    if has_content then
+    if buffer_has_content(bufnr) then
       cache_logic.write_scratch_to_cache(bufnr)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {})
       vim.notify("Stacked to history", vim.log.levels.INFO)
@@ -408,74 +369,46 @@ function M.register_scratch_keymaps(bufnr, opts)
     end
   end, { desc = "Stack (save and clear) scratch buffer" })
 
-  -- Navigate to older entry (scratch buffer) - default: keys.history_prev or <leader>h,
-  safe_set("n", keys.history_prev or "c<space>p", function()
+  local function apply_history_offset(direction)
     local list_buf = cache_logic.get_history_list_buf_for_target(bufnr)
     local entries = cache_logic.read_history_entries(list_buf) or {}
     if not entries or #entries == 0 then
-      vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
       return
     end
 
-    -- If the buffer is empty (or whitespace only), start from the latest entry (1).
-    -- This handles the case where the buffer was cleared after sending (idx=1 but content is empty).
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local is_empty = true
-    for _, line in ipairs(lines) do
-      if line:match("%S") then
-        is_empty = false
-        break
+    local cur = vim.b[bufnr].lazyagent_history_idx or 0
+    local next_idx
+    if direction > 0 then
+      next_idx = buffer_has_content(bufnr) and (cur + 1) or 1
+    else
+      if cur <= 1 then
+        return
       end
+      next_idx = cur - 1
     end
 
-    local cur = vim.b[bufnr].lazyagent_history_idx or 0
-    local next_idx = cur + 1
-    if is_empty then
+    if next_idx < 1 then
       next_idx = 1
     end
 
     if next_idx > #entries then
-      vim.notify("LazyAgentHistory: already at oldest entry", vim.log.levels.INFO)
       return
     end
+
     local ok, total = cache_logic.apply_history_entry_to_target_buf(bufnr, next_idx)
-    if ok then
-      vim.notify("LazyAgentHistory: applied " .. tostring(next_idx) .. "/" .. tostring(total), vim.log.levels.INFO)
-    else
-      if total == 0 then
-        vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
-      else
-        vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
-      end
+    if not ok and total > 0 then
+      vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
     end
-    -- restart_insert_if_valid(bufnr)
+  end
+
+  -- Navigate to older entry (scratch buffer) - default: keys.history_prev or <leader>h,
+  safe_set("n", keys.history_prev or "c<space>p", function()
+    apply_history_offset(1)
   end, { desc = "Apply older cached history to scratch buffer" })
 
   -- Navigate to newer entry (scratch buffer) - default: keys.history_next or <leader>h.
   safe_set("n", keys.history_next or "c<space>n", function()
-    local list_buf = cache_logic.get_history_list_buf_for_target(bufnr)
-    local entries = cache_logic.read_history_entries(list_buf) or {}
-    if not entries or #entries == 0 then
-      vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
-      return
-    end
-    local cur = vim.b[bufnr].lazyagent_history_idx or 0
-    if cur <= 1 then
-      vim.notify("LazyAgentHistory: already at latest entry", vim.log.levels.INFO)
-      return
-    end
-    local next_idx = cur - 1
-    local ok, total = cache_logic.apply_history_entry_to_target_buf(bufnr, next_idx)
-    if ok then
-      vim.notify("LazyAgentHistory: applied " .. tostring(next_idx) .. "/" .. tostring(total), vim.log.levels.INFO)
-    else
-      if total == 0 then
-        vim.notify("LazyAgentHistory: no cached entries found", vim.log.levels.INFO)
-      else
-        vim.notify("LazyAgentHistory: failed to apply entry", vim.log.levels.ERROR)
-      end
-    end
-    -- restart_insert_if_valid(bufnr)
+    apply_history_offset(-1)
   end, { desc = "Apply newer cached history to scratch buffer" })
 
   -- Custom mappings for user request (C-j/k for navigation, C-Space for Enter)

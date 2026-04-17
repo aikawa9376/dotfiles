@@ -23,6 +23,12 @@ M.attach_session = session_logic.attach_session
 M.pick_acp_config = session_logic.pick_acp_config
 M.pick_acp_model = session_logic.pick_acp_model
 M.pick_acp_mode = session_logic.pick_acp_mode
+M.reopen_acp_window = session_logic.reopen_acp_window
+M.pick_acp_commands = session_logic.pick_acp_commands
+M.show_acp_tool_timeline = session_logic.show_acp_tool_timeline
+M.pick_acp_resources = session_logic.pick_acp_resources
+M.show_acp_capabilities = session_logic.show_acp_capabilities
+M.save_conversation_checkpoint = session_logic.save_conversation_checkpoint
 M.send_visual = send_logic.send_visual
 M.send_line = send_logic.send_line
 M.status = status_logic.get_status
@@ -321,6 +327,15 @@ function M.setup(opts)
       auto_permission = nil,
       default_mode = nil,
       initial_model = nil,
+      buffer_background = nil,
+      buffer_inactive_background = nil,
+      permission_rules = {},
+      auto_switch = {
+        enabled = false,
+        preserve_manual = true,
+        mode_rules = {},
+        model_rules = {},
+      },
     },
     tmux_auto_exit_copy_mode = true,
     submit_delay = 600,
@@ -331,6 +346,7 @@ function M.setup(opts)
     open_conversation_on_save = false,
     scratch_keymaps = {
       close = "q",
+      interrupt = "<C-c>",
       send_and_clear = "<C-Space>",
       send_key_insert = "<C-s>",
       send_key_normal = "<CR>",
@@ -347,6 +363,7 @@ function M.setup(opts)
       enabled = true,
       dir = vim.fn.stdpath("cache") .. "/lazyagent",
       debounce_ms = 1500,
+      persistence_debounce_ms = 150,
       max_history = 100,
       -- Automatically delete conversation log files older than this duration on startup.
       -- Format: "<number><unit>" where unit is h (hours), d (days), w (weeks), m (months).

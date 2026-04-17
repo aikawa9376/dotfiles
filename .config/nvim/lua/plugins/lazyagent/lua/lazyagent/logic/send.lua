@@ -348,122 +348,149 @@ function M.send_line()
   M.send(text)
 end
 
-function M.send_key(key)
-  local active_agents = agent_logic.get_active_agents()
-  if #active_agents == 0 then
-    vim.notify("No active agent found", vim.log.levels.INFO)
-    return
-  end
-  
-  -- If there's an open agent (scratch buffer focused or last used), prefer it
-  local target_agent = state.open_agent
-  if not target_agent or not state.sessions[target_agent] then
-     target_agent = active_agents[1]
+local function find_session_by_pane_id(pane_id)
+  if not pane_id or pane_id == "" then
+    return nil, nil
   end
 
-  local session = state.sessions[target_agent]
-  if not session or not session.pane_id then return end
-  
-  local _, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
-  if key == "C-c" then
-    backend_mod.send_keys(session.pane_id, { "C-c" })
-  elseif key:match("^%d$") then
-    -- Send digits as literal keys (-l) to avoid tmux interpreting them weirdly or if special handling is needed
-    -- We use a special flag "--literal" that our modified tmux.send_keys understands to inject -l
-    backend_mod.send_keys(session.pane_id, { "--literal", key })
+  for agent_name, session in pairs(state.sessions or {}) do
+    if session and session.pane_id == pane_id then
+      return agent_name, session
+    end
+  end
+
+  return nil, nil
+end
+
+local function resolve_send_target(opts)
+  opts = opts or {}
+
+  local agent_name = opts.agent_name
+  local pane_id = opts.pane_id
+  local backend_name = opts.backend_name
+  local backend_mod = opts.backend_mod
+  local session = nil
+
+  if agent_name and state.sessions[agent_name] then
+    session = state.sessions[agent_name]
+    pane_id = pane_id or session.pane_id
+  elseif pane_id and pane_id ~= "" then
+    agent_name, session = find_session_by_pane_id(pane_id)
   else
-    backend_mod.send_keys(session.pane_id, { key })
-  end
-end
+    local active_agents = agent_logic.get_active_agents()
+    if #active_agents == 0 then
+      return nil
+    end
 
-function M.send_enter()
-  local active_agents = agent_logic.get_active_agents()
-  if #active_agents == 0 then
-    -- vim.notify("No active agent found", vim.log.levels.INFO)
-    return
-  end
+    agent_name = state.open_agent
+    if not agent_name or not state.sessions[agent_name] then
+      agent_name = active_agents[1]
+    end
 
-  local target_agent = state.open_agent
-  if not target_agent or not state.sessions[target_agent] then
-     target_agent = active_agents[1]
+    session = state.sessions[agent_name]
+    pane_id = session and session.pane_id or nil
   end
 
-  local session = state.sessions[target_agent]
-  if not session or not session.pane_id then return end
-
-  local _, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
-  -- Use send_keys so copy-mode exit logic (tmux_auto_exit_copy_mode) applies.
-  backend_mod.send_keys(session.pane_id, { "Enter" })
-end
-
-function M.send_down()
-  M.send_key("Down")
-end
-
-function M.send_up()
-  M.send_key("Up")
-end
-
-function M.send_interrupt()
-  M.send_key("C-c")
-end
-
-function M.send_raw_keys(keys)
-  local active_agents = agent_logic.get_active_agents()
-  if #active_agents == 0 then
-    -- vim.notify("No active agent found", vim.log.levels.INFO)
-    return
+  if (not pane_id or pane_id == "") and session then
+    pane_id = session.pane_id
+  end
+  if not pane_id or pane_id == "" then
+    return nil
   end
 
-  -- If there's an open agent (scratch buffer focused or last used), prefer it
-  local target_agent = state.open_agent
-  if not target_agent or not state.sessions[target_agent] then
-     target_agent = active_agents[1]
+  if not backend_mod and agent_name then
+    backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
   end
 
-  local session = state.sessions[target_agent]
-  if not session or not session.pane_id then return end
+  backend_name = backend_name or (session and session.backend) or nil
+  if not backend_mod and backend_name then
+    backend_mod = state.backends and state.backends[backend_name] or nil
+  end
+  if not backend_mod then
+    return nil
+  end
 
-  local _, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
-  backend_mod.send_keys(session.pane_id, keys)
+  return {
+    agent_name = agent_name,
+    session = session,
+    pane_id = pane_id,
+    backend_name = backend_name,
+    backend_mod = backend_mod,
+  }
 end
 
-function M.clear_input()
-  local active_agents = agent_logic.get_active_agents()
-  if #active_agents == 0 then
+local function notify_missing_target(opts)
+  if not (opts and opts.silent) then
     vim.notify("No active agent found", vim.log.levels.INFO)
+  end
+end
+
+local function normalized_keys_for_backend(backend_name, key)
+  local normalized = tostring(key)
+  if normalized == "C-c" and backend_name == "builtin" then
+    return { string.char(3) }
+  end
+  if normalized:match("^%d$") and backend_name == "tmux" then
+    return { "--literal", normalized }
+  end
+  return { normalized }
+end
+
+function M.send_key(key, opts)
+  local target = resolve_send_target(opts)
+  if not target then
+    notify_missing_target(opts)
     return
   end
-  
-  -- If there's an open agent (scratch buffer focused or last used), prefer it
-  local target_agent = state.open_agent
-  if not target_agent or not state.sessions[target_agent] then
-     target_agent = active_agents[1]
+
+  return target.backend_mod.send_keys(target.pane_id, normalized_keys_for_backend(target.backend_name, key))
+end
+
+function M.send_enter(opts)
+  return M.send_key("Enter", opts)
+end
+
+function M.send_down(opts)
+  return M.send_key("Down", opts)
+end
+
+function M.send_up(opts)
+  return M.send_key("Up", opts)
+end
+
+function M.send_interrupt(opts)
+  return M.send_key("C-c", opts)
+end
+
+function M.send_raw_keys(keys, opts)
+  local target = resolve_send_target(opts)
+  if not target then
+    notify_missing_target(opts)
+    return
   end
 
-  local session = state.sessions[target_agent]
-  if not session or not session.pane_id then return end
-  
-  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(target_agent, nil)
-  
-  if backend_name == "tmux" then
-    -- Send hex codes for control keys to ensure they bypass TUI input filters
-    -- Use printf and load-buffer/paste-buffer trick to force raw byte injection
-    -- because send-keys (even with -H) can be intercepted by some TUI layers.
-    -- We construct a sequence for C-e (05), C-u (15), BS (7F)
-    -- local raw_cmd = "printf '\\x05\\x15\\x7f' | tmux load-buffer - && tmux paste-buffer -d -t " .. session.pane_id
+  return target.backend_mod.send_keys(target.pane_id, keys)
+end
+
+function M.clear_input(opts)
+  local target = resolve_send_target(opts)
+  if not target then
+    notify_missing_target(opts)
+    return
+  end
+
+  if target.backend_name == "tmux" then
     for _ = 1, 20 do
-      backend_mod.run({ "send-keys", "-t", session.pane_id, "-H", "05" })
+      target.backend_mod.run({ "send-keys", "-t", target.pane_id, "-H", "05" })
       vim.wait(5)
-      backend_mod.run({ "send-keys", "-t", session.pane_id, "-H", "15" })
+      target.backend_mod.run({ "send-keys", "-t", target.pane_id, "-H", "15" })
       vim.wait(5)
-      backend_mod.run({ "send-keys", "-t", session.pane_id, "-H", "7F" })
+      target.backend_mod.run({ "send-keys", "-t", target.pane_id, "-H", "7F" })
       vim.wait(5)
     end
   else
-    -- ASCII 5 is C-e, 21 is C-u, 8 is Backspace
     for _ = 1, 20 do
-      backend_mod.send_keys(session.pane_id, { string.char(5), string.char(21), string.char(8) })
+      target.backend_mod.send_keys(target.pane_id, { string.char(5), string.char(21), string.char(8) })
     end
   end
 end

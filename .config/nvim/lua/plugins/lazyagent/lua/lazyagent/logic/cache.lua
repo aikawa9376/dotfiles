@@ -113,6 +113,20 @@ local function lines_equal(a, b)
   return true
 end
 
+local function is_slash_command_line(line)
+  local command, rest = tostring(line or ""):match("^%s*/([%w_-]+)(.*)$")
+  return command ~= nil and (rest == "" or rest:match("^%s") ~= nil)
+end
+
+local function starts_with_slash_command(lines)
+  for _, line in ipairs(lines or {}) do
+    if line and line:match("%S") then
+      return is_slash_command_line(line)
+    end
+  end
+  return false
+end
+
 --- Builds a cache filename based on the buffer's git context.
 -- @param bufnr (number|nil) The buffer number (defaults to current).
 -- @return (string) The generated cache filename.
@@ -163,6 +177,9 @@ function M.write_scratch_to_cache(bufnr)
   end
 
   local trimmed = trim_trailing_blank(content)
+  if starts_with_slash_command(trimmed) then
+    return
+  end
   local ts = os.date("%Y-%m-%d %H:%M:%S")
   local new_entry = { ts = ts, content = trimmed }
 

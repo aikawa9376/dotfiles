@@ -11,6 +11,7 @@ local ERR = {
   internal = -32603,
   transport = -32000,
 }
+local STDERR_MAX_LINES = 200
 
 local function normalize_command_spec(spec)
   if type(spec) == "string" then
@@ -62,6 +63,16 @@ local function trim(text)
   return (tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+local function append_stderr_line(lines, message)
+  lines[#lines + 1] = message
+  local overflow = #lines - STDERR_MAX_LINES
+  if overflow > 0 then
+    for _ = 1, overflow do
+      table.remove(lines, 1)
+    end
+  end
+end
+
 local function empty_dict_if_needed(value)
   if type(value) == "table" and vim.tbl_isempty(value) then
     return vim.empty_dict()
@@ -93,12 +104,16 @@ local function update_config_option_current_value(config_options, matches, value
     return false
   end
 
+  local function normalize_config_key(candidate)
+    return tostring(candidate or ""):lower():gsub("[^%w]+", "")
+  end
+
   matches = type(matches) == "table" and matches or { matches }
   for _, option in ipairs(config_options) do
-    local id = tostring(option.id or "")
-    local category = tostring(option.category or "")
+    local id = normalize_config_key(option.id)
+    local category = normalize_config_key(option.category)
     for _, candidate in ipairs(matches) do
-      local expected = tostring(candidate or "")
+      local expected = normalize_config_key(candidate)
       if expected ~= "" and (id == expected or category == expected) then
         option.currentValue = value
         return true
@@ -613,7 +628,7 @@ function Client:start(callback)
     if not data or data == "" then return end
     local message = trim(data)
     if message ~= "" then
-      table.insert(self.stderr_lines, message)
+      append_stderr_line(self.stderr_lines, message)
     end
   end)
 
