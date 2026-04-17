@@ -309,6 +309,35 @@ function M.register_scratch_keymaps(bufnr, opts)
     send_key_to_pane("Down", true)
   end, { desc = "Send Down to agent pane (insert mode)" })
 
+  local function resume_follow()
+    local p = get_pane()
+    local mod = backend_mod
+    local resolved_backend = backend_name
+
+    if not p or p == "" then
+      local active_agents = agent_logic.get_active_agents()
+      if #active_agents == 1 then
+        local name = active_agents[1]
+        p = state.sessions[name] and state.sessions[name].pane_id or nil
+        local resolved_name, m = backend_logic.resolve_backend_for_agent(name, nil)
+        resolved_backend = resolved_name
+        mod = m
+      end
+    end
+
+    if not p then
+      vim.notify("No active agent pane found", vim.log.levels.WARN)
+      return
+    end
+
+    if resolved_backend ~= "buffer_acp" and resolved_backend ~= "tmux_acp" then
+      vim.notify("adjust_line is only available for ACP sessions", vim.log.levels.WARN)
+      return
+    end
+
+    mod.send_keys(p, { "Escape" })
+  end
+
   -- Escape mapping (normal)
   safe_set("n", keys.esc or "<Esc>", function()
     if (agent_name == "Cursor") then
@@ -317,6 +346,12 @@ function M.register_scratch_keymaps(bufnr, opts)
       send_key_to_pane("Escape", false)
     end
   end, { desc = "Send Escape to agent pane" })
+
+  if keys.adjust_line then
+    safe_set("n", keys.adjust_line, function()
+      resume_follow()
+    end, { desc = "Resume ACP transcript follow" })
+  end
 
   safe_set("n", keys.clear or "c<space>d", function()
     clear_agent_pane_input(false)
