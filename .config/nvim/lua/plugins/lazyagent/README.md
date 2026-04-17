@@ -151,7 +151,7 @@ require("lazyagent").setup({
 - この footer は transcript window 幅に合わせて折り返され、更新時は末尾が見えるように view を調整します。
 - footer/statusline/float は使わず、会話バッファ自身の末尾に情報を寄せるので、window focus や globalstatus 設定に影響されません。
 - `mcp_mode` は ACP では必須ではありません。true のままでも、全 agent が ACP で動く構成なら lazyagent の MCP server は起動せず、非 ACP agent がいる場合だけ起動します。
-- ACP でも global/scratch の特殊キー送信は使えます。`C-c` は現在の turn を cancel し、数字キーはその数字をそのまま prompt として送信します。`Up` / `Down` は transcript を半画面ずつ scroll し、`Escape` は最下部へ戻って follow を再開します。
+- ACP でも global/scratch の特殊キー送信は使えます。`C-c` は現在の turn を cancel し、数字キーはその数字をそのまま prompt として送信します。`Up` / `Down` は transcript を半画面ずつ scroll し、`Escape` は agent に送られます。transcript の最下部へ戻って follow を再開したい場合は `scratch_keymaps.adjust_line` に好みのキーを割り当ててください。
 - `buffer_acp` の split は `winfixwidth` / `winfixheight` を使ってサイズを固定するので、ファイラーなど別ウィンドウを開いても transcript pane が広がりにくくなっています。
 - `Remaining reqs.` や loaded skill 数のような値は、provider が ACP で expose していない限り表示しません。現状の Copilot ACP ではそこまでは取得できません。
 - transcript は `tmux` / `buffer` のどちらでも Nerd Font アイコン付きの section block で表示され、`User` / `Assistant` / `System` / `Tool` などの境目を追いやすくしています。

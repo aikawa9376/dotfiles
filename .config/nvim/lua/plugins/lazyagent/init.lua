@@ -89,6 +89,7 @@ return {
       nav_up = "<C-k>",
       nav_down = "<C-j>",
       esc = "<C-c>",
+      adjust_line = "<C-l>",
       clear = "c<space>d",
     },
     interactive_agents = {
