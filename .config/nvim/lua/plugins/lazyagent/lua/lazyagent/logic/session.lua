@@ -203,6 +203,7 @@ end
 local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts)
   local root_dir = resolve_root_dir(agent_cfg)
   local env = merge_env(agent_cfg and agent_cfg.env, split_opts.env)
+  local acp = acp_logic.resolve(agent_name, agent_cfg)
 
   return {
     agent_name = agent_name,
@@ -213,9 +214,11 @@ local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_op
     cwd = root_dir,
     root_dir = root_dir,
     env = env,
-    auto_permission = acp_logic.resolve(agent_name, agent_cfg).auto_permission,
-    default_mode = acp_logic.resolve(agent_name, agent_cfg).default_mode,
-    initial_model = acp_logic.resolve(agent_name, agent_cfg).initial_model,
+    auto_permission = acp.auto_permission,
+    default_mode = acp.default_mode,
+    initial_model = acp.initial_model,
+    permission_rules = acp.permission_rules,
+    auto_switch = acp.auto_switch,
   }
 end
 
@@ -263,6 +266,47 @@ local function resolve_acp_target_agent(agent_name, callback)
     if choice and choice ~= "" then
       callback(choice)
     end
+  end)
+end
+
+local function with_acp_session(agent_name, callback)
+  resolve_acp_target_agent(agent_name, function(chosen)
+    if not chosen or chosen == "" then
+      return
+    end
+
+    local agent_cfg = agent_logic.get_interactive_agent(chosen)
+    if not agent_cfg then
+      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not configured", vim.log.levels.WARN)
+      return
+    end
+
+    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(chosen, agent_cfg)
+    if not acp_logic.is_acp_backend(backend_name) then
+      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not using ACP", vim.log.levels.WARN)
+      return
+    end
+
+    M.ensure_session(chosen, agent_cfg, true, function(pane_id)
+      if not pane_id or pane_id == "" then
+        vim.notify("LazyAgentACP: failed to obtain a session for '" .. tostring(chosen) .. "'", vim.log.levels.ERROR)
+        return
+      end
+      callback(chosen, pane_id, backend_mod, agent_cfg)
+    end)
+  end)
+end
+
+function M.reopen_acp_window(agent_name)
+  resolve_acp_target_agent(agent_name, function(chosen)
+    if not chosen or chosen == "" then
+      return
+    end
+    M.start_interactive_session({
+      agent_name = chosen,
+      reuse = true,
+      stay_hidden = false,
+    })
   end)
 end
 
@@ -333,6 +377,18 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   end
 
   if reuse and state.sessions[agent_name] and state.sessions[agent_name].pane_id and state.sessions[agent_name].pane_id ~= "" then
+    if acp_logic.is_acp_backend(backend_name)
+      and backend_name == "buffer_acp"
+      and not state.sessions[agent_name].hidden
+      and backend_mod
+      and type(backend_mod.get_pane_info) == "function"
+    then
+      local pane_info = backend_mod.get_pane_info(state.sessions[agent_name].pane_id)
+      if not pane_info then
+        state.sessions[agent_name].hidden = true
+      end
+    end
+
     -- If stay_hidden is requested (Instant Mode) and session is NOT hidden, hide it.
     if agent_cfg.stay_hidden and not state.sessions[agent_name].hidden then
        if backend_mod and type(backend_mod.break_pane) == "function" then
@@ -1222,34 +1278,12 @@ function M.detach_session(agent_name)
 end
 
 function M.pick_acp_config(agent_name, category)
-  resolve_acp_target_agent(agent_name, function(chosen)
-    if not chosen or chosen == "" then
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_config_picker) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose config pickers", vim.log.levels.WARN)
       return
     end
-
-    local agent_cfg = agent_logic.get_interactive_agent(chosen)
-    if not agent_cfg then
-      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not configured", vim.log.levels.WARN)
-      return
-    end
-
-    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(chosen, agent_cfg)
-    if not acp_logic.is_acp_backend(backend_name) then
-      vim.notify("LazyAgentACP: agent '" .. tostring(chosen) .. "' is not using ACP", vim.log.levels.WARN)
-      return
-    end
-
-    M.ensure_session(chosen, agent_cfg, true, function(pane_id)
-      if not pane_id or pane_id == "" then
-        vim.notify("LazyAgentACP: failed to obtain a session for '" .. tostring(chosen) .. "'", vim.log.levels.ERROR)
-        return
-      end
-      if not backend_mod or type(backend_mod.show_config_picker) ~= "function" then
-        vim.notify("LazyAgentACP: backend does not expose config pickers", vim.log.levels.WARN)
-        return
-      end
-      backend_mod.show_config_picker(pane_id, category)
-    end)
+    backend_mod.show_config_picker(pane_id, category)
   end)
 end
 
@@ -1259,6 +1293,46 @@ end
 
 function M.pick_acp_mode(agent_name)
   M.pick_acp_config(agent_name, "mode")
+end
+
+function M.pick_acp_commands(agent_name)
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_command_palette) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose a command palette", vim.log.levels.WARN)
+      return
+    end
+    backend_mod.show_command_palette(pane_id)
+  end)
+end
+
+function M.show_acp_tool_timeline(agent_name)
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_tool_timeline) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose a tool timeline", vim.log.levels.WARN)
+      return
+    end
+    backend_mod.show_tool_timeline(pane_id)
+  end)
+end
+
+function M.pick_acp_resources(agent_name)
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_resource_browser) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose a resource browser", vim.log.levels.WARN)
+      return
+    end
+    backend_mod.show_resource_browser(pane_id)
+  end)
+end
+
+function M.show_acp_capabilities(agent_name)
+  with_acp_session(agent_name, function(_, pane_id, backend_mod)
+    if not backend_mod or type(backend_mod.show_capabilities) ~= "function" then
+      vim.notify("LazyAgentACP: backend does not expose a capability report", vim.log.levels.WARN)
+      return
+    end
+    backend_mod.show_capabilities(pane_id)
+  end)
 end
 
 ---

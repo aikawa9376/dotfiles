@@ -69,7 +69,8 @@ return {
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
     "LazyAgentOpenConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
-    "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode",
+    "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPReopen",
+    "LazyAgentACPCommands", "LazyAgentACPTools", "LazyAgentACPResources", "LazyAgentACPCapabilities",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {

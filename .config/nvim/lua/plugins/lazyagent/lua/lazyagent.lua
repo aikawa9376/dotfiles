@@ -23,6 +23,11 @@ M.attach_session = session_logic.attach_session
 M.pick_acp_config = session_logic.pick_acp_config
 M.pick_acp_model = session_logic.pick_acp_model
 M.pick_acp_mode = session_logic.pick_acp_mode
+M.reopen_acp_window = session_logic.reopen_acp_window
+M.pick_acp_commands = session_logic.pick_acp_commands
+M.show_acp_tool_timeline = session_logic.show_acp_tool_timeline
+M.pick_acp_resources = session_logic.pick_acp_resources
+M.show_acp_capabilities = session_logic.show_acp_capabilities
 M.send_visual = send_logic.send_visual
 M.send_line = send_logic.send_line
 M.status = status_logic.get_status
@@ -321,6 +326,13 @@ function M.setup(opts)
       auto_permission = nil,
       default_mode = nil,
       initial_model = nil,
+      permission_rules = {},
+      auto_switch = {
+        enabled = false,
+        preserve_manual = true,
+        mode_rules = {},
+        model_rules = {},
+      },
     },
     tmux_auto_exit_copy_mode = true,
     submit_delay = 600,

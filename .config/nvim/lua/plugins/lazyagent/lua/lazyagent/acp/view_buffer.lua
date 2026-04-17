@@ -9,8 +9,10 @@ local footer_ns = vim.api.nvim_create_namespace("lazyagent_acp_footer")
 local highlights_defined = false
 local layout_autocmds_initialized = false
 local first_visible_window
+local replace_buffer_lines
 local set_buffer_lines
 local scroll_buffer_to_end
+local transcript_line_count
 
 local function ensure_highlights()
   if highlights_defined then
@@ -139,26 +141,42 @@ local function normalize_header_lines(bufnr, lines)
   return normalized or lines, changed
 end
 
-local function decorate_buffer(bufnr)
+local function decorate_transcript_range(bufnr, start_idx, end_idx)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
 
   ensure_highlights()
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local transcript_stop = transcript_line_count(bufnr)
+  local range_start = math.max(0, tonumber(start_idx) or 0)
+  local range_stop = math.max(range_start, math.min(transcript_stop, tonumber(end_idx) or transcript_stop))
+  if range_start >= range_stop then
+    return
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, range_start, range_stop, false)
   local normalized, changed = normalize_header_lines(bufnr, lines)
   if changed then
-    set_buffer_lines(bufnr, normalized)
+    replace_buffer_lines(bufnr, range_start, range_stop, normalized)
     lines = normalized
   end
 
-  vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, 0, -1)
+  vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, range_start, range_stop)
   for idx, line in ipairs(lines) do
     if line:match("^─ ") or line:match("^╭─ ") then
       local header_hl = section_style_for_line(line)
-      vim.api.nvim_buf_add_highlight(bufnr, transcript_ns, header_hl, idx - 1, 0, -1)
+      vim.api.nvim_buf_add_highlight(bufnr, transcript_ns, header_hl, range_start + idx - 1, 0, -1)
     end
   end
+end
+
+local function decorate_buffer(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, 0, -1)
+  decorate_transcript_range(bufnr, 0, transcript_line_count(bufnr))
 end
 
 local function find_config_option(session, keys)
@@ -287,9 +305,13 @@ first_visible_window = function(bufnr)
 end
 
 set_buffer_lines = function(bufnr, lines)
+  replace_buffer_lines(bufnr, 0, -1, lines)
+end
+
+replace_buffer_lines = function(bufnr, start_idx, end_idx, lines)
   local original_modifiable = vim.bo[bufnr].modifiable
   vim.bo[bufnr].modifiable = true
-  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
+  pcall(vim.api.nvim_buf_set_lines, bufnr, start_idx, end_idx, false, lines)
   vim.bo[bufnr].modifiable = original_modifiable
 end
 
@@ -331,7 +353,7 @@ scroll_buffer_to_end = function(bufnr)
   end
 end
 
-local function transcript_line_count(bufnr)
+transcript_line_count = function(bufnr)
   local total = vim.api.nvim_buf_line_count(bufnr)
   local footer_lines = math.max(0, tonumber(footer_state[tostring(bufnr)]) or 0)
   return math.max(0, total - footer_lines)
@@ -348,27 +370,25 @@ end
 
 local function append_text_to_buffer(bufnr, text)
   if not text or text == "" or not vim.api.nvim_buf_is_valid(bufnr) then
-    return
+    return nil
   end
 
-  local current_lines = transcript_lines(bufnr)
-  local chunks = vim.split(text, "\n", { plain = true })
-  local line_count = #current_lines
-  local start_idx = math.max(0, line_count - 1)
-  local current_last = current_lines[line_count] or ""
-  local base_lines = {}
-  for idx = 1, start_idx do
-    base_lines[idx] = current_lines[idx]
+  local transcript_stop = transcript_line_count(bufnr)
+  local total_lines = vim.api.nvim_buf_line_count(bufnr)
+  local replace_start = transcript_stop
+  local current_last = ""
+  if transcript_stop > 0 then
+    replace_start = transcript_stop - 1
+    current_last = vim.api.nvim_buf_get_lines(bufnr, replace_start, transcript_stop, false)[1] or ""
   end
+
+  local chunks = vim.split(text, "\n", { plain = true })
   local replacement = { current_last .. table.remove(chunks, 1) }
   vim.list_extend(replacement, chunks)
 
-  local original_modifiable = vim.bo[bufnr].modifiable
-  vim.bo[bufnr].modifiable = true
-  vim.list_extend(base_lines, replacement)
-  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, base_lines)
-  vim.bo[bufnr].modifiable = original_modifiable
+  replace_buffer_lines(bufnr, replace_start, total_lines, replacement)
   footer_state[tostring(bufnr)] = 0
+  return replace_start
 end
 
 local function refresh_buffer_from_file(session)
@@ -430,8 +450,10 @@ local function queue_append(session, text)
     if pending == "" then
       return
     end
-    append_text_to_buffer(bufnr, pending)
-    decorate_buffer(bufnr)
+    local changed_start = append_text_to_buffer(bufnr, pending)
+    if changed_start ~= nil then
+      decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
+    end
     M.refresh_footer(bufnr)
     if should_follow_output(bufnr) then
       scroll_buffer_to_end(bufnr)
@@ -720,13 +742,12 @@ function M.refresh_footer(bufnr)
     return
   end
 
-  local content = transcript_lines(bufnr)
+  local footer_start = transcript_line_count(bufnr)
   local footer_lines, footer_hls = render_footer_lines(bufnr)
+  footer_state[tostring(bufnr)] = 0
+  replace_buffer_lines(bufnr, footer_start, -1, footer_lines)
   footer_state[tostring(bufnr)] = #footer_lines
-  set_buffer_lines(bufnr, vim.list_extend(vim.deepcopy(content), footer_lines))
-  decorate_buffer(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, footer_ns, 0, -1)
-  local footer_start = #content
   for idx, hl in ipairs(footer_hls) do
     if hl and hl ~= "" then
       vim.api.nvim_buf_add_highlight(bufnr, footer_ns, hl, footer_start + idx - 1, 0, -1)
@@ -737,6 +758,19 @@ end
 function M.refresh_all_footers()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil then
+      M.refresh_footer(bufnr)
+    end
+  end
+end
+
+function M.refresh_agent_footers(agent_name)
+  if not agent_name or agent_name == "" then
+    return
+  end
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil
+      and buffer_var(bufnr, "lazyagent_acp_agent") == agent_name
+    then
       M.refresh_footer(bufnr)
     end
   end

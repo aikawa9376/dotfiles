@@ -4,52 +4,60 @@ local backend_logic = require("lazyagent.logic.backend")
 local state = require("lazyagent.logic.state")
 
 local animation_timer = nil
+local ANIMATION_INTERVAL_MS = 200
 
-local function refresh_transcript_footers()
+local function refresh_transcript_footers(agent_names)
   pcall(function()
-    require("lazyagent.acp.view_buffer").refresh_all_footers()
+    local view = require("lazyagent.acp.view_buffer")
+    if type(agent_names) == "table" and #agent_names > 0 then
+      for _, agent_name in ipairs(agent_names) do
+        view.refresh_agent_footers(agent_name)
+      end
+      return
+    end
+    view.refresh_all_footers()
   end)
 end
 
-local function refresh_ui()
+local function refresh_ui(agent_names)
   pcall(function() require("lualine").refresh() end)
   pcall(vim.cmd, "redrawstatus")
-  refresh_transcript_footers()
+  refresh_transcript_footers(agent_names)
+end
+
+local function active_monitoring_agents()
+  local agents = {}
+  for agent_name, s in pairs(state.sessions or {}) do
+    if s.monitor_timer then
+      table.insert(agents, agent_name)
+    end
+  end
+  return agents
 end
 
 -- Start animation loop if any session is in monitoring mode
 local function check_and_animate()
-  local any_active = false
-  for _, s in pairs(state.sessions or {}) do
-     if s.monitor_timer then
-        any_active = true
-        break
-     end
-  end
+  local monitoring_agents = active_monitoring_agents()
+  local any_active = #monitoring_agents > 0
 
   if any_active then
-     if not animation_timer then
-        animation_timer = vim.loop.new_timer()
-        animation_timer:start(100, 100, vim.schedule_wrap(function()
-           local still_active = false
-           for _, s in pairs(state.sessions or {}) do
-              if s.monitor_timer then
-                 still_active = true
-                 break
-              end
-            end
+      if not animation_timer then
+         animation_timer = vim.loop.new_timer()
+         animation_timer:start(ANIMATION_INTERVAL_MS, ANIMATION_INTERVAL_MS, vim.schedule_wrap(function()
+            local active_agents = active_monitoring_agents()
+            local still_active = #active_agents > 0
             if still_active then
-               refresh_ui()
-            else
-               if animation_timer then
-                  animation_timer:stop()
-                  animation_timer:close()
-                  animation_timer = nil
-               end
-               refresh_ui()
-             end
-          end))
-      end
+                refresh_ui(active_agents)
+             else
+                if animation_timer then
+                   animation_timer:stop()
+                   animation_timer:close()
+                   animation_timer = nil
+                end
+                refresh_ui()
+              end
+           end))
+       end
   else
       if animation_timer then
         animation_timer:stop()

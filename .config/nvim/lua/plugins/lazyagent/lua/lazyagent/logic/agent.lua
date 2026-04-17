@@ -314,7 +314,7 @@ function M.get_scratch_completions(agent_name)
   local res = vim.tbl_deep_extend("force", {}, defaults or {}, provided or {})
   local running = agent_name and state.sessions and state.sessions[agent_name] or nil
   if use_acp then
-    local local_slash = normalize_completion_list(acp_local_commands.entries())
+    local local_slash = normalize_completion_list(acp_local_commands.entries(running))
     local explicit_slash = normalize_completion_list((provided and provided.slash) or {})
     local dynamic_slash = {}
     if running and type(running.acp_available_commands) == "table" then

@@ -130,6 +130,51 @@ function M.setup_commands()
       complete = available_acp_agents,
     })
 
+  try_create_user_command("LazyAgentACPReopen", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.reopen_acp_window(explicit)
+  end, {
+      nargs = "?",
+      desc = "Reopen the ACP transcript window for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPCommands", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.pick_acp_commands(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP slash command palette for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPTools", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.show_acp_tool_timeline(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP tool call timeline for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPResources", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.pick_acp_resources(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP resource browser for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
+  try_create_user_command("LazyAgentACPCapabilities", function(cmdargs)
+    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
+    session_logic.show_acp_capabilities(explicit)
+  end, {
+      nargs = "?",
+      desc = "Open ACP capability summary for an ACP-enabled agent",
+      complete = available_acp_agents,
+    })
+
   try_create_user_command("LazyAgentRestore", function(cmdargs)
     local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
     agent_logic.resolve_target_agent(explicit, nil, function(chosen)

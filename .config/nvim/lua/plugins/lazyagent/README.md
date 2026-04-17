@@ -118,6 +118,21 @@ require("lazyagent").setup({
     view = "buffer",
     default_mode = "bypassPermissions",
     auto_permission = "allow_always",
+    permission_rules = {
+      { name = "safe-readonly", tool_pattern = "read", action = "allow_once" },
+      { name = "block-dotenv", path_pattern = "%.env", action = "manual" },
+    },
+    auto_switch = {
+      enabled = true,
+      preserve_manual = true,
+      mode_rules = {
+        { name = "debug-errors", errors_min = 1, value = "debug" },
+      },
+      model_rules = {
+        { name = "cheap-short-prompts", prompt_length_max = 400, value = "gpt-5-mini" },
+        { name = "strong-long-prompts", prompt_length_min = 1200, value = "gpt-5.4" },
+      },
+    },
   },
   interactive_agents = {
     Gemini = { acp_cmd = { "gemini", "--acp" } },
@@ -140,11 +155,19 @@ require("lazyagent").setup({
 - `interactive_agents.<name>.acp = false` を付けると、global ACP 有効時でもその agent だけ従来 backend を使えます。
 - `interactive_agents.<name>.acp = { enabled = true, view = "tmux" }` のように agent 単位で view を上書きできます。
 - `acp.default_mode` / `acp.initial_model` は session ready 後に自動で適用します。agent 単位では `interactive_agents.<name>.acp = { default_mode = "...", initial_model = "..." }` や旧式 alias の `acp_default_mode` / `acp_initial_model` も使えます。
+- `acp.permission_rules` を使うと、ACP の構造化 permission request に対して rule-based に `allow_once` / `allow_always` / `reject_once` / `reject_always` / `manual` を選べます。rule は上から順に評価し、agent 単位の `interactive_agents.<name>.acp.permission_rules` が global より先に効きます。
+- permission rule の match 条件は `agent`, `agent_pattern`, `cwd`, `cwd_pattern`, `tool`, `tool_pattern`, `title`, `title_pattern`, `kind`, `kind_pattern`, `path`, `path_pattern`, `text_pattern` を使えます。`manual`/`prompt`/`ask` は rule をマッチさせつつ picker にフォールバックさせたいとき用です。
+- `acp.auto_switch` を使うと、送信前に model/mode を自動切替できます。`mode_rules` / `model_rules` は上から順に評価し、`value`（または `mode` / `model`）に一致する choice がその session に存在するときだけ適用します。
+- auto switch rule の match 条件は `agent`, `agent_pattern`, `cwd`, `cwd_pattern`, `filetype`, `filetype_pattern`, `path`, `path_pattern`, `text_pattern`, `prompt_length_min`, `prompt_length_max`, `prompt_lines_min`, `prompt_lines_max`, `diagnostics_min`, `diagnostics_max`, `errors_min`, `errors_max`, `warnings_min`, `warnings_max` を使えます。
+- `acp.auto_switch.preserve_manual = true` のときは、`/model` `/mode` や picker で手動変更した session ではそのキーの自動切替を止めます。restart すると解除されます。
 - ACP でも scratch / cache / `#history` / `#report` はそのまま使えます。会話保存は tmux pane ではなく transcript から取ります。
 - ACP セッションは lazyagent の独自 MCP server に依存しません。status 更新や permission 応答後の monitor 再開、編集後の open-last-changed も Neovim 側で直接処理します。
-- ACP の scratch `/` 補完は agent が `available_commands_update` で advertise した command に加えて、lazyagent 側の `/config` `/model` `/mode` `/new` を出します。
+- ACP の scratch `/` 補完は agent が `available_commands_update` で advertise した command に加えて、lazyagent 側の `/config` `/model` `/mode` `/resources` `/capabilities` `/new` を出します。
 - `/model` `/mode` `/config` は ACP に plain text として送らず、Neovim の `vim.ui.select` で local selector を開きます。provider 側の picker UI をそのまま再現するのではなく、agentic.nvim 寄りの挙動です。
-- `:LazyAgentACPConfig` `:LazyAgentACPModel` `:LazyAgentACPMode` でも同じ selector を開けます。
+- local ACP command は session capability に合わせて出し分けます。`model` / `mode` / `config` を expose しない provider では command palette と補完候補から隠れます。`/capabilities` で現在 session の capability summary を見られます。
+- 手動 permission picker に落ちる場合は、選択前に diff/path/resource preview を transcript へ追加します。
+- `:q` などで `buffer_acp` の transcript window を直接閉じても、`LazyAgentToggle` でもう一度開き直せます。明示的に戻したいときは `:LazyAgentACPReopen` を使えます。
+- `:LazyAgentACPConfig` `:LazyAgentACPModel` `:LazyAgentACPMode` に加えて、`:LazyAgentACPReopen` で transcript reopen、`:LazyAgentACPCommands` で slash command palette、`:LazyAgentACPTools` で tool call timeline、`:LazyAgentACPResources` で resource browser、`:LazyAgentACPCapabilities` で capability summary を開けます。
 - ACP で agent から質問や確認が来た場合は、通常どおり scratch buffer から返信してください。generic な質問 picker は使わず、protocol で構造化されている permission request だけを picker で扱います。
 - advertise されていないその他の `/...` は plain prompt text として送られます。
 - `buffer` view では transcript 末尾に薄い footer 行を実バッファとして保ち、`Thinking...` / `Waiting...` などの進行中ステータスを独立行で表示します。footer メタ情報はその下に 2 行空けて、transcript size、provider/version、current model/mode、reasoning、model usage 倍率（Copilot が expose している場合）、MCP server 数、slash command 数、embedded context 対応をまとめて表示します。
@@ -265,6 +288,11 @@ prompts = {
 - LazyAgentACPConfig — ACP セッションの config option selector を開く（model/mode 以外の option も含む）
 - LazyAgentACPModel — ACP セッションの model selector を開く
 - LazyAgentACPMode — ACP セッションの mode selector を開く
+- LazyAgentACPReopen — 閉じてしまった ACP transcript window を再表示する
+- LazyAgentACPCommands — ACP セッションの slash command palette を開く（local command と agent advertise 済み command をまとめて表示）
+- LazyAgentACPTools — ACP セッションの tool call timeline を開く
+- LazyAgentACPResources — ACP セッションの resource browser を開き、選んだ reference を scratch に挿入する（scratch が無い場合はレジスタへコピー）
+- LazyAgentACPCapabilities — ACP セッションの capability summary を開く
 - Claude, Codex, Gemini, Copilot, Cursor — 対話型エージェントを直接開始するコマンド（lazy の cmd で読み込む）
 
 - `#report`（`- Summarize in Markdown file.`）トークンを使うと、`stdpath("cache")/lazyagent/summary/<project>-<branch>-<slug>.md` というプレフィックスを提示します（プロジェクト・ブランチ部分はプラグインで付与、slug は AI に選ばせる）。AI 側でそのパスに Markdown を作成/追記してください。`LazyAgentSummary` で既存の summary を開いたりパスをコピーできます。
@@ -296,6 +324,12 @@ prompts = {
   `send_buffer_and_clear()` の便利ラッパーで、現在のバッファを対象に送信・クリアを行います。
 - `require("lazyagent").pick_acp_config(agent_name)` / `.pick_acp_model(agent_name)` / `.pick_acp_mode(agent_name)`:
   ACP セッション用の local selector を開きます。agent 名を省略すると ACP 有効な agent から選択します。
+- `require("lazyagent").reopen_acp_window(agent_name)`:
+  閉じてしまった ACP transcript window を再表示します。agent 名を省略すると ACP 有効な agent から選択します。
+- `require("lazyagent").pick_acp_commands(agent_name)` / `.show_acp_tool_timeline(agent_name)`:
+  ACP セッション用の slash command palette / tool timeline を開きます。agent 名を省略すると ACP 有効な agent から選択します。
+- `require("lazyagent").pick_acp_resources(agent_name)` / `.show_acp_capabilities(agent_name)`:
+  ACP セッション用の resource browser / capability summary を開きます。agent 名を省略すると ACP 有効な agent から選択します。
 - `require("lazyagent").close_session(agent_name)` / `.close_all_sessions()`:
   1 つのセッション、もしくは全セッションを閉じる
 

@@ -11,6 +11,7 @@ local ERR = {
   internal = -32603,
   transport = -32000,
 }
+local STDERR_MAX_LINES = 200
 
 local function normalize_command_spec(spec)
   if type(spec) == "string" then
@@ -60,6 +61,16 @@ end
 
 local function trim(text)
   return (tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function append_stderr_line(lines, message)
+  lines[#lines + 1] = message
+  local overflow = #lines - STDERR_MAX_LINES
+  if overflow > 0 then
+    for _ = 1, overflow do
+      table.remove(lines, 1)
+    end
+  end
 end
 
 local function empty_dict_if_needed(value)
@@ -613,7 +624,7 @@ function Client:start(callback)
     if not data or data == "" then return end
     local message = trim(data)
     if message ~= "" then
-      table.insert(self.stderr_lines, message)
+      append_stderr_line(self.stderr_lines, message)
     end
   end)
 

@@ -17,6 +17,79 @@ local function normalize_acp_config(value)
   return {}
 end
 
+local function normalize_permission_rules(value)
+  if type(value) ~= "table" then
+    return {}
+  end
+
+  local out = {}
+  for _, rule in ipairs(value) do
+    if type(rule) == "table" then
+      out[#out + 1] = vim.deepcopy(rule)
+    end
+  end
+  return out
+end
+
+local function merge_permission_rules(agent_rules, global_rules)
+  local out = {}
+  for _, rule in ipairs(normalize_permission_rules(agent_rules)) do
+    out[#out + 1] = rule
+  end
+  for _, rule in ipairs(normalize_permission_rules(global_rules)) do
+    out[#out + 1] = rule
+  end
+  return out
+end
+
+local function normalize_auto_switch_config(value)
+  if type(value) == "boolean" then
+    return {
+      enabled = value,
+      preserve_manual = true,
+      mode_rules = {},
+      model_rules = {},
+    }
+  end
+
+  local cfg = type(value) == "table" and vim.deepcopy(value) or {}
+  cfg.mode_rules = normalize_permission_rules(cfg.mode_rules)
+  cfg.model_rules = normalize_permission_rules(cfg.model_rules)
+  if cfg.preserve_manual == nil then
+    cfg.preserve_manual = true
+  end
+  if cfg.enabled == nil then
+    cfg.enabled = (#cfg.mode_rules > 0 or #cfg.model_rules > 0)
+  end
+  return cfg
+end
+
+local function merge_auto_switch_config(agent_cfg, global_cfg)
+  local agent = normalize_auto_switch_config(agent_cfg)
+  local global = normalize_auto_switch_config(global_cfg)
+  local enabled
+  if agent.enabled ~= nil then
+    enabled = agent.enabled == true
+  else
+    enabled = global.enabled == true
+  end
+
+  local preserve_manual = agent.preserve_manual
+  if preserve_manual == nil then
+    preserve_manual = global.preserve_manual
+  end
+  if preserve_manual == nil then
+    preserve_manual = true
+  end
+
+  return {
+    enabled = enabled,
+    preserve_manual = preserve_manual == true,
+    mode_rules = merge_permission_rules(agent.mode_rules, global.mode_rules),
+    model_rules = merge_permission_rules(agent.model_rules, global.model_rules),
+  }
+end
+
 local function normalized_view_name(value)
   local view = value
   if type(view) ~= "string" or view == "" then
@@ -73,6 +146,14 @@ local function resolve_from_config(agent_cfg)
     auto_permission = agent_acp.auto_permission or global_cfg.auto_permission,
     default_mode = agent_acp.default_mode or global_cfg.default_mode,
     initial_model = agent_acp.initial_model or global_cfg.initial_model,
+    permission_rules = merge_permission_rules(
+      agent_acp.permission_rules or (agent_cfg and agent_cfg.acp_permission_rules),
+      global_cfg.permission_rules or (state.opts and state.opts.acp_permission_rules)
+    ),
+    auto_switch = merge_auto_switch_config(
+      agent_acp.auto_switch or (agent_cfg and agent_cfg.acp_auto_switch),
+      global_cfg.auto_switch or (state.opts and state.opts.acp_auto_switch)
+    ),
   }
 end
 
@@ -89,6 +170,8 @@ function M.resolve(agent_name, agent_cfg)
       auto_permission = session.auto_permission,
       default_mode = session.default_mode,
       initial_model = session.initial_model,
+      permission_rules = vim.deepcopy(session.permission_rules or {}),
+      auto_switch = vim.deepcopy(session.auto_switch or {}),
     }
   end
 

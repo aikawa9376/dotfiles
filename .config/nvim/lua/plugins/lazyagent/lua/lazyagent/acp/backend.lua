@@ -4,6 +4,8 @@ local cache_logic = require("lazyagent.logic.cache")
 local ACPClient = require("lazyagent.acp.client")
 local local_commands = require("lazyagent.acp.local_commands")
 local acp_logic = require("lazyagent.logic.acp")
+local summary_logic = require("lazyagent.logic.summary")
+local transforms = require("lazyagent.transforms")
 
 local sessions = {}
 local terminal_seq = 0
@@ -15,6 +17,9 @@ local section_icons = {
   Error = "󰅚",
   Plan = "󰐕",
 }
+local resolve_permission_option
+local tool_heading
+local buffer_root_for_session
 
 local function sanitize_filename_component(text)
   return tostring(text or ""):gsub("[^%w-_]+", "-")
@@ -121,7 +126,7 @@ end
 
 local function section_icon_for_heading(heading)
   if heading:match("^Tool") then
-    return "󰯈"
+    return "󱁤"
   end
   if heading:match("^Terminal") then
     return ""
@@ -310,12 +315,311 @@ local function render_tool_raw_output(raw_output)
   return table.concat(parts, "\n")
 end
 
+local function summarize_inline(text, limit)
+  local normalized = normalize_text(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  limit = tonumber(limit) or 120
+  if normalized == "" then
+    return ""
+  end
+  if #normalized <= limit then
+    return normalized
+  end
+  return normalized:sub(1, math.max(1, limit - 1)) .. "…"
+end
+
+local function to_match_values(value)
+  if value == nil then
+    return {}
+  end
+  if type(value) == "table" then
+    local out = {}
+    for _, item in ipairs(value) do
+      if item ~= nil and tostring(item) ~= "" then
+        out[#out + 1] = tostring(item)
+      end
+    end
+    return out
+  end
+  local text = tostring(value)
+  if text == "" then
+    return {}
+  end
+  return { text }
+end
+
+local function matches_exact(candidates, expected)
+  local values = to_match_values(expected)
+  if #values == 0 then
+    return true
+  end
+  for _, wanted in ipairs(values) do
+    local needle = wanted:lower()
+    for _, candidate in ipairs(candidates or {}) do
+      if tostring(candidate or ""):lower() == needle then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+local function matches_pattern(candidates, expected)
+  local values = to_match_values(expected)
+  if #values == 0 then
+    return true
+  end
+  for _, pattern in ipairs(values) do
+    for _, candidate in ipairs(candidates or {}) do
+      local ok, matched = pcall(string.match, tostring(candidate or ""), pattern)
+      if ok and matched then
+        return true
+      end
+    end
+  end
+  return false
+end
+
+local function add_unique_text(list, seen, value)
+  local text = tostring(value or "")
+  if text == "" or seen[text] then
+    return
+  end
+  seen[text] = true
+  list[#list + 1] = text
+end
+
+local function maybe_add_uri_path(list, seen, uri)
+  local text = tostring(uri or "")
+  if text == "" then
+    return
+  end
+  if text:match("^file://") then
+    local ok, path = pcall(vim.uri_to_fname, text)
+    if ok and path and path ~= "" then
+      add_unique_text(list, seen, path)
+      return
+    end
+  end
+  add_unique_text(list, seen, text)
+end
+
+local function extract_tool_paths(tool)
+  local out = {}
+  local seen = {}
+  if type(tool) ~= "table" then
+    return out
+  end
+
+  add_unique_text(out, seen, tool.path)
+  if type(tool.paths) == "table" then
+    for _, path in ipairs(tool.paths) do
+      add_unique_text(out, seen, path)
+    end
+  end
+
+  for _, item in ipairs(tool.content or {}) do
+    if type(item) == "table" then
+      if item.type == "diff" then
+        add_unique_text(out, seen, item.path)
+      elseif item.type == "content" and type(item.content) == "table" then
+        local content = item.content
+        maybe_add_uri_path(out, seen, content.uri)
+        if type(content.resource) == "table" then
+          maybe_add_uri_path(out, seen, content.resource.uri)
+        end
+      end
+    end
+  end
+
+  if type(tool.rawOutput) == "table" then
+    add_unique_text(out, seen, tool.rawOutput.path)
+    add_unique_text(out, seen, tool.rawOutput.file)
+  end
+
+  return out
+end
+
+local function tool_match_fields(tool)
+  local fields = {
+    title = {},
+    tool = {},
+    kind = {},
+    path = extract_tool_paths(tool),
+    text = {},
+    agent = {},
+    cwd = {},
+  }
+
+  add_unique_text(fields.title, {}, tool and tool.title)
+  local tool_seen = {}
+  add_unique_text(fields.tool, tool_seen, tool and tool.name)
+  add_unique_text(fields.tool, tool_seen, tool and tool.toolName)
+  add_unique_text(fields.tool, tool_seen, tool and tool.title)
+  add_unique_text(fields.tool, tool_seen, tool and tool.toolCallId)
+  add_unique_text(fields.kind, {}, tool and tool.kind)
+
+  local text_seen = {}
+  add_unique_text(fields.text, text_seen, tool and tool.title)
+  add_unique_text(fields.text, text_seen, render_tool_content(tool and tool.content))
+  add_unique_text(fields.text, text_seen, render_tool_raw_output(tool and tool.rawOutput))
+
+  return fields
+end
+
+local function permission_rule_label(rule, idx)
+  if type(rule) ~= "table" then
+    return string.format("rule #%d", idx)
+  end
+  local label = rule.name or rule.label or rule.id
+  if label and tostring(label) ~= "" then
+    return tostring(label)
+  end
+  return string.format("rule #%d", idx)
+end
+
+local function resolve_permission_rule_action(options, action)
+  local normalized = tostring(action or ""):lower()
+  if normalized == "" or normalized == "prompt" or normalized == "manual" or normalized == "ask" then
+    return nil
+  end
+  return resolve_permission_option(options, normalized)
+end
+
+local function permission_rule_matches(session, rule, tool)
+  if type(rule) ~= "table" then
+    return false
+  end
+
+  local fields = tool_match_fields(tool)
+  fields.agent = { tostring(session and session.agent_name or "") }
+  fields.cwd = {
+    tostring(session and session.cwd or ""),
+    tostring(session and session.root_dir or ""),
+  }
+
+  if not matches_exact(fields.agent, rule.agent) then
+    return false
+  end
+  if not matches_pattern(fields.agent, rule.agent_pattern) then
+    return false
+  end
+  if not matches_exact(fields.cwd, rule.cwd) then
+    return false
+  end
+  if not matches_pattern(fields.cwd, rule.cwd_pattern) then
+    return false
+  end
+  if not matches_exact(fields.tool, rule.tool) then
+    return false
+  end
+  if not matches_pattern(fields.tool, rule.tool_pattern) then
+    return false
+  end
+  if not matches_exact(fields.title, rule.title) then
+    return false
+  end
+  if not matches_pattern(fields.title, rule.title_pattern) then
+    return false
+  end
+  if not matches_exact(fields.kind, rule.kind) then
+    return false
+  end
+  if not matches_pattern(fields.kind, rule.kind_pattern) then
+    return false
+  end
+  if not matches_exact(fields.path, rule.path) then
+    return false
+  end
+  if not matches_pattern(fields.path, rule.path_pattern) then
+    return false
+  end
+  if not matches_pattern(fields.text, rule.text_pattern) then
+    return false
+  end
+
+  return true
+end
+
+local function resolve_permission_rule(session, tool, options)
+  local rules = type(session and session.permission_rules) == "table" and session.permission_rules or {}
+  for idx, rule in ipairs(rules) do
+    if permission_rule_matches(session, rule, tool) then
+      local action = tostring(rule.action or rule.outcome or "")
+      return {
+        matched = true,
+        label = permission_rule_label(rule, idx),
+        action = action,
+        option = resolve_permission_rule_action(options, action),
+      }
+    end
+  end
+  return { matched = false }
+end
+
+local function summarize_tool(tool)
+  if type(tool) ~= "table" then
+    return ""
+  end
+  local body = render_tool_content(tool.content)
+  if body == "" then
+    body = render_tool_raw_output(tool.rawOutput)
+  end
+  if body ~= "" then
+    return summarize_inline(body, 140)
+  end
+  return summarize_inline(tool.title or tool.toolCallId or "tool", 140)
+end
+
+local function upsert_tool_timeline(session, tool)
+  if not session or type(tool) ~= "table" or not tool.toolCallId then
+    return
+  end
+
+  session.tool_timeline = session.tool_timeline or {}
+  session.tool_timeline_index = session.tool_timeline_index or {}
+  local idx = session.tool_timeline_index[tool.toolCallId]
+  local entry = idx and session.tool_timeline[idx] or {
+    seq = #session.tool_timeline + 1,
+    toolCallId = tool.toolCallId,
+  }
+
+  entry.title = tool.title or entry.title or tool.toolCallId
+  entry.heading = tool_heading(tool)
+  entry.status = tool.status or entry.status
+  entry.kind = tool.kind or entry.kind
+  entry.paths = extract_tool_paths(tool)
+  entry.summary = summarize_tool(tool)
+  entry.tool = vim.deepcopy(tool)
+
+  if not idx then
+    session.tool_timeline[#session.tool_timeline + 1] = entry
+    session.tool_timeline_index[tool.toolCallId] = #session.tool_timeline
+  else
+    session.tool_timeline[idx] = entry
+  end
+end
+
 local function merge_tool_update(session, update)
   local tool_id = update.toolCallId or ("tool-" .. tostring(#session.tool_calls + 1))
   local merged = vim.tbl_deep_extend("force", session.tool_calls[tool_id] or {}, update)
   merged.toolCallId = tool_id
   session.tool_calls[tool_id] = merged
+  upsert_tool_timeline(session, merged)
   return merged
+end
+
+local function tool_update_is_terminal(tool)
+  local status = tostring(tool and tool.status or ""):lower()
+  return status == "completed"
+    or status == "complete"
+    or status == "finished"
+    or status == "done"
+    or status == "failed"
+    or status == "error"
+    or status == "errored"
+    or status == "cancelled"
+    or status == "canceled"
+    or status == "rejected"
 end
 
 local function normalize_available_commands(commands)
@@ -395,6 +699,10 @@ local function sync_runtime_session(session)
   runtime.acp_failed = session.failed == true
   runtime.acp_supports_embedded_context = session.prompt_supports_embedded_context == true
   runtime.acp_mcp_server_count = session.mcp_server_count or ((session.mcp_url and session.mcp_url ~= "") and 1 or 0)
+  runtime.acp_permission_rules = vim.deepcopy(session.permission_rules or {})
+  runtime.acp_auto_switch = vim.deepcopy(session.auto_switch or {})
+  runtime.acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {})
+  runtime.acp_tool_timeline = vim.deepcopy(session.tool_timeline or {})
 end
 
 local function config_option_key(option)
@@ -468,7 +776,8 @@ local function queue_after_ready(session, callback)
   table.insert(session.on_ready_actions, callback)
 end
 
-local function apply_config_option_choice(session, option, choice, on_done)
+local function apply_config_option_choice(session, option, choice, on_done, opts)
+  opts = opts or {}
   if type(on_done) ~= "function" then
     on_done = function() end
   end
@@ -479,9 +788,10 @@ local function apply_config_option_choice(session, option, choice, on_done)
   end
 
   local label = config_option_title(option)
+  local key = config_option_key(option)
+  local source = opts.source or "manual"
   local method = "set_config_option"
   if session.client._legacy_api then
-    local key = config_option_key(option)
     if key == "mode" and type(session.client.set_mode) == "function" then
       method = "set_mode"
     elseif key == "model" and type(session.client.set_model) == "function" then
@@ -496,8 +806,21 @@ local function apply_config_option_choice(session, option, choice, on_done)
       return
     end
     session.config_options = vim.deepcopy(config_options or session.client.config_options or session.config_options or {})
+    session.manual_config_overrides = session.manual_config_overrides or {}
+    session.auto_switch_state = session.auto_switch_state or {}
+    if source == "manual" and key then
+      session.manual_config_overrides[key] = true
+    elseif source == "auto" and key then
+      session.auto_switch_state[key] = choice.value
+    end
     sync_runtime_session(session)
-    append_block(session, "System", string.format("%s set to %s", label, choice.name or tostring(choice.value)))
+    local success_message = opts.success_message
+    if success_message == nil then
+      success_message = string.format("%s set to %s", label, choice.name or tostring(choice.value))
+    end
+    if success_message ~= false and success_message ~= "" then
+      append_block(session, "System", success_message)
+    end
     on_done(true)
   end
 
@@ -535,6 +858,214 @@ local function find_config_choice(option, value)
     end
   end
   return nil
+end
+
+local function choice_display_name(choice)
+  if type(choice) ~= "table" then
+    return tostring(choice or "")
+  end
+  return choice.name or tostring(choice.value or "")
+end
+
+local function session_source_bufnr(session)
+  local bufnr = session and session.agent_cfg and (session.agent_cfg.source_bufnr or session.agent_cfg.origin_bufnr) or nil
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    return bufnr
+  end
+  return nil
+end
+
+local function build_auto_switch_context(session, prompt)
+  local bufnr = session_source_bufnr(session)
+  local path = bufnr and vim.api.nvim_buf_get_name(bufnr) or ""
+  local filetype = (bufnr and vim.bo[bufnr] and vim.bo[bufnr].filetype) or ""
+  local diagnostics = bufnr and transforms.gather_diagnostics(bufnr) or {}
+  local counts = {
+    diagnostics = #diagnostics,
+    errors = 0,
+    warnings = 0,
+    infos = 0,
+    hints = 0,
+  }
+
+  for _, item in ipairs(diagnostics or {}) do
+    local severity = tostring(item.severity or ""):upper()
+    if severity == "ERROR" then
+      counts.errors = counts.errors + 1
+    elseif severity == "WARN" or severity == "WARNING" then
+      counts.warnings = counts.warnings + 1
+    elseif severity == "INFO" then
+      counts.infos = counts.infos + 1
+    elseif severity == "HINT" then
+      counts.hints = counts.hints + 1
+    end
+  end
+
+  return {
+    agent = tostring(session and session.agent_name or ""),
+    cwd = tostring(session and (session.root_dir or session.cwd) or vim.fn.getcwd()),
+    path = path,
+    filetype = filetype,
+    text = tostring(prompt or ""),
+    prompt_length = vim.fn.strchars(tostring(prompt or "")),
+    prompt_lines = select(2, tostring(prompt or ""):gsub("\n", "\n")) + 1,
+    diagnostics = counts.diagnostics,
+    errors = counts.errors,
+    warnings = counts.warnings,
+    infos = counts.infos,
+    hints = counts.hints,
+  }
+end
+
+local function auto_switch_rule_label(rule, idx)
+  if type(rule) ~= "table" then
+    return string.format("rule #%d", idx)
+  end
+  return tostring(rule.name or rule.label or rule.id or ("rule #" .. tostring(idx)))
+end
+
+local function auto_switch_rule_matches(context, rule)
+  if type(rule) ~= "table" then
+    return false
+  end
+  if not matches_exact({ context.agent }, rule.agent) then
+    return false
+  end
+  if not matches_pattern({ context.agent }, rule.agent_pattern) then
+    return false
+  end
+  if not matches_exact({ context.cwd }, rule.cwd) then
+    return false
+  end
+  if not matches_pattern({ context.cwd }, rule.cwd_pattern) then
+    return false
+  end
+  if not matches_exact({ context.filetype }, rule.filetype) then
+    return false
+  end
+  if not matches_pattern({ context.filetype }, rule.filetype_pattern) then
+    return false
+  end
+  if not matches_exact({ context.path }, rule.path) then
+    return false
+  end
+  if not matches_pattern({ context.path }, rule.path_pattern) then
+    return false
+  end
+  if not matches_pattern({ context.text }, rule.text_pattern) then
+    return false
+  end
+  if rule.prompt_length_min and context.prompt_length < tonumber(rule.prompt_length_min) then
+    return false
+  end
+  if rule.prompt_length_max and context.prompt_length > tonumber(rule.prompt_length_max) then
+    return false
+  end
+  if rule.prompt_lines_min and context.prompt_lines < tonumber(rule.prompt_lines_min) then
+    return false
+  end
+  if rule.prompt_lines_max and context.prompt_lines > tonumber(rule.prompt_lines_max) then
+    return false
+  end
+  if rule.diagnostics_min and context.diagnostics < tonumber(rule.diagnostics_min) then
+    return false
+  end
+  if rule.diagnostics_max and context.diagnostics > tonumber(rule.diagnostics_max) then
+    return false
+  end
+  if rule.errors_min and context.errors < tonumber(rule.errors_min) then
+    return false
+  end
+  if rule.errors_max and context.errors > tonumber(rule.errors_max) then
+    return false
+  end
+  if rule.warnings_min and context.warnings < tonumber(rule.warnings_min) then
+    return false
+  end
+  if rule.warnings_max and context.warnings > tonumber(rule.warnings_max) then
+    return false
+  end
+  return true
+end
+
+local function resolve_auto_switch_operations(session, prompt)
+  local latest_cfg = acp_logic.resolve_config(session.agent_cfg or {})
+  session.auto_switch = vim.deepcopy(latest_cfg.auto_switch or {})
+  sync_runtime_session(session)
+
+  local auto_cfg = session.auto_switch or {}
+  if auto_cfg.enabled ~= true then
+    return {}
+  end
+
+  local context = build_auto_switch_context(session, prompt)
+  local operations = {}
+  local preserve_manual = auto_cfg.preserve_manual ~= false
+
+  for _, spec in ipairs({
+    { key = "mode", rules = auto_cfg.mode_rules, value_key = "mode" },
+    { key = "model", rules = auto_cfg.model_rules, value_key = "model" },
+  }) do
+    if not (preserve_manual and session.manual_config_overrides and session.manual_config_overrides[spec.key]) then
+      local option = find_config_option(session, spec.key)
+      if option then
+        for idx, rule in ipairs(spec.rules or {}) do
+          if auto_switch_rule_matches(context, rule) then
+            local desired = rule.value or rule[spec.value_key]
+            local choice = find_config_choice(option, desired)
+            local current = tostring(option.currentValue or "")
+            if choice and tostring(choice.value or "") ~= current then
+              operations[#operations + 1] = {
+                key = spec.key,
+                option = option,
+                choice = choice,
+                rule_label = auto_switch_rule_label(rule, idx),
+              }
+            end
+            break
+          end
+        end
+      end
+    end
+  end
+
+  return operations
+end
+
+local function maybe_apply_auto_switch(session, prompt, done)
+  done = done or function() end
+  if not session or session.failed or not session.ready or not session.client then
+    done()
+    return
+  end
+
+  local operations = resolve_auto_switch_operations(session, prompt)
+  if #operations == 0 then
+    done()
+    return
+  end
+
+  local function step(index)
+    local item = operations[index]
+    if not item then
+      done()
+      return
+    end
+
+    apply_config_option_choice(session, item.option, item.choice, function()
+      step(index + 1)
+    end, {
+      source = "auto",
+      success_message = string.format(
+        "Auto %s -> %s (%s)",
+        item.key,
+        choice_display_name(item.choice),
+        item.rule_label
+      ),
+    })
+  end
+
+  step(1)
 end
 
 local function apply_initial_session_config(session, done)
@@ -580,7 +1111,7 @@ local function apply_initial_session_config(session, done)
 
     apply_config_option_choice(session, option, choice, function()
       step(index + 1)
-    end)
+    end, { source = "initial" })
   end
 
   step(1)
@@ -659,10 +1190,446 @@ local function show_config_picker_for_session(session, category)
   return true
 end
 
+local function command_palette_items(session)
+  local out = {}
+  local seen = {}
+
+  for _, command in ipairs(local_commands.entries(session)) do
+    if type(command) == "table" and command.label and not seen[command.label] then
+      seen[command.label] = true
+      out[#out + 1] = vim.tbl_extend("force", { source = "local" }, vim.deepcopy(command))
+    end
+  end
+
+  for _, command in ipairs(session and session.available_commands or {}) do
+    if type(command) == "table" and command.label and not seen[command.label] then
+      seen[command.label] = true
+      out[#out + 1] = vim.tbl_extend("force", { source = "agent" }, vim.deepcopy(command))
+    end
+  end
+
+  return out
+end
+
+local function show_command_palette_for_session(session, submit)
+  if not session then
+    return false
+  end
+
+  if session.failed then
+    append_block(session, "Error", "ACP session is disconnected. Restart the agent session to continue.")
+    return false
+  end
+
+  if not session.ready or not session.client then
+    queue_after_ready(session, function()
+      show_command_palette_for_session(session, submit)
+    end)
+    append_block(session, "System", "ACP session is still connecting. Command palette will open when ready.")
+    return true
+  end
+
+  local items = command_palette_items(session)
+  if #items == 0 then
+    append_block(session, "System", "This ACP session does not expose any slash commands yet.")
+    return false
+  end
+
+  vim.ui.select(items, {
+    prompt = "Choose ACP command:",
+    format_item = function(item)
+      local source = item.source == "local" and "local" or "agent"
+      local desc = item.desc and item.desc ~= "" and (" - " .. item.desc) or ""
+      return string.format("%s [%s]%s", item.label, source, desc)
+    end,
+  }, function(choice)
+    if not choice or not choice.label or choice.label == "" then
+      return
+    end
+    submit(choice.label)
+  end)
+
+  return true
+end
+
+local function render_tool_timeline_detail(entry)
+  local tool = entry and entry.tool or {}
+  local lines = {
+    "# ACP Tool Timeline",
+    "",
+    "ID: " .. tostring(entry and entry.toolCallId or ""),
+    "Title: " .. tostring(entry and entry.title or tool.title or ""),
+    "Heading: " .. tostring(entry and entry.heading or ""),
+    "Status: " .. tostring(entry and entry.status or tool.status or ""),
+  }
+
+  local paths = type(entry and entry.paths) == "table" and entry.paths or extract_tool_paths(tool)
+  if #paths > 0 then
+    lines[#lines + 1] = "Paths:"
+    for _, path in ipairs(paths) do
+      lines[#lines + 1] = "- " .. path
+    end
+  end
+
+  local body = render_tool_content(tool.content)
+  if body ~= "" then
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Content:"
+    vim.list_extend(lines, vim.split(body, "\n", { plain = true }))
+  end
+
+  local raw_output = render_tool_raw_output(tool.rawOutput)
+  if raw_output ~= "" then
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Raw output:"
+    vim.list_extend(lines, vim.split(raw_output, "\n", { plain = true }))
+  end
+
+  return lines
+end
+
+local function open_tool_timeline_buffer(entry)
+  vim.cmd("belowright split")
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, buf)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = true
+  vim.bo[buf].filetype = "markdown"
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, render_tool_timeline_detail(entry))
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].readonly = true
+  vim.api.nvim_buf_set_name(buf, "lazyagent://acp-tool-" .. sanitize_filename_component(entry.toolCallId or "tool"))
+  vim.wo.wrap = false
+end
+
+local function show_tool_timeline_for_session(session)
+  if not session then
+    return false
+  end
+
+  local timeline = session.tool_timeline or {}
+  if #timeline == 0 then
+    append_block(session, "System", "No ACP tool calls have been recorded for this session yet.")
+    return false
+  end
+
+  vim.ui.select(timeline, {
+    prompt = "ACP tool timeline:",
+    format_item = function(item)
+      local status = item.status and item.status ~= "" and (" [" .. item.status .. "]") or ""
+      local summary = item.summary and item.summary ~= "" and (" - " .. item.summary) or ""
+      return string.format("%02d. %s%s%s", item.seq or 0, item.title or item.toolCallId or "tool", status, summary)
+    end,
+  }, function(choice)
+    if not choice then
+      return
+    end
+    open_tool_timeline_buffer(choice)
+  end)
+
+  return true
+end
+
+local function open_report_buffer(name, filetype, lines)
+  vim.cmd("belowright split")
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(0, buf)
+  vim.bo[buf].buftype = "nofile"
+  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].swapfile = false
+  vim.bo[buf].modifiable = true
+  vim.bo[buf].filetype = filetype or "markdown"
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or {})
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].readonly = true
+  vim.api.nvim_buf_set_name(buf, name)
+  vim.wo.wrap = false
+end
+
+local function render_capability_report(session)
+  local info = session and session.agent_info or {}
+  local lines = {
+    "# ACP Capability Summary",
+    "",
+    "## Session",
+    string.format("- Agent: %s", tostring(session and session.agent_name or "")),
+    string.format("- Provider: %s", tostring(info.title or info.name or session.agent_name or "ACP")),
+    string.format("- Version: %s", tostring(info.version or "unknown")),
+    string.format("- Ready: %s", tostring(session and session.ready == true)),
+    string.format("- Embedded context: %s", tostring(session and session.prompt_supports_embedded_context == true)),
+    string.format("- MCP servers: %d", tonumber(session and session.mcp_server_count or 0) or 0),
+    string.format("- Root: %s", tostring(session and (session.root_dir or session.cwd) or "")),
+  }
+
+  if session and session.session_id then
+    lines[#lines + 1] = string.format("- Session ID: %s", session.session_id)
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "## Local ACP actions"
+  for _, command in ipairs(local_commands.entries(session)) do
+    lines[#lines + 1] = string.format("- %s — %s", command.label, command.desc or "")
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "## Config options"
+  if #(session and session.config_options or {}) == 0 then
+    lines[#lines + 1] = "- None"
+  else
+    for _, option in ipairs(session.config_options or {}) do
+      if type(option) == "table" then
+        lines[#lines + 1] = string.format(
+          "- %s: %s (%d choices)",
+          config_option_title(option),
+          tostring(config_option_current_name(option) or "unset"),
+          #(option.options or {})
+        )
+      end
+    end
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "## Slash commands"
+  if #(session and session.available_commands or {}) == 0 then
+    lines[#lines + 1] = "- None advertised"
+  else
+    for _, command in ipairs(session.available_commands or {}) do
+      lines[#lines + 1] = string.format("- %s — %s", command.label or "", command.desc or "")
+    end
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "## Auto switch"
+  local auto_cfg = session and session.auto_switch or {}
+  lines[#lines + 1] = string.format("- Enabled: %s", tostring(auto_cfg and auto_cfg.enabled == true))
+  lines[#lines + 1] = string.format("- Preserve manual: %s", tostring(auto_cfg and auto_cfg.preserve_manual ~= false))
+  lines[#lines + 1] = string.format("- Mode rules: %d", #(auto_cfg and auto_cfg.mode_rules or {}))
+  lines[#lines + 1] = string.format("- Model rules: %d", #(auto_cfg and auto_cfg.model_rules or {}))
+  local overrides = session and session.manual_config_overrides or {}
+  if next(overrides) then
+    lines[#lines + 1] = "- Manual overrides: " .. table.concat(vim.tbl_keys(overrides), ", ")
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "## Agent capabilities"
+  lines[#lines + 1] = "```lua"
+  vim.list_extend(lines, vim.split(vim.inspect(session and session.agent_capabilities or {}), "\n", { plain = true }))
+  lines[#lines + 1] = "```"
+
+  return lines
+end
+
+local function show_capabilities_for_session(session)
+  if not session then
+    return false
+  end
+  open_report_buffer(
+    "lazyagent://acp-capabilities-" .. sanitize_filename_component(session.agent_name or "session"),
+    "markdown",
+    render_capability_report(session)
+  )
+  return true
+end
+
+local function relative_reference_for_path(session, path)
+  local root = buffer_root_for_session(session)
+  local normalized = vim.fn.fnamemodify(path or "", ":p")
+  if root and normalized:sub(1, #root) == root then
+    local rel = normalized:sub(#root + 2)
+    if rel ~= "" then
+      return "@" .. rel
+    end
+  end
+  return "@" .. normalized
+end
+
+local function build_resource_items(session)
+  local items = {}
+  local seen = {}
+
+  local function add_item(kind, label, path, reference)
+    local ref = reference or relative_reference_for_path(session, path)
+    if not ref or ref == "" or seen[ref] then
+      return
+    end
+    seen[ref] = true
+    items[#items + 1] = {
+      kind = kind,
+      label = label,
+      path = path,
+      reference = ref,
+    }
+  end
+
+  local source_bufnr = session_source_bufnr(session)
+  local root = buffer_root_for_session(session)
+  if root and root ~= "" then
+    add_item("workspace", "Project root", root, "@.")
+  end
+
+  if source_bufnr and vim.api.nvim_buf_is_valid(source_bufnr) then
+    local source_path = vim.api.nvim_buf_get_name(source_bufnr)
+    if source_path ~= "" then
+      local mark = vim.api.nvim_buf_get_mark(source_bufnr, '"')
+      add_item("buffer", "Current buffer", source_path)
+      if type(mark) == "table" and mark[1] and mark[1] > 0 then
+        add_item("cursor", "Current cursor location", source_path, relative_reference_for_path(session, source_path) .. ":" .. tostring(mark[1]))
+      end
+    end
+  end
+
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(bufnr) and vim.fn.buflisted(bufnr) == 1 then
+      local path = vim.api.nvim_buf_get_name(bufnr)
+      if path ~= "" then
+        add_item("buffer", "Open buffer", path)
+      end
+    end
+  end
+
+  if source_bufnr then
+    local history_path = cache_logic.get_cache_path(source_bufnr)
+    if history_path and vim.fn.filereadable(history_path) == 1 then
+      add_item("history", "Latest history log", history_path)
+    end
+
+    local summary_path = summary_logic.summary_path(source_bufnr)
+    if summary_path and vim.fn.filereadable(summary_path) == 1 then
+      add_item("summary", "Summary file", summary_path)
+    end
+  end
+
+  if session.transcript_path and vim.fn.filereadable(session.transcript_path) == 1 then
+    add_item("transcript", "Live ACP transcript", session.transcript_path)
+  end
+
+  table.sort(items, function(a, b)
+    if a.kind == b.kind then
+      return (a.path or a.reference or "") < (b.path or b.reference or "")
+    end
+    return a.kind < b.kind
+  end)
+
+  return items
+end
+
+local function insert_resource_reference(session, reference)
+  if not reference or reference == "" then
+    return false
+  end
+
+  local ok_window, window = pcall(require, "lazyagent.window")
+  local scratch = ok_window and window and type(window.get_scratch_bufnr) == "function" and window.get_scratch_bufnr() or nil
+  if scratch and vim.api.nvim_buf_is_valid(scratch) and vim.b[scratch] and vim.b[scratch].lazyagent_agent == session.agent_name then
+    local lines = vim.api.nvim_buf_get_lines(scratch, 0, -1, false)
+    if #lines == 0 then
+      vim.api.nvim_buf_set_lines(scratch, 0, -1, false, { reference })
+    else
+      local last = lines[#lines] or ""
+      local joiner = last:match("%S$") and " " or ""
+      lines[#lines] = last .. joiner .. reference
+      vim.api.nvim_buf_set_lines(scratch, 0, -1, false, lines)
+    end
+    vim.notify("LazyAgentACP: inserted resource reference into scratch: " .. reference, vim.log.levels.INFO)
+    return true
+  end
+
+  pcall(vim.fn.setreg, '"', reference)
+  pcall(vim.fn.setreg, "+", reference)
+  append_block(session, "System", "Copied ACP resource reference to register:\n" .. reference)
+  return false
+end
+
+local function show_resource_browser_for_session(session)
+  if not session then
+    return false
+  end
+
+  local items = build_resource_items(session)
+  if #items == 0 then
+    append_block(session, "System", "No ACP resource references are available for this session yet.")
+    return false
+  end
+
+  vim.ui.select(items, {
+    prompt = "Choose ACP resource:",
+    format_item = function(item)
+      return string.format("%s [%s] → %s", item.label, item.kind, item.reference)
+    end,
+  }, function(choice)
+    if not choice or not choice.reference then
+      return
+    end
+    insert_resource_reference(session, choice.reference)
+  end)
+
+  return true
+end
+
+local function render_permission_preview(tool)
+  if type(tool) ~= "table" then
+    return ""
+  end
+
+  local lines = {}
+  local paths = extract_tool_paths(tool)
+  if #paths > 0 then
+    lines[#lines + 1] = "Targets:"
+    for _, path in ipairs(paths) do
+      lines[#lines + 1] = "- " .. path
+    end
+  end
+
+  for _, item in ipairs(tool.content or {}) do
+    if type(item) == "table" and item.type == "diff" then
+      lines[#lines + 1] = ""
+      lines[#lines + 1] = "Diff preview: " .. tostring(item.path or "file")
+      lines[#lines + 1] = "--- before"
+      local before_lines = vim.split(item.oldText or "", "\n", { plain = true })
+      for idx = 1, math.min(#before_lines, 6) do
+        lines[#lines + 1] = before_lines[idx]
+      end
+      if #before_lines > 6 then
+        lines[#lines + 1] = "... (truncated)"
+      end
+      lines[#lines + 1] = "+++ after"
+      local after_lines = vim.split(item.newText or "", "\n", { plain = true })
+      for idx = 1, math.min(#after_lines, 6) do
+        lines[#lines + 1] = after_lines[idx]
+      end
+      if #after_lines > 6 then
+        lines[#lines + 1] = "... (truncated)"
+      end
+    elseif type(item) == "table" and item.type == "content" and type(item.content) == "table" then
+      local uri = item.content.uri or (type(item.content.resource) == "table" and item.content.resource.uri) or nil
+      if uri and uri ~= "" then
+        lines[#lines + 1] = ""
+        lines[#lines + 1] = "Resource: " .. tostring(uri)
+      end
+    end
+  end
+
+  if #lines == 0 then
+    local summary = summarize_tool(tool)
+    if summary ~= "" then
+      lines[#lines + 1] = summary
+    end
+  end
+
+  return table.concat(lines, "\n")
+end
+
 local function handle_local_slash_command(session, prompt)
   local command, args = local_commands.parse(prompt)
   if not command or args ~= "" then
     return false
+  end
+
+  if not local_commands.is_available(command.name, session) then
+    append_block(session, "System", local_commands.unavailable_reason(command.name, session) or "ACP command unavailable.")
+    return true
   end
 
   if command.name == "model" then
@@ -680,6 +1647,16 @@ local function handle_local_slash_command(session, prompt)
     return true
   end
 
+  if command.name == "resources" then
+    show_resource_browser_for_session(session)
+    return true
+  end
+
+  if command.name == "capabilities" then
+    show_capabilities_for_session(session)
+    return true
+  end
+
   if command.name == "new" then
     append_block(session, "System", "Restarting ACP session...")
     vim.schedule(function()
@@ -691,7 +1668,7 @@ local function handle_local_slash_command(session, prompt)
   return false
 end
 
-local function tool_heading(tool)
+tool_heading = function(tool)
   local parts = { "Tool" }
   if tool.kind and tool.kind ~= "" then
     table.insert(parts, tool.kind)
@@ -734,7 +1711,7 @@ local function maybe_call_mcp_tool(name, params)
   end
 end
 
-local function buffer_root_for_session(session)
+buffer_root_for_session = function(session)
   if session.root_dir and session.root_dir ~= "" then
     return session.root_dir
   end
@@ -1087,7 +2064,7 @@ local function terminal_release(session, params)
   return vim.NIL
 end
 
-local function resolve_permission_option(options, preferred_kind)
+resolve_permission_option = function(options, preferred_kind)
   if type(options) ~= "table" then return nil end
   if preferred_kind then
     for _, option in ipairs(options) do
@@ -1121,6 +2098,7 @@ end
 local function handle_permission_request(session, params, done)
   local latest_cfg = acp_logic.resolve_config(session.agent_cfg or {})
   session.auto_permission = latest_cfg.auto_permission
+  session.permission_rules = vim.deepcopy(latest_cfg.permission_rules or {})
   local tool = merge_tool_update(session, params.toolCall or {})
   append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested")
   maybe_call_mcp_tool("notify_waiting", {
@@ -1128,13 +2106,44 @@ local function handle_permission_request(session, params, done)
     message = "Permission",
   })
 
+  local rule_resolution = resolve_permission_rule(session, tool, params.options or {})
+  local rule_matched = rule_resolution and rule_resolution.matched == true
+  if rule_matched and rule_resolution.option then
+    append_block(
+      session,
+      "System",
+      string.format(
+        "ACP permission rule `%s` matched and selected `%s`.",
+        rule_resolution.label or "rule",
+        rule_resolution.action or rule_resolution.option.kind or "option"
+      )
+    )
+    pcall(function()
+      require("lazyagent.logic.status").start_monitor(session.agent_name)
+    end)
+    done({
+      outcome = "selected",
+      optionId = rule_resolution.option.optionId,
+    })
+    return
+  elseif rule_matched then
+    append_block(
+      session,
+      "System",
+      string.format("ACP permission rule `%s` matched and requires manual confirmation.", rule_resolution.label or "rule")
+    )
+  end
+
   local preferred = session.auto_permission
-  if not preferred and session.agent_cfg and session.agent_cfg.yolo then
+  if not rule_matched and not preferred and session.agent_cfg and session.agent_cfg.yolo then
     preferred = "allow_once"
   end
 
-  local auto = resolve_permission_option(params.options or {}, preferred)
-  if not auto and preferred == "allow_always" then
+  local auto = nil
+  if not rule_matched then
+    auto = resolve_permission_option(params.options or {}, preferred)
+  end
+  if not auto and not rule_matched and preferred == "allow_always" then
     auto = resolve_best_allow_option(params.options or {})
   end
   if auto then
@@ -1146,6 +2155,11 @@ local function handle_permission_request(session, params, done)
       optionId = auto.optionId,
     })
     return
+  end
+
+  local preview = render_permission_preview(tool)
+  if preview ~= "" then
+    append_block(session, "Edited Preview", preview)
   end
 
   local labels = {}
@@ -1311,6 +2325,9 @@ local function on_client_update(session, params)
     else
       append_block(session, tool_heading(tool), title)
     end
+    if tool_update_is_terminal(tool) then
+      session.tool_calls[tool.toolCallId] = nil
+    end
     return
   end
 end
@@ -1436,7 +2453,7 @@ local function create_backend(default_view)
 
   function backend._drain_prompt_queue(pane_id)
     local session = get_session(pane_id)
-    if not session or session.failed or session.busy or not session.ready or not session.client then
+    if not session or session.failed or session.busy or session.preparing_prompt or not session.ready or not session.client then
       return false
     end
 
@@ -1445,41 +2462,45 @@ local function create_backend(default_view)
       return false
     end
 
-    session.busy = true
-    maybe_call_mcp_tool("notify_start", { agent_name = session.agent_name })
-    note_unadvertised_slash_command(session, prompt)
-    append_block(session, "User", prompt)
+    session.preparing_prompt = true
+    maybe_apply_auto_switch(session, prompt, function()
+      session.preparing_prompt = false
+      session.busy = true
+      maybe_call_mcp_tool("notify_start", { agent_name = session.agent_name })
+      note_unadvertised_slash_command(session, prompt)
+      append_block(session, "User", prompt)
 
-    local blocks = build_prompt_blocks(session, prompt)
-    session.client:send_prompt(blocks, function(result, err)
-      session.busy = false
-      close_stream(session)
+      local blocks = build_prompt_blocks(session, prompt)
+      session.client:send_prompt(blocks, function(result, err)
+        session.busy = false
+        close_stream(session)
 
-      if err then
-        append_block(session, "Error", err.message or tostring(err))
-        pcall(function()
-          require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
-        end)
-        session.prompt_queue = {}
-        return
-      end
+        if err then
+          append_block(session, "Error", err.message or tostring(err))
+          pcall(function()
+            require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
+          end)
+          session.prompt_queue = {}
+          return
+        end
 
-      local stop_reason = result and result.stopReason or nil
-      if stop_reason == "tool_call" then
-        pcall(function()
-          require("lazyagent.logic.status").start_monitor(session.agent_name)
-        end)
-        return
-      end
+        local stop_reason = result and result.stopReason or nil
+        if stop_reason == "tool_call" then
+          pcall(function()
+            require("lazyagent.logic.status").start_monitor(session.agent_name)
+          end)
+          return
+        end
 
-      if stop_reason and stop_reason ~= "end_turn" then
-        append_block(session, "System", "Turn finished with stopReason: " .. tostring(stop_reason))
-      end
+        if stop_reason and stop_reason ~= "end_turn" then
+          append_block(session, "System", "Turn finished with stopReason: " .. tostring(stop_reason))
+        end
 
-      maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
-      if #session.prompt_queue > 0 then
-        backend._drain_prompt_queue(pane_id)
-      end
+        maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
+        if #session.prompt_queue > 0 then
+          backend._drain_prompt_queue(pane_id)
+        end
+      end)
     end)
 
     return true
@@ -1560,9 +2581,16 @@ local function create_backend(default_view)
         available_commands = {},
         config_options = {},
         on_ready_actions = {},
+        permission_rules = vim.deepcopy(acp.permission_rules or {}),
+        auto_switch = vim.deepcopy(acp.auto_switch or {}),
+        manual_config_overrides = {},
+        auto_switch_state = {},
+        tool_timeline = {},
+        tool_timeline_index = {},
         ready = false,
         failed = false,
         busy = false,
+        preparing_prompt = false,
         command = acp.command,
         env = acp.env or {},
         cwd = acp.cwd or vim.fn.getcwd(),
@@ -1786,6 +2814,40 @@ local function create_backend(default_view)
       return false
     end
     return show_config_picker_for_session(session, category)
+  end
+
+  function backend.show_command_palette(target_pane)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return show_command_palette_for_session(session, function(prompt)
+      backend.paste_and_submit(target_pane, prompt, { "C-m" }, {})
+    end)
+  end
+
+  function backend.show_tool_timeline(target_pane)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return show_tool_timeline_for_session(session)
+  end
+
+  function backend.show_resource_browser(target_pane)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return show_resource_browser_for_session(session)
+  end
+
+  function backend.show_capabilities(target_pane)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return show_capabilities_for_session(session)
   end
 
   function backend.capture_pane(pane_id, on_output)
