@@ -169,16 +169,16 @@ require("lazyagent").setup({
 - `acp.auto_switch.preserve_manual = true` のときは、`/model` `/mode` や picker で手動変更した session ではそのキーの自動切替を止めます。restart すると解除されます。
 - ACP でも scratch / cache / `#history` / `#report` はそのまま使えます。会話保存は tmux pane ではなく transcript から取ります。
 - ACP セッションは lazyagent の独自 MCP server に依存しません。status 更新や permission 応答後の monitor 再開、編集後の open-last-changed も Neovim 側で直接処理します。
-- ACP の scratch `/` 補完は agent が `available_commands_update` で advertise した command に加えて、lazyagent 側の `/config` `/model` `/mode` `/resources` `/capabilities` `/new` を出します。
+- ACP の scratch `/` 補完は agent が `available_commands_update` で advertise した command を正として、足りない分だけ lazyagent 側の `/config` `/model` `/mode` `/resources` `/capabilities` `/new` を補います。
 - `/model` `/mode` `/config` は ACP に plain text として送らず、Neovim の `vim.ui.select` で local selector を開きます。provider 側の picker UI をそのまま再現するのではなく、agentic.nvim 寄りの挙動です。
 - provider が `thought_level` / `reasoning_effort` を config option として expose している場合は、`/model` や `:LazyAgentACPModel` で model を変えた直後に、その reasoning picker も続けて開きます。
-- local ACP command は session capability に合わせて出し分けます。`model` / `mode` / `config` を expose しない provider では command palette と補完候補から隠れます。`/capabilities` で現在 session の capability summary を見られます。
+- local ACP command は session capability に合わせて出し分けます。`model` / `mode` / `config` を expose しない provider では command palette と補完候補から隠れます。slash command の merged list は ACP が返した内容を正とし、同名の local action は上書きせず不足分だけ補います。`/capabilities` で現在 session の capability summary を見られます。
 - 手動 permission picker に落ちる場合は、選択前に diff/path/resource preview を transcript へ追加します。
 - `:q` などで `buffer_acp` の transcript window を直接閉じても、transcript buffer は wipe されるだけなので `LazyAgentToggle` でもう一度開き直せます。明示的に戻したいときは `:LazyAgentACPReopen` を使えます。
 - `:LazyAgentACPConfig` `:LazyAgentACPModel` `:LazyAgentACPMode` に加えて、`:LazyAgentACPReopen` で transcript reopen、`:LazyAgentACPCommands` で slash command palette、`:LazyAgentACPTools` で tool call timeline、`:LazyAgentACPResources` で resource browser、`:LazyAgentACPCapabilities` で capability summary を開けます。
 - ACP で agent から質問や確認が来た場合は、通常どおり scratch buffer から返信してください。generic な質問 picker は使わず、protocol で構造化されている permission request だけを picker で扱います。
 - advertise されていないその他の `/...` は plain prompt text として送られます。
-- `buffer` view では transcript 末尾に薄い footer 行を実バッファとして保ち、`Thinking...` / `Waiting...` などの進行中ステータスを独立行で表示します。footer メタ情報はその下に 2 行空けて、transcript size、provider/version、current model/mode、reasoning、model usage 倍率（Copilot が expose している場合）、MCP server 数、slash command 数、embedded context 対応をまとめて表示します。
+- `buffer` view では transcript 末尾に薄い footer 行を実バッファとして保ち、`Thinking...` / `Waiting...` などの進行中ステータスを独立行で表示します。footer メタ情報はその下に 2 行空けて、transcript size、provider/version、current model/mode、reasoning、model usage 倍率（Copilot が expose している場合）、MCP server 数、visible な slash command 数、embedded context 対応をまとめて表示します。
 - この footer は transcript window 幅に合わせて折り返され、更新時は末尾が見えるように view を調整します。
 - footer/statusline/float は使わず、会話バッファ自身の末尾に情報を寄せるので、window focus や globalstatus 設定に影響されません。
 - `mcp_mode` は ACP では必須ではありません。true のままでも、全 agent が ACP で動く構成なら lazyagent の MCP server は起動せず、非 ACP agent がいる場合だけ起動します。

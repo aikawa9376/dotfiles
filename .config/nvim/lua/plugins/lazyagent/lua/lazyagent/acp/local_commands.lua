@@ -152,6 +152,27 @@ function M.entries(session)
   return out
 end
 
+function M.merged_entries(session, advertised)
+  local out = {}
+  local seen = {}
+
+  for _, command in ipairs(advertised or session and (session.available_commands or session.acp_available_commands) or {}) do
+    if type(command) == "table" and command.label and command.label ~= "" and not seen[command.label] then
+      seen[command.label] = true
+      out[#out + 1] = vim.deepcopy(command)
+    end
+  end
+
+  for _, command in ipairs(M.entries(session)) do
+    if type(command) == "table" and command.label and command.label ~= "" and not seen[command.label] then
+      seen[command.label] = true
+      out[#out + 1] = vim.deepcopy(command)
+    end
+  end
+
+  return out
+end
+
 function M.parse(prompt)
   local normalized = trim(prompt)
   if normalized == "" then

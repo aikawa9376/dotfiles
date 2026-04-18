@@ -1,5 +1,7 @@
 local M = {}
 
+local agent_logic = require("lazyagent.logic.agent")
+local local_commands = require("lazyagent.acp.local_commands")
 local state = require("lazyagent.logic.state")
 local pane_config = {}
 local pane_buffers = {}
@@ -918,8 +920,8 @@ local function footer_context_segments(session)
     table.insert(segments, string.format("%d MCP server%s", mcp_count, mcp_count == 1 and "" or "s"))
   end
 
-  local command_count = type(session and session.acp_available_commands) == "table" and #session.acp_available_commands or 0
-  if command_count > 0 then
+  if session then
+    local command_count = #agent_logic.get_visible_slash_commands(agent_name, session)
     table.insert(segments, string.format("%d slash cmd%s", command_count, command_count == 1 and "" or "s"))
   end
 
@@ -1138,7 +1140,7 @@ function M.refresh_all_footers()
   end
 end
 
-function M.refresh_agent_footers(agent_name)
+function M.refresh_agent_footers(agent_name, opts)
   if not agent_name or agent_name == "" then
     return
   end
@@ -1147,7 +1149,7 @@ function M.refresh_agent_footers(agent_name)
       and buffer_var(bufnr, "lazyagent_acp_agent") == agent_name
       and buffer_is_visible(bufnr)
     then
-      M.refresh_footer(bufnr)
+      M.refresh_footer(bufnr, opts)
     end
   end
 end
