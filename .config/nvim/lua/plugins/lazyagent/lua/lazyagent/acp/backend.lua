@@ -35,10 +35,13 @@ local function transcript_dir()
 end
 
 local function build_transcript_path(agent_name, source_bufnr)
+  local instance_id = tostring(vim.fn.getpid())
   return table.concat({
     transcript_dir(),
     "/",
     cache_logic.build_cache_prefix(source_bufnr),
+    instance_id,
+    "-",
     sanitize_filename_component(agent_name),
     "-live.log",
   })

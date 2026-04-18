@@ -3,7 +3,7 @@ local DEFAULT_SUBMIT_DELAY_MS = 600
 local DEFAULT_SUBMIT_RETRY = 1
 local util = require("lazyagent.util")
 local state = require("lazyagent.logic.state")
-local POOL_SESSION = "lazyagent-pool"
+local POOL_SESSION = "lazyagent-pool-" .. tostring(vim.fn.getpid())
 
 -- Per-pane options (keyed by pane_id).  Currently supports:
 --   refocus_on_send (bool): send \e[I (focus-in) before pasting/sending keys so that
