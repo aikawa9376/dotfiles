@@ -4,6 +4,7 @@
 local M = {}
 
 local state = require("lazyagent.logic.state")
+local acp_logic = require("lazyagent.logic.acp")
 local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local send_logic = require("lazyagent.logic.send")
@@ -43,6 +44,7 @@ function M.register_scratch_keymaps(bufnr, opts)
   local reuse = opts.reuse ~= false
 
   local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+  local preserve_scratch = acp_logic.is_acp_backend(backend_name)
 
   -- Merge keymap settings: defaults -> agent-specific -> per-call overrides
   local keys = {}
@@ -184,8 +186,8 @@ function M.register_scratch_keymaps(bufnr, opts)
       end
 
       if submit_result == true and (close_after or state.opts.close_on_send) then
-        window.close()
-        if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+        window.close({ keep_buffer = preserve_scratch })
+        if not preserve_scratch and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
           vim.api.nvim_buf_delete(bufnr, { force = true })
         end
         state.open_agent = nil
@@ -224,9 +226,9 @@ function M.register_scratch_keymaps(bufnr, opts)
 
   -- Close mapping
   safe_set("n", keys.close or "q", function()
-    local closed = window.close()
+    local closed = window.close({ keep_buffer = preserve_scratch })
     if not closed then return end
-    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    if not preserve_scratch and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end
     state.open_agent = nil

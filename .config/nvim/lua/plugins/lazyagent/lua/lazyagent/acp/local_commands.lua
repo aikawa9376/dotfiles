@@ -45,11 +45,25 @@ local function trim(text)
   return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local function session_config_options(session)
+  if not session then
+    return nil
+  end
+  if type(session.config_options) == "table" then
+    return session.config_options
+  end
+  if type(session.acp_config_options) == "table" then
+    return session.acp_config_options
+  end
+  return nil
+end
+
 local function has_select_option(session, expected)
-  if not session or type(session.config_options) ~= "table" then
+  local options = session_config_options(session)
+  if type(options) ~= "table" then
     return false
   end
-  for _, option in ipairs(session.config_options) do
+  for _, option in ipairs(options) do
     if type(option) == "table"
       and option.type == "select"
       and type(option.options) == "table"
@@ -65,10 +79,11 @@ local function has_select_option(session, expected)
 end
 
 local function has_any_config(session)
-  if not session or type(session.config_options) ~= "table" then
+  local options = session_config_options(session)
+  if type(options) ~= "table" then
     return false
   end
-  for _, option in ipairs(session.config_options) do
+  for _, option in ipairs(options) do
     if type(option) == "table"
       and option.type == "select"
       and type(option.options) == "table"
@@ -97,6 +112,7 @@ function M.is_available(name, session)
     return (session.root_dir and session.root_dir ~= "")
       or (session.cwd and session.cwd ~= "")
       or (session.transcript_path and session.transcript_path ~= "")
+      or (session.acp_transcript_path and session.acp_transcript_path ~= "")
   end
   if name == "capabilities" then
     return true

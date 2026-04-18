@@ -25,9 +25,9 @@ return {
     { "<leader>sa", function() require("lazyagent").send_visual() end, mode = "v", desc = "Send Visual to Agent" },
     { "<leader>sl", function() require("lazyagent").send_line() end, mode = "n", desc = "Send Line to Agent" },
     { "c<space><space>", function() require("lazyagent").toggle_session("Gemini") end, mode = "n", desc = "Toggle Gemini Agent" },
-    { "<leader>sac", function() require("lazyagent").start_interactive_session({ agent_name = "Claude", reuse = true }) end, mode = "n", desc = "Start Claude Agent" },
-    { "<leader>sax", function() require("lazyagent").start_interactive_session({ agent_name = "Codex", reuse = true }) end, mode = "n", desc = "Start Codex Agent" },
-    { "<leader>sag", function() require("lazyagent").start_interactive_session({ agent_name = "Gemini", reuse = true }) end, mode = "n", desc = "Start Gemini Agent" },
+    { "<leader>sac", function() require("lazyagent").toggle_session("Claude") end, mode = "n", desc = "Start Claude Agent" },
+    { "<leader>sax", function() require("lazyagent").toggle_session("Codex") end, mode = "n", desc = "Start Codex Agent" },
+    { "<leader>sag", function() require("lazyagent").toggle_session("Gemini") end, mode = "n", desc = "Start Gemini Agent" },
   },
   cmd = {
     "LazyAgentScratch", "LazyAgentToggle", "LazyAgentClose",
@@ -76,7 +76,7 @@ lazyagent の `setup(opts)` で指定可能です。主なデフォルト:
     close_on_send = true, -- 送信後に float を閉じるか
   send_key_insert = "<C-CR>",
   send_key_normal = "<CR>",
-  setup_keymaps = false, -- true にするとプラグイン側がデフォルトキーを登録します
+  -- キーは lazy.nvim の `keys`（例: plugins/lazyagent/init.lua）で管理することを推奨します
   cache = {
     enabled = true,
     dir = vim.fn.stdpath("cache") .. "/lazyagent",
@@ -86,7 +86,7 @@ lazyagent の `setup(opts)` で指定可能です。主なデフォルト:
 }
 ```
 
-- `setup_keymaps` を `false` にして、キーは `plugins/lazyagent/init.lua`（lazy.nvim の keys）に寄せるのが推奨です。
+- キーは lazy.nvim の `keys`（例: `plugins/lazyagent/init.lua`）で管理することを推奨します。
 - `cache` を有効にすると、スクラッチバッファを自動的にキャッシュ保存してくれます（詳細は下記）。
 - `cache.persistence_debounce_ms` を使うと、`sessions.json` の書き込み頻度を抑えられます（既定: 150ms）。
 
@@ -122,6 +122,7 @@ require("lazyagent").setup({
     auto_permission = "allow_always",
     buffer_background = "#002b36",
     buffer_inactive_background = "#073642",
+    -- transcript_max_lines = 4000, -- 未指定なら全件。指定したときだけ末尾 N 行に制限
     permission_rules = {
       { name = "safe-readonly", tool_pattern = "read", action = "allow_once" },
       { name = "block-dotenv", path_pattern = "%.env", action = "manual" },
@@ -154,6 +155,7 @@ require("lazyagent").setup({
 
 - デフォルトは `false` なので、既存の tmux ベース運用は変わりません。
 - `acp.view = "tmux"` なら `tmux_acp`、`acp.view = "buffer"` なら `buffer_acp` が選ばれます。
+- `acp.transcript_max_lines` / `interactive_agents.<name>.acp.transcript_max_lines` を指定すると、`buffer_acp` transcript の読み込みを末尾 N 行に制限できます。未指定なら全件読み込みます。
 - 最高権限寄りで始めたい場合は、まず provider が expose している mode を `acp.default_mode` で指定するのが本命です。agentic.nvim と同じく、`"bypassPermissions"` のような mode がある provider ではこちらを優先してください。
 - `acp.auto_permission = "allow_always"` は fallback としては有効ですが、provider mode を切り替えられない場合の補助です。`yolo = true` だけでは ACP permission は暗黙で `allow_once` までに留めています。
 - `interactive_agents.<name>.acp = false` を付けると、global ACP 有効時でもその agent だけ従来 backend を使えます。
@@ -172,7 +174,7 @@ require("lazyagent").setup({
 - provider が `thought_level` / `reasoning_effort` を config option として expose している場合は、`/model` や `:LazyAgentACPModel` で model を変えた直後に、その reasoning picker も続けて開きます。
 - local ACP command は session capability に合わせて出し分けます。`model` / `mode` / `config` を expose しない provider では command palette と補完候補から隠れます。`/capabilities` で現在 session の capability summary を見られます。
 - 手動 permission picker に落ちる場合は、選択前に diff/path/resource preview を transcript へ追加します。
-- `:q` などで `buffer_acp` の transcript window を直接閉じても、`LazyAgentToggle` でもう一度開き直せます。明示的に戻したいときは `:LazyAgentACPReopen` を使えます。
+- `:q` などで `buffer_acp` の transcript window を直接閉じても、transcript buffer は wipe されるだけなので `LazyAgentToggle` でもう一度開き直せます。明示的に戻したいときは `:LazyAgentACPReopen` を使えます。
 - `:LazyAgentACPConfig` `:LazyAgentACPModel` `:LazyAgentACPMode` に加えて、`:LazyAgentACPReopen` で transcript reopen、`:LazyAgentACPCommands` で slash command palette、`:LazyAgentACPTools` で tool call timeline、`:LazyAgentACPResources` で resource browser、`:LazyAgentACPCapabilities` で capability summary を開けます。
 - ACP で agent から質問や確認が来た場合は、通常どおり scratch buffer から返信してください。generic な質問 picker は使わず、protocol で構造化されている permission request だけを picker で扱います。
 - advertise されていないその他の `/...` は plain prompt text として送られます。
@@ -199,11 +201,11 @@ require("lazyagent").setup({
 
 ```lua
 -- register backend at runtime (module object)
-require("lazyagent").register_backend("mybackend", require("my.lazyagent.backend"))
+require("lazyagent.logic.backend").register_backend("mybackend", require("my.lazyagent.backend"))
 -- set global backend
-require("lazyagent").set_default_backend("mybackend")
+require("lazyagent.logic.backend").set_default_backend("mybackend")
 -- set per-agent override in runtime-config
-require("lazyagent").set_agent_backend("Gemini", "mybackend")
+require("lazyagent.logic.backend").set_agent_backend("Gemini", "mybackend")
 ```
 
 （注）set_default_backend / set_agent_backend は既存のセッションを自動的に再起動・移行しません。必要に応じて既存 TMUX セッションを close して開き直すか、再接続する前提でご利用ください。
@@ -229,7 +231,7 @@ require("lazyagent").setup({
 
 ## prompts（非対話式・プロンプトハンドラ）
 
-lazyagent は「interactive_agents」（tmux を使う対話式）に加え、非対話型のプロンプトハンドラ（prompts）をサポートしています。prompts は `require("lazyagent").setup(opts)` の `prompts` テーブルに、エージェント名をキーとするコールバック関数を設定することで利用可能です。`M.send()` や `M.send_buffer_and_clear()` は、`interactive_agents` に該当しないエージェント名が指定されている場合、`prompts` テーブルに定義されたコールバックを呼び出します。`gen` は特別扱いで、`M.send()` で追加のプロンプト入力を要求して `context.prompt` に格納してから `prompts["gen"]` を呼びます。
+lazyagent は「interactive_agents」（tmux を使う対話式）に加え、非対話型のプロンプトハンドラ（prompts）をサポートしています。prompts は `require("lazyagent").setup(opts)` の `prompts` テーブルに、エージェント名をキーとするコールバック関数を設定することで利用可能です。`require("lazyagent").send()` や `require("lazyagent.logic.send").send_buffer_and_clear()` は、`interactive_agents` に該当しないエージェント名が指定されている場合、`prompts` テーブルに定義されたコールバックを呼び出します。`gen` は特別扱いで、`require("lazyagent").send()` で追加のプロンプト入力を要求して `context.prompt` に格納してから `prompts["gen"]` を呼びます。
 
 context のフィールド:
 - `filename` : 対象バッファのファイル名
@@ -278,8 +280,7 @@ prompts = {
 - `BufWritePost`, `BufLeave`, `InsertLeave`, `TextChanged`（遅延バッファ）
 - `BufDelete`, `BufWipeout` 時に確実に保存しています
 
-バッファにキャッシュ自動保存を直接繋げたい場合は、
-`require("lazyagent").attach_cache_to_buf(bufnr)` を呼び出すことで、手動で有効化できます。
+バッファにキャッシュ自動保存を直接繋げたい場合は、`require("lazyagent.logic.cache").write_scratch_to_cache(bufnr)` を呼び出すか、適切な autocmd からキャッシュ関数を呼び出してください。
 
 ---
 
@@ -308,36 +309,33 @@ prompts = {
 
 ## API（簡易）
 
+主な公開 API（`require("lazyagent")` で利用可能）:
+
 - `require("lazyagent").setup(opts)`:
-  設定を読み込み初期化します。`setup_keymaps` が true の場合、デフォルトの keymaps も登録します。
-- `require("lazyagent").register_keymaps(maps)`:
-  デフォルト keymap を中央で登録するためのヘルパー。
-- `require("lazyagent").default_keymaps()`:
-  デフォルトの keymap 定義（必要な場合にカスタム登録に利用）。
-- `require("lazyagent").start_interactive_session({ agent_name, reuse, initial_input, open_input })`:
-  tmux に対話ペインを作り、スクラッチバッファを開く（`reuse=true` で既存のセッションを再利用）。
-- `require("lazyagent").toggle_session(agent_name)`:
-  - エージェントが未起動なら起動してスクラッチを開く
-  - 起動済みでスクラッチが表示されていればスクラッチを閉じる
-  - 起動済みでスクラッチが非表示ならスクラッチを開く
-- `require("lazyagent").send_visual()` / `.send_line()`:
-  選択/行送信ヘルパー
+  プラグインを初期化します。`opts` で既定値を上書きします。
+- `require("lazyagent").open_history()`:
+  履歴 UI を開きます。
+- `require("lazyagent").get_active_agents()`:
+  アクティブなエージェント名の配列を返します。
 - `require("lazyagent").send_to_cli(agent_name, text)`:
-  1回送信（pane を作成/再利用、送って終わる）
-- `require("lazyagent").send_buffer_and_clear(agent_name, bufnr)`:
-  指定バッファ（省略時は現在のバッファ）の全内容を指定エージェントに送信し、送信後にバッファを空にします。スクラッチのフロートは閉じません（interactive agent / prompt agent の両方に対応）。
-- `require("lazyagent").send_and_clear(agent_name)`:
-  `send_buffer_and_clear()` の便利ラッパーで、現在のバッファを対象に送信・クリアを行います。
-- `require("lazyagent").pick_acp_config(agent_name)` / `.pick_acp_model(agent_name)` / `.pick_acp_mode(agent_name)`:
-  ACP セッション用の local selector を開きます。agent 名を省略すると ACP 有効な agent から選択します。
-- `require("lazyagent").reopen_acp_window(agent_name)`:
-  閉じてしまった ACP transcript window を再表示します。agent 名を省略すると ACP 有効な agent から選択します。
-- `require("lazyagent").pick_acp_commands(agent_name)` / `.show_acp_tool_timeline(agent_name)`:
-  ACP セッション用の slash command palette / tool timeline を開きます。agent 名を省略すると ACP 有効な agent から選択します。
-- `require("lazyagent").pick_acp_resources(agent_name)` / `.show_acp_capabilities(agent_name)`:
-  ACP セッション用の resource browser / capability summary を開きます。agent 名を省略すると ACP 有効な agent から選択します。
-- `require("lazyagent").close_session(agent_name)` / `.close_all_sessions()`:
-  1 つのセッション、もしくは全セッションを閉じる
+  指定エージェントの CLI ペインにテキストを送信します（interactive agent）。
+- `require("lazyagent").send_visual()` / `require("lazyagent").send_line()`:
+  Visual 選択 / 現在行を送信するヘルパー。
+- `require("lazyagent").send_enter()` / `send_down()` / `send_up()` / `send_key(key)` / `send_interrupt()`:
+  エージェントのペインへキー入力を送ります。
+- `require("lazyagent").toggle_session(agent_name)` / `open_instant(agent_name)` / `attach_session(agent_name[, pane_id])`:
+  セッションの起動・トグル・アタッチ等を行います。
+- `require("lazyagent").pick_acp_config(agent_name)` / `pick_acp_model(agent_name)` / `pick_acp_mode(agent_name)`:
+  ACP 用のローカルセレクタを開きます（agent 名を省略すると候補から選択）。
+- `require("lazyagent").reopen_acp_window(agent_name)` / `pick_acp_commands(agent_name)` / `show_acp_tool_timeline(agent_name)`:
+  ACP 関連のユーティリティ。
+- `require("lazyagent").pick_acp_resources(agent_name)` / `show_acp_capabilities(agent_name)`:
+  ACP のリソース / capability を表示します。
+- `require("lazyagent").close_session(agent_name)` / `close_all_sessions()`:
+  セッションを閉じます。
+
+注: バッファの全内容を送信してクリアするユーティリティ（`send_buffer_and_clear` / `send_and_clear`）は
+`require("lazyagent.logic.send")` モジュールに実装されています。必要であればそちらを直接 require して利用してください。
 
 ---
 
@@ -347,7 +345,7 @@ prompts = {
 - ペインに貼り付け + submit key を送ることで送信します。submit は通常 `C-m` などに設定します。
 - 一部端末（例: kitty）の DCS / device-control 文字列が流れて出力に目に見えることがあります。キャプチャ時にそうした行をフィルタするロジックを入れていますが、稀に端末依存で表示されることがあります。
 - プラグインは Neovim 終了時 (`VimLeavePre`) に既知の tmux セッションを閉じます（`close_all_sessions`）。
-- デフォルトではプラグインは `setup_keymaps=false` です。キーは `lazy.nvim` に任せて起動時に読み込む構成が推奨です。
+- プラグインはキーの自動登録機能を提供していません。lazy.nvim の `keys`（例: `plugins/lazyagent/init.lua`）で登録することを推奨します。
 
 ---
 

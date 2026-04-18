@@ -1306,7 +1306,7 @@ local function show_command_palette_for_session(session, submit)
   vim.ui.select(items, {
     prompt = "Choose ACP command:",
     format_item = function(item)
-      local source = item.source == "local" and "local" or "agent"
+      local source = item.source or "agent"
       local desc = item.desc and item.desc ~= "" and (" - " .. item.desc) or ""
       return string.format("%s [%s]%s", item.label, source, desc)
     end,
@@ -1589,7 +1589,11 @@ local function insert_resource_reference(session, reference)
   end
 
   local ok_window, window = pcall(require, "lazyagent.window")
-  local scratch = ok_window and window and type(window.get_scratch_bufnr) == "function" and window.get_scratch_bufnr() or nil
+  local scratch = ok_window
+    and window
+    and type(window.get_scratch_bufnr) == "function"
+    and window.get_scratch_bufnr(session.agent_name)
+    or nil
   if scratch and vim.api.nvim_buf_is_valid(scratch) and vim.b[scratch] and vim.b[scratch].lazyagent_agent == session.agent_name then
     local lines = vim.api.nvim_buf_get_lines(scratch, 0, -1, false)
     if #lines == 0 then
@@ -2381,6 +2385,45 @@ local function on_client_update(session, params)
     return
   end
 
+  if kind == "usage_update" then
+    -- Merge usage info into model catalog so UI can display context/usage
+    local model_id = update.modelId or update.currentModelId or (update.model and update.model.modelId) or nil
+    if type(session.model_catalog) == "table" and type(session.model_catalog.availableModels) == "table" then
+      for _, m in ipairs(session.model_catalog.availableModels) do
+        if type(m) == "table" and (not model_id or m.modelId == model_id) then
+          m._meta = m._meta or {}
+          if type(update.usage) == "table" then
+            m._meta.usage = vim.deepcopy(update.usage)
+            local used = nil
+            local total = nil
+            if update.usage.promptTokens or update.usage.completionTokens then
+              local p = tonumber(update.usage.promptTokens) or 0
+              local c = tonumber(update.usage.completionTokens) or 0
+              used = p + c
+            elseif update.usage.usedTokens then
+              used = tonumber(update.usage.usedTokens)
+            end
+            total = tonumber(update.usage.totalTokens) or tonumber(update.usage.contextSize) or tonumber(m._meta.contextSize) or tonumber(m.contextSize)
+            if used and total then
+              m._meta.token_usage_used = used
+              m._meta.token_usage_total = total
+            end
+          end
+          if type(update.model) == "table" and type(update.model._meta) == "table" then
+            for k, v in pairs(update.model._meta) do
+              m._meta[k] = v
+            end
+          end
+          if update.copilotUsage then
+            m._meta.copilotUsage = tostring(update.copilotUsage)
+          end
+        end
+      end
+      sync_runtime_session(session)
+    end
+    return
+  end
+
   if kind == "tool_call" or kind == "tool_call_update" then
     local tool = merge_tool_update(session, update)
     local title = tool.title or tool.toolCallId or "tool"
@@ -2669,6 +2712,7 @@ local function create_backend(default_view)
         initial_model = acp.initial_model,
         buffer_background = acp.buffer_background,
         buffer_inactive_background = acp.buffer_inactive_background,
+        transcript_max_lines = acp.transcript_max_lines,
         initial_config_applied = false,
         view = view,
         view_state = view_state or {},

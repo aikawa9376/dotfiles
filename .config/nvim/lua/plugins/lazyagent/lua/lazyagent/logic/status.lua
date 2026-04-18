@@ -174,6 +174,10 @@ function M.start_monitor(agent_name)
   end)
   refresh_ui()
 
+  if s.backend == "buffer_acp" then
+    return
+  end
+
   if s.monitor_timer then
     pcall(function() s.monitor_timer:stop() end)
     pcall(function() s.monitor_timer:close() end)
