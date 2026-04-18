@@ -3,6 +3,7 @@ local M = {}
 local cache_logic = require("lazyagent.logic.cache")
 local ACPClient = require("lazyagent.acp.client")
 local local_commands = require("lazyagent.acp.local_commands")
+local agent_logic = require("lazyagent.logic.agent")
 local acp_logic = require("lazyagent.logic.acp")
 local summary_logic = require("lazyagent.logic.summary")
 local transforms = require("lazyagent.transforms")
@@ -720,6 +721,10 @@ local function sync_runtime_session(session)
   runtime.acp_auto_switch = vim.deepcopy(session.auto_switch or {})
   runtime.acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {})
   runtime.acp_tool_timeline = vim.deepcopy(session.tool_timeline or {})
+
+  pcall(function()
+    require("lazyagent.acp.view_buffer").refresh_agent_footers(session.agent_name, { force = true })
+  end)
 end
 
 local function normalize_config_key(value)
@@ -1260,19 +1265,34 @@ end
 
 local function command_palette_items(session)
   local out = {}
-  local seen = {}
+  local advertised = {}
 
-  for _, command in ipairs(local_commands.entries(session)) do
-    if type(command) == "table" and command.label and not seen[command.label] then
-      seen[command.label] = true
-      out[#out + 1] = vim.tbl_extend("force", { source = "local" }, vim.deepcopy(command))
+  for _, command in ipairs(session and session.available_commands or {}) do
+    if type(command) == "table" and command.label and command.label ~= "" then
+      advertised[command.label] = true
     end
   end
 
-  for _, command in ipairs(session and session.available_commands or {}) do
-    if type(command) == "table" and command.label and not seen[command.label] then
-      seen[command.label] = true
-      out[#out + 1] = vim.tbl_extend("force", { source = "agent" }, vim.deepcopy(command))
+  for _, command in ipairs(local_commands.merged_entries(session, session and session.available_commands or {})) do
+    if type(command) == "table" and command.label then
+      local source = advertised[command.label] and "agent" or "local"
+      out[#out + 1] = vim.tbl_extend("force", { source = source }, vim.deepcopy(command))
+    end
+  end
+
+  for _, command in ipairs(agent_logic.get_visible_slash_commands(session and session.agent_name, session)) do
+    if type(command) == "table" and command.label then
+      local exists = false
+      for _, item in ipairs(out) do
+        if item.label == command.label then
+          exists = true
+          break
+        end
+      end
+      if not exists then
+        local source = advertised[command.label] and "agent" or "local"
+        out[#out + 1] = vim.tbl_extend("force", { source = source }, vim.deepcopy(command))
+      end
     end
   end
 
@@ -1460,10 +1480,11 @@ local function render_capability_report(session)
 
   lines[#lines + 1] = ""
   lines[#lines + 1] = "## Slash commands"
-  if #(session and session.available_commands or {}) == 0 then
+  local merged_commands = agent_logic.get_visible_slash_commands(session and session.agent_name, session)
+  if #merged_commands == 0 then
     lines[#lines + 1] = "- None advertised"
   else
-    for _, command in ipairs(session.available_commands or {}) do
+    for _, command in ipairs(merged_commands) do
       lines[#lines + 1] = string.format("- %s — %s", command.label or "", command.desc or "")
     end
   end
@@ -1696,6 +1717,10 @@ end
 local function handle_local_slash_command(session, prompt)
   local command, args = local_commands.parse(prompt)
   if not command or args ~= "" then
+    return false
+  end
+
+  if session_has_available_command(session, command.name) then
     return false
   end
 

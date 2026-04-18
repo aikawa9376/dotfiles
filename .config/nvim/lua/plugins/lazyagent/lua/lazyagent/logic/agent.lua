@@ -287,6 +287,50 @@ local function normalize_completion_list(list)
   return out
 end
 
+function M.get_visible_slash_commands(agent_name, session)
+  if not agent_name or agent_name == "" then
+    local available = M.available_agents()
+    if #available > 0 then agent_name = available[1] end
+  end
+
+  local cfg = M.get_interactive_agent(agent_name)
+  local use_acp = M.use_acp(agent_name, cfg)
+  local provider = cfg and cfg.scratch_completions
+  local defaults = load_default_completions(agent_name)
+  local provided = {}
+  if provider then
+    local ok, val = pcall(function()
+      if type(provider) == "function" then
+        return provider(cfg)
+      end
+      return provider
+    end)
+    if ok and type(val) == "table" then
+      provided = val
+    end
+  end
+
+  local res = vim.tbl_deep_extend("force", {}, defaults or {}, provided or {})
+  local running = session or (agent_name and state.sessions and state.sessions[agent_name] or nil)
+  local configured_slash = normalize_completion_list(res.slash or {})
+
+  if use_acp then
+    local advertised = {}
+    if running and type(running.acp_available_commands) == "table" then
+      advertised = vim.deepcopy(running.acp_available_commands)
+    elseif running and type(running.available_commands) == "table" then
+      advertised = vim.deepcopy(running.available_commands)
+    end
+    return normalize_completion_list(vim.list_extend(acp_local_commands.merged_entries(running, advertised), configured_slash))
+  end
+
+  local dynamic_slash = {}
+  if running and type(running.acp_available_commands) == "table" then
+    dynamic_slash = vim.deepcopy(running.acp_available_commands)
+  end
+  return normalize_completion_list(vim.list_extend(dynamic_slash, configured_slash))
+end
+
 function M.get_scratch_completions(agent_name)
   if not agent_name or agent_name == "" then
     -- Fallback to default agent if configured.
@@ -313,21 +357,7 @@ function M.get_scratch_completions(agent_name)
 
   local res = vim.tbl_deep_extend("force", {}, defaults or {}, provided or {})
   local running = agent_name and state.sessions and state.sessions[agent_name] or nil
-  if use_acp then
-    local local_slash = normalize_completion_list(acp_local_commands.entries(running))
-    local explicit_slash = normalize_completion_list((provided and provided.slash) or {})
-    local dynamic_slash = {}
-    if running and type(running.acp_available_commands) == "table" then
-      dynamic_slash = vim.deepcopy(running.acp_available_commands)
-    end
-    res.slash = normalize_completion_list(vim.list_extend(vim.list_extend(local_slash, dynamic_slash), explicit_slash))
-  else
-    local dynamic_slash = {}
-    if running and type(running.acp_available_commands) == "table" then
-      dynamic_slash = vim.deepcopy(running.acp_available_commands)
-    end
-    res.slash = normalize_completion_list(vim.list_extend(dynamic_slash, res.slash or {}))
-  end
+  res.slash = M.get_visible_slash_commands(agent_name, running)
   -- Replace @ completions with fd-based file/dir list (common across agents).
   local fd_paths = path_completions.list_fd_paths()
   if fd_paths and #fd_paths > 0 then
