@@ -91,5 +91,8 @@ return {
     vim.api.nvim_set_hl(0, "RenderMarkdownBullet", { fg = "#98c379" })
 
     vim.api.nvim_set_hl(0, "RenderMarkdownCode", { bg = "#073642" })
+
+    -- 強調
+    vim.api.nvim_set_hl(0, "@markup.strong", { fg = "#98c379", bg = "NONE", bold = true })
   end
 }
