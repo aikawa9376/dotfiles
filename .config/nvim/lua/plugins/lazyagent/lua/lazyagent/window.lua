@@ -3,6 +3,7 @@ local cache_logic = require("lazyagent.logic.cache")
 
 local winid = nil
 local scratch_bufnr = nil
+local scratch_bufnrs = {}
 local float_autocmd_group_id = nil
 local float_original_opts = nil
 local float_is_focused = false
@@ -12,6 +13,18 @@ local function ensure_scratch_buffer(bufnr, opts)
   if type(bufnr) == "table" and opts == nil then
     opts = bufnr
     bufnr = nil
+  end
+
+  local agent_name = opts and opts.agent_name or nil
+  if agent_name and (not bufnr or not vim.api.nvim_buf_is_valid(bufnr)) then
+    local existing = scratch_bufnrs[agent_name]
+    if existing and vim.api.nvim_buf_is_valid(existing) then
+      scratch_bufnr = existing
+      if opts and opts.source_bufnr then
+        pcall(function() vim.b[existing].lazyagent_source_bufnr = opts.source_bufnr end)
+      end
+      return existing, opts
+    end
   end
 
   -- If the caller didn't pass a valid buffer, create a scratch buffer to avoid nvim_open_win assertion errors.
@@ -27,6 +40,10 @@ local function ensure_scratch_buffer(bufnr, opts)
     -- Remember this scratch buffer so we can restore it if another file is opened here.
     scratch_bufnr = bufnr
     pcall(function() vim.b[bufnr].lazyagent_is_scratch = true end)
+    if agent_name and agent_name ~= "" then
+      scratch_bufnrs[agent_name] = bufnr
+      pcall(function() vim.b[bufnr].lazyagent_agent = agent_name end)
+    end
 
     -- Provide buffer-local :edit / :e that open files in the last non-special window
     pcall(function()
@@ -192,6 +209,24 @@ function M.open_float(bufnr, opts)
   }
   float_is_focused = true
 
+  local function close_float_window()
+    if not winid or not vim.api.nvim_win_is_valid(winid) then
+      return
+    end
+    local closing_win = winid
+    winid = nil
+    pcall(function() vim.api.nvim_win_close(closing_win, true) end)
+    if float_autocmd_group_id then
+      pcall(vim.api.nvim_del_augroup_by_id, float_autocmd_group_id)
+      float_autocmd_group_id = nil
+    end
+    float_original_opts = nil
+    float_is_focused = false
+    if opts and type(opts.on_close) == "function" then
+      pcall(opts.on_close)
+    end
+  end
+
   local function shrink_float()
     if not winid or not vim.api.nvim_win_is_valid(winid) then return end
     local shrink_area = resolve_window_area(opts)
@@ -236,6 +271,11 @@ function M.open_float(bufnr, opts)
           end
         end
       else
+        if opts and opts.close_on_focus_lost then
+          close_float_window()
+          return
+        end
+
         -- When focus moves away, shrink and move it to the bottom-right.
         if float_is_focused then
           shrink_float()
@@ -333,7 +373,7 @@ function M.close(opts)
   opts = opts or {}
   local bufnr = winid and vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) or nil
 
-  if not (opts.force) and buffer_has_content(bufnr) then
+  if not (opts.force or opts.keep_buffer) and buffer_has_content(bufnr) then
     local raw_choice = vim.fn.confirm(
       "Scratch buffer has content. Close?",
       "&Yes\n&No\n&Save to history",
@@ -359,6 +399,9 @@ function M.close(opts)
   end
   float_original_opts = nil
   float_is_focused = false
+  if opts and type(opts.on_close) == "function" then
+    pcall(opts.on_close)
+  end
   return true
 end
 
@@ -377,7 +420,14 @@ function M.get_winid()
   return winid
 end
 
-function M.get_scratch_bufnr()
+function M.get_scratch_bufnr(agent_name)
+  if agent_name and agent_name ~= "" then
+    local bufnr = scratch_bufnrs[agent_name]
+    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      return bufnr
+    end
+    return nil
+  end
   return scratch_bufnr
 end
 

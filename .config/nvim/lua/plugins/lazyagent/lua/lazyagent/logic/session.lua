@@ -219,6 +219,7 @@ local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_op
     initial_model = acp.initial_model,
     buffer_background = acp.buffer_background,
     buffer_inactive_background = acp.buffer_inactive_background,
+    transcript_max_lines = acp.transcript_max_lines,
     permission_rules = acp.permission_rules,
     auto_switch = acp.auto_switch,
   }
@@ -654,6 +655,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         cwd = resolve_root_dir(agent_cfg),
         buffer_background = resolved_acp.buffer_background,
         buffer_inactive_background = resolved_acp.buffer_inactive_background,
+        transcript_max_lines = resolved_acp.transcript_max_lines,
         hidden = (agent_cfg.stay_hidden == true),
         mode = mode
       }
@@ -1123,6 +1125,9 @@ end
 function M.toggle_session(agent_name)
   local function _toggle(chosen)
     if not chosen or chosen == "" then return end
+    local agent_cfg = agent_logic.get_interactive_agent(chosen)
+    local backend_name = select(1, backend_logic.resolve_backend_for_agent(chosen, agent_cfg))
+    local preserve_scratch = acp_logic.is_acp_backend(backend_name)
 
     local initial_input = nil
     local current_mode = vim.fn.mode()
@@ -1152,8 +1157,8 @@ function M.toggle_session(agent_name)
     -- If the floating input is already open for this agent, close it.
     if state.open_agent == chosen and window.is_open() then
       local bufnr = window.get_bufnr()
-      window.close()
-      if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      window.close({ keep_buffer = preserve_scratch })
+      if not preserve_scratch and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
         vim.api.nvim_buf_delete(bufnr, { force = true })
       end
       state.open_agent = nil
@@ -1325,8 +1330,9 @@ function M.detach_session(agent_name)
     -- Close the floating window if it's open for this agent
     if state.open_agent == chosen and window.is_open() then
       local bufnr = window.get_bufnr()
-      window.close()
-      if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      local preserve_scratch = acp_logic.is_acp_backend(s.backend)
+      window.close({ keep_buffer = preserve_scratch })
+      if not preserve_scratch and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
         vim.api.nvim_buf_delete(bufnr, { force = true })
       end
       state.open_agent = nil
@@ -1507,6 +1513,8 @@ function M.start_interactive_session(opts)
   if opts.reuse == nil and agent_cfg and agent_cfg.yolo then
     reuse = false
   end
+  local backend_name = select(1, backend_logic.resolve_backend_for_agent(agent_name, agent_cfg))
+  local preserve_scratch = acp_logic.is_acp_backend(backend_name)
   M.ensure_session(agent_name, agent_cfg, reuse, function(pane_id)
     -- Handle one-shot sends where no input scratch buffer is opened.
     if opts.open_input == false then
@@ -1515,7 +1523,8 @@ function M.start_interactive_session(opts)
     end
 
     -- Create an input buffer and open it in a floating window.
-    local bufnr = window.ensure_scratch_buffer(nil, {
+    local bufnr = window.ensure_scratch_buffer(window.get_scratch_bufnr(agent_name), {
+      agent_name = agent_name,
       filetype = agent_cfg.scratch_filetype or "lazyagent",
       source_bufnr = origin_bufnr,
     })
@@ -1540,6 +1549,13 @@ function M.start_interactive_session(opts)
     end
     if opts.title then
        open_opts.title = opts.title
+    end
+    open_opts.agent_name = agent_name
+    open_opts.close_on_focus_lost = preserve_scratch
+    open_opts.on_close = function()
+      if state.open_agent == agent_name then
+        state.open_agent = nil
+      end
     end
 
     window.open(bufnr, open_opts)

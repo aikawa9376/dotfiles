@@ -2,16 +2,22 @@ local M = {}
 
 local state = require("lazyagent.logic.state")
 local pane_config = {}
+local pane_buffers = {}
+local next_pane_seq = 0
 local transcript_ns = vim.api.nvim_create_namespace("lazyagent_acp_transcript")
 local footer_ns = vim.api.nvim_create_namespace("lazyagent_acp_footer")
 local highlights_defined = false
 local layout_autocmds_initialized = false
+local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer ..."
+local FOLLOW_SCROLL_OFF = 0
+local DEFAULT_SCROLL_OFF = 2
 local first_visible_window
 local replace_buffer_lines
 local set_buffer_lines
 local scroll_buffer_to_end
 local transcript_line_count
 local refresh_buffer_layout
+local refresh_buffer_from_path
 local custom_background_groups = {}
 local layout_state = {}
 
@@ -223,8 +229,16 @@ local function resolve_anchor_window(win)
 end
 
 local function to_bufnr(pane_id)
+  local key = tostring(pane_id or "")
+  local tracked = pane_buffers[key]
+  if tracked and vim.api.nvim_buf_is_valid(tracked) then
+    return tracked
+  end
+  pane_buffers[key] = nil
+
   local n = tonumber(pane_id)
   if n and vim.api.nvim_buf_is_valid(n) then
+    pane_buffers[key] = n
     return n
   end
   return nil
@@ -335,6 +349,11 @@ local function set_follow_output(bufnr, enabled)
   pane_config[pane_id] = vim.tbl_extend("force", pane_config[pane_id] or {}, {
     follow_output = enabled ~= false,
   })
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if vim.api.nvim_win_is_valid(win) then
+      vim.wo[win].scrolloff = (enabled ~= false) and FOLLOW_SCROLL_OFF or DEFAULT_SCROLL_OFF
+    end
+  end
 end
 
 local function set_window_size(win, size, is_vertical)
@@ -351,6 +370,7 @@ end
 
 local function apply_transcript_window_opts(win, is_vertical, appearance)
   pcall(function()
+    local bufnr = vim.api.nvim_win_get_buf(win)
     vim.wo[win].number = false
     vim.wo[win].relativenumber = false
     vim.wo[win].cursorline = false
@@ -359,7 +379,7 @@ local function apply_transcript_window_opts(win, is_vertical, appearance)
     vim.wo[win].foldcolumn = "0"
     vim.wo[win].winfixwidth = is_vertical == true
     vim.wo[win].winfixheight = is_vertical ~= true
-    vim.wo[win].scrolloff = 2
+    vim.wo[win].scrolloff = should_follow_output(bufnr) and FOLLOW_SCROLL_OFF or DEFAULT_SCROLL_OFF
     vim.wo[win].statusline = ""
     hide_end_of_buffer_fill(win)
   end)
@@ -374,6 +394,27 @@ local function close_buffer_windows(bufnr)
   end
 end
 
+local function create_transcript_buffer(pane_id, agent_name, transcript_path)
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  local safe_agent_name = tostring(agent_name or "agent"):gsub("[^%w-_]+", "-")
+  local pane_key = tostring(pane_id)
+
+  pcall(function()
+    vim.bo[bufnr].buftype = "nofile"
+    vim.bo[bufnr].bufhidden = "wipe"
+    vim.bo[bufnr].swapfile = false
+    vim.bo[bufnr].modifiable = false
+    vim.bo[bufnr].filetype = "markdown"
+    vim.api.nvim_buf_set_name(bufnr, string.format("lazyagent://acp/%s-%s", safe_agent_name, pane_key))
+    vim.b[bufnr].lazyagent_acp_pane_id = pane_key
+    vim.b[bufnr].lazyagent_acp_agent = agent_name
+    vim.b[bufnr].lazyagent_acp_transcript_path = transcript_path
+  end)
+
+  pane_buffers[pane_key] = bufnr
+  return bufnr
+end
+
 first_visible_window = function(bufnr)
   for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
     if vim.api.nvim_win_is_valid(win) then
@@ -381,6 +422,65 @@ first_visible_window = function(bufnr)
     end
   end
   return nil
+end
+
+local function buffer_is_visible(bufnr)
+  return first_visible_window(bufnr) ~= nil
+end
+
+local function transcript_max_lines(bufnr)
+  local opts = pane_opts_for_bufnr(bufnr)
+  local value = tonumber(opts and opts.transcript_max_lines)
+  if value and value > 0 then
+    return math.floor(value)
+  end
+  return nil
+end
+
+local function read_transcript_lines(path, max_lines)
+  if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
+    return {}
+  end
+
+  max_lines = tonumber(max_lines)
+  if max_lines and max_lines > 0 and vim.fn.executable("tail") == 1 then
+    local data = vim.fn.systemlist({ "tail", "-n", tostring(max_lines + 1), path })
+    if vim.v.shell_error == 0 and type(data) == "table" then
+      if #data > max_lines then
+        data = vim.list_slice(data, #data - max_lines + 1, #data)
+        table.insert(data, 1, TRANSCRIPT_TRUNCATED_MARKER)
+      end
+      return data
+    end
+  end
+
+  local ok, data = pcall(vim.fn.readfile, path)
+  if not ok or not data then
+    return {}
+  end
+  if max_lines and max_lines > 0 and #data > max_lines then
+    data = vim.list_slice(data, #data - max_lines + 1, #data)
+    table.insert(data, 1, TRANSCRIPT_TRUNCATED_MARKER)
+  end
+  return data
+end
+
+local function transcript_file_signature(path)
+  if not path or path == "" then
+    return ""
+  end
+
+  local stat = vim.loop.fs_stat(path)
+  if not stat then
+    return ""
+  end
+
+  local mtime = stat.mtime or {}
+  return table.concat({
+    tostring(stat.size or 0),
+    tostring(mtime.sec or 0),
+    tostring(mtime.nsec or 0),
+  }, ":")
 end
 
 set_buffer_lines = function(bufnr, lines)
@@ -455,7 +555,26 @@ local function ensure_layout_autocmds()
           apply_transcript_window_opts(win, opts.is_vertical == true, opts)
         end
       end
-      pcall(refresh_buffer_layout, bufnr)
+      if layout_entry(bufnr).pending_full_refresh then
+        pcall(refresh_buffer_from_path, bufnr, buffer_var(bufnr, "lazyagent_acp_transcript_path"))
+      else
+        pcall(refresh_buffer_layout, bufnr)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    group = group,
+    callback = function(args)
+      local bufnr = tonumber(args.buf)
+      if not bufnr then
+        return
+      end
+      local pane_id = buffer_var(bufnr, "lazyagent_acp_pane_id")
+      if pane_id ~= nil and pane_buffers[tostring(pane_id)] == bufnr then
+        pane_buffers[tostring(pane_id)] = nil
+      end
+      layout_state[tostring(bufnr)] = nil
     end,
   })
 
@@ -489,7 +608,11 @@ scroll_buffer_to_end = function(bufnr)
   local col = math.max(0, #last_line)
   for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
     if vim.api.nvim_win_is_valid(win) then
-      pcall(vim.api.nvim_win_set_cursor, win, { row, col })
+      pcall(vim.api.nvim_win_call, win, function()
+        vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
+        vim.api.nvim_win_set_cursor(win, { row, col })
+        vim.cmd("silent! normal! zb")
+      end)
     end
   end
 end
@@ -529,6 +652,29 @@ local function append_text_to_buffer(bufnr, text)
   return replace_start
 end
 
+refresh_buffer_from_path = function(bufnr, transcript_path, opts)
+  opts = opts or {}
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+
+  local entry = layout_entry(bufnr)
+  local signature = transcript_file_signature(transcript_path)
+  if not opts.force and entry.transcript_file_signature == signature then
+    entry.pending_full_refresh = false
+    refresh_buffer_layout(bufnr, opts.layout or {})
+    return false
+  end
+
+  local lines = read_transcript_lines(transcript_path, transcript_max_lines(bufnr))
+
+  set_buffer_lines(bufnr, lines)
+  entry.pending_full_refresh = false
+  entry.transcript_file_signature = signature
+  refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
+  return true
+end
+
 local function refresh_buffer_from_file(session)
   local bufnr = to_bufnr(session and session.pane_id)
   if not bufnr then
@@ -547,16 +693,12 @@ local function refresh_buffer_from_file(session)
       return
     end
 
-    local lines = {}
-    if vim.fn.filereadable(session.transcript_path) == 1 then
-      local ok, data = pcall(vim.fn.readfile, session.transcript_path)
-      if ok and data then
-        lines = data
-      end
+    if not buffer_is_visible(bufnr) then
+      layout_entry(bufnr).pending_full_refresh = true
+      return
     end
 
-    set_buffer_lines(bufnr, lines)
-    refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
+    refresh_buffer_from_path(bufnr, session.transcript_path)
   end)
 end
 
@@ -584,10 +726,18 @@ local function queue_append(session, text)
     if pending == "" then
       return
     end
+    if not buffer_is_visible(bufnr) then
+      layout_entry(bufnr).pending_full_refresh = true
+      return
+    end
     local changed_start = append_text_to_buffer(bufnr, pending)
-    if changed_start ~= nil then
+    local max_lines = transcript_max_lines(bufnr)
+    if max_lines and max_lines > 0 and transcript_line_count(bufnr) > (max_lines + 1) then
+      refresh_buffer_from_path(bufnr, session.transcript_path)
+    elseif changed_start ~= nil then
       decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
     end
+    layout_entry(bufnr).transcript_file_signature = transcript_file_signature(session.transcript_path)
     M.refresh_footer(bufnr)
     if should_follow_output(bufnr) then
       scroll_buffer_to_end(bufnr)
@@ -677,9 +827,38 @@ local function current_model_usage(session)
   for _, model in ipairs(catalog.availableModels or {}) do
     if type(model) == "table" and model.modelId == current_model_id then
       local meta = model._meta or {}
-      if meta.copilotUsage and meta.copilotUsage ~= "" then
-        return tostring(meta.copilotUsage)
+
+      -- prefer explicit numeric usage fields if present
+      local used = tonumber(meta.token_usage_used) or (meta.usage and tonumber(meta.usage.usedTokens)) or nil
+      local total = tonumber(meta.token_usage_total) or (meta.usage and (tonumber(meta.usage.totalTokens) or tonumber(meta.usage.contextSize))) or (tonumber(meta.contextSize) or tonumber(model.contextSize)) or nil
+
+      -- handle prompt/completion tokens sum
+      if not used and meta.usage and (meta.usage.promptTokens or meta.usage.completionTokens) then
+        local p = tonumber(meta.usage.promptTokens) or 0
+        local c = tonumber(meta.usage.completionTokens) or 0
+        used = p + c
       end
+
+      if used and total and total > 0 then
+        local pct = (used / total) * 100
+        return string.format("%d/%d (%.1f%%)", used, total, pct)
+      end
+
+      -- fallback: try parsing copilotUsage string like "123/8192"
+      if meta.copilotUsage and meta.copilotUsage ~= "" then
+        local s = tostring(meta.copilotUsage)
+        local a,b = s:match("(%d+)%s*[/%-]%s*(%d+)")
+        if a and b then
+          local ua = tonumber(a)
+          local tb = tonumber(b)
+          if ua and tb and tb > 0 then
+            return string.format("%d/%d (%.1f%%)", ua, tb, (ua / tb) * 100)
+          end
+        end
+        -- If can't parse, return raw string
+        return s
+      end
+
       return nil
     end
   end
@@ -871,6 +1050,9 @@ function M.refresh_footer(bufnr, opts)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
+  if not opts.force and not buffer_is_visible(bufnr) then
+    return
+  end
 
   local footer_start = transcript_line_count(bufnr)
   local footer_lines, footer_hls = render_footer_lines(bufnr)
@@ -927,7 +1109,6 @@ refresh_buffer_layout = function(bufnr, opts)
   local footer_width = overlay_target_width(bufnr)
   local transcript_count = transcript_line_count(bufnr)
   local decorate_needed = opts.force_decorate == true
-    or entry.header_width ~= header_width
     or entry.transcript_count ~= transcript_count
   local footer_needed = opts.force_footer == true
     or decorate_needed
@@ -951,7 +1132,7 @@ end
 
 function M.refresh_all_footers()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil then
+    if buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil and buffer_is_visible(bufnr) then
       M.refresh_footer(bufnr)
     end
   end
@@ -964,6 +1145,7 @@ function M.refresh_agent_footers(agent_name)
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil
       and buffer_var(bufnr, "lazyagent_acp_agent") == agent_name
+      and buffer_is_visible(bufnr)
     then
       M.refresh_footer(bufnr)
     end
@@ -986,42 +1168,22 @@ function M.create_pane(args, on_split)
   local win = vim.api.nvim_get_current_win()
   set_window_size(win, args.size, args.is_vertical)
 
-  local bufnr = vim.api.nvim_create_buf(false, true)
+  next_pane_seq = next_pane_seq + 1
+  local pane_id = string.format("buffer-acp-%d", next_pane_seq)
   local agent_name = (args.acp or {}).agent_name or "agent"
-  local safe_agent_name = agent_name:gsub("[^%w-_]+", "-")
-
-  pcall(function()
-    vim.bo[bufnr].buftype = "nofile"
-    vim.bo[bufnr].bufhidden = "hide"
-    vim.bo[bufnr].swapfile = false
-    vim.bo[bufnr].modifiable = false
-    vim.bo[bufnr].filetype = "markdown"
-    vim.api.nvim_buf_set_name(bufnr, string.format("lazyagent://acp/%s-%d", safe_agent_name, bufnr))
-    vim.b[bufnr].lazyagent_acp_pane_id = tostring(bufnr)
-    vim.b[bufnr].lazyagent_acp_agent = agent_name
-  end)
-  pane_config[tostring(bufnr)] = vim.tbl_extend("force", pane_config[tostring(bufnr)] or {}, {
+  local bufnr = create_transcript_buffer(pane_id, agent_name, args.transcript_path)
+  pane_config[pane_id] = vim.tbl_extend("force", pane_config[pane_id] or {}, {
     source_winid = anchor_win,
     is_vertical = args.is_vertical == true,
     follow_output = true,
     buffer_background = args.acp and args.acp.buffer_background or nil,
     buffer_inactive_background = args.acp and args.acp.buffer_inactive_background or nil,
+    transcript_max_lines = args.acp and args.acp.transcript_max_lines or nil,
   })
 
   vim.api.nvim_win_set_buf(win, bufnr)
-  apply_transcript_window_opts(win, args.is_vertical, pane_config[tostring(bufnr)])
-
-  local lines = {}
-  if vim.fn.filereadable(args.transcript_path) == 1 then
-    local ok, data = pcall(vim.fn.readfile, args.transcript_path)
-    if ok and data then
-      lines = data
-    end
-  end
-  vim.bo[bufnr].modifiable = true
-  pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
-  vim.bo[bufnr].modifiable = false
-  refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
+  apply_transcript_window_opts(win, args.is_vertical, pane_config[pane_id])
+  refresh_buffer_from_path(bufnr, args.transcript_path, { force = true })
 
   if anchor_win and anchor_win ~= win then
     pcall(vim.api.nvim_set_current_win, anchor_win)
@@ -1029,7 +1191,7 @@ function M.create_pane(args, on_split)
 
   if on_split then
     vim.schedule(function()
-      on_split(tostring(bufnr), { bufnr = bufnr, winid = win, source_winid = anchor_win })
+      on_split(pane_id, { bufnr = bufnr, winid = win, source_winid = anchor_win })
     end)
   end
 end
@@ -1040,6 +1202,7 @@ function M.on_session_created(session)
     pcall(function()
       vim.b[bufnr].lazyagent_acp_pane_id = tostring(session.pane_id)
       vim.b[bufnr].lazyagent_acp_agent = session.agent_name
+      vim.b[bufnr].lazyagent_acp_transcript_path = session.transcript_path
     end)
     refresh_buffer_layout(bufnr, { force_footer = true })
   end
@@ -1073,12 +1236,13 @@ end
 
 function M.kill_pane(pane_id)
   local bufnr = to_bufnr(pane_id)
+  pane_buffers[tostring(pane_id)] = nil
+  pane_config[tostring(pane_id)] = nil
   if not bufnr then
-    return false
+    return true
   end
   close_buffer_windows(bufnr)
   layout_state[tostring(bufnr)] = nil
-  pane_config[tostring(pane_id)] = nil
   pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   return true
 end
@@ -1109,6 +1273,9 @@ function M.break_pane(pane_id)
     return false
   end
   close_buffer_windows(bufnr)
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+  end
   return true
 end
 
@@ -1119,18 +1286,9 @@ end
 function M.join_pane(pane_id, size, is_vertical, on_done, session)
   ensure_layout_autocmds()
   local bufnr = to_bufnr(pane_id)
-  if not bufnr then
-    if on_done then
-      vim.schedule(function()
-        on_done(false)
-      end)
-    end
-    return false
-  end
-
   local pane_opts = pane_config[tostring(pane_id)] or {}
   local anchor_win = resolve_anchor_window(pane_opts.source_winid)
-  local existing = first_visible_window(bufnr)
+  local existing = bufnr and first_visible_window(bufnr) or nil
   if existing then
     pane_config[tostring(pane_id)] = vim.tbl_extend("force", pane_opts, {
       source_winid = anchor_win,
@@ -1139,6 +1297,7 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
       buffer_inactive_background = pane_opts.buffer_inactive_background
         or (session and session.buffer_inactive_background)
         or nil,
+      transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
     })
     refresh_buffer_layout(bufnr, { force_footer = true })
     if on_done then
@@ -1147,6 +1306,18 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
       end)
     end
     return true
+  end
+
+  if not bufnr then
+    if not session then
+      if on_done then
+        vim.schedule(function()
+          on_done(false)
+        end)
+      end
+      return false
+    end
+    bufnr = create_transcript_buffer(pane_id, session.agent_name, session.transcript_path)
   end
 
   if anchor_win then
@@ -1161,7 +1332,6 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
   local win = vim.api.nvim_get_current_win()
   set_window_size(win, size, is_vertical)
   vim.api.nvim_win_set_buf(win, bufnr)
-  local ok, agent_name = pcall(vim.api.nvim_buf_get_var, bufnr, "lazyagent_acp_agent")
   pane_config[tostring(pane_id)] = vim.tbl_extend("force", pane_config[tostring(pane_id)] or {}, {
     source_winid = anchor_win,
     is_vertical = is_vertical == true,
@@ -1170,9 +1340,12 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
     buffer_inactive_background = pane_opts.buffer_inactive_background
       or (session and session.buffer_inactive_background)
       or nil,
+    transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
   })
   apply_transcript_window_opts(win, is_vertical, pane_config[tostring(pane_id)])
-  refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
+  refresh_buffer_from_path(bufnr, session and session.transcript_path or buffer_var(bufnr, "lazyagent_acp_transcript_path"), {
+    force = true,
+  })
 
   if anchor_win and anchor_win ~= win then
     pcall(vim.api.nvim_set_current_win, anchor_win)

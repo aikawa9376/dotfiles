@@ -31,6 +31,14 @@ local function normalize_color(value)
   return text
 end
 
+local function normalize_positive_integer(value)
+  local number = tonumber(value)
+  if not number or number <= 0 then
+    return nil
+  end
+  return math.floor(number)
+end
+
 local function normalize_permission_rules(value)
   if type(value) ~= "table" then
     return {}
@@ -164,6 +172,9 @@ local function resolve_from_config(agent_cfg)
     buffer_inactive_background = normalize_color(
       agent_acp.buffer_inactive_background or global_cfg.buffer_inactive_background
     ),
+    transcript_max_lines = normalize_positive_integer(
+      agent_acp.transcript_max_lines or global_cfg.transcript_max_lines
+    ),
     permission_rules = merge_permission_rules(
       agent_acp.permission_rules or (agent_cfg and agent_cfg.acp_permission_rules),
       global_cfg.permission_rules or (state.opts and state.opts.acp_permission_rules)
@@ -190,6 +201,7 @@ function M.resolve(agent_name, agent_cfg)
       initial_model = session.initial_model,
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
+      transcript_max_lines = session.transcript_max_lines,
       permission_rules = vim.deepcopy(session.permission_rules or {}),
       auto_switch = vim.deepcopy(session.auto_switch or {}),
     }
