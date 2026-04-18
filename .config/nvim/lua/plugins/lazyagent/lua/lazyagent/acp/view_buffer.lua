@@ -379,6 +379,8 @@ local function apply_transcript_window_opts(win, is_vertical, appearance)
     vim.wo[win].wrap = true
     vim.wo[win].signcolumn = "no"
     vim.wo[win].foldcolumn = "0"
+    vim.wo[win].foldmethod = "manual"
+    vim.wo[win].foldexpr = "0"
     vim.wo[win].winfixwidth = is_vertical == true
     vim.wo[win].winfixheight = is_vertical ~= true
     vim.wo[win].scrolloff = should_follow_output(bufnr) and FOLLOW_SCROLL_OFF or DEFAULT_SCROLL_OFF
@@ -403,10 +405,12 @@ local function create_transcript_buffer(pane_id, agent_name, transcript_path)
 
   pcall(function()
     vim.bo[bufnr].buftype = "nofile"
-    vim.bo[bufnr].bufhidden = "wipe"
+    vim.bo[bufnr].bufhidden = "hide"
     vim.bo[bufnr].swapfile = false
     vim.bo[bufnr].modifiable = false
-    vim.bo[bufnr].filetype = "markdown"
+    vim.bo[bufnr].buflisted = false
+    vim.bo[bufnr].undofile = false
+    vim.bo[bufnr].filetype = "lazyagent"
     vim.api.nvim_buf_set_name(bufnr, string.format("lazyagent://acp/%s-%s", safe_agent_name, pane_key))
     vim.b[bufnr].lazyagent_acp_pane_id = pane_key
     vim.b[bufnr].lazyagent_acp_agent = agent_name
@@ -1275,9 +1279,6 @@ function M.break_pane(pane_id)
     return false
   end
   close_buffer_windows(bufnr)
-  if vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
-  end
   return true
 end
 
@@ -1345,9 +1346,7 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
     transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
   })
   apply_transcript_window_opts(win, is_vertical, pane_config[tostring(pane_id)])
-  refresh_buffer_from_path(bufnr, session and session.transcript_path or buffer_var(bufnr, "lazyagent_acp_transcript_path"), {
-    force = true,
-  })
+  refresh_buffer_from_path(bufnr, session and session.transcript_path or buffer_var(bufnr, "lazyagent_acp_transcript_path"))
 
   if anchor_win and anchor_win ~= win then
     pcall(vim.api.nvim_set_current_win, anchor_win)
