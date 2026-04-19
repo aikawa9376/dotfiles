@@ -73,6 +73,38 @@ local function ensure_highlights()
   end
 end
 
+local function refresh_markdown_rendering(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local ft = vim.bo[bufnr].filetype
+  if ft ~= ACP_TRANSCRIPT_FILETYPE and ft ~= "lazyagent" then
+    return
+  end
+
+  pcall(vim.treesitter.start, bufnr, "markdown")
+
+  local ok_manager, manager = pcall(require, "render-markdown.core.manager")
+  if ok_manager and type(manager.attach) == "function" then
+    pcall(manager.attach, bufnr)
+  end
+
+  local wins = vim.fn.win_findbuf(bufnr)
+  if #wins == 0 then
+    return
+  end
+
+  local ok_render, render = pcall(require, "render-markdown")
+  if ok_render and type(render.render) == "function" then
+    pcall(render.render, {
+      buf = bufnr,
+      win = wins,
+      event = "LazyAgentACPUpdate",
+    })
+  end
+end
+
 local function session_for_agent(agent_name)
   return agent_name and state.sessions and state.sessions[agent_name] or nil
 end
@@ -1573,6 +1605,7 @@ refresh_buffer_layout = function(bufnr, opts)
   if should_follow_output(bufnr) then
     scroll_buffer_to_end(bufnr)
   end
+  refresh_markdown_rendering(bufnr)
   return decorate_needed or footer_needed
 end
 
