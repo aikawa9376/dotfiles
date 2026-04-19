@@ -340,6 +340,7 @@ function M.setup(opts)
     tmux_auto_exit_copy_mode = true,
     submit_delay = 600,
     submit_retry = 1,
+    -- When enabled, ACP transcript footers include session/resource metadata.
     debug = false,
     close_on_send = true,
     save_conversation_on_close = true,
@@ -450,7 +451,7 @@ function M.setup(opts)
 
   pcall(function()
     if vim and vim.treesitter and vim.treesitter.language and vim.treesitter.language.register then
-      pcall(function() vim.treesitter.language.register("markdown", { "lazyagent" }) end)
+      pcall(function() vim.treesitter.language.register("markdown", { "lazyagent", "lazyagent_acp" }) end)
     end
   end)
 

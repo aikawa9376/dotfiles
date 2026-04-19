@@ -6,6 +6,7 @@ return {
       filetypes_denylist = {
         'fugitive',
         'harpoon',
+        'lazyagent_acp',
       },
     })
   end

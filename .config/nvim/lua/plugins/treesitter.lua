@@ -6,6 +6,7 @@ return {
     build = ":TSUpdate",
     init = function ()
       vim.treesitter.language.register('bash', { 'sh', 'zsh' })
+      vim.treesitter.language.register('markdown', { 'lazyagent', 'lazyagent_acp' })
 
       vim.api.nvim_create_autocmd("FileType", {
         -- NOTICE: need treesitter-cli
