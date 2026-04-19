@@ -2,7 +2,7 @@ return {
   "NvChad/nvim-colorizer.lua",
   event = "BufReadPre",
   opts = {
-    filetypes = { "*", "!fugitive", "!noice" },
+    filetypes = { "*", "!fugitive", "!noice", "!lazyagent_acp" },
     options = {
       parsers = {
         hex = {
