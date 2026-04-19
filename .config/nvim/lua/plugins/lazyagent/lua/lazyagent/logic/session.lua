@@ -256,9 +256,66 @@ end
 
 M.wait_for_idle_before_close = wait_for_idle_before_close
 
+local function is_acp_agent(name)
+  if not name or name == "" then
+    return false
+  end
+
+  local agent_cfg = agent_logic.get_interactive_agent(name)
+  if not agent_cfg then
+    return false
+  end
+
+  local backend_name = select(1, backend_logic.resolve_backend_for_agent(name, agent_cfg))
+  return acp_logic.is_acp_backend(backend_name)
+end
+
+local function current_context_acp_agent()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local candidates = {
+    vim.b[bufnr] and vim.b[bufnr].lazyagent_acp_agent or nil,
+    vim.b[bufnr] and vim.b[bufnr].lazyagent_agent or nil,
+  }
+
+  for _, candidate in ipairs(candidates) do
+    if is_acp_agent(candidate) then
+      return candidate
+    end
+  end
+
+  return nil
+end
+
+local function active_acp_agents()
+  local active = {}
+  for _, name in ipairs(agent_logic.get_active_agents()) do
+    local session = state.sessions[name]
+    if session and session.pane_id and session.pane_id ~= "" and is_acp_agent(name) then
+      active[#active + 1] = name
+    end
+  end
+  return active
+end
+
 local function resolve_acp_target_agent(agent_name, callback)
   if agent_name and agent_name ~= "" then
     callback(agent_name)
+    return
+  end
+
+  local current = current_context_acp_agent()
+  if current then
+    callback(current)
+    return
+  end
+
+  local active = active_acp_agents()
+  if #active == 1 then
+    callback(active[1])
     return
   end
 
@@ -313,12 +370,7 @@ local function resolve_active_acp_session(agent_name, callback)
 
   local function is_active_acp(name)
     local session = state.sessions[name]
-    if not session or not session.pane_id or session.pane_id == "" then
-      return false
-    end
-
-    local backend_name = select(1, backend_logic.resolve_backend_for_agent(name, agent_logic.get_interactive_agent(name)))
-    return acp_logic.is_acp_backend(backend_name)
+    return session and session.pane_id and session.pane_id ~= "" and is_acp_agent(name) or false
   end
 
   if agent_name and agent_name ~= "" then
@@ -330,8 +382,14 @@ local function resolve_active_acp_session(agent_name, callback)
     return
   end
 
+  local current = current_context_acp_agent()
+  if current and is_active_acp(current) then
+    callback(current)
+    return
+  end
+
   local active = {}
-  for _, name in ipairs(agent_logic.get_active_agents()) do
+  for _, name in ipairs(active_acp_agents()) do
     if is_active_acp(name) then
       table.insert(active, name)
     end

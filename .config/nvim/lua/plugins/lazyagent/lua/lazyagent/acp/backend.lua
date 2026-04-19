@@ -456,6 +456,28 @@ local function maybe_add_uri_path(list, seen, uri)
   add_unique_text(list, seen, text)
 end
 
+local function normalize_tool_path(path, cwd)
+  local text = tostring(path or "")
+  if text == "" then
+    return nil
+  end
+
+  if text:match("^file://") then
+    local ok, resolved = pcall(vim.uri_to_fname, text)
+    if ok and resolved and resolved ~= "" then
+      text = resolved
+    end
+  elseif not text:match("^/") then
+    text = (cwd or vim.fn.getcwd()) .. "/" .. text
+  end
+
+  local normalized = vim.fn.fnamemodify(text, ":p")
+  if vim.fs and type(vim.fs.normalize) == "function" then
+    normalized = vim.fs.normalize(normalized)
+  end
+  return normalized
+end
+
 local function extract_tool_paths(tool)
   local out = {}
   local seen = {}
@@ -1856,22 +1878,32 @@ local function maybe_call_mcp_tool(name, params)
 end
 
 local function maybe_sync_acp_edit_targets(session, tool)
-  local content = type(tool and tool.content) == "table" and tool.content or {}
-  local seen = {}
   local cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd()
+  local content = type(tool and tool.content) == "table" and tool.content or {}
+  local diff_by_path = {}
+
   for _, item in ipairs(content) do
     if type(item) == "table" and item.type == "diff" then
-      local path = tostring(item.path or item.filePath or "")
-      if path ~= "" and not seen[path] then
-        seen[path] = true
-        maybe_call_mcp_tool("open_last_changed", {
-          agent_name = session and session.agent_name or nil,
-          cwd = cwd,
-          path = path,
-          oldText = item.oldText or item.old_text,
-          newText = item.newText or item.new_text,
-        })
+      local path = normalize_tool_path(item.path or item.filePath, cwd)
+      if path and not diff_by_path[path] then
+        diff_by_path[path] = item
       end
+    end
+  end
+
+  local seen = {}
+  for _, raw_path in ipairs(extract_tool_paths(tool)) do
+    local path = normalize_tool_path(raw_path, cwd)
+    if path and not seen[path] then
+      seen[path] = true
+      local item = diff_by_path[path] or {}
+      maybe_call_mcp_tool("open_last_changed", {
+        agent_name = session and session.agent_name or nil,
+        cwd = cwd,
+        path = path,
+        oldText = item.oldText or item.old_text,
+        newText = item.newText or item.new_text,
+      })
     end
   end
 end

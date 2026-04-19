@@ -48,6 +48,10 @@ local function ensure_highlights()
   highlights_defined = true
 
   local defs = {
+    FugitiveExtAdd = { default = true, bg = "#23384C" },
+    FugitiveExtDelete = { default = true, bg = "#321e1e" },
+    FugitiveExtAddText = { default = true, bg = "#005f5f" },
+    FugitiveExtDeleteText = { default = true, bg = "#8c3b40" },
     LazyAgentACPUserHeader = { default = true, fg = "#e0af68", bold = true },
     LazyAgentACPAssistantHeader = { default = true, fg = "#9ece6a", bold = true },
     LazyAgentACPThinkingHeader = { default = true, fg = "#bb9af7", bold = true },
@@ -62,10 +66,10 @@ local function ensure_highlights()
     LazyAgentACPFooterError = { default = true, link = "DiagnosticError" },
     LazyAgentACPFooterMuted = { default = true, link = "Comment" },
     LazyAgentACPFooterMeta = { default = true, link = "SpecialComment" },
-    LazyAgentACPDiffDelete = { default = true, link = "DiffDelete" },
-    LazyAgentACPDiffAdd = { default = true, link = "DiffAdd" },
-    LazyAgentACPDiffDeleteWord = { default = true, link = "DiffText" },
-    LazyAgentACPDiffAddWord = { default = true, link = "DiffText" },
+    LazyAgentACPDiffDelete = { default = true, link = "FugitiveExtDelete" },
+    LazyAgentACPDiffAdd = { default = true, link = "FugitiveExtAdd" },
+    LazyAgentACPDiffDeleteWord = { default = true, link = "FugitiveExtDeleteText" },
+    LazyAgentACPDiffAddWord = { default = true, link = "FugitiveExtAddText" },
   }
 
   for name, spec in pairs(defs) do

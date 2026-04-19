@@ -7,6 +7,18 @@ local state = require("lazyagent.logic.state")
 local backend_logic = require("lazyagent.logic.backend")
 local diff_utils = require("lazyagent.acp.diff")
 
+local function normalize_fs_path(path)
+  path = tostring(path or "")
+  if path == "" then
+    return nil
+  end
+  local normalized = vim.fn.fnamemodify(path, ":p")
+  if vim.fs and type(vim.fs.normalize) == "function" then
+    normalized = vim.fs.normalize(normalized)
+  end
+  return normalized
+end
+
 -- Return git-changed files in cwd modified at or after `since` (os.time()).
 -- If since is nil, returns all changed files.
 local function changed_files_since(cwd, since)
@@ -37,11 +49,11 @@ end
 local function resolve_tool_cwd(params)
   params = type(params) == "table" and params or {}
   if params.cwd and params.cwd ~= "" then
-    return vim.fn.fnamemodify(params.cwd, ":p")
+    return normalize_fs_path(params.cwd)
   end
   local session = params.agent_name and state.sessions and state.sessions[params.agent_name] or nil
   local cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd()
-  return vim.fn.fnamemodify(cwd, ":p")
+  return normalize_fs_path(cwd)
 end
 
 local function resolve_target_path(path, cwd)
@@ -50,9 +62,9 @@ local function resolve_target_path(path, cwd)
     return nil
   end
   if path:sub(1, 1) == "/" then
-    return vim.fn.fnamemodify(path, ":p")
+    return normalize_fs_path(path)
   end
-  return vim.fn.fnamemodify(cwd .. "/" .. path, ":p")
+  return normalize_fs_path((cwd or vim.fn.getcwd()) .. "/" .. path)
 end
 
 local function git_diff_for_path(cwd, abs_path)
