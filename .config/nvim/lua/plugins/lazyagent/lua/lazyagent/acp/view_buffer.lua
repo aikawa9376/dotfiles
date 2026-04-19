@@ -13,6 +13,11 @@ local layout_autocmds_initialized = false
 local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer ..."
 local FOLLOW_SCROLL_OFF = 0
 local DEFAULT_SCROLL_OFF = 2
+local ACP_TRANSCRIPT_FILETYPE = "lazyagent_acp"
+local APPEND_BATCH_MS = 60
+local DECORATE_PREFETCH_MARGIN = 80
+local DECORATE_SYNC_LINE_LIMIT = 600
+local DECORATE_CHUNK_SIZE = 400
 local first_visible_window
 local replace_buffer_lines
 local set_buffer_lines
@@ -20,8 +25,19 @@ local scroll_buffer_to_end
 local transcript_line_count
 local refresh_buffer_layout
 local refresh_buffer_from_path
+local layout_entry
+local buffer_is_visible
 local custom_background_groups = {}
 local layout_state = {}
+local suppress_transcript_window_refresh = false
+
+local function close_timer(timer)
+  if not timer then
+    return
+  end
+  pcall(function() timer:stop() end)
+  pcall(function() timer:close() end)
+end
 
 local function ensure_highlights()
   if highlights_defined then
@@ -121,6 +137,37 @@ local function overlay_target_width(bufnr)
   return math.max(12, vim.api.nvim_win_get_width(win) - 2)
 end
 
+local function cancel_deferred_decoration(bufnr)
+  local entry = layout_entry(bufnr)
+  entry.decoration_generation = (entry.decoration_generation or 0) + 1
+  return entry.decoration_generation
+end
+
+local function visible_transcript_range(bufnr)
+  local transcript_stop = transcript_line_count(bufnr)
+  if transcript_stop <= 0 then
+    return 0, 0
+  end
+
+  local win = first_visible_window(bufnr)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return 0, math.min(transcript_stop, DECORATE_CHUNK_SIZE)
+  end
+
+  local ok, bounds = pcall(vim.api.nvim_win_call, win, function()
+    return { vim.fn.line("w0"), vim.fn.line("w$") }
+  end)
+  if not ok or type(bounds) ~= "table" then
+    return 0, math.min(transcript_stop, DECORATE_CHUNK_SIZE)
+  end
+
+  local top = math.max(1, tonumber(bounds[1]) or 1)
+  local bottom = math.max(top, tonumber(bounds[2]) or top)
+  local range_start = math.max(0, top - 1 - DECORATE_PREFETCH_MARGIN)
+  local range_stop = math.min(transcript_stop, bottom + DECORATE_PREFETCH_MARGIN)
+  return range_start, math.max(range_start, range_stop)
+end
+
 local function normalize_header_lines(bufnr, lines)
   local width = header_target_width(bufnr)
   if not width or width <= 0 then
@@ -168,11 +215,52 @@ local function decorate_transcript_range(bufnr, start_idx, end_idx)
 
   vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, range_start, range_stop)
   for idx, line in ipairs(lines) do
+    local row = range_start + idx - 1
     if line:match("^─ ") or line:match("^╭─ ") then
       local header_hl = section_style_for_line(line)
-      vim.api.nvim_buf_add_highlight(bufnr, transcript_ns, header_hl, range_start + idx - 1, 0, -1)
+      vim.api.nvim_buf_add_highlight(bufnr, transcript_ns, header_hl, row, 0, -1)
     end
   end
+end
+
+local function queue_deferred_transcript_decoration(bufnr, ranges, generation)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local entry = layout_entry(bufnr)
+  local function step(range_idx, cursor)
+    if not vim.api.nvim_buf_is_valid(bufnr) or entry.decoration_generation ~= generation then
+      return
+    end
+    if not buffer_is_visible(bufnr) then
+      entry.pending_full_refresh = true
+      return
+    end
+
+    local range = ranges[range_idx]
+    if not range then
+      return
+    end
+
+    local start_idx = cursor or range[1]
+    local next_stop = math.min(range[2], start_idx + DECORATE_CHUNK_SIZE)
+    decorate_transcript_range(bufnr, start_idx, next_stop)
+    if next_stop < range[2] then
+      vim.schedule(function()
+        step(range_idx, next_stop)
+      end)
+      return
+    end
+
+    vim.schedule(function()
+      step(range_idx + 1)
+    end)
+  end
+
+  vim.schedule(function()
+    step(1)
+  end)
 end
 
 local function decorate_buffer(bufnr)
@@ -180,8 +268,31 @@ local function decorate_buffer(bufnr)
     return
   end
 
+  local transcript_stop = transcript_line_count(bufnr)
+  local generation = cancel_deferred_decoration(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, 0, -1)
-  decorate_transcript_range(bufnr, 0, transcript_line_count(bufnr))
+  if transcript_stop <= 0 then
+    return
+  end
+
+  if transcript_stop <= DECORATE_SYNC_LINE_LIMIT or not buffer_is_visible(bufnr) then
+    decorate_transcript_range(bufnr, 0, transcript_stop)
+    return
+  end
+
+  local visible_start, visible_stop = visible_transcript_range(bufnr)
+  decorate_transcript_range(bufnr, visible_start, visible_stop)
+
+  local ranges = {}
+  if visible_start > 0 then
+    ranges[#ranges + 1] = { 0, visible_start }
+  end
+  if visible_stop < transcript_stop then
+    ranges[#ranges + 1] = { visible_stop, transcript_stop }
+  end
+  if #ranges > 0 then
+    queue_deferred_transcript_decoration(bufnr, ranges, generation)
+  end
 end
 
 local function find_config_option(session, keys)
@@ -266,7 +377,7 @@ local function pane_opts_for_bufnr(bufnr)
   return pane_config[tostring(pane_id_for_bufnr(bufnr))] or {}
 end
 
-local function layout_entry(bufnr)
+layout_entry = function(bufnr)
   local key = tostring(bufnr)
   local entry = layout_state[key]
   if not entry then
@@ -310,22 +421,43 @@ local function apply_transcript_background(win, appearance)
   appearance = appearance or {}
   local active_bg = appearance.buffer_background
   local inactive_bg = appearance.buffer_inactive_background or active_bg
-  if not active_bg and not inactive_bg then
-    return
-  end
 
   local mappings = {}
   local active_group = window_background_group("Normal", active_bg)
   local inactive_group = window_background_group("NormalNC", inactive_bg)
   if active_group then
-    mappings[#mappings + 1] = "Normal:" .. active_group
-    mappings[#mappings + 1] = "EndOfBuffer:" .. active_group
+    mappings.Normal = active_group
+    mappings.EndOfBuffer = active_group
+  else
+    mappings.EndOfBuffer = "None"
   end
   if inactive_group then
-    mappings[#mappings + 1] = "NormalNC:" .. inactive_group
+    mappings.NormalNC = inactive_group
   end
-  if #mappings > 0 then
-    vim.wo[win].winhighlight = table.concat(mappings, ",")
+  if next(mappings) ~= nil then
+    local current = vim.wo[win].winhighlight
+    local merged = {}
+    local order = {}
+    for _, part in ipairs(vim.split(current or "", ",", { trimempty = true })) do
+      local key, value = part:match("^([^:]+):(.+)$")
+      if key and value then
+        if merged[key] == nil then
+          order[#order + 1] = key
+        end
+        merged[key] = value
+      end
+    end
+    for key, value in pairs(mappings) do
+      if merged[key] == nil then
+        order[#order + 1] = key
+      end
+      merged[key] = value
+    end
+    local rendered = {}
+    for _, key in ipairs(order) do
+      rendered[#rendered + 1] = key .. ":" .. merged[key]
+    end
+    vim.wo[win].winhighlight = table.concat(rendered, ",")
   end
 end
 
@@ -372,22 +504,58 @@ end
 
 local function apply_transcript_window_opts(win, is_vertical, appearance)
   pcall(function()
+    suppress_transcript_window_refresh = true
     local bufnr = vim.api.nvim_win_get_buf(win)
     vim.wo[win].number = false
     vim.wo[win].relativenumber = false
     vim.wo[win].cursorline = false
     vim.wo[win].wrap = true
     vim.wo[win].signcolumn = "no"
+    vim.wo[win].statuscolumn = ""
     vim.wo[win].foldcolumn = "0"
+    vim.wo[win].foldenable = false
     vim.wo[win].foldmethod = "manual"
     vim.wo[win].foldexpr = "0"
     vim.wo[win].winfixwidth = is_vertical == true
     vim.wo[win].winfixheight = is_vertical ~= true
     vim.wo[win].scrolloff = should_follow_output(bufnr) and FOLLOW_SCROLL_OFF or DEFAULT_SCROLL_OFF
     vim.wo[win].statusline = ""
+    vim.wo[win].eventignorewin = ""
     hide_end_of_buffer_fill(win)
   end)
   pcall(apply_transcript_background, win, appearance)
+  suppress_transcript_window_refresh = false
+end
+
+local function refresh_transcript_window(bufnr, win)
+  if not bufnr or buffer_var(bufnr, "lazyagent_acp_pane_id") == nil then
+    return
+  end
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return
+  end
+  if vim.api.nvim_win_get_buf(win) ~= bufnr then
+    return
+  end
+
+  local opts = pane_opts_for_bufnr(bufnr)
+  apply_transcript_window_opts(win, opts.is_vertical == true, opts)
+end
+
+local function apply_transcript_buffer_opts(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  pcall(function()
+    vim.bo[bufnr].swapfile = false
+    vim.bo[bufnr].undofile = false
+    vim.bo[bufnr].buflisted = false
+    vim.b[bufnr].lazyagent_acp_transcript = true
+    vim.b[bufnr].illuminate_disable = true
+    vim.b[bufnr].matchup_matchparen_enabled = 0
+  end)
+  pcall(vim.api.nvim_set_option_value, "spell", false, { buf = bufnr })
 end
 
 local function close_buffer_windows(bufnr)
@@ -410,12 +578,14 @@ local function create_transcript_buffer(pane_id, agent_name, transcript_path)
     vim.bo[bufnr].modifiable = false
     vim.bo[bufnr].buflisted = false
     vim.bo[bufnr].undofile = false
-    vim.bo[bufnr].filetype = "lazyagent"
+    vim.b[bufnr].lazyagent_acp_transcript = true
+    vim.bo[bufnr].filetype = ACP_TRANSCRIPT_FILETYPE
     vim.api.nvim_buf_set_name(bufnr, string.format("lazyagent://acp/%s-%s", safe_agent_name, pane_key))
     vim.b[bufnr].lazyagent_acp_pane_id = pane_key
     vim.b[bufnr].lazyagent_acp_agent = agent_name
     vim.b[bufnr].lazyagent_acp_transcript_path = transcript_path
   end)
+  apply_transcript_buffer_opts(bufnr)
 
   pane_buffers[pane_key] = bufnr
   return bufnr
@@ -430,7 +600,7 @@ first_visible_window = function(bufnr)
   return nil
 end
 
-local function buffer_is_visible(bufnr)
+buffer_is_visible = function(bufnr)
   return first_visible_window(bufnr) ~= nil
 end
 
@@ -531,6 +701,14 @@ local function ensure_layout_autocmds()
   layout_autocmds_initialized = true
 
   local group = vim.api.nvim_create_augroup("LazyAgentACPLayout", { clear = true })
+  vim.api.nvim_create_autocmd("FileType", {
+    group = group,
+    pattern = ACP_TRANSCRIPT_FILETYPE,
+    callback = function(args)
+      apply_transcript_buffer_opts(tonumber(args.buf))
+    end,
+  })
+
   vim.api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
     group = group,
     callback = function()
@@ -555,17 +733,42 @@ local function ensure_layout_autocmds()
       if not bufnr or buffer_var(bufnr, "lazyagent_acp_pane_id") == nil then
         return
       end
+      apply_transcript_buffer_opts(bufnr)
       for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
-        if vim.api.nvim_win_is_valid(win) then
-          local opts = pane_opts_for_bufnr(bufnr)
-          apply_transcript_window_opts(win, opts.is_vertical == true, opts)
-        end
+        refresh_transcript_window(bufnr, win)
       end
       if layout_entry(bufnr).pending_full_refresh then
         pcall(refresh_buffer_from_path, bufnr, buffer_var(bufnr, "lazyagent_acp_transcript_path"))
       else
         pcall(refresh_buffer_layout, bufnr)
       end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = group,
+    callback = function()
+      local win = vim.api.nvim_get_current_win()
+      local bufnr = vim.api.nvim_get_current_buf()
+      refresh_transcript_window(bufnr, win)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("OptionSet", {
+    group = group,
+    pattern = { "fillchars", "winhighlight", "foldenable", "foldmethod", "foldexpr", "foldcolumn" },
+    callback = function()
+      if suppress_transcript_window_refresh then
+        return
+      end
+      local win = vim.api.nvim_get_current_win()
+      local bufnr = vim.api.nvim_get_current_buf()
+      if not bufnr or buffer_var(bufnr, "lazyagent_acp_pane_id") == nil then
+        return
+      end
+      vim.schedule(function()
+        refresh_transcript_window(bufnr, win)
+      end)
     end,
   })
 
@@ -716,13 +919,10 @@ local function queue_append(session, text)
 
   session.view_state = session.view_state or {}
   session.view_state.pending_append = (session.view_state.pending_append or "") .. tostring(text or "")
-  if session.view_state.append_pending then
-    return
-  end
-  session.view_state.append_pending = true
 
-  vim.schedule(function()
-    session.view_state.append_pending = false
+  local function flush_pending_append()
+    close_timer(session.view_state.append_timer)
+    session.view_state.append_timer = nil
     if not vim.api.nvim_buf_is_valid(bufnr) then
       session.view_state.pending_append = ""
       return
@@ -748,7 +948,21 @@ local function queue_append(session, text)
     if should_follow_output(bufnr) then
       scroll_buffer_to_end(bufnr)
     end
-  end)
+  end
+
+  if session.view_state.append_timer then
+    return
+  end
+
+  local uv = vim.uv or vim.loop
+  if not uv or not uv.new_timer then
+    vim.schedule(flush_pending_append)
+    return
+  end
+
+  local timer = uv.new_timer()
+  session.view_state.append_timer = timer
+  timer:start(APPEND_BATCH_MS, 0, vim.schedule_wrap(flush_pending_append))
 end
 
 local function compact_config_value(value)
@@ -897,7 +1111,67 @@ local function session_status(agent_name, session)
   return nil, nil
 end
 
-local function footer_context_segments(session)
+local function footer_debug_enabled()
+  return state and state.opts and state.opts.debug == true
+end
+
+local function footer_display_path(path)
+  path = tostring(path or "")
+  if path == "" then
+    return nil
+  end
+  local ok, display = pcall(vim.fn.fnamemodify, path, ":~:.")
+  if ok and display and display ~= "" then
+    return display
+  end
+  return path
+end
+
+local function footer_debug_lines(session)
+  if not footer_debug_enabled() or not session then
+    return {}
+  end
+
+  local lines = {}
+  local identity = {}
+  local resources = {}
+
+  if session.acp_session_id and session.acp_session_id ~= "" then
+    table.insert(identity, "Session " .. tostring(session.acp_session_id))
+  end
+  if session.pane_id and session.pane_id ~= "" then
+    table.insert(identity, "Pane " .. tostring(session.pane_id))
+  end
+  if session.backend and session.backend ~= "" then
+    table.insert(identity, "Backend " .. tostring(session.backend))
+  end
+  if #identity > 0 then
+    table.insert(lines, { text = " " .. table.concat(identity, "  "), hl = "LazyAgentACPFooterMuted" })
+  end
+
+  local transcript_path = footer_display_path(session.acp_transcript_path or session.transcript_path)
+  if transcript_path then
+    table.insert(resources, "Transcript " .. transcript_path)
+  end
+
+  local mcp_url = tostring(session.mcp_url or ((state.opts and state.opts._mcp_url) or ""))
+  if mcp_url ~= "" then
+    table.insert(resources, "MCP " .. mcp_url)
+  end
+
+  local root_dir = footer_display_path(session.root_dir or session.cwd)
+  if root_dir then
+    table.insert(resources, "Root " .. root_dir)
+  end
+
+  for _, resource in ipairs(resources) do
+    table.insert(lines, { text = " " .. resource, hl = "LazyAgentACPFooterMeta" })
+  end
+
+  return lines
+end
+
+local function footer_context_segments(agent_name, session)
   local segments = {}
   local model = select(1, current_config_details(session, { "model" }))
   if model and model ~= "" then
@@ -924,7 +1198,7 @@ local function footer_context_segments(session)
     table.insert(segments, string.format("%d MCP server%s", mcp_count, mcp_count == 1 and "" or "s"))
   end
 
-  if session then
+  if agent_name and session then
     local command_count = #agent_logic.get_visible_slash_commands(agent_name, session)
     table.insert(segments, string.format("%d slash cmd%s", command_count, command_count == 1 and "" or "s"))
   end
@@ -936,8 +1210,8 @@ local function footer_context_segments(session)
   return segments
 end
 
-local function footer_context_text(session)
-  local context = footer_context_segments(session)
+local function footer_context_text(agent_name, session)
+  local context = footer_context_segments(agent_name, session)
   if #context > 0 then
     return table.concat(context, " · ")
   end
@@ -981,7 +1255,7 @@ end
 local function footer_render_lines(agent_name, session)
   local size = transcript_size_label(session)
   local provider = provider_label(agent_name, session)
-  local context = footer_context_text(session)
+  local context = footer_context_text(agent_name, session)
   local status_text, status_hl = session_status(agent_name, session)
   local lines = {}
   local meta = {}
@@ -1010,6 +1284,10 @@ local function footer_render_lines(agent_name, session)
 
   if has_context then
     table.insert(lines, { text = " " .. context, hl = "LazyAgentACPFooterMeta" })
+  end
+
+  for _, line in ipairs(footer_debug_lines(session)) do
+    table.insert(lines, line)
   end
 
   return lines
@@ -1116,6 +1394,7 @@ refresh_buffer_layout = function(bufnr, opts)
   local transcript_count = transcript_line_count(bufnr)
   local decorate_needed = opts.force_decorate == true
     or entry.transcript_count ~= transcript_count
+    or entry.header_width ~= header_width
   local footer_needed = opts.force_footer == true
     or decorate_needed
     or entry.footer_width ~= footer_width

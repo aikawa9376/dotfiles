@@ -1,12 +1,12 @@
 return {
   "MeanderingProgrammer/render-markdown.nvim",
-  ft = { 'markdown', 'Avante', 'fzf', 'lazyagent' },
+  ft = { 'markdown', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp' },
   opts = {
     -- restart_highlighter = true,
     anti_conceal = {
       enabled = false,
     },
-    file_types = { 'markdown', 'Avante', 'fzf', 'lazyagent' },
+    file_types = { 'markdown', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp' },
     heading = {
       sign = false,
       position = "inline",
@@ -51,9 +51,18 @@ return {
       lsp = { enabled = true },
       blink = { enabled = true },
     },
+    custom_handlers = {
+      markdown = { parse = function (ctx)
+        return require("lazyagent.render_markdown").parse(ctx)
+      end },
+    },
     overrides = {
       filetype = {
         lazyagent = {
+          debounce = 300,
+          render_modes = { 'n', 'c', 't' },
+        },
+        lazyagent_acp = {
           debounce = 300,
           render_modes = { 'n', 'c', 't' },
         },
