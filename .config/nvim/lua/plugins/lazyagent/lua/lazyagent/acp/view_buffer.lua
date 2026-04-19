@@ -3,11 +3,13 @@ local M = {}
 local agent_logic = require("lazyagent.logic.agent")
 local local_commands = require("lazyagent.acp.local_commands")
 local state = require("lazyagent.logic.state")
+local diff_utils = require("lazyagent.acp.diff")
 local pane_config = {}
 local pane_buffers = {}
 local next_pane_seq = 0
 local transcript_ns = vim.api.nvim_create_namespace("lazyagent_acp_transcript")
 local footer_ns = vim.api.nvim_create_namespace("lazyagent_acp_footer")
+local diff_ns = vim.api.nvim_create_namespace("lazyagent_acp_diff")
 local highlights_defined = false
 local layout_autocmds_initialized = false
 local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer ..."
@@ -60,6 +62,10 @@ local function ensure_highlights()
     LazyAgentACPFooterError = { default = true, link = "DiagnosticError" },
     LazyAgentACPFooterMuted = { default = true, link = "Comment" },
     LazyAgentACPFooterMeta = { default = true, link = "SpecialComment" },
+    LazyAgentACPDiffDelete = { default = true, link = "DiffDelete" },
+    LazyAgentACPDiffAdd = { default = true, link = "DiffAdd" },
+    LazyAgentACPDiffDeleteWord = { default = true, link = "DiffText" },
+    LazyAgentACPDiffAddWord = { default = true, link = "DiffText" },
   }
 
   for name, spec in pairs(defs) do
@@ -223,6 +229,105 @@ local function decorate_transcript_range(bufnr, start_idx, end_idx)
   end
 end
 
+local function apply_diff_range(bufnr, row, start_col, end_col, hl_group)
+  if start_col >= end_col then
+    return
+  end
+  vim.highlight.range(bufnr, diff_ns, hl_group, { row, start_col }, { row, end_col })
+end
+
+local function is_diff_marker_line(line)
+  return type(line) == "string" and line:match("^%s*[-+] ") ~= nil
+end
+
+local function decorate_diff_block(bufnr, start_row, end_row)
+  if end_row < start_row then
+    return
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row + 1, false)
+  local has_diff = false
+  for _, line in ipairs(lines) do
+    if is_diff_marker_line(line) then
+      has_diff = true
+      break
+    end
+  end
+  if not has_diff then
+    return
+  end
+
+  local idx = 1
+  while idx <= #lines do
+    local line = lines[idx]
+    local row = start_row + idx - 1
+    local old_prefix = line and line:match("^(%s*%- )")
+    local new_prefix = line and line:match("^(%s*%+ )")
+
+    if old_prefix then
+      apply_diff_range(bufnr, row, 0, #line, "LazyAgentACPDiffDelete")
+      local next_line = lines[idx + 1]
+      local next_row = row + 1
+      local next_prefix = next_line and next_line:match("^(%s*%+ )")
+      if next_prefix then
+        apply_diff_range(bufnr, next_row, 0, #next_line, "LazyAgentACPDiffAdd")
+        local old_text = line:sub(#old_prefix + 1)
+        local new_text = next_line:sub(#next_prefix + 1)
+        local change = diff_utils.find_inline_change(old_text, new_text)
+        if change then
+          apply_diff_range(
+            bufnr,
+            row,
+            #old_prefix + change.old_start,
+            #old_prefix + change.old_end,
+            "LazyAgentACPDiffDeleteWord"
+          )
+          apply_diff_range(
+            bufnr,
+            next_row,
+            #next_prefix + change.new_start,
+            #next_prefix + change.new_end,
+            "LazyAgentACPDiffAddWord"
+          )
+        end
+        idx = idx + 2
+      else
+        idx = idx + 1
+      end
+    elseif new_prefix then
+      apply_diff_range(bufnr, row, 0, #line, "LazyAgentACPDiffAdd")
+      idx = idx + 1
+    else
+      idx = idx + 1
+    end
+  end
+end
+
+local function decorate_diff_blocks(bufnr)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local transcript_stop = transcript_line_count(bufnr)
+  vim.api.nvim_buf_clear_namespace(bufnr, diff_ns, 0, -1)
+  if transcript_stop <= 0 then
+    return
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false)
+  local fence_start = nil
+  for idx, line in ipairs(lines) do
+    if line:match("^%s*```") then
+      if fence_start then
+        decorate_diff_block(bufnr, fence_start, idx - 2)
+        fence_start = nil
+      else
+        fence_start = idx
+      end
+    end
+  end
+end
+
 local function queue_deferred_transcript_decoration(bufnr, ranges, generation)
   if not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -277,6 +382,7 @@ local function decorate_buffer(bufnr)
 
   if transcript_stop <= DECORATE_SYNC_LINE_LIMIT or not buffer_is_visible(bufnr) then
     decorate_transcript_range(bufnr, 0, transcript_stop)
+    decorate_diff_blocks(bufnr)
     return
   end
 
@@ -293,6 +399,7 @@ local function decorate_buffer(bufnr)
   if #ranges > 0 then
     queue_deferred_transcript_decoration(bufnr, ranges, generation)
   end
+  decorate_diff_blocks(bufnr)
 end
 
 local function find_config_option(session, keys)
@@ -942,6 +1049,7 @@ local function queue_append(session, text)
       refresh_buffer_from_path(bufnr, session.transcript_path)
     elseif changed_start ~= nil then
       decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
+      decorate_diff_blocks(bufnr)
     end
     layout_entry(bufnr).transcript_file_signature = transcript_file_signature(session.transcript_path)
     M.refresh_footer(bufnr)
