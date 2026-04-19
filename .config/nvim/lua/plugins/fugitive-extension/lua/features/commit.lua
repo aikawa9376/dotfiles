@@ -201,8 +201,10 @@ local function commit_auto_pop(work_tree)
   vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' stash pop --index --quiet')
   if vim.v.shell_error ~= 0 then
     vim.notify('Auto-stash pop failed; please pop manually', vim.log.levels.ERROR)
+    return false
   else
     vim.notify('Auto-stash popped', vim.log.levels.INFO)
+    return true
   end
 end
 
@@ -428,15 +430,64 @@ local function apply_patch_and_amend(git_dir, commit, filepath, patch_lines, use
   return true
 end
 
+local function apply_patch_to_worktree(git_dir, patch_lines, use_reverse)
+  local patch_file = vim.fn.tempname()
+  local f = io.open(patch_file, 'w')
+  if not f then
+    vim.notify('Failed to create temp file', vim.log.levels.ERROR)
+    return false
+  end
+
+  f:write(table.concat(patch_lines, '\n') .. '\n')
+  f:close()
+
+  local rev = use_reverse and '--reverse ' or ''
+  local out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir)
+    .. ' && git apply ' .. rev .. '--unidiff-zero ' .. vim.fn.shellescape(patch_file) .. ' 2>&1')
+  os.remove(patch_file)
+
+  if vim.v.shell_error ~= 0 then
+    vim.notify('Failed to restore unstaged changes: ' .. out:sub(1, 120), vim.log.levels.ERROR)
+    return false
+  end
+
+  return true
+end
+
+local function confirm_discard_mode(scope, commit)
+  local choice = vim.fn.confirm(
+    table.concat({
+      string.format('Discard %s changes from commit %s?', scope, commit:sub(1, 7)),
+      '',
+      'Hard: remove them from the commit and worktree',
+      'Mixed: remove them from the commit and keep them unstaged',
+    }, '\n'),
+    '&Hard\n&Mixed\n&Cancel',
+    3
+  )
+
+  if choice == 1 then
+    return 'hard'
+  end
+  if choice == 2 then
+    return 'mixed'
+  end
+end
+
 -- Post-discard: stash pop, check empty commit, reload buffer
-local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, stashed)
+local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, stashed, reset_mode)
   local view_state = save_commit_view_state(vim.api.nvim_get_current_buf())
   local ok = apply_patch_and_amend(git_dir, commit, filepath, patch, use_reverse)
-  if stashed then commit_auto_pop(git_dir) end
   if not ok then
+    if stashed then commit_auto_pop(git_dir) end
     vim.cmd('checktime')
     restore_commit_view_state(view_state)
     return
+  end
+
+  local stash_popped = true
+  if stashed then
+    stash_popped = commit_auto_pop(git_dir)
   end
 
   local new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir)
@@ -453,6 +504,13 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
       vim.fn.system('cd ' .. vim.fn.shellescape(git_dir)
         .. " && GIT_SEQUENCE_EDITOR=\"sed -i '1s/^pick/drop/'\" GIT_EDITOR=true git rebase -i HEAD^ 2>&1")
       vim.notify('Dropped empty commit ' .. new_hash:sub(1, 7), vim.log.levels.INFO)
+      if reset_mode == 'mixed' then
+        if stash_popped then
+          apply_patch_to_worktree(git_dir, patch, not use_reverse)
+        else
+          vim.notify('Skipped restoring unstaged changes because auto-stash pop failed', vim.log.levels.WARN)
+        end
+      end
       vim.cmd('silent! doautocmd User FugitiveChanged')
       vim.cmd('checktime')
       cleanup_view_file(view_state.view_file)
@@ -461,7 +519,28 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
     end
   end
 
-  vim.notify(string.format('Discarded %s from %s', scope, commit:sub(1, 7)), vim.log.levels.INFO)
+  local restored_to_worktree = reset_mode ~= 'mixed'
+  if reset_mode == 'mixed' then
+    if stash_popped then
+      if not apply_patch_to_worktree(git_dir, patch, not use_reverse) then
+        vim.cmd('silent! doautocmd User FugitiveChanged')
+        reopen_commit_preserving_view(new_hash, view_state)
+        return
+      end
+      restored_to_worktree = true
+    else
+      vim.notify('Skipped restoring unstaged changes because auto-stash pop failed', vim.log.levels.WARN)
+    end
+  end
+
+  if restored_to_worktree then
+    vim.notify(
+      string.format('Removed %s from %s and restored it as unstaged changes', scope, commit:sub(1, 7)),
+      vim.log.levels.INFO
+    )
+  else
+    vim.notify(string.format('Discarded %s from %s', scope, commit:sub(1, 7)), vim.log.levels.INFO)
+  end
   -- Trigger log buffer refresh via standard fugitive event
   vim.cmd('silent! doautocmd User FugitiveChanged')
   -- Reload the buffer to reflect the amended commit
@@ -770,10 +849,8 @@ function M.setup(group)
           return
         end
         local scope = on_file_header and 'file' or 'hunk'
-        if vim.fn.confirm(
-          string.format('Discard %s changes from commit %s?', scope, commit:sub(1, 7)),
-          '&Yes\n&No', 2
-        ) ~= 1 then return end
+        local reset_mode = confirm_discard_mode(scope, commit)
+        if not reset_mode then return end
         local git_dir = vim.fn.FugitiveWorkTree()
         local stashed = commit_auto_stash(git_dir)
         if stashed == nil then return end
@@ -783,7 +860,7 @@ function M.setup(group)
         else
           patch = collect_hunk_patch(lines, file_lnum, hunk_start)
         end
-        do_discard(git_dir, commit, filepath, patch, true, scope, stashed)
+        do_discard(git_dir, commit, filepath, patch, true, scope, stashed, reset_mode)
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Discard diff changes from commit' })
 
       vim.keymap.set('v', 'X', function()
@@ -801,10 +878,8 @@ function M.setup(group)
           vim.notify('No commit found', vim.log.levels.WARN)
           return
         end
-        if vim.fn.confirm(
-          string.format('Discard selected changes from commit %s?', commit:sub(1, 7)),
-          '&Yes\n&No', 2
-        ) ~= 1 then return end
+        local reset_mode = confirm_discard_mode('selected', commit)
+        if not reset_mode then return end
         local git_dir = vim.fn.FugitiveWorkTree()
         local stashed = commit_auto_stash(git_dir)
         if stashed == nil then return end
@@ -814,7 +889,7 @@ function M.setup(group)
           if stashed then commit_auto_pop(git_dir) end
           return
         end
-        do_discard(git_dir, commit, filepath, patch, false, 'selection', stashed)
+        do_discard(git_dir, commit, filepath, patch, false, 'selection', stashed, reset_mode)
       end, { buffer = ev.buf, silent = true, desc = 'Discard selected diff changes from commit' })
 
       -- q: Close window and flog window
