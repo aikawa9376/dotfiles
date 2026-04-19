@@ -336,6 +336,35 @@ local function render_tool_raw_output(raw_output)
   return table.concat(parts, "\n")
 end
 
+local function summarize_tool_block(tool, title, body)
+  title = tostring(title or "tool")
+  body = normalize_text(body or "")
+  if body == "" then
+    return title
+  end
+
+  local action = tostring(tool and tool.kind or ""):lower()
+  local status = tostring(tool and tool.status or ""):lower()
+  if action == "edit" and status == "pending" then
+    return title
+  end
+  if action == "edit" then
+    return title .. "\n" .. body
+  end
+
+  local lines = vim.split(body, "\n", { plain = true })
+  while #lines > 0 and lines[#lines] == "" do
+    table.remove(lines, #lines)
+  end
+  local count = #lines
+  if count <= 0 then
+    return title
+  end
+
+  local unit = count == 1 and "line" or "lines"
+  return string.format("%s\n%s %d %s", title, action ~= "" and action or "tool", count, unit)
+end
+
 local function summarize_inline(text, limit)
   local normalized = normalize_text(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
   limit = tonumber(limit) or 120
@@ -2460,7 +2489,7 @@ local function on_client_update(session, params)
       body = render_tool_raw_output(tool.rawOutput)
     end
     if body ~= "" then
-      append_block(session, tool_heading(tool), title .. "\n" .. body)
+      append_block(session, tool_heading(tool), summarize_tool_block(tool, title, body))
     else
       append_block(session, tool_heading(tool), title)
     end
