@@ -4,18 +4,6 @@ local M = {}
 local state = require("lazyagent.logic.state")
 local util = require("lazyagent.util")
 
---- Sanitizes a string to be used as a filename component.
--- Replaces non-alphanumeric characters (except for '-' and '_') with a hyphen.
--- @param s (string) The string to sanitize.
--- @return (string) The sanitized string.
-local function sanitize_filename_component(s)
-  if not s then return "" end
-  s = tostring(s)
-  -- Replace path separators and whitespace with hyphens; keep alnum, underscore and dash.
-  s = s:gsub("[^%w-_]+", "-")
-  return s
-end
-
 --- Gets the cache directory, creating it if it doesn't exist.
 -- @return (string) The path to the cache directory.
 local function get_cache_dir()
@@ -127,17 +115,24 @@ local function starts_with_slash_command(lines)
   return false
 end
 
+local function build_cache_context(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
+  local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
+  local branch = util.git_branch_for_path(bufn) or "no-branch"
+  return {
+    root_component = util.sanitize_filename_component(vim.fn.fnamemodify(root, ":t") or "root"),
+    branch_component = util.sanitize_filename_component(branch),
+  }
+end
+
 --- Builds a cache filename based on the buffer's git context.
 -- @param bufnr (number|nil) The buffer number (defaults to current).
 -- @return (string) The generated cache filename.
 local function build_cache_filename(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
-  local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
-  local rootname = vim.fn.fnamemodify(root, ":t") or "root"
-  local branch = util.git_branch_for_path(bufn) or "no-branch"
+  local context = build_cache_context(bufnr)
   -- Keep history per project+branch (no date-based splitting); allow max_history to manage size.
-  return sanitize_filename_component(rootname) .. "-" .. sanitize_filename_component(branch) .. "-history.log"
+  return context.root_component .. "-" .. context.branch_component .. "-history.log"
 end
 
 --- Writes the content of a scratch buffer to a cache file.
@@ -443,12 +438,8 @@ M.apply_history_entry_to_target_buf = function(target_buf, idx)
 end
 
 local function build_cache_prefix(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
-  local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
-  local rootname = vim.fn.fnamemodify(root, ":t") or "root"
-  local branch = util.git_branch_for_path(bufn) or "no-branch"
-  return sanitize_filename_component(rootname) .. "-" .. sanitize_filename_component(branch) .. "-"
+  local context = build_cache_context(bufnr)
+  return context.root_component .. "-" .. context.branch_component .. "-"
 end
 M.build_cache_prefix = build_cache_prefix
 

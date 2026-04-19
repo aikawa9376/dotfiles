@@ -1,13 +1,22 @@
 local M = {}
 
-local function normalize_text(text)
-  -- Normalize CRLF -> LF and ensure trailing newline
+local function normalize_text(text, opts)
+  opts = type(opts) == "table" and opts or {}
+  local ensure_trailing_newline = opts.ensure_trailing_newline ~= false
+  -- Normalize CRLF -> LF and optionally ensure trailing newline
   local s = tostring(text or "")
   s = s:gsub("\r\n", "\n")
-  if not s:match("\n$") then
+  if ensure_trailing_newline and not s:match("\n$") then
     s = s .. "\n"
   end
   return s
+end
+
+local function sanitize_filename_component(text)
+  if text == nil then
+    return ""
+  end
+  return tostring(text):gsub("[^%w-_]+", "-")
 end
 
 local function contains_enter_key(keys)
@@ -27,6 +36,7 @@ local function contains_enter_key(keys)
 end
 
   M.normalize_text = normalize_text
+  M.sanitize_filename_component = sanitize_filename_component
   M.contains_enter_key = contains_enter_key
 
   -- Robustly get visual selection text:

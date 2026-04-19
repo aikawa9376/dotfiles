@@ -15,6 +15,17 @@ local persistence = require("lazyagent.logic.persistence")
 local util = require("lazyagent.util")
 local ok_watch, watch = pcall(require, "lazyagent.watch")
 
+local function call_watch(method, ...)
+  if not ok_watch or not watch then
+    return false
+  end
+  local fn = watch[method]
+  if type(fn) ~= "function" then
+    return false
+  end
+  return pcall(fn, ...)
+end
+
 -- Helper: best-effortly send several interrupt signals (Ctrl-C) to a pane
 -- before killing it. Some backends (tmux) accept the literal "C-c" token;
 -- builtin terminal needs the actual ASCII ETX (0x03). The behaviour and
@@ -226,7 +237,6 @@ local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_op
 end
 
 local function maybe_disable_watchers()
-  if not ok_watch or not watch or type(watch.disable) ~= "function" then return end
   local cnt = 0
   for _, s in pairs(state.sessions or {}) do
     if s and s.pane_id and s.pane_id ~= "" then
@@ -239,10 +249,8 @@ local function maybe_disable_watchers()
     end
   end
   if cnt == 0 then
-    pcall(watch.disable)
-    if type(watch.stop_follow) == "function" then
-      pcall(watch.stop_follow)
-    end
+    call_watch("disable")
+    call_watch("stop_follow")
   end
 end
 
@@ -483,13 +491,13 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
           cwd = vim.fn.getcwd()
         }
         -- If this session requested watchers, enable them.
-        if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
-          pcall(watch.enable)
+        if watch_enabled_val then
+          call_watch("enable")
         end
         -- If auto_follow is configured, start following file changes in cwd.
         local follow_mode = (agent_cfg and agent_cfg.auto_follow) or (state.opts and state.opts.auto_follow)
-        if follow_mode and ok_watch and watch and type(watch.start_follow) == "function" then
-          pcall(watch.start_follow, {
+        if follow_mode then
+          call_watch("start_follow", {
             mode = (type(follow_mode) == "string") and follow_mode or "split",
             dir = vim.fn.getcwd(),
           })
@@ -596,8 +604,8 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
     end
 
     -- Ensure watchers are enabled if this session wants them.
-    if state.sessions[agent_name].watch_enabled and ok_watch and watch and type(watch.enable) == "function" then
-      pcall(watch.enable)
+    if state.sessions[agent_name].watch_enabled then
+      call_watch("enable")
     end
 
     -- If this session no longer wants watching, check whether to disable watchers globally.
@@ -660,14 +668,14 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         mode = mode
       }
       -- If this session requested watchers, enable them.
-      if watch_enabled_val and ok_watch and watch and type(watch.enable) == "function" then
-        pcall(watch.enable)
+      if watch_enabled_val then
+        call_watch("enable")
       end
 
       -- If auto_follow is configured, start following file changes in cwd.
       local follow_mode = (agent_cfg and agent_cfg.auto_follow) or (state.opts and state.opts.auto_follow)
-      if follow_mode and ok_watch and watch and type(watch.start_follow) == "function" then
-        pcall(watch.start_follow, {
+      if follow_mode then
+        call_watch("start_follow", {
           mode = (type(follow_mode) == "string") and follow_mode or "split",
           dir = vim.fn.getcwd(),
         })
@@ -1107,9 +1115,7 @@ function M.close_all_sessions(sync)
       state.sessions[name] = nil
     end
   end
-  if ok_watch and watch and type(watch.disable) == "function" then
-    pcall(watch.disable)
-  end
+  call_watch("disable")
 
    for backend_mod, _ in pairs(seen_backends) do
      if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
