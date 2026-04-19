@@ -51,11 +51,11 @@ return {
       lsp = { enabled = true },
       blink = { enabled = true },
     },
-    custom_handlers = {
-      markdown = { parse = function (ctx)
-        return require("lazyagent.render_markdown").parse(ctx)
-      end },
-    },
+    -- custom_handlers = {
+    --   markdown = { parse = function (ctx)
+    --     return require("lazyagent.render_markdown").parse(ctx)
+    --   end },
+    -- },
     overrides = {
       filetype = {
         lazyagent = {

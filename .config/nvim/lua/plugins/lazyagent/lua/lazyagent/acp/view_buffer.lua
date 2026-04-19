@@ -224,7 +224,21 @@ local function decorate_transcript_range(bufnr, start_idx, end_idx)
     local row = range_start + idx - 1
     if line:match("^─ ") or line:match("^╭─ ") then
       local header_hl = section_style_for_line(line)
-      vim.api.nvim_buf_add_highlight(bufnr, transcript_ns, header_hl, row, 0, -1)
+      -- Prefer using vim.highlight.range for a full-line highlight region. Fall back to
+      -- extmark or nvim_buf_add_highlight if not available.
+      local ok = pcall(function()
+        local start_pos = { row, 0 }
+        local end_pos = { row, #line }
+        vim.highlight.range(bufnr, transcript_ns, header_hl, start_pos, end_pos)
+      end)
+      if not ok then
+        local ok2 = pcall(function()
+          vim.api.nvim_buf_set_extmark(bufnr, transcript_ns, row, 0, { hl_group = header_hl, hl_eol = true })
+        end)
+        if not ok2 then
+          pcall(function() vim.api.nvim_buf_add_highlight(bufnr, transcript_ns, header_hl, row, 0, -1) end)
+        end
+      end
     end
   end
 end
@@ -375,7 +389,6 @@ local function decorate_buffer(bufnr)
 
   local transcript_stop = transcript_line_count(bufnr)
   local generation = cancel_deferred_decoration(bufnr)
-  vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, 0, -1)
   if transcript_stop <= 0 then
     return
   end
@@ -663,6 +676,46 @@ local function apply_transcript_buffer_opts(bufnr)
     vim.b[bufnr].matchup_matchparen_enabled = 0
   end)
   pcall(vim.api.nvim_set_option_value, "spell", false, { buf = bufnr })
+
+  -- Buffer-local mappings: jump between User sections with ]] and [[
+  local function jump_to_user(forward)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+    local win = vim.api.nvim_get_current_win()
+    local cur = vim.api.nvim_win_get_cursor(win)
+    local cur_row = cur[1]
+    local stop = transcript_line_count(bufnr)
+    if forward then
+      for r = cur_row + 1, stop do
+        local line = vim.api.nvim_buf_get_lines(bufnr, r - 1, r, false)[1] or ""
+        if line_has_heading(line, "User") then
+          pcall(function()
+            vim.api.nvim_win_set_cursor(win, { r, 0 })
+            pcall(vim.cmd, "normal! zz")
+          end)
+          return
+        end
+      end
+      vim.notify("No later User section", vim.log.levels.INFO)
+    else
+      for r = math.max(1, cur_row - 1), 1, -1 do
+        local line = vim.api.nvim_buf_get_lines(bufnr, r - 1, r, false)[1] or ""
+        if line_has_heading(line, "User") then
+          pcall(function()
+            vim.api.nvim_win_set_cursor(win, { r, 0 })
+            pcall(vim.cmd, "normal! zz")
+          end)
+          return
+        end
+      end
+      vim.notify("No earlier User section", vim.log.levels.INFO)
+    end
+  end
+
+  pcall(function()
+    vim.keymap.set("n", "]]", function() jump_to_user(true) end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: next User" })
+    vim.keymap.set("n", "[[", function() jump_to_user(false) end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: prev User" })
+  end)
+
 end
 
 local function close_buffer_windows(bufnr)
