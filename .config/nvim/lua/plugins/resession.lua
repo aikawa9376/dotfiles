@@ -41,8 +41,58 @@ return {
     -- Configuration for extensions
     extensions = {
       quickfix = {},
+      lazyagent = {},
     },
   },
+  config = function(_, opts)
+    local function ensure_lazyagent_loaded()
+      local ok_lazy, lazy = pcall(require, "lazy")
+      if ok_lazy and lazy and type(lazy.load) == "function" then
+        pcall(lazy.load, { plugins = { "lazyagent" } })
+      end
+    end
+
+    package.preload["resession.extensions.lazyagent"] = function()
+      ensure_lazyagent_loaded()
+      return require("lazyagent.resession_extension")
+    end
+
+    local resession = require("resession")
+    resession.setup(opts)
+
+    local function with_lazyagent(callback)
+      ensure_lazyagent_loaded()
+
+      local ok_agent, agent = pcall(require, "lazyagent")
+      if ok_agent and agent then
+        callback(agent)
+      end
+    end
+
+    resession.add_hook("pre_save", function(name)
+      with_lazyagent(function(agent)
+        if type(agent.on_session_save_pre) == "function" then
+          agent.on_session_save_pre({ source = "resession", session_name = name })
+        end
+      end)
+    end)
+
+    resession.add_hook("pre_load", function(name)
+      with_lazyagent(function(agent)
+        if type(agent.on_session_load_pre) == "function" then
+          agent.on_session_load_pre({ source = "resession", session_name = name })
+        end
+      end)
+    end)
+
+    resession.add_hook("post_load", function(name)
+      with_lazyagent(function(agent)
+        if type(agent.on_session_load_post) == "function" then
+          agent.on_session_load_post({ source = "resession", session_name = name })
+        end
+      end)
+    end)
+  end,
   init = function ()
     local function get_session_name()
       local name = vim.fn.getcwd()

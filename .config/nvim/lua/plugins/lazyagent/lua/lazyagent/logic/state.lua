@@ -13,6 +13,12 @@ local M = {
   -- The name of the currently active/focused agent in the scratch buffer.
   open_agent = nil,
 
+  -- Session-switch runtime state keyed by editor session identity.
+  session_views = {},
+
+  -- Name of the currently loaded editor session when managed via resession hooks.
+  current_session_name = nil,
+
   -- Flag to ensure setup is only run once.
   _configured = false,
 

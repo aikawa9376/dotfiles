@@ -170,6 +170,31 @@ function M.get_active_agents()
   return active
 end
 
+local function current_context_agent()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local candidates = {
+    vim.b[bufnr] and vim.b[bufnr].lazyagent_acp_agent or nil,
+    vim.b[bufnr] and vim.b[bufnr].lazyagent_agent or nil,
+  }
+
+  for _, candidate in ipairs(candidates) do
+    if type(candidate) == "string" and candidate ~= "" then
+      if state.sessions and state.sessions[candidate] and state.sessions[candidate].pane_id then
+        return candidate
+      end
+      if state.opts.interactive_agents and state.opts.interactive_agents[candidate] then
+        return candidate
+      end
+    end
+  end
+
+  return nil
+end
+
 --- Resolves the target agent to use based on context.
 -- 1) If 'explicit' is provided, use it.
 -- 2) If exactly one active agent is present, use it.
@@ -183,6 +208,12 @@ function M.resolve_target_agent(explicit, hint, callback)
 
   if explicit and explicit ~= "" then
     callback(explicit)
+    return
+  end
+
+  local current = current_context_agent()
+  if current then
+    callback(current)
     return
   end
 

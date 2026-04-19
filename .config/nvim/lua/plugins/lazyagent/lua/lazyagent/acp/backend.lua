@@ -2880,6 +2880,39 @@ local function create_backend(default_view)
     return nil
   end
 
+  function backend.get_runtime_snapshot(pane_id)
+    local session = get_session(pane_id)
+    if not session then
+      return nil
+    end
+
+    return {
+      pane_id = session.pane_id,
+      cwd = session.cwd,
+      root_dir = session.root_dir,
+      transcript_path = session.transcript_path,
+      buffer_background = session.buffer_background,
+      buffer_inactive_background = session.buffer_inactive_background,
+      transcript_max_lines = session.transcript_max_lines,
+      acp_available_commands = vim.deepcopy(session.available_commands or {}),
+      acp_config_options = vim.deepcopy(session.config_options or {}),
+      acp_session_id = session.session_id,
+      acp_transcript_path = session.transcript_path,
+      acp_agent_info = vim.deepcopy(session.agent_info or {}),
+      acp_agent_capabilities = vim.deepcopy(session.agent_capabilities or {}),
+      acp_model_catalog = vim.deepcopy(session.model_catalog or {}),
+      acp_mode_catalog = vim.deepcopy(session.mode_catalog or {}),
+      acp_ready = session.ready == true,
+      acp_failed = session.failed == true,
+      acp_supports_embedded_context = session.prompt_supports_embedded_context == true,
+      acp_mcp_server_count = session.mcp_server_count or ((session.mcp_url and session.mcp_url ~= "") and 1 or 0),
+      acp_permission_rules = vim.deepcopy(session.permission_rules or {}),
+      acp_auto_switch = vim.deepcopy(session.auto_switch or {}),
+      acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {}),
+      acp_tool_timeline = vim.deepcopy(session.tool_timeline or {}),
+    }
+  end
+
   function backend.send_keys(pane_id, keys)
     local session = get_session(pane_id)
     if not session or not keys then return false end

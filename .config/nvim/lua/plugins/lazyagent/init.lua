@@ -73,6 +73,7 @@ return {
     "LazyAgentACPCommands", "LazyAgentACPTools", "LazyAgentACPResources", "LazyAgentACPCapabilities",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
+  init = function() end,
   opts = {
     backend = "tmux",
     acp = {
