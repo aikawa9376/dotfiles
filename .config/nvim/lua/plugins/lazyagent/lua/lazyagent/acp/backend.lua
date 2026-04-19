@@ -8,6 +8,7 @@ local acp_logic = require("lazyagent.logic.acp")
 local diff_utils = require("lazyagent.acp.diff")
 local summary_logic = require("lazyagent.logic.summary")
 local transforms = require("lazyagent.transforms")
+local util = require("lazyagent.util")
 
 local sessions = {}
 local terminal_seq = 0
@@ -23,9 +24,7 @@ local resolve_permission_option
 local tool_heading
 local buffer_root_for_session
 
-local function sanitize_filename_component(text)
-  return tostring(text or ""):gsub("[^%w-_]+", "-")
-end
+local sanitize_filename_component = util.sanitize_filename_component
 
 local function transcript_dir()
   local dir = cache_logic.get_cache_dir() .. "/acp"
@@ -53,7 +52,7 @@ local function get_session(pane_id)
 end
 
 local function normalize_text(text)
-  return tostring(text or ""):gsub("\r\n", "\n")
+  return util.normalize_text(text, { ensure_trailing_newline = false })
 end
 
 local function file_uri(path)

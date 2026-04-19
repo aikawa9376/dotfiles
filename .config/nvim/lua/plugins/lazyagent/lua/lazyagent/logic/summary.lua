@@ -3,13 +3,6 @@ local M = {}
 local cache = require("lazyagent.logic.cache")
 local util = require("lazyagent.util")
 
-local function sanitize_filename_component(s)
-  if not s then return "" end
-  s = tostring(s)
-  s = s:gsub("[^%w-_]+", "-")
-  return s
-end
-
 local function summary_dir()
   local base = cache.get_cache_dir()
   local dir = base .. "/summary"
@@ -20,50 +13,37 @@ local function summary_dir()
 end
 M.summary_dir = summary_dir
 
-local function build_summary_filename(bufnr)
+local function build_summary_context(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
   local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
-  local rootname = vim.fn.fnamemodify(root, ":t") or "root"
   local branch = util.git_branch_for_path(bufn) or "no-branch"
-  local root_component = sanitize_filename_component(rootname)
-  local branch_component = sanitize_filename_component(branch)
+  local root_component = util.sanitize_filename_component(vim.fn.fnamemodify(root, ":t") or "root")
+  local branch_component = util.sanitize_filename_component(branch)
   local dir = summary_dir() .. "/" .. root_component .. "/" .. branch_component
   if vim.fn.isdirectory(dir) == 0 then
     vim.fn.mkdir(dir, "p")
   end
-  return root_component .. "/" .. branch_component .. "/summary.md"
+  return {
+    root_component = root_component,
+    branch_component = branch_component,
+    dir = dir,
+  }
+end
+
+local function build_summary_filename(bufnr)
+  local context = build_summary_context(bufnr)
+  return context.root_component .. "/" .. context.branch_component .. "/summary.md"
 end
 
 local function build_summary_filename_with_slug(bufnr, slug)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
-  local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
-  local rootname = vim.fn.fnamemodify(root, ":t") or "root"
-  local branch = util.git_branch_for_path(bufn) or "no-branch"
-  local root_component = sanitize_filename_component(rootname)
-  local branch_component = sanitize_filename_component(branch)
-  local suffix = slug and sanitize_filename_component(slug) or "summary"
-  local dir = summary_dir() .. "/" .. root_component .. "/" .. branch_component
-  if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, "p")
-  end
-  return root_component .. "/" .. branch_component .. "/" .. suffix .. ".md"
+  local context = build_summary_context(bufnr)
+  local suffix = slug and util.sanitize_filename_component(slug) or "summary"
+  return context.root_component .. "/" .. context.branch_component .. "/" .. suffix .. ".md"
 end
 
 local function build_summary_prefix(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
-  local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
-  local rootname = vim.fn.fnamemodify(root, ":t") or "root"
-  local branch = util.git_branch_for_path(bufn) or "no-branch"
-  local root_component = sanitize_filename_component(rootname)
-  local branch_component = sanitize_filename_component(branch)
-  local dir = summary_dir() .. "/" .. root_component .. "/" .. branch_component
-  if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, "p")
-  end
-  return dir .. "/"
+  return build_summary_context(bufnr).dir .. "/"
 end
 M.summary_prefix = build_summary_prefix
 
@@ -88,11 +68,14 @@ end
 
 local function resolve_filter_dir()
   local bufn = vim.api.nvim_buf_get_name(0) or ""
+  if bufn == "" then
+    return nil
+  end
   local root = util.git_root_for_path(bufn)
   local branch = util.git_branch_for_path(bufn)
   if not root or root == "" or not branch or branch == "" then return nil end
-  local root_component = sanitize_filename_component(vim.fn.fnamemodify(root, ":t"))
-  local branch_component = sanitize_filename_component(branch)
+  local root_component = util.sanitize_filename_component(vim.fn.fnamemodify(root, ":t"))
+  local branch_component = util.sanitize_filename_component(branch)
   if root_component == "" or branch_component == "" then return nil end
   local candidate = summary_dir() .. "/" .. root_component .. "/" .. branch_component
   if vim.fn.isdirectory(candidate) == 1 then
