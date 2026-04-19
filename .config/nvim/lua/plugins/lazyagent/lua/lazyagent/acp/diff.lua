@@ -180,6 +180,141 @@ function M.find_inline_change(old_line, new_line)
   }
 end
 
+function M.parse_rendered_diff_block(value)
+  local lines = M.normalize_lines(value)
+  local old_lines = {}
+  local new_lines = {}
+  for _, line in ipairs(lines) do
+    local old_line = line:match("^%s*%- (.*)$")
+    if old_line ~= nil then
+      old_lines[#old_lines + 1] = old_line
+    end
+    local new_line = line:match("^%s*%+ (.*)$")
+    if new_line ~= nil then
+      new_lines[#new_lines + 1] = new_line
+    end
+  end
+  return {
+    old_lines = old_lines,
+    new_lines = new_lines,
+  }
+end
+
+function M.parse_unified_diff_hunks(value)
+  local lines = M.normalize_lines(value)
+  local hunks = {}
+  local current = nil
+
+  local function parse_count(raw)
+    raw = tostring(raw or "")
+    if raw == "" then
+      return 1
+    end
+    return tonumber(raw) or 1
+  end
+
+  for _, line in ipairs(lines) do
+    local old_start, old_count, new_start, new_count = line:match("^@@ %-(%d+),?(%d*) %+([0-9]+),?(%d*) @@")
+    if old_start and new_start then
+      current = {
+        old_start = tonumber(old_start) or 1,
+        old_count = parse_count(old_count),
+        new_start = tonumber(new_start) or 1,
+        new_count = parse_count(new_count),
+        deletions = {},
+        additions = {},
+      }
+      hunks[#hunks + 1] = current
+    elseif current and not line:match("^%-%-%- ") and not line:match("^%+%+%+ ") and not line:match("^diff %-%-git") then
+      local old_line = line:match("^%-(.*)$")
+      if old_line ~= nil then
+        current.deletions[#current.deletions + 1] = old_line
+      end
+      local new_line = line:match("^%+(.*)$")
+      if new_line ~= nil then
+        current.additions[#current.additions + 1] = new_line
+      end
+    end
+  end
+
+  return hunks
+end
+
+local function count_matches(needles, haystack)
+  if type(needles) ~= "table" or type(haystack) ~= "table" or #needles == 0 or #haystack == 0 then
+    return 0
+  end
+
+  local remaining = {}
+  for _, line in ipairs(haystack) do
+    remaining[line] = (remaining[line] or 0) + 1
+  end
+
+  local matched = 0
+  for _, line in ipairs(needles) do
+    local count = remaining[line] or 0
+    if count > 0 then
+      matched = matched + 1
+      remaining[line] = count - 1
+    end
+  end
+  return matched
+end
+
+function M.best_matching_hunk(block, hunks)
+  block = type(block) == "table" and block or {}
+  hunks = type(hunks) == "table" and hunks or {}
+
+  local best_hunk = nil
+  local best_score = -1
+  for _, hunk in ipairs(hunks) do
+    local additions = count_matches(block.new_lines or {}, hunk.additions or {})
+    local deletions = count_matches(block.old_lines or {}, hunk.deletions or {})
+    local score = (additions * 3) + (deletions * 2)
+    if additions > 0 and deletions > 0 then
+      score = score + 4
+    end
+    if score > best_score then
+      best_score = score
+      best_hunk = hunk
+    end
+  end
+
+  if best_score <= 0 then
+    return nil
+  end
+  return best_hunk
+end
+
+function M.line_for_rendered_block(block_lines, unified_diff_lines)
+  local hunk = M.best_matching_hunk(
+    M.parse_rendered_diff_block(block_lines),
+    M.parse_unified_diff_hunks(unified_diff_lines)
+  )
+  if not hunk then
+    return nil
+  end
+  if (hunk.new_count or 0) > 0 then
+    return hunk.new_start
+  end
+  return hunk.old_start
+end
+
+function M.line_for_change(old_text, new_text, unified_diff_lines)
+  local filtered = M.filter_unchanged_lines(old_text or "", new_text or "")
+  local hunk = M.best_matching_hunk(
+    { old_lines = filtered.old_lines or {}, new_lines = filtered.new_lines or {} },
+    M.parse_unified_diff_hunks(unified_diff_lines)
+  )
+  if not hunk then
+    return nil
+  end
+  if (hunk.new_count or 0) > 0 then
+    return hunk.new_start
+  end
+  return hunk.old_start
+end
+
 function M.format_diff_item(item, opts)
   opts = opts or {}
   item = type(item) == "table" and item or {}
