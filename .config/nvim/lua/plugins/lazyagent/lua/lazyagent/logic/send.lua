@@ -13,6 +13,26 @@ local config = require("lazyagent.logic.config")
 local window = require("lazyagent.window")
 local status = require("lazyagent.logic.status")
 
+local function current_context_agent(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local candidates = {
+    vim.b[bufnr] and vim.b[bufnr].lazyagent_acp_agent or nil,
+    vim.b[bufnr] and vim.b[bufnr].lazyagent_agent or nil,
+  }
+
+  for _, candidate in ipairs(candidates) do
+    if type(candidate) == "string" and candidate ~= "" then
+      return candidate
+    end
+  end
+
+  return nil
+end
+
 -- Helper to send text to a pane and optionally kill it after a delay.
 -- Used for one-shot commands.
 -- @param agent_name (string) The name of the agent.
@@ -79,6 +99,9 @@ function M.send_to_cli(agent_name, text, opts)
     if state.open_agent and state.open_agent ~= "" then
       agent_name = state.open_agent
     else
+      agent_name = current_context_agent()
+    end
+    if not agent_name or agent_name == "" then
       local bufnr = vim.api.nvim_get_current_buf()
       local ft = vim.bo[bufnr].filetype
       local settings = (state.opts and state.opts.filetype_settings) and (state.opts.filetype_settings[ft] or state.opts.filetype_settings["*"]) or nil
@@ -179,6 +202,9 @@ function M.send_buffer_and_clear(agent_name, bufnr)
     if state.open_agent and state.open_agent ~= "" then
       agent_name = state.open_agent
     else
+      agent_name = current_context_agent(bufnr)
+    end
+    if not agent_name or agent_name == "" then
       local ft = vim.bo[bufnr].filetype
       local settings = (state.opts and state.opts.filetype_settings) and (state.opts.filetype_settings[ft] or state.opts.filetype_settings["*"]) or nil
       if settings and settings.agent then

@@ -256,6 +256,79 @@ end
 
 M.wait_for_idle_before_close = wait_for_idle_before_close
 
+local function current_editor_session_name()
+  local value = state.current_session_name
+  if type(value) == "string" and value ~= "" then
+    return value
+  end
+  return nil
+end
+
+local function session_view(session_name)
+  if not session_name or session_name == "" then
+    return nil
+  end
+  state.session_views = state.session_views or {}
+  local view = state.session_views[session_name]
+  if type(view) ~= "table" then
+    view = {}
+    state.session_views[session_name] = view
+  end
+  view.agents = type(view.agents) == "table" and view.agents or {}
+  view.visible_agents = type(view.visible_agents) == "table" and view.visible_agents or {}
+  view.open_agent = type(view.open_agent) == "string" and view.open_agent or nil
+  return view
+end
+
+local function session_agents_for_name(session_name)
+  local names = {}
+  local view = session_view(session_name)
+  if not view then
+    return names
+  end
+
+  for name, snapshot in pairs(view.agents) do
+    if type(snapshot) == "table" and snapshot.pane_id and snapshot.pane_id ~= "" then
+      names[#names + 1] = name
+    end
+  end
+  table.sort(names)
+  return names
+end
+
+local function resolve_saved_snapshot(agent_name, snapshot)
+  if type(snapshot) ~= "table" or not snapshot.pane_id or snapshot.pane_id == "" then
+    return nil, nil, false, nil
+  end
+
+  local agent_cfg = agent_logic.get_interactive_agent(agent_name)
+  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+  if not backend_mod then
+    return backend_name, backend_mod, false, nil
+  end
+
+  local pane_alive = false
+  local live_snapshot = nil
+  if acp_logic.is_acp_backend(backend_name) and type(backend_mod.get_runtime_snapshot) == "function" then
+    live_snapshot = backend_mod.get_runtime_snapshot(snapshot.pane_id)
+    pane_alive = type(live_snapshot) == "table" and live_snapshot.acp_failed ~= true
+  elseif type(backend_mod.pane_exists) == "function" then
+    pane_alive = backend_mod.pane_exists(snapshot.pane_id)
+  else
+    pane_alive = true
+  end
+
+  return backend_name, backend_mod, pane_alive, live_snapshot
+end
+
+local function mark_session_scope(agent_name, session_name)
+  local session = agent_name and state.sessions and state.sessions[agent_name] or nil
+  if not session then
+    return
+  end
+  session.session_scope = session_name or current_editor_session_name()
+end
+
 local function is_acp_agent(name)
   if not name or name == "" then
     return false
@@ -301,6 +374,23 @@ local function active_acp_agents()
   return active
 end
 
+local function preferred_session_agent(session_key)
+  local view = session_view(session_key)
+  if view and view.last_agent and is_acp_agent(view.last_agent) then
+    local snapshot = view.agents and view.agents[view.last_agent] or nil
+    if type(snapshot) == "table" and snapshot.pane_id and snapshot.pane_id ~= "" then
+      return view.last_agent
+    end
+  end
+
+  local names = session_agents_for_name(session_key)
+  if #names == 1 and is_acp_agent(names[1]) then
+    return names[1]
+  end
+
+  return nil
+end
+
 local function resolve_acp_target_agent(agent_name, callback)
   if agent_name and agent_name ~= "" then
     callback(agent_name)
@@ -310,6 +400,12 @@ local function resolve_acp_target_agent(agent_name, callback)
   local current = current_context_acp_agent()
   if current then
     callback(current)
+    return
+  end
+
+  local scoped = preferred_session_agent(current_editor_session_name())
+  if scoped then
+    callback(scoped)
     return
   end
 
@@ -385,6 +481,12 @@ local function resolve_active_acp_session(agent_name, callback)
   local current = current_context_acp_agent()
   if current and is_active_acp(current) then
     callback(current)
+    return
+  end
+
+  local scoped = preferred_session_agent(current_editor_session_name())
+  if scoped and is_active_acp(scoped) then
+    callback(scoped)
     return
   end
 
@@ -508,6 +610,273 @@ function M.reopen_acp_window(agent_name)
   end)
 end
 
+local function hide_session_agent_pane(agent_name)
+  local session = state.sessions[agent_name]
+  if not session or not session.pane_id or session.pane_id == "" or session.hidden then
+    return false
+  end
+
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_logic.get_interactive_agent(agent_name))
+  if not backend_mod or type(backend_mod.break_pane) ~= "function" then
+    return false
+  end
+
+  backend_mod.break_pane(session.pane_id)
+  session.hidden = true
+  return true
+end
+
+local function show_session_agent_pane(agent_name)
+  local session = state.sessions[agent_name]
+  if not session or not session.pane_id or session.pane_id == "" or not session.hidden then
+    return false
+  end
+
+  local agent_cfg = agent_logic.get_interactive_agent(agent_name) or {}
+  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+  if not backend_mod or type(backend_mod.join_pane) ~= "function" then
+    return false
+  end
+
+  if type(backend_mod.configure_pane) == "function" then
+    local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
+    backend_mod.configure_pane(session.pane_id, {
+      refocus_on_send = refocus,
+      source_winid = vim.api.nvim_get_current_win(),
+    })
+  end
+
+  backend_mod.join_pane(
+    session.pane_id,
+    agent_cfg.pane_size or 30,
+    agent_cfg.is_vertical or false,
+    function(success)
+      if success and state.sessions[agent_name] then
+        state.sessions[agent_name].hidden = false
+      end
+    end,
+    session
+  )
+  return true
+end
+
+local function event_session_name(opts)
+  local name = opts and opts.session_name or nil
+  if type(name) ~= "string" or name == "" then
+    local data = opts and opts.data or nil
+    name = data and data.session or nil
+  end
+  if type(name) ~= "string" or name == "" then
+    return nil
+  end
+  return name
+end
+
+local function capture_runtime_session(session_name, opts)
+  opts = opts or {}
+  if not session_name or session_name == "" then
+    return nil
+  end
+
+  local view = session_view(session_name)
+  if not view then
+    return nil
+  end
+  local previous_agents = vim.deepcopy(view.agents or {})
+  local previous_visible_agents = vim.deepcopy(view.visible_agents or {})
+  local previous_last_agent = view.last_agent
+  local previous_open_agent = view.open_agent
+  view.agents = {}
+  view.visible_agents = {}
+  view.last_agent = nil
+  view.open_agent = nil
+
+  for agent_name, snapshot in pairs(previous_agents) do
+    local _, _, pane_alive, live_snapshot = resolve_saved_snapshot(agent_name, snapshot)
+    if pane_alive then
+      local preserved = vim.deepcopy(snapshot)
+      if type(live_snapshot) == "table" then
+        preserved = vim.tbl_extend("force", preserved, live_snapshot)
+      end
+      preserved.session_scope = session_name
+      view.agents[agent_name] = preserved
+      if previous_visible_agents[agent_name] then
+        view.visible_agents[agent_name] = true
+      end
+      if previous_last_agent == agent_name then
+        view.last_agent = agent_name
+      end
+      if previous_open_agent == agent_name then
+        view.open_agent = agent_name
+      end
+    end
+  end
+
+  local ordered = {}
+  for agent_name, session in pairs(state.sessions or {}) do
+    if type(session) == "table" and session.pane_id and session.pane_id ~= "" then
+      ordered[#ordered + 1] = agent_name
+    end
+  end
+  table.sort(ordered)
+
+  for _, agent_name in ipairs(ordered) do
+    local session = state.sessions[agent_name]
+    local visible = not session.hidden
+    local snapshot = vim.deepcopy(session)
+    snapshot.session_scope = session_name
+    view.agents[agent_name] = snapshot
+    if visible then
+      view.visible_agents[agent_name] = true
+    end
+    if state.open_agent == agent_name then
+      view.last_agent = agent_name
+      view.open_agent = agent_name
+    elseif not view.last_agent then
+      view.last_agent = agent_name
+    end
+
+    if opts.hide_visible and visible then
+      hide_session_agent_pane(agent_name)
+      view.agents[agent_name].hidden = true
+    end
+
+    if opts.detach_runtime then
+      state.sessions[agent_name] = nil
+    end
+  end
+
+  if not view.last_agent then
+    view.last_agent = previous_last_agent
+  end
+  if not view.open_agent then
+    view.open_agent = previous_open_agent
+  end
+
+  if opts.detach_runtime and state.open_agent then
+    if window.is_open() then
+      window.close({ force = true, keep_buffer = true })
+    end
+    state.open_agent = nil
+  end
+
+  return view
+end
+
+local function restore_captured_session(session_name)
+  local view = session_view(session_name)
+  if not view then
+    return
+  end
+
+  local ordered = session_agents_for_name(session_name)
+  if #ordered == 0 then
+    return
+  end
+
+  if view.last_agent then
+    for idx, agent_name in ipairs(ordered) do
+      if agent_name == view.last_agent then
+        table.remove(ordered, idx)
+        table.insert(ordered, 1, agent_name)
+        break
+      end
+    end
+  end
+
+  for _, agent_name in ipairs(ordered) do
+    local snapshot = view.agents[agent_name]
+    local backend_name, backend_mod, pane_alive, live_snapshot = resolve_saved_snapshot(agent_name, snapshot)
+
+    if snapshot and backend_mod and pane_alive then
+      local restored = vim.deepcopy(snapshot)
+      if acp_logic.is_acp_backend(backend_name) then
+        restored = vim.tbl_extend("force", restored, live_snapshot or {})
+      end
+      restored.session_scope = session_name
+      restored.hidden = true
+      state.sessions[agent_name] = restored
+      if view.visible_agents[agent_name] then
+        show_session_agent_pane(agent_name)
+      end
+    else
+      view.agents[agent_name] = nil
+      view.visible_agents[agent_name] = nil
+    end
+  end
+end
+
+function M.on_session_save_pre(opts)
+  local session_name = event_session_name(opts)
+  if not session_name then
+    return
+  end
+
+  state.current_session_name = session_name
+  capture_runtime_session(session_name, { hide_visible = false, detach_runtime = false })
+end
+
+function M.resession_snapshot()
+  local session_name = current_editor_session_name()
+  if not session_name then
+    return nil
+  end
+  local view = capture_runtime_session(session_name, { hide_visible = false, detach_runtime = false })
+  if not view then
+    return nil
+  end
+  local snapshot = vim.deepcopy(view)
+  snapshot.session_name = session_name
+  return snapshot
+end
+
+function M.resession_pre_load(_data)
+  local current = current_editor_session_name()
+  if not current then
+    return
+  end
+
+  capture_runtime_session(current, { hide_visible = true, detach_runtime = true })
+end
+
+function M.resession_post_load(data)
+  if type(data) ~= "table" then
+    return
+  end
+  local session_name = data.session_name
+  if not session_name then
+    return
+  end
+
+  state.current_session_name = session_name
+  state.session_views[session_name] = vim.deepcopy(data)
+  restore_captured_session(session_name)
+  if data.open_agent and state.sessions[data.open_agent] and state.sessions[data.open_agent].pane_id then
+    vim.schedule(function()
+      if not (state.sessions[data.open_agent] and state.sessions[data.open_agent].pane_id) then
+        return
+      end
+      M.start_interactive_session({
+        agent_name = data.open_agent,
+        reuse = true,
+        stay_hidden = false,
+      })
+    end)
+  end
+end
+
+function M.on_session_load_pre(opts)
+  M.resession_pre_load(opts)
+end
+
+function M.on_session_load_post(opts)
+  local session_name = event_session_name(opts)
+  if not session_name then
+    return
+  end
+  state.current_session_name = session_name
+end
+
 ---
 -- Ensures a backend session (e.g., a tmux pane) exists for the agent.
 -- @param agent_name (string) The name of the agent.
@@ -546,7 +915,8 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
           watch_enabled = watch_enabled_val,
           launch_cmd = requested_launch_key,
           hidden = true, -- Assume hidden/detached if we are restoring it
-          cwd = vim.fn.getcwd()
+          cwd = vim.fn.getcwd(),
+          session_scope = current_editor_session_name(),
         }
         -- If this session requested watchers, enable them.
         if watch_enabled_val then
@@ -661,6 +1031,8 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       state.sessions[agent_name].watch_enabled = agent_cfg.watch
     end
 
+    mark_session_scope(agent_name)
+
     -- Ensure watchers are enabled if this session wants them.
     if state.sessions[agent_name].watch_enabled then
       call_watch("enable")
@@ -719,6 +1091,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         watch_enabled = watch_enabled_val,
         launch_cmd = requested_launch_key,
         cwd = resolve_root_dir(agent_cfg),
+        session_scope = current_editor_session_name(),
         buffer_background = resolved_acp.buffer_background,
         buffer_inactive_background = resolved_acp.buffer_inactive_background,
         transcript_max_lines = resolved_acp.transcript_max_lines,
@@ -1108,8 +1481,10 @@ end
 -- Closes all active agent sessions.
 function M.close_all_sessions(sync)
   local seen_backends = {}
+  local closed_panes = {}
   for name, s in pairs(state.sessions) do
     if s and s.pane_id and s.pane_id ~= "" then
+      closed_panes[tostring(s.pane_id)] = true
       local agent_cfg = agent_logic.get_interactive_agent(name)
       local save_conv = (agent_cfg and agent_cfg.save_conversation_on_close) or (state.opts and state.opts.save_conversation_on_close)
       local open_conv = (agent_cfg and agent_cfg.open_conversation_on_save) or (state.opts and state.opts.open_conversation_on_save)
@@ -1173,6 +1548,36 @@ function M.close_all_sessions(sync)
       state.sessions[name] = nil
     end
   end
+
+  for session_name, view in pairs(state.session_views or {}) do
+    if type(view) == "table" and type(view.agents) == "table" then
+      for agent_name, saved in pairs(view.agents) do
+        local pane_id = saved and saved.pane_id or nil
+        local pane_key = pane_id and tostring(pane_id) or nil
+        if pane_key and not closed_panes[pane_key] then
+          closed_panes[pane_key] = true
+          local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+          if backend_mod then
+            seen_backends[backend_mod] = true
+          end
+          if sync then
+            if backend_mod and type(backend_mod.kill_pane_sync) == "function" then
+              maybe_kill_pane(agent_name, pane_id, backend_mod, true)
+            elseif backend_mod and type(backend_mod.kill_pane) == "function" then
+              maybe_kill_pane(agent_name, pane_id, backend_mod, false)
+            end
+          else
+            if backend_mod and type(backend_mod.kill_pane) == "function" then
+              maybe_kill_pane(agent_name, pane_id, backend_mod, false)
+            end
+          end
+          persistence.remove_session(agent_name, saved.cwd)
+        end
+      end
+    end
+    state.session_views[session_name] = nil
+  end
+  state.current_session_name = nil
   call_watch("disable")
 
    for backend_mod, _ in pairs(seen_backends) do
@@ -1691,6 +2096,7 @@ function M.attach_session(agent_name, pane_id)
       cwd = vim.fn.getcwd(),
       hidden = true, -- treat as detached until user opens scratch
       force_resume = true,
+      session_scope = current_editor_session_name(),
     }
 
     -- Persist so the pairing survives future restarts too
