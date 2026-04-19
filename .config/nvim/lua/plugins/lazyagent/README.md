@@ -174,6 +174,7 @@ require("lazyagent").setup({
 - provider が `thought_level` / `reasoning_effort` を config option として expose している場合は、`/model` や `:LazyAgentACPModel` で model を変えた直後に、その reasoning picker も続けて開きます。
 - local ACP command は session capability に合わせて出し分けます。`model` / `mode` / `config` を expose しない provider では command palette と補完候補から隠れます。slash command の merged list は ACP が返した内容を正とし、同名の local action は上書きせず不足分だけ補います。`/capabilities` で現在 session の capability summary を見られます。
 - 手動 permission picker に落ちる場合は、選択前に diff/path/resource preview を transcript へ追加します。
+- `buffer_acp` では edit tool の構造化 diff を fenced code block として transcript に表示し、追加/削除/変更行には inline diff ハイライトを重ねます。
 - `:q` などで `buffer_acp` の transcript window を直接閉じても、transcript buffer は wipe されるだけなので `LazyAgentToggle` でもう一度開き直せます。明示的に戻したいときは `:LazyAgentACPReopen` を使えます。
 - `:LazyAgentACPConfig` `:LazyAgentACPModel` `:LazyAgentACPMode` に加えて、`:LazyAgentACPReopen` で transcript reopen、`:LazyAgentACPCommands` で slash command palette、`:LazyAgentACPTools` で tool call timeline、`:LazyAgentACPResources` で resource browser、`:LazyAgentACPCapabilities` で capability summary を開けます。
 - ACP で agent から質問や確認が来た場合は、通常どおり scratch buffer から返信してください。generic な質問 picker は使わず、protocol で構造化されている permission request だけを picker で扱います。

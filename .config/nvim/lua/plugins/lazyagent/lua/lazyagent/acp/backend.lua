@@ -5,6 +5,7 @@ local ACPClient = require("lazyagent.acp.client")
 local local_commands = require("lazyagent.acp.local_commands")
 local agent_logic = require("lazyagent.logic.agent")
 local acp_logic = require("lazyagent.logic.acp")
+local diff_utils = require("lazyagent.acp.diff")
 local summary_logic = require("lazyagent.logic.summary")
 local transforms = require("lazyagent.transforms")
 
@@ -296,14 +297,7 @@ local function render_tool_content(content)
         local text = render_content(item.content)
         if text ~= "" then table.insert(parts, text) end
       elseif item.type == "diff" then
-        local path = item.path or ""
-        local diff = table.concat({
-          "--- " .. path,
-          item.oldText or "",
-          "+++ " .. path,
-          item.newText or "",
-        }, "\n")
-        table.insert(parts, diff)
+        table.insert(parts, table.concat(diff_utils.format_diff_item(item), "\n"))
       elseif item.type == "terminal" then
         table.insert(parts, "[terminal " .. tostring(item.terminalId or "") .. "]")
       end
@@ -609,6 +603,18 @@ end
 local function summarize_tool(tool)
   if type(tool) ~= "table" then
     return ""
+  end
+  local paths = extract_tool_paths(tool)
+  if type(tool.content) == "table" then
+    for _, item in ipairs(tool.content) do
+      if type(item) == "table" and item.type == "diff" then
+        local target = paths[1] or item.path or tool.title or tool.toolCallId or "diff"
+        if #paths > 1 then
+          return string.format("%s (+%d more)", target, #paths - 1)
+        end
+        return tostring(target)
+      end
+    end
   end
   local body = render_tool_content(tool.content)
   if body == "" then
