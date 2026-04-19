@@ -342,6 +342,16 @@ local function summarize_tool_block(tool, title, body)
   if action == "edit" and status == "pending" then
     return title
   end
+  if action == "edit" and (
+    status == "failed"
+    or status == "error"
+    or status == "errored"
+    or status == "cancelled"
+    or status == "canceled"
+    or status == "rejected"
+  ) then
+    return string.format("%s\n%s", title, summarize_inline(body, 140))
+  end
   if action == "edit" then
     return title .. "\n" .. body
   end
@@ -1819,21 +1829,21 @@ local function maybe_call_mcp_tool(name, params)
 
   if name == "notify_start" then
     pcall(function()
-      require("lazyagent.logic.status").start_monitor(payload.agent_name)
+      require("lazyagent.mcp.tools").call("notify_start", payload)
     end)
     return
   end
 
   if name == "notify_done" then
     pcall(function()
-      require("lazyagent.logic.status").set_idle(payload.agent_name)
+      require("lazyagent.mcp.tools").call("notify_done", payload)
     end)
     return
   end
 
   if name == "notify_waiting" then
     pcall(function()
-      require("lazyagent.logic.status").set_waiting(payload.agent_name, payload.message)
+      require("lazyagent.mcp.tools").call("notify_waiting", payload)
     end)
     return
   end
@@ -1843,6 +1853,27 @@ local function maybe_call_mcp_tool(name, params)
       require("lazyagent.mcp.tools").call("open_last_changed", payload)
     end)
     return
+  end
+end
+
+local function maybe_sync_acp_edit_targets(session, tool)
+  local content = type(tool and tool.content) == "table" and tool.content or {}
+  local seen = {}
+  local cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd()
+  for _, item in ipairs(content) do
+    if type(item) == "table" and item.type == "diff" then
+      local path = tostring(item.path or item.filePath or "")
+      if path ~= "" and not seen[path] then
+        seen[path] = true
+        maybe_call_mcp_tool("open_last_changed", {
+          agent_name = session and session.agent_name or nil,
+          cwd = cwd,
+          path = path,
+          oldText = item.oldText or item.old_text,
+          newText = item.newText or item.new_text,
+        })
+      end
+    end
   end
 end
 
@@ -2362,6 +2393,8 @@ local function write_text_file(session, params)
   end
 
   local abs = vim.fn.fnamemodify(path, ":p")
+  local before_lines = read_path_lines(abs) or {}
+  local before_text = table.concat(before_lines, "\n")
   local content = normalize_text(params.content or "")
   ensure_parent_dir(abs)
 
@@ -2389,7 +2422,13 @@ local function write_text_file(session, params)
   file:close()
 
   append_block(session, "Edited " .. vim.fn.fnamemodify(abs, ":."), "Updated via ACP fs/write_text_file")
-  maybe_call_mcp_tool("open_last_changed", {})
+  maybe_call_mcp_tool("open_last_changed", {
+    agent_name = session and session.agent_name or nil,
+    cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd(),
+    path = abs,
+    oldText = before_text,
+    newText = content,
+  })
   return vim.NIL
 end
 
@@ -2500,6 +2539,7 @@ local function on_client_update(session, params)
       append_block(session, tool_heading(tool), title)
     end
     if tool_update_is_terminal(tool) then
+      maybe_sync_acp_edit_targets(session, tool)
       session.tool_calls[tool.toolCallId] = nil
     end
     return

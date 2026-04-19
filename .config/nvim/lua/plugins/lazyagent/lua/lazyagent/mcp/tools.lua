@@ -5,6 +5,7 @@
 local M = {}
 local state = require("lazyagent.logic.state")
 local backend_logic = require("lazyagent.logic.backend")
+local diff_utils = require("lazyagent.acp.diff")
 
 -- Return git-changed files in cwd modified at or after `since` (os.time()).
 -- If since is nil, returns all changed files.
@@ -22,6 +23,74 @@ local function changed_files_since(cwd, since)
     end
   end
   return result
+end
+
+local function begin_edit_tracking()
+  state._hook_turn_start = os.time()
+  local hopts = (state.opts and state.opts.hooks) or {}
+  if hopts.quickfix_on_edit ~= false then
+    state._qf_items = {}
+    vim.fn.setqflist({}, "r", { title = "Agent turn", items = {} })
+  end
+end
+
+local function resolve_tool_cwd(params)
+  params = type(params) == "table" and params or {}
+  if params.cwd and params.cwd ~= "" then
+    return vim.fn.fnamemodify(params.cwd, ":p")
+  end
+  local session = params.agent_name and state.sessions and state.sessions[params.agent_name] or nil
+  local cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd()
+  return vim.fn.fnamemodify(cwd, ":p")
+end
+
+local function resolve_target_path(path, cwd)
+  path = tostring(path or "")
+  if path == "" then
+    return nil
+  end
+  if path:sub(1, 1) == "/" then
+    return vim.fn.fnamemodify(path, ":p")
+  end
+  return vim.fn.fnamemodify(cwd .. "/" .. path, ":p")
+end
+
+local function git_diff_for_path(cwd, abs_path)
+  local diff = vim.fn.systemlist(
+    "git -C " .. vim.fn.shellescape(cwd)
+    .. " diff --unified=0 -- " .. vim.fn.shellescape(abs_path)
+    .. " 2>/dev/null"
+  )
+  if vim.v.shell_error ~= 0 or type(diff) ~= "table" then
+    return {}
+  end
+  return diff
+end
+
+local function changed_line_from_diff(cwd, abs_path, params)
+  local diff = git_diff_for_path(cwd, abs_path)
+  if not diff or #diff == 0 then
+    return 1
+  end
+
+  local line = diff_utils.line_for_change(
+    params.oldText or params.old_text,
+    params.newText or params.new_text,
+    diff
+  )
+  if line then
+    return tonumber(line) or 1
+  end
+
+  local first = diff_utils.parse_unified_diff_hunks(diff)[1]
+  if first then
+    if (first.new_count or 0) > 0 then
+      return tonumber(first.new_start) or 1
+    end
+    return tonumber(first.old_start) or 1
+  end
+
+  return 1
 end
 
 -- Helper: get the "current" code buffer and its window, skipping lazyagent scratch buffers.
@@ -83,7 +152,7 @@ M.list = {
         end
       end
       local hopts = (state.opts and state.opts.hooks) or {}
-      local cwd = vim.fn.getcwd()
+      local cwd = resolve_tool_cwd(params)
       -- Notify changed files summary
       if hopts.notify_on_done ~= false then
         local files = changed_files_since(cwd, state._hook_turn_start)
@@ -152,14 +221,7 @@ M.list = {
           pcall(function() status.start_monitor(aname) end)
         end
       end
-      -- Record turn start time for filtering hook file lists to this turn only
-      state._hook_turn_start = os.time()
-      -- Reset quickfix state at the start of each turn
-      local hopts = (state.opts and state.opts.hooks) or {}
-      if hopts.quickfix_on_edit ~= false then
-        state._qf_items = {}
-        vim.fn.setqflist({}, "r", { title = "Agent turn", items = {} })
-      end
+      begin_edit_tracking()
       return { success = true }
     end,
   },
@@ -447,16 +509,21 @@ M.list = {
   {
     name = "open_last_changed",
     description = "Open the most recently modified file in the current project (detected via git) and jump to the changed line. Call this after editing files.",
-    inputSchema = { type = "object", properties = {} },
+    inputSchema = {
+      type = "object",
+      properties = {
+        agent_name = { type = "string", description = "Agent session name used to resolve the project root." },
+        cwd = { type = "string", description = "Working directory used to resolve relative paths." },
+        path = { type = "string", description = "Explicit changed file path. When omitted, lazyagent infers the latest changed file." },
+        oldText = { type = "string", description = "Before-edit content for matching the changed hunk." },
+        newText = { type = "string", description = "After-edit content for matching the changed hunk." },
+      },
+      required = {},
+    },
     handler = function(_params)
       local hopts = (state.opts and state.opts.hooks) or {}
-      local cwd = vim.fn.getcwd()
-
-      -- Get files changed during this agent turn
-      local files = changed_files_since(cwd, state._hook_turn_start)
-      if not files or #files == 0 then
-        return { success = false, message = "No changed files found in " .. cwd }
-      end
+      local cwd = resolve_tool_cwd(_params)
+      local newest_path = nil
 
       -- Build set of paths already in quickfix this turn
       state._qf_items = state._qf_items or {}
@@ -465,39 +532,42 @@ M.list = {
         in_qf[item.filename] = true
       end
 
-      -- Among files NOT yet in quickfix, pick the one with highest mtime
-      -- (>= so last-in-list wins on tie, giving progress across hook calls)
-      local newest_mtime, newest_path = -1, nil
-      for _, rel in ipairs(files) do
-        local abs = cwd .. "/" .. rel
-        if not in_qf[abs] then
-          local mtime = vim.fn.getftime(abs)
-          if mtime >= newest_mtime then
-            newest_mtime = mtime
-            newest_path = abs
+      if _params.path and _params.path ~= "" then
+        newest_path = resolve_target_path(_params.path, cwd)
+        if not newest_path then
+          return nil, { code = -32602, message = "Invalid path: " .. tostring(_params.path) }
+        end
+      else
+        -- Get files changed during this agent turn
+        local files = changed_files_since(cwd, state._hook_turn_start)
+        if not files or #files == 0 then
+          return { success = false, message = "No changed files found in " .. cwd }
+        end
+
+        -- Among files NOT yet in quickfix, pick the one with highest mtime
+        -- (>= so last-in-list wins on tie, giving progress across hook calls)
+        local newest_mtime = -1
+        for _, rel in ipairs(files) do
+          local abs = resolve_target_path(rel, cwd)
+          if abs and not in_qf[abs] then
+            local mtime = vim.fn.getftime(abs)
+            if mtime >= newest_mtime then
+              newest_mtime = mtime
+              newest_path = abs
+            end
           end
+        end
+
+        -- All files already registered this turn – nothing to do
+        if not newest_path then
+          return { success = true, message = "All changed files already in quickfix" }
         end
       end
 
-      -- All files already registered this turn – nothing to do
-      if not newest_path then
-        return { success = true, message = "All changed files already in quickfix" }
-      end
-
-      -- Find changed line from git diff hunk header
-      local diff = vim.fn.systemlist(
-        "git -C " .. vim.fn.shellescape(cwd)
-        .. " diff --unified=0 -- " .. vim.fn.shellescape(newest_path)
-        .. " 2>/dev/null | grep '^@@' | tail -1"
-      )
-      local line = 1
-      if diff and #diff > 0 then
-        local m = diff[1]:match("%+(%d+)")
-        if m then line = tonumber(m) end
-      end
+      local line = changed_line_from_diff(cwd, newest_path, _params)
 
       -- Append to quickfix (dedup handled via in_qf above)
-      if hopts.quickfix_on_edit ~= false then
+      if hopts.quickfix_on_edit ~= false and not in_qf[newest_path] then
         table.insert(state._qf_items, { filename = newest_path, lnum = line, col = 1, text = "agent edited" })
         vim.fn.setqflist({}, "r", { title = "Agent turn", items = state._qf_items })
       end
