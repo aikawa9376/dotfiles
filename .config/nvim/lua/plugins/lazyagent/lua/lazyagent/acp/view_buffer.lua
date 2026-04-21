@@ -1578,7 +1578,7 @@ local function wrap_footer_text(text, width)
   return wrapped
 end
 
-local function footer_render_lines(agent_name, session)
+local function footer_render_lines(agent_name, session, line_count)
   local size = transcript_size_label(session)
   local provider = provider_label(agent_name, session)
   local context = footer_context_text(agent_name, session)
@@ -1591,8 +1591,16 @@ local function footer_render_lines(agent_name, session)
   if provider ~= "" then
     table.insert(meta, provider)
   end
+
+  local stats = {}
   if size then
-    table.insert(meta, size)
+    table.insert(stats, size)
+  end
+  if line_count and line_count > 0 then
+    table.insert(stats, string.format("%d %s", line_count, line_count == 1 and "line" or "lines"))
+  end
+  if #stats > 0 then
+    table.insert(meta, table.concat(stats, " / "))
   end
 
   if has_status then
@@ -1629,9 +1637,10 @@ local function render_footer_lines(bufnr)
     return {}, {}
   end
 
+  local line_count = transcript_line_count(bufnr)
   local rendered = {}
   local highlights = {}
-  for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name))) do
+  for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name), line_count)) do
     for _, wrapped in ipairs(wrap_footer_text(line.text or "", overlay_target_width(bufnr))) do
       table.insert(rendered, wrapped)
       table.insert(highlights, line.hl)
