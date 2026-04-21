@@ -146,7 +146,7 @@ local function find_diff_block_at_row(bufnr, row)
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false)
   local idx = math.min(math.max(1, (tonumber(row) or 0) + 1), #lines)
-  if lines[idx] and lines[idx]:match("^Path:%s+") and lines[idx + 1] and lines[idx + 1]:match("^%s*```") then
+  if lines[idx] and lines[idx]:match("^%s*Path:%s+") and lines[idx + 1] and lines[idx + 1]:match("^%s*```") then
     idx = idx + 1
   end
 
@@ -178,8 +178,16 @@ local function find_diff_block_at_row(bufnr, row)
     return nil
   end
 
+  local path = nil
+  for scan = fence_start - 1, math.max(1, fence_start - 3), -1 do
+    path = (lines[scan] or ""):match("^%s*Path:%s+(.+)$")
+    if path and path ~= "" then
+      break
+    end
+  end
+
   return {
-    path = (lines[fence_start - 1] or ""):match("^Path:%s+(.+)$"),
+    path = path,
     body_lines = body_lines,
   }
 end
@@ -194,6 +202,106 @@ local function git_diff_lines(cwd, path)
     return {}
   end
   return diff
+end
+
+local function tab_has_diff(tabnr)
+  tabnr = tabnr or vim.api.nvim_get_current_tabpage()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tabnr)) do
+    if vim.api.nvim_win_is_valid(win) and vim.wo[win].diff then
+      return true
+    end
+  end
+  return false
+end
+
+local function git_repo_relative_path(cwd, abs_path)
+  local rel = vim.fn.systemlist(
+    "git -C " .. vim.fn.shellescape(cwd)
+    .. " ls-files --full-name -- " .. vim.fn.shellescape(abs_path)
+    .. " 2>/dev/null"
+  )
+  if vim.v.shell_error == 0 and type(rel) == "table" and rel[1] and rel[1] ~= "" then
+    return rel[1]
+  end
+
+  local root = vim.fn.systemlist(
+    "git -C " .. vim.fn.shellescape(cwd) .. " rev-parse --show-toplevel 2>/dev/null"
+  )
+  if vim.v.shell_error ~= 0 or type(root) ~= "table" or not root[1] or root[1] == "" then
+    return nil
+  end
+
+  local root_path = vim.fn.fnamemodify(root[1], ":p")
+  local normalized_path = vim.fn.fnamemodify(abs_path, ":p")
+  if normalized_path:sub(1, #root_path) ~= root_path then
+    return nil
+  end
+
+  local rel_path = normalized_path:sub(#root_path + 1)
+  if rel_path:sub(1, 1) == "/" then
+    rel_path = rel_path:sub(2)
+  end
+  return rel_path ~= "" and rel_path or nil
+end
+
+local function open_builtin_head_diff(abs_path, cwd)
+  local rel_path = git_repo_relative_path(cwd, abs_path)
+  if not rel_path then
+    return false
+  end
+
+  local head_lines = vim.fn.systemlist(
+    "git -C " .. vim.fn.shellescape(cwd)
+    .. " show " .. vim.fn.shellescape("HEAD:" .. rel_path)
+    .. " 2>/dev/null"
+  )
+  if vim.v.shell_error ~= 0 or type(head_lines) ~= "table" then
+    head_lines = {}
+  end
+
+  local file_win = vim.api.nvim_get_current_win()
+  vim.cmd("leftabove vnew")
+  local diff_win = vim.api.nvim_get_current_win()
+  local diff_buf = vim.api.nvim_get_current_buf()
+  local diff_name = string.format("lazyagent://diff/%d/%s", os.time(), rel_path:gsub("%s+", "_"))
+
+  vim.bo[diff_buf].buftype = "nofile"
+  vim.bo[diff_buf].bufhidden = "wipe"
+  vim.bo[diff_buf].swapfile = false
+  vim.bo[diff_buf].modifiable = true
+  vim.bo[diff_buf].readonly = false
+  vim.bo[diff_buf].buflisted = false
+  vim.bo[diff_buf].filetype = diff_utils.language_from_path(abs_path)
+  pcall(vim.api.nvim_buf_set_name, diff_buf, diff_name)
+  vim.api.nvim_buf_set_lines(diff_buf, 0, -1, false, head_lines)
+  vim.bo[diff_buf].modifiable = false
+  vim.bo[diff_buf].readonly = true
+  vim.wo[diff_win].wrap = false
+
+  pcall(vim.cmd, "diffthis")
+  pcall(vim.api.nvim_set_current_win, file_win)
+  pcall(vim.cmd, "diffthis")
+  return tab_has_diff()
+end
+
+local function file_window_for_path(tabnr, abs_path)
+  tabnr = tabnr or vim.api.nvim_get_current_tabpage()
+  local normalized = vim.fn.fnamemodify(abs_path, ":p")
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(tabnr)) do
+    if vim.api.nvim_win_is_valid(win) then
+      local buf = vim.api.nvim_win_get_buf(win)
+      local name = vim.api.nvim_buf_get_name(buf)
+      if name ~= "" and vim.fn.fnamemodify(name, ":p") == normalized then
+        return win
+      end
+    end
+  end
+  return nil
+end
+
+local function open_git_diff_tab(abs_path, cwd)
+  vim.cmd("tabnew " .. vim.fn.fnameescape(abs_path))
+  return open_builtin_head_diff(abs_path, cwd)
 end
 
 local function open_diff_block_under_cursor(bufnr)
@@ -217,20 +325,17 @@ local function open_diff_block_under_cursor(bufnr)
   local cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd()
   local line = diff_utils.line_for_rendered_block(block.body_lines, git_diff_lines(cwd, abs_path)) or 1
 
-  vim.cmd("tabnew " .. vim.fn.fnameescape(abs_path))
-  pcall(function()
-    require("gitsigns").diffthis()
-  end)
+  if not open_git_diff_tab(abs_path, cwd) then
+    vim.notify("LazyAgentACP: failed to open git diff for " .. block.path, vim.log.levels.WARN)
+    return true
+  end
 
   vim.schedule(function()
-    local target_buf = vim.fn.bufnr(abs_path)
-    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-      if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == target_buf then
-        pcall(vim.api.nvim_set_current_win, win)
-        pcall(vim.api.nvim_win_set_cursor, win, { math.max(1, tonumber(line) or 1), 0 })
-        pcall(vim.cmd, "normal! zz")
-        break
-      end
+    local target_win = file_window_for_path(nil, abs_path)
+    if target_win and vim.api.nvim_win_is_valid(target_win) then
+      pcall(vim.api.nvim_set_current_win, target_win)
+      pcall(vim.api.nvim_win_set_cursor, target_win, { math.max(1, tonumber(line) or 1), 0 })
+      pcall(vim.cmd, "normal! zz")
     end
   end)
 

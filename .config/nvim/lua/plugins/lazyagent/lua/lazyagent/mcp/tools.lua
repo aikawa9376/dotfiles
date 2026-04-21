@@ -6,6 +6,7 @@ local M = {}
 local state = require("lazyagent.logic.state")
 local backend_logic = require("lazyagent.logic.backend")
 local diff_utils = require("lazyagent.acp.diff")
+local uv = vim.uv or vim.loop
 
 local function normalize_fs_path(path)
   path = tostring(path or "")
@@ -19,13 +20,89 @@ local function normalize_fs_path(path)
   return normalized
 end
 
--- Return git-changed files in cwd modified at or after `since` (os.time()).
--- If since is nil, returns all changed files.
+local function file_stat_stamp(path)
+  path = normalize_fs_path(path)
+  if not path then
+    return { exists = false, size = -1, sec = -1, nsec = -1 }
+  end
+
+  if uv and type(uv.fs_stat) == "function" then
+    local stat = uv.fs_stat(path)
+    if stat then
+      local mtime = stat.mtime or {}
+      return {
+        exists = true,
+        size = tonumber(stat.size or -1) or -1,
+        sec = tonumber(mtime.sec or mtime.tv_sec or -1) or -1,
+        nsec = tonumber(mtime.nsec or mtime.tv_nsec or 0) or 0,
+      }
+    end
+  end
+
+  local sec = tonumber(vim.fn.getftime(path)) or -1
+  if sec < 0 then
+    return { exists = false, size = -1, sec = -1, nsec = -1 }
+  end
+
+  return {
+    exists = true,
+    size = tonumber(vim.fn.getfsize(path)) or -1,
+    sec = sec,
+    nsec = 0,
+  }
+end
+
+local function same_file_stat(a, b)
+  a = a or {}
+  b = b or {}
+  return a.exists == b.exists
+    and tonumber(a.size or -1) == tonumber(b.size or -1)
+    and tonumber(a.sec or -1) == tonumber(b.sec or -1)
+    and tonumber(a.nsec or -1) == tonumber(b.nsec or -1)
+end
+
+local function changed_file_snapshot(cwd)
+  local snapshot = {}
+  local all = vim.fn.systemlist(
+    "git -C " .. vim.fn.shellescape(cwd) .. " status --short 2>/dev/null | awk '{print $NF}'"
+  )
+  if not all or #all == 0 then
+    return snapshot
+  end
+
+  for _, rel in ipairs(all) do
+    local abs = normalize_fs_path(cwd .. "/" .. rel)
+    if abs then
+      snapshot[abs] = {
+        rel = rel,
+        stat = file_stat_stamp(abs),
+      }
+    end
+  end
+  return snapshot
+end
+
+-- Return git-changed files touched during the current turn.
+-- Falls back to mtime filtering if no per-turn snapshot exists.
 local function changed_files_since(cwd, since)
   local all = vim.fn.systemlist(
     "git -C " .. vim.fn.shellescape(cwd) .. " status --short 2>/dev/null | awk '{print $NF}'"
   )
   if not all or #all == 0 then return {} end
+  local normalized_cwd = normalize_fs_path(cwd)
+  local snapshot = normalized_cwd and state._hook_turn_cwd == normalized_cwd and state._hook_turn_snapshot or nil
+  if type(snapshot) == "table" then
+    local result = {}
+    for _, rel in ipairs(all) do
+      local abs = normalize_fs_path(cwd .. "/" .. rel)
+      local before = abs and snapshot[abs] or nil
+      local after = abs and file_stat_stamp(abs) or nil
+      if not before or not same_file_stat(before.stat, after) then
+        table.insert(result, rel)
+      end
+    end
+    return result
+  end
   if not since then return all end
   local result = {}
   for _, rel in ipairs(all) do
@@ -37,8 +114,11 @@ local function changed_files_since(cwd, since)
   return result
 end
 
-local function begin_edit_tracking()
+local function begin_edit_tracking(cwd)
+  cwd = normalize_fs_path(cwd or vim.fn.getcwd())
   state._hook_turn_start = os.time()
+  state._hook_turn_cwd = cwd
+  state._hook_turn_snapshot = cwd and changed_file_snapshot(cwd) or {}
   local hopts = (state.opts and state.opts.hooks) or {}
   if hopts.quickfix_on_edit ~= false then
     state._qf_items = {}
@@ -233,7 +313,7 @@ M.list = {
           pcall(function() status.start_monitor(aname) end)
         end
       end
-      begin_edit_tracking()
+      begin_edit_tracking(resolve_tool_cwd(params))
       return { success = true }
     end,
   },
