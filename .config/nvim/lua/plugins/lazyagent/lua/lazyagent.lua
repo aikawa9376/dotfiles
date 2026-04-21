@@ -10,6 +10,7 @@ local session_logic = require("lazyagent.logic.session")
 local send_logic = require("lazyagent.logic.send")
 local backend_logic = require("lazyagent.logic.backend")
 local status_logic = require("lazyagent.logic.status")
+local util = require("lazyagent.util")
 
 -- Expose public API from logic modules through the main M table
 M.open_history = cache_logic.open_history
@@ -45,6 +46,7 @@ M.send_key = send_logic.send_key
 M.send_interrupt = send_logic.send_interrupt
 M.send_raw_keys = send_logic.send_raw_keys
 M.clear_input = send_logic.clear_input
+M.fire_event = util.fire_event
 
 -- Write MCP config into each agent's settings file so they auto-connect.
 -- Writes lazyagent MCP config into agent settings files (JSON) and generates

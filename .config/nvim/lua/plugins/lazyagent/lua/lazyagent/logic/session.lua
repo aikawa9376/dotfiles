@@ -1156,9 +1156,12 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
       end
 
       -- Wait a bit for tmux to resize and vim to update its dimensions before opening the window
+            -- Wait a bit for tmux to resize and vim to update its dimensions before opening the window
       vim.defer_fn(function()
+        util.fire_event("SessionStarted", { agent_name = agent_name, pane_id = pane_id })
         on_ready(pane_id)
       end, 200)
+
     end
   }
 
@@ -1469,9 +1472,11 @@ function M.close_session(agent_name)
         if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
           maybe_kill_pane(agent_name, s2.pane_id, backend_mod2, false)
         end
-        state.sessions[agent_name] = nil
+                state.sessions[agent_name] = nil
         maybe_disable_watchers()
         cleanup_agent_external_configs(agent_name)
+        util.fire_event("SessionStopped", { agent_name = agent_name })
+
       end, {
         merge_with_last_save = s2.merge_conversation_on_next_save,
       })

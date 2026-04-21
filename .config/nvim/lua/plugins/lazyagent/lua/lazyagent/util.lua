@@ -162,4 +162,25 @@ function M.open_in_normal_win(path, opts)
   return true
 end
 
+function M.fire_event(event_name, data)
+  local state = require("lazyagent.logic.state")
+  data = data or {}
+  data.event = event_name
+
+  -- 1. Call User autocmd
+  vim.schedule(function()
+    pcall(vim.api.nvim_exec_autocmds, "User", {
+      pattern = "LazyAgent" .. event_name,
+      data = data,
+    })
+  end)
+
+  -- 2. Call Lua callback from opts
+  if state.opts and state.opts.callbacks and type(state.opts.callbacks[event_name]) == "function" then
+    vim.schedule(function()
+      pcall(state.opts.callbacks[event_name], data)
+    end)
+  end
+end
+
 return M
