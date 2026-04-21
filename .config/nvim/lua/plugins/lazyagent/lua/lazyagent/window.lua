@@ -8,6 +8,109 @@ local float_autocmd_group_id = nil
 local float_original_opts = nil
 local float_is_focused = false
 
+local function buffer_var(bufnr, name)
+  local ok, value = pcall(vim.api.nvim_buf_get_var, bufnr, name)
+  if ok then
+    return value
+  end
+  return nil
+end
+
+local function scratch_filetype(bufnr, fallback)
+  local expected = buffer_var(bufnr, "lazyagent_scratch_filetype")
+  if type(expected) == "string" and expected ~= "" then
+    return expected
+  end
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    local current = vim.bo[bufnr].filetype
+    if type(current) == "string" and current ~= "" then
+      return current
+    end
+  end
+  return fallback or "lazyagent"
+end
+
+local function is_acp_transcript_buffer(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  if vim.bo[bufnr].filetype == "lazyagent_acp" then
+    return true
+  end
+  if buffer_var(bufnr, "lazyagent_acp_transcript") == true then
+    return true
+  end
+  local name = vim.api.nvim_buf_get_name(bufnr) or ""
+  return name:match("^lazyagent://acp/") ~= nil
+end
+
+local function scratch_buffer_is_usable(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  if buffer_var(bufnr, "lazyagent_is_scratch") ~= true then
+    return false
+  end
+  if (vim.api.nvim_buf_get_name(bufnr) or "") ~= "" then
+    return false
+  end
+  if vim.bo[bufnr].buftype ~= "nofile" then
+    return false
+  end
+  local expected = scratch_filetype(bufnr, "")
+  return expected == "" or vim.bo[bufnr].filetype == expected
+end
+
+local function forget_scratch_buffer(bufnr)
+  if scratch_bufnr == bufnr then
+    scratch_bufnr = nil
+  end
+  for agent_name, tracked in pairs(scratch_bufnrs) do
+    if tracked == bufnr then
+      scratch_bufnrs[agent_name] = nil
+    end
+  end
+end
+
+local function tracked_scratch_agent(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+  local agent_name = buffer_var(bufnr, "lazyagent_agent")
+  if type(agent_name) == "string" and agent_name ~= "" and scratch_bufnrs[agent_name] == bufnr then
+    return agent_name
+  end
+  for name, tracked in pairs(scratch_bufnrs) do
+    if tracked == bufnr then
+      return name
+    end
+  end
+  if scratch_bufnr == bufnr and type(agent_name) == "string" and agent_name ~= "" then
+    return agent_name
+  end
+  return nil
+end
+
+local function get_tracked_scratch_bufnr(agent_name)
+  if agent_name and agent_name ~= "" then
+    local tracked = scratch_bufnrs[agent_name]
+    if scratch_buffer_is_usable(tracked) then
+      return tracked
+    end
+    if tracked then
+      forget_scratch_buffer(tracked)
+    end
+    return nil
+  end
+  if scratch_buffer_is_usable(scratch_bufnr) then
+    return scratch_bufnr
+  end
+  if scratch_bufnr then
+    forget_scratch_buffer(scratch_bufnr)
+  end
+  return nil
+end
+
 local function ensure_scratch_buffer(bufnr, opts)
   -- Normalize accepting either (bufnr, opts) or (opts) as the first parameter.
   if type(bufnr) == "table" and opts == nil then
@@ -17,9 +120,12 @@ local function ensure_scratch_buffer(bufnr, opts)
 
   local agent_name = opts and opts.agent_name or nil
   if agent_name and (not bufnr or not vim.api.nvim_buf_is_valid(bufnr)) then
-    local existing = scratch_bufnrs[agent_name]
-    if existing and vim.api.nvim_buf_is_valid(existing) then
+    local existing = get_tracked_scratch_bufnr(agent_name)
+    if existing then
       scratch_bufnr = existing
+      pcall(function()
+        vim.b[existing].lazyagent_scratch_filetype = (opts and opts.filetype) or scratch_filetype(existing)
+      end)
       if opts and opts.source_bufnr then
         pcall(function() vim.b[existing].lazyagent_source_bufnr = opts.source_bufnr end)
       end
@@ -35,6 +141,7 @@ local function ensure_scratch_buffer(bufnr, opts)
       vim.bo[bufnr].buftype = "nofile"
       vim.bo[bufnr].filetype = (opts and opts.filetype) or "lazyagent"
       vim.bo[bufnr].modifiable = true
+      vim.b[bufnr].lazyagent_scratch_filetype = vim.bo[bufnr].filetype
     end)
 
     -- Remember this scratch buffer so we can restore it if another file is opened here.
@@ -422,13 +529,9 @@ end
 
 function M.get_scratch_bufnr(agent_name)
   if agent_name and agent_name ~= "" then
-    local bufnr = scratch_bufnrs[agent_name]
-    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-      return bufnr
-    end
-    return nil
+    return get_tracked_scratch_bufnr(agent_name)
   end
-  return scratch_bufnr
+  return get_tracked_scratch_bufnr()
 end
 
 function M.set_title(title)
@@ -460,11 +563,28 @@ pcall(function()
         if win ~= winid then return end
         local buf = args.buf or vim.api.nvim_get_current_buf()
         if not buf or not vim.api.nvim_buf_is_valid(buf) then return end
-        -- Skip if it's the scratch buffer
-        if vim.bo[buf].filetype == "lazyagent" then return end
-        -- Only handle buffers with a real filename
-        local name = vim.api.nvim_buf_get_name(buf) or ""
-        if name == "" then return end
+        if scratch_buffer_is_usable(buf) or is_acp_transcript_buffer(buf) then return end
+        local restore_buf = nil
+        local restore_agent = tracked_scratch_agent(buf)
+        if restore_agent then
+          local restore_ft = scratch_filetype(buf, "lazyagent")
+          local source_bufnr = buffer_var(buf, "lazyagent_source_bufnr")
+          forget_scratch_buffer(buf)
+          restore_buf = ensure_scratch_buffer(nil, {
+            agent_name = restore_agent,
+            filetype = restore_ft,
+            source_bufnr = source_bufnr,
+          })
+        else
+          restore_buf = get_tracked_scratch_bufnr()
+        end
+        if not restore_buf or not vim.api.nvim_buf_is_valid(restore_buf) then
+          restore_buf = ensure_scratch_buffer(nil, {
+            agent_name = restore_agent,
+            filetype = scratch_filetype(buf, "lazyagent"),
+            source_bufnr = buffer_var(buf, "lazyagent_source_bufnr"),
+          })
+        end
         -- Find a normal window to move the buffer into
         local target = nil
         for _, w in ipairs(vim.api.nvim_list_wins()) do
@@ -491,8 +611,8 @@ pcall(function()
         -- move the new file buffer to the target window
         pcall(function() vim.api.nvim_win_set_buf(target, buf) end)
         -- restore the scratch buffer in the lazyagent window
-        if scratch_bufnr and vim.api.nvim_buf_is_valid(scratch_bufnr) then
-          pcall(function() vim.api.nvim_win_set_buf(win, scratch_bufnr) end)
+        if restore_buf and vim.api.nvim_buf_is_valid(restore_buf) then
+          pcall(function() vim.api.nvim_win_set_buf(win, restore_buf) end)
         else
           -- recreate scratch if missing
           local nb = ensure_scratch_buffer(nil, { filetype = "lazyagent" })
