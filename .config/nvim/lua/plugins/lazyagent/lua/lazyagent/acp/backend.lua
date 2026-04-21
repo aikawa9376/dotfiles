@@ -2569,8 +2569,12 @@ local function on_client_update(session, params)
     else
       append_block(session, tool_heading(tool), title)
     end
-    if tool_update_is_terminal(tool) then
+        if tool_update_is_terminal(tool) then
+      if tool.kind == "edit" then
+        util.fire_event("EditDone", { agent_name = session.agent_name, tool = tool })
+      end
       maybe_sync_acp_edit_targets(session, tool)
+
       session.tool_calls[tool.toolCallId] = nil
     end
     return
@@ -2741,7 +2745,10 @@ local function create_backend(default_view)
           append_block(session, "System", "Turn finished with stopReason: " .. tostring(stop_reason))
         end
 
+                util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = result })
+        util.fire_event("TurnDone", { agent_name = session.agent_name, result = result })
         maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
+
         if #session.prompt_queue > 0 then
           backend._drain_prompt_queue(pane_id)
         end
