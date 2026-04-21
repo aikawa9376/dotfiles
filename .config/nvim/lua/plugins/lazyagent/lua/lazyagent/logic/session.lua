@@ -1331,6 +1331,26 @@ function M.capture_and_save_session(agent_name, open_file, on_done, opts)
       end
 
       local lines = vim.split(text, "\n")
+
+      if opts.line_limit and tonumber(opts.line_limit) then
+        local limit = tonumber(opts.line_limit)
+        if #lines > limit then
+          local start_idx = #lines - limit + 1
+          -- Search for User header within the candidates (─ 󰍩 User)
+          local user_idx = nil
+          for i = start_idx, #lines do
+            if lines[i]:match("^─ .*User") then
+              user_idx = i
+              break
+            end
+          end
+          if user_idx then
+            start_idx = user_idx
+          end
+          lines = vim.list_slice(lines, start_idx)
+        end
+      end
+
       local path = persist_conversation_capture(agent_name, s, lines, {
         merge_with_last_save = opts.merge_with_last_save,
       })
@@ -1894,7 +1914,18 @@ function M.show_acp_capabilities(agent_name)
   end)
 end
 
-function M.save_conversation_checkpoint(agent_name)
+function M.save_conversation_checkpoint(arg1, arg2)
+  local agent_name, line_limit
+  if tonumber(arg1) then
+    line_limit = tonumber(arg1)
+    agent_name = arg2
+  elseif tonumber(arg2) then
+    line_limit = tonumber(arg2)
+    agent_name = arg1
+  else
+    agent_name = arg1
+  end
+
   resolve_active_acp_session(agent_name, function(chosen)
     local session = state.sessions[chosen]
     if not session or not session.pane_id or session.pane_id == "" then
@@ -1928,9 +1959,14 @@ function M.save_conversation_checkpoint(agent_name)
       end
 
       current.merge_conversation_on_next_save = true
-      vim.notify("LazyAgentConversation: saved conversation to " .. path .. " and cleared ACP transcript", vim.log.levels.INFO)
+      local msg = "LazyAgentConversation: saved conversation to " .. path .. " and cleared ACP transcript"
+      if line_limit then
+        msg = "LazyAgentConversation: saved last " .. line_limit .. " lines to " .. path .. " and cleared ACP transcript"
+      end
+      vim.notify(msg, vim.log.levels.INFO)
     end, {
       merge_with_last_save = session.merge_conversation_on_next_save,
+      line_limit = line_limit,
     })
   end)
 end

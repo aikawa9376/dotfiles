@@ -235,9 +235,9 @@ function M.setup_commands()
 
   -- Save the active ACP conversation snapshot and clear the live transcript buffer.
   try_create_user_command("LazyAgentConversation", function(cmdargs)
-    local explicit = (cmdargs and cmdargs.args and cmdargs.args ~= "") and cmdargs.args or nil
-    session_logic.save_conversation_checkpoint(explicit)
-  end, { nargs = "?", desc = "Save the active ACP conversation and clear its live transcript buffer." })
+    local args = vim.split((cmdargs and cmdargs.args or ""), "%s+", { trimempty = true })
+    session_logic.save_conversation_checkpoint(unpack(args))
+  end, { nargs = "*", desc = "Save the active ACP conversation and clear its live transcript buffer." })
 
   -- Resume a conversation from a saved snapshot and preload it into a new session scratch buffer.
   try_create_user_command("LazyAgentResumeConversation", function(cmdargs)
