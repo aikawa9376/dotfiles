@@ -454,6 +454,233 @@ local function apply_patch_to_worktree(git_dir, patch_lines, use_reverse)
   return true
 end
 
+-- Commit message edit float + amend flow
+local edit_float_win = nil
+local edit_float_buf = nil
+
+local function close_edit_commit_float(bufnr)
+  bufnr = bufnr or edit_float_buf
+  -- Mark buffer as intentionally closing to skip unload prompt
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(function() vim.b[bufnr].amend_closing = true end)
+  end
+
+  if edit_float_win and vim.api.nvim_win_is_valid(edit_float_win) then
+    pcall(vim.api.nvim_win_close, edit_float_win, true)
+  end
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+  end
+  edit_float_win = nil
+  edit_float_buf = nil
+end
+
+local function do_amend_commit_from_file(git_dir, commit, message_file, view_state)
+  if not git_dir or git_dir == '' then
+    vim.notify('Not in a git repository', vim.log.levels.ERROR)
+    return false
+  end
+  local stashed = commit_auto_stash(git_dir)
+  if stashed == nil then return false end
+
+  local resolved = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse ' .. vim.fn.shellescape(commit) .. ' 2>/dev/null'):gsub('%s+', '')
+  local head = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
+
+  if resolved == '' then
+    vim.notify('Failed to resolve commit: ' .. tostring(commit), vim.log.levels.ERROR)
+    if stashed then commit_auto_pop(git_dir) end
+    return false
+  end
+
+  local new_hash = ''
+  if resolved == head then
+    -- Amend HEAD
+    local cmd = 'git -C ' .. vim.fn.shellescape(git_dir) .. ' commit --amend -F ' .. vim.fn.shellescape(message_file) .. ' 2>&1'
+    local out = vim.fn.system(cmd)
+    if vim.v.shell_error ~= 0 then
+      vim.notify('Amend failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
+      if stashed then commit_auto_pop(git_dir) end
+      return false
+    end
+    new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
+  else
+    -- Interactive rebase edit the commit
+    local short = resolved:sub(1, 7)
+    local rebase_cmd = 'cd ' .. vim.fn.shellescape(git_dir)
+      .. " && GIT_SEQUENCE_EDITOR=\"sed -i '/" .. short
+      .. "/s/^pick/edit/'\" git rebase -i " .. resolved .. '^ 2>&1'
+    local out = vim.fn.system(rebase_cmd)
+    if not out:match('Stopped at') then
+      vim.notify('Rebase failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
+      if stashed then commit_auto_pop(git_dir) end
+      return false
+    end
+
+    local amend_cmd = 'git -C ' .. vim.fn.shellescape(git_dir) .. ' commit --amend -F ' .. vim.fn.shellescape(message_file) .. ' --allow-empty 2>&1'
+    out = vim.fn.system(amend_cmd)
+    if vim.v.shell_error ~= 0 then
+      vim.notify('Amend failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
+      vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
+      if stashed then commit_auto_pop(git_dir) end
+      return false
+    end
+
+    out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && GIT_EDITOR=true git rebase --continue 2>&1')
+    if not (out:match('Successfully rebased') or vim.v.shell_error == 0) then
+      vim.notify('Rebase continue failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
+      vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
+      if stashed then commit_auto_pop(git_dir) end
+      return false
+    end
+    new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
+  end
+
+  if stashed then commit_auto_pop(git_dir) end
+
+  -- Reopen commit view to reflect new history
+  reopen_commit_preserving_view(new_hash, view_state)
+  vim.notify('Amended commit ' .. (resolved:sub(1,7)) .. ' → ' .. (new_hash and new_hash:sub(1,7) or ''), vim.log.levels.INFO)
+  return true
+end
+
+local function open_edit_commit_float(commit, origin_buf, view_state)
+  -- If float already open, replace content
+  pcall(close_edit_commit_float)
+
+  local msg = vim.fn.systemlist('git show -s --format=%B ' .. vim.fn.shellescape(commit))
+  if vim.v.shell_error ~= 0 or not msg then msg = { '' } end
+  while #msg > 0 and msg[#msg] == '' do table.remove(msg) end
+
+  edit_float_buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[edit_float_buf].buftype = 'nofile'
+  vim.bo[edit_float_buf].bufhidden = 'wipe'
+  vim.bo[edit_float_buf].swapfile = false
+  vim.bo[edit_float_buf].filetype = 'gitcommit'
+  vim.api.nvim_buf_set_lines(edit_float_buf, 0, -1, false, msg)
+  vim.bo[edit_float_buf].modifiable = true
+
+  local width = math.min(80, vim.o.columns - 4)
+  local height = math.min(30, math.max(6, #msg))
+  local col = math.floor((vim.o.columns - width) / 2)
+  local row = math.floor((vim.o.lines - height) / 2)
+
+  edit_float_win = vim.api.nvim_open_win(edit_float_buf, true, {
+    relative = 'editor', width = width, height = height, col = col, row = row,
+    style = 'minimal', border = 'single', title = ' Amend commit ', title_pos = 'center',
+  })
+
+  -- Keymaps: 'q' and <Esc> will trigger the close-with-prompt flow. <Leader>a still triggers amend directly.
+  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', 'q', [[:lua require('features.commit')._close_edit_float()<CR>]], { noremap = true, silent = true })
+  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', '<Esc>', [[:lua require('features.commit')._close_edit_float()<CR>]], { noremap = true, silent = true })
+  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', '<Leader>a', [[:lua require('features.commit')._do_amend_from_buffer()<CR>]], { noremap = true, silent = true })
+
+  -- Store state for the buffer via buffer variable
+  vim.b[edit_float_buf].amend_target = commit
+  vim.b[edit_float_buf].amend_origin_buf = origin_buf
+  vim.b[edit_float_buf].amend_view_state = view_state
+  vim.b[edit_float_buf].amend_original_text = table.concat(msg, '\n')
+
+  -- Prompt on unexpected buffer unload/close: if buffer is unloaded while not intentionally closing, run prompt handler
+  vim.api.nvim_create_autocmd({ 'BufUnload' }, {
+    buffer = edit_float_buf,
+    callback = function(ev)
+      vim.schedule(function()
+        local b = ev.buf
+        -- If buffer is already invalid, nothing to do
+        if not b or not pcall(vim.api.nvim_buf_is_valid, b) or not vim.api.nvim_buf_is_valid(b) then
+          return
+        end
+        -- If buffer is flagged as intentionally closing, do nothing
+        if vim.b[b] and vim.b[b].amend_closing then
+          return
+        end
+        -- Otherwise, invoke the close-with-prompt handler
+        pcall(function()
+          require('features.commit')._close_edit_float(b)
+        end)
+      end)
+    end,
+  })
+end
+
+-- Close-with-prompt wrapper. If buffer content changed, ask user to apply (amend) or discard changes.
+M._close_edit_float = function(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+
+  -- If flagged as intentionally closing, just close
+  if vim.b[bufnr] and vim.b[bufnr].amend_closing then
+    close_edit_commit_float(bufnr)
+    return
+  end
+
+  local orig = vim.b[bufnr] and vim.b[bufnr].amend_original_text or nil
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local cur = table.concat(lines, '\n')
+
+  if not orig or orig == cur then
+    -- Nothing changed
+    close_edit_commit_float(bufnr)
+    return
+  end
+
+  local commit = vim.b[bufnr] and vim.b[bufnr].amend_target or ''
+  local short = (commit and commit ~= '') and tostring(commit):sub(1,7) or ''
+
+  local choice = vim.fn.confirm(
+    string.format('Apply changes to commit %s?', short),
+    '&Yes\n&No\n&Cancel', 1
+  )
+
+  if choice == 1 then
+    -- Apply (amend) and close
+    M._do_amend_from_buffer(bufnr, true)
+    return
+  elseif choice == 2 then
+    -- Close without applying
+    close_edit_commit_float(bufnr)
+    return
+  else
+    -- Cancel: keep open
+    return
+  end
+end
+
+-- Perform amend from given buffer (or current buf)
+M._do_amend_from_buffer = function(bufnr, skip_confirm)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local commit = vim.b[bufnr] and vim.b[bufnr].amend_target or nil
+  local origin = vim.b[bufnr] and vim.b[bufnr].amend_origin_buf or nil
+  local view_state = vim.b[bufnr] and vim.b[bufnr].amend_view_state or nil
+  if not commit then
+    vim.notify('No amend target', vim.log.levels.ERROR)
+    return
+  end
+
+  -- Light confirmation unless explicitly skipped
+  if not skip_confirm then
+    local short = tostring(commit):sub(1, 7)
+    local choice = vim.fn.confirm('Amend commit ' .. short .. '?', '&Yes\n&No', 1)
+    if choice ~= 1 then
+      vim.notify('Amend cancelled', vim.log.levels.INFO)
+      return
+    end
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local temp = vim.fn.tempname()
+  local f = io.open(temp, 'w')
+  if not f then vim.notify('Failed to create temp file', vim.log.levels.ERROR); return end
+  f:write(table.concat(lines, '\n') .. '\n')
+  f:close()
+
+  local git_dir = vim.fn.FugitiveWorkTree()
+  local ok = do_amend_commit_from_file(git_dir, commit, temp, view_state)
+  os.remove(temp)
+  if ok then close_edit_commit_float(bufnr) end
+end
+
+
 local function confirm_discard_mode(scope, commit)
   local choice = vim.fn.confirm(
     table.concat({
@@ -721,6 +948,20 @@ function M.setup(group)
 
         commands.show_commit_info_float(commit, true, true)
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Show commit info in float window' })
+
+      -- A: コミットメッセージをフロートで編集して amend 実行
+      vim.keymap.set('n', 'A', function()
+        local commit = get_commit_from_buffer(ev.buf)
+
+        if not commit then
+          print('No commit found')
+          return
+        end
+
+        local view_state = save_commit_view_state(ev.buf)
+
+        open_edit_commit_float(commit, ev.buf, view_state)
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Edit/amend commit message in float' })
 
       -- p: カーソル位置ファイルの前のコミット
       vim.keymap.set('n', 'p', function()

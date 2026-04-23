@@ -6,12 +6,15 @@ return {
   { 'mgalliou/blink-cmp-tmux', ft = 'lazyagent' },
   { 'fang2hou/blink-copilot', event = 'InsertEnter' },
   { 'hrsh7th/cmp-nvim-lsp-document-symbol', event = 'CmdlineEnter' },
+  -- { 'saghen/blink.lib', event = { 'InsertEnter', 'CmdlineEnter' } },
   { 'copilotlsp-nvim/copilot-lsp', lazy = true,
     opts = { nes = { distance_threshold = 100, clear_on_large_distance = false, } }
   },
   {
     'saghen/blink.cmp',
     event = { 'InsertEnter', 'CmdlineEnter' },
+    -- branch = 'v1',
+    commit = "90d14caca4ae557665ab105080c27d5f289a2e30",
     build = 'cargo build --release',
     ---@module 'blink.cmp'
     ---@type blink.cmp.Config
