@@ -5,6 +5,7 @@
 local M = {}
 local state = require("lazyagent.logic.state")
 local backend_logic = require("lazyagent.logic.backend")
+local agent_logic = require("lazyagent.logic.agent")
 local diff_utils = require("lazyagent.acp.diff")
 local uv = vim.uv or vim.loop
 
@@ -124,6 +125,9 @@ local function begin_edit_tracking(cwd)
     state._qf_items = {}
     vim.fn.setqflist({}, "r", { title = "Agent turn", items = {} })
   end
+  -- Stop any active diagnostic-review loop and clear fix-request flag when a new agent turn begins
+  state._diagnostic_loop_active = false
+  state._fix_requested = false
 end
 
 local function resolve_tool_cwd(params)
@@ -263,6 +267,117 @@ M.list = {
           .. " commit -m 'chore: agent checkpoint' --no-verify 2>/dev/null"
         )
       end
+
+      -- Optionally request the agent to fix files collected in quickfix (opt-in via state.opts.hooks)
+      if hopts.auto_fix_on_done == true and type(state._qf_items) == "table" and #state._qf_items > 0 then
+        state._fix_requested = state._fix_requested or false
+        if not state._fix_requested then
+          state._fix_requested = true
+
+          local targets = {}
+          if params.agent_name and params.agent_name ~= "" then
+            table.insert(targets, params.agent_name)
+          else
+            for aname, s in pairs(state.sessions or {}) do
+              if s and s.pane_id then table.insert(targets, aname) end
+            end
+          end
+
+          for _, aname in ipairs(targets) do
+            local s = state.sessions and state.sessions[aname] or nil
+            if s and s.pane_id then
+              -- Build file list using quickfix items (absolute paths)
+              local files = {}
+              for _, item in ipairs(state._qf_items or {}) do
+                local path = normalize_fs_path(item.filename)
+                if path then table.insert(files, path) end
+              end
+
+              if #files > 0 then
+                -- Build a user-style prompt that references files so ACP can embed them (@file)
+                local prompt_lines = {
+                  "Please fix the following files to resolve their diagnostics. Edit the files directly and make minimal, focused changes. For each file, apply fixes and then reply with a one-line summary of what you changed.",
+                  "",
+                  "Files:",
+                }
+                for _, f in ipairs(files) do table.insert(prompt_lines, "- @" .. f) end
+                table.insert(prompt_lines, "")
+                table.insert(prompt_lines, "-Lazyagent")
+                local prompt = table.concat(prompt_lines, "\n")
+
+                local agent_cfg = agent_logic and agent_logic.get_interactive_agent and agent_logic.get_interactive_agent(aname) or nil
+                local _, backend_mod = backend_logic.resolve_backend_for_agent(aname, agent_cfg)
+                if backend_mod and type(backend_mod.paste_and_submit) == "function" then
+                  pcall(function()
+                    backend_mod.paste_and_submit(s.pane_id, prompt, agent_cfg and agent_cfg.submit_keys or {}, { submit_delay = tonumber(hopts.fix_submit_delay_ms) or 150 })
+                  end)
+                end
+              end
+            end
+          end
+        end
+
+      -- Auto-review diagnostics for quickfix items (configurable via state.opts.hooks)
+      elseif hopts.diagnostic_on_done ~= false and type(state._qf_items) == "table" and #state._qf_items > 0 then
+        if not state._diagnostic_loop_active then
+          state._diagnostic_loop_active = true
+          local items = vim.deepcopy(state._qf_items)
+          local interval = tonumber(hopts.diagnostic_loop_interval_ms) or 1500
+          local fetch_delay = tonumber(hopts.diagnostic_fetch_delay_ms) or 200
+          local sev_map = { error = 1, warning = 2, info = 3, hint = 4, all = 4 }
+          local min_sev = sev_map[tostring(hopts.diagnostic_min_severity or "all"):lower()] or 4
+          local repeat_loop = hopts.diagnostic_loop_repeat == true
+          local idx = 1
+
+          local function stop_loop()
+            state._diagnostic_loop_active = false
+          end
+
+          local function show_next()
+            if not state._diagnostic_loop_active then return end
+            if not items or #items == 0 then stop_loop(); return end
+            local item = items[idx]
+            if not item or not item.filename then
+              idx = idx + 1
+              if idx > #items then
+                if repeat_loop then idx = 1 else stop_loop(); return end
+              end
+              vim.defer_fn(show_next, 0)
+              return
+            end
+            local fname = item.filename
+            -- Open file in current window (prefer normal window)
+            pcall(vim.cmd, "edit " .. vim.fn.fnameescape(fname))
+            local bufnr = vim.fn.bufnr(fname)
+            if not vim.api.nvim_buf_is_loaded(bufnr) then pcall(vim.fn.bufload, bufnr) end
+
+            -- Allow LSP/diagnostic providers to publish diagnostics
+            vim.defer_fn(function()
+              if not state._diagnostic_loop_active then return end
+              local raw = vim.diagnostic.get(bufnr) or {}
+              local filtered = {}
+              for _, d in ipairs(raw) do
+                if (d.severity or 4) <= min_sev then table.insert(filtered, d) end
+              end
+              if #filtered > 0 then
+                local d = filtered[1]
+                pcall(vim.api.nvim_win_set_cursor, vim.api.nvim_get_current_win(), { d.lnum + 1, d.col or 0 })
+                pcall(vim.diagnostic.open_float, bufnr, { scope = "line" })
+              else
+                vim.notify("No diagnostics for " .. vim.fn.fnamemodify(fname, ":t"), vim.log.levels.INFO, { title = "Agent diagnostics" })
+              end
+              idx = idx + 1
+              if idx > #items then
+                if repeat_loop then idx = 1 else stop_loop(); return end
+              end
+              vim.defer_fn(show_next, interval)
+            end, fetch_delay)
+          end
+
+          vim.defer_fn(show_next, 0)
+        end
+      end
+
       return { success = true }
     end,
   },

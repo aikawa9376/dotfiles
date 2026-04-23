@@ -2343,6 +2343,32 @@ local function handle_permission_request(session, params, done)
   if not auto and not rule_matched and preferred == "allow_always" then
     auto = resolve_best_allow_option(params.options or {})
   end
+
+  -- Auto-allow write/edit tools when a previous auto-fix was requested
+  if not auto and not rule_matched then
+    local ok, state_mod = pcall(function() return require("lazyagent.logic.state") end)
+    if ok and state_mod and state_mod._fix_requested == true then
+      local is_edit_tool = false
+      if type(tool) == "table" then
+        local kind = tostring(tool.kind or "")
+        local tname = tostring(tool.toolName or tool.name or tool.title or ""):lower()
+        if kind == "edit" or tname:match("write_text_file") or tname:match("write") then
+          is_edit_tool = true
+        end
+      end
+      if is_edit_tool then
+        local allow_opt = resolve_permission_option(params.options or {}, "allow_once") or resolve_best_allow_option(params.options or {})
+        if allow_opt then
+          pcall(function()
+            require("lazyagent.logic.status").start_monitor(session.agent_name)
+          end)
+          done({ outcome = "selected", optionId = allow_opt.optionId })
+          return
+        end
+      end
+    end
+  end
+
   if auto then
     pcall(function()
       require("lazyagent.logic.status").start_monitor(session.agent_name)
