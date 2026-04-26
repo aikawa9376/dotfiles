@@ -739,6 +739,8 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
         end
       end
       vim.cmd('silent! doautocmd User FugitiveChanged')
+      pcall(function() vim.fn['fugitive#ReloadStatus']() end)
+      vim.schedule(function() pcall(function() require('features.status').refresh_all() end) end)
       vim.cmd('checktime')
       cleanup_view_file(view_state.view_file)
       vim.schedule(function() require('utilities').smart_close() end)
@@ -770,6 +772,8 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
   end
   -- Trigger log buffer refresh via standard fugitive event
   vim.cmd('silent! doautocmd User FugitiveChanged')
+  pcall(function() vim.fn['fugitive#ReloadStatus']() end)
+  vim.schedule(function() pcall(function() require('features.status').refresh_all() end) end)
   -- Reload the buffer to reflect the amended commit
   reopen_commit_preserving_view(new_hash, view_state)
 end
