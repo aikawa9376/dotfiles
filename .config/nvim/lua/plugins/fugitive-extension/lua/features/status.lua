@@ -334,6 +334,7 @@ function M.setup(group)
                 "while [ ! -f " .. vim.fn.shellescape(done_file_head) .. " ]; do sleep 0.1; done",
                 "exit 0"}, editor_file_head)
               vim.fn.system('chmod +x ' .. vim.fn.shellescape(editor_file_head))
+              local commit_msg_bufnr_head = nil
               local uvh = vim.loop
               local timerh = uvh.new_timer()
               timerh:start(50, 50, vim.schedule_wrap(function()
@@ -352,13 +353,14 @@ function M.setup(group)
                       vim.cmd('belowright split ' .. fname)
                       -- Ensure new split gets focus and filetype is set
                       pcall(function() vim.bo.filetype = 'gitcommit' end)
-                      local bufnrh = vim.api.nvim_get_current_buf()
-                      vim.api.nvim_create_autocmd({'BufWritePost'}, {
-                        buffer = bufnrh,
+                      commit_msg_bufnr_head = vim.api.nvim_get_current_buf()
+                      -- Ensure git continues when buffer is written OR closed
+                      vim.api.nvim_create_autocmd({'BufWritePost','BufWipeout','BufUnload'}, {
+                        buffer = commit_msg_bufnr_head,
                         once = true,
                         callback = function()
-                          vim.fn.writefile({}, done_file_head)
-                          if vim.fn.filereadable(marker_file_head) == 1 then vim.fn.delete(marker_file_head) end
+                          pcall(vim.fn.writefile, {}, done_file_head)
+                          if vim.fn.filereadable(marker_file_head) == 1 then pcall(vim.fn.delete, marker_file_head) end
                         end,
                       })
                     end)
@@ -378,6 +380,12 @@ function M.setup(group)
                       vim.notify('Amend completed', vim.log.levels.INFO)
                       vim.fn['fugitive#ReloadStatus']()
                       vim.schedule(refresh)
+                      -- Close the commit message buffer if still open
+                      if commit_msg_bufnr_head and pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_head) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_head) then
+                        local winid = vim.fn.bufwinid(commit_msg_bufnr_head)
+                        if type(winid) == 'number' and winid > 0 then pcall(vim.api.nvim_win_close, winid, true) end
+                        if pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_head) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_head) then pcall(vim.api.nvim_buf_delete, commit_msg_bufnr_head, { force = true }) end
+                      end
                     end)
                   else
                     vim.schedule(function()
@@ -421,7 +429,8 @@ function M.setup(group)
               vim.fn.system('chmod +x ' .. vim.fn.shellescape(seq_file) .. ' ' .. vim.fn.shellescape(editor_file))
 
               -- Poll for marker file created by the editor script and open the file
-              local uv = vim.loop
+              local commit_msg_bufnr_rebase = nil
+               local uv = vim.loop
               local timer = uv.new_timer()
               timer:start(50, 50, vim.schedule_wrap(function()
                 if vim.fn.filereadable(marker_file) == 1 then
@@ -438,14 +447,14 @@ function M.setup(group)
                       end
                       vim.cmd('belowright split ' .. fname)
                       pcall(function() vim.bo.filetype = 'gitcommit' end)
-                      local bufnr = vim.api.nvim_get_current_buf()
-                      vim.api.nvim_create_autocmd({'BufWritePost'}, {
-                        buffer = bufnr,
+                      commit_msg_bufnr_rebase = vim.api.nvim_get_current_buf()
+                      -- Ensure git continues when buffer written OR closed
+                      vim.api.nvim_create_autocmd({'BufWritePost','BufWipeout','BufUnload'}, {
+                        buffer = commit_msg_bufnr_rebase,
                         once = true,
                         callback = function()
-                          -- Signal the editor script to exit so git can continue
-                          vim.fn.writefile({}, done_file)
-                          if vim.fn.filereadable(marker_file) == 1 then vim.fn.delete(marker_file) end
+                          pcall(vim.fn.writefile, {}, done_file)
+                          if vim.fn.filereadable(marker_file) == 1 then pcall(vim.fn.delete, marker_file) end
                         end,
                       })
                     end)
@@ -472,6 +481,12 @@ function M.setup(group)
                       vim.notify('Rebase completed', vim.log.levels.INFO)
                       vim.fn['fugitive#ReloadStatus']()
                       vim.schedule(refresh)
+                      -- Close the commit message buffer if still open
+                      if commit_msg_bufnr_rebase and pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_rebase) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_rebase) then
+                        local winid = vim.fn.bufwinid(commit_msg_bufnr_rebase)
+                        if type(winid) == 'number' and winid > 0 then pcall(vim.api.nvim_win_close, winid, true) end
+                        if pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_rebase) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_rebase) then pcall(vim.api.nvim_buf_delete, commit_msg_bufnr_rebase, { force = true }) end
+                      end
                     end)
                   else
                     vim.schedule(function()
