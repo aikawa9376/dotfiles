@@ -60,6 +60,40 @@ local function find_insert_point(bufnr)
   return #lines + 1
 end
 
+-- Ensure a buffer is temporarily made modifiable while fn runs. Retries a few
+-- times if the buffer is momentarily not writable (race with other autocommands).
+local function with_buf_modifiable(bufnr, fn, retries)
+  retries = retries or 5
+  local prev_modifiable, prev_readonly
+  pcall(function()
+    prev_modifiable = vim.api.nvim_buf_get_option(bufnr, 'modifiable')
+    prev_readonly = vim.api.nvim_buf_get_option(bufnr, 'readonly')
+  end)
+
+  local function attempt(remaining)
+    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    pcall(vim.api.nvim_buf_set_option, bufnr, 'modifiable', true)
+    pcall(vim.api.nvim_buf_set_option, bufnr, 'readonly', false)
+
+    local ok, err = pcall(fn)
+
+    -- Restore previous flags (best-effort)
+    pcall(vim.api.nvim_buf_set_option, bufnr, 'modifiable', prev_modifiable or false)
+    pcall(vim.api.nvim_buf_set_option, bufnr, 'readonly', prev_readonly or false)
+
+    if ok then return end
+    if remaining > 0 then
+      vim.defer_fn(function() attempt(remaining - 1) end, 50)
+    else
+      vim.schedule(function()
+        vim.notify('Failed to update fugitive status buffer: ' .. tostring(err), vim.log.levels.WARN)
+      end)
+    end
+  end
+
+  attempt(retries)
+end
+
 local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
   local work_tree = get_fugitive_work_tree()
@@ -68,12 +102,6 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
   local worktree_mod = require("features.worktree")
   local worktree_summary = worktree_mod.get_summary(work_tree)
   local stash_list = get_stash_list(work_tree)
-
-  local prev_modifiable = vim.bo[bufnr].modifiable
-  local prev_readonly = vim.bo[bufnr].readonly
-  vim.bo[bufnr].modifiable, vim.bo[bufnr].readonly = true, false
-
-  remove_custom_sections(bufnr)
 
   local final_lines = {}
   if worktree_summary and #worktree_summary > 0 then
@@ -86,71 +114,75 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
     for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
   end
 
-  if #final_lines > 0 then
-    local insert_idx = find_insert_point(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, insert_idx - 1, insert_idx - 1, false, final_lines)
-  end
-
-  vim.api.nvim_buf_clear_namespace(bufnr, ns_worktree, 0, -1)
-  vim.api.nvim_buf_clear_namespace(bufnr, ns_stash, 0, -1)
-
-  local lines_after = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local in_worktree, in_stash = false, false
-  local current_wt_abs = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
-
-  for i, l in ipairs(lines_after) do
-    if l:match('^Worktrees') then
-      vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterViolet' })
-      in_worktree, in_stash = true, false
-    elseif l:match('^Stashes') then
-      vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsChange' })
-      in_worktree, in_stash = false, true
-    elseif in_worktree then
-      -- 形式: [path]  [branch]  [head] [sync_icon]
-      local p_part = l:match('^(%S+)')
-      if p_part then
-        local s_p, e_p = l:find(p_part, 1, true)
-        local path_hl = (vim.fn.fnamemodify(p_part, ':p'):gsub('/+$', '') == current_wt_abs) and 'DiagnosticOk' or 'Directory'
-        vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_p - 1, { end_col = e_p, hl_group = path_hl })
-
-        -- ブランチ
-        local br_part = l:sub(e_p + 1):match('%s+(%S+)')
-        local s_b, e_b
-        if br_part then
-          s_b, e_b = l:find(br_part, e_p + 1, true)
-          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_b - 1, { end_col = e_b, hl_group = 'Type' })
-        end
-
-        -- ハッシュ
-        local hd_part = l:sub((e_b or e_p) + 1):match('%s+(%S+)')
-        local s_h, e_h
-        if hd_part then
-          s_h, e_h = l:find(hd_part, (e_b or e_p) + 1, true)
-          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_h - 1, { end_col = e_h, hl_group = 'Comment' })
-        end
-
-        -- 同期アイコン (一番右)
-        local icon_str = '󰚰'
-        local icon_pos, icon_end = l:find(icon_str, (e_h or e_b or e_p), true)
-        if icon_pos then
-          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, icon_pos - 1, { end_col = icon_end, hl_group = 'DiagnosticOk' })
-        end
-      else
-        if l ~= '' then in_worktree = false end
-      end
-
-    elseif in_stash then
-      local ref = stash_ref_from_line(l)
-      if ref then
-        local s, e = l:find(ref, 1, true)
-        -- stash@{n} の部分を強調
-        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, s - 1, { end_col = e, hl_group = 'GitSignsAdd' })
-        -- それ以降（メッセージ部分）をコメント色に
-        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, e, { end_col = #l, hl_group = 'Comment' })
-      else in_stash = false end
+  with_buf_modifiable(bufnr, function()
+    -- Update buffer contents
+    remove_custom_sections(bufnr)
+    if #final_lines > 0 then
+      local insert_idx = find_insert_point(bufnr)
+      pcall(vim.api.nvim_buf_set_lines, bufnr, insert_idx - 1, insert_idx - 1, false, final_lines)
     end
-  end
-  vim.bo[bufnr].modifiable, vim.bo[bufnr].readonly = prev_modifiable, prev_readonly
+
+    -- Update extmarks based on the new buffer contents
+    vim.api.nvim_buf_clear_namespace(bufnr, ns_worktree, 0, -1)
+    vim.api.nvim_buf_clear_namespace(bufnr, ns_stash, 0, -1)
+
+    local lines_after = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local in_worktree, in_stash = false, false
+    local current_wt_abs = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
+
+    for i, l in ipairs(lines_after) do
+      if l:match('^Worktrees') then
+        vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterViolet' })
+        in_worktree, in_stash = true, false
+      elseif l:match('^Stashes') then
+        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsChange' })
+        in_worktree, in_stash = false, true
+      elseif in_worktree then
+        -- 形式: [path]  [branch]  [head] [sync_icon]
+        local p_part = l:match('^(%S+)')
+        if p_part then
+          local s_p, e_p = l:find(p_part, 1, true)
+          local path_hl = (vim.fn.fnamemodify(p_part, ':p'):gsub('/+$', '') == current_wt_abs) and 'DiagnosticOk' or 'Directory'
+          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_p - 1, { end_col = e_p, hl_group = path_hl })
+
+          -- ブランチ
+          local br_part = l:sub(e_p + 1):match('%s+(%S+)')
+          local s_b, e_b
+          if br_part then
+            s_b, e_b = l:find(br_part, e_p + 1, true)
+            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_b - 1, { end_col = e_b, hl_group = 'Type' })
+          end
+
+          -- ハッシュ
+          local hd_part = l:sub((e_b or e_p) + 1):match('%s+(%S+)')
+          local s_h, e_h
+          if hd_part then
+            s_h, e_h = l:find(hd_part, (e_b or e_p) + 1, true)
+            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_h - 1, { end_col = e_h, hl_group = 'Comment' })
+          end
+
+          -- 同期アイコン (一番右)
+          local icon_str = '󰚰'
+          local icon_pos, icon_end = l:find(icon_str, (e_h or e_b or e_p), true)
+          if icon_pos then
+            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, icon_pos - 1, { end_col = icon_end, hl_group = 'DiagnosticOk' })
+          end
+        else
+          if l ~= '' then in_worktree = false end
+        end
+
+      elseif in_stash then
+        local ref = stash_ref_from_line(l)
+        if ref then
+          local s, e = l:find(ref, 1, true)
+          -- stash@{n} の部分を強調
+          vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, s - 1, { end_col = e, hl_group = 'GitSignsAdd' })
+          -- それ以降（メッセージ部分）をコメント色に
+          vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, e, { end_col = #l, hl_group = 'Comment' })
+        else in_stash = false end
+      end
+    end
+  end, 5)
 end
 
 local function get_stash_ref_at_cursor(bufnr)
@@ -258,9 +290,202 @@ function M.setup(group)
         else vim.notify("No operation to abort.", vim.log.levels.WARN) end
       end
 
+      local function rename_stash_at_cursor(r)
+        local line = vim.api.nvim_get_current_line()
+        local current_msg = line:match('^%s*stash@%{%d+%}:%s*(.*)') or ""
+        vim.ui.input({ prompt = 'New name for ' .. r .. ': ', default = current_msg }, function(input)
+          if not input or input == '' or input == current_msg then return end
+          local hash = vim.fn.trim(vim.fn.system('git rev-parse ' .. vim.fn.shellescape(r)))
+          if vim.v.shell_error ~= 0 then return end
+          vim.fn.system('git stash drop ' .. vim.fn.shellescape(r))
+          vim.fn.system('git stash store -m ' .. vim.fn.shellescape(input) .. ' ' .. hash)
+          vim.fn['fugitive#ReloadStatus']()
+          vim.schedule(refresh)
+        end)
+      end
+
       vim.keymap.set('n', 'rr', perform_continue, { buffer = b, silent = true, desc = "Continue" })
       vim.keymap.set('n', 'rs', perform_skip, { buffer = b, silent = true, desc = "Skip" })
       vim.keymap.set('n', 'ra', perform_abort, { buffer = b, silent = true, desc = "Abort" })
+
+      vim.keymap.set('n', 'cw', function()
+        local line = vim.api.nvim_get_current_line()
+        local r = stash_ref_from_line(line)
+        if r then
+          rename_stash_at_cursor(r)
+          return
+        end
+
+        local h = line:match('^%s*(%x%x%x%x%x%x%x+)')
+        if h then
+          -- Verify it is a commit hash
+          if vim.fn.system('git rev-parse --verify ' .. h .. '^{commit} 2>/dev/null') and vim.v.shell_error == 0 then
+            local head = vim.fn.trim(vim.fn.system('git rev-parse HEAD'))
+            if head:sub(1, #h) == h then
+              -- Use git commit --amend with a blocking editor that opens the message in Neovim
+              local wt_head = get_fugitive_work_tree() or vim.fn.getcwd()
+              local tmpb = vim.fn.tempname()
+              local editor_file_head = tmpb .. '.editor.sh'
+              local marker_file_head = tmpb .. '.marker'
+              local done_file_head = tmpb .. '.done'
+              vim.fn.writefile({"#!/bin/sh",
+                "commit_msg_file=\"$1\"",
+                "printf '%s\\n' \"$commit_msg_file\" > " .. vim.fn.shellescape(marker_file_head),
+                "while [ ! -f " .. vim.fn.shellescape(done_file_head) .. " ]; do sleep 0.1; done",
+                "exit 0"}, editor_file_head)
+              vim.fn.system('chmod +x ' .. vim.fn.shellescape(editor_file_head))
+              local uvh = vim.loop
+              local timerh = uvh.new_timer()
+              timerh:start(50, 50, vim.schedule_wrap(function()
+                if vim.fn.filereadable(marker_file_head) == 1 then
+                  timerh:stop()
+                  timerh:close()
+                  local linesh = vim.fn.readfile(marker_file_head)
+                  local commit_msg_pathh = linesh[1] or ''
+                  if commit_msg_pathh ~= '' then
+                    vim.schedule(function()
+                      local fname = vim.fn.fnameescape(commit_msg_pathh)
+                      local winid = vim.fn.bufwinid(b)
+                      if type(winid) == 'number' and winid > 0 then
+                        pcall(vim.api.nvim_set_current_win, winid)
+                      end
+                      vim.cmd('belowright split ' .. fname)
+                      -- Ensure new split gets focus and filetype is set
+                      pcall(function() vim.bo.filetype = 'gitcommit' end)
+                      local bufnrh = vim.api.nvim_get_current_buf()
+                      vim.api.nvim_create_autocmd({'BufWritePost'}, {
+                        buffer = bufnrh,
+                        once = true,
+                        callback = function()
+                          vim.fn.writefile({}, done_file_head)
+                          if vim.fn.filereadable(marker_file_head) == 1 then vim.fn.delete(marker_file_head) end
+                        end,
+                      })
+                    end)
+                  end
+                end
+              end))
+              local cmd_head = 'cd ' .. vim.fn.shellescape(wt_head) .. ' && GIT_EDITOR=' .. vim.fn.shellescape('sh ' .. editor_file_head) .. ' git commit --amend'
+              vim.fn.jobstart({'sh','-c', cmd_head}, {
+                stdout_buffered = true,
+                stderr_buffered = true,
+                on_exit = function(_, code)
+                  pcall(vim.fn.delete, editor_file_head)
+                  pcall(vim.fn.delete, marker_file_head)
+                  pcall(vim.fn.delete, done_file_head)
+                  if code == 0 then
+                    vim.schedule(function()
+                      vim.notify('Amend completed', vim.log.levels.INFO)
+                      vim.fn['fugitive#ReloadStatus']()
+                      vim.schedule(refresh)
+                    end)
+                  else
+                    vim.schedule(function()
+                      vim.notify('Amend exited with code ' .. tostring(code), vim.log.levels.ERROR)
+                    end)
+                  end
+                end,
+              })
+            else
+              local base = h .. '^'
+              if vim.fn.system('git rev-parse ' .. base .. ' 2>/dev/null') and vim.v.shell_error ~= 0 then base = '--root' end
+
+              -- Perform an interactive rebase that stops at the target commit and
+              -- open the commit message file in this Neovim instance. We create a
+              -- temporary sequence-editor to mark the todo as 'reword' and a small
+              -- blocking editor script that writes the commit message path to a
+              -- marker file; a timer watches that marker and opens the file for
+              -- editing. When the user writes the buffer we touch the done file to
+              -- let git continue.
+              local wt = get_fugitive_work_tree() or vim.fn.getcwd()
+              local short = h:sub(1, 7)
+              local tmpbase = vim.fn.tempname()
+              local seq_file = tmpbase .. '.seq.sh'
+              local editor_file = tmpbase .. '.editor.sh'
+              local marker_file = tmpbase .. '.marker'
+              local done_file = tmpbase .. '.done'
+
+              vim.fn.writefile({
+                "#!/bin/sh",
+                "tmp=$(mktemp)",
+                "awk -v s=\"" .. short .. "\" '{ if ($0 ~ \"^pick .*\" s) { sub(/^pick/, \"reword\", $0); } print }' \"$1\" > \"$tmp\"",
+                "mv \"$tmp\" \"$1\"",
+              }, seq_file)
+              vim.fn.writefile({"#!/bin/sh",
+                "commit_msg_file=\"$1\"",
+                "printf '%s\\n' \"$commit_msg_file\" > " .. vim.fn.shellescape(marker_file),
+                "while [ ! -f " .. vim.fn.shellescape(done_file) .. " ]; do sleep 0.1; done",
+                "exit 0"}, editor_file)
+
+              -- Make scripts executable
+              vim.fn.system('chmod +x ' .. vim.fn.shellescape(seq_file) .. ' ' .. vim.fn.shellescape(editor_file))
+
+              -- Poll for marker file created by the editor script and open the file
+              local uv = vim.loop
+              local timer = uv.new_timer()
+              timer:start(50, 50, vim.schedule_wrap(function()
+                if vim.fn.filereadable(marker_file) == 1 then
+                  timer:stop()
+                  timer:close()
+                  local lines = vim.fn.readfile(marker_file)
+                  local commit_msg_path = lines[1] or ''
+                  if commit_msg_path ~= '' then
+                    vim.schedule(function()
+                      local fname = vim.fn.fnameescape(commit_msg_path)
+                      local winid = vim.fn.bufwinid(b)
+                      if type(winid) == 'number' and winid > 0 then
+                        pcall(vim.api.nvim_set_current_win, winid)
+                      end
+                      vim.cmd('belowright split ' .. fname)
+                      pcall(function() vim.bo.filetype = 'gitcommit' end)
+                      local bufnr = vim.api.nvim_get_current_buf()
+                      vim.api.nvim_create_autocmd({'BufWritePost'}, {
+                        buffer = bufnr,
+                        once = true,
+                        callback = function()
+                          -- Signal the editor script to exit so git can continue
+                          vim.fn.writefile({}, done_file)
+                          if vim.fn.filereadable(marker_file) == 1 then vim.fn.delete(marker_file) end
+                        end,
+                      })
+                    end)
+                  end
+                end
+              end))
+
+              -- Start the rebase asynchronously with our custom editors
+              local cmd = 'cd ' .. vim.fn.shellescape(wt)
+                .. ' && GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape('sh ' .. seq_file)
+                .. ' GIT_EDITOR=' .. vim.fn.shellescape('sh ' .. editor_file)
+                .. ' git rebase -i ' .. vim.fn.shellescape(base)
+              vim.fn.jobstart({'sh', '-c', cmd}, {
+                stdout_buffered = true,
+                stderr_buffered = true,
+                on_exit = function(_, code)
+                  -- Cleanup
+                  pcall(vim.fn.delete, seq_file)
+                  pcall(vim.fn.delete, editor_file)
+                  pcall(vim.fn.delete, marker_file)
+                  pcall(vim.fn.delete, done_file)
+                  if code == 0 then
+                    vim.schedule(function()
+                      vim.notify('Rebase completed', vim.log.levels.INFO)
+                      vim.fn['fugitive#ReloadStatus']()
+                      vim.schedule(refresh)
+                    end)
+                  else
+                    vim.schedule(function()
+                      vim.notify('Rebase exited with code ' .. tostring(code), vim.log.levels.ERROR)
+                    end)
+                  end
+                end,
+              })
+            end
+            return
+          end
+        end
+        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:cw", true, false, true), 'm', true)
+      end, { buffer = b, nowait = true, silent = true, desc = "Reword commit or rename stash" })
 
       vim.keymap.set('n', 'A', function()
         if is_cursor_in_stash_area() then
