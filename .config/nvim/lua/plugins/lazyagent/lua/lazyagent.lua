@@ -418,6 +418,8 @@ function M.setup(opts)
       notify_on_done = true,
       -- Automatically create a git commit checkpoint when the agent finishes a turn.
       git_checkpoint_on_done = false,
+      -- Automatically show diagnostics in quickfix when agent finishes (default: false)
+      diagnostic_on_done = false,
     },
     -- Options specific to Instant Mode
     instant_mode = {
@@ -426,6 +428,15 @@ function M.setup(opts)
   }
 
   M.opts = vim.tbl_deep_extend("force", default_opts, opts or {})
+
+  -- Export NVIM_LISTEN_ADDRESS from vim.v.servername if available (simple implementation)
+  pcall(function()
+    local ok, sv = pcall(function() return vim.v.servername end)
+    if ok and sv and sv ~= "" then
+      vim.env.NVIM_LISTEN_ADDRESS = sv
+      pcall(function() vim.fn.setenv("NVIM_LISTEN_ADDRESS", sv) end)
+    end
+  end)
 
   local function should_start_mcp_server()
     if not M.opts.mcp_mode then

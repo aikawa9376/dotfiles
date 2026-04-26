@@ -370,3 +370,159 @@ prompts = {
 | macOS | `fswatch` | `brew install fswatch` |
 
 ---
+
+## NVIM_LISTEN_ADDRESS と ACP 編集フック（追記）
+
+### NVIM_LISTEN_ADDRESS のエクスポート
+
+- 挙動: lazyagent の setup() 時に、`vim.v.servername` が存在すればプラグインは `vim.env.NVIM_LISTEN_ADDRESS` を設定し、併せて `vim.fn.setenv("NVIM_LISTEN_ADDRESS", <value>)` を呼びます。これにより Neovim 内側の環境と、`:!` や `jobstart` で起動する子プロセス/シェルに同一の値が継承されます。
+- 目的: tmux ペインで起動した agent CLI が、起動元 Neovim のサーバソケット（servername）へ接続できるようにするためです（例: Copilot の CLI 等）。
+- 注意点: `vim.v.servername` が非常に早い段階で未設定だと値は設定されません（現状は簡潔な実装のためリトライ/VimEnter のフォールバックを行っていません）。必要ならオプトインでフォールバックを追加できます。
+
+### tmux ペインへの注入
+
+- 実装: `lua/lazyagent/logic/session.lua` 側で `split_opts.env.NVIM_LISTEN_ADDRESS` を設定し、tmux split を作る際に env を渡しています。これにより agent プロセスが起動時に環境変数を取得できます。
+
+### ACP の編集フック
+
+- 編集フロー: ACP の `fs/write_text_file` 等は、Neovim バッファを更新しファイルへ書き込みます（実装: `lua/lazyagent/acp/backend.lua` の `write_text_file()`）。
+- フック: 書き込み後に `maybe_call_mcp_tool("open_last_changed", ...)` を呼ぶほか、ツール完了時に `util.fire_event("EditDone", { agent_name = ..., tool = ... })` を発火します。
+- 受け取り方:
+  - User autocmd:
+
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "LazyAgentEditDone",
+      callback = function(ev)
+        -- ev.data に { event = "EditDone", agent_name = <name>, tool = <tool_object> } が入る
+        print(vim.inspect(ev.data))
+      end,
+    })
+
+  - setup のコールバック:
+
+    require("lazyagent").setup({
+      callbacks = {
+        EditDone = function(data)
+          -- data: { event = "EditDone", agent_name = ..., tool = ... }
+        end,
+      },
+    })
+
+- 設定項目: `M.opts.hooks` 内の主要なフック/制御オプション:
+  - open_on_edit (boolean): 編集後に自動で最終変更ファイルを開く（デフォルト: true）
+  - quickfix_on_edit (boolean): 編集中の変更を quickfix に追加（デフォルト: true）
+  - notify_on_done (boolean): エージェントの turn 完了時に notify を表示（デフォルト: true）
+  - git_checkpoint_on_done (boolean): turn 完了時に git commit を自動で作る（デフォルト: false）
+  - diagnostic_on_done (boolean): notify_done 時に quickfix のファイルを順に開いて LSP diagnostics を表示する自動診断レビューを行う（デフォルト: false）
+  - diagnostic_loop_interval_ms (number): 自動診断レビューでファイルを切り替える間隔（ms、デフォルト: 1500）
+  - diagnostic_fetch_delay_ms (number): 診断表示前の待機時間（ms、デフォルト: 200）
+  - diagnostic_min_severity ("error"|"warning"|"info"|"hint"|"all"): 最小表示レベル（デフォルト: "all"）
+  - diagnostic_loop_repeat (boolean): 診断レビューを繰り返すかどうか（デフォルト: false）
+  - auto_fix_on_done (boolean): notify_done 時に quickfix のファイル一覧を agent に送って自動修正を依頼する（opt-in、デフォルト: false）
+
+  これらは `M.opts.hooks` テーブルで設定可能です。
+
+### 主要実装箇所（参照）
+
+- `lua/lazyagent.lua` : setup() 内での `NVIM_LISTEN_ADDRESS` エクスポート
+- `lua/lazyagent/logic/session.lua` : tmux split での env 注入
+- `lua/lazyagent/acp/backend.lua` : `write_text_file()`, `maybe_call_mcp_tool()`, `on_client_update()` (EditDone 発火)
+- `lua/lazyagent/mcp/tools.lua` : `open_last_changed` 等の MCP ツール実装
+- `lua/lazyagent/util.lua` : `fire_event()` 実装 (User autocmd + setup callbacks)
+
+---
+
+## 有効化と設定例（この実装に関連するオプション）
+
+以下は、ここで実装した動作（NVIM_LISTEN_ADDRESS の export、tmux ペインへの env 注入、ACP の edit フック / MCP hooks / util.fire_event 発火）を有効化／制御するための主要なオプション一覧と設定例です。
+
+- グローバル / フック関連 (M.opts.hooks)
+  - open_on_edit (boolean)         : 編集後に自動で最終変更ファイルを開く（デフォルト: true）
+  - quickfix_on_edit (boolean)     : 編集中の変更を quickfix に追加する（デフォルト: true）
+  - notify_on_done (boolean)       : エージェントの turn 完了時に notify を表示する（デフォルト: true）
+  - git_checkpoint_on_done (bool)  : turn 完了時に git commit を自動で作る（デフォルト: false）
+
+- MCP / ACP 関連
+  - mcp_mode (boolean)             : プラグイン内の MCP サーバ起動の振る舞い（mcp server の自動起動制御）
+  - mcp_initial_send (boolean)     : agent 起動時に initial_send を送って notify_start/notify_done を誘発させる（デフォルト: false）
+  - acp.enabled (boolean)          : ACP を有効にして ACP 対応エージェントを起動する（デフォルト: false）
+  - acp.view ("tmux"|"buffer")   : ACP 表示先（tmux / buffer）
+  - interactive_agents.<name>.acp_cmd: エージェントの ACP 用起動コマンド（例: Copilot の `--acp` フラグ）
+  - interactive_agents.<name>.acp     : agent 単位で ACP を無効化/有効化・view を上書きできるテーブル
+
+- イベント購読（setup の callbacks と User autocmd）
+  - util.fire_event は次のイベント名を発火します（例）:
+    - EditDone
+    - TurnDone
+    - AssistantResponse
+    - SessionStarted
+    - SessionStopped
+  - 受け取り方:
+    - setup の callbacks:
+
+```lua
+require("lazyagent").setup({
+  callbacks = {
+    EditDone = function(data) print("EditDone:", vim.inspect(data)) end,
+    TurnDone = function(data) print("TurnDone:", vim.inspect(data)) end,
+    AssistantResponse = function(data) print("AssistantResponse:", vim.inspect(data)) end,
+    SessionStarted = function(data) print("SessionStarted:", vim.inspect(data)) end,
+    SessionStopped = function(data) print("SessionStopped:", vim.inspect(data)) end,
+  }
+})
+```
+
+    - User autocmd (Neovim の `User` イベント):
+
+```lua
+vim.api.nvim_create_autocmd("User", {
+  pattern = "LazyAgentEditDone",
+  callback = function(ev)
+    -- ev.data.event == "EditDone"
+    print(vim.inspect(ev.data))
+  end,
+})
+-- 同様に LazyAgentTurnDone, LazyAgentAssistantResponse, LazyAgentSessionStarted, LazyAgentSessionStopped を受け取れます
+```
+
+- 有効化の実用例まとめ
+
+有効にして、編集後に自動でファイルを開きつつ MCP/ACP フックも使う最小構成例:
+
+```lua
+require("lazyagent").setup({
+  -- MCP を使いたい場合（agent CLI が MCP をサポートする場合）
+  mcp_mode = true,
+  mcp_initial_send = true,
+
+  -- ACP を使う（Neovim 側で ACP セッションを管理）
+  acp = { enabled = true, view = "buffer" },
+
+  -- フック挙動
+  hooks = {
+    open_on_edit = true,
+    quickfix_on_edit = true,
+    notify_on_done = true,
+    git_checkpoint_on_done = false,
+  },
+
+  -- コールバックで受け取る例
+  callbacks = {
+    EditDone = function(d) vim.notify("Agent edited: " .. tostring(d.agent_name)) end,
+    TurnDone = function(d) vim.notify("Turn done: " .. tostring(d.agent_name)) end,
+  },
+
+  -- agent 側は ACP を渡して起動（例: Copilot）
+  interactive_agents = {
+    Copilot = { acp_cmd = { "copilot", "--acp" } },
+  },
+})
+```
+
+- NVIM_LISTEN_ADDRESS のエクスポートについて
+  - これは現在 plugin.setup() の起動時に `vim.v.servername` が存在すれば自動で `vim.env.NVIM_LISTEN_ADDRESS` と `vim.fn.setenv("NVIM_LISTEN_ADDRESS", ...)` を呼んでいます。特に設定オプションは用意していません（必要ならオプトインのフォールバック挙動を追加可能です）。
+
+---
+
+Last updated: 2026-04-26T15:55:55+09:00
+

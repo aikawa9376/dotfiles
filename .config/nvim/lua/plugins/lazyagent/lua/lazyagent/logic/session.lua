@@ -1171,6 +1171,18 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
 
   local function do_split()
     split_opts.env = split_opts.env or {}
+    -- Ensure NVIM_LISTEN_ADDRESS is available in the pane's environment so agents can connect back to this Neovim instance.
+    do
+      local ok, server = pcall(function() return vim.v.servername end)
+      if ok and server and server ~= "" then
+        split_opts.env.NVIM_LISTEN_ADDRESS = split_opts.env.NVIM_LISTEN_ADDRESS or server
+      else
+        local e = (vim.env and vim.env.NVIM_LISTEN_ADDRESS) or nil
+        if e and e ~= "" then
+          split_opts.env.NVIM_LISTEN_ADDRESS = split_opts.env.NVIM_LISTEN_ADDRESS or e
+        end
+      end
+    end
 
     if acp_logic.is_acp_backend(backend_name) then
       split_opts.acp = build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts)
