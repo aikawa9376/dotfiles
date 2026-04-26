@@ -9,6 +9,7 @@ local diff_utils = require("lazyagent.acp.diff")
 local summary_logic = require("lazyagent.logic.summary")
 local transforms = require("lazyagent.transforms")
 local util = require("lazyagent.util")
+local state = require("lazyagent.logic.state")
 
 local sessions = {}
 local terminal_seq = 0
@@ -2590,12 +2591,16 @@ local function on_client_update(session, params)
     if body == "" then
       body = render_tool_raw_output(tool.rawOutput)
     end
-    if body ~= "" then
-      append_block(session, tool_heading(tool), summarize_tool_block(tool, title, body))
-    else
-      append_block(session, tool_heading(tool), title)
+    local hide_pending = state and state.opts and state.opts.acp and state.opts.acp.hide_pending_messages == true
+    local is_terminal = tool_update_is_terminal(tool)
+    if not (hide_pending and not is_terminal) then
+      if body ~= "" then
+        append_block(session, tool_heading(tool), summarize_tool_block(tool, title, body))
+      else
+        append_block(session, tool_heading(tool), title)
+      end
     end
-        if tool_update_is_terminal(tool) then
+    if is_terminal then
       if tool.kind == "edit" then
         util.fire_event("EditDone", { agent_name = session.agent_name, tool = tool })
       end

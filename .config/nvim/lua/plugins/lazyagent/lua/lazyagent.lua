@@ -338,6 +338,7 @@ function M.setup(opts)
       buffer_background = nil,
       buffer_inactive_background = nil,
       permission_rules = {},
+      hide_pending_messages = true,
       auto_switch = {
         enabled = false,
         preserve_manual = true,

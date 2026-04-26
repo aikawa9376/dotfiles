@@ -156,6 +156,7 @@ require("lazyagent").setup({
 - デフォルトは `false` なので、既存の tmux ベース運用は変わりません。
 - `acp.view = "tmux"` なら `tmux_acp`、`acp.view = "buffer"` なら `buffer_acp` が選ばれます。
 - `acp.transcript_max_lines` / `interactive_agents.<name>.acp.transcript_max_lines` を指定すると、`buffer_acp` transcript の読み込みを末尾 N 行に制限できます。未指定なら全件読み込みます。
+- `acp.hide_pending_messages` (boolean): ACP の pending 系ステータス（tool の waiting/pending）を transcript に自動追加するのを抑制します（デフォルト: true）。transcript に pending 表示が必要な場合は false に設定してください。
 - 最高権限寄りで始めたい場合は、まず provider が expose している mode を `acp.default_mode` で指定するのが本命です。agentic.nvim と同じく、`"bypassPermissions"` のような mode がある provider ではこちらを優先してください。
 - `acp.auto_permission = "allow_always"` は fallback としては有効ですが、provider mode を切り替えられない場合の補助です。`yolo = true` だけでは ACP permission は暗黙で `allow_once` までに留めています。
 - `interactive_agents.<name>.acp = false` を付けると、global ACP 有効時でもその agent だけ従来 backend を使えます。
