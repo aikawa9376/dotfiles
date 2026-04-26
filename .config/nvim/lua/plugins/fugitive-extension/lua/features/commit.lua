@@ -1158,4 +1158,9 @@ function M.setup(group)
   })
 end
 
+M.open_edit_commit = function(commit, origin_buf)
+  local view_state = save_commit_view_state(origin_buf)
+  open_edit_commit_float(commit, origin_buf, view_state)
+end
+
 return M
