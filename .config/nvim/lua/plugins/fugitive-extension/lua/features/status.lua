@@ -654,4 +654,21 @@ function M.setup(group)
   })
 end
 
+function M.refresh_buffer(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+  local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
+  local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
+  pcall(function()
+    refresh_status_sections(bufnr, ns_worktree, ns_stash)
+  end)
+end
+
+function M.refresh_all()
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_get_option(bufnr, 'filetype') == 'fugitive' then
+      M.refresh_buffer(bufnr)
+    end
+  end
+end
+
 return M
