@@ -182,6 +182,46 @@ local function line_has_tail(line)
   return line_has_heading(line, "User") or line_has_heading(line, "Assistant")
 end
 
+local function is_markdown_fence(line)
+  return type(line) == "string" and line:match("^%s*```") ~= nil
+end
+
+local function code_block_target_row(lines, cur_row, forward)
+  lines = type(lines) == "table" and lines or {}
+
+  local openings = {}
+  local inside_fence = false
+  for row, line in ipairs(lines) do
+    if is_markdown_fence(line) then
+      if not inside_fence then
+        local target = row
+        if type(lines[row - 1]) == "string" and lines[row - 1]:match("^%s*Path:%s+") then
+          target = row - 1
+        end
+        openings[#openings + 1] = target
+      end
+      inside_fence = not inside_fence
+    end
+  end
+
+  if forward then
+    for _, row in ipairs(openings) do
+      if row > cur_row then
+        return row
+      end
+    end
+    return nil
+  end
+
+  for idx = #openings, 1, -1 do
+    if openings[idx] < cur_row then
+      return openings[idx]
+    end
+  end
+
+  return nil
+end
+
 local function strdisplaywidth(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text)
   return ok and width or #tostring(text or "")
@@ -871,9 +911,18 @@ local function apply_transcript_buffer_opts(bufnr)
   end)
   pcall(vim.api.nvim_set_option_value, "spell", false, { buf = bufnr })
 
-  -- Buffer-local mappings: jump between User sections with ]] and [[
+  -- Buffer-local mappings: jump between User sections and fenced code blocks.
+  local function jump_to_row(win, row)
+    pcall(function()
+      vim.api.nvim_win_set_cursor(win, { row, 0 })
+      pcall(vim.cmd, "normal! zz")
+    end)
+  end
+
   local function jump_to_user(forward)
-    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
     local win = vim.api.nvim_get_current_win()
     local cur = vim.api.nvim_win_get_cursor(win)
     local cur_row = cur[1]
@@ -882,10 +931,7 @@ local function apply_transcript_buffer_opts(bufnr)
       for r = cur_row + 1, stop do
         local line = vim.api.nvim_buf_get_lines(bufnr, r - 1, r, false)[1] or ""
         if line_has_heading(line, "User") then
-          pcall(function()
-            vim.api.nvim_win_set_cursor(win, { r, 0 })
-            pcall(vim.cmd, "normal! zz")
-          end)
+          jump_to_row(win, r)
           return
         end
       end
@@ -894,10 +940,7 @@ local function apply_transcript_buffer_opts(bufnr)
       for r = math.max(1, cur_row - 1), 1, -1 do
         local line = vim.api.nvim_buf_get_lines(bufnr, r - 1, r, false)[1] or ""
         if line_has_heading(line, "User") then
-          pcall(function()
-            vim.api.nvim_win_set_cursor(win, { r, 0 })
-            pcall(vim.cmd, "normal! zz")
-          end)
+          jump_to_row(win, r)
           return
         end
       end
@@ -905,9 +948,39 @@ local function apply_transcript_buffer_opts(bufnr)
     end
   end
 
+  local function jump_to_code_block(forward)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    local win = vim.api.nvim_get_current_win()
+    local cur = vim.api.nvim_win_get_cursor(win)
+    local cur_row = cur[1]
+    local stop = transcript_line_count(bufnr)
+    local target = code_block_target_row(
+      transcript_source_lines(bufnr, 0, stop),
+      cur_row,
+      forward
+    )
+    if target then
+      jump_to_row(win, target)
+      return
+    end
+    vim.notify(forward and "No later code block" or "No earlier code block", vim.log.levels.INFO)
+  end
+
   pcall(function()
-    vim.keymap.set("n", "]]", function() jump_to_user(true) end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: next User" })
-    vim.keymap.set("n", "[[", function() jump_to_user(false) end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: prev User" })
+    vim.keymap.set("n", "]]", function()
+      jump_to_user(true)
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: next User" })
+    vim.keymap.set("n", "[[", function()
+      jump_to_user(false)
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: prev User" })
+    vim.keymap.set("n", "]d", function()
+      jump_to_code_block(true)
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: next code block" })
+    vim.keymap.set("n", "[d", function()
+      jump_to_code_block(false)
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: prev code block" })
     vim.keymap.set("n", "<C-u>", function()
       M.scroll_up(pane_id_for_bufnr(bufnr))
     end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: half page up" })
