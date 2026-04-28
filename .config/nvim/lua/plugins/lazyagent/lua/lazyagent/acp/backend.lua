@@ -24,6 +24,8 @@ local section_icons = {
 local resolve_permission_option
 local tool_heading
 local buffer_root_for_session
+local sync_runtime_session
+local sync_runtime_live_state
 
 local sanitize_filename_component = util.sanitize_filename_component
 
@@ -137,11 +139,20 @@ local function clear_session_transcript(session, replacement_text)
   session.current_stream_key = nil
   session.current_stream_heading = nil
   session.current_stream_at_line_start = nil
+  session.current_stream_item_id = nil
 
   local text = normalize_text(replacement_text or "")
   local ok = write_session_transcript(session, text, "w")
   if ok then
     session.transcript_has_content = text ~= ""
+    session.conversation_timeline = {}
+    session.conversation_timeline_index = {}
+    session.tool_calls = {}
+    session.tool_timeline = {}
+    session.tool_timeline_index = {}
+    if sync_runtime_live_state then
+      sync_runtime_live_state(session)
+    end
   end
   return ok
 end
@@ -219,6 +230,140 @@ local function render_section_block(heading, body)
   return table.concat(lines)
 end
 
+local function summarize_conversation_text(text, limit)
+  local normalized = normalize_text(text or "")
+    :gsub("%s+", " ")
+    :gsub("^%s+", "")
+    :gsub("%s+$", "")
+  limit = tonumber(limit) or 120
+  if normalized == "" then
+    return ""
+  end
+  if #normalized <= limit then
+    return normalized
+  end
+  return normalized:sub(1, math.max(1, limit - 1)) .. "…"
+end
+
+local function conversation_kind_for_heading(heading)
+  heading = tostring(heading or "")
+  if heading == "User" then
+    return "user"
+  end
+  if heading == "Assistant" then
+    return "assistant"
+  end
+  if heading == "Thinking" then
+    return "thinking"
+  end
+  if heading == "System" then
+    return "system"
+  end
+  if heading == "Error" then
+    return "error"
+  end
+  if heading == "Plan" then
+    return "plan"
+  end
+  if heading:match("^Tool") then
+    return "tool"
+  end
+  if heading:match("^Terminal") then
+    return "terminal"
+  end
+  if heading:match("^Edited ") then
+    return "edited"
+  end
+  return heading:lower()
+end
+
+local function next_conversation_item_id(session)
+  session.conversation_next_item_id = (tonumber(session.conversation_next_item_id) or 0) + 1
+  return string.format("%s:%d", tostring(session.pane_id or session.agent_name or "acp"), session.conversation_next_item_id)
+end
+
+local function conversation_item_index(session, item_id)
+  if not session or not item_id or type(session.conversation_timeline_index) ~= "table" then
+    return nil
+  end
+  return session.conversation_timeline_index[item_id]
+end
+
+local function conversation_item_for_id(session, item_id)
+  local idx = conversation_item_index(session, item_id)
+  return idx and session.conversation_timeline and session.conversation_timeline[idx] or nil
+end
+
+local function sync_tool_pin_state(session, item)
+  if not session or type(item) ~= "table" or not item.toolCallId then
+    return
+  end
+  local idx = session.tool_timeline_index and session.tool_timeline_index[item.toolCallId] or nil
+  local entry = idx and session.tool_timeline and session.tool_timeline[idx] or nil
+  if not entry then
+    return
+  end
+  if item.pinned == nil then
+    item.pinned = entry.pinned == true
+  else
+    entry.pinned = item.pinned == true
+  end
+  entry.conversation_item_id = item.id
+end
+
+local function new_conversation_item(session, heading, body, meta)
+  meta = type(meta) == "table" and meta or {}
+  session.conversation_timeline = session.conversation_timeline or {}
+  session.conversation_timeline_index = session.conversation_timeline_index or {}
+
+  local item = {
+    id = meta.id or next_conversation_item_id(session),
+    seq = #session.conversation_timeline + 1,
+    kind = meta.kind or conversation_kind_for_heading(heading),
+    heading = heading,
+    title = meta.title or heading,
+    body = body or "",
+    summary = meta.summary or summarize_conversation_text(body or meta.title or heading, 140),
+    pinned = meta.pinned == true,
+    stream_key = meta.stream_key,
+    toolCallId = meta.toolCallId,
+    status = meta.status,
+    path = meta.path,
+  }
+
+  session.conversation_timeline[#session.conversation_timeline + 1] = item
+  session.conversation_timeline_index[item.id] = #session.conversation_timeline
+  sync_tool_pin_state(session, item)
+  return item
+end
+
+local function update_conversation_item(item, body, meta)
+  if type(item) ~= "table" then
+    return
+  end
+  meta = type(meta) == "table" and meta or {}
+  item.body = body or item.body or ""
+  if meta.title and meta.title ~= "" then
+    item.title = meta.title
+  end
+  if meta.kind and meta.kind ~= "" then
+    item.kind = meta.kind
+  end
+  if meta.toolCallId and meta.toolCallId ~= "" then
+    item.toolCallId = meta.toolCallId
+  end
+  if meta.status and meta.status ~= "" then
+    item.status = meta.status
+  end
+  if meta.path and meta.path ~= "" then
+    item.path = meta.path
+  end
+  if meta.pinned ~= nil then
+    item.pinned = meta.pinned == true
+  end
+  item.summary = meta.summary or summarize_conversation_text(item.body ~= "" and item.body or item.title or item.heading, 140)
+end
+
 local function close_stream(session)
   if session.current_stream_key then
     if not session.current_stream_at_line_start then
@@ -227,20 +372,25 @@ local function close_stream(session)
     session.current_stream_key = nil
     session.current_stream_heading = nil
     session.current_stream_at_line_start = nil
+    session.current_stream_item_id = nil
     session.transcript_has_content = true
   end
 end
 
-local function append_block(session, heading, body)
+local function append_block(session, heading, body, meta)
   body = normalize_text(body)
   if body == "" then return end
   close_stream(session)
   local prefix = session.transcript_has_content and "\n" or ""
   write_session_transcript(session, prefix .. render_section_block(heading, body))
   session.transcript_has_content = true
+  new_conversation_item(session, heading, body, meta)
+  if sync_runtime_live_state then
+    sync_runtime_live_state(session)
+  end
 end
 
-local function append_stream_chunk(session, stream_key, heading, body)
+local function append_stream_chunk(session, stream_key, heading, body, meta)
   body = normalize_text(body)
   if body == "" then return end
   if session.current_stream_key ~= stream_key then
@@ -250,11 +400,24 @@ local function append_stream_chunk(session, stream_key, heading, body)
     session.current_stream_key = stream_key
     session.current_stream_heading = heading
     session.current_stream_at_line_start = true
+    local item = new_conversation_item(session, heading, body, vim.tbl_extend("force", meta or {}, {
+      stream_key = stream_key,
+    }))
+    session.current_stream_item_id = item.id
     session.transcript_has_content = true
+  else
+    local item = conversation_item_for_id(session, session.current_stream_item_id)
+    if item then
+      update_conversation_item(item, (item.body or "") .. body, meta)
+      sync_tool_pin_state(session, item)
+    end
   end
   local padded, next_at_line_start = pad_stream_chunk(body, session.current_stream_at_line_start)
   write_session_transcript(session, padded)
   session.current_stream_at_line_start = next_at_line_start
+  if sync_runtime_live_state then
+    sync_runtime_live_state(session)
+  end
 end
 
 local function render_content(content)
@@ -677,6 +840,9 @@ local function upsert_tool_timeline(session, tool)
   entry.kind = tool.kind or entry.kind
   entry.paths = extract_tool_paths(tool)
   entry.summary = summarize_tool(tool)
+  entry.rendered_content = render_tool_content(tool.content)
+  entry.rendered_raw_output = render_tool_raw_output(tool.rawOutput)
+  entry.pinned = entry.pinned == true
   entry.tool = vim.deepcopy(tool)
 
   if not idx then
@@ -685,6 +851,31 @@ local function upsert_tool_timeline(session, tool)
   else
     session.tool_timeline[idx] = entry
   end
+  if sync_runtime_live_state then
+    sync_runtime_live_state(session)
+  end
+end
+
+local function tool_timeline_entry_for_call(session, tool_call_id)
+  if not session or not tool_call_id or tool_call_id == "" then
+    return nil
+  end
+
+  local idx = session.tool_timeline_index and session.tool_timeline_index[tool_call_id] or nil
+  local entry = idx and session.tool_timeline and session.tool_timeline[idx] or nil
+  if entry then
+    return entry
+  end
+
+  for seq, item in ipairs(session.tool_timeline or {}) do
+    if type(item) == "table" and item.toolCallId == tool_call_id then
+      session.tool_timeline_index = session.tool_timeline_index or {}
+      session.tool_timeline_index[tool_call_id] = seq
+      return item
+    end
+  end
+
+  return nil
 end
 
 local function merge_tool_update(session, update)
@@ -768,13 +959,25 @@ local function note_unadvertised_slash_command(session, prompt)
   )
 end
 
-local function sync_runtime_session(session)
+sync_runtime_live_state = function(session)
   local ok_state, state = pcall(require, "lazyagent.logic.state")
   if not ok_state or not state or not state.sessions or not state.sessions[session.agent_name] then
     return
   end
 
   local runtime = state.sessions[session.agent_name]
+  runtime.acp_tool_timeline = session.tool_timeline or {}
+  runtime.acp_conversation_timeline = session.conversation_timeline or {}
+end
+
+sync_runtime_session = function(session)
+  local ok_state, state = pcall(require, "lazyagent.logic.state")
+  if not ok_state or not state or not state.sessions or not state.sessions[session.agent_name] then
+    return
+  end
+
+  local runtime = state.sessions[session.agent_name]
+  sync_runtime_live_state(session)
   runtime.acp_available_commands = vim.deepcopy(session.available_commands or {})
   runtime.acp_config_options = vim.deepcopy(session.config_options or {})
   runtime.acp_session_id = session.session_id
@@ -791,7 +994,6 @@ local function sync_runtime_session(session)
   runtime.acp_permission_rules = vim.deepcopy(session.permission_rules or {})
   runtime.acp_auto_switch = vim.deepcopy(session.auto_switch or {})
   runtime.acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {})
-  runtime.acp_tool_timeline = vim.deepcopy(session.tool_timeline or {})
 
   pcall(function()
     require("lazyagent.acp.view_buffer").refresh_agent_footers(session.agent_name, { force = true })
@@ -1430,14 +1632,20 @@ local function render_tool_timeline_detail(entry)
     end
   end
 
-  local body = render_tool_content(tool.content)
+  local body = tostring(entry and entry.rendered_content or "")
+  if body == "" then
+    body = render_tool_content(tool.content)
+  end
   if body ~= "" then
     lines[#lines + 1] = ""
     lines[#lines + 1] = "Content:"
     vim.list_extend(lines, vim.split(body, "\n", { plain = true }))
   end
 
-  local raw_output = render_tool_raw_output(tool.rawOutput)
+  local raw_output = tostring(entry and entry.rendered_raw_output or "")
+  if raw_output == "" then
+    raw_output = render_tool_raw_output(tool.rawOutput)
+  end
   if raw_output ~= "" then
     lines[#lines + 1] = ""
     lines[#lines + 1] = "Raw output:"
@@ -1447,20 +1655,116 @@ local function render_tool_timeline_detail(entry)
   return lines
 end
 
-local function open_tool_timeline_buffer(entry)
-  vim.cmd("belowright split")
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_win_set_buf(0, buf)
-  vim.bo[buf].buftype = "nofile"
+local function normalize_buffer_lines(lines)
+  local normalized = {}
+  for _, line in ipairs(lines or {}) do
+    local text = tostring(line or "")
+    local split = vim.split(text, "\n", { plain = true })
+    if #split == 0 then
+      normalized[#normalized + 1] = ""
+    else
+      vim.list_extend(normalized, split)
+    end
+  end
+  return normalized
+end
+
+local function is_standard_window(win)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return false
+  end
+
+  local ok_cfg, cfg = pcall(vim.api.nvim_win_get_config, win)
+  if not ok_cfg or (cfg and cfg.relative ~= "") then
+    return false
+  end
+
+  local ok_buf, buf = pcall(vim.api.nvim_win_get_buf, win)
+  if not ok_buf or not buf or not vim.api.nvim_buf_is_valid(buf) then
+    return false
+  end
+
+  local ok_pane, pane_id = pcall(vim.api.nvim_buf_get_var, buf, "lazyagent_acp_pane_id")
+  if ok_pane and pane_id ~= nil then
+    return false
+  end
+
+  local buftype = vim.bo[buf].buftype
+  return buftype == "" or buftype == "acwrite"
+end
+
+local function preferred_output_window(session)
+  local candidates = {
+    session and session.view_state and session.view_state.source_winid or nil,
+  }
+
+  local ok_current, current = pcall(vim.api.nvim_get_current_win)
+  if ok_current then
+    candidates[#candidates + 1] = current
+  end
+
+  for _, win in ipairs(candidates) do
+    if is_standard_window(win) then
+      return win
+    end
+  end
+
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    if is_standard_window(win) then
+      return win
+    end
+  end
+
+  return nil
+end
+
+local function open_output_window(session)
+  local target = preferred_output_window(session)
+  if target and vim.api.nvim_win_is_valid(target) then
+    pcall(vim.api.nvim_set_current_win, target)
+    pcall(vim.cmd, "belowright split")
+    return vim.api.nvim_get_current_win()
+  end
+
+  pcall(vim.cmd, "tabnew")
+  return vim.api.nvim_get_current_win()
+end
+
+local function open_output_buffer(session, name, filetype, lines)
+  local win = open_output_window(session)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return false
+  end
+
+  local buf = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_win_set_buf(win, buf)
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].swapfile = false
+  vim.bo[buf].undofile = false
   vim.bo[buf].modifiable = true
-  vim.bo[buf].filetype = "markdown"
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, render_tool_timeline_detail(entry))
+  vim.bo[buf].filetype = filetype or "markdown"
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, normalize_buffer_lines(lines or {}))
+  if name and name ~= "" then
+    vim.api.nvim_buf_set_name(buf, string.format("%s [%d]", name, buf))
+  end
+  vim.bo[buf].modified = false
   vim.bo[buf].modifiable = false
   vim.bo[buf].readonly = true
-  vim.api.nvim_buf_set_name(buf, "lazyagent://acp-tool-" .. sanitize_filename_component(entry.toolCallId or "tool"))
-  vim.wo.wrap = false
+  vim.keymap.set("n", "q", function()
+    if vim.api.nvim_buf_is_valid(buf) then
+      pcall(vim.api.nvim_win_close, 0, false)
+    end
+  end, { buffer = buf, silent = true, noremap = true, desc = "Close ACP output" })
+  return true
+end
+
+local function open_tool_timeline_buffer(session, entry)
+  open_output_buffer(
+    session,
+    "ACP Tool Output " .. sanitize_filename_component(entry.toolCallId or "tool"),
+    "markdown",
+    render_tool_timeline_detail(entry)
+  )
 end
 
 local function show_tool_timeline_for_session(session)
@@ -1477,34 +1781,23 @@ local function show_tool_timeline_for_session(session)
   vim.ui.select(timeline, {
     prompt = "ACP tool timeline:",
     format_item = function(item)
+      local pin = item.pinned and "📌 " or ""
       local status = item.status and item.status ~= "" and (" [" .. item.status .. "]") or ""
       local summary = item.summary and item.summary ~= "" and (" - " .. item.summary) or ""
-      return string.format("%02d. %s%s%s", item.seq or 0, item.title or item.toolCallId or "tool", status, summary)
+      return string.format("%s%02d. %s%s%s", pin, item.seq or 0, item.title or item.toolCallId or "tool", status, summary)
     end,
   }, function(choice)
     if not choice then
       return
     end
-    open_tool_timeline_buffer(choice)
+    open_tool_timeline_buffer(session, choice)
   end)
 
   return true
 end
 
-local function open_report_buffer(name, filetype, lines)
-  vim.cmd("belowright split")
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_win_set_buf(0, buf)
-  vim.bo[buf].buftype = "nofile"
-  vim.bo[buf].bufhidden = "wipe"
-  vim.bo[buf].swapfile = false
-  vim.bo[buf].modifiable = true
-  vim.bo[buf].filetype = filetype or "markdown"
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines or {})
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].readonly = true
-  vim.api.nvim_buf_set_name(buf, name)
-  vim.wo.wrap = false
+local function open_report_buffer(session, name, filetype, lines)
+  open_output_buffer(session, name, filetype, lines)
 end
 
 local function render_capability_report(session)
@@ -1586,7 +1879,8 @@ local function show_capabilities_for_session(session)
     return false
   end
   open_report_buffer(
-    "lazyagent://acp-capabilities-" .. sanitize_filename_component(session.agent_name or "session"),
+    session,
+    "ACP Capabilities " .. sanitize_filename_component(session.agent_name or "session"),
     "markdown",
     render_capability_report(session)
   )
@@ -2299,7 +2593,14 @@ local function handle_permission_request(session, params, done)
   session.auto_permission = latest_cfg.auto_permission
   session.permission_rules = vim.deepcopy(latest_cfg.permission_rules or {})
   local tool = merge_tool_update(session, params.toolCall or {})
-  append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested")
+  append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested", {
+    kind = "tool",
+    title = tool.title or tool.toolCallId or "Permission requested",
+    summary = tool.title or tool.toolCallId or "Permission requested",
+    toolCallId = tool.toolCallId,
+    status = tool.status,
+    path = (extract_tool_paths(tool) or {})[1],
+  })
   maybe_call_mcp_tool("notify_waiting", {
     agent_name = session.agent_name,
     message = "Permission",
@@ -2596,9 +2897,23 @@ local function on_client_update(session, params)
     local is_terminal = tool_update_is_terminal(tool)
     if not (hide_pending and not is_terminal) then
       if body ~= "" then
-        append_block(session, tool_heading(tool), summarize_tool_block(tool, title, body))
+        append_block(session, tool_heading(tool), summarize_tool_block(tool, title, body), {
+          kind = "tool",
+          title = title,
+          summary = summarize_tool_block(tool, title, body),
+          toolCallId = tool.toolCallId,
+          status = tool.status,
+          path = (extract_tool_paths(tool) or {})[1],
+        })
       else
-        append_block(session, tool_heading(tool), title)
+        append_block(session, tool_heading(tool), title, {
+          kind = "tool",
+          title = title,
+          summary = title,
+          toolCallId = tool.toolCallId,
+          status = tool.status,
+          path = (extract_tool_paths(tool) or {})[1],
+        })
       end
     end
     if is_terminal then
@@ -2869,6 +3184,9 @@ local function create_backend(default_view)
         auto_switch = vim.deepcopy(acp.auto_switch or {}),
         manual_config_overrides = {},
         auto_switch_state = {},
+        conversation_timeline = {},
+        conversation_timeline_index = {},
+        conversation_next_item_id = 0,
         tool_timeline = {},
         tool_timeline_index = {},
         ready = false,
@@ -2887,10 +3205,16 @@ local function create_backend(default_view)
         buffer_background = acp.buffer_background,
         buffer_inactive_background = acp.buffer_inactive_background,
         transcript_max_lines = acp.transcript_max_lines,
+        transcript_compaction = vim.deepcopy(acp.transcript_compaction or {}),
         initial_config_applied = false,
         view = view,
         view_state = view_state or {},
       }
+      new_conversation_item(
+        sessions[pane_id],
+        "System",
+        "Connecting ACP session for " .. acp.agent_name .. "..."
+      )
 
       if type(view.on_session_created) == "function" then
         view.on_session_created(sessions[pane_id])
@@ -2935,6 +3259,7 @@ local function create_backend(default_view)
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,
+      transcript_compaction = vim.deepcopy(session.transcript_compaction or {}),
       acp_available_commands = vim.deepcopy(session.available_commands or {}),
       acp_config_options = vim.deepcopy(session.config_options or {}),
       acp_session_id = session.session_id,
@@ -2951,6 +3276,7 @@ local function create_backend(default_view)
       acp_auto_switch = vim.deepcopy(session.auto_switch or {}),
       acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {}),
       acp_tool_timeline = vim.deepcopy(session.tool_timeline or {}),
+      acp_conversation_timeline = vim.deepcopy(session.conversation_timeline or {}),
     }
   end
 
@@ -3154,6 +3480,44 @@ local function create_backend(default_view)
       return false
     end
     return show_tool_timeline_for_session(session)
+  end
+
+  function backend.show_tool_timeline_entry(target_pane, tool_call_id)
+    local session = get_session(target_pane)
+    local entry = session and tool_timeline_entry_for_call(session, tool_call_id) or nil
+    if not entry then
+      return false
+    end
+    open_tool_timeline_buffer(session, entry)
+    return true
+  end
+
+  function backend.get_tool_timeline_entry(target_pane, tool_call_id)
+    local session = get_session(target_pane)
+    local entry = session and tool_timeline_entry_for_call(session, tool_call_id) or nil
+    return entry and vim.deepcopy(entry) or nil
+  end
+
+  function backend.get_conversation_timeline(target_pane)
+    local session = get_session(target_pane)
+    return session and vim.deepcopy(session.conversation_timeline or {}) or {}
+  end
+
+  function backend.toggle_conversation_pin(target_pane, item_id, pinned)
+    local session = get_session(target_pane)
+    local item = session and conversation_item_for_id(session, item_id) or nil
+    if not item then
+      return nil
+    end
+    if pinned == nil then
+      pinned = not item.pinned
+    end
+    item.pinned = pinned == true
+    sync_tool_pin_state(session, item)
+    if sync_runtime_live_state then
+      sync_runtime_live_state(session)
+    end
+    return item.pinned
   end
 
   function backend.show_resource_browser(target_pane)

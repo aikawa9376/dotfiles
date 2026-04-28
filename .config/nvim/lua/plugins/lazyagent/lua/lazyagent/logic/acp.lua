@@ -39,6 +39,40 @@ local function normalize_positive_integer(value)
   return math.floor(number)
 end
 
+local function normalize_transcript_compaction_config(value)
+  if type(value) == "boolean" then
+    return { enabled = value }
+  end
+
+  local cfg = type(value) == "table" and vim.deepcopy(value) or {}
+  return {
+    enabled = cfg.enabled,
+    min_sections = normalize_positive_integer(cfg.min_sections or cfg.section_threshold),
+    keep_recent_sections = normalize_positive_integer(cfg.keep_recent_sections or cfg.keep_recent),
+    summary_items = normalize_positive_integer(cfg.summary_items or cfg.max_summary_items),
+  }
+end
+
+local function merge_transcript_compaction_config(agent_cfg, global_cfg)
+  local agent = normalize_transcript_compaction_config(agent_cfg)
+  local global = normalize_transcript_compaction_config(global_cfg)
+  local enabled
+  if agent.enabled ~= nil then
+    enabled = agent.enabled == true
+  elseif global.enabled ~= nil then
+    enabled = global.enabled == true
+  else
+    enabled = false
+  end
+
+  return {
+    enabled = enabled,
+    min_sections = agent.min_sections or global.min_sections or 48,
+    keep_recent_sections = agent.keep_recent_sections or global.keep_recent_sections or 24,
+    summary_items = agent.summary_items or global.summary_items or 6,
+  }
+end
+
 local function normalize_permission_rules(value)
   if type(value) ~= "table" then
     return {}
@@ -186,6 +220,10 @@ local function resolve_from_config(agent_cfg)
     transcript_max_lines = normalize_positive_integer(
       agent_acp.transcript_max_lines or global_cfg.transcript_max_lines
     ),
+    transcript_compaction = merge_transcript_compaction_config(
+      agent_acp.transcript_compaction,
+      global_cfg.transcript_compaction
+    ),
     permission_rules = merge_permission_rules(
       agent_acp.permission_rules or (agent_cfg and agent_cfg.acp_permission_rules),
       global_cfg.permission_rules or (state.opts and state.opts.acp_permission_rules)
@@ -213,6 +251,7 @@ function M.resolve(agent_name, agent_cfg)
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,
+      transcript_compaction = vim.deepcopy(session.transcript_compaction or {}),
       footer_animation = session.footer_animation,
       permission_rules = vim.deepcopy(session.permission_rules or {}),
       auto_switch = vim.deepcopy(session.auto_switch or {}),

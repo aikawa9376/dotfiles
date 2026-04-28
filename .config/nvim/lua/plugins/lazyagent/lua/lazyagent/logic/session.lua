@@ -232,6 +232,7 @@ local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_op
     buffer_background = acp.buffer_background,
     buffer_inactive_background = acp.buffer_inactive_background,
     transcript_max_lines = acp.transcript_max_lines,
+    transcript_compaction = vim.deepcopy(acp.transcript_compaction or {}),
     permission_rules = acp.permission_rules,
     auto_switch = acp.auto_switch,
   }
@@ -568,6 +569,225 @@ local function merge_conversation_lines(previous, current)
   return merged
 end
 
+local SIDECAR_VERSION = 1
+local SIDECAR_SUMMARY_LIMIT = 1024
+local SIDECAR_BODY_LIMIT = 64 * 1024
+local SIDECAR_TOOL_OUTPUT_LIMIT = 128 * 1024
+
+local function clamp_sidecar_text(text, byte_limit)
+  text = tostring(text or "")
+  byte_limit = tonumber(byte_limit) or 0
+  if byte_limit <= 0 or #text <= byte_limit then
+    return text
+  end
+  return text:sub(1, byte_limit) .. "\n… [truncated]"
+end
+
+local function serialize_conversation_timeline(items)
+  local out = {}
+  for _, item in ipairs(items or {}) do
+    if type(item) == "table" then
+      out[#out + 1] = {
+        id = tostring(item.id or ""),
+        seq = tonumber(item.seq or (#out + 1)) or (#out + 1),
+        kind = tostring(item.kind or ""),
+        heading = tostring(item.heading or ""),
+        title = tostring(item.title or item.heading or ""),
+        summary = clamp_sidecar_text(item.summary or "", SIDECAR_SUMMARY_LIMIT),
+        body = clamp_sidecar_text(item.body or "", SIDECAR_BODY_LIMIT),
+        pinned = item.pinned == true,
+        toolCallId = item.toolCallId,
+        status = item.status,
+        path = item.path,
+      }
+    end
+  end
+  return out
+end
+
+local function serialize_tool_timeline(entries)
+  local out = {}
+  for _, entry in ipairs(entries or {}) do
+    if type(entry) == "table" then
+      out[#out + 1] = {
+        toolCallId = tostring(entry.toolCallId or ""),
+        seq = tonumber(entry.seq or (#out + 1)) or (#out + 1),
+        title = tostring(entry.title or entry.toolCallId or "tool"),
+        heading = tostring(entry.heading or ""),
+        status = tostring(entry.status or ""),
+        kind = tostring(entry.kind or ""),
+        summary = clamp_sidecar_text(entry.summary or "", SIDECAR_SUMMARY_LIMIT),
+        paths = vim.deepcopy(entry.paths or {}),
+        pinned = entry.pinned == true,
+        conversation_item_id = entry.conversation_item_id,
+        rendered_content = clamp_sidecar_text(entry.rendered_content or "", SIDECAR_TOOL_OUTPUT_LIMIT),
+        rendered_raw_output = clamp_sidecar_text(entry.rendered_raw_output or "", SIDECAR_TOOL_OUTPUT_LIMIT),
+      }
+    end
+  end
+  return out
+end
+
+local function collect_pinned_ids(items, tools)
+  local ids = {}
+  local seen = {}
+  for _, item in ipairs(items or {}) do
+    if type(item) == "table" and item.pinned == true and item.id and item.id ~= "" and not seen[item.id] then
+      seen[item.id] = true
+      ids[#ids + 1] = item.id
+    end
+  end
+  for _, tool in ipairs(tools or {}) do
+    if type(tool) == "table" and tool.pinned == true then
+      local id = tool.conversation_item_id or (tool.toolCallId and ("tool:" .. tostring(tool.toolCallId))) or nil
+      if id and not seen[id] then
+        seen[id] = true
+        ids[#ids + 1] = id
+      end
+    end
+  end
+  return ids
+end
+
+local function merge_sidecar_entries(previous, current, key)
+  local merged = {}
+  local index = {}
+
+  for _, item in ipairs(previous or {}) do
+    if type(item) == "table" then
+      local copy = vim.deepcopy(item)
+      merged[#merged + 1] = copy
+      local id = copy[key]
+      if id and id ~= "" then
+        index[id] = #merged
+      end
+    end
+  end
+
+  for _, item in ipairs(current or {}) do
+    if type(item) == "table" then
+      local copy = vim.deepcopy(item)
+      local id = copy[key]
+      local idx = id and id ~= "" and index[id] or nil
+      if idx then
+        merged[idx] = vim.tbl_deep_extend("force", merged[idx], copy)
+      else
+        merged[#merged + 1] = copy
+        if id and id ~= "" then
+          index[id] = #merged
+        end
+      end
+    end
+  end
+
+  return merged
+end
+
+local function build_conversation_sidecar(agent_name, session, path, lines)
+  local conversation_timeline = serialize_conversation_timeline(session.acp_conversation_timeline or session.conversation_timeline or {})
+  local tool_timeline = serialize_tool_timeline(session.acp_tool_timeline or session.tool_timeline or {})
+  return {
+    version = SIDECAR_VERSION,
+    kind = "lazyagent-acp-conversation",
+    agent_name = agent_name,
+    saved_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    conversation_log_path = path,
+    line_count = #(lines or {}),
+    conversation_timeline = conversation_timeline,
+    tool_timeline = tool_timeline,
+    pinned_ids = collect_pinned_ids(conversation_timeline, tool_timeline),
+  }
+end
+
+local function merge_conversation_metadata(previous, current)
+  local merged = vim.deepcopy(previous or {})
+  merged.version = current.version or merged.version
+  merged.kind = current.kind or merged.kind
+  merged.agent_name = current.agent_name or merged.agent_name
+  merged.saved_at = current.saved_at or merged.saved_at
+  merged.conversation_log_path = current.conversation_log_path or merged.conversation_log_path
+  merged.line_count = current.line_count or merged.line_count
+  merged.conversation_timeline = merge_sidecar_entries(
+    previous and previous.conversation_timeline or {},
+    current.conversation_timeline or {},
+    "id"
+  )
+  merged.tool_timeline = merge_sidecar_entries(
+    previous and previous.tool_timeline or {},
+    current.tool_timeline or {},
+    "toolCallId"
+  )
+  merged.pinned_ids = collect_pinned_ids(merged.conversation_timeline, merged.tool_timeline)
+  return merged
+end
+
+local function should_write_conversation_sidecar(session)
+  if not session then
+    return false
+  end
+  if session.backend and acp_logic.is_acp_backend(session.backend) then
+    return true
+  end
+  return type(session.acp_conversation_timeline) == "table"
+    or type(session.acp_tool_timeline) == "table"
+    or type(session.conversation_timeline) == "table"
+    or type(session.tool_timeline) == "table"
+end
+
+local function build_resume_prompt(path, metadata)
+  local lines = {
+    "Use the following saved ACP conversation as the current context for this new session.",
+    "",
+    "Transcript:",
+    "@" .. path,
+  }
+
+  local pinned = {}
+  for _, item in ipairs(metadata and metadata.conversation_timeline or {}) do
+    if type(item) == "table" and item.pinned == true then
+      pinned[#pinned + 1] = item
+    end
+  end
+  table.sort(pinned, function(a, b)
+    return (tonumber(a.seq) or 0) < (tonumber(b.seq) or 0)
+  end)
+
+  if #pinned > 0 then
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Pinned context:"
+    for _, item in ipairs(pinned) do
+      local label = item.heading or item.kind or "Item"
+      local summary = item.summary ~= "" and item.summary or item.title or label
+      lines[#lines + 1] = string.format("- [%s] %s", label, summary)
+    end
+  end
+
+  local tools = vim.deepcopy(metadata and metadata.tool_timeline or {})
+  table.sort(tools, function(a, b)
+    return (tonumber(a.seq) or 0) < (tonumber(b.seq) or 0)
+  end)
+  if #tools > 6 then
+    local recent = {}
+    for idx = math.max(#tools - 5, 1), #tools do
+      recent[#recent + 1] = tools[idx]
+    end
+    tools = recent
+  end
+  if #tools > 0 then
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Recent tool activity:"
+    for _, tool in ipairs(tools) do
+      local status = tool.status ~= "" and (" [" .. tool.status .. "]") or ""
+      local summary = tool.summary ~= "" and (" - " .. tool.summary) or ""
+      lines[#lines + 1] = string.format("- %s%s%s", tool.title or tool.toolCallId or "tool", status, summary)
+    end
+  end
+
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "Treat the transcript and notes above as the existing context. Continue from there without asking me to restate it."
+  return table.concat(lines, "\n")
+end
+
 local function persist_conversation_capture(agent_name, session, lines, opts)
   opts = opts or {}
 
@@ -593,8 +813,17 @@ local function persist_conversation_capture(agent_name, session, lines, opts)
   end
 
   pcall(vim.fn.writefile, saved_lines, path)
+  local metadata = nil
+  if should_write_conversation_sidecar(session) then
+    metadata = build_conversation_sidecar(agent_name, session, path, saved_lines)
+    if reuse_path and session.last_save_metadata then
+      metadata = merge_conversation_metadata(session.last_save_metadata, metadata)
+    end
+    pcall(cache_logic.write_conversation_metadata, path, metadata)
+  end
   session.last_save_path = path
   session.last_save_content = saved_lines
+  session.last_save_metadata = metadata
   return path, saved_lines
 end
 
@@ -1097,6 +1326,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         buffer_background = resolved_acp.buffer_background,
         buffer_inactive_background = resolved_acp.buffer_inactive_background,
         transcript_max_lines = resolved_acp.transcript_max_lines,
+        transcript_compaction = vim.deepcopy(resolved_acp.transcript_compaction or {}),
         hidden = (agent_cfg.stay_hidden == true),
         mode = mode
       }
@@ -1770,7 +2000,8 @@ function M.resume_conversation(agent_name)
 
     local rel_path = vim.fn.fnamemodify(path, ":.")
     if not rel_path or rel_path == "" then rel_path = path end
-    local content = "@" .. rel_path
+    local metadata = cache_logic.read_conversation_metadata(path)
+    local content = metadata and build_resume_prompt(rel_path, metadata) or ("@" .. rel_path)
 
     local function start_for_agent(chosen_agent)
       if not chosen_agent or chosen_agent == "" then return end

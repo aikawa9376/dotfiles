@@ -33,6 +33,9 @@ local set_window_size
 local diff_view
 local footer_view
 local normalize_header_lines
+local transcript_source_lines
+local pane_id_for_bufnr
+local agent_name_for_bufnr
 local custom_background_groups = {}
 local layout_state = {}
 local suppress_transcript_window_refresh = false
@@ -222,6 +225,394 @@ local function code_block_target_row(lines, cur_row, forward)
   return nil
 end
 
+local SECTION_HEADINGS = {
+  "User",
+  "Assistant",
+  "Thinking",
+  "System",
+  "Error",
+  "Plan",
+  "Terminal",
+  "Tool",
+  "Edited",
+}
+
+local function jump_window_to_row(win, row)
+  pcall(function()
+    vim.api.nvim_win_set_cursor(win, { row, 0 })
+    pcall(vim.cmd, "normal! zz")
+  end)
+end
+
+local function section_heading_for_line(line)
+  if type(line) ~= "string" or not line:match("^─ ") then
+    return nil
+  end
+  for _, heading in ipairs(SECTION_HEADINGS) do
+    if line_has_heading(line, heading) then
+      return heading
+    end
+  end
+  return nil
+end
+
+local function collect_transcript_sections(lines)
+  lines = type(lines) == "table" and lines or {}
+  local sections = {}
+  local start_idx = lines[1] == TRANSCRIPT_TRUNCATED_MARKER and 2 or 1
+
+  for row = start_idx, #lines do
+    local heading = section_heading_for_line(lines[row])
+    if heading then
+      sections[#sections + 1] = {
+        heading = heading,
+        start_row = row,
+      }
+    end
+  end
+
+  for idx, section in ipairs(sections) do
+    local stop = idx < #sections and (sections[idx + 1].start_row - 1) or #lines
+    while stop > section.start_row and lines[stop] == "" do
+      stop = stop - 1
+    end
+    section.end_row = math.max(section.start_row, stop)
+  end
+
+  return sections
+end
+
+local function backend_for_agent(agent_name)
+  local session = session_for_agent(agent_name)
+  local backend_name = session and session.backend or nil
+  if not backend_name or backend_name == "" then
+    return nil
+  end
+  return state.backends and state.backends[backend_name] or nil
+end
+
+local function runtime_conversation_timeline(bufnr)
+  local agent_name = agent_name_for_bufnr(bufnr)
+  local session = session_for_agent(agent_name)
+  if session and type(session.acp_conversation_timeline) == "table" then
+    return session.acp_conversation_timeline
+  end
+  local backend = backend_for_agent(agent_name)
+  if backend and type(backend.get_conversation_timeline) == "function" then
+    return backend.get_conversation_timeline(pane_id_for_bufnr(bufnr))
+  end
+  return {}
+end
+
+local function runtime_tool_timeline(bufnr)
+  local agent_name = agent_name_for_bufnr(bufnr)
+  local session = session_for_agent(agent_name)
+  if session and type(session.acp_tool_timeline) == "table" then
+    return session.acp_tool_timeline
+  end
+  return {}
+end
+
+local function visible_conversation_context(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local stop = transcript_line_count(bufnr)
+  local lines = transcript_source_lines(bufnr, 0, stop)
+  local sections = collect_transcript_sections(lines)
+  if #sections == 0 then
+    return {
+      lines = lines,
+      sections = sections,
+      items = {},
+      index = nil,
+      section = nil,
+      item = nil,
+    }
+  end
+
+  local entry = layout_entry(bufnr)
+  local items = type(entry.transcript_section_items) == "table" and entry.transcript_section_items or nil
+  if type(items) ~= "table" or #items ~= #sections then
+    items = {}
+    local timeline = runtime_conversation_timeline(bufnr)
+    local offset = math.max(#timeline - #sections, 0)
+    for idx = 1, #sections do
+      items[idx] = timeline[offset + idx]
+    end
+  end
+
+  local row = vim.api.nvim_win_get_cursor(vim.api.nvim_get_current_win())[1]
+  local index = #sections
+  for idx, section in ipairs(sections) do
+    if row < section.start_row then
+      index = math.max(1, idx - 1)
+      break
+    end
+    if row >= section.start_row and row <= section.end_row then
+      index = idx
+      break
+    end
+  end
+
+  return {
+    lines = lines,
+    sections = sections,
+    items = items,
+    index = index,
+    section = sections[index],
+    item = items[index],
+  }
+end
+
+local function section_text(lines, section)
+  if type(lines) ~= "table" or type(section) ~= "table" then
+    return ""
+  end
+  local chunk = {}
+  for row = section.start_row, section.end_row do
+    chunk[#chunk + 1] = lines[row] or ""
+  end
+  while #chunk > 0 and chunk[#chunk] == "" do
+    table.remove(chunk)
+  end
+  return table.concat(chunk, "\n")
+end
+
+local function copy_to_clipboard(text, label)
+  text = tostring(text or "")
+  if text == "" then
+    vim.notify("Nothing to copy", vim.log.levels.INFO)
+    return
+  end
+  vim.fn.setreg('"', text)
+  pcall(vim.fn.setreg, "+", text)
+  vim.notify((label or "Copied") .. " to clipboard", vim.log.levels.INFO)
+end
+
+local function tool_entry_for_item(bufnr, item)
+  if type(item) ~= "table" or not item.toolCallId or item.toolCallId == "" then
+    return nil
+  end
+
+  for _, entry in ipairs(runtime_tool_timeline(bufnr)) do
+    if type(entry) == "table" and entry.toolCallId == item.toolCallId then
+      return entry
+    end
+  end
+
+  local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
+  if backend and type(backend.get_tool_timeline_entry) == "function" then
+    return backend.get_tool_timeline_entry(pane_id_for_bufnr(bufnr), item.toolCallId)
+  end
+
+  return nil
+end
+
+local function show_outline_picker(bufnr, pinned_only)
+  local context = visible_conversation_context(bufnr)
+  local win = vim.api.nvim_get_current_win()
+  local entries = {}
+
+  for idx, section in ipairs(context and context.sections or {}) do
+    local item = context.items[idx]
+    if not pinned_only or (item and item.pinned == true) then
+      entries[#entries + 1] = {
+        section = section,
+        item = item,
+      }
+    end
+  end
+
+  if #entries == 0 then
+    vim.notify(pinned_only and "No pinned blocks" or "No transcript blocks", vim.log.levels.INFO)
+    return
+  end
+
+  vim.ui.select(entries, {
+    prompt = pinned_only and "Pinned ACP blocks:" or "ACP outline:",
+    format_item = function(entry)
+      local item = entry.item or {}
+      local pin = item.pinned and "[pin] " or ""
+      local label = item.title or item.heading or entry.section.heading or "Block"
+      local summary = item.summary and item.summary ~= "" and (" - " .. item.summary) or ""
+      local status = item.status and item.status ~= "" and (" [" .. item.status .. "]") or ""
+      return string.format("%s%s%s%s", pin, label, status, summary)
+    end,
+  }, function(choice)
+    if choice and vim.api.nvim_win_is_valid(win) then
+      jump_window_to_row(win, choice.section.start_row)
+    end
+  end)
+end
+
+local function toggle_current_pin(bufnr)
+  local context = visible_conversation_context(bufnr)
+  local item = context and context.item or nil
+  if not item or not item.id or item.id == "" then
+    vim.notify("No pinnable ACP block under cursor", vim.log.levels.INFO)
+    return
+  end
+
+  local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
+  local pinned = nil
+  if backend and type(backend.toggle_conversation_pin) == "function" then
+    pinned = backend.toggle_conversation_pin(pane_id_for_bufnr(bufnr), item.id)
+  end
+  if pinned == nil then
+    pinned = not item.pinned
+    item.pinned = pinned
+  end
+
+  vim.notify(pinned and "Pinned current block" or "Unpinned current block", vim.log.levels.INFO)
+end
+
+local function copy_current_block(bufnr)
+  local context = visible_conversation_context(bufnr)
+  local text = section_text(context and context.lines or {}, context and context.section or nil)
+  copy_to_clipboard(text, "Copied current block")
+end
+
+local function copy_current_tool_output(bufnr)
+  local context = visible_conversation_context(bufnr)
+  local entry = tool_entry_for_item(bufnr, context and context.item or nil)
+  if not entry then
+    vim.notify("No tool output for this block", vim.log.levels.INFO)
+    return
+  end
+
+  local parts = {}
+  if entry.rendered_content and entry.rendered_content ~= "" then
+    parts[#parts + 1] = entry.rendered_content
+  end
+  if entry.rendered_raw_output and entry.rendered_raw_output ~= "" then
+    if #parts > 0 then
+      parts[#parts + 1] = ""
+    end
+    parts[#parts + 1] = "Raw output:"
+    parts[#parts + 1] = entry.rendered_raw_output
+  end
+
+  copy_to_clipboard(table.concat(parts, "\n"), "Copied tool output")
+end
+
+local function open_current_tool_output(bufnr)
+  local context = visible_conversation_context(bufnr)
+  local item = context and context.item or nil
+  if not item or not item.toolCallId or item.toolCallId == "" then
+    vim.notify("No tool output for this block", vim.log.levels.INFO)
+    return
+  end
+
+  local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
+  if backend and type(backend.show_tool_timeline_entry) == "function" then
+    if backend.show_tool_timeline_entry(pane_id_for_bufnr(bufnr), item.toolCallId) then
+      return
+    end
+  end
+
+  vim.notify("Tool output viewer is unavailable for this block", vim.log.levels.WARN)
+end
+
+local function preview_current_diff_source(bufnr)
+  if not diff_view or type(diff_view.preview_diff_block_under_cursor) ~= "function" then
+    vim.notify("Diff preview is unavailable", vim.log.levels.WARN)
+    return
+  end
+
+  local ok, opened = pcall(diff_view.preview_diff_block_under_cursor, bufnr)
+  if not ok then
+    vim.notify("LazyAgentACP: failed to preview diff source", vim.log.levels.WARN)
+    return
+  end
+  if not opened then
+    vim.notify("No diff block under cursor", vim.log.levels.INFO)
+  end
+end
+
+local function show_action_menu(bufnr)
+  local context = visible_conversation_context(bufnr)
+  if not context or not context.section then
+    vim.notify("No ACP block under cursor", vim.log.levels.INFO)
+    return
+  end
+
+  local item = context.item or {}
+  local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
+  local actions = {
+    {
+      label = "Outline",
+      action = function()
+        show_outline_picker(bufnr, false)
+      end,
+    },
+    {
+      label = "Pinned",
+      action = function()
+        show_outline_picker(bufnr, true)
+      end,
+    },
+    {
+      label = item.pinned and "Unpin current block" or "Pin current block",
+      action = function()
+        toggle_current_pin(bufnr)
+      end,
+    },
+    {
+      label = "Copy current block",
+      action = function()
+        copy_current_block(bufnr)
+      end,
+    },
+  }
+
+  if backend and type(backend.show_tool_timeline) == "function" then
+    actions[#actions + 1] = {
+      label = "Tool timeline",
+      action = function()
+        backend.show_tool_timeline(pane_id_for_bufnr(bufnr))
+      end,
+    }
+  end
+
+  if diff_view and type(diff_view.has_diff_block_under_cursor) == "function"
+      and diff_view.has_diff_block_under_cursor(bufnr) then
+    actions[#actions + 1] = {
+      label = "Preview diff source",
+      action = function()
+        preview_current_diff_source(bufnr)
+      end,
+    }
+  end
+
+  if item.toolCallId and item.toolCallId ~= "" then
+    actions[#actions + 1] = {
+      label = "Open tool output",
+      action = function()
+        open_current_tool_output(bufnr)
+      end,
+    }
+    actions[#actions + 1] = {
+      label = "Copy tool output",
+      action = function()
+        copy_current_tool_output(bufnr)
+      end,
+    }
+  end
+
+  vim.ui.select(actions, {
+    prompt = "ACP actions:",
+    format_item = function(entry)
+      return entry.label
+    end,
+  }, function(choice)
+    if choice and type(choice.action) == "function" then
+      choice.action()
+    end
+  end)
+end
+
 local function strdisplaywidth(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text)
   return ok and width or #tostring(text or "")
@@ -273,7 +664,7 @@ local function line_diff_range(left, right)
   return first_diff, left_tail, right_tail
 end
 
-local function transcript_source_lines(bufnr, start_idx, end_idx)
+transcript_source_lines = function(bufnr, start_idx, end_idx)
   local raw = layout_entry(bufnr).transcript_source_lines
   if type(raw) ~= "table" then
     return vim.api.nvim_buf_get_lines(bufnr, start_idx, end_idx, false)
@@ -539,11 +930,11 @@ local function buffer_var(bufnr, name)
   return ok and value or nil
 end
 
-local function pane_id_for_bufnr(bufnr)
+pane_id_for_bufnr = function(bufnr)
   return buffer_var(bufnr, "lazyagent_acp_pane_id") or bufnr
 end
 
-local function agent_name_for_bufnr(bufnr)
+agent_name_for_bufnr = function(bufnr)
   return buffer_var(bufnr, "lazyagent_acp_agent")
 end
 
@@ -837,6 +1228,17 @@ local function set_follow_output(bufnr, enabled)
   end
 end
 
+local function pause_follow_output(bufnr)
+  if not bufnr or not is_acp_buffer(bufnr) or not should_follow_output(bufnr) then
+    return false
+  end
+  set_follow_output(bufnr, false)
+  if type(M.refresh_footer) == "function" then
+    M.refresh_footer(bufnr)
+  end
+  return true
+end
+
 set_window_size = function(win, size, is_vertical)
   local amount = tonumber(size)
   if not amount or amount <= 0 then
@@ -913,10 +1315,7 @@ local function apply_transcript_buffer_opts(bufnr)
 
   -- Buffer-local mappings: jump between User sections and fenced code blocks.
   local function jump_to_row(win, row)
-    pcall(function()
-      vim.api.nvim_win_set_cursor(win, { row, 0 })
-      pcall(vim.cmd, "normal! zz")
-    end)
+    jump_window_to_row(win, row)
   end
 
   local function jump_to_user(forward)
@@ -988,11 +1387,21 @@ local function apply_transcript_buffer_opts(bufnr)
       M.scroll_down(pane_id_for_bufnr(bufnr))
     end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: half page down" })
     vim.keymap.set("n", "<CR>", function()
-      if diff_view and diff_view.open_diff_block_under_cursor(bufnr) then
-        return
+      if diff_view and type(diff_view.open_diff_block_under_cursor) == "function" then
+        local ok, opened = pcall(diff_view.open_diff_block_under_cursor, bufnr)
+        if ok and opened then
+          return
+        end
+        if not ok then
+          vim.notify("LazyAgentACP: failed to open diff block", vim.log.levels.WARN)
+          return
+        end
       end
       vim.cmd("normal! <CR>")
     end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: open diff block" })
+    vim.keymap.set("n", "ga", function()
+      show_action_menu(bufnr)
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: actions" })
   end)
 
 end
@@ -1052,6 +1461,174 @@ local function transcript_max_lines(bufnr)
   return nil
 end
 
+local function transcript_compaction_config(bufnr)
+  local opts = pane_opts_for_bufnr(bufnr)
+  local cfg = type(opts and opts.transcript_compaction) == "table" and opts.transcript_compaction or {}
+  local min_sections = tonumber(cfg.min_sections) or 48
+  local keep_recent_sections = tonumber(cfg.keep_recent_sections) or 24
+  local summary_items = tonumber(cfg.summary_items) or 6
+  return {
+    enabled = cfg.enabled == true,
+    min_sections = math.max(2, math.floor(min_sections)),
+    keep_recent_sections = math.max(1, math.floor(keep_recent_sections)),
+    summary_items = math.max(1, math.floor(summary_items)),
+  }
+end
+
+local function section_chunk_stop(sections, idx, total_lines)
+  if idx < #sections then
+    return math.max(sections[idx].end_row, sections[idx + 1].start_row - 1)
+  end
+  return math.max(sections[idx].end_row, total_lines)
+end
+
+local function append_line_range(target, source, start_row, stop_row)
+  for row = start_row, stop_row do
+    target[#target + 1] = source[row] or ""
+  end
+end
+
+local function summarize_compacted_text(text, limit)
+  text = tostring(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  limit = tonumber(limit) or 120
+  if text == "" then
+    return ""
+  end
+  if #text <= limit then
+    return text
+  end
+  return text:sub(1, math.max(1, limit - 1)) .. "…"
+end
+
+local function section_summary_text(lines, section)
+  if type(section) ~= "table" then
+    return ""
+  end
+  for row = section.start_row + 1, section.end_row do
+    local text = summarize_compacted_text((lines[row] or ""):gsub("^%s+", ""), 120)
+    if text ~= "" then
+      return text
+    end
+  end
+  return ""
+end
+
+local function transcript_items_for_sections(bufnr, sections)
+  local items = {}
+  local timeline = runtime_conversation_timeline(bufnr)
+  local offset = math.max(#timeline - #sections, 0)
+  for idx = 1, #sections do
+    items[idx] = timeline[offset + idx]
+  end
+  return items
+end
+
+local function compacted_block_body(lines, sections, items, cfg)
+  local counts = {}
+  local ordered_counts = {}
+  local highlights = {}
+  local seen_highlights = {}
+
+  for idx, section in ipairs(sections) do
+    local item = items[idx]
+    local label = (item and item.heading) or section.heading or "Section"
+    if counts[label] == nil then
+      ordered_counts[#ordered_counts + 1] = label
+      counts[label] = 0
+    end
+    counts[label] = counts[label] + 1
+
+    local summary = summarize_compacted_text(item and item.summary or section_summary_text(lines, section), 120)
+    if summary ~= "" and not seen_highlights[summary] and #highlights < cfg.summary_items then
+      seen_highlights[summary] = true
+      highlights[#highlights + 1] = summary
+    end
+  end
+
+  local body = {
+    string.format("Earlier transcript compacted (%d sections).", #sections),
+  }
+
+  if #ordered_counts > 0 then
+    local parts = {}
+    for _, label in ipairs(ordered_counts) do
+      parts[#parts + 1] = string.format("%s x%d", label, counts[label])
+    end
+    body[#body + 1] = "- " .. table.concat(parts, ", ")
+  end
+
+  for _, highlight in ipairs(highlights) do
+    body[#body + 1] = "- " .. highlight
+  end
+
+  return body
+end
+
+local function compacted_section_lines(lines, sections, items, cfg)
+  local body = compacted_block_body(lines, sections, items, cfg)
+  local rendered = { "─ System" }
+  for _, line in ipairs(body) do
+    rendered[#rendered + 1] = " " .. line
+  end
+  rendered[#rendered + 1] = ""
+  return rendered, {
+    kind = "compacted",
+    heading = "System",
+    title = "Compacted earlier transcript",
+    summary = string.format("%d sections compacted", #sections),
+  }
+end
+
+local function compact_transcript_lines(bufnr, raw_lines)
+  raw_lines = type(raw_lines) == "table" and raw_lines or {}
+  local cfg = transcript_compaction_config(bufnr)
+  local sections = collect_transcript_sections(raw_lines)
+  local items = transcript_items_for_sections(bufnr, sections)
+  if not cfg.enabled or #sections < cfg.min_sections then
+    return raw_lines, items
+  end
+
+  local keep_recent = math.min(#sections, cfg.keep_recent_sections)
+  local compact_limit = #sections - keep_recent
+  if compact_limit < 2 then
+    return raw_lines, items
+  end
+
+  local out_lines = {}
+  local out_items = {}
+  if raw_lines[1] == TRANSCRIPT_TRUNCATED_MARKER then
+    out_lines[#out_lines + 1] = TRANSCRIPT_TRUNCATED_MARKER
+  end
+
+  local idx = 1
+  while idx <= #sections do
+    local item = items[idx]
+    if idx <= compact_limit and not (item and item.pinned == true) then
+      local group_start = idx
+      while idx <= compact_limit and not (items[idx] and items[idx].pinned == true) do
+        idx = idx + 1
+      end
+      local group_end = idx - 1
+      if group_end - group_start + 1 >= 2 then
+        local group_sections = vim.list_slice(sections, group_start, group_end)
+        local group_items = vim.list_slice(items, group_start, group_end)
+        local rendered, synthetic_item = compacted_section_lines(raw_lines, group_sections, group_items, cfg)
+        vim.list_extend(out_lines, rendered)
+        out_items[#out_items + 1] = synthetic_item
+      else
+        append_line_range(out_lines, raw_lines, sections[group_start].start_row, section_chunk_stop(sections, group_start, #raw_lines))
+        out_items[#out_items + 1] = items[group_start]
+      end
+    else
+      append_line_range(out_lines, raw_lines, sections[idx].start_row, section_chunk_stop(sections, idx, #raw_lines))
+      out_items[#out_items + 1] = item
+      idx = idx + 1
+    end
+  end
+
+  return out_lines, out_items
+end
+
 local function read_transcript_lines(path, max_lines)
   if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
     return {}
@@ -1098,11 +1675,12 @@ local function transcript_file_signature(path)
   }, ":")
 end
 
-set_buffer_lines = function(bufnr, lines)
+set_buffer_lines = function(bufnr, lines, section_items)
   local entry = layout_entry(bufnr)
   entry.footer_padding_count = 0
   entry.footer_signature = nil
   entry.transcript_source_lines = vim.deepcopy(lines or {})
+  entry.transcript_section_items = vim.deepcopy(section_items or {})
   replace_buffer_lines(bufnr, 0, -1, lines)
 end
 
@@ -1195,7 +1773,12 @@ local function ensure_layout_autocmds()
     group = group,
     callback = function(args)
       local bufnr = tonumber(args.buf)
-      if not bufnr or is_acp_buffer(bufnr) then
+      if not bufnr then
+        return
+      end
+      if is_acp_buffer(bufnr) then
+        pause_follow_output(bufnr)
+        refresh_transcript_window(bufnr, vim.api.nvim_get_current_win())
         return
       end
       redirect_buffer_from_transcript_window(vim.api.nvim_get_current_win(), bufnr)
@@ -1208,6 +1791,7 @@ local function ensure_layout_autocmds()
       local win = vim.api.nvim_get_current_win()
       local bufnr = vim.api.nvim_get_current_buf()
       if is_acp_buffer(bufnr) then
+        pause_follow_output(bufnr)
         refresh_transcript_window(bufnr, win)
         return
       end
@@ -1339,6 +1923,7 @@ local function append_text_to_buffer(bufnr, text)
   end
   vim.list_extend(new_raw, replacement)
   entry.transcript_source_lines = new_raw
+  entry.transcript_section_items = {}
 
   replace_buffer_lines(bufnr, replace_start, total_lines, replacement)
   return replace_start
@@ -1359,8 +1944,9 @@ refresh_buffer_from_path = function(bufnr, transcript_path, opts)
   end
 
   local lines = read_transcript_lines(transcript_path, transcript_max_lines(bufnr))
+  local display_lines, section_items = compact_transcript_lines(bufnr, lines)
 
-  set_buffer_lines(bufnr, lines)
+  set_buffer_lines(bufnr, display_lines, section_items)
   entry.pending_full_refresh = false
   entry.transcript_file_signature = signature
   refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
@@ -1419,7 +2005,12 @@ local function queue_append(session, text)
       layout_entry(bufnr).pending_full_refresh = true
       return
     end
-    local changed_start = append_text_to_buffer(bufnr, pending)
+    local changed_start = nil
+    if transcript_compaction_config(bufnr).enabled then
+      refresh_buffer_from_path(bufnr, session.transcript_path, { force = true })
+    else
+      changed_start = append_text_to_buffer(bufnr, pending)
+    end
     local max_lines = transcript_max_lines(bufnr)
     if max_lines and max_lines > 0 and transcript_line_count(bufnr) > (max_lines + 1) then
       refresh_buffer_from_path(bufnr, session.transcript_path)
@@ -1567,6 +2158,7 @@ function M.create_pane(args, on_split)
     buffer_background = args.acp and args.acp.buffer_background or nil,
     buffer_inactive_background = args.acp and args.acp.buffer_inactive_background or nil,
     transcript_max_lines = args.acp and args.acp.transcript_max_lines or nil,
+    transcript_compaction = vim.deepcopy(args.acp and args.acp.transcript_compaction or {}),
   })
 
   vim.api.nvim_win_set_buf(win, bufnr)
@@ -1691,6 +2283,9 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
         or (session and session.buffer_inactive_background)
         or nil,
       transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
+      transcript_compaction = vim.deepcopy(
+        pane_opts.transcript_compaction or (session and session.transcript_compaction) or {}
+      ),
     })
     refresh_buffer_layout(bufnr, { force_footer = true })
     if on_done then
@@ -1736,6 +2331,9 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
       or (session and session.buffer_inactive_background)
       or nil,
     transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
+    transcript_compaction = vim.deepcopy(
+      pane_opts.transcript_compaction or (session and session.transcript_compaction) or {}
+    ),
   })
   apply_transcript_window_opts(win, is_vertical, pane_config[tostring(pane_id)])
   refresh_buffer_from_path(bufnr, session and session.transcript_path or buffer_var(bufnr, "lazyagent_acp_transcript_path"))

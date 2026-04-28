@@ -30,6 +30,40 @@ local function get_conversation_dir()
   return dir
 end
 
+local function conversation_metadata_path(path)
+  path = tostring(path or "")
+  if path == "" then
+    return nil
+  end
+  return path:gsub("%.log$", ".meta.json")
+end
+
+local function read_json_file(path)
+  if not path or path == "" or vim.fn.filereadable(path) == 0 then
+    return nil
+  end
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok or not lines or #lines == 0 then
+    return nil
+  end
+  local ok_decode, data = pcall(vim.fn.json_decode, table.concat(lines, ""))
+  if not ok_decode or type(data) ~= "table" then
+    return nil
+  end
+  return data
+end
+
+local function write_json_file(path, data)
+  if not path or path == "" then
+    return false
+  end
+  local ok, encoded = pcall(vim.fn.json_encode, data)
+  if not ok or not encoded then
+    return false
+  end
+  return pcall(vim.fn.writefile, { encoded }, path)
+end
+
 --- Helper: parse history entries from a cache file (newer-first).
 -- Expects a timestamp header line in the format "YYYY-MM-DD HH:MM:SS".
 -- Each entry is represented as a table: { ts = string|nil, content = { <lines> } }.
@@ -234,7 +268,14 @@ local function list_conversation_files()
   for _, f in ipairs(raw) do
     if f:lower():match("%-conversation%-.+%.log$") then
       local path = dir .. "/" .. f
-      table.insert(entries, { name = f, path = path, mtime = vim.fn.getftime(path) or 0 })
+      local meta_path = conversation_metadata_path(path)
+      table.insert(entries, {
+        name = f,
+        path = path,
+        mtime = vim.fn.getftime(path) or 0,
+        meta_path = meta_path,
+        has_metadata = meta_path and vim.fn.filereadable(meta_path) == 1 or false,
+      })
     end
   end
   table.sort(entries, function(a, b) return (a.mtime or 0) > (b.mtime or 0) end)
@@ -277,23 +318,49 @@ function M.open_conversations()
     return
   end
 
-  local dir = get_conversation_dir()
-  local choices = {}
-  for _, e in ipairs(entries) do
-    table.insert(choices, e.name)
+  for _, entry in ipairs(entries) do
+    if entry.has_metadata then
+      entry.metadata = read_json_file(entry.meta_path)
+    end
   end
 
-  vim.ui.select(choices, {
+  vim.ui.select(entries, {
     prompt = "Open conversation capture:",
     previewer = "builtin",
-    cwd = dir,
-  }, function(selected, idx)
-    local choice = (idx and choices[idx]) or selected
-    if not choice or choice == "" then return end
-    local path = dir:gsub("/$", "") .. "/" .. choice
+    cwd = get_conversation_dir(),
+    format_item = function(item)
+      local suffix = {}
+      local metadata = type(item.metadata) == "table" and item.metadata or nil
+      if metadata then
+        local pinned_count = #(metadata.pinned_ids or {})
+        local tool_count = #(metadata.tool_timeline or {})
+        if pinned_count > 0 then
+          suffix[#suffix + 1] = string.format("%d pinned", pinned_count)
+        end
+        if tool_count > 0 then
+          suffix[#suffix + 1] = string.format("%d tools", tool_count)
+        end
+      elseif item.has_metadata then
+        suffix[#suffix + 1] = "meta"
+      end
+      if #suffix > 0 then
+        return string.format("%s [%s]", item.name, table.concat(suffix, ", "))
+      end
+      return item.name
+    end,
+  }, function(choice)
+    if not choice or not choice.path or choice.path == "" then
+      return
+    end
     vim.schedule(function()
-      util.open_in_normal_win(path)
-      vim.cmd("setlocal nowrap")
+      if util.open_in_normal_win(choice.path) then
+        vim.cmd("setlocal nowrap")
+        pcall(function()
+          vim.b[0].lazyagent_conversation_log_path = choice.path
+          vim.b[0].lazyagent_conversation_meta_path = choice.meta_path
+          vim.b[0].lazyagent_conversation_metadata = choice.metadata
+        end)
+      end
     end)
   end)
 end
@@ -332,6 +399,10 @@ function M.purge_old_conversations()
       local mtime = vim.fn.getftime(path)
       if mtime > 0 and (now - mtime) > max_age then
         pcall(vim.fn.delete, path)
+        local meta_path = conversation_metadata_path(path)
+        if meta_path and vim.fn.filereadable(meta_path) == 1 then
+          pcall(vim.fn.delete, meta_path)
+        end
       end
     end
   end
@@ -340,9 +411,17 @@ end
 -- Expose helpers for other modules to locate cache files and prefixes.
 M.get_cache_dir = get_cache_dir
 M.get_conversation_dir = get_conversation_dir
+M.get_conversation_metadata_path = conversation_metadata_path
 M.build_cache_filename = build_cache_filename
 M.list_cache_files = list_cache_files
 M.list_conversation_files = list_conversation_files
+M.read_conversation_metadata = function(path)
+  return read_json_file(conversation_metadata_path(path))
+end
+M.write_conversation_metadata = function(path, data)
+  local meta_path = conversation_metadata_path(path)
+  return write_json_file(meta_path, data)
+end
 
 local function get_cache_path(bufnr)
   return get_history_dir() .. "/" .. build_cache_filename(bufnr)
