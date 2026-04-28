@@ -338,6 +338,12 @@ function M.setup(opts)
       footer_animation = true,
       buffer_background = nil,
       buffer_inactive_background = nil,
+      transcript_compaction = {
+        enabled = false,
+        min_sections = 48,
+        keep_recent_sections = 24,
+        summary_items = 6,
+      },
       permission_rules = {},
       hide_pending_messages = true,
       auto_switch = {

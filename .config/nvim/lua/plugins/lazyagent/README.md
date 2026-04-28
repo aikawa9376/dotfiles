@@ -72,6 +72,12 @@ lazyagent の `setup(opts)` で指定可能です。主なデフォルト:
     acp = {
       enabled = false,
       view = "tmux", -- "tmux" または "buffer"
+      transcript_compaction = {
+        enabled = false,
+        min_sections = 48,
+        keep_recent_sections = 24,
+        summary_items = 6,
+      },
     },
     close_on_send = true, -- 送信後に float を閉じるか
   send_key_insert = "<C-CR>",
@@ -123,6 +129,12 @@ require("lazyagent").setup({
     buffer_background = "#002b36",
     buffer_inactive_background = "#073642",
     -- transcript_max_lines = 4000, -- 未指定なら全件。指定したときだけ末尾 N 行に制限
+    transcript_compaction = {
+      enabled = true,
+      min_sections = 48,
+      keep_recent_sections = 24,
+      summary_items = 6,
+    },
     permission_rules = {
       { name = "safe-readonly", tool_pattern = "read", action = "allow_once" },
       { name = "block-dotenv", path_pattern = "%.env", action = "manual" },
@@ -156,6 +168,7 @@ require("lazyagent").setup({
 - デフォルトは `false` なので、既存の tmux ベース運用は変わりません。
 - `acp.view = "tmux"` なら `tmux_acp`、`acp.view = "buffer"` なら `buffer_acp` が選ばれます。
 - `acp.transcript_max_lines` / `interactive_agents.<name>.acp.transcript_max_lines` を指定すると、`buffer_acp` transcript の読み込みを末尾 N 行に制限できます。未指定なら全件読み込みます。
+- `acp.transcript_compaction` / `interactive_agents.<name>.acp.transcript_compaction` を指定すると、`buffer_acp` transcript の古い section を live 表示だけ要約圧縮できます。`.log` や sidecar の保存内容は維持したまま、非 pinned の古い section 群だけを `Earlier transcript compacted` ブロックへ畳みます。
 - `acp.hide_pending_messages` (boolean): ACP の pending 系ステータス（tool の waiting/pending）を transcript に自動追加するのを抑制します（デフォルト: true）。transcript に pending 表示が必要な場合は false に設定してください。
 - 最高権限寄りで始めたい場合は、まず provider が expose している mode を `acp.default_mode` で指定するのが本命です。agentic.nvim と同じく、`"bypassPermissions"` のような mode がある provider ではこちらを優先してください。
 - `acp.auto_permission = "allow_always"` は fallback としては有効ですが、provider mode を切り替えられない場合の補助です。`yolo = true` だけでは ACP permission は暗黙で `allow_once` までに留めています。
@@ -176,6 +189,11 @@ require("lazyagent").setup({
 - local ACP command は session capability に合わせて出し分けます。`model` / `mode` / `config` を expose しない provider では command palette と補完候補から隠れます。slash command の merged list は ACP が返した内容を正とし、同名の local action は上書きせず不足分だけ補います。`/capabilities` で現在 session の capability summary を見られます。
 - 手動 permission picker に落ちる場合は、選択前に diff/path/resource preview を transcript へ追加します。
 - `buffer_acp` では edit tool の構造化 diff を fenced code block として transcript に表示し、追加/削除/変更行には inline diff ハイライトを重ねます。
+- ACP transcript は会話保存時に `conversation-*.log` に加えて `conversation-*.meta.json` sidecar も保存し、tool timeline / pin / outline 用の構造化メタデータを残します。`ResumeConversation` はこの sidecar を使って pinned context や recent tool activity を新しいセッションへ渡します。
+- `buffer_acp` transcript では `ga` で mini menu を開けます。Outline / Pinned / Pin or Unpin current block / Copy current block / Tool timeline / Open tool output / Copy tool output に加えて、diff block 上では `Preview diff source` も出ます。
+- `ga` の `Preview diff source` は、diff block に対応する元ファイルを通常 window 側で開き、該当行を一時ハイライトします。
+- diff block 上の `<CR>` は git diff tab を開きます。ACP transcript window ではなく通常 window 側を基点に tab を作るので、window layout と衝突しにくくなっています。
+- tool timeline / tool output / capability summary などの詳細ビューは通常 buffer として開き、`q` で気軽に閉じられます。
 - `:q` などで `buffer_acp` の transcript window を直接閉じても、transcript buffer は wipe されるだけなので `LazyAgentToggle` でもう一度開き直せます。明示的に戻したいときは `:LazyAgentACPReopen` を使えます。
 - `:LazyAgentACPConfig` `:LazyAgentACPModel` `:LazyAgentACPMode` に加えて、`:LazyAgentACPReopen` で transcript reopen、`:LazyAgentACPCommands` で slash command palette、`:LazyAgentACPTools` で tool call timeline、`:LazyAgentACPResources` で resource browser、`:LazyAgentACPCapabilities` で capability summary を開けます。
 - ACP で agent から質問や確認が来た場合は、通常どおり scratch buffer から返信してください。generic な質問 picker は使わず、protocol で構造化されている permission request だけを picker で扱います。
@@ -526,4 +544,3 @@ require("lazyagent").setup({
 ---
 
 Last updated: 2026-04-26T15:55:55+09:00
-

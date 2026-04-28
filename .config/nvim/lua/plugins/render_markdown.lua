@@ -52,9 +52,11 @@ return {
       blink = { enabled = true },
     },
     -- custom_handlers = {
-    --   markdown = { parse = function (ctx)
-    --     return require("lazyagent.render_markdown").parse(ctx)
-    --   end },
+    --   markdown = {
+    --     parse = function(ctx)
+    --       return require("lazyagent.render_markdown").parse(ctx)
+    --     end,
+    --   },
     -- },
     overrides = {
       filetype = {
