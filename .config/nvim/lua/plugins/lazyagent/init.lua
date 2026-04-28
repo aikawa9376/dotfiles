@@ -79,6 +79,7 @@ return {
     acp = {
       enabled = true,
       view = "buffer",
+      footer_animation = true,
       -- buffer_background = "#002b36",
       -- buffer_inactive_background = "#073642",
       -- default_mode = "bypassPermissions", -- prefer provider mode when available
