@@ -54,6 +54,7 @@ local ACP_WINDOW_OPTIONS = {
   "winfixwidth",
   "winfixheight",
   "scrolloff",
+  "smoothscroll",
   "statusline",
   "eventignorewin",
   "fillchars",
@@ -827,6 +828,9 @@ local function apply_transcript_window_opts(win, is_vertical, appearance)
     vim.wo[win].winfixwidth = is_vertical == true
     vim.wo[win].winfixheight = is_vertical ~= true
     vim.wo[win].scrolloff = should_follow_output(bufnr) and FOLLOW_SCROLL_OFF or DEFAULT_SCROLL_OFF
+    pcall(function()
+      vim.wo[win].smoothscroll = true
+    end)
     vim.wo[win].statusline = ""
     vim.wo[win].eventignorewin = ""
     hide_end_of_buffer_fill(win)
@@ -1679,28 +1683,33 @@ function M.copy_mode()
   return false
 end
 
+local function scroll_window_by_key(win, key)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return false
+  end
+
+  local moved = false
+  pcall(vim.api.nvim_win_call, win, function()
+    local before = vim.fn.winsaveview()
+    local termcode = vim.api.nvim_replace_termcodes(key, true, false, true)
+    vim.cmd.normal({ bang = true, args = { termcode } })
+    local after = vim.fn.winsaveview()
+    moved = before.topline ~= after.topline or before.lnum ~= after.lnum or before.topfill ~= after.topfill
+  end)
+  return moved
+end
+
 function M.scroll_up(pane_id)
   local bufnr = to_bufnr(pane_id)
   if not bufnr then
     return false
   end
 
-  local line_count = math.max(1, vim.api.nvim_buf_line_count(bufnr))
   local scrolled = false
   set_follow_output(bufnr, false)
   for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if vim.api.nvim_win_is_valid(win) then
-      pcall(vim.api.nvim_win_call, win, function()
-        local height = math.max(1, vim.api.nvim_win_get_height(win))
-        local step = math.max(1, math.floor(height / 2))
-        local view = vim.fn.winsaveview()
-        local new_topline = math.max(1, view.topline - step)
-        local line_delta = new_topline - view.topline
-        view.topline = new_topline
-        view.lnum = math.max(1, math.min(line_count, view.lnum + line_delta))
-        vim.fn.winrestview(view)
-        scrolled = true
-      end)
+    if scroll_window_by_key(win, "<C-u>") then
+      scrolled = true
     end
   end
   return scrolled
@@ -1712,22 +1721,11 @@ function M.scroll_down(pane_id)
     return false
   end
 
-  local line_count = math.max(1, vim.api.nvim_buf_line_count(bufnr))
   local scrolled = false
   set_follow_output(bufnr, false)
   for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if vim.api.nvim_win_is_valid(win) then
-      pcall(vim.api.nvim_win_call, win, function()
-        local height = math.max(1, vim.api.nvim_win_get_height(win))
-        local step = math.max(1, math.floor(height / 2))
-        local view = vim.fn.winsaveview()
-        local new_topline = math.max(1, math.min(line_count, view.topline + step))
-        local line_delta = new_topline - view.topline
-        view.topline = new_topline
-        view.lnum = math.max(1, math.min(line_count, view.lnum + line_delta))
-        vim.fn.winrestview(view)
-        scrolled = true
-      end)
+    if scroll_window_by_key(win, "<C-d>") then
+      scrolled = true
     end
   end
   return scrolled
