@@ -32,6 +32,7 @@ local buffer_is_visible
 local set_window_size
 local diff_view
 local footer_view
+local normalize_header_lines
 local custom_background_groups = {}
 local layout_state = {}
 local suppress_transcript_window_refresh = false
@@ -205,6 +206,80 @@ local function overlay_target_width(bufnr)
   return math.max(12, vim.api.nvim_win_get_width(win) - 2)
 end
 
+local function line_diff_range(left, right)
+  left = type(left) == "table" and left or {}
+  right = type(right) == "table" and right or {}
+
+  local max_len = math.max(#left, #right)
+  local first_diff = nil
+  for idx = 1, max_len do
+    if left[idx] ~= right[idx] then
+      first_diff = idx
+      break
+    end
+  end
+  if not first_diff then
+    return nil, nil, nil
+  end
+
+  local left_tail = #left
+  local right_tail = #right
+  while left_tail >= first_diff and right_tail >= first_diff and left[left_tail] == right[right_tail] do
+    left_tail = left_tail - 1
+    right_tail = right_tail - 1
+  end
+
+  return first_diff, left_tail, right_tail
+end
+
+local function transcript_source_lines(bufnr, start_idx, end_idx)
+  local raw = layout_entry(bufnr).transcript_source_lines
+  if type(raw) ~= "table" then
+    return vim.api.nvim_buf_get_lines(bufnr, start_idx, end_idx, false)
+  end
+
+  local start_row = math.max(0, tonumber(start_idx) or 0)
+  local stop_row = end_idx == -1 and #raw or math.max(start_row, tonumber(end_idx) or #raw)
+  stop_row = math.min(#raw, stop_row)
+
+  local lines = {}
+  for idx = start_row + 1, stop_row do
+    lines[#lines + 1] = raw[idx]
+  end
+  return lines
+end
+
+local function normalize_transcript_display(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local transcript_stop = transcript_line_count(bufnr)
+  if transcript_stop <= 0 then
+    return nil
+  end
+
+  local normalized = transcript_source_lines(bufnr, 0, transcript_stop)
+  normalized = select(1, normalize_header_lines(bufnr, normalized))
+  if diff_view and type(diff_view.normalize_diff_display_lines) == "function" then
+    normalized = select(1, diff_view.normalize_diff_display_lines(bufnr, normalized, header_target_width(bufnr)))
+  end
+
+  local current = vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false)
+  local first_diff, current_last, normalized_last = line_diff_range(current, normalized)
+  if not first_diff then
+    return nil
+  end
+
+  replace_buffer_lines(
+    bufnr,
+    first_diff - 1,
+    current_last,
+    vim.list_slice(normalized, first_diff, normalized_last)
+  )
+  return first_diff - 1
+end
+
 local function cancel_deferred_decoration(bufnr)
   local entry = layout_entry(bufnr)
   entry.decoration_generation = (entry.decoration_generation or 0) + 1
@@ -236,7 +311,7 @@ local function visible_transcript_range(bufnr)
   return range_start, math.max(range_start, range_stop)
 end
 
-local function normalize_header_lines(bufnr, lines)
+normalize_header_lines = function(bufnr, lines)
   local width = header_target_width(bufnr)
   if not width or width <= 0 then
     return lines, false
@@ -355,6 +430,8 @@ local function decorate_buffer(bufnr)
   if transcript_stop <= 0 then
     return
   end
+
+  normalize_transcript_display(bufnr)
 
   if transcript_stop <= DECORATE_SYNC_LINE_LIMIT or not buffer_is_visible(bufnr) then
     decorate_transcript_range(bufnr, 0, transcript_stop)
@@ -948,6 +1025,7 @@ set_buffer_lines = function(bufnr, lines)
   local entry = layout_entry(bufnr)
   entry.footer_padding_count = 0
   entry.footer_signature = nil
+  entry.transcript_source_lines = vim.deepcopy(lines or {})
   replace_buffer_lines(bufnr, 0, -1, lines)
 end
 
@@ -1161,20 +1239,29 @@ local function append_text_to_buffer(bufnr, text)
     return nil
   end
 
+  local entry = layout_entry(bufnr)
+  local raw_lines = type(entry.transcript_source_lines) == "table" and vim.deepcopy(entry.transcript_source_lines) or {}
   local transcript_stop = transcript_line_count(bufnr)
   local replace_start = transcript_stop
   local current_last = ""
   if transcript_stop > 0 then
     replace_start = transcript_stop - 1
-    current_last = vim.api.nvim_buf_get_lines(bufnr, replace_start, transcript_stop, false)[1] or ""
+    current_last = raw_lines[transcript_stop] or ""
   end
   set_footer_padding(bufnr, 0)
-  layout_entry(bufnr).footer_signature = nil
+  entry.footer_signature = nil
   local total_lines = vim.api.nvim_buf_line_count(bufnr)
 
   local chunks = vim.split(text, "\n", { plain = true })
   local replacement = { current_last .. table.remove(chunks, 1) }
   vim.list_extend(replacement, chunks)
+
+  local new_raw = {}
+  for idx = 1, replace_start do
+    new_raw[#new_raw + 1] = raw_lines[idx]
+  end
+  vim.list_extend(new_raw, replacement)
+  entry.transcript_source_lines = new_raw
 
   replace_buffer_lines(bufnr, replace_start, total_lines, replacement)
   return replace_start
@@ -1260,6 +1347,10 @@ local function queue_append(session, text)
     if max_lines and max_lines > 0 and transcript_line_count(bufnr) > (max_lines + 1) then
       refresh_buffer_from_path(bufnr, session.transcript_path)
     elseif changed_start ~= nil then
+      local display_start = normalize_transcript_display(bufnr)
+      if type(display_start) == "number" then
+        changed_start = math.min(changed_start, display_start)
+      end
       decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
       diff_view.decorate_diff_blocks(bufnr)
     end
@@ -1291,6 +1382,9 @@ diff_view = view_diff.new({
   session_for_agent = session_for_agent,
   transcript_line_count = function(bufnr)
     return transcript_line_count(bufnr)
+  end,
+  transcript_lines = function(bufnr, start_idx, end_idx)
+    return transcript_source_lines(bufnr, start_idx, end_idx)
   end,
   agent_name_for_bufnr = agent_name_for_bufnr,
 })
