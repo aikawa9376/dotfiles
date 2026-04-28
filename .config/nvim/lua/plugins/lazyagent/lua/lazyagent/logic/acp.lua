@@ -124,6 +124,16 @@ local function normalized_view_name(value)
   return view
 end
 
+local function resolve_boolean_option(agent_value, global_value, default_value)
+  if agent_value ~= nil then
+    return agent_value == true
+  end
+  if global_value ~= nil then
+    return global_value == true
+  end
+  return default_value == true
+end
+
 local function resolve_from_config(agent_cfg)
   local global_cfg = normalize_acp_config(state.opts and state.opts.acp)
   if global_cfg.enabled == nil and state.opts and state.opts.acp_mode ~= nil then
@@ -165,6 +175,7 @@ local function resolve_from_config(agent_cfg)
   return {
     enabled = enabled,
     view = normalized_view_name(agent_acp.view or global_cfg.view),
+    footer_animation = resolve_boolean_option(agent_acp.footer_animation, global_cfg.footer_animation, true),
     auto_permission = agent_acp.auto_permission or global_cfg.auto_permission,
     default_mode = agent_acp.default_mode or global_cfg.default_mode,
     initial_model = agent_acp.initial_model or global_cfg.initial_model,
@@ -202,6 +213,7 @@ function M.resolve(agent_name, agent_cfg)
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,
+      footer_animation = session.footer_animation,
       permission_rules = vim.deepcopy(session.permission_rules or {}),
       auto_switch = vim.deepcopy(session.auto_switch or {}),
     }

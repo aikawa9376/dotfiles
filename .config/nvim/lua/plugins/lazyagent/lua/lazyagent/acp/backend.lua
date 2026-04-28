@@ -787,6 +787,7 @@ local function sync_runtime_session(session)
   runtime.acp_failed = session.failed == true
   runtime.acp_supports_embedded_context = session.prompt_supports_embedded_context == true
   runtime.acp_mcp_server_count = session.mcp_server_count or ((session.mcp_url and session.mcp_url ~= "") and 1 or 0)
+  runtime.footer_animation = session.footer_animation
   runtime.acp_permission_rules = vim.deepcopy(session.permission_rules or {})
   runtime.acp_auto_switch = vim.deepcopy(session.auto_switch or {})
   runtime.acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {})
@@ -2882,6 +2883,7 @@ local function create_backend(default_view)
         auto_permission = acp.auto_permission,
         default_mode = acp.default_mode,
         initial_model = acp.initial_model,
+        footer_animation = acp.footer_animation,
         buffer_background = acp.buffer_background,
         buffer_inactive_background = acp.buffer_inactive_background,
         transcript_max_lines = acp.transcript_max_lines,
@@ -2929,6 +2931,7 @@ local function create_backend(default_view)
       cwd = session.cwd,
       root_dir = session.root_dir,
       transcript_path = session.transcript_path,
+      footer_animation = session.footer_animation,
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,

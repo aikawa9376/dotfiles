@@ -335,6 +335,7 @@ function M.setup(opts)
       auto_permission = nil,
       default_mode = nil,
       initial_model = nil,
+      footer_animation = true,
       buffer_background = nil,
       buffer_inactive_background = nil,
       permission_rules = {},

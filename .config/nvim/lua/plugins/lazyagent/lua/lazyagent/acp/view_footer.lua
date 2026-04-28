@@ -1,17 +1,113 @@
 local M = {}
 
+local FOOTER_ANIMATION_INTERVAL_MS = 100
+local FOOTER_GRADIENT_STEPS = 8
+local DEFAULT_FOOTER_ACTIVE_FG = 0x7dcfff
+local DEFAULT_FOOTER_BG = 0x1a1b26
+
 function M.new(ctx)
   local footer_ns = ctx.footer_ns or vim.api.nvim_create_namespace("lazyagent_acp_footer")
   local agent_logic = ctx.agent_logic
   local state = ctx.state
+  local footer_animation_timer = nil
+  local footer_animation_frame = 0
+  local footer_gradient_key = nil
+  local footer_gradient_groups = {}
 
   local function session_for_agent(agent_name)
     return ctx.session_for_agent(agent_name)
   end
 
+  local function footer_animation_enabled(session)
+    if session and session.footer_animation ~= nil then
+      return session.footer_animation == true
+    end
+
+    local acp = state and state.opts and state.opts.acp
+    if type(acp) == "table" and acp.footer_animation ~= nil then
+      return acp.footer_animation == true
+    end
+
+    return true
+  end
+
   local function strdisplaywidth(text)
     local ok, width = pcall(vim.fn.strdisplaywidth, text)
     return ok and width or #tostring(text or "")
+  end
+
+  local function highlight_spec(name)
+    local ok, spec = pcall(vim.api.nvim_get_hl, 0, { name = name, link = false })
+    return ok and type(spec) == "table" and spec or nil
+  end
+
+  local function highlight_color(name, attr)
+    local spec = highlight_spec(name)
+    return spec and spec[attr] or nil
+  end
+
+  local function blend_color(from, to, ratio)
+    ratio = math.min(1, math.max(0, tonumber(ratio) or 0))
+    local from_r = math.floor(from / 0x10000) % 0x100
+    local from_g = math.floor(from / 0x100) % 0x100
+    local from_b = from % 0x100
+    local to_r = math.floor(to / 0x10000) % 0x100
+    local to_g = math.floor(to / 0x100) % 0x100
+    local to_b = to % 0x100
+    local r = math.floor(from_r + (to_r - from_r) * ratio + 0.5)
+    local g = math.floor(from_g + (to_g - from_g) * ratio + 0.5)
+    local b = math.floor(from_b + (to_b - from_b) * ratio + 0.5)
+    return r * 0x10000 + g * 0x100 + b
+  end
+
+  local function ensure_footer_gradient_highlights()
+    local active_spec = highlight_spec("LazyAgentACPFooterActive") or highlight_spec("DiagnosticInfo") or {}
+    local active_fg = active_spec.fg
+      or highlight_color("DiagnosticInfo", "fg")
+      or highlight_color("Normal", "fg")
+      or DEFAULT_FOOTER_ACTIVE_FG
+    local normal_bg = highlight_color("Normal", "bg") or DEFAULT_FOOTER_BG
+    local key = tostring(active_fg) .. ":" .. tostring(normal_bg)
+    if footer_gradient_key == key and #footer_gradient_groups == FOOTER_GRADIENT_STEPS then
+      return footer_gradient_groups
+    end
+
+    footer_gradient_key = key
+    footer_gradient_groups = {}
+    for step = 1, FOOTER_GRADIENT_STEPS do
+      local group = "LazyAgentACPFooterActiveGradient" .. step
+      local ratio = ((step - 1) / math.max(1, FOOTER_GRADIENT_STEPS - 1)) * 0.78
+      local spec = vim.deepcopy(active_spec)
+      spec.fg = blend_color(active_fg, normal_bg, ratio)
+      spec.link = nil
+      spec.default = nil
+      spec.ctermfg = nil
+      pcall(vim.api.nvim_set_hl, 0, group, spec)
+      footer_gradient_groups[step] = group
+    end
+
+    return footer_gradient_groups
+  end
+
+  local function animated_footer_chunks(text)
+    local groups = ensure_footer_gradient_highlights()
+    local chars = vim.fn.split(tostring(text or ""), "\\zs")
+    if #chars == 0 then
+      return nil
+    end
+
+    local wave_size = #groups
+    local wave_head = (footer_animation_frame % (#chars + wave_size)) + 1
+    local chunks = {}
+    for idx, char in ipairs(chars) do
+      local distance = wave_head - idx
+      local hl = groups[wave_size] or "LazyAgentACPFooterActive"
+      if distance >= 0 and distance < wave_size then
+        hl = groups[distance + 1] or hl
+      end
+      table.insert(chunks, { char, hl })
+    end
+    return chunks
   end
 
   local function find_config_option(session, keys)
@@ -160,6 +256,16 @@ function M.new(ctx)
     return nil
   end
 
+  local function session_has_animated_footer(session)
+    if not session or session.acp_failed or tostring(session.agent_status_message or "") == "Disconnected" then
+      return false
+    end
+    if not footer_animation_enabled(session) then
+      return false
+    end
+    return session.monitor_timer or session.agent_status == "thinking"
+  end
+
   local function session_status(agent_name, session)
     if not session then
       return "◌ Connecting...", "LazyAgentACPFooterMuted"
@@ -174,8 +280,8 @@ function M.new(ctx)
       return " " .. (message ~= "" and message or "Waiting..."), "LazyAgentACPFooterWaiting"
     end
 
-    if session.monitor_timer or session.agent_status == "thinking" then
-      return message ~= "" and message or "Thinking...", "LazyAgentACPFooterActive"
+    if session_has_animated_footer(session) then
+      return message ~= "" and message or "Thinking...", "LazyAgentACPFooterActive", true
     end
 
     if not session.acp_ready then
@@ -330,7 +436,7 @@ function M.new(ctx)
     local size = transcript_size_label(session)
     local provider = provider_label(agent_name, session)
     local context = footer_context_text(agent_name, session)
-    local status_text, status_hl = session_status(agent_name, session)
+    local status_text, status_hl, status_animate = session_status(agent_name, session)
     local lines = {}
     local meta = {}
     local has_status = status_text and status_text ~= ""
@@ -353,7 +459,7 @@ function M.new(ctx)
 
     if has_status then
       table.insert(lines, blank_footer_line())
-      table.insert(lines, { text = " " .. status_text, hl = status_hl or "LazyAgentACPFooterMuted" })
+      table.insert(lines, { text = " " .. status_text, hl = status_hl or "LazyAgentACPFooterMuted", animate = status_animate })
     end
 
     if #meta > 0 or has_context then
@@ -377,30 +483,33 @@ function M.new(ctx)
 
   local function render_footer_lines(bufnr)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-      return {}, {}
+      return {}, {}, {}
     end
 
     local agent_name = ctx.agent_name_for_bufnr(bufnr)
     if not agent_name or agent_name == "" then
-      return {}, {}
+      return {}, {}, {}
     end
 
     local line_count = ctx.transcript_line_count(bufnr)
     local rendered = {}
     local highlights = {}
+    local animations = {}
     for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name), line_count)) do
       for _, wrapped in ipairs(wrap_footer_text(line.text or "", ctx.overlay_target_width(bufnr))) do
         table.insert(rendered, wrapped)
         table.insert(highlights, line.hl)
+        table.insert(animations, line.animate == true)
       end
     end
-    return rendered, highlights
+    return rendered, highlights, animations
   end
 
-  local function footer_signature(footer_start, footer_lines, footer_hls)
+  local function footer_signature(footer_start, footer_lines, footer_hls, footer_anims)
     local parts = { tostring(footer_start), tostring(#(footer_lines or {})) }
     for idx, line in ipairs(footer_lines or {}) do
       parts[#parts + 1] = tostring(footer_hls[idx] or "")
+      parts[#parts + 1] = footer_anims and footer_anims[idx] and "1" or "0"
       parts[#parts + 1] = "\0"
       parts[#parts + 1] = tostring(line or "")
       parts[#parts + 1] = "\n"
@@ -409,6 +518,71 @@ function M.new(ctx)
   end
 
   local api = {}
+
+  local function stop_footer_animation_timer()
+    if not footer_animation_timer then
+      return
+    end
+    pcall(function() footer_animation_timer:stop() end)
+    pcall(function() footer_animation_timer:close() end)
+    footer_animation_timer = nil
+  end
+
+  local function has_visible_animated_footer()
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      if ctx.is_acp_buffer(bufnr) and ctx.buffer_is_visible(bufnr) then
+        local agent_name = ctx.agent_name_for_bufnr(bufnr)
+        if agent_name and session_has_animated_footer(session_for_agent(agent_name)) then
+          return true
+        end
+      end
+    end
+    return false
+  end
+
+  local function refresh_animated_footers()
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      if ctx.is_acp_buffer(bufnr) and ctx.buffer_is_visible(bufnr) then
+        local agent_name = ctx.agent_name_for_bufnr(bufnr)
+        if agent_name and session_has_animated_footer(session_for_agent(agent_name)) then
+          api.refresh_footer(bufnr, { force = true })
+        end
+      end
+    end
+  end
+
+  local function ensure_footer_animation_timer()
+    if footer_animation_timer then
+      return
+    end
+
+    local uv = vim.uv or vim.loop
+    if not uv or not uv.new_timer then
+      return
+    end
+
+    footer_animation_timer = uv.new_timer()
+    if not footer_animation_timer then
+      return
+    end
+
+    footer_animation_timer:start(FOOTER_ANIMATION_INTERVAL_MS, FOOTER_ANIMATION_INTERVAL_MS, vim.schedule_wrap(function()
+      if not has_visible_animated_footer() then
+        stop_footer_animation_timer()
+        return
+      end
+      footer_animation_frame = footer_animation_frame + 1
+      refresh_animated_footers()
+    end))
+  end
+
+  local function sync_footer_animation_timer()
+    if has_visible_animated_footer() then
+      ensure_footer_animation_timer()
+    else
+      stop_footer_animation_timer()
+    end
+  end
 
   function api.statusline()
     return ""
@@ -424,11 +598,14 @@ function M.new(ctx)
     end
 
     local footer_start = ctx.transcript_line_count(bufnr)
-    local footer_lines, footer_hls = render_footer_lines(bufnr)
-    local signature = footer_signature(footer_start, footer_lines, footer_hls)
+    local footer_lines, footer_hls, footer_anims = render_footer_lines(bufnr)
+    footer_hls = footer_hls or {}
+    footer_anims = footer_anims or {}
+    local signature = footer_signature(footer_start, footer_lines, footer_hls, footer_anims)
     local entry = ctx.layout_entry(bufnr)
     local padding_needed = ctx.footer_padding_count(bufnr) ~= #footer_lines
     if not opts.force and not padding_needed and entry.footer_signature == signature then
+      sync_footer_animation_timer()
       return
     end
 
@@ -437,6 +614,7 @@ function M.new(ctx)
     entry.footer_signature = signature
 
     if #footer_lines == 0 then
+      sync_footer_animation_timer()
       return
     end
 
@@ -445,11 +623,14 @@ function M.new(ctx)
     for idx, line in ipairs(footer_lines) do
       local chunks = nil
       local hl = footer_hls[idx]
-      if line ~= "" then
-        if hl and hl ~= "" then
-          chunks = { { line, hl } }
+      local line_text = tostring(line or "")
+      if line_text ~= "" then
+        if footer_anims[idx] then
+          chunks = animated_footer_chunks(line_text)
+        elseif hl and hl ~= "" then
+          chunks = { { line_text, hl } }
         else
-          chunks = { { line } }
+          chunks = { { line_text } }
         end
       end
 
@@ -462,12 +643,14 @@ function M.new(ctx)
         })
       end
     end
+
+    sync_footer_animation_timer()
   end
 
-  function api.refresh_all_footers()
+  function api.refresh_all_footers(opts)
     for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
       if ctx.is_acp_buffer(bufnr) and ctx.buffer_is_visible(bufnr) then
-        api.refresh_footer(bufnr)
+        api.refresh_footer(bufnr, opts)
       end
     end
   end
