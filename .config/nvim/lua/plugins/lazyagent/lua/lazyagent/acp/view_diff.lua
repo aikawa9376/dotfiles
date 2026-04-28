@@ -12,6 +12,18 @@ function M.new(ctx)
     return ctx.transcript_line_count(bufnr)
   end
 
+  local function transcript_lines(bufnr, start_idx, end_idx)
+    if type(ctx.transcript_lines) == "function" then
+      return ctx.transcript_lines(bufnr, start_idx, end_idx)
+    end
+    return vim.api.nvim_buf_get_lines(bufnr, start_idx, end_idx, false)
+  end
+
+  local function strdisplaywidth(text)
+    local ok, width = pcall(vim.fn.strdisplaywidth, text)
+    return ok and width or #tostring(text or "")
+  end
+
   local function resolve_diff_path(session, path)
     path = tostring(path or "")
     if path == "" then
@@ -24,6 +36,172 @@ function M.new(ctx)
     return vim.fn.fnamemodify(base .. "/" .. path, ":p")
   end
 
+  local function truncate_to_display_width(text, max_width)
+    text = tostring(text or "")
+    max_width = math.max(0, tonumber(max_width) or 0)
+    if max_width <= 0 or strdisplaywidth(text) <= max_width then
+      return text
+    end
+
+    local width = 0
+    local out = {}
+    local char_count = vim.fn.strchars(text)
+    for idx = 0, math.max(0, char_count - 1) do
+      local char = vim.fn.strcharpart(text, idx, 1)
+      local char_width = math.max(0, strdisplaywidth(char))
+      if width + char_width > max_width then
+        break
+      end
+      out[#out + 1] = char
+      width = width + char_width
+    end
+    return table.concat(out)
+  end
+
+  local function render_markdown_offset(value, used_width, win_width)
+    value = tonumber(value) or 0
+    used_width = math.max(0, tonumber(used_width) or 0)
+    win_width = math.max(0, tonumber(win_width) or 0)
+    if value <= 0 then
+      return 0
+    end
+    if value >= 1 then
+      return math.floor(value)
+    end
+    return math.max(0, math.floor(((win_width - used_width) * value) + 0.5))
+  end
+
+  local function render_markdown_code_prefix_width(bufnr, opening_line, body_lines, win_width)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return 0
+    end
+
+    local ok_state, state = pcall(require, "render-markdown.state")
+    if not ok_state or type(state.get) ~= "function" then
+      return 0
+    end
+
+    local ok_config, config = pcall(state.get, bufnr)
+    local code = ok_config and type(config) == "table" and type(config.code) == "table" and config.code or nil
+    if not code or config.enabled == false or code.enabled == false then
+      return 0
+    end
+
+    local content_width = strdisplaywidth(opening_line or "")
+    for _, line in ipairs(body_lines or {}) do
+      content_width = math.max(content_width, strdisplaywidth(line))
+    end
+
+    local language_padding = render_markdown_offset(code.language_pad, content_width, win_width)
+    local left_padding = render_markdown_offset(code.left_pad, content_width, win_width)
+    local right_padding = render_markdown_offset(code.right_pad, content_width, win_width)
+    local body_width = strdisplaywidth(code.language_left or "")
+      + strdisplaywidth(code.language_right or "")
+      + language_padding
+      + strdisplaywidth(opening_line or "")
+    body_width = math.max(
+      body_width,
+      left_padding + content_width + right_padding,
+      tonumber(code.min_width) or 0
+    )
+
+    return left_padding + render_markdown_offset(code.left_margin, body_width, win_width)
+  end
+
+  local function path_for_fence(lines, fence_start)
+    for scan = fence_start - 1, math.max(1, fence_start - 3), -1 do
+      local path = (lines[scan] or ""):match("^%s*Path:%s+(.+)$")
+      if path and path ~= "" then
+        return path
+      end
+    end
+    return nil
+  end
+
+  local function truncate_diff_marker_line(line, width)
+    line = tostring(line or "")
+    width = math.max(0, tonumber(width) or 0)
+    if width <= 0 or strdisplaywidth(line) <= width then
+      return line, false
+    end
+
+    local prefix = line:match("^(%s*[-+] )")
+    if not prefix then
+      return line, false
+    end
+
+    local ellipsis = "..."
+    local body_width = width - strdisplaywidth(prefix) - strdisplaywidth(ellipsis)
+    if body_width <= 0 then
+      return prefix .. ellipsis, true
+    end
+
+    local body = line:sub(#prefix + 1)
+    local truncated = truncate_to_display_width(body, body_width):gsub("%s+$", "")
+    if truncated == "" then
+      return prefix .. ellipsis, true
+    end
+    return prefix .. truncated .. ellipsis, true
+  end
+
+  local function truncate_code_block_line(line, width)
+    line = tostring(line or "")
+    width = math.max(0, tonumber(width) or 0)
+    if width <= 0 or strdisplaywidth(line) <= width then
+      return line, false
+    end
+
+    if line:match("^(%s*[-+] )") then
+      return truncate_diff_marker_line(line, width)
+    end
+
+    local ellipsis = "..."
+    local body_width = width - strdisplaywidth(ellipsis)
+    if body_width <= 0 then
+      return ellipsis, true
+    end
+
+    local truncated = truncate_to_display_width(line, body_width):gsub("%s+$", "")
+    if truncated == "" then
+      return ellipsis, true
+    end
+    return truncated .. ellipsis, true
+  end
+
+  local function normalize_diff_display_lines(bufnr, lines, width)
+    lines = type(lines) == "table" and vim.deepcopy(lines) or {}
+    width = math.max(0, tonumber(width) or 0)
+    if #lines == 0 or width <= 0 then
+      return lines, false
+    end
+
+    local changed = false
+    local fence_start = nil
+    for idx, line in ipairs(lines) do
+      if tostring(line or ""):match("^%s*```") then
+        if fence_start then
+          local body_lines = vim.list_slice(lines, fence_start + 1, idx - 1)
+          local available_width = math.max(
+            0,
+            width - render_markdown_code_prefix_width(bufnr, lines[fence_start], body_lines, width)
+          )
+          for body_idx = fence_start + 1, idx - 1 do
+            local updated, line_changed = truncate_code_block_line(lines[body_idx], available_width)
+            if line_changed then
+              lines[body_idx] = updated
+              changed = true
+            end
+          end
+          fence_start = nil
+        else
+          fence_start = idx
+        end
+      end
+    end
+
+    return lines, changed
+  end
+
   local function find_diff_block_at_row(bufnr, row)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
       return nil
@@ -34,7 +212,7 @@ function M.new(ctx)
       return nil
     end
 
-    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false)
+    local lines = transcript_lines(bufnr, 0, transcript_stop)
     local idx = math.min(math.max(1, (tonumber(row) or 0) + 1), #lines)
     if lines[idx] and lines[idx]:match("^%s*Path:%s+") and lines[idx + 1] and lines[idx + 1]:match("^%s*```") then
       idx = idx + 1
@@ -68,16 +246,8 @@ function M.new(ctx)
       return nil
     end
 
-    local path = nil
-    for scan = fence_start - 1, math.max(1, fence_start - 3), -1 do
-      path = (lines[scan] or ""):match("^%s*Path:%s+(.+)$")
-      if path and path ~= "" then
-        break
-      end
-    end
-
     return {
-      path = path,
+      path = path_for_fence(lines, fence_start),
       body_lines = body_lines,
     }
   end
@@ -269,6 +439,10 @@ function M.new(ctx)
   end
 
   local api = {}
+
+  function api.normalize_diff_display_lines(bufnr, lines, width)
+    return normalize_diff_display_lines(bufnr, lines, width)
+  end
 
   function api.open_diff_block_under_cursor(bufnr)
     local agent_name = ctx.agent_name_for_bufnr(bufnr)
