@@ -69,6 +69,7 @@ return {
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
     "LazyAgentOpenConversation", "LazyAgentConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
+    "LazyAgentRestart", "LazyAgentStack", "LazyAgentHooks", "LazyAgentQR",
     "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPReopen",
     "LazyAgentACPCommands", "LazyAgentACPTools", "LazyAgentACPResources", "LazyAgentACPCapabilities",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
