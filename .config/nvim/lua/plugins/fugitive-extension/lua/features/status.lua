@@ -208,6 +208,42 @@ local function get_worktree_path_at_cursor()
   return line:match('^(%S+)')
 end
 
+local function status_entry_at_cursor()
+  local line = vim.api.nvim_get_current_line()
+  local status, path = line:match('^([MADRCU?!][MADRCU?!]?) (.+)$')
+  if not status then return nil, nil end
+  local _, new_path = path:match('^(.+) %-> (.+)$')
+  return status, new_path or path
+end
+
+local function worktree_relative_abs_path(path)
+  local work_tree = get_fugitive_work_tree()
+  if not work_tree or not path or path == '' then return nil end
+
+  local root = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
+  local abs = vim.fn.fnamemodify(root .. '/' .. path, ':p'):gsub('/+$', '')
+  if abs == root or abs:sub(1, #root + 1) ~= root .. '/' then
+    return nil
+  end
+  return abs
+end
+
+local function delete_untracked_directory_at_cursor()
+  local status, path = status_entry_at_cursor()
+  if status ~= '?' and status ~= '??' then return false end
+
+  local abs = worktree_relative_abs_path(path)
+  if not abs or vim.fn.isdirectory(abs) ~= 1 then return false end
+
+  if vim.fn.delete(abs, 'rf') ~= 0 then
+    vim.notify('Failed to delete untracked directory: ' .. path, vim.log.levels.ERROR)
+    return true
+  end
+
+  vim.notify('Deleted untracked directory: ' .. path, vim.log.levels.INFO)
+  return true
+end
+
 function M.setup(group)
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
@@ -529,6 +565,11 @@ function M.setup(group)
         if is_cursor_in_stash_area() then
           local r = get_stash_ref_at_cursor(b)
           if r then vim.cmd('Git stash drop ' .. r); vim.fn['fugitive#ReloadStatus'](); vim.schedule(refresh) end
+          return
+        end
+        if delete_untracked_directory_at_cursor() then
+          vim.fn['fugitive#ReloadStatus']()
+          vim.schedule(refresh)
           return
         end
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:X", true, false, true), 'm', true)

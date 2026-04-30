@@ -303,13 +303,15 @@ local function replace_token(token, opts, meta)
   if token == "history" then
     local ok_cache, cache_logic = pcall(require, "lazyagent.logic.cache")
     if not ok_cache then return "" end
-    local dir, entries = cache_logic.list_cache_Conversation()
-    if not dir or not entries or #entries == 0 then return "" end
+    if type(cache_logic.list_conversation_files) ~= "function" then return "" end
+    local entries = cache_logic.list_conversation_files()
+    if not entries or #entries == 0 then return "" end
     local prefix = cache_logic.build_cache_prefix(source_bufnr)
     -- Find the most recent file matching this project+branch prefix
-    for _, name in ipairs(entries) do
+    for _, entry in ipairs(entries) do
+      local name = entry.name or ""
       if name:lower():sub(1, #prefix) == prefix:lower() then
-        return "@" .. dir .. "/" .. name
+        return "@" .. (entry.path or name)
       end
     end
     return ""
@@ -377,7 +379,13 @@ function M.expand(text, opts)
   -- First, expand tokens matching pattern #token
   local ok, expanded = pcall(function()
     return tostring(text):gsub("#([%w_%-]+)", function(tok)
-      return replace_token(tok, opts, meta)
+      local ok_token, value = pcall(replace_token, tok, opts, meta)
+      if not ok_token then
+        meta.errors = meta.errors or {}
+        table.insert(meta.errors, { token = tok, error = tostring(value) })
+        return "#" .. tok
+      end
+      return value or ""
     end)
   end)
   if not ok then expanded = tostring(text) end
