@@ -129,6 +129,32 @@ function M.build()
     instant_mode = {
       append_text = nil,
     },
+    edit_blocks = {
+      agent = "Copilot",
+      command = nil,
+      command_mode = "arg",
+      timeout_ms = 90000,
+      context_lines = 80,
+      max_context_chars = 24000,
+      preview = true,
+      auto_apply = false,
+      preserve_indent = true,
+      max_inline_diff_lines = 120,
+      keymaps = {
+        accept = "ct",
+        accept_all = "ca",
+        reject = "co",
+        reject_alt = "cq",
+        reject_none = "c0",
+        next = "]]",
+        prev = "[[",
+      },
+      candidates = {
+        { name = "copilot", cmd = { "copilot", "-p" }, mode = "arg" },
+        { name = "claude", cmd = { "claude", "-p" }, mode = "arg" },
+        { name = "gemini", cmd = { "gemini", "-p" }, mode = "arg" },
+      },
+    },
   }
 end
 

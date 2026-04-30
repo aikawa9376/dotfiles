@@ -5,6 +5,8 @@ local state = require("lazyagent.logic.state")
 
 local animation_timer = nil
 local ANIMATION_INTERVAL_MS = 200
+local transient_tasks = {}
+local next_task_id = 0
 
 local function refresh_transcript_footers(agent_names)
   pcall(function()
@@ -35,17 +37,26 @@ local function active_monitoring_agents()
   return agents
 end
 
+local function active_task_ids()
+  local ids = {}
+  for id, _ in pairs(transient_tasks) do
+    table.insert(ids, id)
+  end
+  table.sort(ids)
+  return ids
+end
+
 -- Start animation loop if any session is in monitoring mode
 local function check_and_animate()
   local monitoring_agents = active_monitoring_agents()
-  local any_active = #monitoring_agents > 0
+  local any_active = #monitoring_agents > 0 or #active_task_ids() > 0
 
   if any_active then
       if not animation_timer then
          animation_timer = vim.loop.new_timer()
          animation_timer:start(ANIMATION_INTERVAL_MS, ANIMATION_INTERVAL_MS, vim.schedule_wrap(function()
             local active_agents = active_monitoring_agents()
-            local still_active = #active_agents > 0
+             local still_active = #active_agents > 0 or #active_task_ids() > 0
             if still_active then
                 refresh_ui(active_agents)
              else
@@ -82,14 +93,15 @@ local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧",
 
 function M.get_status()
   local active = agent_logic.get_active_agents()
-  if #active == 0 then return "" end
+  local tasks = active_task_ids()
+  if #active == 0 and #tasks == 0 then return "" end
 
   local status_parts = {}
+  local frame_idx = math.floor(vim.loop.now() / 50) % #spinner_frames + 1
   for _, name in ipairs(active) do
     local icon = icons[name] or icons.Default
     local s = state.sessions[name]
     if s and s.monitor_timer then
-       local frame_idx = math.floor(vim.loop.now() / 50) % #spinner_frames + 1
        icon = icon .. " " .. spinner_frames[frame_idx]
     elseif s and s.agent_status == "waiting" then
        icon = icon .. " ?"
@@ -97,7 +109,35 @@ function M.get_status()
     table.insert(status_parts, icon)
   end
 
+  for _, id in ipairs(tasks) do
+    local task = transient_tasks[id]
+    if task then
+      local icon = task.icon or icons.Default
+      local label = task.label and (" " .. task.label) or ""
+      table.insert(status_parts, icon .. " " .. spinner_frames[frame_idx] .. label)
+    end
+  end
+
   return table.concat(status_parts, " ")
+end
+
+function M.start_task(label, opts)
+  opts = opts or {}
+  next_task_id = next_task_id + 1
+  local id = next_task_id
+  transient_tasks[id] = {
+    label = label or opts.label or "Task",
+    icon = opts.icon or "",
+  }
+  refresh_ui()
+  check_and_animate()
+  return id
+end
+
+function M.stop_task(id)
+  if not id then return end
+  transient_tasks[id] = nil
+  check_and_animate()
 end
 
 -- ────────────────────────────────────────────────

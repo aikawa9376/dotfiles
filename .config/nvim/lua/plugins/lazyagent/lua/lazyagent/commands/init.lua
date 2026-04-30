@@ -6,6 +6,7 @@ local groups = {
   "lazyagent.commands.session",
   "lazyagent.commands.acp",
   "lazyagent.commands.history",
+  "lazyagent.commands.edit",
   "lazyagent.commands.hooks",
   "lazyagent.commands.mcp",
 }
