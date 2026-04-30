@@ -1,4 +1,5 @@
 local M = {}
+local utils = require("fugitive_utils")
 
 local function setup_blame_gradients()
   local colors = {
@@ -167,14 +168,14 @@ function M.setup(group)
       content = vim.fn.systemlist('git show ' .. commit .. ' -- ' .. vim.fn.shellescape(file_path))
     end
 
-    if not preview_state.buf or not vim.api.nvim_buf_is_valid(preview_state.buf) then
+    if not utils.is_valid_buf(preview_state.buf) then
       close_preview_window()
       return
     end
 
-    vim.api.nvim_set_option_value('modifiable', true, { buf = preview_state.buf })
-    vim.api.nvim_buf_set_lines(preview_state.buf, 0, -1, false, content)
-    vim.api.nvim_set_option_value('modifiable', false, { buf = preview_state.buf })
+    utils.with_buf_modifiable(preview_state.buf, function()
+      vim.api.nvim_buf_set_lines(preview_state.buf, 0, -1, false, content)
+    end)
   end
 
   local function open_preview_window(blame_bufnr)

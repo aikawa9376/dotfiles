@@ -1,4 +1,6 @@
 local M = {}
+local utils = require("fugitive_utils")
+local commands = require("features.commands")
 local help = require("features.help")
 
 _G.fugitive_branch_completion = function(arg_lead, cmd_line, cursor_pos)
@@ -42,7 +44,7 @@ local function get_branch_list(bufnr)
   else
     local git_dir = bufnr and vim.fn.FugitiveGitDir(bufnr) or vim.fn.FugitiveGitDir()
     if git_dir ~= "" then
-      local work_tree = vim.fn.systemlist(string.format("git --git-dir=%s rev-parse --show-toplevel 2>/dev/null", vim.fn.shellescape(git_dir)))[1]
+      local work_tree = utils.get_work_tree({ git_dir = git_dir })
       if work_tree and work_tree ~= "" then
          cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(work_tree))
       end
@@ -73,7 +75,6 @@ local function get_branch_list(bufnr)
   -- First pass: collect all data
   local branches = {}
   local max_branch_len = 0
-  local max_push_len = 0
   local max_subject_len = 0
   local max_date_len = 0
   local max_author_len = 0
@@ -120,7 +121,6 @@ local function get_branch_list(bufnr)
       })
 
       max_branch_len = math.max(max_branch_len, vim.fn.strdisplaywidth(branch))
-      max_push_len = math.max(max_push_len, vim.fn.strdisplaywidth(push_info))
       max_subject_len = math.max(max_subject_len, vim.fn.strdisplaywidth(subject))
       max_date_len = math.max(max_date_len, vim.fn.strdisplaywidth(date))
       max_author_len = math.max(max_author_len, vim.fn.strdisplaywidth(author))
@@ -130,7 +130,6 @@ local function get_branch_list(bufnr)
   -- Second pass: format with calculated widths
   -- Cap widths to avoid string.format limits (max 99)
   max_branch_len = math.min(max_branch_len, 40)
-  max_push_len = math.min(max_push_len, 20)
   max_subject_len = 40  -- Fixed width for subject
   max_date_len = math.min(max_date_len, 6)
   max_author_len = math.min(max_author_len, 15)
@@ -212,8 +211,6 @@ local function get_branch_list(bufnr)
     end
 
     local subject = b.subject
-    local author = b.author
-
     local branch_str, truncated_branch_mode, branch_content_len = pad_right(branch_block, max_branch_len, 'left')
     local date_str, _ = pad_right(b.date, max_date_len)
     local author_str, truncated_author_mode, author_content_len = pad_right(b.author, max_author_len, 'right')
@@ -347,19 +344,16 @@ local function get_branch_name_from_line(line)
 end
 
 local function refresh_branch_list(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    return
-  end
-
-  vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
+  if not utils.is_valid_buf(bufnr) then return end
 
   local branch_output, branch_names, truncated_info = get_branch_list(bufnr)
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
-  vim.b[bufnr].branch_map = branch_names
-  apply_fade_highlight(bufnr, truncated_info)
-  apply_branch_syntax(bufnr)
-
-  vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
+  utils.with_buf_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
+    vim.b[bufnr].branch_map = branch_names
+    apply_fade_highlight(bufnr, truncated_info)
+    apply_branch_syntax(bufnr)
+  end)
+  vim.bo[bufnr].modifiable = false
 end
 
 
@@ -441,9 +435,8 @@ local function checkout_branch(bufnr)
   -- Remove remotes/ prefix if present
   local checkout_name = branch:gsub('^origin/', '')
 
-  local commands = require('features.commands')
-  local git_dir = vim.fn.FugitiveGitDir()
-  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+  local work_tree = utils.get_work_tree({ notify = true })
+  if not work_tree then return end
 
   local stashed = commands.apply_auto_stash(work_tree)
   if stashed == nil then return end
@@ -651,9 +644,8 @@ local function pull_branch(bufnr)
     end
   end
 
-  local commands = require('features.commands')
-  local git_dir = vim.fn.FugitiveGitDir()
-  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+  local work_tree = utils.get_work_tree({ notify = true })
+  if not work_tree then return end
 
   local stashed = commands.apply_auto_stash(work_tree)
   if stashed == nil then return end
@@ -731,9 +723,8 @@ local function pull_branch_under_cursor(bufnr)
     end
   end
 
-  local commands = require('features.commands')
-  local git_dir = vim.fn.FugitiveGitDir()
-  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+  local work_tree = utils.get_work_tree({ notify = true })
+  if not work_tree then return end
 
   local stashed = commands.apply_auto_stash(work_tree)
   if stashed == nil then return end
@@ -847,9 +838,8 @@ local function diff_against_default(bufnr)
 end
 
 local function rebase_with_stash_fetch(bufnr, default_target)
-  local commands = require('features.commands')
-  local git_dir = vim.fn.FugitiveGitDir()
-  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
+  local work_tree = utils.get_work_tree({ notify = true })
+  if not work_tree then return end
 
   local target_default = default_target or get_default_origin_head()
   local target = vim.fn.input('Rebase on: ', target_default, 'customlist,v:lua.fugitive_branch_completion')
@@ -938,11 +928,11 @@ local function open_branch_list()
   vim.cmd('botright split fugitive-branch://' .. git_dir)
   local bufnr = vim.api.nvim_get_current_buf()
 
-  -- Set modifiable before setting lines
-  vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
-  vim.b[bufnr].branch_map = branch_names
-  apply_fade_highlight(bufnr, truncated_info)
+  utils.with_buf_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
+    vim.b[bufnr].branch_map = branch_names
+    apply_fade_highlight(bufnr, truncated_info)
+  end)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
@@ -1038,7 +1028,6 @@ function M.setup(group)
       -- Add cherrypick keymap
       vim.keymap.set('n', 'cP', function()
         -- flog copy register uses +
-        local commands = require('features.commands')
         commands.git_cherry_pick({
           reg = '+',
           on_complete = function()
@@ -1049,7 +1038,6 @@ function M.setup(group)
 
       -- Add git push keymap
       vim.keymap.set('n', '<Leader>gp', function()
-        local commands = require('features.commands')
         commands.git_push({
           on_complete = function()
             refresh_branch_list(bufnr)
@@ -1174,7 +1162,6 @@ function M.setup(group)
           vim.g.flog_win = vim.api.nvim_get_current_win()
           vim.g.flog_branch_bufnr = bufnr
 
-          local utils = require("fugitive_utils")
           utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
           vim.api.nvim_set_current_win(current_win)
         end
@@ -1198,7 +1185,6 @@ function M.setup(group)
               vim.g.flog_bufnr = vim.api.nvim_get_current_buf()
               vim.g.flog_win = vim.api.nvim_get_current_win()
 
-              local utils = require("fugitive_utils")
               utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
               vim.api.nvim_set_current_win(current_win)
             end

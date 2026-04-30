@@ -1,19 +1,8 @@
 local M = {}
 local utils = require("fugitive_utils")
 local commands = require("features.commands")
-
-local function get_fugitive_work_tree()
-  local git_dir = vim.fn.FugitiveGitDir()
-  if git_dir == '' then return nil end
-  local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-  local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
-  return (vim.v.shell_error == 0) and work_tree or nil
-end
-
-local function get_stash_list(work_tree)
-  local stash_output = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(work_tree) .. ' stash list')
-  return (vim.v.shell_error == 0) and stash_output or {}
-end
+local syntax_highlight = require("features.syntax_highlight")
+local worktree = require("features.worktree")
 
 local function stash_ref_from_line(line)
   return line and line:match('stash@%{%d+%}')
@@ -60,48 +49,13 @@ local function find_insert_point(bufnr)
   return #lines + 1
 end
 
--- Ensure a buffer is temporarily made modifiable while fn runs. Retries a few
--- times if the buffer is momentarily not writable (race with other autocommands).
-local function with_buf_modifiable(bufnr, fn, retries)
-  retries = retries or 5
-  local prev_modifiable, prev_readonly
-  pcall(function()
-    prev_modifiable = vim.api.nvim_buf_get_option(bufnr, 'modifiable')
-    prev_readonly = vim.api.nvim_buf_get_option(bufnr, 'readonly')
-  end)
-
-  local function attempt(remaining)
-    if not vim.api.nvim_buf_is_valid(bufnr) then return end
-    pcall(vim.api.nvim_buf_set_option, bufnr, 'modifiable', true)
-    pcall(vim.api.nvim_buf_set_option, bufnr, 'readonly', false)
-
-    local ok, err = pcall(fn)
-
-    -- Restore previous flags (best-effort)
-    pcall(vim.api.nvim_buf_set_option, bufnr, 'modifiable', prev_modifiable or false)
-    pcall(vim.api.nvim_buf_set_option, bufnr, 'readonly', prev_readonly or false)
-
-    if ok then return end
-    if remaining > 0 then
-      vim.defer_fn(function() attempt(remaining - 1) end, 50)
-    else
-      vim.schedule(function()
-        vim.notify('Failed to update fugitive status buffer: ' .. tostring(err), vim.log.levels.WARN)
-      end)
-    end
-  end
-
-  attempt(retries)
-end
-
 local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-  local work_tree = get_fugitive_work_tree()
+  if not utils.is_valid_buf(bufnr) then return end
+  local work_tree = utils.get_work_tree()
   if not work_tree then return end
 
-  local worktree_mod = require("features.worktree")
-  local worktree_summary = worktree_mod.get_summary(work_tree)
-  local stash_list = get_stash_list(work_tree)
+  local worktree_summary = worktree.get_summary(work_tree)
+  local stash_list = utils.get_stash_list(work_tree)
 
   local final_lines = {}
   if worktree_summary and #worktree_summary > 0 then
@@ -114,12 +68,12 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
     for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
   end
 
-  with_buf_modifiable(bufnr, function()
+  utils.with_buf_modifiable(bufnr, function()
     -- Update buffer contents
     remove_custom_sections(bufnr)
     if #final_lines > 0 then
       local insert_idx = find_insert_point(bufnr)
-      pcall(vim.api.nvim_buf_set_lines, bufnr, insert_idx - 1, insert_idx - 1, false, final_lines)
+      vim.api.nvim_buf_set_lines(bufnr, insert_idx - 1, insert_idx - 1, false, final_lines)
     end
 
     -- Update extmarks based on the new buffer contents
@@ -217,7 +171,7 @@ local function status_entry_at_cursor()
 end
 
 local function worktree_relative_abs_path(path)
-  local work_tree = get_fugitive_work_tree()
+  local work_tree = utils.get_work_tree()
   if not work_tree or not path or path == '' then return nil end
 
   local root = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
@@ -268,7 +222,7 @@ function M.setup(group)
       })
 
       local function apply_icons()
-        if not vim.api.nvim_buf_is_valid(b) then return end
+        if not utils.is_valid_buf(b) then return end
         vim.api.nvim_buf_clear_namespace(b, ns_id, 0, -1)
         local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
         for idx, line in ipairs(lines) do
@@ -359,7 +313,7 @@ function M.setup(group)
             local head = vim.fn.trim(vim.fn.system('git rev-parse HEAD'))
             if head:sub(1, #h) == h then
               -- Use git commit --amend with a blocking editor that opens the message in Neovim
-              local wt_head = get_fugitive_work_tree() or vim.fn.getcwd()
+              local wt_head = utils.get_work_tree() or vim.fn.getcwd()
               local tmpb = vim.fn.tempname()
               local editor_file_head = tmpb .. '.editor.sh'
               local marker_file_head = tmpb .. '.marker'
@@ -441,7 +395,7 @@ function M.setup(group)
               -- marker file; a timer watches that marker and opens the file for
               -- editing. When the user writes the buffer we touch the done file to
               -- let git continue.
-              local wt = get_fugitive_work_tree() or vim.fn.getcwd()
+              local wt = utils.get_work_tree() or vim.fn.getcwd()
               local short = h:sub(1, 7)
               local tmpbase = vim.fn.tempname()
               local seq_file = tmpbase .. '.seq.sh'
@@ -559,7 +513,7 @@ function M.setup(group)
       vim.keymap.set('n', 'X', function()
         if is_cursor_in_worktree_area() then
           local p = get_worktree_path_at_cursor()
-          if p and require("features.worktree").remove_worktree_path(p) then vim.fn['fugitive#ReloadStatus'](); vim.schedule(refresh) end
+          if p and worktree.remove_worktree_path(p) then vim.fn['fugitive#ReloadStatus'](); vim.schedule(refresh) end
           return
         end
         if is_cursor_in_stash_area() then
@@ -578,7 +532,7 @@ function M.setup(group)
       vim.keymap.set('n', '<CR>', function()
         if is_cursor_in_worktree_area() then
           local p = get_worktree_path_at_cursor()
-          if p then require("features.worktree").open_worktree_path(p); return end
+          if p then worktree.open_worktree_path(p); return end
         end
         if is_cursor_in_stash_area() then
           local r = get_stash_ref_at_cursor(b)
@@ -586,7 +540,7 @@ function M.setup(group)
         end
         local f = utils.get_filepath_at_cursor(b)
         if f then
-          local wt = get_fugitive_work_tree()
+          local wt = utils.get_work_tree()
           local abs = wt and vim.fn.fnamemodify(wt .. '/' .. f, ':p') or nil
           -- Only open Oil when cursor is directly on the status line for that path
           local cur_line = vim.api.nvim_get_current_line()
@@ -697,13 +651,12 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true, desc = 'Open file diff in new tab' })
 
       -- Load syntax
-      require('features.syntax_highlight').attach(b)
+      syntax_highlight.attach(b)
 
       -- <Leader>wd: Toggle word diff style
       vim.keymap.set('n', '<Leader>wd', function()
-        local sh = require('features.syntax_highlight')
-        local new_style = sh.config.word_diff_style == 'github' and 'lazygit' or 'github'
-        sh.config.word_diff_style = new_style
+        local new_style = syntax_highlight.config.word_diff_style == 'github' and 'lazygit' or 'github'
+        syntax_highlight.config.word_diff_style = new_style
         vim.notify('Word diff style: ' .. new_style, vim.log.levels.INFO)
       end, { buffer = b, silent = true, desc = 'Toggle word diff style (lazygit/github)' })
     end,
@@ -711,7 +664,7 @@ function M.setup(group)
 end
 
 function M.refresh_buffer(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
+  if not utils.is_valid_buf(bufnr) then return end
   local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
   local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
   pcall(function()
@@ -721,7 +674,7 @@ end
 
 function M.refresh_all()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_get_option(bufnr, 'filetype') == 'fugitive' then
+    if utils.is_valid_buf(bufnr) and vim.api.nvim_buf_get_option(bufnr, 'filetype') == 'fugitive' then
       M.refresh_buffer(bufnr)
     end
   end

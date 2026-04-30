@@ -1,9 +1,6 @@
 local M = {}
+local utils = require("fugitive_utils")
 local help = require("features.help")
-
-local function get_stash_list()
-  return vim.fn.systemlist("git stash list")
-end
 
 local function get_stash_ref()
   local line = vim.api.nvim_get_current_line()
@@ -11,14 +8,12 @@ local function get_stash_ref()
 end
 
 local function refresh_stash_list(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    return
-  end
+  if not utils.is_valid_buf(bufnr) then return end
 
-  vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
-
-  local stash_output = get_stash_list()
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, stash_output)
+  local stash_output = utils.get_stash_list()
+  utils.with_buf_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, stash_output)
+  end)
 
   if #stash_output == 0 then
     vim.notify("No stashes left.", vim.log.levels.INFO)
@@ -26,12 +21,10 @@ local function refresh_stash_list(bufnr)
       vim.cmd('bd! ' .. bufnr)
     end, 500)
   end
-
-  vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
 end
 
 local function open_stash_list()
-  local stash_output = get_stash_list()
+  local stash_output = utils.get_stash_list()
   if vim.v.shell_error ~= 0 then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
