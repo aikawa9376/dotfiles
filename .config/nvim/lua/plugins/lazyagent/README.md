@@ -224,7 +224,7 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 | `:LazyAgentHistory [file]` | 現在 context の scratch 履歴を開く |
 | `:LazyAgentHistoryList [file]` | 履歴一覧から開く |
 | `:LazyAgentConversationList [file]` | 保存済み会話 log を開く |
-| `:LazyAgentConversation [agent] [name]` | ACP conversation を checkpoint 保存 |
+| `:LazyAgentConversation [agent] [keep_lines]` | ACP conversation を checkpoint 保存。数値指定時は最新 `keep_lines` 行以上を ACP buffer に残し、それ以前を User セクション境界で保存 |
 | `:LazyAgentResumeConversation [file]` | conversation checkpoint から開始 |
 | `:LazyAgentOpenConversation [agent]` | live pane / transcript を保存して開く |
 | `:LazyAgentSummary [open\|copy]` | summary Markdown を開く / path をコピー |
