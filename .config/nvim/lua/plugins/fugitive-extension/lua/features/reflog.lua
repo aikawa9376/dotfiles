@@ -9,16 +9,12 @@ local function get_reflog_list()
 end
 
 local function refresh_reflog_list(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    return
-  end
+  if not utils.is_valid_buf(bufnr) then return end
 
-  vim.api.nvim_set_option_value('modifiable', true, { buf = bufnr })
-
-  local log_output = get_reflog_list()
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, log_output)
-
-  vim.api.nvim_set_option_value('modifiable', false, { buf = bufnr })
+  utils.with_buf_modifiable(bufnr, function()
+    local log_output = get_reflog_list()
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, log_output)
+  end)
 end
 
 local function open_reflog_list()

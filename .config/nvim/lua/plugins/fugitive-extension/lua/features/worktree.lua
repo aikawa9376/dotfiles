@@ -1,5 +1,6 @@
 local M = {}
 local help = require("features.help")
+local utils = require("fugitive_utils")
 
 -- 内部キャッシュ（最軽量化のため）
 local _cache = {
@@ -17,13 +18,10 @@ local function get_work_tree()
     return _cache.root
   end
 
-  local git_dir = vim.fn.FugitiveGitDir()
-  if git_dir == '' then return nil end
+  local work_tree = utils.get_work_tree()
+  if not work_tree then return nil end
 
-  local work_tree = vim.fn.trim(vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'))
-  if vim.v.shell_error ~= 0 or work_tree == '' then return nil end
-
-  _cache.root = work_tree:gsub('/+$', '')
+  _cache.root = work_tree
   _cache.root_mtime = now
   return _cache.root
 end
@@ -43,7 +41,7 @@ local function get_worktrees(force)
     for _, line in ipairs(output) do
       if line:match('^worktree ') then
         if current then table.insert(res, current) end
-        current = { path = vim.fn.fnamemodify(line:sub(10), ':p'):gsub('/+$', '') }
+        current = { path = utils.normalize_path(line:sub(10)) }
       elseif current then
         local key, val = line:match('^(%S+)%s+(.*)$')
         if key == 'HEAD' then current.head = val
@@ -85,7 +83,7 @@ local function format_line(wt, current_root, main_head, is_main)
 end
 
 local function apply_highlights(bufnr)
-  if not (bufnr and vim.api.nvim_buf_is_valid(bufnr)) then return end
+  if not utils.is_valid_buf(bufnr) then return end
   local entries = vim.b[bufnr].worktree_entries
   if not entries then return end
 
@@ -132,7 +130,7 @@ end
 
 local function refresh_all_worktree_buffers()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == 'fugitiveworktree' then
+    if utils.is_valid_buf(bufnr) and vim.bo[bufnr].filetype == 'fugitiveworktree' then
       M.refresh_worktree_list(bufnr)
     end
   end
@@ -148,8 +146,9 @@ function M.refresh_worktree_list(bufnr)
     table.insert(lines, format_line(wt, current_root, main_head, i == 1))
   end
 
-  vim.bo[bufnr].modifiable = true
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  utils.with_buf_modifiable(bufnr, function()
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  end)
   vim.bo[bufnr].modifiable = false
   vim.b[bufnr].worktree_entries = entries
   apply_highlights(bufnr)
@@ -238,7 +237,7 @@ end
 function M.worktree_needs_sync(path)
   local entries = get_worktrees()
   if #entries < 2 then return false end
-  local target = path and vim.fn.fnamemodify(path, ':p'):gsub('/+$', '') or get_work_tree()
+  local target = path and utils.normalize_path(path) or get_work_tree()
   local primary = entries[1]
   for i, wt in ipairs(entries) do
     if wt.path == target then
@@ -251,7 +250,7 @@ end
 
 function M.open_worktree_path(path)
   if not path or path == "" then return end
-  local abs_path = vim.fn.fnamemodify(path, ':p'):gsub('/+$', '')
+  local abs_path = utils.normalize_path(path)
   local resession = require("resession")
 
   local function get_session_name()
@@ -279,7 +278,7 @@ end
 
 function M.remove_worktree_path(path, force)
   if not path or path == "" then return end
-  local abs_path = vim.fn.fnamemodify(path, ':p'):gsub('/+$', '')
+  local abs_path = utils.normalize_path(path)
   local entries = get_worktrees()
   if #entries == 0 then return end
 

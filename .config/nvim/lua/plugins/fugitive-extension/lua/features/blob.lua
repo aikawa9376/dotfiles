@@ -1,4 +1,5 @@
 local M = {}
+local utils = require("fugitive_utils")
 
 function M.setup(group)
   vim.api.nvim_create_autocmd('BufReadPost', {
@@ -73,34 +74,6 @@ function M.setup(group)
         vim.cmd('tabedit %')
         vim.cmd('Gvdiffsplit!')
       end, { buffer = ev.buf, nowait = true, silent = true })
-
-      local function auto_stash(work_tree)
-        local status = vim.fn.systemlist("git -C " .. vim.fn.shellescape(work_tree) .. " status --porcelain")
-        if vim.v.shell_error ~= 0 then
-          vim.notify("git status failed; skipping auto-stash", vim.log.levels.WARN)
-          return false
-        end
-        if #status == 0 then
-          return false
-        end
-        local msg = "fugitive-ext blob auto-stash"
-        vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash push -u -k -m " .. vim.fn.shellescape(msg))
-        if vim.v.shell_error ~= 0 then
-          vim.notify("auto-stash failed; aborting", vim.log.levels.ERROR)
-          return nil
-        end
-        vim.notify("Auto-stashed dirty worktree", vim.log.levels.INFO)
-        return true
-      end
-
-      local function auto_pop(work_tree)
-        vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash pop --index --quiet")
-        if vim.v.shell_error ~= 0 then
-          vim.notify("Auto-stash pop failed; please pop manually", vim.log.levels.ERROR)
-        else
-          vim.notify("Auto-stash popped", vim.log.levels.INFO)
-        end
-      end
 
       -- du: blobの選択行の変更を打ち消してコミット履歴を書き換え、変更をステージング
       vim.keymap.set('v', 'du', function()
@@ -215,7 +188,11 @@ function M.setup(group)
           return
         end
 
-        local stashed = auto_stash(git_dir)
+        local stashed = utils.auto_stash(git_dir, {
+          message = "fugitive-ext blob auto-stash",
+          keep_index = true,
+          notify_stashed = true,
+        })
         if stashed == nil then return end
 
         local parent_result = vim.fn.systemlist('git log --format=%H --skip=1 -n 1 ' .. commit .. ' -- ' .. vim.fn.shellescape(filepath))
@@ -226,7 +203,7 @@ function M.setup(group)
         local rebase_result = vim.fn.system(rebase_cmd)
         if not rebase_result:match('Stopped at') then
           vim.notify('Rebase failed: ' .. rebase_result:sub(1, 120), vim.log.levels.ERROR)
-          if stashed then auto_pop(git_dir) end
+          if stashed then utils.pop_auto_stash(git_dir, { notify_popped = true }) end
           return
         end
 
@@ -236,7 +213,7 @@ function M.setup(group)
         if vim.v.shell_error ~= 0 then
           vim.notify('Amend failed: ' .. restore_result:sub(1, 120), vim.log.levels.ERROR)
           vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
-          if stashed then auto_pop(git_dir) end
+          if stashed then utils.pop_auto_stash(git_dir, { notify_popped = true }) end
           return
         end
 
@@ -245,14 +222,14 @@ function M.setup(group)
         if not (continue_result:match('Successfully rebased') or vim.v.shell_error == 0) then
           vim.notify('Rebase continue failed: ' .. continue_result:sub(1, 120), vim.log.levels.ERROR)
           vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
-          if stashed then auto_pop(git_dir) end
+          if stashed then utils.pop_auto_stash(git_dir, { notify_popped = true }) end
           return
         end
 
         -- Step 4: ワークツリーをHEADに揃える
         vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git checkout HEAD -- ' .. vim.fn.shellescape(filepath))
 
-        if stashed then auto_pop(git_dir) end
+        if stashed then utils.pop_auto_stash(git_dir, { notify_popped = true }) end
         vim.cmd('checktime')
         vim.notify('Removed file changes from commit ' .. commit:sub(1, 7), vim.log.levels.INFO)
       end, { buffer = ev.buf, silent = true, desc = 'Drop file changes from commit' })

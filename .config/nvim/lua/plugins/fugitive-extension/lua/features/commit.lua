@@ -1,6 +1,7 @@
 local M = {}
 local utils = require("fugitive_utils")
 local commands = require("features.commands")
+local syntax_highlight = require("features.syntax_highlight")
 
 local is_navigating = false
 
@@ -181,31 +182,15 @@ local function build_partial_reverse_patch(filepath, lines, hunk_start, sel_star
 end
 
 local function commit_auto_stash(work_tree)
-  local status = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(work_tree) .. ' status --porcelain')
-  if vim.v.shell_error ~= 0 then
-    vim.notify('git status failed; skipping auto-stash', vim.log.levels.WARN)
-    return false
-  end
-  if #status == 0 then return false end
-  vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree)
-    .. ' stash push -u -k -m ' .. vim.fn.shellescape('fugitive-ext commit auto-stash'))
-  if vim.v.shell_error ~= 0 then
-    vim.notify('auto-stash failed; aborting', vim.log.levels.ERROR)
-    return nil
-  end
-  vim.notify('Auto-stashed dirty worktree', vim.log.levels.INFO)
-  return true
+  return utils.auto_stash(work_tree, {
+    message = 'fugitive-ext commit auto-stash',
+    keep_index = true,
+    notify_stashed = true,
+  })
 end
 
 local function commit_auto_pop(work_tree)
-  vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' stash pop --index --quiet')
-  if vim.v.shell_error ~= 0 then
-    vim.notify('Auto-stash pop failed; please pop manually', vim.log.levels.ERROR)
-    return false
-  else
-    vim.notify('Auto-stash popped', vim.log.levels.INFO)
-    return true
-  end
+  return utils.pop_auto_stash(work_tree, { notify_popped = true })
 end
 
 local function cleanup_view_file(path)
@@ -852,7 +837,7 @@ function M.setup(group)
       })
 
       -- Enable syntax highlighting for diffs
-      require('features.syntax_highlight').attach(ev.buf)
+      syntax_highlight.attach(ev.buf)
 
       local function update_flog_highlight()
         if not vim.api.nvim_buf_is_valid(ev.buf) then return end
@@ -1153,9 +1138,8 @@ function M.setup(group)
 
       -- <Leader>wd: Toggle word diff style
       vim.keymap.set('n', '<Leader>wd', function()
-        local sh = require('features.syntax_highlight')
-        local new_style = sh.config.word_diff_style == 'github' and 'lazygit' or 'github'
-        sh.config.word_diff_style = new_style
+        local new_style = syntax_highlight.config.word_diff_style == 'github' and 'lazygit' or 'github'
+        syntax_highlight.config.word_diff_style = new_style
         vim.notify('Word diff style: ' .. new_style, vim.log.levels.INFO)
       end, { buffer = ev.buf, silent = true, desc = 'Toggle word diff style (lazygit/github)' })
     end,

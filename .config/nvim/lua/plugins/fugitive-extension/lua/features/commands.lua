@@ -1,4 +1,5 @@
 local M = {}
+local utils = require("fugitive_utils")
 
 local float_win = nil
 local float_buf = nil
@@ -6,53 +7,20 @@ local float_buf = nil
 local reflog_redo_stack = {}
 
 local function get_work_tree_from_fugitive()
-  local git_dir = vim.fn.FugitiveGitDir()
-  if git_dir == '' then
-    vim.notify("Not in a git repository", vim.log.levels.ERROR)
-    return nil
-  end
-
-  local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-  local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
-
-  if vim.v.shell_error ~= 0 or work_tree == '' then
-    vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
-    return nil
-  end
-
-  return work_tree
+  return utils.get_work_tree({ notify = true })
 end
 
 -- Worktree cleanliness helper
 local function apply_auto_stash(work_tree)
-  -- Check if worktree is dirty
-  local status = vim.fn.systemlist("git -C " .. vim.fn.shellescape(work_tree) .. " status --porcelain")
-  if vim.v.shell_error ~= 0 then
-    vim.notify("git status failed; skipping auto-stash", vim.log.levels.WARN)
-    return false
-  end
-  if #status == 0 then
-    return false
-  end
-
-  local msg = "fugitive-ext auto-stash"
-  vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash push -u -m " .. vim.fn.shellescape(msg))
-  if vim.v.shell_error ~= 0 then
-    vim.notify("auto-stash failed; aborting command", vim.log.levels.ERROR)
-    return nil
-  end
-  return true
+  return utils.auto_stash(work_tree)
 end
 
 local function pop_auto_stash(work_tree)
-  vim.fn.system("git -C " .. vim.fn.shellescape(work_tree) .. " stash pop --index --quiet")
-  if vim.v.shell_error ~= 0 then
-    vim.notify("Auto-stash pop failed; please pop manually", vim.log.levels.ERROR)
-    return false
-  end
-  pcall(vim.fn['fugitive#ReloadStatus'])
-  return true
+  return utils.pop_auto_stash(work_tree, { reload_status = true })
 end
+
+M.apply_auto_stash = apply_auto_stash
+M.pop_auto_stash = pop_auto_stash
 
 local function handle_cherry_pick_error(work_tree, message)
   if message:match("The previous cherry%-pick is now empty") or message:match("nothing to commit") then
@@ -165,9 +133,9 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
       table.remove(commit_info)
     end
 
-    vim.bo[float_buf].modifiable = true
-    vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, commit_info)
-    vim.bo[float_buf].modifiable = false
+    utils.with_buf_modifiable(float_buf, function()
+      vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, commit_info)
+    end)
 
     local line_count = #commit_info
     local win_height = math.min(line_count, vim.o.lines - 4)
@@ -243,20 +211,8 @@ function M.setup()
     opts = opts or {}
     local on_complete = opts.on_complete
 
-    -- fugitiveバッファのgitディレクトリを取得
-    local git_dir = vim.fn.FugitiveGitDir()
-    if git_dir == '' then
-      vim.notify("Not in a git repository", vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
-      return
-    end
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
 
     local output_lines = {}
     vim.fn.jobstart("git -C " .. vim.fn.shellescape(work_tree) .. " push --force-with-lease", {
@@ -326,20 +282,8 @@ function M.setup()
       return
     end
 
-    -- fugitiveバッファのgitディレクトリを取得
-    local git_dir = vim.fn.FugitiveGitDir()
-    if git_dir == '' then
-      vim.notify("Not in a git repository", vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
-      return
-    end
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
 
     local stashed = apply_auto_stash(work_tree)
     if stashed == nil then return end
@@ -462,19 +406,8 @@ function M.setup()
       return
     end
 
-    local git_dir = vim.fn.FugitiveGitDir()
-    if git_dir == '' then
-      vim.notify('Not in a git repository', vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
-      return
-    end
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
 
     local stashed = apply_auto_stash(work_tree)
     if stashed == nil then return end
@@ -551,19 +484,8 @@ function M.setup()
       return
     end
 
-    local git_dir = vim.fn.FugitiveGitDir()
-    if git_dir == '' then
-      vim.notify('Not in a git repository', vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify("Could not determine work tree from git dir: " .. git_dir, vim.log.levels.ERROR)
-      return
-    end
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
 
     local stashed = apply_auto_stash(work_tree)
     if stashed == nil then return end
@@ -616,21 +538,11 @@ function M.setup()
       return
     end
 
-    local git_dir = vim.fn.FugitiveGitDir()
-    if git_dir == '' then
-      vim.notify('Not in a git repository', vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
-    if vim.v.shell_error ~= 0 then
-      vim.notify("Could not determine work tree", vim.log.levels.ERROR)
-      return
-    end
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
 
     -- Check if there are staged changes
-    local has_staged = vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' diff --cached --quiet')
+    vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' diff --cached --quiet')
     -- exit_code is 1 if there are differences (dirty), 0 if clean
     local is_clean = (vim.v.shell_error == 0)
 
@@ -759,14 +671,8 @@ function M.setup()
       base_commit = current_commit .. '^'
     end
 
-    local git_dir = vim.fn.FugitiveGitDir()
-    if git_dir == '' then
-      vim.notify('Not in a git repository', vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
 
     local stashed = apply_auto_stash(work_tree)
     if stashed == nil then return end
@@ -789,10 +695,8 @@ END {
 ' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
 ]], current_commit:sub(1,7), target_commit:sub(1,7))
 
-    local debug_script = script
-
     local f = io.open(tmpfile, 'w')
-    f:write(debug_script)
+    f:write(script)
     f:close()
     vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
 
@@ -816,14 +720,8 @@ END {
   function M.drop_commits(commits, on_complete)
     if not commits or #commits == 0 then return end
 
-    local git_dir = vim.fn.FugitiveGitDir()
-    if git_dir == '' then
-      vim.notify('Not in a git repository', vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-    local work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
 
     local stashed = apply_auto_stash(work_tree)
     if stashed == nil then return end
@@ -843,7 +741,7 @@ END {
     local oldest_commit = sorted_commits[#sorted_commits]
 
     -- Check if oldest commit has a parent
-    local parent_check = vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. oldest_commit .. '^ 2>/dev/null')
+    vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. oldest_commit .. '^ 2>/dev/null')
     local rebase_base = oldest_commit .. '^'
     
     if vim.v.shell_error ~= 0 then
@@ -1005,16 +903,7 @@ END {
     if not (commit and commit ~= '') then return false end
     if not buf or not vim.api.nvim_buf_is_valid(buf) then return false end
 
-    -- Determine work tree if possible
-    local git_dir = vim.fn.FugitiveGitDir()
-    local work_tree = nil
-    if git_dir and git_dir ~= '' then
-      local work_tree_cmd = 'git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel'
-      work_tree = vim.fn.trim(vim.fn.system(work_tree_cmd))
-      if vim.v.shell_error ~= 0 then
-        work_tree = nil
-      end
-    end
+    local work_tree = utils.get_work_tree()
 
     local cmd
     if work_tree then
@@ -1028,10 +917,8 @@ END {
       return false
     end
 
-    local ok, err = pcall(function()
-      vim.bo[buf].modifiable = true
+    local ok = utils.with_buf_modifiable(buf, function()
       vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-      vim.bo[buf].modifiable = false
     end)
     if not ok then
       return false
@@ -1190,8 +1077,6 @@ END {
   M.git_cherry_pick = git_cherry_pick
   M.reflog_undo = reflog_undo
   M.reflog_redo = reflog_redo
-  M.apply_auto_stash = apply_auto_stash
-  M.pop_auto_stash = pop_auto_stash
 end
 
 return M
