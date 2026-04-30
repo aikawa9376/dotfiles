@@ -138,7 +138,12 @@ return {
       notify_on_done = true,
     },
     edit_blocks = {
+      transport = "api",
       command = { "copilot", "-p", "--model", "gpt-5-mini" },
+      api = {
+        provider = "copilot",
+        model = "gpt-5-mini",
+      },
     },
   }
 }

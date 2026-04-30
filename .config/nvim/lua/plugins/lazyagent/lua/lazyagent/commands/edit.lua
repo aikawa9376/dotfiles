@@ -12,7 +12,7 @@ function M.register(create)
   end, {
     nargs = "*",
     range = true,
-    desc = "Edit the selected line range with a one-shot AI agent",
+    desc = "Edit the selected line range with a one-shot AI backend",
   })
 end
 
