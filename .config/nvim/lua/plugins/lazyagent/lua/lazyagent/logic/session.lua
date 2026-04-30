@@ -569,6 +569,43 @@ local function merge_conversation_lines(previous, current)
   return merged
 end
 
+local function normalize_keep_line_limit(value)
+  local count = tonumber(value)
+  if not count or count <= 0 then
+    return nil
+  end
+  return math.floor(count)
+end
+
+local function is_user_transcript_heading(line)
+  return type(line) == "string"
+    and line:match("^─ ") ~= nil
+    and line:find(" User", 1, true) ~= nil
+end
+
+local function split_conversation_checkpoint_lines(lines, keep_recent_lines)
+  lines = vim.deepcopy(lines or {})
+  local keep_count = normalize_keep_line_limit(keep_recent_lines)
+  if not keep_count or #lines <= keep_count then
+    return {}, lines
+  end
+
+  local keep_start = #lines - keep_count + 1
+  local split_start = keep_start
+  for row = keep_start, 1, -1 do
+    if is_user_transcript_heading(lines[row]) then
+      split_start = row
+      break
+    end
+  end
+
+  if split_start <= 1 then
+    return {}, lines
+  end
+
+  return vim.list_slice(lines, 1, split_start - 1), vim.list_slice(lines, split_start)
+end
+
 local SIDECAR_VERSION = 1
 local SIDECAR_SUMMARY_LIMIT = 1024
 local SIDECAR_BODY_LIMIT = 64 * 1024
@@ -2165,13 +2202,19 @@ function M.show_acp_capabilities(agent_name)
 end
 
 function M.save_conversation_checkpoint(arg1, arg2)
-  local agent_name, line_limit
-  if tonumber(arg1) then
-    line_limit = tonumber(arg1)
+  local agent_name, keep_line_limit
+  if normalize_keep_line_limit(arg1) then
+    keep_line_limit = normalize_keep_line_limit(arg1)
     agent_name = arg2
-  elseif tonumber(arg2) then
-    line_limit = tonumber(arg2)
+  elseif tonumber(arg1) then
+    vim.notify("LazyAgentConversation: keep line count must be a positive number", vim.log.levels.WARN)
+    return
+  elseif normalize_keep_line_limit(arg2) then
+    keep_line_limit = normalize_keep_line_limit(arg2)
     agent_name = arg1
+  elseif tonumber(arg2) then
+    vim.notify("LazyAgentConversation: keep line count must be a positive number", vim.log.levels.WARN)
+    return
   else
     agent_name = arg1
   end
@@ -2193,31 +2236,59 @@ function M.save_conversation_checkpoint(arg1, arg2)
       return
     end
 
-    M.capture_and_save_session(chosen, false, function(path)
-      if not path or path == "" then
-        return
-      end
+    backend_mod.capture_pane(session.pane_id, function(text)
+      vim.schedule(function()
+        if not text or text == "" then
+          vim.notify("LazyAgentConversation: captured conversation was empty for agent '" .. tostring(chosen) .. "'", vim.log.levels.INFO)
+          return
+        end
 
-      local current = state.sessions[chosen]
-      if not current or not current.pane_id or current.pane_id == "" then
-        return
-      end
+        local current = state.sessions[chosen]
+        if not current or not current.pane_id or current.pane_id == "" then
+          return
+        end
 
-      if not backend_mod.clear_transcript(current.pane_id) then
-        vim.notify("LazyAgentConversation: saved conversation but failed to clear ACP transcript", vim.log.levels.ERROR)
-        return
-      end
+        local lines = vim.split(text, "\n")
+        local lines_to_save = lines
+        local lines_to_keep = {}
+        if keep_line_limit then
+          lines_to_save, lines_to_keep = split_conversation_checkpoint_lines(lines, keep_line_limit)
+          if #lines_to_save == 0 then
+            vim.notify(
+              "LazyAgentConversation: no older User-bounded transcript found beyond the newest "
+                .. keep_line_limit
+                .. " lines",
+              vim.log.levels.INFO
+            )
+            return
+          end
+        end
 
-      current.merge_conversation_on_next_save = true
-      local msg = "LazyAgentConversation: saved conversation to " .. path .. " and cleared ACP transcript"
-      if line_limit then
-        msg = "LazyAgentConversation: saved last " .. line_limit .. " lines to " .. path .. " and cleared ACP transcript"
-      end
-      vim.notify(msg, vim.log.levels.INFO)
-    end, {
-      merge_with_last_save = session.merge_conversation_on_next_save,
-      line_limit = line_limit,
-    })
+        local path = persist_conversation_capture(chosen, current, lines_to_save, {
+          merge_with_last_save = current.merge_conversation_on_next_save,
+        })
+        if not path or path == "" then
+          return
+        end
+
+        local replacement = keep_line_limit and table.concat(lines_to_keep, "\n") or nil
+        if not backend_mod.clear_transcript(current.pane_id, replacement) then
+          vim.notify("LazyAgentConversation: saved conversation but failed to update ACP transcript", vim.log.levels.ERROR)
+          return
+        end
+
+        current.merge_conversation_on_next_save = true
+        local msg = "LazyAgentConversation: saved conversation to " .. path .. " and cleared ACP transcript"
+        if keep_line_limit then
+          msg = "LazyAgentConversation: saved older conversation to "
+            .. path
+            .. " and kept "
+            .. #lines_to_keep
+            .. " recent ACP lines"
+        end
+        vim.notify(msg, vim.log.levels.INFO)
+      end)
+    end)
   end)
 end
 
