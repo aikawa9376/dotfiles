@@ -17,6 +17,12 @@ return {
         desc = "Instant AI Agent",
       },
       {
+        "c<space>e",
+        function() require("lazyagent").edit_selection() end,
+        mode = { "n", "x" },
+        desc = "Edit Selected Block",
+      },
+      {
         "c<space><cr>",
         function() require("lazyagent").send_enter() end,
         mode = { "n", "x" },
@@ -68,7 +74,7 @@ return {
     "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
     "LazyAgentOpenConversation", "LazyAgentConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
-    "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach",
+    "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach", "LazyAgentEdit",
     "LazyAgentRestart", "LazyAgentStack", "LazyAgentHooks", "LazyAgentQR",
     "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPReopen",
     "LazyAgentACPCommands", "LazyAgentACPTools", "LazyAgentACPResources", "LazyAgentACPCapabilities",
@@ -130,6 +136,9 @@ return {
       quickfix_on_edit = true,
       git_checkpoint_on_done = false,
       notify_on_done = true,
-    }
+    },
+    edit_blocks = {
+      command = { "copilot", "-p", "--model", "gpt-5-mini" },
+    },
   }
 }

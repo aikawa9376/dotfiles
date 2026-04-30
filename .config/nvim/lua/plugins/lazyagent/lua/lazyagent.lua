@@ -11,6 +11,7 @@ local backend_logic = require("lazyagent.logic.backend")
 local cache_logic = require("lazyagent.logic.cache")
 local commands_logic = require("lazyagent.commands")
 local default_config = require("lazyagent.config.defaults")
+local edit_blocks = require("lazyagent.logic.edit_blocks")
 local mcp_integration = require("lazyagent.integrations.mcp")
 local send_logic = require("lazyagent.logic.send")
 local session_logic = require("lazyagent.logic.session")
@@ -52,6 +53,8 @@ M.send_key = send_logic.send_key
 M.send_interrupt = send_logic.send_interrupt
 M.send_raw_keys = send_logic.send_raw_keys
 M.clear_input = send_logic.clear_input
+M.edit_selection = edit_blocks.edit_selection
+M.edit_selected_blocks = edit_blocks.edit_selection
 M.fire_event = util.fire_event
 
 local function export_nvim_listen_address()

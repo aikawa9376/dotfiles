@@ -40,7 +40,7 @@ return {
   },
   cmd = {
     "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentClose",
-    "LazyAgentHistory", "LazyAgentConversationList", "LazyAgentSummary",
+    "LazyAgentEdit", "LazyAgentHistory", "LazyAgentConversationList", "LazyAgentSummary",
     "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPConfig",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
@@ -84,6 +84,62 @@ require("lazyagent").setup({
 ```
 
 agent ごとの設定は global 設定より優先されます。`interactive_agents.<name>.default = true` を指定すると、起動 agent の候補が複数あるときにその agent を優先します。
+
+## Edit selected blocks
+
+`:LazyAgentEdit` は Avante の edit selected block に近い用途の line-range 編集です。選択範囲と前後 context を one-shot agent CLI に渡し、返ってきた replacement を元バッファ上の inline diff として表示してから適用します。
+
+```vim
+:'<,'>LazyAgentEdit make this function async and keep behavior
+```
+
+または visual mode / normal mode で `c<space>e` を押すと、編集指示の入力 UI を開きます。normal mode では現在行が対象です。
+
+```lua
+require("lazyagent").setup({
+  edit_blocks = {
+    agent = "Copilot",
+    -- 明示したい場合。未指定なら copilot -p, claude -p, gemini -p の順で使えるものを探します。
+    -- command = { "copilot", "-p" },
+    -- モデルを固定したい場合は CLI ごとの option をここに含めます。
+    -- command = { "copilot", "-p", "--model", "gpt-5-mini" },
+    command_mode = "arg", -- "arg" or "stdin"
+    timeout_ms = 90000,
+    context_lines = 80,
+    max_context_chars = 24000,
+    preview = true,
+    auto_apply = false,
+    preserve_indent = true,
+    keymaps = {
+      accept = "ct",
+      accept_all = "ca",
+      reject = "co",
+      reject_alt = "cq",
+    },
+  },
+})
+```
+
+`edit_blocks.command` は one-shot agent の実行方法です。未指定なら `edit_blocks.candidates` から実行可能な CLI を探します。値は table / string / function を指定できます。
+
+```lua
+edit_blocks = {
+  -- table: prompt を最後の引数に追加して実行
+  command = { "copilot", "-p", "--model", "gpt-5-mini" },
+  command_mode = "arg",
+
+  -- stdin で prompt を渡したい CLI の例
+  -- command = { "my-agent", "edit" },
+  -- command_mode = "stdin",
+
+  -- function: テストや独自 provider 用。文字列、または { ok, stdout, stderr } を返せます。
+  -- command = function(prompt, ctx)
+  --   return "<code>" .. ctx.original_lines[1] .. "</code>"
+  -- end,
+}
+```
+
+agent には `<code>...</code>` だけを返すよう指示します。parser は `<code>`、JSON (`replacement` / `code`)、fenced code、raw text の順に受け付けます。inline diff 表示中は `ct` で現在の提案を適用、`ca` で pending edits をまとめて適用、`co` / `cq` / `c0` で破棄できます。適用時には元の選択範囲が変更されていないことを確認するため、遅い agent の応答で別編集を上書きしにくくしています。
 
 ## ACP mode
 
@@ -164,6 +220,7 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 | `:LazyAgentRestore [agent]` | persisted session を復元 |
 | `:LazyAgentDetach [agent]` | session を残して Neovim 側の管理から外す |
 | `:LazyAgentAttach [agent] [pane]` | 既存 tmux pane を session として attach |
+| `:LazyAgentEdit [request]` | 選択範囲 / 現在行を one-shot agent で編集し preview |
 | `:LazyAgentHistory [file]` | 現在 context の scratch 履歴を開く |
 | `:LazyAgentHistoryList [file]` | 履歴一覧から開く |
 | `:LazyAgentConversationList [file]` | 保存済み会話 log を開く |
@@ -204,6 +261,7 @@ lazyagent.open_instant("Cursor")
 lazyagent.send_visual()
 lazyagent.send_line()
 lazyagent.send_to_cli("Copilot", "Explain this diff")
+lazyagent.edit_selection({ request = "simplify this block" })
 lazyagent.send_key("Enter")
 lazyagent.close_session("Gemini")
 lazyagent.get_active_agents()

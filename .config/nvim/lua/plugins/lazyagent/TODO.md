@@ -16,6 +16,14 @@
 
 ## Medium priority
 
+- Review removal candidates before the next cleanup pass.
+  - Legacy `prompts`: non-interactive callback agents are still exposed, but current usage appears centered on interactive/ACP agents. Remove if no personal workflow depends on custom Lua prompt handlers.
+  - `builtin` backend: useful as a tmux-free fallback, but it is much less capable than `tmux`/ACP and increases backend surface area. Remove if tmux/ACP are mandatory for this plugin.
+  - MCP web UI / `:LazyAgentQR`: convenient for mobile/LAN control, but it pulls in web UI, QR, and host exposure concerns. Remove if this is not actively used.
+  - `auto_follow`: watches filesystem changes and opens edited files automatically. It adds platform-specific dependencies (`fswatch`/`inotifywait`) and polling fallback complexity. Remove if ACP edit hooks and quickfix are enough.
+  - Global Cursor/Copilot config rewrites: currently convenient but risky with multiple Neovim instances and shared global config. Replace with per-session/per-project config first; remove direct global mutation if the CLIs support scoped config.
+  - Hardcoded scratch keymap fallbacks (`<C-j>`, `<C-k>`, number keys): useful for this dotfiles workflow, but plugin defaults should stay configurable. Remove hardcoded extras once all desired keys are supplied through `scratch_keymaps` / lazy.nvim `keys`.
+
 - Unify ACP command source handling.
   - Keep one shared API for visible slash commands across completion, palette, footer, and reports.
   - Apply the same model to `@` completions if possible.
