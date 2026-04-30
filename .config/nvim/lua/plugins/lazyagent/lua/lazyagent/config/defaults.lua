@@ -131,6 +131,7 @@ function M.build()
     },
     edit_blocks = {
       agent = "Copilot",
+      transport = "command",
       command = nil,
       command_mode = "arg",
       timeout_ms = 90000,
@@ -140,6 +141,21 @@ function M.build()
       auto_apply = false,
       preserve_indent = true,
       max_inline_diff_lines = 120,
+      api = {
+        provider = nil,
+        model = "gpt-4o-2024-11-20",
+        endpoint = nil,
+        proxy = nil,
+        allow_insecure = false,
+        use_response_api = nil,
+        extra_headers = {},
+        extra_body = {
+          max_tokens = 20480,
+        },
+        copilot = {
+          token_refresh_skew_seconds = 120,
+        },
+      },
       keymaps = {
         accept = "ct",
         accept_all = "ca",

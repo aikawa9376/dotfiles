@@ -1,6 +1,7 @@
 local M = {}
 
 local state = require("lazyagent.logic.state")
+local edit_api = require("lazyagent.logic.edit_api")
 local status = require("lazyagent.logic.status")
 local transforms = require("lazyagent.transforms")
 local util = require("lazyagent.util")
@@ -13,6 +14,7 @@ local keymaps_by_buf = {}
 local function edit_config()
   local defaults = {
     agent = "Copilot",
+    transport = "command",
     command = nil,
     command_mode = "arg",
     timeout_ms = 90000,
@@ -22,6 +24,21 @@ local function edit_config()
     auto_apply = false,
     preserve_indent = true,
     max_inline_diff_lines = 120,
+    api = {
+      provider = nil,
+      model = "gpt-4o-2024-11-20",
+      endpoint = nil,
+      proxy = nil,
+      allow_insecure = false,
+      use_response_api = nil,
+      extra_headers = {},
+      extra_body = {
+        max_tokens = 20480,
+      },
+      copilot = {
+        token_refresh_skew_seconds = 120,
+      },
+    },
     keymaps = {
       accept = "ct",
       accept_all = "ca",
@@ -812,14 +829,12 @@ end
 
 local function submit(ctx, request, opts)
   opts = opts or {}
-  local runners, explicit = resolve_runners(opts)
-  if #runners == 0 then
-    vim.notify("LazyAgentEdit: no one-shot edit command found. Configure edit_blocks.command.", vim.log.levels.ERROR)
-    reject(ctx)
-    return
-  end
 
   local prompt = build_prompt(ctx, request)
+  local transport = trim(opts.transport):lower()
+  if transport == "" then
+    transport = "command"
+  end
   local errors = {}
   ctx.status_task_id = status.start_task("Edit", { icon = "" })
 
@@ -828,6 +843,39 @@ local function submit(ctx, request, opts)
       status.stop_task(ctx.status_task_id)
       ctx.status_task_id = nil
     end
+  end
+
+  if transport == "api" then
+    vim.notify("LazyAgentEdit: requesting " .. edit_api.label(opts), vim.log.levels.INFO)
+    edit_api.request(prompt, ctx, opts, function(ok, stdout, stderr)
+      vim.schedule(function()
+        if not ok then
+          stop_loading()
+          reject(ctx)
+          vim.notify("LazyAgentEdit failed: " .. trim(stderr), vim.log.levels.ERROR)
+          return
+        end
+
+        handle_response(ctx, stdout, opts)
+        stop_loading()
+      end)
+    end)
+    return
+  end
+
+  if transport ~= "command" then
+    stop_loading()
+    reject(ctx)
+    vim.notify("LazyAgentEdit: unsupported transport '" .. tostring(transport) .. "'", vim.log.levels.ERROR)
+    return
+  end
+
+  local runners, explicit = resolve_runners(opts)
+  if #runners == 0 then
+    stop_loading()
+    vim.notify("LazyAgentEdit: no one-shot edit command found. Configure edit_blocks.command.", vim.log.levels.ERROR)
+    reject(ctx)
+    return
   end
 
   local function attempt(index)
@@ -870,7 +918,7 @@ local function submit(ctx, request, opts)
 end
 
 function M.edit_selection(opts)
-  opts = opts or {}
+  opts = vim.tbl_deep_extend("force", edit_config(), opts or {})
   local ctx, err = capture_selection(opts)
   if not ctx then
     vim.notify("LazyAgentEdit: " .. tostring(err), vim.log.levels.ERROR)
