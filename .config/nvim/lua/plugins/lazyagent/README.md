@@ -214,7 +214,7 @@ agent が advertise していない `/...` は通常の prompt text として送
 
 ### ACP transcript buffer keymaps
 
-ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。float は `q` または `<Esc>` で閉じます。
+ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。float は `q` または `<Esc>` で閉じます。
 
 ## MCP hooks
 
@@ -247,6 +247,7 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 | `:LazyAgentRestore [agent]` | persisted session を復元 |
 | `:LazyAgentDetach [agent]` | session を残して Neovim 側の管理から外す |
 | `:LazyAgentAttach [agent] [pane]` | 既存 tmux pane を session として attach |
+| `:LazyAgentACPSwitch [agent]` | 現在の ACP 会話を別 provider に切り替える |
 | `:LazyAgentEdit [request]` | 選択範囲 / 現在行を one-shot agent で編集し preview |
 | `:LazyAgentHistory [file]` | 現在 context の scratch 履歴を開く |
 | `:LazyAgentHistoryList [file]` | 履歴一覧から開く |

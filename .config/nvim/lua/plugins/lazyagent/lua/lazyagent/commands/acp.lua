@@ -10,6 +10,13 @@ end
 
 local commands = {
   {
+    name = "LazyAgentACPSwitch",
+    desc = "Switch ACP providers mid-conversation",
+    handler = function(target_agent)
+      session_logic.switch_acp_provider(nil, target_agent)
+    end,
+  },
+  {
     name = "LazyAgentACPConfig",
     desc = "Open ACP config picker for an ACP-enabled agent",
     handler = session_logic.pick_acp_config,

@@ -28,6 +28,9 @@ M.close_all_sessions = session_logic.close_all_sessions
 M.toggle_session = session_logic.toggle_session
 M.open_instant = session_logic.open_instant
 M.attach_session = session_logic.attach_session
+M.switch_acp_provider = function(target_agent, agent_name)
+  return session_logic.switch_acp_provider(agent_name, target_agent)
+end
 M.pick_acp_config = session_logic.pick_acp_config
 M.pick_acp_model = session_logic.pick_acp_model
 M.pick_acp_mode = session_logic.pick_acp_mode

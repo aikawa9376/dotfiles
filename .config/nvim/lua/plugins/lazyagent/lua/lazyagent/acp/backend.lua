@@ -21,11 +21,18 @@ local section_icons = {
   Error = "󰅚",
   Plan = "󰐕",
 }
+local SWITCH_HISTORY_RECENT_ITEMS = 14
+local SWITCH_HISTORY_ITEM_BODY_LIMIT = 6000
+local SWITCH_HISTORY_TOOL_LIMIT = 6
+local SWITCH_HISTORY_TRANSCRIPT_BYTE_LIMIT = 128 * 1024
 local resolve_permission_option
 local tool_heading
 local buffer_root_for_session
 local sync_runtime_session
 local sync_runtime_live_state
+local clear_pending_switch_history
+local append_block
+local heading_kind
 
 local sanitize_filename_component = util.sanitize_filename_component
 
@@ -157,39 +164,458 @@ local function clear_session_transcript(session, replacement_text)
   return ok
 end
 
-local function section_icon_for_heading(heading)
+local function rebuild_conversation_index(session)
+  session.conversation_timeline = session.conversation_timeline or {}
+  session.conversation_timeline_index = {}
+  for idx, item in ipairs(session.conversation_timeline) do
+    if type(item) == "table" and item.id and item.id ~= "" then
+      session.conversation_timeline_index[item.id] = idx
+    end
+  end
+  session.conversation_next_item_id = #session.conversation_timeline
+end
+
+local function rebuild_tool_index(session)
+  session.tool_timeline = session.tool_timeline or {}
+  session.tool_timeline_index = {}
+  for idx, entry in ipairs(session.tool_timeline) do
+    if type(entry) == "table" and entry.toolCallId and entry.toolCallId ~= "" then
+      session.tool_timeline_index[entry.toolCallId] = idx
+    end
+  end
+end
+
+local function restore_switch_snapshot(session, snapshot)
+  if not session or type(snapshot) ~= "table" then
+    return false
+  end
+
+  clear_pending_switch_history(session)
+  session.current_stream_key = nil
+  session.current_stream_heading = nil
+  session.current_stream_at_line_start = nil
+  session.current_stream_item_id = nil
+  session.tool_calls = {}
+
+  session.conversation_timeline = vim.deepcopy(snapshot.conversation_timeline or {})
+  session.tool_timeline = vim.deepcopy(snapshot.tool_timeline or {})
+  rebuild_conversation_index(session)
+  rebuild_tool_index(session)
+
+  local lines = type(snapshot.transcript_lines) == "table" and vim.deepcopy(snapshot.transcript_lines) or {}
+  local text = normalize_text(table.concat(lines, "\n"))
+  local ok = write_session_transcript(session, text, "w")
+  if ok then
+    session.transcript_has_content = text ~= ""
+  end
+
+  session.pending_switch_history = {
+    provider_from = snapshot.provider_from,
+    transcript_lines = vim.deepcopy(snapshot.transcript_lines or {}),
+    transcript_path = snapshot.transcript_path,
+    conversation_timeline = vim.deepcopy(snapshot.conversation_timeline or {}),
+    tool_timeline = vim.deepcopy(snapshot.tool_timeline or {}),
+  }
+
+  if snapshot.transition_message and snapshot.transition_message ~= "" then
+    append_block(session, "System", snapshot.transition_message)
+  elseif sync_runtime_session then
+    sync_runtime_session(session)
+  end
+
+  return ok
+end
+
+clear_pending_switch_history = function(session)
+  if not session then
+    return
+  end
+  local pending = session.pending_switch_history
+  if pending and pending.transcript_path and pending.transcript_path ~= "" then
+    pcall(vim.fn.delete, pending.transcript_path)
+  end
+  session.pending_switch_history = nil
+end
+
+local function switch_history_label(item)
+  local kind = tostring(item and (item.kind or item.heading) or ""):lower()
+  if kind == "user" then
+    return "User"
+  elseif kind == "assistant" then
+    return "Assistant"
+  elseif kind == "thinking" then
+    return "Assistant (thinking)"
+  elseif kind == "plan" then
+    return "Plan"
+  elseif kind == "tool" then
+    return "Tool"
+  elseif kind == "terminal" then
+    return "Terminal"
+  elseif kind == "edited" then
+    return "Edited"
+  elseif kind == "error" then
+    return "Error"
+  end
+  return item and item.heading or "Context"
+end
+
+local function switch_history_body(text)
+  text = normalize_text(text or "")
+  if text == "" then
+    return ""
+  end
+  if #text <= SWITCH_HISTORY_ITEM_BODY_LIMIT then
+    return text
+  end
+  return text:sub(1, SWITCH_HISTORY_ITEM_BODY_LIMIT) .. "\n... [truncated]"
+end
+
+local function switch_history_item_text(item)
+  if type(item) ~= "table" then
+    return nil
+  end
+
+  local body = switch_history_body(item.body ~= "" and item.body or item.summary or item.title or "")
+  if body == "" then
+    return nil
+  end
+
+  local label = switch_history_label(item)
+  local title = tostring(item.title or "")
+  local status = tostring(item.status or "")
+
+  if label == "User" or label == "Assistant" or label == "Assistant (thinking)" then
+    local speaker = label == "Assistant" and tostring(item.heading or item.title or label) or label
+    return string.format("%s: %s", speaker, body)
+  end
+
+  local header = label
+  if title ~= "" and title ~= item.heading and title ~= label then
+    header = header .. " - " .. title
+  end
+  if status ~= "" then
+    header = header .. " [" .. status .. "]"
+  end
+
+  return header .. ":\n" .. body
+end
+
+local function include_switch_history_item(item)
+  if type(item) ~= "table" then
+    return false
+  end
+  local kind = tostring(item.kind or ""):lower()
+  if kind == "system" or kind == "" then
+    return false
+  end
+  local body = tostring(item.body or item.summary or "")
+  if kind == "error" then
+    return true
+  end
+  if body:match("^Connecting ACP session") or body:match("^ACP session ready:") or body:match("^Switched ACP provider") then
+    return false
+  end
+  return true
+end
+
+local function collect_switch_history_items(pending)
+  local source = {}
+  for _, item in ipairs(pending and pending.conversation_timeline or {}) do
+    if include_switch_history_item(item) then
+      source[#source + 1] = item
+    end
+  end
+
+  if #source <= SWITCH_HISTORY_RECENT_ITEMS then
+    return source
+  end
+
+  local keep = {}
+  local recent_start = math.max(1, #source - SWITCH_HISTORY_RECENT_ITEMS + 1)
+  for idx, item in ipairs(source) do
+    if item.pinned == true or idx >= recent_start then
+      keep[#keep + 1] = item
+    end
+  end
+  return keep
+end
+
+local function recent_switch_tool_lines(pending)
+  local tools = pending and pending.tool_timeline or {}
+  if type(tools) ~= "table" or #tools == 0 then
+    return nil
+  end
+
+  local lines = { "Recent tool activity:" }
+  local start = math.max(1, #tools - SWITCH_HISTORY_TOOL_LIMIT + 1)
+  for idx = start, #tools do
+    local tool = tools[idx]
+    if type(tool) == "table" then
+      local status = tool.status and tool.status ~= "" and (" [" .. tostring(tool.status) .. "]") or ""
+      local summary = summarize_conversation_text(tool.summary or tool.title or tool.toolCallId or "tool", 280)
+      lines[#lines + 1] = string.format("- %s%s", summary, status)
+    end
+  end
+
+  return #lines > 1 and table.concat(lines, "\n") or nil
+end
+
+local function build_switch_history_blocks(session, pending)
+  if type(pending) ~= "table" then
+    return {}
+  end
+
+  local blocks = {}
+  local history_items = collect_switch_history_items(pending)
+  local intro = {
+    string.format(
+      "Conversation carryover from the previous ACP provider%s.",
+      pending.provider_from and pending.provider_from ~= "" and (" (" .. tostring(pending.provider_from) .. ")") or ""
+    ),
+    "Treat the following as existing conversation history for this session.",
+    "Do not ask me to restate it. Respond only to the new user message that follows.",
+  }
+  blocks[#blocks + 1] = {
+    type = "text",
+    text = table.concat(intro, "\n"),
+  }
+
+  for _, item in ipairs(history_items) do
+    local text = switch_history_item_text(item)
+    if text and text ~= "" then
+      blocks[#blocks + 1] = {
+        type = "text",
+        text = text,
+      }
+    end
+  end
+
+  local has_detailed_tool_history = false
+  for _, item in ipairs(history_items) do
+    local kind = tostring(item.kind or ""):lower()
+    if kind == "tool" or kind == "terminal" or kind == "edited" then
+      has_detailed_tool_history = true
+      break
+    end
+  end
+
+  local tool_lines = recent_switch_tool_lines(pending)
+  if tool_lines and not has_detailed_tool_history then
+    blocks[#blocks + 1] = {
+      type = "text",
+      text = tool_lines,
+    }
+  end
+
+  if pending.transcript_path and pending.transcript_path ~= "" then
+    if session.prompt_supports_embedded_context == true then
+      local transcript_text = table.concat(pending.transcript_lines or {}, "\n")
+      if #transcript_text > SWITCH_HISTORY_TRANSCRIPT_BYTE_LIMIT then
+        transcript_text = transcript_text:sub(1, SWITCH_HISTORY_TRANSCRIPT_BYTE_LIMIT) .. "\n... [truncated]"
+      end
+      blocks[#blocks + 1] = {
+        type = "resource",
+        resource = {
+          uri = file_uri(pending.transcript_path),
+          mimeType = "text/plain",
+          text = transcript_text,
+        },
+      }
+    else
+      blocks[#blocks + 1] = {
+        type = "resource_link",
+        uri = file_uri(pending.transcript_path),
+        name = vim.fn.fnamemodify(pending.transcript_path, ":t"),
+        title = "Previous conversation transcript",
+        mimeType = "text/plain",
+      }
+    end
+  end
+
+  return blocks
+end
+
+local function normalize_config_key(value)
+  return tostring(value or ""):lower():gsub("[^%w]+", "")
+end
+
+local function find_config_option(session, keys)
+  if not session or type(session.config_options) ~= "table" then
+    return nil
+  end
+
+  keys = type(keys) == "table" and keys or { keys }
+  for _, option in ipairs(session.config_options) do
+    if type(option) == "table" then
+      local option_id = normalize_config_key(option.id)
+      local category = normalize_config_key(option.category)
+      local name = normalize_config_key(option.name)
+      for _, key in ipairs(keys) do
+        local expected = normalize_config_key(key)
+        if expected ~= "" and (option_id == expected or category == expected or name == expected) then
+          return option
+        end
+      end
+    end
+  end
+
+  return nil
+end
+
+local function compact_config_value(value)
+  local text = tostring(value or "")
+  if text == "" then
+    return ""
+  end
+  return text:gsub("^https://agentclientprotocol%.com/protocol/session%-modes#", "")
+end
+
+local function current_config_label(session, keys)
+  local option = find_config_option(session, keys)
+  if not option then
+    return nil
+  end
+
+  local current = option.currentValue
+  if current == nil or current == "" then
+    return nil
+  end
+
+  for _, choice in ipairs(option.options or {}) do
+    if type(choice) == "table" and choice.value == current then
+      return compact_config_value(choice.name or current)
+    end
+  end
+
+  return compact_config_value(current)
+end
+
+local function provider_heading_label(session)
+  local info = session and session.agent_info or {}
+  local name = info.title or info.name or session.agent_name or "ACP"
+  local parts = { tostring(name) }
+
+  local model = current_config_label(session, { "model" })
+  if model and model ~= "" then
+    parts[#parts + 1] = model
+  end
+
+  local reasoning = current_config_label(session, { "thought_level", "reasoning_effort" })
+  if reasoning and reasoning ~= "" and reasoning:lower() ~= "none" then
+    parts[#parts + 1] = reasoning
+  end
+
+  return table.concat(parts, " ")
+end
+
+local function assistant_heading_label(session)
+  local label = provider_heading_label(session)
+  if label == "" then
+    return "Assistant"
+  end
+  return label
+end
+
+local function section_kind(heading, meta)
+  local explicit = type(meta) == "table" and tostring(meta.kind or ""):lower() or ""
+  if explicit == "user" then
+    return "User"
+  end
+  if explicit == "assistant" then
+    return "Assistant"
+  end
+  if explicit == "thinking" then
+    return "Thinking"
+  end
+  if explicit == "system" then
+    return "System"
+  end
+  if explicit == "error" then
+    return "Error"
+  end
+  if explicit == "plan" then
+    return "Plan"
+  end
+  if explicit == "tool" then
+    return "Tool"
+  end
+  if explicit == "terminal" then
+    return "Terminal"
+  end
+  if explicit == "edited" then
+    return "Edited"
+  end
+  return heading_kind(heading)
+end
+
+heading_kind = function(heading)
+  heading = tostring(heading or "")
+  if heading == "User" then
+    return "User"
+  end
+  if heading == "Assistant" then
+    return "Assistant"
+  end
+  if heading == "Thinking" then
+    return "Thinking"
+  end
+  if heading == "System" then
+    return "System"
+  end
+  if heading == "Error" then
+    return "Error"
+  end
+  if heading == "Plan" then
+    return "Plan"
+  end
   if heading:match("^Tool") then
-    return "󱁤"
+    return "Tool"
   end
   if heading:match("^Terminal") then
-    return ""
+    return "Terminal"
   end
   if heading:match("^Edited ") then
+    return "Edited"
+  end
+  return heading
+end
+
+local function section_icon_for_heading(heading, meta)
+  local kind = section_kind(heading, meta)
+  if kind == "Tool" then
+    return "󱁤"
+  end
+  if kind == "Terminal" then
+    return ""
+  end
+  if kind == "Edited" then
     return "󰏫"
   end
-  return section_icons[heading] or "󰈔"
+  return section_icons[kind] or "󰈔"
 end
 
-local function section_title(heading)
-  return section_icon_for_heading(heading) .. " " .. heading
+local function section_title(heading, meta)
+  return section_icon_for_heading(heading, meta) .. " " .. tostring(heading or "")
 end
 
-local function section_width(heading)
-  local ok, width = pcall(vim.fn.strdisplaywidth, section_title(heading))
-  width = ok and width or #section_title(heading)
+local function section_width(heading, meta)
+  local title = section_title(heading, meta)
+  local ok, width = pcall(vim.fn.strdisplaywidth, title)
+  width = ok and width or #title
   return math.max(44, width + 24)
 end
 
-local function section_has_tail(heading)
-  return heading == "User" or heading == "Assistant"
+local function section_has_tail(heading, meta)
+  local kind = section_kind(heading, meta)
+  return kind == "User" or kind == "Assistant"
 end
 
-local function render_section_header(heading)
-  local title = section_title(heading)
-  if not section_has_tail(heading) then
+local function render_section_header(heading, meta)
+  local title = section_title(heading, meta)
+  if not section_has_tail(heading, meta) then
     return "─ " .. title .. "\n"
   end
-  local total = section_width(heading)
+  local total = section_width(heading, meta)
   local title_width = vim.fn.strdisplaywidth(title)
   local tail = string.rep("─", math.max(8, total - title_width - 3))
   return "─ " .. title .. " " .. tail .. "\n"
@@ -218,12 +644,12 @@ local function pad_stream_chunk(body, at_line_start)
   return padded, body:match("\n$") ~= nil
 end
 
-local function render_section_block(heading, body)
+local function render_section_block(heading, body, meta)
   body = normalize_text(body)
   if body == "" then
     return ""
   end
-  local lines = { render_section_header(heading), pad_block_text(body) }
+  local lines = { render_section_header(heading, meta), pad_block_text(body) }
   if not body:match("\n$") then
     table.insert(lines, "\n")
   end
@@ -246,35 +672,35 @@ local function summarize_conversation_text(text, limit)
 end
 
 local function conversation_kind_for_heading(heading)
-  heading = tostring(heading or "")
-  if heading == "User" then
+  local kind = heading_kind(heading)
+  if kind == "User" then
     return "user"
   end
-  if heading == "Assistant" then
+  if kind == "Assistant" then
     return "assistant"
   end
-  if heading == "Thinking" then
+  if kind == "Thinking" then
     return "thinking"
   end
-  if heading == "System" then
+  if kind == "System" then
     return "system"
   end
-  if heading == "Error" then
+  if kind == "Error" then
     return "error"
   end
-  if heading == "Plan" then
+  if kind == "Plan" then
     return "plan"
   end
-  if heading:match("^Tool") then
+  if kind == "Tool" then
     return "tool"
   end
-  if heading:match("^Terminal") then
+  if kind == "Terminal" then
     return "terminal"
   end
-  if heading:match("^Edited ") then
+  if kind == "Edited" then
     return "edited"
   end
-  return heading:lower()
+  return tostring(heading or ""):lower()
 end
 
 local function next_conversation_item_id(session)
@@ -377,12 +803,12 @@ local function close_stream(session)
   end
 end
 
-local function append_block(session, heading, body, meta)
+append_block = function(session, heading, body, meta)
   body = normalize_text(body)
   if body == "" then return end
   close_stream(session)
   local prefix = session.transcript_has_content and "\n" or ""
-  write_session_transcript(session, prefix .. render_section_block(heading, body))
+  write_session_transcript(session, prefix .. render_section_block(heading, body, meta))
   session.transcript_has_content = true
   new_conversation_item(session, heading, body, meta)
   if sync_runtime_live_state then
@@ -396,7 +822,7 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
   if session.current_stream_key ~= stream_key then
     close_stream(session)
     local prefix = session.transcript_has_content and "\n" or ""
-    write_session_transcript(session, prefix .. render_section_header(heading))
+    write_session_transcript(session, prefix .. render_section_header(heading, meta))
     session.current_stream_key = stream_key
     session.current_stream_heading = heading
     session.current_stream_at_line_start = true
@@ -2799,7 +3225,9 @@ local function on_client_update(session, params)
 
   if kind == "agent_message_chunk" then
     local text = render_content(update.content)
-    append_stream_chunk(session, "assistant", "Assistant", text)
+    append_stream_chunk(session, "assistant", assistant_heading_label(session), text, {
+      kind = "assistant",
+    })
     return
   end
 
@@ -3066,7 +3494,11 @@ local function create_backend(default_view)
       note_unadvertised_slash_command(session, prompt)
       append_block(session, "User", prompt)
 
-      local blocks = build_prompt_blocks(session, prompt)
+      local blocks = {}
+      if session.pending_switch_history then
+        vim.list_extend(blocks, build_switch_history_blocks(session, session.pending_switch_history))
+      end
+      vim.list_extend(blocks, build_prompt_blocks(session, prompt))
       session.client:send_prompt(blocks, function(result, err)
         session.busy = false
         close_stream(session)
@@ -3078,6 +3510,10 @@ local function create_backend(default_view)
           end)
           session.prompt_queue = {}
           return
+        end
+
+        if session.pending_switch_history then
+          clear_pending_switch_history(session)
         end
 
         local stop_reason = result and result.stopReason or nil
@@ -3277,6 +3713,7 @@ local function create_backend(default_view)
       acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {}),
       acp_tool_timeline = vim.deepcopy(session.tool_timeline or {}),
       acp_conversation_timeline = vim.deepcopy(session.conversation_timeline or {}),
+      source_winid = session.view_state and session.view_state.source_winid or nil,
     }
   end
 
@@ -3323,6 +3760,7 @@ local function create_backend(default_view)
   function backend.kill_pane(pane_id)
     local session = get_session(pane_id)
     if session then
+      clear_pending_switch_history(session)
       if session.client then
         session.client:stop()
       end
@@ -3359,6 +3797,24 @@ local function create_backend(default_view)
       end)
     end
     return false
+  end
+
+  function backend.is_busy(target_pane)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return session.busy == true
+      or session.preparing_prompt == true
+      or (type(session.prompt_queue) == "table" and #session.prompt_queue > 0)
+  end
+
+  function backend.restore_switch_snapshot(target_pane, snapshot)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return restore_switch_snapshot(session, snapshot)
   end
 
   function backend.break_pane(pane_id)
