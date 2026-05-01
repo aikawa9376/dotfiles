@@ -212,6 +212,10 @@ ACP session では以下の slash command を Neovim 側で処理します。
 
 agent が advertise していない `/...` は通常の prompt text として送信します。
 
+### ACP transcript buffer keymaps
+
+ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。float は `q` または `<Esc>` で閉じます。
+
 ## MCP hooks
 
 `mcp_mode = true` のとき、非 ACP agent がある場合だけ Neovim 内で MCP server を起動します。ACP だけで運用している場合は server を起動しません。
