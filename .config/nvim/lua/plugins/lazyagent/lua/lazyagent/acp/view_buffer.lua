@@ -12,6 +12,8 @@ local footer_ns = vim.api.nvim_create_namespace("lazyagent_acp_footer")
 local diff_ns = vim.api.nvim_create_namespace("lazyagent_acp_diff")
 local highlights_defined = false
 local layout_autocmds_initialized = false
+local metadata_popup_win = nil
+local metadata_popup_source_buf = nil
 local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer ..."
 local FOLLOW_SCROLL_OFF = 0
 local DEFAULT_SCROLL_OFF = 2
@@ -70,6 +72,19 @@ local function close_timer(timer)
   end
   pcall(function() timer:stop() end)
   pcall(function() timer:close() end)
+end
+
+local function strdisplaywidth(text)
+  local ok, width = pcall(vim.fn.strdisplaywidth, text)
+  return ok and width or #tostring(text or "")
+end
+
+local function is_metadata_popup_buffer(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  local ok, value = pcall(vim.api.nvim_buf_get_var, bufnr, "lazyagent_acp_metadata_popup")
+  return ok and value == true
 end
 
 local function ensure_highlights()
@@ -245,7 +260,11 @@ local function jump_window_to_row(win, row)
 end
 
 local function section_heading_for_line(line)
-  if type(line) ~= "string" or not line:match("^─ ") then
+  if type(line) ~= "string" then
+    return nil
+  end
+  line = line:gsub("^%s+", "")
+  if not line:match("^[─━]+%s+") and not line:match("^[╭┌][─━]+%s+") then
     return nil
   end
   for _, heading in ipairs(SECTION_HEADINGS) do
@@ -366,6 +385,56 @@ local function visible_conversation_context(bufnr)
   }
 end
 
+local function current_display_conversation_context(bufnr, win)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+  if not win or not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= bufnr then
+    return nil
+  end
+
+  local stop = transcript_line_count(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, stop, false)
+  local sections = collect_transcript_sections(lines)
+  if #sections == 0 then
+    return nil
+  end
+
+  local entry = layout_entry(bufnr)
+  local items = type(entry.transcript_section_items) == "table" and entry.transcript_section_items or nil
+  if type(items) ~= "table" or #items ~= #sections then
+    items = {}
+    local timeline = runtime_conversation_timeline(bufnr)
+    local offset = math.max(#timeline - #sections, 0)
+    for idx = 1, #sections do
+      items[idx] = timeline[offset + idx]
+    end
+  end
+
+  local row = vim.api.nvim_win_get_cursor(win)[1]
+  local index = nil
+  for idx, section in ipairs(sections) do
+    if row >= section.start_row and row <= section.end_row then
+      index = idx
+      break
+    end
+    if row < section.start_row then
+      index = math.max(1, idx - 1)
+      break
+    end
+  end
+  index = index or #sections
+
+  return {
+    lines = lines,
+    sections = sections,
+    items = items,
+    index = index,
+    section = sections[index],
+    item = items[index],
+  }
+end
+
 local function section_text(lines, section)
   if type(lines) ~= "table" or type(section) ~= "table" then
     return ""
@@ -378,6 +447,56 @@ local function section_text(lines, section)
     table.remove(chunk)
   end
   return table.concat(chunk, "\n")
+end
+
+local function section_body_text(lines, section)
+  if type(lines) ~= "table" or type(section) ~= "table" then
+    return ""
+  end
+  local chunk = {}
+  for row = (section.start_row or 0) + 1, section.end_row or 0 do
+    local text = tostring(lines[row] or "")
+    if text:sub(1, 1) == " " then
+      text = text:sub(2)
+    end
+    chunk[#chunk + 1] = text
+  end
+  while #chunk > 0 and chunk[#chunk] == "" do
+    table.remove(chunk)
+  end
+  return table.concat(chunk, "\n")
+end
+
+local function normalize_popup_text(text)
+  local lines = vim.split(tostring(text or ""), "\n", { plain = true })
+  for idx, line in ipairs(lines) do
+    if line:sub(1, 1) == " " then
+      lines[idx] = line:sub(2)
+    end
+  end
+  while #lines > 0 and lines[#lines] == "" do
+    table.remove(lines)
+  end
+  return table.concat(lines, "\n")
+end
+
+local function text_looks_like_transcript(text)
+  text = tostring(text or "")
+  if text == "" then
+    return false
+  end
+
+  local heading_count = 0
+  for _, line in ipairs(vim.split(text, "\n", { plain = true })) do
+    if line == TRANSCRIPT_TRUNCATED_MARKER or section_heading_for_line(line) then
+      heading_count = heading_count + 1
+      if heading_count >= 2 then
+        return true
+      end
+    end
+  end
+
+  return false
 end
 
 local function copy_to_clipboard(text, label)
@@ -497,125 +616,509 @@ local function copy_current_tool_output(bufnr)
   copy_to_clipboard(table.concat(parts, "\n"), "Copied tool output")
 end
 
-local function open_current_tool_output(bufnr)
-  local context = visible_conversation_context(bufnr)
-  local item = context and context.item or nil
-  if not item or not item.toolCallId or item.toolCallId == "" then
-    vim.notify("No tool output for this block", vim.log.levels.INFO)
-    return
-  end
-
-  local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
-  if backend and type(backend.show_tool_timeline_entry) == "function" then
-    if backend.show_tool_timeline_entry(pane_id_for_bufnr(bufnr), item.toolCallId) then
+  local function open_current_tool_output(bufnr)
+    local context = visible_conversation_context(bufnr)
+    local item = context and context.item or nil
+    if not item or not item.toolCallId or item.toolCallId == "" then
+      vim.notify("No tool output for this block", vim.log.levels.INFO)
       return
     end
-  end
 
-  vim.notify("Tool output viewer is unavailable for this block", vim.log.levels.WARN)
-end
-
-local function preview_current_diff_source(bufnr)
-  if not diff_view or type(diff_view.preview_diff_block_under_cursor) ~= "function" then
-    vim.notify("Diff preview is unavailable", vim.log.levels.WARN)
-    return
-  end
-
-  local ok, opened = pcall(diff_view.preview_diff_block_under_cursor, bufnr)
-  if not ok then
-    vim.notify("LazyAgentACP: failed to preview diff source", vim.log.levels.WARN)
-    return
-  end
-  if not opened then
-    vim.notify("No diff block under cursor", vim.log.levels.INFO)
-  end
-end
-
-local function show_action_menu(bufnr)
-  local context = visible_conversation_context(bufnr)
-  if not context or not context.section then
-    vim.notify("No ACP block under cursor", vim.log.levels.INFO)
-    return
-  end
-
-  local item = context.item or {}
-  local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
-  local actions = {
-    {
-      label = "Outline",
-      action = function()
-        show_outline_picker(bufnr, false)
-      end,
-    },
-    {
-      label = "Pinned",
-      action = function()
-        show_outline_picker(bufnr, true)
-      end,
-    },
-    {
-      label = item.pinned and "Unpin current block" or "Pin current block",
-      action = function()
-        toggle_current_pin(bufnr)
-      end,
-    },
-    {
-      label = "Copy current block",
-      action = function()
-        copy_current_block(bufnr)
-      end,
-    },
-  }
-
-  if backend and type(backend.show_tool_timeline) == "function" then
-    actions[#actions + 1] = {
-      label = "Tool timeline",
-      action = function()
-        backend.show_tool_timeline(pane_id_for_bufnr(bufnr))
-      end,
-    }
-  end
-
-  if diff_view and type(diff_view.has_diff_block_under_cursor) == "function"
-      and diff_view.has_diff_block_under_cursor(bufnr) then
-    actions[#actions + 1] = {
-      label = "Preview diff source",
-      action = function()
-        preview_current_diff_source(bufnr)
-      end,
-    }
-  end
-
-  if item.toolCallId and item.toolCallId ~= "" then
-    actions[#actions + 1] = {
-      label = "Open tool output",
-      action = function()
-        open_current_tool_output(bufnr)
-      end,
-    }
-    actions[#actions + 1] = {
-      label = "Copy tool output",
-      action = function()
-        copy_current_tool_output(bufnr)
-      end,
-    }
-  end
-
-  vim.ui.select(actions, {
-    prompt = "ACP actions:",
-    format_item = function(entry)
-      return entry.label
-    end,
-  }, function(choice)
-    if choice and type(choice.action) == "function" then
-      choice.action()
+    local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
+    if backend and type(backend.show_tool_timeline_entry) == "function" then
+      if backend.show_tool_timeline_entry(pane_id_for_bufnr(bufnr), item.toolCallId) then
+        return
+      end
     end
-  end)
-end
 
-local function strdisplaywidth(text)
-  local ok, width = pcall(vim.fn.strdisplaywidth, text)
-  return ok and width or #tostring(text or "")
+    vim.notify("Tool output viewer is unavailable for this block", vim.log.levels.WARN)
+  end
+
+  local function close_metadata_popup()
+    if metadata_popup_win and vim.api.nvim_win_is_valid(metadata_popup_win) then
+      pcall(vim.api.nvim_win_close, metadata_popup_win, true)
+    end
+    metadata_popup_win = nil
+    metadata_popup_source_buf = nil
+  end
+
+  local function metadata_popup_is_open()
+    return metadata_popup_win ~= nil and vim.api.nvim_win_is_valid(metadata_popup_win)
+  end
+
+  local function install_source_popup_close_keymap(bufnr)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    vim.keymap.set("n", "q", function()
+      if metadata_popup_is_open() and metadata_popup_source_buf == bufnr then
+        close_metadata_popup()
+        return "<Ignore>"
+      end
+      return "q"
+    end, {
+      buffer = bufnr,
+      expr = true,
+      noremap = true,
+      nowait = true,
+      silent = true,
+      replace_keycodes = true,
+      desc = "LazyAgentACP: close metadata popup",
+    })
+  end
+
+  local function normalize_popup_lines(lines)
+    local normalized = {}
+    for _, line in ipairs(lines or {}) do
+      local text = tostring(line or "")
+      local split = vim.split(text, "\n", { plain = true })
+      if #split == 0 then
+        normalized[#normalized + 1] = ""
+      else
+        vim.list_extend(normalized, split)
+      end
+    end
+    if #normalized == 0 then
+      normalized[1] = "(no metadata)"
+    end
+    return normalized
+  end
+
+  local function append_scalar_field(lines, label, value)
+    if value == nil then
+      return
+    end
+    local text = tostring(value)
+    if text == "" then
+      return
+    end
+    lines[#lines + 1] = string.format("%s: %s", label, text)
+  end
+
+  local function append_list_field(lines, label, values)
+    if type(values) ~= "table" or vim.tbl_isempty(values) then
+      return
+    end
+    lines[#lines + 1] = label .. ":"
+    for _, value in ipairs(values) do
+      local text = tostring(value or "")
+      if text ~= "" then
+        lines[#lines + 1] = "- " .. text
+      end
+    end
+  end
+
+  local function append_text_section(lines, heading, text)
+    text = tostring(text or "")
+    if text == "" then
+      return
+    end
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = heading .. ":"
+    vim.list_extend(lines, vim.split(text, "\n", { plain = true }))
+  end
+
+  local function popup_source_window(bufnr)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return nil
+    end
+
+    local source_win = vim.api.nvim_get_current_win()
+    if not source_win or not vim.api.nvim_win_is_valid(source_win) then
+      return nil
+    end
+    if vim.api.nvim_win_get_buf(source_win) ~= bufnr then
+      return nil
+    end
+    local ok_cfg, cfg = pcall(vim.api.nvim_win_get_config, source_win)
+    if not ok_cfg or not cfg or cfg.relative ~= "" then
+      return nil
+    end
+    local tracked = dedicated_transcript_windows[tostring(source_win)]
+    if not tracked or tracked.bufnr ~= bufnr then
+      return nil
+    end
+
+    local ok, is_transcript = pcall(function()
+      return vim.b[bufnr].lazyagent_acp_transcript
+    end)
+    if not ok or is_transcript ~= true then
+      return nil
+    end
+    if vim.bo[bufnr].filetype ~= ACP_TRANSCRIPT_FILETYPE then
+      return nil
+    end
+
+    return source_win
+  end
+
+  local function build_block_metadata_lines(context, item)
+    local section = context and context.section or {}
+    local body = section_body_text(context and context.lines or {}, section)
+    local item_body = type(item) == "table" and tostring(item.body or "") or ""
+    if body == "" and item_body ~= "" and not text_looks_like_transcript(item_body) then
+      body = item_body
+    end
+
+    local metadata = {
+      id = item and item.id or nil,
+      seq = item and item.seq or nil,
+      kind = item and item.kind or nil,
+      heading = item and item.heading or section.heading,
+      title = item and item.title or section.heading,
+      status = item and item.status or nil,
+      path = item and item.path or nil,
+      toolCallId = item and item.toolCallId or nil,
+      pinned = item and item.pinned == true or false,
+      summary = item and item.summary or nil,
+      transcript_range = section.start_row and string.format("%d-%d", section.start_row, section.end_row or section.start_row) or nil,
+    }
+
+    local lines = { "# ACP Block Metadata", "" }
+    append_scalar_field(lines, "ID", metadata.id)
+    append_scalar_field(lines, "Seq", metadata.seq)
+    append_scalar_field(lines, "Title", metadata.title)
+    append_scalar_field(lines, "Heading", metadata.heading)
+    append_scalar_field(lines, "Kind", metadata.kind)
+    append_scalar_field(lines, "Status", metadata.status)
+    append_scalar_field(lines, "Path", metadata.path)
+    append_scalar_field(lines, "Tool Call", metadata.toolCallId)
+    append_scalar_field(lines, "Pinned", metadata.pinned)
+    append_scalar_field(lines, "Transcript lines", metadata.transcript_range)
+    append_text_section(lines, "Summary", metadata.summary)
+    append_text_section(lines, "Content", body)
+    return lines
+  end
+
+  local function preferred_tool_popup_sections(context, item, entry)
+    local section = context and context.section or {}
+    local transcript_body = section_body_text(context and context.lines or {}, section)
+    local item_body = type(item) == "table" and tostring(item.body or "") or ""
+    local content = tostring(entry and entry.rendered_content or "")
+    local raw_output = tostring(entry and entry.rendered_raw_output or "")
+
+    if text_looks_like_transcript(content) then
+      content = ""
+    end
+    if text_looks_like_transcript(raw_output) then
+      raw_output = ""
+    end
+    if content == "" and item_body ~= "" and not text_looks_like_transcript(item_body) then
+      content = item_body
+    end
+    if content == "" then
+      content = transcript_body
+    end
+
+    if normalize_popup_text(raw_output) == normalize_popup_text(content) then
+      raw_output = ""
+    end
+    if normalize_popup_text(transcript_body) == normalize_popup_text(content) then
+      transcript_body = ""
+    end
+
+    return content, raw_output, transcript_body
+  end
+
+  local function build_tool_metadata_lines(context, item, entry)
+    local section = context and context.section or {}
+    local paths = type(entry and entry.paths) == "table" and vim.deepcopy(entry.paths) or {}
+    if #paths == 0 and item and item.path and item.path ~= "" then
+      paths = { item.path }
+    end
+    local content, raw_output, transcript_body = preferred_tool_popup_sections(context, item, entry)
+    local metadata = {
+      toolCallId = entry and entry.toolCallId or item and item.toolCallId or nil,
+      title = entry and entry.title or item and item.title or nil,
+      heading = entry and entry.heading or item and item.heading or section.heading,
+      status = entry and entry.status or item and item.status or nil,
+      kind = entry and entry.kind or item and item.kind or "tool",
+      pinned = (entry and entry.pinned == true) or (item and item.pinned == true) or false,
+      summary = entry and entry.summary or item and item.summary or nil,
+      paths = paths,
+      transcript_range = section.start_row and string.format("%d-%d", section.start_row, section.end_row or section.start_row) or nil,
+      conversation_item_id = item and item.id or nil,
+    }
+
+    local lines = { "# ACP Tool Metadata", "" }
+    append_scalar_field(lines, "Tool Call", metadata.toolCallId)
+    append_scalar_field(lines, "Title", metadata.title)
+    append_scalar_field(lines, "Heading", metadata.heading)
+    append_scalar_field(lines, "Kind", metadata.kind)
+    append_scalar_field(lines, "Status", metadata.status)
+    append_scalar_field(lines, "Pinned", metadata.pinned)
+    append_scalar_field(lines, "Transcript lines", metadata.transcript_range)
+    append_scalar_field(lines, "Conversation item", metadata.conversation_item_id)
+    append_list_field(lines, "Paths", metadata.paths)
+    append_text_section(lines, "Summary", metadata.summary)
+    append_text_section(lines, "Content", content)
+    append_text_section(lines, "Raw output", raw_output)
+    append_text_section(lines, "Transcript", transcript_body)
+    return lines
+  end
+
+  local function metadata_popup_spec(bufnr, win)
+    local context = current_display_conversation_context(bufnr, win)
+    if not context or not context.section then
+      return nil
+    end
+
+    local item = context.item or {}
+    local tool_entry = tool_entry_for_item(bufnr, item)
+    local section_heading = context.section and context.section.heading or nil
+    local is_tool_section = section_heading == "Tool" or section_heading == "Edited"
+    if tool_entry or is_tool_section or item.kind == "tool" or (item.toolCallId and item.toolCallId ~= "") then
+      local title = tool_entry and (tool_entry.title or tool_entry.toolCallId)
+        or item.title
+        or item.toolCallId
+        or section_heading
+        or "ACP Tool Metadata"
+      return {
+        title = " " .. tostring(title) .. " ",
+        lines = build_tool_metadata_lines(context, item, tool_entry),
+      }
+    end
+
+    local title = item.title or context.section.heading or "ACP Block Metadata"
+    return {
+      title = " " .. tostring(title) .. " ",
+      lines = build_block_metadata_lines(context, item),
+    }
+  end
+
+  local function cursor_screen_position(win)
+    local cursor = vim.api.nvim_win_get_cursor(win)
+    local ok_pos, pos = pcall(vim.fn.screenpos, win, cursor[1], cursor[2] + 1)
+    if ok_pos and type(pos) == "table" and tonumber(pos.row) and tonumber(pos.col) then
+      local row = math.max(0, (tonumber(pos.row) or 1) - 1)
+      local col = math.max(0, (tonumber(pos.endcol) or tonumber(pos.col) or 1) - 1)
+      return row, col
+    end
+
+    local ok_win, win_pos = pcall(vim.api.nvim_win_get_position, win)
+    if ok_win and type(win_pos) == "table" and win_pos[1] ~= nil and win_pos[2] ~= nil then
+      return math.max(0, win_pos[1] + math.max(0, (vim.fn.winline() or 1) - 1)),
+        math.max(0, win_pos[2] + math.max(0, (vim.fn.wincol() or 1) - 1))
+    end
+
+    return 0, 0
+  end
+
+  local function popup_geometry(win, lines)
+    local ui = vim.api.nvim_list_uis()[1] or {}
+    local editor_height = math.max(1, tonumber(ui.height) or vim.o.lines or 24)
+    local editor_width = math.max(1, tonumber(ui.width) or vim.o.columns or 80)
+    local max_width = math.max(1, editor_width - 2)
+    local max_height = math.max(1, editor_height - 2)
+    local width_limit = math.min(max_width, math.max(24, math.min(72, math.floor(editor_width * 0.42))))
+    local height_limit = math.min(max_height, math.max(6, math.min(16, math.floor(editor_height * 0.45))))
+    local max_line_width = 0
+    for _, line in ipairs(lines) do
+      max_line_width = math.max(max_line_width, strdisplaywidth(line))
+    end
+
+    local preferred_width = math.max(28, math.min(max_line_width + 2, 60))
+    local preferred_height = math.max(6, math.min(#lines, 14))
+    local width = math.max(1, math.min(width_limit, preferred_width))
+    local height = math.max(1, math.min(height_limit, preferred_height))
+    local cursor_row, cursor_col = cursor_screen_position(win)
+    local right_space = math.max(0, editor_width - cursor_col - 2)
+    local left_space = math.max(0, cursor_col - 1)
+
+    local col = cursor_col + 2
+    if right_space < width and left_space >= width then
+      col = cursor_col - width - 1
+    else
+      col = math.min(col, math.max(0, editor_width - width))
+    end
+    col = math.max(0, math.min(col, math.max(0, editor_width - width)))
+
+    local row
+    if cursor_row >= height + 1 then
+      row = cursor_row - height
+    else
+      row = cursor_row - math.min(2, height - 1)
+    end
+    row = math.max(0, math.min(row, math.max(0, editor_height - height)))
+
+    return width, height, row, col
+  end
+
+  local function show_metadata_popup(bufnr)
+    local source_win = popup_source_window(bufnr)
+    if not source_win then
+      return
+    end
+
+    local spec = metadata_popup_spec(bufnr, source_win)
+    if not spec then
+      vim.notify("No ACP block under cursor", vim.log.levels.INFO)
+      return
+    end
+
+    close_metadata_popup()
+
+    local lines = normalize_popup_lines(spec.lines)
+    local width, height, row, col = popup_geometry(source_win, lines)
+    local popup_buf = vim.api.nvim_create_buf(false, true)
+    vim.bo[popup_buf].bufhidden = "wipe"
+    vim.bo[popup_buf].swapfile = false
+    vim.bo[popup_buf].modifiable = true
+    vim.bo[popup_buf].readonly = false
+    vim.bo[popup_buf].filetype = "markdown"
+    vim.b[popup_buf].lazyagent_acp_metadata_popup = true
+    vim.api.nvim_buf_set_lines(popup_buf, 0, -1, false, lines)
+    vim.bo[popup_buf].modifiable = false
+    vim.bo[popup_buf].readonly = true
+
+    metadata_popup_win = vim.api.nvim_open_win(popup_buf, true, {
+      relative = "editor",
+      row = row,
+      col = col,
+      width = width,
+      height = height,
+      style = "minimal",
+      border = "rounded",
+      title = spec.title,
+      title_pos = "center",
+      zindex = 90,
+    })
+    metadata_popup_source_buf = bufnr
+    install_source_popup_close_keymap(bufnr)
+
+    vim.wo[metadata_popup_win].wrap = true
+    vim.wo[metadata_popup_win].linebreak = true
+    vim.wo[metadata_popup_win].cursorline = false
+    vim.wo[metadata_popup_win].number = false
+    vim.wo[metadata_popup_win].relativenumber = false
+    vim.wo[metadata_popup_win].signcolumn = "no"
+    vim.wo[metadata_popup_win].foldcolumn = "0"
+    vim.wo[metadata_popup_win].winhighlight = "FloatBorder:LazyAgentACPBorder"
+
+    local function close_and_restore_focus()
+      close_metadata_popup()
+      if source_win and vim.api.nvim_win_is_valid(source_win) then
+        pcall(vim.api.nvim_set_current_win, source_win)
+      end
+    end
+
+    vim.keymap.set("n", "q", close_and_restore_focus, {
+      buffer = popup_buf,
+      noremap = true,
+      nowait = true,
+      silent = true,
+      desc = "LazyAgentACP: close metadata popup",
+    })
+    vim.keymap.set("n", "<Esc>", close_and_restore_focus, {
+      buffer = popup_buf,
+      noremap = true,
+      silent = true,
+      desc = "LazyAgentACP: close metadata popup",
+    })
+  end
+
+  local function preview_current_diff_source(bufnr)
+    if not diff_view or type(diff_view.preview_diff_block_under_cursor) ~= "function" then
+      vim.notify("Diff preview is unavailable", vim.log.levels.WARN)
+      return
+    end
+
+    local ok, opened = pcall(diff_view.preview_diff_block_under_cursor, bufnr)
+    if not ok then
+      vim.notify("LazyAgentACP: failed to preview diff source", vim.log.levels.WARN)
+      return
+    end
+    if not opened then
+      vim.notify("No diff block under cursor", vim.log.levels.INFO)
+    end
+  end
+
+  local function show_action_menu(bufnr)
+    local context = visible_conversation_context(bufnr)
+    if not context or not context.section then
+      vim.notify("No ACP block under cursor", vim.log.levels.INFO)
+      return
+    end
+
+    local item = context.item or {}
+    local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
+    local actions = {
+      {
+        label = "Outline",
+        action = function()
+          show_outline_picker(bufnr, false)
+        end,
+      },
+      {
+        label = "Pinned",
+        action = function()
+          show_outline_picker(bufnr, true)
+        end,
+      },
+      {
+        label = item.pinned and "Unpin current block" or "Pin current block",
+        action = function()
+          toggle_current_pin(bufnr)
+        end,
+      },
+      {
+        label = "Copy current block",
+        action = function()
+          copy_current_block(bufnr)
+        end,
+      },
+      {
+        label = "Show metadata",
+        action = function()
+          show_metadata_popup(bufnr)
+        end,
+      },
+    }
+
+    if backend and type(backend.show_tool_timeline) == "function" then
+      actions[#actions + 1] = {
+        label = "Tool timeline",
+        action = function()
+          backend.show_tool_timeline(pane_id_for_bufnr(bufnr))
+        end,
+      }
+    end
+
+    if diff_view and type(diff_view.has_diff_block_under_cursor) == "function"
+        and diff_view.has_diff_block_under_cursor(bufnr) then
+      actions[#actions + 1] = {
+        label = "Preview diff source",
+        action = function()
+          preview_current_diff_source(bufnr)
+        end,
+      }
+    end
+
+    if item.toolCallId and item.toolCallId ~= "" then
+      actions[#actions + 1] = {
+        label = "Open tool output",
+        action = function()
+          open_current_tool_output(bufnr)
+        end,
+      }
+      actions[#actions + 1] = {
+        label = "Copy tool output",
+        action = function()
+          copy_current_tool_output(bufnr)
+        end,
+      }
+    end
+
+    vim.ui.select(actions, {
+      prompt = "ACP actions:",
+      format_item = function(entry)
+        return entry.label
+      end,
+    }, function(choice)
+      if choice and type(choice.action) == "function" then
+        choice.action()
+      end
+    end)
 end
 
 local function tail_prefix(line)
@@ -1070,6 +1573,9 @@ local function find_redirect_target_window(source_win, pane_opts)
 end
 
 local function redirect_buffer_from_transcript_window(win, bufnr)
+  if is_metadata_popup_buffer(bufnr) then
+    return false
+  end
   local tracked = tracked_transcript_window(win)
   if tracked == nil or tracked.bufnr == bufnr then
     return false
@@ -1400,8 +1906,11 @@ local function apply_transcript_buffer_opts(bufnr)
       vim.cmd("normal! <CR>")
     end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: open diff block" })
     vim.keymap.set("n", "ga", function()
-      show_action_menu(bufnr)
+      show_action_menu(vim.api.nvim_get_current_buf())
     end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: actions" })
+    vim.keymap.set("n", "<Space><Space>", function()
+      show_metadata_popup(vim.api.nvim_get_current_buf())
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: show metadata" })
   end)
 
 end
@@ -1751,6 +2260,9 @@ local function ensure_layout_autocmds()
       if not bufnr then
         return
       end
+      if is_metadata_popup_buffer(bufnr) then
+        return
+      end
       if redirect_buffer_from_transcript_window(vim.api.nvim_get_current_win(), bufnr) then
         return
       end
@@ -1776,6 +2288,9 @@ local function ensure_layout_autocmds()
       if not bufnr then
         return
       end
+      if is_metadata_popup_buffer(bufnr) then
+        return
+      end
       if is_acp_buffer(bufnr) then
         pause_follow_output(bufnr)
         refresh_transcript_window(bufnr, vim.api.nvim_get_current_win())
@@ -1790,6 +2305,9 @@ local function ensure_layout_autocmds()
     callback = function()
       local win = vim.api.nvim_get_current_win()
       local bufnr = vim.api.nvim_get_current_buf()
+      if is_metadata_popup_buffer(bufnr) then
+        return
+      end
       if is_acp_buffer(bufnr) then
         pause_follow_output(bufnr)
         refresh_transcript_window(bufnr, win)
