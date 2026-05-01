@@ -139,7 +139,7 @@ return {
     },
     edit_blocks = {
       transport = "api",
-      command = { "copilot", "-p", "--model", "gpt-5-mini" },
+      command = { "copilot", "--model", "gpt-5-mini", "--effort", "low", "-p" },
       api = {
         provider = "copilot",
         model = "gpt-5-mini",
