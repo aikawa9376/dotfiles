@@ -168,11 +168,22 @@ local function line_has_heading(line, heading)
   return line:sub(-#suffix) == suffix
 end
 
+local function line_has_assistant_heading(line)
+  if line_has_heading(line, "Assistant") then
+    return true
+  end
+  if type(line) ~= "string" then
+    return false
+  end
+  line = line:gsub("^%s+", "")
+  return line:match("^[─━╭┌ ]+" .. vim.pesc("󰭹") .. "%s") ~= nil
+end
+
 local function section_style_for_line(line)
   if line_has_heading(line, "User") then
     return "LazyAgentACPUserHeader"
   end
-  if line_has_heading(line, "Assistant") then
+  if line_has_assistant_heading(line) then
     return "LazyAgentACPAssistantHeader"
   end
   if line_has_heading(line, "Thinking") then
@@ -197,7 +208,7 @@ local function section_style_for_line(line)
 end
 
 local function line_has_tail(line)
-  return line_has_heading(line, "User") or line_has_heading(line, "Assistant")
+  return line_has_heading(line, "User") or line_has_assistant_heading(line)
 end
 
 local function is_markdown_fence(line)
@@ -268,7 +279,7 @@ local function section_heading_for_line(line)
     return nil
   end
   for _, heading in ipairs(SECTION_HEADINGS) do
-    if line_has_heading(line, heading) then
+    if (heading == "Assistant" and line_has_assistant_heading(line)) or line_has_heading(line, heading) then
       return heading
     end
   end
@@ -1043,6 +1054,12 @@ end
     local item = context.item or {}
     local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
     local actions = {
+      {
+        label = "Switch provider",
+        action = function()
+          require("lazyagent.logic.session").switch_acp_provider(agent_name_for_bufnr(bufnr))
+        end,
+      },
       {
         label = "Outline",
         action = function()
@@ -1911,6 +1928,9 @@ local function apply_transcript_buffer_opts(bufnr)
     vim.keymap.set("n", "<Space><Space>", function()
       show_metadata_popup(vim.api.nvim_get_current_buf())
     end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: show metadata" })
+    vim.keymap.set("n", "<LocalLeader>s", function()
+      require("lazyagent.logic.session").switch_acp_provider(agent_name_for_bufnr(vim.api.nvim_get_current_buf()))
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: switch provider" })
   end)
 
 end
@@ -2478,23 +2498,27 @@ local function refresh_buffer_from_file(session)
   end
 
   session.view_state = session.view_state or {}
-  if session.view_state.refresh_pending then
+  local view_state = session.view_state
+  if view_state.refresh_pending then
     return
   end
-  session.view_state.refresh_pending = true
+  view_state.refresh_pending = true
 
   vim.schedule(function()
-    session.view_state.refresh_pending = false
+    view_state.refresh_pending = false
     if not vim.api.nvim_buf_is_valid(bufnr) then
+      view_state.force_full_refresh = false
       return
     end
 
     if not buffer_is_visible(bufnr) then
       layout_entry(bufnr).pending_full_refresh = true
+      view_state.force_full_refresh = false
       return
     end
 
     refresh_buffer_from_path(bufnr, session.transcript_path)
+    view_state.force_full_refresh = false
   end)
 end
 
@@ -2708,7 +2732,16 @@ function M.on_session_created(session)
 end
 
 function M.on_transcript_updated(session, text, mode)
+  session.view_state = session.view_state or {}
   if mode == "w" then
+    session.view_state.force_full_refresh = true
+    session.view_state.pending_append = ""
+    close_timer(session.view_state.append_timer)
+    session.view_state.append_timer = nil
+    refresh_buffer_from_file(session)
+    return
+  end
+  if session.view_state.force_full_refresh then
     refresh_buffer_from_file(session)
     return
   end
