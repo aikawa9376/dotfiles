@@ -58,16 +58,38 @@ local function session_config_options(session)
   return nil
 end
 
+local function normalize_option_type(option)
+  return tostring(option and option.type or ""):lower():gsub("[^%w]+", "")
+end
+
+local function is_pickable_option(option)
+  if type(option) ~= "table" then
+    return false
+  end
+
+  local option_type = normalize_option_type(option)
+  if (option_type == "select" or option_type == "multiselect")
+    and type(option.options) == "table"
+    and #option.options > 0
+  then
+    return true
+  end
+
+  if option_type == "boolean" or option_type == "bool" or option_type == "toggle" then
+    return true
+  end
+
+  return false
+end
+
 local function has_select_option(session, expected)
   local options = session_config_options(session)
   if type(options) ~= "table" then
     return false
   end
   for _, option in ipairs(options) do
-    if type(option) == "table"
-      and option.type == "select"
-      and type(option.options) == "table"
-      and #option.options > 0
+    if is_pickable_option(option)
+      and normalize_option_type(option) == "select"
     then
       local key = tostring(option.category or option.id or option.name or ""):lower()
       if key == expected then
@@ -84,11 +106,7 @@ local function has_any_config(session)
     return false
   end
   for _, option in ipairs(options) do
-    if type(option) == "table"
-      and option.type == "select"
-      and type(option.options) == "table"
-      and #option.options > 0
-    then
+    if is_pickable_option(option) then
       return true
     end
   end
@@ -128,7 +146,7 @@ function M.unavailable_reason(name, session)
     return nil
   end
   if name == "config" then
-    return "This ACP session does not expose any configurable options."
+    return "This ACP session does not expose any selectable or toggleable options."
   end
   if name == "model" then
     return "This ACP session does not expose any model selector."
