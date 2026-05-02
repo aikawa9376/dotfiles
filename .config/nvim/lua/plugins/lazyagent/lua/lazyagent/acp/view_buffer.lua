@@ -1061,6 +1061,12 @@ end
         end,
       },
       {
+        label = "Sessions",
+        action = function()
+          require("lazyagent.logic.session").pick_acp_sessions(agent_name_for_bufnr(bufnr))
+        end,
+      },
+      {
         label = "Outline",
         action = function()
           show_outline_picker(bufnr, false)

@@ -41,6 +41,11 @@ local commands = {
     end,
   },
   {
+    name = "LazyAgentACPSessions",
+    desc = "Browse native ACP provider sessions",
+    handler = session_logic.pick_acp_sessions,
+  },
+  {
     name = "LazyAgentACPConfig",
     desc = "Open ACP config picker for an ACP-enabled agent",
     handler = session_logic.pick_acp_config,
