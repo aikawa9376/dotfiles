@@ -214,7 +214,7 @@ agent が advertise していない `/...` は通常の prompt text として送
 
 ### ACP transcript buffer keymaps
 
-ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。float は `q` または `<Esc>` で閉じます。
+ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。`:LazyAgentACPSessions [agent]` では provider 側が保持している native session を一覧し、現在の会話へ add するか、native load / resume できます。float は `q` または `<Esc>` で閉じます。
 
 ## MCP hooks
 
@@ -254,6 +254,7 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 | `:LazyAgentConversationList [file]` | 保存済み会話 log を開く |
 | `:LazyAgentConversation [agent] [keep_lines]` | ACP conversation を checkpoint 保存。数値指定時は最新 `keep_lines` 行以上を ACP buffer に残し、それ以前を User セクション境界で保存 |
 | `:LazyAgentResumeConversation [file]` | conversation checkpoint から開始 |
+| `:LazyAgentACPSessions [agent]` | native ACP provider session を一覧し、add / load / resume |
 | `:LazyAgentOpenConversation [agent]` | live pane / transcript を保存して開く |
 | `:LazyAgentSummary [open\|copy]` | summary Markdown を開く / path をコピー |
 | `:LazyAgentStack` | scratch 内容を履歴に積んで buffer を空にする |

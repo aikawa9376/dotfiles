@@ -133,7 +133,7 @@ local function write_session_transcript(session, text, mode)
   if ok and session.view and type(session.view.on_transcript_updated) == "function" then
     vim.schedule(function()
       pcall(session.view.on_transcript_updated, session, text, mode)
-    end)
+    end, session.session_bootstrap)
   end
   return ok
 end
@@ -3465,10 +3465,12 @@ local function on_client_update(session, params)
       end
     end
     if is_terminal then
-      if tool.kind == "edit" then
+      if session.ephemeral ~= true and tool.kind == "edit" then
         util.fire_event("EditDone", { agent_name = session.agent_name, tool = tool })
       end
-      maybe_sync_acp_edit_targets(session, tool)
+      if session.ephemeral ~= true then
+        maybe_sync_acp_edit_targets(session, tool)
+      end
 
       session.tool_calls[tool.toolCallId] = nil
     end
@@ -3521,6 +3523,170 @@ local function list_all_sessions_for_client(client, params, on_done, collected)
   end)
 end
 
+local function create_ephemeral_session(base_session)
+  local transcript_path = build_transcript_path((base_session.agent_name or "acp") .. "-native", 0)
+  return {
+    ephemeral = true,
+    runtime_sync_disabled = true,
+    pane_id = "",
+    agent_name = base_session.agent_name,
+    agent_cfg = vim.deepcopy(base_session.agent_cfg or {}),
+    transcript_path = transcript_path,
+    transcript_has_content = false,
+    current_stream_key = nil,
+    current_stream_heading = nil,
+    current_stream_at_line_start = nil,
+    prompt_queue = {},
+    tool_calls = {},
+    terminals = {},
+    available_commands = {},
+    config_options = {},
+    on_ready_actions = {},
+    permission_rules = vim.deepcopy(base_session.permission_rules or {}),
+    auto_switch = vim.deepcopy(base_session.auto_switch or {}),
+    manual_config_overrides = {},
+    auto_switch_state = {},
+    conversation_timeline = {},
+    conversation_timeline_index = {},
+    conversation_next_item_id = 0,
+    tool_timeline = {},
+    tool_timeline_index = {},
+    ready = false,
+    failed = false,
+    busy = false,
+    preparing_prompt = false,
+    command = base_session.command,
+    env = vim.deepcopy(base_session.env or {}),
+    cwd = base_session.cwd or vim.fn.getcwd(),
+    root_dir = base_session.root_dir,
+    mcp_url = base_session.mcp_url,
+    auto_permission = base_session.auto_permission,
+    default_mode = base_session.default_mode,
+    initial_model = base_session.initial_model,
+    footer_animation = false,
+    buffer_background = base_session.buffer_background,
+    buffer_inactive_background = base_session.buffer_inactive_background,
+    transcript_max_lines = base_session.transcript_max_lines,
+    transcript_compaction = vim.deepcopy(base_session.transcript_compaction or {}),
+    initial_config_applied = true,
+    session_info = {},
+  }
+end
+
+local function stop_ephemeral_client(session, callback)
+  local client = session and session.client or nil
+  if not client then
+    if callback then
+      callback()
+    end
+    return
+  end
+
+  local done = function()
+    client:stop()
+    if callback then
+      callback()
+    end
+  end
+
+  if client:supports_session_close() and client.session_id and client.session_id ~= "" then
+    client:close_session(client.session_id, function()
+      done()
+    end)
+    return
+  end
+
+  done()
+end
+
+local function capture_native_session_for_session(session, native_session, on_done)
+  local temp_session = create_ephemeral_session(session)
+  local finished = false
+
+  local function finish(snapshot, err)
+    if finished then
+      return
+    end
+    finished = true
+    stop_ephemeral_client(temp_session, function()
+      vim.schedule(function()
+        on_done(snapshot, err)
+      end)
+    end)
+  end
+
+  temp_session.client = ACPClient.new({
+    command = temp_session.command,
+    cwd = temp_session.cwd,
+    env = temp_session.env,
+    mcp_url = temp_session.mcp_url,
+    client_info = {
+      name = "lazyagent",
+      title = "lazyagent.nvim",
+      version = "0.1.0",
+    },
+    handlers = {},
+    on_update = function(params)
+      on_client_update(temp_session, params)
+    end,
+    on_exit = function(code, signal, stderr_text)
+      on_client_exit(temp_session, code, signal, stderr_text)
+    end,
+  })
+
+  temp_session.client:start(function(client, err)
+    if err then
+      finish(nil, err)
+      return
+    end
+
+    client:load_session(native_session.sessionId, function(_, load_err)
+      if load_err then
+        finish(nil, load_err)
+        return
+      end
+
+      temp_session.client = client
+      temp_session.ready = true
+      temp_session.failed = false
+      temp_session.session_id = client.session_id
+      update_session_info(temp_session, native_session)
+      update_session_info(temp_session, {
+        sessionId = client.session_id,
+        cwd = temp_session.cwd,
+      })
+
+      local transcript = ""
+      if vim.fn.filereadable(temp_session.transcript_path) == 1 then
+        local ok, lines = pcall(vim.fn.readfile, temp_session.transcript_path)
+        if ok and lines then
+          transcript = table.concat(lines, "\n")
+        end
+      end
+
+      local transcript_lines = transcript ~= "" and vim.split(transcript, "\n", { plain = true }) or {}
+      if #transcript_lines > 0 and transcript_lines[#transcript_lines] == "" then
+        table.remove(transcript_lines, #transcript_lines)
+      end
+
+      finish({
+        provider_from = session.agent_name,
+        carryover_label = string.format(
+          "an ACP provider session%s",
+          native_session.title and native_session.title ~= "" and (" (" .. native_session.title .. ")") or ""
+        ),
+        transcript_lines = transcript_lines,
+        transcript_path = temp_session.transcript_path,
+        conversation_timeline = vim.deepcopy(temp_session.conversation_timeline or {}),
+        tool_timeline = vim.deepcopy(temp_session.tool_timeline or {}),
+        session_info = vim.deepcopy(temp_session.session_info or {}),
+      }, nil)
+    end)
+  end, {
+    create_session = false,
+  })
+end
+
 local function create_backend(default_view)
   local backend = {}
 
@@ -3560,6 +3726,7 @@ local function create_backend(default_view)
       command = session.command,
       cwd = session.cwd,
       env = session.env,
+      mcp_url = session.mcp_url,
       client_info = {
         name = "lazyagent",
         title = "lazyagent.nvim",
@@ -3788,6 +3955,7 @@ local function create_backend(default_view)
         cwd = acp.cwd or vim.fn.getcwd(),
         root_dir = acp.root_dir,
         mcp_url = acp.mcp_url,
+        session_bootstrap = vim.deepcopy(acp.session_bootstrap),
         auto_permission = acp.auto_permission,
         default_mode = acp.default_mode,
         initial_model = acp.initial_model,
@@ -4227,6 +4395,48 @@ local function create_backend(default_view)
         end)
       end
     end)
+    return true
+  end
+
+  function backend.capture_native_session(target_pane, native_session, on_done)
+    local session = get_session(target_pane)
+    if not session or not session.client then
+      if on_done then
+        vim.schedule(function()
+          on_done(nil, {
+            code = -32602,
+            message = "ACP session is not ready",
+          })
+        end)
+      end
+      return false
+    end
+
+    if type(native_session) ~= "table" or not native_session.sessionId or native_session.sessionId == "" then
+      if on_done then
+        vim.schedule(function()
+          on_done(nil, {
+            code = -32602,
+            message = "Missing ACP sessionId",
+          })
+        end)
+      end
+      return false
+    end
+
+    if not session.client:supports_session_load() then
+      if on_done then
+        vim.schedule(function()
+          on_done(nil, {
+            code = -32602,
+            message = "ACP agent does not support session/load",
+          })
+        end)
+      end
+      return false
+    end
+
+    capture_native_session_for_session(session, normalize_session_info(native_session.sessionId, native_session), on_done)
     return true
   end
 
