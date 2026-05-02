@@ -62,6 +62,7 @@ function M.build()
       default_mode = nil,
       initial_model = nil,
       footer_animation = true,
+      table_layout = "table",
       buffer_background = nil,
       buffer_inactive_background = nil,
       transcript_compaction = {

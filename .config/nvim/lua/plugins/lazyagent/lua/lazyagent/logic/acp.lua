@@ -39,6 +39,14 @@ local function normalize_positive_integer(value)
   return math.floor(number)
 end
 
+local function normalize_table_layout(value)
+  local layout = tostring(value or ""):lower()
+  if layout == "card" or layout == "cards" or layout == "vertical" then
+    return "card"
+  end
+  return "table"
+end
+
 local function normalize_transcript_compaction_config(value)
   if type(value) == "boolean" then
     return { enabled = value }
@@ -210,6 +218,7 @@ local function resolve_from_config(agent_cfg)
     enabled = enabled,
     view = normalized_view_name(agent_acp.view or global_cfg.view),
     footer_animation = resolve_boolean_option(agent_acp.footer_animation, global_cfg.footer_animation, true),
+    table_layout = normalize_table_layout(agent_acp.table_layout or global_cfg.table_layout),
     auto_permission = agent_acp.auto_permission or global_cfg.auto_permission,
     default_mode = agent_acp.default_mode or global_cfg.default_mode,
     initial_model = agent_acp.initial_model or global_cfg.initial_model,
@@ -248,6 +257,7 @@ function M.resolve(agent_name, agent_cfg)
       auto_permission = session.auto_permission,
       default_mode = session.default_mode,
       initial_model = session.initial_model,
+      table_layout = session.table_layout,
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,

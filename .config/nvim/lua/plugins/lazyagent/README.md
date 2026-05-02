@@ -173,6 +173,7 @@ require("lazyagent").setup({
   acp = {
     enabled = true,
     view = "buffer",
+    table_layout = "card", -- "table" | "card"
     auto_permission = "allow_always",
     default_mode = "bypassPermissions",
     initial_model = "gpt-5.4",
@@ -196,6 +197,8 @@ require("lazyagent").setup({
 ```
 
 `interactive_agents.<name>.acp = false` で、global ACP 有効時でも特定 agent だけ通常 backend に戻せます。
+
+`acp.table_layout = "card"` を指定すると、ACP transcript buffer で assistant が返した markdown table を **表示だけ** key/value 形式の card に変換します。保存される transcript や carryover 用の元ログはそのままです。
 
 ### ACP local commands
 

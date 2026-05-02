@@ -112,6 +112,8 @@ local function ensure_highlights()
     LazyAgentACPFooterError = { default = true, link = "DiagnosticError" },
     LazyAgentACPFooterMuted = { default = true, link = "Comment" },
     LazyAgentACPFooterMeta = { default = true, link = "SpecialComment" },
+    LazyAgentACPCardTitle = { default = true, link = "Title" },
+    LazyAgentACPCardField = { default = true, link = "Identifier" },
     LazyAgentACPDiffDelete = { default = true, link = "FugitiveExtDelete" },
     LazyAgentACPDiffAdd = { default = true, link = "FugitiveExtAdd" },
     LazyAgentACPDiffDeleteWord = { default = true, link = "FugitiveExtDeleteText" },
@@ -1315,10 +1317,22 @@ local function decorate_transcript_range(bufnr, start_idx, end_idx)
   end
 
   vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, range_start, range_stop)
+  local display_meta = layout_entry(bufnr).transcript_display_meta or {}
+  local heading_rows = type(display_meta.heading_rows) == "table" and display_meta.heading_rows or {}
   for idx, line in ipairs(lines) do
     local row = range_start + idx - 1
+    local header_hl = nil
     if line:match("^─ ") or line:match("^╭─ ") then
-      local header_hl = section_style_for_line(line)
+      header_hl = section_style_for_line(line)
+    else
+      local card_heading = heading_rows[row + 1]
+      if card_heading == "title" then
+        header_hl = "LazyAgentACPCardTitle"
+      elseif card_heading == "field" then
+        header_hl = "LazyAgentACPCardField"
+      end
+    end
+    if header_hl then
       -- Prefer using vim.highlight.range for a full-line highlight region. Fall back to
       -- extmark or nvim_buf_add_highlight if not available.
       local ok = pcall(function()
@@ -1466,6 +1480,172 @@ end
 
 local function pane_opts_for_bufnr(bufnr)
   return pane_config[tostring(pane_id_for_bufnr(bufnr))] or {}
+end
+
+local function transcript_table_layout(bufnr)
+  local opts = pane_opts_for_bufnr(bufnr)
+  local layout = tostring(opts and opts.table_layout or ""):lower()
+  if layout == "card" then
+    return "card"
+  end
+  return "table"
+end
+
+local function trim(text)
+  return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function split_markdown_table_cells(line)
+  if type(line) ~= "string" then
+    return nil, nil
+  end
+
+  local prefix = line:match("^(%s*)|")
+  local trimmed = line:match("^%s*(|.*)$")
+  if not prefix or not trimmed or trimmed == "|" then
+    return nil, nil
+  end
+
+  trimmed = trimmed:gsub("^|", ""):gsub("|%s*$", "")
+  local cells = {}
+  local current = {}
+  local escaped = false
+
+  for idx = 1, #trimmed do
+    local char = trimmed:sub(idx, idx)
+    if escaped then
+      current[#current + 1] = char
+      escaped = false
+    elseif char == "\\" then
+      escaped = true
+      current[#current + 1] = char
+    elseif char == "|" then
+      cells[#cells + 1] = trim(table.concat(current))
+      current = {}
+    else
+      current[#current + 1] = char
+    end
+  end
+  cells[#cells + 1] = trim(table.concat(current))
+
+  if #cells < 2 then
+    return nil, nil
+  end
+  return prefix, cells
+end
+
+local function is_markdown_table_separator(line, expected_columns)
+  local _, cells = split_markdown_table_cells(line)
+  if not cells or (#cells ~= expected_columns and #cells < 2) then
+    return false
+  end
+
+  for _, cell in ipairs(cells) do
+    local normalized = trim(cell):gsub("%s+", "")
+    if normalized == "" or not normalized:match("^:?-+:?$") then
+      return false
+    end
+  end
+  return true
+end
+
+local function render_table_cards(prefix, headers, rows)
+  local rendered = {}
+  local meta = {
+    heading_rows = {},
+  }
+  prefix = prefix or ""
+
+  for row_idx, row in ipairs(rows) do
+    if row_idx > 1 then
+      rendered[#rendered + 1] = ""
+    end
+    for col_idx, header in ipairs(headers) do
+      local key = trim(header)
+      if key == "" then
+        key = string.format("Column %d", col_idx)
+      end
+      rendered[#rendered + 1] = string.format("%s- %s", prefix, key)
+      meta.heading_rows[#rendered] = col_idx == 1 and "title" or "field"
+
+      local value = tostring(row[col_idx] or "")
+      local value_lines = vim.split(value, "\n", { plain = true })
+      if #value_lines == 0 then
+        value_lines = { "" }
+      end
+      for _, value_line in ipairs(value_lines) do
+        rendered[#rendered + 1] = string.format("%s %s", prefix, value_line)
+      end
+    end
+  end
+
+  return rendered, meta
+end
+
+local function transform_markdown_tables(lines, layout)
+  if layout ~= "card" then
+    return lines, false, {}
+  end
+
+  lines = type(lines) == "table" and lines or {}
+  local out = {}
+  local meta = {
+    heading_rows = {},
+  }
+  local changed = false
+  local inside_fence = false
+  local row = 1
+
+  while row <= #lines do
+    local line = lines[row]
+    if is_markdown_fence(line) then
+      inside_fence = not inside_fence
+      out[#out + 1] = line
+      row = row + 1
+    elseif inside_fence then
+      out[#out + 1] = line
+      row = row + 1
+    else
+      local prefix, headers = split_markdown_table_cells(line)
+      if headers and is_markdown_table_separator(lines[row + 1], #headers) then
+        local rows = {}
+        local cursor = row + 2
+        while cursor <= #lines do
+          local _, cells = split_markdown_table_cells(lines[cursor])
+          if not cells or is_markdown_table_separator(lines[cursor], #headers) then
+            break
+          end
+          while #cells < #headers do
+            cells[#cells + 1] = ""
+          end
+          if #cells > #headers then
+            cells = vim.list_slice(cells, 1, #headers)
+          end
+          rows[#rows + 1] = cells
+          cursor = cursor + 1
+        end
+
+        if #rows > 0 then
+          local base = #out
+          local rendered, rendered_meta = render_table_cards(prefix, headers, rows)
+          vim.list_extend(out, rendered)
+          for rel_row, kind in pairs(rendered_meta.heading_rows or {}) do
+            meta.heading_rows[base + rel_row] = kind
+          end
+          changed = true
+          row = cursor
+        else
+          out[#out + 1] = line
+          row = row + 1
+        end
+      else
+        out[#out + 1] = line
+        row = row + 1
+      end
+    end
+  end
+
+  return changed and out or lines, changed, changed and meta or {}
 end
 
 local function is_acp_buffer(bufnr)
@@ -2120,7 +2300,8 @@ local function compact_transcript_lines(bufnr, raw_lines)
   local sections = collect_transcript_sections(raw_lines)
   local items = transcript_items_for_sections(bufnr, sections)
   if not cfg.enabled or #sections < cfg.min_sections then
-    return raw_lines, items
+    local transformed, _, meta = transform_markdown_tables(raw_lines, transcript_table_layout(bufnr))
+    return transformed, items, meta
   end
 
   local keep_recent = math.min(#sections, cfg.keep_recent_sections)
@@ -2161,7 +2342,8 @@ local function compact_transcript_lines(bufnr, raw_lines)
     end
   end
 
-  return out_lines, out_items
+  local transformed, _, meta = transform_markdown_tables(out_lines, transcript_table_layout(bufnr))
+  return transformed, out_items, meta
 end
 
 local function read_transcript_lines(path, max_lines)
@@ -2210,12 +2392,13 @@ local function transcript_file_signature(path)
   }, ":")
 end
 
-set_buffer_lines = function(bufnr, lines, section_items)
+set_buffer_lines = function(bufnr, lines, section_items, display_meta)
   local entry = layout_entry(bufnr)
   entry.footer_padding_count = 0
   entry.footer_signature = nil
   entry.transcript_source_lines = vim.deepcopy(lines or {})
   entry.transcript_section_items = vim.deepcopy(section_items or {})
+  entry.transcript_display_meta = vim.deepcopy(display_meta or {})
   replace_buffer_lines(bufnr, 0, -1, lines)
 end
 
@@ -2468,6 +2651,7 @@ local function append_text_to_buffer(bufnr, text)
   vim.list_extend(new_raw, replacement)
   entry.transcript_source_lines = new_raw
   entry.transcript_section_items = {}
+  entry.transcript_display_meta = {}
 
   replace_buffer_lines(bufnr, replace_start, total_lines, replacement)
   return replace_start
@@ -2488,9 +2672,9 @@ refresh_buffer_from_path = function(bufnr, transcript_path, opts)
   end
 
   local lines = read_transcript_lines(transcript_path, transcript_max_lines(bufnr))
-  local display_lines, section_items = compact_transcript_lines(bufnr, lines)
+  local display_lines, section_items, display_meta = compact_transcript_lines(bufnr, lines)
 
-  set_buffer_lines(bufnr, display_lines, section_items)
+  set_buffer_lines(bufnr, display_lines, section_items, display_meta)
   entry.pending_full_refresh = false
   entry.transcript_file_signature = signature
   refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
@@ -2554,7 +2738,7 @@ local function queue_append(session, text)
       return
     end
     local changed_start = nil
-    if transcript_compaction_config(bufnr).enabled then
+    if transcript_compaction_config(bufnr).enabled or transcript_table_layout(bufnr) == "card" then
       refresh_buffer_from_path(bufnr, session.transcript_path, { force = true })
     else
       changed_start = append_text_to_buffer(bufnr, pending)
@@ -2705,6 +2889,7 @@ function M.create_pane(args, on_split)
     follow_output = true,
     buffer_background = args.acp and args.acp.buffer_background or nil,
     buffer_inactive_background = args.acp and args.acp.buffer_inactive_background or nil,
+    table_layout = args.acp and args.acp.table_layout or "table",
     transcript_max_lines = args.acp and args.acp.transcript_max_lines or nil,
     transcript_compaction = vim.deepcopy(args.acp and args.acp.transcript_compaction or {}),
   })
@@ -2839,6 +3024,7 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
       buffer_inactive_background = pane_opts.buffer_inactive_background
         or (session and session.buffer_inactive_background)
         or nil,
+      table_layout = pane_opts.table_layout or (session and session.table_layout) or "table",
       transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
       transcript_compaction = vim.deepcopy(
         pane_opts.transcript_compaction or (session and session.transcript_compaction) or {}
@@ -2887,6 +3073,7 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
     buffer_inactive_background = pane_opts.buffer_inactive_background
       or (session and session.buffer_inactive_background)
       or nil,
+    table_layout = pane_opts.table_layout or (session and session.table_layout) or "table",
     transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
     transcript_compaction = vim.deepcopy(
       pane_opts.transcript_compaction or (session and session.transcript_compaction) or {}
