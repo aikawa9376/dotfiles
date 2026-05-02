@@ -25,6 +25,7 @@ local SWITCH_HISTORY_RECENT_ITEMS = 14
 local SWITCH_HISTORY_ITEM_BODY_LIMIT = 6000
 local SWITCH_HISTORY_TOOL_LIMIT = 6
 local SWITCH_HISTORY_TRANSCRIPT_BYTE_LIMIT = 128 * 1024
+local summarize_conversation_text
 local resolve_permission_option
 local tool_heading
 local buffer_root_for_session
@@ -955,7 +956,7 @@ local function render_section_block(heading, body, meta)
   return table.concat(lines)
 end
 
-local function summarize_conversation_text(text, limit)
+summarize_conversation_text = function(text, limit)
   local normalized = normalize_text(text or "")
     :gsub("%s+", " ")
     :gsub("^%s+", "")

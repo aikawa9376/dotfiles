@@ -25,6 +25,10 @@ local function available_acp_agents()
   return active
 end
 
+local function available_switch_targets()
+  return session_logic.available_acp_switch_targets()
+end
+
 local commands = {
   {
     name = "LazyAgentACPSwitch",
@@ -32,6 +36,7 @@ local commands = {
     handler = function(target_agent)
       session_logic.switch_acp_provider(nil, target_agent)
     end,
+    complete = available_switch_targets,
   },
   {
     name = "LazyAgentACPResumeConversation",
@@ -105,7 +110,7 @@ function M.refresh()
         end, {
           nargs = "?",
           desc = command_spec.desc,
-          complete = available_acp_agents,
+          complete = command_spec.complete or available_acp_agents,
         })
         registered[command_spec.name] = true
       end

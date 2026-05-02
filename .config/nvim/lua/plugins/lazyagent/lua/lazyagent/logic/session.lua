@@ -2795,6 +2795,27 @@ function M.switch_acp_provider(agent_name, target_agent)
   end)
 end
 
+function M.available_acp_switch_targets(agent_name)
+  local current_agent = agent_name
+  if not current_agent or current_agent == "" then
+    current_agent = current_context_acp_agent()
+  end
+  if (not current_agent or current_agent == "") and #active_acp_agents() == 1 then
+    current_agent = active_acp_agents()[1]
+  end
+  if not current_agent or current_agent == "" then
+    current_agent = preferred_session_agent(current_editor_session_name())
+  end
+
+  local candidates = {}
+  for _, name in ipairs(agent_logic.available_acp_agents()) do
+    if name ~= current_agent then
+      candidates[#candidates + 1] = name
+    end
+  end
+  return candidates
+end
+
 function M.pick_acp_commands(agent_name)
   with_acp_session(agent_name, function(_, pane_id, backend_mod)
     if not backend_mod or type(backend_mod.show_command_palette) ~= "function" then
