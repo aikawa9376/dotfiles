@@ -325,18 +325,56 @@ function Client:_build_mcp_servers()
   return servers
 end
 
-function Client:_handle_initialize_response(result, callback)
-  if not result or type(result) ~= "table" then
-    callback(nil, {
-      code = ERR.invalid_request,
-      message = "ACP initialize returned an invalid response",
-    })
+function Client:_attach_session(session_id, session_result)
+  session_result = type(session_result) == "table" and session_result or {}
+  self:_convert_legacy_session_fields(session_result)
+  self.session_id = session_id
+  self:_set_state("ready")
+  return session_result
+end
+
+function Client:_supports_session_capability(name)
+  local session_caps = self.agent_capabilities and self.agent_capabilities.sessionCapabilities or {}
+  return type(session_caps) == "table" and session_caps[name] ~= nil
+end
+
+function Client:supports_session_list()
+  return self:_supports_session_capability("list")
+end
+
+function Client:supports_session_resume()
+  return self:_supports_session_capability("resume")
+end
+
+function Client:supports_session_close()
+  return self:_supports_session_capability("close")
+end
+
+function Client:supports_session_load()
+  return self.agent_capabilities and self.agent_capabilities.loadSession == true
+end
+
+function Client:is_connected()
+  return self.process ~= nil and self.state ~= "stopped"
+end
+
+function Client:_ensure_connected(callback)
+  callback = callback or function() end
+  if self:is_connected() then
+    return true
+  end
+  callback(nil, {
+    code = ERR.invalid_request,
+    message = "ACP client is not connected",
+  })
+  return false
+end
+
+function Client:new_session(callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then
     return
   end
-
-  self.agent_capabilities = result.agentCapabilities or {}
-  self.agent_info = result.agentInfo or {}
-  self.auth_methods = result.authMethods or {}
 
   local session_params = {
     cwd = self.cwd,
@@ -356,11 +394,125 @@ function Client:_handle_initialize_response(result, callback)
       return
     end
 
-    self:_convert_legacy_session_fields(session_result)
-    self.session_id = session_result.sessionId
-    self:_set_state("ready")
-    callback(self, nil, session_result)
+    callback(self:_attach_session(session_result.sessionId, session_result), nil)
   end)
+end
+
+function Client:list_sessions(params, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then
+    return
+  end
+  if not self:supports_session_list() then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP agent does not support session/list",
+    })
+    return
+  end
+
+  self:_send_request("session/list", params or vim.empty_dict(), callback)
+end
+
+function Client:load_session(session_id, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then
+    return
+  end
+  if not self:supports_session_load() then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP agent does not support session/load",
+    })
+    return
+  end
+
+  self:_send_request("session/load", {
+    sessionId = session_id,
+    cwd = self.cwd,
+    mcpServers = self:_build_mcp_servers(),
+  }, function(result, err)
+    if err then
+      callback(nil, err)
+      return
+    end
+    callback(self:_attach_session(session_id, result), nil)
+  end)
+end
+
+function Client:resume_session(session_id, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then
+    return
+  end
+  if not self:supports_session_resume() then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP agent does not support session/resume",
+    })
+    return
+  end
+
+  self:_send_request("session/resume", {
+    sessionId = session_id,
+    cwd = self.cwd,
+    mcpServers = self:_build_mcp_servers(),
+  }, function(result, err)
+    if err then
+      callback(nil, err)
+      return
+    end
+    callback(self:_attach_session(session_id, result), nil)
+  end)
+end
+
+function Client:close_session(session_id, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then
+    return
+  end
+  if not self:supports_session_close() then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP agent does not support session/close",
+    })
+    return
+  end
+
+  local target_session_id = session_id or self.session_id
+  if not target_session_id or target_session_id == "" then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP session is not ready",
+    })
+    return
+  end
+
+  self:_send_request("session/close", {
+    sessionId = target_session_id,
+  }, function(result, err)
+    if not err and self.session_id == target_session_id then
+      self.session_id = nil
+      self:_set_state("initialized")
+    end
+    callback(result, err)
+  end)
+end
+
+function Client:_handle_initialize_response(result, callback)
+  if not result or type(result) ~= "table" then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP initialize returned an invalid response",
+    })
+    return
+  end
+
+  self.agent_capabilities = result.agentCapabilities or {}
+  self.agent_info = result.agentInfo or {}
+  self.auth_methods = result.authMethods or {}
+  self:_set_state("initialized")
+  callback(self, nil)
 end
 
 function Client:_handle_update(params)
@@ -545,7 +697,8 @@ function Client:_handle_message(line)
   end)
 end
 
-function Client:start(callback)
+function Client:start(callback, opts)
+  opts = opts or {}
   if not self.command or self.command == "" then
     callback(nil, {
       code = ERR.invalid_params,
@@ -646,15 +799,38 @@ function Client:start(callback)
       callback(nil, err)
       return
     end
-    self:_handle_initialize_response(result, function(client, init_err, session_result)
+    self:_handle_initialize_response(result, function(client, init_err)
       if init_err then
         callback(nil, init_err)
         return
       end
-      vim.schedule(function()
-        pcall(self.on_ready, session_result or {})
-      end)
-      callback(client, nil, session_result)
+      if opts.create_session == false then
+        vim.schedule(function()
+          pcall(self.on_ready, {})
+        end)
+        callback(client, nil, {})
+        return
+      end
+
+      local mode = opts.session_mode or "new"
+      local done = function(session_result, session_err)
+        if session_err then
+          callback(nil, session_err)
+          return
+        end
+        vim.schedule(function()
+          pcall(self.on_ready, session_result or {})
+        end)
+        callback(client, nil, session_result or {})
+      end
+
+      if mode == "load" then
+        self:load_session(opts.session_id, done)
+      elseif mode == "resume" then
+        self:resume_session(opts.session_id, done)
+      else
+        self:new_session(done)
+      end
     end)
   end)
 end
