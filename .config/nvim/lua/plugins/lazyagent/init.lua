@@ -91,6 +91,7 @@ return {
       auto_permission = "allow_always",
       buffer_background = "none",
       buffer_inactive_background = "none",
+      table_layout = "card"
     },
     resume = false,
     scratch_keymaps = {

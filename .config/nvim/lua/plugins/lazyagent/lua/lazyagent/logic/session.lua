@@ -236,6 +236,7 @@ local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_op
     auto_permission = acp.auto_permission,
     default_mode = acp.default_mode,
     initial_model = acp.initial_model,
+    table_layout = acp.table_layout,
     footer_animation = acp.footer_animation,
     buffer_background = acp.buffer_background,
     buffer_inactive_background = acp.buffer_inactive_background,
