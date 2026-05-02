@@ -13,7 +13,7 @@ local groups = {
 
 function M.setup_commands()
   for _, modname in ipairs(groups) do
-    require(modname).register(command.create)
+    require(modname).register(command.create, command.delete)
   end
 end
 

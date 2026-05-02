@@ -17,6 +17,12 @@ local ok_watch, watch = pcall(require, "lazyagent.watch")
 local sanitize_filename_component = util.sanitize_filename_component
 local cleanup_agent_external_configs
 
+local function refresh_acp_command_visibility()
+  pcall(function()
+    require("lazyagent.commands.acp").refresh()
+  end)
+end
+
 local function call_watch(method, ...)
   if not ok_watch or not watch then
     return false
@@ -2090,6 +2096,7 @@ function M.close_all_sessions(sync)
   end
   state.current_session_name = nil
   call_watch("disable")
+  refresh_acp_command_visibility()
 
    for backend_mod, _ in pairs(seen_backends) do
      if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
