@@ -2378,10 +2378,19 @@ end
 local function format_native_session_label(session_info, current_session_id)
   local parts = {}
   local title = native_session_display_name(session_info)
+  local status_label = tostring(session_info.statusLabel or session_info.status or "")
   if session_info.sessionId and session_info.sessionId ~= "" and session_info.sessionId == current_session_id then
     title = title .. " [current]"
   end
+  if status_label ~= "" then
+    title = string.format("%s [%s]", title, status_label)
+  end
   parts[#parts + 1] = title
+
+  local summary = tostring(session_info.summary or "")
+  if summary ~= "" then
+    parts[#parts + 1] = summary
+  end
 
   local cwd = tostring(session_info.cwd or "")
   if cwd ~= "" then

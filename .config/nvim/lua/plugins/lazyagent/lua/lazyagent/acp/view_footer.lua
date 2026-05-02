@@ -145,6 +145,14 @@ function M.new(ctx)
     return text:gsub("^https://agentclientprotocol%.com/protocol/session%-modes#", "")
   end
 
+  local function compact_single_line(text)
+    text = tostring(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+    if text == "" then
+      return nil
+    end
+    return text
+  end
+
   local function current_config_details(session, keys)
     local option = find_config_option(session, keys)
     if not option then
@@ -206,7 +214,7 @@ function M.new(ctx)
     return name
   end
 
-  local function current_model_usage(session)
+  local function current_model_usage_stats(session)
     local _, current_model_id = current_config_details(session, { "model" })
     if not current_model_id then
       return nil
@@ -233,20 +241,16 @@ function M.new(ctx)
         end
 
         if used and total and total > 0 then
-          return string.format("%d/%d (%.1f%%)", used, total, (used / total) * 100)
+          return {
+            used_tokens = used,
+            total_tokens = total,
+          }
         end
 
         if meta.copilotUsage and meta.copilotUsage ~= "" then
-          local usage = tostring(meta.copilotUsage)
-          local parsed_used, parsed_total = usage:match("(%d+)%s*[/%-]%s*(%d+)")
-          if parsed_used and parsed_total then
-            local numeric_used = tonumber(parsed_used)
-            local numeric_total = tonumber(parsed_total)
-            if numeric_used and numeric_total and numeric_total > 0 then
-              return string.format("%d/%d (%.1f%%)", numeric_used, numeric_total, (numeric_used / numeric_total) * 100)
-            end
-          end
-          return usage
+          return {
+            provider_usage = tostring(meta.copilotUsage),
+          }
         end
 
         return nil
@@ -254,6 +258,150 @@ function M.new(ctx)
     end
 
     return nil
+  end
+
+  local function current_model_usage(session)
+    local usage = current_model_usage_stats(session)
+    if not usage then
+      return nil
+    end
+
+    local used = tonumber(usage.used_tokens)
+    local total = tonumber(usage.total_tokens)
+    if used and total and total > 0 then
+      return string.format("%d/%d (%.1f%%)", used, total, (used / total) * 100)
+    end
+
+    if usage.provider_usage and usage.provider_usage ~= "" then
+      local usage_text = tostring(usage.provider_usage)
+      local parsed_used, parsed_total = usage_text:match("(%d+)%s*[/%-]%s*(%d+)")
+      if parsed_used and parsed_total then
+        local numeric_used = tonumber(parsed_used)
+        local numeric_total = tonumber(parsed_total)
+        if numeric_used and numeric_total and numeric_total > 0 then
+          return string.format("%d/%d (%.1f%%)", numeric_used, numeric_total, (numeric_used / numeric_total) * 100)
+        end
+      end
+      return usage_text
+    end
+
+    return nil
+  end
+
+  local function compact_tokens(value)
+    value = tonumber(value)
+    if not value then
+      return nil
+    end
+    if value >= 1000000 then
+      return string.format("%.1fM", value / 1000000):gsub("%.0M$", "M")
+    end
+    if value >= 1000 then
+      return string.format("%.1fk", value / 1000):gsub("%.0k$", "k")
+    end
+    return tostring(math.floor(value + 0.5))
+  end
+
+  local function footer_usage_stats(session)
+    local direct = type(session and session.acp_usage_stats) == "table" and session.acp_usage_stats or {}
+    local fallback = current_model_usage_stats(session) or {}
+    local context = type(direct.context) == "table" and vim.deepcopy(direct.context) or {}
+    if context.used_tokens == nil then
+      context.used_tokens = fallback.used_tokens
+    end
+    if context.total_tokens == nil then
+      context.total_tokens = fallback.total_tokens
+    end
+    if context.remaining_tokens == nil and context.used_tokens ~= nil and context.total_tokens ~= nil then
+      context.remaining_tokens = math.max(context.total_tokens - context.used_tokens, 0)
+    end
+    return {
+      turn = type(direct.turn) == "table" and vim.deepcopy(direct.turn) or {},
+      cumulative = type(direct.cumulative) == "table" and vim.deepcopy(direct.cumulative) or {},
+      context = context,
+      provider_usage = compact_single_line(direct.provider_usage or fallback.provider_usage),
+    }
+  end
+
+  local function session_info_title(session)
+    local info = session and session.acp_session_info or {}
+    return compact_single_line(info.title)
+  end
+
+  local function session_info_summary(session)
+    local info = session and session.acp_session_info or {}
+    return compact_single_line(info.summary)
+  end
+
+  local function session_info_status_label(session)
+    local info = session and session.acp_session_info or {}
+    return compact_single_line(info.statusLabel or info.status)
+  end
+
+  local function context_usage_segment(session)
+    local usage = footer_usage_stats(session)
+    local used = tonumber(usage.context and usage.context.used_tokens)
+    local total = tonumber(usage.context and usage.context.total_tokens)
+    if not (used and total and total > 0) then
+      return current_model_usage(session), nil
+    end
+    local base = string.format("Ctx %s/%s", compact_tokens(used) or used, compact_tokens(total) or total)
+    local remaining = tonumber(usage.context and usage.context.remaining_tokens)
+    if remaining ~= nil then
+      return base, string.format("%s left", compact_tokens(remaining) or remaining)
+    end
+    return base, nil
+  end
+
+  local function turn_usage_segment(session)
+    local usage = footer_usage_stats(session)
+    local turn = usage.turn or {}
+    local prompt = tonumber(turn.prompt_tokens)
+    local completion = tonumber(turn.completion_tokens)
+    local total = tonumber(turn.total_tokens)
+    if prompt ~= nil or completion ~= nil then
+      return string.format(
+        "Turn %s in / %s out",
+        compact_tokens(prompt or 0) or tostring(prompt or 0),
+        compact_tokens(completion or 0) or tostring(completion or 0)
+      )
+    end
+    if total ~= nil then
+      return string.format("Turn %s tok", compact_tokens(total) or total)
+    end
+    return nil
+  end
+
+  local function cumulative_usage_segment(session)
+    local usage = footer_usage_stats(session)
+    local cumulative = usage.cumulative or {}
+    local prompt = tonumber(cumulative.prompt_tokens)
+    local completion = tonumber(cumulative.completion_tokens)
+    local total = tonumber(cumulative.total_tokens)
+    if prompt ~= nil or completion ~= nil then
+      return string.format(
+        "Total %s in / %s out",
+        compact_tokens(prompt or 0) or tostring(prompt or 0),
+        compact_tokens(completion or 0) or tostring(completion or 0)
+      )
+    end
+    if total ~= nil then
+      return string.format("Total %s tok", compact_tokens(total) or total)
+    end
+    return nil
+  end
+
+  local function provider_usage_segment(session)
+    local usage = footer_usage_stats(session)
+    local text = compact_single_line(usage.provider_usage)
+    if not text then
+      return nil
+    end
+    local context_text = compact_single_line(select(1, context_usage_segment(session)))
+    if context_text and text == context_text:gsub("^Ctx%s+", "") then
+      return nil
+    end
+    return "Provider " .. text
   end
 
   local function session_has_animated_footer(session)
@@ -368,9 +516,32 @@ function M.new(ctx)
       table.insert(segments, "Reasoning " .. reasoning)
     end
 
-    local usage = current_model_usage(session)
-    if usage and usage ~= "" then
-      table.insert(segments, "Usage " .. usage)
+    local state_label = session_info_status_label(session)
+    if state_label then
+      table.insert(segments, "State " .. state_label)
+    end
+
+    local context_usage, remaining_context = context_usage_segment(session)
+    if context_usage and context_usage ~= "" then
+      table.insert(segments, context_usage)
+    end
+    if remaining_context and remaining_context ~= "" then
+      table.insert(segments, remaining_context)
+    end
+
+    local turn_usage = turn_usage_segment(session)
+    if turn_usage then
+      table.insert(segments, turn_usage)
+    end
+
+    local cumulative_usage = cumulative_usage_segment(session)
+    if cumulative_usage then
+      table.insert(segments, cumulative_usage)
+    end
+
+    local provider_usage = provider_usage_segment(session)
+    if provider_usage then
+      table.insert(segments, provider_usage)
     end
 
     local mcp_count = tonumber(session and session.acp_mcp_server_count or 0) or 0
@@ -435,6 +606,8 @@ function M.new(ctx)
   local function footer_render_lines(agent_name, session, line_count)
     local size = transcript_size_label(session)
     local provider = provider_label(agent_name, session)
+    local session_title = session_info_title(session)
+    local session_summary = session_info_summary(session)
     local context = footer_context_text(agent_name, session)
     local status_text, status_hl, status_animate = session_status(agent_name, session)
     local lines = {}
@@ -444,6 +617,9 @@ function M.new(ctx)
 
     if provider ~= "" then
       table.insert(meta, provider)
+    end
+    if session_title and session_title ~= "" then
+      table.insert(meta, session_title)
     end
 
     local stats = {}
@@ -468,6 +644,10 @@ function M.new(ctx)
 
     if #meta > 0 then
       table.insert(lines, { text = " " .. table.concat(meta, "  "), hl = "LazyAgentACPFooterMuted" })
+    end
+
+    if session_summary and session_summary ~= "" then
+      table.insert(lines, { text = " " .. session_summary, hl = "LazyAgentACPFooterMeta" })
     end
 
     if has_context then
