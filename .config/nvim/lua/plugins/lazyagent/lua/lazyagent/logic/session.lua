@@ -9,6 +9,7 @@ local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local keymaps_logic = require("lazyagent.logic.keymaps")
 local send_logic = require("lazyagent.logic.send")
+local skills_logic = require("lazyagent.logic.skills")
 local cache_logic = require("lazyagent.logic.cache")
 local window = require("lazyagent.window")
 local persistence = require("lazyagent.logic.persistence")
@@ -1365,6 +1366,15 @@ end
 -- @param on_ready (function) Callback to execute with the pane_id when ready.
 function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
   local launch_spec, launch_err = agent_logic.resolve_launch_spec(agent_name, agent_cfg)
+  local root_dir = resolve_root_dir(agent_cfg)
+  local skills_launch = skills_logic.prepare(agent_name, agent_cfg, {
+    root_dir = root_dir,
+  })
+  if launch_spec and skills_launch and skills_launch.append_args and not vim.tbl_isempty(skills_launch.append_args) then
+    launch_spec = vim.tbl_deep_extend("force", {}, launch_spec, {
+      command = skills_logic.apply_command(launch_spec.command, skills_launch.append_args),
+    })
+  end
   local existing_session = state.sessions[agent_name]
   if not launch_spec and not (existing_session and existing_session.pane_id) then
     vim.notify("LazyAgent: " .. tostring(launch_err or "launch command is not configured"), vim.log.levels.ERROR)
@@ -1570,7 +1580,7 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
         backend = backend_name,
         watch_enabled = watch_enabled_val,
         launch_cmd = requested_launch_key,
-        cwd = resolve_root_dir(agent_cfg),
+        cwd = root_dir,
         session_scope = current_editor_session_name(),
         footer_animation = resolved_acp.footer_animation,
         buffer_background = resolved_acp.buffer_background,
@@ -1653,6 +1663,9 @@ function M.ensure_session(agent_name, agent_cfg, reuse, on_ready)
 
   local function do_split()
     split_opts.env = split_opts.env or {}
+    if skills_launch and skills_launch.env then
+      split_opts.env = merge_env(split_opts.env, skills_launch.env)
+    end
     -- Ensure NVIM_LISTEN_ADDRESS is available in the pane's environment so agents can connect back to this Neovim instance.
     do
       local ok, server = pcall(function() return vim.v.servername end)

@@ -86,6 +86,47 @@ require("lazyagent").setup({
 
 agent ごとの設定は global 設定より優先されます。`interactive_agents.<name>.default = true` を指定すると、起動 agent の候補が複数あるときにその agent を優先します。
 
+## Skills mount / launch wiring
+
+既定では `lazyagent.nvim` 自身の直下にある `skills/` を見ます。`SKILL.md` を含む skill directory を追加すると、lazyagent 起動時に対応 agent へ渡せます。
+
+```text
+lazyagent/
+├── skills/
+│   ├── reviewer/
+│   │   └── SKILL.md
+│   └── release-notes/
+│       └── SKILL.md
+```
+
+```lua
+require("lazyagent").setup({
+  skills = {
+    enabled = true,
+    mode = "auto", -- "auto" | "mount" | "flag"
+    mount_dir = ".agents/skills",
+    agents = {
+      Copilot = {
+        mode = "flag",
+        flag = "--plugin-dir",
+        -- env = "COPILOT_SKILLS_DIRS", -- env 経由も使いたいときだけ追加
+      },
+      Gemini = {
+        mode = "mount",
+      },
+    },
+  },
+})
+```
+
+- 何も指定しなければ `lazyagent/skills` を使います。
+- 別ディレクトリを使いたいときだけ `skills.source` / `skills.sources` で override します。
+- `mode = "flag"`: 起動 command に agent ごとの skills 用 flag を追加します。現状は Copilot で `--plugin-dir` をサポートします。
+- `mode = "mount"`: runtime で `mount_dir`（既定 `.agents/skills`）へ symlink を作り、workspace skill として見せます。Gemini はこの方式で使います。
+- `mode = "auto"`: Copilot は `flag`、それ以外は `mount` を選びます。
+
+global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ごとに override できます。`interactive_agents.<name>.skills = false` でその agent だけ無効化できます。
+
 ## Edit selected blocks
 
 `:LazyAgentEdit` は Avante の edit selected block に近い用途の line-range 編集です。選択範囲と前後 context を one-shot agent CLI または API に渡し、返ってきた replacement を元バッファ上の inline diff として表示してから適用します。
