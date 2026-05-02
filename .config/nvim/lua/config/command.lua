@@ -10,28 +10,6 @@ vim.api.nvim_create_autocmd("InsertLeave", {
   end,
 })
 
--- lualine for fzf
-vim.api.nvim_create_autocmd("FileType", {
-  group = MyAutoCmd,
-  pattern = "fzf",
-  callback = function()
-    vim.opt.laststatus = 0
-    vim.opt.showmode = false
-    vim.opt.ruler = false
-    vim.opt.showcmd = false
-  end,
-})
-vim.api.nvim_create_autocmd("BufLeave", {
-  group = MyAutoCmd,
-  pattern = "*",
-  callback = function()
-    vim.opt.laststatus = 3
-    vim.opt.showmode = true
-    vim.opt.ruler = true
-    vim.opt.showcmd = true
-  end,
-})
-
 -- terminal mode
 if vim.fn.exists(":terminal") == 2 then
   vim.api.nvim_create_autocmd("TermOpen", {
