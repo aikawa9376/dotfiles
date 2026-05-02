@@ -113,6 +113,19 @@ return {
     instant_mode = {
       append_text = " #cursor #small-fix #diffstyle-code", -- e.g. " #translate"
     },
+    skills = {
+      enabled = true,
+      mode = "auto",
+      agents = {
+        Copilot = {
+          mode = "flag",
+          flag = "--plugin-dir",
+        },
+        Gemini = {
+          mode = "mount",
+        },
+      },
+    },
     -- auto_follow: automatically open/focus files edited by the AI agent.
     -- "split" = dedicated split window (default), "jump" = replace current window.
     --

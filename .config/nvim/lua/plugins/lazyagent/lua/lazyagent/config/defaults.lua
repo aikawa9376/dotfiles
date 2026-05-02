@@ -110,6 +110,20 @@ function M.build()
       max_history = 100,
       conversation_retention = "30d",
     },
+    skills = {
+      enabled = false,
+      mode = "auto",
+      mount_dir = ".agents/skills",
+      agents = {
+        Copilot = {
+          mode = "flag",
+          flag = "--plugin-dir",
+        },
+        Gemini = {
+          mode = "mount",
+        },
+      },
+    },
     send_mode = "append",
     use_bracketed_paste = true,
     send_number_keys_to_agent = true,
