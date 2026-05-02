@@ -216,6 +216,8 @@ agent が advertise していない `/...` は通常の prompt text として送
 
 ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。`:LazyAgentACPSessions [agent]` では provider 側が保持している native session を一覧し、現在の会話へ add するか、native load / resume できます。float は `q` または `<Esc>` で閉じます。
 
+footer は advertise された metadata を使って、provider / native session title / session summary / model / mode / reasoning / context usage / remaining context / turn usage / cumulative usage / provider-specific usage をできるだけ表示します。
+
 ## MCP hooks
 
 `mcp_mode = true` のとき、非 ACP agent がある場合だけ Neovim 内で MCP server を起動します。ACP だけで運用している場合は server を起動しません。

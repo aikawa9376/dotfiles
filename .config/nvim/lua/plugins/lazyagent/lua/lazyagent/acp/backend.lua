@@ -185,14 +185,70 @@ local function rebuild_tool_index(session)
   end
 end
 
+local function first_nonempty(...)
+  for idx = 1, select("#", ...) do
+    local value = select(idx, ...)
+    if value ~= nil then
+      local text = tostring(value)
+      if text ~= "" then
+        return value
+      end
+    end
+  end
+  return nil
+end
+
+local function first_number(...)
+  for idx = 1, select("#", ...) do
+    local value = tonumber(select(idx, ...))
+    if value ~= nil then
+      return value
+    end
+  end
+  return nil
+end
+
 local function normalize_session_info(session_id, info, defaults)
   info = type(info) == "table" and vim.deepcopy(info) or {}
   defaults = type(defaults) == "table" and defaults or {}
+  local meta = type(info._meta) == "table" and info._meta or {}
+  local default_meta = type(defaults._meta) == "table" and defaults._meta or {}
   return {
     sessionId = tostring(session_id or info.sessionId or defaults.sessionId or ""),
     cwd = tostring(info.cwd or defaults.cwd or ""),
-    title = info.title,
-    updatedAt = info.updatedAt,
+    title = first_nonempty(info.title, defaults.title, meta.title, default_meta.title),
+    summary = first_nonempty(
+      info.summary,
+      info.description,
+      info.subtitle,
+      defaults.summary,
+      defaults.description,
+      defaults.subtitle,
+      meta.summary,
+      meta.description,
+      meta.subtitle,
+      meta.sessionSummary,
+      default_meta.summary,
+      default_meta.description,
+      default_meta.subtitle,
+      default_meta.sessionSummary
+    ),
+    status = first_nonempty(info.status, info.state, defaults.status, defaults.state, meta.status, meta.state, default_meta.status, default_meta.state),
+    statusLabel = first_nonempty(
+      info.statusLabel,
+      info.stateLabel,
+      info.label,
+      defaults.statusLabel,
+      defaults.stateLabel,
+      defaults.label,
+      meta.statusLabel,
+      meta.stateLabel,
+      meta.label,
+      default_meta.statusLabel,
+      default_meta.stateLabel,
+      default_meta.label
+    ),
+    updatedAt = first_nonempty(info.updatedAt, defaults.updatedAt, meta.updatedAt, default_meta.updatedAt),
     _meta = vim.deepcopy(info._meta or defaults._meta or {}),
   }
 end
@@ -206,6 +262,9 @@ local function update_session_info(session, info)
     sessionId = session.session_id or "",
     cwd = session.cwd or "",
     title = nil,
+    summary = nil,
+    status = nil,
+    statusLabel = nil,
     updatedAt = nil,
     _meta = {},
   }
@@ -213,6 +272,15 @@ local function update_session_info(session, info)
   if type(info) == "table" then
     if info.title ~= nil then
       current.title = info.title
+    end
+    if info.summary ~= nil then
+      current.summary = info.summary
+    end
+    if info.status ~= nil then
+      current.status = info.status
+    end
+    if info.statusLabel ~= nil then
+      current.statusLabel = info.statusLabel
     end
     if info.updatedAt ~= nil then
       current.updatedAt = info.updatedAt
@@ -232,6 +300,131 @@ local function update_session_info(session, info)
     cwd = session.cwd,
   })
   return session.session_info
+end
+
+local function update_usage_stats(session, update, model_id)
+  if not session then
+    return nil
+  end
+
+  local usage = type(update.usage) == "table" and update.usage or {}
+  local stats = type(session.usage_stats) == "table" and session.usage_stats or {
+    turn = {},
+    cumulative = {},
+    context = {},
+  }
+
+  local prompt_tokens = first_number(
+    usage.promptTokens,
+    usage.inputTokens,
+    usage.prompt_tokens,
+    usage.input_tokens
+  )
+  local completion_tokens = first_number(
+    usage.completionTokens,
+    usage.outputTokens,
+    usage.completion_tokens,
+    usage.output_tokens
+  )
+  local turn_total_tokens = first_number(
+    usage.turnTokens,
+    usage.turnTotalTokens,
+    usage.responseTokens,
+    usage.totalTokens
+  )
+  if turn_total_tokens == nil and (prompt_tokens ~= nil or completion_tokens ~= nil) then
+    turn_total_tokens = (prompt_tokens or 0) + (completion_tokens or 0)
+  end
+
+  local context_used_tokens = first_number(
+    usage.usedTokens,
+    usage.contextUsedTokens,
+    usage.contextTokens,
+    usage.used_tokens
+  )
+  local context_total_tokens = first_number(
+    usage.contextSize,
+    usage.totalContextTokens,
+    usage.contextWindow,
+    usage.contextLimit
+  )
+
+  local cumulative_prompt_tokens = first_number(
+    usage.totalPromptTokens,
+    usage.promptTokensTotal,
+    usage.cumulativePromptTokens
+  )
+  local cumulative_completion_tokens = first_number(
+    usage.totalCompletionTokens,
+    usage.completionTokensTotal,
+    usage.cumulativeCompletionTokens
+  )
+  local cumulative_total_tokens = first_number(
+    usage.totalSessionTokens,
+    usage.sessionTokens,
+    usage.cumulativeTokens
+  )
+
+  local provider_usage = first_nonempty(
+    update.copilotUsage,
+    usage.providerUsage,
+    usage.usageLabel,
+    usage.display,
+    usage.summary
+  )
+
+  if cumulative_total_tokens == nil and (cumulative_prompt_tokens ~= nil or cumulative_completion_tokens ~= nil) then
+    cumulative_total_tokens = (cumulative_prompt_tokens or 0) + (cumulative_completion_tokens or 0)
+  end
+
+  local snapshot_key = table.concat({
+    tostring(model_id or ""),
+    tostring(prompt_tokens or ""),
+    tostring(completion_tokens or ""),
+    tostring(turn_total_tokens or ""),
+    tostring(context_used_tokens or ""),
+    tostring(context_total_tokens or ""),
+    tostring(provider_usage or ""),
+  }, ":")
+
+  if snapshot_key ~= stats.last_snapshot_key then
+    stats.last_snapshot_key = snapshot_key
+    if cumulative_prompt_tokens == nil and prompt_tokens ~= nil then
+      stats.cumulative.prompt_tokens = (tonumber(stats.cumulative.prompt_tokens) or 0) + prompt_tokens
+    elseif cumulative_prompt_tokens ~= nil then
+      stats.cumulative.prompt_tokens = cumulative_prompt_tokens
+    end
+
+    if cumulative_completion_tokens == nil and completion_tokens ~= nil then
+      stats.cumulative.completion_tokens = (tonumber(stats.cumulative.completion_tokens) or 0) + completion_tokens
+    elseif cumulative_completion_tokens ~= nil then
+      stats.cumulative.completion_tokens = cumulative_completion_tokens
+    end
+
+    if cumulative_total_tokens == nil and turn_total_tokens ~= nil then
+      stats.cumulative.total_tokens = (tonumber(stats.cumulative.total_tokens) or 0) + turn_total_tokens
+    elseif cumulative_total_tokens ~= nil then
+      stats.cumulative.total_tokens = cumulative_total_tokens
+    end
+  end
+
+  stats.turn = {
+    prompt_tokens = prompt_tokens,
+    completion_tokens = completion_tokens,
+    total_tokens = turn_total_tokens,
+  }
+  stats.context = {
+    used_tokens = context_used_tokens,
+    total_tokens = context_total_tokens,
+    remaining_tokens = (context_used_tokens ~= nil and context_total_tokens ~= nil)
+        and math.max(context_total_tokens - context_used_tokens, 0)
+      or nil,
+  }
+  stats.provider_usage = provider_usage and tostring(provider_usage) or nil
+  stats.model_id = model_id
+  stats.updated_at = os.time()
+  session.usage_stats = stats
+  return stats
 end
 
 local function restore_switch_snapshot(session, snapshot)
@@ -1526,6 +1719,7 @@ sync_runtime_session = function(session)
   runtime.acp_session_capabilities = vim.deepcopy((session.agent_capabilities and session.agent_capabilities.sessionCapabilities) or {})
   runtime.acp_model_catalog = vim.deepcopy(session.model_catalog or {})
   runtime.acp_mode_catalog = vim.deepcopy(session.mode_catalog or {})
+  runtime.acp_usage_stats = vim.deepcopy(session.usage_stats or {})
   runtime.acp_ready = session.ready == true
   runtime.acp_failed = session.failed == true
   runtime.acp_supports_embedded_context = session.prompt_supports_embedded_context == true
@@ -1556,6 +1750,13 @@ local function config_option_title(option)
     return "ACP setting"
   end
   return option.name or option.label or option.id or option.category or "ACP setting"
+end
+
+local function config_option_description(option)
+  if type(option) ~= "table" then
+    return nil
+  end
+  return first_nonempty(option.description, option.doc, option.helpText, option.help)
 end
 
 local function config_option_current_name(option)
@@ -3429,8 +3630,9 @@ local function on_client_update(session, params)
           end
         end
       end
-      sync_runtime_session(session)
     end
+    update_usage_stats(session, update, model_id)
+    sync_runtime_session(session)
     return
   end
 
@@ -3576,6 +3778,7 @@ local function create_ephemeral_session(base_session)
     transcript_compaction = vim.deepcopy(base_session.transcript_compaction or {}),
     initial_config_applied = true,
     session_info = {},
+    usage_stats = {},
   }
 end
 
@@ -3971,6 +4174,8 @@ local function create_backend(default_view)
         transcript_max_lines = acp.transcript_max_lines,
         transcript_compaction = vim.deepcopy(acp.transcript_compaction or {}),
         initial_config_applied = false,
+        session_info = {},
+        usage_stats = {},
         view = view,
         view_state = view_state or {},
       }
@@ -4033,7 +4238,8 @@ local function create_backend(default_view)
         acp_agent_capabilities = vim.deepcopy(session.agent_capabilities or {}),
         acp_session_capabilities = vim.deepcopy((session.agent_capabilities and session.agent_capabilities.sessionCapabilities) or {}),
         acp_model_catalog = vim.deepcopy(session.model_catalog or {}),
-      acp_mode_catalog = vim.deepcopy(session.mode_catalog or {}),
+        acp_mode_catalog = vim.deepcopy(session.mode_catalog or {}),
+        acp_usage_stats = vim.deepcopy(session.usage_stats or {}),
       acp_ready = session.ready == true,
       acp_failed = session.failed == true,
       acp_supports_embedded_context = session.prompt_supports_embedded_context == true,
