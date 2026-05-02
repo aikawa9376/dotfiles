@@ -981,6 +981,55 @@ local function write_provider_switch_snapshot(agent_name, lines)
   return path
 end
 
+local function read_saved_conversation_lines(path)
+  if not path or path == "" or vim.fn.filereadable(path) == 0 then
+    return nil
+  end
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok or type(lines) ~= "table" then
+    return nil
+  end
+  return lines
+end
+
+local function select_saved_conversation(prompt, on_select)
+  local entries = cache_logic.list_conversation_files()
+  if not entries or #entries == 0 then
+    vim.notify("LazyAgentResume: no conversation snapshots found in " .. cache_logic.get_conversation_dir(), vim.log.levels.INFO)
+    return
+  end
+
+  local dir = cache_logic.get_conversation_dir()
+  local prefix = (cache_logic.build_cache_prefix and cache_logic.build_cache_prefix()) or ""
+  local choices = {}
+  if prefix ~= "" then
+    local matched, rest = {}, {}
+    for _, e in ipairs(entries) do
+      if e.name:lower():sub(1, #prefix) == prefix:lower() then
+        table.insert(matched, e.name)
+      else
+        table.insert(rest, e.name)
+      end
+    end
+    for _, n in ipairs(matched) do table.insert(choices, n) end
+    for _, n in ipairs(rest)    do table.insert(choices, n) end
+  else
+    for _, e in ipairs(entries) do table.insert(choices, e.name) end
+  end
+
+  vim.ui.select(choices, {
+    prompt = prompt or "Resume LazyAgent conversation:",
+    previewer = "builtin",
+    cwd = dir,
+  }, function(selected, idx)
+    local choice = (idx and choices[idx]) or selected
+    if not choice or choice == "" then
+      return
+    end
+    on_select(dir:gsub("/$", "") .. "/" .. choice)
+  end)
+end
+
 local function persist_conversation_capture(agent_name, session, lines, opts)
   opts = opts or {}
 
@@ -2177,14 +2226,6 @@ end
 -- with the snapshot content preloaded.
 -- @param agent_name (string|nil) The name of the agent to use.
 function M.resume_conversation(agent_name)
-  local entries = cache_logic.list_conversation_files()
-  if not entries or #entries == 0 then
-    vim.notify("LazyAgentResume: no conversation snapshots found in " .. cache_logic.get_conversation_dir(), vim.log.levels.INFO)
-    return
-  end
-
-  local dir = cache_logic.get_conversation_dir()
-
   local function start_with_path(path)
     if vim.fn.filereadable(path) == 0 then
       vim.notify("LazyAgentResume: file not found: " .. path, vim.log.levels.ERROR)
@@ -2208,33 +2249,111 @@ function M.resume_conversation(agent_name)
     end
   end
 
-  -- Build choices from entries; sort so current project+branch prefix comes first.
-  local prefix = (cache_logic.build_cache_prefix and cache_logic.build_cache_prefix()) or ""
-  local choices = {}
-  if prefix ~= "" then
-    local matched, rest = {}, {}
-    for _, e in ipairs(entries) do
-      if e.name:lower():sub(1, #prefix) == prefix:lower() then
-        table.insert(matched, e.name)
-      else
-        table.insert(rest, e.name)
-      end
+  select_saved_conversation("Resume LazyAgent conversation:", start_with_path)
+end
+
+function M.resume_acp_conversation(agent_name)
+  local function start_with_path(path)
+    if vim.fn.filereadable(path) == 0 then
+      vim.notify("LazyAgentACPResumeConversation: file not found: " .. path, vim.log.levels.ERROR)
+      return
     end
-    for _, n in ipairs(matched) do table.insert(choices, n) end
-    for _, n in ipairs(rest)    do table.insert(choices, n) end
-  else
-    for _, e in ipairs(entries) do table.insert(choices, e.name) end
+
+    local transcript_lines = read_saved_conversation_lines(path) or {}
+    local metadata = cache_logic.read_conversation_metadata(path) or {}
+
+    resolve_acp_target_agent(agent_name, function(chosen_agent)
+      if not chosen_agent or chosen_agent == "" then
+        return
+      end
+
+      local chosen_agent_cfg = agent_logic.get_interactive_agent(chosen_agent)
+      local _, chosen_backend = backend_logic.resolve_backend_for_agent(chosen_agent, chosen_agent_cfg)
+      local chosen_session = state.sessions[chosen_agent]
+      if chosen_session and chosen_session.pane_id and chosen_backend
+        and type(chosen_backend.is_busy) == "function"
+        and chosen_backend.is_busy(chosen_session.pane_id)
+      then
+        vim.notify("LazyAgentACP: stop the current response before resuming a saved conversation", vim.log.levels.WARN)
+        return
+      end
+
+      local temp_transcript_path = write_provider_switch_snapshot(metadata.agent_name or chosen_agent, transcript_lines)
+      if not temp_transcript_path then
+        vim.notify("LazyAgentACPResumeConversation: failed to prepare the saved conversation snapshot", vim.log.levels.WARN)
+        return
+      end
+
+      local anchor_snapshot = nil
+      local context_agent = current_context_acp_agent()
+      local context_session = context_agent and state.sessions[context_agent] or nil
+      if context_session and context_session.pane_id then
+        local _, context_backend = backend_logic.resolve_backend_for_agent(context_agent, agent_logic.get_interactive_agent(context_agent))
+        if context_backend and type(context_backend.get_runtime_snapshot) == "function" then
+          anchor_snapshot = context_backend.get_runtime_snapshot(context_session.pane_id)
+        end
+      end
+      local anchor = resolve_switch_anchor(anchor_snapshot, nil)
+
+      local next_agent_cfg = vim.tbl_deep_extend("force", chosen_agent_cfg or {}, {
+        source_bufnr = anchor.source_bufnr,
+        origin_bufnr = anchor.source_bufnr,
+        source_winid = anchor.source_winid,
+        origin_winid = anchor.source_winid,
+      })
+
+      local transition_message = string.format(
+        "Added conversation from %s. Previous conversation will be included on the next prompt.",
+        vim.fn.fnamemodify(path, ":t")
+      )
+
+      local carryover_label = "a saved ACP conversation"
+      if metadata.agent_name and metadata.agent_name ~= "" then
+        carryover_label = string.format("%s (%s)", carryover_label, metadata.agent_name)
+      end
+
+      if chosen_session and chosen_session.pane_id then
+        if not chosen_backend or type(chosen_backend.restore_switch_snapshot) ~= "function" then
+          pcall(vim.fn.delete, temp_transcript_path)
+          vim.notify("LazyAgentACPResumeConversation: backend does not support ACP conversation restore", vim.log.levels.WARN)
+          return
+        end
+
+        chosen_backend.restore_switch_snapshot(chosen_session.pane_id, {
+          provider_from = metadata.agent_name,
+          carryover_label = carryover_label,
+          transcript_lines = transcript_lines,
+          transcript_path = temp_transcript_path,
+          conversation_timeline = metadata.conversation_timeline or {},
+          tool_timeline = metadata.tool_timeline or {},
+          transition_message = transition_message,
+          preserve_transcript = true,
+        })
+        return
+      end
+
+      M.ensure_session(chosen_agent, next_agent_cfg, false, function(new_pane_id)
+        local _, next_backend = backend_logic.resolve_backend_for_agent(chosen_agent, next_agent_cfg)
+        if not next_backend or type(next_backend.restore_switch_snapshot) ~= "function" then
+          pcall(vim.fn.delete, temp_transcript_path)
+          vim.notify("LazyAgentACPResumeConversation: backend does not support ACP conversation restore", vim.log.levels.WARN)
+          return
+        end
+
+        next_backend.restore_switch_snapshot(new_pane_id, {
+          provider_from = metadata.agent_name,
+          carryover_label = carryover_label,
+          transcript_lines = transcript_lines,
+          transcript_path = temp_transcript_path,
+          conversation_timeline = metadata.conversation_timeline or {},
+          tool_timeline = metadata.tool_timeline or {},
+          transition_message = transition_message,
+        })
+      end)
+    end)
   end
 
-  vim.ui.select(choices, {
-    prompt = "Resume LazyAgent conversation:",
-    previewer = "builtin",
-    cwd = dir,
-  }, function(selected, idx)
-    local choice = (idx and choices[idx]) or selected
-    if not choice or choice == "" then return end
-    start_with_path(dir:gsub("/$", "") .. "/" .. choice)
-  end)
+  select_saved_conversation("Resume ACP conversation:", start_with_path)
 end
 
 ---
@@ -2394,6 +2513,7 @@ function M.switch_acp_provider(agent_name, target_agent)
         if next_backend and type(next_backend.restore_switch_snapshot) == "function" then
           next_backend.restore_switch_snapshot(new_pane_id, {
             provider_from = current_agent,
+            carryover_label = string.format("the previous ACP provider (%s)", current_agent),
             transcript_lines = transcript_lines,
             transcript_path = transcript_path,
             conversation_timeline = metadata and metadata.conversation_timeline or {},

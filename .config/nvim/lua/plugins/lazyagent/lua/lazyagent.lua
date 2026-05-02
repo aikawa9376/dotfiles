@@ -31,6 +31,9 @@ M.attach_session = session_logic.attach_session
 M.switch_acp_provider = function(target_agent, agent_name)
   return session_logic.switch_acp_provider(agent_name, target_agent)
 end
+M.resume_acp_conversation = function(agent_name)
+  return session_logic.resume_acp_conversation(agent_name)
+end
 M.pick_acp_config = session_logic.pick_acp_config
 M.pick_acp_model = session_logic.pick_acp_model
 M.pick_acp_mode = session_logic.pick_acp_mode

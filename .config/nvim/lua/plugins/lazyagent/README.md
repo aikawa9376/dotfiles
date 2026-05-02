@@ -214,7 +214,7 @@ agent が advertise していない `/...` は通常の prompt text として送
 
 ### ACP transcript buffer keymaps
 
-ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。float は `q` または `<Esc>` で閉じます。
+ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。float は `q` または `<Esc>` で閉じます。
 
 ## MCP hooks
 

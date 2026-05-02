@@ -76,7 +76,7 @@ return {
     "LazyAgentOpenConversation", "LazyAgentConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach", "LazyAgentEdit",
     "LazyAgentRestart", "LazyAgentStack", "LazyAgentHooks", "LazyAgentQR",
-    "LazyAgentACPSwitch", "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPReopen",
+    "LazyAgentACPSwitch", "LazyAgentACPResumeConversation", "LazyAgentACPConfig", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPReopen",
     "LazyAgentACPCommands", "LazyAgentACPTools", "LazyAgentACPResources", "LazyAgentACPCapabilities",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
