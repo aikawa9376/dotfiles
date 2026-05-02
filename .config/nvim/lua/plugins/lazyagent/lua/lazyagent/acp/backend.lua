@@ -185,6 +185,55 @@ local function rebuild_tool_index(session)
   end
 end
 
+local function normalize_session_info(session_id, info, defaults)
+  info = type(info) == "table" and vim.deepcopy(info) or {}
+  defaults = type(defaults) == "table" and defaults or {}
+  return {
+    sessionId = tostring(session_id or info.sessionId or defaults.sessionId or ""),
+    cwd = tostring(info.cwd or defaults.cwd or ""),
+    title = info.title,
+    updatedAt = info.updatedAt,
+    _meta = vim.deepcopy(info._meta or defaults._meta or {}),
+  }
+end
+
+local function update_session_info(session, info)
+  if not session then
+    return nil
+  end
+
+  local current = type(session.session_info) == "table" and vim.deepcopy(session.session_info) or {
+    sessionId = session.session_id or "",
+    cwd = session.cwd or "",
+    title = nil,
+    updatedAt = nil,
+    _meta = {},
+  }
+
+  if type(info) == "table" then
+    if info.title ~= nil then
+      current.title = info.title
+    end
+    if info.updatedAt ~= nil then
+      current.updatedAt = info.updatedAt
+    end
+    if info._meta ~= nil then
+      current._meta = vim.deepcopy(info._meta)
+    end
+    if info.cwd ~= nil and info.cwd ~= "" then
+      current.cwd = info.cwd
+    end
+    if info.sessionId ~= nil and info.sessionId ~= "" then
+      current.sessionId = info.sessionId
+    end
+  end
+
+  session.session_info = normalize_session_info(current.sessionId or session.session_id, current, {
+    cwd = session.cwd,
+  })
+  return session.session_info
+end
+
 local function restore_switch_snapshot(session, snapshot)
   if not session or type(snapshot) ~= "table" then
     return false
@@ -1443,6 +1492,9 @@ local function note_unadvertised_slash_command(session, prompt)
 end
 
 sync_runtime_live_state = function(session)
+  if not session or session.runtime_sync_disabled == true then
+    return
+  end
   local ok_state, state = pcall(require, "lazyagent.logic.state")
   if not ok_state or not state or not state.sessions or not state.sessions[session.agent_name] then
     return
@@ -1454,6 +1506,9 @@ sync_runtime_live_state = function(session)
 end
 
 sync_runtime_session = function(session)
+  if not session or session.runtime_sync_disabled == true then
+    return
+  end
   local ok_state, state = pcall(require, "lazyagent.logic.state")
   if not ok_state or not state or not state.sessions or not state.sessions[session.agent_name] then
     return
@@ -1464,9 +1519,11 @@ sync_runtime_session = function(session)
   runtime.acp_available_commands = vim.deepcopy(session.available_commands or {})
   runtime.acp_config_options = vim.deepcopy(session.config_options or {})
   runtime.acp_session_id = session.session_id
+  runtime.acp_session_info = vim.deepcopy(session.session_info or {})
   runtime.acp_transcript_path = session.transcript_path
   runtime.acp_agent_info = vim.deepcopy(session.agent_info or {})
   runtime.acp_agent_capabilities = vim.deepcopy(session.agent_capabilities or {})
+  runtime.acp_session_capabilities = vim.deepcopy((session.agent_capabilities and session.agent_capabilities.sessionCapabilities) or {})
   runtime.acp_model_catalog = vim.deepcopy(session.model_catalog or {})
   runtime.acp_mode_catalog = vim.deepcopy(session.mode_catalog or {})
   runtime.acp_ready = session.ready == true
@@ -3332,6 +3389,12 @@ local function on_client_update(session, params)
     return
   end
 
+  if kind == "session_info_update" then
+    update_session_info(session, update)
+    sync_runtime_session(session)
+    return
+  end
+
   if kind == "usage_update" then
     -- Merge usage info into model catalog so UI can display context/usage
     local model_id = update.modelId or update.currentModelId or (update.model and update.model.modelId) or nil
@@ -3414,6 +3477,9 @@ local function on_client_update(session, params)
 end
 
 local function on_client_exit(session, code, signal, stderr_text)
+  if session and session.ephemeral == true then
+    return
+  end
   session.ready = false
   session.failed = true
   close_stream(session)
@@ -3425,6 +3491,33 @@ local function on_client_exit(session, code, signal, stderr_text)
   append_block(session, "System", message)
   pcall(function()
     require("lazyagent.logic.status").set_waiting(session.agent_name, "Disconnected")
+  end)
+end
+
+local function list_all_sessions_for_client(client, params, on_done, collected)
+  collected = collected or {}
+  client:list_sessions(params, function(result, err)
+    if err then
+      on_done(nil, err)
+      return
+    end
+
+    result = type(result) == "table" and result or {}
+    for _, item in ipairs(result.sessions or {}) do
+      if type(item) == "table" and item.sessionId and item.sessionId ~= "" then
+        collected[#collected + 1] = normalize_session_info(item.sessionId, item)
+      end
+    end
+
+    if result.nextCursor and result.nextCursor ~= "" then
+      local next_params = vim.tbl_extend("force", params or {}, {
+        cursor = result.nextCursor,
+      })
+      list_all_sessions_for_client(client, next_params, on_done, collected)
+      return
+    end
+
+    on_done(collected, nil)
   end)
 end
 
@@ -3500,6 +3593,10 @@ local function create_backend(default_view)
       session.ready = true
       session.failed = false
       session.session_id = client.session_id
+      update_session_info(session, {
+        sessionId = client.session_id,
+        cwd = session.cwd,
+      })
       session.config_options = vim.deepcopy(client.config_options or (session_result and session_result.configOptions) or {})
       session.agent_info = vim.deepcopy(client.agent_info or {})
       session.agent_capabilities = vim.deepcopy(client.agent_capabilities or {})
@@ -3753,13 +3850,15 @@ local function create_backend(default_view)
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,
       transcript_compaction = vim.deepcopy(session.transcript_compaction or {}),
-      acp_available_commands = vim.deepcopy(session.available_commands or {}),
-      acp_config_options = vim.deepcopy(session.config_options or {}),
-      acp_session_id = session.session_id,
-      acp_transcript_path = session.transcript_path,
-      acp_agent_info = vim.deepcopy(session.agent_info or {}),
-      acp_agent_capabilities = vim.deepcopy(session.agent_capabilities or {}),
-      acp_model_catalog = vim.deepcopy(session.model_catalog or {}),
+        acp_available_commands = vim.deepcopy(session.available_commands or {}),
+        acp_config_options = vim.deepcopy(session.config_options or {}),
+        acp_session_id = session.session_id,
+        acp_session_info = vim.deepcopy(session.session_info or {}),
+        acp_transcript_path = session.transcript_path,
+        acp_agent_info = vim.deepcopy(session.agent_info or {}),
+        acp_agent_capabilities = vim.deepcopy(session.agent_capabilities or {}),
+        acp_session_capabilities = vim.deepcopy((session.agent_capabilities and session.agent_capabilities.sessionCapabilities) or {}),
+        acp_model_catalog = vim.deepcopy(session.model_catalog or {}),
       acp_mode_catalog = vim.deepcopy(session.mode_catalog or {}),
       acp_ready = session.ready == true,
       acp_failed = session.failed == true,
@@ -4047,6 +4146,88 @@ local function create_backend(default_view)
       return false
     end
     return show_capabilities_for_session(session)
+  end
+
+  function backend.list_sessions(target_pane, on_done, opts)
+    local session = get_session(target_pane)
+    if not session or not session.client then
+      if on_done then
+        vim.schedule(function()
+          on_done(nil, {
+            code = -32602,
+            message = "ACP session is not ready",
+          })
+        end)
+      end
+      return false
+    end
+
+    if not session.client:supports_session_list() then
+      if on_done then
+        vim.schedule(function()
+          on_done(nil, {
+            code = -32602,
+            message = "ACP agent does not support session/list",
+          })
+        end)
+      end
+      return false
+    end
+
+    local params = {}
+    if not (opts and opts.all_cwds == true) then
+      params.cwd = session.cwd
+    end
+
+    list_all_sessions_for_client(session.client, params, function(items, err)
+      if err then
+        if on_done then
+          vim.schedule(function()
+            on_done(nil, err)
+          end)
+        end
+        return
+      end
+
+      local sessions_out = {}
+      local by_id = {}
+      for _, item in ipairs(items or {}) do
+        local normalized = normalize_session_info(item.sessionId, item)
+        sessions_out[#sessions_out + 1] = normalized
+        by_id[normalized.sessionId] = normalized
+      end
+
+      if session.session_info and session.session_info.sessionId and session.session_info.sessionId ~= "" then
+        local existing = by_id[session.session_info.sessionId]
+        if existing then
+          by_id[session.session_info.sessionId] = normalize_session_info(existing.sessionId, session.session_info, existing)
+          for idx, item in ipairs(sessions_out) do
+            if item.sessionId == existing.sessionId then
+              sessions_out[idx] = by_id[existing.sessionId]
+              break
+            end
+          end
+        else
+          sessions_out[#sessions_out + 1] = normalize_session_info(session.session_info.sessionId, session.session_info)
+        end
+      end
+
+      table.sort(sessions_out, function(a, b)
+        local a_updated = tostring(a.updatedAt or "")
+        local b_updated = tostring(b.updatedAt or "")
+        if a_updated ~= b_updated then
+          return a_updated > b_updated
+        end
+        return tostring(a.title or a.sessionId or "") < tostring(b.title or b.sessionId or "")
+      end)
+
+      if on_done then
+        vim.schedule(function()
+          on_done(sessions_out, nil)
+        end)
+      end
+    end)
+    return true
   end
 
   function backend.capture_pane(pane_id, on_output)
