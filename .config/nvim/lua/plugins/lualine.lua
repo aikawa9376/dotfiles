@@ -24,7 +24,7 @@ return {
 
       -- 非同期で git 情報を取得してブロッキング（ちらつき）を回避
       local cmd = string.format("git -C %s rev-parse --is-inside-work-tree --show-toplevel --git-common-dir --abbrev-ref HEAD 2>/dev/null", vim.fn.shellescape(dir))
-      
+
       vim.fn.jobstart(cmd, {
         stdout_buffered = true,
         on_stdout = function(_, data)
@@ -47,10 +47,10 @@ return {
 
               -- 末尾のスラッシュを除去して親ディレクトリを取得
               local repo_root = vim.fn.fnamemodify(vim.fn.fnamemodify(abs_common, ":p"):gsub("/+$", ""), ":h")
-              
+
               local is_worktree = toplevel:match("/%.worktree/") ~= nil
               local sync_status = ""
-              
+
               -- ワークツリーの場合は同期状態を確認
               if is_worktree then
                 local ok, wt = pcall(require, "features.worktree")

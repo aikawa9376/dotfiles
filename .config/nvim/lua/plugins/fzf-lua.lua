@@ -28,6 +28,13 @@ return {
       split = "botright new | resize " .. tostring(math.floor(vim.o.lines * 0.4)),
       height = 0.4,
       border = "none",
+      on_create = function()
+        vim.opt.laststatus = 0
+      end,
+      on_close = function()
+        vim.opt.laststatus = 3
+        pcall(function() require("lualine").refresh() end)
+      end,
       preview = {
         -- default = "bat",
         title = false,
