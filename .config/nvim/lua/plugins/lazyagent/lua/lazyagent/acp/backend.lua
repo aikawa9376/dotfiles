@@ -3482,6 +3482,12 @@ local function on_client_exit(session, code, signal, stderr_text)
   if session and session.ephemeral == true then
     return
   end
+  if session and session.closing_intentionally == true then
+    session.ready = false
+    session.failed = false
+    close_stream(session)
+    return
+  end
   session.ready = false
   session.failed = true
   close_stream(session)
@@ -4085,9 +4091,7 @@ local function create_backend(default_view)
     local session = get_session(pane_id)
     if session then
       clear_pending_switch_history(session)
-      if session.client then
-        session.client:stop()
-      end
+      session.closing_intentionally = true
       for terminal_id, _ in pairs(session.terminals or {}) do
         pcall(terminal_release, session, { terminalId = terminal_id })
       end
@@ -4096,6 +4100,30 @@ local function create_backend(default_view)
         view.kill_pane(pane_id, session)
       end
       sessions[pane_id] = nil
+      if session.client then
+        local client = session.client
+        local stopped = false
+        local stop_client = function()
+          if stopped then
+            return
+          end
+          stopped = true
+          client:stop()
+        end
+
+        if client:supports_session_close() and session.session_id and session.session_id ~= "" then
+          client:close_session(session.session_id, function()
+            stop_client()
+          end)
+          vim.defer_fn(function()
+            if client:is_connected() then
+              stop_client()
+            end
+          end, 1000)
+        else
+          stop_client()
+        end
+      end
       return
     end
 
