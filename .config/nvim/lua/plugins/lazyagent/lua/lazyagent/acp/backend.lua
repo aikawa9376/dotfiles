@@ -1630,14 +1630,16 @@ local function normalize_available_commands(commands)
   local out = {}
   for _, command in ipairs(commands or {}) do
     if type(command) == "table" and command.name and command.name ~= "" then
-      local desc = tostring(command.description or "")
+      local desc = tostring(command.description or command.doc or "")
       local hint = command.input and command.input.hint or nil
-      if hint and hint ~= "" then
-        desc = (desc ~= "" and (desc .. " - " .. hint)) or hint
-      end
       table.insert(out, {
+        name = tostring(command.name),
         label = "/" .. tostring(command.name),
         desc = desc,
+        category = first_nonempty(command.category, command.group),
+        input_hint = hint and tostring(hint) or nil,
+        input_required = command.input and command.input.required == true or false,
+        input_placeholder = command.input and command.input.placeholder or nil,
       })
     end
   end
@@ -1759,6 +1761,52 @@ local function config_option_description(option)
   return first_nonempty(option.description, option.doc, option.helpText, option.help)
 end
 
+local function config_option_category(option)
+  if type(option) ~= "table" then
+    return nil
+  end
+  local category = first_nonempty(option.category, option.group)
+  if not category then
+    return nil
+  end
+  category = tostring(category)
+  local title = tostring(config_option_title(option))
+  if category == "" or category == title then
+    return nil
+  end
+  return category
+end
+
+local function config_option_kind(option)
+  local option_type = normalize_config_key(type(option) == "table" and option.type or "")
+  if option_type == "select" or option_type == "multiselect" then
+    if type(option.options) == "table" and #option.options > 0 then
+      return "select"
+    end
+  end
+  if option_type == "boolean" or option_type == "bool" or option_type == "toggle" then
+    return "toggle"
+  end
+  return option_type ~= "" and option_type or nil
+end
+
+local function parse_boolean(value)
+  if type(value) == "boolean" then
+    return value
+  end
+  if value == nil then
+    return nil
+  end
+  local normalized = tostring(value):lower()
+  if normalized == "true" or normalized == "1" or normalized == "yes" or normalized == "on" or normalized == "enabled" then
+    return true
+  end
+  if normalized == "false" or normalized == "0" or normalized == "no" or normalized == "off" or normalized == "disabled" then
+    return false
+  end
+  return nil
+end
+
 local function config_option_current_name(option)
   if type(option) ~= "table" then
     return nil
@@ -1770,6 +1818,12 @@ local function config_option_current_name(option)
   for _, choice in ipairs(option.options or {}) do
     if type(choice) == "table" and choice.value == current then
       return choice.name or tostring(current)
+    end
+  end
+  if config_option_kind(option) == "toggle" then
+    local boolean = parse_boolean(current)
+    if boolean ~= nil then
+      return boolean and "Enabled" or "Disabled"
     end
   end
   return tostring(current)
@@ -1802,11 +1856,8 @@ end
 local function selectable_config_options(session, category)
   local out = {}
   for _, option in ipairs(session.config_options or {}) do
-    if type(option) == "table"
-      and option.type == "select"
-      and type(option.options) == "table"
-      and #option.options > 0
-    then
+    local kind = config_option_kind(option)
+    if type(option) == "table" and (kind == "select" or kind == "toggle") then
       local key = config_option_key(option)
       if not category or key == category or option.id == category then
         table.insert(out, option)
@@ -1833,6 +1884,52 @@ local function move_current_choice_to_head(option)
     end
   end
   return ordered
+end
+
+local function config_option_choice_items(option)
+  if config_option_kind(option) == "toggle" then
+    local base_description = config_option_description(option)
+    return {
+      {
+        name = first_nonempty(option.enabledLabel, option.trueLabel, "Enabled"),
+        value = true,
+        description = first_nonempty(option.enabledDescription, option.trueDescription, base_description),
+      },
+      {
+        name = first_nonempty(option.disabledLabel, option.falseLabel, "Disabled"),
+        value = false,
+        description = first_nonempty(option.disabledDescription, option.falseDescription, base_description),
+      },
+    }
+  end
+  return move_current_choice_to_head(option)
+end
+
+local function config_option_picker_label(option)
+  local label = config_option_title(option)
+  local current = config_option_current_name(option)
+  local meta = {}
+  local category = config_option_category(option)
+  local kind = config_option_kind(option)
+
+  if current and current ~= "" then
+    label = string.format("%s (%s)", label, current)
+  end
+  if category and category ~= "" then
+    meta[#meta + 1] = tostring(category)
+  end
+  if kind and kind ~= "" and kind ~= "select" then
+    meta[#meta + 1] = tostring(kind)
+  end
+  if #meta > 0 then
+    label = string.format("%s [%s]", label, table.concat(meta, ", "))
+  end
+
+  local description = config_option_description(option)
+  if description and description ~= "" then
+    label = label .. " - " .. description
+  end
+  return label
 end
 
 local function queue_after_ready(session, callback)
@@ -2184,7 +2281,7 @@ local function apply_initial_session_config(session, done)
 end
 
 local function show_config_value_picker(session, option)
-  local items = move_current_choice_to_head(option)
+  local items = config_option_choice_items(option)
   if #items == 0 then
     append_block(session, "System", string.format("%s does not expose any selectable values.", config_option_title(option)))
     return false
@@ -2205,7 +2302,7 @@ local function show_config_value_picker(session, option)
   vim.ui.select(items, {
     prompt = "Select " .. config_option_title(option) .. ":",
     format_item = function(item)
-      local prefix = (item.value == current) and "● " or "  "
+      local prefix = (tostring(item.value) == tostring(current)) and "● " or "  "
       local suffix = item.description and item.description ~= "" and (": " .. item.description) or ""
       return prefix .. (item.name or tostring(item.value)) .. suffix
     end,
@@ -2261,11 +2358,7 @@ local function show_config_picker_for_session(session, category)
   vim.ui.select(options, {
     prompt = "Choose ACP setting:",
     format_item = function(item)
-      local current = config_option_current_name(item)
-      if current and current ~= "" then
-        return string.format("%s (%s)", config_option_title(item), current)
-      end
-      return config_option_title(item)
+      return config_option_picker_label(item)
     end,
   }, function(choice)
     if not choice then
@@ -2341,8 +2434,26 @@ local function show_command_palette_for_session(session, submit)
     prompt = "Choose ACP command:",
     format_item = function(item)
       local source = item.source or "agent"
-      local desc = item.desc and item.desc ~= "" and (" - " .. item.desc) or ""
-      return string.format("%s [%s]%s", item.label, source, desc)
+      local meta = { source }
+      if item.category and item.category ~= "" then
+        meta[#meta + 1] = tostring(item.category)
+      end
+      if item.input_required then
+        meta[#meta + 1] = "args"
+      elseif item.input_hint and item.input_hint ~= "" then
+        meta[#meta + 1] = "input"
+      end
+      local details = {}
+      if item.desc and item.desc ~= "" then
+        details[#details + 1] = tostring(item.desc)
+      end
+      if item.input_hint and item.input_hint ~= "" then
+        details[#details + 1] = "Input: " .. tostring(item.input_hint)
+      elseif item.input_placeholder and item.input_placeholder ~= "" then
+        details[#details + 1] = "Input: " .. tostring(item.input_placeholder)
+      end
+      local desc = #details > 0 and (" - " .. table.concat(details, " · ")) or ""
+      return string.format("%s [%s]%s", item.label, table.concat(meta, ", "), desc)
     end,
   }, function(choice)
     if not choice or not choice.label or choice.label == "" then
@@ -2573,12 +2684,23 @@ local function render_capability_report(session)
   else
     for _, option in ipairs(session.config_options or {}) do
       if type(option) == "table" then
-        lines[#lines + 1] = string.format(
-          "- %s: %s (%d choices)",
-          config_option_title(option),
+        local detail = {
           tostring(config_option_current_name(option) or "unset"),
-          #(option.options or {})
-        )
+        }
+        local kind = config_option_kind(option)
+        if kind then
+          detail[#detail + 1] = kind
+        end
+        local category = config_option_category(option)
+        if category then
+          detail[#detail + 1] = category
+        end
+        if type(option.options) == "table" and #option.options > 0 then
+          detail[#detail + 1] = string.format("%d choices", #option.options)
+        end
+        local description = config_option_description(option)
+        local suffix = description and description ~= "" and (" — " .. description) or ""
+        lines[#lines + 1] = string.format("- %s: %s%s", config_option_title(option), table.concat(detail, " / "), suffix)
       end
     end
   end
@@ -2590,7 +2712,22 @@ local function render_capability_report(session)
     lines[#lines + 1] = "- None advertised"
   else
     for _, command in ipairs(merged_commands) do
-      lines[#lines + 1] = string.format("- %s — %s", command.label or "", command.desc or "")
+      local detail = {}
+      if command.category and command.category ~= "" then
+        detail[#detail + 1] = tostring(command.category)
+      end
+      if command.input_required then
+        detail[#detail + 1] = "args"
+      elseif command.input_hint and command.input_hint ~= "" then
+        detail[#detail + 1] = "input"
+      end
+      local desc = command.desc or ""
+      if command.input_hint and command.input_hint ~= "" then
+        desc = desc ~= "" and (desc .. " Input: " .. tostring(command.input_hint)) or ("Input: " .. tostring(command.input_hint))
+      end
+      local meta = #detail > 0 and (" [" .. table.concat(detail, ", ") .. "]") or ""
+      local suffix = desc ~= "" and (" — " .. desc) or ""
+      lines[#lines + 1] = string.format("- %s%s%s", command.label or "", meta, suffix)
     end
   end
 
