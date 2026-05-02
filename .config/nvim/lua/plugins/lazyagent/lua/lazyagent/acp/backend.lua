@@ -190,6 +190,58 @@ local function restore_switch_snapshot(session, snapshot)
     return false
   end
 
+  if snapshot.preserve_transcript == true then
+    local previous = session.pending_switch_history
+    local transcript_lines = vim.deepcopy(snapshot.transcript_lines or {})
+    local conversation_timeline = vim.deepcopy(snapshot.conversation_timeline or {})
+    local tool_timeline = vim.deepcopy(snapshot.tool_timeline or {})
+    local carryover_label = snapshot.carryover_label
+
+    if previous and type(previous) == "table" then
+      local merged_lines = vim.deepcopy(previous.transcript_lines or {})
+      if #merged_lines > 0 and #transcript_lines > 0 and merged_lines[#merged_lines] ~= "" then
+        merged_lines[#merged_lines + 1] = ""
+      end
+      vim.list_extend(merged_lines, transcript_lines)
+      transcript_lines = merged_lines
+
+      local merged_conversation = vim.deepcopy(previous.conversation_timeline or {})
+      vim.list_extend(merged_conversation, conversation_timeline)
+      conversation_timeline = merged_conversation
+
+      local merged_tools = vim.deepcopy(previous.tool_timeline or {})
+      vim.list_extend(merged_tools, tool_timeline)
+      tool_timeline = merged_tools
+
+      if previous.carryover_label and previous.carryover_label ~= "" then
+        carryover_label = carryover_label and carryover_label ~= ""
+            and (previous.carryover_label .. " + " .. carryover_label)
+          or previous.carryover_label
+      end
+
+      if previous.transcript_path and previous.transcript_path ~= "" and previous.transcript_path ~= snapshot.transcript_path then
+        pcall(vim.fn.delete, previous.transcript_path)
+      end
+    end
+
+    session.pending_switch_history = {
+      provider_from = snapshot.provider_from,
+      carryover_label = carryover_label,
+      transcript_lines = transcript_lines,
+      transcript_path = snapshot.transcript_path,
+      conversation_timeline = conversation_timeline,
+      tool_timeline = tool_timeline,
+    }
+
+    if snapshot.transition_message and snapshot.transition_message ~= "" then
+      append_block(session, "System", snapshot.transition_message)
+    elseif sync_runtime_session then
+      sync_runtime_session(session)
+    end
+
+    return true
+  end
+
   clear_pending_switch_history(session)
   session.current_stream_key = nil
   session.current_stream_heading = nil
@@ -211,6 +263,7 @@ local function restore_switch_snapshot(session, snapshot)
 
   session.pending_switch_history = {
     provider_from = snapshot.provider_from,
+    carryover_label = snapshot.carryover_label,
     transcript_lines = vim.deepcopy(snapshot.transcript_lines or {}),
     transcript_path = snapshot.transcript_path,
     conversation_timeline = vim.deepcopy(snapshot.conversation_timeline or {}),
@@ -366,12 +419,16 @@ local function build_switch_history_blocks(session, pending)
   end
 
   local blocks = {}
+  local carryover_label = pending.carryover_label
+  if not carryover_label or carryover_label == "" then
+    carryover_label = "the previous ACP provider"
+    if pending.provider_from and pending.provider_from ~= "" then
+      carryover_label = string.format("%s (%s)", carryover_label, tostring(pending.provider_from))
+    end
+  end
   local history_items = collect_switch_history_items(pending)
   local intro = {
-    string.format(
-      "Conversation carryover from the previous ACP provider%s.",
-      pending.provider_from and pending.provider_from ~= "" and (" (" .. tostring(pending.provider_from) .. ")") or ""
-    ),
+    string.format("Conversation carryover from %s.", carryover_label),
     "Treat the following as existing conversation history for this session.",
     "Do not ask me to restate it. Respond only to the new user message that follows.",
   }

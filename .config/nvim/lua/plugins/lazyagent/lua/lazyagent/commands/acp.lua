@@ -17,6 +17,13 @@ local commands = {
     end,
   },
   {
+    name = "LazyAgentACPResumeConversation",
+    desc = "Resume a saved ACP conversation with carryover restore",
+    handler = function(target_agent)
+      session_logic.resume_acp_conversation(target_agent)
+    end,
+  },
+  {
     name = "LazyAgentACPConfig",
     desc = "Open ACP config picker for an ACP-enabled agent",
     handler = session_logic.pick_acp_config,
