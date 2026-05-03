@@ -153,8 +153,13 @@ local function wait_for_idle_before_close(agent_name, on_ready)
     return
   end
 
+  local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
+  if acp_logic.is_acp_backend(backend_name) then
+    on_ready()
+    return
+  end
+
   -- If the pane/process has already exited, we don't need to wait for idle status.
-  local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
   if backend_mod and type(backend_mod.pane_exists) == "function" then
     local ok, exists = pcall(backend_mod.pane_exists, s.pane_id)
     if ok and not exists then
