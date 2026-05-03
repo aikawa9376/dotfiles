@@ -113,6 +113,8 @@ function M.build()
     skills = {
       enabled = false,
       mode = "auto",
+      bin_dir = nil,
+      bin_env = "LAZYAGENTBIN",
       mount_dir = ".agents/skills",
       agents = {
         Copilot = {

@@ -104,6 +104,7 @@ require("lazyagent").setup({
   skills = {
     enabled = true,
     mode = "auto", -- "auto" | "mount" | "flag"
+    -- bin_dir = "/path/to/bin", -- default: lazyagent/bin
     mount_dir = ".agents/skills",
     agents = {
       Copilot = {
@@ -120,7 +121,10 @@ require("lazyagent").setup({
 ```
 
 - 何も指定しなければ `lazyagent/skills` を使います。
+- 何も指定しなければ `lazyagent/bin` も見て、agent 起動時に `LAZYAGENTBIN=/.../lazyagent/bin` を注入します。
+- local CLI を使う skill は `$LAZYAGENTBIN/<tool>` を見れば OK です。
 - 別ディレクトリを使いたいときだけ `skills.source` / `skills.sources` で override します。
+- bin 側を変えたいときは `skills.bin_dir` で override できます。
 - `mode = "flag"`: 起動 command に agent ごとの skills 用 flag を追加します。現状は Copilot で `--plugin-dir` をサポートします。
 - `mode = "mount"`: runtime で `mount_dir`（既定 `.agents/skills`）へ symlink を作り、workspace skill として見せます。Gemini はこの方式で使います。
 - `mode = "auto"`: Copilot は `flag`、それ以外は `mount` を選びます。

@@ -116,6 +116,7 @@ return {
     skills = {
       enabled = true,
       mode = "auto",
+      -- bin_dir = "/path/to/bin", -- default: lazyagent/bin
       agents = {
         Copilot = {
           mode = "flag",
