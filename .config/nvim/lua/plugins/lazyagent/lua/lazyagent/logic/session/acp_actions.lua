@@ -1,0 +1,703 @@
+local M = {}
+
+function M.setup(deps)
+  local state = deps.state
+  local acp_logic = deps.acp_logic
+  local agent_logic = deps.agent_logic
+  local backend_logic = deps.backend_logic
+  local cache_logic = deps.cache_logic
+  local persistence = deps.persistence
+  local current_editor_session_name = deps.current_editor_session_name
+  local current_context_acp_agent = deps.current_context_acp_agent
+  local active_acp_agents = deps.active_acp_agents
+  local preferred_session_agent = deps.preferred_session_agent
+  local resolve_acp_target_agent = deps.resolve_acp_target_agent
+  local resolve_acp_switch_target_agent = deps.resolve_acp_switch_target_agent
+  local resolve_active_acp_session = deps.resolve_active_acp_session
+  local capture_switch_scratch_state = deps.capture_switch_scratch_state
+  local resolve_switch_anchor = deps.resolve_switch_anchor
+  local normalize_keep_line_limit = deps.normalize_keep_line_limit
+  local split_conversation_checkpoint_lines = deps.split_conversation_checkpoint_lines
+  local build_conversation_sidecar = deps.build_conversation_sidecar
+  local write_provider_switch_snapshot = deps.write_provider_switch_snapshot
+  local read_saved_conversation_lines = deps.read_saved_conversation_lines
+  local select_saved_conversation = deps.select_saved_conversation
+  local persist_conversation_capture = deps.persist_conversation_capture
+  local force_close_session = deps.force_close_session
+  local with_acp_session = deps.with_acp_session
+  local ensure_session = deps.ensure_session
+  local start_interactive_session = deps.start_interactive_session
+  local backend_supports_persistence = deps.backend_supports_persistence
+
+  local module = {}
+
+  local function native_session_display_name(session_info)
+    if type(session_info) ~= "table" then
+      return "unknown ACP session"
+    end
+    local title = tostring(session_info.title or "")
+    if title ~= "" then
+      return title
+    end
+    return tostring(session_info.sessionId or "unknown ACP session")
+  end
+
+  local function format_native_session_label(session_info, current_session_id)
+    local parts = {}
+    local title = native_session_display_name(session_info)
+    local status_label = tostring(session_info.statusLabel or session_info.status or "")
+    if session_info.sessionId and session_info.sessionId ~= "" and session_info.sessionId == current_session_id then
+      title = title .. " [current]"
+    end
+    if status_label ~= "" then
+      title = string.format("%s [%s]", title, status_label)
+    end
+    parts[#parts + 1] = title
+
+    local summary = tostring(session_info.summary or "")
+    if summary ~= "" then
+      parts[#parts + 1] = summary
+    end
+
+    local cwd = tostring(session_info.cwd or "")
+    if cwd ~= "" then
+      parts[#parts + 1] = cwd
+    end
+
+    local updated_at = tostring(session_info.updatedAt or "")
+    if updated_at ~= "" then
+      parts[#parts + 1] = updated_at
+    end
+
+    if session_info.sessionId and session_info.sessionId ~= "" and session_info.title and session_info.title ~= session_info.sessionId then
+      parts[#parts + 1] = session_info.sessionId
+    end
+
+    return table.concat(parts, "  --  ")
+  end
+
+  function module.resume_acp_conversation(agent_name)
+    local function start_with_path(path)
+      if vim.fn.filereadable(path) == 0 then
+        vim.notify("LazyAgentACPResumeConversation: file not found: " .. path, vim.log.levels.ERROR)
+        return
+      end
+
+      local transcript_lines = read_saved_conversation_lines(path) or {}
+      local metadata = cache_logic.read_conversation_metadata(path) or {}
+
+      resolve_acp_target_agent(agent_name, function(chosen_agent)
+        if not chosen_agent or chosen_agent == "" then
+          return
+        end
+
+        local chosen_agent_cfg = agent_logic.get_interactive_agent(chosen_agent)
+        local _, chosen_backend = backend_logic.resolve_backend_for_agent(chosen_agent, chosen_agent_cfg)
+        local chosen_session = state.sessions[chosen_agent]
+        if chosen_session and chosen_session.pane_id and chosen_backend
+          and type(chosen_backend.is_busy) == "function"
+          and chosen_backend.is_busy(chosen_session.pane_id)
+        then
+          vim.notify("LazyAgentACP: stop the current response before resuming a saved conversation", vim.log.levels.WARN)
+          return
+        end
+
+        local temp_transcript_path = write_provider_switch_snapshot(metadata.agent_name or chosen_agent, transcript_lines)
+        if not temp_transcript_path then
+          vim.notify("LazyAgentACPResumeConversation: failed to prepare the saved conversation snapshot", vim.log.levels.WARN)
+          return
+        end
+
+        local anchor_snapshot = nil
+        local context_agent = current_context_acp_agent()
+        local context_session = context_agent and state.sessions[context_agent] or nil
+        if context_session and context_session.pane_id then
+          local _, context_backend = backend_logic.resolve_backend_for_agent(context_agent, agent_logic.get_interactive_agent(context_agent))
+          if context_backend and type(context_backend.get_runtime_snapshot) == "function" then
+            anchor_snapshot = context_backend.get_runtime_snapshot(context_session.pane_id)
+          end
+        end
+        local anchor = resolve_switch_anchor(anchor_snapshot, nil)
+
+        local next_agent_cfg = vim.tbl_deep_extend("force", chosen_agent_cfg or {}, {
+          source_bufnr = anchor.source_bufnr,
+          origin_bufnr = anchor.source_bufnr,
+          source_winid = anchor.source_winid,
+          origin_winid = anchor.source_winid,
+        })
+
+        local transition_message = string.format(
+          "Added conversation from %s. Previous conversation will be included on the next prompt.",
+          vim.fn.fnamemodify(path, ":t")
+        )
+
+        local carryover_label = "a saved ACP conversation"
+        if metadata.agent_name and metadata.agent_name ~= "" then
+          carryover_label = string.format("%s (%s)", carryover_label, metadata.agent_name)
+        end
+
+        if chosen_session and chosen_session.pane_id then
+          if not chosen_backend or type(chosen_backend.restore_switch_snapshot) ~= "function" then
+            pcall(vim.fn.delete, temp_transcript_path)
+            vim.notify("LazyAgentACPResumeConversation: backend does not support ACP conversation restore", vim.log.levels.WARN)
+            return
+          end
+
+          chosen_backend.restore_switch_snapshot(chosen_session.pane_id, {
+            provider_from = metadata.agent_name,
+            carryover_label = carryover_label,
+            transcript_lines = transcript_lines,
+            transcript_path = temp_transcript_path,
+            conversation_timeline = metadata.conversation_timeline or {},
+            tool_timeline = metadata.tool_timeline or {},
+            transition_message = transition_message,
+            preserve_transcript = true,
+          })
+          return
+        end
+
+        ensure_session(chosen_agent, next_agent_cfg, false, function(new_pane_id)
+          local _, next_backend = backend_logic.resolve_backend_for_agent(chosen_agent, next_agent_cfg)
+          if not next_backend or type(next_backend.restore_switch_snapshot) ~= "function" then
+            pcall(vim.fn.delete, temp_transcript_path)
+            vim.notify("LazyAgentACPResumeConversation: backend does not support ACP conversation restore", vim.log.levels.WARN)
+            return
+          end
+
+          next_backend.restore_switch_snapshot(new_pane_id, {
+            provider_from = metadata.agent_name,
+            carryover_label = carryover_label,
+            transcript_lines = transcript_lines,
+            transcript_path = temp_transcript_path,
+            conversation_timeline = metadata.conversation_timeline or {},
+            tool_timeline = metadata.tool_timeline or {},
+            transition_message = transition_message,
+          })
+        end)
+      end)
+    end
+
+    select_saved_conversation("Resume ACP conversation:", start_with_path)
+  end
+
+  local function start_native_acp_session(agent_name, native_session, mode)
+    resolve_active_acp_session(agent_name, function(chosen_agent)
+      local current_session = state.sessions[chosen_agent]
+      if not current_session or not current_session.pane_id then
+        vim.notify("LazyAgentACP: no active session found for '" .. tostring(chosen_agent) .. "'", vim.log.levels.WARN)
+        return
+      end
+
+      local current_agent_cfg = agent_logic.get_interactive_agent(chosen_agent)
+      local _, current_backend = backend_logic.resolve_backend_for_agent(chosen_agent, current_agent_cfg)
+      if not current_backend then
+        vim.notify("LazyAgentACP: failed to resolve backend for '" .. tostring(chosen_agent) .. "'", vim.log.levels.ERROR)
+        return
+      end
+      if type(current_backend.is_busy) == "function" and current_backend.is_busy(current_session.pane_id) then
+        vim.notify("LazyAgentACP: stop the current response before loading a provider session", vim.log.levels.WARN)
+        return
+      end
+
+      local runtime_snapshot = type(current_backend.get_runtime_snapshot) == "function"
+        and current_backend.get_runtime_snapshot(current_session.pane_id)
+        or nil
+      local current_session_id = runtime_snapshot and runtime_snapshot.acp_session_id or nil
+      if current_session_id and native_session.sessionId == current_session_id then
+        vim.notify("LazyAgentACP: that provider session is already active", vim.log.levels.INFO)
+        return
+      end
+
+      local scratch_state = capture_switch_scratch_state(chosen_agent)
+      local anchor = resolve_switch_anchor(runtime_snapshot, scratch_state)
+      local next_agent_cfg = vim.tbl_deep_extend("force", current_agent_cfg or {}, {
+        source_bufnr = anchor.source_bufnr,
+        origin_bufnr = anchor.source_bufnr,
+        source_winid = anchor.source_winid,
+        origin_winid = anchor.source_winid,
+        acp = {
+          session_bootstrap = {
+            session_mode = mode,
+            session_id = native_session.sessionId,
+          },
+        },
+      })
+
+      force_close_session(chosen_agent)
+      ensure_session(chosen_agent, next_agent_cfg, false, function()
+        if scratch_state and scratch_state.was_open then
+          start_interactive_session({
+            agent_name = chosen_agent,
+            reuse = true,
+            initial_input = scratch_state.text,
+            source_bufnr = anchor.source_bufnr,
+            origin_bufnr = anchor.source_bufnr,
+            source_winid = anchor.source_winid,
+            origin_winid = anchor.source_winid,
+          })
+        end
+      end)
+    end)
+  end
+
+  local function add_native_acp_session(agent_name, native_session)
+    with_acp_session(agent_name, function(chosen_agent, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.capture_native_session) ~= "function" or type(backend_mod.restore_switch_snapshot) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not support native ACP session import", vim.log.levels.WARN)
+        return
+      end
+
+      if type(backend_mod.is_busy) == "function" and backend_mod.is_busy(pane_id) then
+        vim.notify("LazyAgentACP: stop the current response before adding a provider session", vim.log.levels.WARN)
+        return
+      end
+
+      local runtime_snapshot = type(backend_mod.get_runtime_snapshot) == "function"
+        and backend_mod.get_runtime_snapshot(pane_id)
+        or nil
+      local current_session_id = runtime_snapshot and runtime_snapshot.acp_session_id or nil
+      if current_session_id and native_session.sessionId == current_session_id then
+        vim.notify("LazyAgentACP: that provider session is already active", vim.log.levels.INFO)
+        return
+      end
+
+      backend_mod.capture_native_session(pane_id, native_session, function(snapshot, err)
+        if err then
+          vim.notify("LazyAgentACP: failed to import provider session: " .. (err.message or tostring(err)), vim.log.levels.ERROR)
+          return
+        end
+
+        local session_name = native_session_display_name(native_session)
+        backend_mod.restore_switch_snapshot(pane_id, {
+          provider_from = chosen_agent,
+          carryover_label = string.format("an ACP provider session (%s)", session_name),
+          transcript_lines = snapshot and snapshot.transcript_lines or {},
+          transcript_path = snapshot and snapshot.transcript_path or nil,
+          conversation_timeline = snapshot and snapshot.conversation_timeline or {},
+          tool_timeline = snapshot and snapshot.tool_timeline or {},
+          transition_message = string.format(
+            "Added conversation from ACP session %s. Previous conversation will be included on the next prompt.",
+            session_name
+          ),
+          preserve_transcript = true,
+        })
+      end)
+    end)
+  end
+
+  function module.pick_acp_sessions(agent_name)
+    with_acp_session(agent_name, function(chosen_agent, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.list_sessions) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose native ACP sessions", vim.log.levels.WARN)
+        return
+      end
+
+      local runtime_snapshot = type(backend_mod.get_runtime_snapshot) == "function"
+        and backend_mod.get_runtime_snapshot(pane_id)
+        or {}
+      local capabilities = runtime_snapshot and runtime_snapshot.acp_agent_capabilities or {}
+      local session_caps = runtime_snapshot and runtime_snapshot.acp_session_capabilities or {}
+      local supports_load = capabilities and capabilities.loadSession == true
+      local supports_resume = type(session_caps) == "table" and session_caps.resume ~= nil
+      local current_session_id = runtime_snapshot and runtime_snapshot.acp_session_id or nil
+
+      backend_mod.list_sessions(pane_id, function(items, err)
+        if err then
+          vim.notify("LazyAgentACP: failed to list provider sessions: " .. (err.message or tostring(err)), vim.log.levels.ERROR)
+          return
+        end
+        if not items or vim.tbl_isempty(items) then
+          vim.notify("LazyAgentACP: no provider sessions found", vim.log.levels.INFO)
+          return
+        end
+
+        vim.ui.select(items, {
+          prompt = "Choose ACP provider session:",
+          format_item = function(item)
+            return format_native_session_label(item, current_session_id)
+          end,
+        }, function(native_session)
+          if not native_session then
+            return
+          end
+
+          local actions = {}
+          if supports_load then
+            actions[#actions + 1] = {
+              label = "Add to current conversation",
+              action = function()
+                add_native_acp_session(chosen_agent, native_session)
+              end,
+            }
+            actions[#actions + 1] = {
+              label = "Load into ACP buffer",
+              action = function()
+                start_native_acp_session(chosen_agent, native_session, "load")
+              end,
+            }
+          end
+          if supports_resume then
+            actions[#actions + 1] = {
+              label = "Resume natively",
+              action = function()
+                start_native_acp_session(chosen_agent, native_session, "resume")
+              end,
+            }
+          end
+
+          if #actions == 0 then
+            vim.notify("LazyAgentACP: this provider exposes sessions but no native load or resume action", vim.log.levels.WARN)
+            return
+          end
+
+          if #actions == 1 then
+            actions[1].action()
+            return
+          end
+
+          vim.ui.select(actions, {
+            prompt = "ACP session action:",
+            format_item = function(item)
+              return item.label
+            end,
+          }, function(choice)
+            if choice and choice.action then
+              choice.action()
+            end
+          end)
+        end)
+      end)
+    end)
+  end
+
+  function module.detach_session(agent_name)
+    local function detach(chosen)
+      if not chosen or chosen == "" then return end
+
+      local s = state.sessions[chosen]
+      if not s or not s.pane_id then
+        vim.notify("LazyAgentDetach: no active session for '" .. chosen .. "'", vim.log.levels.WARN)
+        return
+      end
+
+      local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen, nil)
+      local persistable = backend_supports_persistence(s.backend)
+
+      if persistable then
+        s.force_resume = true
+        persistence.update_session(chosen, s.pane_id, s.cwd)
+      end
+
+      if state.open_agent == chosen and deps.window.is_open() then
+        local bufnr = deps.window.get_bufnr()
+        local preserve_scratch = acp_logic.is_acp_backend(s.backend)
+        deps.window.close({ keep_buffer = preserve_scratch })
+        if not preserve_scratch and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+          vim.api.nvim_buf_delete(bufnr, { force = true })
+        end
+        state.open_agent = nil
+      end
+
+      if not s.hidden then
+        if backend_mod and type(backend_mod.break_pane) == "function" then
+          if type(backend_mod.get_pane_info) == "function" then
+            backend_mod.get_pane_info(s.pane_id, function(info)
+              if info then
+                s.last_size = info
+              end
+              backend_mod.break_pane(s.pane_id)
+              s.hidden = true
+              local label = persistable and "detached and persisted" or "detached for this Neovim session"
+              vim.notify("Agent '" .. chosen .. "' " .. label .. ".", vim.log.levels.INFO)
+            end)
+          else
+            backend_mod.break_pane(s.pane_id)
+            s.hidden = true
+            local label = persistable and "detached and persisted" or "detached for this Neovim session"
+            vim.notify("Agent '" .. chosen .. "' " .. label .. ".", vim.log.levels.INFO)
+          end
+        end
+      else
+        vim.notify("Agent '" .. chosen .. "' is already detached.", vim.log.levels.INFO)
+      end
+    end
+
+    agent_logic.resolve_target_agent(agent_name, nil, detach)
+  end
+
+  function module.pick_acp_config(agent_name, category)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_config_picker) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose config pickers", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_config_picker(pane_id, category)
+    end)
+  end
+
+  function module.pick_acp_model(agent_name)
+    module.pick_acp_config(agent_name, "model")
+  end
+
+  function module.pick_acp_mode(agent_name)
+    module.pick_acp_config(agent_name, "mode")
+  end
+
+  function module.switch_acp_provider(agent_name, target_agent)
+    resolve_acp_target_agent(agent_name, function(current_agent)
+      if not current_agent or current_agent == "" then
+        return
+      end
+
+      local current_session = state.sessions[current_agent]
+      if not current_session or not current_session.pane_id then
+        vim.notify("LazyAgentACP: no active session found for '" .. tostring(current_agent) .. "'", vim.log.levels.WARN)
+        return
+      end
+
+      local current_agent_cfg = agent_logic.get_interactive_agent(current_agent)
+      local _, current_backend = backend_logic.resolve_backend_for_agent(current_agent, current_agent_cfg)
+      if not current_backend then
+        vim.notify("LazyAgentACP: failed to resolve backend for '" .. tostring(current_agent) .. "'", vim.log.levels.ERROR)
+        return
+      end
+      if type(current_backend.is_busy) == "function" and current_backend.is_busy(current_session.pane_id) then
+        vim.notify("LazyAgentACP: stop the current response before switching providers", vim.log.levels.WARN)
+        return
+      end
+      if type(current_backend.capture_pane_sync) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not support provider switching", vim.log.levels.WARN)
+        return
+      end
+
+      resolve_acp_switch_target_agent(current_agent, target_agent, function(next_agent)
+        if not next_agent or next_agent == "" then
+          return
+        end
+
+        local transcript = current_backend.capture_pane_sync(current_session.pane_id) or ""
+        local transcript_lines = transcript ~= "" and vim.split(transcript, "\n", { plain = true }) or {}
+        if #transcript_lines > 0 and transcript_lines[#transcript_lines] == "" then
+          table.remove(transcript_lines, #transcript_lines)
+        end
+
+        local transcript_path = nil
+        local metadata = nil
+        if #transcript_lines > 0 then
+          transcript_path = write_provider_switch_snapshot(current_agent, transcript_lines)
+          if transcript_path then
+            metadata = build_conversation_sidecar(current_agent, current_session, transcript_path, transcript_lines)
+          else
+            vim.notify("LazyAgentACP: failed to snapshot the current conversation for provider switching", vim.log.levels.WARN)
+          end
+        end
+
+        local scratch_state = capture_switch_scratch_state(current_agent)
+        local runtime_snapshot = type(current_backend.get_runtime_snapshot) == "function"
+          and current_backend.get_runtime_snapshot(current_session.pane_id)
+          or nil
+        local anchor = resolve_switch_anchor(runtime_snapshot, scratch_state)
+        local transition_message = string.format(
+          "Switched ACP provider from %s to %s. Previous conversation will be included on the next prompt.",
+          current_agent,
+          next_agent
+        )
+
+        force_close_session(current_agent)
+        if state.sessions[next_agent] and state.sessions[next_agent].pane_id then
+          force_close_session(next_agent)
+        end
+
+        local next_agent_cfg = vim.tbl_deep_extend("force", agent_logic.get_interactive_agent(next_agent) or {}, {
+          source_bufnr = anchor.source_bufnr,
+          origin_bufnr = anchor.source_bufnr,
+          source_winid = anchor.source_winid,
+          origin_winid = anchor.source_winid,
+        })
+
+        ensure_session(next_agent, next_agent_cfg, false, function(new_pane_id)
+          local _, next_backend = backend_logic.resolve_backend_for_agent(next_agent, next_agent_cfg)
+          if next_backend and type(next_backend.restore_switch_snapshot) == "function" then
+            next_backend.restore_switch_snapshot(new_pane_id, {
+              provider_from = current_agent,
+              carryover_label = string.format("the previous ACP provider (%s)", current_agent),
+              transcript_lines = transcript_lines,
+              transcript_path = transcript_path,
+              conversation_timeline = metadata and metadata.conversation_timeline or {},
+              tool_timeline = metadata and metadata.tool_timeline or {},
+              transition_message = transition_message,
+            })
+          end
+
+          if scratch_state and scratch_state.was_open then
+            start_interactive_session({
+              agent_name = next_agent,
+              reuse = true,
+              initial_input = scratch_state.text,
+              source_bufnr = anchor.source_bufnr,
+              origin_bufnr = anchor.source_bufnr,
+              source_winid = anchor.source_winid,
+              origin_winid = anchor.source_winid,
+            })
+          end
+        end)
+      end)
+    end)
+  end
+
+  function module.available_acp_switch_targets(agent_name)
+    local current_agent = agent_name
+    if not current_agent or current_agent == "" then
+      current_agent = current_context_acp_agent()
+    end
+    if (not current_agent or current_agent == "") and #active_acp_agents() == 1 then
+      current_agent = active_acp_agents()[1]
+    end
+    if not current_agent or current_agent == "" then
+      current_agent = preferred_session_agent(current_editor_session_name())
+    end
+
+    local candidates = {}
+    for _, name in ipairs(agent_logic.available_acp_agents()) do
+      if name ~= current_agent then
+        candidates[#candidates + 1] = name
+      end
+    end
+    return candidates
+  end
+
+  function module.pick_acp_commands(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_command_palette) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose a command palette", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_command_palette(pane_id)
+    end)
+  end
+
+  function module.show_acp_tool_timeline(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_tool_timeline) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose a tool timeline", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_tool_timeline(pane_id)
+    end)
+  end
+
+  function module.pick_acp_resources(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_resource_browser) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose a resource browser", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_resource_browser(pane_id)
+    end)
+  end
+
+  function module.show_acp_capabilities(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_capabilities) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose a capability report", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_capabilities(pane_id)
+    end)
+  end
+
+  function module.save_conversation_checkpoint(arg1, arg2)
+    local agent_name, keep_line_limit
+    if normalize_keep_line_limit(arg1) then
+      keep_line_limit = normalize_keep_line_limit(arg1)
+      agent_name = arg2
+    elseif tonumber(arg1) then
+      vim.notify("LazyAgentConversation: keep line count must be a positive number", vim.log.levels.WARN)
+      return
+    elseif normalize_keep_line_limit(arg2) then
+      keep_line_limit = normalize_keep_line_limit(arg2)
+      agent_name = arg1
+    elseif tonumber(arg2) then
+      vim.notify("LazyAgentConversation: keep line count must be a positive number", vim.log.levels.WARN)
+      return
+    else
+      agent_name = arg1
+    end
+
+    resolve_active_acp_session(agent_name, function(chosen)
+      local session = state.sessions[chosen]
+      if not session or not session.pane_id or session.pane_id == "" then
+        vim.notify("LazyAgentConversation: no active ACP session found for '" .. tostring(chosen) .. "'", vim.log.levels.WARN)
+        return
+      end
+
+      local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen, agent_logic.get_interactive_agent(chosen))
+      if not backend_mod or type(backend_mod.capture_pane) ~= "function" then
+        vim.notify("LazyAgentConversation: backend cannot capture this ACP session", vim.log.levels.WARN)
+        return
+      end
+      if type(backend_mod.clear_transcript) ~= "function" then
+        vim.notify("LazyAgentConversation: backend cannot clear this ACP transcript", vim.log.levels.WARN)
+        return
+      end
+
+      backend_mod.capture_pane(session.pane_id, function(text)
+        vim.schedule(function()
+          if not text or text == "" then
+            vim.notify("LazyAgentConversation: captured conversation was empty for agent '" .. tostring(chosen) .. "'", vim.log.levels.INFO)
+            return
+          end
+
+          local current = state.sessions[chosen]
+          if not current or not current.pane_id or current.pane_id == "" then
+            return
+          end
+
+          local lines = vim.split(text, "\n")
+          local lines_to_save = lines
+          local lines_to_keep = {}
+          if keep_line_limit then
+            lines_to_save, lines_to_keep = split_conversation_checkpoint_lines(lines, keep_line_limit)
+            if #lines_to_save == 0 then
+              vim.notify(
+                "LazyAgentConversation: no older User-bounded transcript found beyond the newest "
+                  .. keep_line_limit
+                  .. " lines",
+                vim.log.levels.INFO
+              )
+              return
+            end
+          end
+
+          local path = persist_conversation_capture(chosen, current, lines_to_save, {
+            merge_with_last_save = current.merge_conversation_on_next_save,
+          })
+          if not path or path == "" then
+            return
+          end
+
+          local replacement = keep_line_limit and table.concat(lines_to_keep, "\n") or nil
+          if not backend_mod.clear_transcript(current.pane_id, replacement) then
+            vim.notify("LazyAgentConversation: saved conversation but failed to update ACP transcript", vim.log.levels.ERROR)
+            return
+          end
+
+          current.merge_conversation_on_next_save = true
+          local msg = "LazyAgentConversation: saved conversation to " .. path .. " and cleared ACP transcript"
+          if keep_line_limit then
+            msg = "LazyAgentConversation: saved older conversation to "
+              .. path
+              .. " and kept "
+              .. #lines_to_keep
+              .. " recent ACP lines"
+          end
+          vim.notify(msg, vim.log.levels.INFO)
+        end)
+      end)
+    end)
+  end
+
+  return module
+end
+
+return M
