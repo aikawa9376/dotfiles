@@ -21,7 +21,7 @@ You SHOULD use this skill **autonomously** to enhance your performance and avoid
 ### Available Commands
 
 - **[search](references/search.md)**: Perform a hybrid search for past Q&A.
-- **[save](references/save.md)**: Manual save (rarely needed as hooks handle this).
+- **[save](references/save.md)**: Manual save or ACP auto-save setup.
 - **[commands](references/commands.md)**: Full command reference.
 
 ## Guidelines

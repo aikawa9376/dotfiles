@@ -85,6 +85,9 @@ return {
       enabled = true,
       view = "buffer",
       footer_animation = true,
+      brain_save = {
+        enabled = true,
+      },
       -- buffer_background = "#002b36",
       -- buffer_inactive_background = "#073642",
       -- default_mode = "bypassPermissions", -- prefer provider mode when available
@@ -117,6 +120,7 @@ return {
       enabled = true,
       mode = "auto",
       -- bin_dir = "/path/to/bin", -- default: lazyagent/bin
+      -- mount_dir = "~/.agents/skills", -- fallback only; Gemini uses hidden cache runtime by default
       agents = {
         Copilot = {
           mode = "flag",
