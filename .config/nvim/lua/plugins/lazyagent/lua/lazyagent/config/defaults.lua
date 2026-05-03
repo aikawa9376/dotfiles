@@ -79,6 +79,10 @@ function M.build()
         mode_rules = {},
         model_rules = {},
       },
+      brain_save = {
+        enabled = false,
+        command = nil,
+      },
     },
     tmux_auto_exit_copy_mode = true,
     submit_delay = 600,
@@ -115,7 +119,7 @@ function M.build()
       mode = "auto",
       bin_dir = nil,
       bin_env = "LAZYAGENTBIN",
-      mount_dir = ".agents/skills",
+      mount_dir = "~/.agents/skills",
       agents = {
         Copilot = {
           mode = "flag",

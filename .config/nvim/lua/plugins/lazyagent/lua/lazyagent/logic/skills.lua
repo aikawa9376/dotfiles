@@ -46,6 +46,13 @@ local function is_readable_file(path)
   return vim.fn.filereadable(path) == 1
 end
 
+local function is_executable_file(path)
+  if not path or path == "" then
+    return false
+  end
+  return vim.fn.executable(path) == 1
+end
+
 local function delete_path(path)
   if not path or path == "" then
     return
@@ -295,11 +302,56 @@ local function sync_mount_dir(aggregate_dir, mount_dir)
   return true
 end
 
+local function sync_dir_links(source_dir, target_dir, opts)
+  opts = type(opts) == "table" and opts or {}
+  local exclude = type(opts.exclude) == "table" and opts.exclude or {}
+
+  ensure_dir(target_dir)
+
+  local ok_source, source_entries = pcall(vim.fn.readdir, source_dir)
+  if not ok_source or type(source_entries) ~= "table" then
+    return false
+  end
+
+  local source_lookup = {}
+  for _, entry in ipairs(source_entries) do
+    if not exclude[entry] then
+      source_lookup[entry] = true
+      sync_symlink(join_path(source_dir, entry), join_path(target_dir, entry))
+    end
+  end
+
+  local ok_target, target_entries = pcall(vim.fn.readdir, target_dir)
+  if ok_target and type(target_entries) == "table" then
+    for _, entry in ipairs(target_entries) do
+      if not source_lookup[entry] then
+        local link_path = join_path(target_dir, entry)
+        local link_stat = uv.fs_lstat(link_path)
+        if link_stat and link_stat.type == "link" then
+          local target = uv.fs_readlink(link_path)
+          if type(target) == "string" and target:sub(1, #source_dir) == source_dir then
+            delete_path(link_path)
+          end
+        end
+      end
+    end
+  end
+
+  return true
+end
+
 local function runtime_base_dir()
   local cache_dir = (state.opts and state.opts.cache and state.opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
   local base = join_path(cache_dir, "skills-runtime")
   ensure_dir(base)
   return base
+end
+
+local function cache_agent_dir(agent_name)
+  local cache_dir = (state.opts and state.opts.cache and state.opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
+  local dir = join_path(join_path(cache_dir, "agents"), tostring(agent_name or ""):lower())
+  ensure_dir(dir)
+  return dir
 end
 
 local function default_skill_sources()
@@ -326,6 +378,10 @@ local function default_bin_dir()
   return nil
 end
 
+local function default_mount_dir()
+  return vim.fn.expand("~/.agents/skills")
+end
+
 local function build_binary_env(cfg)
   local env = {}
   local root = module_root()
@@ -346,11 +402,42 @@ local function build_binary_env(cfg)
   return env, bin_dir
 end
 
+local function prepare_gemini_hidden_runtime(agent_name, aggregate_dir)
+  local runtime_home = cache_agent_dir(agent_name)
+  local runtime_gemini_dir = join_path(runtime_home, ".gemini")
+  local runtime_agent_skills_dir = join_path(runtime_home, ".agents/skills")
+  local user_gemini_dir = vim.fn.expand("~/.gemini")
+
+  ensure_dir(runtime_home)
+  ensure_dir(runtime_gemini_dir)
+
+  if is_directory(user_gemini_dir) then
+    sync_dir_links(user_gemini_dir, runtime_gemini_dir, {
+      exclude = {
+        skills = true,
+      },
+    })
+  end
+
+  sync_mount_dir(aggregate_dir, join_path(runtime_gemini_dir, "skills"))
+  sync_mount_dir(aggregate_dir, runtime_agent_skills_dir)
+
+  return {
+    home_dir = runtime_home,
+    user_skills_dir = join_path(runtime_gemini_dir, "skills"),
+    agent_skills_dir = runtime_agent_skills_dir,
+  }
+end
+
 local function resolve_agent_config(agent_name, agent_cfg)
   local global_cfg = type(state.opts and state.opts.skills) == "table" and vim.deepcopy(state.opts.skills) or {}
   local global_agent_cfg = normalize_override(global_cfg.agents and global_cfg.agents[agent_name])
   local local_agent_cfg = normalize_override(agent_cfg and agent_cfg.skills)
   local inherited_enabled = global_cfg.enabled
+  local configured_mount_dir = type(global_cfg.mount_dir) == "string" and vim.fn.expand(global_cfg.mount_dir) or global_cfg.mount_dir
+  local mount_dir_explicit = local_agent_cfg.mount_dir ~= nil
+    or global_agent_cfg.mount_dir ~= nil
+    or (configured_mount_dir ~= nil and configured_mount_dir ~= default_mount_dir())
 
   global_cfg.agents = nil
 
@@ -365,10 +452,11 @@ local function resolve_agent_config(agent_name, agent_cfg)
     merged.sources = default_skill_sources()
   end
   merged.bin_dir = merged.bin_dir or default_bin_dir()
+  merged.mount_dir_explicit = mount_dir_explicit
   if merged.bin_env == nil then
     merged.bin_env = "LAZYAGENTBIN"
   end
-  merged.mount_dir = merged.mount_dir or ".agents/skills"
+  merged.mount_dir = merged.mount_dir or default_mount_dir()
   merged.flag = merged.flag
   merged.env = merged.env
   return merged
@@ -491,6 +579,23 @@ function M.prepare(agent_name, agent_cfg, opts)
     return nil
   end
 
+  if agent_name == "Gemini" and not cfg.mount_dir_explicit then
+    local runtime = prepare_gemini_hidden_runtime(agent_name, aggregate_dir)
+    env.GEMINI_CLI_HOME = runtime.home_dir
+    return {
+      mode = "mount",
+      env = env,
+      append_args = {},
+      root_dir = root_dir,
+      source_dirs = source_dirs,
+      aggregate_dir = aggregate_dir,
+      mount_dir = nil,
+      bin_dir = bin_dir,
+      gemini_home_dir = runtime.home_dir,
+      gemini_skills_dir = runtime.user_skills_dir,
+    }
+  end
+
   local mount_dir = resolve_path(root_dir, cfg.mount_dir)
   if mount_dir then
     sync_mount_dir(aggregate_dir, mount_dir)
@@ -498,7 +603,7 @@ function M.prepare(agent_name, agent_cfg, opts)
 
   return {
     mode = "mount",
-    env = {},
+    env = env,
     append_args = {},
     root_dir = root_dir,
     source_dirs = source_dirs,
@@ -506,6 +611,36 @@ function M.prepare(agent_name, agent_cfg, opts)
     mount_dir = mount_dir,
     bin_dir = bin_dir,
   }
+end
+
+function M.resolve_bin_dir()
+  local cfg = type(state.opts and state.opts.skills) == "table" and vim.deepcopy(state.opts.skills) or {}
+  local root = module_root()
+  if root == "" then
+    root = vim.fn.getcwd()
+  else
+    root = root:gsub("/$", "")
+  end
+  local bin_dir = resolve_path(root, cfg.bin_dir or default_bin_dir())
+  if bin_dir and is_directory(bin_dir) then
+    return bin_dir
+  end
+  return nil
+end
+
+function M.find_binary(name)
+  if type(name) ~= "string" or name == "" then
+    return nil
+  end
+  local bin_dir = M.resolve_bin_dir()
+  if not bin_dir then
+    return nil
+  end
+  local path = join_path(bin_dir, name)
+  if is_executable_file(path) then
+    return path
+  end
+  return nil
 end
 
 return M

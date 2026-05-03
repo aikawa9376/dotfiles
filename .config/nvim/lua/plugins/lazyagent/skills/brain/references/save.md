@@ -1,11 +1,29 @@
 # brain save — Save Conversation History
 
-Save command invoked from the Gemini CLI SessionEnd Hook.
-Normally **the Hook runs automatically**, so manual action is not required.
+In ACP mode, prefer lazyagent's built-in post-turn save instead of provider-native hooks.
 
-## Hook Configuration (automatic saves)
+## ACP auto-save
 
-If you add the following to `~/.gemini/settings.json`, sessions will be saved automatically on session end:
+Enable this in lazyagent:
+
+```lua
+require("lazyagent").setup({
+  acp = {
+    enabled = true,
+    brain_save = {
+      enabled = true,
+      -- command = { "/absolute/path/to/ai-memory-cli", "save" },
+    },
+  },
+})
+```
+
+When `command` is omitted, lazyagent tries `$LAZYAGENTBIN/ai-memory-cli save`.
+The payload is sent directly over stdin, so no intermediate transcript JSON is required.
+
+## Provider-native hooks
+
+For non-ACP / direct CLI workflows, provider hooks are still usable. Example for Gemini:
 
 ```json
 {
@@ -21,19 +39,22 @@ If you add the following to `~/.gemini/settings.json`, sessions will be saved au
 }
 ```
 
-If your hook runner does not preserve `LAZYAGENTBIN`, replace
-`$LAZYAGENTBIN/ai-memory-cli` with the concrete path from `echo $LAZYAGENTBIN`.
-
 ## Manual Save
 
-To save manually without the Hook, pass the Hook payload JSON to stdin:
+To save manually without hooks, pass the payload JSON to stdin:
 
 ```bash
 BRAIN="$LAZYAGENTBIN/ai-memory-cli"
 
 echo '{
   "session_id": "my-session",
-  "transcript_path": "/path/to/transcript.json"
+  "cwd": "/path/to/project",
+  "interactions": [
+    {
+      "user_input": "fix the failing test",
+      "assistant_output": "updated the matcher and explained why"
+    }
+  ]
 }' | $BRAIN save
 ```
 
