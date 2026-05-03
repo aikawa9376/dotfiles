@@ -314,6 +314,38 @@ local function default_skill_sources()
   return {}
 end
 
+local function default_bin_dir()
+  local root = module_root()
+  if root == "" then
+    return nil
+  end
+  local bin_dir = join_path(root:gsub("/$", ""), "bin")
+  if is_directory(bin_dir) then
+    return bin_dir
+  end
+  return nil
+end
+
+local function build_binary_env(cfg)
+  local env = {}
+  local root = module_root()
+  if root == "" then
+    root = vim.fn.getcwd()
+  else
+    root = root:gsub("/$", "")
+  end
+  local bin_dir = resolve_path(root, cfg.bin_dir)
+  if not bin_dir or not is_directory(bin_dir) then
+    return env, nil
+  end
+
+  if type(cfg.bin_env) == "string" and cfg.bin_env ~= "" then
+    env[cfg.bin_env] = bin_dir
+  end
+
+  return env, bin_dir
+end
+
 local function resolve_agent_config(agent_name, agent_cfg)
   local global_cfg = type(state.opts and state.opts.skills) == "table" and vim.deepcopy(state.opts.skills) or {}
   local global_agent_cfg = normalize_override(global_cfg.agents and global_cfg.agents[agent_name])
@@ -331,6 +363,10 @@ local function resolve_agent_config(agent_name, agent_cfg)
   merged.sources = normalize_sources(merged.sources or merged.source)
   if #merged.sources == 0 then
     merged.sources = default_skill_sources()
+  end
+  merged.bin_dir = merged.bin_dir or default_bin_dir()
+  if merged.bin_env == nil then
+    merged.bin_env = "LAZYAGENTBIN"
   end
   merged.mount_dir = merged.mount_dir or ".agents/skills"
   merged.flag = merged.flag
@@ -414,6 +450,7 @@ function M.prepare(agent_name, agent_cfg, opts)
   local source_key = table.concat(source_dirs, "\n")
   local base_dir = join_path(runtime_base_dir(), hash_text(root_dir .. "\0" .. source_key))
   local mode = resolve_mode(agent_name, cfg)
+  local env, bin_dir = build_binary_env(cfg)
 
   if mode == "flag" and agent_name == "Copilot" then
     local plugin_dir = join_path(base_dir, "copilot-plugin")
@@ -432,7 +469,6 @@ function M.prepare(agent_name, agent_cfg, opts)
       }
     end
 
-    local env = {}
     if type(cfg.env) == "string" and cfg.env ~= "" then
       env[cfg.env] = aggregate_dir
     end
@@ -445,6 +481,7 @@ function M.prepare(agent_name, agent_cfg, opts)
       source_dirs = source_dirs,
       aggregate_dir = aggregate_dir,
       plugin_dir = plugin_dir,
+      bin_dir = bin_dir,
     }
   end
 
@@ -467,6 +504,7 @@ function M.prepare(agent_name, agent_cfg, opts)
     source_dirs = source_dirs,
     aggregate_dir = aggregate_dir,
     mount_dir = mount_dir,
+    bin_dir = bin_dir,
   }
 end
 
