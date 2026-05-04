@@ -13,6 +13,72 @@ function M.setup(deps)
   local start_interactive_session = deps.start_interactive_session
 
   local module = {}
+  local ACP_SNAPSHOT_DROP_KEYS = {
+    available_commands = true,
+    config_options = true,
+    session_info = true,
+    agent_info = true,
+    agent_capabilities = true,
+    model_catalog = true,
+    mode_catalog = true,
+    usage_stats = true,
+    permission_rules = true,
+    auto_switch = true,
+    manual_config_overrides = true,
+    conversation_timeline = true,
+    conversation_timeline_index = true,
+    conversation_next_item_id = true,
+    tool_calls = true,
+    tool_timeline = true,
+    tool_timeline_index = true,
+    pending_switch_history = true,
+    current_stream_key = true,
+    current_stream_heading = true,
+    current_stream_at_line_start = true,
+    current_stream_item_id = true,
+    acp_available_commands = true,
+    acp_config_options = true,
+    acp_session_info = true,
+    acp_agent_info = true,
+    acp_agent_capabilities = true,
+    acp_session_capabilities = true,
+    acp_model_catalog = true,
+    acp_mode_catalog = true,
+    acp_usage_stats = true,
+    acp_permission_rules = true,
+    acp_auto_switch = true,
+    acp_manual_config_overrides = true,
+    acp_tool_timeline = true,
+    acp_conversation_timeline = true,
+    on_idle_callback = true,
+  }
+
+  local function deepcopy_value(value)
+    local ok, copied = pcall(vim.deepcopy, value)
+    return ok and copied or value
+  end
+
+  local function compact_session_snapshot(session)
+    if type(session) ~= "table" then
+      return nil
+    end
+    if not acp_logic.is_acp_backend(session.backend) then
+      return deepcopy_value(session)
+    end
+
+    local snapshot = {}
+    for key, value in pairs(session) do
+      if key == "view_state" then
+        local source_winid = type(value) == "table" and value.source_winid or nil
+        if source_winid ~= nil then
+          snapshot.view_state = { source_winid = source_winid }
+        end
+      elseif not ACP_SNAPSHOT_DROP_KEYS[key] then
+        snapshot[key] = deepcopy_value(value)
+      end
+    end
+    return snapshot
+  end
 
   function module.hide_session_agent_pane(agent_name)
     local session = state.sessions[agent_name]
@@ -98,12 +164,12 @@ function M.setup(deps)
     for agent_name, snapshot in pairs(previous_agents) do
       local _, _, pane_alive, live_snapshot = resolve_saved_snapshot(agent_name, snapshot)
       if pane_alive then
-        local preserved = vim.deepcopy(snapshot)
+        local preserved = deepcopy_value(snapshot)
         if type(live_snapshot) == "table" then
           preserved = vim.tbl_extend("force", preserved, live_snapshot)
         end
         preserved.session_scope = session_name
-        view.agents[agent_name] = preserved
+        view.agents[agent_name] = compact_session_snapshot(preserved)
         if previous_visible_agents[agent_name] then
           view.visible_agents[agent_name] = true
         end
@@ -127,7 +193,7 @@ function M.setup(deps)
     for _, agent_name in ipairs(ordered) do
       local session = state.sessions[agent_name]
       local visible = not session.hidden
-      local snapshot = vim.deepcopy(session)
+      local snapshot = compact_session_snapshot(session)
       snapshot.session_scope = session_name
       view.agents[agent_name] = snapshot
       if visible then

@@ -60,6 +60,60 @@ function M.setup(deps)
     remove_lazyagent_from(vim.fn.expand("~/.cursor/hooks.json"))
   end
 
+  local function purge_agent_session_views(agent_name)
+    if not agent_name or agent_name == "" then
+      return false
+    end
+
+    local removed = false
+    for session_name, view in pairs(state.session_views or {}) do
+      if type(view) == "table" then
+        local changed = false
+        if type(view.agents) == "table" and view.agents[agent_name] ~= nil then
+          view.agents[agent_name] = nil
+          changed = true
+        end
+        if type(view.visible_agents) == "table" and view.visible_agents[agent_name] ~= nil then
+          view.visible_agents[agent_name] = nil
+          changed = true
+        end
+        if view.last_agent == agent_name then
+          view.last_agent = nil
+          changed = true
+        end
+        if view.open_agent == agent_name then
+          view.open_agent = nil
+          changed = true
+        end
+        if changed then
+          local has_agents = type(view.agents) == "table" and next(view.agents) ~= nil
+          local has_visible = type(view.visible_agents) == "table" and next(view.visible_agents) ~= nil
+          if not has_agents and not has_visible and not view.last_agent and not view.open_agent then
+            state.session_views[session_name] = nil
+          end
+          removed = true
+        end
+      end
+    end
+
+    return removed
+  end
+
+  local function finalize_closed_session(agent_name, session, backend_mod)
+    if backend_mod and session and type(backend_mod.clear_pane_config) == "function" then
+      backend_mod.clear_pane_config(session.pane_id)
+    end
+    state.sessions[agent_name] = nil
+    purge_agent_session_views(agent_name)
+    persistence.remove_session(agent_name, session and session.cwd or nil)
+    maybe_disable_watchers()
+    cleanup_agent_external_configs(agent_name)
+    if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
+      pcall(backend_mod.cleanup_if_idle)
+    end
+    util.fire_event("SessionStopped", { agent_name = agent_name })
+  end
+
   function module.force_close_session(agent_name)
     if state.open_agent == agent_name then
       local bufnr = window.get_bufnr()
@@ -72,6 +126,8 @@ function M.setup(deps)
     local session = state.sessions[agent_name]
     if not session or not session.pane_id or session.pane_id == "" then
       state.sessions[agent_name] = nil
+      purge_agent_session_views(agent_name)
+      persistence.remove_session(agent_name)
       maybe_disable_watchers()
       return true
     end
@@ -80,20 +136,7 @@ function M.setup(deps)
     if backend_mod and type(backend_mod.kill_pane) == "function" then
       maybe_kill_pane(agent_name, session.pane_id, backend_mod, false)
     end
-    if backend_mod and type(backend_mod.clear_pane_config) == "function" then
-      backend_mod.clear_pane_config(session.pane_id)
-    end
-
-    state.sessions[agent_name] = nil
-    persistence.remove_session(agent_name, session.cwd)
-    maybe_disable_watchers()
-    cleanup_agent_external_configs(agent_name)
-
-    if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
-      pcall(backend_mod.cleanup_if_idle)
-    end
-
-    util.fire_event("SessionStopped", { agent_name = agent_name })
+    finalize_closed_session(agent_name, session, backend_mod)
     return true
   end
 
@@ -234,6 +277,8 @@ function M.setup(deps)
     local s = state.sessions[agent_name]
     if not s or not s.pane_id or s.pane_id == "" then
       state.sessions[agent_name] = nil
+      purge_agent_session_views(agent_name)
+      persistence.remove_session(agent_name)
       maybe_disable_watchers()
       return
     end
@@ -254,10 +299,7 @@ function M.setup(deps)
           if backend_mod2 and type(backend_mod2.kill_pane) == "function" then
             maybe_kill_pane(agent_name, s2.pane_id, backend_mod2, false)
           end
-          state.sessions[agent_name] = nil
-          maybe_disable_watchers()
-          cleanup_agent_external_configs(agent_name)
-          util.fire_event("SessionStopped", { agent_name = agent_name })
+          finalize_closed_session(agent_name, s2, backend_mod2)
         end, {
           merge_with_last_save = s2.merge_conversation_on_next_save,
         })
@@ -267,17 +309,7 @@ function M.setup(deps)
       if backend_mod and type(backend_mod.kill_pane) == "function" then
         maybe_kill_pane(agent_name, s2.pane_id, backend_mod, false)
       end
-      if backend_mod and type(backend_mod.clear_pane_config) == "function" then
-        backend_mod.clear_pane_config(s2.pane_id)
-      end
-      state.sessions[agent_name] = nil
-      persistence.remove_session(agent_name, s2.cwd)
-      maybe_disable_watchers()
-      cleanup_agent_external_configs(agent_name)
-
-      if backend_mod and type(backend_mod.cleanup_if_idle) == "function" then
-        pcall(backend_mod.cleanup_if_idle)
-      end
+      finalize_closed_session(agent_name, s2, backend_mod)
     end)
   end
 
