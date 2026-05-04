@@ -779,8 +779,12 @@ M.list = {
         vim.fn.setqflist({}, "r", { title = "Agent turn", items = state._qf_items })
       end
 
-      if hopts.open_on_edit == false then
-        return { success = true, path = newest_path, line = line }
+      if hopts.open_on_edit ~= true then
+        return {
+          success = true,
+          path = newest_path,
+          line = line,
+        }
       end
 
       -- Focus a normal (non-lazyagent) window BEFORE opening the file,
@@ -799,7 +803,11 @@ M.list = {
       end
       pcall(vim.api.nvim_win_set_cursor, target_win or vim.api.nvim_get_current_win(), { line, 0 })
 
-      return { success = true, path = newest_path, line = line }
+      return {
+        success = true,
+        path = newest_path,
+        line = line,
+      }
     end,
   },
   {

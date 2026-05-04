@@ -18,6 +18,23 @@ function M.setup(deps)
 
   local module = {}
 
+  local function watch_enabled_for_session(agent_cfg, backend_name)
+    if agent_cfg and agent_cfg.watch ~= nil then
+      return agent_cfg.watch
+    end
+    if acp_logic.is_acp_backend(backend_name) then
+      return false
+    end
+    return true
+  end
+
+  local function auto_follow_mode_for_session(agent_cfg, backend_name)
+    if acp_logic.is_acp_backend(backend_name) then
+      return nil
+    end
+    return (agent_cfg and agent_cfg.auto_follow) or (state.opts and state.opts.auto_follow)
+  end
+
   local function serialize_launch_command(command)
     if type(command) == "table" then
       return vim.json.encode(command)
@@ -107,8 +124,7 @@ function M.setup(deps)
       local persisted_pane = persistence.get_session(agent_name)
       if persisted_pane and persisted_pane ~= "" then
         if backend_mod and type(backend_mod.pane_exists) == "function" and backend_mod.pane_exists(persisted_pane) then
-          local watch_enabled_val = true
-          if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
+          local watch_enabled_val = watch_enabled_for_session(agent_cfg, backend_name)
           state.sessions[agent_name] = {
             pane_id = persisted_pane,
             last_output = "",
@@ -122,7 +138,7 @@ function M.setup(deps)
           if watch_enabled_val then
             call_watch("enable")
           end
-          local follow_mode = (agent_cfg and agent_cfg.auto_follow) or (state.opts and state.opts.auto_follow)
+          local follow_mode = auto_follow_mode_for_session(agent_cfg, backend_name)
           if follow_mode then
             call_watch("start_follow", {
               mode = (type(follow_mode) == "string") and follow_mode or "split",
@@ -195,9 +211,7 @@ function M.setup(deps)
         end
       end
 
-      if agent_cfg and agent_cfg.watch ~= nil then
-        state.sessions[agent_name].watch_enabled = agent_cfg.watch
-      end
+      state.sessions[agent_name].watch_enabled = watch_enabled_for_session(agent_cfg, backend_name)
 
       mark_session_scope(agent_name)
 
@@ -239,8 +253,7 @@ function M.setup(deps)
           return
         end
 
-        local watch_enabled_val = true
-        if agent_cfg and agent_cfg.watch ~= nil then watch_enabled_val = agent_cfg.watch end
+        local watch_enabled_val = watch_enabled_for_session(agent_cfg, backend_name)
 
         local mode = nil
         if agent_cfg and agent_cfg.stay_hidden then mode = "instant" end
@@ -267,7 +280,7 @@ function M.setup(deps)
           call_watch("enable")
         end
 
-        local follow_mode = (agent_cfg and agent_cfg.auto_follow) or (state.opts and state.opts.auto_follow)
+        local follow_mode = auto_follow_mode_for_session(agent_cfg, backend_name)
         if follow_mode then
           call_watch("start_follow", {
             mode = (type(follow_mode) == "string") and follow_mode or "split",
