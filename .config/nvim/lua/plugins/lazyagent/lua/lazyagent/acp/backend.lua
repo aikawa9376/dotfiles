@@ -99,6 +99,37 @@ local function read_path_lines(path)
   return nil, nil
 end
 
+local function reload_loaded_buffers_for_path(path)
+  local normalized = vim.fn.fnamemodify(path or "", ":p")
+  if normalized == "" or vim.fn.filereadable(normalized) ~= 1 then
+    return { reloaded = 0, skipped_modified = 0 }
+  end
+
+  local ok, lines = pcall(vim.fn.readfile, normalized)
+  if not ok or type(lines) ~= "table" then
+    return { reloaded = 0, skipped_modified = 0 }
+  end
+
+  local result = { reloaded = 0, skipped_modified = 0 }
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      local name = vim.api.nvim_buf_get_name(bufnr)
+      if name ~= "" and vim.fn.fnamemodify(name, ":p") == normalized and vim.bo[bufnr].buftype == "" then
+        if vim.bo[bufnr].modified then
+          result.skipped_modified = result.skipped_modified + 1
+        else
+          pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
+          pcall(function() vim.bo[bufnr].modified = false end)
+          pcall(function() vim.bo[bufnr].readonly = false end)
+          result.reloaded = result.reloaded + 1
+        end
+      end
+    end
+  end
+
+  return result
+end
+
 local function clamp_utf8_from_end(text, byte_limit)
   if not byte_limit or byte_limit <= 0 or #text <= byte_limit then
     return text, false
@@ -3219,14 +3250,17 @@ local function maybe_sync_acp_edit_targets(session, tool)
     local path = normalize_tool_path(raw_path, cwd)
     if path and not seen[path] then
       seen[path] = true
-      local item = diff_by_path[path] or {}
-      maybe_call_mcp_tool("open_last_changed", {
-        agent_name = session and session.agent_name or nil,
-        cwd = cwd,
-        path = path,
-        oldText = item.oldText or item.old_text,
-        newText = item.newText or item.new_text,
-      })
+      reload_loaded_buffers_for_path(path)
+      if ((state.opts or {}).hooks or {}).open_on_edit == true then
+        local item = diff_by_path[path] or {}
+        maybe_call_mcp_tool("open_last_changed", {
+          agent_name = session and session.agent_name or nil,
+          cwd = cwd,
+          path = path,
+          oldText = item.oldText or item.old_text,
+          newText = item.newText or item.new_text,
+        })
+      end
     end
   end
 end
@@ -3809,13 +3843,15 @@ local function write_text_file(session, params)
   file:close()
 
   append_block(session, "Edited " .. vim.fn.fnamemodify(abs, ":."), "Updated via ACP fs/write_text_file")
-  maybe_call_mcp_tool("open_last_changed", {
-    agent_name = session and session.agent_name or nil,
-    cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd(),
-    path = abs,
-    oldText = before_text,
-    newText = content,
-  })
+  if ((state.opts or {}).hooks or {}).open_on_edit == true then
+    maybe_call_mcp_tool("open_last_changed", {
+      agent_name = session and session.agent_name or nil,
+      cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd(),
+      path = abs,
+      oldText = before_text,
+      newText = content,
+    })
+  end
   return vim.NIL
 end
 

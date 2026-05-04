@@ -21,7 +21,6 @@ local session_acp_actions = require("lazyagent.logic.session.acp_actions")
 local window = require("lazyagent.window")
 local persistence = require("lazyagent.logic.persistence")
 local util = require("lazyagent.util")
-local ok_watch, watch = pcall(require, "lazyagent.watch")
 
 local function refresh_acp_command_visibility()
   pcall(function()
@@ -30,6 +29,7 @@ local function refresh_acp_command_visibility()
 end
 
 local function call_watch(method, ...)
+  local ok_watch, watch = pcall(require, "lazyagent.watch")
   if not ok_watch or not watch then
     return false
   end

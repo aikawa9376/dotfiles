@@ -3,9 +3,9 @@ local M = {}
 local state = require("lazyagent.logic.state")
 local acp_logic = require("lazyagent.logic.acp")
 local backend_logic = require("lazyagent.logic.backend")
-local ok_watch, watch = pcall(require, "lazyagent.watch")
 
 local function call_watch(method, ...)
+  local ok_watch, watch = pcall(require, "lazyagent.watch")
   if not ok_watch or not watch then
     return false
   end
