@@ -172,25 +172,125 @@ local function write_session_transcript(session, text, mode)
   return ok
 end
 
+local function prune_saved_session_snapshots(agent_name, pane_id, opts)
+  if not agent_name or agent_name == "" then
+    return
+  end
+
+  opts = opts or {}
+  local pane_key = pane_id and tostring(pane_id) or nil
+  for session_name, view in pairs(state.session_views or {}) do
+    if type(view) == "table" and type(view.agents) == "table" then
+      local snapshot = view.agents[agent_name]
+      if type(snapshot) == "table" then
+        local snapshot_pane_key = snapshot.pane_id and tostring(snapshot.pane_id) or nil
+        if pane_key == nil or snapshot_pane_key == pane_key then
+          if opts.purge == true then
+            view.agents[agent_name] = nil
+            if type(view.visible_agents) == "table" then
+              view.visible_agents[agent_name] = nil
+            end
+            if view.last_agent == agent_name then
+              view.last_agent = nil
+            end
+            if view.open_agent == agent_name then
+              view.open_agent = nil
+            end
+            local has_agents = next(view.agents) ~= nil
+            local has_visible = type(view.visible_agents) == "table" and next(view.visible_agents) ~= nil
+            if not has_agents and not has_visible and not view.last_agent and not view.open_agent then
+              state.session_views[session_name] = nil
+            end
+          else
+            snapshot.pending_switch_history = nil
+            snapshot.conversation_timeline = nil
+            snapshot.conversation_timeline_index = nil
+            snapshot.conversation_next_item_id = 0
+            snapshot.tool_calls = nil
+            snapshot.tool_timeline = nil
+            snapshot.tool_timeline_index = nil
+            snapshot.acp_conversation_timeline = {}
+            snapshot.acp_tool_timeline = {}
+            if type(snapshot.view_state) == "table" then
+              local source_winid = snapshot.view_state.source_winid
+              snapshot.view_state = source_winid ~= nil and { source_winid = source_winid } or nil
+            end
+          end
+        end
+      end
+    end
+  end
+end
+
+local function compact_session_view_state(session)
+  if not session then
+    return
+  end
+
+  local view = session.view
+  if view and type(view.release_session_resources) == "function" then
+    pcall(view.release_session_resources, session)
+    return
+  end
+
+  local view_state = type(session.view_state) == "table" and session.view_state or nil
+  local source_winid = view_state and view_state.source_winid or nil
+  session.view_state = source_winid ~= nil and { source_winid = source_winid } or {}
+end
+
+local function clear_session_timeline_state(session)
+  if not session then
+    return
+  end
+
+  clear_pending_switch_history(session)
+  compact_session_view_state(session)
+  session.current_stream_key = nil
+  session.current_stream_heading = nil
+  session.current_stream_at_line_start = nil
+  session.current_stream_item_id = nil
+  session.conversation_timeline = {}
+  session.conversation_timeline_index = {}
+  session.conversation_next_item_id = 0
+  session.tool_calls = {}
+  session.tool_timeline = {}
+  session.tool_timeline_index = {}
+  prune_saved_session_snapshots(session.agent_name, session.pane_id, { purge = false })
+end
+
+local function release_closing_session_memory(session)
+  if not session then
+    return
+  end
+
+  clear_session_timeline_state(session)
+  session.available_commands = {}
+  session.config_options = {}
+  session.session_info = {}
+  session.agent_info = {}
+  session.agent_capabilities = {}
+  session.model_catalog = {}
+  session.mode_catalog = {}
+  session.usage_stats = {}
+  session.permission_rules = {}
+  session.auto_switch = {}
+  session.manual_config_overrides = {}
+  session.prompt_queue = {}
+  session.terminals = {}
+  session.last_output = ""
+  prune_saved_session_snapshots(session.agent_name, session.pane_id, { purge = true })
+end
+
 local function clear_session_transcript(session, replacement_text)
   if not session or not session.transcript_path or session.transcript_path == "" then
     return false
   end
 
-  session.current_stream_key = nil
-  session.current_stream_heading = nil
-  session.current_stream_at_line_start = nil
-  session.current_stream_item_id = nil
-
   local text = normalize_text(replacement_text or "")
   local ok = write_session_transcript(session, text, "w")
   if ok then
     session.transcript_has_content = text ~= ""
-    session.conversation_timeline = {}
-    session.conversation_timeline_index = {}
-    session.tool_calls = {}
-    session.tool_timeline = {}
-    session.tool_timeline_index = {}
+    clear_session_timeline_state(session)
     if sync_runtime_live_state then
       sync_runtime_live_state(session)
     end
@@ -4631,6 +4731,7 @@ local function create_backend(default_view)
       if view and type(view.kill_pane) == "function" then
         view.kill_pane(pane_id, session)
       end
+      release_closing_session_memory(session)
       sessions[pane_id] = nil
       if session.client then
         local client = session.client

@@ -2958,12 +2958,30 @@ function M.clear_pane_config(pane_id)
   return true
 end
 
+function M.release_session_resources(session)
+  if type(session) ~= "table" then
+    return false
+  end
+
+  local view_state = type(session.view_state) == "table" and session.view_state or nil
+  local source_winid = view_state and view_state.source_winid or nil
+  if view_state then
+    close_timer(view_state.append_timer)
+  end
+
+  session.view_state = source_winid ~= nil and { source_winid = source_winid } or {}
+  return true
+end
+
 function M.pane_exists(pane_id)
   return to_bufnr(pane_id) ~= nil
 end
 
-function M.kill_pane(pane_id)
+function M.kill_pane(pane_id, session)
   local bufnr = to_bufnr(pane_id)
+  if session then
+    M.release_session_resources(session)
+  end
   pane_buffers[tostring(pane_id)] = nil
   pane_config[tostring(pane_id)] = nil
   if not bufnr then
@@ -3158,7 +3176,35 @@ function M.resume_follow(pane_id)
 end
 
 function M.cleanup_if_idle()
-  return false
+  local cleaned = false
+
+  for pane_id, bufnr in pairs(pane_buffers) do
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      pane_buffers[pane_id] = nil
+      pane_config[pane_id] = nil
+      cleaned = true
+    end
+  end
+
+  for key, _ in pairs(layout_state) do
+    local bufnr = tonumber(key)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      layout_state[key] = nil
+      cleaned = true
+    end
+  end
+
+  for key, entry in pairs(dedicated_transcript_windows) do
+    local bufnr = entry and entry.bufnr or nil
+    local winid = entry and entry.winid or nil
+    if (bufnr and not vim.api.nvim_buf_is_valid(bufnr)) or (winid and not vim.api.nvim_win_is_valid(winid)) then
+      dedicated_transcript_windows[key] = nil
+      redirecting_transcript_windows[key] = nil
+      cleaned = true
+    end
+  end
+
+  return cleaned
 end
 
 return M

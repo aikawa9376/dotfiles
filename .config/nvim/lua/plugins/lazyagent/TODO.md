@@ -14,6 +14,22 @@
   - Same repo + same branch + same agent across two Neovim instances.
   - Close one instance/session and verify the other remains connected and visually correct.
 
+- Harden ACP memory/resource teardown around close and conversation flows.
+  - Investigation notes:
+    - `LazyAgentClose` and `LazyAgentConversation` can release the visible pane/buffer while still retaining Lua-side memory through `state.session_views` snapshots.
+    - ACP runtime/session capture previously copied heavy state such as `conversation_timeline`, `tool_timeline`, and related ACP metadata into saved snapshots.
+    - Transcript clearing reduced file contents but did not always clear all in-memory state symmetrically (`pending_switch_history`, runtime copies, append timers, view state).
+    - `close_all_sessions()` already cleaned `session_views`, but single-session close paths were weaker and could leave retained snapshot/state references behind.
+  - Current mitigation:
+    - Compact ACP snapshots before storing them in runtime session views.
+    - Purge agent-specific saved snapshots on single-session close/force-close.
+    - Clear ACP timeline state and release append timers/view state when clearing transcripts or killing panes.
+  - Follow-up tasks:
+    - Add a repeatable memory regression checklist for `LazyAgentClose` / `LazyAgentConversation` / repeated open-close loops.
+    - Audit teardown symmetry across all ACP lifecycle paths: close, force-close, transcript clear, provider switch, restore/resession, client exit, and pane kill.
+    - Add debug visibility for retained resources such as `session_views`, pane buffers, timers, transcript paths, and ACP session IDs.
+    - Revisit whether runtime snapshots should ever retain heavy ACP history by default, or only when explicitly needed for restore/debug flows.
+
 ## Medium priority
 
 - Review removal candidates before the next cleanup pass.
