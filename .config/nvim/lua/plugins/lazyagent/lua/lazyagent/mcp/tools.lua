@@ -151,6 +151,44 @@ local function resolve_target_path(path, cwd)
   return normalize_fs_path((cwd or vim.fn.getcwd()) .. "/" .. path)
 end
 
+local function reload_loaded_buffers_for_paths(cwd, files)
+  if type(files) ~= "table" or #files == 0 then
+    return { reloaded = 0, skipped_modified = 0 }
+  end
+
+  local targets = {}
+  for _, rel in ipairs(files) do
+    local abs = resolve_target_path(rel, cwd)
+    if abs and vim.fn.filereadable(abs) == 1 then
+      targets[abs] = true
+    end
+  end
+  if not next(targets) then
+    return { reloaded = 0, skipped_modified = 0 }
+  end
+
+  local result = { reloaded = 0, skipped_modified = 0 }
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr) then
+      local name = normalize_fs_path(vim.api.nvim_buf_get_name(bufnr))
+      if name and targets[name] and vim.bo[bufnr].buftype == "" then
+        if vim.bo[bufnr].modified then
+          result.skipped_modified = result.skipped_modified + 1
+        else
+          pcall(vim.cmd, "silent checktime " .. tostring(bufnr))
+          result.reloaded = result.reloaded + 1
+        end
+      end
+    end
+  end
+
+  return result
+end
+
+local function hook_reload_enabled()
+  return ((((state.opts or {}).hooks or {}).reload_mode) or "hook") ~= "watch"
+end
+
 local function git_diff_for_path(cwd, abs_path)
   local diff = vim.fn.systemlist(
     "git -C " .. vim.fn.shellescape(cwd)
@@ -249,9 +287,12 @@ M.list = {
       end
       local hopts = (state.opts and state.opts.hooks) or {}
       local cwd = resolve_tool_cwd(params)
+      local files = changed_files_since(cwd, state._hook_turn_start)
+      if hook_reload_enabled() then
+        reload_loaded_buffers_for_paths(cwd, files)
+      end
       -- Notify changed files summary
       if hopts.notify_on_done ~= false then
-        local files = changed_files_since(cwd, state._hook_turn_start)
         if files and #files > 0 then
           local label = #files == 1 and "1 file changed" or (#files .. " files changed")
           local names = table.concat(vim.tbl_map(function(f) return vim.fn.fnamemodify(f, ":t") end, files), ", ")

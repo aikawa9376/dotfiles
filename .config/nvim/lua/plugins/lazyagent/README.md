@@ -279,6 +279,7 @@ ACP の command palette と config picker も advertise された説明・catego
 require("lazyagent").setup({
   mcp_mode = true,
   hooks = {
+    reload_mode = "hook", -- "hook" (default) or "watch"
     open_on_edit = true,
     quickfix_on_edit = true,
     notify_on_done = true,

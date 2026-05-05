@@ -29,6 +29,10 @@ function M.setup(deps)
 
   local module = {}
 
+  local function hook_reload_enabled()
+    return (((state.opts or {}).hooks or {}).reload_mode or "hook") ~= "watch"
+  end
+
 local function render_tool_timeline_detail(entry)
   local tool = entry and entry.tool or {}
   local lines = {
@@ -634,8 +638,10 @@ local function maybe_sync_acp_edit_targets(session, tool)
     local path = normalize_tool_path(raw_path, cwd)
     if path and not seen[path] then
       seen[path] = true
-      reload_loaded_buffers_for_path(path)
-      if ((state.opts or {}).hooks or {}).open_on_edit == true then
+      if hook_reload_enabled() then
+        reload_loaded_buffers_for_path(path)
+      end
+      if hook_reload_enabled() and ((state.opts or {}).hooks or {}).open_on_edit == true then
         local item = diff_by_path[path] or {}
         maybe_call_mcp_tool("open_last_changed", {
           agent_name = session and session.agent_name or nil,

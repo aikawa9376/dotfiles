@@ -132,6 +132,7 @@ host_helpers = backend_host.setup({
   ensure_parent_dir = state_helpers.ensure_parent_dir,
   read_path_lines = state_helpers.read_path_lines,
   read_buffer_lines_for_path = state_helpers.read_buffer_lines_for_path,
+  reload_loaded_buffers_for_path = state_helpers.reload_loaded_buffers_for_path,
   write_session_transcript = state_helpers.write_session_transcript,
   sync_runtime_session = state_helpers.sync_runtime_session,
   update_session_info = state_helpers.update_session_info,

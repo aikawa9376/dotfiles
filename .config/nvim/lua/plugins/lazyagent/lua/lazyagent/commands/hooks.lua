@@ -19,6 +19,11 @@ function M.register(create)
         return
       end
 
+      if type(hook_opts[flag]) ~= "boolean" then
+        vim.notify("LazyAgentHooks: '" .. flag .. "' is not a boolean toggle", vim.log.levels.WARN)
+        return
+      end
+
       hook_opts[flag] = not hook_opts[flag]
       vim.notify("LazyAgentHooks: " .. flag .. " = " .. tostring(hook_opts[flag]), vim.log.levels.INFO)
       return
