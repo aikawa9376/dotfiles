@@ -23,7 +23,7 @@ function M.setup(deps)
       return agent_cfg.watch
     end
     if acp_logic.is_acp_backend(backend_name) then
-      return false
+      return (((state.opts or {}).hooks or {}).reload_mode == "watch")
     end
     return true
   end

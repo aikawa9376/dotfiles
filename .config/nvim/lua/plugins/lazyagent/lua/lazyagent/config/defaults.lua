@@ -141,6 +141,7 @@ function M.build()
     interrupt_interval_ms = 40,
     post_interrupt_wait_ms = 2000,
     hooks = {
+      reload_mode = "hook",
       open_on_edit = false,
       quickfix_on_edit = true,
       notify_on_done = true,

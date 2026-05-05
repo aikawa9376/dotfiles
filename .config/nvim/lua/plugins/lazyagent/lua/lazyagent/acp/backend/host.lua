@@ -12,6 +12,7 @@ function M.setup(deps)
   local ensure_parent_dir = deps.ensure_parent_dir
   local read_path_lines = deps.read_path_lines
   local read_buffer_lines_for_path = deps.read_buffer_lines_for_path
+  local reload_loaded_buffers_for_path = deps.reload_loaded_buffers_for_path
   local write_session_transcript = deps.write_session_transcript
   local sync_runtime_session = deps.sync_runtime_session
   local update_session_info = deps.update_session_info
@@ -37,6 +38,10 @@ function M.setup(deps)
   local maybe_sync_acp_edit_targets = deps.maybe_sync_acp_edit_targets
   local terminal_seq = 0
   local resolve_permission_option
+
+  local function hook_reload_enabled()
+    return ((((state.opts or {}).hooks or {}).reload_mode) or "hook") ~= "watch"
+  end
 
   local module = {}
 
@@ -425,12 +430,6 @@ local function write_text_file(session, params)
     table.remove(lines, #lines)
   end
 
-  local _, bufnr = read_buffer_lines_for_path(abs)
-  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
-    pcall(function() vim.bo[bufnr].modified = false end)
-  end
-
   local file, err = io.open(abs, "w")
   if not file then
     return nil, { code = -32000, message = tostring(err) }
@@ -438,8 +437,11 @@ local function write_text_file(session, params)
   file:write(content)
   file:close()
 
+  if hook_reload_enabled() then
+    reload_loaded_buffers_for_path(abs)
+  end
   append_block(session, "Edited " .. vim.fn.fnamemodify(abs, ":."), "Updated via ACP fs/write_text_file")
-  if ((state.opts or {}).hooks or {}).open_on_edit == true then
+  if hook_reload_enabled() and ((state.opts or {}).hooks or {}).open_on_edit == true then
     maybe_call_mcp_tool("open_last_changed", {
       agent_name = session and session.agent_name or nil,
       cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd(),

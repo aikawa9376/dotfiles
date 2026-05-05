@@ -149,6 +149,7 @@ return {
     -- Default is "127.0.0.1" (localhost only).
     mcp_host = "0.0.0.0",
     hooks = {
+      reload_mode = "hook",
       open_on_edit = false,
       quickfix_on_edit = true,
       git_checkpoint_on_done = false,

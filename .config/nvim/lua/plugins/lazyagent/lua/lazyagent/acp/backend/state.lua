@@ -71,22 +71,15 @@ local function reload_loaded_buffers_for_path(path)
     return { reloaded = 0, skipped_modified = 0 }
   end
 
-  local ok, lines = pcall(vim.fn.readfile, normalized)
-  if not ok or type(lines) ~= "table" then
-    return { reloaded = 0, skipped_modified = 0 }
-  end
-
   local result = { reloaded = 0, skipped_modified = 0 }
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_valid(bufnr) then
+    if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr) then
       local name = vim.api.nvim_buf_get_name(bufnr)
       if name ~= "" and vim.fn.fnamemodify(name, ":p") == normalized and vim.bo[bufnr].buftype == "" then
         if vim.bo[bufnr].modified then
           result.skipped_modified = result.skipped_modified + 1
         else
-          pcall(vim.api.nvim_buf_set_lines, bufnr, 0, -1, false, lines)
-          pcall(function() vim.bo[bufnr].modified = false end)
-          pcall(function() vim.bo[bufnr].readonly = false end)
+          pcall(vim.cmd, "silent checktime " .. tostring(bufnr))
           result.reloaded = result.reloaded + 1
         end
       end
