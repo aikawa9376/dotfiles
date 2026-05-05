@@ -26,6 +26,7 @@ local first_visible_window
 local replace_buffer_lines
 local set_buffer_lines
 local scroll_buffer_to_end
+local transcript_max_lines
 local transcript_line_count
 local refresh_buffer_layout
 local refresh_buffer_from_path
@@ -38,6 +39,7 @@ local normalize_header_lines
 local transcript_source_lines
 local pane_id_for_bufnr
 local agent_name_for_bufnr
+local read_transcript_lines
 local custom_background_groups = {}
 local layout_state = {}
 local suppress_transcript_window_refresh = false
@@ -77,6 +79,112 @@ end
 local function strdisplaywidth(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text)
   return ok and width or #tostring(text or "")
+end
+
+local function remove_list_value(list, value)
+  if type(list) ~= "table" then
+    return
+  end
+  for idx = #list, 1, -1 do
+    if list[idx] == value then
+      table.remove(list, idx)
+    end
+  end
+end
+
+local function cleanup_render_markdown_decorator(decorator, ns, bufnr)
+  if type(decorator) ~= "table" then
+    return
+  end
+
+  local marks = type(decorator.get) == "function" and decorator:get() or decorator.marks
+  if vim.api.nvim_buf_is_valid(bufnr) and type(marks) == "table" then
+    for _, mark in ipairs(marks) do
+      if type(mark) == "table" and type(mark.hide) == "function" then
+        pcall(mark.hide, mark, ns, bufnr)
+      end
+    end
+  end
+
+  decorator.marks = {}
+  decorator.tick = nil
+  decorator.running = false
+
+  local timer = decorator.timer
+  if timer then
+    pcall(function() timer:stop() end)
+    pcall(function() timer:close() end)
+    decorator.timer = nil
+  end
+end
+
+local function prune_invalid_render_markdown_state(manager, render_state, ui)
+  if type(manager) == "table" and type(manager.buffers) == "table" then
+    for idx = #manager.buffers, 1, -1 do
+      local tracked = manager.buffers[idx]
+      if not tracked or not vim.api.nvim_buf_is_valid(tracked) then
+        table.remove(manager.buffers, idx)
+      end
+    end
+  end
+
+  if type(render_state) == "table" and type(render_state.cache) == "table" then
+    for tracked, _ in pairs(render_state.cache) do
+      if not tracked or not vim.api.nvim_buf_is_valid(tracked) then
+        render_state.cache[tracked] = nil
+      end
+    end
+  end
+
+  if type(ui) == "table" and type(ui.cache) == "table" then
+    for tracked, _ in pairs(ui.cache) do
+      if not tracked or not vim.api.nvim_buf_is_valid(tracked) then
+        cleanup_render_markdown_decorator(ui.cache[tracked], ui.ns, tracked)
+        ui.cache[tracked] = nil
+      end
+    end
+  end
+end
+
+local function cleanup_markdown_rendering(bufnr)
+  if not bufnr then
+    return
+  end
+
+  local is_valid = vim.api.nvim_buf_is_valid(bufnr)
+  if is_valid then
+    pcall(vim.treesitter.stop, bufnr)
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, transcript_ns, 0, -1)
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, footer_ns, 0, -1)
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, diff_ns, 0, -1)
+  end
+
+  local ok_manager, manager = pcall(require, "render-markdown.core.manager")
+  if ok_manager and type(manager) == "table" then
+    remove_list_value(manager.buffers, bufnr)
+  end
+
+  local ok_state, render_state = pcall(require, "render-markdown.state")
+  if ok_state and type(render_state) == "table" and type(render_state.cache) == "table" then
+    render_state.cache[bufnr] = nil
+  end
+
+  local ok_ui, ui = pcall(require, "render-markdown.core.ui")
+  if ok_ui and type(ui) == "table" then
+    if is_valid and ui.ns then
+      pcall(vim.api.nvim_buf_clear_namespace, bufnr, ui.ns, 0, -1)
+    end
+    if type(ui.cache) == "table" then
+      cleanup_render_markdown_decorator(ui.cache[bufnr], ui.ns, bufnr)
+      ui.cache[bufnr] = nil
+    end
+  end
+
+  prune_invalid_render_markdown_state(
+    ok_manager and manager or nil,
+    ok_state and render_state or nil,
+    ok_ui and ui or nil
+  )
 end
 
 local function is_metadata_popup_buffer(bufnr)
@@ -135,16 +243,17 @@ local function refresh_markdown_rendering(bufnr)
     return
   end
 
+  local wins = vim.fn.win_findbuf(bufnr)
+  if #wins == 0 or (transcript_line_count and transcript_line_count(bufnr) == 0) then
+    cleanup_markdown_rendering(bufnr)
+    return
+  end
+
   pcall(vim.treesitter.start, bufnr, "markdown")
 
   local ok_manager, manager = pcall(require, "render-markdown.core.manager")
   if ok_manager and type(manager.attach) == "function" then
     pcall(manager.attach, bufnr)
-  end
-
-  local wins = vim.fn.win_findbuf(bufnr)
-  if #wins == 0 then
-    return
   end
 
   local ok_render, render = pcall(require, "render-markdown")
@@ -648,6 +757,13 @@ end
   end
 
   local function close_metadata_popup()
+    local popup_buf = nil
+    if metadata_popup_win and vim.api.nvim_win_is_valid(metadata_popup_win) then
+      popup_buf = vim.api.nvim_win_get_buf(metadata_popup_win)
+    end
+    if popup_buf and vim.api.nvim_buf_is_valid(popup_buf) then
+      cleanup_markdown_rendering(popup_buf)
+    end
     if metadata_popup_win and vim.api.nvim_win_is_valid(metadata_popup_win) then
       pcall(vim.api.nvim_win_close, metadata_popup_win, true)
     end
@@ -729,6 +845,41 @@ end
     lines[#lines + 1] = ""
     lines[#lines + 1] = heading .. ":"
     vim.list_extend(lines, vim.split(text, "\n", { plain = true }))
+  end
+
+  local function compacted_transcript_preview_lines(bufnr, item)
+    if type(item) ~= "table" or item.kind ~= "compacted" then
+      return {}
+    end
+
+    local start_row = tonumber(item.compacted_relative_start_row)
+    local stop_row = tonumber(item.compacted_relative_stop_row)
+    if not start_row or not stop_row then
+      return {}
+    end
+
+    local ok, transcript_path = pcall(vim.api.nvim_buf_get_var, bufnr, "lazyagent_acp_transcript_path")
+    if not ok or type(transcript_path) ~= "string" or transcript_path == "" then
+      return {}
+    end
+
+    local slice_lines = read_transcript_lines(transcript_path, item.compacted_max_lines)
+    if type(slice_lines) ~= "table" or #slice_lines == 0 then
+      return {}
+    end
+
+    start_row = math.max(1, math.floor(start_row))
+    stop_row = math.max(start_row, math.floor(stop_row))
+    if start_row > #slice_lines then
+      return {}
+    end
+    stop_row = math.min(stop_row, #slice_lines)
+
+    local preview = vim.list_slice(slice_lines, start_row, stop_row)
+    while #preview > 0 and preview[#preview] == "" do
+      table.remove(preview)
+    end
+    return preview
   end
 
   local function popup_source_window(bufnr)
@@ -870,13 +1021,41 @@ end
     return lines
   end
 
+  local function build_compacted_metadata_lines(bufnr, context, item)
+    local section = context and context.section or {}
+    local preview_lines = compacted_transcript_preview_lines(bufnr, item)
+    local lines = { "# ACP Compacted Transcript", "" }
+    append_scalar_field(lines, "Title", item and item.title or nil)
+    append_scalar_field(lines, "Compacted sections", item and item.compacted_section_count or nil)
+    append_scalar_field(
+      lines,
+      "Displayed lines",
+      section.start_row and string.format("%d-%d", section.start_row, section.end_row or section.start_row) or nil
+    )
+    append_text_section(lines, "Summary", item and item.summary or nil)
+    append_text_section(lines, "Expanded transcript", table.concat(preview_lines, "\n"))
+    if #preview_lines == 0 then
+      append_text_section(lines, "Expanded transcript", "(source transcript unavailable)")
+    end
+    return lines
+  end
+
   local function metadata_popup_spec(bufnr, win)
     local context = current_display_conversation_context(bufnr, win)
     if not context or not context.section then
       return nil
     end
 
-    local item = context.item or {}
+    local entry = layout_entry(bufnr)
+    local indexed_item = type(entry.transcript_section_items) == "table" and entry.transcript_section_items[context.index] or nil
+    local item = indexed_item or context.item or {}
+    if item.kind == "compacted" then
+      return {
+        title = " " .. tostring(item.title or "Compacted transcript") .. " ",
+        lines = build_compacted_metadata_lines(bufnr, context, item),
+      }
+    end
+
     local tool_entry = tool_entry_for_item(bufnr, item)
     local section_heading = context.section and context.section.heading or nil
     local is_tool_section = section_heading == "Tool" or section_heading == "Edited"
@@ -2154,6 +2333,45 @@ local function create_transcript_buffer(pane_id, agent_name, transcript_path)
   return bufnr
 end
 
+local function recycle_transcript_buffer(session)
+  if type(session) ~= "table" or not session.pane_id or session.pane_id == "" then
+    return nil
+  end
+
+  local pane_key = tostring(session.pane_id)
+  local old_bufnr = to_bufnr(pane_key)
+  if not old_bufnr or not vim.api.nvim_buf_is_valid(old_bufnr) then
+    return nil
+  end
+
+  local transcript_path = session.transcript_path or buffer_var(old_bufnr, "lazyagent_acp_transcript_path")
+  local agent_name = session.agent_name or buffer_var(old_bufnr, "lazyagent_acp_agent") or "agent"
+  local opts = pane_config[pane_key] or {}
+  local windows = vim.fn.win_findbuf(old_bufnr)
+
+  cleanup_markdown_rendering(old_bufnr)
+  layout_state[tostring(old_bufnr)] = nil
+
+  local new_bufnr = create_transcript_buffer(pane_key, agent_name, transcript_path)
+
+  for _, win in ipairs(windows) do
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == old_bufnr then
+      pcall(vim.api.nvim_win_set_buf, win, new_bufnr)
+      apply_transcript_window_opts(win, opts.is_vertical == true, opts)
+    end
+  end
+
+  vim.schedule(function()
+    if vim.api.nvim_buf_is_valid(old_bufnr) then
+      pcall(vim.api.nvim_buf_delete, old_bufnr, { force = true })
+    end
+    if #windows > 0 and vim.api.nvim_buf_is_valid(new_bufnr) and #vim.fn.win_findbuf(new_bufnr) == 0 then
+      M.join_pane(pane_key, opts.pane_size, opts.is_vertical == true, nil, session)
+    end
+  end)
+  return new_bufnr
+end
+
 first_visible_window = function(bufnr)
   for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
     if vim.api.nvim_win_is_valid(win) then
@@ -2167,7 +2385,7 @@ buffer_is_visible = function(bufnr)
   return first_visible_window(bufnr) ~= nil
 end
 
-local function transcript_max_lines(bufnr)
+transcript_max_lines = function(bufnr)
   local opts = pane_opts_for_bufnr(bufnr)
   local value = tonumber(opts and opts.transcript_max_lines)
   if value and value > 0 then
@@ -2279,18 +2497,24 @@ local function compacted_block_body(lines, sections, items, cfg)
   return body
 end
 
-local function compacted_section_lines(lines, sections, items, cfg)
+local function compacted_section_lines(bufnr, lines, sections, items, cfg)
   local body = compacted_block_body(lines, sections, items, cfg)
   local rendered = { "─ System" }
   for _, line in ipairs(body) do
     rendered[#rendered + 1] = " " .. line
   end
   rendered[#rendered + 1] = ""
+  local start_row = sections[1] and sections[1].start_row or 1
+  local stop_row = sections[#sections] and section_chunk_stop(sections, #sections, #lines) or start_row
   return rendered, {
     kind = "compacted",
     heading = "System",
     title = "Compacted earlier transcript",
     summary = string.format("%d sections compacted", #sections),
+    compacted_section_count = #sections,
+    compacted_relative_start_row = start_row,
+    compacted_relative_stop_row = stop_row,
+    compacted_max_lines = transcript_max_lines(bufnr),
   }
 end
 
@@ -2328,7 +2552,7 @@ local function compact_transcript_lines(bufnr, raw_lines)
       if group_end - group_start + 1 >= 2 then
         local group_sections = vim.list_slice(sections, group_start, group_end)
         local group_items = vim.list_slice(items, group_start, group_end)
-        local rendered, synthetic_item = compacted_section_lines(raw_lines, group_sections, group_items, cfg)
+        local rendered, synthetic_item = compacted_section_lines(bufnr, raw_lines, group_sections, group_items, cfg)
         vim.list_extend(out_lines, rendered)
         out_items[#out_items + 1] = synthetic_item
       else
@@ -2346,7 +2570,7 @@ local function compact_transcript_lines(bufnr, raw_lines)
   return transformed, out_items, meta
 end
 
-local function read_transcript_lines(path, max_lines)
+read_transcript_lines = function(path, max_lines)
   if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
     return {}
   end
@@ -2552,6 +2776,7 @@ local function ensure_layout_autocmds()
         return
       end
       local pane_id = buffer_var(bufnr, "lazyagent_acp_pane_id")
+      cleanup_markdown_rendering(bufnr)
       if pane_id ~= nil and pane_buffers[tostring(pane_id)] == bufnr then
         pane_buffers[tostring(pane_id)] = nil
       end
@@ -2929,6 +3154,7 @@ function M.on_transcript_updated(session, text, mode)
     session.view_state.pending_append = ""
     close_timer(session.view_state.append_timer)
     session.view_state.append_timer = nil
+    recycle_transcript_buffer(session)
     refresh_buffer_from_file(session)
     return
   end
@@ -2963,6 +3189,11 @@ function M.release_session_resources(session)
     return false
   end
 
+  local bufnr = to_bufnr(session.pane_id)
+  if bufnr then
+    cleanup_markdown_rendering(bufnr)
+  end
+
   local view_state = type(session.view_state) == "table" and session.view_state or nil
   local source_winid = view_state and view_state.source_winid or nil
   if view_state then
@@ -2981,6 +3212,9 @@ function M.kill_pane(pane_id, session)
   local bufnr = to_bufnr(pane_id)
   if session then
     M.release_session_resources(session)
+  end
+  if bufnr then
+    cleanup_markdown_rendering(bufnr)
   end
   pane_buffers[tostring(pane_id)] = nil
   pane_config[tostring(pane_id)] = nil

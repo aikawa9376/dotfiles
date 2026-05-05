@@ -243,6 +243,7 @@ require("lazyagent").setup({
 ```
 
 `interactive_agents.<name>.acp = false` で、global ACP 有効時でも特定 agent だけ通常 backend に戻せます。
+古い transcript section をまとめて最近分を優先表示する `transcript_compaction` は default で有効です。従来どおり全 section をそのまま表示したい場合だけ `enabled = false` にしてください。
 
 `acp.table_layout = "card"` を指定すると、ACP transcript buffer で assistant が返した markdown table を **表示だけ** key/value 形式の card に変換します。保存される transcript や carryover 用の元ログはそのままです。
 
