@@ -239,7 +239,11 @@ function M.register_scratch_keymaps(bufnr, opts)
   end, { nowait = true, desc = "Close input buffer"  })
 
   -- Submit mappings (normal / insert)
-  safe_set("n", keys.send_key_normal or "<CR>", function() send_from_buf() end, { desc = "Submit from buffer" })
+  local normal_submit_key = keys.send_key_normal or "<CR>"
+  safe_set("n", normal_submit_key, function() send_from_buf() end, { desc = "Submit from buffer" })
+  if keys.send_key_insert and keys.send_key_insert ~= normal_submit_key then
+    safe_set("n", keys.send_key_insert, function() send_from_buf() end, { desc = "Submit from buffer" })
+  end
   safe_set("i", keys.send_key_insert or "<C-s>", function()
     vim.cmd("stopinsert")
     send_from_buf()
