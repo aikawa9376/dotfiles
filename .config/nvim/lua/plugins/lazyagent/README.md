@@ -121,7 +121,7 @@ require("lazyagent").setup({
 ```
 
 - 何も指定しなければ `lazyagent/skills` を使います。
-- 何も指定しなければ `lazyagent/bin` も見て、agent 起動時に `LAZYAGENTBIN=/.../lazyagent/bin` を注入します。
+- 何も指定しなければ `lazyagent/bin` を基準に、`bin/<os>-<arch>/`（例: `bin/linux-x64`, `bin/darwin-arm64`）があればそちらを優先して `LAZYAGENTBIN` に注入します。platform dir が無ければ従来どおり `lazyagent/bin` を使います。
 - local CLI を使う skill は `$LAZYAGENTBIN/<tool>` を見れば OK です。
 - 別ディレクトリを使いたいときだけ `skills.source` / `skills.sources` で override します。
 - bin 側を変えたいときは `skills.bin_dir` で override できます。
