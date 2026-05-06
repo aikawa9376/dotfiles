@@ -3346,6 +3346,57 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
   return true
 end
 
+function M.open_fullscreen_transcript(pane_id, session)
+  session = type(session) == "table" and session or nil
+  if not session or not session.transcript_path or session.transcript_path == "" then
+    return false
+  end
+
+  local source_opts = pane_config[tostring(pane_id)] or {}
+  local tab_opts = vim.tbl_extend("force", {}, source_opts, {
+    source_winid = nil,
+    source_window_options = nil,
+    pane_size = nil,
+    is_vertical = false,
+    follow_output = false,
+    transcript_max_lines = nil,
+  })
+  tab_opts.transcript_compaction = vim.tbl_deep_extend(
+    "force",
+    vim.deepcopy(source_opts.transcript_compaction or session.transcript_compaction or {}),
+    { enabled = false }
+  )
+
+  next_pane_seq = next_pane_seq + 1
+  local inspector_pane_id = string.format("buffer-acp-inspector-%d", next_pane_seq)
+
+  vim.cmd("tabnew")
+  local win = vim.api.nvim_get_current_win()
+  local bufnr = create_transcript_buffer(inspector_pane_id, session.agent_name or "agent", session.transcript_path)
+  pane_config[tostring(inspector_pane_id)] = tab_opts
+
+  vim.api.nvim_win_set_buf(win, bufnr)
+  apply_transcript_window_opts(win, false, tab_opts)
+  refresh_buffer_from_path(bufnr, session.transcript_path, { force = true })
+  set_follow_output(bufnr, false)
+
+  vim.bo[bufnr].bufhidden = "wipe"
+  vim.b[bufnr].lazyagent_acp_fullscreen_transcript = true
+
+  vim.keymap.set("n", "q", function()
+    if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_get_current_buf() == bufnr then
+      vim.cmd("tabclose")
+    end
+  end, {
+    buffer = bufnr,
+    noremap = true,
+    silent = true,
+    desc = "LazyAgentACP: close fullscreen transcript",
+  })
+
+  return true
+end
+
 function M.copy_mode()
   return false
 end

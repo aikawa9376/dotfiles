@@ -578,6 +578,15 @@ local function create_backend(default_view)
     return backend.break_pane(pane_id)
   end
 
+  function backend.open_fullscreen_transcript(pane_id)
+    local session = get_session(pane_id)
+    local view = session_view(session)
+    if view and type(view.open_fullscreen_transcript) == "function" then
+      return view.open_fullscreen_transcript(pane_id, session)
+    end
+    return false
+  end
+
   function backend.join_pane(pane_id, size, is_vertical, on_done)
     local session = get_session(pane_id)
     local view = session_view(session)

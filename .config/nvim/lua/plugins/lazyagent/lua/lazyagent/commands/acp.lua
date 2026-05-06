@@ -71,6 +71,16 @@ local commands = {
     handler = session_logic.reopen_acp_window,
   },
   {
+    name = "LazyAgentACPRawTranscript",
+    desc = "Open the uncompacted ACP transcript for an ACP-enabled agent",
+    handler = session_logic.open_raw_acp_transcript,
+  },
+  {
+    name = "LazyAgentACPFullTranscript",
+    desc = "Open the uncompacted ACP transcript in a fullscreen tab",
+    handler = session_logic.open_full_acp_transcript,
+  },
+  {
     name = "LazyAgentACPCommands",
     desc = "Open ACP slash command palette for an ACP-enabled agent",
     handler = session_logic.pick_acp_commands,

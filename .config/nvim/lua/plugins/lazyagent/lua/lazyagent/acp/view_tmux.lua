@@ -54,6 +54,17 @@ function M.join_pane(pane_id, size, is_vertical, on_done)
   return tmux.join_pane(pane_id, size, is_vertical, on_done)
 end
 
+function M.open_fullscreen_transcript(_, session)
+  if not session or not session.transcript_path or session.transcript_path == "" then
+    return false
+  end
+
+  vim.cmd("tabnew")
+  vim.cmd("edit " .. vim.fn.fnameescape(session.transcript_path))
+  vim.cmd("setlocal nowrap")
+  return true
+end
+
 function M.copy_mode(pane_id)
   return tmux.copy_mode(pane_id)
 end
