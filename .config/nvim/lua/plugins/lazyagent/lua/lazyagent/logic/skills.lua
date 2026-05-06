@@ -378,6 +378,109 @@ local function default_bin_dir()
   return nil
 end
 
+local function current_platform_os()
+  local uname = uv.os_uname and uv.os_uname() or {}
+  local sysname = tostring(uname and uname.sysname or ""):lower()
+  if sysname:find("windows", 1, true) then
+    return "windows"
+  end
+  if sysname:find("darwin", 1, true) or sysname:find("mac", 1, true) then
+    return "darwin"
+  end
+  if sysname:find("linux", 1, true) then
+    return "linux"
+  end
+  return sysname ~= "" and sysname or "unknown"
+end
+
+local function current_platform_arch()
+  local uname = uv.os_uname and uv.os_uname() or {}
+  local machine = tostring(uname and uname.machine or ""):lower()
+  if machine == "x86_64" or machine == "amd64" then
+    return "x64"
+  end
+  if machine == "arm64" or machine == "aarch64" then
+    return "arm64"
+  end
+  if machine:match("^armv7") then
+    return "armv7"
+  end
+  return machine ~= "" and machine or "unknown"
+end
+
+local function platform_tag_aliases()
+  local os_name = current_platform_os()
+  local arch_name = current_platform_arch()
+  local os_aliases = { os_name }
+  local arch_aliases = { arch_name }
+
+  if os_name == "darwin" then
+    os_aliases[#os_aliases + 1] = "macos"
+  elseif os_name == "windows" then
+    os_aliases[#os_aliases + 1] = "win32"
+  end
+
+  if arch_name == "x64" then
+    arch_aliases[#arch_aliases + 1] = "x86_64"
+    arch_aliases[#arch_aliases + 1] = "amd64"
+  elseif arch_name == "arm64" then
+    arch_aliases[#arch_aliases + 1] = "aarch64"
+  end
+
+  local tags = {}
+  local seen = {}
+  for _, os_alias in ipairs(os_aliases) do
+    for _, arch_alias in ipairs(arch_aliases) do
+      local tag = os_alias .. "-" .. arch_alias
+      if not seen[tag] then
+        seen[tag] = true
+        tags[#tags + 1] = tag
+      end
+    end
+  end
+  return tags, os_aliases, arch_aliases
+end
+
+local function resolve_platform_bin_dir(bin_dir)
+  if not is_directory(bin_dir) then
+    return nil
+  end
+
+  local tags, os_aliases, arch_aliases = platform_tag_aliases()
+  for _, tag in ipairs(tags) do
+    local candidate = join_path(bin_dir, tag)
+    if is_directory(candidate) then
+      return candidate
+    end
+  end
+
+  for _, os_alias in ipairs(os_aliases) do
+    for _, arch_alias in ipairs(arch_aliases) do
+      local candidate = join_path(join_path(bin_dir, os_alias), arch_alias)
+      if is_directory(candidate) then
+        return candidate
+      end
+    end
+  end
+
+  return bin_dir
+end
+
+local function resolve_bin_dir_from(root_dir, value)
+  local bin_dir = resolve_path(root_dir, value)
+  if not bin_dir then
+    return nil
+  end
+  return resolve_platform_bin_dir(bin_dir)
+end
+
+local function executable_name_candidates(name)
+  if current_platform_os() == "windows" and not name:match("%.exe$") then
+    return { name .. ".exe", name }
+  end
+  return { name }
+end
+
 local function default_mount_dir()
   return vim.fn.expand("~/.agents/skills")
 end
@@ -390,7 +493,7 @@ local function build_binary_env(cfg)
   else
     root = root:gsub("/$", "")
   end
-  local bin_dir = resolve_path(root, cfg.bin_dir)
+  local bin_dir = resolve_bin_dir_from(root, cfg.bin_dir)
   if not bin_dir or not is_directory(bin_dir) then
     return env, nil
   end
@@ -621,7 +724,8 @@ function M.resolve_bin_dir()
   else
     root = root:gsub("/$", "")
   end
-  local bin_dir = resolve_path(root, cfg.bin_dir or default_bin_dir())
+  local configured = cfg.bin_dir or default_bin_dir()
+  local bin_dir = resolve_bin_dir_from(root, configured)
   if bin_dir and is_directory(bin_dir) then
     return bin_dir
   end
@@ -636,9 +740,11 @@ function M.find_binary(name)
   if not bin_dir then
     return nil
   end
-  local path = join_path(bin_dir, name)
-  if is_executable_file(path) then
-    return path
+  for _, candidate in ipairs(executable_name_candidates(name)) do
+    local path = join_path(bin_dir, candidate)
+    if is_executable_file(path) then
+      return path
+    end
   end
   return nil
 end
