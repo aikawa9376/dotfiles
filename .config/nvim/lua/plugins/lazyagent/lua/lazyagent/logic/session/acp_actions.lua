@@ -7,6 +7,7 @@ function M.setup(deps)
   local backend_logic = deps.backend_logic
   local cache_logic = deps.cache_logic
   local persistence = deps.persistence
+  local util = deps.util
   local current_editor_session_name = deps.current_editor_session_name
   local current_context_acp_agent = deps.current_context_acp_agent
   local active_acp_agents = deps.active_acp_agents
@@ -603,6 +604,32 @@ function M.setup(deps)
         return
       end
       backend_mod.show_capabilities(pane_id)
+    end)
+  end
+
+  function module.open_raw_transcript(agent_name)
+    resolve_active_acp_session(agent_name, function(chosen)
+      local session = state.sessions[chosen]
+      local path = session and session.transcript_path or nil
+      if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
+        vim.notify("LazyAgentACP: raw transcript is unavailable for '" .. tostring(chosen) .. "'", vim.log.levels.WARN)
+        return
+      end
+
+      util.open_in_normal_win(path)
+      vim.cmd("setlocal nowrap")
+    end)
+  end
+
+  function module.open_full_transcript(agent_name)
+    with_acp_session(agent_name, function(chosen, pane_id, backend_mod)
+      if backend_mod and type(backend_mod.open_fullscreen_transcript) == "function" then
+        if backend_mod.open_fullscreen_transcript(pane_id) then
+          return
+        end
+      end
+
+      vim.notify("LazyAgentACP: fullscreen transcript view is unavailable for '" .. tostring(chosen) .. "'", vim.log.levels.WARN)
     end)
   end
 

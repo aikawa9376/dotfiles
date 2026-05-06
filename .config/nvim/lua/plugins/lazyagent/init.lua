@@ -75,7 +75,7 @@ return {
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
     "LazyAgentOpenConversation", "LazyAgentConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach", "LazyAgentEdit",
-    "LazyAgentRestart", "LazyAgentStack", "LazyAgentHooks", "LazyAgentQR",
+    "LazyAgentRestart", "LazyAgentStack", "LazyAgentHooks", "LazyAgentQR", "LazyAgentACPRawTranscript", "LazyAgentACPFullTranscript",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   init = function() end,
