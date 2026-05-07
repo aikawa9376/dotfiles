@@ -46,6 +46,11 @@ return {
       ignore_whitespace_change_at_eol = true,
     },
     auto_attach = true,
+    on_attach = function(bufnr)
+      if vim.bo[bufnr].filetype == "bigfile" then
+        return false
+      end
+    end,
     attach_to_untracked = false,
     current_line_blame = false, -- Toggle with `:Gitsigns toggle_current_line_blame`
     current_line_blame_opts = {

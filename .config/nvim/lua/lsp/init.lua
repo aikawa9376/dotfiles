@@ -29,6 +29,9 @@ local base_start = vim.lsp.start
 ---@diagnostic disable-next-line: duplicate-set-field
 vim.lsp.start = function(config, opts)
   if opts and opts.bufnr then
+    if vim.bo[opts.bufnr].filetype == "bigfile" then
+      return
+    end
     -- fugitive系のbufferの場合はスキップ
     if vim.b[opts.bufnr].fugitive_type then
       return
