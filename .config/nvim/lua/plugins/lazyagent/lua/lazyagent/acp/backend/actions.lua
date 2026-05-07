@@ -33,7 +33,7 @@ function M.setup(deps)
     return (((state.opts or {}).hooks or {}).reload_mode or "hook") ~= "watch"
   end
 
-local function render_tool_timeline_detail(entry)
+local function render_tool_timeline_detail(session, entry)
   local tool = entry and entry.tool or {}
   local lines = {
     "# ACP Tool Timeline",
@@ -70,6 +70,14 @@ local function render_tool_timeline_detail(entry)
     lines[#lines + 1] = ""
     lines[#lines + 1] = "Raw output:"
     vim.list_extend(lines, vim.split(raw_output, "\n", { plain = true }))
+  end
+
+  if entry and entry.compacted == true and body == "" and raw_output == "" then
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Output was compacted to reduce memory. Use :LazyAgentACPFullTranscript or :LazyAgentACPRawTranscript for the full transcript."
+    if session and session.transcript_path and session.transcript_path ~= "" then
+      lines[#lines + 1] = "Transcript: " .. session.transcript_path
+    end
   end
 
   return lines
@@ -183,7 +191,7 @@ local function open_tool_timeline_buffer(session, entry)
     session,
     "ACP Tool Output " .. sanitize_filename_component(entry.toolCallId or "tool"),
     "markdown",
-    render_tool_timeline_detail(entry)
+    render_tool_timeline_detail(session, entry)
   )
 end
 

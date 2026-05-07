@@ -342,11 +342,13 @@ local function create_backend(default_view)
         default_mode = acp.default_mode,
         initial_model = acp.initial_model,
         table_layout = acp.table_layout,
+        release_buffer_on_hide = acp.release_buffer_on_hide,
         footer_animation = acp.footer_animation,
         buffer_background = acp.buffer_background,
         buffer_inactive_background = acp.buffer_inactive_background,
         transcript_max_lines = acp.transcript_max_lines,
         transcript_compaction = vim.deepcopy(acp.transcript_compaction or {}),
+        runtime_compaction = vim.deepcopy(acp.runtime_compaction or {}),
         initial_config_applied = false,
         session_info = {},
         usage_stats = {},
@@ -393,22 +395,28 @@ local function create_backend(default_view)
     return nil
   end
 
-  function backend.get_runtime_snapshot(pane_id)
+  function backend.get_runtime_snapshot(pane_id, opts)
+    if opts == true then
+      opts = { full = true }
+    end
+    opts = opts or {}
     local session = get_session(pane_id)
     if not session then
       return nil
     end
 
-    return {
+    local snapshot = {
       pane_id = session.pane_id,
       cwd = session.cwd,
       root_dir = session.root_dir,
       transcript_path = session.transcript_path,
       footer_animation = session.footer_animation,
+      release_buffer_on_hide = session.release_buffer_on_hide,
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,
       transcript_compaction = vim.deepcopy(session.transcript_compaction or {}),
+      runtime_compaction = vim.deepcopy(session.runtime_compaction or {}),
       acp_available_commands = vim.deepcopy(session.available_commands or {}),
       acp_config_options = vim.deepcopy(session.config_options or {}),
       acp_session_id = session.session_id,
@@ -427,10 +435,13 @@ local function create_backend(default_view)
       acp_permission_rules = vim.deepcopy(session.permission_rules or {}),
       acp_auto_switch = vim.deepcopy(session.auto_switch or {}),
       acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {}),
-      acp_tool_timeline = vim.deepcopy(session.tool_timeline or {}),
-      acp_conversation_timeline = vim.deepcopy(session.conversation_timeline or {}),
       source_winid = session.view_state and session.view_state.source_winid or nil,
     }
+    if opts.full == true or opts.include_timelines == true then
+      snapshot.acp_tool_timeline = vim.deepcopy(session.tool_timeline or {})
+      snapshot.acp_conversation_timeline = vim.deepcopy(session.conversation_timeline or {})
+    end
+    return snapshot
   end
 
   function backend.send_keys(pane_id, keys)

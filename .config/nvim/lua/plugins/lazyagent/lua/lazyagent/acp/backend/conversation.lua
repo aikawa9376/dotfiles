@@ -376,6 +376,66 @@ summarize_conversation_text = function(text, limit)
   return normalized:sub(1, math.max(1, limit - 1)) .. "…"
 end
 
+local function runtime_compaction_config(session)
+  local cfg = type(session and session.runtime_compaction) == "table" and session.runtime_compaction or {}
+  return {
+    enabled = cfg.enabled ~= false,
+    keep_recent_items = math.max(1, tonumber(cfg.keep_recent_items) or 80),
+    keep_recent_tools = math.max(1, tonumber(cfg.keep_recent_tools) or 40),
+    body_limit = math.max(256, tonumber(cfg.body_limit) or 12000),
+    tool_output_limit = math.max(256, tonumber(cfg.tool_output_limit) or 24000),
+  }
+end
+
+local function compact_old_text(text, limit)
+  text = normalize_text(text or "")
+  limit = tonumber(limit) or 0
+  if text == "" or limit <= 0 or #text <= limit then
+    return text
+  end
+  return text:sub(1, math.max(1, limit - 18)) .. "\n... [truncated]"
+end
+
+local function prune_runtime_timelines(session)
+  if not session then
+    return
+  end
+  local cfg = runtime_compaction_config(session)
+  if not cfg.enabled then
+    return
+  end
+
+  local conversation = session.conversation_timeline or {}
+  local conversation_recent_start = math.max(1, #conversation - cfg.keep_recent_items + 1)
+  for idx, item in ipairs(conversation) do
+    if type(item) == "table" then
+      if item.pinned == true or idx >= conversation_recent_start then
+        item.body = compact_old_text(item.body, cfg.body_limit)
+      else
+        item.body = ""
+        item.stream_key = nil
+        item.compacted = true
+      end
+    end
+  end
+
+  local tools = session.tool_timeline or {}
+  local tool_recent_start = math.max(1, #tools - cfg.keep_recent_tools + 1)
+  for idx, entry in ipairs(tools) do
+    if type(entry) == "table" then
+      if entry.pinned == true or idx >= tool_recent_start then
+        entry.rendered_content = compact_old_text(entry.rendered_content, cfg.tool_output_limit)
+        entry.rendered_raw_output = compact_old_text(entry.rendered_raw_output, cfg.tool_output_limit)
+      else
+        entry.rendered_content = ""
+        entry.rendered_raw_output = ""
+        entry.tool = nil
+        entry.compacted = true
+      end
+    end
+  end
+end
+
 local function conversation_kind_for_heading(heading)
   local kind = heading_kind(heading)
   if kind == "User" then
@@ -516,6 +576,7 @@ append_block = function(session, heading, body, meta)
   write_session_transcript(session, prefix .. render_section_block(heading, body, meta))
   session.transcript_has_content = true
   new_conversation_item(session, heading, body, meta)
+  prune_runtime_timelines(session)
   if sync_runtime_live_state then
     sync_runtime_live_state(session)
   end
@@ -543,6 +604,7 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
       sync_tool_pin_state(session, item)
     end
   end
+  prune_runtime_timelines(session)
   local padded, next_at_line_start = pad_stream_chunk(body, session.current_stream_at_line_start)
   write_session_transcript(session, padded)
   session.current_stream_at_line_start = next_at_line_start
@@ -982,6 +1044,7 @@ local function upsert_tool_timeline(session, tool)
   else
     session.tool_timeline[idx] = entry
   end
+  prune_runtime_timelines(session)
   if sync_runtime_live_state then
     sync_runtime_live_state(session)
   end
