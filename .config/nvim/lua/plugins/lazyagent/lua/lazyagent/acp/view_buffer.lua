@@ -735,6 +735,14 @@ local function copy_current_tool_output(bufnr)
     parts[#parts + 1] = entry.rendered_raw_output
   end
 
+  if #parts == 0 then
+    local message = entry.compacted == true
+        and "Tool output was compacted; open the full/raw ACP transcript for details"
+      or "No tool output for this block"
+    vim.notify(message, vim.log.levels.INFO)
+    return
+  end
+
   copy_to_clipboard(table.concat(parts, "\n"), "Copied tool output")
 end
 
@@ -1670,6 +1678,23 @@ local function transcript_table_layout(bufnr)
   return "table"
 end
 
+local function should_release_buffer_on_hide(bufnr_or_pane_id)
+  local opts
+  if type(bufnr_or_pane_id) == "number" and vim.api.nvim_buf_is_valid(bufnr_or_pane_id) then
+    opts = pane_opts_for_bufnr(bufnr_or_pane_id)
+  else
+    opts = pane_config[tostring(bufnr_or_pane_id or "")]
+  end
+  return type(opts) == "table" and opts.release_buffer_on_hide == true
+end
+
+local function resolve_release_buffer_on_hide(pane_opts, session)
+  if type(pane_opts) == "table" and pane_opts.release_buffer_on_hide ~= nil then
+    return pane_opts.release_buffer_on_hide == true
+  end
+  return session and session.release_buffer_on_hide == true or false
+end
+
 local function trim(text)
   return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
@@ -2308,6 +2333,19 @@ local function close_buffer_windows(bufnr)
   end
 end
 
+local function release_transcript_buffer(pane_id, bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  cleanup_markdown_rendering(bufnr)
+  layout_state[tostring(bufnr)] = nil
+  if pane_buffers[tostring(pane_id)] == bufnr then
+    pane_buffers[tostring(pane_id)] = nil
+  end
+  pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+  return true
+end
+
 local function create_transcript_buffer(pane_id, agent_name, transcript_path)
   local bufnr = vim.api.nvim_create_buf(false, true)
   local safe_agent_name = tostring(agent_name or "agent"):gsub("[^%w-_]+", "-")
@@ -2456,6 +2494,13 @@ local function transcript_items_for_sections(bufnr, sections)
   return items
 end
 
+local function with_transcript_display_meta(meta, sections, compacted)
+  meta = type(meta) == "table" and meta or {}
+  meta.raw_section_count = #(sections or {})
+  meta.compacted = compacted == true
+  return meta
+end
+
 local function compacted_block_body(lines, sections, items, cfg)
   local counts = {}
   local ordered_counts = {}
@@ -2525,13 +2570,14 @@ local function compact_transcript_lines(bufnr, raw_lines)
   local items = transcript_items_for_sections(bufnr, sections)
   if not cfg.enabled or #sections < cfg.min_sections then
     local transformed, _, meta = transform_markdown_tables(raw_lines, transcript_table_layout(bufnr))
-    return transformed, items, meta
+    return transformed, items, with_transcript_display_meta(meta, sections, false)
   end
 
   local keep_recent = math.min(#sections, cfg.keep_recent_sections)
   local compact_limit = #sections - keep_recent
   if compact_limit < 2 then
-    return raw_lines, items
+    local transformed, _, meta = transform_markdown_tables(raw_lines, transcript_table_layout(bufnr))
+    return transformed, items, with_transcript_display_meta(meta, sections, false)
   end
 
   local out_lines = {}
@@ -2567,7 +2613,7 @@ local function compact_transcript_lines(bufnr, raw_lines)
   end
 
   local transformed, _, meta = transform_markdown_tables(out_lines, transcript_table_layout(bufnr))
-  return transformed, out_items, meta
+  return transformed, out_items, with_transcript_display_meta(meta, sections, true)
 end
 
 read_transcript_lines = function(path, max_lines)
@@ -2620,9 +2666,9 @@ set_buffer_lines = function(bufnr, lines, section_items, display_meta)
   local entry = layout_entry(bufnr)
   entry.footer_padding_count = 0
   entry.footer_signature = nil
-  entry.transcript_source_lines = vim.deepcopy(lines or {})
-  entry.transcript_section_items = vim.deepcopy(section_items or {})
-  entry.transcript_display_meta = vim.deepcopy(display_meta or {})
+  entry.transcript_source_lines = lines or {}
+  entry.transcript_section_items = section_items or {}
+  entry.transcript_display_meta = display_meta or {}
   replace_buffer_lines(bufnr, 0, -1, lines)
 end
 
@@ -2847,13 +2893,16 @@ transcript_line_count = function(bufnr)
   return count
 end
 
-local function append_text_to_buffer(bufnr, text)
+local function append_text_to_buffer(bufnr, text, opts)
   if not text or text == "" or not vim.api.nvim_buf_is_valid(bufnr) then
     return nil
   end
+  opts = opts or {}
 
   local entry = layout_entry(bufnr)
-  local raw_lines = type(entry.transcript_source_lines) == "table" and vim.deepcopy(entry.transcript_source_lines) or {}
+  local preserved_section_items = opts.preserve_display_metadata == true and entry.transcript_section_items or nil
+  local preserved_display_meta = opts.preserve_display_metadata == true and entry.transcript_display_meta or nil
+  local raw_lines = type(entry.transcript_source_lines) == "table" and entry.transcript_source_lines or {}
   local transcript_stop = transcript_line_count(bufnr)
   local replace_start = transcript_stop
   local current_last = ""
@@ -2875,11 +2924,53 @@ local function append_text_to_buffer(bufnr, text)
   end
   vim.list_extend(new_raw, replacement)
   entry.transcript_source_lines = new_raw
-  entry.transcript_section_items = {}
-  entry.transcript_display_meta = {}
+  entry.transcript_section_items = preserved_section_items or {}
+  entry.transcript_display_meta = preserved_display_meta or {}
 
   replace_buffer_lines(bufnr, replace_start, total_lines, replacement)
   return replace_start
+end
+
+local function pending_transcript_section_count(text)
+  local count = 0
+  for _, line in ipairs(vim.split(tostring(text or ""), "\n", { plain = true })) do
+    if section_heading_for_line(line) then
+      count = count + 1
+    end
+  end
+  return count
+end
+
+local function text_has_markdown_table_candidate(text)
+  local lines = vim.split(tostring(text or ""), "\n", { plain = true })
+  for idx, line in ipairs(lines) do
+    local _, headers = split_markdown_table_cells(line)
+    if headers and is_markdown_table_separator(lines[idx + 1], #headers) then
+      return true
+    end
+    if type(line) == "string" and line:match("^%s*|%s*:?-") then
+      return true
+    end
+  end
+  return false
+end
+
+local function append_requires_full_refresh(bufnr, text)
+  local cfg = transcript_compaction_config(bufnr)
+  local has_table_candidate = transcript_table_layout(bufnr) == "card" and text_has_markdown_table_candidate(text)
+  if cfg.enabled then
+    local meta = layout_entry(bufnr).transcript_display_meta or {}
+    local pending_sections = pending_transcript_section_count(text)
+    if meta.compacted == true then
+      return pending_sections > 0 or has_table_candidate
+    end
+    local section_count = tonumber(meta.raw_section_count) or 0
+    if section_count + pending_sections >= cfg.min_sections then
+      return true
+    end
+  end
+
+  return has_table_candidate
 end
 
 refresh_buffer_from_path = function(bufnr, transcript_path, opts)
@@ -2963,10 +3054,21 @@ local function queue_append(session, text)
       return
     end
     local changed_start = nil
-    if transcript_compaction_config(bufnr).enabled or transcript_table_layout(bufnr) == "card" then
+    local pending_sections = pending_transcript_section_count(pending)
+    if append_requires_full_refresh(bufnr, pending) then
       refresh_buffer_from_path(bufnr, session.transcript_path, { force = true })
     else
-      changed_start = append_text_to_buffer(bufnr, pending)
+      local entry = layout_entry(bufnr)
+      local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
+      local preserve_display_metadata = meta.compacted == true and pending_sections == 0
+      changed_start = append_text_to_buffer(bufnr, pending, {
+        preserve_display_metadata = preserve_display_metadata,
+      })
+      if changed_start ~= nil then
+        local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
+        meta.raw_section_count = (tonumber(meta.raw_section_count) or 0) + pending_sections
+        entry.transcript_display_meta = meta
+      end
     end
     local max_lines = transcript_max_lines(bufnr)
     if max_lines and max_lines > 0 and transcript_line_count(bufnr) > (max_lines + 1) then
@@ -3115,6 +3217,7 @@ function M.create_pane(args, on_split)
     buffer_background = args.acp and args.acp.buffer_background or nil,
     buffer_inactive_background = args.acp and args.acp.buffer_inactive_background or nil,
     table_layout = args.acp and args.acp.table_layout or "table",
+    release_buffer_on_hide = args.acp and args.acp.release_buffer_on_hide == true,
     transcript_max_lines = args.acp and args.acp.transcript_max_lines or nil,
     transcript_compaction = vim.deepcopy(args.acp and args.acp.transcript_compaction or {}),
   })
@@ -3205,7 +3308,7 @@ function M.release_session_resources(session)
 end
 
 function M.pane_exists(pane_id)
-  return to_bufnr(pane_id) ~= nil
+  return to_bufnr(pane_id) ~= nil or pane_config[tostring(pane_id)] ~= nil
 end
 
 function M.kill_pane(pane_id, session)
@@ -3250,9 +3353,12 @@ end
 function M.break_pane(pane_id)
   local bufnr = to_bufnr(pane_id)
   if not bufnr then
-    return false
+    return pane_config[tostring(pane_id)] ~= nil
   end
   close_buffer_windows(bufnr)
+  if should_release_buffer_on_hide(pane_id) then
+    release_transcript_buffer(pane_id, bufnr)
+  end
   return true
 end
 
@@ -3277,6 +3383,7 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
         or (session and session.buffer_inactive_background)
         or nil,
       table_layout = pane_opts.table_layout or (session and session.table_layout) or "table",
+      release_buffer_on_hide = resolve_release_buffer_on_hide(pane_opts, session),
       transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
       transcript_compaction = vim.deepcopy(
         pane_opts.transcript_compaction or (session and session.transcript_compaction) or {}
@@ -3326,6 +3433,7 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
       or (session and session.buffer_inactive_background)
       or nil,
     table_layout = pane_opts.table_layout or (session and session.table_layout) or "table",
+    release_buffer_on_hide = resolve_release_buffer_on_hide(pane_opts, session),
     transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
     transcript_compaction = vim.deepcopy(
       pane_opts.transcript_compaction or (session and session.transcript_compaction) or {}
@@ -3359,6 +3467,7 @@ function M.open_fullscreen_transcript(pane_id, session)
     pane_size = nil,
     is_vertical = false,
     follow_output = false,
+    release_buffer_on_hide = false,
     transcript_max_lines = nil,
   })
   tab_opts.transcript_compaction = vim.tbl_deep_extend(

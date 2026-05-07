@@ -81,6 +81,42 @@ local function merge_transcript_compaction_config(agent_cfg, global_cfg)
   }
 end
 
+local function normalize_runtime_compaction_config(value)
+  if type(value) == "boolean" then
+    return { enabled = value }
+  end
+
+  local cfg = type(value) == "table" and vim.deepcopy(value) or {}
+  return {
+    enabled = cfg.enabled,
+    keep_recent_items = normalize_positive_integer(cfg.keep_recent_items or cfg.keep_recent),
+    keep_recent_tools = normalize_positive_integer(cfg.keep_recent_tools or cfg.keep_recent_tool_entries),
+    body_limit = normalize_positive_integer(cfg.body_limit or cfg.item_body_limit),
+    tool_output_limit = normalize_positive_integer(cfg.tool_output_limit or cfg.tool_body_limit),
+  }
+end
+
+local function merge_runtime_compaction_config(agent_cfg, global_cfg)
+  local agent = normalize_runtime_compaction_config(agent_cfg)
+  local global = normalize_runtime_compaction_config(global_cfg)
+  local enabled
+  if agent.enabled ~= nil then
+    enabled = agent.enabled == true
+  elseif global.enabled ~= nil then
+    enabled = global.enabled == true
+  else
+    enabled = true
+  end
+
+  return {
+    enabled = enabled,
+    keep_recent_items = agent.keep_recent_items or global.keep_recent_items or 80,
+    keep_recent_tools = agent.keep_recent_tools or global.keep_recent_tools or 40,
+    body_limit = agent.body_limit or global.body_limit or 12000,
+    tool_output_limit = agent.tool_output_limit or global.tool_output_limit or 24000,
+  }
+end
+
 local function normalize_permission_rules(value)
   if type(value) ~= "table" then
     return {}
@@ -219,6 +255,11 @@ local function resolve_from_config(agent_cfg)
     view = normalized_view_name(agent_acp.view or global_cfg.view),
     footer_animation = resolve_boolean_option(agent_acp.footer_animation, global_cfg.footer_animation, true),
     table_layout = normalize_table_layout(agent_acp.table_layout or global_cfg.table_layout),
+    release_buffer_on_hide = resolve_boolean_option(
+      agent_acp.release_buffer_on_hide,
+      global_cfg.release_buffer_on_hide,
+      true
+    ),
     auto_permission = agent_acp.auto_permission or global_cfg.auto_permission,
     default_mode = agent_acp.default_mode or global_cfg.default_mode,
     initial_model = agent_acp.initial_model or global_cfg.initial_model,
@@ -232,6 +273,10 @@ local function resolve_from_config(agent_cfg)
     transcript_compaction = merge_transcript_compaction_config(
       agent_acp.transcript_compaction,
       global_cfg.transcript_compaction
+    ),
+    runtime_compaction = merge_runtime_compaction_config(
+      agent_acp.runtime_compaction,
+      global_cfg.runtime_compaction
     ),
     permission_rules = merge_permission_rules(
       agent_acp.permission_rules or (agent_cfg and agent_cfg.acp_permission_rules),
@@ -258,10 +303,12 @@ function M.resolve(agent_name, agent_cfg)
       default_mode = session.default_mode,
       initial_model = session.initial_model,
       table_layout = session.table_layout,
+      release_buffer_on_hide = session.release_buffer_on_hide,
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,
       transcript_compaction = vim.deepcopy(session.transcript_compaction or {}),
+      runtime_compaction = vim.deepcopy(session.runtime_compaction or {}),
       footer_animation = session.footer_animation,
       permission_rules = vim.deepcopy(session.permission_rules or {}),
       auto_switch = vim.deepcopy(session.auto_switch or {}),

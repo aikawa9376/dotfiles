@@ -63,6 +63,8 @@ function M.build()
       initial_model = nil,
       footer_animation = true,
       table_layout = "table",
+      transcript_max_lines = 12000,
+      release_buffer_on_hide = true,
       buffer_background = nil,
       buffer_inactive_background = nil,
       transcript_compaction = {
@@ -70,6 +72,13 @@ function M.build()
         min_sections = 48,
         keep_recent_sections = 24,
         summary_items = 6,
+      },
+      runtime_compaction = {
+        enabled = true,
+        keep_recent_items = 80,
+        keep_recent_tools = 40,
+        body_limit = 12000,
+        tool_output_limit = 24000,
       },
       permission_rules = {},
       hide_pending_messages = true,

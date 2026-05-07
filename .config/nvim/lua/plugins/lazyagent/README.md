@@ -223,11 +223,20 @@ require("lazyagent").setup({
     auto_permission = "allow_always",
     default_mode = "bypassPermissions",
     initial_model = "gpt-5.4",
+    transcript_max_lines = 12000,
+    release_buffer_on_hide = true,
     transcript_compaction = {
       enabled = true,
       min_sections = 48,
       keep_recent_sections = 24,
       summary_items = 6,
+    },
+    runtime_compaction = {
+      enabled = true,
+      keep_recent_items = 80,
+      keep_recent_tools = 40,
+      body_limit = 12000,
+      tool_output_limit = 24000,
     },
   },
   interactive_agents = {
@@ -243,7 +252,11 @@ require("lazyagent").setup({
 ```
 
 `interactive_agents.<name>.acp = false` で、global ACP 有効時でも特定 agent だけ通常 backend に戻せます。
-古い transcript section をまとめて最近分を優先表示する `transcript_compaction` は default で有効です。従来どおり全 section をそのまま表示したい場合だけ `enabled = false` にしてください。
+通常の buffer view は default で最新 `transcript_max_lines` 行だけを tail 表示します。全文を確認したい場合は `:LazyAgentACPFullTranscript` または `:LazyAgentACPRawTranscript` を使ってください。
+
+古い transcript section をまとめて最近分を優先表示する `transcript_compaction` は default で有効です。従来どおり全 section をそのまま表示したい場合だけ `enabled = false` にしてください。`runtime_compaction` も default で有効で、古い runtime timeline は summary/pin 情報だけ残し、詳細本文は recent/pinned item と transcript file に寄せます。
+
+`release_buffer_on_hide = true` では ACP transcript window を閉じたときに表示 buffer を wipe し、再表示時に live transcript file から復元します。agent process/session は維持されます。
 
 `acp.table_layout = "card"` を指定すると、ACP transcript buffer で assistant が返した markdown table を **表示だけ** key/value 形式の card に変換します。保存される transcript や carryover 用の元ログはそのままです。
 
