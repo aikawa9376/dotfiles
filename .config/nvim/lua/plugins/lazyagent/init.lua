@@ -94,6 +94,7 @@ return {
       auto_permission = "allow_always",
       buffer_background = "none",
       buffer_inactive_background = "none",
+      fancy_mode = false,
       table_layout = "card"
     },
     resume = false,

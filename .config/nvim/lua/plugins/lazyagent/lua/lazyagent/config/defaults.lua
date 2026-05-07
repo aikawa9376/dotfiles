@@ -62,6 +62,7 @@ function M.build()
       default_mode = nil,
       initial_model = nil,
       footer_animation = true,
+      fancy_mode = false,
       table_layout = "table",
       transcript_max_lines = 12000,
       release_buffer_on_hide = true,

@@ -223,6 +223,7 @@ require("lazyagent").setup({
     auto_permission = "allow_always",
     default_mode = "bypassPermissions",
     initial_model = "gpt-5.4",
+    fancy_mode = true,
     transcript_max_lines = 12000,
     release_buffer_on_hide = true,
     transcript_compaction = {
@@ -257,6 +258,8 @@ require("lazyagent").setup({
 古い transcript section をまとめて最近分を優先表示する `transcript_compaction` は default で有効です。従来どおり全 section をそのまま表示したい場合だけ `enabled = false` にしてください。`runtime_compaction` も default で有効で、古い runtime timeline は summary/pin 情報だけ残し、詳細本文は recent/pinned item と transcript file に寄せます。
 
 `release_buffer_on_hide = true` では ACP transcript window を閉じたときに表示 buffer を wipe し、再表示時に live transcript file から復元します。agent process/session は維持されます。
+
+`acp.fancy_mode = true` を指定すると、ACP transcript buffer の header / compacted summary / metadata popup を絵文字まみれの display-only skin で表示します。保存される transcript や provider 側の会話内容は変わりません。
 
 `acp.table_layout = "card"` を指定すると、ACP transcript buffer で assistant が返した markdown table を **表示だけ** key/value 形式の card に変換します。保存される transcript や carryover 用の元ログはそのままです。
 

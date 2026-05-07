@@ -254,6 +254,7 @@ local function resolve_from_config(agent_cfg)
     enabled = enabled,
     view = normalized_view_name(agent_acp.view or global_cfg.view),
     footer_animation = resolve_boolean_option(agent_acp.footer_animation, global_cfg.footer_animation, true),
+    fancy_mode = resolve_boolean_option(agent_acp.fancy_mode, global_cfg.fancy_mode, false),
     table_layout = normalize_table_layout(agent_acp.table_layout or global_cfg.table_layout),
     release_buffer_on_hide = resolve_boolean_option(
       agent_acp.release_buffer_on_hide,
@@ -303,6 +304,7 @@ function M.resolve(agent_name, agent_cfg)
       default_mode = session.default_mode,
       initial_model = session.initial_model,
       table_layout = session.table_layout,
+      fancy_mode = session.fancy_mode,
       release_buffer_on_hide = session.release_buffer_on_hide,
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
