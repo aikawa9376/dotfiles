@@ -7,6 +7,7 @@ return {
         'fugitive',
         'harpoon',
         'lazyagent_acp',
+        'bigfile',
       },
     })
   end
