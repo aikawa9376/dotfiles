@@ -40,6 +40,7 @@ local transcript_source_lines
 local pane_id_for_bufnr
 local agent_name_for_bufnr
 local read_transcript_lines
+local fancy_mode_enabled
 local custom_background_groups = {}
 local layout_state = {}
 local suppress_transcript_window_refresh = false
@@ -279,6 +280,21 @@ local function line_has_heading(line, heading)
   return line:sub(-#suffix) == suffix
 end
 
+local function replace_heading_token(line, heading, replacement)
+  if type(line) ~= "string" then
+    return line
+  end
+  local needle = " " .. heading .. " "
+  if line:find(needle, 1, true) then
+    return line:gsub(vim.pesc(needle), " " .. replacement .. " ", 1)
+  end
+  local suffix = " " .. heading
+  if line:sub(-#suffix) == suffix then
+    return line:sub(1, #line - #suffix) .. " " .. replacement
+  end
+  return line
+end
+
 local function line_has_assistant_heading(line)
   if line_has_heading(line, "Assistant") then
     return true
@@ -372,6 +388,32 @@ local SECTION_HEADINGS = {
   "Terminal",
   "Tool",
   "Edited",
+}
+
+local FANCY_SECTION_LABELS = {
+  User = "💬✨ User ✨💬",
+  Assistant = "🤖🌈 Assistant 🌈🤖",
+  Thinking = "🧠💭 Thinking 💭🧠",
+  System = "🛸⚡ System ⚡🛸",
+  Error = "🚨💥 Error 💥🚨",
+  Plan = "🗺️🎀 Plan 🎀🗺️",
+  Terminal = "🖥️🔥 Terminal 🔥🖥️",
+  Tool = "🧰✨ Tool ✨🧰",
+  Edited = "✍️🎉 Edited 🎉✍️",
+}
+
+local FANCY_POPUP_MARKDOWN_TITLES = {
+  block = "# 🎀 ACP Block Metadata 🎀",
+  tool = "# 🧰✨ ACP Tool Metadata ✨🧰",
+  compacted = "# 🎉📦 ACP Compacted Transcript 📦🎉",
+}
+
+local FANCY_POPUP_SECTION_HEADINGS = {
+  Summary = "Summary 💖✨",
+  Content = "Content 🍭🌈",
+  ["Raw output"] = "Raw output 🔥📦",
+  Transcript = "Transcript 🌈📜",
+  ["Expanded transcript"] = "Expanded transcript 🎉📜",
 }
 
 local function jump_window_to_row(win, row)
@@ -855,6 +897,27 @@ end
     vim.list_extend(lines, vim.split(text, "\n", { plain = true }))
   end
 
+  local function popup_markdown_title(bufnr, kind, fallback)
+    if fancy_mode_enabled(bufnr) then
+      return FANCY_POPUP_MARKDOWN_TITLES[kind] or fallback
+    end
+    return fallback
+  end
+
+  local function popup_window_title(bufnr, title, emoji)
+    if not fancy_mode_enabled(bufnr) then
+      return title
+    end
+    return string.format("%s %s %s", emoji, title, emoji)
+  end
+
+  local function popup_section_heading(bufnr, heading)
+    if fancy_mode_enabled(bufnr) then
+      return FANCY_POPUP_SECTION_HEADINGS[heading] or heading
+    end
+    return heading
+  end
+
   local function compacted_transcript_preview_lines(bufnr, item)
     if type(item) ~= "table" or item.kind ~= "compacted" then
       return {}
@@ -924,7 +987,7 @@ end
     return source_win
   end
 
-  local function build_block_metadata_lines(context, item)
+  local function build_block_metadata_lines(bufnr, context, item)
     local section = context and context.section or {}
     local body = section_body_text(context and context.lines or {}, section)
     local item_body = type(item) == "table" and tostring(item.body or "") or ""
@@ -946,7 +1009,7 @@ end
       transcript_range = section.start_row and string.format("%d-%d", section.start_row, section.end_row or section.start_row) or nil,
     }
 
-    local lines = { "# ACP Block Metadata", "" }
+    local lines = { popup_markdown_title(bufnr, "block", "# ACP Block Metadata"), "" }
     append_scalar_field(lines, "ID", metadata.id)
     append_scalar_field(lines, "Seq", metadata.seq)
     append_scalar_field(lines, "Title", metadata.title)
@@ -957,8 +1020,8 @@ end
     append_scalar_field(lines, "Tool Call", metadata.toolCallId)
     append_scalar_field(lines, "Pinned", metadata.pinned)
     append_scalar_field(lines, "Transcript lines", metadata.transcript_range)
-    append_text_section(lines, "Summary", metadata.summary)
-    append_text_section(lines, "Content", body)
+    append_text_section(lines, popup_section_heading(bufnr, "Summary"), metadata.summary)
+    append_text_section(lines, popup_section_heading(bufnr, "Content"), body)
     return lines
   end
 
@@ -992,7 +1055,7 @@ end
     return content, raw_output, transcript_body
   end
 
-  local function build_tool_metadata_lines(context, item, entry)
+  local function build_tool_metadata_lines(bufnr, context, item, entry)
     local section = context and context.section or {}
     local paths = type(entry and entry.paths) == "table" and vim.deepcopy(entry.paths) or {}
     if #paths == 0 and item and item.path and item.path ~= "" then
@@ -1012,7 +1075,7 @@ end
       conversation_item_id = item and item.id or nil,
     }
 
-    local lines = { "# ACP Tool Metadata", "" }
+    local lines = { popup_markdown_title(bufnr, "tool", "# ACP Tool Metadata"), "" }
     append_scalar_field(lines, "Tool Call", metadata.toolCallId)
     append_scalar_field(lines, "Title", metadata.title)
     append_scalar_field(lines, "Heading", metadata.heading)
@@ -1022,17 +1085,17 @@ end
     append_scalar_field(lines, "Transcript lines", metadata.transcript_range)
     append_scalar_field(lines, "Conversation item", metadata.conversation_item_id)
     append_list_field(lines, "Paths", metadata.paths)
-    append_text_section(lines, "Summary", metadata.summary)
-    append_text_section(lines, "Content", content)
-    append_text_section(lines, "Raw output", raw_output)
-    append_text_section(lines, "Transcript", transcript_body)
+    append_text_section(lines, popup_section_heading(bufnr, "Summary"), metadata.summary)
+    append_text_section(lines, popup_section_heading(bufnr, "Content"), content)
+    append_text_section(lines, popup_section_heading(bufnr, "Raw output"), raw_output)
+    append_text_section(lines, popup_section_heading(bufnr, "Transcript"), transcript_body)
     return lines
   end
 
   local function build_compacted_metadata_lines(bufnr, context, item)
     local section = context and context.section or {}
     local preview_lines = compacted_transcript_preview_lines(bufnr, item)
-    local lines = { "# ACP Compacted Transcript", "" }
+    local lines = { popup_markdown_title(bufnr, "compacted", "# ACP Compacted Transcript"), "" }
     append_scalar_field(lines, "Title", item and item.title or nil)
     append_scalar_field(lines, "Compacted sections", item and item.compacted_section_count or nil)
     append_scalar_field(
@@ -1040,10 +1103,18 @@ end
       "Displayed lines",
       section.start_row and string.format("%d-%d", section.start_row, section.end_row or section.start_row) or nil
     )
-    append_text_section(lines, "Summary", item and item.summary or nil)
-    append_text_section(lines, "Expanded transcript", table.concat(preview_lines, "\n"))
+    append_text_section(lines, popup_section_heading(bufnr, "Summary"), item and item.summary or nil)
+    append_text_section(
+      lines,
+      popup_section_heading(bufnr, "Expanded transcript"),
+      table.concat(preview_lines, "\n")
+    )
     if #preview_lines == 0 then
-      append_text_section(lines, "Expanded transcript", "(source transcript unavailable)")
+      append_text_section(
+        lines,
+        popup_section_heading(bufnr, "Expanded transcript"),
+        "(source transcript unavailable)"
+      )
     end
     return lines
   end
@@ -1058,8 +1129,9 @@ end
     local indexed_item = type(entry.transcript_section_items) == "table" and entry.transcript_section_items[context.index] or nil
     local item = indexed_item or context.item or {}
     if item.kind == "compacted" then
+      local title = popup_window_title(bufnr, tostring(item.title or "Compacted transcript"), "🎉📦")
       return {
-        title = " " .. tostring(item.title or "Compacted transcript") .. " ",
+        title = " " .. title .. " ",
         lines = build_compacted_metadata_lines(bufnr, context, item),
       }
     end
@@ -1073,16 +1145,18 @@ end
         or item.toolCallId
         or section_heading
         or "ACP Tool Metadata"
+      title = popup_window_title(bufnr, tostring(title), "🧰✨")
       return {
         title = " " .. tostring(title) .. " ",
-        lines = build_tool_metadata_lines(context, item, tool_entry),
+        lines = build_tool_metadata_lines(bufnr, context, item, tool_entry),
       }
     end
 
     local title = item.title or context.section.heading or "ACP Block Metadata"
+    title = popup_window_title(bufnr, tostring(title), "🎀🌈")
     return {
       title = " " .. tostring(title) .. " ",
-      lines = build_block_metadata_lines(context, item),
+      lines = build_block_metadata_lines(bufnr, context, item),
     }
   end
 
@@ -1337,6 +1411,15 @@ local function tail_prefix(line)
   return (line:gsub("[%s─]+$", ""))
 end
 
+local function fancy_header_line(line)
+  local heading = section_heading_for_line(line)
+  local replacement = heading and FANCY_SECTION_LABELS[heading] or nil
+  if not replacement or line:find(replacement, 1, true) then
+    return line
+  end
+  return replace_heading_token(line, heading, replacement)
+end
+
 local function header_target_width(bufnr)
   local win = first_visible_window(bufnr)
   if not win or not vim.api.nvim_win_is_valid(win) then
@@ -1460,23 +1543,28 @@ end
 
 normalize_header_lines = function(bufnr, lines)
   local width = header_target_width(bufnr)
-  if not width or width <= 0 then
+  local fancy = fancy_mode_enabled(bufnr)
+  if (not width or width <= 0) and not fancy then
     return lines, false
   end
 
   local changed = false
   local normalized = nil
   for idx, line in ipairs(lines) do
-    if line:match("^─ ") and line_has_tail(line) then
-      local prefix = tail_prefix(line)
+    local rebuilt = line
+    if fancy and (rebuilt:match("^─ ") or rebuilt:match("^╭─ ")) then
+      rebuilt = fancy_header_line(rebuilt)
+    end
+    if width and width > 0 and rebuilt:match("^─ ") and line_has_tail(rebuilt) then
+      local prefix = tail_prefix(rebuilt)
       local prefix_width = strdisplaywidth(prefix)
       local tail_len = math.max(8, width - prefix_width - 1)
-      local rebuilt = prefix .. " " .. string.rep("─", tail_len)
-      if rebuilt ~= line then
-        normalized = normalized or vim.deepcopy(lines)
-        normalized[idx] = rebuilt
-        changed = true
-      end
+      rebuilt = prefix .. " " .. string.rep("─", tail_len)
+    end
+    if rebuilt ~= line then
+      normalized = normalized or vim.deepcopy(lines)
+      normalized[idx] = rebuilt
+      changed = true
     end
   end
 
@@ -1676,6 +1764,16 @@ local function transcript_table_layout(bufnr)
     return "card"
   end
   return "table"
+end
+
+fancy_mode_enabled = function(bufnr_or_pane_id)
+  local opts
+  if type(bufnr_or_pane_id) == "number" and vim.api.nvim_buf_is_valid(bufnr_or_pane_id) then
+    opts = pane_opts_for_bufnr(bufnr_or_pane_id)
+  else
+    opts = pane_config[tostring(bufnr_or_pane_id or "")]
+  end
+  return type(opts) == "table" and opts.fancy_mode == true
 end
 
 local function should_release_buffer_on_hide(bufnr_or_pane_id)
@@ -2501,11 +2599,12 @@ local function with_transcript_display_meta(meta, sections, compacted)
   return meta
 end
 
-local function compacted_block_body(lines, sections, items, cfg)
+local function compacted_block_body(bufnr, lines, sections, items, cfg)
   local counts = {}
   local ordered_counts = {}
   local highlights = {}
   local seen_highlights = {}
+  local fancy = fancy_mode_enabled(bufnr)
 
   for idx, section in ipairs(sections) do
     local item = items[idx]
@@ -2524,7 +2623,9 @@ local function compacted_block_body(lines, sections, items, cfg)
   end
 
   local body = {
-    string.format("Earlier transcript compacted (%d sections).", #sections),
+    fancy
+        and string.format("🎉✨ Earlier transcript compacted (%d sections). ✨🎉", #sections)
+      or string.format("Earlier transcript compacted (%d sections).", #sections),
   }
 
   if #ordered_counts > 0 then
@@ -2532,18 +2633,18 @@ local function compacted_block_body(lines, sections, items, cfg)
     for _, label in ipairs(ordered_counts) do
       parts[#parts + 1] = string.format("%s x%d", label, counts[label])
     end
-    body[#body + 1] = "- " .. table.concat(parts, ", ")
+    body[#body + 1] = (fancy and "🎈 " or "- ") .. table.concat(parts, ", ")
   end
 
   for _, highlight in ipairs(highlights) do
-    body[#body + 1] = "- " .. highlight
+    body[#body + 1] = (fancy and "🌟 " or "- ") .. highlight
   end
 
   return body
 end
 
 local function compacted_section_lines(bufnr, lines, sections, items, cfg)
-  local body = compacted_block_body(lines, sections, items, cfg)
+  local body = compacted_block_body(bufnr, lines, sections, items, cfg)
   local rendered = { "─ System" }
   for _, line in ipairs(body) do
     rendered[#rendered + 1] = " " .. line
@@ -3217,6 +3318,7 @@ function M.create_pane(args, on_split)
     buffer_background = args.acp and args.acp.buffer_background or nil,
     buffer_inactive_background = args.acp and args.acp.buffer_inactive_background or nil,
     table_layout = args.acp and args.acp.table_layout or "table",
+    fancy_mode = args.acp and args.acp.fancy_mode == true,
     release_buffer_on_hide = args.acp and args.acp.release_buffer_on_hide == true,
     transcript_max_lines = args.acp and args.acp.transcript_max_lines or nil,
     transcript_compaction = vim.deepcopy(args.acp and args.acp.transcript_compaction or {}),
@@ -3383,6 +3485,7 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
         or (session and session.buffer_inactive_background)
         or nil,
       table_layout = pane_opts.table_layout or (session and session.table_layout) or "table",
+      fancy_mode = pane_opts.fancy_mode == true or (session and session.fancy_mode == true),
       release_buffer_on_hide = resolve_release_buffer_on_hide(pane_opts, session),
       transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
       transcript_compaction = vim.deepcopy(
@@ -3433,6 +3536,7 @@ function M.join_pane(pane_id, size, is_vertical, on_done, session)
       or (session and session.buffer_inactive_background)
       or nil,
     table_layout = pane_opts.table_layout or (session and session.table_layout) or "table",
+    fancy_mode = pane_opts.fancy_mode == true or (session and session.fancy_mode == true),
     release_buffer_on_hide = resolve_release_buffer_on_hide(pane_opts, session),
     transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
     transcript_compaction = vim.deepcopy(

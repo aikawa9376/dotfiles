@@ -691,6 +691,7 @@ local function create_ephemeral_session(base_session)
     auto_permission = base_session.auto_permission,
     default_mode = base_session.default_mode,
     initial_model = base_session.initial_model,
+    fancy_mode = base_session.fancy_mode,
     table_layout = base_session.table_layout,
     release_buffer_on_hide = base_session.release_buffer_on_hide,
     footer_animation = false,
