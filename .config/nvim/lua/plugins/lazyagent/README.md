@@ -282,7 +282,7 @@ agent が advertise していない `/...` は通常の prompt text として送
 
 ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。`:LazyAgentACPSessions [agent]` では provider 側が保持している native session を一覧し、現在の会話へ add するか、native load / resume できます。float は `q` または `<Esc>` で閉じます。
 
-compaction で省略された以前のやり取りも含めて **装飾付きの ACP 表示のまま** 全画面で見たいときは、`:LazyAgentACPFullTranscript [agent]` を使います。新しい tab に live transcript を開き、compaction だけ無効化した ACP buffer を表示します。`q` で閉じられます。
+compaction で省略された以前のやり取りも含めて全文を全画面で見たいときは、`:LazyAgentACPFullTranscript [agent]` を使います。新しい tab に live transcript を開き、**compaction / fancy_mode / card table 変換を無効化した** ACP buffer を表示します。`q` で閉じられます。
 
 `:LazyAgentACPRawTranscript [agent]` は live transcript file を通常ウィンドウにそのまま開く raw log viewer です。
 
@@ -332,7 +332,7 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 | `:LazyAgentConversation [agent] [keep_lines]` | ACP conversation を checkpoint 保存。数値指定時は最新 `keep_lines` 行以上を ACP buffer に残し、それ以前を User セクション境界で保存 |
 | `:LazyAgentResumeConversation [file]` | conversation checkpoint から開始 |
 | `:LazyAgentACPSessions [agent]` | native ACP provider session を一覧し、add / load / resume |
-| `:LazyAgentACPFullTranscript [agent]` | compaction を切った ACP transcript を全画面 tab で開く |
+| `:LazyAgentACPFullTranscript [agent]` | compaction と display transform を切った ACP transcript を全画面 tab で開く |
 | `:LazyAgentACPRawTranscript [agent]` | compaction なしの ACP live transcript を開く |
 | `:LazyAgentOpenConversation [agent]` | live pane / transcript を保存して開く |
 | `:LazyAgentSummary [open\|copy]` | summary Markdown を開く / path をコピー |

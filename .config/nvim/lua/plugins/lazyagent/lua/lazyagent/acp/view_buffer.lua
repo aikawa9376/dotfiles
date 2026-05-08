@@ -1950,6 +1950,84 @@ local function transform_markdown_tables(lines, layout)
   return changed and out or lines, changed, changed and meta or {}
 end
 
+local function trailing_markdown_table_context(lines)
+  lines = type(lines) == "table" and lines or {}
+
+  local end_idx = #lines
+  while end_idx > 0 and tostring(lines[end_idx] or "") == "" do
+    end_idx = end_idx - 1
+  end
+  if end_idx <= 0 then
+    return {
+      state = "none",
+      lines = {},
+    }
+  end
+
+  local inside_fence = false
+  local kinds = {}
+  for idx = 1, end_idx do
+    local line = lines[idx]
+    if is_markdown_fence(line) then
+      inside_fence = not inside_fence
+      kinds[idx] = "fence"
+    elseif inside_fence then
+      kinds[idx] = "other"
+    else
+      local _, cells = split_markdown_table_cells(line)
+      if cells then
+        kinds[idx] = is_markdown_table_separator(line, #cells) and "separator" or "row"
+      else
+        kinds[idx] = "other"
+      end
+    end
+  end
+
+  if inside_fence then
+    return {
+      state = "none",
+      lines = {},
+    }
+  end
+
+  if kinds[end_idx] ~= "row" and kinds[end_idx] ~= "separator" then
+    return {
+      state = "none",
+      lines = {},
+    }
+  end
+
+  local start_idx = end_idx
+  while start_idx > 1 and (kinds[start_idx - 1] == "row" or kinds[start_idx - 1] == "separator") do
+    start_idx = start_idx - 1
+  end
+
+  local block_kinds = {}
+  for idx = start_idx, end_idx do
+    block_kinds[#block_kinds + 1] = kinds[idx]
+  end
+
+  local state = "none"
+  if block_kinds[1] == "row" then
+    if #block_kinds == 1 then
+      state = "header"
+    elseif block_kinds[2] == "separator" then
+      state = #block_kinds == 2 and "separator" or "rows"
+      for idx = 3, #block_kinds do
+        if block_kinds[idx] ~= "row" then
+          state = "none"
+          break
+        end
+      end
+    end
+  end
+
+  return {
+    state = state,
+    lines = state == "none" and {} or vim.list_slice(lines, start_idx, end_idx),
+  }
+end
+
 local function is_acp_buffer(bufnr)
   return buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil
 end
@@ -2592,10 +2670,11 @@ local function transcript_items_for_sections(bufnr, sections)
   return items
 end
 
-local function with_transcript_display_meta(meta, sections, compacted)
+local function with_transcript_display_meta(meta, sections, compacted, lines)
   meta = type(meta) == "table" and meta or {}
   meta.raw_section_count = #(sections or {})
   meta.compacted = compacted == true
+  meta.table_tail_state = trailing_markdown_table_context(lines).state
   return meta
 end
 
@@ -2671,14 +2750,14 @@ local function compact_transcript_lines(bufnr, raw_lines)
   local items = transcript_items_for_sections(bufnr, sections)
   if not cfg.enabled or #sections < cfg.min_sections then
     local transformed, _, meta = transform_markdown_tables(raw_lines, transcript_table_layout(bufnr))
-    return transformed, items, with_transcript_display_meta(meta, sections, false)
+    return transformed, items, with_transcript_display_meta(meta, sections, false, raw_lines)
   end
 
   local keep_recent = math.min(#sections, cfg.keep_recent_sections)
   local compact_limit = #sections - keep_recent
   if compact_limit < 2 then
     local transformed, _, meta = transform_markdown_tables(raw_lines, transcript_table_layout(bufnr))
-    return transformed, items, with_transcript_display_meta(meta, sections, false)
+    return transformed, items, with_transcript_display_meta(meta, sections, false, raw_lines)
   end
 
   local out_lines = {}
@@ -2714,7 +2793,7 @@ local function compact_transcript_lines(bufnr, raw_lines)
   end
 
   local transformed, _, meta = transform_markdown_tables(out_lines, transcript_table_layout(bufnr))
-  return transformed, out_items, with_transcript_display_meta(meta, sections, true)
+  return transformed, out_items, with_transcript_display_meta(meta, sections, true, raw_lines)
 end
 
 read_transcript_lines = function(path, max_lines)
@@ -3024,9 +3103,11 @@ local function append_text_to_buffer(bufnr, text, opts)
     new_raw[#new_raw + 1] = raw_lines[idx]
   end
   vim.list_extend(new_raw, replacement)
+  local next_meta = type(preserved_display_meta) == "table" and vim.deepcopy(preserved_display_meta) or {}
+  next_meta.table_tail_state = trailing_markdown_table_context(new_raw).state
   entry.transcript_source_lines = new_raw
   entry.transcript_section_items = preserved_section_items or {}
-  entry.transcript_display_meta = preserved_display_meta or {}
+  entry.transcript_display_meta = next_meta
 
   replace_buffer_lines(bufnr, replace_start, total_lines, replacement)
   return replace_start
@@ -3057,10 +3138,24 @@ local function text_has_markdown_table_candidate(text)
 end
 
 local function append_requires_full_refresh(bufnr, text)
+  local entry = layout_entry(bufnr)
+  local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
   local cfg = transcript_compaction_config(bufnr)
-  local has_table_candidate = transcript_table_layout(bufnr) == "card" and text_has_markdown_table_candidate(text)
+  local has_table_candidate = false
+  if transcript_table_layout(bufnr) == "card" then
+    local table_state = tostring(meta.table_tail_state or "none")
+    if table_state == "rows" or text_has_markdown_table_candidate(text) then
+      has_table_candidate = true
+    elseif table_state == "header" or table_state == "separator" then
+      local tail_context = trailing_markdown_table_context(entry.transcript_source_lines).lines
+      if #tail_context > 0 then
+        local combined = vim.deepcopy(tail_context)
+        vim.list_extend(combined, vim.split(tostring(text or ""), "\n", { plain = true }))
+        has_table_candidate = text_has_markdown_table_candidate(table.concat(combined, "\n"))
+      end
+    end
+  end
   if cfg.enabled then
-    local meta = layout_entry(bufnr).transcript_display_meta or {}
     local pending_sections = pending_transcript_section_count(text)
     if meta.compacted == true then
       return pending_sections > 0 or has_table_candidate
@@ -3571,6 +3666,8 @@ function M.open_fullscreen_transcript(pane_id, session)
     pane_size = nil,
     is_vertical = false,
     follow_output = false,
+    fancy_mode = false,
+    table_layout = "table",
     release_buffer_on_hide = false,
     transcript_max_lines = nil,
   })
