@@ -51,7 +51,7 @@ end
 
 local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
   if not utils.is_valid_buf(bufnr) then return end
-  local work_tree = utils.get_work_tree()
+  local work_tree = utils.get_buf_work_tree(bufnr)
   if not work_tree then return end
 
   local worktree_summary = worktree.get_summary(work_tree)
@@ -171,7 +171,7 @@ local function status_entry_at_cursor()
 end
 
 local function worktree_relative_abs_path(path)
-  local work_tree = utils.get_work_tree()
+  local work_tree = utils.get_buf_work_tree(vim.api.nvim_get_current_buf())
   if not work_tree or not path or path == '' then return nil end
 
   local root = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
@@ -204,6 +204,7 @@ function M.setup(group)
     pattern = 'fugitive',
     callback = function(ev)
       local b = ev.buf
+      utils.set_buf_work_tree(b, utils.get_work_tree({ bufnr = b }))
       vim.opt_local.number, vim.opt_local.relativenumber = false, false
       local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
       local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
@@ -213,13 +214,32 @@ function M.setup(group)
         refresh_status_sections(b, ns_worktree, ns_stash)
       end
 
+      local function reload_status()
+        if not utils.is_valid_buf(b) then return end
+        if vim.b[b].fugitive_status_reloading then
+          vim.schedule(refresh)
+          return
+        end
+        vim.b[b].fugitive_status_reloading = true
+        if vim.fn.exists('*fugitive#ReloadStatus') == 1 then
+          pcall(vim.api.nvim_buf_call, b, function()
+            vim.fn['fugitive#ReloadStatus']()
+          end)
+        end
+        vim.b[b].fugitive_status_reloading = false
+        vim.schedule(refresh)
+      end
+
+      local function notify_repo_changed()
+        utils.fire_fugitive_changed({ bufnr = b })
+      end
+
       vim.schedule(refresh)
 
       local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
-      vim.api.nvim_create_autocmd('BufEnter', {
-        group = bufgroupt, buffer = b,
-        callback = function() vim.schedule(refresh) end,
-      })
+      utils.setup_repo_refresh(bufgroupt, b, function()
+        reload_status()
+      end, { visible_only = true })
 
       local function apply_icons()
         if not utils.is_valid_buf(b) then return end
@@ -289,8 +309,7 @@ function M.setup(group)
           if vim.v.shell_error ~= 0 then return end
           vim.fn.system('git stash drop ' .. vim.fn.shellescape(r))
           vim.fn.system('git stash store -m ' .. vim.fn.shellescape(input) .. ' ' .. hash)
-          vim.fn['fugitive#ReloadStatus']()
-          vim.schedule(refresh)
+          notify_repo_changed()
         end)
       end
 
@@ -313,7 +332,7 @@ function M.setup(group)
             local head = vim.fn.trim(vim.fn.system('git rev-parse HEAD'))
             if head:sub(1, #h) == h then
               -- Use git commit --amend with a blocking editor that opens the message in Neovim
-              local wt_head = utils.get_work_tree() or vim.fn.getcwd()
+              local wt_head = utils.get_buf_work_tree(b) or vim.fn.getcwd()
               local tmpb = vim.fn.tempname()
               local editor_file_head = tmpb .. '.editor.sh'
               local marker_file_head = tmpb .. '.marker'
@@ -365,14 +384,13 @@ function M.setup(group)
                   pcall(vim.fn.delete, editor_file_head)
                   pcall(vim.fn.delete, marker_file_head)
                   pcall(vim.fn.delete, done_file_head)
-                  if code == 0 then
-                    vim.schedule(function()
-                      vim.notify('Amend completed', vim.log.levels.INFO)
-                      vim.fn['fugitive#ReloadStatus']()
-                      vim.schedule(refresh)
-                      -- Close the commit message buffer if still open
-                      if commit_msg_bufnr_head and pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_head) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_head) then
-                        local winid = vim.fn.bufwinid(commit_msg_bufnr_head)
+                    if code == 0 then
+                      vim.schedule(function()
+                        vim.notify('Amend completed', vim.log.levels.INFO)
+                        notify_repo_changed()
+                        -- Close the commit message buffer if still open
+                        if commit_msg_bufnr_head and pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_head) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_head) then
+                          local winid = vim.fn.bufwinid(commit_msg_bufnr_head)
                         if type(winid) == 'number' and winid > 0 then pcall(vim.api.nvim_win_close, winid, true) end
                         if pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_head) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_head) then pcall(vim.api.nvim_buf_delete, commit_msg_bufnr_head, { force = true }) end
                       end
@@ -395,7 +413,7 @@ function M.setup(group)
               -- marker file; a timer watches that marker and opens the file for
               -- editing. When the user writes the buffer we touch the done file to
               -- let git continue.
-              local wt = utils.get_work_tree() or vim.fn.getcwd()
+              local wt = utils.get_buf_work_tree(b) or vim.fn.getcwd()
               local short = h:sub(1, 7)
               local tmpbase = vim.fn.tempname()
               local seq_file = tmpbase .. '.seq.sh'
@@ -466,14 +484,13 @@ function M.setup(group)
                   pcall(vim.fn.delete, editor_file)
                   pcall(vim.fn.delete, marker_file)
                   pcall(vim.fn.delete, done_file)
-                  if code == 0 then
-                    vim.schedule(function()
-                      vim.notify('Rebase completed', vim.log.levels.INFO)
-                      vim.fn['fugitive#ReloadStatus']()
-                      vim.schedule(refresh)
-                      -- Close the commit message buffer if still open
-                      if commit_msg_bufnr_rebase and pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_rebase) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_rebase) then
-                        local winid = vim.fn.bufwinid(commit_msg_bufnr_rebase)
+                    if code == 0 then
+                      vim.schedule(function()
+                        vim.notify('Rebase completed', vim.log.levels.INFO)
+                        notify_repo_changed()
+                        -- Close the commit message buffer if still open
+                        if commit_msg_bufnr_rebase and pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_rebase) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_rebase) then
+                          local winid = vim.fn.bufwinid(commit_msg_bufnr_rebase)
                         if type(winid) == 'number' and winid > 0 then pcall(vim.api.nvim_win_close, winid, true) end
                         if pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_rebase) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_rebase) then pcall(vim.api.nvim_buf_delete, commit_msg_bufnr_rebase, { force = true }) end
                       end
@@ -495,7 +512,7 @@ function M.setup(group)
       vim.keymap.set('n', 'A', function()
         if is_cursor_in_stash_area() then
           local r = get_stash_ref_at_cursor(b)
-          if r then vim.cmd('Git stash apply ' .. r); vim.fn['fugitive#ReloadStatus'](); vim.schedule(refresh) end
+          if r then vim.cmd('Git stash apply ' .. r); notify_repo_changed() end
           return
         end
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:ce", true, false, true), 'm', true)
@@ -504,7 +521,7 @@ function M.setup(group)
       vim.keymap.set('n', 'P', function()
         if is_cursor_in_stash_area() then
           local r = get_stash_ref_at_cursor(b)
-          if r then vim.cmd('Git stash pop ' .. r); vim.fn['fugitive#ReloadStatus'](); vim.schedule(refresh) end
+          if r then vim.cmd('Git stash pop ' .. r); notify_repo_changed() end
           return
         end
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:P", true, false, true), 'm', true)
@@ -513,17 +530,16 @@ function M.setup(group)
       vim.keymap.set('n', 'X', function()
         if is_cursor_in_worktree_area() then
           local p = get_worktree_path_at_cursor()
-          if p and worktree.remove_worktree_path(p) then vim.fn['fugitive#ReloadStatus'](); vim.schedule(refresh) end
+          if p then worktree.remove_worktree_path(p) end
           return
         end
         if is_cursor_in_stash_area() then
           local r = get_stash_ref_at_cursor(b)
-          if r then vim.cmd('Git stash drop ' .. r); vim.fn['fugitive#ReloadStatus'](); vim.schedule(refresh) end
+          if r then vim.cmd('Git stash drop ' .. r); notify_repo_changed() end
           return
         end
         if delete_untracked_directory_at_cursor() then
-          vim.fn['fugitive#ReloadStatus']()
-          vim.schedule(refresh)
+          notify_repo_changed()
           return
         end
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:X", true, false, true), 'm', true)
@@ -540,7 +556,7 @@ function M.setup(group)
         end
         local f = utils.get_filepath_at_cursor(b)
         if f then
-          local wt = utils.get_work_tree()
+          local wt = utils.get_buf_work_tree(b)
           local abs = wt and vim.fn.fnamemodify(wt .. '/' .. f, ':p') or nil
           -- Only open Oil when cursor is directly on the status line for that path
           local cur_line = vim.api.nvim_get_current_line()
@@ -669,6 +685,26 @@ function M.refresh_buffer(bufnr)
   local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
   pcall(function()
     refresh_status_sections(bufnr, ns_worktree, ns_stash)
+  end)
+end
+
+function M.reload_buffer(bufnr)
+  if not utils.is_valid_buf(bufnr) then return end
+  if vim.b[bufnr].fugitive_status_reloading then
+    vim.schedule(function()
+      M.refresh_buffer(bufnr)
+    end)
+    return
+  end
+  vim.b[bufnr].fugitive_status_reloading = true
+  if vim.fn.exists('*fugitive#ReloadStatus') == 1 then
+    pcall(vim.api.nvim_buf_call, bufnr, function()
+      vim.fn['fugitive#ReloadStatus']()
+    end)
+  end
+  vim.b[bufnr].fugitive_status_reloading = false
+  vim.schedule(function()
+    M.refresh_buffer(bufnr)
   end)
 end
 
