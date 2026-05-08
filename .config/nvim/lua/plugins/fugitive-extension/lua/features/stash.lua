@@ -10,7 +10,7 @@ end
 local function refresh_stash_list(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
 
-  local stash_output = utils.get_stash_list()
+  local stash_output = utils.get_stash_list(utils.get_buf_work_tree(bufnr))
   utils.with_buf_modifiable(bufnr, function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, stash_output)
   end)
@@ -37,6 +37,7 @@ local function open_stash_list()
 
   vim.cmd('botright split fugitive-stash://')
   local bufnr = vim.api.nvim_get_current_buf()
+  utils.set_buf_work_tree(bufnr, utils.get_work_tree())
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, stash_output)
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
@@ -80,7 +81,7 @@ function M.setup(group)
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Git stash apply ' .. stash_ref)
-          refresh_stash_list(bufnr)
+          utils.fire_fugitive_changed({ bufnr = bufnr })
         end
       end, { buffer = bufnr, silent = true, desc = "Apply stash" })
 
@@ -88,7 +89,7 @@ function M.setup(group)
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Git stash pop ' .. stash_ref)
-          refresh_stash_list(bufnr)
+          utils.fire_fugitive_changed({ bufnr = bufnr })
         end
       end, { buffer = bufnr, silent = true, desc = "Pop stash" })
 
@@ -96,7 +97,7 @@ function M.setup(group)
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Git stash drop ' .. stash_ref)
-          refresh_stash_list(bufnr)
+          utils.fire_fugitive_changed({ bufnr = bufnr })
         end
       end, { buffer = bufnr, silent = true, desc = "Drop stash" })
 
@@ -126,6 +127,11 @@ function M.setup(group)
           vim.cmd('runtime! ftplugin/git.vim ftplugin/git_*.vim after/ftplugin/git.vim')
         end
       end, 10)
+
+      local buf_group = vim.api.nvim_create_augroup('fugitive_stash_buf_' .. bufnr, { clear = true })
+      utils.setup_repo_refresh(buf_group, bufnr, function(target_bufnr)
+        refresh_stash_list(target_bufnr)
+      end, { visible_only = true })
     end,
   })
 end

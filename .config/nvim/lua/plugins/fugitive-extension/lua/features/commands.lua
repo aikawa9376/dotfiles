@@ -71,7 +71,7 @@ local function hard_reset_to_commit(work_tree, commit)
     return false
   end
 
-  vim.cmd('doautocmd User FugitiveChanged')
+  utils.fire_fugitive_changed({ work_tree = work_tree })
   return true
 end
 
@@ -221,7 +221,7 @@ function M.setup()
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
             vim.notify("Push successful", vim.log.levels.INFO)
-            vim.cmd('doautocmd User FugitiveChanged')
+            utils.fire_fugitive_changed({ work_tree = work_tree })
           else
             vim.notify("Push failed\n" .. message, vim.log.levels.ERROR)
           end
@@ -229,7 +229,6 @@ function M.setup()
             on_complete(exit_code)
           end
         end)
-        vim.fn['fugitive#ReloadStatus']()
       end,
       on_stdout = function(_, data)
         if data then
@@ -297,13 +296,13 @@ function M.setup()
           if exit_code == 0 then
             if stashed then pop_auto_stash(work_tree) end
             vim.notify("Cherry-pick successful", vim.log.levels.INFO)
-            vim.cmd('doautocmd User FugitiveChanged')
+            utils.fire_fugitive_changed({ work_tree = work_tree })
           else
             local handled, err_msg, should_pop = handle_cherry_pick_error(work_tree, message)
             if handled then
                if should_pop and stashed then pop_auto_stash(work_tree) end
                if err_msg then vim.notify(err_msg, vim.log.levels.WARN) end
-               vim.cmd('doautocmd User FugitiveChanged')
+               utils.fire_fugitive_changed({ work_tree = work_tree })
             else
                if stashed then pop_auto_stash(work_tree) end
                vim.notify("Cherry-pick failed\n" .. message, vim.log.levels.ERROR)
@@ -313,7 +312,6 @@ function M.setup()
             on_complete(exit_code)
           end
         end)
-        vim.fn['fugitive#ReloadStatus']()
       end,
       on_stdout = function(_, data)
         if data then
@@ -471,7 +469,7 @@ function M.setup()
     if vim.v.shell_error ~= 0 then
       vim.notify('Reword failed: ' .. result, vim.log.levels.ERROR)
     else
-      vim.fn['fugitive#ReloadStatus']()
+      utils.fire_fugitive_changed({ work_tree = work_tree })
       if on_complete then
         vim.schedule(on_complete)
       end
@@ -524,8 +522,7 @@ function M.setup()
     if vim.v.shell_error ~= 0 then
       vim.notify('Rebase failed: ' .. result, vim.log.levels.ERROR)
     else
-      -- Reload status if the fugitive buffer is open
-      vim.fn['fugitive#ReloadStatus']()
+      utils.fire_fugitive_changed({ work_tree = work_tree })
       if on_complete then
         vim.schedule(on_complete)
       end
@@ -611,12 +608,12 @@ function M.setup()
 
     if stashed then pop_auto_stash(work_tree) end
 
-    if vim.v.shell_error ~= 0 then
-       vim.notify("Rebase failed: " .. rebase_res, vim.log.levels.ERROR)
-    else
-       vim.fn['fugitive#ReloadStatus']()
+     if vim.v.shell_error ~= 0 then
+        vim.notify("Rebase failed: " .. rebase_res, vim.log.levels.ERROR)
+     else
+       utils.fire_fugitive_changed({ work_tree = work_tree })
        if on_complete then vim.schedule(on_complete) end
-    end
+     end
   end
 
   function M.mix_index_with_input(commit_hash)
@@ -632,23 +629,15 @@ function M.setup()
 
   function M.reload_log()
     local cursor_pos = vim.api.nvim_win_get_cursor(0)
+    local work_tree = get_work_tree_from_fugitive()
     if vim.fn.exists('*fugitive#Reload') == 1 then
-       -- This reloads fugitive status/log buffers created by fugitive itself
        vim.fn['fugitive#Reload']()
-    end
-    -- For our custom log buffer, we might need specific reload logic if fugitive#Reload doesn't cover it.
-    -- However, fugitive#Reload usually triggers FugitiveChanged event?
-    -- If so, our autocmd catches it.
-    -- But if not, we can fall back to 'edit' or rely on the caller to refresh.
-    
-    -- If this is called from 'R' mapping in log.lua, we replaced it with refresh_log_list.
-    -- If called from undo/redo, we might need to trigger refresh manually if we are in log buffer.
-    
-    -- Let's stick to the original implementation which tried fugitive#Reload or edit.
+     end
     if vim.fn.exists('*fugitive#Reload') ~= 1 then
       vim.cmd('edit')
     end
     pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
+    utils.fire_fugitive_changed({ work_tree = work_tree })
   end
 
   function M.move_commit(current_commit, target_commit, direction, on_complete)

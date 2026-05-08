@@ -3,6 +3,13 @@ local utils = require("fugitive_utils")
 local commands = require("features.commands")
 local help = require("features.help")
 
+local function notify_branch_changed(bufnr, work_tree)
+  utils.fire_fugitive_changed({
+    bufnr = bufnr,
+    work_tree = work_tree,
+  })
+end
+
 _G.fugitive_branch_completion = function(arg_lead, cmd_line, cursor_pos)
   local branches = vim.fn.systemlist("git branch -a --format='%(refname:short)'")
   if vim.v.shell_error ~= 0 then return {} end
@@ -419,10 +426,7 @@ local function delete_branches(bufnr, branches)
     vim.notify(string.format("Failed: %s", table.concat(failed, ", ")), vim.log.levels.WARN)
   end
 
-  -- Refresh the list
-  vim.defer_fn(function()
-    refresh_branch_list(bufnr)
-  end, 100)
+  notify_branch_changed(bufnr)
 end
 
 local function checkout_branch(bufnr)
@@ -447,10 +451,7 @@ local function checkout_branch(bufnr)
     commands.pop_auto_stash(work_tree)
   end
 
-  -- Refresh the branch list after checkout
-  vim.defer_fn(function()
-    refresh_branch_list(bufnr)
-  end, 200)
+  notify_branch_changed(bufnr)
 end
 
 local function rename_branch(bufnr)
@@ -480,10 +481,7 @@ local function rename_branch(bufnr)
   if vim.v.shell_error ~= 0 then
     vim.notify("Failed to rename branch: " .. vim.fn.trim(result), vim.log.levels.ERROR)
   else
-    -- vim.notify(string.format("Renamed branch %s to %s", old_name, new_name), vim.log.levels.INFO)
-    vim.defer_fn(function()
-      refresh_branch_list(bufnr)
-    end, 100)
+    notify_branch_changed(bufnr)
   end
 end
 
@@ -537,14 +535,11 @@ local function duplicate_branch(bufnr)
   if vim.v.shell_error ~= 0 then
     vim.notify("Failed to duplicate branch: " .. vim.fn.trim(result), vim.log.levels.ERROR)
   else
-    -- vim.notify(string.format("Duplicated branch %s to %s", old_name, new_name), vim.log.levels.INFO)
-    vim.defer_fn(function()
-      refresh_branch_list(bufnr)
-    end, 100)
+    notify_branch_changed(bufnr)
   end
 end
 
-local function create_worktree()
+local function create_worktree(bufnr)
   local branch = get_branch_name_from_line()
   if not branch then
     vim.notify("No branch found on this line", vim.log.levels.WARN)
@@ -566,7 +561,7 @@ local function create_worktree()
   if vim.v.shell_error ~= 0 then
     vim.notify("Failed to create worktree: " .. vim.fn.trim(result), vim.log.levels.ERROR)
   else
-    -- vim.notify(string.format("Created worktree for '%s' at %s", branch, worktree_path), vim.log.levels.INFO)
+    notify_branch_changed(bufnr)
   end
 end
 
@@ -575,10 +570,7 @@ local function fetch_all(bufnr)
   vim.fn.jobstart("git fetch --all --prune", {
     on_exit = function(_, exit_code)
       if exit_code == 0 then
-        -- vim.notify("Fetch complete", vim.log.levels.INFO)
-        vim.schedule(function()
-          refresh_branch_list(bufnr)
-        end)
+        notify_branch_changed(bufnr)
       else
         vim.notify("Fetch failed", vim.log.levels.ERROR)
       end
@@ -592,20 +584,20 @@ local function handle_pull_error(work_tree, message, args, on_success)
     if choice == 1 then -- Rebase
       local cmd = "git -C " .. vim.fn.shellescape(work_tree) .. " pull --rebase" .. args
       local out = vim.fn.system(cmd)
-      if vim.v.shell_error == 0 then
-        vim.notify("Pull --rebase successful.", vim.log.levels.INFO)
-        if on_success then on_success() end
-        return true
+       if vim.v.shell_error == 0 then
+         vim.notify("Pull --rebase successful.", vim.log.levels.INFO)
+         if on_success then on_success() end
+         return true
       else
         return false, "Pull --rebase failed:\n" .. out
       end
     elseif choice == 2 then -- Merge
       local cmd = "git -C " .. vim.fn.shellescape(work_tree) .. " pull --no-ff" .. args
       local out = vim.fn.system(cmd)
-      if vim.v.shell_error == 0 then
-        vim.notify("Pull --no-ff successful.", vim.log.levels.INFO)
-        if on_success then on_success() end
-        return true
+       if vim.v.shell_error == 0 then
+         vim.notify("Pull --no-ff successful.", vim.log.levels.INFO)
+         if on_success then on_success() end
+         return true
       else
         return false, "Pull --no-ff failed:\n" .. out
       end
@@ -676,10 +668,10 @@ local function pull_branch(bufnr)
         if stashed then commands.pop_auto_stash(work_tree) end
         local message = table.concat(output_lines, "\n")
         if exit_code == 0 then
-          refresh_branch_list(bufnr)
+          notify_branch_changed(bufnr, work_tree)
         else
           local handled, err_msg = handle_pull_error(work_tree, message, args, function()
-             refresh_branch_list(bufnr)
+             notify_branch_changed(bufnr, work_tree)
           end)
           if handled then
              if err_msg then
@@ -774,10 +766,10 @@ local function pull_branch_under_cursor(bufnr)
         if stashed then commands.pop_auto_stash(work_tree) end
 
         if pull_success then
-          refresh_branch_list(bufnr)
+          notify_branch_changed(bufnr, work_tree)
         else
           local handled, err_msg = handle_pull_error(work_tree, message, args, function()
-             refresh_branch_list(bufnr)
+             notify_branch_changed(bufnr, work_tree)
           end)
           if handled then
              if err_msg then
@@ -883,8 +875,8 @@ local function rebase_with_stash_fetch(bufnr, default_target)
              end
           else
              vim.notify("Rebase successful.", vim.log.levels.INFO)
-          end
-          refresh_branch_list(bufnr)
+           end
+          notify_branch_changed(bufnr, work_tree)
         else
           vim.notify("Rebase failed.\n" .. message, vim.log.levels.ERROR)
           if stashed then
@@ -903,10 +895,7 @@ local function merge_with_input(bufnr, default_target)
   if target == '' then return end
 
   vim.cmd('Git merge ' .. target)
-
-  vim.defer_fn(function()
-    refresh_branch_list(bufnr)
-  end, 500)
+  notify_branch_changed(bufnr)
 end
 
 local function open_branch_list()
@@ -927,6 +916,7 @@ local function open_branch_list()
   end
   vim.cmd('botright split fugitive-branch://' .. git_dir)
   local bufnr = vim.api.nvim_get_current_buf()
+  utils.set_buf_work_tree(bufnr, utils.get_work_tree({ git_dir = git_dir }) or git_dir)
 
   utils.with_buf_modifiable(bufnr, function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
@@ -988,6 +978,9 @@ function M.setup(group)
     pattern = 'fugitive-branch://*',
     callback = function(ev)
       local bufnr = ev.buf
+      local buf_name = vim.api.nvim_buf_get_name(bufnr)
+      local work_tree = utils.get_work_tree({ git_dir = buf_name:sub(#'fugitive-branch://' + 1) })
+      utils.set_buf_work_tree(bufnr, work_tree)
       vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
       vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
       vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
@@ -1068,7 +1061,7 @@ function M.setup(group)
 
       -- cot: Create worktree from branch
       vim.keymap.set('n', 'cot', function()
-        create_worktree()
+        create_worktree(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Create worktree from branch" })
 
       -- X: Delete branch(es)
@@ -1222,17 +1215,9 @@ function M.setup(group)
         end
       end, 10)
 
-      -- Auto-refresh on specific events (FugitiveChanged)
-      vim.api.nvim_create_autocmd('User', {
-        pattern = 'FugitiveChanged',
-        group = buf_group,
-        -- Listen globally, but only update this buffer if it is visible
-        callback = function()
-          if vim.api.nvim_buf_is_valid(bufnr) and vim.fn.bufwinnr(bufnr) ~= -1 then
-             refresh_branch_list(bufnr)
-          end
-        end,
-      })
+      utils.setup_repo_refresh(buf_group, bufnr, function(target_bufnr)
+        refresh_branch_list(target_bufnr)
+      end, { visible_only = true })
     end,
   })
 end

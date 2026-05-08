@@ -14,13 +14,15 @@ local function apply_highlights(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
 
   -- Get list of unpushed/diverged commit hashes
   local args = vim.b[bufnr].fugitive_log_args or "HEAD"
   if args == "" then args = "HEAD" end
   local target = vim.fn.trim(args)
 
-  local current_branch = vim.fn.system("git rev-parse --abbrev-ref HEAD"):gsub("\n", "")
+  local current_branch = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref HEAD"):gsub("\n", "")
   local diverged_commits = {}
   local unpushed_commits = {}
   local cmd_diverged = nil
@@ -28,20 +30,20 @@ local function apply_highlights(bufnr)
 
   if target == "HEAD" or target == current_branch then
     -- If viewing current branch, compare against upstream for unpushed (Red)
-    local upstream = vim.fn.system("git rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
+    local upstream = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
     if vim.v.shell_error == 0 and upstream ~= "" then
-      cmd_unpushed = "git log " .. target .. " --not " .. upstream .. " --format='%h'"
+      cmd_unpushed = git_prefix .. "log " .. target .. " --not " .. upstream .. " --format='%h'"
     end
   else
     -- If viewing another branch:
     -- 1. Compare against HEAD (current branch) for diverged (Orange)
-    cmd_diverged = "git log " .. target .. " --not HEAD --format='%h'"
+    cmd_diverged = git_prefix .. "log " .. target .. " --not HEAD --format='%h'"
 
     -- 2. Compare against its own upstream for unpushed (Red)
     -- This handles the case where we view a branch that has unpushed commits relative to ITS upstream
-    local upstream = vim.fn.system("git rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
+    local upstream = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
     if vim.v.shell_error == 0 and upstream ~= "" then
-      cmd_unpushed = "git log " .. target .. " --not " .. upstream .. " --format='%h'"
+      cmd_unpushed = git_prefix .. "log " .. target .. " --not " .. upstream .. " --format='%h'"
     end
   end
 
@@ -106,7 +108,9 @@ local function get_log_list(bufnr)
   if bufnr then
     args = vim.b[bufnr].fugitive_log_args or ""
   end
-  local cmd = "git log --pretty=format:'%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
+  local work_tree = bufnr and utils.get_buf_work_tree(bufnr) or nil
+  local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
+  local cmd = git_prefix .. "log --pretty=format:'%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
   return vim.fn.systemlist(cmd)
 end
 
@@ -130,6 +134,7 @@ local function open_log_list(opts)
   vim.cmd('Git ' .. cmd)
 
   local bufnr = vim.api.nvim_get_current_buf()
+  utils.set_buf_work_tree(bufnr, utils.get_work_tree())
 
   vim.bo[bufnr].filetype = 'fugitivelog'
   vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
@@ -202,16 +207,9 @@ function M.setup(group)
         end
       })
 
-      -- Auto-refresh on specific events (FugitiveChanged)
-      vim.api.nvim_create_autocmd('User', {
-        pattern = 'FugitiveChanged',
-        group = buf_group,
-        callback = function()
-          if vim.api.nvim_buf_is_valid(ev.buf) then
-            refresh_log_list(ev.buf)
-          end
-        end,
-      })
+      utils.setup_repo_refresh(buf_group, ev.buf, function(bufnr)
+        refresh_log_list(bufnr)
+      end, { visible_only = true })
 
 
       -- Load fugitive's default mappings

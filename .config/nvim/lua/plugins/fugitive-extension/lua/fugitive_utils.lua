@@ -21,6 +21,12 @@ function M.is_valid_win(win)
   return win ~= nil and vim.api.nvim_win_is_valid(win)
 end
 
+---@param bufnr integer|nil
+---@return boolean
+function M.is_buf_visible(bufnr)
+  return M.is_valid_buf(bufnr) and #vim.fn.win_findbuf(bufnr) > 0
+end
+
 ---@param opts? {bufnr?: integer, git_dir?: string, notify?: boolean, not_git_message?: string, error_message?: string}
 ---@return string|nil
 function M.get_work_tree(opts)
@@ -48,6 +54,115 @@ function M.get_work_tree(opts)
   end
 
   return M.normalize_path(work_tree)
+end
+
+---@param bufnr integer
+---@param work_tree string|nil
+---@return string|nil
+function M.set_buf_work_tree(bufnr, work_tree)
+  if not M.is_valid_buf(bufnr) then
+    return nil
+  end
+
+  local normalized = M.normalize_path(work_tree)
+  if normalized then
+    vim.b[bufnr].fugitive_work_tree = normalized
+  end
+  return normalized
+end
+
+---@param bufnr integer
+---@param opts? {work_tree?: string}
+---@return string|nil
+function M.get_buf_work_tree(bufnr, opts)
+  if not M.is_valid_buf(bufnr) then
+    return nil
+  end
+
+  local work_tree = M.normalize_path(vim.b[bufnr].fugitive_work_tree)
+  if work_tree then
+    return work_tree
+  end
+
+  work_tree = opts and opts.work_tree or M.get_work_tree({ bufnr = bufnr })
+  return M.set_buf_work_tree(bufnr, work_tree)
+end
+
+---@param opts? {bufnr?: integer, work_tree?: string, git_dir?: string, reason?: string}
+function M.fire_fugitive_changed(opts)
+  opts = opts or {}
+
+  local work_tree = opts.work_tree
+  if not work_tree and opts.bufnr then
+    work_tree = M.get_buf_work_tree(opts.bufnr)
+  end
+  if not work_tree and opts.git_dir then
+    work_tree = M.get_work_tree({ git_dir = opts.git_dir })
+  end
+  if not work_tree then
+    work_tree = M.get_work_tree()
+  end
+
+  work_tree = M.normalize_path(work_tree)
+  vim.schedule(function()
+    vim.api.nvim_exec_autocmds('User', {
+      pattern = 'FugitiveChanged',
+      data = {
+        work_tree = work_tree,
+        reason = opts.reason,
+      },
+    })
+  end)
+end
+
+---@param group integer
+---@param bufnr integer
+---@param refresh fun(bufnr: integer, ev?: table)
+---@param opts? {work_tree?: string, refresh_on_enter?: boolean, visible_only?: boolean}
+function M.setup_repo_refresh(group, bufnr, refresh, opts)
+  opts = opts or {}
+  local initial_work_tree = opts.work_tree or M.get_buf_work_tree(bufnr)
+  M.set_buf_work_tree(bufnr, initial_work_tree)
+
+  local function matches_repo(ev)
+    if not M.is_valid_buf(bufnr) then
+      return false
+    end
+
+    if opts.visible_only and not M.is_buf_visible(bufnr) then
+      return false
+    end
+
+    local changed_work_tree = ev and ev.data and ev.data.work_tree or nil
+    if not changed_work_tree then
+      return true
+    end
+
+    local buffer_work_tree = M.get_buf_work_tree(bufnr)
+    return not buffer_work_tree or M.normalize_path(changed_work_tree) == buffer_work_tree
+  end
+
+  local function maybe_refresh(ev)
+    if matches_repo(ev) then
+      refresh(bufnr, ev)
+    end
+  end
+
+  if opts.refresh_on_enter ~= false then
+    vim.api.nvim_create_autocmd('BufEnter', {
+      group = group,
+      buffer = bufnr,
+      callback = function()
+        maybe_refresh()
+      end,
+    })
+  end
+
+  vim.api.nvim_create_autocmd('User', {
+    group = group,
+    pattern = 'FugitiveChanged',
+    callback = maybe_refresh,
+  })
 end
 
 ---@param work_tree string|nil

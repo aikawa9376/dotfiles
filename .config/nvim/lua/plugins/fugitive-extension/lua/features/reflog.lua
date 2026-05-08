@@ -3,8 +3,10 @@ local utils = require("fugitive_utils")
 local commands = require("features.commands")
 local help = require("features.help")
 
-local function get_reflog_list()
-  local cmd = "git reflog --pretty=format:'%h%x09%gd%x09%gs' -n 1000"
+local function get_reflog_list(bufnr)
+  local work_tree = bufnr and utils.get_buf_work_tree(bufnr) or nil
+  local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
+  local cmd = git_prefix .. "reflog --pretty=format:'%h%x09%gd%x09%gs' -n 1000"
   return vim.fn.systemlist(cmd)
 end
 
@@ -12,7 +14,7 @@ local function refresh_reflog_list(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
 
   utils.with_buf_modifiable(bufnr, function()
-    local log_output = get_reflog_list()
+    local log_output = get_reflog_list(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, log_output)
   end)
 end
@@ -23,6 +25,7 @@ local function open_reflog_list()
   vim.cmd('Git ' .. cmd)
 
   local bufnr = vim.api.nvim_get_current_buf()
+  utils.set_buf_work_tree(bufnr, utils.get_work_tree())
 
   vim.bo[bufnr].filetype = 'fugitivereflog'
   vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
@@ -187,6 +190,10 @@ function M.setup(group)
           commands.close_commit_info_float()
         end,
       })
+
+      utils.setup_repo_refresh(buf_group, ev.buf, function(bufnr)
+        refresh_reflog_list(bufnr)
+      end, { visible_only = true })
     end,
   })
 end

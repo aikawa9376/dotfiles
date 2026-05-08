@@ -723,9 +723,7 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
           vim.notify('Skipped restoring unstaged changes because auto-stash pop failed', vim.log.levels.WARN)
         end
       end
-      vim.cmd('silent! doautocmd User FugitiveChanged')
-      pcall(function() vim.fn['fugitive#ReloadStatus']() end)
-      vim.schedule(function() pcall(function() require('features.status').refresh_all() end) end)
+      utils.fire_fugitive_changed({ work_tree = git_dir })
       vim.cmd('checktime')
       cleanup_view_file(view_state.view_file)
       vim.schedule(function() require('utilities').smart_close() end)
@@ -737,7 +735,7 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
   if reset_mode == 'mixed' then
     if stash_popped then
       if not apply_patch_to_worktree(git_dir, patch, not use_reverse) then
-        vim.cmd('silent! doautocmd User FugitiveChanged')
+        utils.fire_fugitive_changed({ work_tree = git_dir })
         reopen_commit_preserving_view(new_hash, view_state)
         return
       end
@@ -756,9 +754,7 @@ local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, 
     vim.notify(string.format('Discarded %s from %s', scope, commit:sub(1, 7)), vim.log.levels.INFO)
   end
   -- Trigger log buffer refresh via standard fugitive event
-  vim.cmd('silent! doautocmd User FugitiveChanged')
-  pcall(function() vim.fn['fugitive#ReloadStatus']() end)
-  vim.schedule(function() pcall(function() require('features.status').refresh_all() end) end)
+  utils.fire_fugitive_changed({ work_tree = git_dir })
   -- Reload the buffer to reflect the amended commit
   reopen_commit_preserving_view(new_hash, view_state)
 end

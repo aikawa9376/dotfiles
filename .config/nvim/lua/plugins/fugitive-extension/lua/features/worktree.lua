@@ -12,7 +12,11 @@ local _cache = {
 local CACHE_TTL = 5 -- 秒
 
 -- ワークツリーのルート取得（キャッシュ付き）
-local function get_work_tree()
+local function get_work_tree(work_tree)
+  if work_tree and work_tree ~= '' then
+    return utils.normalize_path(work_tree)
+  end
+
   local now = os.time()
   if _cache.root and (now - _cache.root_mtime) < CACHE_TTL then
     return _cache.root
@@ -27,14 +31,16 @@ local function get_work_tree()
 end
 
 -- ワークツリー一覧の取得（キャッシュ付き）
-local function get_worktrees(force)
+local function get_worktrees(force, work_tree)
+  local root = get_work_tree(work_tree)
+  if not root then return {} end
   local now = os.time()
-  if not force and _cache.entries and (now - _cache.mtime) < CACHE_TTL then
+  if not force and _cache.entries and _cache.root == root and (now - _cache.mtime) < CACHE_TTL then
     return _cache.entries
   end
 
   local ok, entries = pcall(function()
-    local output = vim.fn.systemlist('git worktree list --porcelain')
+    local output = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(root) .. ' worktree list --porcelain')
     if vim.v.shell_error ~= 0 then return {} end
 
     local res, current = {}, nil
@@ -53,6 +59,7 @@ local function get_worktrees(force)
   end)
 
   if ok then
+    _cache.root = root
     _cache.entries = entries
     _cache.mtime = now
     return entries
@@ -137,8 +144,8 @@ local function refresh_all_worktree_buffers()
 end
 
 function M.refresh_worktree_list(bufnr)
-  local entries = get_worktrees(true)
-  local current_root = get_work_tree()
+  local current_root = utils.get_buf_work_tree(bufnr) or get_work_tree()
+  local entries = get_worktrees(true, current_root)
   local main_head = entries[1] and entries[1].head
 
   local lines = {}
@@ -155,11 +162,13 @@ function M.refresh_worktree_list(bufnr)
 end
 
 local function open_worktree_list()
-  local entries = get_worktrees(true)
+  local current_root = get_work_tree()
+  local entries = get_worktrees(true, current_root)
   if #entries == 0 then return end
 
   vim.cmd('botright split fugitive-worktree://')
   local bufnr = vim.api.nvim_get_current_buf()
+  utils.set_buf_work_tree(bufnr, current_root)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('buflisted', false, { buf = bufnr })
@@ -189,13 +198,13 @@ local function perform_sync(primary_path, target_head)
 
   M.clear_cache()
   refresh_all_worktree_buffers()
+  utils.fire_fugitive_changed({ work_tree = primary_path })
 end
 
 function M.sync_current_worktree_to_primary()
-  local entries = get_worktrees()
-  if #entries < 2 then return end
-
   local current_root = get_work_tree()
+  local entries = get_worktrees(false, current_root)
+  if #entries < 2 then return end
   local primary = entries[1]
   local current = nil
   for _, wt in ipairs(entries) do
@@ -235,9 +244,9 @@ function M.lualine_sync_status()
 end
 
 function M.worktree_needs_sync(path)
-  local entries = get_worktrees()
-  if #entries < 2 then return false end
   local target = path and utils.normalize_path(path) or get_work_tree()
+  local entries = get_worktrees(false, target)
+  if #entries < 2 then return false end
   local primary = entries[1]
   for i, wt in ipairs(entries) do
     if wt.path == target then
@@ -297,11 +306,12 @@ function M.remove_worktree_path(path, force)
     vim.notify("Failed: " .. vim.fn.trim(output), vim.log.levels.ERROR); return false
   end
   M.clear_cache()
+  utils.fire_fugitive_changed({ work_tree = entries[1].path })
   return true
 end
 
 local function add_worktree(bufnr)
-  local entries = get_worktrees()
+  local entries = get_worktrees(false, utils.get_buf_work_tree(bufnr))
   if #entries == 0 then return end
   local primary = entries[1]
   local project_name = vim.fn.fnamemodify(primary.path, ':t')
@@ -322,17 +332,17 @@ local function add_worktree(bufnr)
     if vim.v.shell_error == 0 then
       vim.notify(string.format("Added worktree '%s'", branch))
       M.clear_cache()
-      M.refresh_worktree_list(bufnr)
+      utils.fire_fugitive_changed({ bufnr = bufnr, work_tree = primary.path })
     else
       vim.notify("Failed: " .. vim.fn.trim(output), vim.log.levels.ERROR)
     end
   end)
 end
 
-function M.get_summary()
-  local entries = get_worktrees()
+function M.get_summary(work_tree)
+  local current_root = get_work_tree(work_tree)
+  local entries = get_worktrees(false, current_root)
   if #entries <= 1 then return nil end
-  local current_root = get_work_tree()
   local main_head = entries[1] and entries[1].head
 
   local lines = { 'Worktrees (' .. #entries .. ')' }
@@ -363,6 +373,7 @@ function M.setup(group)
 
   vim.api.nvim_create_autocmd('FileType', { group = group, pattern = 'fugitiveworktree', callback = function(ev)
     local b = ev.buf
+    local buf_group = vim.api.nvim_create_augroup('fugitive_worktree_buf_' .. b, { clear = true })
     vim.opt_local.number, vim.opt_local.relativenumber, vim.opt_local.signcolumn = false, false, 'no'
     vim.keymap.set('n', 'g?', function() help.show('Worktree keys', { 'g? help', '<CR> open', 'gs sync', 'a add', 'X remove', 'R refresh', 'q close' }) end, { buffer = b })
     vim.keymap.set('n', '<CR>', function() local e = entry_at_cursor(b); if e then M.open_worktree_path(e.path) end end, { buffer = b })
@@ -371,10 +382,14 @@ function M.setup(group)
       local entries = get_worktrees()
       if e and entries[1] then perform_sync(entries[1].path, e.head) end
     end, { buffer = b })
-    vim.keymap.set('n', 'X', function() local e = entry_at_cursor(b); if e and M.remove_worktree_path(e.path) then M.refresh_worktree_list(b) end end, { buffer = b })
+    vim.keymap.set('n', 'X', function() local e = entry_at_cursor(b); if e then M.remove_worktree_path(e.path) end end, { buffer = b })
     vim.keymap.set('n', 'a', function() add_worktree(b) end, { buffer = b })
     vim.keymap.set('n', 'R', function() M.refresh_worktree_list(b) end, { buffer = b })
     vim.keymap.set('n', 'q', ':bd<CR>', { buffer = b, nowait = true, silent = true })
+    utils.setup_repo_refresh(buf_group, b, function(bufnr)
+      M.clear_cache()
+      M.refresh_worktree_list(bufnr)
+    end, { visible_only = true })
   end })
 
   vim.api.nvim_create_autocmd({'DirChanged', 'BufEnter', 'BufWritePost'}, { group = group, callback = M.clear_cache })
