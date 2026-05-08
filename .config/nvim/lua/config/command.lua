@@ -2,6 +2,43 @@ local MyAutoCmd = vim.api.nvim_create_augroup("MyAutoCmd", { clear = true })
 
 vim.cmd("filetype plugin indent on")
 
+local function no_name_buffer_should_prune(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  if (vim.api.nvim_buf_get_name(bufnr) or "") ~= "" then
+    return false
+  end
+  if vim.bo[bufnr].buftype ~= "" then
+    return false
+  end
+  if vim.b[bufnr] and vim.b[bufnr].lazyagent_is_scratch == true then
+    return false
+  end
+  if vim.bo[bufnr].modified then
+    return false
+  end
+  return #vim.fn.win_findbuf(bufnr) == 0
+end
+
+local function prune_orphaned_no_name_buffers()
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if no_name_buffer_should_prune(bufnr) then
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+    end
+  end
+end
+
+local function schedule_no_name_prune()
+  vim.schedule(prune_orphaned_no_name_buffers)
+end
+
+vim.api.nvim_create_autocmd({ "BufHidden", "WinClosed" }, {
+  group = MyAutoCmd,
+  pattern = "*",
+  callback = schedule_no_name_prune,
+})
+
 vim.api.nvim_create_autocmd("InsertLeave", {
   group = MyAutoCmd,
   pattern = "*",

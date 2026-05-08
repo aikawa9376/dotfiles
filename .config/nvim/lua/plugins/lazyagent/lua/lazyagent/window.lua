@@ -623,6 +623,16 @@ pcall(function()
       end)
     end,
   })
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    group = group,
+    callback = function(args)
+      local bufnr = tonumber(args.buf)
+      if not bufnr then
+        return
+      end
+      forget_scratch_buffer(bufnr)
+    end,
+  })
 end)
 
 return M
