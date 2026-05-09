@@ -139,6 +139,16 @@ return {
           function() if vim.fn.line('.') == 1 then vim.cmd("normal! G") else vim.cmd("normal! gk") end end,
           { noremap = true, silent = true, buffer = obj.bufnr }
         )
+        vim.keymap.set(
+          "n",
+          "q",
+          function()
+            if obj.win_id and vim.api.nvim_win_is_valid(obj.win_id) then
+              vim.api.nvim_win_close(obj.win_id, true)
+            end
+          end,
+          { noremap = true, silent = true, nowait = true, buffer = obj.bufnr, desc = "Harpoon: close menu" }
+        )
 
         vim.api.nvim_create_autocmd("CursorMoved", {
           buffer = obj.bufnr,
@@ -149,18 +159,6 @@ return {
               row = updateSettings.row + updateSettings.height + 2,
               height = math.floor(previewArea * 0.8)
             })
-          end,
-        })
-        vim.api.nvim_create_autocmd("BufLeave", {
-          buffer = obj.bufnr,
-          group = HarpoonGroup,
-          callback = function()
-            for _, win in ipairs(vim.api.nvim_list_wins()) do
-              local win_config = vim.api.nvim_win_get_config(win)
-              if win_config.relative ~= "" then
-                vim.api.nvim_win_close(win, true)
-              end
-            end
           end,
         })
       end
