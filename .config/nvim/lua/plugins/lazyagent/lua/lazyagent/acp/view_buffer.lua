@@ -3080,8 +3080,9 @@ local function append_text_to_buffer(bufnr, text, opts)
   opts = opts or {}
 
   local entry = layout_entry(bufnr)
+  local current_display_meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
   local preserved_section_items = opts.preserve_display_metadata == true and entry.transcript_section_items or nil
-  local preserved_display_meta = opts.preserve_display_metadata == true and entry.transcript_display_meta or nil
+  local preserved_display_meta = opts.preserve_display_metadata == true and current_display_meta or nil
   local raw_lines = type(entry.transcript_source_lines) == "table" and entry.transcript_source_lines or {}
   local transcript_stop = transcript_line_count(bufnr)
   local replace_start = transcript_stop
@@ -3103,7 +3104,13 @@ local function append_text_to_buffer(bufnr, text, opts)
     new_raw[#new_raw + 1] = raw_lines[idx]
   end
   vim.list_extend(new_raw, replacement)
-  local next_meta = type(preserved_display_meta) == "table" and vim.deepcopy(preserved_display_meta) or {}
+  local next_meta = vim.deepcopy(current_display_meta)
+  if type(next_meta) ~= "table" then
+    next_meta = {}
+  end
+  if type(preserved_display_meta) ~= "table" then
+    next_meta.compacted = false
+  end
   next_meta.table_tail_state = trailing_markdown_table_context(new_raw).state
   entry.transcript_source_lines = new_raw
   entry.transcript_section_items = preserved_section_items or {}

@@ -227,7 +227,7 @@ require("lazyagent").setup({
     transcript_max_lines = 12000,
     release_buffer_on_hide = true,
     transcript_compaction = {
-      enabled = true,
+      enabled = false,
       min_sections = 48,
       keep_recent_sections = 24,
       summary_items = 6,
@@ -255,7 +255,7 @@ require("lazyagent").setup({
 `interactive_agents.<name>.acp = false` で、global ACP 有効時でも特定 agent だけ通常 backend に戻せます。
 通常の buffer view は default で最新 `transcript_max_lines` 行だけを tail 表示します。全文を確認したい場合は `:LazyAgentACPFullTranscript` または `:LazyAgentACPRawTranscript` を使ってください。
 
-古い transcript section をまとめて最近分を優先表示する `transcript_compaction` は default で有効です。従来どおり全 section をそのまま表示したい場合だけ `enabled = false` にしてください。`runtime_compaction` も default で有効で、古い runtime timeline は summary/pin 情報だけ残し、詳細本文は recent/pinned item と transcript file に寄せます。
+古い transcript section をまとめて最近分を優先表示する `transcript_compaction` は default では無効です。必要な場合だけ `enabled = true` にしてください。`runtime_compaction` は default で有効で、古い runtime timeline は summary/pin 情報だけ残し、詳細本文は recent/pinned item と transcript file に寄せます。
 
 `release_buffer_on_hide = true` では ACP transcript window を閉じたときに表示 buffer を wipe し、再表示時に live transcript file から復元します。agent process/session は維持されます。
 
