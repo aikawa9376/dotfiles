@@ -47,6 +47,7 @@ local conversation_helpers
 local config_helpers
 local actions_helpers
 local host_helpers
+local complete_pending_turn
 
 state_helpers = backend_state.setup({
   cache_logic = cache_logic,
@@ -74,6 +75,7 @@ conversation_helpers = backend_conversation.setup({
 })
 
 config_helpers = backend_config.setup({
+  state = state,
   acp_logic = acp_logic,
   agent_logic = agent_logic,
   skills_logic = skills_logic,
@@ -141,6 +143,12 @@ host_helpers = backend_host.setup({
   assistant_heading_label = config_helpers.assistant_heading_label,
   apply_initial_session_config = config_helpers.apply_initial_session_config,
   maybe_save_turn_to_brain = config_helpers.maybe_save_turn_to_brain,
+  complete_pending_turn = function(session)
+    if type(complete_pending_turn) == "function" then
+      return complete_pending_turn(session)
+    end
+    return false
+  end,
   normalize_available_commands = config_helpers.normalize_available_commands,
   note_unadvertised_slash_command = config_helpers.note_unadvertised_slash_command,
   build_switch_history_blocks = conversation_helpers.build_switch_history_blocks,
@@ -166,6 +174,19 @@ host_helpers = backend_host.setup({
 local function create_backend(default_view)
   local backend = {}
 
+  complete_pending_turn = function(session)
+    local pending = session and session.pending_brain_turn or nil
+    if not pending then
+      return false
+    end
+    session.pending_brain_turn = nil
+    util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = pending.result })
+    util.fire_event("TurnDone", { agent_name = session.agent_name, result = pending.result })
+    actions_helpers.maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
+    config_helpers.maybe_save_turn_to_brain(session, pending.prompt, pending.start_seq)
+    return true
+  end
+
   local function session_view(session)
     return (session and session.view) or default_view
   end
@@ -183,6 +204,9 @@ local function create_backend(default_view)
 
     session.preparing_prompt = true
     config_helpers.maybe_apply_auto_switch(session, prompt, function()
+      if next(session.tool_calls or {}) == nil then
+        complete_pending_turn(session)
+      end
       session.preparing_prompt = false
       session.busy = true
       actions_helpers.maybe_call_mcp_tool("notify_start", { agent_name = session.agent_name })
@@ -200,6 +224,7 @@ local function create_backend(default_view)
         conversation_helpers.close_stream(session)
 
         if err then
+          session.pending_brain_turn = nil
           conversation_helpers.append_block(session, "Error", err.message or tostring(err))
           pcall(function()
             require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
@@ -214,6 +239,12 @@ local function create_backend(default_view)
 
         local stop_reason = result and result.stopReason or nil
         if stop_reason == "tool_call" then
+          session.pending_brain_turn = {
+            prompt = prompt,
+            start_seq = turn_start_seq,
+            result = result,
+            token = 0,
+          }
           pcall(function()
             require("lazyagent.logic.status").start_monitor(session.agent_name)
           end)
@@ -224,10 +255,12 @@ local function create_backend(default_view)
           conversation_helpers.append_block(session, "System", "Turn finished with stopReason: " .. tostring(stop_reason))
         end
 
-        util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = result })
-        util.fire_event("TurnDone", { agent_name = session.agent_name, result = result })
-        actions_helpers.maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
-        config_helpers.maybe_save_turn_to_brain(session, prompt, turn_start_seq)
+        session.pending_brain_turn = {
+          prompt = prompt,
+          start_seq = turn_start_seq,
+          result = result,
+        }
+        complete_pending_turn(session)
 
         if #session.prompt_queue > 0 then
           backend._drain_prompt_queue(pane_id)
@@ -493,6 +526,9 @@ local function create_backend(default_view)
   function backend.kill_pane(pane_id)
     local session = get_session(pane_id)
     if session then
+      if next(session.tool_calls or {}) == nil then
+        complete_pending_turn(session)
+      end
       state_helpers.clear_pending_switch_history(session)
       session.closing_intentionally = true
       for terminal_id, _ in pairs(session.terminals or {}) do
