@@ -20,6 +20,7 @@ function M.setup(deps)
   local normalize_session_info = deps.normalize_session_info
   local assistant_heading_label = deps.assistant_heading_label
   local apply_initial_session_config = deps.apply_initial_session_config
+  local complete_pending_turn = deps.complete_pending_turn
   local normalize_available_commands = deps.normalize_available_commands
   local append_block = deps.append_block
   local append_stream_chunk = deps.append_stream_chunk

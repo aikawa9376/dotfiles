@@ -1,6 +1,7 @@
 local M = {}
 
 function M.setup(deps)
+  local state = deps.state
   local acp_logic = deps.acp_logic
   local agent_logic = deps.agent_logic
   local skills_logic = deps.skills_logic

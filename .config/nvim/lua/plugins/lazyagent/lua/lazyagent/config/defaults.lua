@@ -90,7 +90,7 @@ function M.build()
         model_rules = {},
       },
       brain_save = {
-        enabled = false,
+        enabled = true,
         command = nil,
       },
     },
