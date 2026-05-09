@@ -1,10 +1,18 @@
 local api = vim.api
 
+local M = {}
+
 -- フロートウィンドウのバッファとウィンドウの ID
 local preview_buf = nil
 local preview_win = nil
+local owner_buf = nil
+local owner_win = nil
+local owner_buf_leave_autocmd = nil
+local owner_win_enter_autocmd = nil
+local owner_win_closed_autocmd = nil
 
 local prev_row = nil
+local preview_group = api.nvim_create_augroup("HarpoonPreviewLifecycle", { clear = false })
 
 local function get_current_file()
     local line = api.nvim_get_current_line()
@@ -37,8 +45,84 @@ local function previewWinMove(win_id, bufnr, direction)
   highlight_cursor(bufnr, new_row - 1)
 end
 
+local function clear_owner_autocmds()
+  if owner_buf_leave_autocmd then
+    pcall(api.nvim_del_autocmd, owner_buf_leave_autocmd)
+    owner_buf_leave_autocmd = nil
+  end
+  if owner_win_enter_autocmd then
+    pcall(api.nvim_del_autocmd, owner_win_enter_autocmd)
+    owner_win_enter_autocmd = nil
+  end
+  if owner_win_closed_autocmd then
+    pcall(api.nvim_del_autocmd, owner_win_closed_autocmd)
+    owner_win_closed_autocmd = nil
+  end
+  owner_buf = nil
+  owner_win = nil
+end
+
+local function attach_owner(parent)
+  local next_owner_buf = type(parent) == "table" and tonumber(parent.bufnr) or nil
+  local next_owner_win = type(parent) == "table" and tonumber(parent.win_id) or nil
+  if not next_owner_buf or not next_owner_win then
+    clear_owner_autocmds()
+    return
+  end
+
+  if owner_buf == next_owner_buf and owner_win == next_owner_win then
+    return
+  end
+
+  clear_owner_autocmds()
+  owner_buf = next_owner_buf
+  owner_win = next_owner_win
+
+  owner_buf_leave_autocmd = api.nvim_create_autocmd("BufLeave", {
+    group = preview_group,
+    buffer = owner_buf,
+    once = true,
+    callback = function()
+      M.close()
+    end,
+  })
+  owner_win_enter_autocmd = api.nvim_create_autocmd("WinEnter", {
+    group = preview_group,
+    callback = function()
+      if not owner_win then
+        return
+      end
+      local current_win = api.nvim_get_current_win()
+      if current_win ~= owner_win then
+        M.close()
+      end
+    end,
+  })
+  owner_win_closed_autocmd = api.nvim_create_autocmd("WinClosed", {
+    group = preview_group,
+    pattern = tostring(owner_win),
+    once = true,
+    callback = function()
+      M.close()
+    end,
+  })
+end
+
+function M.close()
+  clear_owner_autocmds()
+  if preview_win and api.nvim_win_is_valid(preview_win) then
+    pcall(api.nvim_win_close, preview_win, true)
+  end
+  if preview_buf and api.nvim_buf_is_valid(preview_buf) then
+    pcall(api.nvim_buf_delete, preview_buf, { force = true })
+  end
+  preview_win = nil
+  preview_buf = nil
+  prev_row = nil
+end
+
 -- プレビューを開く関数
-local function open_preview(parent, float_opts)
+function M.open(parent, float_opts)
   float_opts = float_opts or {}
   float_opts = vim.tbl_deep_extend('force', {
     relative = "editor",
@@ -52,6 +136,8 @@ local function open_preview(parent, float_opts)
 
   local item = get_current_file()
   if not item then return end
+
+  attach_owner(parent)
 
   -- プレビュー用バッファを作成
   if preview_buf == nil or not vim.api.nvim_buf_is_valid(preview_buf) then
@@ -105,4 +191,8 @@ local function open_preview(parent, float_opts)
   return { win_id = preview_win, buf_id = preview_buf, item = item }
 end
 
-return open_preview
+return setmetatable(M, {
+  __call = function(_, ...)
+    return M.open(...)
+  end,
+})
