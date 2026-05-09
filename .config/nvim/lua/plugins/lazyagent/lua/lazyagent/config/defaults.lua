@@ -69,7 +69,7 @@ function M.build()
       buffer_background = nil,
       buffer_inactive_background = nil,
       transcript_compaction = {
-        enabled = true,
+        enabled = false,
         min_sections = 48,
         keep_recent_sections = 24,
         summary_items = 6,
