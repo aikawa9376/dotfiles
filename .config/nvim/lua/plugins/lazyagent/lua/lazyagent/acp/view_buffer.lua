@@ -3707,6 +3707,7 @@ function M.open_fullscreen_transcript(pane_id, session)
   end, {
     buffer = bufnr,
     noremap = true,
+    nowait = true,
     silent = true,
     desc = "LazyAgentACP: close fullscreen transcript",
   })

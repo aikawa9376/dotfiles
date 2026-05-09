@@ -1,4 +1,3 @@
-
 local M = {}
 
 function M.setup(deps)
@@ -11,7 +10,6 @@ function M.setup(deps)
   local clamp_utf8_from_end = deps.clamp_utf8_from_end
   local ensure_parent_dir = deps.ensure_parent_dir
   local read_path_lines = deps.read_path_lines
-  local read_buffer_lines_for_path = deps.read_buffer_lines_for_path
   local reload_loaded_buffers_for_path = deps.reload_loaded_buffers_for_path
   local write_session_transcript = deps.write_session_transcript
   local sync_runtime_session = deps.sync_runtime_session
@@ -20,7 +18,6 @@ function M.setup(deps)
   local normalize_session_info = deps.normalize_session_info
   local assistant_heading_label = deps.assistant_heading_label
   local apply_initial_session_config = deps.apply_initial_session_config
-  local complete_pending_turn = deps.complete_pending_turn
   local normalize_available_commands = deps.normalize_available_commands
   local append_block = deps.append_block
   local append_stream_chunk = deps.append_stream_chunk
@@ -46,780 +43,780 @@ function M.setup(deps)
 
   local module = {}
 
-local function next_terminal_id()
-  terminal_seq = terminal_seq + 1
-  return "lazyagent-term-" .. tostring(terminal_seq)
-end
-
-local function make_env_map(env_list)
-  local env = vim.fn.environ()
-  for _, entry in ipairs(env_list or {}) do
-    if type(entry) == "table" and entry.name and entry.value ~= nil then
-      env[entry.name] = tostring(entry.value)
-    end
-  end
-  return env
-end
-
-local function append_terminal_output(session, terminal_id, data)
-  if not data then return end
-  local text = type(data) == "table" and table.concat(vim.tbl_filter(function(item)
-    return item and item ~= ""
-  end, data), "\n") or tostring(data)
-  if text == "" then return end
-  append_stream_chunk(session, "terminal:" .. terminal_id, "Terminal " .. terminal_id, text)
-  if not text:match("\n$") then
-    write_session_transcript(session, "\n")
-  end
-end
-
-local function create_terminal(session, params, done)
-  local terminal_id = next_terminal_id()
-  local output_limit = tonumber(params.outputByteLimit) or (1024 * 1024)
-  local cwd = params.cwd or session.cwd
-  local command = params.command
-  if not command or command == "" then
-    done(nil, { code = -32602, message = "terminal/create requires command" })
-    return
+  local function next_terminal_id()
+    terminal_seq = terminal_seq + 1
+    return "lazyagent-term-" .. tostring(terminal_seq)
   end
 
-  local argv = { command }
-  for _, arg in ipairs(params.args or {}) do
-    table.insert(argv, tostring(arg))
-  end
-
-  local terminal = {
-    id = terminal_id,
-    output_limit = output_limit,
-    output = "",
-    truncated = false,
-    exit_status = nil,
-    waiters = {},
-    job_id = nil,
-  }
-  session.terminals[terminal_id] = terminal
-
-  local function append_output(data)
-    if not data then return end
-    local parts = {}
-    for _, chunk in ipairs(data) do
-      if chunk and chunk ~= "" then
-        table.insert(parts, chunk)
+  local function make_env_map(env_list)
+    local env = vim.fn.environ()
+    for _, entry in ipairs(env_list or {}) do
+      if type(entry) == "table" and entry.name and entry.value ~= nil then
+        env[entry.name] = tostring(entry.value)
       end
     end
-    if #parts == 0 then return end
-    local text = table.concat(parts, "\n")
-    if terminal.output ~= "" and not terminal.output:match("\n$") then
-      terminal.output = terminal.output .. "\n"
-    end
-    terminal.output = terminal.output .. text
-    terminal.output, terminal.truncated = clamp_utf8_from_end(terminal.output, terminal.output_limit)
-    append_terminal_output(session, terminal_id, text)
+    return env
   end
 
-  local job_id = vim.fn.jobstart(argv, {
-    cwd = cwd,
-    env = make_env_map(params.env or {}),
-    stdout_buffered = false,
-    stderr_buffered = false,
-    on_stdout = function(_, data)
-      vim.schedule(function()
-        append_output(data)
-      end)
-    end,
-    on_stderr = function(_, data)
-      vim.schedule(function()
-        append_output(data)
-      end)
-    end,
-    on_exit = function(_, code, signal)
-      vim.schedule(function()
-        terminal.exit_status = {
-          exitCode = code,
-          signal = signal == 0 and vim.NIL or signal,
-        }
-        close_stream(session)
-        for _, waiter in ipairs(terminal.waiters) do
-          pcall(waiter, {
+  local function append_terminal_output(session, terminal_id, data)
+    if not data then return end
+    local text = type(data) == "table" and table.concat(vim.tbl_filter(function(item)
+      return item and item ~= ""
+    end, data), "\n") or tostring(data)
+    if text == "" then return end
+    append_stream_chunk(session, "terminal:" .. terminal_id, "Terminal " .. terminal_id, text)
+    if not text:match("\n$") then
+      write_session_transcript(session, "\n")
+    end
+  end
+
+  local function create_terminal(session, params, done)
+    local terminal_id = next_terminal_id()
+    local output_limit = tonumber(params.outputByteLimit) or (1024 * 1024)
+    local cwd = params.cwd or session.cwd
+    local command = params.command
+    if not command or command == "" then
+      done(nil, { code = -32602, message = "terminal/create requires command" })
+      return
+    end
+
+    local argv = { command }
+    for _, arg in ipairs(params.args or {}) do
+      table.insert(argv, tostring(arg))
+    end
+
+    local terminal = {
+      id = terminal_id,
+      output_limit = output_limit,
+      output = "",
+      truncated = false,
+      exit_status = nil,
+      waiters = {},
+      job_id = nil,
+    }
+    session.terminals[terminal_id] = terminal
+
+    local function append_output(data)
+      if not data then return end
+      local parts = {}
+      for _, chunk in ipairs(data) do
+        if chunk and chunk ~= "" then
+          table.insert(parts, chunk)
+        end
+      end
+      if #parts == 0 then return end
+      local text = table.concat(parts, "\n")
+      if terminal.output ~= "" and not terminal.output:match("\n$") then
+        terminal.output = terminal.output .. "\n"
+      end
+      terminal.output = terminal.output .. text
+      terminal.output, terminal.truncated = clamp_utf8_from_end(terminal.output, terminal.output_limit)
+      append_terminal_output(session, terminal_id, text)
+    end
+
+    local job_id = vim.fn.jobstart(argv, {
+      cwd = cwd,
+      env = make_env_map(params.env or {}),
+      stdout_buffered = false,
+      stderr_buffered = false,
+      on_stdout = function(_, data)
+        vim.schedule(function()
+          append_output(data)
+        end)
+      end,
+      on_stderr = function(_, data)
+        vim.schedule(function()
+          append_output(data)
+        end)
+      end,
+      on_exit = function(_, code, signal)
+        vim.schedule(function()
+          terminal.exit_status = {
             exitCode = code,
             signal = signal == 0 and vim.NIL or signal,
-          })
-        end
-        terminal.waiters = {}
-      end)
-    end,
-  })
-
-  if job_id <= 0 then
-    session.terminals[terminal_id] = nil
-    done(nil, {
-      code = -32000,
-      message = "Failed to start terminal command: " .. command,
+          }
+          close_stream(session)
+          for _, waiter in ipairs(terminal.waiters) do
+            pcall(waiter, {
+              exitCode = code,
+              signal = signal == 0 and vim.NIL or signal,
+            })
+          end
+          terminal.waiters = {}
+        end)
+      end,
     })
-    return
+
+    if job_id <= 0 then
+      session.terminals[terminal_id] = nil
+      done(nil, {
+        code = -32000,
+        message = "Failed to start terminal command: " .. command,
+      })
+      return
+    end
+
+    terminal.job_id = job_id
+    done({ terminalId = terminal_id })
   end
 
-  terminal.job_id = job_id
-  done({ terminalId = terminal_id })
-end
+  local function terminal_output(session, params)
+    local terminal = session.terminals[params.terminalId or ""]
+    if not terminal then
+      return nil, { code = -32602, message = "Unknown terminalId: " .. tostring(params.terminalId) }
+    end
 
-local function terminal_output(session, params)
-  local terminal = session.terminals[params.terminalId or ""]
-  if not terminal then
-    return nil, { code = -32602, message = "Unknown terminalId: " .. tostring(params.terminalId) }
+    local result = {
+      output = terminal.output,
+      truncated = terminal.truncated == true,
+    }
+    if terminal.exit_status then
+      result.exitStatus = terminal.exit_status
+    end
+    return result
   end
 
-  local result = {
-    output = terminal.output,
-    truncated = terminal.truncated == true,
-  }
-  if terminal.exit_status then
-    result.exitStatus = terminal.exit_status
-  end
-  return result
-end
+  local function terminal_wait_for_exit(session, params, done)
+    local terminal = session.terminals[params.terminalId or ""]
+    if not terminal then
+      done(nil, { code = -32602, message = "Unknown terminalId: " .. tostring(params.terminalId) })
+      return
+    end
 
-local function terminal_wait_for_exit(session, params, done)
-  local terminal = session.terminals[params.terminalId or ""]
-  if not terminal then
-    done(nil, { code = -32602, message = "Unknown terminalId: " .. tostring(params.terminalId) })
-    return
-  end
+    if terminal.exit_status then
+      done({
+        exitCode = terminal.exit_status.exitCode,
+        signal = terminal.exit_status.signal,
+      })
+      return
+    end
 
-  if terminal.exit_status then
-    done({
-      exitCode = terminal.exit_status.exitCode,
-      signal = terminal.exit_status.signal,
-    })
-    return
+    table.insert(terminal.waiters, done)
   end
 
-  table.insert(terminal.waiters, done)
-end
-
-local function terminal_kill(session, params)
-  local terminal = session.terminals[params.terminalId or ""]
-  if not terminal then
-    return nil, { code = -32602, message = "Unknown terminalId: " .. tostring(params.terminalId) }
-  end
-  if terminal.job_id then
-    pcall(vim.fn.jobstop, terminal.job_id)
-  end
-  return vim.NIL
-end
-
-local function terminal_release(session, params)
-  local terminal = session.terminals[params.terminalId or ""]
-  if not terminal then
+  local function terminal_kill(session, params)
+    local terminal = session.terminals[params.terminalId or ""]
+    if not terminal then
+      return nil, { code = -32602, message = "Unknown terminalId: " .. tostring(params.terminalId) }
+    end
+    if terminal.job_id then
+      pcall(vim.fn.jobstop, terminal.job_id)
+    end
     return vim.NIL
   end
-  if terminal.job_id and not terminal.exit_status then
-    pcall(vim.fn.jobstop, terminal.job_id)
-  end
-  session.terminals[params.terminalId] = nil
-  return vim.NIL
-end
 
-resolve_permission_option = function(options, preferred_kind)
-  if type(options) ~= "table" then return nil end
-  if preferred_kind then
-    for _, option in ipairs(options) do
-      if option.kind == preferred_kind then
-        return option
+  local function terminal_release(session, params)
+    local terminal = session.terminals[params.terminalId or ""]
+    if not terminal then
+      return vim.NIL
+    end
+    if terminal.job_id and not terminal.exit_status then
+      pcall(vim.fn.jobstop, terminal.job_id)
+    end
+    session.terminals[params.terminalId] = nil
+    return vim.NIL
+  end
+
+  resolve_permission_option = function(options, preferred_kind)
+    if type(options) ~= "table" then return nil end
+    if preferred_kind then
+      for _, option in ipairs(options) do
+        if option.kind == preferred_kind then
+          return option
+        end
       end
     end
-  end
-  if preferred_kind and preferred_kind:match("^allow") then
-    for _, option in ipairs(options) do
-      if type(option.kind) == "string" and option.kind:match("^allow") then
-        return option
+    if preferred_kind and preferred_kind:match("^allow") then
+      for _, option in ipairs(options) do
+        if type(option.kind) == "string" and option.kind:match("^allow") then
+          return option
+        end
       end
     end
-  end
-  if preferred_kind and preferred_kind:match("^reject") then
-    for _, option in ipairs(options) do
-      if type(option.kind) == "string" and option.kind:match("^reject") then
-        return option
+    if preferred_kind and preferred_kind:match("^reject") then
+      for _, option in ipairs(options) do
+        if type(option.kind) == "string" and option.kind:match("^reject") then
+          return option
+        end
       end
     end
+    return nil
   end
-  return nil
-end
 
-local function resolve_best_allow_option(options)
-  return resolve_permission_option(options, "allow_always")
-    or resolve_permission_option(options, "allow_once")
-end
+  local function resolve_best_allow_option(options)
+    return resolve_permission_option(options, "allow_always")
+      or resolve_permission_option(options, "allow_once")
+  end
 
-local function handle_permission_request(session, params, done)
-  local latest_cfg = acp_logic.resolve_config(session.agent_cfg or {})
-  session.auto_permission = latest_cfg.auto_permission
-  session.permission_rules = vim.deepcopy(latest_cfg.permission_rules or {})
-  local tool = merge_tool_update(session, params.toolCall or {})
-  append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested", {
-    kind = "tool",
-    title = tool.title or tool.toolCallId or "Permission requested",
-    summary = tool.title or tool.toolCallId or "Permission requested",
-    toolCallId = tool.toolCallId,
-    status = tool.status,
-    path = (extract_tool_paths(tool) or {})[1],
-  })
-  maybe_call_mcp_tool("notify_waiting", {
-    agent_name = session.agent_name,
-    message = "Permission",
-  })
+  local function handle_permission_request(session, params, done)
+    local latest_cfg = acp_logic.resolve_config(session.agent_cfg or {})
+    session.auto_permission = latest_cfg.auto_permission
+    session.permission_rules = vim.deepcopy(latest_cfg.permission_rules or {})
+    local tool = merge_tool_update(session, params.toolCall or {})
+    append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested", {
+      kind = "tool",
+      title = tool.title or tool.toolCallId or "Permission requested",
+      summary = tool.title or tool.toolCallId or "Permission requested",
+      toolCallId = tool.toolCallId,
+      status = tool.status,
+      path = (extract_tool_paths(tool) or {})[1],
+    })
+    maybe_call_mcp_tool("notify_waiting", {
+      agent_name = session.agent_name,
+      message = "Permission",
+    })
 
-  local rule_resolution = resolve_permission_rule(session, tool, params.options or {})
-  local rule_matched = rule_resolution and rule_resolution.matched == true
-  if rule_matched and rule_resolution.option then
-    append_block(
-      session,
-      "System",
-      string.format(
-        "ACP permission rule `%s` matched and selected `%s`.",
-        rule_resolution.label or "rule",
-        rule_resolution.action or rule_resolution.option.kind or "option"
+    local rule_resolution = resolve_permission_rule(session, tool, params.options or {})
+    local rule_matched = rule_resolution and rule_resolution.matched == true
+    if rule_matched and rule_resolution.option then
+      append_block(
+        session,
+        "System",
+        string.format(
+          "ACP permission rule `%s` matched and selected `%s`.",
+          rule_resolution.label or "rule",
+          rule_resolution.action or rule_resolution.option.kind or "option"
+        )
       )
-    )
-    pcall(function()
-      require("lazyagent.logic.status").start_monitor(session.agent_name)
-    end)
-    done({
-      outcome = "selected",
-      optionId = rule_resolution.option.optionId,
-    })
-    return
-  elseif rule_matched then
-    append_block(
-      session,
-      "System",
-      string.format("ACP permission rule `%s` matched and requires manual confirmation.", rule_resolution.label or "rule")
-    )
-  end
-
-  local preferred = session.auto_permission
-  if not rule_matched and not preferred and session.agent_cfg and session.agent_cfg.yolo then
-    preferred = "allow_once"
-  end
-
-  local auto = nil
-  if not rule_matched then
-    auto = resolve_permission_option(params.options or {}, preferred)
-  end
-  if not auto and not rule_matched and preferred == "allow_always" then
-    auto = resolve_best_allow_option(params.options or {})
-  end
-
-  -- Auto-allow write/edit tools when a previous auto-fix was requested
-  if not auto and not rule_matched then
-    local ok, state_mod = pcall(function() return require("lazyagent.logic.state") end)
-    if ok and state_mod and state_mod._fix_requested == true then
-      local is_edit_tool = false
-      if type(tool) == "table" then
-        local kind = tostring(tool.kind or "")
-        local tname = tostring(tool.toolName or tool.name or tool.title or ""):lower()
-        if kind == "edit" or tname:match("write_text_file") or tname:match("write") then
-          is_edit_tool = true
-        end
-      end
-      if is_edit_tool then
-        local allow_opt = resolve_permission_option(params.options or {}, "allow_once") or resolve_best_allow_option(params.options or {})
-        if allow_opt then
-          pcall(function()
-            require("lazyagent.logic.status").start_monitor(session.agent_name)
-          end)
-          done({ outcome = "selected", optionId = allow_opt.optionId })
-          return
-        end
-      end
-    end
-  end
-
-  if auto then
-    pcall(function()
-      require("lazyagent.logic.status").start_monitor(session.agent_name)
-    end)
-    done({
-      outcome = "selected",
-      optionId = auto.optionId,
-    })
-    return
-  end
-
-  local preview = render_permission_preview(tool)
-  if preview ~= "" then
-    append_block(session, "Edited Preview", preview)
-  end
-
-  local labels = {}
-  for _, option in ipairs(params.options or {}) do
-    table.insert(labels, string.format("%s [%s]", option.name or option.optionId or "Option", option.kind or "option"))
-  end
-
-  vim.schedule(function()
-    vim.ui.select(labels, {
-      prompt = string.format("%s permission: %s", session.agent_name, tool.title or tool.toolCallId or "tool"),
-    }, function(_, idx)
-      local selected = idx and params.options and params.options[idx] or nil
-      if not selected then
-        selected = resolve_permission_option(params.options or {}, "reject_once")
-      end
-      if selected then
-        pcall(function()
-          require("lazyagent.logic.status").start_monitor(session.agent_name)
-        end)
-        done({
-          outcome = "selected",
-          optionId = selected.optionId,
-        })
-      else
-        done({ outcome = "cancelled" })
-      end
-    end)
-  end)
-end
-
-local function read_text_file(_, params)
-  local path = params.path
-  if not path or path == "" then
-    return nil, { code = -32602, message = "fs/read_text_file requires path" }
-  end
-
-  local abs = vim.fn.fnamemodify(path, ":p")
-  local lines = read_path_lines(abs)
-  if not lines then
-    return nil, { code = -32602, message = "File not found: " .. abs }
-  end
-
-  local start_line = tonumber(params.line) or 1
-  local limit = tonumber(params.limit)
-  local start_idx = math.max(1, start_line)
-  local end_idx = #lines
-  if limit and limit >= 0 then
-    end_idx = math.min(#lines, start_idx + limit - 1)
-  end
-
-  local slice = {}
-  for idx = start_idx, end_idx do
-    table.insert(slice, lines[idx])
-  end
-
-  return {
-    content = table.concat(slice, "\n"),
-  }
-end
-
-local function write_text_file(session, params)
-  local path = params.path
-  if not path or path == "" then
-    return nil, { code = -32602, message = "fs/write_text_file requires path" }
-  end
-
-  local abs = vim.fn.fnamemodify(path, ":p")
-  local before_lines = read_path_lines(abs) or {}
-  local before_text = table.concat(before_lines, "\n")
-  local content = normalize_text(params.content or "")
-  ensure_parent_dir(abs)
-
-  local ok_watch, watch = pcall(require, "lazyagent.watch")
-  if ok_watch and watch and type(watch.suspend) == "function" then
-    pcall(watch.suspend, abs, 1500)
-  end
-
-  local lines = vim.split(content, "\n", { plain = true })
-  if lines[#lines] == "" then
-    table.remove(lines, #lines)
-  end
-
-  local file, err = io.open(abs, "w")
-  if not file then
-    return nil, { code = -32000, message = tostring(err) }
-  end
-  file:write(content)
-  file:close()
-
-  if hook_reload_enabled() then
-    reload_loaded_buffers_for_path(abs)
-  end
-  append_block(session, "Edited " .. vim.fn.fnamemodify(abs, ":."), "Updated via ACP fs/write_text_file")
-  if hook_reload_enabled() and ((state.opts or {}).hooks or {}).open_on_edit == true then
-    maybe_call_mcp_tool("open_last_changed", {
-      agent_name = session and session.agent_name or nil,
-      cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd(),
-      path = abs,
-      oldText = before_text,
-      newText = content,
-    })
-  end
-  return vim.NIL
-end
-
-local function on_client_update(session, params)
-  if not params or not params.update then return end
-  local update = params.update
-  local kind = update.sessionUpdate
-
-  if kind == "agent_message_chunk" then
-    local text = render_content(update.content)
-    append_stream_chunk(session, "assistant", assistant_heading_label(session), text, {
-      kind = "assistant",
-    })
-    return
-  end
-
-  if kind == "agent_thought_chunk" then
-    append_stream_chunk(session, "thought", "Thinking", render_content(update.content))
-    return
-  end
-
-  if kind == "user_message_chunk" then
-    append_stream_chunk(session, "user", "User", render_content(update.content))
-    return
-  end
-
-  if kind == "plan" and type(update.entries) == "table" then
-    local lines = {}
-    for _, entry in ipairs(update.entries) do
-      if type(entry) == "table" then
-        table.insert(lines, string.format("- [%s] %s", entry.status or "pending", entry.content or ""))
-      end
-    end
-    append_block(session, "Plan", table.concat(lines, "\n"))
-    return
-  end
-
-  if kind == "available_commands_update" then
-    session.available_commands = normalize_available_commands(update.availableCommands)
-    sync_runtime_session(session)
-    return
-  end
-
-  if kind == "config_option_update" then
-    session.config_options = vim.deepcopy((session.client and session.client.config_options) or update.configOptions or {})
-    sync_runtime_session(session)
-    return
-  end
-
-  if kind == "current_mode_update" or kind == "current_model_update" then
-    if kind == "current_mode_update" and type(session.mode_catalog) == "table" then
-      session.mode_catalog.currentModeId = update.modeId or update.currentModeId or update.currentMode or session.mode_catalog.currentModeId
-    elseif kind == "current_model_update" and type(session.model_catalog) == "table" then
-      session.model_catalog.currentModelId = update.modelId or update.currentModelId or update.currentModel or session.model_catalog.currentModelId
-    end
-    session.config_options = vim.deepcopy((session.client and session.client.config_options) or session.config_options or {})
-    sync_runtime_session(session)
-    return
-  end
-
-  if kind == "session_info_update" then
-    update_session_info(session, update)
-    sync_runtime_session(session)
-    return
-  end
-
-  if kind == "usage_update" then
-    -- Merge usage info into model catalog so UI can display context/usage
-    local model_id = update.modelId or update.currentModelId or (update.model and update.model.modelId) or nil
-    if type(session.model_catalog) == "table" and type(session.model_catalog.availableModels) == "table" then
-      for _, m in ipairs(session.model_catalog.availableModels) do
-        if type(m) == "table" and (not model_id or m.modelId == model_id) then
-          m._meta = m._meta or {}
-          if type(update.usage) == "table" then
-            m._meta.usage = vim.deepcopy(update.usage)
-            local used = nil
-            local total = nil
-            if update.usage.promptTokens or update.usage.completionTokens then
-              local p = tonumber(update.usage.promptTokens) or 0
-              local c = tonumber(update.usage.completionTokens) or 0
-              used = p + c
-            elseif update.usage.usedTokens then
-              used = tonumber(update.usage.usedTokens)
-            end
-            total = tonumber(update.usage.totalTokens) or tonumber(update.usage.contextSize) or tonumber(m._meta.contextSize) or tonumber(m.contextSize)
-            if used and total then
-              m._meta.token_usage_used = used
-              m._meta.token_usage_total = total
-            end
-          end
-          if type(update.model) == "table" and type(update.model._meta) == "table" then
-            for k, v in pairs(update.model._meta) do
-              m._meta[k] = v
-            end
-          end
-          if update.copilotUsage then
-            m._meta.copilotUsage = tostring(update.copilotUsage)
-          end
-        end
-      end
-    end
-    update_usage_stats(session, update, model_id)
-    sync_runtime_session(session)
-    return
-  end
-
-  if kind == "tool_call" or kind == "tool_call_update" then
-    local tool = merge_tool_update(session, update)
-    local title = tool.title or tool.toolCallId or "tool"
-    local body = render_tool_content(tool.content)
-    if body == "" then
-      body = render_tool_raw_output(tool.rawOutput)
-    end
-    local hide_pending = state and state.opts and state.opts.acp and state.opts.acp.hide_pending_messages == true
-    local is_terminal = tool_update_is_terminal(tool)
-    if not (hide_pending and not is_terminal) then
-      if body ~= "" then
-        append_block(session, tool_heading(tool), summarize_tool_block(tool, title, body), {
-          kind = "tool",
-          title = title,
-          summary = summarize_tool_block(tool, title, body),
-          toolCallId = tool.toolCallId,
-          status = tool.status,
-          path = (extract_tool_paths(tool) or {})[1],
-        })
-      else
-        append_block(session, tool_heading(tool), title, {
-          kind = "tool",
-          title = title,
-          summary = title,
-          toolCallId = tool.toolCallId,
-          status = tool.status,
-          path = (extract_tool_paths(tool) or {})[1],
-        })
-      end
-    end
-    if is_terminal then
-      if session.ephemeral ~= true and tool.kind == "edit" then
-        util.fire_event("EditDone", { agent_name = session.agent_name, tool = tool })
-      end
-      if session.ephemeral ~= true then
-        maybe_sync_acp_edit_targets(session, tool)
-      end
-
-      session.tool_calls[tool.toolCallId] = nil
-    end
-    return
-  end
-end
-
-local function on_client_exit(session, code, signal, stderr_text)
-  if session and session.ephemeral == true then
-    return
-  end
-  if session and session.closing_intentionally == true then
-    session.ready = false
-    session.failed = false
-    close_stream(session)
-    return
-  end
-  session.ready = false
-  session.failed = true
-  close_stream(session)
-  sync_runtime_session(session)
-  local message = string.format("ACP agent exited (code=%s signal=%s)", tostring(code), tostring(signal))
-  if stderr_text and stderr_text ~= "" then
-    message = message .. "\n" .. stderr_text
-  end
-  append_block(session, "System", message)
-  pcall(function()
-    require("lazyagent.logic.status").set_waiting(session.agent_name, "Disconnected")
-  end)
-end
-
-local function list_all_sessions_for_client(client, params, on_done, collected)
-  collected = collected or {}
-  client:list_sessions(params, function(result, err)
-    if err then
-      on_done(nil, err)
-      return
-    end
-
-    result = type(result) == "table" and result or {}
-    for _, item in ipairs(result.sessions or {}) do
-      if type(item) == "table" and item.sessionId and item.sessionId ~= "" then
-        collected[#collected + 1] = normalize_session_info(item.sessionId, item)
-      end
-    end
-
-    if result.nextCursor and result.nextCursor ~= "" then
-      local next_params = vim.tbl_extend("force", params or {}, {
-        cursor = result.nextCursor,
-      })
-      list_all_sessions_for_client(client, next_params, on_done, collected)
-      return
-    end
-
-    on_done(collected, nil)
-  end)
-end
-
-local function create_ephemeral_session(base_session)
-  local transcript_path = build_transcript_path((base_session.agent_name or "acp") .. "-native", 0)
-  return {
-    ephemeral = true,
-    runtime_sync_disabled = true,
-    pane_id = "",
-    agent_name = base_session.agent_name,
-    agent_cfg = vim.deepcopy(base_session.agent_cfg or {}),
-    transcript_path = transcript_path,
-    transcript_has_content = false,
-    current_stream_key = nil,
-    current_stream_heading = nil,
-    current_stream_at_line_start = nil,
-    prompt_queue = {},
-    tool_calls = {},
-    terminals = {},
-    available_commands = {},
-    config_options = {},
-    on_ready_actions = {},
-    permission_rules = vim.deepcopy(base_session.permission_rules or {}),
-    auto_switch = vim.deepcopy(base_session.auto_switch or {}),
-    manual_config_overrides = {},
-    auto_switch_state = {},
-    conversation_timeline = {},
-    conversation_timeline_index = {},
-    conversation_next_item_id = 0,
-    tool_timeline = {},
-    tool_timeline_index = {},
-    ready = false,
-    failed = false,
-    busy = false,
-    preparing_prompt = false,
-    command = base_session.command,
-    env = vim.deepcopy(base_session.env or {}),
-    cwd = base_session.cwd or vim.fn.getcwd(),
-    root_dir = base_session.root_dir,
-    mcp_url = base_session.mcp_url,
-    auto_permission = base_session.auto_permission,
-    default_mode = base_session.default_mode,
-    initial_model = base_session.initial_model,
-    fancy_mode = base_session.fancy_mode,
-    table_layout = base_session.table_layout,
-    release_buffer_on_hide = base_session.release_buffer_on_hide,
-    footer_animation = false,
-    buffer_background = base_session.buffer_background,
-    buffer_inactive_background = base_session.buffer_inactive_background,
-    transcript_max_lines = base_session.transcript_max_lines,
-    transcript_compaction = vim.deepcopy(base_session.transcript_compaction or {}),
-    runtime_compaction = vim.deepcopy(base_session.runtime_compaction or {}),
-    initial_config_applied = true,
-    session_info = {},
-    usage_stats = {},
-  }
-end
-
-local function stop_ephemeral_client(session, callback)
-  local client = session and session.client or nil
-  if not client then
-    if callback then
-      callback()
-    end
-    return
-  end
-
-  local done = function()
-    client:stop()
-    if callback then
-      callback()
-    end
-  end
-
-  if client:supports_session_close() and client.session_id and client.session_id ~= "" then
-    client:close_session(client.session_id, function()
-      done()
-    end)
-    return
-  end
-
-  done()
-end
-
-local function capture_native_session_for_session(session, native_session, on_done)
-  local temp_session = create_ephemeral_session(session)
-  local finished = false
-
-  local function finish(snapshot, err)
-    if finished then
-      return
-    end
-    finished = true
-    stop_ephemeral_client(temp_session, function()
-      vim.schedule(function()
-        on_done(snapshot, err)
+      pcall(function()
+        require("lazyagent.logic.status").start_monitor(session.agent_name)
       end)
-    end)
-  end
+      done({
+        outcome = "selected",
+        optionId = rule_resolution.option.optionId,
+      })
+      return
+    elseif rule_matched then
+      append_block(
+        session,
+        "System",
+        string.format("ACP permission rule `%s` matched and requires manual confirmation.", rule_resolution.label or "rule")
+      )
+    end
 
-  temp_session.client = ACPClient.new({
-    command = temp_session.command,
-    cwd = temp_session.cwd,
-    env = temp_session.env,
-    mcp_url = temp_session.mcp_url,
-    client_info = {
-      name = "lazyagent",
-      title = "lazyagent.nvim",
-      version = "0.1.0",
-    },
-    handlers = {},
-    on_update = function(params)
-      on_client_update(temp_session, params)
-    end,
-    on_exit = function(code, signal, stderr_text)
-      on_client_exit(temp_session, code, signal, stderr_text)
-    end,
-  })
+    local preferred = session.auto_permission
+    if not rule_matched and not preferred and session.agent_cfg and session.agent_cfg.yolo then
+      preferred = "allow_once"
+    end
 
-  temp_session.client:start(function(client, err)
-    if err then
-      finish(nil, err)
+    local auto = nil
+    if not rule_matched then
+      auto = resolve_permission_option(params.options or {}, preferred)
+    end
+    if not auto and not rule_matched and preferred == "allow_always" then
+      auto = resolve_best_allow_option(params.options or {})
+    end
+
+    -- Auto-allow write/edit tools when a previous auto-fix was requested
+    if not auto and not rule_matched then
+      local ok, state_mod = pcall(function() return require("lazyagent.logic.state") end)
+      if ok and state_mod and state_mod._fix_requested == true then
+        local is_edit_tool = false
+        if type(tool) == "table" then
+          local kind = tostring(tool.kind or "")
+          local tname = tostring(tool.toolName or tool.name or tool.title or ""):lower()
+          if kind == "edit" or tname:match("write_text_file") or tname:match("write") then
+            is_edit_tool = true
+          end
+        end
+        if is_edit_tool then
+          local allow_opt = resolve_permission_option(params.options or {}, "allow_once") or resolve_best_allow_option(params.options or {})
+          if allow_opt then
+            pcall(function()
+              require("lazyagent.logic.status").start_monitor(session.agent_name)
+            end)
+            done({ outcome = "selected", optionId = allow_opt.optionId })
+            return
+          end
+        end
+      end
+    end
+
+    if auto then
+      pcall(function()
+        require("lazyagent.logic.status").start_monitor(session.agent_name)
+      end)
+      done({
+        outcome = "selected",
+        optionId = auto.optionId,
+      })
       return
     end
 
-    client:load_session(native_session.sessionId, function(_, load_err)
-      if load_err then
-        finish(nil, load_err)
+    local preview = render_permission_preview(tool)
+    if preview ~= "" then
+      append_block(session, "Edited Preview", preview)
+    end
+
+    local labels = {}
+    for _, option in ipairs(params.options or {}) do
+      table.insert(labels, string.format("%s [%s]", option.name or option.optionId or "Option", option.kind or "option"))
+    end
+
+    vim.schedule(function()
+      vim.ui.select(labels, {
+        prompt = string.format("%s permission: %s", session.agent_name, tool.title or tool.toolCallId or "tool"),
+      }, function(_, idx)
+          local selected = idx and params.options and params.options[idx] or nil
+          if not selected then
+            selected = resolve_permission_option(params.options or {}, "reject_once")
+          end
+          if selected then
+            pcall(function()
+              require("lazyagent.logic.status").start_monitor(session.agent_name)
+            end)
+            done({
+              outcome = "selected",
+              optionId = selected.optionId,
+            })
+          else
+            done({ outcome = "cancelled" })
+          end
+        end)
+    end)
+  end
+
+  local function read_text_file(_, params)
+    local path = params.path
+    if not path or path == "" then
+      return nil, { code = -32602, message = "fs/read_text_file requires path" }
+    end
+
+    local abs = vim.fn.fnamemodify(path, ":p")
+    local lines = read_path_lines(abs)
+    if not lines then
+      return nil, { code = -32602, message = "File not found: " .. abs }
+    end
+
+    local start_line = tonumber(params.line) or 1
+    local limit = tonumber(params.limit)
+    local start_idx = math.max(1, start_line)
+    local end_idx = #lines
+    if limit and limit >= 0 then
+      end_idx = math.min(#lines, start_idx + limit - 1)
+    end
+
+    local slice = {}
+    for idx = start_idx, end_idx do
+      table.insert(slice, lines[idx])
+    end
+
+    return {
+      content = table.concat(slice, "\n"),
+    }
+  end
+
+  local function write_text_file(session, params)
+    local path = params.path
+    if not path or path == "" then
+      return nil, { code = -32602, message = "fs/write_text_file requires path" }
+    end
+
+    local abs = vim.fn.fnamemodify(path, ":p")
+    local before_lines = read_path_lines(abs) or {}
+    local before_text = table.concat(before_lines, "\n")
+    local content = normalize_text(params.content or "")
+    ensure_parent_dir(abs)
+
+    local ok_watch, watch = pcall(require, "lazyagent.watch")
+    if ok_watch and watch and type(watch.suspend) == "function" then
+      pcall(watch.suspend, abs, 1500)
+    end
+
+    local lines = vim.split(content, "\n", { plain = true })
+    if lines[#lines] == "" then
+      table.remove(lines, #lines)
+    end
+
+    local file, err = io.open(abs, "w")
+    if not file then
+      return nil, { code = -32000, message = tostring(err) }
+    end
+    file:write(content)
+    file:close()
+
+    if hook_reload_enabled() then
+      reload_loaded_buffers_for_path(abs)
+    end
+    append_block(session, "Edited " .. vim.fn.fnamemodify(abs, ":."), "Updated via ACP fs/write_text_file")
+    if hook_reload_enabled() and ((state.opts or {}).hooks or {}).open_on_edit == true then
+      maybe_call_mcp_tool("open_last_changed", {
+        agent_name = session and session.agent_name or nil,
+        cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd(),
+        path = abs,
+        oldText = before_text,
+        newText = content,
+      })
+    end
+    return vim.NIL
+  end
+
+  local function on_client_update(session, params)
+    if not params or not params.update then return end
+    local update = params.update
+    local kind = update.sessionUpdate
+
+    if kind == "agent_message_chunk" then
+      local text = render_content(update.content)
+      append_stream_chunk(session, "assistant", assistant_heading_label(session), text, {
+        kind = "assistant",
+      })
+      return
+    end
+
+    if kind == "agent_thought_chunk" then
+      append_stream_chunk(session, "thought", "Thinking", render_content(update.content))
+      return
+    end
+
+    if kind == "user_message_chunk" then
+      append_stream_chunk(session, "user", "User", render_content(update.content))
+      return
+    end
+
+    if kind == "plan" and type(update.entries) == "table" then
+      local lines = {}
+      for _, entry in ipairs(update.entries) do
+        if type(entry) == "table" then
+          table.insert(lines, string.format("- [%s] %s", entry.status or "pending", entry.content or ""))
+        end
+      end
+      append_block(session, "Plan", table.concat(lines, "\n"))
+      return
+    end
+
+    if kind == "available_commands_update" then
+      session.available_commands = normalize_available_commands(update.availableCommands)
+      sync_runtime_session(session)
+      return
+    end
+
+    if kind == "config_option_update" then
+      session.config_options = vim.deepcopy((session.client and session.client.config_options) or update.configOptions or {})
+      sync_runtime_session(session)
+      return
+    end
+
+    if kind == "current_mode_update" or kind == "current_model_update" then
+      if kind == "current_mode_update" and type(session.mode_catalog) == "table" then
+        session.mode_catalog.currentModeId = update.modeId or update.currentModeId or update.currentMode or session.mode_catalog.currentModeId
+      elseif kind == "current_model_update" and type(session.model_catalog) == "table" then
+        session.model_catalog.currentModelId = update.modelId or update.currentModelId or update.currentModel or session.model_catalog.currentModelId
+      end
+      session.config_options = vim.deepcopy((session.client and session.client.config_options) or session.config_options or {})
+      sync_runtime_session(session)
+      return
+    end
+
+    if kind == "session_info_update" then
+      update_session_info(session, update)
+      sync_runtime_session(session)
+      return
+    end
+
+    if kind == "usage_update" then
+      -- Merge usage info into model catalog so UI can display context/usage
+      local model_id = update.modelId or update.currentModelId or (update.model and update.model.modelId) or nil
+      if type(session.model_catalog) == "table" and type(session.model_catalog.availableModels) == "table" then
+        for _, m in ipairs(session.model_catalog.availableModels) do
+          if type(m) == "table" and (not model_id or m.modelId == model_id) then
+            m._meta = m._meta or {}
+            if type(update.usage) == "table" then
+              m._meta.usage = vim.deepcopy(update.usage)
+              local used = nil
+              local total = nil
+              if update.usage.promptTokens or update.usage.completionTokens then
+                local p = tonumber(update.usage.promptTokens) or 0
+                local c = tonumber(update.usage.completionTokens) or 0
+                used = p + c
+              elseif update.usage.usedTokens then
+                used = tonumber(update.usage.usedTokens)
+              end
+              total = tonumber(update.usage.totalTokens) or tonumber(update.usage.contextSize) or tonumber(m._meta.contextSize) or tonumber(m.contextSize)
+              if used and total then
+                m._meta.token_usage_used = used
+                m._meta.token_usage_total = total
+              end
+            end
+            if type(update.model) == "table" and type(update.model._meta) == "table" then
+              for k, v in pairs(update.model._meta) do
+                m._meta[k] = v
+              end
+            end
+            if update.copilotUsage then
+              m._meta.copilotUsage = tostring(update.copilotUsage)
+            end
+          end
+        end
+      end
+      update_usage_stats(session, update, model_id)
+      sync_runtime_session(session)
+      return
+    end
+
+    if kind == "tool_call" or kind == "tool_call_update" then
+      local tool = merge_tool_update(session, update)
+      local title = tool.title or tool.toolCallId or "tool"
+      local body = render_tool_content(tool.content)
+      if body == "" then
+        body = render_tool_raw_output(tool.rawOutput)
+      end
+      local hide_pending = state and state.opts and state.opts.acp and state.opts.acp.hide_pending_messages == true
+      local is_terminal = tool_update_is_terminal(tool)
+      if not (hide_pending and not is_terminal) then
+        if body ~= "" then
+          append_block(session, tool_heading(tool), summarize_tool_block(tool, title, body), {
+            kind = "tool",
+            title = title,
+            summary = summarize_tool_block(tool, title, body),
+            toolCallId = tool.toolCallId,
+            status = tool.status,
+            path = (extract_tool_paths(tool) or {})[1],
+          })
+        else
+          append_block(session, tool_heading(tool), title, {
+            kind = "tool",
+            title = title,
+            summary = title,
+            toolCallId = tool.toolCallId,
+            status = tool.status,
+            path = (extract_tool_paths(tool) or {})[1],
+          })
+        end
+      end
+      if is_terminal then
+        if session.ephemeral ~= true and tool.kind == "edit" then
+          util.fire_event("EditDone", { agent_name = session.agent_name, tool = tool })
+        end
+        if session.ephemeral ~= true then
+          maybe_sync_acp_edit_targets(session, tool)
+        end
+
+        session.tool_calls[tool.toolCallId] = nil
+      end
+      return
+    end
+  end
+
+  local function on_client_exit(session, code, signal, stderr_text)
+    if session and session.ephemeral == true then
+      return
+    end
+    if session and session.closing_intentionally == true then
+      session.ready = false
+      session.failed = false
+      close_stream(session)
+      return
+    end
+    session.ready = false
+    session.failed = true
+    close_stream(session)
+    sync_runtime_session(session)
+    local message = string.format("ACP agent exited (code=%s signal=%s)", tostring(code), tostring(signal))
+    if stderr_text and stderr_text ~= "" then
+      message = message .. "\n" .. stderr_text
+    end
+    append_block(session, "System", message)
+    pcall(function()
+      require("lazyagent.logic.status").set_waiting(session.agent_name, "Disconnected")
+    end)
+  end
+
+  local function list_all_sessions_for_client(client, params, on_done, collected)
+    collected = collected or {}
+    client:list_sessions(params, function(result, err)
+      if err then
+        on_done(nil, err)
         return
       end
 
-      temp_session.client = client
-      temp_session.ready = true
-      temp_session.failed = false
-      temp_session.session_id = client.session_id
-      update_session_info(temp_session, native_session)
-      update_session_info(temp_session, {
-        sessionId = client.session_id,
-        cwd = temp_session.cwd,
-      })
-
-      local transcript = ""
-      if vim.fn.filereadable(temp_session.transcript_path) == 1 then
-        local ok, lines = pcall(vim.fn.readfile, temp_session.transcript_path)
-        if ok and lines then
-          transcript = table.concat(lines, "\n")
+      result = type(result) == "table" and result or {}
+      for _, item in ipairs(result.sessions or {}) do
+        if type(item) == "table" and item.sessionId and item.sessionId ~= "" then
+          collected[#collected + 1] = normalize_session_info(item.sessionId, item)
         end
       end
 
-      local transcript_lines = transcript ~= "" and vim.split(transcript, "\n", { plain = true }) or {}
-      if #transcript_lines > 0 and transcript_lines[#transcript_lines] == "" then
-        table.remove(transcript_lines, #transcript_lines)
+      if result.nextCursor and result.nextCursor ~= "" then
+        local next_params = vim.tbl_extend("force", params or {}, {
+          cursor = result.nextCursor,
+        })
+        list_all_sessions_for_client(client, next_params, on_done, collected)
+        return
       end
 
-      finish({
-        provider_from = session.agent_name,
-        carryover_label = string.format(
-          "an ACP provider session%s",
-          native_session.title and native_session.title ~= "" and (" (" .. native_session.title .. ")") or ""
-        ),
-        transcript_lines = transcript_lines,
-        transcript_path = temp_session.transcript_path,
-        conversation_timeline = vim.deepcopy(temp_session.conversation_timeline or {}),
-        tool_timeline = vim.deepcopy(temp_session.tool_timeline or {}),
-        session_info = vim.deepcopy(temp_session.session_info or {}),
-      }, nil)
+      on_done(collected, nil)
     end)
-  end, {
-    create_session = false,
-  })
-end
+  end
+
+  local function create_ephemeral_session(base_session)
+    local transcript_path = build_transcript_path((base_session.agent_name or "acp") .. "-native", 0)
+    return {
+      ephemeral = true,
+      runtime_sync_disabled = true,
+      pane_id = "",
+      agent_name = base_session.agent_name,
+      agent_cfg = vim.deepcopy(base_session.agent_cfg or {}),
+      transcript_path = transcript_path,
+      transcript_has_content = false,
+      current_stream_key = nil,
+      current_stream_heading = nil,
+      current_stream_at_line_start = nil,
+      prompt_queue = {},
+      tool_calls = {},
+      terminals = {},
+      available_commands = {},
+      config_options = {},
+      on_ready_actions = {},
+      permission_rules = vim.deepcopy(base_session.permission_rules or {}),
+      auto_switch = vim.deepcopy(base_session.auto_switch or {}),
+      manual_config_overrides = {},
+      auto_switch_state = {},
+      conversation_timeline = {},
+      conversation_timeline_index = {},
+      conversation_next_item_id = 0,
+      tool_timeline = {},
+      tool_timeline_index = {},
+      ready = false,
+      failed = false,
+      busy = false,
+      preparing_prompt = false,
+      command = base_session.command,
+      env = vim.deepcopy(base_session.env or {}),
+      cwd = base_session.cwd or vim.fn.getcwd(),
+      root_dir = base_session.root_dir,
+      mcp_url = base_session.mcp_url,
+      auto_permission = base_session.auto_permission,
+      default_mode = base_session.default_mode,
+      initial_model = base_session.initial_model,
+      fancy_mode = base_session.fancy_mode,
+      table_layout = base_session.table_layout,
+      release_buffer_on_hide = base_session.release_buffer_on_hide,
+      footer_animation = false,
+      buffer_background = base_session.buffer_background,
+      buffer_inactive_background = base_session.buffer_inactive_background,
+      transcript_max_lines = base_session.transcript_max_lines,
+      transcript_compaction = vim.deepcopy(base_session.transcript_compaction or {}),
+      runtime_compaction = vim.deepcopy(base_session.runtime_compaction or {}),
+      initial_config_applied = true,
+      session_info = {},
+      usage_stats = {},
+    }
+  end
+
+  local function stop_ephemeral_client(session, callback)
+    local client = session and session.client or nil
+    if not client then
+      if callback then
+        callback()
+      end
+      return
+    end
+
+    local done = function()
+      client:stop()
+      if callback then
+        callback()
+      end
+    end
+
+    if client:supports_session_close() and client.session_id and client.session_id ~= "" then
+      client:close_session(client.session_id, function()
+        done()
+      end)
+      return
+    end
+
+    done()
+  end
+
+  local function capture_native_session_for_session(session, native_session, on_done)
+    local temp_session = create_ephemeral_session(session)
+    local finished = false
+
+    local function finish(snapshot, err)
+      if finished then
+        return
+      end
+      finished = true
+      stop_ephemeral_client(temp_session, function()
+        vim.schedule(function()
+          on_done(snapshot, err)
+        end)
+      end)
+    end
+
+    temp_session.client = ACPClient.new({
+      command = temp_session.command,
+      cwd = temp_session.cwd,
+      env = temp_session.env,
+      mcp_url = temp_session.mcp_url,
+      client_info = {
+        name = "lazyagent",
+        title = "lazyagent.nvim",
+        version = "0.1.0",
+      },
+      handlers = {},
+      on_update = function(params)
+        on_client_update(temp_session, params)
+      end,
+      on_exit = function(code, signal, stderr_text)
+        on_client_exit(temp_session, code, signal, stderr_text)
+      end,
+    })
+
+    temp_session.client:start(function(client, err)
+      if err then
+        finish(nil, err)
+        return
+      end
+
+      client:load_session(native_session.sessionId, function(_, load_err)
+        if load_err then
+          finish(nil, load_err)
+          return
+        end
+
+        temp_session.client = client
+        temp_session.ready = true
+        temp_session.failed = false
+        temp_session.session_id = client.session_id
+        update_session_info(temp_session, native_session)
+        update_session_info(temp_session, {
+          sessionId = client.session_id,
+          cwd = temp_session.cwd,
+        })
+
+        local transcript = ""
+        if vim.fn.filereadable(temp_session.transcript_path) == 1 then
+          local ok, lines = pcall(vim.fn.readfile, temp_session.transcript_path)
+          if ok and lines then
+            transcript = table.concat(lines, "\n")
+          end
+        end
+
+        local transcript_lines = transcript ~= "" and vim.split(transcript, "\n", { plain = true }) or {}
+        if #transcript_lines > 0 and transcript_lines[#transcript_lines] == "" then
+          table.remove(transcript_lines, #transcript_lines)
+        end
+
+        finish({
+          provider_from = session.agent_name,
+          carryover_label = string.format(
+            "an ACP provider session%s",
+            native_session.title and native_session.title ~= "" and (" (" .. native_session.title .. ")") or ""
+          ),
+          transcript_lines = transcript_lines,
+          transcript_path = temp_session.transcript_path,
+          conversation_timeline = vim.deepcopy(temp_session.conversation_timeline or {}),
+          tool_timeline = vim.deepcopy(temp_session.tool_timeline or {}),
+          session_info = vim.deepcopy(temp_session.session_info or {}),
+        }, nil)
+      end)
+    end, {
+        create_session = false,
+      })
+  end
   function module.start_client(session, opts)
     opts = opts or {}
     local drain_prompt_queue = opts.drain_prompt_queue
