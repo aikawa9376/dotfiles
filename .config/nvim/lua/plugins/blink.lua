@@ -6,16 +6,16 @@ return {
   { 'mgalliou/blink-cmp-tmux', ft = 'lazyagent' },
   { 'fang2hou/blink-copilot', event = 'InsertEnter' },
   { 'hrsh7th/cmp-nvim-lsp-document-symbol', event = 'CmdlineEnter' },
-  -- { 'saghen/blink.lib', event = { 'InsertEnter', 'CmdlineEnter' } },
+  { 'saghen/blink.lib', event = { 'InsertEnter', 'CmdlineEnter' } },
   { 'copilotlsp-nvim/copilot-lsp', lazy = true,
     opts = { nes = { distance_threshold = 100, clear_on_large_distance = false, } }
   },
   {
     'saghen/blink.cmp',
     event = { 'InsertEnter', 'CmdlineEnter' },
-    -- branch = 'v1',
-    commit = "90d14caca4ae557665ab105080c27d5f289a2e30",
-    build = 'cargo build --release',
+    build = function()
+      require('blink.cmp').build():wait(60000)
+    end,
     ---@module 'blink.cmp'
     ---@type blink.cmp.Config
     opts = {
@@ -46,12 +46,14 @@ return {
           ['<C-e>'] = false,
         },
         ---@diagnostic disable-next-line: assign-type-mismatch
-        sources = function()
-          local type = vim.fn.getcmdtype()
-          if type == '/' or type == '?' then return { 'document_symbol', 'buffer' } end
-          if type == ':' or type == '@' then return { 'cmdline', 'history' } end
-          return {}
-        end,
+        sources = {
+          default = function()
+            local type = vim.fn.getcmdtype()
+            if type == '/' or type == '?' then return { 'document_symbol', 'buffer' } end
+            if type == ':' or type == '@' then return { 'cmdline', 'history' } end
+            return {}
+          end,
+        },
       },
       keymap = {
         preset = 'none',
@@ -153,7 +155,6 @@ return {
           min_width = 20,
           -- TODO 逆方向モード実装まで
           max_height = 10,
-          order = { n = 'bottom_up', s = 'top_down' },
           draw = {
             columns = {
               { "kind_icon" },
