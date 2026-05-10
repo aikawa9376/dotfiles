@@ -521,7 +521,7 @@ function M.check(opts)
   local cmd = resolve_command(opts and opts.command or detection.command)
   local cwd = opts and opts.cwd or detection.cwd
   if not cwd then
-    local ok, project_api = pcall(require, "project.api")
+    local ok, project_api = pcall(require, "project")
     if ok and project_api.get_project_root then
       local root = project_api.get_project_root()
       if root then

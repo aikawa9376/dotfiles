@@ -7,8 +7,8 @@ return {
       manual_mode = false,
 
       lsp = {
-        enable = true,
-        igonore = { "lua_ls" }
+        enabled = true,
+        ignore = { "lua_ls" }
       },
 
       -- All the patterns used to detect root dir, when **"pattern"** is in
