@@ -59,7 +59,7 @@ local colorFilename = function(files)
 end
 
 local function getRootDir()
-  local project = require("project.api")
+  local project = require("project")
   local rootDir = project.get_project_root()
 
   if rootDir ~= "" then
