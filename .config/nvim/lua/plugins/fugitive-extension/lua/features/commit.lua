@@ -112,6 +112,40 @@ local function get_diff_context_at_line(bufnr, lnum)
   return filepath, file_lnum, on_file_header, hunk_start, lines
 end
 
+local function get_diff_target_at_cursor(bufnr)
+  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  local filepath = utils.get_filepath_at_cursor(bufnr)
+  local _diff_filepath, _file_lnum, on_file_header, hunk_start, lines = get_diff_context_at_line(bufnr, lnum)
+  if not filepath then
+    return nil
+  end
+
+  if on_file_header or not hunk_start then
+    return filepath
+  end
+
+  local hunk_header = lines[hunk_start]
+  local new_start = tonumber(hunk_header and hunk_header:match('^@@ %-%d+,?%d* %+(%d+),?%d* @@'))
+  if not new_start then
+    return filepath
+  end
+
+  local target_line = new_start
+  local new_lnum = new_start
+
+  for i = hunk_start + 1, lnum do
+    local prefix = (lines[i] or ''):sub(1, 1)
+    if prefix == ' ' or prefix == '+' then
+      target_line = new_lnum
+      new_lnum = new_lnum + 1
+    elseif prefix == '-' then
+      target_line = new_lnum
+    end
+  end
+
+  return filepath, target_line
+end
+
 local function collect_file_patch(lines, file_lnum)
   local result = {}
   for i = file_lnum, #lines do
@@ -1023,9 +1057,14 @@ function M.setup(group)
 
       -- gf: カーソル位置のファイルを開く
       vim.keymap.set('n', 'gf', function()
-        local filepath = utils.get_filepath_at_cursor(ev.buf)
+        local filepath, target_line = get_diff_target_at_cursor(ev.buf)
+        filepath = filepath or utils.get_filepath_at_cursor(ev.buf)
         if filepath then
-          vim.cmd('edit ' .. filepath)
+          vim.cmd('edit ' .. vim.fn.fnameescape(filepath))
+          if target_line then
+            local max_line = vim.api.nvim_buf_line_count(0)
+            vim.api.nvim_win_set_cursor(0, { clamp_line(target_line, max_line), 0 })
+          end
         end
       end, { buffer = ev.buf, nowait = true, silent = true })
 
