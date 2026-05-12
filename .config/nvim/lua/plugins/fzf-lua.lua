@@ -28,7 +28,10 @@ return {
       split = "botright new | resize " .. tostring(math.floor(vim.o.lines * 0.4)),
       height = 0.4,
       border = "none",
-      on_create = function()
+      on_create = function(obj)
+        if obj and obj.bufnr then
+          vim.b[obj.bufnr].is_fzf_lua_picker = true
+        end
         vim.opt.laststatus = 0
       end,
       on_close = function()
