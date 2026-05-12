@@ -16,6 +16,18 @@ return {
     build = function()
       require('blink.cmp').build():wait(60000)
     end,
+    config = function(_, opts)
+      local cmp = require('blink.cmp')
+      cmp.setup(opts)
+
+      local orig_is_enabled = cmp.is_enabled
+      cmp.is_enabled = function()
+        if vim.api.nvim_get_mode().mode == 't' and vim.b.is_fzf_lua_picker then
+          return false
+        end
+        return orig_is_enabled()
+      end
+    end,
     ---@module 'blink.cmp'
     ---@type blink.cmp.Config
     opts = {
