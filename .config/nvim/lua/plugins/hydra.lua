@@ -10,6 +10,54 @@ return {
       require("undo-glow").highlight_changes(ugOpts)
       vim.fn.feedkeys(vim.api.nvim_replace_termcodes(key, true, true, true), 'n')
     end
+    local clearCursorGlowSuppression = function()
+      vim.g.ug_ignore_cursor_moved = nil
+    end
+    local suppressCursorGlow = function(move, opts)
+      local cursor_before = vim.api.nvim_win_get_cursor(0)
+      vim.g.ug_ignore_cursor_moved = true
+
+      local maybeClear = function()
+        if vim.g.ug_ignore_cursor_moved ~= true then
+          return
+        end
+
+        local cursor_after = vim.api.nvim_win_get_cursor(0)
+        if cursor_after[1] == cursor_before[1] and cursor_after[2] == cursor_before[2] then
+          clearCursorGlowSuppression()
+        end
+      end
+
+      local ok, err = pcall(move, maybeClear)
+      if not ok then
+        clearCursorGlowSuppression()
+        error(err)
+      end
+
+      if opts and opts.defer then
+        return
+      end
+
+      maybeClear()
+    end
+    local navHunkWithoutCursorGlow = function(direction)
+      suppressCursorGlow(function(maybeClear)
+        local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
+        require("gitsigns").nav_hunk(direction, is_fugitive and { target = 'all' } or {}, function(err)
+          if err then
+            clearCursorGlowSuppression()
+            return
+          end
+          vim.schedule(maybeClear)
+        end)
+      end, { defer = true })
+    end
+    local diagnosticJumpWithoutCursorGlow = function(count, float)
+      suppressCursorGlow(function()
+        vim.diagnostic.jump({ count = count, float = float })
+        vim.diagnostic.open_float(nil, { scope = 'cursor', focusable = false })
+      end)
+    end
 
     Hydra({
       name = 'Harpoon',
@@ -241,24 +289,21 @@ return {
         invoke_on_body = true,
         on_key = function() vim.wait(50) end,
         on_enter = function ()
-          local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
-          require"gitsigns".nav_hunk('next', is_fugitive and { target = 'all' } or {})
+          navHunkWithoutCursorGlow('next')
         end
       },
       heads = {
         { ']', function ()
           if vim.wo.diff then return ']c' end
           vim.schedule(function()
-            local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
-            require"gitsigns".nav_hunk('next', is_fugitive and { target = 'all' } or {})
+            navHunkWithoutCursorGlow('next')
           end)
           return '<Ignore>'
         end },
         { '[', function ()
           if vim.wo.diff then return '[c' end
           vim.schedule(function()
-            local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
-            require"gitsigns".nav_hunk('prev', is_fugitive and { target = 'all' } or {})
+            navHunkWithoutCursorGlow('prev')
           end)
           return '<Ignore>'
         end },
@@ -273,24 +318,21 @@ return {
         invoke_on_body = true,
         on_key = function() vim.wait(50) end,
         on_enter = function ()
-          local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
-          require"gitsigns".nav_hunk('prev', is_fugitive and { target = 'all' } or {})
+          navHunkWithoutCursorGlow('prev')
         end
       },
       heads = {
         { ']', function ()
           if vim.wo.diff then return ']c' end
           vim.schedule(function()
-            local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
-            require"gitsigns".nav_hunk('next', is_fugitive and { target = 'all' } or {})
+            navHunkWithoutCursorGlow('next')
           end)
           return '<Ignore>'
         end },
         { '[', function ()
           if vim.wo.diff then return '[c' end
           vim.schedule(function()
-            local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
-            require"gitsigns".nav_hunk('prev', is_fugitive and { target = 'all' } or {})
+            navHunkWithoutCursorGlow('prev')
           end)
           return '<Ignore>'
         end },
@@ -392,17 +434,18 @@ return {
         hint = false,
         invoke_on_body = true,
         on_enter = function()
-          vim.diagnostic.jump({ count = 1, float = true })
-          vim.diagnostic.open_float(nil, {  scope = 'cursor', focusable = false })
+          diagnosticJumpWithoutCursorGlow(1, true)
         end
       },
       heads = {
-        { ']',
-          "<cmd>lua vim.diagnostic.jump({count = 1, float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
-        { '[',
-          "<cmd>lua vim.diagnostic.jump({count = -1, float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
-        { '<C-Space>',
-          "<cmd>Lspsaga diagnostic_jump_next<CR>", { exit = true } },
+        { ']', function() diagnosticJumpWithoutCursorGlow(1, false) end },
+        { '[', function() diagnosticJumpWithoutCursorGlow(-1, false) end },
+        { '<C-Space>', function()
+          suppressCursorGlow(function(maybeClear)
+            vim.cmd('Lspsaga diagnostic_jump_next')
+            vim.schedule(maybeClear)
+          end, { defer = true })
+        end, { exit = true } },
       }
     })
     Hydra({
@@ -413,17 +456,18 @@ return {
         hint = false,
         invoke_on_body = true,
         on_enter = function()
-          vim.diagnostic.jump({ count = -1, float = true })
-          vim.diagnostic.open_float(nil, {  scope = 'cursor', focusable = false })
+          diagnosticJumpWithoutCursorGlow(-1, true)
         end
       },
       heads = {
-        { ']',
-          "<cmd>lua vim.diagnostic.jump({count = 1, float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
-        { '[',
-          "<cmd>lua vim.diagnostic.jump({count = -1, float = false})<CR><cmd>lua vim.diagnostic.open_float(nil, { scope = 'cursor',  focusable = false })<CR>" },
-        { '<C-Space>',
-          "<cmd>Lspsaga diagnostic_jump_prev<CR>", { exit = true } },
+        { ']', function() diagnosticJumpWithoutCursorGlow(1, false) end },
+        { '[', function() diagnosticJumpWithoutCursorGlow(-1, false) end },
+        { '<C-Space>', function()
+          suppressCursorGlow(function(maybeClear)
+            vim.cmd('Lspsaga diagnostic_jump_prev')
+            vim.schedule(maybeClear)
+          end, { defer = true })
+        end, { exit = true } },
       }
     })
   end
