@@ -1802,13 +1802,31 @@ local function split_markdown_table_cells(line)
     return nil, nil
   end
 
-  local prefix = line:match("^(%s*)|")
-  local trimmed = line:match("^%s*(|.*)$")
-  if not prefix or not trimmed or trimmed == "|" then
+  local prefix, trimmed = line:match("^(%s*)(.-)%s*$")
+  if not trimmed or trimmed == "" then
+    return nil, nil
+  end
+  if not trimmed:find("|", 1, true) then
     return nil, nil
   end
 
-  trimmed = trimmed:gsub("^|", ""):gsub("|%s*$", "")
+  local function pipe_is_escaped(text, idx)
+    local backslashes = 0
+    idx = idx - 1
+    while idx >= 1 and text:sub(idx, idx) == "\\" do
+      backslashes = backslashes + 1
+      idx = idx - 1
+    end
+    return (backslashes % 2) == 1
+  end
+
+  if trimmed:sub(1, 1) == "|" then
+    trimmed = trimmed:sub(2)
+  end
+  if trimmed:sub(-1) == "|" and not pipe_is_escaped(trimmed, #trimmed) then
+    trimmed = trimmed:sub(1, -2)
+  end
+
   local cells = {}
   local current = {}
   local escaped = false
@@ -1838,7 +1856,10 @@ end
 
 local function is_markdown_table_separator(line, expected_columns)
   local _, cells = split_markdown_table_cells(line)
-  if not cells or (#cells ~= expected_columns and #cells < 2) then
+  if not cells or #cells < 2 then
+    return false
+  end
+  if expected_columns and #cells ~= expected_columns then
     return false
   end
 
@@ -2509,6 +2530,44 @@ local function close_buffer_windows(bufnr)
   end
 end
 
+local function save_window_views(bufnr)
+  local views = {}
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return views
+  end
+
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if vim.api.nvim_win_is_valid(win) then
+      local ok, view = pcall(vim.api.nvim_win_call, win, function()
+        return vim.fn.winsaveview()
+      end)
+      if ok and type(view) == "table" then
+        views[tostring(win)] = view
+      end
+    end
+  end
+  return views
+end
+
+local function restore_window_views(bufnr, views)
+  if type(views) ~= "table" or not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  local line_count = math.max(1, vim.api.nvim_buf_line_count(bufnr))
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    local view = views[tostring(win)]
+    if vim.api.nvim_win_is_valid(win) and type(view) == "table" and vim.api.nvim_win_get_buf(win) == bufnr then
+      pcall(vim.api.nvim_win_call, win, function()
+        local restored = vim.deepcopy(view)
+        restored.lnum = math.min(math.max(1, tonumber(restored.lnum) or 1), line_count)
+        restored.topline = math.min(math.max(1, tonumber(restored.topline) or 1), line_count)
+        vim.fn.winrestview(restored)
+      end)
+    end
+  end
+end
+
 local function release_transcript_buffer(pane_id, bufnr)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return false
@@ -2547,43 +2606,42 @@ local function create_transcript_buffer(pane_id, agent_name, transcript_path)
   return bufnr
 end
 
-local function recycle_transcript_buffer(session)
-  if type(session) ~= "table" or not session.pane_id or session.pane_id == "" then
+local function adopt_transcript_buffer(pane_id, agent_name, transcript_path, switch_view)
+  if type(switch_view) ~= "table" then
     return nil
   end
 
-  local pane_key = tostring(session.pane_id)
-  local old_bufnr = to_bufnr(pane_key)
-  if not old_bufnr or not vim.api.nvim_buf_is_valid(old_bufnr) then
+  local bufnr = tonumber(switch_view.bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return nil
   end
 
-  local transcript_path = session.transcript_path or buffer_var(old_bufnr, "lazyagent_acp_transcript_path")
-  local agent_name = session.agent_name or buffer_var(old_bufnr, "lazyagent_acp_agent") or "agent"
-  local opts = pane_config[pane_key] or {}
-  local windows = vim.fn.win_findbuf(old_bufnr)
-
-  cleanup_markdown_rendering(old_bufnr)
-  layout_state[tostring(old_bufnr)] = nil
-
-  local new_bufnr = create_transcript_buffer(pane_key, agent_name, transcript_path)
-
-  for _, win in ipairs(windows) do
-    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == old_bufnr then
-      pcall(vim.api.nvim_win_set_buf, win, new_bufnr)
-      apply_transcript_window_opts(win, opts.is_vertical == true, opts)
+  local pane_key = tostring(pane_id)
+  local old_pane_key = tostring(switch_view.pane_id or buffer_var(bufnr, "lazyagent_acp_pane_id") or "")
+  if old_pane_key ~= "" then
+    if pane_buffers[old_pane_key] == bufnr then
+      pane_buffers[old_pane_key] = nil
     end
+    pane_config[old_pane_key] = nil
   end
 
-  vim.schedule(function()
-    if vim.api.nvim_buf_is_valid(old_bufnr) then
-      pcall(vim.api.nvim_buf_delete, old_bufnr, { force = true })
-    end
-    if #windows > 0 and vim.api.nvim_buf_is_valid(new_bufnr) and #vim.fn.win_findbuf(new_bufnr) == 0 then
-      M.join_pane(pane_key, opts.pane_size, opts.is_vertical == true, nil, session)
-    end
+  local safe_agent_name = tostring(agent_name or "agent"):gsub("[^%w-_]+", "-")
+  pcall(function()
+    vim.api.nvim_buf_set_name(bufnr, "")
+    vim.api.nvim_buf_set_name(bufnr, string.format("lazyagent://acp/%s-%s", safe_agent_name, pane_key))
+    vim.b[bufnr].lazyagent_acp_pane_id = pane_key
+    vim.b[bufnr].lazyagent_acp_agent = agent_name
+    vim.b[bufnr].lazyagent_acp_transcript_path = transcript_path
   end)
-  return new_bufnr
+
+  local entry = layout_entry(bufnr)
+  entry.footer_signature = nil
+  entry.pending_full_refresh = false
+  entry.transcript_file_signature = nil
+
+  pane_buffers[pane_key] = bufnr
+  apply_transcript_buffer_opts(bufnr)
+  return bufnr
 end
 
 first_visible_window = function(bufnr)
@@ -3137,7 +3195,7 @@ local function text_has_markdown_table_candidate(text)
     if headers and is_markdown_table_separator(lines[idx + 1], #headers) then
       return true
     end
-    if type(line) == "string" and line:match("^%s*|%s*:?-") then
+    if is_markdown_table_separator(line) then
       return true
     end
   end
@@ -3183,10 +3241,15 @@ refresh_buffer_from_path = function(bufnr, transcript_path, opts)
   end
 
   local entry = layout_entry(bufnr)
+  local saved_views = nil
+  if opts.preserve_view ~= false and not should_follow_output(bufnr) then
+    saved_views = save_window_views(bufnr)
+  end
   local signature = transcript_file_signature(transcript_path)
   if not opts.force and entry.transcript_file_signature == signature then
     entry.pending_full_refresh = false
     refresh_buffer_layout(bufnr, opts.layout or {})
+    restore_window_views(bufnr, saved_views)
     return false
   end
 
@@ -3197,6 +3260,7 @@ refresh_buffer_from_path = function(bufnr, transcript_path, opts)
   entry.pending_full_refresh = false
   entry.transcript_file_signature = signature
   refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
+  restore_window_views(bufnr, saved_views)
   return true
 end
 
@@ -3391,32 +3455,53 @@ function M.refresh_agent_footers(agent_name, opts)
   return footer_view.refresh_agent_footers(agent_name, opts)
 end
 
+function M.capture_switch_view(pane_id)
+  ensure_layout_autocmds()
+  local bufnr = to_bufnr(pane_id)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local windows = {}
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if vim.api.nvim_win_is_valid(win) then
+      windows[#windows + 1] = win
+    end
+  end
+  if #windows == 0 then
+    return nil
+  end
+
+  return {
+    pane_id = tostring(pane_id),
+    bufnr = bufnr,
+    windows = windows,
+    views = save_window_views(bufnr),
+    pane_config = vim.deepcopy(pane_config[tostring(pane_id)] or {}),
+  }
+end
+
 function M.create_pane(args, on_split)
   ensure_layout_autocmds()
   local anchor_win = resolve_anchor_window(args.acp and args.acp.source_winid)
-  if anchor_win then
-    pcall(vim.api.nvim_set_current_win, anchor_win)
-  end
-
-  if args.is_vertical then
-    vim.cmd("vsplit")
-  else
-    vim.cmd("split")
-  end
-
-  local win = vim.api.nvim_get_current_win()
-  set_window_size(win, args.size, args.is_vertical)
-
   next_pane_seq = next_pane_seq + 1
   local pane_id = string.format("buffer-acp-%d", next_pane_seq)
   local agent_name = (args.acp or {}).agent_name or "agent"
-  local bufnr = create_transcript_buffer(pane_id, agent_name, args.transcript_path)
-  pane_config[pane_id] = vim.tbl_extend("force", pane_config[pane_id] or {}, {
+  local switch_view = args.acp and args.acp.reuse_view or nil
+  local bufnr = adopt_transcript_buffer(pane_id, agent_name, args.transcript_path, switch_view)
+  local reused_view = bufnr ~= nil
+
+  local base_pane_config = reused_view and type(switch_view) == "table" and switch_view.pane_config or nil
+  local inherited_follow_output = true
+  if reused_view and type(base_pane_config) == "table" and base_pane_config.follow_output == false then
+    inherited_follow_output = false
+  end
+  pane_config[pane_id] = vim.tbl_extend("force", base_pane_config or pane_config[pane_id] or {}, {
     source_winid = anchor_win,
     source_window_options = capture_window_options(anchor_win),
     pane_size = args.size,
     is_vertical = args.is_vertical == true,
-    follow_output = true,
+    follow_output = inherited_follow_output,
     buffer_background = args.acp and args.acp.buffer_background or nil,
     buffer_inactive_background = args.acp and args.acp.buffer_inactive_background or nil,
     table_layout = args.acp and args.acp.table_layout or "table",
@@ -3426,9 +3511,33 @@ function M.create_pane(args, on_split)
     transcript_compaction = vim.deepcopy(args.acp and args.acp.transcript_compaction or {}),
   })
 
-  vim.api.nvim_win_set_buf(win, bufnr)
-  apply_transcript_window_opts(win, args.is_vertical, pane_config[pane_id])
-  refresh_buffer_from_path(bufnr, args.transcript_path, { force = true })
+  local win = bufnr and first_visible_window(bufnr) or nil
+  if reused_view and win then
+    for _, visible_win in ipairs(vim.fn.win_findbuf(bufnr)) do
+      if vim.api.nvim_win_is_valid(visible_win) then
+        apply_transcript_window_opts(visible_win, args.is_vertical, pane_config[pane_id])
+      end
+    end
+    refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
+    restore_window_views(bufnr, switch_view and switch_view.views or nil)
+  else
+    if anchor_win then
+      pcall(vim.api.nvim_set_current_win, anchor_win)
+    end
+
+    if args.is_vertical then
+      vim.cmd("vsplit")
+    else
+      vim.cmd("split")
+    end
+
+    win = vim.api.nvim_get_current_win()
+    set_window_size(win, args.size, args.is_vertical)
+    bufnr = create_transcript_buffer(pane_id, agent_name, args.transcript_path)
+    vim.api.nvim_win_set_buf(win, bufnr)
+    apply_transcript_window_opts(win, args.is_vertical, pane_config[pane_id])
+    refresh_buffer_from_path(bufnr, args.transcript_path, { force = true })
+  end
 
   if anchor_win and anchor_win ~= win then
     pcall(vim.api.nvim_set_current_win, anchor_win)
@@ -3436,7 +3545,12 @@ function M.create_pane(args, on_split)
 
   if on_split then
     vim.schedule(function()
-      on_split(pane_id, { bufnr = bufnr, winid = win, source_winid = anchor_win })
+      on_split(pane_id, {
+        bufnr = bufnr,
+        winid = win,
+        source_winid = anchor_win,
+        preserve_existing_transcript = reused_view == true,
+      })
     end)
   end
 end
@@ -3451,6 +3565,9 @@ function M.on_session_created(session)
     end)
     refresh_buffer_layout(bufnr, { force_footer = true })
   end
+  if session and session.view_state and session.view_state.preserve_existing_transcript == true then
+    return
+  end
   refresh_buffer_from_file(session)
 end
 
@@ -3458,10 +3575,10 @@ function M.on_transcript_updated(session, text, mode)
   session.view_state = session.view_state or {}
   if mode == "w" then
     session.view_state.force_full_refresh = true
+    session.view_state.preserve_existing_transcript = nil
     session.view_state.pending_append = ""
     close_timer(session.view_state.append_timer)
     session.view_state.append_timer = nil
-    recycle_transcript_buffer(session)
     refresh_buffer_from_file(session)
     return
   end

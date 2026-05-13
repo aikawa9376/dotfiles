@@ -504,17 +504,29 @@ function M.setup(deps)
           next_agent
         )
 
-        force_close_session(current_agent)
-        if state.sessions[next_agent] and state.sessions[next_agent].pane_id then
-          force_close_session(next_agent)
-        end
-
         local next_agent_cfg = vim.tbl_deep_extend("force", agent_logic.get_interactive_agent(next_agent) or {}, {
           source_bufnr = anchor.source_bufnr,
           origin_bufnr = anchor.source_bufnr,
           source_winid = anchor.source_winid,
           origin_winid = anchor.source_winid,
         })
+        local next_backend_name = select(1, backend_logic.resolve_backend_for_agent(next_agent, next_agent_cfg))
+        local switch_view = nil
+        if current_session.backend == "buffer_acp"
+          and next_backend_name == "buffer_acp"
+          and type(current_backend.capture_switch_view) == "function"
+        then
+          switch_view = current_backend.capture_switch_view(current_session.pane_id)
+        end
+        if switch_view then
+          next_agent_cfg.acp_reuse_view = switch_view
+        else
+          force_close_session(current_agent)
+        end
+
+        if state.sessions[next_agent] and state.sessions[next_agent].pane_id then
+          force_close_session(next_agent)
+        end
 
         ensure_session(next_agent, next_agent_cfg, false, function(new_pane_id)
           local _, next_backend = backend_logic.resolve_backend_for_agent(next_agent, next_agent_cfg)
@@ -540,6 +552,10 @@ function M.setup(deps)
               source_winid = anchor.source_winid,
               origin_winid = anchor.source_winid,
             })
+          end
+
+          if switch_view then
+            force_close_session(current_agent)
           end
         end)
       end)
