@@ -479,6 +479,15 @@ local function create_backend(default_view)
     return snapshot
   end
 
+  function backend.capture_switch_view(pane_id)
+    local session = get_session(pane_id)
+    local view = session_view(session)
+    if view and type(view.capture_switch_view) == "function" then
+      return view.capture_switch_view(pane_id, session)
+    end
+    return nil
+  end
+
   function backend.send_keys(pane_id, keys)
     local session = get_session(pane_id)
     if not session or not keys then

@@ -97,6 +97,7 @@ function M.setup(deps)
       permission_rules = acp.permission_rules,
       auto_switch = acp.auto_switch,
       session_bootstrap = vim.deepcopy(acp.session_bootstrap),
+      reuse_view = agent_cfg and agent_cfg.acp_reuse_view or nil,
     }
   end
 
