@@ -57,8 +57,29 @@ local function scratch_buffer_is_usable(bufnr)
   if vim.bo[bufnr].buftype ~= "nofile" then
     return false
   end
+  if vim.bo[bufnr].buflisted then
+    return false
+  end
   local expected = scratch_filetype(bufnr, "")
   return expected == "" or vim.bo[bufnr].filetype == expected
+end
+
+local function apply_scratch_buffer_defaults(bufnr, filetype)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  pcall(function()
+    vim.bo[bufnr].bufhidden = "hide"
+    vim.bo[bufnr].buftype = "nofile"
+    vim.bo[bufnr].buflisted = false
+    vim.bo[bufnr].swapfile = false
+    vim.bo[bufnr].undofile = false
+    vim.bo[bufnr].modifiable = true
+    vim.bo[bufnr].filetype = filetype or vim.bo[bufnr].filetype or "lazyagent"
+    vim.b[bufnr].lazyagent_is_scratch = true
+    vim.b[bufnr].lazyagent_scratch_filetype = vim.bo[bufnr].filetype
+  end)
 end
 
 local function forget_scratch_buffer(bufnr)
@@ -123,9 +144,7 @@ local function ensure_scratch_buffer(bufnr, opts)
     local existing = get_tracked_scratch_bufnr(agent_name)
     if existing then
       scratch_bufnr = existing
-      pcall(function()
-        vim.b[existing].lazyagent_scratch_filetype = (opts and opts.filetype) or scratch_filetype(existing)
-      end)
+      apply_scratch_buffer_defaults(existing, (opts and opts.filetype) or scratch_filetype(existing))
       if opts and opts.source_bufnr then
         pcall(function() vim.b[existing].lazyagent_source_bufnr = opts.source_bufnr end)
       end
@@ -136,22 +155,19 @@ local function ensure_scratch_buffer(bufnr, opts)
   -- If the caller didn't pass a valid buffer, create a scratch buffer to avoid nvim_open_win assertion errors.
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     bufnr = vim.api.nvim_create_buf(false, true)
-    pcall(function()
-      vim.bo[bufnr].bufhidden = "hide"
-      vim.bo[bufnr].buftype = "nofile"
-      vim.bo[bufnr].filetype = (opts and opts.filetype) or "lazyagent"
-      vim.bo[bufnr].modifiable = true
-      vim.b[bufnr].lazyagent_scratch_filetype = vim.bo[bufnr].filetype
-    end)
+    apply_scratch_buffer_defaults(bufnr, (opts and opts.filetype) or "lazyagent")
 
     -- Remember this scratch buffer so we can restore it if another file is opened here.
     scratch_bufnr = bufnr
-    pcall(function() vim.b[bufnr].lazyagent_is_scratch = true end)
     if agent_name and agent_name ~= "" then
       scratch_bufnrs[agent_name] = bufnr
       pcall(function() vim.b[bufnr].lazyagent_agent = agent_name end)
     end
+  elseif buffer_var(bufnr, "lazyagent_is_scratch") == true then
+    apply_scratch_buffer_defaults(bufnr, (opts and opts.filetype) or scratch_filetype(bufnr))
+  end
 
+  if buffer_var(bufnr, "lazyagent_is_scratch") == true then
     -- Provide buffer-local :edit / :e that open files in the last non-special window
     pcall(function()
       vim.api.nvim_buf_create_user_command(bufnr, "edit", function(cmd)
@@ -547,6 +563,18 @@ end
 -- Redirect files accidentally opened in the scratch window to the last normal window.
 pcall(function()
   local group = vim.api.nvim_create_augroup("LazyAgentRedirectOpen", { clear = true })
+  vim.api.nvim_create_autocmd({ "BufAdd", "BufEnter" }, {
+    group = group,
+    callback = function(args)
+      local bufnr = tonumber(args.buf)
+      if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      if buffer_var(bufnr, "lazyagent_is_scratch") == true then
+        apply_scratch_buffer_defaults(bufnr, scratch_filetype(bufnr, "lazyagent"))
+      end
+    end,
+  })
   vim.api.nvim_create_autocmd("BufWinEnter", {
     group = group,
     callback = function(args)
