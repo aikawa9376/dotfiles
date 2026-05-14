@@ -13,6 +13,10 @@ if altTabCycleTimer then
     altTabCycleTimer:stop()
     altTabCycleTimer = nil
 end
+if altTabFocusPollTimer then
+    altTabFocusPollTimer:stop()
+    altTabFocusPollTimer = nil
+end
 if altTabWindowFilter and altTabWindowFilter.unsubscribeAll then
     altTabWindowFilter:unsubscribeAll()
     altTabWindowFilter = nil
@@ -20,37 +24,56 @@ end
 
 -- MRU履歴を自分で管理（ウィンドウIDのリスト、最近使った順）
 local mruHistory = {}
+local MAX_MRU_HISTORY = 50
+local FOCUS_POLL_INTERVAL = 0.2
 
 -- Alt+Tabサイクル中かどうかのフラグ
 local isCycling = false
 local cycleStartWindowId = nil
 local cycleWindowList = nil
+local focusPollTimer = nil
+local lastObservedFocusedWindowId = nil
+
+local function removeFromHistory(winId)
+    for i, id in ipairs(mruHistory) do
+        if id == winId then
+            table.remove(mruHistory, i)
+            return
+        end
+    end
+end
+
+local function isTrackableWindow(win)
+    return win and win:id() and win:isStandard() and win:isVisible() and win:application()
+end
+
+local function focusedTrackableWindow()
+    local win = hs.window.focusedWindow()
+    if isTrackableWindow(win) then
+        return win
+    end
+    return nil
+end
+
+local function touchMru(win)
+    if isCycling or not isTrackableWindow(win) then
+        return
+    end
+
+    local winId = win:id()
+    removeFromHistory(winId)
+    table.insert(mruHistory, 1, winId)
+
+    while #mruHistory > MAX_MRU_HISTORY do
+        table.remove(mruHistory)
+    end
+end
 
 -- ウィンドウフォーカス変更を監視してMRU履歴を更新
 local windowFilter = hs.window.filter.new()
 altTabWindowFilter = windowFilter
 windowFilter:subscribe(hs.window.filter.windowFocused, function(win)
-    -- Alt+Tabサイクル中は履歴を更新しない
-    if isCycling then return end
-
-    if not win then return end
-    local winId = win:id()
-
-    -- 既存の履歴から削除
-    for i, id in ipairs(mruHistory) do
-        if id == winId then
-            table.remove(mruHistory, i)
-            break
-        end
-    end
-
-    -- 先頭に追加（最新）
-    table.insert(mruHistory, 1, winId)
-
-    -- 履歴が長くなりすぎないように制限（最大50個）
-    while #mruHistory > 50 do
-        table.remove(mruHistory)
-    end
+    touchMru(win)
 end)
 
 local cycleTimer = nil
@@ -64,14 +87,15 @@ local function finalizeCycle()
         altTabCycleTimer = nil
     end
 
-    if cycleStartWindowId then
-        for i, id in ipairs(mruHistory) do
-            if id == cycleStartWindowId then
-                table.remove(mruHistory, i)
-                break
-            end
+    local focusedWin = focusedTrackableWindow()
+    local finalizedWinId = focusedWin and focusedWin:id() or cycleStartWindowId
+    if finalizedWinId then
+        removeFromHistory(finalizedWinId)
+        table.insert(mruHistory, 1, finalizedWinId)
+        while #mruHistory > MAX_MRU_HISTORY do
+            table.remove(mruHistory)
         end
-        table.insert(mruHistory, 1, cycleStartWindowId)
+        lastObservedFocusedWindowId = finalizedWinId
     end
 
     isCycling = false
@@ -89,27 +113,60 @@ altTabFlagWatcher = hs.eventtap.new({ hs.eventtap.event.types.flagsChanged }, fu
 end)
 altTabFlagWatcher:start()
 
+local function startFocusPoll()
+    if focusPollTimer then
+        focusPollTimer:stop()
+        focusPollTimer = nil
+    end
+
+    local currentWin = focusedTrackableWindow()
+    lastObservedFocusedWindowId = currentWin and currentWin:id() or nil
+
+    focusPollTimer = hs.timer.new(FOCUS_POLL_INTERVAL, function()
+        local win = focusedTrackableWindow()
+        local winId = win and win:id() or nil
+
+        if winId == lastObservedFocusedWindowId then
+            return
+        end
+
+        lastObservedFocusedWindowId = winId
+        if win then
+            touchMru(win)
+        end
+    end)
+
+    focusPollTimer:start()
+    altTabFocusPollTimer = focusPollTimer
+end
+
+startFocusPoll()
+
 local function cycleRawWindows(reverse)
     -- サイクル開始時にウィンドウリストを固定
     if not isCycling then
+        local currentWin = focusedTrackableWindow()
+        if currentWin then
+            touchMru(currentWin)
+        end
         isCycling = true
 
-        -- 全ウィンドウを取得
-        local allWindows = hs.window.allWindows()
-
-        -- 標準的で表示されているウィンドウのマップを作成（ID -> window）
+        -- 現在見えている実ウィンドウを前面順で取得
+        local visibleWindows = hs.window.orderedWindows()
         local windowMap = {}
-        for _, win in ipairs(allWindows) do
-            if win:isStandard() and win:isVisible() then
+        local orderedWindowList = {}
+        local addedWindowIds = {}
+        for _, win in ipairs(visibleWindows) do
+            if isTrackableWindow(win) then
                 local app = win:application()
-                if app then
-                    windowMap[win:id()] = {
-                        window = win,
-                        id = win:id(),
-                        appName = app:name(),
-                        title = win:title() or "No Title"
-                    }
-                end
+                local item = {
+                    window = win,
+                    id = win:id(),
+                    appName = app:name(),
+                    title = win:title() or "No Title",
+                }
+                windowMap[item.id] = item
+                table.insert(orderedWindowList, item)
             end
         end
 
@@ -118,19 +175,13 @@ local function cycleRawWindows(reverse)
         for _, winId in ipairs(mruHistory) do
             if windowMap[winId] then
                 table.insert(cycleWindowList, windowMap[winId])
+                addedWindowIds[winId] = true
             end
         end
 
-        -- 履歴にないウィンドウも追加（念のため）
-        for winId, item in pairs(windowMap) do
-            local found = false
-            for _, vw in ipairs(cycleWindowList) do
-                if vw.id == winId then
-                    found = true
-                    break
-                end
-            end
-            if not found then
+        -- 履歴にないウィンドウは現在の前面順で追加
+        for _, item in ipairs(orderedWindowList) do
+            if not addedWindowIds[item.id] then
                 table.insert(cycleWindowList, item)
             end
         end
@@ -141,7 +192,12 @@ local function cycleRawWindows(reverse)
             return
         end
 
-        cycleStartWindowId = cycleWindowList[1].id
+        local currentWinId = currentWin and currentWin:id() or nil
+        if currentWinId and windowMap[currentWinId] ~= nil then
+            cycleStartWindowId = currentWinId
+        else
+            cycleStartWindowId = cycleWindowList[1].id
+        end
     end
 
     -- 現在のウィンドウの位置を探す
@@ -171,19 +227,22 @@ local function cycleRawWindows(reverse)
 
     local nextItem = cycleWindowList[nextIndex]
     local nextWin = nextItem.window
+    if not isTrackableWindow(nextWin) then
+        finalizeCycle()
+        return
+    end
 
     -- 次のサイクルのために更新
     cycleStartWindowId = nextItem.id
 
-    -- ウィンドウを前面に持ってきてからフォーカス
-    nextWin:raise()
-    nextWin:focus()
-
-    -- アプリケーションもアクティブにする
+    -- 別アプリへ移るときは先にアプリを前面化し、その後ターゲットウィンドウを確定させる
     local app = nextWin:application()
-    if app then
+    if app and not app:isFrontmost() then
         app:activate()
     end
+    nextWin:raise()
+    nextWin:becomeMain()
+    nextWin:focus()
 
     -- フラッシュエフェクトを表示
     windowFlash.flashWindow(nextWin)
