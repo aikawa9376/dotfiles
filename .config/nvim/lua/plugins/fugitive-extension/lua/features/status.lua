@@ -198,6 +198,66 @@ local function delete_untracked_directory_at_cursor()
   return true
 end
 
+local function preferred_target_window(status_win)
+  local alt = vim.fn.win_getid(vim.fn.winnr('#'))
+  if alt and alt ~= 0 and alt ~= status_win and vim.api.nvim_win_is_valid(alt) then
+    local alt_buf = vim.api.nvim_win_get_buf(alt)
+    if vim.bo[alt_buf].filetype ~= 'fugitive' then
+      return alt
+    end
+  end
+
+  local fallback = nil
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= status_win and vim.api.nvim_win_is_valid(win) then
+      local win_buf = vim.api.nvim_win_get_buf(win)
+      if vim.bo[win_buf].filetype ~= 'fugitive' then
+        return win
+      end
+      fallback = fallback or win
+    end
+  end
+  return fallback
+end
+
+local function open_entry_and_close_status(bufnr)
+  local file_path = utils.get_filepath_at_cursor(bufnr)
+  if not file_path then
+    vim.notify('No file found at cursor', vim.log.levels.WARN)
+    return
+  end
+
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  local abs = work_tree and vim.fn.fnamemodify(work_tree .. '/' .. file_path, ':p') or nil
+  local target = vim.fn.FugitiveFind(':' .. file_path)
+  if not target or target == '' then
+    target = abs
+  end
+  if not target or target == '' then
+    vim.notify('Could not resolve file at cursor', vim.log.levels.WARN)
+    return
+  end
+
+  local status_win = vim.api.nvim_get_current_win()
+  local target_win = preferred_target_window(status_win)
+  local opened_in_other_window = target_win and vim.api.nvim_win_is_valid(target_win) and target_win ~= status_win
+  if opened_in_other_window then
+    vim.api.nvim_set_current_win(target_win)
+  end
+
+  if abs and vim.fn.isdirectory(abs) == 1 then
+    vim.cmd('Oil ' .. vim.fn.fnameescape(abs))
+  else
+    vim.cmd('edit ' .. vim.fn.fnameescape(target))
+  end
+
+  if opened_in_other_window and vim.api.nvim_win_is_valid(status_win) then
+    pcall(vim.api.nvim_win_call, status_win, function()
+      require('utilities').smart_close()
+    end)
+  end
+end
+
 function M.setup(group)
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
@@ -571,6 +631,10 @@ function M.setup(group)
         end
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:<cr>", true, false, true), 'm', true)
       end, { buffer = b, nowait = true, silent = true })
+
+      vim.keymap.set('n', 'o', function()
+        open_entry_and_close_status(b)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Open file and close status' })
 
       -- Toggle Flog
       vim.keymap.set('n', '<C-Space>', function()
