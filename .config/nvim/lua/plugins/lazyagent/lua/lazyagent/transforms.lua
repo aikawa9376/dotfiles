@@ -9,6 +9,7 @@
 --  - #git_root    -> repository root path for the source buffer (git)
 --  - #git_branch  -> git branch name for the source buffer
 --  - #diagnostics -> fenced diagnostics code block formatted for prompts
+--  - #cursor-diagnostic-fix -> cursor location + diagnostics at cursor + targeted fix request
 local M = {}
 local util = require("lazyagent.util")
 local summary = require("lazyagent.logic.summary")
@@ -62,20 +63,140 @@ local function get_target_bufnr(bufnr)
   return target_bufnr
 end
 
-local function gather_diagnostics(bufnr)
+local function raw_diagnostics(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if not vim.api.nvim_buf_is_valid(bufnr) or not vim.diagnostic or not vim.diagnostic.get then return {} end
-  local diags = vim.diagnostic.get(bufnr) or {}
+  return vim.diagnostic.get(bufnr) or {}
+end
+
+local function normalize_diagnostic(d, fallback_bufnr)
+  local resolved_bufnr = d.bufnr or fallback_bufnr
+  local fn = (resolved_bufnr and vim.api.nvim_buf_is_valid(resolved_bufnr)) and vim.api.nvim_buf_get_name(resolved_bufnr)
+    or vim.api.nvim_buf_get_name(fallback_bufnr)
+  local ln = (d.lnum and (d.lnum + 1)) or 0
+  local col = (d.col and (d.col + 1)) or 0
+  local sev = "?"
+  if d.severity and severity_names[d.severity] then sev = severity_names[d.severity] else sev = tostring(d.severity or "?") end
+  return {
+    bufnr = resolved_bufnr or fallback_bufnr,
+    filename = fn or "",
+    lnum = ln,
+    col = col,
+    severity = sev,
+    message = d.message or "",
+    end_lnum = d.end_lnum and (d.end_lnum + 1) or nil,
+    end_col = d.end_col and (d.end_col + 1) or nil,
+  }
+end
+
+local function gather_diagnostics(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local diags = raw_diagnostics(bufnr)
   local out = {}
   for _, d in ipairs(diags) do
-    local fn = (d.bufnr and vim.api.nvim_buf_is_valid(d.bufnr)) and vim.api.nvim_buf_get_name(d.bufnr) or vim.api.nvim_buf_get_name(bufnr)
-    local ln = (d.lnum and (d.lnum + 1)) or 0
-    local col = (d.col and (d.col + 1)) or 0
-    local sev = "?"
-    if d.severity and severity_names[d.severity] then sev = severity_names[d.severity] else sev = tostring(d.severity or "?") end
-    table.insert(out, { bufnr = d.bufnr or bufnr, filename = fn or "", lnum = ln, col = col, severity = sev, message = d.message or "" })
+    table.insert(out, normalize_diagnostic(d, bufnr))
   end
   return out
+end
+
+local function cursor_position(bufnr)
+  local target_bufnr = get_target_bufnr(bufnr)
+  local path = get_rel_to_root_path(target_bufnr) or get_abs_path(target_bufnr) or ""
+  local winid = vim.fn.bufwinid(target_bufnr)
+  if winid ~= -1 then
+    local cursor = vim.api.nvim_win_get_cursor(winid)
+    return {
+      bufnr = target_bufnr,
+      path = path,
+      line = cursor[1],
+      col = cursor[2] + 1,
+      col0 = cursor[2],
+    }
+  end
+  local mark = vim.api.nvim_buf_get_mark(target_bufnr, '"')
+  if mark and mark[1] > 0 then
+    return {
+      bufnr = target_bufnr,
+      path = path,
+      line = mark[1],
+      col = mark[2] + 1,
+      col0 = mark[2],
+    }
+  end
+  return {
+    bufnr = target_bufnr,
+    path = path,
+  }
+end
+
+local function cursor_text(bufnr)
+  local pos = cursor_position(bufnr)
+  local path = pos.path or ""
+  if pos.line and pos.col then
+    return string.format("@%s:%d:%d", path, pos.line, pos.col)
+  end
+  return "@" .. path
+end
+
+local function diagnostic_contains_cursor(diagnostic, pos)
+  if type(diagnostic) ~= "table" or type(pos) ~= "table" or not pos.line or pos.col0 == nil then
+    return false
+  end
+
+  local line0 = pos.line - 1
+  local col0 = pos.col0
+  local start_line = diagnostic.lnum or 0
+  local end_line = diagnostic.end_lnum or start_line
+  if line0 < start_line or line0 > end_line then
+    return false
+  end
+
+  local start_col = diagnostic.col or 0
+  local end_col = diagnostic.end_col
+  if line0 == start_line and line0 == end_line then
+    if end_col == nil then
+      return col0 >= start_col
+    end
+    return col0 >= start_col and col0 <= math.max(start_col, end_col)
+  end
+  if line0 == start_line then
+    return col0 >= start_col
+  end
+  if line0 == end_line and end_col ~= nil then
+    return col0 <= math.max(0, end_col)
+  end
+  return true
+end
+
+local function gather_cursor_diagnostics(bufnr)
+  local pos = cursor_position(bufnr)
+  if not pos.bufnr or not pos.line or pos.col0 == nil then
+    return {}
+  end
+
+  local out = {}
+  for _, diagnostic in ipairs(raw_diagnostics(pos.bufnr)) do
+    if diagnostic_contains_cursor(diagnostic, pos) then
+      table.insert(out, normalize_diagnostic(diagnostic, pos.bufnr))
+    end
+  end
+  return out
+end
+
+local function cursor_diagnostic_fix_text(bufnr)
+  local pos = cursor_position(bufnr)
+  local lines = { cursor_text(pos.bufnr) }
+  local diags = gather_cursor_diagnostics(pos.bufnr)
+  if #diags > 0 then
+    lines[#lines + 1] = "```diagnostics"
+    lines[#lines + 1] = diagnostics_to_text(diags)
+    lines[#lines + 1] = "```"
+    lines[#lines + 1] = "- Fix the diagnostics at the cursor position with a minimal, targeted change. Avoid unrelated refactors."
+  else
+    lines[#lines + 1] = "- No diagnostics were found at the cursor position."
+    lines[#lines + 1] = "- If you change anything, keep it minimal and scoped to the cursor context."
+  end
+  return table.concat(lines, "\n")
 end
 
 local function diagnostics_to_text(diags)
@@ -152,19 +273,7 @@ local function replace_token(token, opts, meta)
   end
 
   if token == "cursor" then
-    local path = get_rel_to_root_path(source_bufnr) or get_abs_path(source_bufnr) or ""
-    -- Try to find a window displaying this buffer to get live cursor
-    local winid = vim.fn.bufwinid(source_bufnr)
-    if winid ~= -1 then
-      local cursor = vim.api.nvim_win_get_cursor(winid)
-      return string.format("@%s:%d:%d", path, cursor[1], cursor[2] + 1)
-    end
-    -- Fallback: try last cursor position mark
-    local mark = vim.api.nvim_buf_get_mark(source_bufnr, '"')
-    if mark and mark[1] > 0 then
-       return string.format("@%s:%d:%d", path, mark[1], mark[2] + 1)
-    end
-    return "@" .. path
+    return cursor_text(source_bufnr)
   end
 
   if token == "buffers" then
@@ -205,6 +314,10 @@ local function replace_token(token, opts, meta)
 
     if not diags or #diags == 0 then return "" end
     return "```diagnostics\n" .. diagnostics_to_text(diags) .. "\n```"
+  end
+
+  if token == "cursor-diagnostic-fix" then
+    return cursor_diagnostic_fix_text(source_bufnr)
   end
 
   if token == "selection" then
@@ -400,6 +513,13 @@ local token_definitions = {
   { name = "buffers", desc = "Newline-separated list of listed buffers with @ prefix (relative paths by default)." },
   { name = "buffers_abs", desc = "Newline-separated list of listed buffers with @ prefix (absolute paths)." },
   { name = "cursor", desc = "Path to the source buffer, prefixed with '@' and including line and column (e.g., @path:line:col)." },
+  {
+    name = "cursor-diagnostic-fix",
+    desc = "Cursor location plus diagnostics at the cursor position, followed by a minimal targeted-fix request.",
+    available = function(opts)
+      return #gather_cursor_diagnostics(get_target_bufnr(opts and opts.source_bufnr or opts and opts.origin_bufnr)) > 0
+    end,
+  },
   { name = "directory", desc = "Directory of the source buffer (relative to git root if available), prefixed with '@'." },
   { name = "git_root", desc = "Repository root path for the source buffer (git)." },
   { name = "git_branch", desc = "Git branch name for the source buffer." },
@@ -431,6 +551,18 @@ end
 -- Use this instead of depending on transforms' return `meta` object.
 function M.gather_diagnostics(bufnr)
   return gather_diagnostics(bufnr)
+end
+
+function M.gather_cursor_diagnostics(bufnr)
+  return gather_cursor_diagnostics(bufnr)
+end
+
+local function token_is_available(definition, opts)
+  if type(definition) ~= "table" or type(definition.available) ~= "function" then
+    return true
+  end
+  local ok, available = pcall(definition.available, opts or {})
+  return ok and available ~= false
 end
 
 -- Find potential transform files on runtime path (eg. transforms-source.lua), and project-root lazygit.lua
@@ -503,11 +635,23 @@ local function try_load_external_transforms()
   end
 end
 
--- Return a copy of the available tokens so callers can't mutate the original list.
-function M.available_tokens()
-  local tokens = vim.deepcopy(token_definitions)
-  for name, t in pairs(external_transforms) do
-    table.insert(tokens, { name = name, desc = t.desc or "" })
+function M.available_tokens(opts)
+  local tokens = {}
+  for _, token in ipairs(token_definitions) do
+    if token_is_available(token, opts) then
+      table.insert(tokens, { name = token.name, desc = token.desc })
+    end
+  end
+  local external_names = {}
+  for name in pairs(external_transforms) do
+    table.insert(external_names, name)
+  end
+  table.sort(external_names)
+  for _, name in ipairs(external_names) do
+    local t = external_transforms[name]
+    if token_is_available(t, opts) then
+      table.insert(tokens, { name = name, desc = t.desc or "" })
+    end
   end
   return tokens
 end
