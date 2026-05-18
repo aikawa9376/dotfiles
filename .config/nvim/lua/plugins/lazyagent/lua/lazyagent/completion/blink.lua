@@ -160,7 +160,7 @@ function source:get_completions(ctx, callback)
   end
   source_buf = source_buf or bufnr
 
-  local tokens = transforms.available_tokens() or {}
+  local tokens = transforms.available_tokens({ source_bufnr = source_buf }) or {}
   local items = {}
   if token_prefix then
     for _, tok in ipairs(tokens) do

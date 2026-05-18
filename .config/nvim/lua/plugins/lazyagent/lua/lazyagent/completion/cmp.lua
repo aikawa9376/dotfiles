@@ -41,11 +41,11 @@ function source.is_available(self)
 end
 
 -- Create a single completion item for token.
-local function make_item(tok, params)
+local function make_item(tok, source_bufnr)
   local label = "#" .. tok.name
   local insert_text = label
 
-  local preview, meta = transforms.preview_token(tok.name, { source_bufnr = vim.api.nvim_get_current_buf() })
+  local preview, meta = transforms.preview_token(tok.name, { source_bufnr = source_bufnr or vim.api.nvim_get_current_buf() })
   local doc_value = ""
   if preview and preview ~= "" then
     -- If the preview already contains code-fenced diagnostics or blocks, use as-is.
@@ -67,7 +67,7 @@ local function make_item(tok, params)
     kind = kind,
     documentation = { kind = "markdown", value = doc_value },
     detail = tok.desc or "",
-    data = { token = tok.name },
+    data = { token = tok.name, source_bufnr = source_bufnr },
   }
   return item
 end
@@ -122,13 +122,20 @@ function source.complete(self, params, callback)
     callback({ items = {}, isIncomplete = false })
     return
   end
+ 
+  local bufnr = vim.api.nvim_get_current_buf()
+  local source_buf = bufnr
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) and vim.b[bufnr] and vim.b[bufnr].lazyagent_source_bufnr then
+    local candidate = vim.b[bufnr].lazyagent_source_bufnr
+    if vim.api.nvim_buf_is_valid(candidate) then source_buf = candidate end
+  end
 
-  local tokens = transforms.available_tokens() or {}
+  local tokens = transforms.available_tokens({ source_bufnr = source_buf }) or {}
   local items = {}
   if token_prefix then
     for _, tok in ipairs(tokens) do
       if tok.name:sub(1, #token_prefix) == token_prefix then
-        table.insert(items, make_item(tok, params))
+        table.insert(items, make_item(tok, source_buf))
       end
     end
   end

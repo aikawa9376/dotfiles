@@ -353,6 +353,7 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 
 | Token | 展開内容 |
 | --- | --- |
+| `#cursor-diagnostic-fix` | カーソル位置と、その位置にかかっている diagnostic を展開して、最小変更での修正を依頼 |
 | `#history` | 現在の project / branch に対応する最新会話 log への参照 |
 | `#report` | summary Markdown の保存先 prefix |
 
