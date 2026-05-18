@@ -33,6 +33,9 @@ local refresh_buffer_layout
 local refresh_buffer_from_path
 local layout_entry
 local buffer_is_visible
+local flush_pending_append
+local resume_deferred_updates_for_buffer
+local resume_deferred_transcript_updates
 local set_window_size
 local diff_view
 local footer_view
@@ -3036,11 +3039,7 @@ local function ensure_layout_autocmds()
       for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
         refresh_transcript_window(bufnr, win)
       end
-      if layout_entry(bufnr).pending_full_refresh then
-        pcall(refresh_buffer_from_path, bufnr, buffer_var(bufnr, "lazyagent_acp_transcript_path"))
-      else
-        pcall(refresh_buffer_layout, bufnr)
-      end
+      pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
     end,
   })
 
@@ -3057,6 +3056,7 @@ local function ensure_layout_autocmds()
       if is_acp_buffer(bufnr) then
         pause_follow_output(bufnr)
         refresh_transcript_window(bufnr, vim.api.nvim_get_current_win())
+        pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
         return
       end
       redirect_buffer_from_transcript_window(vim.api.nvim_get_current_win(), bufnr)
@@ -3074,9 +3074,19 @@ local function ensure_layout_autocmds()
       if is_acp_buffer(bufnr) then
         pause_follow_output(bufnr)
         refresh_transcript_window(bufnr, win)
+        pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
         return
       end
       redirect_buffer_from_transcript_window(win, bufnr)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "FocusGained", "VimResume" }, {
+    group = group,
+    callback = function()
+      vim.schedule(function()
+        pcall(resume_deferred_transcript_updates)
+      end)
     end,
   })
 
@@ -3341,6 +3351,139 @@ local function refresh_buffer_from_file(session)
   end)
 end
 
+local function apply_pending_append(bufnr, pending)
+  local entry = layout_entry(bufnr)
+  local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
+  local pending_sections = pending_transcript_section_count(pending)
+  if append_requires_full_refresh(bufnr, pending) then
+    return nil, pending_sections, true
+  end
+
+  local preserve_display_metadata = meta.compacted == true and pending_sections == 0
+  local changed_start = append_text_to_buffer(bufnr, pending, {
+    preserve_display_metadata = preserve_display_metadata,
+  })
+
+  if changed_start ~= nil then
+    meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
+    meta.raw_section_count = (tonumber(meta.raw_section_count) or 0) + pending_sections
+    entry.transcript_display_meta = meta
+  end
+
+  return changed_start, pending_sections, false
+end
+
+flush_pending_append = function(session, opts)
+  opts = opts or {}
+  local bufnr = to_bufnr(session and session.pane_id)
+  if not bufnr then
+    return false
+  end
+
+  session.view_state = session.view_state or {}
+  close_timer(session.view_state.append_timer)
+  session.view_state.append_timer = nil
+
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    session.view_state.pending_append = ""
+    return false
+  end
+
+  local pending = session.view_state.pending_append or ""
+  session.view_state.pending_append = ""
+  if pending == "" then
+    return false
+  end
+
+  local visible = buffer_is_visible(bufnr)
+  local changed_start = nil
+  local needs_full_refresh = false
+
+  if not visible and opts.allow_hidden_incremental ~= true then
+    layout_entry(bufnr).pending_full_refresh = true
+    return false
+  end
+
+  changed_start, _, needs_full_refresh = apply_pending_append(bufnr, pending)
+  if needs_full_refresh then
+    if visible then
+      refresh_buffer_from_path(bufnr, session.transcript_path, { force = true })
+      return true
+    end
+    layout_entry(bufnr).pending_full_refresh = true
+    return false
+  end
+
+  local max_lines = transcript_max_lines(bufnr)
+  if max_lines and max_lines > 0 and transcript_line_count(bufnr) > (max_lines + 1) then
+    if visible then
+      refresh_buffer_from_path(bufnr, session.transcript_path)
+      return true
+    end
+    layout_entry(bufnr).pending_full_refresh = true
+    return false
+  end
+
+  layout_entry(bufnr).pending_full_refresh = false
+  layout_entry(bufnr).transcript_file_signature = transcript_file_signature(session.transcript_path)
+
+  if not visible then
+    return changed_start ~= nil
+  end
+
+  if changed_start ~= nil then
+    local display_start = normalize_transcript_display(bufnr)
+    if type(display_start) == "number" then
+      changed_start = math.min(changed_start, display_start)
+    end
+    decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
+    diff_view.decorate_diff_blocks(bufnr)
+  end
+  M.refresh_footer(bufnr)
+  if should_follow_output(bufnr) then
+    scroll_buffer_to_end(bufnr)
+  end
+  return true
+end
+
+resume_deferred_updates_for_buffer = function(bufnr, opts)
+  opts = opts or {}
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+
+  local session = session_for_agent(agent_name_for_bufnr(bufnr))
+  if session and type(session.view_state) == "table" and (session.view_state.pending_append or "") ~= "" then
+    return flush_pending_append(session, {
+      allow_hidden_incremental = opts.allow_hidden_incremental == true,
+    })
+  end
+
+  local entry = layout_entry(bufnr)
+  if entry.pending_full_refresh then
+    local transcript_path = (session and session.transcript_path) or buffer_var(bufnr, "lazyagent_acp_transcript_path")
+    if transcript_path and transcript_path ~= "" then
+      refresh_buffer_from_path(bufnr, transcript_path, { force = true })
+      return true
+    end
+  end
+
+  if opts.refresh_layout == true and buffer_is_visible(bufnr) then
+    refresh_buffer_layout(bufnr, { force_footer = true })
+    return true
+  end
+
+  return false
+end
+
+resume_deferred_transcript_updates = function()
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil and buffer_is_visible(bufnr) then
+      pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
+    end
+  end
+end
+
 local function queue_append(session, text)
   local bufnr = to_bufnr(session and session.pane_id)
   if not bufnr then
@@ -3350,70 +3493,23 @@ local function queue_append(session, text)
   session.view_state = session.view_state or {}
   session.view_state.pending_append = (session.view_state.pending_append or "") .. tostring(text or "")
 
-  local function flush_pending_append()
-    close_timer(session.view_state.append_timer)
-    session.view_state.append_timer = nil
-    if not vim.api.nvim_buf_is_valid(bufnr) then
-      session.view_state.pending_append = ""
-      return
-    end
-    local pending = session.view_state.pending_append or ""
-    session.view_state.pending_append = ""
-    if pending == "" then
-      return
-    end
-    if not buffer_is_visible(bufnr) then
-      layout_entry(bufnr).pending_full_refresh = true
-      return
-    end
-    local changed_start = nil
-    local pending_sections = pending_transcript_section_count(pending)
-    if append_requires_full_refresh(bufnr, pending) then
-      refresh_buffer_from_path(bufnr, session.transcript_path, { force = true })
-    else
-      local entry = layout_entry(bufnr)
-      local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
-      local preserve_display_metadata = meta.compacted == true and pending_sections == 0
-      changed_start = append_text_to_buffer(bufnr, pending, {
-        preserve_display_metadata = preserve_display_metadata,
-      })
-      if changed_start ~= nil then
-        local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
-        meta.raw_section_count = (tonumber(meta.raw_section_count) or 0) + pending_sections
-        entry.transcript_display_meta = meta
-      end
-    end
-    local max_lines = transcript_max_lines(bufnr)
-    if max_lines and max_lines > 0 and transcript_line_count(bufnr) > (max_lines + 1) then
-      refresh_buffer_from_path(bufnr, session.transcript_path)
-    elseif changed_start ~= nil then
-      local display_start = normalize_transcript_display(bufnr)
-      if type(display_start) == "number" then
-        changed_start = math.min(changed_start, display_start)
-      end
-      decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
-      diff_view.decorate_diff_blocks(bufnr)
-    end
-    layout_entry(bufnr).transcript_file_signature = transcript_file_signature(session.transcript_path)
-    M.refresh_footer(bufnr)
-    if should_follow_output(bufnr) then
-      scroll_buffer_to_end(bufnr)
-    end
-  end
-
   if session.view_state.append_timer then
     return
   end
 
   local uv = vim.uv or vim.loop
   if not uv or not uv.new_timer then
-    vim.schedule(flush_pending_append)
+    vim.schedule(function()
+      flush_pending_append(session, { allow_hidden_incremental = true })
+    end)
     return
   end
 
   local timer = uv.new_timer()
   session.view_state.append_timer = timer
-  timer:start(APPEND_BATCH_MS, 0, vim.schedule_wrap(flush_pending_append))
+  timer:start(APPEND_BATCH_MS, 0, vim.schedule_wrap(function()
+    flush_pending_append(session, { allow_hidden_incremental = true })
+  end))
 end
 
 diff_view = view_diff.new({
