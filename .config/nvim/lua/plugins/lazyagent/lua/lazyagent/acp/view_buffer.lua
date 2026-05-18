@@ -18,6 +18,7 @@ local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer 
 local FOLLOW_SCROLL_OFF = 0
 local DEFAULT_SCROLL_OFF = 2
 local ACP_TRANSCRIPT_FILETYPE = "lazyagent_acp"
+local ACP_PIN_ICON = "󰐃"
 local APPEND_BATCH_MS = 60
 local DECORATE_PREFETCH_MARGIN = 80
 local DECORATE_SYNC_LINE_LIMIT = 600
@@ -36,6 +37,7 @@ local set_window_size
 local diff_view
 local footer_view
 local normalize_header_lines
+local pinned_section_rows
 local transcript_source_lines
 local pane_id_for_bufnr
 local agent_name_for_bufnr
@@ -215,6 +217,7 @@ local function ensure_highlights()
     LazyAgentACPPlanHeader = { default = true, fg = "#e0af68", bold = true },
     LazyAgentACPToolHeader = { default = true, fg = "#7aa2f7", bold = true },
     LazyAgentACPTerminalHeader = { default = true, fg = "#73daca", bold = true },
+    LazyAgentACPPinIcon = { default = true, fg = "#f7768e", bold = true },
     LazyAgentACPBorder = { default = true, link = "FloatBorder" },
     LazyAgentACPFooterActive = { default = true, link = "DiagnosticInfo" },
     LazyAgentACPFooterWaiting = { default = true, link = "DiagnosticWarn" },
@@ -749,6 +752,18 @@ local function toggle_current_pin(bufnr)
   end
 
   vim.notify(pinned and "Pinned current block" or "Unpinned current block", vim.log.levels.INFO)
+  local session = session_for_agent(agent_name_for_bufnr(bufnr))
+  local transcript_path = session and session.transcript_path or nil
+  if not transcript_path or transcript_path == "" then
+    local ok, value = pcall(vim.api.nvim_buf_get_var, bufnr, "lazyagent_acp_transcript_path")
+    transcript_path = ok and value or nil
+  end
+  pcall(
+    refresh_buffer_from_path,
+    bufnr,
+    transcript_path,
+    { force = true }
+  )
 end
 
 local function copy_current_block(bufnr)
@@ -1594,6 +1609,7 @@ local function decorate_transcript_range(bufnr, start_idx, end_idx)
   vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, range_start, range_stop)
   local display_meta = layout_entry(bufnr).transcript_display_meta or {}
   local heading_rows = type(display_meta.heading_rows) == "table" and display_meta.heading_rows or {}
+  local pinned_rows = pinned_section_rows(bufnr, vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false))
   for idx, line in ipairs(lines) do
     local row = range_start + idx - 1
     local header_hl = nil
@@ -1623,6 +1639,13 @@ local function decorate_transcript_range(bufnr, start_idx, end_idx)
           pcall(function() vim.api.nvim_buf_add_highlight(bufnr, transcript_ns, header_hl, row, 0, -1) end)
         end
       end
+    end
+    if pinned_rows[row + 1] then
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, transcript_ns, row, 0, {
+        virt_text = { { " " .. ACP_PIN_ICON, "LazyAgentACPPinIcon" } },
+        virt_text_pos = "right_align",
+        priority = 250,
+      })
     end
   end
 end
@@ -2726,6 +2749,29 @@ local function transcript_items_for_sections(bufnr, sections)
     items[idx] = timeline[offset + idx]
   end
   return items
+end
+
+pinned_section_rows = function(bufnr, lines)
+  lines = type(lines) == "table" and lines or {}
+  local sections = collect_transcript_sections(lines)
+  if #sections == 0 then
+    return {}
+  end
+
+  local entry = layout_entry(bufnr)
+  local items = type(entry.transcript_section_items) == "table" and entry.transcript_section_items or nil
+  if type(items) ~= "table" or #items ~= #sections then
+    items = transcript_items_for_sections(bufnr, sections)
+  end
+
+  local pinned_rows = {}
+  for idx, section in ipairs(sections) do
+    if type(items[idx]) == "table" and items[idx].pinned == true then
+      pinned_rows[section.start_row] = true
+    end
+  end
+
+  return pinned_rows
 end
 
 local function with_transcript_display_meta(meta, sections, compacted, lines)
