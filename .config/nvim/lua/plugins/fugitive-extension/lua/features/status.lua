@@ -632,7 +632,7 @@ function M.setup(group)
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:<cr>", true, false, true), 'm', true)
       end, { buffer = b, nowait = true, silent = true })
 
-      vim.keymap.set('n', 'o', function()
+      vim.keymap.set('n', 'gf', function()
         open_entry_and_close_status(b)
       end, { buffer = b, nowait = true, silent = true, desc = 'Open file and close status' })
 
