@@ -15,6 +15,7 @@ local util = require("lazyagent.util")
 local summary = require("lazyagent.logic.summary")
 
 local severity_names = {}
+local diagnostics_to_text
 if vim and vim.diagnostic and vim.diagnostic.severity then
   severity_names[vim.diagnostic.severity.ERROR] = "ERROR"
   severity_names[vim.diagnostic.severity.WARN] = "WARN"
@@ -185,21 +186,22 @@ end
 
 local function cursor_diagnostic_fix_text(bufnr)
   local pos = cursor_position(bufnr)
-  local lines = { cursor_text(pos.bufnr) }
+  local cursor_ref = cursor_text(pos.bufnr)
+  local lines = { cursor_ref }
   local diags = gather_cursor_diagnostics(pos.bufnr)
   if #diags > 0 then
     lines[#lines + 1] = "```diagnostics"
     lines[#lines + 1] = diagnostics_to_text(diags)
     lines[#lines + 1] = "```"
-    lines[#lines + 1] = "- Fix the diagnostics at the cursor position with a minimal, targeted change. Avoid unrelated refactors."
+    lines[#lines + 1] = "- Fix the diagnostics at the cursor position (" .. cursor_ref .. ") with a minimal, targeted change. Avoid unrelated refactors."
   else
-    lines[#lines + 1] = "- No diagnostics were found at the cursor position."
+    lines[#lines + 1] = "- No diagnostics were found at the cursor position (" .. cursor_ref .. ")."
     lines[#lines + 1] = "- If you change anything, keep it minimal and scoped to the cursor context."
   end
   return table.concat(lines, "\n")
 end
 
-local function diagnostics_to_text(diags)
+diagnostics_to_text = function(diags)
   if not diags or #diags == 0 then return "" end
   local lines = {}
   for _, d in ipairs(diags) do
@@ -238,6 +240,46 @@ end
 -- registration to provide additional token transforms.
 local external_transforms = {}
 
+local function token_aliases(t)
+  if type(t) ~= "table" then
+    return {}
+  end
+  if type(t.aliases) == "string" and t.aliases ~= "" then
+    return { t.aliases }
+  end
+  if type(t.aliases) == "table" then
+    return vim.deepcopy(t.aliases)
+  end
+  return {}
+end
+
+local function token_matches(name, target, aliases)
+  if tostring(name or "") == tostring(target or "") then
+    return true
+  end
+  for _, alias in ipairs(aliases or {}) do
+    if tostring(name or "") == tostring(alias) then
+      return true
+    end
+  end
+  return false
+end
+
+local function external_transform_for_token(name)
+  local direct = external_transforms[name]
+  if direct then
+    return name, direct
+  end
+  for ext_name, transform in pairs(external_transforms) do
+    for _, alias in ipairs(transform.aliases or {}) do
+      if tostring(name or "") == tostring(alias) then
+        return ext_name, transform
+      end
+    end
+  end
+  return nil, nil
+end
+
 local function register_external_transform(t)
   if not t or type(t) ~= "table" then
     if vim and vim.notify then pcall(vim.notify, "lazyagent.transforms: invalid transform (not a table)", vim.log.levels.WARN) end
@@ -251,7 +293,13 @@ local function register_external_transform(t)
     if vim and vim.notify then pcall(vim.notify, "lazyagent.transforms: transform 'trans' must be a string or function for " .. t.name, vim.log.levels.WARN) end
     return nil
   end
-  external_transforms[t.name] = { desc = t.desc or "", trans = t.trans }
+  external_transforms[t.name] = {
+    desc = t.desc or "",
+    trans = t.trans,
+    aliases = token_aliases(t),
+    preview_as_markdown = t.preview_as_markdown == true,
+    available = t.available,
+  }
   return external_transforms[t.name]
 end
 
@@ -462,7 +510,7 @@ local function replace_token(token, opts, meta)
   end
 
   -- Allow externally registered transforms to handle custom tokens (either string or function).
-  local ext = external_transforms[token]
+  local _, ext = external_transform_for_token(token)
   if ext then
     if type(ext.trans) == "function" then
       local ok, val = pcall(ext.trans, opts, meta, token)
@@ -516,6 +564,7 @@ local token_definitions = {
   {
     name = "cursor-diagnostic-fix",
     desc = "Cursor location plus diagnostics at the cursor position, followed by a minimal targeted-fix request.",
+    preview_as_markdown = true,
     available = function(opts)
       return #gather_cursor_diagnostics(get_target_bufnr(opts and opts.source_bufnr or opts and opts.origin_bufnr)) > 0
     end,
@@ -639,7 +688,12 @@ function M.available_tokens(opts)
   local tokens = {}
   for _, token in ipairs(token_definitions) do
     if token_is_available(token, opts) then
-      table.insert(tokens, { name = token.name, desc = token.desc })
+      table.insert(tokens, {
+        name = token.name,
+        desc = token.desc,
+        aliases = vim.deepcopy(token.aliases or {}),
+        preview_as_markdown = token.preview_as_markdown == true,
+      })
     end
   end
   local external_names = {}
@@ -650,7 +704,12 @@ function M.available_tokens(opts)
   for _, name in ipairs(external_names) do
     local t = external_transforms[name]
     if token_is_available(t, opts) then
-      table.insert(tokens, { name = name, desc = t.desc or "" })
+      table.insert(tokens, {
+        name = name,
+        desc = t.desc or "",
+        aliases = vim.deepcopy(t.aliases or {}),
+        preview_as_markdown = t.preview_as_markdown == true,
+      })
     end
   end
   return tokens
@@ -658,9 +717,10 @@ end
 
 function M.token_description(name)
   for _, t in ipairs(token_definitions) do
-    if t.name == name then return t.desc end
+    if token_matches(name, t.name, t.aliases) then return t.desc end
   end
-  if external_transforms[name] then return external_transforms[name].desc end
+  local _, ext = external_transform_for_token(name)
+  if ext then return ext.desc end
   return nil
 end
 

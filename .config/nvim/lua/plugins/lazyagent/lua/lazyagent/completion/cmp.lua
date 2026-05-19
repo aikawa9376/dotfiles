@@ -41,16 +41,37 @@ function source.is_available(self)
 end
 
 -- Create a single completion item for token.
-local function make_item(tok, source_bufnr)
-  local label = "#" .. tok.name
+local function completion_label(tok, typed_prefix)
+  if typed_prefix and typed_prefix:find("_", 1, true) then
+    for _, alias in ipairs(tok.aliases or {}) do
+      if alias:find("_", 1, true) then
+        return "#" .. alias
+      end
+    end
+  end
+  return "#" .. tok.name
+end
+
+local function token_matches_prefix(tok, prefix)
+  if tok.name:sub(1, #prefix) == prefix then
+    return true
+  end
+  for _, alias in ipairs(tok.aliases or {}) do
+    if alias:sub(1, #prefix) == prefix then
+      return true
+    end
+  end
+  return false
+end
+
+local function make_item(tok, source_bufnr, typed_prefix)
+  local label = completion_label(tok, typed_prefix)
   local insert_text = label
 
   local preview, meta = transforms.preview_token(tok.name, { source_bufnr = source_bufnr or vim.api.nvim_get_current_buf() })
   local doc_value = ""
   if preview and preview ~= "" then
-    -- If the preview already contains code-fenced diagnostics or blocks, use as-is.
-    -- Otherwise present a simple markdown fenced block for readability.
-    if preview:match("^```") then
+    if tok.preview_as_markdown == true or preview:match("^```") then
       doc_value = preview
     else
       doc_value = "```text\n" .. preview .. "\n```"
@@ -64,6 +85,7 @@ local function make_item(tok, source_bufnr)
   local item = {
     label = label,
     insertText = insert_text,
+    filterText = label:gsub("^#", ""),
     kind = kind,
     documentation = { kind = "markdown", value = doc_value },
     detail = tok.desc or "",
@@ -134,8 +156,8 @@ function source.complete(self, params, callback)
   local items = {}
   if token_prefix then
     for _, tok in ipairs(tokens) do
-      if tok.name:sub(1, #token_prefix) == token_prefix then
-        table.insert(items, make_item(tok, source_buf))
+      if token_matches_prefix(tok, token_prefix) then
+        table.insert(items, make_item(tok, source_buf, token_prefix))
       end
     end
   end
