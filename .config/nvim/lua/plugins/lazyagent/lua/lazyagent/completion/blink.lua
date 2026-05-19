@@ -63,18 +63,50 @@ function source:get_keyword_pattern()
   return "[#/@][A-Za-z0-9_%.%-/]*"
 end
 
-local function make_item(tok, _, bufnr)
-  local label = "#" .. tok.name
+local function completion_label(tok, typed_prefix)
+  if typed_prefix and typed_prefix:find("_", 1, true) then
+    for _, alias in ipairs(tok.aliases or {}) do
+      if alias:find("_", 1, true) then
+        return "#" .. alias
+      end
+    end
+  end
+  return "#" .. tok.name
+end
+
+local function token_matches_prefix(tok, prefix)
+  if tok.name:sub(1, #prefix) == prefix then
+    return true
+  end
+  for _, alias in ipairs(tok.aliases or {}) do
+    if alias:sub(1, #prefix) == prefix then
+      return true
+    end
+  end
+  return false
+end
+
+local function make_item(tok, typed_prefix, bufnr)
+  local label = completion_label(tok, typed_prefix)
+  local doc_value = tok.desc or ""
+  if tok.preview_as_markdown then
+    local ok, preview = pcall(function()
+      return transforms.preview_token(tok.name, { source_bufnr = bufnr })
+    end)
+    if ok and preview and preview ~= "" then
+      doc_value = preview
+    end
+  end
   local item = {
     label = label,
-    filterText = tok.name,
+    filterText = label:gsub("^#", ""),
     insertText = label .. " ",
     kind = types.CompletionItemKind.Text,
     -- Populated lazily in source:resolve to avoid blocking on # input
-    documentation = { kind = "markdown", value = tok.desc or "" },
+    documentation = { kind = "markdown", value = doc_value },
     detail = tok.desc or "",
     -- Stash metadata needed for deferred preview
-    data = { token_name = tok.name, source_bufnr = bufnr },
+    data = { token_name = tok.name, source_bufnr = bufnr, preview_as_markdown = tok.preview_as_markdown == true },
   }
   return item
 end
@@ -164,8 +196,8 @@ function source:get_completions(ctx, callback)
   local items = {}
   if token_prefix then
     for _, tok in ipairs(tokens) do
-      if tok.name:sub(1, #token_prefix) == token_prefix then
-        table.insert(items, make_item(tok, ctx, source_buf))
+      if token_matches_prefix(tok, token_prefix) then
+        table.insert(items, make_item(tok, token_prefix, source_buf))
       end
     end
   end
@@ -216,7 +248,7 @@ function source:resolve(item, callback)
     local opts = { source_bufnr = data.source_bufnr }
     local ok, preview = pcall(function() return transforms.preview_token(data.token_name, opts) end)
     if ok and preview and preview ~= "" then
-      local doc_value = preview:match("^```") and preview or ("```text\n" .. preview .. "\n```")
+      local doc_value = (data.preview_as_markdown == true or preview:match("^```")) and preview or ("```text\n" .. preview .. "\n```")
       item = vim.tbl_deep_extend("force", item, { documentation = { kind = "markdown", value = doc_value } })
     end
   end
