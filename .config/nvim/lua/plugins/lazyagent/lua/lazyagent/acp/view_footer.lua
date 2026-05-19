@@ -603,7 +603,7 @@ function M.new(ctx)
     return wrapped
   end
 
-  local function footer_render_lines(agent_name, session, line_count)
+  local function footer_render_lines(agent_name, session, line_count, follow_label)
     local size = transcript_size_label(session)
     local provider = provider_label(agent_name, session)
     local session_title = session_info_title(session)
@@ -628,6 +628,9 @@ function M.new(ctx)
     end
     if line_count and line_count > 0 then
       table.insert(stats, string.format("%d %s", line_count, line_count == 1 and "line" or "lines"))
+    end
+    if follow_label and follow_label ~= "" then
+      table.insert(stats, follow_label)
     end
     if #stats > 0 then
       table.insert(meta, table.concat(stats, " / "))
@@ -675,7 +678,11 @@ function M.new(ctx)
     local rendered = {}
     local highlights = {}
     local animations = {}
-    for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name), line_count)) do
+    local follow_label = nil
+    if type(ctx.should_follow_output) == "function" then
+      follow_label = ctx.should_follow_output(bufnr) and "follow:on" or "follow:paused"
+    end
+    for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name), line_count, follow_label)) do
       for _, wrapped in ipairs(wrap_footer_text(line.text or "", ctx.overlay_target_width(bufnr))) do
         table.insert(rendered, wrapped)
         table.insert(highlights, line.hl)

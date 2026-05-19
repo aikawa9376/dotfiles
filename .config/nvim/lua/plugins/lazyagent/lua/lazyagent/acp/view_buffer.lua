@@ -2392,27 +2392,185 @@ local function should_follow_output(bufnr)
   return pane_opts_for_bufnr(bufnr).follow_output ~= false
 end
 
-local function set_follow_output(bufnr, enabled)
+function M._follow_auto_resume_enabled(bufnr)
+  return buffer_var(bufnr, "lazyagent_acp_fullscreen_transcript") ~= true
+end
+
+local function set_follow_output(bufnr, enabled, opts)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  opts = opts or {}
   local pane_id = tostring(pane_id_for_bufnr(bufnr))
-  pane_config[pane_id] = vim.tbl_extend("force", pane_config[pane_id] or {}, {
+  local next_config = vim.tbl_extend("force", pane_config[pane_id] or {}, {
     follow_output = enabled ~= false,
   })
+  if enabled ~= false then
+    next_config.follow_pause_reason = nil
+    next_config.follow_pause_win = nil
+    next_config.follow_pause_topline = nil
+  else
+    next_config.follow_pause_reason = opts.reason or "manual"
+    next_config.follow_pause_win = opts.win
+    next_config.follow_pause_topline = opts.topline or (opts.win and M._window_topline(opts.win) or nil)
+  end
+  pane_config[pane_id] = next_config
   for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
     if vim.api.nvim_win_is_valid(win) then
       vim.wo[win].scrolloff = (enabled ~= false) and FOLLOW_SCROLL_OFF or DEFAULT_SCROLL_OFF
     end
   end
+  return true
 end
 
-local function pause_follow_output(bufnr)
-  if not bufnr or not is_acp_buffer(bufnr) or not should_follow_output(bufnr) then
+local function pause_follow_output(bufnr, opts)
+  opts = opts or {}
+  if not bufnr or not is_acp_buffer(bufnr) then
     return false
   end
-  set_follow_output(bufnr, false)
+  if not should_follow_output(bufnr) then
+    if opts.reason then
+      set_follow_output(bufnr, false, opts)
+      if type(M.refresh_footer) == "function" then
+        M.refresh_footer(bufnr)
+      end
+    end
+    return false
+  end
+  set_follow_output(bufnr, false, opts)
   if type(M.refresh_footer) == "function" then
     M.refresh_footer(bufnr)
   end
   return true
+end
+
+function M._transcript_end_line(bufnr)
+  local buffer_stop = math.max(1, vim.api.nvim_buf_line_count(bufnr))
+  local transcript_stop = transcript_line_count and transcript_line_count(bufnr) or buffer_stop
+  if transcript_stop and transcript_stop > 0 then
+    return math.min(buffer_stop, transcript_stop)
+  end
+  return buffer_stop
+end
+
+function M._window_bottom_line(win)
+  local bottom = nil
+  pcall(vim.api.nvim_win_call, win, function()
+    bottom = vim.fn.line("w$")
+  end)
+  return tonumber(bottom)
+end
+
+function M._window_topline(win)
+  local topline = nil
+  pcall(vim.api.nvim_win_call, win, function()
+    topline = vim.fn.winsaveview().topline
+  end)
+  return tonumber(topline)
+end
+
+function M._window_view_reaches_transcript_end(win, bufnr)
+  if not win or not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= bufnr then
+    return false
+  end
+  local bottom = M._window_bottom_line(win)
+  return bottom ~= nil and bottom >= M._transcript_end_line(bufnr)
+end
+
+function M._window_cursor_reaches_transcript_end(win, bufnr)
+  if not win or not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= bufnr then
+    return false
+  end
+  local ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
+  return ok and type(cursor) == "table" and tonumber(cursor[1]) and cursor[1] >= M._transcript_end_line(bufnr)
+end
+
+function M._window_at_transcript_end(win, bufnr)
+  return M._window_cursor_reaches_transcript_end(win, bufnr) or M._window_view_reaches_transcript_end(win, bufnr)
+end
+
+function M._any_window_at_transcript_end(bufnr)
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if M._window_at_transcript_end(win, bufnr) then
+      return true
+    end
+  end
+  return false
+end
+
+function M._any_window_cursor_reaches_transcript_end(bufnr)
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if M._window_cursor_reaches_transcript_end(win, bufnr) then
+      return true
+    end
+  end
+  return false
+end
+
+function M._resume_follow_output(bufnr, opts)
+  opts = opts or {}
+  if not bufnr or not is_acp_buffer(bufnr) then
+    return false
+  end
+  set_follow_output(bufnr, true)
+  if type(M.refresh_footer) == "function" then
+    M.refresh_footer(bufnr)
+  end
+  if opts.scroll ~= false and scroll_buffer_to_end then
+    scroll_buffer_to_end(bufnr)
+  end
+  return true
+end
+
+function M._resume_follow_if_at_end(bufnr, win, opts)
+  opts = opts or {}
+  if not M._follow_auto_resume_enabled(bufnr) or should_follow_output(bufnr) then
+    return false
+  end
+  local pane_opts = pane_opts_for_bufnr(bufnr)
+  local allow_view_end = opts.allow_view_end == true or pane_opts.follow_pause_reason ~= "manual"
+  local at_end = false
+  if allow_view_end then
+    at_end = (win and M._window_at_transcript_end(win, bufnr)) or M._any_window_at_transcript_end(bufnr)
+  else
+    at_end = (win and M._window_cursor_reaches_transcript_end(win, bufnr))
+      or M._any_window_cursor_reaches_transcript_end(bufnr)
+  end
+  if at_end then
+    return M._resume_follow_output(bufnr, opts)
+  end
+  return false
+end
+
+function M._sync_follow_after_scroll(bufnr, win)
+  if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
+    return false
+  end
+  if M._window_view_reaches_transcript_end(win, bufnr) then
+    local pane_opts = pane_opts_for_bufnr(bufnr)
+    if pane_opts.follow_pause_reason == "manual" and not M._window_cursor_reaches_transcript_end(win, bufnr) then
+      local current_topline = M._window_topline(win)
+      local paused_topline = tonumber(pane_opts.follow_pause_topline)
+      if not current_topline or not paused_topline or current_topline <= paused_topline then
+        return false
+      end
+    end
+    return M._resume_follow_if_at_end(bufnr, win, { allow_view_end = true })
+  end
+  return pause_follow_output(bufnr, { reason = "manual", win = win })
+end
+
+function M._sync_follow_after_cursor_moved(bufnr, win)
+  if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
+    return false
+  end
+  if should_follow_output(bufnr) and not M._window_view_reaches_transcript_end(win, bufnr) then
+    return pause_follow_output(bufnr, { reason = "manual", win = win })
+  end
+  if not should_follow_output(bufnr) and M._window_cursor_reaches_transcript_end(win, bufnr) then
+    return M._resume_follow_output(bufnr)
+  end
+  return false
 end
 
 set_window_size = function(win, size, is_vertical)
@@ -2562,6 +2720,24 @@ local function apply_transcript_buffer_opts(bufnr)
     vim.keymap.set("n", "<C-d>", function()
       M.scroll_down(pane_id_for_bufnr(bufnr))
     end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: half page down" })
+    vim.keymap.set("n", "<C-b>", function()
+      M.scroll_page_up(pane_id_for_bufnr(bufnr))
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: page up" })
+    vim.keymap.set("n", "<C-f>", function()
+      M.scroll_page_down(pane_id_for_bufnr(bufnr))
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: page down" })
+    vim.keymap.set("n", "<PageUp>", function()
+      M.scroll_page_up(pane_id_for_bufnr(bufnr))
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: page up" })
+    vim.keymap.set("n", "<PageDown>", function()
+      M.scroll_page_down(pane_id_for_bufnr(bufnr))
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: page down" })
+    vim.keymap.set("n", "G", function()
+      M.resume_follow(pane_id_for_bufnr(bufnr))
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: jump to end and follow" })
+    vim.keymap.set("n", "<End>", function()
+      M.resume_follow(pane_id_for_bufnr(bufnr))
+    end, { buffer = bufnr, noremap = true, silent = true, desc = "LazyAgentACP: jump to end and follow" })
     vim.keymap.set("n", "<CR>", function()
       if diff_view and type(diff_view.open_diff_block_under_cursor) == "function" then
         local ok, opened = pcall(diff_view.open_diff_block_under_cursor, bufnr)
@@ -3094,7 +3270,7 @@ local function ensure_layout_autocmds()
         return
       end
       if is_acp_buffer(bufnr) then
-        pause_follow_output(bufnr)
+        pause_follow_output(bufnr, { reason = "focus", win = vim.api.nvim_get_current_win() })
         refresh_transcript_window(bufnr, vim.api.nvim_get_current_win())
         pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
         return
@@ -3112,12 +3288,51 @@ local function ensure_layout_autocmds()
         return
       end
       if is_acp_buffer(bufnr) then
-        pause_follow_output(bufnr)
+        pause_follow_output(bufnr, { reason = "focus", win = win })
         refresh_transcript_window(bufnr, win)
         pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
         return
       end
       redirect_buffer_from_transcript_window(win, bufnr)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufLeave", "WinLeave" }, {
+    group = group,
+    callback = function(args)
+      local win = vim.api.nvim_get_current_win()
+      local bufnr = tonumber(args.buf)
+      if not bufnr and vim.api.nvim_win_is_valid(win) then
+        bufnr = vim.api.nvim_win_get_buf(win)
+      end
+      if bufnr and is_acp_buffer(bufnr) then
+        M._resume_follow_if_at_end(bufnr, win)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("WinScrolled", {
+    group = group,
+    callback = function(args)
+      local win = tonumber(args.match) or vim.api.nvim_get_current_win()
+      if not win or not vim.api.nvim_win_is_valid(win) then
+        return
+      end
+      local bufnr = vim.api.nvim_win_get_buf(win)
+      if is_acp_buffer(bufnr) then
+        M._sync_follow_after_scroll(bufnr, win)
+      end
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    group = group,
+    callback = function(args)
+      local bufnr = tonumber(args.buf)
+      local win = vim.api.nvim_get_current_win()
+      if bufnr and is_acp_buffer(bufnr) then
+        M._sync_follow_after_cursor_moved(bufnr, win)
+      end
     end,
   })
 
@@ -3639,6 +3854,7 @@ footer_view = view_footer.new({
     return buffer_is_visible(bufnr)
   end,
   is_acp_buffer = is_acp_buffer,
+  should_follow_output = should_follow_output,
 })
 
 function M.statusline()
@@ -4097,20 +4313,33 @@ local function scroll_window_by_key(win, key)
   return moved
 end
 
+function M._scroll_buffer_with_key(bufnr, key, opts)
+  opts = opts or {}
+  if opts.pause ~= false then
+    pause_follow_output(bufnr, { reason = "manual", win = vim.api.nvim_get_current_win() })
+  end
+
+  local scrolled = false
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if scroll_window_by_key(win, key) then
+      scrolled = true
+    end
+  end
+
+  if opts.resume_at_end == true and M._any_window_at_transcript_end(bufnr) then
+    M._resume_follow_output(bufnr)
+  end
+
+  return scrolled
+end
+
 function M.scroll_up(pane_id)
   local bufnr = to_bufnr(pane_id)
   if not bufnr then
     return false
   end
 
-  local scrolled = false
-  set_follow_output(bufnr, false)
-  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if scroll_window_by_key(win, "<C-u>") then
-      scrolled = true
-    end
-  end
-  return scrolled
+  return M._scroll_buffer_with_key(bufnr, "<C-u>")
 end
 
 function M.scroll_down(pane_id)
@@ -4119,14 +4348,25 @@ function M.scroll_down(pane_id)
     return false
   end
 
-  local scrolled = false
-  set_follow_output(bufnr, false)
-  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if scroll_window_by_key(win, "<C-d>") then
-      scrolled = true
-    end
+  return M._scroll_buffer_with_key(bufnr, "<C-d>", { resume_at_end = true })
+end
+
+function M.scroll_page_up(pane_id)
+  local bufnr = to_bufnr(pane_id)
+  if not bufnr then
+    return false
   end
-  return scrolled
+
+  return M._scroll_buffer_with_key(bufnr, "<C-b>")
+end
+
+function M.scroll_page_down(pane_id)
+  local bufnr = to_bufnr(pane_id)
+  if not bufnr then
+    return false
+  end
+
+  return M._scroll_buffer_with_key(bufnr, "<C-f>", { resume_at_end = true })
 end
 
 function M.resume_follow(pane_id)
@@ -4134,10 +4374,7 @@ function M.resume_follow(pane_id)
   if not bufnr then
     return false
   end
-  set_follow_output(bufnr, true)
-  M.refresh_footer(bufnr)
-  scroll_buffer_to_end(bufnr)
-  return true
+  return M._resume_follow_output(bufnr)
 end
 
 function M.cleanup_if_idle()
