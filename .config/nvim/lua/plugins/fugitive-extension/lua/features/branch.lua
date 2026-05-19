@@ -3,6 +3,9 @@ local utils = require("fugitive_utils")
 local commands = require("features.commands")
 local help = require("features.help")
 
+local branch_name_ns = vim.api.nvim_create_namespace("fugitive_branch_names")
+local branch_fade_ns = vim.api.nvim_create_namespace("fugitive_branch_fade")
+
 local function notify_branch_changed(bufnr, work_tree)
   utils.fire_fugitive_changed({
     bufnr = bufnr,
@@ -274,8 +277,7 @@ local function get_branch_list(bufnr)
 end
 
 local function apply_fade_highlight(bufnr, truncated_info)
-  local ns_id = vim.api.nvim_create_namespace('fugitive_branch_fade')
-  vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
+  vim.api.nvim_buf_clear_namespace(bufnr, branch_fade_ns, 0, -1)
 
   for _, info in ipairs(truncated_info or {}) do
     local line = info.line
@@ -286,15 +288,17 @@ local function apply_fade_highlight(bufnr, truncated_info)
     if mode == 'left' then
       -- Apply fade effect to the first few characters (left side)
       -- 1st char: Very faint (NonText)
-      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, col, {
+      vim.api.nvim_buf_set_extmark(bufnr, branch_fade_ns, line, col, {
         end_col = col + 1,
         hl_group = "NonText",
+        priority = 110,
       })
 
       -- 2nd char: Faint (Comment)
-      vim.api.nvim_buf_set_extmark(bufnr, ns_id, line, col + 1, {
+      vim.api.nvim_buf_set_extmark(bufnr, branch_fade_ns, line, col + 1, {
         end_col = col + 2,
         hl_group = "Comment",
+        priority = 110,
       })
     elseif mode == 'right' then
       -- Apply fade effect to the last few characters (right side)
@@ -304,33 +308,43 @@ local function apply_fade_highlight(bufnr, truncated_info)
 
       -- Last char: Very faint (NonText)
       if end_col > 0 then
-        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, line, end_col - 1, {
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, branch_fade_ns, line, end_col - 1, {
           end_col = end_col,
           hl_group = "NonText",
+          priority = 110,
         })
       end
 
       -- 2nd to last char: Faint (Comment)
       if end_col > 1 then
-        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns_id, line, end_col - 2, {
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, branch_fade_ns, line, end_col - 2, {
           end_col = end_col - 1,
           hl_group = "Comment",
+          priority = 110,
         })
       end
     end
   end
 end
 
-local function apply_branch_syntax(bufnr)
-  vim.api.nvim_buf_call(bufnr, function()
-    vim.cmd([[
-      syntax clear
-      syntax match FugitiveBranchName /^\s*\*\?\s*\zs\S\+/
-      syntax match FugitiveBranchCurrent /^\s*\*\s*\zs\S\+/
-      highlight default link FugitiveBranchName Directory
-      highlight default link FugitiveBranchCurrent String
-    ]])
-  end)
+local function apply_branch_highlight(bufnr)
+  if not utils.is_valid_buf(bufnr) then return end
+
+  vim.api.nvim_set_hl(0, "FugitiveBranchName", { link = "Directory", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveBranchCurrent", { link = "String", default = true })
+  vim.api.nvim_buf_clear_namespace(bufnr, branch_name_ns, 0, -1)
+
+  for lnum, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+    local _, prefix_end = line:find("^%s*%*?%s*")
+    local branch = line:match("^%s*%*?%s*(%S+)")
+    if prefix_end and branch then
+      vim.api.nvim_buf_set_extmark(bufnr, branch_name_ns, lnum - 1, prefix_end, {
+        end_col = prefix_end + #branch,
+        hl_group = line:match("^%s*%*") and "FugitiveBranchCurrent" or "FugitiveBranchName",
+        priority = 80,
+      })
+    end
+  end
 end
 
 local function get_branch_name_from_line(line)
@@ -358,7 +372,7 @@ local function refresh_branch_list(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
     vim.b[bufnr].branch_map = branch_names
     apply_fade_highlight(bufnr, truncated_info)
-    apply_branch_syntax(bufnr)
+    apply_branch_highlight(bufnr)
   end)
   vim.bo[bufnr].modifiable = false
 end
@@ -922,6 +936,7 @@ local function open_branch_list()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
     vim.b[bufnr].branch_map = branch_names
     apply_fade_highlight(bufnr, truncated_info)
+    apply_branch_highlight(bufnr)
   end)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
@@ -1205,8 +1220,8 @@ function M.setup(group)
       vim.opt_local.relativenumber = false
       vim.opt_local.signcolumn = 'no'
 
-      -- Setup syntax highlighting for branch names
-      apply_branch_syntax(bufnr)
+      -- Setup highlighting for branch names
+      apply_branch_highlight(bufnr)
 
       -- Load fugitive's default mappings
       vim.defer_fn(function()
