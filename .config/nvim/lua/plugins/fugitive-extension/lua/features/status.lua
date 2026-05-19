@@ -220,41 +220,71 @@ local function preferred_target_window(status_win)
   return fallback
 end
 
-local function open_entry_and_close_status(bufnr)
-  local file_path = utils.get_filepath_at_cursor(bufnr)
-  if not file_path then
-    vim.notify('No file found at cursor', vim.log.levels.WARN)
-    return
+local function fugitive_edit_command_at_cursor()
+  local mapping = vim.fn.maparg('<Plug>fugitive:<cr>', 'n', false, true)
+  local sid = tonumber(mapping.sid)
+  if not sid or sid == 0 then
+    return nil, 'Fugitive <CR> mapping not found'
   end
 
-  local work_tree = utils.get_buf_work_tree(bufnr)
-  local abs = work_tree and vim.fn.fnamemodify(work_tree .. '/' .. file_path, ':p') or nil
-  local target = vim.fn.FugitiveFind(':' .. file_path)
-  if not target or target == '' then
-    target = abs
+  local gf = vim.fn['<SNR>' .. sid .. '_GF']
+  local ok, cmd = pcall(gf, 'edit')
+  if not ok then
+    return nil, tostring(cmd)
   end
-  if not target or target == '' then
-    vim.notify('Could not resolve file at cursor', vim.log.levels.WARN)
-    return
+  if type(cmd) ~= 'string' or cmd == '' then
+    return nil, 'No file found at cursor'
   end
+  return cmd
+end
+
+local function open_entry_and_close_status(bufnr)
+  if not utils.is_valid_buf(bufnr) then return end
 
   local status_win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_buf(status_win) ~= bufnr then
+    status_win = vim.fn.bufwinid(bufnr)
+  end
+  if status_win == -1 or not vim.api.nvim_win_is_valid(status_win) then
+    vim.notify('Status window not found', vim.log.levels.WARN)
+    return
+  end
+
   local target_win = preferred_target_window(status_win)
   local opened_in_other_window = target_win and vim.api.nvim_win_is_valid(target_win) and target_win ~= status_win
-  if opened_in_other_window then
-    vim.api.nvim_set_current_win(target_win)
+
+  local result = vim.api.nvim_win_call(status_win, function()
+    local cmd, err = fugitive_edit_command_at_cursor()
+    if not cmd then
+      return { ok = false, err = err }
+    end
+
+    local ok, exec_err = pcall(vim.cmd, cmd)
+    if not ok then
+      return { ok = false, err = tostring(exec_err) }
+    end
+
+    return {
+      ok = true,
+      bufnr = vim.api.nvim_get_current_buf(),
+      view = vim.fn.winsaveview(),
+    }
+  end)
+
+  if not result.ok then
+    vim.notify(result.err, vim.log.levels.WARN)
+    return
   end
 
-  if abs and vim.fn.isdirectory(abs) == 1 then
-    vim.cmd('Oil ' .. vim.fn.fnameescape(abs))
-  else
-    vim.cmd('edit ' .. vim.fn.fnameescape(target))
-  end
-
-  if opened_in_other_window and vim.api.nvim_win_is_valid(status_win) then
-    pcall(vim.api.nvim_win_call, status_win, function()
-      require('utilities').smart_close()
+  if opened_in_other_window and vim.api.nvim_win_is_valid(status_win) and vim.api.nvim_win_is_valid(target_win) then
+    vim.api.nvim_win_set_buf(target_win, result.bufnr)
+    pcall(vim.api.nvim_win_call, target_win, function()
+      vim.fn.winrestview(result.view)
     end)
+    pcall(vim.api.nvim_win_close, status_win, false)
+    if vim.api.nvim_win_is_valid(target_win) then
+      vim.api.nvim_set_current_win(target_win)
+    end
   end
 end
 
