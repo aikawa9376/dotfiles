@@ -20,6 +20,7 @@ local DEFAULT_SCROLL_OFF = 2
 local ACP_TRANSCRIPT_FILETYPE = "lazyagent_acp"
 local ACP_PIN_ICON = "󰐃"
 local APPEND_BATCH_MS = 60
+local MARKDOWN_RENDER_BATCH_MS = 120
 local DECORATE_PREFETCH_MARGIN = 80
 local DECORATE_SYNC_LINE_LIMIT = 600
 local DECORATE_CHUNK_SIZE = 400
@@ -270,6 +271,45 @@ local function refresh_markdown_rendering(bufnr)
       win = wins,
       event = "LazyAgentACPUpdate",
     })
+  end
+end
+
+local function queue_markdown_rendering(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  if buffer_is_visible and not buffer_is_visible(bufnr) then
+    return
+  end
+
+  local entry = layout_entry(bufnr)
+  if entry.markdown_render_pending then
+    return
+  end
+
+  entry.markdown_render_pending = true
+  local token = {}
+  entry.markdown_render_token = token
+  local function run()
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    local current_entry = layout_state[tostring(bufnr)]
+    if type(current_entry) ~= "table" or current_entry.markdown_render_token ~= token then
+      return
+    end
+    current_entry.markdown_render_pending = false
+    current_entry.markdown_render_token = nil
+    if buffer_is_visible and not buffer_is_visible(bufnr) then
+      return
+    end
+    refresh_markdown_rendering(bufnr)
+  end
+
+  if type(vim.defer_fn) == "function" then
+    vim.defer_fn(run, MARKDOWN_RENDER_BATCH_MS)
+  else
+    vim.schedule(run)
   end
 end
 
@@ -3304,6 +3344,8 @@ refresh_buffer_from_path = function(bufnr, transcript_path, opts)
   local signature = transcript_file_signature(transcript_path)
   if not opts.force and entry.transcript_file_signature == signature then
     entry.pending_full_refresh = false
+    entry.pending_deferred_refresh = false
+    entry.pending_deferred_changed_start = nil
     refresh_buffer_layout(bufnr, opts.layout or {})
     restore_window_views(bufnr, saved_views)
     return false
@@ -3314,6 +3356,8 @@ refresh_buffer_from_path = function(bufnr, transcript_path, opts)
 
   set_buffer_lines(bufnr, display_lines, section_items, display_meta)
   entry.pending_full_refresh = false
+  entry.pending_deferred_refresh = false
+  entry.pending_deferred_changed_start = nil
   entry.transcript_file_signature = signature
   refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
   restore_window_views(bufnr, saved_views)
@@ -3349,6 +3393,31 @@ local function refresh_buffer_from_file(session)
     refresh_buffer_from_path(bufnr, session.transcript_path)
     view_state.force_full_refresh = false
   end)
+end
+
+local function clear_deferred_incremental_refresh(bufnr)
+  local entry = layout_entry(bufnr)
+  entry.pending_deferred_refresh = false
+  entry.pending_deferred_changed_start = nil
+end
+
+local function mark_deferred_incremental_refresh(bufnr, changed_start)
+  local entry = layout_entry(bufnr)
+  entry.pending_deferred_refresh = true
+  if type(changed_start) == "number" then
+    local current = tonumber(entry.pending_deferred_changed_start)
+    entry.pending_deferred_changed_start = current and math.min(current, changed_start) or changed_start
+  end
+end
+
+local function buffer_has_deferred_updates(bufnr)
+  local entry = layout_state[tostring(bufnr)]
+  if type(entry) == "table" and (entry.pending_full_refresh or entry.pending_deferred_refresh) then
+    return true
+  end
+
+  local session = session_for_agent(agent_name_for_bufnr(bufnr))
+  return session and type(session.view_state) == "table" and (session.view_state.pending_append or "") ~= ""
 end
 
 local function apply_pending_append(bufnr, pending)
@@ -3400,7 +3469,9 @@ flush_pending_append = function(session, opts)
   local needs_full_refresh = false
 
   if not visible and opts.allow_hidden_incremental ~= true then
-    layout_entry(bufnr).pending_full_refresh = true
+    local entry = layout_entry(bufnr)
+    entry.pending_full_refresh = true
+    clear_deferred_incremental_refresh(bufnr)
     return false
   end
 
@@ -3410,7 +3481,9 @@ flush_pending_append = function(session, opts)
       refresh_buffer_from_path(bufnr, session.transcript_path, { force = true })
       return true
     end
-    layout_entry(bufnr).pending_full_refresh = true
+    local entry = layout_entry(bufnr)
+    entry.pending_full_refresh = true
+    clear_deferred_incremental_refresh(bufnr)
     return false
   end
 
@@ -3420,17 +3493,30 @@ flush_pending_append = function(session, opts)
       refresh_buffer_from_path(bufnr, session.transcript_path)
       return true
     end
-    layout_entry(bufnr).pending_full_refresh = true
+    local entry = layout_entry(bufnr)
+    entry.pending_full_refresh = true
+    clear_deferred_incremental_refresh(bufnr)
     return false
   end
 
-  layout_entry(bufnr).pending_full_refresh = false
-  layout_entry(bufnr).transcript_file_signature = transcript_file_signature(session.transcript_path)
+  local entry = layout_entry(bufnr)
+  entry.pending_full_refresh = false
+  entry.transcript_file_signature = transcript_file_signature(session.transcript_path)
 
   if not visible then
+    if changed_start ~= nil then
+      mark_deferred_incremental_refresh(bufnr, changed_start)
+    end
     return changed_start ~= nil
   end
 
+  if entry.pending_deferred_refresh then
+    clear_deferred_incremental_refresh(bufnr)
+    refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
+    return true
+  end
+
+  clear_deferred_incremental_refresh(bufnr)
   if changed_start ~= nil then
     local display_start = normalize_transcript_display(bufnr)
     if type(display_start) == "number" then
@@ -3438,12 +3524,14 @@ flush_pending_append = function(session, opts)
     end
     decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
     diff_view.decorate_diff_blocks(bufnr)
+    queue_markdown_rendering(bufnr)
+    M.refresh_footer(bufnr)
+    if should_follow_output(bufnr) then
+      scroll_buffer_to_end(bufnr)
+    end
+    return true
   end
-  M.refresh_footer(bufnr)
-  if should_follow_output(bufnr) then
-    scroll_buffer_to_end(bufnr)
-  end
-  return true
+  return false
 end
 
 resume_deferred_updates_for_buffer = function(bufnr, opts)
@@ -3466,11 +3554,17 @@ resume_deferred_updates_for_buffer = function(bufnr, opts)
       refresh_buffer_from_path(bufnr, transcript_path, { force = true })
       return true
     end
+    entry.pending_full_refresh = false
+  end
+
+  if entry.pending_deferred_refresh and buffer_is_visible(bufnr) then
+    clear_deferred_incremental_refresh(bufnr)
+    refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
+    return true
   end
 
   if opts.refresh_layout == true and buffer_is_visible(bufnr) then
-    refresh_buffer_layout(bufnr, { force_footer = true })
-    return true
+    return refresh_buffer_layout(bufnr, { check_footer = true })
   end
 
   return false
@@ -3478,7 +3572,10 @@ end
 
 resume_deferred_transcript_updates = function()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil and buffer_is_visible(bufnr) then
+    if buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil
+      and buffer_is_visible(bufnr)
+      and buffer_has_deferred_updates(bufnr)
+    then
       pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
     end
   end
@@ -3569,8 +3666,10 @@ refresh_buffer_layout = function(bufnr, opts)
     or entry.transcript_count ~= transcript_count
     or entry.header_width ~= header_width
   local footer_needed = opts.force_footer == true
+    or opts.check_footer == true
     or decorate_needed
     or entry.footer_width ~= footer_width
+  local render_needed = opts.force_render == true or decorate_needed
 
   entry.header_width = header_width
   entry.footer_width = footer_width
@@ -3585,8 +3684,12 @@ refresh_buffer_layout = function(bufnr, opts)
   if should_follow_output(bufnr) then
     scroll_buffer_to_end(bufnr)
   end
-  refresh_markdown_rendering(bufnr)
-  return decorate_needed or footer_needed
+  if render_needed then
+    entry.markdown_render_pending = false
+    entry.markdown_render_token = nil
+    refresh_markdown_rendering(bufnr)
+  end
+  return decorate_needed or footer_needed or render_needed
 end
 
 function M.refresh_all_footers()
