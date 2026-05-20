@@ -4,6 +4,8 @@ local FOOTER_ANIMATION_INTERVAL_MS = 100
 local FOOTER_GRADIENT_STEPS = 8
 local DEFAULT_FOOTER_ACTIVE_FG = 0x7dcfff
 local DEFAULT_FOOTER_BG = 0x1a1b26
+local FOOTER_INFO_HL = "LazyAgentACPFooterInfo"
+local FOOTER_RENDER_VERSION = "fg-only-v1"
 
 function M.new(ctx)
   local footer_ns = ctx.footer_ns or vim.api.nvim_create_namespace("lazyagent_acp_footer")
@@ -13,6 +15,7 @@ function M.new(ctx)
   local footer_animation_frame = 0
   local footer_gradient_key = nil
   local footer_gradient_groups = {}
+  local footer_info_key = nil
 
   local function session_for_agent(agent_name)
     return ctx.session_for_agent(agent_name)
@@ -44,6 +47,35 @@ function M.new(ctx)
   local function highlight_color(name, attr)
     local spec = highlight_spec(name)
     return spec and spec[attr] or nil
+  end
+
+  local function ensure_footer_info_highlights()
+    local meta_spec = highlight_spec("LazyAgentACPFooterMeta") or highlight_spec("SpecialComment") or {}
+    local info_fg = meta_spec.fg
+      or highlight_color("SpecialComment", "fg")
+      or highlight_color("DiagnosticInfo", "fg")
+      or highlight_color("Normal", "fg")
+      or DEFAULT_FOOTER_ACTIVE_FG
+    local key = table.concat({
+      tostring(info_fg),
+      meta_spec.bold and "bold" or "",
+      meta_spec.italic and "italic" or "",
+      meta_spec.underline and "underline" or "",
+    }, ":")
+
+    if footer_info_key ~= key then
+      footer_info_key = key
+      local text_spec = vim.deepcopy(meta_spec)
+      text_spec.link = nil
+      text_spec.default = nil
+      text_spec.fg = info_fg
+      text_spec.bg = nil
+      text_spec.ctermfg = nil
+      text_spec.ctermbg = nil
+      pcall(vim.api.nvim_set_hl, 0, FOOTER_INFO_HL, text_spec)
+    end
+
+    return FOOTER_INFO_HL
   end
 
   local function blend_color(from, to, ratio)
@@ -79,9 +111,11 @@ function M.new(ctx)
       local ratio = ((step - 1) / math.max(1, FOOTER_GRADIENT_STEPS - 1)) * 0.78
       local spec = vim.deepcopy(active_spec)
       spec.fg = blend_color(active_fg, normal_bg, ratio)
+      spec.bg = nil
       spec.link = nil
       spec.default = nil
       spec.ctermfg = nil
+      spec.ctermbg = nil
       pcall(vim.api.nvim_set_hl, 0, group, spec)
       footer_gradient_groups[step] = group
     end
@@ -89,23 +123,44 @@ function M.new(ctx)
     return footer_gradient_groups
   end
 
+  local char_split_cache = {}
+  local char_split_cache_count = 0
+  local CHAR_SPLIT_CACHE_LIMIT = 64
+
+  local function split_chars(text)
+    text = tostring(text or "")
+    local cached = char_split_cache[text]
+    if cached then
+      return cached
+    end
+    local chars = vim.fn.split(text, "\\zs")
+    if char_split_cache_count >= CHAR_SPLIT_CACHE_LIMIT then
+      char_split_cache = {}
+      char_split_cache_count = 0
+    end
+    char_split_cache[text] = chars
+    char_split_cache_count = char_split_cache_count + 1
+    return chars
+  end
+
   local function animated_footer_chunks(text)
     local groups = ensure_footer_gradient_highlights()
-    local chars = vim.fn.split(tostring(text or ""), "\\zs")
+    local chars = split_chars(text)
     if #chars == 0 then
       return nil
     end
 
     local wave_size = #groups
     local wave_head = (footer_animation_frame % (#chars + wave_size)) + 1
+    local fallback_hl = groups[wave_size] or "LazyAgentACPFooterActive"
     local chunks = {}
-    for idx, char in ipairs(chars) do
+    for idx = 1, #chars do
       local distance = wave_head - idx
-      local hl = groups[wave_size] or "LazyAgentACPFooterActive"
+      local hl = fallback_hl
       if distance >= 0 and distance < wave_size then
         hl = groups[distance + 1] or hl
       end
-      table.insert(chunks, { char, hl })
+      chunks[idx] = { chars[idx], hl }
     end
     return chunks
   end
@@ -411,29 +466,45 @@ function M.new(ctx)
     if not footer_animation_enabled(session) then
       return false
     end
-    return session.monitor_timer or session.agent_status == "thinking"
+    -- アニメ（青グラデーション）は明示的な thinking 状態のみ。
+    -- 描画中（monitor_timer のみ）は灰色っぽく見えるアニメをかけずに meta 同色で出す。
+    return session.agent_status == "thinking"
+  end
+
+  local function session_is_streaming(session)
+    if not session then
+      return false
+    end
+    return session.monitor_timer ~= nil and session.agent_status ~= "thinking"
   end
 
   local function session_status(agent_name, session)
+    local info_hl = ensure_footer_info_highlights()
     if not session then
-      return "◌ Connecting...", "LazyAgentACPFooterMuted"
+      return "◌ Connecting...", info_hl
     end
 
     local message = tostring(session.agent_status_message or "")
     if session.acp_failed or message == "Disconnected" then
-      return "󰅚 " .. (message ~= "" and message or "Disconnected"), "LazyAgentACPFooterError"
+      return "󰅚 " .. (message ~= "" and message or "Disconnected"), info_hl
     end
 
     if session.agent_status == "waiting" then
-      return " " .. (message ~= "" and message or "Waiting..."), "LazyAgentACPFooterWaiting"
+      return " " .. (message ~= "" and message or "Waiting..."), info_hl
     end
 
     if session_has_animated_footer(session) then
       return message ~= "" and message or "Thinking...", "LazyAgentACPFooterActive", true
     end
 
+    -- 描画中（monitor_timer のみ）はアニメせず、他の情報行と同じ Meta 色で
+    -- 静的にメッセージを表示する。これで描画中も色が灰色にならない。
+    if session_is_streaming(session) then
+      return message ~= "" and message or "Generating...", info_hl
+    end
+
     if not session.acp_ready then
-      return "◌ Connecting " .. provider_label(agent_name, session) .. "...", "LazyAgentACPFooterMuted"
+      return "◌ Connecting " .. provider_label(agent_name, session) .. "...", info_hl
     end
 
     return nil, nil
@@ -474,7 +545,7 @@ function M.new(ctx)
       table.insert(identity, "Backend " .. tostring(session.backend))
     end
     if #identity > 0 then
-      table.insert(lines, { text = " " .. table.concat(identity, "  "), hl = "LazyAgentACPFooterMuted" })
+      table.insert(lines, " " .. table.concat(identity, "  "))
     end
 
     local transcript_path = footer_display_path(session.acp_transcript_path or session.transcript_path)
@@ -493,7 +564,7 @@ function M.new(ctx)
     end
 
     for _, resource in ipairs(resources) do
-      table.insert(lines, { text = " " .. resource, hl = "LazyAgentACPFooterMeta" })
+      table.insert(lines, " " .. resource)
     end
 
     return lines
@@ -570,40 +641,111 @@ function M.new(ctx)
   end
 
   local function blank_footer_line()
-    return { text = "", hl = nil }
+    return { text = "", hl = ensure_footer_info_highlights() }
   end
 
-  local function wrap_footer_text(text, width)
+  local WRAP_SEPARATORS = { " · ", "  ", " " }
+
+  local function wrap_char_level(text, width)
     local wrapped = {}
     local current = {}
     local current_width = 0
+
+    for _, char in ipairs(split_chars(text)) do
+      local char_width = math.max(1, strdisplaywidth(char))
+      if current_width > 0 and current_width + char_width > width then
+        wrapped[#wrapped + 1] = table.concat(current)
+        current = {}
+        current_width = 0
+      end
+      current[#current + 1] = char
+      current_width = current_width + char_width
+    end
+    wrapped[#wrapped + 1] = table.concat(current)
+    return wrapped
+  end
+
+  local function wrap_footer_text(text, width)
+    text = tostring(text or "")
     width = math.max(12, tonumber(width) or 80)
 
-    local function push_current()
-      table.insert(wrapped, table.concat(current))
-      current = {}
-      current_width = 0
-    end
-
-    text = tostring(text or "")
     if text == "" then
       return { "" }
     end
 
-    for _, char in ipairs(vim.fn.split(text, "\\zs")) do
-      local char_width = math.max(1, strdisplaywidth(char))
-      if current_width > 0 and current_width + char_width > width then
-        push_current()
+    -- 先頭インデント（半角/タブ）を検出し、wrap 後の全行に同じ prefix を付け直す。
+    local indent = text:match("^[ \t]+") or ""
+    local indent_width = strdisplaywidth(indent)
+    local body = indent ~= "" and text:sub(#indent + 1) or text
+    local body_width = math.max(1, width - indent_width)
+
+    local function with_indent(lines)
+      if indent == "" then
+        return lines
       end
-      table.insert(current, char)
-      current_width = current_width + char_width
+      for i, line in ipairs(lines) do
+        lines[i] = indent .. line
+      end
+      return lines
     end
 
-    push_current()
-    return wrapped
+    if strdisplaywidth(body) <= body_width then
+      return with_indent({ body })
+    end
+
+    -- 優先度の高い区切り文字から探す（chunk の塊を途中で割らないため）。
+    local segments, sep
+    for _, candidate in ipairs(WRAP_SEPARATORS) do
+      if body:find(candidate, 1, true) then
+        segments = vim.split(body, candidate, { plain = true })
+        sep = candidate
+        break
+      end
+    end
+
+    if not segments or #segments <= 1 then
+      return with_indent(wrap_char_level(body, body_width))
+    end
+
+    local sep_width = strdisplaywidth(sep)
+    local lines = {}
+    local current = {}
+    local current_width = 0
+
+    for _, segment in ipairs(segments) do
+      local seg_width = strdisplaywidth(segment)
+      if #current == 0 then
+        current[1] = segment
+        current_width = seg_width
+      elseif current_width + sep_width + seg_width <= body_width then
+        current[#current + 1] = segment
+        current_width = current_width + sep_width + seg_width
+      else
+        lines[#lines + 1] = table.concat(current, sep)
+        current = { segment }
+        current_width = seg_width
+      end
+    end
+    if #current > 0 then
+      lines[#lines + 1] = table.concat(current, sep)
+    end
+
+    -- 1 セグメントが幅超過なら、その行だけ文字単位に分解する。
+    local final = {}
+    for _, line in ipairs(lines) do
+      if strdisplaywidth(line) <= body_width then
+        final[#final + 1] = line
+      else
+        for _, piece in ipairs(wrap_char_level(line, body_width)) do
+          final[#final + 1] = piece
+        end
+      end
+    end
+    return with_indent(final)
   end
 
   local function footer_render_lines(agent_name, session, line_count, follow_label)
+    local info_hl = ensure_footer_info_highlights()
     local size = transcript_size_label(session)
     local provider = provider_label(agent_name, session)
     local session_title = session_info_title(session)
@@ -638,7 +780,7 @@ function M.new(ctx)
 
     if has_status then
       table.insert(lines, blank_footer_line())
-      table.insert(lines, { text = " " .. status_text, hl = status_hl or "LazyAgentACPFooterMuted", animate = status_animate })
+      table.insert(lines, { text = " " .. status_text, hl = status_hl or info_hl, animate = status_animate })
     end
 
     if #meta > 0 or has_context then
@@ -646,19 +788,19 @@ function M.new(ctx)
     end
 
     if #meta > 0 then
-      table.insert(lines, { text = " " .. table.concat(meta, "  "), hl = "LazyAgentACPFooterMuted" })
+      table.insert(lines, { text = " " .. table.concat(meta, "  "), hl = info_hl })
     end
 
     if session_summary and session_summary ~= "" then
-      table.insert(lines, { text = " " .. session_summary, hl = "LazyAgentACPFooterMeta" })
+      table.insert(lines, { text = " " .. session_summary, hl = info_hl })
     end
 
     if has_context then
-      table.insert(lines, { text = " " .. context, hl = "LazyAgentACPFooterMeta" })
+      table.insert(lines, { text = " " .. context, hl = info_hl })
     end
 
     for _, line in ipairs(footer_debug_lines(session)) do
-      table.insert(lines, line)
+      table.insert(lines, { text = line, hl = info_hl })
     end
 
     return lines
@@ -675,6 +817,8 @@ function M.new(ctx)
     end
 
     local line_count = ctx.transcript_line_count(bufnr)
+    local info_hl = ensure_footer_info_highlights()
+    local wrap_width = math.max(12, tonumber(ctx.overlay_target_width(bufnr)) or 80)
     local rendered = {}
     local highlights = {}
     local animations = {}
@@ -683,25 +827,33 @@ function M.new(ctx)
       follow_label = ctx.should_follow_output(bufnr) and "follow:on" or "follow:paused"
     end
     for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name), line_count, follow_label)) do
-      for _, wrapped in ipairs(wrap_footer_text(line.text or "", ctx.overlay_target_width(bufnr))) do
+      for _, wrapped in ipairs(wrap_footer_text(line.text or "", wrap_width)) do
         table.insert(rendered, wrapped)
-        table.insert(highlights, line.hl)
+        table.insert(highlights, line.hl or info_hl)
         table.insert(animations, line.animate == true)
       end
     end
     return rendered, highlights, animations
   end
 
-  local function footer_signature(footer_start, footer_lines, footer_hls, footer_anims)
-    local parts = { tostring(footer_start), tostring(#(footer_lines or {})) }
-    for idx, line in ipairs(footer_lines or {}) do
-      parts[#parts + 1] = tostring(footer_hls[idx] or "")
-      parts[#parts + 1] = footer_anims and footer_anims[idx] and "1" or "0"
-      parts[#parts + 1] = "\0"
-      parts[#parts + 1] = tostring(line or "")
-      parts[#parts + 1] = "\n"
+  local function build_line_chunks(line_text, hl, animate)
+    line_text = tostring(line_text or "")
+    if line_text == "" then
+      if hl and hl ~= "" then
+        return { { " ", hl } }
+      end
+      return { { " " } }
     end
-    return table.concat(parts)
+    if animate then
+      local chunks = animated_footer_chunks(line_text)
+      if chunks and #chunks > 0 then
+        return chunks
+      end
+    end
+    if hl and hl ~= "" then
+      return { { line_text, hl } }
+    end
+    return { { line_text } }
   end
 
   local api = {}
@@ -784,50 +936,118 @@ function M.new(ctx)
       return
     end
 
-    local footer_start = ctx.transcript_line_count(bufnr)
     local footer_lines, footer_hls, footer_anims = render_footer_lines(bufnr)
     footer_hls = footer_hls or {}
     footer_anims = footer_anims or {}
-    local signature = footer_signature(footer_start, footer_lines, footer_hls, footer_anims)
     local entry = ctx.layout_entry(bufnr)
-    local padding_needed = ctx.footer_padding_count(bufnr) ~= #footer_lines
-    if not opts.force and not padding_needed and entry.footer_signature == signature then
+    entry.footer_extmark_ids = entry.footer_extmark_ids or {}
+    entry.footer_extmark_ids = entry.footer_extmark_ids or {}
+
+    -- 旧 virt_lines 実装で使っていた anchor extmark は不要なので明示破棄。
+    if entry.footer_extmark_id then
+      pcall(vim.api.nvim_buf_del_extmark, bufnr, footer_ns, entry.footer_extmark_id)
+      entry.footer_extmark_id = nil
+    end
+
+    -- 静的部分の署名（アニメ frame は含めない）。
+    local base_parts = { FOOTER_RENDER_VERSION, tostring(#footer_lines) }
+    local has_anim = false
+    for idx, line in ipairs(footer_lines) do
+      local animate = footer_anims[idx] == true
+      if animate then
+        has_anim = true
+      end
+      base_parts[#base_parts + 1] = tostring(footer_hls[idx] or "")
+      base_parts[#base_parts + 1] = animate and "1" or "0"
+      base_parts[#base_parts + 1] = "\0"
+      base_parts[#base_parts + 1] = tostring(line or "")
+      base_parts[#base_parts + 1] = "\n"
+    end
+    local base_sig = table.concat(base_parts)
+
+    -- 静的キャッシュ。非アニメ行の chunks は base_sig が同じ間は再利用。
+    local cache = entry.footer_render_cache
+    if not cache or cache.base_sig ~= base_sig then
+      local rendered = {}
+      for idx, line in ipairs(footer_lines) do
+        local hl = footer_hls[idx]
+        local animate = footer_anims[idx] == true
+        if animate then
+          rendered[#rendered + 1] = { animate = true, text = tostring(line or "") }
+        else
+          rendered[#rendered + 1] = { animate = false, chunks = build_line_chunks(line, hl, false) }
+        end
+      end
+      cache = { base_sig = base_sig, rendered = rendered, has_anim = has_anim }
+      entry.footer_render_cache = cache
+    end
+
+    -- padding は必要数とずれている時だけ調整（毎フレームの flicker 防止）。
+    if ctx.footer_padding_count(bufnr) ~= #footer_lines then
+      ctx.set_footer_padding(bufnr, #footer_lines)
+    end
+
+    local full_sig = cache.has_anim and (base_sig .. "@" .. tostring(footer_animation_frame)) or base_sig
+    if not opts.force and entry.footer_signature == full_sig then
       sync_footer_animation_timer()
       return
     end
+    entry.footer_signature = full_sig
 
-    vim.api.nvim_buf_clear_namespace(bufnr, footer_ns, 0, -1)
-    ctx.set_footer_padding(bufnr, #footer_lines)
-    entry.footer_signature = signature
-
-    if #footer_lines == 0 then
+    -- 空フッターは extmark を全削除して終了。
+    if #cache.rendered == 0 then
+      for idx, id in pairs(entry.footer_extmark_ids) do
+        pcall(vim.api.nvim_buf_del_extmark, bufnr, footer_ns, id)
+        entry.footer_extmark_ids[idx] = nil
+      end
       sync_footer_animation_timer()
       return
     end
 
     local line_count = vim.api.nvim_buf_line_count(bufnr)
-    local footer_base = math.max(0, line_count - #footer_lines)
-    for idx, line in ipairs(footer_lines) do
-      local chunks = nil
-      local hl = footer_hls[idx]
-      local line_text = tostring(line or "")
-      if line_text ~= "" then
-        if footer_anims[idx] then
-          chunks = animated_footer_chunks(line_text)
-        elseif hl and hl ~= "" then
-          chunks = { { line_text, hl } }
-        else
-          chunks = { { line_text } }
-        end
+    local footer_base = math.max(0, line_count - #cache.rendered)
+
+    for idx, item in ipairs(cache.rendered) do
+      local row = math.min(math.max(0, line_count - 1), footer_base + idx - 1)
+      local chunks
+      if item.animate then
+        chunks = animated_footer_chunks(item.text) or { { item.text, "LazyAgentACPFooterActive" } }
+      else
+        chunks = item.chunks
       end
 
-      if chunks then
-        local row = math.min(math.max(0, line_count - 1), footer_base + idx - 1)
-        vim.api.nvim_buf_set_extmark(bufnr, footer_ns, row, 0, {
-          virt_text = chunks,
-          virt_text_pos = "overlay",
-          hl_mode = "combine",
-        })
+      local extmark_opts = {
+        virt_text = chunks,
+        virt_text_pos = "overlay",
+        hl_mode = "replace",
+        undo_restore = false,
+        right_gravity = true,
+      }
+      local prev_id = entry.footer_extmark_ids[idx]
+      if prev_id then
+        extmark_opts.id = prev_id
+      end
+
+      local ok, new_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, footer_ns, row, 0, extmark_opts)
+      if ok then
+        entry.footer_extmark_ids[idx] = new_id
+      else
+        -- id が失効していた場合は作り直す。
+        extmark_opts.id = nil
+        local retry_ok, retry_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, footer_ns, row, 0, extmark_opts)
+        if retry_ok then
+          entry.footer_extmark_ids[idx] = retry_id
+        else
+          entry.footer_extmark_ids[idx] = nil
+        end
+      end
+    end
+
+    -- 余分な extmark（行数が減った場合）を削除。
+    for idx, id in pairs(entry.footer_extmark_ids) do
+      if idx > #cache.rendered then
+        pcall(vim.api.nvim_buf_del_extmark, bufnr, footer_ns, id)
+        entry.footer_extmark_ids[idx] = nil
       end
     end
 
