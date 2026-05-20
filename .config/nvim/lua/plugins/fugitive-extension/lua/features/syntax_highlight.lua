@@ -134,7 +134,7 @@ function Utils.compute_word_diffs(old_text, new_text)
   local new_lines = table.concat(new_tokens, '\n') .. '\n'
 
   local ok, result = pcall(vim.diff, old_lines, new_lines, { result_type = 'indices' })
-  if not ok or not result then return {} end
+  if not ok or type(result) ~= 'table' then return {} end
 
   local byte_diffs = {}
 
