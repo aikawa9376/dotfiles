@@ -15,6 +15,7 @@ local layout_autocmds_initialized = false
 local metadata_popup_win = nil
 local metadata_popup_source_buf = nil
 local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer ..."
+local SYNTHETIC_MARKDOWN_FENCE_CLOSE = " ```"
 local FOLLOW_SCROLL_OFF = 0
 local DEFAULT_SCROLL_OFF = 2
 local ACP_TRANSCRIPT_FILETYPE = "lazyagent_acp"
@@ -509,6 +510,65 @@ local function collect_transcript_sections(lines)
   end
 
   return sections
+end
+
+local function balance_unclosed_markdown_fences(lines)
+  lines = type(lines) == "table" and lines or {}
+  local balanced = nil
+  local inside_fence = false
+
+  for idx, line in ipairs(lines) do
+    if section_heading_for_line(line) and inside_fence then
+      if not balanced then
+        balanced = {}
+        for copy_idx = 1, idx - 1 do
+          balanced[copy_idx] = lines[copy_idx]
+        end
+      end
+      -- Bound malformed Markdown to the ACP section that produced it.
+      balanced[#balanced + 1] = SYNTHETIC_MARKDOWN_FENCE_CLOSE
+      inside_fence = false
+    end
+
+    if balanced then
+      balanced[#balanced + 1] = line
+    end
+    if is_markdown_fence(line) then
+      inside_fence = not inside_fence
+    end
+  end
+
+  return balanced or lines
+end
+
+local function trailing_section_has_open_markdown_fence(lines)
+  lines = type(lines) == "table" and lines or {}
+  local inside_fence = false
+  for _, line in ipairs(lines) do
+    if section_heading_for_line(line) then
+      inside_fence = false
+    end
+    if is_markdown_fence(line) then
+      inside_fence = not inside_fence
+    end
+  end
+  return inside_fence
+end
+
+local function append_crosses_unclosed_markdown_fence(lines, text)
+  local inside_fence = trailing_section_has_open_markdown_fence(lines)
+  for _, line in ipairs(vim.split(tostring(text or ""), "\n", { plain = true })) do
+    if section_heading_for_line(line) then
+      if inside_fence then
+        return true
+      end
+      inside_fence = false
+    end
+    if is_markdown_fence(line) then
+      inside_fence = not inside_fence
+    end
+  end
+  return false
 end
 
 local function backend_for_agent(agent_name)
@@ -3072,15 +3132,17 @@ local function compact_transcript_lines(bufnr, raw_lines)
   local sections = collect_transcript_sections(raw_lines)
   local items = transcript_items_for_sections(bufnr, sections)
   if not cfg.enabled or #sections < cfg.min_sections then
-    local transformed, _, meta = transform_markdown_tables(raw_lines, transcript_table_layout(bufnr))
-    return transformed, items, with_transcript_display_meta(meta, sections, false, raw_lines)
+    local balanced_lines = balance_unclosed_markdown_fences(raw_lines)
+    local transformed, _, meta = transform_markdown_tables(balanced_lines, transcript_table_layout(bufnr))
+    return transformed, items, with_transcript_display_meta(meta, sections, false, balanced_lines)
   end
 
   local keep_recent = math.min(#sections, cfg.keep_recent_sections)
   local compact_limit = #sections - keep_recent
   if compact_limit < 2 then
-    local transformed, _, meta = transform_markdown_tables(raw_lines, transcript_table_layout(bufnr))
-    return transformed, items, with_transcript_display_meta(meta, sections, false, raw_lines)
+    local balanced_lines = balance_unclosed_markdown_fences(raw_lines)
+    local transformed, _, meta = transform_markdown_tables(balanced_lines, transcript_table_layout(bufnr))
+    return transformed, items, with_transcript_display_meta(meta, sections, false, balanced_lines)
   end
 
   local out_lines = {}
@@ -3115,8 +3177,9 @@ local function compact_transcript_lines(bufnr, raw_lines)
     end
   end
 
-  local transformed, _, meta = transform_markdown_tables(out_lines, transcript_table_layout(bufnr))
-  return transformed, out_items, with_transcript_display_meta(meta, sections, true, raw_lines)
+  local balanced_out_lines = balance_unclosed_markdown_fences(out_lines)
+  local transformed, _, meta = transform_markdown_tables(balanced_out_lines, transcript_table_layout(bufnr))
+  return transformed, out_items, with_transcript_display_meta(meta, sections, true, balanced_out_lines)
 end
 
 read_transcript_lines = function(path, max_lines)
@@ -3517,6 +3580,11 @@ local function append_requires_full_refresh(bufnr, text)
   local entry = layout_entry(bufnr)
   local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
   local cfg = transcript_compaction_config(bufnr)
+  local pending_sections = pending_transcript_section_count(text)
+  if pending_sections > 0 and append_crosses_unclosed_markdown_fence(entry.transcript_source_lines, text) then
+    return true
+  end
+
   local has_table_candidate = false
   if transcript_table_layout(bufnr) == "card" then
     local table_state = tostring(meta.table_tail_state or "none")
@@ -3532,7 +3600,6 @@ local function append_requires_full_refresh(bufnr, text)
     end
   end
   if cfg.enabled then
-    local pending_sections = pending_transcript_section_count(text)
     if meta.compacted == true then
       return pending_sections > 0 or has_table_candidate
     end
