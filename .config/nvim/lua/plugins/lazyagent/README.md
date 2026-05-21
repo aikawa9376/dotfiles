@@ -263,6 +263,8 @@ require("lazyagent").setup({
 
 `acp.table_layout = "card"` を指定すると、ACP transcript buffer で assistant が返した markdown table を **表示だけ** key/value 形式の card に変換します。保存される transcript や carryover 用の元ログはそのままです。
 
+ACP buffer view は section 境界で未閉じの fenced code block を表示上だけ閉じ、後続 section に Markdown state が漏れないようにします。保存される transcript は変更しません。
+
 ### ACP local commands
 
 ACP session では以下の slash command を Neovim 側で処理します。
