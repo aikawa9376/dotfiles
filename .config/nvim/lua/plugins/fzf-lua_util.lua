@@ -75,6 +75,10 @@ local function removeUnicodeUtf8(str)
   return str
 end
 
+local function stripAnsi(str)
+  return tostring(str or ""):gsub("\27%[[0-9;]*[A-Za-z]", "")
+end
+
 local function escapePattern(text)
   return text:gsub("([().%+%-*?[^$])", "%%%1")
 end
@@ -455,6 +459,149 @@ M.fzf_dirs_smart = function(opts)
     end
   }):start()
 end
+
+local function enhancd_log_candidates()
+  local candidates = {}
+  local seen = {}
+
+  local function add(path)
+    path = tostring(path or "")
+    if path == "" or seen[path] then
+      return
+    end
+    seen[path] = true
+    candidates[#candidates + 1] = path
+  end
+
+  add(vim.env.ENHANCD_LOG)
+  if vim.env.ENHANCD_DIR and vim.env.ENHANCD_DIR ~= "" then
+    add(vim.env.ENHANCD_DIR .. "/enhancd.log")
+  end
+  if vim.env.XDG_CONFIG_HOME and vim.env.XDG_CONFIG_HOME ~= "" then
+    add(vim.env.XDG_CONFIG_HOME .. "/enhancd/enhancd.log")
+  end
+  add(vim.fn.expand("~/.config/enhancd/enhancd.log"))
+
+  return candidates
+end
+
+local function enhancd_history_dirs()
+  local log_path = nil
+  for _, path in ipairs(enhancd_log_candidates()) do
+    if vim.fn.filereadable(path) == 1 then
+      log_path = path
+      break
+    end
+  end
+  if not log_path then
+    return {}
+  end
+
+  local ok, lines = pcall(vim.fn.readfile, log_path)
+  if not ok or type(lines) ~= "table" then
+    return {}
+  end
+
+  local cwd = vim.fn.fnamemodify(vim.fn.getcwd(), ":p"):gsub("/$", "")
+  local dirs = {}
+  local seen = {}
+  for idx = #lines, 1, -1 do
+    local path = vim.trim(lines[idx] or "")
+    if path ~= "" then
+      path = vim.fn.fnamemodify(path, ":p"):gsub("/$", "")
+      if path ~= cwd and not seen[path] and vim.fn.isdirectory(path) == 1 then
+        seen[path] = true
+        dirs[#dirs + 1] = path
+      end
+    end
+  end
+
+  return dirs
+end
+
+local function color_enhancd_dir(path)
+  path = tostring(path or "")
+  return path:gsub("([^/]+)$", "\27[1;34m%1\27[0m")
+end
+
+local function enhancd_selected_paths(selected)
+  local paths = {}
+  for _, item in ipairs(selected or {}) do
+    local path = vim.trim(stripAnsi(item):gsub("\r", ""))
+    if path ~= "" then
+      paths[#paths + 1] = path
+    end
+  end
+  return paths
+end
+
+local function copy_enhancd_paths(selected)
+  local paths = enhancd_selected_paths(selected)
+  if #paths == 0 then
+    vim.notify("No directory to copy", vim.log.levels.WARN)
+    return
+  end
+
+  local joined = table.concat(paths, "\n")
+  vim.fn.setreg("+", joined)
+  vim.fn.setreg("\"", joined)
+  vim.notify(#paths == 1 and ("Copied: " .. paths[1]) or ("Copied " .. #paths .. " directories"), vim.log.levels.INFO)
+end
+
+local function insert_enhancd_path(selected)
+  local paths = enhancd_selected_paths(selected)
+  local path = paths[#paths]
+  if not path or path == "" then
+    vim.notify("No directory to insert", vim.log.levels.WARN)
+    return
+  end
+
+  vim.api.nvim_put({ path }, "c", true, true)
+end
+
+local function getEnhancdDirOpt()
+  local opts = {}
+  opts.prompt = "enhancd >"
+  opts.preview = {
+    type = "cmd",
+    fn = function(items)
+      local path = enhancd_selected_paths(items)[1]
+      if not path or path == "" then
+        return ""
+      end
+      return string.format("tree -C %s | head -200", vim.fn.shellescape(path))
+    end,
+  }
+  opts.actions = {
+    ["enter"] = insert_enhancd_path,
+    ["ctrl-y"] = copy_enhancd_paths,
+  }
+  opts.fzf_opts = {
+    ["-x"] = "",
+    ["--multi"] = "",
+    ["--ansi"] = "",
+    ["--scheme"] = "history",
+    ["--tiebreak"] = "index",
+    ["--no-unicode"] = "",
+    ["--preview-window"] = "noborder",
+  }
+  opts.winopts = middleFloatWinOpts
+  opts.fn_transform = color_enhancd_dir
+
+  return opts
+end
+
+M.fzf_enhancd_dirs = function()
+  local dirs = enhancd_history_dirs()
+  if #dirs == 0 then
+    vim.notify("enhancd history has no available directories", vim.log.levels.WARN)
+    return
+  end
+
+  fzf_lua.fzf_exec(dirs, getEnhancdDirOpt())
+end
+
+vim.cmd([[command! EnhancdLua lua require"plugins.fzf-lua_util".fzf_enhancd_dirs()]])
 
 -- ------------------------------------------------------------------
 -- RG grep
@@ -902,6 +1049,89 @@ M.fzf_lazyagent = function()
 end
 
 vim.cmd([[command! -nargs=* LazyAgentLua lua require"plugins.fzf-lua_util".fzf_lazyagent()]])
+
+-- ------------------------------------------------------------------
+-- akin (path similarity)
+-- ------------------------------------------------------------------
+
+---@param line string
+---@return string
+local function akin_line_to_relpath(line)
+  local path = line:match("^%d+%.%d+%s+(.+)$")
+  return vim.trim(path or line)
+end
+
+---@param base string
+---@param target_basename string
+local function getAkinOpts(base, target_basename)
+  local opts = {}
+  opts.cwd = base
+  opts.multiprocess = false
+  opts.prompt = "akin " .. target_basename .. " >"
+  opts.previewer = "builtin"
+  opts.file_icons = true
+  opts.git_icons = true
+  opts.fn_transform = function(line)
+    local relpath = akin_line_to_relpath(line)
+    return fzf_lua.make_entry.file(relpath, { file_icons = true, color_icons = true })
+  end
+  opts.actions = vim.tbl_deep_extend("force", defaultActions, {
+    ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
+  })
+  opts.fzf_opts = {
+    ["-x"] = "",
+    ["--multi"] = "",
+    ["--scheme"] = "history",
+    ["--tiebreak"] = "index",
+    ["--no-unicode"] = "",
+  }
+  return opts
+end
+
+---@param user_opts? { target?: string, top?: number, threshold?: number }
+M.fzf_akin = function(user_opts)
+  user_opts = user_opts or {}
+  if vim.fn.executable("akin") ~= 1 then
+    vim.notify("akin が PATH にありません", vim.log.levels.ERROR)
+    return
+  end
+
+  local target = user_opts.target
+  if not target or target == "" then
+    target = vim.api.nvim_buf_get_name(0)
+  else
+    target = vim.fn.fnamemodify(vim.fn.expand(target), ":p")
+  end
+
+  if target == "" or vim.fn.filereadable(target) ~= 1 then
+    vim.notify("akin: 有効なファイルを開くか、引数でパスを指定してください", vim.log.levels.WARN)
+    return
+  end
+
+  target = vim.fn.fnamemodify(target, ":p")
+
+  local project = require("project")
+  local base = project.get_project_root()
+  if base == "" then
+    base = vim.fn.getcwd()
+  end
+  base = vim.fn.fnamemodify(base, ":p"):gsub("/$", "")
+
+  local top = user_opts.top or 50
+  local shell = string.format(
+    "cd %s && akin -n %d%s %s",
+    vim.fn.shellescape(base),
+    top,
+    user_opts.threshold and (" -t " .. tostring(user_opts.threshold)) or "",
+    vim.fn.shellescape(target)
+  )
+
+  fzf_lua.fzf_exec(shell, getAkinOpts(base, vim.fn.fnamemodify(target, ":t")))
+end
+
+vim.cmd(
+  [[command! -nargs=* AkinLua lua require"plugins.fzf-lua_util".fzf_akin({ target = vim.fn.expand(<q-args>) })]]
+)
 
 -- ------------------------------------------------------------------
 -- loravel.nvim override
