@@ -8,218 +8,13 @@ function M.setup(deps)
   local write_session_transcript = deps.write_session_transcript
   local sync_runtime_live_state = deps.sync_runtime_live_state
   local section_icons = deps.section_icons or {}
-  local SWITCH_HISTORY_RECENT_ITEMS = deps.switch_history_recent_items or 14
-  local SWITCH_HISTORY_ITEM_BODY_LIMIT = deps.switch_history_item_body_limit or 6000
-  local SWITCH_HISTORY_TOOL_LIMIT = deps.switch_history_tool_limit or 6
-  local SWITCH_HISTORY_TRANSCRIPT_BYTE_LIMIT = deps.switch_history_transcript_byte_limit or (128 * 1024)
   local summarize_conversation_text
   local heading_kind
   local tool_heading
   local append_block
+  local build_switch_history_blocks
 
   local module = {}
-
-local function switch_history_label(item)
-  local kind = tostring(item and (item.kind or item.heading) or ""):lower()
-  if kind == "user" then
-    return "User"
-  elseif kind == "assistant" then
-    return "Assistant"
-  elseif kind == "thinking" then
-    return "Assistant (thinking)"
-  elseif kind == "plan" then
-    return "Plan"
-  elseif kind == "tool" then
-    return "Tool"
-  elseif kind == "terminal" then
-    return "Terminal"
-  elseif kind == "edited" then
-    return "Edited"
-  elseif kind == "error" then
-    return "Error"
-  end
-  return item and item.heading or "Context"
-end
-
-local function switch_history_body(text)
-  text = normalize_text(text or "")
-  if text == "" then
-    return ""
-  end
-  if #text <= SWITCH_HISTORY_ITEM_BODY_LIMIT then
-    return text
-  end
-  return text:sub(1, SWITCH_HISTORY_ITEM_BODY_LIMIT) .. "\n... [truncated]"
-end
-
-local function switch_history_item_text(item)
-  if type(item) ~= "table" then
-    return nil
-  end
-
-  local body = switch_history_body(item.body ~= "" and item.body or item.summary or item.title or "")
-  if body == "" then
-    return nil
-  end
-
-  local label = switch_history_label(item)
-  local title = tostring(item.title or "")
-  local status = tostring(item.status or "")
-
-  if label == "User" or label == "Assistant" or label == "Assistant (thinking)" then
-    local speaker = label == "Assistant" and tostring(item.heading or item.title or label) or label
-    return string.format("%s: %s", speaker, body)
-  end
-
-  local header = label
-  if title ~= "" and title ~= item.heading and title ~= label then
-    header = header .. " - " .. title
-  end
-  if status ~= "" then
-    header = header .. " [" .. status .. "]"
-  end
-
-  return header .. ":\n" .. body
-end
-
-local function include_switch_history_item(item)
-  if type(item) ~= "table" then
-    return false
-  end
-  local kind = tostring(item.kind or ""):lower()
-  if kind == "system" or kind == "" then
-    return false
-  end
-  local body = tostring(item.body or item.summary or "")
-  if kind == "error" then
-    return true
-  end
-  if body:match("^Connecting ACP session") or body:match("^ACP session ready:") or body:match("^Switched ACP provider") then
-    return false
-  end
-  return true
-end
-
-local function collect_switch_history_items(pending)
-  local source = {}
-  for _, item in ipairs(pending and pending.conversation_timeline or {}) do
-    if include_switch_history_item(item) then
-      source[#source + 1] = item
-    end
-  end
-
-  if #source <= SWITCH_HISTORY_RECENT_ITEMS then
-    return source
-  end
-
-  local keep = {}
-  local recent_start = math.max(1, #source - SWITCH_HISTORY_RECENT_ITEMS + 1)
-  for idx, item in ipairs(source) do
-    if item.pinned == true or idx >= recent_start then
-      keep[#keep + 1] = item
-    end
-  end
-  return keep
-end
-
-local function recent_switch_tool_lines(pending)
-  local tools = pending and pending.tool_timeline or {}
-  if type(tools) ~= "table" or #tools == 0 then
-    return nil
-  end
-
-  local lines = { "Recent tool activity:" }
-  local start = math.max(1, #tools - SWITCH_HISTORY_TOOL_LIMIT + 1)
-  for idx = start, #tools do
-    local tool = tools[idx]
-    if type(tool) == "table" then
-      local status = tool.status and tool.status ~= "" and (" [" .. tostring(tool.status) .. "]") or ""
-      local summary = summarize_conversation_text(tool.summary or tool.title or tool.toolCallId or "tool", 280)
-      lines[#lines + 1] = string.format("- %s%s", summary, status)
-    end
-  end
-
-  return #lines > 1 and table.concat(lines, "\n") or nil
-end
-
-local function build_switch_history_blocks(session, pending)
-  if type(pending) ~= "table" then
-    return {}
-  end
-
-  local blocks = {}
-  local carryover_label = pending.carryover_label
-  if not carryover_label or carryover_label == "" then
-    carryover_label = "the previous ACP provider"
-    if pending.provider_from and pending.provider_from ~= "" then
-      carryover_label = string.format("%s (%s)", carryover_label, tostring(pending.provider_from))
-    end
-  end
-  local history_items = collect_switch_history_items(pending)
-  local intro = {
-    string.format("Conversation carryover from %s.", carryover_label),
-    "Treat the following as existing conversation history for this session.",
-    "Do not ask me to restate it. Respond only to the new user message that follows.",
-  }
-  blocks[#blocks + 1] = {
-    type = "text",
-    text = table.concat(intro, "\n"),
-  }
-
-  for _, item in ipairs(history_items) do
-    local text = switch_history_item_text(item)
-    if text and text ~= "" then
-      blocks[#blocks + 1] = {
-        type = "text",
-        text = text,
-      }
-    end
-  end
-
-  local has_detailed_tool_history = false
-  for _, item in ipairs(history_items) do
-    local kind = tostring(item.kind or ""):lower()
-    if kind == "tool" or kind == "terminal" or kind == "edited" then
-      has_detailed_tool_history = true
-      break
-    end
-  end
-
-  local tool_lines = recent_switch_tool_lines(pending)
-  if tool_lines and not has_detailed_tool_history then
-    blocks[#blocks + 1] = {
-      type = "text",
-      text = tool_lines,
-    }
-  end
-
-  if pending.transcript_path and pending.transcript_path ~= "" then
-    if session.prompt_supports_embedded_context == true then
-      local transcript_text = table.concat(pending.transcript_lines or {}, "\n")
-      if #transcript_text > SWITCH_HISTORY_TRANSCRIPT_BYTE_LIMIT then
-        transcript_text = transcript_text:sub(1, SWITCH_HISTORY_TRANSCRIPT_BYTE_LIMIT) .. "\n... [truncated]"
-      end
-      blocks[#blocks + 1] = {
-        type = "resource",
-        resource = {
-          uri = file_uri(pending.transcript_path),
-          mimeType = "text/plain",
-          text = transcript_text,
-        },
-      }
-    else
-      blocks[#blocks + 1] = {
-        type = "resource_link",
-        uri = file_uri(pending.transcript_path),
-        name = vim.fn.fnamemodify(pending.transcript_path, ":t"),
-        title = "Previous conversation transcript",
-        mimeType = "text/plain",
-      }
-    end
-  end
-
-  return blocks
-end
 
 local function section_kind(heading, meta)
   local explicit = type(meta) == "table" and tostring(meta.kind or ""):lower() or ""
@@ -375,6 +170,17 @@ summarize_conversation_text = function(text, limit)
   end
   return normalized:sub(1, math.max(1, limit - 1)) .. "…"
 end
+
+local history = require("lazyagent.acp.backend.conversation.history").setup({
+  normalize_text = normalize_text,
+  file_uri = file_uri,
+  summarize_conversation_text = summarize_conversation_text,
+  switch_history_recent_items = deps.switch_history_recent_items,
+  switch_history_item_body_limit = deps.switch_history_item_body_limit,
+  switch_history_tool_limit = deps.switch_history_tool_limit,
+  switch_history_transcript_byte_limit = deps.switch_history_transcript_byte_limit,
+})
+build_switch_history_blocks = history.build_switch_history_blocks
 
 local function runtime_compaction_config(session)
   local cfg = type(session and session.runtime_compaction) == "table" and session.runtime_compaction or {}

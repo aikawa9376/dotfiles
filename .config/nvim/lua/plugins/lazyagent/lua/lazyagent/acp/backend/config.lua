@@ -13,10 +13,16 @@ function M.setup(deps)
   local first_nonempty = deps.first_nonempty
   local matches_exact = deps.matches_exact
   local matches_pattern = deps.matches_pattern
-  local brain_save_missing_command_warned = false
   local find_config_option
 
   local module = {}
+
+  local brain_save = require("lazyagent.acp.backend.config.brain_save").setup({
+    state = state,
+    skills_logic = skills_logic,
+    normalize_text = normalize_text,
+  })
+  local maybe_save_turn_to_brain = brain_save.maybe_save_turn_to_brain
 
   local function normalize_config_key(value)
     return tostring(value or ""):lower():gsub("[^%w]+", "")
@@ -224,35 +230,6 @@ function M.setup(deps)
     return tostring(current)
   end
 
-
-  find_config_option = function(session, keys)
-    if not session or type(session.config_options) ~= "table" then
-      return nil
-    end
-
-    keys = type(keys) == "table" and keys or { keys }
-    for _, option in ipairs(session.config_options or {}) do
-      if type(option) == "table" then
-        local option_key = normalize_config_key(config_option_key(option))
-        local option_id = normalize_config_key(option.id)
-        local option_category = normalize_config_key(option.category)
-        local option_name = normalize_config_key(option.name)
-        for _, key in ipairs(keys) do
-          local expected = normalize_config_key(key)
-          if expected ~= "" and (
-            option_key == expected
-            or option_id == expected
-            or option_category == expected
-            or option_name == expected
-          ) then
-            return option
-          end
-        end
-      end
-    end
-
-    return nil
-  end
 
   local function followup_picker_for_option(session, option)
     if normalize_config_key(config_option_key(option)) ~= "model" and normalize_config_key(option.id) ~= "model" then
@@ -473,152 +450,6 @@ function M.setup(deps)
       return bufnr
     end
     return nil
-  end
-
-  local function trim_text(text)
-    local trimmed = normalize_text(text or "")
-    trimmed = trimmed:gsub("^%s+", "")
-    trimmed = trimmed:gsub("%s+$", "")
-    return trimmed
-  end
-
-  local function brain_save_config()
-    local cfg = state and state.opts and state.opts.acp and state.opts.acp.brain_save
-    if cfg == true then
-      return { enabled = true }
-    end
-    if type(cfg) == "table" then
-      return cfg
-    end
-    return {}
-  end
-
-  local function resolve_brain_save_command()
-    local cfg = brain_save_config()
-    if cfg.enabled ~= true then
-      return nil
-    end
-    if type(cfg.command) == "table" and not vim.tbl_isempty(cfg.command) then
-      return vim.deepcopy(cfg.command), nil
-    end
-    if type(cfg.command) == "string" and cfg.command ~= "" then
-      return cfg.command, nil
-    end
-
-    local binary = type(skills_logic.find_binary) == "function" and skills_logic.find_binary("ai-memory-cli") or nil
-    if binary then
-      return { binary, "save" }, nil
-    end
-
-    local bin_dir = type(skills_logic.resolve_bin_dir) == "function" and skills_logic.resolve_bin_dir() or nil
-    local suffix = (bin_dir and bin_dir ~= "") and (" (checked " .. bin_dir .. ")") or ""
-    return nil, "ai-memory-cli not found; set acp.brain_save.command or skills.bin_dir" .. suffix
-  end
-
-  local function collect_brain_turn_interactions(session, prompt, start_seq)
-    local assistant_parts = {}
-    for _, item in ipairs(session and session.conversation_timeline or {}) do
-      if type(item) == "table" and (tonumber(item.seq) or 0) > (tonumber(start_seq) or 0) and item.kind == "assistant" then
-        local body = trim_text(item.body)
-        if body ~= "" then
-          assistant_parts[#assistant_parts + 1] = body
-        end
-      end
-    end
-
-    local user_input = trim_text(prompt)
-    local assistant_output = trim_text(table.concat(assistant_parts, "\n\n"))
-    if user_input == "" or assistant_output == "" then
-      return nil
-    end
-
-    return {
-      {
-        user_input = user_input,
-        assistant_output = assistant_output,
-      },
-    }
-  end
-
-  local function notify_brain_save_failure(message, level)
-    if not message or message == "" then
-      return
-    end
-    vim.schedule(function()
-      vim.notify("LazyAgent ACP brain save: " .. tostring(message), level or vim.log.levels.WARN)
-    end)
-  end
-
-  local function maybe_save_turn_to_brain(session, prompt, start_seq)
-    local interactions = collect_brain_turn_interactions(session, prompt, start_seq)
-    if not interactions then
-      return
-    end
-
-    local command, command_err = resolve_brain_save_command()
-    if not command then
-      if command_err and not brain_save_missing_command_warned then
-        brain_save_missing_command_warned = true
-        notify_brain_save_failure(command_err)
-      end
-      return
-    end
-
-    local stdout = {}
-    local stderr = {}
-    local job_id = vim.fn.jobstart(command, {
-      cwd = session.root_dir or session.cwd or vim.fn.getcwd(),
-      env = session.env or {},
-      stdin = "pipe",
-      stdout_buffered = true,
-      stderr_buffered = true,
-      on_stdout = function(_, data)
-        if type(data) == "table" then
-          for _, line in ipairs(data) do
-            if line and line ~= "" then
-              stdout[#stdout + 1] = line
-            end
-          end
-        end
-      end,
-      on_stderr = function(_, data)
-        if type(data) == "table" then
-          for _, line in ipairs(data) do
-            if line and line ~= "" then
-              stderr[#stderr + 1] = line
-            end
-          end
-        end
-      end,
-      on_exit = function(_, code)
-        if code == 0 then
-          return
-        end
-        local msg = table.concat(stderr, "\n")
-        if msg == "" then
-          msg = table.concat(stdout, "\n")
-        end
-        if msg == "" then
-          msg = "exit code " .. tostring(code)
-        end
-        notify_brain_save_failure(msg)
-      end,
-    })
-
-    if job_id <= 0 then
-      notify_brain_save_failure("failed to start ai-memory-cli save")
-      return
-    end
-
-    local payload = {
-      session_id = session.session_id,
-      cwd = session.root_dir or session.cwd,
-      source = "lazyagent-acp",
-      agent_name = session.agent_name,
-      interactions = interactions,
-    }
-    vim.fn.chansend(job_id, vim.fn.json_encode(payload))
-    vim.fn.chanclose(job_id, "stdin")
   end
 
   local function build_auto_switch_context(session, prompt)
