@@ -211,6 +211,10 @@ local function create_backend(default_view)
       session.busy = true
       actions_helpers.maybe_call_mcp_tool("notify_start", { agent_name = session.agent_name })
       config_helpers.note_unadvertised_slash_command(session, prompt)
+      local view = session_view(session)
+      if view and type(view.resume_follow) == "function" then
+        view.resume_follow(pane_id)
+      end
       conversation_helpers.append_block(session, "User", prompt)
       local turn_start_seq = #session.conversation_timeline
 
