@@ -6,6 +6,7 @@ function M.new(ctx)
   local runtime_conversation_timeline = ctx.runtime_conversation_timeline
   local layout_entry = ctx.layout_entry
   local trailing_markdown_table_context = ctx.trailing_markdown_table_context
+  local trailing_section_has_open_markdown_fence = ctx.trailing_section_has_open_markdown_fence
   local balance_unclosed_markdown_fences = ctx.balance_unclosed_markdown_fences
   local transform_markdown_tables = ctx.transform_markdown_tables
   local transcript_table_layout = ctx.transcript_table_layout
@@ -103,9 +104,12 @@ function M.new(ctx)
 
   local function with_transcript_display_meta(meta, sections, compacted, lines)
     meta = type(meta) == "table" and meta or {}
+    local tail_context = trailing_markdown_table_context(lines)
     meta.raw_section_count = #(sections or {})
     meta.compacted = compacted == true
-    meta.table_tail_state = trailing_markdown_table_context(lines).state
+    meta.table_tail_state = tail_context.state
+    meta.table_tail_lines = (tail_context.state == "header" or tail_context.state == "separator") and tail_context.lines or {}
+    meta.trailing_section_open_markdown_fence = trailing_section_has_open_markdown_fence(lines)
     return meta
   end
 

@@ -341,6 +341,7 @@ local section_heading_for_line = view_sections.section_heading_for_line
 local collect_transcript_sections = view_sections.collect_transcript_sections
 local balance_unclosed_markdown_fences = view_sections.balance_unclosed_markdown_fences
 local append_crosses_unclosed_markdown_fence = view_sections.append_crosses_unclosed_markdown_fence
+local trailing_section_has_open_markdown_fence = view_sections.trailing_section_has_open_markdown_fence
 
 local function backend_for_agent(agent_name)
   local session = session_for_agent(agent_name)
@@ -700,12 +701,12 @@ local view_windowing = require("lazyagent.acp.view_buffer.windowing").new({
     return diff_view
   end,
 })
-local resolve_anchor_window = view_windowing.resolve_anchor_window
+resolve_anchor_window = view_windowing.resolve_anchor_window
 local to_bufnr = view_windowing.to_bufnr
 local buffer_var = view_windowing.buffer_var
 pane_id_for_bufnr = view_windowing.pane_id_for_bufnr
 agent_name_for_bufnr = view_windowing.agent_name_for_bufnr
-local pane_opts_for_bufnr = view_windowing.pane_opts_for_bufnr
+pane_opts_for_bufnr = view_windowing.pane_opts_for_bufnr
 local transcript_table_layout = view_windowing.transcript_table_layout
 fancy_mode_enabled = view_windowing.fancy_mode_enabled
 local should_release_buffer_on_hide = view_windowing.should_release_buffer_on_hide
@@ -744,6 +745,7 @@ local view_compaction = require("lazyagent.acp.view_buffer.compaction").new({
   runtime_conversation_timeline = runtime_conversation_timeline,
   layout_entry = layout_entry,
   trailing_markdown_table_context = trailing_markdown_table_context,
+  trailing_section_has_open_markdown_fence = trailing_section_has_open_markdown_fence,
   balance_unclosed_markdown_fences = balance_unclosed_markdown_fences,
   transform_markdown_tables = transform_markdown_tables,
   transcript_table_layout = transcript_table_layout,
@@ -782,7 +784,7 @@ set_buffer_lines = function(bufnr, lines, section_items, display_meta)
   local entry = layout_entry(bufnr)
   entry.footer_padding_count = 0
   entry.footer_signature = nil
-  entry.transcript_source_lines = lines or {}
+  entry.transcript_source_lines = nil
   entry.transcript_section_items = section_items or {}
   entry.transcript_display_meta = display_meta or {}
   replace_buffer_lines(bufnr, 0, -1, lines)
@@ -874,6 +876,8 @@ local view_updates = require("lazyagent.acp.view_buffer.updates").new({
   request_buffer_redraw = request_buffer_redraw,
   append_batch_ms = APPEND_BATCH_MS,
   acp_transcript_filetype = ACP_TRANSCRIPT_FILETYPE,
+  trailing_section_has_open_markdown_fence = trailing_section_has_open_markdown_fence,
+  is_markdown_fence = is_markdown_fence,
 })
 local set_footer_padding = view_updates.set_footer_padding
 local ensure_layout_autocmds = view_updates.ensure_layout_autocmds
