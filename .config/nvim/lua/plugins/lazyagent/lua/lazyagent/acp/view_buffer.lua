@@ -44,6 +44,8 @@ local pinned_section_rows
 local transcript_source_lines
 local pane_id_for_bufnr
 local agent_name_for_bufnr
+local pane_opts_for_bufnr
+local resolve_anchor_window
 local read_transcript_lines
 local fancy_mode_enabled
 local custom_background_groups = {}
@@ -552,6 +554,7 @@ end
 local view_actions = require("lazyagent.acp.view_buffer.actions").new({
   runtime_tool_timeline = runtime_tool_timeline,
   visible_conversation_context = visible_conversation_context,
+  current_display_conversation_context = current_display_conversation_context,
   section_text = section_text,
   section_body_text = section_body_text,
   normalize_popup_text = normalize_popup_text,
@@ -563,8 +566,28 @@ local view_actions = require("lazyagent.acp.view_buffer.actions").new({
   agent_name_for_bufnr = function(bufnr)
     return agent_name_for_bufnr(bufnr)
   end,
+  session_for_bufnr = function(bufnr)
+    return session_for_agent(agent_name_for_bufnr(bufnr))
+  end,
   pane_id_for_bufnr = function(bufnr)
     return pane_id_for_bufnr(bufnr)
+  end,
+  quickfix_open_window_for_bufnr = function(bufnr)
+    local pane_opts = pane_opts_for_bufnr(bufnr)
+    local anchor = resolve_anchor_window(pane_opts and pane_opts.source_winid)
+    if anchor and vim.api.nvim_win_is_valid(anchor) then
+      return anchor
+    end
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.api.nvim_win_is_valid(win) then
+        local target_buf = vim.api.nvim_win_get_buf(win)
+        local bt = vim.bo[target_buf].buftype
+        if bt == "" or bt == "acwrite" then
+          return win
+        end
+      end
+    end
+    return nil
   end,
   cleanup_markdown_rendering = cleanup_markdown_rendering,
   read_transcript_lines = function(...)
