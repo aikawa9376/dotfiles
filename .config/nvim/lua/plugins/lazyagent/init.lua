@@ -98,6 +98,20 @@ return {
       table_layout = "card"
     },
     resume = false,
+    image_paste = {
+      enabled = true,
+      dir = vim.fn.stdpath("cache") .. "/lazyagent/conversation",
+      dir_layout = "conversation",
+      max_dimension = 1600,
+      drop = {
+        enabled = true,
+        copy = true,
+      },
+      preview = {
+        max_width = 80,
+        max_height = 20,
+      },
+    },
     scratch_keymaps = {
       close = "q",
       send_and_clear = "<C-Space>",

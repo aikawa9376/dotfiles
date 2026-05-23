@@ -11,6 +11,7 @@ local send_logic = require("lazyagent.logic.send")
 local window = require("lazyagent.window")
 local cache_logic = require("lazyagent.logic.cache")
 local config = require("lazyagent.logic.config")
+local image_paste = require("lazyagent.logic.image_paste")
 
 local function restart_insert_if_valid(bufnr)
   if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
@@ -267,6 +268,31 @@ function M.register_scratch_keymaps(bufnr, opts)
   safe_set("i", keys.send_and_clear or "<C-Space>", function()
     smart_send(true)
   end, { desc = "Send buffer and clear (insert mode)" })
+
+  local function paste_image(insert_mode)
+    with_insert_wrap(insert_mode, function()
+      image_paste.paste_into_buffer(bufnr)
+    end)
+  end
+
+  local function set_paste_image_key(mode, lhs, insert_mode)
+    if type(lhs) ~= "string" or lhs == "" then
+      return
+    end
+    safe_set(mode, lhs, function()
+      paste_image(insert_mode)
+    end, { desc = "Paste image into scratch buffer" })
+  end
+
+  set_paste_image_key("n", keys.paste_image_normal or keys.paste_image, false)
+  set_paste_image_key("i", keys.paste_image_insert or keys.paste_image, true)
+  if keys.paste_image_insert_alt ~= (keys.paste_image_insert or keys.paste_image) then
+    set_paste_image_key("i", keys.paste_image_insert_alt, true)
+  end
+
+  pcall(vim.api.nvim_buf_create_user_command, bufnr, "LazyAgentPasteImage", function()
+    paste_image(vim.fn.mode():sub(1, 1) == "i")
+  end, { desc = "Paste image into scratch buffer", force = true })
 
   -- Scroll mappings
   safe_set("n", keys.scroll_up or "<C-u>", function()

@@ -1,5 +1,6 @@
 local M = {}
 local cache_logic = require("lazyagent.logic.cache")
+local image_paste = require("lazyagent.logic.image_paste")
 
 local winid = nil
 local scratch_bufnr = nil
@@ -80,6 +81,7 @@ local function apply_scratch_buffer_defaults(bufnr, filetype)
     vim.b[bufnr].lazyagent_is_scratch = true
     vim.b[bufnr].lazyagent_scratch_filetype = vim.bo[bufnr].filetype
   end)
+  image_paste.attach_buffer(bufnr)
 end
 
 local function forget_scratch_buffer(bufnr)

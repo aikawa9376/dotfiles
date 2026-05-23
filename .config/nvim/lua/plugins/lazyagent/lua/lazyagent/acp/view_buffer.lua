@@ -1,6 +1,7 @@
 local M = {}
 
 local agent_logic = require("lazyagent.logic.agent")
+local image_paste = require("lazyagent.logic.image_paste")
 local state = require("lazyagent.logic.state")
 local view_diff = require("lazyagent.acp.view_diff")
 local view_footer = require("lazyagent.acp.view_footer")
@@ -275,6 +276,7 @@ local function refresh_markdown_rendering(bufnr)
       event = "LazyAgentACPUpdate",
     })
   end
+  image_paste.refresh_buffer_previews(bufnr)
   request_buffer_redraw(bufnr)
 end
 

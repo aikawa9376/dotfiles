@@ -12,6 +12,7 @@ local cache_logic = require("lazyagent.logic.cache")
 local commands_logic = require("lazyagent.commands")
 local default_config = require("lazyagent.config.defaults")
 local edit_blocks = require("lazyagent.logic.edit_blocks")
+local image_paste = require("lazyagent.logic.image_paste")
 local mcp_integration = require("lazyagent.integrations.mcp")
 local send_logic = require("lazyagent.logic.send")
 local session_logic = require("lazyagent.logic.session")
@@ -124,6 +125,7 @@ function M.setup(opts)
   export_nvim_listen_address()
   register_custom_backends(M.opts)
   register_treesitter_filetypes()
+  image_paste.setup()
 
   if M._configured then
     return
