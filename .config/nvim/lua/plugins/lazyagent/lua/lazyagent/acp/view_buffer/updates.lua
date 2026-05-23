@@ -40,7 +40,8 @@ function M.new(ctx)
   local to_bufnr = ctx.to_bufnr
   local session_for_agent = ctx.session_for_agent
   local agent_name_for_bufnr = ctx.agent_name_for_bufnr
-  local append_crosses_unclosed_markdown_fence = ctx.append_crosses_unclosed_markdown_fence
+  local trailing_section_has_open_markdown_fence = ctx.trailing_section_has_open_markdown_fence
+  local is_markdown_fence = ctx.is_markdown_fence
   local section_heading_for_line = ctx.section_heading_for_line
   local split_markdown_table_cells = ctx.split_markdown_table_cells
   local is_markdown_table_separator = ctx.is_markdown_table_separator
@@ -325,6 +326,44 @@ function M.new(ctx)
     return count
   end
 
+  local function transcript_display_lines(bufnr)
+    local stop = transcript_line_count(bufnr)
+    if stop <= 0 then
+      return {}, 0
+    end
+    return vim.api.nvim_buf_get_lines(bufnr, 0, stop, false), stop
+  end
+
+  local function append_crosses_markdown_fence_state(initial_state, text)
+    local inside_fence = initial_state == true
+    for _, line in ipairs(vim.split(tostring(text or ""), "\n", { plain = true })) do
+      if section_heading_for_line(line) then
+        if inside_fence then
+          return true
+        end
+        inside_fence = false
+      end
+      if is_markdown_fence(line) then
+        inside_fence = not inside_fence
+      end
+    end
+    return false
+  end
+
+  local function advanced_markdown_fence_state(initial_state, lines)
+    local inside_fence = initial_state == true
+    lines = type(lines) == "table" and lines or {}
+    for _, line in ipairs(lines) do
+      if section_heading_for_line(line) then
+        inside_fence = false
+      end
+      if is_markdown_fence(line) then
+        inside_fence = not inside_fence
+      end
+    end
+    return inside_fence
+  end
+
   local function append_text_to_buffer(bufnr, text, opts)
     if not text or text == "" or not vim.api.nvim_buf_is_valid(bufnr) then
       return nil
@@ -335,8 +374,7 @@ function M.new(ctx)
     local current_display_meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
     local preserved_section_items = opts.preserve_display_metadata == true and entry.transcript_section_items or nil
     local preserved_display_meta = opts.preserve_display_metadata == true and current_display_meta or nil
-    local raw_lines = type(entry.transcript_source_lines) == "table" and entry.transcript_source_lines or {}
-    local transcript_stop = transcript_line_count(bufnr)
+    local raw_lines, transcript_stop = transcript_display_lines(bufnr)
     local replace_start = transcript_stop
     local current_last = ""
     if transcript_stop > 0 then
@@ -351,11 +389,6 @@ function M.new(ctx)
     local replacement = { current_last .. table.remove(chunks, 1) }
     vim.list_extend(replacement, chunks)
 
-    local new_raw = {}
-    for idx = 1, replace_start do
-      new_raw[#new_raw + 1] = raw_lines[idx]
-    end
-    vim.list_extend(new_raw, replacement)
     local next_meta = vim.deepcopy(current_display_meta)
     if type(next_meta) ~= "table" then
       next_meta = {}
@@ -363,8 +396,22 @@ function M.new(ctx)
     if type(preserved_display_meta) ~= "table" then
       next_meta.compacted = false
     end
-    next_meta.table_tail_state = trailing_markdown_table_context(new_raw).state
-    entry.transcript_source_lines = new_raw
+    local previous_tail_lines = type(current_display_meta.table_tail_lines) == "table" and current_display_meta.table_tail_lines or {}
+    local combined_tail = {}
+    for _, line in ipairs(previous_tail_lines) do
+      combined_tail[#combined_tail + 1] = line
+    end
+    vim.list_extend(combined_tail, replacement)
+    local next_tail_context = trailing_markdown_table_context(combined_tail)
+    next_meta.table_tail_state = next_tail_context.state
+    next_meta.table_tail_lines = (next_tail_context.state == "header" or next_tail_context.state == "separator")
+        and next_tail_context.lines
+      or {}
+    local prior_open_fence = type(current_display_meta.trailing_section_open_markdown_fence) == "boolean"
+        and current_display_meta.trailing_section_open_markdown_fence
+      or trailing_section_has_open_markdown_fence(raw_lines)
+    next_meta.trailing_section_open_markdown_fence = advanced_markdown_fence_state(prior_open_fence, replacement)
+    entry.transcript_source_lines = nil
     entry.transcript_section_items = preserved_section_items or {}
     entry.transcript_display_meta = next_meta
 
@@ -401,7 +448,10 @@ function M.new(ctx)
     local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
     local cfg = transcript_compaction_config(bufnr)
     local pending_sections = pending_transcript_section_count(text)
-    if pending_sections > 0 and append_crosses_unclosed_markdown_fence(entry.transcript_source_lines, text) then
+    local trailing_open_fence = type(meta.trailing_section_open_markdown_fence) == "boolean"
+        and meta.trailing_section_open_markdown_fence
+      or trailing_section_has_open_markdown_fence(transcript_display_lines(bufnr))
+    if pending_sections > 0 and append_crosses_markdown_fence_state(trailing_open_fence, text) then
       return true
     end
 
@@ -411,7 +461,7 @@ function M.new(ctx)
       if table_state == "rows" or text_has_markdown_table_candidate(text) then
         has_table_candidate = true
       elseif table_state == "header" or table_state == "separator" then
-        local tail_context = trailing_markdown_table_context(entry.transcript_source_lines).lines
+        local tail_context = type(meta.table_tail_lines) == "table" and meta.table_tail_lines or {}
         if #tail_context > 0 then
           local combined = vim.deepcopy(tail_context)
           vim.list_extend(combined, vim.split(tostring(text or ""), "\n", { plain = true }))
