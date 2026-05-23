@@ -1,8 +1,10 @@
 local M = {}
 
 function M.new(ctx)
+  local uv = vim.uv or vim.loop
   local runtime_tool_timeline = ctx.runtime_tool_timeline
   local visible_conversation_context = ctx.visible_conversation_context
+  local current_display_conversation_context = ctx.current_display_conversation_context or visible_conversation_context
   local section_text = ctx.section_text
   local section_body_text = ctx.section_body_text
   local normalize_popup_text = ctx.normalize_popup_text
@@ -12,7 +14,9 @@ function M.new(ctx)
   local toggle_current_pin = ctx.toggle_current_pin
   local backend_for_agent = ctx.backend_for_agent
   local agent_name_for_bufnr = ctx.agent_name_for_bufnr
+  local session_for_bufnr = ctx.session_for_bufnr
   local pane_id_for_bufnr = ctx.pane_id_for_bufnr
+  local quickfix_open_window_for_bufnr = ctx.quickfix_open_window_for_bufnr
   local cleanup_markdown_rendering = ctx.cleanup_markdown_rendering
   local read_transcript_lines = ctx.read_transcript_lines
   local fancy_mode_enabled = ctx.fancy_mode_enabled
@@ -31,6 +35,15 @@ function M.new(ctx)
   local metadata_popup_win = nil
   local metadata_popup_source_buf = nil
 
+  local function current_context_item(bufnr, context)
+    local entry = layout_entry(bufnr)
+    local indexed = context
+      and type(entry.transcript_section_items) == "table"
+      and entry.transcript_section_items[context.index]
+      or nil
+    return indexed or (context and context.item) or {}
+  end
+
   local function tool_entry_for_item(bufnr, item)
     if type(item) ~= "table" or not item.toolCallId or item.toolCallId == "" then
       return nil
@@ -48,6 +61,485 @@ function M.new(ctx)
     end
 
     return nil
+  end
+
+  local function quickfix_block_title(context, item, entry)
+    local title = tostring(
+      (entry and entry.title)
+      or (item and item.title)
+      or (item and item.heading)
+      or (context and context.section and context.section.heading)
+      or "ACP block"
+    )
+    title = vim.trim(title)
+    if title == "" then
+      title = "ACP block"
+    end
+    if strdisplaywidth(title) > 72 then
+      title = vim.fn.strcharpart(title, 0, 69) .. "..."
+    end
+    return title
+  end
+
+  local function quickfix_block_description(context, item, entry)
+    local kind = tostring(
+      (entry and entry.kind)
+      or (item and item.kind)
+      or (context and context.section and context.section.heading)
+      or "block"
+    )
+    local title = quickfix_block_title(context, item, entry)
+    local status = tostring((entry and entry.status) or (item and item.status) or "")
+    local summary = tostring((entry and entry.summary) or (item and item.summary) or "")
+    summary = vim.trim(summary:gsub("%s+", " "))
+    if strdisplaywidth(summary) > 120 then
+      summary = vim.fn.strcharpart(summary, 0, 117) .. "..."
+    end
+
+    local parts = { "[" .. kind .. "]", title }
+    if status ~= "" then
+      parts[#parts + 1] = "(" .. status .. ")"
+    end
+    local text = table.concat(parts, " ")
+    if summary ~= "" then
+      text = text .. " - " .. summary
+    end
+    return text
+  end
+
+  local function escape_lua_pattern(text)
+    return (tostring(text or ""):gsub("([^%w])", "%%%1"))
+  end
+
+  local function normalize_qf_item_text(text, fallback)
+    local normalized = tostring(text or "")
+    normalized = normalized:gsub("\27%[[0-9;]*m", "")
+    normalized = vim.trim(normalized:gsub("%s+", " "))
+    if normalized == "" then
+      normalized = tostring(fallback or "")
+    end
+    if strdisplaywidth(normalized) > 140 then
+      normalized = vim.fn.strcharpart(normalized, 0, 137) .. "..."
+    end
+    return normalized
+  end
+
+  local function clean_qf_source_fragment(text)
+    local cleaned = tostring(text or "")
+    cleaned = cleaned:gsub("\27%[[0-9;]*m", "")
+    cleaned = cleaned:gsub("^%s*[%-%*%+>%d%.%)%(]+%s*", "")
+    cleaned = cleaned:gsub("^%s*[`\"'({%[]+", "")
+    cleaned = cleaned:gsub("[`\"')}%]>%,;:%.!%?]+%s*$", "")
+    cleaned = cleaned:gsub("^Path:%s*", "")
+    cleaned = cleaned:gsub("^Paths:%s*", "")
+    cleaned = cleaned:gsub("^File:%s*", "")
+    cleaned = cleaned:gsub("^Resource:%s*", "")
+    cleaned = cleaned:gsub("^Viewing%s+", "")
+    cleaned = cleaned:gsub("^using%s+", "")
+    cleaned = cleaned:gsub("^open%s+", "")
+    cleaned = cleaned:gsub("^%s*[:=-]+%s*", "")
+    cleaned = cleaned:gsub("%s*[:=-]+%s*$", "")
+    return vim.trim(cleaned:gsub("%s+", " "))
+  end
+
+  local function quickfix_line_description(line, token, fallback)
+    local raw_line = tostring(line or "")
+    if raw_line == "" then
+      return normalize_qf_item_text(fallback, fallback), 1
+    end
+
+    local token_text = tostring(token or "")
+    if token_text ~= "" then
+      local link_label = raw_line:match("%[([^%]]+)%]%(" .. escape_lua_pattern(token_text) .. "%)")
+      if link_label and vim.trim(link_label) ~= "" then
+        return normalize_qf_item_text(link_label, fallback), 3
+      end
+
+      local before, after = raw_line:match("^(.-)" .. escape_lua_pattern(token_text) .. "(.*)$")
+      if before ~= nil then
+        local right = clean_qf_source_fragment(after)
+        if right ~= "" then
+          return normalize_qf_item_text(right, fallback), 2
+        end
+
+        local left = clean_qf_source_fragment(before)
+        if left ~= "" then
+          return normalize_qf_item_text(left, fallback), 2
+        end
+      end
+    end
+
+    local cleaned_line = clean_qf_source_fragment(raw_line)
+    if cleaned_line ~= "" and cleaned_line ~= token_text then
+      return normalize_qf_item_text(cleaned_line, fallback), 2
+    end
+
+    return normalize_qf_item_text(fallback, fallback), 1
+  end
+
+  local function normalize_existing_qf_path(path)
+    local text = tostring(path or "")
+    if text == "" then
+      return nil
+    end
+
+    local normalized = vim.fn.fnamemodify(text, ":p")
+    if vim.fs and type(vim.fs.normalize) == "function" then
+      normalized = vim.fs.normalize(normalized)
+    end
+    local stat = uv and uv.fs_stat(normalized) or nil
+    if not stat or stat.type ~= "file" then
+      return nil
+    end
+    return normalized
+  end
+
+  local function resolve_qf_path_part(path_part, cwd)
+    local text = tostring(path_part or "")
+    if text == "" then
+      return nil
+    end
+
+    if text:match("^file://") then
+      local ok, resolved = pcall(vim.uri_to_fname, text)
+      if ok and resolved and resolved ~= "" then
+        return normalize_existing_qf_path(resolved)
+      end
+      return nil
+    end
+
+    if text:match("^~[/\\]") then
+      text = vim.fn.expand(text)
+    end
+    if text:match("^/") then
+      return normalize_existing_qf_path(text)
+    end
+
+    local root = cwd or vim.fn.getcwd()
+    local direct = normalize_existing_qf_path(root .. "/" .. text)
+    if direct then
+      return direct
+    end
+
+    local segments = {}
+    for segment in text:gmatch("[^/]+") do
+      if segment ~= "" and segment ~= "." then
+        segments[#segments + 1] = segment
+      end
+    end
+
+    for idx = 2, #segments do
+      local suffix = table.concat(segments, "/", idx)
+      local resolved = normalize_existing_qf_path(root .. "/" .. suffix)
+      if resolved then
+        return resolved
+      end
+    end
+
+    local basename = segments[#segments]
+    if basename and basename:match("^[^%*%?%[%]{}]+%.[%w_+-]+$") and vim.fs and type(vim.fs.find) == "function" then
+      local matches = vim.fs.find(basename, {
+        path = root,
+        type = "file",
+        limit = 32,
+      })
+      local suffixes = {}
+      for idx = 1, #segments do
+        suffixes[#suffixes + 1] = "/" .. table.concat(segments, "/", idx)
+      end
+      local unique = nil
+      local unique_score = 0
+      for _, match in ipairs(matches or {}) do
+        local normalized = normalize_existing_qf_path(match)
+        if normalized then
+          local score = 0
+          for _, suffix in ipairs(suffixes) do
+            if normalized:sub(-#suffix) == suffix then
+              score = math.max(score, #suffix)
+            end
+          end
+          if score > 0 then
+            if score > unique_score then
+              unique = normalized
+              unique_score = score
+            elseif score == unique_score and unique and unique ~= normalized then
+              return nil
+            end
+          end
+        end
+      end
+      if unique then
+        return unique
+      end
+    end
+
+    return nil
+  end
+
+  local function normalize_qf_path_token(token, cwd)
+    local text = tostring(token or "")
+    if text == "" then
+      return nil
+    end
+
+    text = text:gsub("^[%s%(%[%{<\"'`]+", "")
+    text = text:gsub("[%s%)%]%}>,;:%.!%?\"'`]+$", "")
+    if vim.startswith(text, "@") then
+      text = text:sub(2)
+    end
+    if text == "" or text == "." then
+      return nil
+    end
+    if text:find("*", 1, true) or text:find("?", 1, true) then
+      return nil
+    end
+    if text == "repo" or text == "workspace" or text == "file" or text == "selection"
+        or text == "changes" or text == "diagnostics" or text == "recent" or text == "api" then
+      return nil
+    end
+
+    local path_part = text
+    local lnum, col
+    local matched_path, a, b = text:match("^(.-)#L(%d+)C(%d+)$")
+    if matched_path then
+      path_part = matched_path
+      lnum = tonumber(a)
+      col = tonumber(b)
+    else
+      matched_path, a, b = text:match("^(.-)#L(%d+)C(%d+)%-L?%d+C%d+$")
+      if matched_path then
+        path_part = matched_path
+        lnum = tonumber(a)
+        col = tonumber(b)
+      else
+        matched_path, a = text:match("^(.-)#L(%d+)$")
+        if matched_path then
+          path_part = matched_path
+          lnum = tonumber(a)
+        else
+          matched_path, a = text:match("^(.-)#L(%d+)%-L?%d+$")
+          if matched_path then
+            path_part = matched_path
+            lnum = tonumber(a)
+          else
+            matched_path, a, b = text:match("^(.-):(%d+):(%d+)$")
+            if matched_path then
+              path_part = matched_path
+              lnum = tonumber(a)
+              col = tonumber(b)
+            else
+              matched_path, a = text:match("^(.-):(%d+)$")
+              if matched_path then
+                path_part = matched_path
+                lnum = tonumber(a)
+              else
+                matched_path, a = text:match("^(.-):(%d+)%-%d+$")
+                if matched_path then
+                  path_part = matched_path
+                  lnum = tonumber(a)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
+    if path_part == "" then
+      return nil
+    end
+
+    local normalized = resolve_qf_path_part(path_part, cwd)
+    if not normalized then
+      return nil
+    end
+
+    return {
+      filename = normalized,
+      lnum = math.max(1, tonumber(lnum) or 1),
+      col = math.max(1, tonumber(col) or 1),
+    }
+  end
+
+  local function make_qf_candidate(token, cwd, fallback_text, source_line)
+    local candidate = normalize_qf_path_token(token, cwd)
+    if not candidate then
+      return nil
+    end
+
+    local text, text_rank
+    if source_line and source_line ~= "" then
+      text, text_rank = quickfix_line_description(source_line, token, fallback_text)
+    else
+      text = normalize_qf_item_text(fallback_text, fallback_text)
+      text_rank = 1
+    end
+    candidate.text = text
+    candidate.text_rank = text_rank
+    return candidate
+  end
+
+  local function collect_qf_candidates_from_text(text, cwd, fallback_text, add_candidate)
+    text = tostring(text or "")
+    if text == "" then
+      return
+    end
+
+    for line in text:gmatch("[^\n]+") do
+      local explicit_path = line:match("Path:%s+(.+)$")
+      if explicit_path then
+        add_candidate(make_qf_candidate(explicit_path, cwd, fallback_text, line))
+      end
+
+      for snippet in line:gmatch("`([^`]+)`") do
+        add_candidate(make_qf_candidate(snippet, cwd, fallback_text, line))
+      end
+      for snippet in line:gmatch("%b[]%((.-)%)") do
+        add_candidate(make_qf_candidate(snippet, cwd, fallback_text, line))
+      end
+
+      for token in line:gmatch("%S+") do
+        local first = token:sub(1, 1)
+        if first == "@" or first == "/" or first == "~" or token:match("^%.?%.?/") or token:match("^%.%.%./")
+            or token:match("^file://")
+            or token:find("/", 1, true) or token:find(".", 1, true) then
+          add_candidate(make_qf_candidate(token, cwd, fallback_text, line))
+        end
+      end
+    end
+  end
+
+  local function send_current_block_paths_to_quickfix(bufnr)
+    local context = visible_conversation_context(bufnr)
+    if not context or not context.section then
+      vim.notify("No ACP block under cursor", vim.log.levels.INFO)
+      return
+    end
+
+    local item = current_context_item(bufnr, context)
+    local entry = tool_entry_for_item(bufnr, item)
+    local session = session_for_bufnr and session_for_bufnr(bufnr) or nil
+    local cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd()
+    local description = quickfix_block_description(context, item, entry)
+    local files = {}
+    local file_order = {}
+
+    local function add_candidate(candidate)
+      if type(candidate) ~= "table" or candidate.filename == nil or candidate.filename == "" then
+        return
+      end
+
+      local filename = tostring(candidate.filename)
+      local candidate_text = normalize_qf_item_text(candidate.text, description)
+      local candidate_text_rank = math.max(1, tonumber(candidate.text_rank) or 1)
+      local bucket = files[filename]
+      if not bucket then
+        bucket = {
+          generic = nil,
+          lines = {},
+          line_order = {},
+        }
+        files[filename] = bucket
+        file_order[#file_order + 1] = filename
+      end
+
+      local lnum = math.max(1, tonumber(candidate.lnum) or 1)
+      local col = math.max(1, tonumber(candidate.col) or 1)
+      if lnum > 1 or col > 1 then
+        local line_key = tostring(lnum)
+        local existing = bucket.lines[line_key]
+        if existing then
+          if (existing.qf.col or 1) <= 1 and col > 1 then
+            existing.qf.col = col
+          end
+          if existing.text_rank < candidate_text_rank then
+            existing.qf.text = candidate_text
+            existing.text_rank = candidate_text_rank
+          end
+          return
+        end
+        bucket.lines[line_key] = {
+          qf = {
+            filename = filename,
+            lnum = lnum,
+            col = col,
+            text = candidate_text,
+          },
+          text_rank = candidate_text_rank,
+        }
+        bucket.line_order[#bucket.line_order + 1] = line_key
+        return
+      end
+
+      if not bucket.generic then
+        bucket.generic = {
+          qf = {
+            filename = filename,
+            lnum = 1,
+            col = 1,
+            text = candidate_text,
+          },
+          text_rank = candidate_text_rank,
+        }
+      elseif bucket.generic.text_rank < candidate_text_rank then
+        bucket.generic.qf.text = candidate_text
+        bucket.generic.text_rank = candidate_text_rank
+      end
+    end
+
+    local paths = type(entry and entry.paths) == "table" and entry.paths or {}
+    if #paths == 0 and item and item.path and item.path ~= "" then
+      paths = { item.path }
+    end
+    for _, path in ipairs(paths) do
+      add_candidate(make_qf_candidate(path, cwd, description))
+    end
+
+    collect_qf_candidates_from_text(section_body_text(context.lines or {}, context.section), cwd, description, add_candidate)
+    collect_qf_candidates_from_text(section_text(context.lines or {}, context.section), cwd, description, add_candidate)
+    collect_qf_candidates_from_text(item and item.summary or "", cwd, description, add_candidate)
+    collect_qf_candidates_from_text(entry and entry.summary or "", cwd, description, add_candidate)
+    collect_qf_candidates_from_text(entry and entry.rendered_content or "", cwd, description, add_candidate)
+    collect_qf_candidates_from_text(entry and entry.rendered_raw_output or "", cwd, description, add_candidate)
+
+    local items = {}
+    for _, filename in ipairs(file_order) do
+      local bucket = files[filename]
+      if bucket then
+        if next(bucket.lines) ~= nil then
+          for _, line_key in ipairs(bucket.line_order) do
+            items[#items + 1] = bucket.lines[line_key].qf
+          end
+        elseif bucket.generic then
+          items[#items + 1] = bucket.generic.qf
+        end
+      end
+    end
+
+    if #items == 0 then
+      vim.notify("No file paths found in current ACP block", vim.log.levels.INFO)
+      return
+    end
+
+    vim.fn.setqflist({}, "r", {
+      title = "ACP block files: " .. quickfix_block_title(context, item, entry),
+      items = items,
+    })
+    local current_win = vim.api.nvim_get_current_win()
+    local open_win = quickfix_open_window_for_bufnr and quickfix_open_window_for_bufnr(bufnr) or nil
+    if open_win and vim.api.nvim_win_is_valid(open_win) then
+      pcall(vim.api.nvim_win_call, open_win, function()
+        vim.cmd("cclose")
+        vim.cmd("copen")
+      end)
+    else
+      pcall(vim.cmd, "cclose")
+      pcall(vim.cmd, "copen")
+    end
+    if current_win and vim.api.nvim_win_is_valid(current_win) then
+      pcall(vim.api.nvim_set_current_win, current_win)
+    end
+    vim.notify(string.format("Added %d file%s to quickfix", #items, #items == 1 and "" or "s"), vim.log.levels.INFO)
   end
 
   local function show_outline_picker(bufnr, pinned_only)
@@ -726,6 +1218,12 @@ function M.new(ctx)
           label = "Show metadata",
           action = function()
             show_metadata_popup(bufnr)
+          end,
+        },
+        {
+          label = "Block files -> quickfix",
+          action = function()
+            send_current_block_paths_to_quickfix(bufnr)
           end,
         },
       }
