@@ -124,6 +124,23 @@ function M.build()
       max_history = 100,
       conversation_retention = "30d",
     },
+    image_paste = {
+      enabled = true,
+      dir = vim.fn.stdpath("cache") .. "/lazyagent/conversation",
+      dir_layout = "conversation",
+      max_dimension = 1600,
+      notify = true,
+      drop = {
+        enabled = true,
+        copy = true,
+      },
+      preview = {
+        enabled = true,
+        max_width = 80,
+        max_height = 20,
+        auto_resize = true,
+      },
+    },
     skills = {
       enabled = false,
       mode = "auto",
