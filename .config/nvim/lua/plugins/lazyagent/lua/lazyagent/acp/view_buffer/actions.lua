@@ -10,15 +10,15 @@ function M.new(ctx)
   local normalize_popup_text = ctx.normalize_popup_text
   local text_looks_like_transcript = ctx.text_looks_like_transcript
   local copy_to_clipboard = ctx.copy_to_clipboard
-  local show_outline_picker = ctx.show_outline_picker
-  local toggle_current_pin = ctx.toggle_current_pin
   local backend_for_agent = ctx.backend_for_agent
   local agent_name_for_bufnr = ctx.agent_name_for_bufnr
   local session_for_bufnr = ctx.session_for_bufnr
   local pane_id_for_bufnr = ctx.pane_id_for_bufnr
+  local jump_window_to_row = ctx.jump_window_to_row
   local quickfix_open_window_for_bufnr = ctx.quickfix_open_window_for_bufnr
   local cleanup_markdown_rendering = ctx.cleanup_markdown_rendering
   local read_transcript_lines = ctx.read_transcript_lines
+  local refresh_buffer_from_path = ctx.refresh_buffer_from_path
   local fancy_mode_enabled = ctx.fancy_mode_enabled
   local dedicated_transcript_windows = ctx.dedicated_transcript_windows
   local ACP_TRANSCRIPT_FILETYPE = ctx.acp_transcript_filetype
@@ -604,7 +604,7 @@ function M.new(ctx)
     end
 
     vim.notify(pinned and "Pinned current block" or "Unpinned current block", vim.log.levels.INFO)
-    local session = session_for_agent(agent_name_for_bufnr(bufnr))
+    local session = session_for_bufnr and session_for_bufnr(bufnr) or nil
     local transcript_path = session and session.transcript_path or nil
     if not transcript_path or transcript_path == "" then
       local ok, value = pcall(vim.api.nvim_buf_get_var, bufnr, "lazyagent_acp_transcript_path")
@@ -1104,6 +1104,8 @@ function M.new(ctx)
       local popup_buf = vim.api.nvim_create_buf(false, true)
       vim.bo[popup_buf].bufhidden = "wipe"
       vim.bo[popup_buf].swapfile = false
+      vim.bo[popup_buf].undofile = false
+      vim.bo[popup_buf].undolevels = -1
       vim.bo[popup_buf].modifiable = true
       vim.bo[popup_buf].readonly = false
       apply_metadata_popup_filetype(popup_buf)

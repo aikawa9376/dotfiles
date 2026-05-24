@@ -696,6 +696,7 @@ function M.setup(deps)
       buffer_background = base_session.buffer_background,
       buffer_inactive_background = base_session.buffer_inactive_background,
       transcript_max_lines = base_session.transcript_max_lines,
+      render_markdown_max_lines = base_session.render_markdown_max_lines,
       transcript_compaction = vim.deepcopy(base_session.transcript_compaction or {}),
       runtime_compaction = vim.deepcopy(base_session.runtime_compaction or {}),
       initial_config_applied = true,

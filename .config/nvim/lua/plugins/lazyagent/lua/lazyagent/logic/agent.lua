@@ -7,7 +7,28 @@ local acp_logic = require("lazyagent.logic.acp")
 local acp_local_commands = require("lazyagent.acp.local_commands")
 local path_completions = require("lazyagent.logic.path_completions")
 local completion_cache = {}
-local is_list = vim.islist or vim.tbl_islist
+
+local function is_list(value)
+  if vim.islist then
+    return vim.islist(value)
+  end
+  if type(value) ~= "table" then
+    return false
+  end
+  local count = 0
+  for key in pairs(value) do
+    if type(key) ~= "number" or key < 1 or key % 1 ~= 0 then
+      return false
+    end
+    count = count + 1
+  end
+  for index = 1, count do
+    if rawget(value, index) == nil then
+      return false
+    end
+  end
+  return true
+end
 
 local function join_cmd_parts(cmd)
   if not cmd then return nil end
@@ -370,7 +391,6 @@ function M.get_scratch_completions(agent_name)
   end
 
   local cfg = M.get_interactive_agent(agent_name)
-  local use_acp = M.use_acp(agent_name, cfg)
   local provider = cfg and cfg.scratch_completions
   local defaults = load_default_completions(agent_name)
   local provided = {}

@@ -50,7 +50,7 @@ function M.new(ctx)
   local normalize_transcript_display = ctx.normalize_transcript_display
   local decorate_transcript_range = ctx.decorate_transcript_range
   local queue_markdown_rendering = ctx.queue_markdown_rendering
-  local request_buffer_redraw = ctx.request_buffer_redraw or function() end
+  local request_buffer_redraw = ctx.request_buffer_redraw or function(_) end
   local APPEND_BATCH_MS = ctx.append_batch_ms
   local ACP_TRANSCRIPT_FILETYPE = ctx.acp_transcript_filetype
   local diff_view = setmetatable({}, {

@@ -10,7 +10,6 @@ local cache_logic = require("lazyagent.logic.cache")
 local transforms = require("lazyagent.transforms")
 local util = require("lazyagent.util")
 local config = require("lazyagent.logic.config")
-local window = require("lazyagent.window")
 local status = require("lazyagent.logic.status")
 
 local function current_context_agent(bufnr)

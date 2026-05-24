@@ -271,6 +271,9 @@ local function resolve_from_config(agent_cfg)
     transcript_max_lines = normalize_positive_integer(
       agent_acp.transcript_max_lines or global_cfg.transcript_max_lines
     ),
+    render_markdown_max_lines = normalize_positive_integer(
+      agent_acp.render_markdown_max_lines or global_cfg.render_markdown_max_lines
+    ),
     transcript_compaction = merge_transcript_compaction_config(
       agent_acp.transcript_compaction,
       global_cfg.transcript_compaction
@@ -309,6 +312,7 @@ function M.resolve(agent_name, agent_cfg)
       buffer_background = session.buffer_background,
       buffer_inactive_background = session.buffer_inactive_background,
       transcript_max_lines = session.transcript_max_lines,
+      render_markdown_max_lines = session.render_markdown_max_lines,
       transcript_compaction = vim.deepcopy(session.transcript_compaction or {}),
       runtime_compaction = vim.deepcopy(session.runtime_compaction or {}),
       footer_animation = session.footer_animation,

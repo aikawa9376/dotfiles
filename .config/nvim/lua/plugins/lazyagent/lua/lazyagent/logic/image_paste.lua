@@ -1020,6 +1020,57 @@ local function first_visible_window_for_buf(bufnr)
   return nil
 end
 
+local function acp_preview_scan_config()
+  local preview = image_paste_opts().preview or {}
+  local max_previews = tonumber(preview.acp_max_previews)
+  if max_previews == nil then
+    max_previews = 6
+  end
+  max_previews = math.max(0, math.floor(max_previews))
+
+  local prefetch = tonumber(preview.acp_prefetch_lines)
+  if prefetch == nil then
+    prefetch = 40
+  end
+  prefetch = math.max(0, math.floor(prefetch))
+
+  return {
+    max_previews = max_previews,
+    prefetch_lines = prefetch,
+  }
+end
+
+local function preview_scan_rows(bufnr)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  if line_count <= 0 then
+    return 1, 0, nil
+  end
+
+  if buffer_var(bufnr, "lazyagent_acp_transcript") ~= true then
+    return 1, line_count, nil
+  end
+
+  local cfg = acp_preview_scan_config()
+  if cfg.max_previews <= 0 then
+    return 1, 0, cfg
+  end
+
+  local win = first_visible_window_for_buf(bufnr)
+  if not win or not vim.api.nvim_win_is_valid(win) then
+    return 1, 0, cfg
+  end
+
+  local ok, info = pcall(vim.fn.getwininfo, win)
+  local bounds = ok and type(info) == "table" and info[1] or nil
+  if type(bounds) ~= "table" then
+    return 1, math.min(line_count, cfg.prefetch_lines + 1), cfg
+  end
+
+  local start_row = math.max(1, (tonumber(bounds.topline) or 1) - cfg.prefetch_lines)
+  local stop_row = math.min(line_count, (tonumber(bounds.botline) or 1) + cfg.prefetch_lines)
+  return start_row, stop_row, cfg
+end
+
 local function preview_placement_opts(bufnr, row, ref_text)
   local cfg = image_paste_opts()
   local preview = cfg.preview or {}
@@ -1351,18 +1402,39 @@ function M.refresh_buffer_previews(bufnr)
   clear_buffer_previews(bufnr)
 
   local Snacks = nil
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  for row, line in ipairs(lines) do
+  local start_row, stop_row, cfg = preview_scan_rows(bufnr)
+  if stop_row < start_row then
+    sync_previews(bufnr)
+    return bufnr
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row - 1, stop_row, false)
+  local created = 0
+  for offset, line in ipairs(lines) do
+    local row = start_row + offset - 1
     local candidate = extract_image_reference(line)
     local image_path = candidate and candidate.source_path or nil
     if image_path then
       Snacks = Snacks or load_snacks()
       create_preview(bufnr, row, line, image_path, Snacks)
+      created = created + 1
+      if cfg and created >= cfg.max_previews then
+        break
+      end
     end
   end
 
   sync_previews(bufnr)
   return bufnr
+end
+
+function M.clear_buffer_previews(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not bufnr then
+    return false
+  end
+  clear_buffer_previews(bufnr)
+  return true
 end
 
 function M.setup()

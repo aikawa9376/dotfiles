@@ -1,6 +1,5 @@
 local M = {}
 
-local agent_logic = require("lazyagent.logic.agent")
 local acp_logic = require("lazyagent.logic.acp")
 local command = require("lazyagent.commands.util")
 local session_logic = require("lazyagent.logic.session")
@@ -28,6 +27,26 @@ end
 local function available_switch_targets()
   return session_logic.available_acp_switch_targets()
 end
+
+local always_commands = {
+  {
+    name = "LazyAgentACPRestart",
+    desc = "Restart Neovim and rehydrate the current ACP session",
+    handler = function(target_agent)
+      session_logic.restart_acp_session(target_agent)
+    end,
+    complete = available_acp_agents,
+  },
+  {
+    name = "LazyAgentACPRestoreRestartState",
+    desc = "Restore ACP state after an internal restart",
+    handler = function(bundle_path)
+      session_logic.restore_acp_restart_state(bundle_path)
+    end,
+    nargs = 1,
+    complete = "file",
+  },
+}
 
 local commands = {
   {
@@ -109,6 +128,20 @@ end
 function M.refresh()
   if not create_command or not delete_command then
     return
+  end
+
+  for _, spec in ipairs(always_commands) do
+    if not registered[spec.name] then
+      local command_spec = spec
+      create_command(command_spec.name, function(cmdargs)
+        command_spec.handler(command.arg(cmdargs))
+      end, {
+        nargs = command_spec.nargs or "?",
+        desc = command_spec.desc,
+        complete = command_spec.complete,
+      })
+      registered[command_spec.name] = true
+    end
   end
 
   if has_active_acp_sessions() then

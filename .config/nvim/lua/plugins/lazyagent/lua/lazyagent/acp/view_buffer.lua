@@ -13,7 +13,6 @@ local footer_ns = vim.api.nvim_create_namespace("lazyagent_acp_footer")
 local diff_ns = vim.api.nvim_create_namespace("lazyagent_acp_diff")
 local highlights_defined = false
 local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer ..."
-local SYNTHETIC_MARKDOWN_FENCE_CLOSE = " ```"
 local FOLLOW_SCROLL_OFF = 0
 local DEFAULT_SCROLL_OFF = 2
 local ACP_TRANSCRIPT_FILETYPE = "lazyagent_acp"
@@ -33,13 +32,9 @@ local refresh_buffer_layout
 local refresh_buffer_from_path
 local layout_entry
 local buffer_is_visible
-local flush_pending_append
-local resume_deferred_updates_for_buffer
-local resume_deferred_transcript_updates
 local set_window_size
 local diff_view
 local footer_view
-local normalize_header_lines
 local pinned_section_rows
 local transcript_source_lines
 local pane_id_for_bufnr
@@ -263,6 +258,18 @@ local function refresh_markdown_rendering(bufnr)
     return
   end
 
+  local opts = pane_opts_for_bufnr and pane_opts_for_bufnr(bufnr) or {}
+  local max_render_lines = tonumber(opts.render_markdown_max_lines)
+    or tonumber((((state.opts or {}).acp or {}).render_markdown_max_lines))
+  local visible_lines = transcript_line_count and transcript_line_count(bufnr) or vim.api.nvim_buf_line_count(bufnr)
+  if max_render_lines and max_render_lines > 0 and visible_lines > max_render_lines then
+    cleanup_markdown_rendering(bufnr)
+    if type(image_paste.clear_buffer_previews) == "function" then
+      image_paste.clear_buffer_previews(bufnr)
+    end
+    return
+  end
+
   pcall(vim.treesitter.start, bufnr, "markdown")
 
   local ok_manager, manager = pcall(require, "render-markdown.core.manager")
@@ -328,7 +335,6 @@ end
 local view_sections = require("lazyagent.acp.view_buffer.sections")
 local line_has_heading = view_sections.line_has_heading
 local replace_heading_token = view_sections.replace_heading_token
-local line_has_assistant_heading = view_sections.line_has_assistant_heading
 local section_style_for_line = view_sections.section_style_for_line
 local line_has_tail = view_sections.line_has_tail
 local is_markdown_fence = view_sections.is_markdown_fence
@@ -561,8 +567,6 @@ local view_actions = require("lazyagent.acp.view_buffer.actions").new({
   normalize_popup_text = normalize_popup_text,
   text_looks_like_transcript = text_looks_like_transcript,
   copy_to_clipboard = copy_to_clipboard,
-  show_outline_picker = show_outline_picker,
-  toggle_current_pin = toggle_current_pin,
   backend_for_agent = backend_for_agent,
   agent_name_for_bufnr = function(bufnr)
     return agent_name_for_bufnr(bufnr)
@@ -573,6 +577,7 @@ local view_actions = require("lazyagent.acp.view_buffer.actions").new({
   pane_id_for_bufnr = function(bufnr)
     return pane_id_for_bufnr(bufnr)
   end,
+  jump_window_to_row = jump_window_to_row,
   quickfix_open_window_for_bufnr = function(bufnr)
     local pane_opts = pane_opts_for_bufnr(bufnr)
     local anchor = resolve_anchor_window(pane_opts and pane_opts.source_winid)
@@ -591,6 +596,9 @@ local view_actions = require("lazyagent.acp.view_buffer.actions").new({
     return nil
   end,
   cleanup_markdown_rendering = cleanup_markdown_rendering,
+  refresh_buffer_from_path = function(...)
+    return refresh_buffer_from_path(...)
+  end,
   read_transcript_lines = function(...)
     return read_transcript_lines(...)
   end,
@@ -662,7 +670,6 @@ local header_target_width = view_render.header_target_width
 local overlay_target_width = view_render.overlay_target_width
 transcript_source_lines = view_render.transcript_source_lines
 local normalize_transcript_display = view_render.normalize_transcript_display
-normalize_header_lines = view_render.normalize_header_lines
 local decorate_transcript_range = view_render.decorate_transcript_range
 local decorate_buffer = view_render.decorate_buffer
 
@@ -885,9 +892,6 @@ scroll_buffer_to_end = view_updates.scroll_buffer_to_end
 transcript_line_count = view_updates.transcript_line_count
 refresh_buffer_from_path = view_updates.refresh_buffer_from_path
 local refresh_buffer_from_file = view_updates.refresh_buffer_from_file
-flush_pending_append = view_updates.flush_pending_append
-resume_deferred_updates_for_buffer = view_updates.resume_deferred_updates_for_buffer
-resume_deferred_transcript_updates = view_updates.resume_deferred_transcript_updates
 local queue_append = view_updates.queue_append
 
 diff_view = view_diff.new({
