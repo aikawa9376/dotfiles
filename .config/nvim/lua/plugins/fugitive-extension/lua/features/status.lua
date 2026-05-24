@@ -130,9 +130,11 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
         if ref then
           local s, e = l:find(ref, 1, true)
           -- stash@{n} の部分を強調
-          vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, s - 1, { end_col = e, hl_group = 'GitSignsAdd' })
-          -- それ以降（メッセージ部分）をコメント色に
-          vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, e, { end_col = #l, hl_group = 'Comment' })
+          if s and e then
+            vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, s - 1, { end_col = e, hl_group = 'GitSignsAdd' })
+            -- それ以降（メッセージ部分）をコメント色に
+            vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, e, { end_col = #l, hl_group = 'Comment' })
+          end
         else in_stash = false end
       end
     end
@@ -259,7 +261,9 @@ local function open_entry_and_close_status(bufnr)
       return { ok = false, err = err }
     end
 
-    local ok, exec_err = pcall(vim.cmd, cmd)
+    local ok, exec_err = pcall(function()
+      vim.cmd(cmd)
+    end)
     if not ok then
       return { ok = false, err = tostring(exec_err) }
     end
@@ -276,14 +280,23 @@ local function open_entry_and_close_status(bufnr)
     return
   end
 
-  if opened_in_other_window and vim.api.nvim_win_is_valid(status_win) and vim.api.nvim_win_is_valid(target_win) then
-    vim.api.nvim_win_set_buf(target_win, result.bufnr)
-    pcall(vim.api.nvim_win_call, target_win, function()
-      vim.fn.winrestview(result.view)
+  local resolved_target_win = type(target_win) == 'number' and target_win or nil
+  if opened_in_other_window
+    and vim.api.nvim_win_is_valid(status_win)
+    and resolved_target_win
+    and vim.api.nvim_win_is_valid(resolved_target_win)
+    and type(result.bufnr) == 'number'
+    and result.view
+  then
+    vim.api.nvim_win_set_buf(resolved_target_win, result.bufnr)
+    pcall(function()
+      vim.api.nvim_win_call(resolved_target_win, function()
+        vim.fn.winrestview(result.view)
+      end)
     end)
     pcall(vim.api.nvim_win_close, status_win, false)
-    if vim.api.nvim_win_is_valid(target_win) then
-      vim.api.nvim_set_current_win(target_win)
+    if vim.api.nvim_win_is_valid(resolved_target_win) then
+      vim.api.nvim_set_current_win(resolved_target_win)
     end
   end
 end
@@ -434,14 +447,18 @@ function M.setup(group)
                 "exit 0"}, editor_file_head)
               vim.fn.system('chmod +x ' .. vim.fn.shellescape(editor_file_head))
               local commit_msg_bufnr_head = nil
-              local uvh = vim.loop
-              local timerh = uvh.new_timer()
+              local uvh = vim.uv or vim.loop
+              local timerh = uvh and uvh.new_timer and uvh.new_timer() or nil
+              if not timerh then
+                vim.notify('Failed to start amend watcher', vim.log.levels.ERROR)
+                return
+              end
               timerh:start(50, 50, vim.schedule_wrap(function()
                 if vim.fn.filereadable(marker_file_head) == 1 then
                   timerh:stop()
                   timerh:close()
                   local linesh = vim.fn.readfile(marker_file_head)
-                  local commit_msg_pathh = linesh[1] or ''
+                  local commit_msg_pathh = type(linesh) == 'table' and linesh[1] or ''
                   if commit_msg_pathh ~= '' then
                     vim.schedule(function()
                       local fname = vim.fn.fnameescape(commit_msg_pathh)
@@ -528,14 +545,18 @@ function M.setup(group)
 
               -- Poll for marker file created by the editor script and open the file
               local commit_msg_bufnr_rebase = nil
-               local uv = vim.loop
-              local timer = uv.new_timer()
+              local uv = vim.uv or vim.loop
+              local timer = uv and uv.new_timer and uv.new_timer() or nil
+              if not timer then
+                vim.notify('Failed to start rebase watcher', vim.log.levels.ERROR)
+                return
+              end
               timer:start(50, 50, vim.schedule_wrap(function()
                 if vim.fn.filereadable(marker_file) == 1 then
                   timer:stop()
                   timer:close()
                   local lines = vim.fn.readfile(marker_file)
-                  local commit_msg_path = lines[1] or ''
+                  local commit_msg_path = type(lines) == 'table' and lines[1] or ''
                   if commit_msg_path ~= '' then
                     vim.schedule(function()
                       local fname = vim.fn.fnameescape(commit_msg_path)
@@ -656,7 +677,10 @@ function M.setup(group)
             cur_match = new or cur_match
           end
           if abs and cur_match == f and vim.fn.isdirectory(abs) == 1 then
-            pcall(vim.cmd, 'Oil ' .. vim.fn.fnameescape(abs)); return
+            pcall(function()
+              vim.cmd('Oil ' .. vim.fn.fnameescape(abs))
+            end)
+            return
           end
         end
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:<cr>", true, false, true), 'm', true)
@@ -804,7 +828,7 @@ end
 
 function M.refresh_all()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if utils.is_valid_buf(bufnr) and vim.api.nvim_buf_get_option(bufnr, 'filetype') == 'fugitive' then
+    if utils.is_valid_buf(bufnr) and vim.bo[bufnr].filetype == 'fugitive' then
       M.refresh_buffer(bufnr)
     end
   end

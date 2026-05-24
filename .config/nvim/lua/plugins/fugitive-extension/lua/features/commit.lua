@@ -115,7 +115,10 @@ end
 local function get_diff_target_at_cursor(bufnr)
   local lnum = vim.api.nvim_win_get_cursor(0)[1]
   local filepath = utils.get_filepath_at_cursor(bufnr)
-  local _diff_filepath, _file_lnum, on_file_header, hunk_start, lines = get_diff_context_at_line(bufnr, lnum)
+  local context = { get_diff_context_at_line(bufnr, lnum) }
+  local on_file_header = context[3]
+  local hunk_start = context[4]
+  local lines = context[5]
   if not filepath then
     return nil
   end
@@ -300,13 +303,15 @@ local function open_file_fold(file_lnum)
     return false
   end
 
-  return pcall(vim.cmd, ('silent! %dfoldopen!'):format(file_lnum))
+  return pcall(function()
+    vim.cmd(('silent! %dfoldopen!'):format(file_lnum))
+  end)
 end
 
 local function save_commit_view_state(bufnr)
   local win = vim.api.nvim_get_current_win()
   local lnum = vim.api.nvim_win_get_cursor(win)[1]
-  local filepath, file_lnum, _on_file_header, hunk_start, lines = get_diff_context_at_line(bufnr, lnum)
+  local filepath, file_lnum, _, hunk_start, lines = get_diff_context_at_line(bufnr, lnum)
   local state = {
     win = win,
     view = vim.fn.winsaveview(),
@@ -343,7 +348,9 @@ local function restore_commit_view_state(state)
 
   vim.api.nvim_win_call(state.win, function()
     if state.view_file then
-      pcall(vim.cmd, 'silent! loadview ' .. vim.fn.fnameescape(state.view_file))
+      pcall(function()
+        vim.cmd('silent! loadview ' .. vim.fn.fnameescape(state.view_file))
+      end)
     end
 
     local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -372,12 +379,18 @@ local function restore_commit_view_state(state)
     local screen_offset = math.max((state.view.lnum or 1) - (state.view.topline or 1), 0)
     view.lnum = target_line
     view.topline = clamp_line(target_line - screen_offset, max_line)
-    pcall(vim.fn.winrestview, view)
+    pcall(function()
+      vim.fn.winrestview(view)
+    end)
 
     local opened = open_file_fold(file_lnum)
-    pcall(vim.cmd, 'silent! normal! zv')
+    pcall(function()
+      vim.cmd('silent! normal! zv')
+    end)
     if opened then
-      pcall(vim.fn.winrestview, view)
+      pcall(function()
+        vim.fn.winrestview(view)
+      end)
     end
   end)
 
@@ -391,7 +404,9 @@ local function reopen_commit_preserving_view(new_hash, state)
   end
 
   vim.schedule(function()
-    local ok, err = pcall(vim.cmd, 'Gedit ' .. new_hash)
+    local ok, err = pcall(function()
+      vim.cmd('Gedit ' .. new_hash)
+    end)
     if not ok then
       cleanup_view_file(state and state.view_file or nil)
       vim.notify('Failed to reopen commit: ' .. err, vim.log.levels.ERROR)
@@ -669,7 +684,6 @@ end
 M._do_amend_from_buffer = function(bufnr, skip_confirm)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local commit = vim.b[bufnr] and vim.b[bufnr].amend_target or nil
-  local origin = vim.b[bufnr] and vim.b[bufnr].amend_origin_buf or nil
   local view_state = vim.b[bufnr] and vim.b[bufnr].amend_view_state or nil
   if not commit then
     vim.notify('No amend target', vim.log.levels.ERROR)

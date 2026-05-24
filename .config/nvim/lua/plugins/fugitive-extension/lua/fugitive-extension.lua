@@ -17,7 +17,7 @@ function M.setup()
     group = group,
     pattern = { 'git', 'fugitive', 'fugitiveblame', 'fugitivebranch', 'gitrebase', 'gitcommit' },
     callback = function(ev)
-      set_nowrap(ev.win, ev.buf)
+      set_nowrap(vim.api.nvim_get_current_win(), ev.buf)
     end,
   })
 
