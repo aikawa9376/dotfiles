@@ -71,6 +71,37 @@ local function reload_loaded_buffers_for_path(path)
     return { reloaded = 0, skipped_modified = 0 }
   end
 
+  local function focus_safe_checktime(bufnr)
+    local current_win = nil
+    local current_view = nil
+    do
+      local ok_win, win = pcall(vim.api.nvim_get_current_win)
+      if ok_win and win and vim.api.nvim_win_is_valid(win) then
+        current_win = win
+        local ok_view, view = pcall(vim.fn.winsaveview)
+        if ok_view and type(view) == "table" then
+          current_view = view
+        end
+      end
+    end
+
+    local ok = pcall(vim.api.nvim_buf_call, bufnr, function()
+      vim.cmd("silent checktime")
+    end)
+
+    if current_win and vim.api.nvim_win_is_valid(current_win) then
+      local ok_now, now = pcall(vim.api.nvim_get_current_win)
+      if ok_now and now ~= current_win then
+        pcall(vim.api.nvim_set_current_win, current_win)
+      end
+      if current_view then
+        pcall(vim.fn.winrestview, current_view)
+      end
+    end
+
+    return ok
+  end
+
   local result = { reloaded = 0, skipped_modified = 0 }
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_is_loaded(bufnr) then
@@ -79,8 +110,9 @@ local function reload_loaded_buffers_for_path(path)
         if vim.bo[bufnr].modified then
           result.skipped_modified = result.skipped_modified + 1
         else
-          pcall(vim.cmd, "silent checktime " .. tostring(bufnr))
-          result.reloaded = result.reloaded + 1
+          if focus_safe_checktime(bufnr) then
+            result.reloaded = result.reloaded + 1
+          end
         end
       end
     end

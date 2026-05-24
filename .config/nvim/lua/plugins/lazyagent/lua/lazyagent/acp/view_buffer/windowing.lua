@@ -469,20 +469,26 @@ function M.new(ctx)
     return buffer_stop
   end
 
+  local function window_info(win)
+    if not win or not vim.api.nvim_win_is_valid(win) then
+      return nil
+    end
+    local ok, info = pcall(vim.fn.getwininfo, win)
+    local entry = ok and type(info) == "table" and info[1] or nil
+    if type(entry) ~= "table" then
+      return nil
+    end
+    return entry
+  end
+
   function M._window_bottom_line(win)
-    local bottom = nil
-    pcall(vim.api.nvim_win_call, win, function()
-      bottom = vim.fn.line("w$")
-    end)
-    return tonumber(bottom)
+    local info = window_info(win)
+    return info and tonumber(info.botline) or nil
   end
 
   function M._window_topline(win)
-    local topline = nil
-    pcall(vim.api.nvim_win_call, win, function()
-      topline = vim.fn.winsaveview().topline
-    end)
-    return tonumber(topline)
+    local info = window_info(win)
+    return info and tonumber(info.topline) or nil
   end
 
   function M._window_view_reaches_transcript_end(win, bufnr)

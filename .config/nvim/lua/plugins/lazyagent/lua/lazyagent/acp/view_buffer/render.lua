@@ -26,6 +26,7 @@ function M.new(ctx)
   local DECORATE_SYNC_LINE_LIMIT = ctx.decorate_sync_line_limit
   local DECORATE_CHUNK_SIZE = ctx.decorate_chunk_size
   local ensure_highlights = ctx.ensure_highlights
+  local INCREMENTAL_NORMALIZE_LOOKBACK = 256
 
   local transcript_source_lines
   local normalize_header_lines
@@ -102,7 +103,24 @@ function M.new(ctx)
     return lines
   end
 
-  local function normalize_transcript_display(bufnr)
+  local function incremental_normalize_start(bufnr, start_idx)
+    start_idx = math.max(0, tonumber(start_idx) or 0)
+    if start_idx <= 0 then
+      return 0
+    end
+
+    local scan_start = math.max(0, start_idx - INCREMENTAL_NORMALIZE_LOOKBACK)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, scan_start, start_idx + 1, false)
+    for idx = #lines - 1, 1, -1 do
+      local line = lines[idx] or ""
+      if section_heading_for_line(line) or line:match("^%s*```") then
+        return scan_start + idx - 1
+      end
+    end
+    return scan_start
+  end
+
+  local function normalize_transcript_display(bufnr, start_idx)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
       return nil
     end
@@ -112,13 +130,18 @@ function M.new(ctx)
       return nil
     end
 
-    local normalized = transcript_source_lines(bufnr, 0, transcript_stop)
+    local normalize_start = start_idx == nil and 0 or math.min(transcript_stop, math.max(0, math.floor(start_idx)))
+    if normalize_start > 0 then
+      normalize_start = incremental_normalize_start(bufnr, normalize_start)
+    end
+
+    local normalized = transcript_source_lines(bufnr, normalize_start, transcript_stop)
     normalized = select(1, normalize_header_lines(bufnr, normalized))
     if diff_view and type(diff_view.normalize_diff_display_lines) == "function" then
       normalized = select(1, diff_view.normalize_diff_display_lines(bufnr, normalized, header_target_width(bufnr)))
     end
 
-    local current = vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false)
+    local current = vim.api.nvim_buf_get_lines(bufnr, normalize_start, transcript_stop, false)
     local first_diff, current_last, normalized_last = line_diff_range(current, normalized)
     if not first_diff then
       return nil
@@ -126,11 +149,11 @@ function M.new(ctx)
 
     replace_buffer_lines(
       bufnr,
-      first_diff - 1,
-      current_last,
+      normalize_start + first_diff - 1,
+      normalize_start + current_last,
       vim.list_slice(normalized, first_diff, normalized_last)
     )
-    return first_diff - 1
+    return normalize_start + first_diff - 1
   end
 
   local function cancel_deferred_decoration(bufnr)
@@ -214,9 +237,15 @@ function M.new(ctx)
     end
 
     vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, range_start, range_stop)
-    local display_meta = layout_entry(bufnr).transcript_display_meta or {}
+    local entry = layout_entry(bufnr)
+    local display_meta = entry.transcript_display_meta or {}
     local heading_rows = type(display_meta.heading_rows) == "table" and display_meta.heading_rows or {}
-    local pinned_rows = pinned_section_rows(bufnr, vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false))
+    local pinned_rows = type(display_meta.pinned_rows) == "table" and display_meta.pinned_rows or nil
+    if type(pinned_rows) ~= "table" then
+      pinned_rows = pinned_section_rows(bufnr, vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false))
+      display_meta.pinned_rows = pinned_rows
+      entry.transcript_display_meta = display_meta
+    end
     for idx, line in ipairs(lines) do
       local row = range_start + idx - 1
       local header_hl = nil
