@@ -32,6 +32,9 @@ end
 -- Prefer scratch detection (vim.b[bufnr].lazyagent_source_bufnr) or markdown/text filetypes.
 -- If you prefer the source to always be available, change to `return true`.
 function source.is_available(self)
+  local ok_mode, mode = pcall(vim.api.nvim_get_mode)
+  mode = ok_mode and mode and mode.mode or ""
+  if type(mode) == "string" and mode:sub(1, 1) == "c" then return false end
   local bufnr = vim.api.nvim_get_current_buf()
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end
   if vim.b[bufnr] and (vim.b[bufnr].lazyagent_source_bufnr or vim.b[bufnr].lazyagent_agent) then return true end

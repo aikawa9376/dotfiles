@@ -624,9 +624,18 @@ function M.setup(deps)
   end
 
   function module.open_raw_transcript(agent_name)
-    resolve_active_acp_session(agent_name, function(chosen)
+    with_acp_session(agent_name, function(chosen, pane_id, backend_mod)
       local session = state.sessions[chosen]
-      local path = session and session.transcript_path or nil
+      local path = session and (session.acp_transcript_path or session.transcript_path) or nil
+
+      if (not path or path == "") and backend_mod and type(backend_mod.get_runtime_snapshot) == "function" then
+        local snapshot = backend_mod.get_runtime_snapshot(pane_id)
+        path = snapshot and (snapshot.acp_transcript_path or snapshot.transcript_path) or nil
+        if session and path and path ~= "" then
+          session.acp_transcript_path = path
+        end
+      end
+
       if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
         vim.notify("LazyAgentACP: raw transcript is unavailable for '" .. tostring(chosen) .. "'", vim.log.levels.WARN)
         return

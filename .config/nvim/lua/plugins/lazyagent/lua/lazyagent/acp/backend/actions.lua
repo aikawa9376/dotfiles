@@ -28,9 +28,20 @@ function M.setup(deps)
   local buffer_root_for_session
 
   local module = {}
+  local ACP_MARKDOWN_FILETYPE = "lazyagent_acp_markdown"
 
   local function hook_reload_enabled()
     return (((state.opts or {}).hooks or {}).reload_mode or "hook") ~= "watch"
+  end
+
+  local function apply_output_buffer_filetype(bufnr, filetype)
+    local resolved = filetype or "markdown"
+    if resolved == "markdown" then
+      vim.bo[bufnr].filetype = ACP_MARKDOWN_FILETYPE
+      pcall(vim.treesitter.start, bufnr, "markdown")
+      return
+    end
+    vim.bo[bufnr].filetype = resolved
   end
 
 local function render_tool_timeline_detail(session, entry)
@@ -170,7 +181,7 @@ local function open_output_buffer(session, name, filetype, lines)
   vim.bo[buf].swapfile = false
   vim.bo[buf].undofile = false
   vim.bo[buf].modifiable = true
-  vim.bo[buf].filetype = filetype or "markdown"
+  apply_output_buffer_filetype(buf, filetype)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, normalize_buffer_lines(lines or {}))
   if name and name ~= "" then
     vim.api.nvim_buf_set_name(buf, string.format("%s [%d]", name, buf))

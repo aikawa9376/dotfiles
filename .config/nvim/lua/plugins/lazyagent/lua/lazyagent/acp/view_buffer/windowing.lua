@@ -887,6 +887,8 @@ function M.new(ctx)
     pcall(function()
       vim.api.nvim_buf_set_name(bufnr, "")
       vim.api.nvim_buf_set_name(bufnr, string.format("lazyagent://acp/%s-%s", safe_agent_name, pane_key))
+      vim.b[bufnr].lazyagent_acp_transcript = true
+      vim.bo[bufnr].filetype = ACP_TRANSCRIPT_FILETYPE
       vim.b[bufnr].lazyagent_acp_pane_id = pane_key
       vim.b[bufnr].lazyagent_acp_agent = agent_name
       vim.b[bufnr].lazyagent_acp_transcript_path = transcript_path

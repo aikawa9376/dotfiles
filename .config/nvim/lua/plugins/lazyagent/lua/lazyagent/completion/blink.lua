@@ -45,6 +45,9 @@ end
 -- - scratch buffers with a persisted origin bufnr (vim.b[buf].lazyagent_source_bufnr)
 -- - or common textlike filetypes like markdown/text
 function source:enabled(ctx)
+  local ok_mode, mode = pcall(vim.api.nvim_get_mode)
+  mode = ok_mode and mode and mode.mode or ""
+  if type(mode) == "string" and mode:sub(1, 1) == "c" then return false end
   local bufnr = (ctx and ctx.bufnr) or vim.api.nvim_get_current_buf()
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end
 
