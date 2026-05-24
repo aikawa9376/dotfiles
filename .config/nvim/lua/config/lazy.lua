@@ -55,6 +55,8 @@ require("lazy").setup({
     { import = "plugins.harpoon" },
     { import = "plugins.fzf-lua" },
     { import = "plugins.render_markdown" },
+    { import = "plugins.obsidian" },
+    { import = "plugins.obsidian-extension" },
     { import = "plugins.time-machine" },
     { import = "plugins.grug-far" },
     { import = "plugins.junkfile" },
