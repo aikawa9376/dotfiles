@@ -34,6 +34,12 @@ function M.new(ctx)
   })
   local metadata_popup_win = nil
   local metadata_popup_source_buf = nil
+  local ACP_METADATA_FILETYPE = "lazyagent_acp_metadata"
+
+  local function apply_metadata_popup_filetype(bufnr)
+    vim.bo[bufnr].filetype = ACP_METADATA_FILETYPE
+    pcall(vim.treesitter.start, bufnr, "markdown")
+  end
 
   local function current_context_item(bufnr, context)
     local entry = layout_entry(bufnr)
@@ -1100,7 +1106,7 @@ function M.new(ctx)
       vim.bo[popup_buf].swapfile = false
       vim.bo[popup_buf].modifiable = true
       vim.bo[popup_buf].readonly = false
-      vim.bo[popup_buf].filetype = "markdown"
+      apply_metadata_popup_filetype(popup_buf)
       vim.b[popup_buf].lazyagent_acp_metadata_popup = true
       vim.api.nvim_buf_set_lines(popup_buf, 0, -1, false, lines)
       vim.bo[popup_buf].modifiable = false

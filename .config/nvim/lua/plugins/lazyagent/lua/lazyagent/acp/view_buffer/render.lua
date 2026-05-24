@@ -150,15 +150,14 @@ function M.new(ctx)
       return 0, math.min(transcript_stop, DECORATE_CHUNK_SIZE)
     end
 
-    local ok, bounds = pcall(vim.api.nvim_win_call, win, function()
-      return { vim.fn.line("w0"), vim.fn.line("w$") }
-    end)
-    if not ok or type(bounds) ~= "table" then
+    local ok, info = pcall(vim.fn.getwininfo, win)
+    local bounds = ok and type(info) == "table" and info[1] or nil
+    if type(bounds) ~= "table" then
       return 0, math.min(transcript_stop, DECORATE_CHUNK_SIZE)
     end
 
-    local top = math.max(1, tonumber(bounds[1]) or 1)
-    local bottom = math.max(top, tonumber(bounds[2]) or top)
+    local top = math.max(1, tonumber(bounds.topline) or 1)
+    local bottom = math.max(top, tonumber(bounds.botline) or top)
     local range_start = math.max(0, top - 1 - DECORATE_PREFETCH_MARGIN)
     local range_stop = math.min(transcript_stop, bottom + DECORATE_PREFETCH_MARGIN)
     return range_start, math.max(range_start, range_stop)

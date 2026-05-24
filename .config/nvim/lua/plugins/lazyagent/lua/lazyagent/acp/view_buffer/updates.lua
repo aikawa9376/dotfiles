@@ -306,10 +306,9 @@ function M.new(ctx)
     local col = math.max(0, #last_line)
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
       if vim.api.nvim_win_is_valid(win) then
-        pcall(vim.api.nvim_win_call, win, function()
+        pcall(function()
           vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
           vim.api.nvim_win_set_cursor(win, { row, col })
-          vim.cmd("silent! normal! zb")
         end)
       end
     end
@@ -612,11 +611,11 @@ function M.new(ctx)
     end
 
     local pending = session.view_state.pending_append or ""
-    session.view_state.pending_append = ""
     if pending == "" then
       return false
     end
 
+    session.view_state.pending_append = ""
     local visible = buffer_is_visible(bufnr)
     local changed_start = nil
     local needs_full_refresh = false
