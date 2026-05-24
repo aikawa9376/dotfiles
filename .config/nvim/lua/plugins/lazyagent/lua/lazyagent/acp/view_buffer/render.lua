@@ -239,12 +239,9 @@ function M.new(ctx)
           vim.highlight.range(bufnr, transcript_ns, header_hl, start_pos, end_pos)
         end)
         if not ok then
-          local ok2 = pcall(function()
+          pcall(function()
             vim.api.nvim_buf_set_extmark(bufnr, transcript_ns, row, 0, { hl_group = header_hl, hl_eol = true })
           end)
-          if not ok2 then
-            pcall(function() vim.api.nvim_buf_add_highlight(bufnr, transcript_ns, header_hl, row, 0, -1) end)
-          end
         end
       end
       if pinned_rows[row + 1] then

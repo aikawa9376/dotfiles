@@ -1,4 +1,4 @@
-local uv = vim.loop
+local uv = vim.uv or vim.loop
 
 local Client = {}
 Client.__index = Client
@@ -711,13 +711,20 @@ function Client:start(callback, opts)
   local stdout = uv.new_pipe(false)
   local stderr = uv.new_pipe(false)
 
-  local handle, pid = uv.spawn(self.command, {
+  local spawn_opts = {
     args = self.args,
     cwd = self.cwd,
     env = build_env(self.env),
     stdio = { stdin, stdout, stderr },
     detached = false,
-  }, function(code, signal)
+    uid = type(uv.getuid) == "function" and uv.getuid() or nil,
+    gid = type(uv.getgid) == "function" and uv.getgid() or nil,
+    hide = false,
+    verbatim = false,
+  }
+  local handle
+  local pid
+  handle, pid = uv.spawn(self.command, spawn_opts, function(code, signal)
     safe_close(stdin)
     safe_close(stdout)
     safe_close(stderr)

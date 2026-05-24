@@ -35,6 +35,12 @@ end
 M.resume_acp_conversation = function(agent_name)
   return session_logic.resume_acp_conversation(agent_name)
 end
+M.restart_acp_session = function(agent_name)
+  return session_logic.restart_acp_session(agent_name)
+end
+M.restore_acp_restart_state = function(bundle_path)
+  return session_logic.restore_acp_restart_state(bundle_path)
+end
 M.pick_acp_sessions = session_logic.pick_acp_sessions
 M.pick_acp_config = session_logic.pick_acp_config
 M.pick_acp_model = session_logic.pick_acp_model

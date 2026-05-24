@@ -71,7 +71,7 @@ local function make_item(tok, source_bufnr, typed_prefix)
   local label = completion_label(tok, typed_prefix)
   local insert_text = label
 
-  local preview, meta = transforms.preview_token(tok.name, { source_bufnr = source_bufnr or vim.api.nvim_get_current_buf() })
+  local preview = transforms.preview_token(tok.name, { source_bufnr = source_bufnr or vim.api.nvim_get_current_buf() })
   local doc_value = ""
   if preview and preview ~= "" then
     if tok.preview_as_markdown == true or preview:match("^```") then

@@ -2,6 +2,7 @@ local M = {}
 
 function M.attach(api, ctx)
   local M = api
+  local image_paste = require("lazyagent.logic.image_paste")
   local footer_view = ctx.footer_view
   local ensure_layout_autocmds = ctx.ensure_layout_autocmds
   local to_bufnr = ctx.to_bufnr
@@ -30,8 +31,6 @@ function M.attach(api, ctx)
   local layout_state = ctx.layout_state
   local dedicated_transcript_windows = ctx.dedicated_transcript_windows
   local redirecting_transcript_windows = ctx.redirecting_transcript_windows
-  local should_follow_output = ctx.should_follow_output
-  local scroll_buffer_to_end = ctx.scroll_buffer_to_end
   local allocate_pane_id = ctx.allocate_pane_id
   local close_timer = ctx.close_timer
   local queue_append = ctx.queue_append
@@ -96,6 +95,7 @@ function M.attach(api, ctx)
       fancy_mode = args.acp and args.acp.fancy_mode == true,
       release_buffer_on_hide = args.acp and args.acp.release_buffer_on_hide == true,
       transcript_max_lines = args.acp and args.acp.transcript_max_lines or nil,
+      render_markdown_max_lines = args.acp and args.acp.render_markdown_max_lines or nil,
       transcript_compaction = vim.deepcopy(args.acp and args.acp.transcript_compaction or {}),
     })
 
@@ -204,6 +204,9 @@ function M.attach(api, ctx)
     local bufnr = to_bufnr(session.pane_id)
     if bufnr then
       cleanup_markdown_rendering(bufnr)
+      if type(image_paste.clear_buffer_previews) == "function" then
+        image_paste.clear_buffer_previews(bufnr)
+      end
     end
 
     local view_state = type(session.view_state) == "table" and session.view_state or nil
@@ -227,6 +230,9 @@ function M.attach(api, ctx)
     end
     if bufnr then
       cleanup_markdown_rendering(bufnr)
+      if type(image_paste.clear_buffer_previews) == "function" then
+        image_paste.clear_buffer_previews(bufnr)
+      end
     end
     pane_buffers[tostring(pane_id)] = nil
     pane_config[tostring(pane_id)] = nil
@@ -295,6 +301,9 @@ function M.attach(api, ctx)
         fancy_mode = pane_opts.fancy_mode == true or (session and session.fancy_mode == true),
         release_buffer_on_hide = resolve_release_buffer_on_hide(pane_opts, session),
         transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
+        render_markdown_max_lines = pane_opts.render_markdown_max_lines
+          or (session and session.render_markdown_max_lines)
+          or nil,
         transcript_compaction = vim.deepcopy(
           pane_opts.transcript_compaction or (session and session.transcript_compaction) or {}
         ),
@@ -346,6 +355,9 @@ function M.attach(api, ctx)
       fancy_mode = pane_opts.fancy_mode == true or (session and session.fancy_mode == true),
       release_buffer_on_hide = resolve_release_buffer_on_hide(pane_opts, session),
       transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
+      render_markdown_max_lines = pane_opts.render_markdown_max_lines
+        or (session and session.render_markdown_max_lines)
+        or nil,
       transcript_compaction = vim.deepcopy(
         pane_opts.transcript_compaction or (session and session.transcript_compaction) or {}
       ),
@@ -382,6 +394,7 @@ function M.attach(api, ctx)
       table_layout = "table",
       release_buffer_on_hide = false,
       transcript_max_lines = nil,
+      render_markdown_max_lines = nil,
     })
     tab_opts.transcript_compaction = vim.tbl_deep_extend(
       "force",

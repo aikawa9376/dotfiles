@@ -7,6 +7,7 @@ function M.setup(deps)
   local backend_logic = deps.backend_logic
   local cache_logic = deps.cache_logic
   local persistence = deps.persistence
+  local tmux = require("lazyagent.tmux")
   local util = deps.util
   local current_editor_session_name = deps.current_editor_session_name
   local current_context_acp_agent = deps.current_context_acp_agent
@@ -31,6 +32,7 @@ function M.setup(deps)
   local backend_supports_persistence = deps.backend_supports_persistence
 
   local module = {}
+  local RESTART_BUNDLE_VERSION = 1
 
   local function native_session_display_name(session_info)
     if type(session_info) ~= "table" then
@@ -75,6 +77,216 @@ function M.setup(deps)
     end
 
     return table.concat(parts, "  --  ")
+  end
+
+  local function split_transcript_lines(text)
+    if not text or text == "" then
+      return {}
+    end
+    local lines = vim.split(text, "\n", { plain = true })
+    if #lines > 0 and lines[#lines] == "" then
+      table.remove(lines, #lines)
+    end
+    return lines
+  end
+
+  local function normal_file_path(bufnr)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].buftype ~= "" then
+      return nil
+    end
+    local path = vim.api.nvim_buf_get_name(bufnr)
+    if not path or path == "" then
+      return nil
+    end
+    return vim.fn.fnamemodify(path, ":p")
+  end
+
+  local function modified_file_buffers()
+    local items = {}
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].buftype == "" and vim.bo[bufnr].modified then
+        items[#items + 1] = normal_file_path(bufnr) or ("[No Name " .. tostring(bufnr) .. "]")
+      end
+    end
+    table.sort(items)
+    return items
+  end
+
+  local function restart_bundle_dir()
+    local dir = cache_logic.get_cache_dir() .. "/acp/restart"
+    if vim.fn.isdirectory(dir) == 0 then
+      vim.fn.mkdir(dir, "p")
+    end
+    return dir
+  end
+
+  local function restart_bundle_path(agent_name)
+    local loop = vim.uv or vim.loop
+    local stamp = loop and tostring(loop.hrtime()) or tostring(os.time())
+    return string.format(
+      "%s/%s-%s.json",
+      restart_bundle_dir(),
+      util.sanitize_filename_component(agent_name or "acp"),
+      stamp
+    )
+  end
+
+  local function write_restart_bundle(path, bundle)
+    local ok, encoded = pcall(vim.fn.json_encode, bundle)
+    if not ok or not encoded then
+      return false
+    end
+    return pcall(vim.fn.writefile, { encoded }, path)
+  end
+
+  local function read_restart_bundle(path)
+    if not path or path == "" or vim.fn.filereadable(path) == 0 then
+      return nil
+    end
+    local ok, lines = pcall(vim.fn.readfile, path)
+    if not ok or type(lines) ~= "table" or #lines == 0 then
+      return nil
+    end
+    local ok_decode, bundle = pcall(vim.fn.json_decode, table.concat(lines, "\n"))
+    if not ok_decode or type(bundle) ~= "table" then
+      return nil
+    end
+    return bundle
+  end
+
+  local function build_restart_command(bundle_path_value, source_path)
+    local argv = { vim.v.progpath }
+    if source_path and source_path ~= "" then
+      argv[#argv + 1] = source_path
+    end
+    argv[#argv + 1] = "+LazyAgentACPRestoreRestartState " .. vim.fn.fnameescape(bundle_path_value)
+    return "exec " .. table.concat(vim.tbl_map(function(arg)
+      return vim.fn.shellescape(tostring(arg))
+    end, argv), " ")
+  end
+
+  local function cleanup_restart_bundle(bundle_path_value, transcript_path)
+    if bundle_path_value and bundle_path_value ~= "" then
+      pcall(vim.fn.delete, bundle_path_value)
+    end
+    if transcript_path and transcript_path ~= "" then
+      pcall(vim.fn.delete, transcript_path)
+    end
+  end
+
+  local function capture_restart_transcript(agent_name, session, backend_mod)
+    if backend_mod and type(backend_mod.capture_pane_sync) == "function" then
+      local text = backend_mod.capture_pane_sync(session.pane_id) or ""
+      local lines = split_transcript_lines(text)
+      if #lines > 0 then
+        return lines
+      end
+    end
+
+    local path = session and (session.acp_transcript_path or session.transcript_path) or nil
+    if path and path ~= "" then
+      return read_saved_conversation_lines(path) or {}
+    end
+
+    vim.notify(
+      "LazyAgentACP: failed to capture the current transcript for '" .. tostring(agent_name) .. "'",
+      vim.log.levels.WARN
+    )
+    return {}
+  end
+
+  local function build_restart_bundle(agent_name, session, backend_mod)
+    local runtime_snapshot = type(backend_mod.get_runtime_snapshot) == "function"
+      and backend_mod.get_runtime_snapshot(session.pane_id)
+      or nil
+    local scratch_state = capture_switch_scratch_state(agent_name)
+    local anchor = resolve_switch_anchor(runtime_snapshot, scratch_state)
+    local source_path = normal_file_path(anchor.source_bufnr)
+    local source_cursor = nil
+    if anchor.source_winid and vim.api.nvim_win_is_valid(anchor.source_winid) then
+      source_cursor = vim.api.nvim_win_get_cursor(anchor.source_winid)
+    end
+
+    local transcript_lines = capture_restart_transcript(agent_name, session, backend_mod)
+    local transcript_path = nil
+    local metadata = {}
+    if #transcript_lines > 0 then
+      transcript_path = write_provider_switch_snapshot(agent_name, transcript_lines)
+      if transcript_path then
+        metadata = build_conversation_sidecar(agent_name, session, transcript_path, transcript_lines)
+      end
+    end
+
+    local model_catalog = runtime_snapshot and runtime_snapshot.acp_model_catalog or session.model_catalog or {}
+    local mode_catalog = runtime_snapshot and runtime_snapshot.acp_mode_catalog or session.mode_catalog or {}
+
+    return {
+      version = RESTART_BUNDLE_VERSION,
+      kind = "lazyagent-acp-restart",
+      created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+      agent_name = agent_name,
+      cwd = session.cwd or (source_path and util.git_root_for_path(source_path)) or vim.fn.getcwd(),
+      source_path = source_path,
+      source_cursor = source_cursor,
+      scratch = {
+        was_open = scratch_state and scratch_state.was_open == true or false,
+        text = scratch_state and scratch_state.text or "",
+      },
+      transcript_path = transcript_path,
+      conversation_timeline = metadata.conversation_timeline or {},
+      tool_timeline = metadata.tool_timeline or {},
+      carryover_label = string.format("the ACP conversation from before restart (%s)", agent_name),
+      transition_message = string.format(
+        "Restored ACP context for %s after restarting Neovim.",
+        agent_name
+      ),
+      acp = {
+        auto_permission = session.auto_permission,
+        default_mode = (type(mode_catalog) == "table" and mode_catalog.currentModeId) or session.default_mode,
+        initial_model = (type(model_catalog) == "table" and model_catalog.currentModelId) or session.initial_model,
+      },
+    }
+  end
+
+  local function resolve_tmux_pane()
+    if vim.env.TMUX_PANE and vim.env.TMUX_PANE ~= "" then
+      return vim.env.TMUX_PANE
+    end
+
+    local ok, lines = pcall(vim.fn.systemlist, { "tmux", "display-message", "-p", "-F", "#{pane_id}" })
+    if not ok or vim.v.shell_error ~= 0 or type(lines) ~= "table" then
+      return nil
+    end
+    local pane = lines[1]
+    if type(pane) ~= "string" or pane == "" then
+      return nil
+    end
+    return pane
+  end
+
+  local function restore_restart_anchor(bundle)
+    local source_path = type(bundle.source_path) == "string" and bundle.source_path or nil
+    if source_path and source_path ~= "" and vim.fn.filereadable(source_path) == 1 then
+      local current_name = vim.api.nvim_buf_get_name(0)
+      local current_path = current_name ~= "" and vim.fn.fnamemodify(current_name, ":p") or ""
+      local target_path = vim.fn.fnamemodify(source_path, ":p")
+      if current_path ~= target_path then
+        pcall(vim.cmd.edit, vim.fn.fnameescape(target_path))
+      end
+    end
+
+    local source_winid = vim.api.nvim_get_current_win()
+    local source_bufnr = vim.api.nvim_get_current_buf()
+    if type(bundle.source_cursor) == "table" and #bundle.source_cursor >= 2 and vim.api.nvim_win_is_valid(source_winid) then
+      local line = math.max(1, tonumber(bundle.source_cursor[1]) or 1)
+      local col = math.max(0, tonumber(bundle.source_cursor[2]) or 0)
+      pcall(vim.api.nvim_win_set_cursor, source_winid, { line, col })
+    end
+
+    return {
+      source_bufnr = vim.api.nvim_buf_is_valid(source_bufnr) and source_bufnr or nil,
+      source_winid = vim.api.nvim_win_is_valid(source_winid) and source_winid or nil,
+    }
   end
 
   function module.resume_acp_conversation(agent_name)
@@ -558,6 +770,139 @@ function M.setup(deps)
             force_close_session(current_agent)
           end
         end)
+      end)
+    end)
+  end
+
+  function module.restart_acp_session(agent_name)
+    resolve_active_acp_session(agent_name, function(chosen_agent)
+      local session = state.sessions[chosen_agent]
+      if not session or not session.pane_id or session.pane_id == "" then
+        vim.notify("LazyAgentACP: no active session found for '" .. tostring(chosen_agent) .. "'", vim.log.levels.WARN)
+        return
+      end
+
+      local current_agent_cfg = agent_logic.get_interactive_agent(chosen_agent)
+      local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen_agent, current_agent_cfg)
+      if not backend_mod then
+        vim.notify("LazyAgentACP: failed to resolve backend for '" .. tostring(chosen_agent) .. "'", vim.log.levels.ERROR)
+        return
+      end
+      if type(backend_mod.is_busy) == "function" and backend_mod.is_busy(session.pane_id) then
+        vim.notify("LazyAgentACP: stop the current response before restarting Neovim", vim.log.levels.WARN)
+        return
+      end
+
+      local modified = modified_file_buffers()
+      if #modified > 0 then
+        local preview = table.concat(vim.list_slice(modified, 1, math.min(#modified, 3)), ", ")
+        local suffix = #modified > 3 and " ..." or ""
+        vim.notify(
+          "LazyAgentACP: save modified buffers before restarting Neovim (" .. preview .. suffix .. ")",
+          vim.log.levels.WARN
+        )
+        return
+      end
+
+      local tmux_pane = resolve_tmux_pane()
+      if not tmux_pane then
+        vim.notify("LazyAgentACP: ACP restart currently requires running Neovim inside tmux", vim.log.levels.WARN)
+        return
+      end
+
+      local bundle = build_restart_bundle(chosen_agent, session, backend_mod)
+      local bundle_path_value = restart_bundle_path(chosen_agent)
+      if not write_restart_bundle(bundle_path_value, bundle) then
+        cleanup_restart_bundle(bundle_path_value, bundle.transcript_path)
+        vim.notify("LazyAgentACP: failed to write the ACP restart bundle", vim.log.levels.ERROR)
+        return
+      end
+
+      local command = build_restart_command(bundle_path_value, bundle.source_path)
+      local ok = tmux.run({
+        "respawn-pane",
+        "-k",
+        "-t",
+        tmux_pane,
+        "-c",
+        bundle.cwd or vim.fn.getcwd(),
+        command,
+      })
+      if not ok then
+        cleanup_restart_bundle(bundle_path_value, bundle.transcript_path)
+        vim.notify("LazyAgentACP: failed to restart the current tmux pane", vim.log.levels.ERROR)
+      end
+    end)
+  end
+
+  function module.restore_acp_restart_state(bundle_path_value)
+    local bundle = read_restart_bundle(bundle_path_value)
+    if not bundle then
+      vim.notify("LazyAgentACP: restart bundle is missing or invalid", vim.log.levels.ERROR)
+      return
+    end
+
+    pcall(vim.fn.delete, bundle_path_value)
+
+    vim.schedule(function()
+      local agent_name = tostring(bundle.agent_name or "")
+      if agent_name == "" then
+        vim.notify("LazyAgentACP: restart bundle did not contain an ACP agent", vim.log.levels.ERROR)
+        return
+      end
+
+      local agent_cfg = agent_logic.get_interactive_agent(agent_name)
+      if not agent_cfg then
+        vim.notify("LazyAgentACP: unknown ACP agent in restart bundle: " .. agent_name, vim.log.levels.ERROR)
+        return
+      end
+
+      local anchor = restore_restart_anchor(bundle)
+      local next_agent_cfg = vim.tbl_deep_extend("force", agent_cfg or {}, {
+        source_bufnr = anchor.source_bufnr,
+        origin_bufnr = anchor.source_bufnr,
+        source_winid = anchor.source_winid,
+        origin_winid = anchor.source_winid,
+        acp = {
+          auto_permission = bundle.acp and bundle.acp.auto_permission or nil,
+          default_mode = bundle.acp and bundle.acp.default_mode or nil,
+          initial_model = bundle.acp and bundle.acp.initial_model or nil,
+        },
+      })
+
+      ensure_session(agent_name, next_agent_cfg, false, function(new_pane_id)
+        local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, next_agent_cfg)
+        if backend_mod and type(backend_mod.restore_switch_snapshot) == "function" then
+          local transcript_lines = read_saved_conversation_lines(bundle.transcript_path) or {}
+          local transcript_path = bundle.transcript_path
+          if transcript_path and transcript_path ~= "" and vim.fn.filereadable(transcript_path) ~= 1 then
+            transcript_path = nil
+          end
+          backend_mod.restore_switch_snapshot(new_pane_id, {
+            provider_from = agent_name,
+            carryover_label = bundle.carryover_label or string.format("the ACP conversation from before restart (%s)", agent_name),
+            transcript_lines = transcript_lines,
+            transcript_path = transcript_path,
+            conversation_timeline = bundle.conversation_timeline or {},
+            tool_timeline = bundle.tool_timeline or {},
+            transition_message = bundle.transition_message
+              or string.format("Restored ACP context for %s after restarting Neovim.", agent_name),
+          })
+        elseif bundle.transcript_path and bundle.transcript_path ~= "" then
+          pcall(vim.fn.delete, bundle.transcript_path)
+        end
+
+        if bundle.scratch and bundle.scratch.was_open then
+          start_interactive_session({
+            agent_name = agent_name,
+            reuse = true,
+            initial_input = bundle.scratch.text or "",
+            source_bufnr = anchor.source_bufnr,
+            origin_bufnr = anchor.source_bufnr,
+            source_winid = anchor.source_winid,
+            origin_winid = anchor.source_winid,
+          })
+        end
       end)
     end)
   end

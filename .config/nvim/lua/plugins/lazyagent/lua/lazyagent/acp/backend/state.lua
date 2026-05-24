@@ -126,7 +126,7 @@ local function write_session_transcript(session, text, mode)
   if ok and session.view and type(session.view.on_transcript_updated) == "function" then
     vim.schedule(function()
       pcall(session.view.on_transcript_updated, session, text, mode)
-    end, session.session_bootstrap)
+    end)
   end
   return ok
 end

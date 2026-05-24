@@ -139,6 +139,8 @@ function M.build()
         max_width = 80,
         max_height = 20,
         auto_resize = true,
+        acp_max_previews = 6,
+        acp_prefetch_lines = 40,
       },
     },
     skills = {

@@ -13,6 +13,8 @@ function M.setup(deps)
   local tool_heading
   local append_block
   local build_switch_history_blocks
+  local summarize_inline
+  local resolve_permission_option
 
   local module = {}
 
@@ -202,6 +204,18 @@ local function compact_old_text(text, limit)
   return text:sub(1, math.max(1, limit - 18)) .. "\n... [truncated]"
 end
 
+local function compact_tool_snapshot(tool)
+  if type(tool) ~= "table" then
+    return nil
+  end
+  return {
+    toolCallId = tool.toolCallId,
+    title = tool.title,
+    kind = tool.kind,
+    status = tool.status,
+  }
+end
+
 local function prune_runtime_timelines(session)
   if not session then
     return
@@ -232,6 +246,7 @@ local function prune_runtime_timelines(session)
       if entry.pinned == true or idx >= tool_recent_start then
         entry.rendered_content = compact_old_text(entry.rendered_content, cfg.tool_output_limit)
         entry.rendered_raw_output = compact_old_text(entry.rendered_raw_output, cfg.tool_output_limit)
+        entry.tool = compact_tool_snapshot(entry.tool)
       else
         entry.rendered_content = ""
         entry.rendered_raw_output = ""
@@ -531,7 +546,7 @@ local function summarize_tool_block(tool, title, body)
   return string.format("%s\n%s %d %s", title, action ~= "" and action or "tool", count, unit)
 end
 
-local function summarize_inline(text, limit)
+summarize_inline = function(text, limit)
   local normalized = normalize_text(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
   limit = tonumber(limit) or 120
   if normalized == "" then
@@ -715,6 +730,34 @@ local function permission_rule_label(rule, idx)
   return string.format("rule #%d", idx)
 end
 
+resolve_permission_option = function(options, preferred_kind)
+  if type(options) ~= "table" then
+    return nil
+  end
+  if preferred_kind then
+    for _, option in ipairs(options) do
+      if option.kind == preferred_kind then
+        return option
+      end
+    end
+  end
+  if preferred_kind and preferred_kind:match("^allow") then
+    for _, option in ipairs(options) do
+      if type(option.kind) == "string" and option.kind:match("^allow") then
+        return option
+      end
+    end
+  end
+  if preferred_kind and preferred_kind:match("^reject") then
+    for _, option in ipairs(options) do
+      if type(option.kind) == "string" and option.kind:match("^reject") then
+        return option
+      end
+    end
+  end
+  return options[1]
+end
+
 local function resolve_permission_rule_action(options, action)
   local normalized = tostring(action or ""):lower()
   if normalized == "" or normalized == "prompt" or normalized == "manual" or normalized == "ask" then
@@ -842,7 +885,7 @@ local function upsert_tool_timeline(session, tool)
   entry.rendered_content = render_tool_content(tool.content)
   entry.rendered_raw_output = render_tool_raw_output(tool.rawOutput)
   entry.pinned = entry.pinned == true
-  entry.tool = vim.deepcopy(tool)
+  entry.tool = compact_tool_snapshot(tool)
 
   if not idx then
     session.tool_timeline[#session.tool_timeline + 1] = entry

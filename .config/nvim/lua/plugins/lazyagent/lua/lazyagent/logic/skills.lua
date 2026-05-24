@@ -3,7 +3,7 @@ local M = {}
 local state = require("lazyagent.logic.state")
 local util = require("lazyagent.util")
 
-local uv = vim.loop
+local uv = vim.uv or vim.loop
 
 local function module_root()
   local info = debug.getinfo(1, "S")
@@ -15,7 +15,25 @@ local function module_root()
 end
 
 local function is_list(value)
-  return vim.islist and vim.islist(value) or vim.tbl_islist(value)
+  if vim.islist then
+    return vim.islist(value)
+  end
+  if type(value) ~= "table" then
+    return false
+  end
+  local count = 0
+  for key in pairs(value) do
+    if type(key) ~= "number" or key < 1 or key % 1 ~= 0 then
+      return false
+    end
+    count = count + 1
+  end
+  for index = 1, count do
+    if rawget(value, index) == nil then
+      return false
+    end
+  end
+  return true
 end
 
 local function ensure_dir(path)

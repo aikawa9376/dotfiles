@@ -11,7 +11,6 @@ function M.setup(deps)
   local file_uri = deps.file_uri
   local read_path_lines = deps.read_path_lines
   local reload_loaded_buffers_for_path = deps.reload_loaded_buffers_for_path
-  local normalize_text = deps.normalize_text
   local append_block = deps.append_block
   local render_tool_content = deps.render_tool_content
   local render_tool_raw_output = deps.render_tool_raw_output
@@ -32,6 +31,14 @@ function M.setup(deps)
 
   local function hook_reload_enabled()
     return (((state.opts or {}).hooks or {}).reload_mode or "hook") ~= "watch"
+  end
+
+  local function session_source_bufnr(session)
+    local bufnr = session and session.agent_cfg and (session.agent_cfg.source_bufnr or session.agent_cfg.origin_bufnr) or nil
+    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      return bufnr
+    end
+    return nil
   end
 
   local function apply_output_buffer_filetype(bufnr, filetype)
@@ -180,6 +187,7 @@ local function open_output_buffer(session, name, filetype, lines)
   vim.bo[buf].bufhidden = "wipe"
   vim.bo[buf].swapfile = false
   vim.bo[buf].undofile = false
+  vim.bo[buf].undolevels = -1
   vim.bo[buf].modifiable = true
   apply_output_buffer_filetype(buf, filetype)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, normalize_buffer_lines(lines or {}))
@@ -593,17 +601,6 @@ local function handle_local_slash_command(session, prompt)
   end
 
   return false
-end
-
-tool_heading = function(tool)
-  local parts = { "Tool" }
-  if tool.kind and tool.kind ~= "" then
-    table.insert(parts, tool.kind)
-  end
-  if tool.status and tool.status ~= "" then
-    table.insert(parts, tool.status)
-  end
-  return table.concat(parts, " ")
 end
 
 local function maybe_call_mcp_tool(name, params)

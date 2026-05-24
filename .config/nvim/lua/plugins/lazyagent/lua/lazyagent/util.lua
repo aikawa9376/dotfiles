@@ -134,7 +134,9 @@ function M.open_in_normal_win(path, opts)
     for _, w in ipairs(vim.api.nvim_list_wins()) do
       local ok, b = pcall(vim.api.nvim_win_get_buf, w)
       if ok and b then
-        local ok2, bt = pcall(vim.api.nvim_buf_get_option, b, "buftype")
+        local ok2, bt = pcall(function()
+          return vim.bo[b].buftype
+        end)
         if ok2 and (bt == "" or bt == "acwrite") then
           target = w
           break

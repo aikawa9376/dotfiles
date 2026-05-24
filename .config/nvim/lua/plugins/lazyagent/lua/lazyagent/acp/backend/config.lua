@@ -340,7 +340,7 @@ function M.setup(deps)
   local function apply_config_option_choice(session, option, choice, on_done, opts)
     opts = opts or {}
     if type(on_done) ~= "function" then
-      on_done = function() end
+      on_done = function(...) end
     end
     if not session.ready or session.failed or not session.client then
       append_block(session, "Error", "ACP session is not ready for configuration changes.")

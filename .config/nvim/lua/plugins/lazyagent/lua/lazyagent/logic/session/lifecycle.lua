@@ -35,7 +35,7 @@ local function send_interrupts_before_kill(agent_name, pane_id, backend_mod, syn
   end
 end
 
-local function wait_for_pane_process_exit(agent_name, pane_id, backend_mod, timeout_ms, sync)
+local function wait_for_pane_process_exit(pane_id, backend_mod, timeout_ms, sync)
   timeout_ms = timeout_ms or ((state.opts and state.opts.post_interrupt_wait_ms) or 2000)
   local poll_interval = math.max(40, ((state.opts and state.opts.interrupt_interval_ms) or 40))
   local elapsed = 0
@@ -97,7 +97,6 @@ function M.maybe_kill_pane(agent_name, pane_id, backend_mod, use_sync)
   pcall(send_interrupts_before_kill, agent_name, pane_id, backend_mod, use_sync)
   local ok_wait, exited = pcall(
     wait_for_pane_process_exit,
-    agent_name,
     pane_id,
     backend_mod,
     (state.opts and state.opts.post_interrupt_wait_ms) or 2000,

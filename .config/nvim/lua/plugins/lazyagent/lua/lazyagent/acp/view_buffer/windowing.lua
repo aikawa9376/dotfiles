@@ -656,6 +656,7 @@ function M.new(ctx)
     pcall(function()
       vim.bo[bufnr].swapfile = false
       vim.bo[bufnr].undofile = false
+      vim.bo[bufnr].undolevels = -1
       vim.bo[bufnr].buflisted = false
       vim.b[bufnr].lazyagent_acp_transcript = true
       vim.b[bufnr].illuminate_disable = true
