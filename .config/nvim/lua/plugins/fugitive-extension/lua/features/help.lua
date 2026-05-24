@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-global, undefined-doc-name
+
 local M = {}
 
 ---Open a small floating help window with the provided lines.

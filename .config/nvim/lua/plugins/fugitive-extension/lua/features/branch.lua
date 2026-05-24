@@ -1,3 +1,5 @@
+---@diagnostic disable: undefined-global
+
 local M = {}
 local utils = require("fugitive_utils")
 local commands = require("features.commands")
@@ -13,7 +15,8 @@ local function notify_branch_changed(bufnr, work_tree)
   })
 end
 
-_G.fugitive_branch_completion = function(arg_lead, cmd_line, cursor_pos)
+---@diagnostic disable-next-line: unused-vararg
+_G.fugitive_branch_completion = function(arg_lead, ...)
   local branches = vim.fn.systemlist("git branch -a --format='%(refname:short)'")
   if vim.v.shell_error ~= 0 then return {} end
   local matches = {}
@@ -213,7 +216,7 @@ local function get_branch_list(bufnr)
 
   local formatted = {}
   local truncated_info = {}
-  for i, b in ipairs(branches) do
+  for _, b in ipairs(branches) do
     -- Combine branch name with push info
     local branch_block = b.branch
     if b.push_info ~= '' then
@@ -433,9 +436,6 @@ local function delete_branches(bufnr, branches)
   end
 
   -- Show results
-  if #deleted > 0 then
-    -- vim.notify(string.format("Deleted: %s", table.concat(deleted, ", ")), vim.log.levels.INFO)
-  end
   if #failed > 0 then
     vim.notify(string.format("Failed: %s", table.concat(failed, ", ")), vim.log.levels.WARN)
   end
@@ -811,7 +811,7 @@ local function get_default_origin_head()
   return default_branch
 end
 
-local function diff_against_default(bufnr)
+local function diff_against_default()
   local branch = get_branch_name_from_line()
   if not branch then
     vim.notify("No branch found on this line", vim.log.levels.WARN)
@@ -1104,7 +1104,7 @@ function M.setup(group)
 
       -- D: Diff against default branch
       vim.keymap.set('n', 'd', function()
-        diff_against_default(bufnr)
+        diff_against_default()
       end, { buffer = bufnr, silent = true, desc = "Diff against default branch" })
 
       -- r<Space>: Stash, Fetch, Rebase

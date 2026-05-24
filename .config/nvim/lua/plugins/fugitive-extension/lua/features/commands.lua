@@ -133,13 +133,17 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
       table.remove(commit_info)
     end
 
-    utils.with_buf_modifiable(float_buf, function()
-      vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, commit_info)
-    end)
+    if float_buf and vim.api.nvim_buf_is_valid(float_buf) then
+      utils.with_buf_modifiable(float_buf, function()
+        vim.api.nvim_buf_set_lines(float_buf, 0, -1, false, commit_info)
+      end)
+    end
 
     local line_count = #commit_info
     local win_height = math.min(line_count, vim.o.lines - 4)
-    vim.api.nvim_win_set_height(float_win, win_height)
+    if float_win and vim.api.nvim_win_is_valid(float_win) then
+      vim.api.nvim_win_set_height(float_win, win_height)
+    end
   end
 
   vim.api.nvim_set_option_value('wrap', false, { win = float_win })
@@ -685,6 +689,11 @@ END {
 ]], current_commit:sub(1,7), target_commit:sub(1,7))
 
     local f = io.open(tmpfile, 'w')
+    if not f then
+      if stashed then pop_auto_stash(work_tree) end
+      vim.notify('Failed to create temp rebase script', vim.log.levels.ERROR)
+      return
+    end
     f:write(script)
     f:close()
     vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
@@ -732,7 +741,7 @@ END {
     -- Check if oldest commit has a parent
     vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. oldest_commit .. '^ 2>/dev/null')
     local rebase_base = oldest_commit .. '^'
-    
+
     if vim.v.shell_error ~= 0 then
       -- No parent (root commit). Need --root option.
       rebase_base = '--root'
@@ -747,7 +756,7 @@ END {
     end
 
     local commits_in_range = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-list ' .. range)
-    
+
     local all_dropped = true
     for _, rev in ipairs(commits_in_range) do
        local found = false
@@ -852,7 +861,9 @@ END {
   end
 
   -- Preview helpers ------------------------------------------------------
+  ---@type integer|nil
   local preview_win = nil
+  ---@type integer|nil
   local preview_buf = nil
   local preview_commit = nil
   local preview_update_timer = nil
@@ -942,8 +953,9 @@ END {
 
     -- Reuse existing preview window if present
     if preview_win and vim.api.nvim_win_is_valid(preview_win) then
+      ---@type integer|nil
       local prev_buf = preview_buf or vim.api.nvim_win_get_buf(preview_win)
-      if not vim.api.nvim_buf_is_valid(prev_buf) then
+      if not prev_buf or not vim.api.nvim_buf_is_valid(prev_buf) then
         prev_buf = nil
         preview_buf = nil
       end
@@ -997,8 +1009,8 @@ END {
     local buf = vim.api.nvim_get_current_buf()
 
     local buf_from_fugitive = open_with_fugitive(preview_win, commit)
-    local ok = buf_from_fugitive and vim.api.nvim_buf_is_valid(buf_from_fugitive)
-    if ok then
+    local ok = type(buf_from_fugitive) == 'number' and vim.api.nvim_buf_is_valid(buf_from_fugitive)
+    if ok and type(buf_from_fugitive) == 'number' then
       buf = buf_from_fugitive
     else
       ok = load_commit_into_buf(commit, buf)

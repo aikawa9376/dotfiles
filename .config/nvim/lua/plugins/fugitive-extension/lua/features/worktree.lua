@@ -22,10 +22,10 @@ local function get_work_tree(work_tree)
     return _cache.root
   end
 
-  local work_tree = utils.get_work_tree()
-  if not work_tree then return nil end
+  local detected_root = utils.get_work_tree()
+  if not detected_root then return nil end
 
-  _cache.root = work_tree
+  _cache.root = detected_root
   _cache.root_mtime = now
   return _cache.root
 end
@@ -146,7 +146,11 @@ end
 function M.refresh_worktree_list(bufnr)
   local current_root = utils.get_buf_work_tree(bufnr) or get_work_tree()
   local entries = get_worktrees(true, current_root)
-  local main_head = entries[1] and entries[1].head
+  if type(entries) ~= 'table' then
+    entries = {}
+  end
+  local primary = entries[1]
+  local main_head = primary and primary.head or nil
 
   local lines = {}
   for i, wt in ipairs(entries) do
@@ -204,8 +208,14 @@ end
 function M.sync_current_worktree_to_primary()
   local current_root = get_work_tree()
   local entries = get_worktrees(false, current_root)
+  if type(entries) ~= 'table' then
+    entries = {}
+  end
   if #entries < 2 then return end
   local primary = entries[1]
+  if not primary then
+    return
+  end
   local current = nil
   for _, wt in ipairs(entries) do
     if wt.path == current_root then current = wt; break end
@@ -246,8 +256,14 @@ end
 function M.worktree_needs_sync(path)
   local target = path and utils.normalize_path(path) or get_work_tree()
   local entries = get_worktrees(false, target)
+  if type(entries) ~= 'table' then
+    entries = {}
+  end
   if #entries < 2 then return false end
   local primary = entries[1]
+  if not primary then
+    return false
+  end
   for i, wt in ipairs(entries) do
     if wt.path == target then
       if i == 1 then return false end
@@ -288,10 +304,14 @@ end
 function M.remove_worktree_path(path, force)
   if not path or path == "" then return end
   local abs_path = utils.normalize_path(path)
+  if not abs_path then return false end
   local entries = get_worktrees()
+  if type(entries) ~= 'table' then return false end
   if #entries == 0 then return end
+  local primary = entries[1]
+  if not primary then return false end
 
-  if abs_path == entries[1].path then
+  if abs_path == primary.path then
     vim.notify("Cannot remove the primary worktree", vim.log.levels.WARN); return false
   end
 
@@ -306,12 +326,15 @@ function M.remove_worktree_path(path, force)
     vim.notify("Failed: " .. vim.fn.trim(output), vim.log.levels.ERROR); return false
   end
   M.clear_cache()
-  utils.fire_fugitive_changed({ work_tree = entries[1].path })
+  utils.fire_fugitive_changed({ work_tree = primary.path })
   return true
 end
 
 local function add_worktree(bufnr)
   local entries = get_worktrees(false, utils.get_buf_work_tree(bufnr))
+  if type(entries) ~= 'table' then
+    entries = {}
+  end
   if #entries == 0 then return end
   local primary = entries[1]
   local project_name = vim.fn.fnamemodify(primary.path, ':t')
@@ -342,20 +365,24 @@ end
 function M.get_summary(work_tree)
   local current_root = get_work_tree(work_tree)
   local entries = get_worktrees(false, current_root)
+  if type(entries) ~= 'table' then
+    entries = {}
+  end
   if #entries <= 1 then return nil end
-  local main_head = entries[1] and entries[1].head
+  local primary = entries[1]
+  local main_head = primary and primary.head or nil
 
   local lines = { 'Worktrees (' .. #entries .. ')' }
   for i, wt in ipairs(entries) do
     local path = vim.fn.fnamemodify(wt.path, ':~')
     local branch = wt.branch or '(detached)'
     local head = (wt.head or ''):sub(1, 7)
-    
+
     -- 同期アイコンの判定（親と同じハッシュなら表示）
     local is_main = (i == 1)
     local is_synced = (not is_main and main_head and wt.head == main_head)
     local sync_icon = is_synced and ' 󰚰' or ''
-    
+
     -- ステータス画面用は左詰め + 右側に同期アイコン
     table.insert(lines, string.format('%s  %s  %s%s', path, branch, head, sync_icon))
   end
@@ -380,7 +407,9 @@ function M.setup(group)
     vim.keymap.set('n', 'gs', function()
       local e = entry_at_cursor(b)
       local entries = get_worktrees()
-      if e and entries[1] then perform_sync(entries[1].path, e.head) end
+      if type(entries) ~= 'table' then return end
+      local primary = entries[1]
+      if e and primary then perform_sync(primary.path, e.head) end
     end, { buffer = b })
     vim.keymap.set('n', 'X', function() local e = entry_at_cursor(b); if e then M.remove_worktree_path(e.path) end end, { buffer = b })
     vim.keymap.set('n', 'a', function() add_worktree(b) end, { buffer = b })

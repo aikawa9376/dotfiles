@@ -57,6 +57,7 @@ function M.setup(group)
     group = group,
     pattern = 'fugitivereflog',
     callback = function(ev)
+      local buf_group = vim.api.nvim_create_augroup('fugitive_reflog_buf_' .. ev.buf, { clear = true })
       -- Syntax highlighting
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false

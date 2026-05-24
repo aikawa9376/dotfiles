@@ -6,7 +6,7 @@ function M.normalize_path(path)
   if not path or path == "" then
     return nil
   end
-  return vim.fn.fnamemodify(path, ':p'):gsub('/+$', '')
+  return (vim.fn.fnamemodify(path, ':p'):gsub('/+$', ''))
 end
 
 ---@param bufnr integer|nil
@@ -24,7 +24,11 @@ end
 ---@param bufnr integer|nil
 ---@return boolean
 function M.is_buf_visible(bufnr)
-  return M.is_valid_buf(bufnr) and #vim.fn.win_findbuf(bufnr) > 0
+  if not M.is_valid_buf(bufnr) then
+    return false
+  end
+  ---@cast bufnr integer
+  return #vim.fn.win_findbuf(bufnr) > 0
 end
 
 ---@param opts? {bufnr?: integer, git_dir?: string, notify?: boolean, not_git_message?: string, error_message?: string}
@@ -292,9 +296,9 @@ function M.get_filepath_at_cursor(bufnr)
       local status_match = line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
       if status_match then
         -- Handle rename "R old -> new"
-        local old, new = status_match:match('^(.+) %-> (.+)$')
-        if new then
-          return new
+        local renamed_to = status_match:match('^.+ %-> (.+)$')
+        if renamed_to then
+          return renamed_to
         end
         return status_match
       end
