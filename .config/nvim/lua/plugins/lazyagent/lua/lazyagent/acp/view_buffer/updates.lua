@@ -40,7 +40,6 @@ function M.new(ctx)
   local to_bufnr = ctx.to_bufnr
   local session_for_agent = ctx.session_for_agent
   local agent_name_for_bufnr = ctx.agent_name_for_bufnr
-  local trailing_section_has_open_markdown_fence = ctx.trailing_section_has_open_markdown_fence
   local is_markdown_fence = ctx.is_markdown_fence
   local section_heading_for_line = ctx.section_heading_for_line
   local split_markdown_table_cells = ctx.split_markdown_table_cells
@@ -325,14 +324,6 @@ function M.new(ctx)
     return count
   end
 
-  local function transcript_display_lines(bufnr)
-    local stop = transcript_line_count(bufnr)
-    if stop <= 0 then
-      return {}, 0
-    end
-    return vim.api.nvim_buf_get_lines(bufnr, 0, stop, false), stop
-  end
-
   local function append_crosses_markdown_fence_state(initial_state, text)
     local inside_fence = initial_state == true
     for _, line in ipairs(vim.split(tostring(text or ""), "\n", { plain = true })) do
@@ -373,12 +364,12 @@ function M.new(ctx)
     local current_display_meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
     local preserved_section_items = opts.preserve_display_metadata == true and entry.transcript_section_items or nil
     local preserved_display_meta = opts.preserve_display_metadata == true and current_display_meta or nil
-    local raw_lines, transcript_stop = transcript_display_lines(bufnr)
+    local transcript_stop = transcript_line_count(bufnr)
     local replace_start = transcript_stop
     local current_last = ""
     if transcript_stop > 0 then
       replace_start = transcript_stop - 1
-      current_last = raw_lines[transcript_stop] or ""
+      current_last = vim.api.nvim_buf_get_lines(bufnr, transcript_stop - 1, transcript_stop, false)[1] or ""
     end
     set_footer_padding(bufnr, 0)
     entry.footer_signature = nil
@@ -406,9 +397,7 @@ function M.new(ctx)
     next_meta.table_tail_lines = (next_tail_context.state == "header" or next_tail_context.state == "separator")
         and next_tail_context.lines
       or {}
-    local prior_open_fence = type(current_display_meta.trailing_section_open_markdown_fence) == "boolean"
-        and current_display_meta.trailing_section_open_markdown_fence
-      or trailing_section_has_open_markdown_fence(raw_lines)
+    local prior_open_fence = current_display_meta.trailing_section_open_markdown_fence == true
     next_meta.trailing_section_open_markdown_fence = advanced_markdown_fence_state(prior_open_fence, replacement)
     entry.transcript_source_lines = nil
     entry.transcript_section_items = preserved_section_items or {}
@@ -447,9 +436,10 @@ function M.new(ctx)
     local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
     local cfg = transcript_compaction_config(bufnr)
     local pending_sections = pending_transcript_section_count(text)
-    local trailing_open_fence = type(meta.trailing_section_open_markdown_fence) == "boolean"
-        and meta.trailing_section_open_markdown_fence
-      or trailing_section_has_open_markdown_fence(transcript_display_lines(bufnr))
+    if pending_sections > 0 and type(meta.trailing_section_open_markdown_fence) ~= "boolean" then
+      return true
+    end
+    local trailing_open_fence = meta.trailing_section_open_markdown_fence == true
     if pending_sections > 0 and append_crosses_markdown_fence_state(trailing_open_fence, text) then
       return true
     end
@@ -588,6 +578,9 @@ function M.new(ctx)
     if changed_start ~= nil then
       meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
       meta.raw_section_count = (tonumber(meta.raw_section_count) or 0) + pending_sections
+      if pending_sections > 0 then
+        meta.pinned_rows = nil
+      end
       entry.transcript_display_meta = meta
     end
 
@@ -671,7 +664,7 @@ function M.new(ctx)
 
     clear_deferred_incremental_refresh(bufnr)
     if changed_start ~= nil then
-      local display_start = normalize_transcript_display(bufnr)
+      local display_start = normalize_transcript_display(bufnr, changed_start)
       if type(display_start) == "number" then
         changed_start = math.min(changed_start, display_start)
       end

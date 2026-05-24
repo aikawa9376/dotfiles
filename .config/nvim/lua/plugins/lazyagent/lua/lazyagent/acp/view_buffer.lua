@@ -787,6 +787,23 @@ local function transcript_file_signature(path)
   }, ":")
 end
 
+local function build_pinned_row_cache(lines, section_items)
+  lines = type(lines) == "table" and lines or {}
+  section_items = type(section_items) == "table" and section_items or {}
+  local sections = collect_transcript_sections(lines)
+  if #sections == 0 or #section_items ~= #sections then
+    return nil
+  end
+
+  local pinned_rows = {}
+  for idx, section in ipairs(sections) do
+    if type(section_items[idx]) == "table" and section_items[idx].pinned == true then
+      pinned_rows[section.start_row] = true
+    end
+  end
+  return pinned_rows
+end
+
 set_buffer_lines = function(bufnr, lines, section_items, display_meta)
   local entry = layout_entry(bufnr)
   entry.footer_padding_count = 0
@@ -794,6 +811,7 @@ set_buffer_lines = function(bufnr, lines, section_items, display_meta)
   entry.transcript_source_lines = nil
   entry.transcript_section_items = section_items or {}
   entry.transcript_display_meta = display_meta or {}
+  entry.transcript_display_meta.pinned_rows = build_pinned_row_cache(lines, entry.transcript_section_items)
   replace_buffer_lines(bufnr, 0, -1, lines)
 end
 
