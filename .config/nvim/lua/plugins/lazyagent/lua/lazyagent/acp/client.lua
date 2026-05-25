@@ -73,6 +73,55 @@ local function append_stderr_line(lines, message)
   end
 end
 
+local function append_stdout_chunk(client, chunk)
+  if not chunk or chunk == "" then
+    return
+  end
+  local chunks = client.stdout_buffer_chunks
+  if type(chunks) ~= "table" then
+    chunks = {}
+    client.stdout_buffer_chunks = chunks
+  end
+  chunks[#chunks + 1] = chunk
+  client.stdout_buffer_size = (tonumber(client.stdout_buffer_size) or 0) + #chunk
+end
+
+local function take_stdout_line(client)
+  local chunks = client.stdout_buffer_chunks
+  local line = ""
+  if type(chunks) == "table" and #chunks > 0 then
+    line = #chunks == 1 and chunks[1] or table.concat(chunks)
+  end
+  client.stdout_buffer_chunks = {}
+  client.stdout_buffer_size = 0
+  client.stdout_buffer = ""
+  return trim(line)
+end
+
+local function handle_stdout_data(client, data)
+  if not data or data == "" then
+    return
+  end
+
+  local start = 1
+  while true do
+    local idx = data:find("\n", start, true)
+    if not idx then
+      break
+    end
+    append_stdout_chunk(client, data:sub(start, idx - 1))
+    local line = take_stdout_line(client)
+    if line ~= "" then
+      client:_handle_message(line)
+    end
+    start = idx + 1
+  end
+
+  if start <= #data then
+    append_stdout_chunk(client, data:sub(start))
+  end
+end
+
 local function empty_dict_if_needed(value)
   if type(value) == "table" and vim.tbl_isempty(value) then
     return vim.empty_dict()
@@ -143,6 +192,8 @@ function Client.new(opts)
     next_id = 0,
     state = "created",
     stdout_buffer = "",
+    stdout_buffer_chunks = {},
+    stdout_buffer_size = 0,
     stderr_lines = {},
     session_id = nil,
     agent_capabilities = nil,
@@ -771,16 +822,7 @@ function Client:start(callback, opts)
     end
     if not data then return end
 
-    self.stdout_buffer = self.stdout_buffer .. data
-    while true do
-      local idx = self.stdout_buffer:find("\n", 1, true)
-      if not idx then break end
-      local line = trim(self.stdout_buffer:sub(1, idx - 1))
-      self.stdout_buffer = self.stdout_buffer:sub(idx + 1)
-      if line ~= "" then
-        self:_handle_message(line)
-      end
-    end
+    handle_stdout_data(self, data)
   end)
 
   stderr:read_start(function(err, data)

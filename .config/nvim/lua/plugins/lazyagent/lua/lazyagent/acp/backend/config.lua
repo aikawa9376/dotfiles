@@ -11,6 +11,7 @@ function M.setup(deps)
   local append_block = deps.append_block
   local sync_runtime_session = deps.sync_runtime_session
   local first_nonempty = deps.first_nonempty
+  local item_body_text = deps.item_body_text
   local matches_exact = deps.matches_exact
   local matches_pattern = deps.matches_pattern
   local find_config_option
@@ -21,6 +22,7 @@ function M.setup(deps)
     state = state,
     skills_logic = skills_logic,
     normalize_text = normalize_text,
+    item_body_text = item_body_text,
   })
   local maybe_save_turn_to_brain = brain_save.maybe_save_turn_to_brain
 

@@ -216,6 +216,179 @@ local function compact_tool_snapshot(tool)
   }
 end
 
+local function safe_ref_component(value)
+  local text = tostring(value or "item")
+  text = text:gsub("[^%w_.-]+", "-")
+  text = text:gsub("^-+", ""):gsub("-+$", "")
+  return text ~= "" and text or "item"
+end
+
+local function count_newlines(text)
+  local _, count = tostring(text or ""):gsub("\n", "")
+  return count
+end
+
+local function transcript_position_after(count, trailing_newline, text)
+  text = tostring(text or "")
+  if text == "" then
+    return tonumber(count) or 0, trailing_newline ~= false
+  end
+
+  count = tonumber(count) or 0
+  local newline_count = count_newlines(text)
+  local ends_newline = text:sub(-1) == "\n"
+  local added
+  if trailing_newline ~= false or count == 0 then
+    added = newline_count + (ends_newline and 0 or 1)
+  else
+    added = newline_count
+    if ends_newline then
+      added = math.max(0, added - 1)
+    end
+  end
+  return count + added, ends_newline
+end
+
+local function transcript_file_position(path)
+  if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
+    return 0, true
+  end
+
+  if vim.fn.executable("wc") == 1 and vim.fn.executable("tail") == 1 then
+    local lines = vim.fn.systemlist({ "wc", "-l", path })
+    local count = type(lines) == "table" and tonumber(tostring(lines[1] or ""):match("^%s*(%d+)")) or nil
+    if count then
+      local last = vim.fn.system({ "tail", "-c", "1", path })
+      local trailing = last == "\n" or last == ""
+      if not trailing then
+        count = count + 1
+      end
+      return count, trailing
+    end
+  end
+
+  local ok, data = pcall(vim.fn.readfile, path)
+  if not ok or type(data) ~= "table" then
+    return 0, true
+  end
+  return #data, true
+end
+
+local function ensure_transcript_position(session)
+  if not session then
+    return 0, true
+  end
+  if session.transcript_line_count == nil or session._transcript_trailing_newline == nil then
+    local count, trailing = transcript_file_position(session.transcript_path)
+    session.transcript_line_count = count
+    session._transcript_trailing_newline = trailing
+  end
+  return tonumber(session.transcript_line_count) or 0, session._transcript_trailing_newline ~= false
+end
+
+local function note_transcript_write(session, text)
+  if not session then
+    return
+  end
+  local count, trailing = ensure_transcript_position(session)
+  local next_count, next_trailing = transcript_position_after(count, trailing, text)
+  session.transcript_line_count = next_count
+  session._transcript_trailing_newline = next_trailing
+end
+
+local function read_line_range(path, start_line, end_line)
+  start_line = math.max(1, tonumber(start_line) or 1)
+  end_line = math.max(start_line, tonumber(end_line) or start_line)
+  if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
+    return {}
+  end
+
+  if vim.fn.executable("sed") == 1 then
+    local data = vim.fn.systemlist({ "sed", "-n", string.format("%d,%dp", start_line, end_line), path })
+    if vim.v.shell_error == 0 and type(data) == "table" then
+      return data
+    end
+  end
+
+  local ok, data = pcall(vim.fn.readfile, path, "", end_line)
+  if not ok or type(data) ~= "table" then
+    return {}
+  end
+  return vim.list_slice(data, start_line, end_line)
+end
+
+local function body_ref_text(ref)
+  if type(ref) ~= "table" then
+    return ""
+  end
+  local lines = read_line_range(ref.path, ref.start_line, ref.end_line)
+  for idx, line in ipairs(lines) do
+    line = tostring(line or "")
+    if line:sub(1, 1) == " " then
+      line = line:sub(2)
+    end
+    lines[idx] = line
+  end
+  while #lines > 0 and lines[#lines] == "" do
+    table.remove(lines)
+  end
+  return normalize_text(table.concat(lines, "\n"))
+end
+
+local function item_body_text(item)
+  if type(item) ~= "table" then
+    return ""
+  end
+  if type(item.body_chunks) == "table" and #item.body_chunks > 0 then
+    return normalize_text(table.concat(item.body_chunks))
+  end
+  if item.body and item.body ~= "" then
+    return normalize_text(item.body)
+  end
+  return body_ref_text(item.body_ref)
+end
+
+local function can_reference_transcript(session)
+  return type(session) == "table" and type(session.transcript_path) == "string" and session.transcript_path ~= ""
+end
+
+local function tool_ref_path(session, tool_call_id, kind)
+  local transcript_path = session and session.transcript_path or nil
+  if not transcript_path or transcript_path == "" then
+    return nil
+  end
+  local dir = vim.fn.fnamemodify(transcript_path, ":h")
+  local stem = vim.fn.fnamemodify(transcript_path, ":t:r")
+  return string.format(
+    "%s/%s-tool-%s-%s.log",
+    dir,
+    safe_ref_component(stem),
+    safe_ref_component(tool_call_id),
+    safe_ref_component(kind)
+  )
+end
+
+local function write_text_ref(session, tool_call_id, kind, text)
+  text = normalize_text(text or "")
+  if text == "" then
+    return nil
+  end
+  local path = tool_ref_path(session, tool_call_id, kind)
+  if not path then
+    return nil
+  end
+  local file = io.open(path, "w")
+  if not file then
+    return nil
+  end
+  file:write(text)
+  file:close()
+  return {
+    path = path,
+    bytes = #text,
+  }
+end
+
 local function prune_runtime_timelines(session)
   if not session then
     return
@@ -229,7 +402,9 @@ local function prune_runtime_timelines(session)
   local conversation_recent_start = math.max(1, #conversation - cfg.keep_recent_items + 1)
   for idx, item in ipairs(conversation) do
     if type(item) == "table" then
-      if item.pinned == true or idx >= conversation_recent_start then
+      if item.body_ref then
+        item.body = ""
+      elseif item.pinned == true or idx >= conversation_recent_start then
         item.body = compact_old_text(item.body, cfg.body_limit)
       else
         item.body = ""
@@ -243,7 +418,11 @@ local function prune_runtime_timelines(session)
   local tool_recent_start = math.max(1, #tools - cfg.keep_recent_tools + 1)
   for idx, entry in ipairs(tools) do
     if type(entry) == "table" then
-      if entry.pinned == true or idx >= tool_recent_start then
+      if entry.rendered_content_ref or entry.rendered_raw_output_ref then
+        entry.rendered_content = ""
+        entry.rendered_raw_output = ""
+        entry.tool = compact_tool_snapshot(entry.tool)
+      elseif entry.pinned == true or idx >= tool_recent_start then
         entry.rendered_content = compact_old_text(entry.rendered_content, cfg.tool_output_limit)
         entry.rendered_raw_output = compact_old_text(entry.rendered_raw_output, cfg.tool_output_limit)
         entry.tool = compact_tool_snapshot(entry.tool)
@@ -328,20 +507,28 @@ local function new_conversation_item(session, heading, body, meta)
   session.conversation_timeline = session.conversation_timeline or {}
   session.conversation_timeline_index = session.conversation_timeline_index or {}
 
+  local body_chunks = type(meta.body_chunks) == "table" and meta.body_chunks or nil
+  local body_ref = type(meta.body_ref) == "table" and meta.body_ref or nil
+  local body_text = body or ""
   local item = {
     id = meta.id or next_conversation_item_id(session),
     seq = #session.conversation_timeline + 1,
     kind = meta.kind or conversation_kind_for_heading(heading),
     heading = heading,
     title = meta.title or heading,
-    body = body or "",
-    summary = meta.summary or summarize_conversation_text(body or meta.title or heading, 140),
+    body = body_ref and "" or body_text,
+    body_ref = body_ref,
+    body_chunks = body_chunks,
+    summary = meta.summary or summarize_conversation_text(body_text ~= "" and body_text or meta.title or heading, 140),
     pinned = meta.pinned == true,
     stream_key = meta.stream_key,
     toolCallId = meta.toolCallId,
     status = meta.status,
     path = meta.path,
   }
+  if body_chunks then
+    item._summary_source = tostring(body_text or ""):sub(1, 512)
+  end
 
   session.conversation_timeline[#session.conversation_timeline + 1] = item
   session.conversation_timeline_index[item.id] = #session.conversation_timeline
@@ -349,12 +536,11 @@ local function new_conversation_item(session, heading, body, meta)
   return item
 end
 
-local function update_conversation_item(item, body, meta)
+local function apply_conversation_item_meta(item, meta)
   if type(item) ~= "table" then
     return
   end
   meta = type(meta) == "table" and meta or {}
-  item.body = body or item.body or ""
   if meta.title and meta.title ~= "" then
     item.title = meta.title
   end
@@ -373,13 +559,60 @@ local function update_conversation_item(item, body, meta)
   if meta.pinned ~= nil then
     item.pinned = meta.pinned == true
   end
-  item.summary = meta.summary or summarize_conversation_text(item.body ~= "" and item.body or item.title or item.heading, 140)
+end
+
+local function update_conversation_item(item, body, meta)
+  if type(item) ~= "table" then
+    return
+  end
+  meta = type(meta) == "table" and meta or {}
+  item.body = body or item.body or ""
+  item.body_ref = type(meta.body_ref) == "table" and meta.body_ref or item.body_ref
+  apply_conversation_item_meta(item, meta)
+  local resolved_body = item_body_text(item)
+  item.summary = meta.summary or summarize_conversation_text(resolved_body ~= "" and resolved_body or item.title or item.heading, 140)
+end
+
+local function append_conversation_item_chunk(item, chunk, meta)
+  if type(item) ~= "table" then
+    return
+  end
+  meta = type(meta) == "table" and meta or {}
+  chunk = normalize_text(chunk or "")
+  if chunk ~= "" then
+    item.body_chunks = item.body_chunks or {}
+    item.body_chunks[#item.body_chunks + 1] = chunk
+    item.body = ""
+  end
+  apply_conversation_item_meta(item, meta)
+  if meta.summary then
+    item.summary = meta.summary
+  else
+    local summary_source = tostring(item._summary_source or "")
+    if #summary_source < 512 and chunk ~= "" then
+      item._summary_source = (summary_source .. chunk):sub(1, 512)
+    end
+    local source = tostring(item._summary_source or "")
+    item.summary = summarize_conversation_text(source ~= "" and source or item.title or item.heading, 140)
+  end
 end
 
 local function close_stream(session)
   if session.current_stream_key then
     if not session.current_stream_at_line_start then
       write_session_transcript(session, "\n")
+      note_transcript_write(session, "\n")
+    end
+    local item = conversation_item_for_id(session, session.current_stream_item_id)
+    if item and type(item.body_ref) == "table" then
+      item.body_ref.end_line = session.transcript_line_count
+      item.body_chunks = nil
+      item.body = ""
+      item._summary_source = nil
+    elseif item and type(item.body_chunks) == "table" then
+      item.body = table.concat(item.body_chunks)
+      item.body_chunks = nil
+      item._summary_source = nil
     end
     session.current_stream_key = nil
     session.current_stream_heading = nil
@@ -394,9 +627,37 @@ append_block = function(session, heading, body, meta)
   if body == "" then return end
   close_stream(session)
   local prefix = session.transcript_has_content and "\n" or ""
-  write_session_transcript(session, prefix .. render_section_block(heading, body, meta))
+  ensure_transcript_position(session)
+  local header = prefix .. render_section_header(heading, meta)
+  local block_body = pad_block_text(body)
+  if not body:match("\n$") then
+    block_body = block_body .. "\n"
+  end
+  local header_count = transcript_position_after(
+    session.transcript_line_count,
+    session._transcript_trailing_newline,
+    header
+  )
+  local rendered = header .. block_body
+  local final_count = transcript_position_after(
+    session.transcript_line_count,
+    session._transcript_trailing_newline,
+    rendered
+  )
+  local item_meta = meta or {}
+  if can_reference_transcript(session) then
+    item_meta = vim.tbl_extend("force", item_meta, {
+      body_ref = {
+        path = session.transcript_path,
+        start_line = header_count + 1,
+        end_line = final_count,
+      },
+    })
+  end
+  write_session_transcript(session, rendered)
+  note_transcript_write(session, rendered)
   session.transcript_has_content = true
-  new_conversation_item(session, heading, body, meta)
+  new_conversation_item(session, heading, body, item_meta)
   prune_runtime_timelines(session)
   if sync_runtime_live_state then
     sync_runtime_live_state(session)
@@ -409,25 +670,47 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
   if session.current_stream_key ~= stream_key then
     close_stream(session)
     local prefix = session.transcript_has_content and "\n" or ""
-    write_session_transcript(session, prefix .. render_section_header(heading, meta))
+    ensure_transcript_position(session)
+    local header = prefix .. render_section_header(heading, meta)
+    local header_count = transcript_position_after(
+      session.transcript_line_count,
+      session._transcript_trailing_newline,
+      header
+    )
+    write_session_transcript(session, header)
+    note_transcript_write(session, header)
     session.current_stream_key = stream_key
     session.current_stream_heading = heading
     session.current_stream_at_line_start = true
-    local item = new_conversation_item(session, heading, body, vim.tbl_extend("force", meta or {}, {
+    local item_meta = vim.tbl_extend("force", meta or {}, {
       stream_key = stream_key,
-    }))
+      body_chunks = { body },
+    })
+    if can_reference_transcript(session) then
+      item_meta.body_ref = {
+        path = session.transcript_path,
+        start_line = header_count + 1,
+        end_line = header_count,
+      }
+    end
+    local item = new_conversation_item(session, heading, body, item_meta)
     session.current_stream_item_id = item.id
     session.transcript_has_content = true
   else
     local item = conversation_item_for_id(session, session.current_stream_item_id)
     if item then
-      update_conversation_item(item, (item.body or "") .. body, meta)
+      append_conversation_item_chunk(item, body, meta)
       sync_tool_pin_state(session, item)
     end
   end
   prune_runtime_timelines(session)
   local padded, next_at_line_start = pad_stream_chunk(body, session.current_stream_at_line_start)
   write_session_transcript(session, padded)
+  note_transcript_write(session, padded)
+  local item = conversation_item_for_id(session, session.current_stream_item_id)
+  if item and type(item.body_ref) == "table" then
+    item.body_ref.end_line = session.transcript_line_count
+  end
   session.current_stream_at_line_start = next_at_line_start
   if sync_runtime_live_state then
     sync_runtime_live_state(session)
@@ -882,8 +1165,12 @@ local function upsert_tool_timeline(session, tool)
   entry.kind = tool.kind or entry.kind
   entry.paths = extract_tool_paths(tool)
   entry.summary = summarize_tool(tool)
-  entry.rendered_content = render_tool_content(tool.content)
-  entry.rendered_raw_output = render_tool_raw_output(tool.rawOutput)
+  local rendered_content = render_tool_content(tool.content)
+  local rendered_raw_output = render_tool_raw_output(tool.rawOutput)
+  entry.rendered_content_ref = write_text_ref(session, tool.toolCallId, "content", rendered_content)
+  entry.rendered_raw_output_ref = write_text_ref(session, tool.toolCallId, "raw", rendered_raw_output)
+  entry.rendered_content = entry.rendered_content_ref and "" or rendered_content
+  entry.rendered_raw_output = entry.rendered_raw_output_ref and "" or rendered_raw_output
   entry.pinned = entry.pinned == true
   entry.tool = compact_tool_snapshot(tool)
 
@@ -958,6 +1245,7 @@ end
   module.build_switch_history_blocks = build_switch_history_blocks
   module.render_section_block = render_section_block
   module.summarize_conversation_text = summarize_conversation_text
+  module.item_body_text = item_body_text
   module.new_conversation_item = new_conversation_item
   module.conversation_item_for_id = conversation_item_for_id
   module.sync_tool_pin_state = sync_tool_pin_state

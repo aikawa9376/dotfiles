@@ -41,6 +41,59 @@ function M.new(ctx)
     pcall(vim.treesitter.start, bufnr, "markdown")
   end
 
+  local function read_text_ref(ref)
+    if type(ref) ~= "table" or not ref.path or ref.path == "" or vim.fn.filereadable(ref.path) ~= 1 then
+      return ""
+    end
+    local ok, lines = pcall(vim.fn.readfile, ref.path)
+    if not ok or type(lines) ~= "table" then
+      return ""
+    end
+    return table.concat(lines, "\n")
+  end
+
+  local function read_body_ref(ref)
+    if type(ref) ~= "table" or not ref.path or ref.path == "" or vim.fn.filereadable(ref.path) ~= 1 then
+      return ""
+    end
+    local start_line = math.max(1, tonumber(ref.start_line) or 1)
+    local end_line = math.max(start_line, tonumber(ref.end_line) or start_line)
+    local lines = {}
+    if vim.fn.executable("sed") == 1 then
+      local data = vim.fn.systemlist({ "sed", "-n", string.format("%d,%dp", start_line, end_line), ref.path })
+      if vim.v.shell_error == 0 and type(data) == "table" then
+        lines = data
+      end
+    end
+    if #lines == 0 then
+      local ok, data = pcall(vim.fn.readfile, ref.path, "", end_line)
+      if ok and type(data) == "table" then
+        lines = vim.list_slice(data, start_line, end_line)
+      end
+    end
+    for idx, line in ipairs(lines) do
+      line = tostring(line or "")
+      if line:sub(1, 1) == " " then
+        line = line:sub(2)
+      end
+      lines[idx] = line
+    end
+    while #lines > 0 and lines[#lines] == "" do
+      table.remove(lines)
+    end
+    return table.concat(lines, "\n")
+  end
+
+  local function item_body_text(item)
+    if type(item) ~= "table" then
+      return ""
+    end
+    if item.body and item.body ~= "" then
+      return tostring(item.body)
+    end
+    return read_body_ref(item.body_ref)
+  end
+
   local function current_context_item(bufnr, context)
     local entry = layout_entry(bufnr)
     local indexed = context
@@ -507,6 +560,8 @@ function M.new(ctx)
     collect_qf_candidates_from_text(entry and entry.summary or "", cwd, description, add_candidate)
     collect_qf_candidates_from_text(entry and entry.rendered_content or "", cwd, description, add_candidate)
     collect_qf_candidates_from_text(entry and entry.rendered_raw_output or "", cwd, description, add_candidate)
+    collect_qf_candidates_from_text(read_text_ref(entry and entry.rendered_content_ref), cwd, description, add_candidate)
+    collect_qf_candidates_from_text(read_text_ref(entry and entry.rendered_raw_output_ref), cwd, description, add_candidate)
 
     local items = {}
     for _, filename in ipairs(file_order) do
@@ -857,7 +912,7 @@ function M.new(ctx)
     local function build_block_metadata_lines(bufnr, context, item)
       local section = context and context.section or {}
       local body = section_body_text(context and context.lines or {}, section)
-      local item_body = type(item) == "table" and tostring(item.body or "") or ""
+      local item_body = item_body_text(item)
       if body == "" and item_body ~= "" and not text_looks_like_transcript(item_body) then
         body = item_body
       end
@@ -895,9 +950,15 @@ function M.new(ctx)
     local function preferred_tool_popup_sections(context, item, entry)
       local section = context and context.section or {}
       local transcript_body = section_body_text(context and context.lines or {}, section)
-      local item_body = type(item) == "table" and tostring(item.body or "") or ""
+      local item_body = item_body_text(item)
       local content = tostring(entry and entry.rendered_content or "")
       local raw_output = tostring(entry and entry.rendered_raw_output or "")
+      if content == "" then
+        content = read_text_ref(entry and entry.rendered_content_ref)
+      end
+      if raw_output == "" then
+        raw_output = read_text_ref(entry and entry.rendered_raw_output_ref)
+      end
 
       if text_looks_like_transcript(content) then
         content = ""
