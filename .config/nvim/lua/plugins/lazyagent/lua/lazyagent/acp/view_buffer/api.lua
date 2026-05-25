@@ -165,6 +165,8 @@ function M.attach(api, ctx)
       session.view_state.force_full_refresh = true
       session.view_state.preserve_existing_transcript = nil
       session.view_state.pending_append = ""
+      session.view_state.pending_append_chunks = nil
+      session.view_state.pending_append_size = 0
       close_timer(session.view_state.append_timer)
       session.view_state.append_timer = nil
       refresh_buffer_from_file(session)

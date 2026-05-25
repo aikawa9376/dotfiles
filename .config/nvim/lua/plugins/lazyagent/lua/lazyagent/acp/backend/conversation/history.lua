@@ -11,6 +11,52 @@ function M.setup(deps)
 
   local module = {}
 
+  local function read_body_ref(ref, fallback_path)
+    if type(ref) ~= "table" then
+      return ""
+    end
+    local path = ref.path or fallback_path
+    if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
+      return ""
+    end
+    local start_line = math.max(1, tonumber(ref.start_line) or 1)
+    local end_line = math.max(start_line, tonumber(ref.end_line) or start_line)
+    local lines = {}
+    if vim.fn.executable("sed") == 1 then
+      local data = vim.fn.systemlist({ "sed", "-n", string.format("%d,%dp", start_line, end_line), path })
+      if vim.v.shell_error == 0 and type(data) == "table" then
+        lines = data
+      end
+    end
+    if #lines == 0 then
+      local ok, data = pcall(vim.fn.readfile, path, "", end_line)
+      if ok and type(data) == "table" then
+        lines = vim.list_slice(data, start_line, end_line)
+      end
+    end
+    for idx, line in ipairs(lines) do
+      line = tostring(line or "")
+      if line:sub(1, 1) == " " then
+        line = line:sub(2)
+      end
+      lines[idx] = line
+    end
+    while #lines > 0 and lines[#lines] == "" do
+      table.remove(lines)
+    end
+    return normalize_text(table.concat(lines, "\n"))
+  end
+
+  local function item_body(item, pending)
+    if type(item) ~= "table" then
+      return ""
+    end
+    if item.body and item.body ~= "" then
+      return item.body
+    end
+    return read_body_ref(item.body_ref, pending and pending.transcript_path or nil)
+  end
+
   local function switch_history_label(item)
     local kind = tostring(item and (item.kind or item.heading) or ""):lower()
     if kind == "user" then
@@ -44,12 +90,13 @@ function M.setup(deps)
     return text:sub(1, SWITCH_HISTORY_ITEM_BODY_LIMIT) .. "\n... [truncated]"
   end
 
-  local function switch_history_item_text(item)
+  local function switch_history_item_text(item, pending)
     if type(item) ~= "table" then
       return nil
     end
 
-    local body = switch_history_body(item.body ~= "" and item.body or item.summary or item.title or "")
+    local resolved_body = item_body(item, pending)
+    local body = switch_history_body(resolved_body ~= "" and resolved_body or item.summary or item.title or "")
     if body == "" then
       return nil
     end
@@ -159,7 +206,7 @@ function M.setup(deps)
     }
 
     for _, item in ipairs(history_items) do
-      local text = switch_history_item_text(item)
+      local text = switch_history_item_text(item, pending)
       if text and text ~= "" then
         blocks[#blocks + 1] = {
           type = "text",

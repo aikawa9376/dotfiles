@@ -11,6 +11,14 @@ local SIDECAR_SUMMARY_LIMIT = 1024
 local SIDECAR_BODY_LIMIT = 64 * 1024
 local SIDECAR_TOOL_OUTPUT_LIMIT = 128 * 1024
 
+local function shallow_list_copy(list)
+  local out = {}
+  for idx = 1, #(list or {}) do
+    out[idx] = list[idx]
+  end
+  return out
+end
+
 local function lines_start_with(lines, prefix)
   lines = lines or {}
   prefix = prefix or {}
@@ -30,16 +38,16 @@ local function merge_conversation_lines(previous, current)
   current = current or {}
 
   if #previous == 0 then
-    return vim.deepcopy(current)
+    return shallow_list_copy(current)
   end
   if #current == 0 then
-    return vim.deepcopy(previous)
+    return shallow_list_copy(previous)
   end
   if lines_start_with(current, previous) then
-    return vim.deepcopy(current)
+    return shallow_list_copy(current)
   end
   if lines_start_with(previous, current) then
-    return vim.deepcopy(previous)
+    return shallow_list_copy(previous)
   end
 
   local overlap = math.min(#previous, #current)
@@ -57,7 +65,7 @@ local function merge_conversation_lines(previous, current)
     overlap = overlap - 1
   end
 
-  local merged = vim.deepcopy(previous)
+  local merged = shallow_list_copy(previous)
   for idx = overlap + 1, #current do
     merged[#merged + 1] = current[idx]
   end
@@ -79,7 +87,7 @@ local function is_user_transcript_heading(line)
 end
 
 function M.split_conversation_checkpoint_lines(lines, keep_recent_lines)
-  lines = vim.deepcopy(lines or {})
+  lines = lines or {}
   local keep_count = M.normalize_keep_line_limit(keep_recent_lines)
   if not keep_count or #lines <= keep_count then
     return {}, lines
@@ -122,6 +130,7 @@ local function serialize_conversation_timeline(items)
         title = tostring(item.title or item.heading or ""),
         summary = clamp_sidecar_text(item.summary or "", SIDECAR_SUMMARY_LIMIT),
         body = clamp_sidecar_text(item.body or "", SIDECAR_BODY_LIMIT),
+        body_ref = vim.deepcopy(item.body_ref),
         pinned = item.pinned == true,
         toolCallId = item.toolCallId,
         status = item.status,
@@ -149,6 +158,8 @@ local function serialize_tool_timeline(entries)
         conversation_item_id = entry.conversation_item_id,
         rendered_content = clamp_sidecar_text(entry.rendered_content or "", SIDECAR_TOOL_OUTPUT_LIMIT),
         rendered_raw_output = clamp_sidecar_text(entry.rendered_raw_output or "", SIDECAR_TOOL_OUTPUT_LIMIT),
+        rendered_content_ref = vim.deepcopy(entry.rendered_content_ref),
+        rendered_raw_output_ref = vim.deepcopy(entry.rendered_raw_output_ref),
       }
     end
   end
@@ -227,7 +238,12 @@ function M.build_conversation_sidecar(agent_name, session, path, lines)
 end
 
 local function merge_conversation_metadata(previous, current)
-  local merged = vim.deepcopy(previous or {})
+  local merged = {}
+  for key, value in pairs(previous or {}) do
+    if key ~= "conversation_timeline" and key ~= "tool_timeline" and key ~= "pinned_ids" then
+      merged[key] = value
+    end
+  end
   merged.version = current.version or merged.version
   merged.kind = current.kind or merged.kind
   merged.agent_name = current.agent_name or merged.agent_name

@@ -50,6 +50,7 @@ function M.new(ctx)
   local decorate_transcript_range = ctx.decorate_transcript_range
   local queue_markdown_rendering = ctx.queue_markdown_rendering
   local request_buffer_redraw = ctx.request_buffer_redraw or function(_) end
+  local invalidate_transcript_section_cache = ctx.invalidate_transcript_section_cache or function(_) end
   local APPEND_BATCH_MS = ctx.append_batch_ms
   local ACP_TRANSCRIPT_FILETYPE = ctx.acp_transcript_filetype
   local diff_view = setmetatable({}, {
@@ -65,6 +66,66 @@ function M.new(ctx)
   local flush_pending_append
   local resume_deferred_updates_for_buffer
   local resume_deferred_transcript_updates
+
+  local function pending_append_has_text(view_state)
+    if type(view_state) ~= "table" then
+      return false
+    end
+    if type(view_state.pending_append_chunks) == "table" and #view_state.pending_append_chunks > 0 then
+      return true
+    end
+    return (view_state.pending_append or "") ~= ""
+  end
+
+  local function clear_pending_append(view_state)
+    if type(view_state) ~= "table" then
+      return
+    end
+    view_state.pending_append = ""
+    view_state.pending_append_chunks = nil
+    view_state.pending_append_size = 0
+  end
+
+  local function push_pending_append(view_state, text)
+    text = tostring(text or "")
+    if text == "" then
+      return
+    end
+    local chunks = view_state.pending_append_chunks
+    if type(chunks) ~= "table" then
+      chunks = {}
+      if (view_state.pending_append or "") ~= "" then
+        chunks[#chunks + 1] = view_state.pending_append
+      end
+      view_state.pending_append = ""
+      view_state.pending_append_chunks = chunks
+    end
+    chunks[#chunks + 1] = text
+    view_state.pending_append_size = (tonumber(view_state.pending_append_size) or 0) + #text
+  end
+
+  local function take_pending_append(view_state)
+    if type(view_state) ~= "table" then
+      return ""
+    end
+    local pending = view_state.pending_append or ""
+    local chunks = view_state.pending_append_chunks
+    if type(chunks) == "table" and #chunks > 0 then
+      pending = pending ~= "" and (pending .. table.concat(chunks)) or table.concat(chunks)
+    end
+    clear_pending_append(view_state)
+    return pending
+  end
+
+  local function shallow_table_copy(value)
+    local out = {}
+    if type(value) == "table" then
+      for key, item in pairs(value) do
+        out[key] = item
+      end
+    end
+    return out
+  end
 
   local function set_footer_padding(bufnr, count)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
@@ -379,10 +440,7 @@ function M.new(ctx)
     local replacement = { current_last .. table.remove(chunks, 1) }
     vim.list_extend(replacement, chunks)
 
-    local next_meta = vim.deepcopy(current_display_meta)
-    if type(next_meta) ~= "table" then
-      next_meta = {}
-    end
+    local next_meta = shallow_table_copy(current_display_meta)
     if type(preserved_display_meta) ~= "table" then
       next_meta.compacted = false
     end
@@ -404,6 +462,7 @@ function M.new(ctx)
     entry.transcript_display_meta = next_meta
 
     replace_buffer_lines(bufnr, replace_start, total_lines, replacement)
+    invalidate_transcript_section_cache(bufnr)
     return replace_start
   end
 
@@ -559,7 +618,7 @@ function M.new(ctx)
     end
 
     local session = session_for_agent(agent_name_for_bufnr(bufnr))
-    return session and type(session.view_state) == "table" and (session.view_state.pending_append or "") ~= ""
+    return session and pending_append_has_text(session.view_state)
   end
 
   local function apply_pending_append(bufnr, pending)
@@ -599,16 +658,15 @@ function M.new(ctx)
     session.view_state.append_timer = nil
 
     if not vim.api.nvim_buf_is_valid(bufnr) then
-      session.view_state.pending_append = ""
+      clear_pending_append(session.view_state)
       return false
     end
 
-    local pending = session.view_state.pending_append or ""
+    local pending = take_pending_append(session.view_state)
     if pending == "" then
       return false
     end
 
-    session.view_state.pending_append = ""
     local visible = buffer_is_visible(bufnr)
     local changed_start = nil
     local needs_full_refresh = false
@@ -688,7 +746,7 @@ function M.new(ctx)
     end
 
     local session = session_for_agent(agent_name_for_bufnr(bufnr))
-    if session and type(session.view_state) == "table" and (session.view_state.pending_append or "") ~= "" then
+    if session and pending_append_has_text(session.view_state) then
       return flush_pending_append(session, {
         allow_hidden_incremental = opts.allow_hidden_incremental == true,
       })
@@ -736,7 +794,7 @@ function M.new(ctx)
     end
 
     session.view_state = session.view_state or {}
-    session.view_state.pending_append = (session.view_state.pending_append or "") .. tostring(text or "")
+    push_pending_append(session.view_state, text)
 
     if session.view_state.append_timer then
       return

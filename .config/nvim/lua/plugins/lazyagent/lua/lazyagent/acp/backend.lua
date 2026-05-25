@@ -89,6 +89,9 @@ config_helpers = backend_config.setup({
     return state_helpers.sync_runtime_session(...)
   end,
   first_nonempty = state_helpers.first_nonempty,
+  item_body_text = function(...)
+    return conversation_helpers.item_body_text(...)
+  end,
   matches_exact = conversation_helpers.matches_exact,
   matches_pattern = conversation_helpers.matches_pattern,
 })

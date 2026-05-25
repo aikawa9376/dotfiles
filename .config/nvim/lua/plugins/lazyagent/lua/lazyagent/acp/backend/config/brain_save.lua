@@ -4,6 +4,7 @@ function M.setup(deps)
   local state = deps.state
   local skills_logic = deps.skills_logic
   local normalize_text = deps.normalize_text
+  local item_body_text = deps.item_body_text
 
   local module = {}
 
@@ -51,7 +52,7 @@ function M.setup(deps)
     local assistant_parts = {}
     for _, item in ipairs(session and session.conversation_timeline or {}) do
       if type(item) == "table" and (tonumber(item.seq) or 0) > (tonumber(start_seq) or 0) and item.kind == "assistant" then
-        local body = trim_text(item.body)
+        local body = trim_text(type(item_body_text) == "function" and item_body_text(item) or item.body)
         if body ~= "" then
           assistant_parts[#assistant_parts + 1] = body
         end

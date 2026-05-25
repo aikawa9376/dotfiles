@@ -36,6 +36,9 @@ local set_window_size
 local diff_view
 local footer_view
 local pinned_section_rows
+local cached_transcript_sections
+local invalidate_transcript_section_cache
+local pinned_rows_for_buffer
 local transcript_source_lines
 local pane_id_for_bufnr
 local agent_name_for_bufnr
@@ -380,6 +383,89 @@ local function runtime_tool_timeline(bufnr)
   return {}
 end
 
+local function changedtick(bufnr)
+  local ok, tick = pcall(vim.api.nvim_buf_get_changedtick, bufnr)
+  return ok and tick or 0
+end
+
+local function items_for_sections(bufnr, sections)
+  local entry = layout_entry(bufnr)
+  local items = type(entry.transcript_section_items) == "table" and entry.transcript_section_items or nil
+  if type(items) == "table" and #items == #sections then
+    return items
+  end
+
+  items = {}
+  local timeline = runtime_conversation_timeline(bufnr)
+  local offset = math.max(#timeline - #sections, 0)
+  for idx = 1, #sections do
+    items[idx] = timeline[offset + idx]
+  end
+  return items
+end
+
+cached_transcript_sections = function(bufnr, kind, lines)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return {}
+  end
+
+  kind = kind == "display" and "display" or "source"
+  local entry = layout_entry(bufnr)
+  local key = kind == "display" and "transcript_display_sections_cache" or "transcript_source_sections_cache"
+  local stop = transcript_line_count(bufnr)
+  local tick = changedtick(bufnr)
+  local cache = entry[key]
+  if type(cache) == "table" and cache.tick == tick and cache.stop == stop then
+    return cache.sections or {}
+  end
+
+  if type(lines) ~= "table" then
+    lines = kind == "display"
+        and vim.api.nvim_buf_get_lines(bufnr, 0, stop, false)
+      or transcript_source_lines(bufnr, 0, stop)
+  end
+  local sections = collect_transcript_sections(lines)
+  entry[key] = {
+    tick = tick,
+    stop = stop,
+    sections = sections,
+  }
+  return sections
+end
+
+invalidate_transcript_section_cache = function(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  local entry = layout_entry(bufnr)
+  entry.transcript_source_sections_cache = nil
+  entry.transcript_display_sections_cache = nil
+end
+
+pinned_rows_for_buffer = function(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return {}
+  end
+
+  local entry = layout_entry(bufnr)
+  local display_meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
+  if type(display_meta.pinned_rows) == "table" then
+    return display_meta.pinned_rows
+  end
+
+  local sections = cached_transcript_sections(bufnr, "source")
+  local items = items_for_sections(bufnr, sections)
+  local pinned_rows = {}
+  for idx, section in ipairs(sections) do
+    if type(items[idx]) == "table" and items[idx].pinned == true then
+      pinned_rows[section.start_row] = true
+    end
+  end
+  display_meta.pinned_rows = pinned_rows
+  entry.transcript_display_meta = display_meta
+  return pinned_rows
+end
+
 local function visible_conversation_context(bufnr)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return nil
@@ -387,7 +473,7 @@ local function visible_conversation_context(bufnr)
 
   local stop = transcript_line_count(bufnr)
   local lines = transcript_source_lines(bufnr, 0, stop)
-  local sections = collect_transcript_sections(lines)
+  local sections = cached_transcript_sections(bufnr, "source", lines)
   if #sections == 0 then
     return {
       lines = lines,
@@ -399,16 +485,7 @@ local function visible_conversation_context(bufnr)
     }
   end
 
-  local entry = layout_entry(bufnr)
-  local items = type(entry.transcript_section_items) == "table" and entry.transcript_section_items or nil
-  if type(items) ~= "table" or #items ~= #sections then
-    items = {}
-    local timeline = runtime_conversation_timeline(bufnr)
-    local offset = math.max(#timeline - #sections, 0)
-    for idx = 1, #sections do
-      items[idx] = timeline[offset + idx]
-    end
-  end
+  local items = items_for_sections(bufnr, sections)
 
   local row = vim.api.nvim_win_get_cursor(vim.api.nvim_get_current_win())[1]
   local index = #sections
@@ -443,21 +520,12 @@ local function current_display_conversation_context(bufnr, win)
 
   local stop = transcript_line_count(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, stop, false)
-  local sections = collect_transcript_sections(lines)
+  local sections = cached_transcript_sections(bufnr, "display", lines)
   if #sections == 0 then
     return nil
   end
 
-  local entry = layout_entry(bufnr)
-  local items = type(entry.transcript_section_items) == "table" and entry.transcript_section_items or nil
-  if type(items) ~= "table" or #items ~= #sections then
-    items = {}
-    local timeline = runtime_conversation_timeline(bufnr)
-    local offset = math.max(#timeline - #sections, 0)
-    for idx = 1, #sections do
-      items[idx] = timeline[offset + idx]
-    end
-  end
+  local items = items_for_sections(bufnr, sections)
 
   local row = vim.api.nvim_win_get_cursor(win)[1]
   local index = nil
@@ -654,6 +722,9 @@ local view_render = require("lazyagent.acp.view_buffer.render").new({
   pinned_section_rows = function(...)
     return pinned_section_rows(...)
   end,
+  pinned_rows_for_buffer = function(bufnr)
+    return pinned_rows_for_buffer(bufnr)
+  end,
   line_has_tail = line_has_tail,
   section_style_for_line = section_style_for_line,
   diff_view = function()
@@ -806,6 +877,7 @@ end
 
 set_buffer_lines = function(bufnr, lines, section_items, display_meta)
   local entry = layout_entry(bufnr)
+  invalidate_transcript_section_cache(bufnr)
   entry.footer_padding_count = 0
   entry.footer_signature = nil
   entry.transcript_source_lines = nil
@@ -858,6 +930,9 @@ local view_updates = require("lazyagent.acp.view_buffer.updates").new({
     for key in pairs(custom_background_groups) do
       custom_background_groups[key] = nil
     end
+  end,
+  invalidate_transcript_section_cache = function(bufnr)
+    return invalidate_transcript_section_cache(bufnr)
   end,
   suppress_transcript_window_refresh = function()
     return suppress_transcript_window_refresh

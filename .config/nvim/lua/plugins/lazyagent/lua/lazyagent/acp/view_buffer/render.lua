@@ -12,6 +12,7 @@ function M.new(ctx)
   local replace_buffer_lines = ctx.replace_buffer_lines
   local buffer_is_visible = ctx.buffer_is_visible
   local pinned_section_rows = ctx.pinned_section_rows
+  local pinned_rows_for_buffer = ctx.pinned_rows_for_buffer
   local line_has_tail = ctx.line_has_tail
   local section_style_for_line = ctx.section_style_for_line
   local diff_view = setmetatable({}, {
@@ -30,6 +31,14 @@ function M.new(ctx)
 
   local transcript_source_lines
   local normalize_header_lines
+
+  local function shallow_list_copy(list)
+    local out = {}
+    for idx = 1, #list do
+      out[idx] = list[idx]
+    end
+    return out
+  end
 
   local function tail_prefix(line)
     return (line:gsub("[%s─]+$", ""))
@@ -207,7 +216,7 @@ function M.new(ctx)
         rebuilt = prefix .. " " .. string.rep("─", tail_len)
       end
       if rebuilt ~= line then
-        normalized = normalized or vim.deepcopy(lines)
+        normalized = normalized or shallow_list_copy(lines)
         normalized[idx] = rebuilt
         changed = true
       end
@@ -242,7 +251,9 @@ function M.new(ctx)
     local heading_rows = type(display_meta.heading_rows) == "table" and display_meta.heading_rows or {}
     local pinned_rows = type(display_meta.pinned_rows) == "table" and display_meta.pinned_rows or nil
     if type(pinned_rows) ~= "table" then
-      pinned_rows = pinned_section_rows(bufnr, vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false))
+      pinned_rows = type(pinned_rows_for_buffer) == "function"
+          and pinned_rows_for_buffer(bufnr)
+        or pinned_section_rows(bufnr, vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false))
       display_meta.pinned_rows = pinned_rows
       entry.transcript_display_meta = display_meta
     end

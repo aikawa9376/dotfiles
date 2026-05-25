@@ -51,6 +51,17 @@ function M.setup(deps)
     vim.bo[bufnr].filetype = resolved
   end
 
+local function read_text_ref(ref)
+  if type(ref) ~= "table" or not ref.path or ref.path == "" or vim.fn.filereadable(ref.path) ~= 1 then
+    return ""
+  end
+  local ok, lines = pcall(vim.fn.readfile, ref.path)
+  if not ok or type(lines) ~= "table" then
+    return ""
+  end
+  return table.concat(lines, "\n")
+end
+
 local function render_tool_timeline_detail(session, entry)
   local tool = entry and entry.tool or {}
   local lines = {
@@ -72,6 +83,9 @@ local function render_tool_timeline_detail(session, entry)
 
   local body = tostring(entry and entry.rendered_content or "")
   if body == "" then
+    body = read_text_ref(entry and entry.rendered_content_ref)
+  end
+  if body == "" then
     body = render_tool_content(tool.content)
   end
   if body ~= "" then
@@ -81,6 +95,9 @@ local function render_tool_timeline_detail(session, entry)
   end
 
   local raw_output = tostring(entry and entry.rendered_raw_output or "")
+  if raw_output == "" then
+    raw_output = read_text_ref(entry and entry.rendered_raw_output_ref)
+  end
   if raw_output == "" then
     raw_output = render_tool_raw_output(tool.rawOutput)
   end
