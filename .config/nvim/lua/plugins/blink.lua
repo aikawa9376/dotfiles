@@ -12,6 +12,7 @@ return {
   },
   {
     'saghen/blink.cmp',
+    dependencies = { 'blink-extension' },
     event = { 'InsertEnter', 'CmdlineEnter' },
     build = function()
       require('blink.cmp').build():wait(60000)
@@ -151,7 +152,7 @@ return {
       completion = {
         list = {
           selection = {
-            preselect = true,
+            preselect = false,
             auto_insert = false,
           }
         },
@@ -189,14 +190,14 @@ return {
         }
       },
       sources = {
-        default = { 'lsp', 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep' },
+        default = { 'lsp', 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep', 'japanese' },
         per_filetype = {
-          AvanteInput = { 'avante', 'buffer', 'ripgrep' },
+          AvanteInput = { 'avante', 'buffer', 'ripgrep', 'japanese' },
           sql = { 'buffer', 'snippets' },
-          text = { 'buffer', 'ripgrep' },
-          markdown = { 'buffer', 'ripgrep', 'snippets' },
-          lazyagent = { 'buffer', 'ripgrep', 'tmux', 'lazyagent' },
-          php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep'  },
+          text = { 'buffer', 'ripgrep', 'japanese' },
+          markdown = { 'buffer', 'ripgrep', 'japanese', 'snippets' },
+          lazyagent = { 'buffer', 'ripgrep', 'japanese', 'tmux', 'lazyagent' },
+          php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep', 'japanese'  },
         },
         providers = {
           lazyagent = {
@@ -215,7 +216,11 @@ return {
           },
           buffer = {
             name = "[B]",
+            module = "blink_extension.completion.buffer_ascii",
             score_offset = -5,
+            should_show_items = function(ctx)
+              return not require("blink_extension.features.completion").is_japanese_completion_context(ctx)
+            end,
           },
           lazydev = {
             name = "[D]",
@@ -243,11 +248,31 @@ return {
               project_root_marker = ".git",
             },
             transform_items = function(_, items)
+              items = require("blink_extension.features.completion").filter_ascii_completion_items(items)
               for _, item in ipairs(items) do
                 item.kind_name = 'text'
               end
               return items
             end,
+            should_show_items = function(ctx, items)
+              return not require("blink_extension.features.completion").is_japanese_completion_context(ctx) and #items > 0
+            end,
+          },
+          japanese = {
+            module = "blink_extension.completion.japanese",
+            name = "[J]",
+            async = true,
+            score_offset = -18,
+            min_keyword_length = 2,
+            opts = {
+              min_keyword_length = 2,
+              max_items = 50,
+              max_filesize = "1M",
+              max_line_matches = 20,
+              project_root_marker = ".git",
+              project_root_fallback = true,
+              search_casing = "--ignore-case",
+            },
           },
           history = {
             name = '[H]',

@@ -101,6 +101,7 @@ require("lazy").setup({
     { import = "plugins.buffer-position" },
     { import = "plugins.vtsls" },
     { import = "plugins.luasnip" },
+    { import = "plugins.blink-extension" },
     { import = "plugins.blink" },
     { import = "plugins.recorder" },
     { "neovim/nvim-lspconfig", event = "BufReadPre", config = function () require"lsp" end, },
