@@ -91,6 +91,53 @@ return {
     -- 起動時の初期更新
     update_git_cache()
 
+    local overseer_symbols = {
+      RUNNING = { hl = "OverseerRUNNING", icon = "󰑮 " },
+      FAILURE = { hl = "OverseerFAILURE", icon = "󰅚 " },
+      CANCELED = { hl = "OverseerCANCELED", icon = " " },
+      SUCCESS = { hl = "OverseerSUCCESS", icon = "󰄴 " },
+    }
+    local overseer_status_order = { "RUNNING", "FAILURE", "CANCELED", "SUCCESS" }
+
+    local function overseer_list_is_open()
+      if not package.loaded["overseer.window"] then return false end
+      local ok, window = pcall(require, "overseer.window")
+      return ok and window.is_open()
+    end
+
+    local function overseer_statusline()
+      if not package.loaded["overseer.task_list"] or overseer_list_is_open() then
+        return ""
+      end
+
+      local ok, task_list = pcall(require, "overseer.task_list")
+      if not ok then return "" end
+
+      local counts = {}
+      for _, task in ipairs(task_list.list_tasks({ unique = true, include_ephemeral = true })) do
+        counts[task.status] = (counts[task.status] or 0) + 1
+      end
+
+      local parts = {}
+      for _, status in ipairs(overseer_status_order) do
+        local count = counts[status]
+        local symbol = overseer_symbols[status]
+        if count and count > 0 and symbol then
+          parts[#parts + 1] = string.format("%%#%s#%s%d%%*", symbol.hl, symbol.icon, count)
+        end
+      end
+
+      if #parts == 0 then return "" end
+      return " " .. table.concat(parts, " ")
+    end
+
+    vim.api.nvim_create_autocmd("User", {
+      pattern = { "OverseerListUpdate", "OverseerListClose" },
+      callback = function()
+        vim.schedule(function() lualine.refresh() end)
+      end,
+    })
+
     --------------------------------------------------------------------
     -- 2. 色定義
     --------------------------------------------------------------------
@@ -229,6 +276,10 @@ return {
         },
         lualine_x = {
           { function() return vim.fn.reg_recording() .. " recording" end, cond = conditions.recording, color = { fg = "#ff9e64" } },
+          {
+            overseer_statusline,
+            cond = conditions.hide_in_width,
+          },
           { "fileformat", symbols = { unix = "", dos = "", mac = "" } },
           {
             function()
