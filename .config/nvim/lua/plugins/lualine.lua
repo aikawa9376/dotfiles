@@ -9,6 +9,47 @@ return {
     --------------------------------------------------------------------
     local git_cache = {}
 
+    local function normalize_path(path)
+      if not path or path == "" then return nil end
+      return vim.fn.fnamemodify(path, ":p"):gsub("/+$", "")
+    end
+
+    local function resolve_path(base_dir, path)
+      if not path or path == "" then return nil end
+      if path:sub(1, 1) == "/" or path:match("^%a:[/\\]") then
+        return normalize_path(path)
+      end
+      return normalize_path(base_dir:gsub("/+$", "") .. "/" .. path)
+    end
+
+    local function dirname(path)
+      if not path or path == "" then return nil end
+      return vim.fn.fnamemodify(path, ":h")
+    end
+
+    local function worktree_source_root(common_dir)
+      if not common_dir or common_dir == "" then return nil end
+
+      local super_root, module_path = common_dir:match("^(.*)/%.git/modules/(.+)$")
+      if super_root and module_path then
+        return normalize_path(super_root .. "/" .. module_path)
+      end
+
+      if common_dir:match("/%.git$") then
+        return normalize_path(dirname(common_dir))
+      end
+
+      return nil
+    end
+
+    local function project_display_name(toplevel, common_dir, is_worktree)
+      local display_root = normalize_path(toplevel)
+      if is_worktree then
+        display_root = worktree_source_root(common_dir) or display_root
+      end
+      return display_root and vim.fs.basename(display_root) or nil
+    end
+
     local function update_git_cache(bufnr)
       bufnr = bufnr or vim.api.nvim_get_current_buf()
       if not vim.api.nvim_buf_is_valid(bufnr) then return end
@@ -35,20 +76,11 @@ return {
             if not is_git then
               git_cache[bufnr] = { is_git = false }
             else
-              local toplevel = data[2]
-              local common_dir = data[3]
+              local toplevel = normalize_path(data[2])
+              local common_dir = resolve_path(dir, data[3])
               local branch = data[4]
 
-              -- common-dir ( .git の場所 ) を基準にプロジェクト名を特定
-              local abs_common = common_dir
-              if not (common_dir:sub(1,1) == "/" or common_dir:match("^%a:")) then
-                abs_common = dir:gsub("/+$", "") .. "/" .. common_dir
-              end
-
-              -- 末尾のスラッシュを除去して親ディレクトリを取得
-              local repo_root = vim.fn.fnamemodify(vim.fn.fnamemodify(abs_common, ":p"):gsub("/+$", ""), ":h")
-
-              local is_worktree = toplevel:match("/%.worktree/") ~= nil
+              local is_worktree = toplevel ~= nil and toplevel:match("/%.worktree/") ~= nil
               local sync_status = ""
 
               -- ワークツリーの場合は同期状態を確認
@@ -63,8 +95,8 @@ return {
                 is_git = true,
                 branch = branch,
                 is_worktree = is_worktree,
-                project_name = vim.fn.fnamemodify(repo_root, ":t"),
-                repo_root = repo_root,
+                project_name = project_display_name(toplevel, common_dir, is_worktree),
+                repo_root = toplevel,
                 sync_status = sync_status,
               }
             end
