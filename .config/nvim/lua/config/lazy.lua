@@ -32,7 +32,7 @@ require("lazy").setup({
     -- { import = "plugins.sidekick" },
     { import = "plugins.colorizer" },
     { import = "plugins.insx" },
-    -- { import = "plugins.automa" },
+    { import = "plugins.automa" },
     { import = "plugins.comment" },
     { import = "plugins.yanky" },
     { import = "plugins.flash" },
