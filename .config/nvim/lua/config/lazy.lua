@@ -28,7 +28,7 @@ require("lazy").setup({
     { import = "plugins.tiny-inline-diagnostic" },
     { import = "plugins.hlchunk" },
     { import = "plugins.outline" },
-    { import = "plugins.avante" },
+    -- { import = "plugins.avante" },
     -- { import = "plugins.sidekick" },
     { import = "plugins.colorizer" },
     { import = "plugins.insx" },
