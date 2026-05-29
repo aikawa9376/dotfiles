@@ -6,5 +6,6 @@ return {
   },
   init = function ()
     vim.g.matchup_matchparen_offscreen = { method = "status_manual" }
+    vim.g.matchup_matchparen_deferred = 1
   end
 }
