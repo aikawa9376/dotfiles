@@ -62,6 +62,7 @@ require("lazy").setup({
     { import = "plugins.junkfile" },
     { import = "plugins.guess-indent" },
     { import = "plugins.dbee" },
+    { import = "plugins.connector" },
     { import = "plugins.tmux" },
     { import = "plugins.snack" },
     { import = "plugins.gitsigns" },
