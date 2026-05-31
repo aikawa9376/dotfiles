@@ -15,7 +15,7 @@ return {
     dependencies = { 'blink-extension' },
     event = { 'InsertEnter', 'CmdlineEnter' },
     build = function()
-      require('blink.cmp').build():wait(60000)
+      require('blink.cmp').build():pwait()
     end,
     config = function(_, opts)
       local cmp = require('blink.cmp')
