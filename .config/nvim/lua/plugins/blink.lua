@@ -193,7 +193,7 @@ return {
         default = { 'lsp', 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep', 'japanese' },
         per_filetype = {
           AvanteInput = { 'avante', 'buffer', 'ripgrep', 'japanese' },
-          sql = { 'buffer', 'snippets' },
+          sql = { 'connector', 'buffer', 'snippets'  },
           text = { 'buffer', 'ripgrep', 'japanese' },
           markdown = { 'buffer', 'ripgrep', 'japanese', 'snippets' },
           lazyagent = { 'buffer', 'ripgrep', 'japanese', 'tmux', 'lazyagent' },
@@ -312,6 +312,7 @@ return {
             name = "tmux",
             score_offset = -15,
           },
+          connector = require("connector").blink_source({ name = "[CO]" }),
         },
       },
       fuzzy = {
