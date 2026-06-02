@@ -9,6 +9,7 @@ local groups = {
   "lazyagent.commands.edit",
   "lazyagent.commands.hooks",
   "lazyagent.commands.mcp",
+  "lazyagent.commands.image",
 }
 
 function M.setup_commands()

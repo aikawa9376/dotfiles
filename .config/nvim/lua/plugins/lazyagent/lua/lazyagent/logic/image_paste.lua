@@ -181,6 +181,27 @@ local function system_text(cmd)
   return result.stdout or ""
 end
 
+local function is_windows()
+  return vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1
+end
+
+local function is_macos()
+  return vim.fn.has("macunix") == 1
+end
+
+local function powershell_executable()
+  if not is_windows() then
+    return nil
+  end
+
+  for _, candidate in ipairs({ "powershell", "powershell.exe", "pwsh" }) do
+    if vim.fn.executable(candidate) == 1 then
+      return candidate
+    end
+  end
+  return nil
+end
+
 local function xclip_mime_candidates()
   local seen = {}
   local ordered = {}
@@ -863,6 +884,49 @@ local function capture_from_binary_command(dir, cmd)
   return nil, last_err
 end
 
+local function capture_from_powershell_clipboard(dir)
+  local shell = powershell_executable()
+  if not shell then
+    return nil
+  end
+
+  local path = build_destination(dir, "png")
+  local script = [[
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$image = $null
+for ($i = 0; $i -lt 10; $i++) {
+  try {
+    $image = [System.Windows.Forms.Clipboard]::GetImage()
+  } catch {
+    $image = $null
+  }
+  if ($null -ne $image) { break }
+  Start-Sleep -Milliseconds 100
+}
+if ($null -eq $image) { exit 2 }
+$image.Save($args[0], [System.Drawing.Imaging.ImageFormat]::Png)
+]]
+
+  local result = vim.system({ shell, "-NoProfile", "-STA", "-Command", script, path }, { text = true }):wait()
+  if result.code == 0 and file_exists(path) then
+    return path, "powershell"
+  end
+
+  if file_exists(path) then
+    uv.fs_unlink(path)
+  end
+
+  if result.code == 2 then
+    return nil, "clipboard does not contain image data"
+  end
+
+  local stderr = result.stderr and vim.trim(result.stderr) or ""
+  local stdout = result.stdout and vim.trim(result.stdout) or ""
+  local msg = stderr ~= "" and stderr or stdout ~= "" and stdout or "powershell clipboard capture failed"
+  return nil, msg
+end
+
 local function capture_clipboard_image(dir)
   local path, source = capture_from_pngpaste(dir)
   if path then
@@ -889,10 +953,181 @@ local function capture_clipboard_image(dir)
     end
   end
 
+  path, last_err = capture_from_powershell_clipboard(dir)
+  if path then
+    return path, "powershell"
+  end
+
   if last_err and last_err ~= "" then
     return nil, last_err
   end
-  return nil, "clipboard image backend not found. Install wl-paste, xclip, pngpaste, or use macOS osascript."
+  return nil, "clipboard image backend not found. Install wl-paste, xclip, pngpaste, use macOS osascript, or use Windows PowerShell clipboard access."
+end
+
+local function capture_from_screencapture(dir)
+  if not is_macos() or vim.fn.executable("screencapture") ~= 1 then
+    return nil
+  end
+
+  local path = build_destination(dir, "png")
+  local result = vim.system({ "screencapture", "-i", "-x", path }, { text = true }):wait()
+  if result.code == 0 and file_exists(path) then
+    return path, "screencapture"
+  end
+
+  if file_exists(path) then
+    uv.fs_unlink(path)
+  end
+
+  local stderr = result.stderr and vim.trim(result.stderr) or ""
+  local stdout = result.stdout and vim.trim(result.stdout) or ""
+  local msg = stderr ~= "" and stderr or stdout ~= "" and stdout or "screencapture failed (canceled?)"
+  return nil, msg
+end
+
+local function capture_from_import(dir)
+  if vim.fn.executable("import") ~= 1 then
+    return nil
+  end
+
+  local path = build_destination(dir, "png")
+  local result = vim.system({ "import", path }, { text = true }):wait()
+  if result.code == 0 and file_exists(path) then
+    return path, "import"
+  end
+
+  if file_exists(path) then
+    uv.fs_unlink(path)
+  end
+
+  local stderr = result.stderr and vim.trim(result.stderr) or ""
+  local stdout = result.stdout and vim.trim(result.stdout) or ""
+  local msg = stderr ~= "" and stderr or stdout ~= "" and stdout or "import failed (canceled?)"
+  return nil, msg
+end
+
+local function capture_from_grim_slurp(dir)
+  if vim.fn.executable("grim") ~= 1 or vim.fn.executable("slurp") ~= 1 then
+    return nil
+  end
+
+  local path = build_destination(dir, "png")
+  local cmd = string.format('grim -g "$(slurp)" %s', vim.fn.shellescape(path))
+  local result = vim.system({ "sh", "-c", cmd }, { text = true }):wait()
+  if result.code == 0 and file_exists(path) then
+    return path, "grim+slurp"
+  end
+
+  if file_exists(path) then
+    uv.fs_unlink(path)
+  end
+
+  local stderr = result.stderr and vim.trim(result.stderr) or ""
+  local stdout = result.stdout and vim.trim(result.stdout) or ""
+  local msg = stderr ~= "" and stderr or stdout ~= "" and stdout or "grim+slurp failed (canceled?)"
+  return nil, msg
+end
+
+local function capture_from_windows_snipping(dir)
+  local shell = powershell_executable()
+  if not shell then
+    return nil
+  end
+
+  local path = build_destination(dir, "png")
+  local script = [[
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+try { [System.Windows.Forms.Clipboard]::Clear() } catch {}
+$started = $false
+foreach ($candidate in @("SnippingTool.exe", "snippingtool")) {
+  $cmd = Get-Command $candidate -ErrorAction SilentlyContinue
+  if ($cmd) {
+    Start-Process -FilePath $cmd.Source -ArgumentList "/clip"
+    $started = $true
+    break
+  }
+}
+if (-not $started) {
+  try {
+    Start-Process "ms-screenclip:"
+    $started = $true
+  } catch {
+  }
+}
+if (-not $started) { exit 4 }
+for ($i = 0; $i -lt 240; $i++) {
+  Start-Sleep -Milliseconds 250
+  try {
+    $image = [System.Windows.Forms.Clipboard]::GetImage()
+  } catch {
+    $image = $null
+  }
+  if ($null -ne $image) {
+    $image.Save($args[0], [System.Drawing.Imaging.ImageFormat]::Png)
+    exit 0
+  }
+}
+exit 3
+]]
+
+  local result = vim.system({ shell, "-NoProfile", "-STA", "-Command", script, path }, { text = true }):wait()
+  if result.code == 0 and file_exists(path) then
+    return path, "snippingtool"
+  end
+
+  if file_exists(path) then
+    uv.fs_unlink(path)
+  end
+
+  if result.code == 3 then
+    return nil, "snipping tool timed out or was canceled"
+  end
+  if result.code == 4 then
+    return nil, "windows screen clipping backend not found"
+  end
+
+  local stderr = result.stderr and vim.trim(result.stderr) or ""
+  local stdout = result.stdout and vim.trim(result.stdout) or ""
+  local msg = stderr ~= "" and stderr or stdout ~= "" and stdout or "snipping tool capture failed"
+  return nil, msg
+end
+
+local function capture_screenshot_image(dir)
+  local path, source_or_err = capture_from_screencapture(dir)
+  if path then
+    return path, source_or_err
+  end
+  local last_err = source_or_err
+
+  local path, source_or_err = capture_from_import(dir)
+  if path then
+    return path, source_or_err
+  end
+  if source_or_err ~= nil then
+    last_err = source_or_err
+  end
+
+  path, source_or_err = capture_from_grim_slurp(dir)
+  if path then
+    return path, source_or_err
+  end
+  if source_or_err ~= nil then
+    last_err = source_or_err
+  end
+
+  path, source_or_err = capture_from_windows_snipping(dir)
+  if path then
+    return path, source_or_err
+  end
+  if source_or_err ~= nil then
+    last_err = source_or_err
+  end
+
+  if last_err and last_err ~= "" then
+    return nil, last_err
+  end
+  return nil, "screenshot backend not found. Install ImageMagick (import), grim+slurp, use macOS screencapture, or use Windows Snipping Tool."
 end
 
 local function resize_with_convert(path, max_dimension)
@@ -1362,6 +1597,51 @@ end
 
 function M.paste_current_buffer()
   return M.paste_into_buffer(vim.api.nvim_get_current_buf())
+end
+
+function M.screenshot_into_buffer(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    notify("scratch buffer is not available", vim.log.levels.ERROR)
+    return nil
+  end
+
+  local cfg = image_paste_opts()
+  if cfg.enabled == false then
+    notify("image paste is disabled", vim.log.levels.WARN)
+    return nil
+  end
+
+  local dir, dir_err = resolve_image_dir(bufnr)
+  if not dir then
+    notify(dir_err, vim.log.levels.ERROR)
+    return nil
+  end
+
+  local image_path, capture_source_or_err = capture_screenshot_image(dir)
+  if not image_path then
+    notify(capture_source_or_err, vim.log.levels.ERROR)
+    return nil
+  end
+
+  local resized, resize_err = resize_image(image_path, tonumber(cfg.max_dimension))
+  if resized == nil then
+    notify(resize_err, vim.log.levels.WARN)
+  end
+
+  local ref_text = "@" .. image_path
+  local row = insert_reference_line(bufnr, ref_text)
+  create_preview(bufnr, row, ref_text, image_path)
+
+  if cfg.notify ~= false then
+    notify("captured screenshot via " .. capture_source_or_err)
+  end
+
+  return image_path
+end
+
+function M.screenshot_current_buffer()
+  return M.screenshot_into_buffer(vim.api.nvim_get_current_buf())
 end
 
 function M.attach_buffer(bufnr)
