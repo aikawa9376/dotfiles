@@ -294,6 +294,16 @@ function M.register_scratch_keymaps(bufnr, opts)
     paste_image(vim.fn.mode():sub(1, 1) == "i")
   end, { desc = "Paste image into scratch buffer", force = true })
 
+  local function screenshot(insert_mode)
+    with_insert_wrap(insert_mode, function()
+      image_paste.screenshot_into_buffer(bufnr)
+    end)
+  end
+
+  pcall(vim.api.nvim_buf_create_user_command, bufnr, "LazyAgentScreenShot", function()
+    screenshot(vim.fn.mode():sub(1, 1) == "i")
+  end, { desc = "Capture screen region into scratch buffer", force = true })
+
   -- Scroll mappings
   safe_set("n", keys.scroll_up or "<C-u>", function()
     local pane = get_pane()
