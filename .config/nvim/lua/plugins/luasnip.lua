@@ -33,7 +33,8 @@ return {
     })
 
     require("luasnip.loaders.from_lua").load({ paths = "./lua/snippets" })
-    require("luasnip.loaders.from_vscode").lazy_load()
+    -- Use friendly-snippets for most filetypes, but keep SQL snippets local (ported + customized).
+    require("luasnip.loaders.from_vscode").lazy_load({ exclude = { "sql" } })
     -- require("luasnip.loaders.from_snipmate").load()
 
     ls.filetype_set("cpp", { "c" })
