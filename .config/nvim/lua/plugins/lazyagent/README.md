@@ -239,6 +239,7 @@ require("lazyagent").setup({
     initial_model = "gpt-5.4",
     fancy_mode = true,
     transcript_max_lines = 12000,
+    render_markdown_debounce_ms = 900,
     release_buffer_on_hide = true,
     transcript_compaction = {
       enabled = false,

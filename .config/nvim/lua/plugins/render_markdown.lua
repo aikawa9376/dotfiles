@@ -51,13 +51,18 @@ return {
       lsp = { enabled = true },
       blink = { enabled = true },
     },
-    -- custom_handlers = {
-    --   markdown = {
-    --     parse = function(ctx)
-    --       return require("lazyagent.render_markdown").parse(ctx)
-    --     end,
-    --   },
-    -- },
+    custom_handlers = {
+      markdown = {
+        parse = function(ctx)
+          local bufnr = ctx and ctx.buf or nil
+          local ft = bufnr and vim.bo[bufnr].filetype or ""
+          if ft == "lazyagent" or ft == "lazyagent_acp" then
+            return require("lazyagent.render_markdown").parse(ctx)
+          end
+          return require("render-markdown.handler.markdown").parse(ctx)
+        end,
+      },
+    },
     overrides = {
       filetype = {
         lazyagent = {

@@ -157,7 +157,7 @@ local function prune_invalid_render_markdown_state(manager, render_state, ui)
   end
 end
 
-local function cleanup_markdown_rendering(bufnr)
+local function cleanup_external_markdown_rendering(bufnr)
   if not bufnr then
     return
   end
@@ -165,9 +165,6 @@ local function cleanup_markdown_rendering(bufnr)
   local is_valid = vim.api.nvim_buf_is_valid(bufnr)
   if is_valid then
     pcall(vim.treesitter.stop, bufnr)
-    pcall(vim.api.nvim_buf_clear_namespace, bufnr, transcript_ns, 0, -1)
-    pcall(vim.api.nvim_buf_clear_namespace, bufnr, footer_ns, 0, -1)
-    pcall(vim.api.nvim_buf_clear_namespace, bufnr, diff_ns, 0, -1)
   end
 
   local ok_manager, manager = pcall(require, "render-markdown.core.manager")
@@ -191,11 +188,40 @@ local function cleanup_markdown_rendering(bufnr)
     end
   end
 
+  if type(layout_entry) == "function" and is_valid then
+    local entry = layout_entry(bufnr)
+    entry.render_markdown_attached = nil
+  end
+
   prune_invalid_render_markdown_state(
     ok_manager and manager or nil,
     ok_state and render_state or nil,
     ok_ui and ui or nil
   )
+end
+
+local function cleanup_markdown_rendering(bufnr)
+  if not bufnr then
+    return
+  end
+
+  local is_valid = vim.api.nvim_buf_is_valid(bufnr)
+  if type(layout_entry) == "function" and is_valid then
+    local entry = layout_entry(bufnr)
+    close_timer(entry.markdown_render_timer)
+    entry.markdown_render_timer = nil
+    entry.markdown_render_pending = nil
+    entry.markdown_render_token = nil
+    entry.render_markdown_attached = nil
+  end
+
+  cleanup_external_markdown_rendering(bufnr)
+
+  if is_valid then
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, transcript_ns, 0, -1)
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, footer_ns, 0, -1)
+    pcall(vim.api.nvim_buf_clear_namespace, bufnr, diff_ns, 0, -1)
+  end
 end
 
 local function is_metadata_popup_buffer(bufnr)
@@ -261,33 +287,26 @@ local function refresh_markdown_rendering(bufnr)
     return
   end
 
-  local opts = pane_opts_for_bufnr and pane_opts_for_bufnr(bufnr) or {}
-  local max_render_lines = tonumber(opts.render_markdown_max_lines)
-    or tonumber((((state.opts or {}).acp or {}).render_markdown_max_lines))
-  local visible_lines = transcript_line_count and transcript_line_count(bufnr) or vim.api.nvim_buf_line_count(bufnr)
-  if max_render_lines and max_render_lines > 0 and visible_lines > max_render_lines then
-    cleanup_markdown_rendering(bufnr)
-    if type(image_paste.clear_buffer_previews) == "function" then
-      image_paste.clear_buffer_previews(bufnr)
-    end
-    return
+  local entry = type(layout_entry) == "function" and layout_entry(bufnr) or nil
+  if not entry or entry.render_markdown_attached ~= true then
+    pcall(vim.treesitter.start, bufnr, "markdown")
   end
-
-  pcall(vim.treesitter.start, bufnr, "markdown")
 
   local ok_manager, manager = pcall(require, "render-markdown.core.manager")
   if ok_manager and type(manager.attach) == "function" then
-    pcall(manager.attach, bufnr)
+    if not entry or entry.render_markdown_attached ~= true then
+      pcall(manager.attach, bufnr)
+      if entry then
+        entry.render_markdown_attached = true
+      end
+    end
   end
 
-  local ok_render, render = pcall(require, "render-markdown")
-  if ok_render and type(render.render) == "function" then
-    pcall(render.render, {
-      buf = bufnr,
-      win = wins,
-      event = "LazyAgentACPUpdate",
-    })
+  local ok_ui, ui = pcall(require, "render-markdown.core.ui")
+  if ok_ui and type(ui.update) == "function" then
+    pcall(ui.update, bufnr, wins[1], "LazyAgentACPUpdate", false)
   end
+
   image_paste.refresh_buffer_previews(bufnr)
   request_buffer_redraw(bufnr)
 end
@@ -301,13 +320,23 @@ local function queue_markdown_rendering(bufnr)
   end
 
   local entry = layout_entry(bufnr)
-  if entry.markdown_render_pending then
+  local opts = pane_opts_for_bufnr and pane_opts_for_bufnr(bufnr) or {}
+  local debounce_ms = tonumber(opts.render_markdown_debounce_ms)
+    or tonumber((((state.opts or {}).acp or {}).render_markdown_debounce_ms))
+    or MARKDOWN_RENDER_BATCH_MS
+  debounce_ms = math.max(0, math.floor(tonumber(debounce_ms) or MARKDOWN_RENDER_BATCH_MS))
+  if debounce_ms == 0 then
     return
   end
 
   entry.markdown_render_pending = true
+
+  close_timer(entry.markdown_render_timer)
+  entry.markdown_render_timer = nil
+
   local token = {}
   entry.markdown_render_token = token
+
   local function run()
     if not vim.api.nvim_buf_is_valid(bufnr) then
       return
@@ -318,14 +347,26 @@ local function queue_markdown_rendering(bufnr)
     end
     current_entry.markdown_render_pending = false
     current_entry.markdown_render_token = nil
+    current_entry.markdown_render_timer = nil
     if buffer_is_visible and not buffer_is_visible(bufnr) then
       return
     end
     refresh_markdown_rendering(bufnr)
   end
 
+  local uv = vim.uv or vim.loop
+  if uv and type(uv.new_timer) == "function" then
+    local timer = uv.new_timer()
+    entry.markdown_render_timer = timer
+    timer:start(debounce_ms, 0, vim.schedule_wrap(function()
+      close_timer(timer)
+      run()
+    end))
+    return
+  end
+
   if type(vim.defer_fn) == "function" then
-    vim.defer_fn(run, MARKDOWN_RENDER_BATCH_MS)
+    vim.defer_fn(run, debounce_ms)
   else
     vim.schedule(run)
   end
