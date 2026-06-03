@@ -83,6 +83,8 @@ function M.build()
         tool_output_limit = 24000,
       },
       permission_rules = {},
+      -- Debounce markdown rendering so streaming output doesn't repeatedly re-render.
+      render_markdown_debounce_ms = 900,
       hide_pending_messages = true,
       auto_switch = {
         enabled = false,

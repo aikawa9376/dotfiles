@@ -579,11 +579,15 @@ local function append_conversation_item_chunk(item, chunk, meta)
   end
   meta = type(meta) == "table" and meta or {}
   chunk = normalize_text(chunk or "")
-  if chunk ~= "" then
+
+  -- If we have a transcript reference, avoid keeping the full streamed body in
+  -- memory (rendering/UI reads from the transcript file when needed).
+  if chunk ~= "" and type(item.body_ref) ~= "table" then
     item.body_chunks = item.body_chunks or {}
     item.body_chunks[#item.body_chunks + 1] = chunk
     item.body = ""
   end
+
   apply_conversation_item_meta(item, meta)
   if meta.summary then
     item.summary = meta.summary
@@ -684,7 +688,6 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
     session.current_stream_at_line_start = true
     local item_meta = vim.tbl_extend("force", meta or {}, {
       stream_key = stream_key,
-      body_chunks = { body },
     })
     if can_reference_transcript(session) then
       item_meta.body_ref = {
@@ -692,6 +695,8 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
         start_line = header_count + 1,
         end_line = header_count,
       }
+    else
+      item_meta.body_chunks = { body }
     end
     local item = new_conversation_item(session, heading, body, item_meta)
     session.current_stream_item_id = item.id
