@@ -312,7 +312,11 @@ return {
             name = "tmux",
             score_offset = -15,
           },
-          connector = require("connector").blink_source({ name = "[CO]" }),
+          connector = {
+            module = "connector.blink",
+            name = "[CO]",
+            async = true,
+          },
         },
       },
       fuzzy = {
