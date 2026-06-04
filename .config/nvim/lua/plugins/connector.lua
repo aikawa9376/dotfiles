@@ -5,7 +5,6 @@ return {
     require("connector").install()
   end,
   config = function()
-    require("connector").setup({
-    })
+    require("connector").setup({})
   end,
 }
