@@ -1,5 +1,6 @@
 local M = {}
 local fzf_lua = require("fzf-lua")
+local ui_select_registered = false
 
 -- ------------------------------------------------------------------
 -- default settings
@@ -206,35 +207,47 @@ end
 -- ------------------------------------------------------------------
 -- init vim.ui.select
 -- ------------------------------------------------------------------
-fzf_lua.register_ui_select(function (opts)
-  -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
-  if opts.previewer == "builtin" then
-    opts.previewer = {
-      _ctor = function()
-        local Parent = require("fzf-lua.previewer.builtin").buffer_or_file
-        local Previewer = Parent:extend()
-        function Previewer:parse_entry(entry_str)
-          local path = extract_path_from_entry(entry_str)
-          return Parent.parse_entry(self, path)
-        end
-        return Previewer
-      end,
-    }
+M.register_ui_select = function()
+  if ui_select_registered then
+    return
   end
 
-  opts.winopts = {
-    height = 0.4,
-    width = 0.6,
-    row = 0.5,
-    split = false,
-    border = "single",
-    preview = {
+  fzf_lua.register_ui_select(function (opts)
+    opts = opts or {}
+
+    -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
+    if opts.previewer == "builtin" then
+      opts.previewer = {
+        _ctor = function()
+          local Parent = require("fzf-lua.previewer.builtin").buffer_or_file
+          local Previewer = Parent:extend()
+          function Previewer:parse_entry(entry_str)
+            local path = extract_path_from_entry(entry_str)
+            return Parent.parse_entry(self, path)
+          end
+          return Previewer
+        end,
+      }
+    end
+
+    opts.winopts = {
+      height = 0.4,
+      width = 0.6,
+      row = 0.5,
+      split = false,
       border = "single",
-      hidden = true
+      preview = {
+        border = "single",
+        hidden = true
+      }
     }
-  }
-  return opts
-end)
+    return opts
+  end)
+
+  ui_select_registered = true
+end
+
+M.register_ui_select()
 
 -- ------------------------------------------------------------------
 -- Files Enhanced
