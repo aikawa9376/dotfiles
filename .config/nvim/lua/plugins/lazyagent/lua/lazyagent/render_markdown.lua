@@ -83,36 +83,65 @@ local function is_diff_list_item(buf, node)
   return change_count >= 2 and saw_minus and saw_plus
 end
 
-local function line_has_heading(line, heading)
-  local needle = " " .. heading .. " "
-  if line:find(needle, 1, true) then
-    return true
-  end
-  local suffix = " " .. heading
-  return line:sub(-#suffix) == suffix
-end
-
-local function transcript_section_by_row(buf)
+local function transcript_skip_ranges(buf)
   if not is_lazyagent_acp_buffer(buf) then
     return nil
   end
 
-  local headings = { "User", "Assistant", "Thinking", "System", "Error", "Plan", "Terminal", "Tool", "Edited" }
+  local section_heading_for_line = require("lazyagent.acp.view_buffer.sections").section_heading_for_line
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-  local sections = {}
-  local current = nil
+  local ranges = {}
+  local skip_start = nil
 
   for idx, line in ipairs(lines) do
-    for _, heading in ipairs(headings) do
-      if line:match("^─ ") and line_has_heading(line, heading) then
-        current = heading
-        break
+    local heading = section_heading_for_line(line)
+    if heading then
+      if skip_start then
+        ranges[#ranges + 1] = { start_row = skip_start, end_row = idx - 2 }
+        skip_start = nil
+      end
+      if heading == "Tool" or heading == "Edited" then
+        skip_start = idx - 1
       end
     end
-    sections[idx - 1] = current
   end
 
-  return sections
+  if skip_start then
+    ranges[#ranges + 1] = { start_row = skip_start, end_row = #lines - 1 }
+  end
+
+  return #ranges > 0 and ranges or nil
+end
+
+local function row_in_ranges(row, ranges)
+  if not ranges then
+    return false
+  end
+
+  local left = 1
+  local right = #ranges
+  while left <= right do
+    local mid = math.floor((left + right) / 2)
+    local range = ranges[mid]
+    if row < range.start_row then
+      right = mid - 1
+    elseif row > range.end_row then
+      left = mid + 1
+    else
+      return true
+    end
+  end
+  return false
+end
+
+local function should_skip_render(buf, capture, node, ranges)
+  if row_in_ranges(node.start_row, ranges) then
+    return true
+  end
+  if capture == "list" and is_diff_list_item(buf, node) then
+    return true
+  end
+  return false
 end
 
 function M.parse(ctx)
@@ -136,14 +165,9 @@ function M.parse(ctx)
 
   local context = Context.get(ctx.buf)
   local marks = Marks.new(context, false)
-  local sections = transcript_section_by_row(ctx.buf)
+  local skip_ranges = transcript_skip_ranges(ctx.buf)
   context.view:nodes(ctx.root, query, function(capture, node)
-    local section = sections and sections[node.start_row] or nil
-    if section == "Tool" or section == "Edited" then
-      return
-    end
-
-    if capture == "list" and is_diff_list_item(ctx.buf, node) then
+    if should_skip_render(ctx.buf, capture, node, skip_ranges) then
       return
     end
 
