@@ -581,7 +581,10 @@ local function open_edit_commit_float(commit, origin_buf, view_state)
   -- If float already open, replace content
   pcall(close_edit_commit_float)
 
-  local msg = vim.fn.systemlist('git show -s --format=%B ' .. vim.fn.shellescape(commit))
+  local work_tree = utils.get_buf_work_tree(origin_buf)
+    or utils.set_buf_work_tree(origin_buf, utils.get_work_tree({ bufnr = origin_buf }))
+  local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
+  local msg = vim.fn.systemlist(git_prefix .. 'show -s --format=%B ' .. vim.fn.shellescape(commit))
   if vim.v.shell_error ~= 0 or not msg then msg = { '' } end
   while #msg > 0 and msg[#msg] == '' do table.remove(msg) end
 
@@ -611,6 +614,7 @@ local function open_edit_commit_float(commit, origin_buf, view_state)
   -- Store state for the buffer via buffer variable
   vim.b[edit_float_buf].amend_target = commit
   vim.b[edit_float_buf].amend_origin_buf = origin_buf
+  vim.b[edit_float_buf].amend_work_tree = work_tree
   vim.b[edit_float_buf].amend_view_state = view_state
   vim.b[edit_float_buf].amend_original_text = table.concat(msg, '\n')
 
@@ -684,6 +688,7 @@ end
 M._do_amend_from_buffer = function(bufnr, skip_confirm)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local commit = vim.b[bufnr] and vim.b[bufnr].amend_target or nil
+  local origin_buf = vim.b[bufnr] and vim.b[bufnr].amend_origin_buf or nil
   local view_state = vim.b[bufnr] and vim.b[bufnr].amend_view_state or nil
   if not commit then
     vim.notify('No amend target', vim.log.levels.ERROR)
@@ -707,7 +712,13 @@ M._do_amend_from_buffer = function(bufnr, skip_confirm)
   f:write(table.concat(lines, '\n') .. '\n')
   f:close()
 
-  local git_dir = vim.fn.FugitiveWorkTree()
+  local git_dir = vim.b[bufnr] and vim.b[bufnr].amend_work_tree
+    or (origin_buf and utils.get_buf_work_tree(origin_buf))
+  if not git_dir then
+    vim.notify('Not in a git repository', vim.log.levels.ERROR)
+    os.remove(temp)
+    return
+  end
   local ok = do_amend_commit_from_file(git_dir, commit, temp, view_state)
   os.remove(temp)
   if ok then close_edit_commit_float(bufnr) end
@@ -823,6 +834,8 @@ function M.setup(group)
     group = group,
     pattern = 'git',
     callback = function(ev)
+      utils.set_buf_work_tree(ev.buf, utils.get_work_tree({ bufnr = ev.buf }))
+
       -- Highlight diff paths
       local ns_id = vim.api.nvim_create_namespace('git_diff_path_highlight')
 
@@ -1007,7 +1020,19 @@ function M.setup(group)
           return
         end
 
-        local result = vim.fn.systemlist('git log --format=%H --skip=1 -n 1 ' .. commit .. ' -- ' .. vim.fn.shellescape(filepath))
+        local work_tree = utils.get_buf_work_tree(ev.buf)
+        if not work_tree then
+          vim.notify('Not in a git repository', vim.log.levels.WARN)
+          return
+        end
+        local result = vim.fn.systemlist(
+          'git -C '
+            .. vim.fn.shellescape(work_tree)
+            .. ' log --format=%H --skip=1 -n 1 '
+            .. vim.fn.shellescape(commit)
+            .. ' -- '
+            .. vim.fn.shellescape(filepath)
+        )
         if not result or #result == 0 or result[1] == '' then
           print('No previous commit found for ' .. filepath)
           return
@@ -1074,7 +1099,12 @@ function M.setup(group)
         local filepath, target_line = get_diff_target_at_cursor(ev.buf)
         filepath = filepath or utils.get_filepath_at_cursor(ev.buf)
         if filepath then
-          vim.cmd('edit ' .. vim.fn.fnameescape(filepath))
+          local abs_path = utils.worktree_relative_abs_path(utils.get_buf_work_tree(ev.buf), filepath)
+          if not abs_path then
+            vim.notify('Could not resolve file from repository root: ' .. filepath, vim.log.levels.WARN)
+            return
+          end
+          vim.cmd('edit ' .. vim.fn.fnameescape(abs_path))
           if target_line then
             local max_line = vim.api.nvim_buf_line_count(0)
             vim.api.nvim_win_set_cursor(0, { clamp_line(target_line, max_line), 0 })
@@ -1130,7 +1160,11 @@ function M.setup(group)
         local scope = on_file_header and 'file' or 'hunk'
         local reset_mode = confirm_discard_mode(scope, commit)
         if not reset_mode then return end
-        local git_dir = vim.fn.FugitiveWorkTree()
+        local git_dir = utils.get_buf_work_tree(ev.buf)
+        if not git_dir then
+          vim.notify('Not in a git repository', vim.log.levels.WARN)
+          return
+        end
         local stashed = commit_auto_stash(git_dir)
         if stashed == nil then return end
         local patch
@@ -1159,7 +1193,11 @@ function M.setup(group)
         end
         local reset_mode = confirm_discard_mode('selected', commit)
         if not reset_mode then return end
-        local git_dir = vim.fn.FugitiveWorkTree()
+        local git_dir = utils.get_buf_work_tree(ev.buf)
+        if not git_dir then
+          vim.notify('Not in a git repository', vim.log.levels.WARN)
+          return
+        end
         local stashed = commit_auto_stash(git_dir)
         if stashed == nil then return end
         local patch = build_partial_reverse_patch(filepath, lines, hunk_start, sel_start, sel_end)

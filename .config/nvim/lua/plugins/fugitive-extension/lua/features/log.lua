@@ -130,18 +130,27 @@ local function open_log_list(opts)
   -- %d (ref names) を取得して未プッシュ判定に使用する
   -- タブ区切り: hash <tab> date <tab> subject <tab> author <tab> refs
   local args = opts and opts.args or ""
-  local cmd = "log --pretty=format:'%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
-  vim.cmd('Git ' .. cmd)
+  local source_bufnr = vim.api.nvim_get_current_buf()
+  local work_tree = utils.get_buf_work_tree(source_bufnr)
+    or utils.set_buf_work_tree(source_bufnr, utils.get_work_tree({ bufnr = source_bufnr }))
+    or utils.get_work_tree({ notify = true })
+  if not work_tree then
+    return
+  end
 
+  vim.cmd('botright new')
   local bufnr = vim.api.nvim_get_current_buf()
-  utils.set_buf_work_tree(bufnr, utils.get_work_tree())
+  utils.set_buf_work_tree(bufnr, work_tree)
+  pcall(vim.api.nvim_buf_set_name, bufnr, 'fugitive-log://' .. work_tree .. '//' .. args)
 
+  vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.bo[bufnr].filetype = 'fugitivelog'
   vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.opt_local.list = false
 
   vim.b[bufnr].fugitive_log_args = args
+  refresh_log_list(bufnr)
 
   apply_highlights(bufnr)
 end
