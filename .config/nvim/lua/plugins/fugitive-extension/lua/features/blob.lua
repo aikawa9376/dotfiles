@@ -11,16 +11,34 @@ function M.setup(group)
       if not parse or not parse[1] then
         return
       end
-      local commit, filepath = parse[1]:match('^(%x+):(.+)$')
+      local commit, filepath = parse[1]:match('^([^:]+):(.+)$')
       if not commit or not filepath then
         return
+      end
+      local work_tree = utils.set_buf_work_tree(ev.buf, utils.get_work_tree({ git_dir = parse[2] }))
+      if not work_tree then
+        return
+      end
+
+      local function git_cmd(args)
+        return 'git -C ' .. vim.fn.shellescape(work_tree) .. ' ' .. args
+      end
+
+      local function git_systemlist(args)
+        return vim.fn.systemlist(git_cmd(args))
+      end
+
+      local function git_system(args)
+        return vim.fn.system(git_cmd(args))
       end
 
       vim.keymap.set('n', 'p', function()
         local current_pos = vim.api.nvim_win_get_cursor(0)
-        local result = vim.fn.systemlist('git log --format=%H --skip=1 -n 1 ' .. commit .. ' -- ' .. vim.fn.shellescape(filepath))
+        local result = git_systemlist(
+          'log --format=%H --skip=1 -n 1 ' .. vim.fn.shellescape(commit) .. ' -- ' .. vim.fn.shellescape(filepath)
+        )
         if result and #result > 0 and result[1] ~= '' then
-          vim.cmd('Gedit ' .. result[1] .. ':' .. filepath)
+          vim.cmd('Gedit ' .. vim.fn.fnameescape(result[1] .. ':' .. filepath))
           vim.schedule(function()
             local line_count = vim.api.nvim_buf_line_count(0)
             local target_line = math.min(current_pos[1], line_count)
@@ -31,6 +49,26 @@ function M.setup(group)
         end
       end, { buffer = ev.buf, nowait = true, silent = true })
 
+      vim.keymap.set('n', 'gf', function()
+        local abs_path = utils.worktree_relative_abs_path(work_tree, filepath)
+        if not abs_path then
+          vim.notify('Could not resolve file from repository root: ' .. filepath, vim.log.levels.WARN)
+          return
+        end
+        if vim.fn.filereadable(abs_path) ~= 1 then
+          vim.notify('File does not exist in worktree: ' .. filepath, vim.log.levels.WARN)
+          return
+        end
+
+        local current_pos = vim.api.nvim_win_get_cursor(0)
+        vim.cmd('edit ' .. vim.fn.fnameescape(abs_path))
+        vim.schedule(function()
+          local line_count = vim.api.nvim_buf_line_count(0)
+          local target_line = math.min(current_pos[1], line_count)
+          vim.api.nvim_win_set_cursor(0, { target_line, current_pos[2] })
+        end)
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Open blob file in worktree' })
+
       local ns_id = vim.api.nvim_create_namespace("FugitiveDiffDim")
       local dim_enabled = false
       vim.keymap.set('n', 'dd', function()
@@ -39,11 +77,20 @@ function M.setup(group)
           dim_enabled = false
           print('Diff highlight cleared')
         else
-          local parent_result = vim.fn.systemlist('git log --format=%H --skip=1 -n 1 ' .. commit .. ' -- ' .. vim.fn.shellescape(filepath))
+          local parent_result = git_systemlist(
+            'log --format=%H --skip=1 -n 1 ' .. vim.fn.shellescape(commit) .. ' -- ' .. vim.fn.shellescape(filepath)
+          )
           local parent_commit = parent_result and #parent_result > 0 and parent_result[1] ~= '' and parent_result[1]
             or commit .. '^'
 
-          local diff_output = vim.fn.systemlist('git diff --unified=0 ' .. parent_commit .. ' ' .. commit .. ' -- ' .. vim.fn.shellescape(filepath))
+          local diff_output = git_systemlist(
+            'diff --unified=0 '
+              .. vim.fn.shellescape(parent_commit)
+              .. ' '
+              .. vim.fn.shellescape(commit)
+              .. ' -- '
+              .. vim.fn.shellescape(filepath)
+          )
           local diff_lines = {}
 
           for _, line in ipairs(diff_output) do
@@ -109,10 +156,11 @@ function M.setup(group)
         f:write(table.concat(patch_lines, '\n') .. '\n')
         f:close()
 
-        local git_dir = vim.fn.FugitiveWorkTree()
-
         -- Step 1: インタラクティブリベースで対象コミットを編集モードに
-        local rebase_cmd = 'cd ' .. vim.fn.shellescape(git_dir) .. " && GIT_SEQUENCE_EDITOR=\"sed -i '/" .. commit:sub(1, 7) .. "/s/^pick/edit/'\" git rebase -i " .. commit .. '^ 2>&1'
+        local rebase_cmd = 'GIT_SEQUENCE_EDITOR='
+          .. vim.fn.shellescape("sed -i '/" .. commit:sub(1, 7) .. "/s/^pick/edit/'")
+          .. ' '
+          .. git_cmd('rebase -i ' .. vim.fn.shellescape(commit .. '^') .. ' 2>&1')
         local rebase_result = vim.fn.system(rebase_cmd)
 
         if not rebase_result:match('Stopped at') then
@@ -122,28 +170,32 @@ function M.setup(group)
         end
 
         -- Step 2: パッチを適用してコミットから変更を削除
-        local apply_cmd = 'cd ' .. vim.fn.shellescape(git_dir) .. ' && git apply --unidiff-zero ' .. vim.fn.shellescape(patch_file) .. ' && git add ' .. vim.fn.shellescape(filepath) .. ' && git commit --amend --no-edit 2>&1'
+        local apply_cmd = git_cmd('apply --unidiff-zero ' .. vim.fn.shellescape(patch_file))
+          .. ' && '
+          .. git_cmd('add ' .. vim.fn.shellescape(filepath))
+          .. ' && '
+          .. git_cmd('commit --amend --no-edit 2>&1')
         local apply_result = vim.fn.system(apply_cmd)
 
         if vim.v.shell_error ~= 0 then
           print('Apply failed (conflict?): ' .. apply_result:sub(1, 100))
-          vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
+          git_system('rebase --abort')
           os.remove(patch_file)
           return
         end
 
         -- Step 3: リベース継続
-        local continue_result = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --continue 2>&1')
+        local continue_result = git_system('rebase --continue 2>&1')
 
         if not (continue_result:match('Successfully rebased') or vim.v.shell_error == 0) then
           print('Rebase continue failed (conflict?): ' .. continue_result:sub(1, 100))
-          vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
+          git_system('rebase --abort')
           os.remove(patch_file)
           return
         end
 
         -- Step 4: ワーキングツリーをクリーンな状態にリセット
-        vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git checkout HEAD -- ' .. vim.fn.shellescape(filepath))
+        git_system('checkout HEAD -- ' .. vim.fn.shellescape(filepath))
 
         -- Step 5: 削除した変更をインデックスに復元（逆パッチを適用）
         local forward_patch_lines = {
@@ -165,7 +217,9 @@ function M.setup(group)
           f2:write(table.concat(forward_patch_lines, '\n') .. '\n')
           f2:close()
 
-          local restore_cmd = 'cd ' .. vim.fn.shellescape(git_dir) .. ' && git apply --unidiff-zero ' .. vim.fn.shellescape(forward_patch_file) .. ' && git add ' .. vim.fn.shellescape(filepath) .. ' 2>&1'
+          local restore_cmd = git_cmd('apply --unidiff-zero ' .. vim.fn.shellescape(forward_patch_file))
+            .. ' && '
+            .. git_cmd('add ' .. vim.fn.shellescape(filepath) .. ' 2>&1')
           local restore_result = vim.fn.system(restore_cmd)
           os.remove(forward_patch_file)
 
@@ -182,54 +236,62 @@ function M.setup(group)
 
       -- df: ファイル全体の変更を対象コミットから取り除き、後続へ反映
       vim.keymap.set('n', 'df', function()
-        local git_dir = vim.fn.FugitiveWorkTree()
-        if git_dir == '' then
-          vim.notify('Not in a git repository', vim.log.levels.ERROR)
-          return
-        end
-
-        local stashed = utils.auto_stash(git_dir, {
+        local stashed = utils.auto_stash(work_tree, {
           message = "fugitive-ext blob auto-stash",
           keep_index = true,
           notify_stashed = true,
         })
         if stashed == nil then return end
 
-        local parent_result = vim.fn.systemlist('git log --format=%H --skip=1 -n 1 ' .. commit .. ' -- ' .. vim.fn.shellescape(filepath))
-        local parent_commit = parent_result and #parent_result > 0 and parent_result[1] ~= '' and parent_result[1] or commit .. '^'
+        local parent_result = git_systemlist(
+          'log --format=%H --skip=1 -n 1 ' .. vim.fn.shellescape(commit) .. ' -- ' .. vim.fn.shellescape(filepath)
+        )
+        local parent_commit = commit .. '^'
+        if parent_result and #parent_result > 0 and parent_result[1] ~= '' then
+          parent_commit = parent_result[1]
+        end
 
         -- Step 1: rebase -i edit
-        local rebase_cmd = 'cd ' .. vim.fn.shellescape(git_dir) .. " && GIT_SEQUENCE_EDITOR=\"sed -i '/" .. commit:sub(1, 7) .. "/s/^pick/edit/'\" git rebase -i " .. commit .. '^ 2>&1'
+        local rebase_cmd = 'GIT_SEQUENCE_EDITOR='
+          .. vim.fn.shellescape("sed -i '/" .. commit:sub(1, 7) .. "/s/^pick/edit/'")
+          .. ' '
+          .. git_cmd('rebase -i ' .. vim.fn.shellescape(commit .. '^') .. ' 2>&1')
         local rebase_result = vim.fn.system(rebase_cmd)
         if not rebase_result:match('Stopped at') then
           vim.notify('Rebase failed: ' .. rebase_result:sub(1, 120), vim.log.levels.ERROR)
-          if stashed then utils.pop_auto_stash(git_dir, { notify_popped = true }) end
+          if stashed then utils.pop_auto_stash(work_tree, { notify_popped = true }) end
           return
         end
 
         -- Step 2: 親の状態に戻して amend
-        local restore_cmd = 'cd ' .. vim.fn.shellescape(git_dir) .. ' && git checkout ' .. vim.fn.shellescape(parent_commit) .. ' -- ' .. vim.fn.shellescape(filepath) .. ' && git add ' .. vim.fn.shellescape(filepath) .. ' && git commit --amend --no-edit 2>&1'
+        local restore_cmd = git_cmd(
+          'checkout ' .. vim.fn.shellescape(parent_commit) .. ' -- ' .. vim.fn.shellescape(filepath)
+        )
+          .. ' && '
+          .. git_cmd('add ' .. vim.fn.shellescape(filepath))
+          .. ' && '
+          .. git_cmd('commit --amend --no-edit 2>&1')
         local restore_result = vim.fn.system(restore_cmd)
         if vim.v.shell_error ~= 0 then
           vim.notify('Amend failed: ' .. restore_result:sub(1, 120), vim.log.levels.ERROR)
-          vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
-          if stashed then utils.pop_auto_stash(git_dir, { notify_popped = true }) end
+          git_system('rebase --abort')
+          if stashed then utils.pop_auto_stash(work_tree, { notify_popped = true }) end
           return
         end
 
         -- Step 3: rebase --continue
-        local continue_result = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --continue 2>&1')
+        local continue_result = git_system('rebase --continue 2>&1')
         if not (continue_result:match('Successfully rebased') or vim.v.shell_error == 0) then
           vim.notify('Rebase continue failed: ' .. continue_result:sub(1, 120), vim.log.levels.ERROR)
-          vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
-          if stashed then utils.pop_auto_stash(git_dir, { notify_popped = true }) end
+          git_system('rebase --abort')
+          if stashed then utils.pop_auto_stash(work_tree, { notify_popped = true }) end
           return
         end
 
         -- Step 4: ワークツリーをHEADに揃える
-        vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git checkout HEAD -- ' .. vim.fn.shellescape(filepath))
+        git_system('checkout HEAD -- ' .. vim.fn.shellescape(filepath))
 
-        if stashed then utils.pop_auto_stash(git_dir, { notify_popped = true }) end
+        if stashed then utils.pop_auto_stash(work_tree, { notify_popped = true }) end
         vim.cmd('checktime')
         vim.notify('Removed file changes from commit ' .. commit:sub(1, 7), vim.log.levels.INFO)
       end, { buffer = ev.buf, silent = true, desc = 'Drop file changes from commit' })

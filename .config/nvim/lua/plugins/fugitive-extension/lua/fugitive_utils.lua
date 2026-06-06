@@ -9,6 +9,58 @@ function M.normalize_path(path)
   return (vim.fn.fnamemodify(path, ':p'):gsub('/+$', ''))
 end
 
+---@param work_tree string|nil
+---@param path string|nil
+---@return string|nil
+function M.worktree_relative_abs_path(work_tree, path)
+  work_tree = M.normalize_path(work_tree)
+  if not work_tree or not path or path == '' then
+    return nil
+  end
+
+  local abs = vim.fn.fnamemodify(work_tree .. '/' .. path, ':p'):gsub('/+$', '')
+  if abs == work_tree or abs:sub(1, #work_tree + 1) ~= work_tree .. '/' then
+    return nil
+  end
+  return abs
+end
+
+---@param path string|nil
+---@return boolean
+local function is_absolute_path(path)
+  return type(path) == 'string' and (path:sub(1, 1) == '/' or path:match('^%a:[/\\]') ~= nil)
+end
+
+---@param base string
+---@param path string
+---@return string|nil
+local function resolve_path(base, path)
+  if is_absolute_path(path) then
+    return M.normalize_path(path)
+  end
+  return M.normalize_path(base .. '/' .. path)
+end
+
+---@param git_dir string|nil
+---@return string|nil
+local function get_work_tree_from_git_dir(git_dir)
+  git_dir = M.normalize_path(git_dir)
+  if not git_dir then
+    return nil
+  end
+
+  local configured_work_tree = vim.fn.trim(
+    vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' config --path --get core.worktree')
+  )
+  if vim.v.shell_error == 0 and configured_work_tree ~= '' then
+    return resolve_path(git_dir, configured_work_tree)
+  end
+
+  if vim.fn.fnamemodify(git_dir, ':t') == '.git' then
+    return M.normalize_path(vim.fn.fnamemodify(git_dir, ':h'))
+  end
+end
+
 ---@param bufnr integer|nil
 ---@return boolean
 function M.is_valid_buf(bufnr)
@@ -47,12 +99,20 @@ function M.get_work_tree(opts)
     return nil
   end
 
-  local work_tree = vim.fn.trim(
-    vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel')
-  )
-  if vim.v.shell_error ~= 0 or work_tree == '' then
+  local work_tree = get_work_tree_from_git_dir(git_dir)
+  local shell_error = 0
+  if not work_tree then
+    work_tree = vim.fn.trim(
+      vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' rev-parse --show-toplevel')
+    )
+    shell_error = vim.v.shell_error
+  end
+  if shell_error ~= 0 or not work_tree or work_tree == '' then
     if opts.notify then
-      vim.notify(opts.error_message or ("Could not determine work tree from git dir: " .. git_dir), vim.log.levels.ERROR)
+      vim.notify(
+        opts.error_message or ("Could not determine work tree from git dir: " .. git_dir),
+        vim.log.levels.ERROR
+      )
     end
     return nil
   end
@@ -303,9 +363,9 @@ function M.get_filepath_at_cursor(bufnr)
         return status_match
       end
       -- For git commit buffer
-      local commit_match = line:match('^diff %-%-git [ab]/(.+) [ab]/')
-      if commit_match then
-        return commit_match
+      local old_path, new_path = line:match('^diff %-%-git a/(.+) b/(.+)$')
+      if old_path then
+        return new_path or old_path
       end
       -- For rename in diff output
       local rename_to = line:match('^rename to (.+)$')

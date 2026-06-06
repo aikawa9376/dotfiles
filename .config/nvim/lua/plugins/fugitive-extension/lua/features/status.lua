@@ -173,15 +173,7 @@ local function status_entry_at_cursor()
 end
 
 local function worktree_relative_abs_path(path)
-  local work_tree = utils.get_buf_work_tree(vim.api.nvim_get_current_buf())
-  if not work_tree or not path or path == '' then return nil end
-
-  local root = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
-  local abs = vim.fn.fnamemodify(root .. '/' .. path, ':p'):gsub('/+$', '')
-  if abs == root or abs:sub(1, #root + 1) ~= root .. '/' then
-    return nil
-  end
-  return abs
+  return utils.worktree_relative_abs_path(utils.get_buf_work_tree(vim.api.nvim_get_current_buf()), path)
 end
 
 local function delete_untracked_directory_at_cursor()
@@ -403,15 +395,25 @@ function M.setup(group)
         else vim.notify("No operation to abort.", vim.log.levels.WARN) end
       end
 
+      local function status_git_prefix()
+        local work_tree = utils.get_buf_work_tree(b)
+        return work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or nil
+      end
+
       local function rename_stash_at_cursor(r)
         local line = vim.api.nvim_get_current_line()
         local current_msg = line:match('^%s*stash@%{%d+%}:%s*(.*)') or ""
         vim.ui.input({ prompt = 'New name for ' .. r .. ': ', default = current_msg }, function(input)
           if not input or input == '' or input == current_msg then return end
-          local hash = vim.fn.trim(vim.fn.system('git rev-parse ' .. vim.fn.shellescape(r)))
+          local git = status_git_prefix()
+          if not git then
+            vim.notify('Not in a git repository', vim.log.levels.WARN)
+            return
+          end
+          local hash = vim.fn.trim(vim.fn.system(git .. 'rev-parse ' .. vim.fn.shellescape(r)))
           if vim.v.shell_error ~= 0 then return end
-          vim.fn.system('git stash drop ' .. vim.fn.shellescape(r))
-          vim.fn.system('git stash store -m ' .. vim.fn.shellescape(input) .. ' ' .. hash)
+          vim.fn.system(git .. 'stash drop ' .. vim.fn.shellescape(r))
+          vim.fn.system(git .. 'stash store -m ' .. vim.fn.shellescape(input) .. ' ' .. vim.fn.shellescape(hash))
           notify_repo_changed()
         end)
       end
@@ -431,11 +433,21 @@ function M.setup(group)
         local h = line:match('^%s*(%x%x%x%x%x%x%x+)')
         if h then
           -- Verify it is a commit hash
-          if vim.fn.system('git rev-parse --verify ' .. h .. '^{commit} 2>/dev/null') and vim.v.shell_error == 0 then
-            local head = vim.fn.trim(vim.fn.system('git rev-parse HEAD'))
+          local git = status_git_prefix()
+          if not git then
+            vim.notify('Not in a git repository', vim.log.levels.WARN)
+            return
+          end
+          vim.fn.system(git .. 'rev-parse --verify ' .. vim.fn.shellescape(h .. '^{commit}') .. ' 2>/dev/null')
+          if vim.v.shell_error == 0 then
+            local head = vim.fn.trim(vim.fn.system(git .. 'rev-parse HEAD'))
             if head:sub(1, #h) == h then
               -- Use git commit --amend with a blocking editor that opens the message in Neovim
-              local wt_head = utils.get_buf_work_tree(b) or vim.fn.getcwd()
+              local wt_head = utils.get_buf_work_tree(b)
+              if not wt_head then
+                vim.notify('Not in a git repository', vim.log.levels.WARN)
+                return
+              end
               local tmpb = vim.fn.tempname()
               local editor_file_head = tmpb .. '.editor.sh'
               local marker_file_head = tmpb .. '.marker'
@@ -511,7 +523,8 @@ function M.setup(group)
               })
             else
               local base = h .. '^'
-              if vim.fn.system('git rev-parse ' .. base .. ' 2>/dev/null') and vim.v.shell_error ~= 0 then base = '--root' end
+              vim.fn.system(git .. 'rev-parse ' .. vim.fn.shellescape(base) .. ' 2>/dev/null')
+              if vim.v.shell_error ~= 0 then base = '--root' end
 
               -- Perform an interactive rebase that stops at the target commit and
               -- open the commit message file in this Neovim instance. We create a
@@ -520,7 +533,11 @@ function M.setup(group)
               -- marker file; a timer watches that marker and opens the file for
               -- editing. When the user writes the buffer we touch the done file to
               -- let git continue.
-              local wt = utils.get_buf_work_tree(b) or vim.fn.getcwd()
+              local wt = utils.get_buf_work_tree(b)
+              if not wt then
+                vim.notify('Not in a git repository', vim.log.levels.WARN)
+                return
+              end
               local short = h:sub(1, 7)
               local tmpbase = vim.fn.tempname()
               local seq_file = tmpbase .. '.seq.sh'

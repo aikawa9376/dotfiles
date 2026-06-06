@@ -1147,7 +1147,7 @@ function M.setup(group)
           vim.notify("No branch found on this line", vim.log.levels.WARN)
           return
         end
-        vim.cmd("FugitiveLog " .. branch)
+        vim.cmd("FugitiveLog " .. vim.fn.fnameescape(branch))
       end, { buffer = bufnr, silent = true, desc = "Open log for branch" })
 
       -- <C-Space>: Flog window toggle for current branch
