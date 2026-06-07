@@ -144,6 +144,7 @@ function M.build()
         auto_resize = true,
         acp_max_previews = 6,
         acp_prefetch_lines = 40,
+        acp_refresh_debounce_ms = 80,
       },
     },
     skills = {

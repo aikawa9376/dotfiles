@@ -83,6 +83,10 @@ local function is_scratch_buffer(bufnr)
     and vim.b[bufnr].lazyagent_is_scratch == true
 end
 
+local function is_acp_transcript_buffer(bufnr)
+  return bufnr and vim.api.nvim_buf_is_valid(bufnr) and buffer_var(bufnr, "lazyagent_acp_transcript") == true
+end
+
 local function file_exists(path)
   local stat = path and uv.fs_stat(path) or nil
   return stat and stat.type == "file" and (stat.size or 0) > 0
@@ -365,7 +369,7 @@ local function fallback_scope_name(bufnr)
     parts[#parts + 1] = sanitized_agent
   end
 
-  if buffer_var(bufnr, "lazyagent_acp_transcript") == true then
+  if is_acp_transcript_buffer(bufnr) then
     parts[#parts + 1] = "acp"
   elseif is_scratch_buffer(bufnr) then
     parts[#parts + 1] = "scratch"
@@ -532,6 +536,9 @@ local function normalize_image_url_text(text)
     return nil
   end
 
+  if candidate:sub(1, 1) == "@" then
+    candidate = vim.trim(candidate:sub(2))
+  end
   candidate = strip_wrapping_delimiters(candidate)
   if not candidate:match("^https?://") then
     return nil
@@ -619,6 +626,38 @@ local function line_candidate_starts(line, ext_start)
   return ordered
 end
 
+local function preview_line_candidate_starts(line, ext_start)
+  local starts = {}
+  for _, pos in ipairs(line_candidate_starts(line, ext_start)) do
+    starts[pos] = true
+  end
+
+  local lower = line:lower()
+  local idx = 1
+  while true do
+    local pos = line:find("@", idx, true)
+    if not pos or pos > ext_start then
+      break
+    end
+
+    local next_char = line:sub(pos + 1, pos + 1)
+    local rest = lower:sub(pos + 1)
+    if next_char == "/" or next_char == "~" or rest:sub(1, 7) == "file://" then
+      starts[pos] = true
+    elseif rest:sub(1, 7) == "http://" or rest:sub(1, 8) == "https://" then
+      starts[pos] = true
+    end
+    idx = pos + 1
+  end
+
+  local ordered = {}
+  for pos in pairs(starts) do
+    ordered[#ordered + 1] = pos
+  end
+  table.sort(ordered)
+  return ordered
+end
+
 local function url_candidate_starts(line)
   local starts = {}
   local lower = line:lower()
@@ -643,6 +682,34 @@ local function url_candidate_starts(line)
   return starts
 end
 
+local function preview_url_candidate_starts(line)
+  local starts = {}
+  for _, pos in ipairs(url_candidate_starts(line)) do
+    starts[pos] = true
+  end
+
+  local lower = line:lower()
+  local idx = 1
+  while true do
+    local pos = line:find("@", idx, true)
+    if not pos then
+      break
+    end
+    local rest = lower:sub(pos + 1)
+    if rest:sub(1, 7) == "http://" or rest:sub(1, 8) == "https://" then
+      starts[pos] = true
+    end
+    idx = pos + 1
+  end
+
+  local ordered = {}
+  for pos in pairs(starts) do
+    ordered[#ordered + 1] = pos
+  end
+  table.sort(ordered)
+  return ordered
+end
+
 local function candidate_end_position(line, ext_end)
   local pos = ext_end
   while pos < #line do
@@ -655,7 +722,10 @@ local function candidate_end_position(line, ext_end)
   return pos
 end
 
-local function extract_image_reference(line)
+local function extract_image_reference(line, opts)
+  opts = opts or {}
+  local path_starts = opts.include_managed_refs and preview_line_candidate_starts or line_candidate_starts
+  local url_starts = opts.include_managed_refs and preview_url_candidate_starts or url_candidate_starts
   local lower = line:lower()
   local best = nil
 
@@ -668,7 +738,7 @@ local function extract_image_reference(line)
       end
 
       local candidate_stop = candidate_end_position(line, ext_end)
-      for _, start_pos in ipairs(line_candidate_starts(line, ext_start)) do
+      for _, start_pos in ipairs(path_starts(line, ext_start)) do
         local raw = line:sub(start_pos, candidate_stop)
         local source_path = normalize_image_path_text(raw)
         local source_url = source_path == nil and normalize_image_url_text(raw) or nil
@@ -692,7 +762,7 @@ local function extract_image_reference(line)
   end
 
   if best == nil then
-    for _, start_pos in ipairs(url_candidate_starts(line)) do
+    for _, start_pos in ipairs(url_starts(line)) do
       local candidate_stop = candidate_end_position(line, start_pos + 7)
       local raw = line:sub(start_pos, candidate_stop)
       local source_url = normalize_image_url_text(raw)
@@ -1214,7 +1284,7 @@ local function close_preview(bufnr, mark_id)
   buf_state.items[mark_id] = nil
 
   if not next(buf_state.items) then
-    if buf_state.process_drops then
+    if buf_state.process_drops or buf_state.keep_tracking or buf_state.refresh_pending then
       return
     end
     if buf_state.augroup then
@@ -1224,15 +1294,36 @@ local function close_preview(bufnr, mark_id)
   end
 end
 
-local function clear_buffer_previews(bufnr)
+local function cleanup_preview_tracking(bufnr, buf_state)
+  if buf_state and buf_state.augroup then
+    pcall(vim.api.nvim_del_augroup_by_id, buf_state.augroup)
+  end
+  preview_state[bufnr] = nil
+end
+
+local function clear_buffer_previews(bufnr, opts)
+  opts = opts or {}
   local buf_state = preview_state[bufnr]
   if not buf_state then
     return
   end
 
+  if opts.keep_tracking then
+    buf_state.keep_tracking = true
+  end
+  if opts.detach then
+    buf_state.process_drops = false
+    buf_state.keep_tracking = false
+    buf_state.refresh_pending = false
+  end
+
   local mark_ids = vim.tbl_keys(buf_state.items)
   for _, mark_id in ipairs(mark_ids) do
     close_preview(bufnr, mark_id)
+  end
+
+  if opts.detach then
+    cleanup_preview_tracking(bufnr, preview_state[bufnr] or buf_state)
   end
 end
 
@@ -1275,13 +1366,22 @@ local function acp_preview_scan_config()
   }
 end
 
+local function acp_preview_refresh_debounce_ms()
+  local preview = image_paste_opts().preview or {}
+  local debounce = tonumber(preview.acp_refresh_debounce_ms)
+  if debounce == nil then
+    debounce = 80
+  end
+  return math.max(0, math.floor(debounce))
+end
+
 local function preview_scan_rows(bufnr)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   if line_count <= 0 then
     return 1, 0, nil
   end
 
-  if buffer_var(bufnr, "lazyagent_acp_transcript") ~= true then
+  if not is_acp_transcript_buffer(bufnr) then
     return 1, line_count, nil
   end
 
@@ -1318,7 +1418,7 @@ local function preview_placement_opts(bufnr, row, ref_text)
     auto_resize = preview.auto_resize ~= false,
   }
 
-  if buffer_var(bufnr, "lazyagent_acp_transcript") == true then
+  if is_acp_transcript_buffer(bufnr) then
     local win = first_visible_window_for_buf(bufnr)
     if win and vim.api.nvim_win_is_valid(win) then
       local width = math.max(12, vim.api.nvim_win_get_width(win) - 2)
@@ -1342,31 +1442,57 @@ end
 local function sync_previews(bufnr)
   local buf_state = preview_state[bufnr]
   if not buf_state or not vim.api.nvim_buf_is_valid(bufnr) then
-    if buf_state and buf_state.augroup then
-      pcall(vim.api.nvim_del_augroup_by_id, buf_state.augroup)
-    end
-    preview_state[bufnr] = nil
+    cleanup_preview_tracking(bufnr, buf_state)
     return
   end
 
+  local is_acp = is_acp_transcript_buffer(bufnr)
+  local scan_start, scan_stop, scan_cfg
+  if is_acp then
+    scan_start, scan_stop, scan_cfg = preview_scan_rows(bufnr)
+  end
+
   local stale = {}
+  local entries = {}
   for mark_id, item in pairs(buf_state.items) do
     local pos = vim.api.nvim_buf_get_extmark_by_id(bufnr, preview_ns, mark_id, {})
     if not pos or #pos < 2 then
       stale[#stale + 1] = mark_id
     else
-      local row = pos[1]
+      entries[#entries + 1] = { mark_id = mark_id, item = item, row = pos[1] }
+    end
+  end
+
+  table.sort(entries, function(a, b)
+    return a.row < b.row
+  end)
+
+  local shown = 0
+  local has_window = #vim.fn.win_findbuf(bufnr) > 0
+  for _, entry in ipairs(entries) do
+    local mark_id = entry.mark_id
+    local item = entry.item
+    local row = entry.row
+    local display_row = row + 1
+
+    if is_acp and (scan_stop < scan_start or display_row < scan_start or display_row > scan_stop) then
+      stale[#stale + 1] = mark_id
+    elseif is_acp and scan_cfg and shown >= scan_cfg.max_previews then
+      stale[#stale + 1] = mark_id
+    else
       local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
-      if line ~= item.ref_text then
+      if line ~= item.ref_text or not item.placement then
         stale[#stale + 1] = mark_id
       else
-        item.placement.opts.pos = { row + 1, 0 }
-        item.placement.opts.range = preview_range(row + 1, line)
-        if #vim.fn.win_findbuf(bufnr) > 0 and type(item.placement.show) == "function" then
-          item.placement:show()
-        else
-          item.placement:update()
+        item.placement.opts = item.placement.opts or {}
+        item.placement.opts.pos = { display_row, 0 }
+        item.placement.opts.range = preview_range(display_row, line)
+        if has_window and type(item.placement.show) == "function" then
+          pcall(item.placement.show, item.placement)
+        elseif type(item.placement.update) == "function" then
+          pcall(item.placement.update, item.placement)
         end
+        shown = shown + 1
       end
     end
   end
@@ -1377,9 +1503,11 @@ local function sync_previews(bufnr)
 end
 
 local process_dropped_image_lines
+local schedule_acp_preview_refresh
 
 local function ensure_preview_tracking(bufnr)
   if preview_state[bufnr] then
+    preview_state[bufnr].items = preview_state[bufnr].items or {}
     return preview_state[bufnr]
   end
 
@@ -1389,6 +1517,8 @@ local function ensure_preview_tracking(bufnr)
     items = {},
     process_drops = false,
     processing = false,
+    keep_tracking = false,
+    refresh_pending = false,
   }
 
   vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufWinEnter", "BufEnter", "WinEnter" }, {
@@ -1400,6 +1530,10 @@ local function ensure_preview_tracking(bufnr)
         if not buf_state then
           return
         end
+        if is_acp_transcript_buffer(bufnr) then
+          schedule_acp_preview_refresh(bufnr)
+          return
+        end
         if buf_state.process_drops and process_dropped_image_lines then
           process_dropped_image_lines(bufnr)
         end
@@ -1407,6 +1541,22 @@ local function ensure_preview_tracking(bufnr)
       end)
     end,
   })
+
+  for _, event in ipairs({ "WinScrolled", "WinResized" }) do
+    pcall(vim.api.nvim_create_autocmd, event, {
+      group = group,
+      callback = function()
+        local buf_state = preview_state[bufnr]
+        if not buf_state or not is_acp_transcript_buffer(bufnr) then
+          return
+        end
+        if not first_visible_window_for_buf(bufnr) then
+          return
+        end
+        schedule_acp_preview_refresh(bufnr)
+      end,
+    })
+  end
 
   vim.api.nvim_create_autocmd("BufWipeout", {
     group = group,
@@ -1416,18 +1566,46 @@ local function ensure_preview_tracking(bufnr)
       if not buf_state then
         return
       end
-      local mark_ids = vim.tbl_keys(buf_state.items)
-      for _, mark_id in ipairs(mark_ids) do
-        close_preview(bufnr, mark_id)
-      end
-      if buf_state.augroup then
-        pcall(vim.api.nvim_del_augroup_by_id, buf_state.augroup)
-      end
-      preview_state[bufnr] = nil
+      clear_buffer_previews(bufnr, { detach = true })
     end,
   })
 
   return preview_state[bufnr]
+end
+
+schedule_acp_preview_refresh = function(bufnr)
+  local buf_state = preview_state[bufnr]
+  if not buf_state or buf_state.refresh_pending then
+    return
+  end
+  if not is_acp_transcript_buffer(bufnr) then
+    return
+  end
+
+  buf_state.refresh_pending = true
+  local function run()
+    local state_for_buf = preview_state[bufnr]
+    if not state_for_buf then
+      return
+    end
+    state_for_buf.refresh_pending = false
+    if not vim.api.nvim_buf_is_valid(bufnr) then
+      cleanup_preview_tracking(bufnr, state_for_buf)
+      return
+    end
+    if not is_acp_transcript_buffer(bufnr) then
+      sync_previews(bufnr)
+      return
+    end
+    M.refresh_buffer_previews(bufnr)
+  end
+
+  local debounce = acp_preview_refresh_debounce_ms()
+  if debounce == 0 then
+    vim.schedule(run)
+  else
+    vim.defer_fn(run, debounce)
+  end
 end
 
 local function create_preview(bufnr, row, ref_text, image_path, Snacks)
@@ -1467,6 +1645,9 @@ end
 process_dropped_image_lines = function(bufnr)
   local buf_state = preview_state[bufnr]
   if not buf_state or buf_state.processing or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  if is_acp_transcript_buffer(bufnr) then
     return
   end
 
@@ -1651,10 +1832,18 @@ function M.attach_buffer(bufnr)
   end
 
   local buf_state = ensure_preview_tracking(bufnr)
-  buf_state.process_drops = true
+  local is_acp = is_acp_transcript_buffer(bufnr)
+  buf_state.process_drops = not is_acp
+  buf_state.keep_tracking = is_acp
 
   vim.schedule(function()
-    process_dropped_image_lines(bufnr)
+    if is_acp_transcript_buffer(bufnr) then
+      schedule_acp_preview_refresh(bufnr)
+      return
+    end
+    if process_dropped_image_lines then
+      process_dropped_image_lines(bufnr)
+    end
     sync_previews(bufnr)
   end)
 
@@ -1668,8 +1857,12 @@ function M.process_buffer(bufnr)
   end
 
   M.attach_buffer(bufnr)
-  process_dropped_image_lines(bufnr)
-  sync_previews(bufnr)
+  if is_acp_transcript_buffer(bufnr) then
+    M.refresh_buffer_previews(bufnr)
+  else
+    process_dropped_image_lines(bufnr)
+    sync_previews(bufnr)
+  end
   return bufnr
 end
 
@@ -1679,7 +1872,20 @@ function M.refresh_buffer_previews(bufnr)
     return nil
   end
 
-  clear_buffer_previews(bufnr)
+  local preview = image_paste_opts().preview or {}
+  if preview.enabled == false then
+    clear_buffer_previews(bufnr, { detach = true })
+    return bufnr
+  end
+
+  local is_acp = is_acp_transcript_buffer(bufnr)
+  if is_acp then
+    local buf_state = ensure_preview_tracking(bufnr)
+    buf_state.process_drops = false
+    buf_state.keep_tracking = true
+  end
+
+  clear_buffer_previews(bufnr, { keep_tracking = is_acp })
 
   local Snacks = nil
   local start_row, stop_row, cfg = preview_scan_rows(bufnr)
@@ -1692,7 +1898,7 @@ function M.refresh_buffer_previews(bufnr)
   local created = 0
   for offset, line in ipairs(lines) do
     local row = start_row + offset - 1
-    local candidate = extract_image_reference(line)
+    local candidate = extract_image_reference(line, { include_managed_refs = is_acp })
     local image_path = candidate and candidate.source_path or nil
     if image_path then
       Snacks = Snacks or load_snacks()
@@ -1713,7 +1919,7 @@ function M.clear_buffer_previews(bufnr)
   if not bufnr then
     return false
   end
-  clear_buffer_previews(bufnr)
+  clear_buffer_previews(bufnr, { detach = true })
   return true
 end
 
