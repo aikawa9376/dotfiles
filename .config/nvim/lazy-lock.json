@@ -89,7 +89,7 @@
   "oil.nvim": { "branch": "master", "commit": "b73018b75affd13fa38e2fc94ef753b465f770d7" },
   "outline.nvim": { "branch": "main", "commit": "2a132953b944561d45b52e4541ebfff71934a742" },
   "overseer.nvim": { "branch": "master", "commit": "a93d9f6d6defdac4bcd6d2c8ba988650e42e0a0e" },
-  "phprefactoring.nvim": { "branch": "feat/treesitter-main-support", "commit": "e6cbbc78f50736cd75110f13985be7d9fd37469b" },
+  "phprefactoring.nvim": { "branch": "main", "commit": "61471acdb1ab3ef396cff3cd8fa047b743a5430d" },
   "playground": { "branch": "master", "commit": "ba48c6a62a280eefb7c85725b0915e021a1a0749" },
   "plenary.nvim": { "branch": "master", "commit": "74b06c6c75e4eeb3108ec01852001636d85a932b" },
   "project.nvim": { "branch": "main", "commit": "43ad7ddf0dc5c475211c581f616bd5d779489b6a" },
