@@ -128,7 +128,8 @@ return {
     },
     interactive_agents = {
       Gemini = { yolo = true, mcp_context_dir_flag = "--include-directories" },
-      Copilot = { yolo = true, default = true },
+      Copilot = { yolo = true },
+      Codex = { yolo = true, default = true },
     },
     instant_mode = {
       append_text = " #cursor #small-fix #diffstyle-code", -- e.g. " #translate"
