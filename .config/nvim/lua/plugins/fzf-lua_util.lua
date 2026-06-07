@@ -80,6 +80,10 @@ local function stripAnsi(str)
   return tostring(str or ""):gsub("\27%[[0-9;]*[A-Za-z]", "")
 end
 
+local function selectedPath(selected)
+  return vim.trim(stripAnsi(selected and selected[1] or ""))
+end
+
 local function escapePattern(text)
   return text:gsub("([().%+%-*?[^$])", "%%%1")
 end
@@ -367,17 +371,13 @@ local getDirOpt = function ()
     end
   }
   opts.actions =  {
-    ["enter"] = {
-      function (selected)
-        vim.cmd('Oil ' .. selected[1])
-      end
-    },
-    ["ctrl-s"] = {
-      function (selected)
-        vim.cmd('vsplit')
-        vim.cmd('Oil ' .. selected[1])
-      end
-    },
+    ["enter"] = function(selected)
+      require("oil").open(selectedPath(selected))
+    end,
+    ["ctrl-s"] = function(selected)
+      vim.cmd("vsplit")
+      require("oil").open(selectedPath(selected))
+    end,
     ["ctrl-t"] = {
       function(selected)
         require('plugins.fzf-lua_util').fzf_files_for_dir(selected[1])
