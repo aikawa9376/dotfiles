@@ -88,8 +88,7 @@ return {
     }
   },
   {
-    "aikawa9376/phprefactoring.nvim",
-    branch = "feat/treesitter-main-support",
+    "adibhanna/phprefactoring.nvim",
     cmd = {
       "PHPExtractVariable", "PHPExtractMethod", "PHPExtractClass", "PHPExtractInterface",
       "PHPIntroduceConstant", "PHPIntroduceField", "PHPIntroduceParameter", "PHPChangeSignature",
