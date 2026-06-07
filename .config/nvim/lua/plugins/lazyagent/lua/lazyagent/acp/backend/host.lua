@@ -37,6 +37,19 @@ function M.setup(deps)
   local terminal_seq = 0
   local resolve_permission_option
 
+  local function first_number(...)
+    for idx = 1, select("#", ...) do
+      local raw = select(idx, ...)
+      if raw ~= nil then
+        local value = tonumber(raw)
+        if value ~= nil then
+          return value
+        end
+      end
+    end
+    return nil
+  end
+
   local function hook_reload_enabled()
     return ((((state.opts or {}).hooks or {}).reload_mode) or "hook") ~= "watch"
   end
@@ -517,23 +530,54 @@ function M.setup(deps)
     if kind == "usage_update" then
       -- Merge usage info into model catalog so UI can display context/usage
       local model_id = update.modelId or update.currentModelId or (update.model and update.model.modelId) or nil
+      local usage = type(update.usage) == "table" and vim.deepcopy(update.usage) or {}
+      if update.used ~= nil then
+        usage.used = update.used
+        usage.usedTokens = usage.usedTokens or update.used
+      end
+      if update.size ~= nil then
+        usage.size = update.size
+        usage.contextSize = usage.contextSize or update.size
+      end
+
       if type(session.model_catalog) == "table" and type(session.model_catalog.availableModels) == "table" then
         for _, m in ipairs(session.model_catalog.availableModels) do
           if type(m) == "table" and (not model_id or m.modelId == model_id) then
             m._meta = m._meta or {}
-            if type(update.usage) == "table" then
-              m._meta.usage = vim.deepcopy(update.usage)
-              local used = nil
-              local total = nil
-              if update.usage.promptTokens or update.usage.completionTokens then
-                local p = tonumber(update.usage.promptTokens) or 0
-                local c = tonumber(update.usage.completionTokens) or 0
-                used = p + c
-              elseif update.usage.usedTokens then
-                used = tonumber(update.usage.usedTokens)
-              end
-              total = tonumber(update.usage.totalTokens) or tonumber(update.usage.contextSize) or tonumber(m._meta.contextSize) or tonumber(m.contextSize)
-              if used and total then
+            if next(usage) ~= nil then
+              m._meta.usage = vim.deepcopy(usage)
+              local used = first_number(
+                update.used,
+                update.usedTokens,
+                update.contextUsedTokens,
+                update.contextTokens,
+                update.context_tokens,
+                update.context_used_tokens,
+                usage.used,
+                usage.usedTokens,
+                usage.contextUsedTokens,
+                usage.contextTokens,
+                usage.context_tokens,
+                usage.context_used_tokens,
+                usage.used_tokens
+              )
+              local total = first_number(
+                update.size,
+                update.contextSize,
+                update.totalContextTokens,
+                update.contextWindow,
+                update.contextLimit,
+                update.context_window,
+                usage.size,
+                usage.contextSize,
+                usage.totalContextTokens,
+                usage.contextWindow,
+                usage.contextLimit,
+                usage.context_window,
+                m._meta.contextSize,
+                m.contextSize
+              )
+              if used and total and total > 0 then
                 m._meta.token_usage_used = used
                 m._meta.token_usage_total = total
               end
