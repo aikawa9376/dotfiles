@@ -62,6 +62,19 @@ function M.new(ctx)
     return text
   end
 
+  local function first_number(...)
+    for idx = 1, select("#", ...) do
+      local raw = select(idx, ...)
+      if raw ~= nil then
+        local value = tonumber(raw)
+        if value ~= nil then
+          return value
+        end
+      end
+    end
+    return nil
+  end
+
   local function current_config_details(session, keys)
     local option = find_config_option(session, keys)
     if not option then
@@ -137,22 +150,34 @@ function M.new(ctx)
     for _, model in ipairs(catalog.availableModels or {}) do
       if type(model) == "table" and model.modelId == current_model_id then
         local meta = model._meta or {}
-        local used = tonumber(meta.token_usage_used) or (meta.usage and tonumber(meta.usage.usedTokens)) or nil
-        local total = tonumber(meta.token_usage_total)
-          or (meta.usage and (tonumber(meta.usage.totalTokens) or tonumber(meta.usage.contextSize)))
+        local usage = type(meta.usage) == "table" and meta.usage or {}
+        local used = first_number(
+          meta.token_usage_used,
+          usage.used,
+          usage.usedTokens,
+          usage.contextUsedTokens,
+          usage.contextTokens,
+          usage.context_tokens,
+          usage.context_used_tokens,
+          usage.used_tokens
+        )
+        local total = first_number(
+          meta.token_usage_total,
+          usage.size,
+          usage.contextSize,
+          usage.totalContextTokens,
+          usage.contextWindow,
+          usage.contextLimit,
+          usage.context_window
+        )
           or (tonumber(meta.contextSize) or tonumber(model.contextSize))
           or nil
-
-        if not used and meta.usage and (meta.usage.promptTokens or meta.usage.completionTokens) then
-          local prompt = tonumber(meta.usage.promptTokens) or 0
-          local completion = tonumber(meta.usage.completionTokens) or 0
-          used = prompt + completion
-        end
 
         if used and total and total > 0 then
           return {
             used_tokens = used,
             total_tokens = total,
+            percentage = (used / total) * 100,
           }
         end
 
@@ -164,34 +189,6 @@ function M.new(ctx)
 
         return nil
       end
-    end
-
-    return nil
-  end
-
-  local function current_model_usage(session)
-    local usage = current_model_usage_stats(session)
-    if not usage then
-      return nil
-    end
-
-    local used = tonumber(usage.used_tokens)
-    local total = tonumber(usage.total_tokens)
-    if used and total and total > 0 then
-      return string.format("%d/%d (%.1f%%)", used, total, (used / total) * 100)
-    end
-
-    if usage.provider_usage and usage.provider_usage ~= "" then
-      local usage_text = tostring(usage.provider_usage)
-      local parsed_used, parsed_total = usage_text:match("(%d+)%s*[/%-]%s*(%d+)")
-      if parsed_used and parsed_total then
-        local numeric_used = tonumber(parsed_used)
-        local numeric_total = tonumber(parsed_total)
-        if numeric_used and numeric_total and numeric_total > 0 then
-          return string.format("%d/%d (%.1f%%)", numeric_used, numeric_total, (numeric_used / numeric_total) * 100)
-        end
-      end
-      return usage_text
     end
 
     return nil
@@ -211,6 +208,55 @@ function M.new(ctx)
     return tostring(math.floor(value + 0.5))
   end
 
+  local function compact_percent(value)
+    value = tonumber(value)
+    if not value then
+      return nil
+    end
+    return string.format("%.1f%%", value):gsub("%.0%%$", "%%")
+  end
+
+  local function format_context_usage(used, total)
+    used = tonumber(used)
+    total = tonumber(total)
+    if used and total and total > 0 then
+      return string.format(
+        "Ctx %s (%s/%s)",
+        compact_percent((used / total) * 100) or "",
+        compact_tokens(used) or tostring(used),
+        compact_tokens(total) or tostring(total)
+      )
+    end
+    return nil
+  end
+
+  local function current_model_usage(session)
+    local usage = current_model_usage_stats(session)
+    if not usage then
+      return nil
+    end
+
+    local context_text = format_context_usage(usage.used_tokens, usage.total_tokens)
+    if context_text then
+      return context_text
+    end
+
+    if usage.provider_usage and usage.provider_usage ~= "" then
+      local usage_text = tostring(usage.provider_usage)
+      local parsed_used, parsed_total = usage_text:match("(%d+)%s*[/%-]%s*(%d+)")
+      if parsed_used and parsed_total then
+        local numeric_used = tonumber(parsed_used)
+        local numeric_total = tonumber(parsed_total)
+        if numeric_used and numeric_total and numeric_total > 0 then
+          return format_context_usage(numeric_used, numeric_total)
+        end
+      end
+      return usage_text
+    end
+
+    return nil
+  end
+
   local function footer_usage_stats(session)
     local direct = type(session and session.acp_usage_stats) == "table" and session.acp_usage_stats or {}
     local fallback = current_model_usage_stats(session) or {}
@@ -223,6 +269,12 @@ function M.new(ctx)
     end
     if context.remaining_tokens == nil and context.used_tokens ~= nil and context.total_tokens ~= nil then
       context.remaining_tokens = math.max(context.total_tokens - context.used_tokens, 0)
+    end
+    if context.percentage == nil then
+      context.percentage = fallback.percentage
+    end
+    if context.percentage == nil and context.used_tokens ~= nil and context.total_tokens ~= nil and context.total_tokens > 0 then
+      context.percentage = (context.used_tokens / context.total_tokens) * 100
     end
     return {
       turn = type(direct.turn) == "table" and vim.deepcopy(direct.turn) or {},
@@ -254,10 +306,11 @@ function M.new(ctx)
     if not (used and total and total > 0) then
       return current_model_usage(session), nil
     end
-    local base = string.format("Ctx %s/%s", compact_tokens(used) or used, compact_tokens(total) or total)
+    local base = format_context_usage(used, total)
     local remaining = tonumber(usage.context and usage.context.remaining_tokens)
     if remaining ~= nil then
-      return base, string.format("%s left", compact_tokens(remaining) or remaining)
+      local remaining_percent = compact_percent((remaining / total) * 100)
+      return base, string.format("%s left", remaining_percent or compact_tokens(remaining) or remaining)
     end
     return base, nil
   end

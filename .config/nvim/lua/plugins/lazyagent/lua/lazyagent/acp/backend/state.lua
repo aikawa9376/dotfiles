@@ -325,9 +325,12 @@ end
 
 local function first_number(...)
   for idx = 1, select("#", ...) do
-    local value = tonumber(select(idx, ...))
-    if value ~= nil then
-      return value
+    local raw = select(idx, ...)
+    if raw ~= nil then
+      local value = tonumber(raw)
+      if value ~= nil then
+        return value
+      end
     end
   end
   return nil
@@ -432,62 +435,178 @@ local function update_usage_stats(session, update, model_id)
     return nil
   end
 
+  update = type(update) == "table" and update or {}
   local usage = type(update.usage) == "table" and update.usage or {}
+  local context = type(update.context) == "table" and update.context or {}
+  local usage_context = type(usage.context) == "table" and usage.context or {}
+  local context_window = type(update.contextWindow) == "table" and update.contextWindow or {}
+  local usage_context_window = type(usage.contextWindow) == "table" and usage.contextWindow or {}
   local stats = type(session.usage_stats) == "table" and session.usage_stats or {
     turn = {},
     cumulative = {},
     context = {},
   }
+  stats.turn = type(stats.turn) == "table" and stats.turn or {}
+  stats.cumulative = type(stats.cumulative) == "table" and stats.cumulative or {}
+  stats.context = type(stats.context) == "table" and stats.context or {}
 
   local prompt_tokens = first_number(
+    update.promptTokens,
+    update.inputTokens,
+    update.prompt_tokens,
+    update.input_tokens,
     usage.promptTokens,
     usage.inputTokens,
     usage.prompt_tokens,
     usage.input_tokens
   )
   local completion_tokens = first_number(
+    update.completionTokens,
+    update.outputTokens,
+    update.completion_tokens,
+    update.output_tokens,
     usage.completionTokens,
     usage.outputTokens,
     usage.completion_tokens,
     usage.output_tokens
   )
   local turn_total_tokens = first_number(
+    update.turnTokens,
+    update.turnTotalTokens,
+    update.responseTokens,
+    update.totalTokens,
+    update.total_tokens,
     usage.turnTokens,
     usage.turnTotalTokens,
     usage.responseTokens,
-    usage.totalTokens
+    usage.totalTokens,
+    usage.total_tokens
   )
   if turn_total_tokens == nil and (prompt_tokens ~= nil or completion_tokens ~= nil) then
     turn_total_tokens = (prompt_tokens or 0) + (completion_tokens or 0)
   end
 
   local context_used_tokens = first_number(
+    update.used,
+    update.usedTokens,
+    update.contextUsedTokens,
+    update.contextTokens,
+    update.context_tokens,
+    update.context_used_tokens,
+    context.used,
+    context.usedTokens,
+    context.used_tokens,
+    context.total_tokens,
+    usage_context.used,
+    usage_context.usedTokens,
+    usage_context.used_tokens,
+    usage_context.total_tokens,
+    context_window.used,
+    context_window.usedTokens,
+    context_window.used_tokens,
+    context_window.total_tokens,
+    usage_context_window.used,
+    usage_context_window.usedTokens,
+    usage_context_window.used_tokens,
+    usage_context_window.total_tokens,
+    usage.used,
     usage.usedTokens,
     usage.contextUsedTokens,
     usage.contextTokens,
+    usage.context_tokens,
+    usage.context_used_tokens,
     usage.used_tokens
   )
   local context_total_tokens = first_number(
+    update.size,
+    update.contextSize,
+    update.totalContextTokens,
+    update.contextWindow,
+    update.contextLimit,
+    update.context_window,
+    update.maxContextTokens,
+    update.max_tokens,
+    context.size,
+    context.maxTokens,
+    context.max_tokens,
+    context.window,
+    usage_context.size,
+    usage_context.maxTokens,
+    usage_context.max_tokens,
+    usage_context.window,
+    context_window.size,
+    context_window.maxTokens,
+    context_window.max_tokens,
+    context_window.window,
+    usage_context_window.size,
+    usage_context_window.maxTokens,
+    usage_context_window.max_tokens,
+    usage_context_window.window,
+    usage.size,
     usage.contextSize,
     usage.totalContextTokens,
     usage.contextWindow,
-    usage.contextLimit
+    usage.contextLimit,
+    usage.context_window,
+    usage.maxContextTokens,
+    usage.max_tokens
   )
+  local context_percentage = first_number(
+    update.percentage,
+    update.contextPercentage,
+    update.context_percentage,
+    context.percentage,
+    context.contextPercentage,
+    context.context_percentage,
+    usage_context.percentage,
+    usage_context.contextPercentage,
+    usage_context.context_percentage,
+    context_window.percentage,
+    context_window.contextPercentage,
+    context_window.context_percentage,
+    usage_context_window.percentage,
+    usage_context_window.contextPercentage,
+    usage_context_window.context_percentage,
+    usage.percentage,
+    usage.contextPercentage,
+    usage.context_percentage
+  )
+  if context_percentage and context_percentage > 0 and context_percentage <= 1 then
+    context_percentage = context_percentage * 100
+  end
+  if context_used_tokens == nil and context_percentage ~= nil and context_total_tokens ~= nil then
+    context_used_tokens = (context_total_tokens * context_percentage) / 100
+  end
 
   local cumulative_prompt_tokens = first_number(
+    update.totalPromptTokens,
+    update.promptTokensTotal,
+    update.cumulativePromptTokens,
+    update.total_prompt_tokens,
     usage.totalPromptTokens,
     usage.promptTokensTotal,
-    usage.cumulativePromptTokens
+    usage.cumulativePromptTokens,
+    usage.total_prompt_tokens
   )
   local cumulative_completion_tokens = first_number(
+    update.totalCompletionTokens,
+    update.completionTokensTotal,
+    update.cumulativeCompletionTokens,
+    update.total_completion_tokens,
     usage.totalCompletionTokens,
     usage.completionTokensTotal,
-    usage.cumulativeCompletionTokens
+    usage.cumulativeCompletionTokens,
+    usage.total_completion_tokens
   )
   local cumulative_total_tokens = first_number(
+    update.totalSessionTokens,
+    update.sessionTokens,
+    update.cumulativeTokens,
+    update.total_session_tokens,
     usage.totalSessionTokens,
     usage.sessionTokens,
-    usage.cumulativeTokens
+    usage.cumulativeTokens,
+    usage.total_session_tokens
   )
 
   local provider_usage = first_nonempty(
@@ -509,6 +628,7 @@ local function update_usage_stats(session, update, model_id)
     tostring(turn_total_tokens or ""),
     tostring(context_used_tokens or ""),
     tostring(context_total_tokens or ""),
+    tostring(context_percentage or ""),
     tostring(provider_usage or ""),
   }, ":")
 
@@ -544,7 +664,15 @@ local function update_usage_stats(session, update, model_id)
     remaining_tokens = (context_used_tokens ~= nil and context_total_tokens ~= nil)
         and math.max(context_total_tokens - context_used_tokens, 0)
       or nil,
+    percentage = (context_used_tokens ~= nil and context_total_tokens ~= nil and context_total_tokens > 0)
+        and ((context_used_tokens / context_total_tokens) * 100)
+      or context_percentage,
   }
+  if type(update.cost) == "table" then
+    stats.cost = vim.deepcopy(update.cost)
+  elseif type(usage.cost) == "table" then
+    stats.cost = vim.deepcopy(usage.cost)
+  end
   stats.provider_usage = provider_usage and tostring(provider_usage) or nil
   stats.model_id = model_id
   stats.updated_at = os.time()
