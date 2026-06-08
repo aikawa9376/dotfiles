@@ -12,8 +12,8 @@ vim.b.did_ftplugin_blade = true
 
 -- Buffer-local mappings (use <buffer> to ensure mappings only apply to blade files)
 vim.keymap.set('n', 'gd', function()
-  require('laravel.navigate').goto_laravel_string()
-end, { buffer = true, noremap = true })
+  require('laravel_extension.features.definition').goto_definition()
+end, { buffer = true, noremap = true, silent = true, desc = 'Laravel: Follow definition' })
 
 -- コメント: ファイルタイププラグインを読み込んだことを示す
 -- vim.api.nvim_echo({{"Blade filetype plugin loaded", "MoreMsg"}}, false, {})

@@ -1147,31 +1147,66 @@ vim.cmd(
 )
 
 -- ------------------------------------------------------------------
--- loravel.nvim override
+-- laravel.nvim override
 -- ------------------------------------------------------------------
 
-M.fzf_laravel = function(winopts)
-  if vim.g.filetype ~= "php" and vim.g.filetype ~= "blade" then
-    if _G.laravel_nvim and _G.laravel_nvim.is_laravel_project then
-      local navigate = require('laravel.navigate')
-      if navigate.is_laravel_navigation_context() then
-        -- This is a Laravel-specific context, try Laravel navigation
-        local success = pcall(navigate.goto_laravel_string)
-        if success then
-          return -- Laravel navigation succeeded
-        end
-      end
-    end
-
-    -- Default to LSP definition for everything else
-    if vim.lsp.buf.definition then
-      require("fzf-lua.cmd").run_command('lsp_definitions')
-    else
-      vim.notify('No LSP definition available', vim.log.levels.WARN)
-    end
-  else
-    require("fzf-lua.cmd").run_command('lsp_definitions')
+local function goto_laravel_extension_context()
+  local ft = vim.bo.filetype
+  if ft ~= "php" and ft ~= "blade" then
+    return false
   end
+
+  local ok_livewire, livewire = pcall(require, "laravel_extension.features.livewire")
+  if ok_livewire and livewire.goto_livewire_at_cursor({ notify = false }) then
+    return true
+  end
+
+  local ok_component, component = pcall(require, "laravel_extension.features.component")
+  if ok_component and component.goto_component_at_cursor({ notify = false }) then
+    return true
+  end
+
+  local ok_view, view = pcall(require, "laravel_extension.features.view")
+  if ok_view and view.goto_view_at_cursor({ notify = false, fallback_to_laravel = false }) then
+    return true
+  end
+
+  return false
+end
+
+local function goto_laravel_nvim_context()
+  if not (_G.laravel_nvim and _G.laravel_nvim.is_laravel_project) then
+    return false
+  end
+
+  local ok_nav, navigate = pcall(require, "laravel.navigate")
+  if not ok_nav or type(navigate.is_laravel_navigation_context) ~= "function" then
+    return false
+  end
+
+  local ok_context, is_context = pcall(navigate.is_laravel_navigation_context)
+  if not ok_context or not is_context or type(navigate.goto_laravel_string) ~= "function" then
+    return false
+  end
+
+  local ok_goto, result = pcall(navigate.goto_laravel_string)
+  return ok_goto and result ~= false
+end
+
+local function goto_lsp_definitions()
+  if vim.lsp.buf.definition then
+    require("fzf-lua.cmd").run_command("lsp_definitions")
+  else
+    vim.notify("No LSP definition available", vim.log.levels.WARN)
+  end
+end
+
+M.fzf_laravel = function()
+  if goto_laravel_extension_context() or goto_laravel_nvim_context() then
+    return
+  end
+
+  goto_lsp_definitions()
 end
 
 vim.cmd([[command! -nargs=* LaravelLua lua require"plugins.fzf-lua_util".fzf_laravel()]])
