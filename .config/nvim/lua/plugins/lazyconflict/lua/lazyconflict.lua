@@ -116,6 +116,24 @@ local function normalize_path(path, cwd)
   return vim.fs.normalize(path)
 end
 
+local function normalize_cwd(cwd)
+  cwd = cwd or fn.getcwd()
+  return normalize_path(cwd)
+end
+
+local function git_root_for(cwd)
+  cwd = normalize_cwd(cwd)
+  local output = fn.systemlist({ "git", "-C", cwd, "rev-parse", "--show-toplevel" })
+  if vim.v.shell_error ~= 0 or not output or output[1] == "" then
+    return nil
+  end
+  return vim.fs.normalize(output[1])
+end
+
+local function path_readable(path, cwd)
+  return fn.filereadable(normalize_path(path, cwd)) == 1
+end
+
 local function get_buf_path(bufnr)
   return normalize_path(api.nvim_buf_get_name(bufnr))
 end
@@ -529,7 +547,7 @@ function M.check(opts)
       end
     end
   end
-  cwd = cwd or fn.getcwd()
+  cwd = normalize_cwd(cwd)
   if type(cmd) == "string" then
     cmd = { cmd }
   end
@@ -543,24 +561,37 @@ function M.check(opts)
   end
   state.cwd = cwd
 
-  local function run_rg(files)
+  local function run_rg(files, rg_cwd)
+    rg_cwd = normalize_cwd(rg_cwd or cwd)
     if not files or #files == 0 then
+      set_conflicts({})
+      return
+    end
+    local readable_files = {}
+    for _, file in ipairs(files) do
+      if file ~= "" and path_readable(file, rg_cwd) then
+        table.insert(readable_files, file)
+      end
+    end
+    if #readable_files == 0 then
       set_conflicts({})
       return
     end
     local rg_cmd = {
       "rg",
       "--no-heading",
+      "--with-filename",
       "--line-number",
       "--color",
       "never",
       detection.pattern or default_config.detection.pattern,
+      "--",
     }
-    vim.list_extend(rg_cmd, files)
+    vim.list_extend(rg_cmd, readable_files)
     local stdout_data = {}
     local stderr_data = {}
     state.job = fn.jobstart(rg_cmd, {
-      cwd = cwd,
+      cwd = rg_cwd,
       stdout_buffered = true,
       stderr_buffered = true,
       on_stdout = function(_, data)
@@ -585,7 +616,7 @@ function M.check(opts)
         local notify_err = code > 1 and #stderr_data > 0
         local entries = {}
         if code == 0 or code == 1 then
-          entries = parse_lines(stdout_data, cwd)
+          entries = parse_lines(stdout_data, rg_cwd)
         end
         vim.schedule(function()
           set_conflicts(entries)
@@ -691,7 +722,7 @@ function M.check(opts)
           return
         end
         vim.schedule(function()
-          run_rg(files)
+          run_rg(files, cwd)
         end)
       end,
     })
@@ -699,22 +730,24 @@ function M.check(opts)
   end
 
   -- "git" モード (デフォルト): git diff --diff-filter=U で競合ファイルを取得
-  if #vim.fs.find(".git", { path = cwd, upward = true }) == 0 then
+  local git_root = git_root_for(cwd)
+  if not git_root then
     set_conflicts({})
     return
   end
+  state.cwd = git_root
 
   local files = {}
   local stderr_git = {}
   state.git_job = fn.jobstart({ "git", "diff", "--name-only", "--diff-filter=U" }, {
-    cwd = cwd,
+    cwd = git_root,
     stdout_buffered = true,
     stderr_buffered = true,
     on_stdout = function(_, data)
       if data then
         for _, line in ipairs(data) do
           if line ~= "" then
-            table.insert(files, normalize_path(line, cwd))
+            table.insert(files, line)
           end
         end
       end
@@ -739,7 +772,7 @@ function M.check(opts)
         return
       end
       vim.schedule(function()
-        run_rg(files)
+        run_rg(files, git_root)
       end)
     end,
   })
