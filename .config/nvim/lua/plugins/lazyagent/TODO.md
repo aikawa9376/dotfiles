@@ -44,8 +44,9 @@
   - Keep one shared API for visible slash commands across completion, palette, footer, and reports.
   - Apply the same model to `@` completions if possible.
 
-- Add a `:LazyAgentDoctor` diagnostic command.
-  - Show PID, backend, ACP session ID, transcript path, tmux pool/session names, MCP URL, and command source breakdown.
+- Expand doctor diagnostics beyond ACP.
+  - `:LazyAgentACPDoctor` covers the active ACP session state.
+  - Add a global `:LazyAgentDoctor` for PID, backend, tmux pool/session names, MCP URL, non-ACP sessions, and command source breakdown.
 
 - Improve footer observability.
   - Surface more debug-friendly metadata such as transcript path/session identity when useful.

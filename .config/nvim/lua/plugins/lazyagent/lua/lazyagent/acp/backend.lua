@@ -811,6 +811,30 @@ local function create_backend(default_view)
     return actions_helpers.show_capabilities_for_session(session)
   end
 
+  function backend.show_doctor(target_pane)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return actions_helpers.show_doctor_for_session(session)
+  end
+
+  function backend.show_context_budget(target_pane)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return actions_helpers.show_context_budget_for_session(session)
+  end
+
+  function backend.show_tool_review(target_pane)
+    local session = get_session(target_pane)
+    if not session then
+      return false
+    end
+    return actions_helpers.show_tool_review_for_session(session)
+  end
+
   function backend.list_sessions(target_pane, on_done, opts)
     local session = get_session(target_pane)
     if not session or not session.client then

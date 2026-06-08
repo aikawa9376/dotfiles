@@ -968,6 +968,36 @@ function M.setup(deps)
     end)
   end
 
+  function module.show_acp_doctor(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_doctor) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose ACP doctor diagnostics", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_doctor(pane_id)
+    end)
+  end
+
+  function module.show_acp_context_budget(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_context_budget) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose a context budget report", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_context_budget(pane_id)
+    end)
+  end
+
+  function module.show_acp_tool_review(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_tool_review) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose a tool review report", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_tool_review(pane_id)
+    end)
+  end
+
   function module.open_raw_transcript(agent_name)
     with_acp_session(agent_name, function(chosen, pane_id, backend_mod)
       local session = state.sessions[chosen]

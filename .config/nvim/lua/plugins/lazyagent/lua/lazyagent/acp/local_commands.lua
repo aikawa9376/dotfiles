@@ -1,6 +1,6 @@
 local M = {}
 
-local ordered_names = { "config", "model", "mode", "resources", "capabilities", "new" }
+local ordered_names = { "config", "model", "mode", "resources", "capabilities", "doctor", "context", "tools", "new" }
 
 local commands = {
   config = {
@@ -32,6 +32,24 @@ local commands = {
     label = "/capabilities",
     desc = "Show ACP capability summary for this session.",
     doc = "Show ACP capabilities, config options, and local actions for the active session.",
+  },
+  doctor = {
+    name = "doctor",
+    label = "/doctor",
+    desc = "Open ACP health diagnostics for this session.",
+    doc = "Open a local ACP doctor report with provider, runtime, permission, context, and tool state.",
+  },
+  context = {
+    name = "context",
+    label = "/context",
+    desc = "Open ACP context budget details for this session.",
+    doc = "Open a local ACP context budget report with usage, transcript, compaction, and carryover state.",
+  },
+  tools = {
+    name = "tools",
+    label = "/tools",
+    desc = "Open ACP tool review for this session.",
+    doc = "Open a local ACP tool review with statuses, touched paths, and output sizes.",
   },
   new = {
     name = "new",
@@ -133,6 +151,15 @@ function M.is_available(name, session)
       or (session.acp_transcript_path and session.acp_transcript_path ~= "")
   end
   if name == "capabilities" then
+    return true
+  end
+  if name == "doctor" then
+    return true
+  end
+  if name == "context" then
+    return true
+  end
+  if name == "tools" then
     return true
   end
   if name == "new" then

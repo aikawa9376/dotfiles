@@ -1306,6 +1306,33 @@ function M.new(ctx)
         }
       end
 
+      if backend and type(backend.show_tool_review) == "function" then
+        actions[#actions + 1] = {
+          label = "Tool review",
+          action = function()
+            backend.show_tool_review(pane_id_for_bufnr(bufnr))
+          end,
+        }
+      end
+
+      if backend and type(backend.show_context_budget) == "function" then
+        actions[#actions + 1] = {
+          label = "Context budget",
+          action = function()
+            backend.show_context_budget(pane_id_for_bufnr(bufnr))
+          end,
+        }
+      end
+
+      if backend and type(backend.show_doctor) == "function" then
+        actions[#actions + 1] = {
+          label = "Doctor",
+          action = function()
+            backend.show_doctor(pane_id_for_bufnr(bufnr))
+          end,
+        }
+      end
+
       if diff_view and type(diff_view.has_diff_block_under_cursor) == "function"
           and diff_view.has_diff_block_under_cursor(bufnr) then
         actions[#actions + 1] = {
