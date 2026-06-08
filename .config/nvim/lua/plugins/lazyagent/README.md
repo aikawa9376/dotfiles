@@ -291,6 +291,9 @@ ACP session では以下の slash command を Neovim 側で処理します。
 | `/config` | config option picker |
 | `/resources` | ACP resource browser |
 | `/capabilities` | session capability summary |
+| `/doctor` | ACP health diagnostics |
+| `/context` | context budget report |
+| `/tools` | tool / edit review |
 | `/new` | session restart |
 
 agent が advertise していない `/...` は通常の prompt text として送信します。
@@ -306,6 +309,8 @@ compaction で省略された以前のやり取りも含めて全文を全画面
 footer は advertise された metadata を使って、provider / native session title / session summary / model / mode / reasoning / context usage / remaining context / turn usage / cumulative usage / provider-specific usage をできるだけ表示します。
 
 ACP の command palette と config picker も advertise された説明・category・input hint をできるだけ表示し、boolean / toggle 系 option は picker から直接切り替えられます。
+
+`:LazyAgentACPDoctor` / `:LazyAgentACPContext` / `:LazyAgentACPReview` は `ga` の action menu と local slash command からも開けます。
 
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
@@ -364,6 +369,9 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 | `:LazyAgentACPTools [agent]` | ACP tool timeline |
 | `:LazyAgentACPResources [agent]` | ACP resource browser |
 | `:LazyAgentACPCapabilities [agent]` | ACP capability summary |
+| `:LazyAgentACPDoctor [agent]` | ACP health diagnostics |
+| `:LazyAgentACPContext [agent]` | context usage / transcript / compaction budget report |
+| `:LazyAgentACPReview [agent]` | ACP tool / edit review report |
 | `:Gemini` / `:Claude` / `:Codex` / `:Copilot` / `:Cursor` | agent を直接起動 |
 
 ## Scratch tokens

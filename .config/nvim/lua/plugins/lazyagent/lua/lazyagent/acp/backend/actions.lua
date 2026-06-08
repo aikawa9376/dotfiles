@@ -62,6 +62,53 @@ local function read_text_ref(ref)
   return table.concat(lines, "\n")
 end
 
+local function format_bytes(bytes)
+  bytes = tonumber(bytes)
+  if not bytes or bytes < 0 then
+    return nil
+  end
+  if bytes < 1024 then
+    return string.format("%d B", bytes)
+  end
+
+  local value = bytes
+  local unit = "B"
+  for _, candidate in ipairs({ "KiB", "MiB", "GiB", "TiB" }) do
+    value = value / 1024
+    unit = candidate
+    if value < 1024 then
+      break
+    end
+  end
+  return string.format("%.1f %s", value, unit)
+end
+
+local function file_stat(path)
+  if type(path) ~= "string" or path == "" then
+    return nil
+  end
+  local loop = vim.uv or vim.loop
+  return loop and loop.fs_stat(path) or nil
+end
+
+local function text_ref_size(ref, inline_text)
+  if type(ref) == "table" then
+    local bytes = tonumber(ref.bytes)
+    if bytes then
+      return bytes
+    end
+    local stat = file_stat(ref.path)
+    if stat and stat.size then
+      return stat.size
+    end
+  end
+  inline_text = tostring(inline_text or "")
+  if inline_text ~= "" then
+    return #inline_text
+  end
+  return nil
+end
+
 local function render_tool_timeline_detail(session, entry)
   local tool = entry and entry.tool or {}
   local lines = {
@@ -72,6 +119,27 @@ local function render_tool_timeline_detail(session, entry)
     "Heading: " .. tostring(entry and entry.heading or ""),
     "Status: " .. tostring(entry and entry.status or tool.status or ""),
   }
+  if entry and entry.kind and entry.kind ~= "" then
+    lines[#lines + 1] = "Kind: " .. tostring(entry.kind)
+  end
+  if entry and entry.summary and entry.summary ~= "" then
+    lines[#lines + 1] = "Summary: " .. tostring(entry.summary)
+  end
+  local content_bytes = text_ref_size(entry and entry.rendered_content_ref, entry and entry.rendered_content)
+  local raw_bytes = text_ref_size(entry and entry.rendered_raw_output_ref, entry and entry.rendered_raw_output)
+  if content_bytes or raw_bytes then
+    lines[#lines + 1] = string.format(
+      "Output size: content=%s, raw=%s",
+      format_bytes(content_bytes) or "none",
+      format_bytes(raw_bytes) or "none"
+    )
+  end
+  if entry and entry.pinned == true then
+    lines[#lines + 1] = "Pinned: true"
+  end
+  if entry and entry.compacted == true then
+    lines[#lines + 1] = "Compacted: true"
+  end
 
   local paths = type(entry and entry.paths) == "table" and entry.paths or extract_tool_paths(tool)
   if #paths > 0 then
@@ -263,6 +331,15 @@ end
 local function open_report_buffer(session, name, filetype, lines)
   open_output_buffer(session, name, filetype, lines)
 end
+
+local reports = require("lazyagent.acp.backend.reports").setup({
+  local_commands = local_commands,
+  sanitize_filename_component = sanitize_filename_component,
+  open_report_buffer = open_report_buffer,
+})
+local show_doctor_for_session = reports.show_doctor_for_session
+local show_context_budget_for_session = reports.show_context_budget_for_session
+local show_tool_review_for_session = reports.show_tool_review_for_session
 
 local function render_capability_report(session)
   local info = session and session.agent_info or {}
@@ -609,6 +686,21 @@ local function handle_local_slash_command(session, prompt)
     return true
   end
 
+  if command.name == "doctor" then
+    show_doctor_for_session(session)
+    return true
+  end
+
+  if command.name == "context" then
+    show_context_budget_for_session(session)
+    return true
+  end
+
+  if command.name == "tools" then
+    show_tool_review_for_session(session)
+    return true
+  end
+
   if command.name == "new" then
     append_block(session, "System", "Restarting ACP session...")
     vim.schedule(function()
@@ -869,6 +961,9 @@ end
   module.open_tool_timeline_buffer = open_tool_timeline_buffer
   module.show_tool_timeline_for_session = show_tool_timeline_for_session
   module.show_capabilities_for_session = show_capabilities_for_session
+  module.show_doctor_for_session = show_doctor_for_session
+  module.show_context_budget_for_session = show_context_budget_for_session
+  module.show_tool_review_for_session = show_tool_review_for_session
   module.show_resource_browser_for_session = show_resource_browser_for_session
   module.render_permission_preview = render_permission_preview
   module.handle_local_slash_command = handle_local_slash_command

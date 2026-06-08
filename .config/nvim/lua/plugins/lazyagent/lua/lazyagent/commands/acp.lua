@@ -119,6 +119,21 @@ local commands = {
     desc = "Open ACP capability summary for an ACP-enabled agent",
     handler = session_logic.show_acp_capabilities,
   },
+  {
+    name = "LazyAgentACPDoctor",
+    desc = "Open ACP health diagnostics for an ACP-enabled agent",
+    handler = session_logic.show_acp_doctor,
+  },
+  {
+    name = "LazyAgentACPContext",
+    desc = "Open ACP context budget details for an ACP-enabled agent",
+    handler = session_logic.show_acp_context_budget,
+  },
+  {
+    name = "LazyAgentACPReview",
+    desc = "Open ACP tool and edit review for an ACP-enabled agent",
+    handler = session_logic.show_acp_tool_review,
+  },
 }
 
 local function has_active_acp_sessions()
