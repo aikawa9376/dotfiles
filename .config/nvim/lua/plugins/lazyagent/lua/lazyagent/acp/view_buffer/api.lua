@@ -18,6 +18,7 @@ function M.attach(api, ctx)
   local apply_transcript_window_opts = ctx.apply_transcript_window_opts
   local refresh_buffer_from_path = ctx.refresh_buffer_from_path
   local refresh_buffer_from_file = ctx.refresh_buffer_from_file
+  local resume_deferred_updates_for_buffer = ctx.resume_deferred_updates_for_buffer
   local refresh_buffer_layout = ctx.refresh_buffer_layout
   local cleanup_markdown_rendering = ctx.cleanup_markdown_rendering
   local close_buffer_windows = ctx.close_buffer_windows
@@ -516,6 +517,21 @@ function M.attach(api, ctx)
       return false
     end
     return M._resume_follow_output(bufnr)
+  end
+
+  function M.sync_mobile_transcript(pane_id)
+    local bufnr = to_bufnr(pane_id)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return false
+    end
+    if type(resume_deferred_updates_for_buffer) ~= "function" then
+      return false
+    end
+
+    return resume_deferred_updates_for_buffer(bufnr, {
+      allow_hidden_incremental = true,
+      refresh_layout = true,
+    })
   end
 
   function M.cleanup_if_idle()
