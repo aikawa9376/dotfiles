@@ -7,7 +7,12 @@ local float_buf = nil
 local reflog_redo_stack = {}
 
 local function get_work_tree_from_fugitive()
-  return utils.get_work_tree({ notify = true })
+  local bufnr = vim.api.nvim_get_current_buf()
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if work_tree then
+    return work_tree
+  end
+  return utils.get_work_tree({ bufnr = bufnr, notify = true })
 end
 
 -- Worktree cleanliness helper
