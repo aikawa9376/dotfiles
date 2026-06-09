@@ -52,6 +52,15 @@ M.pick_acp_commands = session_logic.pick_acp_commands
 M.show_acp_tool_timeline = session_logic.show_acp_tool_timeline
 M.pick_acp_resources = session_logic.pick_acp_resources
 M.show_acp_capabilities = session_logic.show_acp_capabilities
+M.start_acp_mobile = function(opts)
+  return require("lazyagent.acp.mobile").notify_url(opts)
+end
+M.stop_acp_mobile = function()
+  return require("lazyagent.acp.mobile").stop()
+end
+M.show_acp_mobile_qr = function(opts)
+  return require("lazyagent.acp.mobile").show_qr(opts)
+end
 M.save_conversation_checkpoint = session_logic.save_conversation_checkpoint
 M.on_session_save_pre = session_logic.on_session_save_pre
 M.on_session_load_pre = session_logic.on_session_load_pre

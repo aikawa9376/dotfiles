@@ -96,6 +96,10 @@ function M.build()
         enabled = true,
         command = nil,
       },
+      mobile = {
+        host = nil,
+        port = nil,
+      },
     },
     tmux_auto_exit_copy_mode = true,
     submit_delay = 600,
