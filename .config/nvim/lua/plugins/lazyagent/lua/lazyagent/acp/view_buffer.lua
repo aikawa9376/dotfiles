@@ -1026,6 +1026,7 @@ scroll_buffer_to_end = view_updates.scroll_buffer_to_end
 transcript_line_count = view_updates.transcript_line_count
 refresh_buffer_from_path = view_updates.refresh_buffer_from_path
 local refresh_buffer_from_file = view_updates.refresh_buffer_from_file
+local resume_deferred_updates_for_buffer = view_updates.resume_deferred_updates_for_buffer
 local queue_append = view_updates.queue_append
 
 diff_view = view_diff.new({
@@ -1134,6 +1135,7 @@ require("lazyagent.acp.view_buffer.api").attach(M, {
     return refresh_buffer_from_path(...)
   end,
   refresh_buffer_from_file = refresh_buffer_from_file,
+  resume_deferred_updates_for_buffer = resume_deferred_updates_for_buffer,
   refresh_buffer_layout = function(...)
     return refresh_buffer_layout(...)
   end,
@@ -1160,5 +1162,62 @@ require("lazyagent.acp.view_buffer.api").attach(M, {
     return string.format("%s-%d", prefix, next_pane_seq)
   end,
 })
+
+local function clamp_mobile_tail(lines, tail)
+  lines = type(lines) == "table" and lines or {}
+  tail = math.max(1, math.floor(tonumber(tail) or 420))
+  local total = #lines
+  if total <= tail then
+    return lines, 0, total, false
+  end
+  return vim.list_slice(lines, total - tail + 1, total), total - tail, total, true
+end
+
+function M.mobile_transcript_snapshot(agent_name, opts)
+  opts = opts or {}
+  agent_name = tostring(agent_name or "")
+  local session = state.sessions and state.sessions[agent_name] or nil
+  if type(session) ~= "table" then
+    return nil, "ACP session not found: " .. agent_name
+  end
+
+  local pane_id = session.pane_id and tostring(session.pane_id) or nil
+  local bufnr = pane_id and to_bufnr(pane_id) or nil
+  local tail = math.min(math.max(1, math.floor(tonumber(opts.tail) or 420)), 1600)
+
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    pcall(M.sync_mobile_transcript, pane_id)
+    local total = transcript_line_count(bufnr)
+    local start_idx = math.max(0, total - tail)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, start_idx, total, false)
+    return {
+      agent = agent_name,
+      pane_id = pane_id,
+      bufnr = bufnr,
+      source = "buffer",
+      lines = lines,
+      start_line = start_idx + 1,
+      line_count = total,
+      truncated = start_idx > 0,
+      changedtick = changedtick(bufnr),
+      follow = should_follow_output(bufnr),
+    }
+  end
+
+  local path = session.acp_transcript_path or session.transcript_path
+  local lines = read_transcript_lines(path, tail)
+  local sliced, start_idx, total, truncated = clamp_mobile_tail(lines, tail)
+  return {
+    agent = agent_name,
+    pane_id = pane_id,
+    source = "file",
+    lines = sliced,
+    start_line = start_idx + 1,
+    line_count = total,
+    truncated = truncated,
+    changedtick = 0,
+    follow = true,
+  }
+end
 
 return M

@@ -11,6 +11,14 @@ M._server = nil
 M.port = nil
 M.host = nil
 
+local event_clients = {}
+local heartbeat_timer = nil
+local event_poll_timer = nil
+local event_signatures = {}
+local event_seq = 0
+local stop_heartbeat
+local stop_event_watcher
+
 local AUTO_PORT_START = 39280
 local AUTO_PORT_END = 39480
 
@@ -219,6 +227,52 @@ local function interrupt_agent(agent_name)
   return true, nil, target
 end
 
+local function transcript_snapshot(agent_name, opts)
+  local target, err = resolve_agent(agent_name)
+  if not target then
+    return nil, err
+  end
+
+  local ok, view = pcall(require, "lazyagent.acp.view_buffer")
+  if ok and view and type(view.mobile_transcript_snapshot) == "function" then
+    local snapshot, snapshot_err = view.mobile_transcript_snapshot(target, opts or {})
+    if snapshot then
+      return snapshot, nil, target
+    end
+    if snapshot_err then
+      return nil, snapshot_err
+    end
+  end
+
+  local session = state.sessions[target]
+  local path = session and (session.acp_transcript_path or session.transcript_path) or nil
+  local lines = {}
+  local tail = math.min(math.max(1, math.floor(tonumber(opts and opts.tail) or 420)), 1600)
+  if path and path ~= "" and vim.fn.filereadable(path) == 1 then
+    local read_ok, data = pcall(vim.fn.readfile, path)
+    if read_ok and type(data) == "table" then
+      lines = data
+    end
+  end
+  local total = #lines
+  local start_idx = math.max(0, total - tail)
+  if start_idx > 0 then
+    lines = vim.list_slice(lines, start_idx + 1, total)
+  end
+
+  return {
+    agent = target,
+    pane_id = session and session.pane_id or nil,
+    source = "file",
+    lines = lines,
+    start_line = start_idx + 1,
+    line_count = total,
+    truncated = start_idx > 0,
+    changedtick = 0,
+    follow = true,
+  }, nil, target
+end
+
 local WEB_UI = [=[
 <!doctype html>
 <html lang="en">
@@ -229,179 +283,259 @@ local WEB_UI = [=[
   <style>
     :root {
       color-scheme: light dark;
-      --bg: #101214;
-      --panel: #181c20;
-      --panel-2: #20262c;
-      --text: #eef2f4;
-      --muted: #a9b3bd;
-      --line: #313941;
-      --accent: #69d2e7;
-      --danger: #ff6b6b;
-      --ok: #9be564;
+      --bg: #0f1216;
+      --surface: #171b21;
+      --surface-2: #20262e;
+      --surface-3: #262d36;
+      --text: #eef3f6;
+      --muted: #9aa8b5;
+      --line: #343d48;
+      --accent: #6bd6bd;
+      --accent-2: #8bb8ff;
+      --danger: #ff7373;
+      --ok: #a6e36d;
+      --warn: #f0c36a;
     }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
-      min-height: 100vh;
+      overflow: hidden;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
     }
     main {
-      width: min(760px, 100%);
+      width: min(880px, 100%);
+      height: 100dvh;
       margin: 0 auto;
-      padding: 16px;
       display: grid;
-      gap: 12px;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      background: var(--bg);
     }
-    header {
+    .topbar {
+      min-height: 44px;
+      padding: 8px 12px 6px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 4px 0;
+      border-bottom: 1px solid var(--line);
     }
-    h1 {
-      font-size: 18px;
+    .brand {
+      font-size: 16px;
+      font-weight: 700;
       line-height: 1.2;
-      margin: 0;
-      font-weight: 650;
-      letter-spacing: 0;
+      min-width: 0;
     }
     .status {
       color: var(--muted);
-      font-size: 13px;
-      min-height: 18px;
-      text-align: right;
-    }
-    section {
-      display: grid;
-      gap: 10px;
-      padding: 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-    }
-    label {
-      color: var(--muted);
       font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
+      line-height: 1.2;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .agentbar {
+      padding: 8px 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 84px;
+      gap: 8px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
     }
     select, textarea, button {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 6px;
-      background: var(--panel-2);
+      background: var(--surface-2);
       color: var(--text);
       font: inherit;
     }
     select {
-      min-height: 42px;
+      min-height: 38px;
       padding: 0 10px;
     }
+    button {
+      min-height: 38px;
+      padding: 0 10px;
+      cursor: pointer;
+      font-weight: 650;
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: transparent;
+      color: #06110f;
+    }
+    button.danger { color: var(--danger); }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .transcript-panel {
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .transcript-meta {
+      min-height: 32px;
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+      background: var(--bg);
+    }
+    .transcript-meta strong {
+      color: var(--text);
+      font-size: 13px;
+    }
+    .transcript {
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 10px 12px 16px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 13px;
+      line-height: 1.45;
+      background: #101318;
+    }
+    .line {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      min-height: 1.45em;
+      padding: 1px 0;
+    }
+    .line.heading {
+      margin: 12px 0 5px;
+      padding-top: 8px;
+      border-top: 1px solid var(--line);
+      color: var(--accent-2);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 12px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+    .line.heading.user { color: var(--warn); }
+    .line.heading.assistant { color: var(--ok); }
+    .line.heading.tool,
+    .line.heading.edited { color: var(--accent-2); }
+    .line.heading.error { color: var(--danger); }
+    .empty {
+      color: var(--muted);
+      padding: 16px 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+    }
+    .composer {
+      padding: 10px 12px 12px;
+      display: grid;
+      gap: 8px;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+    }
     textarea {
-      min-height: 190px;
+      min-height: 84px;
+      max-height: 28dvh;
       resize: vertical;
       padding: 10px;
       line-height: 1.45;
     }
     .actions {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 112px 112px;
+      grid-template-columns: minmax(0, 1fr) 92px 108px;
       gap: 8px;
-      align-items: stretch;
     }
-    button {
-      min-height: 44px;
-      padding: 0 12px;
+    details {
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+    }
+    summary {
       cursor: pointer;
+      color: var(--muted);
+      font-size: 12px;
       font-weight: 650;
-    }
-    button.primary {
-      background: var(--accent);
-      color: #071012;
-      border-color: transparent;
-    }
-    button.danger {
-      color: var(--danger);
-    }
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
     }
     .agents {
       display: grid;
-      gap: 8px;
+      gap: 6px;
+      margin-top: 8px;
+      max-height: 22dvh;
+      overflow-y: auto;
     }
     .agent {
       display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 6px;
-      padding: 10px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 8px;
+      padding: 8px;
       border-radius: 6px;
-      background: var(--panel-2);
+      background: var(--surface-2);
       border: 1px solid transparent;
     }
-    .agent.active {
-      border-color: var(--accent);
-    }
+    .agent.active { border-color: var(--accent); }
     .agent-name {
-      font-weight: 650;
       min-width: 0;
+      font-weight: 700;
       overflow-wrap: anywhere;
     }
     .agent-meta {
+      grid-column: 1 / -1;
       color: var(--muted);
       font-size: 12px;
-      grid-column: 1 / -1;
     }
     .pill {
       align-self: start;
-      border-radius: 999px;
       border: 1px solid var(--line);
-      padding: 2px 8px;
-      font-size: 12px;
+      border-radius: 999px;
+      padding: 1px 8px;
       color: var(--muted);
+      font-size: 12px;
     }
     .pill.ready { color: var(--ok); }
+    .pill.busy,
+    .pill.starting { color: var(--warn); }
     .pill.failed { color: var(--danger); }
-    .hint {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.5;
-    }
     @media (max-width: 560px) {
-      main { padding: 12px; }
-      header { align-items: flex-start; }
-      .actions { grid-template-columns: 1fr; }
-      .status { text-align: left; }
+      .topbar { padding-inline: 10px; }
+      .agentbar { grid-template-columns: minmax(0, 1fr) 76px; padding-inline: 10px; }
+      .transcript { padding-inline: 10px; font-size: 12px; }
+      .composer { padding-inline: 10px; }
+      .actions { grid-template-columns: 1fr 76px 96px; }
     }
   </style>
 </head>
 <body>
   <main>
-    <header>
-      <h1>LazyAgent ACP</h1>
-      <div class="status" id="status">Connecting...</div>
+    <header class="topbar">
+      <div class="brand">LazyAgent ACP</div>
+      <div class="status" id="status">Connecting</div>
     </header>
 
-    <section>
-      <label for="agent">Agent</label>
+    <div class="agentbar">
       <select id="agent"></select>
-      <label for="prompt">Prompt</label>
-      <textarea id="prompt" placeholder="Type a prompt for the active ACP session"></textarea>
+      <button id="latest">Latest</button>
+    </div>
+
+    <section class="transcript-panel">
+      <div class="transcript-meta">
+        <strong id="transcriptTitle">Transcript</strong>
+        <span id="transcriptMeta"></span>
+      </div>
+      <div class="transcript" id="transcript" aria-live="polite"></div>
+    </section>
+
+    <section class="composer">
+      <textarea id="prompt" placeholder="Prompt"></textarea>
       <div class="actions">
         <button class="primary" id="send">Send</button>
         <button id="mic">Mic</button>
         <button class="danger" id="interrupt">Interrupt</button>
       </div>
-      <div class="hint">Ctrl+Enter or Cmd+Enter sends. Voice input requires a secure browser context.</div>
-    </section>
-
-    <section>
-      <label>Sessions</label>
-      <div class="agents" id="agents"></div>
+      <details>
+        <summary>Sessions</summary>
+        <div class="agents" id="agents"></div>
+      </details>
     </section>
   </main>
 
@@ -411,10 +545,19 @@ local WEB_UI = [=[
     const sendButton = document.getElementById('send');
     const micButton = document.getElementById('mic');
     const interruptButton = document.getElementById('interrupt');
+    const latestButton = document.getElementById('latest');
     const statusEl = document.getElementById('status');
     const agentsEl = document.getElementById('agents');
+    const transcriptEl = document.getElementById('transcript');
+    const transcriptTitleEl = document.getElementById('transcriptTitle');
+    const transcriptMetaEl = document.getElementById('transcriptMeta');
     let knownAgents = [];
-    let pollTimer = null;
+    let statusTimer = null;
+    let statusRefreshTimer = null;
+    let fallbackTranscriptTimer = null;
+    let events = null;
+    let lastTranscriptKey = '';
+    let followTranscript = true;
 
     async function api(path, options = {}) {
       const response = await fetch(path, {
@@ -432,10 +575,95 @@ local WEB_UI = [=[
       statusEl.textContent = text || '';
     }
 
+    function selectedAgent() {
+      return agentSelect.value || '';
+    }
+
+    function nearTranscriptEnd() {
+      return transcriptEl.scrollHeight - transcriptEl.scrollTop - transcriptEl.clientHeight < 80;
+    }
+
+    function scrollTranscriptToEnd() {
+      transcriptEl.scrollTop = transcriptEl.scrollHeight;
+      followTranscript = true;
+    }
+
+    function headingKind(line) {
+      const match = String(line || '').match(/^\s*(?:\u2500|-){2,}\s*(.*?)\s*(?:\u2500|-){2,}\s*$/);
+      if (!match) return null;
+      const label = match[1].toLowerCase();
+      if (label.includes('user')) return 'user';
+      if (label.includes('assistant')) return 'assistant';
+      if (label.includes('tool') || label.includes('terminal')) return 'tool';
+      if (label.includes('edited')) return 'edited';
+      if (label.includes('error')) return 'error';
+      return 'heading';
+    }
+
+    function renderTranscript(snapshot) {
+      const lines = snapshot.lines || [];
+      const key = [
+        snapshot.agent || '',
+        snapshot.changedtick || 0,
+        snapshot.line_count || 0,
+        snapshot.start_line || 1,
+        lines.length,
+        lines[lines.length - 1] || '',
+      ].join('\u0001');
+      if (key === lastTranscriptKey) return;
+      lastTranscriptKey = key;
+
+      followTranscript = followTranscript || nearTranscriptEnd();
+      transcriptTitleEl.textContent = snapshot.agent || 'Transcript';
+      const meta = [];
+      if (snapshot.truncated) meta.push('tail');
+      meta.push(String(snapshot.line_count || lines.length) + ' lines');
+      meta.push(snapshot.source || 'buffer');
+      transcriptMetaEl.textContent = meta.join(' / ');
+
+      transcriptEl.textContent = '';
+      if (lines.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'No transcript';
+        transcriptEl.appendChild(empty);
+      } else {
+        const frag = document.createDocumentFragment();
+        for (const line of lines) {
+          const div = document.createElement('div');
+          const kind = headingKind(line);
+          div.className = kind ? 'line heading ' + kind : 'line';
+          div.textContent = line === '' ? ' ' : line;
+          frag.appendChild(div);
+        }
+        transcriptEl.appendChild(frag);
+      }
+
+      if (followTranscript) {
+        requestAnimationFrame(scrollTranscriptToEnd);
+      }
+    }
+
+    async function refreshTranscript() {
+      const agent = selectedAgent();
+      if (!agent) {
+        transcriptEl.textContent = '';
+        transcriptMetaEl.textContent = '';
+        lastTranscriptKey = '';
+        return;
+      }
+      try {
+        const payload = await api('/api/transcript?agent=' + encodeURIComponent(agent) + '&tail=520');
+        renderTranscript(payload.transcript || {});
+      } catch (err) {
+        transcriptMetaEl.textContent = err.message;
+      }
+    }
+
     function renderStatus(payload) {
       knownAgents = payload.agents || [];
-      const current = agentSelect.value || payload.default_agent || (knownAgents[0] && knownAgents[0].name) || '';
-      agentSelect.innerHTML = '';
+      const current = selectedAgent() || payload.default_agent || (knownAgents[0] && knownAgents[0].name) || '';
+      agentSelect.textContent = '';
       if (knownAgents.length === 0) {
         const opt = document.createElement('option');
         opt.value = '';
@@ -451,37 +679,32 @@ local WEB_UI = [=[
         agentSelect.value = knownAgents.some(agent => agent.name === current) ? current : knownAgents[0].name;
       }
 
-      agentsEl.innerHTML = '';
-      if (knownAgents.length === 0) {
-        const empty = document.createElement('div');
-        empty.className = 'hint';
-        empty.textContent = 'Start an ACP session in Neovim, then refresh this page.';
-        agentsEl.appendChild(empty);
-      } else {
-        for (const agent of knownAgents) {
-          const row = document.createElement('div');
-          row.className = 'agent' + (agent.name === agentSelect.value ? ' active' : '');
-          const name = document.createElement('div');
-          name.className = 'agent-name';
-          name.textContent = agent.name;
-          const pill = document.createElement('div');
-          pill.className = 'pill ' + agent.status;
-          pill.textContent = agent.status;
-          const meta = document.createElement('div');
-          meta.className = 'agent-meta';
-          const details = [];
-          if (agent.model) details.push('model ' + agent.model);
-          if (agent.mode) details.push('mode ' + agent.mode);
-          if (agent.queue) details.push('queue ' + agent.queue);
-          details.push(agent.backend || 'acp');
-          meta.textContent = details.join(' / ');
-          row.append(name, pill, meta);
-          row.addEventListener('click', () => {
-            agentSelect.value = agent.name;
-            renderStatus({ agents: knownAgents, default_agent: agent.name });
-          });
-          agentsEl.appendChild(row);
-        }
+      agentsEl.textContent = '';
+      for (const agent of knownAgents) {
+        const row = document.createElement('div');
+        row.className = 'agent' + (agent.name === selectedAgent() ? ' active' : '');
+        const name = document.createElement('div');
+        name.className = 'agent-name';
+        name.textContent = agent.name;
+        const pill = document.createElement('div');
+        pill.className = 'pill ' + agent.status;
+        pill.textContent = agent.status;
+        const meta = document.createElement('div');
+        meta.className = 'agent-meta';
+        const details = [];
+        if (agent.model) details.push('model ' + agent.model);
+        if (agent.mode) details.push('mode ' + agent.mode);
+        if (agent.queue) details.push('queue ' + agent.queue);
+        details.push(agent.backend || 'acp');
+        meta.textContent = details.join(' / ');
+        row.append(name, pill, meta);
+        row.addEventListener('click', () => {
+          agentSelect.value = agent.name;
+          lastTranscriptKey = '';
+          renderStatus({ agents: knownAgents, default_agent: agent.name });
+          refreshTranscript();
+        });
+        agentsEl.appendChild(row);
       }
       setStatus(new Date().toLocaleTimeString());
     }
@@ -489,25 +712,39 @@ local WEB_UI = [=[
     async function refreshStatus() {
       try {
         const payload = await api('/api/status');
+        const before = selectedAgent();
         renderStatus(payload);
+        if (selectedAgent() !== before || lastTranscriptKey === '') {
+          await refreshTranscript();
+        }
       } catch (err) {
         setStatus('Disconnected');
       }
+    }
+
+    function scheduleStatusRefresh() {
+      if (statusRefreshTimer) return;
+      statusRefreshTimer = setTimeout(() => {
+        statusRefreshTimer = null;
+        refreshStatus();
+      }, 800);
     }
 
     async function sendPrompt() {
       const text = promptInput.value.trim();
       if (!text) return;
       sendButton.disabled = true;
-      setStatus('Sending...');
+      setStatus('Sending');
       try {
         const res = await api('/api/send', {
           method: 'POST',
-          body: JSON.stringify({ agent: agentSelect.value, text }),
+          body: JSON.stringify({ agent: selectedAgent(), text }),
         });
         promptInput.value = '';
         setStatus('Sent to ' + res.agent);
+        followTranscript = true;
         await refreshStatus();
+        await refreshTranscript();
       } catch (err) {
         setStatus(err.message);
         alert(err.message);
@@ -518,11 +755,11 @@ local WEB_UI = [=[
 
     async function interruptAgent() {
       interruptButton.disabled = true;
-      setStatus('Interrupting...');
+      setStatus('Interrupting');
       try {
         const res = await api('/api/interrupt', {
           method: 'POST',
-          body: JSON.stringify({ agent: agentSelect.value }),
+          body: JSON.stringify({ agent: selectedAgent() }),
         });
         setStatus('Interrupted ' + res.agent);
         await refreshStatus();
@@ -534,15 +771,40 @@ local WEB_UI = [=[
       }
     }
 
+    function connectEvents() {
+      if (!window.EventSource) return false;
+      events = new EventSource('/api/events');
+      events.addEventListener('open', () => setStatus('Live'));
+      events.addEventListener('transcript', event => {
+        let payload = {};
+        try { payload = JSON.parse(event.data || '{}'); } catch (_) {}
+        if (!payload.agent || payload.agent === selectedAgent()) {
+          refreshTranscript();
+        }
+        scheduleStatusRefresh();
+      });
+      events.onerror = () => setStatus('Reconnecting');
+      return true;
+    }
+
     sendButton.addEventListener('click', sendPrompt);
     interruptButton.addEventListener('click', interruptAgent);
+    latestButton.addEventListener('click', scrollTranscriptToEnd);
+    transcriptEl.addEventListener('scroll', () => {
+      followTranscript = nearTranscriptEnd();
+    }, { passive: true });
     promptInput.addEventListener('keydown', event => {
       if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         sendPrompt();
       }
     });
-    agentSelect.addEventListener('change', () => renderStatus({ agents: knownAgents, default_agent: agentSelect.value }));
+    agentSelect.addEventListener('change', () => {
+      lastTranscriptKey = '';
+      followTranscript = true;
+      renderStatus({ agents: knownAgents, default_agent: selectedAgent() });
+      refreshTranscript();
+    });
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const secure = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
@@ -568,9 +830,15 @@ local WEB_UI = [=[
     }
 
     refreshStatus();
-    pollTimer = setInterval(refreshStatus, 1800);
+    if (!connectEvents()) {
+      fallbackTranscriptTimer = setInterval(refreshTranscript, 1200);
+    }
+    statusTimer = setInterval(refreshStatus, 5000);
     window.addEventListener('pagehide', () => {
-      if (pollTimer) clearInterval(pollTimer);
+      if (statusTimer) clearInterval(statusTimer);
+      if (statusRefreshTimer) clearTimeout(statusRefreshTimer);
+      if (fallbackTranscriptTimer) clearInterval(fallbackTranscriptTimer);
+      if (events) events.close();
     });
   </script>
 </body>
@@ -579,6 +847,28 @@ local WEB_UI = [=[
 
 local function route_path(path)
   return tostring(path or ""):match("^([^?]+)") or "/"
+end
+
+local function url_decode(value)
+  value = tostring(value or ""):gsub("+", " ")
+  return (value:gsub("%%(%x%x)", function(hex)
+    return string.char(tonumber(hex, 16))
+  end))
+end
+
+local function query_params(path)
+  local query = tostring(path or ""):match("%?(.*)$")
+  local params = {}
+  if not query or query == "" then
+    return params
+  end
+  for pair in query:gmatch("[^&]+") do
+    local key, value = pair:match("^([^=]*)=?(.*)$")
+    if key and key ~= "" then
+      params[url_decode(key)] = url_decode(value or "")
+    end
+  end
+  return params
 end
 
 local function read_json_body(req)
@@ -590,6 +880,216 @@ local function read_json_body(req)
     return nil, "Invalid JSON body"
   end
   return decoded
+end
+
+local function sse_headers()
+  return table.concat({
+    "HTTP/1.1 200 OK",
+    "Content-Type: text/event-stream; charset=utf-8",
+    "Cache-Control: no-cache",
+    "Connection: keep-alive",
+    "Access-Control-Allow-Origin: *",
+    "",
+    "",
+  }, "\r\n")
+end
+
+local function close_event_client(client)
+  if event_clients[client] then
+    event_clients[client] = nil
+  end
+  pcall(function() client:close() end)
+  if next(event_clients) == nil then
+    if stop_heartbeat then
+      stop_heartbeat()
+    end
+    if stop_event_watcher then
+      stop_event_watcher()
+    end
+  end
+end
+
+local function write_event(client, event_name, payload)
+  local closing_ok, closing = pcall(function()
+    return client and client:is_closing()
+  end)
+  if not client or not closing_ok or closing then
+    close_event_client(client)
+    return false
+  end
+  event_seq = event_seq + 1
+  local body = table.concat({
+    "id: " .. tostring(event_seq),
+    "event: " .. tostring(event_name or "message"),
+    "data: " .. vim.fn.json_encode(payload or {}),
+    "",
+    "",
+  }, "\n")
+  local ok = pcall(function()
+    client:write(body)
+  end)
+  if not ok then
+    close_event_client(client)
+  end
+  return ok
+end
+
+local function broadcast_event(event_name, payload)
+  for client in pairs(event_clients) do
+    write_event(client, event_name, payload)
+  end
+end
+
+local function transcript_stat_signature(path)
+  path = tostring(path or "")
+  if path == "" then
+    return ""
+  end
+  local stat = uv.fs_stat(path)
+  if not stat then
+    return path .. ":missing"
+  end
+  local mtime = stat.mtime or {}
+  return table.concat({
+    path,
+    tostring(stat.size or 0),
+    tostring(mtime.sec or 0),
+    tostring(mtime.nsec or 0),
+  }, ":")
+end
+
+local function session_event_signature(session)
+  local queue_size = type(session.prompt_queue) == "table" and #session.prompt_queue or 0
+  local busy = session.busy == true or session.preparing_prompt == true or queue_size > 0
+  return table.concat({
+    tostring(session.backend or ""),
+    tostring(session.ready == true),
+    tostring(session.failed == true),
+    tostring(busy),
+    tostring(queue_size),
+    tostring(session.current_model or session.model or session.acp_model or ""),
+    tostring(session.current_mode or session.mode or session.acp_mode or ""),
+    transcript_stat_signature(session.acp_transcript_path or session.transcript_path),
+  }, "\31")
+end
+
+local function active_event_signatures()
+  local signatures = {}
+  for name, session in pairs(state.sessions or {}) do
+    if type(session) == "table"
+      and session.pane_id
+      and session.pane_id ~= ""
+      and acp_logic.is_acp_backend(session.backend)
+    then
+      signatures[name] = session_event_signature(session)
+    end
+  end
+  return signatures
+end
+
+local function start_event_watcher()
+  if event_poll_timer then
+    return
+  end
+  event_signatures = active_event_signatures()
+  event_poll_timer = uv.new_timer()
+  event_poll_timer:start(250, 250, vim.schedule_wrap(function()
+    if next(event_clients) == nil then
+      if stop_event_watcher then
+        stop_event_watcher()
+      end
+      return
+    end
+
+    local current = active_event_signatures()
+    local active_set_changed = false
+    for name, signature in pairs(current) do
+      if event_signatures[name] ~= signature then
+        local session = state.sessions[name]
+        broadcast_event("transcript", {
+          agent = name,
+          pane_id = session and session.pane_id and tostring(session.pane_id) or nil,
+        })
+      end
+    end
+    for name in pairs(event_signatures) do
+      if current[name] == nil then
+        active_set_changed = true
+        break
+      end
+    end
+    if active_set_changed then
+      broadcast_event("transcript", {})
+    end
+    event_signatures = current
+  end))
+end
+
+stop_event_watcher = function()
+  if event_poll_timer then
+    pcall(function() event_poll_timer:stop() end)
+    pcall(function() event_poll_timer:close() end)
+    event_poll_timer = nil
+  end
+  event_signatures = {}
+end
+
+local function start_heartbeat()
+  if heartbeat_timer then
+    return
+  end
+  heartbeat_timer = uv.new_timer()
+  heartbeat_timer:start(15000, 15000, vim.schedule_wrap(function()
+    for client in pairs(event_clients) do
+      local closing_ok, closing = pcall(function()
+        return client:is_closing()
+      end)
+      if not closing_ok or closing then
+        close_event_client(client)
+      else
+        local ok = pcall(function()
+          client:write(": ping\n\n")
+        end)
+        if not ok then
+          close_event_client(client)
+        end
+      end
+    end
+  end))
+end
+
+stop_heartbeat = function()
+  if heartbeat_timer then
+    pcall(function() heartbeat_timer:stop() end)
+    pcall(function() heartbeat_timer:close() end)
+    heartbeat_timer = nil
+  end
+end
+
+local function handle_events(client)
+  pcall(function() client:read_stop() end)
+  event_clients[client] = true
+  local ok = pcall(function()
+    client:write(sse_headers())
+  end)
+  if not ok then
+    close_event_client(client)
+    return
+  end
+  write_event(client, "hello", {
+    ok = true,
+    agents = active_acp_sessions(),
+    default_agent = default_agent(),
+  })
+  start_heartbeat()
+  start_event_watcher()
+  pcall(function()
+    client:read_start(function(err, data)
+      if err or data == nil then
+        close_event_client(client)
+      end
+    end)
+  end)
 end
 
 local function handle_request(req)
@@ -611,6 +1111,21 @@ local function handle_request(req)
         host = M.host,
         port = M.port,
       },
+    })
+  end
+
+  if req.method == "GET" and path == "/api/transcript" then
+    local params = query_params(req.path)
+    local snapshot, err, agent = transcript_snapshot(params.agent or params.agent_name, {
+      tail = params.tail,
+    })
+    if not snapshot then
+      return json_response("400 Bad Request", { ok = false, error = err })
+    end
+    return json_response("200 OK", {
+      ok = true,
+      agent = agent,
+      transcript = snapshot,
     })
   end
 
@@ -669,6 +1184,11 @@ local function handle_client(client)
       if not req then
         client:write(http_response("400 Bad Request", "text/plain; charset=utf-8", "Bad Request"))
         close_client(client)
+        return
+      end
+
+      if req.method == "GET" and route_path(req.path) == "/api/events" then
+        handle_events(client)
         return
       end
 
@@ -772,6 +1292,15 @@ end
 function M.stop()
   if M._server then
     pcall(function() M._server:close() end)
+  end
+  for client in pairs(event_clients) do
+    close_event_client(client)
+  end
+  if stop_heartbeat then
+    stop_heartbeat()
+  end
+  if stop_event_watcher then
+    stop_event_watcher()
   end
   M._server = nil
   M.port = nil
