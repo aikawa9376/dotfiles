@@ -38,6 +38,28 @@ local always_commands = {
     complete = available_acp_agents,
   },
   {
+    name = "LazyAgentACPMobileStart",
+    desc = "Start ACP mobile web UI server",
+    handler = function()
+      require("lazyagent.acp.mobile").notify_url()
+    end,
+  },
+  {
+    name = "LazyAgentACPMobileStop",
+    desc = "Stop ACP mobile web UI server",
+    handler = function()
+      require("lazyagent.acp.mobile").stop()
+      vim.notify("[lazyagent ACP mobile] stopped", vim.log.levels.INFO)
+    end,
+  },
+  {
+    name = "LazyAgentACPMobileQR",
+    desc = "Show ACP mobile web UI QR code",
+    handler = function()
+      require("lazyagent.acp.mobile").show_qr()
+    end,
+  },
+  {
     name = "LazyAgentACPRestoreRestartState",
     desc = "Restore ACP state after an internal restart",
     handler = function(bundle_path)
