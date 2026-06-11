@@ -208,6 +208,17 @@ local function extract_path_from_entry(entry_str)
   return vim.trim(stripped)
 end
 
+local function normalize_ui_select_prompt(prompt)
+  prompt = vim.trim(tostring(prompt or "Select"))
+  if prompt == "" then
+    prompt = "Select"
+  end
+  if prompt:match("[:：>]$") then
+    return prompt .. " "
+  end
+  return prompt .. ": "
+end
+
 -- ------------------------------------------------------------------
 -- init vim.ui.select
 -- ------------------------------------------------------------------
@@ -218,6 +229,7 @@ M.register_ui_select = function()
 
   fzf_lua.register_ui_select(function (opts)
     opts = opts or {}
+    local is_toggle_menu = opts.kind == "toggle-menu"
 
     -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
     if opts.previewer == "builtin" then
@@ -234,9 +246,10 @@ M.register_ui_select = function()
       }
     end
 
+    opts.prompt = normalize_ui_select_prompt(opts.prompt)
     opts.winopts = {
-      height = 0.4,
-      width = 0.6,
+      height = is_toggle_menu and 0.34 or 0.4,
+      width = is_toggle_menu and 0.46 or 0.6,
       row = 0.5,
       split = false,
       border = "single",
@@ -245,6 +258,10 @@ M.register_ui_select = function()
         hidden = true
       }
     }
+    if is_toggle_menu then
+      opts.fzf_opts = opts.fzf_opts or {}
+      opts.fzf_opts["--tiebreak"] = "begin,index"
+    end
     return opts
   end)
 
