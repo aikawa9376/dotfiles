@@ -82,16 +82,6 @@ M.edit_selection = edit_blocks.edit_selection
 M.edit_selected_blocks = edit_blocks.edit_selection
 M.fire_event = util.fire_event
 
-local function export_nvim_listen_address()
-  pcall(function()
-    local ok, servername = pcall(function() return vim.v.servername end)
-    if ok and servername and servername ~= "" then
-      vim.env.NVIM_LISTEN_ADDRESS = servername
-      pcall(function() vim.fn.setenv("NVIM_LISTEN_ADDRESS", servername) end)
-    end
-  end)
-end
-
 local function register_custom_backends(opts)
   if type(opts.backends) ~= "table" then
     return
@@ -137,7 +127,6 @@ end
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", default_config.build(), opts or {})
 
-  export_nvim_listen_address()
   register_custom_backends(M.opts)
   register_treesitter_filetypes()
   image_paste.setup()

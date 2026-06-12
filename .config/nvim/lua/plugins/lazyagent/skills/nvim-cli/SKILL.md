@@ -9,8 +9,9 @@ Interact with Neovim buffers and the filesystem. This tool handles both open buf
 
 ## Global Options
 
-- `--server` / `-s`: Specify the Neovim socket path (e.g., `/tmp/nvim.sock` or value of `vim.v.servername`). If omitted, uses `NVIM_LISTEN_ADDRESS` or `NVIM` environment variables.
-- First try `nvim-cli` directly. If it is not on `PATH`, use `$LAZYAGENTBIN/nvim-cli`.
+- When launched from lazyagent, use `$LAZYAGENTBIN/nvim-cli-bridge` without `--server`. It is a shell wrapper around Neovim Lua and uses the `LAZYAGENT_NVIM_BRIDGE_*` environment to talk to the Neovim instance that started the agent, which works from sandboxed tool commands.
+- `$LAZYAGENTBIN/nvim-cli` is the raw socket client. Use it only when you intentionally want socket mode; sandboxed tool commands often cannot connect to sockets.
+- First try `nvim-cli-bridge` directly. If it is not on `PATH`, use `$LAZYAGENTBIN/nvim-cli-bridge`.
 
 ## Instructions
 

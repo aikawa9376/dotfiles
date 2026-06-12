@@ -36,6 +36,7 @@ function M.setup(deps)
   local maybe_sync_acp_edit_targets = deps.maybe_sync_acp_edit_targets
   local terminal_seq = 0
   local resolve_permission_option
+  local nvim_bridge = require("lazyagent.nvim_bridge")
 
   local function first_number(...)
     for idx = 1, select("#", ...) do
@@ -68,7 +69,7 @@ function M.setup(deps)
         env[entry.name] = tostring(entry.value)
       end
     end
-    return env
+    return nvim_bridge.inject_env(env)
   end
 
   local function append_terminal_output(session, terminal_id, data)

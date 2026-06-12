@@ -1,0 +1,35 @@
+#!/bin/sh
+
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PLUGIN_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+RAW_CLI="$SCRIPT_DIR/nvim-cli"
+BRIDGE_LUA="$PLUGIN_ROOT/lua/lazyagent/nvim_bridge.lua"
+
+if [ "$#" -eq 0 ]; then
+  exec "$RAW_CLI"
+fi
+
+case "${1:-}" in
+  -h|--help|help)
+    exec "$RAW_CLI" "$@"
+    ;;
+esac
+
+for arg in "$@"; do
+  case "$arg" in
+    -s|--server|--server=*)
+      exec "$RAW_CLI" "$@"
+      ;;
+  esac
+done
+
+if [ -z "${LAZYAGENT_NVIM_BRIDGE_DIR:-}" ] || [ -z "${LAZYAGENT_NVIM_BRIDGE_TOKEN:-}" ]; then
+  exec "$RAW_CLI" "$@"
+fi
+
+unset NVIM
+unset NVIM_LISTEN_ADDRESS
+
+exec nvim --clean --headless --cmd "set shadafile=NONE" -l "$BRIDGE_LUA" --client "$@"

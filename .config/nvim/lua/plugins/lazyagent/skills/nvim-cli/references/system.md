@@ -7,19 +7,19 @@ Tools for shell and git interaction.
 ### shell "<cmd>"
 Execute a shell command and get stdout/stderr.
 ```bash
-nvim-cli shell "ls -la"
+nvim-cli-bridge shell "ls -la"
 ```
 
 ### diff
 Get the current git diff of the project.
 ```bash
-nvim-cli diff
+nvim-cli-bridge diff
 ```
 
 ### exec "<cmd>"
 Execute an Ex command directly in Neovim.
 ```bash
-nvim-cli exec "colorscheme desert"
+nvim-cli-bridge exec "colorscheme desert"
 ```
 
 ## Usage Note
