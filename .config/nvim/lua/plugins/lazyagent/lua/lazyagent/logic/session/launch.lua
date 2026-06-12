@@ -15,6 +15,7 @@ function M.setup(deps)
   local maybe_disable_watchers = deps.maybe_disable_watchers
   local current_editor_session_name = deps.current_editor_session_name
   local mark_session_scope = deps.mark_session_scope
+  local nvim_bridge = require("lazyagent.nvim_bridge")
 
   local module = {}
 
@@ -349,17 +350,7 @@ function M.setup(deps)
       if skills_launch and skills_launch.env then
         split_opts.env = merge_env(split_opts.env, skills_launch.env)
       end
-      do
-        local ok, server = pcall(function() return vim.v.servername end)
-        if ok and server and server ~= "" then
-          split_opts.env.NVIM_LISTEN_ADDRESS = split_opts.env.NVIM_LISTEN_ADDRESS or server
-        else
-          local e = (vim.env and vim.env.NVIM_LISTEN_ADDRESS) or nil
-          if e and e ~= "" then
-            split_opts.env.NVIM_LISTEN_ADDRESS = split_opts.env.NVIM_LISTEN_ADDRESS or e
-          end
-        end
-      end
+      split_opts.env = nvim_bridge.inject_env(split_opts.env)
 
       if acp_logic.is_acp_backend(backend_name) then
         split_opts.acp = build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts)
