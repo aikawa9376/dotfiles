@@ -196,13 +196,21 @@ return {
           sql = { 'connector', 'buffer', 'snippets'  },
           text = { 'buffer', 'ripgrep', 'japanese' },
           markdown = { 'buffer', 'ripgrep', 'japanese', 'snippets' },
-          lazyagent = { 'buffer', 'ripgrep', 'japanese', 'tmux', 'lazyagent' },
+          lazyagent = { 'buffer', 'lazyagent_acp_buffer', 'ripgrep', 'japanese', 'tmux', 'lazyagent' },
           php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep', 'japanese'  },
         },
         providers = {
           lazyagent = {
             name = '[SA]',
             module = 'lazyagent.completion.blink',
+          },
+          lazyagent_acp_buffer = {
+            name = '[AB]',
+            module = 'lazyagent.completion.acp_buffer',
+            score_offset = -6,
+            should_show_items = function(ctx, items)
+              return not require("blink_extension.features.completion").is_japanese_completion_context(ctx) and #items > 0
+            end,
           },
           lsp = {
             name = "[L]",
