@@ -47,6 +47,30 @@ vim.api.nvim_create_autocmd("InsertLeave", {
   end,
 })
 
+-- Do not keep canceled or failed command-line entries.
+vim.api.nvim_create_autocmd("CmdlineLeave", {
+  group = MyAutoCmd,
+  pattern = ":",
+  callback = function()
+    local cmd = vim.fn.getcmdline()
+    local exit_key = vim.v.char
+
+    if exit_key == "\r" then
+      vim.v.errmsg = ""
+    end
+
+    vim.schedule(function()
+      if cmd == "" or vim.fn.histget("cmd", -1) ~= cmd then
+        return
+      end
+
+      if exit_key ~= "\r" or vim.v.errmsg ~= "" then
+        vim.fn.histdel("cmd", -1)
+      end
+    end)
+  end,
+})
+
 -- terminal mode
 if vim.fn.exists(":terminal") == 2 then
   vim.api.nvim_create_autocmd("TermOpen", {
