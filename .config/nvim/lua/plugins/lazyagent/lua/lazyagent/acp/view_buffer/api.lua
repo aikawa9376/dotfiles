@@ -3,6 +3,7 @@ local M = {}
 function M.attach(api, ctx)
   local M = api
   local image_paste = require("lazyagent.logic.image_paste")
+  local smooth_scroll = require("lazyagent.acp.view_buffer.smooth_scroll")
   local footer_view = ctx.footer_view
   local ensure_layout_autocmds = ctx.ensure_layout_autocmds
   local to_bufnr = ctx.to_bufnr
@@ -35,6 +36,12 @@ function M.attach(api, ctx)
   local allocate_pane_id = ctx.allocate_pane_id
   local close_timer = ctx.close_timer
   local queue_append = ctx.queue_append
+
+  local function smooth_scroll_config(bufnr, mode)
+    local pane_id = buffer_var(bufnr, "lazyagent_acp_pane_id")
+    local opts = pane_config[tostring(pane_id or "")] or {}
+    return smooth_scroll.config(opts.smooth_scroll, mode)
+  end
 
   function M.refresh_all_footers()
     return footer_view.refresh_all_footers()
@@ -94,6 +101,7 @@ function M.attach(api, ctx)
       buffer_inactive_background = args.acp and args.acp.buffer_inactive_background or nil,
       table_layout = args.acp and args.acp.table_layout or "table",
       fancy_mode = args.acp and args.acp.fancy_mode == true,
+      smooth_scroll = vim.deepcopy(args.acp and args.acp.smooth_scroll or {}),
       release_buffer_on_hide = args.acp and args.acp.release_buffer_on_hide == true,
       transcript_max_lines = args.acp and args.acp.transcript_max_lines or nil,
       render_markdown_max_lines = args.acp and args.acp.render_markdown_max_lines or nil,
@@ -302,6 +310,7 @@ function M.attach(api, ctx)
           or nil,
         table_layout = pane_opts.table_layout or (session and session.table_layout) or "table",
         fancy_mode = pane_opts.fancy_mode == true or (session and session.fancy_mode == true),
+        smooth_scroll = vim.deepcopy(pane_opts.smooth_scroll or (session and session.smooth_scroll) or {}),
         release_buffer_on_hide = resolve_release_buffer_on_hide(pane_opts, session),
         transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
         render_markdown_max_lines = pane_opts.render_markdown_max_lines
@@ -356,6 +365,7 @@ function M.attach(api, ctx)
         or nil,
       table_layout = pane_opts.table_layout or (session and session.table_layout) or "table",
       fancy_mode = pane_opts.fancy_mode == true or (session and session.fancy_mode == true),
+      smooth_scroll = vim.deepcopy(pane_opts.smooth_scroll or (session and session.smooth_scroll) or {}),
       release_buffer_on_hide = resolve_release_buffer_on_hide(pane_opts, session),
       transcript_max_lines = pane_opts.transcript_max_lines or (session and session.transcript_max_lines) or nil,
       render_markdown_max_lines = pane_opts.render_markdown_max_lines
@@ -439,9 +449,35 @@ function M.attach(api, ctx)
     return false
   end
 
-  local function scroll_window_by_key(win, key)
+  local function scroll_delta_for_key(win, key)
+    local height = math.max(1, vim.api.nvim_win_get_height(win))
+    local half = tonumber(vim.wo[win].scroll) or math.floor(height / 2)
+    if half <= 0 then
+      half = math.floor(height / 2)
+    end
+    half = math.max(1, half)
+
+    if key == "<C-u>" then
+      return -half
+    elseif key == "<C-d>" then
+      return half
+    elseif key == "<C-b>" then
+      return -math.max(1, height - 2)
+    elseif key == "<C-f>" then
+      return math.max(1, height - 2)
+    end
+    return nil
+  end
+
+  local function scroll_window_by_key(win, key, cfg, opts)
+    opts = opts or {}
     if not win or not vim.api.nvim_win_is_valid(win) then
       return false
+    end
+
+    local delta = cfg and scroll_delta_for_key(win, key) or nil
+    if delta then
+      return smooth_scroll.scroll_by_lines(win, delta, cfg, opts)
     end
 
     local moved = false
@@ -461,15 +497,26 @@ function M.attach(api, ctx)
       pause_follow_output(bufnr, { reason = "manual", win = vim.api.nvim_get_current_win() })
     end
 
+    local cfg = smooth_scroll_config(bufnr, "manual")
     local scrolled = false
+    local function resume_if_needed()
+      if opts.resume_at_end == true and M._any_window_at_transcript_end(bufnr) then
+        M._resume_follow_output(bufnr)
+      end
+    end
+
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
-      if scroll_window_by_key(win, key) then
+      if scroll_window_by_key(win, key, cfg, {
+        bufnr = bufnr,
+        mode = "manual",
+        on_finish = resume_if_needed,
+      }) then
         scrolled = true
       end
     end
 
-    if opts.resume_at_end == true and M._any_window_at_transcript_end(bufnr) then
-      M._resume_follow_output(bufnr)
+    if not cfg then
+      resume_if_needed()
     end
 
     return scrolled

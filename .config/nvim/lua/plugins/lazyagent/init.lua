@@ -98,7 +98,15 @@ return {
       buffer_background = "none",
       buffer_inactive_background = "none",
       fancy_mode = false,
-      table_layout = "card"
+      table_layout = "card",
+      smooth_scroll = {
+        enabled = true,
+        duration_ms = 140,
+        step_ms = 10,
+        max_delta = 80,
+        manual = true,
+        follow = true,
+      },
     },
     resume = false,
     image_paste = {

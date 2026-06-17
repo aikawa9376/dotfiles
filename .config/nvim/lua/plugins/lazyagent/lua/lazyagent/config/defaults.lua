@@ -65,6 +65,7 @@ function M.build()
       footer_animation = true,
       fancy_mode = false,
       table_layout = "table",
+      smooth_scroll = false,
       transcript_max_lines = 12000,
       release_buffer_on_hide = true,
       buffer_background = nil,

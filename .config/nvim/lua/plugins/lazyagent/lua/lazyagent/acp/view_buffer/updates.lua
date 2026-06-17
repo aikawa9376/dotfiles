@@ -53,6 +53,7 @@ function M.new(ctx)
   local invalidate_transcript_section_cache = ctx.invalidate_transcript_section_cache or function(_) end
   local APPEND_BATCH_MS = ctx.append_batch_ms
   local ACP_TRANSCRIPT_FILETYPE = ctx.acp_transcript_filetype
+  local smooth_scroll = require("lazyagent.acp.view_buffer.smooth_scroll")
   local diff_view = setmetatable({}, {
     __index = function(_, key)
       local view = ctx.diff_view and ctx.diff_view() or nil
@@ -84,6 +85,11 @@ function M.new(ctx)
     view_state.pending_append = ""
     view_state.pending_append_chunks = nil
     view_state.pending_append_size = 0
+  end
+
+  local function smooth_scroll_config(bufnr, mode)
+    local opts = pane_opts_for_bufnr(bufnr) or {}
+    return smooth_scroll.config(opts.smooth_scroll, mode)
   end
 
   local function push_pending_append(view_state, text)
@@ -265,6 +271,9 @@ function M.new(ctx)
         end
         local bufnr = vim.api.nvim_win_get_buf(win)
         if is_acp_buffer(bufnr) then
+          if smooth_scroll.active(win) then
+            return
+          end
           M._sync_follow_after_scroll(bufnr, win)
         end
       end,
@@ -276,6 +285,9 @@ function M.new(ctx)
         local bufnr = tonumber(args.buf)
         local win = vim.api.nvim_get_current_win()
         if bufnr and is_acp_buffer(bufnr) then
+          if smooth_scroll.active(win) then
+            return
+          end
           M._sync_follow_after_cursor_moved(bufnr, win)
         end
       end,
@@ -315,6 +327,7 @@ function M.new(ctx)
         if not bufnr then
           return
         end
+        smooth_scroll.stop_for_buffer(bufnr)
         local pane_id = buffer_var(bufnr, "lazyagent_acp_pane_id")
         cleanup_markdown_rendering(bufnr)
         if pane_id ~= nil and pane_buffers[tostring(pane_id)] == bufnr then
@@ -333,7 +346,9 @@ function M.new(ctx)
     vim.api.nvim_create_autocmd("WinClosed", {
       group = group,
       callback = function(args)
-        clear_transcript_window(tonumber(args.match))
+        local win = tonumber(args.match)
+        smooth_scroll.stop_window(win)
+        clear_transcript_window(win)
       end,
     })
 
@@ -366,10 +381,27 @@ function M.new(ctx)
     local col = math.max(0, #last_line)
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
       if vim.api.nvim_win_is_valid(win) then
-        pcall(function()
+        local cfg = smooth_scroll_config(bufnr, "follow")
+        local bottom = type(M._window_bottom_line) == "function" and M._window_bottom_line(win) or nil
+        local delta = bottom and (row - bottom) or nil
+        local function jump_to_end()
           vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
-          vim.api.nvim_win_set_cursor(win, { row, col })
-        end)
+          pcall(vim.api.nvim_win_set_cursor, win, { row, col })
+        end
+        if cfg and delta and delta > 0 and delta <= cfg.max_delta then
+          vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
+          smooth_scroll.scroll_by_lines(win, delta, cfg, {
+            bufnr = bufnr,
+            mode = "follow",
+            on_finish = function()
+              if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == bufnr then
+                jump_to_end()
+              end
+            end,
+          })
+        else
+          pcall(jump_to_end)
+        end
       end
     end
   end
