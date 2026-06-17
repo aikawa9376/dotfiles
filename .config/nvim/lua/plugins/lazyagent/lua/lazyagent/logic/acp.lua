@@ -47,6 +47,62 @@ local function normalize_table_layout(value)
   return "table"
 end
 
+local SMOOTH_SCROLL_DEFAULTS = {
+  enabled = false,
+  duration_ms = 140,
+  step_ms = 10,
+  max_delta = 80,
+  manual = true,
+  follow = true,
+}
+
+local function normalize_smooth_scroll_input(value)
+  if value == nil then
+    return nil
+  end
+  if type(value) == "boolean" then
+    return { enabled = value }
+  end
+  if type(value) ~= "table" then
+    return nil
+  end
+
+  local cfg = vim.deepcopy(value)
+  if cfg.enabled == nil then
+    cfg.enabled = true
+  end
+  if cfg.duration_ms == nil then
+    cfg.duration_ms = cfg.duration or cfg.time_ms
+  end
+  if cfg.step_ms == nil then
+    cfg.step_ms = cfg.interval_ms or cfg.frame_ms
+  end
+  if cfg.max_delta == nil then
+    cfg.max_delta = cfg.max_lines or cfg.jump_after_lines
+  end
+  return cfg
+end
+
+local function merge_smooth_scroll_config(agent_cfg, global_cfg)
+  local out = vim.deepcopy(SMOOTH_SCROLL_DEFAULTS)
+  local global = normalize_smooth_scroll_input(global_cfg)
+  local agent = normalize_smooth_scroll_input(agent_cfg)
+  if global then
+    out = vim.tbl_extend("force", out, global)
+  end
+  if agent then
+    out = vim.tbl_extend("force", out, agent)
+  end
+
+  out.enabled = out.enabled == true
+  out.duration_ms = normalize_positive_integer(out.duration_ms) or SMOOTH_SCROLL_DEFAULTS.duration_ms
+  out.step_ms = normalize_positive_integer(out.step_ms) or SMOOTH_SCROLL_DEFAULTS.step_ms
+  out.max_delta = normalize_positive_integer(out.max_delta) or SMOOTH_SCROLL_DEFAULTS.max_delta
+  out.manual = out.manual ~= false
+  out.follow = out.follow ~= false
+  return out
+end
+
 local function normalize_transcript_compaction_config(value)
   if type(value) == "boolean" then
     return { enabled = value }
@@ -256,6 +312,7 @@ local function resolve_from_config(agent_cfg)
     footer_animation = resolve_boolean_option(agent_acp.footer_animation, global_cfg.footer_animation, true),
     fancy_mode = resolve_boolean_option(agent_acp.fancy_mode, global_cfg.fancy_mode, false),
     table_layout = normalize_table_layout(agent_acp.table_layout or global_cfg.table_layout),
+    smooth_scroll = merge_smooth_scroll_config(agent_acp.smooth_scroll, global_cfg.smooth_scroll),
     release_buffer_on_hide = resolve_boolean_option(
       agent_acp.release_buffer_on_hide,
       global_cfg.release_buffer_on_hide,
@@ -307,6 +364,7 @@ function M.resolve(agent_name, agent_cfg)
       default_mode = session.default_mode,
       initial_model = session.initial_model,
       table_layout = session.table_layout,
+      smooth_scroll = vim.deepcopy(session.smooth_scroll or {}),
       fancy_mode = session.fancy_mode,
       release_buffer_on_hide = session.release_buffer_on_hide,
       buffer_background = session.buffer_background,

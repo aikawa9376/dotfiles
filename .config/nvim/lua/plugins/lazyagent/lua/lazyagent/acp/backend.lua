@@ -383,6 +383,7 @@ local function create_backend(default_view)
         initial_model = acp.initial_model,
         fancy_mode = acp.fancy_mode,
         table_layout = acp.table_layout,
+        smooth_scroll = vim.deepcopy(acp.smooth_scroll or {}),
         release_buffer_on_hide = acp.release_buffer_on_hide,
         footer_animation = acp.footer_animation,
         buffer_background = acp.buffer_background,

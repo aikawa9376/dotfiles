@@ -736,6 +736,7 @@ function M.setup(deps)
       initial_model = base_session.initial_model,
       fancy_mode = base_session.fancy_mode,
       table_layout = base_session.table_layout,
+      smooth_scroll = vim.deepcopy(base_session.smooth_scroll or {}),
       release_buffer_on_hide = base_session.release_buffer_on_hide,
       footer_animation = false,
       buffer_background = base_session.buffer_background,
