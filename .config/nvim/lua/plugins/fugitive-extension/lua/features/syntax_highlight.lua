@@ -1,8 +1,11 @@
 local M = {}
 
--- 'lazygit': similarity-based line pairing (current behavior)
+-- 'diffs':   diffs.nvim-style group diff -> line pairing -> byte diff
+-- 'lazygit': similarity-based line pairing
 -- 'github':  sequential line pairing (old[i] <-> new[i])
-M.config = { word_diff_style = 'lazygit' }
+M.config = { word_diff_style = 'diffs' }
+
+local WORD_DIFF_STYLES = { 'diffs', 'lazygit', 'github' }
 
 local PRIORITY_BG = 200
 local PRIORITY_SYNTAX = 210
@@ -197,6 +200,213 @@ function Utils.compute_word_diffs(old_text, new_text)
   return byte_diffs
 end
 
+local DIFFOPT_FLAGS = {
+  iwhite = 'ignore_whitespace_change',
+  iwhiteall = 'ignore_whitespace',
+  iwhiteeol = 'ignore_whitespace_change_at_eol',
+  iblank = 'ignore_blank_lines',
+}
+
+function Utils.diff_opts()
+  local opts = {}
+  for _, item in ipairs(vim.split(vim.o.diffopt, ',', { plain = true })) do
+    local key, val = item:match('^(%w+):(.+)$')
+    if key == 'algorithm' then
+      opts.algorithm = val
+    elseif key == 'linematch' then
+      opts.linematch = tonumber(val)
+    elseif DIFFOPT_FLAGS[item] then
+      opts[DIFFOPT_FLAGS[item]] = true
+    end
+  end
+  return opts
+end
+
+function Utils.diff_indices(old_text, new_text, diff_opts)
+  local vim_opts = { result_type = 'indices' }
+  if diff_opts then
+    for key, value in pairs(diff_opts) do
+      if value ~= nil then
+        vim_opts[key] = value
+      end
+    end
+  end
+
+  local ok, result = pcall(vim.diff, old_text, new_text, vim_opts)
+  if not ok or type(result) ~= 'table' then
+    return {}
+  end
+
+  local hunks = {}
+  for _, h in ipairs(result) do
+    hunks[#hunks + 1] = {
+      old_start = h[1],
+      old_count = h[2],
+      new_start = h[3],
+      new_count = h[4],
+    }
+  end
+  return hunks
+end
+
+function Utils.split_bytes(str)
+  local bytes = {}
+  for i = 1, #str do
+    bytes[#bytes + 1] = str:sub(i, i)
+  end
+  return bytes
+end
+
+function Utils.extract_change_groups(hunk_lines)
+  local groups = {}
+  local del_buf = {}
+  local add_buf = {}
+  local in_del = false
+
+  local function flush()
+    if #del_buf > 0 and #add_buf > 0 then
+      groups[#groups + 1] = { del_lines = del_buf, add_lines = add_buf }
+    end
+    del_buf = {}
+    add_buf = {}
+  end
+
+  for i, line in ipairs(hunk_lines) do
+    local prefix = line:sub(1, 1)
+    if prefix == '-' then
+      if not in_del and #add_buf > 0 then
+        flush()
+      end
+      in_del = true
+      del_buf[#del_buf + 1] = { idx = i, text = line:sub(2) }
+    elseif prefix == '+' then
+      in_del = false
+      add_buf[#add_buf + 1] = { idx = i, text = line:sub(2) }
+    else
+      flush()
+      in_del = false
+    end
+  end
+
+  flush()
+  return groups
+end
+
+function Utils.drop_whitespace_spans(spans, line, diff_opts)
+  local ignore_all = diff_opts and diff_opts.ignore_whitespace
+  local ignore_eol = diff_opts and diff_opts.ignore_whitespace_change_at_eol
+  if not (ignore_all or ignore_eol) then
+    return spans
+  end
+
+  local kept = {}
+  for _, span in ipairs(spans) do
+    local text = line:sub(span.col_start, span.col_end - 1)
+    local whitespace_only = text:match('^%s*$') ~= nil
+    local drop
+    if ignore_all then
+      drop = whitespace_only
+    else
+      drop = whitespace_only and span.col_end > #line
+    end
+    if not drop then
+      kept[#kept + 1] = span
+    end
+  end
+  return kept
+end
+
+function Utils.char_diff_pair(old_line, new_line, del_idx, add_idx, diff_opts)
+  local old_text = table.concat(Utils.split_bytes(old_line), '\n') .. '\n'
+  local new_text = table.concat(Utils.split_bytes(new_line), '\n') .. '\n'
+  local char_opts = diff_opts
+  if diff_opts and diff_opts.linematch then
+    char_opts = { algorithm = diff_opts.algorithm }
+  end
+
+  local del_spans = {}
+  local add_spans = {}
+  for _, ch in ipairs(Utils.diff_indices(old_text, new_text, char_opts)) do
+    if ch.old_count > 0 then
+      del_spans[#del_spans + 1] = {
+        line = del_idx,
+        col_start = ch.old_start,
+        col_end = ch.old_start + ch.old_count,
+      }
+    end
+    if ch.new_count > 0 then
+      add_spans[#add_spans + 1] = {
+        line = add_idx,
+        col_start = ch.new_start,
+        col_end = ch.new_start + ch.new_count,
+      }
+    end
+  end
+
+  return Utils.drop_whitespace_spans(del_spans, old_line, diff_opts),
+    Utils.drop_whitespace_spans(add_spans, new_line, diff_opts)
+end
+
+function Utils.pair_group_lines(group, diff_opts)
+  if #group.del_lines == 1 and #group.add_lines == 1 then
+    return { { del = group.del_lines[1], add = group.add_lines[1] } }
+  end
+
+  local old_texts = {}
+  for _, line in ipairs(group.del_lines) do
+    old_texts[#old_texts + 1] = line.text
+  end
+
+  local new_texts = {}
+  for _, line in ipairs(group.add_lines) do
+    new_texts[#new_texts + 1] = line.text
+  end
+
+  local pair_opts = diff_opts
+  if diff_opts and diff_opts.linematch then
+    pair_opts = { algorithm = diff_opts.algorithm }
+  end
+
+  local pairs = {}
+  local old_block = table.concat(old_texts, '\n') .. '\n'
+  local new_block = table.concat(new_texts, '\n') .. '\n'
+  for _, lh in ipairs(Utils.diff_indices(old_block, new_block, pair_opts)) do
+    local count = (lh.old_count == lh.new_count) and lh.old_count or math.min(lh.old_count, lh.new_count)
+    for k = 0, count - 1 do
+      local del = group.del_lines[lh.old_start + k]
+      local add = group.add_lines[lh.new_start + k]
+      if del and add then
+        pairs[#pairs + 1] = { del = del, add = add }
+      end
+    end
+  end
+  return pairs
+end
+
+function Utils.compute_diffs_style_word_diffs(hunk_lines)
+  local groups = Utils.extract_change_groups(hunk_lines)
+  if #groups == 0 then
+    return nil
+  end
+
+  local diff_opts = Utils.diff_opts()
+  local add_spans = {}
+  local del_spans = {}
+
+  for _, group in ipairs(groups) do
+    for _, pair in ipairs(Utils.pair_group_lines(group, diff_opts)) do
+      local ds, as = Utils.char_diff_pair(pair.del.text, pair.add.text, pair.del.idx, pair.add.idx, diff_opts)
+      vim.list_extend(del_spans, ds)
+      vim.list_extend(add_spans, as)
+    end
+  end
+
+  if #add_spans == 0 and #del_spans == 0 then
+    return nil
+  end
+  return { add_spans = add_spans, del_spans = del_spans }
+end
+
 -- --- Parser ---
 
 local Parser = {}
@@ -371,6 +581,34 @@ function Highlighter.apply_background(bufnr, ns, hunk)
   end
 end
 
+function Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
+  local intra = Utils.compute_diffs_style_word_diffs(hunk.lines)
+  if not intra then
+    return
+  end
+
+  local function apply_span(span, hl_group)
+    local line = hunk.lines[span.line]
+    if not line then
+      return
+    end
+
+    local buf_line = hunk.start_line + span.line - 1
+    pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, buf_line, span.col_start, {
+      end_col = span.col_end,
+      hl_group = hl_group,
+      priority = PRIORITY_SYNTAX + 150,
+    })
+  end
+
+  for _, span in ipairs(intra.del_spans) do
+    apply_span(span, 'FugitiveExtDeleteText')
+  end
+  for _, span in ipairs(intra.add_spans) do
+    apply_span(span, 'FugitiveExtAddText')
+  end
+end
+
 function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
   if #group_old == 0 or #group_new == 0 then return end
 
@@ -472,6 +710,11 @@ function Highlighter.process_hunk(bufnr, ns, hunk)
   Highlighter.apply_background(bufnr, ns, hunk)
 
   -- 2. Word Diffs & Syntax Prep
+  local word_style = M.config.word_diff_style
+  if word_style == 'diffs' then
+    Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
+  end
+
   local group_old = {}
   local group_new = {}
   local group_old_lines = {}
@@ -483,7 +726,9 @@ function Highlighter.process_hunk(bufnr, ns, hunk)
   local old_map = {}
 
   local function flush_groups()
-    Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
+    if word_style ~= 'diffs' then
+      Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
+    end
     group_old = {}
     group_new = {}
     group_old_lines = {}
@@ -506,15 +751,17 @@ function Highlighter.process_hunk(bufnr, ns, hunk)
     end
 
     -- Collect groups for word diff
-    if prefix == '-' then
-      if #group_new > 0 then flush_groups() end
-      table.insert(group_old, content)
-      table.insert(group_old_lines, buf_line)
-    elseif prefix == '+' then
-      table.insert(group_new, content)
-      table.insert(group_new_lines, buf_line)
-    else
-      flush_groups()
+    if word_style ~= 'diffs' then
+      if prefix == '-' then
+        if #group_new > 0 then flush_groups() end
+        table.insert(group_old, content)
+        table.insert(group_old_lines, buf_line)
+      elseif prefix == '+' then
+        table.insert(group_new, content)
+        table.insert(group_new_lines, buf_line)
+      else
+        flush_groups()
+      end
     end
   end
   flush_groups()
@@ -529,6 +776,44 @@ end
 -- --- Main ---
 
 local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local attached_refreshers = {}
+
+function M.refresh(bufnr)
+  local refresh = attached_refreshers[bufnr]
+  if not refresh then
+    return false
+  end
+  refresh()
+  return true
+end
+
+function M.refresh_all()
+  local refreshed = false
+  for bufnr, refresh in pairs(attached_refreshers) do
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      refresh()
+      refreshed = true
+    else
+      attached_refreshers[bufnr] = nil
+    end
+  end
+  return refreshed
+end
+
+function M.cycle_word_diff_style()
+  local current = M.config.word_diff_style
+  local next_style = WORD_DIFF_STYLES[1]
+  for i, style in ipairs(WORD_DIFF_STYLES) do
+    if style == current then
+      next_style = WORD_DIFF_STYLES[(i % #WORD_DIFF_STYLES) + 1]
+      break
+    end
+  end
+
+  M.config.word_diff_style = next_style
+  M.refresh_all()
+  return next_style
+end
 
 function M.attach(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then return end
@@ -556,11 +841,20 @@ function M.attach(bufnr)
     end
   end
 
+  attached_refreshers[bufnr] = refresh
   refresh()
 
   vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI'}, {
     buffer = bufnr,
     callback = function() vim.schedule(refresh) end
+  })
+
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    buffer = bufnr,
+    once = true,
+    callback = function()
+      attached_refreshers[bufnr] = nil
+    end,
   })
 end
 

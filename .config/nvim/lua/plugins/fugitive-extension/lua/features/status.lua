@@ -806,10 +806,9 @@ function M.setup(group)
 
       -- <Leader>wd: Toggle word diff style
       vim.keymap.set('n', '<Leader>wd', function()
-        local new_style = syntax_highlight.config.word_diff_style == 'github' and 'lazygit' or 'github'
-        syntax_highlight.config.word_diff_style = new_style
+        local new_style = syntax_highlight.cycle_word_diff_style()
         vim.notify('Word diff style: ' .. new_style, vim.log.levels.INFO)
-      end, { buffer = b, silent = true, desc = 'Toggle word diff style (lazygit/github)' })
+      end, { buffer = b, silent = true, desc = 'Toggle word diff style (diffs/lazygit/github)' })
     end,
   })
 end
