@@ -31,5 +31,6 @@ fi
 
 unset NVIM
 unset NVIM_LISTEN_ADDRESS
+export NVIM_LOG_FILE="${LAZYAGENT_NVIM_BRIDGE_LOG_FILE:-/dev/null}"
 
 exec nvim --clean --headless --cmd "set shadafile=NONE" -l "$BRIDGE_LUA" --client "$@"
