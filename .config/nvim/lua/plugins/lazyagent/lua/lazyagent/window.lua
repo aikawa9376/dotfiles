@@ -134,6 +134,27 @@ local function get_tracked_scratch_bufnr(agent_name)
   return nil
 end
 
+local function source_winid_from_opts(opts)
+  local winid = opts and (opts.source_winid or opts.origin_winid or opts.parent_winid) or nil
+  if winid and vim.api.nvim_win_is_valid(winid) then
+    return winid
+  end
+  return nil
+end
+
+local function remember_scratch_source(bufnr, opts)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  if opts and opts.source_bufnr then
+    pcall(function() vim.b[bufnr].lazyagent_source_bufnr = opts.source_bufnr end)
+  end
+  local source_winid = source_winid_from_opts(opts)
+  if source_winid then
+    pcall(function() vim.b[bufnr].lazyagent_source_winid = source_winid end)
+  end
+end
+
 local function ensure_scratch_buffer(bufnr, opts)
   -- Normalize accepting either (bufnr, opts) or (opts) as the first parameter.
   if type(bufnr) == "table" and opts == nil then
@@ -147,9 +168,7 @@ local function ensure_scratch_buffer(bufnr, opts)
     if existing then
       scratch_bufnr = existing
       apply_scratch_buffer_defaults(existing, (opts and opts.filetype) or scratch_filetype(existing))
-      if opts and opts.source_bufnr then
-        pcall(function() vim.b[existing].lazyagent_source_bufnr = opts.source_bufnr end)
-      end
+      remember_scratch_source(existing, opts)
       return existing, opts
     end
   end
@@ -192,9 +211,7 @@ local function ensure_scratch_buffer(bufnr, opts)
 
   -- Keep a reference to the source buffer when provided so downstream logic
   -- (transforms/completion) can resolve context consistently.
-  if opts and opts.source_bufnr then
-    pcall(function() vim.b[bufnr].lazyagent_source_bufnr = opts.source_bufnr end)
-  end
+  remember_scratch_source(bufnr, opts)
 
   return bufnr, opts
 end
@@ -411,7 +428,10 @@ function M.open_float(bufnr, opts)
         local current_buf = vim.api.nvim_get_current_buf()
         -- Ensure we are not tracking the lazyagent buffer itself, nor special buffers
         if current_buf ~= bufnr and vim.api.nvim_buf_is_valid(current_buf) and vim.bo[current_buf].buftype == "" then
-           pcall(function() vim.b[bufnr].lazyagent_source_bufnr = current_buf end)
+          pcall(function()
+            vim.b[bufnr].lazyagent_source_bufnr = current_buf
+            vim.b[bufnr].lazyagent_source_winid = curr
+          end)
         end
       end
     end,
@@ -599,11 +619,13 @@ pcall(function()
         if restore_agent then
           local restore_ft = scratch_filetype(buf, "lazyagent")
           local source_bufnr = buffer_var(buf, "lazyagent_source_bufnr")
+          local source_winid = buffer_var(buf, "lazyagent_source_winid")
           forget_scratch_buffer(buf)
           restore_buf = ensure_scratch_buffer(nil, {
             agent_name = restore_agent,
             filetype = restore_ft,
             source_bufnr = source_bufnr,
+            source_winid = source_winid,
           })
         else
           restore_buf = get_tracked_scratch_bufnr()
@@ -613,6 +635,7 @@ pcall(function()
             agent_name = restore_agent,
             filetype = scratch_filetype(buf, "lazyagent"),
             source_bufnr = buffer_var(buf, "lazyagent_source_bufnr"),
+            source_winid = buffer_var(buf, "lazyagent_source_winid"),
           })
         end
         -- Find a normal window to move the buffer into

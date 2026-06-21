@@ -12,6 +12,7 @@ local window = require("lazyagent.window")
 local cache_logic = require("lazyagent.logic.cache")
 local config = require("lazyagent.logic.config")
 local image_paste = require("lazyagent.logic.image_paste")
+local context_providers = require("lazyagent.context_providers")
 
 local function restart_insert_if_valid(bufnr)
   if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
@@ -28,6 +29,7 @@ end
 --   - pane_id (string): The ID of the associated pane.
 --   - reuse (boolean): Whether the pane is reused.
 --   - source_bufnr (number): The original buffer that triggered the scratch.
+--   - source_winid (number): The original window that triggered the scratch.
 --   - scratch_keymaps (table): Overrides for default scratch keymaps.
 function M.register_scratch_keymaps(bufnr, opts)
   opts = opts or {}
@@ -35,8 +37,14 @@ function M.register_scratch_keymaps(bufnr, opts)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
 
   local source_bufnr = opts.source_bufnr or opts.origin_bufnr or vim.api.nvim_get_current_buf()
+  local source_winid = opts.source_winid or opts.origin_winid or opts.parent_winid
   if source_bufnr and source_bufnr > 0 then
     pcall(function() vim.b[bufnr].lazyagent_source_bufnr = source_bufnr end)
+  end
+  if source_winid and vim.api.nvim_win_is_valid(source_winid) then
+    pcall(function() vim.b[bufnr].lazyagent_source_winid = source_winid end)
+  else
+    source_winid = nil
   end
 
   local agent_name = opts.agent_name
@@ -117,6 +125,22 @@ function M.register_scratch_keymaps(bufnr, opts)
     return false
   end
 
+  local function current_source_bufnr()
+    local current = vim.b[bufnr].lazyagent_source_bufnr or source_bufnr
+    if current and vim.api.nvim_buf_is_valid(current) then
+      return current
+    end
+    return source_bufnr
+  end
+
+  local function current_source_winid()
+    local current = vim.b[bufnr].lazyagent_source_winid or source_winid
+    if current and vim.api.nvim_win_is_valid(current) then
+      return current
+    end
+    return nil
+  end
+
   local function send_key_to_pane(key, insert_wrap)
     local _, resolved_pane, _, resolved_mod = resolve_target()
     if not resolved_pane then
@@ -138,8 +162,16 @@ function M.register_scratch_keymaps(bufnr, opts)
     local text = table.concat(content, "\n")
     -- Expand placeholders before sending (use source_bufnr information)
     local transforms = require("lazyagent.transforms") -- require here to avoid circular dependency
-    local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr, scratch_bufnr = bufnr })
+    local resolved_source_bufnr = current_source_bufnr()
+    local expanded_text, _ = transforms.expand(text, { source_bufnr = resolved_source_bufnr, scratch_bufnr = bufnr })
     text = expanded_text or text
+    if preserve_scratch then
+      text = context_providers.prepend_to_prompt(text, {
+        source_bufnr = resolved_source_bufnr,
+        source_winid = current_source_winid(),
+        scratch_bufnr = bufnr,
+      })
+    end
 
      -- Append custom tag if configured AND in instant mode
     local s = agent_name and state.sessions[agent_name]
@@ -147,7 +179,7 @@ function M.register_scratch_keymaps(bufnr, opts)
        local append_text = (state.opts and state.opts.instant_mode and state.opts.instant_mode.append_text) or nil
        if append_text and append_text ~= "" then
           -- Expand tokens in append_text (e.g., #translate)
-          local expanded_append = transforms.expand(append_text, { source_bufnr = source_bufnr, scratch_bufnr = bufnr })
+          local expanded_append = transforms.expand(append_text, { source_bufnr = resolved_source_bufnr, scratch_bufnr = bufnr })
           append_text = expanded_append or append_text
 
           -- Ensure we append nicely (with space if needed, avoid double space)

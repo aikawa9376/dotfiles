@@ -522,6 +522,7 @@ function M.setup(deps)
         agent_name = agent_name,
         filetype = agent_cfg.scratch_filetype or "lazyagent",
         source_bufnr = origin_bufnr,
+        source_winid = origin_winid,
       })
       pcall(function() vim.b[bufnr].lazyagent_agent = agent_name end)
 
@@ -531,6 +532,7 @@ function M.setup(deps)
         pane_id = pane_id,
         reuse = reuse,
         source_bufnr = origin_bufnr,
+        source_winid = origin_winid,
       })
 
       state.open_agent = agent_name
@@ -542,6 +544,7 @@ function M.setup(deps)
       end
       open_opts.is_vertical = agent_cfg.is_vertical or false
       open_opts.parent_winid = origin_winid
+      open_opts.source_winid = origin_winid
 
       if opts.window_opts then
         open_opts.window_opts = opts.window_opts
