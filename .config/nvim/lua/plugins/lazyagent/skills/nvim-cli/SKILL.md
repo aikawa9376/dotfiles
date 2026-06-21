@@ -28,6 +28,7 @@ Use this skill when you need to:
 - **[quickfix](references/quickfix.md)**: Manage the Neovim quickfix list (e.g., "Add these files to qf").
 - **[system](references/system.md)**: Shell commands, git operations, and raw Ex commands.
 - **[cursor](references/cursor.md)**: Get context around the current Neovim cursor ("Where am I?").
+- **[connector](references/connector.md)**: Run connector.nvim context and SQL commands through the active Neovim instance.
 
 ## Guidelines
 

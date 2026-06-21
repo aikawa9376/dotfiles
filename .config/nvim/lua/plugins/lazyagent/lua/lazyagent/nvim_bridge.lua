@@ -275,6 +275,10 @@ local function command_qf_remove(req)
   return { stdout = "Success\n" }
 end
 
+local function command_connector(req)
+  return require("lazyagent.connector_bridge").run(req.args or {})
+end
+
 local handlers = {
   read = command_read,
   write = command_write,
@@ -291,6 +295,7 @@ local handlers = {
   close = command_close,
   ["qf-add"] = command_qf_add,
   ["qf-remove"] = command_qf_remove,
+  connector = command_connector,
 }
 
 local function process_request(path)
@@ -488,6 +493,62 @@ local function parse_cli_command(args)
 
   if command == "diff" then
     return command, {}
+  end
+
+  if command == "connector" then
+    local subcommand = args[2] or "help"
+    local payload = {
+      subcommand = subcommand,
+      format = "table",
+      sql = "",
+    }
+    local sql_parts = {}
+    local index = 3
+    while index <= #args do
+      local item = args[index]
+      if item == "--format" then
+        if args[index + 1] == nil then
+          die("connector --format requires a value")
+        end
+        payload.format = args[index + 1]
+        index = index + 2
+      elseif item == "--json" then
+        payload.format = "json"
+        index = index + 1
+      elseif item == "--csv" then
+        payload.format = "csv"
+        index = index + 1
+      elseif item == "--table" then
+        payload.format = "table"
+        index = index + 1
+      elseif item == "--limit" or item == "--row-limit" then
+        if args[index + 1] == nil then
+          die("connector " .. item .. " requires a value")
+        end
+        payload.limit = tonumber(args[index + 1])
+        index = index + 2
+      elseif item == "--timeout-ms" then
+        if args[index + 1] == nil then
+          die("connector --timeout-ms requires a value")
+        end
+        payload.timeout_ms = tonumber(args[index + 1])
+        index = index + 2
+      elseif item == "--connection" or item == "--connection-id" then
+        if args[index + 1] == nil then
+          die("connector " .. item .. " requires a value")
+        end
+        payload.connection_id = args[index + 1]
+        index = index + 2
+      elseif item == "--write" or item == "--allow-write" then
+        payload.allow_write = true
+        index = index + 1
+      else
+        sql_parts[#sql_parts + 1] = item
+        index = index + 1
+      end
+    end
+    payload.sql = table.concat(sql_parts, " ")
+    return command, payload
   end
 
   return nil

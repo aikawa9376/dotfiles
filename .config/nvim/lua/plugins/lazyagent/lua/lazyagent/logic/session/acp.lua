@@ -293,11 +293,12 @@ function M.capture_switch_scratch_state(agent_name)
     was_open = true,
     text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n"),
     source_bufnr = vim.b[bufnr].lazyagent_source_bufnr,
+    source_winid = vim.b[bufnr].lazyagent_source_winid,
   }
 end
 
 function M.resolve_switch_anchor(runtime_snapshot, scratch_state)
-  local source_winid = runtime_snapshot and runtime_snapshot.source_winid or nil
+  local source_winid = (scratch_state and scratch_state.source_winid) or (runtime_snapshot and runtime_snapshot.source_winid) or nil
   if source_winid and not vim.api.nvim_win_is_valid(source_winid) then
     source_winid = nil
   end
