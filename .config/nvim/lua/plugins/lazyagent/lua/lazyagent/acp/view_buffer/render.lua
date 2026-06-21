@@ -118,15 +118,58 @@ function M.new(ctx)
       return 0
     end
 
-    local scan_start = math.max(0, start_idx - INCREMENTAL_NORMALIZE_LOOKBACK)
-    local lines = vim.api.nvim_buf_get_lines(bufnr, scan_start, start_idx + 1, false)
-    for idx = #lines - 1, 1, -1 do
-      local line = lines[idx] or ""
-      if section_heading_for_line(line) or line:match("^%s*```") then
-        return scan_start + idx - 1
+    local transcript_stop = transcript_line_count(bufnr)
+    local stop_row = math.min(transcript_stop, start_idx + 1)
+    local lines = transcript_source_lines(bufnr, 0, stop_row)
+    local boundary_row = nil
+    local boundary_kind = nil
+
+    for row = #lines, 1, -1 do
+      local line = lines[row] or ""
+      if line:match("^%s*```") then
+        boundary_row = row
+        boundary_kind = "fence"
+        break
+      elseif section_heading_for_line(line) then
+        boundary_row = row
+        boundary_kind = "heading"
+        break
       end
     end
-    return scan_start
+
+    if not boundary_row then
+      return math.max(0, start_idx - INCREMENTAL_NORMALIZE_LOOKBACK)
+    end
+    if boundary_kind == "heading" then
+      return math.max(0, boundary_row - 1)
+    end
+
+    local section_row = 1
+    for row = boundary_row - 1, 1, -1 do
+      if section_heading_for_line(lines[row] or "") then
+        section_row = row
+        break
+      end
+    end
+
+    local fence_count = 0
+    local previous_fence_row = nil
+    for row = section_row, boundary_row do
+      if (lines[row] or ""):match("^%s*```") then
+        if row < boundary_row then
+          previous_fence_row = row
+        end
+        fence_count = fence_count + 1
+      end
+    end
+
+    if fence_count % 2 == 1 then
+      return math.max(0, boundary_row - 1)
+    end
+    if boundary_row == start_idx + 1 and previous_fence_row then
+      return math.max(0, previous_fence_row - 1)
+    end
+    return math.min(transcript_stop, boundary_row)
   end
 
   local function normalize_transcript_display(bufnr, start_idx)
