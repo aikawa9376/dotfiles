@@ -17,6 +17,12 @@ local hook_reload_enabled = tool_helpers.hook_reload_enabled
 local changed_line_from_diff = tool_helpers.changed_line_from_diff
 local current_buf = tool_helpers.current_buf
 
+local function apply_qf_annotations(items, title)
+  pcall(function()
+    require("lazyagent.acp.qf_annotations").apply(items, { title = title })
+  end)
+end
+
 -- ────────────────────────────────────────────────
 -- Tool registry
 -- ────────────────────────────────────────────────
@@ -576,8 +582,24 @@ M.list = {
 
       -- Append to quickfix (dedup handled via in_qf above)
       if hopts.quickfix_on_edit ~= false and not in_qf[newest_path] then
-        table.insert(state._qf_items, { filename = newest_path, lnum = line, col = 1, text = "agent edited" })
+        local qf_line = math.max(1, tonumber(line) or 1)
+        table.insert(state._qf_items, {
+          filename = newest_path,
+          lnum = qf_line,
+          col = 1,
+          text = "agent edited",
+          user_data = {
+            lazyagent_acp = {
+              source = "agent_edit",
+              title = "Agent edit",
+              description = "Agent edited this file",
+              content = string.format("Changed line inferred from the latest agent edit: %d", qf_line),
+              cwd = cwd,
+            },
+          },
+        })
         vim.fn.setqflist({}, "r", { title = "Agent turn", items = state._qf_items })
+        apply_qf_annotations(state._qf_items, "Agent turn")
       end
 
       if hopts.open_on_edit ~= true then

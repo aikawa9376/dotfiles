@@ -183,6 +183,18 @@ function M.new(ctx)
     return normalized
   end
 
+  local function truncate_qf_annotation_text(text, limit)
+    local value = tostring(text or "")
+    if value == "" then
+      return ""
+    end
+    limit = tonumber(limit) or 6000
+    if #value <= limit then
+      return value
+    end
+    return value:sub(1, limit) .. "\n...(truncated)"
+  end
+
   local function clean_qf_source_fragment(text)
     local cleaned = tostring(text or "")
     cleaned = cleaned:gsub("\27%[[0-9;]*m", "")
@@ -435,6 +447,8 @@ function M.new(ctx)
     end
     candidate.text = text
     candidate.text_rank = text_rank
+    candidate.source_line = source_line
+    candidate.token = token
     return candidate
   end
 
@@ -445,9 +459,33 @@ function M.new(ctx)
     end
 
     for line in text:gmatch("[^\n]+") do
+      local function add_line_context_candidate(path_part, lnum, col)
+        local token = tostring(path_part or "") .. ":" .. tostring(lnum or "")
+        if col and col ~= "" then
+          token = token .. ":" .. tostring(col)
+        end
+        add_candidate(make_qf_candidate(token, cwd, fallback_text, line))
+      end
+
       local explicit_path = line:match("Path:%s+(.+)$")
       if explicit_path then
         add_candidate(make_qf_candidate(explicit_path, cwd, fallback_text, line))
+      end
+
+      for path_part, lnum, col in line:gmatch(
+        "([@~%./%w_%-%+]+%.[%w_%-%+]+)%s*[,:%-]?%s*[Ll]ine%s+(%d+):?(%d*)"
+      ) do
+        add_line_context_candidate(path_part, lnum, col)
+      end
+      for path_part, lnum, col in line:gmatch(
+        "([@~%./%w_%-%+]+%.[%w_%-%+]+)%s*%(%s*[Ll]ine%s+(%d+):?(%d*)%s*%)"
+      ) do
+        add_line_context_candidate(path_part, lnum, col)
+      end
+      for lnum, col, path_part in line:gmatch(
+        "[Ll]ine%s+(%d+):?(%d*)%s+in%s+([@~%./%w_%-%+]+%.[%w_%-%+]+)"
+      ) do
+        add_line_context_candidate(path_part, lnum, col)
       end
 
       for snippet in line:gmatch("`([^`]+)`") do
@@ -479,9 +517,71 @@ function M.new(ctx)
     local entry = tool_entry_for_item(bufnr, item)
     local session = session_for_bufnr and session_for_bufnr(bufnr) or nil
     local cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd()
+    local title = quickfix_block_title(context, item, entry)
     local description = quickfix_block_description(context, item, entry)
+    local section = context.section or {}
+    local transcript_range = section.start_row and string.format("%d-%d", section.start_row, section.end_row or section.start_row) or nil
+    local block_body = section_body_text(context.lines or {}, section)
+    local block_text = section_text(context.lines or {}, section)
+    local item_body = item_body_text(item)
+    local item_summary = tostring(item and item.summary or "")
+    local entry_summary = tostring(entry and entry.summary or "")
+    local entry_content = tostring(entry and entry.rendered_content or "")
+    local entry_raw_output = tostring(entry and entry.rendered_raw_output or "")
+    if entry_content == "" then
+      entry_content = read_text_ref(entry and entry.rendered_content_ref)
+    end
+    if entry_raw_output == "" then
+      entry_raw_output = read_text_ref(entry and entry.rendered_raw_output_ref)
+    end
     local files = {}
     local file_order = {}
+
+    local function build_qf_annotation(candidate, candidate_text)
+      local content = entry_content
+      if content == "" and item_body ~= "" and not text_looks_like_transcript(item_body) then
+        content = item_body
+      end
+      if content == "" then
+        content = block_body
+      end
+
+      local raw_output = entry_raw_output
+      if normalize_popup_text(raw_output) == normalize_popup_text(content) then
+        raw_output = ""
+      end
+
+      local transcript = ""
+      if block_text ~= "" and normalize_popup_text(block_text) ~= normalize_popup_text(content) then
+        transcript = block_text
+      end
+
+      return {
+        source = "acp_block",
+        title = title,
+        description = candidate_text,
+        kind = (entry and entry.kind) or (item and item.kind) or (section and section.heading) or "block",
+        status = (entry and entry.status) or (item and item.status) or nil,
+        summary = entry_summary ~= "" and entry_summary or item_summary,
+        content = truncate_qf_annotation_text(content, 6000),
+        raw_output = truncate_qf_annotation_text(raw_output, 6000),
+        transcript = truncate_qf_annotation_text(transcript, 4000),
+        source_line = candidate and candidate.source_line or nil,
+        token = candidate and candidate.token or nil,
+        tool_call_id = (entry and entry.toolCallId) or (item and item.toolCallId) or nil,
+        conversation_item_id = item and item.id or nil,
+        transcript_range = transcript_range,
+        agent_name = agent_name_for_bufnr(bufnr),
+        cwd = cwd,
+      }
+    end
+
+    local function set_qf_annotation(qf, candidate, candidate_text)
+      qf.user_data = {
+        lazyagent_acp = build_qf_annotation(candidate, candidate_text),
+      }
+      return qf
+    end
 
     local function add_candidate(candidate)
       if type(candidate) ~= "table" or candidate.filename == nil or candidate.filename == "" then
@@ -508,22 +608,29 @@ function M.new(ctx)
         local line_key = tostring(lnum)
         local existing = bucket.lines[line_key]
         if existing then
+          local update_annotation = false
           if (existing.qf.col or 1) <= 1 and col > 1 then
             existing.qf.col = col
+            update_annotation = true
           end
           if existing.text_rank < candidate_text_rank then
             existing.qf.text = candidate_text
             existing.text_rank = candidate_text_rank
+            update_annotation = true
+          end
+          if update_annotation or not existing.qf.user_data then
+            set_qf_annotation(existing.qf, candidate, existing.qf.text)
           end
           return
         end
+        local qf = set_qf_annotation({
+          filename = filename,
+          lnum = lnum,
+          col = col,
+          text = candidate_text,
+        }, candidate, candidate_text)
         bucket.lines[line_key] = {
-          qf = {
-            filename = filename,
-            lnum = lnum,
-            col = col,
-            text = candidate_text,
-          },
+          qf = qf,
           text_rank = candidate_text_rank,
         }
         bucket.line_order[#bucket.line_order + 1] = line_key
@@ -531,18 +638,22 @@ function M.new(ctx)
       end
 
       if not bucket.generic then
+        local qf = set_qf_annotation({
+          filename = filename,
+          lnum = 1,
+          col = 1,
+          text = candidate_text,
+        }, candidate, candidate_text)
         bucket.generic = {
-          qf = {
-            filename = filename,
-            lnum = 1,
-            col = 1,
-            text = candidate_text,
-          },
+          qf = qf,
           text_rank = candidate_text_rank,
         }
       elseif bucket.generic.text_rank < candidate_text_rank then
         bucket.generic.qf.text = candidate_text
         bucket.generic.text_rank = candidate_text_rank
+        set_qf_annotation(bucket.generic.qf, candidate, candidate_text)
+      elseif not bucket.generic.qf.user_data then
+        set_qf_annotation(bucket.generic.qf, candidate, bucket.generic.qf.text)
       end
     end
 
@@ -554,14 +665,12 @@ function M.new(ctx)
       add_candidate(make_qf_candidate(path, cwd, description))
     end
 
-    collect_qf_candidates_from_text(section_body_text(context.lines or {}, context.section), cwd, description, add_candidate)
-    collect_qf_candidates_from_text(section_text(context.lines or {}, context.section), cwd, description, add_candidate)
-    collect_qf_candidates_from_text(item and item.summary or "", cwd, description, add_candidate)
-    collect_qf_candidates_from_text(entry and entry.summary or "", cwd, description, add_candidate)
-    collect_qf_candidates_from_text(entry and entry.rendered_content or "", cwd, description, add_candidate)
-    collect_qf_candidates_from_text(entry and entry.rendered_raw_output or "", cwd, description, add_candidate)
-    collect_qf_candidates_from_text(read_text_ref(entry and entry.rendered_content_ref), cwd, description, add_candidate)
-    collect_qf_candidates_from_text(read_text_ref(entry and entry.rendered_raw_output_ref), cwd, description, add_candidate)
+    collect_qf_candidates_from_text(block_body, cwd, description, add_candidate)
+    collect_qf_candidates_from_text(block_text, cwd, description, add_candidate)
+    collect_qf_candidates_from_text(item_summary, cwd, description, add_candidate)
+    collect_qf_candidates_from_text(entry_summary, cwd, description, add_candidate)
+    collect_qf_candidates_from_text(entry_content, cwd, description, add_candidate)
+    collect_qf_candidates_from_text(entry_raw_output, cwd, description, add_candidate)
 
     local items = {}
     for _, filename in ipairs(file_order) do
@@ -582,10 +691,14 @@ function M.new(ctx)
       return
     end
 
+    local quickfix_title = "ACP block files: " .. title
     vim.fn.setqflist({}, "r", {
-      title = "ACP block files: " .. quickfix_block_title(context, item, entry),
+      title = quickfix_title,
       items = items,
     })
+    pcall(function()
+      require("lazyagent.acp.qf_annotations").apply(items, { title = quickfix_title })
+    end)
     local current_win = vim.api.nvim_get_current_win()
     local open_win = quickfix_open_window_for_bufnr and quickfix_open_window_for_bufnr(bufnr) or nil
     if open_win and vim.api.nvim_win_is_valid(open_win) then
