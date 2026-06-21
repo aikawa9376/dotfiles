@@ -68,6 +68,27 @@ local always_commands = {
     nargs = 1,
     complete = "file",
   },
+  {
+    name = "LazyAgentACPQuickfixPopup",
+    desc = "Show the LazyAgent ACP quickfix note for the current line",
+    handler = function()
+      require("lazyagent.acp.qf_annotations").show_at_cursor()
+    end,
+  },
+  {
+    name = "LazyAgentACPQuickfixRefresh",
+    desc = "Refresh LazyAgent ACP quickfix line notes",
+    handler = function()
+      require("lazyagent.acp.qf_annotations").refresh()
+    end,
+  },
+  {
+    name = "LazyAgentACPQuickfixClear",
+    desc = "Clear LazyAgent ACP quickfix line notes",
+    handler = function()
+      require("lazyagent.acp.qf_annotations").clear()
+    end,
+  },
 }
 
 local commands = {
