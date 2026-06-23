@@ -1070,7 +1070,11 @@ local getAgentOpts = function (cacheDir)
 end
 
 M.fzf_lazyagent = function()
-  local cacheDir, conversations = require"lazyagent.logic.cache".list_cache_Conversation()
+  local cache = require"lazyagent.logic.cache"
+  local cacheDir = cache.get_conversation_dir()
+  local conversations = vim.tbl_map(function(entry)
+    return entry.name
+  end, cache.list_conversation_files() or {})
 
   fzf_lua.fzf_exec(
     conversations,

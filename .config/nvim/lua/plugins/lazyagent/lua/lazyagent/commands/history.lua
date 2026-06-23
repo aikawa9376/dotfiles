@@ -96,8 +96,9 @@ function M.register(create)
 
     local entries = cache_logic.list_cache_files()
     local prefix = cache_logic.build_cache_prefix(bufnr)
+    local prefix_lower = prefix:lower()
     for _, entry in ipairs(entries) do
-      if entry.name:match("^" .. prefix .. ".*%.log$") then
+      if (entry.name or ""):lower():sub(1, #prefix_lower) == prefix_lower then
         util.open_in_normal_win(entry.path)
         return
       end

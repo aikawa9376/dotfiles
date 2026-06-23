@@ -14,7 +14,11 @@ end
 M.summary_dir = summary_dir
 
 local function build_summary_context(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if type(cache.resolve_context_bufnr) == "function" then
+    bufnr = cache.resolve_context_bufnr(bufnr)
+  else
+    bufnr = bufnr or vim.api.nvim_get_current_buf()
+  end
   local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
   local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
   local branch = util.git_branch_for_path(bufn) or "no-branch"
@@ -67,7 +71,8 @@ function M.copy_path(path)
 end
 
 local function resolve_filter_dir()
-  local bufn = vim.api.nvim_buf_get_name(0) or ""
+  local bufnr = type(cache.resolve_context_bufnr) == "function" and cache.resolve_context_bufnr(0) or 0
+  local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
   if bufn == "" then
     return nil
   end

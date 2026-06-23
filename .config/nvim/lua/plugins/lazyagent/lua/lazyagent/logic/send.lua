@@ -49,9 +49,8 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
   local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr or vim.api.nvim_get_current_buf() })
   text = expanded_text or text
 
-  -- Persist the one-shot content to the cache (if configured). Use the source_bufnr supplied
-  -- by the caller so this write does not rely on the currently focused buffer.
-  pcall(function() cache_logic.write_scratch_to_cache(source_bufnr) end)
+  -- Persist the one-shot prompt text to the cache without reading the source file buffer.
+  pcall(function() cache_logic.write_text_to_cache(text, source_bufnr or vim.api.nvim_get_current_buf()) end)
 
   local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
 
@@ -129,7 +128,7 @@ function M.send_to_cli(agent_name, text, opts)
         vim.notify("send_to_cli: failed to obtain pane for " .. tostring(agent_name), vim.log.levels.ERROR)
         return
       end
-      cache_logic.write_scratch_to_cache(source_bufnr)
+      cache_logic.write_text_to_cache(text, source_bufnr)
       local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
       local _send_mode = config.pref(agent_cfg, "send_mode", nil)
       local _move_to_end = (_send_mode == "append")
@@ -169,7 +168,7 @@ function M.send_to_cli(agent_name, text, opts)
       if diags and #diags > 0 then
         context.diagnostics = diags
       end
-      cache_logic.write_scratch_to_cache(bufnr)
+      cache_logic.write_text_to_cache(text, source_bufnr)
       p(context)
       return
   end

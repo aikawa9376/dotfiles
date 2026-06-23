@@ -339,6 +339,15 @@ local function provider_switch_cache_dir()
   return dir
 end
 
+local function session_source_bufnr(session)
+  local cfg = type(session) == "table" and session.agent_cfg or nil
+  local bufnr = cfg and (cfg.source_bufnr or cfg.origin_bufnr) or nil
+  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    return bufnr
+  end
+  return nil
+end
+
 function M.write_provider_switch_snapshot(agent_name, lines)
   local loop = vim.uv or vim.loop
   local stamp = loop and tostring(loop.hrtime()) or tostring(os.time())
@@ -408,7 +417,7 @@ function M.persist_conversation_capture(agent_name, session, lines, opts)
   opts = opts or {}
 
   local dir = cache_logic.get_conversation_dir()
-  local prefix = cache_logic.build_cache_prefix()
+  local prefix = cache_logic.build_cache_prefix(session_source_bufnr(session))
   local sanitized = tostring(agent_name):gsub("[^%w-_]+", "-")
   local path = session.last_save_path
   local saved_lines = lines
