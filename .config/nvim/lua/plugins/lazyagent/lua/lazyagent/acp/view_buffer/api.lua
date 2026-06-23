@@ -83,7 +83,13 @@ function M.attach(api, ctx)
     local pane_id = allocate_pane_id("buffer-acp")
     local agent_name = (args.acp or {}).agent_name or "agent"
     local switch_view = args.acp and args.acp.reuse_view or nil
-    local bufnr = adopt_transcript_buffer(pane_id, agent_name, args.transcript_path, switch_view)
+    local bufnr = adopt_transcript_buffer(
+      pane_id,
+      agent_name,
+      args.transcript_path,
+      switch_view,
+      args.acp and args.acp.source_bufnr or nil
+    )
     local reused_view = bufnr ~= nil
 
     local base_pane_config = reused_view and type(switch_view) == "table" and switch_view.pane_config or nil
@@ -130,7 +136,12 @@ function M.attach(api, ctx)
 
       win = vim.api.nvim_get_current_win()
       set_window_size(win, args.size, args.is_vertical)
-      bufnr = create_transcript_buffer(pane_id, agent_name, args.transcript_path)
+      bufnr = create_transcript_buffer(
+        pane_id,
+        agent_name,
+        args.transcript_path,
+        args.acp and args.acp.source_bufnr or nil
+      )
       vim.api.nvim_win_set_buf(win, bufnr)
       apply_transcript_window_opts(win, args.is_vertical, pane_config[pane_id])
       refresh_buffer_from_path(bufnr, args.transcript_path, { force = true })
@@ -159,6 +170,11 @@ function M.attach(api, ctx)
         vim.b[bufnr].lazyagent_acp_pane_id = tostring(session.pane_id)
         vim.b[bufnr].lazyagent_acp_agent = session.agent_name
         vim.b[bufnr].lazyagent_acp_transcript_path = session.transcript_path
+        local source_bufnr = session.agent_cfg and (session.agent_cfg.source_bufnr or session.agent_cfg.origin_bufnr)
+          or nil
+        if source_bufnr and vim.api.nvim_buf_is_valid(source_bufnr) then
+          vim.b[bufnr].lazyagent_source_bufnr = source_bufnr
+        end
       end)
       refresh_buffer_layout(bufnr, { force_footer = true })
     end
@@ -338,7 +354,9 @@ function M.attach(api, ctx)
         end
         return false
       end
-      bufnr = create_transcript_buffer(pane_id, session.agent_name, session.transcript_path)
+      local source_bufnr = session.agent_cfg and (session.agent_cfg.source_bufnr or session.agent_cfg.origin_bufnr)
+        or nil
+      bufnr = create_transcript_buffer(pane_id, session.agent_name, session.transcript_path, source_bufnr)
     end
 
     if anchor_win then
@@ -419,7 +437,14 @@ function M.attach(api, ctx)
 
     vim.cmd("tabnew")
     local win = vim.api.nvim_get_current_win()
-    local bufnr = create_transcript_buffer(inspector_pane_id, session.agent_name or "agent", session.transcript_path)
+    local source_bufnr = session.agent_cfg and (session.agent_cfg.source_bufnr or session.agent_cfg.origin_bufnr)
+      or nil
+    local bufnr = create_transcript_buffer(
+      inspector_pane_id,
+      session.agent_name or "agent",
+      session.transcript_path,
+      source_bufnr
+    )
     pane_config[tostring(inspector_pane_id)] = tab_opts
 
     vim.api.nvim_win_set_buf(win, bufnr)

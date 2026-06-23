@@ -149,8 +149,80 @@ local function starts_with_slash_command(lines)
   return false
 end
 
-local function build_cache_context(bufnr)
+local function valid_bufnr(bufnr)
+  return type(bufnr) == "number" and bufnr > 0 and vim.api.nvim_buf_is_valid(bufnr)
+end
+
+local function buffer_var(bufnr, name)
+  if not valid_bufnr(bufnr) then
+    return nil
+  end
+  local ok, value = pcall(vim.api.nvim_buf_get_var, bufnr, name)
+  if ok then
+    return value
+  end
+  return nil
+end
+
+local function normal_context_bufnr(bufnr)
+  if not valid_bufnr(bufnr) then
+    return nil
+  end
+  local name = vim.api.nvim_buf_get_name(bufnr) or ""
+  if name == "" then
+    return nil
+  end
+  local ok, buftype = pcall(vim.api.nvim_get_option_value, "buftype", { buf = bufnr })
+  if ok and (buftype == "" or buftype == "acwrite") then
+    return bufnr
+  end
+  return nil
+end
+
+local function session_source_bufnr(agent_name)
+  if type(agent_name) ~= "string" or agent_name == "" then
+    return nil
+  end
+  local session = state.sessions and state.sessions[agent_name] or nil
+  local cfg = session and session.agent_cfg or nil
+  local source = cfg and (cfg.source_bufnr or cfg.origin_bufnr) or nil
+  if valid_bufnr(source) then
+    return source
+  end
+  return nil
+end
+
+local function resolve_history_context_bufnr(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not valid_bufnr(bufnr) then
+    return vim.api.nvim_get_current_buf()
+  end
+
+  local source = buffer_var(bufnr, "lazyagent_source_bufnr")
+  if valid_bufnr(source) then
+    return source
+  end
+
+  source = session_source_bufnr(buffer_var(bufnr, "lazyagent_acp_agent"))
+    or session_source_bufnr(buffer_var(bufnr, "lazyagent_agent"))
+  if valid_bufnr(source) then
+    return source
+  end
+
+  local ok, buftype = pcall(vim.api.nvim_get_option_value, "buftype", { buf = bufnr })
+  if ok and buftype == "nofile" then
+    local alt_buf = vim.fn.bufnr("#")
+    local alt_context = normal_context_bufnr(alt_buf)
+    if alt_context then
+      return alt_context
+    end
+  end
+
+  return bufnr
+end
+
+local function build_cache_context(bufnr)
+  bufnr = resolve_history_context_bufnr(bufnr)
   local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
   local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
   local branch = util.git_branch_for_path(bufn) or "no-branch"
@@ -410,6 +482,7 @@ end
 
 -- Expose helpers for other modules to locate cache files and prefixes.
 M.get_cache_dir = get_cache_dir
+M.get_history_dir = get_history_dir
 M.get_conversation_dir = get_conversation_dir
 M.get_conversation_metadata_path = conversation_metadata_path
 M.build_cache_filename = build_cache_filename
