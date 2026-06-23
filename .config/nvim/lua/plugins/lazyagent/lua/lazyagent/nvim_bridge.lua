@@ -104,6 +104,160 @@ local function read_one(path)
   return read_file_lines(path)
 end
 
+local function terminal_job_for_buf(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+  local job_id = vim.b[bufnr] and vim.b[bufnr].terminal_job_id or nil
+  job_id = tonumber(job_id)
+  if job_id and job_id > 0 then
+    return job_id
+  end
+  return nil
+end
+
+local function is_terminal_buffer(bufnr)
+  return bufnr
+    and vim.api.nvim_buf_is_valid(bufnr)
+    and (vim.bo[bufnr].buftype == "terminal" or terminal_job_for_buf(bufnr) ~= nil)
+end
+
+local function terminal_windows(bufnr)
+  local windows = {}
+  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if vim.api.nvim_win_is_valid(winid) then
+      local ok_top, top = pcall(vim.fn.line, "w0", winid)
+      local ok_bot, bot = pcall(vim.fn.line, "w$", winid)
+      windows[#windows + 1] = {
+        winid = winid,
+        current = winid == vim.api.nvim_get_current_win(),
+        topline = ok_top and top or nil,
+        botline = ok_bot and bot or nil,
+      }
+    end
+  end
+  return windows
+end
+
+local function terminal_info(bufnr)
+  local job_id = terminal_job_for_buf(bufnr)
+  local pid = nil
+  if job_id then
+    local ok_pid, value = pcall(vim.fn.jobpid, job_id)
+    if ok_pid and type(value) == "number" and value > 0 then
+      pid = value
+    end
+  end
+
+  local name = vim.api.nvim_buf_get_name(bufnr)
+  local title = nil
+  pcall(function()
+    title = vim.b[bufnr].term_title
+  end)
+
+  local windows = terminal_windows(bufnr)
+  return {
+    bufnr = bufnr,
+    name = name,
+    title = title,
+    job_id = job_id,
+    pid = pid,
+    line_count = vim.api.nvim_buf_line_count(bufnr),
+    listed = vim.fn.buflisted(bufnr) == 1,
+    loaded = vim.api.nvim_buf_is_loaded(bufnr),
+    visible = #windows > 0,
+    windows = windows,
+  }
+end
+
+local function terminal_content_end(bufnr)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local chunk_size = 200
+  local scan_end = line_count
+  while scan_end > 0 do
+    local scan_start = math.max(0, scan_end - chunk_size)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, scan_start, scan_end, false)
+    for index = #lines, 1, -1 do
+      if vim.trim(lines[index] or "") ~= "" then
+        return scan_start + index
+      end
+    end
+    scan_end = scan_start
+  end
+  return 0
+end
+
+local function list_terminals()
+  local terminals = {}
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if is_terminal_buffer(bufnr) then
+      terminals[#terminals + 1] = terminal_info(bufnr)
+    end
+  end
+  table.sort(terminals, function(a, b)
+    if a.bufnr == vim.api.nvim_get_current_buf() then
+      return true
+    end
+    if b.bufnr == vim.api.nvim_get_current_buf() then
+      return false
+    end
+    if a.visible ~= b.visible then
+      return a.visible
+    end
+    return a.bufnr < b.bufnr
+  end)
+  return terminals
+end
+
+local function resolve_terminal_bufnr(args)
+  args = args or {}
+  local bufnr = tonumber(args.bufnr)
+  if args.current then
+    bufnr = vim.api.nvim_get_current_buf()
+  end
+  if bufnr then
+    if not is_terminal_buffer(bufnr) then
+      error("buffer is not a terminal: " .. tostring(bufnr))
+    end
+    return bufnr
+  end
+
+  local current = vim.api.nvim_get_current_buf()
+  if is_terminal_buffer(current) then
+    return current
+  end
+
+  local terminals = list_terminals()
+  if #terminals == 1 then
+    return terminals[1].bufnr
+  end
+  error("terminal capture requires --current or --bufnr when current buffer is not a terminal")
+end
+
+local function capture_terminal(args)
+  args = args or {}
+  local bufnr = resolve_terminal_bufnr(args)
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local content_end = terminal_content_end(bufnr)
+  local last = tonumber(args.last) or 200
+  if last < 0 then
+    last = 0
+  end
+  local start_line = 0
+  if last > 0 then
+    start_line = math.max(0, content_end - last)
+  end
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_line, content_end, false)
+  return vim.tbl_extend("force", terminal_info(bufnr), {
+    start_line = content_end > 0 and (start_line + 1) or 0,
+    end_line = content_end,
+    trailing_blank_lines = line_count - content_end,
+    truncated = start_line > 0,
+    content = table.concat(lines, "\n"),
+    lines = lines,
+  })
+end
+
 local function scan_files(dir, out)
   local handle = uv.fs_scandir(dir)
   if not handle then
@@ -279,6 +433,18 @@ local function command_connector(req)
   return require("lazyagent.connector_bridge").run(req.args or {})
 end
 
+local function command_terminal(req)
+  local args = req.args or {}
+  local subcommand = args.subcommand or "list"
+  if subcommand == "list" then
+    return { result = { terminals = list_terminals() } }
+  end
+  if subcommand == "capture" then
+    return { result = capture_terminal(args) }
+  end
+  error("unsupported terminal subcommand: " .. tostring(subcommand))
+end
+
 local handlers = {
   read = command_read,
   write = command_write,
@@ -296,6 +462,7 @@ local handlers = {
   ["qf-add"] = command_qf_add,
   ["qf-remove"] = command_qf_remove,
   connector = command_connector,
+  terminal = command_terminal,
 }
 
 local function process_request(path)
@@ -548,6 +715,36 @@ local function parse_cli_command(args)
       end
     end
     payload.sql = table.concat(sql_parts, " ")
+    return command, payload
+  end
+
+  if command == "terminal" then
+    local subcommand = args[2] or "list"
+    local payload = {
+      subcommand = subcommand,
+    }
+    local index = 3
+    while index <= #args do
+      local item = args[index]
+      if item == "--current" then
+        payload.current = true
+        index = index + 1
+      elseif item == "--bufnr" or item == "--buffer" then
+        if args[index + 1] == nil then
+          die("terminal " .. item .. " requires a value")
+        end
+        payload.bufnr = tonumber(args[index + 1])
+        index = index + 2
+      elseif item == "--last" or item == "--tail" then
+        if args[index + 1] == nil then
+          die("terminal " .. item .. " requires a value")
+        end
+        payload.last = tonumber(args[index + 1])
+        index = index + 2
+      else
+        die("unsupported terminal option: " .. tostring(item))
+      end
+    end
     return command, payload
   end
 

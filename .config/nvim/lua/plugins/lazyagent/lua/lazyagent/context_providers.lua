@@ -1,8 +1,14 @@
 local M = {}
 
 local DEFAULT_MAX_CONTEXT_CHARS = 6000
+local LAST_CONTEXT_HASH_VAR = "lazyagent_last_editor_context_hash"
 
 local default_providers = {
+  {
+    name = "terminal",
+    module = "lazyagent.terminal_context",
+    method = "context_for_buffer",
+  },
   {
     name = "connector.nvim",
     module = "connector.api.context",
@@ -49,6 +55,38 @@ local function clamp_text(text, max_chars)
     return text
   end
   return text:sub(1, math.max(1, max_chars - 18)) .. "\n... (truncated)"
+end
+
+local function editor_context_hash(text)
+  return vim.fn.sha256(tostring(text or ""))
+end
+
+local function last_context_hash(opts)
+  local scratch_bufnr = valid_bufnr(opts and opts.scratch_bufnr)
+  if not scratch_bufnr then
+    return nil, nil
+  end
+
+  local ok, value = pcall(vim.api.nvim_buf_get_var, scratch_bufnr, LAST_CONTEXT_HASH_VAR)
+  if not ok or type(value) ~= "string" or value == "" then
+    return nil, scratch_bufnr
+  end
+  return value, scratch_bufnr
+end
+
+local function set_last_context_hash(scratch_bufnr, hash)
+  if not scratch_bufnr or not vim.api.nvim_buf_is_valid(scratch_bufnr) or type(hash) ~= "string" or hash == "" then
+    return
+  end
+  pcall(vim.api.nvim_buf_set_var, scratch_bufnr, LAST_CONTEXT_HASH_VAR, hash)
+end
+
+local function unchanged_context_marker(hash)
+  return table.concat({
+    ("<editor-context status=\"unchanged\" hash=\"%s\">"):format(hash),
+    "Editor context is unchanged from the previous LazyAgent turn for this scratch buffer. The full context is not repeated.",
+    "</editor-context>",
+  }, "\n")
 end
 
 local function provider_specs(opts)
@@ -117,6 +155,9 @@ function M.collect(opts)
       winid = source_winid,
       scratch_bufnr = opts.scratch_bufnr,
       max_chars = opts.max_chars,
+      terminal_lines = opts.terminal_lines,
+      terminal_max_lines = opts.terminal_max_lines,
+      terminal_max_chars = opts.terminal_max_chars,
     })
     local text = ctx and context_text(ctx) or nil
     if text and vim.trim(text) ~= "" then
@@ -156,6 +197,13 @@ function M.prepend_to_prompt(text, opts)
   local rendered = M.render(M.collect(opts or {}))
   if not rendered or rendered == "" then
     return text
+  end
+  local hash = editor_context_hash(rendered)
+  local previous_hash, scratch_bufnr = last_context_hash(opts or {})
+  if previous_hash == hash then
+    rendered = unchanged_context_marker(hash)
+  else
+    set_last_context_hash(scratch_bufnr, hash)
   end
   return rendered .. "\n\nUser request:\n" .. text
 end

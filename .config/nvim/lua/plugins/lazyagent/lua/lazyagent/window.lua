@@ -142,6 +142,17 @@ local function source_winid_from_opts(opts)
   return nil
 end
 
+local function source_buffer_is_trackable(bufnr, scratch_bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) or bufnr == scratch_bufnr then
+    return false
+  end
+  if buffer_var(bufnr, "lazyagent_is_scratch") == true or buffer_var(bufnr, "lazyagent_acp_pane_id") then
+    return false
+  end
+  local buftype = vim.bo[bufnr].buftype
+  return buftype == "" or buftype == "terminal"
+end
+
 local function remember_scratch_source(bufnr, opts)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return
@@ -424,10 +435,9 @@ function M.open_float(bufnr, opts)
           float_is_focused = false
         end
 
-        -- Update the source buffer to the current buffer if we are in a normal buffer
+        -- Update the source buffer to the current buffer if it is usable editor context.
         local current_buf = vim.api.nvim_get_current_buf()
-        -- Ensure we are not tracking the lazyagent buffer itself, nor special buffers
-        if current_buf ~= bufnr and vim.api.nvim_buf_is_valid(current_buf) and vim.bo[current_buf].buftype == "" then
+        if source_buffer_is_trackable(current_buf, bufnr) then
           pcall(function()
             vim.b[bufnr].lazyagent_source_bufnr = current_buf
             vim.b[bufnr].lazyagent_source_winid = curr

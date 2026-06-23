@@ -139,6 +139,7 @@ require("lazyagent").setup({
 - 何も指定しなければ `lazyagent/bin` を基準に、`bin/<os>-<arch>/`（例: `bin/linux-x64`, `bin/darwin-arm64`）があればそちらを優先して `LAZYAGENTBIN` に注入します。platform dir が無ければ従来どおり `lazyagent/bin` を使います。
 - local CLI を使う skill は `$LAZYAGENTBIN/<tool>` を見れば OK です。
 - lazyagent から起動した agent には `LAZYAGENT_NVIM_BRIDGE_*` が注入され、bundled `nvim-cli-bridge` は socket ではなく file bridge 経由で親 Neovim を操作します。bridge client は shell wrapper + Neovim Lua です。sandbox 内で `NVIM_LISTEN_ADDRESS` の socket 接続が拒否される環境でもこの経路を使います。`nvim-cli` は従来どおり raw socket client のままです。
+- Neovim の内蔵 terminal は `nvim-cli-bridge terminal list` / `terminal capture` で確認できます。terminal buffer から ACP scratch を開いた場合は、terminal 出力の短い末尾（既定 40 行 / 約 2.4KB 上限）だけが editor context として自動添付されます。そこで判断できない場合は `nvim-cli-bridge terminal capture --bufnr <bufnr> --last N` で必要な scrollback だけ遡ります。同じ scratch で前回と同一の editor context は hash 付きの unchanged marker だけに圧縮されます。
 - 別ディレクトリを使いたいときだけ `skills.source` / `skills.sources` で override します。
 - bin 側を変えたいときは `skills.bin_dir` で override できます。
 - `mode = "flag"`: 起動 command に agent ごとの skills 用 flag を追加します。現状は Copilot で `--plugin-dir` をサポートします。
