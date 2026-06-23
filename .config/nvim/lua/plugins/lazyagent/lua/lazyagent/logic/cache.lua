@@ -192,7 +192,7 @@ local function session_source_bufnr(agent_name)
   return nil
 end
 
-local function resolve_history_context_bufnr(bufnr)
+local function resolve_context_bufnr(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if not valid_bufnr(bufnr) then
     return vim.api.nvim_get_current_buf()
@@ -222,7 +222,7 @@ local function resolve_history_context_bufnr(bufnr)
 end
 
 local function build_cache_context(bufnr)
-  bufnr = resolve_history_context_bufnr(bufnr)
+  bufnr = resolve_context_bufnr(bufnr)
   local bufn = vim.api.nvim_buf_get_name(bufnr) or ""
   local root = util.git_root_for_path(bufn) or vim.fn.getcwd()
   local branch = util.git_branch_for_path(bufn) or "no-branch"
@@ -239,6 +239,68 @@ local function build_cache_filename(bufnr)
   local context = build_cache_context(bufnr)
   -- Keep history per project+branch (no date-based splitting); allow max_history to manage size.
   return context.root_component .. "-" .. context.branch_component .. "-history.log"
+end
+
+local function has_non_whitespace(lines)
+  for _, l in ipairs(lines or {}) do
+    if l and l:match("%S") then
+      return true
+    end
+  end
+  return false
+end
+
+local function text_to_lines(text)
+  return vim.split(tostring(text or ""), "\n", { plain = true })
+end
+
+local function write_lines_to_cache(lines, context_bufnr, idx_bufnr)
+  if not (state.opts and state.opts.cache and state.opts.cache.enabled) then
+    return
+  end
+  context_bufnr = context_bufnr or vim.api.nvim_get_current_buf()
+  if not context_bufnr or not vim.api.nvim_buf_is_valid(context_bufnr) then
+    return
+  end
+
+  if not has_non_whitespace(lines) then
+    return
+  end
+
+  local trimmed = trim_trailing_blank(lines)
+  if starts_with_slash_command(trimmed) then
+    return
+  end
+
+  local dir = get_history_dir()
+  local filename = build_cache_filename(context_bufnr)
+  local path = dir .. "/" .. filename
+  local ts = os.date("%Y-%m-%d %H:%M:%S")
+  local new_entry = { ts = ts, content = trimmed }
+
+  -- Read existing entries (newest-first)
+  local existing = parse_history_entries(path)
+
+  -- If the newest entry matches exactly, do not write duplicate. Also ensure idx points to latest.
+  if existing[1] and lines_equal(existing[1].content or {}, new_entry.content or {}) then
+    if valid_bufnr(idx_bufnr) then
+      pcall(function() vim.b[idx_bufnr].lazyagent_history_idx = 1 end)
+    end
+    return
+  end
+
+  -- Prepend and trim to max_history.
+  table.insert(existing, 1, new_entry)
+  local max_history = (state.opts and state.opts.cache and state.opts.cache.max_history) or 50
+  while #existing > max_history do
+    table.remove(existing) -- removes last (oldest) entry
+  end
+
+  local merged = entries_to_lines(existing)
+  local ok = pcall(vim.fn.writefile, merged, path)
+  if ok and valid_bufnr(idx_bufnr) then
+    pcall(function() vim.b[idx_bufnr].lazyagent_history_idx = 1 end)
+  end
 end
 
 --- Writes the content of a scratch buffer to a cache file.
@@ -259,52 +321,13 @@ function M.write_scratch_to_cache(bufnr)
     return
   end
 
-  local dir = get_history_dir()
-  local filename = build_cache_filename(bufnr)
-  local path = dir .. "/" .. filename
-
   -- Read current buffer content and normalize by trimming trailing blank lines
   local content = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false) or {}
-  -- Do not write empty or whitespace-only buffers
-  local has_non_whitespace = false
-  for _, l in ipairs(content) do
-    if l and l:match("%S") then
-      has_non_whitespace = true
-      break
-    end
-  end
-  if not has_non_whitespace then
-    return
-  end
+  write_lines_to_cache(content, bufnr, bufnr)
+end
 
-  local trimmed = trim_trailing_blank(content)
-  if starts_with_slash_command(trimmed) then
-    return
-  end
-  local ts = os.date("%Y-%m-%d %H:%M:%S")
-  local new_entry = { ts = ts, content = trimmed }
-
-  -- Read existing entries (newest-first)
-  local existing = parse_history_entries(path)
-
-  -- If the newest entry matches exactly, do not write duplicate. Also ensure idx points to latest.
-  if existing[1] and lines_equal(existing[1].content or {}, new_entry.content or {}) then
-    pcall(function() vim.b[bufnr].lazyagent_history_idx = 1 end)
-    return
-  end
-
-  -- Prepend and trim to max_history.
-  table.insert(existing, 1, new_entry)
-  local max_history = (state.opts and state.opts.cache and state.opts.cache.max_history) or 50
-  while #existing > max_history do
-    table.remove(existing) -- removes last (oldest) entry
-  end
-
-  local merged = entries_to_lines(existing)
-  local ok = pcall(vim.fn.writefile, merged, path)
-  if ok then
-    pcall(function() vim.b[bufnr].lazyagent_history_idx = 1 end)
-  end
+function M.write_text_to_cache(text, context_bufnr)
+  write_lines_to_cache(text_to_lines(text), context_bufnr, context_bufnr)
 end
 
 --- Lists all history cache files, sorted by modification time (newest first).
@@ -485,6 +508,7 @@ M.get_cache_dir = get_cache_dir
 M.get_history_dir = get_history_dir
 M.get_conversation_dir = get_conversation_dir
 M.get_conversation_metadata_path = conversation_metadata_path
+M.resolve_context_bufnr = resolve_context_bufnr
 M.build_cache_filename = build_cache_filename
 M.list_cache_files = list_cache_files
 M.list_conversation_files = list_conversation_files
