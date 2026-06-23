@@ -29,6 +29,7 @@ Use this skill when you need to:
 - **[system](references/system.md)**: Shell commands, git operations, and raw Ex commands.
 - **[cursor](references/cursor.md)**: Get context around the current Neovim cursor ("Where am I?").
 - **[connector](references/connector.md)**: Run connector.nvim context and SQL commands through the active Neovim instance.
+- **[terminal](references/terminal.md)**: List and capture Neovim builtin terminal buffers.
 
 ## Guidelines
 
