@@ -1,6 +1,6 @@
 return {
   "pwntester/octo.nvim",
-  cmd = { "Octo", "OctoPrFromSha", "OctoPrFromBranch" },
+  cmd = { "Octo", "OctoPrFromSha", "OctoPrFromBranch", "OctoCopyPrFromBranch" },
   config = function ()
     require"octo".setup({
       picker = "fzf-lua"
@@ -74,6 +74,102 @@ return {
       return hostname, repo
     end
 
+    local function gh_repo_arg(hostname, repo)
+      if hostname and hostname ~= "" and hostname ~= "github.com" then
+        return hostname .. "/" .. repo
+      end
+      return repo
+    end
+
+    local function current_branch_name()
+      local res = vim.system({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, { text = true }):wait()
+      if res.code ~= 0 then
+        return ""
+      end
+      return vim.fn.trim(res.stdout or "")
+    end
+
+    local function branch_name_from_opts(opts)
+      local branch_name = opts.args
+      if branch_name == "" then
+        branch_name = current_branch_name()
+      end
+      branch_name = vim.fn.trim(branch_name or "")
+
+      if not branch_name or branch_name == "" then
+        vim.notify("Could not determine branch name.", vim.log.levels.WARN)
+        return nil
+      end
+      return branch_name
+    end
+
+    local function build_pr_url(hostname, repo, pr_number)
+      return ("https://%s/%s/pull/%s"):format(hostname, repo, pr_number)
+    end
+
+    local function query_prs_for_branch(hostname, repo, branch_name)
+      local res = vim.system({
+        "gh", "pr", "list",
+        "--repo", gh_repo_arg(hostname, repo),
+        "--head", branch_name,
+        "--state", "all",
+        "--json", "number,url",
+        "-q", ".[] | [.number, .url] | @tsv",
+      }, { text = true }):wait()
+
+      if res.code ~= 0 then
+        local msg = res.stderr ~= "" and res.stderr or res.stdout
+        vim.notify("Failed to query PRs for branch: " .. (msg or "unknown error"), vim.log.levels.ERROR)
+        return nil
+      end
+
+      local pr_items = {}
+      for line in (res.stdout or ""):gmatch("[^\r\n]+") do
+        local number, url = line:match("^(%d+)%s+(.+)$")
+        if number then
+          table.insert(pr_items, {
+            number = number,
+            url = url ~= "" and url or build_pr_url(hostname, repo, number),
+          })
+        end
+      end
+      return pr_items
+    end
+
+    local function with_branch_pr(opts, action)
+      local branch_name = branch_name_from_opts(opts)
+      if not branch_name then
+        return
+      end
+
+      local hostname, repo = parse_git_remote()
+      local pr_items = query_prs_for_branch(hostname, repo, branch_name)
+      if not pr_items then
+        return
+      end
+
+      if #pr_items == 0 then
+        vim.notify("No associated PRs for branch " .. branch_name, vim.log.levels.WARN)
+        return
+      end
+
+      if #pr_items == 1 then
+        action(pr_items[1], hostname, repo)
+        return
+      end
+
+      vim.ui.select(pr_items, {
+        prompt = "Select PR for branch " .. branch_name,
+        format_item = function(item)
+          return ("#%s %s"):format(item.number, item.url)
+        end,
+      }, function(choice)
+        if choice then
+          action(choice, hostname, repo)
+        end
+      end)
+    end
+
     vim.api.nvim_create_user_command("OctoPrFromSha", function(opts)
       local sha = opts.args ~= "" and opts.args or vim.fn.expand("<cword>")
       sha = sha and sha:gsub("^%s+", ""):gsub("%s+$", "")
@@ -128,7 +224,9 @@ return {
         -- end
 
         vim.cmd("tabnew")
-        local ok = pcall(vim.cmd, ("Octo pr edit %s %s"):format(pr_number, repo))
+        local ok = pcall(function()
+          vim.cmd(("Octo pr edit %s %s"):format(pr_number, repo))
+        end)
         if not ok then
           vim.fn.setreg("+", pr_url)
           vim.notify("Octo failed. URL copied to clipboard: " .. pr_url, vim.log.levels.WARN)
@@ -145,51 +243,28 @@ return {
     end, { nargs = "?" })
 
     vim.api.nvim_create_user_command("OctoPrFromBranch", function(opts)
-      local branch_name = opts.args
-      if branch_name == "" then
-        branch_name = vim.system({'git', 'rev-parse', '--abbrev-ref', 'HEAD'}, {text = true}):wait().stdout
-      end
-      branch_name = vim.fn.trim(branch_name)
-
-      if not branch_name or branch_name == "" then
-        vim.notify("Could not determine branch name.", vim.log.levels.WARN)
-        return
-      end
-
-      local hostname, repo = parse_git_remote()
-
-      local out = vim.system({
-        "gh", "pr", "list", "--head", branch_name, "--state", "all", "--json", "number", "-q", ".[].number"
-      }, { text = true }):wait().stdout or ""
-
-      local pr_numbers = {}
-      for n in out:gmatch("%d+") do
-        table.insert(pr_numbers, n)
-      end
-
-      if #pr_numbers == 0 then
-        vim.notify("No associated PRs for branch " .. branch_name, vim.log.levels.WARN)
-        return
-      end
-
-      local function open_pr(pr_number)
-        local pr_url = ("https://%s/%s/pull/%s"):format(hostname, repo, pr_number)
-
+      with_branch_pr(opts, function(item, _, repo)
         vim.cmd("tabnew")
-        local ok = pcall(vim.cmd, ("Octo pr edit %s %s"):format(pr_number, repo))
-        if not ok then
-          vim.fn.setreg("+", pr_url)
-          vim.notify("Octo failed. URL copied to clipboard: " .. pr_url, vim.log.levels.WARN)
-        end
-      end
-
-      if #pr_numbers == 1 then
-        open_pr(pr_numbers[1])
-      else
-        vim.ui.select(pr_numbers, { prompt = "Select PR for branch " .. branch_name }, function(choice)
-          if choice then open_pr(choice) end
+        local ok = pcall(function()
+          vim.cmd(("Octo pr edit %s %s"):format(item.number, repo))
         end)
-      end
-    end, { nargs = "?" })
+        if not ok then
+          vim.fn.setreg("+", item.url)
+          vim.notify("Octo failed. URL copied to clipboard: " .. item.url, vim.log.levels.WARN)
+        end
+      end)
+    end, { nargs = "?", desc = "Open a PR associated with the current or given branch" })
+
+    vim.api.nvim_create_user_command("OctoCopyPrFromBranch", function(opts)
+      with_branch_pr(opts, function(item)
+        local ok = pcall(vim.fn.setreg, "+", item.url)
+        pcall(vim.fn.setreg, '"', item.url)
+        if ok then
+          vim.notify("PR URL copied to clipboard: " .. item.url, vim.log.levels.INFO)
+        else
+          vim.notify("Failed to copy PR URL: " .. item.url, vim.log.levels.ERROR)
+        end
+      end)
+    end, { nargs = "?", desc = "Copy a PR URL associated with the current or given branch" })
   end
 }
