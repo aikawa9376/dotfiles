@@ -8,8 +8,8 @@ local state = require("lazyagent.logic.state")
 local summary_logic = require("lazyagent.logic.summary")
 local util = require("lazyagent.util")
 
-local function open_cache_file(command_name, filename, configure)
-  local dir = cache_logic.get_cache_dir()
+local function open_cache_file(command_name, filename, configure, dir)
+  dir = dir or cache_logic.get_cache_dir()
   local path = dir .. "/" .. filename
   if vim.fn.filereadable(path) == 1 then
     util.open_in_normal_win(path)
@@ -27,7 +27,7 @@ function M.register(create)
   create("LazyAgentHistoryList", function(cmdargs)
     local explicit = command.arg(cmdargs)
     if explicit then
-      open_cache_file("LazyAgentHistoryList", explicit)
+      open_cache_file("LazyAgentHistoryList", explicit, nil, cache_logic.get_history_dir())
       return
     end
     cache_logic.open_history()
@@ -38,7 +38,7 @@ function M.register(create)
     if explicit then
       open_cache_file("LazyAgentConversationList", explicit, function()
         vim.cmd("setlocal nowrap")
-      end)
+      end, cache_logic.get_conversation_dir())
       return
     end
     cache_logic.open_conversations()
@@ -75,9 +75,9 @@ function M.register(create)
 
   create("LazyAgentHistory", function(cmdargs)
     local explicit = command.arg(cmdargs)
-    local dir = cache_logic.get_cache_dir()
+    local dir = cache_logic.get_history_dir()
     if explicit then
-      open_cache_file("LazyAgentHistory", explicit)
+      open_cache_file("LazyAgentHistory", explicit, nil, dir)
       return
     end
 

@@ -846,7 +846,7 @@ function M.new(ctx)
     return true
   end
 
-  local function create_transcript_buffer(pane_id, agent_name, transcript_path)
+  local function create_transcript_buffer(pane_id, agent_name, transcript_path, source_bufnr)
     local bufnr = vim.api.nvim_create_buf(false, true)
     local safe_agent_name = tostring(agent_name or "agent"):gsub("[^%w-_]+", "-")
     local pane_key = tostring(pane_id)
@@ -864,6 +864,9 @@ function M.new(ctx)
       vim.b[bufnr].lazyagent_acp_pane_id = pane_key
       vim.b[bufnr].lazyagent_acp_agent = agent_name
       vim.b[bufnr].lazyagent_acp_transcript_path = transcript_path
+      if source_bufnr and vim.api.nvim_buf_is_valid(source_bufnr) then
+        vim.b[bufnr].lazyagent_source_bufnr = source_bufnr
+      end
     end)
     apply_transcript_buffer_opts(bufnr)
 
@@ -871,7 +874,7 @@ function M.new(ctx)
     return bufnr
   end
 
-  local function adopt_transcript_buffer(pane_id, agent_name, transcript_path, switch_view)
+  local function adopt_transcript_buffer(pane_id, agent_name, transcript_path, switch_view, source_bufnr)
     if type(switch_view) ~= "table" then
       return nil
     end
@@ -899,6 +902,9 @@ function M.new(ctx)
       vim.b[bufnr].lazyagent_acp_pane_id = pane_key
       vim.b[bufnr].lazyagent_acp_agent = agent_name
       vim.b[bufnr].lazyagent_acp_transcript_path = transcript_path
+      if source_bufnr and vim.api.nvim_buf_is_valid(source_bufnr) then
+        vim.b[bufnr].lazyagent_source_bufnr = source_bufnr
+      end
     end)
 
     local entry = layout_entry(bufnr)
