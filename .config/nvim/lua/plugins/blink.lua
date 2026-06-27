@@ -1,3 +1,11 @@
+local function is_romaji_japanese_trigger(ctx)
+  local trigger = type(ctx) == "table" and ctx.trigger or nil
+  local character = type(trigger) == "table" and trigger.character or nil
+  return type(trigger) == "table"
+    and trigger.kind == "trigger_character"
+    and (character == "." or character == "," or character == "!" or character == "?" or character == "`")
+end
+
 return {
   { 'mikavilpas/blink-ripgrep.nvim', event = 'InsertEnter' },
   { 'rafamadriz/friendly-snippets', event = 'InsertEnter' },
@@ -209,7 +217,9 @@ return {
             module = 'lazyagent.completion.acp_buffer',
             score_offset = -6,
             should_show_items = function(ctx, items)
-              return not require("blink_extension.features.completion").is_japanese_completion_context(ctx) and #items > 0
+              return not is_romaji_japanese_trigger(ctx)
+                and not require("blink_extension.features.completion").is_japanese_completion_context(ctx)
+                and #items > 0
             end,
           },
           lsp = {
@@ -218,6 +228,9 @@ return {
           },
           snippets = {
             name = "[S]",
+            should_show_items = function(ctx)
+              return not is_romaji_japanese_trigger(ctx)
+            end,
           },
           path = {
             name = "[S]"
@@ -227,7 +240,8 @@ return {
             module = "blink_extension.completion.buffer_ascii",
             score_offset = -5,
             should_show_items = function(ctx)
-              return not require("blink_extension.features.completion").is_japanese_completion_context(ctx)
+              return not is_romaji_japanese_trigger(ctx)
+                and not require("blink_extension.features.completion").is_japanese_completion_context(ctx)
             end,
           },
           lazydev = {
@@ -286,51 +300,17 @@ return {
             module = "blink_extension.completion.romaji_japanese",
             name = "[K]",
             async = true,
-            score_offset = -12,
-            min_keyword_length = function(ctx)
-              local char = ctx and ctx.trigger and ctx.trigger.character
-              if char == "." or char == "," or char == "!" or char == "?" then
-                return 0
-              end
-              return 4
-            end,
+            score_offset = -1000,
+            min_keyword_length = 0,
             opts = {
-              min_keyword_length = 4,
-              min_partial_reading_length = 4,
-              dictionary_beam_width = 24,
-              dictionary_max_segment_candidates = 4,
-              dictionary_viterbi_min_reading_length = 3,
-              derive_katakana_readings_from_candidates = true,
+              min_keyword_length = 2,
               max_items = 20,
-              use_builtin_dictionary = true,
-              include_katakana = false,
-              auto_katakana = true,
-              katakana_min_keyword_length = 5,
-              dictionary_paths = {
-                vim.fn.stdpath("config") .. "/dict/romaji-japanese.tsv",
-              },
-              dictionary_registry_path = vim.fn.stdpath("config") .. "/dict/romaji-japanese-dicts.txt",
-              init_dictionary_kinds = { "L.unannotated", "propernoun" },
-              punctuation = {
+              viterust = {
                 enabled = true,
-                require_japanese_before = true,
-              },
-              llm = {
-                enabled = false,
-                endpoint = "http://127.0.0.1:18080/v1/chat/completions",
-                model = "romaji-ja",
-                timeout_ms = 2500,
-                max_items = 5,
-                server = {
-                  command = "/tmp/llama.cpp/build/bin/llama-server",
-                  model_path = "/tmp/Qwen3-0.6B-Q4_0.gguf",
-                  host = "127.0.0.1",
-                  port = 18080,
-                  ctx_size = 2048,
-                  threads = 4,
-                  parallel = 1,
-                  reasoning = "off",
-                },
+                top = 20,
+                beam = 24,
+                fuzzy = 0,
+                extra_args = {},
               },
             },
           },
