@@ -18,8 +18,37 @@ local function line_to_cursor(ctx)
   return line:sub(1, col)
 end
 
+local japanese_context_punctuation = {
+  ["."] = true,
+  [","] = true,
+  ["!"] = true,
+  ["?"] = true,
+  ["。"] = true,
+  ["、"] = true,
+  ["！"] = true,
+  ["？"] = true,
+  ["．"] = true,
+  ["，"] = true,
+}
+
+local function is_punctuation_after_japanese(text)
+  local chars = completion_utils.split_chars(text)
+  local last = chars[#chars]
+  if not japanese_context_punctuation[last] then
+    return false
+  end
+
+  chars[#chars] = nil
+  return completion_utils.extract_trailing_japanese(table.concat(chars)) ~= ""
+end
+
 function M.is_japanese_completion_context(ctx)
-  return completion_utils.extract_trailing_japanese(line_to_cursor(ctx)) ~= ""
+  local text = line_to_cursor(ctx)
+  if completion_utils.extract_trailing_japanese(text) ~= "" then
+    return true
+  end
+
+  return is_punctuation_after_japanese(text)
 end
 
 function M.filter_ascii_completion_items(items)
