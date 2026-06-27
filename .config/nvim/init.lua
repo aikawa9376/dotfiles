@@ -1,3 +1,4 @@
+require('config.open')
 require('config.command')
 require('config.option')
 require('config.keymap')
