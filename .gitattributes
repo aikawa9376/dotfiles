@@ -1,0 +1,3 @@
+*.vtrngram filter=lfs diff=lfs merge=lfs -text
+*.vtrdict filter=lfs diff=lfs merge=lfs -text
+.config/nvim/lua/plugins/blink-extension/bin/linux-x64/viterust filter=lfs diff=lfs merge=lfs -text
