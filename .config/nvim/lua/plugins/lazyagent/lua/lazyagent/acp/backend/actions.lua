@@ -923,9 +923,38 @@ local function push_text_block(blocks, text)
   })
 end
 
+local function normalize_text_after_context_block(text)
+  text = tostring(text or "")
+  if text == "" or text:match("^%s*$") then
+    return ""
+  end
+  if not text:match("^%s") then
+    return text
+  end
+  if text:match("^\n\n") then
+    return text
+  end
+  if text:match("^\n") then
+    return "\n\n" .. text:gsub("^\n[ \t]*", "")
+  end
+  return "\n\n" .. text:gsub("^[ \t]+", "")
+end
+
 local function build_prompt_blocks(session, text)
   local blocks = {}
   local cursor = 1
+  local after_context_block = false
+  local function push_prompt_text(segment)
+    if after_context_block then
+      segment = normalize_text_after_context_block(segment)
+      if segment == "" then
+        return
+      end
+      after_context_block = false
+    end
+    push_text_block(blocks, segment)
+  end
+
   while true do
     local start_idx, end_idx, token = text:find("@(%S+)", cursor)
     if not start_idx then break end
@@ -939,19 +968,20 @@ local function build_prompt_blocks(session, text)
     if not ref then
       cursor = end_idx + 1
     else
-      push_text_block(blocks, text:sub(cursor, start_idx - 1))
+      push_prompt_text(text:sub(cursor, start_idx - 1))
       if ref.note then
         push_text_block(blocks, ref.note)
       end
       table.insert(blocks, ref.block)
+      after_context_block = true
       if ref.trailing and ref.trailing ~= "" then
-        push_text_block(blocks, ref.trailing)
+        push_prompt_text(ref.trailing)
       end
       cursor = end_idx + 1
     end
   end
 
-  push_text_block(blocks, text:sub(cursor))
+  push_prompt_text(text:sub(cursor))
   if #blocks == 0 then
     push_text_block(blocks, text)
   end
