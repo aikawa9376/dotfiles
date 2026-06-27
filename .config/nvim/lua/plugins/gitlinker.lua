@@ -1,7 +1,29 @@
 return {
   "linrongbin16/gitlinker.nvim",
   cmd = "GitLink",
-  opts = {
+  opts = function()
+    local function strip_dot_git(repo)
+      repo = tostring(repo or "")
+      return repo:gsub("%.git$", "")
+    end
+
+    local function circleci_router(vcs)
+      return function(lk)
+        local org = lk.org or lk.user or ""
+        local repo = strip_dot_git(lk.repo)
+        if org == "" or repo == "" then
+          return nil
+        end
+
+        local url = ("https://app.circleci.com/pipelines/%s/%s/%s"):format(vcs, org, repo)
+        if type(lk.current_branch) == "string" and lk.current_branch ~= "" then
+          url = url .. "?branch=" .. vim.uri_encode(lk.current_branch, "rfc3986")
+        end
+        return url
+      end
+    end
+
+    return {
     -- print permanent url in command line
     message = true,
     -- highlight the linked region
@@ -13,6 +35,10 @@ return {
     },
     -- router bindings
     router = {
+      circleci = {
+        ["^github%.com"] = circleci_router("github"),
+        ["^bitbucket%.org"] = circleci_router("bitbucket"),
+      },
       browse = {
         -- example: https://github.com/linrongbin16/gitlinker.nvim/blob/9679445c7a24783d27063cd65f525f02def5f128/lua/gitlinker.lua#L3-L4
         ["^github%.com"] = "https://github.com/"
@@ -181,5 +207,6 @@ return {
     console_log = false,
     -- write logs to file
     file_log = false,
-  }
+    }
+  end,
 }
