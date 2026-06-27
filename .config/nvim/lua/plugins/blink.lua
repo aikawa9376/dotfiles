@@ -190,14 +190,14 @@ return {
         }
       },
       sources = {
-        default = { 'lsp', 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep', 'japanese' },
+        default = { 'lsp', 'copilot', 'lazydev', 'lsp', 'path', 'snippets', 'buffer', 'ripgrep', 'romaji_japanese', 'japanese' },
         per_filetype = {
-          AvanteInput = { 'avante', 'buffer', 'ripgrep', 'japanese' },
+          AvanteInput = { 'avante', 'buffer', 'ripgrep', 'romaji_japanese', 'japanese' },
           sql = { 'connector', 'buffer', 'snippets'  },
-          text = { 'buffer', 'ripgrep', 'japanese' },
-          markdown = { 'buffer', 'ripgrep', 'japanese', 'snippets' },
-          lazyagent = { 'buffer', 'lazyagent_acp_buffer', 'ripgrep', 'japanese', 'tmux', 'lazyagent' },
-          php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep', 'japanese'  },
+          text = { 'buffer', 'ripgrep', 'romaji_japanese', 'japanese' },
+          markdown = { 'buffer', 'ripgrep', 'romaji_japanese', 'japanese', 'snippets' },
+          lazyagent = { 'buffer', 'lazyagent_acp_buffer', 'ripgrep', 'romaji_japanese', 'japanese', 'tmux', 'lazyagent' },
+          php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep', 'romaji_japanese', 'japanese'  },
         },
         providers = {
           lazyagent = {
@@ -280,6 +280,58 @@ return {
               project_root_marker = ".git",
               project_root_fallback = true,
               search_casing = "--ignore-case",
+            },
+          },
+          romaji_japanese = {
+            module = "blink_extension.completion.romaji_japanese",
+            name = "[K]",
+            async = true,
+            score_offset = -12,
+            min_keyword_length = function(ctx)
+              local char = ctx and ctx.trigger and ctx.trigger.character
+              if char == "." or char == "," or char == "!" or char == "?" then
+                return 0
+              end
+              return 4
+            end,
+            opts = {
+              min_keyword_length = 4,
+              min_partial_reading_length = 4,
+              dictionary_beam_width = 24,
+              dictionary_max_segment_candidates = 4,
+              dictionary_viterbi_min_reading_length = 3,
+              derive_katakana_readings_from_candidates = true,
+              max_items = 20,
+              use_builtin_dictionary = true,
+              include_katakana = false,
+              auto_katakana = true,
+              katakana_min_keyword_length = 5,
+              dictionary_paths = {
+                vim.fn.stdpath("config") .. "/dict/romaji-japanese.tsv",
+              },
+              dictionary_registry_path = vim.fn.stdpath("config") .. "/dict/romaji-japanese-dicts.txt",
+              init_dictionary_kinds = { "L.unannotated", "propernoun" },
+              punctuation = {
+                enabled = true,
+                require_japanese_before = true,
+              },
+              llm = {
+                enabled = false,
+                endpoint = "http://127.0.0.1:18080/v1/chat/completions",
+                model = "romaji-ja",
+                timeout_ms = 2500,
+                max_items = 5,
+                server = {
+                  command = "/tmp/llama.cpp/build/bin/llama-server",
+                  model_path = "/tmp/Qwen3-0.6B-Q4_0.gguf",
+                  host = "127.0.0.1",
+                  port = 18080,
+                  ctx_size = 2048,
+                  threads = 4,
+                  parallel = 1,
+                  reasoning = "off",
+                },
+              },
             },
           },
           history = {
