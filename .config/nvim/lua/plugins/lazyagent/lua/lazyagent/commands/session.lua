@@ -44,19 +44,18 @@ function M.register(create)
 
   local function toggle_agent(cmdargs)
     local explicit = command.arg(cmdargs)
-    agent_logic.resolve_target_agent(explicit, nil, function(chosen)
-      if not chosen then return end
-      session_logic.toggle_session(chosen)
-    end)
+    session_logic.toggle_session(explicit, { close_running = cmdargs and cmdargs.bang == true })
   end
 
   create("LazyAgentToggle", toggle_agent, {
     nargs = "?",
+    bang = true,
     desc = "Toggle the agent input buffer",
     complete = available_agents,
   })
   create("LazyAgent", toggle_agent, {
     nargs = "?",
+    bang = true,
     desc = "Toggle the agent input buffer",
     complete = available_agents,
   })

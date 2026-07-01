@@ -417,12 +417,83 @@ function M.setup(deps)
     end
   end
 
-  function module.toggle_session(agent_name)
+  local function active_session_names()
+    local names = {}
+    for name, session in pairs(state.sessions or {}) do
+      if session and session.pane_id and session.pane_id ~= "" then
+        names[#names + 1] = name
+      end
+    end
+    table.sort(names)
+    return names
+  end
+
+  local function has_session_view_state()
+    for _, view in pairs(state.session_views or {}) do
+      if type(view) == "table" then
+        if type(view.agents) == "table" and next(view.agents) ~= nil then
+          return true
+        end
+        if type(view.visible_agents) == "table" and next(view.visible_agents) ~= nil then
+          return true
+        end
+        if view.open_agent or view.last_agent then
+          return true
+        end
+      end
+    end
+    return false
+  end
+
+  local function close_visible_scratch_window()
+    if not window.is_open() then
+      state.open_agent = nil
+      return true
+    end
+
+    local bufnr = window.get_bufnr()
+    if not window.close() then
+      return false
+    end
+    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end
+    state.open_agent = nil
+    return true
+  end
+
+  function module.toggle_session(agent_name, opts)
+    opts = opts or {}
+    local close_running = opts.close_running == true
+
+    if close_running and (not agent_name or agent_name == "") then
+      local active = active_session_names()
+      local has_views = has_session_view_state()
+      if #active > 0 or has_views or window.is_open() then
+        if not close_visible_scratch_window() then
+          return
+        end
+        if #active > 0 or has_views then
+          module.close_all_sessions(false)
+        end
+        return
+      end
+    end
+
     local function toggle(chosen)
       if not chosen or chosen == "" then return end
       local agent_cfg = agent_logic.get_interactive_agent(chosen)
       local backend_name = select(1, backend_logic.resolve_backend_for_agent(chosen, agent_cfg))
       local preserve_scratch = acp_logic.is_acp_backend(backend_name)
+
+      if close_running then
+        local session = state.sessions[chosen]
+        local is_open_agent = state.open_agent == chosen and window.is_open()
+        if is_open_agent or (session and session.pane_id and session.pane_id ~= "") then
+          module.close_session(chosen)
+          return
+        end
+      end
 
       local initial_input = nil
       local current_mode = vim.fn.mode()
