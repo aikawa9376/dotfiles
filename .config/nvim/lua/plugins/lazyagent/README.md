@@ -351,7 +351,7 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 
 | Command | 内容 |
 | --- | --- |
-| `:LazyAgent` / `:LazyAgentToggle [agent]` | scratch buffer を toggle |
+| `:LazyAgent` / `:LazyAgentToggle[!] [agent]` | scratch buffer を toggle。`!` 付きは running session があれば scratch の表示状態に関係なく session 側も閉じる |
 | `:LazyAgentScratch [agent]` | scratch buffer を開く |
 | `:LazyAgentInstant [agent]` | one-shot 用 scratch を開く |
 | `:LazyAgentClose [agent]` | session を閉じる |

@@ -250,7 +250,7 @@ return {
         { label = "m  Gitsigns numhl", run = function() toggle_snacks("gitsigns_numhl") end },
         { label = "h  Gitsigns linehl", run = function() toggle_snacks("gitsigns_linehl") end },
         { label = "c  Connector", run = function() run_command("Connector") end },
-        { label = "l  LazyAgent toggle", run = function() run_command("LazyAgentToggle") end },
+        { label = "l  LazyAgent toggle", run = function() run_command("LazyAgentToggle!") end },
         { label = "t  Trouble LSP", run = function() toggle_trouble("lsp") end },
         { label = "x  Trouble diagnostics", run = function() toggle_trouble("diagnostics") end },
       }
