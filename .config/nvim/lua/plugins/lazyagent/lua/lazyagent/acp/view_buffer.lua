@@ -560,17 +560,15 @@ local function current_display_conversation_context(bufnr, win)
   end
 
   local stop = transcript_line_count(bufnr)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, stop, false)
-  local sections = cached_transcript_sections(bufnr, "display", lines)
-  if #sections == 0 then
+  local display_lines = vim.api.nvim_buf_get_lines(bufnr, 0, stop, false)
+  local display_sections = cached_transcript_sections(bufnr, "display", display_lines)
+  if #display_sections == 0 then
     return nil
   end
 
-  local items = items_for_sections(bufnr, sections)
-
   local row = vim.api.nvim_win_get_cursor(win)[1]
   local index = nil
-  for idx, section in ipairs(sections) do
+  for idx, section in ipairs(display_sections) do
     if row >= section.start_row and row <= section.end_row then
       index = idx
       break
@@ -580,14 +578,24 @@ local function current_display_conversation_context(bufnr, win)
       break
     end
   end
-  index = index or #sections
+  index = index or #display_sections
+
+  local entry = layout_entry(bufnr)
+  local source_lines = type(entry.metadata_source_lines) == "table" and vim.deepcopy(entry.metadata_source_lines)
+    or display_lines
+  local source_sections = collect_transcript_sections(source_lines)
+  local source_section = source_sections[index] or display_sections[index]
+  local items = items_for_sections(bufnr, #source_sections > 0 and source_sections or display_sections)
 
   return {
-    lines = lines,
-    sections = sections,
+    lines = source_lines,
+    sections = source_sections,
+    display_lines = display_lines,
+    display_sections = display_sections,
     items = items,
     index = index,
-    section = sections[index],
+    section = source_section,
+    display_section = display_sections[index],
     item = items[index],
   }
 end
@@ -922,6 +930,7 @@ set_buffer_lines = function(bufnr, lines, section_items, display_meta)
   entry.footer_padding_count = 0
   entry.footer_signature = nil
   entry.transcript_source_lines = nil
+  entry.metadata_source_lines = vim.deepcopy(lines or {})
   entry.transcript_section_items = section_items or {}
   entry.transcript_display_meta = display_meta or {}
   entry.transcript_display_meta.pinned_rows = build_pinned_row_cache(lines, entry.transcript_section_items)
