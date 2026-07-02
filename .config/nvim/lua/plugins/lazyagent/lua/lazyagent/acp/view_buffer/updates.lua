@@ -457,20 +457,34 @@ function M.new(ctx)
     local current_display_meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
     local preserved_section_items = opts.preserve_display_metadata == true and entry.transcript_section_items or nil
     local preserved_display_meta = opts.preserve_display_metadata == true and current_display_meta or nil
+    local metadata_lines = type(entry.metadata_source_lines) == "table"
+        and vim.deepcopy(entry.metadata_source_lines)
+      or vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local transcript_stop = transcript_line_count(bufnr)
     local replace_start = transcript_stop
     local current_last = ""
+    local metadata_last = ""
     if transcript_stop > 0 then
       replace_start = transcript_stop - 1
       current_last = vim.api.nvim_buf_get_lines(bufnr, transcript_stop - 1, transcript_stop, false)[1] or ""
+      metadata_last = metadata_lines[transcript_stop] or current_last
     end
     set_footer_padding(bufnr, 0)
     entry.footer_signature = nil
     local total_lines = vim.api.nvim_buf_line_count(bufnr)
 
     local chunks = vim.split(text, "\n", { plain = true })
-    local replacement = { current_last .. table.remove(chunks, 1) }
+    local first_chunk = table.remove(chunks, 1)
+    local replacement = { current_last .. first_chunk }
+    local metadata_replacement = { metadata_last .. first_chunk }
     vim.list_extend(replacement, chunks)
+    vim.list_extend(metadata_replacement, chunks)
+
+    local next_metadata_lines = {}
+    for idx = 1, replace_start do
+      next_metadata_lines[#next_metadata_lines + 1] = metadata_lines[idx]
+    end
+    vim.list_extend(next_metadata_lines, metadata_replacement)
 
     local next_meta = shallow_table_copy(current_display_meta)
     if type(preserved_display_meta) ~= "table" then
@@ -490,6 +504,7 @@ function M.new(ctx)
     local prior_open_fence = current_display_meta.trailing_section_open_markdown_fence == true
     next_meta.trailing_section_open_markdown_fence = advanced_markdown_fence_state(prior_open_fence, replacement)
     entry.transcript_source_lines = nil
+    entry.metadata_source_lines = next_metadata_lines
     entry.transcript_section_items = preserved_section_items or {}
     entry.transcript_display_meta = next_meta
 
