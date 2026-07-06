@@ -44,7 +44,7 @@ function M.register(create)
 
   local function toggle_agent(cmdargs)
     local explicit = command.arg(cmdargs)
-    session_logic.toggle_session(explicit, { close_running = cmdargs and cmdargs.bang == true })
+    session_logic.toggle_session(explicit, { force_toggle_ui = cmdargs and cmdargs.bang == true })
   end
 
   create("LazyAgentToggle", toggle_agent, {
