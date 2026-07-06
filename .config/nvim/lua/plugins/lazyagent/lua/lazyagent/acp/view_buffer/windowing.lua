@@ -135,6 +135,20 @@ function M.new(ctx)
     return buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil
   end
 
+  local function in_cmdline_mode()
+    local ok, mode = pcall(vim.api.nvim_get_mode)
+    local current_mode = ok and mode and mode.mode or ""
+    return type(current_mode) == "string" and current_mode:sub(1, 1) == "c"
+  end
+
+  local function redirectable_buffer(bufnr)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) or is_acp_buffer(bufnr) then
+      return false
+    end
+    local buftype = vim.bo[bufnr].buftype
+    return buftype == "" or buftype == "acwrite"
+  end
+
   local function tracked_transcript_window(win)
     local key = tostring(win or "")
     local entry = dedicated_transcript_windows[key]
@@ -259,6 +273,9 @@ function M.new(ctx)
   end
 
   local function redirect_buffer_from_transcript_window(win, bufnr)
+    if in_cmdline_mode() then
+      return false
+    end
     if is_metadata_popup_buffer(bufnr) then
       return false
     end
@@ -266,7 +283,10 @@ function M.new(ctx)
     if tracked == nil or tracked.bufnr == bufnr then
       return false
     end
-    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) or is_acp_buffer(bufnr) then
+    if not redirectable_buffer(bufnr) then
+      return false
+    end
+    if vim.api.nvim_win_get_buf(win) ~= bufnr then
       return false
     end
 
