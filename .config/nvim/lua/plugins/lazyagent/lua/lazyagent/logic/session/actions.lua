@@ -417,65 +417,144 @@ function M.setup(deps)
     end
   end
 
-  local function active_session_names()
-    local names = {}
-    for name, session in pairs(state.sessions or {}) do
-      if session and session.pane_id and session.pane_id ~= "" then
-        names[#names + 1] = name
+  local function session_has_visible_pane(session, backend_mod)
+    if not session or not session.pane_id or session.pane_id == "" then
+      return false
+    end
+    if session.hidden == true then
+      return false
+    end
+    if backend_mod and type(backend_mod.get_pane_info) == "function" then
+      local ok, info = pcall(backend_mod.get_pane_info, session.pane_id)
+      if ok and info == false then
+        session.hidden = true
+        return false
       end
     end
-    table.sort(names)
-    return names
+    return true
   end
 
-  local function has_session_view_state()
+  local function mark_agent_hidden_in_views(agent_name)
     for _, view in pairs(state.session_views or {}) do
       if type(view) == "table" then
-        if type(view.agents) == "table" and next(view.agents) ~= nil then
-          return true
+        if type(view.visible_agents) == "table" then
+          view.visible_agents[agent_name] = nil
         end
-        if type(view.visible_agents) == "table" and next(view.visible_agents) ~= nil then
-          return true
+        if view.open_agent == agent_name then
+          view.open_agent = nil
         end
-        if view.open_agent or view.last_agent then
-          return true
+        if not view.last_agent then
+          view.last_agent = agent_name
         end
       end
     end
-    return false
   end
 
-  local function close_visible_scratch_window()
+  local function close_visible_scratch_window(force_delete)
     if not window.is_open() then
       state.open_agent = nil
       return true
     end
 
     local bufnr = window.get_bufnr()
-    if not window.close() then
+    if not window.close({ keep_buffer = not force_delete }) then
       return false
     end
-    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+    if force_delete and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end
     state.open_agent = nil
     return true
   end
 
+  local function hide_agent_ui(agent_name)
+    if not agent_name or agent_name == "" then
+      return false
+    end
+
+    local hidden = false
+    local session = state.sessions[agent_name]
+    local agent_cfg = agent_logic.get_interactive_agent(agent_name)
+    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+    local preserve_scratch = acp_logic.is_acp_backend(backend_name)
+
+    if state.open_agent == agent_name and window.is_open() then
+      local bufnr = window.get_bufnr()
+      if window.close({ keep_buffer = preserve_scratch }) then
+        if not preserve_scratch and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+          vim.api.nvim_buf_delete(bufnr, { force = true })
+        end
+        state.open_agent = nil
+        hidden = true
+      else
+        return false
+      end
+    end
+
+    if session_has_visible_pane(session, backend_mod) then
+      if backend_mod and type(backend_mod.break_pane) == "function" then
+        backend_mod.break_pane(session.pane_id)
+        session.hidden = true
+        hidden = true
+      end
+    end
+
+    mark_agent_hidden_in_views(agent_name)
+    return hidden
+  end
+
+  local function has_visible_lazyagent_ui()
+    if window.is_open() then
+      return true
+    end
+
+    for name, session in pairs(state.sessions or {}) do
+      local _, backend_mod = backend_logic.resolve_backend_for_agent(name, nil)
+      if session_has_visible_pane(session, backend_mod) then
+        return true
+      end
+    end
+
+    return false
+  end
+
+  local function hide_all_visible_lazyagent_ui()
+    local hidden = false
+    if window.is_open() then
+      local agent_name = state.open_agent
+      local force_delete = true
+      if agent_name and agent_name ~= "" then
+        local agent_cfg = agent_logic.get_interactive_agent(agent_name)
+        local backend_name = select(1, backend_logic.resolve_backend_for_agent(agent_name, agent_cfg))
+        force_delete = not acp_logic.is_acp_backend(backend_name)
+      end
+      hidden = close_visible_scratch_window(force_delete) or hidden
+    end
+
+    for name, session in pairs(state.sessions or {}) do
+      if session and session.pane_id and session.pane_id ~= "" then
+        hidden = hide_agent_ui(name) or hidden
+      end
+    end
+
+    for _, view in pairs(state.session_views or {}) do
+      if type(view) == "table" then
+        view.visible_agents = {}
+        view.open_agent = nil
+      end
+    end
+
+    refresh_acp_command_visibility()
+    return hidden
+  end
+
   function module.toggle_session(agent_name, opts)
     opts = opts or {}
-    local close_running = opts.close_running == true
+    local force_toggle_ui = opts.force_toggle_ui == true or opts.close_running == true
 
-    if close_running and (not agent_name or agent_name == "") then
-      local active = active_session_names()
-      local has_views = has_session_view_state()
-      if #active > 0 or has_views or window.is_open() then
-        if not close_visible_scratch_window() then
-          return
-        end
-        if #active > 0 or has_views then
-          module.close_all_sessions(false)
-        end
+    if force_toggle_ui and (not agent_name or agent_name == "") then
+      if has_visible_lazyagent_ui() then
+        hide_all_visible_lazyagent_ui()
         return
       end
     end
@@ -486,11 +565,12 @@ function M.setup(deps)
       local backend_name = select(1, backend_logic.resolve_backend_for_agent(chosen, agent_cfg))
       local preserve_scratch = acp_logic.is_acp_backend(backend_name)
 
-      if close_running then
+      if force_toggle_ui then
         local session = state.sessions[chosen]
+        local _, backend_mod = backend_logic.resolve_backend_for_agent(chosen, agent_cfg)
         local is_open_agent = state.open_agent == chosen and window.is_open()
-        if is_open_agent or (session and session.pane_id and session.pane_id ~= "") then
-          module.close_session(chosen)
+        if is_open_agent or session_has_visible_pane(session, backend_mod) then
+          hide_agent_ui(chosen)
           return
         end
       end
