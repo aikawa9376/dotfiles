@@ -152,6 +152,39 @@ local function parse_entry(entry, prefix_char)
   return nil, nil, nil
 end
 
+local function path_key_matches_prefix(key, prefix)
+  key = tostring(key or ""):gsub("\\", "/"):gsub("^%./", "")
+  prefix = tostring(prefix or ""):gsub("\\", "/"):gsub("^%./", "")
+  if prefix == "" then return true end
+
+  local compare_key = key
+  local compare_prefix = prefix
+  if prefix:lower() == prefix then
+    compare_key = key:lower()
+    compare_prefix = prefix:lower()
+  end
+  if compare_key:sub(1, #compare_prefix) == compare_prefix then return true end
+
+  local dir, partial = compare_prefix:match("^(.*)/([^/]*)$")
+  if not dir then
+    dir = ""
+    partial = compare_prefix
+  end
+  if partial == "" then return false end
+
+  local rest = compare_key
+  if dir ~= "" then
+    local dir_prefix = dir:sub(-1) == "/" and dir or (dir .. "/")
+    if rest:sub(1, #dir_prefix) ~= dir_prefix then return false end
+    rest = rest:sub(#dir_prefix + 1)
+  end
+
+  for component in rest:gmatch("[^/]+") do
+    if component:sub(1, #partial) == partial then return true end
+  end
+  return false
+end
+
 -- Return completions: blink.cmp will do keyword filtering; we return all tokens.
 function source:get_completions(ctx, callback)
   local bufnr = (ctx and ctx.bufnr) or vim.api.nvim_get_current_buf()
@@ -206,38 +239,40 @@ function source:get_completions(ctx, callback)
   end
 
   local agent = ok_agent and current_agent(bufnr) or nil
-  if agent and ok_agent then
-    local comps = agent_logic.get_scratch_completions(agent)
-    if slash_prefix then
-      for _, v in ipairs(comps.slash or {}) do
-        local label, desc, doc = parse_entry(v, "/")
-        if label then
-          local key = label:gsub("^/", "")
-          if key:sub(1, #slash_prefix) == slash_prefix then
-            table.insert(items, make_custom_item("/", label, desc or ("LazyAgent / command for " .. agent), doc))
-          end
-        end
-      end
-    end
-
-    if at_prefix then
-      for _, v in ipairs(comps.at or {}) do
-        local label, desc, doc = parse_entry(v, "@")
-        if label then
-          local key = label:gsub("^@", "")
-          if key:sub(1, #at_prefix) == at_prefix then
-            table.insert(items, make_custom_item("@", label, desc or ("LazyAgent @ item for " .. agent), doc))
-          end
+  if agent and ok_agent and slash_prefix then
+    local comps = agent_logic.get_scratch_completions(agent, { include_at = false })
+    for _, v in ipairs(comps.slash or {}) do
+      local label, desc, doc = parse_entry(v, "/")
+      if label then
+        local key = label:gsub("^/", "")
+        if key:sub(1, #slash_prefix) == slash_prefix then
+          table.insert(items, make_custom_item("/", label, desc or ("LazyAgent / command for " .. agent), doc))
         end
       end
     end
   end
 
-  -- Return items and indicate not-requesting incremental updates by default.
+  if agent and ok_agent and at_prefix then
+    local comps = agent_logic.get_scratch_completions(
+      agent,
+      { include_slash = false, path_prefix = at_prefix }
+    )
+    for _, v in ipairs(comps.at or {}) do
+      local label, desc, doc = parse_entry(v, "@")
+      if label then
+        local key = label:gsub("^@", "")
+        if path_key_matches_prefix(key, at_prefix) then
+          table.insert(items, make_custom_item("@", label, desc or ("LazyAgent @ item for " .. agent), doc))
+        end
+      end
+    end
+  end
+
+  -- Path completion can be refreshed from the async fd cache on the next request.
   callback({
     items = items,
-    is_incomplete_forward = false,
-    is_incomplete_backward = false,
+    is_incomplete_forward = at_prefix ~= nil,
+    is_incomplete_backward = at_prefix ~= nil,
   })
 
   -- No long-running operation so simply return a no-op cancel function.
