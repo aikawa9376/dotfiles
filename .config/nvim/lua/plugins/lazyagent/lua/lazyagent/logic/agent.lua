@@ -383,7 +383,8 @@ function M.get_visible_slash_commands(agent_name, session)
   return normalize_completion_list(vim.list_extend(dynamic_slash, configured_slash))
 end
 
-function M.get_scratch_completions(agent_name)
+function M.get_scratch_completions(agent_name, opts)
+  opts = opts or {}
   if not agent_name or agent_name == "" then
     -- Fallback to default agent if configured.
     local available = M.available_agents()
@@ -408,11 +409,23 @@ function M.get_scratch_completions(agent_name)
 
   local res = vim.tbl_deep_extend("force", {}, defaults or {}, provided or {})
   local running = agent_name and state.sessions and state.sessions[agent_name] or nil
-  res.slash = M.get_visible_slash_commands(agent_name, running)
-  -- Replace @ completions with fd-based file/dir list (common across agents).
-  local fd_paths = path_completions.list_fd_paths()
-  if fd_paths and #fd_paths > 0 then
-    res.at = fd_paths
+  if opts.include_slash ~= false then
+    res.slash = M.get_visible_slash_commands(agent_name, running)
+  else
+    res.slash = {}
+  end
+
+  if opts.include_at ~= false then
+    -- Replace @ completions with async-indexed file/dir candidates common across agents.
+    local fd_paths = path_completions.list_fd_paths(
+      opts.path_prefix or opts.at_prefix or "",
+      opts.path_opts or {}
+    )
+    if fd_paths and #fd_paths > 0 then
+      res.at = fd_paths
+    else
+      res.at = {}
+    end
   else
     res.at = {}
   end
