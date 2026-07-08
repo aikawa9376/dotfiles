@@ -5,11 +5,29 @@ local utils = require("fugitive_utils")
 -- 内部キャッシュ（最軽量化のため）
 local _cache = {
   entries = nil,
-  root = nil,
-  mtime = 0,
-  root_mtime = 0,
+  entries_root = nil,
+  entries_mtime = 0,
+  detected_root = nil,
+  detected_key = nil,
+  detected_mtime = 0,
 }
 local CACHE_TTL = 5 -- 秒
+
+local function current_buffer_work_tree()
+  local ok, bufnr = pcall(vim.api.nvim_get_current_buf)
+  if not ok or not utils.is_valid_buf(bufnr) then return nil end
+  return utils.normalize_path(vim.b[bufnr].fugitive_work_tree)
+end
+
+local function current_git_context_key()
+  local ok, git_dir = pcall(vim.fn.FugitiveGitDir)
+  if ok and git_dir and git_dir ~= '' then
+    return 'git:' .. (utils.normalize_path(git_dir) or git_dir)
+  end
+
+  local ok_cwd, cwd = pcall(vim.fn.getcwd)
+  return 'cwd:' .. (ok_cwd and (utils.normalize_path(cwd) or cwd) or '')
+end
 
 -- ワークツリーのルート取得（キャッシュ付き）
 local function get_work_tree(work_tree)
@@ -17,17 +35,26 @@ local function get_work_tree(work_tree)
     return utils.normalize_path(work_tree)
   end
 
+  local buffer_root = current_buffer_work_tree()
+  if buffer_root then
+    return buffer_root
+  end
+
   local now = os.time()
-  if _cache.root and (now - _cache.root_mtime) < CACHE_TTL then
-    return _cache.root
+  local context_key = current_git_context_key()
+  if _cache.detected_root
+      and _cache.detected_key == context_key
+      and (now - _cache.detected_mtime) < CACHE_TTL then
+    return _cache.detected_root
   end
 
   local detected_root = utils.get_work_tree()
   if not detected_root then return nil end
 
-  _cache.root = detected_root
-  _cache.root_mtime = now
-  return _cache.root
+  _cache.detected_root = detected_root
+  _cache.detected_key = context_key
+  _cache.detected_mtime = now
+  return _cache.detected_root
 end
 
 -- ワークツリー一覧の取得（キャッシュ付き）
@@ -35,7 +62,10 @@ local function get_worktrees(force, work_tree)
   local root = get_work_tree(work_tree)
   if not root then return {} end
   local now = os.time()
-  if not force and _cache.entries and _cache.root == root and (now - _cache.mtime) < CACHE_TTL then
+  if not force
+      and _cache.entries
+      and _cache.entries_root == root
+      and (now - _cache.entries_mtime) < CACHE_TTL then
     return _cache.entries
   end
 
@@ -59,9 +89,9 @@ local function get_worktrees(force, work_tree)
   end)
 
   if ok then
-    _cache.root = root
+    _cache.entries_root = root
     _cache.entries = entries
-    _cache.mtime = now
+    _cache.entries_mtime = now
     return entries
   end
   return {}
@@ -69,9 +99,11 @@ end
 
 function M.clear_cache()
   _cache.entries = nil
-  _cache.root = nil
-  _cache.mtime = 0
-  _cache.root_mtime = 0
+  _cache.entries_root = nil
+  _cache.entries_mtime = 0
+  _cache.detected_root = nil
+  _cache.detected_key = nil
+  _cache.detected_mtime = 0
 end
 
 -- 表示形式の統一: [marker][path]  [branch]  [head] [sync_icon]
@@ -96,7 +128,7 @@ local function apply_highlights(bufnr)
 
   local ns = vim.api.nvim_create_namespace('fugitiveworktree_highlight')
   vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-  local current_root = get_work_tree()
+  local current_root = utils.get_buf_work_tree(bufnr) or get_work_tree()
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
 
   for idx, line in ipairs(lines) do
@@ -228,17 +260,18 @@ end
 
 -- Lualine 用の最軽量ステータス
 function M.lualine_sync_status()
+  local current_root = get_work_tree()
+  if not current_root then return '' end
+
   local now = os.time()
-  if _cache.entries and (now - _cache.mtime) < CACHE_TTL then
-  else
-    get_worktrees()
+  if not (_cache.entries
+      and _cache.entries_root == current_root
+      and (now - _cache.entries_mtime) < CACHE_TTL) then
+    get_worktrees(false, current_root)
   end
 
   local entries = _cache.entries
-  if not entries or #entries < 2 then return '' end
-
-  local current_root = get_work_tree()
-  if not current_root then return '' end
+  if _cache.entries_root ~= current_root or not entries or #entries < 2 then return '' end
 
   local primary = entries[1]
   for i, wt in ipairs(entries) do
@@ -305,7 +338,7 @@ function M.remove_worktree_path(path, force)
   if not path or path == "" then return end
   local abs_path = utils.normalize_path(path)
   if not abs_path then return false end
-  local entries = get_worktrees()
+  local entries = get_worktrees(false, abs_path)
   if type(entries) ~= 'table' then return false end
   if #entries == 0 then return end
   local primary = entries[1]
@@ -406,7 +439,7 @@ function M.setup(group)
     vim.keymap.set('n', '<CR>', function() local e = entry_at_cursor(b); if e then M.open_worktree_path(e.path) end end, { buffer = b })
     vim.keymap.set('n', 'gs', function()
       local e = entry_at_cursor(b)
-      local entries = get_worktrees()
+      local entries = get_worktrees(false, utils.get_buf_work_tree(b))
       if type(entries) ~= 'table' then return end
       local primary = entries[1]
       if e and primary then perform_sync(primary.path, e.head) end

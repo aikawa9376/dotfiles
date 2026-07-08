@@ -42,11 +42,53 @@ local function resolve_path(base, path)
 end
 
 ---@param git_dir string|nil
+---@return boolean
+local function looks_like_git_dir(git_dir)
+  return type(git_dir) == 'string'
+    and vim.fn.filereadable(git_dir .. '/HEAD') == 1
+    and (
+      vim.fn.filereadable(git_dir .. '/config') == 1
+      or vim.fn.filereadable(git_dir .. '/commondir') == 1
+    )
+end
+
+---@param git_dir string
+---@return string|nil
+local function work_tree_from_gitdir_file(git_dir)
+  local gitdir_file = git_dir .. '/gitdir'
+  if vim.fn.filereadable(gitdir_file) ~= 1 then
+    return nil
+  end
+
+  local lines = vim.fn.readfile(gitdir_file, '', 1)
+  local git_file = lines and lines[1] or nil
+  if not git_file or git_file == '' then
+    return nil
+  end
+
+  if not is_absolute_path(git_file) then
+    git_file = git_dir .. '/' .. git_file
+  end
+  return M.normalize_path(vim.fn.fnamemodify(git_file, ':h'))
+end
+
+---@param git_dir string|nil
 ---@return string|nil
 local function get_work_tree_from_git_dir(git_dir)
   git_dir = M.normalize_path(git_dir)
   if not git_dir then
     return nil
+  end
+
+  if vim.fn.fnamemodify(git_dir, ':t') == '.git' then
+    local parent_git_dir = M.normalize_path(vim.fn.fnamemodify(git_dir, ':h'))
+    if looks_like_git_dir(parent_git_dir) then
+      local work_tree = get_work_tree_from_git_dir(parent_git_dir)
+      if work_tree then
+        return work_tree
+      end
+    end
+    return parent_git_dir
   end
 
   local configured_work_tree = vim.fn.trim(
@@ -56,9 +98,7 @@ local function get_work_tree_from_git_dir(git_dir)
     return resolve_path(git_dir, configured_work_tree)
   end
 
-  if vim.fn.fnamemodify(git_dir, ':t') == '.git' then
-    return M.normalize_path(vim.fn.fnamemodify(git_dir, ':h'))
-  end
+  return work_tree_from_gitdir_file(git_dir)
 end
 
 ---@param bufnr integer|nil
