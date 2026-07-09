@@ -57,6 +57,33 @@ local function get_work_tree(work_tree)
   return _cache.detected_root
 end
 
+local function path_is_git_dir(path)
+  return path
+    and vim.fn.filereadable(path .. '/HEAD') == 1
+    and (
+      vim.fn.filereadable(path .. '/config') == 1
+      or vim.fn.filereadable(path .. '/commondir') == 1
+      or vim.fn.filereadable(path .. '/gitdir') == 1
+    )
+end
+
+local function normalize_worktree_entry(entry)
+  if not entry or not entry.path then return entry end
+
+  entry.path = utils.normalize_path(entry.path)
+  if not path_is_git_dir(entry.path) then
+    return entry
+  end
+
+  -- Submodule primaries can be reported as .git/modules/...; show the real worktree.
+  local actual_work_tree = utils.get_work_tree({ git_dir = entry.path })
+  if actual_work_tree then
+    entry.git_dir_path = entry.path
+    entry.path = actual_work_tree
+  end
+  return entry
+end
+
 -- ワークツリー一覧の取得（キャッシュ付き）
 local function get_worktrees(force, work_tree)
   local root = get_work_tree(work_tree)
@@ -76,15 +103,15 @@ local function get_worktrees(force, work_tree)
     local res, current = {}, nil
     for _, line in ipairs(output) do
       if line:match('^worktree ') then
-        if current then table.insert(res, current) end
-        current = { path = utils.normalize_path(line:sub(10)) }
+        if current then table.insert(res, normalize_worktree_entry(current)) end
+        current = { path = line:sub(10) }
       elseif current then
         local key, val = line:match('^(%S+)%s+(.*)$')
         if key == 'HEAD' then current.head = val
         elseif key == 'branch' then current.branch = val:gsub('^refs/heads/', '') end
       end
     end
-    if current then table.insert(res, current) end
+    if current then table.insert(res, normalize_worktree_entry(current)) end
     return res
   end)
 
@@ -343,6 +370,7 @@ function M.remove_worktree_path(path, force)
   if #entries == 0 then return end
   local primary = entries[1]
   if not primary then return false end
+  local repo = vim.fn.shellescape(primary.path)
 
   if abs_path == primary.path then
     vim.notify("Cannot remove the primary worktree", vim.log.levels.WARN); return false
@@ -350,7 +378,12 @@ function M.remove_worktree_path(path, force)
 
   if vim.fn.confirm("Remove worktree?\n" .. abs_path, "&Yes\n&No", 2) ~= 1 then return false end
 
-  local cmd = string.format('git worktree remove %s %s', force and '--force' or '', vim.fn.shellescape(abs_path))
+  local cmd = string.format(
+    'git -C %s worktree remove %s %s',
+    repo,
+    force and '--force' or '',
+    vim.fn.shellescape(abs_path)
+  )
   local output = vim.fn.system(cmd)
   if vim.v.shell_error ~= 0 then
     if not force and output:match('%-%-force') and vim.fn.confirm("Force remove?", "&Yes\n&No", 2) == 1 then
@@ -372,17 +405,21 @@ local function add_worktree(bufnr)
   local primary = entries[1]
   local project_name = vim.fn.fnamemodify(primary.path, ':t')
   local worktree_base = vim.fn.expand('~/.worktree/' .. project_name)
+  local repo = vim.fn.shellescape(primary.path)
 
   vim.ui.input({ prompt = 'Worktree name: ' }, function(name)
     if not name or name == '' then return end
     local path, branch = worktree_base .. '/' .. name, name
+    local path_arg = vim.fn.shellescape(path)
+    local branch_arg = vim.fn.shellescape(branch)
+    local branch_ref_arg = vim.fn.shellescape('refs/heads/' .. branch)
 
-    vim.fn.system('git rev-parse --verify --quiet ' .. vim.fn.shellescape('refs/heads/' .. branch))
+    vim.fn.system('git -C ' .. repo .. ' rev-parse --verify --quiet ' .. branch_ref_arg)
     local exists = (vim.v.shell_error == 0)
 
     local cmd = exists
-      and string.format('git worktree add %s %s', vim.fn.shellescape(path), vim.fn.shellescape(branch))
-      or  string.format('git worktree add -b %s %s HEAD', vim.fn.shellescape(branch), vim.fn.shellescape(path))
+      and string.format('git -C %s worktree add %s %s', repo, path_arg, branch_arg)
+      or  string.format('git -C %s worktree add -b %s %s HEAD', repo, branch_arg, path_arg)
 
     local output = vim.fn.system(cmd)
     if vim.v.shell_error == 0 then
