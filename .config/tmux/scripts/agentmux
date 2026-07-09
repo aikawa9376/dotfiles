@@ -1,0 +1,399 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+
+status_color() {
+  case "$1" in
+    blocked) printf '\033[31m[blocked]\033[0m' ;;
+    working) printf '\033[33m[working]\033[0m' ;;
+    done) printf '\033[34m[done]\033[0m' ;;
+    idle) printf '\033[32m[idle]\033[0m' ;;
+    dead) printf '\033[90m[dead]\033[0m' ;;
+    *) printf '\033[90m[pane]\033[0m' ;;
+  esac
+}
+
+strip_ansi() {
+  sed -E $'s/\x1B\\[[0-?]*[ -/]*[@-~]//g; s/\x1B\\][^\a]*(\a|\x1B\\\\)//g'
+}
+
+one_line() {
+  tr '\t\r\n' '   ' \
+    | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//' \
+    | cut -c 1-180
+}
+
+capture_text() {
+  local pane="$1"
+  local lines="${2:-80}"
+
+  tmux capture-pane -pJ -t "$pane" -S "-$lines" 2>/dev/null || true
+}
+
+detect_kind() {
+  local command="$1"
+  local explicit_kind="$2"
+  local explicit_name="$3"
+  local text="$4"
+  local lower_command lower_text
+
+  if [[ -n "$explicit_kind" ]]; then
+    printf '%s\n' "$explicit_kind"
+    return
+  fi
+
+  if [[ -n "$explicit_name" ]]; then
+    printf '%s\n' "$explicit_name"
+    return
+  fi
+
+  lower_command="${command,,}"
+  lower_text="${text,,}"
+
+  case "$lower_command" in
+    *codex*) printf 'codex\n' ;;
+    *claude*) printf 'claude\n' ;;
+    *opencode*) printf 'opencode\n' ;;
+    *cursor-agent*|*cursor\ agent*) printf 'cursor\n' ;;
+    *copilot*) printf 'copilot\n' ;;
+    *devin*) printf 'devin\n' ;;
+    *droid*) printf 'droid\n' ;;
+    *qoder*) printf 'qoder\n' ;;
+    *kimi*) printf 'kimi\n' ;;
+    *kilo*) printf 'kilo\n' ;;
+    *hermes*) printf 'hermes\n' ;;
+    *gemini*) printf 'gemini\n' ;;
+    *amp*) printf 'amp\n' ;;
+    *nvim*|*vim*)
+      case "$lower_text" in
+        *codex*) printf 'codex\n' ;;
+        *claude*) printf 'claude\n' ;;
+        *opencode*) printf 'opencode\n' ;;
+        *cursor*) printf 'cursor\n' ;;
+        *) printf 'pane\n' ;;
+      esac
+      ;;
+    *) printf 'pane\n' ;;
+  esac
+}
+
+detect_status() {
+  local dead="$1"
+  local kind="$2"
+  local command="$3"
+  local text="$4"
+  local lower
+
+  if [[ "$dead" == "1" ]]; then
+    printf 'dead\n'
+    return
+  fi
+
+  lower="${text,,}"
+
+  if [[ "$kind" == "pane" ]]; then
+    case "$command" in
+      zsh|bash|fish|sh) printf 'idle\n' ;;
+      *) printf 'pane\n' ;;
+    esac
+    return
+  fi
+
+  if [[ "$lower" =~ (approval|required|permission|allow|deny|confirm|continue\?|proceed\?|waiting\ for|needs\ input|press\ enter|blocked|do\ you\ want) ]]; then
+    printf 'blocked\n'
+    return
+  fi
+
+  if [[ "$lower" =~ (completed|complete|finished|successfully|all\ set|anything\ else|how\ can\ i\ help|ready) ]]; then
+    printf 'done\n'
+    return
+  fi
+
+  printf 'working\n'
+}
+
+list_panes() {
+  local origin_pane="${1:-}"
+  local format
+  format='#{session_name}	#{window_index}:#{pane_index}	#{window_name}	#{pane_id}	#{pane_current_command}	#{pane_current_path}	#{pane_dead}	#{@agent_name}	#{@agent_kind}'
+
+  tmux list-panes -a -F "$format" | while IFS=$'\t' read -r session location window pane command cwd dead agent_name agent_kind; do
+    local text last kind status label marker
+
+    text="$(capture_text "$pane" 80 | strip_ansi)"
+    last="$(printf '%s\n' "$text" | sed '/^[[:space:]]*$/d' | tail -n 1 | one_line)"
+    kind="$(detect_kind "$command" "$agent_kind" "$agent_name" "$text")"
+    status="$(detect_status "$dead" "$kind" "$command" "$text")"
+    label="${agent_name:-$kind}"
+    marker=""
+
+    if [[ -n "$origin_pane" && "$pane" == "$origin_pane" ]]; then
+      marker="*"
+    fi
+
+    printf '%b\t%s%s\t%s\t%s:%s\t%s\t%s\t%s\n' \
+      "$(status_color "$status")" \
+      "$marker" \
+      "$label" \
+      "$pane" \
+      "$session" \
+      "$location" \
+      "$command" \
+      "$cwd" \
+      "$last"
+  done
+}
+
+preview_pane() {
+  local pane="$1"
+
+  tmux display-message -p -t "$pane" 'pane #{pane_id}  #{session_name}:#{window_index}.#{pane_index}  #{pane_current_command}  #{pane_current_path}' 2>/dev/null || true
+  printf '\n'
+  tmux capture-pane -epJ -t "$pane" -S -120 2>/dev/null | tail -n 120 || true
+}
+
+pane_from_row() {
+  local row="$1"
+  local _status _label pane _location _command _cwd _last
+
+  IFS=$'\t' read -r _status _label pane _location _command _cwd _last <<<"$row"
+  printf '%s\n' "$pane"
+}
+
+focus_pane() {
+  local pane="$1"
+  local session
+
+  session="$(tmux display-message -p -t "$pane" '#{session_name}' 2>/dev/null)"
+  if [[ -n "$session" ]]; then
+    tmux switch-client -t "$session" 2>/dev/null || true
+  fi
+  tmux select-window -t "$pane" 2>/dev/null || true
+  tmux select-pane -t "$pane" 2>/dev/null || true
+}
+
+agent_command() {
+  case "$1" in
+    codex) printf 'codex\n' ;;
+    claude) printf 'claude\n' ;;
+    opencode) printf 'opencode\n' ;;
+    cursor) printf 'cursor-agent\n' ;;
+    copilot) printf 'copilot\n' ;;
+    gemini) printf 'gemini\n' ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+spawn_agent() {
+  local kind="$1"
+  local cwd="${2:-}"
+  local cmd name pane
+
+  if [[ -z "$cwd" ]]; then
+    cwd="$(tmux display-message -p '#{pane_current_path}' 2>/dev/null || pwd)"
+  fi
+
+  if [[ "$kind" == "custom" ]]; then
+    printf 'command> '
+    IFS= read -r cmd
+    [[ -n "$cmd" ]] || return 0
+    printf 'name [%s]> ' "$cmd"
+    IFS= read -r name
+    name="${name:-$cmd}"
+    kind="$name"
+  else
+    cmd="$(agent_command "$kind")"
+    name="$kind"
+  fi
+
+  pane="$(tmux split-window -h -c "$cwd" -P -F '#{pane_id}' "$cmd")"
+  tmux set-option -pt "$pane" @agent_kind "$kind"
+  tmux set-option -pt "$pane" @agent_name "$name"
+  tmux set-option -pt "$pane" @agent_command "$cmd"
+  tmux set-option -pt "$pane" @agent_created_at "$(date +%s)"
+  focus_pane "$pane"
+}
+
+respawn_agent() {
+  local pane="$1"
+  local cmd cwd
+
+  cmd="$(tmux show-option -pv -t "$pane" @agent_command 2>/dev/null || true)"
+  cwd="$(tmux display-message -p -t "$pane" '#{pane_current_path}' 2>/dev/null || true)"
+
+  if [[ -n "$cmd" ]]; then
+    tmux respawn-pane -k -c "$cwd" -t "$pane" "$cmd"
+  else
+    tmux respawn-pane -k -t "$pane"
+  fi
+}
+
+send_prompt() {
+  local pane="$1"
+  local prompt
+
+  printf 'prompt> '
+  IFS= read -r prompt
+  [[ -n "$prompt" ]] || return 0
+  tmux send-keys -t "$pane" -l "$prompt"
+  tmux send-keys -t "$pane" Enter
+}
+
+mark_pane() {
+  local pane="$1"
+  local kind name cmd
+
+  printf 'kind> '
+  IFS= read -r kind
+  [[ -n "$kind" ]] || return 0
+
+  printf 'name [%s]> ' "$kind"
+  IFS= read -r name
+  name="${name:-$kind}"
+
+  printf 'respawn command [keep current]> '
+  IFS= read -r cmd
+
+  tmux set-option -pt "$pane" @agent_kind "$kind"
+  tmux set-option -pt "$pane" @agent_name "$name"
+  if [[ -n "$cmd" ]]; then
+    tmux set-option -pt "$pane" @agent_command "$cmd"
+  fi
+}
+
+unmark_pane() {
+  local pane="$1"
+
+  tmux set-option -upt "$pane" @agent_kind 2>/dev/null || true
+  tmux set-option -upt "$pane" @agent_name 2>/dev/null || true
+  tmux set-option -upt "$pane" @agent_command 2>/dev/null || true
+  tmux set-option -upt "$pane" @agent_created_at 2>/dev/null || true
+}
+
+confirm() {
+  local prompt="$1"
+  local answer
+
+  printf '%s [y/N] ' "$prompt"
+  IFS= read -r answer
+  [[ "$answer" == "y" || "$answer" == "Y" ]]
+}
+
+menu() {
+  local origin_pane="${1:-}"
+  local origin_cwd=""
+  local header selection key row pane preview_cmd
+
+  if [[ -n "$origin_pane" ]]; then
+    origin_cwd="$(tmux display-message -p -t "$origin_pane" '#{pane_current_path}' 2>/dev/null || true)"
+  fi
+
+  header='enter focus | alt-c codex | alt-l claude | alt-o opencode | ctrl-n custom | ctrl-s send | ctrl-r respawn | ctrl-k kill | ctrl-m mark | ctrl-u unmark'
+  preview_cmd="${SCRIPT_PATH} preview {3}"
+
+  while true; do
+    selection="$(
+      list_panes "$origin_pane" \
+        | fzf --ansi --no-sort --cycle \
+            --delimiter=$'\t' \
+            --with-nth='1,2,3,4,5,7' \
+            --preview "$preview_cmd" \
+            --preview-window='right,65%,border-left' \
+            --prompt='agentmux> ' \
+            --header "$header" \
+            --expect='enter,alt-c,alt-l,alt-o,ctrl-n,ctrl-s,ctrl-r,ctrl-k,ctrl-m,ctrl-u'
+    )" || return 0
+
+    key="$(printf '%s\n' "$selection" | sed -n '1p')"
+    row="$(printf '%s\n' "$selection" | sed -n '2p')"
+
+    case "$key" in
+      alt-c)
+        spawn_agent codex "${origin_cwd:-$(pwd)}"
+        return
+        ;;
+      alt-l)
+        spawn_agent claude "${origin_cwd:-$(pwd)}"
+        return
+        ;;
+      alt-o)
+        spawn_agent opencode "${origin_cwd:-$(pwd)}"
+        return
+        ;;
+      ctrl-n)
+        spawn_agent custom "${origin_cwd:-$(pwd)}"
+        return
+        ;;
+    esac
+
+    [[ -n "$row" ]] || continue
+    pane="$(pane_from_row "$row")"
+
+    case "$key" in
+      enter|'')
+        focus_pane "$pane"
+        return
+        ;;
+      ctrl-s)
+        send_prompt "$pane"
+        return
+        ;;
+      ctrl-r)
+        if confirm "respawn $pane?"; then
+          respawn_agent "$pane"
+        fi
+        ;;
+      ctrl-k)
+        if confirm "kill $pane?"; then
+          tmux kill-pane -t "$pane"
+        fi
+        ;;
+      ctrl-m)
+        mark_pane "$pane"
+        ;;
+      ctrl-u)
+        unmark_pane "$pane"
+        ;;
+    esac
+  done
+}
+
+usage() {
+  cat <<'USAGE'
+agentmux commands:
+  menu [origin-pane]       open the fzf dashboard
+  list [origin-pane]       print panes with inferred agent status
+  preview <pane>           print pane metadata and scrollback
+  focus <pane>             switch to a pane
+  spawn <kind> [cwd]       split and start codex, claude, opencode, or a command
+  send <pane>              prompt for one line and send it to the pane
+  mark <pane>              attach agent metadata to a pane
+  unmark <pane>            clear agent metadata from a pane
+  respawn <pane>           respawn a pane, using @agent_command when present
+USAGE
+}
+
+main() {
+  local command="${1:-menu}"
+  shift || true
+
+  case "$command" in
+    menu) menu "$@" ;;
+    list) list_panes "$@" ;;
+    preview) preview_pane "$@" ;;
+    focus) focus_pane "$@" ;;
+    spawn) spawn_agent "$@" ;;
+    send) send_prompt "$@" ;;
+    mark) mark_pane "$@" ;;
+    unmark) unmark_pane "$@" ;;
+    respawn) respawn_agent "$@" ;;
+    -h|--help|help) usage ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+}
+
+main "$@"
