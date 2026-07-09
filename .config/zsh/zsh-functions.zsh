@@ -377,18 +377,18 @@ fvim() {
 }
 
 f_history_toggle() {
-  local initial_list=$(atuin search --exclude-exit 127 --reverse --format "{time}/{command}" | awk '!seen[$0]++')
+  local dedup='awk -v RS="\0" -v ORS="\0" "!seen[\$0]++"'
 
   local dir; local prompt
   local is_gitdir=$(git rev-parse --is-inside-work-tree 2>/dev/null)
   if [[ $is_gitdir == 'true' ]]; then
     prompt="git"
-    dir="atuin search --exclude-exit 127 --filter-mode workspace --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+    dir="atuin search --exclude-exit 127 --filter-mode workspace --reverse --print0 --format \"{time}\\t{command}\" | $dedup"
   else
     prompt="dir"
-    dir="atuin search --exclude-exit 127 --filter-mode directory --reverse --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+    dir="atuin search --exclude-exit 127 --filter-mode directory --reverse --print0 --format \"{time}\\t{command}\" | $dedup"
   fi
-  local global="atuin search --exclude-exit 127 --reverse  --format \\\"{time}/{command}\\\" | awk \\\"!seen[\\\\\\\$0]++\\\""
+  local global="atuin search --exclude-exit 127 --reverse --print0 --format \"{time}\\t{command}\" | $dedup"
 
   # 本来はdelete_timeとかで倫理削除なので不具合起きたら変更してもいいかも
   local delete="date -d {1} +%s | xargs -I $ sqlite3 ~/.local/share/atuin/history.db \\\"delete from history where timestamp like '$%'\\\""
@@ -398,25 +398,28 @@ f_history_toggle() {
 
   local history_command
   history_command=$(
-    echo -E "$initial_list" | fzf \
+    eval "$global" | fzf \
+      --read0 \
+      --print0 \
+      --no-multi-line \
       --prompt="global >" \
       --query="${LBUFFER}" \
       --tiebreak=index \
-      --preview="echo {} | sed 's|/|\n|' | bat --style=plain --language=sh --color=always" \
-      --delimiter=/ \
+      --preview="printf %s {2..} | bat --style=plain --language=sh --color=always" \
+      --delimiter=$'\t' \
       --with-nth=2.. \
       --preview-window hidden \
       --bind 'ctrl-r:transform:[[ $FZF_PROMPT =~ global ]] &&
-              echo "change-prompt('$prompt' >)+reload('$dir')" ||
-              echo "change-prompt(global >)+reload('$global')"' \
+              echo "change-prompt('$prompt' >)+reload($dir)" ||
+              echo "change-prompt(global >)+reload($global)"' \
       --bind 'ctrl-s:transform:[[ $FZF_PROMPT =~ global ]] &&
-              echo "execute-silent('$update')+reload('$global')" ||
-              echo "execute-silent('$update')+reload('$dir')"' \
+              echo "execute-silent($update)+reload($global)" ||
+              echo "execute-silent($update)+reload($dir)"' \
       --bind 'ctrl-x:transform:[[ $FZF_PROMPT =~ global ]] &&
-              echo "execute-silent('$delete')+reload('$global')" ||
-              echo "execute-silent('$delete')+reload('$dir')"' \
-      --bind 'ctrl-e:execute-silent(printf {2} | xclip -selection c)' \
-      | cut -d'/' -f2-
+              echo "execute-silent($delete)+reload($global)" ||
+              echo "execute-silent($delete)+reload($dir)"' \
+      --bind 'ctrl-e:execute-silent(printf %s {2..} | xclip -selection c)' \
+      | perl -0ne 's/\0\z//; s/^[^\t]*\t//s; print; exit'
   )
 
   if [[ $? -ne 0 || -z "$history_command" ]]; then
