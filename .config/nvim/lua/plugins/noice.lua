@@ -29,7 +29,7 @@ return {
       },
     },
     popupmenu = {
-      enabled = true, -- disable if you use something like cmp-cmdline
+      enabled = false, -- blink.cmp renders cmdline completion; avoid the nvim-cmp popupmenu bridge.
       ---@type 'nui'|'cmp'
       backend = "cmp", -- backend to use to show regular cmdline completions
       -- You can specify options for nui under `config.views.popupmenu`
