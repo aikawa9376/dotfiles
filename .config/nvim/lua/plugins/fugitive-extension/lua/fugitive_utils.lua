@@ -91,6 +91,11 @@ local function get_work_tree_from_git_dir(git_dir)
     return parent_git_dir
   end
 
+  local gitdir_work_tree = work_tree_from_gitdir_file(git_dir)
+  if gitdir_work_tree then
+    return gitdir_work_tree
+  end
+
   local configured_work_tree = vim.fn.trim(
     vim.fn.system('git --git-dir=' .. vim.fn.shellescape(git_dir) .. ' config --path --get core.worktree')
   )
@@ -98,7 +103,21 @@ local function get_work_tree_from_git_dir(git_dir)
     return resolve_path(git_dir, configured_work_tree)
   end
 
-  return work_tree_from_gitdir_file(git_dir)
+  return nil
+end
+
+---@param path string|nil
+---@return string|nil
+local function normalize_work_tree_path(path)
+  local normalized = M.normalize_path(path)
+  if not normalized then
+    return nil
+  end
+
+  if looks_like_git_dir(normalized) or vim.fn.fnamemodify(normalized, ':t') == '.git' then
+    return get_work_tree_from_git_dir(normalized) or normalized
+  end
+  return normalized
 end
 
 ---@param bufnr integer|nil
@@ -168,7 +187,7 @@ function M.set_buf_work_tree(bufnr, work_tree)
     return nil
   end
 
-  local normalized = M.normalize_path(work_tree)
+  local normalized = normalize_work_tree_path(work_tree)
   if normalized then
     vim.b[bufnr].fugitive_work_tree = normalized
   end
@@ -183,8 +202,9 @@ function M.get_buf_work_tree(bufnr, opts)
     return nil
   end
 
-  local work_tree = M.normalize_path(vim.b[bufnr].fugitive_work_tree)
+  local work_tree = normalize_work_tree_path(vim.b[bufnr].fugitive_work_tree)
   if work_tree then
+    vim.b[bufnr].fugitive_work_tree = work_tree
     return work_tree
   end
 

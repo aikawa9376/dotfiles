@@ -16,7 +16,8 @@ local CACHE_TTL = 5 -- 秒
 local function current_buffer_work_tree()
   local ok, bufnr = pcall(vim.api.nvim_get_current_buf)
   if not ok or not utils.is_valid_buf(bufnr) then return nil end
-  return utils.normalize_path(vim.b[bufnr].fugitive_work_tree)
+  if not vim.b[bufnr].fugitive_work_tree then return nil end
+  return utils.get_buf_work_tree(bufnr)
 end
 
 local function current_git_context_key()
