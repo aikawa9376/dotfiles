@@ -2,6 +2,7 @@ local M = {}
 local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local state = require("lazyagent.logic.state")
+local agentmux = require("lazyagent.integrations.agentmux")
 
 local animation_timer = nil
 local ANIMATION_INTERVAL_MS = 200
@@ -169,6 +170,7 @@ function M.set_idle(agent_name)
   stop_monitor_timer(s)
   s.agent_status = "idle"
   s.agent_status_message = "Ready"
+  agentmux.sync()
   require("lazyagent.window").set_title(" " .. agent_name .. " (Idle) ")
   refresh_ui()
   pcall(function()
@@ -192,6 +194,7 @@ function M.set_waiting(agent_name, msg)
   stop_monitor_timer(s)
   s.agent_status = "waiting"
   s.agent_status_message = msg or "Waiting..."
+  agentmux.sync()
   require("lazyagent.window").set_title(" " .. agent_name .. " (" .. (msg or "Waiting...") .. ") ")
   refresh_ui()
   pcall(function()
@@ -208,6 +211,7 @@ function M.start_monitor(agent_name)
 
   s.agent_status = "thinking"
   s.agent_status_message = "Thinking..."
+  agentmux.sync()
   require("lazyagent.window").set_title(" " .. agent_name .. " (Thinking...) ")
   pcall(function()
     require("lazyagent.mcp.transport").push_event({ event = "start", agent = agent_name })
@@ -239,5 +243,7 @@ function M.start_monitor(agent_name)
     ticks = ticks + 1
   end))
 end
+
+agentmux.setup()
 
 return M
