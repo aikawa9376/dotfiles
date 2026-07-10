@@ -9,7 +9,6 @@ status_color() {
     working) printf '\033[33m[working]\033[0m' ;;
     done) printf '\033[34m[done]\033[0m' ;;
     idle) printf '\033[32m[idle]\033[0m' ;;
-    unknown) printf '\033[90m[unknown]\033[0m' ;;
     dead) printf '\033[90m[dead]\033[0m' ;;
     *) printf '\033[90m[pane]\033[0m' ;;
   esac
@@ -25,141 +24,11 @@ one_line() {
     | cut -c 1-180
 }
 
-capture_screen() {
+capture_text() {
   local pane="$1"
+  local lines="${2:-80}"
 
-  tmux capture-pane -pJ -t "$pane" 2>/dev/null || true
-}
-
-is_shell_command() {
-  case "$1" in
-    zsh|bash|fish|sh) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-is_editor_command() {
-  case "${1,,}" in
-    *nvim*|*vim*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
-recent_meaningful_text() {
-  sed '/^[[:space:]]*$/d' | tail -n 16
-}
-
-detect_agent_command() {
-  local lower="${1,,}"
-
-  if [[ "$lower" =~ (^|[^[:alnum:]_])cursor-agent([^[:alnum:]_]|$) ]] || [[ "$lower" =~ cursor[[:space:]]agent ]]; then
-    printf 'cursor\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])codex([^[:alnum:]_]|$) ]]; then
-    printf 'codex\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])claude([^[:alnum:]_]|$) ]]; then
-    printf 'claude\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])opencode([^[:alnum:]_]|$) ]]; then
-    printf 'opencode\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])copilot([^[:alnum:]_]|$) ]]; then
-    printf 'copilot\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])devin([^[:alnum:]_]|$) ]]; then
-    printf 'devin\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])droid([^[:alnum:]_]|$) ]]; then
-    printf 'droid\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])qoder([^[:alnum:]_]|$) ]]; then
-    printf 'qoder\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])kimi([^[:alnum:]_]|$) ]]; then
-    printf 'kimi\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])kilo([^[:alnum:]_]|$) ]]; then
-    printf 'kilo\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])hermes([^[:alnum:]_]|$) ]]; then
-    printf 'hermes\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])gemini([^[:alnum:]_]|$) ]]; then
-    printf 'gemini\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])amp([^[:alnum:]_]|$) ]]; then
-    printf 'amp\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])grok([^[:alnum:]_]|$) ]]; then
-    printf 'grok\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])kiro([^[:alnum:]_]|$) ]]; then
-    printf 'kiro\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])antigravity([^[:alnum:]_]|$) ]]; then
-    printf 'antigravity\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])mastracode([^[:alnum:]_]|$) ]]; then
-    printf 'mastracode\n'
-  elif [[ "$lower" =~ (^|[^[:alnum:]_])aiagent([^[:alnum:]_]|$) ]]; then
-    printf 'aiagent\n'
-  else
-    return 1
-  fi
-}
-
-known_agent_command() {
-  detect_agent_command "$1" >/dev/null 2>&1
-}
-
-normalize_status() {
-  case "${1,,}" in
-    thinking|working|running|busy|active|starting) printf 'working\n' ;;
-    waiting|blocked|permission|approval|input) printf 'blocked\n' ;;
-    completed|complete|done|ready) printf 'done\n' ;;
-    idle|stopped) printf 'idle\n' ;;
-    dead|exited) printf 'dead\n' ;;
-    unknown) printf 'unknown\n' ;;
-    *) return 1 ;;
-  esac
-}
-
-explicit_status_is_fresh() {
-  local changed_at="${1:-}"
-  local ttl="${2:-0}"
-  local owner_pid="${3:-}"
-  local now
-
-  if [[ -n "$owner_pid" ]] && ! kill -0 "$owner_pid" 2>/dev/null; then
-    return 1
-  fi
-
-  if [[ "$ttl" =~ ^[0-9]+$ ]] && (( ttl > 0 )) && [[ "$changed_at" =~ ^[0-9]+$ ]]; then
-    now="$(date +%s)"
-    (( now - changed_at <= ttl )) || return 1
-  fi
-
-  return 0
-}
-
-screen_status() {
-  local kind="$1"
-  local screen="$2"
-  local lower
-
-  lower="${screen,,}"
-
-  if [[ "$lower" =~ (esc\ to\ interrupt|ctrl-c\ to\ interrupt|press\ esc\ to\ interrupt|working\ \([0-9]+[smh]|thinking(\.\.\.|…)|running\ tool|executing\ tool) ]]; then
-    printf 'working\tui:active indicator\n'
-    return
-  fi
-
-  if [[ "$lower" =~ (do\ you\ want\ to\ (proceed|continue|allow)|would\ you\ like\ to|approve\ (this|the)|requesting\ permission|waiting\ for\ (your\ )?(input|approval)|press\ enter\ to\ confirm|choose\ (an|one)\ option|\[y/n\]|\[y/N\]|\(y/n\)|\(Y/n\)) ]]; then
-    printf 'blocked\tui:input requested\n'
-    return
-  fi
-
-  case "$kind" in
-    codex)
-      if [[ "$screen" =~ (^|$'\n')[[:space:]]*[›❯][[:space:]] ]]; then
-        printf 'idle\tui:prompt ready\n'
-        return
-      fi
-      ;;
-    claude)
-      if [[ "$screen" =~ (^|$'\n')[[:space:]]*\>[[:space:]] ]]; then
-        printf 'idle\tui:prompt ready\n'
-        return
-      fi
-      ;;
-  esac
-
-  printf 'idle\tprocess:alive, no active indicator\n'
+  tmux capture-pane -pJ -t "$pane" -S "-$lines" 2>/dev/null || true
 }
 
 detect_kind() {
@@ -167,7 +36,7 @@ detect_kind() {
   local explicit_kind="$2"
   local explicit_name="$3"
   local text="$4"
-  local command_kind lower_text
+  local lower_command lower_text
 
   if [[ -n "$explicit_kind" ]]; then
     printf '%s\n' "$explicit_kind"
@@ -179,15 +48,23 @@ detect_kind() {
     return
   fi
 
+  lower_command="${command,,}"
   lower_text="${text,,}"
 
-  command_kind="$(detect_agent_command "$command" 2>/dev/null || true)"
-  if [[ -n "$command_kind" ]]; then
-    printf '%s\n' "$command_kind"
-    return
-  fi
-
-  case "${command,,}" in
+  case "$lower_command" in
+    *codex*) printf 'codex\n' ;;
+    *claude*) printf 'claude\n' ;;
+    *opencode*) printf 'opencode\n' ;;
+    *cursor-agent*|*cursor\ agent*) printf 'cursor\n' ;;
+    *copilot*) printf 'copilot\n' ;;
+    *devin*) printf 'devin\n' ;;
+    *droid*) printf 'droid\n' ;;
+    *qoder*) printf 'qoder\n' ;;
+    *kimi*) printf 'kimi\n' ;;
+    *kilo*) printf 'kilo\n' ;;
+    *hermes*) printf 'hermes\n' ;;
+    *gemini*) printf 'gemini\n' ;;
+    *amp*) printf 'amp\n' ;;
     *nvim*|*vim*)
       case "$lower_text" in
         *codex*) printf 'codex\n' ;;
@@ -206,113 +83,56 @@ detect_status() {
   local kind="$2"
   local command="$3"
   local text="$4"
-  local has_agent_process="${5:-0}"
-  local explicit_status="${6:-}"
-  local explicit_changed_at="${7:-}"
-  local explicit_ttl="${8:-0}"
-  local explicit_pid="${9:-}"
-  local screen="${10:-$text}"
+  local lower
 
   if [[ "$dead" == "1" ]]; then
     printf 'dead\n'
     return
   fi
 
-  if [[ -n "$explicit_status" ]] \
-    && explicit_status_is_fresh "$explicit_changed_at" "$explicit_ttl" "$explicit_pid"
-  then
-    local normalized
-    normalized="$(normalize_status "$explicit_status" 2>/dev/null || true)"
-    if [[ -n "$normalized" ]]; then
-      printf '%s\tnative:%s\n' "$normalized" "$explicit_status"
-      return
-    fi
-  fi
+  lower="${text,,}"
 
   if [[ "$kind" == "pane" ]]; then
-    if is_shell_command "$command"; then
-      printf 'idle\n'
-    else
-      printf 'pane\n'
-    fi
+    case "$command" in
+      zsh|bash|fish|sh) printf 'idle\n' ;;
+      *) printf 'pane\n' ;;
+    esac
     return
   fi
 
-  if is_editor_command "$command"; then
-    printf 'unknown\teditor:no native status\n'
+  if [[ "$lower" =~ (approval|required|permission|allow|deny|confirm|continue\?|proceed\?|waiting\ for|needs\ input|press\ enter|blocked|do\ you\ want) ]]; then
+    printf 'blocked\n'
     return
   fi
 
-  if is_shell_command "$command" && [[ "$has_agent_process" != "1" ]]; then
-    printf 'idle\tprocess:agent exited\n'
+  if [[ "$lower" =~ (completed|complete|finished|successfully|all\ set|anything\ else|how\ can\ i\ help|ready) ]]; then
+    printf 'done\n'
     return
   fi
 
-  screen_status "$kind" "$screen"
+  printf 'working\n'
 }
 
 list_panes() {
   local origin_pane="${1:-}"
-  local format sep
-  local process_tty process_command process_args
-  declare -A processes_by_tty=()
+  local format
+  format='#{session_name}	#{window_index}:#{pane_index}	#{window_name}	#{pane_id}	#{pane_current_command}	#{pane_current_path}	#{pane_dead}	#{@agent_name}	#{@agent_kind}'
 
-  while read -r process_tty process_command process_args; do
-    [[ -n "$process_tty" && "$process_tty" != "?" ]] || continue
-    processes_by_tty["/dev/$process_tty"]+=" $process_command $process_args"
-  done < <(ps -eo tty=,comm=,args= 2>/dev/null || true)
+  tmux list-panes -a -F "$format" | while IFS=$'\t' read -r session location window pane command cwd dead agent_name agent_kind; do
+    local text last kind status label marker
 
-  sep=$'\x1f'
-  format="#{session_name}${sep}#{window_index}:#{pane_index}${sep}#{window_name}${sep}#{pane_id}${sep}#{pane_current_command}${sep}#{pane_current_path}${sep}#{pane_title}${sep}#{pane_tty}${sep}#{pane_dead}${sep}#{@agent_name}${sep}#{@agent_kind}${sep}#{@agent_status}${sep}#{@agent_status_at}${sep}#{@agent_status_ttl}${sep}#{@agent_status_pid}"
-
-  tmux list-panes -a -F "$format" | while IFS="$sep" read -r session location window pane command cwd title tty dead agent_name agent_kind agent_status status_at status_ttl status_pid; do
-    local screen recent processes command_hint last kind status_result status source label marker sort_group has_agent_process
-
-    screen=""
-    recent=""
-    processes="${processes_by_tty[$tty]-}"
-    command_hint="$command $processes"
-    kind="$(detect_kind "$command_hint" "$agent_kind" "$agent_name" "")"
-
-    if [[ "$kind" == "pane" ]] && is_editor_command "$command"; then
-      screen="$(capture_screen "$pane" | strip_ansi)"
-      kind="$(detect_kind "$command_hint" "$agent_kind" "$agent_name" "$screen")"
-    fi
-
-    if [[ "$kind" != "pane" ]]; then
-      if [[ -z "$screen" ]]; then
-        screen="$(capture_screen "$pane" | strip_ansi)"
-      fi
-      recent="$(printf '%s\n' "$screen" | recent_meaningful_text)"
-      last="$(printf '%s\n' "$screen" | sed '/^[[:space:]]*$/d' | tail -n 1 | one_line)"
-    else
-      recent=""
-      last="$(printf '%s' "$title" | one_line)"
-    fi
-
-    has_agent_process=0
-    if known_agent_command "$command_hint"; then
-      has_agent_process=1
-    fi
-    status_result="$(detect_status "$dead" "$kind" "$command" "$recent" "$has_agent_process" "$agent_status" "$status_at" "$status_ttl" "$status_pid" "$screen")"
-    IFS=$'\t' read -r status source <<<"$status_result"
-    source="${source:-heuristic}"
+    text="$(capture_text "$pane" 80 | strip_ansi)"
+    last="$(printf '%s\n' "$text" | sed '/^[[:space:]]*$/d' | tail -n 1 | one_line)"
+    kind="$(detect_kind "$command" "$agent_kind" "$agent_name" "$text")"
+    status="$(detect_status "$dead" "$kind" "$command" "$text")"
     label="${agent_name:-$kind}"
     marker=""
-    sort_group=1
-
-    if [[ "$kind" != "pane" ]]; then
-      sort_group=0
-    fi
 
     if [[ -n "$origin_pane" && "$pane" == "$origin_pane" ]]; then
       marker="*"
     fi
 
-    printf '%s\t%s\t%s\t%b\t%s%s\t%s\t%s:%s\t%s\t%s\t%s\t%s\n' \
-      "$sort_group" \
-      "$session" \
-      "$location" \
+    printf '%b\t%s%s\t%s\t%s:%s\t%s\t%s\t%s\n' \
       "$(status_color "$status")" \
       "$marker" \
       "$label" \
@@ -321,16 +141,14 @@ list_panes() {
       "$location" \
       "$command" \
       "$cwd" \
-      "$source" \
       "$last"
-  done | LC_ALL=C sort -t $'\t' -k1,1n -k2,2 -k3,3V | cut -f4-
+  done
 }
 
 preview_pane() {
   local pane="$1"
 
   tmux display-message -p -t "$pane" 'pane #{pane_id}  #{session_name}:#{window_index}.#{pane_index}  #{pane_current_command}  #{pane_current_path}' 2>/dev/null || true
-  tmux display-message -p -t "$pane" 'agent #{@agent_name}  kind #{@agent_kind}  native #{@agent_status}  message #{@agent_status_message}' 2>/dev/null || true
   printf '\n'
   tmux capture-pane -epJ -t "$pane" -S -120 2>/dev/null | tail -n 120 || true
 }
@@ -377,7 +195,7 @@ spawn_agent() {
   fi
 
   if [[ "$kind" == "custom" ]]; then
-    printf 'custom command> '
+    printf 'command> '
     IFS= read -r cmd
     [[ -n "$cmd" ]] || return 0
     printf 'name [%s]> ' "$cmd"
@@ -420,35 +238,6 @@ send_prompt() {
   [[ -n "$prompt" ]] || return 0
   tmux send-keys -t "$pane" -l "$prompt"
   tmux send-keys -t "$pane" Enter
-  set_pane_status "$pane" working "prompt sent" 15
-}
-
-set_pane_status() {
-  local pane="$1"
-  local status="$2"
-  local message="${3:-}"
-  local ttl="${4:-0}"
-
-  normalize_status "$status" >/dev/null 2>&1 || {
-    printf 'agentmux: unknown status: %s\n' "$status" >&2
-    return 2
-  }
-  tmux set-option -pt "$pane" @agent_status "$status"
-  tmux set-option -pt "$pane" @agent_status_at "$(date +%s)"
-  tmux set-option -pt "$pane" @agent_status_ttl "$ttl"
-  tmux set-option -pt "$pane" @agent_status_message "$message"
-  tmux set-option -pt "$pane" @agent_status_pid ""
-}
-
-clear_pane_status() {
-  local pane="$1"
-
-  tmux set-option -upt "$pane" @agent_status 2>/dev/null || true
-  tmux set-option -upt "$pane" @agent_status_at 2>/dev/null || true
-  tmux set-option -upt "$pane" @agent_status_ttl 2>/dev/null || true
-  tmux set-option -upt "$pane" @agent_status_message 2>/dev/null || true
-  tmux set-option -upt "$pane" @agent_status_pid 2>/dev/null || true
-  tmux set-option -upt "$pane" @agent_status_owner 2>/dev/null || true
 }
 
 mark_pane() {
@@ -480,7 +269,6 @@ unmark_pane() {
   tmux set-option -upt "$pane" @agent_name 2>/dev/null || true
   tmux set-option -upt "$pane" @agent_command 2>/dev/null || true
   tmux set-option -upt "$pane" @agent_created_at 2>/dev/null || true
-  clear_pane_status "$pane"
 }
 
 confirm() {
@@ -492,189 +280,30 @@ confirm() {
   [[ "$answer" == "y" || "$answer" == "Y" ]]
 }
 
-fzf_action() {
-  local socket="$1"
-  local action="$2"
-  local -a curl_args
-
-  [[ -S "$socket" ]] || return 1
-
-  curl_args=(-fsS --unix-socket "$socket" -X POST http://localhost)
-  if [[ -n "${FZF_API_KEY:-}" ]]; then
-    curl_args+=(-H "x-api-key: ${FZF_API_KEY}")
-  fi
-  curl "${curl_args[@]}" -d "$action" >/dev/null 2>&1
-}
-
-enable_control_panes() {
-  local control_fd="$1"
-  local pane
-
-  while IFS= read -r pane; do
-    [[ -n "$pane" ]] || continue
-    printf 'refresh-client -A "%s:on"\n' "$pane" >&"$control_fd" || return 1
-  done < <(tmux list-panes -a -F '#{pane_id}' 2>/dev/null)
-}
-
-watch_tmux_events() {
-  local socket="$1"
-  local origin_pane="${2:-}"
-  local attempts=0
-  local session event
-  local control_pid control_read_fd control_write_fd
-  local event_dir control_input control_output
-  local preview_timer=""
-  local list_timer=""
-
-  while [[ ! -S "$socket" ]] && (( attempts < 50 )); do
-    sleep 0.05
-    attempts=$((attempts + 1))
-  done
-  [[ -S "$socket" ]] || return 0
-
-  if [[ -n "$origin_pane" ]]; then
-    session="$(tmux display-message -p -t "$origin_pane" '#{session_name}' 2>/dev/null || true)"
-  fi
-  if [[ -z "${session:-}" ]]; then
-    session="$(tmux list-sessions -F '#{session_name}' 2>/dev/null | head -n 1 || true)"
-  fi
-  [[ -n "$session" ]] || return 0
-
-  # Control mode is tmux's event stream. Enabling every pane makes %output
-  # notifications arrive immediately even for panes outside the active window.
-  event_dir="${TMPDIR:-/tmp}/agentmux-events-$$-${RANDOM}"
-  control_input="$event_dir/control.in"
-  control_output="$event_dir/control.out"
-  mkdir -m 700 "$event_dir" || return 0
-  if ! mkfifo "$control_input" "$control_output"; then
-    rmdir "$event_dir" 2>/dev/null || true
-    return 0
-  fi
-
-  # tmux control mode still requires a terminal for tcgetattr(3). `script`
-  # supplies a private PTY while the FIFOs remain the event transport.
-  script -qefE never /dev/null -- \
-    tmux -C attach-session \
-      -f 'ignore-size,no-detach-on-destroy' \
-      -t "$session" \
-    <"$control_input" >"$control_output" 2>/dev/null &
-  control_pid=$!
-  # The child opens input first and output second, so these complementary opens
-  # rendezvous without keeping artificial writers alive after either side exits.
-  exec {control_write_fd}>"$control_input"
-  exec {control_read_fd}<"$control_output"
-
-  cleanup_event_watcher() {
-    trap - EXIT TERM INT HUP
-    [[ -n "$preview_timer" ]] && kill "$preview_timer" 2>/dev/null || true
-    [[ -n "$list_timer" ]] && kill "$list_timer" 2>/dev/null || true
-    printf 'detach-client\n' >&"$control_write_fd" 2>/dev/null || true
-    kill "$control_pid" 2>/dev/null || true
-    wait "$preview_timer" 2>/dev/null || true
-    wait "$list_timer" 2>/dev/null || true
-    wait "$control_pid" 2>/dev/null || true
-    exec {control_write_fd}>&- 2>/dev/null || true
-    exec {control_read_fd}>&- 2>/dev/null || true
-    rm -f "$control_input" "$control_output"
-    rmdir "$event_dir" 2>/dev/null || true
-  }
-  trap cleanup_event_watcher EXIT
-  trap 'exit 0' TERM INT HUP
-
-  enable_control_panes "$control_write_fd" || return 0
-
-  while [[ -S "$socket" ]] && IFS= read -r event <&"$control_read_fd"; do
-    case "$event" in
-      '%output '*|'%extended-output '*)
-        # Pane output can be very chatty. Coalesce bursts so the preview stays
-        # responsive without spawning a capture-pane for every terminal write.
-        if [[ -z "$preview_timer" ]] || ! kill -0 "$preview_timer" 2>/dev/null; then
-          wait "$preview_timer" 2>/dev/null || true
-          (
-            trap - EXIT TERM INT HUP
-            sleep 0.05
-            fzf_action "$socket" 'refresh-preview'
-          ) &
-          preview_timer=$!
-        fi
-        # Status inference and the last-line summary still need a list reload,
-        # but rate-limit that heavier path separately from the live preview.
-        if [[ -z "$list_timer" ]] || ! kill -0 "$list_timer" 2>/dev/null; then
-          wait "$list_timer" 2>/dev/null || true
-          (
-            trap - EXIT TERM INT HUP
-            sleep 0.25
-            fzf_action "$socket" "reload(${SCRIPT_PATH} list ${origin_pane})+refresh-preview"
-          ) &
-          list_timer=$!
-        fi
-        ;;
-      '%sessions-changed'*|'%session-changed '*|'%session-renamed '*|\
-      '%session-window-changed '*|'%window-add '*|'%window-close '*|\
-      '%window-renamed '*|'%window-pane-changed '*|'%layout-change '*)
-        enable_control_panes "$control_write_fd" || return 0
-        fzf_action "$socket" "reload(${SCRIPT_PATH} list ${origin_pane})+refresh-preview" || return 0
-        ;;
-    esac
-  done
-}
-
-stop_event_watcher() {
-  local watcher_pid="${1:-}"
-  local socket="${2:-}"
-
-  if [[ -n "$watcher_pid" ]]; then
-    kill "$watcher_pid" 2>/dev/null || true
-    wait "$watcher_pid" 2>/dev/null || true
-  fi
-  [[ -n "$socket" ]] && rm -f "$socket"
-}
-
 menu() {
   local origin_pane="${1:-}"
   local origin_cwd=""
-  local header selection key row pane preview_cmd refresh_socket watcher_pid
-  local -a listen_args
+  local header selection key row pane preview_cmd
 
   if [[ -n "$origin_pane" ]]; then
     origin_cwd="$(tmux display-message -p -t "$origin_pane" '#{pane_current_path}' 2>/dev/null || true)"
   fi
 
-  header='live preview | enter focus | ctrl-g refresh | alt-c codex | alt-l claude | alt-o opencode | alt-n custom | ctrl-s send | ctrl-r respawn | ctrl-k kill | ctrl-m mark | ctrl-u unmark'
-  if command -v curl >/dev/null 2>&1 && command -v script >/dev/null 2>&1; then
-    header="tmux event refresh | $header"
-  fi
+  header='enter focus | alt-c codex | alt-l claude | alt-o opencode | ctrl-n custom | ctrl-s send | ctrl-r respawn | ctrl-k kill | ctrl-m mark | ctrl-u unmark'
   preview_cmd="${SCRIPT_PATH} preview {3}"
 
   while true; do
-    refresh_socket="${TMPDIR:-/tmp}/agentmux-fzf-$$-${RANDOM}.sock"
-    watcher_pid=""
-    listen_args=()
-    if command -v curl >/dev/null 2>&1 && command -v script >/dev/null 2>&1; then
-      listen_args=(--listen-unsafe="$refresh_socket")
-      watch_tmux_events "$refresh_socket" "$origin_pane" &
-      watcher_pid=$!
-    fi
-
-    if ! selection="$(
+    selection="$(
       list_panes "$origin_pane" \
         | fzf --ansi --no-sort --cycle \
-            --track \
-            --id-nth=3 \
             --delimiter=$'\t' \
-            --with-nth='1,2,3,4,5,7,8' \
+            --with-nth='1,2,3,4,5,7' \
             --preview "$preview_cmd" \
             --preview-window='right,65%,border-left' \
             --prompt='agentmux> ' \
             --header "$header" \
-            "${listen_args[@]}" \
-            --bind="ctrl-g:reload(${SCRIPT_PATH} list ${origin_pane})" \
-            --expect='enter,alt-c,alt-l,alt-o,alt-n,ctrl-s,ctrl-r,ctrl-k,ctrl-m,ctrl-u'
-    )"; then
-      stop_event_watcher "$watcher_pid" "$refresh_socket"
-      return 0
-    fi
-    stop_event_watcher "$watcher_pid" "$refresh_socket"
+            --expect='enter,alt-c,alt-l,alt-o,ctrl-n,ctrl-s,ctrl-r,ctrl-k,ctrl-m,ctrl-u'
+    )" || return 0
 
     key="$(printf '%s\n' "$selection" | sed -n '1p')"
     row="$(printf '%s\n' "$selection" | sed -n '2p')"
@@ -692,7 +321,7 @@ menu() {
         spawn_agent opencode "${origin_cwd:-$(pwd)}"
         return
         ;;
-      alt-n)
+      ctrl-n)
         spawn_agent custom "${origin_cwd:-$(pwd)}"
         return
         ;;
@@ -742,9 +371,6 @@ agentmux commands:
   mark <pane>              attach agent metadata to a pane
   unmark <pane>            clear agent metadata from a pane
   respawn <pane>           respawn a pane, using @agent_command when present
-  status <pane> <state> [message] [ttl]
-                            publish working/blocked/idle/done status
-  clear-status <pane>      clear a published status
 USAGE
 }
 
@@ -762,8 +388,6 @@ main() {
     mark) mark_pane "$@" ;;
     unmark) unmark_pane "$@" ;;
     respawn) respawn_agent "$@" ;;
-    status) set_pane_status "$@" ;;
-    clear-status) clear_pane_status "$@" ;;
     -h|--help|help) usage ;;
     *)
       usage >&2
@@ -772,6 +396,4 @@ main() {
   esac
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
-  main "$@"
-fi
+main "$@"
