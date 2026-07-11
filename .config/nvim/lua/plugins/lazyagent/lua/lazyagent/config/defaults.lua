@@ -28,7 +28,7 @@ function M.build()
       Codex = vim.tbl_deep_extend("force", base_agent, {
         cmd = "codex",
         acp_cmd = { "codex-acp" },
-        yolo_flag = "--full-auto",
+        yolo_flag = "--dangerously-bypass-approvals-and-sandbox",
       }),
       Gemini = vim.tbl_deep_extend("force", base_agent, {
         cmd = "gemini",

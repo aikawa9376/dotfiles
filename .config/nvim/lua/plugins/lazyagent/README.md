@@ -482,3 +482,7 @@ backend.set_agent_backend("Gemini", "mybackend")
 ```
 
 既存 session は自動移行しないため、backend を変えた後は session を閉じて開き直してください。
+
+
+TODO:
+シームレスな再開機能 基本は有効でoptsから選択可能 まずできるのかを調べてもらう
