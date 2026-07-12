@@ -40,7 +40,7 @@ return {
 {
   detection = {
     auto = true,
-    autocmds = { "BufEnter", "BufWritePost", "FocusGained", "TextChanged" },
+    autocmds = { "BufEnter", "BufWritePost", "FocusGained", "TextChanged", "FileChangedShellPost" },
     debounce_ms = 400,
     mode = "git", -- "git" (git status) or "marker" (grep markers)
     command = nil, -- nil なら git diff --name-only --diff-filter=U で競合中ファイルのみ拾い、rg でマーカーを検索

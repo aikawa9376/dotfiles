@@ -9,7 +9,7 @@ local ns = api.nvim_create_namespace("lazyconflict")
 local default_config = {
   detection = {
     auto = true,
-    autocmds = { "BufEnter", "BufWritePost", "FocusGained", "TextChanged" },
+    autocmds = { "BufEnter", "BufWritePost", "FocusGained", "TextChanged", "FileChangedShellPost" },
     debounce_ms = 400,
     cwd = nil,
     mode = "git", -- "git" (default: git diff --diff-filter=U) or "marker" (scan all files for markers)
@@ -62,9 +62,11 @@ local state = {
   cwd = nil,
   augroup = nil,
   buf_keymaps = {},
+  buf_diagnostics = {},
   commands_created = false,
   debounced_check = nil,
   git_job = nil,
+  check_id = 0,
 }
 
 local DEFAULT_COLORS = {
@@ -186,9 +188,57 @@ local function parse_lines(lines, cwd)
   return entries
 end
 
+local function marker(text, char, width, allow_label)
+  local run, rest = (text or ""):match("^(" .. vim.pesc(char) .. "+)(.*)$")
+  if not run or #run < 7 or (width and #run ~= width) then
+    return nil
+  end
+  if allow_label then
+    if rest ~= "" and not rest:match("^%s") then
+      return nil
+    end
+  elseif rest ~= "" then
+    return nil
+  end
+  return #run
+end
+
+local function regions_from_items(items)
+  local regions = {}
+  local current
+  for _, item in ipairs(items or {}) do
+    local text = item.text or ""
+    if not current then
+      local width = marker(text, "<", nil, true)
+      if width then
+        current = { start = item.lnum, width = width }
+      end
+    elseif not current.sep then
+      if not current.base and marker(text, "|", current.width, true) then
+        current.base = item.lnum
+      elseif marker(text, "=", current.width, false) then
+        current.sep = item.lnum
+      end
+    elseif marker(text, ">", current.width, true) then
+      current.finish = item.lnum
+      current.width = nil
+      table.insert(regions, current)
+      current = nil
+    end
+  end
+  return regions
+end
+
+local function recalculate_total()
+  local total = 0
+  for _, info in pairs(state.conflicts) do
+    total = total + #regions_from_items(info.items)
+  end
+  state.total = total
+end
+
 local function set_conflicts(entries)
   local by_file = {}
-  local total = 0
   for _, entry in ipairs(entries) do
     if entry.file and entry.file ~= "" then
       local info = by_file[entry.file]
@@ -203,24 +253,9 @@ local function set_conflicts(entries)
     table.sort(info.items, function(a, b)
       return a.lnum < b.lnum
     end)
-    local count = 0
-    for _, item in ipairs(info.items) do
-      if item.text:match("^<<<<<<<") then
-        count = count + 1
-      end
-    end
-    total = total + count
   end
-  
-  -- Merge with existing buffer-local detections if mode is git but we found markers locally
-  -- Actually, let's just use the git results as base.
-  -- The issue is that apply_buffer might run AFTER set_conflicts clears it,
-  -- so apply_buffer will restore it if markers exist.
-  -- But set_conflicts clears everything first.
-  -- That's fine as long as apply_all_buffers runs right after.
-  
   state.conflicts = by_file
-  state.total = total
+  recalculate_total()
   M.apply_all_buffers()
 end
 
@@ -269,23 +304,21 @@ end
 
 local function clear_keymaps(bufnr)
   local keys = state.buf_keymaps[bufnr]
-  if not keys then
-    return
-  end
-  for _, key in ipairs(keys) do
+  for _, key in ipairs(keys or {}) do
     pcall(vim.keymap.del, "n", key, { buffer = bufnr })
   end
   state.buf_keymaps[bufnr] = nil
-  if state.config.disable_diagnostics then
+  local previous = state.buf_diagnostics[bufnr]
+  state.buf_diagnostics[bufnr] = nil
+  if previous then
     vim.schedule(function()
       if api.nvim_buf_is_valid(bufnr) then
         if vim.diagnostic.enable then
-          vim.diagnostic.enable(true, { bufnr = bufnr })
+          vim.diagnostic.enable(previous.diagnostics, { bufnr = bufnr })
         end
-        if vim.lsp.inlay_hint then
-          vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
+        if vim.lsp.inlay_hint and previous.inlay_hints ~= nil then
+          vim.lsp.inlay_hint.enable(previous.inlay_hints, { bufnr = bufnr })
         end
-        pcall(vim.cmd, "LspStart")
       end
     end)
   end
@@ -293,6 +326,27 @@ end
 
 local function set_keymaps(bufnr)
   local cfg = state.config.keymaps
+  if state.config.disable_diagnostics and not state.buf_diagnostics[bufnr] then
+    local diagnostics = true
+    local inlay_hints
+    if vim.diagnostic.is_enabled then
+      local ok, enabled = pcall(vim.diagnostic.is_enabled, { bufnr = bufnr })
+      diagnostics = not ok or enabled ~= false
+    end
+    if vim.lsp.inlay_hint and vim.lsp.inlay_hint.is_enabled then
+      local ok, enabled = pcall(vim.lsp.inlay_hint.is_enabled, { bufnr = bufnr })
+      if ok then inlay_hints = enabled end
+    end
+    state.buf_diagnostics[bufnr] = { diagnostics = diagnostics, inlay_hints = inlay_hints }
+    vim.schedule(function()
+      if api.nvim_buf_is_valid(bufnr) and state.buf_diagnostics[bufnr] then
+        vim.diagnostic.enable(false, { bufnr = bufnr })
+        if vim.lsp.inlay_hint then
+          vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
+        end
+      end
+    end)
+  end
   if not cfg.enabled then
     return
   end
@@ -301,19 +355,6 @@ local function set_keymaps(bufnr)
     -- But usually checking buf_keymaps is enough to avoid duplicate work.
     -- However, if diagnostics disabling logic needs to run again, we should check that too.
     return
-  end
-  if state.config.disable_diagnostics then
-    vim.schedule(function()
-      if api.nvim_buf_is_valid(bufnr) then
-        if vim.diagnostic.enable then
-          vim.diagnostic.enable(false, { bufnr = bufnr })
-        end
-        if vim.lsp.inlay_hint then
-          vim.lsp.inlay_hint.enable(false, { bufnr = bufnr })
-        end
-        pcall(vim.cmd, "LspStop")
-      end
-    end)
   end
   local keys = {}
   local function add(key, fnc, desc)
@@ -408,30 +449,17 @@ function M.apply_buffer(bufnr)
   if not api.nvim_buf_is_loaded(bufnr) then
     return
   end
+  if not state.enabled then
+    api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+    clear_keymaps(bufnr)
+    return
+  end
   local info = with_conflict_info(bufnr)
 
-  -- Performance optimization:
-  -- If git mode is enabled and git explicitly says "no conflicts in this file" (info is nil),
-  -- AND the file is large, we might want to skip full scan.
-  -- However, to support "fugitive just updated the file but git status is lagging", we need to scan.
-  -- A compromise: scan only if file size is reasonable, or if we have reason to suspect a conflict?
-  -- 
-  -- Better approach:
-  -- We can check if the buffer contains conflict markers using a faster method than full parse?
-  -- But build_regions IS the parser.
-  --
-  -- Let's re-enable the early return BUT with a check for "is this likely a conflict file?"
-  -- If the file was not in conflict list from git, AND it wasn't in our manual conflict list, maybe we can skip?
-  -- But the whole point was to catch it BEFORE git reports it.
-  
-  -- Optimization: If the buffer is large (e.g. > 5000 lines) and not in git's conflict list, 
-  -- we can skip the check to avoid lag on every TextChanged.
-  local line_count = api.nvim_buf_line_count(bufnr)
-  if not info and line_count > 10000 then
-    -- For EXTREMELY large files, skip unless git says it has conflicts.
-    -- search() is fast, but context switching to buffer context might add overhead.
-    -- Let's bump limit to 10k lines.
-    apply_highlights(bufnr, nil)
+  -- Git mode must not count marker examples in otherwise clean files. Only files
+  -- reported by git are eligible for live buffer overrides.
+  if not info and state.config.detection.mode == "git" then
+    api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
     clear_keymaps(bufnr)
     return
   end
@@ -439,6 +467,11 @@ function M.apply_buffer(bufnr)
   -- バッファの内容をチェックし、マーカーがなければクリーンアップして終了
   local regions = M.build_regions(bufnr)
   if not regions or #regions == 0 then
+    local path = get_buf_path(bufnr)
+    if info and path ~= "" then
+      state.conflicts[path] = nil
+      recalculate_total()
+    end
     api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
     clear_keymaps(bufnr)
     return
@@ -462,41 +495,10 @@ function M.apply_buffer(bufnr)
       -- Update state.conflicts with live data
       state.conflicts[path] = { file = path, items = new_items }
       
-      -- Recalculate total
-      local total = 0
-      for _, f_info in pairs(state.conflicts) do
-         local f_count = 0
-         for _, item in ipairs(f_info.items or {}) do
-           if item.text:match("^<<<<<<<") then
-             f_count = f_count + 1
-           end
-         end
-         total = total + f_count
-      end
-      state.total = total
+      recalculate_total()
       
       -- Update info reference since we modified state.conflicts
       info = state.conflicts[path]
-    end
-  elseif info and state.config.detection.mode == "git" then
-    -- If no regions found in buffer but git thinks there are, it means we resolved them locally but git hasn't updated yet.
-    -- We should clear this file from state.conflicts to update statusline immediately.
-    local path = get_buf_path(bufnr)
-    if path and state.conflicts[path] then
-      state.conflicts[path] = nil
-      -- Recalculate total
-      local total = 0
-      for _, f_info in pairs(state.conflicts) do
-         local f_count = 0
-         for _, item in ipairs(f_info.items or {}) do
-           if item.text:match("^<<<<<<<") then
-             f_count = f_count + 1
-           end
-         end
-         total = total + f_count
-      end
-      state.total = total
-      info = nil
     end
   end
 
@@ -535,6 +537,11 @@ function M.check(opts)
     return
   end
   local cfg = state.config
+  state.check_id = state.check_id + 1
+  local check_id = state.check_id
+  local function current_check()
+    return state.enabled and check_id == state.check_id
+  end
   local detection = cfg.detection
   local cmd = resolve_command(opts and opts.command or detection.command)
   local cwd = opts and opts.cwd or detection.cwd
@@ -613,12 +620,14 @@ function M.check(opts)
         end
       end,
       on_exit = function(_, code)
+        if not current_check() then return end
         local notify_err = code > 1 and #stderr_data > 0
         local entries = {}
         if code == 0 or code == 1 then
           entries = parse_lines(stdout_data, rg_cwd)
         end
         vim.schedule(function()
+          if not current_check() then return end
           set_conflicts(entries)
           if notify_err then
             vim.notify("[lazyconflict] " .. table.concat(stderr_data, "\n"), vim.log.levels.WARN)
@@ -658,12 +667,14 @@ function M.check(opts)
         end
       end,
       on_exit = function(_, code)
+        if not current_check() then return end
         local notify_err = code > 1 and #stderr_data > 0
         local entries = {}
         if code == 0 or code == 1 then
           entries = parse_lines(stdout_data, cwd)
         end
         vim.schedule(function()
+          if not current_check() then return end
           set_conflicts(entries)
           if notify_err then
             vim.notify("[lazyconflict] " .. table.concat(stderr_data, "\n"), vim.log.levels.WARN)
@@ -712,8 +723,10 @@ function M.check(opts)
         end
       end,
       on_exit = function(_, code)
+        if not current_check() then return end
         if code ~= 0 and code ~= 1 then -- rg returns 1 if no matches found
           vim.schedule(function()
+            if not current_check() then return end
             if #stderr_rg > 0 then
               vim.notify("[lazyconflict] " .. table.concat(stderr_rg, "\n"), vim.log.levels.WARN)
             end
@@ -722,6 +735,7 @@ function M.check(opts)
           return
         end
         vim.schedule(function()
+          if not current_check() then return end
           run_rg(files, cwd)
         end)
       end,
@@ -762,8 +776,10 @@ function M.check(opts)
       end
     end,
     on_exit = function(_, code)
+      if not current_check() then return end
       if code ~= 0 then
         vim.schedule(function()
+          if not current_check() then return end
           if #stderr_git > 0 then
             vim.notify("[lazyconflict] " .. table.concat(stderr_git, "\n"), vim.log.levels.WARN)
           end
@@ -772,6 +788,7 @@ function M.check(opts)
         return
       end
       vim.schedule(function()
+        if not current_check() then return end
         run_rg(files, git_root)
       end)
     end,
@@ -784,40 +801,12 @@ function M.statusline()
 end
 
 function M.populate_quickfix(opts)
-  local function regions_from_info(info)
-    local regions = {}
-    local start_lnum
-    local ancestor_lnum
-    local sep_lnum
-    for _, item in ipairs(info.items or {}) do
-      local text = item.text or ""
-      if text:match("^<<<<<<<") then
-        start_lnum = item.lnum
-        ancestor_lnum = nil
-        sep_lnum = nil
-      elseif text:match("^|||||||") then
-        ancestor_lnum = item.lnum
-      elseif text:match("^=======") then
-        sep_lnum = item.lnum
-      elseif text:match("^>>>>>>>") and start_lnum and sep_lnum then
-        table.insert(regions, {
-          start = start_lnum,
-          ancestor = ancestor_lnum,
-          sep = sep_lnum,
-          finish = item.lnum,
-        })
-        start_lnum, ancestor_lnum, sep_lnum = nil, nil, nil
-      end
-    end
-    return regions
-  end
-
   local items = {}
   for path, info in pairs(state.conflicts) do
-    local regions = regions_from_info(info)
+    local regions = regions_from_items(info.items)
     if #regions > 0 then
       for _, r in ipairs(regions) do
-        local current_lines = (r.ancestor or r.sep) - r.start - 1
+        local current_lines = (r.base or r.sep) - r.start - 1
         table.insert(items, {
           filename = path,
           lnum = r.start,
@@ -835,11 +824,11 @@ function M.populate_quickfix(opts)
           type = "",
           pattern = "^=======",
         })
-        if r.ancestor then
-          local base_lines = r.sep - r.ancestor - 1
+        if r.base then
+          local base_lines = r.sep - r.base - 1
           table.insert(items, {
             filename = path,
-            lnum = r.ancestor + 1,
+            lnum = r.base + 1,
             col = 0,
             text = string.format("base change (%d lines)", base_lines),
             type = "",
@@ -893,42 +882,11 @@ function M.build_regions(bufnr)
     return {}
   end
 
-  local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local regions = {}
-  local i = 1
-  while i <= #lines do
-    if lines[i]:match("^<<<<<<<") then
-      local start_idx = i
-      local base_idx
-      local sep_idx
-      local end_idx
-      i = i + 1
-      while i <= #lines do
-        if not base_idx and lines[i]:match("^|||||||") then
-          base_idx = i
-        end
-        if lines[i]:match("^=======") then
-          sep_idx = i
-        end
-        if lines[i]:match("^>>>>>>>") then
-          end_idx = i
-          break
-        end
-        i = i + 1
-      end
-      if sep_idx and end_idx then
-        table.insert(regions, {
-          start = start_idx,
-          base = base_idx,
-          sep = sep_idx,
-          finish = end_idx,
-        })
-      end
-    else
-      i = i + 1
-    end
+  local items = {}
+  for lnum, text in ipairs(api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+    table.insert(items, { lnum = lnum, text = text })
   end
-  return regions
+  return regions_from_items(items)
 end
 
 local function find_conflict_region(bufnr)
@@ -1124,17 +1082,47 @@ function M.jump_prev()
   jump("prev")
 end
 
+local function configure_autocmds()
+  local group = ensure_augroup()
+  api.nvim_clear_autocmds({ group = group })
+  if not state.enabled or not state.config.detection.auto then
+    return
+  end
+  local events = state.config.detection.autocmds or {}
+  if #events > 0 then
+    api.nvim_create_autocmd(events, {
+      group = group,
+      callback = function()
+        state.debounced_check()
+      end,
+    })
+  end
+  api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
+    group = group,
+    callback = function(args)
+      M.apply_buffer(args.buf)
+    end,
+  })
+end
+
 function M.enable()
   state.enabled = true
+  configure_autocmds()
   M.check()
 end
 
 function M.disable()
   state.enabled = false
+  state.check_id = state.check_id + 1
   if state.job then
     pcall(fn.jobstop, state.job)
     state.job = nil
   end
+  if state.git_job then
+    pcall(fn.jobstop, state.git_job)
+    state.git_job = nil
+  end
+  configure_autocmds()
   set_conflicts({})
 end
 
@@ -1144,22 +1132,7 @@ function M.setup(opts)
   state.debounced_check = debounce(M.check, state.config.detection.debounce_ms)
   ensure_highlights()
   ensure_commands()
-  if state.config.detection.auto then
-    local group = ensure_augroup()
-    api.nvim_clear_autocmds({ group = group })
-    api.nvim_create_autocmd({ "BufEnter", "BufWritePost", "FocusGained", "TextChanged", "FileChangedShellPost" }, {
-      group = group,
-      callback = function()
-        state.debounced_check()
-      end,
-    })
-    api.nvim_create_autocmd({ "BufEnter", "BufWinEnter" }, {
-      group = group,
-      callback = function(args)
-        M.apply_buffer(args.buf)
-      end,
-    })
-  end
+  configure_autocmds()
   M.check()
 end
 
