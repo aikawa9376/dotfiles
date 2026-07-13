@@ -1,0 +1,23 @@
+#!/bin/sh
+
+client=$1
+save_script=${XDG_CONFIG_HOME:-$HOME/.config}/tmux/plugins/tmux-resurrect/scripts/save.sh
+
+# client_control_mode is no longer reliable once client-detached runs.  The
+# agentmux watcher records its client name beforehand in a global user option.
+marker=$(
+  tmux show-options -g 2>/dev/null |
+    awk -v client="$client" '
+      $1 ~ /^@agentmux_control_client_/ && $2 == client {
+        print $1
+        exit
+      }
+    '
+)
+
+if [ -n "$marker" ]; then
+  tmux set-option -gu "$marker"
+  exit 0
+fi
+
+exec "$save_script"
