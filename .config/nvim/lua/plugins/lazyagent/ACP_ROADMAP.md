@@ -136,6 +136,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 目標: `agent名 = active session`から`thread UUID = conversation`へ移行する。
 
 - [x] `ThreadStore`とversion付きmanifest schemaを追加する。
+  - [x] atomic publishに加えてmulti-Neovim read-modify-write lock、timeout、stale lock回収を追加する。
 - [ ] current session stateをthread-scoped stateへ分割する。
   - [x] backend sessionへlocal `thread_id`を割り当て、native session / process / transcript lifecycleを永続同期する。
 - [ ] provider process、native ACP session、view bufferをthreadから分離する。

@@ -76,6 +76,22 @@ function M.run()
   assert_equal(deleted, true, "delete result")
   assert_equal(deleted_record.thread_id, THREAD_ID, "deleted record")
   assert_equal(#assert(store:list({ include_archived = true })), 0, "deleted thread listing")
+  assert_equal(vim.fn.filereadable(store.lock_path), 0, "mutation lock cleanup")
+
+  local uv = vim.uv or vim.loop
+  local lock_fd = assert(uv.fs_open(store.lock_path, "wx", 384))
+  local blocked_store = ThreadStore.new({
+    dir = base,
+    lock_timeout_ms = 20,
+  })
+  local blocked, lock_err = blocked_store:create({
+    thread_id = THREAD_ID,
+    provider_id = "codex-acp",
+  })
+  assert_equal(blocked, nil, "locked mutation result")
+  assert(tostring(lock_err):match("thread store lock timeout"), "locked mutation timeout")
+  uv.fs_close(lock_fd)
+  uv.fs_unlink(store.lock_path)
 
   vim.fn.writefile({ "not-json" }, store.path)
   local recovered, warning = store:load()
