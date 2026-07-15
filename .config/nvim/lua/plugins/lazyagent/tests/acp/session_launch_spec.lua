@@ -106,6 +106,16 @@ function M.run()
   assert_equal(splits[1].provider_id, "Codex", "first backend provider")
   assert_equal(splits[2].provider_id, "Codex", "second backend provider")
   assert_equal(state.session_aliases.Codex, key_b, "legacy provider command alias")
+
+  local reused_key
+  launch.ensure_session(key_a, {
+    source_bufnr = vim.api.nvim_get_current_buf(),
+  }, true, function(pane_id, session_key)
+    assert_equal(pane_id, "mock-pane-1", "runtime-key command pane")
+    reused_key = session_key
+  end)
+  assert_equal(reused_key, key_a, "runtime-key command reuse")
+  assert_equal(#splits, 2, "runtime-key command must not launch a duplicate")
 end
 
 return M

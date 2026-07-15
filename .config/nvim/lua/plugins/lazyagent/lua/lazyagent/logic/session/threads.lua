@@ -1,0 +1,209 @@
+local M = {}
+
+function M.setup(deps)
+  local state = deps.state
+  local agent_logic = deps.agent_logic
+  local backend_logic = deps.backend_logic
+  local acp_logic = deps.acp_logic
+  local start_interactive_session = deps.start_interactive_session
+  local module = {}
+
+  local function configured_provider(provider_id)
+    if provider_id and provider_id ~= "" then
+      return provider_id
+    end
+    local providers = agent_logic.available_acp_agents()
+    if #providers == 1 then
+      return providers[1]
+    end
+    return nil, providers
+  end
+
+  local function backend_for_provider(provider_id)
+    local cfg = provider_id and agent_logic.get_interactive_agent(provider_id) or nil
+    local backend_name, backend = backend_logic.resolve_backend_for_agent(provider_id, cfg)
+    if backend and acp_logic.is_acp_backend(backend_name) then
+      return backend, cfg
+    end
+    return state.backends and (state.backends.buffer_acp or state.backends.tmux_acp) or nil, cfg
+  end
+
+  local function thread_backend(thread_id, provider_id)
+    local backend = backend_for_provider(provider_id)
+    if backend and thread_id and type(backend.get_thread) == "function" then
+      local thread = backend.get_thread(thread_id)
+      if thread then
+        return backend, thread
+      end
+    end
+    for _, candidate in ipairs({ state.backends and state.backends.buffer_acp, state.backends and state.backends.tmux_acp }) do
+      if candidate and type(candidate.get_thread) == "function" then
+        local thread = candidate.get_thread(thread_id)
+        if thread then
+          return candidate, thread
+        end
+      end
+    end
+    return backend, nil
+  end
+
+  local function active_mutation_error(thread, action)
+    if thread and thread.process_id ~= nil then
+      vim.notify(
+        string.format("LazyAgent ACP: close thread %s before %s", thread.thread_id:sub(1, 8), action),
+        vim.log.levels.WARN
+      )
+      return true
+    end
+    return false
+  end
+
+  function module.open_thread(thread_id)
+    local backend, thread = thread_backend(thread_id)
+    if not backend or not thread then
+      vim.notify("LazyAgent ACP: thread not found: " .. tostring(thread_id), vim.log.levels.WARN)
+      return false
+    end
+    local cfg = agent_logic.get_interactive_agent(thread.provider_id)
+    if not cfg then
+      vim.notify("LazyAgent ACP: provider is not configured: " .. tostring(thread.provider_id), vim.log.levels.WARN)
+      return false
+    end
+    start_interactive_session({
+      agent_name = thread.provider_id,
+      acp_thread_id = thread.thread_id,
+      acp_thread_title = thread.title,
+      reuse = true,
+    })
+    return true
+  end
+
+  function module.new_thread(provider_id)
+    local provider, providers = configured_provider(provider_id)
+    if not provider then
+      if type(providers) ~= "table" or #providers == 0 then
+        vim.notify("LazyAgent ACP: no ACP provider is configured", vim.log.levels.WARN)
+        return false
+      end
+      vim.ui.select(providers, { prompt = "New thread provider:" }, function(choice)
+        if choice then
+          module.new_thread(choice)
+        end
+      end)
+      return true
+    end
+    local backend = backend_for_provider(provider)
+    if not backend or type(backend.create_thread) ~= "function" then
+      vim.notify("LazyAgent ACP: thread store is unavailable", vim.log.levels.ERROR)
+      return false
+    end
+    local thread, err = backend.create_thread({
+      provider_id = provider,
+      cwd = vim.fn.getcwd(),
+      title = provider,
+      status = "closed",
+    })
+    if not thread then
+      vim.notify("LazyAgent ACP: failed to create thread: " .. tostring(err), vim.log.levels.ERROR)
+      return false
+    end
+    return module.open_thread(thread.thread_id)
+  end
+
+  function module.archive_thread(thread_id)
+    local backend, thread = thread_backend(thread_id)
+    if not backend or not thread or active_mutation_error(thread, "archiving") then
+      return false
+    end
+    local updated, err = backend.archive_thread(thread.thread_id)
+    if not updated then
+      vim.notify("LazyAgent ACP: archive failed: " .. tostring(err), vim.log.levels.ERROR)
+      return false
+    end
+    return true
+  end
+
+  function module.restore_thread(thread_id)
+    local backend, thread = thread_backend(thread_id)
+    if not backend or not thread then
+      return false
+    end
+    return backend.restore_thread(thread.thread_id) ~= nil
+  end
+
+  function module.rename_thread(thread_id, title)
+    local backend, thread = thread_backend(thread_id)
+    if not backend or not thread then
+      return false
+    end
+    return backend.rename_thread(thread.thread_id, title) ~= nil
+  end
+
+  function module.delete_thread(thread_id)
+    local backend, thread = thread_backend(thread_id)
+    if not backend or not thread or active_mutation_error(thread, "deleting") then
+      return false
+    end
+    return backend.delete_thread(thread.thread_id) == true
+  end
+
+  local function thread_label(thread)
+    local marker = thread.status == "archived" and "archive" or thread.status
+    local unread = thread.unread == true and " • unread" or ""
+    return string.format("%s · %s [%s%s]", thread.title, thread.provider_id, marker, unread)
+  end
+
+  function module.pick_threads(provider_id)
+    local backend = backend_for_provider(provider_id)
+    if not backend or type(backend.list_threads) ~= "function" then
+      return false
+    end
+    local threads, err = backend.list_threads({ include_archived = true })
+    if not threads then
+      vim.notify("LazyAgent ACP: thread list failed: " .. tostring(err), vim.log.levels.ERROR)
+      return false
+    end
+    if provider_id and provider_id ~= "" then
+      threads = vim.tbl_filter(function(thread)
+        return thread.provider_id == provider_id
+      end, threads)
+    end
+    vim.ui.select(threads, {
+      prompt = "LazyAgent ACP threads:",
+      format_item = thread_label,
+    }, function(thread)
+      if not thread then
+        return
+      end
+      local actions = { "Open", "Rename" }
+      actions[#actions + 1] = thread.status == "archived" and "Restore" or "Archive"
+      actions[#actions + 1] = "Delete"
+      vim.ui.select(actions, { prompt = thread_label(thread) .. ":" }, function(action)
+        if action == "Open" then
+          module.open_thread(thread.thread_id)
+        elseif action == "Rename" then
+          vim.ui.input({ prompt = "Thread title: ", default = thread.title }, function(title)
+            if title and title ~= "" then
+              module.rename_thread(thread.thread_id, title)
+            end
+          end)
+        elseif action == "Archive" then
+          module.archive_thread(thread.thread_id)
+        elseif action == "Restore" then
+          module.restore_thread(thread.thread_id)
+        elseif action == "Delete" then
+          vim.ui.select({ "Cancel", "Delete" }, { prompt = "Delete thread permanently?" }, function(confirm)
+            if confirm == "Delete" then
+              module.delete_thread(thread.thread_id)
+            end
+          end)
+        end
+      end)
+    end)
+    return true
+  end
+
+  return module
+end
+
+return M

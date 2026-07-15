@@ -54,6 +54,9 @@ function M.activate(state, session_key, session)
 end
 
 function M.resolve(state, requested)
+  if requested == nil then
+    return nil, nil
+  end
   requested = clean(requested)
   local sessions = type(state) == "table" and state.sessions or nil
   if requested == "" or type(sessions) ~= "table" then
@@ -83,6 +86,35 @@ function M.resolve(state, requested)
     end
   end
   return match_key or requested, match
+end
+
+function M.deactivate(state, session_key, session)
+  if type(state) ~= "table" then
+    return
+  end
+  local provider_id = M.provider_id(session_key, session)
+  if state.session_aliases and state.session_aliases[provider_id] == session_key then
+    state.session_aliases[provider_id] = nil
+  end
+  local preferred = state.open_agent
+  if preferred ~= session_key
+    and state.sessions
+    and state.sessions[preferred]
+    and M.provider_id(preferred, state.sessions[preferred]) == provider_id
+  then
+    M.activate(state, preferred, state.sessions[preferred])
+    return
+  end
+  local candidates = {}
+  for candidate, candidate_session in pairs(state.sessions or {}) do
+    if candidate ~= session_key and M.provider_id(candidate, candidate_session) == provider_id then
+      candidates[#candidates + 1] = candidate
+    end
+  end
+  table.sort(candidates)
+  if #candidates > 0 then
+    M.activate(state, candidates[#candidates], state.sessions[candidates[#candidates]])
+  end
 end
 
 return M

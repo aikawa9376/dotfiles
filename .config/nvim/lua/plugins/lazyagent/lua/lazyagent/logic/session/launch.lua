@@ -110,10 +110,16 @@ function M.setup(deps)
   end
 
   function module.ensure_session(agent_name, agent_cfg, reuse, on_ready)
-    local provider_id = agent_name
-    local launch_spec, launch_err = agent_logic.resolve_launch_spec(agent_name, agent_cfg)
+    local requested_key = agent_name
+    local requested_session = state.sessions[requested_key]
+    local provider_id = identity.provider_id(requested_key, requested_session)
+    local requested_thread_id = identity.thread_id(requested_key, requested_session)
+    if requested_thread_id and not (agent_cfg and agent_cfg.acp_thread_id) then
+      agent_cfg = vim.tbl_deep_extend("force", {}, agent_cfg or {}, { acp_thread_id = requested_thread_id })
+    end
+    local launch_spec, launch_err = agent_logic.resolve_launch_spec(provider_id, agent_cfg)
     local root_dir = resolve_root_dir(agent_cfg)
-    local skills_launch = skills_logic.prepare(agent_name, agent_cfg, {
+    local skills_launch = skills_logic.prepare(provider_id, agent_cfg, {
       root_dir = root_dir,
     })
     if launch_spec and skills_launch and skills_launch.append_args and not vim.tbl_isempty(skills_launch.append_args) then

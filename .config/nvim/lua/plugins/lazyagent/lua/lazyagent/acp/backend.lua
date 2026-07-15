@@ -620,6 +620,26 @@ local function create_backend(default_view)
     return thread_store:get(thread_id)
   end
 
+  function backend.create_thread(attributes)
+    return thread_store:create(attributes)
+  end
+
+  function backend.archive_thread(thread_id)
+    return thread_store:archive(thread_id)
+  end
+
+  function backend.restore_thread(thread_id)
+    return thread_store:restore(thread_id)
+  end
+
+  function backend.rename_thread(thread_id, title)
+    return thread_store:rename(thread_id, title)
+  end
+
+  function backend.delete_thread(thread_id)
+    return thread_store:delete(thread_id)
+  end
+
   function backend.update_thread(thread_id, changes)
     local updated, err = thread_store:update(thread_id, changes)
     if not updated then

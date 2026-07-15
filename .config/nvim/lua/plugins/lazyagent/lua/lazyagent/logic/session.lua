@@ -18,6 +18,7 @@ local session_runtime = require("lazyagent.logic.session.runtime")
 local session_launch = require("lazyagent.logic.session.launch")
 local session_actions = require("lazyagent.logic.session.actions")
 local session_acp_actions = require("lazyagent.logic.session.acp_actions")
+local session_threads = require("lazyagent.logic.session.threads")
 local window = require("lazyagent.window")
 local persistence = require("lazyagent.logic.persistence")
 local util = require("lazyagent.util")
@@ -69,6 +70,16 @@ local runtime = session_runtime.setup({
   session_agents_for_name = session_acp.session_agents_for_name,
   resolve_saved_snapshot = session_acp.resolve_saved_snapshot,
   current_editor_session_name = session_acp.current_editor_session_name,
+  start_interactive_session = function(opts)
+    return M.start_interactive_session(opts)
+  end,
+})
+
+local threads = session_threads.setup({
+  state = state,
+  acp_logic = acp_logic,
+  agent_logic = agent_logic,
+  backend_logic = backend_logic,
   start_interactive_session = function(opts)
     return M.start_interactive_session(opts)
   end,
@@ -179,5 +190,12 @@ M.open_full_acp_transcript = acp_actions.open_full_transcript
 M.save_conversation_checkpoint = acp_actions.save_conversation_checkpoint
 M.start_interactive_session = launch.start_interactive_session
 M.attach_session = actions.attach_session
+M.pick_acp_threads = threads.pick_threads
+M.new_acp_thread = threads.new_thread
+M.open_acp_thread = threads.open_thread
+M.archive_acp_thread = threads.archive_thread
+M.restore_acp_thread = threads.restore_thread
+M.rename_acp_thread = threads.rename_thread
+M.delete_acp_thread = threads.delete_thread
 
 return M

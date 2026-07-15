@@ -1,4 +1,5 @@
 local M = {}
+local session_identity = require("lazyagent.logic.session.identity")
 
 function M.setup(deps)
   local state = deps.state
@@ -103,6 +104,7 @@ function M.setup(deps)
     if backend_mod and session and type(backend_mod.clear_pane_config) == "function" then
       backend_mod.clear_pane_config(session.pane_id)
     end
+    session_identity.deactivate(state, agent_name, session)
     state.sessions[agent_name] = nil
     purge_agent_session_views(agent_name)
     persistence.remove_session(agent_name, session and session.cwd or nil)
@@ -115,6 +117,7 @@ function M.setup(deps)
   end
 
   function module.force_close_session(agent_name)
+    agent_name = session_identity.resolve(state, agent_name)
     if state.open_agent == agent_name then
       local bufnr = window.get_bufnr()
       if window.close() and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
@@ -125,6 +128,7 @@ function M.setup(deps)
 
     local session = state.sessions[agent_name]
     if not session or not session.pane_id or session.pane_id == "" then
+      session_identity.deactivate(state, agent_name, session)
       state.sessions[agent_name] = nil
       purge_agent_session_views(agent_name)
       persistence.remove_session(agent_name)
@@ -182,6 +186,7 @@ function M.setup(deps)
   end
 
   function module.capture_and_save_session(agent_name, open_file, on_done, opts)
+    agent_name = session_identity.resolve(state, agent_name)
     opts = opts or {}
     on_done = on_done or function() end
     if not agent_name or agent_name == "" then
@@ -246,6 +251,7 @@ function M.setup(deps)
   end
 
   function module.restart_session(agent_name)
+    agent_name = session_identity.resolve(state, agent_name)
     local function restart(chosen)
       if not chosen or chosen == "" then return end
       module.close_session(chosen)
@@ -262,6 +268,7 @@ function M.setup(deps)
   end
 
   function module.close_session(agent_name)
+    agent_name = session_identity.resolve(state, agent_name)
     if not agent_name or agent_name == "" then
       return
     end
@@ -549,6 +556,7 @@ function M.setup(deps)
   end
 
   function module.toggle_session(agent_name, opts)
+    agent_name = session_identity.resolve(state, agent_name)
     opts = opts or {}
     local force_toggle_ui = opts.force_toggle_ui == true or opts.close_running == true
 
@@ -698,6 +706,7 @@ function M.setup(deps)
   end
 
   function module.attach_session(agent_name, pane_id)
+    agent_name = session_identity.resolve(state, agent_name)
     local function list_panes()
       local fmt = "#{pane_id}\t#{pane_current_command}\t#{session_name}:#{window_name}"
       local ok, lines = pcall(vim.fn.systemlist, "tmux list-panes -a -F " .. vim.fn.shellescape(fmt))

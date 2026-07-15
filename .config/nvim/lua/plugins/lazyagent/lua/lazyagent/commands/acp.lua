@@ -30,6 +30,25 @@ end
 
 local always_commands = {
   {
+    name = "LazyAgentACPThreads",
+    desc = "Browse persisted LazyAgent ACP threads",
+    handler = session_logic.pick_acp_threads,
+  },
+  {
+    name = "LazyAgentACPThreadNew",
+    desc = "Create a new LazyAgent ACP thread",
+    handler = session_logic.new_acp_thread,
+    complete = function()
+      return require("lazyagent.logic.agent").available_acp_agents()
+    end,
+  },
+  {
+    name = "LazyAgentACPThreadOpen",
+    desc = "Open a LazyAgent ACP thread UUID",
+    handler = session_logic.open_acp_thread,
+    nargs = 1,
+  },
+  {
     name = "LazyAgentACPRestart",
     desc = "Restart Neovim and rehydrate the current ACP session",
     handler = function(target_agent)
