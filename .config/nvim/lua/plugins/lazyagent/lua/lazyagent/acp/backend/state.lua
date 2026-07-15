@@ -263,6 +263,7 @@ local function release_closing_session_memory(session)
   session.model_catalog = {}
   session.mode_catalog = {}
   session.usage_stats = {}
+  session.protocol_events = {}
   session.permission_rules = {}
   session.auto_switch = {}
   session.manual_config_overrides = {}
@@ -821,6 +822,7 @@ sync_runtime_session = function(session)
   runtime.acp_model_catalog = vim.deepcopy(session.model_catalog or {})
   runtime.acp_mode_catalog = vim.deepcopy(session.mode_catalog or {})
   runtime.acp_usage_stats = vim.deepcopy(session.usage_stats or {})
+  runtime.acp_protocol_events = vim.deepcopy(session.protocol_events or {})
   runtime.acp_ready = session.ready == true
   runtime.acp_failed = session.failed == true
   runtime.acp_supports_embedded_context = session.prompt_supports_embedded_context == true

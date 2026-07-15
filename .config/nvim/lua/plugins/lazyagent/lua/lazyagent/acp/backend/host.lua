@@ -943,6 +943,14 @@ function M.setup(deps)
       on_update = function(params)
         on_client_update(session, params)
       end,
+      on_protocol_event = function(event)
+        session.protocol_events = session.protocol_events or {}
+        session.protocol_events[#session.protocol_events + 1] = vim.deepcopy(event)
+        while #session.protocol_events > 200 do
+          table.remove(session.protocol_events, 1)
+        end
+        sync_runtime_session(session)
+      end,
       on_exit = function(code, signal, stderr_text)
         on_client_exit(session, code, signal, stderr_text)
       end,
@@ -974,6 +982,7 @@ function M.setup(deps)
       session.config_options = vim.deepcopy(client.config_options or (session_result and session_result.configOptions) or {})
       session.agent_info = vim.deepcopy(client.agent_info or {})
       session.agent_capabilities = vim.deepcopy(client.agent_capabilities or {})
+      session.protocol_events = client:get_protocol_events()
       session.model_catalog = vim.deepcopy((session_result and session_result.models) or {})
       session.mode_catalog = vim.deepcopy((session_result and session_result.modes) or {})
       local prompt_caps = client.agent_capabilities and client.agent_capabilities.promptCapabilities or {}

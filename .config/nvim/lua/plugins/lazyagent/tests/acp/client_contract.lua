@@ -35,6 +35,7 @@ local function new_client(root, overrides)
   local errors = {}
   local exits = {}
   local permission_requests = {}
+  local protocol_events = {}
   local deferred_permission_done
 
   local opts = {
@@ -78,6 +79,9 @@ local function new_client(root, overrides)
     on_error = function(err)
       errors[#errors + 1] = err
     end,
+    on_protocol_event = function(event)
+      protocol_events[#protocol_events + 1] = event
+    end,
     on_exit = function(code, signal, stderr)
       exits[#exits + 1] = {
         code = code,
@@ -93,6 +97,7 @@ local function new_client(root, overrides)
     errors = errors,
     exits = exits,
     permission_requests = permission_requests,
+    protocol_events = protocol_events,
     deferred_permission_done = function()
       return deferred_permission_done
     end,
@@ -169,7 +174,10 @@ local function test_stdio_contract(root)
 
   wait_for("prompt response", function() return prompt_result ~= nil end)
   wait_for("scheduled updates", function()
-    return #observed.updates == 3 and #observed.errors == 1 and #observed.permission_requests == 1
+    return #observed.updates == 3
+      and #observed.errors == 1
+      and #observed.permission_requests == 1
+      and #observed.protocol_events >= 2
   end)
   assert_equal("end_turn", prompt_result.stopReason, "prompt stop reason")
   assert_equal("agent_message_chunk", observed.updates[1].update.sessionUpdate, "fragmented update")
@@ -177,6 +185,13 @@ local function test_stdio_contract(root)
   assert_equal("future_update_for_contract_test", observed.updates[3].update.sessionUpdate, "unknown update")
   assert_equal("preserved", observed.updates[3].update.value, "unknown update payload")
   assert_equal(-32700, observed.errors[1].code, "parse error code")
+  local event_kinds = {}
+  for _, event in ipairs(observed.protocol_events) do
+    event_kinds[event.kind] = true
+  end
+  assert_equal(true, event_kinds.parse_error, "parse error logged")
+  assert_equal(true, event_kinds.unknown_update, "unknown update logged")
+  assert_equal(#observed.protocol_events, #client:get_protocol_events(), "protocol log retained")
   assert_equal("tool-1", observed.permission_requests[1].toolCall.toolCallId, "permission request")
 
   local loaded = false
