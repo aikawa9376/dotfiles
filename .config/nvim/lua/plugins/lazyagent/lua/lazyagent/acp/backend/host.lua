@@ -518,6 +518,12 @@ function M.setup(deps)
         kind = message_stream.kind,
         messageId = message_stream.message_id,
       })
+      if state.open_agent ~= session.agent_name
+        and session.thread_record
+        and session.thread_record.unread ~= true
+      then
+        sync_thread(session, { unread = true })
+      end
       return
     end
 

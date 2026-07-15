@@ -27,6 +27,7 @@ function M.run()
   local previous_opts = state.opts
   state.opts = vim.tbl_deep_extend("force", vim.deepcopy(previous_opts or {}), {
     cache = { dir = cache_dir },
+    acp = { auto_permission = "allow_once" },
   })
 
   local killed = false
@@ -113,6 +114,19 @@ function M.run()
   assert_equal(assert(backend.get_thread(runtime.acp_thread_id)).status, "active", "reopened persisted status")
   backend.kill_pane(pane_id)
 
+  assert(backend.update_thread(runtime.acp_thread_id, {
+    draft = "saved thread draft",
+    unread = true,
+    config = {
+      {
+        id = "fast",
+        name = "Fast",
+        type = "boolean",
+        currentValue = false,
+      },
+    },
+  }))
+
   pane_id = nil
   backend.split(nil, 10, false, {
     on_split = function(created)
@@ -138,6 +152,28 @@ function M.run()
   local fallback_runtime = backend.get_runtime_snapshot(pane_id)
   assert_equal(fallback_runtime.acp_resume_strategy, "local_carryover", "local carryover strategy")
   assert_equal(fallback_runtime.acp_has_pending_carryover, true, "local carryover prompt context")
+  assert_equal(fallback_runtime.acp_thread_draft, "saved thread draft", "restored thread draft")
+  assert_equal(fallback_runtime.acp_thread_unread, true, "restored unread state")
+  assert(vim.wait(2000, function()
+    local snapshot = backend.get_runtime_snapshot(pane_id)
+    return snapshot
+      and snapshot.acp_config_options[1]
+      and snapshot.acp_config_options[1].currentValue == false
+  end, 10), "saved config should be restored")
+
+  assert(backend.mark_thread_read(runtime.acp_thread_id))
+  assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_unread, false, "thread read state")
+  assert(backend.set_thread_draft(runtime.acp_thread_id, "updated draft"))
+  assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_draft, "updated draft", "thread draft update")
+
+  local previous_open_agent = state.open_agent
+  state.open_agent = nil
+  backend.paste_and_submit(pane_id, "exercise unread state")
+  assert(vim.wait(5000, function()
+    local snapshot = backend.get_runtime_snapshot(pane_id)
+    return snapshot and snapshot.acp_thread_unread == true
+  end, 10), "background assistant output should mark thread unread")
+  state.open_agent = previous_open_agent
   local fallback_thread = assert(backend.get_thread(runtime.acp_thread_id))
   assert_equal(fallback_thread.metadata.resume_strategy, "local_carryover", "persisted resume strategy")
   assert(

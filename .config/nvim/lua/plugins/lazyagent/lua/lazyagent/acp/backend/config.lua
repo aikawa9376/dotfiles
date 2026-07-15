@@ -10,11 +10,13 @@ function M.setup(deps)
   local normalize_text = deps.normalize_text
   local append_block = deps.append_block
   local sync_runtime_session = deps.sync_runtime_session
+  local sync_thread = deps.sync_thread or function() end
   local first_nonempty = deps.first_nonempty
   local item_body_text = deps.item_body_text
   local matches_exact = deps.matches_exact
   local matches_pattern = deps.matches_pattern
   local find_config_option
+  local config_option_choice_items
 
   local module = {}
 
@@ -49,7 +51,7 @@ function M.setup(deps)
       return nil
     end
 
-    for _, choice in ipairs(option.options or {}) do
+    for _, choice in ipairs(config_option_choice_items(option)) do
       if type(choice) == "table" and choice.value == current then
         return compact_config_value(choice.name or current)
       end
@@ -288,7 +290,7 @@ function M.setup(deps)
     return ordered
   end
 
-  local function config_option_choice_items(option)
+  config_option_choice_items = function(option)
     if config_option_kind(option) == "toggle" then
       local base_description = config_option_description(option)
       return {
@@ -377,6 +379,7 @@ function M.setup(deps)
         session.auto_switch_state[key] = choice.value
       end
       sync_runtime_session(session)
+      sync_thread(session, { config = vim.deepcopy(session.config_options or {}) })
       local success_message = opts.success_message
       if success_message == nil then
         success_message = string.format("%s set to %s", label, choice.name or tostring(choice.value))
@@ -431,7 +434,7 @@ function M.setup(deps)
       return nil
     end
     local expected = tostring(value)
-    for _, choice in ipairs(option.options or {}) do
+    for _, choice in ipairs(config_option_choice_items(option)) do
       if type(choice) == "table" and tostring(choice.value) == expected then
         return choice
       end
@@ -656,6 +659,15 @@ function M.setup(deps)
     session.initial_config_applied = true
 
     local pending = {}
+    for _, saved in ipairs(type(session.initial_config_snapshot) == "table" and session.initial_config_snapshot or {}) do
+      if type(saved) == "table" and saved.id and saved.currentValue ~= nil then
+        table.insert(pending, {
+          key = saved.id,
+          value = saved.currentValue,
+          title = config_option_title(saved),
+        })
+      end
+    end
     if session.default_mode and session.default_mode ~= "" then
       table.insert(pending, { key = "mode", value = session.default_mode, title = "mode" })
     end
