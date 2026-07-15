@@ -33,6 +33,14 @@ local SWITCH_HISTORY_ITEM_BODY_LIMIT = 6000
 local SWITCH_HISTORY_TOOL_LIMIT = 6
 local SWITCH_HISTORY_TRANSCRIPT_BYTE_LIMIT = 128 * 1024
 
+local function table_count(value)
+  local count = 0
+  for _ in pairs(type(value) == "table" and value or {}) do
+    count = count + 1
+  end
+  return count
+end
+
 local function get_session(pane_id)
   return sessions[pane_id]
 end
@@ -529,6 +537,16 @@ local function create_backend(default_view)
       acp_protocol_events = vim.deepcopy(session.protocol_events or {}),
       acp_auth_methods = vim.deepcopy(session.auth_methods or {}),
       acp_client_debug = session.client and session.client:debug_snapshot() or nil,
+      acp_view_debug = session.view and type(session.view.debug_snapshot) == "function"
+          and session.view.debug_snapshot()
+        or nil,
+      acp_view_timer_count = session.view_state and session.view_state.append_timer and 1 or 0,
+      acp_terminal_count = table_count(session.terminals),
+      acp_transcript_debug = {
+        owned = session.transcript_path ~= nil and session.transcript_path ~= "",
+        readable = session.transcript_path ~= nil and vim.fn.filereadable(session.transcript_path) == 1,
+        size = session.transcript_path and vim.fn.getfsize(session.transcript_path) or -1,
+      },
       acp_ready = session.ready == true,
       acp_failed = session.failed == true,
       acp_supports_embedded_context = session.prompt_supports_embedded_context == true,
@@ -544,6 +562,61 @@ local function create_backend(default_view)
       snapshot.acp_tool_timeline = vim.deepcopy(session.tool_timeline or {})
       snapshot.acp_conversation_timeline = vim.deepcopy(session.conversation_timeline or {})
     end
+    return snapshot
+  end
+
+  function backend.get_debug_snapshot()
+    local snapshot = {
+      session_count = 0,
+      session_view_snapshot_count = table_count(state.session_views),
+      transcript_owner_count = 0,
+      terminal_count = 0,
+      child_process_count = 0,
+      timer_count = 0,
+      callback_count = 0,
+      sessions = {},
+      views = {},
+    }
+    local seen_views = {}
+
+    for pane_id, session in pairs(sessions) do
+      snapshot.session_count = snapshot.session_count + 1
+      if session.transcript_path and session.transcript_path ~= "" then
+        snapshot.transcript_owner_count = snapshot.transcript_owner_count + 1
+      end
+      snapshot.terminal_count = snapshot.terminal_count + table_count(session.terminals)
+      if session.view_state and session.view_state.append_timer then
+        snapshot.timer_count = snapshot.timer_count + 1
+      end
+
+      local client_debug = session.client and session.client:debug_snapshot() or nil
+      if client_debug then
+        if client_debug.process == true then
+          snapshot.child_process_count = snapshot.child_process_count + 1
+        end
+        snapshot.timer_count = snapshot.timer_count
+          + (tonumber(client_debug.callback_timers) or 0)
+          + (tonumber(client_debug.stop_timer) or 0)
+        snapshot.callback_count = snapshot.callback_count + (tonumber(client_debug.callbacks) or 0)
+      end
+      snapshot.sessions[tostring(pane_id)] = backend.get_runtime_snapshot(pane_id)
+
+      local view = session.view
+      if view and not seen_views[view] and type(view.debug_snapshot) == "function" then
+        seen_views[view] = true
+        local view_debug = view.debug_snapshot()
+        snapshot.views[#snapshot.views + 1] = view_debug
+        snapshot.timer_count = snapshot.timer_count + (tonumber(view_debug.active_timer_count) or 0)
+      end
+    end
+
+    local fallback_view = default_view
+    if fallback_view and not seen_views[fallback_view] and type(fallback_view.debug_snapshot) == "function" then
+      local view_debug = fallback_view.debug_snapshot()
+      snapshot.views[#snapshot.views + 1] = view_debug
+      snapshot.timer_count = snapshot.timer_count + (tonumber(view_debug.active_timer_count) or 0)
+    end
+
     return snapshot
   end
 
