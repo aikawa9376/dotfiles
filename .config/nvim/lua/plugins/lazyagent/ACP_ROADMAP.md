@@ -260,7 +260,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] explicit create command、thread-open時path検証、stopped+clean限定cleanupを実装しbranchは自動削除しない。
 - [x] 同じrootを共有するthread間で変更衝突を警告する。
   - [x] active threadのlatest changed pathsを比較し、Cockpit card markerとdeduplicated visual warningを表示する。
-- [ ] worktreeごとのtest commandと結果をthread cardへ表示する。
+- [x] worktreeごとのtest commandと結果をthread cardへ表示する。
+  - [x] Cockpit `t`でthread cwd testを非同期実行し、running/pass/failと詳細をthread metadataへ保存する。
 
 ### Exit criteria
 

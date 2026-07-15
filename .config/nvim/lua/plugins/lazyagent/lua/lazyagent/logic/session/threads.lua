@@ -379,6 +379,28 @@ function M.setup(deps)
         refresh()
       end
     end, { buffer = bufnr, silent = true, desc = "Pin ACP cockpit thread" })
+    vim.keymap.set("n", "t", function()
+      local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      local target_backend, thread = thread_backend(id)
+      if not target_backend or not thread then return end
+      local previous = thread.metadata and thread.metadata.test_result and thread.metadata.test_result.command or ""
+      vim.ui.input({ prompt = "Test command: ", default = previous }, function(command)
+        if not command or command == "" then return end
+        local argv, argv_err = require("lazyagent.acp.worktree_test").argv(command)
+        if not argv then vim.notify(argv_err, vim.log.levels.ERROR); return end
+        local started = vim.uv.hrtime() / 1000000
+        target_backend.update_thread(id, { metadata = { test_result = { command = command, status = "running" } } })
+        refresh()
+        vim.system(argv, { cwd = thread.cwd, text = true }, function(result)
+          vim.schedule(function()
+            local finished = vim.uv.hrtime() / 1000000
+            local test_result = require("lazyagent.acp.worktree_test").finish(command, started, result, finished)
+            target_backend.update_thread(id, { metadata = { test_result = test_result } })
+            if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
+          end)
+        end)
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Run ACP thread test" })
     vim.keymap.set("n", "a", function()
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       local _, thread = thread_backend(id)
