@@ -369,21 +369,9 @@ local function replace_token(token, opts, meta)
   end
 
   if token == "selection" then
-    local ok1, mark_s = pcall(vim.api.nvim_buf_get_mark, source_bufnr, "<")
-    local ok2, mark_e = pcall(vim.api.nvim_buf_get_mark, source_bufnr, ">")
-    if not ok1 or not ok2 or not mark_s or not mark_e then return "" end
-    local sl, el = mark_s[1], mark_e[1]
-    if sl == 0 and el == 0 then return "" end
-    local lines = vim.api.nvim_buf_get_lines(source_bufnr, sl - 1, el, false)
-    if not lines or #lines == 0 then return "" end
-    if #lines == 1 then
-      lines[1] = lines[1]:sub(mark_s[2] + 1, mark_e[2] + 1)
-    else
-      lines[1] = lines[1]:sub(mark_s[2] + 1)
-      lines[#lines] = lines[#lines]:sub(1, mark_e[2] + 1)
-    end
-    local ft = vim.bo[source_bufnr] and vim.bo[source_bufnr].filetype or ""
-    return "```" .. ft .. "\n" .. table.concat(lines, "\n") .. "\n```"
+    local ContextItem = require("lazyagent.acp.context_item")
+    local item = ContextItem.selection(source_bufnr)
+    return item and ContextItem.to_markdown(item) or ""
   end
 
   if token == "git_diff" or token == "git_staged" then
