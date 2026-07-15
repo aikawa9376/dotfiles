@@ -197,9 +197,14 @@ function Client.new(opts)
     handlers = opts.handlers or {},
     callbacks = {},
     callback_timers = {},
+    pending_permission_requests = {},
     next_id = 0,
     request_timeout_ms = math.max(0, tonumber(opts.request_timeout_ms) or 60000),
     prompt_timeout_ms = math.max(0, tonumber(opts.prompt_timeout_ms) or 0),
+    cancel_settle_ms = math.max(0, tonumber(opts.cancel_settle_ms) or 50),
+    prompt_state = "idle",
+    prompt_request_id = nil,
+    prompt_generation = 0,
     state = "created",
     stdout_buffer = "",
     stdout_buffer_chunks = {},
@@ -314,6 +319,39 @@ function Client:_reject_pending(reason)
       })
     end)
   end
+  self.pending_permission_requests = {}
+end
+
+function Client:_finish_permission_request(id, pending, outcome, err)
+  if self.pending_permission_requests[id] ~= pending then
+    return false
+  end
+  self.pending_permission_requests[id] = nil
+  if err then
+    self:_send_error(id, err.code or ERR.internal, err.message or tostring(err), err.data)
+  else
+    self:_send_result(id, {
+      outcome = outcome or { outcome = "cancelled" },
+    })
+  end
+  return true
+end
+
+function Client:_cancel_pending_permissions(session_id)
+  local cancelled = 0
+  local pending_ids = {}
+  for id, pending in pairs(self.pending_permission_requests) do
+    if not session_id or not pending.session_id or pending.session_id == session_id then
+      pending_ids[#pending_ids + 1] = id
+    end
+  end
+  for _, id in ipairs(pending_ids) do
+    local pending = self.pending_permission_requests[id]
+    if pending and self:_finish_permission_request(id, pending, { outcome = "cancelled" }) then
+      cancelled = cancelled + 1
+    end
+  end
+  return cancelled
 end
 
 function Client:_send_raw(payload)
@@ -722,17 +760,19 @@ function Client:_handle_server_request(id, method, params)
       self:_send_result(id, { outcome = { outcome = "cancelled" } })
       return
     end
-    self:_dispatch_async(id, function(done)
-      handlers.request_permission(params or {}, function(outcome, err)
-        if err then
-          done(nil, err)
-          return
-        end
-        done({
-          outcome = outcome or { outcome = "cancelled" },
-        })
-      end)
+    local pending = {
+      session_id = params and params.sessionId or nil,
+    }
+    self.pending_permission_requests[id] = pending
+    local ok, err = pcall(handlers.request_permission, params or {}, function(outcome, callback_err)
+      self:_finish_permission_request(id, pending, outcome, callback_err)
     end)
+    if not ok then
+      self:_finish_permission_request(id, pending, nil, {
+        code = ERR.internal,
+        message = tostring(err),
+      })
+    end
     return
   end
 
@@ -998,6 +1038,7 @@ function Client:start(callback, opts)
 end
 
 function Client:send_prompt(prompt, callback)
+  callback = callback or function() end
   if not self.session_id then
     callback(nil, {
       code = ERR.invalid_request,
@@ -1005,11 +1046,41 @@ function Client:send_prompt(prompt, callback)
     })
     return
   end
+  if self.prompt_state ~= "idle" then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP prompt is already active",
+    })
+    return
+  end
 
-  self:_send_request("session/prompt", {
+  self.prompt_generation = self.prompt_generation + 1
+  self.prompt_state = "active"
+  local request_id
+  request_id = self:_send_request("session/prompt", {
     sessionId = self.session_id,
     prompt = prompt,
-  }, callback)
+  }, function(result, err)
+    local was_cancelling = self.prompt_state == "cancelling"
+    self.prompt_request_id = nil
+    if err and tonumber(err.code) == -32800 then
+      result = { stopReason = "cancelled" }
+      err = nil
+    end
+
+    local cancelled = was_cancelling or (result and result.stopReason == "cancelled")
+    local finish = function()
+      self.prompt_state = "idle"
+      callback(result, err)
+    end
+    if cancelled and self.cancel_settle_ms > 0 then
+      self.prompt_state = "settling"
+      vim.defer_fn(finish, self.cancel_settle_ms)
+    else
+      finish()
+    end
+  end)
+  self.prompt_request_id = request_id
 end
 
 function Client:set_config_option(config_id, value, callback)
@@ -1089,6 +1160,10 @@ end
 
 function Client:cancel()
   if not self.session_id then return false end
+  if self.prompt_state == "active" then
+    self.prompt_state = "cancelling"
+  end
+  self:_cancel_pending_permissions(self.session_id)
   return self:_send_notification("session/cancel", {
     sessionId = self.session_id,
   })
@@ -1099,6 +1174,7 @@ function Client:is_ready()
 end
 
 function Client:stop()
+  self:_cancel_pending_permissions(self.session_id)
   if self.process and not self.process:is_closing() then
     pcall(function() self.process:kill(15) end)
     vim.defer_fn(function()
