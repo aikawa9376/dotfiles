@@ -18,6 +18,7 @@ local backend_config = require("lazyagent.acp.backend.config")
 local backend_actions = require("lazyagent.acp.backend.actions")
 local backend_cancellation = require("lazyagent.acp.backend.cancellation")
 local backend_host = require("lazyagent.acp.backend.host")
+local ThreadStore = require("lazyagent.acp.thread_store")
 
 local sessions = {}
 local section_icons = {
@@ -57,6 +58,19 @@ local config_helpers
 local actions_helpers
 local host_helpers
 local complete_pending_turn
+
+local function sync_thread_record(session, changes)
+  if not session or not session.thread_store or not session.thread_id then
+    return nil
+  end
+  local updated, err = session.thread_store:update(session.thread_id, changes or {})
+  if not updated then
+    session.thread_store_error = tostring(err)
+    return nil, err
+  end
+  session.thread_store_error = nil
+  return updated
+end
 
 state_helpers = backend_state.setup({
   cache_logic = cache_logic,
@@ -181,10 +195,12 @@ host_helpers = backend_host.setup({
   render_permission_preview = actions_helpers.render_permission_preview,
   maybe_call_mcp_tool = actions_helpers.maybe_call_mcp_tool,
   maybe_sync_acp_edit_targets = actions_helpers.maybe_sync_acp_edit_targets,
+  sync_thread = sync_thread_record,
 })
 
 local function create_backend(default_view)
   local backend = {}
+  local thread_store = ThreadStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/threads" })
 
   complete_pending_turn = function(session)
     local pending = session and session.pending_brain_turn or nil
@@ -458,17 +474,37 @@ local function create_backend(default_view)
         auth_methods = {},
         view = view,
         view_state = view_state or {},
+        provider_id = acp.provider_id or acp.agent_name,
+        thread_store = thread_store,
       }
+      local session = sessions[pane_id]
+      local thread, thread_err = thread_store:create({
+        thread_id = acp.thread_id,
+        provider_id = session.provider_id,
+        cwd = session.cwd,
+        additional_directories = session.additional_directories,
+        title = acp.thread_title or acp.agent_name,
+        status = "active",
+        transcript_path = transcript_path,
+        model = session.initial_model,
+        mode = session.default_mode,
+        config = vim.deepcopy(session.manual_config_overrides or {}),
+      })
+      if thread then
+        session.thread_id = thread.thread_id
+      else
+        session.thread_store_error = tostring(thread_err)
+      end
       conversation_helpers.new_conversation_item(
-        sessions[pane_id],
+        session,
         "System",
         "Connecting ACP session for " .. acp.agent_name .. "..."
       )
 
       if type(view.on_session_created) == "function" then
-        view.on_session_created(sessions[pane_id])
+        view.on_session_created(session)
       end
-      host_helpers.start_client(sessions[pane_id], {
+      host_helpers.start_client(session, {
         drain_prompt_queue = function(target_pane)
           backend._drain_prompt_queue(target_pane)
         end,
@@ -526,6 +562,9 @@ local function create_backend(default_view)
       acp_available_commands = vim.deepcopy(session.available_commands or {}),
       acp_config_options = vim.deepcopy(session.config_options or {}),
       acp_session_id = session.session_id,
+      acp_thread_id = session.thread_id,
+      acp_provider_id = session.provider_id,
+      acp_thread_store_error = session.thread_store_error,
       acp_session_info = vim.deepcopy(session.session_info or {}),
       acp_transcript_path = session.transcript_path,
       acp_agent_info = vim.deepcopy(session.agent_info or {}),
@@ -689,6 +728,10 @@ local function create_backend(default_view)
         view.kill_pane(pane_id, session)
       end
       state_helpers.release_closing_session_memory(session)
+      sync_thread_record(session, {
+        status = "closed",
+        process_id = vim.NIL,
+      })
       sessions[pane_id] = nil
       if session.client then
         local client = session.client

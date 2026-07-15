@@ -137,6 +137,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 - [x] `ThreadStore`とversion付きmanifest schemaを追加する。
 - [ ] current session stateをthread-scoped stateへ分割する。
+  - [x] backend sessionへlocal `thread_id`を割り当て、native session / process / transcript lifecycleを永続同期する。
 - [ ] provider process、native ACP session、view bufferをthreadから分離する。
 - [ ] 同じproviderの複数threadを同時起動できるようにする。
 - [ ] threadのnew / open / close / archive / restore / rename / deleteを実装する。
