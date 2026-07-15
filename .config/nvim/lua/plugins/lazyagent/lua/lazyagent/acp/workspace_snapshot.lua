@@ -58,10 +58,16 @@ local function file_record(root, path, opts)
     } or { sec = tonumber(modified) or 0, nsec = 0 },
   }
   if opts.blob_store and stat.type == "file" then
-    local blob, blob_err = opts.blob_store:put_file(absolute)
-    record.blob = blob
-    record.binary = blob and blob.binary == true or false
-    record.blob_error = blob_err
+    local should_store = true
+    if opts.only_dirty_blobs then
+      should_store = opts.dirty_set and opts.dirty_set[path] or false
+    end
+    if should_store then
+      local blob, blob_err = opts.blob_store:put_file(absolute)
+      record.blob = blob
+      record.binary = blob and blob.binary == true or false
+      record.blob_error = blob_err
+    end
   end
   return record
 end
@@ -77,17 +83,6 @@ local function git_snapshot(cwd, opts)
     return nil
   end
 
-  local listed = run({ "git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z" })
-  if listed.code ~= 0 then
-    return nil, trim(listed.stderr) ~= "" and trim(listed.stderr) or "git ls-files failed"
-  end
-  local paths = split_zero(listed.stdout)
-  table.sort(paths)
-  local files = {}
-  for _, path in ipairs(paths) do
-    files[#files + 1] = file_record(root, path, opts)
-  end
-
   local status_result = run({ "git", "-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all" })
   if status_result.code ~= 0 then
     return nil, trim(status_result.stderr) ~= "" and trim(status_result.stderr) or "git status failed"
@@ -95,6 +90,7 @@ local function git_snapshot(cwd, opts)
   local records = split_zero(status_result.stdout)
   local dirty = {}
   local untracked = {}
+  local dirty_set = {}
   local index = 1
   while index <= #records do
     local record = records[index]
@@ -110,10 +106,31 @@ local function git_snapshot(cwd, opts)
       item.original_path = records[index]
     end
     dirty[#dirty + 1] = item
+    dirty_set[path] = true
+    if item.original_path then
+      dirty_set[item.original_path] = true
+    end
     if status == "??" then
       untracked[#untracked + 1] = path
     end
     index = index + 1
+  end
+
+  local listed = run({ "git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z" })
+  if listed.code ~= 0 then
+    return nil, trim(listed.stderr) ~= "" and trim(listed.stderr) or "git ls-files failed"
+  end
+  local paths = split_zero(listed.stdout)
+  table.sort(paths)
+
+  local file_opts = opts
+  if opts.only_dirty_blobs then
+    file_opts = vim.tbl_extend("force", opts, { dirty_set = dirty_set })
+  end
+
+  local files = {}
+  for _, path in ipairs(paths) do
+    files[#files + 1] = file_record(root, path, file_opts)
   end
 
   local head_result = run({ "git", "-C", root, "rev-parse", "HEAD" })
@@ -227,7 +244,8 @@ local function change_record(path, operation, left, right)
   }
 end
 
-function M.diff(before, after)
+function M.diff(before, after, opts)
+  opts = opts or {}
   local previous = file_index(before)
   local current = file_index(after)
   local baseline_renames = {}
@@ -274,6 +292,21 @@ function M.diff(before, after)
         operation = "modified"
       end
       if operation then
+        if (operation == "modified" or operation == "deleted") and left and not left.blob and opts.blob_store and before.vcs and before.vcs.kind == "git" then
+          local run_cmd = opts.run or default_run
+          local ref_name = (before.vcs.head and before.vcs.head ~= "") and before.vcs.head or "HEAD"
+          local git_args = { "git", "-C", before.root, "show", ref_name .. ":" .. path }
+          local show_result = run_cmd(git_args)
+          if show_result.code == 0 then
+            local data = show_result.stdout
+            local ref, put_err = opts.blob_store:put(data)
+            if ref then
+              ref.binary = data:find("\0", 1, true) ~= nil
+              left.blob = ref
+              left.binary = ref.binary
+            end
+          end
+        end
         changes[#changes + 1] = change_record(path, operation, left, right)
       end
     end
