@@ -48,6 +48,8 @@ local permission_cancelled = false
 local cancel_prompt_finished = false
 local authenticated = vim.env.LAZYAGENT_FAKE_AUTH_FLOW ~= "1"
 local scope_rejected = false
+local write_complete = false
+local terminal_complete = false
 
 local function has_additional_directory(params)
   local directories = params and params.additionalDirectories
@@ -57,7 +59,13 @@ local function has_additional_directory(params)
 end
 
 local function finish_prompt_if_ready()
-  if not pending_prompt_id or not permission_complete or not read_complete or not scope_rejected then
+  if not pending_prompt_id
+    or not permission_complete
+    or not read_complete
+    or not scope_rejected
+    or not write_complete
+    or not terminal_complete
+  then
     return
   end
   send(response(pending_prompt_id, {
@@ -332,6 +340,26 @@ for line in io.lines() do
           path = "/virtual/fixture.txt",
         },
       })
+      local write_request = encode({
+        jsonrpc = "2.0",
+        id = 902,
+        method = "fs/write_text_file",
+        params = {
+          sessionId = "test-session",
+          path = "/virtual/output.txt",
+          content = "fixture-content",
+        },
+      })
+      local terminal_request = encode({
+        jsonrpc = "2.0",
+        id = 903,
+        method = "terminal/create",
+        params = {
+          sessionId = "test-session",
+          command = "fixture-command",
+          args = { "arg" },
+        },
+      })
       send_raw(
         tool_update
           .. "\n"
@@ -342,6 +370,10 @@ for line in io.lines() do
           .. permission_request
           .. "\n"
           .. read_request
+          .. "\n"
+          .. write_request
+          .. "\n"
+          .. terminal_request
           .. "\n"
       )
     end
@@ -387,6 +419,32 @@ for line in io.lines() do
       io.stderr:flush()
     end
     finish_prompt_if_ready()
+  elseif message.id == 902 then
+    write_complete = message.error == nil
+    finish_prompt_if_ready()
+  elseif message.id == 903 then
+    if message.result and message.result.terminalId == "fixture-terminal" then
+      for id, method in ipairs({ "terminal/output", "terminal/wait_for_exit", "terminal/kill", "terminal/release" }) do
+        send({
+          jsonrpc = "2.0",
+          id = 903 + id,
+          method = method,
+          params = { sessionId = "test-session", terminalId = "fixture-terminal" },
+        })
+      end
+    else
+      io.stderr:write("unexpected terminal/create response\n")
+      io.stderr:flush()
+    end
+  elseif type(message.id) == "number" and message.id >= 904 and message.id <= 907 then
+    if message.error then
+      io.stderr:write("terminal lifecycle request failed\n")
+      io.stderr:flush()
+    end
+    if message.id == 907 then
+      terminal_complete = message.error == nil
+      finish_prompt_if_ready()
+    end
   elseif message.method == "session/cancel" then
     cancel_received = true
     finish_cancel_prompt_if_ready()
