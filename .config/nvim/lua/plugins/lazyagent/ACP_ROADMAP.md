@@ -1,6 +1,6 @@
 # LazyAgent ACP roadmap
 
-> Status: proposed
+> Status: in progress — Milestone 0
 > Last reviewed: 2026-07-15
 
 この文書は、LazyAgent の ACP 機能を Zed の External Agent 相当まで高めつつ、
@@ -92,7 +92,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 ### Contract tests
 
-- [ ] newline分割、複数message同時受信、invalid/unknown updateを再現するfake ACP agentを追加する。
+- [x] newline分割、複数message同時受信、invalid/unknown updateを再現するfake ACP agentを追加する。
 - [ ] initialize、new/prompt/cancel、load/resume/close、permission、terminal、filesystemのgolden testを追加する。
 - [ ] process exit、timeout、late update、pending permission中cancelのtestを追加する。
 - [ ] repeated open/close、provider switch、resession、2 Neovim instanceのlifecycle testを追加する。
@@ -100,13 +100,14 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 ### Stable v1 completion
 
-- [ ] capabilityの`false`をsupport扱いしない。
-- [ ] JSON-RPC request timeoutと`$/cancel_request`を実装する。
+- [x] capabilityの`false`をsupport扱いしない。
+- [x] initialize responseのprotocol versionを検証し、不一致時はagent processを停止する。
+- [x] JSON-RPC request timeoutと`$/cancel_request`を実装する。
 - [ ] cancel後のlate update、tool、permissionを正しく終端するstate machineを実装する。
 - [ ] `messageId`でassistant / thought messageを正しく束ねる。
-- [ ] `session/delete`と`additionalDirectories`を実装する。
+- [x] `session/delete`と`additionalDirectories`をclient APIへ実装する。
 - [ ] authentication / logout flowを実装する。
-- [ ] `session.configOptions.boolean`をadvertiseし、select / booleanを共通UIで扱う。
+- [x] `session.configOptions.boolean`をadvertiseし、select / booleanを共通UIで扱う。
 - [ ] image / audio / resource / resource_linkを入力・出力とも完全に扱う。
 - [ ] unknown method / update variantをログに残しつつconnectionを維持する。
 
