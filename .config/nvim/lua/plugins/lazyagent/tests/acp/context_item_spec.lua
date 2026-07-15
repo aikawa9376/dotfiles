@@ -23,7 +23,7 @@ function M.run()
   assert_equal(#item.content_hash, 64, "range content hash")
   assert_equal(item.preview, "two three", "range preview")
   assert_equal(ContextItem.lower(item, { embedded_context = true }).type, "resource", "embedded lowering")
-  assert_equal(ContextItem.lower(item, {}).type, "resource_link", "resource link lowering")
+  assert_equal(ContextItem.lower(item, {}).type, "text", "range text fallback lowering")
 
   local directory = ContextItem.directory({ path = "/tmp/project", display = "." })
   assert_equal(directory.kind, "directory", "directory context kind")
@@ -133,6 +133,20 @@ function M.run()
   assert_equal(unsupported.type, "text", "unsupported image text lowering")
   assert(unsupported.text:match("does not support image"), "unsupported image reason")
   vim.fn.delete(media_path)
+
+  local binary_path = vim.fn.tempname() .. ".pdf"
+  local binary_file = assert(io.open(binary_path, "wb"))
+  binary_file:write("%PDF\0fixture")
+  binary_file:close()
+  local binary = assert(ContextItem.binary_file({ path = binary_path, display = "manual.pdf" }))
+  assert_equal(binary.kind, "binary_resource", "binary context kind")
+  local linked_binary = assert(ContextItem.lower(binary, {}))
+  assert_equal(linked_binary.type, "resource_link", "binary resource link lowering")
+  assert_equal(linked_binary.title, "manual.pdf", "binary resource title")
+  local embedded_binary = assert(ContextItem.lower(binary, { embedded_context = true }))
+  assert_equal(embedded_binary.type, "resource", "binary embedded lowering")
+  assert_equal(embedded_binary.resource.mimeType, "application/pdf", "binary embedded MIME")
+  vim.fn.delete(binary_path)
 end
 
 return M

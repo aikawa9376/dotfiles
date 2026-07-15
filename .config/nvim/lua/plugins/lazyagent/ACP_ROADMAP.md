@@ -111,8 +111,10 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] `session/delete`と`additionalDirectories`をclient APIへ実装する。
 - [x] authentication method picker、auth-required retry、capability-gated logout flowを実装する。
 - [x] `session.configOptions.boolean`をadvertiseし、select / booleanを共通UIで扱う。
-- [ ] image / audio / resource / resource_linkを入力・出力とも完全に扱う。
+- [x] image / audio / resource / resource_linkを入力・出力とも完全に扱う。
   - [x] `@media`をcapability-gated Image/Audio blockへloweringし、output payloadを安全にmetadata表示する。
+  - [x] binary fileをcapability-gated Resource blob / ResourceLinkへloweringし、MIME・size・annotationsを保持する。
+  - [x] output base64・size上限を検証し、media/resource blobを0600のcontent-addressed fileへmaterializeする。
 - [x] unknown method / update variantをbounded protocol logへ残しつつconnectionを維持する。
 
 ### Host security

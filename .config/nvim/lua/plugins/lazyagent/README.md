@@ -334,9 +334,9 @@ ACP の command palette と config picker も advertise された説明・catego
 
 `:LazyAgentACPDoctor` / `:LazyAgentACPContext` / `:LazyAgentACPReview` は `ga` の action menu と local slash command からも開けます。
 
-ACP agentがimage prompt capabilityを公開している場合、paste / screenshotで挿入された`@image-path`は送信時にfirst-class ACP Image blockへ変換されます。非対応agentには画像データを送信せず、理由をText blockとして渡します。
+ACP agentがimage / audio prompt capabilityを公開している場合、`@image-path` / `@audio-path`は送信時にfirst-class ACP Image / Audio blockへ変換されます。非対応agentにはmediaデータを送信せず、理由をText blockとして渡します。PDF・archiveなどのbinary fileは`embeddedContext`対応agentへbounded Resource blobとして送り、非対応agentへはMIME・size・name付きResourceLinkを送ります。通常のtext fileも`embeddedContext` capabilityに応じてResource textまたはResourceLinkへloweringします。
 
-Assistant messageやtool outputがimage / audio / blob resourceを返した場合は、payloadを`stdpath("cache")/lazyagent/acp/media`へcontent-addressed fileとして保存します。imageはtranscript内でinline previewされ、audio / resourceはMIME・size付きのlocal file参照として表示されます。
+Assistant messageやtool outputがimage / audio / blob resourceを返した場合は、base64と20MiB上限を検証してからpayloadを`stdpath("cache")/lazyagent/acp/media`へ0600のcontent-addressed fileとして保存します。imageはtranscript内でinline previewされ、audio / resourceはMIME・size付きのlocal file参照として表示されます。ResourceLinkはname/title/description/URI/MIME/sizeを保持して表示します。
 
 ACP agentが広告したslash commandはdescriptionに加え、argument hint / placeholderとrequired・optionalをnvim-cmp / blink.cmpのdetail・documentationへ表示します。
 

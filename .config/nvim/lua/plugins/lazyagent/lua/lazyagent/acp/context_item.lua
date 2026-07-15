@@ -94,6 +94,7 @@ function M.file(opts)
     uri = file_uri(path),
     display = display,
     filetype = opts.filetype,
+    mime_type = opts.mime_type or ContentBlocks.mime_type(path) or "text/plain",
     range = range,
     content = table.concat(slice(opts.lines or {}, range), "\n"),
     note = range_note(display, range),
@@ -125,6 +126,23 @@ function M.media(opts)
     path = path,
     uri = file_uri(path),
     display = opts.display or path,
+  }, opts)
+end
+
+function M.binary_file(opts)
+  opts = opts or {}
+  local path = vim.fn.fnamemodify(opts.path, ":p")
+  if not ContentBlocks.is_binary_resource(path) then
+    return nil, "file is not a binary resource"
+  end
+  return enrich({
+    kind = "binary_resource",
+    source = opts.source or "reference",
+    path = path,
+    uri = file_uri(path),
+    display = opts.display or path,
+    mime_type = opts.mime_type or ContentBlocks.mime_type(path) or "application/octet-stream",
+    annotations = opts.annotations and vim.deepcopy(opts.annotations) or nil,
   }, opts)
 end
 
@@ -441,6 +459,13 @@ function M.lower(item, capabilities)
       audio = capabilities.audio == true,
     })
   end
+  if item.kind == "binary_resource" then
+    return ContentBlocks.resource_from_file(item.path, capabilities, {
+      name = vim.fn.fnamemodify(item.path, ":t"),
+      title = item.display,
+      annotations = item.annotations,
+    })
+  end
   if item.kind == "directory" then
     return {
       type = "resource_link",
@@ -457,13 +482,16 @@ function M.lower(item, capabilities)
       title = item.display,
     }
   end
-  if (item.kind == "selection" or item.inline == true) and capabilities.embedded_context ~= true then
+  if (item.kind == "selection" or item.kind == "range" or item.inline == true)
+    and capabilities.embedded_context ~= true
+  then
     return { type = "text", text = item.content or "" }
   end
   if capabilities.embedded_context == true then
     return {
       type = "resource",
-      resource = { uri = item.uri, mimeType = "text/plain", text = item.content or "" },
+      resource = { uri = item.uri, mimeType = item.mime_type or "text/plain", text = item.content or "" },
+      annotations = item.annotations and vim.deepcopy(item.annotations) or nil,
     }
   end
   return {
@@ -471,7 +499,9 @@ function M.lower(item, capabilities)
     uri = item.uri,
     name = vim.fn.fnamemodify(item.path, ":t"),
     title = item.display,
-    mimeType = "text/plain",
+    mimeType = item.mime_type or "text/plain",
+    size = item.size,
+    annotations = item.annotations and vim.deepcopy(item.annotations) or nil,
   }
 end
 

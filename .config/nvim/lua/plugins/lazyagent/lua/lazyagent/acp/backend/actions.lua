@@ -975,6 +975,7 @@ local function resolve_reference(token, session)
   local abs_path
   local is_directory = false
   local is_media = false
+  local is_binary_resource = false
   local lines
   for _, candidate in ipairs(candidates) do
     local expanded = vim.fn.fnamemodify(candidate, ":p")
@@ -986,6 +987,11 @@ local function resolve_reference(token, session)
     if ContentBlocks.media_kind(expanded) and vim.fn.filereadable(expanded) == 1 then
       abs_path = expanded
       is_media = true
+      break
+    end
+    if vim.fn.filereadable(expanded) == 1 and ContentBlocks.is_binary_resource(expanded) then
+      abs_path = expanded
+      is_binary_resource = true
       break
     end
     lines = read_path_lines(expanded)
@@ -1013,6 +1019,20 @@ local function resolve_reference(token, session)
       block = {
         type = "text",
         text = "[media omitted: " .. tostring(media_err or "failed to read media") .. "]",
+      }
+    end
+  elseif is_binary_resource then
+    local resource_err
+    context_item, resource_err = ContextItem.binary_file({ path = abs_path, display = display })
+    if context_item then
+      block, resource_err = ContextItem.lower(context_item, {
+        embedded_context = session.prompt_supports_embedded_context == true,
+      })
+    end
+    if not block then
+      block = {
+        type = "text",
+        text = "[resource omitted: " .. tostring(resource_err or "failed to read resource") .. "]",
       }
     end
   elseif is_directory then
