@@ -6,10 +6,12 @@ local acp_logic = require("lazyagent.logic.acp")
 local backend_logic = require("lazyagent.logic.backend")
 local qr = require("lazyagent.web.qr")
 local state = require("lazyagent.logic.state")
+local security = require("lazyagent.acp.mobile_security")
 
 M._server = nil
 M.port = nil
 M.host = nil
+M.token = nil
 
 local event_clients = {}
 local heartbeat_timer = nil
@@ -21,6 +23,7 @@ local stop_event_watcher
 
 local AUTO_PORT_START = 39280
 local AUTO_PORT_END = 39480
+local MAX_HEADER_BYTES = 16 * 1024
 
 local function trim(text)
   return tostring(text or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -38,6 +41,9 @@ local function parse_http_request(raw)
   end
 
   local header_part = raw:sub(1, header_end - 1)
+  if header_end > MAX_HEADER_BYTES then
+    return nil, "headers_too_large"
+  end
   local body = raw:sub(header_end + 4)
   local lines = vim.split(header_part, "\r\n", { plain = true })
   local method, path = (lines[1] or ""):match("^(%u+) (%S+)")
@@ -53,33 +59,54 @@ local function parse_http_request(raw)
     end
   end
 
+  local raw_content_length = headers["content-length"]
+  if method == "POST" and raw_content_length == nil then
+    return nil, "content_length_required"
+  end
+  local content_length = raw_content_length and tonumber(raw_content_length) or 0
+  if content_length == nil or content_length < 0 or content_length % 1 ~= 0 then
+    return nil, "invalid_content_length"
+  end
+
   return {
     method = method,
     path = path,
     headers = headers,
-    body = body,
-    content_length = tonumber(headers["content-length"] or "0") or 0,
+    body = body:sub(1, content_length),
+    content_length = content_length,
   }
 end
 
-local function request_is_complete(raw)
-  local req = parse_http_request(raw)
-  if not req then
-    return false
+local function request_is_complete(raw, max_body_bytes)
+  if not raw:find("\r\n\r\n", 1, true) and #raw > MAX_HEADER_BYTES then
+    return false, "headers_too_large"
   end
-  return #req.body >= req.content_length
+  if #raw > MAX_HEADER_BYTES + max_body_bytes + 4 then
+    return false, "request_too_large"
+  end
+  local req, parse_err = parse_http_request(raw)
+  if not req then
+    return false, parse_err
+  end
+  if not security.body_allowed(req.content_length, max_body_bytes) then
+    return false, "request_too_large"
+  end
+  return #req.body >= req.content_length, nil
 end
 
-local function http_response(status, content_type, body, extra_headers)
+local function http_response(status, content_type, body, extra_headers, cors_origin)
   body = body or ""
   local lines = {
     "HTTP/1.1 " .. status,
     "Content-Type: " .. content_type,
-    "Access-Control-Allow-Origin: *",
     "Access-Control-Allow-Methods: POST, GET, OPTIONS",
-    "Access-Control-Allow-Headers: Content-Type",
+    "Access-Control-Allow-Headers: Content-Type, Authorization",
+    "Vary: Origin",
     "Content-Length: " .. #body,
   }
+  if cors_origin and cors_origin ~= "" then
+    lines[#lines + 1] = "Access-Control-Allow-Origin: " .. cors_origin
+  end
   if extra_headers then
     for _, header in ipairs(extra_headers) do
       lines[#lines + 1] = header
@@ -90,8 +117,8 @@ local function http_response(status, content_type, body, extra_headers)
   return table.concat(lines, "\r\n")
 end
 
-local function json_response(status, payload)
-  return http_response(status, "application/json; charset=utf-8", vim.fn.json_encode(payload or {}))
+local function json_response(status, payload, cors_origin)
+  return http_response(status, "application/json; charset=utf-8", vim.fn.json_encode(payload or {}), nil, cors_origin)
 end
 
 local function active_acp_sessions()
@@ -558,11 +585,17 @@ local WEB_UI = [=[
     let events = null;
     let lastTranscriptKey = '';
     let followTranscript = true;
+    const mobileToken = new URLSearchParams(window.location.search).get('token') || '';
 
     async function api(path, options = {}) {
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + mobileToken,
+        ...(options.headers || {}),
+      };
       const response = await fetch(path, {
-        headers: { 'Content-Type': 'application/json' },
         ...options,
+        headers,
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok || data.ok === false) {
@@ -773,7 +806,7 @@ local WEB_UI = [=[
 
     function connectEvents() {
       if (!window.EventSource) return false;
-      events = new EventSource('/api/events');
+      events = new EventSource('/api/events?token=' + encodeURIComponent(mobileToken));
       events.addEventListener('open', () => setStatus('Live'));
       events.addEventListener('transcript', event => {
         let payload = {};
@@ -882,16 +915,20 @@ local function read_json_body(req)
   return decoded
 end
 
-local function sse_headers()
-  return table.concat({
+local function sse_headers(cors_origin)
+  local lines = {
     "HTTP/1.1 200 OK",
     "Content-Type: text/event-stream; charset=utf-8",
     "Cache-Control: no-cache",
     "Connection: keep-alive",
-    "Access-Control-Allow-Origin: *",
-    "",
-    "",
-  }, "\r\n")
+    "Vary: Origin",
+  }
+  if cors_origin and cors_origin ~= "" then
+    lines[#lines + 1] = "Access-Control-Allow-Origin: " .. cors_origin
+  end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = ""
+  return table.concat(lines, "\r\n")
 end
 
 local function close_event_client(client)
@@ -1066,11 +1103,11 @@ stop_heartbeat = function()
   end
 end
 
-local function handle_events(client)
+local function handle_events(client, req)
   pcall(function() client:read_stop() end)
   event_clients[client] = true
   local ok = pcall(function()
-    client:write(sse_headers())
+    client:write(sse_headers(((req or {}).headers or {}).origin))
   end)
   if not ok then
     close_event_client(client)
@@ -1093,13 +1130,23 @@ local function handle_events(client)
 end
 
 local function handle_request(req)
+  local cfg = config()
+  if not security.origin_allowed(req, cfg.allowed_origins) then
+    return json_response("403 Forbidden", { ok = false, error = "Origin is not allowed" })
+  end
+  local cors_origin = ((req or {}).headers or {}).origin
   if req.method == "OPTIONS" then
-    return http_response("200 OK", "text/plain; charset=utf-8", "")
+    return http_response("200 OK", "text/plain; charset=utf-8", "", nil, cors_origin)
+  end
+
+  local query = query_params(req.path)
+  if not security.authorized(req, M.token, query.token) then
+    return json_response("401 Unauthorized", { ok = false, error = "Bearer token is required" }, cors_origin)
   end
 
   local path = route_path(req.path)
   if req.method == "GET" and (path == "/" or path == "/ui") then
-    return http_response("200 OK", "text/html; charset=utf-8", WEB_UI)
+    return http_response("200 OK", "text/html; charset=utf-8", WEB_UI, nil, cors_origin)
   end
 
   if req.method == "GET" and path == "/api/status" then
@@ -1111,7 +1158,7 @@ local function handle_request(req)
         host = M.host,
         port = M.port,
       },
-    })
+    }, cors_origin)
   end
 
   if req.method == "GET" and path == "/api/transcript" then
@@ -1120,40 +1167,40 @@ local function handle_request(req)
       tail = params.tail,
     })
     if not snapshot then
-      return json_response("400 Bad Request", { ok = false, error = err })
+      return json_response("400 Bad Request", { ok = false, error = err }, cors_origin)
     end
     return json_response("200 OK", {
       ok = true,
       agent = agent,
       transcript = snapshot,
-    })
+    }, cors_origin)
   end
 
   if req.method == "POST" and path == "/api/send" then
     local body, body_err = read_json_body(req)
     if not body then
-      return json_response("400 Bad Request", { ok = false, error = body_err })
+      return json_response("400 Bad Request", { ok = false, error = body_err }, cors_origin)
     end
     local ok, err, agent = send_prompt(body.agent or body.agent_name, body.text or body.prompt)
     if not ok then
-      return json_response("400 Bad Request", { ok = false, error = err })
+      return json_response("400 Bad Request", { ok = false, error = err }, cors_origin)
     end
-    return json_response("200 OK", { ok = true, agent = agent })
+    return json_response("200 OK", { ok = true, agent = agent }, cors_origin)
   end
 
   if req.method == "POST" and path == "/api/interrupt" then
     local body, body_err = read_json_body(req)
     if not body then
-      return json_response("400 Bad Request", { ok = false, error = body_err })
+      return json_response("400 Bad Request", { ok = false, error = body_err }, cors_origin)
     end
     local ok, err, agent = interrupt_agent(body.agent or body.agent_name)
     if not ok then
-      return json_response("400 Bad Request", { ok = false, error = err })
+      return json_response("400 Bad Request", { ok = false, error = err }, cors_origin)
     end
-    return json_response("200 OK", { ok = true, agent = agent })
+    return json_response("200 OK", { ok = true, agent = agent }, cors_origin)
   end
 
-  return http_response("404 Not Found", "text/plain; charset=utf-8", "Not Found")
+  return http_response("404 Not Found", "text/plain; charset=utf-8", "Not Found", nil, cors_origin)
 end
 
 local function close_client(client)
@@ -1166,6 +1213,10 @@ end
 
 local function handle_client(client)
   local buf = ""
+  local max_body_bytes = tonumber(config().max_body_bytes)
+  if not max_body_bytes or max_body_bytes <= 0 then
+    max_body_bytes = 256 * 1024
+  end
   client:read_start(function(err, data)
     if err or not data then
       pcall(function() client:close() end)
@@ -1173,7 +1224,22 @@ local function handle_client(client)
     end
 
     buf = buf .. data
-    if not request_is_complete(buf) then
+    local complete, request_err = request_is_complete(buf, max_body_bytes)
+    if request_err then
+      local status = "400 Bad Request"
+      local message = "Bad Request"
+      if request_err == "headers_too_large" then
+        status = "431 Request Header Fields Too Large"
+        message = "Request Headers Too Large"
+      elseif request_err == "request_too_large" then
+        status = "413 Payload Too Large"
+        message = "Payload Too Large"
+      end
+      client:write(http_response(status, "text/plain; charset=utf-8", message))
+      close_client(client)
+      return
+    end
+    if not complete then
       return
     end
 
@@ -1187,8 +1253,14 @@ local function handle_client(client)
         return
       end
 
-      if req.method == "GET" and route_path(req.path) == "/api/events" then
-        handle_events(client)
+      local cfg = config()
+      local query = query_params(req.path)
+      if req.method == "GET"
+        and route_path(req.path) == "/api/events"
+        and security.origin_allowed(req, cfg.allowed_origins)
+        and security.authorized(req, M.token, query.token)
+      then
+        handle_events(client, req)
         return
       end
 
@@ -1201,7 +1273,7 @@ end
 local function resolve_start_opts(opts)
   opts = opts or {}
   local cfg = config()
-  local host = opts.host or cfg.host or (state.opts and state.opts.mcp_host) or "127.0.0.1"
+  local host = opts.host or cfg.host or "127.0.0.1"
   local port = tonumber(opts.port or cfg.port)
   if port == 0 then
     port = nil
@@ -1218,6 +1290,18 @@ function M.start(on_ready, opts)
   end
 
   local host, fixed_port = resolve_start_opts(opts)
+  local token, token_err = security.random_token()
+  if not token then
+    vim.notify("[lazyagent ACP mobile] " .. tostring(token_err), vim.log.levels.ERROR)
+    return false
+  end
+  M.token = token
+  if not security.is_loopback(host) then
+    vim.notify(
+      "[lazyagent ACP mobile] LAN exposure enabled on " .. tostring(host) .. "; bearer authentication is required",
+      vim.log.levels.WARN
+    )
+  end
   local function listen(port, quiet)
     if not port then
       vim.notify("[lazyagent ACP mobile] failed to find a free port", vim.log.levels.ERROR)
@@ -1282,11 +1366,11 @@ function M.start(on_ready, opts)
     return false
   end
 
-  if fixed_port then
-    return listen(fixed_port, false)
+  local started = fixed_port and listen(fixed_port, false) or listen_auto()
+  if not started then
+    M.token = nil
   end
-
-  return listen_auto()
+  return started
 end
 
 function M.stop()
@@ -1305,6 +1389,7 @@ function M.stop()
   M._server = nil
   M.port = nil
   M.host = nil
+  M.token = nil
 end
 
 local function display_host(host)
@@ -1325,7 +1410,7 @@ function M.url()
   if not M.port then
     return nil
   end
-  return "http://" .. display_host(M.host) .. ":" .. tostring(M.port) .. "/"
+  return "http://" .. display_host(M.host) .. ":" .. tostring(M.port) .. "/?token=" .. tostring(M.token or "")
 end
 
 local function mobile_hints()
