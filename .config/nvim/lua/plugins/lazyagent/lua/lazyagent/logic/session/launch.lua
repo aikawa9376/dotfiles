@@ -1,4 +1,5 @@
 local M = {}
+local identity = require("lazyagent.logic.session.identity")
 
 function M.setup(deps)
   local state = deps.state
@@ -69,13 +70,13 @@ function M.setup(deps)
     return util.git_root_for_path(source_path) or vim.fn.getcwd()
   end
 
-  local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts)
+  local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts, runtime_key)
     local root_dir = resolve_root_dir(agent_cfg)
     local env = merge_env(agent_cfg and agent_cfg.env, split_opts.env)
     local acp = acp_logic.resolve(agent_name, agent_cfg)
 
     return {
-      agent_name = agent_name,
+      agent_name = runtime_key or agent_name,
       provider_id = agent_cfg and agent_cfg.acp_provider_id or agent_name,
       thread_id = agent_cfg and agent_cfg.acp_thread_id or nil,
       thread_title = agent_cfg and agent_cfg.acp_thread_title or nil,
@@ -109,6 +110,7 @@ function M.setup(deps)
   end
 
   function module.ensure_session(agent_name, agent_cfg, reuse, on_ready)
+    local provider_id = agent_name
     local launch_spec, launch_err = agent_logic.resolve_launch_spec(agent_name, agent_cfg)
     local root_dir = resolve_root_dir(agent_cfg)
     local skills_launch = skills_logic.prepare(agent_name, agent_cfg, {
@@ -119,13 +121,19 @@ function M.setup(deps)
         command = skills_logic.apply_command(launch_spec.command, skills_launch.append_args),
       })
     end
+    local session_key = identity.key(provider_id, agent_cfg)
+    agent_name = session_key
+    local function notify_ready(pane_id)
+      identity.activate(state, session_key, state.sessions[session_key])
+      on_ready(pane_id, session_key)
+    end
     local existing_session = state.sessions[agent_name]
     if not launch_spec and not (existing_session and existing_session.pane_id) then
       vim.notify("LazyAgent: " .. tostring(launch_err or "launch command is not configured"), vim.log.levels.ERROR)
       return
     end
 
-    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(provider_id, agent_cfg)
     local requested_launch_cmd = launch_spec and launch_spec.command or nil
     local requested_launch_key = serialize_launch_command(requested_launch_cmd)
 
@@ -145,6 +153,9 @@ function M.setup(deps)
             hidden = true,
             cwd = vim.fn.getcwd(),
             session_scope = current_editor_session_name(),
+            provider_id = provider_id,
+            thread_id = agent_cfg and agent_cfg.acp_thread_id or nil,
+            session_key = session_key,
           }
           if watch_enabled_val then
             call_watch("enable")
@@ -193,7 +204,7 @@ function M.setup(deps)
         end
 
         if should_keep_hidden then
-          on_ready(state.sessions[agent_name].pane_id)
+          notify_ready(state.sessions[agent_name].pane_id)
           return
         end
 
@@ -211,11 +222,11 @@ function M.setup(deps)
               state.sessions[agent_name].hidden = false
               state.sessions[agent_name].mode = nil
               vim.defer_fn(function()
-                on_ready(state.sessions[agent_name].pane_id)
+                notify_ready(state.sessions[agent_name].pane_id)
               end, 50)
             else
               vim.notify("LazyAgent: failed to restore session pane", vim.log.levels.ERROR)
-              on_ready(state.sessions[agent_name].pane_id)
+              notify_ready(state.sessions[agent_name].pane_id)
             end
           end)
           return
@@ -246,11 +257,11 @@ function M.setup(deps)
                 source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
               })
             end
-            on_ready(state.sessions[agent_name].pane_id)
+            notify_ready(state.sessions[agent_name].pane_id)
             return
           end
         else
-          on_ready(state.sessions[agent_name].pane_id)
+          notify_ready(state.sessions[agent_name].pane_id)
           return
         end
       end
@@ -279,6 +290,9 @@ function M.setup(deps)
           launch_cmd = requested_launch_key,
           cwd = root_dir,
           session_scope = current_editor_session_name(),
+          provider_id = provider_id,
+          thread_id = agent_cfg and agent_cfg.acp_thread_id or nil,
+          session_key = session_key,
           footer_animation = resolved_acp.footer_animation,
           fancy_mode = resolved_acp.fancy_mode,
           smooth_scroll = vim.deepcopy(resolved_acp.smooth_scroll or {}),
@@ -341,8 +355,8 @@ function M.setup(deps)
         end
 
         vim.defer_fn(function()
-          util.fire_event("SessionStarted", { agent_name = agent_name, pane_id = pane_id })
-          on_ready(pane_id)
+          util.fire_event("SessionStarted", { agent_name = agent_name, provider_id = provider_id, pane_id = pane_id })
+          notify_ready(pane_id)
         end, 200)
       end,
     }
@@ -359,7 +373,7 @@ function M.setup(deps)
       split_opts.env = nvim_bridge.inject_env(split_opts.env)
 
       if acp_logic.is_acp_backend(backend_name) then
-        split_opts.acp = build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts)
+        split_opts.acp = build_acp_split_opts(provider_id, agent_cfg, launch_spec, split_opts, session_key)
         backend_mod.split(nil, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, split_opts)
         return
       end
@@ -502,9 +516,10 @@ function M.setup(deps)
     agent_cfg.origin_bufnr = origin_bufnr
     agent_cfg.source_winid = origin_winid
     agent_cfg.origin_winid = origin_winid
+    local session_key = identity.key(agent_name, agent_cfg)
 
     local launch_spec, launch_err = agent_logic.resolve_launch_spec(agent_name, agent_cfg)
-    local has_running_session = state.sessions[agent_name] and state.sessions[agent_name].pane_id
+    local has_running_session = state.sessions[session_key] and state.sessions[session_key].pane_id
     if not launch_spec and not has_running_session then
       vim.notify("interactive agent " .. tostring(agent_name) .. ": " .. tostring(launch_err or "launch command is not configured"), vim.log.levels.ERROR)
       return
@@ -516,22 +531,26 @@ function M.setup(deps)
     end
     local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
     local preserve_scratch = acp_logic.is_acp_backend(backend_name)
-    module.ensure_session(agent_name, agent_cfg, reuse, function(pane_id)
+    module.ensure_session(agent_name, agent_cfg, reuse, function(pane_id, ready_key)
+      local runtime_agent = ready_key or session_key
       if opts.open_input == false then
-        send_logic.send_and_close_if_needed(agent_name, pane_id, opts.initial_input, agent_cfg, reuse, origin_bufnr)
+        send_logic.send_and_close_if_needed(runtime_agent, pane_id, opts.initial_input, agent_cfg, reuse, origin_bufnr)
         return
       end
 
-      local bufnr = window.ensure_scratch_buffer(window.get_scratch_bufnr(agent_name), {
-        agent_name = agent_name,
+      local bufnr = window.ensure_scratch_buffer(window.get_scratch_bufnr(runtime_agent), {
+        agent_name = runtime_agent,
         filetype = agent_cfg.scratch_filetype or "lazyagent",
         source_bufnr = origin_bufnr,
         source_winid = origin_winid,
       })
-      pcall(function() vim.b[bufnr].lazyagent_agent = agent_name end)
+      pcall(function()
+        vim.b[bufnr].lazyagent_agent = runtime_agent
+        vim.b[bufnr].lazyagent_provider = agent_name
+      end)
 
       keymaps_logic.register_scratch_keymaps(bufnr, {
-        agent_name = agent_name,
+        agent_name = runtime_agent,
         agent_cfg = agent_cfg,
         pane_id = pane_id,
         reuse = reuse,
@@ -539,7 +558,7 @@ function M.setup(deps)
         source_winid = origin_winid,
       })
 
-      state.open_agent = agent_name
+      state.open_agent = runtime_agent
       local open_opts = { window_type = agent_cfg.window_type or state.opts.window_type }
       if agent_cfg and agent_cfg.start_in_insert_on_focus ~= nil then
         open_opts.start_in_insert_on_focus = agent_cfg.start_in_insert_on_focus
@@ -556,7 +575,7 @@ function M.setup(deps)
       if opts.title then
         open_opts.title = opts.title
       end
-      open_opts.agent_name = agent_name
+      open_opts.agent_name = runtime_agent
       open_opts.close_on_focus_lost = preserve_scratch
       open_opts.on_close = function()
         if preserve_scratch and backend_mod and type(backend_mod.set_thread_draft) == "function" then
@@ -568,7 +587,7 @@ function M.setup(deps)
             backend_mod.set_thread_draft(runtime.acp_thread_id, draft)
           end
         end
-        if state.open_agent == agent_name then
+        if state.open_agent == runtime_agent then
           state.open_agent = nil
         end
       end
