@@ -85,6 +85,10 @@ function M.build()
         tool_output_limit = 24000,
       },
       permission_rules = {},
+      permissions = {
+        dir = nil,
+        audit = true,
+      },
       notifications = {
         enabled = true,
         visual = true,

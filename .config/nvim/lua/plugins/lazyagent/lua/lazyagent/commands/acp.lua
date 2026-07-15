@@ -40,6 +40,11 @@ local always_commands = {
     handler = function() require("lazyagent.acp.registry").browse() end,
   },
   {
+    name = "LazyAgentACPPermissionAudit",
+    desc = "Open the LazyAgent ACP permission audit log",
+    handler = function() require("lazyagent.acp.permission_store").open_audit() end,
+  },
+  {
     name = "LazyAgentACPThreads",
     desc = "Browse persisted LazyAgent ACP threads",
     handler = session_logic.pick_acp_threads,

@@ -1034,7 +1034,10 @@ local function permission_rule_matches(session, rule, tool)
   end
 
   local fields = tool_match_fields(tool)
-  fields.agent = { tostring(session and session.agent_name or "") }
+  fields.agent = {
+    tostring(session and session.agent_name or ""),
+    tostring(session and session.provider_id or ""),
+  }
   fields.cwd = {
     tostring(session and session.cwd or ""),
     tostring(session and session.root_dir or ""),
@@ -1092,6 +1095,7 @@ local function resolve_permission_rule(session, tool, options)
         matched = true,
         label = permission_rule_label(rule, idx),
         action = action,
+        scope = rule.scope,
         option = resolve_permission_rule_action(options, action),
       }
     end

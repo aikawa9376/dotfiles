@@ -44,6 +44,7 @@ function M.setup(deps)
   local Terminals = require("lazyagent.acp.backend.terminals")
   local MessageStream = require("lazyagent.acp.backend.message_stream")
   local Notifications = require("lazyagent.acp.notifications")
+  local PermissionStore = require("lazyagent.acp.permission_store")
 
   local function notify_attention(kind, session, message)
     return Notifications.emit(((state.opts or {}).acp or {}).notifications, kind, {
@@ -283,10 +284,22 @@ function M.setup(deps)
   end
 
   local function handle_permission_request(session, params, done)
+    local acp_opts = state.opts and state.opts.acp
+    local permission_cfg = type(acp_opts) == "table" and acp_opts.permissions or {}
+    permission_cfg = type(permission_cfg) == "table" and permission_cfg or {}
+    local store_opts = { base_dir = permission_cfg.dir }
     local latest_cfg = acp_logic.resolve_config(session.agent_cfg or {})
     session.auto_permission = latest_cfg.auto_permission
     session.permission_rules = vim.deepcopy(latest_cfg.permission_rules or {})
+    vim.list_extend(session.permission_rules, PermissionStore.rules(session, store_opts))
     local tool = merge_tool_update(session, params.toolCall or {})
+    local tool_path = (extract_tool_paths(tool) or {})[1]
+    local function respond(outcome, metadata)
+      metadata = metadata or {}
+      metadata.path = metadata.path or tool_path
+      if permission_cfg.audit ~= false then PermissionStore.audit(session, tool, outcome, metadata, store_opts) end
+      done(outcome)
+    end
     append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested", {
       kind = "tool",
       title = tool.title or tool.toolCallId or "Permission requested",
@@ -315,9 +328,13 @@ function M.setup(deps)
       pcall(function()
         require("lazyagent.logic.status").start_monitor(session.agent_name)
       end)
-      done({
+      respond({
         outcome = "selected",
         optionId = rule_resolution.option.optionId,
+      }, {
+        source = "rule",
+        scope = rule_resolution.scope or "configured",
+        rule = rule_resolution.label,
       })
       return
     elseif rule_matched then
@@ -359,7 +376,7 @@ function M.setup(deps)
             pcall(function()
               require("lazyagent.logic.status").start_monitor(session.agent_name)
             end)
-            done({ outcome = "selected", optionId = allow_opt.optionId })
+            respond({ outcome = "selected", optionId = allow_opt.optionId }, { source = "auto_fix" })
             return
           end
         end
@@ -370,10 +387,10 @@ function M.setup(deps)
       pcall(function()
         require("lazyagent.logic.status").start_monitor(session.agent_name)
       end)
-      done({
+      respond({
         outcome = "selected",
         optionId = auto.optionId,
-      })
+      }, { source = "auto" })
       return
     end
 
@@ -382,10 +399,7 @@ function M.setup(deps)
       append_block(session, "Edited Preview", preview)
     end
 
-    local labels = {}
-    for _, option in ipairs(params.options or {}) do
-      table.insert(labels, string.format("%s [%s]", option.name or option.optionId or "Option", option.kind or "option"))
-    end
+    local labels, choices = PermissionStore.choices(params.options or {})
 
     notify_attention("permission", session, tool.title or tool.toolCallId or "Tool permission")
 
@@ -393,21 +407,35 @@ function M.setup(deps)
       vim.ui.select(labels, {
         prompt = string.format("%s permission: %s", session.agent_name, tool.title or tool.toolCallId or "tool"),
       }, function(_, idx)
-          local selected = idx and params.options and params.options[idx] or nil
-          if not selected then
-            selected = resolve_permission_option(params.options or {}, "reject_once")
+          local choice = idx and choices[idx] or nil
+          if not choice then
+            local rejected = resolve_permission_option(params.options or {}, "reject_once")
+            if rejected then
+              respond({ outcome = "selected", optionId = rejected.optionId }, { source = "manual", scope = "once" })
+            else
+              respond({ outcome = "cancelled" }, { source = "manual", scope = "once" })
+            end
+            return
           end
-          if selected then
-            pcall(function()
-              require("lazyagent.logic.status").start_monitor(session.agent_name)
-            end)
-            done({
-              outcome = "selected",
-              optionId = selected.optionId,
-            })
-          else
-            done({ outcome = "cancelled" })
+          local audit_scope = choice.scope
+          if choice.scope == "session" or choice.scope == "project" or choice.scope == "global" then
+            local rule = PermissionStore.rule(session, tool, choice.option, choice.scope, tool_path)
+            local remembered, remember_err = PermissionStore.remember(session, choice.scope, rule, store_opts)
+            if remembered then
+              append_block(session, "System", string.format("Remembered `%s` permission for %s scope.",
+                choice.option.kind or "option", choice.scope))
+            else
+              audit_scope = "once"
+              append_block(session, "System", "Failed to remember permission: " .. tostring(remember_err))
+            end
           end
+          pcall(function()
+            require("lazyagent.logic.status").start_monitor(session.agent_name)
+          end)
+          respond({
+            outcome = "selected",
+            optionId = choice.option.optionId,
+          }, { source = "manual", scope = audit_scope })
         end)
     end)
   end
