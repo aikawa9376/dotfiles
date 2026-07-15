@@ -310,6 +310,10 @@ local function resolve_from_config(agent_cfg)
   local global_mcp = global_cfg.mcp_servers or global_cfg.context_servers or (state.opts and state.opts.context_servers)
   local agent_mcp = agent_acp.mcp_servers or agent_acp.context_servers
     or (agent_cfg and (agent_cfg.mcp_servers or agent_cfg.context_servers))
+  local global_experimental = type(global_cfg.experimental) == "table" and global_cfg.experimental or {}
+  local agent_experimental = type(agent_acp.experimental) == "table" and agent_acp.experimental or {}
+  local global_v2 = type(global_experimental.v2_adapter) == "table" and global_experimental.v2_adapter or {}
+  local agent_v2 = type(agent_experimental.v2_adapter) == "table" and agent_experimental.v2_adapter or {}
 
   return {
     enabled = enabled,
@@ -330,6 +334,9 @@ local function resolve_from_config(agent_cfg)
       agent_acp.additional_directories or global_cfg.additional_directories or {}
     ),
     mcp_servers = mcp_servers.merge(global_mcp, agent_mcp),
+    v2_adapter = {
+      enabled = resolve_boolean_option(agent_v2.enabled, global_v2.enabled, false),
+    },
     buffer_background = normalize_color(agent_acp.buffer_background or global_cfg.buffer_background),
     buffer_inactive_background = normalize_color(
       agent_acp.buffer_inactive_background or global_cfg.buffer_inactive_background
@@ -383,6 +390,7 @@ function M.resolve(agent_name, agent_cfg)
       transcript_compaction = vim.deepcopy(session.transcript_compaction or {}),
       runtime_compaction = vim.deepcopy(session.runtime_compaction or {}),
       mcp_servers = vim.deepcopy(session.mcp_servers or {}),
+      v2_adapter = vim.deepcopy(session.v2_adapter or { enabled = false }),
       footer_animation = session.footer_animation,
       permission_rules = vim.deepcopy(session.permission_rules or {}),
       auto_switch = vim.deepcopy(session.auto_switch or {}),
