@@ -1,5 +1,6 @@
 
 local M = {}
+local ContentBlocks = require("lazyagent.acp.content_blocks")
 
 function M.setup(deps)
   local diff_utils = deps.diff_utils
@@ -723,34 +724,7 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
 end
 
 local function render_content(content)
-  if type(content) ~= "table" then
-    return tostring(content or "")
-  end
-
-  if content.type == "text" then
-    return content.text or ""
-  end
-
-  if content.type == "resource_link" then
-    return table.concat(vim.tbl_filter(function(item) return item and item ~= "" end, {
-      content.name,
-      content.uri,
-    }), " - ")
-  end
-
-  if content.type == "resource" and type(content.resource) == "table" then
-    return content.resource.text or content.resource.uri or ""
-  end
-
-  if content.type == "image" then
-    return "[image] " .. (content.uri or content.mimeType or "image")
-  end
-
-  if content.type == "audio" then
-    return "[audio] " .. (content.mimeType or "audio")
-  end
-
-  return vim.inspect(content)
+  return ContentBlocks.render(content)
 end
 
 local function render_tool_content(content)

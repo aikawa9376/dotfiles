@@ -828,6 +828,8 @@ sync_runtime_session = function(session)
   runtime.acp_ready = session.ready == true
   runtime.acp_failed = session.failed == true
   runtime.acp_supports_embedded_context = session.prompt_supports_embedded_context == true
+  runtime.acp_supports_image = session.prompt_supports_image == true
+  runtime.acp_supports_audio = session.prompt_supports_audio == true
   runtime.acp_mcp_server_count = session.mcp_server_count or ((session.mcp_url and session.mcp_url ~= "") and 1 or 0)
   runtime.footer_animation = session.footer_animation
   runtime.acp_permission_rules = vim.deepcopy(session.permission_rules or {})
