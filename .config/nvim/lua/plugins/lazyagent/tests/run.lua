@@ -16,6 +16,7 @@ local suites = {
   "tests.acp.terminals_spec",
   "tests.acp.mobile_security_spec",
   "tests.acp.mobile_server_spec",
+  "tests.acp.message_stream_spec",
 }
 
 local failures = {}
