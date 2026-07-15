@@ -126,6 +126,7 @@ end
 ---@param opts table|nil User options to merge with defaults.
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", default_config.build(), opts or {})
+  require("lazyagent.acp.registry").apply_installed(M.opts)
 
   register_custom_backends(M.opts)
   register_treesitter_filetypes()
