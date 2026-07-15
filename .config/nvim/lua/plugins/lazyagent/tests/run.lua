@@ -19,6 +19,7 @@ local suites = {
   "tests.acp.message_stream_spec",
   "tests.acp.content_blocks_spec",
   "tests.acp.view_lifecycle_spec",
+  "tests.acp.thread_store_spec",
 }
 
 local failures = {}
