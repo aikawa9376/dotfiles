@@ -426,6 +426,12 @@ local function create_backend(default_view)
     decide_hunk = function(thread, turn, change_index, hunk_index, decision)
       return backend.decide_thread_hunk(thread.thread_id, turn.turn_id, change_index, hunk_index, decision)
     end,
+    checkpoint = function(thread, turn, action)
+      return backend.apply_thread_checkpoint(thread.thread_id, turn.turn_id, action)
+    end,
+    branch = function(thread, turn)
+      return backend.branch_thread_checkpoint(thread.thread_id, turn.turn_id)
+    end,
   })
 
   complete_pending_turn = function(session)
@@ -1022,6 +1028,113 @@ local function create_backend(default_view)
       end
     end
     return decided
+  end
+
+  function backend.apply_thread_checkpoint(thread_id, turn_id, action)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then
+      return nil, err
+    end
+    local turn = TurnJournal.get(thread.change_journal, turn_id)
+    if not turn then
+      return nil, "turn not found: " .. tostring(turn_id)
+    end
+    local changes = turn.changes or {}
+    if #changes == 0 then
+      return nil, "checkpoint has no file changes"
+    end
+    local root = turn.baseline and turn.baseline.root or thread.cwd
+    local target_changes = changes
+    if action == "redo" then
+      if not thread.checkpoint or thread.checkpoint.turn_id ~= turn_id or thread.checkpoint.state ~= "restored" then
+        return nil, "checkpoint must be restored before redo"
+      end
+      target_changes = ChangeApply.inverse_changes(changes)
+    elseif action ~= "restore" then
+      return nil, "unsupported checkpoint action: " .. tostring(action)
+    end
+    local applied, apply_err = change_apply.reject_all(target_changes, root)
+    if not applied then
+      return nil, apply_err
+    end
+    local checkpoint = {
+      turn_id = turn_id,
+      state = action == "redo" and "redone" or "restored",
+      updated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    }
+    local updated, update_err = thread_store:update(thread_id, { checkpoint = checkpoint })
+    if not updated then
+      return nil, update_err
+    end
+    local root_prefix = vim.fn.fnamemodify(root, ":p"):gsub("/$", "")
+    for _, change in ipairs(changes) do
+      state_helpers.reload_loaded_buffers_for_path(root_prefix .. "/" .. change.path)
+      if change.previous_path then
+        state_helpers.reload_loaded_buffers_for_path(root_prefix .. "/" .. change.previous_path)
+      end
+    end
+    for _, session in pairs(sessions) do
+      if session.thread_id == thread_id then
+        session.thread_record = vim.deepcopy(updated)
+      end
+    end
+    return updated
+  end
+
+  function backend.branch_thread_checkpoint(thread_id, turn_id)
+    local parent, err = thread_store:get(thread_id)
+    if not parent then
+      return nil, err
+    end
+    local turn = TurnJournal.get(parent.change_journal, turn_id)
+    if not turn then
+      return nil, "turn not found: " .. tostring(turn_id)
+    end
+    local branch, create_err = thread_store:create({
+      provider_id = parent.provider_id,
+      cwd = parent.cwd,
+      additional_directories = parent.additional_directories,
+      title = parent.title .. " · branch " .. tostring(turn_id):match("[^:]+$"),
+      status = "closed",
+      model = parent.model,
+      mode = parent.mode,
+      config = parent.config,
+      checkpoint = {
+        parent_thread_id = parent.thread_id,
+        parent_turn_id = turn_id,
+        state = "client_local_branch",
+      },
+      metadata = {
+        client_local_branch = true,
+        parent_thread_id = parent.thread_id,
+        parent_turn_id = turn_id,
+      },
+    })
+    if not branch then
+      return nil, create_err
+    end
+    if parent.transcript_path and parent.transcript_path ~= "" and vim.fn.filereadable(parent.transcript_path) == 1 then
+      local branch_dir = cache_logic.get_cache_dir() .. "/acp/branches"
+      vim.fn.mkdir(branch_dir, "p")
+      local branch_path = branch_dir .. "/" .. branch.thread_id .. ".log"
+      local ok_read, lines = pcall(vim.fn.readfile, parent.transcript_path, "b")
+      local ok_write, write_result = false, nil
+      if ok_read then
+        ok_write, write_result = pcall(vim.fn.writefile, lines, branch_path, "b")
+      end
+      if not ok_read or not ok_write or write_result ~= 0 then
+        thread_store:delete(branch.thread_id)
+        return nil, "failed to copy branch transcript"
+      end
+      local updated, update_err = thread_store:update(branch.thread_id, { transcript_path = branch_path })
+      if not updated then
+        pcall(vim.fn.delete, branch_path)
+        thread_store:delete(branch.thread_id)
+        return nil, update_err
+      end
+      branch = updated
+    end
+    return branch
   end
 
   function backend.create_thread(attributes)

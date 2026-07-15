@@ -270,6 +270,39 @@ function M.new(opts)
         end)
       end)
     end, { buffer = bufnr, silent = true, desc = "Decide LazyAgent ACP change hunk" })
+    local function apply_checkpoint(action)
+      if type(opts.checkpoint) ~= "function" then
+        return
+      end
+      local updated, err = opts.checkpoint(thread, turn, action)
+      if not updated then
+        vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.ERROR)
+        return
+      end
+      thread = updated
+      vim.notify("LazyAgent ACP checkpoint " .. (action == "redo" and "redone" or "restored"), vim.log.levels.INFO)
+    end
+    vim.keymap.set("n", "u", function()
+      vim.ui.select({ "Cancel", "Restore" }, { prompt = "Restore workspace to before this turn?" }, function(choice)
+        if choice == "Restore" then
+          apply_checkpoint("restore")
+        end
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Restore LazyAgent ACP checkpoint" })
+    vim.keymap.set("n", "U", function()
+      apply_checkpoint("redo")
+    end, { buffer = bufnr, silent = true, desc = "Redo LazyAgent ACP checkpoint" })
+    vim.keymap.set("n", "b", function()
+      if type(opts.branch) ~= "function" then
+        return
+      end
+      local branch, err = opts.branch(thread, turn)
+      if not branch then
+        vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.ERROR)
+        return
+      end
+      vim.notify("Created LazyAgent ACP local branch: " .. branch.thread_id, vim.log.levels.INFO)
+    end, { buffer = bufnr, silent = true, desc = "Branch LazyAgent ACP checkpoint" })
     vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = bufnr, silent = true, desc = "Close changes drawer" })
     return bufnr
   end

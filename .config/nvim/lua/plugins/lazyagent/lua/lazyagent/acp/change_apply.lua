@@ -2,6 +2,45 @@ local M = {}
 
 local uv = vim.uv or vim.loop
 
+function M.inverse_changes(changes)
+  local result = {}
+  for _, change in ipairs(changes or {}) do
+    local inverse = vim.deepcopy(change)
+    inverse.decision = nil
+    inverse.decided_at = nil
+    inverse.apply_mode = nil
+    inverse.hunks = nil
+    inverse.review_blob = nil
+    if change.operation == "modified" then
+      inverse.before_blob = change.after_blob
+      inverse.after_blob = change.before_blob
+      inverse.before_size = change.after_size
+      inverse.after_size = change.before_size
+    elseif change.operation == "added" then
+      inverse.operation = "deleted"
+      inverse.before_blob = change.after_blob
+      inverse.after_blob = nil
+      inverse.before_size = change.after_size
+      inverse.after_size = nil
+    elseif change.operation == "deleted" then
+      inverse.operation = "added"
+      inverse.before_blob = nil
+      inverse.after_blob = change.before_blob
+      inverse.before_size = nil
+      inverse.after_size = change.before_size
+    elseif change.operation == "moved" then
+      inverse.path = change.previous_path
+      inverse.previous_path = change.path
+      inverse.before_blob = change.after_blob
+      inverse.after_blob = change.before_blob
+      inverse.before_size = change.after_size
+      inverse.after_size = change.before_size
+    end
+    result[#result + 1] = inverse
+  end
+  return result
+end
+
 local function read_bytes(path)
   local fd, open_err = uv.fs_open(path, "r", 384)
   if not fd then
@@ -223,6 +262,34 @@ function M.new(opts)
       return nil, current_err
     end
     local prepared = { path = path, mode = "exact" }
+    local desired = change.before_blob and blob(change.before_blob) or nil
+    if change.operation == "added" and current == nil then
+      prepared.already = true
+      prepared.mode = "already"
+      return prepared
+    elseif change.operation == "deleted" and current ~= nil and desired ~= nil and current == desired then
+      prepared.already = true
+      prepared.mode = "already"
+      return prepared
+    elseif change.operation == "modified" and current ~= nil and desired ~= nil and current == desired then
+      prepared.already = true
+      prepared.mode = "already"
+      return prepared
+    elseif change.operation == "moved" and current == nil and desired ~= nil then
+      local previous, previous_err = absolute_path(root, change.previous_path)
+      if not previous then
+        return nil, previous_err
+      end
+      local previous_data, previous_read_err = read_bytes(previous)
+      if previous_read_err then
+        return nil, previous_read_err
+      end
+      if previous_data == desired then
+        prepared.already = true
+        prepared.mode = "already"
+        return prepared
+      end
+    end
     if change.operation == "deleted" then
       if current ~= nil then
         return nil, "file was recreated after the agent turn: " .. path
@@ -266,6 +333,9 @@ function M.new(opts)
       return nil, current_err
     end
     prepared = current
+    if prepared.already then
+      return { mode = prepared.mode }
+    end
     local before, before_err = blob(change.before_blob)
     if change.operation ~= "added" and before == nil then
       return nil, before_err or ("missing before blob: " .. prepared.path)
