@@ -812,6 +812,22 @@ local function resolve_reference(token, session)
   local core = trailing ~= "" and token:sub(1, #token - #trailing) or token
   if core == "" then return nil end
 
+  if core == "diagnostics" then
+    local item, item_err = ContextItem.diagnostics(session_source_bufnr(session))
+    if not item then
+      return {
+        block = { type = "text", text = "[diagnostics unavailable: " .. tostring(item_err) .. "]" },
+        trailing = trailing,
+      }
+    end
+    return {
+      block = ContextItem.lower(item, {
+        embedded_context = session.prompt_supports_embedded_context == true,
+      }),
+      trailing = trailing,
+    }
+  end
+
   local path_part = core
   local line_start, line_end, column
 

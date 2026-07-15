@@ -45,6 +45,17 @@ function M.run()
   assert(selection.source_version.changedtick > 0, "selection source changedtick")
   assert_equal(ContextItem.to_markdown(selection), "```lua\nlpha\nbet\n```", "selection markdown lowering")
   assert_equal(ContextItem.lower(selection, {}).type, "text", "selection text lowering")
+
+  local namespace = vim.api.nvim_create_namespace("lazyagent-context-item-test")
+  vim.diagnostic.set(namespace, bufnr, {
+    { lnum = 1, col = 2, severity = vim.diagnostic.severity.WARN, message = "unused value" },
+  })
+  local diagnostics = assert(ContextItem.diagnostics(bufnr))
+  assert_equal(diagnostics.kind, "diagnostics", "diagnostics context kind")
+  assert(diagnostics.content:match("selection.lua:2:3: WARN: unused value"), "diagnostics context content")
+  assert_equal(ContextItem.lower(diagnostics, {}).type, "text", "diagnostics text lowering")
+  assert_equal(ContextItem.lower(diagnostics, { embedded_context = true }).type, "resource", "diagnostics resource lowering")
+  vim.diagnostic.reset(namespace, bufnr)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 
   local media_path = vim.fn.tempname() .. ".png"
