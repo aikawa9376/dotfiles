@@ -113,6 +113,7 @@ local function record_turn_baseline(session)
   end
   local captured, snapshot = pcall(WorkspaceSnapshot.capture, session.root_dir or session.cwd, {
     blob_store = session.blob_store,
+    only_dirty_blobs = true,
   })
   if not captured then
     session.workspace_snapshot_error = tostring(snapshot)
@@ -202,12 +203,17 @@ local function finish_change_turn(session, completion_state)
   local captured, final_snapshot = pcall(
     WorkspaceSnapshot.capture,
     (active_turn.baseline and active_turn.baseline.root) or session.root_dir or session.cwd,
-    { blob_store = session.blob_store }
+    {
+      blob_store = session.blob_store,
+      only_dirty_blobs = true,
+    }
   )
   local capture_error = nil
   local changes = {}
   if captured then
-    changes = WorkspaceSnapshot.diff(active_turn.baseline, final_snapshot)
+    changes = WorkspaceSnapshot.diff(active_turn.baseline, final_snapshot, {
+      blob_store = session.blob_store,
+    })
   else
     capture_error = tostring(final_snapshot)
     final_snapshot = nil
