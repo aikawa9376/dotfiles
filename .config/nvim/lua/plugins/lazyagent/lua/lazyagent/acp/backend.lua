@@ -20,6 +20,7 @@ local backend_cancellation = require("lazyagent.acp.backend.cancellation")
 local backend_host = require("lazyagent.acp.backend.host")
 local ThreadStore = require("lazyagent.acp.thread_store")
 local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
+local TurnJournal = require("lazyagent.acp.turn_journal")
 
 local sessions = {}
 local section_icons = {
@@ -103,23 +104,33 @@ local function record_turn_baseline(session)
     return nil
   end
   session.workspace_snapshot_error = nil
-  local journal = vim.deepcopy((session.thread_record and session.thread_record.change_journal) or {})
-  journal.turns = type(journal.turns) == "table" and journal.turns or {}
-  local sequence = math.max(1, tonumber(journal.next_turn_sequence) or (#journal.turns + 1))
-  local turn = {
-    turn_id = string.format("%s:%d", session.thread_id, sequence),
-    state = "active",
-    started_at = snapshot.captured_at,
-    baseline = snapshot,
-  }
-  journal.turns[#journal.turns + 1] = turn
-  journal.next_turn_sequence = sequence + 1
+  local journal, turn = TurnJournal.start(
+    (session.thread_record and session.thread_record.change_journal) or {},
+    session.thread_id,
+    snapshot
+  )
   local updated = sync_thread_record(session, { change_journal = journal })
   if updated then
     session.current_change_turn_id = turn.turn_id
     return turn
   end
   return nil
+end
+
+local function record_turn_event(session, kind, event)
+  if not session or not session.current_change_turn_id or not session.thread_record then
+    return nil
+  end
+  local journal, turn = TurnJournal.record(
+    session.thread_record.change_journal,
+    session.current_change_turn_id,
+    kind,
+    event
+  )
+  if not journal then
+    return nil
+  end
+  return sync_thread_record(session, { change_journal = journal }) and turn or nil
 end
 
 state_helpers = backend_state.setup({
@@ -247,6 +258,7 @@ host_helpers = backend_host.setup({
   maybe_call_mcp_tool = actions_helpers.maybe_call_mcp_tool,
   maybe_sync_acp_edit_targets = actions_helpers.maybe_sync_acp_edit_targets,
   sync_thread = sync_thread_record,
+  record_turn_event = record_turn_event,
 })
 
 local function create_backend(default_view)
