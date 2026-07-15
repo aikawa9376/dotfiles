@@ -248,6 +248,7 @@ function Client.new(opts)
     stdout = nil,
     stderr = nil,
     pid = nil,
+    stop_timer = nil,
     on_update = opts.on_update or function() end,
     on_ready = opts.on_ready or function() end,
     on_error = opts.on_error or function() end,
@@ -272,6 +273,32 @@ end
 
 function Client:get_protocol_events()
   return vim.deepcopy(self.protocol_events or {})
+end
+
+function Client:_clear_stop_timer()
+  local timer = self.stop_timer
+  self.stop_timer = nil
+  if timer and not timer:is_closing() then
+    timer:stop()
+    timer:close()
+  end
+end
+
+function Client:debug_snapshot()
+  return {
+    state = self.state,
+    pid = self.pid,
+    process = self.process ~= nil,
+    stdin = self.stdin ~= nil,
+    stdout = self.stdout ~= nil,
+    stderr = self.stderr ~= nil,
+    callbacks = vim.tbl_count(self.callbacks or {}),
+    callback_timers = vim.tbl_count(self.callback_timers or {}),
+    stop_timer = self.stop_timer ~= nil and 1 or 0,
+    pending_permissions = vim.tbl_count(self.pending_permission_requests or {}),
+    stdout_buffer_bytes = tonumber(self.stdout_buffer_size) or 0,
+    prompt_state = self.prompt_state,
+  }
 end
 
 function Client:_convert_legacy_session_fields(result)
@@ -1103,6 +1130,7 @@ function Client:start(callback, opts)
   local handle
   local pid
   handle, pid = uv.spawn(self.command, spawn_opts, function(code, signal)
+    self:_clear_stop_timer()
     safe_close(stdin)
     safe_close(stdout)
     safe_close(stderr)
@@ -1112,6 +1140,13 @@ function Client:start(callback, opts)
     self.stderr = nil
     self.process = nil
     self.pid = nil
+    self.session_id = nil
+    self.pending_session_id = nil
+    self.prompt_state = "idle"
+    self.prompt_request_id = nil
+    self.stdout_buffer = ""
+    self.stdout_buffer_chunks = {}
+    self.stdout_buffer_size = 0
     self:_set_state("stopped")
     self:_reject_pending("ACP process exited")
     vim.schedule(function()
@@ -1376,7 +1411,9 @@ function Client:stop()
   self:_cancel_pending_permissions(self.session_id)
   if self.process and not self.process:is_closing() then
     pcall(function() self.process:kill(15) end)
-    vim.defer_fn(function()
+    self:_clear_stop_timer()
+    self.stop_timer = vim.defer_fn(function()
+      self.stop_timer = nil
       if self.process and not self.process:is_closing() then
         pcall(function() self.process:kill(9) end)
       end

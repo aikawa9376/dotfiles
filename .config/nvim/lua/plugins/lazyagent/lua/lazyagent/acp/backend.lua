@@ -528,6 +528,7 @@ local function create_backend(default_view)
       acp_usage_stats = vim.deepcopy(session.usage_stats or {}),
       acp_protocol_events = vim.deepcopy(session.protocol_events or {}),
       acp_auth_methods = vim.deepcopy(session.auth_methods or {}),
+      acp_client_debug = session.client and session.client:debug_snapshot() or nil,
       acp_ready = session.ready == true,
       acp_failed = session.failed == true,
       acp_supports_embedded_context = session.prompt_supports_embedded_context == true,
