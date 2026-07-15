@@ -879,8 +879,9 @@ local function resolve_reference(token, session)
   local block
   local context_item
   if is_media then
+    context_item = ContextItem.media({ path = abs_path, display = display })
     local media_err
-    block, media_err = ContentBlocks.from_file(abs_path, {
+    block, media_err = ContextItem.lower(context_item, {
       image = session.prompt_supports_image == true,
       audio = session.prompt_supports_audio == true,
     })

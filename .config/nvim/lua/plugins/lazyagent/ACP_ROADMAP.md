@@ -209,7 +209,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [ ] symbol、diagnostics、branch diff、previous thread、terminal、URLを追加する。
 - [x] content hash、source version、size/token estimate、previewを保持する。
   - [x] text itemはSHA-256 / changedtickまたはfile stat / byte÷4 token概算 / whitespace compact previewを生成する。
-- [ ] capabilityに応じてText / Image / EmbeddedResource / ResourceLinkへloweringする。
+- [x] capabilityに応じてText / Image / EmbeddedResource / ResourceLinkへloweringする。
+  - [x] selection / media / file・range / directoryのloweringをContextItemへ集約し、非対応mediaは送信せず理由をText表示する。
 - [ ] input imageをfirst-class ACP Image blockとして送信する。
 - [ ] assistant/tool outputのimage、audio、resourceをNeovim上で表示する。
 - [ ] slash commandのdescriptionとargument hintをcomposer completionへ表示する。
