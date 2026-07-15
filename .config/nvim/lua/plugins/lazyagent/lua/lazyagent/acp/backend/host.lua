@@ -397,6 +397,23 @@ function M.setup(deps)
     end)
   end
 
+  local function select_auth_method(methods, done)
+    local labels = {}
+    for _, method in ipairs(methods or {}) do
+      local label = tostring(method.name or method.id or "Authentication")
+      if method.description and method.description ~= "" then
+        label = label .. " — " .. tostring(method.description)
+      end
+      labels[#labels + 1] = label
+    end
+    vim.schedule(function()
+      vim.ui.select(labels, { prompt = "ACP authentication method" }, function(_, idx)
+        local selected = idx and methods[idx] or nil
+        done(selected and selected.id or nil)
+      end)
+    end)
+  end
+
   resolve_filesystem_path = function(session, path, allow_missing)
     if not session.path_guard then
       local guard, err = PathGuard.new({
@@ -905,6 +922,7 @@ function M.setup(deps)
       request_permission = function(params, done)
         handle_permission_request(session, params, done)
       end,
+      select_auth_method = select_auth_method,
       read_text_file = function(params)
         return read_text_file(session, params)
       end,
@@ -982,6 +1000,7 @@ function M.setup(deps)
       session.config_options = vim.deepcopy(client.config_options or (session_result and session_result.configOptions) or {})
       session.agent_info = vim.deepcopy(client.agent_info or {})
       session.agent_capabilities = vim.deepcopy(client.agent_capabilities or {})
+      session.auth_methods = vim.deepcopy(client.auth_methods or {})
       session.protocol_events = client:get_protocol_events()
       session.model_catalog = vim.deepcopy((session_result and session_result.models) or {})
       session.mode_catalog = vim.deepcopy((session_result and session_result.modes) or {})

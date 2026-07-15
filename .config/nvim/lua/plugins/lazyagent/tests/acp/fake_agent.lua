@@ -46,6 +46,7 @@ local read_complete = false
 local cancel_received = false
 local permission_cancelled = false
 local cancel_prompt_finished = false
+local authenticated = vim.env.LAZYAGENT_FAKE_AUTH_FLOW ~= "1"
 
 local function has_additional_directory(params)
   local directories = params and params.additionalDirectories
@@ -111,6 +112,9 @@ for line in io.lines() do
       send_fragmented(response(message.id, {
         protocolVersion = protocol_version,
         agentCapabilities = {
+          auth = vim.env.LAZYAGENT_FAKE_AUTH_FLOW == "1" and {
+            logout = vim.empty_dict(),
+          } or nil,
           loadSession = true,
           promptCapabilities = {
             image = true,
@@ -128,11 +132,33 @@ for line in io.lines() do
           name = "lazyagent-test-agent",
           version = "1.0.0",
         },
-        authMethods = {},
+        authMethods = vim.env.LAZYAGENT_FAKE_AUTH_FLOW == "1" and {
+          {
+            id = "test-auth",
+            name = "Test authentication",
+            description = "Authenticate the contract fake agent",
+          },
+        } or {},
       }))
     end
+  elseif message.method == "authenticate" then
+    if message.params and message.params.methodId == "test-auth" then
+      authenticated = true
+      send(response(message.id, vim.empty_dict()))
+    else
+      fail(message.id, "unexpected authentication method")
+    end
+  elseif message.method == "logout" then
+    authenticated = false
+    send(response(message.id, vim.empty_dict()))
   elseif message.method == "session/new" then
-    if not has_additional_directory(message.params) then
+    if not authenticated then
+      send({
+        jsonrpc = "2.0",
+        id = message.id,
+        error = { code = -32000, message = "Authentication required" },
+      })
+    elseif not has_additional_directory(message.params) then
       fail(message.id, "session/new additionalDirectories missing")
     else
       send(response(message.id, {

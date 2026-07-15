@@ -106,7 +106,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] cancel後のlate update、tool、permissionを正しく終端するstate machineを実装する。
 - [x] optionalな`messageId`でassistant / thought messageを束ね、未対応agentは従来heuristicへfallbackする。
 - [x] `session/delete`と`additionalDirectories`をclient APIへ実装する。
-- [ ] authentication / logout flowを実装する。
+- [x] authentication method picker、auth-required retry、capability-gated logout flowを実装する。
 - [x] `session.configOptions.boolean`をadvertiseし、select / booleanを共通UIで扱う。
 - [ ] image / audio / resource / resource_linkを入力・出力とも完全に扱う。
 - [x] unknown method / update variantをbounded protocol logへ残しつつconnectionを維持する。

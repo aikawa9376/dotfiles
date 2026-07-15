@@ -676,6 +676,20 @@ local function handle_local_slash_command(session, prompt)
     return true
   end
 
+  if command.name == "auth" then
+    session.client:request_authentication(function(_, err)
+      append_block(session, "System", err and ("Authentication failed: " .. tostring(err.message or err)) or "Authentication completed")
+    end)
+    return true
+  end
+
+  if command.name == "logout" then
+    session.client:logout(function(_, err)
+      append_block(session, "System", err and ("Logout failed: " .. tostring(err.message or err)) or "Logged out from ACP agent")
+    end)
+    return true
+  end
+
   if command.name == "resources" then
     show_resource_browser_for_session(session)
     return true
