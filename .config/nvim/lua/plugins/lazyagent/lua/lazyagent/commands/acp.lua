@@ -48,6 +48,18 @@ local always_commands = {
     end,
   },
   {
+    name = "LazyAgentACPWorktreeNew",
+    desc = "Create an opt-in isolated git worktree ACP thread",
+    handler = session_logic.new_acp_worktree_thread,
+    complete = function() return require("lazyagent.logic.agent").available_acp_agents() end,
+  },
+  {
+    name = "LazyAgentACPWorktreeCleanup",
+    desc = "Remove a stopped clean managed ACP worktree",
+    handler = session_logic.cleanup_acp_worktree,
+    nargs = 1,
+  },
+  {
     name = "LazyAgentACPThreadOpen",
     desc = "Open a LazyAgent ACP thread UUID",
     handler = session_logic.open_acp_thread,

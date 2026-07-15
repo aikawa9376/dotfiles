@@ -60,7 +60,7 @@ function M.render(threads, runtimes)
   local lines = {
     "# LazyAgent ACP Session Cockpit",
     "",
-    "`<CR>` open  `/` filter  `p` pin  `a` archive/restore  `d` delete  `X` bulk close  `r` refresh  `q` close",
+    "`<CR>` open  `/` filter  `p` pin  `a` archive/restore  `c` cleanup worktree  `d` delete  `X` bulk close  `r` refresh  `q` close",
   }
   local line_map = {}
   if #paths == 0 then
