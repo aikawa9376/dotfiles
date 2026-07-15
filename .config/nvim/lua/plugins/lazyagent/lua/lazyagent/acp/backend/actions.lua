@@ -921,6 +921,21 @@ local function resolve_reference(token, session)
     }
   end
 
+  local url_value = core:match("^url:(https?://.+)$") or core:match("^(https?://.+)$")
+  if url_value then
+    local item, item_err = ContextItem.url(url_value)
+    if not item then
+      return {
+        block = { type = "text", text = "[URL unavailable: " .. tostring(item_err) .. "]" },
+        trailing = trailing,
+      }
+    end
+    return {
+      block = ContextItem.lower(item, {}),
+      trailing = trailing,
+    }
+  end
+
   local path_part = core
   local line_start, line_end, column
 

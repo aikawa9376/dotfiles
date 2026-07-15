@@ -461,6 +461,10 @@ function M.get_scratch_completions(agent_name, opts)
         label = "terminal",
         desc = "Attach the latest retained ACP terminal output.",
       }
+      res.at[#res.at + 1] = {
+        label = "url:https://",
+        desc = "Attach an HTTP(S) URL as an ACP ResourceLink.",
+      }
     end
     if fd_paths and #fd_paths > 0 then
       vim.list_extend(res.at, fd_paths)

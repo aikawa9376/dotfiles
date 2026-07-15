@@ -114,6 +114,16 @@ function M.run()
   assert(terminal.content:match("exit code: 0"), "terminal status content")
   assert_equal(ContextItem.lower(terminal, {}).type, "text", "terminal text lowering")
 
+  local url = assert(ContextItem.url("https://example.com/reference?q=acp"))
+  assert_equal(url.kind, "url", "URL context kind")
+  assert_equal(url.source_version.uri, url.uri, "URL source version")
+  local url_block = ContextItem.lower(url, {})
+  assert_equal(url_block.type, "resource_link", "URL resource link lowering")
+  assert_equal(url_block.uri, "https://example.com/reference?q=acp", "URL resource link URI")
+  local invalid_url, invalid_url_err = ContextItem.url("file:///etc/passwd")
+  assert_equal(invalid_url, nil, "non-HTTP URL rejection")
+  assert(invalid_url_err:match("http or https"), "non-HTTP URL reason")
+
   local media_path = vim.fn.tempname() .. ".png"
   vim.fn.writefile({ "image fixture" }, media_path, "b")
   local media = assert(ContextItem.media({ path = media_path }))

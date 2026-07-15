@@ -415,6 +415,24 @@ function M.terminal(terminal, opts)
   })
 end
 
+function M.url(url, opts)
+  opts = opts or {}
+  url = tostring(url or "")
+  if not url:match("^https?://[^%s]+$") then
+    return nil, "URL must use http or https"
+  end
+  return enrich({
+    kind = "url",
+    source = "url",
+    path = url,
+    uri = url,
+    display = opts.display or url,
+  }, {
+    preview_limit = opts.preview_limit,
+    source_version = { uri = url },
+  })
+end
+
 function M.lower(item, capabilities)
   capabilities = capabilities or {}
   if item.kind == "image" or item.kind == "audio" then
@@ -428,6 +446,14 @@ function M.lower(item, capabilities)
       type = "resource_link",
       uri = item.uri,
       name = vim.fn.fnamemodify(item.path, ":t"),
+      title = item.display,
+    }
+  end
+  if item.kind == "url" then
+    return {
+      type = "resource_link",
+      uri = item.uri,
+      name = item.display,
       title = item.display,
     }
   end
