@@ -3,6 +3,7 @@ local uv = vim.uv or vim.loop
 local Client = {}
 Client.__index = Client
 
+local PROTOCOL_VERSION = 1
 local ERR = {
   parse = -32700,
   invalid_request = -32600,
@@ -145,6 +146,11 @@ local function default_client_capabilities(handlers)
   return {
     fs = fs_caps,
     terminal = handlers and handlers.create_terminal ~= nil or false,
+    session = {
+      configOptions = {
+        boolean = vim.empty_dict(),
+      },
+    },
   }
 end
 
@@ -185,11 +191,15 @@ function Client.new(opts)
     mcp_name = opts.mcp_name or "lazyagent",
     mcp_headers = opts.mcp_headers or {},
     mcp_servers = opts.mcp_servers or {},
+    additional_directories = vim.deepcopy(opts.additional_directories or {}),
     client_info = opts.client_info or default_client_info(),
     client_capabilities = opts.client_capabilities or default_client_capabilities(opts.handlers),
     handlers = opts.handlers or {},
     callbacks = {},
+    callback_timers = {},
     next_id = 0,
+    request_timeout_ms = math.max(0, tonumber(opts.request_timeout_ms) or 60000),
+    prompt_timeout_ms = math.max(0, tonumber(opts.prompt_timeout_ms) or 0),
     state = "created",
     stdout_buffer = "",
     stdout_buffer_chunks = {},
@@ -283,10 +293,20 @@ function Client:_next_id()
   return self.next_id
 end
 
+function Client:_clear_request_timer(id)
+  local timer = self.callback_timers[id]
+  self.callback_timers[id] = nil
+  if timer and not timer:is_closing() then
+    timer:stop()
+    timer:close()
+  end
+end
+
 function Client:_reject_pending(reason)
   local callbacks = self.callbacks
   self.callbacks = {}
-  for _, callback in pairs(callbacks) do
+  for id, callback in pairs(callbacks) do
+    self:_clear_request_timer(id)
     vim.schedule(function()
       pcall(callback, nil, {
         code = ERR.transport,
@@ -336,6 +356,7 @@ function Client:_send_request(method, params, callback)
   if not ok then
     local cb = self.callbacks[id]
     self.callbacks[id] = nil
+    self:_clear_request_timer(id)
     if cb then
       vim.schedule(function()
         pcall(cb, nil, {
@@ -344,7 +365,31 @@ function Client:_send_request(method, params, callback)
         })
       end)
     end
+    return id
   end
+
+  local timeout_ms = method == "session/prompt" and self.prompt_timeout_ms or self.request_timeout_ms
+  if timeout_ms > 0 then
+    local timer = uv.new_timer()
+    self.callback_timers[id] = timer
+    timer:start(timeout_ms, 0, function()
+      local cb = self.callbacks[id]
+      if not cb then
+        self:_clear_request_timer(id)
+        return
+      end
+      self.callbacks[id] = nil
+      self:_clear_request_timer(id)
+      self:_send_notification("$/cancel_request", { requestId = id })
+      vim.schedule(function()
+        pcall(cb, nil, {
+          code = ERR.transport,
+          message = string.format("ACP request timed out after %dms: %s", timeout_ms, method),
+        })
+      end)
+    end)
+  end
+  return id
 end
 
 function Client:_send_notification(method, params)
@@ -386,7 +431,11 @@ end
 
 function Client:_supports_session_capability(name)
   local session_caps = self.agent_capabilities and self.agent_capabilities.sessionCapabilities or {}
-  return type(session_caps) == "table" and session_caps[name] ~= nil
+  if type(session_caps) ~= "table" then
+    return false
+  end
+  local capability = session_caps[name]
+  return capability ~= nil and capability ~= false and capability ~= vim.NIL
 end
 
 function Client:supports_session_list()
@@ -401,8 +450,38 @@ function Client:supports_session_close()
   return self:_supports_session_capability("close")
 end
 
+function Client:supports_session_delete()
+  return self:_supports_session_capability("delete")
+end
+
+function Client:supports_additional_directories()
+  return self:_supports_session_capability("additionalDirectories")
+end
+
 function Client:supports_session_load()
   return self.agent_capabilities and self.agent_capabilities.loadSession == true
+end
+
+function Client:_build_session_params(session_id)
+  local params = {
+    cwd = self.cwd,
+    mcpServers = self:_build_mcp_servers(),
+  }
+  if session_id ~= nil then
+    params.sessionId = session_id
+  end
+  if self:supports_additional_directories() and type(self.additional_directories) == "table" then
+    local directories = {}
+    for _, path in ipairs(self.additional_directories) do
+      if type(path) == "string" and path ~= "" then
+        directories[#directories + 1] = path
+      end
+    end
+    if #directories > 0 then
+      params.additionalDirectories = directories
+    end
+  end
+  return params
 end
 
 function Client:is_connected()
@@ -427,10 +506,7 @@ function Client:new_session(callback)
     return
   end
 
-  local session_params = {
-    cwd = self.cwd,
-    mcpServers = self:_build_mcp_servers(),
-  }
+  local session_params = self:_build_session_params()
 
   self:_send_request("session/new", session_params, function(session_result, session_err)
     if session_err then
@@ -478,11 +554,7 @@ function Client:load_session(session_id, callback)
     return
   end
 
-  self:_send_request("session/load", {
-    sessionId = session_id,
-    cwd = self.cwd,
-    mcpServers = self:_build_mcp_servers(),
-  }, function(result, err)
+  self:_send_request("session/load", self:_build_session_params(session_id), function(result, err)
     if err then
       callback(nil, err)
       return
@@ -504,11 +576,7 @@ function Client:resume_session(session_id, callback)
     return
   end
 
-  self:_send_request("session/resume", {
-    sessionId = session_id,
-    cwd = self.cwd,
-    mcpServers = self:_build_mcp_servers(),
-  }, function(result, err)
+  self:_send_request("session/resume", self:_build_session_params(session_id), function(result, err)
     if err then
       callback(nil, err)
       return
@@ -550,11 +618,47 @@ function Client:close_session(session_id, callback)
   end)
 end
 
+function Client:delete_session(session_id, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then
+    return
+  end
+  if not self:supports_session_delete() then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP agent does not support session/delete",
+    })
+    return
+  end
+  if not session_id or session_id == "" then
+    callback(nil, {
+      code = ERR.invalid_params,
+      message = "session/delete requires a sessionId",
+    })
+    return
+  end
+
+  self:_send_request("session/delete", {
+    sessionId = session_id,
+  }, callback)
+end
+
 function Client:_handle_initialize_response(result, callback)
   if not result or type(result) ~= "table" then
     callback(nil, {
       code = ERR.invalid_request,
       message = "ACP initialize returned an invalid response",
+    })
+    return
+  end
+  if result.protocolVersion ~= PROTOCOL_VERSION then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = string.format(
+        "ACP protocol version mismatch: client=%d agent=%s",
+        PROTOCOL_VERSION,
+        tostring(result.protocolVersion)
+      ),
     })
     return
   end
@@ -743,6 +847,7 @@ function Client:_handle_message(line)
     return
   end
   self.callbacks[message.id] = nil
+  self:_clear_request_timer(message.id)
   vim.schedule(function()
     pcall(callback, message.result, message.error)
   end)
@@ -834,22 +939,29 @@ function Client:start(callback, opts)
     end
   end)
 
+  local advertised_capabilities = {
+    fs = empty_dict_if_needed(self.client_capabilities.fs or {}),
+    terminal = self.client_capabilities.terminal == true,
+  }
+  if self.client_capabilities.session ~= nil then
+    advertised_capabilities.session = vim.deepcopy(self.client_capabilities.session)
+  end
+
   local params = {
-    protocolVersion = 1,
-    clientCapabilities = {
-      fs = empty_dict_if_needed(self.client_capabilities.fs or {}),
-      terminal = self.client_capabilities.terminal == true,
-    },
+    protocolVersion = PROTOCOL_VERSION,
+    clientCapabilities = advertised_capabilities,
     clientInfo = self.client_info,
   }
 
   self:_send_request("initialize", params, function(result, err)
     if err then
+      self:stop()
       callback(nil, err)
       return
     end
     self:_handle_initialize_response(result, function(client, init_err)
       if init_err then
+        self:stop()
         callback(nil, init_err)
         return
       end
@@ -864,6 +976,7 @@ function Client:start(callback, opts)
       local mode = opts.session_mode or "new"
       local done = function(session_result, session_err)
         if session_err then
+          self:stop()
           callback(nil, session_err)
           return
         end
