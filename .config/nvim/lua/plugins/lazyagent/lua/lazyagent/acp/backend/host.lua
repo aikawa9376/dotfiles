@@ -5,7 +5,6 @@ function M.setup(deps)
   local state = deps.state
   local acp_logic = deps.acp_logic
   local util = deps.util
-  local normalize_text = deps.normalize_text
   local build_transcript_path = deps.build_transcript_path
   local clamp_utf8_from_end = deps.clamp_utf8_from_end
   local ensure_parent_dir = deps.ensure_parent_dir
@@ -38,6 +37,7 @@ function M.setup(deps)
   local resolve_permission_option
   local nvim_bridge = require("lazyagent.nvim_bridge")
   local PathGuard = require("lazyagent.acp.backend.path_guard")
+  local FileWriter = require("lazyagent.acp.backend.file_writer")
 
   local function first_number(...)
     for idx = 1, select("#", ...) do
@@ -453,9 +453,7 @@ function M.setup(deps)
     if not abs then
       return nil, path_err
     end
-    local before_lines = read_path_lines(abs) or {}
-    local before_text = table.concat(before_lines, "\n")
-    local content = normalize_text(params.content or "")
+    local content = tostring(params.content or "")
     ensure_parent_dir(abs)
 
     local ok_watch, watch = pcall(require, "lazyagent.watch")
@@ -463,17 +461,10 @@ function M.setup(deps)
       pcall(watch.suspend, abs, 1500)
     end
 
-    local lines = vim.split(content, "\n", { plain = true })
-    if lines[#lines] == "" then
-      table.remove(lines, #lines)
-    end
-
-    local file, err = io.open(abs, "w")
-    if not file then
+    local write_result, err = FileWriter.write(abs, content)
+    if not write_result then
       return nil, { code = -32000, message = tostring(err) }
     end
-    file:write(content)
-    file:close()
 
     if hook_reload_enabled() then
       reload_loaded_buffers_for_path(abs)
@@ -484,7 +475,7 @@ function M.setup(deps)
         agent_name = session and session.agent_name or nil,
         cwd = session and (session.root_dir or session.cwd) or vim.fn.getcwd(),
         path = abs,
-        oldText = before_text,
+        oldText = write_result.before_text,
         newText = content,
       })
     end
