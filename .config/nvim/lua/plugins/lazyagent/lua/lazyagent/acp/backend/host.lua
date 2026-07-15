@@ -1017,6 +1017,14 @@ function M.setup(deps)
       session.protocol_events = client:get_protocol_events()
       session.model_catalog = vim.deepcopy((session_result and session_result.models) or {})
       session.mode_catalog = vim.deepcopy((session_result and session_result.modes) or {})
+      session.resume_strategy = session_result
+          and session_result._meta
+          and session_result._meta.lazyagentResumeStrategy
+        or "new"
+      if session.resume_strategy == "local_carryover" and session.thread_carryover then
+        session.pending_switch_history = vim.deepcopy(session.thread_carryover)
+      end
+      session.thread_carryover = nil
       local prompt_caps = client.agent_capabilities and client.agent_capabilities.promptCapabilities or {}
       session.prompt_supports_embedded_context = prompt_caps and prompt_caps.embeddedContext == true
       session.prompt_supports_image = prompt_caps and prompt_caps.image == true
@@ -1030,11 +1038,19 @@ function M.setup(deps)
         model = session.model_catalog.currentModelId or session.initial_model or vim.NIL,
         mode = session.mode_catalog.currentModeId or session.default_mode or vim.NIL,
         config = vim.deepcopy(session.config_options or {}),
+        metadata = { resume_strategy = session.resume_strategy },
       })
       local agent_name = client.agent_info and (client.agent_info.title or client.agent_info.name) or session.agent_name
       local message = string.format("ACP session ready: %s", agent_name)
       if session_result and session_result.sessionId then
         message = message .. "\nSession ID: " .. session_result.sessionId
+      end
+      if session.resume_strategy == "native_resume" then
+        message = message .. "\nContinuation: native ACP resume"
+      elseif session.resume_strategy == "native_load" then
+        message = message .. "\nContinuation: native ACP load"
+      elseif session.resume_strategy == "local_carryover" then
+        message = message .. "\nContinuation: local transcript carryover (native resume/load unavailable)"
       end
       append_block(session, "System", message)
       apply_initial_session_config(session, function()
@@ -1053,7 +1069,7 @@ function M.setup(deps)
           end)
         end
       end)
-    end)
+    end, vim.deepcopy(session.session_bootstrap or {}))
   end
 
   module.terminal_release = terminal_release

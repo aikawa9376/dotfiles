@@ -1231,6 +1231,23 @@ function Client:start(callback, opts)
       end
 
       local mode = opts.session_mode or "new"
+      local resume_strategy = "new"
+      if mode == "auto" then
+        if opts.session_id and opts.session_id ~= "" and self:supports_session_resume() then
+          mode = "resume"
+          resume_strategy = "native_resume"
+        elseif opts.session_id and opts.session_id ~= "" and self:supports_session_load() then
+          mode = "load"
+          resume_strategy = "native_load"
+        else
+          mode = "new"
+          resume_strategy = "local_carryover"
+        end
+      elseif mode == "resume" then
+        resume_strategy = "native_resume"
+      elseif mode == "load" then
+        resume_strategy = "native_load"
+      end
       local attempted_auth = false
       local start_session
       local done = function(session_result, session_err)
@@ -1251,6 +1268,9 @@ function Client:start(callback, opts)
           callback(nil, session_err)
           return
         end
+        session_result = type(session_result) == "table" and session_result or {}
+        session_result._meta = type(session_result._meta) == "table" and session_result._meta or {}
+        session_result._meta.lazyagentResumeStrategy = resume_strategy
         vim.schedule(function()
           pcall(self.on_ready, session_result or {})
         end)
