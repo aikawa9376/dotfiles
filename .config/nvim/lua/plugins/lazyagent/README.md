@@ -352,6 +352,8 @@ ACP composerでは`@diagnostics`を選ぶと、起点bufferのLSP diagnosticsを
 
 `@https://...`または`@url:https://...`はURLをclient側でfetchせず、ACP ResourceLinkとして添付します。`http` / `https`以外のschemeは受け付けません。
 
+生成中に送ったpromptはstable ID付きqueueへ入り、transcriptの`ga` → `Prompt queue`からedit / remove / move / Send Nowを操作できます。ACPのSend Nowは現在turnをcancelしてから対象promptを先頭送信するcancel-and-sendです。
+
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
 ## MCP hooks
