@@ -103,4 +103,38 @@ function M.decide(journal, turn_id, indices, decision, decided_at)
   return journal, copy(turn)
 end
 
+function M.decide_hunk(journal, turn_id, change_index, canonical_hunks, hunk_index, decision, review_blob, decided_at)
+  journal = copy(journal)
+  local turn = find_turn(journal, turn_id)
+  local change = turn and turn.changes and turn.changes[change_index] or nil
+  if not change then
+    return nil, "change not found: " .. tostring(change_index)
+  end
+  local previous = {}
+  for _, hunk in ipairs(change.hunks or {}) do
+    previous[hunk.index] = hunk
+  end
+  change.hunks = copy(canonical_hunks)
+  for _, hunk in ipairs(change.hunks) do
+    local saved = previous[hunk.index]
+    if saved then
+      hunk.decision = saved.decision
+      hunk.decided_at = saved.decided_at
+    end
+  end
+  local hunk = change.hunks[hunk_index]
+  if not hunk then
+    return nil, "hunk not found: " .. tostring(hunk_index)
+  end
+  if hunk.decision then
+    return nil, "hunk already decided: " .. tostring(hunk_index)
+  end
+  hunk.decision = decision
+  hunk.decided_at = decided_at
+  if review_blob then
+    change.review_blob = copy(review_blob)
+  end
+  return journal, copy(turn)
+end
+
 return M

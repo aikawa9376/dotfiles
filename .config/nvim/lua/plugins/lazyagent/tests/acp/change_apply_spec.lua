@@ -34,6 +34,9 @@ function M.run()
     read_blob = function(ref)
       return store:get(ref)
     end,
+    put_blob = function(data)
+      return store:put(data)
+    end,
   })
   local before = assert(store:put("before\0bytes"))
   local after = assert(store:put("after\0bytes"))
@@ -84,6 +87,44 @@ function M.run()
   }, root)
   assert_equal(all_ok, nil, "reject all preflight result")
   assert_equal(read(root .. "/first.bin"), "after\0bytes", "reject all preflight is non-mutating")
+
+  local text_before = "one\nold-a\nmiddle\nold-b\nlast\n"
+  local text_after = "one\nnew-a\nmiddle\nnew-b\nlast\n"
+  local text_change = {
+    operation = "modified",
+    path = "hunks.txt",
+    before_blob = assert(store:put(text_before)),
+    after_blob = assert(store:put(text_after)),
+    binary = false,
+  }
+  write(root .. "/hunks.txt", text_after)
+  local hunks = assert(apply.hunks(text_change))
+  assert_equal(#hunks, 2, "text hunk count")
+  local first_review, canonical = apply.reject_hunks(text_change, root, { 1 })
+  assert(first_review, "first hunk reject")
+  assert_equal(read(root .. "/hunks.txt"), "one\nold-a\nmiddle\nnew-b\nlast\n", "first hunk content")
+  canonical[1].decision = "rejected"
+  text_change.hunks = canonical
+  text_change.review_blob = first_review
+  local second_review = assert(apply.reject_hunks(text_change, root, { 2 }))
+  assert(second_review, "second hunk reject")
+  assert_equal(read(root .. "/hunks.txt"), text_before, "multiple hunk reject content")
+
+  for _, fixture in ipairs({
+    { name = "insert", before = "a\nb\nc\n", after = "a\nx\nb\nc\n" },
+    { name = "delete", before = "a\nb\nc\n", after = "a\nc\n" },
+  }) do
+    local change = {
+      operation = "modified",
+      path = fixture.name .. ".txt",
+      before_blob = assert(store:put(fixture.before)),
+      after_blob = assert(store:put(fixture.after)),
+      binary = false,
+    }
+    write(root .. "/" .. change.path, fixture.after)
+    assert(apply.reject_hunks(change, root, { 1 }))
+    assert_equal(read(root .. "/" .. change.path), fixture.before, fixture.name .. " hunk reject")
+  end
 
   vim.fn.delete(base, "rf")
 end

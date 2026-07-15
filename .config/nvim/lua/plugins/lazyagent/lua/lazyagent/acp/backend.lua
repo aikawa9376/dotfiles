@@ -386,6 +386,9 @@ local function create_backend(default_view)
     read_blob = function(ref)
       return blob_store:get(ref)
     end,
+    put_blob = function(data)
+      return blob_store:put(data)
+    end,
   })
   local change_review = ChangeReview.new({
     read_blob = function(ref)
@@ -393,6 +396,12 @@ local function create_backend(default_view)
     end,
     decide = function(thread, turn, indices, decision)
       return backend.decide_thread_changes(thread.thread_id, turn.turn_id, indices, decision)
+    end,
+    hunks = function(thread, turn, change_index)
+      return backend.get_thread_change_hunks(thread.thread_id, turn.turn_id, change_index)
+    end,
+    decide_hunk = function(thread, turn, change_index, hunk_index, decision)
+      return backend.decide_thread_hunk(thread.thread_id, turn.turn_id, change_index, hunk_index, decision)
     end,
   })
 
@@ -855,6 +864,92 @@ local function create_backend(default_view)
       turn_id,
       indices,
       decision,
+      os.date("!%Y-%m-%dT%H:%M:%SZ")
+    )
+    if not journal then
+      return nil, decided
+    end
+    local updated, update_err = thread_store:update(thread_id, { change_journal = journal })
+    if not updated then
+      return nil, update_err
+    end
+    for _, session in pairs(sessions) do
+      if session.thread_id == thread_id then
+        session.thread_record = vim.deepcopy(updated)
+      end
+    end
+    return decided
+  end
+
+  function backend.get_thread_change_hunks(thread_id, turn_id, change_index)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then
+      return nil, err
+    end
+    local turn = TurnJournal.get(thread.change_journal, turn_id)
+    local change = turn and turn.changes and turn.changes[change_index] or nil
+    if not change then
+      return nil, "change not found: " .. tostring(change_index)
+    end
+    local hunks, hunk_err = change_apply.hunks(change)
+    if not hunks then
+      return nil, hunk_err
+    end
+    local decisions = {}
+    for _, hunk in ipairs(change.hunks or {}) do
+      decisions[hunk.index] = hunk
+    end
+    for _, hunk in ipairs(hunks) do
+      if decisions[hunk.index] then
+        hunk.decision = decisions[hunk.index].decision
+        hunk.decided_at = decisions[hunk.index].decided_at
+      end
+    end
+    return hunks
+  end
+
+  function backend.decide_thread_hunk(thread_id, turn_id, change_index, hunk_index, decision)
+    if decision ~= "kept" and decision ~= "rejected" then
+      return nil, "unsupported hunk decision: " .. tostring(decision)
+    end
+    local thread, err = thread_store:get(thread_id)
+    if not thread then
+      return nil, err
+    end
+    local turn = TurnJournal.get(thread.change_journal, turn_id)
+    local change = turn and turn.changes and turn.changes[change_index] or nil
+    if not change then
+      return nil, "change not found: " .. tostring(change_index)
+    end
+    if change.decision then
+      return nil, "file change already decided"
+    end
+    local hunks, hunk_err = change_apply.hunks(change)
+    if not hunks then
+      return nil, hunk_err
+    end
+    local current_hunk = change.hunks and change.hunks[hunk_index] or nil
+    if current_hunk and current_hunk.decision then
+      return nil, "hunk already decided: " .. tostring(hunk_index)
+    end
+    local review_blob = nil
+    if decision == "rejected" then
+      review_blob, hunk_err = change_apply.reject_hunks(change, turn.baseline.root or thread.cwd, { hunk_index })
+      if not review_blob then
+        return nil, hunk_err
+      end
+      state_helpers.reload_loaded_buffers_for_path(
+        vim.fn.fnamemodify(turn.baseline.root or thread.cwd, ":p"):gsub("/$", "") .. "/" .. change.path
+      )
+    end
+    local journal, decided = TurnJournal.decide_hunk(
+      thread.change_journal,
+      turn_id,
+      change_index,
+      hunks,
+      hunk_index,
+      decision,
+      review_blob,
       os.date("!%Y-%m-%dT%H:%M:%SZ")
     )
     if not journal then

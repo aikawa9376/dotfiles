@@ -57,6 +57,18 @@ function M.run()
   journal = assert(Journal.decide(journal, turn.turn_id, { 1 }, "kept", "2026-07-15T01:04:00Z"))
   assert_equal(journal.turns[1].changes[1].decision, "kept", "change decision")
 
+  local hunk_journal, hunk_turn = Journal.start({}, "thread-2", {
+    captured_at = "2026-07-15T02:00:00Z",
+  })
+  hunk_journal = assert(Journal.finish(hunk_journal, hunk_turn.turn_id, {
+    changes = { { operation = "modified", path = "hunk.lua" } },
+  }))
+  hunk_journal = assert(Journal.decide_hunk(hunk_journal, hunk_turn.turn_id, 1, {
+    { index = 1, before_start = 2, before_count = 1, after_start = 2, after_count = 1 },
+  }, 1, "rejected", { hash = string.rep("e", 64) }, "2026-07-15T02:01:00Z"))
+  assert_equal(hunk_journal.turns[1].changes[1].hunks[1].decision, "rejected", "hunk decision")
+  assert_equal(hunk_journal.turns[1].changes[1].review_blob.hash, string.rep("e", 64), "hunk review blob")
+
   local missing, err = Journal.record(journal, "missing", "buffer", { path = "/repo/a.lua" })
   assert_equal(missing, nil, "missing turn result")
   assert(tostring(err):match("turn not found"), "missing turn error")
