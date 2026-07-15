@@ -93,7 +93,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 ### Contract tests
 
 - [x] newline分割、複数message同時受信、invalid/unknown updateを再現するfake ACP agentを追加する。
-- [ ] initialize、new/prompt/cancel、load/resume/close、permission、terminal、filesystemのgolden testを追加する。
+- [x] initialize、new/prompt/cancel、load/resume/close、permission、terminal、filesystemのgolden testを追加する。
 - [x] process exit、timeout、late update、pending permission中cancelのtestを追加する。
 - [ ] repeated open/close、provider switch、resession、2 Neovim instanceのlifecycle testを追加する。
   - [x] 反復open/closeと並列2 connectionでprocess/timer/callbackのzero-leakを検証する。

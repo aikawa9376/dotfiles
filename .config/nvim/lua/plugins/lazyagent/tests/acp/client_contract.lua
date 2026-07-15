@@ -38,6 +38,8 @@ local function new_client(root, overrides)
   local protocol_events = {}
   local deferred_permission_done
   local auth_selections = {}
+  local writes = {}
+  local terminal_calls = {}
 
   local opts = {
     command = {
@@ -61,6 +63,30 @@ local function new_client(root, overrides)
       read_text_file = function(params)
         assert_equal("/virtual/fixture.txt", params.path, "read path")
         return { content = "fixture-content" }
+      end,
+      write_text_file = function(params)
+        writes[#writes + 1] = params
+        return vim.NIL
+      end,
+      create_terminal = function(params, done)
+        terminal_calls[#terminal_calls + 1] = { method = "create", params = params }
+        done({ terminalId = "fixture-terminal" })
+      end,
+      terminal_output = function(params)
+        terminal_calls[#terminal_calls + 1] = { method = "output", params = params }
+        return { output = "fixture-output", truncated = false }
+      end,
+      terminal_wait_for_exit = function(params, done)
+        terminal_calls[#terminal_calls + 1] = { method = "wait", params = params }
+        done({ exitCode = 0, signal = vim.NIL })
+      end,
+      terminal_kill = function(params)
+        terminal_calls[#terminal_calls + 1] = { method = "kill", params = params }
+        return vim.NIL
+      end,
+      terminal_release = function(params)
+        terminal_calls[#terminal_calls + 1] = { method = "release", params = params }
+        return vim.NIL
       end,
       request_permission = function(params, done)
         permission_requests[#permission_requests + 1] = params
@@ -107,6 +133,8 @@ local function new_client(root, overrides)
       return deferred_permission_done
     end,
     auth_selections = auth_selections,
+    writes = writes,
+    terminal_calls = terminal_calls,
   }
 end
 
@@ -292,6 +320,11 @@ local function test_stdio_contract(root)
   assert_equal(true, event_kinds.unknown_update, "unknown update logged")
   assert_equal(true, event_kinds.session_scope_mismatch, "wrong-session request logged")
   assert_equal(#observed.protocol_events, #client:get_protocol_events(), "protocol log retained")
+  assert_equal(1, #observed.writes, "filesystem write handled")
+  assert_equal("fixture-content", observed.writes[1].content, "filesystem write content")
+  assert_equal({ "create", "output", "wait", "kill", "release" }, vim.tbl_map(function(call)
+    return call.method
+  end, observed.terminal_calls), "terminal lifecycle handled")
   assert_equal("tool-1", observed.permission_requests[1].toolCall.toolCallId, "permission request")
 
   local loaded = false
