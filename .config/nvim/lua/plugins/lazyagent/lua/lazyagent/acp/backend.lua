@@ -878,6 +878,7 @@ local function create_backend(default_view)
     if not turn then
       return nil, "turn not found: " .. tostring(turn_id)
     end
+    local applications = nil
     if decision == "rejected" then
       local selected = {}
       for _, index in ipairs(indices or {}) do
@@ -890,8 +891,9 @@ local function create_backend(default_view)
         selected[#selected + 1] = turn.changes[index]
       end
       local root = turn.baseline and turn.baseline.root or thread.cwd
-      local applied, apply_err = change_apply.reject_all(selected, root)
-      if not applied then
+      local apply_err
+      applications, apply_err = change_apply.reject_all(selected, root)
+      if not applications then
         return nil, apply_err
       end
       local root_prefix = vim.fn.fnamemodify(root, ":p"):gsub("/$", "")
@@ -918,7 +920,8 @@ local function create_backend(default_view)
       turn_id,
       indices,
       decision,
-      os.date("!%Y-%m-%dT%H:%M:%SZ")
+      os.date("!%Y-%m-%dT%H:%M:%SZ"),
+      applications
     )
     if not journal then
       return nil, decided
