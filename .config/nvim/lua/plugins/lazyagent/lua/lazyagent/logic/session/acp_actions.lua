@@ -1000,6 +1000,16 @@ function M.setup(deps)
     end)
   end
 
+  function module.show_acp_protocol_log(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.show_protocol_log) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not expose a protocol log", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.show_protocol_log(pane_id)
+    end)
+  end
+
   function module.show_acp_context_budget(agent_name)
     with_acp_session(agent_name, function(_, pane_id, backend_mod)
       if not backend_mod or type(backend_mod.show_context_budget) ~= "function" then

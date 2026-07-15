@@ -892,6 +892,7 @@ function M.setup(deps)
       additional_directories = vim.deepcopy(base_session.additional_directories or {}),
       mcp_servers = vim.deepcopy(base_session.mcp_servers or {}),
       mcp_url = base_session.mcp_url,
+      protocol_log_path = base_session.protocol_log_path,
       auto_permission = base_session.auto_permission,
       default_mode = base_session.default_mode,
       initial_model = base_session.initial_model,
@@ -961,6 +962,7 @@ function M.setup(deps)
       env = temp_session.env,
       mcp_servers = temp_session.mcp_servers,
       mcp_url = temp_session.mcp_url,
+      protocol_log_path = temp_session.protocol_log_path,
       client_info = {
         name = "lazyagent",
         title = "lazyagent.nvim",
@@ -1068,6 +1070,7 @@ function M.setup(deps)
       env = session.env,
       mcp_servers = session.mcp_servers,
       mcp_url = session.mcp_url,
+      protocol_log_path = session.protocol_log_path,
       client_info = {
         name = "lazyagent",
         title = "lazyagent.nvim",

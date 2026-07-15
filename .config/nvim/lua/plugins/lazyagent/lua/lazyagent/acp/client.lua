@@ -3,6 +3,7 @@ local uv = vim.uv or vim.loop
 local Client = {}
 Client.__index = Client
 local mcp_servers = require("lazyagent.acp.mcp_servers")
+local ProtocolLog = require("lazyagent.acp.protocol_log")
 
 local PROTOCOL_VERSION = 1
 local ERR = {
@@ -237,6 +238,7 @@ function Client.new(opts)
     stdout_buffer_size = 0,
     stderr_lines = {},
     protocol_events = {},
+    protocol_log = opts.protocol_log_path and ProtocolLog.new(opts.protocol_log_path) or nil,
     session_id = nil,
     pending_session_id = nil,
     agent_capabilities = nil,
@@ -431,6 +433,10 @@ end
 function Client:_send_raw(payload)
   if not self.stdin or self.stdin:is_closing() then
     return false
+  end
+  if self.protocol_log then
+    local ok, message = pcall(decode_json, payload)
+    if ok then self.protocol_log:record("out", message) end
   end
   self.stdin:write(payload .. "\n")
   return true
@@ -1068,6 +1074,8 @@ function Client:_handle_message(line)
     end)
     return
   end
+
+  if self.protocol_log then self.protocol_log:record("in", message) end
 
   if message.method then
     if message.id ~= nil then

@@ -29,6 +29,7 @@ local BlobStore = require("lazyagent.acp.blob_store")
 local ChangeReview = require("lazyagent.acp.change_review")
 local ChangeApply = require("lazyagent.acp.change_apply")
 local Follow = require("lazyagent.acp.follow")
+local ProtocolLog = require("lazyagent.acp.protocol_log")
 
 local sessions = {}
 local section_icons = {
@@ -715,6 +716,7 @@ local function create_backend(default_view)
         agent_name = acp.agent_name,
         agent_cfg = acp.agent_cfg or {},
         transcript_path = transcript_path,
+        protocol_log_path = nil,
         transcript_has_content = true,
         current_stream_key = nil,
         current_stream_heading = nil,
@@ -813,6 +815,8 @@ local function create_backend(default_view)
       else
         session.thread_store_error = tostring(thread_err)
       end
+      session.protocol_log_path = cache_logic.get_cache_dir() .. "/acp/protocol/"
+        .. sanitize_filename_component(session.thread_id or pane_id or acp.agent_name) .. ".jsonl"
       conversation_helpers.new_conversation_item(
         session,
         "System",
@@ -1343,6 +1347,7 @@ local function create_backend(default_view)
       acp_thread_unread = session.thread_record and session.thread_record.unread == true or false,
       acp_session_info = vim.deepcopy(session.session_info or {}),
       acp_transcript_path = session.transcript_path,
+      acp_protocol_log_path = session.protocol_log_path,
       acp_agent_info = vim.deepcopy(session.agent_info or {}),
       acp_agent_capabilities = vim.deepcopy(session.agent_capabilities or {}),
       acp_session_capabilities = vim.deepcopy((session.agent_capabilities and session.agent_capabilities.sessionCapabilities) or {}),
@@ -1903,6 +1908,12 @@ local function create_backend(default_view)
       return false
     end
     return actions_helpers.show_doctor_for_session(session)
+  end
+
+  function backend.show_protocol_log(target_pane)
+    local session = get_session(target_pane)
+    if not session then return false end
+    return ProtocolLog.open(session.protocol_log_path)
   end
 
   function backend.show_context_budget(target_pane)
