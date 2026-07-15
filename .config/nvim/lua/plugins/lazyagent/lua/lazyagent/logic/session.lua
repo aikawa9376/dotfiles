@@ -192,6 +192,7 @@ M.save_conversation_checkpoint = acp_actions.save_conversation_checkpoint
 M.start_interactive_session = launch.start_interactive_session
 M.attach_session = actions.attach_session
 M.pick_acp_threads = threads.pick_threads
+M.open_acp_cockpit = threads.open_cockpit
 M.new_acp_thread = threads.new_thread
 M.open_acp_thread = threads.open_thread
 M.archive_acp_thread = threads.archive_thread

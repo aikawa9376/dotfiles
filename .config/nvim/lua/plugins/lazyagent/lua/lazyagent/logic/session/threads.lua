@@ -248,6 +248,50 @@ function M.setup(deps)
     return true
   end
 
+  function module.open_cockpit()
+    local backend = backend_for_provider(nil)
+    if not backend or type(backend.list_threads) ~= "function" then
+      vim.notify("LazyAgent ACP: thread store is unavailable", vim.log.levels.ERROR)
+      return false
+    end
+    local bufnr = vim.api.nvim_create_buf(false, true)
+    vim.cmd("tabnew")
+    vim.api.nvim_win_set_buf(0, bufnr)
+    vim.api.nvim_buf_set_name(bufnr, "LazyAgent ACP Cockpit [" .. tostring(bufnr) .. "]")
+    vim.bo[bufnr].buftype = "nofile"
+    vim.bo[bufnr].bufhidden = "wipe"
+    vim.bo[bufnr].swapfile = false
+    vim.bo[bufnr].filetype = "lazyagent_acp_cockpit"
+
+    local line_map = {}
+    local function refresh()
+      local stored_threads, list_err = backend.list_threads({ include_archived = true })
+      if not stored_threads then
+        vim.notify("LazyAgent ACP cockpit: " .. tostring(list_err), vim.log.levels.ERROR)
+        return
+      end
+      local lines
+      lines, line_map = require("lazyagent.acp.cockpit").render(stored_threads)
+      vim.bo[bufnr].modifiable = true
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+      vim.bo[bufnr].modifiable = false
+      vim.bo[bufnr].modified = false
+    end
+
+    vim.keymap.set("n", "<CR>", function()
+      local thread_id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      if thread_id then module.open_thread(thread_id) end
+    end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit thread" })
+    vim.keymap.set("n", "r", refresh, { buffer = bufnr, silent = true, desc = "Refresh ACP cockpit" })
+    vim.keymap.set("n", "q", function() pcall(vim.cmd, "tabclose") end, {
+      buffer = bufnr,
+      silent = true,
+      desc = "Close ACP cockpit",
+    })
+    refresh()
+    return true
+  end
+
   return module
 end
 
