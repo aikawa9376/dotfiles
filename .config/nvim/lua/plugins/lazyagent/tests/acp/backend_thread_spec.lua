@@ -81,6 +81,24 @@ function M.run()
   assert(persisted.process_id ~= nil, "process identity persistence")
   assert_equal(persisted.transcript_path, runtime.acp_transcript_path, "transcript persistence")
 
+  local imported, created = backend.import_native_session(pane_id, {
+    sessionId = "native-imported",
+    cwd = root,
+    title = "Imported contract session",
+    summary = "import fixture",
+    updatedAt = "2026-07-15T00:00:00Z",
+  })
+  assert_equal(created, true, "native thread import result")
+  assert_equal(imported.provider_id, "ThreadFixture", "native thread provider")
+  assert_equal(imported.native_session_id, "native-imported", "native thread session identity")
+  assert_equal(imported.metadata.imported_from_native, true, "native thread import metadata")
+  local duplicate, duplicate_created = backend.import_native_session(pane_id, {
+    sessionId = "native-imported",
+    cwd = root,
+  })
+  assert_equal(duplicate.thread_id, imported.thread_id, "native thread import deduplication")
+  assert_equal(duplicate_created, false, "native thread duplicate result")
+
   backend.kill_pane(pane_id)
   local closed = assert(store:get(runtime.acp_thread_id))
   assert_equal(closed.status, "closed", "closed persisted thread")
@@ -112,7 +130,7 @@ function M.run()
   assert_equal(reopened_runtime.acp_transcript_path, runtime.acp_transcript_path, "reopened transcript identity")
   assert_equal(reopened_runtime.acp_resume_strategy, "native_resume", "native resume strategy")
   assert_equal(reopened_runtime.acp_has_pending_carryover, false, "native resume carryover")
-  assert_equal(#assert(backend.list_threads({ include_archived = true })), 1, "reopen should not duplicate thread")
+  assert_equal(#assert(backend.list_threads({ include_archived = true })), 2, "reopen and import should not duplicate threads")
   assert_equal(assert(backend.get_thread(runtime.acp_thread_id)).status, "active", "reopened persisted status")
   backend.kill_pane(pane_id)
 

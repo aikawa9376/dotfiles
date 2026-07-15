@@ -535,6 +535,28 @@ function M.setup(deps)
           end
 
           local actions = {}
+          if supports_load or supports_resume then
+            actions[#actions + 1] = {
+              label = "Import as LazyAgent thread",
+              action = function()
+                if type(backend_mod.import_native_session) ~= "function" then
+                  vim.notify("LazyAgentACP: backend does not support thread import", vim.log.levels.WARN)
+                  return
+                end
+                local thread, created = backend_mod.import_native_session(pane_id, native_session)
+                if not thread then
+                  vim.notify("LazyAgentACP: failed to import native session", vim.log.levels.ERROR)
+                  return
+                end
+                vim.notify(
+                  created == false
+                      and string.format("LazyAgent ACP thread already exists: %s", thread.title)
+                    or string.format("Imported LazyAgent ACP thread: %s", thread.title),
+                  vim.log.levels.INFO
+                )
+              end,
+            }
+          end
           if supports_load then
             actions[#actions + 1] = {
               label = "Add to current conversation",
