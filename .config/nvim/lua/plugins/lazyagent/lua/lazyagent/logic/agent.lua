@@ -324,8 +324,22 @@ local function normalize_completion_list(list)
       local label = v.label or v.text or v[1]
       local desc = v.desc or v.description or v[2] or ""
       local doc = v.doc or v.documentation or v[3]
+      local hint = v.input_hint or v.inputHint or v.argument_hint or v.argumentHint or v.input_placeholder
       if label and label ~= "" then
-        return { label = label, desc = desc, doc = doc }
+        if hint and hint ~= "" then
+          local requirement = v.input_required == true and "required" or "optional"
+          local hint_detail = tostring(hint) .. " (" .. requirement .. ")"
+          desc = desc ~= "" and (desc .. " · " .. hint_detail) or hint_detail
+          local argument_doc = string.format("**Arguments:** `%s` (%s)", tostring(hint), requirement)
+          doc = doc and doc ~= "" and (tostring(doc) .. "\n\n" .. argument_doc) or argument_doc
+        end
+        return {
+          label = label,
+          desc = desc,
+          doc = doc,
+          input_hint = hint,
+          input_required = v.input_required == true,
+        }
       end
     end
     return nil
@@ -340,6 +354,8 @@ local function normalize_completion_list(list)
   end
   return out
 end
+
+M.normalize_completion_list = normalize_completion_list
 
 function M.get_visible_slash_commands(agent_name, session)
   if not agent_name or agent_name == "" then

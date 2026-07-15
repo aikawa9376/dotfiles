@@ -91,15 +91,16 @@ function M.setup(deps)
     for _, command in ipairs(commands or {}) do
       if type(command) == "table" and command.name and command.name ~= "" then
         local desc = tostring(command.description or command.doc or "")
-        local hint = command.input and command.input.hint or nil
+        local input = type(command.input) == "table" and command.input or {}
+        local hint = first_nonempty(input.hint, input.placeholder, command.inputHint, command.argumentHint)
         table.insert(out, {
           name = tostring(command.name),
           label = "/" .. tostring(command.name),
           desc = desc,
           category = first_nonempty(command.category, command.group),
           input_hint = hint and tostring(hint) or nil,
-          input_required = command.input and command.input.required == true or false,
-          input_placeholder = command.input and command.input.placeholder or nil,
+          input_required = input.required == true or command.inputRequired == true,
+          input_placeholder = first_nonempty(input.placeholder, command.inputPlaceholder),
         })
       end
     end

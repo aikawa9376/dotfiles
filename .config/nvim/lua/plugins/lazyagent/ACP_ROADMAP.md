@@ -215,7 +215,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] paste / screenshotの`@path`をagent capabilityに応じてACP Imageへloweringし、非対応agentにはpayloadを送らず理由をText表示する。
 - [x] assistant/tool outputのimage、audio、resourceをNeovim上で表示する。
   - [x] base64 payloadをcontent hash付きcacheへmaterializeし、imageはinline preview参照、audio/resourceはlocal file参照とmetadataを表示する。
-- [ ] slash commandのdescriptionとargument hintをcomposer completionへ表示する。
+- [x] slash commandのdescriptionとargument hintをcomposer completionへ表示する。
+  - [x] ACP command metadataのhint / placeholder / requiredを保持し、nvim-cmp / blink.cmpのdetailとdocumentationへ表示する。
 
 ### Queue and thread UX
 
