@@ -272,6 +272,55 @@ function M.attach(api, ctx)
     return snapshot
   end
 
+  function M.capture_thread_view(pane_id)
+    local bufnr = to_bufnr(pane_id)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return nil
+    end
+    local win = first_visible_window(bufnr)
+    local saved = nil
+    if win then
+      local ok, result = pcall(vim.api.nvim_win_call, win, function()
+        return vim.fn.winsaveview()
+      end)
+      saved = ok and result or nil
+    end
+    return {
+      follow_output = (pane_config[tostring(pane_id)] or {}).follow_output ~= false,
+      view = type(saved) == "table" and {
+        lnum = saved.lnum,
+        col = saved.col,
+        topline = saved.topline,
+        leftcol = saved.leftcol,
+      } or {},
+    }
+  end
+
+  function M.restore_thread_view(pane_id, saved)
+    if type(saved) ~= "table" then
+      return false
+    end
+    local bufnr = to_bufnr(pane_id)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return false
+    end
+    local key = tostring(pane_id)
+    pane_config[key] = pane_config[key] or {}
+    pane_config[key].follow_output = saved.follow_output ~= false
+    local win = first_visible_window(bufnr)
+    if not win or type(saved.view) ~= "table" then
+      return true
+    end
+    local line_count = math.max(1, vim.api.nvim_buf_line_count(bufnr))
+    local restored = vim.deepcopy(saved.view)
+    restored.lnum = math.min(math.max(1, tonumber(restored.lnum) or 1), line_count)
+    restored.topline = math.min(math.max(1, tonumber(restored.topline) or 1), line_count)
+    pcall(vim.api.nvim_win_call, win, function()
+      vim.fn.winrestview(restored)
+    end)
+    return true
+  end
+
   function M.release_session_resources(session)
     if type(session) ~= "table" then
       return false

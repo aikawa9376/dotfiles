@@ -31,6 +31,7 @@ function M.run()
     process_id = 42,
     transcript_path = base .. "/thread.log",
     config = { model = "gpt-5" },
+    view_state = { follow_output = false, view = { lnum = 12, topline = 8 } },
   }))
   assert_equal(thread.thread_id, THREAD_ID, "local thread identity")
   assert_equal(thread.provider_id, "codex-acp", "provider identity")
@@ -38,6 +39,7 @@ function M.run()
   assert_equal(thread.process_id, 42, "process identity")
   assert_equal(#thread.additional_directories, 1, "additional directory normalization")
   assert_equal(thread.status, "active", "initial status")
+  assert_equal(thread.view_state.view.topline, 8, "thread view state")
 
   local manifest = assert(store:load())
   assert_equal(manifest.schema_version, ThreadStore.SCHEMA_VERSION, "manifest schema")

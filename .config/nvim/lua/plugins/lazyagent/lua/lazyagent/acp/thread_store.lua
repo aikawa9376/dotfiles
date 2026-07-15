@@ -109,6 +109,7 @@ local function normalize_record(record, opts)
     config = type(record.config) == "table" and copy(record.config) or {},
     checkpoint = type(record.checkpoint) == "table" and copy(record.checkpoint) or {},
     change_journal = type(record.change_journal) == "table" and copy(record.change_journal) or {},
+    view_state = type(record.view_state) == "table" and copy(record.view_state) or {},
     metadata = type(record.metadata) == "table" and copy(record.metadata) or {},
   }
   for _, field in ipairs({ "native_session_id", "process_id", "model", "mode", "archived_at" }) do

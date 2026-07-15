@@ -11,7 +11,11 @@ function M.run()
   local pane_id
   local pane_state
   local transcript_path = vim.fn.tempname() .. "-lazyagent-acp.log"
-  vim.fn.writefile({ "# System", "lifecycle test" }, transcript_path)
+  local transcript_lines = { "# System", "lifecycle test" }
+  for index = 1, 60 do
+    transcript_lines[#transcript_lines + 1] = "line " .. tostring(index)
+  end
+  vim.fn.writefile(transcript_lines, transcript_path)
 
   view.create_pane({
     transcript_path = transcript_path,
@@ -38,6 +42,20 @@ function M.run()
   assert_equal(live.valid_buffer_count, 1, "live valid buffer")
   assert_equal(live.config_count, 1, "live pane configuration")
   assert(live.window_count >= 1, "live transcript should have a window")
+
+  vim.api.nvim_win_call(pane_state.winid, function()
+    vim.fn.winrestview({ lnum = 30, topline = 24, col = 0, leftcol = 0 })
+  end)
+  local saved_view = assert(view.capture_thread_view(pane_id))
+  assert_equal(saved_view.view.lnum, 30, "captured thread cursor")
+  assert_equal(saved_view.view.topline, 24, "captured thread topline")
+  vim.api.nvim_win_call(pane_state.winid, function()
+    vim.fn.winrestview({ lnum = 1, topline = 1, col = 0, leftcol = 0 })
+  end)
+  assert_equal(view.restore_thread_view(pane_id, saved_view), true, "restore thread view")
+  local restored_view = assert(view.capture_thread_view(pane_id))
+  assert_equal(restored_view.view.lnum, saved_view.view.lnum, "restored thread cursor")
+  assert_equal(restored_view.view.topline, saved_view.view.topline, "restored thread topline")
 
   local session = {
     pane_id = pane_id,
