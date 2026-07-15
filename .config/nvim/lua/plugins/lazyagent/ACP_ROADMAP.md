@@ -95,7 +95,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] newline分割、複数message同時受信、invalid/unknown updateを再現するfake ACP agentを追加する。
 - [x] initialize、new/prompt/cancel、load/resume/close、permission、terminal、filesystemのgolden testを追加する。
 - [x] process exit、timeout、late update、pending permission中cancelのtestを追加する。
-- [ ] repeated open/close、provider switch、resession、2 Neovim instanceのlifecycle testを追加する。
+- [x] repeated open/close、provider switch、resession、2 Neovim instanceのlifecycle testを追加する。
   - [x] 反復open/closeと並列2 connectionでprocess/timer/callbackのzero-leakを検証する。
 - [x] timer、callback、session view、transcript、child processの残存数をdebug表示できるようにする。
   - [x] client process、stdio、timer、callback、permission、stdout bufferをruntime debug snapshotへ追加する。
