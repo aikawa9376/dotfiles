@@ -34,6 +34,7 @@ function M.setup(deps)
   local maybe_call_mcp_tool = deps.maybe_call_mcp_tool
   local maybe_sync_acp_edit_targets = deps.maybe_sync_acp_edit_targets
   local sync_thread = deps.sync_thread or function() end
+  local record_turn_event = deps.record_turn_event or function() end
   local terminal_seq = 0
   local resolve_permission_option
   local resolve_filesystem_path
@@ -493,6 +494,14 @@ function M.setup(deps)
     if hook_reload_enabled() then
       reload_loaded_buffers_for_path(abs)
     end
+    record_turn_event(session, "file", {
+      path = abs,
+      operation = write_result.existed and "modified" or "added",
+      source = "acp_fs",
+      tool_call_id = params.toolCallId or (params._meta and params._meta.toolCallId) or nil,
+      before_size = #write_result.before_text,
+      after_size = #content,
+    })
     append_block(session, "Edited " .. vim.fn.fnamemodify(abs, ":."), "Updated via ACP fs/write_text_file")
     if hook_reload_enabled() and ((state.opts or {}).hooks or {}).open_on_edit == true then
       maybe_call_mcp_tool("open_last_changed", {
@@ -665,6 +674,14 @@ function M.setup(deps)
 
     if kind == "tool_call" or kind == "tool_call_update" then
       local tool = merge_tool_update(session, update)
+      record_turn_event(session, "tool", {
+        tool_call_id = tool.toolCallId,
+        title = tool.title,
+        kind = tool.kind,
+        status = tool.status,
+        paths = extract_tool_paths(tool),
+        locations = vim.deepcopy(tool.locations or tool.location or {}),
+      })
       local title = tool.title or tool.toolCallId or "tool"
       local body = render_tool_content(tool.content)
       if body == "" then

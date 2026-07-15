@@ -212,6 +212,7 @@ function M.write(path, content, opts)
 
   return {
     before_text = existing and existing:gsub("\r\n", "\n") or "",
+    existed = existing ~= nil,
     newline = style,
   }
 end
