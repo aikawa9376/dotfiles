@@ -18,6 +18,7 @@ local backend_config = require("lazyagent.acp.backend.config")
 local backend_actions = require("lazyagent.acp.backend.actions")
 local backend_cancellation = require("lazyagent.acp.backend.cancellation")
 local PromptQueue = require("lazyagent.acp.prompt_queue")
+local ThreadExport = require("lazyagent.acp.thread_export")
 local backend_host = require("lazyagent.acp.backend.host")
 local ThreadStore = require("lazyagent.acp.thread_store")
 local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
@@ -1706,6 +1707,42 @@ local function create_backend(default_view)
           backend.send_prompt_now(target_pane, item.id)
         end
       end)
+    end)
+    return true
+  end
+
+  function backend.export_thread_markdown(target_pane, path)
+    local session = get_session(target_pane)
+    if not session then return nil, "ACP session not found" end
+    path = vim.fn.fnamemodify(path, ":p")
+    local markdown = ThreadExport.render({
+      title = session.thread_record and session.thread_record.title or session.agent_name,
+      provider_id = session.provider_id,
+      cwd = session.root_dir or session.cwd,
+      thread_id = session.thread_id,
+      conversation = session.conversation_timeline,
+      tools = session.tool_timeline,
+    })
+    local parent_ok, parent_err = state_helpers.ensure_parent_dir(path)
+    if not parent_ok then return nil, parent_err end
+    local ok, write_err = pcall(vim.fn.writefile, vim.split(markdown, "\n", { plain = true }), path, "b")
+    if not ok then return nil, write_err end
+    return path
+  end
+
+  function backend.show_thread_export(target_pane)
+    local session = get_session(target_pane)
+    if not session then return false end
+    local title = sanitize_filename_component(session.thread_record and session.thread_record.title or session.agent_name)
+    local default_path = (session.root_dir or session.cwd) .. "/" .. title .. "-thread.md"
+    vim.ui.input({ prompt = "Export ACP thread Markdown: ", default = default_path }, function(path)
+      if not path or path == "" then return end
+      local exported, export_err = backend.export_thread_markdown(target_pane, path)
+      if exported then
+        vim.notify("Exported ACP thread to " .. exported, vim.log.levels.INFO)
+      else
+        vim.notify("LazyAgent ACP export failed: " .. tostring(export_err), vim.log.levels.ERROR)
+      end
     end)
     return true
   end

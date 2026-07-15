@@ -81,6 +81,12 @@ function M.run()
   assert(persisted.process_id ~= nil, "process identity persistence")
   assert_equal(persisted.transcript_path, runtime.acp_transcript_path, "transcript persistence")
 
+  local export_path = cache_dir .. "/exports/thread.md"
+  assert_equal(backend.export_thread_markdown(pane_id, export_path), export_path, "thread Markdown export path")
+  local exported_markdown = table.concat(vim.fn.readfile(export_path), "\n")
+  assert(exported_markdown:match("# ThreadFixture"), "thread Markdown export title")
+  assert(exported_markdown:match("Connecting ACP session"), "thread Markdown export content")
+
   assert(backend.update_thread(runtime.acp_thread_id, {
     change_journal = {
       turns = { { turn_id = runtime.acp_thread_id .. ":checkpoint", changes = {} } },

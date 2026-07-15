@@ -140,8 +140,12 @@ end
 local function ensure_parent_dir(path)
   local dir = vim.fn.fnamemodify(path, ":h")
   if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, "p")
+    local ok, result = pcall(vim.fn.mkdir, dir, "p")
+    if not ok or (result == 0 and vim.fn.isdirectory(dir) == 0) then
+      return nil, ok and ("failed to create directory: " .. dir) or result
+    end
   end
+  return true
 end
 
 local function write_transcript(path, text, mode)

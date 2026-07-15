@@ -833,6 +833,12 @@ function M.new(ctx)
     copy_to_clipboard(text, "Copied current block")
   end
 
+  local function copy_current_message(bufnr)
+    local context = visible_conversation_context(bufnr)
+    local body = section_body_text(context and context.lines or {}, context and context.section or nil)
+    copy_to_clipboard(body, "Copied message")
+  end
+
   local function copy_current_tool_output(bufnr)
     local context = visible_conversation_context(bufnr)
     local entry = tool_entry_for_item(bufnr, context and context.item or nil)
@@ -1438,9 +1444,13 @@ function M.new(ctx)
           end,
         },
         {
-          label = "Copy current block",
+          label = (item.kind == "user" or item.kind == "assistant") and "Copy message" or "Copy current block",
           action = function()
-            copy_current_block(bufnr)
+            if item.kind == "user" or item.kind == "assistant" then
+              copy_current_message(bufnr)
+            else
+              copy_current_block(bufnr)
+            end
           end,
         },
         {
@@ -1471,6 +1481,15 @@ function M.new(ctx)
           label = "Prompt queue",
           action = function()
             backend.show_prompt_queue(pane_id_for_bufnr(bufnr))
+          end,
+        }
+      end
+
+      if backend and type(backend.show_thread_export) == "function" then
+        actions[#actions + 1] = {
+          label = "Export thread Markdown",
+          action = function()
+            backend.show_thread_export(pane_id_for_bufnr(bufnr))
           end,
         }
       end
