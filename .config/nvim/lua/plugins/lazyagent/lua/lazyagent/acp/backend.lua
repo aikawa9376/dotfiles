@@ -19,6 +19,7 @@ local backend_actions = require("lazyagent.acp.backend.actions")
 local backend_cancellation = require("lazyagent.acp.backend.cancellation")
 local backend_host = require("lazyagent.acp.backend.host")
 local ThreadStore = require("lazyagent.acp.thread_store")
+local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
 
 local sessions = {}
 local section_icons = {
@@ -90,6 +91,35 @@ local function sync_thread_view(session)
     return nil
   end
   return sync_thread_record(session, { view_state = view_state })
+end
+
+local function record_turn_baseline(session)
+  if not session or not session.thread_id then
+    return nil
+  end
+  local captured, snapshot = pcall(WorkspaceSnapshot.capture, session.root_dir or session.cwd)
+  if not captured then
+    session.workspace_snapshot_error = tostring(snapshot)
+    return nil
+  end
+  session.workspace_snapshot_error = nil
+  local journal = vim.deepcopy((session.thread_record and session.thread_record.change_journal) or {})
+  journal.turns = type(journal.turns) == "table" and journal.turns or {}
+  local sequence = math.max(1, tonumber(journal.next_turn_sequence) or (#journal.turns + 1))
+  local turn = {
+    turn_id = string.format("%s:%d", session.thread_id, sequence),
+    state = "active",
+    started_at = snapshot.captured_at,
+    baseline = snapshot,
+  }
+  journal.turns[#journal.turns + 1] = turn
+  journal.next_turn_sequence = sequence + 1
+  local updated = sync_thread_record(session, { change_journal = journal })
+  if updated then
+    session.current_change_turn_id = turn.turn_id
+    return turn
+  end
+  return nil
 end
 
 state_helpers = backend_state.setup({
@@ -280,6 +310,7 @@ local function create_backend(default_view)
         return
       end
       session.preparing_prompt = false
+      record_turn_baseline(session)
       session.busy = true
       actions_helpers.maybe_call_mcp_tool("notify_start", { agent_name = session.agent_name })
       config_helpers.note_unadvertised_slash_command(session, prompt)
@@ -735,6 +766,7 @@ local function create_backend(default_view)
       acp_thread_id = session.thread_id,
       acp_provider_id = session.provider_id,
       acp_thread_store_error = session.thread_store_error,
+      acp_workspace_snapshot_error = session.workspace_snapshot_error,
       acp_resume_strategy = session.resume_strategy,
       acp_has_pending_carryover = session.pending_switch_history ~= nil,
       acp_thread_draft = session.thread_record and session.thread_record.draft or "",

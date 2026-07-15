@@ -20,6 +20,7 @@ local suites = {
   "tests.acp.content_blocks_spec",
   "tests.acp.view_lifecycle_spec",
   "tests.acp.thread_store_spec",
+  "tests.acp.workspace_snapshot_spec",
   "tests.acp.backend_thread_spec",
   "tests.acp.session_identity_spec",
   "tests.acp.session_launch_spec",
