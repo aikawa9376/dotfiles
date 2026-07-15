@@ -223,6 +223,55 @@ function M.attach(api, ctx)
     return true
   end
 
+  function M.debug_snapshot()
+    local snapshot = {
+      pane_count = 0,
+      config_count = 0,
+      buffer_count = 0,
+      valid_buffer_count = 0,
+      window_count = 0,
+      layout_count = 0,
+      active_timer_count = 0,
+      dedicated_window_count = 0,
+      redirecting_window_count = 0,
+      panes = {},
+    }
+
+    for _ in pairs(pane_config) do
+      snapshot.config_count = snapshot.config_count + 1
+    end
+    for pane_id, bufnr in pairs(pane_buffers) do
+      snapshot.pane_count = snapshot.pane_count + 1
+      snapshot.buffer_count = snapshot.buffer_count + 1
+      local valid = vim.api.nvim_buf_is_valid(bufnr)
+      local windows = valid and vim.fn.win_findbuf(bufnr) or {}
+      if valid then
+        snapshot.valid_buffer_count = snapshot.valid_buffer_count + 1
+      end
+      snapshot.window_count = snapshot.window_count + #windows
+      snapshot.panes[tostring(pane_id)] = {
+        bufnr = bufnr,
+        buffer_valid = valid,
+        window_count = #windows,
+        configured = pane_config[tostring(pane_id)] ~= nil,
+      }
+    end
+    for _, entry in pairs(layout_state) do
+      snapshot.layout_count = snapshot.layout_count + 1
+      if type(entry) == "table" and entry.markdown_render_timer ~= nil then
+        snapshot.active_timer_count = snapshot.active_timer_count + 1
+      end
+    end
+    for _ in pairs(dedicated_transcript_windows) do
+      snapshot.dedicated_window_count = snapshot.dedicated_window_count + 1
+    end
+    for _ in pairs(redirecting_transcript_windows) do
+      snapshot.redirecting_window_count = snapshot.redirecting_window_count + 1
+    end
+
+    return snapshot
+  end
+
   function M.release_session_resources(session)
     if type(session) ~= "table" then
       return false

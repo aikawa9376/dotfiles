@@ -97,8 +97,9 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] process exit、timeout、late update、pending permission中cancelのtestを追加する。
 - [ ] repeated open/close、provider switch、resession、2 Neovim instanceのlifecycle testを追加する。
   - [x] 反復open/closeと並列2 connectionでprocess/timer/callbackのzero-leakを検証する。
-- [ ] timer、callback、session view、transcript、child processの残存数をdebug表示できるようにする。
+- [x] timer、callback、session view、transcript、child processの残存数をdebug表示できるようにする。
   - [x] client process、stdio、timer、callback、permission、stdout bufferをruntime debug snapshotへ追加する。
+  - [x] backend全体のsession / transcript ownership / terminal / child processとbuffer viewのresource snapshotを追加する。
 
 ### Stable v1 completion
 
