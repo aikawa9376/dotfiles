@@ -258,7 +258,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] publish identityをactive thread metadataへdeep-mergeし、Cockpit status fallbackに利用する。
 - [x] opt-inのgit worktree作成、復元、cleanupを追加する。
   - [x] explicit create command、thread-open時path検証、stopped+clean限定cleanupを実装しbranchは自動削除しない。
-- [ ] 同じrootを共有するthread間で変更衝突を警告する。
+- [x] 同じrootを共有するthread間で変更衝突を警告する。
+  - [x] active threadのlatest changed pathsを比較し、Cockpit card markerとdeduplicated visual warningを表示する。
 - [ ] worktreeごとのtest commandと結果をthread cardへ表示する。
 
 ### Exit criteria

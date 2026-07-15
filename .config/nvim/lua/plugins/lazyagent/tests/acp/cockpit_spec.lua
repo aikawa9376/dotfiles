@@ -36,6 +36,14 @@ function M.run()
   assert(mapped["thread-a"] and mapped["thread-b"], "thread line mappings")
   local filtered = Cockpit.filter(threads, "CLAUDE")
   assert(#filtered == 1 and filtered[1].thread_id == "thread-a", "cockpit case-insensitive filter")
+
+  local conflicts = Cockpit.conflicts({
+    { thread_id = "one", cwd = "/shared", status = "active", change_journal = { turns = { { changes = { { path = "same.lua" } } } } } },
+    { thread_id = "two", cwd = "/shared", status = "active", change_journal = { turns = { { changes = { { path = "same.lua" } } } } } },
+    { thread_id = "isolated", cwd = "/worktree", status = "active", change_journal = { turns = { { changes = { { path = "same.lua" } } } } } },
+  })
+  assert(conflicts.one["same.lua"] and conflicts.two["same.lua"], "shared root conflict")
+  assert(conflicts.isolated == nil, "worktree conflict isolation")
 end
 
 return M
