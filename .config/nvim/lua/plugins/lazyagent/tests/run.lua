@@ -19,6 +19,7 @@ local suites = {
   "tests.acp.message_stream_spec",
   "tests.acp.content_blocks_spec",
   "tests.acp.context_item_spec",
+  "tests.acp.prompt_blocks_spec",
   "tests.acp.view_lifecycle_spec",
   "tests.acp.thread_store_spec",
   "tests.acp.workspace_snapshot_spec",

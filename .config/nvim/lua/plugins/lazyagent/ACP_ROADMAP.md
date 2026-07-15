@@ -211,7 +211,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] text itemはSHA-256 / changedtickまたはfile stat / byte÷4 token概算 / whitespace compact previewを生成する。
 - [x] capabilityに応じてText / Image / EmbeddedResource / ResourceLinkへloweringする。
   - [x] selection / media / file・range / directoryのloweringをContextItemへ集約し、非対応mediaは送信せず理由をText表示する。
-- [ ] input imageをfirst-class ACP Image blockとして送信する。
+- [x] input imageをfirst-class ACP Image blockとして送信する。
+  - [x] paste / screenshotの`@path`をagent capabilityに応じてACP Imageへloweringし、非対応agentにはpayloadを送らず理由をText表示する。
 - [ ] assistant/tool outputのimage、audio、resourceをNeovim上で表示する。
 - [ ] slash commandのdescriptionとargument hintをcomposer completionへ表示する。
 
