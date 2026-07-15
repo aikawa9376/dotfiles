@@ -169,9 +169,10 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] prompt開始時にworkspace manifestとdirty/untracked stateを記録する。
   - [x] Git HEAD / tracked / untracked / index・worktree statusとfile statをturn baselineとしてThreadStoreへ永続化する。
   - [x] 非Git workspaceは上限付きfilesystem manifestへfallbackし、採取失敗でprompt送信を止めない。
-- [ ] ACP filesystem edit、tool location、buffer eventをturn/tool callへ紐付ける。
+- [x] ACP filesystem edit、tool location、buffer eventをturn/tool callへ紐付ける。
   - [x] tool call/updateをID単位でturnへupsertし、path / location / statusを永続化する。
   - [x] ACP filesystem writeをadded / modified eventとして現在のturnへ紐付ける。
+  - [x] active turn中の`BufWritePost`をworkspaceで絞り、単一active toolがあればそのIDへ紐付ける。
 - [ ] shell経由の変更をfilesystem watcherとturn終了後scanで補足する。
 - [ ] before/after blobをcontent-addressed storageへ保存する。
 - [ ] file changeをadded / modified / deleted / moved / binaryで表現する。
