@@ -80,6 +80,18 @@ local function sync_thread_record(session, changes)
   return updated
 end
 
+local function sync_thread_view(session)
+  local view = session and session.view or nil
+  if not view or type(view.capture_thread_view) ~= "function" then
+    return nil
+  end
+  local view_state = view.capture_thread_view(session.pane_id, session)
+  if type(view_state) ~= "table" then
+    return nil
+  end
+  return sync_thread_record(session, { view_state = view_state })
+end
+
 state_helpers = backend_state.setup({
   cache_logic = cache_logic,
   util = util,
@@ -571,6 +583,12 @@ local function create_backend(default_view)
       if type(view.on_session_created) == "function" then
         view.on_session_created(session)
       end
+      if existing_thread
+        and type(existing_thread.view_state) == "table"
+        and type(view.restore_thread_view) == "function"
+      then
+        view.restore_thread_view(pane_id, existing_thread.view_state, session)
+      end
       host_helpers.start_client(session, {
         drain_prompt_queue = function(target_pane)
           backend._drain_prompt_queue(target_pane)
@@ -791,18 +809,18 @@ local function create_backend(default_view)
         end
         return true
       elseif normalized == "Up" then
-        if session.view and type(session.view.scroll_up) == "function" then
-          return session.view.scroll_up(pane_id)
-        end
-        return true
+        return backend.scroll_up(pane_id)
       elseif normalized == "Down" then
-        if session.view and type(session.view.scroll_down) == "function" then
-          return session.view.scroll_down(pane_id)
-        end
-        return true
+        return backend.scroll_down(pane_id)
       elseif normalized == "Escape" then
         if session.view and type(session.view.resume_follow) == "function" then
-          return session.view.resume_follow(pane_id)
+          local result = session.view.resume_follow(pane_id)
+          vim.schedule(function()
+            if get_session(pane_id) == session then
+              sync_thread_view(session)
+            end
+          end)
+          return result
         end
         return true
       elseif normalized:match("^%d$") or (literal_mode and #normalized > 0) then
@@ -824,6 +842,7 @@ local function create_backend(default_view)
       session.closing_intentionally = true
       host_helpers.release_all_terminals(session)
       local view = session_view(session)
+      sync_thread_view(session)
       if view and type(view.kill_pane) == "function" then
         view.kill_pane(pane_id, session)
       end
@@ -906,6 +925,7 @@ local function create_backend(default_view)
     local session = get_session(pane_id)
     local view = session_view(session)
     if view and type(view.break_pane) == "function" then
+      sync_thread_view(session)
       return view.break_pane(pane_id, session)
     end
     return false
@@ -915,6 +935,7 @@ local function create_backend(default_view)
     local session = get_session(pane_id)
     local view = session_view(session)
     if view and type(view.break_pane_sync) == "function" then
+      sync_thread_view(session)
       return view.break_pane_sync(pane_id, session)
     end
     return backend.break_pane(pane_id)
@@ -956,7 +977,13 @@ local function create_backend(default_view)
     local session = get_session(pane_id)
     local view = session_view(session)
     if view and type(view.scroll_up) == "function" then
-      return view.scroll_up(pane_id, session)
+      local result = view.scroll_up(pane_id, session)
+      vim.defer_fn(function()
+        if get_session(pane_id) == session then
+          sync_thread_view(session)
+        end
+      end, 100)
+      return result
     end
     return false
   end
@@ -965,7 +992,13 @@ local function create_backend(default_view)
     local session = get_session(pane_id)
     local view = session_view(session)
     if view and type(view.scroll_down) == "function" then
-      return view.scroll_down(pane_id, session)
+      local result = view.scroll_down(pane_id, session)
+      vim.defer_fn(function()
+        if get_session(pane_id) == session then
+          sync_thread_view(session)
+        end
+      end, 100)
+      return result
     end
     return false
   end
