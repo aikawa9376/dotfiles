@@ -44,7 +44,18 @@ function M.run()
   assert_equal(selection.source_version.bufnr, bufnr, "selection source buffer")
   assert(selection.source_version.changedtick > 0, "selection source changedtick")
   assert_equal(ContextItem.to_markdown(selection), "```lua\nlpha\nbet\n```", "selection markdown lowering")
+  assert_equal(ContextItem.lower(selection, {}).type, "text", "selection text lowering")
   vim.api.nvim_buf_delete(bufnr, { force = true })
+
+  local media_path = vim.fn.tempname() .. ".png"
+  vim.fn.writefile({ "image fixture" }, media_path, "b")
+  local media = assert(ContextItem.media({ path = media_path }))
+  assert_equal(media.kind, "image", "media context kind")
+  assert_equal(assert(ContextItem.lower(media, { image = true })).type, "image", "image capability lowering")
+  local unsupported = ContextItem.lower(media, {})
+  assert_equal(unsupported.type, "text", "unsupported image text lowering")
+  assert(unsupported.text:match("does not support image"), "unsupported image reason")
+  vim.fn.delete(media_path)
 end
 
 return M

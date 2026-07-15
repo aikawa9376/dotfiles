@@ -1,6 +1,7 @@
 local M = {}
 
 local uv = vim.uv or vim.loop
+local ContentBlocks = require("lazyagent.acp.content_blocks")
 
 local function preview(text, limit)
   text = tostring(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
@@ -111,6 +112,22 @@ function M.directory(opts)
   }, opts)
 end
 
+function M.media(opts)
+  opts = opts or {}
+  local path = vim.fn.fnamemodify(opts.path, ":p")
+  local kind = ContentBlocks.media_kind(path)
+  if not kind then
+    return nil, "unsupported media type"
+  end
+  return enrich({
+    kind = kind,
+    source = opts.source or "reference",
+    path = path,
+    uri = file_uri(path),
+    display = opts.display or path,
+  }, opts)
+end
+
 function M.selection(bufnr, opts)
   opts = opts or {}
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
@@ -160,6 +177,12 @@ end
 
 function M.lower(item, capabilities)
   capabilities = capabilities or {}
+  if item.kind == "image" or item.kind == "audio" then
+    return ContentBlocks.from_file(item.path, {
+      image = capabilities.image == true,
+      audio = capabilities.audio == true,
+    })
+  end
   if item.kind == "directory" then
     return {
       type = "resource_link",
@@ -167,6 +190,9 @@ function M.lower(item, capabilities)
       name = vim.fn.fnamemodify(item.path, ":t"),
       title = item.display,
     }
+  end
+  if item.kind == "selection" and capabilities.embedded_context ~= true then
+    return { type = "text", text = item.content or "" }
   end
   if capabilities.embedded_context == true then
     return {
