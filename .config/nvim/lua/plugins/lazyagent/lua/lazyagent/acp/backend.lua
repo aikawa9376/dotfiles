@@ -531,6 +531,8 @@ local function create_backend(default_view)
       acp_ready = session.ready == true,
       acp_failed = session.failed == true,
       acp_supports_embedded_context = session.prompt_supports_embedded_context == true,
+      acp_supports_image = session.prompt_supports_image == true,
+      acp_supports_audio = session.prompt_supports_audio == true,
       acp_mcp_server_count = session.mcp_server_count or ((session.mcp_url and session.mcp_url ~= "") and 1 or 0),
       acp_permission_rules = vim.deepcopy(session.permission_rules or {}),
       acp_auto_switch = vim.deepcopy(session.auto_switch or {}),

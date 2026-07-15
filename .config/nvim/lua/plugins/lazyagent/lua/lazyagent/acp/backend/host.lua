@@ -1006,6 +1006,8 @@ function M.setup(deps)
       session.mode_catalog = vim.deepcopy((session_result and session_result.modes) or {})
       local prompt_caps = client.agent_capabilities and client.agent_capabilities.promptCapabilities or {}
       session.prompt_supports_embedded_context = prompt_caps and prompt_caps.embeddedContext == true
+      session.prompt_supports_image = prompt_caps and prompt_caps.image == true
+      session.prompt_supports_audio = prompt_caps and prompt_caps.audio == true
       session.mcp_server_count = 0
       sync_runtime_session(session)
       local agent_name = client.agent_info and (client.agent_info.title or client.agent_info.name) or session.agent_name

@@ -1,5 +1,6 @@
 
 local M = {}
+local ContentBlocks = require("lazyagent.acp.content_blocks")
 
 function M.setup(deps)
   local state = deps.state
@@ -848,12 +849,18 @@ local function resolve_reference(token, session)
 
   local abs_path
   local is_directory = false
+  local is_media = false
   local lines
   for _, candidate in ipairs(candidates) do
     local expanded = vim.fn.fnamemodify(candidate, ":p")
     if vim.fn.isdirectory(expanded) == 1 then
       abs_path = expanded
       is_directory = true
+      break
+    end
+    if ContentBlocks.media_kind(expanded) and vim.fn.filereadable(expanded) == 1 then
+      abs_path = expanded
+      is_media = true
       break
     end
     lines = read_path_lines(expanded)
@@ -883,7 +890,19 @@ local function resolve_reference(token, session)
   end
 
   local block
-  if is_directory then
+  if is_media then
+    local media_err
+    block, media_err = ContentBlocks.from_file(abs_path, {
+      image = session.prompt_supports_image == true,
+      audio = session.prompt_supports_audio == true,
+    })
+    if not block then
+      block = {
+        type = "text",
+        text = "[media omitted: " .. tostring(media_err or "failed to read media") .. "]",
+      }
+    end
+  elseif is_directory then
     block = {
       type = "resource_link",
       uri = file_uri(abs_path),
