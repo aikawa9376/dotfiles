@@ -356,6 +356,8 @@ ACP composerでは`@diagnostics`を選ぶと、起点bufferのLSP diagnosticsを
 
 transcriptの`ga` → `Search thread`はuser/assistant message、thinking、runtime compactionされたbody ref、展開tool content/raw outputを横断検索します。message結果は該当blockへjumpし、tool結果はdetail viewerを開きます。
 
+user/assistant blockの`ga` → `Copy message`は本文だけをcopyします。`Export thread Markdown`はruntime compactionされたmessage bodyとtool content/raw refsも展開し、指定pathへ完全なthread Markdownを書き出します。
+
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
 ## MCP hooks

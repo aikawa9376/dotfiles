@@ -231,7 +231,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] ACP agent向けSend Nowはcancel-and-sendであることを表示する。
 - [x] thread内searchをmessage / thought / expanded tool outputへ対応させる。
   - [x] runtime refsを含むsearch indexと、message jump / tool detail pickerをaction menuへ追加する。
-- [ ] user/assistant messageのcopy、thread Markdown exportを追加する。
+- [x] user/assistant messageのcopy、thread Markdown exportを追加する。
+  - [x] message body copyとruntime/tool refsを展開する欠落のないMarkdown exporterをaction menuへ追加する。
 - [ ] pending permission / elicitation / completionをvisual・sound notificationへ接続する。
 
 ### Exit criteria
