@@ -25,6 +25,7 @@ local Watch = require("lazyagent.watch")
 local BlobStore = require("lazyagent.acp.blob_store")
 local ChangeReview = require("lazyagent.acp.change_review")
 local ChangeApply = require("lazyagent.acp.change_apply")
+local Follow = require("lazyagent.acp.follow")
 
 local sessions = {}
 local section_icons = {
@@ -99,6 +100,7 @@ local function sync_thread_view(session)
 end
 
 local record_turn_event
+local maybe_follow_agent
 
 local function record_turn_baseline(session)
   if not session or not session.thread_id then
@@ -151,7 +153,28 @@ record_turn_event = function(session, kind, event)
   if not journal then
     return nil
   end
-  return sync_thread_record(session, { change_journal = journal }) and turn or nil
+  local recorded = sync_thread_record(session, { change_journal = journal }) and turn or nil
+  if maybe_follow_agent then
+    maybe_follow_agent(session, event)
+  end
+  return recorded
+end
+
+maybe_follow_agent = function(session, event)
+  if not session or session.follow_agent ~= true then
+    return nil
+  end
+  local target = Follow.resolve(session, event)
+  if not target or target.key == session.follow_agent_last_target then
+    return nil
+  end
+  session.follow_agent_last_target = target.key
+  vim.schedule(function()
+    if get_session(session.pane_id) == session and session.follow_agent == true then
+      util.open_in_normal_win(target.path, { line = target.line })
+    end
+  end)
+  return target
 end
 
 local function finish_change_turn(session, completion_state)
@@ -735,6 +758,10 @@ local function create_backend(default_view)
         provider_id = acp.provider_id or acp.agent_name,
         thread_store = thread_store,
         blob_store = blob_store,
+        follow_agent = existing_thread
+            and existing_thread.metadata
+            and existing_thread.metadata.follow_agent == true
+          or acp.follow_agent == true,
         thread_record = existing_thread and vim.deepcopy(existing_thread) or nil,
       }
       local session = sessions[pane_id]
@@ -813,6 +840,33 @@ local function create_backend(default_view)
       return nil, err or ("thread not found: " .. tostring(thread_id))
     end
     return change_review.open(thread)
+  end
+
+  function backend.toggle_follow_agent(pane_id)
+    local session = get_session(pane_id)
+    if not session then
+      return nil, "ACP session is not active"
+    end
+    session.follow_agent = session.follow_agent ~= true
+    session.follow_agent_last_target = nil
+    local metadata = vim.deepcopy((session.thread_record and session.thread_record.metadata) or {})
+    metadata.follow_agent = session.follow_agent
+    sync_thread_record(session, { metadata = metadata })
+    if session.follow_agent then
+      local tool = session.tool_timeline and session.tool_timeline[#session.tool_timeline] or nil
+      if tool then
+        maybe_follow_agent(session, { paths = tool.paths })
+      else
+        local turns = session.thread_record and session.thread_record.change_journal
+          and session.thread_record.change_journal.turns or {}
+        local turn = turns[#turns]
+        local change = turn and turn.changes and turn.changes[#turn.changes] or nil
+        if change then
+          maybe_follow_agent(session, { path = change.path })
+        end
+      end
+    end
+    return session.follow_agent
   end
 
   function backend.decide_thread_changes(thread_id, turn_id, indices, decision)
@@ -1083,6 +1137,7 @@ local function create_backend(default_view)
       acp_provider_id = session.provider_id,
       acp_thread_store_error = session.thread_store_error,
       acp_workspace_snapshot_error = session.workspace_snapshot_error,
+      acp_follow_agent = session.follow_agent == true,
       acp_resume_strategy = session.resume_strategy,
       acp_has_pending_carryover = session.pending_switch_history ~= nil,
       acp_thread_draft = session.thread_record and session.thread_record.draft or "",

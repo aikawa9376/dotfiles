@@ -201,6 +201,11 @@ local commands = {
     desc = "Open ACP tool and edit review for an ACP-enabled agent",
     handler = session_logic.show_acp_tool_review,
   },
+  {
+    name = "LazyAgentACPFollow",
+    desc = "Toggle following the current ACP tool location or changed file",
+    handler = session_logic.toggle_acp_follow,
+  },
 }
 
 local function has_active_acp_sessions()
