@@ -16,6 +16,7 @@ local backend_state = require("lazyagent.acp.backend.state")
 local backend_conversation = require("lazyagent.acp.backend.conversation")
 local backend_config = require("lazyagent.acp.backend.config")
 local backend_actions = require("lazyagent.acp.backend.actions")
+local backend_cancellation = require("lazyagent.acp.backend.cancellation")
 local backend_host = require("lazyagent.acp.backend.host")
 
 local sessions = {}
@@ -194,6 +195,15 @@ local function create_backend(default_view)
     return (session and session.view) or default_view
   end
 
+  local function finalize_cancelled_tools(session)
+    return backend_cancellation.finalize_tools(session, {
+      merge_tool_update = conversation_helpers.merge_tool_update,
+      append_block = conversation_helpers.append_block,
+      tool_heading = conversation_helpers.tool_heading,
+      extract_tool_paths = actions_helpers.extract_tool_paths,
+    })
+  end
+
   function backend._drain_prompt_queue(pane_id)
     local session = get_session(pane_id)
     if not session or session.failed or session.busy or session.preparing_prompt or not session.ready or not session.client then
@@ -209,6 +219,20 @@ local function create_backend(default_view)
     config_helpers.maybe_apply_auto_switch(session, prompt, function()
       if next(session.tool_calls or {}) == nil then
         complete_pending_turn(session)
+      end
+      if session.cancel_requested == true then
+        session.cancel_requested = false
+        session.preparing_prompt = false
+        conversation_helpers.append_block(session, "System", "Prompt cancelled before send")
+        pcall(function()
+          require("lazyagent.logic.status").set_waiting(session.agent_name, "Cancelled")
+        end)
+        if #session.prompt_queue > 0 then
+          vim.schedule(function()
+            backend._drain_prompt_queue(pane_id)
+          end)
+        end
+        return
       end
       session.preparing_prompt = false
       session.busy = true
@@ -228,10 +252,15 @@ local function create_backend(default_view)
       vim.list_extend(blocks, actions_helpers.build_prompt_blocks(session, prompt))
       session.client:send_prompt(blocks, function(result, err)
         session.busy = false
+        local cancel_requested = session.cancel_requested == true
+        session.cancel_requested = false
         conversation_helpers.close_stream(session)
 
         if err then
           session.pending_brain_turn = nil
+          if cancel_requested then
+            finalize_cancelled_tools(session)
+          end
           conversation_helpers.append_block(session, "Error", err.message or tostring(err))
           pcall(function()
             require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
@@ -245,6 +274,27 @@ local function create_backend(default_view)
         end
 
         local stop_reason = result and result.stopReason or nil
+        if cancel_requested or stop_reason == "cancelled" then
+          session.pending_brain_turn = nil
+          finalize_cancelled_tools(session)
+          conversation_helpers.append_block(session, "System", "Turn cancelled")
+          util.fire_event("TurnDone", {
+            agent_name = session.agent_name,
+            result = result,
+            cancelled = true,
+          })
+          actions_helpers.maybe_call_mcp_tool("notify_done", {
+            agent_name = session.agent_name,
+            cancelled = true,
+          })
+          pcall(function()
+            require("lazyagent.logic.status").set_waiting(session.agent_name, "Cancelled")
+          end)
+          if #session.prompt_queue > 0 then
+            backend._drain_prompt_queue(pane_id)
+          end
+          return
+        end
         if stop_reason == "tool_call" then
           session.pending_brain_turn = {
             prompt = prompt,
@@ -514,6 +564,7 @@ local function create_backend(default_view)
         literal_mode = true
       elseif normalized == "C-c" or normalized == string.char(3) then
         if session.client then
+          session.cancel_requested = session.busy == true or session.preparing_prompt == true
           session.client:cancel()
           conversation_helpers.append_block(session, "System", "Cancellation requested")
         end

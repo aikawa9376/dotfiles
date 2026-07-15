@@ -35,6 +35,7 @@ local function new_client(root, overrides)
   local errors = {}
   local exits = {}
   local permission_requests = {}
+  local deferred_permission_done
 
   local opts = {
     command = {
@@ -53,6 +54,7 @@ local function new_client(root, overrides)
     },
     request_timeout_ms = overrides.request_timeout_ms,
     prompt_timeout_ms = overrides.prompt_timeout_ms,
+    cancel_settle_ms = overrides.cancel_settle_ms,
     handlers = {
       read_text_file = function(params)
         assert_equal("/virtual/fixture.txt", params.path, "read path")
@@ -60,10 +62,14 @@ local function new_client(root, overrides)
       end,
       request_permission = function(params, done)
         permission_requests[#permission_requests + 1] = params
-        done({
-          outcome = "selected",
-          optionId = "allow-once",
-        })
+        if overrides.defer_permission then
+          deferred_permission_done = done
+        else
+          done({
+            outcome = "selected",
+            optionId = "allow-once",
+          })
+        end
       end,
     },
     on_update = function(params)
@@ -87,6 +93,9 @@ local function new_client(root, overrides)
     errors = errors,
     exits = exits,
     permission_requests = permission_requests,
+    deferred_permission_done = function()
+      return deferred_permission_done
+    end,
   }
 end
 
@@ -233,7 +242,7 @@ local function test_request_timeout_sends_cancellation(root)
     env = {
       LAZYAGENT_FAKE_HANG_LIST = "1",
     },
-    request_timeout_ms = 50,
+    request_timeout_ms = 1000,
   })
   local started = false
 
@@ -243,6 +252,7 @@ local function test_request_timeout_sends_cancellation(root)
     started = true
   end)
   wait_for("timeout test startup", function() return started end)
+  client.request_timeout_ms = 50
 
   local list_error
   client:list_sessions({}, function(result, err)
@@ -268,12 +278,76 @@ local function test_request_timeout_sends_cancellation(root)
   wait_for("timeout test agent exit", function() return #observed.exits == 1 end)
 end
 
+local function test_cancel_settles_late_updates(root)
+  local client, observed = new_client(root, {
+    env = {
+      LAZYAGENT_FAKE_CANCEL_FLOW = "1",
+    },
+    defer_permission = true,
+    cancel_settle_ms = 30,
+  })
+  local started = false
+
+  client:start(function(connected, err)
+    assert_equal(nil, err, "cancel test startup")
+    assert_equal(client, connected, "cancel test client")
+    started = true
+  end)
+  wait_for("cancel test startup", function() return started end)
+
+  local prompt_result
+  local updates_at_callback
+  client:send_prompt({
+    {
+      type = "text",
+      text = "cancel this turn",
+    },
+  }, function(result, err)
+    assert_equal(nil, err, "cancelled prompt error")
+    prompt_result = result
+    updates_at_callback = #observed.updates
+  end)
+
+  wait_for("pending permission", function()
+    return #observed.permission_requests == 1 and observed.deferred_permission_done() ~= nil
+  end)
+  assert_equal("active", client.prompt_state, "active prompt state")
+  assert_equal(1, vim.tbl_count(client.pending_permission_requests), "pending permission count")
+
+  assert_equal(true, client:cancel(), "session cancel notification")
+  assert_equal("cancelling", client.prompt_state, "cancelling prompt state")
+  assert_equal(0, vim.tbl_count(client.pending_permission_requests), "cancelled permission count")
+
+  wait_for("cancelled prompt response", function() return prompt_result ~= nil end)
+  assert_equal("cancelled", prompt_result.stopReason, "cancel stop reason")
+  assert_equal("idle", client.prompt_state, "settled prompt state")
+  assert_equal(2, updates_at_callback, "late update delivered before callback")
+  assert_equal("tool_call_update", observed.updates[2].update.sessionUpdate, "late tool update")
+  assert_equal(true, observed.updates[2].update._meta.lateAfterPromptResponse, "late update marker")
+
+  observed.deferred_permission_done()({
+    outcome = "selected",
+    optionId = "allow-once",
+  })
+  vim.wait(30, function() return false end, 10)
+  assert_equal(2, #observed.updates, "deferred permission callback ignored")
+
+  local closed = false
+  client:close_session(nil, function(_, err)
+    assert_equal(nil, err, "cancel test close")
+    closed = true
+  end)
+  wait_for("cancel test close", function() return closed end)
+  wait_for("cancel test agent exit", function() return #observed.exits == 1 end)
+end
+
 function M.run()
   local root = plugin_root()
   test_capability_semantics()
   test_stdio_contract(root)
   test_protocol_mismatch_stops_process(root)
   test_request_timeout_sends_cancellation(root)
+  test_cancel_settles_late_updates(root)
 end
 
 return M
