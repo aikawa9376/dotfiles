@@ -1020,6 +1020,21 @@ function M.setup(deps)
     end)
   end
 
+  function module.toggle_acp_follow(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.toggle_follow_agent) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not support Follow Agent", vim.log.levels.WARN)
+        return
+      end
+      local enabled, err = backend_mod.toggle_follow_agent(pane_id)
+      if enabled == nil then
+        vim.notify("LazyAgentACP: " .. tostring(err), vim.log.levels.ERROR)
+        return
+      end
+      vim.notify("LazyAgent ACP Follow Agent: " .. (enabled and "ON" or "OFF"), vim.log.levels.INFO)
+    end)
+  end
+
   function module.open_raw_transcript(agent_name)
     with_acp_session(agent_name, function(chosen, pane_id, backend_mod)
       local session = state.sessions[chosen]

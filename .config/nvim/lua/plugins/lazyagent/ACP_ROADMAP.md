@@ -185,7 +185,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] file / all Keepをdecisionとして永続化し、Rejectはcurrent == after blobのpreflight後だけbefore blobをatomic復元する。
   - [x] added / modified / deleted / moved / binaryのfile Rejectとall事前検証を実装する。
   - [x] text modified / moved changeはstable hunk IDとreview blobを保持し、複数hunkを順次Keep / Rejectできる。
-- [ ] Follow Agentで現在のtool location / changed fileへ追従できるようにする。
+- [x] Follow Agentで現在のtool location / changed fileへ追従できるようにする。
+  - [x] `:LazyAgentACPFollow [agent]`でthread単位に切替え、location > tool path > changed fileの順に通常windowへ追従する。
 - [ ] agent変更後にuserが再編集した場合は3-way applyし、競合時は上書きしない。
 - [ ] filesystem checkpointのrestore / redoとcheckpointからのclient-local branchを追加する。
 

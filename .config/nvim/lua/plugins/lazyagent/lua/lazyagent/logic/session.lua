@@ -185,6 +185,7 @@ M.show_acp_capabilities = acp_actions.show_acp_capabilities
 M.show_acp_doctor = acp_actions.show_acp_doctor
 M.show_acp_context_budget = acp_actions.show_acp_context_budget
 M.show_acp_tool_review = acp_actions.show_acp_tool_review
+M.toggle_acp_follow = acp_actions.toggle_acp_follow
 M.open_raw_acp_transcript = acp_actions.open_raw_transcript
 M.open_full_acp_transcript = acp_actions.open_full_transcript
 M.save_conversation_checkpoint = acp_actions.save_conversation_checkpoint
