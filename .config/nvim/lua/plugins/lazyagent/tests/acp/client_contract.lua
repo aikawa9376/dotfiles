@@ -151,6 +151,58 @@ local function test_authentication_flow(root)
   wait_for("auth test exit", function() return #observed.exits == 1 end)
 end
 
+local function close_client(client, observed, label)
+  local closed = false
+  client:close_session(nil, function(_, err)
+    assert_equal(nil, err, label .. " close error")
+    closed = true
+  end)
+  wait_for(label .. " close response", function() return closed end)
+  wait_for(label .. " process exit", function() return #observed.exits == 1 end)
+  local debug = client:debug_snapshot()
+  assert_equal("stopped", debug.state, label .. " state")
+  assert_equal(false, debug.process, label .. " process handle")
+  assert_equal(nil, debug.pid, label .. " pid")
+  assert_equal(false, debug.stdin, label .. " stdin handle")
+  assert_equal(false, debug.stdout, label .. " stdout handle")
+  assert_equal(false, debug.stderr, label .. " stderr handle")
+  assert_equal(0, debug.callbacks, label .. " callbacks")
+  assert_equal(0, debug.callback_timers, label .. " callback timers")
+  assert_equal(0, debug.stop_timer, label .. " stop timer")
+  assert_equal(0, debug.pending_permissions, label .. " permissions")
+  assert_equal(0, debug.stdout_buffer_bytes, label .. " stdout buffer")
+end
+
+local function test_repeated_and_parallel_lifecycle(root)
+  for idx = 1, 10 do
+    local client, observed = new_client(root)
+    local started
+    client:start(function(result, err)
+      assert_equal(nil, err, "repeat start " .. idx)
+      started = result
+    end)
+    wait_for("repeat start " .. idx, function() return started ~= nil end)
+    close_client(client, observed, "repeat " .. idx)
+  end
+
+  local first, first_observed = new_client(root)
+  local second, second_observed = new_client(root)
+  local first_started, second_started
+  first:start(function(result, err)
+    assert_equal(nil, err, "parallel first start")
+    first_started = result
+  end)
+  second:start(function(result, err)
+    assert_equal(nil, err, "parallel second start")
+    second_started = result
+  end)
+  wait_for("parallel clients", function() return first_started ~= nil and second_started ~= nil end)
+  assert_truthy(first.pid ~= second.pid, "parallel clients use distinct processes")
+  close_client(first, first_observed, "parallel first")
+  assert_equal(true, second:is_connected(), "closing first preserves second")
+  close_client(second, second_observed, "parallel second")
+end
+
 local function test_capability_semantics()
   local Client = require("lazyagent.acp.client")
   local client = Client.new({})
@@ -412,6 +464,7 @@ function M.run()
   test_request_timeout_sends_cancellation(root)
   test_cancel_settles_late_updates(root)
   test_authentication_flow(root)
+  test_repeated_and_parallel_lifecycle(root)
 end
 
 return M
