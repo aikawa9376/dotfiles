@@ -28,6 +28,16 @@ local KNOWN_SESSION_UPDATES = {
   usage_update = true,
   user_message_chunk = true,
 }
+local SESSION_SCOPED_SERVER_METHODS = {
+  ["session/request_permission"] = true,
+  ["fs/read_text_file"] = true,
+  ["fs/write_text_file"] = true,
+  ["terminal/create"] = true,
+  ["terminal/output"] = true,
+  ["terminal/wait_for_exit"] = true,
+  ["terminal/kill"] = true,
+  ["terminal/release"] = true,
+}
 
 local function normalize_command_spec(spec)
   if type(spec) == "string" then
@@ -227,6 +237,7 @@ function Client.new(opts)
     stderr_lines = {},
     protocol_events = {},
     session_id = nil,
+    pending_session_id = nil,
     agent_capabilities = nil,
     agent_info = nil,
     auth_methods = {},
@@ -498,6 +509,7 @@ function Client:_attach_session(session_id, session_result)
   session_result = type(session_result) == "table" and session_result or {}
   self:_convert_legacy_session_fields(session_result)
   self.session_id = session_id
+  self.pending_session_id = nil
   self:_set_state("ready")
   return session_result
 end
@@ -709,8 +721,10 @@ function Client:load_session(session_id, callback)
     return
   end
 
+  self.pending_session_id = session_id
   self:_send_request("session/load", self:_build_session_params(session_id), function(result, err)
     if err then
+      self.pending_session_id = nil
       callback(nil, err)
       return
     end
@@ -731,8 +745,10 @@ function Client:resume_session(session_id, callback)
     return
   end
 
+  self.pending_session_id = session_id
   self:_send_request("session/resume", self:_build_session_params(session_id), function(result, err)
     if err then
+      self.pending_session_id = nil
       callback(nil, err)
       return
     end
@@ -827,6 +843,15 @@ end
 
 function Client:_handle_update(params)
   if not params or type(params) ~= "table" then return end
+  local expected_session = self.session_id or self.pending_session_id
+  if expected_session and params.sessionId ~= expected_session then
+    self:_record_protocol_event("session_scope_mismatch", {
+      method = "session/update",
+      expected_session_id = expected_session,
+      received_session_id = params.sessionId,
+    })
+    return
+  end
   local update = params.update
   if type(update) == "table" then
     local variant = update.sessionUpdate
@@ -879,6 +904,20 @@ end
 
 function Client:_handle_server_request(id, method, params)
   local handlers = self.handlers or {}
+  local expected_session = self.session_id or self.pending_session_id
+  if SESSION_SCOPED_SERVER_METHODS[method]
+    and expected_session
+    and (not params or params.sessionId ~= expected_session)
+  then
+    self:_record_protocol_event("session_scope_mismatch", {
+      id = id,
+      method = method,
+      expected_session_id = expected_session,
+      received_session_id = params and params.sessionId or nil,
+    })
+    self:_send_error(id, ERR.invalid_params, "ACP request sessionId does not match the active session")
+    return
+  end
 
   if method == "session/request_permission" then
     if not handlers.request_permission then
