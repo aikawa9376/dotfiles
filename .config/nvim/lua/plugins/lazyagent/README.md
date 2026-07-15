@@ -366,6 +366,8 @@ active threadはruntime snapshotとjoinされ、statusをrunning / waiting / per
 
 Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`X` running ACP session一括closeを使えます。deleteとbulk closeは確認後に実行します。
 
+agentmux publish時のpane/owner/kind/name/state/message/preview identityはactive threadの`metadata.agentmux`にも保存され、Neovim runtimeが無い場合のCockpit status fallbackとして利用されます。
+
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
 ## MCP hooks

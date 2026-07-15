@@ -26,6 +26,10 @@ local function common_status(thread, runtime)
     end
     if runtime.acp_ready == true then return "idle" end
   end
+  local agentmux_state = thread.metadata and thread.metadata.agentmux and thread.metadata.agentmux.state
+  if agentmux_state == "working" then return "running" end
+  if agentmux_state == "blocked" then return "waiting" end
+  if agentmux_state == "idle" then return "idle" end
   if thread.status == "active" and thread.process_id ~= nil then return "disconnected" end
   return thread.status or "closed"
 end

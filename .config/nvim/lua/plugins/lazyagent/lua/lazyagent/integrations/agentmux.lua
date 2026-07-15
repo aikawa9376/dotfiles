@@ -5,6 +5,7 @@ local state = require("lazyagent.logic.state")
 local initialized = false
 local running = false
 local pending = nil
+local persisted_identity_hashes = {}
 
 local function enclosing_tmux_pane()
   local pane = tostring(vim.env.TMUX_PANE or "")
@@ -82,6 +83,41 @@ local function aggregate_status(sessions)
   return selected.status, selected.message, selected.session
 end
 
+function M.identity_for(name, session, pane)
+  session = session or {}
+  local status = tostring(session.agent_status or "idle"):lower()
+  if session.monitor_timer then status = "thinking" end
+  local states = { thinking = "working", waiting = "blocked", idle = "idle" }
+  return {
+    pane_id = pane or enclosing_tmux_pane(),
+    owner = "lazyagent",
+    owner_pid = vim.fn.getpid(),
+    kind = tostring(name or "lazyagent"):lower(),
+    name = tostring(name or "LazyAgent") .. " (ACP)",
+    state = states[status] or "idle",
+    message = tostring(session.agent_status_message or ""),
+    preview_path = session.acp_transcript_path or session.transcript_path,
+  }
+end
+
+local function persist_thread_identities(sessions, pane)
+  for _, item in ipairs(sessions) do
+    local backend = state.backends and state.backends[item.session.backend] or nil
+    if backend and type(backend.get_runtime_snapshot) == "function" and type(backend.update_thread) == "function" then
+      local runtime = backend.get_runtime_snapshot(item.session.pane_id)
+      local thread_id = runtime and runtime.acp_thread_id or nil
+      if thread_id then
+        local identity = M.identity_for(item.name, item.session, pane)
+        local hash = vim.fn.sha256(vim.inspect(identity))
+        if persisted_identity_hashes[thread_id] ~= hash then
+          local updated = backend.update_thread(thread_id, { metadata = { agentmux = identity } })
+          if updated then persisted_identity_hashes[thread_id] = hash end
+        end
+      end
+    end
+  end
+end
+
 function M.sync()
   local binary = executable()
   local pane = enclosing_tmux_pane()
@@ -94,6 +130,8 @@ function M.sync()
     enqueue({ binary, "withdraw", pane, "--owner", "lazyagent" })
     return true
   end
+
+  persist_thread_identities(sessions, pane)
 
   local names = {}
   for _, item in ipairs(sessions) do
