@@ -173,7 +173,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] tool call/updateをID単位でturnへupsertし、path / location / statusを永続化する。
   - [x] ACP filesystem writeをadded / modified eventとして現在のturnへ紐付ける。
   - [x] active turn中の`BufWritePost`をworkspaceで絞り、単一active toolがあればそのIDへ紐付ける。
-- [ ] shell経由の変更をfilesystem watcherとturn終了後scanで補足する。
+- [x] shell経由の変更をfilesystem watcherとturn終了後scanで補足する。
+  - [x] active turn中はworkspace rootのfilesystem eventを候補として記録し、終了時manifest diffを正本としてadded / modified / deletedを確定する。
 - [ ] before/after blobをcontent-addressed storageへ保存する。
 - [ ] file changeをadded / modified / deleted / moved / binaryで表現する。
 - [ ] changed files drawerとmulti-buffer reviewを実装する。

@@ -66,4 +66,24 @@ function M.record(journal, turn_id, kind, event)
   return journal, copy(turn)
 end
 
+function M.get(journal, turn_id)
+  local turn = find_turn(type(journal) == "table" and journal or {}, turn_id)
+  return turn and copy(turn) or nil
+end
+
+function M.finish(journal, turn_id, completion)
+  journal = copy(journal)
+  local turn = find_turn(journal, turn_id)
+  if not turn then
+    return nil, "turn not found: " .. tostring(turn_id)
+  end
+  completion = copy(completion)
+  turn.state = completion.state or "completed"
+  turn.finished_at = completion.finished_at
+  turn.final_snapshot = completion.final_snapshot
+  turn.changes = type(completion.changes) == "table" and completion.changes or {}
+  turn.capture_error = completion.capture_error
+  return journal, copy(turn)
+end
+
 return M
