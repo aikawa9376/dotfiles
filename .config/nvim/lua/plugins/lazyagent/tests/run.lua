@@ -34,6 +34,7 @@ local suites = {
   "tests.acp.permission_store_spec",
   "tests.acp.protocol_log_spec",
   "tests.acp.replay_spec",
+  "tests.acp.v2_adapter_spec",
   "tests.acp.view_lifecycle_spec",
   "tests.acp.thread_store_spec",
   "tests.acp.workspace_snapshot_spec",

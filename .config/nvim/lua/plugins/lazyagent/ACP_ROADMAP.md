@@ -279,7 +279,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] mobileからpermission、diff review、Keep/Reject、interruptを操作できるようにする。
 - [x] protocol log viewer、capability inspector、session health reportを追加する。
 - [x] event logからtranscript/runtime UIを再構築できるreplay modeを追加する。
-- [ ] ACP v2 adapterをoff-by-defaultのfeature flagとして試作する。
+- [x] ACP v2 adapterをoff-by-defaultのfeature flagとして試作する。
+  - [x] initialize/auth/MCP/message/tool/permissionのdraft差分を変換し、lossy変換を`adapter_loss`へ記録する。
 
 ## Experimental ideas
 

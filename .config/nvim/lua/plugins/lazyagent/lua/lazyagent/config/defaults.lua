@@ -84,6 +84,9 @@ function M.build()
         body_limit = 12000,
         tool_output_limit = 24000,
       },
+      experimental = {
+        v2_adapter = { enabled = false },
+      },
       permission_rules = {},
       permissions = {
         dir = nil,

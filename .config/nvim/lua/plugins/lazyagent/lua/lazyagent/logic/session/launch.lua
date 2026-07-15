@@ -88,6 +88,7 @@ function M.setup(deps)
       root_dir = root_dir,
       additional_directories = vim.deepcopy(acp.additional_directories or {}),
       mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
+      v2_adapter = vim.deepcopy(acp.v2_adapter or { enabled = false }),
       env = env,
       auto_permission = acp.auto_permission,
       default_mode = acp.default_mode,
@@ -310,6 +311,7 @@ function M.setup(deps)
           render_markdown_max_lines = resolved_acp.render_markdown_max_lines,
           transcript_compaction = vim.deepcopy(resolved_acp.transcript_compaction or {}),
           runtime_compaction = vim.deepcopy(resolved_acp.runtime_compaction or {}),
+          v2_adapter = vim.deepcopy(resolved_acp.v2_adapter or { enabled = false }),
           hidden = (agent_cfg.stay_hidden == true),
           mode = mode,
         }

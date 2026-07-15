@@ -4,6 +4,7 @@ local Client = {}
 Client.__index = Client
 local mcp_servers = require("lazyagent.acp.mcp_servers")
 local ProtocolLog = require("lazyagent.acp.protocol_log")
+local V2Adapter = require("lazyagent.acp.v2_adapter")
 
 local PROTOCOL_VERSION = 1
 local ERR = {
@@ -239,6 +240,7 @@ function Client.new(opts)
     stderr_lines = {},
     protocol_events = {},
     protocol_log = opts.protocol_log_path and ProtocolLog.new(opts.protocol_log_path) or nil,
+    v2_adapter = V2Adapter.new(opts.v2_adapter),
     session_id = nil,
     pending_session_id = nil,
     agent_capabilities = nil,
@@ -463,6 +465,8 @@ function Client:_send_error(id, code, message, data)
 end
 
 function Client:_send_request(method, params, callback)
+  local request_method = method
+  method, params = self.v2_adapter:outbound(method, params)
   local id = self:_next_id()
   self.callbacks[id] = callback or function() end
   local ok = self:_send_raw(encode_json({
@@ -486,7 +490,7 @@ function Client:_send_request(method, params, callback)
     return id
   end
 
-  local timeout_ms = method == "session/prompt" and self.prompt_timeout_ms or self.request_timeout_ms
+  local timeout_ms = request_method == "session/prompt" and self.prompt_timeout_ms or self.request_timeout_ms
   if timeout_ms > 0 then
     local timer = uv.new_timer()
     self.callback_timers[id] = timer
@@ -511,6 +515,7 @@ function Client:_send_request(method, params, callback)
 end
 
 function Client:_send_notification(method, params)
+  method, params = self.v2_adapter:outbound(method, params)
   return self:_send_raw(encode_json({
     jsonrpc = "2.0",
     method = method,
@@ -844,6 +849,7 @@ function Client:delete_session(session_id, callback)
 end
 
 function Client:_handle_initialize_response(result, callback)
+  result = self.v2_adapter:initialize_result(result)
   if not result or type(result) ~= "table" then
     callback(nil, {
       code = ERR.invalid_request,
@@ -870,8 +876,21 @@ function Client:_handle_initialize_response(result, callback)
   callback(self, nil)
 end
 
-function Client:_handle_update(params)
+function Client:_handle_update(params, adapted)
   if not params or type(params) ~= "table" then return end
+  if not adapted and self.v2_adapter.enabled then
+    local updates, loss = self.v2_adapter:updates(params)
+    if loss then
+      self:_record_protocol_event("adapter_loss", {
+        method = "session/update",
+        message = loss,
+      })
+    end
+    for _, converted in ipairs(updates) do
+      self:_handle_update(converted, true)
+    end
+    return
+  end
   local expected_session = self.session_id or self.pending_session_id
   if expected_session and params.sessionId ~= expected_session then
     self:_record_protocol_event("session_scope_mismatch", {
@@ -953,6 +972,7 @@ function Client:_handle_server_request(id, method, params)
       self:_send_result(id, { outcome = { outcome = "cancelled" } })
       return
     end
+    params = self.v2_adapter:permission_params(params, id)
     local pending = {
       session_id = params and params.sessionId or nil,
     }
