@@ -175,6 +175,48 @@ function M.selection(bufnr, opts)
   })
 end
 
+function M.diagnostics(bufnr, opts)
+  opts = opts or {}
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil, "invalid diagnostics buffer"
+  end
+  local path = vim.api.nvim_buf_get_name(bufnr)
+  local display = path ~= "" and vim.fn.fnamemodify(path, ":.") or ("buffer " .. tostring(bufnr))
+  local severity_names = {
+    [vim.diagnostic.severity.ERROR] = "ERROR",
+    [vim.diagnostic.severity.WARN] = "WARN",
+    [vim.diagnostic.severity.INFO] = "INFO",
+    [vim.diagnostic.severity.HINT] = "HINT",
+  }
+  local lines = {}
+  for _, diagnostic in ipairs(vim.diagnostic.get(bufnr, opts.diagnostic_opts or {})) do
+    lines[#lines + 1] = string.format(
+      "%s:%d:%d: %s: %s",
+      display,
+      (tonumber(diagnostic.lnum) or 0) + 1,
+      (tonumber(diagnostic.col) or 0) + 1,
+      severity_names[diagnostic.severity] or "DIAGNOSTIC",
+      tostring(diagnostic.message or ""):gsub("%s+", " ")
+    )
+  end
+  if #lines == 0 then
+    lines[1] = "No diagnostics for " .. display .. "."
+  end
+  local item = enrich({
+    kind = "diagnostics",
+    source = "diagnostics",
+    inline = true,
+    path = path ~= "" and path or ("diagnostics-" .. tostring(bufnr)),
+    uri = path ~= "" and file_uri(path) or ("lazyagent://buffer/" .. tostring(bufnr) .. "/diagnostics"),
+    display = "diagnostics: " .. display,
+    content = table.concat(lines, "\n"),
+  }, {
+    preview_limit = opts.preview_limit,
+    source_version = { bufnr = bufnr, changedtick = vim.api.nvim_buf_get_changedtick(bufnr) },
+  })
+  return item
+end
+
 function M.lower(item, capabilities)
   capabilities = capabilities or {}
   if item.kind == "image" or item.kind == "audio" then
@@ -191,7 +233,7 @@ function M.lower(item, capabilities)
       title = item.display,
     }
   end
-  if item.kind == "selection" and capabilities.embedded_context ~= true then
+  if (item.kind == "selection" or item.inline == true) and capabilities.embedded_context ~= true then
     return { type = "text", text = item.content or "" }
   end
   if capabilities.embedded_context == true then

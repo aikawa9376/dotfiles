@@ -50,6 +50,24 @@ function M.run()
   assert(unsupported[1].text:match("does not support image"), "unsupported image reason")
   assert(not unsupported[1].data, "unsupported image payload must not be sent")
 
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(bufnr, root .. "/source.lua")
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "local unused = true" })
+  local namespace = vim.api.nvim_create_namespace("lazyagent-prompt-blocks-test")
+  vim.diagnostic.set(namespace, bufnr, {
+    { lnum = 0, col = 6, severity = vim.diagnostic.severity.ERROR, message = "fixture error" },
+  })
+  local diagnostic_blocks = actions.build_prompt_blocks({
+    root_dir = root,
+    cwd = root,
+    agent_cfg = { source_bufnr = bufnr },
+  }, "fix @diagnostics")
+  assert_equal(2, #diagnostic_blocks, "diagnostics prompt block count")
+  assert_equal("text", diagnostic_blocks[2].type, "diagnostics prompt block type")
+  assert(diagnostic_blocks[2].text:match("source.lua:1:7: ERROR: fixture error"), "diagnostics prompt content")
+  vim.diagnostic.reset(namespace, bufnr)
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+
   vim.fn.delete(root, "rf")
 end
 

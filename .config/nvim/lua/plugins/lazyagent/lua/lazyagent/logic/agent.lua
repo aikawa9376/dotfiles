@@ -439,10 +439,15 @@ function M.get_scratch_completions(agent_name, opts)
       opts.path_prefix or opts.at_prefix or "",
       opts.path_opts or {}
     )
+    res.at = {}
+    if M.use_acp(agent_name, cfg) then
+      res.at[#res.at + 1] = {
+        label = "diagnostics",
+        desc = "Attach LSP diagnostics from the source buffer.",
+      }
+    end
     if fd_paths and #fd_paths > 0 then
-      res.at = fd_paths
-    else
-      res.at = {}
+      vim.list_extend(res.at, fd_paths)
     end
   else
     res.at = {}
