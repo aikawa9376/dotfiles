@@ -40,14 +40,14 @@ local function relative_path(root, path)
   return path:sub(1, #prefix) == prefix and path:sub(#prefix + 1) or path
 end
 
-local function file_record(root, path, stat_fn)
+local function file_record(root, path, opts)
   local absolute = root:gsub("/$", "") .. "/" .. path
-  local stat = stat_fn(absolute)
+  local stat = opts.stat(absolute)
   if not stat then
     return { path = path, exists = false }
   end
   local modified = stat.mtime
-  return {
+  local record = {
     path = path,
     exists = true,
     type = stat.type,
@@ -57,6 +57,13 @@ local function file_record(root, path, stat_fn)
       nsec = tonumber(modified.nsec) or 0,
     } or { sec = tonumber(modified) or 0, nsec = 0 },
   }
+  if opts.blob_store and stat.type == "file" then
+    local blob, blob_err = opts.blob_store:put_file(absolute)
+    record.blob = blob
+    record.binary = blob and blob.binary == true or false
+    record.blob_error = blob_err
+  end
+  return record
 end
 
 local function git_snapshot(cwd, opts)
@@ -78,7 +85,7 @@ local function git_snapshot(cwd, opts)
   table.sort(paths)
   local files = {}
   for _, path in ipairs(paths) do
-    files[#files + 1] = file_record(root, path, opts.stat)
+    files[#files + 1] = file_record(root, path, opts)
   end
 
   local status_result = run({ "git", "-C", root, "status", "--porcelain=v1", "-z", "--untracked-files=all" })
@@ -141,7 +148,7 @@ local function filesystem_snapshot(cwd, opts)
         if kind == "directory" and name ~= ".git" then
           pending[#pending + 1] = absolute
         elseif kind ~= "directory" then
-          files[#files + 1] = file_record(root, relative_path(root, absolute), opts.stat)
+          files[#files + 1] = file_record(root, relative_path(root, absolute), opts)
           if #files >= opts.max_files then
             truncated = true
             pending = {}
@@ -190,6 +197,9 @@ local function file_index(snapshot)
 end
 
 local function same_file_state(left, right)
+  if left.blob and right.blob then
+    return left.blob.hash == right.blob.hash
+  end
   return left.exists == right.exists
     and left.type == right.type
     and left.size == right.size
@@ -227,6 +237,9 @@ function M.diff(before, after)
         operation = operation,
         before_size = left and left.size or nil,
         after_size = right and right.size or nil,
+        before_blob = left and left.blob or nil,
+        after_blob = right and right.blob or nil,
+        binary = (left and left.binary == true) or (right and right.binary == true) or false,
       }
     end
   end

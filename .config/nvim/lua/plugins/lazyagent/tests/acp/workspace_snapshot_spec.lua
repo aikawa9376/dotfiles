@@ -32,6 +32,16 @@ function M.run()
       end
       return { type = "file", size = 10, mtime = { sec = 1, nsec = 2 } }
     end,
+    blob_store = {
+      put_file = function(_, path)
+        return {
+          algorithm = "sha256",
+          hash = path:match("new%.txt$") and string.rep("b", 64) or string.rep("a", 64),
+          size = path:match("new%.txt$") and 3 or 10,
+          binary = false,
+        }
+      end,
+    },
     clock = function()
       return "2026-07-15T01:02:03Z"
     end,
@@ -44,6 +54,7 @@ function M.run()
   assert_equal(#snapshot.files, 3, "workspace manifest")
   assert_equal(snapshot.files[2].path, "new.txt", "sorted workspace paths")
   assert_equal(snapshot.files[2].size, 3, "workspace file stat")
+  assert_equal(snapshot.files[2].blob.hash, string.rep("b", 64), "workspace blob reference")
   assert_equal(#snapshot.dirty, 3, "dirty state count")
   assert_equal(snapshot.dirty[1].worktree_status, "M", "worktree status")
   assert_equal(snapshot.dirty[3].original_path, "old.lua", "rename source")
@@ -61,9 +72,9 @@ function M.run()
     },
   })
   assert_equal(changes, {
-    { path = "added.lua", operation = "added", after_size = 3 },
-    { path = "deleted.lua", operation = "deleted", before_size = 2 },
-    { path = "modified.lua", operation = "modified", before_size = 4, after_size = 5 },
+    { path = "added.lua", operation = "added", after_size = 3, binary = false },
+    { path = "deleted.lua", operation = "deleted", before_size = 2, binary = false },
+    { path = "modified.lua", operation = "modified", before_size = 4, after_size = 5, binary = false },
   }, "workspace manifest diff")
 end
 

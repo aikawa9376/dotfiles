@@ -22,6 +22,7 @@ local ThreadStore = require("lazyagent.acp.thread_store")
 local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
 local TurnJournal = require("lazyagent.acp.turn_journal")
 local Watch = require("lazyagent.watch")
+local BlobStore = require("lazyagent.acp.blob_store")
 
 local sessions = {}
 local section_icons = {
@@ -101,7 +102,9 @@ local function record_turn_baseline(session)
   if not session or not session.thread_id then
     return nil
   end
-  local captured, snapshot = pcall(WorkspaceSnapshot.capture, session.root_dir or session.cwd)
+  local captured, snapshot = pcall(WorkspaceSnapshot.capture, session.root_dir or session.cwd, {
+    blob_store = session.blob_store,
+  })
   if not captured then
     session.workspace_snapshot_error = tostring(snapshot)
     return nil
@@ -168,7 +171,8 @@ local function finish_change_turn(session, completion_state)
 
   local captured, final_snapshot = pcall(
     WorkspaceSnapshot.capture,
-    (active_turn.baseline and active_turn.baseline.root) or session.root_dir or session.cwd
+    (active_turn.baseline and active_turn.baseline.root) or session.root_dir or session.cwd,
+    { blob_store = session.blob_store }
   )
   local capture_error = nil
   local changes = {}
@@ -375,6 +379,7 @@ host_helpers = backend_host.setup({
 local function create_backend(default_view)
   local backend = {}
   local thread_store = ThreadStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/threads" })
+  local blob_store = BlobStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/blobs" })
 
   complete_pending_turn = function(session)
     local pending = session and session.pending_brain_turn or nil
@@ -705,6 +710,7 @@ local function create_backend(default_view)
         view_state = view_state or {},
         provider_id = acp.provider_id or acp.agent_name,
         thread_store = thread_store,
+        blob_store = blob_store,
         thread_record = existing_thread and vim.deepcopy(existing_thread) or nil,
       }
       local session = sessions[pane_id]
