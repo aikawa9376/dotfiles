@@ -237,13 +237,16 @@ function M.setup(group)
         end
 
         local filepath = utils.get_filepath_at_cursor(ev.buf)
+        local work_tree = utils.get_buf_work_tree(ev.buf)
+        if not work_tree then return end
 
         vim.schedule(function()
+          local diff_cmd = 'DiffviewOpen -C' .. vim.fn.fnameescape(work_tree)
+            .. ' ' .. commit .. '^..' .. commit
           if filepath then
-            vim.cmd('DiffviewOpen ' .. commit .. '^..' .. commit .. ' --selected-file=' .. filepath)
-          else
-            vim.cmd('DiffviewOpen ' .. commit .. '^..' .. commit)
+            diff_cmd = diff_cmd .. ' --selected-file=' .. vim.fn.fnameescape(filepath)
           end
+          vim.cmd(diff_cmd)
         end)
       end, { buffer = ev.buf, nowait = true, silent = true })
 
