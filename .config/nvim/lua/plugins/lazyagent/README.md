@@ -350,6 +350,8 @@ ACP composerでは`@diagnostics`を選ぶと、起点bufferのLSP diagnosticsを
 
 `@terminal`はsessionに保持されている最新ACP terminalのcommand、現在のoutput、truncation、exit statusを添付します。agentがterminalをreleaseした後は対象外です。
 
+`@https://...`または`@url:https://...`はURLをclient側でfetchせず、ACP ResourceLinkとして添付します。`http` / `https`以外のschemeは受け付けません。
+
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
 ## MCP hooks

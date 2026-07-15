@@ -68,6 +68,11 @@ function M.run()
   vim.diagnostic.reset(namespace, bufnr)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 
+  local url_blocks = actions.build_prompt_blocks({ root_dir = root, cwd = root }, "read @https://example.com/acp")
+  assert_equal(2, #url_blocks, "URL prompt block count")
+  assert_equal("resource_link", url_blocks[2].type, "URL prompt resource link")
+  assert_equal("https://example.com/acp", url_blocks[2].uri, "URL prompt URI")
+
   vim.fn.delete(root, "rf")
 end
 
