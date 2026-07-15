@@ -25,8 +25,12 @@ function M.run()
   assert_equal("image", image.type, "image type")
   assert_equal("image/png", image.mimeType, "image MIME")
   assert_equal(bytes, vim.base64.decode(image.data), "image data")
-  assert_truthy(Content.render(image):match("%[image%].*image/png"), "image metadata render")
-  assert_truthy(not Content.render(image):find(image.data, 1, true), "base64 hidden from render")
+  local output_cache = base .. "/output-cache"
+  local rendered_image = Content.render(image, { cache_dir = output_cache })
+  assert_truthy(rendered_image:match("%[image%] @.*%.png.*image/png"), "image preview reference render")
+  assert_truthy(not rendered_image:find(image.data, 1, true), "base64 hidden from render")
+  local materialized_image = assert(Content.materialize(image, { cache_dir = output_cache }))
+  assert_equal(bytes, table.concat(vim.fn.readfile(materialized_image, "b"), "\n"), "materialized image bytes")
 
   local omitted = Content.from_file(image_path, { image = false })
   assert_equal("text", omitted.type, "unsupported image lowered to text")
@@ -39,10 +43,15 @@ function M.run()
   local audio = assert(Content.from_file(audio_path, { audio = true }))
   assert_equal("audio", audio.type, "audio type")
   assert_equal("audio/wav", audio.mimeType, "audio MIME")
-  assert_truthy(Content.render({
+  local resource = {
     type = "resource",
     resource = { uri = "file:///blob", mimeType = "application/pdf", blob = "YWJj" },
-  }):match("3 bytes"), "blob resource metadata")
+  }
+  local rendered_resource = Content.render(resource, { cache_dir = output_cache })
+  assert_truthy(rendered_resource:match("output%-cache/.*%.pdf.*3 bytes"), "blob resource cache reference")
+  assert_equal("abc", table.concat(vim.fn.readfile(assert(Content.materialize(resource, {
+    cache_dir = output_cache,
+  })), "b"), "\n"), "materialized resource bytes")
 
   vim.fn.delete(base, "rf")
 end
