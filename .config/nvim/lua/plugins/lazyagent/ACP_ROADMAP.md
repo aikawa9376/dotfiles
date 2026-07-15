@@ -141,16 +141,17 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] backend sessionへlocal `thread_id`を割り当て、native session / process / transcript lifecycleを永続同期する。
 - [x] provider process、native ACP session、view bufferをthreadから分離する。
 - [x] 同じproviderの複数threadを同時起動できるようにする。
-- [ ] threadのnew / open / close / archive / restore / rename / deleteを実装する。
+- [x] threadのnew / open / close / archive / restore / rename / deleteを実装する。
   - [x] atomic manifest上のcreate / update / archive / restore / rename / delete contractを追加する。
   - [x] 既存UUIDのprovider検証付きopenとtranscript再利用、stale process exitの競合防止をbackendへ統合する。
+  - [x] `:LazyAgentACPThreads` pickerと`:LazyAgentACPThreadNew` / `ThreadOpen` commandを追加する。
 - [ ] provider native sessionのlist/importをthread storeへ統合する。
 - [x] 再開時は`resume`、`load`、local carryoverの順にcapability-drivenで選ぶ。
 - [x] native resumeとlocal carryoverをUI上で明確に区別する。
 - [x] draft、scroll position、selected config、unread stateをthread単位で保存する。
   - [x] draft、selected config、read/unreadをThreadStoreへ同期し、scratch open/closeとbackground outputへ接続する。
   - [x] buffer viewのcursor / topline / horizontal scroll / follow-outputをthread単位でcapture / restoreする。
-- [ ] 既存のagent名ベースcommandを互換adapter経由で動かす。
+- [x] 既存のagent名ベースcommandを互換adapter経由で動かす。
   - [x] `provider::thread_uuid` runtime keyと直近active threadへのprovider aliasをlaunch / send / ACP targetへ統合する。
 
 ### Exit criteria

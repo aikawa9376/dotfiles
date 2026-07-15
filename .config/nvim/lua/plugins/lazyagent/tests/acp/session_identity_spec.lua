@@ -35,6 +35,9 @@ function M.run()
   identity.activate(state, second, state.sessions[second])
   assert_equal(identity.resolve(state, "Codex"), second, "latest provider alias")
   assert_equal(identity.resolve(state, first), first, "explicit thread key")
+  identity.deactivate(state, second, state.sessions[second])
+  state.sessions[second] = nil
+  assert_equal(identity.resolve(state, "Codex"), first, "provider alias after thread close")
 end
 
 return M

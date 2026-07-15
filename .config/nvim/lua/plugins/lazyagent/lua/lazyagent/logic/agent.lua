@@ -1,6 +1,7 @@
 -- logic/agent.lua
 -- This module handles agent resolution and management.
 local M = {}
+local session_identity = require("lazyagent.logic.session.identity")
 
 local state = require("lazyagent.logic.state")
 local acp_logic = require("lazyagent.logic.acp")
@@ -94,7 +95,8 @@ end
 -- @param agent (string) The name of the agent.
 -- @return (table|nil) The agent's configuration table, or nil if not found.
 function M.get_interactive_agent(agent)
-  return state.opts.interactive_agents and state.opts.interactive_agents[agent] or nil
+  local agents = state.opts.interactive_agents or {}
+  return agents[agent] or agents[session_identity.provider_id(agent)]
 end
 
 function M.use_acp(agent_name, agent_cfg)
