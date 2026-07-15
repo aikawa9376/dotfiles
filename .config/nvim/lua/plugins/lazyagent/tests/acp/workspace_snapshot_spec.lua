@@ -76,6 +76,44 @@ function M.run()
     { path = "deleted.lua", operation = "deleted", before_size = 2, binary = false },
     { path = "modified.lua", operation = "modified", before_size = 4, after_size = 5, binary = false },
   }, "workspace manifest diff")
+
+  local moved = Snapshot.diff({
+    files = {
+      {
+        path = "old.lua",
+        exists = true,
+        size = 4,
+        blob = { hash = string.rep("c", 64) },
+        binary = true,
+      },
+    },
+    dirty = {},
+  }, {
+    files = {
+      {
+        path = "new.lua",
+        exists = true,
+        size = 5,
+        blob = { hash = string.rep("d", 64) },
+        binary = true,
+      },
+    },
+    dirty = {
+      { path = "new.lua", original_path = "old.lua", index_status = "R", worktree_status = " " },
+    },
+  })
+  assert_equal(moved, {
+    {
+      path = "new.lua",
+      previous_path = "old.lua",
+      operation = "moved",
+      before_size = 4,
+      after_size = 5,
+      before_blob = { hash = string.rep("c", 64) },
+      after_blob = { hash = string.rep("d", 64) },
+      binary = true,
+    },
+  }, "workspace rename classification")
 end
 
 return M
