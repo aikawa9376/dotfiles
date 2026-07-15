@@ -24,6 +24,7 @@ local TurnJournal = require("lazyagent.acp.turn_journal")
 local Watch = require("lazyagent.watch")
 local BlobStore = require("lazyagent.acp.blob_store")
 local ChangeReview = require("lazyagent.acp.change_review")
+local ChangeApply = require("lazyagent.acp.change_apply")
 
 local sessions = {}
 local section_icons = {
@@ -381,9 +382,17 @@ local function create_backend(default_view)
   local backend = {}
   local thread_store = ThreadStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/threads" })
   local blob_store = BlobStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/blobs" })
+  local change_apply = ChangeApply.new({
+    read_blob = function(ref)
+      return blob_store:get(ref)
+    end,
+  })
   local change_review = ChangeReview.new({
     read_blob = function(ref)
       return blob_store:get(ref)
+    end,
+    decide = function(thread, turn, indices, decision)
+      return backend.decide_thread_changes(thread.thread_id, turn.turn_id, indices, decision)
     end,
   })
 
@@ -795,6 +804,72 @@ local function create_backend(default_view)
       return nil, err or ("thread not found: " .. tostring(thread_id))
     end
     return change_review.open(thread)
+  end
+
+  function backend.decide_thread_changes(thread_id, turn_id, indices, decision)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then
+      return nil, err
+    end
+    local turn = TurnJournal.get(thread.change_journal, turn_id)
+    if not turn then
+      return nil, "turn not found: " .. tostring(turn_id)
+    end
+    if decision == "rejected" then
+      local selected = {}
+      for _, index in ipairs(indices or {}) do
+        if not turn.changes[index] then
+          return nil, "change not found: " .. tostring(index)
+        end
+        if turn.changes[index].decision then
+          return nil, "change already decided: " .. tostring(index)
+        end
+        selected[#selected + 1] = turn.changes[index]
+      end
+      local root = turn.baseline and turn.baseline.root or thread.cwd
+      local applied, apply_err = change_apply.reject_all(selected, root)
+      if not applied then
+        return nil, apply_err
+      end
+      local root_prefix = vim.fn.fnamemodify(root, ":p"):gsub("/$", "")
+      for _, change in ipairs(selected) do
+        state_helpers.reload_loaded_buffers_for_path(root_prefix .. "/" .. change.path)
+        if change.previous_path then
+          state_helpers.reload_loaded_buffers_for_path(root_prefix .. "/" .. change.previous_path)
+        end
+      end
+    elseif decision ~= "kept" then
+      return nil, "unsupported change decision: " .. tostring(decision)
+    else
+      for _, index in ipairs(indices or {}) do
+        if not turn.changes[index] then
+          return nil, "change not found: " .. tostring(index)
+        end
+        if turn.changes[index].decision then
+          return nil, "change already decided: " .. tostring(index)
+        end
+      end
+    end
+    local journal, decided = TurnJournal.decide(
+      thread.change_journal,
+      turn_id,
+      indices,
+      decision,
+      os.date("!%Y-%m-%dT%H:%M:%SZ")
+    )
+    if not journal then
+      return nil, decided
+    end
+    local updated, update_err = thread_store:update(thread_id, { change_journal = journal })
+    if not updated then
+      return nil, update_err
+    end
+    for _, session in pairs(sessions) do
+      if session.thread_id == thread_id then
+        session.thread_record = vim.deepcopy(updated)
+      end
+    end
+    return decided
   end
 
   function backend.create_thread(attributes)
