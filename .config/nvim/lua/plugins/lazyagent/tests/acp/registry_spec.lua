@@ -24,6 +24,28 @@ function M.run()
   assert(opts.interactive_agents.a.acp_cmd[1] == "custom-alpha", "user agent config takes precedence")
   assert(vim.deep_equal(opts.interactive_agents.z.acp_cmd, { "uvx", "zulu==1" }), "managed agent restored")
   assert(opts.interactive_agents.z.env.TOKEN == "x", "managed agent environment restored")
+
+  local Binary = require("lazyagent.acp.registry_binary")
+  assert(Binary.platform("Linux", "x64") == "linux-x86_64", "registry binary platform")
+  assert(Binary.archive_kind("https://example.test/agent.tar.gz?download=1") == "tar.gz", "tar archive kind")
+  local plan = assert(Binary.plan({ id = "agent", version = "1/2", distribution = { binary = {
+    ["linux-x86_64"] = {
+      archive = "https://example.test/agent.tar.gz", cmd = "./bin/agent", args = { "acp" }, sha256 = string.rep("A", 64),
+    },
+  } } }, "/tmp/registry", "linux-x86_64"))
+  assert(plan.target == "/tmp/registry/agent/1_2/linux-x86_64", "safe binary install target")
+  assert(plan.relative_cmd == "bin/agent" and plan.sha256 == string.rep("a", 64), "binary plan normalization")
+  assert(Binary.validate_entries("bin/agent\nshare/readme"), "safe archive entries")
+  local hash = string.rep("b", 64)
+  assert(Binary.parse_checksum(hash .. "  archive.tar.gz\n") == hash, "sha256sum output parsed")
+  assert(Binary.parse_checksum("SHA256 hash of archive:\n" .. hash:gsub("..", "%0 ") .. "\nCertUtil: ok") == hash,
+    "certutil output parsed")
+  local safe, safe_err = Binary.validate_entries("../escape")
+  assert(safe == nil and safe_err:match("parent"), "archive traversal rejected")
+  local escaped, escaped_err = Binary.plan({ id = "agent", version = "1", distribution = { binary = {
+    ["linux-x86_64"] = { archive = "https://example.test/agent", cmd = "../agent" },
+  } } }, "/tmp/registry", "linux-x86_64")
+  assert(escaped == nil and escaped_err:match("escapes"), "binary command traversal rejected")
 end
 
 return M

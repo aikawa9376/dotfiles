@@ -1,4 +1,5 @@
 local M = {}
+local Binary = require("lazyagent.acp.registry_binary")
 
 M.URL = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json"
 
@@ -52,6 +53,8 @@ local function agent_config(record)
       id = record.id,
       version = record.version,
       distribution = record.distribution,
+      platform = record.platform,
+      verified = record.verified,
     },
   }
 end
@@ -71,15 +74,14 @@ function M.apply_installed(target, installed)
   return applied
 end
 
-function M.install(agent)
-  local launcher, launch_err = M.launcher(agent)
-  if not launcher then return nil, launch_err end
+local function persist(agent, launcher)
   local dir, path = paths()
   vim.fn.mkdir(dir, "p")
   local installed = M.load_installed()
   installed[agent.id] = {
     id = agent.id, name = agent.name, version = agent.version, distribution = launcher.kind,
-    command = launcher.command, env = launcher.env, installed_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    command = launcher.command, env = launcher.env, platform = launcher.platform, verified = launcher.verified,
+    installed_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
   }
   local ok, write_err = pcall(vim.fn.writefile, { vim.json.encode(installed) }, path)
   if not ok then return nil, write_err end
@@ -87,6 +89,26 @@ function M.install(agent)
   state.opts.interactive_agents = state.opts.interactive_agents or {}
   state.opts.interactive_agents[agent.id] = agent_config(installed[agent.id])
   return installed[agent.id]
+end
+
+function M.install(agent, done, opts)
+  done = done or function() end
+  local launcher, launch_err = M.launcher(agent)
+  if launcher then
+    local record, persist_err = persist(agent, launcher)
+    done(record, persist_err)
+    return record, persist_err
+  end
+  if not (agent and agent.distribution and agent.distribution.binary) then
+    done(nil, launch_err)
+    return nil, launch_err
+  end
+  Binary.install(agent, function(binary_launcher, binary_err)
+    if not binary_launcher then done(nil, binary_err); return end
+    local record, persist_err = persist(agent, binary_launcher)
+    done(record, persist_err)
+  end, opts)
+  return true
 end
 
 function M.fetch(done)
@@ -119,12 +141,20 @@ function M.browse()
       end,
     }, function(agent)
       if not agent then return end
-      local record, install_err = M.install(agent)
-      if record then
-        vim.notify(string.format("LazyAgent ACP Registry: %s %s registered", record.name, record.version), vim.log.levels.INFO)
-      else
-        vim.notify("LazyAgent ACP Registry: " .. tostring(install_err), vim.log.levels.ERROR)
+      local function installed_callback(record, install_err)
+        if record then
+          vim.notify(string.format("LazyAgent ACP Registry: %s %s registered", record.name, record.version), vim.log.levels.INFO)
+        elseif install_err == "binary archive has no sha256; confirmation required" then
+          vim.ui.select({ "Cancel", "Install unverified archive" }, {
+            prompt = agent.name .. " does not publish a SHA-256 checksum:",
+          }, function(choice)
+            if choice == "Install unverified archive" then M.install(agent, installed_callback, { allow_unverified = true }) end
+          end)
+        else
+          vim.notify("LazyAgent ACP Registry: " .. tostring(install_err), vim.log.levels.ERROR)
+        end
       end
+      M.install(agent, installed_callback)
     end)
   end)
   return true
