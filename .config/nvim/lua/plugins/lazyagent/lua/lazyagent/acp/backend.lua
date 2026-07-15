@@ -640,6 +640,42 @@ local function create_backend(default_view)
     return thread_store:delete(thread_id)
   end
 
+  function backend.import_native_session(pane_id, native_session)
+    local session = get_session(pane_id)
+    if not session then
+      return nil, "ACP session is not active"
+    end
+    if type(native_session) ~= "table" or not native_session.sessionId or native_session.sessionId == "" then
+      return nil, "native ACP sessionId is required"
+    end
+    local threads, list_err = thread_store:list({ include_archived = true })
+    if not threads then
+      return nil, list_err
+    end
+    for _, thread in ipairs(threads) do
+      if thread.provider_id == session.provider_id and thread.native_session_id == native_session.sessionId then
+        return thread, false
+      end
+    end
+    local thread, err = thread_store:create({
+      provider_id = session.provider_id,
+      native_session_id = native_session.sessionId,
+      cwd = native_session.cwd or session.cwd,
+      additional_directories = session.additional_directories,
+      title = native_session.title or native_session.summary or (session.provider_id .. " session"),
+      status = "closed",
+      metadata = {
+        imported_from_native = true,
+        native_summary = native_session.summary,
+        native_updated_at = native_session.updatedAt,
+      },
+    })
+    if not thread then
+      return nil, err
+    end
+    return thread, true
+  end
+
   function backend.update_thread(thread_id, changes)
     local updated, err = thread_store:update(thread_id, changes)
     if not updated then

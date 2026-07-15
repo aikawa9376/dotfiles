@@ -145,7 +145,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] atomic manifest上のcreate / update / archive / restore / rename / delete contractを追加する。
   - [x] 既存UUIDのprovider検証付きopenとtranscript再利用、stale process exitの競合防止をbackendへ統合する。
   - [x] `:LazyAgentACPThreads` pickerと`:LazyAgentACPThreadNew` / `ThreadOpen` commandを追加する。
-- [ ] provider native sessionのlist/importをthread storeへ統合する。
+- [x] provider native sessionのlist/importをthread storeへ統合する。
+  - [x] native session pickerからprovider / native session IDで重複排除してThreadStoreへimportする。
 - [x] 再開時は`resume`、`load`、local carryoverの順にcapability-drivenで選ぶ。
 - [x] native resumeとlocal carryoverをUI上で明確に区別する。
 - [x] draft、scroll position、selected config、unread stateをthread単位で保存する。
