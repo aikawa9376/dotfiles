@@ -271,8 +271,9 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 ## Milestone 5 — Ecosystem and polish
 
-- [ ] ACP Registryのbrowse / install / update UIを追加する。
+- [x] ACP Registryのbrowse / install / update UIを追加する。
   - [x] official v1 indexのfetch/cache/search pickerとnpx/uvx version-pinned managed launcher install/updateを追加する。
+  - [x] platform別binary archiveのmanaged install、SHA-256検証、path traversal防止を追加する。
 - [ ] Zed/Neovim側MCP server configをnew/load/resume時にagentへforwardする。
 - [ ] permissionにonce / session / project / global scopeとaudit logを追加する。
 - [ ] mobileからpermission、diff review、Keep/Reject、interruptを操作できるようにする。
