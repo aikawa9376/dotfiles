@@ -337,6 +337,11 @@ function Store:update(thread_id, changes)
   changes.created_at = current.created_at
   changes.updated_at = self:_timestamp()
   local merged = vim.tbl_deep_extend("force", copy(current), changes)
+  for _, field in ipairs({ "native_session_id", "process_id", "model", "mode", "archived_at" }) do
+    if changes[field] == vim.NIL then
+      merged[field] = nil
+    end
+  end
   local record, err = normalize_record(merged)
   if not record then
     return nil, err

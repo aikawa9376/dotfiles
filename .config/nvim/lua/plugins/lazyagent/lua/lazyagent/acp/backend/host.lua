@@ -33,6 +33,7 @@ function M.setup(deps)
   local render_permission_preview = deps.render_permission_preview
   local maybe_call_mcp_tool = deps.maybe_call_mcp_tool
   local maybe_sync_acp_edit_targets = deps.maybe_sync_acp_edit_targets
+  local sync_thread = deps.sync_thread or function() end
   local terminal_seq = 0
   local resolve_permission_option
   local resolve_filesystem_path
@@ -567,12 +568,21 @@ function M.setup(deps)
       end
       session.config_options = vim.deepcopy((session.client and session.client.config_options) or session.config_options or {})
       sync_runtime_session(session)
+      sync_thread(session, {
+        mode = session.mode_catalog and session.mode_catalog.currentModeId or vim.NIL,
+        model = session.model_catalog and session.model_catalog.currentModelId or vim.NIL,
+        config = vim.deepcopy(session.config_options or {}),
+      })
       return
     end
 
     if kind == "session_info_update" then
       update_session_info(session, update)
       sync_runtime_session(session)
+      sync_thread(session, {
+        title = session.session_info and session.session_info.title or session.agent_name,
+        native_session_id = session.session_id or vim.NIL,
+      })
       return
     end
 
@@ -700,12 +710,14 @@ function M.setup(deps)
       session.ready = false
       session.failed = false
       close_stream(session)
+      sync_thread(session, { status = "closed", process_id = vim.NIL })
       return
     end
     session.ready = false
     session.failed = true
     close_stream(session)
     sync_runtime_session(session)
+    sync_thread(session, { status = "failed", process_id = vim.NIL })
     local message = string.format("ACP agent exited (code=%s signal=%s)", tostring(code), tostring(signal))
     if stderr_text and stderr_text ~= "" then
       message = message .. "\n" .. stderr_text
@@ -979,6 +991,7 @@ function M.setup(deps)
         session.failed = true
         session.ready = false
         sync_runtime_session(session)
+        sync_thread(session, { status = "failed", process_id = vim.NIL })
         append_block(session, "System", "Failed to start ACP session: " .. (err.message or tostring(err)))
         pcall(function()
           require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
@@ -1010,6 +1023,14 @@ function M.setup(deps)
       session.prompt_supports_audio = prompt_caps and prompt_caps.audio == true
       session.mcp_server_count = 0
       sync_runtime_session(session)
+      sync_thread(session, {
+        status = "active",
+        native_session_id = client.session_id,
+        process_id = client.pid,
+        model = session.model_catalog.currentModelId or session.initial_model or vim.NIL,
+        mode = session.mode_catalog.currentModeId or session.default_mode or vim.NIL,
+        config = vim.deepcopy(session.config_options or {}),
+      })
       local agent_name = client.agent_info and (client.agent_info.title or client.agent_info.name) or session.agent_name
       local message = string.format("ACP session ready: %s", agent_name)
       if session_result and session_result.sessionId then

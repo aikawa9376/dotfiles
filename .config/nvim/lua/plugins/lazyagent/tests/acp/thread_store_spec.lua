@@ -50,6 +50,8 @@ function M.run()
   local renamed = assert(store:rename(THREAD_ID, "Persistent thread"))
   assert_equal(renamed.title, "Persistent thread", "rename")
   assert_equal(renamed.created_at, thread.created_at, "immutable creation timestamp")
+  local detached = assert(store:update(THREAD_ID, { process_id = vim.NIL }))
+  assert_equal(detached.process_id, nil, "process identity can be detached")
 
   local archived = assert(store:archive(THREAD_ID))
   assert_equal(archived.status, "archived", "archive status")
