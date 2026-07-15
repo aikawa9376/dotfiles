@@ -27,7 +27,7 @@ function M.run()
   local previous_opts = state.opts
   state.opts = vim.tbl_deep_extend("force", vim.deepcopy(previous_opts or {}), {
     cache = { dir = cache_dir },
-    acp = { auto_permission = "allow_once" },
+    acp = { auto_permission = "allow_once", permissions = { dir = cache_dir .. "/permissions" } },
   })
 
   local killed = false
