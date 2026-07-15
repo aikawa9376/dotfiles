@@ -248,9 +248,10 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 - [x] project/worktreeでgroup化したthread一覧bufferを追加する。
   - [x] `:LazyAgentACPCockpit`でgrouped read-only bufferを開き、thread open / store refreshを提供する。
-- [ ] title、provider、model、status、unread、usage/cost、changed filesを表示する。
+- [x] title、provider、model、status、unread、usage/cost、changed filesを表示する。
   - [x] title / provider / model / persisted status / unread / unique changed file countをthread cardへ表示する。
-- [ ] running / waiting / permission / idle / disconnectedを共通statusにする。
+- [x] running / waiting / permission / idle / disconnectedを共通statusにする。
+  - [x] persisted threadとactive runtime snapshotをthread IDでjoinし、status / current model / cumulative usageを上書き表示する。
 - [ ] search、pin、archive、restore、delete、bulk closeを追加する。
 - [ ] agentmux identity/statusをthread modelへ統合する。
 - [ ] opt-inのgit worktree作成、復元、cleanupを追加する。

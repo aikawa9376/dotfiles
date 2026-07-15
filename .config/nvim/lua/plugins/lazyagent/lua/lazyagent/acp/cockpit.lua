@@ -16,7 +16,34 @@ local function group_path(thread)
   return metadata.worktree_path or thread.cwd or "(unknown workspace)"
 end
 
-function M.render(threads)
+local function common_status(thread, runtime)
+  if runtime then
+    if runtime.acp_failed == true then return "disconnected" end
+    if runtime.acp_client_debug and (tonumber(runtime.acp_client_debug.pending_permissions) or 0) > 0 then return "permission" end
+    if runtime.agent_status == "waiting" then return "waiting" end
+    if runtime.acp_busy == true or runtime.acp_preparing_prompt == true or runtime.agent_status == "thinking" then
+      return "running"
+    end
+    if runtime.acp_ready == true then return "idle" end
+  end
+  if thread.status == "active" and thread.process_id ~= nil then return "disconnected" end
+  return thread.status or "closed"
+end
+
+local function usage_label(runtime)
+  local usage = runtime and runtime.acp_usage_stats or {}
+  local cumulative = type(usage.cumulative) == "table" and usage.cumulative or {}
+  local context = type(usage.context) == "table" and usage.context or {}
+  local tokens = cumulative.total_tokens or cumulative.totalTokens or context.used_tokens or context.usedTokens
+  local cost = cumulative.cost or cumulative.total_cost or usage.cost or usage.total_cost
+  local parts = {}
+  if tokens then parts[#parts + 1] = tostring(tokens) .. "tok" end
+  if cost then parts[#parts + 1] = "$" .. string.format("%.4f", tonumber(cost) or 0) end
+  return #parts > 0 and table.concat(parts, "/") or "n/a"
+end
+
+function M.render(threads, runtimes)
+  runtimes = runtimes or {}
   local groups = {}
   for _, thread in ipairs(threads or {}) do
     local path = group_path(thread)
@@ -46,16 +73,19 @@ function M.render(threads)
       return tostring(left.updated_at or "") > tostring(right.updated_at or "")
     end)
     for _, thread in ipairs(groups[path]) do
+      local runtime = runtimes[thread.thread_id]
       local unread = thread.unread == true and "unread" or "read"
-      local model = thread.model and thread.model ~= "" and thread.model or "default"
+      local runtime_model = runtime and runtime.acp_model_catalog and runtime.acp_model_catalog.currentModelId
+      local model = runtime_model or (thread.model and thread.model ~= "" and thread.model) or "default"
       local changes = changed_file_count(thread)
       lines[#lines + 1] = string.format(
-        "- [%s] %s · %s · model:%s · %s · changes:%d",
-        tostring(thread.status or "closed"),
+        "- [%s] %s · %s · model:%s · %s · usage:%s · changes:%d",
+        common_status(thread, runtime),
         tostring(thread.title or thread.thread_id),
         tostring(thread.provider_id or "provider"),
         tostring(model),
         unread,
+        usage_label(runtime),
         changes
       )
       line_map[#lines] = thread.thread_id

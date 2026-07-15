@@ -271,7 +271,20 @@ function M.setup(deps)
         return
       end
       local lines
-      lines, line_map = require("lazyagent.acp.cockpit").render(stored_threads)
+      local runtimes = {}
+      for agent_name, active in pairs(state.sessions or {}) do
+        if active.pane_id and active.pane_id ~= "" then
+          local active_backend = backend_for_provider(agent_name)
+          if active_backend and type(active_backend.get_runtime_snapshot) == "function" then
+            local snapshot = active_backend.get_runtime_snapshot(active.pane_id)
+            if snapshot and snapshot.acp_thread_id then
+              snapshot.agent_status = active.agent_status
+              runtimes[snapshot.acp_thread_id] = snapshot
+            end
+          end
+        end
+      end
+      lines, line_map = require("lazyagent.acp.cockpit").render(stored_threads, runtimes)
       vim.bo[bufnr].modifiable = true
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       vim.bo[bufnr].modifiable = false
