@@ -182,6 +182,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] changed files drawerとmulti-buffer reviewを実装する。
   - [x] `:LazyAgentACPChanges`とthread actionから最新turnの一覧を開き、Enterでbefore/after diff、`a`で全fileをtab reviewする。
 - [ ] hunk / file / all単位のKeep / Rejectを実装する。
+  - [x] file / all Keepをdecisionとして永続化し、Rejectはcurrent == after blobのpreflight後だけbefore blobをatomic復元する。
+  - [x] added / modified / deleted / moved / binaryのfile Rejectとall事前検証を実装する。
 - [ ] Follow Agentで現在のtool location / changed fileへ追従できるようにする。
 - [ ] agent変更後にuserが再編集した場合は3-way applyし、競合時は上書きしない。
 - [ ] filesystem checkpointのrestore / redoとcheckpointからのclient-local branchを追加する。

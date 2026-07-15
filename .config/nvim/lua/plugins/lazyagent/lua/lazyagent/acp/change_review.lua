@@ -57,7 +57,14 @@ function M.drawer_lines(thread, turn)
   }
   for _, change in ipairs(turn.changes or {}) do
     local binary = change.binary == true and " [binary]" or ""
-    lines[#lines + 1] = string.format("%s  %s%s", operation_marker[change.operation] or "?", display_path(change), binary)
+    local decision = change.decision and (" [" .. change.decision .. "]") or ""
+    lines[#lines + 1] = string.format(
+      "%s  %s%s%s",
+      operation_marker[change.operation] or "?",
+      display_path(change),
+      binary,
+      decision
+    )
   end
   return lines
 end
@@ -149,6 +156,63 @@ function M.new(opts)
         review.open_change(thread, turn, change, index)
       end
     end, { buffer = bufnr, silent = true, desc = "Review all LazyAgent ACP changes" })
+    local function refresh(decided_turn)
+      turn = decided_turn or turn
+      vim.bo[bufnr].modifiable = true
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn))
+      vim.bo[bufnr].modifiable = false
+    end
+    local function decide(indices, decision)
+      if type(opts.decide) ~= "function" then
+        return
+      end
+      local decided, err = opts.decide(thread, turn, indices, decision)
+      if not decided then
+        vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.ERROR)
+        return
+      end
+      refresh(decided)
+    end
+    local function undecided_indices()
+      local indices = {}
+      for index, change in ipairs(turn.changes) do
+        if not change.decision then
+          indices[#indices + 1] = index
+        end
+      end
+      return indices
+    end
+    vim.keymap.set("n", "k", function()
+      local index = vim.api.nvim_win_get_cursor(0)[1] - 3
+      if turn.changes[index] and not turn.changes[index].decision then
+        decide({ index }, "kept")
+      end
+    end, { buffer = bufnr, silent = true, desc = "Keep LazyAgent ACP file change" })
+    vim.keymap.set("n", "K", function()
+      local indices = undecided_indices()
+      if #indices > 0 then
+        decide(indices, "kept")
+      end
+    end, { buffer = bufnr, silent = true, desc = "Keep all LazyAgent ACP changes" })
+    local function confirm_reject(indices, label)
+      vim.ui.select({ "Cancel", "Reject" }, { prompt = label }, function(choice)
+        if choice == "Reject" then
+          decide(indices, "rejected")
+        end
+      end)
+    end
+    vim.keymap.set("n", "r", function()
+      local index = vim.api.nvim_win_get_cursor(0)[1] - 3
+      if turn.changes[index] and not turn.changes[index].decision then
+        confirm_reject({ index }, "Reject this file change?")
+      end
+    end, { buffer = bufnr, silent = true, desc = "Reject LazyAgent ACP file change" })
+    vim.keymap.set("n", "R", function()
+      local indices = undecided_indices()
+      if #indices > 0 then
+        confirm_reject(indices, "Reject all file changes?")
+      end
+    end, { buffer = bufnr, silent = true, desc = "Reject all LazyAgent ACP changes" })
     vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = bufnr, silent = true, desc = "Close changes drawer" })
     return bufnr
   end

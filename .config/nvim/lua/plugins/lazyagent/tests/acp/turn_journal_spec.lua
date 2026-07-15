@@ -54,6 +54,8 @@ function M.run()
   }))
   assert_equal(Journal.get(journal, turn.turn_id).state, "completed", "completed turn state")
   assert_equal(journal.turns[1].changes[1].operation, "modified", "completed turn changes")
+  journal = assert(Journal.decide(journal, turn.turn_id, { 1 }, "kept", "2026-07-15T01:04:00Z"))
+  assert_equal(journal.turns[1].changes[1].decision, "kept", "change decision")
 
   local missing, err = Journal.record(journal, "missing", "buffer", { path = "/repo/a.lua" })
   assert_equal(missing, nil, "missing turn result")
