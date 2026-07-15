@@ -86,19 +86,23 @@ function M.finish(journal, turn_id, completion)
   return journal, copy(turn)
 end
 
-function M.decide(journal, turn_id, indices, decision, decided_at)
+function M.decide(journal, turn_id, indices, decision, decided_at, applications)
   journal = copy(journal)
   local turn = find_turn(journal, turn_id)
   if not turn then
     return nil, "turn not found: " .. tostring(turn_id)
   end
-  for _, index in ipairs(indices or {}) do
+  for position, index in ipairs(indices or {}) do
     local change = turn.changes and turn.changes[index] or nil
     if not change then
       return nil, "change not found: " .. tostring(index)
     end
     change.decision = decision
     change.decided_at = decided_at
+    local application = applications and applications[position] or nil
+    if application and application.mode then
+      change.apply_mode = application.mode
+    end
   end
   return journal, copy(turn)
 end

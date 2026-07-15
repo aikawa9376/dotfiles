@@ -56,6 +56,7 @@ function M.run()
     path = "conflict.bin",
     before_blob = before,
     after_blob = after,
+    binary = true,
   }, root)
   assert_equal(rejected, nil, "concurrent edit reject result")
   assert(tostring(conflict_err):match("changed after"), "concurrent edit conflict")
@@ -87,6 +88,39 @@ function M.run()
   }, root)
   assert_equal(all_ok, nil, "reject all preflight result")
   assert_equal(read(root .. "/first.bin"), "after\0bytes", "reject all preflight is non-mutating")
+
+  local merge_before = assert(store:put("agent base\nline 2\nline 3\nline 4\ncommon\n"))
+  local merge_after = assert(store:put("agent changed\nline 2\nline 3\nline 4\ncommon\n"))
+  write(root .. "/merge.txt", "agent changed\nline 2\nline 3\nline 4\ncommon user\n")
+  local merge_result = assert(apply.reject({
+    operation = "modified",
+    path = "merge.txt",
+    before_blob = merge_before,
+    after_blob = merge_after,
+    binary = false,
+  }, root))
+  assert_equal(merge_result.mode, "three_way", "three-way reject mode")
+  assert_equal(
+    read(root .. "/merge.txt"),
+    "agent base\nline 2\nline 3\nline 4\ncommon user\n",
+    "three-way preserves user edit"
+  )
+
+  write(root .. "/merge-conflict.txt", "user changed same line\nline 2\nline 3\nline 4\ncommon\n")
+  local merge_conflict, merge_conflict_err = apply.reject({
+    operation = "modified",
+    path = "merge-conflict.txt",
+    before_blob = merge_before,
+    after_blob = merge_after,
+    binary = false,
+  }, root)
+  assert_equal(merge_conflict, nil, "three-way conflict result")
+  assert(tostring(merge_conflict_err):match("three%-way conflict"), "three-way conflict error")
+  assert_equal(
+    read(root .. "/merge-conflict.txt"),
+    "user changed same line\nline 2\nline 3\nline 4\ncommon\n",
+    "conflict content preserved"
+  )
 
   local text_before = "one\nold-a\nmiddle\nold-b\nlast\n"
   local text_after = "one\nnew-a\nmiddle\nnew-b\nlast\n"

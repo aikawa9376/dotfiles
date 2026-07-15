@@ -39,7 +39,9 @@ local function write_atomic(path, data)
     return nil, ok_mkdir and ("failed to create directory: " .. parent) or mkdir_result
   end
   local temporary = path .. ".lazyagent-reject." .. tostring(vim.fn.getpid()) .. "." .. tostring(uv.hrtime())
-  local fd, open_err = uv.fs_open(temporary, "wx", 420)
+  local existing = uv.fs_stat(path)
+  local mode = existing and bit.band(existing.mode or 420, 511) or 420
+  local fd, open_err = uv.fs_open(temporary, "wx", mode)
   if not fd then
     return nil, open_err
   end
@@ -57,7 +59,68 @@ local function write_atomic(path, data)
     pcall(uv.fs_unlink, temporary)
     return nil, rename_err
   end
+  if uv.fs_chmod then
+    pcall(uv.fs_chmod, path, mode)
+  end
   return true
+end
+
+local function write_temporary(path, data)
+  local fd, open_err = uv.fs_open(path, "wx", 384)
+  if not fd then
+    return nil, open_err
+  end
+  local written, write_err = write_all(fd, data)
+  uv.fs_close(fd)
+  if not written then
+    pcall(uv.fs_unlink, path)
+    return nil, write_err
+  end
+  return true
+end
+
+local function three_way_merge(current, base, desired)
+  if not vim.system or vim.fn.executable("git") ~= 1 then
+    return nil, "git merge-file is unavailable"
+  end
+  local prefix = vim.fn.tempname() .. "-lazyagent-merge"
+  local current_path = prefix .. "-current"
+  local base_path = prefix .. "-base"
+  local desired_path = prefix .. "-desired"
+  local paths = { current_path, base_path, desired_path }
+  for index, item in ipairs({ current, base, desired }) do
+    local ok, err = write_temporary(paths[index], item)
+    if not ok then
+      for _, path in ipairs(paths) do
+        pcall(uv.fs_unlink, path)
+      end
+      return nil, err
+    end
+  end
+  local result = vim.system({
+    "git",
+    "merge-file",
+    "-p",
+    "-L",
+    "current user state",
+    "-L",
+    "agent after",
+    "-L",
+    "LazyAgent before",
+    current_path,
+    base_path,
+    desired_path,
+  }, { text = false }):wait()
+  for _, path in ipairs(paths) do
+    pcall(uv.fs_unlink, path)
+  end
+  if result.code == 0 then
+    return result.stdout or ""
+  end
+  if result.code == 1 then
+    return nil, "three-way conflict; file left unchanged"
+  end
+  return nil, tostring(result.stderr or "git merge-file failed")
 end
 
 local function absolute_path(root, relative)
@@ -159,6 +222,7 @@ function M.new(opts)
     if current_err then
       return nil, current_err
     end
+    local prepared = { path = path, mode = "exact" }
     if change.operation == "deleted" then
       if current ~= nil then
         return nil, "file was recreated after the agent turn: " .. path
@@ -169,7 +233,19 @@ function M.new(opts)
         return nil, expected_err or ("missing after blob: " .. path)
       end
       if current ~= expected then
-        return nil, "file changed after the agent turn: " .. path
+        if change.binary == true or (change.operation ~= "modified" and change.operation ~= "moved") then
+          return nil, "file changed after the agent turn: " .. path
+        end
+        local desired, desired_err = blob(change.before_blob)
+        if desired == nil then
+          return nil, desired_err or ("missing before blob: " .. path)
+        end
+        local merged, merge_err = three_way_merge(current or "", expected, desired)
+        if merged == nil then
+          return nil, merge_err
+        end
+        prepared.restore_data = merged
+        prepared.mode = "three_way"
       end
     end
     if change.operation == "moved" then
@@ -181,7 +257,7 @@ function M.new(opts)
         return nil, "move source was recreated after the agent turn: " .. previous
       end
     end
-    return { path = path }
+    return prepared
   end
 
   local function reject_preflighted(change, root, prepared)
@@ -197,13 +273,14 @@ function M.new(opts)
     if change.operation == "added" then
       return uv.fs_unlink(prepared.path)
     elseif change.operation == "modified" or change.operation == "deleted" then
-      return write_atomic(prepared.path, before)
+      local written, write_err = write_atomic(prepared.path, prepared.restore_data or before)
+      return written and { mode = prepared.mode } or nil, write_err
     elseif change.operation == "moved" then
       local previous, previous_err = absolute_path(root, change.previous_path)
       if not previous then
         return nil, previous_err
       end
-      local written, write_err = write_atomic(previous, before)
+      local written, write_err = write_atomic(previous, prepared.restore_data or before)
       if not written then
         return nil, write_err
       end
@@ -211,7 +288,7 @@ function M.new(opts)
       if not removed then
         return nil, remove_err
       end
-      return true
+      return { mode = prepared.mode }
     end
     return nil, "unsupported change operation: " .. tostring(change.operation)
   end
@@ -233,13 +310,15 @@ function M.new(opts)
       end
       prepared[index] = item
     end
+    local results = {}
     for index, change in ipairs(changes or {}) do
-      local ok, err = reject_preflighted(change, root, prepared[index])
-      if not ok then
+      local result, err = reject_preflighted(change, root, prepared[index])
+      if not result then
         return nil, err
       end
+      results[index] = type(result) == "table" and result or { mode = prepared[index].mode }
     end
-    return true
+    return results
   end
 
   function apply.hunks(change)

@@ -57,7 +57,9 @@ function M.drawer_lines(thread, turn)
   }
   for _, change in ipairs(turn.changes or {}) do
     local binary = change.binary == true and " [binary]" or ""
-    local decision = change.decision and (" [" .. change.decision .. "]") or ""
+    local decision = change.decision
+        and (" [" .. change.decision .. (change.apply_mode and (":" .. change.apply_mode) or "") .. "]")
+      or ""
     local decided_hunks = 0
     for _, hunk in ipairs(change.hunks or {}) do
       if hunk.decision then
