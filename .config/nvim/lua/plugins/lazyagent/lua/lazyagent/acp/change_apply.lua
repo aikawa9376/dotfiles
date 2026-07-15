@@ -80,6 +80,76 @@ function M.new(opts)
     return opts.read_blob(ref)
   end
 
+  local function text_blobs(change)
+    if change.binary == true then
+      return nil, nil, "binary changes do not support hunk decisions"
+    end
+    if change.operation ~= "modified" and change.operation ~= "moved" then
+      return nil, nil, "hunk decisions require a modified or moved text file"
+    end
+    local before, before_err = blob(change.before_blob)
+    local after, after_err = blob(change.after_blob)
+    if before == nil or after == nil then
+      return nil, nil, before_err or after_err or "missing text blob"
+    end
+    return before, after
+  end
+
+  local function diff_hunks(before, after)
+    local indices = vim.diff(before, after, { result_type = "indices", algorithm = "histogram" })
+    local hunks = {}
+    for index, item in ipairs(indices or {}) do
+      hunks[index] = {
+        index = index,
+        before_start = item[1],
+        before_count = item[2],
+        after_start = item[3],
+        after_count = item[4],
+      }
+    end
+    return hunks
+  end
+
+  local function text_lines(text)
+    if text == "" then
+      return {}
+    end
+    return vim.split(text, "\n", { plain = true })
+  end
+
+  local function apply_rejected_hunks(before, after, hunks, rejected)
+    local before_lines = text_lines(before)
+    local result = text_lines(after)
+    local selected = {}
+    for index in pairs(rejected) do
+      if hunks[index] then
+        selected[#selected + 1] = hunks[index]
+      end
+    end
+    table.sort(selected, function(left, right)
+      local left_position = left.after_count == 0 and left.after_start + 1 or left.after_start
+      local right_position = right.after_count == 0 and right.after_start + 1 or right.after_start
+      return left_position > right_position
+    end)
+    for _, hunk in ipairs(selected) do
+      local prefix_count = hunk.after_count == 0 and hunk.after_start or (hunk.after_start - 1)
+      local replacement = {}
+      for offset = 0, hunk.before_count - 1 do
+        replacement[#replacement + 1] = before_lines[hunk.before_start + offset]
+      end
+      local updated = {}
+      for index = 1, prefix_count do
+        updated[#updated + 1] = result[index]
+      end
+      vim.list_extend(updated, replacement)
+      for index = prefix_count + hunk.after_count + 1, #result do
+        updated[#updated + 1] = result[index]
+      end
+      result = updated
+    end
+    return table.concat(result, "\n")
+  end
+
   local function preflight(change, root)
     local path, path_err = absolute_path(root, change.path)
     if not path then
@@ -94,7 +164,7 @@ function M.new(opts)
         return nil, "file was recreated after the agent turn: " .. path
       end
     else
-      local expected, expected_err = blob(change.after_blob)
+      local expected, expected_err = blob(change.review_blob or change.after_blob)
       if expected == nil then
         return nil, expected_err or ("missing after blob: " .. path)
       end
@@ -170,6 +240,49 @@ function M.new(opts)
       end
     end
     return true
+  end
+
+  function apply.hunks(change)
+    local before, after, err = text_blobs(change)
+    if not before then
+      return nil, err
+    end
+    return diff_hunks(before, after)
+  end
+
+  function apply.reject_hunks(change, root, indices)
+    local before, after, text_err = text_blobs(change)
+    if not before then
+      return nil, text_err
+    end
+    local hunks = diff_hunks(before, after)
+    local rejected = {}
+    for _, hunk in ipairs(change.hunks or {}) do
+      if hunk.decision == "rejected" then
+        rejected[hunk.index] = true
+      end
+    end
+    for _, index in ipairs(indices or {}) do
+      if not hunks[index] then
+        return nil, "hunk not found: " .. tostring(index)
+      end
+      rejected[index] = true
+    end
+
+    local prepared, preflight_err = preflight(change, root)
+    if not prepared then
+      return nil, preflight_err
+    end
+    local desired = apply_rejected_hunks(before, after, hunks, rejected)
+    local ref, put_err = opts.put_blob(desired)
+    if not ref then
+      return nil, put_err
+    end
+    local written, write_err = write_atomic(prepared.path, desired)
+    if not written then
+      return nil, write_err
+    end
+    return ref, hunks
   end
 
   return apply

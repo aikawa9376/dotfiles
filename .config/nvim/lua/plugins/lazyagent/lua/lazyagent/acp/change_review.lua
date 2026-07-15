@@ -58,12 +58,20 @@ function M.drawer_lines(thread, turn)
   for _, change in ipairs(turn.changes or {}) do
     local binary = change.binary == true and " [binary]" or ""
     local decision = change.decision and (" [" .. change.decision .. "]") or ""
+    local decided_hunks = 0
+    for _, hunk in ipairs(change.hunks or {}) do
+      if hunk.decision then
+        decided_hunks = decided_hunks + 1
+      end
+    end
+    local hunk_state = decided_hunks > 0 and string.format(" [hunks %d/%d]", decided_hunks, #change.hunks) or ""
     lines[#lines + 1] = string.format(
-      "%s  %s%s%s",
+      "%s  %s%s%s%s",
       operation_marker[change.operation] or "?",
       display_path(change),
       binary,
-      decision
+      decision,
+      hunk_state
     )
   end
   return lines
@@ -98,7 +106,7 @@ function M.new(opts)
     end
 
     local before, before_err = read_blob(change.before_blob)
-    local after, after_err = read_blob(change.after_blob)
+    local after, after_err = read_blob(change.review_blob or change.after_blob)
     if before == nil or after == nil then
       vim.notify("LazyAgent ACP: failed to read change blobs: " .. tostring(before_err or after_err), vim.log.levels.ERROR)
       return false
@@ -213,6 +221,53 @@ function M.new(opts)
         confirm_reject(indices, "Reject all file changes?")
       end
     end, { buffer = bufnr, silent = true, desc = "Reject all LazyAgent ACP changes" })
+    vim.keymap.set("n", "h", function()
+      local change_index = vim.api.nvim_win_get_cursor(0)[1] - 3
+      local change = turn.changes[change_index]
+      if not change or change.decision or type(opts.hunks) ~= "function" then
+        return
+      end
+      local hunks, err = opts.hunks(thread, turn, change_index)
+      if not hunks then
+        vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.INFO)
+        return
+      end
+      vim.ui.select(hunks, {
+        prompt = "Select change hunk:",
+        format_item = function(hunk)
+          local state = hunk.decision and (" [" .. hunk.decision .. "]") or ""
+          return string.format(
+            "@@ -%d,%d +%d,%d @@%s",
+            hunk.before_start,
+            hunk.before_count,
+            hunk.after_start,
+            hunk.after_count,
+            state
+          )
+        end,
+      }, function(hunk)
+        if not hunk or hunk.decision or type(opts.decide_hunk) ~= "function" then
+          return
+        end
+        vim.ui.select({ "Keep", "Reject", "Cancel" }, { prompt = "Hunk decision:" }, function(choice)
+          if choice ~= "Keep" and choice ~= "Reject" then
+            return
+          end
+          local decided, decide_err = opts.decide_hunk(
+            thread,
+            turn,
+            change_index,
+            hunk.index,
+            choice == "Keep" and "kept" or "rejected"
+          )
+          if not decided then
+            vim.notify("LazyAgent ACP: " .. tostring(decide_err), vim.log.levels.ERROR)
+            return
+          end
+          refresh(decided)
+        end)
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Decide LazyAgent ACP change hunk" })
     vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = bufnr, silent = true, desc = "Close changes drawer" })
     return bufnr
   end
