@@ -485,6 +485,9 @@ backend.set_agent_backend("Gemini", "mybackend")
 
 既存 session は自動移行しないため、backend を変えた後は session を閉じて開き直してください。
 
+## Roadmap
 
-TODO:
-シームレスな再開機能 基本は有効でoptsから選択可能 まずできるのかを調べてもらう
+ACP の次期実装計画、Zed External Agent との差分、milestoneと完了条件は
+[ACP_ROADMAP.md](ACP_ROADMAP.md) で管理します。
+
+plugin全体の保守課題、multi-instance対応、削除候補は [TODO.md](TODO.md) を参照してください。
