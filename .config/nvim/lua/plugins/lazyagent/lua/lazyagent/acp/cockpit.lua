@@ -56,7 +56,7 @@ function M.render(threads, runtimes)
   local lines = {
     "# LazyAgent ACP Session Cockpit",
     "",
-    "`<CR>` open  `r` refresh  `q` close",
+    "`<CR>` open  `/` filter  `p` pin  `a` archive/restore  `d` delete  `X` bulk close  `r` refresh  `q` close",
   }
   local line_map = {}
   if #paths == 0 then
@@ -69,6 +69,9 @@ function M.render(threads, runtimes)
     lines[#lines + 1] = ""
     lines[#lines + 1] = "## " .. vim.fn.fnamemodify(path, ":~")
     table.sort(groups[path], function(left, right)
+      local left_pinned = left.metadata and left.metadata.cockpit_pinned == true
+      local right_pinned = right.metadata and right.metadata.cockpit_pinned == true
+      if left_pinned ~= right_pinned then return left_pinned end
       if left.updated_at == right.updated_at then return left.thread_id < right.thread_id end
       return tostring(left.updated_at or "") > tostring(right.updated_at or "")
     end)
@@ -78,8 +81,10 @@ function M.render(threads, runtimes)
       local runtime_model = runtime and runtime.acp_model_catalog and runtime.acp_model_catalog.currentModelId
       local model = runtime_model or (thread.model and thread.model ~= "" and thread.model) or "default"
       local changes = changed_file_count(thread)
+      local pin = thread.metadata and thread.metadata.cockpit_pinned == true and "★ " or ""
       lines[#lines + 1] = string.format(
-        "- [%s] %s · %s · model:%s · %s · usage:%s · changes:%d",
+        "- %s[%s] %s · %s · model:%s · %s · usage:%s · changes:%d",
+        pin,
         common_status(thread, runtime),
         tostring(thread.title or thread.thread_id),
         tostring(thread.provider_id or "provider"),
@@ -92,6 +97,18 @@ function M.render(threads, runtimes)
     end
   end
   return lines, line_map
+end
+
+function M.filter(threads, query)
+  query = vim.trim(tostring(query or "")):lower()
+  if query == "" then return vim.deepcopy(threads or {}) end
+  return vim.tbl_filter(function(thread)
+    local text = table.concat({
+      thread.title or "", thread.provider_id or "", thread.cwd or "", thread.status or "",
+      thread.model or "", thread.unread == true and "unread" or "read",
+    }, " "):lower()
+    return text:find(query, 1, true) ~= nil
+  end, threads or {})
 end
 
 return M
