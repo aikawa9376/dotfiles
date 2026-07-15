@@ -321,6 +321,7 @@ function M.setup(deps)
     local line_map = {}
     local stored_threads = {}
     local query = ""
+    local warned_conflicts = ""
     local function refresh()
       local list_err
       stored_threads, list_err = backend.list_threads({ include_archived = true })
@@ -346,6 +347,12 @@ function M.setup(deps)
         require("lazyagent.acp.cockpit").filter(stored_threads, query),
         runtimes
       )
+      local conflicts = require("lazyagent.acp.cockpit").conflicts(stored_threads)
+      local conflict_hash = vim.fn.sha256(vim.inspect(conflicts))
+      if next(conflicts) and conflict_hash ~= warned_conflicts then
+        warned_conflicts = conflict_hash
+        vim.notify("LazyAgent ACP: active threads share changed files in the same workspace", vim.log.levels.WARN)
+      end
       vim.bo[bufnr].modifiable = true
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       vim.bo[bufnr].modifiable = false

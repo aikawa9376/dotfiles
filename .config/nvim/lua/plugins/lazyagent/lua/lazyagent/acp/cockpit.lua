@@ -11,6 +11,40 @@ local function changed_file_count(thread)
   return vim.tbl_count(seen)
 end
 
+local function latest_paths(thread)
+  local turns = thread.change_journal and thread.change_journal.turns or {}
+  local turn = turns[#turns]
+  local paths = {}
+  for _, change in ipairs(turn and turn.changes or {}) do
+    local path = change.path or change.new_path or change.old_path
+    if path and path ~= "" then paths[path] = true end
+  end
+  return paths
+end
+
+function M.conflicts(threads)
+  local result = {}
+  for left_index, left in ipairs(threads or {}) do
+    if left.status == "active" then
+      local left_paths = latest_paths(left)
+      for right_index = left_index + 1, #(threads or {}) do
+        local right = threads[right_index]
+        if right.status == "active" and left.cwd == right.cwd then
+          for path in pairs(latest_paths(right)) do
+            if left_paths[path] then
+              result[left.thread_id] = result[left.thread_id] or {}
+              result[right.thread_id] = result[right.thread_id] or {}
+              result[left.thread_id][path] = true
+              result[right.thread_id][path] = true
+            end
+          end
+        end
+      end
+    end
+  end
+  return result
+end
+
 local function group_path(thread)
   local metadata = type(thread.metadata) == "table" and thread.metadata or {}
   return metadata.worktree_path or thread.cwd or "(unknown workspace)"
@@ -48,6 +82,7 @@ end
 
 function M.render(threads, runtimes)
   runtimes = runtimes or {}
+  local conflicts = M.conflicts(threads)
   local groups = {}
   for _, thread in ipairs(threads or {}) do
     local path = group_path(thread)
@@ -86,8 +121,10 @@ function M.render(threads, runtimes)
       local model = runtime_model or (thread.model and thread.model ~= "" and thread.model) or "default"
       local changes = changed_file_count(thread)
       local pin = thread.metadata and thread.metadata.cockpit_pinned == true and "★ " or ""
+      local conflict_count = vim.tbl_count(conflicts[thread.thread_id] or {})
+      local conflict = conflict_count > 0 and (" · ⚠conflicts:" .. tostring(conflict_count)) or ""
       lines[#lines + 1] = string.format(
-        "- %s[%s] %s · %s · model:%s · %s · usage:%s · changes:%d",
+        "- %s[%s] %s · %s · model:%s · %s · usage:%s · changes:%d%s",
         pin,
         common_status(thread, runtime),
         tostring(thread.title or thread.thread_id),
@@ -95,7 +132,8 @@ function M.render(threads, runtimes)
         tostring(model),
         unread,
         usage_label(runtime),
-        changes
+        changes,
+        conflict
       )
       line_map[#lines] = thread.thread_id
     end
