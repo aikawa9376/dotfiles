@@ -76,6 +76,9 @@ function M.setup(deps)
 
     return {
       agent_name = agent_name,
+      provider_id = agent_cfg and agent_cfg.acp_provider_id or agent_name,
+      thread_id = agent_cfg and agent_cfg.acp_thread_id or nil,
+      thread_title = agent_cfg and agent_cfg.acp_thread_title or nil,
       agent_cfg = agent_cfg,
       command = launch_spec.command,
       source_bufnr = resolve_source_bufnr(agent_cfg),

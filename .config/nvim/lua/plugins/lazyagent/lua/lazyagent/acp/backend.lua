@@ -63,8 +63,15 @@ local function sync_thread_record(session, changes)
   if not session or not session.thread_store or not session.thread_id then
     return nil
   end
-  local updated, err = session.thread_store:update(session.thread_id, changes or {})
+  local opts = {}
+  if changes and changes.process_id == vim.NIL and session.client and session.client.pid then
+    opts.expected_process_id = session.client.pid
+  end
+  local updated, err = session.thread_store:update(session.thread_id, changes or {}, opts)
   if not updated then
+    if type(err) == "table" and err.code == "stale_process" then
+      return nil, err
+    end
     session.thread_store_error = tostring(err)
     return nil, err
   end
@@ -398,9 +405,44 @@ local function create_backend(default_view)
       return
     end
 
-    local transcript_path = state_helpers.build_transcript_path(acp.agent_name, acp.source_bufnr)
+    local existing_thread = nil
+    if acp.thread_id and acp.thread_id ~= "" then
+      local thread_err
+      existing_thread, thread_err = thread_store:get(acp.thread_id)
+      if not existing_thread then
+        vim.schedule(function()
+          vim.notify("LazyAgent ACP thread open failed: " .. tostring(thread_err or acp.thread_id), vim.log.levels.ERROR)
+        end)
+        if on_split then
+          vim.schedule(function()
+            on_split(nil)
+          end)
+        end
+        return
+      end
+      local provider_id = tostring(acp.provider_id or acp.agent_name)
+      if existing_thread.provider_id ~= provider_id then
+        vim.schedule(function()
+          vim.notify(
+            string.format("LazyAgent ACP thread provider mismatch: expected %s, got %s", existing_thread.provider_id, provider_id),
+            vim.log.levels.ERROR
+          )
+        end)
+        if on_split then
+          vim.schedule(function()
+            on_split(nil)
+          end)
+        end
+        return
+      end
+    end
+
+    local transcript_path = existing_thread and existing_thread.transcript_path ~= "" and existing_thread.transcript_path
+      or state_helpers.build_transcript_path(acp.agent_name, acp.source_bufnr)
     local initial_text = conversation_helpers.render_section_block("System", "Connecting ACP session for " .. acp.agent_name .. "...")
-    state_helpers.write_transcript(transcript_path, "", "w")
+    if not existing_thread then
+      state_helpers.write_transcript(transcript_path, "", "w")
+    end
     state_helpers.write_transcript(transcript_path, initial_text, "a")
 
     view.create_pane({
@@ -478,18 +520,23 @@ local function create_backend(default_view)
         thread_store = thread_store,
       }
       local session = sessions[pane_id]
-      local thread, thread_err = thread_store:create({
-        thread_id = acp.thread_id,
-        provider_id = session.provider_id,
+      local thread_attributes = {
         cwd = session.cwd,
         additional_directories = session.additional_directories,
-        title = acp.thread_title or acp.agent_name,
         status = "active",
         transcript_path = transcript_path,
         model = session.initial_model,
         mode = session.default_mode,
         config = vim.deepcopy(session.manual_config_overrides or {}),
-      })
+      }
+      local thread, thread_err
+      if existing_thread then
+        thread, thread_err = thread_store:open(existing_thread.thread_id, thread_attributes)
+      else
+        thread_attributes.provider_id = session.provider_id
+        thread_attributes.title = acp.thread_title or acp.agent_name
+        thread, thread_err = thread_store:create(thread_attributes)
+      end
       if thread then
         session.thread_id = thread.thread_id
       else
@@ -525,6 +572,14 @@ local function create_backend(default_view)
       return view.pane_exists(pane_id, session)
     end
     return true
+  end
+
+  function backend.list_threads(opts)
+    return thread_store:list(opts)
+  end
+
+  function backend.get_thread(thread_id)
+    return thread_store:get(thread_id)
   end
 
   function backend.get_pane_pid(pane_id)

@@ -142,6 +142,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [ ] 同じproviderの複数threadを同時起動できるようにする。
 - [ ] threadのnew / open / close / archive / restore / rename / deleteを実装する。
   - [x] atomic manifest上のcreate / update / archive / restore / rename / delete contractを追加する。
+  - [x] 既存UUIDのprovider検証付きopenとtranscript再利用、stale process exitの競合防止をbackendへ統合する。
 - [ ] provider native sessionのlist/importをthread storeへ統合する。
 - [ ] 再開時は`resume`、`load`、local carryoverの順にcapability-drivenで選ぶ。
 - [ ] native resumeとlocal carryoverをUI上で明確に区別する。
