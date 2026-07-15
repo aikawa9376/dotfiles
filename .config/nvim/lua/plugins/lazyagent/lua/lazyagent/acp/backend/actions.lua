@@ -1,6 +1,7 @@
 
 local M = {}
 local ContentBlocks = require("lazyagent.acp.content_blocks")
+local ContextItem = require("lazyagent.acp.context_item")
 
 function M.setup(deps)
   local state = deps.state
@@ -874,22 +875,9 @@ local function resolve_reference(token, session)
     return nil
   end
 
-  local note = nil
   local display = path_part
-  if line_start and line_end then
-    if line_end < line_start then
-      line_start, line_end = line_end, line_start
-    end
-    if line_start == line_end and column then
-      note = string.format("Context from %s at line %d, column %d:", display, line_start, column)
-    elseif line_start == line_end then
-      note = string.format("Context from %s line %d:", display, line_start)
-    else
-      note = string.format("Context from %s lines %d-%d:", display, line_start, line_end)
-    end
-  end
-
   local block
+  local context_item
   if is_media then
     local media_err
     block, media_err = ContentBlocks.from_file(abs_path, {
@@ -903,47 +891,27 @@ local function resolve_reference(token, session)
       }
     end
   elseif is_directory then
-    block = {
-      type = "resource_link",
-      uri = file_uri(abs_path),
-      name = vim.fn.fnamemodify(abs_path, ":t"),
-      title = display,
-    }
+    context_item = ContextItem.directory({ path = abs_path, display = display })
+    block = ContextItem.lower(context_item, {
+      embedded_context = session.prompt_supports_embedded_context == true,
+    })
   else
-    local content_lines = lines or {}
-    if line_start and line_end then
-      local start_idx = math.max(1, line_start)
-      local end_idx = math.max(start_idx, line_end)
-      local slice = {}
-      for idx = start_idx, math.min(#content_lines, end_idx) do
-        table.insert(slice, content_lines[idx])
-      end
-      content_lines = slice
-    end
-    local content = table.concat(content_lines, "\n")
-    if session.prompt_supports_embedded_context then
-      block = {
-        type = "resource",
-        resource = {
-          uri = file_uri(abs_path),
-          mimeType = "text/plain",
-          text = content,
-        },
-      }
-    else
-      block = {
-        type = "resource_link",
-        uri = file_uri(abs_path),
-        name = vim.fn.fnamemodify(abs_path, ":t"),
-        title = display,
-        mimeType = "text/plain",
-      }
-    end
+    context_item = ContextItem.file({
+      path = abs_path,
+      display = display,
+      lines = lines or {},
+      start_line = line_start,
+      end_line = line_end,
+      column = column,
+    })
+    block = ContextItem.lower(context_item, {
+      embedded_context = session.prompt_supports_embedded_context == true,
+    })
   end
 
   return {
     block = block,
-    note = note,
+    note = context_item and context_item.note or nil,
     trailing = trailing,
   }
 end

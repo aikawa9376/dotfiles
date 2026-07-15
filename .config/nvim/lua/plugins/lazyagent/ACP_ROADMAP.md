@@ -204,7 +204,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 ### ContextItem
 
-- [ ] file / range / directory / selectionを共通`ContextItem`へ移行する。
+- [x] file / range / directory / selectionを共通`ContextItem`へ移行する。
+  - [x] `@file[:range]` ACP loweringと`{selection}` Markdown loweringを共通model / note / content sliceへ統合する。
 - [ ] symbol、diagnostics、branch diff、previous thread、terminal、URLを追加する。
 - [ ] content hash、source version、size/token estimate、previewを保持する。
 - [ ] capabilityに応じてText / Image / EmbeddedResource / ResourceLinkへloweringする。
