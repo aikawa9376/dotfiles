@@ -453,6 +453,10 @@ function M.get_scratch_completions(agent_name, opts)
         label = "symbol",
         desc = "Attach the enclosing function or class at the source cursor.",
       }
+      res.at[#res.at + 1] = {
+        label = "previous-thread",
+        desc = "Attach the latest matching thread transcript.",
+      }
     end
     if fd_paths and #fd_paths > 0 then
       vim.list_extend(res.at, fd_paths)

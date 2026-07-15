@@ -340,6 +340,37 @@ function M.symbol(bufnr, opts)
   return item
 end
 
+function M.previous_thread(thread, opts)
+  opts = opts or {}
+  if type(thread) ~= "table" or not thread.transcript_path or thread.transcript_path == "" then
+    return nil, "thread transcript is unavailable"
+  end
+  local ok, lines = pcall(vim.fn.readfile, thread.transcript_path)
+  if not ok then
+    return nil, tostring(lines)
+  end
+  local content = table.concat(lines, "\n")
+  local max_bytes = tonumber(opts.max_bytes) or (256 * 1024)
+  if #content > max_bytes then
+    content = string.format("[earlier transcript truncated; showing last %d bytes]\n\n", max_bytes)
+      .. content:sub(#content - max_bytes + 1)
+  end
+  local item = enrich({
+    kind = "previous_thread",
+    source = "thread",
+    inline = true,
+    path = thread.transcript_path,
+    uri = file_uri(thread.transcript_path),
+    display = thread.title or thread.thread_id or "previous thread",
+    filetype = "markdown",
+    content = content ~= "" and content or "Previous thread transcript is empty.",
+    thread_id = thread.thread_id,
+    provider_id = thread.provider_id,
+  }, opts)
+  item.note = "Context from previous thread " .. item.display .. ":"
+  return item
+end
+
 function M.lower(item, capabilities)
   capabilities = capabilities or {}
   if item.kind == "image" or item.kind == "audio" then

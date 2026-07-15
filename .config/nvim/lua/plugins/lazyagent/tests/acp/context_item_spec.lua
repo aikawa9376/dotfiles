@@ -85,6 +85,20 @@ function M.run()
   assert_equal(ContextItem.lower(symbol, {}).type, "text", "symbol text lowering")
   vim.api.nvim_buf_delete(symbol_bufnr, { force = true })
 
+  local transcript_path = vim.fn.tempname() .. ".md"
+  vim.fn.writefile({ "## User", "hello", "## Assistant", "hi" }, transcript_path)
+  local previous_thread = assert(ContextItem.previous_thread({
+    thread_id = "thread-previous",
+    provider_id = "fixture",
+    title = "Earlier work",
+    transcript_path = transcript_path,
+  }))
+  assert_equal(previous_thread.kind, "previous_thread", "previous thread context kind")
+  assert_equal(previous_thread.thread_id, "thread-previous", "previous thread identity")
+  assert(previous_thread.content:match("## Assistant\nhi"), "previous thread content")
+  assert_equal(ContextItem.lower(previous_thread, {}).type, "text", "previous thread text lowering")
+  vim.fn.delete(transcript_path)
+
   local media_path = vim.fn.tempname() .. ".png"
   vim.fn.writefile({ "image fixture" }, media_path, "b")
   local media = assert(ContextItem.media({ path = media_path }))

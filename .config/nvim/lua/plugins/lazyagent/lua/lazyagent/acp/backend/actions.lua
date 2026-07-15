@@ -861,6 +861,42 @@ local function resolve_reference(token, session)
     }
   end
 
+  if core == "previous-thread" then
+    local threads, list_err = session.thread_store and session.thread_store:list({ include_archived = true }) or nil
+    local previous
+    local workspace = vim.fn.fnamemodify(session.root_dir or session.cwd, ":p"):gsub("/$", "")
+    for _, candidate in ipairs(threads or {}) do
+      if candidate.thread_id ~= session.thread_id
+        and candidate.provider_id == session.provider_id
+        and candidate.cwd == workspace
+        and vim.fn.filereadable(candidate.transcript_path) == 1
+      then
+        previous = candidate
+        break
+      end
+    end
+    local item, item_err
+    if previous then
+      item, item_err = ContextItem.previous_thread(previous)
+    end
+    if not item then
+      return {
+        block = {
+          type = "text",
+          text = "[previous thread unavailable: " .. tostring(item_err or list_err or "no matching thread") .. "]",
+        },
+        trailing = trailing,
+      }
+    end
+    return {
+      block = ContextItem.lower(item, {
+        embedded_context = session.prompt_supports_embedded_context == true,
+      }),
+      note = item.note,
+      trailing = trailing,
+    }
+  end
+
   local path_part = core
   local line_start, line_end, column
 
