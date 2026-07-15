@@ -206,9 +206,51 @@ local function same_file_state(left, right)
     and vim.deep_equal(left.mtime, right.mtime)
 end
 
+local function rename_key(item)
+  return table.concat({
+    tostring(item.path or ""),
+    tostring(item.original_path or ""),
+    tostring(item.index_status or ""),
+    tostring(item.worktree_status or ""),
+  }, "\0")
+end
+
+local function change_record(path, operation, left, right)
+  return {
+    path = path,
+    operation = operation,
+    before_size = left and left.size or nil,
+    after_size = right and right.size or nil,
+    before_blob = left and left.blob or nil,
+    after_blob = right and right.blob or nil,
+    binary = (left and left.binary == true) or (right and right.binary == true) or false,
+  }
+end
+
 function M.diff(before, after)
   local previous = file_index(before)
   local current = file_index(after)
+  local baseline_renames = {}
+  for _, item in ipairs((before and before.dirty) or {}) do
+    if (item.index_status == "R" or item.worktree_status == "R") and item.original_path then
+      baseline_renames[rename_key(item)] = true
+    end
+  end
+  local consumed = {}
+  local changes = {}
+  for _, item in ipairs((after and after.dirty) or {}) do
+    if (item.index_status == "R" or item.worktree_status == "R")
+      and item.original_path
+      and not baseline_renames[rename_key(item)]
+    then
+      local moved = change_record(item.path, "moved", previous[item.original_path], current[item.path])
+      moved.previous_path = item.original_path
+      changes[#changes + 1] = moved
+      consumed[item.path] = true
+      consumed[item.original_path] = true
+    end
+  end
+
   local paths = {}
   for path in pairs(previous) do
     paths[path] = true
@@ -217,30 +259,23 @@ function M.diff(before, after)
     paths[path] = true
   end
 
-  local changes = {}
   for path in pairs(paths) do
-    local left = previous[path]
-    local right = current[path]
-    local left_exists = left and left.exists ~= false
-    local right_exists = right and right.exists ~= false
-    local operation = nil
-    if not left_exists and right_exists then
-      operation = "added"
-    elseif left_exists and not right_exists then
-      operation = "deleted"
-    elseif left_exists and right_exists and not same_file_state(left, right) then
-      operation = "modified"
-    end
-    if operation then
-      changes[#changes + 1] = {
-        path = path,
-        operation = operation,
-        before_size = left and left.size or nil,
-        after_size = right and right.size or nil,
-        before_blob = left and left.blob or nil,
-        after_blob = right and right.blob or nil,
-        binary = (left and left.binary == true) or (right and right.binary == true) or false,
-      }
+    if not consumed[path] then
+      local left = previous[path]
+      local right = current[path]
+      local left_exists = left and left.exists ~= false
+      local right_exists = right and right.exists ~= false
+      local operation = nil
+      if not left_exists and right_exists then
+        operation = "added"
+      elseif left_exists and not right_exists then
+        operation = "deleted"
+      elseif left_exists and right_exists and not same_file_state(left, right) then
+        operation = "modified"
+      end
+      if operation then
+        changes[#changes + 1] = change_record(path, operation, left, right)
+      end
     end
   end
   table.sort(changes, function(left, right)
