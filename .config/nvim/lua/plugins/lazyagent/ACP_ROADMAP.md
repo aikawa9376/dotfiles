@@ -137,10 +137,10 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 - [x] `ThreadStore`とversion付きmanifest schemaを追加する。
   - [x] atomic publishに加えてmulti-Neovim read-modify-write lock、timeout、stale lock回収を追加する。
-- [ ] current session stateをthread-scoped stateへ分割する。
+- [x] current session stateをthread-scoped stateへ分割する。
   - [x] backend sessionへlocal `thread_id`を割り当て、native session / process / transcript lifecycleを永続同期する。
-- [ ] provider process、native ACP session、view bufferをthreadから分離する。
-- [ ] 同じproviderの複数threadを同時起動できるようにする。
+- [x] provider process、native ACP session、view bufferをthreadから分離する。
+- [x] 同じproviderの複数threadを同時起動できるようにする。
 - [ ] threadのnew / open / close / archive / restore / rename / deleteを実装する。
   - [x] atomic manifest上のcreate / update / archive / restore / rename / delete contractを追加する。
   - [x] 既存UUIDのprovider検証付きopenとtranscript再利用、stale process exitの競合防止をbackendへ統合する。
@@ -151,6 +151,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] draft、selected config、read/unreadをThreadStoreへ同期し、scratch open/closeとbackground outputへ接続する。
   - [x] buffer viewのcursor / topline / horizontal scroll / follow-outputをthread単位でcapture / restoreする。
 - [ ] 既存のagent名ベースcommandを互換adapter経由で動かす。
+  - [x] `provider::thread_uuid` runtime keyと直近active threadへのprovider aliasをlaunch / send / ACP targetへ統合する。
 
 ### Exit criteria
 

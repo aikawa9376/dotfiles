@@ -31,9 +31,11 @@ function M.run()
   })
 
   local killed = false
+  local pane_seq = 0
   local view = {
     create_pane = function(_, done)
-      done("thread-test-pane", {})
+      pane_seq = pane_seq + 1
+      done("thread-test-pane-" .. tostring(pane_seq), {})
     end,
     pane_exists = function()
       return not killed
@@ -61,7 +63,7 @@ function M.run()
     },
   })
 
-  assert_equal(pane_id, "thread-test-pane", "backend pane")
+  assert_equal(pane_id, "thread-test-pane-1", "backend pane")
   assert(vim.wait(5000, function()
     local snapshot = backend.get_runtime_snapshot(pane_id)
     return snapshot and snapshot.acp_ready == true
@@ -99,7 +101,7 @@ function M.run()
       additional_directories = { root .. "/tests" },
     },
   })
-  assert_equal(pane_id, "thread-test-pane", "reopened backend pane")
+  assert_equal(pane_id, "thread-test-pane-2", "reopened backend pane")
   assert(vim.wait(5000, function()
     local snapshot = backend.get_runtime_snapshot(pane_id)
     return snapshot and snapshot.acp_ready == true
@@ -181,6 +183,44 @@ function M.run()
     "local carryover should be visible in transcript"
   )
   backend.kill_pane(pane_id)
+
+  local parallel_panes = {}
+  for index = 1, 2 do
+    backend.split(nil, 10, false, {
+      on_split = function(created)
+        parallel_panes[index] = created
+      end,
+      acp = {
+        agent_name = "ParallelFixture-" .. tostring(index),
+        provider_id = "ParallelFixture",
+        command = fake_command,
+        cwd = root,
+        root_dir = root,
+        additional_directories = { root .. "/tests" },
+      },
+    })
+  end
+  assert(vim.wait(5000, function()
+    if #parallel_panes ~= 2 then
+      return false
+    end
+    local first = backend.get_runtime_snapshot(parallel_panes[1])
+    local second = backend.get_runtime_snapshot(parallel_panes[2])
+    return first and first.acp_ready == true and second and second.acp_ready == true
+  end, 10), "parallel provider threads should become ready")
+  local first_parallel = backend.get_runtime_snapshot(parallel_panes[1])
+  local second_parallel = backend.get_runtime_snapshot(parallel_panes[2])
+  assert(first_parallel.acp_thread_id ~= second_parallel.acp_thread_id, "parallel threads need distinct UUIDs")
+  assert_equal(first_parallel.acp_provider_id, "ParallelFixture", "first parallel provider")
+  assert_equal(second_parallel.acp_provider_id, "ParallelFixture", "second parallel provider")
+  local parallel_debug = backend.get_debug_snapshot()
+  assert_equal(parallel_debug.session_count, 2, "parallel backend sessions")
+  assert_equal(parallel_debug.child_process_count, 2, "parallel child processes")
+  backend.kill_pane(parallel_panes[1])
+  assert_equal(backend.get_debug_snapshot().session_count, 1, "independent parallel close")
+  assert_equal(assert(backend.get_thread(second_parallel.acp_thread_id)).status, "active", "surviving parallel thread")
+  backend.kill_pane(parallel_panes[2])
+  assert_equal(backend.get_debug_snapshot().session_count, 0, "parallel teardown")
 
   state.opts = previous_opts
   vim.fn.delete(cache_dir, "rf")

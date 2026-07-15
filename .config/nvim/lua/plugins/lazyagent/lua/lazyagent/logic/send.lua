@@ -2,6 +2,7 @@
 -- This module contains functions for sending text to agents,
 -- whether interactive (CLI) or non-interactive (prompts).
 local M = {}
+local session_identity = require("lazyagent.logic.session.identity")
 
 local state = require("lazyagent.logic.state")
 local agent_logic = require("lazyagent.logic.agent")
@@ -395,8 +396,15 @@ local function resolve_send_target(opts)
   local backend_mod = opts.backend_mod
   local session = nil
 
-  if agent_name and state.sessions[agent_name] then
-    session = state.sessions[agent_name]
+  if agent_name then
+    local resolved_key, resolved_session = session_identity.resolve(state, agent_name)
+    if resolved_session then
+      agent_name = resolved_key
+      session = resolved_session
+    end
+  end
+
+  if session then
     pane_id = pane_id or session.pane_id
   elseif pane_id and pane_id ~= "" then
     agent_name, session = find_session_by_pane_id(pane_id)

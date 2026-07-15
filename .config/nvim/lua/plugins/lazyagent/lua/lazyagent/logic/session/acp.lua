@@ -5,6 +5,7 @@ local acp_logic = require("lazyagent.logic.acp")
 local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local window = require("lazyagent.window")
+local identity = require("lazyagent.logic.session.identity")
 
 function M.current_editor_session_name()
   local value = state.current_session_name
@@ -84,12 +85,17 @@ function M.is_acp_agent(name)
     return false
   end
 
-  local agent_cfg = agent_logic.get_interactive_agent(name)
+  local session_key, session = identity.resolve(state, name)
+  if session and acp_logic.is_acp_backend(session.backend) then
+    return true
+  end
+  local provider_id = identity.provider_id(session_key, session)
+  local agent_cfg = agent_logic.get_interactive_agent(provider_id)
   if not agent_cfg then
     return false
   end
 
-  local backend_name = select(1, backend_logic.resolve_backend_for_agent(name, agent_cfg))
+  local backend_name = select(1, backend_logic.resolve_backend_for_agent(provider_id, agent_cfg))
   return acp_logic.is_acp_backend(backend_name)
 end
 
@@ -115,12 +121,12 @@ end
 
 function M.active_acp_agents()
   local active = {}
-  for _, name in ipairs(agent_logic.get_active_agents()) do
-    local session = state.sessions[name]
-    if session and session.pane_id and session.pane_id ~= "" and M.is_acp_agent(name) then
-      active[#active + 1] = name
+  for session_key, session in pairs(state.sessions or {}) do
+    if session and session.pane_id and session.pane_id ~= "" and M.is_acp_agent(session_key) then
+      active[#active + 1] = session_key
     end
   end
+  table.sort(active)
   return active
 end
 
@@ -143,7 +149,8 @@ end
 
 function M.resolve_acp_target_agent(agent_name, callback)
   if agent_name and agent_name ~= "" then
-    callback(agent_name)
+    local session_key = identity.resolve(state, agent_name)
+    callback(session_key)
     return
   end
 
@@ -229,36 +236,43 @@ end
 function M.resolve_active_acp_session(agent_name, callback)
   callback = callback or function() end
 
-  local function is_active_acp(name)
-    local session = state.sessions[name]
-    return session and session.pane_id and session.pane_id ~= "" and M.is_acp_agent(name) or false
+  local function active_acp_key(name)
+    local session_key, session = identity.resolve(state, name)
+    if session and session.pane_id and session.pane_id ~= "" and M.is_acp_agent(session_key) then
+      return session_key
+    end
+    return nil
   end
 
   if agent_name and agent_name ~= "" then
-    if not is_active_acp(agent_name) then
+    local session_key = active_acp_key(agent_name)
+    if not session_key then
       vim.notify("LazyAgentConversation: no active ACP session found for '" .. tostring(agent_name) .. "'", vim.log.levels.WARN)
       return
     end
-    callback(agent_name)
+    callback(session_key)
     return
   end
 
   local current = M.current_context_acp_agent()
-  if current and is_active_acp(current) then
-    callback(current)
+  local current_key = current and active_acp_key(current) or nil
+  if current_key then
+    callback(current_key)
     return
   end
 
   local scoped = M.preferred_session_agent(M.current_editor_session_name())
-  if scoped and is_active_acp(scoped) then
-    callback(scoped)
+  local scoped_key = scoped and active_acp_key(scoped) or nil
+  if scoped_key then
+    callback(scoped_key)
     return
   end
 
   local active = {}
   for _, name in ipairs(M.active_acp_agents()) do
-    if is_active_acp(name) then
-      table.insert(active, name)
+    local session_key = active_acp_key(name)
+    if session_key then
+      table.insert(active, session_key)
     end
   end
 
