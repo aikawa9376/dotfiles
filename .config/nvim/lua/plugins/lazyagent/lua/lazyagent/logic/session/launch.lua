@@ -514,7 +514,7 @@ function M.setup(deps)
     if opts.reuse == nil and agent_cfg and agent_cfg.yolo then
       reuse = false
     end
-    local backend_name = select(1, backend_logic.resolve_backend_for_agent(agent_name, agent_cfg))
+    local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
     local preserve_scratch = acp_logic.is_acp_backend(backend_name)
     module.ensure_session(agent_name, agent_cfg, reuse, function(pane_id)
       if opts.open_input == false then
@@ -559,6 +559,15 @@ function M.setup(deps)
       open_opts.agent_name = agent_name
       open_opts.close_on_focus_lost = preserve_scratch
       open_opts.on_close = function()
+        if preserve_scratch and backend_mod and type(backend_mod.set_thread_draft) == "function" then
+          local runtime = type(backend_mod.get_runtime_snapshot) == "function"
+              and backend_mod.get_runtime_snapshot(pane_id)
+            or nil
+          if runtime and runtime.acp_thread_id and bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+            local draft = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+            backend_mod.set_thread_draft(runtime.acp_thread_id, draft)
+          end
+        end
         if state.open_agent == agent_name then
           state.open_agent = nil
         end
@@ -566,10 +575,26 @@ function M.setup(deps)
 
       window.open(bufnr, open_opts)
 
-      if opts.initial_input and opts.initial_input ~= "" then
+      local runtime = preserve_scratch and backend_mod and type(backend_mod.get_runtime_snapshot) == "function"
+          and backend_mod.get_runtime_snapshot(pane_id)
+        or nil
+      if runtime and runtime.acp_thread_id and type(backend_mod.mark_thread_read) == "function" then
+        backend_mod.mark_thread_read(runtime.acp_thread_id)
+      end
+
+      local initial_input = opts.initial_input
+      local scratch_text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+      if (not initial_input or initial_input == "")
+        and scratch_text == ""
+        and runtime
+        and runtime.acp_thread_draft ~= ""
+      then
+        initial_input = runtime.acp_thread_draft
+      end
+      if initial_input and initial_input ~= "" then
         vim.schedule(function()
           if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-            vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(opts.initial_input, "\n"))
+            vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(initial_input, "\n"))
           end
         end)
       end

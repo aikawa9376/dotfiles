@@ -76,6 +76,7 @@ local function sync_thread_record(session, changes)
     return nil, err
   end
   session.thread_store_error = nil
+  session.thread_record = updated
   return updated
 end
 
@@ -124,6 +125,7 @@ config_helpers = backend_config.setup({
   end,
   matches_exact = conversation_helpers.matches_exact,
   matches_pattern = conversation_helpers.matches_pattern,
+  sync_thread = sync_thread_record,
 })
 
 actions_helpers = backend_actions.setup({
@@ -511,8 +513,9 @@ local function create_backend(default_view)
           tool_timeline = {},
         } or nil,
         auto_permission = acp.auto_permission,
-        default_mode = acp.default_mode,
-        initial_model = acp.initial_model,
+        default_mode = acp.default_mode or (existing_thread and existing_thread.mode) or nil,
+        initial_model = acp.initial_model or (existing_thread and existing_thread.model) or nil,
+        initial_config_snapshot = existing_thread and vim.deepcopy(existing_thread.config or {}) or {},
         fancy_mode = acp.fancy_mode,
         table_layout = acp.table_layout,
         smooth_scroll = vim.deepcopy(acp.smooth_scroll or {}),
@@ -533,6 +536,7 @@ local function create_backend(default_view)
         view_state = view_state or {},
         provider_id = acp.provider_id or acp.agent_name,
         thread_store = thread_store,
+        thread_record = existing_thread and vim.deepcopy(existing_thread) or nil,
       }
       local session = sessions[pane_id]
       local thread_attributes = {
@@ -554,6 +558,7 @@ local function create_backend(default_view)
       end
       if thread then
         session.thread_id = thread.thread_id
+        session.thread_record = thread
       else
         session.thread_store_error = tostring(thread_err)
       end
@@ -597,6 +602,27 @@ local function create_backend(default_view)
     return thread_store:get(thread_id)
   end
 
+  function backend.update_thread(thread_id, changes)
+    local updated, err = thread_store:update(thread_id, changes)
+    if not updated then
+      return nil, err
+    end
+    for _, session in pairs(sessions) do
+      if session.thread_id == updated.thread_id then
+        session.thread_record = vim.deepcopy(updated)
+      end
+    end
+    return updated
+  end
+
+  function backend.set_thread_draft(thread_id, draft)
+    return backend.update_thread(thread_id, { draft = tostring(draft or "") })
+  end
+
+  function backend.mark_thread_read(thread_id)
+    return backend.update_thread(thread_id, { unread = false })
+  end
+
   function backend.get_pane_pid(pane_id)
     local session = get_session(pane_id)
     if session and session.client and session.client.pid then
@@ -637,6 +663,8 @@ local function create_backend(default_view)
       acp_thread_store_error = session.thread_store_error,
       acp_resume_strategy = session.resume_strategy,
       acp_has_pending_carryover = session.pending_switch_history ~= nil,
+      acp_thread_draft = session.thread_record and session.thread_record.draft or "",
+      acp_thread_unread = session.thread_record and session.thread_record.unread == true or false,
       acp_session_info = vim.deepcopy(session.session_info or {}),
       acp_transcript_path = session.transcript_path,
       acp_agent_info = vim.deepcopy(session.agent_info or {}),

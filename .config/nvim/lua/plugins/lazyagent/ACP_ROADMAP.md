@@ -147,6 +147,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] 再開時は`resume`、`load`、local carryoverの順にcapability-drivenで選ぶ。
 - [x] native resumeとlocal carryoverをUI上で明確に区別する。
 - [ ] draft、scroll position、selected config、unread stateをthread単位で保存する。
+  - [x] draft、selected config、read/unreadをThreadStoreへ同期し、scratch open/closeとbackground outputへ接続する。
 - [ ] 既存のagent名ベースcommandを互換adapter経由で動かす。
 
 ### Exit criteria
