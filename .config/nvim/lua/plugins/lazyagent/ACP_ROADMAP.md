@@ -207,7 +207,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] file / range / directory / selectionを共通`ContextItem`へ移行する。
   - [x] `@file[:range]` ACP loweringと`{selection}` Markdown loweringを共通model / note / content sliceへ統合する。
 - [ ] symbol、diagnostics、branch diff、previous thread、terminal、URLを追加する。
-- [ ] content hash、source version、size/token estimate、previewを保持する。
+- [x] content hash、source version、size/token estimate、previewを保持する。
+  - [x] text itemはSHA-256 / changedtickまたはfile stat / byte÷4 token概算 / whitespace compact previewを生成する。
 - [ ] capabilityに応じてText / Image / EmbeddedResource / ResourceLinkへloweringする。
 - [ ] input imageをfirst-class ACP Image blockとして送信する。
 - [ ] assistant/tool outputのimage、audio、resourceをNeovim上で表示する。
