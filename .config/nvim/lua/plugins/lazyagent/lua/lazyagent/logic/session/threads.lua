@@ -7,6 +7,7 @@ function M.setup(deps)
   local acp_logic = deps.acp_logic
   local start_interactive_session = deps.start_interactive_session
   local module = {}
+  local thread_label
 
   local function configured_provider(provider_id)
     if provider_id and provider_id ~= "" then
@@ -147,7 +148,45 @@ function M.setup(deps)
     return backend.delete_thread(thread.thread_id) == true
   end
 
-  local function thread_label(thread)
+  function module.show_thread_changes(thread_id)
+    if thread_id and thread_id ~= "" then
+      local backend, thread = thread_backend(thread_id)
+      if not backend or not thread or type(backend.show_thread_changes) ~= "function" then
+        vim.notify("LazyAgent ACP: thread changes are unavailable", vim.log.levels.WARN)
+        return false
+      end
+      local opened, err = backend.show_thread_changes(thread.thread_id)
+      if not opened then
+        vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.INFO)
+        return false
+      end
+      return true
+    end
+
+    local backend = backend_for_provider(nil)
+    local threads = backend and backend.list_threads and backend.list_threads({ include_archived = true }) or {}
+    threads = vim.tbl_filter(function(thread)
+      local turns = thread.change_journal and thread.change_journal.turns or {}
+      for index = #turns, 1, -1 do
+        if type(turns[index].changes) == "table" and #turns[index].changes > 0 then
+          return true
+        end
+      end
+      return false
+    end, threads or {})
+    if #threads == 0 then
+      vim.notify("LazyAgent ACP: no persisted file changes", vim.log.levels.INFO)
+      return false
+    end
+    vim.ui.select(threads, { prompt = "LazyAgent ACP changed threads:", format_item = thread_label }, function(thread)
+      if thread then
+        module.show_thread_changes(thread.thread_id)
+      end
+    end)
+    return true
+  end
+
+  thread_label = function(thread)
     local marker = thread.status == "archived" and "archive" or thread.status
     local unread = thread.unread == true and " • unread" or ""
     return string.format("%s · %s [%s%s]", thread.title, thread.provider_id, marker, unread)
@@ -176,6 +215,10 @@ function M.setup(deps)
         return
       end
       local actions = { "Open", "Rename" }
+      local latest_turn = require("lazyagent.acp.change_review").latest_turn(thread)
+      if latest_turn then
+        actions[#actions + 1] = "Review changes"
+      end
       actions[#actions + 1] = thread.status == "archived" and "Restore" or "Archive"
       actions[#actions + 1] = "Delete"
       vim.ui.select(actions, { prompt = thread_label(thread) .. ":" }, function(action)
@@ -187,6 +230,8 @@ function M.setup(deps)
               module.rename_thread(thread.thread_id, title)
             end
           end)
+        elseif action == "Review changes" then
+          module.show_thread_changes(thread.thread_id)
         elseif action == "Archive" then
           module.archive_thread(thread.thread_id)
         elseif action == "Restore" then

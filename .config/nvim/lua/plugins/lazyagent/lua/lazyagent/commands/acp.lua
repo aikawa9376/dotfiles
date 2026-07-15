@@ -49,6 +49,11 @@ local always_commands = {
     nargs = 1,
   },
   {
+    name = "LazyAgentACPChanges",
+    desc = "Review persisted LazyAgent ACP file changes",
+    handler = session_logic.show_acp_thread_changes,
+  },
+  {
     name = "LazyAgentACPRestart",
     desc = "Restart Neovim and rehydrate the current ACP session",
     handler = function(target_agent)

@@ -197,5 +197,6 @@ M.archive_acp_thread = threads.archive_thread
 M.restore_acp_thread = threads.restore_thread
 M.rename_acp_thread = threads.rename_thread
 M.delete_acp_thread = threads.delete_thread
+M.show_acp_thread_changes = threads.show_thread_changes
 
 return M
