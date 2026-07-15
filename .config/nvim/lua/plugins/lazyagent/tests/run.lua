@@ -26,6 +26,7 @@ local suites = {
   "tests.acp.thread_export_spec",
   "tests.acp.notifications_spec",
   "tests.acp.cockpit_spec",
+  "tests.acp.agentmux_spec",
   "tests.acp.view_lifecycle_spec",
   "tests.acp.thread_store_spec",
   "tests.acp.workspace_snapshot_spec",

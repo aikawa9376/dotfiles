@@ -254,7 +254,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] persisted threadとactive runtime snapshotをthread IDでjoinし、status / current model / cumulative usageを上書き表示する。
 - [x] search、pin、archive、restore、delete、bulk closeを追加する。
   - [x] Cockpit buffer-local filter / pin / lifecycle / confirmed bulk-close keymapsを追加する。
-- [ ] agentmux identity/statusをthread modelへ統合する。
+- [x] agentmux identity/statusをthread modelへ統合する。
+  - [x] publish identityをactive thread metadataへdeep-mergeし、Cockpit status fallbackに利用する。
 - [ ] opt-inのgit worktree作成、復元、cleanupを追加する。
 - [ ] 同じrootを共有するthread間で変更衝突を警告する。
 - [ ] worktreeごとのtest commandと結果をthread cardへ表示する。
