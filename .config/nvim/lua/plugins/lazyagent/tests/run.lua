@@ -22,6 +22,7 @@ local suites = {
   "tests.acp.thread_store_spec",
   "tests.acp.workspace_snapshot_spec",
   "tests.acp.blob_store_spec",
+  "tests.acp.change_review_spec",
   "tests.acp.turn_journal_spec",
   "tests.acp.backend_thread_spec",
   "tests.acp.session_identity_spec",

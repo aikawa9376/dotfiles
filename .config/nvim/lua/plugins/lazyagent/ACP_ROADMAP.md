@@ -179,7 +179,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] workspace fileをSHA-256 CASへatomic保存し、turn changeにはbefore / after参照とbinary判定を保持する。
 - [x] file changeをadded / modified / deleted / moved / binaryで表現する。
   - [x] baseline以後に発生したGit renameだけをold/new pathとbefore/after blob付き`moved` changeへ統合する。
-- [ ] changed files drawerとmulti-buffer reviewを実装する。
+- [x] changed files drawerとmulti-buffer reviewを実装する。
+  - [x] `:LazyAgentACPChanges`とthread actionから最新turnの一覧を開き、Enterでbefore/after diff、`a`で全fileをtab reviewする。
 - [ ] hunk / file / all単位のKeep / Rejectを実装する。
 - [ ] Follow Agentで現在のtool location / changed fileへ追従できるようにする。
 - [ ] agent変更後にuserが再編集した場合は3-way applyし、競合時は上書きしない。

@@ -23,6 +23,7 @@ local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
 local TurnJournal = require("lazyagent.acp.turn_journal")
 local Watch = require("lazyagent.watch")
 local BlobStore = require("lazyagent.acp.blob_store")
+local ChangeReview = require("lazyagent.acp.change_review")
 
 local sessions = {}
 local section_icons = {
@@ -380,6 +381,11 @@ local function create_backend(default_view)
   local backend = {}
   local thread_store = ThreadStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/threads" })
   local blob_store = BlobStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/blobs" })
+  local change_review = ChangeReview.new({
+    read_blob = function(ref)
+      return blob_store:get(ref)
+    end,
+  })
 
   complete_pending_turn = function(session)
     local pending = session and session.pending_brain_turn or nil
@@ -781,6 +787,14 @@ local function create_backend(default_view)
 
   function backend.get_thread(thread_id)
     return thread_store:get(thread_id)
+  end
+
+  function backend.show_thread_changes(thread_id)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then
+      return nil, err or ("thread not found: " .. tostring(thread_id))
+    end
+    return change_review.open(thread)
   end
 
   function backend.create_thread(attributes)
