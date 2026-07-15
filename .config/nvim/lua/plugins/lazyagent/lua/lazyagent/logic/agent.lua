@@ -449,6 +449,10 @@ function M.get_scratch_completions(agent_name, opts)
         label = "branch-diff",
         desc = "Attach tracked changes relative to Git HEAD.",
       }
+      res.at[#res.at + 1] = {
+        label = "symbol",
+        desc = "Attach the enclosing function or class at the source cursor.",
+      }
     end
     if fd_paths and #fd_paths > 0 then
       vim.list_extend(res.at, fd_paths)

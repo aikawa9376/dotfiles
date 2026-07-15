@@ -344,6 +344,8 @@ ACP composerでは`@diagnostics`を選ぶと、起点bufferのLSP diagnosticsを
 
 `@branch-diff`はworkspaceのtracked changesを`HEAD`基準のdiff ContextItemとして添付します。unborn branchではstaged / unstaged差分へfallbackし、既定で512 KiBを上限にします。
 
+`@symbol`は起点bufferのcursorを囲む最も近いTreesitter function / class nodeを、そのsource rangeとversionを保ったContextItemとして添付します。
+
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
 ## MCP hooks
