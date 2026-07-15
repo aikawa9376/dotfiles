@@ -34,6 +34,8 @@ function M.run()
   local mapped = {}
   for _, id in pairs(line_map) do mapped[id] = true end
   assert(mapped["thread-a"] and mapped["thread-b"], "thread line mappings")
+  local filtered = Cockpit.filter(threads, "CLAUDE")
+  assert(#filtered == 1 and filtered[1].thread_id == "thread-a", "cockpit case-insensitive filter")
 end
 
 return M

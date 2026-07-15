@@ -264,8 +264,11 @@ function M.setup(deps)
     vim.bo[bufnr].filetype = "lazyagent_acp_cockpit"
 
     local line_map = {}
+    local stored_threads = {}
+    local query = ""
     local function refresh()
-      local stored_threads, list_err = backend.list_threads({ include_archived = true })
+      local list_err
+      stored_threads, list_err = backend.list_threads({ include_archived = true })
       if not stored_threads then
         vim.notify("LazyAgent ACP cockpit: " .. tostring(list_err), vim.log.levels.ERROR)
         return
@@ -284,7 +287,10 @@ function M.setup(deps)
           end
         end
       end
-      lines, line_map = require("lazyagent.acp.cockpit").render(stored_threads, runtimes)
+      lines, line_map = require("lazyagent.acp.cockpit").render(
+        require("lazyagent.acp.cockpit").filter(stored_threads, query),
+        runtimes
+      )
       vim.bo[bufnr].modifiable = true
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       vim.bo[bufnr].modifiable = false
@@ -296,6 +302,46 @@ function M.setup(deps)
       if thread_id then module.open_thread(thread_id) end
     end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit thread" })
     vim.keymap.set("n", "r", refresh, { buffer = bufnr, silent = true, desc = "Refresh ACP cockpit" })
+    vim.keymap.set("n", "/", function()
+      vim.ui.input({ prompt = "Filter ACP cockpit: ", default = query }, function(value)
+        if value ~= nil then query = value; refresh() end
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Filter ACP cockpit" })
+    vim.keymap.set("n", "p", function()
+      local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      local target_backend, thread = thread_backend(id)
+      if target_backend and thread then
+        local metadata = vim.deepcopy(thread.metadata or {})
+        metadata.cockpit_pinned = metadata.cockpit_pinned ~= true
+        target_backend.update_thread(id, { metadata = metadata })
+        refresh()
+      end
+    end, { buffer = bufnr, silent = true, desc = "Pin ACP cockpit thread" })
+    vim.keymap.set("n", "a", function()
+      local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      local _, thread = thread_backend(id)
+      if thread and thread.status == "archived" then module.restore_thread(id) else module.archive_thread(id) end
+      refresh()
+    end, { buffer = bufnr, silent = true, desc = "Archive or restore ACP thread" })
+    vim.keymap.set("n", "d", function()
+      local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      if not id then return end
+      vim.ui.select({ "Cancel", "Delete" }, { prompt = "Delete cockpit thread permanently?" }, function(choice)
+        if choice == "Delete" then module.delete_thread(id); refresh() end
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Delete ACP cockpit thread" })
+    vim.keymap.set("n", "X", function()
+      vim.ui.select({ "Cancel", "Close all" }, { prompt = "Close all running ACP sessions?" }, function(choice)
+        if choice ~= "Close all" then return end
+        for agent_name, active in pairs(state.sessions or {}) do
+          if active.pane_id then
+            local active_backend = backend_for_provider(agent_name)
+            if active_backend and type(active_backend.kill_pane) == "function" then active_backend.kill_pane(active.pane_id) end
+          end
+        end
+        vim.schedule(refresh)
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Close all running ACP threads" })
     vim.keymap.set("n", "q", function() pcall(vim.cmd, "tabclose") end, {
       buffer = bufnr,
       silent = true,
