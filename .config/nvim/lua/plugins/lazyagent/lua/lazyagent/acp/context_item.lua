@@ -268,6 +268,78 @@ function M.branch_diff(root, opts)
   })
 end
 
+local SYMBOL_NODE_TYPES = {
+  function_declaration = true,
+  function_definition = true,
+  method_definition = true,
+  method_declaration = true,
+  class_declaration = true,
+  class_definition = true,
+  arrow_function = true,
+  function_expression = true,
+  local_function = true,
+  decorated_definition = true,
+  impl_item = true,
+  function_item = true,
+}
+
+function M.symbol(bufnr, opts)
+  opts = opts or {}
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil, "invalid symbol buffer"
+  end
+  local start_line = tonumber(opts.start_line)
+  local end_line = tonumber(opts.end_line)
+  if not start_line or not end_line then
+    local cursor = opts.cursor
+    if type(cursor) ~= "table" then
+      local winid = vim.fn.bufwinid(bufnr)
+      cursor = winid ~= -1 and vim.api.nvim_win_get_cursor(winid) or vim.api.nvim_buf_get_mark(bufnr, '"')
+    end
+    if not cursor or tonumber(cursor[1]) == nil or tonumber(cursor[1]) <= 0 then
+      return nil, "source cursor is unavailable"
+    end
+    local ok, range_or_err = pcall(function()
+      local node = vim.treesitter.get_node({
+        bufnr = bufnr,
+        pos = { tonumber(cursor[1]) - 1, tonumber(cursor[2]) or 0 },
+      })
+      while node and not SYMBOL_NODE_TYPES[node:type()] do
+        node = node:parent()
+      end
+      if not node then
+        return nil
+      end
+      local start_row, _, end_row = node:range()
+      return { start_row + 1, end_row + 1 }
+    end)
+    if not ok then
+      return nil, tostring(range_or_err)
+    end
+    if not range_or_err then
+      return nil, "no enclosing function or class symbol at source cursor"
+    end
+    start_line, end_line = range_or_err[1], range_or_err[2]
+  end
+
+  local path = vim.api.nvim_buf_get_name(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local item = M.file({
+    path = path ~= "" and path or ("symbol-" .. tostring(bufnr)),
+    display = path ~= "" and vim.fn.fnamemodify(path, ":.") or ("buffer " .. tostring(bufnr)),
+    lines = lines,
+    start_line = start_line,
+    end_line = end_line,
+    source = "symbol",
+    filetype = vim.bo[bufnr].filetype,
+    source_version = { bufnr = bufnr, changedtick = vim.api.nvim_buf_get_changedtick(bufnr) },
+  })
+  item.kind = "symbol"
+  item.inline = true
+  item.note = string.format("Context from enclosing symbol in %s lines %d-%d:", item.display, start_line, end_line)
+  return item
+end
+
 function M.lower(item, capabilities)
   capabilities = capabilities or {}
   if item.kind == "image" or item.kind == "audio" then

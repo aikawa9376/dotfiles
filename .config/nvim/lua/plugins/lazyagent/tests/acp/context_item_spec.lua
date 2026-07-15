@@ -69,6 +69,22 @@ function M.run()
   assert(branch_diff.content:match("%+added line"), "branch diff content")
   assert_equal(ContextItem.lower(branch_diff, {}).type, "text", "branch diff text lowering")
 
+  local symbol_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(symbol_bufnr, "/tmp/symbol.lua")
+  vim.bo[symbol_bufnr].filetype = "lua"
+  vim.api.nvim_buf_set_lines(symbol_bufnr, 0, -1, false, {
+    "local function greet(name)",
+    "  return 'hello ' .. name",
+    "end",
+    "greet('world')",
+  })
+  local symbol = assert(ContextItem.symbol(symbol_bufnr, { start_line = 1, end_line = 3 }))
+  assert_equal(symbol.kind, "symbol", "symbol context kind")
+  assert_equal(symbol.content, "local function greet(name)\n  return 'hello ' .. name\nend", "symbol context content")
+  assert_equal(symbol.source_version.bufnr, symbol_bufnr, "symbol source buffer")
+  assert_equal(ContextItem.lower(symbol, {}).type, "text", "symbol text lowering")
+  vim.api.nvim_buf_delete(symbol_bufnr, { force = true })
+
   local media_path = vim.fn.tempname() .. ".png"
   vim.fn.writefile({ "image fixture" }, media_path, "b")
   local media = assert(ContextItem.media({ path = media_path }))
