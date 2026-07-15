@@ -1300,6 +1300,8 @@ local function create_backend(default_view)
       },
       acp_ready = session.ready == true,
       acp_failed = session.failed == true,
+      acp_busy = session.busy == true,
+      acp_preparing_prompt = session.preparing_prompt == true,
       acp_supports_embedded_context = session.prompt_supports_embedded_context == true,
       acp_supports_image = session.prompt_supports_image == true,
       acp_supports_audio = session.prompt_supports_audio == true,
