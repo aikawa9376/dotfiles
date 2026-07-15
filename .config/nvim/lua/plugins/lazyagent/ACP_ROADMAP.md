@@ -246,8 +246,10 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 目標: 複数project・thread・agentを1画面から運用する。
 
-- [ ] project/worktreeでgroup化したthread一覧bufferを追加する。
+- [x] project/worktreeでgroup化したthread一覧bufferを追加する。
+  - [x] `:LazyAgentACPCockpit`でgrouped read-only bufferを開き、thread open / store refreshを提供する。
 - [ ] title、provider、model、status、unread、usage/cost、changed filesを表示する。
+  - [x] title / provider / model / persisted status / unread / unique changed file countをthread cardへ表示する。
 - [ ] running / waiting / permission / idle / disconnectedを共通statusにする。
 - [ ] search、pin、archive、restore、delete、bulk closeを追加する。
 - [ ] agentmux identity/statusをthread modelへ統合する。

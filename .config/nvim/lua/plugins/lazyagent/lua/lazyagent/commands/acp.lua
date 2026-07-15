@@ -30,6 +30,11 @@ end
 
 local always_commands = {
   {
+    name = "LazyAgentACPCockpit",
+    desc = "Open the project-grouped LazyAgent ACP Session Cockpit",
+    handler = session_logic.open_acp_cockpit,
+  },
+  {
     name = "LazyAgentACPThreads",
     desc = "Browse persisted LazyAgent ACP threads",
     handler = session_logic.pick_acp_threads,

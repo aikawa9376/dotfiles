@@ -360,6 +360,8 @@ user/assistant blockの`ga` → `Copy message`は本文だけをcopyします。
 
 manual permission、authentication elicitation、turn completionはvisual notificationへ接続されます。`acp.notifications.sound_command = { ... }`を設定すると同じeventで非同期sound commandを実行でき、eventごとに`permission` / `elicitation` / `completion = false`で無効化できます。
 
+`:LazyAgentACPCockpit`はpersisted threadをproject/worktree pathでgroup化したread-only bufferを開きます。thread cardにはtitle/provider/model/status/unread/unique changed filesを表示し、`<CR>`でopen、`r`でrefresh、`q`でcloseできます。
+
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
 ## MCP hooks
