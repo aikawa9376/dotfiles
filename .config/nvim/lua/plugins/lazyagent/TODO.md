@@ -1,5 +1,8 @@
 # lazyagent TODO
 
+> ACPの機能拡張、Zed相当化、thread/review/worktreeの実装計画は
+> [ACP_ROADMAP.md](ACP_ROADMAP.md) で管理します。
+
 ## High priority
 
 - Isolate instance-scoped resources more thoroughly.
