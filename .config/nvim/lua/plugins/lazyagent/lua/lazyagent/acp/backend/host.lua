@@ -37,6 +37,7 @@ function M.setup(deps)
   local terminal_seq = 0
   local resolve_permission_option
   local nvim_bridge = require("lazyagent.nvim_bridge")
+  local PathGuard = require("lazyagent.acp.backend.path_guard")
 
   local function first_number(...)
     for idx = 1, select("#", ...) do
@@ -390,13 +391,35 @@ function M.setup(deps)
     end)
   end
 
-  local function read_text_file(_, params)
+  local function resolve_filesystem_path(session, path, allow_missing)
+    if not session.path_guard then
+      local guard, err = PathGuard.new({
+        cwd = session.cwd,
+        additional_directories = session.additional_directories,
+      })
+      if not guard then
+        return nil, { code = -32000, message = err }
+      end
+      session.path_guard = guard
+    end
+
+    local resolved, err = session.path_guard:resolve(path, { allow_missing = allow_missing })
+    if not resolved then
+      return nil, { code = -32602, message = err }
+    end
+    return resolved
+  end
+
+  local function read_text_file(session, params)
     local path = params.path
     if not path or path == "" then
       return nil, { code = -32602, message = "fs/read_text_file requires path" }
     end
 
-    local abs = vim.fn.fnamemodify(path, ":p")
+    local abs, path_err = resolve_filesystem_path(session, path, false)
+    if not abs then
+      return nil, path_err
+    end
     local lines = read_path_lines(abs)
     if not lines then
       return nil, { code = -32602, message = "File not found: " .. abs }
@@ -426,7 +449,10 @@ function M.setup(deps)
       return nil, { code = -32602, message = "fs/write_text_file requires path" }
     end
 
-    local abs = vim.fn.fnamemodify(path, ":p")
+    local abs, path_err = resolve_filesystem_path(session, path, true)
+    if not abs then
+      return nil, path_err
+    end
     local before_lines = read_path_lines(abs) or {}
     local before_text = table.concat(before_lines, "\n")
     local content = normalize_text(params.content or "")
@@ -730,6 +756,7 @@ function M.setup(deps)
       env = vim.deepcopy(base_session.env or {}),
       cwd = base_session.cwd or vim.fn.getcwd(),
       root_dir = base_session.root_dir,
+      additional_directories = vim.deepcopy(base_session.additional_directories or {}),
       mcp_url = base_session.mcp_url,
       auto_permission = base_session.auto_permission,
       default_mode = base_session.default_mode,
@@ -897,6 +924,7 @@ function M.setup(deps)
     session.client = ACPClient.new({
       command = session.command,
       cwd = session.cwd,
+      additional_directories = session.additional_directories,
       env = session.env,
       mcp_url = session.mcp_url,
       client_info = {

@@ -426,6 +426,7 @@ local function create_backend(default_view)
         env = acp.env or {},
         cwd = acp.cwd or vim.fn.getcwd(),
         root_dir = acp.root_dir,
+        additional_directories = vim.deepcopy(acp.additional_directories or {}),
         mcp_url = acp.mcp_url,
         session_bootstrap = vim.deepcopy(acp.session_bootstrap),
         auto_permission = acp.auto_permission,
