@@ -35,9 +35,11 @@ function M.setup(deps)
   local maybe_sync_acp_edit_targets = deps.maybe_sync_acp_edit_targets
   local terminal_seq = 0
   local resolve_permission_option
+  local resolve_filesystem_path
   local nvim_bridge = require("lazyagent.nvim_bridge")
   local PathGuard = require("lazyagent.acp.backend.path_guard")
   local FileWriter = require("lazyagent.acp.backend.file_writer")
+  local Terminals = require("lazyagent.acp.backend.terminals")
 
   local function first_number(...)
     for idx = 1, select("#", ...) do
@@ -88,7 +90,16 @@ function M.setup(deps)
   local function create_terminal(session, params, done)
     local terminal_id = next_terminal_id()
     local output_limit = tonumber(params.outputByteLimit) or (1024 * 1024)
-    local cwd = params.cwd or session.cwd
+    local cwd, cwd_err = resolve_filesystem_path(session, params.cwd or session.cwd, false)
+    if not cwd then
+      done(nil, cwd_err)
+      return
+    end
+    local cwd_stat = (vim.uv or vim.loop).fs_stat(cwd)
+    if not cwd_stat or cwd_stat.type ~= "directory" then
+      done(nil, { code = -32602, message = "terminal/create cwd is not a directory: " .. cwd })
+      return
+    end
     local command = params.command
     if not command or command == "" then
       done(nil, { code = -32602, message = "terminal/create requires command" })
@@ -112,7 +123,7 @@ function M.setup(deps)
     session.terminals[terminal_id] = terminal
 
     local function append_output(data)
-      if not data then return end
+      if terminal.released or not data then return end
       local parts = {}
       for _, chunk in ipairs(data) do
         if chunk and chunk ~= "" then
@@ -146,18 +157,15 @@ function M.setup(deps)
       end,
       on_exit = function(_, code, signal)
         vim.schedule(function()
-          terminal.exit_status = {
+          if terminal.released then
+            return
+          end
+          local status = {
             exitCode = code,
             signal = signal == 0 and vim.NIL or signal,
           }
+          Terminals.finish(terminal, status)
           close_stream(session)
-          for _, waiter in ipairs(terminal.waiters) do
-            pcall(waiter, {
-              exitCode = code,
-              signal = signal == 0 and vim.NIL or signal,
-            })
-          end
-          terminal.waiters = {}
         end)
       end,
     })
@@ -221,15 +229,12 @@ function M.setup(deps)
   end
 
   local function terminal_release(session, params)
-    local terminal = session.terminals[params.terminalId or ""]
-    if not terminal then
-      return vim.NIL
-    end
-    if terminal.job_id and not terminal.exit_status then
-      pcall(vim.fn.jobstop, terminal.job_id)
-    end
-    session.terminals[params.terminalId] = nil
+    Terminals.release(session, params.terminalId or "")
     return vim.NIL
+  end
+
+  local function release_all_terminals(session)
+    return Terminals.release_all(session)
   end
 
   resolve_permission_option = function(options, preferred_kind)
@@ -391,7 +396,7 @@ function M.setup(deps)
     end)
   end
 
-  local function resolve_filesystem_path(session, path, allow_missing)
+  resolve_filesystem_path = function(session, path, allow_missing)
     if not session.path_guard then
       local guard, err = PathGuard.new({
         cwd = session.cwd,
@@ -661,6 +666,7 @@ function M.setup(deps)
   end
 
   local function on_client_exit(session, code, signal, stderr_text)
+    release_all_terminals(session)
     if session and session.ephemeral == true then
       return
     end
@@ -770,6 +776,7 @@ function M.setup(deps)
   end
 
   local function stop_ephemeral_client(session, callback)
+    release_all_terminals(session)
     local client = session and session.client or nil
     if not client then
       if callback then
@@ -990,6 +997,7 @@ function M.setup(deps)
   end
 
   module.terminal_release = terminal_release
+  module.release_all_terminals = release_all_terminals
   module.read_text_file = read_text_file
   module.write_text_file = write_text_file
   module.list_all_sessions_for_client = list_all_sessions_for_client

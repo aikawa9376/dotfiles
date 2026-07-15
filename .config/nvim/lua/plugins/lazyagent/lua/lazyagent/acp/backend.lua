@@ -566,6 +566,7 @@ local function create_backend(default_view)
       elseif normalized == "C-c" or normalized == string.char(3) then
         if session.client then
           session.cancel_requested = session.busy == true or session.preparing_prompt == true
+          host_helpers.release_all_terminals(session)
           session.client:cancel()
           conversation_helpers.append_block(session, "System", "Cancellation requested")
         end
@@ -602,9 +603,7 @@ local function create_backend(default_view)
       end
       state_helpers.clear_pending_switch_history(session)
       session.closing_intentionally = true
-      for terminal_id, _ in pairs(session.terminals or {}) do
-        pcall(host_helpers.terminal_release, session, { terminalId = terminal_id })
-      end
+      host_helpers.release_all_terminals(session)
       local view = session_view(session)
       if view and type(view.kill_pane) == "function" then
         view.kill_pane(pane_id, session)

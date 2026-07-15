@@ -116,6 +116,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] filesystem pathをrealpath化し、cwd / additional roots外とsymlink escapeを拒否する。
 - [x] writeをatomic化し、unsaved buffer・encoding・改行・同時編集の競合を検出する。
 - [ ] terminal cwdとpermission scopeを検証し、cancel時にkill/releaseまで保証する。
+  - [x] terminal cwdをfilesystem roots内に制限し、cancel/close/process exitでkill/releaseする。
 - [ ] mobileにrandom bearer token、Origin/CORS検証、request body上限を追加する。
 - [ ] mobileの既定bindをlocalhostに固定し、LAN公開時は警告と明示設定を要求する。
 
