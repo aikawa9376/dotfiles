@@ -109,7 +109,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [ ] authentication / logout flowを実装する。
 - [x] `session.configOptions.boolean`をadvertiseし、select / booleanを共通UIで扱う。
 - [ ] image / audio / resource / resource_linkを入力・出力とも完全に扱う。
-- [ ] unknown method / update variantをログに残しつつconnectionを維持する。
+- [x] unknown method / update variantをbounded protocol logへ残しつつconnectionを維持する。
 
 ### Host security
 

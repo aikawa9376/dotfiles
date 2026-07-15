@@ -13,6 +13,21 @@ local ERR = {
   transport = -32000,
 }
 local STDERR_MAX_LINES = 200
+local PROTOCOL_EVENT_MAX = 200
+local KNOWN_SESSION_UPDATES = {
+  agent_message_chunk = true,
+  agent_thought_chunk = true,
+  available_commands_update = true,
+  config_option_update = true,
+  current_mode_update = true,
+  current_model_update = true,
+  plan = true,
+  session_info_update = true,
+  tool_call = true,
+  tool_call_update = true,
+  usage_update = true,
+  user_message_chunk = true,
+}
 
 local function normalize_command_spec(spec)
   if type(spec) == "string" then
@@ -210,6 +225,7 @@ function Client.new(opts)
     stdout_buffer_chunks = {},
     stdout_buffer_size = 0,
     stderr_lines = {},
+    protocol_events = {},
     session_id = nil,
     agent_capabilities = nil,
     agent_info = nil,
@@ -224,8 +240,27 @@ function Client.new(opts)
     on_update = opts.on_update or function() end,
     on_ready = opts.on_ready or function() end,
     on_error = opts.on_error or function() end,
+    on_protocol_event = opts.on_protocol_event or function() end,
     on_exit = opts.on_exit or function() end,
   }, Client)
+end
+
+function Client:_record_protocol_event(kind, data)
+  local event = vim.tbl_extend("force", {
+    kind = tostring(kind or "unknown"),
+    timestamp = os.time(),
+  }, type(data) == "table" and vim.deepcopy(data) or {})
+  self.protocol_events[#self.protocol_events + 1] = event
+  while #self.protocol_events > PROTOCOL_EVENT_MAX do
+    table.remove(self.protocol_events, 1)
+  end
+  vim.schedule(function()
+    pcall(self.on_protocol_event, vim.deepcopy(event))
+  end)
+end
+
+function Client:get_protocol_events()
+  return vim.deepcopy(self.protocol_events or {})
 end
 
 function Client:_convert_legacy_session_fields(result)
@@ -712,6 +747,14 @@ function Client:_handle_update(params)
   if not params or type(params) ~= "table" then return end
   local update = params.update
   if type(update) == "table" then
+    local variant = update.sessionUpdate
+    if type(variant) ~= "string" or not KNOWN_SESSION_UPDATES[variant] then
+      self:_record_protocol_event("unknown_update", {
+        method = "session/update",
+        session_id = params.sessionId,
+        variant = variant,
+      })
+    end
     if update.sessionUpdate == "config_option_update" and update.configOptions then
       self.config_options = vim.deepcopy(update.configOptions)
       self._legacy_api = false
@@ -854,11 +897,20 @@ function Client:_handle_server_request(id, method, params)
   end
 
   self:_send_error(id, ERR.method_not_found, "Unknown ACP request: " .. tostring(method))
+  self:_record_protocol_event("unknown_method", {
+    id = id,
+    method = tostring(method),
+    request = true,
+  })
 end
 
 function Client:_handle_message(line)
   local ok, message = pcall(decode_json, line)
   if not ok or type(message) ~= "table" then
+    self:_record_protocol_event("parse_error", {
+      data = tostring(line):sub(1, 4096),
+      truncated = #tostring(line) > 4096,
+    })
     vim.schedule(function()
       pcall(self.on_error, {
         code = ERR.parse,
@@ -874,6 +926,11 @@ function Client:_handle_message(line)
       self:_handle_server_request(message.id, message.method, message.params or {})
     elseif message.method == "session/update" then
       self:_handle_update(message.params or {})
+    else
+      self:_record_protocol_event("unknown_method", {
+        method = tostring(message.method),
+        request = false,
+      })
     end
     return
   end
@@ -884,6 +941,10 @@ function Client:_handle_message(line)
 
   local callback = self.callbacks[message.id]
   if not callback then
+    self:_record_protocol_event("orphan_response", {
+      id = message.id,
+      error = message.error ~= nil,
+    })
     return
   end
   self.callbacks[message.id] = nil
