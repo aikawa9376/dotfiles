@@ -160,6 +160,32 @@ function M.run()
     assert_equal(read(root .. "/" .. change.path), fixture.before, fixture.name .. " hunk reject")
   end
 
+  local checkpoint_before = assert(store:put("checkpoint before\n"))
+  local checkpoint_after = assert(store:put("checkpoint after\n"))
+  local checkpoint_change = {
+    operation = "modified",
+    path = "checkpoint.txt",
+    before_blob = checkpoint_before,
+    after_blob = checkpoint_after,
+    binary = false,
+  }
+  write(root .. "/checkpoint.txt", "checkpoint after\n")
+  assert(apply.reject_all({ checkpoint_change }, root))
+  assert_equal(read(root .. "/checkpoint.txt"), "checkpoint before\n", "checkpoint restore")
+  local already = assert(apply.reject_all({ checkpoint_change }, root))
+  assert_equal(already[1].mode, "already", "checkpoint restore idempotency")
+  assert(apply.reject_all(require("lazyagent.acp.change_apply").inverse_changes({ checkpoint_change }), root))
+  assert_equal(read(root .. "/checkpoint.txt"), "checkpoint after\n", "checkpoint redo")
+
+  local inverses = require("lazyagent.acp.change_apply").inverse_changes({
+    { operation = "added", path = "added" },
+    { operation = "deleted", path = "deleted" },
+    { operation = "moved", path = "new", previous_path = "old" },
+  })
+  assert_equal(inverses[1].operation, "deleted", "added checkpoint inverse")
+  assert_equal(inverses[2].operation, "added", "deleted checkpoint inverse")
+  assert_equal({ inverses[3].path, inverses[3].previous_path }, { "old", "new" }, "moved checkpoint inverse")
+
   vim.fn.delete(base, "rf")
 end
 

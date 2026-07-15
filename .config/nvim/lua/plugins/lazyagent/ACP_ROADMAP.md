@@ -189,7 +189,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] `:LazyAgentACPFollow [agent]`でthread単位に切替え、location > tool path > changed fileの順に通常windowへ追従する。
 - [x] agent変更後にuserが再編集した場合は3-way applyし、競合時は上書きしない。
   - [x] text modified / moved Rejectはagent afterをbaseにuser currentとbeforeをmergeし、競合・binaryは変更せず報告する。
-- [ ] filesystem checkpointのrestore / redoとcheckpointからのclient-local branchを追加する。
+- [x] filesystem checkpointのrestore / redoとcheckpointからのclient-local branchを追加する。
+  - [x] turn changeの反転でRestore / Redoし、親thread / turn metadataとtranscript copyを持つnative非共有branchを作成する。
 
 ### Exit criteria
 

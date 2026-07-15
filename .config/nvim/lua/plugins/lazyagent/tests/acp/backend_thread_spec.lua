@@ -81,6 +81,18 @@ function M.run()
   assert(persisted.process_id ~= nil, "process identity persistence")
   assert_equal(persisted.transcript_path, runtime.acp_transcript_path, "transcript persistence")
 
+  assert(backend.update_thread(runtime.acp_thread_id, {
+    change_journal = {
+      turns = { { turn_id = runtime.acp_thread_id .. ":checkpoint", changes = {} } },
+    },
+  }))
+  local branch = assert(backend.branch_thread_checkpoint(runtime.acp_thread_id, runtime.acp_thread_id .. ":checkpoint"))
+  assert_equal(branch.metadata.client_local_branch, true, "checkpoint local branch")
+  assert_equal(branch.metadata.parent_thread_id, runtime.acp_thread_id, "checkpoint branch parent")
+  assert_equal(branch.native_session_id, nil, "checkpoint branch native isolation")
+  assert_equal(vim.fn.filereadable(branch.transcript_path), 1, "checkpoint branch transcript copy")
+  assert_equal(backend.delete_thread(branch.thread_id), true, "checkpoint branch fixture cleanup")
+
   local imported, created = backend.import_native_session(pane_id, {
     sessionId = "native-imported",
     cwd = root,
