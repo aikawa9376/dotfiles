@@ -897,6 +897,30 @@ local function resolve_reference(token, session)
     }
   end
 
+  if core == "terminal" then
+    local latest_id
+    local latest_seq = -1
+    for id in pairs(session.terminals or {}) do
+      local sequence = tonumber(tostring(id):match("(%d+)$")) or 0
+      if sequence > latest_seq or (sequence == latest_seq and tostring(id) > tostring(latest_id or "")) then
+        latest_id, latest_seq = id, sequence
+      end
+    end
+    local item, item_err = ContextItem.terminal(latest_id and session.terminals[latest_id] or nil, { id = latest_id })
+    if not item then
+      return {
+        block = { type = "text", text = "[terminal unavailable: " .. tostring(item_err) .. "]" },
+        trailing = trailing,
+      }
+    end
+    return {
+      block = ContextItem.lower(item, {
+        embedded_context = session.prompt_supports_embedded_context == true,
+      }),
+      trailing = trailing,
+    }
+  end
+
   local path_part = core
   local line_start, line_end, column
 
