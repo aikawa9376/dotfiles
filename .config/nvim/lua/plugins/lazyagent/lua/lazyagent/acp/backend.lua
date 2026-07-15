@@ -30,6 +30,7 @@ local ChangeReview = require("lazyagent.acp.change_review")
 local ChangeApply = require("lazyagent.acp.change_apply")
 local Follow = require("lazyagent.acp.follow")
 local ProtocolLog = require("lazyagent.acp.protocol_log")
+local Replay = require("lazyagent.acp.replay")
 
 local sessions = {}
 local section_icons = {
@@ -1914,6 +1915,12 @@ local function create_backend(default_view)
     local session = get_session(target_pane)
     if not session then return false end
     return ProtocolLog.open(session.protocol_log_path)
+  end
+
+  function backend.show_replay(target_pane)
+    local session = get_session(target_pane)
+    if not session then return false end
+    return Replay.open(session.protocol_log_path)
   end
 
   function backend.show_context_budget(target_pane)

@@ -224,6 +224,11 @@ local commands = {
     handler = session_logic.show_acp_protocol_log,
   },
   {
+    name = "LazyAgentACPReplay",
+    desc = "Replay transcript and runtime state from the ACP event log",
+    handler = session_logic.show_acp_replay,
+  },
+  {
     name = "LazyAgentACPContext",
     desc = "Open ACP context budget details for an ACP-enabled agent",
     handler = session_logic.show_acp_context_budget,

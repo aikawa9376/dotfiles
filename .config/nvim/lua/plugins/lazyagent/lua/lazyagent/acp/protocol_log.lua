@@ -34,6 +34,10 @@ function Log:flush()
   local lines = self.queue
   self.queue = {}
   vim.fn.mkdir(vim.fs.dirname(self.path), "p")
+  if vim.fn.getfsize(self.path) > 16 * 1024 * 1024 then
+    pcall(vim.uv.fs_unlink, self.path .. ".1")
+    pcall(vim.uv.fs_rename, self.path, self.path .. ".1")
+  end
   local ok, err = pcall(vim.fn.writefile, lines, self.path, "a")
   if ok then pcall(vim.uv.fs_chmod, self.path, 384) end
   return ok and true or nil, ok and nil or err
