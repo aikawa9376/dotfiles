@@ -229,7 +229,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] queued promptのedit / remove / reorder / Send Nowを実装する。
   - [x] stable queue item ID、backend API、action menu pickerを追加する。
 - [x] ACP agent向けSend Nowはcancel-and-sendであることを表示する。
-- [ ] thread内searchをmessage / thought / expanded tool outputへ対応させる。
+- [x] thread内searchをmessage / thought / expanded tool outputへ対応させる。
+  - [x] runtime refsを含むsearch indexと、message jump / tool detail pickerをaction menuへ追加する。
 - [ ] user/assistant messageのcopy、thread Markdown exportを追加する。
 - [ ] pending permission / elicitation / completionをvisual・sound notificationへ接続する。
 

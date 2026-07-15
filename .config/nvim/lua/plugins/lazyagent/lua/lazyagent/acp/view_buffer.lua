@@ -676,6 +676,7 @@ local function copy_to_clipboard(text, label)
 end
 
 local view_actions = require("lazyagent.acp.view_buffer.actions").new({
+  runtime_conversation_timeline = runtime_conversation_timeline,
   runtime_tool_timeline = runtime_tool_timeline,
   visible_conversation_context = visible_conversation_context,
   current_display_conversation_context = current_display_conversation_context,
