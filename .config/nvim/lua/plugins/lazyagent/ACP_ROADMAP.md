@@ -135,11 +135,12 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 目標: `agent名 = active session`から`thread UUID = conversation`へ移行する。
 
-- [ ] `ThreadStore`とversion付きmanifest schemaを追加する。
+- [x] `ThreadStore`とversion付きmanifest schemaを追加する。
 - [ ] current session stateをthread-scoped stateへ分割する。
 - [ ] provider process、native ACP session、view bufferをthreadから分離する。
 - [ ] 同じproviderの複数threadを同時起動できるようにする。
 - [ ] threadのnew / open / close / archive / restore / rename / deleteを実装する。
+  - [x] atomic manifest上のcreate / update / archive / restore / rename / delete contractを追加する。
 - [ ] provider native sessionのlist/importをthread storeへ統合する。
 - [ ] 再開時は`resume`、`load`、local carryoverの順にcapability-drivenで選ぶ。
 - [ ] native resumeとlocal carryoverをUI上で明確に区別する。
