@@ -39,6 +39,13 @@ function M.run()
   }))
   assert_equal(journal.turns[1].file_events[1].operation, "modified", "filesystem event")
 
+  journal = assert(Journal.record(journal, turn.turn_id, "buffer", {
+    event = "BufWritePost",
+    path = "/repo/a.lua",
+    tool_call_id = "tool-1",
+  }))
+  assert_equal(journal.turns[1].buffer_events[1].tool_call_id, "tool-1", "buffer event tool association")
+
   local missing, err = Journal.record(journal, "missing", "buffer", { path = "/repo/a.lua" })
   assert_equal(missing, nil, "missing turn result")
   assert(tostring(err):match("turn not found"), "missing turn error")

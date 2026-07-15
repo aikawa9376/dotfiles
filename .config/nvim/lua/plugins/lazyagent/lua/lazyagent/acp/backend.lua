@@ -133,6 +133,57 @@ local function record_turn_event(session, kind, event)
   return sync_thread_record(session, { change_journal = journal }) and turn or nil
 end
 
+local function path_in_session_workspace(session, path)
+  path = vim.fn.fnamemodify(tostring(path or ""), ":p"):gsub("/$", "")
+  local roots = {}
+  if session.root_dir or session.cwd then
+    roots[#roots + 1] = session.root_dir or session.cwd
+  end
+  if session.cwd and session.cwd ~= session.root_dir then
+    roots[#roots + 1] = session.cwd
+  end
+  vim.list_extend(roots, session.additional_directories or {})
+  for _, root in ipairs(roots) do
+    root = vim.fn.fnamemodify(tostring(root or ""), ":p"):gsub("/$", "")
+    if path == root or path:sub(1, #root + 1) == root .. "/" then
+      return true
+    end
+  end
+  return false
+end
+
+local function single_active_tool_id(session)
+  local found = nil
+  for tool_id in pairs(session.tool_calls or {}) do
+    if found then
+      return nil
+    end
+    found = tool_id
+  end
+  return found
+end
+
+local buffer_event_group = vim.api.nvim_create_augroup("LazyAgentACPTurnJournal", { clear = true })
+vim.api.nvim_create_autocmd("BufWritePost", {
+  group = buffer_event_group,
+  callback = function(args)
+    local path = args.file ~= "" and args.file or vim.api.nvim_buf_get_name(args.buf)
+    for _, session in pairs(sessions) do
+      local turn_active = session.current_change_turn_id
+        and (session.busy or session.pending_brain_turn or next(session.tool_calls or {}) ~= nil)
+      if turn_active and path_in_session_workspace(session, path) then
+        record_turn_event(session, "buffer", {
+          event = "BufWritePost",
+          path = vim.fn.fnamemodify(path, ":p"),
+          bufnr = args.buf,
+          source = "nvim_buffer",
+          tool_call_id = single_active_tool_id(session),
+        })
+      end
+    end
+  end,
+})
+
 state_helpers = backend_state.setup({
   cache_logic = cache_logic,
   util = util,
