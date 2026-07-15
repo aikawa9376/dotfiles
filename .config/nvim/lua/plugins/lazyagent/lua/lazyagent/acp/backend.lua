@@ -439,6 +439,10 @@ local function create_backend(default_view)
 
     local transcript_path = existing_thread and existing_thread.transcript_path ~= "" and existing_thread.transcript_path
       or state_helpers.build_transcript_path(acp.agent_name, acp.source_bufnr)
+    local carryover_lines = nil
+    if existing_thread and vim.fn.filereadable(transcript_path) == 1 then
+      carryover_lines = state_helpers.read_path_lines(transcript_path)
+    end
     local initial_text = conversation_helpers.render_section_block("System", "Connecting ACP session for " .. acp.agent_name .. "...")
     if not existing_thread then
       state_helpers.write_transcript(transcript_path, "", "w")
@@ -494,7 +498,18 @@ local function create_backend(default_view)
         root_dir = acp.root_dir,
         additional_directories = vim.deepcopy(acp.additional_directories or {}),
         mcp_url = acp.mcp_url,
-        session_bootstrap = vim.deepcopy(acp.session_bootstrap),
+        session_bootstrap = vim.deepcopy(acp.session_bootstrap or (existing_thread and existing_thread.native_session_id and {
+          session_mode = "auto",
+          session_id = existing_thread.native_session_id,
+        }) or nil),
+        thread_carryover = existing_thread and {
+          provider_from = existing_thread.provider_id,
+          carryover_label = "the previously opened LazyAgent thread",
+          transcript_lines = vim.deepcopy(carryover_lines or {}),
+          transcript_path = transcript_path,
+          conversation_timeline = {},
+          tool_timeline = {},
+        } or nil,
         auto_permission = acp.auto_permission,
         default_mode = acp.default_mode,
         initial_model = acp.initial_model,
@@ -620,6 +635,8 @@ local function create_backend(default_view)
       acp_thread_id = session.thread_id,
       acp_provider_id = session.provider_id,
       acp_thread_store_error = session.thread_store_error,
+      acp_resume_strategy = session.resume_strategy,
+      acp_has_pending_carryover = session.pending_switch_history ~= nil,
       acp_session_info = vim.deepcopy(session.session_info or {}),
       acp_transcript_path = session.transcript_path,
       acp_agent_info = vim.deepcopy(session.agent_info or {}),

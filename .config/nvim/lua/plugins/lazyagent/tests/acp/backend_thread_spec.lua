@@ -13,6 +13,15 @@ end
 
 function M.run()
   local root = plugin_root()
+  local fake_command = {
+    vim.v.progpath,
+    "--headless",
+    "--clean",
+    "-u",
+    "NONE",
+    "-l",
+    root .. "/tests/acp/fake_agent.lua",
+  }
   local cache_dir = vim.fn.tempname() .. "-backend-thread"
   local state = require("lazyagent.logic.state")
   local previous_opts = state.opts
@@ -44,15 +53,7 @@ function M.run()
     end,
     acp = {
       agent_name = "ThreadFixture",
-      command = {
-        vim.v.progpath,
-        "--headless",
-        "--clean",
-        "-u",
-        "NONE",
-        "-l",
-        root .. "/tests/acp/fake_agent.lua",
-      },
+      command = fake_command,
       cwd = root,
       root_dir = root,
       additional_directories = { root .. "/tests" },
@@ -91,15 +92,7 @@ function M.run()
     acp = {
       agent_name = "ThreadFixture",
       thread_id = runtime.acp_thread_id,
-      command = {
-        vim.v.progpath,
-        "--headless",
-        "--clean",
-        "-u",
-        "NONE",
-        "-l",
-        root .. "/tests/acp/fake_agent.lua",
-      },
+      command = fake_command,
       cwd = root,
       root_dir = root,
       additional_directories = { root .. "/tests" },
@@ -114,8 +107,43 @@ function M.run()
   local reopened_runtime = backend.get_runtime_snapshot(pane_id)
   assert_equal(reopened_runtime.acp_thread_id, runtime.acp_thread_id, "reopened thread identity")
   assert_equal(reopened_runtime.acp_transcript_path, runtime.acp_transcript_path, "reopened transcript identity")
+  assert_equal(reopened_runtime.acp_resume_strategy, "native_resume", "native resume strategy")
+  assert_equal(reopened_runtime.acp_has_pending_carryover, false, "native resume carryover")
   assert_equal(#assert(backend.list_threads({ include_archived = true })), 1, "reopen should not duplicate thread")
   assert_equal(assert(backend.get_thread(runtime.acp_thread_id)).status, "active", "reopened persisted status")
+  backend.kill_pane(pane_id)
+
+  pane_id = nil
+  backend.split(nil, 10, false, {
+    on_split = function(created)
+      pane_id = created
+    end,
+    acp = {
+      agent_name = "ThreadFixture",
+      thread_id = runtime.acp_thread_id,
+      command = fake_command,
+      env = {
+        LAZYAGENT_FAKE_DISABLE_RESUME = "1",
+        LAZYAGENT_FAKE_DISABLE_LOAD = "1",
+      },
+      cwd = root,
+      root_dir = root,
+      additional_directories = { root .. "/tests" },
+    },
+  })
+  assert(vim.wait(5000, function()
+    local snapshot = backend.get_runtime_snapshot(pane_id)
+    return snapshot and snapshot.acp_ready == true
+  end, 10), "local carryover thread should become ready")
+  local fallback_runtime = backend.get_runtime_snapshot(pane_id)
+  assert_equal(fallback_runtime.acp_resume_strategy, "local_carryover", "local carryover strategy")
+  assert_equal(fallback_runtime.acp_has_pending_carryover, true, "local carryover prompt context")
+  local fallback_thread = assert(backend.get_thread(runtime.acp_thread_id))
+  assert_equal(fallback_thread.metadata.resume_strategy, "local_carryover", "persisted resume strategy")
+  assert(
+    backend.capture_pane_sync(pane_id):find("Continuation: local transcript carryover", 1, true),
+    "local carryover should be visible in transcript"
+  )
   backend.kill_pane(pane_id)
 
   state.opts = previous_opts

@@ -124,14 +124,14 @@ for line in io.lines() do
           auth = vim.env.LAZYAGENT_FAKE_AUTH_FLOW == "1" and {
             logout = vim.empty_dict(),
           } or nil,
-          loadSession = true,
+          loadSession = vim.env.LAZYAGENT_FAKE_DISABLE_LOAD ~= "1",
           promptCapabilities = {
             image = true,
             embeddedContext = true,
           },
           sessionCapabilities = {
             list = vim.empty_dict(),
-            resume = vim.empty_dict(),
+            resume = vim.env.LAZYAGENT_FAKE_DISABLE_RESUME ~= "1" and vim.empty_dict() or nil,
             close = vim.empty_dict(),
             delete = vim.empty_dict(),
             additionalDirectories = vim.empty_dict(),
