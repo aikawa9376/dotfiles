@@ -35,6 +35,11 @@ local always_commands = {
     handler = session_logic.open_acp_cockpit,
   },
   {
+    name = "LazyAgentACPRegistry",
+    desc = "Browse and register agents from the official ACP Registry",
+    handler = function() require("lazyagent.acp.registry").browse() end,
+  },
+  {
     name = "LazyAgentACPThreads",
     desc = "Browse persisted LazyAgent ACP threads",
     handler = session_logic.pick_acp_threads,
