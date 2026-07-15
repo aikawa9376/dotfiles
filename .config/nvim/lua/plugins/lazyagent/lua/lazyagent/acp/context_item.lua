@@ -217,6 +217,57 @@ function M.diagnostics(bufnr, opts)
   return item
 end
 
+local function default_git_runner(root, args)
+  local command = { "git", "-C", root }
+  vim.list_extend(command, args)
+  local ok, result = pcall(function()
+    return vim.system(command, { text = true }):wait(3000)
+  end)
+  if not ok then
+    return nil, tostring(result)
+  end
+  if result.code ~= 0 then
+    local message = vim.trim(result.stderr or "")
+    return nil, message ~= "" and message or "git command failed"
+  end
+  return result.stdout or ""
+end
+
+function M.branch_diff(root, opts)
+  opts = opts or {}
+  root = vim.fn.fnamemodify(root or vim.fn.getcwd(), ":p"):gsub("/$", "")
+  local run = opts.run or default_git_runner
+  local content, diff_err = run(root, { "diff", "--no-ext-diff", "HEAD", "--" })
+  if content == nil then
+    local staged = run(root, { "diff", "--no-ext-diff", "--cached", "--" })
+    local unstaged = run(root, { "diff", "--no-ext-diff", "--" })
+    if staged == nil and unstaged == nil then
+      return nil, diff_err or "git diff failed"
+    end
+    content = tostring(staged or "") .. tostring(unstaged or "")
+  end
+  if content == "" then
+    content = "No tracked branch changes in " .. root .. "."
+  end
+  local max_bytes = tonumber(opts.max_bytes) or (512 * 1024)
+  if #content > max_bytes then
+    content = content:sub(1, max_bytes) .. string.format("\n\n[branch diff truncated at %d bytes]", max_bytes)
+  end
+  return enrich({
+    kind = "branch_diff",
+    source = "git",
+    inline = true,
+    path = root,
+    uri = "lazyagent://git/branch-diff?root=" .. vim.uri_encode(root),
+    display = "branch diff: " .. root,
+    filetype = "diff",
+    content = content,
+  }, {
+    preview_limit = opts.preview_limit,
+    source_version = { root = root, content_hash = vim.fn.sha256(content) },
+  })
+end
+
 function M.lower(item, capabilities)
   capabilities = capabilities or {}
   if item.kind == "image" or item.kind == "audio" then

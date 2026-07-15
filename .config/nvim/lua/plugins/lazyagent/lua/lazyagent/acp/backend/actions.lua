@@ -828,6 +828,22 @@ local function resolve_reference(token, session)
     }
   end
 
+  if core == "branch-diff" then
+    local item, item_err = ContextItem.branch_diff(buffer_root_for_session(session))
+    if not item then
+      return {
+        block = { type = "text", text = "[branch diff unavailable: " .. tostring(item_err) .. "]" },
+        trailing = trailing,
+      }
+    end
+    return {
+      block = ContextItem.lower(item, {
+        embedded_context = session.prompt_supports_embedded_context == true,
+      }),
+      trailing = trailing,
+    }
+  end
+
   local path_part = core
   local line_start, line_end, column
 

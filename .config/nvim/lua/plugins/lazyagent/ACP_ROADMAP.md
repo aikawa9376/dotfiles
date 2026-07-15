@@ -208,6 +208,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] `@file[:range]` ACP loweringと`{selection}` Markdown loweringを共通model / note / content sliceへ統合する。
 - [ ] symbol、diagnostics、branch diff、previous thread、terminal、URLを追加する。
   - [x] `@diagnostics`でsource bufferのLSP diagnosticsを位置・severity付きContextItemとして添付する。
+  - [x] `@branch-diff`でworkspaceのtracked HEAD差分をsize上限付きContextItemとして添付する。
 - [x] content hash、source version、size/token estimate、previewを保持する。
   - [x] text itemはSHA-256 / changedtickまたはfile stat / byte÷4 token概算 / whitespace compact previewを生成する。
 - [x] capabilityに応じてText / Image / EmbeddedResource / ResourceLinkへloweringする。

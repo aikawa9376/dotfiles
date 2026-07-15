@@ -445,6 +445,10 @@ function M.get_scratch_completions(agent_name, opts)
         label = "diagnostics",
         desc = "Attach LSP diagnostics from the source buffer.",
       }
+      res.at[#res.at + 1] = {
+        label = "branch-diff",
+        desc = "Attach tracked changes relative to Git HEAD.",
+      }
     end
     if fd_paths and #fd_paths > 0 then
       vim.list_extend(res.at, fd_paths)
