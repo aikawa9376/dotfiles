@@ -321,9 +321,10 @@ function Store:create(attributes)
   return copy(record), warning
 end
 
-function Store:update(thread_id, changes)
+function Store:update(thread_id, changes, opts)
   thread_id = tostring(thread_id or ""):lower()
   changes = copy(changes or {})
+  opts = opts or {}
   local manifest, warning = self:_read()
   if not manifest then
     return nil, warning
@@ -331,6 +332,13 @@ function Store:update(thread_id, changes)
   local index, current = thread_index(manifest, thread_id)
   if not index then
     return nil, "thread not found: " .. thread_id
+  end
+  if opts.expected_process_id ~= nil and current.process_id ~= opts.expected_process_id then
+    return nil, {
+      code = "stale_process",
+      expected_process_id = opts.expected_process_id,
+      current_process_id = current.process_id,
+    }
   end
   changes.thread_id = current.thread_id
   changes.provider_id = current.provider_id
@@ -360,6 +368,14 @@ end
 
 function Store:restore(thread_id)
   return self:update(thread_id, { status = "closed", archived_at = vim.NIL })
+end
+
+function Store:open(thread_id, changes)
+  changes = vim.tbl_deep_extend("force", copy(changes or {}), {
+    status = "active",
+    archived_at = vim.NIL,
+  })
+  return self:update(thread_id, changes)
 end
 
 function Store:rename(thread_id, title)

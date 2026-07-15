@@ -83,6 +83,41 @@ function M.run()
   assert_equal(closed.process_id, nil, "closed process detachment")
   assert_equal(backend.get_debug_snapshot().session_count, 0, "closed backend ownership")
 
+  pane_id = nil
+  backend.split(nil, 10, false, {
+    on_split = function(created)
+      pane_id = created
+    end,
+    acp = {
+      agent_name = "ThreadFixture",
+      thread_id = runtime.acp_thread_id,
+      command = {
+        vim.v.progpath,
+        "--headless",
+        "--clean",
+        "-u",
+        "NONE",
+        "-l",
+        root .. "/tests/acp/fake_agent.lua",
+      },
+      cwd = root,
+      root_dir = root,
+      additional_directories = { root .. "/tests" },
+    },
+  })
+  assert_equal(pane_id, "thread-test-pane", "reopened backend pane")
+  assert(vim.wait(5000, function()
+    local snapshot = backend.get_runtime_snapshot(pane_id)
+    return snapshot and snapshot.acp_ready == true
+  end, 10), "reopened backend thread should become ready")
+
+  local reopened_runtime = backend.get_runtime_snapshot(pane_id)
+  assert_equal(reopened_runtime.acp_thread_id, runtime.acp_thread_id, "reopened thread identity")
+  assert_equal(reopened_runtime.acp_transcript_path, runtime.acp_transcript_path, "reopened transcript identity")
+  assert_equal(#assert(backend.list_threads({ include_archived = true })), 1, "reopen should not duplicate thread")
+  assert_equal(assert(backend.get_thread(runtime.acp_thread_id)).status, "active", "reopened persisted status")
+  backend.kill_pane(pane_id)
+
   state.opts = previous_opts
   vim.fn.delete(cache_dir, "rf")
 end
