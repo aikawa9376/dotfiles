@@ -99,7 +99,12 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
       M.close_commit_info_float()
       return
     end
-  else
+  end
+
+  local work_tree = get_work_tree_from_fugitive()
+  if not work_tree then return end
+
+  if not (float_win and vim.api.nvim_win_is_valid(float_win)) then
     if not create then
       return
     end
@@ -129,7 +134,10 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
   end
 
   -- Use git show with custom format to get pre-formatted date
-  local command = "git show -s --date=format:'%Y-%m-%d %H:%M' --format='tree %T%nparent %P%nauthor %an <%ae> %ad%ncommitter %cn <%ce> %ad%n%n%B' " .. vim.fn.shellescape(commit)
+  local command = "git -C " .. vim.fn.shellescape(work_tree)
+    .. " show -s --date=format:'%Y-%m-%d %H:%M'"
+    .. " --format='tree %T%nparent %P%nauthor %an <%ae> %ad%ncommitter %cn <%ce> %ad%n%n%B' "
+    .. vim.fn.shellescape(commit)
   local commit_info = vim.fn.systemlist(command)
 
   if vim.v.shell_error == 0 then
@@ -655,7 +663,11 @@ function M.setup()
       return
     end
 
-    local current_branch = vim.fn.system('git rev-parse --abbrev-ref HEAD'):gsub('\n', '')
+    local work_tree = get_work_tree_from_fugitive()
+    if not work_tree then return end
+    local git = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' '
+
+    local current_branch = vim.fn.system(git .. 'rev-parse --abbrev-ref HEAD'):gsub('\n', '')
     if current_branch == 'HEAD' then
       vim.notify('Cannot move commits in detached HEAD state', vim.log.levels.ERROR)
       return
@@ -668,9 +680,6 @@ function M.setup()
     else
       base_commit = current_commit .. '^'
     end
-
-    local work_tree = get_work_tree_from_fugitive()
-    if not work_tree then return end
 
     local stashed = apply_auto_stash(work_tree)
     if stashed == nil then return end
@@ -703,7 +712,8 @@ END {
     f:close()
     vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
 
-    local cmd = string.format('GIT_SEQUENCE_EDITOR=%s git rebase -i %s', vim.fn.shellescape(tmpfile), base_commit)
+    local cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile)
+      .. ' ' .. git .. 'rebase -i ' .. vim.fn.shellescape(base_commit)
     local output = vim.fn.system(cmd)
     vim.fn.delete(tmpfile)
 
@@ -871,13 +881,16 @@ END {
   ---@type integer|nil
   local preview_buf = nil
   local preview_commit = nil
+  local preview_work_tree = nil
   local preview_update_timer = nil
   local preview_update_pending_commit = nil
 
-  local function open_with_fugitive(win, commit)
+  local function open_with_fugitive(win, commit, work_tree)
     local ok, _ = pcall(function()
+      local buf = vim.api.nvim_win_get_buf(win)
+      utils.set_buf_work_tree(buf, work_tree)
       vim.api.nvim_set_current_win(win)
-      vim.cmd('keepalt keepjumps silent Gedit ' .. commit)
+      vim.cmd('keepalt keepjumps silent Gedit ' .. vim.fn.fnameescape(commit))
     end)
     if not ok then
       return nil
@@ -896,6 +909,7 @@ END {
     preview_win = nil
     preview_commit = nil
     preview_buf = nil
+    preview_work_tree = nil
     if preview_update_timer then
       pcall(vim.fn.timer_stop, preview_update_timer)
       preview_update_timer = nil
@@ -904,18 +918,14 @@ END {
   end
 
   -- Load a commit into a plain scratch buffer using git show. Returns true on success.
-  local function load_commit_into_buf(commit, buf)
+  local function load_commit_into_buf(commit, buf, work_tree)
     if not (commit and commit ~= '') then return false end
     if not buf or not vim.api.nvim_buf_is_valid(buf) then return false end
+    if not work_tree then return false end
 
-    local work_tree = utils.get_work_tree()
-
-    local cmd
-    if work_tree then
-      cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' show --no-color ' .. vim.fn.shellescape(commit)
-    else
-      cmd = 'git show --no-color ' .. vim.fn.shellescape(commit)
-    end
+    utils.set_buf_work_tree(buf, work_tree)
+    local cmd = 'git -C ' .. vim.fn.shellescape(work_tree)
+      .. ' show --no-color ' .. vim.fn.shellescape(commit)
 
     local lines = vim.fn.systemlist(cmd)
     if vim.v.shell_error ~= 0 or not lines or #lines == 0 then
@@ -932,11 +942,14 @@ END {
     return true
   end
 
-  function M.open_preview_window(commit)
+  function M.open_preview_window(commit, work_tree)
     if not commit or commit == '' then
       return
     end
 
+    work_tree = work_tree or preview_work_tree or get_work_tree_from_fugitive()
+    if not work_tree then return end
+    preview_work_tree = work_tree
     local current_win = vim.api.nvim_get_current_win()
 
     local function finalize_preview(buf)
@@ -965,7 +978,7 @@ END {
         preview_buf = nil
       end
 
-      local buf_from_fugitive = open_with_fugitive(preview_win, commit)
+      local buf_from_fugitive = open_with_fugitive(preview_win, commit, work_tree)
       if buf_from_fugitive and vim.api.nvim_buf_is_valid(buf_from_fugitive) then
         finalize_preview(buf_from_fugitive)
         preview_buf = buf_from_fugitive
@@ -974,7 +987,7 @@ END {
 
       -- If there's an existing buffer, try to overwrite it with git show
       if prev_buf then
-        local ok = load_commit_into_buf(commit, prev_buf)
+        local ok = load_commit_into_buf(commit, prev_buf, work_tree)
         if ok then
           finalize_preview(prev_buf)
           preview_buf = prev_buf
@@ -990,7 +1003,7 @@ END {
         return
       end
 
-      local ok = load_commit_into_buf(commit, new_buf)
+      local ok = load_commit_into_buf(commit, new_buf, work_tree)
       if not ok then
         -- Restore previous buffer if possible
         if prev_buf and vim.api.nvim_buf_is_valid(prev_buf) then
@@ -1013,12 +1026,12 @@ END {
     preview_win = vim.api.nvim_get_current_win()
     local buf = vim.api.nvim_get_current_buf()
 
-    local buf_from_fugitive = open_with_fugitive(preview_win, commit)
+    local buf_from_fugitive = open_with_fugitive(preview_win, commit, work_tree)
     local ok = type(buf_from_fugitive) == 'number' and vim.api.nvim_buf_is_valid(buf_from_fugitive)
     if ok and type(buf_from_fugitive) == 'number' then
       buf = buf_from_fugitive
     else
-      ok = load_commit_into_buf(commit, buf)
+      ok = load_commit_into_buf(commit, buf, work_tree)
     end
 
     if not ok then
@@ -1047,7 +1060,7 @@ END {
     end
 
     -- Use git show to load the commit; open_preview_window will reuse the window/buffer.
-    M.open_preview_window(commit)
+    M.open_preview_window(commit, preview_work_tree)
   end
 
   function M.toggle_preview(commit)

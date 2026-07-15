@@ -15,9 +15,28 @@ local function notify_branch_changed(bufnr, work_tree)
   })
 end
 
+local function get_buffer_work_tree(bufnr, notify)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if work_tree then
+    return work_tree
+  end
+  return utils.get_work_tree({ bufnr = bufnr, notify = notify })
+end
+
+local function get_git_prefix(bufnr, notify)
+  local work_tree = get_buffer_work_tree(bufnr, notify)
+  if not work_tree then
+    return nil, nil
+  end
+  return 'git -C ' .. vim.fn.shellescape(work_tree) .. ' ', work_tree
+end
+
 ---@diagnostic disable-next-line: unused-vararg
 _G.fugitive_branch_completion = function(arg_lead, ...)
-  local branches = vim.fn.systemlist("git branch -a --format='%(refname:short)'")
+  local git = get_git_prefix(vim.api.nvim_get_current_buf())
+  if not git then return {} end
+  local branches = vim.fn.systemlist(git .. "branch -a --format='%(refname:short)'")
   if vim.v.shell_error ~= 0 then return {} end
   local matches = {}
   for _, b in ipairs(branches) do
@@ -34,7 +53,8 @@ local function get_ahead_behind(branch, upstream, cmd_prefix)
   end
 
   cmd_prefix = cmd_prefix or 'git '
-  local result = vim.fn.system(string.format('%srev-list --left-right --count %s...%s 2>/dev/null', cmd_prefix, branch, upstream))
+  local range = vim.fn.shellescape(branch .. '...' .. upstream)
+  local result = vim.fn.system(cmd_prefix .. 'rev-list --left-right --count ' .. range .. ' 2>/dev/null')
   if vim.v.shell_error ~= 0 then
     return 0, 0
   end
@@ -44,31 +64,17 @@ local function get_ahead_behind(branch, upstream, cmd_prefix)
 end
 
 local function get_branch_list(bufnr)
-  local cmd_prefix = "git "
-  -- Use the branch buffer's context (not current buffer) for git command,
-  -- to avoid using a wrong context when FugitiveChanged fires from another tab/buffer.
-  local buf_file = bufnr and vim.api.nvim_buf_get_name(bufnr) or vim.api.nvim_buf_get_name(0)
-  if buf_file:match("^fugitive%-branch://") then
-    local path = buf_file:sub(#"fugitive-branch://" + 1)
-    cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(path))
-  elseif buf_file ~= "" and not buf_file:match("^fugitive://") then
-    local current_dir = vim.fn.fnamemodify(buf_file, ":p:h")
-    cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(current_dir))
-  else
-    local git_dir = bufnr and vim.fn.FugitiveGitDir(bufnr) or vim.fn.FugitiveGitDir()
-    if git_dir ~= "" then
-      local work_tree = utils.get_work_tree({ git_dir = git_dir })
-      if work_tree and work_tree ~= "" then
-         cmd_prefix = string.format("git -C %s ", vim.fn.shellescape(work_tree))
-      end
-    end
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local cmd_prefix = get_git_prefix(bufnr)
+  if not cmd_prefix then
+    return {}, {}, {}, false
   end
 
   local local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
+  local local_ok = vim.v.shell_error == 0
   local remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
-
-  local git_ok = vim.v.shell_error == 0
-  if not git_ok then
+  local remote_ok = vim.v.shell_error == 0
+  if not local_ok or not remote_ok then
     return {}, {}, {}, false
   end
 
@@ -398,6 +404,9 @@ local function delete_branches(bufnr, branches)
     return
   end
 
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
+
   local deleted = {}
   local failed = {}
 
@@ -407,7 +416,7 @@ local function delete_branches(bufnr, branches)
       table.insert(failed, branch .. " (current branch)")
     else
       -- Try to delete branch
-      local result = vim.fn.system(string.format('git branch -d %s 2>&1', branch))
+      local result = vim.fn.system(git .. 'branch -d ' .. vim.fn.shellescape(branch) .. ' 2>&1')
       if vim.v.shell_error ~= 0 then
         -- If normal delete fails, ask for force delete
         if result:match("not fully merged") then
@@ -417,7 +426,7 @@ local function delete_branches(bufnr, branches)
             2
           )
           if force_confirm == 1 then
-            result = vim.fn.system(string.format('git branch -D %s 2>&1', branch))
+            result = vim.fn.system(git .. 'branch -D ' .. vim.fn.shellescape(branch) .. ' 2>&1')
             if vim.v.shell_error == 0 then
               table.insert(deleted, branch)
             else
@@ -440,7 +449,7 @@ local function delete_branches(bufnr, branches)
     vim.notify(string.format("Failed: %s", table.concat(failed, ", ")), vim.log.levels.WARN)
   end
 
-  notify_branch_changed(bufnr)
+  notify_branch_changed(bufnr, work_tree)
 end
 
 local function checkout_branch(bufnr)
@@ -453,13 +462,15 @@ local function checkout_branch(bufnr)
   -- Remove remotes/ prefix if present
   local checkout_name = branch:gsub('^origin/', '')
 
-  local work_tree = utils.get_work_tree({ notify = true })
+  local work_tree = get_buffer_work_tree(bufnr, true)
   if not work_tree then return end
 
   local stashed = commands.apply_auto_stash(work_tree)
   if stashed == nil then return end
 
-  vim.cmd('Git checkout ' .. checkout_name)
+  vim.api.nvim_buf_call(bufnr, function()
+    vim.cmd('Git checkout ' .. vim.fn.fnameescape(checkout_name))
+  end)
 
   if stashed then
     commands.pop_auto_stash(work_tree)
@@ -489,13 +500,15 @@ local function rename_branch(bufnr)
     return
   end
 
-  local cmd = string.format("git branch -m %s %s", vim.fn.shellescape(old_name), vim.fn.shellescape(new_name))
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
+  local cmd = git .. 'branch -m ' .. vim.fn.shellescape(old_name) .. ' ' .. vim.fn.shellescape(new_name)
   local result = vim.fn.system(cmd)
 
   if vim.v.shell_error ~= 0 then
     vim.notify("Failed to rename branch: " .. vim.fn.trim(result), vim.log.levels.ERROR)
   else
-    notify_branch_changed(bufnr)
+    notify_branch_changed(bufnr, work_tree)
   end
 end
 
@@ -522,8 +535,12 @@ local function duplicate_branch(bufnr)
     return
   end
 
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
+
   -- If a local branch with the target name exists, ask to overwrite
-  vim.fn.system(string.format('git rev-parse --verify --quiet refs/heads/%s 2>/dev/null', vim.fn.shellescape(new_name)))
+  vim.fn.system(git .. 'rev-parse --verify --quiet '
+    .. vim.fn.shellescape('refs/heads/' .. new_name) .. ' 2>/dev/null')
   if vim.v.shell_error == 0 then
     local overwrite = vim.fn.confirm(
       string.format("Local branch '%s' already exists. Overwrite?", new_name),
@@ -534,7 +551,7 @@ local function duplicate_branch(bufnr)
       -- vim.notify("Duplicate cancelled.", vim.log.levels.INFO)
       return
     end
-    local del_result = vim.fn.system(string.format('git branch -D %s 2>&1', vim.fn.shellescape(new_name)))
+    local del_result = vim.fn.system(git .. 'branch -D ' .. vim.fn.shellescape(new_name) .. ' 2>&1')
     if vim.v.shell_error ~= 0 then
       vim.notify("Failed to delete existing branch: " .. vim.fn.trim(del_result), vim.log.levels.ERROR)
       return
@@ -543,13 +560,13 @@ local function duplicate_branch(bufnr)
 
   -- Create a new local branch pointing to the same commit as `old_name`.
   -- `old_name` may be local (e.g., "main") or remote (e.g., "origin/main")
-  local cmd = string.format('git branch %s %s 2>&1', vim.fn.shellescape(new_name), vim.fn.shellescape(old_name))
+  local cmd = git .. 'branch ' .. vim.fn.shellescape(new_name) .. ' ' .. vim.fn.shellescape(old_name) .. ' 2>&1'
   local result = vim.fn.system(cmd)
 
   if vim.v.shell_error ~= 0 then
     vim.notify("Failed to duplicate branch: " .. vim.fn.trim(result), vim.log.levels.ERROR)
   else
-    notify_branch_changed(bufnr)
+    notify_branch_changed(bufnr, work_tree)
   end
 end
 
@@ -569,22 +586,26 @@ local function create_worktree(bufnr)
     return
   end
 
-  local cmd = string.format("git worktree add %s %s", vim.fn.shellescape(worktree_path), vim.fn.shellescape(branch))
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
+  local cmd = git .. 'worktree add ' .. vim.fn.shellescape(worktree_path) .. ' ' .. vim.fn.shellescape(branch)
   local result = vim.fn.system(cmd)
 
   if vim.v.shell_error ~= 0 then
     vim.notify("Failed to create worktree: " .. vim.fn.trim(result), vim.log.levels.ERROR)
   else
-    notify_branch_changed(bufnr)
+    notify_branch_changed(bufnr, work_tree)
   end
 end
 
 local function fetch_all(bufnr)
   -- vim.notify("Fetching...", vim.log.levels.INFO)
-  vim.fn.jobstart("git fetch --all --prune", {
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
+  vim.fn.jobstart(git .. "fetch --all --prune", {
     on_exit = function(_, exit_code)
       if exit_code == 0 then
-        notify_branch_changed(bufnr)
+        notify_branch_changed(bufnr, work_tree)
       else
         vim.notify("Fetch failed", vim.log.levels.ERROR)
       end
@@ -628,15 +649,18 @@ local function pull_branch(bufnr)
     return
   end
 
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
+
   -- Check if branch is current
-  local current_branch = vim.fn.trim(vim.fn.system("git branch --show-current"))
+  local current_branch = vim.fn.trim(vim.fn.system(git .. "branch --show-current"))
   if branch ~= current_branch then
     vim.notify("Cannot pull: " .. branch .. " is not checked out.", vim.log.levels.WARN)
     return
   end
 
   -- Check upstream
-  vim.fn.system("git rev-parse --abbrev-ref " .. vim.fn.shellescape(branch) .. "@{u}")
+  vim.fn.system(git .. "rev-parse --abbrev-ref " .. vim.fn.shellescape(branch .. "@{u}"))
   local has_upstream = (vim.v.shell_error == 0)
 
   local args = ""
@@ -650,15 +674,12 @@ local function pull_branch(bufnr)
     end
   end
 
-  local work_tree = utils.get_work_tree({ notify = true })
-  if not work_tree then return end
-
   local stashed = commands.apply_auto_stash(work_tree)
   if stashed == nil then return end
 
   -- vim.notify("Pulling...", vim.log.levels.INFO)
   local output_lines = {}
-  vim.fn.jobstart("git -C " .. vim.fn.shellescape(work_tree) .. " pull" .. args, {
+  vim.fn.jobstart(git .. "pull" .. args, {
     on_stdout = function(_, data)
       if data then
         for _, line in ipairs(data) do
@@ -707,7 +728,10 @@ local function pull_branch_under_cursor(bufnr)
     return
   end
 
-  local current_branch = vim.fn.trim(vim.fn.system("git branch --show-current"))
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
+
+  local current_branch = vim.fn.trim(vim.fn.system(git .. "branch --show-current"))
 
   if branch == current_branch then
     pull_branch(bufnr)
@@ -715,7 +739,7 @@ local function pull_branch_under_cursor(bufnr)
   end
 
   -- Check upstream
-  vim.fn.system("git rev-parse --abbrev-ref " .. vim.fn.shellescape(branch) .. "@{u}")
+  vim.fn.system(git .. "rev-parse --abbrev-ref " .. vim.fn.shellescape(branch .. "@{u}"))
   local has_upstream = (vim.v.shell_error == 0)
 
   local args = ""
@@ -729,14 +753,11 @@ local function pull_branch_under_cursor(bufnr)
     end
   end
 
-  local work_tree = utils.get_work_tree({ notify = true })
-  if not work_tree then return end
-
   local stashed = commands.apply_auto_stash(work_tree)
   if stashed == nil then return end
 
   -- Checkout target branch
-  local out = vim.fn.system("git checkout " .. vim.fn.shellescape(branch) .. " 2>&1")
+  local out = vim.fn.system(git .. "checkout " .. vim.fn.shellescape(branch) .. " 2>&1")
   if vim.v.shell_error ~= 0 then
     vim.notify("Failed to checkout " .. branch .. ": " .. out, vim.log.levels.ERROR)
     if stashed then commands.pop_auto_stash(work_tree) end
@@ -745,7 +766,7 @@ local function pull_branch_under_cursor(bufnr)
 
   -- vim.notify("Pulling " .. branch .. "...", vim.log.levels.INFO)
   local output_lines = {}
-  vim.fn.jobstart("git -C " .. vim.fn.shellescape(work_tree) .. " pull" .. args, {
+  vim.fn.jobstart(git .. "pull" .. args, {
     on_stdout = function(_, data)
       if data then
         for _, line in ipairs(data) do
@@ -770,7 +791,7 @@ local function pull_branch_under_cursor(bufnr)
         local pull_success = (exit_code == 0)
 
         -- Checkout back to original branch
-        local co_out = vim.fn.system("git checkout " .. vim.fn.shellescape(current_branch) .. " 2>&1")
+        local co_out = vim.fn.system(git .. "checkout " .. vim.fn.shellescape(current_branch) .. " 2>&1")
         if vim.v.shell_error ~= 0 then
            vim.notify("Pull " .. (pull_success and "succeeded" or "failed") .. " but could not switch back to " .. current_branch .. "\n" .. co_out .. "\n\nPull output:\n" .. message, vim.log.levels.ERROR)
            -- Do not pop stash if we are on the wrong branch
@@ -798,33 +819,33 @@ local function pull_branch_under_cursor(bufnr)
   })
 end
 
-local function get_default_origin_head()
+local function get_default_origin_head(bufnr)
   local default_branch = "origin/main"
-  local handle = io.popen("git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null")
-  if handle then
-    local result = handle:read("*a")
-    handle:close()
-    if result and result ~= "" then
-      default_branch = result:gsub("refs/remotes/", ""):gsub("\n", "")
-    end
+  local git = get_git_prefix(bufnr)
+  if not git then return default_branch end
+  local result = vim.fn.system(git .. "symbolic-ref refs/remotes/origin/HEAD 2>/dev/null")
+  if vim.v.shell_error == 0 and result ~= "" then
+    default_branch = result:gsub("refs/remotes/", ""):gsub("\n", "")
   end
   return default_branch
 end
 
-local function diff_against_default()
+local function diff_against_default(bufnr)
   local branch = get_branch_name_from_line()
   if not branch then
     vim.notify("No branch found on this line", vim.log.levels.WARN)
     return
   end
 
-  local default_branch = get_default_origin_head()
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
+  local default_branch = get_default_origin_head(bufnr)
 
   -- Notify and fetch
   vim.notify("Fetching origin...", vim.log.levels.INFO)
 
   -- Use jobstart for async fetch
-  vim.fn.jobstart("git fetch origin", {
+  vim.fn.jobstart(git .. "fetch origin", {
     on_exit = function(_, exit_code)
       if exit_code ~= 0 then
         vim.notify("Fetch failed", vim.log.levels.ERROR)
@@ -835,7 +856,8 @@ local function diff_against_default()
       vim.schedule(function()
         -- Compare default_branch...branch (3 dots for merge base diff - GitHub PR style)
         -- The user said "origin and github equivalent diff", so origin/main...branch
-        local diff_cmd = "DiffviewOpen " .. default_branch .. "..." .. branch
+        local diff_cmd = "DiffviewOpen -C" .. vim.fn.fnameescape(work_tree)
+          .. " " .. default_branch .. "..." .. branch
         vim.cmd(diff_cmd)
         vim.notify("Opened diff: " .. default_branch .. "..." .. branch, vim.log.levels.INFO)
       end)
@@ -844,10 +866,10 @@ local function diff_against_default()
 end
 
 local function rebase_with_stash_fetch(bufnr, default_target)
-  local work_tree = utils.get_work_tree({ notify = true })
-  if not work_tree then return end
+  local git, work_tree = get_git_prefix(bufnr, true)
+  if not git then return end
 
-  local target_default = default_target or get_default_origin_head()
+  local target_default = default_target or get_default_origin_head(bufnr)
   local target = vim.fn.input('Rebase on: ', target_default, 'customlist,v:lua.fugitive_branch_completion')
   vim.cmd('redraw')
   if target == '' then return end
@@ -856,7 +878,7 @@ local function rebase_with_stash_fetch(bufnr, default_target)
   local stashed = commands.apply_auto_stash(work_tree)
   if stashed == nil then return end
 
-  local cmd = string.format("git fetch && git rebase %s", vim.fn.shellescape(target))
+  local cmd = git .. "fetch && " .. git .. "rebase " .. vim.fn.shellescape(target)
 
   vim.notify("Running: " .. cmd, vim.log.levels.INFO)
 
@@ -903,17 +925,30 @@ local function rebase_with_stash_fetch(bufnr, default_target)
 end
 
 local function merge_with_input(bufnr, default_target)
-  local target_default = default_target or get_default_origin_head()
+  local work_tree = get_buffer_work_tree(bufnr, true)
+  if not work_tree then return end
+  local target_default = default_target or get_default_origin_head(bufnr)
   local target = vim.fn.input('Merge: ', target_default, 'customlist,v:lua.fugitive_branch_completion')
   vim.cmd('redraw')
   if target == '' then return end
 
-  vim.cmd('Git merge ' .. target)
-  notify_branch_changed(bufnr)
+  vim.api.nvim_buf_call(bufnr, function()
+    vim.cmd('Git merge ' .. vim.fn.fnameescape(target))
+  end)
+  notify_branch_changed(bufnr, work_tree)
 end
 
 local function open_branch_list()
-  local branch_output, branch_names, truncated_info, ok = get_branch_list()
+  local source_bufnr = vim.api.nvim_get_current_buf()
+  local work_tree = get_buffer_work_tree(source_bufnr, true)
+  if not work_tree then return end
+  local git_dir = utils.normalize_path(vim.b[source_bufnr].git_dir) or utils.get_git_dir(work_tree)
+  if not git_dir then
+    vim.notify("Could not determine git dir.", vim.log.levels.ERROR)
+    return
+  end
+
+  local branch_output, branch_names, truncated_info, ok = get_branch_list(source_bufnr)
   if not ok then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
@@ -924,13 +959,9 @@ local function open_branch_list()
     return
   end
 
-  local git_dir = vim.fn.FugitiveGitDir()
-  if git_dir == "" then
-    git_dir = vim.fn.getcwd() -- Fallback if not in git repo, though get_branch_list check above should prevent this
-  end
-  vim.cmd('botright split fugitive-branch://' .. git_dir)
+  vim.cmd('botright split ' .. vim.fn.fnameescape('fugitive-branch://' .. git_dir))
   local bufnr = vim.api.nvim_get_current_buf()
-  utils.set_buf_work_tree(bufnr, utils.get_work_tree({ git_dir = git_dir }) or git_dir)
+  utils.set_buf_work_tree(bufnr, work_tree, git_dir)
 
   utils.with_buf_modifiable(bufnr, function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
@@ -994,8 +1025,9 @@ function M.setup(group)
     callback = function(ev)
       local bufnr = ev.buf
       local buf_name = vim.api.nvim_buf_get_name(bufnr)
-      local work_tree = utils.get_work_tree({ git_dir = buf_name:sub(#'fugitive-branch://' + 1) })
-      utils.set_buf_work_tree(bufnr, work_tree)
+      local git_dir = buf_name:sub(#'fugitive-branch://' + 1)
+      local work_tree = utils.get_work_tree({ git_dir = git_dir })
+      utils.set_buf_work_tree(bufnr, work_tree, git_dir)
       vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
       vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
       vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
@@ -1104,7 +1136,7 @@ function M.setup(group)
 
       -- D: Diff against default branch
       vim.keymap.set('n', 'd', function()
-        diff_against_default()
+        diff_against_default(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Diff against default branch" })
 
       -- r<Space>: Stash, Fetch, Rebase

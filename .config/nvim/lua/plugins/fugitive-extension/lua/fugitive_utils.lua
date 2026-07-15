@@ -120,6 +120,23 @@ local function normalize_work_tree_path(path)
   return normalized
 end
 
+---@param work_tree string|nil
+---@return string|nil
+function M.get_git_dir(work_tree)
+  work_tree = normalize_work_tree_path(work_tree)
+  if not work_tree then
+    return nil
+  end
+
+  local git_dir = vim.fn.trim(
+    vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse --absolute-git-dir')
+  )
+  if vim.v.shell_error ~= 0 or git_dir == '' then
+    return nil
+  end
+  return M.normalize_path(git_dir)
+end
+
 ---@param bufnr integer|nil
 ---@return boolean
 function M.is_valid_buf(bufnr)
@@ -181,8 +198,9 @@ end
 
 ---@param bufnr integer
 ---@param work_tree string|nil
+---@param git_dir? string
 ---@return string|nil
-function M.set_buf_work_tree(bufnr, work_tree)
+function M.set_buf_work_tree(bufnr, work_tree, git_dir)
   if not M.is_valid_buf(bufnr) then
     return nil
   end
@@ -190,6 +208,12 @@ function M.set_buf_work_tree(bufnr, work_tree)
   local normalized = normalize_work_tree_path(work_tree)
   if normalized then
     vim.b[bufnr].fugitive_work_tree = normalized
+    local normalized_git_dir = M.normalize_path(git_dir) or M.get_git_dir(normalized)
+    if normalized_git_dir then
+      vim.b[bufnr].git_dir = normalized_git_dir
+    else
+      vim.b[bufnr].git_dir = nil
+    end
   end
   return normalized
 end
@@ -205,6 +229,9 @@ function M.get_buf_work_tree(bufnr, opts)
   local work_tree = normalize_work_tree_path(vim.b[bufnr].fugitive_work_tree)
   if work_tree then
     vim.b[bufnr].fugitive_work_tree = work_tree
+    if not M.normalize_path(vim.b[bufnr].git_dir) then
+      M.set_buf_work_tree(bufnr, work_tree)
+    end
     return work_tree
   end
 
