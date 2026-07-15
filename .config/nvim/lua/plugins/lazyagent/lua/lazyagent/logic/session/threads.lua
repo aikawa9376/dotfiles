@@ -70,6 +70,13 @@ function M.setup(deps)
       vim.notify("LazyAgent ACP: provider is not configured: " .. tostring(thread.provider_id), vim.log.levels.WARN)
       return false
     end
+    if thread.metadata and thread.metadata.worktree_state == "active" then
+      local _, restore_err = require("lazyagent.acp.worktree").restore(thread)
+      if restore_err then
+        vim.notify("LazyAgent ACP: " .. restore_err, vim.log.levels.ERROR)
+        return false
+      end
+    end
     start_interactive_session({
       agent_name = thread.provider_id,
       acp_thread_id = thread.thread_id,
@@ -109,6 +116,54 @@ function M.setup(deps)
       return false
     end
     return module.open_thread(thread.thread_id)
+  end
+
+  function module.new_worktree_thread(provider_id)
+    local provider, providers = configured_provider(provider_id)
+    if not provider then
+      vim.ui.select(providers or {}, { prompt = "Worktree thread provider:" }, function(choice)
+        if choice then module.new_worktree_thread(choice) end
+      end)
+      return true
+    end
+    local backend = backend_for_provider(provider)
+    if not backend or type(backend.create_thread) ~= "function" then return false end
+    local root = vim.fn.getcwd()
+    vim.ui.input({ prompt = "Worktree branch: " }, function(branch)
+      if not branch or branch == "" then return end
+      local dirname = vim.fn.fnamemodify(root, ":t") .. "-" .. branch:gsub("[^%w._-]", "-")
+      local default_path = vim.fn.fnamemodify(root, ":h") .. "/" .. dirname
+      vim.ui.input({ prompt = "Worktree path: ", default = default_path }, function(path)
+        if not path or path == "" then return end
+        local metadata, create_err = require("lazyagent.acp.worktree").create({
+          root = root, path = path, branch = branch,
+        })
+        if not metadata then
+          vim.notify("LazyAgent ACP worktree: " .. tostring(create_err), vim.log.levels.ERROR)
+          return
+        end
+        local thread, thread_err = backend.create_thread({
+          provider_id = provider, cwd = metadata.worktree_path, title = branch, status = "closed", metadata = metadata,
+        })
+        if not thread then
+          vim.notify("LazyAgent ACP thread: " .. tostring(thread_err), vim.log.levels.ERROR)
+          return
+        end
+        module.open_thread(thread.thread_id)
+      end)
+    end)
+    return true
+  end
+
+  function module.cleanup_worktree(thread_id)
+    local backend, thread = thread_backend(thread_id)
+    if not backend or not thread then return false end
+    local metadata, cleanup_err = require("lazyagent.acp.worktree").cleanup(thread)
+    if not metadata then
+      vim.notify("LazyAgent ACP worktree: " .. tostring(cleanup_err), vim.log.levels.ERROR)
+      return false
+    end
+    return backend.update_thread(thread_id, { cwd = metadata.original_root, metadata = metadata }) ~= nil
   end
 
   function module.archive_thread(thread_id)
@@ -330,6 +385,13 @@ function M.setup(deps)
         if choice == "Delete" then module.delete_thread(id); refresh() end
       end)
     end, { buffer = bufnr, silent = true, desc = "Delete ACP cockpit thread" })
+    vim.keymap.set("n", "c", function()
+      local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      if not id then return end
+      vim.ui.select({ "Cancel", "Cleanup worktree" }, { prompt = "Remove clean managed worktree?" }, function(choice)
+        if choice == "Cleanup worktree" then module.cleanup_worktree(id); refresh() end
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Cleanup managed ACP worktree" })
     vim.keymap.set("n", "X", function()
       vim.ui.select({ "Cancel", "Close all" }, { prompt = "Close all running ACP sessions?" }, function(choice)
         if choice ~= "Close all" then return end
