@@ -859,6 +859,70 @@ local function create_backend(default_view)
     return thread_store:get(thread_id)
   end
 
+  function backend.get_pending_permission(pane_id)
+    local session = get_session(pane_id)
+    local pending = session and session.pending_permission or nil
+    if pending and session.client and next(session.client.pending_permission_requests or {}) == nil then
+      session.pending_permission = nil
+      pending = nil
+    end
+    if not pending then return nil end
+    return {
+      tool_call_id = pending.tool_call_id,
+      title = pending.title,
+      kind = pending.kind,
+      path = pending.path,
+      choices = vim.deepcopy(pending.choices or {}),
+    }
+  end
+
+  function backend.respond_permission(pane_id, option_id, scope)
+    local session = get_session(pane_id)
+    local pending = session and session.pending_permission or nil
+    if pending and session.client and next(session.client.pending_permission_requests or {}) == nil then
+      session.pending_permission = nil
+      pending = nil
+    end
+    if not pending or type(pending.respond) ~= "function" then return nil, "permission request is no longer pending" end
+    return pending.respond(option_id, scope)
+  end
+
+  function backend.get_thread_review(thread_id)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then return nil, err end
+    local turn = ChangeReview.latest_turn(thread)
+    if not turn then return { thread_id = thread_id, changes = {} } end
+    local changes = {}
+    for index, change in ipairs(turn.changes or {}) do
+      local preview, truncated = nil, false
+      if not change.binary then
+        local before = blob_store:get(change.before_blob)
+        local after = blob_store:get(change.review_blob or change.after_blob)
+        if type(before) == "string" and type(after) == "string" then
+          if #before + #after > 2 * 1024 * 1024 then
+            preview, truncated = "Diff omitted because the file pair exceeds 2 MiB.", true
+          else
+            preview = vim.diff(before, after, { result_type = "unified", algorithm = "histogram", ctxlen = 3 }) or ""
+            if #preview > 24000 then preview, truncated = preview:sub(1, 24000), true end
+          end
+        end
+      end
+      changes[#changes + 1] = {
+        index = index,
+        operation = change.operation,
+        path = change.path,
+        previous_path = change.previous_path,
+        binary = change.binary == true,
+        decision = change.decision,
+        apply_mode = change.apply_mode,
+        hunks = vim.deepcopy(change.hunks or {}),
+        diff = preview,
+        truncated = truncated,
+      }
+    end
+    return { thread_id = thread_id, turn_id = turn.turn_id, state = turn.state, changes = changes }
+  end
+
   function backend.show_thread_changes(thread_id)
     local thread, err = thread_store:get(thread_id)
     if not thread then

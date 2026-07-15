@@ -294,11 +294,21 @@ function M.setup(deps)
     vim.list_extend(session.permission_rules, PermissionStore.rules(session, store_opts))
     local tool = merge_tool_update(session, params.toolCall or {})
     local tool_path = (extract_tool_paths(tool) or {})[1]
+    local permission_finished = false
     local function respond(outcome, metadata)
+      if permission_finished then return false end
+      if session.client and next(session.client.pending_permission_requests or {}) == nil then
+        permission_finished = true
+        session.pending_permission = nil
+        return false
+      end
+      permission_finished = true
+      session.pending_permission = nil
       metadata = metadata or {}
       metadata.path = metadata.path or tool_path
       if permission_cfg.audit ~= false then PermissionStore.audit(session, tool, outcome, metadata, store_opts) end
       done(outcome)
+      return true
     end
     append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested", {
       kind = "tool",
@@ -401,41 +411,65 @@ function M.setup(deps)
 
     local labels, choices = PermissionStore.choices(params.options or {})
 
+    local function select_choice(choice)
+      if not choice then
+        local rejected = resolve_permission_option(params.options or {}, "reject_once")
+        if rejected then
+          return respond({ outcome = "selected", optionId = rejected.optionId }, { source = "manual", scope = "once" })
+        end
+        return respond({ outcome = "cancelled" }, { source = "manual", scope = "once" })
+      end
+      local audit_scope = choice.scope
+      if choice.scope == "session" or choice.scope == "project" or choice.scope == "global" then
+        local rule = PermissionStore.rule(session, tool, choice.option, choice.scope, tool_path)
+        local remembered, remember_err = PermissionStore.remember(session, choice.scope, rule, store_opts)
+        if remembered then
+          append_block(session, "System", string.format("Remembered `%s` permission for %s scope.",
+            choice.option.kind or "option", choice.scope))
+        else
+          audit_scope = "once"
+          append_block(session, "System", "Failed to remember permission: " .. tostring(remember_err))
+        end
+      end
+      pcall(function()
+        require("lazyagent.logic.status").start_monitor(session.agent_name)
+      end)
+      return respond({
+        outcome = "selected",
+        optionId = choice.option.optionId,
+      }, { source = "manual", scope = audit_scope })
+    end
+
+    local mobile_choices = {}
+    for index, choice in ipairs(choices) do
+      mobile_choices[index] = {
+        label = labels[index],
+        option_id = choice.option.optionId,
+        option_kind = choice.option.kind,
+        scope = choice.scope,
+      }
+    end
+    session.pending_permission = {
+      tool_call_id = tool.toolCallId,
+      title = tool.title or tool.toolCallId or "Tool permission",
+      kind = tool.kind,
+      path = tool_path,
+      choices = mobile_choices,
+      respond = function(option_id, scope)
+        for _, choice in ipairs(choices) do
+          if choice.option.optionId == option_id and choice.scope == scope then return select_choice(choice) end
+        end
+        return nil, "permission choice is no longer available"
+      end,
+    }
+
     notify_attention("permission", session, tool.title or tool.toolCallId or "Tool permission")
 
     vim.schedule(function()
       vim.ui.select(labels, {
         prompt = string.format("%s permission: %s", session.agent_name, tool.title or tool.toolCallId or "tool"),
       }, function(_, idx)
-          local choice = idx and choices[idx] or nil
-          if not choice then
-            local rejected = resolve_permission_option(params.options or {}, "reject_once")
-            if rejected then
-              respond({ outcome = "selected", optionId = rejected.optionId }, { source = "manual", scope = "once" })
-            else
-              respond({ outcome = "cancelled" }, { source = "manual", scope = "once" })
-            end
-            return
-          end
-          local audit_scope = choice.scope
-          if choice.scope == "session" or choice.scope == "project" or choice.scope == "global" then
-            local rule = PermissionStore.rule(session, tool, choice.option, choice.scope, tool_path)
-            local remembered, remember_err = PermissionStore.remember(session, choice.scope, rule, store_opts)
-            if remembered then
-              append_block(session, "System", string.format("Remembered `%s` permission for %s scope.",
-                choice.option.kind or "option", choice.scope))
-            else
-              audit_scope = "once"
-              append_block(session, "System", "Failed to remember permission: " .. tostring(remember_err))
-            end
-          end
-          pcall(function()
-            require("lazyagent.logic.status").start_monitor(session.agent_name)
-          end)
-          respond({
-            outcome = "selected",
-            optionId = choice.option.optionId,
-          }, { source = "manual", scope = audit_scope })
+        select_choice(idx and choices[idx] or nil)
         end)
     end)
   end

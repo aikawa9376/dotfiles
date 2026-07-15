@@ -276,7 +276,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] platform別binary archiveのmanaged install、SHA-256検証、path traversal防止を追加する。
 - [x] Zed/Neovim側MCP server configをnew/load/resume時にagentへforwardする。
 - [x] permissionにonce / session / project / global scopeとaudit logを追加する。
-- [ ] mobileからpermission、diff review、Keep/Reject、interruptを操作できるようにする。
+- [x] mobileからpermission、diff review、Keep/Reject、interruptを操作できるようにする。
 - [ ] protocol log viewer、capability inspector、session health reportを追加する。
 - [ ] event logからtranscript/runtime UIを再構築できるreplay modeを追加する。
 - [ ] ACP v2 adapterをoff-by-defaultのfeature flagとして試作する。

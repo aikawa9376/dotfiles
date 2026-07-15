@@ -294,7 +294,7 @@ ACP buffer view は section 境界で未閉じの fenced code block を表示上
 
 `:LazyAgentACPMobileQR` はACP mobile serverを起動し、スマホで開くためのQR codeを表示します。`:LazyAgentACPMobileStart` はURLだけを通知し、`:LazyAgentACPMobileStop` で停止します。
 
-このUIはMCP serverを起動せず、active ACP sessionの一覧、prompt送信、interruptだけを提供します。起動ごとにrandom bearer tokenを生成し、QR codeと通知URLへ含めます。未指定時は`127.0.0.1`でlocalhost限定です。LANのスマホから使う場合だけ `acp.mobile.host = "0.0.0.0"` を明示してください。LAN公開時は警告を表示し、token認証、Origin検証、request body上限を適用します。
+このUIはMCP serverを起動せず、active ACP sessionの一覧、prompt送信、interrupt、permission応答、最新turnのdiff reviewとfile単位Keep/Rejectを提供します。起動ごとにrandom bearer tokenを生成し、QR codeと通知URLへ含めます。未指定時は`127.0.0.1`でlocalhost限定です。LANのスマホから使う場合だけ `acp.mobile.host = "0.0.0.0"` を明示してください。LAN公開時は警告を表示し、token認証、Origin検証、request body上限を適用します。
 
 ### ACP local commands
 

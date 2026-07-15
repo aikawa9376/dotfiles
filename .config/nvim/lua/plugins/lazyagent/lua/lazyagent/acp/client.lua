@@ -951,15 +951,19 @@ function Client:_handle_server_request(id, method, params)
       session_id = params and params.sessionId or nil,
     }
     self.pending_permission_requests[id] = pending
-    local ok, err = pcall(handlers.request_permission, params or {}, function(outcome, callback_err)
-      self:_finish_permission_request(id, pending, outcome, callback_err)
+    vim.schedule(function()
+      if self.pending_permission_requests[id] ~= pending then return end
+      local ok, err = pcall(handlers.request_permission, params or {}, function(outcome, callback_err)
+        self:_finish_permission_request(id, pending, outcome, callback_err)
+      end)
+      if not ok then
+        self:_record_protocol_event("handler_error", { id = id, method = method, message = tostring(err) })
+        self:_finish_permission_request(id, pending, nil, {
+          code = ERR.internal,
+          message = tostring(err),
+        })
+      end
     end)
-    if not ok then
-      self:_finish_permission_request(id, pending, nil, {
-        code = ERR.internal,
-        message = tostring(err),
-      })
-    end
     return
   end
 

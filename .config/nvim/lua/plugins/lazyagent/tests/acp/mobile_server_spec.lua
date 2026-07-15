@@ -120,6 +120,12 @@ function M.run()
 
     local ui = request(host, port, "/?token=" .. token)
     assert_truthy(ui:match("HTTP/1%.1 200 OK"), "token URL accepted")
+    assert_truthy(ui:match("/api/permission") and ui:match("/api/review"), "mobile action UI served")
+
+    local no_actions = request(host, port, "/api/actions", {
+      "Authorization: Bearer " .. token,
+    })
+    assert_truthy(no_actions:match("HTTP/1%.1 400 Bad Request"), "actions require an active ACP session")
   end, debug.traceback)
 
   mobile.stop()
