@@ -99,6 +99,21 @@ function M.run()
   assert_equal(ContextItem.lower(previous_thread, {}).type, "text", "previous thread text lowering")
   vim.fn.delete(transcript_path)
 
+  local terminal = assert(ContextItem.terminal({
+    id = "lazyagent-term-4",
+    command = { "rg", "TODO", "." },
+    cwd = "/tmp/project",
+    output = "README.md:1:TODO",
+    truncated = true,
+    exit_status = { exitCode = 0, signal = vim.NIL },
+  }))
+  assert_equal(terminal.kind, "terminal", "terminal context kind")
+  assert_equal(terminal.terminal_id, "lazyagent-term-4", "terminal context identity")
+  assert(terminal.content:match("%$ rg TODO %."), "terminal command content")
+  assert(terminal.content:match("earlier terminal output truncated"), "terminal truncation content")
+  assert(terminal.content:match("exit code: 0"), "terminal status content")
+  assert_equal(ContextItem.lower(terminal, {}).type, "text", "terminal text lowering")
+
   local media_path = vim.fn.tempname() .. ".png"
   vim.fn.writefile({ "image fixture" }, media_path, "b")
   local media = assert(ContextItem.media({ path = media_path }))

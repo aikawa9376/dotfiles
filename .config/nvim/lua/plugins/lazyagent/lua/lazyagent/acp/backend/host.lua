@@ -116,6 +116,9 @@ function M.setup(deps)
 
     local terminal = {
       id = terminal_id,
+      command = vim.deepcopy(argv),
+      cwd = cwd,
+      created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
       output_limit = output_limit,
       output = "",
       truncated = false,

@@ -457,6 +457,10 @@ function M.get_scratch_completions(agent_name, opts)
         label = "previous-thread",
         desc = "Attach the latest matching thread transcript.",
       }
+      res.at[#res.at + 1] = {
+        label = "terminal",
+        desc = "Attach the latest retained ACP terminal output.",
+      }
     end
     if fd_paths and #fd_paths > 0 then
       vim.list_extend(res.at, fd_paths)

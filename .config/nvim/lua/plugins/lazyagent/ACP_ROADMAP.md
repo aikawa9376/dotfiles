@@ -211,6 +211,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] `@branch-diff`でworkspaceのtracked HEAD差分をsize上限付きContextItemとして添付する。
   - [x] `@symbol`でsource cursorを囲むTreesitter function / class nodeをContextItemとして添付する。
   - [x] `@previous-thread`で同provider・workspaceの直近thread transcriptをContextItemとして添付する。
+  - [x] `@terminal`で最新のretained ACP terminal output・command・exit statusをContextItemとして添付する。
 - [x] content hash、source version、size/token estimate、previewを保持する。
   - [x] text itemはSHA-256 / changedtickまたはfile stat / byte÷4 token概算 / whitespace compact previewを生成する。
 - [x] capabilityに応じてText / Image / EmbeddedResource / ResourceLinkへloweringする。

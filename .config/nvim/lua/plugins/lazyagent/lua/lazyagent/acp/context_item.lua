@@ -371,6 +371,50 @@ function M.previous_thread(thread, opts)
   return item
 end
 
+function M.terminal(terminal, opts)
+  opts = opts or {}
+  if type(terminal) ~= "table" then
+    return nil, "terminal is unavailable"
+  end
+  local id = tostring(terminal.id or opts.id or "terminal")
+  local parts = {}
+  if type(terminal.command) == "table" and #terminal.command > 0 then
+    parts[#parts + 1] = "$ " .. table.concat(vim.tbl_map(tostring, terminal.command), " ")
+  end
+  local output = tostring(terminal.output or "")
+  parts[#parts + 1] = output ~= "" and output or "[terminal has no output yet]"
+  if terminal.truncated == true then
+    parts[#parts + 1] = "[earlier terminal output truncated]"
+  end
+  if type(terminal.exit_status) == "table" then
+    parts[#parts + 1] = string.format(
+      "[exit code: %s, signal: %s]",
+      tostring(terminal.exit_status.exitCode),
+      terminal.exit_status.signal == vim.NIL and "none" or tostring(terminal.exit_status.signal)
+    )
+  else
+    parts[#parts + 1] = "[terminal still running]"
+  end
+  return enrich({
+    kind = "terminal",
+    source = "terminal",
+    inline = true,
+    path = terminal.cwd or vim.fn.getcwd(),
+    uri = "lazyagent://terminal/" .. vim.uri_encode(id),
+    display = id,
+    filetype = "text",
+    content = table.concat(parts, "\n"),
+    terminal_id = id,
+  }, {
+    preview_limit = opts.preview_limit,
+    source_version = {
+      terminal_id = id,
+      exit_code = terminal.exit_status and terminal.exit_status.exitCode or nil,
+      content_hash = vim.fn.sha256(output),
+    },
+  })
+end
+
 function M.lower(item, capabilities)
   capabilities = capabilities or {}
   if item.kind == "image" or item.kind == "audio" then
