@@ -43,6 +43,9 @@ function M.run()
   local audio = assert(Content.from_file(audio_path, { audio = true }))
   assert_equal("audio", audio.type, "audio type")
   assert_equal("audio/wav", audio.mimeType, "audio MIME")
+  local materialized_audio = assert(Content.materialize(audio, { cache_dir = output_cache }))
+  assert_equal("RIFFfixtureWAVE", table.concat(vim.fn.readfile(materialized_audio, "b"), "\n"),
+    "materialized audio bytes")
   local resource = {
     type = "resource",
     resource = { uri = "file:///blob", mimeType = "application/pdf", blob = "YWJj" },
@@ -52,6 +55,36 @@ function M.run()
   assert_equal("abc", table.concat(vim.fn.readfile(assert(Content.materialize(resource, {
     cache_dir = output_cache,
   })), "b"), "\n"), "materialized resource bytes")
+
+  local pdf_path = base .. "/fixture.pdf"
+  local pdf_bytes = "%PDF-1.7\0binary"
+  local pdf_file = assert(io.open(pdf_path, "wb"))
+  pdf_file:write(pdf_bytes)
+  pdf_file:close()
+  assert_equal(true, Content.is_binary_resource(pdf_path), "binary resource detection")
+  local linked_pdf = assert(Content.resource_from_file(pdf_path, { embedded_context = false }, {
+    title = "Fixture PDF",
+    description = "binary context",
+    annotations = { audience = { "assistant" }, priority = 0.8 },
+  }))
+  assert_equal("resource_link", linked_pdf.type, "resource link input")
+  assert_equal("application/pdf", linked_pdf.mimeType, "resource link MIME")
+  assert_equal(#pdf_bytes, linked_pdf.size, "resource link size")
+  assert_equal(0.8, linked_pdf.annotations.priority, "resource link annotations")
+  local rendered_link = Content.render(linked_pdf)
+  assert(rendered_link:match("Fixture PDF") and rendered_link:match("binary context"), "resource link metadata render")
+  local embedded_pdf = assert(Content.resource_from_file(pdf_path, { embedded_context = true }))
+  assert_equal("resource", embedded_pdf.type, "embedded blob input")
+  assert_equal(pdf_bytes, vim.base64.decode(embedded_pdf.resource.blob), "embedded blob bytes")
+
+  local too_small, size_err = Content.resource_from_file(pdf_path, { embedded_context = true }, { max_bytes = 4 })
+  assert_equal(nil, too_small, "oversize embedded resource")
+  assert(size_err:match("byte limit"), "oversize embedded resource reason")
+  local invalid, invalid_err = Content.materialize({
+    type = "image", mimeType = "image/png", data = "not!base64",
+  }, { cache_dir = output_cache })
+  assert_equal(nil, invalid, "invalid output base64")
+  assert(invalid_err:match("invalid base64"), "invalid output base64 reason")
 
   vim.fn.delete(base, "rf")
 end

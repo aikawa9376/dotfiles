@@ -73,6 +73,22 @@ function M.run()
   assert_equal("resource_link", url_blocks[2].type, "URL prompt resource link")
   assert_equal("https://example.com/acp", url_blocks[2].uri, "URL prompt URI")
 
+  local pdf_path = root .. "/manual.pdf"
+  local pdf_file = assert(io.open(pdf_path, "wb"))
+  pdf_file:write("%PDF-1.7\0prompt fixture")
+  pdf_file:close()
+  local linked_resource = actions.build_prompt_blocks({
+    root_dir = root, cwd = root, prompt_supports_embedded_context = false,
+  }, "inspect @manual.pdf")
+  assert_equal("resource_link", linked_resource[2].type, "binary prompt resource link")
+  assert_equal("application/pdf", linked_resource[2].mimeType, "binary prompt resource MIME")
+  local embedded_resource = actions.build_prompt_blocks({
+    root_dir = root, cwd = root, prompt_supports_embedded_context = true,
+  }, "inspect @manual.pdf")
+  assert_equal("resource", embedded_resource[2].type, "binary prompt embedded resource")
+  assert_equal("%PDF-1.7\0prompt fixture", vim.base64.decode(embedded_resource[2].resource.blob),
+    "binary prompt embedded bytes")
+
   vim.fn.delete(root, "rf")
 end
 
