@@ -321,6 +321,9 @@ local function resolve_from_config(agent_cfg)
     auto_permission = agent_acp.auto_permission or global_cfg.auto_permission,
     default_mode = agent_acp.default_mode or global_cfg.default_mode,
     initial_model = agent_acp.initial_model or global_cfg.initial_model,
+    additional_directories = vim.deepcopy(
+      agent_acp.additional_directories or global_cfg.additional_directories or {}
+    ),
     buffer_background = normalize_color(agent_acp.buffer_background or global_cfg.buffer_background),
     buffer_inactive_background = normalize_color(
       agent_acp.buffer_inactive_background or global_cfg.buffer_inactive_background

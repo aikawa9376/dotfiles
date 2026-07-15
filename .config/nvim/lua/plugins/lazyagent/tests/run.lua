@@ -11,6 +11,7 @@ package.path = table.concat({
 local suites = {
   "tests.acp.client_contract",
   "tests.acp.cancellation_spec",
+  "tests.acp.path_guard_spec",
 }
 
 local failures = {}

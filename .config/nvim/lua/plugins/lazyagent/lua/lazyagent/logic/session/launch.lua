@@ -82,6 +82,7 @@ function M.setup(deps)
       source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
       cwd = root_dir,
       root_dir = root_dir,
+      additional_directories = vim.deepcopy(acp.additional_directories or {}),
       env = env,
       auto_permission = acp.auto_permission,
       default_mode = acp.default_mode,

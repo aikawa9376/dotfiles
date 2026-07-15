@@ -113,7 +113,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 ### Host security
 
-- [ ] filesystem pathをrealpath化し、cwd / additional roots外とsymlink escapeを拒否する。
+- [x] filesystem pathをrealpath化し、cwd / additional roots外とsymlink escapeを拒否する。
 - [ ] writeをatomic化し、unsaved buffer・encoding・改行・同時編集の競合を検出する。
 - [ ] terminal cwdとpermission scopeを検証し、cancel時にkill/releaseまで保証する。
 - [ ] mobileにrandom bearer token、Origin/CORS検証、request body上限を追加する。
