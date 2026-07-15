@@ -35,6 +35,7 @@ function M.run()
     transcript_compaction = {},
     runtime_compaction = {},
     additional_directories = {},
+    mcp_servers = { { name = "fixture", command = "/bin/fixture", args = {}, env = {} } },
     permission_rules = {},
     auto_switch = {},
   }
@@ -105,6 +106,7 @@ function M.run()
   assert_equal(splits[2].agent_name, key_b, "second backend runtime key")
   assert_equal(splits[1].provider_id, "Codex", "first backend provider")
   assert_equal(splits[2].provider_id, "Codex", "second backend provider")
+  assert_equal(splits[1].mcp_servers[1].name, "fixture", "MCP servers forwarded to ACP backend")
   assert_equal(state.session_aliases.Codex, key_b, "legacy provider command alias")
 
   local reused_key

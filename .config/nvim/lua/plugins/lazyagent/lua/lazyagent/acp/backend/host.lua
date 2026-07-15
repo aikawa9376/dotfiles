@@ -828,6 +828,7 @@ function M.setup(deps)
       cwd = base_session.cwd or vim.fn.getcwd(),
       root_dir = base_session.root_dir,
       additional_directories = vim.deepcopy(base_session.additional_directories or {}),
+      mcp_servers = vim.deepcopy(base_session.mcp_servers or {}),
       mcp_url = base_session.mcp_url,
       auto_permission = base_session.auto_permission,
       default_mode = base_session.default_mode,
@@ -896,6 +897,7 @@ function M.setup(deps)
       command = temp_session.command,
       cwd = temp_session.cwd,
       env = temp_session.env,
+      mcp_servers = temp_session.mcp_servers,
       mcp_url = temp_session.mcp_url,
       client_info = {
         name = "lazyagent",
@@ -1002,6 +1004,7 @@ function M.setup(deps)
       cwd = session.cwd,
       additional_directories = session.additional_directories,
       env = session.env,
+      mcp_servers = session.mcp_servers,
       mcp_url = session.mcp_url,
       client_info = {
         name = "lazyagent",
@@ -1068,7 +1071,7 @@ function M.setup(deps)
       session.prompt_supports_embedded_context = prompt_caps and prompt_caps.embeddedContext == true
       session.prompt_supports_image = prompt_caps and prompt_caps.image == true
       session.prompt_supports_audio = prompt_caps and prompt_caps.audio == true
-      session.mcp_server_count = 0
+      session.mcp_server_count = #client:_build_mcp_servers()
       sync_runtime_session(session)
       sync_thread(session, {
         status = "active",

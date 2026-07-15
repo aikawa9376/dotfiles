@@ -2,6 +2,7 @@ local uv = vim.uv or vim.loop
 
 local Client = {}
 Client.__index = Client
+local mcp_servers = require("lazyagent.acp.mcp_servers")
 
 local PROTOCOL_VERSION = 1
 local ERR = {
@@ -512,21 +513,16 @@ function Client:_send_notification(method, params)
 end
 
 function Client:_build_mcp_servers()
-  local servers = {}
-  if type(self.mcp_servers) == "table" then
-    for _, server in ipairs(self.mcp_servers) do
-      table.insert(servers, vim.deepcopy(server))
-    end
-  end
-
   local caps = self.agent_capabilities and self.agent_capabilities.mcpCapabilities or {}
-  local supports_http = caps == nil or caps.http ~= false
-  if self.mcp_url and self.mcp_url ~= "" and supports_http then
+  local servers = mcp_servers.for_capabilities(mcp_servers.normalize(self.mcp_servers), caps)
+  if self.mcp_url and self.mcp_url ~= "" and caps.http == true then
     table.insert(servers, {
       type = "http",
       name = self.mcp_name,
       url = self.mcp_url,
-      headers = self.mcp_headers,
+      headers = mcp_servers.normalize({ {
+        type = "http", name = self.mcp_name, url = self.mcp_url, headers = self.mcp_headers,
+      } })[1].headers,
     })
   end
   return servers

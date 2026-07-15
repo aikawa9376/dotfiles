@@ -87,6 +87,7 @@ function M.setup(deps)
       cwd = root_dir,
       root_dir = root_dir,
       additional_directories = vim.deepcopy(acp.additional_directories or {}),
+      mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
       env = env,
       auto_permission = acp.auto_permission,
       default_mode = acp.default_mode,
