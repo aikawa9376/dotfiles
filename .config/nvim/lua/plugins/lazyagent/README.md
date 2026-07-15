@@ -336,6 +336,8 @@ ACP の command palette と config picker も advertise された説明・catego
 
 ACP agentがimage prompt capabilityを公開している場合、paste / screenshotで挿入された`@image-path`は送信時にfirst-class ACP Image blockへ変換されます。非対応agentには画像データを送信せず、理由をText blockとして渡します。
 
+Assistant messageやtool outputがimage / audio / blob resourceを返した場合は、payloadを`stdpath("cache")/lazyagent/acp/media`へcontent-addressed fileとして保存します。imageはtranscript内でinline previewされ、audio / resourceはMIME・size付きのlocal file参照として表示されます。
+
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
 ## MCP hooks

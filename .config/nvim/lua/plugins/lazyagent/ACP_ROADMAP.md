@@ -213,7 +213,8 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] selection / media / file・range / directoryのloweringをContextItemへ集約し、非対応mediaは送信せず理由をText表示する。
 - [x] input imageをfirst-class ACP Image blockとして送信する。
   - [x] paste / screenshotの`@path`をagent capabilityに応じてACP Imageへloweringし、非対応agentにはpayloadを送らず理由をText表示する。
-- [ ] assistant/tool outputのimage、audio、resourceをNeovim上で表示する。
+- [x] assistant/tool outputのimage、audio、resourceをNeovim上で表示する。
+  - [x] base64 payloadをcontent hash付きcacheへmaterializeし、imageはinline preview参照、audio/resourceはlocal file参照とmetadataを表示する。
 - [ ] slash commandのdescriptionとargument hintをcomposer completionへ表示する。
 
 ### Queue and thread UX
