@@ -1419,6 +1419,15 @@ function M.new(ctx)
         }
       end
 
+      if backend and type(backend.show_prompt_queue) == "function" then
+        actions[#actions + 1] = {
+          label = "Prompt queue",
+          action = function()
+            backend.show_prompt_queue(pane_id_for_bufnr(bufnr))
+          end,
+        }
+      end
+
       if backend and type(backend.show_tool_review) == "function" then
         actions[#actions + 1] = {
           label = "Tool review",

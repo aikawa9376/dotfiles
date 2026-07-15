@@ -226,8 +226,9 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 ### Queue and thread UX
 
-- [ ] queued promptのedit / remove / reorder / Send Nowを実装する。
-- [ ] ACP agent向けSend Nowはcancel-and-sendであることを表示する。
+- [x] queued promptのedit / remove / reorder / Send Nowを実装する。
+  - [x] stable queue item ID、backend API、action menu pickerを追加する。
+- [x] ACP agent向けSend Nowはcancel-and-sendであることを表示する。
 - [ ] thread内searchをmessage / thought / expanded tool outputへ対応させる。
 - [ ] user/assistant messageのcopy、thread Markdown exportを追加する。
 - [ ] pending permission / elicitation / completionをvisual・sound notificationへ接続する。

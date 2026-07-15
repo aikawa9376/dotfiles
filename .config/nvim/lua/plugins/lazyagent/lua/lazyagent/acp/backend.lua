@@ -17,6 +17,7 @@ local backend_conversation = require("lazyagent.acp.backend.conversation")
 local backend_config = require("lazyagent.acp.backend.config")
 local backend_actions = require("lazyagent.acp.backend.actions")
 local backend_cancellation = require("lazyagent.acp.backend.cancellation")
+local PromptQueue = require("lazyagent.acp.prompt_queue")
 local backend_host = require("lazyagent.acp.backend.host")
 local ThreadStore = require("lazyagent.acp.thread_store")
 local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
@@ -467,10 +468,11 @@ local function create_backend(default_view)
       return false
     end
 
-    local prompt = table.remove(session.prompt_queue, 1)
-    if not prompt then
+    local queued_prompt = PromptQueue.pop(session)
+    if not queued_prompt then
       return false
     end
+    local prompt = queued_prompt.text
 
     session.preparing_prompt = true
     config_helpers.maybe_apply_auto_switch(session, prompt, function()
@@ -520,11 +522,20 @@ local function create_backend(default_view)
             finalize_cancelled_tools(session)
           end
           finish_change_turn(session, cancel_requested and "cancelled" or "failed")
-          conversation_helpers.append_block(session, "Error", err.message or tostring(err))
-          pcall(function()
-            require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
-          end)
-          session.prompt_queue = {}
+          if cancel_requested then
+            conversation_helpers.append_block(session, "System", "Turn cancelled")
+            if #session.prompt_queue > 0 then
+              vim.schedule(function()
+                backend._drain_prompt_queue(pane_id)
+              end)
+            end
+          else
+            conversation_helpers.append_block(session, "Error", err.message or tostring(err))
+            pcall(function()
+              require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
+            end)
+            session.prompt_queue = {}
+          end
           return
         end
 
@@ -703,6 +714,7 @@ local function create_backend(default_view)
         current_stream_heading = nil,
         current_stream_at_line_start = nil,
         prompt_queue = {},
+        prompt_queue_seq = 0,
         tool_calls = {},
         terminals = {},
         available_commands = {},
@@ -1274,6 +1286,7 @@ local function create_backend(default_view)
         or nil,
       acp_view_timer_count = session.view_state and session.view_state.append_timer and 1 or 0,
       acp_terminal_count = table_count(session.terminals),
+      acp_prompt_queue = PromptQueue.list(session),
       acp_transcript_debug = {
         owned = session.transcript_path ~= nil and session.transcript_path ~= "",
         readable = session.transcript_path ~= nil and vim.fn.filereadable(session.transcript_path) == 1,
@@ -1614,8 +1627,86 @@ local function create_backend(default_view)
     if actions_helpers.handle_local_slash_command(session, prompt) then
       return "handled"
     end
-    table.insert(session.prompt_queue, prompt)
+    PromptQueue.push(session, prompt)
     backend._drain_prompt_queue(target_pane)
+    return true
+  end
+
+  function backend.list_prompt_queue(target_pane)
+    local session = get_session(target_pane)
+    return session and PromptQueue.list(session) or nil
+  end
+
+  function backend.edit_prompt_queue(target_pane, id, text)
+    local session = get_session(target_pane)
+    if not session then return nil, "ACP session not found" end
+    return PromptQueue.edit(session, id, text)
+  end
+
+  function backend.remove_prompt_queue(target_pane, id)
+    local session = get_session(target_pane)
+    if not session then return nil, "ACP session not found" end
+    return PromptQueue.remove(session, id)
+  end
+
+  function backend.move_prompt_queue(target_pane, id, delta)
+    local session = get_session(target_pane)
+    if not session then return nil, "ACP session not found" end
+    return PromptQueue.move(session, id, delta)
+  end
+
+  function backend.send_prompt_now(target_pane, id)
+    local session = get_session(target_pane)
+    if not session then return nil, "ACP session not found" end
+    local item, promote_err = PromptQueue.promote(session, id)
+    if not item then return nil, promote_err end
+    if session.busy == true or session.preparing_prompt == true then
+      session.cancel_requested = true
+      host_helpers.release_all_terminals(session)
+      session.client:cancel()
+      conversation_helpers.append_block(
+        session,
+        "System",
+        "Send Now: cancelling the current ACP turn before sending queued prompt " .. item.id
+      )
+      return item, "cancel-and-send"
+    end
+    backend._drain_prompt_queue(target_pane)
+    return item, "sent"
+  end
+
+  function backend.show_prompt_queue(target_pane)
+    local session = get_session(target_pane)
+    if not session then return false end
+    local items = PromptQueue.list(session)
+    if #items == 0 then
+      vim.notify("LazyAgent ACP prompt queue is empty", vim.log.levels.INFO)
+      return true
+    end
+    vim.ui.select(items, {
+      prompt = "Queued ACP prompts:",
+      format_item = function(item)
+        return string.format("%s  %s", item.id, tostring(item.text):gsub("%s+", " "):sub(1, 100))
+      end,
+    }, function(item)
+      if not item then return end
+      local actions = { "Edit", "Remove", "Move up", "Move down", "Send Now (cancel current turn)" }
+      vim.ui.select(actions, { prompt = "Queue action for " .. item.id .. ":" }, function(action)
+        if action == "Edit" then
+          vim.ui.input({ prompt = "Edit queued prompt: ", default = item.text }, function(value)
+            if value then backend.edit_prompt_queue(target_pane, item.id, value) end
+          end)
+        elseif action == "Remove" then
+          backend.remove_prompt_queue(target_pane, item.id)
+        elseif action == "Move up" then
+          backend.move_prompt_queue(target_pane, item.id, -1)
+        elseif action == "Move down" then
+          backend.move_prompt_queue(target_pane, item.id, 1)
+        elseif action == "Send Now (cancel current turn)" then
+          backend.send_prompt_now(target_pane, item.id)
+        end
+      end)
+    end)
     return true
   end
 
