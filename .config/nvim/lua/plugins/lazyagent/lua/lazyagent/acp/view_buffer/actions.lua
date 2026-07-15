@@ -2,7 +2,9 @@ local M = {}
 
 function M.new(ctx)
   local uv = vim.uv or vim.loop
+  local runtime_conversation_timeline = ctx.runtime_conversation_timeline
   local runtime_tool_timeline = ctx.runtime_tool_timeline
+  local ThreadSearch = require("lazyagent.acp.thread_search")
   local visible_conversation_context = ctx.visible_conversation_context
   local current_display_conversation_context = ctx.current_display_conversation_context or visible_conversation_context
   local section_text = ctx.section_text
@@ -753,6 +755,45 @@ function M.new(ctx)
     end)
   end
 
+  local function show_thread_search(bufnr)
+    vim.ui.input({ prompt = "Search ACP thread: " }, function(query)
+      if not query or vim.trim(query) == "" then return end
+      local results = ThreadSearch.search(
+        runtime_conversation_timeline(bufnr),
+        runtime_tool_timeline(bufnr),
+        query
+      )
+      if #results == 0 then
+        vim.notify("No ACP thread matches for: " .. query, vim.log.levels.INFO)
+        return
+      end
+      vim.ui.select(results, {
+        prompt = "ACP thread matches:",
+        format_item = function(result)
+          return string.format("[%s] %s - %s", result.kind, result.title, result.preview)
+        end,
+      }, function(result)
+        if not result then return end
+        local backend = backend_for_agent(agent_name_for_bufnr(bufnr))
+        if result.target == "tool" then
+          if backend and type(backend.show_tool_timeline_entry) == "function" then
+            backend.show_tool_timeline_entry(pane_id_for_bufnr(bufnr), result.tool_call_id)
+          end
+          return
+        end
+        local context = visible_conversation_context(bufnr)
+        local win = vim.fn.bufwinid(bufnr)
+        for index, item in ipairs(context and context.items or {}) do
+          if win ~= -1 and item and item.id == result.id and context.sections[index] then
+            jump_window_to_row(win, context.sections[index].start_row)
+            return
+          end
+        end
+        vim.notify("Match is outside the currently retained transcript view", vim.log.levels.INFO)
+      end)
+    end)
+  end
+
   local function toggle_current_pin(bufnr)
     local context = visible_conversation_context(bufnr)
     local item = context and context.item or nil
@@ -1376,6 +1417,12 @@ function M.new(ctx)
           label = "Outline",
           action = function()
             show_outline_picker(bufnr, false)
+          end,
+        },
+        {
+          label = "Search thread",
+          action = function()
+            show_thread_search(bufnr)
           end,
         },
         {
