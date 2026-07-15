@@ -224,7 +224,7 @@ local function test_stdio_contract(root)
     return #observed.updates == 3
       and #observed.errors == 1
       and #observed.permission_requests == 1
-      and #observed.protocol_events >= 2
+      and #observed.protocol_events >= 3
   end)
   assert_equal("end_turn", prompt_result.stopReason, "prompt stop reason")
   assert_equal("agent_message_chunk", observed.updates[1].update.sessionUpdate, "fragmented update")
@@ -238,6 +238,7 @@ local function test_stdio_contract(root)
   end
   assert_equal(true, event_kinds.parse_error, "parse error logged")
   assert_equal(true, event_kinds.unknown_update, "unknown update logged")
+  assert_equal(true, event_kinds.session_scope_mismatch, "wrong-session request logged")
   assert_equal(#observed.protocol_events, #client:get_protocol_events(), "protocol log retained")
   assert_equal("tool-1", observed.permission_requests[1].toolCall.toolCallId, "permission request")
 

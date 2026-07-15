@@ -47,6 +47,7 @@ local cancel_received = false
 local permission_cancelled = false
 local cancel_prompt_finished = false
 local authenticated = vim.env.LAZYAGENT_FAKE_AUTH_FLOW ~= "1"
+local scope_rejected = false
 
 local function has_additional_directory(params)
   local directories = params and params.additionalDirectories
@@ -56,7 +57,7 @@ local function has_additional_directory(params)
 end
 
 local function finish_prompt_if_ready()
-  if not pending_prompt_id or not permission_complete or not read_complete then
+  if not pending_prompt_id or not permission_complete or not read_complete or not scope_rejected then
     return
   end
   send(response(pending_prompt_id, {
@@ -301,6 +302,16 @@ for line in io.lines() do
           },
         },
       })
+      local wrong_session_request = encode({
+        jsonrpc = "2.0",
+        id = 899,
+        method = "session/request_permission",
+        params = {
+          sessionId = "other-session",
+          toolCall = { toolCallId = "wrong-session-tool", title = "Wrong session", status = "pending" },
+          options = {},
+        },
+      })
       local unknown_update = encode({
         jsonrpc = "2.0",
         method = "session/update",
@@ -326,6 +337,8 @@ for line in io.lines() do
           .. "\n"
           .. unknown_update
           .. "\n"
+          .. wrong_session_request
+          .. "\n"
           .. permission_request
           .. "\n"
           .. read_request
@@ -349,6 +362,14 @@ for line in io.lines() do
       })
     end
     finish_cancel_prompt_if_ready()
+  elseif message.id == 899 then
+    if message.error and message.error.code == -32602 then
+      scope_rejected = true
+    else
+      io.stderr:write("wrong-session request was not rejected\n")
+      io.stderr:flush()
+    end
+    finish_prompt_if_ready()
   elseif message.id == 900 then
     local outcome = message.result and message.result.outcome
     if outcome and outcome.outcome == "selected" and outcome.optionId == "allow-once" then
