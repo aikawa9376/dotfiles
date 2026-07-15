@@ -40,6 +40,7 @@ function M.setup(deps)
   local PathGuard = require("lazyagent.acp.backend.path_guard")
   local FileWriter = require("lazyagent.acp.backend.file_writer")
   local Terminals = require("lazyagent.acp.backend.terminals")
+  local MessageStream = require("lazyagent.acp.backend.message_stream")
 
   local function first_number(...)
     for idx = 1, select("#", ...) do
@@ -491,22 +492,30 @@ function M.setup(deps)
     if not params or not params.update then return end
     local update = params.update
     local kind = update.sessionUpdate
+    local message_stream = MessageStream.identity(update)
 
     if kind == "agent_message_chunk" then
       local text = render_content(update.content)
-      append_stream_chunk(session, "assistant", assistant_heading_label(session), text, {
-        kind = "assistant",
+      append_stream_chunk(session, message_stream.key, assistant_heading_label(session), text, {
+        kind = message_stream.kind,
+        messageId = message_stream.message_id,
       })
       return
     end
 
     if kind == "agent_thought_chunk" then
-      append_stream_chunk(session, "thought", "Thinking", render_content(update.content))
+      append_stream_chunk(session, message_stream.key, "Thinking", render_content(update.content), {
+        kind = message_stream.kind,
+        messageId = message_stream.message_id,
+      })
       return
     end
 
     if kind == "user_message_chunk" then
-      append_stream_chunk(session, "user", "User", render_content(update.content))
+      append_stream_chunk(session, message_stream.key, "User", render_content(update.content), {
+        kind = message_stream.kind,
+        messageId = message_stream.message_id,
+      })
       return
     end
 

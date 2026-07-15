@@ -104,7 +104,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] initialize responseのprotocol versionを検証し、不一致時はagent processを停止する。
 - [x] JSON-RPC request timeoutと`$/cancel_request`を実装する。
 - [x] cancel後のlate update、tool、permissionを正しく終端するstate machineを実装する。
-- [ ] `messageId`でassistant / thought messageを正しく束ねる。
+- [x] optionalな`messageId`でassistant / thought messageを束ね、未対応agentは従来heuristicへfallbackする。
 - [x] `session/delete`と`additionalDirectories`をclient APIへ実装する。
 - [ ] authentication / logout flowを実装する。
 - [x] `session.configOptions.boolean`をadvertiseし、select / booleanを共通UIで扱う。
