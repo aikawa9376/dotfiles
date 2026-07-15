@@ -121,6 +121,8 @@ local function json_response(status, payload, cors_origin)
   return http_response(status, "application/json; charset=utf-8", vim.fn.json_encode(payload or {}), nil, cors_origin)
 end
 
+local backend_for
+
 local function active_acp_sessions()
   local sessions = {}
   for name, session in pairs(state.sessions or {}) do
@@ -139,6 +141,9 @@ local function active_acp_sessions()
       elseif busy then
         status = "busy"
       end
+      local backend_mod = backend_for(name)
+      local pending_permission = backend_mod and type(backend_mod.get_pending_permission) == "function"
+        and backend_mod.get_pending_permission(session.pane_id) or nil
       sessions[#sessions + 1] = {
         name = name,
         pane_id = session.pane_id,
@@ -150,6 +155,7 @@ local function active_acp_sessions()
         queue = queue_size,
         model = session.current_model or session.model or session.acp_model,
         mode = session.current_mode or session.mode or session.acp_mode,
+        permission = pending_permission ~= nil,
       }
     end
   end
@@ -204,7 +210,7 @@ local function resolve_agent(agent_name)
   return nil, "No active ACP session"
 end
 
-local function backend_for(agent_name)
+backend_for = function(agent_name)
   local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, nil)
   return backend_mod
 end
@@ -251,6 +257,73 @@ local function interrupt_agent(agent_name)
     return false, "ACP backend rejected the interrupt"
   end
 
+  return true, nil, target
+end
+
+local function action_snapshot(agent_name)
+  local target, err = resolve_agent(agent_name)
+  if not target then return nil, err end
+  local session = state.sessions[target]
+  local backend_mod = backend_for(target)
+  if not backend_mod then return nil, "ACP backend is unavailable" end
+  local permission = type(backend_mod.get_pending_permission) == "function"
+    and backend_mod.get_pending_permission(session.pane_id) or nil
+  local thread_id = session.thread_id or session.acp_thread_id
+  local review = { changes = {} }
+  if type(backend_mod.get_thread_review) == "function" and thread_id then
+    local review_err
+    review, review_err = backend_mod.get_thread_review(thread_id)
+    if not review then return nil, review_err end
+  end
+  return { agent = target, permission = permission, review = review }, nil, target
+end
+
+local function respond_permission(agent_name, option_id, scope)
+  local target, err = resolve_agent(agent_name)
+  if not target then return false, err end
+  local session = state.sessions[target]
+  local backend_mod = backend_for(target)
+  if not backend_mod or type(backend_mod.respond_permission) ~= "function" then
+    return false, "ACP backend cannot answer permissions"
+  end
+  local ok, response_err = backend_mod.respond_permission(session.pane_id, tostring(option_id or ""), tostring(scope or "once"))
+  if not ok then return false, response_err end
+  return true, nil, target
+end
+
+local function decide_review(agent_name, body)
+  local target, err = resolve_agent(agent_name)
+  if not target then return false, err end
+  local session = state.sessions[target]
+  local backend_mod = backend_for(target)
+  local thread_id = session.thread_id or session.acp_thread_id
+  if not backend_mod or not thread_id then return false, "ACP review is unavailable" end
+  local decision = body.decision == "keep" and "kept" or body.decision == "reject" and "rejected" or body.decision
+  if decision ~= "kept" and decision ~= "rejected" then return false, "decision must be keep or reject" end
+  local turn_id = tostring(body.turn_id or "")
+  if turn_id == "" then return false, "turn_id is required" end
+  local result, decision_err
+  if body.change_index and body.hunk_index then
+    local change_index, hunk_index = tonumber(body.change_index), tonumber(body.hunk_index)
+    if not change_index or change_index < 1 or change_index % 1 ~= 0
+      or not hunk_index or hunk_index < 1 or hunk_index % 1 ~= 0
+    then
+      return false, "change_index and hunk_index must be positive integers"
+    end
+    result, decision_err = backend_mod.decide_thread_hunk(
+      thread_id, turn_id, change_index, hunk_index, decision
+    )
+  else
+    local indices = {}
+    for _, index in ipairs(type(body.indices) == "table" and body.indices or {}) do
+      index = tonumber(index)
+      if not index or index < 1 or index % 1 ~= 0 then return false, "indices must contain positive integers" end
+      indices[#indices + 1] = index
+    end
+    if #indices == 0 then return false, "indices are required" end
+    result, decision_err = backend_mod.decide_thread_changes(thread_id, turn_id, indices, decision)
+  end
+  if not result then return false, decision_err end
   return true, nil, target
 end
 
@@ -474,6 +547,21 @@ local WEB_UI = [=[
       grid-template-columns: minmax(0, 1fr) 92px 108px;
       gap: 8px;
     }
+    .action-card {
+      display: grid;
+      gap: 8px;
+      padding: 9px;
+      border: 1px solid var(--warn);
+      border-radius: 6px;
+      background: var(--surface-2);
+      font-size: 12px;
+    }
+    .choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .review-list { display: grid; gap: 8px; margin-top: 8px; max-height: 34dvh; overflow-y: auto; }
+    .review-item { padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+    .review-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 700; }
+    .review-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 7px; }
+    .diff { max-height: 180px; overflow: auto; white-space: pre; font: 11px/1.4 ui-monospace, monospace; color: var(--muted); }
     details {
       border-top: 1px solid var(--line);
       padding-top: 8px;
@@ -553,12 +641,17 @@ local WEB_UI = [=[
     </section>
 
     <section class="composer">
+      <div class="action-card" id="permissionPanel" hidden></div>
       <textarea id="prompt" placeholder="Prompt"></textarea>
       <div class="actions">
         <button class="primary" id="send">Send</button>
         <button id="mic">Mic</button>
         <button class="danger" id="interrupt">Interrupt</button>
       </div>
+      <details id="reviewDetails" hidden>
+        <summary id="reviewSummary">Review changes</summary>
+        <div class="review-list" id="reviewList"></div>
+      </details>
       <details>
         <summary>Sessions</summary>
         <div class="agents" id="agents"></div>
@@ -573,6 +666,10 @@ local WEB_UI = [=[
     const micButton = document.getElementById('mic');
     const interruptButton = document.getElementById('interrupt');
     const latestButton = document.getElementById('latest');
+    const permissionPanel = document.getElementById('permissionPanel');
+    const reviewDetails = document.getElementById('reviewDetails');
+    const reviewSummary = document.getElementById('reviewSummary');
+    const reviewList = document.getElementById('reviewList');
     const statusEl = document.getElementById('status');
     const agentsEl = document.getElementById('agents');
     const transcriptEl = document.getElementById('transcript');
@@ -750,8 +847,109 @@ local WEB_UI = [=[
         if (selectedAgent() !== before || lastTranscriptKey === '') {
           await refreshTranscript();
         }
+        await refreshActions();
       } catch (err) {
         setStatus('Disconnected');
+      }
+    }
+
+    async function answerPermission(choice) {
+      try {
+        await api('/api/permission', {
+          method: 'POST',
+          body: JSON.stringify({ agent: selectedAgent(), option_id: choice.option_id, scope: choice.scope }),
+        });
+        setStatus('Permission answered');
+        await refreshActions();
+      } catch (err) {
+        setStatus(err.message);
+      }
+    }
+
+    async function decideChange(turnId, indices, decision) {
+      if (decision === 'reject' && !confirm('Reject selected changes and restore the previous content?')) return;
+      try {
+        await api('/api/review', {
+          method: 'POST',
+          body: JSON.stringify({ agent: selectedAgent(), turn_id: turnId, indices, decision }),
+        });
+        setStatus(decision === 'keep' ? 'Changes kept' : 'Changes rejected');
+        await refreshActions();
+        await refreshTranscript();
+      } catch (err) {
+        setStatus(err.message);
+        alert(err.message);
+      }
+    }
+
+    function renderActions(payload) {
+      const permission = payload.permission;
+      permissionPanel.hidden = !permission;
+      permissionPanel.textContent = '';
+      if (permission) {
+        const title = document.createElement('strong');
+        title.textContent = permission.title || 'Permission required';
+        const meta = document.createElement('span');
+        meta.textContent = [permission.kind, permission.path].filter(Boolean).join(' / ');
+        const choices = document.createElement('div');
+        choices.className = 'choice-grid';
+        for (const choice of permission.choices || []) {
+          const button = document.createElement('button');
+          button.textContent = choice.label;
+          if (String(choice.option_kind || '').startsWith('reject')) button.className = 'danger';
+          button.addEventListener('click', () => answerPermission(choice));
+          choices.appendChild(button);
+        }
+        permissionPanel.append(title, meta, choices);
+      }
+
+      const review = payload.review || {};
+      const changes = review.changes || [];
+      reviewDetails.hidden = changes.length === 0;
+      reviewSummary.textContent = 'Review changes (' + changes.filter(change => !change.decision).length + ' pending)';
+      reviewList.textContent = '';
+      for (const change of changes) {
+        const item = document.createElement('div');
+        item.className = 'review-item';
+        const head = document.createElement('div');
+        head.className = 'review-head';
+        const path = document.createElement('span');
+        path.textContent = (change.operation || '?') + ' ' + (change.path || 'unknown');
+        const state = document.createElement('span');
+        state.textContent = change.decision || 'pending';
+        head.append(path, state);
+        item.appendChild(head);
+        if (change.diff) {
+          const diff = document.createElement('pre');
+          diff.className = 'diff';
+          diff.textContent = change.diff + (change.truncated ? '\n… truncated' : '');
+          item.appendChild(diff);
+        }
+        if (!change.decision) {
+          const buttons = document.createElement('div');
+          buttons.className = 'review-buttons';
+          const keep = document.createElement('button');
+          keep.textContent = 'Keep';
+          keep.addEventListener('click', () => decideChange(review.turn_id, [change.index], 'keep'));
+          const reject = document.createElement('button');
+          reject.className = 'danger';
+          reject.textContent = 'Reject';
+          reject.addEventListener('click', () => decideChange(review.turn_id, [change.index], 'reject'));
+          buttons.append(keep, reject);
+          item.appendChild(buttons);
+        }
+        reviewList.appendChild(item);
+      }
+    }
+
+    async function refreshActions() {
+      const agent = selectedAgent();
+      if (!agent) { renderActions({}); return; }
+      try {
+        renderActions(await api('/api/actions?agent=' + encodeURIComponent(agent)));
+      } catch (err) {
+        permissionPanel.hidden = true;
+        reviewDetails.hidden = true;
       }
     }
 
@@ -813,6 +1011,7 @@ local WEB_UI = [=[
         try { payload = JSON.parse(event.data || '{}'); } catch (_) {}
         if (!payload.agent || payload.agent === selectedAgent()) {
           refreshTranscript();
+          refreshActions();
         }
         scheduleStatusRefresh();
       });
@@ -837,6 +1036,7 @@ local WEB_UI = [=[
       followTranscript = true;
       renderStatus({ agents: knownAgents, default_agent: selectedAgent() });
       refreshTranscript();
+      refreshActions();
     });
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1176,6 +1376,14 @@ local function handle_request(req)
     }, cors_origin)
   end
 
+  if req.method == "GET" and path == "/api/actions" then
+    local params = query_params(req.path)
+    local snapshot, err = action_snapshot(params.agent or params.agent_name)
+    if not snapshot then return json_response("400 Bad Request", { ok = false, error = err }, cors_origin) end
+    snapshot.ok = true
+    return json_response("200 OK", snapshot, cors_origin)
+  end
+
   if req.method == "POST" and path == "/api/send" then
     local body, body_err = read_json_body(req)
     if not body then
@@ -1197,6 +1405,22 @@ local function handle_request(req)
     if not ok then
       return json_response("400 Bad Request", { ok = false, error = err }, cors_origin)
     end
+    return json_response("200 OK", { ok = true, agent = agent }, cors_origin)
+  end
+
+  if req.method == "POST" and path == "/api/permission" then
+    local body, body_err = read_json_body(req)
+    if not body then return json_response("400 Bad Request", { ok = false, error = body_err }, cors_origin) end
+    local ok, err, agent = respond_permission(body.agent or body.agent_name, body.option_id, body.scope)
+    if not ok then return json_response("409 Conflict", { ok = false, error = err }, cors_origin) end
+    return json_response("200 OK", { ok = true, agent = agent }, cors_origin)
+  end
+
+  if req.method == "POST" and path == "/api/review" then
+    local body, body_err = read_json_body(req)
+    if not body then return json_response("400 Bad Request", { ok = false, error = body_err }, cors_origin) end
+    local ok, err, agent = decide_review(body.agent or body.agent_name, body)
+    if not ok then return json_response("409 Conflict", { ok = false, error = err }, cors_origin) end
     return json_response("200 OK", { ok = true, agent = agent }, cors_origin)
   end
 

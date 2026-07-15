@@ -81,6 +81,29 @@ function M.run()
   assert(persisted.process_id ~= nil, "process identity persistence")
   assert_equal(persisted.transcript_path, runtime.acp_transcript_path, "transcript persistence")
 
+  local previous_select = vim.ui.select
+  vim.ui.select = function() end
+  state.opts.acp.auto_permission = nil
+  state.opts.acp_auto_permission = nil
+  state.opts.acp.permission_rules = {}
+  state.opts.acp_permission_rules = {}
+  state._fix_requested = false
+  assert(backend.paste_and_submit(pane_id, "exercise mobile permission", { "C-m" }, {}))
+  local permission_pending = vim.wait(3000, function() return backend.get_pending_permission(pane_id) ~= nil end, 10)
+  assert(permission_pending, "backend permission should become pending: " .. vim.inspect({
+    client = backend.get_runtime_snapshot(pane_id).acp_client_debug,
+    events = backend.get_runtime_snapshot(pane_id).acp_protocol_events,
+    acp = state.opts.acp,
+  }))
+  local pending = backend.get_pending_permission(pane_id)
+  assert_equal(pending.tool_call_id, "tool-1", "pending permission tool")
+  assert(vim.tbl_contains(vim.tbl_map(function(choice) return choice.scope end, pending.choices), "project"),
+    "pending permission project scope")
+  assert(backend.respond_permission(pane_id, "allow-once", "project"))
+  assert_equal(backend.get_pending_permission(pane_id), nil, "mobile permission response clears pending state")
+  state.opts.acp.auto_permission = "allow_once"
+  vim.ui.select = previous_select
+
   local export_path = cache_dir .. "/exports/thread.md"
   assert_equal(backend.export_thread_markdown(pane_id, export_path), export_path, "thread Markdown export path")
   local exported_markdown = table.concat(vim.fn.readfile(export_path), "\n")
@@ -89,9 +112,13 @@ function M.run()
 
   assert(backend.update_thread(runtime.acp_thread_id, {
     change_journal = {
-      turns = { { turn_id = runtime.acp_thread_id .. ":checkpoint", changes = {} } },
+      turns = { { turn_id = runtime.acp_thread_id .. ":checkpoint", changes = {
+        { operation = "modified", path = "fixture.bin", binary = true },
+      } } },
     },
   }))
+  local review = assert(backend.get_thread_review(runtime.acp_thread_id))
+  assert_equal(review.changes[1].path, "fixture.bin", "mobile review snapshot")
   local branch = assert(backend.branch_thread_checkpoint(runtime.acp_thread_id, runtime.acp_thread_id .. ":checkpoint"))
   assert_equal(branch.metadata.client_local_branch, true, "checkpoint local branch")
   assert_equal(branch.metadata.parent_thread_id, runtime.acp_thread_id, "checkpoint branch parent")
