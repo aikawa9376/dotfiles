@@ -19,6 +19,7 @@ local backend_actions = require("lazyagent.acp.backend.actions")
 local backend_cancellation = require("lazyagent.acp.backend.cancellation")
 local PromptQueue = require("lazyagent.acp.prompt_queue")
 local ThreadExport = require("lazyagent.acp.thread_export")
+local Notifications = require("lazyagent.acp.notifications")
 local backend_host = require("lazyagent.acp.backend.host")
 local ThreadStore = require("lazyagent.acp.thread_store")
 local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
@@ -446,6 +447,10 @@ local function create_backend(default_view)
     util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = pending.result })
     util.fire_event("TurnDone", { agent_name = session.agent_name, result = pending.result })
     actions_helpers.maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
+    Notifications.emit(((state.opts or {}).acp or {}).notifications, "completion", {
+      agent_name = session.agent_name,
+      message = "Response completed",
+    })
     config_helpers.maybe_save_turn_to_brain(session, pending.prompt, pending.start_seq)
     return true
   end

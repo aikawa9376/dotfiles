@@ -43,6 +43,14 @@ function M.setup(deps)
   local FileWriter = require("lazyagent.acp.backend.file_writer")
   local Terminals = require("lazyagent.acp.backend.terminals")
   local MessageStream = require("lazyagent.acp.backend.message_stream")
+  local Notifications = require("lazyagent.acp.notifications")
+
+  local function notify_attention(kind, session, message)
+    return Notifications.emit(((state.opts or {}).acp or {}).notifications, kind, {
+      agent_name = session and session.agent_name or nil,
+      message = message,
+    })
+  end
 
   local function first_number(...)
     for idx = 1, select("#", ...) do
@@ -378,6 +386,8 @@ function M.setup(deps)
     for _, option in ipairs(params.options or {}) do
       table.insert(labels, string.format("%s [%s]", option.name or option.optionId or "Option", option.kind or "option"))
     end
+
+    notify_attention("permission", session, tool.title or tool.toolCallId or "Tool permission")
 
     vim.schedule(function()
       vim.ui.select(labels, {
@@ -960,7 +970,10 @@ function M.setup(deps)
       request_permission = function(params, done)
         handle_permission_request(session, params, done)
       end,
-      select_auth_method = select_auth_method,
+      select_auth_method = function(methods, done)
+        notify_attention("elicitation", session, "Choose an authentication method")
+        select_auth_method(methods, done)
+      end,
       read_text_file = function(params)
         return read_text_file(session, params)
       end,
