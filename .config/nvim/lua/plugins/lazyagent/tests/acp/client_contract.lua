@@ -37,6 +37,7 @@ local function new_client(root, overrides)
   local permission_requests = {}
   local protocol_events = {}
   local deferred_permission_done
+  local auth_selections = {}
 
   local opts = {
     command = {
@@ -72,6 +73,10 @@ local function new_client(root, overrides)
           })
         end
       end,
+      select_auth_method = overrides.select_auth_method and function(methods, done)
+        auth_selections[#auth_selections + 1] = methods
+        overrides.select_auth_method(methods, done)
+      end or nil,
     },
     on_update = function(params)
       updates[#updates + 1] = params
@@ -101,7 +106,49 @@ local function new_client(root, overrides)
     deferred_permission_done = function()
       return deferred_permission_done
     end,
+    auth_selections = auth_selections,
   }
+end
+
+local function test_authentication_flow(root)
+  local client, observed = new_client(root, {
+    env = { LAZYAGENT_FAKE_AUTH_FLOW = "1" },
+    select_auth_method = function(methods, done)
+      assert_equal("test-auth", methods[1].id, "advertised auth method")
+      done(methods[1].id)
+    end,
+  })
+  local started
+  local start_err
+  client:start(function(result, err)
+    started = result
+    start_err = err
+  end)
+  wait_for("authenticated client startup", function() return started ~= nil or start_err ~= nil end)
+  assert_equal(nil, start_err, "authenticated startup error")
+  assert_equal(1, #observed.auth_selections, "authentication picker count")
+  assert_equal(true, client:supports_logout(), "logout capability")
+
+  local logged_out = false
+  client:logout(function(_, err)
+    assert_equal(nil, err, "logout error")
+    logged_out = true
+  end)
+  wait_for("logout response", function() return logged_out end)
+
+  local auth_error
+  client:new_session(function(_, err)
+    auth_error = err
+  end)
+  wait_for("post-logout auth required", function() return auth_error ~= nil end)
+  assert_equal(-32000, auth_error.code, "post-logout auth error")
+
+  local closed = false
+  client:close_session(nil, function()
+    closed = true
+  end)
+  wait_for("auth test close", function() return closed end)
+  wait_for("auth test exit", function() return #observed.exits == 1 end)
 end
 
 local function test_capability_semantics()
@@ -363,6 +410,7 @@ function M.run()
   test_protocol_mismatch_stops_process(root)
   test_request_timeout_sends_cancellation(root)
   test_cancel_settles_late_updates(root)
+  test_authentication_flow(root)
 end
 
 return M

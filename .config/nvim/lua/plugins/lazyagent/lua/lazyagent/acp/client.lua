@@ -535,6 +535,15 @@ function Client:supports_session_load()
   return self.agent_capabilities and self.agent_capabilities.loadSession == true
 end
 
+function Client:supports_logout()
+  local auth = self.agent_capabilities and self.agent_capabilities.auth or nil
+  if type(auth) ~= "table" then
+    return false
+  end
+  local capability = auth.logout
+  return capability ~= nil and capability ~= false and capability ~= vim.NIL
+end
+
 function Client:_build_session_params(session_id)
   local params = {
     cwd = self.cwd,
@@ -571,6 +580,79 @@ function Client:_ensure_connected(callback)
     message = "ACP client is not connected",
   })
   return false
+end
+
+function Client:authenticate(method_id, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then
+    return
+  end
+  local advertised = false
+  for _, method in ipairs(self.auth_methods or {}) do
+    if type(method) == "table" and tostring(method.id or "") == tostring(method_id or "") then
+      advertised = true
+      break
+    end
+  end
+  if not advertised then
+    callback(nil, {
+      code = ERR.invalid_params,
+      message = "ACP authentication method was not advertised: " .. tostring(method_id),
+    })
+    return
+  end
+  self:_send_request("authenticate", { methodId = method_id }, callback)
+end
+
+function Client:logout(callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then
+    return
+  end
+  if not self:supports_logout() then
+    callback(nil, {
+      code = ERR.invalid_request,
+      message = "ACP agent does not support logout",
+    })
+    return
+  end
+  self:_send_request("logout", vim.empty_dict(), callback)
+end
+
+function Client:_authenticate_for_session(callback)
+  local methods = vim.deepcopy(self.auth_methods or {})
+  local picker = self.handlers and self.handlers.select_auth_method or nil
+  if #methods == 0 or type(picker) ~= "function" then
+    callback(nil, {
+      code = ERR.transport,
+      message = "ACP authentication is required but no supported authentication method is available",
+    })
+    return
+  end
+
+  local finished = false
+  local function selected(method_id, select_err)
+    if finished then
+      return
+    end
+    finished = true
+    if select_err or not method_id then
+      callback(nil, select_err or {
+        code = ERR.transport,
+        message = "ACP authentication was cancelled",
+      })
+      return
+    end
+    self:authenticate(method_id, callback)
+  end
+  local ok, err = pcall(picker, methods, selected)
+  if not ok then
+    selected(nil, { code = ERR.internal, message = tostring(err) })
+  end
+end
+
+function Client:request_authentication(callback)
+  self:_authenticate_for_session(callback or function() end)
 end
 
 function Client:new_session(callback)
@@ -1075,7 +1157,21 @@ function Client:start(callback, opts)
       end
 
       local mode = opts.session_mode or "new"
+      local attempted_auth = false
+      local start_session
       local done = function(session_result, session_err)
+        if session_err and tonumber(session_err.code) == -32000 and not attempted_auth then
+          attempted_auth = true
+          self:_authenticate_for_session(function(_, auth_err)
+            if auth_err then
+              self:stop()
+              callback(nil, auth_err)
+              return
+            end
+            start_session()
+          end)
+          return
+        end
         if session_err then
           self:stop()
           callback(nil, session_err)
@@ -1087,13 +1183,16 @@ function Client:start(callback, opts)
         callback(client, nil, session_result or {})
       end
 
-      if mode == "load" then
-        self:load_session(opts.session_id, done)
-      elseif mode == "resume" then
-        self:resume_session(opts.session_id, done)
-      else
-        self:new_session(done)
+      start_session = function()
+        if mode == "load" then
+          self:load_session(opts.session_id, done)
+        elseif mode == "resume" then
+          self:resume_session(opts.session_id, done)
+        else
+          self:new_session(done)
+        end
       end
+      start_session()
     end)
   end)
 end

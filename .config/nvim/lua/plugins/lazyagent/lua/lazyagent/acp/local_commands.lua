@@ -1,6 +1,6 @@
 local M = {}
 
-local ordered_names = { "config", "model", "mode", "resources", "capabilities", "doctor", "context", "tools", "new" }
+local ordered_names = { "config", "model", "mode", "auth", "logout", "resources", "capabilities", "doctor", "context", "tools", "new" }
 
 local commands = {
   config = {
@@ -20,6 +20,18 @@ local commands = {
     label = "/mode",
     desc = "Open a local ACP mode picker.",
     doc = "Open a local ACP mode picker instead of sending `/mode` as plain text.",
+  },
+  auth = {
+    name = "auth",
+    label = "/auth",
+    desc = "Authenticate with an advertised ACP method.",
+    doc = "Choose an authentication method advertised by the active ACP agent.",
+  },
+  logout = {
+    name = "logout",
+    label = "/logout",
+    desc = "End the ACP agent's authenticated state.",
+    doc = "Call ACP logout when the active agent advertises auth.logout.",
   },
   resources = {
     name = "resources",
@@ -150,6 +162,13 @@ function M.is_available(name, session)
       or (session.transcript_path and session.transcript_path ~= "")
       or (session.acp_transcript_path and session.acp_transcript_path ~= "")
   end
+  if name == "auth" then
+    local methods = session.auth_methods or session.acp_auth_methods
+    return type(methods) == "table" and #methods > 0
+  end
+  if name == "logout" then
+    return session.client ~= nil and type(session.client.supports_logout) == "function" and session.client:supports_logout()
+  end
   if name == "capabilities" then
     return true
   end
@@ -183,6 +202,12 @@ function M.unavailable_reason(name, session)
   end
   if name == "resources" then
     return "No ACP resource references are available for this session yet."
+  end
+  if name == "auth" then
+    return "This ACP agent did not advertise an authentication method."
+  end
+  if name == "logout" then
+    return "This ACP agent does not advertise auth.logout."
   end
   return "This ACP action is not available for the current session."
 end
