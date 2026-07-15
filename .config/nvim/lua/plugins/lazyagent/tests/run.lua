@@ -33,6 +33,7 @@ local suites = {
   "tests.acp.mcp_servers_spec",
   "tests.acp.permission_store_spec",
   "tests.acp.protocol_log_spec",
+  "tests.acp.replay_spec",
   "tests.acp.view_lifecycle_spec",
   "tests.acp.thread_store_spec",
   "tests.acp.workspace_snapshot_spec",

@@ -382,6 +382,8 @@ permission pickerではagent native optionに加え、Allow/Rejectをsession・p
 
 `:LazyAgentACPProtocolLog`はsession単位のprotocol flight recorderを開きます。JSONLは0600でcacheへ保存され、MCP headers、env、token/key/password系fieldを記録前にredactします。`:LazyAgentACPCapabilities`と`:LazyAgentACPDoctor`でcapability matrixとsession healthも確認できます。
 
+`:LazyAgentACPReplay`はflight recorderからその時点のruntime stateとtranscriptを再構築します。replay bufferでは`h`/`l`でeventを前後し、`gg`/`G`で先頭/最新へ移動できます。active logは16MiBで`.1`へrotateします。
+
 `acp.brain_save.enabled = true` を入れると、ACP の各 turn 完了後に lazyagent 側から `ai-memory-cli save` を呼びます。既定では `skills.bin_dir`（未指定なら `lazyagent/bin`）配下の `ai-memory-cli` を探し、transcript file ではなく turn の `user/assistant` payload をそのまま stdin で渡します。別コマンドを使いたい場合だけ `acp.brain_save.command = { "/absolute/path/to/ai-memory-cli", "save" }` を指定してください。
 
 ## MCP hooks

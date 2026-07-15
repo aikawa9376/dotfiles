@@ -278,7 +278,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] permissionにonce / session / project / global scopeとaudit logを追加する。
 - [x] mobileからpermission、diff review、Keep/Reject、interruptを操作できるようにする。
 - [x] protocol log viewer、capability inspector、session health reportを追加する。
-- [ ] event logからtranscript/runtime UIを再構築できるreplay modeを追加する。
+- [x] event logからtranscript/runtime UIを再構築できるreplay modeを追加する。
 - [ ] ACP v2 adapterをoff-by-defaultのfeature flagとして試作する。
 
 ## Experimental ideas
