@@ -95,7 +95,7 @@ function M.render(threads, runtimes)
   local lines = {
     "# LazyAgent ACP Session Cockpit",
     "",
-    "`<CR>` open  `/` filter  `p` pin  `a` archive/restore  `c` cleanup worktree  `d` delete  `X` bulk close  `r` refresh  `q` close",
+    "`<CR>` open  `/` filter  `p` pin  `t` test  `a` archive/restore  `c` cleanup worktree  `d` delete  `X` bulk close  `r` refresh  `q` close",
   }
   local line_map = {}
   if #paths == 0 then
@@ -123,6 +123,8 @@ function M.render(threads, runtimes)
       local pin = thread.metadata and thread.metadata.cockpit_pinned == true and "★ " or ""
       local conflict_count = vim.tbl_count(conflicts[thread.thread_id] or {})
       local conflict = conflict_count > 0 and (" · ⚠conflicts:" .. tostring(conflict_count)) or ""
+      local test = thread.metadata and thread.metadata.test_result or nil
+      local test_label = test and (" · test:" .. tostring(test.status)) or ""
       lines[#lines + 1] = string.format(
         "- %s[%s] %s · %s · model:%s · %s · usage:%s · changes:%d%s",
         pin,
@@ -133,7 +135,7 @@ function M.render(threads, runtimes)
         unread,
         usage_label(runtime),
         changes,
-        conflict
+        conflict .. test_label
       )
       line_map[#lines] = thread.thread_id
     end
