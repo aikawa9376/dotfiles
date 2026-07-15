@@ -253,6 +253,44 @@ function Store:_write(manifest)
   return true
 end
 
+function Store:_acquire_lock()
+  local started = uv.hrtime()
+  while true do
+    local fd, err = uv.fs_open(self.lock_path, "wx", 384)
+    if fd then
+      return fd
+    end
+
+    local stat = uv.fs_stat(self.lock_path)
+    local modified = stat and stat.mtime and (stat.mtime.sec or stat.mtime) or nil
+    if modified and os.time() - tonumber(modified) >= self.stale_lock_seconds then
+      pcall(uv.fs_unlink, self.lock_path)
+    elseif (uv.hrtime() - started) / 1000000 >= self.lock_timeout_ms then
+      return nil, "thread store lock timeout: " .. tostring(err or "manifest is locked")
+    else
+      vim.wait(10)
+    end
+  end
+end
+
+function Store:_with_lock(callback)
+  local ok_dir, dir_err = self:_ensure_dir()
+  if not ok_dir then
+    return nil, dir_err
+  end
+  local fd, lock_err = self:_acquire_lock()
+  if not fd then
+    return nil, lock_err
+  end
+  local ok, first, second, third = pcall(callback)
+  pcall(uv.fs_close, fd)
+  pcall(uv.fs_unlink, self.lock_path)
+  if not ok then
+    return nil, first
+  end
+  return first, second, third
+end
+
 function Store:load()
   local manifest, warning = self:_read()
   if not manifest then
@@ -293,74 +331,78 @@ end
 
 function Store:create(attributes)
   attributes = copy(attributes or {})
-  local manifest, warning = self:_read()
-  if not manifest then
-    return nil, warning
-  end
-  local uuid_err
-  if not attributes.thread_id then
-    attributes.thread_id, uuid_err = self.uuid()
-  end
-  if not attributes.thread_id then
-    return nil, uuid_err
-  end
-  local timestamp = self:_timestamp()
-  attributes.created_at = attributes.created_at or timestamp
-  attributes.updated_at = attributes.updated_at or attributes.created_at
-  local record, err = normalize_record(attributes, { now = timestamp })
-  if not record then
-    return nil, err
-  end
-  if thread_index(manifest, record.thread_id) then
-    return nil, "thread already exists: " .. record.thread_id
-  end
-  manifest.threads[#manifest.threads + 1] = record
-  local ok, write_err = self:_write(manifest)
-  if not ok then
-    return nil, write_err
-  end
-  return copy(record), warning
+  return self:_with_lock(function()
+    local manifest, warning = self:_read()
+    if not manifest then
+      return nil, warning
+    end
+    local uuid_err
+    if not attributes.thread_id then
+      attributes.thread_id, uuid_err = self.uuid()
+    end
+    if not attributes.thread_id then
+      return nil, uuid_err
+    end
+    local timestamp = self:_timestamp()
+    attributes.created_at = attributes.created_at or timestamp
+    attributes.updated_at = attributes.updated_at or attributes.created_at
+    local record, err = normalize_record(attributes, { now = timestamp })
+    if not record then
+      return nil, err
+    end
+    if thread_index(manifest, record.thread_id) then
+      return nil, "thread already exists: " .. record.thread_id
+    end
+    manifest.threads[#manifest.threads + 1] = record
+    local ok, write_err = self:_write(manifest)
+    if not ok then
+      return nil, write_err
+    end
+    return copy(record), warning
+  end)
 end
 
 function Store:update(thread_id, changes, opts)
   thread_id = tostring(thread_id or ""):lower()
   changes = copy(changes or {})
   opts = opts or {}
-  local manifest, warning = self:_read()
-  if not manifest then
-    return nil, warning
-  end
-  local index, current = thread_index(manifest, thread_id)
-  if not index then
-    return nil, "thread not found: " .. thread_id
-  end
-  if opts.expected_process_id ~= nil and current.process_id ~= opts.expected_process_id then
-    return nil, {
-      code = "stale_process",
-      expected_process_id = opts.expected_process_id,
-      current_process_id = current.process_id,
-    }
-  end
-  changes.thread_id = current.thread_id
-  changes.provider_id = current.provider_id
-  changes.created_at = current.created_at
-  changes.updated_at = self:_timestamp()
-  local merged = vim.tbl_deep_extend("force", copy(current), changes)
-  for _, field in ipairs({ "native_session_id", "process_id", "model", "mode", "archived_at" }) do
-    if changes[field] == vim.NIL then
-      merged[field] = nil
+  return self:_with_lock(function()
+    local manifest, warning = self:_read()
+    if not manifest then
+      return nil, warning
     end
-  end
-  local record, err = normalize_record(merged)
-  if not record then
-    return nil, err
-  end
-  manifest.threads[index] = record
-  local ok, write_err = self:_write(manifest)
-  if not ok then
-    return nil, write_err
-  end
-  return copy(record), warning
+    local index, current = thread_index(manifest, thread_id)
+    if not index then
+      return nil, "thread not found: " .. thread_id
+    end
+    if opts.expected_process_id ~= nil and current.process_id ~= opts.expected_process_id then
+      return nil, {
+        code = "stale_process",
+        expected_process_id = opts.expected_process_id,
+        current_process_id = current.process_id,
+      }
+    end
+    changes.thread_id = current.thread_id
+    changes.provider_id = current.provider_id
+    changes.created_at = current.created_at
+    changes.updated_at = self:_timestamp()
+    local merged = vim.tbl_deep_extend("force", copy(current), changes)
+    for _, field in ipairs({ "native_session_id", "process_id", "model", "mode", "archived_at" }) do
+      if changes[field] == vim.NIL then
+        merged[field] = nil
+      end
+    end
+    local record, err = normalize_record(merged)
+    if not record then
+      return nil, err
+    end
+    manifest.threads[index] = record
+    local ok, write_err = self:_write(manifest)
+    if not ok then
+      return nil, write_err
+    end
+    return copy(record), warning
+  end)
 end
 
 function Store:archive(thread_id)
@@ -389,20 +431,22 @@ end
 
 function Store:delete(thread_id)
   thread_id = tostring(thread_id or ""):lower()
-  local manifest, warning = self:_read()
-  if not manifest then
-    return nil, warning
-  end
-  local index, record = thread_index(manifest, thread_id)
-  if not index then
-    return false, "thread not found: " .. thread_id
-  end
-  table.remove(manifest.threads, index)
-  local ok, write_err = self:_write(manifest)
-  if not ok then
-    return nil, write_err
-  end
-  return true, copy(record), warning
+  return self:_with_lock(function()
+    local manifest, warning = self:_read()
+    if not manifest then
+      return nil, warning
+    end
+    local index, record = thread_index(manifest, thread_id)
+    if not index then
+      return false, "thread not found: " .. thread_id
+    end
+    table.remove(manifest.threads, index)
+    local ok, write_err = self:_write(manifest)
+    if not ok then
+      return nil, write_err
+    end
+    return true, copy(record), warning
+  end)
 end
 
 function M.new(opts)
@@ -411,8 +455,11 @@ function M.new(opts)
   return setmetatable({
     dir = dir,
     path = dir .. "/manifest.json",
+    lock_path = dir .. "/manifest.lock",
     clock = opts.clock or now_utc,
     uuid = opts.uuid or uuid_v4,
+    lock_timeout_ms = math.max(1, tonumber(opts.lock_timeout_ms) or 1000),
+    stale_lock_seconds = math.max(1, tonumber(opts.stale_lock_seconds) or 30),
   }, Store)
 end
 
