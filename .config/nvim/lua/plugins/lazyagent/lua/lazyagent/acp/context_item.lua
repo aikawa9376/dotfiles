@@ -1,5 +1,47 @@
 local M = {}
 
+local uv = vim.uv or vim.loop
+
+local function preview(text, limit)
+  text = tostring(text or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  limit = math.max(16, tonumber(limit) or 240)
+  if #text <= limit then
+    return text
+  end
+  return text:sub(1, limit - 3) .. "..."
+end
+
+local function file_version(path)
+  local stat = uv.fs_stat(path)
+  if not stat then
+    return nil
+  end
+  local modified = stat.mtime
+  return {
+    size = tonumber(stat.size) or 0,
+    mtime_sec = type(modified) == "table" and tonumber(modified.sec) or tonumber(modified),
+    mtime_nsec = type(modified) == "table" and tonumber(modified.nsec) or 0,
+  }
+end
+
+local function enrich(item, opts)
+  opts = opts or {}
+  local content = item.content
+  if content ~= nil then
+    item.size = #content
+    item.token_estimate = math.ceil(item.size / 4)
+    item.content_hash = vim.fn.sha256(content)
+    item.preview = preview(content, opts.preview_limit)
+  else
+    local version = file_version(item.path)
+    item.size = version and version.size or nil
+    item.token_estimate = item.size and math.ceil(item.size / 4) or nil
+    item.preview = item.display
+  end
+  item.source_version = opts.source_version or file_version(item.path)
+  return item
+end
+
 local function file_uri(path)
   local normalized = vim.fn.fnamemodify(path, ":p")
   local ok, uri = pcall(vim.uri_from_fname, normalized)
@@ -44,7 +86,7 @@ function M.file(opts)
   } or nil
   local path = vim.fn.fnamemodify(opts.path, ":p")
   local display = opts.display or path
-  return {
+  return enrich({
     kind = range and "range" or "file",
     source = opts.source or "reference",
     path = path,
@@ -54,19 +96,19 @@ function M.file(opts)
     range = range,
     content = table.concat(slice(opts.lines or {}, range), "\n"),
     note = range_note(display, range),
-  }
+  }, opts)
 end
 
 function M.directory(opts)
   opts = opts or {}
   local path = vim.fn.fnamemodify(opts.path, ":p"):gsub("/$", "")
-  return {
+  return enrich({
     kind = "directory",
     source = opts.source or "reference",
     path = path,
     uri = file_uri(path),
     display = opts.display or path,
-  }
+  }, opts)
 end
 
 function M.selection(bufnr, opts)
@@ -110,7 +152,10 @@ function M.selection(bufnr, opts)
   item.range = { start_line = start_line, end_line = end_line }
   item.content = table.concat(lines, "\n")
   item.note = range_note(item.display, item.range)
-  return item
+  return enrich(item, {
+    preview_limit = opts.preview_limit,
+    source_version = { bufnr = bufnr, changedtick = vim.api.nvim_buf_get_changedtick(bufnr) },
+  })
 end
 
 function M.lower(item, capabilities)
