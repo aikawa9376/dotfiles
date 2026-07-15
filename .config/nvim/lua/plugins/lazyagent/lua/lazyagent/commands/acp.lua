@@ -219,6 +219,11 @@ local commands = {
     handler = session_logic.show_acp_doctor,
   },
   {
+    name = "LazyAgentACPProtocolLog",
+    desc = "Open the redacted ACP protocol flight recorder",
+    handler = session_logic.show_acp_protocol_log,
+  },
+  {
     name = "LazyAgentACPContext",
     desc = "Open ACP context budget details for an ACP-enabled agent",
     handler = session_logic.show_acp_context_budget,
