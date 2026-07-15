@@ -247,8 +247,9 @@ require("lazyagent").setup({
     render_markdown_debounce_ms = 900,
     release_buffer_on_hide = true,
     mobile = {
-      host = "0.0.0.0", -- LAN のスマホから開く場合。未指定なら mcp_host、さらに未指定なら 127.0.0.1
+      host = "0.0.0.0", -- LAN のスマホから開く場合。未指定なら 127.0.0.1
       port = nil,       -- nil/0 なら空き port を自動選択
+      max_body_bytes = 256 * 1024,
     },
     transcript_compaction = {
       enabled = false,
@@ -293,7 +294,7 @@ ACP buffer view は section 境界で未閉じの fenced code block を表示上
 
 `:LazyAgentACPMobileQR` はACP mobile serverを起動し、スマホで開くためのQR codeを表示します。`:LazyAgentACPMobileStart` はURLだけを通知し、`:LazyAgentACPMobileStop` で停止します。
 
-このUIはMCP serverを起動せず、active ACP sessionの一覧、prompt送信、interruptだけを提供します。LANのスマホから使う場合は `acp.mobile.host = "0.0.0.0"` を指定してください。未指定時は既存設定との互換のため `mcp_host` を使い、それも無ければ `127.0.0.1` でlocalhost限定になります。LAN公開時は同一ネットワーク上の端末からprompt送信できるため、信頼できるネットワークで使ってください。
+このUIはMCP serverを起動せず、active ACP sessionの一覧、prompt送信、interruptだけを提供します。起動ごとにrandom bearer tokenを生成し、QR codeと通知URLへ含めます。未指定時は`127.0.0.1`でlocalhost限定です。LANのスマホから使う場合だけ `acp.mobile.host = "0.0.0.0"` を明示してください。LAN公開時は警告を表示し、token認証、Origin検証、request body上限を適用します。
 
 ### ACP local commands
 

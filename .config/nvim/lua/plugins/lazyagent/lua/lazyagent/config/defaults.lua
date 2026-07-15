@@ -98,8 +98,10 @@ function M.build()
         command = nil,
       },
       mobile = {
-        host = nil,
+        host = "127.0.0.1",
         port = nil,
+        max_body_bytes = 256 * 1024,
+        allowed_origins = {},
       },
     },
     tmux_auto_exit_copy_mode = true,
