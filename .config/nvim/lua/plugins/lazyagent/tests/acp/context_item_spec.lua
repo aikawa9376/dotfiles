@@ -58,6 +58,17 @@ function M.run()
   vim.diagnostic.reset(namespace, bufnr)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 
+  local branch_diff = assert(ContextItem.branch_diff("/tmp/project", {
+    run = function(_, args)
+      assert_equal(table.concat(args, " "), "diff --no-ext-diff HEAD --", "branch diff git arguments")
+      return "diff --git a/file.lua b/file.lua\n+added line\n"
+    end,
+  }))
+  assert_equal(branch_diff.kind, "branch_diff", "branch diff context kind")
+  assert_equal(branch_diff.filetype, "diff", "branch diff filetype")
+  assert(branch_diff.content:match("%+added line"), "branch diff content")
+  assert_equal(ContextItem.lower(branch_diff, {}).type, "text", "branch diff text lowering")
+
   local media_path = vim.fn.tempname() .. ".png"
   vim.fn.writefile({ "image fixture" }, media_path, "b")
   local media = assert(ContextItem.media({ path = media_path }))
