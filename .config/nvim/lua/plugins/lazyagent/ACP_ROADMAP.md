@@ -274,7 +274,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 - [x] ACP Registryのbrowse / install / update UIを追加する。
   - [x] official v1 indexのfetch/cache/search pickerとnpx/uvx version-pinned managed launcher install/updateを追加する。
   - [x] platform別binary archiveのmanaged install、SHA-256検証、path traversal防止を追加する。
-- [ ] Zed/Neovim側MCP server configをnew/load/resume時にagentへforwardする。
+- [x] Zed/Neovim側MCP server configをnew/load/resume時にagentへforwardする。
 - [ ] permissionにonce / session / project / global scopeとaudit logを追加する。
 - [ ] mobileからpermission、diff review、Keep/Reject、interruptを操作できるようにする。
 - [ ] protocol log viewer、capability inspector、session health reportを追加する。

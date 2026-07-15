@@ -62,6 +62,7 @@ function M.build()
       auto_permission = nil,
       default_mode = nil,
       initial_model = nil,
+      mcp_servers = {},
       footer_animation = true,
       fancy_mode = false,
       table_layout = "table",

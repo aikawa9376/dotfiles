@@ -58,6 +58,18 @@ local function has_additional_directory(params)
     and directories[1]:match("/tests$") ~= nil
 end
 
+local function has_mcp_servers(params)
+  if vim.env.LAZYAGENT_FAKE_EXPECT_MCP ~= "1" then return true end
+  local servers = params and params.mcpServers
+  local stdio = type(servers) == "table" and servers[1] or nil
+  local http = type(servers) == "table" and servers[2] or nil
+  return stdio and stdio.name == "contract-stdio"
+    and type(stdio.command) == "string" and stdio.command:sub(1, 1) == "/"
+    and stdio.env and stdio.env[1] and stdio.env[1].name == "CONTRACT_TOKEN"
+    and http and http.type == "http" and http.name == "contract-http"
+    and http.headers and http.headers[1] and http.headers[1].name == "Authorization"
+end
+
 local function finish_prompt_if_ready()
   if not pending_prompt_id
     or not permission_complete
@@ -129,6 +141,10 @@ for line in io.lines() do
             image = true,
             embeddedContext = true,
           },
+          mcpCapabilities = {
+            http = true,
+            sse = false,
+          },
           sessionCapabilities = {
             list = vim.empty_dict(),
             resume = vim.env.LAZYAGENT_FAKE_DISABLE_RESUME ~= "1" and vim.empty_dict() or nil,
@@ -169,6 +185,8 @@ for line in io.lines() do
       })
     elseif not has_additional_directory(message.params) then
       fail(message.id, "session/new additionalDirectories missing")
+    elseif not has_mcp_servers(message.params) then
+      fail(message.id, "session/new mcpServers missing")
     else
       send(response(message.id, {
         sessionId = "test-session",
@@ -185,6 +203,8 @@ for line in io.lines() do
   elseif message.method == "session/load" or message.method == "session/resume" then
     if not has_additional_directory(message.params) then
       fail(message.id, message.method .. " additionalDirectories missing")
+    elseif not has_mcp_servers(message.params) then
+      fail(message.id, message.method .. " mcpServers missing")
     else
       send(response(message.id, vim.empty_dict()))
     end

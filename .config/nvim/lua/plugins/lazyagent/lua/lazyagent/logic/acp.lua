@@ -1,6 +1,7 @@
 local M = {}
 
 local state = require("lazyagent.logic.state")
+local mcp_servers = require("lazyagent.acp.mcp_servers")
 
 local ACP_BACKENDS = {
   tmux_acp = true,
@@ -306,6 +307,10 @@ local function resolve_from_config(agent_cfg)
     enabled = false
   end
 
+  local global_mcp = global_cfg.mcp_servers or global_cfg.context_servers or (state.opts and state.opts.context_servers)
+  local agent_mcp = agent_acp.mcp_servers or agent_acp.context_servers
+    or (agent_cfg and (agent_cfg.mcp_servers or agent_cfg.context_servers))
+
   return {
     enabled = enabled,
     view = normalized_view_name(agent_acp.view or global_cfg.view),
@@ -324,6 +329,7 @@ local function resolve_from_config(agent_cfg)
     additional_directories = vim.deepcopy(
       agent_acp.additional_directories or global_cfg.additional_directories or {}
     ),
+    mcp_servers = mcp_servers.merge(global_mcp, agent_mcp),
     buffer_background = normalize_color(agent_acp.buffer_background or global_cfg.buffer_background),
     buffer_inactive_background = normalize_color(
       agent_acp.buffer_inactive_background or global_cfg.buffer_inactive_background
@@ -376,6 +382,7 @@ function M.resolve(agent_name, agent_cfg)
       render_markdown_max_lines = session.render_markdown_max_lines,
       transcript_compaction = vim.deepcopy(session.transcript_compaction or {}),
       runtime_compaction = vim.deepcopy(session.runtime_compaction or {}),
+      mcp_servers = vim.deepcopy(session.mcp_servers or {}),
       footer_animation = session.footer_animation,
       permission_rules = vim.deepcopy(session.permission_rules or {}),
       auto_switch = vim.deepcopy(session.auto_switch or {}),

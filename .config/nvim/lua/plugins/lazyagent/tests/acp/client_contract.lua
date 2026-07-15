@@ -52,7 +52,21 @@ local function new_client(root, overrides)
       root .. "/tests/acp/fake_agent.lua",
     },
     cwd = root,
-    env = overrides.env,
+    env = vim.tbl_extend("force", { LAZYAGENT_FAKE_EXPECT_MCP = "1" }, overrides.env or {}),
+    mcp_servers = overrides.mcp_servers or {
+      {
+        name = "contract-stdio",
+        command = vim.fn.exepath("env"),
+        args = { "node", "server.js" },
+        env = { CONTRACT_TOKEN = "secret" },
+      },
+      {
+        type = "http",
+        name = "contract-http",
+        url = "https://example.test/mcp",
+        headers = { Authorization = "Bearer token" },
+      },
+    },
     additional_directories = {
       root .. "/tests",
     },
