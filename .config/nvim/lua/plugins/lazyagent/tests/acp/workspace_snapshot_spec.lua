@@ -48,6 +48,23 @@ function M.run()
   assert_equal(snapshot.dirty[1].worktree_status, "M", "worktree status")
   assert_equal(snapshot.dirty[3].original_path, "old.lua", "rename source")
   assert_equal(snapshot.untracked, { "new.txt" }, "untracked state")
+
+  local changes = Snapshot.diff({
+    files = {
+      { path = "deleted.lua", exists = true, type = "file", size = 2, mtime = { sec = 1, nsec = 0 } },
+      { path = "modified.lua", exists = true, type = "file", size = 4, mtime = { sec = 1, nsec = 0 } },
+    },
+  }, {
+    files = {
+      { path = "added.lua", exists = true, type = "file", size = 3, mtime = { sec = 2, nsec = 0 } },
+      { path = "modified.lua", exists = true, type = "file", size = 5, mtime = { sec = 2, nsec = 0 } },
+    },
+  })
+  assert_equal(changes, {
+    { path = "added.lua", operation = "added", after_size = 3 },
+    { path = "deleted.lua", operation = "deleted", before_size = 2 },
+    { path = "modified.lua", operation = "modified", before_size = 4, after_size = 5 },
+  }, "workspace manifest diff")
 end
 
 return M

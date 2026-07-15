@@ -21,6 +21,7 @@ local backend_host = require("lazyagent.acp.backend.host")
 local ThreadStore = require("lazyagent.acp.thread_store")
 local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
 local TurnJournal = require("lazyagent.acp.turn_journal")
+local Watch = require("lazyagent.watch")
 
 local sessions = {}
 local section_icons = {
@@ -94,6 +95,8 @@ local function sync_thread_view(session)
   return sync_thread_record(session, { view_state = view_state })
 end
 
+local record_turn_event
+
 local function record_turn_baseline(session)
   if not session or not session.thread_id then
     return nil
@@ -112,12 +115,25 @@ local function record_turn_baseline(session)
   local updated = sync_thread_record(session, { change_journal = journal })
   if updated then
     session.current_change_turn_id = turn.turn_id
+    if session.turn_watch_handle then
+      Watch.remove(session.turn_watch_handle)
+    end
+    local watched_turn_id = turn.turn_id
+    session.turn_watch_handle = Watch.add(snapshot.root .. "/.lazyagent-turn-watch", function(path)
+      if session.current_change_turn_id == watched_turn_id then
+        record_turn_event(session, "file", {
+          path = path,
+          operation = "observed",
+          source = "filesystem_watcher",
+        })
+      end
+    end, { debounce_ms = 75 })
     return turn
   end
   return nil
 end
 
-local function record_turn_event(session, kind, event)
+record_turn_event = function(session, kind, event)
   if not session or not session.current_change_turn_id or not session.thread_record then
     return nil
   end
@@ -131,6 +147,50 @@ local function record_turn_event(session, kind, event)
     return nil
   end
   return sync_thread_record(session, { change_journal = journal }) and turn or nil
+end
+
+local function finish_change_turn(session, completion_state)
+  if not session or not session.current_change_turn_id or not session.thread_record then
+    return nil
+  end
+  if session.turn_watch_handle then
+    Watch.remove(session.turn_watch_handle)
+    session.turn_watch_handle = nil
+  end
+
+  local turn_id = session.current_change_turn_id
+  local journal = session.thread_record.change_journal or {}
+  local active_turn = TurnJournal.get(journal, turn_id)
+  if not active_turn then
+    session.current_change_turn_id = nil
+    return nil
+  end
+
+  local captured, final_snapshot = pcall(
+    WorkspaceSnapshot.capture,
+    (active_turn.baseline and active_turn.baseline.root) or session.root_dir or session.cwd
+  )
+  local capture_error = nil
+  local changes = {}
+  if captured then
+    changes = WorkspaceSnapshot.diff(active_turn.baseline, final_snapshot)
+  else
+    capture_error = tostring(final_snapshot)
+    final_snapshot = nil
+  end
+  local finished_at = final_snapshot and final_snapshot.captured_at or os.date("!%Y-%m-%dT%H:%M:%SZ")
+  local finished_journal, finished_turn = TurnJournal.finish(journal, turn_id, {
+    state = completion_state,
+    finished_at = finished_at,
+    final_snapshot = final_snapshot,
+    changes = changes,
+    capture_error = capture_error,
+  })
+  session.current_change_turn_id = nil
+  if not finished_journal then
+    return nil
+  end
+  return sync_thread_record(session, { change_journal = finished_journal }) and finished_turn or nil
 end
 
 local function path_in_session_workspace(session, path)
@@ -322,6 +382,7 @@ local function create_backend(default_view)
       return false
     end
     session.pending_brain_turn = nil
+    finish_change_turn(session, "completed")
     util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = pending.result })
     util.fire_event("TurnDone", { agent_name = session.agent_name, result = pending.result })
     actions_helpers.maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
@@ -400,6 +461,7 @@ local function create_backend(default_view)
           if cancel_requested then
             finalize_cancelled_tools(session)
           end
+          finish_change_turn(session, cancel_requested and "cancelled" or "failed")
           conversation_helpers.append_block(session, "Error", err.message or tostring(err))
           pcall(function()
             require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
@@ -416,6 +478,7 @@ local function create_backend(default_view)
         if cancel_requested or stop_reason == "cancelled" then
           session.pending_brain_turn = nil
           finalize_cancelled_tools(session)
+          finish_change_turn(session, "cancelled")
           conversation_helpers.append_block(session, "System", "Turn cancelled")
           util.fire_event("TurnDone", {
             agent_name = session.agent_name,
@@ -988,6 +1051,9 @@ local function create_backend(default_view)
     if session then
       if next(session.tool_calls or {}) == nil then
         complete_pending_turn(session)
+      end
+      if session.current_change_turn_id then
+        finish_change_turn(session, "interrupted")
       end
       state_helpers.clear_pending_switch_history(session)
       session.closing_intentionally = true

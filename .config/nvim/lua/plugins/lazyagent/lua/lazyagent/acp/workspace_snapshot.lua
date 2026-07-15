@@ -181,4 +181,59 @@ function M.capture(cwd, opts)
   return snapshot
 end
 
+local function file_index(snapshot)
+  local result = {}
+  for _, file in ipairs((snapshot and snapshot.files) or {}) do
+    result[file.path] = file
+  end
+  return result
+end
+
+local function same_file_state(left, right)
+  return left.exists == right.exists
+    and left.type == right.type
+    and left.size == right.size
+    and vim.deep_equal(left.mtime, right.mtime)
+end
+
+function M.diff(before, after)
+  local previous = file_index(before)
+  local current = file_index(after)
+  local paths = {}
+  for path in pairs(previous) do
+    paths[path] = true
+  end
+  for path in pairs(current) do
+    paths[path] = true
+  end
+
+  local changes = {}
+  for path in pairs(paths) do
+    local left = previous[path]
+    local right = current[path]
+    local left_exists = left and left.exists ~= false
+    local right_exists = right and right.exists ~= false
+    local operation = nil
+    if not left_exists and right_exists then
+      operation = "added"
+    elseif left_exists and not right_exists then
+      operation = "deleted"
+    elseif left_exists and right_exists and not same_file_state(left, right) then
+      operation = "modified"
+    end
+    if operation then
+      changes[#changes + 1] = {
+        path = path,
+        operation = operation,
+        before_size = left and left.size or nil,
+        after_size = right and right.size or nil,
+      }
+    end
+  end
+  table.sort(changes, function(left, right)
+    return left.path < right.path
+  end)
+  return changes
+end
+
 return M
