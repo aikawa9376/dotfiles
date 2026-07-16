@@ -40,17 +40,36 @@ return {
 
       maybeClear()
     end
-    local navHunkWithoutCursorGlow = function(direction)
+    local hunkNavState = {
+      busy = false,
+      queue = {},
+    }
+    local drainQueuedHunkNav
+    drainQueuedHunkNav = function()
+      if hunkNavState.busy then
+        return
+      end
+      local direction = table.remove(hunkNavState.queue, 1)
+      if not direction then
+        return
+      end
+      hunkNavState.busy = true
       suppressCursorGlow(function(maybeClear)
         local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
         require("gitsigns").nav_hunk(direction, is_fugitive and { target = 'all' } or {}, function(err)
+          hunkNavState.busy = false
           if err then
             clearCursorGlowSuppression()
-            return
+          else
+            vim.schedule(maybeClear)
           end
-          vim.schedule(maybeClear)
+          vim.schedule(drainQueuedHunkNav)
         end)
       end, { defer = true })
+    end
+    local navHunkWithoutCursorGlow = function(direction)
+      hunkNavState.queue[#hunkNavState.queue + 1] = direction
+      drainQueuedHunkNav()
     end
     local diagnosticJumpWithoutCursorGlow = function(count, float)
       suppressCursorGlow(function()
