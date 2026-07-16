@@ -6,13 +6,13 @@ return {
   { 'mgalliou/blink-cmp-tmux', ft = 'lazyagent' },
   { 'fang2hou/blink-copilot', event = 'InsertEnter' },
   { 'hrsh7th/cmp-nvim-lsp-document-symbol', event = 'CmdlineEnter' },
-  { 'saghen/blink.lib', event = { 'InsertEnter', 'CmdlineEnter' } },
+  -- { 'saghen/blink.lib', event = { 'InsertEnter', 'CmdlineEnter' } },
   { 'copilotlsp-nvim/copilot-lsp', lazy = true,
     opts = { nes = { distance_threshold = 100, clear_on_large_distance = false, } }
   },
   {
     'saghen/blink.cmp',
-    dependencies = { 'blink-extension' },
+    dependencies = { 'saghen/blink.lib', 'blink-extension' },
     event = { 'InsertEnter', 'CmdlineEnter' },
     build = function()
       require('blink.cmp').build():pwait()
