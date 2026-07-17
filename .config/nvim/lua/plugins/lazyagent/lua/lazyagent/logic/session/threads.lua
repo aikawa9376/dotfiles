@@ -336,6 +336,7 @@ function M.setup(deps)
         vim.notify("LazyAgent ACP cockpit: " .. tostring(list_err), vim.log.levels.ERROR)
         return
       end
+      stored_threads = require("lazyagent.acp.cockpit").prune_empty(backend, stored_threads)
       local lines
       local runtimes = {}
       thread_agents = {}
