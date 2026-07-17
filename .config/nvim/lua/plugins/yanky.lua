@@ -197,17 +197,25 @@ return {
       return registers
     end
 
-    local function yanked_text(event)
+    local function event_register_info(event)
+      local regcontents
+
       if type(event.regcontents) == "table" then
-        return table.concat(event.regcontents, "\n")
+        regcontents = table.concat(event.regcontents, "\n")
+
+        if event.regtype == "V" then
+          regcontents = regcontents .. "\n"
+        end
+      elseif type(event.regcontents) == "string" then
+        regcontents = event.regcontents
+      else
+        return get_register_info(event.regname)
       end
 
-      if type(event.regcontents) == "string" then
-        return event.regcontents
-      end
-
-      local info = get_register_info(event.regname)
-      return info and info.regcontents or nil
+      return {
+        regcontents = regcontents,
+        regtype = event.regtype,
+      }
     end
 
     local function is_blank_text(text)
@@ -215,7 +223,8 @@ return {
     end
 
     local function is_blank_yank(event)
-      return is_blank_text(yanked_text(event))
+      local info = event_register_info(event)
+      return info and is_blank_text(info.regcontents) or false
     end
 
     local history = require("yanky.history")
@@ -261,7 +270,16 @@ return {
         return
       end
 
-      original_on_yank()
+      if not (event.visual and event.operator == "d" and yanky.ring.is_cycling) then
+        local info = event_register_info(event)
+
+        if info then
+          info.filetype = vim.bo.filetype
+          history.push(info)
+          pcall(require("yanky.preserve_cursor").on_yank)
+        end
+      end
+
       remember_registers(registers)
     end)
   end
