@@ -81,6 +81,28 @@ local function changed_file_count(thread)
   return vim.tbl_count(seen)
 end
 
+local function transcript_has_user_prompt(path)
+  if not path or path == "" or vim.fn.filereadable(path) ~= 1 then return false end
+  local ok, lines = pcall(vim.fn.readfile, path, "", 2000)
+  if not ok then return false end
+  for _, line in ipairs(lines or {}) do
+    if line:match("^─ .- User") or line:match("^#+%s+User") then return true end
+  end
+  return false
+end
+
+function M.has_meaningful_content(thread)
+  if not thread then return false end
+  if thread.status == "active" or thread.status == "failed" or thread.process_id ~= nil then return true end
+  local metadata = type(thread.metadata) == "table" and thread.metadata or {}
+  if metadata.has_user_prompt == true or metadata.imported_from_native == true then return true end
+  if changed_file_count(thread) > 0 then return true end
+  local title = vim.trim(tostring(thread.title or ""))
+  local provider = vim.trim(tostring(thread.provider_id or ""))
+  if title ~= "" and title ~= provider and title ~= thread.thread_id then return true end
+  return transcript_has_user_prompt(thread.transcript_path)
+end
+
 local function latest_paths(thread)
   local turns = thread.change_journal and thread.change_journal.turns or {}
   local turn = turns[#turns]
@@ -159,6 +181,8 @@ local function card_line(thread, runtime, conflicts, max_width)
   local conflict_count = vim.tbl_count(conflicts[thread.thread_id] or {})
   local test = thread.metadata and thread.metadata.test_result or nil
   local provider = tostring(thread.provider_id or "provider")
+  local raw_title = vim.trim(tostring(thread.title or "")):gsub("%s+", " ")
+  local show_title = raw_title ~= "" and raw_title ~= provider and raw_title ~= thread.thread_id
 
   local fields = {}
   if model ~= "default" then fields[#fields + 1] = { "model:" .. tostring(model), "LazyAgentACPCockpitModel", "model" } end
@@ -178,8 +202,10 @@ local function card_line(thread, runtime, conflicts, max_width)
   end
 
   local function fixed_width()
-    local width = display_width("- " .. (pinned and "★ " or "") .. "[" .. status .. "]  · " .. provider)
+    local width = display_width("- " .. (pinned and "★" or " ") .. " [" .. status .. "]")
+      + (12 - display_width(status)) + display_width("  " .. provider)
     for _, field in ipairs(fields) do width = width + display_width(" · " .. field[1]) end
+    if show_title then width = width + display_width(" · ") end
     return width
   end
 
@@ -199,19 +225,22 @@ local function card_line(thread, runtime, conflicts, max_width)
     if not removed then break end
   end
 
-  local title_width = max_width and math.max(8, max_width - fixed_width()) or 80
-  local title = truncate_display(thread.title or thread.thread_id, title_width)
+  local title_width = max_width and math.max(8, max_width - fixed_width() - 1) or 80
+  local title = show_title and truncate_display(raw_title, title_width) or ""
   local parts, spans = {}, {}
   add_segment(parts, spans, "- ", "LazyAgentACPCockpitMuted")
-  if pinned then add_segment(parts, spans, "★ ", "LazyAgentACPCockpitPin") end
-  add_segment(parts, spans, "[" .. status .. "]", status_highlights[status] or "LazyAgentACPCockpitMuted")
+  add_segment(parts, spans, pinned and "★" or " ", pinned and "LazyAgentACPCockpitPin" or nil)
   add_segment(parts, spans, " ")
-  add_segment(parts, spans, title, "LazyAgentACPCockpitPrompt")
-  add_segment(parts, spans, " · ", "LazyAgentACPCockpitMuted")
+  add_segment(parts, spans, "[" .. status .. "]", status_highlights[status] or "LazyAgentACPCockpitMuted")
+  add_segment(parts, spans, string.rep(" ", 12 - display_width(status) + 2))
   add_segment(parts, spans, provider, "LazyAgentACPCockpitProvider")
   for _, field in ipairs(fields) do
     add_segment(parts, spans, " · ", "LazyAgentACPCockpitMuted")
     add_segment(parts, spans, field[1], field[2])
+  end
+  if title ~= "" then
+    add_segment(parts, spans, " · ", "LazyAgentACPCockpitMuted")
+    add_segment(parts, spans, title, "LazyAgentACPCockpitPrompt")
   end
   return table.concat(parts), spans
 end
@@ -285,14 +314,15 @@ end
 
 function M.filter(threads, query)
   query = vim.trim(tostring(query or "")):lower()
-  if query == "" then return vim.deepcopy(threads or {}) end
+  local meaningful = vim.tbl_filter(M.has_meaningful_content, threads or {})
+  if query == "" then return vim.deepcopy(meaningful) end
   return vim.tbl_filter(function(thread)
     local text = table.concat({
       thread.title or "", thread.provider_id or "", thread.cwd or "", thread.status or "",
       thread.model or "", thread.unread == true and "unread" or "read",
     }, " "):lower()
     return text:find(query, 1, true) ~= nil
-  end, threads or {})
+  end, meaningful)
 end
 
 return M
