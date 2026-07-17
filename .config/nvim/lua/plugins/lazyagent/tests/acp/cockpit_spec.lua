@@ -52,6 +52,10 @@ function M.run()
       assert(vim.fn.strdisplaywidth(line) <= 64, "thread card fits requested width")
     end
   end
+  local compact_lines = Cockpit.render(narrow_threads, {}, { width = 160 })
+  local compact_rendered = table.concat(compact_lines, "\n")
+  assert(compact_rendered:find("%- %[active%]", 1) or compact_rendered:find("%- %[archived%]", 1), "unpinned row has compact prefix")
+  assert(not compact_rendered:find("deliberately much too long for a single cockpit line", 1, true), "prompt has a compact maximum width")
   local filtered = Cockpit.filter(threads, "CLAUDE")
   assert(#filtered == 1 and filtered[1].thread_id == "thread-a", "cockpit case-insensitive filter")
   local without_empty = Cockpit.filter({
