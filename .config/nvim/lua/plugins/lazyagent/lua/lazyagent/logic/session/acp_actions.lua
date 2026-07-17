@@ -1074,6 +1074,8 @@ function M.setup(deps)
       end
 
       util.open_in_normal_win(path)
+      vim.bo.filetype = "markdown"
+      vim.bo.readonly = true
       vim.cmd("setlocal nowrap")
     end)
   end

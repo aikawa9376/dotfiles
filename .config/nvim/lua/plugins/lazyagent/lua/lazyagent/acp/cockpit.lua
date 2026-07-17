@@ -299,7 +299,7 @@ function M.render(threads, runtimes, opts)
     "# LazyAgent ACP Session Cockpit",
     "",
     "persisted threads: running = live process, closed = resumable history, archived = retained history",
-    "`<CR>` open  `x` stop  `/` filter  `p` pin  `t` test  `a` archive/restore  `c` cleanup  `d` delete  `X` stop all  `r` refresh  `q` close",
+    "`<CR>` open  `v` transcript  `x` stop  `/` filter  `p` pin  `t` test  `a` archive/restore  `c` cleanup  `d` delete  `X` stop all  `r` refresh  `q` close",
   }
   local line_map = {}
   local highlights = {

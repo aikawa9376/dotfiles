@@ -78,6 +78,19 @@ function M.run()
   assert_equal(actions.restore_thread(THREAD_ID), true, "restore thread action")
   assert_equal(records[THREAD_ID].status, "closed", "restored thread status")
 
+  local transcript_path = vim.fn.tempname() .. "-thread-transcript.log"
+  vim.fn.writefile({ "# User", "hello" }, transcript_path)
+  records[THREAD_ID].transcript_path = transcript_path
+  local tab_count = vim.fn.tabpagenr("$")
+  assert_equal(actions.open_thread_transcript(THREAD_ID), true, "open persisted raw transcript")
+  assert_equal(vim.fn.tabpagenr("$"), tab_count + 1, "raw transcript tab")
+  assert_equal(vim.api.nvim_buf_get_name(0), transcript_path, "raw transcript path")
+  assert_equal(vim.bo.filetype, "markdown", "raw transcript markdown filetype")
+  assert_equal(vim.bo.readonly, true, "raw transcript readonly")
+  assert_equal(vim.wo.wrap, false, "raw transcript nowrap")
+  vim.cmd("tabclose")
+  vim.fn.delete(transcript_path)
+
   records[THREAD_ID].process_id = 99
   assert_equal(actions.archive_thread(THREAD_ID), false, "active archive guard")
   assert_equal(actions.delete_thread(THREAD_ID), false, "active delete guard")
