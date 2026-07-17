@@ -1,4 +1,5 @@
 local M = {}
+local TextRef = require("lazyagent.acp.text_ref")
 
 local function read_ref(ref)
   if type(ref) ~= "table" or not ref.path or vim.fn.filereadable(ref.path) ~= 1 then
@@ -42,8 +43,30 @@ function M.search(conversation, tools, query, opts)
   query = vim.trim(tostring(query or ""))
   if query == "" then return {} end
   local load_ref = opts.read_ref or read_ref
+  local custom_reader = opts.read_ref ~= nil
   local needle = query:lower()
   local results = {}
+
+  local function match_parts(parts, refs)
+    local haystack = table.concat(parts, "\n")
+    if haystack:lower():find(needle, 1, true) then
+      return preview(haystack, query)
+    end
+    for _, ref in ipairs(refs) do
+      if custom_reader then
+        local ref_text = load_ref(ref)
+        if ref_text:lower():find(needle, 1, true) then
+          return preview(ref_text, query)
+        end
+      else
+        local ref_preview = TextRef.search(ref, query)
+        if ref_preview then
+          return ref_preview
+        end
+      end
+    end
+    return nil
+  end
 
   for _, item in ipairs(conversation or {}) do
     local parts = {}
@@ -52,15 +75,14 @@ function M.search(conversation, tools, query, opts)
     add_text(parts, item.summary)
     add_text(parts, item.body)
     for _, chunk in ipairs(item.body_chunks or {}) do add_text(parts, chunk) end
-    add_text(parts, load_ref(item.body_ref))
-    local haystack = table.concat(parts, "\n")
-    if haystack:lower():find(needle, 1, true) then
+    local match_preview = match_parts(parts, { item.body_ref })
+    if match_preview then
       results[#results + 1] = {
         target = "conversation",
         kind = item.kind or "message",
         id = item.id,
         title = item.title or item.heading or item.kind or "Message",
-        preview = preview(haystack, query),
+        preview = match_preview,
       }
     end
   end
@@ -70,17 +92,18 @@ function M.search(conversation, tools, query, opts)
     add_text(parts, entry.title)
     add_text(parts, entry.summary)
     add_text(parts, entry.rendered_content)
-    add_text(parts, load_ref(entry.rendered_content_ref))
     add_text(parts, entry.rendered_raw_output)
-    add_text(parts, load_ref(entry.rendered_raw_output_ref))
-    local haystack = table.concat(parts, "\n")
-    if haystack:lower():find(needle, 1, true) then
+    local refs = {}
+    if entry.rendered_content_ref then refs[#refs + 1] = entry.rendered_content_ref end
+    if entry.rendered_raw_output_ref then refs[#refs + 1] = entry.rendered_raw_output_ref end
+    local match_preview = match_parts(parts, refs)
+    if match_preview then
       results[#results + 1] = {
         target = "tool",
         kind = "tool",
         tool_call_id = entry.toolCallId,
         title = entry.title or entry.toolCallId or "Tool",
-        preview = preview(haystack, query),
+        preview = match_preview,
       }
     end
   end

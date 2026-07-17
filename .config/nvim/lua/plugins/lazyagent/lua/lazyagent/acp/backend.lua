@@ -417,10 +417,10 @@ local function create_backend(default_view)
   local blob_store = BlobStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/blobs" })
   local change_apply = ChangeApply.new({
     read_blob = function(ref)
-      return blob_store:get(ref)
+      return blob_store:get(ref, { max_bytes = false })
     end,
     put_blob = function(data)
-      return blob_store:put(data)
+      return blob_store:put(data, { max_bytes = false })
     end,
   })
   local change_review = ChangeReview.new({
@@ -912,12 +912,16 @@ local function create_backend(default_view)
     for index, change in ipairs(turn.changes or {}) do
       local preview, truncated = nil, false
       if not change.binary then
-        local before = blob_store:get(change.before_blob)
-        local after = blob_store:get(change.review_blob or change.after_blob)
-        if type(before) == "string" and type(after) == "string" then
-          if #before + #after > 2 * 1024 * 1024 then
-            preview, truncated = "Diff omitted because the file pair exceeds 2 MiB.", true
-          else
+        local before_ref = change.before_blob
+        local after_ref = change.review_blob or change.after_blob
+        local before_size = before_ref and (blob_store:size(before_ref) or tonumber(before_ref.size)) or 0
+        local after_size = after_ref and (blob_store:size(after_ref) or tonumber(after_ref.size)) or 0
+        if before_size and after_size and before_size + after_size > 2 * 1024 * 1024 then
+          preview, truncated = "Diff omitted because the file pair exceeds 2 MiB.", true
+        else
+          local before = blob_store:get(before_ref, { max_bytes = 2 * 1024 * 1024 })
+          local after = blob_store:get(after_ref, { max_bytes = 2 * 1024 * 1024 })
+          if type(before) == "string" and type(after) == "string" then
             preview = vim.diff(before, after, { result_type = "unified", algorithm = "histogram", ctxlen = 3 }) or ""
             if #preview > 24000 then preview, truncated = preview:sub(1, 24000), true end
           end
@@ -1807,19 +1811,17 @@ local function create_backend(default_view)
     local session = get_session(target_pane)
     if not session then return nil, "ACP session not found" end
     path = vim.fn.fnamemodify(path, ":p")
-    local markdown = ThreadExport.render({
+    local export_opts = {
       title = session.thread_record and session.thread_record.title or session.agent_name,
       provider_id = session.provider_id,
       cwd = session.root_dir or session.cwd,
       thread_id = session.thread_id,
       conversation = session.conversation_timeline,
       tools = session.tool_timeline,
-    })
+    }
     local parent_ok, parent_err = state_helpers.ensure_parent_dir(path)
     if not parent_ok then return nil, parent_err end
-    local ok, write_err = pcall(vim.fn.writefile, vim.split(markdown, "\n", { plain = true }), path, "b")
-    if not ok then return nil, write_err end
-    return path
+    return ThreadExport.write(export_opts, path)
   end
 
   function backend.show_thread_export(target_pane)

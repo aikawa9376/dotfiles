@@ -244,6 +244,11 @@ local function change_record(path, operation, left, right)
   }
 end
 
+local function blob_too_large(store, size)
+  local max_bytes = store and store.max_blob_bytes or nil
+  return max_bytes ~= nil and tonumber(size) and tonumber(size) > max_bytes
+end
+
 function M.diff(before, after, opts)
   opts = opts or {}
   local previous = file_index(before)
@@ -295,19 +300,36 @@ function M.diff(before, after, opts)
         if (operation == "modified" or operation == "deleted") and left and not left.blob and opts.blob_store and before.vcs and before.vcs.kind == "git" then
           local run_cmd = opts.run or default_run
           local ref_name = (before.vcs.head and before.vcs.head ~= "") and before.vcs.head or "HEAD"
-          local git_args = { "git", "-C", before.root, "show", ref_name .. ":" .. path }
-          local show_result = run_cmd(git_args)
-          if show_result.code == 0 then
-            local data = show_result.stdout
-            local ref, put_err = opts.blob_store:put(data)
-            if ref then
-              ref.binary = data:find("\0", 1, true) ~= nil
-              left.blob = ref
-              left.binary = ref.binary
+          local object_name = ref_name .. ":" .. path
+          local oversized = blob_too_large(opts.blob_store, left.size)
+          if not oversized and opts.blob_store.max_blob_bytes ~= nil then
+            local size_result = run_cmd({ "git", "-C", before.root, "cat-file", "-s", object_name })
+            if size_result.code == 0 then
+              local object_size = trim(size_result.stdout)
+              oversized = blob_too_large(opts.blob_store, tonumber(object_size))
+            end
+          end
+          if oversized then
+            left.blob_error = string.format("blob exceeds %d bytes", opts.blob_store.max_blob_bytes)
+            changes[#changes + 1] = change_record(path, operation, left, right)
+            consumed[path] = true
+          else
+            local git_args = { "git", "-C", before.root, "show", object_name }
+            local show_result = run_cmd(git_args)
+            if show_result.code == 0 then
+              local data = show_result.stdout
+              local ref = opts.blob_store:put(data)
+              if ref then
+                ref.binary = data:find("\0", 1, true) ~= nil
+                left.blob = ref
+                left.binary = ref.binary
+              end
             end
           end
         end
-        changes[#changes + 1] = change_record(path, operation, left, right)
+        if not consumed[path] then
+          changes[#changes + 1] = change_record(path, operation, left, right)
+        end
       end
     end
   end
