@@ -242,6 +242,21 @@ function M.setup(deps)
     return true
   end
 
+  function module.open_thread_transcript(thread_id)
+    local _, thread = thread_backend(thread_id)
+    local path = thread and thread.transcript_path or nil
+    if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
+      vim.notify("LazyAgent ACP: raw transcript is unavailable", vim.log.levels.WARN)
+      return false
+    end
+    vim.cmd("tabnew")
+    vim.cmd("edit " .. vim.fn.fnameescape(path))
+    vim.bo.filetype = "markdown"
+    vim.bo.readonly = true
+    vim.wo.wrap = false
+    return true
+  end
+
   thread_label = function(thread)
     local marker = thread.status == "archived" and "archive" or thread.status
     local unread = thread.unread == true and " • unread" or ""
@@ -377,6 +392,10 @@ function M.setup(deps)
       local thread_id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       if thread_id then module.open_thread(thread_id) end
     end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit thread" })
+    vim.keymap.set("n", "v", function()
+      local thread_id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      if thread_id then module.open_thread_transcript(thread_id) end
+    end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit raw transcript" })
     vim.keymap.set("n", "r", refresh, { buffer = bufnr, silent = true, desc = "Refresh ACP cockpit" })
     vim.keymap.set("n", "x", function()
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]

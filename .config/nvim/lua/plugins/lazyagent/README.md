@@ -373,7 +373,7 @@ user/assistant blockの`ga` → `Copy message`は本文だけをcopyします。
 
 manual permission、authentication elicitation、turn completionはvisual notificationへ接続されます。`acp.notifications.sound_command = { ... }`を設定すると同じeventで非同期sound commandを実行でき、eventごとに`permission` / `elicitation` / `completion = false`で無効化できます。
 
-`:LazyAgentACPCockpit`はLazyAgentが保存したthreadをproject/worktree pathでgroup化したread-only bufferを開きます。これはproviderのnative resume候補ではなく、`running`は現在のprocess、`closed`は再開可能なtranscript、`archived`は保管済みの履歴です。thread cardは`running`を基準にstatus列をコンパクトに揃え、provider/model/status/unread/unique changed filesの後ろにproviderが返すsession title、またはtranscriptの最初のpromptを最大48表示列で省略して表示します。promptを一度も送らず閉じたthreadは保存せず、過去の空threadもCockpit refresh時にstoreとtranscriptから削除します。`<CR>`でopen、`x`で選択中のprocessを確認付きstop、`r`でrefresh、`q`でcloseできます。
+`:LazyAgentACPCockpit`はLazyAgentが保存したthreadをproject/worktree pathでgroup化したread-only bufferを開きます。これはproviderのnative resume候補ではなく、`running`は現在のprocess、`closed`は再開可能なtranscript、`archived`は保管済みの履歴です。thread cardは`running`を基準にstatus列をコンパクトに揃え、provider/model/status/unread/unique changed filesの後ろにproviderが返すsession title、またはtranscriptの最初のpromptを最大48表示列で省略して表示します。promptを一度も送らず閉じたthreadは保存せず、過去の空threadもCockpit refresh時にstoreとtranscriptから削除します。`<CR>`でopen、`v`でカーソル行のraw transcriptを`markdown`のread-only tabとして表示、`x`で選択中のprocessを確認付きstop、`r`でrefresh、`q`でcloseできます。
 
 active threadはruntime snapshotとjoinされ、statusをrunning / waiting / permission / idle / disconnectedへ正規化し、current modelとcumulative token/costもcardへ表示します。
 

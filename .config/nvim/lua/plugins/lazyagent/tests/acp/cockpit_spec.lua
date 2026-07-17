@@ -28,6 +28,7 @@ function M.run()
   assert(rendered:find("## /tmp/project%-b"), "project B group")
   assert(rendered:find("%[running%]%s+claude · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2 · First"), "thread card columns")
   assert(rendered:find("persisted threads: running = live process"), "cockpit lifecycle legend")
+  assert(rendered:find("`v` transcript", 1, true), "cockpit transcript key hint")
   local permission_lines = Cockpit.render(threads, {
     ["thread-a"] = { acp_ready = true, acp_client_debug = { pending_permissions = 1 } },
   })
