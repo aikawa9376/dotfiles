@@ -707,6 +707,7 @@ function M.new(ctx)
     end
 
     pcall(function()
+      vim.bo[bufnr].filetype = ACP_TRANSCRIPT_FILETYPE
       vim.bo[bufnr].swapfile = false
       vim.bo[bufnr].undofile = false
       vim.bo[bufnr].undolevels = -1
