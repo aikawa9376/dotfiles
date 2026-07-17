@@ -39,6 +39,10 @@ function M.run()
     end,
   })
 
+  vim.bo[bufnr].filetype = "markdown"
+  windowing.apply_transcript_buffer_opts(bufnr)
+  assert_equal(vim.bo[bufnr].filetype, "lazyagent-acp", "transcript options restore ACP filetype")
+
   local topline = 80
   local view_at_end = true
   local cursor_at_end = true

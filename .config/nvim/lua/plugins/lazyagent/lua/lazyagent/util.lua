@@ -117,13 +117,29 @@ function M.open_in_normal_win(path, opts)
   if not path or path == "" then return false end
   local target = nil
 
+  local function is_normal_file_window(win)
+    if not win or not vim.api.nvim_win_is_valid(win) then
+      return false
+    end
+    local ok_config, config = pcall(vim.api.nvim_win_get_config, win)
+    if not ok_config or (config.relative or "") ~= "" then
+      return false
+    end
+    local ok_buf, bufnr = pcall(vim.api.nvim_win_get_buf, win)
+    if not ok_buf or not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return false
+    end
+    local buftype = vim.bo[bufnr].buftype
+    return buftype == "" or buftype == "acwrite"
+  end
+
   -- Prefer the previously focused normal window recorded by the lazyagent scratch buffer
   local ok_win, winmod = pcall(require, "lazyagent.window")
   if ok_win and winmod and type(winmod.get_scratch_bufnr) == "function" then
     local s_buf = winmod.get_scratch_bufnr()
     if s_buf and vim.api.nvim_buf_is_valid(s_buf) then
       local prev = vim.b[s_buf] and vim.b[s_buf].lazyagent_prev_win
-      if prev and vim.api.nvim_win_is_valid(prev) then
+      if is_normal_file_window(prev) then
         target = prev
       end
     end
@@ -132,15 +148,9 @@ function M.open_in_normal_win(path, opts)
   -- Fallback: find first normal window
   if not target then
     for _, w in ipairs(vim.api.nvim_list_wins()) do
-      local ok, b = pcall(vim.api.nvim_win_get_buf, w)
-      if ok and b then
-        local ok2, bt = pcall(function()
-          return vim.bo[b].buftype
-        end)
-        if ok2 and (bt == "" or bt == "acwrite") then
-          target = w
-          break
-        end
+      if is_normal_file_window(w) then
+        target = w
+        break
       end
     end
   end
@@ -153,15 +163,24 @@ function M.open_in_normal_win(path, opts)
     end)
   end
 
-  if target and vim.api.nvim_win_is_valid(target) then
-    pcall(vim.api.nvim_set_current_win, target)
+  if not target or not vim.api.nvim_win_is_valid(target) then
+    return false
   end
 
-  pcall(vim.cmd, "edit " .. vim.fn.fnameescape(path))
+  local ok_current = pcall(vim.api.nvim_set_current_win, target)
+  if not ok_current then
+    return false
+  end
+
+  local ok_edit = pcall(vim.cmd, "edit " .. vim.fn.fnameescape(path))
+  if not ok_edit then
+    return false
+  end
+  local bufnr = vim.api.nvim_win_get_buf(target)
   if opts.line and target and vim.api.nvim_win_is_valid(target) then
     pcall(vim.api.nvim_win_set_cursor, target, { opts.line, 0 })
   end
-  return true
+  return true, bufnr, target
 end
 
 function M.fire_event(event_name, data)

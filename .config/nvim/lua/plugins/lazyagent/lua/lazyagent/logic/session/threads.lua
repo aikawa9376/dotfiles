@@ -251,9 +251,11 @@ function M.setup(deps)
     end
     vim.cmd("tabnew")
     vim.cmd("edit " .. vim.fn.fnameescape(path))
-    vim.bo.filetype = "markdown"
-    vim.bo.readonly = true
-    vim.wo.wrap = false
+    local bufnr = vim.api.nvim_get_current_buf()
+    local winid = vim.api.nvim_get_current_win()
+    vim.bo[bufnr].filetype = "markdown"
+    vim.bo[bufnr].readonly = true
+    vim.wo[winid].wrap = false
     return true
   end
 

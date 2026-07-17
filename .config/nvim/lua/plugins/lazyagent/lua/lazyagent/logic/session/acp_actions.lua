@@ -1073,10 +1073,14 @@ function M.setup(deps)
         return
       end
 
-      util.open_in_normal_win(path)
-      vim.bo.filetype = "markdown"
-      vim.bo.readonly = true
-      vim.cmd("setlocal nowrap")
+      local opened, bufnr, winid = util.open_in_normal_win(path)
+      if not opened or not bufnr or not winid then
+        vim.notify("LazyAgentACP: failed to open raw transcript", vim.log.levels.ERROR)
+        return
+      end
+      vim.bo[bufnr].filetype = "markdown"
+      vim.bo[bufnr].readonly = true
+      vim.wo[winid].wrap = false
     end)
   end
 
