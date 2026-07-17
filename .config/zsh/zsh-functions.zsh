@@ -377,7 +377,12 @@ fvim() {
 }
 
 f_history_toggle() {
-  local dedup='awk -v RS="\0" -v ORS="\0" "!seen[\$0]++"'
+  local dedup
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    dedup="perl -0ne 'print unless \$seen{\$_}++'"
+  else
+    dedup='awk -v RS="\0" -v ORS="\0" "!seen[\$0]++"'
+  fi
 
   local dir; local prompt
   local is_gitdir=$(git rev-parse --is-inside-work-tree 2>/dev/null)
