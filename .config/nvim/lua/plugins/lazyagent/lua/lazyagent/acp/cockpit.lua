@@ -83,14 +83,32 @@ local function changed_file_count(thread)
   return vim.tbl_count(seen)
 end
 
-local function transcript_has_user_prompt(path)
-  if not path or path == "" or vim.fn.filereadable(path) ~= 1 then return false end
+local function transcript_first_user_prompt(path)
+  if not path or path == "" or vim.fn.filereadable(path) ~= 1 then return nil end
   local ok, lines = pcall(vim.fn.readfile, path, "", 2000)
-  if not ok then return false end
+  if not ok then return nil end
+  local collecting = false
+  local body = {}
   for _, line in ipairs(lines or {}) do
-    if line:match("^─ .- User") or line:match("^#+%s+User") then return true end
+    if line:match("^─ .- User") or line:match("^#+%s+User") then
+      collecting = true
+    elseif collecting and (line:match("^─ ") or line:match("^#+%s+")) then
+      break
+    elseif collecting then
+      local text = vim.trim(line)
+      if text ~= "" then body[#body + 1] = text end
+      if #body >= 20 then break end
+    end
   end
-  return false
+  local prompt = vim.trim(table.concat(body, " "))
+  return prompt ~= "" and prompt or nil
+end
+
+function M.prompt_title(thread)
+  local title = vim.trim(tostring(thread and thread.title or "")):gsub("%s+", " ")
+  local provider = vim.trim(tostring(thread and thread.provider_id or ""))
+  if title ~= "" and title ~= provider and title ~= (thread and thread.thread_id) then return title end
+  return transcript_first_user_prompt(thread and thread.transcript_path)
 end
 
 function M.has_meaningful_content(thread)
@@ -99,10 +117,26 @@ function M.has_meaningful_content(thread)
   local metadata = type(thread.metadata) == "table" and thread.metadata or {}
   if metadata.has_user_prompt == true or metadata.imported_from_native == true then return true end
   if changed_file_count(thread) > 0 then return true end
-  local title = vim.trim(tostring(thread.title or ""))
-  local provider = vim.trim(tostring(thread.provider_id or ""))
-  if title ~= "" and title ~= provider and title ~= thread.thread_id then return true end
-  return transcript_has_user_prompt(thread.transcript_path)
+  return M.prompt_title(thread) ~= nil
+end
+
+function M.prune_empty(backend, threads)
+  local kept = {}
+  local removed = 0
+  for _, thread in ipairs(threads or {}) do
+    if M.has_meaningful_content(thread) or not backend or type(backend.delete_thread) ~= "function" then
+      kept[#kept + 1] = thread
+    else
+      local deleted = backend.delete_thread(thread.thread_id)
+      if deleted == true then
+        removed = removed + 1
+        if thread.transcript_path and thread.transcript_path ~= "" then pcall(vim.fn.delete, thread.transcript_path) end
+      else
+        kept[#kept + 1] = thread
+      end
+    end
+  end
+  return kept, removed
 end
 
 local function latest_paths(thread)
@@ -183,8 +217,8 @@ local function card_line(thread, runtime, conflicts, max_width)
   local conflict_count = vim.tbl_count(conflicts[thread.thread_id] or {})
   local test = thread.metadata and thread.metadata.test_result or nil
   local provider = tostring(thread.provider_id or "provider")
-  local raw_title = vim.trim(tostring(thread.title or "")):gsub("%s+", " ")
-  local show_title = raw_title ~= "" and raw_title ~= provider and raw_title ~= thread.thread_id
+  local raw_title = M.prompt_title(thread) or ""
+  local show_title = raw_title ~= ""
 
   local fields = {}
   if model ~= "default" then fields[#fields + 1] = { "model:" .. tostring(model), "LazyAgentACPCockpitModel", "model" } end
