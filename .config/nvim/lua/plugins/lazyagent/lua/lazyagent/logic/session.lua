@@ -83,6 +83,9 @@ local threads = session_threads.setup({
   start_interactive_session = function(opts)
     return M.start_interactive_session(opts)
   end,
+  close_session = function(agent_name)
+    return M.close_session(agent_name)
+  end,
 })
 
 local actions = session_actions.setup({

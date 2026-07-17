@@ -373,11 +373,11 @@ user/assistant blockの`ga` → `Copy message`は本文だけをcopyします。
 
 manual permission、authentication elicitation、turn completionはvisual notificationへ接続されます。`acp.notifications.sound_command = { ... }`を設定すると同じeventで非同期sound commandを実行でき、eventごとに`permission` / `elicitation` / `completion = false`で無効化できます。
 
-`:LazyAgentACPCockpit`はpersisted threadをproject/worktree pathでgroup化したread-only bufferを開きます。thread cardにはtitle/provider/model/status/unread/unique changed filesを表示し、`<CR>`でopen、`r`でrefresh、`q`でcloseできます。
+`:LazyAgentACPCockpit`はLazyAgentが保存したthreadをproject/worktree pathでgroup化したread-only bufferを開きます。これはproviderのnative resume候補ではなく、`running`は現在のprocess、`closed`は再開可能なtranscript、`archived`は保管済みの履歴です。thread cardはproviderが返すsession title（多くは最初のprompt由来）を画面幅で省略し、provider/model/status/unread/unique changed filesを色分けして1行表示します。`<CR>`でopen、`x`で選択中のprocessを確認付きstop、`r`でrefresh、`q`でcloseできます。
 
 active threadはruntime snapshotとjoinされ、statusをrunning / waiting / permission / idle / disconnectedへ正規化し、current modelとcumulative token/costもcardへ表示します。
 
-Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`X` running ACP session一括closeを使えます。deleteとbulk closeは確認後に実行します。
+Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`X` running ACP process一括stopを使えます。stopとdeleteは確認後に実行します。停止済みの履歴自体を消す場合は`d`を使います。
 
 agentmux publish時のpane/owner/kind/name/state/message/preview identityはactive threadの`metadata.agentmux`にも保存され、Neovim runtimeが無い場合のCockpit status fallbackとして利用されます。
 

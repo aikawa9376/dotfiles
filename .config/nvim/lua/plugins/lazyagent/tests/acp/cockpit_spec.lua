@@ -15,7 +15,7 @@ function M.run()
       } } } },
     },
   }
-  local lines, line_map = Cockpit.render(threads, {
+  local lines, line_map, highlights = Cockpit.render(threads, {
     ["thread-a"] = {
       acp_ready = true,
       acp_busy = true,
@@ -27,6 +27,7 @@ function M.run()
   assert(rendered:find("## /tmp/project%-a"), "project A group")
   assert(rendered:find("## /tmp/project%-b"), "project B group")
   assert(rendered:find("%[running%] First · claude · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2"), "thread card columns")
+  assert(rendered:find("persisted threads: running = live process"), "cockpit lifecycle legend")
   local permission_lines = Cockpit.render(threads, {
     ["thread-a"] = { acp_ready = true, acp_client_debug = { pending_permissions = 1 } },
   })
@@ -34,6 +35,23 @@ function M.run()
   local mapped = {}
   for _, id in pairs(line_map) do mapped[id] = true end
   assert(mapped["thread-a"] and mapped["thread-b"], "thread line mappings")
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  Cockpit.apply_highlights(bufnr, highlights)
+  local marks = vim.api.nvim_buf_get_extmarks(bufnr, vim.api.nvim_create_namespace("LazyAgentACPCockpit"), 0, -1, {})
+  assert(#marks >= 10, "cockpit semantic highlights")
+  vim.api.nvim_buf_delete(bufnr, { force = true })
+
+  local narrow_threads = vim.deepcopy(threads)
+  narrow_threads[2].title = "This is the first prompt and it is deliberately much too long for a single cockpit line"
+  local narrow_lines = Cockpit.render(narrow_threads, {}, { width = 64 })
+  local narrow_rendered = table.concat(narrow_lines, "\n")
+  assert(narrow_rendered:find("…", 1, true), "long first prompt is truncated")
+  for _, line in ipairs(narrow_lines) do
+    if line:match("^%- ") then
+      assert(vim.fn.strdisplaywidth(line) <= 64, "thread card fits requested width")
+    end
+  end
   local filtered = Cockpit.filter(threads, "CLAUDE")
   assert(#filtered == 1 and filtered[1].thread_id == "thread-a", "cockpit case-insensitive filter")
 
