@@ -298,8 +298,10 @@ local function decide_review(agent_name, body)
   local backend_mod = backend_for(target)
   local thread_id = session.thread_id or session.acp_thread_id
   if not backend_mod or not thread_id then return false, "ACP review is unavailable" end
-  local decision = body.decision == "keep" and "kept" or body.decision == "reject" and "rejected" or body.decision
-  if decision ~= "kept" and decision ~= "rejected" then return false, "decision must be keep or reject" end
+  local decision = (body.decision == "approve" or body.decision == "keep") and "kept"
+    or body.decision == "reject" and "rejected"
+    or body.decision
+  if decision ~= "kept" and decision ~= "rejected" then return false, "decision must be approve or reject" end
   local turn_id = tostring(body.turn_id or "")
   if turn_id == "" then return false, "turn_id is required" end
   local result, decision_err
@@ -873,7 +875,7 @@ local WEB_UI = [=[
           method: 'POST',
           body: JSON.stringify({ agent: selectedAgent(), turn_id: turnId, indices, decision }),
         });
-        setStatus(decision === 'keep' ? 'Changes kept' : 'Changes rejected');
+        setStatus(decision === 'approve' ? 'Changes approved' : 'Changes rejected');
         await refreshActions();
         await refreshTranscript();
       } catch (err) {
@@ -916,7 +918,7 @@ local WEB_UI = [=[
         const path = document.createElement('span');
         path.textContent = (change.operation || '?') + ' ' + (change.path || 'unknown');
         const state = document.createElement('span');
-        state.textContent = change.decision || 'pending';
+        state.textContent = change.decision === 'kept' ? 'approved' : (change.decision || 'pending');
         head.append(path, state);
         item.appendChild(head);
         if (change.diff) {
@@ -928,14 +930,14 @@ local WEB_UI = [=[
         if (!change.decision) {
           const buttons = document.createElement('div');
           buttons.className = 'review-buttons';
-          const keep = document.createElement('button');
-          keep.textContent = 'Keep';
-          keep.addEventListener('click', () => decideChange(review.turn_id, [change.index], 'keep'));
+          const approve = document.createElement('button');
+          approve.textContent = 'Approve';
+          approve.addEventListener('click', () => decideChange(review.turn_id, [change.index], 'approve'));
           const reject = document.createElement('button');
           reject.className = 'danger';
           reject.textContent = 'Reject';
           reject.addEventListener('click', () => decideChange(review.turn_id, [change.index], 'reject'));
-          buttons.append(keep, reject);
+          buttons.append(approve, reject);
           item.appendChild(buttons);
         }
         reviewList.appendChild(item);

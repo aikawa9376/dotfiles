@@ -1548,6 +1548,7 @@ function M.new(ctx)
 
       vim.ui.select(actions, {
         prompt = "ACP actions:",
+        kind = "lazyagent-acp-actions",
         format_item = function(entry)
           return entry.label
         end,
