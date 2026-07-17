@@ -59,6 +59,8 @@ local function setup_highlights()
     LazyAgentACPCockpitTestPassed = { default = true, link = "DiagnosticOk" },
     LazyAgentACPCockpitTestFailed = { default = true, link = "DiagnosticError" },
     LazyAgentACPCockpitPin = { default = true, link = "DiagnosticWarn" },
+    LazyAgentACPCockpitActive = { default = true, link = "DiagnosticOk" },
+    LazyAgentACPCockpitQueue = { default = true, link = "DiagnosticWarn" },
     LazyAgentACPCockpitStatusRunning = { default = true, link = "DiagnosticInfo" },
     LazyAgentACPCockpitStatusPermission = { default = true, link = "DiagnosticWarn" },
     LazyAgentACPCockpitStatusWaiting = { default = true, link = "DiagnosticWarn" },
@@ -188,12 +190,63 @@ local function common_status(thread, runtime)
     end
     if runtime.acp_ready == true then return "idle" end
   end
-  local agentmux_state = thread.metadata and thread.metadata.agentmux and thread.metadata.agentmux.state
-  if agentmux_state == "working" then return "running" end
-  if agentmux_state == "blocked" then return "waiting" end
-  if agentmux_state == "idle" then return "idle" end
-  if thread.status == "active" and thread.process_id ~= nil then return "disconnected" end
+  if thread.status == "active" and thread.process_id ~= nil then
+    local agentmux_state = thread.metadata and thread.metadata.agentmux and thread.metadata.agentmux.state
+    if agentmux_state == "working" then return "running" end
+    if agentmux_state == "blocked" then return "waiting" end
+    if agentmux_state == "idle" then return "idle" end
+    return "disconnected"
+  end
   return thread.status or "closed"
+end
+
+local transcript_roles = {
+  assistant = true,
+  user = true,
+  system = true,
+  tool = true,
+  thinking = true,
+  plan = true,
+}
+
+local function transcript_role(line)
+  line = tostring(line or "")
+  local role = line:match("^#+%s+([%a]+)")
+  if not role and line:match("^─ ") then
+    role = line:match("%s([%a]+)%s*")
+  end
+  role = role and role:lower() or nil
+  if role and transcript_roles[role] then return role end
+  if line:match("^─ ") and line:match("─+$") then return "assistant" end
+  return nil
+end
+
+function M.latest_response(thread, max_lines)
+  local path = thread and thread.transcript_path or nil
+  if not path or path == "" or vim.fn.filereadable(path) ~= 1 then return {} end
+  local ok, lines = pcall(vim.fn.readfile, path, "", -400)
+  if not ok then return {} end
+  local start = nil
+  for index = #lines, 1, -1 do
+    if transcript_role(lines[index]) == "assistant" then
+      start = index + 1
+      break
+    end
+  end
+  if not start then return {} end
+  local response = {}
+  for index = start, #lines do
+    if transcript_role(lines[index]) then break end
+    response[#response + 1] = lines[index]
+  end
+  while #response > 0 and vim.trim(response[1]) == "" do table.remove(response, 1) end
+  while #response > 0 and vim.trim(response[#response]) == "" do table.remove(response) end
+  max_lines = math.max(1, tonumber(max_lines) or 8)
+  if #response > max_lines then
+    response = vim.list_slice(response, 1, max_lines)
+    response[#response + 1] = "…"
+  end
+  return response
 end
 
 local function usage_label(runtime)
@@ -208,7 +261,9 @@ local function usage_label(runtime)
   return #parts > 0 and table.concat(parts, "/") or "n/a"
 end
 
-local function card_line(thread, runtime, conflicts, max_width)
+local function card_line(thread, runtime, conflicts, opts)
+  opts = opts or {}
+  local max_width = opts.width
   local status = common_status(thread, runtime)
   local runtime_model = runtime and runtime.acp_model_catalog and runtime.acp_model_catalog.currentModelId
   local model = runtime_model or (thread.model and thread.model ~= "" and thread.model) or "default"
@@ -219,6 +274,7 @@ local function card_line(thread, runtime, conflicts, max_width)
   local provider = tostring(thread.provider_id or "provider")
   local raw_title = M.prompt_title(thread) or ""
   local show_title = raw_title ~= ""
+  local is_open = opts.open_thread_id == thread.thread_id
 
   local fields = {}
   if model ~= "default" then fields[#fields + 1] = { "model:" .. tostring(model), "LazyAgentACPCockpitModel", "model" } end
@@ -226,6 +282,10 @@ local function card_line(thread, runtime, conflicts, max_width)
   local usage = usage_label(runtime)
   if usage ~= "n/a" then fields[#fields + 1] = { "usage:" .. usage, "LazyAgentACPCockpitMuted", "usage" } end
   if changes > 0 then fields[#fields + 1] = { "changes:" .. tostring(changes), "LazyAgentACPCockpitChanges", "changes" } end
+  local queue_count = runtime and #(runtime.acp_prompt_queue or {}) or 0
+  if queue_count > 0 then
+    fields[#fields + 1] = { "queue:" .. tostring(queue_count), "LazyAgentACPCockpitQueue", "queue" }
+  end
   if conflict_count > 0 then
     fields[#fields + 1] = { "⚠conflicts:" .. tostring(conflict_count), "LazyAgentACPCockpitConflict", "conflict" }
   end
@@ -239,14 +299,14 @@ local function card_line(thread, runtime, conflicts, max_width)
 
   local function fixed_width()
     local status_padding = math.max(1, STATUS_WIDTH - display_width(status) + 1)
-    local width = display_width("- " .. (pinned and "★ " or "") .. "[" .. status .. "]")
+    local width = display_width("- " .. (is_open and "● " or "  ") .. (pinned and "★ " or "") .. "[" .. status .. "]")
       + status_padding + display_width(provider)
     for _, field in ipairs(fields) do width = width + display_width(" · " .. field[1]) end
     if show_title then width = width + display_width(" · ") end
     return width
   end
 
-  local removal_order = { "usage", "model", "changes", "test", "unread", "conflict" }
+  local removal_order = { "usage", "model", "changes", "test", "unread", "conflict", "queue" }
   while max_width and max_width - fixed_width() < 12 do
     local removed = false
     for _, kind in ipairs(removal_order) do
@@ -267,6 +327,7 @@ local function card_line(thread, runtime, conflicts, max_width)
   local title = show_title and truncate_display(raw_title, title_width) or ""
   local parts, spans = {}, {}
   add_segment(parts, spans, "- ", "LazyAgentACPCockpitMuted")
+  add_segment(parts, spans, is_open and "● " or "  ", is_open and "LazyAgentACPCockpitActive" or "LazyAgentACPCockpitMuted")
   if pinned then add_segment(parts, spans, "★ ", "LazyAgentACPCockpitPin") end
   add_segment(parts, spans, "[" .. status .. "]", status_highlights[status] or "LazyAgentACPCockpitMuted")
   add_segment(parts, spans, string.rep(" ", math.max(1, STATUS_WIDTH - display_width(status) + 1)))
@@ -299,7 +360,7 @@ function M.render(threads, runtimes, opts)
     "# LazyAgent ACP Session Cockpit",
     "",
     "persisted threads: running = live process, closed = resumable history, archived = retained history",
-    "`<CR>` open  `v` transcript  `x` stop  `/` filter  `p` pin  `t` test  `a` archive/restore  `c` cleanup  `d` delete  `X` stop all  `r` refresh  `q` close",
+    "`<CR>` open/resume  `i` message  `v` transcript  `[a`/`]a` live  `P` preview  `x` stop  `/` filter  `p` pin  `t` test  `a` archive/restore  `c` cleanup  `d` delete  `D` force delete  `X` stop all  `r` refresh  `q` close",
   }
   local line_map = {}
   local highlights = {
@@ -318,6 +379,9 @@ function M.render(threads, runtimes, opts)
     lines[#lines + 1] = "## " .. vim.fn.fnamemodify(path, ":~")
     highlights[#lines] = { { start_col = 0, end_col = #lines[#lines], group = "LazyAgentACPCockpitWorkspace" } }
     table.sort(groups[path], function(left, right)
+      local left_live = runtimes[left.thread_id] ~= nil or (left.status == "active" and left.process_id ~= nil)
+      local right_live = runtimes[right.thread_id] ~= nil or (right.status == "active" and right.process_id ~= nil)
+      if left_live ~= right_live then return left_live end
       local left_pinned = left.metadata and left.metadata.cockpit_pinned == true
       local right_pinned = right.metadata and right.metadata.cockpit_pinned == true
       if left_pinned ~= right_pinned then return left_pinned end
@@ -326,7 +390,7 @@ function M.render(threads, runtimes, opts)
     end)
     for _, thread in ipairs(groups[path]) do
       local runtime = runtimes[thread.thread_id]
-      local line, spans = card_line(thread, runtime, conflicts, opts.width)
+      local line, spans = card_line(thread, runtime, conflicts, opts)
       lines[#lines + 1] = line
       line_map[#lines] = thread.thread_id
       highlights[#lines] = spans

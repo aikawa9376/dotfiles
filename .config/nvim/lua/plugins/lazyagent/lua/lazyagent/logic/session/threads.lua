@@ -60,6 +60,18 @@ function M.setup(deps)
     return false
   end
 
+  local function delete_thread_record(backend, thread)
+    local deleted, err = backend.delete_thread(thread.thread_id)
+    if deleted ~= true then
+      vim.notify("LazyAgent ACP: delete failed: " .. tostring(err), vim.log.levels.ERROR)
+      return false
+    end
+    if thread.transcript_path and thread.transcript_path ~= "" then
+      pcall(vim.fn.delete, thread.transcript_path)
+    end
+    return true
+  end
+
   function module.open_thread(thread_id)
     local backend, thread = thread_backend(thread_id)
     if not backend or not thread then
@@ -201,7 +213,15 @@ function M.setup(deps)
     if not backend or not thread or active_mutation_error(thread, "deleting") then
       return false
     end
-    return backend.delete_thread(thread.thread_id) == true
+    return delete_thread_record(backend, thread)
+  end
+
+  function module.force_delete_thread(thread_id)
+    local backend, thread = thread_backend(thread_id)
+    if not backend or not thread then
+      return false
+    end
+    return delete_thread_record(backend, thread)
   end
 
   function module.show_thread_changes(thread_id)
@@ -336,20 +356,90 @@ function M.setup(deps)
     vim.bo[bufnr].swapfile = false
     vim.bo[bufnr].filetype = "lazyagent_acp_cockpit"
 
+    local cockpit_winid = vim.api.nvim_get_current_win()
     local line_map = {}
     local stored_threads = {}
     local query = ""
     local warned_conflicts = ""
     local thread_agents = {}
+    local preview_bufnr
+    local preview_winid
+    local preview_enabled = true
+    local refreshing = false
+    local creating_preview = false
+
+    local function stored_thread(thread_id)
+      for _, thread in ipairs(stored_threads or {}) do
+        if thread.thread_id == thread_id then return thread end
+      end
+      return nil
+    end
+
+    local function create_preview()
+      if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then return true end
+      if creating_preview then return false end
+      if not vim.api.nvim_win_is_valid(cockpit_winid) then return false end
+      creating_preview = true
+      if not preview_bufnr or not vim.api.nvim_buf_is_valid(preview_bufnr) then
+        preview_bufnr = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(preview_bufnr, "LazyAgent ACP Cockpit Preview [" .. tostring(preview_bufnr) .. "]")
+        vim.bo[preview_bufnr].buftype = "nofile"
+        vim.bo[preview_bufnr].bufhidden = "wipe"
+        vim.bo[preview_bufnr].swapfile = false
+        vim.bo[preview_bufnr].filetype = "markdown"
+      end
+      vim.api.nvim_set_current_win(cockpit_winid)
+      vim.cmd("botright 10split")
+      preview_winid = vim.api.nvim_get_current_win()
+      vim.api.nvim_win_set_buf(preview_winid, preview_bufnr)
+      vim.wo[preview_winid].winfixheight = true
+      vim.wo[preview_winid].wrap = true
+      vim.wo[preview_winid].number = false
+      vim.wo[preview_winid].relativenumber = false
+      vim.api.nvim_set_current_win(cockpit_winid)
+      creating_preview = false
+      return true
+    end
+
+    local function selected_thread_id()
+      if not vim.api.nvim_win_is_valid(cockpit_winid) then return nil end
+      return line_map[vim.api.nvim_win_get_cursor(cockpit_winid)[1]]
+    end
+
+    local function update_preview(thread_id)
+      if not preview_enabled or not create_preview() then return end
+      local thread = stored_thread(thread_id or selected_thread_id())
+      local lines = { "# Thread Preview", "", "_Move to a thread to preview its latest response._" }
+      if thread then
+        local title = require("lazyagent.acp.cockpit").prompt_title(thread) or thread.thread_id:sub(1, 8)
+        title = vim.fn.strcharpart(title:gsub("%s+", " "), 0, 72)
+        lines = { "# " .. tostring(thread.provider_id or "Agent") .. " · " .. title, "" }
+        local height = preview_winid and vim.api.nvim_win_is_valid(preview_winid)
+            and vim.api.nvim_win_get_height(preview_winid)
+          or 10
+        local response = require("lazyagent.acp.cockpit").latest_response(thread, math.max(1, height - 3))
+        if #response == 0 then response = { "_No assistant response yet._" } end
+        vim.list_extend(lines, response)
+      end
+      vim.bo[preview_bufnr].modifiable = true
+      vim.api.nvim_buf_set_lines(preview_bufnr, 0, -1, false, lines)
+      vim.bo[preview_bufnr].modifiable = false
+      vim.bo[preview_bufnr].modified = false
+    end
+
     local function cockpit_width()
       local windows = vim.fn.win_findbuf(bufnr)
       local winid = windows[1]
       return math.max(40, (winid and vim.api.nvim_win_get_width(winid) or vim.o.columns) - 1)
     end
     local function refresh()
+      if refreshing or creating_preview then return end
+      refreshing = true
+      local selected_id = selected_thread_id()
       local list_err
       stored_threads, list_err = backend.list_threads({ include_archived = true })
       if not stored_threads then
+        refreshing = false
         vim.notify("LazyAgent ACP cockpit: " .. tostring(list_err), vim.log.levels.ERROR)
         return
       end
@@ -372,10 +462,14 @@ function M.setup(deps)
         end
       end
       local highlights
+      local open_thread_id = require("lazyagent.logic.session.identity").thread_id(
+        state.open_agent,
+        state.open_agent and state.sessions and state.sessions[state.open_agent] or nil
+      )
       lines, line_map, highlights = require("lazyagent.acp.cockpit").render(
         require("lazyagent.acp.cockpit").filter(stored_threads, query),
         runtimes,
-        { width = cockpit_width() }
+        { width = cockpit_width(), open_thread_id = open_thread_id }
       )
       local conflicts = require("lazyagent.acp.cockpit").conflicts(stored_threads)
       local conflict_hash = vim.fn.sha256(vim.inspect(conflicts))
@@ -388,12 +482,85 @@ function M.setup(deps)
       vim.bo[bufnr].modifiable = false
       vim.bo[bufnr].modified = false
       require("lazyagent.acp.cockpit").apply_highlights(bufnr, highlights)
+      if selected_id and vim.api.nvim_win_is_valid(cockpit_winid) then
+        for line, id in pairs(line_map) do
+          if id == selected_id then
+            vim.api.nvim_win_set_cursor(cockpit_winid, { line, 0 })
+            break
+          end
+        end
+      end
+      update_preview(selected_id)
+      refreshing = false
+    end
+
+    local function jump_live(delta)
+      local rows = {}
+      for line, id in pairs(line_map) do
+        if thread_agents[id] then rows[#rows + 1] = line end
+      end
+      table.sort(rows)
+      if #rows == 0 then
+        vim.notify("LazyAgent ACP: no live threads", vim.log.levels.INFO)
+        return
+      end
+      local current = vim.api.nvim_win_get_cursor(cockpit_winid)[1]
+      local target
+      if delta > 0 then
+        for _, line in ipairs(rows) do if line > current then target = line; break end end
+        target = target or rows[1]
+      else
+        for index = #rows, 1, -1 do if rows[index] < current then target = rows[index]; break end end
+        target = target or rows[#rows]
+      end
+      vim.api.nvim_win_set_cursor(cockpit_winid, { target, 0 })
+      update_preview(line_map[target])
     end
 
     vim.keymap.set("n", "<CR>", function()
       local thread_id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       if thread_id then module.open_thread(thread_id) end
     end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit thread" })
+    vim.keymap.set("n", "i", function()
+      local id = selected_thread_id()
+      local agent_name = id and thread_agents[id] or nil
+      local thread = id and stored_thread(id) or nil
+      if not agent_name or not thread then
+        vim.notify("LazyAgent ACP: this thread is not live; press <CR> to resume it", vim.log.levels.INFO)
+        return
+      end
+      start_interactive_session({
+        agent_name = thread.provider_id,
+        acp_thread_id = thread.thread_id,
+        acp_thread_title = thread.title,
+        reuse = true,
+        window_type = "float",
+        window_opts = { width_ratio = 0.55, height = 10 },
+        start_in_insert_on_focus = true,
+        source_bufnr = bufnr,
+        source_winid = cockpit_winid,
+        title = " Message · " .. tostring(thread.provider_id or "Agent") .. " ",
+      })
+      vim.defer_fn(function()
+        if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
+      end, 50)
+    end, { buffer = bufnr, silent = true, desc = "Message selected live ACP thread" })
+    vim.keymap.set("n", "]a", function() jump_live(1) end, {
+      buffer = bufnr, silent = true, desc = "Next live ACP thread",
+    })
+    vim.keymap.set("n", "[a", function() jump_live(-1) end, {
+      buffer = bufnr, silent = true, desc = "Previous live ACP thread",
+    })
+    vim.keymap.set("n", "P", function()
+      if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
+        preview_enabled = false
+        vim.api.nvim_win_close(preview_winid, true)
+        preview_winid = nil
+      else
+        preview_enabled = true
+        update_preview()
+      end
+    end, { buffer = bufnr, silent = true, desc = "Toggle ACP cockpit preview" })
     vim.keymap.set("n", "v", function()
       local thread_id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       if thread_id then module.open_thread_transcript(thread_id) end
@@ -464,6 +631,19 @@ function M.setup(deps)
         if choice == "Delete" then module.delete_thread(id); refresh() end
       end)
     end, { buffer = bufnr, silent = true, desc = "Delete ACP cockpit thread" })
+    vim.keymap.set("n", "D", function()
+      local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      if not id then return end
+      vim.ui.select({ "Cancel", "Force delete" }, {
+        prompt = "Force delete cockpit thread and stop its process? This cannot be undone.",
+      }, function(choice)
+        if choice ~= "Force delete" then return end
+        local agent_name = thread_agents[id]
+        if agent_name then close_session(agent_name) end
+        module.force_delete_thread(id)
+        refresh()
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Force delete ACP cockpit thread" })
     vim.keymap.set("n", "c", function()
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       if not id then return end
@@ -488,7 +668,18 @@ function M.setup(deps)
       silent = true,
       desc = "Close ACP cockpit",
     })
+    vim.api.nvim_create_autocmd("CursorMoved", {
+      buffer = bufnr,
+      callback = function() update_preview() end,
+    })
+    vim.api.nvim_create_autocmd("WinEnter", {
+      buffer = bufnr,
+      callback = refresh,
+    })
     refresh()
+    if vim.api.nvim_win_is_valid(cockpit_winid) then
+      vim.api.nvim_set_current_win(cockpit_winid)
+    end
     return true
   end
 

@@ -45,7 +45,8 @@ return {
   cmd = {
     "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentClose",
     "LazyAgentEdit", "LazyAgentHistory", "LazyAgentConversationList", "LazyAgentSummary",
-    "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPConfig", "LazyAgentACPMobileQR",
+    "LazyAgentACPCockpit", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPConfig",
+    "LazyAgentACPMobileQR",
     "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
@@ -373,11 +374,13 @@ user/assistant blockの`ga` → `Copy message`は本文だけをcopyします。
 
 manual permission、authentication elicitation、turn completionはvisual notificationへ接続されます。`acp.notifications.sound_command = { ... }`を設定すると同じeventで非同期sound commandを実行でき、eventごとに`permission` / `elicitation` / `completion = false`で無効化できます。
 
-`:LazyAgentACPCockpit`はLazyAgentが保存したthreadをproject/worktree pathでgroup化したread-only bufferを開きます。これはproviderのnative resume候補ではなく、`running`は現在のprocess、`closed`は再開可能なtranscript、`archived`は保管済みの履歴です。thread cardは`running`を基準にstatus列をコンパクトに揃え、provider/model/status/unread/unique changed filesの後ろにproviderが返すsession title、またはtranscriptの最初のpromptを最大48表示列で省略して表示します。promptを一度も送らず閉じたthreadは保存せず、過去の空threadもCockpit refresh時にstoreとtranscriptから削除します。`<CR>`でopen、`v`でカーソル行のraw transcriptを`markdown`のread-only tabとして表示、`x`で選択中のprocessを確認付きstop、`r`でrefresh、`q`でcloseできます。
+`:LazyAgentACPCockpit`はLazyAgentが保存したthreadをproject/worktree pathでgroup化したread-only bufferを開きます。これはproviderのnative resume候補ではなく、`running`は現在のprocess、`idle`はlive processの入力待ち、`closed`は再開可能なtranscript、`archived`は保管済みの履歴です。live threadは各project内の先頭へ並び、現在scratch popupで表示中のthreadには`●`、待機promptがあるthreadには`queue:N`を表示します。thread cardはstatus列をコンパクトに揃え、provider/model/status/unread/unique changed filesの後ろにproviderが返すsession title、またはtranscriptの最初のpromptを最大48表示列で省略して表示します。promptを一度も送らず閉じたthreadは保存せず、過去の空threadもCockpit refresh時にstoreとtranscriptから削除します。
+
+Cockpitの`i`は選択中のlive thread専用scratch popupを開き、既存のscratch keymapとmultiline/context入力をそのまま使えます。running中の送信はprompt queueへ追加されます。`[a` / `]a`でlive thread間を移動し、下部previewには選択threadの最新Assistant応答を表示します。`P`でpreviewを切り替え、`<CR>`でopen/resume、`v`でraw transcriptを`markdown`のread-only tabとして表示します。
 
 active threadはruntime snapshotとjoinされ、statusをrunning / waiting / permission / idle / disconnectedへ正規化し、current modelとcumulative token/costもcardへ表示します。
 
-Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`X` running ACP process一括stopを使えます。stopとdeleteは確認後に実行します。停止済みの履歴自体を消す場合は`d`を使います。
+Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`D` force delete、`X` running ACP process一括stopを使えます。stopとdeleteは確認後に実行します。停止済みの履歴自体を消す場合は`d`を使います。異常終了で`process_id`だけが残り通常削除できないthreadは`D`で強制削除でき、同じNeovim内にprocessが残っている場合は先に停止します。
 
 agentmux publish時のpane/owner/kind/name/state/message/preview identityはactive threadの`metadata.agentmux`にも保存され、Neovim runtimeが無い場合のCockpit status fallbackとして利用されます。
 
