@@ -438,17 +438,26 @@ function M.new(ctx)
     end
     opts = opts or {}
     local pane_id = tostring(pane_id_for_bufnr(bufnr))
-    local next_config = vim.tbl_extend("force", pane_config[pane_id] or {}, {
+    local current_config = pane_config[pane_id] or {}
+    local was_following = current_config.follow_output ~= false
+    local next_config = vim.tbl_extend("force", current_config, {
       follow_output = enabled ~= false,
     })
     if enabled ~= false then
       next_config.follow_pause_reason = nil
       next_config.follow_pause_win = nil
       next_config.follow_pause_topline = nil
+      next_config.follow_pause_cursor_left_end = nil
     else
       next_config.follow_pause_reason = opts.reason or "manual"
       next_config.follow_pause_win = opts.win
       next_config.follow_pause_topline = opts.topline or (opts.win and M._window_topline(opts.win) or nil)
+      local cursor_left_end = opts.win and not M._window_cursor_reaches_transcript_end(opts.win, bufnr) or false
+      if was_following then
+        next_config.follow_pause_cursor_left_end = cursor_left_end
+      elseif cursor_left_end then
+        next_config.follow_pause_cursor_left_end = true
+      end
     end
     pane_config[pane_id] = next_config
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
@@ -571,6 +580,13 @@ function M.new(ctx)
     end
     local pane_opts = pane_opts_for_bufnr(bufnr)
     local allow_view_end = opts.allow_view_end == true or pane_opts.follow_pause_reason ~= "manual"
+    if
+      pane_opts.follow_pause_reason == "manual"
+      and opts.allow_view_end ~= true
+      and pane_opts.follow_pause_cursor_left_end ~= true
+    then
+      return false
+    end
     local at_end = false
     if allow_view_end then
       at_end = (win and M._window_at_transcript_end(win, bufnr)) or M._any_window_at_transcript_end(bufnr)
@@ -589,14 +605,18 @@ function M.new(ctx)
       return false
     end
     if M._window_view_reaches_transcript_end(win, bufnr) then
-      local pane_opts = pane_opts_for_bufnr(bufnr)
-      if pane_opts.follow_pause_reason == "manual" and not M._window_cursor_reaches_transcript_end(win, bufnr) then
-        local current_topline = M._window_topline(win)
-        local paused_topline = tonumber(pane_opts.follow_pause_topline)
-        if not current_topline or not paused_topline or current_topline <= paused_topline then
-          return false
-        end
+      if should_follow_output(bufnr) then
+        return false
       end
+
+      local pane_opts = pane_opts_for_bufnr(bufnr)
+      local current_topline = M._window_topline(win)
+      local paused_topline = tonumber(pane_opts.follow_pause_topline)
+      if not current_topline or not paused_topline or current_topline <= paused_topline then
+        pause_follow_output(bufnr, { reason = "manual", win = win, topline = current_topline })
+        return false
+      end
+
       return M._resume_follow_if_at_end(bufnr, win, { allow_view_end = true })
     end
     return pause_follow_output(bufnr, { reason = "manual", win = win })
@@ -609,8 +629,15 @@ function M.new(ctx)
     if should_follow_output(bufnr) and not M._window_view_reaches_transcript_end(win, bufnr) then
       return pause_follow_output(bufnr, { reason = "manual", win = win })
     end
-    if not should_follow_output(bufnr) and M._window_cursor_reaches_transcript_end(win, bufnr) then
-      return M._resume_follow_output(bufnr)
+    if not should_follow_output(bufnr) then
+      local pane_opts = pane_opts_for_bufnr(bufnr)
+      if not M._window_cursor_reaches_transcript_end(win, bufnr) then
+        pane_opts.follow_pause_cursor_left_end = true
+        return false
+      end
+      if pane_opts.follow_pause_cursor_left_end == true then
+        return M._resume_follow_output(bufnr)
+      end
     end
     return false
   end
