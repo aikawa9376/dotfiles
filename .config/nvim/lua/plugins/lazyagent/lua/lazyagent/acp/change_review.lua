@@ -7,6 +7,26 @@ local operation_marker = {
   moved = "R",
 }
 
+local change_namespace = vim.api.nvim_create_namespace("LazyAgentACPChanges")
+
+local operation_highlight = {
+  added = "LazyAgentACPChangesAdded",
+  modified = "LazyAgentACPChangesModified",
+  deleted = "LazyAgentACPChangesDeleted",
+  moved = "LazyAgentACPChangesMoved",
+}
+
+local function setup_highlights()
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesAdded", { link = "GitSignsAdd", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesModified", { link = "GitSignsChange", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesDeleted", { link = "GitSignsDelete", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesMoved", { link = "GitSignsChange", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesApproved", { link = "DiagnosticOk", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesRejected", { link = "DiagnosticError", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesApprovedLine", { link = "DiffAdd", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesRejectedLine", { link = "DiffDelete", default = true })
+end
+
 local function latest_changed_turn(thread)
   local turns = thread and thread.change_journal and thread.change_journal.turns or {}
   for index = #turns, 1, -1 do
@@ -22,6 +42,21 @@ local function display_path(change)
     return string.format("%s -> %s", change.previous_path, change.path)
   end
   return tostring(change.path or "unknown")
+end
+
+local function display_decision(decision)
+  if decision == "kept" then
+    return "approved"
+  end
+  return decision
+end
+
+local function devicon_for(path)
+  local ok, devicons = pcall(require, "nvim-web-devicons")
+  if not ok or type(devicons.get_icon) ~= "function" then
+    return nil, nil
+  end
+  return devicons.get_icon(tostring(path or ""), nil, { default = true })
 end
 
 local function split_lines(text)
@@ -58,7 +93,7 @@ function M.drawer_lines(thread, turn)
   for _, change in ipairs(turn.changes or {}) do
     local binary = change.binary == true and " [binary]" or ""
     local decision = change.decision
-        and (" [" .. change.decision .. (change.apply_mode and (":" .. change.apply_mode) or "") .. "]")
+        and (" [" .. display_decision(change.decision) .. (change.apply_mode and (":" .. change.apply_mode) or "") .. "]")
       or ""
     local decided_hunks = 0
     for _, hunk in ipairs(change.hunks or {}) do
@@ -77,6 +112,65 @@ function M.drawer_lines(thread, turn)
     )
   end
   return lines
+end
+
+function M.apply_drawer_highlights(bufnr, turn)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  setup_highlights()
+  vim.api.nvim_buf_clear_namespace(bufnr, change_namespace, 0, -1)
+  vim.api.nvim_buf_set_extmark(bufnr, change_namespace, 0, 0, {
+    end_col = #(vim.api.nvim_buf_get_lines(bufnr, 0, 1, false)[1] or ""),
+    hl_group = "Title",
+  })
+  vim.api.nvim_buf_set_extmark(bufnr, change_namespace, 1, 0, {
+    end_col = #(vim.api.nvim_buf_get_lines(bufnr, 1, 2, false)[1] or ""),
+    hl_group = "Comment",
+  })
+
+  for index, change in ipairs(turn.changes or {}) do
+    local row = index + 2
+    local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
+    local marker_hl = operation_highlight[change.operation] or "Comment"
+    vim.api.nvim_buf_set_extmark(bufnr, change_namespace, row, 0, {
+      end_col = math.min(1, #line),
+      hl_group = marker_hl,
+    })
+
+    local path = display_path(change)
+    local path_start = line:find(path, 1, true)
+    if path_start then
+      path_start = path_start - 1
+      local icon, icon_hl = devicon_for(change.path)
+      vim.api.nvim_buf_set_extmark(bufnr, change_namespace, row, path_start, {
+        end_col = path_start + #path,
+        hl_group = icon_hl or "Directory",
+        virt_text = icon and { { icon .. " ", icon_hl or "Directory" } } or nil,
+        virt_text_pos = icon and "inline" or nil,
+      })
+    end
+
+    local decision = display_decision(change.decision)
+    if decision then
+      local decision_text = "[" .. decision .. (change.apply_mode and (":" .. change.apply_mode) or "") .. "]"
+      local decision_start = line:find(decision_text, 1, true)
+      local approved = change.decision == "kept"
+      vim.api.nvim_buf_set_extmark(bufnr, change_namespace, row, 0, {
+        line_hl_group = approved and "LazyAgentACPChangesApprovedLine" or "LazyAgentACPChangesRejectedLine",
+        priority = 100,
+      })
+      if decision_start then
+        decision_start = decision_start - 1
+        vim.api.nvim_buf_set_extmark(bufnr, change_namespace, row, decision_start, {
+          end_col = decision_start + #decision_text,
+          hl_group = approved and "LazyAgentACPChangesApproved" or "LazyAgentACPChangesRejected",
+          priority = 110,
+        })
+      end
+    end
+  end
+  return true
 end
 
 function M.new(opts)
@@ -151,6 +245,7 @@ function M.new(opts)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn))
     vim.bo[bufnr].filetype = "lazyagent_changes"
     vim.bo[bufnr].modifiable = false
+    M.apply_drawer_highlights(bufnr, turn)
     vim.cmd("botright vsplit")
     vim.api.nvim_win_set_buf(0, bufnr)
 
@@ -161,16 +256,17 @@ function M.new(opts)
         review.open_change(thread, turn, change, index)
       end
     end, { buffer = bufnr, silent = true, desc = "Review LazyAgent ACP change" })
-    vim.keymap.set("n", "a", function()
+    vim.keymap.set("n", "o", function()
       for index, change in ipairs(turn.changes) do
         review.open_change(thread, turn, change, index)
       end
-    end, { buffer = bufnr, silent = true, desc = "Review all LazyAgent ACP changes" })
+    end, { buffer = bufnr, silent = true, desc = "Open all LazyAgent ACP changes" })
     local function refresh(decided_turn)
       turn = decided_turn or turn
       vim.bo[bufnr].modifiable = true
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn))
       vim.bo[bufnr].modifiable = false
+      M.apply_drawer_highlights(bufnr, turn)
     end
     local function decide(indices, decision)
       if type(opts.decide) ~= "function" then
@@ -192,18 +288,18 @@ function M.new(opts)
       end
       return indices
     end
-    vim.keymap.set("n", "k", function()
+    vim.keymap.set("n", "a", function()
       local index = vim.api.nvim_win_get_cursor(0)[1] - 3
       if turn.changes[index] and not turn.changes[index].decision then
         decide({ index }, "kept")
       end
-    end, { buffer = bufnr, silent = true, desc = "Keep LazyAgent ACP file change" })
-    vim.keymap.set("n", "K", function()
+    end, { buffer = bufnr, silent = true, desc = "Approve LazyAgent ACP file change" })
+    vim.keymap.set("n", "A", function()
       local indices = undecided_indices()
       if #indices > 0 then
         decide(indices, "kept")
       end
-    end, { buffer = bufnr, silent = true, desc = "Keep all LazyAgent ACP changes" })
+    end, { buffer = bufnr, silent = true, desc = "Approve all LazyAgent ACP changes" })
     local function confirm_reject(indices, label)
       vim.ui.select({ "Cancel", "Reject" }, { prompt = label }, function(choice)
         if choice == "Reject" then
@@ -237,7 +333,7 @@ function M.new(opts)
       vim.ui.select(hunks, {
         prompt = "Select change hunk:",
         format_item = function(hunk)
-          local state = hunk.decision and (" [" .. hunk.decision .. "]") or ""
+          local state = hunk.decision and (" [" .. display_decision(hunk.decision) .. "]") or ""
           return string.format(
             "@@ -%d,%d +%d,%d @@%s",
             hunk.before_start,
@@ -251,8 +347,8 @@ function M.new(opts)
         if not hunk or hunk.decision or type(opts.decide_hunk) ~= "function" then
           return
         end
-        vim.ui.select({ "Keep", "Reject", "Cancel" }, { prompt = "Hunk decision:" }, function(choice)
-          if choice ~= "Keep" and choice ~= "Reject" then
+        vim.ui.select({ "Approve", "Reject", "Cancel" }, { prompt = "Hunk decision:" }, function(choice)
+          if choice ~= "Approve" and choice ~= "Reject" then
             return
           end
           local decided, decide_err = opts.decide_hunk(
@@ -260,7 +356,7 @@ function M.new(opts)
             turn,
             change_index,
             hunk.index,
-            choice == "Keep" and "kept" or "rejected"
+            choice == "Approve" and "kept" or "rejected"
           )
           if not decided then
             vim.notify("LazyAgent ACP: " .. tostring(decide_err), vim.log.levels.ERROR)
