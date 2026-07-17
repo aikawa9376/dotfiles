@@ -26,12 +26,12 @@ function M.run()
   local rendered = table.concat(lines, "\n")
   assert(rendered:find("## /tmp/project%-a"), "project A group")
   assert(rendered:find("## /tmp/project%-b"), "project B group")
-  assert(rendered:find("%[running%] First · claude · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2"), "thread card columns")
+  assert(rendered:find("%[running%]%s+claude · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2 · First"), "thread card columns")
   assert(rendered:find("persisted threads: running = live process"), "cockpit lifecycle legend")
   local permission_lines = Cockpit.render(threads, {
     ["thread-a"] = { acp_ready = true, acp_client_debug = { pending_permissions = 1 } },
   })
-  assert(table.concat(permission_lines, "\n"):find("%[permission%] First"), "permission common status")
+  assert(table.concat(permission_lines, "\n"):find("%[permission%]%s+claude.- · First"), "permission common status")
   local mapped = {}
   for _, id in pairs(line_map) do mapped[id] = true end
   assert(mapped["thread-a"] and mapped["thread-b"], "thread line mappings")
@@ -54,6 +54,24 @@ function M.run()
   end
   local filtered = Cockpit.filter(threads, "CLAUDE")
   assert(#filtered == 1 and filtered[1].thread_id == "thread-a", "cockpit case-insensitive filter")
+  local without_empty = Cockpit.filter({
+    { thread_id = "empty", title = "Codex", provider_id = "Codex", status = "closed", transcript_path = "" },
+    { thread_id = "prompted", title = "Real prompt", provider_id = "Codex", status = "closed", transcript_path = "" },
+  }, "")
+  assert(#without_empty == 1 and without_empty[1].thread_id == "prompted", "closed threads without prompts are hidden")
+
+  local aligned_lines = Cockpit.render({
+    { thread_id = "idle", title = "Idle prompt", provider_id = "Codex", cwd = "/tmp/aligned", status = "active" },
+    { thread_id = "run", title = "Running prompt", provider_id = "Codex", cwd = "/tmp/aligned", status = "active" },
+  }, {
+    idle = { acp_ready = true },
+    run = { acp_ready = true, acp_busy = true },
+  }, { width = 100 })
+  local provider_columns = {}
+  for _, line in ipairs(aligned_lines) do
+    if line:match("^%- ") then provider_columns[#provider_columns + 1] = assert(line:find("Codex", 1, true)) end
+  end
+  assert(#provider_columns == 2 and provider_columns[1] == provider_columns[2], "status column alignment")
 
   local conflicts = Cockpit.conflicts({
     { thread_id = "one", cwd = "/shared", status = "active", change_journal = { turns = { { changes = { { path = "same.lua" } } } } } },

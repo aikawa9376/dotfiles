@@ -62,6 +62,13 @@ local function normalize_text(text)
   return util.normalize_text(text, { ensure_trailing_newline = false })
 end
 
+local function transcript_lines_have_user_prompt(lines)
+  for _, line in ipairs(lines or {}) do
+    if line:match("^─ .- User") or line:match("^#+%s+User") then return true end
+  end
+  return false
+end
+
 local sanitize_filename_component = util.sanitize_filename_component
 
 local state_helpers
@@ -516,6 +523,8 @@ local function create_backend(default_view)
         view.resume_follow(pane_id)
       end
       conversation_helpers.append_block(session, "User", prompt)
+      session.has_user_prompt = true
+      sync_thread_record(session, { metadata = { has_user_prompt = true } })
       local turn_start_seq = #session.conversation_timeline
 
       local blocks = {}
@@ -741,6 +750,15 @@ local function create_backend(default_view)
         conversation_timeline = {},
         conversation_timeline_index = {},
         conversation_next_item_id = 0,
+        has_user_prompt = existing_thread ~= nil and (
+          (existing_thread.metadata and existing_thread.metadata.has_user_prompt == true)
+          or (existing_thread.metadata and existing_thread.metadata.imported_from_native == true)
+          or (
+            vim.trim(tostring(existing_thread.title or "")) ~= ""
+            and vim.trim(tostring(existing_thread.title or "")) ~= vim.trim(tostring(existing_thread.provider_id or ""))
+          )
+          or transcript_lines_have_user_prompt(carryover_lines)
+        ) or false,
         tool_timeline = {},
         tool_timeline_index = {},
         ready = false,
@@ -1520,6 +1538,7 @@ local function create_backend(default_view)
   function backend.kill_pane(pane_id)
     local session = get_session(pane_id)
     if session then
+      local discard_empty_thread = session.has_user_prompt ~= true
       if next(session.tool_calls or {}) == nil then
         complete_pending_turn(session)
       end
@@ -1530,15 +1549,23 @@ local function create_backend(default_view)
       session.closing_intentionally = true
       host_helpers.release_all_terminals(session)
       local view = session_view(session)
-      sync_thread_view(session)
+      if not discard_empty_thread then sync_thread_view(session) end
       if view and type(view.kill_pane) == "function" then
         view.kill_pane(pane_id, session)
       end
       state_helpers.release_closing_session_memory(session)
-      sync_thread_record(session, {
-        status = "closed",
-        process_id = vim.NIL,
-      })
+      if discard_empty_thread then
+        local transcript_path = session.transcript_path
+        if session.thread_id then session.thread_store:delete(session.thread_id) end
+        session.thread_id = nil
+        session.thread_record = nil
+        if transcript_path and transcript_path ~= "" then pcall(vim.fn.delete, transcript_path) end
+      else
+        sync_thread_record(session, {
+          status = "closed",
+          process_id = vim.NIL,
+        })
+      end
       sessions[pane_id] = nil
       if session.client then
         local client = session.client

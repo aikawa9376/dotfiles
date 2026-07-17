@@ -104,6 +104,7 @@ function M.run()
   }))
   local pending = backend.get_pending_permission(pane_id)
   assert_equal(pending.tool_call_id, "tool-1", "pending permission tool")
+  assert_equal(assert(store:get(runtime.acp_thread_id)).metadata.has_user_prompt, true, "first prompt persistence marker")
   assert(vim.tbl_contains(vim.tbl_map(function(choice) return choice.scope end, pending.choices), "project"),
     "pending permission project scope")
   assert(backend.respond_permission(pane_id, "allow-once", "project"))
@@ -312,6 +313,10 @@ function M.run()
   assert_equal(assert(backend.get_thread(second_parallel.acp_thread_id)).status, "active", "surviving parallel thread")
   backend.kill_pane(parallel_panes[2])
   assert_equal(backend.get_debug_snapshot().session_count, 0, "parallel teardown")
+  assert_equal(backend.get_thread(first_parallel.acp_thread_id), nil, "promptless first thread is discarded")
+  assert_equal(backend.get_thread(second_parallel.acp_thread_id), nil, "promptless second thread is discarded")
+  assert_equal(vim.fn.filereadable(first_parallel.acp_transcript_path), 0, "promptless first transcript is discarded")
+  assert_equal(vim.fn.filereadable(second_parallel.acp_transcript_path), 0, "promptless second transcript is discarded")
 
   state.opts = previous_opts
   vim.fn.delete(cache_dir, "rf")
