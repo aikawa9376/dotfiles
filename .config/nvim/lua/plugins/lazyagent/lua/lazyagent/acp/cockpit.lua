@@ -1,6 +1,8 @@
 local M = {}
 
 local highlight_ns = vim.api.nvim_create_namespace("LazyAgentACPCockpit")
+local STATUS_WIDTH = 7
+local PROMPT_MAX_WIDTH = 48
 
 local function display_width(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text)
@@ -202,8 +204,9 @@ local function card_line(thread, runtime, conflicts, max_width)
   end
 
   local function fixed_width()
-    local width = display_width("- " .. (pinned and "★" or " ") .. " [" .. status .. "]")
-      + (12 - display_width(status)) + display_width("  " .. provider)
+    local status_padding = math.max(1, STATUS_WIDTH - display_width(status) + 1)
+    local width = display_width("- " .. (pinned and "★ " or "") .. "[" .. status .. "]")
+      + status_padding + display_width(provider)
     for _, field in ipairs(fields) do width = width + display_width(" · " .. field[1]) end
     if show_title then width = width + display_width(" · ") end
     return width
@@ -225,14 +228,14 @@ local function card_line(thread, runtime, conflicts, max_width)
     if not removed then break end
   end
 
-  local title_width = max_width and math.max(8, max_width - fixed_width() - 1) or 80
+  local available_title_width = max_width and math.max(8, max_width - fixed_width() - 1) or PROMPT_MAX_WIDTH
+  local title_width = math.min(PROMPT_MAX_WIDTH, available_title_width)
   local title = show_title and truncate_display(raw_title, title_width) or ""
   local parts, spans = {}, {}
   add_segment(parts, spans, "- ", "LazyAgentACPCockpitMuted")
-  add_segment(parts, spans, pinned and "★" or " ", pinned and "LazyAgentACPCockpitPin" or nil)
-  add_segment(parts, spans, " ")
+  if pinned then add_segment(parts, spans, "★ ", "LazyAgentACPCockpitPin") end
   add_segment(parts, spans, "[" .. status .. "]", status_highlights[status] or "LazyAgentACPCockpitMuted")
-  add_segment(parts, spans, string.rep(" ", 12 - display_width(status) + 2))
+  add_segment(parts, spans, string.rep(" ", math.max(1, STATUS_WIDTH - display_width(status) + 1)))
   add_segment(parts, spans, provider, "LazyAgentACPCockpitProvider")
   for _, field in ipairs(fields) do
     add_segment(parts, spans, " · ", "LazyAgentACPCockpitMuted")
