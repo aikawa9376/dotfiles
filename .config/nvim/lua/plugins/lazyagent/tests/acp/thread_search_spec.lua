@@ -36,6 +36,16 @@ function M.run()
   assert_equal("tool", tool[1].target, "expanded tool search target")
   assert_equal("tool-1", tool[1].tool_call_id, "expanded tool search identity")
   assert_equal({}, Search.search(conversation, tools, "", opts), "empty query results")
+
+  local path = vim.fn.tempname() .. "-thread-search.log"
+  local prefix = string.rep("x", 65530)
+  vim.fn.writefile({ prefix .. "CrossChunkNeedle" .. string.rep("y", 65536) }, path, "b")
+  local streamed = Search.search({
+    { id = "streamed", kind = "assistant", title = "Assistant", body_ref = { path = path } },
+  }, {}, "crosschunkneedle")
+  assert_equal(1, #streamed, "streamed large ref result count")
+  assert_equal("streamed", streamed[1].id, "streamed large ref identity")
+  vim.fn.delete(path)
 end
 
 return M

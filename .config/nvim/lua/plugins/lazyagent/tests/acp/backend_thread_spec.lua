@@ -125,11 +125,28 @@ function M.run()
     change_journal = {
       turns = { { turn_id = runtime.acp_thread_id .. ":checkpoint", changes = {
         { operation = "modified", path = "fixture.bin", binary = true },
+        (function()
+          local blobs = require("lazyagent.acp.blob_store").new({
+            dir = cache_dir .. "/acp/blobs",
+            max_blob_bytes = false,
+          })
+          local before = assert(blobs:put(string.rep("a", 1100 * 1024)))
+          local after = assert(blobs:put(string.rep("b", 1100 * 1024)))
+          return {
+            operation = "modified",
+            path = "large.txt",
+            binary = false,
+            before_blob = before,
+            after_blob = after,
+          }
+        end)(),
       } } },
     },
   }))
   local review = assert(backend.get_thread_review(runtime.acp_thread_id))
   assert_equal(review.changes[1].path, "fixture.bin", "mobile review snapshot")
+  assert_equal(review.changes[2].diff, "Diff omitted because the file pair exceeds 2 MiB.",
+    "large review is classified from blob sizes before diffing")
   local branch = assert(backend.branch_thread_checkpoint(runtime.acp_thread_id, runtime.acp_thread_id .. ":checkpoint"))
   assert_equal(branch.metadata.client_local_branch, true, "checkpoint local branch")
   assert_equal(branch.metadata.parent_thread_id, runtime.acp_thread_id, "checkpoint branch parent")

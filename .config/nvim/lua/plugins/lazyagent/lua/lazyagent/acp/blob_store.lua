@@ -5,6 +5,24 @@ local DEFAULT_MAX_BLOB_BYTES = 4 * 1024 * 1024
 local Store = {}
 Store.__index = Store
 
+local function effective_max_bytes(store, opts)
+  if type(opts) == "table" and opts.max_bytes == false then
+    return nil
+  end
+  if type(opts) == "table" and opts.max_bytes ~= nil then
+    return math.max(0, tonumber(opts.max_bytes) or 0)
+  end
+  return store.max_blob_bytes
+end
+
+local function blob_hash(ref)
+  local hash = type(ref) == "table" and ref.hash or tostring(ref or "")
+  if not hash:match("^[0-9a-f]+$") or #hash ~= 64 then
+    return nil, "invalid sha256 blob reference"
+  end
+  return hash
+end
+
 local function write_all(fd, data)
   local offset = 0
   while offset < #data do
@@ -43,8 +61,12 @@ function Store:_path(hash)
   return self.dir .. "/sha256/" .. hash:sub(1, 2) .. "/" .. hash:sub(3)
 end
 
-function Store:put(data)
+function Store:put(data, opts)
   data = type(data) == "string" and data or tostring(data or "")
+  local max_bytes = effective_max_bytes(self, opts)
+  if max_bytes and #data > max_bytes then
+    return nil, string.format("blob exceeds %d bytes", max_bytes)
+  end
   local hash = vim.fn.sha256(data)
   local path = self:_path(hash)
   if uv.fs_stat(path) then
@@ -92,12 +114,30 @@ function Store:put_file(path)
   return ref
 end
 
-function Store:get(ref)
-  local hash = type(ref) == "table" and ref.hash or tostring(ref or "")
-  if not hash:match("^[0-9a-f]+$") or #hash ~= 64 then
-    return nil, "invalid sha256 blob reference"
+function Store:size(ref)
+  local hash, hash_err = blob_hash(ref)
+  if not hash then
+    return nil, hash_err
   end
-  return read_file(self:_path(hash))
+  local stat, stat_err = uv.fs_stat(self:_path(hash))
+  if not stat then
+    return nil, stat_err or "blob not found"
+  end
+  return tonumber(stat.size) or 0
+end
+
+function Store:get(ref, opts)
+  local hash, hash_err = blob_hash(ref)
+  if not hash then
+    return nil, hash_err
+  end
+  local max_bytes = type(opts) == "table" and opts.max_bytes or nil
+  if max_bytes ~= nil and max_bytes ~= false then
+    max_bytes = math.max(0, tonumber(max_bytes) or 0)
+  else
+    max_bytes = nil
+  end
+  return read_file(self:_path(hash), max_bytes)
 end
 
 function M.new(opts)

@@ -114,6 +114,34 @@ function M.run()
       binary = true,
     },
   }, "workspace rename classification")
+
+  local showed_large_blob = false
+  local large_changes = Snapshot.diff({
+    root = "/repo",
+    vcs = { kind = "git", head = "deadbeef" },
+    files = {
+      { path = "large.bin", exists = true, type = "file", size = 2, mtime = { sec = 1, nsec = 0 } },
+    },
+  }, {
+    files = {
+      { path = "large.bin", exists = true, type = "file", size = 10, mtime = { sec = 2, nsec = 0 } },
+    },
+  }, {
+    blob_store = {
+      max_blob_bytes = 4,
+      put = function() error("oversized content must not reach the blob store") end,
+    },
+    run = function(argv)
+      local command = table.concat(argv, " ")
+      if command:match("cat%-file %-s") then
+        return { code = 0, stdout = "9\n", stderr = "" }
+      end
+      showed_large_blob = true
+      return { code = 0, stdout = string.rep("x", 9), stderr = "" }
+    end,
+  })
+  assert_equal(showed_large_blob, false, "oversized git blob skipped before git show")
+  assert_equal(large_changes[1].before_blob, nil, "oversized baseline has no blob")
 end
 
 return M
