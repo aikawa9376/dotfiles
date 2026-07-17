@@ -41,6 +41,7 @@ local suites = {
   "tests.acp.thread_store_spec",
   "tests.acp.workspace_snapshot_spec",
   "tests.acp.blob_store_spec",
+  "tests.acp.blob_gc_spec",
   "tests.acp.change_review_spec",
   "tests.acp.change_apply_spec",
   "tests.acp.follow_spec",

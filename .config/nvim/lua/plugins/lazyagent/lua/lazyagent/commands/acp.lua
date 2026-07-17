@@ -4,6 +4,7 @@ local acp_logic = require("lazyagent.logic.acp")
 local command = require("lazyagent.commands.util")
 local session_logic = require("lazyagent.logic.session")
 local state = require("lazyagent.logic.state")
+local cache_logic = require("lazyagent.logic.cache")
 
 local create_command
 local delete_command
@@ -28,6 +29,21 @@ local function available_switch_targets()
   return session_logic.available_acp_switch_targets()
 end
 
+local function blob_gc()
+  return require("lazyagent.acp.blob_gc").new({ base_dir = cache_logic.get_cache_dir() .. "/acp" })
+end
+
+local function blob_gc_scan()
+  local gc = blob_gc()
+  local report, err = gc:scan()
+  if not report then
+    vim.notify("LazyAgent ACP blob GC scan failed: " .. vim.inspect(err), vim.log.levels.ERROR)
+    return nil
+  end
+  gc:open_report(report)
+  return gc, report
+end
+
 local always_commands = {
   {
     name = "LazyAgentACPCockpit",
@@ -48,6 +64,50 @@ local always_commands = {
     name = "LazyAgentACPThreads",
     desc = "Browse persisted LazyAgent ACP threads",
     handler = session_logic.pick_acp_threads,
+  },
+  {
+    name = "LazyAgentACPBlobGCDryRun",
+    desc = "Report unreferenced ACP blobs without deleting them",
+    handler = blob_gc_scan,
+  },
+  {
+    name = "LazyAgentACPBlobGC",
+    desc = "Review and delete confirmed unreferenced ACP blobs",
+    handler = function()
+      local gc, report = blob_gc_scan()
+      if not gc then return end
+      if report.blocked then
+        vim.notify("LazyAgent ACP blob GC is blocked; see the dry-run report", vim.log.levels.WARN)
+        return
+      end
+      if report.eligible_count == 0 then
+        vim.notify("LazyAgent ACP blob GC: no eligible orphaned blobs", vim.log.levels.INFO)
+        return
+      end
+      local label = string.format(
+        "Delete %d unreferenced blob(s), %s",
+        report.eligible_count,
+        require("lazyagent.acp.blob_gc").format_bytes(report.eligible_bytes)
+      )
+      vim.ui.select({ "Cancel", label }, { prompt = "Confirm LazyAgent ACP blob GC:" }, function(choice)
+        if choice ~= label then return end
+        local confirmed = {}
+        for _, candidate in ipairs(report.candidates) do
+          if candidate.eligible then confirmed[#confirmed + 1] = candidate.hash end
+        end
+        local result, sweep_err = gc:sweep(confirmed)
+        if not result then
+          vim.notify("LazyAgent ACP blob GC stopped safely: " .. vim.inspect(sweep_err), vim.log.levels.ERROR)
+          return
+        end
+        vim.notify(string.format(
+          "LazyAgent ACP blob GC deleted %d blob(s), %s; skipped %d",
+          result.deleted_count,
+          require("lazyagent.acp.blob_gc").format_bytes(result.deleted_bytes),
+          result.skipped_count
+        ), #result.failures > 0 and vim.log.levels.WARN or vim.log.levels.INFO)
+      end)
+    end,
   },
   {
     name = "LazyAgentACPThreadNew",

@@ -300,6 +300,19 @@ function Store:load()
   return copy(manifest), warning
 end
 
+function Store:with_manifest_lock(callback)
+  if type(callback) ~= "function" then
+    return nil, "manifest lock callback is required"
+  end
+  return self:_with_lock(function()
+    local manifest, warning = self:_read()
+    if not manifest then
+      return nil, warning
+    end
+    return callback(copy(manifest), warning)
+  end)
+end
+
 function Store:list(opts)
   opts = opts or {}
   local manifest, warning = self:_read()
