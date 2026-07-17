@@ -229,6 +229,26 @@ return {
       gitsigns[fn_name](state)
     end
 
+    local function require_blame_heatmap()
+      return require_or_load("features.blame", "fugitive-extension")
+    end
+
+    local function blame_heatmap_is_enabled()
+      local blame = require_blame_heatmap()
+      return blame and type(blame.is_heatmap_enabled) == "function"
+        and blame.is_heatmap_enabled(vim.api.nvim_get_current_buf()) == true
+        or false
+    end
+
+    local function set_blame_heatmap_enabled(state)
+      local blame = require_blame_heatmap()
+      if not blame or type(blame.set_heatmap_enabled) ~= "function" then
+        vim.notify("Git blame heatmap is not available", vim.log.levels.ERROR)
+        return
+      end
+      blame.set_heatmap_enabled(vim.api.nvim_get_current_buf(), state)
+    end
+
     local function run_command(command)
       vim.cmd(command)
     end
@@ -249,6 +269,7 @@ return {
         { label = "d  Gitsigns deleted", run = function() toggle_snacks("gitsigns_deleted") end },
         { label = "m  Gitsigns numhl", run = function() toggle_snacks("gitsigns_numhl") end },
         { label = "h  Gitsigns linehl", run = function() toggle_snacks("gitsigns_linehl") end },
+        { label = "b  Git blame heatmap", run = function() toggle_snacks("git_blame_heatmap") end },
         { label = "c  Connector", run = function() run_command("Connector") end },
         { label = "l  LazyAgent toggle", run = function() run_command("LazyAgentToggle!") end },
         { label = "t  Trouble LSP", run = function() toggle_trouble("lsp") end },
@@ -492,6 +513,15 @@ return {
       set = function(state) set_gitsigns_toggle("toggle_linehl", state) end,
       notify = function(state)
         vim.notify((state and "Enabled" or "Disabled") .. " Gitsigns line highlight", vim.log.levels.INFO)
+      end,
+    })
+    snacks.toggle({
+      id = "git_blame_heatmap",
+      name = "Git Blame Heatmap",
+      get = blame_heatmap_is_enabled,
+      set = set_blame_heatmap_enabled,
+      notify = function(state)
+        vim.notify((state and "Enabled" or "Disabled") .. " Git blame heatmap", vim.log.levels.INFO)
       end,
     })
     snacks.toggle.diagnostics()

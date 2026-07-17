@@ -3,7 +3,7 @@ return {
   cmd = {
     "G", "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit", "Gstash",
     "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit", "GitPush",
-    "Gworktree", "Gbranch", "FugitiveLog"
+    "Gworktree", "Gbranch", "FugitiveLog", "GitHeatmap"
   },
   dependencies = "fugitive-extension",
   keys = {
