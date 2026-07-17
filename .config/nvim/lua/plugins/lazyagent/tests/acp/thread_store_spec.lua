@@ -32,6 +32,15 @@ function M.run()
     transcript_path = base .. "/thread.log",
     config = { model = "gpt-5" },
     view_state = { follow_output = false, view = { lnum = 12, topline = 8 } },
+    change_journal = {
+      turns = { {
+        turn_id = THREAD_ID .. ":1",
+        state = "completed",
+        baseline = { root = base, files = { { path = "large-history.lua" } } },
+        final_snapshot = { root = base, files = { { path = "large-history.lua" } } },
+        changes = { { path = "large-history.lua", operation = "modified" } },
+      } },
+    },
   }))
   assert_equal(thread.thread_id, THREAD_ID, "local thread identity")
   assert_equal(thread.provider_id, "codex-acp", "provider identity")
@@ -40,6 +49,8 @@ function M.run()
   assert_equal(#thread.additional_directories, 1, "additional directory normalization")
   assert_equal(thread.status, "active", "initial status")
   assert_equal(thread.view_state.view.topline, 8, "thread view state")
+  assert_equal(thread.change_journal.turns[1].baseline.files, nil, "completed snapshots compacted on write")
+  assert_equal(thread.change_journal.turns[1].baseline.file_count, 1, "snapshot file count retained")
 
   local manifest = assert(store:load())
   assert_equal(manifest.schema_version, ThreadStore.SCHEMA_VERSION, "manifest schema")

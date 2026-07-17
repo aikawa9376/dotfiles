@@ -13,6 +13,23 @@ local function find_turn(journal, turn_id)
   return nil
 end
 
+local function compact_snapshot(snapshot)
+  if type(snapshot) ~= "table" then
+    return snapshot
+  end
+  return {
+    root = snapshot.root,
+    vcs = copy(snapshot.vcs),
+    captured_at = snapshot.captured_at,
+    schema_version = snapshot.schema_version,
+    truncated = snapshot.truncated == true,
+    file_count = #(snapshot.files or {}),
+    dirty_count = #(snapshot.dirty or {}),
+    untracked_count = #(snapshot.untracked or {}),
+    git_error = snapshot.git_error,
+  }
+end
+
 function M.start(journal, thread_id, baseline)
   journal = copy(journal)
   journal.turns = type(journal.turns) == "table" and journal.turns or {}
@@ -80,10 +97,22 @@ function M.finish(journal, turn_id, completion)
   completion = copy(completion)
   turn.state = completion.state or "completed"
   turn.finished_at = completion.finished_at
-  turn.final_snapshot = completion.final_snapshot
+  turn.baseline = compact_snapshot(completion.baseline or turn.baseline)
+  turn.final_snapshot = compact_snapshot(completion.final_snapshot)
   turn.changes = type(completion.changes) == "table" and completion.changes or {}
   turn.capture_error = completion.capture_error
   return journal, copy(turn)
+end
+
+function M.compact(journal)
+  journal = copy(journal)
+  for _, turn in ipairs(journal.turns or {}) do
+    if turn.state ~= "active" then
+      turn.baseline = compact_snapshot(turn.baseline)
+      turn.final_snapshot = compact_snapshot(turn.final_snapshot)
+    end
+  end
+  return journal
 end
 
 function M.decide(journal, turn_id, indices, decision, decided_at, applications)

@@ -73,6 +73,20 @@ function M.run()
   assert_equal("resource_link", url_blocks[2].type, "URL prompt resource link")
   assert_equal("https://example.com/acp", url_blocks[2].uri, "URL prompt URI")
 
+  local note_path = root .. "/note.lua"
+  vim.fn.writefile({ "return true" }, note_path)
+  local hidden_note = actions.build_prompt_blocks({ root_dir = root, cwd = root }, "@note.lua:1")
+  assert_equal(1, #hidden_note, "context note hidden by default")
+  assert_equal({ type = "text", text = "return true" }, hidden_note[1], "hidden note keeps context body")
+  local visible_note = actions.build_prompt_blocks({
+    root_dir = root,
+    cwd = root,
+    show_context_notes = true,
+  }, "@note.lua:1")
+  assert_equal(2, #visible_note, "context note opt-in block count")
+  assert_equal("Context from note.lua line 1:", visible_note[1].text, "context note opt-in text")
+  assert_equal(hidden_note[1], visible_note[2], "visible note keeps the same context body")
+
   local pdf_path = root .. "/manual.pdf"
   local pdf_file = assert(io.open(pdf_path, "wb"))
   pdf_file:write("%PDF-1.7\0prompt fixture")

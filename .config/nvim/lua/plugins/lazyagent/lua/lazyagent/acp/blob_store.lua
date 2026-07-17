@@ -1,6 +1,7 @@
 local M = {}
 
 local uv = vim.uv or vim.loop
+local DEFAULT_MAX_BLOB_BYTES = 4 * 1024 * 1024
 local Store = {}
 Store.__index = Store
 
@@ -101,10 +102,16 @@ end
 
 function M.new(opts)
   opts = opts or {}
+  local max_blob_bytes = nil
+  if opts.max_blob_bytes ~= false then
+    max_blob_bytes = math.max(0, tonumber(opts.max_blob_bytes) or DEFAULT_MAX_BLOB_BYTES)
+  end
   return setmetatable({
     dir = tostring(opts.dir or (vim.fn.stdpath("cache") .. "/lazyagent/acp/blobs")),
-    max_blob_bytes = opts.max_blob_bytes and math.max(0, tonumber(opts.max_blob_bytes) or 0) or nil,
+    max_blob_bytes = max_blob_bytes,
   }, Store)
 end
+
+M.DEFAULT_MAX_BLOB_BYTES = DEFAULT_MAX_BLOB_BYTES
 
 return M

@@ -308,6 +308,9 @@ function M.setup(deps)
       metadata.path = metadata.path or tool_path
       if permission_cfg.audit ~= false then PermissionStore.audit(session, tool, outcome, metadata, store_opts) end
       done(outcome)
+      pcall(function()
+        require("lazyagent.logic.status").start_monitor(session.agent_name)
+      end)
       return true
     end
     append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested", {
@@ -335,9 +338,6 @@ function M.setup(deps)
           rule_resolution.action or rule_resolution.option.kind or "option"
         )
       )
-      pcall(function()
-        require("lazyagent.logic.status").start_monitor(session.agent_name)
-      end)
       respond({
         outcome = "selected",
         optionId = rule_resolution.option.optionId,
@@ -383,9 +383,6 @@ function M.setup(deps)
         if is_edit_tool then
           local allow_opt = resolve_permission_option(params.options or {}, "allow_once") or resolve_best_allow_option(params.options or {})
           if allow_opt then
-            pcall(function()
-              require("lazyagent.logic.status").start_monitor(session.agent_name)
-            end)
             respond({ outcome = "selected", optionId = allow_opt.optionId }, { source = "auto_fix" })
             return
           end
@@ -394,9 +391,6 @@ function M.setup(deps)
     end
 
     if auto then
-      pcall(function()
-        require("lazyagent.logic.status").start_monitor(session.agent_name)
-      end)
       respond({
         outcome = "selected",
         optionId = auto.optionId,
@@ -431,9 +425,6 @@ function M.setup(deps)
           append_block(session, "System", "Failed to remember permission: " .. tostring(remember_err))
         end
       end
-      pcall(function()
-        require("lazyagent.logic.status").start_monitor(session.agent_name)
-      end)
       return respond({
         outcome = "selected",
         optionId = choice.option.optionId,
@@ -902,6 +893,9 @@ function M.setup(deps)
       smooth_scroll = vim.deepcopy(base_session.smooth_scroll or {}),
       release_buffer_on_hide = base_session.release_buffer_on_hide,
       footer_animation = false,
+      protocol_log = base_session.protocol_log,
+      show_context_notes = base_session.show_context_notes,
+      show_session_summary = base_session.show_session_summary,
       buffer_background = base_session.buffer_background,
       buffer_inactive_background = base_session.buffer_inactive_background,
       transcript_max_lines = base_session.transcript_max_lines,

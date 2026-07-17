@@ -285,11 +285,17 @@ function M.new(ctx)
   end
 
   local function session_info_title(session)
+    if not session or session.show_session_summary ~= true then
+      return nil
+    end
     local info = session and session.acp_session_info or {}
     return compact_single_line(info.title)
   end
 
   local function session_info_summary(session)
+    if not session or session.show_session_summary ~= true then
+      return nil
+    end
     local info = session and session.acp_session_info or {}
     return compact_single_line(info.summary)
   end

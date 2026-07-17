@@ -1115,7 +1115,7 @@ local function build_prompt_blocks(session, text)
       cursor = end_idx + 1
     else
       push_prompt_text(text:sub(cursor, start_idx - 1))
-      if ref.note then
+      if session.show_context_notes == true and ref.note then
         push_text_block(blocks, ref.note)
       end
       table.insert(blocks, ref.block)

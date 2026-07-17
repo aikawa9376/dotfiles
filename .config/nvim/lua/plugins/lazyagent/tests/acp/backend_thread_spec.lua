@@ -81,6 +81,13 @@ function M.run()
   assert(persisted.process_id ~= nil, "process identity persistence")
   assert_equal(persisted.transcript_path, runtime.acp_transcript_path, "transcript persistence")
 
+  local previous_status_session = state.sessions.ThreadFixture
+  local status_session = { backend = "buffer_acp", pane_id = pane_id }
+  state.sessions.ThreadFixture = status_session
+  local agentmux = require("lazyagent.integrations.agentmux")
+  local previous_agentmux_sync = agentmux.sync
+  agentmux.sync = function() return true end
+
   local previous_select = vim.ui.select
   vim.ui.select = function() end
   state.opts.acp.auto_permission = nil
@@ -101,8 +108,12 @@ function M.run()
     "pending permission project scope")
   assert(backend.respond_permission(pane_id, "allow-once", "project"))
   assert_equal(backend.get_pending_permission(pane_id), nil, "mobile permission response clears pending state")
+  assert_equal(status_session.agent_status, "thinking", "accepted permission resumes agent status")
+
   state.opts.acp.auto_permission = "allow_once"
   vim.ui.select = previous_select
+  agentmux.sync = previous_agentmux_sync
+  state.sessions.ThreadFixture = previous_status_session
 
   local export_path = cache_dir .. "/exports/thread.md"
   assert_equal(backend.export_thread_markdown(pane_id, export_path), export_path, "thread Markdown export path")
