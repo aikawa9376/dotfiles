@@ -6,6 +6,7 @@ function M.setup(deps)
   local backend_logic = deps.backend_logic
   local acp_logic = deps.acp_logic
   local start_interactive_session = deps.start_interactive_session
+  local close_session = deps.close_session
   local module = {}
   local thread_label
 
@@ -322,6 +323,12 @@ function M.setup(deps)
     local stored_threads = {}
     local query = ""
     local warned_conflicts = ""
+    local thread_agents = {}
+    local function cockpit_width()
+      local windows = vim.fn.win_findbuf(bufnr)
+      local winid = windows[1]
+      return math.max(40, (winid and vim.api.nvim_win_get_width(winid) or vim.o.columns) - 1)
+    end
     local function refresh()
       local list_err
       stored_threads, list_err = backend.list_threads({ include_archived = true })
@@ -331,6 +338,7 @@ function M.setup(deps)
       end
       local lines
       local runtimes = {}
+      thread_agents = {}
       for agent_name, active in pairs(state.sessions or {}) do
         if active.pane_id and active.pane_id ~= "" then
           local active_backend = backend_for_provider(agent_name)
@@ -338,14 +346,18 @@ function M.setup(deps)
             local snapshot = active_backend.get_runtime_snapshot(active.pane_id)
             if snapshot and snapshot.acp_thread_id then
               snapshot.agent_status = active.agent_status
+              snapshot.pane_id = active.pane_id
               runtimes[snapshot.acp_thread_id] = snapshot
+              thread_agents[snapshot.acp_thread_id] = agent_name
             end
           end
         end
       end
-      lines, line_map = require("lazyagent.acp.cockpit").render(
+      local highlights
+      lines, line_map, highlights = require("lazyagent.acp.cockpit").render(
         require("lazyagent.acp.cockpit").filter(stored_threads, query),
-        runtimes
+        runtimes,
+        { width = cockpit_width() }
       )
       local conflicts = require("lazyagent.acp.cockpit").conflicts(stored_threads)
       local conflict_hash = vim.fn.sha256(vim.inspect(conflicts))
@@ -357,6 +369,7 @@ function M.setup(deps)
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       vim.bo[bufnr].modifiable = false
       vim.bo[bufnr].modified = false
+      require("lazyagent.acp.cockpit").apply_highlights(bufnr, highlights)
     end
 
     vim.keymap.set("n", "<CR>", function()
@@ -364,6 +377,21 @@ function M.setup(deps)
       if thread_id then module.open_thread(thread_id) end
     end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit thread" })
     vim.keymap.set("n", "r", refresh, { buffer = bufnr, silent = true, desc = "Refresh ACP cockpit" })
+    vim.keymap.set("n", "x", function()
+      local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      local agent_name = id and thread_agents[id] or nil
+      if not agent_name then
+        vim.notify("LazyAgent ACP: selected thread has no process in this Neovim", vim.log.levels.INFO)
+        return
+      end
+      vim.ui.select({ "Cancel", "Stop" }, { prompt = "Stop this ACP process?" }, function(choice)
+        if choice ~= "Stop" then return end
+        close_session(agent_name)
+        vim.defer_fn(function()
+          if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
+        end, 150)
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Stop selected ACP cockpit process" })
     vim.keymap.set("n", "/", function()
       vim.ui.input({ prompt = "Filter ACP cockpit: ", default = query }, function(value)
         if value ~= nil then query = value; refresh() end
@@ -422,17 +450,17 @@ function M.setup(deps)
       end)
     end, { buffer = bufnr, silent = true, desc = "Cleanup managed ACP worktree" })
     vim.keymap.set("n", "X", function()
-      vim.ui.select({ "Cancel", "Close all" }, { prompt = "Close all running ACP sessions?" }, function(choice)
-        if choice ~= "Close all" then return end
-        for agent_name, active in pairs(state.sessions or {}) do
-          if active.pane_id then
-            local active_backend = backend_for_provider(agent_name)
-            if active_backend and type(active_backend.kill_pane) == "function" then active_backend.kill_pane(active.pane_id) end
-          end
+      vim.ui.select({ "Cancel", "Stop all" }, { prompt = "Stop all running ACP processes?" }, function(choice)
+        if choice ~= "Stop all" then return end
+        local names = vim.tbl_keys(state.sessions or {})
+        for _, agent_name in ipairs(names) do
+          close_session(agent_name)
         end
-        vim.schedule(refresh)
+        vim.defer_fn(function()
+          if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
+        end, 150)
       end)
-    end, { buffer = bufnr, silent = true, desc = "Close all running ACP threads" })
+    end, { buffer = bufnr, silent = true, desc = "Stop all running ACP processes" })
     vim.keymap.set("n", "q", function() pcall(vim.cmd, "tabclose") end, {
       buffer = bufnr,
       silent = true,
