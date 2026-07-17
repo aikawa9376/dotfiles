@@ -836,6 +836,9 @@ sync_runtime_session = function(session)
   runtime.acp_supports_audio = session.prompt_supports_audio == true
   runtime.acp_mcp_server_count = session.mcp_server_count or ((session.mcp_url and session.mcp_url ~= "") and 1 or 0)
   runtime.footer_animation = session.footer_animation
+  runtime.protocol_log = session.protocol_log
+  runtime.show_context_notes = session.show_context_notes
+  runtime.show_session_summary = session.show_session_summary
   runtime.acp_permission_rules = vim.deepcopy(session.permission_rules or {})
   runtime.acp_auto_switch = vim.deepcopy(session.auto_switch or {})
   runtime.acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {})

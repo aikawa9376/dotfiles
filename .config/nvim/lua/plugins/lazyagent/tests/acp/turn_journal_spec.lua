@@ -11,6 +11,8 @@ function M.run()
   local journal, turn = Journal.start({}, "thread-1", {
     captured_at = "2026-07-15T01:02:03Z",
     root = "/repo",
+    files = { { path = "a.lua" }, { path = "b.lua" } },
+    dirty = { { path = "a.lua" } },
   })
   assert_equal(turn.turn_id, "thread-1:1", "turn identity")
   assert_equal(journal.next_turn_sequence, 2, "turn sequence")
@@ -49,11 +51,14 @@ function M.run()
   journal = assert(Journal.finish(journal, turn.turn_id, {
     state = "completed",
     finished_at = "2026-07-15T01:03:00Z",
-    final_snapshot = { root = "/repo" },
+    final_snapshot = { root = "/repo", files = { { path = "a.lua" } } },
     changes = { { path = "a.lua", operation = "modified" } },
   }))
   assert_equal(Journal.get(journal, turn.turn_id).state, "completed", "completed turn state")
   assert_equal(journal.turns[1].changes[1].operation, "modified", "completed turn changes")
+  assert_equal(journal.turns[1].baseline.files, nil, "completed baseline file list compacted")
+  assert_equal(journal.turns[1].baseline.file_count, 2, "completed baseline file count retained")
+  assert_equal(journal.turns[1].final_snapshot.file_count, 1, "final snapshot file count retained")
   journal = assert(Journal.decide(journal, turn.turn_id, { 1 }, "kept", "2026-07-15T01:04:00Z"))
   assert_equal(journal.turns[1].changes[1].decision, "kept", "change decision")
 

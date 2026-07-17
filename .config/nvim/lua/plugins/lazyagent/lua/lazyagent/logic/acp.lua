@@ -319,6 +319,13 @@ local function resolve_from_config(agent_cfg)
     enabled = enabled,
     view = normalized_view_name(agent_acp.view or global_cfg.view),
     footer_animation = resolve_boolean_option(agent_acp.footer_animation, global_cfg.footer_animation, true),
+    protocol_log = resolve_boolean_option(agent_acp.protocol_log, global_cfg.protocol_log, false),
+    show_context_notes = resolve_boolean_option(agent_acp.show_context_notes, global_cfg.show_context_notes, false),
+    show_session_summary = resolve_boolean_option(
+      agent_acp.show_session_summary,
+      global_cfg.show_session_summary,
+      false
+    ),
     fancy_mode = resolve_boolean_option(agent_acp.fancy_mode, global_cfg.fancy_mode, false),
     table_layout = normalize_table_layout(agent_acp.table_layout or global_cfg.table_layout),
     smooth_scroll = merge_smooth_scroll_config(agent_acp.smooth_scroll, global_cfg.smooth_scroll),
@@ -392,6 +399,9 @@ function M.resolve(agent_name, agent_cfg)
       mcp_servers = vim.deepcopy(session.mcp_servers or {}),
       v2_adapter = vim.deepcopy(session.v2_adapter or { enabled = false }),
       footer_animation = session.footer_animation,
+      protocol_log = session.protocol_log,
+      show_context_notes = session.show_context_notes,
+      show_session_summary = session.show_session_summary,
       permission_rules = vim.deepcopy(session.permission_rules or {}),
       auto_switch = vim.deepcopy(session.auto_switch or {}),
     }

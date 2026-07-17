@@ -29,6 +29,9 @@ function M.run()
   local state = { sessions = {}, opts = { hooks = { reload_mode = "hook" } } }
   local acp_defaults = {
     footer_animation = true,
+    protocol_log = true,
+    show_context_notes = true,
+    show_session_summary = true,
     fancy_mode = false,
     smooth_scroll = {},
     release_buffer_on_hide = true,
@@ -105,6 +108,12 @@ function M.run()
   assert_equal(splits[1].agent_name, key_a, "first backend runtime key")
   assert_equal(splits[2].agent_name, key_b, "second backend runtime key")
   assert_equal(splits[1].provider_id, "Codex", "first backend provider")
+  assert_equal(splits[1].show_context_notes, true, "context note option forwarded to ACP backend")
+  assert_equal(state.sessions[key_a].show_context_notes, true, "context note option stored on runtime session")
+  assert_equal(splits[1].protocol_log, true, "protocol log option forwarded to ACP backend")
+  assert_equal(state.sessions[key_a].protocol_log, true, "protocol log option stored on runtime session")
+  assert_equal(splits[1].show_session_summary, true, "session summary option forwarded to ACP backend")
+  assert_equal(state.sessions[key_a].show_session_summary, true, "session summary option stored on runtime session")
   assert_equal(splits[2].provider_id, "Codex", "second backend provider")
   assert_equal(splits[1].mcp_servers[1].name, "fixture", "MCP servers forwarded to ACP backend")
   assert_equal(state.session_aliases.Codex, key_b, "legacy provider command alias")

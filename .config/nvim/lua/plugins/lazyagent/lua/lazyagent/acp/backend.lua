@@ -121,29 +121,26 @@ local function record_turn_baseline(session)
   end
   session.workspace_snapshot_error = nil
   local journal, turn = TurnJournal.start(
-    (session.thread_record and session.thread_record.change_journal) or {},
+    session.active_change_journal or (session.thread_record and session.thread_record.change_journal) or {},
     session.thread_id,
     snapshot
   )
-  local updated = sync_thread_record(session, { change_journal = journal })
-  if updated then
-    session.current_change_turn_id = turn.turn_id
-    if session.turn_watch_handle then
-      Watch.remove(session.turn_watch_handle)
-    end
-    local watched_turn_id = turn.turn_id
-    session.turn_watch_handle = Watch.add(snapshot.root .. "/.lazyagent-turn-watch", function(path)
-      if session.current_change_turn_id == watched_turn_id then
-        record_turn_event(session, "file", {
-          path = path,
-          operation = "observed",
-          source = "filesystem_watcher",
-        })
-      end
-    end, { debounce_ms = 75 })
-    return turn
+  session.active_change_journal = journal
+  session.current_change_turn_id = turn.turn_id
+  if session.turn_watch_handle then
+    Watch.remove(session.turn_watch_handle)
   end
-  return nil
+  local watched_turn_id = turn.turn_id
+  session.turn_watch_handle = Watch.add(snapshot.root .. "/.lazyagent-turn-watch", function(path)
+    if session.current_change_turn_id == watched_turn_id then
+      record_turn_event(session, "file", {
+        path = path,
+        operation = "observed",
+        source = "filesystem_watcher",
+      })
+    end
+  end, { debounce_ms = 75 })
+  return turn
 end
 
 record_turn_event = function(session, kind, event)
@@ -151,7 +148,7 @@ record_turn_event = function(session, kind, event)
     return nil
   end
   local journal, turn = TurnJournal.record(
-    session.thread_record.change_journal,
+    session.active_change_journal or session.thread_record.change_journal,
     session.current_change_turn_id,
     kind,
     event
@@ -159,11 +156,11 @@ record_turn_event = function(session, kind, event)
   if not journal then
     return nil
   end
-  local recorded = sync_thread_record(session, { change_journal = journal }) and turn or nil
+  session.active_change_journal = journal
   if maybe_follow_agent then
     maybe_follow_agent(session, event)
   end
-  return recorded
+  return turn
 end
 
 maybe_follow_agent = function(session, event)
@@ -193,7 +190,7 @@ local function finish_change_turn(session, completion_state)
   end
 
   local turn_id = session.current_change_turn_id
-  local journal = session.thread_record.change_journal or {}
+  local journal = session.active_change_journal or session.thread_record.change_journal or {}
   local active_turn = TurnJournal.get(journal, turn_id)
   if not active_turn then
     session.current_change_turn_id = nil
@@ -222,11 +219,13 @@ local function finish_change_turn(session, completion_state)
   local finished_journal, finished_turn = TurnJournal.finish(journal, turn_id, {
     state = completion_state,
     finished_at = finished_at,
+    baseline = active_turn.baseline,
     final_snapshot = final_snapshot,
     changes = changes,
     capture_error = capture_error,
   })
   session.current_change_turn_id = nil
+  session.active_change_journal = nil
   if not finished_journal then
     return nil
   end
@@ -777,6 +776,9 @@ local function create_backend(default_view)
         smooth_scroll = vim.deepcopy(acp.smooth_scroll or {}),
         release_buffer_on_hide = acp.release_buffer_on_hide,
         footer_animation = acp.footer_animation,
+        protocol_log = acp.protocol_log == true,
+        show_context_notes = acp.show_context_notes == true,
+        show_session_summary = acp.show_session_summary == true,
         buffer_background = acp.buffer_background,
         buffer_inactive_background = acp.buffer_inactive_background,
         transcript_max_lines = acp.transcript_max_lines,
@@ -823,8 +825,10 @@ local function create_backend(default_view)
       else
         session.thread_store_error = tostring(thread_err)
       end
-      session.protocol_log_path = cache_logic.get_cache_dir() .. "/acp/protocol/"
-        .. sanitize_filename_component(session.thread_id or pane_id or acp.agent_name) .. ".jsonl"
+      session.protocol_log_path = session.protocol_log and (
+        cache_logic.get_cache_dir() .. "/acp/protocol/"
+          .. sanitize_filename_component(session.thread_id or pane_id or acp.agent_name) .. ".jsonl"
+      ) or nil
       conversation_helpers.new_conversation_item(
         session,
         "System",
@@ -1333,6 +1337,9 @@ local function create_backend(default_view)
       root_dir = session.root_dir,
       transcript_path = session.transcript_path,
       footer_animation = session.footer_animation,
+      protocol_log = session.protocol_log,
+      show_context_notes = session.show_context_notes,
+      show_session_summary = session.show_session_summary,
       fancy_mode = session.fancy_mode,
       release_buffer_on_hide = session.release_buffer_on_hide,
       buffer_background = session.buffer_background,
@@ -1921,12 +1928,20 @@ local function create_backend(default_view)
   function backend.show_protocol_log(target_pane)
     local session = get_session(target_pane)
     if not session then return false end
+    if not session.protocol_log_path then
+      vim.notify("LazyAgent ACP: protocol log is disabled; set acp.protocol_log = true before starting the session", vim.log.levels.INFO)
+      return false
+    end
     return ProtocolLog.open(session.protocol_log_path)
   end
 
   function backend.show_replay(target_pane)
     local session = get_session(target_pane)
     if not session then return false end
+    if not session.protocol_log_path then
+      vim.notify("LazyAgent ACP: replay requires acp.protocol_log = true before starting the session", vim.log.levels.INFO)
+      return false
+    end
     return Replay.open(session.protocol_log_path)
   end
 

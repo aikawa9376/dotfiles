@@ -26,6 +26,12 @@ function M.run()
   assert_equal(binary.binary, true, "binary detection")
   assert(assert(store:get(binary)):find("\0", 1, true), "binary blob round trip")
 
+  local limited = BlobStore.new({ dir = root .. "/limited", max_blob_bytes = 4 })
+  local oversized, oversized_err = limited:put_file(binary_path)
+  assert_equal(oversized, nil, "oversized blob skipped")
+  assert(tostring(oversized_err):match("blob exceeds 4 bytes"), "oversized blob reason")
+  assert_equal(store.max_blob_bytes, BlobStore.DEFAULT_MAX_BLOB_BYTES, "safe default blob limit")
+
   local missing, invalid_err = store:get("invalid")
   assert_equal(missing, nil, "invalid reference result")
   assert(tostring(invalid_err):match("invalid sha256"), "invalid reference error")

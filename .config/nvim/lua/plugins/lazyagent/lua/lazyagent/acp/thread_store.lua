@@ -1,6 +1,7 @@
 local M = {}
 
 local uv = vim.uv or vim.loop
+local TurnJournal = require("lazyagent.acp.turn_journal")
 local SCHEMA_VERSION = 1
 local STATUS = {
   active = true,
@@ -108,7 +109,7 @@ local function normalize_record(record, opts)
     unread = record.unread == true,
     config = type(record.config) == "table" and copy(record.config) or {},
     checkpoint = type(record.checkpoint) == "table" and copy(record.checkpoint) or {},
-    change_journal = type(record.change_journal) == "table" and copy(record.change_journal) or {},
+    change_journal = type(record.change_journal) == "table" and TurnJournal.compact(record.change_journal) or {},
     view_state = type(record.view_state) == "table" and copy(record.view_state) or {},
     metadata = type(record.metadata) == "table" and copy(record.metadata) or {},
   }
