@@ -399,7 +399,12 @@ function M.new(opts)
       end
       vim.notify("Created LazyAgent ACP local branch: " .. branch.thread_id, vim.log.levels.INFO)
     end, { buffer = bufnr, silent = true, desc = "Branch LazyAgent ACP checkpoint" })
-    vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = bufnr, silent = true, desc = "Close changes drawer" })
+    vim.keymap.set("n", "q", "<cmd>close<cr>", {
+      buffer = bufnr,
+      nowait = true,
+      silent = true,
+      desc = "Close changes drawer",
+    })
     return bufnr
   end
 

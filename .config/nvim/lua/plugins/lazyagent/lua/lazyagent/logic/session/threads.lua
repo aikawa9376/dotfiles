@@ -1005,6 +1005,7 @@ function M.setup(deps)
     end, { buffer = bufnr, silent = true, desc = "Stop all running ACP processes" })
     vim.keymap.set("n", "q", function() pcall(vim.cmd, "tabclose") end, {
       buffer = bufnr,
+      nowait = true,
       silent = true,
       desc = "Close ACP cockpit",
     })

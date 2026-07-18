@@ -321,6 +321,7 @@ function M.new(ctx)
       buffer = bufnr,
       silent = true,
       noremap = true,
+      nowait = true,
       desc = "Close ACP diff tab",
     })
   end

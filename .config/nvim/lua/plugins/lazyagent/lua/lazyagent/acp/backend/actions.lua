@@ -288,7 +288,7 @@ local function open_output_buffer(session, name, filetype, lines)
     if vim.api.nvim_buf_is_valid(buf) then
       pcall(vim.api.nvim_win_close, 0, false)
     end
-  end, { buffer = buf, silent = true, noremap = true, desc = "Close ACP output" })
+  end, { buffer = buf, silent = true, noremap = true, nowait = true, desc = "Close ACP output" })
   return true
 end
 
