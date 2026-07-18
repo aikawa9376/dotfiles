@@ -434,6 +434,9 @@ function M.setup(deps)
       vim.notify("LazyAgent ACP: no file changes belong to this Neovim", vim.log.levels.INFO)
       return false
     end
+    if #threads == 1 then
+      return module.show_thread_changes(threads[1].thread_id)
+    end
     vim.ui.select(threads, { prompt = "LazyAgent ACP changed threads:", format_item = thread_label }, function(thread)
       if thread then
         module.show_thread_changes(thread.thread_id)
