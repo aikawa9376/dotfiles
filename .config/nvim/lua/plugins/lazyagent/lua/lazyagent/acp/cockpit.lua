@@ -2,7 +2,6 @@ local M = {}
 local config_values = require("lazyagent.acp.config_values")
 
 local highlight_ns = vim.api.nvim_create_namespace("LazyAgentACPCockpit")
-local STATUS_WIDTH = 12
 local PROMPT_MAX_WIDTH = 48
 
 local function display_width(text)
@@ -327,8 +326,8 @@ local function card_line(thread, runtime, conflicts, opts)
   end
 
   local function fixed_width()
-    local status_padding = math.max(1, STATUS_WIDTH - display_width(status) + 1)
-    local width = display_width("- " .. (is_open and "● " or "  ") .. (pinned and "★ " or "") .. "[" .. status .. "]")
+    local status_padding = math.max(1, (opts.status_width or display_width(status)) - display_width(status) + 1)
+    local width = display_width("- " .. (is_open and "● " or "") .. (pinned and "★ " or "") .. "[" .. status .. "]")
       + status_padding + display_width(provider)
     for _, field in ipairs(fields) do width = width + display_width(" · " .. field[1]) end
     if show_title then width = width + display_width(" · ") end
@@ -356,10 +355,10 @@ local function card_line(thread, runtime, conflicts, opts)
   local title = show_title and truncate_display(raw_title, title_width) or ""
   local parts, spans = {}, {}
   add_segment(parts, spans, "- ", "LazyAgentACPCockpitMuted")
-  add_segment(parts, spans, is_open and "● " or "  ", is_open and "LazyAgentACPCockpitActive" or "LazyAgentACPCockpitMuted")
+  if is_open then add_segment(parts, spans, "● ", "LazyAgentACPCockpitActive") end
   if pinned then add_segment(parts, spans, "★ ", "LazyAgentACPCockpitPin") end
   add_segment(parts, spans, "[" .. status .. "]", status_highlights[status] or "LazyAgentACPCockpitMuted")
-  add_segment(parts, spans, string.rep(" ", math.max(1, STATUS_WIDTH - display_width(status) + 1)))
+  add_segment(parts, spans, string.rep(" ", math.max(1, (opts.status_width or display_width(status)) - display_width(status) + 1)))
   add_segment(parts, spans, provider, "LazyAgentACPCockpitProvider")
   for _, field in ipairs(fields) do
     add_segment(parts, spans, " · ", "LazyAgentACPCockpitMuted")
@@ -374,7 +373,14 @@ end
 
 function M.render(threads, runtimes, opts)
   runtimes = runtimes or {}
-  opts = opts or {}
+  opts = vim.tbl_extend("force", {}, opts or {})
+  opts.status_width = 0
+  for _, thread in ipairs(threads or {}) do
+    opts.status_width = math.max(
+      opts.status_width,
+      display_width(common_status(thread, runtimes[thread.thread_id], opts))
+    )
+  end
   local conflicts = M.conflicts(threads)
   local groups = {}
   for _, thread in ipairs(threads or {}) do
