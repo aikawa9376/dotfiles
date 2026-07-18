@@ -45,6 +45,7 @@ function M.setup(deps)
   local MessageStream = require("lazyagent.acp.backend.message_stream")
   local Notifications = require("lazyagent.acp.notifications")
   local PermissionStore = require("lazyagent.acp.permission_store")
+  local config_values = require("lazyagent.acp.config_values")
 
   local function notify_attention(kind, session, message)
     return Notifications.emit(((state.opts or {}).acp or {}).notifications, kind, {
@@ -645,6 +646,19 @@ function M.setup(deps)
     if kind == "config_option_update" then
       session.config_options = vim.deepcopy((session.client and session.client.config_options) or update.configOptions or {})
       sync_runtime_session(session)
+      sync_thread(session, {
+        config = vim.deepcopy(session.config_options or {}),
+        model = config_values.preferred(
+          session.config_options,
+          { "model" },
+          session.model_catalog and session.model_catalog.currentModelId or vim.NIL
+        ),
+        mode = config_values.preferred(
+          session.config_options,
+          { "mode" },
+          session.mode_catalog and session.mode_catalog.currentModeId or vim.NIL
+        ),
+      })
       return
     end
 
@@ -657,8 +671,16 @@ function M.setup(deps)
       session.config_options = vim.deepcopy((session.client and session.client.config_options) or session.config_options or {})
       sync_runtime_session(session)
       sync_thread(session, {
-        mode = session.mode_catalog and session.mode_catalog.currentModeId or vim.NIL,
-        model = session.model_catalog and session.model_catalog.currentModelId or vim.NIL,
+        mode = config_values.preferred(
+          session.config_options,
+          { "mode" },
+          session.mode_catalog and session.mode_catalog.currentModeId or vim.NIL
+        ),
+        model = config_values.preferred(
+          session.config_options,
+          { "model" },
+          session.model_catalog and session.model_catalog.currentModelId or vim.NIL
+        ),
         config = vim.deepcopy(session.config_options or {}),
       })
       return
@@ -1146,8 +1168,16 @@ function M.setup(deps)
         status = "active",
         native_session_id = client.session_id,
         process_id = client.pid,
-        model = session.model_catalog.currentModelId or session.initial_model or vim.NIL,
-        mode = session.mode_catalog.currentModeId or session.default_mode or vim.NIL,
+        model = config_values.preferred(
+          session.config_options,
+          { "model" },
+          session.model_catalog.currentModelId or session.initial_model or vim.NIL
+        ),
+        mode = config_values.preferred(
+          session.config_options,
+          { "mode" },
+          session.mode_catalog.currentModeId or session.default_mode or vim.NIL
+        ),
         config = vim.deepcopy(session.config_options or {}),
         metadata = { resume_strategy = session.resume_strategy },
       })

@@ -1,4 +1,5 @@
 local M = {}
+local config_values = require("lazyagent.acp.config_values")
 
 local highlight_ns = vim.api.nvim_create_namespace("LazyAgentACPCockpit")
 local STATUS_WIDTH = 12
@@ -288,8 +289,13 @@ local function card_line(thread, runtime, conflicts, opts)
   opts = opts or {}
   local max_width = opts.width
   local status = common_status(thread, runtime, opts)
-  local runtime_model = runtime and runtime.acp_model_catalog and runtime.acp_model_catalog.currentModelId
-  local model = runtime_model or (thread.model and thread.model ~= "" and thread.model) or "default"
+  local runtime_model = runtime and config_values.preferred(
+    runtime.acp_config_options,
+    { "model" },
+    runtime.acp_model_catalog and runtime.acp_model_catalog.currentModelId
+  )
+  local stored_model = config_values.preferred(thread.config, { "model" }, thread.model)
+  local model = runtime_model or (stored_model and stored_model ~= "" and stored_model) or "default"
   local changes = changed_file_count(thread)
   local pinned = thread.metadata and thread.metadata.cockpit_pinned == true
   local conflict_count = vim.tbl_count(conflicts[thread.thread_id] or {})
