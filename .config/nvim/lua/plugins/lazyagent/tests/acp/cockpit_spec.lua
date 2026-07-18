@@ -54,6 +54,8 @@ function M.run()
   local lifecycle_rendered = table.concat(lifecycle_lines, "\n")
   assert(lifecycle_rendered:find("%[closed%].-Closed history"), "closed lifecycle overrides stale agentmux state")
   assert(lifecycle_rendered:find("%[idle%].-Live idle"), "live process uses agentmux idle state")
+  local closed_card = vim.tbl_filter(function(line) return line:find("Closed history", 1, true) end, lifecycle_lines)[1]
+  assert(closed_card:find("- [closed] Codex", 1, true) == 1, "inactive rows have a compact prefix")
   local external_lines = Cockpit.render({
     {
       thread_id = "external-live", title = "Other Neovim", provider_id = "Codex", cwd = "/tmp/lifecycle",
@@ -62,9 +64,6 @@ function M.run()
   }, {}, { owner_pid = vim.fn.getpid() + 1 })
   local external_rendered = table.concat(external_lines, "\n")
   assert(external_rendered:find("%[external%].-Other Neovim"), "foreign Neovim live status")
-  local closed_card = vim.tbl_filter(function(line) return line:find("Closed history", 1, true) end, lifecycle_lines)[1]
-  local external_card = vim.tbl_filter(function(line) return line:find("Other Neovim", 1, true) end, external_lines)[1]
-  assert(closed_card:find("Codex", 1, true) == external_card:find("Codex", 1, true), "status columns align")
   local control_lines = Cockpit.render({
     {
       thread_id = "history", title = "Newer history", provider_id = "Codex", cwd = "/tmp/control",
@@ -154,6 +153,9 @@ function M.run()
     if line:match("^%- ") then provider_columns[#provider_columns + 1] = assert(line:find("Codex", 1, true)) end
   end
   assert(#provider_columns == 2 and provider_columns[1] == provider_columns[2], "status column alignment")
+  local aligned_rendered = table.concat(aligned_lines, "\n")
+  assert(aligned_rendered:find("- [idle]    Codex", 1, true), "short status pads to the longest visible status")
+  assert(aligned_rendered:find("- [running] Codex", 1, true), "longest visible status keeps one trailing space")
 
   local conflicts = Cockpit.conflicts({
     { thread_id = "one", cwd = "/shared", status = "active", change_journal = { turns = { { changes = { { path = "same.lua" } } } } } },
