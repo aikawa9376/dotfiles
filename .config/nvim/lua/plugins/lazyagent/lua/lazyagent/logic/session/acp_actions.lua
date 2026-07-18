@@ -1,4 +1,5 @@
 local M = {}
+local config_values = require("lazyagent.acp.config_values")
 
 function M.setup(deps)
   local state = deps.state
@@ -242,8 +243,16 @@ function M.setup(deps)
       ),
       acp = {
         auto_permission = session.auto_permission,
-        default_mode = (type(mode_catalog) == "table" and mode_catalog.currentModeId) or session.default_mode,
-        initial_model = (type(model_catalog) == "table" and model_catalog.currentModelId) or session.initial_model,
+        default_mode = config_values.preferred(
+          runtime_snapshot and runtime_snapshot.acp_config_options,
+          { "mode" },
+          (type(mode_catalog) == "table" and mode_catalog.currentModeId) or session.default_mode
+        ),
+        initial_model = config_values.preferred(
+          runtime_snapshot and runtime_snapshot.acp_config_options,
+          { "model" },
+          (type(model_catalog) == "table" and model_catalog.currentModelId) or session.initial_model
+        ),
       },
     }
   end
@@ -512,7 +521,16 @@ function M.setup(deps)
       local session_caps = runtime_snapshot and runtime_snapshot.acp_session_capabilities or {}
       local supports_load = capabilities and capabilities.loadSession == true
       local supports_resume = type(session_caps) == "table" and session_caps.resume ~= nil
+      local supports_list = type(session_caps) == "table" and session_caps.list ~= nil
       local current_session_id = runtime_snapshot and runtime_snapshot.acp_session_id or nil
+
+      if not supports_list then
+        vim.notify(
+          "LazyAgentACP: this provider does not support native session listing; use LazyAgentACPThreads or Cockpit instead",
+          vim.log.levels.WARN
+        )
+        return
+      end
 
       backend_mod.list_sessions(pane_id, function(items, err)
         if err then

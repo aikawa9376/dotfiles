@@ -31,6 +31,7 @@ local ChangeApply = require("lazyagent.acp.change_apply")
 local Follow = require("lazyagent.acp.follow")
 local ProtocolLog = require("lazyagent.acp.protocol_log")
 local Replay = require("lazyagent.acp.replay")
+local config_values = require("lazyagent.acp.config_values")
 
 local sessions = {}
 local section_icons = {
@@ -786,8 +787,16 @@ local function create_backend(default_view)
           tool_timeline = {},
         } or nil,
         auto_permission = acp.auto_permission,
-        default_mode = acp.default_mode or (existing_thread and existing_thread.mode) or nil,
-        initial_model = acp.initial_model or (existing_thread and existing_thread.model) or nil,
+        default_mode = acp.default_mode or (existing_thread and config_values.preferred(
+          existing_thread.config,
+          { "mode" },
+          existing_thread.mode
+        )) or nil,
+        initial_model = acp.initial_model or (existing_thread and config_values.preferred(
+          existing_thread.config,
+          { "model" },
+          existing_thread.model
+        )) or nil,
         initial_config_snapshot = existing_thread and vim.deepcopy(existing_thread.config or {}) or {},
         fancy_mode = acp.fancy_mode,
         table_layout = acp.table_layout,

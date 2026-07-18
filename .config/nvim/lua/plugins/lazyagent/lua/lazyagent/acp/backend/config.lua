@@ -15,6 +15,7 @@ function M.setup(deps)
   local item_body_text = deps.item_body_text
   local matches_exact = deps.matches_exact
   local matches_pattern = deps.matches_pattern
+  local config_values = require("lazyagent.acp.config_values")
   local find_config_option
   local config_option_choice_items
 
@@ -380,7 +381,19 @@ function M.setup(deps)
         session.auto_switch_state[key] = choice.value
       end
       sync_runtime_session(session)
-      sync_thread(session, { config = vim.deepcopy(session.config_options or {}) })
+      sync_thread(session, {
+        config = vim.deepcopy(session.config_options or {}),
+        model = config_values.preferred(
+          session.config_options,
+          { "model" },
+          session.model_catalog and session.model_catalog.currentModelId or vim.NIL
+        ),
+        mode = config_values.preferred(
+          session.config_options,
+          { "mode" },
+          session.mode_catalog and session.mode_catalog.currentModeId or vim.NIL
+        ),
+      })
       local success_message = opts.success_message
       if success_message == nil then
         success_message = string.format("%s set to %s", label, choice.name or tostring(choice.value))
@@ -441,6 +454,27 @@ function M.setup(deps)
       end
     end
     return nil
+  end
+
+  local function config_values_equal(left, right)
+    if left == nil or right == nil then
+      return left == right
+    end
+    if type(left) == "boolean" or type(right) == "boolean" then
+      return type(left) == "boolean" and type(right) == "boolean" and left == right
+    end
+    return tostring(left) == tostring(right)
+  end
+
+  local function split_combined_model(value)
+    if type(value) ~= "string" then
+      return nil, nil
+    end
+    local model, reasoning = value:match("^(.-)%[([^%[%]]+)%]$")
+    if not model or model == "" or not reasoning or reasoning == "" then
+      return nil, nil
+    end
+    return model, reasoning
   end
 
   local function choice_display_name(choice)
@@ -660,8 +694,11 @@ function M.setup(deps)
     session.initial_config_applied = true
 
     local pending = {}
+    local saved_keys = {}
     for _, saved in ipairs(type(session.initial_config_snapshot) == "table" and session.initial_config_snapshot or {}) do
       if type(saved) == "table" and saved.id and saved.currentValue ~= nil then
+        saved_keys[normalize_config_key(saved.id)] = true
+        saved_keys[normalize_config_key(saved.category)] = true
         table.insert(pending, {
           key = saved.id,
           value = saved.currentValue,
@@ -669,11 +706,26 @@ function M.setup(deps)
         })
       end
     end
-    if session.default_mode and session.default_mode ~= "" then
+    if session.default_mode and session.default_mode ~= "" and not saved_keys.mode then
       table.insert(pending, { key = "mode", value = session.default_mode, title = "mode" })
     end
-    if session.initial_model and session.initial_model ~= "" then
-      table.insert(pending, { key = "model", value = session.initial_model, title = "model" })
+    if session.initial_model and session.initial_model ~= "" and not saved_keys.model then
+      local model = session.initial_model
+      local model_option = find_config_option(session, "model")
+      if model_option and not find_config_choice(model_option, model) then
+        local base_model, reasoning = split_combined_model(model)
+        if base_model and find_config_choice(model_option, base_model) then
+          model = base_model
+          if reasoning and not saved_keys.reasoningeffort and not saved_keys.thoughtlevel then
+            table.insert(pending, {
+              key = { "reasoning_effort", "thought_level" },
+              value = reasoning,
+              title = "reasoning effort",
+            })
+          end
+        end
+      end
+      table.insert(pending, { key = "model", value = model, title = "model" })
     end
 
     local function step(index)
@@ -696,7 +748,7 @@ function M.setup(deps)
         return
       end
 
-      if tostring(option.currentValue or "") == tostring(choice.value) then
+      if config_values_equal(option.currentValue, choice.value) then
         step(index + 1)
         return
       end
