@@ -80,7 +80,7 @@ return {
     "LazyAgentACPMobileStop", "LazyAgentACPMobileQR", "LazyAgentACPRawTranscript", "LazyAgentACPFullTranscript",
     "LazyAgentACPRestart", "LazyAgentACPRestoreRestartState",
     "LazyAgentScreenShot",
-    "Claude", "Codex", "Gemini", "Copilot", "Cursor",
+    "Antigravity", "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   init = function() end,
   opts = {
@@ -137,6 +137,7 @@ return {
       clear = "c<space>d",
     },
     interactive_agents = {
+      Antigravity = { yolo = true, acp = false },
       Gemini = { yolo = true, mcp_context_dir_flag = "--include-directories" },
       Copilot = { yolo = true },
       Codex = { yolo = true, default = true, acp_cmd = { "npx", "@agentclientprotocol/codex-acp" } },

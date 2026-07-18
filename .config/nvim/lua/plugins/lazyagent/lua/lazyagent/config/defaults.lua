@@ -21,6 +21,11 @@ function M.build()
       end,
     },
     interactive_agents = {
+      Antigravity = vim.tbl_deep_extend("force", base_agent, {
+        cmd = "agy",
+        acp = false,
+        yolo_flag = "--dangerously-skip-permissions",
+      }),
       Claude = vim.tbl_deep_extend("force", base_agent, {
         cmd = "claude",
         yolo_flag = "--dangerously-skip-permissions",
