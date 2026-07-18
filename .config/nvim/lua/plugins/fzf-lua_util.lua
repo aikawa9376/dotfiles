@@ -1227,10 +1227,19 @@ local function goto_lsp_definitions()
   end
 end
 
+local function goto_php_interface_definition()
+  if vim.bo.filetype ~= "php" then return false end
+  local ok, definition = pcall(require, "laravel_extension.features.definition")
+  if not ok or type(definition.goto_lsp_definition_with_implementations) ~= "function" then return false end
+  return definition.goto_lsp_definition_with_implementations()
+end
+
 M.fzf_laravel = function()
   if goto_laravel_extension_context() or goto_laravel_nvim_context() then
     return
   end
+
+  if goto_php_interface_definition() then return end
 
   goto_lsp_definitions()
 end
