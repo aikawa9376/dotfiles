@@ -54,6 +54,7 @@ local suites = {
   "tests.acp.session_identity_spec",
   "tests.acp.session_launch_spec",
   "tests.acp.thread_actions_spec",
+  "tests.agent_spec",
 }
 
 local failures = {}
