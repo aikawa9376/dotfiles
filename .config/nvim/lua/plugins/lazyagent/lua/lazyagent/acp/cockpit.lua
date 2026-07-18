@@ -377,7 +377,13 @@ function M.render(threads, runtimes, opts)
     groups[path][#groups[path] + 1] = thread
   end
   local paths = vim.tbl_keys(groups)
-  table.sort(paths)
+  local current_root = tostring(opts.current_root or ""):gsub("/$", "")
+  table.sort(paths, function(left, right)
+    local left_current = tostring(left):gsub("/$", "") == current_root
+    local right_current = tostring(right):gsub("/$", "") == current_root
+    if left_current ~= right_current then return left_current end
+    return left < right
+  end)
 
   local lines = {
     "# LazyAgent ACP Session Cockpit",
