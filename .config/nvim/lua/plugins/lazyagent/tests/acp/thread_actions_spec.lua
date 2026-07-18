@@ -11,6 +11,7 @@ end
 function M.run()
   local records = {}
   local opened
+  local changes_thread_id
   local create_request
   local state = { backends = {}, editor_instance_id = "test-nvim" }
   local backend = {}
@@ -61,6 +62,7 @@ function M.run()
     }
   end
   function backend.show_thread_changes(thread_id)
+    changes_thread_id = thread_id
     return records[thread_id] ~= nil
   end
 
@@ -139,11 +141,27 @@ function M.run()
   }
   local selected_threads
   local previous_select = vim.ui.select
-  vim.ui.select = function(items) selected_threads = items end
+  rawset(vim.ui, "select", function(items) selected_threads = items end)
+  changes_thread_id = nil
   assert_equal(actions.show_thread_changes(), true, "show current Neovim changes")
-  vim.ui.select = previous_select
-  assert_equal(#selected_threads, 1, "changes exclude other Neovim threads")
-  assert_equal(selected_threads[1].thread_id, THREAD_ID, "changes keep current Neovim thread")
+  assert_equal(selected_threads, nil, "single changed thread skips picker")
+  assert_equal(changes_thread_id, THREAD_ID, "single changed thread opens directly")
+
+  local SECOND_ID = "123e4567-e89b-42d3-a456-426614174098"
+  records[SECOND_ID] = {
+    thread_id = SECOND_ID,
+    provider_id = "Codex",
+    title = "Second local changes",
+    cwd = workspace,
+    status = "closed",
+    metadata = { editor = { instance_id = "test-nvim", owner_pid = vim.fn.getpid() } },
+    change_journal = { turns = { { changes = { { path = "second.lua" } } } } },
+  }
+  selected_threads = nil
+  assert_equal(actions.show_thread_changes(), true, "show multiple current Neovim changes")
+  rawset(vim.ui, "select", previous_select)
+  assert_equal(selected_threads and #selected_threads, 2, "multiple changed threads keep picker")
+  records[SECOND_ID] = nil
   records[FOREIGN_ID] = nil
 
   local transcript_path = vim.fn.tempname() .. "-thread-transcript.log"
