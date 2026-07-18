@@ -26,7 +26,7 @@ function M.run()
       return true
     end,
   }
-  local state = { sessions = {}, opts = { hooks = { reload_mode = "hook" } } }
+  local state = { sessions = {}, opts = { hooks = { reload_mode = "hook" } }, editor_instance_id = "test-editor" }
   local acp_defaults = {
     footer_animation = true,
     protocol_log = true,
@@ -86,10 +86,11 @@ function M.run()
   })
 
   local ready = {}
-  for _, thread_id in ipairs({ THREAD_A, THREAD_B }) do
+  for index, thread_id in ipairs({ THREAD_A, THREAD_B }) do
     launch.ensure_session("Codex", {
       acp_thread_id = thread_id,
       source_bufnr = vim.api.nvim_get_current_buf(),
+      root_dir = index == 1 and "/tmp/lazyagent-explicit-root" or nil,
     }, false, function(pane_id, session_key)
       ready[session_key] = pane_id
     end)
@@ -108,6 +109,9 @@ function M.run()
   assert_equal(splits[1].agent_name, key_a, "first backend runtime key")
   assert_equal(splits[2].agent_name, key_b, "second backend runtime key")
   assert_equal(splits[1].provider_id, "Codex", "first backend provider")
+  assert_equal(splits[1].cwd, "/tmp/lazyagent-explicit-root", "explicit thread workspace wins over source root")
+  assert_equal(splits[1].editor.owner_pid, vim.fn.getpid(), "Neovim owner is forwarded")
+  assert_equal(splits[1].editor.instance_id, "test-editor", "Neovim instance identity is forwarded")
   assert_equal(splits[1].show_context_notes, true, "context note option forwarded to ACP backend")
   assert_equal(state.sessions[key_a].show_context_notes, true, "context note option stored on runtime session")
   assert_equal(splits[1].protocol_log, true, "protocol log option forwarded to ACP backend")

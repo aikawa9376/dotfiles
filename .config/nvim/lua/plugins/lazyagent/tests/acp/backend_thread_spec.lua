@@ -60,6 +60,7 @@ function M.run()
       cwd = root,
       root_dir = root,
       additional_directories = { root .. "/tests" },
+      editor = { instance_id = "backend-editor", owner_pid = vim.fn.getpid(), source_path = root .. "/README.md" },
     },
   })
 
@@ -80,6 +81,7 @@ function M.run()
   assert_equal(persisted.native_session_id, runtime.acp_session_id, "native session persistence")
   assert(persisted.process_id ~= nil, "process identity persistence")
   assert_equal(persisted.transcript_path, runtime.acp_transcript_path, "transcript persistence")
+  assert_equal(persisted.metadata.editor.instance_id, "backend-editor", "editor ownership persistence")
 
   local previous_status_session = state.sessions.ThreadFixture
   local status_session = { backend = "buffer_acp", pane_id = pane_id }
@@ -206,6 +208,8 @@ function M.run()
   assert_equal(reopened_runtime.acp_has_pending_carryover, false, "native resume carryover")
   assert_equal(#assert(backend.list_threads({ include_archived = true })), 2, "reopen and import should not duplicate threads")
   assert_equal(assert(backend.get_thread(runtime.acp_thread_id)).status, "active", "reopened persisted status")
+  assert_equal(assert(backend.get_thread(runtime.acp_thread_id)).metadata.editor.instance_id, "backend-editor",
+    "reopen preserves editor ownership metadata")
   backend.kill_pane(pane_id)
 
   assert(backend.update_thread(runtime.acp_thread_id, {

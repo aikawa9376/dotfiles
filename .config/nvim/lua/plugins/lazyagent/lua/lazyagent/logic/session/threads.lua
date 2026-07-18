@@ -1,4 +1,5 @@
 local M = {}
+local identity = require("lazyagent.logic.session.identity")
 
 function M.setup(deps)
   local state = deps.state
@@ -9,6 +10,105 @@ function M.setup(deps)
   local close_session = deps.close_session
   local module = {}
   local thread_label
+
+  local function normalize_path(path)
+    path = tostring(path or "")
+    if path == "" then return nil end
+    return vim.fn.fnamemodify(path, ":p"):gsub("/$", "")
+  end
+
+  local function thread_workspace(thread)
+    local metadata = type(thread and thread.metadata) == "table" and thread.metadata or {}
+    local worktree = metadata.worktree_state == "active" and metadata.worktree_path or nil
+    return normalize_path(worktree or (thread and thread.cwd))
+  end
+
+  local function path_in_workspace(path, workspace)
+    path = normalize_path(path)
+    workspace = normalize_path(workspace)
+    return path ~= nil and workspace ~= nil and (path == workspace or path:sub(1, #workspace + 1) == workspace .. "/")
+  end
+
+  local function session_thread_id(session_key, session)
+    local thread_id = identity.thread_id(session_key, session)
+    if thread_id then return thread_id end
+    local active_backend = session and state.backends and state.backends[session.backend] or nil
+    if active_backend and type(active_backend.get_runtime_snapshot) == "function" and session.pane_id then
+      local snapshot = active_backend.get_runtime_snapshot(session.pane_id)
+      return snapshot and snapshot.acp_thread_id or nil
+    end
+    return nil
+  end
+
+  local function local_session_key(thread_id)
+    for session_key, session in pairs(state.sessions or {}) do
+      if session_thread_id(session_key, session) == thread_id and session.pane_id and session.pane_id ~= "" then
+        return session_key, session
+      end
+    end
+    return nil, nil
+  end
+
+  local function source_anchor(thread)
+    local workspace = thread_workspace(thread)
+    if not workspace then return nil, nil end
+    local candidates = {}
+    local seen = {}
+    local function add(path)
+      path = normalize_path(path)
+      if path and not seen[path] and path_in_workspace(path, workspace) and vim.fn.isdirectory(path) == 0 then
+        seen[path] = true
+        candidates[#candidates + 1] = path
+      end
+    end
+
+    local editor = type(thread.metadata) == "table" and thread.metadata.editor or nil
+    add(editor and editor.source_path)
+    for _, info in ipairs(vim.fn.getbufinfo({ buflisted = 1 })) do add(info.name) end
+    local turns = thread.change_journal and thread.change_journal.turns or {}
+    for turn_index = #turns, 1, -1 do
+      local changes = turns[turn_index].changes or {}
+      for change_index = #changes, 1, -1 do
+        local relative = changes[change_index].path
+        if relative and relative ~= "" then add(workspace .. "/" .. relative) end
+      end
+      if #candidates > 0 then break end
+    end
+    if #candidates == 0 and vim.fn.isdirectory(workspace) == 1 then
+      local files = vim.fn.systemlist({ "git", "-C", workspace, "ls-files" })
+      if vim.v.shell_error == 0 then add(files[1] and (workspace .. "/" .. files[1]) or nil) end
+    end
+    if #candidates == 0 then
+      local name = "LazyAgent Workspace Anchor [" .. tostring(thread.thread_id) .. "]"
+      local bufnr = vim.fn.bufnr(name)
+      if bufnr < 0 then
+        bufnr = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_name(bufnr, name)
+        vim.bo[bufnr].buftype = "nofile"
+        vim.bo[bufnr].bufhidden = "hide"
+        vim.bo[bufnr].swapfile = false
+      end
+      vim.b[bufnr].lazyagent_workspace_root = workspace
+      return bufnr, nil
+    end
+
+    local bufnr = vim.fn.bufnr(candidates[1])
+    if bufnr < 0 then bufnr = vim.fn.bufadd(candidates[1]) end
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid < 0 then winid = nil end
+    return bufnr, winid
+  end
+
+  local function thread_related_to_current_nvim(thread, local_threads)
+    if local_threads[thread.thread_id] then return true end
+    local metadata = type(thread.metadata) == "table" and thread.metadata or {}
+    if metadata.editor and metadata.editor.instance_id and state.editor_instance_id then
+      return metadata.editor.instance_id == state.editor_instance_id
+    end
+    local owner_pid = metadata.editor and metadata.editor.owner_pid
+      or metadata.agentmux and metadata.agentmux.owner_pid
+    return tonumber(owner_pid) == vim.fn.getpid()
+  end
 
   local function configured_provider(provider_id)
     if provider_id and provider_id ~= "" then
@@ -83,6 +183,14 @@ function M.setup(deps)
       vim.notify("LazyAgent ACP: provider is not configured: " .. tostring(thread.provider_id), vim.log.levels.WARN)
       return false
     end
+    local local_key = local_session_key(thread.thread_id)
+    if thread.status == "active" and thread.process_id ~= nil and not local_key then
+      vim.notify(
+        "LazyAgent ACP: live thread belongs to another Neovim or is disconnected; stop it there or force delete it first",
+        vim.log.levels.WARN
+      )
+      return false
+    end
     if thread.metadata and thread.metadata.worktree_state == "active" then
       local _, restore_err = require("lazyagent.acp.worktree").restore(thread)
       if restore_err then
@@ -90,10 +198,17 @@ function M.setup(deps)
         return false
       end
     end
+    local workspace = thread_workspace(thread)
+    local source_bufnr, source_winid = source_anchor(thread)
     start_interactive_session({
       agent_name = thread.provider_id,
       acp_thread_id = thread.thread_id,
       acp_thread_title = thread.title,
+      root_dir = workspace,
+      cwd = workspace,
+      source_bufnr = source_bufnr,
+      source_winid = source_winid,
+      origin_winid = vim.api.nvim_get_current_win(),
       reuse = true,
     })
     return true
@@ -241,7 +356,13 @@ function M.setup(deps)
 
     local backend = backend_for_provider(nil)
     local threads = backend and backend.list_threads and backend.list_threads({ include_archived = true }) or {}
+    local local_threads = {}
+    for session_key, session in pairs(state.sessions or {}) do
+      local id = session_thread_id(session_key, session)
+      if id then local_threads[id] = true end
+    end
     threads = vim.tbl_filter(function(thread)
+      if not thread_related_to_current_nvim(thread, local_threads) then return false end
       local turns = thread.change_journal and thread.change_journal.turns or {}
       for index = #turns, 1, -1 do
         if type(turns[index].changes) == "table" and #turns[index].changes > 0 then
@@ -251,7 +372,7 @@ function M.setup(deps)
       return false
     end, threads or {})
     if #threads == 0 then
-      vim.notify("LazyAgent ACP: no persisted file changes", vim.log.levels.INFO)
+      vim.notify("LazyAgent ACP: no file changes belong to this Neovim", vim.log.levels.INFO)
       return false
     end
     vim.ui.select(threads, { prompt = "LazyAgent ACP changed threads:", format_item = thread_label }, function(thread)
@@ -469,7 +590,12 @@ function M.setup(deps)
       lines, line_map, highlights = require("lazyagent.acp.cockpit").render(
         require("lazyagent.acp.cockpit").filter(stored_threads, query),
         runtimes,
-        { width = cockpit_width(), open_thread_id = open_thread_id }
+        {
+          width = cockpit_width(),
+          open_thread_id = open_thread_id,
+          owner_pid = vim.fn.getpid(),
+          owner_instance_id = state.editor_instance_id,
+        }
       )
       local conflicts = require("lazyagent.acp.cockpit").conflicts(stored_threads)
       local conflict_hash = vim.fn.sha256(vim.inspect(conflicts))

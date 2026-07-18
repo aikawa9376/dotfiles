@@ -38,6 +38,7 @@ local status_highlights = {
   waiting = "LazyAgentACPCockpitStatusWaiting",
   idle = "LazyAgentACPCockpitStatusIdle",
   disconnected = "LazyAgentACPCockpitStatusDisconnected",
+  external = "LazyAgentACPCockpitStatusExternal",
   failed = "LazyAgentACPCockpitStatusDisconnected",
   closed = "LazyAgentACPCockpitStatusClosed",
   archived = "LazyAgentACPCockpitStatusArchived",
@@ -66,6 +67,7 @@ local function setup_highlights()
     LazyAgentACPCockpitStatusWaiting = { default = true, link = "DiagnosticWarn" },
     LazyAgentACPCockpitStatusIdle = { default = true, link = "DiagnosticOk" },
     LazyAgentACPCockpitStatusDisconnected = { default = true, link = "DiagnosticError" },
+    LazyAgentACPCockpitStatusExternal = { default = true, link = "DiagnosticWarn" },
     LazyAgentACPCockpitStatusClosed = { default = true, link = "Comment" },
     LazyAgentACPCockpitStatusArchived = { default = true, link = "NonText" },
   }
@@ -180,7 +182,15 @@ local function group_path(thread)
   return metadata.worktree_path or thread.cwd or "(unknown workspace)"
 end
 
-local function common_status(thread, runtime)
+local function process_alive(pid)
+  pid = tonumber(pid)
+  if not pid or pid <= 0 then return false end
+  local ok, result = pcall((vim.uv or vim.loop).kill, pid, 0)
+  return ok and result == 0
+end
+
+local function common_status(thread, runtime, opts)
+  opts = opts or {}
   if runtime then
     if runtime.acp_failed == true then return "disconnected" end
     if runtime.acp_client_debug and (tonumber(runtime.acp_client_debug.pending_permissions) or 0) > 0 then return "permission" end
@@ -191,6 +201,19 @@ local function common_status(thread, runtime)
     if runtime.acp_ready == true then return "idle" end
   end
   if thread.status == "active" and thread.process_id ~= nil then
+    local metadata = type(thread.metadata) == "table" and thread.metadata or {}
+    local persisted_instance = metadata.editor and metadata.editor.instance_id
+    local persisted_owner = metadata.editor and metadata.editor.owner_pid
+      or metadata.agentmux and metadata.agentmux.owner_pid
+    local foreign = persisted_instance and opts.owner_instance_id and persisted_instance ~= opts.owner_instance_id
+      or not persisted_instance and opts.owner_pid and persisted_owner
+        and tonumber(persisted_owner) ~= tonumber(opts.owner_pid)
+    if foreign then
+      return process_alive(persisted_owner) and "external" or "disconnected"
+    end
+    if opts.owner_pid and persisted_owner then
+      return "disconnected"
+    end
     local agentmux_state = thread.metadata and thread.metadata.agentmux and thread.metadata.agentmux.state
     if agentmux_state == "working" then return "running" end
     if agentmux_state == "blocked" then return "waiting" end
@@ -264,7 +287,7 @@ end
 local function card_line(thread, runtime, conflicts, opts)
   opts = opts or {}
   local max_width = opts.width
-  local status = common_status(thread, runtime)
+  local status = common_status(thread, runtime, opts)
   local runtime_model = runtime and runtime.acp_model_catalog and runtime.acp_model_catalog.currentModelId
   local model = runtime_model or (thread.model and thread.model ~= "" and thread.model) or "default"
   local changes = changed_file_count(thread)

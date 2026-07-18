@@ -91,7 +91,7 @@ end
 function M.git_root_for_path(path)
   path = path or vim.api.nvim_buf_get_name(0)
   if not path or path == "" then path = vim.fn.getcwd() end
-  local cwd = vim.fn.fnamemodify(path, ":p:h")
+  local cwd = vim.fn.isdirectory(path) == 1 and vim.fn.fnamemodify(path, ":p") or vim.fn.fnamemodify(path, ":p:h")
   local cmd = "git -C " .. vim.fn.shellescape(cwd) .. " rev-parse --show-toplevel 2>/dev/null"
   local ok, out = pcall(vim.fn.systemlist, cmd)
   if ok and out and #out > 0 and out[1] and out[1] ~= "" then

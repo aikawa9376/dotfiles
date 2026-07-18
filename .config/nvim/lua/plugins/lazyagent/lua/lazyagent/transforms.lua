@@ -27,7 +27,10 @@ local function get_abs_path(bufnr)
   bufnr = bufnr or 0
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return nil end
   local name = vim.api.nvim_buf_get_name(bufnr) or ""
-  if name == "" then return nil end
+  if name == "" then
+    local workspace = vim.b[bufnr] and vim.b[bufnr].lazyagent_workspace_root or nil
+    return type(workspace) == "string" and workspace ~= "" and workspace or nil
+  end
   return name
 end
 

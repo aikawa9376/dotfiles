@@ -65,6 +65,10 @@ function M.setup(deps)
   end
 
   local function resolve_root_dir(agent_cfg)
+    local explicit = agent_cfg and (agent_cfg.root_dir or agent_cfg.cwd) or nil
+    if type(explicit) == "string" and explicit ~= "" then
+      return vim.fn.fnamemodify(explicit, ":p"):gsub("/$", "")
+    end
     local source_bufnr = resolve_source_bufnr(agent_cfg)
     local source_path = vim.api.nvim_buf_get_name(source_bufnr)
     return util.git_root_for_path(source_path) or vim.fn.getcwd()
@@ -74,6 +78,8 @@ function M.setup(deps)
     local root_dir = resolve_root_dir(agent_cfg)
     local env = merge_env(agent_cfg and agent_cfg.env, split_opts.env)
     local acp = acp_logic.resolve(agent_name, agent_cfg)
+    local source_bufnr = resolve_source_bufnr(agent_cfg)
+    local source_path = vim.bo[source_bufnr].buftype == "" and vim.api.nvim_buf_get_name(source_bufnr) or ""
 
     return {
       agent_name = runtime_key or agent_name,
@@ -82,10 +88,16 @@ function M.setup(deps)
       thread_title = agent_cfg and agent_cfg.acp_thread_title or nil,
       agent_cfg = agent_cfg,
       command = launch_spec.command,
-      source_bufnr = resolve_source_bufnr(agent_cfg),
-      source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
+      source_bufnr = source_bufnr,
+      source_winid = agent_cfg and agent_cfg.source_winid or nil,
       cwd = root_dir,
       root_dir = root_dir,
+      editor = {
+        instance_id = state.editor_instance_id,
+        owner_pid = vim.fn.getpid(),
+        session_scope = current_editor_session_name(),
+        source_path = source_path,
+      },
       additional_directories = vim.deepcopy(acp.additional_directories or {}),
       mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
       v2_adapter = vim.deepcopy(acp.v2_adapter or { enabled = false }),
@@ -224,7 +236,7 @@ function M.setup(deps)
             local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
             backend_mod.configure_pane(state.sessions[agent_name].pane_id, {
               refocus_on_send = refocus,
-              source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
+              source_winid = agent_cfg and agent_cfg.source_winid or nil,
             })
           end
           local size_arg = agent_cfg.pane_size or 30
@@ -265,7 +277,7 @@ function M.setup(deps)
               local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
               backend_mod.configure_pane(state.sessions[agent_name].pane_id, {
                 refocus_on_send = refocus,
-                source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
+                source_winid = agent_cfg and agent_cfg.source_winid or nil,
               })
             end
             notify_ready(state.sessions[agent_name].pane_id)
@@ -337,7 +349,7 @@ function M.setup(deps)
           local refocus = (agent_cfg and agent_cfg.refocus_on_send) or (state.opts and state.opts.refocus_on_send) or false
           backend_mod.configure_pane(pane_id, {
             refocus_on_send = refocus,
-            source_winid = agent_cfg and (agent_cfg.source_winid or agent_cfg.origin_winid) or nil,
+            source_winid = agent_cfg and agent_cfg.source_winid or nil,
           })
         end
 
@@ -525,11 +537,16 @@ function M.setup(deps)
 
     local base_agent_cfg = agent_logic.get_interactive_agent(agent_name)
     local agent_cfg = vim.tbl_deep_extend("force", base_agent_cfg or {}, opts or {})
-    local origin_bufnr = opts.source_bufnr or opts.origin_bufnr or vim.api.nvim_get_current_buf()
-    local origin_winid = opts.source_winid or opts.origin_winid or vim.api.nvim_get_current_win()
-    agent_cfg.source_bufnr = origin_bufnr
-    agent_cfg.origin_bufnr = origin_bufnr
-    agent_cfg.source_winid = origin_winid
+    local has_explicit_source = opts.source_bufnr ~= nil or opts.source_winid ~= nil
+    local source_bufnr = opts.source_bufnr or opts.origin_bufnr or vim.api.nvim_get_current_buf()
+    local source_winid = opts.source_winid
+    if source_winid == nil and not has_explicit_source then
+      source_winid = opts.origin_winid or vim.api.nvim_get_current_win()
+    end
+    local origin_winid = opts.origin_winid or opts.source_winid or vim.api.nvim_get_current_win()
+    agent_cfg.source_bufnr = source_bufnr
+    agent_cfg.origin_bufnr = source_bufnr
+    agent_cfg.source_winid = source_winid
     agent_cfg.origin_winid = origin_winid
     local session_key = identity.key(agent_name, agent_cfg)
 
@@ -549,15 +566,15 @@ function M.setup(deps)
     module.ensure_session(agent_name, agent_cfg, reuse, function(pane_id, ready_key)
       local runtime_agent = ready_key or session_key
       if opts.open_input == false then
-        send_logic.send_and_close_if_needed(runtime_agent, pane_id, opts.initial_input, agent_cfg, reuse, origin_bufnr)
+        send_logic.send_and_close_if_needed(runtime_agent, pane_id, opts.initial_input, agent_cfg, reuse, source_bufnr)
         return
       end
 
       local bufnr = window.ensure_scratch_buffer(window.get_scratch_bufnr(runtime_agent), {
         agent_name = runtime_agent,
         filetype = agent_cfg.scratch_filetype or "lazyagent",
-        source_bufnr = origin_bufnr,
-        source_winid = origin_winid,
+        source_bufnr = source_bufnr,
+        source_winid = source_winid,
       })
       pcall(function()
         vim.b[bufnr].lazyagent_agent = runtime_agent
@@ -569,8 +586,8 @@ function M.setup(deps)
         agent_cfg = agent_cfg,
         pane_id = pane_id,
         reuse = reuse,
-        source_bufnr = origin_bufnr,
-        source_winid = origin_winid,
+        source_bufnr = source_bufnr,
+        source_winid = source_winid,
       })
 
       state.open_agent = runtime_agent
