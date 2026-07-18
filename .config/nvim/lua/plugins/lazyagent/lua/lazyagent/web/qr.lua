@@ -82,7 +82,7 @@ function M.show(url, opts)
   })
   vim.wo[win].wrap = false
 
-  vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = buf, silent = true })
+  vim.keymap.set("n", "q", "<cmd>close<cr>", { buffer = buf, nowait = true, silent = true })
   vim.keymap.set("n", "<Esc>", "<cmd>close<cr>", { buffer = buf, silent = true })
   vim.keymap.set("n", "<CR>", "<cmd>close<cr>", { buffer = buf, silent = true })
 
