@@ -844,6 +844,11 @@ local function create_backend(default_view)
       else
         session.thread_store_error = tostring(thread_err)
       end
+      session.on_transcript_read = function()
+        if sessions[pane_id] == session and session.thread_record and session.thread_record.unread == true then
+          sync_thread_record(session, { unread = false })
+        end
+      end
       session.protocol_log_path = session.protocol_log and (
         cache_logic.get_cache_dir() .. "/acp/protocol/"
           .. sanitize_filename_component(session.thread_id or pane_id or acp.agent_name) .. ".jsonl"

@@ -86,6 +86,7 @@ local threads = session_threads.setup({
   close_session = function(agent_name)
     return M.close_session(agent_name)
   end,
+  editor_registry = require("lazyagent.acp.editor_registry"),
 })
 
 local actions = session_actions.setup({
@@ -197,6 +198,7 @@ M.attach_session = actions.attach_session
 M.pick_acp_threads = threads.pick_threads
 M.open_acp_cockpit = threads.open_cockpit
 M.new_acp_thread = threads.new_thread
+M.new_acp_thread_in_workspace = threads.new_thread_in_workspace
 M.new_acp_worktree_thread = threads.new_worktree_thread
 M.cleanup_acp_worktree = threads.cleanup_worktree
 M.open_acp_thread = threads.open_thread

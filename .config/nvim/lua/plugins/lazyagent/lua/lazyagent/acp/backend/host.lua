@@ -593,9 +593,16 @@ function M.setup(deps)
         kind = message_stream.kind,
         messageId = message_stream.message_id,
       })
-      if state.open_agent ~= session.agent_name
-        and session.thread_record
-        and session.thread_record.unread ~= true
+      local transcript_is_read = session.view
+        and type(session.view.transcript_is_read) == "function"
+        and session.view.transcript_is_read(session.pane_id)
+      if transcript_is_read then
+        if session.thread_record and session.thread_record.unread == true then
+          sync_thread(session, { unread = false })
+        end
+      elseif state.open_agent ~= session.agent_name
+          and session.thread_record
+          and session.thread_record.unread ~= true
       then
         sync_thread(session, { unread = true })
       end

@@ -8,6 +8,7 @@ function M.setup(deps)
   local acp_logic = deps.acp_logic
   local start_interactive_session = deps.start_interactive_session
   local close_session = deps.close_session
+  local editor_registry = deps.editor_registry or require("lazyagent.acp.editor_registry")
   local module = {}
   local thread_label
 
@@ -214,7 +215,8 @@ function M.setup(deps)
     return true
   end
 
-  function module.new_thread(provider_id)
+  function module.new_thread(provider_id, opts)
+    opts = opts or {}
     local provider, providers = configured_provider(provider_id)
     if not provider then
       if type(providers) ~= "table" or #providers == 0 then
@@ -223,7 +225,7 @@ function M.setup(deps)
       end
       vim.ui.select(providers, { prompt = "New thread provider:" }, function(choice)
         if choice then
-          module.new_thread(choice)
+          module.new_thread(choice, opts)
         end
       end)
       return true
@@ -235,7 +237,7 @@ function M.setup(deps)
     end
     local thread, err = backend.create_thread({
       provider_id = provider,
-      cwd = vim.fn.getcwd(),
+      cwd = normalize_path(opts.workspace) or vim.fn.getcwd(),
       title = provider,
       status = "closed",
     })
@@ -244,6 +246,63 @@ function M.setup(deps)
       return false
     end
     return module.open_thread(thread.thread_id)
+  end
+
+  function module.new_thread_in_workspace(provider_id, workspace)
+    workspace = normalize_path(workspace)
+    if not workspace or vim.fn.isdirectory(workspace) ~= 1 then
+      vim.notify("LazyAgent ACP: workspace is unavailable: " .. tostring(workspace), vim.log.levels.WARN)
+      return false
+    end
+    return module.new_thread(provider_id, { workspace = workspace })
+  end
+
+  function module.request_new_agent(workspace, provider_id)
+    workspace = normalize_path(workspace)
+    if not workspace then
+      vim.notify("LazyAgent ACP: move to a project before creating an agent", vim.log.levels.INFO)
+      return false
+    end
+    local provider, providers = configured_provider(provider_id)
+    if not provider then
+      if type(providers) ~= "table" or #providers == 0 then
+        vim.notify("LazyAgent ACP: no ACP provider is configured", vim.log.levels.WARN)
+        return false
+      end
+      vim.ui.select(providers, { prompt = "New agent provider:" }, function(choice)
+        if choice then module.request_new_agent(workspace, choice) end
+      end)
+      return true
+    end
+
+    local targets = editor_registry.targets(workspace)
+    if #targets == 0 then
+      vim.notify(
+        "LazyAgent ACP: no Neovim currently has this workspace open: " .. vim.fn.fnamemodify(workspace, ":~"),
+        vim.log.levels.INFO
+      )
+      return false
+    end
+    local function request(target)
+      local accepted, err = editor_registry.request_create_agent(target, provider, workspace)
+      if not accepted then
+        vim.notify("LazyAgent ACP: failed to create agent: " .. tostring(err), vim.log.levels.ERROR)
+        return false
+      end
+      vim.notify(
+        "LazyAgent ACP: creating " .. provider .. " in " .. tostring(target.label or "target Neovim"),
+        vim.log.levels.INFO
+      )
+      return true
+    end
+    if #targets == 1 then return request(targets[1]) end
+    vim.ui.select(targets, {
+      prompt = "Create agent in Neovim:",
+      format_item = function(target) return target.label end,
+    }, function(target)
+      if target then request(target) end
+    end)
+    return true
   end
 
   function module.new_worktree_thread(provider_id)
@@ -499,6 +558,13 @@ function M.setup(deps)
     local preview_timer
     local refreshing = false
     local creating_preview = false
+    local refresh
+    local maybe_mark_preview_read
+    local preview_augroup = vim.api.nvim_create_augroup(
+      "LazyAgentACPCockpitPreview" .. tostring(bufnr),
+      { clear = true }
+    )
+    local preview_scroll_autocmd
 
     local function stored_thread(thread_id)
       for _, thread in ipairs(stored_threads or {}) do
@@ -531,6 +597,18 @@ function M.setup(deps)
       vim.wo[preview_winid].wrap = true
       vim.wo[preview_winid].number = false
       vim.wo[preview_winid].relativenumber = false
+      if preview_scroll_autocmd then
+        pcall(vim.api.nvim_del_autocmd, preview_scroll_autocmd)
+      end
+      preview_scroll_autocmd = vim.api.nvim_create_autocmd({ "CursorMoved", "WinScrolled" }, {
+        group = preview_augroup,
+        callback = function(args)
+          local event_win = args.event == "WinScrolled" and tonumber(args.match) or vim.api.nvim_get_current_win()
+          if event_win == preview_winid and maybe_mark_preview_read then
+            vim.schedule(maybe_mark_preview_read)
+          end
+        end,
+      })
       vim.api.nvim_set_current_win(cockpit_winid)
       creating_preview = false
       return true
@@ -539,6 +617,26 @@ function M.setup(deps)
     local function selected_thread_id()
       if not vim.api.nvim_win_is_valid(cockpit_winid) then return nil end
       return line_map[vim.api.nvim_win_get_cursor(cockpit_winid)[1]]
+    end
+
+    local function selected_workspace()
+      local selected = stored_thread(selected_thread_id())
+      if selected then return thread_workspace(selected) end
+      if vim.api.nvim_win_is_valid(cockpit_winid) then
+        local row = vim.api.nvim_win_get_cursor(cockpit_winid)[1]
+        local lines = vim.api.nvim_buf_get_lines(bufnr, 0, row, false)
+        for index = #lines, 1, -1 do
+          local label = lines[index]:match("^## (.+)$")
+          if label then
+            for _, thread in ipairs(stored_threads or {}) do
+              local workspace = thread_workspace(thread)
+              if workspace and vim.fn.fnamemodify(workspace, ":~") == label then return workspace end
+            end
+            break
+          end
+        end
+      end
+      return current_root
     end
 
     local function mirror_snapshot(thread)
@@ -565,6 +663,42 @@ function M.setup(deps)
         end
       end
       return { "_No persisted transcript is available for this thread._" }, "empty:" .. tostring(thread.thread_id)
+    end
+
+    maybe_mark_preview_read = function()
+      if preview_mode ~= "mirror"
+        or not preview_thread_id
+        or not preview_winid
+        or not vim.api.nvim_win_is_valid(preview_winid)
+        or not preview_bufnr
+        or not vim.api.nvim_buf_is_valid(preview_bufnr)
+      then
+        return false
+      end
+      local thread = stored_thread(preview_thread_id)
+      if not thread or thread.unread ~= true then return false end
+      local line_count = math.max(1, vim.api.nvim_buf_line_count(preview_bufnr))
+      local info = vim.fn.getwininfo(preview_winid)[1]
+      local cursor = vim.api.nvim_win_get_cursor(preview_winid)[1]
+      if cursor < line_count and (not info or tonumber(info.botline) < line_count) then
+        return false
+      end
+
+      local agent_name = thread_agents[thread.thread_id]
+      local session = agent_name and state.sessions and state.sessions[agent_name] or nil
+      local active_backend = session and state.backends and state.backends[session.backend]
+        or (session and backend_for_provider(agent_name) or nil)
+        or backend
+      if type(active_backend.mark_thread_read) ~= "function"
+        or not active_backend.mark_thread_read(thread.thread_id)
+      then
+        return false
+      end
+      thread.unread = false
+      vim.schedule(function()
+        if refresh and vim.api.nvim_buf_is_valid(bufnr) then refresh() end
+      end)
+      return true
     end
 
     local function update_preview(thread_id, force)
@@ -607,6 +741,9 @@ function M.setup(deps)
       if follow and preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
         pcall(vim.api.nvim_win_set_cursor, preview_winid, { math.max(1, #lines), 0 })
       end
+      if preview_mode == "mirror" then
+        vim.schedule(maybe_mark_preview_read)
+      end
     end
 
     local function cockpit_width()
@@ -614,7 +751,7 @@ function M.setup(deps)
       local winid = windows[1]
       return math.max(40, (winid and vim.api.nvim_win_get_width(winid) or vim.o.columns) - 1)
     end
-    local function refresh()
+    refresh = function()
       if refreshing or creating_preview then return end
       refreshing = true
       local selected_id = selected_thread_id()
@@ -721,6 +858,9 @@ function M.setup(deps)
       local thread_id = selected_thread_id()
       if thread_id then module.open_thread(thread_id) end
     end, { buffer = bufnr, silent = true, desc = "Open or resume ACP cockpit thread" })
+    vim.keymap.set("n", "n", function()
+      module.request_new_agent(selected_workspace())
+    end, { buffer = bufnr, silent = true, desc = "Create an ACP agent in the project Neovim" })
     vim.keymap.set("n", "i", function()
       local id = selected_thread_id()
       local agent_name = id and thread_agents[id] or nil
@@ -873,6 +1013,7 @@ function M.setup(deps)
       local items = {
         { key = "<CR>", description = "Toggle latest response / transcript mirror" },
         { key = "o", description = "Open or resume thread" },
+        { key = "n", description = "Create agent in the project Neovim" },
         { key = "i", description = "Message live thread" },
         { key = "v", description = "Open raw transcript" },
         { key = "]a", description = "Jump to next live thread" },
@@ -923,6 +1064,7 @@ function M.setup(deps)
       buffer = bufnr,
       once = true,
       callback = function()
+        pcall(vim.api.nvim_del_augroup_by_id, preview_augroup)
         if preview_timer then
           preview_timer:stop()
           preview_timer:close()

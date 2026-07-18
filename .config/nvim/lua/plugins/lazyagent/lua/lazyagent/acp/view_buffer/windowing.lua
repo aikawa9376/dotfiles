@@ -23,6 +23,7 @@ function M.new(ctx)
   local scroll_buffer_to_end = ctx.scroll_buffer_to_end
   local show_action_menu = ctx.show_action_menu
   local show_metadata_popup = ctx.show_metadata_popup
+  local notify_transcript_read = ctx.notify_transcript_read or function() end
   local diff_view = setmetatable({}, {
     __index = function(_, key)
       local view = ctx.diff_view and ctx.diff_view() or nil
@@ -558,6 +559,23 @@ function M.new(ctx)
     return false
   end
 
+  function M._transcript_is_read(bufnr)
+    return bufnr ~= nil
+      and vim.api.nvim_buf_is_valid(bufnr)
+      and is_acp_buffer(bufnr)
+      and buffer_is_visible(bufnr)
+      and should_follow_output(bufnr)
+      and M._any_window_at_transcript_end(bufnr)
+  end
+
+  function M._notify_transcript_read(bufnr)
+    if not M._transcript_is_read(bufnr) then
+      return false
+    end
+    notify_transcript_read(pane_id_for_bufnr(bufnr))
+    return true
+  end
+
   function M._resume_follow_output(bufnr, opts)
     opts = opts or {}
     if not bufnr or not is_acp_buffer(bufnr) then
@@ -595,7 +613,9 @@ function M.new(ctx)
         or M._any_window_cursor_reaches_transcript_end(bufnr)
     end
     if at_end then
-      return M._resume_follow_output(bufnr, opts)
+      local resumed = M._resume_follow_output(bufnr, opts)
+      M._notify_transcript_read(bufnr)
+      return resumed
     end
     return false
   end
@@ -606,6 +626,7 @@ function M.new(ctx)
     end
     if M._window_view_reaches_transcript_end(win, bufnr) then
       if should_follow_output(bufnr) then
+        M._notify_transcript_read(bufnr)
         return false
       end
 
@@ -629,6 +650,9 @@ function M.new(ctx)
     if should_follow_output(bufnr) and not M._window_view_reaches_transcript_end(win, bufnr) then
       return pause_follow_output(bufnr, { reason = "manual", win = win })
     end
+    if should_follow_output(bufnr) then
+      M._notify_transcript_read(bufnr)
+    end
     if not should_follow_output(bufnr) then
       local pane_opts = pane_opts_for_bufnr(bufnr)
       if not M._window_cursor_reaches_transcript_end(win, bufnr) then
@@ -636,7 +660,9 @@ function M.new(ctx)
         return false
       end
       if pane_opts.follow_pause_cursor_left_end == true then
-        return M._resume_follow_output(bufnr)
+        local resumed = M._resume_follow_output(bufnr)
+        M._notify_transcript_read(bufnr)
+        return resumed
       end
     end
     return false
