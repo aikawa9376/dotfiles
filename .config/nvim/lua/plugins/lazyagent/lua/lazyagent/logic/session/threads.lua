@@ -486,6 +486,10 @@ function M.setup(deps)
     local preview_bufnr
     local preview_winid
     local preview_enabled = true
+    local preview_mode = "summary"
+    local preview_thread_id
+    local preview_signature
+    local preview_timer
     local refreshing = false
     local creating_preview = false
 
@@ -510,7 +514,10 @@ function M.setup(deps)
         vim.bo[preview_bufnr].filetype = "markdown"
       end
       vim.api.nvim_set_current_win(cockpit_winid)
-      vim.cmd("botright 10split")
+      local preview_height = preview_mode == "mirror"
+          and math.max(12, math.floor(vim.o.lines * 0.35))
+        or 10
+      vim.cmd("botright " .. tostring(preview_height) .. "split")
       preview_winid = vim.api.nvim_get_current_win()
       vim.api.nvim_win_set_buf(preview_winid, preview_bufnr)
       vim.wo[preview_winid].winfixheight = true
@@ -527,25 +534,72 @@ function M.setup(deps)
       return line_map[vim.api.nvim_win_get_cursor(cockpit_winid)[1]]
     end
 
-    local function update_preview(thread_id)
+    local function mirror_snapshot(thread)
+      local agent_name = thread_agents[thread.thread_id]
+      local session = agent_name and state.sessions and state.sessions[agent_name] or nil
+      local active_backend = session and state.backends and state.backends[session.backend]
+        or (session and backend_for_provider(agent_name) or nil)
+      if session and active_backend and type(active_backend.get_view_snapshot) == "function" then
+        local snapshot = active_backend.get_view_snapshot(session.pane_id)
+        if snapshot then
+          return snapshot.lines or {}, table.concat({
+            "live", tostring(thread.thread_id), tostring(snapshot.changedtick or 0), tostring(snapshot.line_count or 0),
+          }, ":")
+        end
+      end
+
+      local path = thread.transcript_path
+      if path and path ~= "" and vim.fn.filereadable(path) == 1 then
+        local ok, lines = pcall(vim.fn.readfile, path)
+        if ok and lines then
+          return lines, table.concat({
+            "file", tostring(thread.thread_id), tostring(vim.fn.getftime(path)), tostring(vim.fn.getfsize(path)),
+          }, ":")
+        end
+      end
+      return { "_No persisted transcript is available for this thread._" }, "empty:" .. tostring(thread.thread_id)
+    end
+
+    local function update_preview(thread_id, force)
       if not preview_enabled or not create_preview() then return end
       local thread = stored_thread(thread_id or selected_thread_id())
       local lines = { "# Thread Preview", "", "_Move to a thread to preview its latest response._" }
       if thread then
         local title = require("lazyagent.acp.cockpit").prompt_title(thread) or thread.thread_id:sub(1, 8)
         title = vim.fn.strcharpart(title:gsub("%s+", " "), 0, 72)
-        lines = { "# " .. tostring(thread.provider_id or "Agent") .. " · " .. title, "" }
-        local height = preview_winid and vim.api.nvim_win_is_valid(preview_winid)
-            and vim.api.nvim_win_get_height(preview_winid)
-          or 10
-        local response = require("lazyagent.acp.cockpit").latest_response(thread, math.max(1, height - 3))
-        if #response == 0 then response = { "_No assistant response yet._" } end
-        vim.list_extend(lines, response)
+        if preview_mode == "mirror" then
+          local signature
+          lines, signature = mirror_snapshot(thread)
+          if not force and preview_thread_id == thread.thread_id and preview_signature == signature then return end
+          preview_thread_id = thread.thread_id
+          preview_signature = signature
+          if #lines == 0 then lines = { "_The transcript is currently empty._" } end
+          if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
+            vim.wo[preview_winid].winbar = " Mirror · " .. tostring(thread.provider_id or "Agent") .. " · " .. title .. " "
+          end
+        else
+          lines = { "# " .. tostring(thread.provider_id or "Agent") .. " · " .. title, "" }
+          local height = preview_winid and vim.api.nvim_win_is_valid(preview_winid)
+              and vim.api.nvim_win_get_height(preview_winid)
+            or 10
+          local response = require("lazyagent.acp.cockpit").latest_response(thread, math.max(1, height - 3))
+          if #response == 0 then response = { "_No assistant response yet._" } end
+          vim.list_extend(lines, response)
+          if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
+            vim.wo[preview_winid].winbar = " Latest response "
+          end
+        end
       end
+      local previous_count = vim.api.nvim_buf_line_count(preview_bufnr)
+      local follow = preview_winid and vim.api.nvim_win_is_valid(preview_winid)
+        and vim.api.nvim_win_get_cursor(preview_winid)[1] >= previous_count
       vim.bo[preview_bufnr].modifiable = true
       vim.api.nvim_buf_set_lines(preview_bufnr, 0, -1, false, lines)
       vim.bo[preview_bufnr].modifiable = false
       vim.bo[preview_bufnr].modified = false
+      if follow and preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
+        pcall(vim.api.nvim_win_set_cursor, preview_winid, { math.max(1, #lines), 0 })
+      end
     end
 
     local function cockpit_width()
@@ -644,20 +698,31 @@ function M.setup(deps)
     end
 
     vim.keymap.set("n", "<CR>", function()
-      local thread_id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
+      local thread_id = selected_thread_id()
+      if not thread_id then return end
+      preview_enabled = true
+      preview_mode = preview_mode == "mirror" and "summary" or "mirror"
+      preview_signature = nil
+      if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
+        local height = preview_mode == "mirror" and math.max(12, math.floor(vim.o.lines * 0.35)) or 10
+        vim.api.nvim_win_set_height(preview_winid, height)
+      end
+      update_preview(thread_id, true)
+    end, { buffer = bufnr, silent = true, desc = "Toggle ACP thread latest response or mirror" })
+    vim.keymap.set("n", "o", function()
+      local thread_id = selected_thread_id()
       if thread_id then module.open_thread(thread_id) end
-    end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit thread" })
+    end, { buffer = bufnr, silent = true, desc = "Open or resume ACP cockpit thread" })
     vim.keymap.set("n", "i", function()
       local id = selected_thread_id()
       local agent_name = id and thread_agents[id] or nil
       local thread = id and stored_thread(id) or nil
       if not agent_name or not thread then
-        vim.notify("LazyAgent ACP: this thread is not live; press <CR> to resume it", vim.log.levels.INFO)
+        vim.notify("LazyAgent ACP: this thread is not live; press o to resume it", vim.log.levels.INFO)
         return
       end
       start_interactive_session({
-        agent_name = thread.provider_id,
-        acp_thread_id = thread.thread_id,
+        agent_name = agent_name,
         acp_thread_title = thread.title,
         reuse = true,
         window_type = "float",
@@ -684,7 +749,8 @@ function M.setup(deps)
         preview_winid = nil
       else
         preview_enabled = true
-        update_preview()
+        preview_signature = nil
+        update_preview(nil, true)
       end
     end, { buffer = bufnr, silent = true, desc = "Toggle ACP cockpit preview" })
     vim.keymap.set("n", "v", function()
@@ -794,6 +860,44 @@ function M.setup(deps)
       silent = true,
       desc = "Close ACP cockpit",
     })
+    vim.keymap.set("n", "?", function()
+      local thread = stored_thread(selected_thread_id())
+      local items = {
+        { key = "<CR>", description = "Toggle latest response / transcript mirror" },
+        { key = "o", description = "Open or resume thread" },
+        { key = "i", description = "Message live thread" },
+        { key = "v", description = "Open raw transcript" },
+        { key = "]a", description = "Jump to next live thread" },
+        { key = "[a", description = "Jump to previous live thread" },
+        { key = "P", description = "Show or hide preview" },
+        { key = "x", description = "Stop selected process" },
+        { key = "/", description = "Filter threads" },
+        { key = "p", description = "Pin or unpin thread" },
+        { key = "t", description = "Run thread test" },
+        { key = "a", description = "Archive or restore thread" },
+        { key = "c", description = "Clean up managed worktree" },
+        { key = "d", description = "Delete stopped thread" },
+        { key = "D", description = "Force delete thread" },
+        { key = "X", description = "Stop all processes" },
+        { key = "r", description = "Refresh cockpit" },
+        { key = "q", description = "Close cockpit" },
+      }
+      vim.ui.select(items, {
+        prompt = thread and ("Cockpit · " .. tostring(thread.provider_id or "Agent") .. ":") or "Cockpit actions:",
+        kind = "lazyagent-acp-actions",
+        format_item = function(item)
+          return string.format("%-4s %s", item.key, item.description)
+        end,
+      }, function(choice)
+        if not choice or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        local callback
+        vim.api.nvim_buf_call(bufnr, function()
+          local mapping = vim.fn.maparg(choice.key, "n", false, true)
+          callback = type(mapping) == "table" and mapping.callback or nil
+        end)
+        if type(callback) == "function" then callback() end
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit action menu" })
     vim.api.nvim_create_autocmd("CursorMoved", {
       buffer = bufnr,
       callback = function() update_preview() end,
@@ -801,6 +905,22 @@ function M.setup(deps)
     vim.api.nvim_create_autocmd("WinEnter", {
       buffer = bufnr,
       callback = refresh,
+    })
+    preview_timer = vim.uv.new_timer()
+    preview_timer:start(300, 300, vim.schedule_wrap(function()
+      if preview_mode ~= "mirror" or not vim.api.nvim_buf_is_valid(bufnr) then return end
+      pcall(update_preview, nil, false)
+    end))
+    vim.api.nvim_create_autocmd("BufWipeout", {
+      buffer = bufnr,
+      once = true,
+      callback = function()
+        if preview_timer then
+          preview_timer:stop()
+          preview_timer:close()
+          preview_timer = nil
+        end
+      end,
     })
     refresh()
     if vim.api.nvim_win_is_valid(cockpit_winid) then

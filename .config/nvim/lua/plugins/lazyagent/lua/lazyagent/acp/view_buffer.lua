@@ -1230,4 +1230,22 @@ function M.mobile_transcript_snapshot(agent_name, opts)
   }
 end
 
+function M.mirror_snapshot(pane_id)
+  pane_id = pane_id and tostring(pane_id) or nil
+  local bufnr = pane_id and to_bufnr(pane_id) or nil
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+
+  local total = transcript_line_count(bufnr)
+  return {
+    pane_id = pane_id,
+    bufnr = bufnr,
+    source = "buffer",
+    lines = vim.api.nvim_buf_get_lines(bufnr, 0, total, false),
+    line_count = total,
+    changedtick = changedtick(bufnr),
+  }
+end
+
 return M
