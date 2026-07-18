@@ -468,6 +468,13 @@ function M.setup(deps)
       vim.notify("LazyAgent ACP: thread store is unavailable", vim.log.levels.ERROR)
       return false
     end
+    local origin_bufnr = vim.api.nvim_get_current_buf()
+    local current_root = vim.b[origin_bufnr].lazyagent_workspace_root
+    if type(current_root) ~= "string" or current_root == "" then
+      current_root = require("lazyagent.util").git_root_for_path(vim.api.nvim_buf_get_name(origin_bufnr))
+        or vim.fn.getcwd()
+    end
+    current_root = normalize_path(current_root)
     local bufnr = vim.api.nvim_create_buf(false, true)
     vim.cmd("tabnew")
     vim.api.nvim_win_set_buf(0, bufnr)
@@ -649,6 +656,7 @@ function M.setup(deps)
           open_thread_id = open_thread_id,
           owner_pid = vim.fn.getpid(),
           owner_instance_id = state.editor_instance_id,
+          current_root = current_root,
         }
       )
       local conflicts = require("lazyagent.acp.cockpit").conflicts(stored_threads)

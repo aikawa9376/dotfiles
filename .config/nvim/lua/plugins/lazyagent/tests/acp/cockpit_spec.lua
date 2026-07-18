@@ -30,6 +30,12 @@ function M.run()
   assert(rendered:find("external = another Neovim", 1, true), "cockpit lifecycle legend")
   assert(rendered:find("`?` actions", 1, true), "cockpit action menu key hint")
   assert(rendered:find("`<CR>` latest/mirror", 1, true), "cockpit preview mode key hint")
+  local current_root_lines = Cockpit.render(threads, {}, { current_root = "/tmp/project-b" })
+  local current_root_rendered = table.concat(current_root_lines, "\n")
+  assert(
+    current_root_rendered:find("## /tmp/project%-b") < current_root_rendered:find("## /tmp/project%-a"),
+    "current Neovim root group sorts first"
+  )
   local permission_lines = Cockpit.render(threads, {
     ["thread-a"] = { acp_ready = true, acp_client_debug = { pending_permissions = 1 } },
   })
