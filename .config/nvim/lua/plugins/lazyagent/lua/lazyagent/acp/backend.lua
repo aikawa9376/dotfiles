@@ -2148,6 +2148,29 @@ local function create_backend(default_view)
     return table.concat(transcript_lines, "\n")
   end
 
+  function backend.get_view_snapshot(pane_id)
+    local session = get_session(pane_id)
+    if not session then return nil end
+    local view = session_view(session)
+    if view and type(view.mirror_snapshot) == "function" then
+      local snapshot = view.mirror_snapshot(pane_id)
+      if snapshot then return snapshot end
+    end
+    if not session.transcript_path or vim.fn.filereadable(session.transcript_path) ~= 1 then
+      return nil
+    end
+    local ok, transcript_lines = pcall(vim.fn.readfile, session.transcript_path)
+    if not ok or not transcript_lines then return nil end
+    return {
+      pane_id = pane_id,
+      source = "file",
+      lines = transcript_lines,
+      line_count = #transcript_lines,
+      changedtick = 0,
+      path = session.transcript_path,
+    }
+  end
+
   function backend.clear_transcript(pane_id, replacement_text)
     local session = get_session(pane_id)
     if not session then

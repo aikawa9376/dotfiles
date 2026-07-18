@@ -1,7 +1,7 @@
 local M = {}
 
 local highlight_ns = vim.api.nvim_create_namespace("LazyAgentACPCockpit")
-local STATUS_WIDTH = 7
+local STATUS_WIDTH = 12
 local PROMPT_MAX_WIDTH = 48
 
 local function display_width(text)
@@ -382,8 +382,8 @@ function M.render(threads, runtimes, opts)
   local lines = {
     "# LazyAgent ACP Session Cockpit",
     "",
-    "persisted threads: running = live process, closed = resumable history, archived = retained history",
-    "`<CR>` open/resume  `i` message  `v` transcript  `[a`/`]a` live  `P` preview  `x` stop  `/` filter  `p` pin  `t` test  `a` archive/restore  `c` cleanup  `d` delete  `D` force delete  `X` stop all  `r` refresh  `q` close",
+    "persisted threads: running/idle = this Neovim, external = another Neovim, closed = resumable history, archived = retained history",
+    "`?` actions  `<CR>` latest/mirror  `P` preview  `q` close",
   }
   local line_map = {}
   local highlights = {

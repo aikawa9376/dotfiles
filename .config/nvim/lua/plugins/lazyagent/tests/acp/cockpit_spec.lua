@@ -27,9 +27,9 @@ function M.run()
   assert(rendered:find("## /tmp/project%-a"), "project A group")
   assert(rendered:find("## /tmp/project%-b"), "project B group")
   assert(rendered:find("%[running%]%s+claude · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2 · First"), "thread card columns")
-  assert(rendered:find("persisted threads: running = live process"), "cockpit lifecycle legend")
-  assert(rendered:find("`v` transcript", 1, true), "cockpit transcript key hint")
-  assert(rendered:find("`D` force delete", 1, true), "cockpit force delete key hint")
+  assert(rendered:find("external = another Neovim", 1, true), "cockpit lifecycle legend")
+  assert(rendered:find("`?` actions", 1, true), "cockpit action menu key hint")
+  assert(rendered:find("`<CR>` latest/mirror", 1, true), "cockpit preview mode key hint")
   local permission_lines = Cockpit.render(threads, {
     ["thread-a"] = { acp_ready = true, acp_client_debug = { pending_permissions = 1 } },
   })
@@ -47,6 +47,17 @@ function M.run()
   local lifecycle_rendered = table.concat(lifecycle_lines, "\n")
   assert(lifecycle_rendered:find("%[closed%].-Closed history"), "closed lifecycle overrides stale agentmux state")
   assert(lifecycle_rendered:find("%[idle%].-Live idle"), "live process uses agentmux idle state")
+  local external_lines = Cockpit.render({
+    {
+      thread_id = "external-live", title = "Other Neovim", provider_id = "Codex", cwd = "/tmp/lifecycle",
+      status = "active", process_id = 42, metadata = { editor = { owner_pid = vim.fn.getpid() } },
+    },
+  }, {}, { owner_pid = vim.fn.getpid() + 1 })
+  local external_rendered = table.concat(external_lines, "\n")
+  assert(external_rendered:find("%[external%].-Other Neovim"), "foreign Neovim live status")
+  local closed_card = vim.tbl_filter(function(line) return line:find("Closed history", 1, true) end, lifecycle_lines)[1]
+  local external_card = vim.tbl_filter(function(line) return line:find("Other Neovim", 1, true) end, external_lines)[1]
+  assert(closed_card:find("Codex", 1, true) == external_card:find("Codex", 1, true), "status columns align")
   local control_lines = Cockpit.render({
     {
       thread_id = "history", title = "Newer history", provider_id = "Codex", cwd = "/tmp/control",
