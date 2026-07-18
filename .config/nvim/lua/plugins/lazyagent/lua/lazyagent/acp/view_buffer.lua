@@ -7,6 +7,7 @@ local view_diff = require("lazyagent.acp.view_diff")
 local view_footer = require("lazyagent.acp.view_footer")
 local pane_config = {}
 local pane_buffers = {}
+local transcript_read_handlers = {}
 local next_pane_seq = 0
 local transcript_ns = vim.api.nvim_create_namespace("lazyagent_acp_transcript")
 local footer_ns = vim.api.nvim_create_namespace("lazyagent_acp_footer")
@@ -828,6 +829,12 @@ local view_windowing = require("lazyagent.acp.view_buffer.windowing").new({
   diff_view = function()
     return diff_view
   end,
+  notify_transcript_read = function(pane_id)
+    local handler = transcript_read_handlers[tostring(pane_id or "")]
+    if type(handler) == "function" then
+      pcall(handler)
+    end
+  end,
 })
 resolve_anchor_window = view_windowing.resolve_anchor_window
 local to_bufnr = view_windowing.to_bufnr
@@ -1114,6 +1121,11 @@ refresh_buffer_layout = function(bufnr, opts)
   end
   if should_follow_output(bufnr) then
     scroll_buffer_to_end(bufnr)
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        M._notify_transcript_read(bufnr)
+      end
+    end)
   end
   if render_needed then
     entry.markdown_render_pending = false
@@ -1129,6 +1141,7 @@ require("lazyagent.acp.view_buffer.api").attach(M, {
   to_bufnr = to_bufnr,
   save_window_views = save_window_views,
   pane_config = pane_config,
+  transcript_read_handlers = transcript_read_handlers,
   first_visible_window = function(bufnr)
     return first_visible_window(bufnr)
   end,
@@ -1246,6 +1259,11 @@ function M.mirror_snapshot(pane_id)
     line_count = total,
     changedtick = changedtick(bufnr),
   }
+end
+
+function M.transcript_is_read(pane_id)
+  local bufnr = to_bufnr(pane_id)
+  return bufnr ~= nil and M._transcript_is_read(bufnr) or false
 end
 
 return M

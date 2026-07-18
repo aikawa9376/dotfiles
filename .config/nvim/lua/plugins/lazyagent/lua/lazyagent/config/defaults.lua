@@ -100,7 +100,7 @@ function M.build()
         visual = true,
         permission = true,
         elicitation = true,
-        completion = true,
+        completion = false,
         sound_command = nil,
       },
       -- Debounce markdown rendering so streaming output doesn't repeatedly re-render.

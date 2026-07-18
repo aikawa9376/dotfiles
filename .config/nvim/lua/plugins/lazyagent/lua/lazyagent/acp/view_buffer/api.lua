@@ -9,6 +9,7 @@ function M.attach(api, ctx)
   local to_bufnr = ctx.to_bufnr
   local save_window_views = ctx.save_window_views
   local pane_config = ctx.pane_config
+  local transcript_read_handlers = ctx.transcript_read_handlers
   local first_visible_window = ctx.first_visible_window
   local restore_window_views = ctx.restore_window_views
   local resolve_anchor_window = ctx.resolve_anchor_window
@@ -164,6 +165,10 @@ function M.attach(api, ctx)
   end
 
   function M.on_session_created(session)
+    local pane_key = tostring(session and session.pane_id or "")
+    if type(session and session.on_transcript_read) == "function" then
+      transcript_read_handlers[pane_key] = session.on_transcript_read
+    end
     local bufnr = to_bufnr(session and session.pane_id)
     if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
       pcall(function()
@@ -361,6 +366,7 @@ function M.attach(api, ctx)
     end
     pane_buffers[tostring(pane_id)] = nil
     pane_config[tostring(pane_id)] = nil
+    transcript_read_handlers[tostring(pane_id)] = nil
     if not bufnr then
       return true
     end

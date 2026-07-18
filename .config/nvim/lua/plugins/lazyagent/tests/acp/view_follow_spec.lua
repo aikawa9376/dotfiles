@@ -17,6 +17,7 @@ function M.run()
     ["follow-test"] = { follow_output = true },
   }
   local scrolls_to_end = 0
+  local read_notifications = 0
   local api = {}
   local windowing = require("lazyagent.acp.view_buffer.windowing").new({
     api = api,
@@ -36,6 +37,10 @@ function M.run()
     end,
     scroll_buffer_to_end = function(_)
       scrolls_to_end = scrolls_to_end + 1
+    end,
+    notify_transcript_read = function(pane_id)
+      assert_equal(pane_id, "follow-test", "read notification pane")
+      read_notifications = read_notifications + 1
     end,
   })
 
@@ -75,6 +80,7 @@ function M.run()
   api._sync_follow_after_cursor_moved(bufnr, win)
   assert_equal(pane_config["follow-test"].follow_output, true, "returning the cursor to end resumes follow")
   assert_equal(scrolls_to_end, 1, "cursor return scrolls to end once")
+  assert_equal(read_notifications, 1, "cursor return marks the visible transcript read")
 
   windowing.pause_follow_output(bufnr, { reason = "focus", win = win })
   topline = 79
@@ -83,6 +89,7 @@ function M.run()
   api._sync_follow_after_scroll(bufnr, win)
   assert_equal(pane_config["follow-test"].follow_output, true, "downward scroll to end resumes follow")
   assert_equal(scrolls_to_end, 2, "downward return scrolls to end once")
+  assert_equal(read_notifications, 2, "downward return marks the visible transcript read")
 
   vim.api.nvim_win_set_buf(win, previous_bufnr)
   vim.api.nvim_buf_delete(bufnr, { force = true })

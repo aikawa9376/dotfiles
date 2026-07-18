@@ -372,7 +372,7 @@ transcriptの`ga` → `Search thread`はuser/assistant message、thinking、runt
 
 user/assistant blockの`ga` → `Copy message`は本文だけをcopyします。`Export thread Markdown`はruntime compactionされたmessage bodyとtool content/raw refsも展開し、指定pathへ完全なthread Markdownを書き出します。
 
-manual permission、authentication elicitation、turn completionはvisual notificationへ接続されます。`acp.notifications.sound_command = { ... }`を設定すると同じeventで非同期sound commandを実行でき、eventごとに`permission` / `elicitation` / `completion = false`で無効化できます。
+manual permissionとauthentication elicitationはvisual notificationへ接続されます。turn completionは`acp.notifications.completion = true`で有効化できます（既定は`false`）。`acp.notifications.sound_command = { ... }`を設定すると有効なeventで非同期sound commandを実行でき、eventごとに`permission` / `elicitation` / `completion`で切り替えられます。
 
 `:LazyAgentACPCockpit`はLazyAgentが保存したthreadをproject/worktree pathでgroup化したread-only bufferを開きます。Cockpitを開いたbufferのworkspace/Git root（なければNeovimのcwd）に一致するgroupを先頭へ表示します。これはproviderのnative resume候補ではなく、`running`は現在のprocess、`idle`はlive processの入力待ち、`external`は別Neovim所有のlive process、`closed`は再開可能なtranscript、`archived`は保管済みの履歴です。live threadは各project内の先頭へ並び、現在scratch popupで表示中のthreadには`●`、待機promptがあるthreadには`queue:N`を表示します。thread cardはstatus列をコンパクトに揃え、provider/model/status/unread/unique changed filesの後ろにproviderが返すsession title、またはtranscriptの最初のpromptを最大48表示列で省略して表示します。promptを一度も送らず閉じたthreadは保存せず、過去の空threadもCockpit refresh時にstoreとtranscriptから削除します。
 

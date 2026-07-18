@@ -6,11 +6,22 @@ local LABELS = {
   completion = "Turn completed",
 }
 
+local DEFAULT_ENABLED = {
+  permission = true,
+  elicitation = true,
+  completion = false,
+}
+
 function M.emit(config, kind, context, deps)
   config = type(config) == "table" and config or {}
   context = type(context) == "table" and context or {}
   deps = deps or {}
-  if config.enabled == false or config[kind] == false then return false end
+  if config.enabled == false
+    or config[kind] == false
+    or (config[kind] == nil and DEFAULT_ENABLED[kind] == false)
+  then
+    return false
+  end
   local label = LABELS[kind] or tostring(kind)
   local agent = tostring(context.agent_name or "LazyAgent ACP")
   local detail = tostring(context.message or context.title or "")

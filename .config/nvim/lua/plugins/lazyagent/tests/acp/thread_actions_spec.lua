@@ -11,6 +11,7 @@ end
 function M.run()
   local records = {}
   local opened
+  local create_request
   local state = { backends = {}, editor_instance_id = "test-nvim" }
   local backend = {}
   state.backends.buffer_acp = backend
@@ -86,11 +87,25 @@ function M.run()
     start_interactive_session = function(opts)
       opened = opts
     end,
+    editor_registry = {
+      targets = function(root)
+        return { { instance_id = "target-nvim", label = "Target Neovim", roots = { root } } }
+      end,
+      request_create_agent = function(target, provider, root)
+        create_request = { target = target, provider = provider, root = root }
+        return true
+      end,
+    },
   })
 
   assert_equal(actions.new_thread("Codex"), true, "new thread action")
   assert_equal(opened.agent_name, "Codex", "new thread provider")
   assert_equal(opened.acp_thread_id, THREAD_ID, "new thread open UUID")
+  assert_equal(actions.new_thread_in_workspace("Codex", "/tmp"), true, "workspace thread action")
+  assert_equal(records[THREAD_ID].cwd, "/tmp", "workspace thread cwd")
+  assert_equal(actions.request_new_agent("/tmp", "Codex"), true, "remote new agent request")
+  assert_equal(create_request.provider, "Codex", "remote new agent provider")
+  assert_equal(create_request.root, "/tmp", "remote new agent workspace")
   assert_equal(actions.rename_thread(THREAD_ID, "Renamed"), true, "rename thread action")
   assert_equal(records[THREAD_ID].title, "Renamed", "renamed thread title")
   assert_equal(actions.archive_thread(THREAD_ID), true, "archive thread action")

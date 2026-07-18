@@ -23,8 +23,13 @@ function M.run()
   assert_equal("Permission required", notices[1][3], "visual notification title")
   assert_equal({ "play", "done.wav" }, sounds[1][1], "sound notification command")
 
-  assert_equal(false, Notifications.emit({ completion = false }, "completion", {}, deps), "kind disabled")
+  assert_equal(false, Notifications.emit({}, "completion", {}, deps), "completion disabled by default")
   assert_equal(1, #notices, "disabled visual notification count")
+  assert_equal(true, Notifications.emit({ completion = true }, "completion", {
+    agent_name = "Fixture",
+    message = "done",
+  }, deps), "completion can be enabled")
+  assert_equal("Turn completed", notices[2][3], "completion notification title")
   assert_equal(false, Notifications.emit({ enabled = false }, "elicitation", {}, deps), "all notifications disabled")
 end
 

@@ -389,7 +389,7 @@ function M.render(threads, runtimes, opts)
     "# LazyAgent ACP Session Cockpit",
     "",
     "persisted threads: running/idle = this Neovim, external = another Neovim, closed = resumable history, archived = retained history",
-    "`?` actions  `<CR>` latest/mirror  `P` preview  `q` close",
+    "`?` actions  `n` new agent  `<CR>` latest/mirror  `P` preview  `q` close",
   }
   local line_map = {}
   local highlights = {

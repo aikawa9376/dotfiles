@@ -32,6 +32,8 @@ function M.run()
 
   local killed = false
   local pane_seq = 0
+  local transcript_is_read = false
+  local on_transcript_read
   local view = {
     create_pane = function(_, done)
       pane_seq = pane_seq + 1
@@ -46,6 +48,12 @@ function M.run()
     end,
     debug_snapshot = function()
       return { active_timer_count = 0 }
+    end,
+    transcript_is_read = function()
+      return transcript_is_read
+    end,
+    on_session_created = function(session)
+      on_transcript_read = session.on_transcript_read
     end,
   }
   local backend = require("lazyagent.acp.backend").new(view)
@@ -261,11 +269,16 @@ function M.run()
 
   assert(backend.mark_thread_read(runtime.acp_thread_id))
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_unread, false, "thread read state")
+  assert_equal(type(on_transcript_read), "function", "transcript read callback")
+  assert(backend.update_thread(runtime.acp_thread_id, { unread = true }))
+  on_transcript_read()
+  assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_unread, false, "returning to transcript end marks read")
   assert(backend.set_thread_draft(runtime.acp_thread_id, "updated draft"))
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_draft, "updated draft", "thread draft update")
 
   local previous_open_agent = state.open_agent
   state.open_agent = nil
+  transcript_is_read = false
   backend.paste_and_submit(pane_id, "exercise unread state")
   assert(vim.wait(5000, function()
     local snapshot = backend.get_runtime_snapshot(pane_id)

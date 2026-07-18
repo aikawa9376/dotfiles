@@ -140,6 +140,7 @@ function M.setup(opts)
   commands_logic.setup_commands()
   register_cleanup_autocmd()
   mcp_integration.setup(M.opts)
+  require("lazyagent.acp.editor_registry").setup()
 end
 
 return M
