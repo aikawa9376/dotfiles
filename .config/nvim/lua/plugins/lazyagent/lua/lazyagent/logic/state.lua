@@ -19,6 +19,9 @@ local M = {
   -- Name of the currently loaded editor session when managed via resession hooks.
   current_session_name = nil,
 
+  -- Unique for this Neovim process lifetime; persisted on ACP threads for ownership checks.
+  editor_instance_id = table.concat({ tostring(vim.fn.getpid()), tostring((vim.uv or vim.loop).hrtime()) }, ":"),
+
   -- Flag to ensure setup is only run once.
   _configured = false,
 

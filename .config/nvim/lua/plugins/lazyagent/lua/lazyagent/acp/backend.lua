@@ -828,6 +828,7 @@ local function create_backend(default_view)
         model = session.initial_model,
         mode = session.default_mode,
         config = vim.deepcopy(session.manual_config_overrides or {}),
+        metadata = { editor = vim.deepcopy(acp.editor or {}) },
       }
       local thread, thread_err
       if existing_thread then
