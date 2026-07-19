@@ -8,6 +8,15 @@ function M.normalize_preview_layout(layout)
   return layout == "horizontal" and "horizontal" or "split"
 end
 
+function M.preview_width(requested_width, cockpit_width)
+  local requested = math.max(20, tonumber(requested_width) or 60)
+  local available = math.max(1, tonumber(cockpit_width) or requested * 2 + 1)
+  -- Keep the preview inside the cockpit's current allocation. This avoids
+  -- stealing width from an ACP window that is already visible in the tab.
+  local local_limit = math.max(1, math.floor((available - 1) / 2))
+  return math.min(requested, local_limit)
+end
+
 local function display_width(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text)
   return ok and width or #text

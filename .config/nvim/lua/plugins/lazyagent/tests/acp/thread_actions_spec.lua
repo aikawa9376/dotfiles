@@ -254,6 +254,11 @@ function M.run()
     end
   end
   assert_equal(preview_found, true, "cockpit transcript mirror window")
+  local preview_winid = vim.fn.bufwinid(cockpit_preview_bufnr)
+  assert(
+    vim.api.nvim_get_option_value("fillchars", { win = preview_winid }):find("eob: ", 1, true),
+    "cockpit preview hides end-of-buffer tildes"
+  )
   vim.cmd("normal \r")
   local latest_lines = vim.api.nvim_buf_get_lines(cockpit_preview_bufnr, 0, -1, false)
   assert(table.concat(latest_lines, "\n"):find("ready", 1, true), "cockpit enter toggles back to latest response")

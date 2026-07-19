@@ -371,7 +371,7 @@ function M.new(ctx)
   local function apply_transcript_background(win, appearance)
     appearance = appearance or {}
     local active_bg = appearance.buffer_background
-    local inactive_bg = appearance.buffer_inactive_background or active_bg
+    local inactive_bg = appearance.buffer_inactive_background
 
     local mappings = {}
     local active_group = window_background_group("Normal", active_bg)
@@ -382,9 +382,7 @@ function M.new(ctx)
     else
       mappings.EndOfBuffer = "None"
     end
-    if inactive_group then
-      mappings.NormalNC = inactive_group
-    end
+    mappings.NormalNC = inactive_group or "NormalNC"
     if next(mappings) ~= nil then
       local current = vim.wo[win].winhighlight
       local merged = {}
