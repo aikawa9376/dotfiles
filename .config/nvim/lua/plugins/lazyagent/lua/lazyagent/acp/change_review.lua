@@ -121,10 +121,11 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   local lines = {
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
     string.format("Turn %s · %d file(s)%s", turn.turn_id or "unknown", #(turn.changes or {}), history),
-    "`=` inline diff  `<CR>` side-by-side  `o` open all",
+    "`i` next diff  `o` toggle inline  `<CR>` open file  `d` side-by-side",
   }
   local change_rows = {}
   local line_changes = {}
+  local line_targets = {}
   for index, change in ipairs(turn.changes or {}) do
     local binary = change.binary == true and " [binary]" or ""
     local decision = change.decision
@@ -147,12 +148,24 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
     )
     change_rows[index] = #lines
     line_changes[#lines] = index
+    line_targets[#lines] = 1
+    local after_line
     for _, diff_line in ipairs((inline_diffs or {})[index] or {}) do
       lines[#lines + 1] = diff_line
       line_changes[#lines] = index
+      local hunk_line = diff_line:match("^@@ %-%d+,?%d* %+(%d+),?%d* @@")
+      if hunk_line then
+        after_line = tonumber(hunk_line)
+      elseif after_line and diff_line:sub(1, 1) ~= "-" then
+        line_targets[#lines] = after_line
+        if diff_line:sub(1, 1) == "+" or diff_line:sub(1, 1) == " " then
+          after_line = after_line + 1
+        end
+      end
+      line_targets[#lines] = line_targets[#lines] or after_line
     end
   end
-  return lines, change_rows, line_changes
+  return lines, change_rows, line_changes, line_targets
 end
 
 function M.drawer_lines(thread, turn, turn_index, turn_count, inline_diffs)
@@ -319,7 +332,6 @@ function M.new(opts)
         "before: " .. vim.inspect(change.before_blob),
         "after: " .. vim.inspect(change.after_blob),
       }, "markdown")
-      vim.cmd("tabnew")
       vim.api.nvim_win_set_buf(0, bufnr)
       return true
     end
@@ -337,7 +349,6 @@ function M.new(opts)
     set_scratch(before_buf, "lazyagent://before/" .. suffix .. "/" .. display_path(change), split_lines(before), ft)
     set_scratch(after_buf, "lazyagent://after/" .. suffix .. "/" .. display_path(change), split_lines(after), ft)
 
-    vim.cmd("tabnew")
     local before_win = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(before_win, before_buf)
     vim.cmd("vsplit")
@@ -350,6 +361,21 @@ function M.new(opts)
     return true
   end
 
+  function review.open_file(thread, turn, change, line)
+    local root = (turn.final_snapshot and turn.final_snapshot.root)
+      or (turn.baseline and turn.baseline.root)
+      or thread.cwd
+    local path = root and vim.fs.joinpath(root, tostring(change.path or "")) or nil
+    if not path or vim.fn.filereadable(path) ~= 1 then
+      vim.notify("LazyAgent ACP: file is unavailable: " .. tostring(path or change.path), vim.log.levels.ERROR)
+      return false
+    end
+    vim.cmd("keepalt edit " .. vim.fn.fnameescape(path))
+    local target = math.max(1, math.min(tonumber(line) or 1, vim.api.nvim_buf_line_count(0)))
+    vim.api.nvim_win_set_cursor(0, { target, 0 })
+    return true
+  end
+
   function review.open(thread)
     local turns = changed_turns(thread)
     local turn_index = #turns
@@ -357,6 +383,7 @@ function M.new(opts)
     local inline_by_turn = {}
     local change_rows = {}
     local line_changes = {}
+    local line_targets = {}
     if not turn then
       return nil, "thread has no completed file changes"
     end
@@ -370,7 +397,7 @@ function M.new(opts)
     vim.bo[bufnr].bufhidden = "hide"
     vim.bo[bufnr].swapfile = false
     vim.bo[bufnr].filetype = "lazyagent_changes"
-    vim.cmd("botright vsplit")
+    vim.cmd("botright split")
     vim.api.nvim_win_set_buf(0, bufnr)
 
     local function current_inline_diffs()
@@ -405,7 +432,7 @@ function M.new(opts)
     end
     local function render()
       local lines
-      lines, change_rows, line_changes = M.drawer_content(
+      lines, change_rows, line_changes, line_targets = M.drawer_content(
         thread, turn, turn_index, #turns, current_inline_diffs()
       )
       vim.bo[bufnr].modifiable = true
@@ -417,19 +444,20 @@ function M.new(opts)
 
     vim.keymap.set("n", "<CR>", function()
       local index = change_index_at_cursor()
-      local change = turn.changes[index]
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+      local change = index and turn.changes[index] or nil
       if change then
-        review.open_change(thread, turn, change, index)
+        review.open_file(thread, turn, change, line_targets[cursor_line])
       end
-    end, { buffer = bufnr, silent = true, desc = "Review LazyAgent ACP change" })
-    vim.keymap.set("n", "=", function()
-      local index = change_index_at_cursor()
+    end, { buffer = bufnr, silent = true, desc = "Open LazyAgent ACP changed file" })
+    local function toggle_inline(index, force_open)
+      index = index or change_index_at_cursor()
       local change = index and turn.changes[index] or nil
       if not change then return end
       local expanded = current_inline_diffs()
-      if expanded[index] then
+      if expanded[index] and not force_open then
         expanded[index] = nil
-      else
+      elseif not expanded[index] then
         local diff, err = build_inline_diff(change)
         if not diff then
           vim.notify("LazyAgent ACP: failed to build inline diff: " .. tostring(err), vim.log.levels.ERROR)
@@ -439,12 +467,46 @@ function M.new(opts)
       end
       render()
       vim.api.nvim_win_set_cursor(0, { change_rows[index] or 4, 0 })
-    end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
+      return index
+    end
     vim.keymap.set("n", "o", function()
-      for index, change in ipairs(turn.changes) do
-        review.open_change(thread, turn, change, index)
+      toggle_inline(change_index_at_cursor(), false)
+    end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
+    vim.keymap.set("n", "i", function()
+      local index = change_index_at_cursor()
+      if not index then return end
+      local row = vim.api.nvim_win_get_cursor(0)[1]
+      if not current_inline_diffs()[index] then
+        toggle_inline(index, true)
+        row = change_rows[index] or row
       end
-    end, { buffer = bufnr, silent = true, desc = "Open all LazyAgent ACP changes" })
+      for cursor = row + 1, vim.api.nvim_buf_line_count(bufnr) do
+        if line_changes[cursor] ~= index then break end
+        local line = vim.api.nvim_buf_get_lines(bufnr, cursor - 1, cursor, false)[1] or ""
+        if line:match("^@@") then
+          vim.api.nvim_win_set_cursor(0, { cursor, 0 })
+          return
+        end
+      end
+      local next_index = index < #turn.changes and (index + 1) or 1
+      toggle_inline(next_index, true)
+      local next_row = change_rows[next_index] or 4
+      for cursor = next_row + 1, vim.api.nvim_buf_line_count(bufnr) do
+        if (vim.api.nvim_buf_get_lines(bufnr, cursor - 1, cursor, false)[1] or ""):match("^@@") then
+          vim.api.nvim_win_set_cursor(0, { cursor, 0 })
+          return
+        end
+      end
+      vim.api.nvim_win_set_cursor(0, { next_row, 0 })
+    end, { buffer = bufnr, silent = true, desc = "Open and jump to next LazyAgent ACP diff" })
+    vim.keymap.set("n", "d", function()
+      local index = change_index_at_cursor()
+      local change = index and turn.changes[index] or nil
+      if change then review.open_change(thread, turn, change, index) end
+    end, { buffer = bufnr, silent = true, desc = "Diff LazyAgent ACP change in current tab" })
+    vim.keymap.set("n", "=", function()
+      toggle_inline(change_index_at_cursor(), false)
+    end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
     local function refresh(decided_turn)
       if decided_turn then
         turn = decided_turn
