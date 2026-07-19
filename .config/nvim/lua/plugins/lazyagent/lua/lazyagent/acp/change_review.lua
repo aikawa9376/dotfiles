@@ -122,6 +122,7 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
     string.format("Turn %s · %d file(s)%s", turn.turn_id or "unknown", #(turn.changes or {}), history),
     "`i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "",
   }
   local change_rows = {}
   local line_changes = {}
@@ -326,7 +327,7 @@ function M.apply_drawer_highlights(bufnr, turn, change_rows)
   })
 
   for index, change in ipairs(turn.changes or {}) do
-    local row = ((change_rows and change_rows[index]) or (index + 3)) - 1
+    local row = ((change_rows and change_rows[index]) or (index + 4)) - 1
     local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
     local marker_hl = operation_highlight[change.operation] or "Comment"
     vim.api.nvim_buf_set_extmark(bufnr, change_namespace, row, 0, {
@@ -550,7 +551,7 @@ function M.new(opts)
         expanded[index] = diff
       end
       render()
-      vim.api.nvim_win_set_cursor(0, { change_rows[index] or 4, 0 })
+      vim.api.nvim_win_set_cursor(0, { change_rows[index] or 5, 0 })
       return index
     end
     vim.keymap.set("n", "o", function()
@@ -602,7 +603,7 @@ function M.new(opts)
       turn_index = index
       turn = turns[turn_index]
       refresh()
-      vim.api.nvim_win_set_cursor(0, { change_rows[1] or math.min(4, vim.api.nvim_buf_line_count(bufnr)), 0 })
+      vim.api.nvim_win_set_cursor(0, { change_rows[1] or math.min(5, vim.api.nvim_buf_line_count(bufnr)), 0 })
     end
     vim.keymap.set("n", "[t", function()
       select_turn(turn_index - 1)
