@@ -121,7 +121,7 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   local lines = {
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
     string.format("Turn %s · %d file(s)%s", turn.turn_id or "unknown", #(turn.changes or {}), history),
-    "`i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "`?` actions  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
   }
   local change_rows = {}
@@ -742,7 +742,45 @@ function M.new(opts)
       end
       vim.notify("Created LazyAgent ACP local branch: " .. branch.thread_id, vim.log.levels.INFO)
     end, { buffer = bufnr, silent = true, desc = "Branch LazyAgent ACP checkpoint" })
-    vim.keymap.set("n", "q", "<cmd>close<cr>", {
+    vim.keymap.set("n", "?", function()
+      local index = change_index_at_cursor()
+      local change = index and turn.changes[index] or nil
+      local items = {
+        { key = "i", description = "Open inline diff and jump to next hunk" },
+        { key = "o", description = "Toggle inline diff" },
+        { key = "<CR>", description = "Open changed file at corresponding line" },
+        { key = "d", description = "Open before / after diff tab" },
+        { key = "[t", description = "Review previous changed turn" },
+        { key = "]t", description = "Review next changed turn" },
+        { key = "h", description = "Decide a change hunk" },
+        { key = "a", description = "Approve selected file" },
+        { key = "A", description = "Approve all files" },
+        { key = "r", description = "Reject selected file" },
+        { key = "R", description = "Reject all files" },
+        { key = "u", description = "Restore checkpoint before this turn" },
+        { key = "U", description = "Redo restored checkpoint" },
+        { key = "b", description = "Branch from this turn" },
+        { key = "q", description = "Close changes drawer" },
+      }
+      vim.ui.select(items, {
+        prompt = change and ("Changes · " .. display_path(change) .. ":") or "Changes actions:",
+        kind = "lazyagent-acp-actions",
+        format_item = function(item)
+          return string.format("%-4s %s", item.key, item.description)
+        end,
+      }, function(choice)
+        if not choice or not vim.api.nvim_buf_is_valid(bufnr) then return end
+        local callback
+        vim.api.nvim_buf_call(bufnr, function()
+          local mapping = vim.fn.maparg(choice.key, "n", false, true)
+          callback = type(mapping) == "table" and mapping.callback or nil
+        end)
+        if type(callback) == "function" then callback() end
+      end)
+    end, { buffer = bufnr, silent = true, desc = "Open LazyAgent ACP changes action menu" })
+    vim.keymap.set("n", "q", function()
+      vim.cmd("close")
+    end, {
       buffer = bufnr,
       nowait = true,
       silent = true,

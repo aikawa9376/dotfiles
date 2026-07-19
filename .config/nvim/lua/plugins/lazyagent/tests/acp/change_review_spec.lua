@@ -38,7 +38,7 @@ function M.run()
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
     "Turn thread-1:2 · 2 file(s)",
-    "`i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "`?` actions  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
     "M  lua/a.lua [approved]",
     "R  old.bin -> new.bin [binary] [rejected]",
@@ -81,9 +81,19 @@ function M.run()
   assert(drawer_position[1] > 0, "changes drawer opens in a bottom split")
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("2/2", 1, true), "latest turn history position")
   vim.api.nvim_win_set_cursor(0, { 5, 0 })
-  vim.api.nvim_feedkeys("i", "x", false)
+  local menu_items, menu_opts, menu_callback
+  local original_select = vim.ui.select
+  vim.ui.select = function(items, opts, callback)
+    menu_items, menu_opts, menu_callback = items, opts, callback
+  end
+  vim.cmd("normal ?")
+  vim.ui.select = original_select
+  assert_equal(menu_opts.kind, "lazyagent-acp-actions", "changes action menu uses compact cursor UI")
+  assert_equal(menu_items[1].key, "i", "changes action menu lists next diff first")
+  assert_equal(vim.fn.maparg("?", "n", false, true).desc, "Open LazyAgent ACP changes action menu", "changes menu mapping")
+  menu_callback(menu_items[1])
   vim.wait(100)
-  assert((vim.api.nvim_get_current_line() or ""):match("^@@"), "i opens inline diff and jumps to its first hunk")
+  assert((vim.api.nvim_get_current_line() or ""):match("^@@"), "menu executes inline diff action")
   local first_hunk_row = vim.api.nvim_win_get_cursor(0)[1]
   vim.api.nvim_feedkeys("i", "x", false)
   vim.wait(100)
@@ -170,6 +180,14 @@ function M.run()
   vim.wait(100)
   assert_equal(vim.fn.tabpagenr("$"), tabs_before, "q closes the whole diff tab")
   assert_equal(vim.api.nvim_get_current_buf(), drawer, "q returns to the changes drawer")
+  vim.ui.select = function(items, opts, callback)
+    menu_items, menu_opts, menu_callback = items, opts, callback
+  end
+  vim.cmd("normal ?")
+  vim.ui.select = original_select
+  assert_equal(menu_items[#menu_items].key, "q", "changes action menu lists close action")
+  menu_callback(menu_items[#menu_items])
+  assert_equal(vim.fn.bufwinid(drawer), -1, "changes action menu executes close action")
   vim.api.nvim_buf_delete(drawer, { force = true })
 
   local missing_change = { operation = "modified", path = "lua/missing.lua", before_blob = "before-a" }
