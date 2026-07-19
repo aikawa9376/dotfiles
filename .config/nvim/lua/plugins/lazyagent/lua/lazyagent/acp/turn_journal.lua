@@ -23,9 +23,9 @@ local function compact_snapshot(snapshot)
     captured_at = snapshot.captured_at,
     schema_version = snapshot.schema_version,
     truncated = snapshot.truncated == true,
-    file_count = #(snapshot.files or {}),
-    dirty_count = #(snapshot.dirty or {}),
-    untracked_count = #(snapshot.untracked or {}),
+    file_count = tonumber(snapshot.file_count) or #(snapshot.files or {}),
+    dirty_count = tonumber(snapshot.dirty_count) or #(snapshot.dirty or {}),
+    untracked_count = tonumber(snapshot.untracked_count) or #(snapshot.untracked or {}),
     git_error = snapshot.git_error,
   }
 end
@@ -86,6 +86,58 @@ end
 function M.get(journal, turn_id)
   local turn = find_turn(type(journal) == "table" and journal or {}, turn_id)
   return turn and copy(turn) or nil
+end
+
+function M.recover_file_event_changes(journal, resolve_before)
+  journal = copy(journal)
+  local recovered = 0
+  for _, turn in ipairs(journal.turns or {}) do
+    turn.changes = type(turn.changes) == "table" and turn.changes or {}
+    local known = {}
+    for _, change in ipairs(turn.changes) do known[change.path] = true end
+    local revisions = {}
+    for _, event in ipairs(turn.file_events or {}) do
+      local path = tostring(event.relative_path or ""):gsub("^/+", "")
+      if path ~= "" then
+        local revision = revisions[path] or {}
+        revision.before_blob = revision.before_blob or event.before_blob
+        if event.after_blob then
+          revision.after_blob = event.after_blob
+          revision.after_seen = true
+        elseif event.operation == "deleted" then
+          revision.after_blob = nil
+          revision.after_seen = true
+        end
+        revision.seen = true
+        revisions[path] = revision
+      end
+    end
+    for path, revision in pairs(revisions) do
+      if not known[path] and revision.seen and revision.after_seen then
+        local before_blob = revision.before_blob
+        if not before_blob and type(resolve_before) == "function" then
+          before_blob = resolve_before(turn, path)
+        end
+        local after_blob = revision.after_blob
+        local changed = before_blob == nil or after_blob == nil
+          or tostring(before_blob.hash or "") ~= tostring(after_blob.hash or "")
+        if changed and (before_blob or after_blob) then
+          turn.changes[#turn.changes + 1] = {
+            path = path,
+            operation = before_blob and (after_blob and "modified" or "deleted") or "added",
+            before_size = before_blob and before_blob.size or nil,
+            after_size = after_blob and after_blob.size or nil,
+            before_blob = before_blob,
+            after_blob = after_blob,
+            binary = (before_blob and before_blob.binary == true) or (after_blob and after_blob.binary == true) or false,
+          }
+          recovered = recovered + 1
+        end
+      end
+    end
+    table.sort(turn.changes, function(left, right) return tostring(left.path) < tostring(right.path) end)
+  end
+  return journal, recovered
 end
 
 function M.finish(journal, turn_id, completion)

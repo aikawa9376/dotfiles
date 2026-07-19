@@ -132,9 +132,11 @@ local function capture_turn_file_event(session, event)
   local root = session and session.current_change_root or nil
   local path = tostring(event.path or "")
   if not session or not root or path == "" or not session.blob_store then return event end
-  local absolute = vim.fn.fnamemodify(path:sub(1, 1) == "/" and path or (root .. "/" .. path), ":p")
-    :gsub("/$", "")
-  root = vim.fn.fnamemodify(root, ":p"):gsub("/$", "")
+  local absolute = vim.fs.normalize(vim.fn.fnamemodify(
+    path:sub(1, 1) == "/" and path or (root .. "/" .. path),
+    ":p"
+  )):gsub("/$", "")
+  root = vim.fs.normalize(vim.fn.fnamemodify(root, ":p")):gsub("/$", "")
   if absolute:sub(1, #root + 1) ~= root .. "/" then return event end
   local relative = absolute:sub(#root + 2)
   local revisions = session.current_change_file_blobs or {}
@@ -517,7 +519,11 @@ local function create_backend(default_view)
 
   local function repair_thread_change_blobs(thread)
     local journal = vim.deepcopy(thread and thread.change_journal or {})
-    local repaired = false
+    local recovered
+    journal, recovered = TurnJournal.recover_file_event_changes(journal, function(turn, path)
+      return WorkspaceSnapshot.git_blob(turn.baseline, path, { blob_store = blob_store })
+    end)
+    local repaired = recovered > 0
     for _, turn in ipairs(journal.turns or {}) do
       for _, change in ipairs(turn.changes or {}) do
         if not change.before_blob and change.operation ~= "added" then

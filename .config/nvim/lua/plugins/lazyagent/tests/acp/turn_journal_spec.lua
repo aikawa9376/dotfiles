@@ -59,6 +59,23 @@ function M.run()
   assert_equal(journal.turns[1].baseline.files, nil, "completed baseline file list compacted")
   assert_equal(journal.turns[1].baseline.file_count, 2, "completed baseline file count retained")
   assert_equal(journal.turns[1].final_snapshot.file_count, 1, "final snapshot file count retained")
+  local compacted_again = Journal.compact(journal)
+  assert_equal(compacted_again.turns[1].baseline.file_count, 2, "repeated compaction preserves baseline file count")
+  assert_equal(compacted_again.turns[1].final_snapshot.file_count, 1, "repeated compaction preserves final file count")
+  local recovered_journal, recovered_count = Journal.recover_file_event_changes({ turns = { {
+    baseline = { root = "/repo", vcs = { kind = "git", head = "before" } },
+    file_events = { {
+      relative_path = "/same.lua",
+      after_blob = { hash = string.rep("f", 64), size = 5 },
+    } },
+    changes = {},
+  } } }, function(_, path)
+    assert_equal(path, "same.lua", "recovered event path normalization")
+    return { hash = string.rep("e", 64), size = 5 }
+  end)
+  assert_equal(recovered_count, 1, "missing change recovered from realtime file event")
+  assert_equal(recovered_journal.turns[1].changes[1].operation, "modified", "recovered event classification")
+  assert_equal(recovered_journal.turns[1].changes[1].after_blob.hash, string.rep("f", 64), "recovered after blob")
   journal = assert(Journal.decide(journal, turn.turn_id, { 1 }, "kept", "2026-07-15T01:04:00Z"))
   assert_equal(journal.turns[1].changes[1].decision, "kept", "change decision")
 
