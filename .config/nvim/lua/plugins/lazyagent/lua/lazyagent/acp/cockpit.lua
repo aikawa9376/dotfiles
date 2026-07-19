@@ -4,6 +4,10 @@ local config_values = require("lazyagent.acp.config_values")
 local highlight_ns = vim.api.nvim_create_namespace("LazyAgentACPCockpit")
 local PROMPT_MAX_WIDTH = 48
 
+function M.normalize_preview_layout(layout)
+  return layout == "horizontal" and "horizontal" or "split"
+end
+
 local function display_width(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text)
   return ok and width or #text
@@ -401,7 +405,7 @@ function M.render(threads, runtimes, opts)
     "# LazyAgent ACP Session Cockpit",
     "",
     "persisted threads: running/idle = this Neovim, external = another Neovim, closed = resumable history, archived = retained history",
-    "`?` actions  `n` new agent  `<CR>` latest/mirror  `P` preview  `q` close",
+    "`?` actions  `n` new agent  `<CR>` latest/mirror  `P` preview  `s` preview layout  `q` close",
   }
   local line_map = {}
   local highlights = {

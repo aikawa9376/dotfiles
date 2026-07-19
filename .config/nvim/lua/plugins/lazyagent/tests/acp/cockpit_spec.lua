@@ -2,6 +2,9 @@ local M = {}
 
 function M.run()
   local Cockpit = require("lazyagent.acp.cockpit")
+  assert(Cockpit.normalize_preview_layout(nil) == "split", "cockpit preview defaults to side split")
+  assert(Cockpit.normalize_preview_layout("horizontal") == "horizontal", "horizontal preview layout")
+  assert(Cockpit.normalize_preview_layout("unknown") == "split", "unknown preview layout falls back to split")
   local threads = {
     {
       thread_id = "thread-b", title = "Second", provider_id = "codex", cwd = "/tmp/project-b",
@@ -31,6 +34,7 @@ function M.run()
   assert(rendered:find("`?` actions", 1, true), "cockpit action menu key hint")
   assert(rendered:find("`n` new agent", 1, true), "cockpit new agent key hint")
   assert(rendered:find("`<CR>` latest/mirror", 1, true), "cockpit preview mode key hint")
+  assert(rendered:find("`s` preview layout", 1, true), "cockpit preview layout key hint")
   local current_root_lines = Cockpit.render(threads, {}, { current_root = "/tmp/project-b" })
   local current_root_rendered = table.concat(current_root_lines, "\n")
   assert(
