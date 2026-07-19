@@ -190,6 +190,38 @@ function M.run()
   })
   assert_equal(realtime_changes[1].before_blob, realtime_before, "realtime first revision supplies before blob")
   assert_equal(realtime_changes[1].after_blob, realtime_after, "realtime latest revision supplies after blob")
+
+  local same_size_after = { algorithm = "sha256", hash = string.rep("1", 64), size = 6 }
+  local same_size_changes = Snapshot.diff({
+    root = "/repo",
+    vcs = { kind = "git", head = "same-size-before" },
+    files = {
+      { path = "same.lua", exists = true, type = "file", size = 6, mtime = { sec = 1, nsec = 0 } },
+    },
+  }, {
+    root = "/repo",
+    vcs = { kind = "git", head = "same-size-before" },
+    files = {
+      { path = "same.lua", exists = true, type = "file", size = 6, mtime = { sec = 1, nsec = 0 } },
+    },
+  }, {
+    realtime_blobs = { ["same.lua"] = { after_blob = same_size_after } },
+    blob_store = {
+      max_blob_bytes = 1024,
+      put = function(_, data)
+        return { algorithm = "sha256", hash = vim.fn.sha256(data), size = #data }
+      end,
+    },
+    run = function(argv)
+      local command = table.concat(argv, " ")
+      if command:match("cat%-file %-s") then return { code = 0, stdout = "6\n", stderr = "" } end
+      if command:match("same%-size%-before:same%.lua") then return { code = 0, stdout = "before", stderr = "" } end
+      error("unexpected same-size command: " .. command)
+    end,
+  })
+  assert_equal(#same_size_changes, 1, "realtime blob detects same-size same-mtime edits")
+  assert_equal(same_size_changes[1].operation, "modified", "same-size edit classification")
+  assert_equal(same_size_changes[1].after_blob, same_size_after, "same-size edit keeps realtime after blob")
 end
 
 return M

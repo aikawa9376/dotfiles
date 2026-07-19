@@ -280,7 +280,12 @@ end
 
 local function apply_realtime_blob(record, realtime, side)
   if not record or record.blob or type(realtime) ~= "table" then return end
-  local ref = side == "before" and realtime.before_blob or realtime.after_blob
+  local ref
+  if side == "before" then
+    ref = realtime.before_blob
+  else
+    ref = realtime.after_blob
+  end
   if ref then
     record.blob = vim.deepcopy(ref)
     record.binary = ref.binary == true
@@ -344,6 +349,12 @@ function M.diff(before, after, opts)
       local realtime = (opts.realtime_blobs or {})[path]
       apply_realtime_blob(left, realtime, "before")
       apply_realtime_blob(right, realtime, "after")
+      -- A same-size edit can keep indistinguishable stat metadata on coarse or
+      -- timestamp-preserving filesystems. If an event captured the final text,
+      -- hydrate the clean baseline before classification and compare hashes.
+      if realtime and realtime.after_blob then
+        apply_git_blob(left, before, path, opts)
+      end
       local left_exists = left and left.exists ~= false
       local right_exists = right and right.exists ~= false
       local operation = nil
