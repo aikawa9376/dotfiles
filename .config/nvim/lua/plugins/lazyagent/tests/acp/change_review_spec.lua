@@ -22,7 +22,10 @@ function M.run()
         {
           turn_id = "thread-1:2",
           changes = {
-            { operation = "modified", path = "lua/a.lua", decision = "kept" },
+            {
+              operation = "modified", path = "lua/a.lua", decision = "kept",
+              before_blob = "before-a", after_blob = "after-a",
+            },
             { operation = "moved", previous_path = "old.bin", path = "new.bin", binary = true, decision = "rejected" },
           },
         },
@@ -35,7 +38,7 @@ function M.run()
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
     "Turn thread-1:2 · 2 file(s)",
-    "",
+    "`=` inline diff  `<CR>` side-by-side  `o` open all",
     "M  lua/a.lua [approved]",
     "R  old.bin -> new.bin [binary] [rejected]",
   }, "changed files drawer")
@@ -54,12 +57,42 @@ function M.run()
   vim.api.nvim_buf_delete(bufnr, { force = true })
 
   local review = ChangeReview.new({
-    read_blob = function()
-      return ""
+    read_blob = function(ref)
+      return ({
+        ["before-a"] = "local value = 1\nreturn value\n",
+        ["after-a"] = "local value = 2\nreturn value\n",
+      })[ref] or ""
     end,
   })
   local drawer = assert(review.open(thread))
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("2/2", 1, true), "latest turn history position")
+  vim.api.nvim_win_set_cursor(0, { 4, 0 })
+  vim.api.nvim_feedkeys("=", "x", false)
+  vim.wait(100)
+  local expanded = table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n")
+  assert(expanded:find("@@", 1, true), "inline diff hunk is expanded")
+  assert(expanded:find("-local value = 1", 1, true), "inline deleted line")
+  assert(expanded:find("+local value = 2", 1, true), "inline added line")
+  local inline_marks = vim.api.nvim_buf_get_extmarks(
+    drawer,
+    vim.api.nvim_get_namespaces().LazyAgentACPChanges,
+    0,
+    -1,
+    { details = true }
+  )
+  local inline_groups = {}
+  for _, mark in ipairs(inline_marks) do
+    local group = mark[4] and mark[4].hl_group
+    if group then inline_groups[group] = true end
+  end
+  assert(inline_groups.LazyAgentACPChangesDiffDelete, "inline deleted background highlight")
+  assert(inline_groups.LazyAgentACPChangesDiffAdd, "inline added background highlight")
+  assert(inline_groups.LazyAgentACPChangesDiffAddText, "inline word-level highlight")
+  assert_equal(vim.fn.maparg("=", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
+  vim.api.nvim_win_set_cursor(0, { 5, 0 })
+  vim.api.nvim_feedkeys("=", "x", false)
+  vim.wait(100)
+  assert(not table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n"):find("@@", 1, true), "inline diff closes")
   vim.api.nvim_feedkeys("[t", "x", false)
   vim.wait(100)
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("thread%-1:1"), "previous turn mapping")
