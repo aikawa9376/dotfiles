@@ -76,6 +76,20 @@ function M.run()
   assert_equal(recovered_count, 1, "missing change recovered from realtime file event")
   assert_equal(recovered_journal.turns[1].changes[1].operation, "modified", "recovered event classification")
   assert_equal(recovered_journal.turns[1].changes[1].after_blob.hash, string.rep("f", 64), "recovered after blob")
+  local baseline_blob = { hash = string.rep("a", 64), size = 4 }
+  local final_blob = { hash = string.rep("b", 64), size = 5 }
+  local watcher_journal, watcher_count = Journal.recover_file_event_changes({ turns = { {
+    file_events = {
+      { relative_path = "README.md", after_blob = final_blob },
+      { relative_path = "README.md", before_blob = final_blob, after_blob = final_blob },
+    },
+    changes = {},
+  } } }, function()
+    return baseline_blob
+  end)
+  assert_equal(watcher_count, 1, "later watcher before blob does not hide the turn change")
+  assert_equal(watcher_journal.turns[1].changes[1].before_blob, baseline_blob, "recovery uses turn baseline when first event lacks before")
+  assert_equal(watcher_journal.turns[1].changes[1].after_blob, final_blob, "recovery keeps latest event revision")
   journal = assert(Journal.decide(journal, turn.turn_id, { 1 }, "kept", "2026-07-15T01:04:00Z"))
   assert_equal(journal.turns[1].changes[1].decision, "kept", "change decision")
 

@@ -142,6 +142,7 @@ local function capture_turn_file_event(session, event)
   local revisions = session.current_change_file_blobs or {}
   session.current_change_file_blobs = revisions
   local current = revisions[relative] or {}
+  local first_revision = current.seen ~= true
 
   local before_blob = event.operation ~= "added" and (event.before_blob or current.after_blob) or nil
   if not before_blob and before_text ~= nil and event.operation ~= "added" then
@@ -162,8 +163,11 @@ local function capture_turn_file_event(session, event)
   event.relative_path = relative
   event.before_blob = before_blob
   event.after_blob = after_blob
-  current.before_blob = current.before_blob or before_blob
+  -- Only the first observed revision can describe the turn baseline. A later
+  -- watcher event's before blob is merely the previous intermediate revision.
+  if first_revision then current.before_blob = before_blob end
   current.after_blob = after_blob
+  current.seen = true
   revisions[relative] = current
   return event
 end
