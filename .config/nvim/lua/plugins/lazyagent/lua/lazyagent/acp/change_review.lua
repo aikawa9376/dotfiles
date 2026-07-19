@@ -121,7 +121,7 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   local lines = {
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
     string.format("Turn %s · %d file(s)%s", turn.turn_id or "unknown", #(turn.changes or {}), history),
-    "`i` next diff  `o` toggle inline  `<CR>` open file  `d` side-by-side",
+    "`i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
   }
   local change_rows = {}
   local line_changes = {}
@@ -393,6 +393,12 @@ function M.new(opts)
     return read_blob(ref)
   end
 
+  local function map_diff_tab_close(bufnr)
+    vim.keymap.set("n", "q", function()
+      vim.cmd("tabclose")
+    end, { buffer = bufnr, nowait = true, silent = true, desc = "Close LazyAgent ACP diff tab" })
+  end
+
   function review.open_change(thread, turn, change, index)
     if change.binary == true then
       local bufnr = vim.api.nvim_create_buf(false, true)
@@ -405,7 +411,9 @@ function M.new(opts)
         "before: " .. vim.inspect(change.before_blob),
         "after: " .. vim.inspect(change.after_blob),
       }, "markdown")
+      vim.cmd("tabnew")
       vim.api.nvim_win_set_buf(0, bufnr)
+      map_diff_tab_close(bufnr)
       return true
     end
 
@@ -421,7 +429,10 @@ function M.new(opts)
     local ft = filetype_for(change.path)
     set_scratch(before_buf, "lazyagent://before/" .. suffix .. "/" .. display_path(change), split_lines(before), ft)
     set_scratch(after_buf, "lazyagent://after/" .. suffix .. "/" .. display_path(change), split_lines(after), ft)
+    map_diff_tab_close(before_buf)
+    map_diff_tab_close(after_buf)
 
+    vim.cmd("tabnew")
     local before_win = vim.api.nvim_get_current_win()
     vim.api.nvim_win_set_buf(before_win, before_buf)
     vim.cmd("vsplit")
@@ -573,7 +584,7 @@ function M.new(opts)
       local index = change_index_at_cursor()
       local change = index and turn.changes[index] or nil
       if change then review.open_change(thread, turn, change, index) end
-    end, { buffer = bufnr, silent = true, desc = "Diff LazyAgent ACP change in current tab" })
+    end, { buffer = bufnr, silent = true, desc = "Open LazyAgent ACP diff tab" })
     vim.keymap.set("n", "=", function()
       toggle_inline(change_index_at_cursor(), false)
     end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
