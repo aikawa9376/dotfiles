@@ -214,6 +214,22 @@ function M.run()
       thread_id = THREAD_ID,
     },
   }
+  local origin_winid = vim.api.nvim_get_current_win()
+  vim.cmd("rightbelow vsplit")
+  local selected_acp_winid = vim.api.nvim_get_current_win()
+  local selected_acp_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(selected_acp_winid, selected_acp_bufnr)
+  vim.b[selected_acp_bufnr].lazyagent_acp_agent = session_key
+  vim.b[selected_acp_bufnr].lazyagent_acp_pane_id = "acp:1"
+  vim.wo[selected_acp_winid].winhighlight = "Normal:TestACPActive,NormalNC:TestACPUsual"
+  vim.cmd("rightbelow vsplit")
+  local other_acp_winid = vim.api.nvim_get_current_win()
+  local other_acp_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_win_set_buf(other_acp_winid, other_acp_bufnr)
+  vim.b[other_acp_bufnr].lazyagent_acp_agent = "Other"
+  vim.b[other_acp_bufnr].lazyagent_acp_pane_id = "acp:2"
+  vim.wo[other_acp_winid].winhighlight = "Normal:TestOtherActive,NormalNC:TestOtherUsual"
+  vim.api.nvim_set_current_win(origin_winid)
   assert_equal(actions.open_cockpit(), true, "open interactive cockpit")
   local cockpit_bufnr = vim.api.nvim_get_current_buf()
   assert_equal(vim.bo[cockpit_bufnr].filetype, "lazyagent_acp_cockpit", "cockpit keeps focus beside preview")
@@ -223,6 +239,15 @@ function M.run()
       break
     end
   end
+  vim.api.nvim_exec_autocmds("CursorMoved", { buffer = cockpit_bufnr })
+  assert(
+    vim.wo[selected_acp_winid].winhighlight:find("NormalNC:TestACPActive", 1, true),
+    "cockpit selected live agent uses its active background"
+  )
+  assert(
+    vim.wo[other_acp_winid].winhighlight:find("NormalNC:NormalNC", 1, true),
+    "cockpit non-selected agent uses NormalNC"
+  )
   local input_map = vim.fn.maparg("i", "n", false, true)
   assert(input_map.buffer == 1, "cockpit live message mapping")
   vim.cmd("normal i")
@@ -279,7 +304,21 @@ function M.run()
   assert(table.concat(mirrored_lines, "\n"):find("live mirror", 1, true), "cockpit action menu executes selected action")
   vim.cmd("normal o")
   assert_equal(opened.acp_thread_id, THREAD_ID, "cockpit o opens exact thread")
-  vim.cmd("tabclose")
+  vim.cmd("normal q")
+  assert_equal(
+    vim.wo[selected_acp_winid].winhighlight,
+    "Normal:TestACPActive,NormalNC:TestACPUsual",
+    "closing cockpit restores selected ACP background"
+  )
+  assert_equal(
+    vim.wo[other_acp_winid].winhighlight,
+    "Normal:TestOtherActive,NormalNC:TestOtherUsual",
+    "closing cockpit restores other ACP background"
+  )
+  vim.api.nvim_win_close(other_acp_winid, true)
+  vim.api.nvim_win_close(selected_acp_winid, true)
+  pcall(vim.api.nvim_buf_delete, other_acp_bufnr, { force = true })
+  pcall(vim.api.nvim_buf_delete, selected_acp_bufnr, { force = true })
   vim.fn.delete(cockpit_transcript_path)
   pcall(vim.api.nvim_buf_delete, vim.fn.bufnr(source_path), { force = true })
   vim.fn.delete(workspace, "rf")
