@@ -38,7 +38,7 @@ function M.run()
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
     "Turn thread-1:2 · 2 file(s)",
-    "`i` next diff  `o` toggle inline  `<CR>` open file  `d` side-by-side",
+    "`i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "M  lua/a.lua [approved]",
     "R  old.bin -> new.bin [binary] [rejected]",
   }, "changed files drawer")
@@ -132,7 +132,7 @@ function M.run()
   assert_equal(vim.fn.maparg("a", "n", false, true).desc, "Approve LazyAgent ACP file change", "approve mapping")
   assert_equal(vim.fn.maparg("A", "n", false, true).desc, "Approve all LazyAgent ACP changes", "approve all mapping")
   assert_equal(vim.fn.maparg("<CR>", "n", false, true).desc, "Open LazyAgent ACP changed file", "open file mapping")
-  assert_equal(vim.fn.maparg("d", "n", false, true).desc, "Diff LazyAgent ACP change in current tab", "current tab diff mapping")
+  assert_equal(vim.fn.maparg("d", "n", false, true).desc, "Open LazyAgent ACP diff tab", "diff tab mapping")
   assert_equal(vim.fn.maparg("k", "n", false, true).buffer or 0, 0, "k remains normal movement")
 
   vim.api.nvim_feedkeys("]t", "x", false)
@@ -155,14 +155,20 @@ function M.run()
   assert_equal(opened_line, 1, "enter opens file at corresponding after line")
 
   local tabs_before = vim.fn.tabpagenr("$")
-  local windows_before = #vim.api.nvim_tabpage_list_wins(0)
   vim.api.nvim_win_set_cursor(0, { 4, 0 })
   vim.api.nvim_feedkeys("d", "x", false)
   vim.wait(100)
-  assert_equal(vim.fn.tabpagenr("$"), tabs_before, "diff stays in current tab")
-  assert_equal(#vim.api.nvim_tabpage_list_wins(0), windows_before + 1, "diff adds a side-by-side window")
+  assert_equal(vim.fn.tabpagenr("$"), tabs_before + 1, "diff opens in a dedicated tab")
+  assert_equal(#vim.api.nvim_tabpage_list_wins(0), 2, "diff tab has before and after windows")
   assert_equal(vim.wo.diff, true, "after side has diff mode enabled")
-  vim.cmd("only")
+  assert_equal(vim.fn.maparg("q", "n", false, true).desc, "Close LazyAgent ACP diff tab", "after diff close mapping")
+  vim.cmd("wincmd h")
+  assert_equal(vim.wo.diff, true, "before side has diff mode enabled")
+  assert_equal(vim.fn.maparg("q", "n", false, true).desc, "Close LazyAgent ACP diff tab", "before diff close mapping")
+  vim.api.nvim_feedkeys("q", "x", false)
+  vim.wait(100)
+  assert_equal(vim.fn.tabpagenr("$"), tabs_before, "q closes the whole diff tab")
+  assert_equal(vim.api.nvim_get_current_buf(), drawer, "q returns to the changes drawer")
   vim.api.nvim_buf_delete(drawer, { force = true })
 
   local missing_change = { operation = "modified", path = "lua/missing.lua", before_blob = "before-a" }
