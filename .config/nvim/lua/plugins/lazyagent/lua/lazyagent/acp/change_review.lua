@@ -37,6 +37,17 @@ local function latest_changed_turn(thread)
   return nil
 end
 
+local function changed_turns(thread)
+  local result = {}
+  local turns = thread and thread.change_journal and thread.change_journal.turns or {}
+  for _, turn in ipairs(turns) do
+    if type(turn.changes) == "table" and #turn.changes > 0 then
+      result[#result + 1] = turn
+    end
+  end
+  return result
+end
+
 local function display_path(change)
   if change.operation == "moved" and change.previous_path then
     return string.format("%s -> %s", change.previous_path, change.path)
@@ -84,10 +95,18 @@ function M.latest_turn(thread)
   return latest_changed_turn(thread)
 end
 
-function M.drawer_lines(thread, turn)
+function M.changed_turns(thread)
+  return changed_turns(thread)
+end
+
+function M.drawer_lines(thread, turn, turn_index, turn_count)
+  local history = ""
+  if turn_index and turn_count and turn_count > 1 then
+    history = string.format(" · %d/%d · [t/]t previous/next", turn_index, turn_count)
+  end
   local lines = {
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
-    string.format("Turn %s · %d file(s)", turn.turn_id or "unknown", #(turn.changes or {})),
+    string.format("Turn %s · %d file(s)%s", turn.turn_id or "unknown", #(turn.changes or {}), history),
     "",
   }
   for _, change in ipairs(turn.changes or {}) do
@@ -228,7 +247,9 @@ function M.new(opts)
   end
 
   function review.open(thread)
-    local turn = latest_changed_turn(thread)
+    local turns = changed_turns(thread)
+    local turn_index = #turns
+    local turn = turns[turn_index]
     if not turn then
       return nil, "thread has no completed file changes"
     end
@@ -242,7 +263,7 @@ function M.new(opts)
     vim.bo[bufnr].bufhidden = "hide"
     vim.bo[bufnr].swapfile = false
     vim.bo[bufnr].modifiable = true
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn))
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn, turn_index, #turns))
     vim.bo[bufnr].filetype = "lazyagent_changes"
     vim.bo[bufnr].modifiable = false
     M.apply_drawer_highlights(bufnr, turn)
@@ -264,10 +285,25 @@ function M.new(opts)
     local function refresh(decided_turn)
       turn = decided_turn or turn
       vim.bo[bufnr].modifiable = true
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn))
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn, turn_index, #turns))
       vim.bo[bufnr].modifiable = false
       M.apply_drawer_highlights(bufnr, turn)
     end
+    local function select_turn(index)
+      if not turns[index] then
+        return
+      end
+      turn_index = index
+      turn = turns[turn_index]
+      refresh()
+      vim.api.nvim_win_set_cursor(0, { math.min(4, vim.api.nvim_buf_line_count(bufnr)), 0 })
+    end
+    vim.keymap.set("n", "[t", function()
+      select_turn(turn_index - 1)
+    end, { buffer = bufnr, silent = true, desc = "Review previous LazyAgent ACP turn" })
+    vim.keymap.set("n", "]t", function()
+      select_turn(turn_index + 1)
+    end, { buffer = bufnr, silent = true, desc = "Review next LazyAgent ACP turn" })
     local function decide(indices, decision)
       if type(opts.decide) ~= "function" then
         return

@@ -333,7 +333,7 @@ agent が advertise していない `/...` は通常の prompt text として送
 
 ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。`:LazyAgentACPSessions [agent]` では provider 側が保持している native session を一覧し、現在の会話へ add するか、native load / resume できます。float は `q` または `<Esc>` で閉じます。
 
-`:LazyAgentACPChanges [thread-uuid]` は最新turnのchanged files drawerを開きます。`<CR>`で選択fileのbefore/after diff、`o`で全fileをtabごとのreviewとして開けます。`h`でtext changeのhunkを選んでApprove / Reject、`a` / `A`でfile / allをApprove、`r` / `R`でfile / allを確認付きRejectできます。`k`は通常の上移動として使えます。Reject前にuserがtextを再編集していても非重複部分は3-way mergeで保持し、競合時は上書きせず停止します。binary changeは内容をbufferへ展開せず、blob metadataを表示します。
+`:LazyAgentACPChanges [thread-uuid]` は最新turnのchanged files drawerを開きます。変更のある過去turnも保存されており、`[t` / `]t`で前後のturnへ移動できます。`<CR>`で選択fileのbefore/after diff、`o`で全fileをtabごとのreviewとして開けます。`h`でtext changeのhunkを選んでApprove / Reject、`a` / `A`でfile / allをApprove、`r` / `R`でfile / allを確認付きRejectできます。`k`は通常の上移動として使えます。Reject前にuserがtextを再編集していても非重複部分は3-way mergeで保持し、競合時は上書きせず停止します。binary changeは内容をbufferへ展開せず、blob metadataを表示します。
 
 changed files drawerでは`u`でturn前のfilesystem checkpointへRestore、`U`でRedo、`b`で親thread/turnとtranscriptを引き継ぐclient-local branchを作成できます。
 

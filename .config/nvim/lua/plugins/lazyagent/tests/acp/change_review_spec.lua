@@ -13,7 +13,12 @@ function M.run()
     title = "Review fixture",
     change_journal = {
       turns = {
-        { turn_id = "thread-1:1", changes = {} },
+        {
+          turn_id = "thread-1:1",
+          changes = {
+            { operation = "added", path = "lua/older.lua" },
+          },
+        },
         {
           turn_id = "thread-1:2",
           changes = {
@@ -26,6 +31,7 @@ function M.run()
   }
   local turn = assert(ChangeReview.latest_turn(thread))
   assert_equal(turn.turn_id, "thread-1:2", "latest changed turn")
+  assert_equal(#ChangeReview.changed_turns(thread), 2, "all changed turns remain reviewable")
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
     "Turn thread-1:2 · 2 file(s)",
@@ -53,6 +59,11 @@ function M.run()
     end,
   })
   local drawer = assert(review.open(thread))
+  assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("2/2", 1, true), "latest turn history position")
+  vim.api.nvim_feedkeys("[t", "x", false)
+  vim.wait(100)
+  assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("thread%-1:1"), "previous turn mapping")
+  assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("1/2", 1, true), "previous turn history position")
   assert_equal(vim.fn.maparg("a", "n", false, true).desc, "Approve LazyAgent ACP file change", "approve mapping")
   assert_equal(vim.fn.maparg("A", "n", false, true).desc, "Approve all LazyAgent ACP changes", "approve all mapping")
   assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Open all LazyAgent ACP changes", "open all mapping")
