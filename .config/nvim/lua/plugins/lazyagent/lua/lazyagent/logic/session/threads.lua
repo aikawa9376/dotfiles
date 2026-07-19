@@ -556,6 +556,9 @@ function M.setup(deps)
     local preview_winid
     local preview_enabled = true
     local preview_mode = "summary"
+    local preview_layout = require("lazyagent.acp.cockpit").normalize_preview_layout(
+      ((state.opts or {}).acp or {}).cockpit_preview_layout or (state.opts or {}).cockpit_preview_layout
+    )
     local preview_thread_id
     local preview_signature
     local preview_timer
@@ -590,16 +593,27 @@ function M.setup(deps)
         vim.bo[preview_bufnr].filetype = "markdown"
       end
       vim.api.nvim_set_current_win(cockpit_winid)
-      local preview_height = preview_mode == "mirror"
-          and math.max(12, math.floor(vim.o.lines * 0.35))
-        or 10
-      vim.cmd("botright " .. tostring(preview_height) .. "split")
+      local selected = stored_thread(line_map[vim.api.nvim_win_get_cursor(cockpit_winid)[1]])
+      local agent_cfg = selected and agent_logic.get_interactive_agent(selected.provider_id) or nil
+      if preview_layout == "horizontal" then
+        local preview_height = preview_mode == "mirror"
+            and math.max(12, math.floor(vim.o.lines * 0.35))
+          or 10
+        vim.cmd("botright " .. tostring(preview_height) .. "split")
+      else
+        local preview_width = math.max(20, tonumber(agent_cfg and agent_cfg.pane_size) or 60)
+        preview_width = math.min(preview_width, math.max(20, vim.o.columns - 40))
+        vim.cmd("botright " .. tostring(preview_width) .. "vsplit")
+      end
       preview_winid = vim.api.nvim_get_current_win()
       vim.api.nvim_win_set_buf(preview_winid, preview_bufnr)
-      vim.wo[preview_winid].winfixheight = true
+      vim.wo[preview_winid].winfixheight = preview_layout == "horizontal"
+      vim.wo[preview_winid].winfixwidth = preview_layout == "split"
       vim.wo[preview_winid].wrap = true
       vim.wo[preview_winid].number = false
       vim.wo[preview_winid].relativenumber = false
+      vim.wo[preview_winid].winhighlight = "Normal:NormalFloat,NormalNC:NormalFloat,EndOfBuffer:NormalFloat"
+      vim.wo[preview_winid].statusline = "%#DiagnosticInfo# LazyAgent Cockpit PREVIEW %*"
       if preview_scroll_autocmd then
         pcall(vim.api.nvim_del_autocmd, preview_scroll_autocmd)
       end
@@ -719,7 +733,8 @@ function M.setup(deps)
           preview_signature = signature
           if #lines == 0 then lines = { "_The transcript is currently empty._" } end
           if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
-            vim.wo[preview_winid].winbar = " Mirror · " .. tostring(thread.provider_id or "Agent") .. " · " .. title .. " "
+            vim.wo[preview_winid].winbar = "%#DiagnosticInfo# PREVIEW %*· Mirror · "
+              .. tostring(thread.provider_id or "Agent") .. " · " .. title .. " "
           end
         else
           lines = { "# " .. tostring(thread.provider_id or "Agent") .. " · " .. title, "" }
@@ -730,7 +745,7 @@ function M.setup(deps)
           if #response == 0 then response = { "_No assistant response yet._" } end
           vim.list_extend(lines, response)
           if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
-            vim.wo[preview_winid].winbar = " Latest response "
+            vim.wo[preview_winid].winbar = "%#DiagnosticInfo# PREVIEW %*· Latest response "
           end
         end
       end
@@ -852,14 +867,23 @@ function M.setup(deps)
       preview_mode = preview_mode == "mirror" and "summary" or "mirror"
       preview_signature = nil
       if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
-        local height = preview_mode == "mirror" and math.max(12, math.floor(vim.o.lines * 0.35)) or 10
-        vim.api.nvim_win_set_height(preview_winid, height)
+        if preview_layout == "horizontal" then
+          local height = preview_mode == "mirror" and math.max(12, math.floor(vim.o.lines * 0.35)) or 10
+          vim.api.nvim_win_set_height(preview_winid, height)
+        end
       end
       update_preview(thread_id, true)
     end, { buffer = bufnr, silent = true, desc = "Toggle ACP thread latest response or mirror" })
     vim.keymap.set("n", "o", function()
       local thread_id = selected_thread_id()
-      if thread_id then module.open_thread(thread_id) end
+      if thread_id then
+        if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
+          preview_enabled = false
+          vim.api.nvim_win_close(preview_winid, true)
+          preview_winid = nil
+        end
+        module.open_thread(thread_id)
+      end
     end, { buffer = bufnr, silent = true, desc = "Open or resume ACP cockpit thread" })
     vim.keymap.set("n", "n", function()
       module.request_new_agent(selected_workspace())
@@ -904,6 +928,17 @@ function M.setup(deps)
         update_preview(nil, true)
       end
     end, { buffer = bufnr, silent = true, desc = "Toggle ACP cockpit preview" })
+    vim.keymap.set("n", "s", function()
+      preview_layout = preview_layout == "split" and "horizontal" or "split"
+      if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
+        vim.api.nvim_win_close(preview_winid, true)
+        preview_winid = nil
+      end
+      preview_enabled = true
+      preview_signature = nil
+      update_preview(nil, true)
+      vim.notify("LazyAgent ACP cockpit preview: " .. preview_layout, vim.log.levels.INFO)
+    end, { buffer = bufnr, silent = true, desc = "Toggle ACP cockpit preview layout" })
     vim.keymap.set("n", "v", function()
       local thread_id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       if thread_id then module.open_thread_transcript(thread_id) end
@@ -1023,6 +1058,7 @@ function M.setup(deps)
         { key = "]a", description = "Jump to next live thread" },
         { key = "[a", description = "Jump to previous live thread" },
         { key = "P", description = "Show or hide preview" },
+        { key = "s", description = "Toggle side / horizontal preview layout" },
         { key = "x", description = "Stop selected process" },
         { key = "/", description = "Filter threads" },
         { key = "p", description = "Pin or unpin thread" },
