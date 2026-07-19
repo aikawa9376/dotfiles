@@ -38,10 +38,18 @@ function M.run()
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
     "Turn thread-1:2 · 2 file(s)",
-    "`=` inline diff  `<CR>` side-by-side  `o` open all",
+    "`i` next diff  `o` toggle inline  `<CR>` open file  `d` side-by-side",
     "M  lua/a.lua [approved]",
     "R  old.bin -> new.bin [binary] [rejected]",
   }, "changed files drawer")
+  local _, _, _, target_lines = ChangeReview.drawer_content(thread, turn, nil, nil, {
+    [1] = { "@@ -10,2 +20,3 @@", " old", "-gone", "+new", " tail" },
+  })
+  assert_equal(target_lines[5], 20, "hunk header targets after start line")
+  assert_equal(target_lines[6], 20, "context line targets current after line")
+  assert_equal(target_lines[7], 21, "deleted line targets next surviving after line")
+  assert_equal(target_lines[8], 21, "added line targets its after line")
+  assert_equal(target_lines[9], 22, "following context advances after line")
 
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, ChangeReview.drawer_lines(thread, turn))
@@ -65,10 +73,13 @@ function M.run()
     end,
   })
   local drawer = assert(review.open(thread))
+  local drawer_position = vim.api.nvim_win_get_position(0)
+  assert(drawer_position[1] > 0, "changes drawer opens in a bottom split")
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("2/2", 1, true), "latest turn history position")
   vim.api.nvim_win_set_cursor(0, { 4, 0 })
-  vim.api.nvim_feedkeys("=", "x", false)
+  vim.api.nvim_feedkeys("i", "x", false)
   vim.wait(100)
+  assert((vim.api.nvim_get_current_line() or ""):match("^@@"), "i opens inline diff and jumps to its first hunk")
   local expanded = table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n")
   assert(expanded:find("@@", 1, true), "inline diff hunk is expanded")
   assert(expanded:find("-local value = 1", 1, true), "inline deleted line")
@@ -88,9 +99,11 @@ function M.run()
   assert(inline_groups.LazyAgentACPChangesDiffDelete, "inline deleted background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAdd, "inline added background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAddText, "inline word-level highlight")
+  assert_equal(vim.fn.maparg("i", "n", false, true).desc, "Open and jump to next LazyAgent ACP diff", "next diff mapping")
+  assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
   assert_equal(vim.fn.maparg("=", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
   vim.api.nvim_win_set_cursor(0, { 5, 0 })
-  vim.api.nvim_feedkeys("=", "x", false)
+  vim.api.nvim_feedkeys("o", "x", false)
   vim.wait(100)
   assert(not table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n"):find("@@", 1, true), "inline diff closes")
   vim.api.nvim_feedkeys("[t", "x", false)
@@ -99,8 +112,38 @@ function M.run()
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("1/2", 1, true), "previous turn history position")
   assert_equal(vim.fn.maparg("a", "n", false, true).desc, "Approve LazyAgent ACP file change", "approve mapping")
   assert_equal(vim.fn.maparg("A", "n", false, true).desc, "Approve all LazyAgent ACP changes", "approve all mapping")
-  assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Open all LazyAgent ACP changes", "open all mapping")
+  assert_equal(vim.fn.maparg("<CR>", "n", false, true).desc, "Open LazyAgent ACP changed file", "open file mapping")
+  assert_equal(vim.fn.maparg("d", "n", false, true).desc, "Diff LazyAgent ACP change in current tab", "current tab diff mapping")
   assert_equal(vim.fn.maparg("k", "n", false, true).buffer or 0, 0, "k remains normal movement")
+
+  vim.api.nvim_feedkeys("]t", "x", false)
+  vim.wait(100)
+  vim.api.nvim_win_set_cursor(0, { 4, 0 })
+  vim.api.nvim_feedkeys("o", "x", false)
+  vim.wait(100)
+  local plus_row
+  for row, line in ipairs(vim.api.nvim_buf_get_lines(drawer, 0, -1, false)) do
+    if line == "+local value = 2" then plus_row = row break end
+  end
+  local opened_line
+  review.open_file = function(_, _, _, line)
+    opened_line = line
+    return true
+  end
+  vim.api.nvim_win_set_cursor(0, { assert(plus_row), 0 })
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "x", false)
+  vim.wait(100)
+  assert_equal(opened_line, 1, "enter opens file at corresponding after line")
+
+  local tabs_before = vim.fn.tabpagenr("$")
+  local windows_before = #vim.api.nvim_tabpage_list_wins(0)
+  vim.api.nvim_win_set_cursor(0, { 4, 0 })
+  vim.api.nvim_feedkeys("d", "x", false)
+  vim.wait(100)
+  assert_equal(vim.fn.tabpagenr("$"), tabs_before, "diff stays in current tab")
+  assert_equal(#vim.api.nvim_tabpage_list_wins(0), windows_before + 1, "diff adds a side-by-side window")
+  assert_equal(vim.wo.diff, true, "after side has diff mode enabled")
+  vim.cmd("only")
   vim.api.nvim_buf_delete(drawer, { force = true })
 
   local missing_change = { operation = "modified", path = "lua/missing.lua", before_blob = "before-a" }
