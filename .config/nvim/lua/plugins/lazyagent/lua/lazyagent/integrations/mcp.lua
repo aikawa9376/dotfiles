@@ -205,25 +205,6 @@ local function write_mcp_configs(url, opts)
   end
 end
 
-local function should_start_mcp_server(opts)
-  if not opts.mcp_mode then
-    return false
-  end
-
-  local acp_logic = require("lazyagent.logic.acp")
-  local agents = opts.interactive_agents or {}
-  local has_agents = false
-
-  for name, cfg in pairs(agents) do
-    has_agents = true
-    if not acp_logic.resolve(name, cfg).enabled then
-      return true
-    end
-  end
-
-  return not has_agents
-end
-
 local function cleanup_stale_resources(opts)
   local uv = vim.loop
   local cache_dir = (opts and opts.cache and opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
@@ -323,14 +304,19 @@ end
 
 function M.setup(opts)
   opts = opts or {}
+  opts._mcp_url = nil
+  opts._mcp_type = nil
+end
 
-  if not should_start_mcp_server(opts) then
-    if opts.mcp_mode then
-      opts._mcp_url = nil
-      opts._mcp_type = nil
-    end
-    return
+function M.ensure_started(opts)
+  opts = opts or {}
+  if not opts.mcp_mode then
+    return false
   end
+  if opts._mcp_url or M._starting then
+    return true
+  end
+  M._starting = true
 
   pcall(function() cleanup_stale_resources(opts) end)
   pcall(function() require("lazyagent.logic.cache").purge_old_conversations() end)
@@ -357,6 +343,7 @@ function M.setup(opts)
   end
 
   mcp_server.start(function(addr)
+    M._starting = false
     if type(addr) == "number" then
       opts._mcp_url = "http://127.0.0.1:" .. addr .. "/mcp"
       opts._mcp_type = "http"
@@ -376,12 +363,14 @@ function M.setup(opts)
       group = vim.api.nvim_create_augroup("LazyAgentMCPCleanup", { clear = true }),
       callback = function()
         pcall(function() mcp_server.stop() end)
+        M._starting = false
         pcall(function() require("lazyagent.logic.session").close_all_sessions(true) end)
         stop_signal_handlers()
       end,
       desc = "Stop lazyagent MCP server on exit",
     })
   end)
+  return true
 end
 
 return M

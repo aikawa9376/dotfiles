@@ -22,6 +22,7 @@ local session_threads = require("lazyagent.logic.session.threads")
 local window = require("lazyagent.window")
 local persistence = require("lazyagent.logic.persistence")
 local util = require("lazyagent.util")
+local mcp_integration = require("lazyagent.integrations.mcp")
 
 local function refresh_acp_command_visibility()
   pcall(function()
@@ -58,6 +59,7 @@ local launch = session_launch.setup({
   maybe_disable_watchers = session_lifecycle.maybe_disable_watchers,
   current_editor_session_name = session_acp.current_editor_session_name,
   mark_session_scope = session_acp.mark_session_scope,
+  mcp_integration = mcp_integration,
 })
 
 local runtime = session_runtime.setup({
