@@ -7,6 +7,34 @@ local function assert_equal(actual, expected, message)
 end
 
 function M.run()
+  local render_module_names = {
+    "render-markdown.core.manager",
+    "render-markdown.core.ui",
+    "render-markdown.state",
+  }
+  local previous_render_modules = {}
+  for _, name in ipairs(render_module_names) do
+    previous_render_modules[name] = package.loaded[name]
+  end
+  local render_updates = 0
+  local render_group = vim.api.nvim_create_augroup("RenderMarkdown", { clear = true })
+  package.loaded["render-markdown.core.manager"] = {
+    buffers = {},
+    attach = function(bufnr)
+      vim.api.nvim_create_autocmd({ "CmdlineChanged", "ModeChanged", "TextChanged" }, {
+        group = render_group,
+        buffer = bufnr,
+        callback = function() end,
+      })
+    end,
+  }
+  package.loaded["render-markdown.core.ui"] = {
+    cache = {},
+    ns = vim.api.nvim_create_namespace("lazyagent_test_render_markdown"),
+    update = function() render_updates = render_updates + 1 end,
+  }
+  package.loaded["render-markdown.state"] = { cache = {} }
+
   local view = require("lazyagent.acp.view_buffer")
   local pane_id
   local pane_state
@@ -43,6 +71,37 @@ function M.run()
   assert_equal(live.config_count, 1, "live pane configuration")
   assert(live.window_count >= 1, "live transcript should have a window")
 
+  vim.wait(300)
+  render_updates = 0
+  local transcript_bufnr = assert(live.panes[tostring(pane_id)]).bufnr
+  assert_equal(#vim.api.nvim_get_autocmds({
+    group = render_group,
+    event = "CmdlineChanged",
+    buffer = transcript_bufnr,
+  }), 0, "ACP transcript removes render-markdown cmdline updates")
+  assert_equal(#vim.api.nvim_get_autocmds({
+    group = render_group,
+    buffer = transcript_bufnr,
+  }), 2, "ACP transcript preserves other render-markdown updates")
+
+  local session = {
+    pane_id = pane_id,
+    agent_name = "lifecycle-test",
+    transcript_path = transcript_path,
+    view_state = vim.tbl_extend("force", pane_state or {}, {}),
+  }
+  local original_get_mode = vim.api.nvim_get_mode
+  vim.api.nvim_get_mode = function() return { mode = "c", blocking = false } end
+  view.on_transcript_updated(session, "\nsecond response", "a")
+  vim.wait(400)
+  assert_equal(render_updates, 0, "agent output does not redraw markdown during cmdline completion")
+  vim.api.nvim_get_mode = original_get_mode
+  vim.api.nvim_exec_autocmds("ModeChanged", { pattern = "c:n" })
+  assert(vim.wait(1000, function() return render_updates == 1 end, 10),
+    "deferred markdown redraw resumes once after cmdline completion")
+  vim.wait(250)
+  assert_equal(render_updates, 1, "deferred markdown redraw is coalesced")
+
   vim.api.nvim_win_call(pane_state.winid, function()
     vim.fn.winrestview({ lnum = 30, topline = 24, col = 0, leftcol = 0 })
   end)
@@ -57,16 +116,11 @@ function M.run()
   assert_equal(restored_view.view.lnum, saved_view.view.lnum, "restored thread cursor")
   assert_equal(restored_view.view.topline, saved_view.view.topline, "restored thread topline")
 
-  local session = {
-    pane_id = pane_id,
-    agent_name = "lifecycle-test",
-    transcript_path = transcript_path,
-    view_state = vim.tbl_extend("force", pane_state or {}, {
-      pending_append = "queued",
-      pending_append_chunks = { "queued" },
-      pending_append_size = 6,
-    }),
-  }
+  session.view_state = vim.tbl_extend("force", session.view_state or {}, {
+    pending_append = "queued",
+    pending_append_chunks = { "queued" },
+    pending_append_size = 6,
+  })
   view.kill_pane(pane_id, session)
 
   local closed = view.debug_snapshot()
@@ -89,6 +143,10 @@ function M.run()
   assert_equal(backend_debug.timer_count, 0, "closed backend timers")
   assert_equal(backend_debug.callback_count, 0, "closed backend callbacks")
 
+  pcall(vim.api.nvim_del_augroup_by_id, render_group)
+  for _, name in ipairs(render_module_names) do
+    package.loaded[name] = previous_render_modules[name]
+  end
   vim.fn.delete(transcript_path)
 end
 

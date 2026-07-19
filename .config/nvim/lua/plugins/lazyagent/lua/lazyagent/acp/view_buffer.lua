@@ -31,6 +31,7 @@ local transcript_max_lines
 local transcript_line_count
 local refresh_buffer_layout
 local refresh_buffer_from_path
+local queue_markdown_rendering
 local layout_entry
 local buffer_is_visible
 local set_window_size
@@ -81,6 +82,67 @@ local function close_timer(timer)
   end
   pcall(function() timer:stop() end)
   pcall(function() timer:close() end)
+end
+
+local function in_cmdline_mode()
+  local ok, mode = pcall(vim.api.nvim_get_mode)
+  local current_mode = ok and mode and mode.mode or ""
+  return type(current_mode) == "string" and current_mode:sub(1, 1) == "c"
+end
+
+local function exclude_render_markdown_cmdline_updates(bufnr)
+  local ok, cmdline_autocmds = pcall(vim.api.nvim_get_autocmds, {
+    group = "RenderMarkdown",
+    event = "CmdlineChanged",
+    buffer = bufnr,
+  })
+  if not ok then
+    return
+  end
+  local handled = {}
+  for _, cmdline_autocmd in ipairs(cmdline_autocmds) do
+    local id = cmdline_autocmd.id
+    if id and not handled[id] then
+      handled[id] = true
+      local all_ok, all_autocmds = pcall(vim.api.nvim_get_autocmds, {
+        group = cmdline_autocmd.group,
+        buffer = bufnr,
+      })
+      if all_ok then
+        local events = {}
+        local callback
+        local command
+        local once = false
+        local desc
+        for _, autocmd in ipairs(all_autocmds) do
+          if autocmd.id == id then
+            if autocmd.event ~= "CmdlineChanged" then
+              events[#events + 1] = autocmd.event
+            end
+            callback = callback or autocmd.callback
+            command = command or (autocmd.command ~= "" and autocmd.command or nil)
+            once = autocmd.once == true
+            desc = desc or autocmd.desc
+          end
+        end
+        pcall(vim.api.nvim_del_autocmd, id)
+        if #events > 0 and (callback or command) then
+          local autocmd_opts = {
+            group = cmdline_autocmd.group,
+            buffer = bufnr,
+            once = once,
+            desc = desc,
+          }
+          if callback then
+            autocmd_opts.callback = callback
+          else
+            autocmd_opts.command = command
+          end
+          pcall(vim.api.nvim_create_autocmd, events, autocmd_opts)
+        end
+      end
+    end
+  end
 end
 
 local function strdisplaywidth(text)
@@ -213,6 +275,10 @@ local function cleanup_markdown_rendering(bufnr)
     entry.markdown_render_timer = nil
     entry.markdown_render_pending = nil
     entry.markdown_render_token = nil
+    if entry.markdown_render_resume_autocmd then
+      pcall(vim.api.nvim_del_autocmd, entry.markdown_render_resume_autocmd)
+      entry.markdown_render_resume_autocmd = nil
+    end
     entry.render_markdown_attached = nil
   end
 
@@ -276,6 +342,12 @@ local function refresh_markdown_rendering(bufnr)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
+  if in_cmdline_mode() then
+    if type(queue_markdown_rendering) == "function" then
+      queue_markdown_rendering(bufnr)
+    end
+    return
+  end
 
   local ft = vim.bo[bufnr].filetype
   if ft ~= ACP_TRANSCRIPT_FILETYPE and ft ~= "lazyagent" then
@@ -301,6 +373,7 @@ local function refresh_markdown_rendering(bufnr)
         entry.render_markdown_attached = true
       end
     end
+    exclude_render_markdown_cmdline_updates(bufnr)
   end
 
   local ok_ui, ui = pcall(require, "render-markdown.core.ui")
@@ -312,7 +385,7 @@ local function refresh_markdown_rendering(bufnr)
   request_buffer_redraw(bufnr)
 end
 
-local function queue_markdown_rendering(bufnr)
+queue_markdown_rendering = function(bufnr)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return
   end
@@ -334,6 +407,31 @@ local function queue_markdown_rendering(bufnr)
 
   close_timer(entry.markdown_render_timer)
   entry.markdown_render_timer = nil
+
+  if in_cmdline_mode() then
+    if not entry.markdown_render_resume_autocmd then
+      entry.markdown_render_resume_autocmd = vim.api.nvim_create_autocmd("ModeChanged", {
+        pattern = "c:*",
+        once = true,
+        callback = function()
+          local current_entry = layout_state[tostring(bufnr)]
+          if type(current_entry) ~= "table" then
+            return
+          end
+          current_entry.markdown_render_resume_autocmd = nil
+          if vim.api.nvim_buf_is_valid(bufnr) then
+            queue_markdown_rendering(bufnr)
+          end
+        end,
+      })
+    end
+    return
+  end
+
+  if entry.markdown_render_resume_autocmd then
+    pcall(vim.api.nvim_del_autocmd, entry.markdown_render_resume_autocmd)
+    entry.markdown_render_resume_autocmd = nil
+  end
 
   local token = {}
   entry.markdown_render_token = token
