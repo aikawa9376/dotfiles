@@ -30,6 +30,56 @@ local function compact_snapshot(snapshot)
   }
 end
 
+local function event_path(event)
+  return tostring(event.relative_path or ""):gsub("^/+", "")
+end
+
+local function copy_blob(blob)
+  return type(blob) == "table" and vim.deepcopy(blob) or nil
+end
+
+local function update_file_revision(turn, event)
+  local path = event_path(event)
+  if path == "" then return end
+  turn.file_revisions = type(turn.file_revisions) == "table" and turn.file_revisions or {}
+  local revision = turn.file_revisions[path]
+  if not revision then
+    revision = { before_blob = copy_blob(event.before_blob), event_count = 0 }
+    turn.file_revisions[path] = revision
+  end
+  revision.event_count = (tonumber(revision.event_count) or 0) + 1
+  if event.after_blob then
+    revision.after_blob = copy_blob(event.after_blob)
+    revision.after_seen = true
+  elseif event.operation == "deleted" then
+    revision.after_blob = nil
+    revision.after_seen = true
+  end
+end
+
+local function legacy_file_revisions(turn)
+  local revisions = {}
+  for _, event in ipairs(turn.file_events or {}) do
+    local path = event_path(event)
+    if path ~= "" then
+      local revision = revisions[path]
+      if not revision then
+        revision = { before_blob = copy_blob(event.before_blob), event_count = 0 }
+        revisions[path] = revision
+      end
+      revision.event_count = revision.event_count + 1
+      if event.after_blob then
+        revision.after_blob = copy_blob(event.after_blob)
+        revision.after_seen = true
+      elseif event.operation == "deleted" then
+        revision.after_blob = nil
+        revision.after_seen = true
+      end
+    end
+  end
+  return revisions
+end
+
 function M.start(journal, thread_id, baseline)
   journal = copy(journal)
   journal.turns = type(journal.turns) == "table" and journal.turns or {}
@@ -41,6 +91,7 @@ function M.start(journal, thread_id, baseline)
     baseline = copy(baseline),
     tools = {},
     file_events = {},
+    file_revisions = {},
     buffer_events = {},
   }
   journal.turns[#journal.turns + 1] = turn
@@ -74,6 +125,7 @@ function M.record(journal, turn_id, kind, event)
   elseif kind == "file" then
     turn.file_events = type(turn.file_events) == "table" and turn.file_events or {}
     turn.file_events[#turn.file_events + 1] = event
+    update_file_revision(turn, event)
   elseif kind == "buffer" then
     turn.buffer_events = type(turn.buffer_events) == "table" and turn.buffer_events or {}
     turn.buffer_events[#turn.buffer_events + 1] = event
@@ -95,26 +147,9 @@ function M.recover_file_event_changes(journal, resolve_before)
     turn.changes = type(turn.changes) == "table" and turn.changes or {}
     local known = {}
     for _, change in ipairs(turn.changes) do known[change.path] = true end
-    local revisions = {}
-    for _, event in ipairs(turn.file_events or {}) do
-      local path = tostring(event.relative_path or ""):gsub("^/+", "")
-      if path ~= "" then
-        local revision = revisions[path]
-        if not revision then
-          revision = { before_blob = event.before_blob, seen = true }
-          revisions[path] = revision
-        end
-        if event.after_blob then
-          revision.after_blob = event.after_blob
-          revision.after_seen = true
-        elseif event.operation == "deleted" then
-          revision.after_blob = nil
-          revision.after_seen = true
-        end
-      end
-    end
+    local revisions = turn.file_revisions ~= nil and copy(turn.file_revisions) or legacy_file_revisions(turn)
     for path, revision in pairs(revisions) do
-      if not known[path] and revision.seen and revision.after_seen then
+      if not known[path] and revision.after_seen then
         local before_blob = revision.before_blob
         if not before_blob and type(resolve_before) == "function" then
           before_blob = resolve_before(turn, path)

@@ -36,10 +36,24 @@ function M.run()
 
   journal = assert(Journal.record(journal, turn.turn_id, "file", {
     path = "/repo/a.lua",
+    relative_path = "a.lua",
     operation = "modified",
     source = "acp_fs",
+    before_blob = { hash = "before" },
+    after_blob = { hash = "middle" },
   }))
   assert_equal(journal.turns[1].file_events[1].operation, "modified", "filesystem event")
+  journal = assert(Journal.record(journal, turn.turn_id, "file", {
+    path = "/repo/a.lua",
+    relative_path = "a.lua",
+    operation = "observed",
+    source = "filesystem_watcher",
+    before_blob = { hash = "middle" },
+    after_blob = { hash = "after" },
+  }))
+  assert_equal(journal.turns[1].file_revisions["a.lua"].before_blob.hash, "before", "first revision is immutable")
+  assert_equal(journal.turns[1].file_revisions["a.lua"].after_blob.hash, "after", "latest revision is canonical")
+  assert_equal(journal.turns[1].file_revisions["a.lua"].event_count, 2, "revision tracks source event count")
 
   journal = assert(Journal.record(journal, turn.turn_id, "buffer", {
     event = "BufWritePost",
@@ -90,6 +104,17 @@ function M.run()
   assert_equal(watcher_count, 1, "later watcher before blob does not hide the turn change")
   assert_equal(watcher_journal.turns[1].changes[1].before_blob, baseline_blob, "recovery uses turn baseline when first event lacks before")
   assert_equal(watcher_journal.turns[1].changes[1].after_blob, final_blob, "recovery keeps latest event revision")
+  local canonical_journal, canonical_count = Journal.recover_file_event_changes({ turns = { {
+    file_revisions = { ["README.md"] = {
+      before_blob = baseline_blob,
+      after_blob = final_blob,
+      after_seen = true,
+    } },
+    file_events = { { relative_path = "ignored.lua", after_blob = final_blob } },
+    changes = {},
+  } } })
+  assert_equal(canonical_count, 1, "canonical revisions recover one change")
+  assert_equal(canonical_journal.turns[1].changes[1].path, "README.md", "new turns do not infer from event logs")
   journal = assert(Journal.decide(journal, turn.turn_id, { 1 }, "kept", "2026-07-15T01:04:00Z"))
   assert_equal(journal.turns[1].changes[1].decision, "kept", "change decision")
 

@@ -139,12 +139,7 @@ local function capture_turn_file_event(session, event)
   root = vim.fs.normalize(vim.fn.fnamemodify(root, ":p")):gsub("/$", "")
   if absolute:sub(1, #root + 1) ~= root .. "/" then return event end
   local relative = absolute:sub(#root + 2)
-  local revisions = session.current_change_file_blobs or {}
-  session.current_change_file_blobs = revisions
-  local current = revisions[relative] or {}
-  local first_revision = current.seen ~= true
-
-  local before_blob = event.operation ~= "added" and (event.before_blob or current.after_blob) or nil
+  local before_blob = event.operation ~= "added" and event.before_blob or nil
   if not before_blob and before_text ~= nil and event.operation ~= "added" then
     before_blob, event.before_blob_error = put_turn_text_blob(session.blob_store, before_text)
   end
@@ -163,12 +158,6 @@ local function capture_turn_file_event(session, event)
   event.relative_path = relative
   event.before_blob = before_blob
   event.after_blob = after_blob
-  -- Only the first observed revision can describe the turn baseline. A later
-  -- watcher event's before blob is merely the previous intermediate revision.
-  if first_revision then current.before_blob = before_blob end
-  current.after_blob = after_blob
-  current.seen = true
-  revisions[relative] = current
   return event
 end
 
@@ -193,7 +182,6 @@ local function record_turn_baseline(session)
   session.active_change_journal = journal
   session.current_change_turn_id = turn.turn_id
   session.current_change_root = snapshot.root
-  session.current_change_file_blobs = {}
   if session.turn_watch_handle then
     Watch.remove(session.turn_watch_handle)
   end
@@ -278,7 +266,7 @@ local function finish_change_turn(session, completion_state)
   if captured then
     changes = WorkspaceSnapshot.diff(active_turn.baseline, final_snapshot, {
       blob_store = session.blob_store,
-      realtime_blobs = session.current_change_file_blobs,
+      realtime_blobs = active_turn.file_revisions,
     })
   else
     capture_error = tostring(final_snapshot)
@@ -296,7 +284,6 @@ local function finish_change_turn(session, completion_state)
   session.current_change_turn_id = nil
   session.active_change_journal = nil
   session.current_change_root = nil
-  session.current_change_file_blobs = nil
   if not finished_journal then
     return nil
   end
