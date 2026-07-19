@@ -564,6 +564,7 @@ function M.setup(deps)
     local preview_timer
     local refreshing = false
     local creating_preview = false
+    local original_acp_winhighlights = {}
     local refresh
     local maybe_mark_preview_read
     local preview_augroup = vim.api.nvim_create_augroup(
@@ -643,6 +644,77 @@ function M.setup(deps)
     local function selected_thread_id()
       if not vim.api.nvim_win_is_valid(cockpit_winid) then return nil end
       return line_map[vim.api.nvim_win_get_cursor(cockpit_winid)[1]]
+    end
+
+    local function winhighlight_parts(value)
+      local parts = {}
+      local indexes = {}
+      for _, part in ipairs(vim.split(value or "", ",", { trimempty = true })) do
+        local key, target = part:match("^([^:]+):(.+)$")
+        if key and target then
+          indexes[key] = #parts + 1
+          parts[#parts + 1] = { key = key, target = target }
+        end
+      end
+      return parts, indexes
+    end
+
+    local function winhighlight_target(value, key)
+      local parts, indexes = winhighlight_parts(value)
+      local index = indexes[key]
+      return index and parts[index].target or nil
+    end
+
+    local function set_winhighlight_target(winid, key, target)
+      local current = vim.wo[winid].winhighlight
+      local parts, indexes = winhighlight_parts(current)
+      local index = indexes[key]
+      if target then
+        if index then
+          parts[index].target = target
+        else
+          parts[#parts + 1] = { key = key, target = target }
+        end
+      elseif index then
+        table.remove(parts, index)
+      end
+      local rendered = vim.tbl_map(function(part)
+        return part.key .. ":" .. part.target
+      end, parts)
+      vim.wo[winid].winhighlight = table.concat(rendered, ",")
+    end
+
+    local function update_acp_backgrounds()
+      local selected_id = selected_thread_id()
+      local selected_agent = thread_agents[selected_id]
+      if not selected_agent and selected_id then
+        selected_agent = local_session_key(selected_id)
+      end
+      for _, winid in ipairs(vim.api.nvim_list_wins()) do
+        local acp_bufnr = vim.api.nvim_win_get_buf(winid)
+        local ok, agent_name = pcall(vim.api.nvim_buf_get_var, acp_bufnr, "lazyagent_acp_agent")
+        if ok and type(agent_name) == "string" and agent_name ~= "" then
+          local original = original_acp_winhighlights[winid]
+          if not original or original.bufnr ~= acp_bufnr then
+            original = {
+              bufnr = acp_bufnr,
+              normal_nc = winhighlight_target(vim.wo[winid].winhighlight, "NormalNC"),
+            }
+            original_acp_winhighlights[winid] = original
+          end
+          local active_target = winhighlight_target(vim.wo[winid].winhighlight, "Normal") or "Normal"
+          set_winhighlight_target(winid, "NormalNC", agent_name == selected_agent and active_target or "NormalNC")
+        end
+      end
+    end
+
+    local function restore_acp_backgrounds()
+      for winid, original in pairs(original_acp_winhighlights) do
+        if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == original.bufnr then
+          pcall(set_winhighlight_target, winid, "NormalNC", original.normal_nc)
+        end
+      end
+      original_acp_winhighlights = {}
     end
 
     local function selected_workspace()
@@ -843,6 +915,7 @@ function M.setup(deps)
         end
       end
       update_preview(selected_id)
+      update_acp_backgrounds()
       refreshing = false
     end
 
@@ -867,6 +940,7 @@ function M.setup(deps)
       end
       vim.api.nvim_win_set_cursor(cockpit_winid, { target, 0 })
       update_preview(line_map[target])
+      update_acp_backgrounds()
     end
 
     vim.keymap.set("n", "<CR>", function()
@@ -1098,7 +1172,10 @@ function M.setup(deps)
     end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit action menu" })
     vim.api.nvim_create_autocmd("CursorMoved", {
       buffer = bufnr,
-      callback = function() update_preview() end,
+      callback = function()
+        update_preview()
+        update_acp_backgrounds()
+      end,
     })
     vim.api.nvim_create_autocmd("WinEnter", {
       buffer = bufnr,
@@ -1113,6 +1190,7 @@ function M.setup(deps)
       buffer = bufnr,
       once = true,
       callback = function()
+        restore_acp_backgrounds()
         pcall(vim.api.nvim_del_augroup_by_id, preview_augroup)
         if preview_timer then
           preview_timer:stop()
