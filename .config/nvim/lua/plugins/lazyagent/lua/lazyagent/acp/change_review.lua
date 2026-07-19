@@ -25,6 +25,20 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesRejected", { link = "DiagnosticError", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesApprovedLine", { link = "DiffAdd", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesRejectedLine", { link = "DiffDelete", default = true })
+  local rich = vim.fn.hlexists("FugitiveExtAdd") == 1
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffAdd", {
+    link = rich and "FugitiveExtAdd" or "DiffAdd", default = true,
+  })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffDelete", {
+    link = rich and "FugitiveExtDelete" or "DiffDelete", default = true,
+  })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffAddText", {
+    link = rich and "FugitiveExtAddText" or "DiffText", default = true,
+  })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffDeleteText", {
+    link = rich and "FugitiveExtDeleteText" or "DiffText", default = true,
+  })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffHunk", { link = "DiffChange", default = true })
 end
 
 local function latest_changed_turn(thread)
@@ -99,7 +113,7 @@ function M.changed_turns(thread)
   return changed_turns(thread)
 end
 
-function M.drawer_lines(thread, turn, turn_index, turn_count)
+function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   local history = ""
   if turn_index and turn_count and turn_count > 1 then
     history = string.format(" · %d/%d · [t/]t previous/next", turn_index, turn_count)
@@ -107,9 +121,11 @@ function M.drawer_lines(thread, turn, turn_index, turn_count)
   local lines = {
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
     string.format("Turn %s · %d file(s)%s", turn.turn_id or "unknown", #(turn.changes or {}), history),
-    "",
+    "`=` inline diff  `<CR>` side-by-side  `o` open all",
   }
-  for _, change in ipairs(turn.changes or {}) do
+  local change_rows = {}
+  local line_changes = {}
+  for index, change in ipairs(turn.changes or {}) do
     local binary = change.binary == true and " [binary]" or ""
     local decision = change.decision
         and (" [" .. display_decision(change.decision) .. (change.apply_mode and (":" .. change.apply_mode) or "") .. "]")
@@ -129,11 +145,83 @@ function M.drawer_lines(thread, turn, turn_index, turn_count)
       decision,
       hunk_state
     )
+    change_rows[index] = #lines
+    line_changes[#lines] = index
+    for _, diff_line in ipairs((inline_diffs or {})[index] or {}) do
+      lines[#lines + 1] = diff_line
+      line_changes[#lines] = index
+    end
   end
+  return lines, change_rows, line_changes
+end
+
+function M.drawer_lines(thread, turn, turn_index, turn_count, inline_diffs)
+  local lines = M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   return lines
 end
 
-function M.apply_drawer_highlights(bufnr, turn)
+local function changed_span(left, right)
+  local prefix = 0
+  local limit = math.min(#left, #right)
+  while prefix < limit and left:byte(prefix + 1) == right:byte(prefix + 1) do
+    prefix = prefix + 1
+  end
+  local suffix = 0
+  while suffix < limit - prefix
+    and left:byte(#left - suffix) == right:byte(#right - suffix)
+  do
+    suffix = suffix + 1
+  end
+  return prefix + 1, #left - suffix + 1, prefix + 1, #right - suffix + 1
+end
+
+local function apply_inline_highlights(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local deleted, added = {}, {}
+  local function flush()
+    for index = 1, math.min(#deleted, #added) do
+      local old = deleted[index]
+      local new = added[index]
+      local old_start, old_end, new_start, new_end = changed_span(old.text:sub(2), new.text:sub(2))
+      if old_start < old_end then
+        vim.api.nvim_buf_set_extmark(bufnr, change_namespace, old.row, old_start, {
+          end_col = old_end, hl_group = "LazyAgentACPChangesDiffDeleteText", priority = 210,
+        })
+      end
+      if new_start < new_end then
+        vim.api.nvim_buf_set_extmark(bufnr, change_namespace, new.row, new_start, {
+          end_col = new_end, hl_group = "LazyAgentACPChangesDiffAddText", priority = 210,
+        })
+      end
+    end
+    deleted, added = {}, {}
+  end
+  for row, line in ipairs(lines) do
+    local zero_row = row - 1
+    if line:match("^@@") then
+      flush()
+      vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
+        end_col = #line, hl_group = "LazyAgentACPChangesDiffHunk",
+      })
+    elseif line:sub(1, 1) == "-" and not line:match("^%-%-%-") then
+      if #added > 0 then flush() end
+      deleted[#deleted + 1] = { row = zero_row, text = line }
+      vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
+        end_row = zero_row + 1, end_col = 0, hl_group = "LazyAgentACPChangesDiffDelete", hl_eol = true,
+      })
+    elseif line:sub(1, 1) == "+" and not line:match("^%+%+%+") then
+      added[#added + 1] = { row = zero_row, text = line }
+      vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
+        end_row = zero_row + 1, end_col = 0, hl_group = "LazyAgentACPChangesDiffAdd", hl_eol = true,
+      })
+    else
+      flush()
+    end
+  end
+  flush()
+end
+
+function M.apply_drawer_highlights(bufnr, turn, change_rows)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return false
   end
@@ -147,9 +235,13 @@ function M.apply_drawer_highlights(bufnr, turn)
     end_col = #(vim.api.nvim_buf_get_lines(bufnr, 1, 2, false)[1] or ""),
     hl_group = "Comment",
   })
+  vim.api.nvim_buf_set_extmark(bufnr, change_namespace, 2, 0, {
+    end_col = #(vim.api.nvim_buf_get_lines(bufnr, 2, 3, false)[1] or ""),
+    hl_group = "Comment",
+  })
 
   for index, change in ipairs(turn.changes or {}) do
-    local row = index + 2
+    local row = ((change_rows and change_rows[index]) or (index + 3)) - 1
     local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ""
     local marker_hl = operation_highlight[change.operation] or "Comment"
     vim.api.nvim_buf_set_extmark(bufnr, change_namespace, row, 0, {
@@ -189,6 +281,7 @@ function M.apply_drawer_highlights(bufnr, turn)
       end
     end
   end
+  apply_inline_highlights(bufnr)
   return true
 end
 
@@ -250,6 +343,9 @@ function M.new(opts)
     local turns = changed_turns(thread)
     local turn_index = #turns
     local turn = turns[turn_index]
+    local inline_by_turn = {}
+    local change_rows = {}
+    local line_changes = {}
     if not turn then
       return nil, "thread has no completed file changes"
     end
@@ -262,32 +358,88 @@ function M.new(opts)
     vim.bo[bufnr].buftype = "nofile"
     vim.bo[bufnr].bufhidden = "hide"
     vim.bo[bufnr].swapfile = false
-    vim.bo[bufnr].modifiable = true
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn, turn_index, #turns))
     vim.bo[bufnr].filetype = "lazyagent_changes"
-    vim.bo[bufnr].modifiable = false
-    M.apply_drawer_highlights(bufnr, turn)
     vim.cmd("botright vsplit")
     vim.api.nvim_win_set_buf(0, bufnr)
 
+    local function current_inline_diffs()
+      local key = tostring(turn.turn_id or turn_index)
+      inline_by_turn[key] = inline_by_turn[key] or {}
+      return inline_by_turn[key]
+    end
+    local function change_index_at_cursor()
+      return line_changes[vim.api.nvim_win_get_cursor(0)[1]]
+    end
+    local function build_inline_diff(change)
+      if change.binary == true then
+        return { "Binary change: inline text diff is unavailable." }
+      end
+      local before, before_err = read_blob(change.before_blob)
+      local after, after_err = read_blob(change.review_blob or change.after_blob)
+      if before == nil or after == nil then
+        return nil, before_err or after_err or "failed to read change blobs"
+      end
+      local ok, unified = pcall(vim.diff, before, after, {
+        result_type = "unified", algorithm = "histogram", ctxlen = 3,
+      })
+      if not ok then return nil, unified end
+      local lines = vim.split(tostring(unified or ""), "\n", { plain = true, trimempty = true })
+      if #lines == 0 then return { "No textual difference." } end
+      local max_lines = math.max(20, tonumber(opts.inline_diff_max_lines) or 500)
+      if #lines > max_lines then
+        lines = vim.list_slice(lines, 1, max_lines)
+        lines[#lines + 1] = string.format("... inline diff truncated after %d lines ...", max_lines)
+      end
+      return lines
+    end
+    local function render()
+      local lines
+      lines, change_rows, line_changes = M.drawer_content(
+        thread, turn, turn_index, #turns, current_inline_diffs()
+      )
+      vim.bo[bufnr].modifiable = true
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+      vim.bo[bufnr].modifiable = false
+      M.apply_drawer_highlights(bufnr, turn, change_rows)
+    end
+    render()
+
     vim.keymap.set("n", "<CR>", function()
-      local index = vim.api.nvim_win_get_cursor(0)[1] - 3
+      local index = change_index_at_cursor()
       local change = turn.changes[index]
       if change then
         review.open_change(thread, turn, change, index)
       end
     end, { buffer = bufnr, silent = true, desc = "Review LazyAgent ACP change" })
+    vim.keymap.set("n", "=", function()
+      local index = change_index_at_cursor()
+      local change = index and turn.changes[index] or nil
+      if not change then return end
+      local expanded = current_inline_diffs()
+      if expanded[index] then
+        expanded[index] = nil
+      else
+        local diff, err = build_inline_diff(change)
+        if not diff then
+          vim.notify("LazyAgent ACP: failed to build inline diff: " .. tostring(err), vim.log.levels.ERROR)
+          return
+        end
+        expanded[index] = diff
+      end
+      render()
+      vim.api.nvim_win_set_cursor(0, { change_rows[index] or 4, 0 })
+    end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
     vim.keymap.set("n", "o", function()
       for index, change in ipairs(turn.changes) do
         review.open_change(thread, turn, change, index)
       end
     end, { buffer = bufnr, silent = true, desc = "Open all LazyAgent ACP changes" })
     local function refresh(decided_turn)
-      turn = decided_turn or turn
-      vim.bo[bufnr].modifiable = true
-      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, M.drawer_lines(thread, turn, turn_index, #turns))
-      vim.bo[bufnr].modifiable = false
-      M.apply_drawer_highlights(bufnr, turn)
+      if decided_turn then
+        turn = decided_turn
+        inline_by_turn[tostring(turn.turn_id or turn_index)] = {}
+      end
+      render()
     end
     local function select_turn(index)
       if not turns[index] then
@@ -296,7 +448,7 @@ function M.new(opts)
       turn_index = index
       turn = turns[turn_index]
       refresh()
-      vim.api.nvim_win_set_cursor(0, { math.min(4, vim.api.nvim_buf_line_count(bufnr)), 0 })
+      vim.api.nvim_win_set_cursor(0, { change_rows[1] or math.min(4, vim.api.nvim_buf_line_count(bufnr)), 0 })
     end
     vim.keymap.set("n", "[t", function()
       select_turn(turn_index - 1)
@@ -325,7 +477,7 @@ function M.new(opts)
       return indices
     end
     vim.keymap.set("n", "a", function()
-      local index = vim.api.nvim_win_get_cursor(0)[1] - 3
+      local index = change_index_at_cursor()
       if turn.changes[index] and not turn.changes[index].decision then
         decide({ index }, "kept")
       end
@@ -344,7 +496,7 @@ function M.new(opts)
       end)
     end
     vim.keymap.set("n", "r", function()
-      local index = vim.api.nvim_win_get_cursor(0)[1] - 3
+      local index = change_index_at_cursor()
       if turn.changes[index] and not turn.changes[index].decision then
         confirm_reject({ index }, "Reject this file change?")
       end
@@ -356,7 +508,7 @@ function M.new(opts)
       end
     end, { buffer = bufnr, silent = true, desc = "Reject all LazyAgent ACP changes" })
     vim.keymap.set("n", "h", function()
-      local change_index = vim.api.nvim_win_get_cursor(0)[1] - 3
+      local change_index = change_index_at_cursor()
       local change = turn.changes[change_index]
       if not change or change.decision or type(opts.hunks) ~= "function" then
         return
