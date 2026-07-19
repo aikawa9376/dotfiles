@@ -66,9 +66,12 @@ function M.run()
 
   local review = ChangeReview.new({
     read_blob = function(ref)
+      local fillers = table.concat(vim.tbl_map(function(index)
+        return "local filler" .. index .. " = " .. index
+      end, { 1, 2, 3, 4, 5, 6, 7, 8 }), "\n")
       return ({
-        ["before-a"] = "local value = 1\nreturn value\n",
-        ["after-a"] = "local value = 2\nreturn value\n",
+        ["before-a"] = "local value = 1\n" .. fillers .. "\nreturn value\n",
+        ["after-a"] = "local value = 2\n" .. fillers .. "\nreturn value + 1\n",
       })[ref] or ""
     end,
   })
@@ -80,6 +83,17 @@ function M.run()
   vim.api.nvim_feedkeys("i", "x", false)
   vim.wait(100)
   assert((vim.api.nvim_get_current_line() or ""):match("^@@"), "i opens inline diff and jumps to its first hunk")
+  local first_hunk_row = vim.api.nvim_win_get_cursor(0)[1]
+  vim.api.nvim_feedkeys("i", "x", false)
+  vim.wait(100)
+  assert((vim.api.nvim_get_current_line() or ""):match("^@@"), "i moves to the next expanded hunk")
+  assert(vim.api.nvim_win_get_cursor(0)[1] > first_hunk_row, "next hunk is below the first")
+  vim.api.nvim_feedkeys("i", "x", false)
+  vim.wait(100)
+  assert((vim.api.nvim_get_current_line() or ""):match("^R  old%.bin"), "i stops on the next file row")
+  assert(not table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n"):find(
+    "Binary change: inline text diff is unavailable.", 1, true
+  ), "moving to the next file does not expand it")
   local expanded = table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n")
   assert(expanded:find("@@", 1, true), "inline diff hunk is expanded")
   assert(expanded:find("-local value = 1", 1, true), "inline deleted line")
@@ -107,7 +121,7 @@ function M.run()
   assert_equal(vim.fn.maparg("i", "n", false, true).desc, "Open and jump to next LazyAgent ACP diff", "next diff mapping")
   assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
   assert_equal(vim.fn.maparg("=", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
-  vim.api.nvim_win_set_cursor(0, { 5, 0 })
+  vim.api.nvim_win_set_cursor(0, { 4, 0 })
   vim.api.nvim_feedkeys("o", "x", false)
   vim.wait(100)
   assert(not table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n"):find("@@", 1, true), "inline diff closes")

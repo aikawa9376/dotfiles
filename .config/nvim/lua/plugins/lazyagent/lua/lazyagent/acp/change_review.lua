@@ -546,31 +546,28 @@ function M.new(opts)
       toggle_inline(change_index_at_cursor(), false)
     end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
     vim.keymap.set("n", "i", function()
-      local index = change_index_at_cursor()
-      if not index then return end
       local row = vim.api.nvim_win_get_cursor(0)[1]
+      local index = change_index_at_cursor()
+      if not index then
+        for _, change_row in ipairs(change_rows) do
+          if change_row > row then
+            vim.api.nvim_win_set_cursor(0, { change_row, 0 })
+            return
+          end
+        end
+        return
+      end
       if not current_inline_diffs()[index] then
         toggle_inline(index, true)
         row = change_rows[index] or row
       end
       for cursor = row + 1, vim.api.nvim_buf_line_count(bufnr) do
-        if line_changes[cursor] ~= index then break end
         local line = vim.api.nvim_buf_get_lines(bufnr, cursor - 1, cursor, false)[1] or ""
-        if line:match("^@@") then
+        if line:match("^@@") or change_rows[(line_changes[cursor] or 0)] == cursor then
           vim.api.nvim_win_set_cursor(0, { cursor, 0 })
           return
         end
       end
-      local next_index = index < #turn.changes and (index + 1) or 1
-      toggle_inline(next_index, true)
-      local next_row = change_rows[next_index] or 4
-      for cursor = next_row + 1, vim.api.nvim_buf_line_count(bufnr) do
-        if (vim.api.nvim_buf_get_lines(bufnr, cursor - 1, cursor, false)[1] or ""):match("^@@") then
-          vim.api.nvim_win_set_cursor(0, { cursor, 0 })
-          return
-        end
-      end
-      vim.api.nvim_win_set_cursor(0, { next_row, 0 })
     end, { buffer = bufnr, silent = true, desc = "Open and jump to next LazyAgent ACP diff" })
     vim.keymap.set("n", "d", function()
       local index = change_index_at_cursor()
