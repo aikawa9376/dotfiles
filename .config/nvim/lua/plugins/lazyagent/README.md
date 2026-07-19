@@ -393,7 +393,7 @@ Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`D` force
 
 agentmux publish時のpane/owner/kind/name/state/message/preview identityはactive threadの`metadata.agentmux`にも保存され、Neovim runtimeが無い場合のCockpit status fallbackとして利用されます。
 
-`:LazyAgentACPChanges`の引数なし候補は、現在のNeovim processが所有するthreadと現在のruntime sessionだけに限定されます。別Neovimや過去のNeovim processに属する変更は混在しません。thread UUIDを明示した場合とCockpitのthread actionでは、そのthreadを直接開けます。
+`:LazyAgentACPChanges`の引数なし候補は、現在のNeovimに属するlive ACP thread（保存statusは`active`、Cockpit表示では`idle` / `running` / `waiting`など）だけに限定されます。停止済み履歴、別Neovimや過去のNeovim processに属する変更は混在しません。thread UUIDを明示した場合とCockpitのthread actionでは、停止済みを含めてそのthreadを直接開けます。
 
 `:LazyAgentACPWorktreeNew [provider]`はbranch/path入力後にisolated git worktreeとthreadを作成します。`:LazyAgentACPWorktreeCleanup {thread-id}`またはCockpitの`c`は停止済みかつcleanなmanaged worktreeだけを削除し、branchは残します。
 
