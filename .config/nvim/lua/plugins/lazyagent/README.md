@@ -413,7 +413,7 @@ ACP v2 draftを試す場合はagent設定またはglobal ACP設定で`acp.experi
 
 ## MCP hooks
 
-`mcp_mode = true` のとき、非 ACP agent がある場合だけ Neovim 内で MCP server を起動します。ACP だけで運用している場合は server を起動しません。
+`mcp_mode = true` のとき、非ACP sessionを実際に起動した時点でNeovim内のMCP serverを遅延起動します。設定済みagentの種類には左右されず、ACP sessionだけを起動した場合はserverを起動しません。
 
 ```lua
 require("lazyagent").setup({

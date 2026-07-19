@@ -16,6 +16,7 @@ function M.setup(deps)
   local maybe_disable_watchers = deps.maybe_disable_watchers
   local current_editor_session_name = deps.current_editor_session_name
   local mark_session_scope = deps.mark_session_scope
+  local mcp_integration = deps.mcp_integration or require("lazyagent.integrations.mcp")
   local nvim_bridge = require("lazyagent.nvim_bridge")
 
   local module = {}
@@ -503,6 +504,7 @@ function M.setup(deps)
     end
 
     if not acp_logic.is_acp_backend(backend_name) and state.opts and state.opts.mcp_mode and not state.opts._mcp_url then
+      mcp_integration.ensure_started(state.opts)
       local max_attempts = 50
       local attempts = 0
       local function wait_for_mcp()

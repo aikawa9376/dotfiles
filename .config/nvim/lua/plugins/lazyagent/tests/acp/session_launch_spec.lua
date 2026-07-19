@@ -12,11 +12,16 @@ end
 function M.run()
   local pane_seq = 0
   local splits = {}
+  local legacy_splits = {}
   local backend = {
     split = function(_, _, _, opts)
       pane_seq = pane_seq + 1
       local pane_id = "mock-pane-" .. tostring(pane_seq)
-      splits[#splits + 1] = vim.deepcopy(opts.acp)
+      if opts.acp then
+        splits[#splits + 1] = vim.deepcopy(opts.acp)
+      else
+        legacy_splits[#legacy_splits + 1] = vim.deepcopy(opts)
+      end
       opts.on_split(pane_id)
     end,
     configure_pane = function()
@@ -42,6 +47,8 @@ function M.run()
     permission_rules = {},
     auto_switch = {},
   }
+  local ready = {}
+  local mcp_start_count = 0
   local launch = require("lazyagent.logic.session.launch").setup({
     state = state,
     acp_logic = {
@@ -58,7 +65,10 @@ function M.run()
       end,
     },
     backend_logic = {
-      resolve_backend_for_agent = function()
+      resolve_backend_for_agent = function(name)
+        if name == "Legacy" then
+          return "tmux", backend
+        end
         return "buffer_acp", backend
       end,
     },
@@ -70,7 +80,11 @@ function M.run()
       end,
     },
     window = {},
-    persistence = {},
+    persistence = {
+      get_session = function()
+        return nil
+      end,
+    },
     util = {
       git_root_for_path = function()
         return vim.fn.getcwd()
@@ -83,9 +97,14 @@ function M.run()
       return nil
     end,
     mark_session_scope = function() end,
+    mcp_integration = {
+      ensure_started = function(opts)
+        mcp_start_count = mcp_start_count + 1
+        opts._mcp_url = "http://127.0.0.1:12345/mcp"
+        opts._mcp_type = "http"
+      end,
+    },
   })
-
-  local ready = {}
   for index, thread_id in ipairs({ THREAD_A, THREAD_B }) do
     launch.ensure_session("Codex", {
       acp_thread_id = thread_id,
@@ -131,6 +150,18 @@ function M.run()
   end)
   assert_equal(reused_key, key_a, "runtime-key command reuse")
   assert_equal(#splits, 2, "runtime-key command must not launch a duplicate")
+  assert_equal(mcp_start_count, 0, "ACP session launch must not start legacy MCP server")
+
+  state.opts.mcp_mode = true
+  local legacy_ready = false
+  launch.ensure_session("Legacy", { acp = false }, false, function()
+    legacy_ready = true
+  end)
+  assert(vim.wait(1000, function()
+    return legacy_ready
+  end, 10), "legacy session launch should become ready")
+  assert_equal(mcp_start_count, 1, "non-ACP session launch starts MCP server lazily")
+  assert_equal(legacy_splits[1].env.LAZYAGENT_MCP_URL, state.opts._mcp_url, "legacy session receives MCP URL")
 end
 
 return M
