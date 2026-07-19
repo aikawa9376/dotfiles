@@ -568,6 +568,8 @@ function M.setup(deps)
       tool_call_id = params.toolCallId or (params._meta and params._meta.toolCallId) or nil,
       before_size = #write_result.before_text,
       after_size = #content,
+      _before_text = write_result.existed and write_result.before_text or nil,
+      _after_text = content,
     })
     append_block(session, "Edited " .. vim.fn.fnamemodify(abs, ":."), "Updated via ACP fs/write_text_file")
     if hook_reload_enabled() and ((state.opts or {}).hooks or {}).open_on_edit == true then
@@ -806,6 +808,14 @@ function M.setup(deps)
         end
       end
       if is_terminal then
+        for _, path in ipairs(extract_tool_paths(tool) or {}) do
+          record_turn_event(session, "file", {
+            path = path,
+            operation = "observed",
+            source = "acp_tool",
+            tool_call_id = tool.toolCallId,
+          })
+        end
         if session.ephemeral ~= true and tool.kind == "edit" then
           util.fire_event("EditDone", { agent_name = session.agent_name, tool = tool })
         end

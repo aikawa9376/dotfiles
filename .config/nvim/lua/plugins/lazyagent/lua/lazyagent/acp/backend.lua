@@ -115,6 +115,57 @@ end
 local record_turn_event
 local maybe_follow_agent
 
+local function put_turn_text_blob(store, text)
+  if not store or text == nil then return nil end
+  text = tostring(text)
+  local ref, err = store:put(text)
+  if ref then ref.binary = text:find("\0", 1, true) ~= nil end
+  return ref, err
+end
+
+local function capture_turn_file_event(session, event)
+  event = vim.deepcopy(event or {})
+  local before_text = event._before_text
+  local after_text = event._after_text
+  event._before_text = nil
+  event._after_text = nil
+  local root = session and session.current_change_root or nil
+  local path = tostring(event.path or "")
+  if not session or not root or path == "" or not session.blob_store then return event end
+  local absolute = vim.fn.fnamemodify(path:sub(1, 1) == "/" and path or (root .. "/" .. path), ":p")
+    :gsub("/$", "")
+  root = vim.fn.fnamemodify(root, ":p"):gsub("/$", "")
+  if absolute:sub(1, #root + 1) ~= root .. "/" then return event end
+  local relative = absolute:sub(#root + 2)
+  local revisions = session.current_change_file_blobs or {}
+  session.current_change_file_blobs = revisions
+  local current = revisions[relative] or {}
+
+  local before_blob = event.operation ~= "added" and (event.before_blob or current.after_blob) or nil
+  if not before_blob and before_text ~= nil and event.operation ~= "added" then
+    before_blob, event.before_blob_error = put_turn_text_blob(session.blob_store, before_text)
+  end
+  local after_blob = event.after_blob
+  if event.operation ~= "deleted" then
+    if after_text ~= nil then
+      after_blob, event.after_blob_error = put_turn_text_blob(session.blob_store, after_text)
+    else
+      local stat = (vim.uv or vim.loop).fs_stat(absolute)
+      if stat and stat.type == "file" then
+        after_blob, event.after_blob_error = session.blob_store:put_file(absolute)
+      end
+    end
+  end
+  event.path = absolute
+  event.relative_path = relative
+  event.before_blob = before_blob
+  event.after_blob = after_blob
+  current.before_blob = current.before_blob or before_blob
+  current.after_blob = after_blob
+  revisions[relative] = current
+  return event
+end
+
 local function record_turn_baseline(session)
   if not session or not session.thread_id then
     return nil
@@ -135,6 +186,8 @@ local function record_turn_baseline(session)
   )
   session.active_change_journal = journal
   session.current_change_turn_id = turn.turn_id
+  session.current_change_root = snapshot.root
+  session.current_change_file_blobs = {}
   if session.turn_watch_handle then
     Watch.remove(session.turn_watch_handle)
   end
@@ -155,6 +208,7 @@ record_turn_event = function(session, kind, event)
   if not session or not session.current_change_turn_id or not session.thread_record then
     return nil
   end
+  if kind == "file" then event = capture_turn_file_event(session, event) end
   local journal, turn = TurnJournal.record(
     session.active_change_journal or session.thread_record.change_journal,
     session.current_change_turn_id,
@@ -218,6 +272,7 @@ local function finish_change_turn(session, completion_state)
   if captured then
     changes = WorkspaceSnapshot.diff(active_turn.baseline, final_snapshot, {
       blob_store = session.blob_store,
+      realtime_blobs = session.current_change_file_blobs,
     })
   else
     capture_error = tostring(final_snapshot)
@@ -234,6 +289,8 @@ local function finish_change_turn(session, completion_state)
   })
   session.current_change_turn_id = nil
   session.active_change_journal = nil
+  session.current_change_root = nil
+  session.current_change_file_blobs = nil
   if not finished_journal then
     return nil
   end
@@ -279,6 +336,12 @@ vim.api.nvim_create_autocmd("BufWritePost", {
       local turn_active = session.current_change_turn_id
         and (session.busy or session.pending_brain_turn or next(session.tool_calls or {}) ~= nil)
       if turn_active and path_in_session_workspace(session, path) then
+        record_turn_event(session, "file", {
+          path = vim.fn.fnamemodify(path, ":p"),
+          operation = "observed",
+          source = "nvim_buffer",
+          tool_call_id = single_active_tool_id(session),
+        })
         record_turn_event(session, "buffer", {
           event = "BufWritePost",
           path = vim.fn.fnamemodify(path, ":p"),
@@ -451,6 +514,38 @@ local function create_backend(default_view)
       return backend.branch_thread_checkpoint(thread.thread_id, turn.turn_id)
     end,
   })
+
+  local function repair_thread_change_blobs(thread)
+    local journal = vim.deepcopy(thread and thread.change_journal or {})
+    local repaired = false
+    for _, turn in ipairs(journal.turns or {}) do
+      for _, change in ipairs(turn.changes or {}) do
+        if not change.before_blob and change.operation ~= "added" then
+          local before_path = change.previous_path or change.path
+          local ref = WorkspaceSnapshot.git_blob(turn.baseline, before_path, { blob_store = blob_store })
+          if ref then
+            change.before_blob = ref
+            change.binary = change.binary == true or ref.binary == true
+            repaired = true
+          end
+        end
+        if not change.after_blob and change.operation ~= "deleted" then
+          local ref = WorkspaceSnapshot.git_blob(turn.final_snapshot, change.path, { blob_store = blob_store })
+          if ref then
+            change.after_blob = ref
+            change.binary = change.binary == true or ref.binary == true
+            repaired = true
+          end
+        end
+      end
+    end
+    if not repaired then return thread end
+    local repaired_thread = vim.tbl_extend("force", vim.deepcopy(thread), { change_journal = journal })
+    -- Do not replace an active process's journal from a review window; its
+    -- in-memory turn may be newer. Completed threads can retain the repair.
+    if thread.status == "active" then return repaired_thread end
+    return thread_store:update(thread.thread_id, { change_journal = journal }) or repaired_thread
+  end
 
   complete_pending_turn = function(session)
     local pending = session and session.pending_brain_turn or nil
@@ -939,6 +1034,7 @@ local function create_backend(default_view)
   function backend.get_thread_review(thread_id)
     local thread, err = thread_store:get(thread_id)
     if not thread then return nil, err end
+    thread = repair_thread_change_blobs(thread)
     local turn = ChangeReview.latest_turn(thread)
     if not turn then return { thread_id = thread_id, changes = {} } end
     local changes = {}
@@ -981,6 +1077,7 @@ local function create_backend(default_view)
     if not thread then
       return nil, err or ("thread not found: " .. tostring(thread_id))
     end
+    thread = repair_thread_change_blobs(thread)
     return change_review.open(thread)
   end
 

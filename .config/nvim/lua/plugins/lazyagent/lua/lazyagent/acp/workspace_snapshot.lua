@@ -249,6 +249,55 @@ local function blob_too_large(store, size)
   return max_bytes ~= nil and tonumber(size) and tonumber(size) > max_bytes
 end
 
+function M.git_blob(snapshot, path, opts)
+  opts = opts or {}
+  local store = opts.blob_store
+  if not store or type(snapshot) ~= "table" or type(snapshot.vcs) ~= "table"
+    or snapshot.vcs.kind ~= "git" or not snapshot.root or not path
+  then
+    return nil, "git blob source is unavailable"
+  end
+  local run_cmd = opts.run or default_run
+  local ref_name = (snapshot.vcs.head and snapshot.vcs.head ~= "") and snapshot.vcs.head or "HEAD"
+  local object_name = ref_name .. ":" .. path
+  if store.max_blob_bytes ~= nil then
+    local size_result = run_cmd({ "git", "-C", snapshot.root, "cat-file", "-s", object_name })
+    local object_size = size_result.code == 0 and tonumber((trim(size_result.stdout))) or nil
+    if blob_too_large(store, object_size) then
+      return nil, string.format("blob exceeds %d bytes", store.max_blob_bytes)
+    end
+  end
+  local show_result = run_cmd({ "git", "-C", snapshot.root, "show", object_name })
+  if show_result.code ~= 0 then
+    return nil, trim(show_result.stderr) ~= "" and trim(show_result.stderr) or ("git blob not found: " .. object_name)
+  end
+  local data = show_result.stdout or ""
+  local ref, put_err = store:put(data)
+  if not ref then return nil, put_err end
+  ref.binary = data:find("\0", 1, true) ~= nil
+  return ref
+end
+
+local function apply_realtime_blob(record, realtime, side)
+  if not record or record.blob or type(realtime) ~= "table" then return end
+  local ref = side == "before" and realtime.before_blob or realtime.after_blob
+  if ref then
+    record.blob = vim.deepcopy(ref)
+    record.binary = ref.binary == true
+  end
+end
+
+local function apply_git_blob(record, snapshot, path, opts)
+  if not record or record.blob or not opts.blob_store then return end
+  local ref, err = M.git_blob(snapshot, path, opts)
+  if ref then
+    record.blob = ref
+    record.binary = ref.binary == true
+  else
+    record.blob_error = record.blob_error or err
+  end
+end
+
 function M.diff(before, after, opts)
   opts = opts or {}
   local previous = file_index(before)
@@ -266,7 +315,13 @@ function M.diff(before, after, opts)
       and item.original_path
       and not baseline_renames[rename_key(item)]
     then
-      local moved = change_record(item.path, "moved", previous[item.original_path], current[item.path])
+      local left = previous[item.original_path]
+      local right = current[item.path]
+      apply_realtime_blob(left, (opts.realtime_blobs or {})[item.original_path], "before")
+      apply_realtime_blob(right, (opts.realtime_blobs or {})[item.path], "after")
+      apply_git_blob(left, before, item.original_path, opts)
+      apply_git_blob(right, after, item.path, opts)
+      local moved = change_record(item.path, "moved", left, right)
       moved.previous_path = item.original_path
       changes[#changes + 1] = moved
       consumed[item.path] = true
@@ -286,6 +341,9 @@ function M.diff(before, after, opts)
     if not consumed[path] then
       local left = previous[path]
       local right = current[path]
+      local realtime = (opts.realtime_blobs or {})[path]
+      apply_realtime_blob(left, realtime, "before")
+      apply_realtime_blob(right, realtime, "after")
       local left_exists = left and left.exists ~= false
       local right_exists = right and right.exists ~= false
       local operation = nil
@@ -297,39 +355,13 @@ function M.diff(before, after, opts)
         operation = "modified"
       end
       if operation then
-        if (operation == "modified" or operation == "deleted") and left and not left.blob and opts.blob_store and before.vcs and before.vcs.kind == "git" then
-          local run_cmd = opts.run or default_run
-          local ref_name = (before.vcs.head and before.vcs.head ~= "") and before.vcs.head or "HEAD"
-          local object_name = ref_name .. ":" .. path
-          local oversized = blob_too_large(opts.blob_store, left.size)
-          if not oversized and opts.blob_store.max_blob_bytes ~= nil then
-            local size_result = run_cmd({ "git", "-C", before.root, "cat-file", "-s", object_name })
-            if size_result.code == 0 then
-              local object_size = trim(size_result.stdout)
-              oversized = blob_too_large(opts.blob_store, tonumber(object_size))
-            end
-          end
-          if oversized then
-            left.blob_error = string.format("blob exceeds %d bytes", opts.blob_store.max_blob_bytes)
-            changes[#changes + 1] = change_record(path, operation, left, right)
-            consumed[path] = true
-          else
-            local git_args = { "git", "-C", before.root, "show", object_name }
-            local show_result = run_cmd(git_args)
-            if show_result.code == 0 then
-              local data = show_result.stdout
-              local ref = opts.blob_store:put(data)
-              if ref then
-                ref.binary = data:find("\0", 1, true) ~= nil
-                left.blob = ref
-                left.binary = ref.binary
-              end
-            end
-          end
+        if operation == "modified" or operation == "deleted" then
+          apply_git_blob(left, before, path, opts)
         end
-        if not consumed[path] then
-          changes[#changes + 1] = change_record(path, operation, left, right)
+        if operation == "modified" or operation == "added" then
+          apply_git_blob(right, after, path, opts)
         end
+        changes[#changes + 1] = change_record(path, operation, left, right)
       end
     end
   end

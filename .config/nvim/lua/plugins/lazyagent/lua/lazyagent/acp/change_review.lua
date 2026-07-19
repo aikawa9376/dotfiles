@@ -290,10 +290,21 @@ function M.new(opts)
   local review = {}
 
   local function read_blob(ref)
-    if not ref then
-      return ""
-    end
+    if not ref then return nil, "blob reference is unavailable" end
     return opts.read_blob(ref)
+  end
+
+  local function read_change_side(change, side)
+    local ref = side == "before" and change.before_blob or (change.review_blob or change.after_blob)
+    if not ref then
+      if (side == "before" and change.operation == "added")
+        or (side == "after" and change.operation == "deleted")
+      then
+        return ""
+      end
+      return nil, side .. " blob is unavailable for " .. tostring(change.operation or "change")
+    end
+    return read_blob(ref)
   end
 
   function review.open_change(thread, turn, change, index)
@@ -313,8 +324,8 @@ function M.new(opts)
       return true
     end
 
-    local before, before_err = read_blob(change.before_blob)
-    local after, after_err = read_blob(change.review_blob or change.after_blob)
+    local before, before_err = read_change_side(change, "before")
+    local after, after_err = read_change_side(change, "after")
     if before == nil or after == nil then
       vim.notify("LazyAgent ACP: failed to read change blobs: " .. tostring(before_err or after_err), vim.log.levels.ERROR)
       return false
@@ -374,8 +385,8 @@ function M.new(opts)
       if change.binary == true then
         return { "Binary change: inline text diff is unavailable." }
       end
-      local before, before_err = read_blob(change.before_blob)
-      local after, after_err = read_blob(change.review_blob or change.after_blob)
+      local before, before_err = read_change_side(change, "before")
+      local after, after_err = read_change_side(change, "after")
       if before == nil or after == nil then
         return nil, before_err or after_err or "failed to read change blobs"
       end

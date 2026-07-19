@@ -102,6 +102,14 @@ function M.run()
   assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Open all LazyAgent ACP changes", "open all mapping")
   assert_equal(vim.fn.maparg("k", "n", false, true).buffer or 0, 0, "k remains normal movement")
   vim.api.nvim_buf_delete(drawer, { force = true })
+
+  local missing_change = { operation = "modified", path = "lua/missing.lua", before_blob = "before-a" }
+  local notification
+  local previous_notify = vim.notify
+  vim.notify = function(message) notification = message end
+  assert_equal(review.open_change(thread, turn, missing_change, 1), false, "missing modified side is not opened as empty")
+  vim.notify = previous_notify
+  assert(tostring(notification):find("after blob is unavailable", 1, true), "missing modified blob is reported explicitly")
 end
 
 return M

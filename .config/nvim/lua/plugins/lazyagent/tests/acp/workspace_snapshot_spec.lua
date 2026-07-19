@@ -142,6 +142,54 @@ function M.run()
   })
   assert_equal(showed_large_blob, false, "oversized git blob skipped before git show")
   assert_equal(large_changes[1].before_blob, nil, "oversized baseline has no blob")
+
+  local stored = {}
+  local committed_changes = Snapshot.diff({
+    root = "/repo",
+    vcs = { kind = "git", head = "before-head" },
+    files = {
+      { path = "committed.lua", exists = true, type = "file", size = 7, mtime = { sec = 1, nsec = 0 } },
+    },
+  }, {
+    root = "/repo",
+    vcs = { kind = "git", head = "after-head" },
+    files = {
+      { path = "committed.lua", exists = true, type = "file", size = 6, mtime = { sec = 2, nsec = 0 } },
+    },
+  }, {
+    blob_store = {
+      max_blob_bytes = 1024,
+      put = function(_, data)
+        stored[#stored + 1] = data
+        return { algorithm = "sha256", hash = vim.fn.sha256(data), size = #data }
+      end,
+    },
+    run = function(argv)
+      local command = table.concat(argv, " ")
+      if command:match("cat%-file %-s") then return { code = 0, stdout = "7\n", stderr = "" } end
+      if command:match("before%-head:committed%.lua") then return { code = 0, stdout = "before\n", stderr = "" } end
+      if command:match("after%-head:committed%.lua") then return { code = 0, stdout = "after\n", stderr = "" } end
+      error("unexpected committed blob command: " .. command)
+    end,
+  })
+  assert_equal(stored, { "before\n", "after\n" }, "clean committed sides are loaded only from their snapshot heads")
+  assert(committed_changes[1].before_blob and committed_changes[1].after_blob, "committed change keeps both blobs")
+
+  local realtime_before = { hash = string.rep("e", 64), size = 6 }
+  local realtime_after = { hash = string.rep("f", 64), size = 5 }
+  local realtime_changes = Snapshot.diff({
+    files = {
+      { path = "live.lua", exists = true, type = "file", size = 6, mtime = { sec = 1, nsec = 0 } },
+    },
+  }, {
+    files = {
+      { path = "live.lua", exists = true, type = "file", size = 5, mtime = { sec = 2, nsec = 0 } },
+    },
+  }, {
+    realtime_blobs = { ["live.lua"] = { before_blob = realtime_before, after_blob = realtime_after } },
+  })
+  assert_equal(realtime_changes[1].before_blob, realtime_before, "realtime first revision supplies before blob")
+  assert_equal(realtime_changes[1].after_blob, realtime_after, "realtime latest revision supplies after blob")
 end
 
 return M
