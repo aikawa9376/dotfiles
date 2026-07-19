@@ -99,8 +99,11 @@ function M.recover_file_event_changes(journal, resolve_before)
     for _, event in ipairs(turn.file_events or {}) do
       local path = tostring(event.relative_path or ""):gsub("^/+", "")
       if path ~= "" then
-        local revision = revisions[path] or {}
-        revision.before_blob = revision.before_blob or event.before_blob
+        local revision = revisions[path]
+        if not revision then
+          revision = { before_blob = event.before_blob, seen = true }
+          revisions[path] = revision
+        end
         if event.after_blob then
           revision.after_blob = event.after_blob
           revision.after_seen = true
@@ -108,8 +111,6 @@ function M.recover_file_event_changes(journal, resolve_before)
           revision.after_blob = nil
           revision.after_seen = true
         end
-        revision.seen = true
-        revisions[path] = revision
       end
     end
     for path, revision in pairs(revisions) do
