@@ -92,13 +92,18 @@ function M.run()
     { details = true }
   )
   local inline_groups = {}
+  local syntax_group
   for _, mark in ipairs(inline_marks) do
     local group = mark[4] and mark[4].hl_group
-    if group then inline_groups[group] = true end
+    if group then
+      inline_groups[group] = true
+      if group:match("^@.+%.lua$") then syntax_group = group end
+    end
   end
   assert(inline_groups.LazyAgentACPChangesDiffDelete, "inline deleted background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAdd, "inline added background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAddText, "inline word-level highlight")
+  assert(syntax_group, "inline Lua code receives Tree-sitter syntax highlights")
   assert_equal(vim.fn.maparg("i", "n", false, true).desc, "Open and jump to next LazyAgent ACP diff", "next diff mapping")
   assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
   assert_equal(vim.fn.maparg("=", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")

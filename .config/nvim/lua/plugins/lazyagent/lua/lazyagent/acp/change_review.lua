@@ -234,6 +234,78 @@ local function apply_inline_highlights(bufnr)
   flush()
 end
 
+local function treesitter_language(path)
+  local filetype = vim.filetype.match({ filename = tostring(path or "") })
+  if not filetype then return nil end
+  local language = vim.treesitter.language.get_lang(filetype)
+  if not language or not pcall(vim.treesitter.language.inspect, language) then return nil end
+  return language
+end
+
+local function apply_code_capture_highlights(bufnr, code_lines, line_map, language)
+  if #code_lines == 0 then return end
+  local code = table.concat(code_lines, "\n")
+  local parser_ok, parser = pcall(vim.treesitter.get_string_parser, code, language)
+  if not parser_ok or not parser then return end
+  local parsed_ok, trees = pcall(function() return parser:parse() end)
+  if not parsed_ok or not trees or not trees[1] then return end
+  local query_ok, query = pcall(vim.treesitter.query.get, language, "highlights")
+  if not query_ok or not query then return end
+  for capture, node, metadata in query:iter_captures(trees[1]:root(), code) do
+    local start_row, start_col, end_row, end_col = node:range()
+    local buffer_start = line_map[start_row + 1]
+    if buffer_start then
+      local buffer_end = line_map[end_row + 1] or buffer_start
+      local priority = (tonumber(metadata and metadata.priority) or 100) + 50
+      pcall(vim.api.nvim_buf_set_extmark, bufnr, change_namespace, buffer_start, start_col + 1, {
+        end_row = buffer_end,
+        end_col = end_col + 1,
+        hl_group = "@" .. query.captures[capture] .. "." .. language,
+        priority = priority,
+      })
+    end
+  end
+end
+
+local function apply_inline_code_highlights(bufnr, turn, change_rows)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for index, change in ipairs(turn.changes or {}) do
+    local language = treesitter_language(change.path)
+    if language then
+      local first_row = change_rows and change_rows[index] or (index + 3)
+      local last_row = ((change_rows and change_rows[index + 1]) or (#lines + 1)) - 1
+      local old_code, old_map, new_code, new_map = {}, {}, {}, {}
+      local in_hunk = false
+      local function flush()
+        apply_code_capture_highlights(bufnr, old_code, old_map, language)
+        apply_code_capture_highlights(bufnr, new_code, new_map, language)
+        old_code, old_map, new_code, new_map = {}, {}, {}, {}
+      end
+      for row = first_row + 1, last_row do
+        local line = lines[row] or ""
+        if line:match("^@@.-@@") then
+          flush()
+          in_hunk = true
+        elseif in_hunk and line:match("^[ +%-]") then
+          local prefix, content = line:sub(1, 1), line:sub(2)
+          if prefix == "-" or prefix == " " then
+            old_code[#old_code + 1] = content
+            old_map[#old_code] = row - 1
+          end
+          if prefix == "+" or prefix == " " then
+            new_code[#new_code + 1] = content
+            new_map[#new_code] = row - 1
+          end
+        else
+          flush()
+          in_hunk = false
+        end
+      end
+      flush()
+    end
+  end
+end
+
 function M.apply_drawer_highlights(bufnr, turn, change_rows)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return false
@@ -295,6 +367,7 @@ function M.apply_drawer_highlights(bufnr, turn, change_rows)
     end
   end
   apply_inline_highlights(bufnr)
+  apply_inline_code_highlights(bufnr, turn, change_rows)
   return true
 end
 
