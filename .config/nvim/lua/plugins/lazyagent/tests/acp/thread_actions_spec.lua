@@ -130,6 +130,8 @@ function M.run()
   records[THREAD_ID].change_journal = { turns = { { changes = { { path = "source.lua" } } } } }
   records[THREAD_ID].metadata.editor.owner_pid = vim.fn.getpid()
   records[THREAD_ID].metadata.editor.instance_id = "test-nvim"
+  records[THREAD_ID].status = "active"
+  records[THREAD_ID].process_id = 42
   records[FOREIGN_ID] = {
     thread_id = FOREIGN_ID,
     provider_id = "Codex",
@@ -139,12 +141,22 @@ function M.run()
     metadata = { editor = { instance_id = "other-nvim", owner_pid = vim.fn.getpid() + 1 } },
     change_journal = { turns = { { changes = { { path = "foreign.lua" } } } } },
   }
+  local STOPPED_ID = "123e4567-e89b-42d3-a456-426614174097"
+  records[STOPPED_ID] = {
+    thread_id = STOPPED_ID,
+    provider_id = "Codex",
+    title = "Stopped local changes",
+    cwd = workspace,
+    status = "closed",
+    metadata = { editor = { instance_id = "test-nvim", owner_pid = vim.fn.getpid() } },
+    change_journal = { turns = { { changes = { { path = "stopped.lua" } } } } },
+  }
   local selected_threads
   local previous_select = vim.ui.select
   rawset(vim.ui, "select", function(items) selected_threads = items end)
   changes_thread_id = nil
   assert_equal(actions.show_thread_changes(), true, "show current Neovim changes")
-  assert_equal(selected_threads, nil, "single changed thread skips picker")
+  assert_equal(selected_threads, nil, "single live changed thread skips picker")
   assert_equal(changes_thread_id, THREAD_ID, "single changed thread opens directly")
 
   local SECOND_ID = "123e4567-e89b-42d3-a456-426614174098"
@@ -153,15 +165,18 @@ function M.run()
     provider_id = "Codex",
     title = "Second local changes",
     cwd = workspace,
-    status = "closed",
+    status = "active",
+    process_id = 43,
     metadata = { editor = { instance_id = "test-nvim", owner_pid = vim.fn.getpid() } },
     change_journal = { turns = { { changes = { { path = "second.lua" } } } } },
   }
   selected_threads = nil
   assert_equal(actions.show_thread_changes(), true, "show multiple current Neovim changes")
   rawset(vim.ui, "select", previous_select)
-  assert_equal(selected_threads and #selected_threads, 2, "multiple changed threads keep picker")
+  assert_equal(selected_threads and #selected_threads, 2, "multiple live changed threads keep picker")
+  assert(not vim.tbl_contains(selected_threads or {}, records[STOPPED_ID]), "stopped changed thread is excluded")
   records[SECOND_ID] = nil
+  records[STOPPED_ID] = nil
   records[FOREIGN_ID] = nil
 
   local transcript_path = vim.fn.tempname() .. "-thread-transcript.log"

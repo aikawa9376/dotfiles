@@ -421,6 +421,7 @@ function M.setup(deps)
       if id then local_threads[id] = true end
     end
     threads = vim.tbl_filter(function(thread)
+      if thread.status ~= "active" then return false end
       if not thread_related_to_current_nvim(thread, local_threads) then return false end
       local turns = thread.change_journal and thread.change_journal.turns or {}
       for index = #turns, 1, -1 do
@@ -431,7 +432,7 @@ function M.setup(deps)
       return false
     end, threads or {})
     if #threads == 0 then
-      vim.notify("LazyAgent ACP: no file changes belong to this Neovim", vim.log.levels.INFO)
+      vim.notify("LazyAgent ACP: no live file changes belong to this Neovim", vim.log.levels.INFO)
       return false
     end
     if #threads == 1 then
