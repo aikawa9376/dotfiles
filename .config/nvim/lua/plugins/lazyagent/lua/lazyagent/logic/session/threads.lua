@@ -599,11 +599,14 @@ function M.setup(deps)
         local preview_height = preview_mode == "mirror"
             and math.max(12, math.floor(vim.o.lines * 0.35))
           or 10
-        vim.cmd("botright " .. tostring(preview_height) .. "split")
+        vim.cmd("belowright " .. tostring(preview_height) .. "split")
       else
-        local preview_width = math.max(20, tonumber(agent_cfg and agent_cfg.pane_size) or 60)
-        preview_width = math.min(preview_width, math.max(20, vim.o.columns - 40))
-        vim.cmd("botright " .. tostring(preview_width) .. "vsplit")
+        local cockpit_width = vim.api.nvim_win_get_width(cockpit_winid)
+        local preview_width = require("lazyagent.acp.cockpit").preview_width(
+          agent_cfg and agent_cfg.pane_size,
+          cockpit_width
+        )
+        vim.cmd("rightbelow " .. tostring(preview_width) .. "vsplit")
       end
       preview_winid = vim.api.nvim_get_current_win()
       vim.api.nvim_win_set_buf(preview_winid, preview_bufnr)
@@ -613,6 +616,12 @@ function M.setup(deps)
       vim.wo[preview_winid].number = false
       vim.wo[preview_winid].relativenumber = false
       vim.wo[preview_winid].winhighlight = "Normal:NormalFloat,NormalNC:NormalFloat,EndOfBuffer:NormalFloat"
+      local fillchars = vim.api.nvim_get_option_value("fillchars", { win = preview_winid })
+      local visible_fillchars = vim.tbl_filter(function(part)
+        return not vim.startswith(part, "eob:")
+      end, vim.split(fillchars or "", ",", { trimempty = true }))
+      visible_fillchars[#visible_fillchars + 1] = "eob: "
+      vim.api.nvim_set_option_value("fillchars", table.concat(visible_fillchars, ","), { win = preview_winid })
       vim.wo[preview_winid].statusline = "%#DiagnosticInfo# LazyAgent Cockpit PREVIEW %*"
       if preview_scroll_autocmd then
         pcall(vim.api.nvim_del_autocmd, preview_scroll_autocmd)

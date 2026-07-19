@@ -5,6 +5,8 @@ function M.run()
   assert(Cockpit.normalize_preview_layout(nil) == "split", "cockpit preview defaults to side split")
   assert(Cockpit.normalize_preview_layout("horizontal") == "horizontal", "horizontal preview layout")
   assert(Cockpit.normalize_preview_layout("unknown") == "split", "unknown preview layout falls back to split")
+  assert(Cockpit.preview_width(60, 200) == 60, "wide cockpit keeps the configured preview width")
+  assert(Cockpit.preview_width(60, 81) == 40, "preview stays within half of the current cockpit allocation")
   local threads = {
     {
       thread_id = "thread-b", title = "Second", provider_id = "codex", cwd = "/tmp/project-b",

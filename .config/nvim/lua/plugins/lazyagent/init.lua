@@ -97,7 +97,6 @@ return {
       -- default_mode = "bypassPermissions", -- prefer provider mode when available
       auto_permission = "allow_always",
       buffer_background = "none",
-      buffer_inactive_background = "none",
       fancy_mode = false,
       table_layout = "card",
       smooth_scroll = {
