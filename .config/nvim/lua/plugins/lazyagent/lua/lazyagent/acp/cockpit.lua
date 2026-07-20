@@ -297,17 +297,21 @@ local function usage_label(runtime)
   return #parts > 0 and table.concat(parts, "/") or "n/a"
 end
 
-local function card_line(thread, runtime, conflicts, opts)
-  opts = opts or {}
-  local max_width = opts.width
-  local status = common_status(thread, runtime, opts)
+local function configured_model(thread, runtime)
   local runtime_model = runtime and config_values.preferred(
     runtime.acp_config_options,
     { "model" },
     runtime.acp_model_catalog and runtime.acp_model_catalog.currentModelId
   )
   local stored_model = config_values.preferred(thread.config, { "model" }, thread.model)
-  local model = runtime_model or (stored_model and stored_model ~= "" and stored_model) or "default"
+  return runtime_model or (stored_model and stored_model ~= "" and stored_model) or "default"
+end
+
+local function card_line(thread, runtime, conflicts, opts)
+  opts = opts or {}
+  local max_width = opts.width
+  local status = common_status(thread, runtime, opts)
+  local model = configured_model(thread, runtime)
   local changes = changed_file_count(thread)
   local pinned = thread.metadata and thread.metadata.cockpit_pinned == true
   local conflict_count = vim.tbl_count(conflicts[thread.thread_id] or {})
@@ -348,7 +352,8 @@ local function card_line(thread, runtime, conflicts, opts)
   end
 
   local removal_order = { "usage", "model", "changes", "test", "unread", "conflict", "queue" }
-  while max_width and max_width - fixed_width() < 12 do
+  local minimum_tail_width = show_title and 12 or 0
+  while max_width and max_width - fixed_width() < minimum_tail_width do
     local removed = false
     for _, kind in ipairs(removal_order) do
       for index = #fields, 1, -1 do
@@ -363,9 +368,15 @@ local function card_line(thread, runtime, conflicts, opts)
     if not removed then break end
   end
 
-  local available_title_width = max_width and math.max(8, max_width - fixed_width() - 1) or PROMPT_MAX_WIDTH
+  if max_width then
+    local width_without_provider = fixed_width() - display_width(provider)
+    local title_reserve = show_title and 1 or 0
+    local provider_width = math.max(1, max_width - width_without_provider - title_reserve)
+    provider = truncate_display(provider, provider_width)
+  end
+  local available_title_width = max_width and math.max(0, max_width - fixed_width()) or PROMPT_MAX_WIDTH
   local title_width = math.min(PROMPT_MAX_WIDTH, available_title_width)
-  local title = show_title and truncate_display(raw_title, title_width) or ""
+  local title = show_title and title_width > 0 and truncate_display(raw_title, title_width) or ""
   local parts, spans = {}, {}
   add_segment(parts, spans, "- ", "LazyAgentACPCockpitMuted")
   if is_open then add_segment(parts, spans, "● ", "LazyAgentACPCockpitActive") end
@@ -467,14 +478,25 @@ function M.apply_highlights(bufnr, highlights)
   end
 end
 
-function M.filter(threads, query)
+function M.filter(threads, query, runtimes, opts)
   query = vim.trim(tostring(query or "")):lower()
+  runtimes = runtimes or {}
+  opts = opts or {}
   local meaningful = vim.tbl_filter(M.has_meaningful_content, threads or {})
-  if query == "" then return vim.deepcopy(meaningful) end
+  if query == "" then return meaningful end
   return vim.tbl_filter(function(thread)
+    local runtime = runtimes[thread.thread_id]
     local text = table.concat({
-      thread.title or "", thread.provider_id or "", thread.cwd or "", thread.status or "",
-      thread.model or "", thread.unread == true and "unread" or "read",
+      thread.thread_id or "",
+      thread.title or "",
+      M.prompt_title(thread) or "",
+      thread.provider_id or "",
+      thread.cwd or "",
+      group_path(thread),
+      thread.status or "",
+      common_status(thread, runtime, opts),
+      tostring(configured_model(thread, runtime)),
+      thread.unread == true and "unread" or "read",
     }, " "):lower()
     return text:find(query, 1, true) ~= nil
   end, meaningful)

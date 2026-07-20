@@ -110,7 +110,42 @@ function M.run()
     "GitSignsChange", "change notes follow fugitive status colors")
   vim.api.nvim_buf_delete(bufnr, { force = true })
 
+  local utf_turn = {
+    turn_id = "utf:1",
+    changes = { { operation = "modified", path = "notes.txt" } },
+  }
+  local utf_lines, utf_rows, utf_changes, utf_targets = ChangeReview.drawer_content(
+    { thread_id = "utf", title = "UTF-8" },
+    utf_turn,
+    nil,
+    nil,
+    { [1] = { "@@ -1 +1 @@", "-あ", "+い" } }
+  )
+  local utf_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_lines(utf_bufnr, 0, -1, false, utf_lines)
+  ChangeReview.apply_drawer_highlights(utf_bufnr, utf_turn, utf_rows, utf_changes, utf_targets)
+  local utf_marks = vim.api.nvim_buf_get_extmarks(
+    utf_bufnr,
+    vim.api.nvim_get_namespaces().LazyAgentACPChanges,
+    0,
+    -1,
+    { details = true }
+  )
+  local utf_spans = {}
+  for _, mark in ipairs(utf_marks) do
+    local group = mark[4] and mark[4].hl_group
+    if group == "LazyAgentACPChangesDiffDeleteText" or group == "LazyAgentACPChangesDiffAddText" then
+      utf_spans[group] = { start_col = mark[3], end_col = mark[4].end_col }
+    end
+  end
+  assert_equal(utf_spans.LazyAgentACPChangesDiffDeleteText, { start_col = 1, end_col = 4 },
+    "UTF-8 deleted highlight starts at a character boundary")
+  assert_equal(utf_spans.LazyAgentACPChangesDiffAddText, { start_col = 1, end_col = 4 },
+    "UTF-8 added highlight starts at a character boundary")
+  vim.api.nvim_buf_delete(utf_bufnr, { force = true })
+
   local live_thread
+  local get_thread_calls = 0
   local review = ChangeReview.new({
     read_blob = function(ref)
       local fillers = table.concat(vim.tbl_map(function(index)
@@ -122,7 +157,12 @@ function M.run()
         ["after-a"] = "local value = 2\n" .. fillers .. "\nreturn value + 1\n",
       })[ref] or ""
     end,
-    get_thread = function() return live_thread end,
+    get_thread = function()
+      get_thread_calls = get_thread_calls + 1
+      return live_thread
+    end,
+    checkpoint = function() error("active turn checkpoint must be blocked") end,
+    branch = function() error("active turn branch must be blocked") end,
   })
   local drawer = assert(review.open(thread))
   local drawer_position = vim.api.nvim_win_get_position(0)
@@ -130,6 +170,8 @@ function M.run()
   assert_equal(vim.wo.number, false, "changes drawer hides absolute line numbers like Fugitive status")
   assert_equal(vim.wo.relativenumber, false, "changes drawer hides relative line numbers like Fugitive status")
   assert_equal(vim.wo.cursorline, false, "changes drawer avoids an inherited blue cursor-line background")
+  assert_equal(review.open(thread), drawer, "reopening a thread reuses its changes buffer")
+  assert_equal(#vim.fn.win_findbuf(drawer), 1, "reopening a visible changes drawer does not duplicate its window")
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("2/2", 1, true), "latest turn history position")
   vim.api.nvim_win_set_cursor(0, { 5, 0 })
   local menu_items, menu_opts, menu_callback
@@ -144,8 +186,12 @@ function M.run()
   assert_equal(vim.fn.maparg("?", "n", false, true).desc, "Open LazyAgent ACP changes action menu", "changes menu mapping")
   local next_diff_action
   for _, item in ipairs(menu_items) do if item.key == "i" then next_diff_action = item end end
+  vim.cmd("aboveleft new")
+  local unrelated_winid = vim.api.nvim_get_current_win()
   menu_callback(next_diff_action)
   vim.wait(100)
+  assert_equal(vim.api.nvim_get_current_buf(), drawer, "changes menu restores drawer context before executing an action")
+  vim.api.nvim_win_close(unrelated_winid, true)
   assert((vim.api.nvim_get_current_line() or ""):match("^@@"), "menu executes inline diff action")
   local first_hunk_row = vim.api.nvim_win_get_cursor(0)[1]
   vim.api.nvim_feedkeys("i", "x", false)
@@ -265,6 +311,18 @@ function M.run()
   vim.wait(100)
   assert_equal(vim.fn.tabpagenr("$"), tabs_before, "q closes the whole diff tab")
   assert_equal(vim.api.nvim_get_current_buf(), drawer, "q returns to the changes drawer")
+
+  local binary_tabs_before = vim.fn.tabpagenr("$")
+  assert_equal(review.open_change(thread, turn, turn.changes[2], 2), true, "open binary change")
+  local first_binary_name = vim.api.nvim_buf_get_name(0)
+  assert_equal(review.open_change(thread, turn, turn.changes[2], 2), true, "reopen binary change")
+  local second_binary_name = vim.api.nvim_buf_get_name(0)
+  assert(first_binary_name ~= second_binary_name, "repeated binary reviews use collision-free scratch buffers")
+  assert_equal(vim.fn.tabpagenr("$"), binary_tabs_before + 2, "binary reviews open independent tabs")
+  vim.cmd("tabclose")
+  vim.cmd("tabclose")
+  assert_equal(vim.api.nvim_get_current_buf(), drawer, "binary review tabs return to the changes drawer")
+
   live_thread = vim.deepcopy(thread)
   live_thread.change_journal.turns[#live_thread.change_journal.turns + 1] = {
     turn_id = "thread-1:3", state = "active",
@@ -286,6 +344,18 @@ function M.run()
   assert_equal(menu_items[#menu_items].key, "q", "changes action menu lists close action")
   menu_callback(menu_items[#menu_items])
   assert_equal(vim.fn.bufwinid(drawer), -1, "changes action menu executes close action")
+
+  local calls_while_visible = get_thread_calls
+  vim.api.nvim_exec_autocmds("User", {
+    pattern = "LazyAgentChangeJournal", data = { thread_id = "thread-1", turn_id = "thread-1:3", state = "active" },
+  })
+  vim.wait(100)
+  assert_equal(get_thread_calls, calls_while_visible, "hidden changes drawer defers live refresh")
+  vim.cmd("botright split")
+  vim.api.nvim_win_set_buf(0, drawer)
+  vim.wait(100)
+  assert_equal(get_thread_calls, calls_while_visible + 1, "reopened changes drawer catches up once")
+  vim.cmd("close")
   vim.api.nvim_buf_delete(drawer, { force = true })
 
   local missing_change = { operation = "modified", path = "lua/missing.lua", before_blob = "before-a" }
@@ -295,6 +365,29 @@ function M.run()
   assert_equal(review.open_change(thread, turn, missing_change, 1), false, "missing modified side is not opened as empty")
   vim.notify = previous_notify
   assert(tostring(notification):find("after blob is unavailable", 1, true), "missing modified blob is reported explicitly")
+
+  local empty_thread = {
+    thread_id = "thread-empty",
+    title = "Empty active turn",
+    change_journal = { turns = {
+      { turn_id = "thread-empty:1", changes = { { operation = "added", path = "old.lua", after_blob = "after-a" } } },
+      { turn_id = "thread-empty:2", state = "active" },
+    } },
+  }
+  local empty_drawer = assert(review.open(empty_thread))
+  assert(vim.api.nvim_buf_get_lines(empty_drawer, 1, 2, false)[1]:find("0 file(s)", 1, true),
+    "active turn can be displayed before its first file change")
+  local active_select = vim.ui.select
+  vim.ui.select = function(items, _, callback) callback(items[#items]) end
+  for _, key in ipairs({ "a", "A", "r", "R", "h", "u", "U", "b" }) do
+    local mapping = vim.fn.maparg(key, "n", false, true)
+    assert(type(mapping.callback) == "function", "empty turn keeps " .. key .. " mapping")
+    local ok, err = pcall(mapping.callback)
+    assert(ok, string.format("%s is a no-op on an empty active turn: %s", key, tostring(err)))
+  end
+  vim.ui.select = active_select
+  vim.cmd("close")
+  vim.api.nvim_buf_delete(empty_drawer, { force = true })
 end
 
 return M

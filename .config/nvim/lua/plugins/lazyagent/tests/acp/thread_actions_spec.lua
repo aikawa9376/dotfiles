@@ -243,6 +243,18 @@ function M.run()
     transcript_path = cockpit_transcript_path,
     metadata = { has_user_prompt = true },
   }
+  local FILTER_ID = "123e4567-e89b-42d3-a456-426614174096"
+  local filter_transcript_path = vim.fn.tempname() .. "-cockpit-filter-transcript.log"
+  vim.fn.writefile({ "# User", "Filtered preview thread", "", "# Assistant", "archived answer" }, filter_transcript_path)
+  records[FILTER_ID] = {
+    thread_id = FILTER_ID,
+    provider_id = "Codex",
+    title = "Codex",
+    cwd = "/tmp/filtered",
+    status = "closed",
+    transcript_path = filter_transcript_path,
+    metadata = { has_user_prompt = true },
+  }
   -- Sessions started without a pre-created thread keep their provider-only key,
   -- even after the ACP backend assigns a persisted thread UUID.
   local session_key = "Codex"
@@ -335,6 +347,26 @@ function M.run()
   local latest_lines = vim.api.nvim_buf_get_lines(cockpit_preview_bufnr, 0, -1, false)
   assert(table.concat(latest_lines, "\n"):find("ready", 1, true), "cockpit enter toggles back to latest response")
 
+  local original_input = vim.ui.input
+  vim.ui.input = function(_, callback) callback("Filtered preview thread") end
+  vim.cmd("normal /")
+  vim.ui.input = original_input
+  local filtered_cockpit = table.concat(vim.api.nvim_buf_get_lines(cockpit_bufnr, 0, -1, false), "\n")
+  assert(filtered_cockpit:find("## /tmp/filtered", 1, true), "cockpit filter matches rendered transcript prompt")
+  assert(not filtered_cockpit:find("Live thread", 1, true), "cockpit filter removes the previous selection")
+  local filtered_preview = table.concat(vim.api.nvim_buf_get_lines(cockpit_preview_bufnr, 0, -1, false), "\n")
+  assert(filtered_preview:find("archived answer", 1, true), "filtered cockpit previews its visible thread")
+  vim.ui.input = function(_, callback) callback("") end
+  vim.cmd("normal /")
+  vim.ui.input = original_input
+  for line, text in ipairs(vim.api.nvim_buf_get_lines(cockpit_bufnr, 0, -1, false)) do
+    if text:find("Live thread", 1, true) then
+      vim.api.nvim_win_set_cursor(0, { line, 0 })
+      break
+    end
+  end
+  vim.api.nvim_exec_autocmds("CursorMoved", { buffer = cockpit_bufnr })
+
   local menu_items, menu_opts, menu_callback
   local menu_select = vim.ui.select
   vim.ui.select = function(items, opts, callback)
@@ -367,6 +399,8 @@ function M.run()
   pcall(vim.api.nvim_buf_delete, other_acp_bufnr, { force = true })
   pcall(vim.api.nvim_buf_delete, selected_acp_bufnr, { force = true })
   vim.fn.delete(cockpit_transcript_path)
+  vim.fn.delete(filter_transcript_path)
+  records[FILTER_ID] = nil
   pcall(vim.api.nvim_buf_delete, vim.fn.bufnr(source_path), { force = true })
   vim.fn.delete(workspace, "rf")
 end
