@@ -23,7 +23,11 @@ local function add(cmdargs)
   if text ~= "" then
     save(text)
   else
-    vim.ui.input({ prompt = "LazyAgent Note: " }, save)
+    notes.open_editor({
+      bufnr = bufnr,
+      start_line = cmdargs.line1,
+      end_line = cmdargs.line2,
+    })
   end
 end
 
@@ -35,6 +39,9 @@ function M.register(create)
   })
   create("LazyAgentNotes", function() notes.open() end, {
     desc = "Open saved AI Notes for the current workspace",
+  })
+  create("LazyAgentNoteShow", function() notes.show_at_cursor() end, {
+    desc = "Show saved AI Notes at the cursor in a float",
   })
   create("LazyAgentNotesClear", function()
     local count = notes.clear()
