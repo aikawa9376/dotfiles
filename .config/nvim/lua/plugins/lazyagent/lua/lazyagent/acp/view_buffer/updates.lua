@@ -307,6 +307,9 @@ function M.new(ctx)
         smooth_scroll.stop_for_buffer(bufnr)
         local pane_id = buffer_var(bufnr, "lazyagent_acp_pane_id")
         cleanup_markdown_rendering(bufnr)
+        vim.schedule(function()
+          cleanup_markdown_rendering(bufnr)
+        end)
         if pane_id ~= nil and pane_buffers[tostring(pane_id)] == bufnr then
           pane_buffers[tostring(pane_id)] = nil
         end
