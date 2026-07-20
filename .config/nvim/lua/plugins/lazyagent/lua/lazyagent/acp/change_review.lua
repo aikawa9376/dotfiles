@@ -9,6 +9,8 @@ local operation_marker = {
 }
 
 local change_namespace = vim.api.nvim_create_namespace("LazyAgentACPChanges")
+local PRIORITY_BG = 200
+local PRIORITY_SYNTAX = 210
 
 local operation_highlight = {
   added = "LazyAgentACPChangesAdded",
@@ -129,6 +131,18 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
     history = string.format(" · %d/%d · [t/]t previous/next", turn_index, turn_count)
   end
   local live = turn.state == "active" and " · live" or ""
+  local turn_annotations = ReviewAnnotations.for_turn(turn)
+  local has_final = false
+  local general_notes = 0
+  for _, annotation in ipairs(turn_annotations) do
+    if annotation.kind == "explanation" then
+      has_final = true
+    else
+      general_notes = general_notes + 1
+    end
+  end
+  local annotation_status = has_final and " · 📝 final" or ""
+  if general_notes > 0 then annotation_status = annotation_status .. " · 💬" .. general_notes end
   local lines = {
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
     string.format(
@@ -136,9 +150,9 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
       turn.turn_id or "unknown",
       #(turn.changes or {}),
       history .. live,
-      #ReviewAnnotations.for_turn(turn) > 0 and (" · 💬" .. #ReviewAnnotations.for_turn(turn)) or ""
+      annotation_status
     ),
-    "`?` actions  `K` note  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "`?` actions  `K` note/final  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
   }
   local change_rows = {}
@@ -245,12 +259,12 @@ local function apply_inline_highlights(bufnr)
       local old_start, old_end, new_start, new_end = changed_span(old.text:sub(2), new.text:sub(2))
       if old_start < old_end then
         vim.api.nvim_buf_set_extmark(bufnr, change_namespace, old.row, old_start, {
-          end_col = old_end, hl_group = "LazyAgentACPChangesDiffDeleteText", priority = 210,
+          end_col = old_end, hl_group = "LazyAgentACPChangesDiffDeleteText", priority = PRIORITY_SYNTAX + 150,
         })
       end
       if new_start < new_end then
         vim.api.nvim_buf_set_extmark(bufnr, change_namespace, new.row, new_start, {
-          end_col = new_end, hl_group = "LazyAgentACPChangesDiffAddText", priority = 210,
+          end_col = new_end, hl_group = "LazyAgentACPChangesDiffAddText", priority = PRIORITY_SYNTAX + 150,
         })
       end
     end
@@ -261,18 +275,20 @@ local function apply_inline_highlights(bufnr)
     if line:match("^@@") then
       flush()
       vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
-        end_col = #line, hl_group = "LazyAgentACPChangesDiffHunk",
+        end_col = #line, hl_group = "LazyAgentACPChangesDiffHunk", priority = PRIORITY_BG,
       })
     elseif line:sub(1, 1) == "-" and not line:match("^%-%-%-") then
       if #added > 0 then flush() end
       deleted[#deleted + 1] = { row = zero_row, text = line }
       vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
         end_row = zero_row + 1, end_col = 0, hl_group = "LazyAgentACPChangesDiffDelete", hl_eol = true,
+        priority = PRIORITY_BG,
       })
     elseif line:sub(1, 1) == "+" and not line:match("^%+%+%+") then
       added[#added + 1] = { row = zero_row, text = line }
       vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
         end_row = zero_row + 1, end_col = 0, hl_group = "LazyAgentACPChangesDiffAdd", hl_eol = true,
+        priority = PRIORITY_BG,
       })
     else
       flush()
@@ -303,7 +319,7 @@ local function apply_code_capture_highlights(bufnr, code_lines, line_map, langua
     local buffer_start = line_map[start_row + 1]
     if buffer_start then
       local buffer_end = line_map[end_row + 1] or buffer_start
-      local priority = (tonumber(metadata and metadata.priority) or 100) + 50
+      local priority = (tonumber(metadata and metadata.priority) or 100) + PRIORITY_SYNTAX
       pcall(vim.api.nvim_buf_set_extmark, bufnr, change_namespace, buffer_start, start_col + 1, {
         end_row = buffer_end,
         end_col = end_col + 1,
@@ -545,6 +561,9 @@ function M.new(opts)
     vim.bo[bufnr].filetype = "lazyagent_changes"
     vim.cmd("botright split")
     vim.api.nvim_win_set_buf(0, bufnr)
+    vim.wo.number = false
+    vim.wo.relativenumber = false
+    vim.wo.cursorline = false
 
     local function current_inline_diffs()
       local key = tostring(turn.turn_id or turn_index)
@@ -651,7 +670,7 @@ function M.new(opts)
       toggle_inline(change_index_at_cursor(), false)
     end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
     local function annotations_at(row)
-      if row == 2 then return ReviewAnnotations.for_turn(turn), "Turn explanation" end
+      if row == 2 then return ReviewAnnotations.for_turn(turn), "Final answer" end
       local index = line_changes[row]
       local change = index and turn.changes[index] or nil
       if not change then return {}, "Changes note" end
