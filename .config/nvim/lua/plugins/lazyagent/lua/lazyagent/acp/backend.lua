@@ -1423,8 +1423,8 @@ local function create_backend(default_view)
     return thread, true
   end
 
-  function backend.update_thread(thread_id, changes)
-    local updated, err = thread_store:update(thread_id, changes)
+  function backend.update_thread(thread_id, changes, opts)
+    local updated, err = thread_store:update(thread_id, changes, opts)
     if not updated then
       return nil, err
     end

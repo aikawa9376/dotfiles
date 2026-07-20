@@ -39,6 +39,21 @@ function M.run()
     records[thread_id].title = title
     return vim.deepcopy(records[thread_id])
   end
+  function backend.update_thread(thread_id, changes, opts)
+    local record = records[thread_id]
+    if not record then return nil, "not found" end
+    if opts and opts.expected_process_id ~= nil and record.process_id ~= opts.expected_process_id then
+      return nil, { code = "stale_process" }
+    end
+    for key, value in pairs(changes or {}) do
+      if value == vim.NIL then
+        record[key] = nil
+      else
+        record[key] = vim.deepcopy(value)
+      end
+    end
+    return vim.deepcopy(record)
+  end
   function backend.delete_thread(thread_id)
     records[thread_id] = nil
     return true
@@ -199,6 +214,16 @@ function M.run()
   assert_equal(opened, nil, "foreign live thread does not launch duplicate")
   assert_equal(actions.archive_thread(THREAD_ID), false, "active archive guard")
   assert_equal(actions.delete_thread(THREAD_ID), false, "active delete guard")
+  local preserved_metadata = records[THREAD_ID].metadata
+  records[THREAD_ID].process_id = 2147483647
+  assert_equal(actions.close_disconnected_thread(THREAD_ID), true, "recover disconnected thread")
+  assert_equal(records[THREAD_ID].status, "closed", "recovered thread status")
+  assert_equal(records[THREAD_ID].process_id, nil, "recovered thread process detachment")
+  assert_equal(records[THREAD_ID].metadata, preserved_metadata, "recovery preserves thread data")
+  records[THREAD_ID].status = "active"
+  records[THREAD_ID].process_id = vim.fn.getpid()
+  assert_equal(actions.close_disconnected_thread(THREAD_ID), false, "live process recovery guard")
+  assert_equal(records[THREAD_ID].status, "active", "live process remains active")
   local stale_transcript_path = vim.fn.tempname() .. "-stale-thread-transcript.log"
   vim.fn.writefile({ "# User", "stale" }, stale_transcript_path)
   records[THREAD_ID].transcript_path = stale_transcript_path

@@ -389,7 +389,7 @@ Cockpitの`i`は選択中のlive thread専用scratch popupを開き、既存のs
 
 active threadはruntime snapshotとjoinされ、statusをrunning / waiting / permission / idle / disconnectedへ正規化し、current modelとcumulative token/costもcardへ表示します。
 
-Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`D` force delete、`X` running ACP process一括stopを使えます。stopとdeleteは確認後に実行します。停止済みの履歴自体を消す場合は`d`を使います。異常終了で`process_id`だけが残り通常削除できないthreadは`D`で強制削除でき、同じNeovim内にprocessが残っている場合は先に停止します。
+Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`D` force delete、`X` running ACP process一括stopを使えます。`x`はlive processを確認後に停止し、disconnected threadでは保存PIDが存在しない場合だけ履歴を保持したまま`closed`へ修復します。停止済みの履歴自体を消す場合は`d`を使います。processが残っているthreadを履歴ごと破棄する場合だけ`D`を使います。
 
 agentmux publish時のpane/owner/kind/name/state/message/preview identityはactive threadの`metadata.agentmux`にも保存され、Neovim runtimeが無い場合のCockpit status fallbackとして利用されます。
 
