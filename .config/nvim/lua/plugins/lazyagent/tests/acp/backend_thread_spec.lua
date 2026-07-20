@@ -119,6 +119,12 @@ function M.run()
   }))
   local pending = backend.get_pending_permission(pane_id)
   assert_equal(pending.tool_call_id, "tool-1", "pending permission tool")
+  local persisted_during_turn = assert(backend.get_thread(runtime.acp_thread_id))
+  local live_during_turn = assert(backend.get_thread(runtime.acp_thread_id, { include_live = true }))
+  local persisted_turns = persisted_during_turn.change_journal.turns or {}
+  local live_turns = live_during_turn.change_journal.turns or {}
+  assert_equal(#live_turns, #persisted_turns + 1, "live thread snapshot includes the unpersisted active turn")
+  assert_equal(live_turns[#live_turns].state, "active", "live thread snapshot exposes active turn state")
   assert_equal(assert(store:get(runtime.acp_thread_id)).metadata.has_user_prompt, true, "first prompt persistence marker")
   assert(vim.tbl_contains(vim.tbl_map(function(choice) return choice.scope end, pending.choices), "project"),
     "pending permission project scope")

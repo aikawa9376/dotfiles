@@ -12,11 +12,21 @@ function M.run()
   local records = {}
   local opened
   local changes_thread_id
+  local changes_backend
   local create_request
   local state = { backends = {}, editor_instance_id = "test-nvim" }
   local backend = {}
+  local live_records = {}
+  local live_backend = {}
   state.backends.buffer_acp = backend
+  state.backends.tmux_acp = live_backend
   function backend.get_thread(thread_id)
+    return records[thread_id]
+  end
+  function live_backend.get_thread(thread_id, opts)
+    if opts and opts.include_live then
+      return live_records[thread_id] or records[thread_id]
+    end
     return records[thread_id]
   end
   function backend.create_thread(attributes)
@@ -78,7 +88,13 @@ function M.run()
   end
   function backend.show_thread_changes(thread_id)
     changes_thread_id = thread_id
+    changes_backend = "buffer_acp"
     return records[thread_id] ~= nil
+  end
+  function live_backend.show_thread_changes(thread_id)
+    changes_thread_id = thread_id
+    changes_backend = "tmux_acp"
+    return live_records[thread_id] ~= nil or records[thread_id] ~= nil
   end
 
   local actions = require("lazyagent.logic.session.threads").setup({
@@ -142,11 +158,21 @@ function M.run()
   assert_equal(vim.api.nvim_buf_get_name(opened.source_bufnr), source_path, "closed thread restores source anchor")
 
   local FOREIGN_ID = "123e4567-e89b-42d3-a456-426614174099"
-  records[THREAD_ID].change_journal = { turns = { { changes = { { path = "source.lua" } } } } }
+  records[THREAD_ID].change_journal = { turns = {} }
   records[THREAD_ID].metadata.editor.owner_pid = vim.fn.getpid()
   records[THREAD_ID].metadata.editor.instance_id = "test-nvim"
   records[THREAD_ID].status = "active"
   records[THREAD_ID].process_id = 42
+  live_records[THREAD_ID] = vim.deepcopy(records[THREAD_ID])
+  live_records[THREAD_ID].change_journal = { turns = { { changes = { { path = "source.lua" } } } } }
+  state.sessions = {
+    Codex = {
+      pane_id = "acp:live-preview",
+      backend = "tmux_acp",
+      provider_id = "Codex",
+      thread_id = THREAD_ID,
+    },
+  }
   records[FOREIGN_ID] = {
     thread_id = FOREIGN_ID,
     provider_id = "Codex",
@@ -170,9 +196,11 @@ function M.run()
   local previous_select = vim.ui.select
   rawset(vim.ui, "select", function(items) selected_threads = items end)
   changes_thread_id = nil
-  assert_equal(actions.show_thread_changes(), true, "show current Neovim changes")
+  changes_backend = nil
+  assert_equal(actions.show_thread_changes(), true, "show current Neovim live preview changes")
   assert_equal(selected_threads, nil, "single live changed thread skips picker")
   assert_equal(changes_thread_id, THREAD_ID, "single changed thread opens directly")
+  assert_equal(changes_backend, "tmux_acp", "live changes use the owning session backend")
 
   local SECOND_ID = "123e4567-e89b-42d3-a456-426614174098"
   records[SECOND_ID] = {
@@ -185,12 +213,20 @@ function M.run()
     metadata = { editor = { instance_id = "test-nvim", owner_pid = vim.fn.getpid() } },
     change_journal = { turns = { { changes = { { path = "second.lua" } } } } },
   }
+  state.sessions.Second = {
+    pane_id = "acp:persisted-preview",
+    backend = "buffer_acp",
+    provider_id = "Codex",
+    thread_id = SECOND_ID,
+  }
   selected_threads = nil
   assert_equal(actions.show_thread_changes(), true, "show multiple current Neovim changes")
   rawset(vim.ui, "select", previous_select)
   assert_equal(selected_threads and #selected_threads, 2, "multiple live changed threads keep picker")
   assert(not vim.tbl_contains(selected_threads or {}, records[STOPPED_ID]), "stopped changed thread is excluded")
   records[SECOND_ID] = nil
+  live_records[THREAD_ID] = nil
+  state.sessions = {}
   records[STOPPED_ID] = nil
   records[FOREIGN_ID] = nil
 
