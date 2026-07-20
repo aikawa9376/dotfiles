@@ -1,4 +1,5 @@
 local M = {}
+local ReviewAnnotations = require("lazyagent.acp.review_annotations")
 
 local operation_marker = {
   added = "A",
@@ -39,6 +40,7 @@ local function setup_highlights()
     link = rich and "FugitiveExtDeleteText" or "DiffText", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffHunk", { link = "DiffChange", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesNote", { link = "DiagnosticInfo", default = true })
 end
 
 local function latest_changed_turn(thread)
@@ -120,8 +122,14 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   end
   local lines = {
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
-    string.format("Turn %s · %d file(s)%s", turn.turn_id or "unknown", #(turn.changes or {}), history),
-    "`?` actions  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    string.format(
+      "Turn %s · %d file(s)%s%s",
+      turn.turn_id or "unknown",
+      #(turn.changes or {}),
+      history,
+      #ReviewAnnotations.for_turn(turn) > 0 and (" · 💬" .. #ReviewAnnotations.for_turn(turn)) or ""
+    ),
+    "`?` actions  `K` note  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
   }
   local change_rows = {}
@@ -139,13 +147,16 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
       end
     end
     local hunk_state = decided_hunks > 0 and string.format(" [hunks %d/%d]", decided_hunks, #change.hunks) or ""
+    local note_count = #ReviewAnnotations.for_change(turn, change)
+    local notes = note_count > 0 and (" 💬" .. note_count) or ""
     lines[#lines + 1] = string.format(
-      "%s  %s%s%s%s",
+      "%s  %s%s%s%s%s",
       operation_marker[change.operation] or "?",
       display_path(change),
       binary,
       decision,
-      hunk_state
+      hunk_state,
+      notes
     )
     change_rows[index] = #lines
     line_changes[#lines] = index
@@ -167,6 +178,32 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
     end
   end
   return lines, change_rows, line_changes, line_targets
+end
+
+local function open_annotation_float(annotations, title)
+  local lines = ReviewAnnotations.markdown(annotations)
+  if #lines == 0 then return false end
+  local width = math.min(math.max(48, math.floor(vim.o.columns * 0.55)), vim.o.columns - 4)
+  local height = math.min(math.max(4, #lines), math.max(4, math.floor(vim.o.lines * 0.55)))
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  vim.bo[bufnr].buftype = "nofile"
+  vim.bo[bufnr].bufhidden = "wipe"
+  vim.bo[bufnr].swapfile = false
+  vim.bo[bufnr].filetype = "markdown"
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+  vim.bo[bufnr].modifiable = false
+  local winid = vim.api.nvim_open_win(bufnr, true, {
+    relative = "cursor", row = 1, col = 1, width = width, height = height,
+    style = "minimal", border = "rounded", title = " " .. title .. " ", title_pos = "center",
+  })
+  vim.wo[winid].wrap = true
+  vim.wo[winid].conceallevel = 2
+  local close = function()
+    if vim.api.nvim_win_is_valid(winid) then vim.api.nvim_win_close(winid, true) end
+  end
+  vim.keymap.set("n", "q", close, { buffer = bufnr, nowait = true, silent = true })
+  vim.keymap.set("n", "<Esc>", close, { buffer = bufnr, nowait = true, silent = true })
+  return true
 end
 
 function M.drawer_lines(thread, turn, turn_index, turn_count, inline_diffs)
@@ -307,7 +344,7 @@ local function apply_inline_code_highlights(bufnr, turn, change_rows)
   end
 end
 
-function M.apply_drawer_highlights(bufnr, turn, change_rows)
+function M.apply_drawer_highlights(bufnr, turn, change_rows, line_changes, line_targets)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return false
   end
@@ -364,6 +401,21 @@ function M.apply_drawer_highlights(bufnr, turn, change_rows)
           hl_group = approved and "LazyAgentACPChangesApproved" or "LazyAgentACPChangesRejected",
           priority = 110,
         })
+      end
+    end
+  end
+  local seen = {}
+  for row = 1, vim.api.nvim_buf_line_count(bufnr) do
+    local index = line_changes and line_changes[row]
+    local change = turn.changes and turn.changes[index]
+    if change and row ~= change_rows[index] then
+      for _, annotation in ipairs(ReviewAnnotations.for_change(turn, change, line_targets and line_targets[row])) do
+        if annotation.target.start_line and not seen[annotation.id] then
+          seen[annotation.id] = true
+          vim.api.nvim_buf_set_extmark(bufnr, change_namespace, row - 1, 0, {
+            virt_text = { { " 💬", "LazyAgentACPChangesNote" } }, virt_text_pos = "eol",
+          })
+        end
       end
     end
   end
@@ -523,7 +575,7 @@ function M.new(opts)
       vim.bo[bufnr].modifiable = true
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       vim.bo[bufnr].modifiable = false
-      M.apply_drawer_highlights(bufnr, turn, change_rows)
+      M.apply_drawer_highlights(bufnr, turn, change_rows, line_changes, line_targets)
     end
     render()
 
@@ -589,6 +641,72 @@ function M.new(opts)
     vim.keymap.set("n", "=", function()
       toggle_inline(change_index_at_cursor(), false)
     end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
+    local function annotations_at(row)
+      if row == 2 then return ReviewAnnotations.for_turn(turn), "Turn explanation" end
+      local index = line_changes[row]
+      local change = index and turn.changes[index] or nil
+      if not change then return {}, "Changes note" end
+      local line = row ~= change_rows[index] and line_targets[row] or nil
+      return ReviewAnnotations.for_change(turn, change, line), display_path(change)
+    end
+    local function show_annotation()
+      local annotations, title = annotations_at(vim.api.nvim_win_get_cursor(0)[1])
+      if not open_annotation_float(annotations, title) then
+        vim.notify("LazyAgent ACP: no note at cursor", vim.log.levels.INFO)
+      end
+    end
+    vim.keymap.set("n", "K", show_annotation, {
+      buffer = bufnr, silent = true, desc = "Show LazyAgent ACP change note",
+    })
+    vim.keymap.set("n", "<Space><Space>", show_annotation, {
+      buffer = bufnr, silent = true, desc = "Show LazyAgent ACP change note",
+    })
+    local function annotation_rows()
+      local rows, seen = {}, {}
+      local function add(row, annotations)
+        for _, annotation in ipairs(annotations) do
+          if not seen[annotation.id] then
+            seen[annotation.id] = true
+            rows[#rows + 1] = row
+          end
+        end
+      end
+      add(2, ReviewAnnotations.for_turn(turn))
+      for index, change in ipairs(turn.changes or {}) do
+        local matched = false
+        for row = 1, vim.api.nvim_buf_line_count(bufnr) do
+          local row_index = line_changes[row]
+          if row_index == index and row ~= change_rows[index] then
+            local notes = ReviewAnnotations.for_change(turn, change, line_targets[row])
+            if #notes > 0 then add(row, notes); matched = true end
+          end
+        end
+        if not matched then add(change_rows[index], ReviewAnnotations.for_change(turn, change)) end
+      end
+      table.sort(rows)
+      return rows
+    end
+    local function jump_annotation(direction)
+      local row, rows = vim.api.nvim_win_get_cursor(0)[1], annotation_rows()
+      if #rows == 0 then return end
+      if direction > 0 then
+        for _, target in ipairs(rows) do
+          if target > row then vim.api.nvim_win_set_cursor(0, { target, 0 }); return end
+        end
+        vim.api.nvim_win_set_cursor(0, { rows[1], 0 })
+      else
+        for index = #rows, 1, -1 do
+          if rows[index] < row then vim.api.nvim_win_set_cursor(0, { rows[index], 0 }); return end
+        end
+        vim.api.nvim_win_set_cursor(0, { rows[#rows], 0 })
+      end
+    end
+    vim.keymap.set("n", "]n", function() jump_annotation(1) end, {
+      buffer = bufnr, silent = true, desc = "Next LazyAgent ACP change note",
+    })
+    vim.keymap.set("n", "[n", function() jump_annotation(-1) end, {
+      buffer = bufnr, silent = true, desc = "Previous LazyAgent ACP change note",
+    })
     local function refresh(decided_turn)
       if decided_turn then
         turn = decided_turn
@@ -746,6 +864,9 @@ function M.new(opts)
       local index = change_index_at_cursor()
       local change = index and turn.changes[index] or nil
       local items = {
+        { key = "K", description = "Show explanation or review note" },
+        { key = "]n", description = "Jump to next note" },
+        { key = "[n", description = "Jump to previous note" },
         { key = "i", description = "Open inline diff and jump to next hunk" },
         { key = "o", description = "Toggle inline diff" },
         { key = "<CR>", description = "Open changed file at corresponding line" },

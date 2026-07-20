@@ -80,7 +80,7 @@ local function legacy_file_revisions(turn)
   return revisions
 end
 
-function M.start(journal, thread_id, baseline)
+function M.start(journal, thread_id, baseline, metadata)
   journal = copy(journal)
   journal.turns = type(journal.turns) == "table" and journal.turns or {}
   local sequence = math.max(1, tonumber(journal.next_turn_sequence) or (#journal.turns + 1))
@@ -93,7 +93,11 @@ function M.start(journal, thread_id, baseline)
     file_events = {},
     file_revisions = {},
     buffer_events = {},
+    annotations = {},
   }
+  for key, value in pairs(type(metadata) == "table" and metadata or {}) do
+    turn[key] = vim.deepcopy(value)
+  end
   journal.turns[#journal.turns + 1] = turn
   journal.next_turn_sequence = sequence + 1
   return journal, copy(turn)
@@ -188,6 +192,9 @@ function M.finish(journal, turn_id, completion)
   turn.baseline = compact_snapshot(completion.baseline or turn.baseline)
   turn.final_snapshot = compact_snapshot(completion.final_snapshot)
   turn.changes = type(completion.changes) == "table" and completion.changes or {}
+  turn.annotations = require("lazyagent.acp.review_annotations").normalize_all(
+    completion.annotations or turn.annotations
+  )
   turn.capture_error = completion.capture_error
   return journal, copy(turn)
 end

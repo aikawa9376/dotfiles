@@ -177,7 +177,8 @@ local function record_turn_baseline(session)
   local journal, turn = TurnJournal.start(
     session.active_change_journal or (session.thread_record and session.thread_record.change_journal) or {},
     session.thread_id,
-    snapshot
+    snapshot,
+    { conversation_start_seq = #(session.conversation_timeline or {}) }
   )
   session.active_change_journal = journal
   session.current_change_turn_id = turn.turn_id
@@ -273,6 +274,15 @@ local function finish_change_turn(session, completion_state)
     final_snapshot = nil
   end
   local finished_at = final_snapshot and final_snapshot.captured_at or os.date("!%Y-%m-%dT%H:%M:%SZ")
+  local annotations = vim.deepcopy(active_turn.annotations or {})
+  local explanation = require("lazyagent.acp.review_annotations").latest_explanation(
+    session.conversation_timeline,
+    active_turn.conversation_start_seq,
+    conversation_helpers.item_body_text,
+    { type = "agent", name = session.agent_name },
+    finished_at
+  )
+  if explanation then annotations[#annotations + 1] = explanation end
   local finished_journal, finished_turn = TurnJournal.finish(journal, turn_id, {
     state = completion_state,
     finished_at = finished_at,
@@ -280,6 +290,7 @@ local function finish_change_turn(session, completion_state)
     final_snapshot = final_snapshot,
     changes = changes,
     capture_error = capture_error,
+    annotations = annotations,
   })
   session.current_change_turn_id = nil
   session.active_change_journal = nil

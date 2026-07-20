@@ -8,6 +8,7 @@ end
 
 function M.run()
   local ChangeReview = require("lazyagent.acp.change_review")
+  local ReviewAnnotations = require("lazyagent.acp.review_annotations")
   local thread = {
     thread_id = "thread-1",
     title = "Review fixture",
@@ -21,10 +22,17 @@ function M.run()
         },
         {
           turn_id = "thread-1:2",
+          annotations = {
+            { kind = "explanation", summary = "Turn summary", rationale = "Changed the return value." },
+            {
+              kind = "review", path = "lua/a.lua", summary = "Check this value",
+              target = { start_line = 1, end_line = 1, blob_hash = "after-hash" },
+            },
+          },
           changes = {
             {
               operation = "modified", path = "lua/a.lua", decision = "kept",
-              before_blob = "before-a", after_blob = "after-a",
+              before_blob = "before-a", after_blob = { hash = "after-hash", ref = "after-a" },
             },
             { operation = "moved", previous_path = "old.bin", path = "new.bin", binary = true, decision = "rejected" },
           },
@@ -35,12 +43,23 @@ function M.run()
   local turn = assert(ChangeReview.latest_turn(thread))
   assert_equal(turn.turn_id, "thread-1:2", "latest changed turn")
   assert_equal(#ChangeReview.changed_turns(thread), 2, "all changed turns remain reviewable")
+  local stale = ReviewAnnotations.for_change({ annotations = { {
+    path = "lua/a.lua", summary = "Old note", target = { blob_hash = "old-hash" },
+  } } }, { path = "lua/a.lua", after_blob = { hash = "new-hash" } })
+  assert_equal(stale[1].outdated, true, "blob changes mark annotations outdated")
+  local explanation = ReviewAnnotations.latest_explanation({
+    { kind = "assistant", body = "old response" },
+    { kind = "user", body = "new prompt" },
+    { kind = "assistant", body_ref = { value = "new response" }, summary = "Done" },
+  }, 1, function(item) return item.body_ref and item.body_ref.value or item.body end, { name = "Codex" })
+  assert_equal(explanation.rationale, "new response", "latest turn assistant response becomes an explanation")
+  assert_equal(explanation.author.name, "Codex", "turn explanation retains its author")
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
-    "Turn thread-1:2 · 2 file(s)",
-    "`?` actions  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "Turn thread-1:2 · 2 file(s) · 💬1",
+    "`?` actions  `K` note  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
-    "M  lua/a.lua [approved]",
+    "M  lua/a.lua [approved] 💬1",
     "R  old.bin -> new.bin [binary] [rejected]",
   }, "changed files drawer")
   local _, _, _, target_lines = ChangeReview.drawer_content(thread, turn, nil, nil, {
@@ -70,6 +89,7 @@ function M.run()
       local fillers = table.concat(vim.tbl_map(function(index)
         return "local filler" .. index .. " = " .. index
       end, { 1, 2, 3, 4, 5, 6, 7, 8 }), "\n")
+      if type(ref) == "table" then ref = ref.ref end
       return ({
         ["before-a"] = "local value = 1\n" .. fillers .. "\nreturn value\n",
         ["after-a"] = "local value = 2\n" .. fillers .. "\nreturn value + 1\n",
@@ -89,9 +109,9 @@ function M.run()
   vim.cmd("normal ?")
   vim.ui.select = original_select
   assert_equal(menu_opts.kind, "lazyagent-acp-actions", "changes action menu uses compact cursor UI")
-  assert_equal(menu_items[1].key, "i", "changes action menu lists next diff first")
+  assert_equal(menu_items[1].key, "K", "changes action menu lists notes first")
   assert_equal(vim.fn.maparg("?", "n", false, true).desc, "Open LazyAgent ACP changes action menu", "changes menu mapping")
-  menu_callback(menu_items[1])
+  menu_callback(menu_items[4])
   vim.wait(100)
   assert((vim.api.nvim_get_current_line() or ""):match("^@@"), "menu executes inline diff action")
   local first_hunk_row = vim.api.nvim_win_get_cursor(0)[1]
@@ -131,8 +151,16 @@ function M.run()
   assert(syntax_group, "inline Lua code receives Tree-sitter syntax highlights")
   assert_equal(vim.fn.maparg("i", "n", false, true).desc, "Open and jump to next LazyAgent ACP diff", "next diff mapping")
   assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
+  assert_equal(vim.fn.maparg("K", "n", false, true).desc, "Show LazyAgent ACP change note", "note mapping")
+  assert_equal(vim.fn.maparg("]n", "n", false, true).desc, "Next LazyAgent ACP change note", "next note mapping")
   assert_equal(vim.fn.maparg("=", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
   vim.api.nvim_win_set_cursor(0, { 5, 0 })
+  vim.api.nvim_feedkeys("K", "x", false)
+  vim.wait(100)
+  assert_equal(vim.bo.filetype, "markdown", "K opens a markdown note float")
+  assert(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"):find("Check this value", 1, true), "note body")
+  vim.api.nvim_feedkeys("q", "x", false)
+  vim.wait(100)
   vim.api.nvim_feedkeys("o", "x", false)
   vim.wait(100)
   assert(not table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n"):find("@@", 1, true), "inline diff closes")
