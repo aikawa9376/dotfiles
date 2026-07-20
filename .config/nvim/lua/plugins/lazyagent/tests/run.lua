@@ -19,6 +19,7 @@ local suites = {
   "tests.acp.mobile_security_spec",
   "tests.acp.mobile_server_spec",
   "tests.acp.message_stream_spec",
+  "tests.acp.conversation_summary_spec",
   "tests.acp.content_blocks_spec",
   "tests.acp.context_item_spec",
   "tests.acp.prompt_blocks_spec",
