@@ -46,6 +46,21 @@ function M.run()
   assert_equal(notes.count({ source_bufnr = bufnr }), 0, "Notes cleared after consume")
   assert_equal(#vim.api.nvim_buf_get_extmarks(bufnr, notes.namespace, 0, -1, {}), 0, "consumed extmark removed")
 
+  local editor_buf, editor_win = notes.open_editor({ bufnr = bufnr, start_line = 1, end_line = 2 })
+  assert_equal(vim.b[editor_buf].lazyagent_note_editor, true, "long-form Note editor marker")
+  assert_equal(vim.api.nvim_win_is_valid(editor_win), true, "long-form Note editor window")
+  vim.api.nvim_buf_set_lines(editor_buf, 0, -1, false, { "Explain why this works.", "Then simplify the implementation." })
+  local long_note = assert(notes.submit_editor(editor_buf))
+  assert_equal(long_note.text, "Explain why this works.\nThen simplify the implementation.", "multiline Note text")
+  assert_equal(notes.count({ source_bufnr = bufnr }), 1, "long-form editor saves Note")
+  local long_rendered = notes.render({ source_bufnr = bufnr })
+  contains(long_rendered, "Explain why this works.\n  Then simplify the implementation.", "multiline Note expansion")
+  assert_equal(notes.show_at_cursor({ bufnr = bufnr, lnum = 1 }), true, "focused Note preview")
+  local preview_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_exec_autocmds("CursorMoved", { buffer = vim.api.nvim_get_current_buf() })
+  assert_equal(vim.api.nvim_win_is_valid(preview_win), true, "focused preview remains scrollable")
+  notes._reset()
+
   local available = transforms.available_tokens({ source_bufnr = bufnr })
   for _, token in ipairs(available) do
     if token.name == "notes" then error("#notes should be hidden when the workspace has no Notes") end
