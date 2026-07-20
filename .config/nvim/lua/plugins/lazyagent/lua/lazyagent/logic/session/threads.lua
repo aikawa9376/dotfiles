@@ -786,7 +786,7 @@ function M.setup(deps)
       return current_root
     end
 
-    local function mirror_snapshot(thread)
+    local function mirror_snapshot(thread, known_signature)
       local agent_name = thread_agents[thread.thread_id]
       local session = agent_name and state.sessions and state.sessions[agent_name] or nil
       local active_backend = session and state.backends and state.backends[session.backend]
@@ -802,11 +802,13 @@ function M.setup(deps)
 
       local path = thread.transcript_path
       if path and path ~= "" and vim.fn.filereadable(path) == 1 then
+        local signature = table.concat({
+          "file", tostring(thread.thread_id), tostring(vim.fn.getftime(path)), tostring(vim.fn.getfsize(path)),
+        }, ":")
+        if signature == known_signature then return nil, signature end
         local ok, lines = pcall(vim.fn.readfile, path)
         if ok and lines then
-          return lines, table.concat({
-            "file", tostring(thread.thread_id), tostring(vim.fn.getftime(path)), tostring(vim.fn.getfsize(path)),
-          }, ":")
+          return lines, signature
         end
       end
       return { "_No persisted transcript is available for this thread._" }, "empty:" .. tostring(thread.thread_id)
@@ -857,8 +859,9 @@ function M.setup(deps)
         title = vim.fn.strcharpart(title:gsub("%s+", " "), 0, 72)
         if preview_mode == "mirror" then
           local signature
-          lines, signature = mirror_snapshot(thread)
-          if not force and preview_thread_id == thread.thread_id and preview_signature == signature then return end
+          local known_signature = not force and preview_thread_id == thread.thread_id and preview_signature or nil
+          lines, signature = mirror_snapshot(thread, known_signature)
+          if not lines or known_signature == signature then return end
           preview_thread_id = thread.thread_id
           preview_signature = signature
           if #lines == 0 then lines = { "_The transcript is currently empty._" } end
@@ -938,37 +941,42 @@ function M.setup(deps)
       elseif current_open_thread_id and not runtimes[current_open_thread_id] then
         current_open_thread_id = nil
       end
+      local render_opts = {
+        width = cockpit_width(),
+        open_thread_id = current_open_thread_id,
+        owner_pid = vim.fn.getpid(),
+        owner_instance_id = state.editor_instance_id,
+        current_root = current_root,
+      }
       lines, line_map, highlights = require("lazyagent.acp.cockpit").render(
-        require("lazyagent.acp.cockpit").filter(stored_threads, query),
+        require("lazyagent.acp.cockpit").filter(stored_threads, query, runtimes, render_opts),
         runtimes,
-        {
-          width = cockpit_width(),
-          open_thread_id = current_open_thread_id,
-          owner_pid = vim.fn.getpid(),
-          owner_instance_id = state.editor_instance_id,
-          current_root = current_root,
-        }
+        render_opts
       )
       local conflicts = require("lazyagent.acp.cockpit").conflicts(stored_threads)
       local conflict_hash = vim.fn.sha256(vim.inspect(conflicts))
       if next(conflicts) and conflict_hash ~= warned_conflicts then
         warned_conflicts = conflict_hash
         vim.notify("LazyAgent ACP: active threads share changed files in the same workspace", vim.log.levels.WARN)
+      elseif not next(conflicts) then
+        warned_conflicts = ""
       end
       vim.bo[bufnr].modifiable = true
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
       vim.bo[bufnr].modifiable = false
       vim.bo[bufnr].modified = false
       require("lazyagent.acp.cockpit").apply_highlights(bufnr, highlights)
+      local restored_selection = false
       if selected_id and vim.api.nvim_win_is_valid(cockpit_winid) then
         for line, id in pairs(line_map) do
           if id == selected_id then
             vim.api.nvim_win_set_cursor(cockpit_winid, { line, 0 })
+            restored_selection = true
             break
           end
         end
       end
-      update_preview(selected_id)
+      update_preview(restored_selection and selected_id or selected_thread_id())
       update_acp_backgrounds()
       refreshing = false
     end
@@ -1221,7 +1229,10 @@ function M.setup(deps)
           local mapping = vim.fn.maparg(choice.key, "n", false, true)
           callback = type(mapping) == "table" and mapping.callback or nil
         end)
-        if type(callback) == "function" then callback() end
+        if type(callback) == "function" and vim.api.nvim_win_is_valid(cockpit_winid) then
+          vim.api.nvim_set_current_win(cockpit_winid)
+          callback()
+        end
       end)
     end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit action menu" })
     vim.api.nvim_create_autocmd("CursorMoved", {

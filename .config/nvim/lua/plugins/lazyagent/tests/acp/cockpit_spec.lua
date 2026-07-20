@@ -111,6 +111,15 @@ function M.run()
   assert(not compact_rendered:find("deliberately much too long for a single cockpit line", 1, true), "prompt has a compact maximum width")
   local filtered = Cockpit.filter(threads, "CLAUDE")
   assert(#filtered == 1 and filtered[1].thread_id == "thread-a", "cockpit case-insensitive filter")
+  local searchable = vim.deepcopy(threads)
+  searchable[1].metadata = { worktree_path = "/tmp/searchable-worktree", has_user_prompt = true }
+  searchable[1].config = { { id = "model", currentValue = "stored-search-model" } }
+  assert(Cockpit.filter(searchable, "searchable-worktree")[1].thread_id == "thread-b", "filter matches visible worktree")
+  assert(Cockpit.filter(searchable, "stored-search-model")[1].thread_id == "thread-b", "filter matches configured model")
+  local runtime_filtered = Cockpit.filter(threads, "RUNNING", {
+    ["thread-a"] = { acp_ready = true, acp_busy = true },
+  })
+  assert(#runtime_filtered == 1 and runtime_filtered[1].thread_id == "thread-a", "filter matches rendered runtime status")
   local without_empty = Cockpit.filter({
     { thread_id = "empty", title = "Codex", provider_id = "Codex", status = "closed", transcript_path = "" },
     { thread_id = "prompted", title = "Real prompt", provider_id = "Codex", status = "closed", transcript_path = "" },
@@ -128,6 +137,7 @@ function M.run()
   }
   assert(Cockpit.prompt_title(transcript_thread) == "instant mix", "first transcript prompt is used as title")
   assert(#Cockpit.filter({ transcript_thread }, "") == 1, "transcript prompt keeps generic provider title thread")
+  assert(#Cockpit.filter({ transcript_thread }, "instant mix") == 1, "filter matches the rendered transcript prompt")
   local latest = Cockpit.latest_response(transcript_thread, 8)
   assert(#latest == 2 and latest[1] == " latest line one" and latest[2] == " latest line two", "latest assistant response preview")
 
@@ -162,6 +172,28 @@ function M.run()
   local aligned_rendered = table.concat(aligned_lines, "\n")
   assert(aligned_rendered:find("- [idle]    Codex", 1, true), "short status pads to the longest visible status")
   assert(aligned_rendered:find("- [running] Codex", 1, true), "longest visible status keeps one trailing space")
+
+  local long_provider_lines = Cockpit.render({ {
+    thread_id = "long-provider",
+    title = "A useful prompt remains visible",
+    provider_id = "An exceptionally long custom ACP provider name",
+    cwd = "/tmp/narrow-provider",
+    status = "closed",
+  } }, {}, { width = 40 })
+  local long_provider_card = vim.tbl_filter(function(line) return line:match("^%- ") end, long_provider_lines)[1]
+  assert(vim.fn.strdisplaywidth(long_provider_card) <= 40, "provider and title fit a narrow cockpit card")
+  assert(long_provider_card:find("…", 1, true), "narrow cockpit truncates low-priority card text")
+  local untitled_lines = Cockpit.render({ {
+    thread_id = "untitled",
+    title = "Codex",
+    provider_id = "Codex",
+    model = "small",
+    cwd = "/tmp/untitled",
+    status = "closed",
+  } }, {}, { width = 32 })
+  local untitled_card = vim.tbl_filter(function(line) return line:match("^%- ") end, untitled_lines)[1]
+  assert(untitled_card:find("model:small", 1, true), "title-less cards retain fields that still fit")
+  assert(vim.fn.strdisplaywidth(untitled_card) <= 32, "title-less card respects requested width")
 
   local conflicts = Cockpit.conflicts({
     { thread_id = "one", cwd = "/shared", status = "active", change_journal = { turns = { { changes = { { path = "same.lua" } } } } } },
