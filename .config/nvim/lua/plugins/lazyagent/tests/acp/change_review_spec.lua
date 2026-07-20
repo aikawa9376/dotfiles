@@ -55,8 +55,8 @@ function M.run()
   assert_equal(explanation.rationale, "new response", "latest turn assistant response becomes an explanation")
   assert_equal(explanation.author.name, "Codex", "turn explanation retains its author")
   assert_equal(ReviewAnnotations.markdown(ReviewAnnotations.for_turn(turn)), {
-    "## Explanation", "", "Turn summary", "", "Changed the return value.", "Kept compatibility.",
-  }, "multiline final answer becomes valid buffer lines")
+    "## Explanation", "", "Changed the return value.", "Kept compatibility.",
+  }, "explanation omits the lossy summary and keeps the multiline final answer")
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
     "Turn thread-1:2 · 2 file(s) · 📝 final",
