@@ -56,8 +56,8 @@ function M.run()
   assert_equal(explanation.author.name, "Codex", "turn explanation retains its author")
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
-    "Turn thread-1:2 · 2 file(s) · 💬1",
-    "`?` actions  `K` note  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "Turn thread-1:2 · 2 file(s) · 📝 final",
+    "`?` actions  `K` note/final  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
     "M  lua/a.lua [approved] 💬1",
     "R  old.bin -> new.bin [binary] [rejected]",
@@ -105,6 +105,9 @@ function M.run()
   local drawer = assert(review.open(thread))
   local drawer_position = vim.api.nvim_win_get_position(0)
   assert(drawer_position[1] > 0, "changes drawer opens in a bottom split")
+  assert_equal(vim.wo.number, false, "changes drawer hides absolute line numbers like Fugitive status")
+  assert_equal(vim.wo.relativenumber, false, "changes drawer hides relative line numbers like Fugitive status")
+  assert_equal(vim.wo.cursorline, false, "changes drawer avoids an inherited blue cursor-line background")
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("2/2", 1, true), "latest turn history position")
   vim.api.nvim_win_set_cursor(0, { 5, 0 })
   local menu_items, menu_opts, menu_callback
@@ -143,11 +146,13 @@ function M.run()
     { details = true }
   )
   local inline_groups = {}
+  local inline_priorities = {}
   local syntax_group
   for _, mark in ipairs(inline_marks) do
     local group = mark[4] and mark[4].hl_group
     if group then
       inline_groups[group] = true
+      inline_priorities[group] = math.max(inline_priorities[group] or 0, tonumber(mark[4].priority) or 0)
       if group:match("^@.+%.lua$") then syntax_group = group end
     end
   end
@@ -155,11 +160,21 @@ function M.run()
   assert(inline_groups.LazyAgentACPChangesDiffAdd, "inline added background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAddText, "inline word-level highlight")
   assert(syntax_group, "inline Lua code receives Tree-sitter syntax highlights")
+  assert_equal(inline_priorities.LazyAgentACPChangesDiffAdd, 200, "inline background uses Fugitive priority")
+  assert_equal(inline_priorities.LazyAgentACPChangesDiffAddText, 360, "inline word diff wins over syntax like Fugitive")
   assert_equal(vim.fn.maparg("i", "n", false, true).desc, "Open and jump to next LazyAgent ACP diff", "next diff mapping")
   assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
   assert_equal(vim.fn.maparg("K", "n", false, true).desc, "Show LazyAgent ACP change note", "note mapping")
   assert_equal(vim.fn.maparg("]n", "n", false, true).desc, "Next LazyAgent ACP change note", "next note mapping")
   assert_equal(vim.fn.maparg("=", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
+  vim.api.nvim_win_set_cursor(0, { 2, 0 })
+  vim.api.nvim_feedkeys("K", "x", false)
+  vim.wait(100)
+  assert_equal(vim.bo.filetype, "markdown", "K on the turn header opens the final answer")
+  assert(table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), "\n"):find("Changed the return value", 1, true),
+    "final answer body")
+  vim.api.nvim_feedkeys("q", "x", false)
+  vim.wait(100)
   vim.api.nvim_win_set_cursor(0, { 5, 0 })
   vim.api.nvim_feedkeys("K", "x", false)
   vim.wait(100)
