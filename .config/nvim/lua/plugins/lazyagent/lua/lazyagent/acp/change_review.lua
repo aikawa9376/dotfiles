@@ -90,6 +90,13 @@ local function display_decision(decision)
   return decision
 end
 
+local function changes_title(thread, turn)
+  local user_input = type(turn and turn.user_input) == "string" and turn.user_input or ""
+  user_input = vim.trim(user_input):gsub("%s+", " ")
+  if user_input ~= "" then return user_input end
+  return thread.title or thread.thread_id
+end
+
 local function devicon_for(path)
   local ok, devicons = pcall(require, "nvim-web-devicons")
   if not ok or type(devicons.get_icon) ~= "function" then
@@ -221,7 +228,10 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   local annotation_status = has_final and " · 📝 final" or ""
   if general_notes > 0 then annotation_status = annotation_status .. " · 💬" .. general_notes end
   local lines = {
-    string.format(review_mode and "LazyAgent AI Review — %s" or "LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
+    string.format(
+      review_mode and "LazyAgent AI Review — %s" or "LazyAgent ACP Changes — %s",
+      review_mode and (thread.title or thread.thread_id) or changes_title(thread, turn)
+    ),
     string.format(
       "Turn %s · %d file(s)%s%s",
       turn.turn_id or "unknown",

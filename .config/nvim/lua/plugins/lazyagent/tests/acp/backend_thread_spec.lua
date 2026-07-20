@@ -125,6 +125,7 @@ function M.run()
   local live_turns = live_during_turn.change_journal.turns or {}
   assert_equal(#live_turns, #persisted_turns + 1, "live thread snapshot includes the unpersisted active turn")
   assert_equal(live_turns[#live_turns].state, "active", "live thread snapshot exposes active turn state")
+  assert_equal(live_turns[#live_turns].user_input, "exercise mobile permission", "active turn keeps its user input")
   assert_equal(assert(store:get(runtime.acp_thread_id)).metadata.has_user_prompt, true, "first prompt persistence marker")
   assert(vim.tbl_contains(vim.tbl_map(function(choice) return choice.scope end, pending.choices), "project"),
     "pending permission project scope")

@@ -178,7 +178,7 @@ local function capture_turn_file_event(session, event)
   return event
 end
 
-local function record_turn_baseline(session)
+local function record_turn_baseline(session, prompt)
   if not session or not session.thread_id then
     return nil
   end
@@ -191,11 +191,16 @@ local function record_turn_baseline(session)
     return nil
   end
   session.workspace_snapshot_error = nil
+  local metadata = {
+    conversation_start_seq = #(session.conversation_timeline or {}),
+  }
+  local user_input = conversation_helpers.summarize_conversation_text(prompt, 140)
+  if user_input ~= "" then metadata.user_input = user_input end
   local journal, turn = TurnJournal.start(
     session.active_change_journal or (session.thread_record and session.thread_record.change_journal) or {},
     session.thread_id,
     snapshot,
-    { conversation_start_seq = #(session.conversation_timeline or {}) }
+    metadata
   )
   session.active_change_journal = journal
   session.change_preview_before_blobs = {}
@@ -706,7 +711,7 @@ local function create_backend(default_view)
         return
       end
       session.preparing_prompt = false
-      record_turn_baseline(session)
+      record_turn_baseline(session, prompt)
       session.busy = true
       actions_helpers.maybe_call_mcp_tool("notify_start", { agent_name = session.agent_name })
       config_helpers.note_unadvertised_slash_command(session, prompt)
