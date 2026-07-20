@@ -1,4 +1,5 @@
 local M = {}
+local scratch_input = require("lazyagent.scratch_input")
 
 local function user_notes(turn)
   local notes = {}
@@ -69,56 +70,22 @@ end
 
 function M.open_editor(opts)
   opts = opts or {}
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  vim.bo[bufnr].bufhidden = "wipe"
-  vim.bo[bufnr].buftype = "nofile"
-  vim.bo[bufnr].swapfile = false
-  vim.bo[bufnr].filetype = "markdown"
-  vim.b[bufnr].lazyagent_review_editor = true
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(tostring(opts.text or ""), "\n", { plain = true }))
-
-  local width = math.max(50, math.floor(vim.o.columns * 0.68))
-  local height = math.max(8, math.floor(vim.o.lines * 0.42))
-  local winid = vim.api.nvim_open_win(bufnr, true, {
-    relative = "editor",
-    row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
-    col = math.max(0, math.floor((vim.o.columns - width) / 2)),
-    width = math.min(width, vim.o.columns - 4),
-    height = math.min(height, vim.o.lines - 4),
-    style = "minimal",
-    border = "rounded",
+  return scratch_input.open({
+    source_bufnr = opts.source_bufnr,
+    source_winid = opts.source_winid,
+    window_type = opts.window_type,
+    window_opts = opts.window_opts,
+    is_vertical = opts.is_vertical,
+    start_in_insert_on_focus = opts.start_in_insert_on_focus,
     title = opts.title or " LazyAgent Review Note ",
-    title_pos = "left",
-    footer = string.format(" <C-Space> %s · q cancel ", opts.action or "save"),
-    footer_pos = "right",
+    text = opts.text,
+    buffer_vars = { lazyagent_review_editor = true },
+    empty_message = "review text is empty",
+    error_prefix = "LazyAgent ACP: ",
+    submit_desc = opts.submit_desc,
+    cancel_desc = "Cancel review editor",
+    on_submit = opts.on_submit,
   })
-  vim.wo[winid].wrap = true
-  vim.wo[winid].linebreak = true
-
-  local function close()
-    if vim.api.nvim_win_is_valid(winid) then vim.api.nvim_win_close(winid, true) end
-  end
-  local function submit()
-    local text = vim.trim(table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n"))
-    if text == "" then
-      vim.notify("LazyAgent ACP: review text is empty", vim.log.levels.ERROR)
-      return
-    end
-    local ok, err = opts.on_submit(text)
-    if not ok then
-      vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.ERROR)
-      return
-    end
-    pcall(vim.cmd, "stopinsert")
-    close()
-  end
-  for _, mode in ipairs({ "n", "i" }) do
-    vim.keymap.set(mode, "<C-Space>", submit, { buffer = bufnr, silent = true, desc = opts.submit_desc })
-  end
-  vim.keymap.set("n", "ZZ", submit, { buffer = bufnr, silent = true, desc = opts.submit_desc })
-  vim.keymap.set("n", "q", close, { buffer = bufnr, silent = true, nowait = true, desc = "Cancel review editor" })
-  vim.cmd("startinsert")
-  return bufnr, winid
 end
 
 return M

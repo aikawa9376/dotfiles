@@ -287,6 +287,16 @@ end
 
 M.ensure_scratch_buffer = ensure_scratch_buffer
 
+-- Create a scratch buffer with the same defaults as agent input without
+-- registering it as an agent's reusable draft buffer.
+function M.create_scratch_buffer(opts)
+  opts = opts or {}
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  apply_scratch_buffer_defaults(bufnr, opts.filetype or "lazyagent")
+  remember_scratch_source(bufnr, opts)
+  return bufnr
+end
+
 function M.open_float(bufnr, opts)
   -- Ensure we always get a valid buffer and canonical opts table.
   bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
@@ -334,21 +344,23 @@ function M.open_float(bufnr, opts)
     title_pos = "center",
   }
 
+  if float_autocmd_group_id then
+    pcall(vim.api.nvim_del_augroup_by_id, float_autocmd_group_id)
+    float_autocmd_group_id = nil
+  end
   if not winid or not vim.api.nvim_win_is_valid(winid) then
     winid = vim.api.nvim_open_win(bufnr, true, win_opts)
   else
-    -- If window exists, just set buffer and focus
+    -- Reusing a float must also restore its requested geometry and title; it
+    -- may currently be the small unfocused scratch preview.
+    local current_config = vim.api.nvim_win_get_config(winid)
+    if current_config.relative ~= "" then vim.api.nvim_win_set_config(winid, win_opts) end
     vim.api.nvim_win_set_buf(winid, bufnr)
     vim.api.nvim_set_current_win(winid)
   end
 
   -- Setup focus-change behavior for floating window:
   -- shrink to bottom-right when focus leaves, and restore original size when focus returns.
-  if float_autocmd_group_id then
-    pcall(vim.api.nvim_del_augroup_by_id, float_autocmd_group_id)
-    float_autocmd_group_id = nil
-  end
-
   float_original_opts = {
     relative = "editor",
     row = row,
@@ -452,6 +464,7 @@ function M.open_float(bufnr, opts)
   if opts and opts.start_in_insert_on_focus then
     vim.cmd("startinsert") -- Start in insert mode
   end
+  return winid
 end
 
 function M.open_vsplit(bufnr, opts)
