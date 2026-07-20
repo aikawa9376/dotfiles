@@ -306,22 +306,23 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 
 ### Provider-independent Git reviews
 
-ChangesのUI・annotation・feedback composerを、現在のACP turn以外のGit diff sourceにも広げます。
+AIがbranchやcommit間のdiffをread-onlyでレビューし、そのfindingをChanges相当のUIへinline表示します。
+humanが最初からannotationを書く機能ではなく、AI findingを人間が素早く確認し、必要なら実装threadへ返すことを主目的にします。
 Keep / Rejectはworkspace transaction固有のため持ち込まず、review findingの記録・解決・共有に集中します。
 
 #### Review source and UI
 
-- [ ] `:LazyAgentReview [range]`でbranch、commit、working tree、staged changesをreviewとして開く。
-  - [ ] `<base>..<head>`のdirect rangeと、PR相当の`<base>...<head>`（merge-base比較）を区別する。
-  - [ ] branch名は開始時にcommit hashへ固定し、branchが移動しても開いているreviewのdiffを変えない。
+- [ ] `:LazyAgentReview [range]`でAI reviewを開始し、branch、commit、working tree、staged changesをreview sourceにする。
+  - [x] commit、`<base>..<head>`のdirect range、PR相当の`<base>...<head>`（merge-base比較）を区別する。
+  - [x] branch名は開始時にcommit hashとblobへ固定し、branchが移動しても保存済みreviewのdiffを変えない。
   - [ ] working tree、index、任意patchも共通`ReviewSource`へ正規化する。
-- [ ] Changesと同じbottom drawer、inline diff、file open、専用diff tab、syntax / word diffを再利用する。
-- [ ] review ID、repository root、base/head hash、作成日時、source種別を永続化し、Cockpitまたはreview一覧から再開する。
+- [x] Changesと同じbottom drawer、inline diff、file open、専用diff tab、syntax / word diffを再利用する。
+- [x] review ID、repository root、base/head hash、作成日時、source種別を永続化し、review一覧から再開する。
 
 #### Annotation model
 
-- [ ] review全体、file、hunk、before/after rangeへhumanまたはagentのannotationを追加・編集・削除・resolveする。
-- [ ] comment badgeは吹き出しと短いlabelを併記する。
+- [ ] review全体、file、hunk、before/after rangeへagent annotationを追加し、編集・削除・resolveする。
+- [x] comment badgeは吹き出しと短いlabelを併記する。
   - `[must]`: 修正必須・blocking。
   - `[should]`: 強い改善提案。
   - `[imo]`: 主観的な提案・non-blocking（既定）。
@@ -335,16 +336,13 @@ Keep / Rejectはworkspace transaction固有のため持ち込まず、review fin
 #### Feedback and AI reviewer
 
 - [ ] 現在のReview Notes composerを再利用し、open annotationをまとめて任意のlive ACP threadへ送る。
-- [ ] AI reviewはread-only diffとannotation write APIだけを受け取り、provider固有処理をUIと保存層から分離する。
-- [ ] human reviewと手動annotationはskillなしで完全に動作させる。
-- [ ] AIがstructured annotationを直接追加する場合だけ、LazyAgent同梱のoptional `reviewer` skillを用意する。
-  - skillはreviewの取得、label選択、annotation追加・resolve APIの呼び方だけを説明する薄いadapterにする。
-  - reviewデータ、UI、Git diff生成、永続化、prompt送信はskillへ実装しない。
-  - skill未対応agentは通常のreview promptと最終回答へfallbackし、機能全体を無効にしない。
+- [x] AI reviewはread-only diffとbuilt-in structured responseを使い、provider固有処理をUIと保存層から分離する。
+- [x] reviewer skillなしで通常のACP agentへreview promptを送り、最終回答からstructured findingを取り込む。
+- [ ] providerごとの観点や追加手順が必要になった場合だけ、optional `reviewer` skillを薄いprompt adapterとして用意する。
 
 #### Exit criteria
 
-- branch/commit rangeをagentなしで開き、human annotationを保存・再開・resolveできる。
+- branch/commit rangeをAIがread-onlyでレビューし、保存済みfindingを再開できる。
 - 同じreviewをAIへ渡してもworkspaceを変更せず、findingだけをstructured annotationとして受け取れる。
 - branch更新後も元reviewは再現可能で、新revisionへ移したnoteのresolved/outdated判定が失われない。
 

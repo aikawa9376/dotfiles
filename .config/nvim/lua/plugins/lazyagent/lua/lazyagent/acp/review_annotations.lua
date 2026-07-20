@@ -8,6 +8,15 @@ local valid_kinds = {
   suggestion = true,
 }
 
+local valid_labels = {
+  must = true,
+  should = true,
+  imo = true,
+  question = true,
+  nit = true,
+  praise = true,
+}
+
 local function text(value)
   value = vim.trim(tostring(value or ""))
   return value ~= "" and value or nil
@@ -24,6 +33,7 @@ function M.normalize(annotation)
   local normalized = {
     id = text(annotation.id),
     kind = valid_kinds[annotation.kind] and annotation.kind or "comment",
+    label = valid_labels[annotation.label] and annotation.label or nil,
     summary = text(annotation.summary),
     rationale = text(annotation.rationale or annotation.body),
     path = text(annotation.path or target.path),
@@ -106,7 +116,9 @@ function M.markdown(annotations)
   end
   for index, annotation in ipairs(annotations or {}) do
     if index > 1 then vim.list_extend(lines, { "", "---", "" }) end
-    lines[#lines + 1] = "## " .. annotation.kind:gsub("^%l", string.upper)
+    local heading = annotation.label and ("[" .. annotation.label .. "]")
+      or annotation.kind:gsub("^%l", string.upper)
+    lines[#lines + 1] = "## " .. heading
     if annotation.kind == "explanation" then
       lines[#lines + 1] = ""
       append(annotation.rationale or annotation.summary)

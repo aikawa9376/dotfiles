@@ -467,6 +467,8 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 | `:LazyAgentNoteShow` | カーソル行の Notes 本文をfocus可能な float で表示 |
 | `:LazyAgentNotes` | 現在 workspace の Notes 一覧を開く（`<CR>` open、`K` preview、`d` delete、`C` clear） |
 | `:LazyAgentNotesClear` | 現在 workspace の Notes をすべて消去 |
+| `:LazyAgentReview [commit\|base..head\|base...head]` | idleなACP agentへGit diffのread-only AI reviewを依頼 |
+| `:LazyAgentReviews [review-id]` | 保存済みAI reviewをChanges相当のdrawerで開く |
 | `:LazyAgentHistory [file]` | 現在 context の scratch 履歴を開く |
 | `:LazyAgentHistoryList [file]` | 履歴一覧から開く |
 | `:LazyAgentConversationList [file]` | 保存済み会話 log を開く |
