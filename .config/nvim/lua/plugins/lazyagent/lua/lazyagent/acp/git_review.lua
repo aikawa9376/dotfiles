@@ -116,7 +116,16 @@ function M.create(range, opts)
 end
 
 function M.prompt(review)
-  return table.concat({
+  local lines = {}
+  local instructions = vim.trim(tostring(review and review.instructions or ""))
+  if instructions ~= "" then
+    vim.list_extend(lines, {
+      "Additional review instructions from the user:",
+      instructions,
+      "",
+    })
+  end
+  vim.list_extend(lines, {
     "Perform a read-only code review of the immutable Git comparison below.",
     "Inspect the exact diff and surrounding code yourself using Git and read-only tools.",
     "Do not edit, create, delete, format, or otherwise modify files.",
@@ -136,7 +145,8 @@ function M.prompt(review)
     "Base: " .. tostring(review.base),
     "Head: " .. tostring(review.head),
     "Git command: git diff --find-renames --no-ext-diff " .. tostring(review.base) .. " " .. tostring(review.head),
-  }, "\n")
+  })
+  return table.concat(lines, "\n")
 end
 
 function M.parse(response, review)
