@@ -82,8 +82,13 @@ function M.run()
     { details = true }
   )
   assert(#highlighted >= 8, "drawer should include title, status, path, and decision highlights")
+  assert_equal(vim.api.nvim_get_hl(0, { name = "LazyAgentACPChangesDiffAdd", link = true }).link,
+    "FugitiveExtAdd", "Changes always uses fugitive-extension add colors")
+  assert_equal(vim.api.nvim_get_hl(0, { name = "LazyAgentACPChangesNote", link = true }).link,
+    "GitSignsChange", "change notes follow fugitive status colors")
   vim.api.nvim_buf_delete(bufnr, { force = true })
 
+  local live_thread
   local review = ChangeReview.new({
     read_blob = function(ref)
       local fillers = table.concat(vim.tbl_map(function(index)
@@ -95,6 +100,7 @@ function M.run()
         ["after-a"] = "local value = 2\n" .. fillers .. "\nreturn value + 1\n",
       })[ref] or ""
     end,
+    get_thread = function() return live_thread end,
   })
   local drawer = assert(review.open(thread))
   local drawer_position = vim.api.nvim_win_get_position(0)
@@ -208,6 +214,19 @@ function M.run()
   vim.wait(100)
   assert_equal(vim.fn.tabpagenr("$"), tabs_before, "q closes the whole diff tab")
   assert_equal(vim.api.nvim_get_current_buf(), drawer, "q returns to the changes drawer")
+  live_thread = vim.deepcopy(thread)
+  live_thread.change_journal.turns[#live_thread.change_journal.turns + 1] = {
+    turn_id = "thread-1:3", state = "active",
+    changes = { { operation = "added", path = "lua/live.lua", after_blob = "after-a" } },
+  }
+  vim.api.nvim_exec_autocmds("User", {
+    pattern = "LazyAgentChangeJournal", data = { thread_id = "thread-1", turn_id = "thread-1:3", state = "active" },
+  })
+  vim.wait(100)
+  assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("live", 1, true),
+    "open Changes drawer follows active turn updates")
+  assert(table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n"):find("lua/live.lua", 1, true),
+    "realtime drawer renders newly changed files")
   vim.ui.select = function(items, opts, callback)
     menu_items, menu_opts, menu_callback = items, opts, callback
   end

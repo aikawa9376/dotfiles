@@ -254,6 +254,7 @@ function M.run()
       thread_id = THREAD_ID,
     },
   }
+  state.open_agent = session_key
   local origin_winid = vim.api.nvim_get_current_win()
   vim.cmd("rightbelow vsplit")
   local selected_acp_winid = vim.api.nvim_get_current_win()
@@ -273,6 +274,12 @@ function M.run()
   assert_equal(actions.open_cockpit(), true, "open interactive cockpit")
   local cockpit_bufnr = vim.api.nvim_get_current_buf()
   assert_equal(vim.bo[cockpit_bufnr].filetype, "lazyagent_acp_cockpit", "cockpit keeps focus beside preview")
+  assert(table.concat(vim.api.nvim_buf_get_lines(cockpit_bufnr, 0, -1, false), "\n"):find("● %[idle%].-Live thread"),
+    "cockpit marks the thread opened by this Neovim")
+  state.open_agent = nil
+  vim.cmd("normal r")
+  assert(table.concat(vim.api.nvim_buf_get_lines(cockpit_bufnr, 0, -1, false), "\n"):find("● %[idle%].-Live thread"),
+    "cockpit refresh preserves the current Neovim marker after scratch closes")
   for line, text in ipairs(vim.api.nvim_buf_get_lines(cockpit_bufnr, 0, -1, false)) do
     if text:find("Live thread", 1, true) then
       vim.api.nvim_win_set_cursor(0, { line, 0 })

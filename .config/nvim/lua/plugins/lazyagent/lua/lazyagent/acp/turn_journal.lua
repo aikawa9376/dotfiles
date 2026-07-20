@@ -180,6 +180,16 @@ function M.recover_file_event_changes(journal, resolve_before)
   return journal, recovered
 end
 
+function M.preview_changes(journal, turn_id, resolve_before)
+  journal = copy(journal)
+  local turn = find_turn(journal, turn_id)
+  if not turn then return nil, "turn not found: " .. tostring(turn_id) end
+  turn.changes = {}
+  local recovered
+  journal, recovered = M.recover_file_event_changes(journal, resolve_before)
+  return journal, copy(find_turn(journal, turn_id)), recovered
+end
+
 function M.finish(journal, turn_id, completion)
   journal = copy(journal)
   local turn = find_turn(journal, turn_id)

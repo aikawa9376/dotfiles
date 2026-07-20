@@ -18,6 +18,13 @@ local operation_highlight = {
 }
 
 local function setup_highlights()
+  -- Keep these available even when fugitive-extension is lazy-loaded after
+  -- Changes. Otherwise `default` would permanently link this buffer to the
+  -- plainer built-in Diff groups for the rest of the session.
+  vim.api.nvim_set_hl(0, "FugitiveExtAdd", { bg = "#23384C", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveExtDelete", { bg = "#321e1e", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveExtAddText", { bg = "#005f5f", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveExtDeleteText", { bg = "#8c3b40", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesAdded", { link = "GitSignsAdd", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesModified", { link = "GitSignsChange", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDeleted", { link = "GitSignsDelete", default = true })
@@ -26,27 +33,28 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesRejected", { link = "DiagnosticError", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesApprovedLine", { link = "DiffAdd", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesRejectedLine", { link = "DiffDelete", default = true })
-  local rich = vim.fn.hlexists("FugitiveExtAdd") == 1
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffAdd", {
-    link = rich and "FugitiveExtAdd" or "DiffAdd", default = true,
+    link = "FugitiveExtAdd", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffDelete", {
-    link = rich and "FugitiveExtDelete" or "DiffDelete", default = true,
+    link = "FugitiveExtDelete", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffAddText", {
-    link = rich and "FugitiveExtAddText" or "DiffText", default = true,
+    link = "FugitiveExtAddText", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffDeleteText", {
-    link = rich and "FugitiveExtDeleteText" or "DiffText", default = true,
+    link = "FugitiveExtDeleteText", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffHunk", { link = "DiffChange", default = true })
-  vim.api.nvim_set_hl(0, "LazyAgentACPChangesNote", { link = "DiagnosticInfo", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesNote", { link = "GitSignsChange", default = true })
 end
 
 local function latest_changed_turn(thread)
   local turns = thread and thread.change_journal and thread.change_journal.turns or {}
   for index = #turns, 1, -1 do
-    if type(turns[index].changes) == "table" and #turns[index].changes > 0 then
+    if turns[index].state == "active"
+      or type(turns[index].changes) == "table" and #turns[index].changes > 0
+    then
       return turns[index]
     end
   end
@@ -57,7 +65,7 @@ local function changed_turns(thread)
   local result = {}
   local turns = thread and thread.change_journal and thread.change_journal.turns or {}
   for _, turn in ipairs(turns) do
-    if type(turn.changes) == "table" and #turn.changes > 0 then
+    if turn.state == "active" or type(turn.changes) == "table" and #turn.changes > 0 then
       result[#result + 1] = turn
     end
   end
@@ -120,13 +128,14 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   if turn_index and turn_count and turn_count > 1 then
     history = string.format(" · %d/%d · [t/]t previous/next", turn_index, turn_count)
   end
+  local live = turn.state == "active" and " · live" or ""
   local lines = {
     string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
     string.format(
       "Turn %s · %d file(s)%s%s",
       turn.turn_id or "unknown",
       #(turn.changes or {}),
-      history,
+      history .. live,
       #ReviewAnnotations.for_turn(turn) > 0 and (" · 💬" .. #ReviewAnnotations.for_turn(turn)) or ""
     ),
     "`?` actions  `K` note  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
@@ -733,6 +742,10 @@ function M.new(opts)
       if type(opts.decide) ~= "function" then
         return
       end
+      if turn.state == "active" then
+        vim.notify("LazyAgent ACP: wait for the active turn before applying review decisions", vim.log.levels.INFO)
+        return
+      end
       local decided, err = opts.decide(thread, turn, indices, decision)
       if not decided then
         vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.ERROR)
@@ -906,6 +919,64 @@ function M.new(opts)
       nowait = true,
       silent = true,
       desc = "Close changes drawer",
+    })
+    local live_group = vim.api.nvim_create_augroup("LazyAgentACPChangesLive" .. tostring(bufnr), { clear = true })
+    vim.api.nvim_create_autocmd("User", {
+      group = live_group,
+      pattern = "LazyAgentChangeJournal",
+      callback = function(args)
+        local data = args.data or {}
+        if data.thread_id ~= thread.thread_id or type(opts.get_thread) ~= "function" then return end
+        vim.schedule(function()
+          if not vim.api.nvim_buf_is_valid(bufnr) then return end
+          local updated = opts.get_thread(thread.thread_id)
+          if not updated then return end
+          local updated_turns = changed_turns(updated)
+          if #updated_turns == 0 then return end
+          local selected_turn_id = turn and turn.turn_id
+          local was_latest = turn_index == #turns
+          local next_index
+          if was_latest then
+            next_index = #updated_turns
+          else
+            for index, candidate in ipairs(updated_turns) do
+              if candidate.turn_id == selected_turn_id then next_index = index; break end
+            end
+          end
+          if not next_index then return end
+          local expanded_paths = {}
+          for index in pairs(current_inline_diffs()) do
+            local change = turn.changes and turn.changes[index]
+            if change and change.path then expanded_paths[change.path] = true end
+          end
+          local windows = vim.fn.win_findbuf(bufnr)
+          local row = windows[1] and vim.api.nvim_win_get_cursor(windows[1])[1] or nil
+          thread = updated
+          turns = updated_turns
+          turn_index = next_index
+          turn = turns[turn_index]
+          local refreshed_inline = {}
+          for index, change in ipairs(turn.changes or {}) do
+            if expanded_paths[change.path] then
+              local diff = build_inline_diff(change)
+              if diff then refreshed_inline[index] = diff end
+            end
+          end
+          inline_by_turn[tostring(turn.turn_id or turn_index)] = refreshed_inline
+          render()
+          if row and windows[1] and vim.api.nvim_win_is_valid(windows[1]) then
+            vim.api.nvim_win_set_cursor(windows[1], { math.min(row, vim.api.nvim_buf_line_count(bufnr)), 0 })
+          end
+        end)
+      end,
+    })
+    vim.api.nvim_create_autocmd("BufWipeout", {
+      group = live_group,
+      buffer = bufnr,
+      once = true,
+      callback = function()
+        vim.schedule(function() pcall(vim.api.nvim_del_augroup_by_id, live_group) end)
+      end,
     })
     return bufnr
   end
