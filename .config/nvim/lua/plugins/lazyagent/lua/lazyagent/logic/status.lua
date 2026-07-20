@@ -4,8 +4,6 @@ local backend_logic = require("lazyagent.logic.backend")
 local state = require("lazyagent.logic.state")
 local agentmux = require("lazyagent.integrations.agentmux")
 
-local animation_timer = nil
-local ANIMATION_INTERVAL_MS = 200
 local transient_tasks = {}
 local next_task_id = 0
 
@@ -23,19 +21,7 @@ local function refresh_transcript_footers(agent_names)
 end
 
 local function refresh_ui(agent_names)
-  pcall(function() require("lualine").refresh() end)
-  pcall(vim.cmd, "redrawstatus")
   refresh_transcript_footers(agent_names)
-end
-
-local function active_monitoring_agents()
-  local agents = {}
-  for agent_name, s in pairs(state.sessions or {}) do
-    if s.monitor_timer then
-      table.insert(agents, agent_name)
-    end
-  end
-  return agents
 end
 
 local function active_task_ids()
@@ -45,39 +31,6 @@ local function active_task_ids()
   end
   table.sort(ids)
   return ids
-end
-
--- Start animation loop if any session is in monitoring mode
-local function check_and_animate()
-  local monitoring_agents = active_monitoring_agents()
-  local any_active = #monitoring_agents > 0 or #active_task_ids() > 0
-
-  if any_active then
-      if not animation_timer then
-         animation_timer = vim.loop.new_timer()
-         animation_timer:start(ANIMATION_INTERVAL_MS, ANIMATION_INTERVAL_MS, vim.schedule_wrap(function()
-            local active_agents = active_monitoring_agents()
-             local still_active = #active_agents > 0 or #active_task_ids() > 0
-            if still_active then
-                refresh_ui(active_agents)
-             else
-                if animation_timer then
-                   animation_timer:stop()
-                   animation_timer:close()
-                   animation_timer = nil
-                end
-                refresh_ui()
-              end
-           end))
-       end
-  else
-      if animation_timer then
-        animation_timer:stop()
-         animation_timer:close()
-         animation_timer = nil
-       end
-      refresh_ui()
-    end
 end
 
 local icons = {
@@ -131,14 +84,13 @@ function M.start_task(label, opts)
     icon = opts.icon or "",
   }
   refresh_ui()
-  check_and_animate()
   return id
 end
 
 function M.stop_task(id)
   if not id then return end
   transient_tasks[id] = nil
-  check_and_animate()
+  refresh_ui()
 end
 
 -- ────────────────────────────────────────────────
@@ -230,7 +182,6 @@ function M.start_monitor(agent_name)
 
   local timer = vim.loop.new_timer()
   s.monitor_timer = timer
-  check_and_animate()
 
   -- Spinner stops when agent calls notify_done via MCP.
   local ticks = 0

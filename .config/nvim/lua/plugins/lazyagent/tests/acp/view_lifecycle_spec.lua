@@ -78,11 +78,11 @@ function M.run()
     group = render_group,
     event = "CmdlineChanged",
     buffer = transcript_bufnr,
-  }), 0, "ACP transcript removes render-markdown cmdline updates")
+  }), 1, "ACP transcript leaves another plugin's cmdline autocmd untouched")
   assert_equal(#vim.api.nvim_get_autocmds({
     group = render_group,
     buffer = transcript_bufnr,
-  }), 2, "ACP transcript preserves other render-markdown updates")
+  }), 3, "ACP transcript preserves all render-markdown updates")
 
   local session = {
     pane_id = pane_id,
@@ -90,17 +90,32 @@ function M.run()
     transcript_path = transcript_path,
     view_state = vim.tbl_extend("force", pane_state or {}, {}),
   }
-  local original_get_mode = vim.api.nvim_get_mode
-  vim.api.nvim_get_mode = function() return { mode = "c", blocking = false } end
+  local popup_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.bo[popup_bufnr].buftype = "nofile"
+  vim.bo[popup_bufnr].filetype = "vim"
+  vim.api.nvim_buf_set_lines(popup_bufnr, 0, -1, false, { ":LazyAgentTest" })
+  local popup_winid = vim.api.nvim_open_win(popup_bufnr, true, {
+    relative = "editor",
+    row = 0,
+    col = 0,
+    width = 30,
+    height = 1,
+    style = "minimal",
+  })
+
   view.on_transcript_updated(session, "\nsecond response", "a")
-  vim.wait(400)
-  assert_equal(render_updates, 0, "agent output does not redraw markdown during cmdline completion")
-  vim.api.nvim_get_mode = original_get_mode
-  vim.api.nvim_exec_autocmds("ModeChanged", { pattern = "c:n" })
   assert(vim.wait(1000, function() return render_updates == 1 end, 10),
-    "deferred markdown redraw resumes once after cmdline completion")
+    "agent output redraws its owned transcript")
   vim.wait(250)
-  assert_equal(render_updates, 1, "deferred markdown redraw is coalesced")
+  assert_equal(render_updates, 1, "owned transcript redraw is coalesced")
+  assert_equal(vim.api.nvim_get_current_win(), popup_winid, "external popup keeps focus during ACP output")
+  assert_equal(vim.api.nvim_get_current_buf(), popup_bufnr, "external popup keeps its buffer during ACP output")
+  assert_equal(vim.bo[popup_bufnr].filetype, "vim", "external popup filetype is untouched")
+  assert_equal(vim.api.nvim_buf_get_lines(popup_bufnr, 0, -1, false)[1], ":LazyAgentTest",
+    "external popup content is untouched")
+  assert_equal(vim.b[popup_bufnr].lazyagent_acp_pane_id, nil, "external popup is not claimed by LazyAgent")
+  vim.api.nvim_win_close(popup_winid, true)
+  vim.api.nvim_buf_delete(popup_bufnr, { force = true })
 
   vim.api.nvim_win_call(pane_state.winid, function()
     vim.fn.winrestview({ lnum = 30, topline = 24, col = 0, leftcol = 0 })

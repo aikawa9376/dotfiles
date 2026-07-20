@@ -44,6 +44,7 @@ local suites = {
   "tests.acp.v2_adapter_spec",
   "tests.acp.view_footer_spec",
   "tests.acp.view_follow_spec",
+  "tests.acp.redraw_spec",
   "tests.acp.view_lifecycle_spec",
   "tests.acp.lifecycle_stress_spec",
   "tests.acp.thread_store_spec",

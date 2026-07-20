@@ -33,7 +33,6 @@ function M.attach(api, ctx)
   local pane_buffers = ctx.pane_buffers
   local layout_state = ctx.layout_state
   local dedicated_transcript_windows = ctx.dedicated_transcript_windows
-  local redirecting_transcript_windows = ctx.redirecting_transcript_windows
   local allocate_pane_id = ctx.allocate_pane_id
   local close_timer = ctx.close_timer
   local queue_append = ctx.queue_append
@@ -238,7 +237,6 @@ function M.attach(api, ctx)
       layout_count = 0,
       active_timer_count = 0,
       dedicated_window_count = 0,
-      redirecting_window_count = 0,
       panes = {},
     }
 
@@ -270,10 +268,6 @@ function M.attach(api, ctx)
     for _ in pairs(dedicated_transcript_windows) do
       snapshot.dedicated_window_count = snapshot.dedicated_window_count + 1
     end
-    for _ in pairs(redirecting_transcript_windows) do
-      snapshot.redirecting_window_count = snapshot.redirecting_window_count + 1
-    end
-
     return snapshot
   end
 
@@ -734,7 +728,6 @@ function M.attach(api, ctx)
       local winid = entry and entry.winid or nil
       if (bufnr and not vim.api.nvim_buf_is_valid(bufnr)) or (winid and not vim.api.nvim_win_is_valid(winid)) then
         dedicated_transcript_windows[key] = nil
-        redirecting_transcript_windows[key] = nil
         cleaned = true
       end
     end
