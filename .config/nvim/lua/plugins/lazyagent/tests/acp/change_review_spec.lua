@@ -23,7 +23,7 @@ function M.run()
         {
           turn_id = "thread-1:2",
           annotations = {
-            { kind = "explanation", summary = "Turn summary", rationale = "Changed the return value." },
+            { kind = "explanation", summary = "Turn summary", rationale = "Changed the return value.\nKept compatibility." },
             {
               kind = "review", path = "lua/a.lua", summary = "Check this value",
               target = { start_line = 1, end_line = 1, blob_hash = "after-hash" },
@@ -54,6 +54,9 @@ function M.run()
   }, 1, function(item) return item.body_ref and item.body_ref.value or item.body end, { name = "Codex" })
   assert_equal(explanation.rationale, "new response", "latest turn assistant response becomes an explanation")
   assert_equal(explanation.author.name, "Codex", "turn explanation retains its author")
+  assert_equal(ReviewAnnotations.markdown(ReviewAnnotations.for_turn(turn)), {
+    "## Explanation", "", "Turn summary", "", "Changed the return value.", "Kept compatibility.",
+  }, "multiline final answer becomes valid buffer lines")
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
     "Turn thread-1:2 · 2 file(s) · 📝 final",
@@ -159,6 +162,7 @@ function M.run()
   assert(inline_groups.LazyAgentACPChangesDiffDelete, "inline deleted background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAdd, "inline added background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAddText, "inline word-level highlight")
+  assert(inline_groups.diffLine, "hunk header directly uses Fugitive-style diffLine highlight")
   assert(syntax_group, "inline Lua code receives Tree-sitter syntax highlights")
   assert_equal(inline_priorities.LazyAgentACPChangesDiffAdd, 200, "inline background uses Fugitive priority")
   assert_equal(inline_priorities.LazyAgentACPChangesDiffAddText, 360, "inline word diff wins over syntax like Fugitive")

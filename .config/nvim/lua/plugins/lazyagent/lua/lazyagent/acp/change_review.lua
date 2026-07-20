@@ -47,7 +47,6 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffDeleteText", {
     link = "FugitiveExtDeleteText", default = true,
   })
-  vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffHunk", { link = "DiffChange", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesNote", { link = "GitSignsChange", default = true })
 end
 
@@ -275,7 +274,7 @@ local function apply_inline_highlights(bufnr)
     if line:match("^@@") then
       flush()
       vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
-        end_col = #line, hl_group = "LazyAgentACPChangesDiffHunk", priority = PRIORITY_BG,
+        end_col = #line, hl_group = "diffLine",
       })
     elseif line:sub(1, 1) == "-" and not line:match("^%-%-%-") then
       if #added > 0 then flush() end

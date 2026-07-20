@@ -101,12 +101,19 @@ end
 
 function M.markdown(annotations)
   local lines = {}
+  local function append(value)
+    vim.list_extend(lines, vim.split(tostring(value or ""), "\n", { plain = true }))
+  end
   for index, annotation in ipairs(annotations or {}) do
     if index > 1 then vim.list_extend(lines, { "", "---", "" }) end
     lines[#lines + 1] = "## " .. annotation.kind:gsub("^%l", string.upper)
-    if annotation.summary then vim.list_extend(lines, { "", annotation.summary }) end
+    if annotation.summary then
+      lines[#lines + 1] = ""
+      append(annotation.summary)
+    end
     if annotation.rationale and annotation.rationale ~= annotation.summary then
-      vim.list_extend(lines, { "", annotation.rationale })
+      lines[#lines + 1] = ""
+      append(annotation.rationale)
     end
     if annotation.outdated then
       vim.list_extend(lines, { "", "> This note may be outdated because the target blob changed." })
