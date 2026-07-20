@@ -107,13 +107,18 @@ function M.markdown(annotations)
   for index, annotation in ipairs(annotations or {}) do
     if index > 1 then vim.list_extend(lines, { "", "---", "" }) end
     lines[#lines + 1] = "## " .. annotation.kind:gsub("^%l", string.upper)
-    if annotation.summary then
+    if annotation.kind == "explanation" then
       lines[#lines + 1] = ""
-      append(annotation.summary)
-    end
-    if annotation.rationale and annotation.rationale ~= annotation.summary then
-      lines[#lines + 1] = ""
-      append(annotation.rationale)
+      append(annotation.rationale or annotation.summary)
+    else
+      if annotation.summary then
+        lines[#lines + 1] = ""
+        append(annotation.summary)
+      end
+      if annotation.rationale and annotation.rationale ~= annotation.summary then
+        lines[#lines + 1] = ""
+        append(annotation.rationale)
+      end
     end
     if annotation.outdated then
       vim.list_extend(lines, { "", "> This note may be outdated because the target blob changed." })
