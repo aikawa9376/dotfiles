@@ -163,7 +163,7 @@ function M.register_scratch_keymaps(bufnr, opts)
     -- Expand placeholders before sending (use source_bufnr information)
     local transforms = require("lazyagent.transforms") -- require here to avoid circular dependency
     local resolved_source_bufnr = current_source_bufnr()
-    local expanded_text, _ = transforms.expand(text, { source_bufnr = resolved_source_bufnr, scratch_bufnr = bufnr })
+    local expanded_text, transform_meta = transforms.expand(text, { source_bufnr = resolved_source_bufnr, scratch_bufnr = bufnr })
     text = expanded_text or text
     if preserve_scratch then
       text = context_providers.prepend_to_prompt(text, {
@@ -210,6 +210,7 @@ function M.register_scratch_keymaps(bufnr, opts)
       if submit_result == false then
         return
       end
+      require("lazyagent.notes").consume_meta(transform_meta)
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
 
       -- Start monitoring for completion (spinner/loader) if appropriate

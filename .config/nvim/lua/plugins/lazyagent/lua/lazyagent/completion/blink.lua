@@ -1,6 +1,6 @@
 -- blink.cmp source for lazyagent token completions.
 -- Exposes a blink.cmp source module that returns token suggestions like:
---   #buffer, #buffer_abs, #buffers, #buffers_abs, #git_root, #git_branch, #diagnostics
+--   #buffer, #buffer_abs, #buffers, #buffers_abs, #git_root, #git_branch, #diagnostics, #notes
 -- The source uses lazyagent.transforms for previews/documentation.
 --
 -- Usage (blink.cmp config):

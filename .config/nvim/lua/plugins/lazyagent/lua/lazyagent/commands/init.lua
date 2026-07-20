@@ -7,6 +7,7 @@ local groups = {
   "lazyagent.commands.acp",
   "lazyagent.commands.history",
   "lazyagent.commands.edit",
+  "lazyagent.commands.notes",
   "lazyagent.commands.hooks",
   "lazyagent.commands.mcp",
   "lazyagent.commands.image",

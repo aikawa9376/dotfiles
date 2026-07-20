@@ -75,6 +75,7 @@ return {
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
     "LazyAgentOpenConversation", "LazyAgentConversation", "LazyAgentResumeConversation", "LazyAgentSummary",
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach", "LazyAgentEdit",
+    "LazyAgentNote", "LazyAgentNotes", "LazyAgentNotesClear",
     "LazyAgentRestart", "LazyAgentStack", "LazyAgentHooks", "LazyAgentQR", "LazyAgentACPCockpit",
     "LazyAgentACPMobileStart",
     "LazyAgentACPMobileStop", "LazyAgentACPMobileQR", "LazyAgentACPRawTranscript", "LazyAgentACPFullTranscript",

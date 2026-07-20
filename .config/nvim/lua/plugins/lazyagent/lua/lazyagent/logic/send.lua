@@ -193,7 +193,7 @@ function M.send_buffer_and_clear(agent_name, bufnr)
   local text = table.concat(lines, "\n")
 
   -- Expand placeholders before sending using the send buffer as the source buffer (makes {buffer} behave sensibly).
-  local expanded_text, _ = transforms.expand(text, { source_bufnr = bufnr })
+  local expanded_text, transform_meta = transforms.expand(text, { source_bufnr = bufnr })
   text = expanded_text or text
 
   -- determine agent_name if not specified
@@ -250,6 +250,7 @@ function M.send_buffer_and_clear(agent_name, bufnr)
       if submit_result == false then
         return
       end
+      require("lazyagent.notes").consume_meta(transform_meta)
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
 
       -- Start status monitor (spinner in statusline while agent is thinking)
@@ -275,6 +276,7 @@ function M.send_buffer_and_clear(agent_name, bufnr)
     -- Save scratch content to cache on send (prompts / non-interactive)
     cache_logic.write_scratch_to_cache(bufnr)
     p(context)
+    require("lazyagent.notes").consume_meta(transform_meta)
     pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
     return
   end
