@@ -9,6 +9,7 @@ local cache_logic = require("lazyagent.logic.cache")
 local state = require("lazyagent.logic.state")
 local backend_logic = require("lazyagent.logic.backend")
 local acp_logic = require("lazyagent.logic.acp")
+local window = require("lazyagent.window")
 
 local base = cache_logic.get_cache_dir() .. "/acp"
 local store = ReviewStore.new({ dir = base .. "/reviews" })
@@ -18,6 +19,48 @@ local initialized = false
 local drawer = ChangeReview.new({
   read_blob = function(ref) return blobs:get(ref, { max_bytes = false }) end,
 })
+
+local function capture_scratch()
+  if not window.is_open() then return nil end
+  local winid, bufnr = window.get_winid(), window.get_bufnr()
+  if not winid or not vim.api.nvim_win_is_valid(winid)
+    or not bufnr or not vim.api.nvim_buf_is_valid(bufnr)
+    or vim.b[bufnr].lazyagent_is_scratch ~= true
+  then
+    return nil
+  end
+  local text = vim.trim(table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n"))
+  if text == "" then return nil end
+  return {
+    bufnr = bufnr,
+    winid = winid,
+    agent_name = vim.b[bufnr].lazyagent_agent,
+    text = text,
+  }
+end
+
+local function consume_scratch(scratch)
+  if type(scratch) ~= "table" then return end
+  if scratch.bufnr and vim.api.nvim_buf_is_valid(scratch.bufnr) then
+    pcall(vim.api.nvim_buf_set_lines, scratch.bufnr, 0, -1, false, {})
+  end
+  if window.get_winid() == scratch.winid or window.get_bufnr() == scratch.bufnr then
+    window.close({ force = true, keep_buffer = true })
+  end
+  local session = scratch.agent_name and state.sessions[scratch.agent_name] or nil
+  if session and session.pane_id then
+    local _, backend = backend_logic.resolve_backend_for_agent(
+      scratch.agent_name,
+      ((state.opts or {}).interactive_agents or {})[scratch.agent_name]
+    )
+    local snapshot = type(backend) == "table" and type(backend.get_runtime_snapshot) == "function"
+        and backend.get_runtime_snapshot(session.pane_id)
+      or nil
+    if snapshot and snapshot.acp_thread_id and type(backend.set_thread_draft) == "function" then
+      backend.set_thread_draft(snapshot.acp_thread_id, "")
+    end
+  end
+end
 
 local function as_thread(review)
   return {
@@ -130,7 +173,7 @@ function M.setup()
   })
 end
 
-local function submit(review, item)
+local function submit(review, item, scratch)
   review.reviewer = item.name
   local saved, err = store:save(review)
   if not saved then return nil, err end
@@ -158,12 +201,14 @@ local function submit(review, item)
     store:save(saved)
     return nil, "the ACP session did not accept the review prompt"
   end
+  consume_scratch(scratch)
   vim.notify("LazyAgent Review: AI review started with " .. item.name, vim.log.levels.INFO)
   return true
 end
 
 function M.start(range)
   M.setup()
+  local scratch = capture_scratch()
   local review, create_err = GitReview.create(range, { cwd = vim.fn.getcwd(), blob_store = blobs })
   if not review then
     vim.notify("LazyAgent Review: " .. tostring(create_err), vim.log.levels.ERROR)
@@ -173,6 +218,7 @@ function M.start(range)
     vim.notify("LazyAgent Review: the selected range has no changes", vim.log.levels.INFO)
     return
   end
+  if scratch then review.instructions = scratch.text end
   local items = candidates(review)
   if #items == 0 then
     vim.notify("LazyAgent Review: start an idle ACP agent in the review repository first", vim.log.levels.WARN)
@@ -180,7 +226,7 @@ function M.start(range)
   end
   local function selected(item)
     if not item then return end
-    local ok, err = submit(review, item)
+    local ok, err = submit(review, item, scratch)
     if not ok then vim.notify("LazyAgent Review: " .. tostring(err), vim.log.levels.ERROR) end
   end
   if #items == 1 then selected(items[1]); return end
@@ -217,5 +263,7 @@ end
 
 M._as_thread = as_thread
 M._finish = finish
+M._capture_scratch = capture_scratch
+M._consume_scratch = consume_scratch
 
 return M

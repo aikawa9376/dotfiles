@@ -46,7 +46,10 @@ function M.run()
   assert_equal(blobs:get(by_path["review.lua"].after_blob, { max_bytes = false }),
     "local value = 2\nreturn value + 1\n", "head blob remains readable")
   assert_equal(review.diff, nil, "review does not duplicate the Git diff")
+  review.instructions = "Focus on Oracle compatibility.\nIgnore formatting-only concerns."
   local prompt = GitReview.prompt(review)
+  assert(prompt:match("^Additional review instructions from the user:\nFocus on Oracle compatibility%."),
+    "scratch instructions are prepended to the review prompt")
   assert(prompt:find("read-only code review", 1, true), "prompt is explicitly read-only")
   assert(prompt:find("Repository root: " .. root, 1, true), "prompt identifies the repository")
   assert(prompt:find("unchanged after-side line in a changed file", 1, true),
@@ -77,6 +80,8 @@ function M.run()
   assert(review_store:save(review), "review is persisted")
   assert_equal(assert(review_store:get(review.review_id)).annotations[1].summary,
     "Return changed", "saved finding is restored")
+  assert_equal(assert(review_store:get(review.review_id)).instructions,
+    "Focus on Oracle compatibility.\nIgnore formatting-only concerns.", "review instructions are persisted")
 
   local thread = {
     thread_id = "git-review-" .. review.review_id,
@@ -92,6 +97,19 @@ function M.run()
   assert_equal(lines[1], "LazyAgent AI Review — HEAD~1..HEAD", "AI review drawer title")
   assert(lines[3]:find("`K` finding", 1, true), "review-specific actions")
   assert(table.concat(lines, "\n"):find("💬[must]", 1, true), "file row includes finding label")
+
+  local window = require("lazyagent.window")
+  local controller = require("lazyagent.acp.git_review_controller")
+  local scratch_buf = window.ensure_scratch_buffer(nil, { filetype = "lazyagent", agent_name = "ReviewFixture" })
+  vim.api.nvim_buf_set_lines(scratch_buf, 0, -1, false, { "Prioritize regressions.", "Check error paths." })
+  window.open(scratch_buf, { window_type = "float", agent_name = "ReviewFixture" })
+  local captured = assert(controller._capture_scratch())
+  assert_equal(captured.text, "Prioritize regressions.\nCheck error paths.", "visible scratch instructions are captured")
+  controller._consume_scratch(captured)
+  assert_equal(window.is_open(), nil, "consumed scratch window is closed")
+  assert_equal(table.concat(vim.api.nvim_buf_get_lines(scratch_buf, 0, -1, false), "\n"), "",
+    "consumed scratch buffer is cleared")
+  vim.api.nvim_buf_delete(scratch_buf, { force = true })
 
   vim.fn.delete(root, "rf")
 end
