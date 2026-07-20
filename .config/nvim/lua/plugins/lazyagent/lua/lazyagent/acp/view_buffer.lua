@@ -49,10 +49,13 @@ local pane_opts_for_bufnr
 local resolve_anchor_window
 local read_transcript_lines
 local fancy_mode_enabled
+local request_buffer_redraw_impl
 local custom_background_groups = {}
 local layout_state = {}
 local suppress_transcript_window_refresh = false
 local dedicated_transcript_windows = {}
+local deferred_cmdline_ui_updates = {}
+local cmdline_leave_autocmd
 local ACP_WINDOW_OPTIONS = {
   "number",
   "relativenumber",
@@ -84,13 +87,96 @@ local function close_timer(timer)
   pcall(function() timer:close() end)
 end
 
+local function in_cmdline_mode()
+  local ok, mode = pcall(vim.api.nvim_get_mode)
+  local current_mode = ok and mode and mode.mode or ""
+  return type(current_mode) == "string" and current_mode:sub(1, 1) == "c"
+end
+
+local function has_deferred_cmdline_ui_updates()
+  return next(deferred_cmdline_ui_updates) ~= nil
+end
+
+local function clear_deferred_cmdline_ui_update(bufnr)
+  deferred_cmdline_ui_updates[bufnr] = nil
+  if has_deferred_cmdline_ui_updates() or not cmdline_leave_autocmd then
+    return
+  end
+  pcall(vim.api.nvim_del_autocmd, cmdline_leave_autocmd)
+  cmdline_leave_autocmd = nil
+end
+
+local flush_deferred_cmdline_ui_updates
+local function ensure_cmdline_leave_autocmd()
+  if cmdline_leave_autocmd then
+    return
+  end
+  cmdline_leave_autocmd = vim.api.nvim_create_autocmd("CmdlineLeave", {
+    once = true,
+    desc = "LazyAgent ACP resume deferred UI updates",
+    callback = function()
+      cmdline_leave_autocmd = nil
+      vim.schedule(flush_deferred_cmdline_ui_updates)
+    end,
+  })
+end
+
+flush_deferred_cmdline_ui_updates = function()
+  if not has_deferred_cmdline_ui_updates() then
+    return
+  end
+  if in_cmdline_mode() then
+    ensure_cmdline_leave_autocmd()
+    return
+  end
+  if cmdline_leave_autocmd then
+    pcall(vim.api.nvim_del_autocmd, cmdline_leave_autocmd)
+    cmdline_leave_autocmd = nil
+  end
+
+  local deferred = deferred_cmdline_ui_updates
+  deferred_cmdline_ui_updates = {}
+  for pending_bufnr, update in pairs(deferred) do
+    if vim.api.nvim_buf_is_valid(pending_bufnr)
+      and is_acp_buffer
+      and is_acp_buffer(pending_bufnr) == true
+      and (not buffer_is_visible or buffer_is_visible(pending_bufnr))
+    then
+      if update.render == true and type(queue_markdown_rendering) == "function" then
+        queue_markdown_rendering(pending_bufnr)
+      end
+      if update.redraw == true and request_buffer_redraw_impl then
+        request_buffer_redraw_impl(pending_bufnr)
+      end
+    end
+  end
+end
+
+local function defer_cmdline_ui_update(bufnr, opts)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  if not is_acp_buffer or is_acp_buffer(bufnr) ~= true then
+    return false
+  end
+
+  local pending = deferred_cmdline_ui_updates[bufnr] or {}
+  pending.render = pending.render == true or opts.render == true
+  pending.redraw = pending.redraw == true or opts.redraw == true
+  deferred_cmdline_ui_updates[bufnr] = pending
+  ensure_cmdline_leave_autocmd()
+  return true
+end
+
 local function strdisplaywidth(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text)
   return ok and width or #tostring(text or "")
 end
 
-local request_buffer_redraw_impl
 local function request_buffer_redraw(bufnr)
+  if in_cmdline_mode() and defer_cmdline_ui_update(bufnr, { redraw = true }) then
+    return
+  end
   return request_buffer_redraw_impl and request_buffer_redraw_impl(bufnr)
 end
 
@@ -103,6 +189,19 @@ local function remove_list_value(list, value)
       table.remove(list, idx)
     end
   end
+end
+
+local function render_markdown_is_attached(manager, bufnr)
+  if type(manager) ~= "table" then
+    return false
+  end
+  if type(manager.attached) == "function" then
+    local ok, attached = pcall(manager.attached, bufnr)
+    if ok then
+      return attached == true
+    end
+  end
+  return type(manager.buffers) == "table" and vim.tbl_contains(manager.buffers, bufnr)
 end
 
 local function cleanup_render_markdown_decorator(decorator, ns, bufnr)
@@ -170,7 +269,9 @@ local function cleanup_external_markdown_rendering(bufnr)
   end
 
   local ok_manager, manager = pcall(require, "render-markdown.core.manager")
-  if ok_manager and type(manager) == "table" then
+  -- render-markdown has no detach API. Removing a valid buffer from its list leaves
+  -- the buffer-local autocmd behind, so a later attach would duplicate every event.
+  if not is_valid and ok_manager and type(manager) == "table" then
     remove_list_value(manager.buffers, bufnr)
   end
 
@@ -207,6 +308,7 @@ local function cleanup_markdown_rendering(bufnr)
     return
   end
 
+  clear_deferred_cmdline_ui_update(bufnr)
   local is_valid = vim.api.nvim_buf_is_valid(bufnr)
   if type(layout_entry) == "function" and is_valid then
     local entry = layout_entry(bufnr)
@@ -284,6 +386,10 @@ local function refresh_markdown_rendering(bufnr)
     return
   end
 
+  if in_cmdline_mode() and defer_cmdline_ui_update(bufnr, { render = true, redraw = true }) then
+    return
+  end
+
   local entry = type(layout_entry) == "function" and layout_entry(bufnr) or nil
   if not entry or entry.render_markdown_attached ~= true then
     pcall(vim.treesitter.start, bufnr, "markdown")
@@ -291,11 +397,13 @@ local function refresh_markdown_rendering(bufnr)
 
   local ok_manager, manager = pcall(require, "render-markdown.core.manager")
   if ok_manager and type(manager.attach) == "function" then
-    if not entry or entry.render_markdown_attached ~= true then
-      pcall(manager.attach, bufnr)
-      if entry then
-        entry.render_markdown_attached = true
-      end
+    local attached = render_markdown_is_attached(manager, bufnr)
+    if not attached then
+      local attach_ok = pcall(manager.attach, bufnr)
+      attached = render_markdown_is_attached(manager, bufnr) or attach_ok
+    end
+    if entry then
+      entry.render_markdown_attached = attached
     end
   end
 
@@ -333,6 +441,11 @@ queue_markdown_rendering = function(bufnr)
 
   close_timer(entry.markdown_render_timer)
   entry.markdown_render_timer = nil
+  entry.markdown_render_token = nil
+
+  if in_cmdline_mode() and defer_cmdline_ui_update(bufnr, { render = true, redraw = true }) then
+    return
+  end
 
   local token = {}
   entry.markdown_render_token = token
