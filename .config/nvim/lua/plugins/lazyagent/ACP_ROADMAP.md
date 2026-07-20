@@ -1,7 +1,7 @@
 # LazyAgent ACP roadmap
 
 > Status: in progress — Milestone 0
-> Last reviewed: 2026-07-15
+> Last reviewed: 2026-07-20
 
 この文書は、LazyAgent の ACP 機能を Zed の External Agent 相当まで高めつつ、
 tmux / agentmux、provider 切替、mobile、brain 連携といった既存の強みを伸ばすための実装計画です。
@@ -193,6 +193,11 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] text modified / moved Rejectはagent afterをbaseにuser currentとbeforeをmergeし、競合・binaryは変更せず報告する。
 - [x] filesystem checkpointのrestore / redoとcheckpointからのclient-local branchを追加する。
   - [x] turn changeの反転でRestore / Redoし、親thread / turn metadataとtranscript copyを持つnative非共有branchを作成する。
+- [x] Changesへprovider非依存のreview annotationモデルを追加する。
+  - [x] turn完了時の最終assistant responseをturn-level explanationとしてjournalへ保存する。
+  - [x] file / after-line rangeを対象にしたexplanation / review / comment / question / suggestionを永続化できる。
+  - [x] Changesの`K` / `<Space><Space>`でMarkdown noteを表示し、`[n` / `]n`でnote間を移動する。
+  - [x] blob hashとcontext hashをtargetへ保持し、対象blobが変わったnoteをoutdated表示できる。
 
 ### Exit criteria
 
@@ -294,6 +299,17 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
 2. 別providerのreview threadがdiffをread-onlyで確認する。
 3. findingをquickfix / review cardへ集約する。
 4. 選択したfindingだけを元threadへ返す。
+
+### Provider-independent change reviews
+
+Changesのannotationモデルを、現在のACP turn以外のdiff sourceにも広げます。
+
+1. working tree、staged changes、任意のGit range、patchを共通`ReviewSource`へ正規化する。
+2. file / hunk / before・after rangeへhumanまたはagentのnoteを追加・編集・解決できるようにする。
+3. blob hashと周辺context fingerprintでnoteを再配置し、再配置不能なものはoutdatedとして残す。
+4. review agentはread-only diffとannotation APIだけを受け取り、provider固有処理をUIから分離する。
+5. optional skillは外部agentへannotation APIの使い方を教える薄い層に留め、表示と保存はskillなしで動作させる。
+6. 複数reviewerのauthor、severity、threaded reply、resolved stateを追加し、quickfix / Cockpitとも共有する。
 
 ### Context budget broker
 

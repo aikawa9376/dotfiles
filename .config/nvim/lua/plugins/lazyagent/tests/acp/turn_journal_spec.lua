@@ -13,10 +13,11 @@ function M.run()
     root = "/repo",
     files = { { path = "a.lua" }, { path = "b.lua" } },
     dirty = { { path = "a.lua" } },
-  })
+  }, { conversation_start_seq = 4 })
   assert_equal(turn.turn_id, "thread-1:1", "turn identity")
   assert_equal(journal.next_turn_sequence, 2, "turn sequence")
   assert_equal(turn.baseline.root, "/repo", "turn baseline")
+  assert_equal(turn.conversation_start_seq, 4, "turn conversation boundary")
 
   journal = assert(Journal.record(journal, turn.turn_id, "tool", {
     tool_call_id = "tool-1",
@@ -67,15 +68,21 @@ function M.run()
     finished_at = "2026-07-15T01:03:00Z",
     final_snapshot = { root = "/repo", files = { { path = "a.lua" } } },
     changes = { { path = "a.lua", operation = "modified" } },
+    annotations = { {
+      kind = "explanation", summary = "Updated a.lua", rationale = "The new behavior is intentional.",
+    } },
   }))
   assert_equal(Journal.get(journal, turn.turn_id).state, "completed", "completed turn state")
   assert_equal(journal.turns[1].changes[1].operation, "modified", "completed turn changes")
+  assert_equal(journal.turns[1].annotations[1].kind, "explanation", "turn annotations are normalized")
+  assert(journal.turns[1].annotations[1].id, "turn annotations receive a stable id")
   assert_equal(journal.turns[1].baseline.files, nil, "completed baseline file list compacted")
   assert_equal(journal.turns[1].baseline.file_count, 2, "completed baseline file count retained")
   assert_equal(journal.turns[1].final_snapshot.file_count, 1, "final snapshot file count retained")
   local compacted_again = Journal.compact(journal)
   assert_equal(compacted_again.turns[1].baseline.file_count, 2, "repeated compaction preserves baseline file count")
   assert_equal(compacted_again.turns[1].final_snapshot.file_count, 1, "repeated compaction preserves final file count")
+  assert_equal(compacted_again.turns[1].annotations[1].summary, "Updated a.lua", "compaction preserves annotations")
   local recovered_journal, recovered_count = Journal.recover_file_event_changes({ turns = { {
     baseline = { root = "/repo", vcs = { kind = "git", head = "before" } },
     file_events = { {
