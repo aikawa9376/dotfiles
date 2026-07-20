@@ -13,11 +13,12 @@ function M.run()
     root = "/repo",
     files = { { path = "a.lua" }, { path = "b.lua" } },
     dirty = { { path = "a.lua" } },
-  }, { conversation_start_seq = 4 })
+  }, { conversation_start_seq = 4, user_input = "Update a.lua" })
   assert_equal(turn.turn_id, "thread-1:1", "turn identity")
   assert_equal(journal.next_turn_sequence, 2, "turn sequence")
   assert_equal(turn.baseline.root, "/repo", "turn baseline")
   assert_equal(turn.conversation_start_seq, 4, "turn conversation boundary")
+  assert_equal(turn.user_input, "Update a.lua", "turn user input")
 
   journal = assert(Journal.record(journal, turn.turn_id, "tool", {
     tool_call_id = "tool-1",
@@ -88,6 +89,7 @@ function M.run()
   assert_equal(compacted_again.turns[1].baseline.file_count, 2, "repeated compaction preserves baseline file count")
   assert_equal(compacted_again.turns[1].final_snapshot.file_count, 1, "repeated compaction preserves final file count")
   assert_equal(compacted_again.turns[1].annotations[1].summary, "Updated a.lua", "compaction preserves annotations")
+  assert_equal(compacted_again.turns[1].user_input, "Update a.lua", "compaction preserves turn user input")
   local recovered_journal, recovered_count = Journal.recover_file_event_changes({ turns = { {
     baseline = { root = "/repo", vcs = { kind = "git", head = "before" } },
     file_events = { {

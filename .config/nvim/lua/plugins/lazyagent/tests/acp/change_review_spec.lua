@@ -16,12 +16,14 @@ function M.run()
       turns = {
         {
           turn_id = "thread-1:1",
+          user_input = "Add the older file",
           changes = {
             { operation = "added", path = "lua/older.lua" },
           },
         },
         {
           turn_id = "thread-1:2",
+          user_input = "Update the return value\nwhile keeping compatibility",
           annotations = {
             { kind = "explanation", summary = "Turn summary", rationale = "Changed the return value.\nKept compatibility." },
             {
@@ -62,7 +64,7 @@ function M.run()
     "## Explanation", "", "Changed the return value.", "Kept compatibility.",
   }, "explanation omits the lossy summary and keeps the multiline final answer")
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
-    "LazyAgent ACP Changes — Review fixture",
+    "LazyAgent ACP Changes — Update the return value while keeping compatibility",
     "Turn thread-1:2 · 2 file(s) · 📝 final",
     "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
@@ -172,6 +174,9 @@ function M.run()
   assert_equal(vim.wo.cursorline, false, "changes drawer avoids an inherited blue cursor-line background")
   assert_equal(review.open(thread), drawer, "reopening a thread reuses its changes buffer")
   assert_equal(#vim.fn.win_findbuf(drawer), 1, "reopening a visible changes drawer does not duplicate its window")
+  assert_equal(vim.api.nvim_buf_get_lines(drawer, 0, 1, false)[1],
+    "LazyAgent ACP Changes — Update the return value while keeping compatibility",
+    "changes drawer title uses the selected turn user input")
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("2/2", 1, true), "latest turn history position")
   vim.api.nvim_win_set_cursor(0, { 5, 0 })
   local menu_items, menu_opts, menu_callback
@@ -269,6 +274,8 @@ function M.run()
   assert(not table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n"):find("@@", 1, true), "inline diff closes")
   vim.api.nvim_feedkeys("[t", "x", false)
   vim.wait(100)
+  assert_equal(vim.api.nvim_buf_get_lines(drawer, 0, 1, false)[1],
+    "LazyAgent ACP Changes — Add the older file", "previous turn title follows its user input")
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("thread%-1:1"), "previous turn mapping")
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("1/2", 1, true), "previous turn history position")
   assert_equal(vim.fn.maparg("a", "n", false, true).desc, "Approve LazyAgent ACP file change", "approve mapping")
@@ -279,6 +286,9 @@ function M.run()
 
   vim.api.nvim_feedkeys("]t", "x", false)
   vim.wait(100)
+  assert_equal(vim.api.nvim_buf_get_lines(drawer, 0, 1, false)[1],
+    "LazyAgent ACP Changes — Update the return value while keeping compatibility",
+    "next turn restores its user input title")
   vim.api.nvim_win_set_cursor(0, { 5, 0 })
   vim.api.nvim_feedkeys("o", "x", false)
   vim.wait(100)
@@ -326,6 +336,7 @@ function M.run()
   live_thread = vim.deepcopy(thread)
   live_thread.change_journal.turns[#live_thread.change_journal.turns + 1] = {
     turn_id = "thread-1:3", state = "active",
+    user_input = "Add the live preview",
     changes = { { operation = "added", path = "lua/live.lua", after_blob = "after-a" } },
   }
   vim.api.nvim_exec_autocmds("User", {
@@ -334,6 +345,8 @@ function M.run()
   vim.wait(100)
   assert(vim.api.nvim_buf_get_lines(drawer, 1, 2, false)[1]:find("live", 1, true),
     "open Changes drawer follows active turn updates")
+  assert_equal(vim.api.nvim_buf_get_lines(drawer, 0, 1, false)[1],
+    "LazyAgent ACP Changes — Add the live preview", "live turn title follows its user input")
   assert(table.concat(vim.api.nvim_buf_get_lines(drawer, 0, -1, false), "\n"):find("lua/live.lua", 1, true),
     "realtime drawer renders newly changed files")
   vim.ui.select = function(items, opts, callback)
@@ -375,6 +388,8 @@ function M.run()
     } },
   }
   local empty_drawer = assert(review.open(empty_thread))
+  assert_equal(vim.api.nvim_buf_get_lines(empty_drawer, 0, 1, false)[1],
+    "LazyAgent ACP Changes — Empty active turn", "legacy turns fall back to the thread title")
   assert(vim.api.nvim_buf_get_lines(empty_drawer, 1, 2, false)[1]:find("0 file(s)", 1, true),
     "active turn can be displayed before its first file change")
   local active_select = vim.ui.select
