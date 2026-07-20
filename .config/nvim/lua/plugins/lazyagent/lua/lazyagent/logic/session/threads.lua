@@ -576,6 +576,10 @@ function M.setup(deps)
       return false
     end
     local origin_bufnr = vim.api.nvim_get_current_buf()
+    local current_open_thread_id = identity.thread_id(
+      state.open_agent,
+      state.open_agent and state.sessions and state.sessions[state.open_agent] or nil
+    )
     local current_root = vim.b[origin_bufnr].lazyagent_workspace_root
     if type(current_root) ~= "string" or current_root == "" then
       current_root = require("lazyagent.util").git_root_for_path(vim.api.nvim_buf_get_name(origin_bufnr))
@@ -925,16 +929,21 @@ function M.setup(deps)
         end
       end
       local highlights
-      local open_thread_id = require("lazyagent.logic.session.identity").thread_id(
+      local live_open_thread_id = identity.thread_id(
         state.open_agent,
         state.open_agent and state.sessions and state.sessions[state.open_agent] or nil
       )
+      if live_open_thread_id then
+        current_open_thread_id = live_open_thread_id
+      elseif current_open_thread_id and not runtimes[current_open_thread_id] then
+        current_open_thread_id = nil
+      end
       lines, line_map, highlights = require("lazyagent.acp.cockpit").render(
         require("lazyagent.acp.cockpit").filter(stored_threads, query),
         runtimes,
         {
           width = cockpit_width(),
-          open_thread_id = open_thread_id,
+          open_thread_id = current_open_thread_id,
           owner_pid = vim.fn.getpid(),
           owner_instance_id = state.editor_instance_id,
           current_root = current_root,

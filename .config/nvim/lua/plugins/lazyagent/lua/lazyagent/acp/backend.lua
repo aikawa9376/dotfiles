@@ -100,6 +100,19 @@ local function sync_thread_record(session, changes)
   return updated
 end
 
+local function live_thread_record(thread_id)
+  for _, session in pairs(sessions) do
+    if session.thread_id == thread_id and session.thread_record then
+      local record = vim.deepcopy(session.thread_record)
+      if session.active_change_journal then
+        record.change_journal = vim.deepcopy(session.active_change_journal)
+      end
+      return record
+    end
+  end
+  return nil
+end
+
 local function sync_thread_view(session)
   local view = session and session.view or nil
   if not view or type(view.capture_thread_view) ~= "function" then
@@ -114,6 +127,7 @@ end
 
 local record_turn_event
 local maybe_follow_agent
+local schedule_change_preview
 
 local function put_turn_text_blob(store, text)
   if not store or text == nil then return nil end
@@ -151,6 +165,8 @@ local function capture_turn_file_event(session, event)
       local stat = (vim.uv or vim.loop).fs_stat(absolute)
       if stat and stat.type == "file" then
         after_blob, event.after_blob_error = session.blob_store:put_file(absolute)
+      elseif event.operation == "observed" then
+        event.operation = "deleted"
       end
     end
   end
@@ -181,8 +197,15 @@ local function record_turn_baseline(session)
     { conversation_start_seq = #(session.conversation_timeline or {}) }
   )
   session.active_change_journal = journal
+  session.change_preview_before_blobs = {}
   session.current_change_turn_id = turn.turn_id
   session.current_change_root = snapshot.root
+  util.fire_event("ChangeJournal", {
+    agent_name = session.agent_name,
+    thread_id = session.thread_id,
+    turn_id = turn.turn_id,
+    state = "active",
+  })
   if session.turn_watch_handle then
     Watch.remove(session.turn_watch_handle)
   end
@@ -197,6 +220,49 @@ local function record_turn_baseline(session)
     end
   end, { debounce_ms = 75 })
   return turn
+end
+
+local function baseline_blob(turn, path)
+  for _, file in ipairs(turn and turn.baseline and turn.baseline.files or {}) do
+    if file.path == path and file.blob then return vim.deepcopy(file.blob) end
+  end
+  return nil
+end
+
+schedule_change_preview = function(session)
+  if not session or not session.current_change_turn_id then return end
+  session.change_preview_generation = (tonumber(session.change_preview_generation) or 0) + 1
+  local generation = session.change_preview_generation
+  local turn_id = session.current_change_turn_id
+  vim.defer_fn(function()
+    if not session.current_change_turn_id
+      or session.current_change_turn_id ~= turn_id
+      or session.change_preview_generation ~= generation
+    then
+      return
+    end
+    local journal, turn = TurnJournal.preview_changes(
+      session.active_change_journal or (session.thread_record and session.thread_record.change_journal) or {},
+      turn_id,
+      function(active_turn, path)
+        local cached = session.change_preview_before_blobs and session.change_preview_before_blobs[path]
+        if cached ~= nil then return cached ~= false and vim.deepcopy(cached) or nil end
+        local before = baseline_blob(active_turn, path)
+          or WorkspaceSnapshot.git_blob(active_turn.baseline, path, { blob_store = session.blob_store })
+        session.change_preview_before_blobs = session.change_preview_before_blobs or {}
+        session.change_preview_before_blobs[path] = before and vim.deepcopy(before) or false
+        return before
+      end
+    )
+    if not journal or not turn then return end
+    session.active_change_journal = journal
+    util.fire_event("ChangeJournal", {
+      agent_name = session.agent_name,
+      thread_id = session.thread_id,
+      turn_id = turn_id,
+      state = "active",
+    })
+  end, 120)
 end
 
 record_turn_event = function(session, kind, event)
@@ -214,6 +280,7 @@ record_turn_event = function(session, kind, event)
     return nil
   end
   session.active_change_journal = journal
+  if kind == "file" and schedule_change_preview then schedule_change_preview(session) end
   if maybe_follow_agent then
     maybe_follow_agent(session, event)
   end
@@ -295,10 +362,21 @@ local function finish_change_turn(session, completion_state)
   session.current_change_turn_id = nil
   session.active_change_journal = nil
   session.current_change_root = nil
+  session.change_preview_before_blobs = nil
   if not finished_journal then
     return nil
   end
-  return sync_thread_record(session, { change_journal = finished_journal }) and finished_turn or nil
+  local synced = sync_thread_record(session, { change_journal = finished_journal })
+  if synced then
+    util.fire_event("ChangeJournal", {
+      agent_name = session.agent_name,
+      thread_id = session.thread_id,
+      turn_id = turn_id,
+      state = completion_state,
+    })
+    return finished_turn
+  end
+  return nil
 end
 
 local function path_in_session_workspace(session, path)
@@ -501,6 +579,9 @@ local function create_backend(default_view)
   local change_review = ChangeReview.new({
     read_blob = function(ref)
       return blob_store:get(ref)
+    end,
+    get_thread = function(thread_id)
+      return live_thread_record(thread_id) or thread_store:get(thread_id)
     end,
     decide = function(thread, turn, indices, decision)
       return backend.decide_thread_changes(thread.thread_id, turn.turn_id, indices, decision)
@@ -1081,7 +1162,9 @@ local function create_backend(default_view)
   end
 
   function backend.show_thread_changes(thread_id)
-    local thread, err = thread_store:get(thread_id)
+    local thread = live_thread_record(thread_id)
+    local err
+    if not thread then thread, err = thread_store:get(thread_id) end
     if not thread then
       return nil, err or ("thread not found: " .. tostring(thread_id))
     end

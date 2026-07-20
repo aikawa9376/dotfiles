@@ -55,6 +55,11 @@ function M.run()
   assert_equal(journal.turns[1].file_revisions["a.lua"].before_blob.hash, "before", "first revision is immutable")
   assert_equal(journal.turns[1].file_revisions["a.lua"].after_blob.hash, "after", "latest revision is canonical")
   assert_equal(journal.turns[1].file_revisions["a.lua"].event_count, 2, "revision tracks source event count")
+  local preview_journal, preview_turn, preview_count = Journal.preview_changes(journal, turn.turn_id)
+  assert_equal(preview_count, 1, "active turn preview recovers changed files")
+  assert_equal(preview_turn.state, "active", "realtime preview keeps the turn active")
+  assert_equal(preview_turn.changes[1].after_blob.hash, "after", "realtime preview uses the latest revision")
+  journal = preview_journal
 
   journal = assert(Journal.record(journal, turn.turn_id, "buffer", {
     event = "BufWritePost",
