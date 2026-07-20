@@ -60,6 +60,10 @@ function M.build()
     },
     start_in_insert_on_focus = false,
     window_type = "float",
+    notes = {
+      icon_position = "eol",
+      icon = "󰆉",
+    },
     backend = "tmux",
     acp = {
       enabled = false,

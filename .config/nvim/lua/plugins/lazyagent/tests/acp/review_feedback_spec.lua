@@ -39,9 +39,10 @@ function M.run()
     submit_desc = "Send review fixture",
   })
   assert_equal(vim.b[editor_buf].lazyagent_review_editor, true, "review editor marker")
+  assert_equal(vim.b[editor_buf].lazyagent_is_scratch, true, "review editor uses LazyAgent scratch buffer defaults")
   assert_equal(vim.api.nvim_win_is_valid(editor_win), true, "review editor window")
   assert_equal(vim.fn.maparg("<C-Space>", "n", false, true).desc, "Send review fixture", "review editor submit mapping")
-  vim.api.nvim_win_close(editor_win, true)
+  require("lazyagent.scratch_input").close(editor_buf)
 end
 
 return M

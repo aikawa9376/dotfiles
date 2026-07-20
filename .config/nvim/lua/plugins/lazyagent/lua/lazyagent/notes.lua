@@ -1,6 +1,8 @@
 local M = {}
 
 local util = require("lazyagent.util")
+local state = require("lazyagent.logic.state")
+local scratch_input = require("lazyagent.scratch_input")
 
 local namespace = vim.api.nvim_create_namespace("LazyAgentNotes")
 local entries = {}
@@ -82,8 +84,50 @@ end
 
 local function ensure_highlights()
   vim.api.nvim_set_hl(0, "LazyAgentNoteSign", { link = "DiagnosticInfo", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentNoteRange", { link = "CursorLine", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentNoteText", { link = "Comment", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentNoteHeader", { link = "Title", default = true })
+end
+
+local function visual_options(opts)
+  local configured = ((state.opts or {}).notes or {})
+  local icon_position = tostring(opts.icon_position or configured.icon_position or "eol"):lower()
+  if icon_position == "sign" then icon_position = "gutter" end
+  if icon_position ~= "gutter" then icon_position = "eol" end
+  local icon = tostring(opts.icon or configured.icon or "󰆉")
+  if icon == "" then icon = "󰆉" end
+  return icon_position, icon
+end
+
+local function create_marks(bufnr, start_line, end_line, opts)
+  local anchor = vim.api.nvim_buf_set_extmark(bufnr, namespace, start_line - 1, 0, {
+    end_row = end_line,
+    end_col = 0,
+    right_gravity = false,
+    end_right_gravity = false,
+  })
+  local background = vim.api.nvim_buf_set_extmark(bufnr, namespace, start_line - 1, 0, {
+    end_row = end_line,
+    end_col = 0,
+    right_gravity = false,
+    end_right_gravity = false,
+    hl_group = "LazyAgentNoteRange",
+    hl_eol = true,
+    priority = 40,
+  })
+
+  local icon_position, icon = visual_options(opts)
+  local icon_opts = { right_gravity = false, priority = 100 }
+  if icon_position == "gutter" then
+    icon_opts.sign_text = icon
+    icon_opts.sign_hl_group = "LazyAgentNoteSign"
+  else
+    icon_opts.virt_text = { { " " .. icon, "LazyAgentNoteSign" } }
+    icon_opts.virt_text_pos = "eol"
+    icon_opts.hl_mode = "combine"
+  end
+  local icon_mark = vim.api.nvim_buf_set_extmark(bufnr, namespace, start_line - 1, 0, icon_opts)
+  return anchor, background, icon_mark, icon_position
 end
 
 local function close_window(winid)
@@ -221,14 +265,12 @@ function M.add(opts)
   if start_line > end_line then start_line, end_line = end_line, start_line end
   ensure_highlights()
 
-  local mark_id = vim.api.nvim_buf_set_extmark(bufnr, namespace, start_line - 1, 0, {
-    end_row = end_line,
-    end_col = 0,
-    right_gravity = false,
-    end_right_gravity = true,
-    sign_text = "󰆉",
-    sign_hl_group = "LazyAgentNoteSign",
-  })
+  local mark_id, background_mark_id, icon_mark_id, icon_position = create_marks(
+    bufnr,
+    start_line,
+    end_line,
+    opts
+  )
   local entry = {
     id = next_id,
     bufnr = bufnr,
@@ -238,6 +280,9 @@ function M.add(opts)
     end_line = end_line,
     text = text,
     mark_id = mark_id,
+    background_mark_id = background_mark_id,
+    icon_mark_id = icon_mark_id,
+    icon_position = icon_position,
   }
   next_id = next_id + 1
   entries[entry.id] = entry
@@ -265,20 +310,7 @@ function M.show(id)
 end
 
 function M.submit_editor(bufnr)
-  local ctx = editor_contexts[bufnr]
-  if not ctx or not vim.api.nvim_buf_is_valid(bufnr) then return nil, "Note editor is no longer valid" end
-  local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-  local entry, err = M.add(vim.tbl_extend("force", ctx, { text = text }))
-  if not entry then
-    vim.notify("LazyAgentNote: " .. tostring(err), vim.log.levels.ERROR)
-    return nil, err
-  end
-  editor_contexts[bufnr] = nil
-  pcall(vim.cmd, "stopinsert")
-  local winid = vim.fn.bufwinid(bufnr)
-  close_window(winid ~= -1 and winid or nil)
-  vim.notify(string.format("LazyAgentNote: saved %s:%d", vim.fn.fnamemodify(entry.path, ":t"), entry.start_line))
-  return entry
+  return scratch_input.submit(bufnr)
 end
 
 function M.open_editor(opts)
@@ -293,56 +325,41 @@ function M.open_editor(opts)
   local end_line = math.max(1, math.min(tonumber(opts.end_line) or start_line, line_count))
   if start_line > end_line then start_line, end_line = end_line, start_line end
 
-  local editor_buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[editor_buf].bufhidden = "wipe"
-  vim.bo[editor_buf].buftype = "nofile"
-  vim.bo[editor_buf].swapfile = false
-  vim.bo[editor_buf].filetype = "markdown"
-  vim.b[editor_buf].lazyagent_note_editor = true
+  local source_winid = tonumber(opts.source_winid)
+  if not source_winid or not vim.api.nvim_win_is_valid(source_winid) then
+    source_winid = vim.fn.bufwinid(bufnr)
+    if source_winid == -1 then source_winid = vim.api.nvim_get_current_win() end
+  end
+  local editor_buf, winid
+  editor_buf, winid = scratch_input.open({
+    source_bufnr = bufnr,
+    source_winid = source_winid,
+    window_type = opts.window_type,
+    window_opts = opts.window_opts,
+    is_vertical = opts.is_vertical,
+    start_in_insert_on_focus = opts.start_in_insert_on_focus,
+    title = " LazyAgent Note ",
+    buffer_vars = { lazyagent_note_editor = true },
+    empty_message = "Note text is empty",
+    error_prefix = "LazyAgentNote: ",
+    submit_desc = "Save LazyAgent Note",
+    cancel_desc = "Cancel LazyAgent Note",
+    on_submit = function(text, input_buf)
+      local ctx = editor_contexts[input_buf]
+      if not ctx then return nil, "Note editor is no longer valid" end
+      local entry, err = M.add(vim.tbl_extend("force", ctx, { text = text }))
+      if not entry then return nil, err end
+      editor_contexts[input_buf] = nil
+      vim.notify(string.format("LazyAgentNote: saved %s:%d", vim.fn.fnamemodify(entry.path, ":t"), entry.start_line))
+      return entry
+    end,
+    on_close = function(_, input_buf) editor_contexts[input_buf] = nil end,
+  })
   editor_contexts[editor_buf] = {
     bufnr = bufnr,
     start_line = start_line,
     end_line = end_line,
   }
-
-  local width = math.max(50, math.floor(vim.o.columns * 0.68))
-  local height = math.max(8, math.floor(vim.o.lines * 0.42))
-  local range = start_line == end_line and tostring(start_line) or string.format("%d-%d", start_line, end_line)
-  local title = string.format(" LazyAgent Note · %s:%s ", vim.fn.fnamemodify(path, ":~:."), range)
-  local winid = vim.api.nvim_open_win(editor_buf, true, {
-    relative = "editor",
-    row = math.max(0, math.floor((vim.o.lines - height) / 2) - 1),
-    col = math.max(0, math.floor((vim.o.columns - width) / 2)),
-    width = math.min(width, vim.o.columns - 4),
-    height = math.min(height, vim.o.lines - 4),
-    style = "minimal",
-    border = "rounded",
-    title = title,
-    title_pos = "left",
-    footer = " <C-Space> save · q cancel ",
-    footer_pos = "right",
-  })
-  vim.wo[winid].wrap = true
-  vim.wo[winid].linebreak = true
-
-  local function cancel()
-    editor_contexts[editor_buf] = nil
-    close_window(winid)
-  end
-  for _, mode in ipairs({ "n", "i" }) do
-    vim.keymap.set(mode, "<C-Space>", function() M.submit_editor(editor_buf) end, {
-      buffer = editor_buf,
-      silent = true,
-      desc = "Save LazyAgent Note",
-    })
-  end
-  vim.keymap.set("n", "ZZ", function() M.submit_editor(editor_buf) end, {
-    buffer = editor_buf,
-    silent = true,
-    desc = "Save LazyAgent Note",
-  })
-  vim.keymap.set("n", "q", cancel, { buffer = editor_buf, silent = true, nowait = true, desc = "Cancel LazyAgent Note" })
-  vim.cmd("startinsert")
   return editor_buf, winid
 end
 
@@ -372,8 +389,10 @@ end
 function M.remove(id)
   local entry = entries[tonumber(id)]
   if not entry then return false end
-  if entry.bufnr and vim.api.nvim_buf_is_valid(entry.bufnr) and entry.mark_id then
-    pcall(vim.api.nvim_buf_del_extmark, entry.bufnr, namespace, entry.mark_id)
+  if entry.bufnr and vim.api.nvim_buf_is_valid(entry.bufnr) then
+    for _, key in ipairs({ "mark_id", "background_mark_id", "icon_mark_id" }) do
+      if entry[key] then pcall(vim.api.nvim_buf_del_extmark, entry.bufnr, namespace, entry[key]) end
+    end
   end
   entries[entry.id] = nil
   return true
@@ -465,8 +484,7 @@ function M._reset()
   for id in pairs(entries) do M.remove(id) end
   close_popup()
   for bufnr in pairs(editor_contexts) do
-    local winid = vim.fn.bufwinid(bufnr)
-    close_window(winid ~= -1 and winid or nil)
+    scratch_input.close(bufnr)
     editor_contexts[bufnr] = nil
   end
   next_id = 1
