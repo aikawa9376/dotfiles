@@ -592,6 +592,12 @@ local function create_backend(default_view)
     decide_hunk = function(thread, turn, change_index, hunk_index, decision)
       return backend.decide_thread_hunk(thread.thread_id, turn.turn_id, change_index, hunk_index, decision)
     end,
+    add_note = function(thread, turn, annotation)
+      return backend.add_thread_review_note(thread.thread_id, turn.turn_id, annotation)
+    end,
+    send_review = function(thread, turn, text, annotation_ids)
+      return backend.send_thread_review(thread.thread_id, turn.turn_id, text, annotation_ids)
+    end,
     checkpoint = function(thread, turn, action)
       return backend.apply_thread_checkpoint(thread.thread_id, turn.turn_id, action)
     end,
@@ -1266,6 +1272,58 @@ local function create_backend(default_view)
       end
     end
     return decided
+  end
+
+  function backend.add_thread_review_note(thread_id, turn_id, annotation)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then return nil, err end
+    for _, session in pairs(sessions) do
+      if session.thread_id == thread_id and session.current_change_turn_id then
+        return nil, "wait for the active turn before adding review notes"
+      end
+    end
+    local turn = TurnJournal.get(thread.change_journal, turn_id)
+    if not turn then return nil, "turn not found: " .. tostring(turn_id) end
+    if turn.state == "active" then return nil, "wait for the active turn before adding review notes" end
+    annotation = vim.tbl_extend("force", vim.deepcopy(annotation or {}), {
+      kind = "review",
+      author = { type = "user", name = "User" },
+      created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
+    })
+    local journal, updated_turn = TurnJournal.add_annotation(thread.change_journal, turn_id, annotation)
+    if not journal then return nil, updated_turn end
+    local updated, update_err = backend.update_thread(thread_id, { change_journal = journal })
+    if not updated then return nil, update_err end
+    return TurnJournal.get(updated.change_journal, turn_id)
+  end
+
+  function backend.send_thread_review(thread_id, turn_id, text, annotation_ids)
+    local thread, err = thread_store:get(thread_id)
+    if not thread then return nil, err end
+    local turn = TurnJournal.get(thread.change_journal, turn_id)
+    if not turn then return nil, "turn not found: " .. tostring(turn_id) end
+    if turn.state == "active" then return nil, "wait for the active turn before sending review feedback" end
+    local session
+    for _, candidate in pairs(sessions) do
+      if candidate.thread_id == thread_id then session = candidate; break end
+    end
+    if not session or session.failed or not session.ready then
+      return nil, "resume this thread before sending review feedback"
+    end
+    if session.current_change_turn_id then
+      return nil, "wait for the active turn before sending review feedback"
+    end
+
+    local journal, cleared_turn = TurnJournal.remove_annotations(thread.change_journal, turn_id, annotation_ids)
+    if not journal then return nil, cleared_turn end
+    local updated, update_err = backend.update_thread(thread_id, { change_journal = journal })
+    if not updated then return nil, update_err end
+    local submitted = backend.paste_and_submit(session.pane_id, text, {}, {})
+    if submitted == false then
+      backend.update_thread(thread_id, { change_journal = thread.change_journal })
+      return nil, "failed to queue review feedback"
+    end
+    return cleared_turn
   end
 
   function backend.get_thread_change_hunks(thread_id, turn_id, change_index)
