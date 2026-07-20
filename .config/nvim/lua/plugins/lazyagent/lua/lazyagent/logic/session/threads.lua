@@ -161,6 +161,50 @@ function M.setup(deps)
     return false
   end
 
+  local function process_state(pid)
+    pid = tonumber(pid)
+    if not pid or pid <= 0 then return false end
+    local ok, result, err, code = pcall((vim.uv or vim.loop).kill, pid, 0)
+    if not ok then return nil, result end
+    if result == 0 then return true end
+    if code == "ESRCH" then return false end
+    return nil, err or code
+  end
+
+  function module.close_disconnected_thread(thread_id)
+    local backend, thread = thread_backend(thread_id)
+    if not backend or not thread then
+      vim.notify("LazyAgent ACP: thread not found: " .. tostring(thread_id), vim.log.levels.WARN)
+      return false
+    end
+    if thread.status ~= "active" or thread.process_id == nil then
+      vim.notify("LazyAgent ACP: selected thread is not disconnected", vim.log.levels.INFO)
+      return false
+    end
+    local alive, process_err = process_state(thread.process_id)
+    if alive == true then
+      vim.notify("LazyAgent ACP: process is still running; refusing to detach its thread", vim.log.levels.WARN)
+      return false
+    end
+    if alive == nil then
+      vim.notify("LazyAgent ACP: cannot verify process state: " .. tostring(process_err), vim.log.levels.WARN)
+      return false
+    end
+    local expected_process_id = thread.process_id
+    local updated, err = backend.update_thread(thread.thread_id, {
+      status = "closed",
+      process_id = vim.NIL,
+    }, { expected_process_id = expected_process_id })
+    if not updated then
+      vim.notify("LazyAgent ACP: failed to recover disconnected thread: " .. tostring(
+        type(err) == "table" and err.code or err
+      ), vim.log.levels.ERROR)
+      return false
+    end
+    vim.notify("LazyAgent ACP: disconnected thread is now closed and can be resumed", vim.log.levels.INFO)
+    return true
+  end
+
   local function delete_thread_record(backend, thread)
     local deleted, err = backend.delete_thread(thread.thread_id)
     if deleted ~= true then
@@ -1032,7 +1076,7 @@ function M.setup(deps)
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       local agent_name = id and thread_agents[id] or nil
       if not agent_name then
-        vim.notify("LazyAgent ACP: selected thread has no process in this Neovim", vim.log.levels.INFO)
+        if id and module.close_disconnected_thread(id) then refresh() end
         return
       end
       vim.ui.select({ "Cancel", "Stop" }, { prompt = "Stop this ACP process?" }, function(choice)
