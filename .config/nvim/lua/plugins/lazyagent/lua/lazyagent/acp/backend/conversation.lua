@@ -19,6 +19,31 @@ function M.setup(deps)
 
   local module = {}
 
+local function utf8_safe_prefix(value, byte_limit)
+  local text = tostring(value or "")
+  byte_limit = math.max(0, tonumber(byte_limit) or 0)
+  if #text <= byte_limit then return text end
+
+  local last = byte_limit
+  local lead = last
+  while lead > 0 do
+    local byte = text:byte(lead)
+    if not byte or byte < 0x80 or byte > 0xBF then break end
+    lead = lead - 1
+  end
+
+  local first = text:byte(lead)
+  local width = first and (
+    first < 0x80 and 1
+    or first < 0xE0 and 2
+    or first < 0xF0 and 3
+    or first < 0xF8 and 4
+    or 1
+  ) or 1
+  if lead + width - 1 > last then last = lead - 1 end
+  return text:sub(1, math.max(0, last))
+end
+
 local function section_kind(heading, meta)
   local explicit = type(meta) == "table" and tostring(meta.kind or ""):lower() or ""
   if explicit == "user" then
@@ -171,7 +196,7 @@ summarize_conversation_text = function(text, limit)
   if #normalized <= limit then
     return normalized
   end
-  return normalized:sub(1, math.max(1, limit - 1)) .. "…"
+  return utf8_safe_prefix(normalized, math.max(1, limit - #"…")) .. "…"
 end
 
 local history = require("lazyagent.acp.backend.conversation.history").setup({
@@ -527,8 +552,8 @@ local function new_conversation_item(session, heading, body, meta)
     status = meta.status,
     path = meta.path,
   }
-  if body_chunks then
-    item._summary_source = tostring(body_text or ""):sub(1, 512)
+  if meta.stream_key then
+    item._summary_source = utf8_safe_prefix(body_text, 512)
   end
 
   session.conversation_timeline[#session.conversation_timeline + 1] = item
@@ -595,7 +620,7 @@ local function append_conversation_item_chunk(item, chunk, meta)
   else
     local summary_source = tostring(item._summary_source or "")
     if #summary_source < 512 and chunk ~= "" then
-      item._summary_source = (summary_source .. chunk):sub(1, 512)
+      item._summary_source = utf8_safe_prefix(summary_source .. chunk, 512)
     end
     local source = tostring(item._summary_source or "")
     item.summary = summarize_conversation_text(source ~= "" and source or item.title or item.heading, 140)
@@ -817,7 +842,7 @@ summarize_inline = function(text, limit)
   if #normalized <= limit then
     return normalized
   end
-  return normalized:sub(1, math.max(1, limit - 1)) .. "…"
+  return utf8_safe_prefix(normalized, math.max(1, limit - #"…")) .. "…"
 end
 
 local function to_match_values(value)
