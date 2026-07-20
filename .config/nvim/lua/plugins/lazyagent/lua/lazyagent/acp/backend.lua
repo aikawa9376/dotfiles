@@ -1096,7 +1096,11 @@ local function create_backend(default_view)
     return thread_store:list(opts)
   end
 
-  function backend.get_thread(thread_id)
+  function backend.get_thread(thread_id, opts)
+    if opts and opts.include_live == true then
+      local thread = live_thread_record(thread_id)
+      if thread then return thread end
+    end
     return thread_store:get(thread_id)
   end
 

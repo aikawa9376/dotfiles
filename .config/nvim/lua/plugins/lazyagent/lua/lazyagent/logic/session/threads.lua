@@ -100,15 +100,14 @@ function M.setup(deps)
     return bufnr, winid
   end
 
-  local function thread_related_to_current_nvim(thread, local_threads)
-    if local_threads[thread.thread_id] then return true end
-    local metadata = type(thread.metadata) == "table" and thread.metadata or {}
-    if metadata.editor and metadata.editor.instance_id and state.editor_instance_id then
-      return metadata.editor.instance_id == state.editor_instance_id
+  local function thread_has_changes(thread)
+    local turns = thread and thread.change_journal and thread.change_journal.turns or {}
+    for index = #turns, 1, -1 do
+      if type(turns[index].changes) == "table" and #turns[index].changes > 0 then
+        return true
+      end
     end
-    local owner_pid = metadata.editor and metadata.editor.owner_pid
-      or metadata.agentmux and metadata.agentmux.owner_pid
-    return tonumber(owner_pid) == vim.fn.getpid()
+    return false
   end
 
   local function configured_provider(provider_id)
@@ -132,6 +131,20 @@ function M.setup(deps)
   end
 
   local function thread_backend(thread_id, provider_id)
+    local session_key, session = local_session_key(thread_id)
+    if session then
+      local active_backend = state.backends and state.backends[session.backend] or nil
+      if not active_backend then
+        active_backend = backend_for_provider(identity.provider_id(session_key, session))
+      end
+      if active_backend and type(active_backend.get_thread) == "function" then
+        local thread = active_backend.get_thread(thread_id, { include_live = true })
+        if thread then
+          return active_backend, thread
+        end
+      end
+    end
+
     local backend = backend_for_provider(provider_id)
     if backend and thread_id and type(backend.get_thread) == "function" then
       local thread = backend.get_thread(thread_id)
@@ -457,24 +470,26 @@ function M.setup(deps)
       return true
     end
 
-    local backend = backend_for_provider(nil)
-    local threads = backend and backend.list_threads and backend.list_threads({ include_archived = true }) or {}
-    local local_threads = {}
+    local threads = {}
+    local seen = {}
     for session_key, session in pairs(state.sessions or {}) do
       local id = session_thread_id(session_key, session)
-      if id then local_threads[id] = true end
-    end
-    threads = vim.tbl_filter(function(thread)
-      if thread.status ~= "active" then return false end
-      if not thread_related_to_current_nvim(thread, local_threads) then return false end
-      local turns = thread.change_journal and thread.change_journal.turns or {}
-      for index = #turns, 1, -1 do
-        if type(turns[index].changes) == "table" and #turns[index].changes > 0 then
-          return true
+      if id and not seen[id] and session.pane_id and session.pane_id ~= "" then
+        seen[id] = true
+        local _, thread = thread_backend(id, identity.provider_id(session_key, session))
+        if thread and thread.status == "active" and thread_has_changes(thread) then
+          threads[#threads + 1] = thread
         end
       end
-      return false
-    end, threads or {})
+    end
+    table.sort(threads, function(left, right)
+      local left_updated = tostring(left.updated_at or "")
+      local right_updated = tostring(right.updated_at or "")
+      if left_updated == right_updated then
+        return tostring(left.thread_id) < tostring(right.thread_id)
+      end
+      return left_updated > right_updated
+    end)
     if #threads == 0 then
       vim.notify("LazyAgent ACP: no live file changes belong to this Neovim", vim.log.levels.INFO)
       return false
