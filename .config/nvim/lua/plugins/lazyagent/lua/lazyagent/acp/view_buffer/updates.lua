@@ -12,9 +12,7 @@ function M.new(ctx)
   local pane_opts_for_bufnr = ctx.pane_opts_for_bufnr
   local apply_transcript_window_opts = ctx.apply_transcript_window_opts
   local apply_transcript_buffer_opts = ctx.apply_transcript_buffer_opts
-  local redirect_buffer_from_transcript_window = ctx.redirect_buffer_from_transcript_window
   local is_acp_buffer = ctx.is_acp_buffer
-  local is_metadata_popup_buffer = ctx.is_metadata_popup_buffer
   local pause_follow_output = ctx.pause_follow_output
   local refresh_transcript_window = ctx.refresh_transcript_window
   local refresh_buffer_layout = ctx.refresh_buffer_layout
@@ -23,7 +21,6 @@ function M.new(ctx)
   local pane_buffers = ctx.pane_buffers
   local layout_state = ctx.layout_state
   local dedicated_transcript_windows = ctx.dedicated_transcript_windows
-  local redirecting_transcript_windows = ctx.redirecting_transcript_windows
   local reset_appearance_cache = ctx.reset_appearance_cache
   local suppress_transcript_window_refresh = ctx.suppress_transcript_window_refresh
   local FOLLOW_SCROLL_OFF = ctx.follow_scroll_off
@@ -190,16 +187,7 @@ function M.new(ctx)
       group = group,
       callback = function(args)
         local bufnr = tonumber(args.buf)
-        if not bufnr then
-          return
-        end
-        if is_metadata_popup_buffer(bufnr) then
-          return
-        end
-        if redirect_buffer_from_transcript_window(vim.api.nvim_get_current_win(), bufnr) then
-          return
-        end
-        if not is_acp_buffer(bufnr) then
+        if not bufnr or not is_acp_buffer(bufnr) then
           return
         end
         apply_transcript_buffer_opts(bufnr)
@@ -214,19 +202,12 @@ function M.new(ctx)
       group = group,
       callback = function(args)
         local bufnr = tonumber(args.buf)
-        if not bufnr then
+        if not bufnr or not is_acp_buffer(bufnr) then
           return
         end
-        if is_metadata_popup_buffer(bufnr) then
-          return
-        end
-        if is_acp_buffer(bufnr) then
-          pause_follow_output(bufnr, { reason = "focus", win = vim.api.nvim_get_current_win() })
-          refresh_transcript_window(bufnr, vim.api.nvim_get_current_win())
-          pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
-          return
-        end
-        redirect_buffer_from_transcript_window(vim.api.nvim_get_current_win(), bufnr)
+        pause_follow_output(bufnr, { reason = "focus", win = vim.api.nvim_get_current_win() })
+        refresh_transcript_window(bufnr, vim.api.nvim_get_current_win())
+        pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
       end,
     })
 
@@ -235,16 +216,12 @@ function M.new(ctx)
       callback = function()
         local win = vim.api.nvim_get_current_win()
         local bufnr = vim.api.nvim_get_current_buf()
-        if is_metadata_popup_buffer(bufnr) then
+        if not is_acp_buffer(bufnr) then
           return
         end
-        if is_acp_buffer(bufnr) then
-          pause_follow_output(bufnr, { reason = "focus", win = win })
-          refresh_transcript_window(bufnr, win)
-          pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
-          return
-        end
-        redirect_buffer_from_transcript_window(win, bufnr)
+        pause_follow_output(bufnr, { reason = "focus", win = win })
+        refresh_transcript_window(bufnr, win)
+        pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
       end,
     })
 
@@ -337,7 +314,6 @@ function M.new(ctx)
         for key, entry in pairs(dedicated_transcript_windows) do
           if entry.bufnr == bufnr or tostring(entry.pane_id or "") == tostring(pane_id or "") then
             dedicated_transcript_windows[key] = nil
-            redirecting_transcript_windows[key] = nil
           end
         end
       end,

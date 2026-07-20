@@ -6,7 +6,6 @@ function M.new(ctx)
   local pane_buffers = ctx.pane_buffers
   local layout_state = ctx.layout_state
   local dedicated_transcript_windows = ctx.dedicated_transcript_windows
-  local redirecting_transcript_windows = ctx.redirecting_transcript_windows
   local ACP_WINDOW_OPTIONS = ctx.acp_window_options
   local custom_background_groups = ctx.custom_background_groups
   local set_suppress_transcript_window_refresh = ctx.set_suppress_transcript_window_refresh
@@ -14,7 +13,6 @@ function M.new(ctx)
   local DEFAULT_SCROLL_OFF = ctx.default_scroll_off
   local ACP_TRANSCRIPT_FILETYPE = ctx.acp_transcript_filetype
   local cleanup_markdown_rendering = ctx.cleanup_markdown_rendering
-  local is_metadata_popup_buffer = ctx.is_metadata_popup_buffer
   local line_has_heading = ctx.line_has_heading
   local jump_window_to_row = ctx.jump_window_to_row
   local transcript_line_count = ctx.transcript_line_count
@@ -136,34 +134,6 @@ function M.new(ctx)
     return buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil
   end
 
-  local function in_cmdline_mode()
-    local ok, mode = pcall(vim.api.nvim_get_mode)
-    local current_mode = ok and mode and mode.mode or ""
-    return type(current_mode) == "string" and current_mode:sub(1, 1) == "c"
-  end
-
-  local function redirectable_buffer(bufnr)
-    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) or is_acp_buffer(bufnr) then
-      return false
-    end
-    local buftype = vim.bo[bufnr].buftype
-    return buftype == "" or buftype == "acwrite"
-  end
-
-  local function tracked_transcript_window(win)
-    local key = tostring(win or "")
-    local entry = dedicated_transcript_windows[key]
-    if entry == nil then
-      return nil
-    end
-    if not win or not vim.api.nvim_win_is_valid(win) then
-      dedicated_transcript_windows[key] = nil
-      redirecting_transcript_windows[key] = nil
-      return nil
-    end
-    return entry
-  end
-
   local function track_transcript_window(win, pane_id, bufnr)
     if not win or not vim.api.nvim_win_is_valid(win) then
       return
@@ -177,18 +147,6 @@ function M.new(ctx)
   local function clear_transcript_window(win)
     local key = tostring(win or "")
     dedicated_transcript_windows[key] = nil
-    redirecting_transcript_windows[key] = nil
-  end
-
-  local function reset_window_from_defaults(win)
-    if not win or not vim.api.nvim_win_is_valid(win) then
-      return
-    end
-    pcall(vim.api.nvim_win_call, win, function()
-      for _, option in ipairs(ACP_WINDOW_OPTIONS) do
-        pcall(vim.cmd, "setlocal " .. option .. "<")
-      end
-    end)
   end
 
   local function capture_window_options(win)
@@ -203,129 +161,6 @@ function M.new(ctx)
       end
     end
     return snapshot
-  end
-
-  local function apply_window_options(win, snapshot)
-    if not win or not vim.api.nvim_win_is_valid(win) or type(snapshot) ~= "table" then
-      return false
-    end
-    for _, option in ipairs(ACP_WINDOW_OPTIONS) do
-      if snapshot[option] ~= nil then
-        pcall(vim.api.nvim_set_option_value, option, snapshot[option], { win = win })
-      end
-    end
-    return true
-  end
-
-  local function normalize_redirect_target_window(win, pane_opts)
-    if apply_window_options(win, pane_opts and pane_opts.source_window_options) then
-      return
-    end
-    reset_window_from_defaults(win)
-  end
-
-  local function restore_transcript_window_size(win, pane_opts)
-    if not pane_opts or not win or not vim.api.nvim_win_is_valid(win) then
-      return
-    end
-    set_window_size(win, pane_opts.pane_size, pane_opts.is_vertical == true)
-  end
-
-  local function usable_redirect_target(win, source_win)
-    if not is_normal_window(win) or win == source_win or not vim.api.nvim_win_is_valid(win) then
-      return false
-    end
-    if tracked_transcript_window(win) ~= nil then
-      return false
-    end
-    local buf = vim.api.nvim_win_get_buf(win)
-    if not buf or not vim.api.nvim_buf_is_valid(buf) then
-      return false
-    end
-    local buftype = vim.bo[buf].buftype
-    return buftype == "" or buftype == "acwrite"
-  end
-
-  local function find_redirect_target_window(source_win, pane_opts)
-    local anchor = resolve_anchor_window(pane_opts and pane_opts.source_winid)
-    if usable_redirect_target(anchor, source_win) then
-      return anchor, false
-    end
-
-    for _, win in ipairs(vim.api.nvim_list_wins()) do
-      if usable_redirect_target(win, source_win) then
-        return win, false
-      end
-    end
-
-    local created = nil
-    pcall(function()
-      vim.api.nvim_set_current_win(source_win)
-      if pane_opts and pane_opts.is_vertical == true then
-        vim.cmd("leftabove vsplit")
-      else
-        vim.cmd("leftabove split")
-      end
-      created = vim.api.nvim_get_current_win()
-      normalize_redirect_target_window(created, pane_opts)
-      restore_transcript_window_size(source_win, pane_opts)
-    end)
-    return created, created ~= nil
-  end
-
-  local function redirect_buffer_from_transcript_window(win, bufnr)
-    if in_cmdline_mode() then
-      return false
-    end
-    if is_metadata_popup_buffer(bufnr) then
-      return false
-    end
-    local tracked = tracked_transcript_window(win)
-    if tracked == nil or tracked.bufnr == bufnr then
-      return false
-    end
-    if not redirectable_buffer(bufnr) then
-      return false
-    end
-    if vim.api.nvim_win_get_buf(win) ~= bufnr then
-      return false
-    end
-
-    local key = tostring(win)
-    if redirecting_transcript_windows[key] then
-      return false
-    end
-
-    local restore_buf = tracked.bufnr
-    if not restore_buf or not vim.api.nvim_buf_is_valid(restore_buf) then
-      restore_buf = to_bufnr(tracked.pane_id)
-      if restore_buf and vim.api.nvim_buf_is_valid(restore_buf) then
-        tracked.bufnr = restore_buf
-      end
-    end
-    if not restore_buf or not vim.api.nvim_buf_is_valid(restore_buf) then
-      clear_transcript_window(win)
-      return false
-    end
-
-    redirecting_transcript_windows[key] = true
-    local pane_opts = pane_config[tracked.pane_id] or pane_opts_for_bufnr(restore_buf)
-    local target_win = select(1, find_redirect_target_window(win, pane_opts))
-    if not target_win or not vim.api.nvim_win_is_valid(target_win) then
-      redirecting_transcript_windows[key] = nil
-      return false
-    end
-
-    pcall(vim.api.nvim_win_set_buf, target_win, bufnr)
-    pcall(vim.api.nvim_win_set_buf, win, restore_buf)
-    track_transcript_window(win, tracked.pane_id, restore_buf)
-    if pane_config[tracked.pane_id] ~= nil then
-      pane_config[tracked.pane_id].source_winid = target_win
-      pane_config[tracked.pane_id].source_window_options = capture_window_options(target_win)
-    end
-    pcall(vim.api.nvim_set_current_win, target_win)
-    redirecting_transcript_windows[key] = nil
-    return true
   end
 
   layout_entry = function(bufnr)
@@ -1026,11 +861,9 @@ function M.new(ctx)
     should_release_buffer_on_hide = should_release_buffer_on_hide,
     resolve_release_buffer_on_hide = resolve_release_buffer_on_hide,
     is_acp_buffer = is_acp_buffer,
-    tracked_transcript_window = tracked_transcript_window,
     track_transcript_window = track_transcript_window,
     clear_transcript_window = clear_transcript_window,
     capture_window_options = capture_window_options,
-    redirect_buffer_from_transcript_window = redirect_buffer_from_transcript_window,
     layout_entry = layout_entry,
     footer_padding_count = footer_padding_count,
     should_follow_output = should_follow_output,

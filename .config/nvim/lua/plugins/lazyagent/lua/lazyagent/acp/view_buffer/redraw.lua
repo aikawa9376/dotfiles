@@ -3,13 +3,13 @@ local M = {}
 function M.new(ctx)
   local layout_state = ctx.layout_state
   local buffer_is_visible = ctx.buffer_is_visible
+  local owns_buffer = ctx.owns_buffer
 
   local function redraw_buffer(bufnr)
     if type(vim.api.nvim__redraw) == "function" then
       local ok = pcall(vim.api.nvim__redraw, {
         buf = bufnr,
         valid = false,
-        flush = true,
       })
       if ok then
         return
@@ -23,6 +23,9 @@ function M.new(ctx)
 
   return function(bufnr)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    if not owns_buffer or owns_buffer(bufnr) ~= true then
       return
     end
     if buffer_is_visible and not buffer_is_visible(bufnr) then
@@ -46,6 +49,9 @@ function M.new(ctx)
         current_entry.redraw_pending = nil
       end
       if not vim.api.nvim_buf_is_valid(bufnr) then
+        return
+      end
+      if owns_buffer(bufnr) ~= true then
         return
       end
       if buffer_is_visible and not buffer_is_visible(bufnr) then
