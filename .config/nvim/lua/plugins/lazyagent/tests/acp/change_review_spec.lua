@@ -60,7 +60,7 @@ function M.run()
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Review fixture",
     "Turn thread-1:2 · 2 file(s) · 📝 final",
-    "`?` actions  `K` note/final  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
     "M  lua/a.lua [approved] 💬1",
     "R  old.bin -> new.bin [binary] [rejected]",
@@ -123,7 +123,9 @@ function M.run()
   assert_equal(menu_opts.kind, "lazyagent-acp-actions", "changes action menu uses compact cursor UI")
   assert_equal(menu_items[1].key, "K", "changes action menu lists notes first")
   assert_equal(vim.fn.maparg("?", "n", false, true).desc, "Open LazyAgent ACP changes action menu", "changes menu mapping")
-  menu_callback(menu_items[4])
+  local next_diff_action
+  for _, item in ipairs(menu_items) do if item.key == "i" then next_diff_action = item end end
+  menu_callback(next_diff_action)
   vim.wait(100)
   assert((vim.api.nvim_get_current_line() or ""):match("^@@"), "menu executes inline diff action")
   local first_hunk_row = vim.api.nvim_win_get_cursor(0)[1]
@@ -169,6 +171,8 @@ function M.run()
   assert_equal(vim.fn.maparg("i", "n", false, true).desc, "Open and jump to next LazyAgent ACP diff", "next diff mapping")
   assert_equal(vim.fn.maparg("o", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
   assert_equal(vim.fn.maparg("K", "n", false, true).desc, "Show LazyAgent ACP change note", "note mapping")
+  assert_equal(vim.fn.maparg("c", "n", false, true).desc, "Add LazyAgent ACP review note", "add review note mapping")
+  assert_equal(vim.fn.maparg("S", "n", false, true).desc, "Send LazyAgent ACP review feedback", "send review mapping")
   assert_equal(vim.fn.maparg("]n", "n", false, true).desc, "Next LazyAgent ACP change note", "next note mapping")
   assert_equal(vim.fn.maparg("=", "n", false, true).desc, "Toggle LazyAgent ACP inline diff", "inline diff mapping")
   vim.api.nvim_win_set_cursor(0, { 2, 0 })

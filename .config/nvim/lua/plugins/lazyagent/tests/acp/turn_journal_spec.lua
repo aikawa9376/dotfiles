@@ -129,6 +129,14 @@ function M.run()
   assert_equal(canonical_journal.turns[1].changes[1].path, "README.md", "new turns do not infer from event logs")
   journal = assert(Journal.decide(journal, turn.turn_id, { 1 }, "kept", "2026-07-15T01:04:00Z"))
   assert_equal(journal.turns[1].changes[1].decision, "kept", "change decision")
+  local annotation
+  journal, _, annotation = assert(Journal.add_annotation(journal, turn.turn_id, {
+    kind = "review", rationale = "Please simplify this.", author = { type = "user" },
+  }))
+  assert_equal(annotation.rationale, "Please simplify this.", "review annotation added")
+  journal = assert(Journal.remove_annotations(journal, turn.turn_id, { annotation.id }))
+  assert_equal(#journal.turns[1].annotations, 1, "sent review annotation removed")
+  assert_equal(journal.turns[1].annotations[1].kind, "explanation", "agent explanation remains after review send")
 
   local hunk_journal, hunk_turn = Journal.start({}, "thread-2", {
     captured_at = "2026-07-15T02:00:00Z",

@@ -144,6 +144,31 @@ function M.get(journal, turn_id)
   return turn and copy(turn) or nil
 end
 
+function M.add_annotation(journal, turn_id, annotation)
+  journal = copy(journal)
+  local turn = find_turn(journal, turn_id)
+  if not turn then return nil, "turn not found: " .. tostring(turn_id) end
+  local normalized = require("lazyagent.acp.review_annotations").normalize(annotation)
+  if not normalized then return nil, "review note is empty" end
+  turn.annotations = type(turn.annotations) == "table" and turn.annotations or {}
+  turn.annotations[#turn.annotations + 1] = normalized
+  return journal, copy(turn), copy(normalized)
+end
+
+function M.remove_annotations(journal, turn_id, ids)
+  journal = copy(journal)
+  local turn = find_turn(journal, turn_id)
+  if not turn then return nil, "turn not found: " .. tostring(turn_id) end
+  local remove = {}
+  for _, id in ipairs(ids or {}) do remove[tostring(id)] = true end
+  local kept = {}
+  for _, annotation in ipairs(turn.annotations or {}) do
+    if not remove[tostring(annotation.id)] then kept[#kept + 1] = annotation end
+  end
+  turn.annotations = kept
+  return journal, copy(turn)
+end
+
 function M.recover_file_event_changes(journal, resolve_before)
   journal = copy(journal)
   local recovered = 0

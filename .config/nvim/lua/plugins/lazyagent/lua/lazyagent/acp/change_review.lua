@@ -1,5 +1,6 @@
 local M = {}
 local ReviewAnnotations = require("lazyagent.acp.review_annotations")
+local ReviewFeedback = require("lazyagent.acp.review_feedback")
 
 local operation_marker = {
   added = "A",
@@ -151,7 +152,7 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
       history .. live,
       annotation_status
     ),
-    "`?` actions  `K` note/final  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
   }
   local change_rows = {}
@@ -737,10 +738,73 @@ function M.new(opts)
     local function refresh(decided_turn)
       if decided_turn then
         turn = decided_turn
+        turns[turn_index] = turn
         inline_by_turn[tostring(turn.turn_id or turn_index)] = {}
       end
       render()
     end
+    local function review_target_at_cursor()
+      local row = vim.api.nvim_win_get_cursor(0)[1]
+      local index = line_changes[row]
+      local change = index and turn.changes[index] or nil
+      if not change then return {}, "Overall" end
+      local line = row ~= change_rows[index] and line_targets[row] or nil
+      local ref = change.review_blob or change.after_blob
+      return {
+        path = change.path,
+        target = {
+          side = "after",
+          start_line = line,
+          end_line = line,
+          blob_hash = type(ref) == "table" and ref.hash or nil,
+        },
+      }, line and string.format("%s:%d", display_path(change), line) or display_path(change)
+    end
+    vim.keymap.set("n", "c", function()
+      if turn.state == "active" then
+        vim.notify("LazyAgent ACP: wait for the active turn before adding review notes", vim.log.levels.INFO)
+        return
+      end
+      if type(opts.add_note) ~= "function" then return end
+      local target, label = review_target_at_cursor()
+      ReviewFeedback.open_editor({
+        title = " LazyAgent Review Note · " .. label .. " ",
+        action = "save",
+        submit_desc = "Save LazyAgent ACP review note",
+        on_submit = function(text)
+          local saved, err = opts.add_note(thread, turn, vim.tbl_extend("force", target, { rationale = text }))
+          if not saved then return nil, err end
+          refresh(saved)
+          vim.notify("LazyAgent ACP: review note saved", vim.log.levels.INFO)
+          return true
+        end,
+      })
+    end, { buffer = bufnr, silent = true, desc = "Add LazyAgent ACP review note" })
+    vim.keymap.set("n", "S", function()
+      if turn.state == "active" then
+        vim.notify("LazyAgent ACP: wait for the active turn before sending review feedback", vim.log.levels.INFO)
+        return
+      end
+      if type(opts.send_review) ~= "function" then return end
+      local prompt, annotation_ids, has_feedback = ReviewFeedback.build_prompt(turn)
+      if not has_feedback then
+        vim.notify("LazyAgent ACP: no review decisions or notes to send", vim.log.levels.INFO)
+        return
+      end
+      ReviewFeedback.open_editor({
+        title = " LazyAgent Review · " .. tostring(turn.turn_id or "turn") .. " ",
+        text = prompt,
+        action = "send",
+        submit_desc = "Send LazyAgent ACP review feedback",
+        on_submit = function(text)
+          local sent, err = opts.send_review(thread, turn, text, annotation_ids)
+          if not sent then return nil, err end
+          refresh(sent)
+          vim.notify("LazyAgent ACP: review feedback queued", vim.log.levels.INFO)
+          return true
+        end,
+      })
+    end, { buffer = bufnr, silent = true, desc = "Send LazyAgent ACP review feedback" })
     local function select_turn(index)
       if not turns[index] then
         return
@@ -896,6 +960,8 @@ function M.new(opts)
       local change = index and turn.changes[index] or nil
       local items = {
         { key = "K", description = "Show explanation or review note" },
+        { key = "c", description = "Add review note at cursor" },
+        { key = "S", description = "Edit and send review feedback" },
         { key = "]n", description = "Jump to next note" },
         { key = "[n", description = "Jump to previous note" },
         { key = "i", description = "Open inline diff and jump to next hunk" },

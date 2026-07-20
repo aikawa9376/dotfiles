@@ -198,6 +198,10 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] file / after-line rangeを対象にしたexplanation / review / comment / question / suggestionを永続化できる。
   - [x] Changesの`K` / `<Space><Space>`でMarkdown noteを表示し、`[n` / `]n`でnote間を移動する。
   - [x] blob hashとcontext hashをtargetへ保持し、対象blobが変わったnoteをoutdated表示できる。
+- [x] user review feedbackを同じagent threadへ返せるようにする。
+  - [x] Changesのheader / file / after-lineへturn-scopedなuser Review Noteを保存する。
+  - [x] file / hunk decisionとReview Notesを編集可能なreview promptへまとめ、同じlive threadのqueueへ送る。
+  - [x] queue受理後は送信したuser Noteだけをclearし、agent annotationとfinal answerを保持する。
 
 ### Exit criteria
 
