@@ -82,6 +82,11 @@ function M.run()
   assert(runtime.acp_thread_id ~= nil, "runtime thread identity")
   assert_equal(runtime.acp_provider_id, "ThreadFixture", "runtime provider identity")
   assert_equal(runtime.acp_thread_store_error, nil, "runtime thread persistence")
+  assert(backend.set_read_only_guard(pane_id, "fixture-review", true, "fixture review is read-only"))
+  assert_equal(backend.get_runtime_snapshot(pane_id).acp_read_only_reason, "fixture review is read-only",
+    "runtime exposes the active read-only guard")
+  assert(backend.set_read_only_guard(pane_id, "fixture-review", false))
+  assert_equal(backend.get_runtime_snapshot(pane_id).acp_read_only_reason, nil, "read-only guard is released")
 
   local store = require("lazyagent.acp.thread_store").new({ dir = cache_dir .. "/acp/threads" })
   local persisted = assert(store:get(runtime.acp_thread_id))

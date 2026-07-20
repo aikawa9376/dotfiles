@@ -12,6 +12,7 @@ local operation_marker = {
 local change_namespace = vim.api.nvim_create_namespace("LazyAgentACPChanges")
 local PRIORITY_BG = 200
 local PRIORITY_SYNTAX = 210
+local REVIEW_CONTEXT_LINES = 3
 
 local operation_highlight = {
   added = "LazyAgentACPChangesAdded",
@@ -49,6 +50,7 @@ local function setup_highlights()
     link = "FugitiveExtDeleteText", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesNote", { link = "GitSignsChange", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPChangesContext", { link = "Comment", default = true })
 end
 
 local function latest_changed_turn(thread)
@@ -125,7 +127,82 @@ function M.changed_turns(thread)
   return changed_turns(thread)
 end
 
+local function text_lines(value)
+  value = tostring(value or "")
+  if value == "" then return {} end
+  local lines = vim.split(value, "\n", { plain = true })
+  if value:sub(-1) == "\n" and lines[#lines] == "" then table.remove(lines) end
+  return lines
+end
+
+local function visible_after_lines(diff_lines)
+  local visible = {}
+  local after_line
+  for _, line in ipairs(diff_lines or {}) do
+    local hunk_line = line:match("^@@ %-%d+,?%d* %+(%d+),?%d* @@")
+      or line:match("^:: review context %+(%d+),?%d* ::$")
+    if hunk_line then
+      after_line = tonumber(hunk_line)
+    elseif after_line and line:match("^[ +%-]") then
+      if line:sub(1, 1) ~= "-" then
+        visible[after_line] = true
+        after_line = after_line + 1
+      end
+    else
+      after_line = nil
+    end
+  end
+  return visible
+end
+
+function M.append_review_context(diff_lines, after_text, annotations, ctxlen)
+  local result = vim.deepcopy(diff_lines or {})
+  local after = text_lines(after_text)
+  if #after == 0 then return result end
+  local visible = visible_after_lines(result)
+  local padding = math.max(0, tonumber(ctxlen) or REVIEW_CONTEXT_LINES)
+  local ranges = {}
+  for _, annotation in ipairs(annotations or {}) do
+    local target = type(annotation.target) == "table" and annotation.target or {}
+    local first = math.floor(tonumber(target.start_line) or 0)
+    local last = math.floor(tonumber(target.end_line) or first)
+    if target.side ~= "before" and annotation.outdated ~= true and first >= 1 and first <= #after then
+      last = math.max(first, math.min(last, #after))
+      local shown = false
+      for line = first, last do
+        if visible[line] then shown = true; break end
+      end
+      if not shown then
+        ranges[#ranges + 1] = {
+          first = math.max(1, first - padding),
+          last = math.min(#after, last + padding),
+        }
+      end
+    end
+  end
+  table.sort(ranges, function(a, b) return a.first < b.first end)
+  local merged = {}
+  for _, range in ipairs(ranges) do
+    local previous = merged[#merged]
+    if previous and range.first <= previous.last + 1 then
+      previous.last = math.max(previous.last, range.last)
+    else
+      merged[#merged + 1] = range
+    end
+  end
+  for _, range in ipairs(merged) do
+    result[#result + 1] = string.format(
+      ":: review context +%d,%d ::",
+      range.first,
+      range.last - range.first + 1
+    )
+    for line = range.first, range.last do result[#result + 1] = " " .. after[line] end
+  end
+  return result
+end
+
 function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
+  local review_mode = thread.review_mode == true
   local history = ""
   if turn_index and turn_count and turn_count > 1 then
     history = string.format(" · %d/%d · [t/]t previous/next", turn_index, turn_count)
@@ -144,7 +221,7 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
   local annotation_status = has_final and " · 📝 final" or ""
   if general_notes > 0 then annotation_status = annotation_status .. " · 💬" .. general_notes end
   local lines = {
-    string.format("LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
+    string.format(review_mode and "LazyAgent AI Review — %s" or "LazyAgent ACP Changes — %s", thread.title or thread.thread_id),
     string.format(
       "Turn %s · %d file(s)%s%s",
       turn.turn_id or "unknown",
@@ -152,7 +229,9 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
       history .. live,
       annotation_status
     ),
-    "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    review_mode
+        and "`?` actions  `K` finding  `]n/[n` next/previous  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab"
+      or "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
   }
   local change_rows = {}
@@ -170,8 +249,19 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
       end
     end
     local hunk_state = decided_hunks > 0 and string.format(" [hunks %d/%d]", decided_hunks, #change.hunks) or ""
-    local note_count = #ReviewAnnotations.for_change(turn, change)
+    local change_annotations = ReviewAnnotations.for_change(turn, change)
+    local note_count = #change_annotations
     local notes = note_count > 0 and (" 💬" .. note_count) or ""
+    if review_mode and note_count > 0 then
+      local labels, seen = {}, {}
+      for _, annotation in ipairs(change_annotations) do
+        if annotation.label and not seen[annotation.label] then
+          seen[annotation.label] = true
+          labels[#labels + 1] = "[" .. annotation.label .. "]"
+        end
+      end
+      notes = #labels > 0 and (" 💬" .. table.concat(labels, " ")) or notes
+    end
     lines[#lines + 1] = string.format(
       "%s  %s%s%s%s%s",
       operation_marker[change.operation] or "?",
@@ -189,6 +279,7 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
       lines[#lines + 1] = diff_line
       line_changes[#lines] = index
       local hunk_line = diff_line:match("^@@ %-%d+,?%d* %+(%d+),?%d* @@")
+        or diff_line:match("^:: review context %+(%d+),?%d* ::$")
       if hunk_line then
         after_line = tonumber(hunk_line)
       elseif after_line and diff_line:sub(1, 1) ~= "-" then
@@ -249,6 +340,11 @@ local function changed_span(left, right)
   return prefix + 1, #left - suffix + 1, prefix + 1, #right - suffix + 1
 end
 
+local function is_inline_header(line)
+  return tostring(line or ""):match("^@@") ~= nil
+    or tostring(line or ""):match("^:: review context .+::$") ~= nil
+end
+
 local function apply_inline_highlights(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local deleted, added = {}, {}
@@ -272,7 +368,12 @@ local function apply_inline_highlights(bufnr)
   end
   for row, line in ipairs(lines) do
     local zero_row = row - 1
-    if line:match("^@@") then
+    if line:match("^:: review context ") then
+      flush()
+      vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
+        end_col = #line, hl_group = "LazyAgentACPChangesContext",
+      })
+    elseif line:match("^@@") then
       flush()
       vim.api.nvim_buf_set_extmark(bufnr, change_namespace, zero_row, 0, {
         end_col = #line, hl_group = "diffLine",
@@ -346,7 +447,7 @@ local function apply_inline_code_highlights(bufnr, turn, change_rows)
       end
       for row = first_row + 1, last_row do
         local line = lines[row] or ""
-        if line:match("^@@.-@@") then
+        if line:match("^@@.-@@") or line:match("^:: review context .+::$") then
           flush()
           in_hunk = true
         elseif in_hunk and line:match("^[ +%-]") then
@@ -433,12 +534,14 @@ function M.apply_drawer_highlights(bufnr, turn, change_rows, line_changes, line_
   for row = 1, vim.api.nvim_buf_line_count(bufnr) do
     local index = line_changes and line_changes[row]
     local change = turn.changes and turn.changes[index]
-    if change and row ~= change_rows[index] then
+    local rendered_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ""
+    if change and row ~= change_rows[index] and not is_inline_header(rendered_line) then
       for _, annotation in ipairs(ReviewAnnotations.for_change(turn, change, line_targets and line_targets[row])) do
         if annotation.target.start_line and not seen[annotation.id] then
           seen[annotation.id] = true
+          local badge = annotation.label and (" 💬[" .. annotation.label .. "]") or " 💬"
           vim.api.nvim_buf_set_extmark(bufnr, change_namespace, row - 1, 0, {
-            virt_text = { { " 💬", "LazyAgentACPChangesNote" } }, virt_text_pos = "eol",
+            virt_text = { { badge, "LazyAgentACPChangesNote" } }, virt_text_pos = "eol",
           })
         end
       end
@@ -593,7 +696,12 @@ function M.new(opts)
         lines = vim.list_slice(lines, 1, max_lines)
         lines[#lines + 1] = string.format("... inline diff truncated after %d lines ...", max_lines)
       end
-      return lines
+      return M.append_review_context(
+        lines,
+        after,
+        ReviewAnnotations.for_change(turn, change),
+        REVIEW_CONTEXT_LINES
+      )
     end
     local function render()
       local lines
@@ -670,7 +778,9 @@ function M.new(opts)
       toggle_inline(change_index_at_cursor(), false)
     end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
     local function annotations_at(row)
-      if row == 2 then return ReviewAnnotations.for_turn(turn), "Final answer" end
+      if row == 2 then
+        return ReviewAnnotations.for_turn(turn), thread.review_mode and "Review summary" or "Final answer"
+      end
       local index = line_changes[row]
       local change = index and turn.changes[index] or nil
       if not change then return {}, "Changes note" end
@@ -704,7 +814,8 @@ function M.new(opts)
         local matched = false
         for row = 1, vim.api.nvim_buf_line_count(bufnr) do
           local row_index = line_changes[row]
-          if row_index == index and row ~= change_rows[index] then
+          local rendered_line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ""
+          if row_index == index and row ~= change_rows[index] and not is_inline_header(rendered_line) then
             local notes = ReviewAnnotations.for_change(turn, change, line_targets[row])
             if #notes > 0 then add(row, notes); matched = true end
           end
@@ -955,33 +1066,43 @@ function M.new(opts)
       end
       vim.notify("Created LazyAgent ACP local branch: " .. branch.thread_id, vim.log.levels.INFO)
     end, { buffer = bufnr, silent = true, desc = "Branch LazyAgent ACP checkpoint" })
+    if thread.review_mode then
+      for _, key in ipairs({ "c", "S", "[t", "]t", "h", "a", "A", "r", "R", "u", "U", "b" }) do
+        pcall(vim.keymap.del, "n", key, { buffer = bufnr })
+      end
+    end
     vim.keymap.set("n", "?", function()
       local index = change_index_at_cursor()
       local change = index and turn.changes[index] or nil
       local items = {
         { key = "K", description = "Show explanation or review note" },
-        { key = "c", description = "Add review note at cursor" },
-        { key = "S", description = "Edit and send review feedback" },
         { key = "]n", description = "Jump to next note" },
         { key = "[n", description = "Jump to previous note" },
         { key = "i", description = "Open inline diff and jump to next hunk" },
         { key = "o", description = "Toggle inline diff" },
         { key = "<CR>", description = "Open changed file at corresponding line" },
         { key = "d", description = "Open before / after diff tab" },
-        { key = "[t", description = "Review previous changed turn" },
-        { key = "]t", description = "Review next changed turn" },
-        { key = "h", description = "Decide a change hunk" },
-        { key = "a", description = "Approve selected file" },
-        { key = "A", description = "Approve all files" },
-        { key = "r", description = "Reject selected file" },
-        { key = "R", description = "Reject all files" },
-        { key = "u", description = "Restore checkpoint before this turn" },
-        { key = "U", description = "Redo restored checkpoint" },
-        { key = "b", description = "Branch from this turn" },
-        { key = "q", description = "Close changes drawer" },
       }
+      if not thread.review_mode then
+        table.insert(items, 2, { key = "c", description = "Add review note at cursor" })
+        table.insert(items, 3, { key = "S", description = "Edit and send review feedback" })
+        vim.list_extend(items, {
+          { key = "[t", description = "Review previous changed turn" },
+          { key = "]t", description = "Review next changed turn" },
+          { key = "h", description = "Decide a change hunk" },
+          { key = "a", description = "Approve selected file" },
+          { key = "A", description = "Approve all files" },
+          { key = "r", description = "Reject selected file" },
+          { key = "R", description = "Reject all files" },
+          { key = "u", description = "Restore checkpoint before this turn" },
+          { key = "U", description = "Redo restored checkpoint" },
+          { key = "b", description = "Branch from this turn" },
+        })
+      end
+      items[#items + 1] = { key = "q", description = "Close changes drawer" }
       vim.ui.select(items, {
-        prompt = change and ("Changes · " .. display_path(change) .. ":") or "Changes actions:",
+        prompt = change and ((thread.review_mode and "Review · " or "Changes · ") .. display_path(change) .. ":")
+          or (thread.review_mode and "Review actions:" or "Changes actions:"),
         kind = "lazyagent-acp-actions",
         format_item = function(item)
           return string.format("%-4s %s", item.key, item.description)

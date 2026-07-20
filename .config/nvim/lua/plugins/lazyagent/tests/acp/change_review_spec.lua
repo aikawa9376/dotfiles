@@ -28,6 +28,10 @@ function M.run()
               kind = "review", path = "lua/a.lua", summary = "Check this value",
               target = { start_line = 1, end_line = 1, blob_hash = "after-hash" },
             },
+            {
+              kind = "review", label = "should", path = "lua/a.lua", summary = "Check surrounding code",
+              target = { start_line = 10, end_line = 10, blob_hash = "after-hash" },
+            },
           },
           changes = {
             {
@@ -62,7 +66,7 @@ function M.run()
     "Turn thread-1:2 · 2 file(s) · 📝 final",
     "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
     "",
-    "M  lua/a.lua [approved] 💬1",
+    "M  lua/a.lua [approved] 💬2",
     "R  old.bin -> new.bin [binary] [rejected]",
   }, "changed files drawer")
   local _, _, _, target_lines = ChangeReview.drawer_content(thread, turn, nil, nil, {
@@ -73,6 +77,21 @@ function M.run()
   assert_equal(target_lines[8], 21, "deleted line targets next surviving after line")
   assert_equal(target_lines[9], 21, "added line targets its after line")
   assert_equal(target_lines[10], 22, "following context advances after line")
+  assert_equal(ChangeReview.append_review_context(
+    { "@@ -1 +1 @@", "-old", "+line 1" },
+    table.concat(vim.tbl_map(function(index) return "line " .. index end, vim.fn.range(1, 14)), "\n") .. "\n",
+    {
+      { target = { side = "after", start_line = 1, end_line = 1 } },
+      { target = { side = "after", start_line = 8, end_line = 8 } },
+      { target = { side = "after", start_line = 10, end_line = 10 } },
+      { target = { side = "after", start_line = 99, end_line = 99 } },
+    },
+    2
+  ), {
+    "@@ -1 +1 @@", "-old", "+line 1",
+    ":: review context +6,7 ::",
+    " line 6", " line 7", " line 8", " line 9", " line 10", " line 11", " line 12",
+  }, "hunk-external review targets add merged after-side context")
 
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, ChangeReview.drawer_lines(thread, turn))
@@ -96,7 +115,7 @@ function M.run()
     read_blob = function(ref)
       local fillers = table.concat(vim.tbl_map(function(index)
         return "local filler" .. index .. " = " .. index
-      end, { 1, 2, 3, 4, 5, 6, 7, 8 }), "\n")
+      end, vim.fn.range(1, 20)), "\n")
       if type(ref) == "table" then ref = ref.ref end
       return ({
         ["before-a"] = "local value = 1\n" .. fillers .. "\nreturn value\n",
@@ -143,6 +162,8 @@ function M.run()
   assert(expanded:find("@@", 1, true), "inline diff hunk is expanded")
   assert(expanded:find("-local value = 1", 1, true), "inline deleted line")
   assert(expanded:find("+local value = 2", 1, true), "inline added line")
+  assert(expanded:find(":: review context +7,7 ::", 1, true), "hunk-external finding adds review context")
+  assert(expanded:find(" local filler9 = 9", 1, true), "review context includes the finding target")
   local inline_marks = vim.api.nvim_buf_get_extmarks(
     drawer,
     vim.api.nvim_get_namespaces().LazyAgentACPChanges,
@@ -153,6 +174,7 @@ function M.run()
   local inline_groups = {}
   local inline_priorities = {}
   local syntax_group
+  local context_badge
   for _, mark in ipairs(inline_marks) do
     local group = mark[4] and mark[4].hl_group
     if group then
@@ -160,11 +182,17 @@ function M.run()
       inline_priorities[group] = math.max(inline_priorities[group] or 0, tonumber(mark[4].priority) or 0)
       if group:match("^@.+%.lua$") then syntax_group = group end
     end
+    local virt_text = mark[4] and mark[4].virt_text or {}
+    for _, chunk in ipairs(virt_text) do
+      if tostring(chunk[1]):find("💬[should]", 1, true) then context_badge = true end
+    end
   end
   assert(inline_groups.LazyAgentACPChangesDiffDelete, "inline deleted background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAdd, "inline added background highlight")
   assert(inline_groups.LazyAgentACPChangesDiffAddText, "inline word-level highlight")
   assert(inline_groups.diffLine, "hunk header directly uses Fugitive-style diffLine highlight")
+  assert(inline_groups.LazyAgentACPChangesContext, "review context header is distinguished from diff hunks")
+  assert(context_badge, "hunk-external finding is shown on its after-side context line")
   assert(syntax_group, "inline Lua code receives Tree-sitter syntax highlights")
   assert_equal(inline_priorities.LazyAgentACPChangesDiffAdd, 200, "inline background uses Fugitive priority")
   assert_equal(inline_priorities.LazyAgentACPChangesDiffAddText, 360, "inline word diff wins over syntax like Fugitive")

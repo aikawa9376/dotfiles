@@ -32,6 +32,7 @@ local Follow = require("lazyagent.acp.follow")
 local ProtocolLog = require("lazyagent.acp.protocol_log")
 local Replay = require("lazyagent.acp.replay")
 local config_values = require("lazyagent.acp.config_values")
+local ReadOnlyGuard = require("lazyagent.acp.backend.read_only_guard")
 
 local sessions = {}
 local section_icons = {
@@ -931,6 +932,7 @@ local function create_backend(default_view)
         prompt_queue_seq = 0,
         tool_calls = {},
         terminals = {},
+        read_only_guards = {},
         available_commands = {},
         config_options = {},
         on_ready_actions = {},
@@ -1660,6 +1662,7 @@ local function create_backend(default_view)
         or nil,
       acp_view_timer_count = session.view_state and session.view_state.append_timer and 1 or 0,
       acp_terminal_count = table_count(session.terminals),
+      acp_read_only_reason = ReadOnlyGuard.reason(session),
       acp_prompt_queue = PromptQueue.list(session),
       acp_transcript_debug = {
         owned = session.transcript_path ~= nil and session.transcript_path ~= "",
@@ -1684,6 +1687,12 @@ local function create_backend(default_view)
       snapshot.acp_conversation_timeline = vim.deepcopy(session.conversation_timeline or {})
     end
     return snapshot
+  end
+
+  function backend.set_read_only_guard(pane_id, owner, enabled, reason)
+    local session = get_session(pane_id)
+    if not session then return nil, "ACP session not found" end
+    return ReadOnlyGuard.set(session, owner, enabled, reason)
   end
 
   function backend.get_debug_snapshot()

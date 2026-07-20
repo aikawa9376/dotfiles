@@ -41,6 +41,7 @@ function M.setup(deps)
   local nvim_bridge = require("lazyagent.nvim_bridge")
   local PathGuard = require("lazyagent.acp.backend.path_guard")
   local FileWriter = require("lazyagent.acp.backend.file_writer")
+  local ReadOnlyGuard = require("lazyagent.acp.backend.read_only_guard")
   local Terminals = require("lazyagent.acp.backend.terminals")
   local MessageStream = require("lazyagent.acp.backend.message_stream")
   local Notifications = require("lazyagent.acp.notifications")
@@ -101,6 +102,11 @@ function M.setup(deps)
   end
 
   local function create_terminal(session, params, done)
+    local guard_err = ReadOnlyGuard.terminal_error(session, params)
+    if guard_err then
+      done(nil, guard_err)
+      return
+    end
     local terminal_id = next_terminal_id()
     local output_limit = tonumber(params.outputByteLimit) or (1024 * 1024)
     local cwd, cwd_err = resolve_filesystem_path(session, params.cwd or session.cwd, false)
@@ -536,6 +542,8 @@ function M.setup(deps)
   end
 
   local function write_text_file(session, params)
+    local guard_err = ReadOnlyGuard.write_error(session)
+    if guard_err then return nil, guard_err end
     local path = params.path
     if not path or path == "" then
       return nil, { code = -32602, message = "fs/write_text_file requires path" }
