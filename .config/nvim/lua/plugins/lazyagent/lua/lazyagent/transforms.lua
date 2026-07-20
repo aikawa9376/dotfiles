@@ -5,6 +5,7 @@
 --  - #buffer_abs  -> absolute path of the source buffer
 --  - #buffers     -> newline-separated list of "bufferline"-equivalent buffers (listed buffers) with "@" prefix
 --  - #buffers_abs -> newline-separated list of bufferline-equivalent buffers, absolute paths with "@" prefix
+--  - #notes       -> saved code Notes with file and line-range context
 --  - #directory   -> Directory of the source buffer (relative to git root if available), prefixed with '@'.
 --  - #git_root    -> repository root path for the source buffer (git)
 --  - #git_branch  -> git branch name for the source buffer
@@ -500,6 +501,14 @@ local function replace_token(token, opts, meta)
     return instructions
   end
 
+  if token == "notes" then
+    local notes = require("lazyagent.notes")
+    local rendered, ids = notes.render({ source_bufnr = source_bufnr })
+    meta.note_ids = meta.note_ids or {}
+    for _, id in ipairs(ids) do meta.note_ids[#meta.note_ids + 1] = id end
+    return rendered
+  end
+
   -- Allow externally registered transforms to handle custom tokens (either string or function).
   local _, ext = external_transform_for_token(token)
   if ext then
@@ -565,6 +574,14 @@ local token_definitions = {
   { name = "git_branch", desc = "Git branch name for the source buffer." },
   { name = "diagnostics", desc = "Fenced diagnostics code block formatted for prompts (````diagnostics````)." },
   { name = "selection", desc = "Last visual selection from the source buffer as a fenced code block." },
+  {
+    name = "notes",
+    desc = "Saved code Notes with file and line-range context. Notes are cleared after a successful send.",
+    preview_as_markdown = true,
+    available = function(opts)
+      return require("lazyagent.notes").count({ source_bufnr = opts and opts.source_bufnr }) > 0
+    end,
+  },
   { name = "git_diff", desc = "Output of `git diff HEAD` for the source buffer's repository as a fenced diff block." },
   { name = "git_staged", desc = "Output of `git diff --staged` for the source buffer's repository as a fenced diff block." },
   { name = "quickfix", desc = "Current quickfix list entries as a fenced quickfix block." },
