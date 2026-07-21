@@ -11,6 +11,7 @@ local operation_marker = {
 }
 
 local change_namespace = vim.api.nvim_create_namespace("LazyAgentACPChanges")
+local review_comment_namespace = vim.api.nvim_create_namespace("LazyAgentACPReviewComments")
 local PRIORITY_BG = 200
 local PRIORITY_SYNTAX = 210
 local REVIEW_CONTEXT_LINES = 3
@@ -52,6 +53,9 @@ local function setup_highlights()
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesNote", { link = "GitSignsChange", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesContext", { link = "Comment", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPReviewComment", { link = "DiagnosticInfo", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPReviewCommentBody", { link = "Comment", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentACPReviewCommentOutdated", { link = "DiagnosticWarn", default = true })
 end
 
 local function reviewable_turn(turn)
@@ -240,8 +244,8 @@ function M.drawer_content(thread, turn, turn_index, turn_count, inline_diffs)
       annotation_status
     ),
     review_mode
-        and "`?` actions  `K` finding  `]n/[n` next/previous  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab"
-      or "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+        and "`?` actions  `K` finding  `]n/[n` next/previous  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab  `v` comments"
+      or "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab  `v` comments",
     "",
   }
   local change_rows = {}
@@ -328,6 +332,63 @@ local function open_annotation_float(annotations, title)
   vim.keymap.set("n", "q", close, { buffer = bufnr, nowait = true, silent = true })
   vim.keymap.set("n", "<Esc>", close, { buffer = bufnr, nowait = true, silent = true })
   return true
+end
+
+local function annotation_virtual_lines(annotations, outdated)
+  local lines = {}
+  for _, annotation in ipairs(annotations or {}) do
+    local badge = annotation.label and ("[" .. annotation.label .. "]") or "[comment]"
+    local heading = annotation.summary or annotation.rationale or "Review comment"
+    lines[#lines + 1] = { { "  ╭─ 💬" .. badge .. " " .. heading, "LazyAgentACPReviewComment" } }
+    if annotation.rationale and annotation.rationale ~= annotation.summary then
+      for _, body_line in ipairs(vim.split(annotation.rationale, "\n", { plain = true })) do
+        lines[#lines + 1] = { { "  │ " .. body_line, "LazyAgentACPReviewCommentBody" } }
+      end
+    end
+    local author = annotation.author and (annotation.author.name or annotation.author.provider) or nil
+    if outdated or annotation.outdated then
+      lines[#lines + 1] = { { "  │ ⚠ target differs from the reviewed snapshot", "LazyAgentACPReviewCommentOutdated" } }
+    end
+    lines[#lines + 1] = {
+      { author and ("  ╰─ " .. tostring(author)) or "  ╰─", "LazyAgentACPReviewCommentBody" },
+    }
+  end
+  return lines
+end
+
+function M.apply_buffer_annotations(bufnr, annotations, opts)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end
+  setup_highlights()
+  vim.api.nvim_buf_clear_namespace(bufnr, review_comment_namespace, 0, -1)
+  local grouped = {}
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  for _, annotation in ipairs(annotations or {}) do
+    local target = type(annotation.target) == "table" and annotation.target or {}
+    local line = math.floor(tonumber(target.end_line or target.start_line) or 0)
+    if target.side ~= "before" and line >= 1 and line <= line_count then
+      grouped[line] = grouped[line] or {}
+      grouped[line][#grouped[line] + 1] = annotation
+    end
+  end
+  local count = 0
+  for line, items in pairs(grouped) do
+    vim.api.nvim_buf_set_extmark(bufnr, review_comment_namespace, line - 1, 0, {
+      virt_lines = annotation_virtual_lines(items, opts and opts.outdated),
+      virt_lines_above = false,
+    })
+    count = count + #items
+  end
+  return true, count
+end
+
+function M.clear_buffer_annotations(bufnr)
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end
+  vim.api.nvim_buf_clear_namespace(bufnr, review_comment_namespace, 0, -1)
+  return true
+end
+
+local function buffer_has_annotations(bufnr)
+  return #vim.api.nvim_buf_get_extmarks(bufnr, review_comment_namespace, 0, -1, { limit = 1 }) > 0
 end
 
 function M.drawer_lines(thread, turn, turn_index, turn_count, inline_diffs)
@@ -609,6 +670,7 @@ function M.new(opts)
     local ft = filetype_for(change.path)
     set_scratch(before_buf, "lazyagent://before/" .. suffix .. "/" .. display_path(change), split_lines(before), ft)
     set_scratch(after_buf, "lazyagent://after/" .. suffix .. "/" .. display_path(change), split_lines(after), ft)
+    M.apply_buffer_annotations(after_buf, ReviewAnnotations.for_change(turn, change))
     map_diff_tab_close(before_buf)
     map_diff_tab_close(after_buf)
 
@@ -638,6 +700,47 @@ function M.new(opts)
     local target = math.max(1, math.min(tonumber(line) or 1, vim.api.nvim_buf_line_count(0)))
     vim.api.nvim_win_set_cursor(0, { target, 0 })
     return true
+  end
+
+  function review.toggle_file_annotations(thread, turn, change, line)
+    local root = (turn.final_snapshot and turn.final_snapshot.root)
+      or (turn.baseline and turn.baseline.root)
+      or thread.cwd
+    local path = root and vim.fs.joinpath(root, tostring(change.path or "")) or nil
+    local existing = path and vim.fn.bufnr(path) or -1
+    if not path or (existing < 0 and vim.fn.filereadable(path) ~= 1) then
+      vim.notify("LazyAgent ACP: file is unavailable: " .. tostring(path or change.path), vim.log.levels.ERROR)
+      return false
+    end
+    local windows = existing >= 0 and vim.fn.win_findbuf(existing) or {}
+    if windows[1] and vim.api.nvim_win_is_valid(windows[1]) then
+      vim.api.nvim_set_current_win(windows[1])
+    elseif existing >= 0 then
+      vim.fn.bufload(existing)
+      vim.api.nvim_win_set_buf(0, existing)
+    else
+      vim.cmd("keepalt edit " .. vim.fn.fnameescape(path))
+    end
+    local bufnr = vim.api.nvim_get_current_buf()
+    local target = math.max(1, math.min(tonumber(line) or 1, vim.api.nvim_buf_line_count(bufnr)))
+    vim.api.nvim_win_set_cursor(0, { target, 0 })
+    if buffer_has_annotations(bufnr) then
+      M.clear_buffer_annotations(bufnr)
+      vim.notify("LazyAgent ACP: review comments hidden for " .. tostring(change.path), vim.log.levels.INFO)
+      return true, false
+    end
+    local annotations = ReviewAnnotations.for_change(turn, change)
+    if #annotations == 0 then
+      vim.notify("LazyAgent ACP: no review comments for " .. tostring(change.path), vim.log.levels.INFO)
+      return false
+    end
+    local contents = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+    if vim.bo[bufnr].endofline then contents = contents .. "\n" end
+    local ref = change.review_blob or change.after_blob
+    local outdated = type(ref) == "table" and ref.hash ~= nil and vim.fn.sha256(contents) ~= ref.hash
+    M.apply_buffer_annotations(bufnr, annotations, { outdated = outdated })
+    vim.notify("LazyAgent ACP: review comments shown for " .. tostring(change.path), vim.log.levels.INFO)
+    return true, true
   end
 
   function review.open(thread)
@@ -782,6 +885,14 @@ function M.new(opts)
       local change = change_at(index)
       if change then review.open_change(thread, turn, change, index) end
     end, { buffer = bufnr, silent = true, desc = "Open LazyAgent ACP diff tab" })
+    vim.keymap.set("n", "v", function()
+      local index = change_index_at_cursor()
+      local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+      local change = change_at(index)
+      if change then
+        review.toggle_file_annotations(thread, turn, change, line_targets[cursor_line])
+      end
+    end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP review comments in file" })
     vim.keymap.set("n", "=", function()
       toggle_inline(change_index_at_cursor(), false)
     end, { buffer = bufnr, silent = true, desc = "Toggle LazyAgent ACP inline diff" })
@@ -1091,6 +1202,7 @@ function M.new(opts)
         { key = "o", description = "Toggle inline diff" },
         { key = "<CR>", description = "Open changed file at corresponding line" },
         { key = "d", description = "Open before / after diff tab" },
+        { key = "v", description = "Toggle review comments in actual file" },
       }
       if not thread.review_mode then
         table.insert(items, 2, { key = "c", description = "Add review note at cursor" })

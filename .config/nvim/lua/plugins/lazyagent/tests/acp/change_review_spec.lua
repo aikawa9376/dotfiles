@@ -66,7 +66,7 @@ function M.run()
   assert_equal(ChangeReview.drawer_lines(thread, turn), {
     "LazyAgent ACP Changes — Update the return value while keeping compatibility",
     "Turn thread-1:2 · 2 file(s) · 📝 final",
-    "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab",
+    "`?` actions  `K` note/final  `c` comment  `S` send review  `i` next diff  `o` toggle inline  `<CR>` open file  `d` diff tab  `v` comments",
     "",
     "M  lua/a.lua [approved] 💬2",
     "R  old.bin -> new.bin [binary] [rejected]",
@@ -282,6 +282,8 @@ function M.run()
   assert_equal(vim.fn.maparg("A", "n", false, true).desc, "Approve all LazyAgent ACP changes", "approve all mapping")
   assert_equal(vim.fn.maparg("<CR>", "n", false, true).desc, "Open LazyAgent ACP changed file", "open file mapping")
   assert_equal(vim.fn.maparg("d", "n", false, true).desc, "Open LazyAgent ACP diff tab", "diff tab mapping")
+  assert_equal(vim.fn.maparg("v", "n", false, true).desc,
+    "Toggle LazyAgent ACP review comments in file", "actual file comment mapping")
   assert_equal(vim.fn.maparg("k", "n", false, true).buffer or 0, 0, "k remains normal movement")
 
   vim.api.nvim_feedkeys("]t", "x", false)
@@ -314,6 +316,18 @@ function M.run()
   assert_equal(#vim.api.nvim_tabpage_list_wins(0), 2, "diff tab has before and after windows")
   assert_equal(vim.wo.diff, true, "after side has diff mode enabled")
   assert_equal(vim.fn.maparg("q", "n", false, true).desc, "Close LazyAgent ACP diff tab", "after diff close mapping")
+  local diff_comment_marks = vim.api.nvim_buf_get_extmarks(
+    0,
+    vim.api.nvim_get_namespaces().LazyAgentACPReviewComments,
+    0,
+    -1,
+    { details = true }
+  )
+  assert_equal(#diff_comment_marks, 2, "after diff buffer shows review comments")
+  local diff_comment_text = vim.inspect(diff_comment_marks[1][4].virt_lines)
+    .. vim.inspect(diff_comment_marks[2][4].virt_lines)
+  assert(diff_comment_text:find("Check this value", 1, true), "diff comment includes its summary")
+  assert(diff_comment_text:find("[should]", 1, true), "diff comment includes its label")
   vim.cmd("wincmd h")
   assert_equal(vim.wo.diff, true, "before side has diff mode enabled")
   assert_equal(vim.fn.maparg("q", "n", false, true).desc, "Close LazyAgent ACP diff tab", "before diff close mapping")
@@ -321,6 +335,39 @@ function M.run()
   vim.wait(100)
   assert_equal(vim.fn.tabpagenr("$"), tabs_before, "q closes the whole diff tab")
   assert_equal(vim.api.nvim_get_current_buf(), drawer, "q returns to the changes drawer")
+
+  local file_root = vim.fn.tempname()
+  vim.fn.mkdir(file_root .. "/lua", "p")
+  local actual_lines = { "local value = 2" }
+  for index = 1, 20 do actual_lines[#actual_lines + 1] = "local filler" .. index .. " = " .. index end
+  actual_lines[#actual_lines + 1] = "return value + 1"
+  vim.fn.writefile(actual_lines, file_root .. "/lua/a.lua")
+  thread.cwd = file_root
+  vim.api.nvim_win_set_cursor(0, { 5, 0 })
+  vim.api.nvim_feedkeys("v", "x", false)
+  vim.wait(100)
+  assert_equal(vim.api.nvim_buf_get_name(0), file_root .. "/lua/a.lua", "v opens the actual changed file")
+  local actual_marks = vim.api.nvim_buf_get_extmarks(
+    0,
+    vim.api.nvim_get_namespaces().LazyAgentACPReviewComments,
+    0,
+    -1,
+    { details = true }
+  )
+  assert_equal(#actual_marks, 2, "actual file receives review comments")
+  assert(vim.inspect(actual_marks):find("target differs from the reviewed snapshot", 1, true),
+    "diverged actual file warns that review line targets may be stale")
+  assert_equal(review.open(thread), drawer, "review drawer reopens after showing actual comments")
+  vim.api.nvim_win_set_cursor(0, { 5, 0 })
+  vim.api.nvim_feedkeys("v", "x", false)
+  vim.wait(100)
+  assert_equal(#vim.api.nvim_buf_get_extmarks(
+    0, vim.api.nvim_get_namespaces().LazyAgentACPReviewComments, 0, -1, {}
+  ), 0, "v toggles actual file comments off")
+  vim.api.nvim_buf_delete(0, { force = true })
+  assert_equal(review.open(thread), drawer, "review drawer reopens after hiding actual comments")
+  vim.fn.delete(file_root, "rf")
+  thread.cwd = nil
 
   local binary_tabs_before = vim.fn.tabpagenr("$")
   assert_equal(review.open_change(thread, turn, turn.changes[2], 2), true, "open binary change")
