@@ -48,9 +48,6 @@ function M.new(ctx)
   local queue_markdown_rendering = ctx.queue_markdown_rendering
   local request_buffer_redraw = ctx.request_buffer_redraw or function(_) end
   local invalidate_transcript_section_cache = ctx.invalidate_transcript_section_cache or function(_) end
-  local in_cmdline_mode = ctx.in_cmdline_mode or function()
-    return false
-  end
   local APPEND_BATCH_MS = ctx.append_batch_ms
   local ACP_TRANSCRIPT_FILETYPE = ctx.acp_transcript_filetype
   local smooth_scroll = require("lazyagent.acp.view_buffer.smooth_scroll")
@@ -85,11 +82,6 @@ function M.new(ctx)
     view_state.pending_append = ""
     view_state.pending_append_chunks = nil
     view_state.pending_append_size = 0
-  end
-
-  local function smooth_scroll_config(bufnr, mode)
-    local opts = pane_opts_for_bufnr(bufnr) or {}
-    return smooth_scroll.config(opts.smooth_scroll, mode)
   end
 
   local function push_pending_append(view_state, text)
@@ -363,30 +355,9 @@ function M.new(ctx)
     local col = math.max(0, #last_line)
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
       if vim.api.nvim_win_is_valid(win) then
-        local cfg = smooth_scroll_config(bufnr, "follow")
-        local bottom = type(M._window_bottom_line) == "function" and M._window_bottom_line(win) or nil
-        local delta = bottom and (row - bottom) or nil
-        local function jump_to_end()
-          vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
-          pcall(vim.api.nvim_win_set_cursor, win, { row, col })
-        end
-        if in_cmdline_mode() then
-          smooth_scroll.stop_window(win)
-          pcall(jump_to_end)
-        elseif cfg and delta and delta > 0 and delta <= cfg.max_delta then
-          vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
-          smooth_scroll.scroll_by_lines(win, delta, cfg, {
-            bufnr = bufnr,
-            mode = "follow",
-            on_finish = function()
-              if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == bufnr then
-                jump_to_end()
-              end
-            end,
-          })
-        else
-          pcall(jump_to_end)
-        end
+        smooth_scroll.stop_window(win)
+        vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
+        pcall(vim.api.nvim_win_set_cursor, win, { row, col })
       end
     end
   end

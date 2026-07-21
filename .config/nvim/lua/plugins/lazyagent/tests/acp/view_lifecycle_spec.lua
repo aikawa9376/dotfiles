@@ -69,7 +69,7 @@ function M.run()
         duration_ms = 140,
         step_ms = 10,
         max_delta = 80,
-        follow = true,
+        manual = true,
       },
     },
   }, function(created_pane_id, created_state)
@@ -112,9 +112,11 @@ function M.run()
   local original_get_mode = vim.api.nvim_get_mode
   local original_redraw = vim.api.nvim__redraw
   local original_win_call = vim.api.nvim_win_call
-  local redraw_count = 0
+  local redraws = {}
   local transcript_win_call_count = 0
-  rawset(vim.api, "nvim__redraw", function() redraw_count = redraw_count + 1 end)
+  rawset(vim.api, "nvim__redraw", function(opts)
+    redraws[#redraws + 1] = vim.deepcopy(opts)
+  end)
   rawset(vim.api, "nvim_win_call", function(win, callback)
     if win == pane_state.winid then
       transcript_win_call_count = transcript_win_call_count + 1
@@ -126,8 +128,15 @@ function M.run()
     for index = 1, 20 do
       view.on_transcript_updated(session, "\ncmdline response " .. tostring(index), "a")
     end
-    vim.wait(500)
-
+    assert(vim.wait(500, function() return #redraws > 0 end, 10),
+      "ACP output should redraw while command-line completion is active")
+    local live_lines = table.concat(vim.api.nvim_buf_get_lines(transcript_bufnr, 0, -1, false), "\n")
+    assert(live_lines:find("cmdline response 20", 1, true),
+      "ACP output should keep updating while command-line completion is active")
+    local cmdline_snapshot = view.debug_snapshot()
+    assert_equal(cmdline_snapshot.buffer_count, 1, "command-line updates reuse the ACP transcript buffer")
+    assert_equal(cmdline_snapshot.panes[tostring(pane_id)].bufnr, transcript_bufnr,
+      "command-line updates keep the original ACP transcript buffer")
     view.configure_pane(pane_id, { follow_output = false })
     view.on_transcript_updated(session, "", "w")
     assert(vim.wait(1000, function()
@@ -145,12 +154,17 @@ function M.run()
     error(cmdline_error)
   end
   assert_equal(render_updates, 0, "ACP markdown rendering waits while command-line completion is active")
-  assert_equal(redraw_count, 0, "ACP buffer redraw waits while command-line completion is active")
+  assert(#redraws >= 1, "ACP buffer redraw remains live during command-line completion")
+  for _, redraw in ipairs(redraws) do
+    assert_equal(redraw.buf, transcript_bufnr, "command-line redraw targets the ACP transcript")
+    assert_equal(redraw.valid, false, "command-line redraw invalidates the ACP transcript")
+    assert_equal(redraw.flush, true, "command-line redraw is visible without another keypress")
+  end
   assert_equal(transcript_win_call_count, 0,
     "ACP output never enters its window while command-line completion is active")
   local resume_count = 0
   for _, autocmd in ipairs(vim.api.nvim_get_autocmds({ event = "CmdlineLeave" })) do
-    if autocmd.desc == "LazyAgent ACP resume deferred UI updates" then
+    if autocmd.desc == "LazyAgent ACP resume deferred markdown rendering" then
       resume_count = resume_count + 1
     end
   end
@@ -161,6 +175,22 @@ function M.run()
     "ACP markdown rendering resumes after command-line completion")
   vim.wait(250)
   assert_equal(render_updates, 1, "deferred ACP markdown rendering is coalesced")
+
+  local normal_win_call_count = 0
+  rawset(vim.api, "nvim_win_call", function(win, callback)
+    if win == pane_state.winid then
+      normal_win_call_count = normal_win_call_count + 1
+    end
+    return original_win_call(win, callback)
+  end)
+  local expected_follow_update = render_updates + 1
+  view.on_transcript_updated(session, "\ndirect automatic follow", "a")
+  local followed = vim.wait(1000, function() return render_updates == expected_follow_update end, 10)
+  rawset(vim.api, "nvim_win_call", original_win_call)
+  assert(followed, "normal-mode ACP output should finish rendering")
+  assert_equal(normal_win_call_count, 0, "automatic follow never enters the ACP window")
+  assert_equal(require("lazyagent.acp.view_buffer.smooth_scroll").active(pane_state.winid), false,
+    "automatic follow never starts smooth scrolling")
 
   for index = 1, 5 do
     view.release_session_resources(session)

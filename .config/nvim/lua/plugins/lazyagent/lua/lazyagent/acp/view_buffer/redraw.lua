@@ -4,20 +4,29 @@ function M.new(ctx)
   local layout_state = ctx.layout_state
   local buffer_is_visible = ctx.buffer_is_visible
   local owns_buffer = ctx.owns_buffer
+  local in_cmdline_mode = ctx.in_cmdline_mode or function()
+    return false
+  end
 
   local function redraw_buffer(bufnr)
     if type(vim.api.nvim__redraw) == "function" then
-      local ok = pcall(vim.api.nvim__redraw, {
+      local opts = {
         buf = bufnr,
         valid = false,
-      })
+      }
+      if in_cmdline_mode() then
+        opts.flush = true
+      end
+      local ok = pcall(vim.api.nvim__redraw, opts)
       if ok then
         return
       end
     end
 
     if vim.api.nvim_get_current_buf() == bufnr then
-      pcall(vim.cmd, "redraw")
+      pcall(function()
+        vim.cmd("redraw")
+      end)
     end
   end
 

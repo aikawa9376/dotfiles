@@ -54,7 +54,6 @@ local SMOOTH_SCROLL_DEFAULTS = {
   step_ms = 10,
   max_delta = 80,
   manual = true,
-  follow = true,
 }
 
 local function normalize_smooth_scroll_input(value)
@@ -100,7 +99,7 @@ local function merge_smooth_scroll_config(agent_cfg, global_cfg)
   out.step_ms = normalize_positive_integer(out.step_ms) or SMOOTH_SCROLL_DEFAULTS.step_ms
   out.max_delta = normalize_positive_integer(out.max_delta) or SMOOTH_SCROLL_DEFAULTS.max_delta
   out.manual = out.manual ~= false
-  out.follow = out.follow ~= false
+  out.follow = nil
   return out
 end
 
