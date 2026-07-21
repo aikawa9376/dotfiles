@@ -21,7 +21,10 @@ function M.new(ctx)
   local scroll_buffer_to_end = ctx.scroll_buffer_to_end
   local show_action_menu = ctx.show_action_menu
   local show_metadata_popup = ctx.show_metadata_popup
-  local notify_transcript_read = ctx.notify_transcript_read or function() end
+  local notify_transcript_read = ctx.notify_transcript_read or function(_) end
+  local in_cmdline_mode = ctx.in_cmdline_mode or function()
+    return false
+  end
   local diff_view = setmetatable({}, {
     __index = function(_, key)
       local view = ctx.diff_view and ctx.diff_view() or nil
@@ -712,9 +715,23 @@ function M.new(ctx)
 
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
       if vim.api.nvim_win_is_valid(win) then
-        local ok, view = pcall(vim.api.nvim_win_call, win, function()
-          return vim.fn.winsaveview()
-        end)
+        local ok, view
+        if in_cmdline_mode() then
+          local cursor_ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
+          local info_ok, info = pcall(vim.fn.getwininfo, win)
+          local info_entry = info_ok and type(info) == "table" and info[1] or nil
+          ok = cursor_ok and type(cursor) == "table"
+          view = ok and {
+            lnum = cursor[1],
+            col = cursor[2],
+            topline = info_entry and info_entry.topline or cursor[1],
+            leftcol = 0,
+          } or nil
+        else
+          ok, view = pcall(vim.api.nvim_win_call, win, function()
+            return vim.fn.winsaveview()
+          end)
+        end
         if ok and type(view) == "table" then
           views[tostring(win)] = view
         end
@@ -732,12 +749,18 @@ function M.new(ctx)
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
       local view = views[tostring(win)]
       if vim.api.nvim_win_is_valid(win) and type(view) == "table" and vim.api.nvim_win_get_buf(win) == bufnr then
-        pcall(vim.api.nvim_win_call, win, function()
-          local restored = vim.deepcopy(view)
-          restored.lnum = math.min(math.max(1, tonumber(restored.lnum) or 1), line_count)
-          restored.topline = math.min(math.max(1, tonumber(restored.topline) or 1), line_count)
-          vim.fn.winrestview(restored)
-        end)
+        local restored = vim.deepcopy(view)
+        restored.lnum = math.min(math.max(1, tonumber(restored.lnum) or 1), line_count)
+        restored.topline = math.min(math.max(1, tonumber(restored.topline) or 1), line_count)
+        if in_cmdline_mode() then
+          local line = vim.api.nvim_buf_get_lines(bufnr, restored.lnum - 1, restored.lnum, false)[1] or ""
+          local col = math.min(math.max(0, tonumber(restored.col) or 0), #line)
+          pcall(vim.api.nvim_win_set_cursor, win, { restored.lnum, col })
+        else
+          pcall(vim.api.nvim_win_call, win, function()
+            vim.fn.winrestview(restored)
+          end)
+        end
       end
     end
   end

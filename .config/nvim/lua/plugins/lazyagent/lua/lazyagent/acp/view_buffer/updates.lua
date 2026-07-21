@@ -48,6 +48,9 @@ function M.new(ctx)
   local queue_markdown_rendering = ctx.queue_markdown_rendering
   local request_buffer_redraw = ctx.request_buffer_redraw or function(_) end
   local invalidate_transcript_section_cache = ctx.invalidate_transcript_section_cache or function(_) end
+  local in_cmdline_mode = ctx.in_cmdline_mode or function()
+    return false
+  end
   local APPEND_BATCH_MS = ctx.append_batch_ms
   local ACP_TRANSCRIPT_FILETYPE = ctx.acp_transcript_filetype
   local smooth_scroll = require("lazyagent.acp.view_buffer.smooth_scroll")
@@ -367,7 +370,10 @@ function M.new(ctx)
           vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
           pcall(vim.api.nvim_win_set_cursor, win, { row, col })
         end
-        if cfg and delta and delta > 0 and delta <= cfg.max_delta then
+        if in_cmdline_mode() then
+          smooth_scroll.stop_window(win)
+          pcall(jump_to_end)
+        elseif cfg and delta and delta > 0 and delta <= cfg.max_delta then
           vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
           smooth_scroll.scroll_by_lines(win, delta, cfg, {
             bufnr = bufnr,

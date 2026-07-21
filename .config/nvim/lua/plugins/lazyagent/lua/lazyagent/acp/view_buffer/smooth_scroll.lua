@@ -11,6 +11,12 @@ local DEFAULTS = {
   follow = true,
 }
 
+local function in_cmdline_mode()
+  local ok, mode = pcall(vim.api.nvim_get_mode)
+  local current_mode = ok and mode and mode.mode or ""
+  return type(current_mode) == "string" and current_mode:sub(1, 1) == "c"
+end
+
 local function positive_integer(value, fallback)
   local number = tonumber(value)
   if not number or number <= 0 then
@@ -88,7 +94,7 @@ function M.active(win, mode)
 end
 
 local function normal_scroll(win, key, amount)
-  if not win or not vim.api.nvim_win_is_valid(win) or amount <= 0 then
+  if in_cmdline_mode() or not win or not vim.api.nvim_win_is_valid(win) or amount <= 0 then
     return false
   end
 
@@ -125,6 +131,13 @@ function M.scroll_by_lines(win, delta, cfg, opts)
   local on_finish = opts.on_finish
 
   close_entry(tostring(win))
+
+  -- nvim_win_call() temporarily changes the current window. During command-line
+  -- editing Neovim exposes that as c -> n -> c, which invalidates completion
+  -- state. Callers that need follow scrolling can use window-local APIs instead.
+  if in_cmdline_mode() then
+    return false
+  end
 
   if amount > max_delta then
     local moved = normal_scroll(win, key, amount)
@@ -189,6 +202,10 @@ function M.scroll_by_lines(win, delta, cfg, opts)
       return
     end
     if bufnr and vim.api.nvim_win_get_buf(win) ~= bufnr then
+      finish()
+      return
+    end
+    if in_cmdline_mode() then
       finish()
       return
     end
