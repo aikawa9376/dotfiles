@@ -6,4 +6,5 @@ package.path = table.concat({ root .. "/?.lua", root .. "/?/init.lua", package.p
 
 require("tests.definition_spec").run()
 require("tests.component_spec").run()
+require("tests.fzf_picker_spec").run()
 print("all laravel-extension tests passed")

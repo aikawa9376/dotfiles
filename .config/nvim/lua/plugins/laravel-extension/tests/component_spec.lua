@@ -39,7 +39,7 @@ function M.run()
   vim.api.nvim_win_set_cursor(0, { 2, 7 })
   assert_equal(component.component_class_at_cursor(0, root), "hoge.fuge", "cursor on component class name")
 
-  local selected_items, selected_opts, opened
+  local selected_items, selected_opts
   local lsp_item = {
     kind = "php",
     path = class_path,
@@ -50,15 +50,13 @@ function M.run()
   local handled = component.goto_references_at_cursor({
     root = root,
     request_lsp_references = function(_, _, callback) callback({ lsp_item }) end,
-    select = function(items, opts, on_choice)
+    picker = function(items, opts)
       selected_items, selected_opts = items, opts
-      on_choice(items[2])
     end,
-    open = function(item) opened = item end,
   })
   assert_equal(handled, true, "component class references handled")
-  assert(vim.wait(2000, function() return opened ~= nil end, 10), "component reference search completes")
-  assert(selected_items and selected_opts and opened, "component reference picker state")
+  assert(vim.wait(2000, function() return selected_items ~= nil end, 10), "component reference search completes")
+  assert(selected_items and selected_opts, "component reference picker state")
   assert_equal(#selected_items, 4, "php reference and three blade tag occurrences")
   assert_equal(selected_items[1].kind, "php", "php reference retained")
   assert_equal(selected_items[2].kind, "blade", "blade opening tag added")
@@ -66,9 +64,7 @@ function M.run()
   assert_equal(selected_items[4].kind, "blade", "blade closing tag added")
   assert_equal(selected_items[2].path, view_path, "blade reference path")
   assert_equal(selected_items[2].row, 2, "blade reference row")
-  assert(selected_opts.format_item(selected_items[2]):find("%[blade%]"), "blade reference label")
   assert(selected_opts.prompt:find("<x%-hoge%.fuge>"), "component tag in picker prompt")
-  assert_equal(opened, selected_items[2], "selected blade reference opens")
 
   vim.api.nvim_win_set_cursor(0, { 3, 22 })
   assert_equal(component.component_class_at_cursor(0, root), nil, "method cursor is not component class reference")

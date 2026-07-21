@@ -210,21 +210,6 @@ local function find_blade_references(root, component_name, callback)
   end)
 end
 
-local function reference_label(item)
-  local path = vim.fn.fnamemodify(item.path, ":~:.")
-  local suffix = item.text ~= "" and " · " .. item.text or ""
-  return string.format("[%s] %s:%d:%d%s", item.kind, path, item.row, item.col, suffix)
-end
-
-local function open_reference(item)
-  if item.location then
-    vim.lsp.util.show_document(item.location, item.encoding or "utf-16", { focus = true })
-    return
-  end
-  vim.cmd("edit " .. vim.fn.fnameescape(item.path))
-  pcall(vim.api.nvim_win_set_cursor, 0, { item.row, math.max(0, item.col - 1) })
-end
-
 function M.goto_references_at_cursor(opts)
   opts = opts or {}
   local bufnr = vim.api.nvim_get_current_buf()
@@ -242,14 +227,10 @@ function M.goto_references_at_cursor(opts)
       vim.notify("No references found for <x-" .. component_name .. ">", vim.log.levels.INFO)
       return
     end
-    local select = opts.select or vim.ui.select
-    select(items, {
+    local picker = opts.picker or require("laravel_extension.fzf_picker").select
+    picker(items, {
       prompt = "References for <x-" .. component_name .. ">:",
-      kind = "laravel_component_references",
-      format_item = reference_label,
-    }, function(choice)
-      if choice then (opts.open or open_reference)(choice) end
-    end)
+    })
   end
 
   local request_references = opts.request_lsp_references or request_lsp_references

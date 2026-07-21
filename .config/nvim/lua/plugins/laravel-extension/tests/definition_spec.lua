@@ -77,8 +77,8 @@ function M.run()
   assert_equal(definition.is_interface_location({ location = interface_definition }), true, "interface method location")
 
   local original_get_clients = vim.lsp.get_clients
-  local original_select = vim.ui.select
   local original_show_document = vim.lsp.util.show_document
+  local original_picker = definition.pick_locations
   ---@type table[]?
   local selected_items
   ---@type table?
@@ -102,10 +102,8 @@ function M.run()
 
   ---@diagnostic disable-next-line: duplicate-set-field
   vim.lsp.get_clients = function() return { client } end
-  ---@diagnostic disable-next-line: duplicate-set-field
-  vim.ui.select = function(items, opts, on_choice)
+  definition.pick_locations = function(items, opts)
     selected_items, selected_opts = items, opts
-    on_choice(items[2])
   end
   ---@diagnostic disable-next-line: duplicate-set-field
   vim.lsp.util.show_document = function(target)
@@ -114,15 +112,14 @@ function M.run()
   end
 
   assert_equal(definition.goto_lsp_definition_with_implementations(), true, "definition request starts")
-  assert(vim.wait(1000, function() return opened ~= nil end, 10), "interface implementation picker completes")
-  assert(selected_items and selected_opts and opened, "interface picker state")
+  assert(vim.wait(1000, function() return selected_items ~= nil end, 10), "interface implementation picker completes")
+  assert(selected_items and selected_opts, "interface picker state")
   assert_equal(#selected_items, 2, "interface and implementation choices")
   assert_equal(selected_items[1].kind, "interface", "interface choice kind")
   assert_equal(selected_items[2].kind, "implementation", "implementation choice kind")
-  assert(selected_opts.format_item(selected_items[1]):find("%[interface%]"), "interface picker label")
-  assert(selected_opts.format_item(selected_items[2]):find("%[implementation%]"), "implementation picker label")
-  assert_equal(opened.uri, vim.uri_from_fname(implementation_path), "selected implementation class opens")
-  assert_equal(opened.range.start.line, 1, "implementation opens at class declaration")
+  assert(selected_opts.prompt:find("interface"), "interface picker prompt")
+  assert_equal(selected_items[2].location.uri, vim.uri_from_fname(implementation_path), "implementation class location")
+  assert_equal(selected_items[2].location.range.start.line, 1, "implementation points at class declaration")
   assert_equal(vim.tbl_map(function(request) return request.method end, requested), {
     "textDocument/definition",
     "textDocument/references",
@@ -134,12 +131,13 @@ function M.run()
   client.definition_result = abstract_definition
   client.reference_result = { abstract_reference }
   assert_equal(definition.goto_lsp_definition_with_implementations(), true, "abstract definition request starts")
-  assert(vim.wait(1000, function() return opened ~= nil end, 10), "abstract implementation picker completes")
-  assert(selected_items and opened, "abstract picker state")
+  assert(vim.wait(1000, function() return selected_items ~= nil end, 10), "abstract implementation picker completes")
+  assert(selected_items and selected_opts, "abstract picker state")
   assert_equal(#selected_items, 2, "abstract and subclass choices")
   assert_equal(selected_items[1].kind, "abstract", "abstract choice kind")
   assert_equal(selected_items[2].kind, "implementation", "subclass choice kind")
-  assert_equal(opened.uri, vim.uri_from_fname(child_path), "selected subclass opens")
+  assert(selected_opts.prompt:find("abstract class"), "abstract picker prompt")
+  assert_equal(selected_items[2].location.uri, vim.uri_from_fname(child_path), "subclass location")
   assert_equal(vim.tbl_map(function(request) return request.method end, requested), {
     "textDocument/definition",
     "textDocument/references",
@@ -156,8 +154,8 @@ function M.run()
   }, "regular class skips references request")
 
   vim.lsp.get_clients = original_get_clients
-  vim.ui.select = original_select
   vim.lsp.util.show_document = original_show_document
+  definition.pick_locations = original_picker
   vim.cmd("enew")
   vim.fn.delete(root, "rf")
 end
