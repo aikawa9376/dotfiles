@@ -53,6 +53,218 @@ local function kebab(segment)
     :lower()
 end
 
+local function normalize_path(path)
+  if type(path) ~= "string" or path == "" then return "" end
+  return vim.fn.fnamemodify(path, ":p"):gsub("/$", "")
+end
+
+function M.component_name_from_class_path(path, root)
+  root = root or project_root(0)
+  if not root then return nil end
+  root = normalize_path(root)
+  path = normalize_path(path)
+  local class_root = root ~= "" and (root .. "/app/View/Components/") or ""
+  if class_root == "" or path:sub(1, #class_root) ~= class_root or not path:match("%.php$") then
+    return nil
+  end
+
+  local relative = path:sub(#class_root + 1):gsub("%.php$", "")
+  local parts = vim.split(relative, "/", { plain = true, trimempty = true })
+  for index, part in ipairs(parts) do
+    parts[index] = kebab(part)
+  end
+  return #parts > 0 and table.concat(parts, ".") or nil
+end
+
+local function node_at_cursor(bufnr)
+  local ok, parser = pcall(vim.treesitter.get_parser, bufnr, "php")
+  if not ok or not parser then return nil end
+  local parsed, trees = pcall(parser.parse, parser)
+  if not parsed or not trees or not trees[1] then return nil end
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  return trees[1]:root():named_descendant_for_range(cursor[1] - 1, cursor[2], cursor[1] - 1, cursor[2])
+end
+
+function M.component_class_at_cursor(bufnr, root)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local name = M.component_name_from_class_path(vim.api.nvim_buf_get_name(bufnr), root)
+  if not name then return nil end
+
+  local node = node_at_cursor(bufnr)
+  if not node or node:type() ~= "name" then return nil end
+  local parent = node:parent()
+  if not parent or parent:type() ~= "class_declaration" then return nil end
+  local class_names = parent:field("name")
+  if not class_names or class_names[1] ~= node then return nil end
+  return name
+end
+
+local function location_key(location)
+  local range = location.range or location.targetSelectionRange or location.targetRange
+  local uri = location.uri or location.targetUri
+  local start = range and range.start or {}
+  return table.concat({ uri or "", start.line or 0, start.character or 0 }, ":")
+end
+
+local function location_item(location, encoding)
+  local uri = location.uri or location.targetUri
+  local range = location.range or location.targetSelectionRange or location.targetRange
+  if not uri or not range or not range.start then return nil end
+  local path = vim.uri_to_fname(uri)
+  local row = (tonumber(range.start.line) or 0) + 1
+  local col = (tonumber(range.start.character) or 0) + 1
+  local line = vim.fn.readfile(path, "", row)[row] or ""
+  return {
+    kind = "php",
+    path = path,
+    row = row,
+    col = col,
+    text = trim(line):gsub("%s+", " "),
+    location = { uri = uri, range = range },
+    encoding = encoding or "utf-16",
+  }
+end
+
+local function request_lsp_references(bufnr, winid, callback)
+  local clients = vim.tbl_filter(function(client)
+    local ok, supported = pcall(client.supports_method, client, "textDocument/references", bufnr)
+    return ok and supported
+  end, vim.lsp.get_clients({ bufnr = bufnr }))
+  if #clients == 0 then
+    callback({})
+    return
+  end
+
+  local pending = #clients
+  local items, seen = {}, {}
+  local function complete()
+    pending = pending - 1
+    if pending == 0 then callback(items) end
+  end
+  for _, client in ipairs(clients) do
+    local encoding = client.offset_encoding or "utf-16"
+    local params = vim.lsp.util.make_position_params(winid, encoding)
+    ---@diagnostic disable-next-line: inject-field
+    params.context = { includeDeclaration = true }
+    local ok, accepted = pcall(client.request, client, "textDocument/references", params, function(err, result)
+      if not err then
+        for _, location in ipairs(type(result) == "table" and result or {}) do
+          local key = location_key(location)
+          if not seen[key] then
+            local item = location_item(location, encoding)
+            if item then
+              seen[key] = true
+              items[#items + 1] = item
+            end
+          end
+        end
+      end
+      complete()
+    end, bufnr)
+    if not ok or accepted == false then complete() end
+  end
+end
+
+local function regex_escape(text)
+  return tostring(text or ""):gsub("([\\%^%$%.|%?%*%+%(%)%[%]{}])", "\\%1")
+end
+
+local function find_blade_references(root, component_name, callback)
+  local pattern = "<\\s*/?\\s*x-" .. regex_escape(component_name) .. "(?=[\\s/>])"
+  vim.system({
+    "rg",
+    "--json",
+    "--pcre2",
+    "--glob",
+    "*.blade.php",
+    "--glob",
+    "!vendor/**",
+    pattern,
+    root,
+  }, { text = true }, function(result)
+    local items, seen = {}, {}
+    for line in tostring(result.stdout or ""):gmatch("[^\n]+") do
+      local ok, event = pcall(vim.json.decode, line)
+      ---@type any
+      local data = ok and event.type == "match" and event.data or nil
+      local path = data and data.path and data.path.text or nil
+      local row = data and tonumber(data.line_number) or nil
+      if path and row then
+        for _, match in ipairs(data.submatches or {}) do
+          local col = (tonumber(match.start) or 0) + 1
+          local key = table.concat({ path, row, col }, ":")
+          if not seen[key] then
+            seen[key] = true
+            items[#items + 1] = {
+              kind = "blade",
+              path = path,
+              row = row,
+              col = col,
+              text = trim(data.lines and data.lines.text or ""):gsub("%s+", " "),
+            }
+          end
+        end
+      end
+    end
+    vim.schedule(function() callback(items) end)
+  end)
+end
+
+local function reference_label(item)
+  local path = vim.fn.fnamemodify(item.path, ":~:.")
+  local suffix = item.text ~= "" and " · " .. item.text or ""
+  return string.format("[%s] %s:%d:%d%s", item.kind, path, item.row, item.col, suffix)
+end
+
+local function open_reference(item)
+  if item.location then
+    vim.lsp.util.show_document(item.location, item.encoding or "utf-16", { focus = true })
+    return
+  end
+  vim.cmd("edit " .. vim.fn.fnameescape(item.path))
+  pcall(vim.api.nvim_win_set_cursor, 0, { item.row, math.max(0, item.col - 1) })
+end
+
+function M.goto_references_at_cursor(opts)
+  opts = opts or {}
+  local bufnr = vim.api.nvim_get_current_buf()
+  local root = opts.root or project_root(bufnr)
+  local component_name = root and M.component_class_at_cursor(bufnr, root) or nil
+  if not component_name then return false end
+
+  local pending = 2
+  local lsp_items, blade_items = {}, {}
+  local function finish()
+    pending = pending - 1
+    if pending > 0 then return end
+    local items = vim.list_extend(lsp_items, blade_items)
+    if #items == 0 then
+      vim.notify("No references found for <x-" .. component_name .. ">", vim.log.levels.INFO)
+      return
+    end
+    local select = opts.select or vim.ui.select
+    select(items, {
+      prompt = "References for <x-" .. component_name .. ">:",
+      kind = "laravel_component_references",
+      format_item = reference_label,
+    }, function(choice)
+      if choice then (opts.open or open_reference)(choice) end
+    end)
+  end
+
+  local request_references = opts.request_lsp_references or request_lsp_references
+  request_references(bufnr, vim.api.nvim_get_current_win(), function(items)
+    lsp_items = items or {}
+    finish()
+  end)
+  local search_blade = opts.find_blade_references or find_blade_references
+  search_blade(root, component_name, function(items)
+    blade_items = items or {}
+    finish()
+  end)
+  return true
+end
+
 local function normalize_name(name)
   name = trim(name)
 

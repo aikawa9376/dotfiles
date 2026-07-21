@@ -5,4 +5,5 @@ vim.opt.runtimepath:prepend(root)
 package.path = table.concat({ root .. "/?.lua", root .. "/?/init.lua", package.path }, ";")
 
 require("tests.definition_spec").run()
+require("tests.component_spec").run()
 print("all laravel-extension tests passed")
