@@ -203,19 +203,12 @@ function M.is_interface_location(item)
   return interface_node_at(bufnr, row, col) or interface_text_at(bufnr, row)
 end
 
-local function location_label(item)
-  local bufnr, path = location_buffer(item)
-  local start = item.location.range.start
-  local row = (tonumber(start.line) or 0) + 1
-  local line = bufnr and vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ""
-  line = vim.trim(tostring(line or "")):gsub("%s+", " ")
-  if #line > 72 then line = line:sub(1, 69) .. "…" end
-  local relative = vim.fn.fnamemodify(path, ":~:.")
-  return string.format("[%s] %s:%d%s", item.kind, relative, row, line ~= "" and " · " .. line or "")
-end
-
 local function open_location(item)
   vim.lsp.util.show_document(item.location, item.encoding or "utf-16", { focus = true })
+end
+
+function M.pick_locations(items, opts)
+  require("laravel_extension.fzf_picker").select(items, opts)
 end
 
 local function choose_locations(definitions, implementations, target_kind)
@@ -239,15 +232,11 @@ local function choose_locations(definitions, implementations, target_kind)
     item.kind = "implementation"
     items[#items + 1] = item
   end
-  vim.ui.select(items, {
+  M.pick_locations(items, {
     prompt = #implementations > 0
         and string.format("Select %s or implementation:", target_kind == "abstract" and "abstract class" or "interface")
       or "Select definition:",
-    kind = "laravel_interface_implementation",
-    format_item = location_label,
-  }, function(choice)
-    if choice then open_location(choice) end
-  end)
+  })
 end
 
 function M.goto_lsp_definition_with_implementations()
