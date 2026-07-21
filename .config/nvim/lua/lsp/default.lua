@@ -20,7 +20,7 @@ M.settings = function(client, bufnr)
 
   -- Mappings.
   local keyopts = { noremap = true, silent = true, nowait = true }
-  buf_set_keymap("n", "gr", "m`:FzfLua lsp_references<CR>", keyopts)
+  buf_set_keymap("n", "gr", "m`:lua require'plugins.fzf-lua_util'.fzf_references()<CR>", keyopts)
   buf_set_keymap("n", "gR", "m`:FzfLua lsp_finder<CR>", keyopts)
   -- buf_set_keymap("n", "gd", "m`:FzfLua lsp_definitions<CR>", keyopts)
   buf_set_keymap("n", "gd", "m`:lua require'plugins.fzf-lua_util'.fzf_laravel()<CR>", keyopts)

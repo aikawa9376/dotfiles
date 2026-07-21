@@ -39,7 +39,7 @@ local function supporting_clients(bufnr, method)
   return clients
 end
 
-local function request_locations(bufnr, winid, method, callback)
+local function request_locations_with_params(bufnr, method, make_params, callback)
   local clients = supporting_clients(bufnr, method)
   if #clients == 0 then return false end
 
@@ -52,7 +52,7 @@ local function request_locations(bufnr, winid, method, callback)
 
   for _, client in ipairs(clients) do
     local encoding = client.offset_encoding or "utf-16"
-    local params = vim.lsp.util.make_position_params(winid, encoding)
+    local params = make_params(client, encoding)
     local ok, accepted = pcall(client.request, client, method, params, function(err, result)
       if not err then append_locations(locations, seen, result, encoding) end
       complete_one()
@@ -60,6 +60,12 @@ local function request_locations(bufnr, winid, method, callback)
     if not ok or accepted == false then complete_one() end
   end
   return true
+end
+
+local function request_locations(bufnr, winid, method, callback)
+  return request_locations_with_params(bufnr, method, function(_, encoding)
+    return vim.lsp.util.make_position_params(winid, encoding)
+  end, callback)
 end
 
 local function location_buffer(item)
@@ -70,18 +76,109 @@ local function location_buffer(item)
   return bufnr, path
 end
 
-local function interface_node_at(bufnr, row, col)
+local function parsed_node_at(bufnr, row, col)
   local ok, parser = pcall(vim.treesitter.get_parser, bufnr, "php")
-  if not ok or type(parser) ~= "table" or type(parser.parse) ~= "function" then return false end
+  if not ok or type(parser) ~= "table" or type(parser.parse) ~= "function" then return nil end
   local parsed, trees = pcall(parser.parse, parser)
-  if not parsed or type(trees) ~= "table" then return false end
+  if not parsed or type(trees) ~= "table" then return nil end
   local root = trees[1] and trees[1]:root() or nil
-  local node = root and root:named_descendant_for_range(row, col, row, col) or nil
+  return root and root:named_descendant_for_range(row, col, row, col) or nil
+end
+
+local function interface_node_at(bufnr, row, col)
+  local node = parsed_node_at(bufnr, row, col)
   while node do
     if node:type() == "interface_declaration" then return true end
     node = node:parent()
   end
   return false
+end
+
+local function node_location(uri, node)
+  local start_row, start_col, end_row, end_col = node:range()
+  return {
+    uri = uri,
+    range = {
+      start = { line = start_row, character = start_col },
+      ["end"] = { line = end_row, character = end_col },
+    },
+  }
+end
+
+local function declaration_name_node(node)
+  local names = node and node:field("name") or {}
+  return names and names[1] or nil
+end
+
+local function is_abstract_class(node)
+  if not node or node:type() ~= "class_declaration" then return false end
+  for child in node:iter_children() do
+    if child:type() == "abstract_modifier" then return true end
+  end
+  return false
+end
+
+local function implementation_target(item)
+  if not item or not item.location then return nil end
+  local bufnr = location_buffer(item)
+  if not bufnr or bufnr < 0 or not vim.api.nvim_buf_is_loaded(bufnr) then return nil end
+  local start = item.location.range.start
+  local node = parsed_node_at(bufnr, tonumber(start.line) or 0, tonumber(start.character) or 0)
+  while node do
+    local node_type = node:type()
+    local kind = node_type == "interface_declaration" and "interface"
+      or (is_abstract_class(node) and "abstract")
+      or nil
+    if kind then
+      local name = declaration_name_node(node)
+      if not name then return nil end
+      return { kind = kind, location = node_location(item.location.uri, name) }
+    end
+    if node_type == "class_declaration" then return nil end
+    node = node:parent()
+  end
+  return nil
+end
+
+local function implementation_class(item)
+  if not item or not item.location then return nil end
+  local bufnr = location_buffer(item)
+  if not bufnr or bufnr < 0 or not vim.api.nvim_buf_is_loaded(bufnr) then return nil end
+  local start = item.location.range.start
+  local node = parsed_node_at(bufnr, tonumber(start.line) or 0, tonumber(start.character) or 0)
+  local is_inheritance = false
+  while node do
+    local node_type = node:type()
+    if node_type == "base_clause" or node_type == "class_interface_clause" then
+      is_inheritance = true
+    elseif node_type == "class_declaration" then
+      if not is_inheritance then return nil end
+      local name = declaration_name_node(node)
+      if not name then return nil end
+      return {
+        location = node_location(item.location.uri, name),
+        encoding = item.encoding,
+        kind = "implementation",
+      }
+    end
+    node = node:parent()
+  end
+  return nil
+end
+
+local function implementation_classes(references)
+  local classes, seen = {}, {}
+  for _, reference in ipairs(references or {}) do
+    local class = implementation_class(reference)
+    if class then
+      local key = location_key(class.location)
+      if not seen[key] then
+        seen[key] = true
+        classes[#classes + 1] = class
+      end
+    end
+  end
+  return classes
 end
 
 local function interface_text_at(bufnr, row)
@@ -121,7 +218,7 @@ local function open_location(item)
   vim.lsp.util.show_document(item.location, item.encoding or "utf-16", { focus = true })
 end
 
-local function choose_locations(definitions, implementations)
+local function choose_locations(definitions, implementations, target_kind)
   implementations = implementations or {}
   local definition_keys = {}
   for _, item in ipairs(definitions) do definition_keys[location_key(item.location)] = true end
@@ -135,7 +232,7 @@ local function choose_locations(definitions, implementations)
 
   local items = {}
   for _, item in ipairs(definitions) do
-    item.kind = M.is_interface_location(item) and "interface" or "definition"
+    item.kind = target_kind or (M.is_interface_location(item) and "interface" or "definition")
     items[#items + 1] = item
   end
   for _, item in ipairs(implementations) do
@@ -143,7 +240,9 @@ local function choose_locations(definitions, implementations)
     items[#items + 1] = item
   end
   vim.ui.select(items, {
-    prompt = #implementations > 0 and "Select interface or implementation:" or "Select definition:",
+    prompt = #implementations > 0
+        and string.format("Select %s or implementation:", target_kind == "abstract" and "abstract class" or "interface")
+      or "Select definition:",
     kind = "laravel_interface_implementation",
     format_item = location_label,
   }, function(choice)
@@ -160,15 +259,27 @@ function M.goto_lsp_definition_with_implementations()
         vim.notify("No LSP definition available", vim.log.levels.WARN)
         return
       end
-      local has_interface = vim.iter(definitions):any(M.is_interface_location)
-      if not has_interface then
+      local target
+      for _, definition in ipairs(definitions) do
+        target = implementation_target(definition)
+        if target then break end
+      end
+      if not target then
         choose_locations(definitions)
         return
       end
-      if not request_locations(bufnr, winid, "textDocument/implementation", function(implementations)
-        vim.schedule(function() choose_locations(definitions, implementations) end)
+      if not request_locations_with_params(bufnr, "textDocument/references", function()
+        return {
+          textDocument = { uri = target.location.uri },
+          position = vim.deepcopy(target.location.range.start),
+          context = { includeDeclaration = false },
+        }
+      end, function(references)
+        vim.schedule(function()
+          choose_locations(definitions, implementation_classes(references), target.kind)
+        end)
       end) then
-        choose_locations(definitions)
+        choose_locations(definitions, nil, target.kind)
       end
     end)
   end)

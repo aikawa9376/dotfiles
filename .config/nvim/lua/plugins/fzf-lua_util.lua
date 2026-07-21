@@ -1244,6 +1244,14 @@ M.fzf_laravel = function()
   goto_lsp_definitions()
 end
 
+M.fzf_references = function()
+  local ok, component = pcall(require, "laravel_extension.features.component")
+  if ok and type(component.goto_references_at_cursor) == "function" and component.goto_references_at_cursor() then
+    return
+  end
+  require("fzf-lua.cmd").run_command("lsp_references")
+end
+
 vim.cmd([[command! -nargs=* LaravelLua lua require"plugins.fzf-lua_util".fzf_laravel()]])
 
 -- ------------------------------------------------------------------
