@@ -455,9 +455,8 @@ end
 function source:get_completions(ctx, callback)
   local prefix = extract_prefix(ctx)
   if prefix == "" or not has_enough_keyword_length(prefix, self.opts.min_keyword_length) then
-    local should_refetch_forward = prefix ~= "" or is_after_japanese_text(ctx)
     callback(response({}, {
-      is_incomplete_forward = should_refetch_forward,
+      is_incomplete_forward = true,
       is_incomplete_backward = prefix ~= "",
     }))
     return function() end
