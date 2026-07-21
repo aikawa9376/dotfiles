@@ -43,8 +43,8 @@ function M.run()
 
     assert_equal(smooth_scroll.scroll_by_lines(win, 20, cfg, {
       bufnr = bufnr,
-      mode = "follow",
-    }), false, "smooth scroll is not started from command-line mode")
+      mode = "manual",
+    }), false, "manual smooth scroll is not started from command-line mode")
     vim.wait(60)
     assert_equal(win_call_count, 0, "command-line mode does not enter the target window")
     assert_equal(smooth_scroll.active(win), false, "command-line mode leaves no smooth-scroll timer")
@@ -53,11 +53,11 @@ function M.run()
     local finish_count = 0
     assert_equal(smooth_scroll.scroll_by_lines(win, 20, cfg, {
       bufnr = bufnr,
-      mode = "follow",
+      mode = "manual",
       on_finish = function()
         finish_count = finish_count + 1
       end,
-    }), true, "smooth scroll starts in normal mode")
+    }), true, "manual smooth scroll starts in normal mode")
     assert(vim.wait(200, function() return win_call_count > 0 end, 5),
       "normal-mode smooth scroll should advance at least one frame")
 

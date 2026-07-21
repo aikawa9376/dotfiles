@@ -8,7 +8,6 @@ local DEFAULTS = {
   step_ms = 10,
   max_delta = 80,
   manual = true,
-  follow = true,
 }
 
 local function in_cmdline_mode()
@@ -36,10 +35,6 @@ function M.config(value, mode)
   if mode == "manual" and cfg.manual == false then
     return nil
   end
-  if mode == "follow" and cfg.follow == false then
-    return nil
-  end
-
   cfg.duration_ms = positive_integer(cfg.duration_ms, DEFAULTS.duration_ms)
   cfg.step_ms = positive_integer(cfg.step_ms, DEFAULTS.step_ms)
   cfg.max_delta = positive_integer(cfg.max_delta, DEFAULTS.max_delta)

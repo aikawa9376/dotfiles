@@ -54,7 +54,7 @@ local custom_background_groups = {}
 local layout_state = {}
 local suppress_transcript_window_refresh = false
 local dedicated_transcript_windows = {}
-local deferred_cmdline_ui_updates = {}
+local deferred_cmdline_rendering = {}
 local cmdline_leave_autocmd
 local ACP_WINDOW_OPTIONS = {
   "number",
@@ -93,36 +93,36 @@ local function in_cmdline_mode()
   return type(current_mode) == "string" and current_mode:sub(1, 1) == "c"
 end
 
-local function has_deferred_cmdline_ui_updates()
-  return next(deferred_cmdline_ui_updates) ~= nil
+local function has_deferred_cmdline_rendering()
+  return next(deferred_cmdline_rendering) ~= nil
 end
 
-local function clear_deferred_cmdline_ui_update(bufnr)
-  deferred_cmdline_ui_updates[bufnr] = nil
-  if has_deferred_cmdline_ui_updates() or not cmdline_leave_autocmd then
+local function clear_deferred_cmdline_rendering(bufnr)
+  deferred_cmdline_rendering[bufnr] = nil
+  if has_deferred_cmdline_rendering() or not cmdline_leave_autocmd then
     return
   end
   pcall(vim.api.nvim_del_autocmd, cmdline_leave_autocmd)
   cmdline_leave_autocmd = nil
 end
 
-local flush_deferred_cmdline_ui_updates
+local flush_deferred_cmdline_rendering
 local function ensure_cmdline_leave_autocmd()
   if cmdline_leave_autocmd then
     return
   end
   cmdline_leave_autocmd = vim.api.nvim_create_autocmd("CmdlineLeave", {
     once = true,
-    desc = "LazyAgent ACP resume deferred UI updates",
+    desc = "LazyAgent ACP resume deferred markdown rendering",
     callback = function()
       cmdline_leave_autocmd = nil
-      vim.schedule(flush_deferred_cmdline_ui_updates)
+      vim.schedule(flush_deferred_cmdline_rendering)
     end,
   })
 end
 
-flush_deferred_cmdline_ui_updates = function()
-  if not has_deferred_cmdline_ui_updates() then
+flush_deferred_cmdline_rendering = function()
+  if not has_deferred_cmdline_rendering() then
     return
   end
   if in_cmdline_mode() then
@@ -134,25 +134,22 @@ flush_deferred_cmdline_ui_updates = function()
     cmdline_leave_autocmd = nil
   end
 
-  local deferred = deferred_cmdline_ui_updates
-  deferred_cmdline_ui_updates = {}
-  for pending_bufnr, update in pairs(deferred) do
+  local deferred = deferred_cmdline_rendering
+  deferred_cmdline_rendering = {}
+  for pending_bufnr in pairs(deferred) do
     if vim.api.nvim_buf_is_valid(pending_bufnr)
       and is_acp_buffer
       and is_acp_buffer(pending_bufnr) == true
       and (not buffer_is_visible or buffer_is_visible(pending_bufnr))
     then
-      if update.render == true and type(queue_markdown_rendering) == "function" then
+      if type(queue_markdown_rendering) == "function" then
         queue_markdown_rendering(pending_bufnr)
-      end
-      if update.redraw == true and request_buffer_redraw_impl then
-        request_buffer_redraw_impl(pending_bufnr)
       end
     end
   end
 end
 
-local function defer_cmdline_ui_update(bufnr, opts)
+local function defer_cmdline_rendering(bufnr)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     return false
   end
@@ -160,10 +157,7 @@ local function defer_cmdline_ui_update(bufnr, opts)
     return false
   end
 
-  local pending = deferred_cmdline_ui_updates[bufnr] or {}
-  pending.render = pending.render == true or opts.render == true
-  pending.redraw = pending.redraw == true or opts.redraw == true
-  deferred_cmdline_ui_updates[bufnr] = pending
+  deferred_cmdline_rendering[bufnr] = true
   ensure_cmdline_leave_autocmd()
   return true
 end
@@ -174,9 +168,6 @@ local function strdisplaywidth(text)
 end
 
 local function request_buffer_redraw(bufnr)
-  if in_cmdline_mode() and defer_cmdline_ui_update(bufnr, { redraw = true }) then
-    return
-  end
   return request_buffer_redraw_impl and request_buffer_redraw_impl(bufnr)
 end
 
@@ -308,7 +299,7 @@ local function cleanup_markdown_rendering(bufnr)
     return
   end
 
-  clear_deferred_cmdline_ui_update(bufnr)
+  clear_deferred_cmdline_rendering(bufnr)
   local is_valid = vim.api.nvim_buf_is_valid(bufnr)
   if type(layout_entry) == "function" and is_valid then
     local entry = layout_entry(bufnr)
@@ -386,7 +377,7 @@ local function refresh_markdown_rendering(bufnr)
     return
   end
 
-  if in_cmdline_mode() and defer_cmdline_ui_update(bufnr, { render = true, redraw = true }) then
+  if in_cmdline_mode() and defer_cmdline_rendering(bufnr) then
     return
   end
 
@@ -443,7 +434,7 @@ queue_markdown_rendering = function(bufnr)
   entry.markdown_render_timer = nil
   entry.markdown_render_token = nil
 
-  if in_cmdline_mode() and defer_cmdline_ui_update(bufnr, { render = true, redraw = true }) then
+  if in_cmdline_mode() and defer_cmdline_rendering(bufnr) then
     return
   end
 
@@ -980,6 +971,7 @@ transcript_max_lines = view_windowing.transcript_max_lines
 request_buffer_redraw_impl = require("lazyagent.acp.view_buffer.redraw").new({
   layout_state = layout_state,
   owns_buffer = is_acp_buffer,
+  in_cmdline_mode = in_cmdline_mode,
   buffer_is_visible = function(bufnr)
     return buffer_is_visible(bufnr)
   end,
@@ -1140,7 +1132,6 @@ local view_updates = require("lazyagent.acp.view_buffer.updates").new({
   end,
   queue_markdown_rendering = queue_markdown_rendering,
   request_buffer_redraw = request_buffer_redraw,
-  in_cmdline_mode = in_cmdline_mode,
   append_batch_ms = APPEND_BATCH_MS,
   acp_transcript_filetype = ACP_TRANSCRIPT_FILETYPE,
   trailing_section_has_open_markdown_fence = trailing_section_has_open_markdown_fence,

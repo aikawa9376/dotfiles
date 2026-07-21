@@ -107,7 +107,6 @@ return {
         step_ms = 10,
         max_delta = 80,
         manual = true,
-        follow = true,
       },
     },
     resume = false,
