@@ -36,14 +36,11 @@ function M.attach(api, ctx)
   local allocate_pane_id = ctx.allocate_pane_id
   local close_timer = ctx.close_timer
   local queue_append = ctx.queue_append
-  local in_cmdline_mode = ctx.in_cmdline_mode or function()
-    return false
-  end
 
-  local function smooth_scroll_config(bufnr, mode)
+  local function smooth_scroll_config(bufnr)
     local pane_id = buffer_var(bufnr, "lazyagent_acp_pane_id")
     local opts = pane_config[tostring(pane_id or "")] or {}
-    return smooth_scroll.config(opts.smooth_scroll, mode)
+    return smooth_scroll.config(opts.smooth_scroll)
   end
 
   function M.refresh_all_footers()
@@ -588,7 +585,7 @@ function M.attach(api, ctx)
 
   local function scroll_window_by_key(win, key, cfg, opts)
     opts = opts or {}
-    if in_cmdline_mode() or not win or not vim.api.nvim_win_is_valid(win) then
+    if not win or not vim.api.nvim_win_is_valid(win) then
       return false
     end
 
@@ -614,7 +611,7 @@ function M.attach(api, ctx)
       pause_follow_output(bufnr, { reason = "manual", win = vim.api.nvim_get_current_win() })
     end
 
-    local cfg = smooth_scroll_config(bufnr, "manual")
+    local cfg = smooth_scroll_config(bufnr)
     local scrolled = false
     local function resume_if_needed()
       if opts.resume_at_end == true and M._any_window_at_transcript_end(bufnr) then
@@ -625,7 +622,6 @@ function M.attach(api, ctx)
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
       if scroll_window_by_key(win, key, cfg, {
         bufnr = bufnr,
-        mode = "manual",
         on_finish = resume_if_needed,
       }) then
         scrolled = true

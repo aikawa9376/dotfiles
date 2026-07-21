@@ -106,7 +106,6 @@ return {
         duration_ms = 140,
         step_ms = 10,
         max_delta = 80,
-        manual = true,
       },
     },
     resume = false,

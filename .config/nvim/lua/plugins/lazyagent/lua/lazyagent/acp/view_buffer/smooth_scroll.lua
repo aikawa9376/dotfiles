@@ -7,7 +7,6 @@ local DEFAULTS = {
   duration_ms = 140,
   step_ms = 10,
   max_delta = 80,
-  manual = true,
 }
 
 local function in_cmdline_mode()
@@ -24,15 +23,12 @@ local function positive_integer(value, fallback)
   return math.floor(number)
 end
 
-function M.config(value, mode)
+function M.config(value)
   local cfg = vim.tbl_extend("force", DEFAULTS, type(value) == "table" and value or {})
   if value == true then
     cfg.enabled = true
   end
   if cfg.enabled ~= true then
-    return nil
-  end
-  if mode == "manual" and cfg.manual == false then
     return nil
   end
   cfg.duration_ms = positive_integer(cfg.duration_ms, DEFAULTS.duration_ms)
@@ -77,19 +73,13 @@ function M.stop_for_buffer(bufnr)
   end
 end
 
-function M.active(win, mode)
+function M.active(win)
   local entry = active[tostring(win or "")]
-  if not entry then
-    return false
-  end
-  if mode ~= nil then
-    return entry.mode == mode
-  end
-  return true
+  return entry ~= nil
 end
 
 local function normal_scroll(win, key, amount)
-  if in_cmdline_mode() or not win or not vim.api.nvim_win_is_valid(win) or amount <= 0 then
+  if not win or not vim.api.nvim_win_is_valid(win) or amount <= 0 then
     return false
   end
 
@@ -127,9 +117,8 @@ function M.scroll_by_lines(win, delta, cfg, opts)
 
   close_entry(tostring(win))
 
-  -- nvim_win_call() temporarily changes the current window. During command-line
-  -- editing Neovim exposes that as c -> n -> c, which invalidates completion
-  -- state. Callers that need follow scrolling can use window-local APIs instead.
+  -- A manual animation can overlap entering command-line mode. Stop before its
+  -- next nvim_win_call(), which would invalidate command-line completion state.
   if in_cmdline_mode() then
     return false
   end
@@ -171,7 +160,6 @@ function M.scroll_by_lines(win, delta, cfg, opts)
   local entry = {
     timer = timer,
     bufnr = bufnr,
-    mode = opts.mode,
   }
   active[key_name] = entry
 
