@@ -713,10 +713,13 @@ function M.new(ctx)
       return views
     end
 
+    local cmdline_active = in_cmdline_mode()
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
       if vim.api.nvim_win_is_valid(win) then
         local ok, view
-        if in_cmdline_mode() then
+        if cmdline_active then
+          -- nvim_win_call() exposes a temporary c -> n -> c transition. Window-local
+          -- APIs preserve enough state for background refreshes without resetting completion.
           local cursor_ok, cursor = pcall(vim.api.nvim_win_get_cursor, win)
           local info_ok, info = pcall(vim.fn.getwininfo, win)
           local info_entry = info_ok and type(info) == "table" and info[1] or nil
@@ -746,13 +749,14 @@ function M.new(ctx)
     end
 
     local line_count = math.max(1, vim.api.nvim_buf_line_count(bufnr))
+    local cmdline_active = in_cmdline_mode()
     for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
       local view = views[tostring(win)]
       if vim.api.nvim_win_is_valid(win) and type(view) == "table" and vim.api.nvim_win_get_buf(win) == bufnr then
         local restored = vim.deepcopy(view)
         restored.lnum = math.min(math.max(1, tonumber(restored.lnum) or 1), line_count)
         restored.topline = math.min(math.max(1, tonumber(restored.topline) or 1), line_count)
-        if in_cmdline_mode() then
+        if cmdline_active then
           local line = vim.api.nvim_buf_get_lines(bufnr, restored.lnum - 1, restored.lnum, false)[1] or ""
           local col = math.min(math.max(0, tonumber(restored.col) or 0), #line)
           pcall(vim.api.nvim_win_set_cursor, win, { restored.lnum, col })

@@ -53,7 +53,6 @@ local SMOOTH_SCROLL_DEFAULTS = {
   duration_ms = 140,
   step_ms = 10,
   max_delta = 80,
-  manual = true,
 }
 
 local function normalize_smooth_scroll_input(value)
@@ -94,13 +93,12 @@ local function merge_smooth_scroll_config(agent_cfg, global_cfg)
     out = vim.tbl_extend("force", out, agent)
   end
 
-  out.enabled = out.enabled == true
-  out.duration_ms = normalize_positive_integer(out.duration_ms) or SMOOTH_SCROLL_DEFAULTS.duration_ms
-  out.step_ms = normalize_positive_integer(out.step_ms) or SMOOTH_SCROLL_DEFAULTS.step_ms
-  out.max_delta = normalize_positive_integer(out.max_delta) or SMOOTH_SCROLL_DEFAULTS.max_delta
-  out.manual = out.manual ~= false
-  out.follow = nil
-  return out
+  return {
+    enabled = out.enabled == true,
+    duration_ms = normalize_positive_integer(out.duration_ms) or SMOOTH_SCROLL_DEFAULTS.duration_ms,
+    step_ms = normalize_positive_integer(out.step_ms) or SMOOTH_SCROLL_DEFAULTS.step_ms,
+    max_delta = normalize_positive_integer(out.max_delta) or SMOOTH_SCROLL_DEFAULTS.max_delta,
+  }
 end
 
 local function normalize_transcript_compaction_config(value)

@@ -69,7 +69,6 @@ function M.run()
         duration_ms = 140,
         step_ms = 10,
         max_delta = 80,
-        manual = true,
       },
     },
   }, function(created_pane_id, created_state)
@@ -137,6 +136,8 @@ function M.run()
     assert_equal(cmdline_snapshot.buffer_count, 1, "command-line updates reuse the ACP transcript buffer")
     assert_equal(cmdline_snapshot.panes[tostring(pane_id)].bufnr, transcript_bufnr,
       "command-line updates keep the original ACP transcript buffer")
+    assert(vim.wait(1000, function() return render_updates > 0 end, 10),
+      "ACP delegates markdown mode handling without a separate command-line queue")
     view.configure_pane(pane_id, { follow_output = false })
     view.on_transcript_updated(session, "", "w")
     assert(vim.wait(1000, function()
@@ -153,7 +154,7 @@ function M.run()
   if not cmdline_ok then
     error(cmdline_error)
   end
-  assert_equal(render_updates, 0, "ACP markdown rendering waits while command-line completion is active")
+  assert(render_updates > 0, "ACP markdown updates are not held by LazyAgent command-line state")
   assert(#redraws >= 1, "ACP buffer redraw remains live during command-line completion")
   for _, redraw in ipairs(redraws) do
     assert_equal(redraw.buf, transcript_bufnr, "command-line redraw targets the ACP transcript")
@@ -168,13 +169,8 @@ function M.run()
       resume_count = resume_count + 1
     end
   end
-  assert_equal(resume_count, 1, "ACP command-line deferral uses one resume autocmd")
+  assert_equal(resume_count, 0, "ACP does not install a markdown command-line state machine")
   view.configure_pane(pane_id, { follow_output = true })
-  vim.api.nvim_exec_autocmds("CmdlineLeave", { pattern = ":" })
-  assert(vim.wait(1000, function() return render_updates == 1 end, 10),
-    "ACP markdown rendering resumes after command-line completion")
-  vim.wait(250)
-  assert_equal(render_updates, 1, "deferred ACP markdown rendering is coalesced")
 
   local normal_win_call_count = 0
   rawset(vim.api, "nvim_win_call", function(win, callback)

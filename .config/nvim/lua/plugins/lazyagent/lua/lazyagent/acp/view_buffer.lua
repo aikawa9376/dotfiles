@@ -49,13 +49,10 @@ local pane_opts_for_bufnr
 local resolve_anchor_window
 local read_transcript_lines
 local fancy_mode_enabled
-local request_buffer_redraw_impl
 local custom_background_groups = {}
 local layout_state = {}
 local suppress_transcript_window_refresh = false
 local dedicated_transcript_windows = {}
-local deferred_cmdline_rendering = {}
-local cmdline_leave_autocmd
 local ACP_WINDOW_OPTIONS = {
   "number",
   "relativenumber",
@@ -93,80 +90,12 @@ local function in_cmdline_mode()
   return type(current_mode) == "string" and current_mode:sub(1, 1) == "c"
 end
 
-local function has_deferred_cmdline_rendering()
-  return next(deferred_cmdline_rendering) ~= nil
-end
-
-local function clear_deferred_cmdline_rendering(bufnr)
-  deferred_cmdline_rendering[bufnr] = nil
-  if has_deferred_cmdline_rendering() or not cmdline_leave_autocmd then
-    return
-  end
-  pcall(vim.api.nvim_del_autocmd, cmdline_leave_autocmd)
-  cmdline_leave_autocmd = nil
-end
-
-local flush_deferred_cmdline_rendering
-local function ensure_cmdline_leave_autocmd()
-  if cmdline_leave_autocmd then
-    return
-  end
-  cmdline_leave_autocmd = vim.api.nvim_create_autocmd("CmdlineLeave", {
-    once = true,
-    desc = "LazyAgent ACP resume deferred markdown rendering",
-    callback = function()
-      cmdline_leave_autocmd = nil
-      vim.schedule(flush_deferred_cmdline_rendering)
-    end,
-  })
-end
-
-flush_deferred_cmdline_rendering = function()
-  if not has_deferred_cmdline_rendering() then
-    return
-  end
-  if in_cmdline_mode() then
-    ensure_cmdline_leave_autocmd()
-    return
-  end
-  if cmdline_leave_autocmd then
-    pcall(vim.api.nvim_del_autocmd, cmdline_leave_autocmd)
-    cmdline_leave_autocmd = nil
-  end
-
-  local deferred = deferred_cmdline_rendering
-  deferred_cmdline_rendering = {}
-  for pending_bufnr in pairs(deferred) do
-    if vim.api.nvim_buf_is_valid(pending_bufnr)
-      and is_acp_buffer
-      and is_acp_buffer(pending_bufnr) == true
-      and (not buffer_is_visible or buffer_is_visible(pending_bufnr))
-    then
-      if type(queue_markdown_rendering) == "function" then
-        queue_markdown_rendering(pending_bufnr)
-      end
-    end
-  end
-end
-
-local function defer_cmdline_rendering(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    return false
-  end
-  if not is_acp_buffer or is_acp_buffer(bufnr) ~= true then
-    return false
-  end
-
-  deferred_cmdline_rendering[bufnr] = true
-  ensure_cmdline_leave_autocmd()
-  return true
-end
-
 local function strdisplaywidth(text)
   local ok, width = pcall(vim.fn.strdisplaywidth, text)
   return ok and width or #tostring(text or "")
 end
 
+local request_buffer_redraw_impl
 local function request_buffer_redraw(bufnr)
   return request_buffer_redraw_impl and request_buffer_redraw_impl(bufnr)
 end
@@ -299,7 +228,6 @@ local function cleanup_markdown_rendering(bufnr)
     return
   end
 
-  clear_deferred_cmdline_rendering(bufnr)
   local is_valid = vim.api.nvim_buf_is_valid(bufnr)
   if type(layout_entry) == "function" and is_valid then
     local entry = layout_entry(bufnr)
@@ -377,10 +305,6 @@ local function refresh_markdown_rendering(bufnr)
     return
   end
 
-  if in_cmdline_mode() and defer_cmdline_rendering(bufnr) then
-    return
-  end
-
   local entry = type(layout_entry) == "function" and layout_entry(bufnr) or nil
   if not entry or entry.render_markdown_attached ~= true then
     pcall(vim.treesitter.start, bufnr, "markdown")
@@ -432,11 +356,6 @@ queue_markdown_rendering = function(bufnr)
 
   close_timer(entry.markdown_render_timer)
   entry.markdown_render_timer = nil
-  entry.markdown_render_token = nil
-
-  if in_cmdline_mode() and defer_cmdline_rendering(bufnr) then
-    return
-  end
 
   local token = {}
   entry.markdown_render_token = token
@@ -1279,7 +1198,6 @@ require("lazyagent.acp.view_buffer.api").attach(M, {
   end,
   close_timer = close_timer,
   queue_append = queue_append,
-  in_cmdline_mode = in_cmdline_mode,
   allocate_pane_id = function(prefix)
     next_pane_seq = next_pane_seq + 1
     return string.format("%s-%d", prefix, next_pane_seq)
