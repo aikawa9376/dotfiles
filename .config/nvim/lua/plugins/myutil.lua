@@ -14,6 +14,10 @@ return {
     { "<C-K>", function() require"utilities".ctrl_k() end, mode = "c" },
     { "y@", function() require"utilities".copy_git_root_relative_path(true) end, mode = "n" },
     { "<leader>@", function() require"utilities".copy_line_path(true) end, mode = "x" },
+    { "<Leader>rw", function() require"utilities".open_word_substitute(false) end, mode = "n" },
+    { "<Leader>rW", function() require"utilities".open_word_substitute(true) end, mode = "n" },
+    { "<Leader>rw", function() require"utilities".open_visual_substitute(false) end, mode = "x" },
+    { "<Leader>rW", function() require"utilities".open_visual_substitute(true) end, mode = "x" },
     { "<Leader>gd", function () vim.cmd("Diff") end },
     { "<Leader>x",
       function ()
