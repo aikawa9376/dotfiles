@@ -64,6 +64,13 @@ function M.run()
       agent_name = "lifecycle-test",
       source_winid = vim.api.nvim_get_current_win(),
       source_bufnr = vim.api.nvim_get_current_buf(),
+      smooth_scroll = {
+        enabled = true,
+        duration_ms = 140,
+        step_ms = 10,
+        max_delta = 80,
+        follow = true,
+      },
     },
   }, function(created_pane_id, created_state)
     pane_id = created_pane_id
@@ -104,16 +111,43 @@ function M.run()
 
   local original_get_mode = vim.api.nvim_get_mode
   local original_redraw = vim.api.nvim__redraw
+  local original_win_call = vim.api.nvim_win_call
   local redraw_count = 0
-  vim.api.nvim__redraw = function() redraw_count = redraw_count + 1 end
-  vim.api.nvim_get_mode = function() return { mode = "c", blocking = false } end
-  for index = 1, 20 do
-    view.on_transcript_updated(session, "\ncmdline response " .. tostring(index), "a")
+  local transcript_win_call_count = 0
+  rawset(vim.api, "nvim__redraw", function() redraw_count = redraw_count + 1 end)
+  rawset(vim.api, "nvim_win_call", function(win, callback)
+    if win == pane_state.winid then
+      transcript_win_call_count = transcript_win_call_count + 1
+    end
+    return original_win_call(win, callback)
+  end)
+  rawset(vim.api, "nvim_get_mode", function() return { mode = "c", blocking = false } end)
+  local cmdline_ok, cmdline_error = xpcall(function()
+    for index = 1, 20 do
+      view.on_transcript_updated(session, "\ncmdline response " .. tostring(index), "a")
+    end
+    vim.wait(500)
+
+    view.configure_pane(pane_id, { follow_output = false })
+    view.on_transcript_updated(session, "", "w")
+    assert(vim.wait(1000, function()
+      return session.view_state.refresh_pending ~= true and session.view_state.force_full_refresh ~= true
+    end, 10), "full ACP transcript refresh should finish during command-line completion")
+
+    local cmdline_view = assert(view.capture_thread_view(pane_id))
+    assert_equal(view.restore_thread_view(pane_id, cmdline_view), true,
+      "ACP thread view remains available during command-line completion")
+  end, debug.traceback)
+  rawset(vim.api, "nvim__redraw", original_redraw)
+  rawset(vim.api, "nvim_win_call", original_win_call)
+  rawset(vim.api, "nvim_get_mode", original_get_mode)
+  if not cmdline_ok then
+    error(cmdline_error)
   end
-  vim.wait(500)
-  vim.api.nvim__redraw = original_redraw
   assert_equal(render_updates, 0, "ACP markdown rendering waits while command-line completion is active")
   assert_equal(redraw_count, 0, "ACP buffer redraw waits while command-line completion is active")
+  assert_equal(transcript_win_call_count, 0,
+    "ACP output never enters its window while command-line completion is active")
   local resume_count = 0
   for _, autocmd in ipairs(vim.api.nvim_get_autocmds({ event = "CmdlineLeave" })) do
     if autocmd.desc == "LazyAgent ACP resume deferred UI updates" then
@@ -121,7 +155,7 @@ function M.run()
     end
   end
   assert_equal(resume_count, 1, "ACP command-line deferral uses one resume autocmd")
-  vim.api.nvim_get_mode = original_get_mode
+  view.configure_pane(pane_id, { follow_output = true })
   vim.api.nvim_exec_autocmds("CmdlineLeave", { pattern = ":" })
   assert(vim.wait(1000, function() return render_updates == 1 end, 10),
     "ACP markdown rendering resumes after command-line completion")

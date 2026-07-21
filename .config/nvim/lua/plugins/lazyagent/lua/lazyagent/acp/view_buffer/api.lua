@@ -36,6 +36,9 @@ function M.attach(api, ctx)
   local allocate_pane_id = ctx.allocate_pane_id
   local close_timer = ctx.close_timer
   local queue_append = ctx.queue_append
+  local in_cmdline_mode = ctx.in_cmdline_mode or function()
+    return false
+  end
 
   local function smooth_scroll_config(bufnr, mode)
     local pane_id = buffer_var(bufnr, "lazyagent_acp_pane_id")
@@ -279,10 +282,7 @@ function M.attach(api, ctx)
     local win = first_visible_window(bufnr)
     local saved = nil
     if win then
-      local ok, result = pcall(vim.api.nvim_win_call, win, function()
-        return vim.fn.winsaveview()
-      end)
-      saved = ok and result or nil
+      saved = save_window_views(bufnr)[tostring(win)]
     end
     return {
       follow_output = (pane_config[tostring(pane_id)] or {}).follow_output ~= false,
@@ -310,13 +310,7 @@ function M.attach(api, ctx)
     if not win or type(saved.view) ~= "table" then
       return true
     end
-    local line_count = math.max(1, vim.api.nvim_buf_line_count(bufnr))
-    local restored = vim.deepcopy(saved.view)
-    restored.lnum = math.min(math.max(1, tonumber(restored.lnum) or 1), line_count)
-    restored.topline = math.min(math.max(1, tonumber(restored.topline) or 1), line_count)
-    pcall(vim.api.nvim_win_call, win, function()
-      vim.fn.winrestview(restored)
-    end)
+    restore_window_views(bufnr, { [tostring(win)] = saved.view })
     return true
   end
 
@@ -594,7 +588,7 @@ function M.attach(api, ctx)
 
   local function scroll_window_by_key(win, key, cfg, opts)
     opts = opts or {}
-    if not win or not vim.api.nvim_win_is_valid(win) then
+    if in_cmdline_mode() or not win or not vim.api.nvim_win_is_valid(win) then
       return false
     end
 

@@ -945,6 +945,7 @@ local view_windowing = require("lazyagent.acp.view_buffer.windowing").new({
       pcall(handler)
     end
   end,
+  in_cmdline_mode = in_cmdline_mode,
 })
 resolve_anchor_window = view_windowing.resolve_anchor_window
 local to_bufnr = view_windowing.to_bufnr
@@ -1139,6 +1140,7 @@ local view_updates = require("lazyagent.acp.view_buffer.updates").new({
   end,
   queue_markdown_rendering = queue_markdown_rendering,
   request_buffer_redraw = request_buffer_redraw,
+  in_cmdline_mode = in_cmdline_mode,
   append_batch_ms = APPEND_BATCH_MS,
   acp_transcript_filetype = ACP_TRANSCRIPT_FILETYPE,
   trailing_section_has_open_markdown_fence = trailing_section_has_open_markdown_fence,
@@ -1286,6 +1288,7 @@ require("lazyagent.acp.view_buffer.api").attach(M, {
   end,
   close_timer = close_timer,
   queue_append = queue_append,
+  in_cmdline_mode = in_cmdline_mode,
   allocate_pane_id = function(prefix)
     next_pane_seq = next_pane_seq + 1
     return string.format("%s-%d", prefix, next_pane_seq)
