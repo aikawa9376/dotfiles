@@ -211,7 +211,7 @@ function M.pick_locations(items, opts)
   require("laravel_extension.fzf_picker").select(items, opts)
 end
 
-local function choose_locations(definitions, implementations, target_kind)
+local function choose_locations(definitions, implementations, target_kind, cwd)
   implementations = implementations or {}
   local definition_keys = {}
   for _, item in ipairs(definitions) do definition_keys[location_key(item.location)] = true end
@@ -233,6 +233,7 @@ local function choose_locations(definitions, implementations, target_kind)
     items[#items + 1] = item
   end
   M.pick_locations(items, {
+    cwd = cwd,
     prompt = #implementations > 0
         and string.format("Select %s or implementation:", target_kind == "abstract" and "abstract class" or "interface")
       or "Select definition:",
@@ -242,6 +243,7 @@ end
 function M.goto_lsp_definition_with_implementations()
   local bufnr = vim.api.nvim_get_current_buf()
   local winid = vim.api.nvim_get_current_win()
+  local cwd = utils.project_root(bufnr) or vim.fn.getcwd()
   return request_locations(bufnr, winid, "textDocument/definition", function(definitions)
     vim.schedule(function()
       if #definitions == 0 then
@@ -254,7 +256,7 @@ function M.goto_lsp_definition_with_implementations()
         if target then break end
       end
       if not target then
-        choose_locations(definitions)
+        choose_locations(definitions, nil, nil, cwd)
         return
       end
       if not request_locations_with_params(bufnr, "textDocument/references", function()
@@ -265,10 +267,10 @@ function M.goto_lsp_definition_with_implementations()
         }
       end, function(references)
         vim.schedule(function()
-          choose_locations(definitions, implementation_classes(references), target.kind)
+          choose_locations(definitions, implementation_classes(references), target.kind, cwd)
         end)
       end) then
-        choose_locations(definitions, nil, target.kind)
+        choose_locations(definitions, nil, target.kind, cwd)
       end
     end)
   end)

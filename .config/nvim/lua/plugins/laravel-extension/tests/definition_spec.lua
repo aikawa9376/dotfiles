@@ -21,6 +21,7 @@ function M.run()
   local definition = require("laravel_extension.features.definition")
   local root = vim.fn.tempname() .. "-laravel-definition"
   vim.fn.mkdir(root, "p")
+  vim.fn.writefile({ "#!/usr/bin/env php" }, root .. "/artisan")
 
   local source_path = root .. "/Consumer.php"
   local interface_path = root .. "/Repository.php"
@@ -117,6 +118,7 @@ function M.run()
   assert_equal(#selected_items, 2, "interface and implementation choices")
   assert_equal(selected_items[1].kind, "interface", "interface choice kind")
   assert_equal(selected_items[2].kind, "implementation", "implementation choice kind")
+  assert_equal(selected_opts.cwd, root, "definition picker uses Laravel project root")
   assert(selected_opts.prompt:find("interface"), "interface picker prompt")
   assert_equal(selected_items[2].location.uri, vim.uri_from_fname(implementation_path), "implementation class location")
   assert_equal(selected_items[2].location.range.start.line, 1, "implementation points at class declaration")
