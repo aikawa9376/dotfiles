@@ -64,6 +64,7 @@ function M.run()
   assert_equal(selected_items[4].kind, "blade", "blade closing tag added")
   assert_equal(selected_items[2].path, view_path, "blade reference path")
   assert_equal(selected_items[2].row, 2, "blade reference row")
+  assert_equal(selected_opts.cwd, root, "component picker uses Laravel project root")
   assert(selected_opts.prompt:find("<x%-hoge%.fuge>"), "component tag in picker prompt")
 
   vim.api.nvim_win_set_cursor(0, { 3, 22 })

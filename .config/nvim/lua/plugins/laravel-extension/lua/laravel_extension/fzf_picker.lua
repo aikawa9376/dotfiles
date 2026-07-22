@@ -21,24 +21,32 @@ local function item_text(item, path, row)
   if bufnr >= 0 and vim.api.nvim_buf_is_loaded(bufnr) then
     return vim.trim(vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ""):gsub("%s+", " ")
   end
-  local ok, lines = pcall(vim.fn.readfile, path, "", row)
-  return ok and vim.trim(lines[row] or ""):gsub("%s+", " ") or ""
+  return ""
 end
 
-function M.entries(items)
+local function relative_path(path, cwd)
+  if not cwd or cwd == "" then return path end
+  cwd = vim.fn.fnamemodify(cwd, ":p"):gsub("/$", "")
+  local prefix = cwd .. "/"
+  return path:sub(1, #prefix) == prefix and path:sub(#prefix + 1) or path
+end
+
+function M.entries(items, opts)
+  opts = opts or {}
   return vim.tbl_map(function(item)
     local path = item_path(item)
     local row, col = item_position(item)
     local text = item_text(item, path, row)
     local label = string.format("[%s]%s", item.kind or "reference", text ~= "" and " " .. text or "")
-    return string.format("%s:%d:%d:%s", path, row, col, label)
+    return string.format("%s:%d:%d:%s", relative_path(path, opts.cwd), row, col, label)
   end, items or {})
 end
 
 function M.select(items, opts)
   opts = opts or {}
   local fzf_lua = require("fzf-lua")
-  fzf_lua.fzf_exec(M.entries(items), {
+  fzf_lua.fzf_exec(M.entries(items, opts), {
+    cwd = opts.cwd,
     prompt = opts.prompt or "References > ",
     previewer = "builtin",
     actions = {

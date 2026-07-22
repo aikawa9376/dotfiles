@@ -113,7 +113,10 @@ local function location_item(location, encoding)
   local path = vim.uri_to_fname(uri)
   local row = (tonumber(range.start.line) or 0) + 1
   local col = (tonumber(range.start.character) or 0) + 1
-  local line = vim.fn.readfile(path, "", row)[row] or ""
+  local bufnr = vim.fn.bufnr(path)
+  local line = bufnr >= 0 and vim.api.nvim_buf_is_loaded(bufnr)
+      and vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1]
+    or ""
   return {
     kind = "php",
     path = path,
@@ -229,6 +232,7 @@ function M.goto_references_at_cursor(opts)
     end
     local picker = opts.picker or require("laravel_extension.fzf_picker").select
     picker(items, {
+      cwd = root,
       prompt = "References for <x-" .. component_name .. ">:",
     })
   end

@@ -27,13 +27,16 @@ function M.run()
   picker.select({
     { path = "/repo/app/View/Components/Hoge.php", row = 7, col = 9, kind = "php", text = "class Hoge" },
     { path = "/repo/resources/views/show.blade.php", row = 12, col = 5, kind = "blade", text = "<x-hoge />" },
-  }, { prompt = "Component references > " })
+    { path = "/vendor/package/External.php", row = 3, col = 1, kind = "definition" },
+  }, { cwd = "/repo", prompt = "Component references > " })
 
   assert_equal(captured_entries, {
-    "/repo/app/View/Components/Hoge.php:7:9:[php] class Hoge",
-    "/repo/resources/views/show.blade.php:12:5:[blade] <x-hoge />",
-  }, "file entries include previewable positions")
+    "app/View/Components/Hoge.php:7:9:[php] class Hoge",
+    "resources/views/show.blade.php:12:5:[blade] <x-hoge />",
+    "/vendor/package/External.php:3:1:[definition]",
+  }, "project files are relative and external files stay absolute")
   assert(captured_opts, "fzf options captured")
+  assert_equal(captured_opts.cwd, "/repo", "project root passed to preview and actions")
   assert_equal(captured_opts.prompt, "Component references > ", "custom prompt")
   assert_equal(captured_opts.previewer, "builtin", "builtin file preview enabled")
   assert_equal(captured_opts.winopts, nil, "global bottom split options inherited")
