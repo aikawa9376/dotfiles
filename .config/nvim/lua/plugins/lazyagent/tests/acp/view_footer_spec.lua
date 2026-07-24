@@ -38,6 +38,7 @@ end
 function M.run()
   local session = {
     acp_ready = true,
+    acp_supports_image = true,
     acp_agent_info = { title = "Codex", version = "1.1.4" },
     acp_session_info = {
       title = "the first user message as title",
@@ -49,11 +50,16 @@ function M.run()
   assert(hidden:find("Codex 1.1.4", 1, true), "provider metadata remains visible")
   assert(not hidden:find("the first user message as title", 1, true), "session title hidden by default")
   assert(not hidden:find("the first user message as summary", 1, true), "session summary hidden by default")
+  assert(hidden:find("Image input", 1, true), "supported image input is visible")
 
   session.show_session_summary = true
   local visible = footer_text(session)
   assert(visible:find("the first user message as title", 1, true), "session title visible when enabled")
   assert(visible:find("the first user message as summary", 1, true), "session summary visible when enabled")
+
+  session.acp_supports_image = false
+  local text_only = footer_text(session)
+  assert(text_only:find("No image input", 1, true), "unsupported image input is visible")
 end
 
 return M

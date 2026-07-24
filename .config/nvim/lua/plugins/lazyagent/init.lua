@@ -80,7 +80,7 @@ return {
     "LazyAgentACPMobileStart",
     "LazyAgentACPMobileStop", "LazyAgentACPMobileQR", "LazyAgentACPRawTranscript", "LazyAgentACPFullTranscript",
     "LazyAgentACPRestart", "LazyAgentACPRestoreRestartState",
-    "LazyAgentScreenShot",
+    "LazyAgentImage", "LazyAgentScreenShot",
     "Antigravity", "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   init = function() end,

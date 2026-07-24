@@ -80,6 +80,8 @@ M.send_raw_keys = send_logic.send_raw_keys
 M.clear_input = send_logic.clear_input
 M.edit_selection = edit_blocks.edit_selection
 M.edit_selected_blocks = edit_blocks.edit_selection
+M.choose_image = image_paste.choose_current_buffer
+M.image_actions = image_paste.actions_at_cursor
 M.fire_event = util.fire_event
 
 local function register_custom_backends(opts)
