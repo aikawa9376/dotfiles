@@ -675,7 +675,7 @@ local function create_backend(default_view)
       merge_tool_update = conversation_helpers.merge_tool_update,
       append_block = conversation_helpers.append_block,
       tool_heading = conversation_helpers.tool_heading,
-      extract_tool_paths = actions_helpers.extract_tool_paths,
+      extract_tool_paths = conversation_helpers.extract_tool_paths,
     })
   end
 

@@ -1,5 +1,16 @@
 local M = {}
 
+local function first_tool_path(tool, deps)
+  if type(deps.extract_tool_paths) ~= "function" then
+    return nil
+  end
+  local ok, paths = pcall(deps.extract_tool_paths, tool)
+  if not ok or type(paths) ~= "table" then
+    return nil
+  end
+  return paths[1]
+end
+
 function M.finalize_tools(session, deps)
   if not session then
     return 0
@@ -24,7 +35,7 @@ function M.finalize_tools(session, deps)
       summary = title,
       toolCallId = tool_call_id,
       status = "cancelled",
-      path = (deps.extract_tool_paths(tool) or {})[1],
+      path = first_tool_path(tool, deps),
     })
     session.tool_calls[tool_call_id] = nil
   end
