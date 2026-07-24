@@ -10,6 +10,7 @@ package.path = table.concat({
 
 local suites = {
   "tests.util_spec",
+  "tests.image_preview_spec",
   "tests.notes_spec",
   "tests.acp.client_contract",
   "tests.acp.cancellation_spec",
