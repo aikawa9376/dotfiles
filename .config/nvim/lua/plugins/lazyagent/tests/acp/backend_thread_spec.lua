@@ -347,6 +347,48 @@ function M.run()
   assert_equal(vim.fn.filereadable(first_parallel.acp_transcript_path), 0, "promptless first transcript is discarded")
   assert_equal(vim.fn.filereadable(second_parallel.acp_transcript_path), 0, "promptless second transcript is discarded")
 
+  local previous_auto_permission = state.opts.acp.auto_permission
+  local previous_legacy_auto_permission = state.opts.acp_auto_permission
+  local previous_cancel_select = vim.ui.select
+  state.opts.acp.auto_permission = nil
+  state.opts.acp_auto_permission = nil
+  vim.ui.select = function() end
+
+  local cancel_pane
+  backend.split(nil, 10, false, {
+    on_split = function(created)
+      cancel_pane = created
+    end,
+    acp = {
+      agent_name = "CancelFixture",
+      command = fake_command,
+      env = {
+        LAZYAGENT_FAKE_CANCEL_FLOW = "1",
+      },
+      cwd = root,
+      root_dir = root,
+      additional_directories = { root .. "/tests" },
+    },
+  })
+  assert(vim.wait(5000, function()
+    local snapshot = backend.get_runtime_snapshot(cancel_pane)
+    return snapshot and snapshot.acp_ready == true
+  end, 10), "cancel backend should become ready")
+  assert(backend.paste_and_submit(cancel_pane, "cancel this backend turn", { "C-m" }, {}))
+  assert(vim.wait(3000, function()
+    return backend.get_pending_permission(cancel_pane) ~= nil
+  end, 10), "cancel backend should expose its pending permission")
+  assert(backend.send_keys(cancel_pane, { "C-c" }))
+  assert(vim.wait(5000, function()
+    return backend.capture_pane_sync(cancel_pane):find("Turn cancelled", 1, true) ~= nil
+  end, 10), "cancel backend should finalize its active tool without a callback error")
+  local cancelled_tools = backend.get_runtime_snapshot(cancel_pane, { include_timelines = true }).acp_tool_timeline
+  assert_equal(cancelled_tools[#cancelled_tools].status, "cancelled", "cancelled backend tool status")
+  backend.kill_pane(cancel_pane)
+
+  vim.ui.select = previous_cancel_select
+  state.opts.acp.auto_permission = previous_auto_permission
+  state.opts.acp_auto_permission = previous_legacy_auto_permission
   state.opts = previous_opts
   vim.fn.delete(cache_dir, "rf")
 end

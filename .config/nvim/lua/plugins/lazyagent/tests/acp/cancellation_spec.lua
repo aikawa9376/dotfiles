@@ -60,6 +60,32 @@ function M.run()
   assert_equal("cancelled", blocks[1].meta.status, "first tool status")
   assert_equal("/tmp/first.lua", blocks[1].meta.path, "first tool path")
   assert_equal("Tool cancelled", blocks[2].heading, "second tool heading")
+
+  local fallback_blocks = {}
+  local fallback_session = {
+    tool_calls = {
+      ["tool-without-path-helper"] = {
+        title = "Fallback tool",
+        status = "in_progress",
+      },
+    },
+  }
+  local fallback_count = cancellation.finalize_tools(fallback_session, {
+    merge_tool_update = function(target, update)
+      local merged = vim.tbl_deep_extend("force", {}, target.tool_calls[update.toolCallId], update)
+      target.tool_calls[update.toolCallId] = merged
+      return merged
+    end,
+    append_block = function(_, _, _, meta)
+      fallback_blocks[#fallback_blocks + 1] = meta
+    end,
+    tool_heading = function()
+      return "Tool cancelled"
+    end,
+  })
+  assert_equal(1, fallback_count, "missing optional path helper does not interrupt cancellation")
+  assert_equal(nil, fallback_blocks[1].path, "missing path helper omits path metadata")
+  assert_equal(nil, next(fallback_session.tool_calls), "fallback active tool map")
 end
 
 return M
