@@ -17,6 +17,11 @@ local function location(path, lines, line_number, needle, init)
   }
 end
 
+local function item_for_path(items, path)
+  local uri = vim.uri_from_fname(path)
+  return vim.iter(items or {}):find(function(item) return item.location and item.location.uri == uri end)
+end
+
 function M.run()
   local definition = require("laravel_extension.features.definition")
   local root = vim.fn.tempname() .. "-laravel-definition"
@@ -26,19 +31,31 @@ function M.run()
   local source_path = root .. "/Consumer.php"
   local interface_path = root .. "/Repository.php"
   local implementation_path = root .. "/DatabaseRepository.php"
+  local aliased_path = root .. "/CachedRepository.php"
   local abstract_path = root .. "/BaseService.php"
   local child_path = root .. "/ConcreteService.php"
   local regular_path = root .. "/RegularService.php"
   local source_lines = { "<?php", "$repository->find(1);" }
   local interface_lines = {
     "<?php",
+    "namespace App\\Contracts;",
     "interface Repository {",
     "    public function find(int $id): object;",
     "}",
   }
   local implementation_lines = {
     "<?php",
+    "namespace App\\Repositories;",
+    "use App\\Contracts\\Repository;",
     "final class DatabaseRepository implements Repository {",
+    "    public function find(int $id): object {}",
+    "}",
+  }
+  local aliased_lines = {
+    "<?php",
+    "namespace App\\Repositories;",
+    "use App\\Contracts\\Repository as Repo;",
+    "final class CachedRepository implements Repo {",
     "    public function find(int $id): object {}",
     "}",
   }
@@ -63,17 +80,15 @@ function M.run()
   vim.fn.writefile(source_lines, source_path)
   vim.fn.writefile(interface_lines, interface_path)
   vim.fn.writefile(implementation_lines, implementation_path)
+  vim.fn.writefile(aliased_lines, aliased_path)
   vim.fn.writefile(abstract_lines, abstract_path)
   vim.fn.writefile(child_lines, child_path)
   vim.fn.writefile(regular_lines, regular_path)
 
   vim.cmd("edit " .. vim.fn.fnameescape(source_path))
   vim.bo.filetype = "php"
-  local interface_definition = location(interface_path, interface_lines, 2, "find")
-  local interface_reference = location(implementation_path, implementation_lines, 1, "Repository", 30)
-  local unrelated_reference = location(source_path, source_lines, 1, "find")
+  local interface_definition = location(interface_path, interface_lines, 3, "find")
   local abstract_definition = location(abstract_path, abstract_lines, 2, "execute")
-  local abstract_reference = location(child_path, child_lines, 1, "BaseService")
   local regular_definition = location(regular_path, regular_lines, 2, "execute")
   assert_equal(definition.is_interface_location({ location = interface_definition }), true, "interface method location")
 
@@ -90,14 +105,13 @@ function M.run()
   local client = {
     offset_encoding = "utf-16",
     definition_result = interface_definition,
-    reference_result = { interface_reference, unrelated_reference },
   }
   function client:supports_method(method)
-    return method == "textDocument/definition" or method == "textDocument/references"
+    return method == "textDocument/definition"
   end
   function client:request(method, params, callback)
     requested[#requested + 1] = { method = method, params = params }
-    callback(nil, method == "textDocument/definition" and self.definition_result or self.reference_result)
+    callback(nil, self.definition_result)
     return true
   end
 
@@ -115,23 +129,21 @@ function M.run()
   assert_equal(definition.goto_lsp_definition_with_implementations(), true, "definition request starts")
   assert(vim.wait(1000, function() return selected_items ~= nil end, 10), "interface implementation picker completes")
   assert(selected_items and selected_opts, "interface picker state")
-  assert_equal(#selected_items, 2, "interface and implementation choices")
+  assert_equal(#selected_items, 3, "interface and direct or aliased implementation choices")
   assert_equal(selected_items[1].kind, "interface", "interface choice kind")
-  assert_equal(selected_items[2].kind, "implementation", "implementation choice kind")
   assert_equal(selected_opts.cwd, root, "definition picker uses Laravel project root")
   assert(selected_opts.prompt:find("interface"), "interface picker prompt")
-  assert_equal(selected_items[2].location.uri, vim.uri_from_fname(implementation_path), "implementation class location")
-  assert_equal(selected_items[2].location.range.start.line, 1, "implementation points at class declaration")
+  local implementation = assert(item_for_path(selected_items, implementation_path), "direct implementation found")
+  local aliased = assert(item_for_path(selected_items, aliased_path), "aliased implementation found")
+  assert_equal(implementation.kind, "implementation", "implementation choice kind")
+  assert_equal(implementation.location.range.start.line, 4, "implementation points at method declaration")
+  assert_equal(aliased.location.range.start.line, 4, "aliased implementation points at method declaration")
   assert_equal(vim.tbl_map(function(request) return request.method end, requested), {
     "textDocument/definition",
-    "textDocument/references",
-  }, "interface uses free references request")
-  assert_equal(requested[2].params.textDocument.uri, vim.uri_from_fname(interface_path), "references target interface file")
-  assert_equal(requested[2].params.context.includeDeclaration, false, "references exclude target declaration")
+  }, "interface implementation scan avoids LSP references")
 
   selected_items, selected_opts, opened, requested = nil, nil, nil, {}
   client.definition_result = abstract_definition
-  client.reference_result = { abstract_reference }
   assert_equal(definition.goto_lsp_definition_with_implementations(), true, "abstract definition request starts")
   assert(vim.wait(1000, function() return selected_items ~= nil end, 10), "abstract implementation picker completes")
   assert(selected_items and selected_opts, "abstract picker state")
@@ -139,15 +151,14 @@ function M.run()
   assert_equal(selected_items[1].kind, "abstract", "abstract choice kind")
   assert_equal(selected_items[2].kind, "implementation", "subclass choice kind")
   assert(selected_opts.prompt:find("abstract class"), "abstract picker prompt")
-  assert_equal(selected_items[2].location.uri, vim.uri_from_fname(child_path), "subclass location")
+  local subclass = assert(item_for_path(selected_items, child_path), "subclass found")
+  assert_equal(subclass.location.range.start.line, 2, "subclass points at method declaration")
   assert_equal(vim.tbl_map(function(request) return request.method end, requested), {
     "textDocument/definition",
-    "textDocument/references",
-  }, "abstract class uses references request")
+  }, "abstract implementation scan avoids LSP references")
 
   selected_items, selected_opts, opened, requested = nil, nil, nil, {}
   client.definition_result = regular_definition
-  client.reference_result = {}
   assert_equal(definition.goto_lsp_definition_with_implementations(), true, "regular definition request starts")
   assert(vim.wait(1000, function() return opened ~= nil end, 10), "regular class definition opens")
   assert_equal(selected_items, nil, "regular class skips picker")

@@ -174,6 +174,8 @@ end
 
 local function find_blade_references(root, component_name, callback)
   local pattern = "<\\s*/?\\s*x-" .. regex_escape(component_name) .. "(?=[\\s/>])"
+  local search_root = root .. "/resources/views"
+  if vim.fn.isdirectory(search_root) ~= 1 then search_root = root end
   vim.system({
     "rg",
     "--json",
@@ -183,7 +185,7 @@ local function find_blade_references(root, component_name, callback)
     "--glob",
     "!vendor/**",
     pattern,
-    root,
+    search_root,
   }, { text = true }, function(result)
     local items, seen = {}, {}
     for line in tostring(result.stdout or ""):gmatch("[^\n]+") do
