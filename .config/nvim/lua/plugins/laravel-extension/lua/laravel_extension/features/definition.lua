@@ -118,21 +118,43 @@ local function is_abstract_class(node)
   return false
 end
 
+local function node_name(node, source)
+  local name = declaration_name_node(node)
+  return name and vim.treesitter.get_node_text(name, source) or nil, name
+end
+
+local function php_namespace(source)
+  return source:match("%f[%a]namespace%s+([%w_\\]+)%s*[;{]") or ""
+end
+
 local function implementation_target(item)
   if not item or not item.location then return nil end
   local bufnr = location_buffer(item)
   if not bufnr or bufnr < 0 or not vim.api.nvim_buf_is_loaded(bufnr) then return nil end
   local start = item.location.range.start
   local node = parsed_node_at(bufnr, tonumber(start.line) or 0, tonumber(start.character) or 0)
+  local source = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
+  local member_name
   while node do
     local node_type = node:type()
+    if node_type == "method_declaration" and not member_name then
+      member_name = node_name(node, bufnr)
+    end
     local kind = node_type == "interface_declaration" and "interface"
       or (is_abstract_class(node) and "abstract")
       or nil
     if kind then
       local name = declaration_name_node(node)
       if not name then return nil end
-      return { kind = kind, location = node_location(item.location.uri, name) }
+      local type_name = vim.treesitter.get_node_text(name, bufnr)
+      local namespace = php_namespace(source)
+      return {
+        kind = kind,
+        location = node_location(item.location.uri, name),
+        type_name = type_name,
+        fqcn = namespace ~= "" and (namespace .. "\\" .. type_name) or type_name,
+        member_name = member_name,
+      }
     end
     if node_type == "class_declaration" then return nil end
     node = node:parent()
@@ -140,45 +162,138 @@ local function implementation_target(item)
   return nil
 end
 
-local function implementation_class(item)
-  if not item or not item.location then return nil end
-  local bufnr = location_buffer(item)
-  if not bufnr or bufnr < 0 or not vim.api.nvim_buf_is_loaded(bufnr) then return nil end
-  local start = item.location.range.start
-  local node = parsed_node_at(bufnr, tonumber(start.line) or 0, tonumber(start.character) or 0)
-  local is_inheritance = false
-  while node do
-    local node_type = node:type()
-    if node_type == "base_clause" or node_type == "class_interface_clause" then
-      is_inheritance = true
-    elseif node_type == "class_declaration" then
-      if not is_inheritance then return nil end
-      local name = declaration_name_node(node)
-      if not name then return nil end
-      return {
-        location = node_location(item.location.uri, name),
-        encoding = item.encoding,
-        kind = "implementation",
-      }
-    end
-    node = node:parent()
+local function php_aliases(source)
+  local aliases = {}
+  for imported, alias in source:gmatch("%f[%a]use%s+([%w_\\]+)%s+as%s+([%w_]+)%s*;") do
+    aliases[alias:lower()] = imported:gsub("^\\", "")
   end
-  return nil
+  for imported in source:gmatch("%f[%a]use%s+([%w_\\]+)%s*;") do
+    local alias = imported:match("([^\\]+)$")
+    if alias then aliases[alias:lower()] = imported:gsub("^\\", "") end
+  end
+  return aliases
 end
 
-local function implementation_classes(references)
-  local classes, seen = {}, {}
-  for _, reference in ipairs(references or {}) do
-    local class = implementation_class(reference)
-    if class then
-      local key = location_key(class.location)
-      if not seen[key] then
-        seen[key] = true
-        classes[#classes + 1] = class
+local function resolve_type_name(name, namespace, aliases)
+  name = tostring(name or ""):gsub("%s+", "")
+  local absolute = name:sub(1, 1) == "\\"
+  name = name:gsub("^\\", "")
+  if absolute then return name end
+  local first, rest = name:match("^([^\\]+)\\(.+)$")
+  local imported = aliases[(first or name):lower()]
+  if imported then return rest and (imported .. "\\" .. rest) or imported end
+  return namespace ~= "" and (namespace .. "\\" .. name) or name
+end
+
+local function class_implements_target(node, source, target, namespace, aliases)
+  for child in node:iter_children() do
+    if child:type() == "base_clause" or child:type() == "class_interface_clause" then
+      for relation in child:iter_children() do
+        if relation:named() then
+          local resolved = resolve_type_name(vim.treesitter.get_node_text(relation, source), namespace, aliases)
+          if resolved:lower() == target.fqcn:lower() then return true end
+        end
       end
     end
   end
-  return classes
+  return false
+end
+
+local function implementation_name_node(class, source, member_name)
+  if member_name then
+    local bodies = class:field("body")
+    local body = bodies and bodies[1] or nil
+    if body then
+      for child in body:iter_children() do
+        if child:type() == "method_declaration" then
+          local name, name_node = node_name(child, source)
+          if name and name:lower() == member_name:lower() then return name_node end
+        end
+      end
+    end
+  end
+  return declaration_name_node(class)
+end
+
+local function implementations_in_source(path, source, target)
+  local ok, parser = pcall(vim.treesitter.get_string_parser, source, "php")
+  if not ok or not parser then return {} end
+  local parsed, trees = pcall(parser.parse, parser)
+  local root = parsed and trees and trees[1] and trees[1]:root() or nil
+  if not root then return {} end
+
+  local namespace = php_namespace(source)
+  local aliases = php_aliases(source)
+  local uri = vim.uri_from_fname(path)
+  local items = {}
+  local function visit(node)
+    if node:type() == "class_declaration" and class_implements_target(node, source, target, namespace, aliases) then
+      local name = implementation_name_node(node, source, target.member_name)
+      if name then
+        items[#items + 1] = { location = node_location(uri, name), encoding = "utf-8", kind = "implementation" }
+      end
+      return
+    end
+    for child in node:iter_children() do
+      if child:named() then visit(child) end
+    end
+  end
+  visit(root)
+  return items
+end
+
+local function regex_escape(text)
+  return tostring(text or ""):gsub("([\\%^%$%.|%?%*%+%(%)%[%]{}])", "\\%1")
+end
+
+local function find_implementations(root, target, callback)
+  local type_name = regex_escape(target.type_name)
+  local pattern = "(?s)(?:\\b(?:implements|extends)\\b[^{;]*\\b"
+    .. type_name
+    .. "\\b|\\buse\\s+[^;]*\\b"
+    .. type_name
+    .. "\\b[^;]*;)"
+  vim.system({
+    "rg",
+    "--files-with-matches",
+    "--multiline",
+    "--pcre2",
+    "--glob",
+    "*.php",
+    "--glob",
+    "!vendor/**",
+    "--glob",
+    "!storage/**",
+    "--",
+    pattern,
+    root,
+  }, { text = true }, function(result)
+    local paths = vim.split(tostring(result.stdout or ""), "\n", { trimempty = true })
+    local items, seen, index = {}, {}, 1
+    local function process_batch()
+      local last = math.min(#paths, index + 24)
+      for position = index, last do
+        local path = paths[position]
+        local ok, lines = pcall(vim.fn.readfile, path)
+        if ok then
+          for _, item in ipairs(implementations_in_source(path, table.concat(lines, "\n"), target)) do
+            local key = location_key(item.location)
+            if not seen[key] then
+              seen[key] = true
+              items[#items + 1] = item
+            end
+          end
+        end
+      end
+      index = last + 1
+      if index <= #paths then
+        vim.schedule(process_batch)
+      else
+        callback(items)
+      end
+    end
+    vim.schedule(process_batch)
+  end)
 end
 
 local function interface_text_at(bufnr, row)
@@ -259,19 +374,9 @@ function M.goto_lsp_definition_with_implementations()
         choose_locations(definitions, nil, nil, cwd)
         return
       end
-      if not request_locations_with_params(bufnr, "textDocument/references", function()
-        return {
-          textDocument = { uri = target.location.uri },
-          position = vim.deepcopy(target.location.range.start),
-          context = { includeDeclaration = false },
-        }
-      end, function(references)
-        vim.schedule(function()
-          choose_locations(definitions, implementation_classes(references), target.kind, cwd)
-        end)
-      end) then
-        choose_locations(definitions, nil, target.kind, cwd)
-      end
+      find_implementations(cwd, target, function(implementations)
+        choose_locations(definitions, implementations, target.kind, cwd)
+      end)
     end)
   end)
 end
