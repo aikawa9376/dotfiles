@@ -137,21 +137,6 @@ function M.new(ctx)
     return buffer_var(bufnr, "lazyagent_acp_pane_id") ~= nil
   end
 
-  local function track_transcript_window(win, pane_id, bufnr)
-    if not win or not vim.api.nvim_win_is_valid(win) then
-      return
-    end
-    dedicated_transcript_windows[tostring(win)] = {
-      pane_id = tostring(pane_id),
-      bufnr = bufnr,
-    }
-  end
-
-  local function clear_transcript_window(win)
-    local key = tostring(win or "")
-    dedicated_transcript_windows[key] = nil
-  end
-
   local function capture_window_options(win)
     if not win or not vim.api.nvim_win_is_valid(win) then
       return nil
@@ -164,6 +149,79 @@ function M.new(ctx)
       end
     end
     return snapshot
+  end
+
+  local function apply_window_options(win, snapshot)
+    if not win or not vim.api.nvim_win_is_valid(win) or type(snapshot) ~= "table" then
+      return false
+    end
+    for _, option in ipairs(ACP_WINDOW_OPTIONS) do
+      if snapshot[option] ~= nil then
+        pcall(vim.api.nvim_set_option_value, option, snapshot[option], { win = win })
+      end
+    end
+    return true
+  end
+
+  local function track_transcript_window(win, pane_id, bufnr)
+    if not win or not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+    local key = tostring(win)
+    local tracked = dedicated_transcript_windows[key]
+    dedicated_transcript_windows[key] = {
+      pane_id = tostring(pane_id),
+      bufnr = bufnr,
+      winid = win,
+      restore_options = tracked and tracked.restore_options or capture_window_options(win),
+    }
+  end
+
+  local function clear_transcript_window(win)
+    local key = tostring(win or "")
+    dedicated_transcript_windows[key] = nil
+  end
+
+  local function restore_transcript_window(win, opts)
+    opts = opts or {}
+    local key = tostring(win or "")
+    local tracked = dedicated_transcript_windows[key]
+    if not tracked then
+      return false
+    end
+    if not win or not vim.api.nvim_win_is_valid(win) then
+      dedicated_transcript_windows[key] = nil
+      return false
+    end
+
+    local current_bufnr = vim.api.nvim_win_get_buf(win)
+    if opts.force ~= true and is_acp_buffer(current_bufnr) then
+      return false
+    end
+
+    local pane_opts = pane_config[tostring(tracked.pane_id or "")] or {}
+    local snapshot = tracked.restore_options or pane_opts.source_window_options
+    set_suppress_transcript_window_refresh(true)
+    local restored = apply_window_options(win, snapshot)
+    set_suppress_transcript_window_refresh(false)
+    dedicated_transcript_windows[key] = nil
+    return restored
+  end
+
+  local function restore_detached_transcript_windows()
+    local windows = {}
+    for key, tracked in pairs(dedicated_transcript_windows) do
+      windows[#windows + 1] = tonumber(key) or (tracked and tracked.winid)
+    end
+    local restored = false
+    for _, win in ipairs(windows) do
+      if not win or not vim.api.nvim_win_is_valid(win) then
+        clear_transcript_window(win)
+      elseif not is_acp_buffer(vim.api.nvim_win_get_buf(win)) then
+        restored = restore_transcript_window(win) or restored
+      end
+    end
+    return restored
   end
 
   layout_entry = function(bufnr)
@@ -519,9 +577,10 @@ function M.new(ctx)
   end
 
   local function apply_transcript_window_opts(win, is_vertical, appearance)
+    local bufnr = vim.api.nvim_win_get_buf(win)
+    track_transcript_window(win, pane_id_for_bufnr(bufnr), bufnr)
     pcall(function()
       set_suppress_transcript_window_refresh(true)
-      local bufnr = vim.api.nvim_win_get_buf(win)
       vim.wo[win].number = false
       vim.wo[win].relativenumber = false
       vim.wo[win].cursorline = false
@@ -545,8 +604,6 @@ function M.new(ctx)
       hide_end_of_buffer_fill(win)
     end)
     pcall(apply_transcript_background, win, appearance)
-    local bufnr = vim.api.nvim_win_get_buf(win)
-    track_transcript_window(win, pane_id_for_bufnr(bufnr), bufnr)
     set_suppress_transcript_window_refresh(false)
   end
 
@@ -891,6 +948,8 @@ function M.new(ctx)
     track_transcript_window = track_transcript_window,
     clear_transcript_window = clear_transcript_window,
     capture_window_options = capture_window_options,
+    restore_transcript_window = restore_transcript_window,
+    restore_detached_transcript_windows = restore_detached_transcript_windows,
     layout_entry = layout_entry,
     footer_padding_count = footer_padding_count,
     should_follow_output = should_follow_output,

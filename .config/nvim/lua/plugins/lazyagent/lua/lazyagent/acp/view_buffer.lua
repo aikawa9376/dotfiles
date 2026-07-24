@@ -870,6 +870,8 @@ local resolve_release_buffer_on_hide = view_windowing.resolve_release_buffer_on_
 is_acp_buffer = view_windowing.is_acp_buffer
 local clear_transcript_window = view_windowing.clear_transcript_window
 local capture_window_options = view_windowing.capture_window_options
+local restore_transcript_window = view_windowing.restore_transcript_window
+local restore_detached_transcript_windows = view_windowing.restore_detached_transcript_windows
 layout_entry = view_windowing.layout_entry
 local footer_padding_count = view_windowing.footer_padding_count
 local should_follow_output = view_windowing.should_follow_output
@@ -998,6 +1000,8 @@ local view_updates = require("lazyagent.acp.view_buffer.updates").new({
     return refresh_buffer_layout(...)
   end,
   clear_transcript_window = clear_transcript_window,
+  restore_transcript_window = restore_transcript_window,
+  restore_detached_transcript_windows = restore_detached_transcript_windows,
   cleanup_markdown_rendering = cleanup_markdown_rendering,
   pane_buffers = pane_buffers,
   layout_state = layout_state,
