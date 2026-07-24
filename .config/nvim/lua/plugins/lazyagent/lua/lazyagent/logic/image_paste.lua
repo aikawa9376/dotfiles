@@ -1,5 +1,6 @@
 local M = {}
 
+local acp_logic = require("lazyagent.logic.acp")
 local cache_logic = require("lazyagent.logic.cache")
 local state = require("lazyagent.logic.state")
 
@@ -159,6 +160,24 @@ local function load_snacks()
 
   ok, Snacks = pcall(require, "snacks")
   if ok and Snacks and Snacks.image and Snacks.image.placement then
+    return Snacks
+  end
+  return nil
+end
+
+local function load_snacks_picker()
+  local ok, Snacks = pcall(require, "snacks")
+  if ok and Snacks and Snacks.picker and type(Snacks.picker.files) == "function" then
+    return Snacks
+  end
+
+  local ok_lazy, lazy = pcall(require, "lazy")
+  if ok_lazy and lazy and type(lazy.load) == "function" then
+    pcall(lazy.load, { plugins = { "snacks.nvim" } })
+  end
+
+  ok, Snacks = pcall(require, "snacks")
+  if ok and Snacks and Snacks.picker and type(Snacks.picker.files) == "function" then
     return Snacks
   end
   return nil
@@ -550,6 +569,14 @@ local function normalize_image_url_text(text)
   return candidate
 end
 
+local function normalize_explicit_image_url(text)
+  local candidate = strip_wrapping_delimiters(vim.trim(text or ""))
+  if candidate == "" or not candidate:match("^https?://") or candidate:match("%s") then
+    return nil
+  end
+  return candidate
+end
+
 local function line_candidate_starts(line, ext_start)
   local starts = {}
 
@@ -904,11 +931,18 @@ local function download_image_url(dir, url)
 
   if result.code == 0 and file_exists(path) then
     local content_type = vim.trim(result.stdout or "")
-    if ext == "" then
-      ext = image_extension_from_content_type(content_type)
+    local response_ext = image_extension_from_content_type(content_type)
+    local response_mime = tostring(content_type):match("^%s*([^;]+)")
+    response_mime = response_mime and vim.trim(response_mime):lower() or ""
+    local generic_binary = response_mime == "application/octet-stream" or response_mime == "binary/octet-stream"
+    if response_mime ~= "" and response_ext == "" and not (generic_binary and ext ~= "") then
+      uv.fs_unlink(path)
+      return nil, "URL returned an unsupported image content type: " .. response_mime
     end
+    ext = response_ext ~= "" and response_ext or ext
     if ext == "" then
-      ext = "png"
+      uv.fs_unlink(path)
+      return nil, "URL did not provide a supported image extension or content type"
     end
 
     if provisional_ext ~= ext then
@@ -1365,61 +1399,278 @@ process_dropped_image_lines = function(bufnr)
   end
 end
 
+local function first_window_for_buffer(bufnr)
+  local current_win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_is_valid(current_win) and vim.api.nvim_win_get_buf(current_win) == bufnr then
+    return current_win
+  end
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == bufnr then
+      return win
+    end
+  end
+  return nil
+end
+
 local function insert_reference_line(bufnr, ref_text)
-  local cursor = vim.api.nvim_win_get_cursor(0)
-  local row = cursor[1]
+  local target_win = first_window_for_buffer(bufnr)
+  local row = target_win and vim.api.nvim_win_get_cursor(target_win)[1] or vim.api.nvim_buf_line_count(bufnr)
   local current = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ""
 
   if current:match("^%s*$") then
     vim.api.nvim_buf_set_lines(bufnr, row - 1, row, false, { ref_text, "" })
-    vim.api.nvim_win_set_cursor(0, { row + 1, 0 })
+    if target_win then
+      vim.api.nvim_win_set_cursor(target_win, { row + 1, 0 })
+    end
     return row
   end
 
   vim.api.nvim_buf_set_lines(bufnr, row, row, false, { ref_text, "" })
-  vim.api.nvim_win_set_cursor(0, { row + 2, 0 })
+  if target_win then
+    vim.api.nvim_win_set_cursor(target_win, { row + 2, 0 })
+  end
   return row + 1
 end
 
-function M.paste_into_buffer(bufnr)
+local function image_reference_at_cursor(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
+    return nil
+  end
+  local win = first_window_for_buffer(bufnr)
+  if not win then
+    return nil
+  end
+  local cursor = vim.api.nvim_win_get_cursor(win)
+  local line = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, cursor[1], false)[1] or ""
+  local reference = extract_image_reference(line, { include_managed_refs = true })
+  if not reference then
+    return nil
+  end
+  local cursor_col = cursor[2] + 1
+  if cursor_col < reference.start_col or cursor_col > reference.end_col + 1 then
+    return nil
+  end
+  reference.bufnr = bufnr
+  reference.row = cursor[1]
+  reference.line = line
+  reference.source = reference.source_path or reference.source_url
+  return reference
+end
+
+local function attachment_context(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
     notify("scratch buffer is not available", vim.log.levels.ERROR)
-    return nil
+    return nil, nil
   end
 
   local cfg = image_paste_opts()
   if cfg.enabled == false then
     notify("image paste is disabled", vim.log.levels.WARN)
-    return nil
+    return nil, nil
   end
 
   local dir, dir_err = resolve_image_dir(bufnr)
   if not dir then
     notify(dir_err, vim.log.levels.ERROR)
-    return nil
+    return nil, nil
+  end
+  return cfg, dir
+end
+
+local function image_capability(bufnr)
+  local agent_name = buffer_var(bufnr, "lazyagent_agent")
+  if type(agent_name) ~= "string" or agent_name == "" then
+    agent_name = state.open_agent
+  end
+  local session = agent_name and state.sessions and state.sessions[agent_name] or nil
+  if not session then
+    return {
+      status = "unknown",
+      label = "image capability unknown",
+      agent_name = agent_name,
+    }
+  end
+  if not acp_logic.is_acp_backend(session.backend) then
+    return {
+      status = "path",
+      label = "CLI @path attachment",
+      agent_name = agent_name,
+    }
+  end
+  if session.acp_ready ~= true then
+    return {
+      status = "pending",
+      label = "ACP image capability pending",
+      agent_name = agent_name,
+    }
+  end
+  if session.acp_supports_image == true then
+    return {
+      status = "supported",
+      label = "ACP image input supported",
+      agent_name = agent_name,
+    }
+  end
+  return {
+    status = "unsupported",
+    label = "ACP image input unavailable",
+    agent_name = agent_name,
+  }
+end
+
+local function finalize_attachment(bufnr, image_path, source, cfg, opts)
+  opts = opts or {}
+  if opts.resize ~= false then
+    local resized, resize_err = resize_image(image_path, tonumber(cfg.max_dimension))
+    if resized == nil then
+      notify(resize_err, vim.log.levels.WARN)
+    end
   end
 
-  local image_path, capture_source_or_err = capture_clipboard_image(dir)
-  if not image_path then
-    notify(capture_source_or_err, vim.log.levels.ERROR)
-    return nil
-  end
-
-  local resized, resize_err = resize_image(image_path, tonumber(cfg.max_dimension))
-  if resized == nil then
-    notify(resize_err, vim.log.levels.WARN)
-  end
-
-  local ref_text = "@" .. image_path
-  insert_reference_line(bufnr, ref_text)
+  insert_reference_line(bufnr, "@" .. image_path)
   image_preview.refresh(bufnr)
 
   if cfg.notify ~= false then
-    notify("pasted image from " .. capture_source_or_err)
+    local capability = image_capability(bufnr)
+    local message = "attached image from " .. tostring(source or "image")
+    if capability.status == "unsupported" then
+      local agent = capability.agent_name and (" for " .. capability.agent_name) or ""
+      notify(message .. "; ACP image input is unavailable" .. agent .. " and the image will be omitted on send", vim.log.levels.WARN)
+    else
+      notify(message)
+    end
   end
 
   return image_path
+end
+
+local function recent_image_files()
+  local cfg = image_paste_opts()
+  local picker_cfg = type(cfg.picker) == "table" and cfg.picker or {}
+  local limit = math.max(1, math.floor(tonumber(picker_cfg.recent_limit) or 20))
+  local max_depth = math.max(0, math.floor(tonumber(picker_cfg.recent_scan_depth) or 4))
+  local scan_limit = math.max(limit, math.floor(tonumber(picker_cfg.recent_scan_limit) or 2000))
+  local root = image_storage_root()
+  if vim.fn.isdirectory(root) ~= 1 then
+    return {}
+  end
+
+  local images = {}
+  local scanned = 0
+  local function scan(dir, depth)
+    if scanned >= scan_limit then
+      return
+    end
+    local handle = uv.fs_scandir(dir)
+    if not handle then
+      return
+    end
+    while scanned < scan_limit do
+      local name, kind = uv.fs_scandir_next(handle)
+      if not name then
+        break
+      end
+      scanned = scanned + 1
+      local path = vim.fs.joinpath(dir, name)
+      if kind == "directory" and depth < max_depth then
+        scan(path, depth + 1)
+      elseif kind == "file" and IMAGE_FILE_EXTENSIONS[image_file_extension(path)] then
+        local stat = uv.fs_stat(path)
+        if stat and (stat.size or 0) > 0 then
+          local modified = stat.mtime
+          images[#images + 1] = {
+            path = path,
+            mtime = type(modified) == "table" and tonumber(modified.sec) or tonumber(modified) or 0,
+          }
+        end
+      end
+    end
+  end
+  scan(root, 0)
+  table.sort(images, function(a, b)
+    if a.mtime == b.mtime then
+      return a.path < b.path
+    end
+    return a.mtime > b.mtime
+  end)
+  while #images > limit do
+    table.remove(images)
+  end
+  return images
+end
+
+function M.capability(bufnr)
+  return image_capability(bufnr or vim.api.nvim_get_current_buf())
+end
+
+function M.paste_into_buffer(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local cfg, dir = attachment_context(bufnr)
+  if not cfg then
+    return nil
+  end
+
+  local image_path, source_or_err = capture_clipboard_image(dir)
+  if not image_path then
+    notify(source_or_err, vim.log.levels.ERROR)
+    return nil
+  end
+  return finalize_attachment(bufnr, image_path, source_or_err, cfg)
+end
+
+function M.attach_file_into_buffer(bufnr, path, opts)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  opts = opts or {}
+  local cfg, dir = attachment_context(bufnr)
+  if not cfg then
+    return nil
+  end
+
+  local source_path = normalize_image_path_text(path)
+  if not source_path then
+    notify("not a readable supported image file: " .. tostring(path or ""), vim.log.levels.ERROR)
+    return nil
+  end
+
+  local import_cfg = type(cfg.import) == "table" and cfg.import or {}
+  local image_path = source_path
+  if import_cfg.copy ~= false then
+    local import_err
+    image_path, import_err = import_image_file(dir, source_path)
+    if not image_path then
+      notify(import_err, vim.log.levels.ERROR)
+      return nil
+    end
+  end
+  return finalize_attachment(bufnr, image_path, opts.source or "file", cfg, {
+    resize = image_path ~= source_path,
+  })
+end
+
+function M.attach_url_into_buffer(bufnr, url)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local cfg, dir = attachment_context(bufnr)
+  if not cfg then
+    return nil
+  end
+
+  local source_url = normalize_explicit_image_url(url)
+  if not source_url then
+    notify("image URL must use http:// or https:// and contain no whitespace", vim.log.levels.ERROR)
+    return nil
+  end
+  local image_path, download_err = download_image_url(dir, source_url)
+  if not image_path then
+    notify(download_err, vim.log.levels.ERROR)
+    return nil
+  end
+  return finalize_attachment(bufnr, image_path, "URL", cfg)
+end
+
+function M.recent_images()
+  return recent_image_files()
 end
 
 function M.paste_current_buffer()
@@ -1428,47 +1679,145 @@ end
 
 function M.screenshot_into_buffer(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    notify("scratch buffer is not available", vim.log.levels.ERROR)
+  local cfg, dir = attachment_context(bufnr)
+  if not cfg then
     return nil
   end
 
-  local cfg = image_paste_opts()
-  if cfg.enabled == false then
-    notify("image paste is disabled", vim.log.levels.WARN)
-    return nil
-  end
-
-  local dir, dir_err = resolve_image_dir(bufnr)
-  if not dir then
-    notify(dir_err, vim.log.levels.ERROR)
-    return nil
-  end
-
-  local image_path, capture_source_or_err = capture_screenshot_image(dir)
+  local image_path, source_or_err = capture_screenshot_image(dir)
   if not image_path then
-    notify(capture_source_or_err, vim.log.levels.ERROR)
+    notify(source_or_err, vim.log.levels.ERROR)
     return nil
   end
-
-  local resized, resize_err = resize_image(image_path, tonumber(cfg.max_dimension))
-  if resized == nil then
-    notify(resize_err, vim.log.levels.WARN)
-  end
-
-  local ref_text = "@" .. image_path
-  insert_reference_line(bufnr, ref_text)
-  image_preview.refresh(bufnr)
-
-  if cfg.notify ~= false then
-    notify("captured screenshot via " .. capture_source_or_err)
-  end
-
-  return image_path
+  return finalize_attachment(bufnr, image_path, source_or_err, cfg)
 end
 
 function M.screenshot_current_buffer()
   return M.screenshot_into_buffer(vim.api.nvim_get_current_buf())
+end
+
+local image_picker
+local function picker_controller()
+  if image_picker then
+    return image_picker
+  end
+  image_picker = require("lazyagent.logic.image_picker").new({
+    capability = M.capability,
+    attach_clipboard = M.paste_into_buffer,
+    attach_screenshot = M.screenshot_into_buffer,
+    attach_file = M.attach_file_into_buffer,
+    attach_url = M.attach_url_into_buffer,
+    recent_images = M.recent_images,
+    load_snacks = load_snacks_picker,
+    notify = notify,
+  })
+  return image_picker
+end
+
+function M.choose_into_buffer(bufnr, opts)
+  return picker_controller().open(bufnr or vim.api.nvim_get_current_buf(), opts)
+end
+
+function M.choose_current_buffer(opts)
+  return M.choose_into_buffer(vim.api.nvim_get_current_buf(), opts)
+end
+
+function M.current_image(bufnr)
+  return image_reference_at_cursor(bufnr or vim.api.nvim_get_current_buf())
+end
+
+function M.preview_image(bufnr, reference)
+  reference = reference or image_reference_at_cursor(bufnr)
+  if not reference then
+    return false
+  end
+  local Snacks = load_snacks()
+  if Snacks and Snacks.image and type(Snacks.image.hover) == "function" then
+    local ok = pcall(Snacks.image.hover)
+    if ok then
+      return true
+    end
+  end
+  notify("larger image preview requires Snacks.image hover support", vim.log.levels.WARN)
+  return false
+end
+
+function M.open_image(_, reference)
+  reference = reference or image_reference_at_cursor(vim.api.nvim_get_current_buf())
+  local source = reference and reference.source or nil
+  if not source or type(vim.ui.open) ~= "function" then
+    notify("system image viewer is not available", vim.log.levels.WARN)
+    return false
+  end
+  local ok, process_or_err, open_err = pcall(vim.ui.open, source)
+  if not ok then
+    open_err = process_or_err
+  end
+  if not ok or open_err then
+    notify("failed to open image: " .. tostring(open_err or "unknown error"), vim.log.levels.ERROR)
+    return false
+  end
+  return true
+end
+
+function M.copy_image_path(_, reference)
+  reference = reference or image_reference_at_cursor(vim.api.nvim_get_current_buf())
+  local source = reference and reference.source or nil
+  if not source then
+    return false
+  end
+  vim.fn.setreg('"', source)
+  pcall(vim.fn.setreg, "+", source)
+  notify("copied image path")
+  return true
+end
+
+function M.remove_image_reference(bufnr, reference)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  reference = reference or image_reference_at_cursor(bufnr)
+  if not reference or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+  if not vim.bo[bufnr].modifiable then
+    notify("image reference buffer is not modifiable", vim.log.levels.WARN)
+    return false
+  end
+
+  local line = vim.api.nvim_buf_get_lines(bufnr, reference.row - 1, reference.row, false)[1] or ""
+  if line:sub(reference.start_col, reference.end_col) ~= reference.raw then
+    notify("image reference changed; place the cursor on it and try again", vim.log.levels.WARN)
+    return false
+  end
+  local replacement = line:sub(1, reference.start_col - 1) .. line:sub(reference.end_col + 1)
+  vim.api.nvim_buf_set_lines(bufnr, reference.row - 1, reference.row, false, { replacement })
+  local win = first_window_for_buffer(bufnr)
+  if win then
+    local col = math.min(vim.api.nvim_win_get_cursor(win)[2], #replacement)
+    vim.api.nvim_win_set_cursor(win, { reference.row, col })
+  end
+  image_preview.refresh(bufnr)
+  notify("removed image reference")
+  return true
+end
+
+local image_actions
+local function action_controller()
+  if image_actions then
+    return image_actions
+  end
+  image_actions = require("lazyagent.logic.image_actions").new({
+    current_image = M.current_image,
+    preview = M.preview_image,
+    open = M.open_image,
+    copy = M.copy_image_path,
+    remove = M.remove_image_reference,
+    notify = notify,
+  })
+  return image_actions
+end
+
+function M.actions_at_cursor(bufnr, opts)
+  return action_controller().open(bufnr or vim.api.nvim_get_current_buf(), opts)
 end
 
 function M.attach_buffer(bufnr)

@@ -538,6 +538,10 @@ function M.new(ctx)
       table.insert(segments, string.format("%d slash cmd%s", command_count, command_count == 1 and "" or "s"))
     end
 
+    if session and session.acp_ready then
+      table.insert(segments, session.acp_supports_image and "Image input" or "No image input")
+    end
+
     if session and session.acp_supports_embedded_context then
       table.insert(segments, "Embedded ctx")
     end

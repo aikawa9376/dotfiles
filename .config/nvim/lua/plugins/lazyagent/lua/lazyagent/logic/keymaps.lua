@@ -323,6 +323,53 @@ function M.register_scratch_keymaps(bufnr, opts)
     set_paste_image_key("i", keys.paste_image_insert_alt, true)
   end
 
+  local function choose_image(insert_mode)
+    local restart_insert = insert_mode and vim.fn.mode():sub(1, 1) == "i"
+    if restart_insert then
+      vim.cmd("stopinsert")
+    end
+    image_paste.choose_into_buffer(bufnr, {
+      on_done = function()
+        if
+          restart_insert
+          and vim.api.nvim_buf_is_valid(bufnr)
+          and vim.api.nvim_get_current_buf() == bufnr
+        then
+          restart_insert_if_valid(bufnr)
+        end
+      end,
+    })
+  end
+
+  local image_picker_normal = keys.image_picker_normal
+  if image_picker_normal == nil then
+    image_picker_normal = keys.image_picker
+  end
+  if type(image_picker_normal) == "string" and image_picker_normal ~= "" then
+    safe_set("n", image_picker_normal, function()
+      choose_image(false)
+    end, { desc = "Choose image for scratch buffer" })
+  end
+  if type(keys.image_picker_insert) == "string" and keys.image_picker_insert ~= "" then
+    safe_set("i", keys.image_picker_insert, function()
+      choose_image(true)
+    end, { desc = "Choose image for scratch buffer" })
+  end
+
+  pcall(vim.api.nvim_buf_create_user_command, bufnr, "LazyAgentImage", function()
+    choose_image(vim.fn.mode():sub(1, 1) == "i")
+  end, { desc = "Choose image for scratch buffer", force = true })
+
+  if type(keys.image_actions) == "string" and keys.image_actions ~= "" then
+    safe_set("n", keys.image_actions, function()
+      image_paste.actions_at_cursor(bufnr)
+    end, { desc = "Image actions at cursor" })
+  end
+
+  pcall(vim.api.nvim_buf_create_user_command, bufnr, "LazyAgentImageActions", function()
+    image_paste.actions_at_cursor(bufnr)
+  end, { desc = "Image actions at cursor", force = true })
+
   pcall(vim.api.nvim_buf_create_user_command, bufnr, "LazyAgentPasteImage", function()
     paste_image(vim.fn.mode():sub(1, 1) == "i")
   end, { desc = "Paste image into scratch buffer", force = true })

@@ -153,6 +153,8 @@ function M.build()
       clear = "c<space>d",
       history_next = "c<space>n",
       history_prev = "c<space>p",
+      image_picker = "c<space>i",
+      image_actions = "c<space>I",
     },
     cache = {
       enabled = true,
@@ -168,9 +170,17 @@ function M.build()
       dir_layout = "conversation",
       max_dimension = 1600,
       notify = true,
+      import = {
+        copy = true,
+      },
       drop = {
         enabled = true,
         copy = true,
+      },
+      picker = {
+        recent_limit = 20,
+        recent_scan_depth = 4,
+        recent_scan_limit = 2000,
       },
       preview = {
         enabled = true,
