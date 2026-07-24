@@ -48,6 +48,29 @@ function M.run()
   local view = require("lazyagent.acp.view_buffer")
   local pane_id
   local pane_state
+  local source_winid = vim.api.nvim_get_current_win()
+  local source_bufnr = vim.api.nvim_get_current_buf()
+  local original_window_options = {
+    number = vim.wo[source_winid].number,
+    relativenumber = vim.wo[source_winid].relativenumber,
+    wrap = vim.wo[source_winid].wrap,
+    signcolumn = vim.wo[source_winid].signcolumn,
+    statusline = vim.wo[source_winid].statusline,
+    fillchars = vim.wo[source_winid].fillchars,
+  }
+  local expected_window_options = {
+    number = true,
+    relativenumber = true,
+    wrap = false,
+    signcolumn = "yes",
+  }
+  local normal_buffer_defaults = {
+    statusline = vim.api.nvim_get_option_value("statusline", { scope = "global" }),
+    fillchars = vim.api.nvim_get_option_value("fillchars", { scope = "global" }),
+  }
+  for option, value in pairs(expected_window_options) do
+    vim.api.nvim_set_option_value(option, value, { win = source_winid })
+  end
   local transcript_path = vim.fn.tempname() .. "-lazyagent-acp.log"
   local transcript_lines = { "# System", "lifecycle test" }
   for index = 1, 60 do
@@ -243,12 +266,60 @@ function M.run()
   assert_equal(restored_view.view.lnum, saved_view.view.lnum, "restored thread cursor")
   assert_equal(restored_view.view.topline, saved_view.view.topline, "restored thread topline")
 
+  vim.api.nvim_win_close(source_winid, true)
+  assert_equal(#vim.api.nvim_tabpage_list_wins(0), 1, "transcript can become the only window")
+  local replacement_bufnr = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_lines(replacement_bufnr, 0, -1, false, { "replacement file" })
+  vim.api.nvim_win_set_buf(pane_state.winid, replacement_bufnr)
+  for option, expected in pairs(expected_window_options) do
+    assert_equal(
+      vim.api.nvim_get_option_value(option, { win = pane_state.winid }),
+      expected,
+      "normal buffer restores pre-ACP window option " .. option
+    )
+  end
+  for option, expected in pairs(normal_buffer_defaults) do
+    assert_equal(
+      vim.api.nvim_get_option_value(option, { win = pane_state.winid }),
+      expected,
+      "normal buffer restores global-local window option " .. option
+    )
+  end
+  assert_equal(view.debug_snapshot().dedicated_window_count, 0,
+    "normal buffer is no longer tracked as a transcript window")
+
+  local joined = nil
+  view.join_pane(pane_id, 8, false, function(ok)
+    joined = ok
+  end, session)
+  assert(vim.wait(1000, function()
+    return joined ~= nil
+  end, 10), "hidden transcript should rejoin after replacing its fullscreen window")
+  assert_equal(joined, true, "hidden transcript rejoins")
+  local rejoined_winid = assert(vim.fn.bufwinid(transcript_bufnr))
+  assert(rejoined_winid > 0 and rejoined_winid ~= pane_state.winid,
+    "rejoined transcript uses a dedicated split")
+  vim.api.nvim_win_close(pane_state.winid, true)
+  assert_equal(#vim.api.nvim_tabpage_list_wins(0), 1, "rejoined transcript can become the only window")
+
   session.view_state = vim.tbl_extend("force", session.view_state or {}, {
     pending_append = "queued",
     pending_append_chunks = { "queued" },
     pending_append_size = 6,
   })
   view.kill_pane(pane_id, session)
+
+  local fallback_winid = vim.api.nvim_get_current_win()
+  assert(vim.api.nvim_win_is_valid(fallback_winid), "killing the sole transcript leaves a usable window")
+  assert(vim.api.nvim_get_current_buf() ~= transcript_bufnr,
+    "killing the sole transcript replaces its buffer")
+  for option, expected in pairs(expected_window_options) do
+    assert_equal(
+      vim.api.nvim_get_option_value(option, { win = fallback_winid }),
+      expected,
+      "sole transcript teardown restores window option " .. option
+    )
+  end
 
   local closed = view.debug_snapshot()
   assert_equal(closed.pane_count, 0, "closed pane ownership")
@@ -271,6 +342,15 @@ function M.run()
   assert_equal(backend_debug.child_process_count, 0, "closed child processes")
   assert_equal(backend_debug.timer_count, 0, "closed backend timers")
   assert_equal(backend_debug.callback_count, 0, "closed backend callbacks")
+
+  local remaining_win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_buf_is_valid(source_bufnr) then
+    vim.api.nvim_win_set_buf(remaining_win, source_bufnr)
+  end
+  for option, value in pairs(original_window_options) do
+    vim.api.nvim_set_option_value(option, value, { win = remaining_win })
+  end
+  pcall(vim.api.nvim_buf_delete, replacement_bufnr, { force = true })
 
   pcall(vim.api.nvim_del_augroup_by_id, render_group)
   for _, name in ipairs(render_module_names) do

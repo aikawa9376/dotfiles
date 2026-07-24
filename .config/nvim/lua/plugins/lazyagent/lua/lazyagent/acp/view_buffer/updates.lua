@@ -17,6 +17,8 @@ function M.new(ctx)
   local refresh_transcript_window = ctx.refresh_transcript_window
   local refresh_buffer_layout = ctx.refresh_buffer_layout
   local clear_transcript_window = ctx.clear_transcript_window
+  local restore_transcript_window = ctx.restore_transcript_window
+  local restore_detached_transcript_windows = ctx.restore_detached_transcript_windows
   local cleanup_markdown_rendering = ctx.cleanup_markdown_rendering
   local pane_buffers = ctx.pane_buffers
   local layout_state = ctx.layout_state
@@ -181,6 +183,7 @@ function M.new(ctx)
     vim.api.nvim_create_autocmd("BufWinEnter", {
       group = group,
       callback = function(args)
+        restore_detached_transcript_windows()
         local bufnr = tonumber(args.buf)
         if not bufnr or not is_acp_buffer(bufnr) then
           return
@@ -196,6 +199,7 @@ function M.new(ctx)
     vim.api.nvim_create_autocmd("BufEnter", {
       group = group,
       callback = function(args)
+        restore_detached_transcript_windows()
         local bufnr = tonumber(args.buf)
         if not bufnr or not is_acp_buffer(bufnr) then
           return
@@ -209,6 +213,7 @@ function M.new(ctx)
     vim.api.nvim_create_autocmd("WinEnter", {
       group = group,
       callback = function()
+        restore_detached_transcript_windows()
         local win = vim.api.nvim_get_current_win()
         local bufnr = vim.api.nvim_get_current_buf()
         if not is_acp_buffer(bufnr) then
@@ -309,10 +314,14 @@ function M.new(ctx)
           pane_buffers[tostring(pane_id)] = nil
         end
         layout_state[tostring(bufnr)] = nil
+        local transcript_windows = {}
         for key, entry in pairs(dedicated_transcript_windows) do
           if entry.bufnr == bufnr or tostring(entry.pane_id or "") == tostring(pane_id or "") then
-            dedicated_transcript_windows[key] = nil
+            transcript_windows[#transcript_windows + 1] = tonumber(key) or entry.winid
           end
+        end
+        for _, win in ipairs(transcript_windows) do
+          restore_transcript_window(win, { force = true })
         end
       end,
     })
