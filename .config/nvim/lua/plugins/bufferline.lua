@@ -32,12 +32,12 @@ return {
     },
     highlights = {
       fill = {
-        fg = 'none',
-        bg = 'none',
+        fg = '#002b36',
+        bg = '#002b36',
       },
       background = {
         fg = '#E5E9F0',
-        bg = 'none'
+        bg = '#002b36'
       },
       buffer_selected = {
         fg = '#88C0D0',
