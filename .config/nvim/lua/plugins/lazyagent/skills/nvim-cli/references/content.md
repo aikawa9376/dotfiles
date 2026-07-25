@@ -1,11 +1,12 @@
 # Content Operations
 
-Tools for reading and modifying files or directories, and managing Neovim buffers.
+Operations for reading or changing content through the active Neovim instance.
 
 ## Usage Scenarios
-- **"ファイルを開いて"**: Open one or more files in Neovim buffers.
-- **"コードを読んで"**: Read content from a file or directory recursively.
-- **"ファイルを閉じて"**: Close buffers for specific files.
+
+- **"ファイルを開いて"**: Open one or more files in Neovim buffers when the user requests an editor action.
+- **Unsaved buffer context**: Read through Neovim when the active buffer may differ from the file on disk.
+- **"ファイルを閉じて"**: Close buffers when the user requests it.
 
 ## Commands
 

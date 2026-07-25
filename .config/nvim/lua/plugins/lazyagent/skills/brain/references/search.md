@@ -11,9 +11,10 @@ $BRAIN search "<query>" [--current-project]
 
 ## Instructions for Use
 
-### Autonomous Scenarios
-- **Start of Task**: Search for "How did I implement [feature] last time?" or "[library] usage examples".
-- **Facing Errors**: Search the exact error message or a description of the bug.
+### Appropriate Scenarios
+
+- **Missing Context**: Search when the user refers to prior work that is not explained in the current conversation.
+- **Repeated or Unclear Errors**: Search the exact error message or a description when a prior investigation is likely.
 - **Decision Retrieval**: Search for "Why did we choose [X] over [Y]?"
 
 ### Query Best Practices
