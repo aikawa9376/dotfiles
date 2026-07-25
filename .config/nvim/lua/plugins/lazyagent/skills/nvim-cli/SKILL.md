@@ -1,11 +1,11 @@
 ---
 name: nvim-cli
-description: Tools for Neovim and filesystem interaction. Supports opening/closing files, managing the quickfix list, reading cursor context, and retrieving LSP diagnostics.
+description: Interact with the active Neovim instance for editor-specific context and actions, including unsaved buffers, cursor or window state, quickfix, terminals, and LSP diagnostics. Use when direct Neovim manipulation is requested or when required context is unavailable from files alone. Do not use for ordinary repository file reading or routine validation.
 ---
 
 # nvim-cli
 
-Interact with Neovim buffers and the filesystem. This tool handles both open buffers (with unsaved changes) and files on disk transparently.
+Interact with the active Neovim instance. The tool can access editor state such as unsaved buffers, windows, cursor position, quickfix entries, terminals, and LSP diagnostics.
 
 ## Global Options
 
@@ -15,11 +15,14 @@ Interact with Neovim buffers and the filesystem. This tool handles both open buf
 
 ## Instructions
 
-Use this skill when you need to:
+Use this skill when the task depends on the state of the active Neovim instance or requires changing that state. Typical cases include:
+
 - **"Quickfixに入れて" (Add to quickfix)**: Use `qf-add` to collect files for review.
 - **"カーソルを合わせて開いて" (Open and focus cursor)**: Use `open` and `cursor` to understand the current editor state.
-- **"コードを読んで" (Read code)**: Use `read` to get file content, prioritizing unsaved buffer content.
+- **Unsaved buffer context**: Use `read` when the on-disk file may differ from the active buffer.
 - **"診断結果を確認して" (Check diagnostics)**: Use `diagnostics` to see LSP errors/warnings.
+
+Do not use it merely to read files available on disk or to run routine post-edit checks.
 
 ### Available Commands
 
@@ -33,6 +36,5 @@ Use this skill when you need to:
 
 ## Guidelines
 
-- **Recursive Reading**: When exploring a new project, use `read` on a directory to get a full view of the code.
 - **Transparent Buffers**: The tool automatically handles unsaved changes in Neovim buffers.
-- **Verification**: Use `diagnostics` after edits to check for errors reported by the editor's LSP.
+- **Verification**: Use `diagnostics` when the user requests editor diagnostics or LSP state materially affects the task.

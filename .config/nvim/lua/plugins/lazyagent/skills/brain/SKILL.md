@@ -1,6 +1,6 @@
 ---
 name: brain
-description: Search and retrieve knowledge from past conversation history. Use this autonomously at the start of a task, when encountering errors, or to find existing code patterns.
+description: Search past conversation history with ai-memory-cli. Use when the user's request lacks context likely captured in prior sessions, when they ask about earlier decisions, or when a repeated or unclear failure may have a known prior resolution. Do not use routinely at the start of a task.
 ---
 
 # brain
@@ -9,14 +9,13 @@ Leverage past experiences and solutions using the `ai-memory-cli` tool. This all
 
 ## Instructions
 
-You SHOULD use this skill **autonomously** to enhance your performance and avoid repeating past efforts.
+Use this skill only when the current conversation and repository do not provide enough context and past sessions are likely to contain the missing information. Typical cases include:
 
-### When to Use
+- The user refers to earlier work or asks why a previous decision was made.
+- A repeated or unclear error may already have been investigated.
+- Important historical constraints cannot be recovered from the current code or documentation.
 
-- **Task Initiation**: Before starting a new feature or refactor, search for related past discussions or implementations.
-- **Error Troubleshooting**: When facing an error message, search for it to see how you or the user resolved it previously.
-- **API/Library Reference**: If you've used a specific library before, search for code snippets to recall the correct usage.
-- **Pattern Discovery**: Find past architectural decisions or design patterns to ensure consistency.
+Do not use it merely because a task has started, code is being edited, or local patterns need to be found.
 
 ### Available Commands
 
