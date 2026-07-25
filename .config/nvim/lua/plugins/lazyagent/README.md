@@ -518,9 +518,17 @@ MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP 
 | --- | --- |
 | `#cursor-diagnostic-fix` | カーソル位置と、その位置にかかっている diagnostic を展開して、最小変更での修正を依頼 |
 | `#history` | 現在の project / branch に対応する最新会話 log への参照 |
+| `#obsidian` | 作業結果を軽量なMarkdown knowledgeへ整理し、daily・関連ノート・project/branch noteからリンク |
+| `#obsidian-html` | 作業結果を検索用Markdown要約と閲覧用HTML artifactのペアで保存（`#obsiditan-html`もaliasとして利用可） |
 | `#report` | summary Markdown の保存先 prefix |
 
 その他の transform は `lua/lazyagent/transforms.lua` と `lua/lazyagent/transforms/` を参照してください。
+
+`#obsidian` はMarkdownのみを保存します。HTML資料も残したい場合は
+`#obsidian-html` を使い、検索用Markdown要約と閲覧用HTML artifactをペアにします。
+URLならDefuddleによるWeb capture、複数ノートのproperty viewならObsidian Bases、
+空間的な概念図ならJSON Canvasへ振り分けます。Obsidianの操作は外部CLIではなく
+既存の`obsidian.nvim` コマンドを使います。
 
 ## Public API
 

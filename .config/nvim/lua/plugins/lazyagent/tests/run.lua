@@ -14,6 +14,7 @@ local suites = {
   "tests.image_picker_spec",
   "tests.image_attachment_spec",
   "tests.image_actions_spec",
+  "tests.transforms_spec",
   "tests.notes_spec",
   "tests.acp.client_contract",
   "tests.acp.cancellation_spec",

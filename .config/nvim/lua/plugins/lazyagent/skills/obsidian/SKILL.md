@@ -1,23 +1,24 @@
 ---
 name: obsidian
-description: Work effectively with the local Obsidian vault in ~/workspace/obsidian. Use this for daily notes, permanent notes, wiki links, tags, and note refactors that match the current obsidian.nvim setup.
+description: Capture, organize, retrieve, and visualize knowledge in the local Obsidian vault at ~/workspace/obsidian. Use for daily or permanent notes, agent-result capture, web articles, paired Markdown and HTML reports, Obsidian Markdown, properties, wiki links, Bases dashboards, JSON Canvas maps, note refactors, and interactive obsidian.nvim workflows.
 ---
 
 # obsidian
-
-Use this skill when the task is about capturing, organizing, or refining knowledge in the local Obsidian vault.
 
 ## Instructions
 
 Before creating a new note, search the vault for an existing note on the same topic and prefer linking over duplicating.
 
-### When to Use
+Route the task to the smallest relevant reference:
 
-- **Daily capture**: Add a progress log, journal entry, or meeting memo to today's daily note.
-- **Permanent note creation**: Turn a conversation, idea, or task outcome into a durable note under `notes/`.
-- **Note refactoring**: Split a large note, extract a subtopic, rename a note, or improve links and tags.
-- **Knowledge gardening**: Add backlinks, related-note links, tags, and concise summaries so notes stay discoverable.
-- **Obsidian command guidance**: Suggest the right `obsidian.nvim` command when the user is working inside Neovim.
+- Read [conventions](references/conventions.md) whenever creating or rewriting a note.
+- Read [markdown](references/markdown.md) for Obsidian-specific links, embeds, callouts, or formatting.
+- Read [workflows](references/workflows.md) for daily capture, permanent notes, agent results, refactors, and linking.
+- Read [web capture](references/web-capture.md) when a URL or online article should become a note.
+- Read [HTML artifacts](references/html-artifacts.md) when the request uses `#obsidian-html` or explicitly asks for an HTML companion.
+- Read [bases](references/bases.md) when creating a database-like table, card, or list view over notes.
+- Read [canvas](references/canvas.md) when creating a mind map, architecture map, or other `.canvas` visualization.
+- Read [commands](references/commands.md) for interactive work in Neovim. Use `obsidian.nvim`; do not depend on the Obsidian CLI.
 
 ### Vault Conventions
 
@@ -26,6 +27,8 @@ Before creating a new note, search the vault for an existing note on the same to
 - Daily notes: `daily/`
 - Templates: `templates/`
 - Image attachments: `assets/imgs/`
+- HTML artifacts: `assets/html/`
+- Bases dashboards: `bases/`
 - Preferred internal link style: wiki links like `[[note title]]`
 - Existing note shape:
 
@@ -45,8 +48,13 @@ When you create or rewrite a note directly, preserve that structure: frontmatter
 ## Available References
 
 - **[conventions](references/conventions.md)**: Vault layout, note shape, and writing conventions for this setup.
+- **[markdown](references/markdown.md)**: Obsidian-specific Markdown, wikilinks, embeds, callouts, and validation.
 - **[commands](references/commands.md)**: `obsidian.nvim` commands available in the current Neovim configuration.
 - **[workflows](references/workflows.md)**: Practical workflows for daily notes, permanent notes, refactors, and linking.
+- **[web capture](references/web-capture.md)**: Extract, distill, and save online articles with Defuddle.
+- **[HTML artifacts](references/html-artifacts.md)**: Pair a searchable Markdown note with a polished standalone HTML document.
+- **[bases](references/bases.md)**: Build `.base` dashboards from standardized note properties.
+- **[canvas](references/canvas.md)**: Build and validate JSON Canvas maps.
 
 ## Guidelines
 
