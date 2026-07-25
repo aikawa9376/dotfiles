@@ -139,7 +139,11 @@ return {
       Antigravity = { yolo = true, acp = false },
       Gemini = { yolo = true, mcp_context_dir_flag = "--include-directories" },
       Copilot = { yolo = true },
-      Codex = { yolo = true, default = true, acp_cmd = { "npx", "@agentclientprotocol/codex-acp" } },
+      Codex = {
+        yolo = true,
+        default = true,
+        acp_cmd = { "npx", "--yes", "--prefer-online", "@agentclientprotocol/codex-acp@latest" },
+      },
     },
     instant_mode = {
       append_text = " #cursor #small-fix #diffstyle-code", -- e.g. " #translate"
