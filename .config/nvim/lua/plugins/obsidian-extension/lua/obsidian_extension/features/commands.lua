@@ -126,6 +126,15 @@ local function branch_note_spec(context)
     id = context.branch_note_segments[#context.branch_note_segments],
     dir = relative_dir,
     tags = { "project-note", "branch-note" },
+    metadata = {
+      type = "project",
+      project = context.repo_slug,
+      branch = context.branch_name,
+    },
+    metadata_defaults = {
+      source = "manual",
+      status = "seed",
+    },
   }
 end
 
@@ -135,7 +144,26 @@ local function repo_note_spec(context)
     id = "index",
     dir = ("notes/projects/%s"):format(context.repo_slug),
     tags = { "project-note", "repo-note" },
+    metadata = {
+      type = "project",
+      project = context.repo_slug,
+    },
+    metadata_defaults = {
+      source = "manual",
+      status = "evergreen",
+    },
   }
+end
+
+local function apply_note_metadata(note, spec)
+  for key, value in pairs(spec.metadata or {}) do
+    note:add_field(key, value)
+  end
+  for key, value in pairs(spec.metadata_defaults or {}) do
+    if note:get_field(key) == nil then
+      note:add_field(key, value)
+    end
+  end
 end
 
 local function open_or_create_note(spec)
@@ -148,6 +176,12 @@ local function open_or_create_note(spec)
 
   if note_path:exists() then
     client:open_note(note_path, { sync = true })
+    local bufnr = vim.api.nvim_get_current_buf()
+    local note = client:current_note(bufnr)
+    if note then
+      apply_note_metadata(note, spec)
+      client:update_frontmatter(note, bufnr)
+    end
     return
   end
 
@@ -158,6 +192,7 @@ local function open_or_create_note(spec)
     tags = spec.tags,
     no_write = true,
   })
+  apply_note_metadata(note, spec)
   client:open_note(note, { sync = true })
   client:write_note_to_buffer(note)
 end

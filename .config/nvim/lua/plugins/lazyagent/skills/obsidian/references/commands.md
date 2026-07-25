@@ -1,6 +1,7 @@
 # obsidian.nvim Commands in This Setup
 
 These commands are already enabled in the local Neovim configuration.
+Prefer them over the external Obsidian CLI in this setup.
 
 ## Navigation and Search
 
@@ -42,5 +43,8 @@ These commands are already enabled in the local Neovim configuration.
 - `:ObsidianGit [message]` — save modified vault buffers, `git add -A`, then commit and push with a default message like `2026-05-23 22:17:53**obsidian`
 - `:ObsidianBranchNote` — if the current buffer or cwd is inside a git repo, open or create `notes/projects/<repo>/<branch>.md`
 - `:ObsidianRepoNote` — if the current buffer or cwd is inside a git repo, open or create `notes/projects/<repo>/index.md`
+- `:ObsidianKnowledgeBase` — open or create `bases/knowledge.base` with Seeds, Evergreen, and References views
+- `:ObsidianNoteStatus seed|evergreen|archived` — update the current note's knowledge-gardening status
+- `:ObsidianOpenArtifact` — open the file or HTTPS URL in the current note's `artifact` property
 
 When the user is already inside Neovim and asks for an interactive note workflow, prefer these commands over manual file editing where possible.

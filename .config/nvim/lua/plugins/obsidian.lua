@@ -30,6 +30,9 @@ return {
     "ObsidianGit",
     "ObsidianBranchNote",
     "ObsidianRepoNote",
+    "ObsidianKnowledgeBase",
+    "ObsidianNoteStatus",
+    "ObsidianOpenArtifact",
   },
   dependencies = "obsidian-extension",
   opts = {
@@ -42,6 +45,9 @@ return {
     notes_subdir = "notes",
     new_notes_location = "notes_subdir",
     preferred_link_style = "wiki",
+    note_frontmatter_func = function(note)
+      return require("obsidian_extension").note_frontmatter(note)
+    end,
     picker = {
       name = "fzf-lua",
     },
@@ -57,11 +63,11 @@ return {
       alias_format = "%Y-%m-%d",
       default_tags = { "daily-notes" },
     },
-    templates = {
+    templates = vim.fn.isdirectory(vim.fn.expand("~/workspace/obsidian/templates")) == 1 and {
       folder = "templates",
       date_format = "%Y-%m-%d",
       time_format = "%H:%M",
-    },
+    } or nil,
     attachments = {
       img_folder = "assets/imgs",
     },
