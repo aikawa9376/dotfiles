@@ -3,8 +3,35 @@ local M = {}
 local original_open = rawget(vim.ui, "_dotfiles_original_open") or vim.ui.open
 vim.ui["_dotfiles_original_open"] = original_open
 
+local function default_browser_value()
+  local sysname = vim.uv.os_uname().sysname
+
+  if sysname == "Darwin" then
+    return { "open", "-a", "Vivaldi.app" }
+  end
+
+  if sysname == "Windows_NT" then
+    local candidates = { "vivaldi.exe" }
+    for _, root in ipairs({ vim.env.LOCALAPPDATA, vim.env.PROGRAMFILES, vim.env["PROGRAMFILES(X86)"] }) do
+      if root and root ~= "" then
+        candidates[#candidates + 1] = vim.fs.joinpath(root, "Vivaldi", "Application", "vivaldi.exe")
+      end
+    end
+
+    for _, candidate in ipairs(candidates) do
+      if vim.fn.executable(candidate) == 1 then
+        return candidate
+      end
+    end
+
+    return nil
+  end
+
+  return "vivaldi-stable"
+end
+
 local function browser_value()
-  return vim.g.nvim_browser or vim.env.NVIM_BROWSER or "vivaldi-stable"
+  return vim.g.nvim_browser or vim.env.NVIM_BROWSER or default_browser_value()
 end
 
 local function normalize_command(value)
