@@ -72,13 +72,7 @@ local function matching(root)
   for _, entry in pairs(entries) do
     if entry.root == root then result[#result + 1] = entry end
   end
-  table.sort(result, function(a, b)
-    if a.path ~= b.path then return a.path < b.path end
-    local a_line = position(a)
-    local b_line = position(b)
-    if a_line ~= b_line then return a_line < b_line end
-    return a.id < b.id
-  end)
+  table.sort(result, function(a, b) return a.id < b.id end)
   return result
 end
 
@@ -378,9 +372,10 @@ function M.render(opts)
     "",
   }
   local ids = {}
-  for _, entry in ipairs(notes) do
-    local text = entry.text:gsub("\n", "\n  ")
-    lines[#lines + 1] = ref_for(entry) .. " " .. text
+  for index, entry in ipairs(notes) do
+    local prefix = string.format("%d. ", index)
+    local text = entry.text:gsub("\n", "\n" .. string.rep(" ", #prefix))
+    lines[#lines + 1] = prefix .. ref_for(entry) .. " " .. text
     ids[#ids + 1] = entry.id
   end
   return table.concat(lines, "\n"), ids
@@ -419,14 +414,14 @@ end
 
 local function refresh_list(bufnr, root)
   if not vim.api.nvim_buf_is_valid(bufnr) then return end
-  local lines = { "# LazyAgent Notes", "", "<CR> open  K preview  d delete  C clear  q close", "" }
+  local lines = { "# LazyAgent Notes · added order", "", "<CR> open  K preview  d delete  C clear  q close", "" }
   local line_map = {}
-  for _, entry in ipairs(matching(root)) do
+  for index, entry in ipairs(matching(root)) do
     local row = #lines + 1
     local summary = entry.text:match("[^\n]*") or ""
     if vim.fn.strdisplaywidth(summary) > 80 then summary = vim.fn.strcharpart(summary, 0, 77) .. "…" end
     if entry.text:find("\n", 1, true) then summary = summary .. " …" end
-    lines[#lines + 1] = string.format("%s  %s", ref_for(entry):sub(2), summary)
+    lines[#lines + 1] = string.format("%d. %s  %s", index, ref_for(entry):sub(2), summary)
     line_map[row] = entry.id
   end
   if #lines == 4 then lines[#lines + 1] = "No Notes saved for this workspace." end

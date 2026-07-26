@@ -77,6 +77,32 @@ function M.run()
   assert_equal(notes.count({ source_bufnr = bufnr }), 0, "Notes cleared after consume")
   assert_equal(#vim.api.nvim_buf_get_extmarks(bufnr, notes.namespace, 0, -1, {}), 0, "consumed extmark removed")
 
+  local added_first = assert(notes.add({
+    bufnr = bufnr,
+    start_line = 5,
+    end_line = 5,
+    text = "Handle this first.",
+  }))
+  local added_second = assert(notes.add({
+    bufnr = bufnr,
+    start_line = 1,
+    end_line = 1,
+    text = "Handle this second.",
+  }))
+  local ordered, ordered_ids = notes.render({ source_bufnr = bufnr })
+  contains(ordered, "1. @sample.lua:5 Handle this first.", "first added Note is rendered first")
+  contains(ordered, "2. @sample.lua:1 Handle this second.", "second added Note is rendered second")
+  assert_equal(ordered_ids[1], added_first.id, "render metadata preserves first addition")
+  assert_equal(ordered_ids[2], added_second.id, "render metadata preserves second addition")
+
+  local notes_buf = notes.open({ source_bufnr = bufnr })
+  local note_lines = vim.api.nvim_buf_get_lines(notes_buf, 0, -1, false)
+  contains(note_lines[1], "added order", "Notes list identifies its ordering")
+  contains(note_lines[5], "1. sample.lua:5", "Notes list shows first addition number")
+  contains(note_lines[6], "2. sample.lua:1", "Notes list shows second addition number")
+  vim.api.nvim_win_close(vim.api.nvim_get_current_win(), true)
+  assert_equal(notes.consume(ordered_ids), 2, "ordered test Notes removed")
+
   local state = require("lazyagent.logic.state")
   local previous_notes = state.opts.notes
   state.opts.notes = { icon_position = "gutter" }
@@ -130,7 +156,7 @@ function M.run()
   assert_equal(long_note.text, "Explain why this works.\nThen simplify the implementation.", "multiline Note text")
   assert_equal(notes.count({ source_bufnr = bufnr }), 1, "long-form editor saves Note")
   local long_rendered = notes.render({ source_bufnr = bufnr })
-  contains(long_rendered, "Explain why this works.\n  Then simplify the implementation.", "multiline Note expansion")
+  contains(long_rendered, "Explain why this works.\n   Then simplify the implementation.", "multiline Note expansion")
   assert_equal(notes.show_at_cursor({ bufnr = bufnr, lnum = 1 }), true, "focused Note preview")
   local preview_win = vim.api.nvim_get_current_win()
   vim.api.nvim_exec_autocmds("CursorMoved", { buffer = vim.api.nvim_get_current_buf() })
