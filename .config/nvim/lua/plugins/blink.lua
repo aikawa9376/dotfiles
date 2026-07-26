@@ -21,6 +21,26 @@ return {
       local cmp = require('blink.cmp')
       cmp.setup(opts)
 
+      -- TODO: Replace when blink.cmp supports list-wide transforms:
+      -- https://github.com/Saghen/blink.cmp/issues/1222
+      local list = require('blink.cmp.completion.list')
+      local orig_fuzzy = list.fuzzy
+      list.fuzzy = function(ctx, items_by_source)
+        local items = orig_fuzzy(ctx, items_by_source)
+        if ctx.mode ~= 'cmdline' then return items end
+
+        local seen = {}
+        return vim.tbl_filter(function(item)
+          if item.source_id ~= 'cmdline' and item.source_id ~= 'history' then return true end
+
+          local text_edit = type(item.textEdit) == 'table' and item.textEdit or nil
+          local text = text_edit and text_edit.newText or item.insertText or item.label
+          if seen[text] then return false end
+          seen[text] = true
+          return true
+        end, items)
+      end
+
       local orig_is_enabled = cmp.is_enabled
       cmp.is_enabled = function()
         if vim.api.nvim_get_mode().mode == 't' and vim.b.is_fzf_lua_picker then
