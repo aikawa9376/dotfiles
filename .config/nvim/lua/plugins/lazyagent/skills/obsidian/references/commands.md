@@ -5,6 +5,8 @@ Prefer them over the external Obsidian CLI in this setup.
 
 ## Navigation and Search
 
+- `:Obsidian` / `:ObsidianMenu` — open a described picker of commonly useful Obsidian actions
+- `:ObsidianSidebar` — toggle a right sidebar with note metadata, headings, outgoing links, and backlinks; use `<CR>` to open, `R` to refresh, and `q` to close
 - `:ObsidianQuickSwitch` — fuzzy switch to another note
 - `:ObsidianSearch` — search note content
 - `:ObsidianOpen` — open the current note in the Obsidian app
