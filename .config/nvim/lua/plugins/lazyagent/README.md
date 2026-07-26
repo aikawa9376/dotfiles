@@ -259,7 +259,7 @@ agent には `<code>...</code>` だけを返すよう指示します。parser �
 
 Note の位置は専用 extmark で保持するため、保存後に前方の行を編集しても対象範囲に追従します。既定では先頭行の文末にアイコンを表示し、単独行を含む対象範囲全体を `LazyAgentNoteRange` の控えめな背景色で示します。従来の sign column 表示は `notes.icon_position = "gutter"` で利用できます。本文はコード上へ描画せず、カーソルを止めると float preview が開きます。`:LazyAgentNoteShow` なら同じ float をfocusしてスクロールできます。Notes 一覧では `K` で本文を表示します。
 
-agent scratch で `#notes` を入力すると補完と preview が表示され、送信時には `@path:line` / `@path:start-end` 形式の実指示へ展開されます。preview だけでは消えず、送信が受理されたときに展開対象の Notes が消えます。Notes は workspace ごとの Neovim session 内データで、ファイルには書き込みません。
+agent scratch で `#notes` を入力すると補完と preview が表示され、送信時には追加順の番号と `@path:line` / `@path:start-end` 形式の実指示へ展開されます。ファイルや行の位置にかかわらず追加順を維持するため、複数 Note を依頼の流れとして並べられます。`:LazyAgentNotes` の一覧も同じ追加順と番号を表示します。preview だけでは消えず、送信が受理されたときに展開対象の Notes が消えます。Notes は workspace ごとの Neovim session 内データで、ファイルには書き込みません。
 
 ## ACP mode
 
