@@ -1,8 +1,8 @@
 return {
   "epwalsh/obsidian.nvim",
   event = {
-    "BufReadPre " .. vim.fn.expand("~/workspace/obsidian") .. "/**/*.md",
-    "BufNewFile " .. vim.fn.expand("~/workspace/obsidian") .. "/**/*.md",
+    "BufReadPre " .. vim.fn.expand("~/gdrive/share/obsidian/") .. "/**/*.md",
+    "BufNewFile " .. vim.fn.expand("~/gdrive/share/obsidian/") .. "/**/*.md",
   },
   cmd = {
     "ObsidianOpen",
@@ -33,13 +33,16 @@ return {
     "ObsidianKnowledgeBase",
     "ObsidianNoteStatus",
     "ObsidianOpenArtifact",
+    "Obsidian",
+    "ObsidianMenu",
+    "ObsidianSidebar",
   },
   dependencies = "obsidian-extension",
   opts = {
     workspaces = {
       {
         name = "main",
-        path = vim.fn.expand("~/workspace/obsidian"),
+        path = vim.fn.expand("~/gdrive/share/obsidian/"),
       },
     },
     notes_subdir = "notes",
@@ -63,7 +66,7 @@ return {
       alias_format = "%Y-%m-%d",
       default_tags = { "daily-notes" },
     },
-    templates = vim.fn.isdirectory(vim.fn.expand("~/workspace/obsidian/templates")) == 1 and {
+    templates = vim.fn.isdirectory(vim.fn.expand("~/gdrive/share/obsidian/templates")) == 1 and {
       folder = "templates",
       date_format = "%Y-%m-%d",
       time_format = "%H:%M",
