@@ -4,13 +4,13 @@ Use these conventions when reading or writing notes in this environment.
 
 ## Layout
 
-- Vault root: `~/workspace/obsidian`
-- Permanent notes: `~/workspace/obsidian/notes`
-- Daily notes: `~/workspace/obsidian/daily`
-- Templates: `~/workspace/obsidian/templates`
-- Image attachments: `~/workspace/obsidian/assets/imgs`
-- HTML artifacts: `~/workspace/obsidian/assets/html`
-- Bases: `~/workspace/obsidian/bases`
+- Vault root: `VAULT_ROOT`, resolved from the current Neovim Obsidian workspace as instructed in `SKILL.md`
+- Permanent notes: `$VAULT_ROOT/notes`
+- Daily notes: `$VAULT_ROOT/daily`
+- Templates: `$VAULT_ROOT/templates`
+- Image attachments: `$VAULT_ROOT/assets/imgs`
+- HTML artifacts: `$VAULT_ROOT/assets/html`
+- Bases: `$VAULT_ROOT/bases`
 
 ## Note Shape
 
