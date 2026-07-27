@@ -5,6 +5,7 @@ function M.note_frontmatter(note)
 end
 
 function M.setup()
+  require("obsidian_extension.features.properties").setup()
   require("obsidian_extension.features.commands").setup()
   require("obsidian_extension.features.knowledge").setup()
   require("obsidian_extension.features.sidebar").setup()
