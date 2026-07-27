@@ -141,6 +141,20 @@ function M.register_scratch_keymaps(bufnr, opts)
     return nil
   end
 
+  local function clear_acp_thread_draft(target_pane)
+    if not preserve_scratch
+      or not backend_mod
+      or type(backend_mod.get_runtime_snapshot) ~= "function"
+      or type(backend_mod.set_thread_draft) ~= "function"
+    then
+      return
+    end
+    local runtime = backend_mod.get_runtime_snapshot(target_pane)
+    if runtime and runtime.acp_thread_id then
+      backend_mod.set_thread_draft(runtime.acp_thread_id, "")
+    end
+  end
+
   local function send_key_to_pane(key, insert_wrap)
     local _, resolved_pane, _, resolved_mod = resolve_target()
     if not resolved_pane then
@@ -212,6 +226,7 @@ function M.register_scratch_keymaps(bufnr, opts)
       end
       require("lazyagent.notes").consume_meta(transform_meta)
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
+      clear_acp_thread_draft(pane)
 
       -- Start monitoring for completion (spinner/loader) if appropriate
       local status_logic = require("lazyagent.logic.status")
