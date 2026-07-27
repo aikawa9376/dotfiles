@@ -1,11 +1,26 @@
 ---
 name: obsidian
-description: Capture, organize, retrieve, and visualize knowledge in the local Obsidian vault at ~/workspace/obsidian. Use for daily or permanent notes, agent-result capture, web articles, paired Markdown and HTML reports, Obsidian Markdown, properties, wiki links, Bases dashboards, JSON Canvas maps, note refactors, and interactive obsidian.nvim workflows.
+description: Capture, organize, retrieve, and visualize knowledge in the locally configured Obsidian vault. Use for daily or permanent notes, agent-result capture, web articles, paired Markdown and HTML reports, Obsidian Markdown, properties, wiki links, Bases dashboards, JSON Canvas maps, note refactors, and interactive obsidian.nvim workflows.
 ---
 
 # obsidian
 
 ## Instructions
+
+Before any vault operation, resolve `scripts/resolve_vault.lua` relative to the
+directory containing this `SKILL.md`, run it with Neovim, and use its output as
+`VAULT_ROOT`:
+
+```sh
+nvim --headless --clean -u NONE -l <skill-dir>/scripts/resolve_vault.lua
+```
+
+The script reads the current `opts.workspaces` value from
+`${XDG_CONFIG_HOME:-~/.config}/nvim/lua/plugins/obsidian.lua`, preferring the
+workspace named `main`. Resolve the vault on every task; do not copy its
+current value into this skill or fall back to an old hard-coded path. If
+resolution fails, inspect that Neovim configuration and ask the user rather
+than guessing.
 
 Before creating a new note, search the vault for an existing note on the same topic and prefer linking over duplicating.
 
@@ -22,7 +37,7 @@ Route the task to the smallest relevant reference:
 
 ### Vault Conventions
 
-- Vault path: `~/workspace/obsidian`
+- Vault path: the dynamically resolved `VAULT_ROOT`
 - Regular notes: `notes/`
 - Daily notes: `daily/`
 - Templates: `templates/`
