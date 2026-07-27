@@ -8,6 +8,22 @@ local scratch_bufnrs = {}
 local float_autocmd_group_id = nil
 local float_original_opts = nil
 local float_is_focused = false
+local window_on_close = nil
+
+local function remember_on_close(opts)
+  window_on_close = opts and type(opts.on_close) == "function" and opts.on_close or nil
+end
+
+local function run_on_close(extra_callback)
+  local callback = window_on_close
+  window_on_close = nil
+  if callback then
+    pcall(callback)
+  end
+  if type(extra_callback) == "function" and extra_callback ~= callback then
+    pcall(extra_callback)
+  end
+end
 
 local function buffer_var(bufnr, name)
   local ok, value = pcall(vim.api.nvim_buf_get_var, bufnr, name)
@@ -300,6 +316,7 @@ end
 function M.open_float(bufnr, opts)
   -- Ensure we always get a valid buffer and canonical opts table.
   bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
+  remember_on_close(opts)
   -- Record the previously focused normal window so we can restore files opened here.
   pcall(function()
     local prev_win = resolve_parent_window(opts) or vim.api.nvim_get_current_win()
@@ -387,9 +404,7 @@ function M.open_float(bufnr, opts)
     end
     float_original_opts = nil
     float_is_focused = false
-    if opts and type(opts.on_close) == "function" then
-      pcall(opts.on_close)
-    end
+    run_on_close()
   end
 
   local function shrink_float()
@@ -470,6 +485,7 @@ end
 function M.open_vsplit(bufnr, opts)
   -- Ensure we always get a valid buffer and canonical opts table.
   bufnr, opts = ensure_scratch_buffer(bufnr, opts or {})
+  remember_on_close(opts)
   pcall(function()
     local prev_win = resolve_parent_window(opts) or vim.api.nvim_get_current_win()
     pcall(function() vim.b[bufnr].lazyagent_prev_win = prev_win end)
@@ -567,9 +583,7 @@ function M.close(opts)
   end
   float_original_opts = nil
   float_is_focused = false
-  if opts and type(opts.on_close) == "function" then
-    pcall(opts.on_close)
-  end
+  run_on_close(opts.on_close)
   return true
 end
 

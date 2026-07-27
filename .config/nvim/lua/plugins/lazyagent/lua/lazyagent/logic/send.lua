@@ -13,6 +13,21 @@ local util = require("lazyagent.util")
 local config = require("lazyagent.logic.config")
 local status = require("lazyagent.logic.status")
 
+local function clear_acp_thread_draft(backend_name, backend_mod, pane_id)
+  if not backend_name
+    or not backend_name:match("acp")
+    or not backend_mod
+    or type(backend_mod.get_runtime_snapshot) ~= "function"
+    or type(backend_mod.set_thread_draft) ~= "function"
+  then
+    return
+  end
+  local runtime = backend_mod.get_runtime_snapshot(pane_id)
+  if runtime and runtime.acp_thread_id then
+    backend_mod.set_thread_draft(runtime.acp_thread_id, "")
+  end
+end
+
 local function current_context_agent(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
@@ -235,7 +250,7 @@ function M.send_buffer_and_clear(agent_name, bufnr)
       end
       -- Save scratch content to cache on send
       cache_logic.write_scratch_to_cache(bufnr)
-      local _, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
+      local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(agent_name, agent_cfg)
 
       if not text or #text == 0 then
         backend_mod.send_keys(pane_id, { "Enter" })
@@ -252,6 +267,7 @@ function M.send_buffer_and_clear(agent_name, bufnr)
       end
       require("lazyagent.notes").consume_meta(transform_meta)
       pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
+      clear_acp_thread_draft(backend_name, backend_mod, pane_id)
 
       -- Start status monitor (spinner in statusline while agent is thinking)
       -- We start it here locally; agents using MCP will subsequently call notify_done when finished.
