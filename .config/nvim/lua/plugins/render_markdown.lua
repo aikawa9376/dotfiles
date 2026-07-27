@@ -59,7 +59,12 @@ return {
           if ft == "lazyagent" or ft == "lazyagent_acp" then
             return require("lazyagent.render_markdown").parse(ctx)
           end
-          return require("render-markdown.handler.markdown").parse(ctx)
+          local marks = require("render-markdown.handler.markdown").parse(ctx)
+          local ok, properties = pcall(require, "obsidian_extension.features.properties")
+          if ok and type(properties.filter_render_marks) == "function" then
+            return properties.filter_render_marks(bufnr, marks)
+          end
+          return marks
         end,
       },
     },
