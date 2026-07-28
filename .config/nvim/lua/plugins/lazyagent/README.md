@@ -290,13 +290,17 @@ JSON を採用したのは、Neovim 標準の `vim.json` だけで厳密に検�
 
 最初の引数が既知の team ID なら、その team を使います。team ID だけ、または引数なしなら、通常の interactive agent と同じく lead の ACP buffer と入力 scratch window を開きます。scratch から最初に送る依頼へ team role instructions を一度だけ自動添付します。team ID に続けて依頼を書いた場合は従来どおり直接送信します。既知の team ID で始まらない場合は、引数全体を既定 team への依頼として扱います。複数チームがあり team を省略し、保存済み選択も `default_team` も無い場合は selector を表示します。active team の途中切替は行わず、先に `:LazyAgentTeamStop` が必要です。
 
-active team で引数なしの `:LazyAgentTeam` を再実行すると、既存 lead の ACP buffer と scratch を再表示します。依頼本文を渡した場合は lead への follow-up になります。部下は lead または manager が委譲した時点で遅延起動し、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使い、lead だけを自動表示し、部下は background session として起動します。Cockpit には team ID・role・status と worktree metadata が表示されます。
+active team で引数なしの `:LazyAgentTeam` を再実行すると、既存 lead の ACP buffer と scratch を再表示します。依頼本文を渡した場合は lead への follow-up になります。team 起動時に全 member の ACP session を並行起動し、lead だけを自動表示して部下は hidden background session にします。委譲時は起動済みの直属 member へ依頼を送り、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使います。Cockpit には team ID・role・status と worktree metadata が表示されます。
+
+active team 中は、対象を省略した `LazyAgentToggle` / `LazyAgentScratch` と global send key を常に lead session へ送ります。部下を直接操作する場合だけ Cockpit または完全な session key で明示します。
 
 worktree 有効時は role ごとに既存の managed worktree API で作成し、その directory を session root にします。`TeamStop` は session を閉じますが worktree は削除しません。後から Cockpit の既存 cleanup 操作で dirty 状態を確認しながら整理できます。
 
 Teams は ACP を会話・session 実行に使い、既存の Neovim 内 MCP server を委譲・報告・状態確認の制御面にだけ併用します。下位 agent が manager へ非同期に結果を返すための共通 control plane として現状は MCP が必要で、`mcp_mode = true` と各 member の ACP 対応を要求します。通常の ACP session と project skills / prompts は MCP server なしでも利用できます。
 
 MCP server は editor 操作 tool も公開するため、LAN 共有が明確に必要な場合を除き `mcp_host = "127.0.0.1"` を推奨します。Teams の role credential は team instance ごとに生成し、status API には返しません。
+
+Team sessionでは`teams.mcp_auto_approve = { lazyagent = true }`を既定とし、`lazyagent` MCP serverのtool承認だけをUIなしで通します。承認は呼び出しごとにLazyAgentが応答するため、provider側のglobal approval設定は変更しません。通常のACP session、別名のMCP server、通常のpermissionとuser inputは対象外です。無効化する場合は`teams.mcp_auto_approve.lazyagent = false`を指定します。
 
 ## Edit selected blocks
 
@@ -554,11 +558,11 @@ transcriptの`ga` → `Search thread`はuser/assistant message、thinking、runt
 
 user/assistant blockの`ga` → `Copy message`は本文だけをcopyします。`Export thread Markdown`はruntime compactionされたmessage bodyとtool content/raw refsも展開し、指定pathへ完全なthread Markdownを書き出します。
 
-manual permissionとauthentication elicitationはvisual notificationへ接続されます。turn completionは`acp.notifications.completion = true`で有効化できます（既定は`false`）。`acp.notifications.sound_command = { ... }`を設定すると有効なeventで非同期sound commandを実行でき、eventごとに`permission` / `elicitation` / `completion`で切り替えられます。
+manual permission・authentication・elicitationの選択UIは全ACP sessionで1本のFIFO queueを共有します。複数agentから同時に入力を求められても、現在の選択を回答またはcancelしてから次を表示します。manual permissionとauthentication elicitationはvisual notificationへ接続されます。turn completionは`acp.notifications.completion = true`で有効化できます（既定は`false`）。`acp.notifications.sound_command = { ... }`を設定すると有効なeventで非同期sound commandを実行でき、eventごとに`permission` / `elicitation` / `completion`で切り替えられます。
 
 `:LazyAgentACPCockpit`はLazyAgentが保存したthreadをproject/worktree pathでgroup化したread-only bufferを開きます。Cockpitを開いたbufferのworkspace/Git root（なければNeovimのcwd）に一致するgroupを先頭へ表示します。これはproviderのnative resume候補ではなく、`running`は現在のprocess、`idle`はlive processの入力待ち、`external`は別Neovim所有のlive process、`closed`は再開可能なtranscript、`archived`は保管済みの履歴です。live threadは各project内の先頭へ並び、現在scratch popupで表示中のthreadには`●`、待機promptがあるthreadには`queue:N`を表示します。thread cardはstatus列をコンパクトに揃え、provider/model/status/unread/unique changed filesの後ろにproviderが返すsession title、またはtranscriptの最初のpromptを最大48表示列で省略して表示します。promptを一度も送らず閉じたthreadは保存せず、過去の空threadもCockpit refresh時にstoreとtranscriptから削除します。
 
-Cockpitの`i`は選択中のlive thread専用scratch popupを開き、既存のscratch keymapとmultiline/context入力をそのまま使えます。running中の送信はprompt queueへ追加されます。`[a` / `]a`でlive thread間を移動し、下部previewには選択threadの最新Assistant応答を表示します。`<CR>`は最新Assistant応答とread-only transcript mirrorを切り替え、live threadのmirrorでは表示bufferを定期更新し、closed/external threadでは保存済みtranscriptを表示します。この操作はagentのroot、session、Neovim context、元bufferのfollow状態を変更しません。`?`はカーソル位置に全操作のコンパクトなaction menuを開き、選択した操作をそのまま実行できます。`P`でpreviewを切り替え、`o`でopen/resume、`v`でraw transcriptを`markdown`のread-only tabとして表示します。`closed` threadの再開は保存済みworkspaceをcwd/rootとして使い、保存source pathまたは同workspace内のbufferへNeovim contextを結び直します。別Neovim所有またはruntimeから切断されたactive threadは二重起動を避けるため`o`を拒否します。
+Cockpitの`i`は選択中のlive thread専用scratch popupを開き、既存のscratch keymapとmultiline/context入力をそのまま使えます。running中の送信はprompt queueへ追加されます。`[a` / `]a`でlive thread間を移動し、下部previewには選択threadの最新Assistant応答を表示します。`<CR>`は最新Assistant応答とread-only transcript mirrorを切り替え、live threadのmirrorでは表示bufferを定期更新し、closed/external threadでは保存済みtranscriptを表示します。この操作はagentのroot、session、Neovim context、元bufferのfollow状態を変更しません。`?`はカーソル位置に全操作のコンパクトなaction menuを開き、選択した操作をそのまま実行できます。`P`でpreviewを切り替え、`o`はproviderやleadの選択UIを経由せずカーソル位置のlive agentを直接開き、停止済みthreadならそのthreadを再開します。`v`でraw transcriptを`markdown`のread-only tabとして表示します。`closed` threadの再開は保存済みworkspaceをcwd/rootとして使い、保存source pathまたは同workspace内のbufferへNeovim contextを結び直します。別Neovim所有またはruntimeから切断されたactive threadは二重起動を避けるため`o`を拒否します。
 
 active threadはruntime snapshotとjoinされ、statusをrunning / waiting / permission / idle / disconnectedへ正規化し、current modelとcumulative token/costもcardへ表示します。
 
