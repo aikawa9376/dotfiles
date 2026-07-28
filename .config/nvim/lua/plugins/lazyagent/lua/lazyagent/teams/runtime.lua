@@ -56,6 +56,18 @@ local function member_summary(team, role_id)
   return #reports > 0 and table.concat(reports, ", ") or "none"
 end
 
+local function pending_reports(team, manager_id)
+  local pending = {}
+  for _, child_id in ipairs(team.config.members[manager_id].reports or {}) do
+    local child = team.members[child_id]
+    if child and child.assigned_by == manager_id and child.status ~= "reported" then
+      pending[#pending + 1] = child_id
+    end
+  end
+  table.sort(pending)
+  return pending
+end
+
 local function role_prompt(team, role_id)
   local member = team.config.members[role_id]
   local lines = {
@@ -77,6 +89,9 @@ local function role_prompt(team, role_id)
   if #member.reports > 0 then
     lines[#lines + 1] = "You may delegate only to your direct reports with the `team_delegate` MCP tool."
     lines[#lines + 1] = "Plan work, give each report a bounded assignment, and integrate their reports before presenting a conclusion."
+    lines[#lines + 1] = "Delegation is asynchronous: after dispatching the needed assignments, end the current turn and become idle."
+    lines[#lines + 1] = "Do not poll `team_status`, sleep, wait, or repeatedly check progress; each `team_report` will wake you as a new prompt."
+    lines[#lines + 1] = "If a report says other delegated reports are still pending, end that turn too. Integrate only after the final report arrives."
   else
     lines[#lines + 1] = "You have no direct reports; do not attempt further delegation."
   end
@@ -370,12 +385,15 @@ function M.delegate(params)
   if not ok then return nil, launch_err end
   team.members[target].assigned_by = from
   team.members[target].assignment = assignment
+  local pending = pending_reports(team, from)
   return {
     accepted = true,
     team = team.config.name,
     from = from,
     to = target,
     status = team.members[target].status,
+    pending_reports = pending,
+    next_action = "Finish any remaining delegations, then end this turn and wait for team_report prompts. Do not poll.",
   }
 end
 
@@ -398,15 +416,25 @@ function M.report(params)
   team.members[from].result = result
 
   local manager = member.manager
-  local message = table.concat({
+  local pending = pending_reports(team, manager)
+  local message_lines = {
     string.format("# Team report from %s (%s)", from, member.role),
     result,
     "",
-    "Integrate this report with the other work. Delegate follow-up only if needed.",
-  }, "\n")
+  }
+  if #pending > 0 then
+    message_lines[#message_lines + 1] = "Still waiting for delegated reports from: " .. table.concat(pending, ", ") .. "."
+    message_lines[#message_lines + 1] =
+      "Record this result, then end the turn and remain idle. Do not poll; the remaining reports will arrive as new prompts."
+  else
+    message_lines[#message_lines + 1] =
+      "All delegated direct reports have now reported. Integrate their results and continue the assignment."
+    message_lines[#message_lines + 1] = "Delegate follow-up only if needed."
+  end
+  local message = table.concat(message_lines, "\n")
   local ok, send_err = send_to_member(team, manager, message)
   if not ok then return nil, send_err end
-  return { accepted = true, from = from, to = manager }
+  return { accepted = true, from = from, to = manager, pending_reports = pending }
 end
 
 function M.status()

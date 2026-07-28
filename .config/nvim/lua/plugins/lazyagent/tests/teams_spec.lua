@@ -194,6 +194,7 @@ function M.run()
   local original_backend = backend_logic.resolve_backend_for_agent
   local original_create = Worktree.create
   local captured_cfg
+  local submitted_prompts = {}
   state.opts = vim.tbl_deep_extend("force", vim.deepcopy(previous_opts or {}), {
     interactive_agents = {
       EngineerAgent = {
@@ -229,7 +230,10 @@ function M.run()
       get_thread = function() return nil end,
       create_thread = function(attributes) return attributes end,
       get_runtime_snapshot = function() return { acp_mcp_server_count = 1 } end,
-      paste_and_submit = function() return true end,
+      paste_and_submit = function(_, text)
+        submitted_prompts[#submitted_prompts + 1] = text
+        return true
+      end,
     }
   end
   local opened_cfg
@@ -246,6 +250,8 @@ function M.run()
     "lead thread is reserved before the ACP session opens")
   assert(opened_cfg.acp_session_instructions:find("Your role: CTO", 1, true),
     "lead role instructions wait for the first scratch submit")
+  assert(opened_cfg.acp_session_instructions:find("Do not poll `team_status`", 1, true),
+    "manager role instructions require event-driven report waiting")
 
   local delegated, delegate_err = runtime.delegate({
     team_id = "team-1",
@@ -255,6 +261,8 @@ function M.run()
     assignment = "Implement the scoped change",
   })
   assert(delegated, delegate_err)
+  assert_equal(delegated.pending_reports[1], "engineer", "delegate response identifies pending reports")
+  assert(delegated.next_action:find("Do not poll", 1, true), "delegate response tells the manager to become idle")
   assert_equal(captured_cfg.acp.initial_model, "fast-model", "role model reaches ACP config")
   assert_equal(captured_cfg.acp.initial_effort, "medium", "role reasoning effort reaches ACP config")
   assert(captured_cfg.acp_session_instructions:find("Your role: Engineer", 1, true),
@@ -263,6 +271,29 @@ function M.run()
   assert_equal(captured_cfg.stay_hidden, true, "non-lead ACP view stays hidden")
   assert_equal(captured_cfg.acp_thread_metadata.lazyagent_team.role_id, "engineer", "team metadata reaches thread")
   assert_equal(captured_cfg.acp_thread_metadata.worktree_path, "/tmp/engineer-worktree", "worktree metadata reaches thread")
+
+  state.team_runtime.members.architect.assigned_by = "cto"
+  state.team_runtime.members.architect.status = "running"
+  local first_report, first_report_err = runtime.report({
+    team_id = "team-1",
+    ["from"] = "engineer",
+    token = "engineer-token",
+    result = "Implementation complete",
+  })
+  assert(first_report, first_report_err)
+  assert_equal(first_report.pending_reports[1], "architect", "manager is told which delegated report remains")
+  assert(submitted_prompts[#submitted_prompts]:find("end the turn and remain idle", 1, true),
+    "partial report wakes the manager without starting a polling loop")
+  local final_report, final_report_err = runtime.report({
+    team_id = "team-1",
+    ["from"] = "architect",
+    token = "architect-token",
+    result = "Review complete",
+  })
+  assert(final_report, final_report_err)
+  assert_equal(#final_report.pending_reports, 0, "final report clears the manager wait set")
+  assert(submitted_prompts[#submitted_prompts]:find("All delegated direct reports have now reported", 1, true),
+    "final report tells the manager to integrate results")
 
   local eager_dir = vim.fn.tempname()
   vim.fn.mkdir(eager_dir .. "/.lazyagent", "p")

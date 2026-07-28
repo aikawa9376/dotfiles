@@ -294,6 +294,8 @@ active team で引数なしの `:LazyAgentTeam` を再実行すると、既存 l
 
 active team 中は、対象を省略した `LazyAgentToggle` / `LazyAgentScratch` と global send key を常に lead session へ送ります。部下を直接操作する場合だけ Cockpit または完全な session key で明示します。
 
+managerは必要な`team_delegate`を送ったら現在turnを終了してidleになります。進捗をpollせず、`team_report`がmanagerのprompt queueへ入った時だけ新しいturnで再開します。未報告の委譲先が残る途中reportでは再びidleへ戻り、最後のreportで結果を統合します。
+
 worktree 有効時は role ごとに既存の managed worktree API で作成し、その directory を session root にします。`TeamStop` は session を閉じますが worktree は削除しません。後から Cockpit の既存 cleanup 操作で dirty 状態を確認しながら整理できます。
 
 Teams は ACP を会話・session 実行に使い、既存の Neovim 内 MCP server を委譲・報告・状態確認の制御面にだけ併用します。下位 agent が manager へ非同期に結果を返すための共通 control plane として現状は MCP が必要で、`mcp_mode = true` と各 member の ACP 対応を要求します。通常の ACP session と project skills / prompts は MCP server なしでも利用できます。
