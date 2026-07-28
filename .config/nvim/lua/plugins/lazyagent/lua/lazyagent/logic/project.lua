@@ -57,31 +57,46 @@ function M.instructions(start_path)
   }
 end
 
-function M.apply_instructions(text, tracker, start_path)
+function M.apply_instructions(text, tracker, start_path, session_instructions)
   text = tostring(text or "")
-  if type(tracker) == "table" and tracker.project_instructions_applied == true then
+  local project_applied = type(tracker) == "table" and tracker.project_instructions_applied == true
+  local session_applied = type(tracker) == "table" and tracker.session_instructions_applied == true
+  session_instructions = vim.trim(tostring(session_instructions or ""))
+  if project_applied and (session_instructions == "" or session_applied) then
     return text
   end
   local source = type(tracker) == "table" and tracker.project_instructions_root or nil
-  local instructions, err = M.instructions(source or start_path)
+  local instructions, err
+  if not project_applied then instructions, err = M.instructions(source or start_path) end
   if err then return nil, err end
-  if not instructions then return text end
-  if type(tracker) == "table" then
-    tracker.project_instructions_applied = true
-    tracker.project_instructions_path = instructions.path
-    tracker.project_instructions_hash = instructions.hash
+  local include_session = session_instructions ~= "" and not session_applied
+  if not instructions and not include_session then return text end
+  local lines = {}
+  if include_session then
+    lines[#lines + 1] = session_instructions
+    if type(tracker) == "table" then tracker.session_instructions_applied = true end
   end
-  return table.concat({
-    "# LazyAgent project instructions",
-    "",
-    "The following instructions come from " .. instructions.path .. " and apply to this project session.",
-    "",
-    instructions.content,
-    "",
-    "# User request",
-    "",
-    text,
-  }, "\n")
+  if instructions then
+    if #lines > 0 then lines[#lines + 1] = "" end
+    lines[#lines + 1] = "# LazyAgent project instructions"
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "The following instructions come from " .. instructions.path
+      .. " and apply to this project session."
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = instructions.content
+  end
+  if type(tracker) == "table" then
+    if instructions then
+      tracker.project_instructions_applied = true
+      tracker.project_instructions_path = instructions.path
+      tracker.project_instructions_hash = instructions.hash
+    end
+  end
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = "# User request"
+  lines[#lines + 1] = ""
+  lines[#lines + 1] = text
+  return table.concat(lines, "\n")
 end
 
 function M.list_prompts(start_path)

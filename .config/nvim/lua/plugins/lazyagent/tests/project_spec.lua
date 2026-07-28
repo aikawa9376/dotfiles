@@ -36,6 +36,19 @@ function M.run()
     "instructions are applied only once per session")
   assert(tracker.project_instructions_applied, "session tracks instruction injection")
 
+  local role_tracker = {}
+  local role_instructed = assert(project.apply_instructions(
+    "Plan the change.",
+    role_tracker,
+    root,
+    "# Team role\nYou are the lead."
+  ))
+  assert(role_instructed:find("# Team role", 1, true), "session instructions are included")
+  assert(role_instructed:find("# LazyAgent project instructions", 1, true), "project instructions follow role")
+  assert(role_instructed:find("# User request\n\nPlan the change.", 1, true), "request follows all instructions")
+  assert_equal(project.apply_instructions("Follow up.", role_tracker, root, "# Team role"),
+    "Follow up.", "session and project instructions are both applied once")
+
   local expanded, err, matched = project.expand_prompt("/prompt review check parser.lua", root)
   assert(matched and not err, err)
   assert(expanded:find("Review this request:", 1, true), "prompt body")

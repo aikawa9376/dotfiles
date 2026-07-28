@@ -98,6 +98,7 @@ function M.setup(deps)
       cwd = root_dir,
       root_dir = root_dir,
       project_instructions_root = agent_cfg and agent_cfg.project_instructions_root or root_dir,
+      session_instructions = agent_cfg and agent_cfg.acp_session_instructions or nil,
       editor = {
         instance_id = state.editor_instance_id,
         owner_pid = vim.fn.getpid(),
@@ -665,6 +666,9 @@ function M.setup(deps)
             vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, vim.split(initial_input, "\n"))
           end
         end)
+      end
+      if type(opts.on_ready) == "function" then
+        opts.on_ready(pane_id, runtime_agent, bufnr)
       end
     end)
   end

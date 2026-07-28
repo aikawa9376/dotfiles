@@ -261,9 +261,9 @@ JSON を採用したのは、Neovim 標準の `vim.json` だけで厳密に検�
 :LazyAgentTeamStop
 ```
 
-最初の引数が既知の team ID なら、その team を使います。team ID だけなら依頼入力を表示し、続けて依頼を書けば直接起動します。既知の team ID で始まらない場合は、従来どおり引数全体を既定 team への依頼として扱います。複数チームがあり team を省略し、保存済み選択も `default_team` も無い場合は selector を表示します。active team の途中切替は行わず、先に `:LazyAgentTeamStop` が必要です。
+最初の引数が既知の team ID なら、その team を使います。team ID だけ、または引数なしなら、通常の interactive agent と同じく lead の ACP buffer と入力 scratch window を開きます。scratch から最初に送る依頼へ team role instructions を一度だけ自動添付します。team ID に続けて依頼を書いた場合は従来どおり直接送信します。既知の team ID で始まらない場合は、引数全体を既定 team への依頼として扱います。複数チームがあり team を省略し、保存済み選択も `default_team` も無い場合は selector を表示します。active team の途中切替は行わず、先に `:LazyAgentTeamStop` が必要です。
 
-引数なしの `:LazyAgentTeam` は依頼入力を表示します。2回目以降は active team の lead への follow-up になります。部下は lead または manager が委譲した時点で遅延起動し、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使い、lead だけを自動表示し、部下は background session として起動します。Cockpit には team ID・role・status と worktree metadata が表示されます。
+active team で引数なしの `:LazyAgentTeam` を再実行すると、既存 lead の ACP buffer と scratch を再表示します。依頼本文を渡した場合は lead への follow-up になります。部下は lead または manager が委譲した時点で遅延起動し、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使い、lead だけを自動表示し、部下は background session として起動します。Cockpit には team ID・role・status と worktree metadata が表示されます。
 
 worktree 有効時は role ごとに既存の managed worktree API で作成し、その directory を session root にします。`TeamStop` は session を閉じますが worktree は削除しません。後から Cockpit の既存 cleanup 操作で dirty 状態を確認しながら整理できます。
 
