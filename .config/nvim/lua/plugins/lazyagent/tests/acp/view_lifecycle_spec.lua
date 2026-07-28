@@ -78,6 +78,47 @@ function M.run()
   end
   vim.fn.writefile(transcript_lines, transcript_path)
 
+  local background_pane_id
+  local window_count_before = #vim.api.nvim_list_wins()
+  view.create_pane({
+    transcript_path = transcript_path,
+    size = 8,
+    is_vertical = false,
+    opts = { hidden = true },
+    acp = {
+      agent_name = "background-lifecycle-test",
+      source_winid = source_winid,
+      source_bufnr = source_bufnr,
+    },
+  }, function(created_pane_id)
+    background_pane_id = created_pane_id
+  end)
+  assert(vim.wait(1000, function() return background_pane_id ~= nil end, 10), "background view should be created")
+  local background = view.debug_snapshot()
+  assert_equal(background.config_count, 1, "background view keeps pane configuration")
+  assert_equal(background.buffer_count, 0, "background view creates no transcript buffer")
+  assert_equal(#vim.api.nvim_list_wins(), window_count_before, "background view creates no window")
+  local background_opened
+  view.join_pane(background_pane_id, 8, false, function(ok)
+    background_opened = ok
+  end, {
+    pane_id = background_pane_id,
+    agent_name = "background-lifecycle-test",
+    transcript_path = transcript_path,
+    agent_cfg = { source_bufnr = source_bufnr },
+  })
+  assert(vim.wait(1000, function() return background_opened ~= nil end, 10),
+    "background view should open on demand")
+  assert_equal(background_opened, true, "background view opens successfully")
+  local opened_background = view.debug_snapshot()
+  assert_equal(opened_background.buffer_count, 1, "opening background view creates its transcript buffer")
+  assert(opened_background.window_count >= 1, "opening background view creates its window")
+  view.kill_pane(background_pane_id, {
+    pane_id = background_pane_id,
+    transcript_path = transcript_path,
+  })
+  render_attach_count = 0
+
   view.create_pane({
     transcript_path = transcript_path,
     size = 8,

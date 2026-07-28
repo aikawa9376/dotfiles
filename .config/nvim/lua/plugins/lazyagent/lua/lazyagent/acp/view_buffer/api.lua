@@ -83,13 +83,17 @@ function M.attach(api, ctx)
     local pane_id = allocate_pane_id("buffer-acp")
     local agent_name = (args.acp or {}).agent_name or "agent"
     local switch_view = args.acp and args.acp.reuse_view or nil
-    local bufnr = adopt_transcript_buffer(
-      pane_id,
-      agent_name,
-      args.transcript_path,
-      switch_view,
-      args.acp and args.acp.source_bufnr or nil
-    )
+    local hidden = args.opts and args.opts.hidden == true
+    local bufnr = nil
+    if not hidden then
+      bufnr = adopt_transcript_buffer(
+        pane_id,
+        agent_name,
+        args.transcript_path,
+        switch_view,
+        args.acp and args.acp.source_bufnr or nil
+      )
+    end
     local reused_view = bufnr ~= nil
 
     local base_pane_config = reused_view and type(switch_view) == "table" and switch_view.pane_config or nil
@@ -113,6 +117,18 @@ function M.attach(api, ctx)
       render_markdown_max_lines = args.acp and args.acp.render_markdown_max_lines or nil,
       transcript_compaction = vim.deepcopy(args.acp and args.acp.transcript_compaction or {}),
     })
+
+    if hidden then
+      if on_split then
+        vim.schedule(function()
+          on_split(pane_id, {
+            source_winid = anchor_win,
+            background = true,
+          })
+        end)
+      end
+      return
+    end
 
     local win = bufnr and first_visible_window(bufnr) or nil
     if reused_view and win then
