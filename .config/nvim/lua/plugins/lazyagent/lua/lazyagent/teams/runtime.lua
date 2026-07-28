@@ -168,6 +168,7 @@ local function build_member_config(team, role_id)
     acp_thread_metadata = thread_metadata,
     root_dir = root_dir,
     cwd = root_dir,
+    project_instructions_root = team.config.root_dir,
     stay_hidden = role_id ~= team.config.lead,
     lazyagent_team = {
       id = team.id,

@@ -2,6 +2,7 @@ local M = {}
 local DEFAULT_SUBMIT_DELAY_MS = 600
 local DEFAULT_SUBMIT_RETRY = 1
 local util = require("lazyagent.util")
+local state = require("lazyagent.logic.state")
 
 -- Minimal builtin backend implementation using Neovim terminals/buffers:
 -- pane_id will be represented as the buffer number string for terminal buffers,
@@ -20,6 +21,23 @@ local function term_job_for_buf(bufnr)
     return vim.b[bufnr].terminal_job_id
   end
   return nil
+end
+
+local function apply_project_instructions(target_pane, text)
+  if tostring(text or ""):match("^%s*/") then return text end
+  for _, session in pairs(state.sessions or {}) do
+    if tostring(session.pane_id or "") == tostring(target_pane or "") then
+      local instructed, err = require("lazyagent.logic.project").apply_instructions(text, session, session.cwd)
+      if err then
+        vim.schedule(function()
+          vim.notify("LazyAgent project instructions: " .. tostring(err), vim.log.levels.ERROR)
+        end)
+        return nil
+      end
+      return instructed
+    end
+  end
+  return text
 end
 
 function M.split(command, size, is_vertical, on_split)
@@ -181,6 +199,8 @@ function M.paste_and_submit(target_pane, text, submit_keys, opts)
   local move_to_end = opts.move_to_end or false
   local use_bracketed_paste = opts.use_bracketed_paste or false
 
+  text = apply_project_instructions(target_pane, text)
+  if text == nil then return false end
   local normalized_text = util.normalize_text(text)
   local bufnr = to_bufnum(target_pane)
   if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end

@@ -10,6 +10,23 @@ local POOL_SESSION = "lazyagent-pool-" .. tostring(vim.fn.getpid())
 --     TUI apps using focus events resume active input handling after a focus-out.
 local pane_config = {}
 
+local function apply_project_instructions(target_pane, text)
+  if tostring(text or ""):match("^%s*/") then return text end
+  for _, session in pairs(state.sessions or {}) do
+    if tostring(session.pane_id or "") == tostring(target_pane or "") then
+      local instructed, err = require("lazyagent.logic.project").apply_instructions(text, session, session.cwd)
+      if err then
+        vim.schedule(function()
+          vim.notify("LazyAgent project instructions: " .. tostring(err), vim.log.levels.ERROR)
+        end)
+        return nil
+      end
+      return instructed
+    end
+  end
+  return text
+end
+
 function M.configure_pane(pane_id, opts)
   if not pane_id or pane_id == "" then return end
   pane_config[pane_id] = opts or {}
@@ -505,6 +522,8 @@ function M.paste_and_submit(target_pane, text, submit_keys, opts)
   local move_to_end = opts.move_to_end or false
   local use_bracketed_paste = opts.use_bracketed_paste or false
 
+  text = apply_project_instructions(target_pane, text)
+  if text == nil then return false end
   -- Normalize text and ensure trailing newline; this mirrors M.set_buffer behavior.
   local normalized_text = util.normalize_text(text)
 
