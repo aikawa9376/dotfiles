@@ -149,6 +149,7 @@ local function build_member_config(team, role_id)
   local acp = type(base.acp) == "table" and vim.deepcopy(base.acp) or {}
   acp.enabled = true
   if member.model and member.model ~= "" then acp.initial_model = member.model end
+  if member.effort and member.effort ~= "" then acp.initial_effort = member.effort end
   local team_metadata = {
     instance_id = team.id,
     team_id = team.config.team_id,

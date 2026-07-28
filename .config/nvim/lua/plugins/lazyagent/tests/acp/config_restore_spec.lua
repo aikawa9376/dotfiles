@@ -118,6 +118,26 @@ function M.run()
   }, "combined historical model is restored as separate model and reasoning options")
   assert_no_unavailable_warning(blocks, "compatible combined historical model is migrated without warnings")
 
+  helpers, blocks = setup_config()
+  calls = {}
+  session = {
+    ready = true,
+    config_options = {
+      choice_option("model", "gpt-5.6-luna", { "gpt-5.6-sol", "gpt-5.6-luna" }, "model"),
+      choice_option("reasoning_effort", "medium", { "low", "medium", "high", "max" }, "thought_level"),
+    },
+    initial_config_snapshot = {},
+    initial_model = "gpt-5.6-sol",
+    initial_effort = "max",
+  }
+  attach_client(session, calls)
+  helpers.apply_initial_session_config(session)
+  assert_equal(calls, {
+    { id = "model", value = "gpt-5.6-sol" },
+    { id = "reasoning_effort", value = "max" },
+  }, "explicit initial model and reasoning effort use separate ACP config options")
+  assert_no_unavailable_warning(blocks, "supported explicit reasoning effort applies without warnings")
+
   helpers = setup_config()
   calls = {}
   session = {

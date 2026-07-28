@@ -69,13 +69,64 @@ local function install_instructions(target_dir, result)
   return true
 end
 
+local function install_teams(target_dir, result)
+  local target = target_dir .. "/teams.json"
+  if uv.fs_lstat(target) then
+    result.skipped[#result.skipped + 1] = target
+    return true
+  end
+  vim.fn.mkdir(target_dir, "p")
+  local lines = {
+    "{",
+    '  "version": 1,',
+    '  "default_team": "sol-luna",',
+    '  "teams": {',
+    '    "sol-luna": {',
+    '      "name": "Sol and Luna",',
+    '      "lead": "sol_lead",',
+    '      "members": {',
+    '        "sol_lead": {',
+    '          "agent": "Codex",',
+    '          "model": "gpt-5.6-sol",',
+    '          "effort": "max",',
+    '          "role": "Lead architect",',
+    '          "instructions": "Plan the work, delegate focused tasks, review reports, and integrate the final answer.",',
+    '          "reports": ["luna_implementer", "luna_reviewer"]',
+    "        },",
+    '        "luna_implementer": {',
+    '          "agent": "Codex",',
+    '          "model": "gpt-5.6-luna",',
+    '          "effort": "medium",',
+    '          "role": "Implementation engineer",',
+    '          "instructions": "Implement the delegated scope and report concrete changes and verification.",',
+    '          "reports": []',
+    "        },",
+    '        "luna_reviewer": {',
+    '          "agent": "Codex",',
+    '          "model": "gpt-5.6-luna",',
+    '          "effort": "medium",',
+    '          "role": "Review engineer",',
+    '          "instructions": "Review the delegated scope independently and report risks, defects, and recommendations.",',
+    '          "reports": []',
+    "        }",
+    "      }",
+    "    }",
+    "  }",
+    "}",
+  }
+  local ok, err = pcall(vim.fn.writefile, lines, target)
+  if not ok then return nil, "failed to install " .. target .. ": " .. tostring(err) end
+  result.created[#result.created + 1] = target
+  return true
+end
+
 function M.install(opts)
   opts = opts or {}
   local scope = opts.scope or "project"
   local components = opts.components or "all"
   if scope ~= "project" and scope ~= "global" then return nil, "scope must be project or global" end
-  if components ~= "all" and components ~= "instructions" and components ~= "skills" then
-    return nil, "components must be all, instructions, or skills"
+  if components ~= "all" and components ~= "instructions" and components ~= "skills" and components ~= "teams" then
+    return nil, "components must be all, instructions, skills, or teams"
   end
 
   local target_dir = M.target_dir(scope, opts)
@@ -87,6 +138,10 @@ function M.install(opts)
   if components == "all" or components == "skills" then
     local source = module_root() .. "skills"
     local ok, err = copy_missing(source, target_dir .. "/skills", result)
+    if not ok then return nil, err end
+  end
+  if components == "all" or components == "teams" then
+    local ok, err = install_teams(target_dir, result)
     if not ok then return nil, err end
   end
   return result

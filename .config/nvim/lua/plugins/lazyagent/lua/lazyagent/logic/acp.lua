@@ -340,6 +340,7 @@ local function resolve_from_config(agent_cfg)
     question_policy = agent_acp.question_policy or global_cfg.question_policy or "prompt",
     default_mode = agent_acp.default_mode or global_cfg.default_mode,
     initial_model = agent_acp.initial_model or global_cfg.initial_model,
+    initial_effort = agent_acp.initial_effort or global_cfg.initial_effort,
     additional_directories = vim.deepcopy(
       agent_acp.additional_directories or global_cfg.additional_directories or {}
     ),
@@ -395,6 +396,7 @@ function M.resolve(agent_name, agent_cfg)
       question_policy = session.question_policy,
       default_mode = session.default_mode,
       initial_model = session.initial_model,
+      initial_effort = session.initial_effort,
       table_layout = session.table_layout,
       smooth_scroll = vim.deepcopy(session.smooth_scroll or {}),
       fancy_mode = session.fancy_mode,
