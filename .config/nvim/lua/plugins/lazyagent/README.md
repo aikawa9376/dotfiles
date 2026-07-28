@@ -47,7 +47,7 @@ return {
     "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentClose",
     "LazyAgentEdit", "LazyAgentNote", "LazyAgentNoteShow", "LazyAgentNotes", "LazyAgentHistory", "LazyAgentConversationList", "LazyAgentSummary",
     "LazyAgentACPCockpit", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPConfig",
-    "LazyAgentACPMobileQR",
+    "LazyAgentACPMobileQR", "LazyAgentTeam", "LazyAgentTeamStatus", "LazyAgentTeamStop",
     "Antigravity", "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
@@ -169,6 +169,60 @@ require("lazyagent").setup({
 - `mode = "auto"`: Copilot は `flag`、それ以外は `mount` を選びます。
 
 global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ごとに override できます。`interactive_agents.<name>.skills = false` でその agent だけ無効化できます。
+
+## LazyAgent Teams
+
+project 内またはその親 directory に `.lazyagent/teams.json` があると、company 型の AI orchestration を利用できます。project 側に無い場合は `stdpath("config") .. "/lazyagent/teams.json"` を global fallback として探します。設定場所を固定したい場合は `teams.path` を指定できます。
+
+```json
+{
+  "version": 1,
+  "name": "Product Engineering",
+  "lead": "cto",
+  "members": {
+    "cto": {
+      "agent": "Codex",
+      "role": "CTO",
+      "instructions": "Own the plan and final decision. Keep changes focused.",
+      "reports": ["architect", "implementer"]
+    },
+    "architect": {
+      "agent": "Gemini",
+      "role": "Software Architect",
+      "instructions": "Investigate design, compatibility, and risks.",
+      "reports": []
+    },
+    "implementer": {
+      "agent": "Copilot",
+      "role": "Implementation Engineer",
+      "instructions": "Implement scoped work and verify it with tests.",
+      "reports": ["reviewer"]
+    },
+    "reviewer": {
+      "agent": "Codex",
+      "role": "Reviewer",
+      "instructions": "Review correctness, regressions, and missing tests.",
+      "reports": []
+    }
+  }
+}
+```
+
+`lead` がユーザーからの依頼を受ける最上位 AI です。各 member の `reports` は直属の部下だけを列挙します。循環、複数上司、`lead` から到達できない member、未設定 agent は起動前に拒否されます。
+
+```vim
+:LazyAgentTeam この機能を設計し、実装とテストまで完了してください
+:LazyAgentTeamStatus
+:LazyAgentTeamStop
+```
+
+引数なしの `:LazyAgentTeam` は依頼入力を表示します。2回目以降は active team の lead への follow-up になります。部下は lead または manager が委譲した時点で遅延起動し、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使い、lead の transcript がユーザー向けの統合結果になります。
+
+Teams は ACP を会話・session 実行に使い、既存の Neovim 内 MCP server を委譲・報告・状態確認の制御面にだけ併用します。このため `mcp_mode = true` と、各 member が指定する agent の ACP 対応が必要です。通常の ACP session は引き続き MCP server なしでも利用できます。
+
+MCP server は editor 操作 tool も公開するため、LAN 共有が明確に必要な場合を除き `mcp_host = "127.0.0.1"` を推奨します。Teams の role credential は team instance ごとに生成し、status API には返しません。
+
+設定形式は Neovim 標準の `vim.json` だけで検証可能な JSON を採用しています。YAML parser の追加依存や環境差を避けつつ、将来 `.lazyagent/` 配下に permissions や workflow 定義を追加できる layout です。
 
 ## Edit selected blocks
 

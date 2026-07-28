@@ -81,6 +81,10 @@ function M.setup(deps)
     local acp = acp_logic.resolve(agent_name, agent_cfg)
     local source_bufnr = resolve_source_bufnr(agent_cfg)
     local source_path = vim.bo[source_bufnr].buftype == "" and vim.api.nvim_buf_get_name(source_bufnr) or ""
+    local team_mcp_url = nil
+    if agent_cfg and agent_cfg.lazyagent_team and state.opts and state.opts._mcp_type == "http" then
+      team_mcp_url = state.opts._mcp_url
+    end
 
     return {
       agent_name = runtime_key or agent_name,
@@ -101,6 +105,7 @@ function M.setup(deps)
       },
       additional_directories = vim.deepcopy(acp.additional_directories or {}),
       mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
+      mcp_url = team_mcp_url,
       v2_adapter = vim.deepcopy(acp.v2_adapter or { enabled = false }),
       experimental = vim.deepcopy(acp.experimental or {}),
       question_policy = acp.question_policy,

@@ -28,6 +28,62 @@ end
 -- ────────────────────────────────────────────────
 
 M.list = {
+  -- LazyAgent Teams orchestration
+  {
+    name = "team_delegate",
+    description = "Delegate a bounded assignment to one of the caller's direct reports in the active LazyAgent team.",
+    inputSchema = {
+      type = "object",
+      properties = {
+        team_id = { type = "string", description = "Active team instance id from the role instructions." },
+        ["from"] = { type = "string", description = "Calling member id from the role instructions." },
+        token = { type = "string", description = "Ephemeral credential from the role instructions." },
+        to = { type = "string", description = "Direct report member id." },
+        assignment = { type = "string", description = "Self-contained, bounded work assignment." },
+      },
+      required = { "team_id", "from", "token", "to", "assignment" },
+    },
+    handler = function(params)
+      local result, err = require("lazyagent.teams.runtime").delegate(params)
+      if not result then
+        return nil, { code = -32602, message = tostring(err) }
+      end
+      return result
+    end,
+  },
+  {
+    name = "team_report",
+    description = "Report a completed assignment to the caller's manager in the active LazyAgent team.",
+    inputSchema = {
+      type = "object",
+      properties = {
+        team_id = { type = "string", description = "Active team instance id from the role instructions." },
+        ["from"] = { type = "string", description = "Calling member id from the role instructions." },
+        token = { type = "string", description = "Ephemeral credential from the role instructions." },
+        result = { type = "string", description = "Concise findings, changes, verification, and remaining risks." },
+      },
+      required = { "team_id", "from", "token", "result" },
+    },
+    handler = function(params)
+      local result, err = require("lazyagent.teams.runtime").report(params)
+      if not result then
+        return nil, { code = -32602, message = tostring(err) }
+      end
+      return result
+    end,
+  },
+  {
+    name = "team_status",
+    description = "Inspect the active LazyAgent team and member progress. Credentials are not returned.",
+    inputSchema = {
+      type = "object",
+      properties = {},
+      required = {},
+    },
+    handler = function()
+      return require("lazyagent.teams.runtime").status()
+    end,
+  },
   -- Lifecycle / status
   {
     name = "notify_done",
