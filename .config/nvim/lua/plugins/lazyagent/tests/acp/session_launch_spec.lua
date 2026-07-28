@@ -13,6 +13,7 @@ end
 function M.run()
   local pane_seq = 0
   local splits = {}
+  local acp_split_opts = {}
   local legacy_splits = {}
   local hidden_panes = {}
   local backend = {
@@ -21,6 +22,7 @@ function M.run()
       local pane_id = "mock-pane-" .. tostring(pane_seq)
       if opts.acp then
         splits[#splits + 1] = vim.deepcopy(opts.acp)
+        acp_split_opts[#acp_split_opts + 1] = vim.deepcopy(opts)
       else
         legacy_splits[#legacy_splits + 1] = vim.deepcopy(opts)
       end
@@ -169,7 +171,8 @@ function M.run()
   assert(vim.wait(1000, function()
     return hidden_key ~= nil
   end, 10), "hidden ACP session should become ready")
-  assert_equal(hidden_panes[1], "mock-pane-3", "buffer ACP member view is hidden after creation")
+  assert_equal(acp_split_opts[3].hidden, true, "hidden ACP session requests a headless buffer view")
+  assert_equal(#hidden_panes, 0, "headless ACP session never creates a view that must be closed")
   assert_equal(state.sessions[hidden_key].hidden, true, "hidden ACP runtime remains marked hidden")
 
   state.opts.mcp_mode = true

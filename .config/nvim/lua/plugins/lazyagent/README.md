@@ -290,7 +290,7 @@ JSON を採用したのは、Neovim 標準の `vim.json` だけで厳密に検�
 
 最初の引数が既知の team ID なら、その team を使います。team ID だけ、または引数なしなら、通常の interactive agent と同じく lead の ACP buffer と入力 scratch window を開きます。scratch から最初に送る依頼へ team role instructions を一度だけ自動添付します。team ID に続けて依頼を書いた場合は従来どおり直接送信します。既知の team ID で始まらない場合は、引数全体を既定 team への依頼として扱います。複数チームがあり team を省略し、保存済み選択も `default_team` も無い場合は selector を表示します。active team の途中切替は行わず、先に `:LazyAgentTeamStop` が必要です。
 
-active team で引数なしの `:LazyAgentTeam` を再実行すると、既存 lead の ACP buffer と scratch を再表示します。依頼本文を渡した場合は lead への follow-up になります。team 起動時に全 member の ACP session を並行起動し、lead だけを自動表示して部下は hidden background session にします。委譲時は起動済みの直属 member へ依頼を送り、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使います。Cockpit には team ID・role・status と worktree metadata が表示されます。
+active team で引数なしの `:LazyAgentTeam` を再実行すると、既存 lead の ACP buffer と scratch を再表示します。依頼本文を渡した場合は lead への follow-up になります。team 起動時に全 member の ACP session を並行起動し、lead だけを自動表示します。部下は初期buffer/windowを作らないhidden background sessionとして起動し、Cockpitなどから明示的に開いた時点で初めてtranscript bufferを作ります。委譲時は起動済みの直属 member へ依頼を送り、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使います。Cockpit には team ID・role・status と worktree metadata が表示されます。
 
 active team 中は、対象を省略した `LazyAgentToggle` / `LazyAgentScratch` と global send key を常に lead session へ送ります。部下を直接操作する場合だけ Cockpit または完全な session key で明示します。
 

@@ -383,7 +383,8 @@ function M.setup(deps)
         end
 
         local needs_explicit_hide = agent_cfg.stay_hidden
-          and (not split_opts.target_session or backend_name == "buffer_acp")
+          and not split_opts.hidden
+          and not split_opts.target_session
         if needs_explicit_hide then
           if backend_mod and type(backend_mod.break_pane) == "function" then
             backend_mod.break_pane(pane_id)
@@ -416,6 +417,9 @@ function M.setup(deps)
 
     if agent_cfg.stay_hidden then
       split_opts.target_session = "lazyagent-pool"
+      if backend_name == "buffer_acp" then
+        split_opts.hidden = true
+      end
     end
 
     local function do_split()
