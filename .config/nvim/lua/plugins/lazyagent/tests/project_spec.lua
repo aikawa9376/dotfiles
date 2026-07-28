@@ -49,6 +49,58 @@ function M.run()
   assert_equal(project.apply_instructions("Follow up.", role_tracker, root, "# Team role"),
     "Follow up.", "session and project instructions are both applied once")
 
+  local native_tracker = {}
+  local native_role = assert(project.apply_instructions(
+    "Delegate this.",
+    native_tracker,
+    root,
+    "# Team role\nYou are the lead.",
+    { include_project = false }
+  ))
+  assert(native_role:find("# Team role", 1, true), "team role remains a session instruction")
+  assert(not native_role:find("# LazyAgent project instructions", 1, true),
+    "native project instructions are not added to the user prompt")
+  assert(native_role:find("# User request\n\nDelegate this.", 1, true), "native request remains after team role")
+
+  local codex = assert(project.prepare_native("Codex", root, {
+    command = { "codex-acp" },
+    env = { CODEX_CONFIG = vim.json.encode({ model = "gpt-5", developer_instructions = "Existing." }) },
+    acp = true,
+  }))
+  local codex_config = vim.json.decode(codex.env.CODEX_CONFIG)
+  assert(codex.native, "Codex uses native instructions")
+  assert_equal(codex_config.model, "gpt-5", "Codex config is preserved")
+  assert(codex_config.developer_instructions:find("Existing.", 1, true), "existing Codex instructions are preserved")
+  assert(codex_config.developer_instructions:find("Keep changes scoped", 1, true),
+    "Codex developer instructions include the project file")
+
+  local copilot = assert(project.prepare_native("Copilot", root, {
+    command = { "copilot", "--acp" },
+    env = { COPILOT_CUSTOM_INSTRUCTIONS_DIRS = "/existing" },
+    acp = true,
+  }))
+  assert(copilot.native, "Copilot uses native instructions")
+  assert_equal(copilot.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS,
+    "/existing," .. root .. "/.lazyagent", "Copilot instruction directories are merged")
+
+  local claude = assert(project.prepare_native("Claude", root, {
+    command = { "claude" },
+    env = {},
+  }))
+  assert(claude.native, "Claude uses native instructions")
+  assert_equal(claude.command[#claude.command - 1], "--append-system-prompt-file", "Claude instruction flag")
+  assert_equal(claude.command[#claude.command], root .. "/.lazyagent/AGENTS.md", "Claude instruction path")
+
+  local gemini_home = root .. "/gemini-home"
+  local gemini = assert(project.prepare_native("Gemini", root, {
+    command = { "gemini", "--acp" },
+    env = { GEMINI_CLI_HOME = gemini_home },
+    acp = true,
+  }))
+  assert(gemini.native, "Gemini uses native instructions")
+  local gemini_memory = table.concat(vim.fn.readfile(gemini_home .. "/.gemini/GEMINI.md"), "\n")
+  assert(gemini_memory:find("Keep changes scoped", 1, true), "Gemini memory includes project instructions")
+
   local expanded, err, matched = project.expand_prompt("/prompt review check parser.lua", root)
   assert(matched and not err, err)
   assert(expanded:find("Review this request:", 1, true), "prompt body")

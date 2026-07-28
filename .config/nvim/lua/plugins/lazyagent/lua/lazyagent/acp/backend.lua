@@ -969,6 +969,7 @@ local function create_backend(default_view)
         source_bufnr = acp.source_bufnr,
         root_dir = acp.root_dir,
         project_instructions_root = acp.project_instructions_root or acp.root_dir or acp.cwd,
+        project_instructions_native = acp.project_instructions_native == true,
         session_instructions = acp.session_instructions,
         additional_directories = vim.deepcopy(acp.additional_directories or {}),
         mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
@@ -2054,7 +2055,8 @@ local function create_backend(default_view)
       prompt,
       session,
       session.root_dir or session.cwd,
-      session.session_instructions
+      session.session_instructions,
+      { include_project = session.project_instructions_native ~= true }
     )
     if instructions_err then
       conversation_helpers.append_block(session, "Error", "Project instructions: " .. tostring(instructions_err))

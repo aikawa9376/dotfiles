@@ -185,7 +185,7 @@ project root またはその親に `.lazyagent/` がある場合、LazyAgent 全
 └── teams.json
 ```
 
-- `.lazyagent/AGENTS.md` は project 共通 instructions として、各 runtime session の最初の agent prompt に一度だけ自動添付されます。ACP、tmux、builtin terminal backend が対象で、Teams の role worktree からも元 project のファイルを参照します。空ファイルは無視し、サイズ上限は 128 KiB です。
+- `.lazyagent/AGENTS.md` は project 共通 instructions として、会話の user prompt へ露出させず provider native の instruction layer へ渡します。Codex は `developer_instructions`、Copilot は custom instruction directory、Claude は appended system prompt file、Gemini は hidden runtime の `GEMINI.md` を利用します。未知の custom provider だけ、互換 fallback として最初の agent prompt に一度添付します。ACP、tmux、builtin terminal backend が対象で、Teams の role worktree からも元 project のファイルを参照します。空ファイルは無視し、サイズ上限は 128 KiB です。
 - `.lazyagent/skills/` は全 LazyAgent session の skill source に自動追加されます。global の `skills.enabled = false` でも project source がある場合は有効になります。
 - `.lazyagent/prompts/*.md` は `/prompt <name> [request]` で展開できます。本文中の `{{input}}` に request を差し込み、placeholder が無い場合は末尾へ `# Request` として追加します。
 - prompt 名は英数字・`_`・`-`・`.`、ファイルは直下の Markdown、サイズ上限は 64 KiB です。

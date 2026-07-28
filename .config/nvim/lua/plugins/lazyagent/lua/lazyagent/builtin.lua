@@ -27,7 +27,13 @@ local function apply_project_instructions(target_pane, text)
   if tostring(text or ""):match("^%s*/") then return text end
   for _, session in pairs(state.sessions or {}) do
     if tostring(session.pane_id or "") == tostring(target_pane or "") then
-      local instructed, err = require("lazyagent.logic.project").apply_instructions(text, session, session.cwd)
+      local instructed, err = require("lazyagent.logic.project").apply_instructions(
+        text,
+        session,
+        session.cwd,
+        nil,
+        { include_project = session.project_instructions_native ~= true }
+      )
       if err then
         vim.schedule(function()
           vim.notify("LazyAgent project instructions: " .. tostring(err), vim.log.levels.ERROR)

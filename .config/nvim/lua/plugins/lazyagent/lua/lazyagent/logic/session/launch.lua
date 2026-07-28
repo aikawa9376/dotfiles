@@ -18,6 +18,7 @@ function M.setup(deps)
   local mark_session_scope = deps.mark_session_scope
   local mcp_integration = deps.mcp_integration or require("lazyagent.integrations.mcp")
   local nvim_bridge = require("lazyagent.nvim_bridge")
+  local project = require("lazyagent.logic.project")
 
   local module = {}
 
@@ -98,6 +99,7 @@ function M.setup(deps)
       cwd = root_dir,
       root_dir = root_dir,
       project_instructions_root = agent_cfg and agent_cfg.project_instructions_root or root_dir,
+      project_instructions_native = agent_cfg and agent_cfg.project_instructions_native == true,
       session_instructions = agent_cfg and agent_cfg.acp_session_instructions or nil,
       editor = {
         instance_id = state.editor_instance_id,
@@ -192,6 +194,8 @@ function M.setup(deps)
             session_key = session_key,
             lazyagent_team = vim.deepcopy(agent_cfg and agent_cfg.lazyagent_team or nil),
             project_instructions_root = agent_cfg and agent_cfg.project_instructions_root or root_dir,
+            project_instructions_native = project.uses_native_instructions(provider_id)
+              and project.instructions(agent_cfg and agent_cfg.project_instructions_root or root_dir) ~= nil,
           }
           if watch_enabled_val then
             call_watch("enable")
@@ -303,6 +307,7 @@ function M.setup(deps)
       end
     end
 
+    local project_instructions_native = false
     local split_opts
     split_opts = {
       on_split = function(pane_id)
@@ -331,6 +336,7 @@ function M.setup(deps)
           session_key = session_key,
           lazyagent_team = vim.deepcopy(agent_cfg and agent_cfg.lazyagent_team or nil),
           project_instructions_root = agent_cfg and agent_cfg.project_instructions_root or root_dir,
+          project_instructions_native = project_instructions_native,
           footer_animation = resolved_acp.footer_animation,
           protocol_log = resolved_acp.protocol_log,
           show_context_notes = resolved_acp.show_context_notes,
@@ -414,10 +420,34 @@ function M.setup(deps)
       if skills_launch and skills_launch.env then
         split_opts.env = merge_env(split_opts.env, skills_launch.env)
       end
-      split_opts.env = nvim_bridge.inject_env(split_opts.env)
 
       if acp_logic.is_acp_backend(backend_name) then
-        split_opts.acp = build_acp_split_opts(provider_id, agent_cfg, launch_spec, split_opts, session_key)
+        if provider_id == "Gemini" and not split_opts.env.GEMINI_CLI_HOME then
+          local runtime = skills_logic.prepare_gemini_runtime(provider_id)
+          split_opts.env.GEMINI_CLI_HOME = runtime.home_dir
+        end
+        local prepared, prepare_err = project.prepare_native(provider_id,
+          agent_cfg and agent_cfg.project_instructions_root or root_dir, {
+            command = launch_spec.command,
+            env = split_opts.env,
+            acp = true,
+          })
+        if prepare_err then vim.notify("LazyAgent project instructions: " .. prepare_err, vim.log.levels.WARN) end
+        project_instructions_native = prepared.native
+        split_opts.env = nvim_bridge.inject_env(prepared.env)
+        local launch_agent_cfg = vim.tbl_deep_extend("force", {}, agent_cfg or {}, {
+          project_instructions_native = prepared.native,
+        })
+        local native_launch_spec = vim.tbl_deep_extend("force", {}, launch_spec, {
+          command = prepared.command,
+        })
+        split_opts.acp = build_acp_split_opts(
+          provider_id,
+          launch_agent_cfg,
+          native_launch_spec,
+          split_opts,
+          session_key
+        )
         backend_mod.split(nil, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, split_opts)
         return
       end
@@ -511,11 +541,28 @@ function M.setup(deps)
 
         if agent_name == "Copilot" or (agent_cfg and agent_cfg.cmd and tostring(agent_cfg.cmd):match("copilot")) then
           split_opts.env.COPILOT_CONFIG_DIR = agent_cache_dir
-          split_opts.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = agent_cache_dir
+          local instruction_dirs = split_opts.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS
+          split_opts.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = instruction_dirs
+            and (instruction_dirs .. "," .. agent_cache_dir)
+            or agent_cache_dir
           launch_cmd = (launch_cmd or "") .. " --additional-mcp-config " .. vim.fn.shellescape("@" .. agent_cache_dir .. "/mcp-config.json")
           launch_cmd = launch_cmd .. " --plugin-dir " .. vim.fn.shellescape(agent_cache_dir)
         end
       end
+      if provider_id == "Gemini" and not split_opts.env.GEMINI_CLI_HOME then
+        local runtime = skills_logic.prepare_gemini_runtime(provider_id)
+        split_opts.env.GEMINI_CLI_HOME = runtime.home_dir
+      end
+      local prepared, prepare_err = project.prepare_native(provider_id,
+        agent_cfg and agent_cfg.project_instructions_root or root_dir, {
+          command = launch_cmd,
+          env = split_opts.env,
+          acp = false,
+        })
+      if prepare_err then vim.notify("LazyAgent project instructions: " .. prepare_err, vim.log.levels.WARN) end
+      project_instructions_native = prepared.native
+      split_opts.env = nvim_bridge.inject_env(prepared.env)
+      launch_cmd = prepared.command
       backend_mod.split(launch_cmd, agent_cfg.pane_size or 30, agent_cfg.is_vertical or false, split_opts)
     end
 

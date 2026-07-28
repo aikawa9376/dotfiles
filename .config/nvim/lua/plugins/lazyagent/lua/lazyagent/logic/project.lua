@@ -57,9 +57,123 @@ function M.instructions(start_path)
   }
 end
 
-function M.apply_instructions(text, tracker, start_path, session_instructions)
+local function provider_key(provider_id)
+  return tostring(provider_id or ""):lower()
+end
+
+function M.uses_native_instructions(provider_id)
+  local key = provider_key(provider_id)
+  return key == "codex" or key == "copilot" or key == "claude" or key == "gemini"
+end
+
+local function append_command_args(command, args)
+  if type(command) == "table" then
+    local updated = vim.deepcopy(command)
+    vim.list_extend(updated, args)
+    return updated
+  end
+  if type(command) == "string" and command ~= "" then
+    local updated = { command }
+    for _, arg in ipairs(args) do
+      updated[#updated + 1] = vim.fn.shellescape(tostring(arg))
+    end
+    return table.concat(updated, " ")
+  end
+  return command
+end
+
+local function append_unique_csv(value, addition)
+  local entries = {}
+  local seen = {}
+  for entry in tostring(value or ""):gmatch("[^,]+") do
+    entry = vim.trim(entry)
+    if entry ~= "" and not seen[entry] then
+      seen[entry] = true
+      entries[#entries + 1] = entry
+    end
+  end
+  if not seen[addition] then entries[#entries + 1] = addition end
+  return table.concat(entries, ",")
+end
+
+local function combined_instructions(existing, instructions)
+  local blocks = {}
+  existing = vim.trim(tostring(existing or ""))
+  if existing ~= "" then blocks[#blocks + 1] = existing end
+  blocks[#blocks + 1] = "# LazyAgent project instructions\n\n"
+    .. "Source: " .. instructions.path .. "\n\n"
+    .. instructions.content
+  return table.concat(blocks, "\n\n")
+end
+
+function M.prepare_native(provider_id, start_path, launch)
+  launch = launch or {}
+  local instructions, err = M.instructions(start_path)
+  local result = {
+    command = launch.command,
+    env = vim.tbl_extend("force", {}, launch.env or {}),
+    native = false,
+    instructions = instructions,
+  }
+  if err or not instructions then return result, err end
+
+  local key = provider_key(provider_id)
+  if key == "codex" and launch.acp then
+    local config = {}
+    local encoded = result.env.CODEX_CONFIG
+    if encoded and encoded ~= "" then
+      local ok, decoded = pcall(vim.json.decode, encoded)
+      if not ok or type(decoded) ~= "table" then
+        return result, "CODEX_CONFIG is not valid JSON; using prompt fallback"
+      end
+      config = decoded
+    end
+    config.developer_instructions = combined_instructions(config.developer_instructions, instructions)
+    result.env.CODEX_CONFIG = vim.json.encode(config)
+    result.native = true
+  elseif key == "codex" then
+    result.command = append_command_args(result.command, {
+      "-c",
+      "developer_instructions=" .. vim.json.encode(combined_instructions(nil, instructions)),
+    })
+    result.native = true
+  elseif key == "copilot" then
+    local project_dir = vim.fn.fnamemodify(instructions.path, ":h")
+    result.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS =
+      append_unique_csv(result.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, project_dir)
+    result.native = true
+  elseif key == "claude" then
+    result.command = append_command_args(result.command, {
+      "--append-system-prompt-file",
+      instructions.path,
+    })
+    result.native = true
+  elseif key == "gemini" and result.env.GEMINI_CLI_HOME and result.env.GEMINI_CLI_HOME ~= "" then
+    local gemini_dir = result.env.GEMINI_CLI_HOME .. "/.gemini"
+    local target = gemini_dir .. "/GEMINI.md"
+    vim.fn.mkdir(gemini_dir, "p")
+    local user_path = vim.fn.expand("~/.gemini/GEMINI.md")
+    local user_content = ""
+    if vim.fn.filereadable(user_path) == 1 then
+      local ok, lines = pcall(vim.fn.readfile, user_path)
+      if ok then user_content = table.concat(lines, "\n") end
+    end
+    if uv.fs_lstat(target) then vim.fn.delete(target) end
+    local ok, write_err = pcall(vim.fn.writefile,
+      vim.split(combined_instructions(user_content, instructions), "\n", { plain = true }),
+      target)
+    if not ok then return result, "failed to prepare Gemini project memory: " .. tostring(write_err) end
+    result.native = true
+  end
+  return result
+end
+
+function M.apply_instructions(text, tracker, start_path, session_instructions, opts)
+  opts = opts or {}
   text = tostring(text or "")
-  local project_applied = type(tracker) == "table" and tracker.project_instructions_applied == true
+  local include_project = opts.include_project ~= false
+  local project_applied = not include_project
+    or (type(tracker) == "table" and tracker.project_instructions_applied == true)
   local session_applied = type(tracker) == "table" and tracker.session_instructions_applied == true
   session_instructions = vim.trim(tostring(session_instructions or ""))
   if project_applied and (session_instructions == "" or session_applied) then
