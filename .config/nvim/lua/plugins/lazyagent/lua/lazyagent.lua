@@ -83,6 +83,15 @@ M.edit_selected_blocks = edit_blocks.edit_selection
 M.choose_image = image_paste.choose_current_buffer
 M.image_actions = image_paste.actions_at_cursor
 M.fire_event = util.fire_event
+M.start_team = function(request, opts)
+  return require("lazyagent.teams.runtime").start(request, opts)
+end
+M.stop_team = function()
+  return require("lazyagent.teams.runtime").stop()
+end
+M.team_status = function()
+  return require("lazyagent.teams.runtime").status()
+end
 
 local function register_custom_backends(opts)
   if type(opts.backends) ~= "table" then

@@ -212,6 +212,10 @@ function M.build()
         },
       },
     },
+    teams = {
+      enabled = true,
+      path = nil,
+    },
     send_mode = "append",
     use_bracketed_paste = true,
     send_number_keys_to_agent = true,
