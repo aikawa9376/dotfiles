@@ -47,6 +47,25 @@ function M.run()
   assert_equal(legacy_team, nil, "ordinary request does not select a team")
   assert_equal(legacy_request, "investigate parser", "ordinary request stays intact")
 
+  local registered = {}
+  team_commands.register(function(name, callback, opts)
+    registered[name] = { callback = callback, opts = opts }
+  end)
+  local original_start = runtime.start
+  local original_names = runtime.team_names
+  local opened
+  runtime.team_names = function() return { "engineering", "research" } end
+  runtime.start = function(request, opts)
+    opened = { request = request, opts = opts }
+    return { config = { name = "Research" } }
+  end
+  registered.LazyAgentTeam.callback({ args = "research" })
+  assert_equal(opened.request, "", "team-only command does not request inline input")
+  assert_equal(opened.opts.team, "research", "team-only command keeps selected team")
+  assert_equal(opened.opts.open_input, true, "team-only command opens normal scratch input")
+  runtime.start = original_start
+  runtime.team_names = original_names
+
   local normalized, err = config_loader.validate(valid_config())
   assert(normalized, err)
   assert_equal(normalized.members.architect.manager, "cto", "manager is derived from reports")
@@ -161,6 +180,7 @@ function M.run()
   local backend_logic = require("lazyagent.logic.backend")
   local Worktree = require("lazyagent.acp.worktree")
   local original_ensure = session_logic.ensure_session
+  local original_start_interactive = session_logic.start_interactive_session
   local original_backend = backend_logic.resolve_backend_for_agent
   local original_create = Worktree.create
   local captured_cfg
@@ -176,9 +196,11 @@ function M.run()
   normalized.root_dir = "/repo"
   normalized.team_id = "engineering"
   normalized.name = "Engineering"
+  normalized.members.cto.agent = "EngineerAgent"
   normalized.members.engineer.agent = "EngineerAgent"
   normalized.members.engineer.worktree = true
   state.team_runtime.config = normalized
+  state.team_runtime.members.cto.thread_id = "123e4567-e89b-42d3-a456-426614174110"
   state.team_runtime.members.engineer.thread_id = "123e4567-e89b-42d3-a456-426614174111"
   Worktree.create = function()
     return {
@@ -198,6 +220,19 @@ function M.run()
       paste_and_submit = function() return true end,
     }
   end
+  local opened_cfg
+  session_logic.start_interactive_session = function(opts)
+    opened_cfg = opts
+    opts.on_ready("lead-pane", "EngineerAgent::123e4567-e89b-42d3-a456-426614174110", 1)
+  end
+  local opened_team, open_err = runtime.start("", { open_input = true })
+  assert(opened_team, open_err)
+  assert_equal(opened_cfg.open_input, nil, "team uses the standard interactive scratch path")
+  assert_equal(opened_cfg.stay_hidden, false, "lead view is visible")
+  assert_equal(opened_cfg.initial_input, "", "lead scratch starts empty")
+  assert(opened_cfg.acp_session_instructions:find("Your role: CTO", 1, true),
+    "lead role instructions wait for the first scratch submit")
+
   local delegated, delegate_err = runtime.delegate({
     team_id = "team-1",
     ["from"] = "cto",
@@ -207,11 +242,14 @@ function M.run()
   })
   assert(delegated, delegate_err)
   assert_equal(captured_cfg.acp.initial_model, "fast-model", "role model reaches ACP config")
+  assert(captured_cfg.acp_session_instructions:find("Your role: Engineer", 1, true),
+    "role instructions are attached to the ACP session")
   assert_equal(captured_cfg.root_dir, "/tmp/engineer-worktree", "role session uses managed worktree")
   assert_equal(captured_cfg.stay_hidden, true, "non-lead ACP view stays hidden")
   assert_equal(captured_cfg.acp_thread_metadata.lazyagent_team.role_id, "engineer", "team metadata reaches thread")
   assert_equal(captured_cfg.acp_thread_metadata.worktree_path, "/tmp/engineer-worktree", "worktree metadata reaches thread")
   session_logic.ensure_session = original_ensure
+  session_logic.start_interactive_session = original_start_interactive
   backend_logic.resolve_backend_for_agent = original_backend
   Worktree.create = original_create
   state.opts = previous_opts

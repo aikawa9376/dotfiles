@@ -169,6 +169,7 @@ local function build_member_config(team, role_id)
     root_dir = root_dir,
     cwd = root_dir,
     project_instructions_root = team.config.root_dir,
+    acp_session_instructions = role_prompt(team, role_id),
     stay_hidden = role_id ~= team.config.lead,
     lazyagent_team = {
       id = team.id,
@@ -247,6 +248,48 @@ local function send_to_member(team, role_id, text, callback)
   return true
 end
 
+local function open_lead(team, initial_input)
+  local role_id = team.config.lead
+  local runtime_member = team.members[role_id]
+  set_member_status(team, role_id, "starting")
+  local cfg, cfg_err = build_member_config(team, role_id)
+  if not cfg then
+    set_member_status(team, role_id, "failed", cfg_err)
+    return nil, cfg_err
+  end
+  local session_logic = require("lazyagent.logic.session")
+  local launch_opts = vim.tbl_deep_extend("force", {}, cfg, {
+    agent_name = team.config.members[role_id].agent,
+    reuse = true,
+    stay_hidden = false,
+    initial_input = vim.trim(tostring(initial_input or "")),
+    title = string.format("%s · %s", team.config.name, team.config.members[role_id].role),
+    on_ready = function(pane_id, session_key)
+      runtime_member.session_key = session_key
+      runtime_member.pane_id = pane_id
+      if active() ~= team then
+        pcall(session_logic.close_session, session_key)
+        return
+      end
+      set_member_status(team, role_id, "running")
+      local _, backend = backend_logic.resolve_backend_for_agent(session_key, cfg)
+      local snapshot = backend and type(backend.get_runtime_snapshot) == "function"
+          and backend.get_runtime_snapshot(pane_id)
+        or nil
+      if snapshot and snapshot.acp_mcp_server_count == 0 then
+        set_member_status(team, role_id, "failed",
+          "agent ACP capabilities do not accept the Teams HTTP MCP control server")
+        vim.notify(
+          "LazyAgentTeam: lead ACP does not accept the Teams HTTP MCP control server",
+          vim.log.levels.ERROR
+        )
+      end
+    end,
+  })
+  session_logic.start_interactive_session(launch_opts)
+  return true
+end
+
 local function credentials(params)
   local team = active()
   if not team then
@@ -280,12 +323,7 @@ function M.delegate(params)
     return nil, string.format("'%s' may delegate only to direct reports: %s", from, member_summary(team, from))
   end
 
-  local prompt = table.concat({
-    role_prompt(team, target),
-    "",
-    "# Assignment from " .. from,
-    assignment,
-  }, "\n")
+  local prompt = "# Assignment from " .. from .. "\n" .. assignment
   local ok, launch_err = send_to_member(team, target, prompt)
   if not ok then return nil, launch_err end
   team.members[target].assigned_by = from
@@ -367,7 +405,8 @@ function M.status()
   }
 end
 
-local function begin(config, request)
+local function begin(config, request, opts)
+  opts = opts or {}
   local team = {
     id = uuid(),
     config = config,
@@ -383,13 +422,12 @@ local function begin(config, request)
   end
   state.team_runtime = team
 
-  local lead_prompt = table.concat({
-    role_prompt(team, config.lead),
-    "",
-    "# Request from the human user",
-    request,
-  }, "\n")
-  local ok, err = send_to_member(team, config.lead, lead_prompt)
+  local ok, err
+  if opts.open_input then
+    ok, err = open_lead(team, request)
+  else
+    ok, err = send_to_member(team, config.lead, request)
+  end
   if not ok then
     state.team_runtime = nil
     return nil, err
@@ -470,12 +508,28 @@ end
 function M.start(request, opts)
   opts = opts or {}
   request = vim.trim(tostring(request or ""))
-  if request == "" then
+  if request == "" and opts.open_input ~= true then
     return nil, "request must not be empty"
   end
   local teams_opts = (state.opts and state.opts.teams) or {}
   if teams_opts.enabled == false then
     return nil, "Teams is disabled by teams.enabled = false"
+  end
+  if active() then
+    if opts.team and opts.team ~= active().config.team_id then
+      return nil, "another LazyAgent team is already active; stop it before switching teams"
+    end
+    if opts.path and vim.fn.fnamemodify(opts.path, ":p") ~= active().config.path then
+      return nil, "another LazyAgent team is already active; stop it before switching configs"
+    end
+    if opts.open_input == true then
+      local ok, open_err = open_lead(active(), request)
+      return ok and active() or nil, open_err
+    end
+    local lead = active().config.lead
+    local prompt = "# Follow-up request from the human user\n" .. request
+    local ok, send_err = send_to_member(active(), lead, prompt)
+    return ok and active() or nil, send_err
   end
   local catalog, catalog_err = catalog_for(opts)
   if not catalog then return nil, catalog_err end
@@ -499,15 +553,6 @@ function M.start(request, opts)
   local ready, preflight_err = preflight(config)
   if not ready then return nil, preflight_err end
 
-  if active() then
-    if active().config.path ~= config.path or active().config.team_id ~= config.team_id then
-      return nil, "another LazyAgent team is already active; stop it before switching configs"
-    end
-    local lead = active().config.lead
-    local prompt = "# Follow-up request from the human user\n" .. request
-    local ok, send_err = send_to_member(active(), lead, prompt)
-    return ok and active() or nil, send_err
-  end
   if state.team_start_pending then
     return nil, "a LazyAgent team is already starting"
   end
@@ -526,7 +571,7 @@ function M.start(request, opts)
     attempts = attempts + 1
     if state.opts._mcp_url then
       state.team_start_pending = nil
-      local team, start_err = begin(config, request)
+      local team, start_err = begin(config, request, { open_input = opts.open_input == true })
       if not team then
         vim.notify("LazyAgentTeam: " .. tostring(start_err), vim.log.levels.ERROR)
       end

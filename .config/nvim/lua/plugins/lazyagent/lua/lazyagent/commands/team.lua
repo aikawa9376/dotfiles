@@ -15,8 +15,8 @@ local function parse_args(raw, team_names)
   return request, nil
 end
 
-local function start(request, team_id)
-  local result, err = runtime.start(request, { team = team_id })
+local function start(request, team_id, open_input)
+  local result, err = runtime.start(request, { team = team_id, open_input = open_input == true })
   if not result then
     notify_error(err)
     return
@@ -24,7 +24,8 @@ local function start(request, team_id)
   if result.selecting then return end
   local config = result.config or (result.config_path and result) or nil
   local name = config and config.name or (runtime.status().name or "team")
-  vim.notify("LazyAgentTeam: request sent to " .. name, vim.log.levels.INFO)
+  local action = open_input and "opened " or "request sent to "
+  vim.notify("LazyAgentTeam: " .. action .. name, vim.log.levels.INFO)
 end
 
 function M.register(create)
@@ -34,11 +35,7 @@ function M.register(create)
       start(request, team_id)
       return
     end
-    vim.ui.input({ prompt = team_id and ("Team request (" .. team_id .. "): ") or "Team request: " }, function(input)
-      if input and vim.trim(input) ~= "" then
-        start(input, team_id)
-      end
-    end)
+    start("", team_id, true)
   end, {
     nargs = "*",
     complete = function(arglead, cmdline)
