@@ -5,6 +5,10 @@ M.directory = ".lazyagent"
 M.max_prompt_bytes = 64 * 1024
 M.max_instructions_bytes = 128 * 1024
 
+function M.global_dir()
+  return vim.fn.stdpath("data") .. "/lazyagent"
+end
+
 local function normalize_dir(path)
   path = vim.fn.fnamemodify(path or vim.fn.getcwd(), ":p")
   if vim.fn.isdirectory(path) ~= 1 then path = vim.fn.fnamemodify(path, ":h") end
@@ -31,16 +35,22 @@ function M.skills_dir(start_path)
   return path and vim.fn.isdirectory(path) == 1 and path or nil
 end
 
+function M.skills_dirs(start_path)
+  local dirs = {}
+  local global = M.global_dir() .. "/skills"
+  if vim.fn.isdirectory(global) == 1 then dirs[#dirs + 1] = global end
+  local project = M.skills_dir(start_path)
+  if project and project ~= global then dirs[#dirs + 1] = project end
+  return dirs
+end
+
 function M.prompts_dir(start_path)
   local project_dir = M.find(start_path)
   local path = project_dir and (project_dir .. "/prompts") or nil
   return path and vim.fn.isdirectory(path) == 1 and path or nil
 end
 
-function M.instructions(start_path)
-  local project_dir = M.find(start_path)
-  if not project_dir then return nil end
-  local path = project_dir .. "/AGENTS.md"
+local function read_instructions(path)
   if vim.fn.filereadable(path) ~= 1 then return nil end
   local size = vim.fn.getfsize(path)
   if size < 0 or size > M.max_instructions_bytes then
@@ -53,6 +63,40 @@ function M.instructions(start_path)
   return {
     content = content,
     path = uv.fs_realpath(path) or vim.fn.fnamemodify(path, ":p"),
+  }
+end
+
+function M.instructions(start_path)
+  local sources = {}
+  local global, global_err = read_instructions(M.global_dir() .. "/AGENTS.md")
+  if global_err then return nil, global_err end
+  if global then
+    global.scope = "global"
+    sources[#sources + 1] = global
+  end
+
+  local project_dir = M.find(start_path)
+  local project, project_err
+  if project_dir then project, project_err = read_instructions(project_dir .. "/AGENTS.md") end
+  if project_err then return nil, project_err end
+  if project and (not global or project.path ~= global.path) then
+    project.scope = "project"
+    sources[#sources + 1] = project
+  end
+  if #sources == 0 then return nil end
+
+  local blocks = {}
+  local paths = {}
+  for _, source in ipairs(sources) do
+    blocks[#blocks + 1] = string.format("# %s LazyAgent instructions\n\n%s",
+      source.scope == "global" and "Global" or "Project", source.content)
+    paths[#paths + 1] = source.path
+  end
+  local content = table.concat(blocks, "\n\n")
+  return {
+    content = content,
+    path = paths[#paths],
+    paths = paths,
     hash = vim.fn.sha256(content),
   }
 end
@@ -101,7 +145,7 @@ local function combined_instructions(existing, instructions)
   existing = vim.trim(tostring(existing or ""))
   if existing ~= "" then blocks[#blocks + 1] = existing end
   blocks[#blocks + 1] = "# LazyAgent project instructions\n\n"
-    .. "Source: " .. instructions.path .. "\n\n"
+    .. "Source: " .. table.concat(instructions.paths or { instructions.path }, ", ") .. "\n\n"
     .. instructions.content
   return table.concat(blocks, "\n\n")
 end
@@ -138,15 +182,19 @@ function M.prepare_native(provider_id, start_path, launch)
     })
     result.native = true
   elseif key == "copilot" then
-    local project_dir = vim.fn.fnamemodify(instructions.path, ":h")
-    result.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS =
-      append_unique_csv(result.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, project_dir)
+    local dirs = result.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS
+    for _, path in ipairs(instructions.paths or { instructions.path }) do
+      dirs = append_unique_csv(dirs, vim.fn.fnamemodify(path, ":h"))
+    end
+    result.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = dirs
     result.native = true
   elseif key == "claude" then
-    result.command = append_command_args(result.command, {
-      "--append-system-prompt-file",
-      instructions.path,
-    })
+    for _, path in ipairs(instructions.paths or { instructions.path }) do
+      result.command = append_command_args(result.command, {
+        "--append-system-prompt-file",
+        path,
+      })
+    end
     result.native = true
   elseif key == "gemini" and result.env.GEMINI_CLI_HOME and result.env.GEMINI_CLI_HOME ~= "" then
     local gemini_dir = result.env.GEMINI_CLI_HOME .. "/.gemini"

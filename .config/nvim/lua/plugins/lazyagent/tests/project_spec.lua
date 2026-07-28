@@ -9,6 +9,8 @@ end
 function M.run()
   local project = require("lazyagent.logic.project")
   local root = vim.fn.tempname() .. "-lazyagent-project"
+  local original_global_dir = project.global_dir
+  project.global_dir = function() return root .. "/global" end
   vim.fn.mkdir(root .. "/.lazyagent/prompts", "p")
   vim.fn.mkdir(root .. "/.lazyagent/skills/reviewer", "p")
   vim.fn.mkdir(root .. "/src/nested", "p")
@@ -124,7 +126,27 @@ function M.run()
   local prepared = assert(require("lazyagent.logic.skills").prepare("Copilot", {}, { root_dir = root }))
   assert(vim.tbl_contains(prepared.source_dirs, root .. "/.lazyagent/skills"),
     "project skills activate independently of global skills")
+
+  vim.fn.mkdir(root .. "/global/skills/global-reviewer", "p")
+  vim.fn.writefile({ "# Global reviewer" }, root .. "/global/skills/global-reviewer/SKILL.md")
+  vim.fn.writefile({ "# Global rules", "", "- Keep responses concise." }, root .. "/global/AGENTS.md")
+  local layered = assert(project.instructions(root))
+  assert_equal(layered.paths[1], root .. "/global/AGENTS.md", "global instructions load first")
+  assert_equal(layered.paths[2], root .. "/.lazyagent/AGENTS.md", "project instructions load second")
+  assert(layered.content:find("Keep responses concise", 1, true), "global instructions are included")
+  local layered_skills = assert(require("lazyagent.logic.skills").prepare("Copilot", {}, { root_dir = root }))
+  assert(vim.tbl_contains(layered_skills.source_dirs, root .. "/global/skills"), "global installed skills activate")
+  assert(vim.tbl_contains(layered_skills.source_dirs, root .. "/.lazyagent/skills"), "project skills remain active")
+  local layered_copilot = assert(project.prepare_native("Copilot", root, { env = {}, acp = true }))
+  assert_equal(layered_copilot.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS,
+    root .. "/global," .. root .. "/.lazyagent", "Copilot receives global and project instruction directories")
+  local layered_claude = assert(project.prepare_native("Claude", root, { command = { "claude" } }))
+  assert_equal(layered_claude.command[#layered_claude.command - 2], root .. "/global/AGENTS.md",
+    "Claude receives global instructions first")
+  assert_equal(layered_claude.command[#layered_claude.command], root .. "/.lazyagent/AGENTS.md",
+    "Claude receives project instructions second")
   state.opts = previous_opts
+  project.global_dir = original_global_dir
   vim.fn.delete(root, "rf")
 end
 

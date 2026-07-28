@@ -372,18 +372,6 @@ local function cache_agent_dir(agent_name)
   return dir
 end
 
-local function default_skill_sources()
-  local root = module_root()
-  if root == "" then
-    return {}
-  end
-  local skills_dir = join_path(root:gsub("/$", ""), "skills")
-  if is_directory(skills_dir) then
-    return { skills_dir }
-  end
-  return {}
-end
-
 local function default_bin_dir()
   local root = module_root()
   if root == "" then
@@ -571,9 +559,6 @@ local function resolve_agent_config(agent_name, agent_cfg)
   merged.enabled = resolve_boolean(local_agent_cfg.enabled, inherited_enabled, false)
   merged.mode = normalize_mode(merged.mode)
   merged.sources = normalize_sources(merged.sources or merged.source)
-  if #merged.sources == 0 then
-    merged.sources = default_skill_sources()
-  end
   merged.bin_dir = merged.bin_dir or default_bin_dir()
   merged.mount_dir_explicit = mount_dir_explicit
   if merged.bin_env == nil then
@@ -653,12 +638,17 @@ function M.prepare(agent_name, agent_cfg, opts)
   opts = opts or {}
   local root_dir = opts.root_dir or vim.fn.getcwd()
   local cfg = resolve_agent_config(agent_name, agent_cfg)
-  local project_skills = require("lazyagent.logic.project").skills_dir(root_dir)
-  if project_skills then
+  local installed_skills = require("lazyagent.logic.project").skills_dirs(root_dir)
+  if #installed_skills > 0 then
     cfg.enabled = true
     local seen = {}
     for _, source in ipairs(cfg.sources or {}) do seen[source] = true end
-    if not seen[project_skills] then cfg.sources[#cfg.sources + 1] = project_skills end
+    for _, source in ipairs(installed_skills) do
+      if not seen[source] then
+        cfg.sources[#cfg.sources + 1] = source
+        seen[source] = true
+      end
+    end
   end
   if not cfg.enabled then
     return nil
