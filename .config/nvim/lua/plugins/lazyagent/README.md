@@ -366,10 +366,13 @@ agent scratch で `#notes` を入力すると補完と preview が表示され�
 
 ACP を使う場合は `acp.enabled = true` にします。`view = "buffer"` は transcript を Neovim buffer に表示し、`view = "tmux"` は tmux pane に tail 表示します。
 
-Neovim自身がtmux pane内で動作し、`agentmux`が`PATH`にある場合、`view = "buffer"` のACP sessionはagentmuxへ自動公開されます。単一sessionは`Codex (ACP)`のような名前で、複数sessionは一つの`LazyAgent: ...`項目に集約されます。状態はACP lifecycleに合わせて`working` / `blocked` / `idle`へ更新され、previewにはNeovimの編集中bufferではなく、選択されたACP sessionのlive transcriptが末尾追従で表示されます。最後のACP sessionを閉じるかNeovimを終了するとowner確認付きで解除されます。
+Neovim自身がtmux pane内で動作し、`agentmux`が`PATH`にある場合、`view = "buffer"` のACP sessionはagentmuxへ自動公開されます。単一sessionは`Codex (ACP)`のような名前で、複数sessionは一つの`LazyAgent: ...`項目に集約されます。状態はACP lifecycleに合わせて`working` / `blocked` / `idle`へ更新され、previewにはNeovimの編集中bufferではなく、選択されたACP sessionのlive transcriptが末尾追従で表示されます。最後のACP sessionを閉じるかNeovimを終了するとowner確認付きで解除されます。pluginの読み込みだけではagentmux同期を実行しません。連携を使わない場合は`agentmux.enabled = false`にすると、agentmux commandとautocmdを登録しません。
 
 ```lua
 require("lazyagent").setup({
+  agentmux = {
+    enabled = true,
+  },
   acp = {
     enabled = true,
     view = "buffer",

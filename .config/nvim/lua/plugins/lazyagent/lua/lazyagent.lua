@@ -144,6 +144,7 @@ end
 function M.setup(opts)
   M.opts = vim.tbl_deep_extend("force", default_config.build(), opts or {})
   require("lazyagent.acp.registry").apply_installed(M.opts)
+  status_logic.setup()
 
   register_custom_backends(M.opts)
   register_treesitter_filetypes()

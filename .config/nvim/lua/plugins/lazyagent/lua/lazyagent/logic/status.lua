@@ -195,6 +195,8 @@ function M.start_monitor(agent_name)
   end))
 end
 
-agentmux.setup()
+function M.setup()
+  return agentmux.setup()
+end
 
 return M
