@@ -220,6 +220,9 @@ function M.build()
     teams = {
       enabled = true,
       path = nil,
+      mcp_auto_approve = {
+        lazyagent = true,
+      },
     },
     send_mode = "append",
     use_bracketed_paste = true,

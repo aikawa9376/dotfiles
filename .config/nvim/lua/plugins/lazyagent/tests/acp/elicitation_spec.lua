@@ -9,6 +9,34 @@ end
 function M.run()
   local Elicitation = require("lazyagent.acp.elicitation")
 
+  assert_equal({
+    action = "accept",
+    content = { persist = "once" },
+  }, Elicitation.auto_approve_mcp({
+    mode = "form",
+    message = 'Allow the lazyagent MCP server to run tool "team_report"?',
+    requestedSchema = {
+      type = "object",
+      properties = {
+        persist = {
+          type = "string",
+          oneOf = {
+            { const = "once", title = "Allow once" },
+            { const = "session", title = "Allow for this session" },
+          },
+        },
+      },
+    },
+    _meta = { codex_approval_kind = "mcp_tool_call" },
+  }, { lazyagent = true }), "trusted MCP approval")
+  assert_equal(nil, Elicitation.auto_approve_mcp({
+    message = 'Allow the external MCP server to run tool "publish"?',
+    _meta = { codex_approval_kind = "mcp_tool_call" },
+  }, { lazyagent = true }), "untrusted MCP remains interactive")
+  assert_equal(nil, Elicitation.auto_approve_mcp({
+    message = 'Allow the lazyagent MCP server to run tool "team_report"?',
+  }, { lazyagent = true }), "ordinary elicitation is not mistaken for MCP approval")
+
   local autonomous
   Elicitation.handle({
     mode = "form",
