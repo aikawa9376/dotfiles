@@ -35,6 +35,17 @@ function M.run()
   local config_loader = require("lazyagent.teams.config")
   local runtime = require("lazyagent.teams.runtime")
   local state = require("lazyagent.logic.state")
+  local team_commands = require("lazyagent.commands.team")
+
+  local parsed_request, parsed_team = team_commands._parse_args("research investigate parser", {
+    "engineering",
+    "research",
+  })
+  assert_equal(parsed_team, "research", "known first argument selects a team")
+  assert_equal(parsed_request, "investigate parser", "request follows the selected team")
+  local legacy_request, legacy_team = team_commands._parse_args("investigate parser", { "engineering" })
+  assert_equal(legacy_team, nil, "ordinary request does not select a team")
+  assert_equal(legacy_request, "investigate parser", "ordinary request stays intact")
 
   local normalized, err = config_loader.validate(valid_config())
   assert(normalized, err)

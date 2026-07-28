@@ -253,13 +253,13 @@ JSON を採用したのは、Neovim 標準の `vim.json` だけで厳密に検�
 `lead` がユーザーからの依頼を受ける最上位 AI です。各 member の `reports` は直属の部下だけを列挙します。循環、複数上司、`lead` から到達できない member、未設定 agent は起動前に拒否されます。
 
 ```vim
-:LazyAgentTeamSelect engineering
-:LazyAgentTeam この機能を設計し、実装とテストまで完了してください
+:LazyAgentTeam engineering
+:LazyAgentTeam engineering この機能を設計し、実装とテストまで完了してください
 :LazyAgentTeamStatus
 :LazyAgentTeamStop
 ```
 
-複数チームがあり、保存済み選択も `default_team` も無い場合は selector を表示します。active team の途中切替は行わず、先に `:LazyAgentTeamStop` が必要です。
+最初の引数が既知の team ID なら、その team を使います。team ID だけなら依頼入力を表示し、続けて依頼を書けば直接起動します。既知の team ID で始まらない場合は、従来どおり引数全体を既定 team への依頼として扱います。複数チームがあり team を省略し、保存済み選択も `default_team` も無い場合は selector を表示します。active team の途中切替は行わず、先に `:LazyAgentTeamStop` が必要です。
 
 引数なしの `:LazyAgentTeam` は依頼入力を表示します。2回目以降は active team の lead への follow-up になります。部下は lead または manager が委譲した時点で遅延起動し、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使い、lead だけを自動表示し、部下は background session として起動します。Cockpit には team ID・role・status と worktree metadata が表示されます。
 
