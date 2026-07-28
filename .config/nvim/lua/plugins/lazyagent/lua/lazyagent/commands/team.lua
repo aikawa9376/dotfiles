@@ -6,8 +6,17 @@ local function notify_error(err)
   vim.notify("LazyAgentTeam: " .. tostring(err), vim.log.levels.ERROR)
 end
 
-local function start(request)
-  local result, err = runtime.start(request)
+local function parse_args(raw, team_names)
+  local request = vim.trim(raw or "")
+  local first, rest = request:match("^(%S+)%s*(.*)$")
+  if first and vim.tbl_contains(team_names or runtime.team_names(), first) then
+    return rest, first
+  end
+  return request, nil
+end
+
+local function start(request, team_id)
+  local result, err = runtime.start(request, { team = team_id })
   if not result then
     notify_error(err)
     return
@@ -20,18 +29,23 @@ end
 
 function M.register(create)
   create("LazyAgentTeam", function(cmdargs)
-    local request = cmdargs and cmdargs.args or ""
+    local request, team_id = parse_args(cmdargs and cmdargs.args or "")
     if vim.trim(request) ~= "" then
-      start(request)
+      start(request, team_id)
       return
     end
-    vim.ui.input({ prompt = "Team request: " }, function(input)
+    vim.ui.input({ prompt = team_id and ("Team request (" .. team_id .. "): ") or "Team request: " }, function(input)
       if input and vim.trim(input) ~= "" then
-        start(input)
+        start(input, team_id)
       end
     end)
   end, {
     nargs = "*",
+    complete = function(arglead, cmdline)
+      local args = tostring(cmdline or ""):match("^%S+%s+(.*)$") or ""
+      if args:find("%s") then return {} end
+      return vim.tbl_filter(function(id) return vim.startswith(id, arglead) end, runtime.team_names())
+    end,
     desc = "Send a request through the project LazyAgent team",
   })
 
@@ -63,24 +77,6 @@ function M.register(create)
     desc = "Show active LazyAgent team status",
   })
 
-  create("LazyAgentTeamSelect", function(cmdargs)
-    local requested = cmdargs and cmdargs.args ~= "" and cmdargs.args or nil
-    runtime.select_team(requested, {}, function(team_id, err, config)
-      if not team_id then
-        if err ~= "team selection cancelled" then notify_error(err) end
-        return
-      end
-      vim.notify(
-        string.format("LazyAgentTeam: selected %s · %s", team_id, config and config.name or team_id),
-        vim.log.levels.INFO
-      )
-    end)
-  end, {
-    nargs = "?",
-    complete = function() return runtime.team_names() end,
-    desc = "Select the project LazyAgent team used for the next request",
-  })
-
   create("LazyAgentTeamStop", function()
     if runtime.stop() then
       vim.notify("LazyAgentTeam: stopped", vim.log.levels.INFO)
@@ -91,5 +87,7 @@ function M.register(create)
     desc = "Stop all sessions owned by the active LazyAgent team",
   })
 end
+
+M._parse_args = parse_args
 
 return M
