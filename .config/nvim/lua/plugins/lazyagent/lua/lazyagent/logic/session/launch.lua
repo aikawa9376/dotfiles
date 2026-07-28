@@ -97,6 +97,7 @@ function M.setup(deps)
       source_winid = agent_cfg and agent_cfg.source_winid or nil,
       cwd = root_dir,
       root_dir = root_dir,
+      project_instructions_root = agent_cfg and agent_cfg.project_instructions_root or root_dir,
       editor = {
         instance_id = state.editor_instance_id,
         owner_pid = vim.fn.getpid(),
@@ -189,6 +190,7 @@ function M.setup(deps)
             thread_id = agent_cfg and agent_cfg.acp_thread_id or nil,
             session_key = session_key,
             lazyagent_team = vim.deepcopy(agent_cfg and agent_cfg.lazyagent_team or nil),
+            project_instructions_root = agent_cfg and agent_cfg.project_instructions_root or root_dir,
           }
           if watch_enabled_val then
             call_watch("enable")
@@ -327,6 +329,7 @@ function M.setup(deps)
           thread_id = agent_cfg and agent_cfg.acp_thread_id or nil,
           session_key = session_key,
           lazyagent_team = vim.deepcopy(agent_cfg and agent_cfg.lazyagent_team or nil),
+          project_instructions_root = agent_cfg and agent_cfg.project_instructions_root or root_dir,
           footer_animation = resolved_acp.footer_animation,
           protocol_log = resolved_acp.protocol_log,
           show_context_notes = resolved_acp.show_context_notes,

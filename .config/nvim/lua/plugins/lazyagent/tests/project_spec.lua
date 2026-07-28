@@ -15,12 +15,26 @@ function M.run()
   vim.fn.writefile({ "# Review", "", "Review this request:", "{{input}}" }, root .. "/.lazyagent/prompts/review.md")
   vim.fn.writefile({ "# Explain", "", "Explain carefully." }, root .. "/.lazyagent/prompts/explain.md")
   vim.fn.writefile({ "# Reviewer" }, root .. "/.lazyagent/skills/reviewer/SKILL.md")
+  vim.fn.writefile({ "# Project rules", "", "- Run focused tests.", "- Keep changes scoped." },
+    root .. "/.lazyagent/AGENTS.md")
 
   local project_dir, project_root = project.find(root .. "/src/nested")
   assert_equal(project_dir, root .. "/.lazyagent", "nearest .lazyagent directory")
   assert_equal(project_root, root, "project root")
   assert_equal(project.skills_dir(root), root .. "/.lazyagent/skills", "project skills directory")
   assert_equal(#project.list_prompts(root), 2, "project prompts discovered")
+  local instructions = assert(project.instructions(root .. "/src/nested"))
+  assert_equal(instructions.path, root .. "/.lazyagent/AGENTS.md", "project instructions path")
+  assert(instructions.content:find("Run focused tests", 1, true), "project instructions content")
+
+  local tracker = {}
+  local instructed = assert(project.apply_instructions("Fix the parser.", tracker, root))
+  assert(instructed:find("# LazyAgent project instructions", 1, true), "instructions heading")
+  assert(instructed:find("Keep changes scoped", 1, true), "instructions are included")
+  assert(instructed:find("# User request\n\nFix the parser.", 1, true), "request follows instructions")
+  assert_equal(project.apply_instructions("Follow up.", tracker, root), "Follow up.",
+    "instructions are applied only once per session")
+  assert(tracker.project_instructions_applied, "session tracks instruction injection")
 
   local expanded, err, matched = project.expand_prompt("/prompt review check parser.lua", root)
   assert(matched and not err, err)

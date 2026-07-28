@@ -3,6 +3,7 @@ local uv = vim.uv or vim.loop
 
 M.directory = ".lazyagent"
 M.max_prompt_bytes = 64 * 1024
+M.max_instructions_bytes = 128 * 1024
 
 local function normalize_dir(path)
   path = vim.fn.fnamemodify(path or vim.fn.getcwd(), ":p")
@@ -34,6 +35,53 @@ function M.prompts_dir(start_path)
   local project_dir = M.find(start_path)
   local path = project_dir and (project_dir .. "/prompts") or nil
   return path and vim.fn.isdirectory(path) == 1 and path or nil
+end
+
+function M.instructions(start_path)
+  local project_dir = M.find(start_path)
+  if not project_dir then return nil end
+  local path = project_dir .. "/AGENTS.md"
+  if vim.fn.filereadable(path) ~= 1 then return nil end
+  local size = vim.fn.getfsize(path)
+  if size < 0 or size > M.max_instructions_bytes then
+    return nil, "project AGENTS.md exceeds 128 KiB"
+  end
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok then return nil, "failed to read project AGENTS.md: " .. tostring(lines) end
+  local content = vim.trim(table.concat(lines, "\n"))
+  if content == "" then return nil end
+  return {
+    content = content,
+    path = uv.fs_realpath(path) or vim.fn.fnamemodify(path, ":p"),
+    hash = vim.fn.sha256(content),
+  }
+end
+
+function M.apply_instructions(text, tracker, start_path)
+  text = tostring(text or "")
+  if type(tracker) == "table" and tracker.project_instructions_applied == true then
+    return text
+  end
+  local source = type(tracker) == "table" and tracker.project_instructions_root or nil
+  local instructions, err = M.instructions(source or start_path)
+  if err then return nil, err end
+  if not instructions then return text end
+  if type(tracker) == "table" then
+    tracker.project_instructions_applied = true
+    tracker.project_instructions_path = instructions.path
+    tracker.project_instructions_hash = instructions.hash
+  end
+  return table.concat({
+    "# LazyAgent project instructions",
+    "",
+    "The following instructions come from " .. instructions.path .. " and apply to this project session.",
+    "",
+    instructions.content,
+    "",
+    "# User request",
+    "",
+    text,
+  }, "\n")
 end
 
 function M.list_prompts(start_path)

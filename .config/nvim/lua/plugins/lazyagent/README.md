@@ -172,10 +172,11 @@ global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ご�
 
 ## Project `.lazyagent`
 
-project root またはその親に `.lazyagent/` がある場合、LazyAgent 全体で project 固有の skills と reusable prompts を利用できます。これは Teams の role 定義とは独立した機能です。
+project root またはその親に `.lazyagent/` がある場合、LazyAgent 全体で project 固有の instructions、skills、reusable prompts を利用できます。これは Teams の role 定義とは独立した機能です。
 
 ```text
 .lazyagent/
+├── AGENTS.md
 ├── prompts/
 │   └── review.md
 ├── skills/
@@ -184,6 +185,7 @@ project root またはその親に `.lazyagent/` がある場合、LazyAgent 全
 └── teams.json
 ```
 
+- `.lazyagent/AGENTS.md` は project 共通 instructions として、各 runtime session の最初の agent prompt に一度だけ自動添付されます。ACP、tmux、builtin terminal backend が対象で、Teams の role worktree からも元 project のファイルを参照します。空ファイルは無視し、サイズ上限は 128 KiB です。
 - `.lazyagent/skills/` は全 LazyAgent session の skill source に自動追加されます。global の `skills.enabled = false` でも project source がある場合は有効になります。
 - `.lazyagent/prompts/*.md` は `/prompt <name> [request]` で展開できます。本文中の `{{input}}` に request を差し込み、placeholder が無い場合は末尾へ `# Request` として追加します。
 - prompt 名は英数字・`_`・`-`・`.`、ファイルは直下の Markdown、サイズ上限は 64 KiB です。

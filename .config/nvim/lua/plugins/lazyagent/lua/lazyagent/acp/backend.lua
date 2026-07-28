@@ -968,6 +968,7 @@ local function create_backend(default_view)
         cwd = acp.cwd or vim.fn.getcwd(),
         source_bufnr = acp.source_bufnr,
         root_dir = acp.root_dir,
+        project_instructions_root = acp.project_instructions_root or acp.root_dir or acp.cwd,
         additional_directories = vim.deepcopy(acp.additional_directories or {}),
         mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
         v2_adapter = vim.deepcopy(acp.v2_adapter or { enabled = false }),
@@ -2048,6 +2049,16 @@ local function create_backend(default_view)
     if actions_helpers.handle_local_slash_command(session, prompt) then
       return "handled"
     end
+    local instructed, instructions_err = require("lazyagent.logic.project").apply_instructions(
+      prompt,
+      session,
+      session.root_dir or session.cwd
+    )
+    if instructions_err then
+      conversation_helpers.append_block(session, "Error", "Project instructions: " .. tostring(instructions_err))
+      return "handled"
+    end
+    prompt = instructed or prompt
     PromptQueue.push(session, prompt)
     backend._drain_prompt_queue(target_pane)
     return true
