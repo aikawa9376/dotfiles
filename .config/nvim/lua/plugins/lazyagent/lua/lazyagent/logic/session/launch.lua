@@ -382,7 +382,9 @@ function M.setup(deps)
           persistence.update_session(agent_name, pane_id, state.sessions[agent_name].cwd)
         end
 
-        if agent_cfg.stay_hidden and not split_opts.target_session then
+        local needs_explicit_hide = agent_cfg.stay_hidden
+          and (not split_opts.target_session or backend_name == "buffer_acp")
+        if needs_explicit_hide then
           if backend_mod and type(backend_mod.break_pane) == "function" then
             backend_mod.break_pane(pane_id)
             state.sessions[agent_name].hidden = true

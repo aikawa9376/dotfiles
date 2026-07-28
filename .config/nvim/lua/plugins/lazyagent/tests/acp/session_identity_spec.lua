@@ -38,6 +38,24 @@ function M.run()
   identity.deactivate(state, second, state.sessions[second])
   state.sessions[second] = nil
   assert_equal(identity.resolve(state, "Codex"), first, "provider alias after thread close")
+
+  local team_state = {
+    sessions = {
+      [first] = {
+        provider_id = "Codex",
+        thread_id = THREAD_A,
+        lazyagent_team = { lead = true },
+      },
+      [second] = {
+        provider_id = "Codex",
+        thread_id = THREAD_B,
+        lazyagent_team = { lead = false },
+      },
+    },
+  }
+  identity.activate(team_state, first, team_state.sessions[first])
+  identity.activate(team_state, second, team_state.sessions[second])
+  assert_equal(identity.resolve(team_state, "Codex"), first, "background team member does not replace lead alias")
 end
 
 return M

@@ -448,6 +448,15 @@ local function resolve_send_target(opts)
   elseif pane_id and pane_id ~= "" then
     agent_name, session = find_session_by_pane_id(pane_id)
   else
+    local team_lead, team_lead_session = agent_logic.team_lead_session()
+    if team_lead then
+      agent_name = team_lead
+      session = team_lead_session
+      pane_id = session.pane_id
+    end
+  end
+
+  if not session and not (pane_id and pane_id ~= "") then
     local active_agents = agent_logic.get_active_agents()
     if #active_agents == 0 then
       return nil

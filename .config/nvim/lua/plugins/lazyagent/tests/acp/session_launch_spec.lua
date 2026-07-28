@@ -2,6 +2,7 @@ local M = {}
 
 local THREAD_A = "123e4567-e89b-42d3-a456-426614174000"
 local THREAD_B = "123e4567-e89b-42d3-a456-426614174001"
+local THREAD_C = "123e4567-e89b-42d3-a456-426614174002"
 
 local function assert_equal(actual, expected, message)
   if actual ~= expected then
@@ -13,6 +14,7 @@ function M.run()
   local pane_seq = 0
   local splits = {}
   local legacy_splits = {}
+  local hidden_panes = {}
   local backend = {
     split = function(_, _, _, opts)
       pane_seq = pane_seq + 1
@@ -28,6 +30,10 @@ function M.run()
       return true
     end,
     pane_exists = function()
+      return true
+    end,
+    break_pane = function(pane_id)
+      hidden_panes[#hidden_panes + 1] = pane_id
       return true
     end,
   }
@@ -151,6 +157,20 @@ function M.run()
   assert_equal(reused_key, key_a, "runtime-key command reuse")
   assert_equal(#splits, 2, "runtime-key command must not launch a duplicate")
   assert_equal(mcp_start_count, 0, "ACP session launch must not start legacy MCP server")
+
+  local hidden_key
+  launch.ensure_session("Codex", {
+    acp_thread_id = THREAD_C,
+    source_bufnr = vim.api.nvim_get_current_buf(),
+    stay_hidden = true,
+  }, false, function(_, session_key)
+    hidden_key = session_key
+  end)
+  assert(vim.wait(1000, function()
+    return hidden_key ~= nil
+  end, 10), "hidden ACP session should become ready")
+  assert_equal(hidden_panes[1], "mock-pane-3", "buffer ACP member view is hidden after creation")
+  assert_equal(state.sessions[hidden_key].hidden, true, "hidden ACP runtime remains marked hidden")
 
   state.opts.mcp_mode = true
   local legacy_ready = false

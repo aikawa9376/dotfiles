@@ -559,6 +559,9 @@ function M.setup(deps)
     agent_name = session_identity.resolve(state, agent_name)
     opts = opts or {}
     local force_toggle_ui = opts.force_toggle_ui == true or opts.close_running == true
+    if not agent_name or agent_name == "" then
+      agent_name = agent_logic.team_lead_session()
+    end
 
     if force_toggle_ui and (not agent_name or agent_name == "") then
       if has_visible_lazyagent_ui() then

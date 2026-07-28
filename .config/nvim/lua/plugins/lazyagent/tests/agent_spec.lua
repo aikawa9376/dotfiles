@@ -29,6 +29,28 @@ function M.run()
   local launch = assert(agent.resolve_launch_spec("Antigravity", antigravity))
   assert_equal(launch.mode, "cli", "Antigravity launch mode")
   assert_equal(launch.command, "agy --dangerously-skip-permissions", "Antigravity launch spec")
+
+  local previous_sessions = state.sessions
+  local previous_team = state.team_runtime
+  state.sessions = {
+    ["Codex::lead"] = { pane_id = "lead-pane", provider_id = "Codex" },
+    ["Codex::child"] = { pane_id = "child-pane", provider_id = "Codex" },
+  }
+  state.team_runtime = {
+    id = "team-1",
+    config = { lead = "lead" },
+    members = {
+      lead = { session_key = "Codex::lead" },
+      child = { session_key = "Codex::child" },
+    },
+  }
+  local selected
+  agent.resolve_target_agent(nil, nil, function(choice)
+    selected = choice
+  end)
+  assert_equal(selected, "Codex::lead", "implicit actions target the active team lead")
+  state.sessions = previous_sessions
+  state.team_runtime = previous_team
   state.opts = previous_opts
 end
 

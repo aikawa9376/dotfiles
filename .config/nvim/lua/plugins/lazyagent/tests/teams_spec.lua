@@ -38,6 +38,9 @@ function M.run()
   local state = require("lazyagent.logic.state")
   local team_commands = require("lazyagent.commands.team")
 
+  assert(runtime._uuid():match("^[0-9a-f]+%-[0-9a-f]+%-4[0-9a-f]+%-8[0-9a-f]+%-[0-9a-f]+$"),
+    "team identities use UUID v4 version and variant bits")
+
   local parsed_request, parsed_team = team_commands._parse_args("research investigate parser", {
     "engineering",
     "research",
@@ -223,6 +226,8 @@ function M.run()
   end
   backend_logic.resolve_backend_for_agent = function()
     return "buffer_acp", {
+      get_thread = function() return nil end,
+      create_thread = function(attributes) return attributes end,
       get_runtime_snapshot = function() return { acp_mcp_server_count = 1 } end,
       paste_and_submit = function() return true end,
     }
@@ -237,6 +242,8 @@ function M.run()
   assert_equal(opened_cfg.open_input, nil, "team uses the standard interactive scratch path")
   assert_equal(opened_cfg.stay_hidden, false, "lead view is visible")
   assert_equal(opened_cfg.initial_input, "", "lead scratch starts empty")
+  assert_equal(opened_cfg.acp_thread_id, "123e4567-e89b-42d3-a456-426614174110",
+    "lead thread is reserved before the ACP session opens")
   assert(opened_cfg.acp_session_instructions:find("Your role: CTO", 1, true),
     "lead role instructions wait for the first scratch submit")
 
@@ -256,6 +263,40 @@ function M.run()
   assert_equal(captured_cfg.stay_hidden, true, "non-lead ACP view stays hidden")
   assert_equal(captured_cfg.acp_thread_metadata.lazyagent_team.role_id, "engineer", "team metadata reaches thread")
   assert_equal(captured_cfg.acp_thread_metadata.worktree_path, "/tmp/engineer-worktree", "worktree metadata reaches thread")
+
+  local eager_dir = vim.fn.tempname()
+  vim.fn.mkdir(eager_dir .. "/.lazyagent", "p")
+  vim.fn.writefile({ vim.json.encode({
+    version = 1,
+    name = "Eager Team",
+    lead = "lead",
+    members = {
+      lead = { agent = "EngineerAgent", reports = { "implementer", "reviewer" } },
+      implementer = { agent = "EngineerAgent", reports = {} },
+      reviewer = { agent = "EngineerAgent", reports = {} },
+    },
+  }) }, eager_dir .. "/.lazyagent/teams.json")
+  state.team_runtime = nil
+  state.opts.mcp_mode = true
+  state.opts._mcp_url = "http://127.0.0.1:12345/mcp"
+  state.opts._mcp_type = "http"
+  local background_cfgs = {}
+  session_logic.ensure_session = function(_, cfg, _, callback)
+    background_cfgs[#background_cfgs + 1] = cfg
+    callback("background-" .. tostring(#background_cfgs), "background-session-" .. tostring(#background_cfgs))
+  end
+  session_logic.start_interactive_session = function(opts)
+    opened_cfg = opts
+    opts.on_ready("lead-pane", "lead-session", 1)
+  end
+  local eager_result, eager_err = runtime.start("", { open_input = true, start_path = eager_dir })
+  assert(eager_result, eager_err)
+  assert_equal(#background_cfgs, 2, "all non-lead ACP sessions start with the lead")
+  assert_equal(background_cfgs[1].stay_hidden, true, "first background member stays hidden")
+  assert_equal(background_cfgs[2].stay_hidden, true, "second background member stays hidden")
+  assert_equal(opened_cfg.stay_hidden, false, "eager lead remains visible")
+  vim.fn.delete(eager_dir, "rf")
+
   session_logic.ensure_session = original_ensure
   session_logic.start_interactive_session = original_start_interactive
   backend_logic.resolve_backend_for_agent = original_backend

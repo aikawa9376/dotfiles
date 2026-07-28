@@ -103,6 +103,29 @@ function M.use_acp(agent_name, agent_cfg)
   return acp_logic.enabled(agent_name, agent_cfg)
 end
 
+function M.team_lead_session()
+  local team = state.team_runtime
+  local lead_id = team and team.config and team.config.lead or nil
+  if not team or not lead_id then
+    return nil, nil
+  end
+  local member = lead_id and team.members and team.members[lead_id] or nil
+  local session_key = member and member.session_key or nil
+  if session_key and state.sessions and state.sessions[session_key] then
+    return session_key, state.sessions[session_key]
+  end
+  for candidate, session in pairs(state.sessions or {}) do
+    local metadata = session and session.lazyagent_team or nil
+    if metadata
+      and metadata.id == team.id
+      and metadata.role_id == lead_id
+    then
+      return candidate, session
+    end
+  end
+  return nil, nil
+end
+
 function M.resolve_acp_command(agent_name, agent_cfg)
   local cfg = agent_cfg or M.get_interactive_agent(agent_name) or {}
   local candidates = {}
@@ -220,9 +243,10 @@ end
 
 --- Resolves the target agent to use based on context.
 -- 1) If 'explicit' is provided, use it.
--- 2) If exactly one active agent is present, use it.
--- 3) If multiple active agents are present, present a ui.select of the active agents.
--- 4) If no active agents exist: if 'hint' is provided and valid, use it; otherwise, present ui.select of configured agents.
+-- 2) If a team is active, use its lead session.
+-- 3) If exactly one active agent is present, use it.
+-- 4) If multiple active agents are present, present a ui.select of the active agents.
+-- 5) If no active agents exist: if 'hint' is provided and valid, use it; otherwise, present ui.select of configured agents.
 -- @param explicit (string|nil) An explicitly provided agent name.
 -- @param hint (string|nil) A hint for the agent name (e.g., from a command).
 -- @param callback (function) A function to call with the chosen agent name.
@@ -231,6 +255,12 @@ function M.resolve_target_agent(explicit, hint, callback)
 
   if explicit and explicit ~= "" then
     callback(explicit)
+    return
+  end
+
+  local team_lead = M.team_lead_session()
+  if team_lead then
+    callback(team_lead)
     return
   end
 
