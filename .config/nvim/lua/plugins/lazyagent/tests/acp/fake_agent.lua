@@ -157,6 +157,11 @@ for line in io.lines() do
           name = "lazyagent-test-agent",
           version = "1.0.0",
         },
+        _meta = {
+          steering = {
+            supported = true,
+          },
+        },
         authMethods = vim.env.LAZYAGENT_FAKE_AUTH_FLOW == "1" and {
           {
             id = "test-auth",
@@ -230,6 +235,10 @@ for line in io.lines() do
           currentValue = message.params.value,
         },
       },
+    }))
+  elseif message.method == "_session/steering" then
+    send(response(message.id, {
+      outcome = "injected",
     }))
   elseif message.method == "session/delete" then
     send(response(message.id, vim.empty_dict()))

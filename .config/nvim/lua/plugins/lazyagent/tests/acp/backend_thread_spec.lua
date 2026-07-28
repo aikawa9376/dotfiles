@@ -119,6 +119,13 @@ function M.run()
   }))
   local pending = backend.get_pending_permission(pane_id)
   assert_equal(pending.tool_call_id, "tool-1", "pending permission tool")
+  local steering_result
+  assert(backend.steer_active_turn(pane_id, "Prefer compatibility", function(ok, result)
+    steering_result = { ok = ok, result = result }
+  end))
+  assert(vim.wait(1000, function() return steering_result ~= nil end, 10), "backend steering response")
+  assert_equal(steering_result.ok, true, "backend steering accepted")
+  assert_equal(steering_result.result.outcome, "injected", "backend steering outcome")
   local persisted_during_turn = assert(backend.get_thread(runtime.acp_thread_id))
   local live_during_turn = assert(backend.get_thread(runtime.acp_thread_id, { include_live = true }))
   local persisted_turns = persisted_during_turn.change_journal.turns or {}

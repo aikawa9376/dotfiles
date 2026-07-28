@@ -152,6 +152,8 @@ function M.build()
       send_and_clear = "<C-Space>",
       send_key_insert = "<C-s>",
       send_key_normal = "<CR>",
+      steer_normal = "<M-s>",
+      steer_insert = "<M-s>",
       scroll_up = "<C-u>",
       scroll_down = "<C-d>",
       nav_up = "<Up>",

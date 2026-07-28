@@ -2226,6 +2226,35 @@ local function create_backend(default_view)
     return true
   end
 
+  function backend.steer_active_turn(target_pane, text, callback)
+    callback = callback or function() end
+    local session = get_session(target_pane)
+    if not session or not session.client or not session.client:supports_steering() then
+      return nil, "ACP provider does not advertise native steering"
+    end
+    if session.busy ~= true then
+      return nil, "ACP session has no active turn"
+    end
+    local prompt = normalize_text(text or "")
+    if prompt == "" then
+      return nil, "Steering input is empty"
+    end
+    local blocks = actions_helpers.build_prompt_blocks(session, prompt)
+    session.client:steer(blocks, function(result, err)
+      if err then
+        callback(false, err)
+        return
+      end
+      conversation_helpers.append_block(
+        session,
+        "System",
+        "Steering: " .. tostring(result and result.outcome or "sent")
+      )
+      callback(true, result)
+    end)
+    return true
+  end
+
   function backend.show_steering_input(target_pane)
     local session = get_session(target_pane)
     if not session or not session.client or not session.client:supports_steering() then
@@ -2233,17 +2262,19 @@ local function create_backend(default_view)
     end
     vim.ui.input({ prompt = "Steer active ACP turn: " }, function(value)
       if not value or vim.trim(value) == "" then return end
-      session.client:steer({ { type = "text", text = value } }, function(result, err)
-        if err then
-          vim.notify("LazyAgent ACP steering failed: " .. tostring(err.message or err), vim.log.levels.ERROR)
+      local accepted, steer_err = backend.steer_active_turn(target_pane, value, function(ok, result_or_err)
+        if not ok then
+          local detail = type(result_or_err) == "table" and result_or_err.message or result_or_err
+          vim.notify(
+            "LazyAgent ACP steering failed: " .. tostring(detail),
+            vim.log.levels.ERROR
+          )
           return
         end
-        conversation_helpers.append_block(
-          session,
-          "System",
-          "Steering: " .. tostring(result and result.outcome or "sent")
-        )
       end)
+      if not accepted then
+        vim.notify("LazyAgent ACP steering failed: " .. tostring(steer_err), vim.log.levels.WARN)
+      end
     end)
     return true
   end
