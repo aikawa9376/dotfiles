@@ -114,6 +114,9 @@ return {
         step_ms = 10,
         max_delta = 80,
       },
+      mobile = {
+        host = "0.0.0.0",
+      },
     },
     resume = false,
     image_paste = {
@@ -183,8 +186,8 @@ return {
     -- ACP mode itself no longer depends on this path; if all configured agents use ACP,
     -- lazyagent skips starting the MCP server even when this stays true.
     mcp_mode = true,
-    -- mcp_host: set to "0.0.0.0" to expose the MCP server (and web UI) to the local network.
-    -- Access the web UI at http://<your-ip>:<port>/ from any device on the same network.
+    -- mcp_host controls the legacy / Teams control server; ACP Mobile uses acp.mobile.host above.
+    -- Set to "0.0.0.0" to expose that MCP server to the local network.
     -- Default is "127.0.0.1" (localhost only).
     mcp_host = "0.0.0.0",
     hooks = {
