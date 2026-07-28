@@ -100,6 +100,16 @@ function M.git_root_for_path(path)
   return nil
 end
 
+function M.project_root_for_buf(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  if not vim.api.nvim_buf_is_valid(bufnr) then return nil end
+  local ok_project, project = pcall(require, "project")
+  if not ok_project or type(project.get_project_root) ~= "function" then return nil end
+  local ok_root, root = pcall(project.get_project_root, bufnr)
+  if not ok_root or type(root) ~= "string" or root == "" then return nil end
+  return vim.fn.fnamemodify(root, ":p"):gsub("/$", "")
+end
+
 function M.git_branch_for_path(path)
   path = path or vim.api.nvim_buf_get_name(0)
   if not path or path == "" then path = vim.fn.getcwd() end

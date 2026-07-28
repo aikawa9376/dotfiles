@@ -11,6 +11,16 @@ function M.run()
   local normal_win = vim.api.nvim_get_current_win()
   local normal_buf = vim.api.nvim_get_current_buf()
   local scratch_buf = vim.api.nvim_create_buf(false, true)
+  local previous_project_module = package.loaded.project
+  package.loaded.project = {
+    get_project_root = function(bufnr)
+      assert_equal(bufnr, normal_buf, "project root buffer")
+      return "/tmp/lazyagent-project-root", "pattern"
+    end,
+  }
+  assert_equal(util.project_root_for_buf(normal_buf), "/tmp/lazyagent-project-root",
+    "project.nvim is the Neovim root authority")
+  package.loaded.project = previous_project_module
 
   vim.cmd("vnew")
   local transcript_win = vim.api.nvim_get_current_win()

@@ -216,6 +216,8 @@ project root またはその親に `.lazyagent/` がある場合、LazyAgent 全
 
 たとえば `.lazyagent/prompts/review.md` を作成後、ACP scratch や通常の LazyAgent 入力から `/prompt review parser.lua を確認して` と送れます。
 
+LazyAgent session の workspace は、明示した `root_dir` / `cwd`、Neovim の `project.nvim` が起点 buffer に対して決定した project root、起点 buffer が保持する workspace、起点 file の Git root、非 Git file の親 directory、Neovim の cwd の順で決定します。ACP process の OS cwd と ACP `session/new` の `cwd` には同じ workspace を渡します。Neovim 自体の cwd は変更しません。
+
 ## LazyAgent Teams
 
 project 内またはその親 directory に `.lazyagent/teams.json` があると、company 型の AI orchestration を利用できます。project 側に無い場合は `stdpath("data") .. "/lazyagent/teams.json"` を global fallback として探し、従来の `stdpath("config") .. "/lazyagent/teams.json"` も互換維持します。設定場所を固定したい場合は `teams.path` を指定できます。
