@@ -97,6 +97,12 @@ return {
       -- buffer_inactive_background = "#073642",
       -- default_mode = "bypassPermissions", -- prefer provider mode when available
       auto_permission = "allow_always",
+      question_policy = "prompt", -- "prompt" | "autonomous"
+      experimental = {
+        elicitation = { enabled = true },
+        session_fork = { enabled = true },
+        next_edit_suggestions = { enabled = true },
+      },
       buffer_background = "none",
       buffer_inactive_background = "none",
       fancy_mode = false,

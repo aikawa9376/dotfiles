@@ -46,6 +46,7 @@ function M.setup(deps)
   local MessageStream = require("lazyagent.acp.backend.message_stream")
   local Notifications = require("lazyagent.acp.notifications")
   local PermissionStore = require("lazyagent.acp.permission_store")
+  local Elicitation = require("lazyagent.acp.elicitation")
   local config_values = require("lazyagent.acp.config_values")
 
   local function notify_attention(kind, session, message)
@@ -930,9 +931,11 @@ function M.setup(deps)
       additional_directories = vim.deepcopy(base_session.additional_directories or {}),
       mcp_servers = vim.deepcopy(base_session.mcp_servers or {}),
       v2_adapter = vim.deepcopy(base_session.v2_adapter or { enabled = false }),
+      experimental = vim.deepcopy(base_session.experimental or {}),
       mcp_url = base_session.mcp_url,
       protocol_log_path = base_session.protocol_log_path,
       auto_permission = base_session.auto_permission,
+      question_policy = base_session.question_policy,
       default_mode = base_session.default_mode,
       initial_model = base_session.initial_model,
       fancy_mode = base_session.fancy_mode,
@@ -1105,6 +1108,32 @@ function M.setup(deps)
         return terminal_release(session, params)
       end,
     }
+    local experimental = type(session.experimental) == "table" and session.experimental or {}
+    local elicitation_cfg = type(experimental.elicitation) == "table" and experimental.elicitation or {}
+    if elicitation_cfg.enabled == true then
+      handlers.elicitation = function(params, done)
+        notify_attention("elicitation", session, params.message or "Input required")
+        append_block(session, "System", "Input requested: " .. tostring(params.message or "ACP elicitation"))
+        Elicitation.handle(params, {
+          question_policy = session.question_policy or "prompt",
+        }, done)
+      end
+    end
+    local client_capabilities = {}
+    if handlers.elicitation then
+      client_capabilities.elicitation = {
+        form = vim.empty_dict(),
+        url = vim.empty_dict(),
+      }
+    end
+    local nes_cfg = type(experimental.next_edit_suggestions) == "table"
+        and experimental.next_edit_suggestions
+      or {}
+    if nes_cfg.enabled == true then
+      -- The basic edit suggestion kind is implicit in the RFD. Advertise no
+      -- optional kinds until their editor operations are implemented.
+      client_capabilities.nes = vim.empty_dict()
+    end
 
     session.client = ACPClient.new({
       command = session.command,
@@ -1115,6 +1144,7 @@ function M.setup(deps)
       mcp_url = session.mcp_url,
       protocol_log_path = session.protocol_log_path,
       v2_adapter = session.v2_adapter,
+      client_capabilities = client_capabilities,
       client_info = {
         name = "lazyagent",
         title = "lazyagent.nvim",

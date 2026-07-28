@@ -69,6 +69,7 @@ function M.build()
       enabled = false,
       view = "tmux",
       auto_permission = nil,
+      question_policy = "prompt",
       default_mode = nil,
       initial_model = nil,
       mcp_servers = {},
@@ -98,6 +99,9 @@ function M.build()
       },
       experimental = {
         v2_adapter = { enabled = false },
+        elicitation = { enabled = true },
+        session_fork = { enabled = false },
+        next_edit_suggestions = { enabled = false },
       },
       permission_rules = {},
       permissions = {

@@ -970,6 +970,7 @@ local function create_backend(default_view)
         additional_directories = vim.deepcopy(acp.additional_directories or {}),
         mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
         v2_adapter = vim.deepcopy(acp.v2_adapter or { enabled = false }),
+        experimental = vim.deepcopy(acp.experimental or {}),
         mcp_url = acp.mcp_url,
         session_bootstrap = vim.deepcopy(acp.session_bootstrap or (existing_thread and existing_thread.native_session_id and {
           session_mode = "auto",
@@ -984,6 +985,7 @@ local function create_backend(default_view)
           tool_timeline = {},
         } or nil,
         auto_permission = acp.auto_permission,
+        question_policy = acp.question_policy or "prompt",
         default_mode = acp.default_mode or (existing_thread and config_values.preferred(
           existing_thread.config,
           { "mode" },

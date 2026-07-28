@@ -274,6 +274,7 @@ require("lazyagent").setup({
     view = "buffer",
     table_layout = "card", -- "table" | "card"
     auto_permission = "allow_always",
+    question_policy = "prompt", -- "prompt" | "autonomous"
     default_mode = "bypassPermissions",
     initial_model = "gpt-5.4",
     fancy_mode = true,
@@ -283,6 +284,11 @@ require("lazyagent").setup({
     transcript_max_lines = 12000,
     render_markdown_debounce_ms = 900,
     release_buffer_on_hide = true,
+    experimental = {
+      elicitation = { enabled = true },
+      session_fork = { enabled = false },
+      next_edit_suggestions = { enabled = false },
+    },
     mobile = {
       host = "0.0.0.0", -- LAN のスマホから開く場合。未指定なら 127.0.0.1
       port = nil,       -- nil/0 なら空き port を自動選択
