@@ -12,6 +12,7 @@ local groups = {
   "lazyagent.commands.hooks",
   "lazyagent.commands.mcp",
   "lazyagent.commands.image",
+  "lazyagent.commands.install",
   "lazyagent.commands.team",
 }
 

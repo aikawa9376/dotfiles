@@ -98,6 +98,9 @@ end
 M.team_names = function(opts)
   return require("lazyagent.teams.runtime").team_names(opts)
 end
+M.install = function(opts)
+  return require("lazyagent.logic.installer").install(opts)
+end
 
 local function register_custom_backends(opts)
   if type(opts.backends) ~= "table" then

@@ -124,7 +124,7 @@ scratchへ画像file pathや画像URLをdrag & dropした場合も、`image_past
 
 ## Skills mount / launch wiring
 
-既定では `lazyagent.nvim` 自身の直下にある `skills/` を見ます。`SKILL.md` を含む skill directory を追加すると、lazyagent 起動時に対応 agent へ渡せます。
+同梱skillsは暗黙にマウントしません。`:LazyAgentInstall`でprojectまたはglobal領域へ明示的にコピーすると、`SKILL.md`を含むskill directoryが対応agentへ渡されます。`skills.sources`による任意directoryの明示指定も引き続き利用できます。
 
 ```text
 lazyagent/
@@ -156,7 +156,8 @@ require("lazyagent").setup({
 })
 ```
 
-- 何も指定しなければ `lazyagent/skills` を使います。
+- `:LazyAgentInstall project skills`で`<git-root>/.lazyagent/skills/`、`:LazyAgentInstall global skills`で`stdpath("data")/lazyagent/skills/`へ同梱skillsをコピーします。
+- installed project/global skillsがあれば、`skills.enabled = false`でもsourceとして有効になります。globalを先、projectを後に重ねます。
 - 何も指定しなければ `lazyagent/bin` を基準に、`bin/<os>-<arch>/`（例: `bin/linux-x64`, `bin/darwin-arm64`）があればそちらを優先して `LAZYAGENTBIN` に注入します。platform dir が無ければ従来どおり `lazyagent/bin` を使います。
 - local CLI を使う skill は `$LAZYAGENTBIN/<tool>` を見れば OK です。
 - lazyagent から起動した agent には `LAZYAGENT_NVIM_BRIDGE_*` が注入され、bundled `nvim-cli-bridge` は socket ではなく file bridge 経由で親 Neovim を操作します。bridge client は shell wrapper + Neovim Lua です。sandbox 内で `NVIM_LISTEN_ADDRESS` の socket 接続が拒否される環境でもこの経路を使います。`nvim-cli` は従来どおり raw socket client のままです。
@@ -169,6 +170,26 @@ require("lazyagent").setup({
 - `mode = "auto"`: Copilot は `flag`、それ以外は `mount` を選びます。
 
 global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ごとに override できます。`interactive_agents.<name>.skills = false` でその agent だけ無効化できます。
+
+## Install project / global configuration
+
+```vim
+:LazyAgentInstall
+:LazyAgentInstall project all
+:LazyAgentInstall project instructions
+:LazyAgentInstall project skills
+:LazyAgentInstall global all
+```
+
+引数なしではscope（`project` / `global`）と内容（`all` / `instructions` / `skills`）を順に選択します。
+
+- project: Git root（Git外では`cwd`）の`.lazyagent/`
+- global: `stdpath("data")/lazyagent/`。通常は`~/.local/share/nvim/lazyagent/`
+- instructions: 編集用の`AGENTS.md` starterを作成
+- skills: LazyAgent同梱skillsをコピー
+- 既存ファイルは上書きせず、不足しているファイルだけ追加
+
+globalとprojectの両方に`AGENTS.md`がある場合はglobal→projectの順で重ね、provider-native instruction layerへ渡します。
 
 ## Project `.lazyagent`
 
@@ -186,7 +207,7 @@ project root またはその親に `.lazyagent/` がある場合、LazyAgent 全
 ```
 
 - `.lazyagent/AGENTS.md` は project 共通 instructions として、会話の user prompt へ露出させず provider native の instruction layer へ渡します。Codex は `developer_instructions`、Copilot は custom instruction directory、Claude は appended system prompt file、Gemini は hidden runtime の `GEMINI.md` を利用します。未知の custom provider だけ、互換 fallback として最初の agent prompt に一度添付します。ACP、tmux、builtin terminal backend が対象で、Teams の role worktree からも元 project のファイルを参照します。空ファイルは無視し、サイズ上限は 128 KiB です。
-- `.lazyagent/skills/` は全 LazyAgent session の skill source に自動追加されます。global の `skills.enabled = false` でも project source がある場合は有効になります。
+- `.lazyagent/skills/` は全 LazyAgent session の skill source に自動追加されます。global installed skillsは`stdpath("data")/lazyagent/skills/`から先に読み込みます。
 - `.lazyagent/prompts/*.md` は `/prompt <name> [request]` で展開できます。本文中の `{{input}}` に request を差し込み、placeholder が無い場合は末尾へ `# Request` として追加します。
 - prompt 名は英数字・`_`・`-`・`.`、ファイルは直下の Markdown、サイズ上限は 64 KiB です。
 
@@ -628,6 +649,7 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentACPDoctor [agent]` | ACP health diagnostics |
 | `:LazyAgentACPContext [agent]` | context usage / transcript / compaction budget report |
 | `:LazyAgentACPReview [agent]` | ACP tool / edit review report |
+| `:LazyAgentInstall [project\|global] [all\|instructions\|skills]` | projectまたは`stdpath("data")/lazyagent`へstarter `AGENTS.md`と同梱skillsを非破壊install |
 | `:Antigravity` / `:Gemini` / `:Claude` / `:Codex` / `:Copilot` / `:Cursor` | agent を直接起動 |
 
 ## Scratch tokens
@@ -664,6 +686,7 @@ lazyagent.send_key("Enter")
 lazyagent.close_session("Gemini")
 lazyagent.get_active_agents()
 lazyagent.status()
+lazyagent.install({ scope = "global", components = "all" })
 ```
 
 低レベル API は `lazyagent.logic.*` にあります。外部から使う場合は、できるだけ `require("lazyagent")` の facade を優先してください。
