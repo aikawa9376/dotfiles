@@ -401,6 +401,14 @@ f_history_toggle() {
         update+="| xargs -I $ sqlite3 ~/.local/share/atuin/history.db "
         update+="\\\"update history set timestamp = CAST((julianday() - 2440587.5) * 86400000000000 AS INTEGER) where timestamp like '$%'\\\""
 
+  # fzf runs transform actions in a child shell, so local values must be exported.
+  # printf preserves the quotes and backslashes used by the NUL-delimited commands.
+  local -x F_HISTORY_PROMPT="$prompt"
+  local -x F_HISTORY_DIR="$dir"
+  local -x F_HISTORY_GLOBAL="$global"
+  local -x F_HISTORY_UPDATE="$update"
+  local -x F_HISTORY_DELETE="$delete"
+
   local history_command
   history_command=$(
     eval "$global" | fzf \
@@ -415,14 +423,14 @@ f_history_toggle() {
       --with-nth=2.. \
       --preview-window hidden \
       --bind 'ctrl-r:transform:[[ $FZF_PROMPT =~ global ]] &&
-              echo "change-prompt('$prompt' >)+reload($dir)" ||
-              echo "change-prompt(global >)+reload($global)"' \
+              printf "%s\n" "change-prompt($F_HISTORY_PROMPT >)+reload($F_HISTORY_DIR)" ||
+              printf "%s\n" "change-prompt(global >)+reload($F_HISTORY_GLOBAL)"' \
       --bind 'ctrl-s:transform:[[ $FZF_PROMPT =~ global ]] &&
-              echo "execute-silent($update)+reload($global)" ||
-              echo "execute-silent($update)+reload($dir)"' \
+              printf "%s\n" "execute-silent($F_HISTORY_UPDATE)+reload($F_HISTORY_GLOBAL)" ||
+              printf "%s\n" "execute-silent($F_HISTORY_UPDATE)+reload($F_HISTORY_DIR)"' \
       --bind 'ctrl-x:transform:[[ $FZF_PROMPT =~ global ]] &&
-              echo "execute-silent($delete)+reload($global)" ||
-              echo "execute-silent($delete)+reload($dir)"' \
+              printf "%s\n" "execute-silent($F_HISTORY_DELETE)+reload($F_HISTORY_GLOBAL)" ||
+              printf "%s\n" "execute-silent($F_HISTORY_DELETE)+reload($F_HISTORY_DIR)"' \
       --bind 'ctrl-e:execute-silent(printf %s {2..} | xclip -selection c)' \
       | perl -0ne 's/\0\z//; s/^[^\t]*\t//s; print; exit'
   )
