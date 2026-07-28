@@ -7,6 +7,12 @@ local running = false
 local pending = nil
 local persisted_identity_hashes = {}
 
+local function enabled()
+  local opts = state.opts and state.opts.agentmux
+  if opts == false then return false end
+  return type(opts) ~= "table" or opts.enabled ~= false
+end
+
 local function enclosing_tmux_pane()
   local pane = tostring(vim.env.TMUX_PANE or "")
   return pane:match("^%%%d+$") and pane or nil
@@ -119,6 +125,7 @@ local function persist_thread_identities(sessions, pane)
 end
 
 function M.sync()
+  if not enabled() then return false end
   local binary = executable()
   local pane = enclosing_tmux_pane()
   if not binary or not pane then
@@ -169,6 +176,7 @@ function M.sync()
 end
 
 function M.clear_sync()
+  if not enabled() then return false end
   local binary = executable()
   local pane = enclosing_tmux_pane()
   if not binary or not pane then
@@ -179,9 +187,8 @@ function M.clear_sync()
 end
 
 function M.setup()
-  if initialized then
-    return
-  end
+  if initialized then return true end
+  if not enabled() then return false end
   initialized = true
 
   local group = vim.api.nvim_create_augroup("LazyAgentAgentmuxStatus", { clear = true })
@@ -194,7 +201,7 @@ function M.setup()
     group = group,
     callback = M.clear_sync,
   })
-  vim.schedule(M.sync)
+  return true
 end
 
 return M

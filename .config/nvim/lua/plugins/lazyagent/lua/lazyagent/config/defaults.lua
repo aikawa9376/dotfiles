@@ -64,6 +64,9 @@ function M.build()
       icon_position = "eol",
       icon = "󰆉",
     },
+    agentmux = {
+      enabled = true,
+    },
     backend = "tmux",
     acp = {
       enabled = false,
