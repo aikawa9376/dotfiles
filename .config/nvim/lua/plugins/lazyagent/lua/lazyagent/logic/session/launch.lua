@@ -72,8 +72,28 @@ function M.setup(deps)
       return vim.fn.fnamemodify(explicit, ":p"):gsub("/$", "")
     end
     local source_bufnr = resolve_source_bufnr(agent_cfg)
+    local project_root = type(util.project_root_for_buf) == "function"
+        and util.project_root_for_buf(source_bufnr)
+      or nil
+    if project_root and project_root ~= "" then return project_root end
+    local workspace = vim.b[source_bufnr] and vim.b[source_bufnr].lazyagent_workspace_root or nil
+    if type(workspace) == "string" and workspace ~= "" then
+      return vim.fn.fnamemodify(workspace, ":p"):gsub("/$", "")
+    end
     local source_path = vim.api.nvim_buf_get_name(source_bufnr)
-    return util.git_root_for_path(source_path) or vim.fn.getcwd()
+    local git_root = util.git_root_for_path(source_path)
+    if git_root and git_root ~= "" then
+      return vim.fn.fnamemodify(git_root, ":p"):gsub("/$", "")
+    end
+    if source_path ~= "" then
+      local source_dir = vim.fn.isdirectory(source_path) == 1
+          and source_path
+        or vim.fn.fnamemodify(source_path, ":h")
+      if source_dir ~= "" and vim.fn.isdirectory(source_dir) == 1 then
+        return vim.fn.fnamemodify(source_dir, ":p"):gsub("/$", "")
+      end
+    end
+    return vim.fn.fnamemodify(vim.fn.getcwd(), ":p"):gsub("/$", "")
   end
 
   local function build_acp_split_opts(agent_name, agent_cfg, launch_spec, split_opts, runtime_key)

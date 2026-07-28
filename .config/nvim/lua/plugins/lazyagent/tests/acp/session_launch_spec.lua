@@ -11,6 +11,9 @@ local function assert_equal(actual, expected, message)
 end
 
 function M.run()
+  local source_bufnr = vim.api.nvim_get_current_buf()
+  local previous_workspace_root = vim.b[source_bufnr].lazyagent_workspace_root
+  vim.b[source_bufnr].lazyagent_workspace_root = "/tmp/lazyagent-buffer-root"
   local pane_seq = 0
   local splits = {}
   local acp_split_opts = {}
@@ -94,7 +97,12 @@ function M.run()
       end,
     },
     util = {
-      git_root_for_path = function()
+      project_root_for_buf = function(bufnr)
+        if bufnr == source_bufnr then return "/tmp/lazyagent-project-root" end
+        return nil
+      end,
+      git_root_for_path = function(path)
+        if tostring(path):match("lazyagent%-non%-git") then return nil end
         return vim.fn.getcwd()
       end,
       fire_event = function() end,
@@ -116,7 +124,7 @@ function M.run()
   for index, thread_id in ipairs({ THREAD_A, THREAD_B }) do
     launch.ensure_session("Codex", {
       acp_thread_id = thread_id,
-      source_bufnr = vim.api.nvim_get_current_buf(),
+      source_bufnr = source_bufnr,
       root_dir = index == 1 and "/tmp/lazyagent-explicit-root" or nil,
     }, false, function(pane_id, session_key)
       ready[session_key] = pane_id
@@ -137,6 +145,7 @@ function M.run()
   assert_equal(splits[2].agent_name, key_b, "second backend runtime key")
   assert_equal(splits[1].provider_id, "Codex", "first backend provider")
   assert_equal(splits[1].cwd, "/tmp/lazyagent-explicit-root", "explicit thread workspace wins over source root")
+  assert_equal(splits[2].cwd, "/tmp/lazyagent-project-root", "Neovim project root wins over buffer fallback")
   assert_equal(splits[1].editor.owner_pid, vim.fn.getpid(), "Neovim owner is forwarded")
   assert_equal(splits[1].editor.instance_id, "test-editor", "Neovim instance identity is forwarded")
   assert_equal(splits[1].show_context_notes, true, "context note option forwarded to ACP backend")
@@ -161,9 +170,13 @@ function M.run()
   assert_equal(mcp_start_count, 0, "ACP session launch must not start legacy MCP server")
 
   local hidden_key
+  local non_git_dir = vim.fn.tempname() .. "-lazyagent-non-git"
+  vim.fn.mkdir(non_git_dir, "p")
+  local non_git_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(non_git_bufnr, non_git_dir .. "/notes.md")
   launch.ensure_session("Codex", {
     acp_thread_id = THREAD_C,
-    source_bufnr = vim.api.nvim_get_current_buf(),
+    source_bufnr = non_git_bufnr,
     stay_hidden = true,
   }, false, function(_, session_key)
     hidden_key = session_key
@@ -174,6 +187,9 @@ function M.run()
   assert_equal(acp_split_opts[3].hidden, true, "hidden ACP session requests a headless buffer view")
   assert_equal(#hidden_panes, 0, "headless ACP session never creates a view that must be closed")
   assert_equal(state.sessions[hidden_key].hidden, true, "hidden ACP runtime remains marked hidden")
+  assert_equal(splits[3].cwd, non_git_dir, "non-Git source directory wins over Neovim cwd")
+  vim.api.nvim_buf_delete(non_git_bufnr, { force = true })
+  vim.fn.delete(non_git_dir, "rf")
 
   state.opts.mcp_mode = true
   local legacy_ready = false
@@ -183,6 +199,7 @@ function M.run()
   assert(vim.wait(1000, function()
     return legacy_ready
   end, 10), "legacy session launch should become ready")
+  vim.b[source_bufnr].lazyagent_workspace_root = previous_workspace_root
   assert_equal(mcp_start_count, 1, "non-ACP session launch starts MCP server lazily")
   assert_equal(legacy_splits[1].env.LAZYAGENT_MCP_URL, state.opts._mcp_url, "legacy session receives MCP URL")
 end
