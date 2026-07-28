@@ -65,6 +65,7 @@ local function setup_highlights()
     LazyAgentACPCockpitPrompt = { default = true, link = "String" },
     LazyAgentACPCockpitProvider = { default = true, link = "Type" },
     LazyAgentACPCockpitModel = { default = true, link = "Identifier" },
+    LazyAgentACPCockpitTeam = { default = true, link = "Special" },
     LazyAgentACPCockpitMuted = { default = true, link = "Comment" },
     LazyAgentACPCockpitUnread = { default = true, link = "DiagnosticWarn" },
     LazyAgentACPCockpitChanges = { default = true, link = "Special" },
@@ -322,6 +323,15 @@ local function card_line(thread, runtime, conflicts, opts)
   local is_open = opts.open_thread_id == thread.thread_id
 
   local fields = {}
+  local team = runtime and runtime.lazyagent_team
+    or (thread.metadata and thread.metadata.lazyagent_team)
+    or nil
+  if team then
+    local team_label = tostring(team.team_id or team.name or "team")
+      .. "/" .. tostring(team.role_id or team.role or "member")
+    if team.status and team.status ~= "" then team_label = team_label .. ":" .. tostring(team.status) end
+    fields[#fields + 1] = { "team:" .. team_label, "LazyAgentACPCockpitTeam", "team" }
+  end
   if model ~= "default" then fields[#fields + 1] = { "model:" .. tostring(model), "LazyAgentACPCockpitModel", "model" } end
   if thread.unread == true then fields[#fields + 1] = { "unread", "LazyAgentACPCockpitUnread", "unread" } end
   local usage = usage_label(runtime)
@@ -351,7 +361,7 @@ local function card_line(thread, runtime, conflicts, opts)
     return width
   end
 
-  local removal_order = { "usage", "model", "changes", "test", "unread", "conflict", "queue" }
+  local removal_order = { "usage", "model", "changes", "test", "unread", "conflict", "queue", "team" }
   local minimum_tail_width = show_title and 12 or 0
   while max_width and max_width - fixed_width() < minimum_tail_width do
     local removed = false
@@ -496,6 +506,10 @@ function M.filter(threads, query, runtimes, opts)
       thread.status or "",
       common_status(thread, runtime, opts),
       tostring(configured_model(thread, runtime)),
+      thread.metadata and thread.metadata.lazyagent_team
+          and vim.inspect(thread.metadata.lazyagent_team)
+        or "",
+      runtime and runtime.lazyagent_team and vim.inspect(runtime.lazyagent_team) or "",
       thread.unread == true and "unread" or "read",
     }, " "):lower()
     return text:find(query, 1, true) ~= nil

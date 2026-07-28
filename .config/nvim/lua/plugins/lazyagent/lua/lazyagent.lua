@@ -92,6 +92,12 @@ end
 M.team_status = function()
   return require("lazyagent.teams.runtime").status()
 end
+M.select_team = function(team_id, opts, callback)
+  return require("lazyagent.teams.runtime").select_team(team_id, opts, callback)
+end
+M.team_names = function(opts)
+  return require("lazyagent.teams.runtime").team_names(opts)
+end
 
 local function register_custom_backends(opts)
   if type(opts.backends) ~= "table" then

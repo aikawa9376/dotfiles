@@ -1037,7 +1037,9 @@ local function create_backend(default_view)
         model = session.initial_model,
         mode = session.default_mode,
         config = vim.deepcopy(session.manual_config_overrides or {}),
-        metadata = { editor = vim.deepcopy(acp.editor or {}) },
+        metadata = vim.tbl_deep_extend("force", {
+          editor = vim.deepcopy(acp.editor or {}),
+        }, vim.deepcopy(acp.thread_metadata or {})),
       }
       local thread, thread_err
       if existing_thread then
@@ -2034,6 +2036,15 @@ local function create_backend(default_view)
     if prompt:match("\n$") then
       prompt = prompt:gsub("\n+$", "")
     end
+    local expanded, prompt_err, matched = require("lazyagent.logic.project").expand_prompt(
+      prompt,
+      session.root_dir or session.cwd
+    )
+    if matched and prompt_err then
+      conversation_helpers.append_block(session, "Error", "Project prompt: " .. tostring(prompt_err))
+      return "handled"
+    end
+    prompt = expanded or prompt
     if actions_helpers.handle_local_slash_command(session, prompt) then
       return "handled"
     end

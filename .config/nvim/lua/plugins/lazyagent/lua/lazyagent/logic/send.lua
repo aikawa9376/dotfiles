@@ -12,6 +12,21 @@ local transforms = require("lazyagent.transforms")
 local util = require("lazyagent.util")
 local config = require("lazyagent.logic.config")
 local status = require("lazyagent.logic.status")
+local project = require("lazyagent.logic.project")
+
+local function expand_project_prompt(text, source_bufnr, root_dir)
+  local source = root_dir
+  if not source and source_bufnr and vim.api.nvim_buf_is_valid(source_bufnr) then
+    local name = vim.api.nvim_buf_get_name(source_bufnr)
+    if name ~= "" then source = name end
+  end
+  local expanded, err, matched = project.expand_prompt(text, source or vim.fn.getcwd())
+  if matched and err then
+    vim.notify("LazyAgent project prompt: " .. tostring(err), vim.log.levels.ERROR)
+    return nil
+  end
+  return expanded
+end
 
 local function clear_acp_thread_draft(backend_name, backend_mod, pane_id)
   if not backend_name
@@ -64,6 +79,8 @@ function M.send_and_close_if_needed(agent_name, pane_id, text, agent_cfg, reuse,
   -- Expand placeholders in one-shot input before sending.
   local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr or vim.api.nvim_get_current_buf() })
   text = expanded_text or text
+  text = expand_project_prompt(text, source_bufnr, agent_cfg and (agent_cfg.root_dir or agent_cfg.cwd))
+  if not text then return end
 
   -- Persist the one-shot prompt text to the cache without reading the source file buffer.
   pcall(function() cache_logic.write_text_to_cache(text, source_bufnr or vim.api.nvim_get_current_buf()) end)
@@ -107,6 +124,8 @@ function M.send_to_cli(agent_name, text, opts)
   local source_bufnr = (opts and opts.source_bufnr) or vim.api.nvim_get_current_buf()
   local expanded_text, _ = transforms.expand(text, { source_bufnr = source_bufnr })
   text = expanded_text or text
+  text = expand_project_prompt(text, source_bufnr, opts.root_dir or opts.cwd)
+  if not text then return end
 
   -- Determine the agent_name if not provided
   if not agent_name or agent_name == "" then
@@ -210,6 +229,8 @@ function M.send_buffer_and_clear(agent_name, bufnr)
   -- Expand placeholders before sending using the send buffer as the source buffer (makes {buffer} behave sensibly).
   local expanded_text, transform_meta = transforms.expand(text, { source_bufnr = bufnr })
   text = expanded_text or text
+  text = expand_project_prompt(text, bufnr)
+  if not text then return end
 
   -- determine agent_name if not specified
   if not agent_name or agent_name == "" then

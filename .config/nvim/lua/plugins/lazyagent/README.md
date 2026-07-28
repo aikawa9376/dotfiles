@@ -47,7 +47,7 @@ return {
     "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentClose",
     "LazyAgentEdit", "LazyAgentNote", "LazyAgentNoteShow", "LazyAgentNotes", "LazyAgentHistory", "LazyAgentConversationList", "LazyAgentSummary",
     "LazyAgentACPCockpit", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPConfig",
-    "LazyAgentACPMobileQR", "LazyAgentTeam", "LazyAgentTeamStatus", "LazyAgentTeamStop",
+    "LazyAgentACPMobileQR", "LazyAgentTeam", "LazyAgentTeamSelect", "LazyAgentTeamStatus", "LazyAgentTeamStop",
     "Antigravity", "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
@@ -170,59 +170,104 @@ require("lazyagent").setup({
 
 global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ごとに override できます。`interactive_agents.<name>.skills = false` でその agent だけ無効化できます。
 
+## Project `.lazyagent`
+
+project root またはその親に `.lazyagent/` がある場合、LazyAgent 全体で project 固有の skills と reusable prompts を利用できます。これは Teams の role 定義とは独立した機能です。
+
+```text
+.lazyagent/
+├── prompts/
+│   └── review.md
+├── skills/
+│   └── reviewer/
+│       └── SKILL.md
+└── teams.json
+```
+
+- `.lazyagent/skills/` は全 LazyAgent session の skill source に自動追加されます。global の `skills.enabled = false` でも project source がある場合は有効になります。
+- `.lazyagent/prompts/*.md` は `/prompt <name> [request]` で展開できます。本文中の `{{input}}` に request を差し込み、placeholder が無い場合は末尾へ `# Request` として追加します。
+- prompt 名は英数字・`_`・`-`・`.`、ファイルは直下の Markdown、サイズ上限は 64 KiB です。
+
+たとえば `.lazyagent/prompts/review.md` を作成後、ACP scratch や通常の LazyAgent 入力から `/prompt review parser.lua を確認して` と送れます。
+
 ## LazyAgent Teams
 
 project 内またはその親 directory に `.lazyagent/teams.json` があると、company 型の AI orchestration を利用できます。project 側に無い場合は `stdpath("config") .. "/lazyagent/teams.json"` を global fallback として探します。設定場所を固定したい場合は `teams.path` を指定できます。
 
+JSON を採用したのは、Neovim 標準の `vim.json` だけで厳密に検証でき、YAML parser の追加依存や解釈差を避けられるためです。複数チームは同じファイルの `teams` object で管理します。
+
 ```json
 {
   "version": 1,
-  "name": "Product Engineering",
-  "lead": "cto",
-  "members": {
-    "cto": {
-      "agent": "Codex",
-      "role": "CTO",
-      "instructions": "Own the plan and final decision. Keep changes focused.",
-      "reports": ["architect", "implementer"]
+  "default_team": "engineering",
+  "worktree": false,
+  "teams": {
+    "engineering": {
+      "name": "Product Engineering",
+      "lead": "cto",
+      "worktree": {
+        "enabled": true,
+        "base": "main",
+        "path": "../.worktrees/{team}-{role}-{id}"
+      },
+      "members": {
+        "cto": {
+          "agent": "Codex",
+          "model": "gpt-5",
+          "role": "CTO",
+          "instructions_file": ".lazyagent/roles/cto.md",
+          "reports": ["implementer"]
+        },
+        "implementer": {
+          "agent": "Copilot",
+          "model": "fast-model",
+          "role": "Implementation Engineer",
+          "instructions": "Implement scoped work and verify it with tests.",
+          "worktree": false,
+          "reports": []
+        }
+      }
     },
-    "architect": {
-      "agent": "Gemini",
-      "role": "Software Architect",
-      "instructions": "Investigate design, compatibility, and risks.",
-      "reports": []
-    },
-    "implementer": {
-      "agent": "Copilot",
-      "role": "Implementation Engineer",
-      "instructions": "Implement scoped work and verify it with tests.",
-      "reports": ["reviewer"]
-    },
-    "reviewer": {
-      "agent": "Codex",
-      "role": "Reviewer",
-      "instructions": "Review correctness, regressions, and missing tests.",
-      "reports": []
+    "research": {
+      "name": "Research",
+      "lead": "analyst",
+      "members": {
+        "analyst": {
+          "agent": "Gemini",
+          "reports": []
+        }
+      }
     }
   }
 }
 ```
 
+主なパラメータ:
+
+- root: `version` は現在 `1`、`default_team` は既定チーム ID、`teams` は team ID を key にした object です。従来の root 直下に `name` / `lead` / `members` を置く単一チーム形式も互換維持しています。
+- team: `name`、`lead`、`members`、任意の `worktree` を指定します。
+- member: `agent`、任意の `model` / `role` / `instructions` / `instructions_file` / `worktree`、直属の部下 ID を並べる `reports` を指定します。
+- `instructions_file`: project root 基準または絶対 path の Markdown です。project root 外への escape は拒否し、64 KiB を上限とします。inline `instructions` がある場合は両方を結合します。
+- `worktree`: `true` / `false` または `{ "enabled", "path", "branch", "base", "timeout_ms" }`。team の値を member が override できます。`path` では `{team}` / `{role}` / `{id}` を利用できます。
+
 `lead` がユーザーからの依頼を受ける最上位 AI です。各 member の `reports` は直属の部下だけを列挙します。循環、複数上司、`lead` から到達できない member、未設定 agent は起動前に拒否されます。
 
 ```vim
+:LazyAgentTeamSelect engineering
 :LazyAgentTeam この機能を設計し、実装とテストまで完了してください
 :LazyAgentTeamStatus
 :LazyAgentTeamStop
 ```
 
-引数なしの `:LazyAgentTeam` は依頼入力を表示します。2回目以降は active team の lead への follow-up になります。部下は lead または manager が委譲した時点で遅延起動し、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使い、lead の transcript がユーザー向けの統合結果になります。
+複数チームがあり、保存済み選択も `default_team` も無い場合は selector を表示します。active team の途中切替は行わず、先に `:LazyAgentTeamStop` が必要です。
 
-Teams は ACP を会話・session 実行に使い、既存の Neovim 内 MCP server を委譲・報告・状態確認の制御面にだけ併用します。このため `mcp_mode = true` と、各 member が指定する agent の ACP 対応が必要です。通常の ACP session は引き続き MCP server なしでも利用できます。
+引数なしの `:LazyAgentTeam` は依頼入力を表示します。2回目以降は active team の lead への follow-up になります。部下は lead または manager が委譲した時点で遅延起動し、完了報告は manager の ACP prompt queue に戻ります。各役割は別の ACP thread を使い、lead だけを自動表示し、部下は background session として起動します。Cockpit には team ID・role・status と worktree metadata が表示されます。
+
+worktree 有効時は role ごとに既存の managed worktree API で作成し、その directory を session root にします。`TeamStop` は session を閉じますが worktree は削除しません。後から Cockpit の既存 cleanup 操作で dirty 状態を確認しながら整理できます。
+
+Teams は ACP を会話・session 実行に使い、既存の Neovim 内 MCP server を委譲・報告・状態確認の制御面にだけ併用します。下位 agent が manager へ非同期に結果を返すための共通 control plane として現状は MCP が必要で、`mcp_mode = true` と各 member の ACP 対応を要求します。通常の ACP session と project skills / prompts は MCP server なしでも利用できます。
 
 MCP server は editor 操作 tool も公開するため、LAN 共有が明確に必要な場合を除き `mcp_host = "127.0.0.1"` を推奨します。Teams の role credential は team instance ごとに生成し、status API には返しません。
-
-設定形式は Neovim 標準の `vim.json` だけで検証可能な JSON を採用しています。YAML parser の追加依存や環境差を避けつつ、将来 `.lazyagent/` 配下に permissions や workflow 定義を追加できる layout です。
 
 ## Edit selected blocks
 
