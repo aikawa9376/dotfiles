@@ -1143,9 +1143,7 @@ function M.setup(deps)
     if elicitation_cfg.enabled == true then
       handlers.elicitation = function(params, done)
         local teams_cfg = type(state.opts and state.opts.teams) == "table" and state.opts.teams or {}
-        local automatic = session.lazyagent_team
-          and Elicitation.auto_approve_mcp(params, teams_cfg.mcp_auto_approve)
-          or nil
+        local automatic = Elicitation.auto_approve_team_mcp(params, session, teams_cfg.mcp_auto_approve)
         if automatic then
           done(automatic)
           return
