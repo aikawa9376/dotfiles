@@ -36,6 +36,21 @@ function M.run()
   assert_equal(nil, Elicitation.auto_approve_mcp({
     message = 'Allow the lazyagent MCP server to run tool "team_report"?',
   }, { lazyagent = true }), "ordinary elicitation is not mistaken for MCP approval")
+  assert_equal({
+    action = "accept",
+    content = vim.empty_dict(),
+  }, Elicitation.auto_approve_team_mcp({
+    message = 'Allow the lazyagent MCP server to run tool "team_report"?',
+    _meta = { codex_approval_kind = "mcp_tool_call" },
+  }, {
+    agent_cfg = { lazyagent_team = { role_id = "reviewer" } },
+  }, { lazyagent = true }), "backend-shaped team session trusts its configured MCP server")
+  assert_equal(nil, Elicitation.auto_approve_team_mcp({
+    message = 'Allow the lazyagent MCP server to run tool "team_report"?',
+    _meta = { codex_approval_kind = "mcp_tool_call" },
+  }, {
+    agent_cfg = {},
+  }, { lazyagent = true }), "ordinary ACP session does not inherit team MCP trust")
 
   local autonomous
   Elicitation.handle({

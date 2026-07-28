@@ -43,6 +43,20 @@ function M.auto_approve_mcp(params, trusted_servers)
   return { action = "accept", content = content }
 end
 
+function M.auto_approve_team_mcp(params, session, trusted_servers)
+  session = type(session) == "table" and session or {}
+  local agent_cfg = type(session.agent_cfg) == "table" and session.agent_cfg or {}
+  local thread_metadata = type(session.thread_record) == "table"
+      and type(session.thread_record.metadata) == "table"
+      and session.thread_record.metadata
+    or {}
+  local team = session.lazyagent_team
+    or agent_cfg.lazyagent_team
+    or thread_metadata.lazyagent_team
+  if type(team) ~= "table" then return nil end
+  return M.auto_approve_mcp(params, trusted_servers)
+end
+
 local function sorted_properties(schema)
   local properties = type(schema) == "table" and schema.properties or {}
   local required = {}

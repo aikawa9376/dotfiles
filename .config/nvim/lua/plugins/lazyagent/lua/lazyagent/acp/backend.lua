@@ -927,6 +927,11 @@ local function create_backend(default_view)
         pane_id = pane_id,
         agent_name = acp.agent_name,
         agent_cfg = acp.agent_cfg or {},
+        lazyagent_team = vim.deepcopy(
+          (acp.agent_cfg and acp.agent_cfg.lazyagent_team)
+          or (acp.thread_metadata and acp.thread_metadata.lazyagent_team)
+          or nil
+        ),
         transcript_path = transcript_path,
         protocol_log_path = nil,
         transcript_has_content = true,
