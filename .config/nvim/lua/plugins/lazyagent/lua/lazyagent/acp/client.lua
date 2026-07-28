@@ -221,11 +221,16 @@ function Client.new(opts)
     mcp_servers = opts.mcp_servers or {},
     additional_directories = vim.deepcopy(opts.additional_directories or {}),
     client_info = opts.client_info or default_client_info(),
-    client_capabilities = opts.client_capabilities or default_client_capabilities(opts.handlers),
+    client_capabilities = vim.tbl_deep_extend(
+      "force",
+      default_client_capabilities(opts.handlers),
+      opts.client_capabilities or {}
+    ),
     handlers = opts.handlers or {},
     callbacks = {},
     callback_timers = {},
     pending_permission_requests = {},
+    pending_elicitation_requests = {},
     next_id = 0,
     request_timeout_ms = math.max(0, tonumber(opts.request_timeout_ms) or 60000),
     prompt_timeout_ms = math.max(0, tonumber(opts.prompt_timeout_ms) or 0),
@@ -301,6 +306,7 @@ function Client:debug_snapshot()
     callback_timers = vim.tbl_count(self.callback_timers or {}),
     stop_timer = self.stop_timer ~= nil and 1 or 0,
     pending_permissions = vim.tbl_count(self.pending_permission_requests or {}),
+    pending_elicitations = vim.tbl_count(self.pending_elicitation_requests or {}),
     stdout_buffer_bytes = tonumber(self.stdout_buffer_size) or 0,
     prompt_state = self.prompt_state,
   }
@@ -398,6 +404,7 @@ function Client:_reject_pending(reason)
     end)
   end
   self.pending_permission_requests = {}
+  self.pending_elicitation_requests = {}
 end
 
 function Client:_finish_permission_request(id, pending, outcome, err)
@@ -428,6 +435,50 @@ function Client:_cancel_pending_permissions(session_id)
     if pending and self:_finish_permission_request(id, pending, { outcome = "cancelled" }) then
       cancelled = cancelled + 1
     end
+  end
+  return cancelled
+end
+
+function Client:_finish_elicitation_request(id, pending, response, err)
+  if self.pending_elicitation_requests[id] ~= pending then return false end
+  self.pending_elicitation_requests[id] = nil
+  if err then
+    self:_send_error(id, err.code or ERR.internal, err.message or tostring(err), err.data)
+  else
+    self:_send_result(id, response or { action = "cancel" })
+  end
+  return true
+end
+
+function Client:_cancel_pending_elicitations(session_id)
+  local cancelled = 0
+  local ids = {}
+  for id, pending in pairs(self.pending_elicitation_requests or {}) do
+    if not session_id or not pending.session_id or pending.session_id == session_id then ids[#ids + 1] = id end
+  end
+  for _, id in ipairs(ids) do
+    local pending = self.pending_elicitation_requests[id]
+    if pending and self:_finish_elicitation_request(id, pending, { action = "cancel" }) then
+      cancelled = cancelled + 1
+    end
+  end
+  return cancelled
+end
+
+function Client:_handle_incoming_cancellation(params)
+  local request_id = params and params.requestId
+  if request_id == nil then return false end
+  local cancelled = false
+  if self.pending_permission_requests[request_id] then
+    self.pending_permission_requests[request_id] = nil
+    cancelled = true
+  end
+  if self.pending_elicitation_requests[request_id] then
+    self.pending_elicitation_requests[request_id] = nil
+    cancelled = true
+  end
+  if cancelled then
+    self:_record_protocol_event("incoming_request_cancelled", { id = request_id })
   end
   return cancelled
 end
@@ -993,6 +1044,28 @@ function Client:_handle_server_request(id, method, params)
     return
   end
 
+  if method == "elicitation/create" then
+    if not handlers.elicitation then
+      self:_send_result(id, { action = "decline" })
+      return
+    end
+    local pending = { session_id = params and params.sessionId or nil }
+    self.pending_elicitation_requests[id] = pending
+    vim.schedule(function()
+      if self.pending_elicitation_requests[id] ~= pending then return end
+      local ok, err = pcall(handlers.elicitation, params or {}, function(response, callback_err)
+        self:_finish_elicitation_request(id, pending, response, callback_err)
+      end)
+      if not ok then
+        self:_finish_elicitation_request(id, pending, nil, {
+          code = ERR.internal,
+          message = tostring(err),
+        })
+      end
+    end)
+    return
+  end
+
   if method == "fs/read_text_file" then
     if not handlers.read_text_file then
       self:_send_error(id, ERR.method_not_found, "fs/read_text_file is not supported")
@@ -1100,6 +1173,8 @@ function Client:_handle_message(line)
   if message.method then
     if message.id ~= nil then
       self:_handle_server_request(message.id, message.method, message.params or {})
+    elseif message.method == "$/cancel_request" then
+      self:_handle_incoming_cancellation(message.params or {})
     elseif message.method == "session/update" then
       self:_handle_update(message.params or {})
     else
@@ -1224,13 +1299,9 @@ function Client:start(callback, opts)
     end
   end)
 
-  local advertised_capabilities = {
-    fs = empty_dict_if_needed(self.client_capabilities.fs or {}),
-    terminal = self.client_capabilities.terminal == true,
-  }
-  if self.client_capabilities.session ~= nil then
-    advertised_capabilities.session = vim.deepcopy(self.client_capabilities.session)
-  end
+  local advertised_capabilities = vim.deepcopy(self.client_capabilities or {})
+  advertised_capabilities.fs = empty_dict_if_needed(advertised_capabilities.fs or {})
+  advertised_capabilities.terminal = advertised_capabilities.terminal == true
 
   local params = {
     protocolVersion = PROTOCOL_VERSION,
@@ -1446,6 +1517,7 @@ function Client:cancel()
     self.prompt_state = "cancelling"
   end
   self:_cancel_pending_permissions(self.session_id)
+  self:_cancel_pending_elicitations(self.session_id)
   return self:_send_notification("session/cancel", {
     sessionId = self.session_id,
   })
@@ -1457,6 +1529,7 @@ end
 
 function Client:stop()
   self:_cancel_pending_permissions(self.session_id)
+  self:_cancel_pending_elicitations(self.session_id)
   if self.process and not self.process:is_closing() then
     pcall(function() self.process:kill(15) end)
     self:_clear_stop_timer()

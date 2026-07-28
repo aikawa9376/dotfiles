@@ -102,6 +102,8 @@ function M.setup(deps)
       additional_directories = vim.deepcopy(acp.additional_directories or {}),
       mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
       v2_adapter = vim.deepcopy(acp.v2_adapter or { enabled = false }),
+      experimental = vim.deepcopy(acp.experimental or {}),
+      question_policy = acp.question_policy,
       env = env,
       auto_permission = acp.auto_permission,
       default_mode = acp.default_mode,
@@ -331,6 +333,8 @@ function M.setup(deps)
           transcript_compaction = vim.deepcopy(resolved_acp.transcript_compaction or {}),
           runtime_compaction = vim.deepcopy(resolved_acp.runtime_compaction or {}),
           v2_adapter = vim.deepcopy(resolved_acp.v2_adapter or { enabled = false }),
+          experimental = vim.deepcopy(resolved_acp.experimental or {}),
+          question_policy = resolved_acp.question_policy,
           hidden = (agent_cfg.stay_hidden == true),
           mode = mode,
         }

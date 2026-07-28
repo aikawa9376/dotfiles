@@ -311,6 +311,11 @@ local function resolve_from_config(agent_cfg)
   local agent_experimental = type(agent_acp.experimental) == "table" and agent_acp.experimental or {}
   local global_v2 = type(global_experimental.v2_adapter) == "table" and global_experimental.v2_adapter or {}
   local agent_v2 = type(agent_experimental.v2_adapter) == "table" and agent_experimental.v2_adapter or {}
+  local function experimental_enabled(name, fallback)
+    local global_value = type(global_experimental[name]) == "table" and global_experimental[name].enabled or nil
+    local agent_value = type(agent_experimental[name]) == "table" and agent_experimental[name].enabled or nil
+    return resolve_boolean_option(agent_value, global_value, fallback)
+  end
 
   return {
     enabled = enabled,
@@ -332,6 +337,7 @@ local function resolve_from_config(agent_cfg)
       true
     ),
     auto_permission = agent_acp.auto_permission or global_cfg.auto_permission,
+    question_policy = agent_acp.question_policy or global_cfg.question_policy or "prompt",
     default_mode = agent_acp.default_mode or global_cfg.default_mode,
     initial_model = agent_acp.initial_model or global_cfg.initial_model,
     additional_directories = vim.deepcopy(
@@ -340,6 +346,11 @@ local function resolve_from_config(agent_cfg)
     mcp_servers = mcp_servers.merge(global_mcp, agent_mcp),
     v2_adapter = {
       enabled = resolve_boolean_option(agent_v2.enabled, global_v2.enabled, false),
+    },
+    experimental = {
+      elicitation = { enabled = experimental_enabled("elicitation", true) },
+      session_fork = { enabled = experimental_enabled("session_fork", false) },
+      next_edit_suggestions = { enabled = experimental_enabled("next_edit_suggestions", false) },
     },
     buffer_background = normalize_color(agent_acp.buffer_background or global_cfg.buffer_background),
     buffer_inactive_background = normalize_color(
@@ -381,6 +392,7 @@ function M.resolve(agent_name, agent_cfg)
       enabled = true,
       view = session.backend == "buffer_acp" and "buffer" or "tmux",
       auto_permission = session.auto_permission,
+      question_policy = session.question_policy,
       default_mode = session.default_mode,
       initial_model = session.initial_model,
       table_layout = session.table_layout,
@@ -395,6 +407,7 @@ function M.resolve(agent_name, agent_cfg)
       runtime_compaction = vim.deepcopy(session.runtime_compaction or {}),
       mcp_servers = vim.deepcopy(session.mcp_servers or {}),
       v2_adapter = vim.deepcopy(session.v2_adapter or { enabled = false }),
+      experimental = vim.deepcopy(session.experimental or {}),
       footer_animation = session.footer_animation,
       protocol_log = session.protocol_log,
       show_context_notes = session.show_context_notes,
