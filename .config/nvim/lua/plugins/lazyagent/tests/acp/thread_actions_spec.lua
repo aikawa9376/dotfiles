@@ -418,7 +418,8 @@ function M.run()
   local mirrored_lines = vim.api.nvim_buf_get_lines(cockpit_preview_bufnr, 0, -1, false)
   assert(table.concat(mirrored_lines, "\n"):find("live mirror", 1, true), "cockpit action menu executes selected action")
   vim.cmd("normal o")
-  assert_equal(opened.acp_thread_id, THREAD_ID, "cockpit o opens exact thread")
+  assert_equal(opened.agent_name, session_key, "cockpit o opens the exact live agent under the cursor")
+  assert_equal(opened.acp_thread_id, nil, "cockpit live open bypasses provider thread selection")
   vim.cmd("normal q")
   assert_equal(
     vim.wo[selected_acp_winid].winhighlight,
