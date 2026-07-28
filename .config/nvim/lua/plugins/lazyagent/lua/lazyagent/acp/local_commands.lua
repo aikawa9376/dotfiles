@@ -240,6 +240,18 @@ function M.merged_entries(session, advertised)
     end
   end
 
+  local root_dir = session and (session.root_dir or session.cwd) or vim.fn.getcwd()
+  if #require("lazyagent.logic.project").list_prompts(root_dir) > 0 and not seen["/prompt"] then
+    out[#out + 1] = {
+      name = "prompt",
+      label = "/prompt",
+      desc = "Expand a project prompt from .lazyagent/prompts/<name>.md.",
+      doc = "Usage: `/prompt <name> [request]`. `{{input}}` in the Markdown template is replaced with the request.",
+      input_hint = "<name> [request]",
+      input_required = true,
+    }
+  end
+
   return out
 end
 

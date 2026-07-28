@@ -106,6 +106,7 @@ function M.setup(deps)
       additional_directories = vim.deepcopy(acp.additional_directories or {}),
       mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
       mcp_url = team_mcp_url,
+      thread_metadata = vim.deepcopy(agent_cfg and agent_cfg.acp_thread_metadata or {}),
       v2_adapter = vim.deepcopy(acp.v2_adapter or { enabled = false }),
       experimental = vim.deepcopy(acp.experimental or {}),
       question_policy = acp.question_policy,
@@ -187,6 +188,7 @@ function M.setup(deps)
             provider_id = provider_id,
             thread_id = agent_cfg and agent_cfg.acp_thread_id or nil,
             session_key = session_key,
+            lazyagent_team = vim.deepcopy(agent_cfg and agent_cfg.lazyagent_team or nil),
           }
           if watch_enabled_val then
             call_watch("enable")
@@ -324,6 +326,7 @@ function M.setup(deps)
           provider_id = provider_id,
           thread_id = agent_cfg and agent_cfg.acp_thread_id or nil,
           session_key = session_key,
+          lazyagent_team = vim.deepcopy(agent_cfg and agent_cfg.lazyagent_team or nil),
           footer_animation = resolved_acp.footer_animation,
           protocol_log = resolved_acp.protocol_log,
           show_context_notes = resolved_acp.show_context_notes,

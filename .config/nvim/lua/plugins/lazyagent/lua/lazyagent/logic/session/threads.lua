@@ -940,6 +940,7 @@ function M.setup(deps)
             if snapshot and snapshot.acp_thread_id then
               snapshot.agent_status = active.agent_status
               snapshot.pane_id = active.pane_id
+              snapshot.lazyagent_team = vim.deepcopy(active.lazyagent_team or nil)
               runtimes[snapshot.acp_thread_id] = snapshot
               thread_agents[snapshot.acp_thread_id] = agent_name
             end

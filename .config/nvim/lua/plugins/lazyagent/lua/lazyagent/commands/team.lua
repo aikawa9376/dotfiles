@@ -12,6 +12,7 @@ local function start(request)
     notify_error(err)
     return
   end
+  if result.selecting then return end
   local config = result.config or (result.config_path and result) or nil
   local name = config and config.name or (runtime.status().name or "team")
   vim.notify("LazyAgentTeam: request sent to " .. name, vim.log.levels.INFO)
@@ -60,6 +61,24 @@ function M.register(create)
     vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO, { title = "LazyAgent Team" })
   end, {
     desc = "Show active LazyAgent team status",
+  })
+
+  create("LazyAgentTeamSelect", function(cmdargs)
+    local requested = cmdargs and cmdargs.args ~= "" and cmdargs.args or nil
+    runtime.select_team(requested, {}, function(team_id, err, config)
+      if not team_id then
+        if err ~= "team selection cancelled" then notify_error(err) end
+        return
+      end
+      vim.notify(
+        string.format("LazyAgentTeam: selected %s · %s", team_id, config and config.name or team_id),
+        vim.log.levels.INFO
+      )
+    end)
+  end, {
+    nargs = "?",
+    complete = function() return runtime.team_names() end,
+    desc = "Select the project LazyAgent team used for the next request",
   })
 
   create("LazyAgentTeamStop", function()

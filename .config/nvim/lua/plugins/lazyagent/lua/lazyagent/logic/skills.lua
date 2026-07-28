@@ -647,6 +647,13 @@ function M.prepare(agent_name, agent_cfg, opts)
   opts = opts or {}
   local root_dir = opts.root_dir or vim.fn.getcwd()
   local cfg = resolve_agent_config(agent_name, agent_cfg)
+  local project_skills = require("lazyagent.logic.project").skills_dir(root_dir)
+  if project_skills then
+    cfg.enabled = true
+    local seen = {}
+    for _, source in ipairs(cfg.sources or {}) do seen[source] = true end
+    if not seen[project_skills] then cfg.sources[#cfg.sources + 1] = project_skills end
+  end
   if not cfg.enabled then
     return nil
   end

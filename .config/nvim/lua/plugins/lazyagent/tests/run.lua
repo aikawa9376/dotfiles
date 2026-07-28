@@ -18,6 +18,7 @@ local suites = {
   "tests.transforms_spec",
   "tests.notes_spec",
   "tests.teams_spec",
+  "tests.project_spec",
   "tests.acp.client_contract",
   "tests.acp.cancellation_spec",
   "tests.acp.path_guard_spec",

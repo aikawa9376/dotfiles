@@ -5,6 +5,7 @@ local config_loader = require("lazyagent.teams.config")
 local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local mcp_integration = require("lazyagent.integrations.mcp")
+local Worktree = require("lazyagent.acp.worktree")
 
 local function uuid()
   local seed = table.concat({
@@ -24,6 +25,25 @@ end
 
 local function active()
   return state.team_runtime
+end
+
+local function safe_name(value)
+  local name = tostring(value or ""):lower():gsub("[^%w._-]", "-"):gsub("%-+", "-")
+  name = name:gsub("^%-+", ""):gsub("%-+$", "")
+  return name ~= "" and name or "team"
+end
+
+local function set_member_status(team, role_id, status, err)
+  local member = team and team.members and team.members[role_id] or nil
+  if not member then return end
+  member.status = status
+  member.error = err
+  if member.session_key and state.sessions and state.sessions[member.session_key] then
+    local session_team = state.sessions[member.session_key].lazyagent_team or {}
+    session_team.status = status
+    session_team.error = err
+    state.sessions[member.session_key].lazyagent_team = session_team
+  end
 end
 
 local function member_summary(team, role_id)
@@ -72,23 +92,90 @@ local function role_prompt(team, role_id)
   return table.concat(lines, "\n")
 end
 
+local function worktree_policy(team, role_id)
+  local member = team.config.members[role_id]
+  local value = member.worktree
+  if value == nil then value = team.config.worktree end
+  if value == nil or value == false then return { enabled = false } end
+  if value == true then return { enabled = true } end
+  local policy = vim.deepcopy(value)
+  if policy.enabled == nil then policy.enabled = true end
+  return policy
+end
+
+local function ensure_member_worktree(team, role_id)
+  local runtime_member = team.members[role_id]
+  if runtime_member.worktree then return runtime_member.worktree end
+  local policy = worktree_policy(team, role_id)
+  if policy.enabled ~= true then return nil end
+
+  local instance = team.id:gsub("%-", ""):sub(1, 8)
+  local team_name = safe_name(team.config.team_id or team.config.name)
+  local role_name = safe_name(role_id)
+  local branch = tostring(policy.branch or ("lazyagent/" .. team_name .. "/" .. role_name .. "/" .. instance))
+  local path = policy.path
+  if type(path) == "string" and path ~= "" then
+    path = path:gsub("{team}", team_name):gsub("{role}", role_name):gsub("{id}", instance)
+    if path:sub(1, 1) ~= "/" then
+      path = vim.fn.fnamemodify(team.config.root_dir, ":h") .. "/" .. path
+    end
+  else
+    local cache = (state.opts.cache and state.opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
+    path = table.concat({ cache, "teams", "worktrees", safe_name(vim.fn.fnamemodify(team.config.root_dir, ":t")),
+      team_name, role_name .. "-" .. instance }, "/")
+  end
+  vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
+  local metadata, err = Worktree.create({
+    root = team.config.root_dir,
+    path = path,
+    branch = branch,
+    base = policy.base or "HEAD",
+    timeout_ms = policy.timeout_ms,
+  })
+  if not metadata then return nil, err end
+  runtime_member.worktree = metadata
+  return metadata
+end
+
 local function build_member_config(team, role_id)
   local member = team.config.members[role_id]
   local base = agent_logic.get_interactive_agent(member.agent)
   if not base then
     return nil, "agent '" .. member.agent .. "' is not configured"
   end
+  local worktree, worktree_err = ensure_member_worktree(team, role_id)
+  if worktree_err then return nil, "worktree: " .. worktree_err end
+  local root_dir = worktree and worktree.worktree_path or team.config.root_dir
   local acp = type(base.acp) == "table" and vim.deepcopy(base.acp) or {}
   acp.enabled = true
+  if member.model and member.model ~= "" then acp.initial_model = member.model end
+  local team_metadata = {
+    instance_id = team.id,
+    team_id = team.config.team_id,
+    name = team.config.name,
+    role_id = role_id,
+    role = member.role,
+    manager = member.manager,
+    lead = role_id == team.config.lead,
+  }
+  local thread_metadata = vim.tbl_deep_extend("force", {}, worktree or {}, {
+    lazyagent_team = team_metadata,
+  })
   local cfg = vim.tbl_deep_extend("force", vim.deepcopy(base), {
     acp = acp,
     acp_thread_id = team.members[role_id].thread_id,
-    root_dir = team.config.root_dir,
-    cwd = team.config.root_dir,
+    acp_thread_title = string.format("%s · %s", team.config.name, member.role),
+    acp_thread_metadata = thread_metadata,
+    root_dir = root_dir,
+    cwd = root_dir,
     stay_hidden = role_id ~= team.config.lead,
     lazyagent_team = {
       id = team.id,
+      team_id = team.config.team_id,
+      name = team.config.name,
       role_id = role_id,
+      role = member.role,
+      status = team.members[role_id].status,
     },
   })
   local command, command_err = agent_logic.resolve_acp_command(member.agent, cfg)
@@ -100,11 +187,9 @@ end
 
 local function send_to_member(team, role_id, text, callback)
   local runtime_member = team.members[role_id]
-  runtime_member.status = "starting"
-  runtime_member.error = nil
+  set_member_status(team, role_id, "starting")
   local function fail(message)
-    runtime_member.status = "failed"
-    runtime_member.error = message
+    set_member_status(team, role_id, "failed", message)
     vim.schedule(function()
       vim.notify(
         string.format("LazyAgentTeam: %s failed: %s", role_id, message),
@@ -126,7 +211,21 @@ local function send_to_member(team, role_id, text, callback)
       pcall(session_logic.close_session, session_key)
       return
     end
-    runtime_member.status = "running"
+    set_member_status(team, role_id, "running")
+    if state.sessions and state.sessions[session_key] then
+      state.sessions[session_key].lazyagent_team = vim.tbl_extend(
+        "force",
+        state.sessions[session_key].lazyagent_team or {},
+        {
+          id = team.id,
+          team_id = team.config.team_id,
+          name = team.config.name,
+          role_id = role_id,
+          role = team.config.members[role_id].role,
+          status = "running",
+        }
+      )
+    end
     local _, backend = backend_logic.resolve_backend_for_agent(session_key, cfg)
     if not backend or type(backend.paste_and_submit) ~= "function" then
       fail("ACP backend cannot submit prompts")
@@ -214,7 +313,7 @@ function M.report(params)
   if result == "" then
     return nil, "result must not be empty"
   end
-  team.members[from].status = "reported"
+  set_member_status(team, from, "reported")
   team.members[from].result = result
 
   local manager = member.manager
@@ -251,6 +350,8 @@ function M.status()
       status = runtime_member.status,
       session_key = runtime_member.session_key,
       has_result = runtime_member.result ~= nil,
+      model = config_member.model,
+      worktree_path = runtime_member.worktree and runtime_member.worktree.worktree_path or nil,
     }
   end
   table.sort(members, function(a, b) return a.id < b.id end)
@@ -258,6 +359,7 @@ function M.status()
     active = true,
     id = team.id,
     name = team.config.name,
+    team_id = team.config.team_id,
     lead = team.config.lead,
     config_path = team.config.path,
     members = members,
@@ -305,6 +407,62 @@ local function preflight(config)
       return nil, string.format("member '%s': %s", id, command_err)
     end
   end
+  local policy = config.worktree
+  if policy == true or (type(policy) == "table" and policy.enabled ~= false) then
+    if vim.fn.system({ "git", "-C", config.root_dir, "rev-parse", "--show-toplevel" }) == "" or vim.v.shell_error ~= 0 then
+      return nil, "team worktree requires a Git repository: " .. config.root_dir
+    end
+  end
+  return true
+end
+
+local function source_path(opts)
+  local source = opts and opts.start_path or nil
+  if not source or source == "" then
+    local current = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+    source = current ~= "" and current or vim.fn.getcwd()
+  end
+  return source
+end
+
+local function catalog_for(opts)
+  opts = opts or {}
+  local teams_opts = (state.opts and state.opts.teams) or {}
+  return config_loader.resolve_all(source_path(opts), { path = opts.path or teams_opts.path })
+end
+
+function M.team_names(opts)
+  local catalog = catalog_for(opts or {})
+  if not catalog then return {} end
+  local ids = vim.tbl_keys(catalog.teams)
+  table.sort(ids)
+  return ids
+end
+
+function M.select_team(team_id, opts, callback)
+  opts = opts or {}
+  callback = callback or function() end
+  local catalog, err = catalog_for(opts)
+  if not catalog then callback(nil, err) return nil, err end
+  local ids = vim.tbl_keys(catalog.teams)
+  table.sort(ids)
+  local function select(id)
+    if not id or not catalog.teams[id] then
+      callback(nil, id and ("unknown team '" .. tostring(id) .. "'") or "team selection cancelled")
+      return
+    end
+    state.team_selections = state.team_selections or {}
+    state.team_selections[catalog.path] = id
+    callback(id, nil, catalog.teams[id])
+  end
+  if team_id and team_id ~= "" then
+    select(team_id)
+    return true
+  end
+  vim.ui.select(ids, {
+    prompt = "Choose LazyAgent team:",
+    format_item = function(id) return string.format("%s · %s", id, catalog.teams[id].name) end,
+  }, select)
   return true
 end
 
@@ -314,22 +472,34 @@ function M.start(request, opts)
   if request == "" then
     return nil, "request must not be empty"
   end
-  local source = opts.start_path
-  if not source or source == "" then
-    local current = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
-    source = current ~= "" and current or vim.fn.getcwd()
-  end
   local teams_opts = (state.opts and state.opts.teams) or {}
   if teams_opts.enabled == false then
     return nil, "Teams is disabled by teams.enabled = false"
   end
-  local config, config_err = config_loader.resolve(source, { path = opts.path or teams_opts.path })
+  local catalog, catalog_err = catalog_for(opts)
+  if not catalog then return nil, catalog_err end
+  local selected = opts.team
+    or (state.team_selections and state.team_selections[catalog.path])
+    or catalog.default_team
+  local config, config_err = config_loader.select(catalog, selected)
+  if not config and not selected and vim.tbl_count(catalog.teams) > 1 then
+    M.select_team(nil, opts, function(choice, select_err)
+      if select_err then
+        if select_err ~= "team selection cancelled" then
+          vim.notify("LazyAgentTeam: " .. select_err, vim.log.levels.ERROR)
+        end
+        return
+      end
+      M.start(request, vim.tbl_extend("force", {}, opts, { team = choice, path = catalog.path }))
+    end)
+    return { selecting = true, catalog = catalog }
+  end
   if not config then return nil, config_err end
   local ready, preflight_err = preflight(config)
   if not ready then return nil, preflight_err end
 
   if active() then
-    if active().config.path ~= config.path then
+    if active().config.path ~= config.path or active().config.team_id ~= config.team_id then
       return nil, "another LazyAgent team is already active; stop it before switching configs"
     end
     local lead = active().config.lead

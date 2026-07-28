@@ -88,6 +88,23 @@ function M.run()
   local mapped = {}
   for _, id in pairs(line_map) do mapped[id] = true end
   assert(mapped["thread-a"] and mapped["thread-b"], "thread line mappings")
+  local team_lines = Cockpit.render({ {
+    thread_id = "team-thread",
+    title = "Engineering · Engineer",
+    provider_id = "Codex",
+    cwd = "/tmp/team",
+    status = "active",
+    metadata = { lazyagent_team = { team_id = "engineering", role_id = "engineer" } },
+  } }, {
+    ["team-thread"] = {
+      acp_ready = true,
+      lazyagent_team = { team_id = "engineering", role_id = "engineer", status = "running" },
+    },
+  })
+  assert(
+    table.concat(team_lines, "\n"):find("team:engineering/engineer:running", 1, true),
+    "cockpit shows team role and orchestration state"
+  )
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   Cockpit.apply_highlights(bufnr, highlights)
