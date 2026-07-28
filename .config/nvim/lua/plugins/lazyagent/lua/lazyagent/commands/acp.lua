@@ -239,6 +239,11 @@ local commands = {
     handler = session_logic.pick_acp_mode,
   },
   {
+    name = "LazyAgentACPPlanToggle",
+    desc = "Toggle Plan/Agent mode for an ACP-enabled agent",
+    handler = session_logic.toggle_acp_plan_mode,
+  },
+  {
     name = "LazyAgentACPReopen",
     desc = "Reopen the ACP transcript window for an ACP-enabled agent",
     handler = session_logic.reopen_acp_window,

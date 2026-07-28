@@ -45,6 +45,7 @@ M.pick_acp_sessions = session_logic.pick_acp_sessions
 M.pick_acp_config = session_logic.pick_acp_config
 M.pick_acp_model = session_logic.pick_acp_model
 M.pick_acp_mode = session_logic.pick_acp_mode
+M.toggle_acp_plan_mode = session_logic.toggle_acp_plan_mode
 M.reopen_acp_window = session_logic.reopen_acp_window
 M.open_raw_acp_transcript = session_logic.open_raw_acp_transcript
 M.open_full_acp_transcript = session_logic.open_full_acp_transcript

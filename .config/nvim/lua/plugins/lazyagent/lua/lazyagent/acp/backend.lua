@@ -2203,6 +2203,17 @@ local function create_backend(default_view)
     return config_helpers.show_config_picker_for_session(session, category)
   end
 
+  function backend.toggle_plan_mode(target_pane, on_done)
+    local session = get_session(target_pane)
+    if not session then
+      if type(on_done) == "function" then
+        on_done(false, nil, "ACP session was not found")
+      end
+      return false
+    end
+    return config_helpers.toggle_plan_mode_for_session(session, on_done)
+  end
+
   function backend.show_command_palette(target_pane)
     local session = get_session(target_pane)
     if not session then

@@ -18,6 +18,7 @@ function M.setup(deps)
   local config_values = require("lazyagent.acp.config_values")
   local find_config_option
   local config_option_choice_items
+  local config_values_equal
 
   local module = {}
 
@@ -456,7 +457,162 @@ function M.setup(deps)
     return nil
   end
 
-  local function config_values_equal(left, right)
+  local function compact_choice_key(value)
+    local text = tostring(value or ""):lower()
+    text = text:match("#([^#]+)$") or text
+    return normalize_config_key(text)
+  end
+
+  local function choice_matches(choice, expected)
+    if type(choice) ~= "table" then
+      return false
+    end
+    return expected[compact_choice_key(choice.value)] == true
+      or expected[compact_choice_key(choice.name)] == true
+  end
+
+  local function plan_toggle_choices(option)
+    local choices = config_option_choice_items(option)
+    local option_key = normalize_config_key(config_option_key(option))
+    local option_id = normalize_config_key(option.id)
+    local plan_option = vim.tbl_contains({
+      "collaborationmode",
+      "planningmode",
+      "planmode",
+    }, option_key) or vim.tbl_contains({
+      "collaborationmode",
+      "planningmode",
+      "planmode",
+    }, option_id)
+
+    if config_option_kind(option) == "toggle" and plan_option then
+      local plan_choice
+      local agent_choice
+      for _, choice in ipairs(choices) do
+        if choice.value == true then
+          plan_choice = choice
+        elseif choice.value == false then
+          agent_choice = choice
+        end
+      end
+      return plan_choice, agent_choice
+    end
+
+    local plan_values = { plan = true, planning = true, planmode = true }
+    local agent_values = {
+      agent = true,
+      default = true,
+      normal = true,
+      code = true,
+      build = true,
+      act = true,
+      auto = true,
+      autonomous = true,
+      execute = true,
+      execution = true,
+      interactive = true,
+      agentmode = true,
+    }
+    local plan_choice
+    local agent_choice
+    local first_non_plan_choice
+    for _, choice in ipairs(choices) do
+      if not plan_choice and choice_matches(choice, plan_values) then
+        plan_choice = choice
+      elseif not first_non_plan_choice then
+        first_non_plan_choice = choice
+      end
+      if not agent_choice and choice_matches(choice, agent_values) then
+        agent_choice = choice
+      end
+    end
+    return plan_choice, agent_choice or first_non_plan_choice
+  end
+
+  local function find_plan_toggle_option(session)
+    local preferred_keys = {
+      "collaboration_mode",
+      "collaboration-mode",
+      "collaborationMode",
+      "planning_mode",
+      "planning-mode",
+      "planningMode",
+      "plan_mode",
+      "plan-mode",
+      "planMode",
+    }
+    local preferred = find_config_option(session, preferred_keys)
+    if preferred then
+      local plan_choice, agent_choice = plan_toggle_choices(preferred)
+      if plan_choice and agent_choice then
+        return preferred, plan_choice, agent_choice
+      end
+    end
+
+    for _, option in ipairs(session.config_options or {}) do
+      local plan_choice, agent_choice = plan_toggle_choices(option)
+      if plan_choice and agent_choice then
+        return option, plan_choice, agent_choice
+      end
+    end
+    return nil
+  end
+
+  local function toggle_plan_mode_for_session(session, on_done)
+    on_done = type(on_done) == "function" and on_done or function() end
+    if not session then
+      on_done(false, nil, "ACP session was not found")
+      return false
+    end
+    if session.failed then
+      local message = "ACP session is disconnected. Restart the agent session to continue."
+      append_block(session, "Error", message)
+      on_done(false, nil, message)
+      return false
+    end
+    if not session.ready or not session.client then
+      queue_after_ready(session, function()
+        toggle_plan_mode_for_session(session, on_done)
+      end)
+      append_block(session, "System", "ACP session is still connecting. Plan mode will toggle when ready.")
+      return true
+    end
+
+    local option, plan_choice, default_agent_choice = find_plan_toggle_option(session)
+    if not option then
+      local message = "This ACP provider does not expose a Plan/Agent mode setting."
+      append_block(session, "System", message)
+      on_done(false, nil, message)
+      return false
+    end
+
+    local current = option.currentValue
+    local currently_planning = config_values_equal(current, plan_choice.value)
+    local target = plan_choice
+    local target_mode = "plan"
+    if currently_planning then
+      local previous = session.plan_toggle_previous
+      local restored = previous
+        and tostring(previous.option_id or "") == tostring(option.id or "")
+        and find_config_choice(option, previous.value)
+        or nil
+      target = restored or default_agent_choice
+      target_mode = "agent"
+    else
+      session.plan_toggle_previous = {
+        option_id = option.id,
+        value = current,
+      }
+    end
+
+    return apply_config_option_choice(session, option, target, function(updated, err)
+      on_done(updated, updated and target_mode or nil, err)
+    end, {
+      success_message = target_mode == "plan" and "Plan mode enabled" or "Agent mode enabled",
+    })
+  end
+
+  config_values_equal = function(left, right)
     if left == nil or right == nil then
       return left == right
     end
@@ -977,6 +1133,7 @@ function M.setup(deps)
   module.maybe_apply_auto_switch = maybe_apply_auto_switch
   module.apply_initial_session_config = apply_initial_session_config
   module.show_config_picker_for_session = show_config_picker_for_session
+  module.toggle_plan_mode_for_session = toggle_plan_mode_for_session
   module.command_palette_items = command_palette_items
   module.show_command_palette_for_session = show_command_palette_for_session
 

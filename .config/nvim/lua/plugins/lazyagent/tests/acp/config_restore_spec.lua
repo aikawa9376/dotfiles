@@ -151,6 +151,64 @@ function M.run()
   attach_client(session, calls)
   helpers.apply_initial_session_config(session)
   assert_equal(calls, { { id = "model", value = "legacy[medium]" } }, "legacy combined model identifiers remain supported")
+
+  helpers, blocks = setup_config()
+  calls = {}
+  session = {
+    ready = true,
+    config_options = {
+      choice_option("mode", "agent-full-access", { "read-only", "agent", "agent-full-access" }, "mode"),
+      choice_option("collaboration_mode", "default", { "default", "plan" }, "collaboration_mode"),
+    },
+  }
+  attach_client(session, calls)
+  local toggled_modes = {}
+  helpers.toggle_plan_mode_for_session(session, function(updated, mode)
+    assert(updated, "Codex collaboration mode toggle succeeds")
+    toggled_modes[#toggled_modes + 1] = mode
+  end)
+  helpers.toggle_plan_mode_for_session(session, function(updated, mode)
+    assert(updated, "Codex collaboration mode restore succeeds")
+    toggled_modes[#toggled_modes + 1] = mode
+  end)
+  assert_equal(calls, {
+    { id = "collaboration_mode", value = "plan" },
+    { id = "collaboration_mode", value = "default" },
+  }, "Plan toggle changes collaboration mode without touching permission mode")
+  assert_equal(toggled_modes, { "plan", "agent" }, "Plan toggle reports both resulting modes")
+
+  helpers = setup_config()
+  calls = {}
+  session = {
+    ready = true,
+    config_options = {
+      choice_option("mode", "build", { "plan", "build" }, "mode"),
+    },
+  }
+  attach_client(session, calls)
+  helpers.toggle_plan_mode_for_session(session)
+  helpers.toggle_plan_mode_for_session(session)
+  assert_equal(calls, {
+    { id = "mode", value = "plan" },
+    { id = "mode", value = "build" },
+  }, "providers with a combined mode option toggle and restore their agent choice")
+
+  helpers, blocks = setup_config()
+  calls = {}
+  session = {
+    ready = true,
+    config_options = {
+      choice_option("mode", "agent", { "read-only", "agent", "agent-full-access" }, "mode"),
+    },
+  }
+  attach_client(session, calls)
+  local unsupported
+  helpers.toggle_plan_mode_for_session(session, function(updated, _, err)
+    unsupported = { updated = updated, err = err }
+  end)
+  assert_equal(calls, {}, "permission-only mode is never changed by Plan toggle")
+  assert_equal(unsupported.updated, false, "unsupported provider reports no update")
+  assert(tostring(unsupported.err):find("does not expose", 1, true), "unsupported provider explains missing Plan mode")
 end
 
 return M
