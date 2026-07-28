@@ -165,19 +165,15 @@ function M.register_scratch_keymaps(bufnr, opts)
     end)
   end
 
-  local function send_from_buf(close_after)
-    local pane = pane_id or (agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id) or nil
-    if not pane or pane == "" then
-      -- fallback to generic prompt API
-      send_logic.send_buffer_and_clear(agent_name, bufnr)
-      return
-    end
+  local function prepare_buffer_prompt()
     local content = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local text = table.concat(content, "\n")
-    -- Expand placeholders before sending (use source_bufnr information)
     local transforms = require("lazyagent.transforms") -- require here to avoid circular dependency
     local resolved_source_bufnr = current_source_bufnr()
-    local expanded_text, transform_meta = transforms.expand(text, { source_bufnr = resolved_source_bufnr, scratch_bufnr = bufnr })
+    local expanded_text, transform_meta = transforms.expand(text, {
+      source_bufnr = resolved_source_bufnr,
+      scratch_bufnr = bufnr,
+    })
     text = expanded_text or text
     if preserve_scratch then
       text = context_providers.prepend_to_prompt(text, {
@@ -186,6 +182,17 @@ function M.register_scratch_keymaps(bufnr, opts)
         scratch_bufnr = bufnr,
       })
     end
+    return text, transform_meta, transforms, resolved_source_bufnr
+  end
+
+  local function send_from_buf(close_after)
+    local pane = pane_id or (agent_name and state.sessions[agent_name] and state.sessions[agent_name].pane_id) or nil
+    if not pane or pane == "" then
+      -- fallback to generic prompt API
+      send_logic.send_buffer_and_clear(agent_name, bufnr)
+      return
+    end
+    local text, transform_meta, transforms, resolved_source_bufnr = prepare_buffer_prompt()
 
      -- Append custom tag if configured AND in instant mode
     local s = agent_name and state.sessions[agent_name]
@@ -316,6 +323,71 @@ function M.register_scratch_keymaps(bufnr, opts)
   safe_set("i", keys.send_and_clear or "<C-Space>", function()
     smart_send(true)
   end, { desc = "Send buffer and clear (insert mode)" })
+
+  local steer_pending = false
+  local function steer_from_buf(insert_mode)
+    if steer_pending then
+      vim.notify("LazyAgent ACP steering is already pending", vim.log.levels.WARN)
+      return
+    end
+    local _, resolved_pane, resolved_backend, resolved_mod = resolve_target()
+    if not resolved_pane or not acp_logic.is_acp_backend(resolved_backend) then
+      vim.notify("LazyAgent ACP steering requires an active ACP session", vim.log.levels.WARN)
+      return
+    end
+    if type(resolved_mod.supports_steering) ~= "function"
+      or not resolved_mod.supports_steering(resolved_pane)
+      or type(resolved_mod.steer_active_turn) ~= "function"
+    then
+      vim.notify("ACP provider does not advertise native steering", vim.log.levels.WARN)
+      return
+    end
+
+    local text, transform_meta = prepare_buffer_prompt()
+    if vim.trim(text or "") == "" then
+      vim.notify("LazyAgent ACP steering input is empty", vim.log.levels.WARN)
+      return
+    end
+    local captured_tick = vim.api.nvim_buf_get_changedtick(bufnr)
+    steer_pending = true
+    local accepted, steer_err
+    with_insert_wrap(insert_mode, function()
+      accepted, steer_err = resolved_mod.steer_active_turn(resolved_pane, text, function(ok, result_or_err)
+        vim.schedule(function()
+          steer_pending = false
+          if not ok then
+            local detail = type(result_or_err) == "table" and result_or_err.message or result_or_err
+            vim.notify(
+              "LazyAgent ACP steering failed: " .. tostring(detail),
+              vim.log.levels.ERROR
+            )
+            return
+          end
+          require("lazyagent.notes").consume_meta(transform_meta)
+          if vim.api.nvim_buf_is_valid(bufnr)
+            and vim.api.nvim_buf_get_changedtick(bufnr) == captured_tick
+          then
+            pcall(function() vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {}) end)
+            clear_acp_thread_draft(resolved_pane)
+          end
+        end)
+      end)
+    end)
+    if not accepted then
+      steer_pending = false
+      vim.notify("LazyAgent ACP steering failed: " .. tostring(steer_err), vim.log.levels.WARN)
+    end
+  end
+
+  local function set_steer_key(mode, lhs, insert_mode)
+    if type(lhs) ~= "string" or lhs == "" then return end
+    safe_set(mode, lhs, function()
+      steer_from_buf(insert_mode)
+    end, { desc = "Steer active ACP turn from scratch" })
+  end
+
+  set_steer_key("n", keys.steer_normal, false)
+  set_steer_key("i", keys.steer_insert, true)
 
   local function paste_image(insert_mode)
     with_insert_wrap(insert_mode, function()
