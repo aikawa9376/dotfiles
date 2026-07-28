@@ -17,8 +17,8 @@ local function uuid()
   return table.concat({
     hash:sub(1, 8),
     hash:sub(9, 12),
-    hash:sub(13, 16),
-    hash:sub(17, 20),
+    "4" .. hash:sub(14, 16),
+    "8" .. hash:sub(18, 20),
     hash:sub(21, 32),
   }, "-")
 end
@@ -178,6 +178,7 @@ local function build_member_config(team, role_id)
       name = team.config.name,
       role_id = role_id,
       role = member.role,
+      lead = role_id == team.config.lead,
       status = team.members[role_id].status,
     },
   })
@@ -185,10 +186,30 @@ local function build_member_config(team, role_id)
   if not command then
     return nil, command_err or ("agent '" .. member.agent .. "' does not support ACP")
   end
+  local _, backend = backend_logic.resolve_backend_for_agent(member.agent, cfg)
+  if not backend or type(backend.get_thread) ~= "function" or type(backend.create_thread) ~= "function" then
+    return nil, "ACP backend does not provide a thread store"
+  end
+  local thread_id = team.members[role_id].thread_id
+  local thread, thread_err = backend.get_thread(thread_id)
+  if not thread then
+    thread, thread_err = backend.create_thread({
+      thread_id = thread_id,
+      provider_id = cfg.acp_provider_id or member.agent,
+      cwd = root_dir,
+      additional_directories = vim.deepcopy(acp.additional_directories or {}),
+      title = cfg.acp_thread_title,
+      status = "closed",
+      metadata = vim.deepcopy(thread_metadata),
+    })
+  end
+  if not thread then
+    return nil, "failed to create ACP thread: " .. tostring(thread_err)
+  end
   return cfg
 end
 
-local function send_to_member(team, role_id, text, callback)
+local function launch_member_session(team, role_id, on_ready, callback)
   local runtime_member = team.members[role_id]
   set_member_status(team, role_id, "starting")
   local function fail(message)
@@ -239,14 +260,34 @@ local function send_to_member(team, role_id, text, callback)
       fail("agent ACP capabilities do not accept the Teams HTTP MCP control server")
       return
     end
-    local result = backend.paste_and_submit(pane_id, text, cfg.submit_keys, {})
-    if result == false then
-      fail("failed to submit prompt")
-      return
+    if on_ready then
+      local ready_ok, ready_err = on_ready(backend, pane_id, cfg)
+      if ready_ok == false then
+        fail(ready_err or "member session setup failed")
+        return
+      end
     end
     if callback then callback(true) end
   end)
   return true
+end
+
+local function send_to_member(team, role_id, text, callback)
+  return launch_member_session(team, role_id, function(backend, pane_id, cfg)
+    local result = backend.paste_and_submit(pane_id, text, cfg.submit_keys, {})
+    if result == false then
+      return false, "failed to submit prompt"
+    end
+    return true
+  end, callback)
+end
+
+local function start_background_members(team)
+  for role_id in pairs(team.config.members) do
+    if role_id ~= team.config.lead then
+      launch_member_session(team, role_id)
+    end
+  end
 end
 
 local function open_lead(team, initial_input)
@@ -433,6 +474,7 @@ local function begin(config, request, opts)
     state.team_runtime = nil
     return nil, err
   end
+  start_background_members(team)
   return team
 end
 
@@ -603,5 +645,7 @@ function M.stop()
   state.team_runtime = nil
   return true
 end
+
+M._uuid = uuid
 
 return M

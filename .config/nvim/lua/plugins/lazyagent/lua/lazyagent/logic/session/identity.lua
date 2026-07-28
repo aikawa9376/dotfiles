@@ -47,7 +47,8 @@ function M.activate(state, session_key, session)
   session = session or (state.sessions and state.sessions[session_key]) or nil
   local provider_id = M.provider_id(session_key, session)
   state.session_aliases = state.session_aliases or {}
-  if provider_id ~= "" then
+  local team_metadata = type(session) == "table" and session.lazyagent_team or nil
+  if provider_id ~= "" and not (team_metadata and team_metadata.lead == false) then
     state.session_aliases[provider_id] = session_key
   end
   return session_key
