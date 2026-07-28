@@ -420,6 +420,8 @@ function M.run()
   vim.cmd("normal o")
   assert_equal(opened.agent_name, session_key, "cockpit o opens the exact live agent under the cursor")
   assert_equal(opened.acp_thread_id, nil, "cockpit live open bypasses provider thread selection")
+  assert_equal(opened.open_input, false, "cockpit o opens the ACP buffer without covering it with scratch")
+  assert_equal(opened.focus_agent_view, true, "cockpit o focuses the selected ACP buffer")
   vim.cmd("normal q")
   assert_equal(
     vim.wo[selected_acp_winid].winhighlight,

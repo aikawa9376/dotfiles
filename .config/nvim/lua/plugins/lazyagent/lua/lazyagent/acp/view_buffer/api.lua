@@ -397,6 +397,15 @@ function M.attach(api, ctx)
     return info ~= nil
   end
 
+  function M.focus_pane(pane_id)
+    local bufnr = to_bufnr(pane_id)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return false end
+    local win = first_visible_window(bufnr)
+    if not win or not vim.api.nvim_win_is_valid(win) then return false end
+    vim.api.nvim_set_current_win(win)
+    return true
+  end
+
   function M.break_pane(pane_id)
     local bufnr = to_bufnr(pane_id)
     if not bufnr then

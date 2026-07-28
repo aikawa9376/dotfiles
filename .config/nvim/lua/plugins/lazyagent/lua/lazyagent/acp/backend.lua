@@ -1915,6 +1915,15 @@ local function create_backend(default_view)
     return false
   end
 
+  function backend.focus_pane(pane_id)
+    local session = get_session(pane_id)
+    local view = session_view(session)
+    if view and type(view.focus_pane) == "function" then
+      return view.focus_pane(pane_id, session)
+    end
+    return false
+  end
+
   function backend.is_busy(target_pane)
     local session = get_session(target_pane)
     if not session then
