@@ -258,9 +258,8 @@ function M.setup(deps)
     end
     local workspace = thread_workspace(thread)
     local source_bufnr, source_winid = source_anchor(thread)
-    start_interactive_session({
-      agent_name = thread.provider_id,
-      acp_thread_id = thread.thread_id,
+    local launch_opts = {
+      agent_name = local_key or thread.provider_id,
       acp_thread_title = thread.title,
       root_dir = workspace,
       cwd = workspace,
@@ -268,7 +267,11 @@ function M.setup(deps)
       source_winid = source_winid,
       origin_winid = vim.api.nvim_get_current_win(),
       reuse = true,
-    })
+    }
+    if not local_key then
+      launch_opts.acp_thread_id = thread.thread_id
+    end
+    start_interactive_session(launch_opts)
     return true
   end
 
