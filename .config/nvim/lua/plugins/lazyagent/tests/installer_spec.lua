@@ -22,6 +22,13 @@ function M.run()
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/brain/SKILL.md") == 1, "bundled skills installed")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian/references/html-artifacts.md") == 1,
     "skill references installed recursively")
+  local catalog = assert(require("lazyagent.teams.config").load_all(root .. "/.lazyagent/teams.json"))
+  local team = assert(require("lazyagent.teams.config").select(catalog))
+  assert_equal(team.members.sol_lead.model, "gpt-5.6-sol", "team template uses Sol for the lead")
+  assert_equal(team.members.sol_lead.effort, "max", "team template gives the lead max reasoning")
+  assert_equal(team.members.luna_implementer.model, "gpt-5.6-luna", "team template uses Luna for members")
+  assert_equal(team.members.luna_reviewer.effort, "medium", "team template gives members medium reasoning")
+  assert_equal(#team.members.sol_lead.reports, 2, "team template gives the lead two direct reports")
 
   vim.fn.writefile({ "# Custom project rules" }, root .. "/.lazyagent/AGENTS.md")
   local repeated = assert(installer.install({
@@ -47,6 +54,7 @@ function M.run()
   assert(invalid == nil and err:find("scope", 1, true), "invalid scope rejected")
   assert_equal(install_command._complete("g", "LazyAgentInstall g")[1], "global", "scope completion")
   assert_equal(install_command._complete("s", "LazyAgentInstall project s")[1], "skills", "component completion")
+  assert_equal(install_command._complete("t", "LazyAgentInstall project t")[1], "teams", "teams completion")
   vim.fn.delete(root, "rf")
 end
 

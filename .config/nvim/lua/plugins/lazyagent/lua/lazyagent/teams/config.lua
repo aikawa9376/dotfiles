@@ -60,9 +60,12 @@ function M.find(start_path, opts)
   end
 
   if opts.include_global ~= false then
-    local global = vim.fn.stdpath("config") .. "/" .. M.global_path
-    if readable(global) then
-      return global
+    local global_candidates = {
+      require("lazyagent.logic.project").global_dir() .. "/teams.json",
+      vim.fn.stdpath("config") .. "/" .. M.global_path,
+    }
+    for _, global in ipairs(global_candidates) do
+      if readable(global) then return global end
     end
   end
   return nil
@@ -118,6 +121,9 @@ function M.validate(value)
     end
     if member.model ~= nil and type(member.model) ~= "string" then
       return fail("member '" .. id .. "'.model must be a string")
+    end
+    if member.effort ~= nil and type(member.effort) ~= "string" then
+      return fail("member '" .. id .. "'.effort must be a string")
     end
     if member.worktree ~= nil and type(member.worktree) ~= "boolean" and type(member.worktree) ~= "table" then
       return fail("member '" .. id .. "'.worktree must be a boolean or object")
@@ -181,6 +187,7 @@ function M.validate(value)
     member.id = id
     member.role = vim.trim(member.role or id)
     member.instructions = vim.trim(member.instructions or "")
+    member.effort = vim.trim(member.effort or "")
     member.reports = vim.deepcopy(member.reports or {})
     member.manager = parent[id]
   end

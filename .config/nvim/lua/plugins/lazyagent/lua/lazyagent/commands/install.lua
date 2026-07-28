@@ -3,7 +3,7 @@ local M = {}
 local installer = require("lazyagent.logic.installer")
 
 local scopes = { "project", "global" }
-local components = { "all", "instructions", "skills" }
+local components = { "all", "instructions", "skills", "teams" }
 
 local function complete(arglead, cmdline)
   local args = tostring(cmdline or ""):match("^%S+%s+(.*)$") or ""

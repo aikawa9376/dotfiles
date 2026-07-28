@@ -47,7 +47,7 @@ return {
     "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentClose",
     "LazyAgentEdit", "LazyAgentNote", "LazyAgentNoteShow", "LazyAgentNotes", "LazyAgentHistory", "LazyAgentConversationList", "LazyAgentSummary",
     "LazyAgentACPCockpit", "LazyAgentACPModel", "LazyAgentACPMode", "LazyAgentACPConfig",
-    "LazyAgentACPMobileQR", "LazyAgentTeam", "LazyAgentTeamSelect", "LazyAgentTeamStatus", "LazyAgentTeamStop",
+    "LazyAgentACPMobileQR", "LazyAgentInstall", "LazyAgentTeam", "LazyAgentTeamStatus", "LazyAgentTeamStop",
     "Antigravity", "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
   opts = {
@@ -178,15 +178,18 @@ global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ご�
 :LazyAgentInstall project all
 :LazyAgentInstall project instructions
 :LazyAgentInstall project skills
+:LazyAgentInstall project teams
 :LazyAgentInstall global all
 ```
 
-引数なしではscope（`project` / `global`）と内容（`all` / `instructions` / `skills`）を順に選択します。
+引数なしではscope（`project` / `global`）と内容（`all` / `instructions` / `skills` / `teams`）を順に選択します。
 
 - project: Git root（Git外では`cwd`）の`.lazyagent/`
 - global: `stdpath("data")/lazyagent/`。通常は`~/.local/share/nvim/lazyagent/`
 - instructions: 編集用の`AGENTS.md` starterを作成
 - skills: LazyAgent同梱skillsをコピー
+- teams: Codex Sol/maxのleadとLuna/mediumの部下2名からなる`teams.json` starterを作成
+- all: instructions、skills、teamsをまとめてinstall
 - 既存ファイルは上書きせず、不足しているファイルだけ追加
 
 globalとprojectの両方に`AGENTS.md`がある場合はglobal→projectの順で重ね、provider-native instruction layerへ渡します。
@@ -215,7 +218,7 @@ project root またはその親に `.lazyagent/` がある場合、LazyAgent 全
 
 ## LazyAgent Teams
 
-project 内またはその親 directory に `.lazyagent/teams.json` があると、company 型の AI orchestration を利用できます。project 側に無い場合は `stdpath("config") .. "/lazyagent/teams.json"` を global fallback として探します。設定場所を固定したい場合は `teams.path` を指定できます。
+project 内またはその親 directory に `.lazyagent/teams.json` があると、company 型の AI orchestration を利用できます。project 側に無い場合は `stdpath("data") .. "/lazyagent/teams.json"` を global fallback として探し、従来の `stdpath("config") .. "/lazyagent/teams.json"` も互換維持します。設定場所を固定したい場合は `teams.path` を指定できます。
 
 JSON を採用したのは、Neovim 標準の `vim.json` だけで厳密に検証でき、YAML parser の追加依存や解釈差を避けられるためです。複数チームは同じファイルの `teams` object で管理します。
 
@@ -236,14 +239,16 @@ JSON を採用したのは、Neovim 標準の `vim.json` だけで厳密に検�
       "members": {
         "cto": {
           "agent": "Codex",
-          "model": "gpt-5",
+          "model": "gpt-5.6-sol",
+          "effort": "max",
           "role": "CTO",
           "instructions_file": ".lazyagent/roles/cto.md",
           "reports": ["implementer"]
         },
         "implementer": {
-          "agent": "Copilot",
-          "model": "fast-model",
+          "agent": "Codex",
+          "model": "gpt-5.6-luna",
+          "effort": "medium",
           "role": "Implementation Engineer",
           "instructions": "Implement scoped work and verify it with tests.",
           "worktree": false,
@@ -269,7 +274,8 @@ JSON を採用したのは、Neovim 標準の `vim.json` だけで厳密に検�
 
 - root: `version` は現在 `1`、`default_team` は既定チーム ID、`teams` は team ID を key にした object です。従来の root 直下に `name` / `lead` / `members` を置く単一チーム形式も互換維持しています。
 - team: `name`、`lead`、`members`、任意の `worktree` を指定します。
-- member: `agent`、任意の `model` / `role` / `instructions` / `instructions_file` / `worktree`、直属の部下 ID を並べる `reports` を指定します。
+- member: `agent`、任意の `model` / `effort` / `role` / `instructions` / `instructions_file` / `worktree`、直属の部下 ID を並べる `reports` を指定します。
+- `model` / `effort`: session 起動後に provider が広告した ACP config option へ適用します。Codex の `effort` は `low` / `medium` / `high` / `xhigh` / `max` / `ultra` です。未対応の値や provider では警告して session は継続します。
 - `instructions_file`: project root 基準または絶対 path の Markdown です。project root 外への escape は拒否し、64 KiB を上限とします。inline `instructions` がある場合は両方を結合します。
 - `worktree`: `true` / `false` または `{ "enabled", "path", "branch", "base", "timeout_ms" }`。team の値を member が override できます。`path` では `{team}` / `{role}` / `{id}` を利用できます。
 
@@ -649,7 +655,7 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentACPDoctor [agent]` | ACP health diagnostics |
 | `:LazyAgentACPContext [agent]` | context usage / transcript / compaction budget report |
 | `:LazyAgentACPReview [agent]` | ACP tool / edit review report |
-| `:LazyAgentInstall [project\|global] [all\|instructions\|skills]` | projectまたは`stdpath("data")/lazyagent`へstarter `AGENTS.md`と同梱skillsを非破壊install |
+| `:LazyAgentInstall [project\|global] [all\|instructions\|skills\|teams]` | projectまたは`stdpath("data")/lazyagent`へstarter `AGENTS.md`、同梱skills、Sol/Luna teamを非破壊install |
 | `:Antigravity` / `:Gemini` / `:Claude` / `:Codex` / `:Copilot` / `:Cursor` | agent を直接起動 |
 
 ## Scratch tokens

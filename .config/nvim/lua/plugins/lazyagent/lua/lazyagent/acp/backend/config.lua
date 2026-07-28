@@ -716,7 +716,11 @@ function M.setup(deps)
         local base_model, reasoning = split_combined_model(model)
         if base_model and find_config_choice(model_option, base_model) then
           model = base_model
-          if reasoning and not saved_keys.reasoningeffort and not saved_keys.thoughtlevel then
+          if reasoning
+            and (not session.initial_effort or session.initial_effort == "")
+            and not saved_keys.reasoningeffort
+            and not saved_keys.thoughtlevel
+          then
             table.insert(pending, {
               key = { "reasoning_effort", "thought_level" },
               value = reasoning,
@@ -726,6 +730,16 @@ function M.setup(deps)
         end
       end
       table.insert(pending, { key = "model", value = model, title = "model" })
+    end
+    if session.initial_effort and session.initial_effort ~= ""
+      and not saved_keys.reasoningeffort
+      and not saved_keys.thoughtlevel
+    then
+      table.insert(pending, {
+        key = { "reasoning_effort", "thought_level" },
+        value = session.initial_effort,
+        title = "reasoning effort",
+      })
     end
 
     local function step(index)

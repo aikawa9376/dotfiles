@@ -940,6 +940,7 @@ function M.setup(deps)
       question_policy = base_session.question_policy,
       default_mode = base_session.default_mode,
       initial_model = base_session.initial_model,
+      initial_effort = base_session.initial_effort,
       fancy_mode = base_session.fancy_mode,
       table_layout = base_session.table_layout,
       smooth_scroll = vim.deepcopy(base_session.smooth_scroll or {}),

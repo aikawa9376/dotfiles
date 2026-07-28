@@ -1000,6 +1000,7 @@ local function create_backend(default_view)
           { "model" },
           existing_thread.model
         )) or nil,
+        initial_effort = acp.initial_effort,
         initial_config_snapshot = existing_thread and vim.deepcopy(existing_thread.config or {}) or {},
         fancy_mode = acp.fancy_mode,
         table_layout = acp.table_layout,

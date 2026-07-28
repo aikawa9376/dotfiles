@@ -118,6 +118,7 @@ function M.setup(deps)
       auto_permission = acp.auto_permission,
       default_mode = acp.default_mode,
       initial_model = acp.initial_model,
+      initial_effort = acp.initial_effort,
       fancy_mode = acp.fancy_mode,
       table_layout = acp.table_layout,
       smooth_scroll = vim.deepcopy(acp.smooth_scroll or {}),

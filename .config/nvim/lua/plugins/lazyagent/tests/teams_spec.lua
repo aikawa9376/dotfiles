@@ -26,6 +26,7 @@ local function valid_config()
         agent = "Copilot",
         role = "Engineer",
         model = "fast-model",
+        effort = "medium",
       },
     },
   }
@@ -71,6 +72,12 @@ function M.run()
   assert_equal(normalized.members.architect.manager, "cto", "manager is derived from reports")
   assert_equal(normalized.members.engineer.manager, "cto", "second manager is derived")
   assert_equal(#normalized.members.engineer.reports, 0, "missing reports defaults to empty")
+  assert_equal(normalized.members.engineer.effort, "medium", "reasoning effort is preserved")
+
+  local invalid_effort = valid_config()
+  invalid_effort.members.engineer.effort = 42
+  local invalid_effort_config, effort_err = config_loader.validate(invalid_effort)
+  assert(invalid_effort_config == nil and effort_err:match("effort must be a string"), "invalid effort is rejected")
 
   local duplicate = valid_config()
   duplicate.members.architect.reports = { "engineer" }
@@ -242,6 +249,7 @@ function M.run()
   })
   assert(delegated, delegate_err)
   assert_equal(captured_cfg.acp.initial_model, "fast-model", "role model reaches ACP config")
+  assert_equal(captured_cfg.acp.initial_effort, "medium", "role reasoning effort reaches ACP config")
   assert(captured_cfg.acp_session_instructions:find("Your role: Engineer", 1, true),
     "role instructions are attached to the ACP session")
   assert_equal(captured_cfg.root_dir, "/tmp/engineer-worktree", "role session uses managed worktree")
