@@ -1142,6 +1142,14 @@ function M.setup(deps)
     local elicitation_cfg = type(experimental.elicitation) == "table" and experimental.elicitation or {}
     if elicitation_cfg.enabled == true then
       handlers.elicitation = function(params, done)
+        local teams_cfg = type(state.opts and state.opts.teams) == "table" and state.opts.teams or {}
+        local automatic = session.lazyagent_team
+          and Elicitation.auto_approve_mcp(params, teams_cfg.mcp_auto_approve)
+          or nil
+        if automatic then
+          done(automatic)
+          return
+        end
         append_block(session, "System", "Input requested: " .. tostring(params.message or "ACP elicitation"))
         UiQueue.enqueue(function(release)
           notify_attention("elicitation", session, params.message or "Input required")

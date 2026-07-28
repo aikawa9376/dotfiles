@@ -1,5 +1,48 @@
 local M = {}
 
+local function mcp_server_name(params)
+  local meta = type(params._meta) == "table" and params._meta or {}
+  if meta.codex_approval_kind ~= "mcp_tool_call" then return nil end
+  local explicit = meta.serverName or meta.server_name
+  if type(explicit) == "string" and explicit ~= "" then return explicit end
+  return tostring(params.message or ""):match('^Allow the ([%w_.-]+) MCP server to run tool ".+"%?$')
+end
+
+local function trusted_server(servers, name)
+  if type(servers) ~= "table" or not name then return false end
+  if servers[name] == true then return true end
+  for _, candidate in ipairs(servers) do
+    if candidate == name then return true end
+  end
+  return false
+end
+
+local function supports_persist_value(schema, target)
+  local persist = type(schema) == "table"
+      and type(schema.properties) == "table"
+      and type(schema.properties.persist) == "table"
+      and schema.properties.persist
+    or nil
+  if not persist then return false end
+  for _, value in ipairs(type(persist.enum) == "table" and persist.enum or {}) do
+    if value == target then return true end
+  end
+  for _, variant in ipairs(type(persist.oneOf) == "table" and persist.oneOf or {}) do
+    if type(variant) == "table" and variant.const == target then return true end
+  end
+  return false
+end
+
+function M.auto_approve_mcp(params, trusted_servers)
+  params = type(params) == "table" and params or {}
+  if not trusted_server(trusted_servers, mcp_server_name(params)) then return nil end
+  local content = vim.empty_dict()
+  if supports_persist_value(params.requestedSchema, "once") then
+    content = { persist = "once" }
+  end
+  return { action = "accept", content = content }
+end
+
 local function sorted_properties(schema)
   local properties = type(schema) == "table" and schema.properties or {}
   local required = {}
