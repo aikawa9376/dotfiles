@@ -638,6 +638,8 @@ function M.setup(deps)
     end
 
     if kind == "plan" and type(update.entries) == "table" then
+      session.current_plan = vim.deepcopy(update.entries)
+      sync_runtime_session(session)
       local lines = {}
       for _, entry in ipairs(update.entries) do
         if type(entry) == "table" then

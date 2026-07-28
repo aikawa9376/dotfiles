@@ -1485,6 +1485,56 @@ function M.new(ctx)
         }
       end
 
+      if backend
+          and type(backend.show_plan_actions) == "function"
+          and type(backend.supports_plan_actions) == "function"
+          and backend.supports_plan_actions(pane_id_for_bufnr(bufnr)) then
+        actions[#actions + 1] = {
+          label = "Plan actions",
+          action = function()
+            backend.show_plan_actions(pane_id_for_bufnr(bufnr))
+          end,
+        }
+      end
+
+      if backend
+          and type(backend.show_steering_input) == "function"
+          and type(backend.supports_steering) == "function"
+          and backend.supports_steering(pane_id_for_bufnr(bufnr)) then
+        actions[#actions + 1] = {
+          label = "Steer active turn",
+          action = function()
+            backend.show_steering_input(pane_id_for_bufnr(bufnr))
+          end,
+        }
+      end
+
+      if backend
+          and type(backend.fork_current_session) == "function"
+          and type(backend.supports_session_fork) == "function"
+          and backend.supports_session_fork(pane_id_for_bufnr(bufnr)) then
+        actions[#actions + 1] = {
+          label = "Fork session",
+          action = function()
+            local ok, err = backend.fork_current_session(pane_id_for_bufnr(bufnr))
+            if not ok and err then vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.INFO) end
+          end,
+        }
+      end
+
+      if backend
+          and type(backend.request_next_edit_suggestion) == "function"
+          and type(backend.supports_next_edit_suggestions) == "function"
+          and backend.supports_next_edit_suggestions(pane_id_for_bufnr(bufnr)) then
+        actions[#actions + 1] = {
+          label = "Next edit suggestion",
+          action = function()
+            local ok, err = backend.request_next_edit_suggestion(pane_id_for_bufnr(bufnr))
+            if not ok and err then vim.notify("LazyAgent ACP: " .. tostring(err), vim.log.levels.INFO) end
+          end,
+        }
+      end
+
       if backend and type(backend.show_thread_export) == "function" then
         actions[#actions + 1] = {
           label = "Export thread Markdown",

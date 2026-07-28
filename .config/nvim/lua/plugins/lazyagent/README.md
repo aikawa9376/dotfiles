@@ -321,6 +321,12 @@ require("lazyagent").setup({
 ```
 
 `interactive_agents.<name>.acp = false` で、global ACP 有効時でも特定 agent だけ通常 backend に戻せます。
+
+`question_policy = "prompt"` はagentからのACP `elicitation/create`を`vim.ui.select` / `vim.ui.input`で表示します。`"autonomous"`では質問を`decline`し、agent自身の既定判断で継続するよう促します。これはpermission確認には影響しません。
+
+experimentalなACP RFDはcapability-drivenで扱います。`session_fork`対応providerでは`ga` → `Fork session`がnative forkを保存し、`next_edit_suggestions`対応providerでは`ga` → `Next edit suggestion`から現在fileへのedit候補を取得できます。plan update受信後は`ga` → `Plan actions`で承認・自律続行・修正依頼を送れます。providerがcapabilityをadvertiseしない操作は表示されません。
+
+providerがnative steering extensionを広告する場合は`ga` → `Steer active turn`で、現在turnをcancelせず追加指示を注入できます。非対応providerの`Send Now`は従来どおりcancel-and-sendです。workspace checkpointとlocal branchはfile/transcriptを復元しますが、providerが履歴rewind capabilityを持たない限りmodel内部状態のrewindを装いません。
 通常の buffer view は default で最新 `transcript_max_lines` 行だけを tail 表示します。全文を確認したい場合は `:LazyAgentACPFullTranscript` または `:LazyAgentACPRawTranscript` を使ってください。
 
 古い transcript section をまとめて最近分を優先表示する `transcript_compaction` は default では無効です。必要な場合だけ `enabled = true` にしてください。`runtime_compaction` は default で有効で、古い runtime timeline は summary/pin 情報だけ残し、詳細本文は recent/pinned item と transcript file に寄せます。
