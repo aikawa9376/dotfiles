@@ -579,7 +579,7 @@ require("lazyagent").setup({
 })
 ```
 
-MCP integration は cache 配下に agent 用の `AGENTS.md`, hook scripts, MCP config を生成します。Cursor / Copilot 連携では一部 global config も更新します。
+MCP integration は cache 配下に hook scripts と MCP config を生成します。project instructions は MCP から分離され、`.lazyagent/AGENTS.md` の provider-native 経路だけを使います。Cursor / Copilot 連携では一部 global config も更新します。
 
 ## Commands
 

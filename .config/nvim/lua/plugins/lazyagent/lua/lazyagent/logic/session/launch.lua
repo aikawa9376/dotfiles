@@ -515,36 +515,10 @@ function M.setup(deps)
             split_opts.env.GEMINI_CLI_SYSTEM_DEFAULTS_PATH = sys_path
           end
 
-          do
-            local function read_text(p)
-              local fh = io.open(p, "r")
-              if not fh then return nil end
-              local s = fh:read("*a")
-              fh:close()
-              return s
-            end
-            local agent_md = read_text(agent_cache_dir .. "/AGENTS.md") or ""
-            local existing_sys = read_text(agent_cache_dir .. "/system.md") or ""
-            local sys_content
-            if agent_md ~= "" then
-              sys_content = agent_md
-            else
-              sys_content = (existing_sys ~= "" and existing_sys) or (read_text(cache_dir .. "/default_instructions.md") or "")
-            end
-            local system_md_path = agent_cache_dir .. "/system.md"
-            local sf = io.open(system_md_path, "w")
-            if sf then sf:write(sys_content); sf:close() end
-            vim.notify(string.format("[lazyagent] wrote system.md -> %s (%d bytes)", system_md_path, #sys_content), vim.log.levels.DEBUG)
-            split_opts.env.GEMINI_SYSTEM_MD = system_md_path
-          end
         end
 
         if agent_name == "Copilot" or (agent_cfg and agent_cfg.cmd and tostring(agent_cfg.cmd):match("copilot")) then
           split_opts.env.COPILOT_CONFIG_DIR = agent_cache_dir
-          local instruction_dirs = split_opts.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS
-          split_opts.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = instruction_dirs
-            and (instruction_dirs .. "," .. agent_cache_dir)
-            or agent_cache_dir
           launch_cmd = (launch_cmd or "") .. " --additional-mcp-config " .. vim.fn.shellescape("@" .. agent_cache_dir .. "/mcp-config.json")
           launch_cmd = launch_cmd .. " --plugin-dir " .. vim.fn.shellescape(agent_cache_dir)
         end

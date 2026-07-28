@@ -9,27 +9,6 @@ local function module_root()
   return (src and src:match("(.*/lazyagent/)integrations/[^/]+%.lua$")) or ""
 end
 
-local function default_instructions_content()
-  local paths = {
-    module_root() .. "resources/default_instructions.md",
-    vim.fn.stdpath("config") .. "/lua/plugins/lazyagent/lua/lazyagent/resources/default_instructions.md",
-    vim.fn.stdpath("cache") .. "/lazyagent/default_instructions.md",
-  }
-
-  for _, md in ipairs(paths) do
-    local file = io.open(md, "r")
-    if file then
-      local content = file:read("*a")
-      file:close()
-      if content and content ~= "" then
-        return content
-      end
-    end
-  end
-
-  return ""
-end
-
 local function copy_hook_scripts(agent_dir)
   local src_dir = module_root() .. "resources/hooks"
   pcall(vim.fn.mkdir, agent_dir .. "/hooks", "p")
@@ -183,16 +162,10 @@ local function write_mcp_configs(url, opts)
   local cache_dir = (opts and opts.cache and opts.cache.dir) or (vim.fn.stdpath("cache") .. "/lazyagent")
   vim.fn.mkdir(cache_dir, "p")
 
-  local instructions = default_instructions_content()
-
   for name, _ in pairs((opts and opts.interactive_agents) or {}) do
     local lname = string.lower(name)
     local agent_dir = cache_dir .. "/agents/" .. lname
     pcall(vim.fn.mkdir, agent_dir, "p")
-
-    if instructions ~= "" then
-      write_file(agent_dir .. "/AGENTS.md", instructions)
-    end
 
     if lname == "copilot" then
       write_copilot_files(agent_dir, url, opts)
