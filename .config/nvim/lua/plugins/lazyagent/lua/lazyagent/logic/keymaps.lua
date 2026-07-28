@@ -15,9 +15,15 @@ local image_paste = require("lazyagent.logic.image_paste")
 local context_providers = require("lazyagent.context_providers")
 
 local function restart_insert_if_valid(bufnr)
-  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-    vim.cmd("startinsert")
+  if not bufnr
+    or not vim.api.nvim_buf_is_valid(bufnr)
+    or not vim.api.nvim_buf_is_loaded(bufnr)
+    or vim.api.nvim_get_current_buf() ~= bufnr
+    or not vim.bo[bufnr].modifiable
+  then
+    return
   end
+  pcall(vim.cmd, "startinsert")
 end
 
 ---

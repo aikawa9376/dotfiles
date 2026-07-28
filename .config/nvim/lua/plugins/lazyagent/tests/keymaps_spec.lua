@@ -15,8 +15,12 @@ function M.run()
   local previous_resolve = backend_logic.resolve_backend_for_agent
   local previous_keymap_set = vim.keymap.set
   local previous_notify = vim.notify
+  local previous_current_buf = vim.api.nvim_get_current_buf()
   local bufnr = vim.api.nvim_create_buf(false, true)
+  local readonly_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.bo[readonly_bufnr].modifiable = false
   local registered = {}
+  local submit_insert
   local notices = {}
   local pending_callback
   local steer_calls = 0
@@ -38,6 +42,10 @@ function M.run()
       cleared_draft = value == ""
       return true
     end,
+    paste_and_submit = function()
+      vim.api.nvim_set_current_buf(readonly_bufnr)
+      return false
+    end,
   }
 
   local function cleanup()
@@ -46,8 +54,14 @@ function M.run()
     backend_logic.resolve_backend_for_agent = previous_resolve
     vim.keymap.set = previous_keymap_set
     vim.notify = previous_notify
+    if vim.api.nvim_buf_is_valid(previous_current_buf) then
+      vim.api.nvim_set_current_buf(previous_current_buf)
+    end
     if vim.api.nvim_buf_is_valid(bufnr) then
       vim.api.nvim_buf_delete(bufnr, { force = true })
+    end
+    if vim.api.nvim_buf_is_valid(readonly_bufnr) then
+      vim.api.nvim_buf_delete(readonly_bufnr, { force = true })
     end
   end
 
@@ -69,6 +83,7 @@ function M.run()
     end
     vim.keymap.set = function(mode, lhs, rhs)
       if lhs == "<M-s>" then registered[mode] = rhs end
+      if mode == "i" and lhs == "<C-s>" then submit_insert = rhs end
     end
     vim.notify = function(message)
       notices[#notices + 1] = tostring(message)
@@ -83,6 +98,7 @@ function M.run()
     })
     assert(type(registered.n) == "function", "normal scratch steering key")
     assert(type(registered.i) == "function", "insert scratch steering key")
+    assert(type(submit_insert) == "function", "insert submit key")
 
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "redirect this turn" })
     registered.n()
@@ -116,6 +132,9 @@ function M.run()
     registered.n()
     assert_equal(3, steer_calls, "unsupported steering does not send")
     assert_equal({ "unsupported redirect" }, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "unsupported content")
+
+    local submit_ok, submit_err = pcall(submit_insert)
+    assert(submit_ok, "insert submit must not restart insert in readonly current buffer: " .. tostring(submit_err))
   end, debug.traceback)
 
   cleanup()
