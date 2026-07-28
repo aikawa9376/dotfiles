@@ -540,8 +540,10 @@ local function prepare_gemini_hidden_runtime(agent_name, aggregate_dir)
     })
   end
 
-  sync_mount_dir(aggregate_dir, join_path(runtime_gemini_dir, "skills"))
-  sync_mount_dir(aggregate_dir, runtime_agent_skills_dir)
+  if aggregate_dir then
+    sync_mount_dir(aggregate_dir, join_path(runtime_gemini_dir, "skills"))
+    sync_mount_dir(aggregate_dir, runtime_agent_skills_dir)
+  end
 
   return {
     home_dir = runtime_home,
@@ -641,6 +643,10 @@ function M.apply_command(command, append_args)
   end
 
   return command
+end
+
+function M.prepare_gemini_runtime(agent_name)
+  return prepare_gemini_hidden_runtime(agent_name or "Gemini")
 end
 
 function M.prepare(agent_name, agent_cfg, opts)
