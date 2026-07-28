@@ -653,6 +653,7 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentACPConfig [agent]` | ACP config picker |
 | `:LazyAgentACPModel [agent]` | ACP model picker |
 | `:LazyAgentACPMode [agent]` | ACP mode picker |
+| `:LazyAgentACPPlanToggle [agent]` | provider が公開する設定で Plan / Agent mode をtoggle |
 | `:LazyAgentACPReopen [agent]` | ACP transcript window を再表示 |
 | `:LazyAgentACPCommands [agent]` | ACP slash command palette |
 | `:LazyAgentACPTools [agent]` | ACP tool timeline |
@@ -663,6 +664,9 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentACPReview [agent]` | ACP tool / edit review report |
 | `:LazyAgentInstall [project\|global] [all\|instructions\|skills\|teams]` | projectまたは`stdpath("data")/lazyagent`へstarter `AGENTS.md`、同梱skills、Sol/Luna teamを非破壊install |
 | `:Antigravity` / `:Gemini` / `:Claude` / `:Codex` / `:Copilot` / `:Cursor` | agent を直接起動 |
+
+`c<space>m` でも現在の ACP session（Team 利用時は lead）の Plan / Agent mode を切り替えられます。
+Codex ACP では権限用の `mode` を維持したまま `collaboration_mode` の `default` / `plan` を切り替えます。
 
 ## Scratch tokens
 

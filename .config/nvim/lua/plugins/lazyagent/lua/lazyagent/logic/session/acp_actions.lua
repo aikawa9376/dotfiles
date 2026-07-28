@@ -696,6 +696,23 @@ function M.setup(deps)
     module.pick_acp_config(agent_name, "mode")
   end
 
+  function module.toggle_acp_plan_mode(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.toggle_plan_mode) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not support Plan/Agent mode toggling", vim.log.levels.WARN)
+        return
+      end
+      backend_mod.toggle_plan_mode(pane_id, function(updated, mode, err)
+        if updated then
+          vim.notify("LazyAgent ACP: " .. (mode == "plan" and "Plan mode" or "Agent mode"), vim.log.levels.INFO)
+        elseif err then
+          local message = type(err) == "table" and (err.message or vim.inspect(err)) or tostring(err)
+          vim.notify("LazyAgentACP: " .. message, vim.log.levels.WARN)
+        end
+      end)
+    end)
+  end
+
   function module.switch_acp_provider(agent_name, target_agent)
     resolve_acp_target_agent(agent_name, function(current_agent)
       if not current_agent or current_agent == "" then

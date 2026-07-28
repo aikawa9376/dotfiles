@@ -182,6 +182,7 @@ M.detach_session = acp_actions.detach_session
 M.pick_acp_config = acp_actions.pick_acp_config
 M.pick_acp_model = acp_actions.pick_acp_model
 M.pick_acp_mode = acp_actions.pick_acp_mode
+M.toggle_acp_plan_mode = acp_actions.toggle_acp_plan_mode
 M.switch_acp_provider = acp_actions.switch_acp_provider
 M.available_acp_switch_targets = acp_actions.available_acp_switch_targets
 M.pick_acp_commands = acp_actions.pick_acp_commands

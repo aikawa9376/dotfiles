@@ -40,6 +40,12 @@ return {
         mode = { "n", "x" },
         desc = "Send Up to Agent",
       },
+      {
+        "c<space>m",
+        function() require("lazyagent").toggle_acp_plan_mode() end,
+        mode = { "n", "x" },
+        desc = "Toggle ACP Plan/Agent Mode",
+      },
     }
     for i = 0, 9 do
       table.insert(keys, {
@@ -80,6 +86,7 @@ return {
     "LazyAgentACPMobileStart",
     "LazyAgentACPMobileStop", "LazyAgentACPMobileQR", "LazyAgentACPRawTranscript", "LazyAgentACPFullTranscript",
     "LazyAgentACPRestart", "LazyAgentACPRestoreRestartState",
+    "LazyAgentACPPlanToggle",
     "LazyAgentImage", "LazyAgentScreenShot",
     "LazyAgentTeam", "LazyAgentTeamStatus", "LazyAgentTeamStop",
     "Antigravity", "Claude", "Codex", "Gemini", "Copilot", "Cursor",
