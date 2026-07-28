@@ -249,6 +249,7 @@ function Client.new(opts)
     session_id = nil,
     pending_session_id = nil,
     agent_capabilities = nil,
+    agent_meta = {},
     agent_info = nil,
     auth_methods = {},
     config_options = nil,
@@ -624,6 +625,21 @@ function Client:supports_session_delete()
   return self:_supports_session_capability("delete")
 end
 
+function Client:supports_session_fork()
+  return self:_supports_session_capability("fork")
+end
+
+function Client:supports_nes()
+  local capability = self.agent_capabilities and self.agent_capabilities.nes or nil
+  return capability ~= nil and capability ~= false and capability ~= vim.NIL
+end
+
+function Client:supports_steering()
+  return self.agent_meta
+    and self.agent_meta.steering
+    and self.agent_meta.steering.supported == true
+end
+
 function Client:supports_additional_directories()
   return self:_supports_session_capability("additionalDirectories")
 end
@@ -899,6 +915,90 @@ function Client:delete_session(session_id, callback)
   }, callback)
 end
 
+function Client:fork_session(session_id, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then return end
+  if not self:supports_session_fork() then
+    callback(nil, { code = ERR.invalid_request, message = "ACP agent does not support session/fork" })
+    return
+  end
+  local source_session_id = session_id or self.session_id
+  if not source_session_id or source_session_id == "" then
+    callback(nil, { code = ERR.invalid_params, message = "session/fork requires a sessionId" })
+    return
+  end
+  self:_send_request("session/fork", self:_build_session_params(source_session_id), callback)
+end
+
+function Client:start_nes(params, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then return end
+  if not self:supports_nes() then
+    callback(nil, { code = ERR.invalid_request, message = "ACP agent does not support Next Edit Suggestions" })
+    return
+  end
+  self:_send_request("nes/start", params or {
+    workspaceUri = vim.uri_from_fname(self.cwd),
+    workspaceFolders = { {
+      uri = vim.uri_from_fname(self.cwd),
+      name = vim.fn.fnamemodify(self.cwd, ":t"),
+    } },
+  }, callback)
+end
+
+function Client:suggest_nes(params, callback)
+  callback = callback or function() end
+  if not self:supports_nes() then
+    callback(nil, { code = ERR.invalid_request, message = "ACP agent does not support Next Edit Suggestions" })
+    return
+  end
+  self:_send_request("nes/suggest", params or vim.empty_dict(), callback)
+end
+
+function Client:accept_nes(session_id, suggestion_id)
+  return self:_send_notification("nes/accept", { sessionId = session_id, id = suggestion_id })
+end
+
+function Client:reject_nes(session_id, suggestion_id, reason)
+  return self:_send_notification("nes/reject", {
+    sessionId = session_id,
+    id = suggestion_id,
+    reason = reason,
+  })
+end
+
+function Client:close_nes(session_id, callback)
+  self:_send_request("nes/close", { sessionId = session_id }, callback or function() end)
+end
+
+function Client:notify_nes_document(method, params)
+  local allowed = {
+    didOpen = true,
+    didChange = true,
+    didClose = true,
+    didSave = true,
+    didFocus = true,
+  }
+  if not allowed[method] then return false end
+  return self:_send_notification("document/" .. method, params or vim.empty_dict())
+end
+
+function Client:steer(prompt, callback)
+  callback = callback or function() end
+  if not self.session_id then
+    callback(nil, { code = ERR.invalid_request, message = "ACP session is not ready" })
+    return
+  end
+  if not self:supports_steering() then
+    callback(nil, { code = ERR.invalid_request, message = "ACP agent does not advertise steering" })
+    return
+  end
+  self:_send_request("_session/steering", {
+    sessionId = self.session_id,
+    prompt = prompt,
+  }, callback)
+end
+
 function Client:_handle_initialize_response(result, callback)
   result = self.v2_adapter:initialize_result(result)
   if not result or type(result) ~= "table" then
@@ -921,6 +1021,7 @@ function Client:_handle_initialize_response(result, callback)
   end
 
   self.agent_capabilities = result.agentCapabilities or {}
+  self.agent_meta = type(result._meta) == "table" and vim.deepcopy(result._meta) or {}
   self.agent_info = result.agentInfo or {}
   self.auth_methods = result.authMethods or {}
   self:_set_state("initialized")

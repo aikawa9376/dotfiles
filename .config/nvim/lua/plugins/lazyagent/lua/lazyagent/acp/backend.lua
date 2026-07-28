@@ -966,6 +966,7 @@ local function create_backend(default_view)
         command = acp.command,
         env = acp.env or {},
         cwd = acp.cwd or vim.fn.getcwd(),
+        source_bufnr = acp.source_bufnr,
         root_dir = acp.root_dir,
         additional_directories = vim.deepcopy(acp.additional_directories or {}),
         mcp_servers = vim.deepcopy(acp.mcp_servers or {}),
@@ -1828,6 +1829,10 @@ local function create_backend(default_view)
       end
       state_helpers.clear_pending_switch_history(session)
       session.closing_intentionally = true
+      if session.nes_session_id and session.client then
+        session.client:close_nes(session.nes_session_id)
+        session.nes_session_id = nil
+      end
       host_helpers.release_all_terminals(session)
       local view = session_view(session)
       if not discard_empty_thread then sync_thread_view(session) end
@@ -2165,6 +2170,240 @@ local function create_backend(default_view)
     return config_helpers.show_command_palette_for_session(session, function(prompt)
       backend.paste_and_submit(target_pane, prompt, { "C-m" }, {})
     end)
+  end
+
+  function backend.show_plan_actions(target_pane)
+    local session = get_session(target_pane)
+    if not session then return false end
+    if type(session.current_plan) ~= "table" or #session.current_plan == 0 then
+      vim.notify("LazyAgent ACP has no current plan", vim.log.levels.INFO)
+      return true
+    end
+    local actions = {
+      { label = "Approve and continue", prompt = "The current plan is approved. Continue with implementation." },
+      { label = "Continue autonomously", prompt = "Continue autonomously. Resolve remaining implementation decisions yourself." },
+      { label = "Request plan changes", input = true },
+    }
+    vim.ui.select(actions, {
+      prompt = "ACP plan action:",
+      format_item = function(action) return action.label end,
+    }, function(action)
+      if not action then return end
+      if action.input then
+        vim.ui.input({ prompt = "Requested plan changes: " }, function(value)
+          if value and vim.trim(value) ~= "" then
+            backend.paste_and_submit(target_pane, "Revise the current plan as follows:\n" .. value, { "C-m" }, {})
+          end
+        end)
+      else
+        backend.paste_and_submit(target_pane, action.prompt, { "C-m" }, {})
+      end
+    end)
+    return true
+  end
+
+  function backend.show_steering_input(target_pane)
+    local session = get_session(target_pane)
+    if not session or not session.client or not session.client:supports_steering() then
+      return nil, "ACP provider does not advertise native steering"
+    end
+    vim.ui.input({ prompt = "Steer active ACP turn: " }, function(value)
+      if not value or vim.trim(value) == "" then return end
+      session.client:steer({ { type = "text", text = value } }, function(result, err)
+        if err then
+          vim.notify("LazyAgent ACP steering failed: " .. tostring(err.message or err), vim.log.levels.ERROR)
+          return
+        end
+        conversation_helpers.append_block(
+          session,
+          "System",
+          "Steering: " .. tostring(result and result.outcome or "sent")
+        )
+      end)
+    end)
+    return true
+  end
+
+  function backend.supports_steering(target_pane)
+    local session = get_session(target_pane)
+    return session ~= nil and session.client ~= nil and session.client:supports_steering()
+  end
+
+  function backend.supports_plan_actions(target_pane)
+    local session = get_session(target_pane)
+    return session ~= nil and type(session.current_plan) == "table" and #session.current_plan > 0
+  end
+
+  function backend.fork_current_session(target_pane)
+    local session = get_session(target_pane)
+    if not session or not session.client then return nil, "ACP session not found" end
+    if not session.client:supports_session_fork() then
+      return nil, "ACP provider does not advertise session/fork"
+    end
+    session.client:fork_session(session.session_id, function(result, err)
+      if err then
+        vim.notify("LazyAgent ACP fork failed: " .. tostring(err.message or err), vim.log.levels.ERROR)
+        return
+      end
+      local native_session_id = result and result.sessionId
+      if not native_session_id or native_session_id == "" then
+        vim.notify("LazyAgent ACP fork returned no sessionId", vim.log.levels.ERROR)
+        return
+      end
+      local parent = session.thread_record or {}
+      local forked, create_err = thread_store:create({
+        provider_id = session.provider_id or session.agent_name,
+        native_session_id = native_session_id,
+        cwd = session.cwd,
+        additional_directories = session.additional_directories,
+        title = tostring(parent.title or session.agent_name) .. " · fork",
+        status = "closed",
+        model = parent.model,
+        mode = parent.mode,
+        config = session.config_options,
+        metadata = {
+          native_fork = true,
+          parent_thread_id = session.thread_id,
+          parent_native_session_id = session.session_id,
+        },
+      })
+      if not forked then
+        vim.notify("LazyAgent ACP fork could not be saved: " .. tostring(create_err), vim.log.levels.ERROR)
+        return
+      end
+      vim.notify("Created native ACP fork: " .. forked.thread_id, vim.log.levels.INFO)
+    end)
+    return true
+  end
+
+  function backend.supports_session_fork(target_pane)
+    local session = get_session(target_pane)
+    local config = session and session.experimental and session.experimental.session_fork or {}
+    return session ~= nil
+      and config.enabled == true
+      and session.client ~= nil
+      and session.client:supports_session_fork()
+  end
+
+  function backend.request_next_edit_suggestion(target_pane)
+    local session = get_session(target_pane)
+    if not session or not session.client then return nil, "ACP session not found" end
+    if not session.client:supports_nes() then
+      return nil, "ACP provider does not advertise Next Edit Suggestions"
+    end
+    local bufnr = session.source_bufnr
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) or vim.bo[bufnr].buftype ~= "" then
+      bufnr = vim.api.nvim_get_current_buf()
+    end
+    local path = vim.api.nvim_buf_get_name(bufnr)
+    if path == "" or vim.bo[bufnr].buftype ~= "" then return nil, "current buffer is not a file" end
+    local uri = vim.uri_from_bufnr(bufnr)
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local nes_capabilities = session.client.agent_capabilities.nes or {}
+    local position_encoding = session.client.agent_capabilities.positionEncoding or "utf-16"
+    local cursor_character = cursor[2]
+    if position_encoding ~= "utf-8" then
+      local ok_index, index = pcall(
+        vim.str_utfindex,
+        lines[cursor[1]] or "",
+        position_encoding,
+        cursor[2],
+        false
+      )
+      if ok_index then cursor_character = index end
+    end
+    local nes_events = nes_capabilities.events
+      and nes_capabilities.events.document
+      or {}
+    local nes_context_caps = nes_capabilities.context or {}
+    local function request(nes_session_id)
+      if nes_events.didOpen ~= nil and nes_events.didOpen ~= false then
+        session.client:notify_nes_document("didOpen", {
+          sessionId = nes_session_id,
+          uri = uri,
+          languageId = vim.bo[bufnr].filetype,
+          version = vim.b[bufnr].changedtick,
+          text = table.concat(lines, "\n"),
+        })
+      end
+      local context = {}
+      if nes_context_caps.recentFiles ~= nil and nes_context_caps.recentFiles ~= false then
+        context.recentFiles = { {
+          uri = uri,
+          languageId = vim.bo[bufnr].filetype,
+          text = table.concat(lines, "\n"),
+        } }
+      end
+      if nes_context_caps.openFiles ~= nil and nes_context_caps.openFiles ~= false then
+        context.openFiles = { {
+          uri = uri,
+          languageId = vim.bo[bufnr].filetype,
+          lastFocusedMs = os.time() * 1000,
+        } }
+      end
+      local request_params = {
+        sessionId = nes_session_id,
+        uri = uri,
+        version = vim.b[bufnr].changedtick,
+        position = { line = cursor[1] - 1, character = cursor_character },
+        triggerKind = "manual",
+      }
+      if not vim.tbl_isempty(context) then request_params.context = context end
+      session.client:suggest_nes(request_params, function(result, err)
+        if err then
+          vim.notify("LazyAgent ACP NES failed: " .. tostring(err.message or err), vim.log.levels.ERROR)
+          return
+        end
+        local suggestions = result and result.suggestions or {}
+        if #suggestions == 0 then
+          vim.notify("LazyAgent ACP returned no edit suggestion", vim.log.levels.INFO)
+          return
+        end
+        vim.ui.select(suggestions, {
+          prompt = "Next edit suggestion:",
+          format_item = function(item)
+            return string.format("%s · %s", tostring(item.kind or "edit"), tostring(item.uri or uri))
+          end,
+        }, function(item)
+          if not item then return end
+          if item.kind ~= "edit" or type(item.edits) ~= "table" then
+            session.client:reject_nes(nes_session_id, item.id, "rejected")
+            vim.notify("Unsupported NES suggestion kind: " .. tostring(item.kind), vim.log.levels.WARN)
+            return
+          end
+          local target_buf = vim.uri_to_bufnr(item.uri or uri)
+          vim.fn.bufload(target_buf)
+          vim.lsp.util.apply_text_edits(item.edits, target_buf, position_encoding)
+          session.client:accept_nes(nes_session_id, item.id)
+          vim.notify("Applied ACP next edit suggestion", vim.log.levels.INFO)
+        end)
+      end)
+    end
+    if session.nes_session_id then
+      request(session.nes_session_id)
+    else
+      session.client:start_nes({
+        workspaceUri = vim.uri_from_fname(session.cwd),
+        workspaceFolders = { {
+          uri = vim.uri_from_fname(session.cwd),
+          name = vim.fn.fnamemodify(session.cwd, ":t"),
+        } },
+      }, function(result, err)
+        if err then
+          vim.notify("LazyAgent ACP NES start failed: " .. tostring(err.message or err), vim.log.levels.ERROR)
+          return
+        end
+        session.nes_session_id = result and result.sessionId
+        if session.nes_session_id then request(session.nes_session_id) end
+      end)
+    end
+    return true
+  end
+
+  function backend.supports_next_edit_suggestions(target_pane)
+    local session = get_session(target_pane)
+    return session ~= nil and session.client ~= nil and session.client:supports_nes()
   end
 
   function backend.show_tool_timeline(target_pane)

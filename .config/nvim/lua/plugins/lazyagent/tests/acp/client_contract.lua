@@ -253,6 +253,7 @@ local function test_capability_semantics()
       list = false,
       resume = vim.empty_dict(),
       close = vim.NIL,
+      fork = vim.empty_dict(),
     },
   }
 
@@ -260,6 +261,11 @@ local function test_capability_semantics()
   assert_equal(true, client:supports_session_resume(), "empty object capability")
   assert_equal(false, client:supports_session_close(), "null capability")
   assert_equal(false, client:supports_session_delete(), "missing delete capability")
+  assert_equal(true, client:supports_session_fork(), "fork capability")
+  client.agent_capabilities.nes = vim.empty_dict()
+  assert_equal(true, client:supports_nes(), "NES capability")
+  client.agent_meta = { steering = { supported = true } }
+  assert_equal(true, client:supports_steering(), "provider steering extension")
 end
 
 local function test_stdio_contract(root)
