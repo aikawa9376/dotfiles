@@ -49,6 +49,7 @@ local suites = {
   "tests.acp.mcp_servers_spec",
   "tests.acp.mcp_integration_spec",
   "tests.acp.permission_store_spec",
+  "tests.acp.ui_queue_spec",
   "tests.acp.elicitation_spec",
   "tests.acp.protocol_log_spec",
   "tests.acp.replay_spec",

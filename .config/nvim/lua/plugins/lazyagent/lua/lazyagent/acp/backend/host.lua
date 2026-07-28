@@ -47,6 +47,7 @@ function M.setup(deps)
   local Notifications = require("lazyagent.acp.notifications")
   local PermissionStore = require("lazyagent.acp.permission_store")
   local Elicitation = require("lazyagent.acp.elicitation")
+  local UiQueue = require("lazyagent.acp.ui_queue")
   local config_values = require("lazyagent.acp.config_values")
 
   local function notify_attention(kind, session, message)
@@ -291,7 +292,7 @@ function M.setup(deps)
       or resolve_permission_option(options, "allow_once")
   end
 
-  local function handle_permission_request(session, params, done)
+  local function handle_permission_request(session, params, done, on_finished)
     local acp_opts = state.opts and state.opts.acp
     local permission_cfg = type(acp_opts) == "table" and acp_opts.permissions or {}
     permission_cfg = type(permission_cfg) == "table" and permission_cfg or {}
@@ -303,11 +304,17 @@ function M.setup(deps)
     local tool = merge_tool_update(session, params.toolCall or {})
     local tool_path = (extract_tool_paths(tool) or {})[1]
     local permission_finished = false
+    local function finish_request()
+      local callback = on_finished
+      on_finished = nil
+      if callback then callback() end
+    end
     local function respond(outcome, metadata)
       if permission_finished then return false end
       if session.client and next(session.client.pending_permission_requests or {}) == nil then
         permission_finished = true
         session.pending_permission = nil
+        finish_request()
         return false
       end
       permission_finished = true
@@ -315,6 +322,7 @@ function M.setup(deps)
       metadata = metadata or {}
       metadata.path = metadata.path or tool_path
       if permission_cfg.audit ~= false then PermissionStore.audit(session, tool, outcome, metadata, store_opts) end
+      finish_request()
       done(outcome)
       pcall(function()
         require("lazyagent.logic.status").start_monitor(session.agent_name)
@@ -1083,11 +1091,30 @@ function M.setup(deps)
     local drain_prompt_queue = opts.drain_prompt_queue
     local handlers = {
       request_permission = function(params, done)
-        handle_permission_request(session, params, done)
+        UiQueue.enqueue(function(release)
+          handle_permission_request(session, params, done, release)
+        end, {
+          kind = "permission",
+          label = params and params.toolCall and (params.toolCall.title or params.toolCall.toolCallId) or nil,
+          on_error = function(err)
+            done(nil, { code = -32603, message = tostring(err) })
+          end,
+        })
       end,
       select_auth_method = function(methods, done)
-        notify_attention("elicitation", session, "Choose an authentication method")
-        select_auth_method(methods, done)
+        UiQueue.enqueue(function(release)
+          notify_attention("elicitation", session, "Choose an authentication method")
+          select_auth_method(methods, function(...)
+            release()
+            done(...)
+          end)
+        end, {
+          kind = "authentication",
+          label = session.agent_name,
+          on_error = function()
+            done(nil)
+          end,
+        })
       end,
       read_text_file = function(params)
         return read_text_file(session, params)
@@ -1115,11 +1142,22 @@ function M.setup(deps)
     local elicitation_cfg = type(experimental.elicitation) == "table" and experimental.elicitation or {}
     if elicitation_cfg.enabled == true then
       handlers.elicitation = function(params, done)
-        notify_attention("elicitation", session, params.message or "Input required")
         append_block(session, "System", "Input requested: " .. tostring(params.message or "ACP elicitation"))
-        Elicitation.handle(params, {
-          question_policy = session.question_policy or "prompt",
-        }, done)
+        UiQueue.enqueue(function(release)
+          notify_attention("elicitation", session, params.message or "Input required")
+          Elicitation.handle(params, {
+            question_policy = session.question_policy or "prompt",
+          }, function(...)
+            release()
+            done(...)
+          end)
+        end, {
+          kind = "elicitation",
+          label = params.message or session.agent_name,
+          on_error = function(err)
+            done(nil, { code = -32603, message = tostring(err) })
+          end,
+        })
       end
     end
     local client_capabilities = {}
