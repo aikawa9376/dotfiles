@@ -113,6 +113,9 @@ function M.run()
   local opened_background = view.debug_snapshot()
   assert_equal(opened_background.buffer_count, 1, "opening background view creates its transcript buffer")
   assert(opened_background.window_count >= 1, "opening background view creates its window")
+  assert_equal(view.focus_pane(background_pane_id), true, "opened background view can be focused")
+  assert_equal(vim.api.nvim_get_current_buf(), opened_background.panes[tostring(background_pane_id)].bufnr,
+    "background pane focus selects its transcript buffer")
   view.kill_pane(background_pane_id, {
     pane_id = background_pane_id,
     transcript_path = transcript_path,

@@ -267,6 +267,8 @@ function M.setup(deps)
       source_winid = source_winid,
       origin_winid = vim.api.nvim_get_current_win(),
       reuse = true,
+      open_input = false,
+      focus_agent_view = true,
     }
     if not local_key then
       launch_opts.acp_thread_id = thread.thread_id
