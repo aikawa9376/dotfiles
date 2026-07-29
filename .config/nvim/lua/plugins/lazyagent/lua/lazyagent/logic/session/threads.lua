@@ -230,7 +230,8 @@ function M.setup(deps)
     return true
   end
 
-  function module.open_thread(thread_id)
+  function module.open_thread(thread_id, opts)
+    opts = opts or {}
     local backend, thread = thread_backend(thread_id)
     if not backend or not thread then
       vim.notify("LazyAgent ACP: thread not found: " .. tostring(thread_id), vim.log.levels.WARN)
@@ -257,15 +258,19 @@ function M.setup(deps)
       end
     end
     local workspace = thread_workspace(thread)
-    local source_bufnr, source_winid = source_anchor(thread)
+    local source_bufnr, context_winid = source_anchor(thread)
+    local placement_winid = opts.placement_winid
+    if placement_winid and not vim.api.nvim_win_is_valid(placement_winid) then
+      placement_winid = nil
+    end
     local launch_opts = {
       agent_name = local_key or thread.provider_id,
       acp_thread_title = thread.title,
       root_dir = workspace,
       cwd = workspace,
       source_bufnr = source_bufnr,
-      source_winid = source_winid,
-      origin_winid = vim.api.nvim_get_current_win(),
+      source_winid = placement_winid or context_winid,
+      origin_winid = placement_winid or vim.api.nvim_get_current_win(),
       reuse = true,
       stay_hidden = false,
       open_input = false,
@@ -1049,7 +1054,7 @@ function M.setup(deps)
           vim.api.nvim_win_close(preview_winid, true)
           preview_winid = nil
         end
-        module.open_thread(thread_id)
+        module.open_thread(thread_id, { placement_winid = cockpit_winid })
       end
     end, { buffer = bufnr, silent = true, desc = "Open or resume ACP cockpit thread" })
     vim.keymap.set("n", "n", function()
