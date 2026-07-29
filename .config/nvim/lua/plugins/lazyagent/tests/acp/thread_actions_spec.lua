@@ -320,6 +320,7 @@ function M.run()
   vim.wo[other_acp_winid].winhighlight = "Normal:TestOtherActive,NormalNC:TestOtherUsual"
   vim.api.nvim_set_current_win(origin_winid)
   assert_equal(actions.open_cockpit(), true, "open interactive cockpit")
+  local cockpit_winid = vim.api.nvim_get_current_win()
   local cockpit_bufnr = vim.api.nvim_get_current_buf()
   assert_equal(vim.bo[cockpit_bufnr].filetype, "lazyagent_acp_cockpit", "cockpit keeps focus beside preview")
   assert(table.concat(vim.api.nvim_buf_get_lines(cockpit_bufnr, 0, -1, false), "\n"):find("● %[idle%].-Live thread"),
@@ -420,6 +421,10 @@ function M.run()
   vim.cmd("normal o")
   assert_equal(opened.agent_name, session_key, "cockpit o opens the exact live agent under the cursor")
   assert_equal(opened.acp_thread_id, nil, "cockpit live open bypasses provider thread selection")
+  assert_equal(opened.source_winid, cockpit_winid, "cockpit o places the ACP buffer in the cockpit tab")
+  assert_equal(opened.origin_winid, cockpit_winid, "cockpit o keeps ACP focus in the cockpit tab")
+  assert_equal(vim.b[opened.source_bufnr].lazyagent_workspace_root, "/tmp/live",
+    "cockpit placement preserves the thread workspace context")
   assert_equal(opened.stay_hidden, false, "cockpit o reveals a hidden Team member session")
   assert_equal(opened.open_input, false, "cockpit o opens the ACP buffer without covering it with scratch")
   assert_equal(opened.focus_agent_view, true, "cockpit o focuses the selected ACP buffer")
