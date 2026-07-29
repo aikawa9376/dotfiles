@@ -83,6 +83,48 @@ function M.extract_quoted_strings(text)
   return strings
 end
 
+function M.cursor_in_string(bufnr, winid)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  winid = winid or vim.api.nvim_get_current_win()
+  local cursor = vim.api.nvim_win_get_cursor(winid)
+  local row, col = cursor[1] - 1, cursor[2]
+
+  if vim.treesitter and type(vim.treesitter.get_node) == "function" then
+    local ok_node, node = pcall(vim.treesitter.get_node, {
+      bufnr = bufnr,
+      pos = { row, col },
+    })
+    if ok_node then
+      while node do
+        if tostring(node:type()):find("string", 1, true) then return true end
+        node = node:parent()
+      end
+    end
+  end
+
+  local line = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or "")
+  local quote
+  local escaped = false
+  for index = 1, #line do
+    local char = line:sub(index, index)
+    local under_cursor = index == col + 1
+    if quote then
+      if under_cursor then return true end
+      if escaped then
+        escaped = false
+      elseif char == "\\" then
+        escaped = true
+      elseif char == quote then
+        quote = nil
+      end
+    elseif char == "'" or char == '"' then
+      if under_cursor then return true end
+      quote = char
+    end
+  end
+  return false
+end
+
 function M.cursor_context(radius)
   radius = radius or 5
   local cursor = vim.api.nvim_win_get_cursor(0)

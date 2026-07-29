@@ -381,7 +381,8 @@ function M.goto_lsp_definition_with_implementations()
   end)
 end
 
-local function fallback_definition()
+function M.goto_laravel_nvim_string()
+  if not utils.cursor_in_string() then return false end
   local ok_nav, navigate = pcall(require, "laravel.navigate")
   if ok_nav and type(navigate.is_laravel_navigation_context) == "function" then
     local ok_context, is_context = pcall(navigate.is_laravel_navigation_context)
@@ -392,7 +393,11 @@ local function fallback_definition()
       end
     end
   end
+  return false
+end
 
+local function fallback_definition()
+  if M.goto_laravel_nvim_string() then return true end
   if M.goto_lsp_definition_with_implementations() then return true end
 
   vim.cmd("normal! gd")

@@ -1205,18 +1205,10 @@ local function goto_laravel_nvim_context()
     return false
   end
 
-  local ok_nav, navigate = pcall(require, "laravel.navigate")
-  if not ok_nav or type(navigate.is_laravel_navigation_context) ~= "function" then
-    return false
-  end
-
-  local ok_context, is_context = pcall(navigate.is_laravel_navigation_context)
-  if not ok_context or not is_context or type(navigate.goto_laravel_string) ~= "function" then
-    return false
-  end
-
-  local ok_goto, result = pcall(navigate.goto_laravel_string)
-  return ok_goto and result ~= false
+  local ok, definition = pcall(require, "laravel_extension.features.definition")
+  return ok
+    and type(definition.goto_laravel_nvim_string) == "function"
+    and definition.goto_laravel_nvim_string()
 end
 
 local function goto_lsp_definitions()
