@@ -274,7 +274,7 @@ function M.setup(deps)
       reuse = true,
       stay_hidden = false,
       open_input = false,
-      focus_agent_view = true,
+      focus_agent_view = opts.focus_agent_view ~= false,
     }
     if not local_key then
       launch_opts.acp_thread_id = thread.thread_id
@@ -1046,7 +1046,7 @@ function M.setup(deps)
       end
       update_preview(thread_id, true)
     end, { buffer = bufnr, silent = true, desc = "Toggle ACP thread latest response or mirror" })
-    vim.keymap.set("n", "o", function()
+    local function open_selected_thread(focus_agent_view)
       local thread_id = selected_thread_id()
       if thread_id then
         if preview_winid and vim.api.nvim_win_is_valid(preview_winid) then
@@ -1054,9 +1054,18 @@ function M.setup(deps)
           vim.api.nvim_win_close(preview_winid, true)
           preview_winid = nil
         end
-        module.open_thread(thread_id, { placement_winid = cockpit_winid })
+        module.open_thread(thread_id, {
+          placement_winid = cockpit_winid,
+          focus_agent_view = focus_agent_view,
+        })
       end
+    end
+    vim.keymap.set("n", "o", function()
+      open_selected_thread(false)
     end, { buffer = bufnr, silent = true, desc = "Open or resume ACP cockpit thread" })
+    vim.keymap.set("n", "O", function()
+      open_selected_thread(true)
+    end, { buffer = bufnr, silent = true, desc = "Open or resume and focus ACP cockpit thread" })
     vim.keymap.set("n", "n", function()
       module.request_new_agent(selected_workspace())
     end, { buffer = bufnr, silent = true, desc = "Create an ACP agent in the project Neovim" })
@@ -1223,7 +1232,8 @@ function M.setup(deps)
       local thread = stored_thread(selected_thread_id())
       local items = {
         { key = "<CR>", description = "Toggle latest response / transcript mirror" },
-        { key = "o", description = "Open or resume thread" },
+        { key = "o", description = "Open or resume thread in Cockpit tab" },
+        { key = "O", description = "Open or resume thread and focus agent" },
         { key = "n", description = "Create agent in the project Neovim" },
         { key = "i", description = "Message live thread" },
         { key = "v", description = "Open raw transcript" },

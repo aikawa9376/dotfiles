@@ -427,7 +427,11 @@ function M.run()
     "cockpit placement preserves the thread workspace context")
   assert_equal(opened.stay_hidden, false, "cockpit o reveals a hidden Team member session")
   assert_equal(opened.open_input, false, "cockpit o opens the ACP buffer without covering it with scratch")
-  assert_equal(opened.focus_agent_view, true, "cockpit o focuses the selected ACP buffer")
+  assert_equal(opened.focus_agent_view, false, "cockpit o leaves focus in the cockpit")
+  opened = nil
+  vim.cmd("normal O")
+  assert_equal(opened.agent_name, session_key, "cockpit O opens the exact live agent under the cursor")
+  assert_equal(opened.focus_agent_view, true, "cockpit O focuses the selected ACP buffer")
   vim.cmd("normal q")
   assert_equal(
     vim.wo[selected_acp_winid].winhighlight,
