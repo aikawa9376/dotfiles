@@ -19,6 +19,7 @@ function M.run()
   local acp_split_opts = {}
   local legacy_splits = {}
   local hidden_panes = {}
+  local joined_panes = {}
   local backend = {
     split = function(_, _, _, opts)
       pane_seq = pane_seq + 1
@@ -39,6 +40,11 @@ function M.run()
     end,
     break_pane = function(pane_id)
       hidden_panes[#hidden_panes + 1] = pane_id
+      return true
+    end,
+    join_pane = function(pane_id, _, _, callback)
+      joined_panes[#joined_panes + 1] = pane_id
+      callback(true)
       return true
     end,
   }
@@ -188,6 +194,19 @@ function M.run()
   assert_equal(#hidden_panes, 0, "headless ACP session never creates a view that must be closed")
   assert_equal(state.sessions[hidden_key].hidden, true, "hidden ACP runtime remains marked hidden")
   assert_equal(splits[3].cwd, non_git_dir, "non-Git source directory wins over Neovim cwd")
+  local revealed_key
+  launch.ensure_session(hidden_key, {
+    source_bufnr = non_git_bufnr,
+    stay_hidden = false,
+  }, true, function(_, session_key)
+    revealed_key = session_key
+  end)
+  assert(vim.wait(1000, function()
+    return revealed_key ~= nil
+  end, 10), "explicitly visible reuse should reveal a hidden ACP session")
+  assert_equal(joined_panes[1], state.sessions[hidden_key].pane_id, "hidden ACP session rejoins a window")
+  assert_equal(state.sessions[hidden_key].hidden, false, "revealed ACP session is no longer hidden")
+  assert_equal(state.sessions[hidden_key].mode, nil, "revealed ACP session leaves instant mode")
   vim.api.nvim_buf_delete(non_git_bufnr, { force = true })
   vim.fn.delete(non_git_dir, "rf")
 
