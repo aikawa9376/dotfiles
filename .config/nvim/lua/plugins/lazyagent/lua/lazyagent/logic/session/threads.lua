@@ -267,6 +267,7 @@ function M.setup(deps)
       source_winid = source_winid,
       origin_winid = vim.api.nvim_get_current_win(),
       reuse = true,
+      stay_hidden = false,
       open_input = false,
       focus_agent_view = true,
     }
