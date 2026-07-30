@@ -406,6 +406,38 @@ function M.attach(api, ctx)
     return true
   end
 
+  function M.relocate_pane(pane_id, size, is_vertical, target_winid, on_done, session)
+    if not target_winid or not vim.api.nvim_win_is_valid(target_winid) then
+      if on_done then vim.schedule(function() on_done(false) end) end
+      return false
+    end
+
+    local bufnr = to_bufnr(pane_id)
+    local target_tab = vim.api.nvim_win_get_tabpage(target_winid)
+    local target_view
+    for _, winid in ipairs(bufnr and vim.fn.win_findbuf(bufnr) or {}) do
+      if vim.api.nvim_win_is_valid(winid) then
+        if vim.api.nvim_win_get_tabpage(winid) == target_tab then
+          target_view = target_view or winid
+        else
+          pcall(vim.api.nvim_win_close, winid, true)
+        end
+      end
+    end
+
+    pane_config[tostring(pane_id)] = vim.tbl_extend("force", pane_config[tostring(pane_id)] or {}, {
+      source_winid = target_winid,
+    })
+    if target_view then
+      if bufnr then refresh_buffer_layout(bufnr, { force_footer = true }) end
+      if on_done then vim.schedule(function() on_done(true) end) end
+      return true
+    end
+
+    pcall(vim.api.nvim_set_current_win, target_winid)
+    return M.join_pane(pane_id, size, is_vertical, on_done, session)
+  end
+
   function M.break_pane(pane_id)
     local bufnr = to_bufnr(pane_id)
     if not bufnr then

@@ -1924,6 +1924,18 @@ local function create_backend(default_view)
     return false
   end
 
+  function backend.relocate_pane(pane_id, size, is_vertical, target_winid, on_done)
+    local session = get_session(pane_id)
+    local view = session_view(session)
+    if view and type(view.relocate_pane) == "function" then
+      return view.relocate_pane(pane_id, size, is_vertical, target_winid, on_done, session)
+    end
+    if type(on_done) == "function" then
+      vim.schedule(function() on_done(false) end)
+    end
+    return false
+  end
+
   function backend.is_busy(target_pane)
     local session = get_session(target_pane)
     if not session then

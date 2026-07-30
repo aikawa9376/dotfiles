@@ -632,12 +632,28 @@ function M.setup(deps)
     module.ensure_session(agent_name, agent_cfg, reuse, function(pane_id, ready_key)
       local runtime_agent = ready_key or session_key
       if opts.open_input == false then
-        send_logic.send_and_close_if_needed(runtime_agent, pane_id, opts.initial_input, agent_cfg, reuse, source_bufnr)
-        if opts.focus_agent_view == true and backend_mod and type(backend_mod.focus_pane) == "function" then
-          backend_mod.focus_pane(pane_id)
+        local function finish_open()
+          send_logic.send_and_close_if_needed(runtime_agent, pane_id, opts.initial_input, agent_cfg, reuse, source_bufnr)
+          if opts.focus_agent_view == true and backend_mod and type(backend_mod.focus_pane) == "function" then
+            backend_mod.focus_pane(pane_id)
+          end
+          if type(opts.on_ready) == "function" then
+            opts.on_ready(pane_id, runtime_agent)
+          end
         end
-        if type(opts.on_ready) == "function" then
-          opts.on_ready(pane_id, runtime_agent)
+        if opts.relocate_agent_view == true
+          and backend_mod
+          and type(backend_mod.relocate_pane) == "function"
+        then
+          backend_mod.relocate_pane(
+            pane_id,
+            agent_cfg.pane_size or 30,
+            agent_cfg.is_vertical or false,
+            origin_winid,
+            finish_open
+          )
+        else
+          finish_open()
         end
         return
       end
