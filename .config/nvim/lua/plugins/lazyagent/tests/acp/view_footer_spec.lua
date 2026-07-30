@@ -52,6 +52,19 @@ function M.run()
   assert(not hidden:find("the first user message as summary", 1, true), "session summary hidden by default")
   assert(hidden:find("Image input", 1, true), "supported image input is visible")
 
+  session.acp_thread_title = "Manual LazyAgent name"
+  session.acp_thread_title_source = "manual"
+  local local_title_hidden = footer_text(session)
+  assert(not local_title_hidden:find("Manual LazyAgent name", 1, true), "manual thread title hidden by default")
+
+  session.show_thread_title = true
+  local local_title_visible = footer_text(session)
+  assert(local_title_visible:find("Manual LazyAgent name", 1, true), "manual thread title visible when enabled")
+
+  session.acp_thread_title_source = "provider"
+  local provider_title_hidden = footer_text(session)
+  assert(not provider_title_hidden:find("Manual LazyAgent name", 1, true), "provider title is not treated as explicit thread title")
+
   session.show_session_summary = true
   local visible = footer_text(session)
   assert(visible:find("the first user message as title", 1, true), "session title visible when enabled")

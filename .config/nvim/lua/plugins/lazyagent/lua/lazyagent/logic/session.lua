@@ -88,6 +88,7 @@ local threads = session_threads.setup({
   close_session = function(agent_name)
     return M.close_session(agent_name)
   end,
+  resolve_active_acp_session = session_acp.resolve_active_acp_session,
   editor_registry = require("lazyagent.acp.editor_registry"),
 })
 
@@ -208,6 +209,7 @@ M.open_acp_thread = threads.open_thread
 M.archive_acp_thread = threads.archive_thread
 M.restore_acp_thread = threads.restore_thread
 M.rename_acp_thread = threads.rename_thread
+M.rename_acp_session = threads.rename_active_thread
 M.delete_acp_thread = threads.delete_thread
 M.show_acp_thread_changes = threads.show_thread_changes
 

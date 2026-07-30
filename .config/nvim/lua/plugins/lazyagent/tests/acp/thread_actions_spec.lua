@@ -14,6 +14,7 @@ function M.run()
   local changes_thread_id
   local changes_backend
   local create_request
+  local resolved_active_agent
   local state = { backends = {}, editor_instance_id = "test-nvim" }
   local backend = {}
   local live_records = {}
@@ -49,6 +50,7 @@ function M.run()
     records[thread_id].title = title
     return vim.deepcopy(records[thread_id])
   end
+  live_backend.rename_thread = backend.rename_thread
   function backend.update_thread(thread_id, changes, opts)
     local record = records[thread_id]
     if not record then return nil, "not found" end
@@ -120,6 +122,10 @@ function M.run()
     start_interactive_session = function(opts)
       opened = opts
     end,
+    resolve_active_acp_session = function(agent_name, callback)
+      resolved_active_agent = agent_name
+      callback("Codex")
+    end,
     editor_registry = {
       targets = function(root)
         return { { instance_id = "target-nvim", label = "Target Neovim", roots = { root } } }
@@ -173,6 +179,9 @@ function M.run()
       thread_id = THREAD_ID,
     },
   }
+  assert_equal(actions.rename_active_thread("  Active session name  ", "Codex"), true, "rename active thread action")
+  assert_equal(resolved_active_agent, "Codex", "rename active thread target")
+  assert_equal(records[THREAD_ID].title, "Active session name", "active thread title is trimmed")
   records[FOREIGN_ID] = {
     thread_id = FOREIGN_ID,
     provider_id = "Codex",

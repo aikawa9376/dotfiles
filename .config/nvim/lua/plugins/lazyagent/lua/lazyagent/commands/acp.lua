@@ -66,6 +66,12 @@ local always_commands = {
     handler = session_logic.pick_acp_threads,
   },
   {
+    name = "LazyAgentACPRename",
+    desc = "Rename the current LazyAgent ACP thread",
+    handler = session_logic.rename_acp_session,
+    nargs = "*",
+  },
+  {
     name = "LazyAgentACPBlobGCDryRun",
     desc = "Report unreferenced ACP blobs without deleting them",
     handler = blob_gc_scan,

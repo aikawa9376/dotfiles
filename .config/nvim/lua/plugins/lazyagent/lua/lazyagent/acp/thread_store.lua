@@ -436,11 +436,14 @@ function Store:open(thread_id, changes)
 end
 
 function Store:rename(thread_id, title)
-  title = tostring(title or "")
+  title = vim.trim(tostring(title or ""))
   if title == "" then
     return nil, "thread title is required"
   end
-  return self:update(thread_id, { title = title })
+  return self:update(thread_id, {
+    title = title,
+    metadata = { title_source = "manual" },
+  })
 end
 
 function Store:delete(thread_id)

@@ -710,10 +710,18 @@ function M.setup(deps)
     if kind == "session_info_update" then
       update_session_info(session, update)
       sync_runtime_session(session)
-      sync_thread(session, {
-        title = session.session_info and session.session_info.title or session.agent_name,
+      local title_source = session.thread_record
+          and session.thread_record.metadata
+          and session.thread_record.metadata.title_source
+        or nil
+      local changes = {
         native_session_id = session.session_id or vim.NIL,
-      })
+      }
+      if title_source ~= "manual" and title_source ~= "configured" then
+        changes.title = session.session_info and session.session_info.title or session.agent_name
+      end
+      sync_thread(session, changes)
+      sync_runtime_session(session)
       return
     end
 

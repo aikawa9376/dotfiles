@@ -115,6 +115,32 @@ local function capture_for_session(agent_name, session)
   return backend_mod.capture_pane_sync(session.pane_id, 300)
 end
 
+function M.session_display_name(agent_name)
+  local session = state.sessions[agent_name]
+  local source = session and session.acp_thread_title_source or nil
+  local title = session and vim.trim(tostring(session.acp_thread_title or "")) or ""
+  if title ~= "" and (source == "manual" or source == "configured") then
+    return title
+  end
+  return agent_name
+end
+
+function M.refresh_session_title(agent_name)
+  local session = state.sessions[agent_name]
+  if not session then return end
+  local label = M.session_display_name(agent_name)
+  local status = session.agent_status
+  local suffix
+  if status == "thinking" then
+    suffix = "Thinking..."
+  elseif status == "waiting" then
+    suffix = session.agent_status_message or "Waiting..."
+  else
+    suffix = "Idle"
+  end
+  require("lazyagent.window").set_title(" " .. label .. " (" .. suffix .. ") ")
+end
+
 -- Mark an agent as idle (called by MCP notify_done tool or internally)
 function M.set_idle(agent_name)
   local s = state.sessions[agent_name]
@@ -123,7 +149,7 @@ function M.set_idle(agent_name)
   s.agent_status = "idle"
   s.agent_status_message = "Ready"
   agentmux.sync()
-  require("lazyagent.window").set_title(" " .. agent_name .. " (Idle) ")
+  M.refresh_session_title(agent_name)
   refresh_ui()
   pcall(function()
     local transport = require("lazyagent.mcp.transport")
@@ -147,7 +173,7 @@ function M.set_waiting(agent_name, msg)
   s.agent_status = "waiting"
   s.agent_status_message = msg or "Waiting..."
   agentmux.sync()
-  require("lazyagent.window").set_title(" " .. agent_name .. " (" .. (msg or "Waiting...") .. ") ")
+  M.refresh_session_title(agent_name)
   refresh_ui()
   pcall(function()
     local capture = capture_for_session(agent_name, s)
@@ -164,7 +190,7 @@ function M.start_monitor(agent_name)
   s.agent_status = "thinking"
   s.agent_status_message = "Thinking..."
   agentmux.sync()
-  require("lazyagent.window").set_title(" " .. agent_name .. " (Thinking...) ")
+  M.refresh_session_title(agent_name)
   pcall(function()
     require("lazyagent.mcp.transport").push_event({ event = "start", agent = agent_name })
   end)

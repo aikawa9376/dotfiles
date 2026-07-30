@@ -288,6 +288,19 @@ for line in io.lines() do
       read_complete = false
 
       send_raw("{not valid json}\n")
+      if vim.env.LAZYAGENT_FAKE_SESSION_INFO_TITLE then
+        send({
+          jsonrpc = "2.0",
+          method = "session/update",
+          params = {
+            sessionId = "test-session",
+            update = {
+              sessionUpdate = "session_info_update",
+              title = vim.env.LAZYAGENT_FAKE_SESSION_INFO_TITLE,
+            },
+          },
+        })
+      end
       send_fragmented({
         jsonrpc = "2.0",
         method = "session/update",

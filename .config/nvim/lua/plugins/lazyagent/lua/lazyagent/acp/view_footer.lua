@@ -300,6 +300,17 @@ function M.new(ctx)
     return compact_single_line(info.summary)
   end
 
+  local function thread_title(session)
+    if not session or session.show_thread_title ~= true then
+      return nil
+    end
+    local source = session.acp_thread_title_source
+    if source ~= "manual" and source ~= "configured" then
+      return nil
+    end
+    return compact_single_line(session.acp_thread_title)
+  end
+
   local function session_info_status_label(session)
     local info = session and session.acp_session_info or {}
     return compact_single_line(info.statusLabel or info.status)
@@ -665,6 +676,7 @@ function M.new(ctx)
     local info_hl = ensure_footer_info_highlights()
     local size = transcript_size_label(session)
     local provider = provider_label(agent_name, session)
+    local local_thread_title = thread_title(session)
     local session_title = session_info_title(session)
     local session_summary = session_info_summary(session)
     local context = footer_context_text(agent_name, session)
@@ -676,6 +688,9 @@ function M.new(ctx)
 
     if provider ~= "" then
       table.insert(meta, provider)
+    end
+    if local_thread_title and local_thread_title ~= "" then
+      table.insert(meta, local_thread_title)
     end
     if session_title and session_title ~= "" then
       table.insert(meta, session_title)

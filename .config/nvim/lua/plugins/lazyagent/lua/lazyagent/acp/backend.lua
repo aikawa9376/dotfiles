@@ -1015,6 +1015,7 @@ local function create_backend(default_view)
         protocol_log = acp.protocol_log == true,
         show_context_notes = acp.show_context_notes == true,
         show_session_summary = acp.show_session_summary == true,
+        show_thread_title = acp.show_thread_title == true,
         buffer_background = acp.buffer_background,
         buffer_inactive_background = acp.buffer_inactive_background,
         transcript_max_lines = acp.transcript_max_lines,
@@ -1038,6 +1039,12 @@ local function create_backend(default_view)
         thread_record = existing_thread and vim.deepcopy(existing_thread) or nil,
       }
       local session = sessions[pane_id]
+      local thread_metadata = vim.tbl_deep_extend("force", {
+        editor = vim.deepcopy(acp.editor or {}),
+      }, vim.deepcopy(acp.thread_metadata or {}))
+      if acp.thread_title and acp.thread_title ~= "" and thread_metadata.title_source == nil then
+        thread_metadata.title_source = "configured"
+      end
       local thread_attributes = {
         cwd = session.cwd,
         additional_directories = session.additional_directories,
@@ -1046,9 +1053,7 @@ local function create_backend(default_view)
         model = session.initial_model,
         mode = session.default_mode,
         config = vim.deepcopy(session.manual_config_overrides or {}),
-        metadata = vim.tbl_deep_extend("force", {
-          editor = vim.deepcopy(acp.editor or {}),
-        }, vim.deepcopy(acp.thread_metadata or {})),
+        metadata = thread_metadata,
       }
       local thread, thread_err
       if existing_thread then
@@ -1557,7 +1562,17 @@ local function create_backend(default_view)
   end
 
   function backend.rename_thread(thread_id, title)
-    return thread_store:rename(thread_id, title)
+    local updated, err = thread_store:rename(thread_id, title)
+    if not updated then
+      return nil, err
+    end
+    for _, session in pairs(sessions) do
+      if session.thread_id == updated.thread_id then
+        session.thread_record = vim.deepcopy(updated)
+        state_helpers.sync_runtime_session(session)
+      end
+    end
+    return updated
   end
 
   function backend.delete_thread(thread_id)
@@ -1648,6 +1663,7 @@ local function create_backend(default_view)
       protocol_log = session.protocol_log,
       show_context_notes = session.show_context_notes,
       show_session_summary = session.show_session_summary,
+      show_thread_title = session.show_thread_title,
       fancy_mode = session.fancy_mode,
       release_buffer_on_hide = session.release_buffer_on_hide,
       buffer_background = session.buffer_background,
@@ -1661,6 +1677,11 @@ local function create_backend(default_view)
       acp_session_id = session.session_id,
       acp_thread_id = session.thread_id,
       acp_provider_id = session.provider_id,
+      acp_thread_title = session.thread_record and session.thread_record.title or nil,
+      acp_thread_title_source = session.thread_record
+          and session.thread_record.metadata
+          and session.thread_record.metadata.title_source
+        or nil,
       acp_thread_store_error = session.thread_store_error,
       acp_workspace_snapshot_error = session.workspace_snapshot_error,
       acp_follow_agent = session.follow_agent == true,
