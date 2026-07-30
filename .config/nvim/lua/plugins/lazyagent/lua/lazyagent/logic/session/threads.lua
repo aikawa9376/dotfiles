@@ -646,6 +646,60 @@ function M.setup(deps)
     return true
   end
 
+  function module.pick_named_threads()
+    local backend = backend_for_provider()
+    if not backend or type(backend.list_threads) ~= "function" then
+      vim.notify("LazyAgent ACP: named threads are unavailable", vim.log.levels.WARN)
+      return false
+    end
+    local threads, err = backend.list_threads({ include_archived = true })
+    if not threads then
+      vim.notify("LazyAgent ACP: named thread list failed: " .. tostring(err), vim.log.levels.ERROR)
+      return false
+    end
+    threads = vim.tbl_filter(function(thread)
+      local metadata = type(thread.metadata) == "table" and thread.metadata or {}
+      return metadata.title_source == "manual" and vim.trim(tostring(thread.title or "")) ~= ""
+    end, threads)
+    table.sort(threads, function(left, right)
+      local left_updated = tostring(left.updated_at or "")
+      local right_updated = tostring(right.updated_at or "")
+      if left_updated == right_updated then
+        return tostring(left.title or ""):lower() < tostring(right.title or ""):lower()
+      end
+      return left_updated > right_updated
+    end)
+    if #threads == 0 then
+      vim.notify("LazyAgent ACP: no manually named threads", vim.log.levels.INFO)
+      return false
+    end
+
+    vim.ui.select(threads, {
+      prompt = "Resume named LazyAgent ACP thread:",
+      kind = "lazyagent-acp-names",
+      previewer = "builtin",
+      fzf_opts = {
+        ["--delimiter"] = "\t",
+        ["--with-nth"] = "2..",
+      },
+      format_item = function(thread)
+        local path = tostring(thread.transcript_path or "")
+        if path == "" then path = "[no-transcript]" end
+        local workspace = vim.fn.fnamemodify(tostring(thread.cwd or ""), ":~")
+        local details = {
+          tostring(thread.title),
+          tostring(thread.provider_id or "Agent"),
+          tostring(thread.status or "closed"),
+        }
+        if workspace ~= "" then details[#details + 1] = workspace end
+        return path .. "\t" .. table.concat(details, "  ·  ")
+      end,
+    }, function(thread)
+      if thread then module.open_thread(thread.thread_id) end
+    end)
+    return true
+  end
+
   function module.open_cockpit()
     local backend = backend_for_provider(nil)
     if not backend or type(backend.list_threads) ~= "function" then

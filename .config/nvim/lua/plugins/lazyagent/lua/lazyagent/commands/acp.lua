@@ -72,6 +72,11 @@ local always_commands = {
     nargs = "*",
   },
   {
+    name = "LazyAgentACPNames",
+    desc = "Preview and resume manually named LazyAgent ACP threads",
+    handler = session_logic.pick_named_acp_threads,
+  },
+  {
     name = "LazyAgentACPBlobGCDryRun",
     desc = "Report unreferenced ACP blobs without deleting them",
     handler = blob_gc_scan,

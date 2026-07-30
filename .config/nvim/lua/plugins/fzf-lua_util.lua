@@ -231,6 +231,7 @@ M.register_ui_select = function()
     opts = opts or {}
     local is_toggle_menu = opts.kind == "toggle-menu"
     local is_lazyagent_actions = opts.kind == "lazyagent-acp-actions"
+    local is_lazyagent_names = opts.kind == "lazyagent-acp-names"
 
     -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
     if opts.previewer == "builtin" then
@@ -249,10 +250,14 @@ M.register_ui_select = function()
 
     opts.prompt = normalize_ui_select_prompt(opts.prompt)
     opts.winopts = {
-      height = is_lazyagent_actions and math.min(18, math.max(6, #(items or {}) + 4))
+      height = is_lazyagent_names and 0.72
+        or is_lazyagent_actions and math.min(18, math.max(6, #(items or {}) + 4))
         or is_toggle_menu and 0.34
         or 0.4,
-      width = is_lazyagent_actions and 44 or is_toggle_menu and 0.46 or 0.6,
+      width = is_lazyagent_names and 0.88
+        or is_lazyagent_actions and 44
+        or is_toggle_menu and 0.46
+        or 0.6,
       row = is_lazyagent_actions and 1 or 0.5,
       col = is_lazyagent_actions and 1 or nil,
       relative = is_lazyagent_actions and "cursor" or nil,
@@ -260,7 +265,7 @@ M.register_ui_select = function()
       border = "single",
       preview = {
         border = "single",
-        hidden = true
+        hidden = not is_lazyagent_names,
       }
     }
     if is_toggle_menu then
