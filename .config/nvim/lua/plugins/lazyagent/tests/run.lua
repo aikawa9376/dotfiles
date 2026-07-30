@@ -75,6 +75,7 @@ local suites = {
   "tests.acp.session_launch_spec",
   "tests.acp.thread_actions_spec",
   "tests.agent_spec",
+  "tests.session_lifecycle_spec",
   "tests.status_spec",
 }
 
