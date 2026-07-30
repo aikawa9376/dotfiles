@@ -275,6 +275,7 @@ function M.setup(deps)
       stay_hidden = false,
       open_input = false,
       focus_agent_view = opts.focus_agent_view ~= false,
+      relocate_agent_view = opts.relocate_agent_view == true,
     }
     if not local_key then
       launch_opts.acp_thread_id = thread.thread_id
@@ -1057,6 +1058,7 @@ function M.setup(deps)
         module.open_thread(thread_id, {
           placement_winid = cockpit_winid,
           focus_agent_view = focus_agent_view,
+          relocate_agent_view = true,
         })
       end
     end

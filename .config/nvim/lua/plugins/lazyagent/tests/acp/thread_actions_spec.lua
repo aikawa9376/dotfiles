@@ -423,6 +423,7 @@ function M.run()
   assert_equal(opened.acp_thread_id, nil, "cockpit live open bypasses provider thread selection")
   assert_equal(opened.source_winid, cockpit_winid, "cockpit o places the ACP buffer in the cockpit tab")
   assert_equal(opened.origin_winid, cockpit_winid, "cockpit o keeps ACP focus in the cockpit tab")
+  assert_equal(opened.relocate_agent_view, true, "cockpit o moves an existing ACP view into the cockpit tab")
   assert_equal(vim.b[opened.source_bufnr].lazyagent_workspace_root, "/tmp/live",
     "cockpit placement preserves the thread workspace context")
   assert_equal(opened.stay_hidden, false, "cockpit o reveals a hidden Team member session")

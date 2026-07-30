@@ -116,10 +116,31 @@ function M.run()
   assert_equal(view.focus_pane(background_pane_id), true, "opened background view can be focused")
   assert_equal(vim.api.nvim_get_current_buf(), opened_background.panes[tostring(background_pane_id)].bufnr,
     "background pane focus selects its transcript buffer")
+  local original_agent_winid = vim.api.nvim_get_current_win()
+  vim.cmd("tabnew")
+  local target_winid = vim.api.nvim_get_current_win()
+  local target_tab = vim.api.nvim_get_current_tabpage()
+  local relocated
+  view.relocate_pane(background_pane_id, 8, false, target_winid, function(ok)
+    relocated = ok
+  end, {
+    pane_id = background_pane_id,
+    agent_name = "background-lifecycle-test",
+    transcript_path = transcript_path,
+    agent_cfg = { source_bufnr = source_bufnr },
+  })
+  assert(vim.wait(1000, function() return relocated ~= nil end, 10), "visible ACP view should relocate")
+  assert_equal(relocated, true, "visible ACP view relocates successfully")
+  local relocated_windows = vim.fn.win_findbuf(opened_background.panes[tostring(background_pane_id)].bufnr)
+  assert_equal(#relocated_windows, 1, "relocation leaves one ACP window")
+  assert_equal(vim.api.nvim_win_get_tabpage(relocated_windows[1]), target_tab, "ACP window moves to the target tab")
+  assert_equal(vim.api.nvim_win_is_valid(original_agent_winid), false, "ACP window closes in its original tab")
+  assert_equal(vim.api.nvim_get_current_win(), target_winid, "relocation leaves focus on its target anchor")
   view.kill_pane(background_pane_id, {
     pane_id = background_pane_id,
     transcript_path = transcript_path,
   })
+  vim.cmd("tabclose")
   render_attach_count = 0
 
   view.create_pane({
