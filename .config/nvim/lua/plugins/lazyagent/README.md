@@ -485,6 +485,8 @@ ACP scratch bufferではnormal / insert modeの`<M-s>`で、現在の内容をac
 
 `:LazyAgentACPRename [title]` は現在のLazyAgent ACP threadへ手動の表示名を付けます。引数を省略すると現在名を初期値にした入力欄を開きます。名前はLazyAgentのthread metadataへ保存され、providerから後着する自動タイトルでは上書きされません。LazyAgent自身は未命名threadを自動命名せず、命名前のCockpit表示は従来どおりprovider titleまたは最初のpromptへfallbackします。`acp.show_thread_title = true`を指定した場合だけ、手動名またはTeam設定などの明示名をACP footerにも表示します（defaultは`false`）。
 
+`:LazyAgentACPNames` は手動で名前を付けたthreadだけを更新日時順に一覧し、保存transcriptをpreviewしながら選択してACP sessionとして再開します。Neovimを終了した後の再開用ショートカットで、provider自動タイトルやTeam設定名は候補へ混ぜません。現在のNeovimですでに起動中のthreadを選んだ場合は二重起動せず、そのthreadを開きます。
+
 `acp.table_layout = "card"` を指定すると、ACP transcript buffer で assistant が返した markdown table を **表示だけ** key/value 形式の card に変換します。保存される transcript や carryover 用の元ログはそのままです。
 
 ACP buffer view は section 境界で未閉じの fenced code block を表示上だけ閉じ、後続 section に Markdown state が漏れないようにします。保存される transcript は変更しません。
@@ -646,6 +648,7 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentResumeConversation [file]` | conversation checkpoint から開始 |
 | `:LazyAgentACPSessions [agent]` | native ACP provider session を一覧し、add / load / resume |
 | `:LazyAgentACPRename [title]` | 現在のLazyAgent ACP threadへ手動の表示名を付ける |
+| `:LazyAgentACPNames` | 手動で命名したthreadをpreviewしてACP sessionとして再開 |
 | `:LazyAgentACPFullTranscript [agent]` | compaction と display transform を切った ACP transcript を全画面 tab で開く |
 | `:LazyAgentACPRawTranscript [agent]` | compaction なしの ACP live transcript を開く |
 | `:LazyAgentOpenConversation [agent]` | live pane / transcript を保存して開く |

@@ -48,6 +48,8 @@ function M.run()
   end
   function backend.rename_thread(thread_id, title)
     records[thread_id].title = title
+    records[thread_id].metadata = records[thread_id].metadata or {}
+    records[thread_id].metadata.title_source = "manual"
     return vim.deepcopy(records[thread_id])
   end
   live_backend.rename_thread = backend.rename_thread
@@ -147,6 +149,33 @@ function M.run()
   assert_equal(create_request.root, "/tmp", "remote new agent workspace")
   assert_equal(actions.rename_thread(THREAD_ID, "Renamed"), true, "rename thread action")
   assert_equal(records[THREAD_ID].title, "Renamed", "renamed thread title")
+  records[THREAD_ID].transcript_path = "/tmp/named-thread.md"
+  local PROVIDER_NAMED_ID = "123e4567-e89b-42d3-a456-426614174096"
+  records[PROVIDER_NAMED_ID] = {
+    thread_id = PROVIDER_NAMED_ID,
+    provider_id = "Codex",
+    title = "Provider title",
+    status = "closed",
+    metadata = { title_source = "provider" },
+    transcript_path = "/tmp/provider-thread.md",
+  }
+  local named_items, named_opts, named_callback
+  local named_select = vim.ui.select
+  vim.ui.select = function(items, opts, callback)
+    named_items, named_opts, named_callback = items, opts, callback
+  end
+  assert_equal(actions.pick_named_threads(), true, "named thread picker action")
+  vim.ui.select = named_select
+  assert_equal(#named_items, 1, "named picker only includes manual titles")
+  assert_equal(named_items[1].thread_id, THREAD_ID, "named picker thread")
+  assert_equal(named_opts.kind, "lazyagent-acp-names", "named picker preview UI kind")
+  assert_equal(named_opts.previewer, "builtin", "named picker enables transcript preview")
+  assert(named_opts.format_item(named_items[1]):find("/tmp/named-thread.md", 1, true),
+    "named picker entry carries its transcript path")
+  opened = nil
+  named_callback(named_items[1])
+  assert_equal(opened.acp_thread_id, THREAD_ID, "named picker resumes the selected thread")
+  records[PROVIDER_NAMED_ID] = nil
   assert_equal(actions.archive_thread(THREAD_ID), true, "archive thread action")
   assert_equal(records[THREAD_ID].status, "archived", "archived thread status")
   assert_equal(actions.restore_thread(THREAD_ID), true, "restore thread action")
