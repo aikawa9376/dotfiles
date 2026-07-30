@@ -16,15 +16,15 @@ local function call_watch(method, ...)
   return pcall(fn, ...)
 end
 
-local function send_interrupts_before_kill(agent_name, pane_id, backend_mod, sync)
+local function send_interrupts_before_kill(agent_name, pane_id, backend_mod, sync, max_attempts)
   local backend_name = nil
   pcall(function()
     backend_name = (select(1, backend_logic.resolve_backend_for_agent(agent_name or "", nil)))
   end)
-  local attempts = (state.opts and state.opts.interrupt_attempts) or 3
+  local attempts = max_attempts or (state.opts and state.opts.interrupt_attempts) or 3
   local interval_ms = (state.opts and state.opts.interrupt_interval_ms) or 40
-  if not pane_id or pane_id == "" then return end
-  if not backend_mod or type(backend_mod.send_keys) ~= "function" then return end
+  if not pane_id or pane_id == "" then return false end
+  if not backend_mod or type(backend_mod.send_keys) ~= "function" then return false end
   local key = "C-c"
   if backend_name == "builtin" then
     key = string.char(3)
@@ -33,6 +33,7 @@ local function send_interrupts_before_kill(agent_name, pane_id, backend_mod, syn
     pcall(backend_mod.send_keys, pane_id, { key })
     pcall(vim.wait, interval_ms, function() return false end, 10, not sync)
   end
+  return true
 end
 
 local function wait_for_pane_process_exit(pane_id, backend_mod, timeout_ms, sync)
@@ -84,8 +85,34 @@ function M.maybe_kill_pane(agent_name, pane_id, backend_mod, use_sync)
   end)
 
   if acp_logic.is_acp_backend(backend_name) then
-    pcall(send_interrupts_before_kill, agent_name, pane_id, backend_mod, use_sync)
-    pcall(vim.wait, math.max(40, ((state.opts and state.opts.interrupt_interval_ms) or 40)), function() return false end, 10, not use_sync)
+    local busy = nil
+    if backend_mod and type(backend_mod.is_busy) == "function" then
+      local ok_busy, result = pcall(backend_mod.is_busy, pane_id)
+      if ok_busy then
+        busy = result == true
+      end
+    end
+    local interrupted = false
+    if busy ~= false then
+      local ok_interrupt, result = pcall(
+        send_interrupts_before_kill,
+        agent_name,
+        pane_id,
+        backend_mod,
+        use_sync,
+        1
+      )
+      interrupted = ok_interrupt and result == true
+    end
+    if interrupted then
+      pcall(
+        vim.wait,
+        math.max(40, ((state.opts and state.opts.interrupt_interval_ms) or 40)),
+        function() return false end,
+        10,
+        not use_sync
+      )
+    end
     if use_sync and backend_mod and type(backend_mod.kill_pane_sync) == "function" then
       backend_mod.kill_pane_sync(pane_id)
     elseif backend_mod and type(backend_mod.kill_pane) == "function" then
