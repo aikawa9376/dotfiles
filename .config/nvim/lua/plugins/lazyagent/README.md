@@ -714,6 +714,8 @@ lazyagent.status()
 lazyagent.install({ scope = "global", components = "all" })
 ```
 
+`lazyagent.status()` は、同じAIのセッションを `2` のように集約し、Teamのメンバーはチームごとに1つの `` として表示します。実行中・入力待ちの状態表示も集約後のアイコンに反映されます。
+
 低レベル API は `lazyagent.logic.*` にあります。外部から使う場合は、できるだけ `require("lazyagent")` の facade を優先してください。
 
 ## Directory layout

@@ -2,6 +2,7 @@ local M = {}
 local agent_logic = require("lazyagent.logic.agent")
 local backend_logic = require("lazyagent.logic.backend")
 local state = require("lazyagent.logic.state")
+local session_identity = require("lazyagent.logic.session.identity")
 local agentmux = require("lazyagent.integrations.agentmux")
 
 local transient_tasks = {}
@@ -42,8 +43,47 @@ local icons = {
   -- Fallback
   Default = "",
 }
+local team_icon = ""
 
 local spinner_frames = { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" }
+
+local function grouped_active_sessions(active)
+  local groups = {}
+  for _, session_key in ipairs(active) do
+    local session = state.sessions[session_key] or {}
+    local team = type(session.lazyagent_team) == "table" and session.lazyagent_team or nil
+    local provider_id = session_identity.provider_id(session_key, session)
+    local team_id = team and (team.id or team.instance_id or team.team_id or team.name) or nil
+    local key = team and ("team:" .. tostring(team_id or "active"))
+      or ("provider:" .. tostring(provider_id))
+    local group = groups[key]
+    if not group then
+      group = {
+        key = key,
+        icon = team and team_icon or (icons[provider_id] or icons.Default),
+        is_team = team ~= nil,
+        count = 0,
+        thinking = false,
+        waiting = false,
+      }
+      groups[key] = group
+    end
+    group.count = group.count + 1
+    group.waiting = group.waiting or session.agent_status == "waiting"
+    group.thinking = group.thinking
+      or session.monitor_timer ~= nil
+      or session.agent_status == "thinking"
+  end
+
+  local ordered = vim.tbl_values(groups)
+  table.sort(ordered, function(left, right)
+    if left.is_team ~= right.is_team then
+      return left.is_team
+    end
+    return left.key < right.key
+  end)
+  return ordered
+end
 
 function M.get_status()
   local active = agent_logic.get_active_agents()
@@ -52,13 +92,15 @@ function M.get_status()
 
   local status_parts = {}
   local frame_idx = math.floor(vim.loop.now() / 50) % #spinner_frames + 1
-  for _, name in ipairs(active) do
-    local icon = icons[name] or icons.Default
-    local s = state.sessions[name]
-    if s and s.monitor_timer then
-       icon = icon .. " " .. spinner_frames[frame_idx]
-    elseif s and s.agent_status == "waiting" then
-       icon = icon .. " ?"
+  for _, group in ipairs(grouped_active_sessions(active)) do
+    local icon = group.icon
+    if not group.is_team and group.count > 1 then
+      icon = icon .. tostring(group.count)
+    end
+    if group.waiting then
+      icon = icon .. " ?"
+    elseif group.thinking then
+      icon = icon .. " " .. spinner_frames[frame_idx]
     end
     table.insert(status_parts, icon)
   end
