@@ -8,6 +8,7 @@ function M.setup(deps)
   local acp_logic = deps.acp_logic
   local start_interactive_session = deps.start_interactive_session
   local close_session = deps.close_session
+  local resolve_active_acp_session = deps.resolve_active_acp_session
   local editor_registry = deps.editor_registry or require("lazyagent.acp.editor_registry")
   local module = {}
   local thread_label
@@ -448,7 +449,60 @@ function M.setup(deps)
     if not backend or not thread then
       return false
     end
-    return backend.rename_thread(thread.thread_id, title) ~= nil
+    local updated, err = backend.rename_thread(thread.thread_id, title)
+    if not updated then
+      vim.notify("LazyAgent ACP: rename failed: " .. tostring(err), vim.log.levels.ERROR)
+      return false
+    end
+    local session_key = local_session_key(thread.thread_id)
+    if session_key then
+      pcall(function() require("lazyagent.logic.status").refresh_session_title(session_key) end)
+    end
+    return true
+  end
+
+  function module.prompt_rename_thread(thread_id, on_done)
+    local _, thread = thread_backend(thread_id)
+    if not thread then return false end
+    vim.ui.input({ prompt = "Thread title: ", default = thread.title }, function(title)
+      if title == nil then return end
+      title = vim.trim(title)
+      if title == "" then
+        vim.notify("LazyAgent ACP: thread title is required", vim.log.levels.WARN)
+        return
+      end
+      local renamed = module.rename_thread(thread.thread_id, title)
+      if renamed then
+        vim.notify("LazyAgent ACP thread renamed: " .. title, vim.log.levels.INFO)
+        if on_done then on_done() end
+      end
+    end)
+    return true
+  end
+
+  function module.rename_active_thread(title, agent_name)
+    if type(resolve_active_acp_session) ~= "function" then return false end
+    resolve_active_acp_session(agent_name, function(session_key)
+      local session = state.sessions and state.sessions[session_key] or nil
+      local thread_id = session_thread_id(session_key, session)
+      if not thread_id then
+        vim.notify("LazyAgent ACP: active thread is unavailable", vim.log.levels.WARN)
+        return
+      end
+      if title == nil then
+        module.prompt_rename_thread(thread_id)
+        return
+      end
+      local normalized = vim.trim(tostring(title))
+      if normalized == "" then
+        vim.notify("LazyAgent ACP: thread title is required", vim.log.levels.WARN)
+        return
+      end
+      if module.rename_thread(thread_id, normalized) then
+        vim.notify("LazyAgent ACP thread renamed: " .. normalized, vim.log.levels.INFO)
+      end
+    end)
+    return true
   end
 
   function module.delete_thread(thread_id)
@@ -573,11 +627,7 @@ function M.setup(deps)
         if action == "Open" then
           module.open_thread(thread.thread_id)
         elseif action == "Rename" then
-          vim.ui.input({ prompt = "Thread title: ", default = thread.title }, function(title)
-            if title and title ~= "" then
-              module.rename_thread(thread.thread_id, title)
-            end
-          end)
+          module.prompt_rename_thread(thread.thread_id)
         elseif action == "Review changes" then
           module.show_thread_changes(thread.thread_id)
         elseif action == "Archive" then
@@ -1127,6 +1177,10 @@ function M.setup(deps)
       if thread_id then module.open_thread_transcript(thread_id) end
     end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit raw transcript" })
     vim.keymap.set("n", "r", refresh, { buffer = bufnr, silent = true, desc = "Refresh ACP cockpit" })
+    vim.keymap.set("n", "R", function()
+      local id = selected_thread_id()
+      if id then module.prompt_rename_thread(id, refresh) end
+    end, { buffer = bufnr, silent = true, desc = "Rename ACP cockpit thread" })
     vim.keymap.set("n", "x", function()
       local id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       local agent_name = id and thread_agents[id] or nil
@@ -1253,6 +1307,7 @@ function M.setup(deps)
         { key = "D", description = "Force delete thread" },
         { key = "X", description = "Stop all processes" },
         { key = "r", description = "Refresh cockpit" },
+        { key = "R", description = "Rename thread" },
         { key = "q", description = "Close cockpit" },
       }
       vim.ui.select(items, {

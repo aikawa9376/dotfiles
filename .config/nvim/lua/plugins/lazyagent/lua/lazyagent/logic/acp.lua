@@ -328,6 +328,11 @@ local function resolve_from_config(agent_cfg)
       global_cfg.show_session_summary,
       false
     ),
+    show_thread_title = resolve_boolean_option(
+      agent_acp.show_thread_title,
+      global_cfg.show_thread_title,
+      false
+    ),
     fancy_mode = resolve_boolean_option(agent_acp.fancy_mode, global_cfg.fancy_mode, false),
     table_layout = normalize_table_layout(agent_acp.table_layout or global_cfg.table_layout),
     smooth_scroll = merge_smooth_scroll_config(agent_acp.smooth_scroll, global_cfg.smooth_scroll),
@@ -414,6 +419,7 @@ function M.resolve(agent_name, agent_cfg)
       protocol_log = session.protocol_log,
       show_context_notes = session.show_context_notes,
       show_session_summary = session.show_session_summary,
+      show_thread_title = session.show_thread_title,
       permission_rules = vim.deepcopy(session.permission_rules or {}),
       auto_switch = vim.deepcopy(session.auto_switch or {}),
     }

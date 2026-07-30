@@ -42,6 +42,7 @@ M.restore_acp_restart_state = function(bundle_path)
   return session_logic.restore_acp_restart_state(bundle_path)
 end
 M.pick_acp_sessions = session_logic.pick_acp_sessions
+M.rename_acp_session = session_logic.rename_acp_session
 M.pick_acp_config = session_logic.pick_acp_config
 M.pick_acp_model = session_logic.pick_acp_model
 M.pick_acp_mode = session_logic.pick_acp_mode

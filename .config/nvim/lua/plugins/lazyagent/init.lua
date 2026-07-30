@@ -83,6 +83,7 @@ return {
     "LazyAgentRestore", "LazyAgentDetach", "LazyAgentInstant", "LazyAgentAttach", "LazyAgentEdit",
     "LazyAgentNote", "LazyAgentNoteShow", "LazyAgentNotes", "LazyAgentNotesClear",
     "LazyAgentRestart", "LazyAgentStack", "LazyAgentHooks", "LazyAgentQR", "LazyAgentACPCockpit",
+    "LazyAgentACPRename",
     "LazyAgentACPMobileStart",
     "LazyAgentACPMobileStop", "LazyAgentACPMobileQR", "LazyAgentACPRawTranscript", "LazyAgentACPFullTranscript",
     "LazyAgentACPRestart", "LazyAgentACPRestoreRestartState",

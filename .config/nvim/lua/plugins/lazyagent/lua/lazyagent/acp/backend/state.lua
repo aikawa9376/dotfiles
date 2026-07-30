@@ -839,6 +839,12 @@ sync_runtime_session = function(session)
   runtime.protocol_log = session.protocol_log
   runtime.show_context_notes = session.show_context_notes
   runtime.show_session_summary = session.show_session_summary
+  runtime.show_thread_title = session.show_thread_title
+  runtime.acp_thread_title = session.thread_record and session.thread_record.title or nil
+  runtime.acp_thread_title_source = session.thread_record
+      and session.thread_record.metadata
+      and session.thread_record.metadata.title_source
+    or nil
   runtime.acp_permission_rules = vim.deepcopy(session.permission_rules or {})
   runtime.acp_auto_switch = vim.deepcopy(session.auto_switch or {})
   runtime.acp_manual_config_overrides = vim.deepcopy(session.manual_config_overrides or {})

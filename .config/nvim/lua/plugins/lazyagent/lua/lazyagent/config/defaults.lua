@@ -80,6 +80,7 @@ function M.build()
       protocol_log = false,
       show_context_notes = false,
       show_session_summary = false,
+      show_thread_title = false,
       fancy_mode = false,
       table_layout = "table",
       smooth_scroll = false,

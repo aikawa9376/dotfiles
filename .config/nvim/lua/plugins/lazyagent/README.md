@@ -420,6 +420,7 @@ require("lazyagent").setup({
     protocol_log = false,
     show_context_notes = false,
     show_session_summary = false,
+    show_thread_title = false,
     transcript_max_lines = 12000,
     render_markdown_debounce_ms = 900,
     release_buffer_on_hide = true,
@@ -481,6 +482,8 @@ ACP scratch bufferではnormal / insert modeの`<M-s>`で、現在の内容をac
 `acp.protocol_log = true` を指定すると、ACP protocol の JSONL log と replay を有効にします。streaming 中の同期 encode / disk write を避けるため、default では無効です。
 
 `acp.show_session_summary = true` を指定すると、ACP footer に native session title / summary を表示します。これらは初回メッセージ由来の文字列になることがあるため、default では非表示です。
+
+`:LazyAgentACPRename [title]` は現在のLazyAgent ACP threadへ手動の表示名を付けます。引数を省略すると現在名を初期値にした入力欄を開きます。名前はLazyAgentのthread metadataへ保存され、providerから後着する自動タイトルでは上書きされません。LazyAgent自身は未命名threadを自動命名せず、命名前のCockpit表示は従来どおりprovider titleまたは最初のpromptへfallbackします。`acp.show_thread_title = true`を指定した場合だけ、手動名またはTeam設定などの明示名をACP footerにも表示します（defaultは`false`）。
 
 `acp.table_layout = "card"` を指定すると、ACP transcript buffer で assistant が返した markdown table を **表示だけ** key/value 形式の card に変換します。保存される transcript や carryover 用の元ログはそのままです。
 
@@ -570,7 +573,7 @@ Cockpitの`i`は選択中のlive thread専用scratch popupを開き、既存のs
 
 active threadはruntime snapshotとjoinされ、statusをrunning / waiting / permission / idle / disconnectedへ正規化し、current modelとcumulative token/costもcardへ表示します。
 
-Cockpitでは`/` filter、`p` pin、`a` archive/restore、`d` delete、`D` force delete、`X` running ACP process一括stopを使えます。`x`はlive processを確認後に停止し、disconnected threadでは保存PIDが存在しない場合だけ履歴を保持したまま`closed`へ修復します。停止済みの履歴自体を消す場合は`d`を使います。processが残っているthreadを履歴ごと破棄する場合だけ`D`を使います。
+Cockpitでは`/` filter、`R` rename、`p` pin、`a` archive/restore、`d` delete、`D` force delete、`X` running ACP process一括stopを使えます。`x`はlive processを確認後に停止し、disconnected threadでは保存PIDが存在しない場合だけ履歴を保持したまま`closed`へ修復します。停止済みの履歴自体を消す場合は`d`を使います。processが残っているthreadを履歴ごと破棄する場合だけ`D`を使います。
 
 agentmux publish時のpane/owner/kind/name/state/message/preview identityはactive threadの`metadata.agentmux`にも保存され、Neovim runtimeが無い場合のCockpit status fallbackとして利用されます。
 
@@ -642,6 +645,7 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentConversation [agent] [keep_lines]` | ACP conversation を checkpoint 保存。数値指定時は最新 `keep_lines` 行以上を ACP buffer に残し、それ以前を User セクション境界で保存 |
 | `:LazyAgentResumeConversation [file]` | conversation checkpoint から開始 |
 | `:LazyAgentACPSessions [agent]` | native ACP provider session を一覧し、add / load / resume |
+| `:LazyAgentACPRename [title]` | 現在のLazyAgent ACP threadへ手動の表示名を付ける |
 | `:LazyAgentACPFullTranscript [agent]` | compaction と display transform を切った ACP transcript を全画面 tab で開く |
 | `:LazyAgentACPRawTranscript [agent]` | compaction なしの ACP live transcript を開く |
 | `:LazyAgentOpenConversation [agent]` | live pane / transcript を保存して開く |

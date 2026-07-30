@@ -54,6 +54,7 @@ function M.run()
     protocol_log = true,
     show_context_notes = true,
     show_session_summary = true,
+    show_thread_title = true,
     fancy_mode = false,
     smooth_scroll = {},
     release_buffer_on_hide = true,
@@ -160,6 +161,8 @@ function M.run()
   assert_equal(state.sessions[key_a].protocol_log, true, "protocol log option stored on runtime session")
   assert_equal(splits[1].show_session_summary, true, "session summary option forwarded to ACP backend")
   assert_equal(state.sessions[key_a].show_session_summary, true, "session summary option stored on runtime session")
+  assert_equal(splits[1].show_thread_title, true, "thread title option forwarded to ACP backend")
+  assert_equal(state.sessions[key_a].show_thread_title, true, "thread title option stored on runtime session")
   assert_equal(splits[2].provider_id, "Codex", "second backend provider")
   assert_equal(splits[1].mcp_servers[1].name, "fixture", "MCP servers forwarded to ACP backend")
   assert_equal(state.session_aliases.Codex, key_b, "legacy provider command alias")

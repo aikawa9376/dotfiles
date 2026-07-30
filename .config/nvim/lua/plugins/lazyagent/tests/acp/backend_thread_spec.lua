@@ -68,6 +68,7 @@ function M.run()
       cwd = root,
       root_dir = root,
       additional_directories = { root .. "/tests" },
+      env = { LAZYAGENT_FAKE_SESSION_INFO_TITLE = "Provider generated title" },
       editor = { instance_id = "backend-editor", owner_pid = vim.fn.getpid(), source_path = root .. "/README.md" },
     },
   })
@@ -95,6 +96,11 @@ function M.run()
   assert(persisted.process_id ~= nil, "process identity persistence")
   assert_equal(persisted.transcript_path, runtime.acp_transcript_path, "transcript persistence")
   assert_equal(persisted.metadata.editor.instance_id, "backend-editor", "editor ownership persistence")
+  local renamed = assert(backend.rename_thread(runtime.acp_thread_id, "Manual thread title"))
+  assert_equal(renamed.metadata.title_source, "manual", "backend rename marks a manual title")
+  local renamed_runtime = backend.get_runtime_snapshot(pane_id)
+  assert_equal(renamed_runtime.acp_thread_title, "Manual thread title", "runtime receives renamed thread title")
+  assert_equal(renamed_runtime.acp_thread_title_source, "manual", "runtime receives manual title source")
 
   local previous_status_session = state.sessions.ThreadFixture
   local status_session = { backend = "buffer_acp", pane_id = pane_id }
@@ -117,6 +123,8 @@ function M.run()
     events = backend.get_runtime_snapshot(pane_id).acp_protocol_events,
     acp = state.opts.acp,
   }))
+  assert_equal(assert(store:get(runtime.acp_thread_id)).title, "Manual thread title",
+    "provider session title does not overwrite a manual title")
   local pending = backend.get_pending_permission(pane_id)
   assert_equal(pending.tool_call_id, "tool-1", "pending permission tool")
   local steering_result
@@ -148,7 +156,7 @@ function M.run()
   local export_path = cache_dir .. "/exports/thread.md"
   assert_equal(backend.export_thread_markdown(pane_id, export_path), export_path, "thread Markdown export path")
   local exported_markdown = table.concat(vim.fn.readfile(export_path), "\n")
-  assert(exported_markdown:match("# ThreadFixture"), "thread Markdown export title")
+  assert(exported_markdown:match("# Manual thread title"), "thread Markdown export title")
   assert(exported_markdown:match("Connecting ACP session"), "thread Markdown export content")
 
   assert(backend.update_thread(runtime.acp_thread_id, {
