@@ -20,6 +20,8 @@ function M.run()
   assert_equal(project_result.target_dir, root .. "/.lazyagent", "project install target")
   assert(vim.fn.filereadable(root .. "/.lazyagent/AGENTS.md") == 1, "project instructions installed")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/brain/SKILL.md") == 1, "bundled skills installed")
+  assert(vim.fn.filereadable(root .. "/.lazyagent/skills/lazyagent-team-builder/scripts/validate.lua") == 1,
+    "team builder skill resources installed")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian/references/html-artifacts.md") == 1,
     "skill references installed recursively")
   local catalog = assert(require("lazyagent.teams.config").load_all(root .. "/.lazyagent/teams.json"))
