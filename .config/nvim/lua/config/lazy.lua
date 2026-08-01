@@ -70,6 +70,7 @@ require("lazy").setup({
     { import = "plugins.fugitive-extension" },
     { import = "plugins.flog" },
     { import = "plugins.diffview" },
+    { import = "plugins.diffview-extension" },
     { import = "plugins.lualine" },
     { import = "plugins.bufferline" },
     { import = "plugins.goto-preview" },

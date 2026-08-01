@@ -23,8 +23,18 @@ local function resolve(run, root, rev)
   return trim(result.stdout)
 end
 
-local function review_id(root, base, head)
-  return vim.fn.sha256(table.concat({ root, base, head }, "\0")):sub(1, 20)
+local function content_id(root, base, head, changes)
+  local parts = { root or "", base or "", head or "" }
+  for _, change in ipairs(changes or {}) do
+    local before = type(change.before_blob) == "table" and change.before_blob.hash or ""
+    local after = type(change.after_blob) == "table" and change.after_blob.hash or ""
+    parts[#parts + 1] = table.concat({ change.operation or "", change.previous_path or "", change.path or "", before, after }, "\0")
+  end
+  return vim.fn.sha256(table.concat(parts, "\0")):sub(1, 20)
+end
+
+local function review_id(changeset_id, created_at, nonce)
+  return vim.fn.sha256(table.concat({ changeset_id, created_at, tostring(nonce) }, "\0")):sub(1, 20)
 end
 
 local function blob_at(run, blobs, root, commit, path)
@@ -100,9 +110,12 @@ function M.create(range, opts)
   end
 
   local created_at = (opts.clock or function() return os.date("!%Y-%m-%dT%H:%M:%SZ") end)()
+  local changeset_id = content_id(root, base, head, changes)
   return {
-    schema_version = 1,
-    review_id = review_id(root, base, head),
+    schema_version = 2,
+    review_id = review_id(changeset_id, created_at, opts.nonce or (vim.uv or vim.loop).hrtime()),
+    changeset_id = changeset_id,
+    lineage_id = changeset_id,
     root = root,
     range = range,
     mode = mode,
@@ -112,6 +125,37 @@ function M.create(range, opts)
     status = "pending",
     changes = changes,
     annotations = {},
+    source = { kind = "range", frontend = "change_review", mutable = false, range = range },
+  }
+end
+
+---Create a review from an already captured immutable comparison.
+---@param snapshot table
+---@param opts? table
+function M.from_snapshot(snapshot, opts)
+  opts = opts or {}
+  if type(snapshot) ~= "table" or type(snapshot.root) ~= "string" or type(snapshot.changes) ~= "table" then
+    return nil, "invalid review snapshot"
+  end
+  local changes = vim.deepcopy(snapshot.changes)
+  local created_at = (opts.clock or function() return os.date("!%Y-%m-%dT%H:%M:%SZ") end)()
+  local changeset_id = content_id(snapshot.root, snapshot.base, snapshot.head, changes)
+  return {
+    schema_version = 2,
+    review_id = review_id(changeset_id, created_at, opts.nonce or (vim.uv or vim.loop).hrtime()),
+    changeset_id = changeset_id,
+    lineage_id = snapshot.lineage_id or changeset_id,
+    root = snapshot.root,
+    range = snapshot.range or snapshot.title or "Diffview",
+    mode = snapshot.mode or "snapshot",
+    base = snapshot.base,
+    head = snapshot.head,
+    created_at = created_at,
+    status = "pending",
+    changes = changes,
+    annotations = {},
+    source = vim.deepcopy(snapshot.source or { kind = "snapshot", frontend = "change_review", mutable = false }),
+    parent_review_id = snapshot.parent_review_id,
   }
 end
 
@@ -130,22 +174,35 @@ function M.prompt(review)
     "Inspect the exact diff and surrounding code yourself using Git and read-only tools.",
     "Do not edit, create, delete, format, or otherwise modify files.",
     "Report only concrete findings that are useful to show inline in the diff.",
+    "A finding may target either side, a file as a whole, or the review as a whole.",
     "A finding may target an unchanged after-side line in a changed file when that surrounding code is directly relevant.",
     "Do not report unrelated pre-existing issues.",
     "Labels: must, should, imo, question, nit, praise.",
     "Your entire final response must be exactly one fenced block in this form:",
     "```lazyagent-review",
-    '{"review_id":"' .. tostring(review.review_id) .. '","findings":[{"label":"must","path":"file.lua","line":12,"summary":"Short title","rationale":"Why this matters"}]}',
+    '{"review_id":"' .. tostring(review.review_id) .. '","findings":[{"label":"must","path":"file.lua","side":"after","line":12,"end_line":12,"summary":"Short title","rationale":"Why this matters"}]}',
     "```",
     "The example finding only demonstrates the schema; do not copy it.",
-    "Use after-side line numbers. Return an empty findings array when there are no findings.",
+    "Use side before or after for line findings, side file with no line for file findings, and omit path with side overall for overall findings.",
+    "Return an empty findings array when there are no findings.",
     "",
     "Repository root: " .. tostring(review.root),
     "Git range: " .. tostring(review.range),
     "Base: " .. tostring(review.base),
     "Head: " .. tostring(review.head),
-    "Git command: git diff --find-renames --no-ext-diff " .. tostring(review.base) .. " " .. tostring(review.head),
   })
+  if review.base and review.head then
+    lines[#lines + 1] = "Git command: git diff --find-renames --no-ext-diff " .. tostring(review.base) .. " " .. tostring(review.head)
+  else
+    lines[#lines + 1] = "The comparison was captured from Diffview; inspect the listed files and current repository without modifying them."
+    if review.base then lines[#lines + 1] = "Git command: git diff --find-renames --no-ext-diff " .. tostring(review.base) end
+  end
+  lines[#lines + 1] = "Captured files:"
+  for _, change in ipairs(review.changes or {}) do
+    local before = type(change.before_blob) == "table" and change.before_blob.hash or "null"
+    local after = type(change.after_blob) == "table" and change.after_blob.hash or "null"
+    lines[#lines + 1] = string.format("- %s (%s, before=%s, after=%s)", change.path, change.operation or "modified", before, after)
+  end
   return table.concat(lines, "\n")
 end
 
@@ -161,22 +218,33 @@ function M.parse(response, review)
   local annotations = {}
   for _, finding in ipairs(type(decoded.findings) == "table" and decoded.findings or {}) do
     local label = tostring(finding.label or "imo"):lower()
-    local change = paths[tostring(finding.path or "")]
+    local path = tostring(finding.path or "")
+    local change = paths[path]
+    local side = tostring(finding.side or "after"):lower()
     local line = tonumber(finding.line)
+    local end_line = tonumber(finding.end_line or finding.line)
     local summary = vim.trim(tostring(finding.summary or ""))
     local rationale = vim.trim(tostring(finding.rationale or ""))
-    if allowed_labels[label] and change and line and line > 0 and (summary ~= "" or rationale ~= "") then
+    local ref = change and (side == "before" and change.before_blob or change.after_blob) or nil
+    local target_ok = side == "overall" and path == ""
+      or side == "file" and change ~= nil
+      or (change ~= nil and ref ~= nil and change.binary ~= true
+        and (side == "before" or side == "after") and line and line > 0)
+    if allowed_labels[label] and target_ok and (summary ~= "" or rationale ~= "") then
       annotations[#annotations + 1] = {
         kind = "review",
         label = label,
         summary = summary ~= "" and summary or nil,
         rationale = rationale ~= "" and rationale or nil,
-        path = change.path,
+        path = change and change.path or nil,
         target = {
-          side = "after", start_line = math.floor(line), end_line = math.floor(line),
-          blob_hash = type(change.after_blob) == "table" and change.after_blob.hash or nil,
+          side = side,
+          start_line = line and math.floor(line) or nil,
+          end_line = end_line and math.max(math.floor(line or end_line), math.floor(end_line)) or nil,
+          blob_hash = type(ref) == "table" and ref.hash or nil,
         },
         author = { type = "agent", name = "AI Reviewer" },
+        created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
       }
     end
   end

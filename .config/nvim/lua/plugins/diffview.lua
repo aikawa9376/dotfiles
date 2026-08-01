@@ -1,15 +1,16 @@
 return {
   "dlyongemallo/diffview.nvim",
+  dependencies = { "diffview-extension" },
   cmd = { 'DiffviewOpen', 'DiffviewFileHistory' },
   keys = {
-    { "<Leader>gH", ":DiffviewFileHistory %<CR>", mode= { "n", "x" }, silent = true },
-    { "<Leader>gD", ":DiffviewOpen origin/develop -- %" }
+    { "<Leader>gH", ":DiffviewFileHistory %<CR>", mode = { "n", "x" }, silent = true },
+    { "<Leader>gD", ":DiffviewOpen origin/develop -- %" },
   },
   opts = {
     file_panel = {
       win_config = {
         position = vim.o.columns > 120 and "left" or "bottom",
-        height = 10
+        height = 10,
       },
     },
     hooks = {
@@ -35,5 +36,5 @@ return {
         { "n", "q", "<CMD>tabclose<CR>" },
       },
     },
-  }
+  },
 }
