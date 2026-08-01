@@ -55,6 +55,7 @@ local suites = {
   "tests.acp.protocol_log_spec",
   "tests.acp.replay_spec",
   "tests.acp.v2_adapter_spec",
+  "tests.acp.view_diff_spec",
   "tests.acp.view_footer_spec",
   "tests.acp.view_follow_spec",
   "tests.acp.smooth_scroll_spec",

@@ -4,6 +4,8 @@ function M.new(ctx)
   local diff_utils = ctx.diff_utils
   local diff_ns = ctx.diff_ns or vim.api.nvim_create_namespace("lazyagent_acp_diff")
   local preview_ns = vim.api.nvim_create_namespace("lazyagent_acp_diff_preview")
+  local truncated_code_rows = {}
+  local captures_at_pos = ctx.captures_at_pos or vim.treesitter.get_captures_at_pos
   local util = require("lazyagent.util")
 
   local function session_for_agent(agent_name)
@@ -170,9 +172,17 @@ function M.new(ctx)
     return truncated .. ellipsis, true
   end
 
-  local function normalize_diff_display_lines(bufnr, lines, width)
+  local function normalize_diff_display_lines(bufnr, lines, width, start_row)
     lines = type(lines) == "table" and vim.deepcopy(lines) or {}
     width = math.max(0, tonumber(width) or 0)
+    start_row = math.max(0, tonumber(start_row) or 0)
+    local tracked_rows = truncated_code_rows[bufnr] or {}
+    for row in pairs(tracked_rows) do
+      if row >= start_row then
+        tracked_rows[row] = nil
+      end
+    end
+    truncated_code_rows[bufnr] = tracked_rows
     if #lines == 0 or width <= 0 then
       return lines, false
     end
@@ -191,6 +201,9 @@ function M.new(ctx)
             local updated, line_changed = truncate_code_block_line(lines[body_idx], available_width)
             if line_changed then
               lines[body_idx] = updated
+              tracked_rows[start_row + body_idx - 1] = {
+                ellipsis_col = math.max(0, #updated - 3),
+              }
               changed = true
             end
           end
@@ -202,6 +215,64 @@ function M.new(ctx)
     end
 
     return lines, changed
+  end
+
+  local function ellipsis_highlight_group(bufnr, row, ellipsis_col)
+    if type(captures_at_pos) ~= "function" or ellipsis_col <= 0 then
+      return nil
+    end
+
+    local ok, captures = pcall(captures_at_pos, bufnr, row, ellipsis_col - 1)
+    if not ok or type(captures) ~= "table" then
+      return nil
+    end
+
+    local selected, selected_score = nil, -1
+    for _, capture in ipairs(captures) do
+      if type(capture) == "table" and type(capture.capture) == "string" then
+        local metadata = type(capture.metadata) == "table" and capture.metadata or {}
+        local score = tonumber(metadata.priority) or 100
+        if capture.lang and capture.lang ~= "markdown" and capture.lang ~= "lazyagent_acp" then
+          score = score + 1000
+        end
+        if score >= selected_score then
+          selected, selected_score = capture, score
+        end
+      end
+    end
+    if not selected then
+      return nil
+    end
+
+    local suffix = selected.lang and selected.lang ~= "" and ("." .. selected.lang) or ""
+    return "@" .. selected.capture .. suffix
+  end
+
+  local function decorate_truncated_ellipses(bufnr)
+    local tracked_rows = truncated_code_rows[bufnr]
+    if type(tracked_rows) ~= "table" then
+      return
+    end
+
+    local line_count = vim.api.nvim_buf_line_count(bufnr)
+    for row, mark in pairs(tracked_rows) do
+      if row >= 0 and row < line_count and type(mark) == "table" then
+        local line = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or {})[1] or ""
+        local ellipsis_col = tonumber(mark.ellipsis_col)
+        if ellipsis_col and line:sub(ellipsis_col + 1, ellipsis_col + 3) == "..." then
+          local hl_group = ellipsis_highlight_group(bufnr, row, ellipsis_col)
+          if hl_group then
+            pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
+              end_row = row,
+              end_col = ellipsis_col + 3,
+              hl_group = hl_group,
+              hl_mode = "combine",
+              priority = 210,
+            })
+          end
+        end
+      end
+    end
   end
 
   local function find_diff_block_at_row(bufnr, row)
@@ -608,8 +679,8 @@ function M.new(ctx)
 
   local api = {}
 
-  function api.normalize_diff_display_lines(bufnr, lines, width)
-    return normalize_diff_display_lines(bufnr, lines, width)
+  function api.normalize_diff_display_lines(bufnr, lines, width, start_row)
+    return normalize_diff_display_lines(bufnr, lines, width, start_row)
   end
 
   function api.open_diff_block_under_cursor(bufnr)
@@ -690,6 +761,7 @@ function M.new(ctx)
         end
       end
     end
+    decorate_truncated_ellipses(bufnr)
   end
 
   return api
