@@ -1,6 +1,11 @@
 return {
   "dlyongemallo/diffview.nvim",
-  dependencies = { "diffview-extension" },
+  dependencies = {
+    {
+      "diffview-extension",
+      dir = os.getenv("XDG_CONFIG_HOME") .. "/nvim/lua/plugins/diffview-extension",
+    },
+  },
   cmd = { 'DiffviewOpen', 'DiffviewFileHistory' },
   keys = {
     { "<Leader>gH", ":DiffviewFileHistory %<CR>", mode = { "n", "x" }, silent = true },
