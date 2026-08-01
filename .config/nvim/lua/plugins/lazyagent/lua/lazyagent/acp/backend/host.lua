@@ -1156,12 +1156,22 @@ function M.setup(deps)
           done(automatic)
           return
         end
-        append_block(session, "System", "Input requested: " .. tostring(params.message or "ACP elicitation"))
+        append_block(session, "System", Elicitation.describe_request(params), {
+          kind = "elicitation",
+          title = params.message or "ACP elicitation",
+          status = "pending",
+        })
         UiQueue.enqueue(function(release)
           notify_attention("elicitation", session, params.message or "Input required")
           Elicitation.handle(params, {
             question_policy = session.question_policy or "prompt",
           }, function(...)
+            local response = select(1, ...)
+            append_block(session, "System", Elicitation.describe_response(params, response), {
+              kind = "elicitation",
+              title = params.message or "ACP elicitation",
+              status = type(response) == "table" and response.action or "error",
+            })
             release()
             done(...)
           end)

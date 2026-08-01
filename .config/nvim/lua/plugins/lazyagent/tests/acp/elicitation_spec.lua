@@ -63,6 +63,8 @@ function M.run()
   assert_equal({ action = "decline" }, autonomous, "autonomous policy")
 
   local selected_prompts = {}
+  local selected_opts = {}
+  local selected_displays = {}
   local response
   Elicitation.handle({
     mode = "form",
@@ -75,8 +77,8 @@ function M.run()
           type = "string",
           title = "Strategy",
           oneOf = {
-            { const = "safe", title = "Safe" },
-            { const = "fast", title = "Fast" },
+            { const = "safe", title = "Safe", description = "Prefer compatibility and validation." },
+            { const = "fast", title = "Fast", description = "Prefer the shortest implementation." },
           },
         },
       },
@@ -87,6 +89,8 @@ function M.run()
   end, {
     select = function(items, opts, callback)
       selected_prompts[#selected_prompts + 1] = opts.prompt
+      selected_opts[#selected_opts + 1] = opts
+      selected_displays[#selected_displays + 1] = opts.format_item(items[1])
       callback(items[1])
     end,
     input = function(_, callback)
@@ -99,6 +103,43 @@ function M.run()
     content = { count = 3, strategy = "safe" },
   }, response, "form response")
   assert_equal({ "Strategy (required)" }, selected_prompts, "enum picker")
+  assert_equal("lazyagent-acp-elicitation", selected_opts[1].kind, "elicitation picker kind")
+  assert_equal(2, selected_opts[1].multiline, "elicitation picker enables multiline entries")
+  assert_equal(true, selected_opts[1].fzf_opts["--wrap"], "elicitation picker wraps long lines")
+  assert(selected_displays[1]:find("\n", 1, true), "choice description is displayed on another line")
+
+  local described_request = Elicitation.describe_request({
+    mode = "form",
+    message = "Choose an implementation strategy",
+    requestedSchema = {
+      type = "object",
+      properties = {
+        strategy = {
+          type = "string", title = "Strategy",
+          oneOf = {
+            { const = "safe", title = "Safe", description = "Prefer compatibility." },
+            { const = "fast", title = "Fast" },
+          },
+        },
+      },
+      required = { "strategy" },
+    },
+  })
+  assert(described_request:find("Choose an implementation strategy", 1, true), "transcript request includes message")
+  assert(described_request:find("- Strategy (required)", 1, true), "transcript request includes question")
+  assert(described_request:find("Safe — Prefer compatibility.", 1, true), "transcript request includes choices")
+  local described_response = Elicitation.describe_response({
+    message = "Choose an implementation strategy",
+    requestedSchema = {
+      type = "object",
+      properties = { strategy = {
+        type = "string", title = "Strategy",
+        oneOf = { { const = "safe", title = "Safe" } },
+      } },
+    },
+  }, { action = "accept", content = { strategy = "safe" } })
+  assert(described_response:find("Action: accept", 1, true), "transcript answer includes action")
+  assert(described_response:find("- Strategy: Safe", 1, true), "transcript answer includes selected label")
 
   local other_response
   Elicitation.handle({
