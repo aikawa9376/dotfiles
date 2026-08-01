@@ -10,6 +10,7 @@ package.path = table.concat({
 
 local suites = {
   "tests.util_spec",
+  "tests.watch_spec",
   "tests.window_spec",
   "tests.keymaps_spec",
   "tests.image_preview_spec",

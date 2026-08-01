@@ -10,8 +10,7 @@
 --  - M.is_watching(path_or_bufnr)
 --  - M.start(dir_or_file), M.stop(dir), M.update(), M.enable(), M.disable(), M.list()
 --
--- It also provides a 'refresh' method (debounced) which runs vim.cmd.checktime() and
--- clears the internal changes log.
+-- It also provides a debounced refresh which runs vim.cmd.checktime().
 
 local M = {}
 local uv = vim.loop
@@ -34,9 +33,6 @@ local DEFAULT_REFRESH_MS = 100
 local watchers = {}
 M.watches = watchers
 
--- Per-directory change log (path -> true)
-local changes = {}
-
 -- Next callback id
 local next_cb_id = 1
 
@@ -50,7 +46,11 @@ local AUTOCMD_GROUP_NAME = "lazyagent.watch"
 -- Helper: canonicalize an absolute path
 local function abs_path(p)
   if not p or p == "" then return nil end
-  return vim.fn.fnamemodify(p, ":p")
+  local path = vim.fn.fnamemodify(p, ":p")
+  if path ~= "/" then
+    path = path:gsub("/+$", "")
+  end
+  return path
 end
 
 -- Helper: get absolute path and directory/base parts
@@ -85,30 +85,29 @@ local function debounce(fn, ms)
   end
 end
 
--- Global debounced refresh to call checktime and clear the changes log
+-- Global debounced refresh to call checktime.
 local function refresh()
-  -- Nothing to do
-  if not next(changes) then return end
-  -- Run checktime to let Vim notice changed files
   vim.cmd.checktime()
-  -- Debug log of changes if any (best-effort)
-  local keys = vim.tbl_keys(changes)
-  pcall(function()
-    if #keys > 0 then
-      pcall(vim.notify, "# lazyagent.watch: changes\n- " .. table.concat(keys, "\n- "), vim.log.levels.DEBUG)
-    end
-  end)
-  changes = {}
 end
 local refresh_debounced = debounce(refresh, DEFAULT_REFRESH_MS)
+
+local function is_missing_agent_metadata(path)
+  if not path or uv.fs_stat(path) then return false end
+  return path:match("/%.agents$") ~= nil
+    or path:find("/.agents/", 1, true) ~= nil
+    or path:match("/%.codex$") ~= nil
+    or path:find("/.codex/", 1, true) ~= nil
+end
 
 -- Per-watcher debounce to collapse multiple events
 local function schedule_debounce(w, path, ms)
   ms = ms or DEFAULT_DEBOUNCE_MS
   if not w then return end
 
-  -- Record change
-  if path and path ~= "" then changes[path] = true end
+  w.pending_paths = w.pending_paths or {}
+  if path and path ~= "" then
+    w.pending_paths[path] = true
+  end
 
   -- Cancel previous timer if any
   if w.timer then
@@ -127,11 +126,21 @@ local function schedule_debounce(w, path, ms)
     end)
     -- Call callbacks on the main loop
     vim.schedule_wrap(function()
-      for _, cb in pairs(w.cbs or {}) do
-        pcall(cb, path)
+      local pending_paths = w.pending_paths or {}
+      w.pending_paths = {}
+      local changed = false
+      for changed_path in pairs(pending_paths) do
+        if not is_missing_agent_metadata(changed_path) then
+          changed = true
+          for _, cb in pairs(w.cbs or {}) do
+            pcall(cb, changed_path)
+          end
+        end
       end
-      -- Also trigger global checktime refresh (debounced)
-      refresh_debounced()
+      if changed then
+        -- Also trigger global checktime refresh (debounced)
+        refresh_debounced()
+      end
     end)()
   end)
 end
@@ -148,7 +157,7 @@ local function create_watcher_for_dir(dir, opts)
   local key = dir
   if watchers[key] then return watchers[key] end
 
-  local w = { dir = dir, cbs = {}, timer = nil, handle = nil, autocmd_group = nil }
+  local w = { dir = dir, cbs = {}, pending_paths = {}, timer = nil, handle = nil, autocmd_group = nil }
   -- Prefer uv.fs_event when available
   local ok_fs_event = uv and uv.new_fs_event and true or false
   if ok_fs_event then
@@ -171,7 +180,7 @@ local function create_watcher_for_dir(dir, opts)
         if fname == "" or not fname then
           path = dir
         else
-          path = abs_path(dir .. "/" .. fname)
+          path = abs_path(vim.fs.joinpath(dir, fname))
         end
         if not path then return end
 
@@ -225,7 +234,8 @@ function M.start(path, opts)
   if type(path) == "number" then path = vim.api.nvim_buf_get_name(path) end
   local abs = abs_path(path)
   if not abs then return nil end
-  local _, dir = pcall(function() return vim.fn.fnamemodify(abs, ":h") end)
+  local stat = uv.fs_stat(abs)
+  local dir = stat and stat.type == "directory" and abs or vim.fn.fnamemodify(abs, ":h")
   if not dir or dir == "" then return nil end
   return create_watcher_for_dir(dir, opts)
 end
@@ -240,10 +250,8 @@ function M.stop(path_or_key)
     local p = vim.api.nvim_buf_get_name(path_or_key)
     key = p and abs_path(vim.fn.fnamemodify(p, ":h"))
   else
-    key = abs_path(vim.fn.fnamemodify(path_or_key, ":p"))
-    key = key and vim.fn.fnamemodify(key, ":h")
-    -- Ensure the key always matches the canonical absolute directory format.
-    key = key and abs_path(key)
+    local abs = abs_path(path_or_key)
+    key = abs and (watchers[abs] and abs or abs_path(vim.fn.fnamemodify(abs, ":h")))
   end
   if not key then return end
   local w = watchers[key]
@@ -397,7 +405,8 @@ function M.is_watching(path)
   if type(path) == "number" then path = vim.api.nvim_buf_get_name(path) end
   local abs = abs_path(path)
   if not abs then return false end
-  local d = vim.fn.fnamemodify(abs, ":h")
+  if watchers[abs] then return true end
+  local d = abs_path(vim.fn.fnamemodify(abs, ":h"))
   return watchers[d] ~= nil
 end
 
@@ -599,7 +608,6 @@ end
 function M.enable()
   if M.enabled then return end
   M.enabled = true
-  pcall(vim.notify, "lazyagent.watch: enabled", vim.log.levels.DEBUG)
   vim.api.nvim_create_autocmd({ "BufAdd", "BufDelete", "BufWipeout", "BufReadPost" }, {
     group = vim.api.nvim_create_augroup(AUTOCMD_GROUP_NAME, { clear = true }),
     callback = M.update,
@@ -611,7 +619,6 @@ end
 function M.disable()
   if not M.enabled then return end
   M.enabled = false
-  pcall(vim.notify, "lazyagent.watch: disabled", vim.log.levels.DEBUG)
   pcall(vim.api.nvim_clear_autocmds, { group = AUTOCMD_GROUP_NAME })
   pcall(vim.api.nvim_del_augroup_by_name, AUTOCMD_GROUP_NAME)
   M.stop_all()
