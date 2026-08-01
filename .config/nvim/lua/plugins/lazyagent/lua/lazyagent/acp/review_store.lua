@@ -24,10 +24,18 @@ local function write_all(fd, payload)
 end
 
 function Store:_read()
-  if vim.fn.filereadable(self.path) ~= 1 then return { schema_version = 1, reviews = {} } end
+  if vim.fn.filereadable(self.path) ~= 1 then return { schema_version = 2, reviews = {} } end
   local ok, value = pcall(decode, table.concat(vim.fn.readfile(self.path), "\n"))
   if not ok or type(value) ~= "table" or type(value.reviews) ~= "table" then
     return nil, "invalid Git review store"
+  end
+  value.schema_version = 2
+  for _, review in ipairs(value.reviews) do
+    review.schema_version = tonumber(review.schema_version) or 1
+    review.changeset_id = review.changeset_id or review.review_id
+    review.lineage_id = review.lineage_id or review.changeset_id
+    review.source = review.source or { kind = "range", frontend = "change_review", mutable = false, range = review.range }
+    review.annotations = review.annotations or {}
   end
   return value
 end
@@ -58,6 +66,34 @@ function Store:get(id)
     if review.review_id == id then return review end
   end
   return nil, "review not found: " .. tostring(id)
+end
+
+function Store:for_changeset(changeset_id)
+  local reviews, err = self:list()
+  if not reviews then return nil, err end
+  local result = {}
+  for _, review in ipairs(reviews) do
+    if review.changeset_id == changeset_id then result[#result + 1] = review end
+  end
+  return result
+end
+
+function Store:for_lineage(lineage_id)
+  local reviews, err = self:list()
+  if not reviews then return nil, err end
+  local result = {}
+  for _, review in ipairs(reviews) do
+    if review.lineage_id == lineage_id then result[#result + 1] = review end
+  end
+  return result
+end
+
+function Store:update(id, mutate)
+  local review, err = self:get(id)
+  if not review then return nil, err end
+  local updated = type(mutate) == "function" and mutate(vim.deepcopy(review)) or nil
+  if type(updated) ~= "table" then return nil, "review update was cancelled" end
+  return self:save(updated)
 end
 
 function Store:save(review)

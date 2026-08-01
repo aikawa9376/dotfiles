@@ -37,6 +37,8 @@ function M.run()
   assert_equal(review.base, base, "review freezes base revision")
   assert_equal(review.head, head, "review freezes head revision")
   assert_equal(review.mode, "direct", "two-dot range mode")
+  assert_equal(review.schema_version, 2, "review schema version")
+  assert_equal(review.lineage_id, review.changeset_id, "initial review starts a lineage")
   assert_equal(#review.changes, 2, "modified and added files are captured")
   local by_path = {}
   for _, change in ipairs(review.changes) do by_path[change.path] = change end
@@ -73,6 +75,17 @@ function M.run()
   assert_equal(#annotations, 1, "invalid findings are discarded")
   assert_equal(annotations[1].label, "must", "finding label")
   assert_equal(annotations[1].target.start_line, 2, "finding after line")
+  local sides = assert(GitReview.parse(table.concat({
+    "```lazyagent-review",
+    vim.json.encode({ review_id = review.review_id, findings = {
+      { label = "should", path = "review.lua", side = "before", line = 1, summary = "Before" },
+      { label = "imo", path = "added.txt", side = "file", summary = "Whole file" },
+      { label = "question", side = "overall", summary = "Overall" },
+    } }),
+    "```",
+  }, "\n"), review))
+  assert_equal(#sides, 3, "before, file, and overall findings")
+  assert_equal(sides[1].target.blob_hash, by_path["review.lua"].before_blob.hash, "before finding anchors before blob")
   review.annotations = annotations
   review.status = "completed"
 
@@ -82,6 +95,24 @@ function M.run()
     "Return changed", "saved finding is restored")
   assert_equal(assert(review_store:get(review.review_id)).instructions,
     "Focus on Oracle compatibility.\nIgnore formatting-only concerns.", "review instructions are persisted")
+  assert_equal(#assert(review_store:for_lineage(review.lineage_id)), 1, "reviews can be listed by lineage")
+
+  local feedback_review = vim.deepcopy(review)
+  feedback_review.reviewer = "ReviewFixture"
+  feedback_review.annotations = { {
+    id = "comment-1", kind = "comment", path = "review.lua", rationale = "Please fix this",
+    target = { side = "after", start_line = 1 }, author = { type = "user" }, pending = true,
+  } }
+  local controller = require("lazyagent.acp.git_review_controller")
+  local feedback_prompt = controller._feedback_prompt(feedback_review)
+  assert(feedback_prompt:find("comment%-1"), "feedback prompt includes annotation ID")
+  local updated = controller._apply_feedback_response(feedback_review, table.concat({
+    "Done.", "```lazyagent-review-replies",
+    vim.json.encode({ review_id = review.review_id, replies = { { annotation_id = "comment-1", body = "Fixed and tested." } } }),
+    "```",
+  }, "\n"))
+  assert_equal(updated.annotations[1].pending, false, "sent comment is no longer pending")
+  assert_equal(updated.annotations[1].replies[1].body, "Fixed and tested.", "AI reply is attached to comment")
 
   local thread = {
     thread_id = "git-review-" .. review.review_id,
@@ -99,7 +130,6 @@ function M.run()
   assert(table.concat(lines, "\n"):find("💬[must]", 1, true), "file row includes finding label")
 
   local window = require("lazyagent.window")
-  local controller = require("lazyagent.acp.git_review_controller")
   local scratch_buf = window.ensure_scratch_buffer(nil, { filetype = "lazyagent", agent_name = "ReviewFixture" })
   vim.api.nvim_buf_set_lines(scratch_buf, 0, -1, false, { "Prioritize regressions.", "Check error paths." })
   window.open(scratch_buf, { window_type = "float", agent_name = "ReviewFixture" })

@@ -8,6 +8,8 @@ local valid_kinds = {
   suggestion = true,
 }
 
+local valid_sides = { before = true, after = true, file = true, overall = true }
+
 local valid_labels = {
   must = true,
   should = true,
@@ -38,7 +40,7 @@ function M.normalize(annotation)
     rationale = text(annotation.rationale or annotation.body),
     path = text(annotation.path or target.path),
     target = {
-      side = target.side == "before" and "before" or "after",
+      side = valid_sides[target.side] and target.side or (annotation.path and "after" or "overall"),
       start_line = tonumber(target.start_line or target.line),
       end_line = tonumber(target.end_line or target.start_line or target.line),
       blob_hash = text(target.blob_hash),
@@ -46,6 +48,10 @@ function M.normalize(annotation)
     },
     author = type(annotation.author) == "table" and vim.deepcopy(annotation.author) or nil,
     created_at = text(annotation.created_at),
+    resolved = annotation.resolved == true,
+    resolved_at = text(annotation.resolved_at),
+    replies = type(annotation.replies) == "table" and vim.deepcopy(annotation.replies) or {},
+    sent = annotation.sent == true,
   }
   if not normalized.summary and not normalized.rationale then return nil end
   normalized.id = normalized.id or vim.fn.sha256(vim.inspect(normalized)):sub(1, 16)
@@ -134,6 +140,14 @@ function M.markdown(annotations)
     end
     if annotation.outdated then
       vim.list_extend(lines, { "", "> This note may be outdated because the target blob changed." })
+    end
+    if annotation.resolved then
+      vim.list_extend(lines, { "", "_Resolved_" })
+    end
+    for _, reply in ipairs(annotation.replies or {}) do
+      vim.list_extend(lines, { "", "> " .. tostring(reply.body or reply.summary or "") })
+      local reply_author = reply.author and (reply.author.name or reply.author.provider) or nil
+      if reply_author then lines[#lines + 1] = "> — " .. tostring(reply_author) end
     end
     local author = annotation.author and (annotation.author.name or annotation.author.provider) or nil
     if author then vim.list_extend(lines, { "", "_" .. tostring(author) .. "_" }) end

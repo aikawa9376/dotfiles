@@ -87,6 +87,7 @@ return {
     "LazyAgentACPMobileStart",
     "LazyAgentACPMobileStop", "LazyAgentACPMobileQR", "LazyAgentACPRawTranscript", "LazyAgentACPFullTranscript",
     "LazyAgentACPRestart", "LazyAgentACPRestoreRestartState",
+    "LazyAgentReview", "LazyAgentReviews",
     "LazyAgentACPPlanToggle",
     "LazyAgentImage", "LazyAgentScreenShot",
     "LazyAgentTeam", "LazyAgentTeamStatus", "LazyAgentTeamStop",
