@@ -1,5 +1,7 @@
 local M = {}
 
+local ELICITATION_KIND = "lazyagent-acp-elicitation"
+
 local function mcp_server_name(params)
   local meta = type(params._meta) == "table" and params._meta or {}
   if meta.codex_approval_kind ~= "mcp_tool_call" then return nil end
@@ -100,6 +102,101 @@ local function enum_choices(schema)
   return #out > 0 and out or nil
 end
 
+local function display_choice(choice)
+  if choice.description and tostring(choice.description) ~= "" then
+    return tostring(choice.label) .. "\n  " .. tostring(choice.description)
+  end
+  return tostring(choice.label)
+end
+
+local function select_options(title, format_item)
+  return {
+    prompt = title,
+    kind = ELICITATION_KIND,
+    multiline = 2,
+    fzf_opts = { ["--wrap"] = true },
+    format_item = format_item or display_choice,
+  }
+end
+
+local function scalar_text(value)
+  if type(value) == "table" then
+    local values = {}
+    for _, item in ipairs(value) do values[#values + 1] = tostring(item) end
+    return table.concat(values, ", ")
+  end
+  if type(value) == "boolean" then return value and "Yes" or "No" end
+  return tostring(value)
+end
+
+local function choice_label(schema, value)
+  for _, choice in ipairs(enum_choices(schema) or {}) do
+    if vim.deep_equal(choice.value, value) then return choice.label end
+  end
+  return scalar_text(value)
+end
+
+function M.describe_request(params)
+  params = type(params) == "table" and params or {}
+  local lines = { "ACP question", "", tostring(params.message or "Input required") }
+  if params.mode == "url" then
+    if params.url then vim.list_extend(lines, { "", tostring(params.url) }) end
+    return table.concat(lines, "\n")
+  end
+  local fields = sorted_properties(params.requestedSchema or {})
+  if #fields > 0 then
+    lines[#lines + 1] = ""
+    for _, field in ipairs(fields) do
+      local meta = field.schema and field.schema._meta and field.schema._meta.codex or {}
+      if meta.isOtherAnswer ~= true then
+        local title = tostring(field.schema.title or field.name)
+        lines[#lines + 1] = "- " .. title .. (field.required and " (required)" or "")
+        if field.schema.description and field.schema.description ~= "" then
+          lines[#lines + 1] = "  " .. tostring(field.schema.description)
+        end
+        local schema = field.schema.type == "array" and field.schema.items or field.schema
+        for _, choice in ipairs(enum_choices(type(schema) == "table" and schema or {}) or {}) do
+          local suffix = choice.description and choice.description ~= "" and (" — " .. tostring(choice.description)) or ""
+          lines[#lines + 1] = "  - " .. tostring(choice.label) .. suffix
+        end
+      end
+    end
+  end
+  return table.concat(lines, "\n")
+end
+
+function M.describe_response(params, response)
+  params = type(params) == "table" and params or {}
+  response = type(response) == "table" and response or {}
+  local action = tostring(response.action or "unknown")
+  local lines = { "ACP answer", "", tostring(params.message or "Input required"), "", "Action: " .. action }
+  local content = type(response.content) == "table" and response.content or {}
+  local fields = sorted_properties(params.requestedSchema or {})
+  local by_name, other_for = {}, {}
+  for _, field in ipairs(fields) do
+    by_name[field.name] = field
+    local meta = field.schema and field.schema._meta and field.schema._meta.codex or {}
+    if meta.isOtherAnswer == true and meta.questionId then other_for[field.name] = tostring(meta.questionId) end
+  end
+  local content_names = vim.tbl_keys(content)
+  table.sort(content_names)
+  for _, name in ipairs(content_names) do
+    local field = by_name[name]
+    local display_field = other_for[name] and by_name[other_for[name]] or field
+    local title = display_field and tostring(display_field.schema.title or display_field.name) or tostring(name)
+    local value = content[name]
+    local schema = display_field and display_field.schema or {}
+    if schema.type == "array" and type(value) == "table" then
+      local labels = {}
+      for _, item in ipairs(value) do labels[#labels + 1] = choice_label(schema.items or {}, item) end
+      lines[#lines + 1] = "- " .. title .. ": " .. table.concat(labels, ", ")
+    else
+      lines[#lines + 1] = "- " .. title .. ": " .. choice_label(schema, value)
+    end
+  end
+  return table.concat(lines, "\n")
+end
+
 local function parse_scalar(value, schema)
   if value == nil or value == "" then
     if schema.default ~= nil then return schema.default end
@@ -143,12 +240,7 @@ local function prompt_field(field, done, deps)
           description = choice.description,
         }
       end
-      deps.select(items, {
-        prompt = title .. (field.required and " (required)" or ""),
-        format_item = function(choice)
-          return choice.description and (choice.label .. " — " .. choice.description) or choice.label
-        end,
-      }, function(choice)
+      deps.select(items, select_options(title .. (field.required and " (required)" or ""), display_choice), function(choice)
         if not choice then
           done(nil, "cancelled")
         elseif choice.done then
@@ -177,12 +269,7 @@ local function prompt_field(field, done, deps)
     if field.other_name then
       choices[#choices + 1] = { other = true, label = "Other…" }
     end
-    deps.select(choices, {
-      prompt = title .. (field.required and " (required)" or ""),
-      format_item = function(choice)
-        return choice.description and (choice.label .. " — " .. choice.description) or choice.label
-      end,
-    }, function(choice)
+    deps.select(choices, select_options(title .. (field.required and " (required)" or ""), display_choice), function(choice)
       if not choice and field.required then
         done(nil, "cancelled")
       elseif choice and choice.other then
@@ -207,10 +294,9 @@ local function prompt_field(field, done, deps)
       { value = true, label = "Yes" },
       { value = false, label = "No" },
     }
-    deps.select(boolean_choices, {
-      prompt = title .. (field.required and " (required)" or ""),
-      format_item = function(choice) return choice.label end,
-    }, function(choice)
+    deps.select(boolean_choices, select_options(title .. (field.required and " (required)" or ""), function(choice)
+      return choice.label
+    end), function(choice)
       if not choice and field.required then
         done(nil, "cancelled")
       else
@@ -310,6 +396,9 @@ function M.handle(params, opts, done, deps)
     }
     deps.select(choices, {
       prompt = tostring(params.message or "ACP requests opening a URL") .. "\n" .. tostring(params.url or ""),
+      kind = ELICITATION_KIND,
+      multiline = 2,
+      fzf_opts = { ["--wrap"] = true },
       format_item = function(choice) return choice.label end,
     }, function(choice)
       if not choice then

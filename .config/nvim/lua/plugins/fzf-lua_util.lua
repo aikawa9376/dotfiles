@@ -219,6 +219,25 @@ local function normalize_ui_select_prompt(prompt)
   return prompt .. ": "
 end
 
+local function wrap_ui_select_header(text, width)
+  width = math.max(20, tonumber(width) or 80)
+  local wrapped = {}
+  for _, source_line in ipairs(vim.split(tostring(text or ""), "\n", { plain = true })) do
+    local line, display_width = "", 0
+    for _, char in ipairs(vim.fn.split(source_line, "\\zs")) do
+      local char_width = vim.fn.strdisplaywidth(char)
+      if display_width > 0 and display_width + char_width > width then
+        wrapped[#wrapped + 1] = line
+        line, display_width = "", 0
+      end
+      line = line .. char
+      display_width = display_width + char_width
+    end
+    wrapped[#wrapped + 1] = line
+  end
+  return table.concat(wrapped, "\n")
+end
+
 -- ------------------------------------------------------------------
 -- init vim.ui.select
 -- ------------------------------------------------------------------
@@ -232,6 +251,7 @@ M.register_ui_select = function()
     local is_toggle_menu = opts.kind == "toggle-menu"
     local is_lazyagent_actions = opts.kind == "lazyagent-acp-actions"
     local is_lazyagent_names = opts.kind == "lazyagent-acp-names"
+    local is_lazyagent_elicitation = opts.kind == "lazyagent-acp-elicitation"
 
     -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
     if opts.previewer == "builtin" then
@@ -248,13 +268,16 @@ M.register_ui_select = function()
       }
     end
 
-    opts.prompt = normalize_ui_select_prompt(opts.prompt)
+    local elicitation_question = is_lazyagent_elicitation and vim.trim(tostring(opts.prompt or "")) or nil
+    opts.prompt = normalize_ui_select_prompt(is_lazyagent_elicitation and "Answer" or opts.prompt)
     opts.winopts = {
-      height = is_lazyagent_names and 0.72
+      height = is_lazyagent_elicitation and 0.7
+        or is_lazyagent_names and 0.72
         or is_lazyagent_actions and math.min(18, math.max(6, #(items or {}) + 4))
         or is_toggle_menu and 0.34
         or 0.4,
-      width = is_lazyagent_names and 0.88
+      width = is_lazyagent_elicitation and 0.88
+        or is_lazyagent_names and 0.88
         or is_lazyagent_actions and 44
         or is_toggle_menu and 0.46
         or 0.6,
@@ -268,6 +291,14 @@ M.register_ui_select = function()
         hidden = not is_lazyagent_names,
       }
     }
+    if is_lazyagent_elicitation then
+      opts.multiline = opts.multiline or 2
+      opts.fzf_opts = opts.fzf_opts or {}
+      opts.fzf_opts["--wrap"] = true
+      if elicitation_question ~= "" then
+        opts.fzf_opts["--header"] = wrap_ui_select_header(elicitation_question, math.floor(vim.o.columns * 0.78))
+      end
+    end
     if is_toggle_menu then
       opts.fzf_opts = opts.fzf_opts or {}
       opts.fzf_opts["--tiebreak"] = "begin,index"
