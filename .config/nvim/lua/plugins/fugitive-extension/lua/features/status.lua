@@ -3,9 +3,14 @@ local utils = require("fugitive_utils")
 local commands = require("features.commands")
 local syntax_highlight = require("features.syntax_highlight")
 local worktree = require("features.worktree")
+local pull_requests_by_buf = {}
 
 local function stash_ref_from_line(line)
   return line and line:match('stash@%{%d+%}')
+end
+
+local function pull_request_number_from_line(line)
+  return line and tonumber(line:match('^#(%d+)%s'))
 end
 
 local function remove_custom_sections(bufnr)
@@ -15,7 +20,7 @@ local function remove_custom_sections(bufnr)
   while i <= #lines do
     local line = lines[i]
     -- カスタムセクションのヘッダーを検知
-    if line:match('^Worktrees %(') or line:match('^Stashes %(') then
+    if line:match('^Worktrees %(') or line:match('^Stashes %(') or line:match('^Pull requests %(') then
       local start_idx = i
       -- 直前の空行も含める
       if start_idx > 1 and lines[start_idx - 1] == '' then start_idx = start_idx - 1 end
@@ -26,8 +31,8 @@ local function remove_custom_sections(bufnr)
         local next_line = lines[end_idx + 1]
         -- セクションに含まれる可能性のある行のパターン
         if next_line == '' or
-           next_line:match('^[~/]') or next_line:match('^stash@') or
-           next_line:match('^Worktrees %(') or next_line:match('^Stashes %(') then
+           next_line:match('^[~/]') or next_line:match('^stash@') or next_line:match('^#%d+%s') or
+           next_line:match('^Worktrees %(') or next_line:match('^Stashes %(') or next_line:match('^Pull requests %(') then
           end_idx = end_idx + 1
         else break end
       end
@@ -49,7 +54,7 @@ local function find_insert_point(bufnr)
   return #lines + 1
 end
 
-local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
+local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   if not utils.is_valid_buf(bufnr) then return end
   local work_tree = utils.get_buf_work_tree(bufnr)
   if not work_tree then return end
@@ -67,6 +72,16 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
     table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
     for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
   end
+  local pull_requests = pull_requests_by_buf[bufnr] or {}
+  if #pull_requests > 0 then
+    table.insert(final_lines, '')
+    table.insert(final_lines, 'Pull requests (' .. #pull_requests .. ')')
+    for _, pr in ipairs(pull_requests) do
+      local draft = pr.isDraft and ' [draft]' or ''
+      local branch = pr.headRefName ~= '' and ('  ' .. pr.headRefName) or ''
+      table.insert(final_lines, ('#%d%s %s%s'):format(pr.number, draft, pr.title, branch))
+    end
+  end
 
   utils.with_buf_modifiable(bufnr, function()
     -- Update buffer contents
@@ -79,18 +94,22 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
     -- Update extmarks based on the new buffer contents
     vim.api.nvim_buf_clear_namespace(bufnr, ns_worktree, 0, -1)
     vim.api.nvim_buf_clear_namespace(bufnr, ns_stash, 0, -1)
+    vim.api.nvim_buf_clear_namespace(bufnr, ns_pr, 0, -1)
 
     local lines_after = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local in_worktree, in_stash = false, false
+    local in_worktree, in_stash, in_pr = false, false, false
     local current_wt_abs = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
 
     for i, l in ipairs(lines_after) do
       if l:match('^Worktrees') then
         vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterViolet' })
-        in_worktree, in_stash = true, false
+        in_worktree, in_stash, in_pr = true, false, false
       elseif l:match('^Stashes') then
         vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsChange' })
-        in_worktree, in_stash = false, true
+        in_worktree, in_stash, in_pr = false, true, false
+      elseif l:match('^Pull requests') then
+        vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, 0, { end_col = #l, hl_group = 'GitSignsAdd' })
+        in_worktree, in_stash, in_pr = false, false, true
       elseif in_worktree then
         -- 形式: [path]  [branch]  [head] [sync_icon]
         local p_part = l:match('^(%S+)')
@@ -136,6 +155,16 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash)
             vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, e, { end_col = #l, hl_group = 'Comment' })
           end
         else in_stash = false end
+      elseif in_pr then
+        local number = pull_request_number_from_line(l)
+        if number then
+          local number_end = #tostring(number) + 1
+          vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, 0, { end_col = number_end, hl_group = 'Identifier' })
+          local draft_start, draft_end = l:find('%[draft%]')
+          if draft_start then
+            vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, draft_start - 1, { end_col = draft_end, hl_group = 'Comment' })
+          end
+        else in_pr = false end
       end
     end
   end, 5)
@@ -157,6 +186,10 @@ end
 local function is_cursor_in_worktree_area()
   local line = vim.api.nvim_get_current_line()
   return line:match('^Worktrees') or line:match('^[~/]')
+end
+
+local function is_cursor_in_pull_request_area()
+  return pull_request_number_from_line(vim.api.nvim_get_current_line()) ~= nil
 end
 
 local function get_worktree_path_at_cursor()
@@ -303,16 +336,70 @@ function M.setup(group)
       vim.opt_local.number, vim.opt_local.relativenumber = false, false
       local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
       local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
+      local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
       local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
+      local pr_fetching, pr_fetch_pending = false, false
 
       local function refresh()
-        refresh_status_sections(b, ns_worktree, ns_stash)
+        refresh_status_sections(b, ns_worktree, ns_stash, ns_pr)
+      end
+
+      local fetch_pull_requests
+      fetch_pull_requests = function()
+        if not utils.is_valid_buf(b) then return end
+        if pr_fetching then
+          pr_fetch_pending = true
+          return
+        end
+
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree or vim.fn.executable('gh') ~= 1 then return end
+
+        pr_fetching = true
+        vim.system({
+          'gh', 'pr', 'list', '--state', 'open',
+          '--limit', '100',
+          '--json', 'number,title,headRefName,isDraft,url',
+        }, { cwd = work_tree, text = true }, function(result)
+          vim.schedule(function()
+            pr_fetching = false
+            if not utils.is_valid_buf(b) then return end
+
+            if result.code == 0 then
+              local ok, decoded = pcall(vim.json.decode, result.stdout or '')
+              local pull_requests = {}
+              if ok and type(decoded) == 'table' then
+                for _, pr in ipairs(decoded) do
+                  local number = tonumber(pr.number)
+                  if number then
+                    local url = type(pr.url) == 'string' and pr.url or ''
+                    table.insert(pull_requests, {
+                      number = number,
+                      title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
+                      headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
+                      isDraft = pr.isDraft == true,
+                      repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
+                    })
+                  end
+                end
+              end
+              pull_requests_by_buf[b] = pull_requests
+              refresh()
+            end
+
+            if pr_fetch_pending then
+              pr_fetch_pending = false
+              fetch_pull_requests()
+            end
+          end)
+        end)
       end
 
       local function reload_status()
         if not utils.is_valid_buf(b) then return end
         if vim.b[b].fugitive_status_reloading then
           vim.schedule(refresh)
+          fetch_pull_requests()
           return
         end
         vim.b[b].fugitive_status_reloading = true
@@ -323,13 +410,26 @@ function M.setup(group)
         end
         vim.b[b].fugitive_status_reloading = false
         vim.schedule(refresh)
+        fetch_pull_requests()
       end
 
       local function notify_repo_changed()
         utils.fire_fugitive_changed({ bufnr = b })
       end
 
-      vim.schedule(refresh)
+      vim.schedule(function()
+        refresh()
+        fetch_pull_requests()
+      end)
+
+      vim.api.nvim_create_autocmd('BufWipeout', {
+        group = group,
+        buffer = b,
+        once = true,
+        callback = function()
+          pull_requests_by_buf[b] = nil
+        end,
+      })
 
       local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
       utils.setup_repo_refresh(bufgroupt, b, function()
@@ -678,6 +778,23 @@ function M.setup(group)
           local p = get_worktree_path_at_cursor()
           if p then worktree.open_worktree_path(p); return end
         end
+        if is_cursor_in_pull_request_area() then
+          local number = pull_request_number_from_line(vim.api.nvim_get_current_line())
+          local repository = nil
+          for _, pr in ipairs(pull_requests_by_buf[b] or {}) do
+            if pr.number == number then
+              repository = pr.repository
+              break
+            end
+          end
+          if number and repository then
+            vim.cmd('tabnew')
+            vim.cmd(('Octo pr edit %d %s'):format(number, repository))
+          elseif number then
+            vim.notify('Could not determine repository for PR #' .. number, vim.log.levels.WARN)
+          end
+          return
+        end
         if is_cursor_in_stash_area() then
           local r = get_stash_ref_at_cursor(b)
           if r then vim.cmd('Gvsplit ' .. r); return end
@@ -817,8 +934,9 @@ function M.refresh_buffer(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
   local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
   local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
+  local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
   pcall(function()
-    refresh_status_sections(bufnr, ns_worktree, ns_stash)
+    refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   end)
 end
 
