@@ -190,7 +190,12 @@ function M.new(ctx)
     local normalized = transcript_source_lines(bufnr, normalize_start, transcript_stop)
     normalized = select(1, normalize_header_lines(bufnr, normalized))
     if diff_view and type(diff_view.normalize_diff_display_lines) == "function" then
-      normalized = select(1, diff_view.normalize_diff_display_lines(bufnr, normalized, header_target_width(bufnr)))
+      normalized = select(1, diff_view.normalize_diff_display_lines(
+        bufnr,
+        normalized,
+        header_target_width(bufnr),
+        normalize_start
+      ))
     end
 
     local current = vim.api.nvim_buf_get_lines(bufnr, normalize_start, transcript_stop, false)
