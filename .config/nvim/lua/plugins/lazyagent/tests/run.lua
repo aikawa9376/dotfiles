@@ -37,6 +37,7 @@ local suites = {
   "tests.acp.prompt_blocks_spec",
   "tests.acp.completion_spec",
   "tests.acp.config_restore_spec",
+  "tests.acp.local_commands_spec",
   "tests.acp.prompt_queue_spec",
   "tests.acp.thread_search_spec",
   "tests.acp.thread_export_spec",
