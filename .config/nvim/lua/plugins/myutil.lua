@@ -29,7 +29,7 @@ return {
       end, silent = true
     },
   },
-  cmd = { "Capture", "Diff" },
+  cmd = { "Capture", "Diff", "FullPath" },
   config = function ()
     -- keep foldtext initialization in init
     -- vim.opt.foldtext = require"utilities".custom_fold_text()
@@ -85,6 +85,14 @@ return {
         require"utilities".cmd_capture(opts)
       end,
       { nargs = '+', bang = true, complete = 'command' }
+    )
+
+    -- ex command
+    vim.api.nvim_create_user_command(
+      'FullPath',
+      function(opts)
+        require"utilities".copy_git_root_relative_path(true)
+      end
     )
 
     vim.api.nvim_create_user_command(
