@@ -105,6 +105,11 @@ function M.run()
     table.concat(team_lines, "\n"):find("team:engineering/engineer:running", 1, true),
     "cockpit shows team role and orchestration state"
   )
+  local branch_lines = Cockpit.render({ {
+    thread_id = "local-branch", title = "Local branch", provider_id = "Codex", cwd = "/tmp/branch",
+    status = "closed", metadata = { client_local_branch = true },
+  } }, {})
+  assert(table.concat(branch_lines, "\n"):find("branch:local", 1, true), "cockpit identifies client-local branches")
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   Cockpit.apply_highlights(bufnr, highlights)

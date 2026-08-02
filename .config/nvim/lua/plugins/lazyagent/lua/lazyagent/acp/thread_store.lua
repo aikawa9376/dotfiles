@@ -113,7 +113,7 @@ local function normalize_record(record, opts)
     view_state = type(record.view_state) == "table" and copy(record.view_state) or {},
     metadata = type(record.metadata) == "table" and copy(record.metadata) or {},
   }
-  for _, field in ipairs({ "native_session_id", "process_id", "model", "mode", "archived_at" }) do
+  for _, field in ipairs({ "native_session_id", "process_id", "model", "mode", "archived_at", "history_path" }) do
     if record[field] ~= nil and record[field] ~= "" then
       normalized[field] = record[field]
     end

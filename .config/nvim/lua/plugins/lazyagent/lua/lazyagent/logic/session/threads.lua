@@ -285,6 +285,34 @@ function M.setup(deps)
     return true
   end
 
+  function module.branch_thread(thread_id, turn_id)
+    local backend, stored = thread_backend(thread_id)
+    if not backend or not stored or type(backend.branch_thread_checkpoint) ~= "function" then
+      vim.notify("LazyAgent ACP: local branch is unavailable", vim.log.levels.WARN)
+      return nil
+    end
+    local thread = type(backend.get_thread) == "function"
+        and backend.get_thread(thread_id, { include_live = true })
+      or stored
+    local turns = thread and thread.change_journal and thread.change_journal.turns or {}
+    if not turn_id then
+      for index = #turns, 1, -1 do
+        if turns[index].state ~= "active" then turn_id = turns[index].turn_id; break end
+      end
+    end
+    if not turn_id then
+      vim.notify("LazyAgent ACP: no completed turn is available to branch", vim.log.levels.INFO)
+      return nil
+    end
+    local branch, err = backend.branch_thread_checkpoint(thread_id, turn_id)
+    if not branch then
+      vim.notify("LazyAgent ACP: local branch failed: " .. tostring(err), vim.log.levels.ERROR)
+      return nil
+    end
+    vim.notify("LazyAgent ACP: created local branch " .. branch.thread_id:sub(1, 8), vim.log.levels.INFO)
+    return branch
+  end
+
   function module.new_thread(provider_id, opts)
     opts = opts or {}
     local provider, providers = configured_provider(provider_id)
@@ -620,6 +648,7 @@ function M.setup(deps)
       local latest_turn = require("lazyagent.acp.change_review").latest_turn(thread)
       if latest_turn then
         actions[#actions + 1] = "Review changes"
+        actions[#actions + 1] = "Branch latest turn"
       end
       actions[#actions + 1] = thread.status == "archived" and "Restore" or "Archive"
       actions[#actions + 1] = "Delete"
@@ -630,6 +659,8 @@ function M.setup(deps)
           module.prompt_rename_thread(thread.thread_id)
         elseif action == "Review changes" then
           module.show_thread_changes(thread.thread_id)
+        elseif action == "Branch latest turn" then
+          module.branch_thread(thread.thread_id, latest_turn.turn_id)
         elseif action == "Archive" then
           module.archive_thread(thread.thread_id)
         elseif action == "Restore" then
@@ -1230,6 +1261,11 @@ function M.setup(deps)
       local thread_id = line_map[vim.api.nvim_win_get_cursor(0)[1]]
       if thread_id then module.open_thread_transcript(thread_id) end
     end, { buffer = bufnr, silent = true, desc = "Open ACP cockpit raw transcript" })
+    vim.keymap.set("n", "b", function()
+      local id = selected_thread_id()
+      if id then module.branch_thread(id) end
+      refresh()
+    end, { buffer = bufnr, silent = true, desc = "Branch selected ACP thread at its latest completed turn" })
     vim.keymap.set("n", "r", refresh, { buffer = bufnr, silent = true, desc = "Refresh ACP cockpit" })
     vim.keymap.set("n", "R", function()
       local id = selected_thread_id()
@@ -1347,6 +1383,7 @@ function M.setup(deps)
         { key = "n", description = "Create agent in the project Neovim" },
         { key = "i", description = "Message live thread" },
         { key = "v", description = "Open raw transcript" },
+        { key = "b", description = "Branch latest completed turn" },
         { key = "]a", description = "Jump to next live thread" },
         { key = "[a", description = "Jump to previous live thread" },
         { key = "P", description = "Show or hide preview" },

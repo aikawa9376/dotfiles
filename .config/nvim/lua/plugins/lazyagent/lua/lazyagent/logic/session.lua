@@ -207,6 +207,7 @@ M.new_acp_thread_in_workspace = threads.new_thread_in_workspace
 M.new_acp_worktree_thread = threads.new_worktree_thread
 M.cleanup_acp_worktree = threads.cleanup_worktree
 M.open_acp_thread = threads.open_thread
+M.branch_acp_thread = threads.branch_thread
 M.archive_acp_thread = threads.archive_thread
 M.restore_acp_thread = threads.restore_thread
 M.rename_acp_thread = threads.rename_thread

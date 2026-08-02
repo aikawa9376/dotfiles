@@ -393,6 +393,7 @@ function M.run()
   assert(vim.fn.maparg("[a", "n", false, true).buffer == 1, "cockpit previous live mapping")
   assert(vim.fn.maparg("P", "n", false, true).buffer == 1, "cockpit preview toggle mapping")
   assert(vim.fn.maparg("<CR>", "n", false, true).buffer == 1, "cockpit mirror mapping")
+  assert(vim.fn.maparg("b", "n", false, true).buffer == 1, "cockpit local branch mapping")
   assert(vim.fn.maparg("o", "n", false, true).buffer == 1, "cockpit open mapping")
   opened = nil
   vim.cmd("normal \r")

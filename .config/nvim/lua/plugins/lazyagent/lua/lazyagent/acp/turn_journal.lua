@@ -231,7 +231,26 @@ function M.finish(journal, turn_id, completion)
     completion.annotations or turn.annotations
   )
   turn.capture_error = completion.capture_error
+  turn.conversation_end_seq = completion.conversation_end_seq or turn.conversation_end_seq
+  turn.transcript_end_line = completion.transcript_end_line or turn.transcript_end_line
   return journal, copy(turn)
+end
+
+function M.slice(journal, turn_id)
+  journal = copy(journal)
+  local turns = {}
+  local found = false
+  for _, turn in ipairs(journal.turns or {}) do
+    turns[#turns + 1] = turn
+    if turn.turn_id == turn_id then
+      found = true
+      break
+    end
+  end
+  if not found then return nil, "turn not found: " .. tostring(turn_id) end
+  journal.turns = turns
+  journal.next_turn_sequence = #turns + 1
+  return journal, copy(turns[#turns])
 end
 
 function M.compact(journal)
