@@ -57,6 +57,7 @@ local second = assert(GitReview.from_snapshot(snapshot, { clock = function() ret
 eq(first.changeset_id, second.changeset_id, "same snapshot shares changeset")
 assert(first.review_id ~= second.review_id, "rerun creates a distinct review")
 eq(first.source.frontend, "diffview", "source frontend retained")
+assert(GitReview.prompt(first):find("Prefer a before or after line target", 1, true), "review prompt prefers line targets")
 
 local response = table.concat({
   "```lazyagent-review",
@@ -83,6 +84,7 @@ package.loaded["lazyagent.acp.git_review_controller"] = {
         annotations = {
           { id = "open", path = "tracked.txt", summary = "Still open", target = { side = "after", start_line = 1, blob_hash = "old-hash" } },
           { id = "resolved", path = "tracked.txt", summary = "Done", resolved = true, target = { side = "after", start_line = 1, blob_hash = "old-hash" } },
+          { id = "file", path = "tracked.txt", summary = "Whole file", target = { side = "file", blob_hash = "old-hash" } },
         },
       },
       {
@@ -97,10 +99,19 @@ local review_view = require("diffview_extension.review_view")
 local fake_view = { tabpage = 12345 }
 review_view._states[fake_view.tabpage] = { visibility = 1, changeset_id = "new", lineage_id = "lineage" }
 local visible = review_view._annotations_for(fake_view, "tracked.txt", "after")
-eq(#visible, 1, "default view keeps unresolved findings and hides resolved findings")
+eq(#visible, 1, "diff buffer keeps line findings and excludes resolved and file findings")
 eq(visible[1].outdated, true, "unresolved old snapshot finding is marked outdated")
 review_view._states[fake_view.tabpage].visibility = 2
 eq(#review_view._annotations_for(fake_view, "tracked.txt", "after"), 2, "all view includes resolved findings")
+local review_buf = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_buf_set_lines(review_buf, 0, -1, false, { "first", "second" })
+fake_view.cur_entry = { path = "tracked.txt" }
+fake_view.cur_layout = { windows = { { file = { bufnr = review_buf, symbol = "b", path = "tracked.txt" } } } }
+review_view._render_buffer(fake_view, review_buf)
+local review_marks = vim.api.nvim_buf_get_extmarks(review_buf, -1, 0, -1, {})
+eq(#review_marks, 1, "render creates an extmark only for line findings")
+eq(review_marks[1][2], 0, "line finding is rendered at its target line")
+vim.api.nvim_buf_delete(review_buf, { force = true })
 package.loaded["lazyagent.acp.git_review_controller"] = old_controller
 
 vim.fn.delete(temp, "rf")
