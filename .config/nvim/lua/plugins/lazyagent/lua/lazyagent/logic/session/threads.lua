@@ -277,7 +277,10 @@ function M.setup(deps)
       open_input = false,
       focus_agent_view = opts.focus_agent_view ~= false,
       relocate_agent_view = opts.relocate_agent_view == true,
+      on_ready = opts.on_ready,
+      initial_input = opts.initial_input,
     }
+    if opts.open_input == true then launch_opts.open_input = true end
     if not local_key then
       launch_opts.acp_thread_id = thread.thread_id
     end
@@ -285,7 +288,8 @@ function M.setup(deps)
     return true
   end
 
-  function module.branch_thread(thread_id, turn_id)
+  function module.branch_thread(thread_id, turn_id, opts)
+    opts = opts or {}
     local backend, stored = thread_backend(thread_id)
     if not backend or not stored or type(backend.branch_thread_checkpoint) ~= "function" then
       vim.notify("LazyAgent ACP: local branch is unavailable", vim.log.levels.WARN)
@@ -304,12 +308,13 @@ function M.setup(deps)
       vim.notify("LazyAgent ACP: no completed turn is available to branch", vim.log.levels.INFO)
       return nil
     end
-    local branch, err = backend.branch_thread_checkpoint(thread_id, turn_id)
+    local branch, err = backend.branch_thread_checkpoint(thread_id, turn_id, { kind = opts.kind })
     if not branch then
       vim.notify("LazyAgent ACP: local branch failed: " .. tostring(err), vim.log.levels.ERROR)
       return nil
     end
     vim.notify("LazyAgent ACP: created local branch " .. branch.thread_id:sub(1, 8), vim.log.levels.INFO)
+    if opts.open == true then module.open_thread(branch.thread_id, opts) end
     return branch
   end
 

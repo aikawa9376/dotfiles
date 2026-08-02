@@ -191,6 +191,14 @@ function M.run()
   assert_equal(branch.native_session_id, nil, "checkpoint branch native isolation")
   assert_equal(vim.fn.filereadable(branch.transcript_path), 1, "checkpoint branch transcript copy")
   assert_equal(backend.delete_thread(branch.thread_id), true, "checkpoint branch fixture cleanup")
+  local side = assert(backend.branch_thread_checkpoint(
+    runtime.acp_thread_id,
+    runtime.acp_thread_id .. ":checkpoint",
+    { kind = "side" }
+  ))
+  assert_equal(side.metadata.side_conversation, true, "side conversation metadata")
+  assert(side.title:find(" · side", 1, true), "side conversation title")
+  assert_equal(backend.delete_thread(side.thread_id), true, "side conversation fixture cleanup")
 
   local imported, created = backend.import_native_session(pane_id, {
     sessionId = "native-imported",

@@ -650,7 +650,7 @@ end
 
 local function handle_local_slash_command(session, prompt)
   local command, args = local_commands.parse(prompt)
-  if not command or args ~= "" then
+  if not command or (args ~= "" and command.name ~= "side") then
     return false
   end
 
@@ -715,6 +715,10 @@ local function handle_local_slash_command(session, prompt)
   if command.name == "tools" then
     show_tool_review_for_session(session)
     return true
+  end
+
+  if command.name == "side" then
+    return "side", args
   end
 
   if command.name == "new" then

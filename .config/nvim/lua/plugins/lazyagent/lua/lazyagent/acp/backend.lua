@@ -1513,7 +1513,8 @@ local function create_backend(default_view)
     return updated
   end
 
-  function backend.branch_thread_checkpoint(thread_id, turn_id)
+  function backend.branch_thread_checkpoint(thread_id, turn_id, opts)
+    opts = opts or {}
     local parent, err = thread_store:get(thread_id)
     if not parent then
       return nil, err
@@ -1535,7 +1536,7 @@ local function create_backend(default_view)
       provider_id = parent.provider_id,
       cwd = parent.cwd,
       additional_directories = parent.additional_directories,
-      title = parent.title .. " · branch " .. tostring(turn_id):match("[^:]+$"),
+      title = parent.title .. (opts.kind == "side" and " · side" or (" · branch " .. tostring(turn_id):match("[^:]+$"))),
       status = "closed",
       model = parent.model,
       mode = parent.mode,
@@ -1549,6 +1550,7 @@ local function create_backend(default_view)
       metadata = {
         client_local_branch = true,
         structured_carryover = true,
+        side_conversation = opts.kind == "side" or nil,
         parent_thread_id = parent.thread_id,
         parent_turn_id = turn_id,
       },
@@ -2155,7 +2157,22 @@ local function create_backend(default_view)
       return "handled"
     end
     prompt = expanded or prompt
-    if actions_helpers.handle_local_slash_command(session, prompt) then
+    local local_action, local_args = actions_helpers.handle_local_slash_command(session, prompt)
+    if local_action == "side" then
+      vim.schedule(function()
+        local branch = require("lazyagent.logic.session").branch_acp_thread(session.thread_id, nil, {
+          kind = "side",
+          open = true,
+          open_input = local_args == "",
+          initial_input = local_args ~= "" and local_args or nil,
+        })
+        if branch and get_session(target_pane) == session then
+          conversation_helpers.append_block(session, "System", "Opened side conversation " .. branch.thread_id:sub(1, 8))
+        end
+      end)
+      return "handled"
+    end
+    if local_action then
       return "handled"
     end
     local instructed, instructions_err = require("lazyagent.logic.project").apply_instructions(

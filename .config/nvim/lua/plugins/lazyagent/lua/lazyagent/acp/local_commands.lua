@@ -1,6 +1,8 @@
 local M = {}
 
-local ordered_names = { "config", "model", "mode", "auth", "logout", "resources", "capabilities", "doctor", "context", "tools", "new" }
+local ordered_names = {
+  "config", "model", "mode", "auth", "logout", "resources", "capabilities", "doctor", "context", "tools", "side", "new",
+}
 
 local commands = {
   config = {
@@ -62,6 +64,13 @@ local commands = {
     label = "/tools",
     desc = "Open ACP tool review for this session.",
     doc = "Open a local ACP tool review with statuses, touched paths, and output sizes.",
+  },
+  side = {
+    name = "side",
+    label = "/side",
+    desc = "Open a local side conversation without changing the parent thread.",
+    doc = "Usage: `/side [question]`. Branch the latest completed turn and optionally send the question in the new thread.",
+    input_hint = "[question]",
   },
   new = {
     name = "new",
@@ -179,6 +188,9 @@ function M.is_available(name, session)
     return true
   end
   if name == "tools" then
+    return true
+  end
+  if name == "side" then
     return true
   end
   if name == "new" then

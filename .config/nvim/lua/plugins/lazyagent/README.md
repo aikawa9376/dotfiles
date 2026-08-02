@@ -512,6 +512,7 @@ ACP session では以下の slash command を Neovim 側で処理します。
 | `/doctor` | ACP health diagnostics |
 | `/context` | context budget report |
 | `/tools` | tool / edit review |
+| `/side [question]` | 親threadを保ったlocal side conversation |
 | `/new` | session restart |
 
 agent が advertise していない `/...` は通常の prompt text として送信します。
@@ -525,6 +526,8 @@ ACP transcript buffer では `ga` で action menu、`<space><space>` でカー�
 `:LazyAgentACPChanges [thread-uuid]` は最新turnのchanged files drawerをFugitive status同様のbottom splitで開きます。`?`ではCockpit同様のaction menuから各操作を選択・実行できます。変更のある過去turnも保存されており、`[t` / `]t`で前後のturnへ移動できます。turn headerの`📝 final`はagentの最終回答が保存されている印で、その行の`K` / `<Space><Space>`でMarkdown floatを開きます。file / diff行の`💬N`は対象箇所に紐づいたreview noteを表し、同じキーで表示します。`c`はheader・file・inline diffのカーソル位置にturn-scopedなuser Review Noteを長文scratchで保存します。`S`はfile/hunkのApprove・Reject結果とuser Review Notesを1つのreview promptへまとめたscratchを開き、編集後に同じlive ACP threadへ送信します。queueへ受理されたReview Notesだけがclearされ、agent由来のannotationとfinal answerは残ります。停止済みthreadでは送信前に再開が必要です。`i`で現在fileのinline diffを開いて次のhunkへ移動し、`o`（互換用の`=`も利用可能）で選択fileのinline diffを開閉します。`<CR>`は実fileを対応するafter側の行へ移動して開き、`d`はbefore/afterのside-by-side diffを専用tabに開きます。diff tabはどちら側でも`q`で閉じられ、Changes一覧へ戻ります。inline diffはFugitive extensionと同じ背景・syntax・単語内diffのpriorityと配色を使います。さらにfiletypeに対応するTree-sitter parserがあれば、hunkのold/newコードへ通常bufferと同じsyntax foregroundを重ねます。`h`でtext changeのhunkを選んでApprove / Reject、`a` / `A`でfile / allをApprove、`r` / `R`でfile / allを確認付きRejectできます。`k`は通常の上移動として使えます。Reject前にuserがtextを再編集していても非重複部分は3-way mergeで保持し、競合時は上書きせず停止します。binary changeは内容をbufferへ展開せず、blob metadataを表示します。
 
 changed files drawerでは`u`でturn前のfilesystem checkpointへRestore、`U`でRedo、`b`で選択turnまでのtranscript・conversation/tool/file event履歴を引き継ぐclient-local branchを作成できます。provider内部stateのnative forkではなく、新規sessionの最初のpromptへstructured carryoverとして渡します。Cockpitではlocal branchに`branch:local`を表示し、選択threadの最新完了turnからは`b`でbranchを作成できます。
+
+`/side [question]`は親threadを変更せず、最新の完了turnからlocal branchを開きます。questionを指定した場合は新branchへ自動送信し、省略した場合は入力scratchを開きます。providerが`/side`をadvertiseする場合はprovider native commandを優先します。
 
 filesystem checkpoint のcontent blobは4 MiB/fileを上限とし、それを超える大容量fileは変更metadataだけを記録します。これによりturn開始・終了時にNeovimのmain loopで巨大fileを同期read/hashしません。
 
