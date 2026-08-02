@@ -585,6 +585,8 @@ function M.new(ctx)
       vim.wo[win].relativenumber = false
       vim.wo[win].cursorline = false
       vim.wo[win].wrap = true
+      vim.wo[win].conceallevel = 2
+      vim.wo[win].concealcursor = "nvic"
       vim.wo[win].linebreak = true
       vim.wo[win].breakindent = true
       vim.wo[win].signcolumn = "no"

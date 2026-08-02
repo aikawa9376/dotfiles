@@ -58,6 +58,8 @@ local ACP_WINDOW_OPTIONS = {
   "relativenumber",
   "cursorline",
   "wrap",
+  "conceallevel",
+  "concealcursor",
   "linebreak",
   "breakindent",
   "signcolumn",

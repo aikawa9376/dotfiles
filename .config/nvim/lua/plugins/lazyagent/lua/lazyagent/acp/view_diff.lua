@@ -198,11 +198,13 @@ function M.new(ctx)
             width - render_markdown_code_prefix_width(bufnr, lines[fence_start], body_lines, width)
           )
           for body_idx = fence_start + 1, idx - 1 do
-            local updated, line_changed = truncate_code_block_line(lines[body_idx], available_width)
+            local display_line, line_changed = truncate_code_block_line(lines[body_idx], available_width)
             if line_changed then
-              lines[body_idx] = updated
+              -- Keep the complete source for injected-language parsers. Cutting a quoted
+              -- string here would leak its highlight into the following transcript lines.
               tracked_rows[start_row + body_idx - 1] = {
-                ellipsis_col = math.max(0, #updated - 3),
+                ellipsis_col = math.max(0, #display_line - 3),
+                source_end_col = #lines[body_idx],
               }
               changed = true
             end
@@ -259,17 +261,22 @@ function M.new(ctx)
       if row >= 0 and row < line_count and type(mark) == "table" then
         local line = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or {})[1] or ""
         local ellipsis_col = tonumber(mark.ellipsis_col)
-        if ellipsis_col and line:sub(ellipsis_col + 1, ellipsis_col + 3) == "..." then
+        local source_end_col = math.min(#line, tonumber(mark.source_end_col) or #line)
+        if ellipsis_col and ellipsis_col < source_end_col then
           local hl_group = ellipsis_highlight_group(bufnr, row, ellipsis_col)
-          if hl_group then
-            pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
-              end_row = row,
-              end_col = ellipsis_col + 3,
-              hl_group = hl_group,
-              hl_mode = "combine",
-              priority = 210,
-            })
-          end
+          pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
+            end_row = row,
+            end_col = source_end_col,
+            conceal = "",
+            priority = 209,
+          })
+          local chunk = hl_group and { "...", hl_group } or { "..." }
+          pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
+            virt_text = { chunk },
+            virt_text_pos = "inline",
+            hl_mode = "combine",
+            priority = 210,
+          })
         end
       end
     end
