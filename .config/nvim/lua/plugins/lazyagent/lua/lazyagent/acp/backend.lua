@@ -24,6 +24,7 @@ local backend_host = require("lazyagent.acp.backend.host")
 local ThreadStore = require("lazyagent.acp.thread_store")
 local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
 local TurnJournal = require("lazyagent.acp.turn_journal")
+local StructuredHistory = require("lazyagent.acp.structured_history")
 local Watch = require("lazyagent.watch")
 local BlobStore = require("lazyagent.acp.blob_store")
 local ChangeReview = require("lazyagent.acp.change_review")
@@ -364,6 +365,8 @@ local function finish_change_turn(session, completion_state)
     changes = changes,
     capture_error = capture_error,
     annotations = annotations,
+    conversation_end_seq = #(session.conversation_timeline or {}),
+    transcript_end_line = session.transcript_line_count,
   })
   session.current_change_turn_id = nil
   session.active_change_journal = nil
@@ -372,7 +375,19 @@ local function finish_change_turn(session, completion_state)
   if not finished_journal then
     return nil
   end
-  local synced = sync_thread_record(session, { change_journal = finished_journal })
+  local history_path = session.thread_record.history_path
+    or StructuredHistory.path(cache_logic.get_cache_dir(), session.thread_id)
+  local history_record = StructuredHistory.turn_record(
+    finished_turn,
+    session.conversation_timeline,
+    conversation_helpers.item_body_text
+  )
+  local history_ok, history_err = StructuredHistory.append(history_path, history_record)
+  if not history_ok then session.structured_history_error = tostring(history_err) end
+  local synced = sync_thread_record(session, {
+    change_journal = finished_journal,
+    history_path = history_ok and history_path or session.thread_record.history_path,
+  })
   if synced then
     util.fire_event("ChangeJournal", {
       agent_name = session.agent_name,
@@ -899,8 +914,13 @@ local function create_backend(default_view)
     local transcript_path = existing_thread and existing_thread.transcript_path ~= "" and existing_thread.transcript_path
       or state_helpers.build_transcript_path(acp.agent_name, acp.source_bufnr)
     local carryover_lines = nil
+    local carryover_conversation = {}
     if existing_thread and vim.fn.filereadable(transcript_path) == 1 then
       carryover_lines = state_helpers.read_path_lines(transcript_path)
+    end
+    if existing_thread and existing_thread.history_path then
+      local records = StructuredHistory.read(existing_thread.history_path)
+      if records then carryover_conversation = StructuredHistory.conversation(records) end
     end
     local initial_text = conversation_helpers.render_section_block("System", "Connecting ACP session for " .. acp.agent_name .. "...")
     if not existing_thread then
@@ -990,7 +1010,7 @@ local function create_backend(default_view)
           carryover_label = "the previously opened LazyAgent thread",
           transcript_lines = vim.deepcopy(carryover_lines or {}),
           transcript_path = transcript_path,
-          conversation_timeline = {},
+          conversation_timeline = vim.deepcopy(carryover_conversation),
           tool_timeline = {},
         } or nil,
         auto_permission = acp.auto_permission,
@@ -1500,8 +1520,17 @@ local function create_backend(default_view)
     end
     local turn = TurnJournal.get(parent.change_journal, turn_id)
     if not turn then
+      local live = live_thread_record(thread_id)
+      local live_turn = live and TurnJournal.get(live.change_journal, turn_id) or nil
+      if live_turn then parent, turn = live, live_turn end
+    end
+    if not turn then
       return nil, "turn not found: " .. tostring(turn_id)
     end
+    if turn.state == "active" then return nil, "wait for the active turn before branching from it" end
+    local sliced_journal, slice_err = TurnJournal.slice(parent.change_journal, turn_id)
+    if not sliced_journal then return nil, slice_err end
+    local turn_number = #sliced_journal.turns
     local branch, create_err = thread_store:create({
       provider_id = parent.provider_id,
       cwd = parent.cwd,
@@ -1511,6 +1540,7 @@ local function create_backend(default_view)
       model = parent.model,
       mode = parent.mode,
       config = parent.config,
+      change_journal = sliced_journal,
       checkpoint = {
         parent_thread_id = parent.thread_id,
         parent_turn_id = turn_id,
@@ -1518,6 +1548,7 @@ local function create_backend(default_view)
       },
       metadata = {
         client_local_branch = true,
+        structured_carryover = true,
         parent_thread_id = parent.thread_id,
         parent_turn_id = turn_id,
       },
@@ -1532,6 +1563,7 @@ local function create_backend(default_view)
       local ok_read, lines = pcall(vim.fn.readfile, parent.transcript_path, "b")
       local ok_write, write_result = false, nil
       if ok_read then
+        lines = StructuredHistory.transcript_slice(lines, turn_number, turn.transcript_end_line)
         ok_write, write_result = pcall(vim.fn.writefile, lines, branch_path, "b")
       end
       if not ok_read or not ok_write or write_result ~= 0 then
@@ -1545,6 +1577,27 @@ local function create_backend(default_view)
         return nil, update_err
       end
       branch = updated
+    end
+    if parent.history_path and vim.fn.filereadable(parent.history_path) == 1 then
+      local records = StructuredHistory.read(parent.history_path)
+      local sliced = records and StructuredHistory.slice(records, turn_id) or nil
+      if sliced then
+        local history_path = StructuredHistory.path(cache_logic.get_cache_dir(), branch.thread_id)
+        local wrote, write_err = StructuredHistory.write(history_path, sliced)
+        if not wrote then
+          thread_store:delete(branch.thread_id)
+          if branch.transcript_path and branch.transcript_path ~= "" then pcall(vim.fn.delete, branch.transcript_path) end
+          return nil, write_err
+        end
+        local updated, update_err = thread_store:update(branch.thread_id, { history_path = history_path })
+        if not updated then
+          pcall(vim.fn.delete, history_path)
+          thread_store:delete(branch.thread_id)
+          if branch.transcript_path and branch.transcript_path ~= "" then pcall(vim.fn.delete, branch.transcript_path) end
+          return nil, update_err
+        end
+        branch = updated
+      end
     end
     return branch
   end
@@ -1576,7 +1629,13 @@ local function create_backend(default_view)
   end
 
   function backend.delete_thread(thread_id)
-    return thread_store:delete(thread_id)
+    local deleted, record_or_err = thread_store:delete(thread_id)
+    if deleted == true and type(record_or_err) == "table" then
+      for _, path in ipairs({ record_or_err.transcript_path, record_or_err.history_path }) do
+        if path and path ~= "" then pcall(vim.fn.delete, path) end
+      end
+    end
+    return deleted, record_or_err
   end
 
   function backend.import_native_session(pane_id, native_session)

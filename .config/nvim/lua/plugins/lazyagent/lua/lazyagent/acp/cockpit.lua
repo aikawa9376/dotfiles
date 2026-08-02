@@ -332,6 +332,9 @@ local function card_line(thread, runtime, conflicts, opts)
     if team.status and team.status ~= "" then team_label = team_label .. ":" .. tostring(team.status) end
     fields[#fields + 1] = { "team:" .. team_label, "LazyAgentACPCockpitTeam", "team" }
   end
+  if thread.metadata and thread.metadata.client_local_branch == true then
+    fields[#fields + 1] = { "branch:local", "LazyAgentACPCockpitMuted", "branch" }
+  end
   if model ~= "default" then fields[#fields + 1] = { "model:" .. tostring(model), "LazyAgentACPCockpitModel", "model" } end
   if thread.unread == true then fields[#fields + 1] = { "unread", "LazyAgentACPCockpitUnread", "unread" } end
   local usage = usage_label(runtime)

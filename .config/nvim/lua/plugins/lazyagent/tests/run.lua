@@ -72,6 +72,7 @@ local suites = {
   "tests.acp.change_apply_spec",
   "tests.acp.follow_spec",
   "tests.acp.turn_journal_spec",
+  "tests.acp.structured_history_spec",
   "tests.acp.backend_thread_spec",
   "tests.acp.session_identity_spec",
   "tests.acp.session_launch_spec",
