@@ -50,7 +50,9 @@ local function annotations_for(view, path, side, include_hidden)
     for _, annotation in ipairs(review.annotations or {}) do
       local target = annotation.target or {}
       local same_path = annotation.path == path
-      local same_side = target.side == side or target.side == "file"
+      -- File-level findings belong to the file panel.  Treating them as
+      -- findings for either diff side makes them match every cursor line.
+      local same_side = target.side == side
       if same_path and same_side and (s.visibility == 2 or not annotation.resolved) then
         local copy = vim.deepcopy(annotation)
         copy.review_id = review.review_id
@@ -66,7 +68,7 @@ local function annotations_for(view, path, side, include_hidden)
 end
 
 local function annotation_text(annotation)
-  local prefix = annotation.resolved and "✓" or annotation.outdated and "↻" or "●"
+  local prefix = annotation.resolved and "✓ 💬" or annotation.outdated and "↻ 💬" or "💬"
   local label = annotation.label and ("[" .. annotation.label .. "] ") or ""
   return string.format(" %s %s%s", prefix, label, annotation.summary or annotation.rationale or "Review note")
 end
@@ -79,10 +81,12 @@ local function render_buffer(view, bufnr)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   local grouped = {}
   for _, annotation in ipairs(annotations_for(view, path, side)) do
-    local line = tonumber(annotation.target and annotation.target.start_line) or 1
-    line = math.max(1, math.min(line, line_count))
-    grouped[line] = grouped[line] or {}
-    grouped[line][#grouped[line] + 1] = annotation
+    local line = tonumber(annotation.target and annotation.target.start_line)
+    if line then
+      line = math.max(1, math.min(line, line_count))
+      grouped[line] = grouped[line] or {}
+      grouped[line][#grouped[line] + 1] = annotation
+    end
   end
   for line, annotations in pairs(grouped) do
     local chunks = {}
@@ -92,7 +96,6 @@ local function render_buffer(view, bufnr)
     end
     vim.api.nvim_buf_set_extmark(bufnr, ns, line - 1, 0, {
       virt_text = chunks, virt_text_pos = "eol", priority = 120,
-      user_data = { annotations = annotations },
     })
   end
 end
@@ -114,14 +117,14 @@ local function render_panel(view)
   end
   if overall > 0 and vim.api.nvim_buf_line_count(bufnr) > 0 then
     vim.api.nvim_buf_set_extmark(bufnr, panel_ns, 0, 0, {
-      virt_text = { { "  overall:" .. overall, "DiagnosticInfo" } }, virt_text_pos = "eol",
+      virt_text = { { "  💬 overall:" .. overall, "DiagnosticInfo" } }, virt_text_pos = "eol",
     })
   end
   for row, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
     for path, count in pairs(counts) do
       if line:find(vim.pesc(vim.fn.fnamemodify(path, ":t"))) then
         vim.api.nvim_buf_set_extmark(bufnr, panel_ns, row - 1, 0, {
-          virt_text = { { "  review:" .. count, "DiagnosticInfo" } }, virt_text_pos = "eol",
+          virt_text = { { "  💬" .. count, "DiagnosticInfo" } }, virt_text_pos = "eol",
         })
         break
       end
@@ -130,10 +133,41 @@ local function render_panel(view)
   if M._setup_panel_keymaps then M._setup_panel_keymaps(view, bufnr) end
 end
 
+local keymaps
+
+local function hook_panel(view)
+  local panel = view and view.panel
+  if not panel or panel._lazyagent_review_hooked then return end
+  panel._lazyagent_review_hooked = true
+
+  local function wrap(method)
+    local original = panel[method]
+    if type(original) ~= "function" then return end
+    panel[method] = function(self, ...)
+      local result = original(self, ...)
+      vim.schedule(function()
+        if self == panel and self.bufid and vim.api.nvim_buf_is_valid(self.bufid) then
+          render_panel(view)
+        end
+      end)
+      return result
+    end
+  end
+
+  -- redraw() normally writes the panel buffer. Some auto-resize paths call
+  -- render() and then write it directly, so hook both entry points.
+  wrap("render")
+  wrap("redraw")
+end
+
 local function refresh(view)
   if not view then return end
+  hook_panel(view)
   for _, win in ipairs(view.cur_layout and view.cur_layout.windows or {}) do
-    if win.file and win.file.bufnr then render_buffer(view, win.file.bufnr) end
+    if win.file and win.file.bufnr then
+      keymaps(view, win.file.bufnr)
+      render_buffer(view, win.file.bufnr)
+    end
   end
   render_panel(view)
 end
@@ -358,7 +392,7 @@ local function navigate(view, delta)
   if target then vim.api.nvim_win_set_cursor(0, { target[2] + 1, 0 }) end
 end
 
-local function keymaps(view, bufnr)
+keymaps = function(view, bufnr)
   if vim.b[bufnr].diffview_extension_review_keymaps then return end
   vim.b[bufnr].diffview_extension_review_keymaps = true
   local map = function(mode, lhs, rhs, desc) vim.keymap.set(mode, lhs, rhs, { buffer = bufnr, silent = true, desc = desc }) end
@@ -390,10 +424,10 @@ function M.attach_current()
   local view = current_view()
   local s = state(view)
   if not s or not s.changeset_id then return end
-  local bufnr = vim.api.nvim_get_current_buf()
-  keymaps(view, bufnr)
-  render_buffer(view, bufnr)
-  render_panel(view)
+  -- Diffview restores focus to the file panel after loading an entry, so the
+  -- current buffer is not reliably one of the diff buffers by the time the
+  -- scheduled event handler runs. Refresh the complete layout every time.
+  refresh(view)
 end
 
 local function blob_lines(ref)
@@ -412,6 +446,7 @@ function M.open(review)
     and review.source.instance == vim.g.diffview_extension_instance
   then
     local s = state(view); s.review_id, s.changeset_id, s.lineage_id = review.review_id, review.changeset_id, review.lineage_id
+    hook_panel(view)
     refresh(view)
     return true
   end
@@ -424,14 +459,22 @@ function M.open(review)
     files.working[#files.working + 1] = {
       path = change.path, oldpath = change.previous_path, status = status[change.operation] or "M",
       left_null = change.operation == "added", right_null = change.operation == "deleted",
+      selected = #files.working == 0,
     }
   end
+  -- CUSTOM revisions use the same diffview:// buffer name on both sides.
+  -- Give captured commits their real revision identity, and reserve CUSTOM
+  -- for the worktree side, so the two snapshots cannot collapse into one
+  -- shared buffer.
+  local left = review.base and api.Rev(api.RevType.COMMIT, review.base) or api.Rev(api.RevType.CUSTOM)
+  local right = review.head and api.Rev(api.RevType.COMMIT, review.head) or api.Rev(api.RevType.CUSTOM)
   local custom = api.CDiffView({
     git_root = review.root,
-    left = api.Rev(api.RevType.CUSTOM), right = api.Rev(api.RevType.CUSTOM),
+    left = left, right = right,
     files = files, update_files = function() return files end,
     get_file_data = function(_, path, side) return side == "left" and (before[path] or {}) or (after[path] or {}) end,
   })
+  hook_panel(custom)
   custom:open()
   local s = state(custom); s.review_id, s.changeset_id, s.lineage_id = review.review_id, review.changeset_id, review.lineage_id
   vim.schedule(function() refresh(custom) end)
@@ -440,6 +483,7 @@ end
 
 function M.bind_review(view, review)
   local s = state(view); s.review_id, s.changeset_id, s.lineage_id = review.review_id, review.changeset_id, review.lineage_id
+  hook_panel(view)
   refresh(view)
 end
 
@@ -449,5 +493,6 @@ end
 
 M._states = states
 M._annotations_for = annotations_for
+M._render_buffer = render_buffer
 
 return M
