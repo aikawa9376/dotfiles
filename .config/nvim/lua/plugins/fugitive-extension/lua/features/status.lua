@@ -4,6 +4,10 @@ local commands = require("features.commands")
 local syntax_highlight = require("features.syntax_highlight")
 local worktree = require("features.worktree")
 local pull_requests_by_buf = {}
+local pull_request_scope_by_buf = {}
+local pull_request_branch_by_buf = {}
+local commit_scope_by_buf = {}
+local unpushed_commits_by_buf = {}
 
 local function stash_ref_from_line(line)
   return line and line:match('stash@%{%d+%}')
@@ -20,7 +24,8 @@ local function remove_custom_sections(bufnr)
   while i <= #lines do
     local line = lines[i]
     -- カスタムセクションのヘッダーを検知
-    if line:match('^Worktrees %(') or line:match('^Stashes %(') or line:match('^Pull requests %(') then
+    if line:match('^Unpushed %[only%]') or line:match('^Commits %[') or line:match('^Worktrees %(') or
+       line:match('^Stashes %(') or line:match('^Pull requests %(') then
       local start_idx = i
       -- 直前の空行も含める
       if start_idx > 1 and lines[start_idx - 1] == '' then start_idx = start_idx - 1 end
@@ -32,7 +37,9 @@ local function remove_custom_sections(bufnr)
         -- セクションに含まれる可能性のある行のパターン
         if next_line == '' or
            next_line:match('^[~/]') or next_line:match('^stash@') or next_line:match('^#%d+%s') or
-           next_line:match('^Worktrees %(') or next_line:match('^Stashes %(') or next_line:match('^Pull requests %(') then
+           next_line:match('^%x+%s') or next_line:match('^Unpushed %[only%]') or
+           next_line:match('^Commits %[') or next_line:match('^Worktrees %(') or next_line:match('^Stashes %(') or
+           next_line:match('^Pull requests %(') then
           end_idx = end_idx + 1
         else break end
       end
@@ -44,6 +51,54 @@ local function remove_custom_sections(bufnr)
   for r = #ranges, 1, -1 do
     vim.api.nvim_buf_set_lines(bufnr, ranges[r][1] - 1, ranges[r][2], false, {})
   end
+end
+
+local function extract_unpushed_commits(bufnr)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local commits, seen, ranges = {}, {}, {}
+  local found = false
+  local i = 1
+
+  while i <= #lines do
+    if lines[i]:match('^Unpushed .+ %(%d+%+?%)$') then
+      found = true
+      local start_idx = i
+      if start_idx > 1 and lines[start_idx - 1] == '' then start_idx = start_idx - 1 end
+
+      local end_idx = i
+      while end_idx < #lines and lines[end_idx + 1]:match('^%x+%s') do
+        end_idx = end_idx + 1
+        local line = lines[end_idx]
+        local hash = line:match('^(%x+)%s')
+        if hash and not seen[hash] then
+          seen[hash] = true
+          table.insert(commits, line)
+        end
+      end
+      table.insert(ranges, { start_idx, end_idx })
+      i = end_idx + 1
+    else
+      i = i + 1
+    end
+  end
+
+  for r = #ranges, 1, -1 do
+    vim.api.nvim_buf_set_lines(bufnr, ranges[r][1] - 1, ranges[r][2], false, {})
+  end
+  return commits, found
+end
+
+local function recent_commit_lines(work_tree, limit)
+  local result = vim.system({
+    'git', 'log', '--pretty=format:%h%x09%s', '-n', tostring(limit), 'HEAD', '--',
+  }, { cwd = work_tree, text = true }):wait()
+  if result.code ~= 0 then return {} end
+
+  local commits = {}
+  for line in (result.stdout or ''):gmatch('[^\r\n]+') do
+    table.insert(commits, (line:gsub('\t', ' ', 1)))
+  end
+  return commits
 end
 
 local function find_insert_point(bufnr)
@@ -62,30 +117,63 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   local worktree_summary = worktree.get_summary(work_tree)
   local stash_list = utils.get_stash_list(work_tree)
 
-  local final_lines = {}
-  if worktree_summary and #worktree_summary > 0 then
+  local commit_scope = commit_scope_by_buf[bufnr] or 'unpushed'
+  local pull_requests = pull_requests_by_buf[bufnr]
+
+  local function build_final_lines(commit_lines)
+    local final_lines = {}
     table.insert(final_lines, '')
-    for _, l in ipairs(worktree_summary) do table.insert(final_lines, l) end
-  end
-  if stash_list and #stash_list > 0 then
-    table.insert(final_lines, '')
-    table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
-    for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
-  end
-  local pull_requests = pull_requests_by_buf[bufnr] or {}
-  if #pull_requests > 0 then
-    table.insert(final_lines, '')
-    table.insert(final_lines, 'Pull requests (' .. #pull_requests .. ')')
-    for _, pr in ipairs(pull_requests) do
-      local draft = pr.isDraft and ' [draft]' or ''
-      local branch = pr.headRefName ~= '' and ('  ' .. pr.headRefName) or ''
-      table.insert(final_lines, ('#%d%s %s%s'):format(pr.number, draft, pr.title, branch))
+    local commit_header = commit_scope == 'recent'
+      and ('Commits [latest 15+] (%d)'):format(#commit_lines)
+      or ('Unpushed [only] (%d)'):format(#commit_lines)
+    table.insert(final_lines, commit_header)
+    for _, l in ipairs(commit_lines) do table.insert(final_lines, l) end
+
+    if worktree_summary and #worktree_summary > 0 then
+      table.insert(final_lines, '')
+      for _, l in ipairs(worktree_summary) do table.insert(final_lines, l) end
     end
+    if stash_list and #stash_list > 0 then
+      table.insert(final_lines, '')
+      table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
+      for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
+    end
+    if pull_requests then
+      local scope = pull_request_scope_by_buf[bufnr] or 'branch'
+      local scope_label = scope == 'all'
+        and 'all'
+        or ('branch: ' .. (pull_request_branch_by_buf[bufnr] or 'detached HEAD'))
+      table.insert(final_lines, '')
+      table.insert(final_lines, ('Pull requests (%d) [%s]'):format(#pull_requests, scope_label))
+      for _, pr in ipairs(pull_requests) do
+        local draft = pr.isDraft and ' [draft]' or ''
+        local branch = pr.headRefName ~= '' and ('  ' .. pr.headRefName) or ''
+        table.insert(final_lines, ('#%d%s %s%s'):format(pr.number, draft, pr.title, branch))
+      end
+    end
+    return final_lines
   end
 
   utils.with_buf_modifiable(bufnr, function()
     -- Update buffer contents
+    local had_custom_commit_section = false
+    for _, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+      if line:match('^Unpushed %[only%]') or line:match('^Commits %[') then
+        had_custom_commit_section = true
+        break
+      end
+    end
+    local unpushed_commits, found_unpushed = extract_unpushed_commits(bufnr)
+    if found_unpushed or not had_custom_commit_section then
+      unpushed_commits_by_buf[bufnr] = unpushed_commits
+    end
     remove_custom_sections(bufnr)
+
+    local commit_lines = unpushed_commits_by_buf[bufnr] or {}
+    if commit_scope == 'recent' and #commit_lines < 15 then
+      commit_lines = recent_commit_lines(work_tree, 15)
+    end
+    local final_lines = build_final_lines(commit_lines)
     if #final_lines > 0 then
       local insert_idx = find_insert_point(bufnr)
       vim.api.nvim_buf_set_lines(bufnr, insert_idx - 1, insert_idx - 1, false, final_lines)
@@ -190,6 +278,16 @@ end
 
 local function is_cursor_in_pull_request_area()
   return pull_request_number_from_line(vim.api.nvim_get_current_line()) ~= nil
+end
+
+local function is_cursor_on_pull_request_header()
+  return vim.api.nvim_get_current_line():match('^Pull requests %(') ~= nil
+end
+
+local function is_cursor_on_commit_header()
+  local line = vim.api.nvim_get_current_line()
+  return line:match('^Unpushed %[only%] %(%d+%)$') ~= nil
+    or line:match('^Commits %[latest 15%+%] %(%d+%)$') ~= nil
 end
 
 local function get_worktree_path_at_cursor()
@@ -339,6 +437,8 @@ function M.setup(group)
       local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
       local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
       local pr_fetching, pr_fetch_pending = false, false
+      pull_request_scope_by_buf[b] = 'branch'
+      commit_scope_by_buf[b] = 'unpushed'
 
       local function refresh()
         refresh_status_sections(b, ns_worktree, ns_stash, ns_pr)
@@ -356,16 +456,40 @@ function M.setup(group)
         if not work_tree or vim.fn.executable('gh') ~= 1 then return end
 
         pr_fetching = true
-        vim.system({
+        local requested_scope = pull_request_scope_by_buf[b] or 'branch'
+        local branch = nil
+        if requested_scope == 'branch' then
+          local branch_result = vim.system(
+            { 'git', 'branch', '--show-current' },
+            { cwd = work_tree, text = true }
+          ):wait()
+          if branch_result.code == 0 then
+            branch = vim.trim(branch_result.stdout or '')
+          end
+          if not branch or branch == '' then
+            pull_requests_by_buf[b] = {}
+            pull_request_branch_by_buf[b] = nil
+            pr_fetching = false
+            refresh()
+            return
+          end
+        end
+
+        local args = {
           'gh', 'pr', 'list', '--state', 'open',
           '--limit', '100',
           '--json', 'number,title,headRefName,isDraft,url',
-        }, { cwd = work_tree, text = true }, function(result)
+        }
+        if branch then
+          vim.list_extend(args, { '--head', branch })
+        end
+
+        vim.system(args, { cwd = work_tree, text = true }, function(result)
           vim.schedule(function()
             pr_fetching = false
             if not utils.is_valid_buf(b) then return end
 
-            if result.code == 0 then
+            if result.code == 0 and pull_request_scope_by_buf[b] == requested_scope then
               local ok, decoded = pcall(vim.json.decode, result.stdout or '')
               local pull_requests = {}
               if ok and type(decoded) == 'table' then
@@ -384,6 +508,7 @@ function M.setup(group)
                 end
               end
               pull_requests_by_buf[b] = pull_requests
+              pull_request_branch_by_buf[b] = branch
               refresh()
             end
 
@@ -428,8 +553,67 @@ function M.setup(group)
         once = true,
         callback = function()
           pull_requests_by_buf[b] = nil
+          pull_request_scope_by_buf[b] = nil
+          pull_request_branch_by_buf[b] = nil
+          commit_scope_by_buf[b] = nil
+          unpushed_commits_by_buf[b] = nil
         end,
       })
+
+      local function set_commit_scope(scope)
+        if scope == commit_scope_by_buf[b] then return end
+        commit_scope_by_buf[b] = scope
+        refresh()
+      end
+
+      local function toggle_commit_scope()
+        set_commit_scope(commit_scope_by_buf[b] == 'recent' and 'unpushed' or 'recent')
+      end
+
+      local function select_commit_scope()
+        local choices = {
+          { scope = 'unpushed', label = 'Unpushed only' },
+          { scope = 'recent', label = 'Latest 15 (keep all unpushed)' },
+        }
+        vim.ui.select(choices, {
+          prompt = 'Commit scope:',
+          format_item = function(item)
+            local selected = item.scope == commit_scope_by_buf[b] and ' (current)' or ''
+            return item.label .. selected
+          end,
+        }, function(choice)
+          if choice then set_commit_scope(choice.scope) end
+        end)
+      end
+
+      local function set_pull_request_scope(scope)
+        if scope == pull_request_scope_by_buf[b] then return end
+        pull_request_scope_by_buf[b] = scope
+        pull_requests_by_buf[b] = nil
+        pull_request_branch_by_buf[b] = nil
+        refresh()
+        fetch_pull_requests()
+      end
+
+      local function toggle_pull_request_scope()
+        set_pull_request_scope(pull_request_scope_by_buf[b] == 'all' and 'branch' or 'all')
+      end
+
+      local function select_pull_request_scope()
+        local choices = {
+          { scope = 'branch', label = 'Current branch' },
+          { scope = 'all', label = 'All open pull requests' },
+        }
+        vim.ui.select(choices, {
+          prompt = 'Pull request scope:',
+          format_item = function(item)
+            local selected = item.scope == pull_request_scope_by_buf[b] and ' (current)' or ''
+            return item.label .. selected
+          end,
+        }, function(choice)
+          if choice then set_pull_request_scope(choice.scope) end
+        end)
+      end
 
       local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
       utils.setup_repo_refresh(bufgroupt, b, function()
@@ -774,6 +958,14 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true })
 
       vim.keymap.set('n', '<CR>', function()
+        if is_cursor_on_commit_header() then
+          toggle_commit_scope()
+          return
+        end
+        if is_cursor_on_pull_request_header() then
+          toggle_pull_request_scope()
+          return
+        end
         if is_cursor_in_worktree_area() then
           local p = get_worktree_path_at_cursor()
           if p then worktree.open_worktree_path(p); return end
@@ -819,6 +1011,16 @@ function M.setup(group)
         end
         vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<Plug>fugitive:<cr>", true, false, true), 'm', true)
       end, { buffer = b, nowait = true, silent = true })
+
+      vim.keymap.set('n', 'gS', function()
+        if is_cursor_on_commit_header() then
+          select_commit_scope()
+        elseif is_cursor_on_pull_request_header() then
+          select_pull_request_scope()
+        else
+          vim.notify('No selectable scope at cursor', vim.log.levels.WARN)
+        end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Select status section scope' })
 
       vim.keymap.set('n', 'gf', function()
         open_entry_and_close_status(b)
