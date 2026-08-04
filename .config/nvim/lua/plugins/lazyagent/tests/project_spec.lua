@@ -119,6 +119,24 @@ function M.run()
 
   local state = require("lazyagent.logic.state")
   local previous_opts = state.opts
+  local env_only_root = vim.fn.tempname() .. "-lazyagent-env-only"
+  local env_only_bin = env_only_root .. "/bin"
+  vim.fn.mkdir(env_only_bin, "p")
+  project.global_dir = function() return env_only_root .. "/global" end
+  state.opts = vim.tbl_deep_extend("force", vim.deepcopy(previous_opts or {}), {
+    skills = {
+      enabled = true,
+      bin_dir = env_only_bin,
+      bin_env = "LAZYAGENTBIN",
+    },
+  })
+  local env_only = assert(require("lazyagent.logic.skills").prepare("Codex", {}, { root_dir = env_only_root }))
+  assert_equal(env_only.mode, "env", "binary environment does not require skill sources")
+  assert_equal(env_only.env.LAZYAGENTBIN, env_only_bin, "binary directory is injected without skill sources")
+  assert(vim.tbl_isempty(env_only.source_dirs), "environment-only preparation has no skill sources")
+  vim.fn.delete(env_only_root, "rf")
+
+  project.global_dir = function() return root .. "/global" end
   state.opts = vim.tbl_deep_extend("force", vim.deepcopy(previous_opts or {}), {
     cache = { dir = root .. "/cache" },
     skills = { enabled = false },
