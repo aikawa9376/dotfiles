@@ -654,15 +654,25 @@ function M.prepare(agent_name, agent_cfg, opts)
     return nil
   end
 
+  local env, bin_dir = build_binary_env(cfg)
   local source_dirs = resolve_source_dirs(root_dir, cfg)
   if vim.tbl_isempty(source_dirs) then
+    if not vim.tbl_isempty(env) then
+      return {
+        mode = "env",
+        env = env,
+        append_args = {},
+        root_dir = root_dir,
+        source_dirs = {},
+        bin_dir = bin_dir,
+      }
+    end
     return nil
   end
 
   local source_key = table.concat(source_dirs, "\n")
   local base_dir = join_path(runtime_base_dir(), hash_text(root_dir .. "\0" .. source_key))
   local mode = resolve_mode(agent_name, cfg)
-  local env, bin_dir = build_binary_env(cfg)
 
   if mode == "flag" and agent_name == "Copilot" then
     local plugin_dir = join_path(base_dir, "copilot-plugin")
