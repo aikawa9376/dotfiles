@@ -109,10 +109,60 @@ local function find_insert_point(bufnr)
   return #lines + 1
 end
 
+local function status_header_kind(line)
+  if not line then return nil end
+  if line:match('^Unpushed %[only%] %(%d+%)$') or line:match('^Commits %[latest 15%+%] %(%d+%)$') then
+    return 'commit'
+  end
+  if line:match('^Pull requests %(') then return 'pull_request' end
+  return nil
+end
+
+local function capture_status_header_cursor(bufnr)
+  local current_win = vim.api.nvim_get_current_win()
+  local wins = { current_win }
+  for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if winid ~= current_win then table.insert(wins, winid) end
+  end
+
+  for _, winid in ipairs(wins) do
+    if vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr then
+      local cursor = vim.api.nvim_win_get_cursor(winid)
+      local line = vim.api.nvim_buf_get_lines(bufnr, cursor[1] - 1, cursor[1], false)[1]
+      local kind = status_header_kind(line)
+      if kind then
+        return { kind = kind, winid = winid, col = cursor[2] }
+      end
+    end
+  end
+  return nil
+end
+
+local function restore_status_header_cursor(bufnr, anchor)
+  if not anchor then return end
+  local row, line
+  for i, candidate in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+    if status_header_kind(candidate) == anchor.kind then
+      row, line = i, candidate
+      break
+    end
+  end
+  if not row then return end
+
+  local winid = anchor.winid
+  if not (winid and vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr) then
+    winid = vim.fn.bufwinid(bufnr)
+  end
+  if winid and winid ~= -1 and vim.api.nvim_win_is_valid(winid) then
+    pcall(vim.api.nvim_win_set_cursor, winid, { row, math.min(anchor.col or 0, #line) })
+  end
+end
+
 local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   if not utils.is_valid_buf(bufnr) then return end
   local work_tree = utils.get_buf_work_tree(bufnr)
   if not work_tree then return end
+  local cursor_anchor = capture_status_header_cursor(bufnr)
 
   local worktree_summary = worktree.get_summary(work_tree)
   local stash_list = utils.get_stash_list(work_tree)
@@ -256,6 +306,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
       end
     end
   end, 5)
+  restore_status_header_cursor(bufnr, cursor_anchor)
 end
 
 local function get_stash_ref_at_cursor(bufnr)
@@ -589,7 +640,6 @@ function M.setup(group)
       local function set_pull_request_scope(scope)
         if scope == pull_request_scope_by_buf[b] then return end
         pull_request_scope_by_buf[b] = scope
-        pull_requests_by_buf[b] = nil
         pull_request_branch_by_buf[b] = nil
         refresh()
         fetch_pull_requests()
