@@ -437,8 +437,8 @@ function M.setup(group)
       local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
       local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
       local pr_fetching, pr_fetch_pending = false, false
-      pull_request_scope_by_buf[b] = 'branch'
-      commit_scope_by_buf[b] = 'unpushed'
+      pull_request_scope_by_buf[b] = pull_request_scope_by_buf[b] or 'branch'
+      commit_scope_by_buf[b] = commit_scope_by_buf[b] or 'unpushed'
 
       local function refresh()
         refresh_status_sections(b, ns_worktree, ns_stash, ns_pr)
