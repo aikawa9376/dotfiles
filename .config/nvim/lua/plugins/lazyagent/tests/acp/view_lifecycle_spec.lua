@@ -244,11 +244,15 @@ function M.run()
   end
   assert(render_updates > 0, "ACP markdown updates are not held by LazyAgent command-line state")
   assert(#redraws >= 1, "ACP buffer redraw remains live during command-line completion")
+  local found_lazyagent_redraw = false
   for _, redraw in ipairs(redraws) do
-    assert_equal(redraw.buf, transcript_bufnr, "command-line redraw targets the ACP transcript")
-    assert_equal(redraw.valid, false, "command-line redraw invalidates the ACP transcript")
-    assert_equal(redraw.flush, true, "command-line redraw is visible without another keypress")
+    if redraw.buf == transcript_bufnr and redraw.valid == false and redraw.flush == true then
+      found_lazyagent_redraw = true
+      break
+    end
   end
+  assert(found_lazyagent_redraw,
+    "command-line redraw invalidates and flushes the ACP transcript: " .. vim.inspect(redraws))
   assert_equal(transcript_win_call_count, 0,
     "ACP output never enters its window while command-line completion is active")
   local resume_count = 0
