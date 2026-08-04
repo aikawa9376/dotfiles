@@ -165,20 +165,22 @@ local function load_snacks()
   return nil
 end
 
-local function load_snacks_picker()
-  local ok, Snacks = pcall(require, "snacks")
-  if ok and Snacks and Snacks.picker and type(Snacks.picker.files) == "function" then
-    return Snacks
+local function load_fzf_lua()
+  local ok, fzf = pcall(require, "fzf-lua")
+  if ok and fzf and type(fzf.fzf_exec) == "function" then
+    load_snacks()
+    return fzf
   end
 
   local ok_lazy, lazy = pcall(require, "lazy")
   if ok_lazy and lazy and type(lazy.load) == "function" then
-    pcall(lazy.load, { plugins = { "snacks.nvim" } })
+    pcall(lazy.load, { plugins = { "fzf-lua" } })
   end
 
-  ok, Snacks = pcall(require, "snacks")
-  if ok and Snacks and Snacks.picker and type(Snacks.picker.files) == "function" then
-    return Snacks
+  ok, fzf = pcall(require, "fzf-lua")
+  if ok and fzf and type(fzf.fzf_exec) == "function" then
+    load_snacks()
+    return fzf
   end
   return nil
 end
@@ -1708,7 +1710,22 @@ local function picker_controller()
     attach_file = M.attach_file_into_buffer,
     attach_url = M.attach_url_into_buffer,
     recent_images = M.recent_images,
-    load_snacks = load_snacks_picker,
+    load_fzf = load_fzf_lua,
+    file_cwd = function()
+      local cfg = image_paste_opts()
+      local picker_cfg = type(cfg.picker) == "table" and cfg.picker or {}
+      return picker_cfg.file_cwd
+    end,
+    winopts = function()
+      local cfg = image_paste_opts()
+      local picker_cfg = type(cfg.picker) == "table" and cfg.picker or {}
+      local configured = picker_cfg.winopts
+      if type(configured) == "function" then
+        local ok, result = pcall(configured)
+        return ok and result or nil
+      end
+      return configured
+    end,
     notify = notify,
   })
   return image_picker

@@ -34,6 +34,10 @@ local fullFloatWinOpts = {
   }
 }
 
+function M.middle_float_winopts()
+  return vim.deepcopy(middleFloatWinOpts)
+end
+
 -- ------------------------------------------------------------------
 -- Utils
 -- ------------------------------------------------------------------
