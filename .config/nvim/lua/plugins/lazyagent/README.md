@@ -116,7 +116,7 @@ require("lazyagent").setup({
 
 agent ごとの設定は global 設定より優先されます。`interactive_agents.<name>.default = true` を指定すると、起動 agent の候補が複数あるときにその agent を優先します。
 
-`:LazyAgentImage [agent]`、または scratch buffer 内の既定keymap `c<space>i` で、Clipboard / Screenshot / File / URL / Recent を一つのpickerから選べます。FileはSnacks pickerが利用可能なら画像拡張子だけを一覧し、無い場合はfile補完付きinputへfallbackします。画像参照上の`c<space>I` / `:LazyAgentImageActions`では、拡大preview・system viewerで開く・path copy・参照削除を選べます。従来のbuffer-local `:LazyAgentPasteImage` と `:LazyAgentScreenShot` もそのまま使えます。
+`:LazyAgentImage [agent]`、または scratch buffer 内の既定keymap `c<space>i` で、Clipboard / Screenshot / File / URL / Recent を一つのpickerから選べます。Fileは設定した`image_paste.picker.file_cwd`（この設定では`~/gdrive/download`）から画像拡張子だけを更新日時の新しい順にfzf-luaで一覧し、RecentはLazyAgentへ以前取り込んだ画像を同じ順序・pickerで再利用します。どちらもscratchを維持するfloating pickerに`image_paste.picker.winopts`（この設定ではfzf-lua utilityの共通float style）とbuiltin previewを適用するため、Kitty graphics対応terminalではSnacks.image連携による画像previewが表示されます。画像参照上の`c<space>I` / `:LazyAgentImageActions`では、拡大preview・system viewerで開く・path copy・参照削除を選べます。従来のbuffer-local `:LazyAgentPasteImage` と `:LazyAgentScreenShot` もそのまま使えます。
 
 添付画像は `@/absolute/path/to/image.png` の行として挿入し、`folke/snacks.nvim` のimage機能が使える場合はinline previewします。ScreenshotはLinuxの`import`（ImageMagick / X11）または`grim+slurp`（Wayland）、macOSの`screencapture -i`、WindowsのSnipping Tool / screen clipを利用します。ACP sessionではpickerとtranscript footerにimage input capabilityを表示し、非対応agentへ添付した場合は送信前に警告します。
 

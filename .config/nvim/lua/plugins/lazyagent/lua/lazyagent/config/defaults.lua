@@ -188,6 +188,8 @@ function M.build()
         copy = true,
       },
       picker = {
+        file_cwd = nil,
+        winopts = nil,
         recent_limit = 20,
         recent_scan_depth = 4,
         recent_scan_limit = 2000,

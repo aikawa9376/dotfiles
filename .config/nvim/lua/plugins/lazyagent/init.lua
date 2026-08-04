@@ -137,6 +137,12 @@ return {
         enabled = true,
         copy = true,
       },
+      picker = {
+        file_cwd = vim.fn.expand("~/gdrive/download"),
+        winopts = function()
+          return require("plugins.fzf-lua_util").middle_float_winopts()
+        end,
+      },
       preview = {
         max_width = 80,
         max_height = 20,
