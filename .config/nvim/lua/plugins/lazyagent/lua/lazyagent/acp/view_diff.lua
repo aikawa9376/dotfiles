@@ -148,6 +148,65 @@ function M.new(ctx)
     return prefix .. truncated .. ellipsis, true
   end
 
+  local function quote_is_escaped(text, byte_idx)
+    local backslashes = 0
+    local idx = byte_idx - 1
+    while idx > 0 and text:sub(idx, idx) == "\\" do
+      backslashes = backslashes + 1
+      idx = idx - 1
+    end
+    return backslashes % 2 == 1
+  end
+
+  local function active_quote_delimiter(text, byte_limit)
+    text = tostring(text or "")
+    byte_limit = math.min(#text, math.max(0, tonumber(byte_limit) or 0))
+    local active = nil
+    local idx = 1
+    while idx <= byte_limit do
+      if active then
+        if idx + #active - 1 <= byte_limit
+          and text:sub(idx, idx + #active - 1) == active
+          and not quote_is_escaped(text, idx)
+        then
+          idx = idx + #active
+          active = nil
+        else
+          idx = idx + 1
+        end
+      else
+        local char = text:sub(idx, idx)
+        if char == "'" or char == '"' or char == "`" then
+          local triple = char ~= "`"
+            and idx + 2 <= byte_limit
+            and text:sub(idx, idx + 2) == char:rep(3)
+          active = triple and char:rep(3) or char
+          idx = idx + #active
+        else
+          idx = idx + 1
+        end
+      end
+    end
+    return active
+  end
+
+  local function make_truncated_line_syntax_safe(line, truncated, width)
+    local ellipsis = "..."
+    local visible_prefix = truncated:sub(1, math.max(0, #truncated - #ellipsis))
+    local delimiter = active_quote_delimiter(line, #visible_prefix)
+    if not delimiter then
+      return truncated, 0
+    end
+
+    local prefix_width = width - strdisplaywidth(ellipsis) - strdisplaywidth(delimiter)
+    local safe_prefix = truncate_to_display_width(line, math.max(0, prefix_width)):gsub("%s+$", "")
+    delimiter = active_quote_delimiter(line, #safe_prefix)
+    if not delimiter then
+      return safe_prefix .. ellipsis, 0
+    end
+    return safe_prefix .. ellipsis .. delimiter, #delimiter
+  end
+
   local function truncate_code_block_line(line, width)
     line = tostring(line or "")
     width = math.max(0, tonumber(width) or 0)
@@ -156,20 +215,27 @@ function M.new(ctx)
     end
 
     if line:match("^(%s*[-+] )") then
-      return truncate_diff_marker_line(line, width)
+      local truncated, changed = truncate_diff_marker_line(line, width)
+      if not changed then
+        return truncated, false, 0
+      end
+      local safe, suffix_len = make_truncated_line_syntax_safe(line, truncated, width)
+      return safe, true, suffix_len
     end
 
     local ellipsis = "..."
     local body_width = width - strdisplaywidth(ellipsis)
     if body_width <= 0 then
-      return ellipsis, true
+      return ellipsis, true, 0
     end
 
     local truncated = truncate_to_display_width(line, body_width):gsub("%s+$", "")
     if truncated == "" then
-      return ellipsis, true
+      return ellipsis, true, 0
     end
-    return truncated .. ellipsis, true
+    local updated = truncated .. ellipsis
+    local safe, suffix_len = make_truncated_line_syntax_safe(line, updated, width)
+    return safe, true, suffix_len
   end
 
   local function normalize_diff_display_lines(bufnr, lines, width, start_row)
@@ -198,13 +264,15 @@ function M.new(ctx)
             width - render_markdown_code_prefix_width(bufnr, lines[fence_start], body_lines, width)
           )
           for body_idx = fence_start + 1, idx - 1 do
-            local display_line, line_changed = truncate_code_block_line(lines[body_idx], available_width)
+            local display_line, line_changed, syntax_suffix_len = truncate_code_block_line(
+              lines[body_idx],
+              available_width
+            )
             if line_changed then
-              -- Keep the complete source for injected-language parsers. Cutting a quoted
-              -- string here would leak its highlight into the following transcript lines.
+              lines[body_idx] = display_line
               tracked_rows[start_row + body_idx - 1] = {
-                ellipsis_col = math.max(0, #display_line - 3),
-                source_end_col = #lines[body_idx],
+                ellipsis_col = math.max(0, #display_line - 3 - syntax_suffix_len),
+                syntax_suffix_len = syntax_suffix_len,
               }
               changed = true
             end
@@ -256,27 +324,44 @@ function M.new(ctx)
       return
     end
 
+    -- A short closing quote may be concealed after the visible ellipsis so an
+    -- injected-language parser does not leak string highlighting into later
+    -- lines. Existing windows must keep conceal enabled for that suffix.
+    for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+      if vim.api.nvim_win_is_valid(win) then
+        if vim.wo[win].conceallevel < 2 then
+          vim.wo[win].conceallevel = 2
+        end
+        vim.wo[win].concealcursor = "nvic"
+      end
+    end
+
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     for row, mark in pairs(tracked_rows) do
       if row >= 0 and row < line_count and type(mark) == "table" then
         local line = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or {})[1] or ""
         local ellipsis_col = tonumber(mark.ellipsis_col)
-        local source_end_col = math.min(#line, tonumber(mark.source_end_col) or #line)
-        if ellipsis_col and ellipsis_col < source_end_col then
+        local suffix_len = math.max(0, tonumber(mark.syntax_suffix_len) or 0)
+        local ellipsis_end_col = math.min(#line, (ellipsis_col or 0) + 3)
+        if ellipsis_col and line:sub(ellipsis_col + 1, ellipsis_end_col) == "..." then
           local hl_group = ellipsis_highlight_group(bufnr, row, ellipsis_col)
-          pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
-            end_row = row,
-            end_col = source_end_col,
-            conceal = "",
-            priority = 209,
-          })
-          local chunk = hl_group and { "...", hl_group } or { "..." }
-          pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
-            virt_text = { chunk },
-            virt_text_pos = "inline",
-            hl_mode = "combine",
-            priority = 210,
-          })
+          if hl_group then
+            pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
+              end_row = row,
+              end_col = ellipsis_end_col,
+              hl_group = hl_group,
+              hl_mode = "combine",
+              priority = 210,
+            })
+          end
+          if suffix_len > 0 and ellipsis_end_col < #line then
+            pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_end_col, {
+              end_row = row,
+              end_col = math.min(#line, ellipsis_end_col + suffix_len),
+              conceal = "",
+              priority = 209,
+            })
+          end
         end
       end
     end
