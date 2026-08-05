@@ -15,7 +15,7 @@ function M.run()
     { seq = 1, kind = "system", body = "ready" },
     { seq = 2, kind = "user", body = "first" },
     { seq = 3, kind = "thinking", body_ref = { path = "/tmp/source", start_line = 1, end_line = 1 } },
-    { seq = 4, kind = "assistant", body = "answer" },
+    { seq = 4, kind = "assistant", body = "answer", created_at = 1785850500 },
     { seq = 5, kind = "user", body = "later" },
   }
   local first = StructuredHistory.turn_record({
@@ -32,6 +32,7 @@ function M.run()
   assert_equal(#first.conversation, 3, "turn conversation slice")
   assert_equal(first.conversation[2].body, "resolved reasoning", "portable referenced body")
   assert_equal(first.conversation[2].body_ref, nil, "portable history removes transcript reference")
+  assert_equal(first.conversation[3].created_at, 1785850500, "portable history preserves message timestamp")
   assert(StructuredHistory.append(path, first))
   local second = vim.tbl_extend("force", vim.deepcopy(first), { turn_id = "thread-1:2" })
   assert(StructuredHistory.append(path, second))

@@ -9,6 +9,10 @@ function M.setup(deps)
   local write_session_transcript = deps.write_session_transcript
   local sync_runtime_live_state = deps.sync_runtime_live_state
   local section_icons = deps.section_icons or {}
+  local now = deps.now or os.time
+  local format_message_time = deps.format_message_time or function(timestamp)
+    return os.date("%Y-%m-%d %H:%M", timestamp)
+  end
   local summarize_conversation_text
   local heading_kind
   local tool_heading
@@ -123,7 +127,14 @@ local function section_icon_for_heading(heading, meta)
 end
 
 local function section_title(heading, meta)
-  return section_icon_for_heading(heading, meta) .. " " .. tostring(heading or "")
+  local title = section_icon_for_heading(heading, meta) .. " " .. tostring(heading or "")
+  local kind = section_kind(heading, meta)
+  local created_at = type(meta) == "table" and tonumber(meta.created_at) or nil
+  if created_at and (kind == "User" or kind == "Assistant") then
+    local timestamp = tostring(format_message_time(created_at) or "")
+    if timestamp ~= "" then title = title .. " · " .. timestamp end
+  end
+  return title
 end
 
 local function section_width(heading, meta)
@@ -551,6 +562,7 @@ local function new_conversation_item(session, heading, body, meta)
     toolCallId = meta.toolCallId,
     status = meta.status,
     path = meta.path,
+    created_at = tonumber(meta.created_at) or now(),
   }
   if meta.stream_key then
     item._summary_source = utf8_safe_prefix(body_text, 512)
@@ -656,9 +668,12 @@ append_block = function(session, heading, body, meta)
   body = normalize_text(body)
   if body == "" then return end
   close_stream(session)
+  local item_meta = vim.tbl_extend("force", meta or {}, {
+    created_at = tonumber(meta and meta.created_at) or now(),
+  })
   local prefix = session.transcript_has_content and "\n" or ""
   ensure_transcript_position(session)
-  local header = prefix .. render_section_header(heading, meta)
+  local header = prefix .. render_section_header(heading, item_meta)
   local block_body = pad_block_text(body)
   if not body:match("\n$") then
     block_body = block_body .. "\n"
@@ -674,7 +689,6 @@ append_block = function(session, heading, body, meta)
     session._transcript_trailing_newline,
     rendered
   )
-  local item_meta = meta or {}
   if can_reference_transcript(session) then
     item_meta = vim.tbl_extend("force", item_meta, {
       body_ref = {
@@ -699,9 +713,13 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
   if body == "" then return end
   if session.current_stream_key ~= stream_key then
     close_stream(session)
+    local item_meta = vim.tbl_extend("force", meta or {}, {
+      stream_key = stream_key,
+      created_at = tonumber(meta and meta.created_at) or now(),
+    })
     local prefix = session.transcript_has_content and "\n" or ""
     ensure_transcript_position(session)
-    local header = prefix .. render_section_header(heading, meta)
+    local header = prefix .. render_section_header(heading, item_meta)
     local header_count = transcript_position_after(
       session.transcript_line_count,
       session._transcript_trailing_newline,
@@ -712,9 +730,6 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
     session.current_stream_key = stream_key
     session.current_stream_heading = heading
     session.current_stream_at_line_start = true
-    local item_meta = vim.tbl_extend("force", meta or {}, {
-      stream_key = stream_key,
-    })
     if can_reference_transcript(session) then
       item_meta.body_ref = {
         path = session.transcript_path,
