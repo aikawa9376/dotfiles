@@ -1,13 +1,8 @@
 local M = {}
-
-local vault_path = vim.fn.expand("~/workspace/obsidian")
+local context = require("obsidian_extension.context")
 
 local function trim(text)
   return (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
-end
-
-local function is_vault_path(path)
-  return path == vault_path or path:sub(1, #vault_path + 1) == vault_path .. "/"
 end
 
 local function notify_git_error(prefix, result)
@@ -30,88 +25,11 @@ local function git_result_text(result)
 end
 
 local function run_git(args, on_done)
-  vim.system(args, { cwd = vault_path, text = true }, function(result)
+  vim.system(args, { cwd = context.vault_path(), text = true }, function(result)
     vim.schedule(function()
       on_done(result)
     end)
   end)
-end
-
-local function run_system(args, cwd)
-  return vim.system(args, { cwd = cwd, text = true }):wait()
-end
-
-local function normalize_note_segment(text, fallback)
-  local normalized = trim(text)
-    :gsub("[/\\]", "-")
-    :gsub("[^%w%._-]", "-")
-    :gsub("%-+", "-")
-    :gsub("^[-_.]+", "")
-    :gsub("[-_.]+$", "")
-  if normalized == "" then
-    return fallback
-  end
-  return normalized
-end
-
-local function current_context_dir()
-  local bufname = vim.api.nvim_buf_get_name(0)
-  if bufname ~= "" then
-    local stat = vim.uv.fs_stat(bufname)
-    if stat then
-      if stat.type == "directory" then
-        return bufname
-      end
-      return vim.fs.dirname(bufname)
-    end
-
-    local bufdir = vim.fs.dirname(bufname)
-    if bufdir and vim.uv.fs_stat(bufdir) then
-      return bufdir
-    end
-  end
-
-  return vim.fn.getcwd()
-end
-
-local function current_git_context()
-  local start_dir = current_context_dir()
-  local repo_result = run_system({ "git", "rev-parse", "--show-toplevel" }, start_dir)
-  if repo_result.code ~= 0 then
-    return nil, repo_result
-  end
-
-  local repo_root = trim(repo_result.stdout or "")
-  local repo_name = vim.fs.basename(repo_root)
-  local repo_slug = normalize_note_segment(repo_name, "project")
-
-  local branch_result = run_system({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, repo_root)
-  if branch_result.code ~= 0 then
-    return nil, branch_result
-  end
-
-  local branch_name = trim(branch_result.stdout or "")
-  if branch_name == "" then
-    branch_name = "HEAD"
-  end
-
-  local branch_segments = vim.split(branch_name, "/", { trimempty = true })
-  if vim.tbl_isempty(branch_segments) then
-    branch_segments = { "HEAD" }
-  end
-
-  local note_segments = {}
-  for index, segment in ipairs(branch_segments) do
-    note_segments[index] = normalize_note_segment(segment, ("branch-%d"):format(index))
-  end
-
-  return {
-    repo_root = repo_root,
-    repo_name = repo_name,
-    repo_slug = repo_slug,
-    branch_name = branch_name,
-    branch_note_segments = note_segments,
-  }
 end
 
 local function branch_note_spec(context)
@@ -198,10 +116,11 @@ local function open_or_create_note(spec)
 end
 
 local function write_vault_buffers()
+  local vault_path = context.vault_path()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].modified and vim.bo[bufnr].buftype == "" then
       local path = vim.api.nvim_buf_get_name(bufnr)
-      if path ~= "" and is_vault_path(path) then
+      if path ~= "" and context.is_vault_path(path, vault_path) then
         local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function()
           vim.cmd("silent write")
         end)
@@ -333,25 +252,25 @@ function M.setup()
   })
 
   vim.api.nvim_create_user_command("ObsidianBranchNote", function()
-    local context, err = current_git_context()
-    if not context then
+    local git_context, err = context.git()
+    if not git_context then
       notify_git_error("Current buffer is not inside a git repository", err)
       return
     end
 
-    open_or_create_note(branch_note_spec(context))
+    open_or_create_note(branch_note_spec(git_context))
   end, {
     desc = "Open or create a branch-scoped project note",
   })
 
   vim.api.nvim_create_user_command("ObsidianRepoNote", function()
-    local context, err = current_git_context()
-    if not context then
+    local git_context, err = context.git()
+    if not git_context then
       notify_git_error("Current buffer is not inside a git repository", err)
       return
     end
 
-    open_or_create_note(repo_note_spec(context))
+    open_or_create_note(repo_note_spec(git_context))
   end, {
     desc = "Open or create a repo-scoped project note",
   })

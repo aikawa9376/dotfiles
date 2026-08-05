@@ -30,6 +30,7 @@ return {
     "ObsidianGit",
     "ObsidianBranchNote",
     "ObsidianRepoNote",
+    "ObsidianRelated",
     "ObsidianKnowledgeBase",
     "ObsidianNoteStatus",
     "ObsidianOpenArtifact",
