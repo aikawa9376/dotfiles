@@ -2,6 +2,13 @@ local M = {}
 local TextRef = require("lazyagent.acp.text_ref")
 local uv = vim.uv or vim.loop
 
+local function item_heading(item)
+  local heading = tostring(item.heading or item.title or item.kind or "Message")
+  local created_at = tonumber(item.created_at)
+  if created_at then heading = heading .. " · " .. os.date("%Y-%m-%d %H:%M", created_at) end
+  return heading
+end
+
 local function read_ref(ref)
   if type(ref) ~= "table" or not ref.path or vim.fn.filereadable(ref.path) ~= 1 then return "" end
   local ok, lines
@@ -50,7 +57,7 @@ function M.render(opts)
   for _, entry in ipairs(opts.tools or {}) do tools[entry.toolCallId] = entry end
   for _, item in ipairs(opts.conversation or {}) do
     lines[#lines + 1] = ""
-    lines[#lines + 1] = "## " .. tostring(item.heading or item.title or item.kind or "Message")
+    lines[#lines + 1] = "## " .. item_heading(item)
     lines[#lines + 1] = ""
     local body = expanded_text(item.body, item.body_chunks, item.body_ref, load_ref)
     lines[#lines + 1] = body ~= "" and body or "_No retained content._"
@@ -143,7 +150,7 @@ function M.write(opts, path)
   local tools = {}
   for _, entry in ipairs(opts.tools or {}) do tools[entry.toolCallId] = entry end
   for _, item in ipairs(opts.conversation or {}) do
-    emit("\n\n## " .. tostring(item.heading or item.title or item.kind or "Message") .. "\n\n")
+    emit("\n\n## " .. item_heading(item) .. "\n\n")
     local has_body = (type(item.body) == "string" and item.body ~= "")
       or (type(item.body_chunks) == "table" and #item.body_chunks > 0)
       or type(item.body_ref) == "table"

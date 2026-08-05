@@ -9,7 +9,7 @@ function M.run()
     cwd = "/tmp/project",
     thread_id = "thread-1",
     conversation = {
-      { id = "1", heading = "User", body = "hello" },
+      { id = "1", heading = "User", body = "hello", created_at = 1785850500 },
       { id = "2", heading = "Assistant", body_ref = { path = "message" } },
       { id = "3", heading = "Tool search", body = "summary", toolCallId = "tool-1" },
     },
@@ -19,7 +19,7 @@ function M.run()
     read_ref = function(ref) return refs[ref and ref.path] or "" end,
   })
   assert(markdown:match("# Fixture thread"), "export title")
-  assert(markdown:match("## User\n\nhello"), "export user message")
+  assert(markdown:match("## User · %d%d%d%d%-%d%d%-%d%d %d%d:%d%d\n\nhello"), "export includes minute timestamp")
   assert(markdown:match("## Assistant\n\nrestored assistant body"), "export body ref")
   assert(markdown:match("### Raw tool output\n\n    full raw tool output"), "export raw tool ref")
   assert(markdown:match("Thread: `thread%-1`"), "export metadata")

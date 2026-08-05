@@ -13,6 +13,11 @@ function M.run()
     file_uri = function(path) return path end,
     write_session_transcript = function() end,
     sync_runtime_live_state = function() end,
+    now = function() return 1785850500 end,
+    format_message_time = function(timestamp)
+      assert_equal(timestamp, 1785850500, "message timestamp passed to formatter")
+      return "2026-08-04 22:35"
+    end,
   })
   local session = {
     pane_id = "summary-test",
@@ -33,6 +38,15 @@ function M.run()
   )
 
   local summary = session.conversation_timeline[1].summary
+  assert_equal(session.conversation_timeline[1].created_at, 1785850500, "conversation item stores epoch timestamp")
+  assert(Conversation.render_section_block("Codex GPT-5.6-Sol", "done", {
+    kind = "assistant",
+    created_at = 1785850500,
+  }):find("Codex GPT%-5%.6%-Sol · 2026%-08%-04 22:35"), "assistant header formats stored timestamp")
+  assert(Conversation.render_section_block("User", "hello", {
+    kind = "user",
+    created_at = 1785850500,
+  }):find("User · 2026%-08%-04 22:35"), "user header formats stored timestamp")
   assert_equal(summary:sub(1, #"完了しました。"), "完了しました。", "stream summary keeps its first chunk")
   assert_equal(vim.fn.strcharpart(summary, 0, vim.fn.strchars(summary)), summary,
     "stream summary is truncated at a UTF-8 character boundary")
