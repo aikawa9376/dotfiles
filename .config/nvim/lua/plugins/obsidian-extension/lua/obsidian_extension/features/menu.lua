@@ -12,6 +12,11 @@ local items = {
     command = "ObsidianQuickSwitch",
   },
   {
+    label = "Related notes",
+    description = "現在のproject・branchに関連するノートを表示する",
+    command = "ObsidianRelated",
+  },
+  {
     label = "Today's note",
     description = "今日の Daily Note を開く",
     command = "ObsidianToday",
