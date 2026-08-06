@@ -9,6 +9,7 @@ package.path = table.concat({
 }, ";")
 
 local related = require("obsidian_extension.features.related")
+local context = require("obsidian_extension.context")
 local vault = "/vault"
 related._cache.root = vault
 
@@ -72,16 +73,39 @@ assert(ranked[1].score > ranked[2].score, "link and query boosts affect ordering
 assert(vim.tbl_contains(ranked[1].reasons, "linked"), "ranking explains link relevance")
 assert(vim.tbl_contains(ranked[1].reasons, "content"), "ranking explains content relevance")
 
+local unscoped = related._rank_entries(entries, nil, "")
+assert(#unscoped == 4, "empty query without Git context keeps every note searchable")
+
 assert(related._branch_note_relative(git_context) == "notes/projects/dotfiles/master.md",
   "branch note path matches project layout")
 
-package.loaded["fzf-lua.previewer.builtin"] = {
-  buffer_or_file = {
-    extend = function() return {} end,
-    parse_entry = function(_, entry) return entry end,
+local note_context = context._git_context_from_frontmatter({
+  "---",
+  "project: afiliate",
+  "branch: feature/campaign",
+  "---",
+})
+assert(note_context.repo_slug == "afiliate" and note_context.branch_name == "feature/campaign",
+  "current note frontmatter supplies the related-note context")
+assert(note_context.branch_note_segments[1] == "feature" and note_context.branch_note_segments[2] == "campaign",
+  "frontmatter branch is converted to branch-note segments")
+
+local captured_lines, captured_opts
+package.loaded["fzf-lua"] = {
+  actions = {
+    file_edit_or_qf = function() end,
+    file_split = function() end,
+    file_vsplit = function() end,
+    file_sel_to_qf = function() end,
   },
+  fzf_exec = function(lines, opts)
+    captured_lines, captured_opts = lines, opts
+  end,
 }
-local previewer = related._related_previewer()
-assert(previewer.parse_entry({}, "/vault/notes/topic.md\t 280 Topic") == "/vault/notes/topic.md",
-  "related preview strips ranking display from the path")
+related._open_picker(vault, { { entry = linked, score = 280, reasons = { "project", "branch" } } }, git_context)
+assert(captured_lines[1]:match("^notes/lazyagent%-usage%.md:1:1:"),
+  "related picker uses the builtin file location format")
+assert(captured_opts.previewer == "builtin", "related picker enables builtin preview")
+assert(captured_opts.winopts == nil, "related picker inherits the global bottom split")
+assert(captured_opts.prompt == "Related [dotfiles/master] > ", "related picker shows the active ranking context")
 print("ok - related_spec")

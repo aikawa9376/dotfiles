@@ -14,6 +14,49 @@ local function normalize_note_segment(text, fallback)
   return normalized ~= "" and normalized or fallback
 end
 
+local function unquote(text)
+  text = trim(text)
+  local quote = text:sub(1, 1)
+  if (quote == '"' or quote == "'") and text:sub(-1) == quote then
+    return text:sub(2, -2)
+  end
+  return text
+end
+
+local function git_context_from_frontmatter(lines)
+  if type(lines) ~= "table" or lines[1] ~= "---" then return nil end
+  local project, branch
+  for index = 2, #lines do
+    local line = lines[index]
+    if line == "---" or line == "..." then break end
+    local key, value = line:match("^([%w_-]+):%s*(.*)$")
+    if key == "project" then project = unquote(value) end
+    if key == "branch" then branch = unquote(value) end
+  end
+  if not project or project == "" then return nil end
+
+  local branch_segments = branch and vim.split(branch, "/", { trimempty = true }) or {}
+  local note_segments = {}
+  for index, segment in ipairs(branch_segments) do
+    note_segments[index] = normalize_note_segment(segment, ("branch-%d"):format(index))
+  end
+  return {
+    repo_name = project,
+    repo_slug = normalize_note_segment(project, "project"),
+    branch_name = branch ~= "" and branch or nil,
+    branch_note_segments = note_segments,
+    source = "note",
+  }
+end
+
+local function current_note_git_context()
+  local bufname = vim.api.nvim_buf_get_name(0)
+  if bufname == "" or not M.is_vault_path(bufname) then return nil end
+  local line_count = vim.api.nvim_buf_line_count(0)
+  local lines = vim.api.nvim_buf_get_lines(0, 0, math.min(line_count, 100), false)
+  return git_context_from_frontmatter(lines)
+end
+
 local function current_context_dir()
   local bufname = vim.api.nvim_buf_get_name(0)
   if bufname ~= "" then
@@ -48,6 +91,9 @@ function M.is_vault_path(path, vault_path)
 end
 
 function M.git()
+  local note_context = current_note_git_context()
+  if note_context then return note_context end
+
   local start_dir = current_context_dir()
   local repo_result = vim.system({ "git", "rev-parse", "--show-toplevel" }, {
     cwd = start_dir,
@@ -80,7 +126,10 @@ function M.git()
     repo_slug = repo_slug,
     branch_name = branch_name,
     branch_note_segments = note_segments,
+    source = "git",
   }
 end
+
+M._git_context_from_frontmatter = git_context_from_frontmatter
 
 return M
