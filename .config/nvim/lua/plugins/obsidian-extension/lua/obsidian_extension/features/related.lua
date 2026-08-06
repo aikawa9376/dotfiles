@@ -163,7 +163,7 @@ local function refresh_index(root, callback)
 end
 
 local function branch_note_relative(git_context)
-  if not git_context then return nil end
+  if not git_context or not git_context.branch_note_segments or #git_context.branch_note_segments == 0 then return nil end
   return ("notes/projects/%s/%s.md"):format(
     git_context.repo_slug,
     table.concat(git_context.branch_note_segments, "/")
@@ -201,7 +201,7 @@ local function rank_entries(entries_by_path, git_context, query)
   for _, entry in ipairs(entries) do
     local score, reasons = 0, {}
     local same_project = git_context and entry.project == git_context.repo_slug
-    local same_branch = same_project and entry.branch == git_context.branch_name
+    local same_branch = same_project and git_context.branch_name and entry.branch == git_context.branch_name
     if same_project then score = score + 100; reasons[#reasons + 1] = "project" end
     if same_branch then score = score + 100; reasons[#reasons + 1] = "branch" end
     if branch_entry and entry.path ~= branch_entry.path then
@@ -234,7 +234,9 @@ local function rank_entries(entries_by_path, git_context, query)
       end
     end
     if entry.status == "archived" then score = score - 30 end
-    if score > 0 then ranked[#ranked + 1] = { entry = entry, score = score, reasons = reasons } end
+    -- Keep every note in the picker so an empty command argument still opens
+    -- a useful, searchable index. Context and query matches only affect order.
+    ranked[#ranked + 1] = { entry = entry, score = score, reasons = reasons }
   end
 
   table.sort(ranked, function(a, b)
@@ -244,45 +246,42 @@ local function rank_entries(entries_by_path, git_context, query)
   return ranked
 end
 
-local function related_previewer()
-  local Parent = require("fzf-lua.previewer.builtin").buffer_or_file
-  local Previewer = Parent:extend()
-  function Previewer:parse_entry(entry_str)
-    return Parent.parse_entry(self, entry_str:match("^([^\t]+)") or entry_str)
-  end
-  return Previewer
-end
-
-local function open_picker(root, ranked)
+local function open_picker(root, ranked, git_context)
   if #ranked == 0 then
     vim.notify("No related Obsidian notes found", vim.log.levels.INFO)
     return
   end
   local lines = {}
   for _, candidate in ipairs(ranked) do
-    lines[#lines + 1] = candidate.entry.path .. "\t"
-      .. ("%4d  %-28s  [%s]"):format(candidate.score, candidate.entry.title, table.concat(candidate.reasons, ","))
+    local reasons = #candidate.reasons > 0 and (" [" .. table.concat(candidate.reasons, ",") .. "]") or ""
+    -- fzf-lua's builtin previewer understands this native location format.
+    -- Keeping the path relative to cwd also makes the candidate display compact.
+    lines[#lines + 1] = ("%s:1:1:%4d  %s%s"):format(
+      candidate.entry.relative_path,
+      candidate.score,
+      candidate.entry.title,
+      reasons
+    )
   end
-  require("fzf-lua").fzf_exec(lines, {
-    prompt = "Related notes > ",
+  local fzf = require("fzf-lua")
+  local context_label = git_context and git_context.repo_slug or "all notes"
+  if git_context and git_context.branch_name then
+    context_label = context_label .. "/" .. git_context.branch_name
+  end
+  fzf.fzf_exec(lines, {
+    prompt = ("Related [%s] > "):format(context_label),
     cwd = root,
-    previewer = related_previewer(),
+    previewer = "builtin",
     actions = {
-      enter = function(selected)
-        local path = selected and selected[1] and selected[1]:match("^([^\t]+)") or nil
-        if path then vim.schedule(function() vim.cmd.edit(vim.fn.fnameescape(path)) end) end
-      end,
+      ["enter"] = fzf.actions.file_edit_or_qf,
+      ["ctrl-s"] = fzf.actions.file_split,
+      ["ctrl-v"] = fzf.actions.file_vsplit,
+      ["ctrl-q"] = fzf.actions.file_sel_to_qf,
     },
     fzf_opts = {
-      ["--delimiter"] = "\t",
-      ["--with-nth"] = "2..",
+      ["--delimiter"] = ":",
+      ["--nth"] = "4..,1",
       ["--no-sort"] = true,
-    },
-    winopts = {
-      split = false,
-      height = 0.8,
-      width = 0.9,
-      preview = { hidden = false, layout = "horizontal", horizontal = "right:55%" },
     },
   })
 end
@@ -294,12 +293,8 @@ local function suggest(query)
     return
   end
   local git_context = context.git()
-  if not git_context and trim(query) == "" then
-    vim.notify("Pass search text when outside a Git repository", vim.log.levels.WARN)
-    return
-  end
   refresh_index(root, function(entries)
-    open_picker(root, rank_entries(entries, git_context, query))
+    open_picker(root, rank_entries(entries, git_context, query), git_context)
   end)
 end
 
@@ -320,7 +315,7 @@ end
 M._parse_note = parse_note
 M._rank_entries = rank_entries
 M._branch_note_relative = branch_note_relative
-M._related_previewer = related_previewer
+M._open_picker = open_picker
 M._refresh_index = refresh_index
 M._cache = cache
 
