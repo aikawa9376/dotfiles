@@ -42,7 +42,18 @@ zinit ice lucid as"program" pick"tmuximum"
 zinit light "arks22/tmuximum"
 # abbr
 zinit ice lucid
-zinit light "olets/zsh-abbr"
+typeset -g _zsh_abbr_init_lock="${TMPDIR:-/tmp}/zsh-abbr-init-${UID}.lock"
+command touch "$_zsh_abbr_init_lock"
+if zmodload zsh/system && zsystem flock -t 10 -i 0.01 -f _zsh_abbr_init_lock_fd "$_zsh_abbr_init_lock"; then
+  {
+    zinit light "olets/zsh-abbr"
+  } always {
+    zsystem flock -u "$_zsh_abbr_init_lock_fd"
+  }
+else
+  zinit light "olets/zsh-abbr"
+fi
+unset _zsh_abbr_init_lock _zsh_abbr_init_lock_fd
 # fzf-tab
 zinit ice wait'!0' lucid; zinit load "Aloxaf/fzf-tab"
 # git plugin
