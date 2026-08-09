@@ -39,28 +39,28 @@ if [ -d /etc/X11/xinit/xinitrc.d ] ; then
 fi
 
 get_session(){
-	local dbus_args=(--sh-syntax --exit-with-session)
+	local session_args=()
 	case $1 in
-		awesome) dbus_args+=(awesome) ;;
-		bspwm) dbus_args+=(bspwm-session) ;;
-		budgie) dbus_args+=(budgie-desktop) ;;
-		cinnamon) dbus_args+=(cinnamon-session) ;;
-		deepin) dbus_args+=(startdde) ;;
-		enlightenment) dbus_args+=(enlightenment_start) ;;
-		fluxbox) dbus_args+=(startfluxbox) ;;
-		gnome) dbus_args+=(gnome-session) ;;
-		i3|i3wm) dbus_args+=(i3 --shmlog-size 0) ;;
-		jwm) dbus_args+=(jwm) ;;
-		kde) dbus_args+=(startkde) ;;
-		lxde) dbus_args+=(startlxde) ;;
-		lxqt) dbus_args+=(lxqt-session) ;;
-		mate) dbus_args+=(mate-session) ;;
-		xfce) dbus_args+=(xfce4-session) ;;
-		openbox) dbus_args+=(openbox-session) ;;
-		*) dbus_args+=($DEFAULT_SESSION) ;;
+		awesome) session_args+=(awesome) ;;
+		bspwm) session_args+=(bspwm-session) ;;
+		budgie) session_args+=(budgie-desktop) ;;
+		cinnamon) session_args+=(cinnamon-session) ;;
+		deepin) session_args+=(startdde) ;;
+		enlightenment) session_args+=(enlightenment_start) ;;
+		fluxbox) session_args+=(startfluxbox) ;;
+		gnome) session_args+=(gnome-session) ;;
+		i3|i3wm) session_args+=(i3 --shmlog-size 0) ;;
+		jwm) session_args+=(jwm) ;;
+		kde) session_args+=(startkde) ;;
+		lxde) session_args+=(startlxde) ;;
+		lxqt) session_args+=(lxqt-session) ;;
+		mate) session_args+=(mate-session) ;;
+		xfce) session_args+=(xfce4-session) ;;
+		openbox) session_args+=(openbox-session) ;;
+		*) session_args+=($DEFAULT_SESSION) ;;
 	esac
 
-	echo "dbus-launch ${dbus_args[*]}"
+	echo "${session_args[*]}"
 }
 
 export DefaultImModule=fcitx
