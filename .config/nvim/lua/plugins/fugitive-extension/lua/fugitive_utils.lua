@@ -440,7 +440,7 @@ function M.get_filepath_at_cursor(bufnr)
     local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
     if line then
       -- For fugitive status buffer
-      local status_match = line:match('^[MADRCU?!][MADRCU?!]? (.+)$')
+      local status_match = line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
       if status_match then
         -- Handle rename "R old -> new"
         local renamed_to = status_match:match('^.+ %-> (.+)$')

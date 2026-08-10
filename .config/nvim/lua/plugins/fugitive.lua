@@ -7,7 +7,7 @@ return {
   },
   dependencies = "fugitive-extension",
   keys = {
-    { "<Leader>gs", "<cmd>Git<CR><Plug>fugitive:gU", silent = true },
+    { "<Leader>gs", function() require('features.status').open({ focus = 'unstaged', split = true }) end, silent = true },
     { "<Leader>gg", "<cmd>GeditHeadAtFile<CR>", silent = true },
     { "<Leader>gb", "<cmd>Git blame -w --date=format:'%Y-%m-%d %H:%M'<CR>", silent = true },
     { "<Leader>gr", "<cmd>Git! rm --cached %<CR>", silent = true },

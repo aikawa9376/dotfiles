@@ -3,7 +3,7 @@ local M = {}
 -- 'diffs':   diffs.nvim-style group diff -> line pairing -> byte diff
 -- 'lazygit': similarity-based line pairing
 -- 'github':  sequential line pairing (old[i] <-> new[i])
-M.config = { word_diff_style = 'diffs' }
+M.config = { word_diff_style = 'lazygit' }
 
 local WORD_DIFF_STYLES = { 'diffs', 'lazygit', 'github' }
 
@@ -822,6 +822,7 @@ function M.attach(bufnr)
   vim.api.nvim_create_autocmd('ColorScheme', { callback = Highlighter.setup_groups })
 
   local legacy_regions = {}
+  local refresh_scheduled = false
 
   local function refresh()
     if not vim.api.nvim_buf_is_valid(bufnr) then return end
@@ -844,9 +845,18 @@ function M.attach(bufnr)
   attached_refreshers[bufnr] = refresh
   refresh()
 
+  local function schedule_refresh()
+    if refresh_scheduled then return end
+    refresh_scheduled = true
+    vim.schedule(function()
+      refresh_scheduled = false
+      refresh()
+    end)
+  end
+
   vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI'}, {
     buffer = bufnr,
-    callback = function() vim.schedule(refresh) end
+    callback = schedule_refresh,
   })
 
   vim.api.nvim_create_autocmd('BufWipeout', {

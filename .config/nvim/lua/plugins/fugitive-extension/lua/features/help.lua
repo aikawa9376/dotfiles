@@ -26,8 +26,8 @@ function M.show(title, lines)
   for _, line in ipairs(content) do
     width = math.max(width, vim.fn.strdisplaywidth(line))
   end
-  width = math.min(width + 4, math.max(40, width + 2))
-  local height = #content
+  width = math.min(math.max(width + 2, 40), math.max(vim.o.columns - 4, 1))
+  local height = math.min(#content, math.max(vim.o.lines - 4, 1))
 
   local opts = {
     relative = 'editor',
@@ -44,6 +44,11 @@ function M.show(title, lines)
   local win = vim.api.nvim_open_win(buf, true, opts)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, content)
   vim.keymap.set('n', 'q', function()
+    if win and vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_close(win, true)
+    end
+  end, { buffer = buf, nowait = true, silent = true })
+  vim.keymap.set('n', '<Esc>', function()
     if win and vim.api.nvim_win_is_valid(win) then
       vim.api.nvim_win_close(win, true)
     end
