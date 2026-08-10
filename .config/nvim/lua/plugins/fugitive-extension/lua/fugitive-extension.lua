@@ -15,7 +15,7 @@ function M.setup()
 
   vim.api.nvim_create_autocmd({ 'FileType', 'BufWinEnter' }, {
     group = group,
-    pattern = { 'git', 'fugitive', 'fugitiveblame', 'fugitivebranch', 'gitrebase', 'gitcommit' },
+    pattern = { 'git', 'fugitive', 'fugitivestatus', 'fugitiveblame', 'fugitivebranch', 'gitrebase', 'gitcommit' },
     callback = function(ev)
       set_nowrap(vim.api.nvim_get_current_win(), ev.buf)
     end,
