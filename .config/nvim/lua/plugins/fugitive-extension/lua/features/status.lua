@@ -7,6 +7,7 @@ local status_renderer = require("features.status_renderer")
 local operation = require('features.operation')
 local range_diff = require('features.range_diff')
 local repository_health = require('features.repository_health')
+local notes = require('features.notes')
 local pull_requests_by_buf = {}
 local pull_request_scope_by_buf = {}
 local pull_request_branch_by_buf = {}
@@ -988,6 +989,9 @@ function M.setup(group)
             end
           end
         end
+        notes.apply_icons(b, utils.get_buf_work_tree(b), function(line)
+          return line:match('^(%x%x%x%x%x%x%x+)%s')
+        end)
       end
       apply_icons()
 
@@ -1731,6 +1735,7 @@ function M.setup(group)
 
       local function show_status_actions()
         local row = vim.api.nvim_win_get_cursor(0)[1]
+        local on_commit = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s') ~= nil
         local entry = status_renderer.entry_at(b, row)
         local conflicted = entry and not entry.header and entry.section == 'conflicted'
         local work_tree = utils.get_buf_work_tree(b)
@@ -1755,6 +1760,8 @@ function M.setup(group)
             { key = 'cr', label = 'Mark resolved', enabled = conflicted },
           } },
           { title = 'Commit', actions = {
+            { key = 'gn', label = 'Show Git note', enabled = on_commit },
+            { key = 'gN', label = 'Add / edit Git note', enabled = on_commit },
             { key = 'cc', label = 'Commit staged changes' },
             { key = 'ca', label = 'Amend commit' },
             { key = 'ce', label = 'Amend without editing message' },
@@ -1790,6 +1797,22 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Show Git status actions' })
       vim.keymap.set('n', '?', show_status_actions,
         { buffer = b, nowait = true, silent = true, desc = 'Show Git status actions' })
+
+      local function note_target()
+        local commit = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s')
+        if not commit then vim.notify('No commit found at cursor', vim.log.levels.WARN) end
+        return commit
+      end
+
+      vim.keymap.set('n', 'gn', function()
+        local commit = note_target()
+        if commit then notes.show(utils.get_buf_work_tree(b), commit, apply_icons) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Show Git note' })
+
+      vim.keymap.set('n', 'gN', function()
+        local commit = note_target()
+        if commit then notes.edit(utils.get_buf_work_tree(b), commit, apply_icons) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Edit Git note' })
 
       local function open_status_item()
         if is_cursor_on_commit_header() then
@@ -2097,6 +2120,9 @@ function M.refresh_buffer(bufnr)
   local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
   pcall(function()
     refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
+  end)
+  notes.apply_icons(bufnr, utils.get_buf_work_tree(bufnr), function(line)
+    return line:match('^(%x%x%x%x%x%x%x+)%s')
   end)
 end
 
