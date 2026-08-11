@@ -2,6 +2,7 @@ local M = {}
 local utils = require("fugitive_utils")
 local commands = require("features.commands")
 local help = require("features.help")
+local notes = require("features.notes")
 
 local function get_commit_at_line(bufnr, lnum)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
@@ -124,6 +125,9 @@ local function refresh_log_list(bufnr)
 
   apply_highlights(bufnr)
   apply_log_syntax(bufnr)
+  notes.apply_icons(bufnr, utils.get_buf_work_tree(bufnr), function(line)
+    return line:match('^(%x+)')
+  end)
 end
 
 local function open_log_list(opts)
@@ -160,6 +164,7 @@ local function show_log_help()
     'g?          show this help',
     'd           Diffview commit (or file if detected)',
     'C           commit info float',
+    'gn / gN     show / edit Git note',
     'O           Octo PR from commit',
     '<C-y>       copy short hash',
     '<Leader>cf  fixup commit into parent',
@@ -205,6 +210,9 @@ function M.setup(group)
       end, { buffer = ev.buf, silent = true, desc = "Help" })
       apply_log_syntax(ev.buf)
       apply_highlights(ev.buf)
+      notes.apply_icons(ev.buf, utils.get_buf_work_tree(ev.buf), function(line)
+        return line:match('^(%x+)')
+      end)
 
       -- Re-apply highlights on reload
       vim.api.nvim_create_autocmd('BufReadPost', {
@@ -263,6 +271,28 @@ function M.setup(group)
 
         commands.show_commit_info_float(commit, true, true)
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Show commit info in float window' })
+
+      local function note_target()
+        local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+        if not commit then vim.notify('No commit found at cursor', vim.log.levels.WARN) end
+        return commit
+      end
+
+      local function refresh_note_icons()
+        notes.apply_icons(ev.buf, utils.get_buf_work_tree(ev.buf), function(line)
+          return line:match('^(%x+)')
+        end)
+      end
+
+      vim.keymap.set('n', 'gn', function()
+        local commit = note_target()
+        if commit then notes.show(utils.get_buf_work_tree(ev.buf), commit, refresh_note_icons) end
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Show Git note' })
+
+      vim.keymap.set('n', 'gN', function()
+        local commit = note_target()
+        if commit then notes.edit(utils.get_buf_work_tree(ev.buf), commit, refresh_note_icons) end
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Edit Git note' })
 
       -- O: Octo PR
       vim.keymap.set('n', 'O', function()
