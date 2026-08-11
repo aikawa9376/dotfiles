@@ -2,6 +2,14 @@ local version = vim.version()
 
 ---@type vim.lsp.Config
 return {
+  -- The server does not reliably exit when its stdio pipe closes. Its built-in
+  -- parent watchdog prevents one orphaned process from accumulating per Nvim.
+  cmd = {
+    "copilot-language-server",
+    "--stdio",
+    "--clientProcessId",
+    tostring(vim.fn.getpid()),
+  },
   init_options = {
     editorInfo = {
       name = "neovim",
