@@ -79,21 +79,30 @@ local items = {
 }
 
 local function open_menu()
-  vim.ui.select(items, {
-    prompt = "Obsidian action",
-    kind = "obsidian-menu",
-    format_item = function(item)
-      return ("%-19s  %s"):format(item.label, item.description)
-    end,
-  }, function(item)
-    if not item then
-      return
-    end
+  local fzf = require("fzf-lua")
+  local entries = {}
+  local entry_to_item = {}
+  for _, item in ipairs(items) do
+    local entry = ("%-19s  %s"):format(item.label, item.description)
+    entries[#entries + 1] = entry
+    entry_to_item[entry] = item
+  end
 
-    vim.schedule(function()
-      vim.cmd(item.command)
-    end)
-  end)
+  fzf.fzf_exec(entries, {
+    prompt = "Obsidian action > ",
+    actions = {
+      ["default"] = function(selected)
+        local item = selected and entry_to_item[selected[1]]
+        if not item then
+          return
+        end
+
+        vim.schedule(function()
+          vim.cmd(item.command)
+        end)
+      end,
+    },
+  })
 end
 
 function M.setup()

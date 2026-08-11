@@ -56,9 +56,6 @@ local function with_preview(fzf_opts, locations)
   fzf_opts = fzf_opts or {}
   fzf_opts.previewer = fzf_opts.previewer or location_previewer(locations)
   fzf_opts.winopts = vim.tbl_deep_extend("force", fzf_opts.winopts or {}, {
-    split = false,
-    height = 0.8,
-    width = 0.9,
     preview = {
       hidden = false,
       layout = "horizontal",
