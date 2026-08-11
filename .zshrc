@@ -90,7 +90,8 @@ zinit light romkatv/powerlevel10k
 # 基本設定
 # -------------------------------------
 export PATH="/usr/local/bin:$PATH"
-export TERM='xterm-kitty'
+# Keep kitty's xterm-kitty outside tmux and tmux-256color inside tmux.
+# Overriding TERM here makes applications negotiate with the wrong terminal.
 export XAPIAN_CJK_NGRAM=1
 export EDITOR='nvim'
 export PAGER='bat'
@@ -409,3 +410,6 @@ ABBR_SET_EXPANSION_CURSOR=1
 if [[ "$TERM" == "xterm-kitty" && -z "$TMUX" ]]; then
   (tmux start-server || tmux new-session -d) >/dev/null 2>&1 &!
 fi
+
+# Load last: CSI-u bindings mirror the final custom ZLE bindings above.
+loadlib $ZCONFDIR/zsh-csi-u.zsh
