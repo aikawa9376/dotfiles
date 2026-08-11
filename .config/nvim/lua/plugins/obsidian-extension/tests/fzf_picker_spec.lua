@@ -44,7 +44,9 @@ package.loaded["fzf-lua.previewer.builtin"] = {
 }
 local opts = fzf_picker._with_preview({}, locations)
 assert(opts.previewer ~= nil, "builtin previewer configured")
-assert(opts.winopts.split == false, "preview picker uses a float")
+assert(opts.winopts.split == nil, "preview picker inherits the global bottom split")
+assert(opts.winopts.height == nil, "preview picker does not override the global height")
+assert(opts.winopts.width == nil, "preview picker does not override the global width")
 assert(opts.winopts.preview.hidden == false, "preview is initially visible")
 
 local captured_opts
