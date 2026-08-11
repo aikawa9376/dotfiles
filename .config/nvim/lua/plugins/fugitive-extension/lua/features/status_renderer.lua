@@ -213,6 +213,16 @@ function M.entry_at(bufnr, row)
   return model and model.entries_by_row[row] or nil
 end
 
+function M.shift_entries(bufnr, from_row, delta)
+  local model = models[bufnr]
+  if not model or delta == 0 then return end
+  local shifted = {}
+  for row, entry in pairs(model.entries_by_row) do
+    shifted[row >= from_row and row + delta or row] = entry
+  end
+  model.entries_by_row = shifted
+end
+
 function M.entry_row(bufnr, row)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
