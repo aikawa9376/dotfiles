@@ -3,6 +3,7 @@ local utils = require("fugitive_utils")
 local commands = require("features.commands")
 local help = require("features.help")
 local notes = require("features.notes")
+local commit_highlight = require("features.commit_highlight")
 
 local function get_commit_at_line(bufnr, lnum)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
@@ -67,17 +68,17 @@ local function apply_highlights(bufnr)
     local hash = line:match("^([^\t]+)")
 
     if hash then
-      local hl_group = "String" -- Default string-ish
+      local state = 'default'
 
       if unpushed_commits[hash] then
-        hl_group = "@text.danger" -- Red for unpushed
+        state = 'unpushed'
       elseif diverged_commits[hash] then
-        hl_group = "Constant" -- Orange for diverged (but pushed)
+        state = 'diverged'
       end
 
       vim.api.nvim_buf_set_extmark(bufnr, ns_id, i - 1, 0, {
         end_col = #hash,
-        hl_group = hl_group,
+        hl_group = commit_highlight.group(state),
       })
     end
   end

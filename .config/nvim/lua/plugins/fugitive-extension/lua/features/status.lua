@@ -9,6 +9,7 @@ local range_diff = require('features.range_diff')
 local repository_health = require('features.repository_health')
 local notes = require('features.notes')
 local index_flags = require('features.index_flags')
+local commit_highlight = require('features.commit_highlight')
 local pull_requests_by_buf = {}
 local pull_request_scope_by_buf = {}
 local pull_request_branch_by_buf = {}
@@ -1007,7 +1008,15 @@ function M.setup(group)
         if not utils.is_valid_buf(b) then return end
         vim.api.nvim_buf_clear_namespace(b, ns_id, 0, -1)
         local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local unpushed_hashes = commit_highlight.hash_set(unpushed_commits_by_buf[b])
+        local in_unpulled = false
         for idx, line in ipairs(lines) do
+          if line:match('^Unpulled ') then
+            in_unpulled = true
+          elseif in_unpulled and not line:match('^%x%x%x%x%x%x%x+%s') then
+            in_unpulled = false
+          end
+
           if line:match('^Staged') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 6, hl_group = 'GitSignsAdd' })
           elseif line:match('^Bisecting') then
@@ -1042,6 +1051,17 @@ function M.setup(group)
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 8, hl_group = 'GitSignsChange' })
           elseif line:match('^Untracked') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 9, hl_group = 'GitSignsDelete' })
+          end
+
+          local commit_hash = line:match('^(%x%x%x%x%x%x%x+)%s')
+          if commit_hash then
+            local state = in_unpulled and 'unpulled'
+              or (commit_scope_by_buf[b] == 'recent' and unpushed_hashes[commit_hash] and 'unpushed')
+              or 'default'
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, {
+              end_col = #commit_hash,
+              hl_group = commit_highlight.group(state),
+            })
           end
 
           local filepath = line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
