@@ -8,6 +8,7 @@ local operation = require('features.operation')
 local range_diff = require('features.range_diff')
 local repository_health = require('features.repository_health')
 local notes = require('features.notes')
+local index_flags = require('features.index_flags')
 local pull_requests_by_buf = {}
 local pull_request_scope_by_buf = {}
 local pull_request_branch_by_buf = {}
@@ -16,6 +17,8 @@ local unpushed_commits_by_buf = {}
 local status_cursor_anchor_by_buf = {}
 local pending_status_cursor_anchors_by_buf = {}
 local repository_health_by_buf = {}
+local index_flags_by_buf = {}
+local index_flags_expanded_by_buf = {}
 
 local function is_status_buffer(bufnr)
   return utils.is_valid_buf(bufnr)
@@ -66,6 +69,8 @@ local function status_header_kind(line)
     return 'commit'
   end
   if line:match('^Pull requests %(') then return 'pull_request' end
+  if line:match('^Hidden changes: %d+ files? %(Index flags%)$') then return 'index_flags_warning' end
+  if line:match('^Index flags %[local%] %(%d+%) %[.+%]$') then return 'index_flags' end
   return nil
 end
 
@@ -73,6 +78,8 @@ local function status_cursor_key(lines, row, bufnr)
   local line = lines[row] or ''
   local rendered_entry = bufnr and status_renderer.entry_at(bufnr, row) or nil
   if rendered_entry and not rendered_entry.header then return 'status_entry', rendered_entry.path end
+  local flagged_entry = bufnr and index_flags.entry_from_line(index_flags_by_buf[bufnr], line) or nil
+  if flagged_entry then return 'index_flag', flagged_entry.path end
   local header = status_header_kind(line)
   if header then return 'header', header end
 
@@ -303,6 +310,17 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   local pull_requests = pull_requests_by_buf[bufnr]
   local health = repository_health.inspect(work_tree)
   repository_health_by_buf[bufnr] = health
+  local flag_state = index_flags.inspect(work_tree)
+  index_flags_by_buf[bufnr] = flag_state
+  local warning = index_flags.warning_line(flag_state)
+  if warning then
+    local warning_row = #native_lines + 1
+    for row, line in ipairs(native_lines) do
+      if line == 'Help: g?' then warning_row = row + 1; break end
+    end
+    table.insert(native_lines, warning_row, warning)
+    status_renderer.shift_entries(bufnr, warning_row, 1)
+  end
 
   local function build_final_lines(commit_lines)
     local final_lines = {}
@@ -336,6 +354,10 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
         table.insert(final_lines, ('#%d%s %s%s'):format(pr.number, draft, pr.title, branch))
       end
     end
+    vim.list_extend(final_lines, index_flags.status_lines(
+      flag_state,
+      index_flags_expanded_by_buf[bufnr] == true
+    ))
     return final_lines
   end
 
@@ -646,6 +668,25 @@ local function open_entry_from_status(bufnr, close_status)
   end
 end
 
+local function open_index_flag_file(bufnr, path)
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if not work_tree then return false end
+  local absolute = vim.fs.joinpath(work_tree, path)
+  if vim.fn.filereadable(absolute) ~= 1 and vim.fn.isdirectory(absolute) ~= 1 then
+    vim.notify('Flagged path is missing: ' .. path, vim.log.levels.WARN)
+    return false
+  end
+  local status_win = vim.fn.bufwinid(bufnr)
+  if status_win == -1 then return false end
+  local target_win = target_window_or_split(status_win)
+  if not target_win then return false end
+  vim.api.nvim_win_call(target_win, function()
+    vim.cmd('edit ' .. vim.fn.fnameescape(absolute))
+  end)
+  vim.api.nvim_set_current_win(target_win)
+  return true
+end
+
 local function open_oil_in_target(bufnr, path)
   local status_win = vim.fn.bufwinid(bufnr)
   if status_win == -1 or not vim.api.nvim_win_is_valid(status_win) then return false end
@@ -703,6 +744,24 @@ local function open_status_diff(bufnr, target_line, layout)
     pcall(vim.api.nvim_win_set_cursor, right_win, { math.min(math.max(target_line, 1), line_count), 0 })
     vim.api.nvim_win_call(right_win, function() vim.cmd('normal! zz') end)
   end
+  return true
+end
+
+local function open_index_flag_diff(bufnr, entry, layout)
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if not work_tree then return false end
+  local sides, err = index_flags.diff_sides(work_tree, entry)
+  if not sides then vim.notify(err, vim.log.levels.WARN); return false end
+
+  vim.cmd('tabnew')
+  local placeholder = vim.api.nvim_get_current_buf()
+  local left_win = vim.api.nvim_get_current_win()
+  show_diff_side(left_win, sides.left, sides.path, sides.left_label)
+  if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
+    pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
+  end
+  vim.cmd(layout == 'horizontal' and 'rightbelow split' or 'rightbelow vsplit')
+  show_diff_side(vim.api.nvim_get_current_win(), sides.right, sides.path, sides.right_label)
   return true
 end
 
@@ -855,6 +914,8 @@ function M.setup(group)
           status_cursor_anchor_by_buf[b] = nil
           pending_status_cursor_anchors_by_buf[b] = nil
           repository_health_by_buf[b] = nil
+          index_flags_by_buf[b] = nil
+          index_flags_expanded_by_buf[b] = nil
           status_renderer.cleanup(b)
         end,
       })
@@ -969,6 +1030,14 @@ function M.setup(group)
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = health_group })
           elseif line:match('^Upstream:.*%[gone%]') or line == 'HEAD: detached' then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
+          elseif line:match('^Hidden changes: %d+ files? %(Index flags%)$') then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
+          elseif line:match('^Index flags %[local%]') then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'Comment' })
+          elseif line:match('^  skip%s') or line:match('^  assume%s') then
+            local flag_group = line:match('%[missing%]') and 'DiagnosticError'
+              or (line:match('%[modified%]') and 'DiagnosticWarn' or 'Comment')
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = flag_group })
           elseif line:match('^Unpulled') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 8, hl_group = 'GitSignsChange' })
           elseif line:match('^Untracked') then
@@ -1419,7 +1488,6 @@ function M.setup(group)
 
       for key, section in pairs({
         gu = 'untracked',
-        gU = 'unstaged',
         gs = 'staged',
         gp = 'unpushed',
         gP = 'unpulled',
@@ -1700,7 +1768,84 @@ function M.setup(group)
         return true
       end
 
+      local function index_flag_entry_at_cursor()
+        return index_flags.entry_from_line(index_flags_by_buf[b], vim.api.nvim_get_current_line())
+      end
+
+      local function index_flag_path_at_cursor()
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then return flagged.path end
+        local entry = status_renderer.entry_at(b, vim.api.nvim_win_get_cursor(0)[1])
+        if entry and not entry.header and entry.section ~= 'untracked' then return entry.path end
+        return nil
+      end
+
+      local function move_to_index_flags(expand)
+        if expand ~= nil then index_flags_expanded_by_buf[b] = expand end
+        refresh()
+        vim.schedule(function()
+          if not utils.is_valid_buf(b) then return end
+          local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+          for row, line in ipairs(lines) do
+            if line:match('^Index flags %[local%]') then
+              local target = index_flags_expanded_by_buf[b] and math.min(row + 1, #lines) or row
+              pcall(vim.api.nvim_win_set_cursor, 0, { target, 0 })
+              vim.cmd('normal! zz')
+              return
+            end
+          end
+        end)
+      end
+
+      local function update_index_flag(path, flag)
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree then return end
+        local ok, err = index_flags.update(work_tree, path, flag)
+        if not ok then vim.notify(err, vim.log.levels.ERROR); return end
+        local action = flag and ('set to ' .. flag) or 'cleared'
+        vim.notify(('Index flag %s: %s'):format(action, path), vim.log.levels.INFO)
+        reload_status()
+        notify_repo_changed()
+      end
+
+      local function choose_index_flag_action(path)
+        local current = index_flags.flag_for_path(index_flags_by_buf[b], path)
+        local choices = {}
+        if current then
+          table.insert(choices, { flag = nil, label = 'Clear ' .. current })
+        end
+        if current ~= 'skip' then
+          table.insert(choices, { flag = 'skip', label = 'Set skip-worktree' })
+        end
+        if current ~= 'assume' then
+          table.insert(choices, { flag = 'assume', label = 'Set assume-unchanged (performance hint)' })
+        end
+        vim.ui.select(choices, { prompt = 'Index flag for ' .. path .. ':' }, function(choice)
+          if choice then update_index_flag(path, choice.flag) end
+        end)
+      end
+
+      local function show_index_flag_actions()
+        local path = index_flag_path_at_cursor()
+        if path then choose_index_flag_action(path); return end
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree then return end
+        local paths, err = index_flags.tracked_paths(work_tree)
+        if #paths == 0 then
+          vim.notify(err or 'No tracked files', vim.log.levels.WARN)
+          return
+        end
+        vim.ui.select(paths, { prompt = 'Select tracked file for index flag:' }, function(selected)
+          if selected then choose_index_flag_action(selected) end
+        end)
+      end
+
+      vim.keymap.set('n', 'gU', show_index_flag_actions,
+        { buffer = b, nowait = true, silent = true, desc = 'Manage update-index flags' })
+
       vim.keymap.set('n', 'X', function()
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then update_index_flag(flagged.path, nil); return end
         if is_cursor_in_worktree_area() then
           local p = get_worktree_path_at_cursor()
           if p then worktree.remove_worktree_path(p) end
@@ -1736,6 +1881,7 @@ function M.setup(group)
       local function show_status_actions()
         local row = vim.api.nvim_win_get_cursor(0)[1]
         local on_commit = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s') ~= nil
+        local flagged_entry = index_flag_entry_at_cursor()
         local entry = status_renderer.entry_at(b, row)
         local conflicted = entry and not entry.header and entry.section == 'conflicted'
         local work_tree = utils.get_buf_work_tree(b)
@@ -1782,6 +1928,9 @@ function M.setup(group)
             { key = 'br', label = 'Reset bisect', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
           } },
           { title = 'Repository', actions = {
+            { key = 'gU', label = 'Manage update-index flags' },
+            { key = 'X', label = 'Clear selected index flag', enabled = flagged_entry ~= nil },
+            { key = 'd', label = 'Diff flagged worktree file against index', enabled = flagged_entry ~= nil },
             { key = 'mi', label = on_submodule and 'Initialize selected submodule' or 'Initialize all submodules', enabled = has_submodules },
             { key = 'mu', label = on_submodule and 'Update selected submodule' or 'Update all submodules', enabled = has_submodules },
             { key = 'ms', label = 'Synchronize submodule URLs', enabled = has_submodules },
@@ -1815,6 +1964,21 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true, desc = 'Edit Git note' })
 
       local function open_status_item()
+        local current_line = vim.api.nvim_get_current_line()
+        if current_line:match('^Hidden changes: %d+ files? %(Index flags%)$') then
+          move_to_index_flags(true)
+          return
+        end
+        if current_line:match('^Index flags %[local%]') then
+          index_flags_expanded_by_buf[b] = not index_flags_expanded_by_buf[b]
+          refresh()
+          return
+        end
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then
+          open_index_flag_file(b, flagged.path)
+          return
+        end
         if is_cursor_on_commit_header() then
           toggle_commit_scope()
           return
@@ -1978,6 +2142,7 @@ function M.setup(group)
 
       vim.keymap.set('n', 'R', function()
         status_renderer.collapse_all(b)
+        index_flags_expanded_by_buf[b] = false
         reload_status()
         vim.schedule(function()
           if utils.is_valid_buf(b) then M.focus_section(b, 'unstaged') end
@@ -2051,6 +2216,11 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true, desc = 'Revert commit under cursor' })
 
       local function open_diff_at_cursor(layout)
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then
+          open_index_flag_diff(b, flagged, layout)
+          return
+        end
         local target_line = nil
         local current_line_idx = vim.api.nvim_win_get_cursor(0)[1]
         local hunk_line = nil
