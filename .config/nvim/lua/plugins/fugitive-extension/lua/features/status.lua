@@ -1517,220 +1517,27 @@ function M.setup(group)
           { buffer = b, nowait = true, silent = true, desc = 'Go to ' .. section .. ' section' })
       end
 
+      -- Reword the commit selected in status with the shared commit editor.
       vim.keymap.set('n', 'cw', function()
-        local line = vim.api.nvim_get_current_line()
-        local r = stash_ref_from_line(line)
-        if r then
-          rename_stash_at_cursor(r)
+        local stash_ref = stash_ref_from_line(vim.api.nvim_get_current_line())
+        if stash_ref then
+          rename_stash_at_cursor(stash_ref)
           return
         end
 
-        local h = line:match('^%s*(%x%x%x%x%x%x%x+)')
-        if h then
-          -- Verify it is a commit hash
-          local git = status_git_prefix()
-          if not git then
-            vim.notify('Not in a git repository', vim.log.levels.WARN)
-            return
-          end
-          vim.fn.system(git .. 'rev-parse --verify ' .. vim.fn.shellescape(h .. '^{commit}') .. ' 2>/dev/null')
-          if vim.v.shell_error == 0 then
-            local head = vim.fn.trim(vim.fn.system(git .. 'rev-parse HEAD'))
-            if head:sub(1, #h) == h then
-              -- Use git commit --amend with a blocking editor that opens the message in Neovim
-              local wt_head = utils.get_buf_work_tree(b)
-              if not wt_head then
-                vim.notify('Not in a git repository', vim.log.levels.WARN)
-                return
-              end
-              local tmpb = vim.fn.tempname()
-              local editor_file_head = tmpb .. '.editor.sh'
-              local marker_file_head = tmpb .. '.marker'
-              local done_file_head = tmpb .. '.done'
-              vim.fn.writefile({"#!/bin/sh",
-                "commit_msg_file=\"$1\"",
-                "printf '%s\\n' \"$commit_msg_file\" > " .. vim.fn.shellescape(marker_file_head),
-                "while [ ! -f " .. vim.fn.shellescape(done_file_head) .. " ]; do sleep 0.1; done",
-                "exit 0"}, editor_file_head)
-              vim.fn.system('chmod +x ' .. vim.fn.shellescape(editor_file_head))
-              local commit_msg_bufnr_head = nil
-              local uvh = vim.uv or vim.loop
-              local timerh = uvh and uvh.new_timer and uvh.new_timer() or nil
-              if not timerh then
-                vim.notify('Failed to start amend watcher', vim.log.levels.ERROR)
-                return
-              end
-              timerh:start(50, 50, vim.schedule_wrap(function()
-                if vim.fn.filereadable(marker_file_head) == 1 then
-                  timerh:stop()
-                  timerh:close()
-                  local linesh = vim.fn.readfile(marker_file_head)
-                  local commit_msg_pathh = type(linesh) == 'table' and linesh[1] or ''
-                  if commit_msg_pathh ~= '' then
-                    vim.schedule(function()
-                      local fname = vim.fn.fnameescape(commit_msg_pathh)
-                      local winid = vim.fn.bufwinid(b)
-                      if type(winid) == 'number' and winid > 0 then
-                        pcall(vim.api.nvim_set_current_win, winid)
-                      end
-                      vim.cmd('belowright split ' .. fname)
-                      -- Ensure new split gets focus and filetype is set
-                      pcall(function() vim.bo.filetype = 'gitcommit' end)
-                      commit_msg_bufnr_head = vim.api.nvim_get_current_buf()
-                      -- Ensure git continues when buffer is written OR closed
-                      vim.api.nvim_create_autocmd({'BufWritePost','BufWipeout','BufUnload'}, {
-                        buffer = commit_msg_bufnr_head,
-                        once = true,
-                        callback = function()
-                          pcall(vim.fn.writefile, {}, done_file_head)
-                          if vim.fn.filereadable(marker_file_head) == 1 then pcall(vim.fn.delete, marker_file_head) end
-                        end,
-                      })
-                    end)
-                  end
-                end
-              end))
-              local cmd_head = 'cd ' .. vim.fn.shellescape(wt_head) .. ' && GIT_EDITOR=' .. vim.fn.shellescape('sh ' .. editor_file_head) .. ' git commit --amend'
-              vim.fn.jobstart({'sh','-c', cmd_head}, {
-                stdout_buffered = true,
-                stderr_buffered = true,
-                on_exit = function(_, code)
-                  pcall(vim.fn.delete, editor_file_head)
-                  pcall(vim.fn.delete, marker_file_head)
-                  pcall(vim.fn.delete, done_file_head)
-                    if code == 0 then
-                      vim.schedule(function()
-                        vim.notify('Amend completed', vim.log.levels.INFO)
-                        notify_repo_changed()
-                        -- Close the commit message buffer if still open
-                        if commit_msg_bufnr_head and pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_head) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_head) then
-                          local winid = vim.fn.bufwinid(commit_msg_bufnr_head)
-                        if type(winid) == 'number' and winid > 0 then pcall(vim.api.nvim_win_close, winid, true) end
-                        if pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_head) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_head) then pcall(vim.api.nvim_buf_delete, commit_msg_bufnr_head, { force = true }) end
-                      end
-                    end)
-                  else
-                    vim.schedule(function()
-                      vim.notify('Amend exited with code ' .. tostring(code), vim.log.levels.ERROR)
-                    end)
-                  end
-                end,
-              })
-            else
-              local base = h .. '^'
-              vim.fn.system(git .. 'rev-parse ' .. vim.fn.shellescape(base) .. ' 2>/dev/null')
-              if vim.v.shell_error ~= 0 then base = '--root' end
-
-              -- Perform an interactive rebase that stops at the target commit and
-              -- open the commit message file in this Neovim instance. We create a
-              -- temporary sequence-editor to mark the todo as 'reword' and a small
-              -- blocking editor script that writes the commit message path to a
-              -- marker file; a timer watches that marker and opens the file for
-              -- editing. When the user writes the buffer we touch the done file to
-              -- let git continue.
-              local wt = utils.get_buf_work_tree(b)
-              if not wt then
-                vim.notify('Not in a git repository', vim.log.levels.WARN)
-                return
-              end
-              local short = h:sub(1, 7)
-              local tmpbase = vim.fn.tempname()
-              local seq_file = tmpbase .. '.seq.sh'
-              local editor_file = tmpbase .. '.editor.sh'
-              local marker_file = tmpbase .. '.marker'
-              local done_file = tmpbase .. '.done'
-
-              vim.fn.writefile({
-                "#!/bin/sh",
-                "tmp=$(mktemp)",
-                "awk -v s=\"" .. short .. "\" '{ if ($0 ~ \"^pick .*\" s) { sub(/^pick/, \"reword\", $0); } print }' \"$1\" > \"$tmp\"",
-                "mv \"$tmp\" \"$1\"",
-              }, seq_file)
-              vim.fn.writefile({"#!/bin/sh",
-                "commit_msg_file=\"$1\"",
-                "printf '%s\\n' \"$commit_msg_file\" > " .. vim.fn.shellescape(marker_file),
-                "while [ ! -f " .. vim.fn.shellescape(done_file) .. " ]; do sleep 0.1; done",
-                "exit 0"}, editor_file)
-
-              -- Make scripts executable
-              vim.fn.system('chmod +x ' .. vim.fn.shellescape(seq_file) .. ' ' .. vim.fn.shellescape(editor_file))
-
-              -- Poll for marker file created by the editor script and open the file
-              local commit_msg_bufnr_rebase = nil
-              local uv = vim.uv or vim.loop
-              local timer = uv and uv.new_timer and uv.new_timer() or nil
-              if not timer then
-                vim.notify('Failed to start rebase watcher', vim.log.levels.ERROR)
-                return
-              end
-              timer:start(50, 50, vim.schedule_wrap(function()
-                if vim.fn.filereadable(marker_file) == 1 then
-                  timer:stop()
-                  timer:close()
-                  local lines = vim.fn.readfile(marker_file)
-                  local commit_msg_path = type(lines) == 'table' and lines[1] or ''
-                  if commit_msg_path ~= '' then
-                    vim.schedule(function()
-                      local fname = vim.fn.fnameescape(commit_msg_path)
-                      local winid = vim.fn.bufwinid(b)
-                      if type(winid) == 'number' and winid > 0 then
-                        pcall(vim.api.nvim_set_current_win, winid)
-                      end
-                      vim.cmd('belowright split ' .. fname)
-                      pcall(function() vim.bo.filetype = 'gitcommit' end)
-                      commit_msg_bufnr_rebase = vim.api.nvim_get_current_buf()
-                      -- Ensure git continues when buffer written OR closed
-                      vim.api.nvim_create_autocmd({'BufWritePost','BufWipeout','BufUnload'}, {
-                        buffer = commit_msg_bufnr_rebase,
-                        once = true,
-                        callback = function()
-                          pcall(vim.fn.writefile, {}, done_file)
-                          if vim.fn.filereadable(marker_file) == 1 then pcall(vim.fn.delete, marker_file) end
-                        end,
-                      })
-                    end)
-                  end
-                end
-              end))
-
-              -- Start the rebase asynchronously with our custom editors
-              local cmd = 'cd ' .. vim.fn.shellescape(wt)
-                .. ' && GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape('sh ' .. seq_file)
-                .. ' GIT_EDITOR=' .. vim.fn.shellescape('sh ' .. editor_file)
-                .. ' git rebase -i ' .. vim.fn.shellescape(base)
-              vim.fn.jobstart({'sh', '-c', cmd}, {
-                stdout_buffered = true,
-                stderr_buffered = true,
-                on_exit = function(_, code)
-                  -- Cleanup
-                  pcall(vim.fn.delete, seq_file)
-                  pcall(vim.fn.delete, editor_file)
-                  pcall(vim.fn.delete, marker_file)
-                  pcall(vim.fn.delete, done_file)
-                    if code == 0 then
-                      vim.schedule(function()
-                        vim.notify('Rebase completed', vim.log.levels.INFO)
-                        notify_repo_changed()
-                        -- Close the commit message buffer if still open
-                        if commit_msg_bufnr_rebase and pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_rebase) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_rebase) then
-                          local winid = vim.fn.bufwinid(commit_msg_bufnr_rebase)
-                        if type(winid) == 'number' and winid > 0 then pcall(vim.api.nvim_win_close, winid, true) end
-                        if pcall(vim.api.nvim_buf_is_valid, commit_msg_bufnr_rebase) and vim.api.nvim_buf_is_valid(commit_msg_bufnr_rebase) then pcall(vim.api.nvim_buf_delete, commit_msg_bufnr_rebase, { force = true }) end
-                      end
-                    end)
-                  else
-                    vim.schedule(function()
-                      vim.notify('Rebase exited with code ' .. tostring(code), vim.log.levels.ERROR)
-                    end)
-                  end
-                end,
-              })
-            end
-            return
-          end
+        local commit = vim.api.nvim_get_current_line():match('^%s*(%x%x%x%x%x%x%x+)')
+        if not commit then
+          vim.notify('No commit or stash found at cursor', vim.log.levels.WARN)
+          return
         end
-        vim.notify('No commit or stash found at cursor', vim.log.levels.WARN)
-      end, { buffer = b, nowait = true, silent = true, desc = "Reword commit or rename stash" })
+        require('features.commit').open_edit_commit(commit, b, {
+          reopen = false,
+          on_complete = function()
+            reload_status()
+            notify_repo_changed()
+          end,
+        })
+      end, { buffer = b, nowait = true, silent = true, desc = 'Reword commit or rename stash' })
 
       vim.keymap.set('n', 'A', function()
         if is_cursor_in_stash_area() then

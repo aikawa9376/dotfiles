@@ -491,6 +491,7 @@ end
 -- Commit message edit float + amend flow
 local edit_float_win = nil
 local edit_float_buf = nil
+local edit_context_by_buf = {}
 
 local function close_edit_commit_float(bufnr)
   bufnr = bufnr or edit_float_buf
@@ -505,16 +506,23 @@ local function close_edit_commit_float(bufnr)
   if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
     pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
   end
+  if bufnr then edit_context_by_buf[bufnr] = nil end
   edit_float_win = nil
   edit_float_buf = nil
 end
 
-local function do_amend_commit_from_file(git_dir, commit, message_file, view_state)
+local function do_amend_commit_from_file(git_dir, commit, message_file, view_state, opts)
+  opts = opts or {}
   if not git_dir or git_dir == '' then
     vim.notify('Not in a git repository', vim.log.levels.ERROR)
     return false
   end
-  local stashed = commit_auto_stash(git_dir)
+  -- Rewording must not leave staged files in the index: an amend would otherwise
+  -- accidentally include them, and an interactive rebase rejects a dirty index.
+  local stashed = utils.auto_stash(git_dir, {
+    message = 'fugitive-ext reword auto-stash',
+    notify_stashed = true,
+  })
   if stashed == nil then return false end
 
   local resolved = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse ' .. vim.fn.shellescape(commit) .. ' 2>/dev/null'):gsub('%s+', '')
@@ -529,7 +537,8 @@ local function do_amend_commit_from_file(git_dir, commit, message_file, view_sta
   local new_hash = ''
   if resolved == head then
     -- Amend HEAD
-    local cmd = 'git -C ' .. vim.fn.shellescape(git_dir) .. ' commit --amend -F ' .. vim.fn.shellescape(message_file) .. ' 2>&1'
+    local cmd = 'git -C ' .. vim.fn.shellescape(git_dir)
+      .. ' commit --amend --only --allow-empty -F ' .. vim.fn.shellescape(message_file) .. ' 2>&1'
     local out = vim.fn.system(cmd)
     if vim.v.shell_error ~= 0 then
       vim.notify('Amend failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
@@ -539,13 +548,24 @@ local function do_amend_commit_from_file(git_dir, commit, message_file, view_sta
     new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
   else
     -- Interactive rebase edit the commit
-    local short = resolved:sub(1, 7)
+    local parent = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir)
+      .. ' rev-parse --verify ' .. vim.fn.shellescape(resolved .. '^') .. ' 2>/dev/null'):gsub('%s+', '')
+    local base = parent ~= '' and vim.fn.shellescape(parent) or '--root'
+    local sequence_editor = "sed -i '/^pick " .. resolved:sub(1, 7) .. "/s/^pick/edit/'"
     local rebase_cmd = 'cd ' .. vim.fn.shellescape(git_dir)
-      .. " && GIT_SEQUENCE_EDITOR=\"sed -i '/" .. short
-      .. "/s/^pick/edit/'\" git rebase -i " .. resolved .. '^ 2>&1'
+      .. ' && GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(sequence_editor)
+      .. ' git rebase -i ' .. base .. ' 2>&1'
     local out = vim.fn.system(rebase_cmd)
-    if not out:match('Stopped at') then
+    local rebase_exit = vim.v.shell_error
+    local repository_dir = utils.get_git_dir(git_dir)
+    local rebase_active = repository_dir ~= nil
+      and (vim.fn.isdirectory(vim.fs.joinpath(repository_dir, 'rebase-merge')) == 1
+        or vim.fn.isdirectory(vim.fs.joinpath(repository_dir, 'rebase-apply')) == 1)
+    if rebase_exit ~= 0 or not rebase_active then
       vim.notify('Rebase failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
+      if rebase_active then
+        vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rebase --abort')
+      end
       if stashed then commit_auto_pop(git_dir) end
       return false
     end
@@ -558,6 +578,10 @@ local function do_amend_commit_from_file(git_dir, commit, message_file, view_sta
       if stashed then commit_auto_pop(git_dir) end
       return false
     end
+    -- Capture the rewritten target before continuing; after the rebase HEAD is
+    -- the tip commit, which is not necessarily the commit the user edited.
+    new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir)
+      .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
 
     out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && GIT_EDITOR=true git rebase --continue 2>&1')
     if not (out:match('Successfully rebased') or vim.v.shell_error == 0) then
@@ -566,18 +590,19 @@ local function do_amend_commit_from_file(git_dir, commit, message_file, view_sta
       if stashed then commit_auto_pop(git_dir) end
       return false
     end
-    new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
   end
 
   if stashed then commit_auto_pop(git_dir) end
 
-  -- Reopen commit view to reflect new history
-  reopen_commit_preserving_view(new_hash, view_state)
+  if opts.reopen ~= false then
+    reopen_commit_preserving_view(new_hash, view_state)
+  end
+  if opts.on_complete then pcall(opts.on_complete, new_hash) end
   vim.notify('Amended commit ' .. (resolved:sub(1,7)) .. ' → ' .. (new_hash and new_hash:sub(1,7) or ''), vim.log.levels.INFO)
   return true
 end
 
-local function open_edit_commit_float(commit, origin_buf, view_state)
+local function open_edit_commit_float(commit, origin_buf, view_state, opts)
   -- If float already open, replace content
   pcall(close_edit_commit_float)
 
@@ -617,6 +642,7 @@ local function open_edit_commit_float(commit, origin_buf, view_state)
   vim.b[edit_float_buf].amend_work_tree = work_tree
   vim.b[edit_float_buf].amend_view_state = view_state
   vim.b[edit_float_buf].amend_original_text = table.concat(msg, '\n')
+  edit_context_by_buf[edit_float_buf] = opts or {}
 
   -- Prompt on unexpected buffer unload/close: if buffer is unloaded while not intentionally closing, run prompt handler
   vim.api.nvim_create_autocmd({ 'BufUnload' }, {
@@ -690,6 +716,7 @@ M._do_amend_from_buffer = function(bufnr, skip_confirm)
   local commit = vim.b[bufnr] and vim.b[bufnr].amend_target or nil
   local origin_buf = vim.b[bufnr] and vim.b[bufnr].amend_origin_buf or nil
   local view_state = vim.b[bufnr] and vim.b[bufnr].amend_view_state or nil
+  local opts = edit_context_by_buf[bufnr] or {}
   if not commit then
     vim.notify('No amend target', vim.log.levels.ERROR)
     return
@@ -719,7 +746,7 @@ M._do_amend_from_buffer = function(bufnr, skip_confirm)
     os.remove(temp)
     return
   end
-  local ok = do_amend_commit_from_file(git_dir, commit, temp, view_state)
+  local ok = do_amend_commit_from_file(git_dir, commit, temp, view_state, opts)
   os.remove(temp)
   if ok then close_edit_commit_float(bufnr) end
 end
@@ -1009,6 +1036,17 @@ function M.setup(group)
         open_edit_commit_float(commit, ev.buf, view_state)
       end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Edit/amend commit message in float' })
 
+      -- Override Fugitive's built-in `cw` (which always amends HEAD) so the
+      -- commit currently displayed by this buffer is reworded instead.
+      vim.keymap.set('n', 'cw', function()
+        local commit = get_commit_from_buffer(ev.buf)
+        if not commit then
+          vim.notify('No commit found', vim.log.levels.WARN)
+          return
+        end
+        open_edit_commit_float(commit, ev.buf, save_commit_view_state(ev.buf))
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Reword displayed commit' })
+
       -- p: カーソル位置ファイルの前のコミット
       vim.keymap.set('n', 'p', function()
         local commit = get_commit_from_buffer(ev.buf)
@@ -1232,9 +1270,10 @@ function M.setup(group)
   })
 end
 
-M.open_edit_commit = function(commit, origin_buf)
-  local view_state = save_commit_view_state(origin_buf)
-  open_edit_commit_float(commit, origin_buf, view_state)
+M.open_edit_commit = function(commit, origin_buf, opts)
+  opts = opts or {}
+  local view_state = opts.reopen == false and nil or save_commit_view_state(origin_buf)
+  open_edit_commit_float(commit, origin_buf, view_state, opts)
 end
 
 return M
