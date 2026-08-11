@@ -1,4 +1,5 @@
 local M = {}
+local operation = require('features.operation')
 
 local models = {}
 local expanded = {}
@@ -71,7 +72,7 @@ local function parse_status(work_tree)
         end
       end
     elseif record:sub(1, 2) == 'u ' then
-      local xy, path = record:match('^u ([^ ]+) [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (.*)$')
+      local xy, path = record:match('^u ([^ ]+) [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (.*)$')
       if xy and path then
         table.insert(model.conflicted, { section = 'conflicted', status = xy, path = path })
       end
@@ -147,23 +148,6 @@ local function append_section(lines, entries_by_row, model, title, section, entr
   end
 end
 
-local function operation_lines(work_tree)
-  local git_dir_result = run(work_tree, { 'rev-parse', '--git-dir' })
-  if git_dir_result.code ~= 0 then return {} end
-  local git_dir = vim.trim(git_dir_result.stdout or '')
-  if not vim.startswith(git_dir, '/') then git_dir = work_tree .. '/' .. git_dir end
-  if vim.fn.isdirectory(git_dir .. '/rebase-merge') == 1 or vim.fn.isdirectory(git_dir .. '/rebase-apply') == 1 then
-    return { 'Rebase in progress' }
-  elseif vim.fn.filereadable(git_dir .. '/CHERRY_PICK_HEAD') == 1 then
-    return { 'Cherry-pick in progress' }
-  elseif vim.fn.filereadable(git_dir .. '/MERGE_HEAD') == 1 then
-    return { 'Merge in progress' }
-  elseif vim.fn.filereadable(git_dir .. '/REVERT_HEAD') == 1 then
-    return { 'Revert in progress' }
-  end
-  return {}
-end
-
 local function commit_lines(work_tree, revisions)
   local args = { 'log', '--pretty=format:%h%x09%s', '-n', '256' }
   if type(revisions) == 'table' then
@@ -203,7 +187,7 @@ function M.snapshot(bufnr, work_tree)
     table.insert(lines, ('Upstream: %s (+%d/-%d)'):format(model.upstream, model.ahead, model.behind))
   end
   if model.push and model.push ~= model.upstream then table.insert(lines, 'Push: ' .. model.push) end
-  for _, line in ipairs(operation_lines(work_tree)) do table.insert(lines, line) end
+  for _, line in ipairs(operation.status_lines(operation.inspect(work_tree))) do table.insert(lines, line) end
   table.insert(lines, 'Help: g?')
 
   if model.upstream and model.behind > 0 then
@@ -485,6 +469,32 @@ function M.discard(bufnr, row)
   return true
 end
 
+function M.resolve_conflict(bufnr, row, side)
+  local model = models[bufnr]
+  local entry = M.entry_at(bufnr, row)
+  if not model or not entry or entry.header or entry.section ~= 'conflicted' then
+    return false, 'No conflicted file at cursor'
+  end
+  if side ~= 'ours' and side ~= 'theirs' then return false, 'Unknown conflict side' end
+
+  local result = run(model.work_tree, { 'checkout', '--' .. side, '--', entry.path })
+  if result.code ~= 0 then
+    return false, vim.trim(result.stderr or ('Failed to choose ' .. side .. ' for ' .. entry.path))
+  end
+  return true
+end
+
+function M.mark_resolved(bufnr, row)
+  local model = models[bufnr]
+  local entry = M.entry_at(bufnr, row)
+  if not model or not entry or entry.header or entry.section ~= 'conflicted' then
+    return false, 'No conflicted file at cursor'
+  end
+  local result = run(model.work_tree, { 'add', '-A', '--', entry.path })
+  if result.code ~= 0 then return false, vim.trim(result.stderr or 'Failed to mark conflict resolved') end
+  return true
+end
+
 function M.patch_command(bufnr, row)
   local entry = M.entry_at(bufnr, row)
   if not entry then return nil, 'No status entry at cursor' end
@@ -541,6 +551,20 @@ function M.diff_sides(bufnr, row)
     right = worktree_lines(model, entry.path),
     left_label = entry.section == 'untracked' and 'empty' or 'index',
     right_label = 'worktree',
+  }
+end
+
+function M.conflict_sides(bufnr, row)
+  local model = models[bufnr]
+  local entry = M.entry_at(bufnr, row)
+  if not model or not entry or entry.header or entry.section ~= 'conflicted' then
+    return nil, 'No conflicted file at cursor'
+  end
+  return {
+    path = entry.path,
+    { label = 'base', lines = blob_lines(model, ':1', entry.path) },
+    { label = 'ours', lines = blob_lines(model, ':2', entry.path) },
+    { label = 'theirs', lines = blob_lines(model, ':3', entry.path) },
   }
 end
 
