@@ -149,8 +149,6 @@ function _update_vcs_info_msg() {
   local -a messages
   local prompt
 
-  LANG=jp_JP.UTF-8 vcs_info
-
   # 1行あける
   print
   # バージョン管理されてた場合、ブランチ名
