@@ -1730,6 +1730,8 @@ function M.setup(group)
           { title = 'Changes', actions = {
             { key = 'o', label = 'Toggle inline diff', enabled = entry ~= nil },
             { key = 's', label = 'Stage / unstage', enabled = entry ~= nil },
+            { key = 'S', label = 'Stage all changes' },
+            { key = 'U', label = 'Unstage all changes' },
             { key = 'P', label = 'Patch mode', enabled = entry ~= nil },
             { key = 'X', label = 'Discard change / drop commit' },
             { key = 'c3', label = 'Open base / ours / theirs', enabled = conflicted },
@@ -1979,7 +1981,7 @@ function M.setup(group)
         vim.schedule(function()
           if utils.is_valid_buf(b) then M.focus_section(b, 'unstaged') end
         end)
-      end, { buffer = b, silent = true, desc = 'Collapse all and refresh status' })
+      end, { buffer = b, nowait = true, silent = true, desc = 'Collapse all and refresh status' })
 
       vim.keymap.set('n', 'rD', function()
         local work_tree = utils.get_buf_work_tree(b)
@@ -2083,7 +2085,7 @@ function M.setup(group)
       end
 
       vim.keymap.set('n', 'd', function() open_diff_at_cursor('vertical') end,
-        { buffer = b, silent = true, desc = 'Open file diff in new tab' })
+        { buffer = b, nowait = true, silent = true, desc = 'Open file diff in new tab' })
       for _, key in ipairs({ 'dd', 'dv' }) do
         vim.keymap.set('n', key, function() open_diff_at_cursor('vertical') end,
           { buffer = b, nowait = true, silent = true, desc = 'Open vertical file diff' })
