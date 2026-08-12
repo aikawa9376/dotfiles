@@ -1647,7 +1647,10 @@ function M.setup(group)
         if current ~= 'assume' then
           table.insert(choices, { flag = 'assume', label = 'Set assume-unchanged (performance hint)' })
         end
-        vim.ui.select(choices, { prompt = 'Index flag for ' .. path .. ':' }, function(choice)
+        vim.ui.select(choices, {
+          prompt = 'Index flag for ' .. path .. ':',
+          format_item = function(choice) return choice.label end,
+        }, function(choice)
           if choice then update_index_flag(path, choice.flag) end
         end)
       end
