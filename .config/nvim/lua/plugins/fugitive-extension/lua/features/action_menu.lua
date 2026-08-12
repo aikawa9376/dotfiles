@@ -35,7 +35,7 @@ function M.show(title, groups, opts)
     for _, action in ipairs(group.actions) do
       if action.enabled == nil then action.enabled = true end
       local marker = action.enabled and ' ' or '·'
-      table.insert(lines, ('%s %-10s %s'):format(marker, action.key, action.label))
+      table.insert(lines, ('%s %-10s %s'):format(marker, action.display_key or action.key, action.label))
       actions_by_row[#lines] = action
     end
     table.insert(lines, '')
