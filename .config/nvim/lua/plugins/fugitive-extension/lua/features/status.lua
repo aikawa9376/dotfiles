@@ -532,21 +532,23 @@ local function preferred_target_window(status_win)
     return not config.external and (config.relative == nil or config.relative == '')
   end
 
-  local alt = vim.fn.win_getid(vim.fn.winnr('#'))
-  if alt ~= status_win and is_regular_window(alt) then
-    local alt_buf = vim.api.nvim_win_get_buf(alt)
-    if not is_status_buffer(alt_buf) and vim.bo[alt_buf].filetype ~= 'fugitive' then
-      return alt
+  local function is_editing_window(winid)
+    if not is_regular_window(winid) then return false end
+    local bufnr = vim.api.nvim_win_get_buf(winid)
+    if is_status_buffer(bufnr) or vim.bo[bufnr].filetype == 'fugitive' then return false end
+    if vim.bo[bufnr].buftype ~= '' then return false end
+    if vim.b[bufnr].lazyagent_is_scratch == true or vim.b[bufnr].lazyagent_acp_transcript == true then
+      return false
     end
+    local filetype = vim.bo[bufnr].filetype
+    return filetype ~= 'lazyagent' and filetype ~= 'lazyagent_acp'
   end
 
+  local alt = vim.fn.win_getid(vim.fn.winnr('#'))
+  if alt ~= status_win and is_editing_window(alt) then return alt end
+
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if win ~= status_win and is_regular_window(win) then
-      local win_buf = vim.api.nvim_win_get_buf(win)
-      if not is_status_buffer(win_buf) and vim.bo[win_buf].filetype ~= 'fugitive' then
-        return win
-      end
-    end
+    if win ~= status_win and is_editing_window(win) then return win end
   end
   return nil
 end
