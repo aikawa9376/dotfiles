@@ -50,7 +50,7 @@ function M.show(title, groups, opts)
     relative = 'editor', width = width, height = height,
     col = math.floor((vim.o.columns - width) / 2),
     row = math.floor((vim.o.lines - height) / 2),
-    style = 'minimal', border = 'rounded', title = ' Actions ', title_pos = 'center',
+    style = 'minimal', border = 'single', title = ' Actions ', title_pos = 'center',
   })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false

@@ -1163,7 +1163,7 @@ function M.setup(group)
         end)
       end
 
-      vim.keymap.set('n', 'bs', function()
+      vim.keymap.set('n', 'gbs', function()
         local work_tree = utils.get_buf_work_tree(b)
         local current = work_tree and operation.inspect(work_tree) or nil
         if current and current.kind == 'bisect' then
@@ -1178,21 +1178,21 @@ function M.setup(group)
           end)
         end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Start Git bisect' })
-      vim.keymap.set('n', 'bg', function() bisect('good') end,
+      vim.keymap.set('n', 'gbg', function() bisect('good') end,
         { buffer = b, nowait = true, silent = true, desc = 'Mark bisect commit good' })
-      vim.keymap.set('n', 'bb', function() bisect('bad') end,
+      vim.keymap.set('n', 'gbb', function() bisect('bad') end,
         { buffer = b, nowait = true, silent = true, desc = 'Mark bisect commit bad' })
-      vim.keymap.set('n', 'bk', function() bisect('skip') end,
+      vim.keymap.set('n', 'gbk', function() bisect('skip') end,
         { buffer = b, nowait = true, silent = true, desc = 'Skip bisect commit' })
-      vim.keymap.set('n', 'br', function() bisect('reset') end,
+      vim.keymap.set('n', 'gbr', function() bisect('reset') end,
         { buffer = b, nowait = true, silent = true, desc = 'Reset Git bisect' })
-      vim.keymap.set('n', 'bx', function()
+      vim.keymap.set('n', 'gbx', function()
         vim.ui.input({ prompt = 'Bisect run command: ' }, function(command)
           if not command or vim.trim(command) == '' then return end
           bisect('run', { 'sh', '-c', command })
         end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Run command through Git bisect' })
-      vim.keymap.set('n', 'bv', function()
+      vim.keymap.set('n', 'gbv', function()
         local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
         local in_bisect = false
         for row, line in ipairs(lines) do
@@ -1750,12 +1750,12 @@ function M.setup(group)
             { key = 'rr', label = 'Continue', enabled = current_operation ~= nil and current_operation.kind ~= 'bisect' },
             { key = 'rs', label = 'Skip', enabled = current_operation ~= nil and current_operation.kind ~= 'merge' and current_operation.kind ~= 'bisect' },
             { key = 'ra', label = 'Abort', enabled = current_operation ~= nil and current_operation.kind ~= 'bisect' },
-            { key = 'bs', label = 'Start bisect', enabled = current_operation == nil },
-            { key = 'bg', label = 'Mark good', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-            { key = 'bb', label = 'Mark bad', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-            { key = 'bk', label = 'Skip candidate', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-            { key = 'bx', label = 'Run test command', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-            { key = 'br', label = 'Reset bisect', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
+            { key = 'gbs', label = 'Start bisect', enabled = current_operation == nil },
+            { key = 'gbg', label = 'Mark good', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
+            { key = 'gbb', label = 'Mark bad', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
+            { key = 'gbk', label = 'Skip candidate', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
+            { key = 'gbx', label = 'Run test command', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
+            { key = 'gbr', label = 'Reset bisect', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
           } },
           { title = 'Repository', actions = {
             { key = 'gU', label = 'Manage update-index flags' },
