@@ -632,7 +632,8 @@ local function open_edit_commit_float(commit, origin_buf, view_state, opts)
   })
 
   -- Keymaps: 'q' and <Esc> will trigger the close-with-prompt flow. <Leader>a still triggers amend directly.
-  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', 'q', [[:lua require('features.commit')._close_edit_float()<CR>]], { noremap = true, silent = true })
+  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', 'q', [[:lua require('features.commit')._close_edit_float()<CR>]],
+    { noremap = true, silent = true, nowait = true })
   vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', '<Esc>', [[:lua require('features.commit')._close_edit_float()<CR>]], { noremap = true, silent = true })
   vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', '<Leader>a', [[:lua require('features.commit')._do_amend_from_buffer()<CR>]], { noremap = true, silent = true })
 
