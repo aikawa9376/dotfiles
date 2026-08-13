@@ -14,12 +14,7 @@ local function run(work_tree, args)
   return vim.system(command, { cwd = work_tree, text = true }):wait()
 end
 
-local function age_label(timestamp)
-  local seconds = math.max(os.time() - timestamp, 0)
-  if seconds < 60 then return 'now' end
-  if seconds < 3600 then return ('%dm'):format(math.floor(seconds / 60)) end
-  if seconds < 86400 then return ('%dh'):format(math.floor(seconds / 3600)) end
-  if seconds < 604800 then return ('%dd'):format(math.floor(seconds / 86400)) end
+local function date_label(timestamp)
   return os.date('%Y-%m-%d', timestamp)
 end
 
@@ -75,7 +70,7 @@ local function render_entry(entry)
   local suffix = entry.same_count > 1 and ('  [same ×%d]'):format(entry.same_count) or ''
   return ('%-11s %10s  %-8s  %-12s %s%s'):format(
     entry.selector,
-    age_label(entry.timestamp),
+    date_label(entry.timestamp),
     entry.short_hash,
     entry.operation,
     entry.detail,
@@ -99,7 +94,7 @@ local function apply_static_highlights(bufnr, lines, entries)
   for row, entry in ipairs(entries) do
     local line = lines[row]
     local next_col = highlight_range(bufnr, row, line, entry.selector, 1, 'Directory')
-    next_col = highlight_range(bufnr, row, line, age_label(entry.timestamp), next_col, 'Comment')
+    next_col = highlight_range(bufnr, row, line, date_label(entry.timestamp), next_col, 'Comment')
     next_col = highlight_range(bufnr, row, line, entry.short_hash, next_col,
       entry.same_count > 1 and 'DiagnosticInfo' or 'String')
     local operation_group = ({
