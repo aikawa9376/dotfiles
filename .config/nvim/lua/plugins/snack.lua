@@ -90,15 +90,25 @@ return {
       end
     end
 
-    local function is_fugitive_status_window(win)
+    local function is_git_status_window(win)
       if not vim.api.nvim_win_is_valid(win) then
         return false
       end
 
       local buf = vim.api.nvim_win_get_buf(win)
-      if not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].filetype ~= "fugitive" then
+      if not vim.api.nvim_buf_is_valid(buf) then
         return false
       end
+
+      local filetype = vim.bo[buf].filetype
+      local name = vim.api.nvim_buf_get_name(buf)
+      if vim.b[buf].custom_git_status == true
+        or filetype == "fugitivestatus"
+        or name:match("^git%-status://")
+      then
+        return true
+      end
+      if filetype ~= "fugitive" then return false end
 
       local ok, status = pcall(vim.api.nvim_win_get_var, win, "fugitive_status")
       return vim.b[buf].fugitive_type == "index" or (ok and status ~= nil)
@@ -106,7 +116,7 @@ return {
 
     local function fugitive_status_is_open()
       for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if is_fugitive_status_window(win) then
+        if is_git_status_window(win) then
           return true
         end
       end
@@ -115,7 +125,7 @@ return {
 
     local function set_fugitive_status_open(state)
       if state then
-        local ok, err = pcall(vim.cmd, "Git")
+        local ok, err = pcall(vim.cmd, "GitStatus")
         if not ok then
           vim.notify("Fugitive status failed: " .. tostring(err), vim.log.levels.ERROR)
         end
@@ -123,7 +133,7 @@ return {
       end
 
       for _, win in ipairs(vim.api.nvim_list_wins()) do
-        if is_fugitive_status_window(win) then
+        if is_git_status_window(win) then
           pcall(vim.api.nvim_win_close, win, true)
         end
       end
