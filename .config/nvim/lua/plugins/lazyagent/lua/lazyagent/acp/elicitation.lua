@@ -115,6 +115,10 @@ local function select_options(title, format_item)
     kind = ELICITATION_KIND,
     multiline = 2,
     fzf_opts = { ["--wrap"] = true },
+    winopts = {
+      height = 0.3,
+      width = 0.6,
+    },
     format_item = format_item or display_choice,
   }
 end
