@@ -95,5 +95,12 @@ return {
       "PHPPullMembersUp", "PHPRenameVariable", "PHPRenameMethod", "PHPRenameClass",
     },
     config = true
+  },
+  {
+    "aikawa9376/atom-repeat.nvim",
+    event = "BufReadPost",
+    config = function()
+      require("atom-repeat").setup()
+    end,
   }
 }
