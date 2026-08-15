@@ -256,6 +256,7 @@ M.register_ui_select = function()
     local is_lazyagent_actions = opts.kind == "lazyagent-acp-actions"
     local is_lazyagent_names = opts.kind == "lazyagent-acp-names"
     local is_lazyagent_elicitation = opts.kind == "lazyagent-acp-elicitation"
+    local requested_winopts = opts.winopts
 
     -- If previewer is builtin, wrap it to strip fzf index prefixes ("1. foo") before parsing
     if opts.previewer == "builtin" then
@@ -274,7 +275,7 @@ M.register_ui_select = function()
 
     local elicitation_question = is_lazyagent_elicitation and vim.trim(tostring(opts.prompt or "")) or nil
     opts.prompt = normalize_ui_select_prompt(is_lazyagent_elicitation and "Answer" or opts.prompt)
-    opts.winopts = {
+    opts.winopts = vim.tbl_deep_extend("force", {
       height = is_lazyagent_elicitation and 0.7
         or is_lazyagent_names and 0.72
         or is_lazyagent_actions and math.min(18, math.max(6, #(items or {}) + 4))
@@ -294,7 +295,7 @@ M.register_ui_select = function()
         border = "single",
         hidden = not is_lazyagent_names,
       }
-    }
+    }, type(requested_winopts) == "table" and requested_winopts or {})
     if is_lazyagent_elicitation then
       opts.multiline = opts.multiline or 2
       opts.fzf_opts = opts.fzf_opts or {}

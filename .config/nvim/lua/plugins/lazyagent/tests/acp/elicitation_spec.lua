@@ -106,6 +106,8 @@ function M.run()
   assert_equal("lazyagent-acp-elicitation", selected_opts[1].kind, "elicitation picker kind")
   assert_equal(2, selected_opts[1].multiline, "elicitation picker enables multiline entries")
   assert_equal(true, selected_opts[1].fzf_opts["--wrap"], "elicitation picker wraps long lines")
+  assert_equal(0.6, selected_opts[1].winopts.width, "elicitation picker uses scratch-like width")
+  assert_equal(0.3, selected_opts[1].winopts.height, "elicitation picker uses scratch-like height")
   assert(selected_displays[1]:find("\n", 1, true), "choice description is displayed on another line")
 
   local described_request = Elicitation.describe_request({
