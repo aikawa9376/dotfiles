@@ -285,11 +285,29 @@ local function send(view)
   if not review then return end
   local count = controller().pending_feedback_count(review)
   if count == 0 then vim.notify("LazyAgent Review: no pending feedback", vim.log.levels.INFO); return end
-  vim.ui.select({ "Send", "Cancel" }, { prompt = string.format("Send %d review item(s) to %s?", count, review.reviewer or "reviewer") }, function(choice)
-    if choice ~= "Send" then return end
-    local ok, err = controller().send_feedback(review.review_id)
-    if not ok then vim.notify("LazyAgent Review: " .. tostring(err), vim.log.levels.ERROR) end
-  end)
+  local targets, target_err = controller().feedback_candidates(review.review_id)
+  if not targets then vim.notify("LazyAgent Review: " .. tostring(target_err), vim.log.levels.ERROR); return end
+  if #targets == 0 then
+    vim.notify("LazyAgent Review: start an idle ACP agent in this repository first", vim.log.levels.WARN)
+    return
+  end
+  local function confirm(target)
+    if not target then return end
+    vim.ui.select({ "Send", "Cancel" }, {
+      prompt = string.format("Send %d review item(s) to %s?", count, target.name),
+    }, function(choice)
+      if choice ~= "Send" then return end
+      local ok, err = controller().send_feedback(review.review_id, target.name)
+      if not ok then vim.notify("LazyAgent Review: " .. tostring(err), vim.log.levels.ERROR) end
+    end)
+  end
+  if #targets == 1 then confirm(targets[1]); return end
+  vim.ui.select(targets, {
+    prompt = "Choose ACP thread for review feedback:",
+    format_item = function(target)
+      return string.format("%s%s", target.name, target.original and " (original reviewer)" or "")
+    end,
+  }, confirm)
 end
 
 local function action_menu(view)

@@ -46,6 +46,132 @@ local function blob_at(run, blobs, root, commit, path)
   return ref, err
 end
 
+local function index_blob(run, blobs, root, path)
+  if not path then return nil end
+  local result = run({ "git", "-C", root, "show", ":" .. path })
+  if result.code ~= 0 then return nil end
+  local ref, err = blobs:put(result.stdout, { max_bytes = false })
+  if ref then ref.binary = result.stdout:find("\0", 1, true) ~= nil end
+  return ref, err
+end
+
+local function worktree_data(root, path)
+  local uv = vim.uv or vim.loop
+  local absolute = vim.fs.joinpath(root, path)
+  local stat = uv.fs_lstat(absolute)
+  if not stat then return nil end
+  if stat.type == "link" then return uv.fs_readlink(absolute) end
+  if stat.type ~= "file" then return nil end
+  local fd = uv.fs_open(absolute, "r", 0)
+  if not fd then return nil end
+  local data = uv.fs_read(fd, stat.size, 0)
+  uv.fs_close(fd)
+  return data
+end
+
+local function worktree_blob(blobs, root, path)
+  local data = worktree_data(root, path)
+  if data == nil then return nil end
+  local ref, err = blobs:put(data, { max_bytes = false })
+  if ref then ref.binary = data:find("\0", 1, true) ~= nil end
+  return ref, err
+end
+
+local function captured_review(root, label, mode, base, changes, source, opts)
+  local created_at = (opts.clock or function() return os.date("!%Y-%m-%dT%H:%M:%SZ") end)()
+  local changeset_id = content_id(root, base, nil, changes)
+  return {
+    schema_version = 2,
+    review_id = review_id(changeset_id, created_at, opts.nonce or (vim.uv or vim.loop).hrtime()),
+    changeset_id = changeset_id,
+    lineage_id = changeset_id,
+    root = root,
+    range = label,
+    mode = mode,
+    base = base,
+    head = nil,
+    created_at = created_at,
+    status = "pending",
+    changes = changes,
+    annotations = {},
+    source = source,
+  }
+end
+
+local function mutable_snapshot(kind, opts)
+  local run = opts.run or default_run
+  local cwd = tostring(opts.cwd or vim.fn.getcwd())
+  local root_result = run({ "git", "-C", cwd, "rev-parse", "--show-toplevel" })
+  if root_result.code ~= 0 then return nil, "not inside a Git repository" end
+  local root = vim.fn.fnamemodify(trim(root_result.stdout), ":p"):gsub("/$", "")
+  local base, base_err = resolve(run, root, "HEAD")
+  if not base then return nil, base_err end
+  local staged = kind == "index"
+  local argv = { "git", "-C", root, "diff" }
+  if staged then argv[#argv + 1] = "--cached" end
+  vim.list_extend(argv, { "--name-status", "-z", "--find-renames", base, "--" })
+  local names = run(argv)
+  if names.code ~= 0 then return nil, trim(names.stderr) ~= "" and trim(names.stderr) or "git diff failed" end
+
+  local tokens, changes, seen, index = split_zero(names.stdout), {}, {}, 1
+  while index <= #tokens do
+    local status = tokens[index]
+    local code = status:sub(1, 1)
+    local old_path, path
+    if code == "R" or code == "C" then
+      old_path, path = tokens[index + 1], tokens[index + 2]
+      index = index + 3
+    else
+      path, old_path = tokens[index + 1], tokens[index + 1]
+      index = index + 2
+    end
+    if path then
+      local operation = code == "A" and "added" or code == "D" and "deleted" or code == "R" and "moved" or "modified"
+      local before = operation ~= "added" and blob_at(run, opts.blob_store, root, base, old_path) or nil
+      local after
+      if operation ~= "deleted" then
+        after = staged and index_blob(run, opts.blob_store, root, path)
+          or worktree_blob(opts.blob_store, root, path)
+      end
+      changes[#changes + 1] = {
+        operation = operation,
+        path = path,
+        previous_path = operation == "moved" and old_path or nil,
+        before_blob = before,
+        after_blob = after,
+        binary = (before and before.binary == true) or (after and after.binary == true) or false,
+      }
+      seen[path] = true
+    end
+  end
+
+  if not staged then
+    local untracked = run({ "git", "-C", root, "ls-files", "--others", "--exclude-standard", "-z" })
+    if untracked.code ~= 0 then
+      return nil, trim(untracked.stderr) ~= "" and trim(untracked.stderr) or "git ls-files failed"
+    end
+    for _, path in ipairs(split_zero(untracked.stdout)) do
+      if not seen[path] then
+        local after = worktree_blob(opts.blob_store, root, path)
+        changes[#changes + 1] = {
+          operation = "added",
+          path = path,
+          after_blob = after,
+          binary = after and after.binary == true or false,
+        }
+      end
+    end
+  end
+  table.sort(changes, function(a, b) return tostring(a.path) < tostring(b.path) end)
+  local label = staged and "HEAD..INDEX" or "HEAD..WORKTREE"
+  return captured_review(root, label, kind, base, changes, {
+    kind = kind,
+    frontend = "change_review",
+    mutable = true,
+    base = base,
+  }, opts)
+end
+
 function M.create(range, opts)
   opts = opts or {}
   if type(opts.blob_store) ~= "table" or type(opts.blob_store.put) ~= "function" then
@@ -58,6 +184,13 @@ function M.create(range, opts)
   local root = vim.fn.fnamemodify(trim(root_result.stdout), ":p"):gsub("/$", "")
   range = vim.trim(tostring(range or ""))
   if range == "" then range = "HEAD~1..HEAD" end
+  local source_aliases = {
+    working = "working_tree", worktree = "working_tree", ["working-tree"] = "working_tree",
+    staged = "index", index = "index", ["--cached"] = "index",
+  }
+  if source_aliases[range:lower()] then
+    return mutable_snapshot(source_aliases[range:lower()], opts)
+  end
 
   local left, right, mode
   if range:find("...", 1, true) then
@@ -197,7 +330,7 @@ function M.prompt(review)
   if review.base and review.head then
     lines[#lines + 1] = "Git command: git diff --find-renames --no-ext-diff " .. tostring(review.base) .. " " .. tostring(review.head)
   else
-    lines[#lines + 1] = "The comparison was captured from Diffview; inspect the listed files and current repository without modifying them."
+    lines[#lines + 1] = "The comparison was captured as immutable blobs; inspect the listed files and current repository without modifying them."
     if review.base then lines[#lines + 1] = "Git command: git diff --find-renames --no-ext-diff " .. tostring(review.base) end
   end
   lines[#lines + 1] = "Captured files:"

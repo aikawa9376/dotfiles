@@ -180,7 +180,7 @@ local function feedback_prompt(review)
   return table.concat(lines, "\n")
 end
 
-local function apply_feedback_response(review, response)
+local function apply_feedback_response(review, response, reviewer_name)
   local payload = tostring(response or ""):match("```lazyagent%-review%-replies%s*\n(.-)\n```")
   if not payload then return nil, "AI response has no lazyagent-review-replies block" end
   local replies = {}
@@ -197,7 +197,7 @@ local function apply_feedback_response(review, response)
         annotation.replies = annotation.replies or {}
         annotation.replies[#annotation.replies + 1] = {
           body = body,
-          author = { type = "agent", name = review.reviewer or "AI Reviewer" },
+          author = { type = "agent", name = reviewer_name or review.reviewer or "AI Reviewer" },
           created_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
         }
       end
@@ -215,7 +215,7 @@ end
 local function finish_feedback(agent_name, item)
   pending[agent_name] = nil
   if item.guard_id then item.backend.set_read_only_guard(item.session.pane_id, item.guard_id, false) end
-  local review, response_err = apply_feedback_response(item.review, latest_response(item))
+  local review, response_err = apply_feedback_response(item.review, latest_response(item), agent_name)
   if not review then
     item.review.feedback_error = response_err
     store:save(item.review)
@@ -524,14 +524,36 @@ function M.pending_feedback_count(review)
   return count
 end
 
-function M.send_feedback(review_id)
+local function feedback_candidates_for(review)
+  local result = {}
+  for _, item in ipairs(candidates(review)) do
+    result[#result + 1] = {
+      name = item.name,
+      thread_id = item.snapshot.acp_thread_id,
+      original = item.name == review.reviewer and item.snapshot.acp_thread_id == review.reviewer_thread_id,
+    }
+  end
+  return result
+end
+
+function M.feedback_candidates(review_id)
+  local review, err = store:get(review_id)
+  if not review then return nil, err end
+  return feedback_candidates_for(review)
+end
+
+function M.send_feedback(review_id, agent_name)
   local review, err = store:get(review_id)
   if not review then return nil, err end
   if M.pending_feedback_count(review) == 0 then return nil, "no pending review feedback" end
-  if not review.reviewer or not review.reviewer_thread_id then return nil, "the original ACP review thread is unavailable" end
-  local item = candidate(review.reviewer, review)
-  if not item or item.snapshot.acp_thread_id ~= review.reviewer_thread_id then
-    return nil, "resume the original idle ACP review thread before sending feedback"
+  local target_name = vim.trim(tostring(agent_name or review.reviewer or ""))
+  if target_name == "" then return nil, "choose an idle ACP review thread" end
+  local item = candidate(target_name, review)
+  if not item then
+    return nil, "the selected ACP thread is unavailable, busy, or belongs to another repository"
+  end
+  if not agent_name and item.snapshot.acp_thread_id ~= review.reviewer_thread_id then
+    return nil, "resume the original idle ACP review thread or choose another target explicitly"
   end
   local guard_id
   if not (review.source and review.source.mutable == true) then
@@ -564,5 +586,6 @@ M._capture_scratch = capture_scratch
 M._consume_scratch = consume_scratch
 M._feedback_prompt = feedback_prompt
 M._apply_feedback_response = apply_feedback_response
+M._feedback_candidates_for = feedback_candidates_for
 
 return M

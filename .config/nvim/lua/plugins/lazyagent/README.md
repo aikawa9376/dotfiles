@@ -660,7 +660,7 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentNoteShow` | カーソル行の Notes 本文をfocus可能な float で表示 |
 | `:LazyAgentNotes` | 現在 workspace の Notes 一覧を開く（`<CR>` open、`K` preview、`d` delete、`C` clear） |
 | `:LazyAgentNotesClear` | 現在 workspace の Notes をすべて消去 |
-| `:LazyAgentReview [commit\|base..head\|base...head]` | idleなACP agentへGit diffのread-only AI reviewを依頼 |
+| `:LazyAgentReview [working\|staged\|commit\|base..head\|base...head]` | working tree、index、またはGit rangeをimmutable blobへ固定し、idleなACP agentへread-only AI reviewを依頼。引数なしではactive Diffviewを使う |
 | `:LazyAgentReviews [review-id]` | 保存済みAI reviewをChanges相当のdrawerで開く |
 | `:LazyAgentHistory [file]` | 現在 context の scratch 履歴を開く |
 | `:LazyAgentHistoryList [file]` | 履歴一覧から開く |
@@ -804,6 +804,6 @@ backend.set_agent_backend("Gemini", "mybackend")
 
 ## Roadmap
 
-過去の機能拡張milestoneと未完のexperimental案は[ACP_ROADMAP.md](ACP_ROADMAP.md)に残しています。現在のACP安定化・release判断はObsidian vaultの `notes/LazyAgent ACP安定化/docs/acp-stabilization/README.md` を正本とします。
+ACP Milestone 0–5と旧TODO計画は完了済み履歴としてObsidian vaultの `notes/LazyAgent ACP安定化/docs/acp-stabilization/archive/` に保存しています。現在のACP安定化、support tier、release判断は同ディレクトリの `README.md` を正本とします。
 
-plugin全体の保守課題、multi-instance対応、削除候補は [TODO.md](TODO.md) を参照してください。
+新しい保守課題は旧TODOへ追記せず、現在の仕様と検証根拠を持つtaskとして改めて起票してください。
