@@ -44,6 +44,11 @@ function M.run()
       title = "the first user message as title",
       summary = "the first user message as summary",
     },
+    acp_activation = {
+      phase = "ready",
+      context_continuity = "native_resume",
+      visible_history = "unavailable",
+    },
   }
 
   local hidden = footer_text(session)
@@ -51,6 +56,8 @@ function M.run()
   assert(not hidden:find("the first user message as title", 1, true), "session title hidden by default")
   assert(not hidden:find("the first user message as summary", 1, true), "session summary hidden by default")
   assert(hidden:find("Image input", 1, true), "supported image input is visible")
+  assert(hidden:find("Context Native resume", 1, true), "context continuity is visible independently")
+  assert(hidden:find("History Unavailable", 1, true), "visible history provenance is visible independently")
 
   session.acp_thread_title = "Manual LazyAgent name"
   session.acp_thread_title_source = "manual"

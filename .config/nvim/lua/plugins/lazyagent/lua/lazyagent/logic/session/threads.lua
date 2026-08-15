@@ -284,6 +284,18 @@ function M.setup(deps)
     if not local_key then
       launch_opts.acp_thread_id = thread.thread_id
     end
+    if opts.activation_mode == "load" or opts.activation_mode == "resume" then
+      if not thread.native_session_id or thread.native_session_id == "" then
+        vim.notify("LazyAgent ACP: this thread has no native session to activate", vim.log.levels.WARN)
+        return false
+      end
+      launch_opts.acp = {
+        session_bootstrap = {
+          session_mode = opts.activation_mode,
+          session_id = thread.native_session_id,
+        },
+      }
+    end
     start_interactive_session(launch_opts)
     return true
   end
@@ -768,6 +780,7 @@ function M.setup(deps)
     local query = ""
     local warned_conflicts = ""
     local thread_agents = {}
+    local runtimes = {}
     local preview_bufnr
     local preview_winid
     local preview_enabled = true
@@ -1082,7 +1095,7 @@ function M.setup(deps)
       end
       stored_threads = require("lazyagent.acp.cockpit").prune_empty(backend, stored_threads)
       local lines
-      local runtimes = {}
+      runtimes = {}
       thread_agents = {}
       for agent_name, active in pairs(state.sessions or {}) do
         if active.pane_id and active.pane_id ~= "" then
@@ -1202,12 +1215,45 @@ function M.setup(deps)
         })
       end
     end
+    local function capability_runtime(thread)
+      if not thread then return nil end
+      if runtimes[thread.thread_id] then return runtimes[thread.thread_id] end
+      for _, runtime in pairs(runtimes) do
+        if runtime.acp_provider_id == thread.provider_id then return runtime end
+      end
+      return nil
+    end
+    local function open_selected_thread_explicit(mode)
+      local thread = stored_thread(selected_thread_id())
+      local supported = false
+      for _, action in ipairs(require("lazyagent.acp.cockpit").explicit_activation_actions(
+        thread, capability_runtime(thread)
+      )) do
+        if action.mode == mode then supported = true; break end
+      end
+      if not supported then
+        vim.notify("LazyAgent ACP: this explicit activation is not supported by the connected provider", vim.log.levels.WARN)
+        return
+      end
+      module.open_thread(thread.thread_id, {
+        placement_winid = cockpit_winid,
+        focus_agent_view = true,
+        relocate_agent_view = true,
+        activation_mode = mode,
+      })
+    end
     vim.keymap.set("n", "o", function()
       open_selected_thread(false)
     end, { buffer = bufnr, silent = true, desc = "Open or resume ACP cockpit thread" })
     vim.keymap.set("n", "O", function()
       open_selected_thread(true)
     end, { buffer = bufnr, silent = true, desc = "Open or resume and focus ACP cockpit thread" })
+    vim.keymap.set("n", "L", function() open_selected_thread_explicit("load") end, {
+      buffer = bufnr, silent = true, desc = "Load ACP thread with native history replay",
+    })
+    vim.keymap.set("n", "M", function() open_selected_thread_explicit("resume") end, {
+      buffer = bufnr, silent = true, desc = "Resume ACP thread without native replay",
+    })
     vim.keymap.set("n", "n", function()
       module.request_new_agent(selected_workspace())
     end, { buffer = bufnr, silent = true, desc = "Create an ACP agent in the project Neovim" })
@@ -1406,6 +1452,15 @@ function M.setup(deps)
         { key = "R", description = "Rename thread" },
         { key = "q", description = "Close cockpit" },
       }
+      local explicit_actions = require("lazyagent.acp.cockpit").explicit_activation_actions(
+        thread, capability_runtime(thread)
+      )
+      for _, action in ipairs(explicit_actions) do
+        items[#items + 1] = {
+          key = action.mode == "load" and "L" or "M",
+          description = action.label,
+        }
+      end
       vim.ui.select(items, {
         prompt = thread and ("Cockpit · " .. tostring(thread.provider_id or "Agent") .. ":") or "Cockpit actions:",
         kind = "lazyagent-acp-actions",

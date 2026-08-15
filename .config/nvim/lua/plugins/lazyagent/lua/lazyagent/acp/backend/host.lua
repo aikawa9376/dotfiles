@@ -49,6 +49,7 @@ function M.setup(deps)
   local Elicitation = require("lazyagent.acp.elicitation")
   local UiQueue = require("lazyagent.acp.ui_queue")
   local config_values = require("lazyagent.acp.config_values")
+  local SessionHydrator = require("lazyagent.acp.session_hydrator")
 
   local function notify_attention(kind, session, message)
     return Notifications.emit(((state.opts or {}).acp or {}).notifications, kind, {
@@ -527,10 +528,11 @@ function M.setup(deps)
     if not abs then
       return nil, path_err
     end
-    local lines = read_path_lines(abs)
+    local lines, _, provenance = read_path_lines(abs)
     if not lines then
       return nil, { code = -32602, message = "File not found: " .. abs }
     end
+    session.last_read = provenance and vim.deepcopy(provenance) or nil
 
     local start_line = tonumber(params.line) or 1
     local limit = tonumber(params.limit)
@@ -603,6 +605,11 @@ function M.setup(deps)
 
   local function on_client_update(session, params)
     if not params or not params.update then return end
+    if session.activation_phase == "hydrating" and session.activation_hydrator then
+      local ok, err = session.activation_hydrator:consume(params)
+      if not ok then session.activation_hydration_error = tostring(err) end
+      return
+    end
     local update = params.update
     local kind = update.sessionUpdate
     local message_stream = MessageStream.identity(update)
@@ -858,6 +865,16 @@ function M.setup(deps)
 
   local function on_client_exit(session, code, signal, stderr_text)
     release_all_terminals(session)
+    if session and session.activation_hydrator then
+      session.activation_hydrator:discard("client_exit")
+      session.activation_hydrator = nil
+    end
+    if session then session.activation_phase = session.closing_intentionally == true and "stopped" or "failed" end
+    if session and type(session.on_client_released) == "function" then
+      local released = session.on_client_released
+      session.on_client_released = nil
+      pcall(released)
+    end
     if session and session.ephemeral == true then
       return
     end
@@ -1097,8 +1114,15 @@ function M.setup(deps)
   function module.start_client(session, opts)
     opts = opts or {}
     local drain_prompt_queue = opts.drain_prompt_queue
+    local function hydration_rejection(method)
+      if session.activation_phase ~= "hydrating" or not session.activation_hydrator then return nil end
+      local _, err = session.activation_hydrator:reject_host_request(method)
+      return err
+    end
     local handlers = {
       request_permission = function(params, done)
+        local rejected = hydration_rejection("session/request_permission")
+        if rejected then done(nil, rejected); return end
         UiQueue.enqueue(function(release)
           handle_permission_request(session, params, done, release)
         end, {
@@ -1125,24 +1149,38 @@ function M.setup(deps)
         })
       end,
       read_text_file = function(params)
+        local rejected = hydration_rejection("fs/read_text_file")
+        if rejected then return nil, rejected end
         return read_text_file(session, params)
       end,
       write_text_file = function(params)
+        local rejected = hydration_rejection("fs/write_text_file")
+        if rejected then return nil, rejected end
         return write_text_file(session, params)
       end,
       create_terminal = function(params, done)
+        local rejected = hydration_rejection("terminal/create")
+        if rejected then done(nil, rejected); return end
         create_terminal(session, params, done)
       end,
       terminal_output = function(params)
+        local rejected = hydration_rejection("terminal/output")
+        if rejected then return nil, rejected end
         return terminal_output(session, params)
       end,
       terminal_wait_for_exit = function(params, done)
+        local rejected = hydration_rejection("terminal/wait_for_exit")
+        if rejected then done(nil, rejected); return end
         terminal_wait_for_exit(session, params, done)
       end,
       terminal_kill = function(params)
+        local rejected = hydration_rejection("terminal/kill")
+        if rejected then return nil, rejected end
         return terminal_kill(session, params)
       end,
       terminal_release = function(params)
+        local rejected = hydration_rejection("terminal/release")
+        if rejected then return nil, rejected end
         return terminal_release(session, params)
       end,
     }
@@ -1150,6 +1188,8 @@ function M.setup(deps)
     local elicitation_cfg = type(experimental.elicitation) == "table" and experimental.elicitation or {}
     if elicitation_cfg.enabled == true then
       handlers.elicitation = function(params, done)
+        local rejected = hydration_rejection("session/elicitation")
+        if rejected then done(nil, rejected); return end
         local teams_cfg = type(state.opts and state.opts.teams) == "table" and state.opts.teams or {}
         local automatic = Elicitation.auto_approve_team_mcp(params, session, teams_cfg.mcp_auto_approve)
         if automatic then
@@ -1205,6 +1245,7 @@ function M.setup(deps)
       cwd = session.cwd,
       additional_directories = session.additional_directories,
       env = session.env,
+      request_timeout_ms = session.request_timeout_ms,
       mcp_servers = session.mcp_servers,
       mcp_url = session.mcp_url,
       protocol_log_path = session.protocol_log_path,
@@ -1232,12 +1273,104 @@ function M.setup(deps)
       end,
     })
 
+    local activation_hooks = {
+        before_attempt = function(attempt)
+          if session.activation_hydrator then
+            session.activation_hydrator:discard("next_attempt")
+            session.activation_hydrator = nil
+          end
+          session.activation_hydration_error = nil
+          session.activation_artifact = nil
+          if attempt.hydration == true then
+            session.activation_phase = "hydrating"
+            local hydrator = SessionHydrator.new({
+              thread = session.thread_record,
+              base_session = session,
+              cache_dir = session.cache_dir,
+              create_collector = create_ephemeral_session,
+              apply_update = function(collector, params)
+                return on_client_update(collector, params)
+              end,
+            })
+            local collector, begin_err = hydrator:begin()
+            if not collector then return nil, begin_err end
+            session.activation_hydrator = hydrator
+          else
+            session.activation_phase = "activating"
+          end
+          sync_runtime_session(session)
+          return true
+        end,
+        after_attempt = function(attempt, _, error_kind)
+          local hydrator = session.activation_hydrator
+          if error_kind then
+            if hydrator then hydrator:discard(error_kind) end
+            session.activation_hydrator = nil
+            session.activation_phase = "activating"
+            return true
+          end
+          if attempt.hydration ~= true then
+            session.activation_phase = "activating"
+            return true
+          end
+          if session.activation_hydration_error then
+            local hydration_err = session.activation_hydration_error
+            if hydrator then hydrator:discard(hydration_err) end
+            session.activation_hydrator = nil
+            return nil, hydration_err
+          end
+          if not hydrator then return nil, "hydration collector is missing" end
+          local artifact, prepare_err = hydrator:prepare()
+          if not artifact then return nil, prepare_err end
+          local updated, publish_err = hydrator:publish(function(changes, update_opts)
+            return sync_thread(session, changes, update_opts)
+          end)
+          if not updated then
+            hydrator:discard(publish_err)
+            session.activation_hydrator = nil
+            return nil, publish_err
+          end
+          session.activation_artifact = artifact
+          session.activation_hydrator_snapshot = hydrator:snapshot()
+          session.activation_hydrator = nil
+          session.activation_phase = "activating"
+          session.thread_record = vim.deepcopy(updated)
+          session.transcript_path = updated.transcript_path
+          return true
+        end,
+        on_trace = function(trace)
+          session.activation_trace = vim.deepcopy(trace or {})
+          sync_runtime_session(session)
+        end,
+      }
+
+    local start_opts = vim.deepcopy(session.session_bootstrap or {})
+    session.activation_phase = "activating"
+    start_opts.activation = {
+      request = vim.deepcopy(session.activation_request or {}),
+      hooks = activation_hooks,
+    }
     session.client:start(function(client, err, session_result)
       if err then
+        if session.activation_hydrator then session.activation_hydrator:discard("activation_failed") end
+        session.activation_hydrator = nil
+        session.activation_phase = "failed"
+        session.activation_trace = vim.deepcopy(err.trace or session.activation_trace or {})
         session.failed = true
         session.ready = false
         sync_runtime_session(session)
-        sync_thread(session, { status = "failed", process_id = vim.NIL })
+        local failure_metadata = vim.deepcopy(session.thread_record and session.thread_record.metadata or {})
+        failure_metadata.activation = vim.tbl_deep_extend("force", failure_metadata.activation or {}, {
+          attempts = vim.deepcopy(session.activation_trace),
+          context_continuity = "none",
+          visible_history = "unavailable",
+        })
+        sync_thread(session, {
+          status = "failed",
+          process_id = vim.NIL,
+          native_session_id = err.invalidated_session_id == true and vim.NIL or nil,
+          metadata = failure_metadata,
+        }, { replace_metadata = true })
         append_block(session, "System", "Failed to start ACP session: " .. (err.message or tostring(err)))
         pcall(function()
           require("lazyagent.logic.status").set_waiting(session.agent_name, "ACP error")
@@ -1249,6 +1382,7 @@ function M.setup(deps)
       end
 
       session.client = client
+      session.activation_phase = "ready"
       session.ready = true
       session.failed = false
       session.session_id = client.session_id
@@ -1263,11 +1397,23 @@ function M.setup(deps)
       session.protocol_events = client:get_protocol_events()
       session.model_catalog = vim.deepcopy((session_result and session_result.models) or {})
       session.mode_catalog = vim.deepcopy((session_result and session_result.modes) or {})
-      session.resume_strategy = session_result
+      local activation_result = session_result
           and session_result._meta
-          and session_result._meta.lazyagentResumeStrategy
-        or "new"
-      if session.resume_strategy == "local_carryover" and session.thread_carryover then
+          and session_result._meta.lazyagentActivation
+        or {}
+      session.activation_trace = vim.deepcopy(activation_result.trace or session.activation_trace or {})
+      session.activation_context_continuity = activation_result.contextContinuity or "new"
+      session.activation_visible_history = activation_result.visibleHistory
+        or (session.activation_context_continuity == "native_load" and "native_replay" or "unavailable")
+      if session.activation_artifact then
+        session.session_info = vim.tbl_deep_extend(
+          "force", session.session_info or {}, vim.deepcopy(session.activation_artifact.session_info or {})
+        )
+        if next(session.activation_artifact.config_options or {}) ~= nil then
+          session.config_options = vim.deepcopy(session.activation_artifact.config_options)
+        end
+      end
+      if session.activation_context_continuity == "local_carryover" and session.thread_carryover then
         session.pending_switch_history = vim.deepcopy(session.thread_carryover)
       end
       session.thread_carryover = nil
@@ -1277,6 +1423,12 @@ function M.setup(deps)
       session.prompt_supports_audio = prompt_caps and prompt_caps.audio == true
       session.mcp_server_count = #client:_build_mcp_servers()
       sync_runtime_session(session)
+      local activation_metadata = vim.deepcopy(session.thread_record and session.thread_record.metadata or {})
+      activation_metadata.activation = vim.tbl_deep_extend("force", activation_metadata.activation or {}, {
+        attempts = vim.deepcopy(session.activation_trace),
+        context_continuity = session.activation_context_continuity,
+        visible_history = session.activation_visible_history,
+      })
       sync_thread(session, {
         status = "active",
         native_session_id = client.session_id,
@@ -1292,18 +1444,18 @@ function M.setup(deps)
           session.mode_catalog.currentModeId or session.default_mode or vim.NIL
         ),
         config = vim.deepcopy(session.config_options or {}),
-        metadata = { resume_strategy = session.resume_strategy },
-      })
+        metadata = activation_metadata,
+      }, { replace_metadata = true })
       local agent_name = client.agent_info and (client.agent_info.title or client.agent_info.name) or session.agent_name
       local message = string.format("ACP session ready: %s", agent_name)
       if session_result and session_result.sessionId then
         message = message .. "\nSession ID: " .. session_result.sessionId
       end
-      if session.resume_strategy == "native_resume" then
+      if session.activation_context_continuity == "native_resume" then
         message = message .. "\nContinuation: native ACP resume"
-      elseif session.resume_strategy == "native_load" then
+      elseif session.activation_context_continuity == "native_load" then
         message = message .. "\nContinuation: native ACP load"
-      elseif session.resume_strategy == "local_carryover" then
+      elseif session.activation_context_continuity == "local_carryover" then
         message = message .. "\nContinuation: local transcript carryover (native resume/load unavailable)"
       end
       append_block(session, "System", message)
@@ -1323,7 +1475,7 @@ function M.setup(deps)
           end)
         end
       end)
-    end, vim.deepcopy(session.session_bootstrap or {}))
+    end, start_opts)
   end
 
   module.terminal_release = terminal_release
@@ -1331,6 +1483,10 @@ function M.setup(deps)
   module.read_text_file = read_text_file
   module.write_text_file = write_text_file
   module.list_all_sessions_for_client = list_all_sessions_for_client
+  module.create_ephemeral_session = create_ephemeral_session
+  module.apply_ephemeral_update = function(session, params)
+    return on_client_update(session, params)
+  end
   module.capture_native_session_for_session = capture_native_session_for_session
 
   return module

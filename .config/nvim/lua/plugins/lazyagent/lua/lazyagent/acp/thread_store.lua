@@ -401,6 +401,9 @@ function Store:update(thread_id, changes, opts)
     changes.created_at = current.created_at
     changes.updated_at = self:_timestamp()
     local merged = vim.tbl_deep_extend("force", copy(current), changes)
+    if opts.replace_metadata == true then
+      merged.metadata = copy(changes.metadata or {})
+    end
     for _, field in ipairs({ "native_session_id", "process_id", "model", "mode", "archived_at" }) do
       if changes[field] == vim.NIL then
         merged[field] = nil

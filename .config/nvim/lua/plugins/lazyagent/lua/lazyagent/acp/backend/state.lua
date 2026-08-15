@@ -41,7 +41,11 @@ end
 local function read_buffer_lines_for_path(path)
   local normalized = vim.fn.fnamemodify(path, ":p")
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_valid(bufnr) then
+    if vim.api.nvim_buf_is_valid(bufnr)
+      and vim.api.nvim_buf_is_loaded(bufnr)
+      and vim.bo[bufnr].buflisted
+      and vim.bo[bufnr].buftype == ""
+    then
       local name = vim.api.nvim_buf_get_name(bufnr)
       if name ~= "" and vim.fn.fnamemodify(name, ":p") == normalized then
         return vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), bufnr
@@ -53,13 +57,19 @@ end
 
 local function read_path_lines(path)
   local lines, bufnr = read_buffer_lines_for_path(path)
+  local normalized = vim.fn.fnamemodify(path, ":p")
   if lines then
-    return lines, bufnr
+    return lines, bufnr, {
+      source = "buffer",
+      path = normalized,
+      bufnr = bufnr,
+      changedtick = vim.api.nvim_buf_get_changedtick(bufnr),
+    }
   end
   if vim.fn.filereadable(path) == 1 then
     local ok, data = pcall(vim.fn.readfile, path)
     if ok and data then
-      return data, nil
+      return data, nil, { source = "disk", path = normalized }
     end
   end
   return nil, nil

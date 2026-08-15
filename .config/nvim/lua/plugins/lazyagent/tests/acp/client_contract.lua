@@ -245,6 +245,31 @@ local function test_repeated_and_parallel_lifecycle(root)
   close_client(second, second_observed, "parallel second")
 end
 
+local function test_opt_in_activation_start(root)
+  local client, observed = new_client(root)
+  local started, start_err
+  client:start(function(connected, err, session)
+    started, start_err = connected and session or nil, err
+  end, {
+    activation = {
+      request = {
+        requested_mode = "auto",
+        session_id = "activation-contract",
+        origin = "native_import",
+        history_state = "missing",
+        has_local_history = false,
+      },
+      hooks = {},
+    },
+  })
+  wait_for("opt-in activation start", function() return started ~= nil or start_err ~= nil end)
+  assert_equal(nil, start_err, "opt-in activation error")
+  assert_equal("native_load", started._meta.lazyagentActivation.contextContinuity,
+    "LA-STAB-14 canonical activation continuity")
+  assert_equal(nil, started._meta.lazyagentResumeStrategy, "LA-STAB-14 legacy client field is absent")
+  close_client(client, observed, "opt-in activation")
+end
+
 local function test_capability_semantics()
   local Client = require("lazyagent.acp.client")
   local client = Client.new({})
@@ -268,21 +293,78 @@ local function test_capability_semantics()
   assert_equal(true, client:supports_steering(), "provider steering extension")
 end
 
+local function test_session_attempts_rebuild_current_context()
+  local Client = require("lazyagent.acp.client")
+  local client = Client.new({})
+  client.process = {}
+  client.state = "ready"
+  client.agent_capabilities = {
+    loadSession = true,
+    mcpCapabilities = { http = true },
+    sessionCapabilities = {
+      resume = vim.empty_dict(),
+      additionalDirectories = vim.empty_dict(),
+    },
+  }
+
+  local captured = {}
+  client._send_request = function(_, method, params, callback)
+    captured[#captured + 1] = { method = method, params = vim.deepcopy(params) }
+    callback(method == "session/new" and { sessionId = "new-context" } or vim.empty_dict(), nil)
+  end
+
+  local function set_context(label)
+    client.cwd = "/workspace/" .. label
+    client.additional_directories = { "/shared/" .. label }
+    client.mcp_servers = { {
+      type = "http",
+      name = "context-" .. label,
+      url = "https://example.invalid/" .. label,
+    } }
+  end
+
+  set_context("new")
+  client:new_session(function(_, err) assert_equal(nil, err, "LA-STAB-00 new context request") end)
+  set_context("load")
+  client:load_session("native-load", function(_, err) assert_equal(nil, err, "LA-STAB-00 load context request") end)
+  set_context("resume")
+  client:resume_session("native-resume", function(_, err) assert_equal(nil, err, "LA-STAB-00 resume context request") end)
+
+  assert_equal({ "session/new", "session/load", "session/resume" }, vim.tbl_map(function(item)
+    return item.method
+  end, captured), "LA-STAB-00 session method coverage")
+  for index, label in ipairs({ "new", "load", "resume" }) do
+    local params = captured[index].params
+    assert_equal("/workspace/" .. label, params.cwd, "LA-STAB-00 " .. label .. " current cwd")
+    assert_equal({ "/shared/" .. label }, params.additionalDirectories,
+      "LA-STAB-00 " .. label .. " current additional directories")
+    assert_equal("context-" .. label, params.mcpServers[1].name,
+      "LA-STAB-00 " .. label .. " current MCP servers")
+  end
+  assert_equal(nil, captured[1].params.sessionId, "LA-STAB-00 new omits native session identity")
+  assert_equal("native-load", captured[2].params.sessionId, "LA-STAB-00 load native session identity")
+  assert_equal("native-resume", captured[3].params.sessionId, "LA-STAB-00 resume native session identity")
+end
+
 local function test_stdio_contract(root)
   local client, observed = new_client(root)
   local started = false
   local start_error
+  local started_session
 
   client:start(function(connected, err, session)
     start_error = err
     assert_equal(client, connected, "connected client")
     assert_equal("test-session", session.sessionId, "new session id")
+    started_session = session
     started = true
   end)
 
   wait_for("client startup", function() return started or start_error ~= nil end)
   assert_equal(nil, start_error, "start error")
   assert_truthy(client:is_ready(), "client should be ready")
+  assert_truthy(type(started_session._meta.lazyagentActivation) == "table",
+    "LA-STAB-13 default startup must use the activation planner")
   assert_equal("lazyagent-test-agent", client.agent_info.name, "agent info")
   assert_equal(true, client:supports_session_list(), "session/list capability")
   assert_equal(true, client:supports_session_resume(), "session/resume capability")
@@ -429,6 +511,7 @@ local function test_request_timeout_sends_cancellation(root)
   end)
   wait_for("request timeout", function() return list_error ~= nil end)
   assert_truthy(list_error.message:find("session/list", 1, true), "timeout method")
+  assert_equal("timeout", list_error.data.lazyagent.kind, "typed request timeout")
   wait_for("cancel request notification", function()
     return #observed.updates == 1
       and observed.updates[1].update.sessionUpdate == "cancel_request_observed"
@@ -444,6 +527,32 @@ local function test_request_timeout_sends_cancellation(root)
   end)
   wait_for("timeout test close", function() return closed end)
   wait_for("timeout test agent exit", function() return #observed.exits == 1 end)
+end
+
+local function test_internal_transport_error_tags(root)
+  local Client = require("lazyagent.acp.client")
+  local disconnected = Client.new({})
+  local disconnected_err
+  disconnected:new_session(function(_, err) disconnected_err = err end)
+  assert_equal("transport", disconnected_err.data.lazyagent.kind, "typed stopped transport")
+
+  local spawn_err
+  Client.new({ command = "/definitely/missing/lazyagent-acp" }):start(function(_, err) spawn_err = err end)
+  assert_equal("transport", spawn_err.data.lazyagent.kind, "typed spawn transport")
+
+  local exited = new_client(root, {
+    env = {
+      LAZYAGENT_FAKE_LOAD_ERROR = "agent_error",
+      LAZYAGENT_FAKE_HANG_LOAD = "1",
+    },
+  })
+  local exit_err
+  exited:start(function(_, err) exit_err = err end, { create_session = false })
+  wait_for("typed process exit", function() return exit_err ~= nil end)
+  assert_truthy(exit_err.data, "typed process exit metadata: " .. vim.inspect(exit_err))
+  assert_equal("process_exit", exit_err.data.lazyagent.kind, "typed process exit transport")
+  wait_for("typed process exit cleanup", function() return exited:debug_snapshot().process == false end)
+  assert_equal(0, exited:debug_snapshot().callbacks, "process exit callback cleanup")
 end
 
 local function test_cancel_settles_late_updates(root)
@@ -512,12 +621,15 @@ end
 function M.run()
   local root = plugin_root()
   test_capability_semantics()
+  test_session_attempts_rebuild_current_context()
   test_stdio_contract(root)
   test_protocol_mismatch_stops_process(root)
   test_request_timeout_sends_cancellation(root)
+  test_internal_transport_error_tags(root)
   test_cancel_settles_late_updates(root)
   test_authentication_flow(root)
   test_repeated_and_parallel_lifecycle(root)
+  test_opt_in_activation_start(root)
 end
 
 return M

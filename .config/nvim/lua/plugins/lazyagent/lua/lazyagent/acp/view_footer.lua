@@ -496,6 +496,25 @@ function M.new(ctx)
 
   local function footer_context_segments(agent_name, session)
     local segments = {}
+    local activation = session and session.acp_activation or {}
+    local context_labels = {
+      native_load = "Context Native load",
+      native_resume = "Context Native resume",
+      local_carryover = "Context Local carryover",
+      new = "Context New",
+      none = "Context None",
+    }
+    local history_labels = {
+      native_replay = "History Native replay",
+      local_snapshot = "History Local snapshot",
+      unavailable = "History Unavailable",
+    }
+    if context_labels[activation.context_continuity] then
+      table.insert(segments, context_labels[activation.context_continuity])
+    end
+    if history_labels[activation.visible_history] then
+      table.insert(segments, history_labels[activation.visible_history])
+    end
     local model = select(1, current_config_details(session, { "model" }))
     if model and model ~= "" then
       table.insert(segments, model)

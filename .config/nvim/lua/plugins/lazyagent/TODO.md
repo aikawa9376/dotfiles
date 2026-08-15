@@ -2,6 +2,8 @@
 
 > ACPの機能拡張、Zed相当化、thread/review/worktreeの実装計画は
 > [ACP_ROADMAP.md](ACP_ROADMAP.md) で管理します。
+>
+> ACP安定化とrelease gateはObsidian `notes/LazyAgent ACP安定化/docs/acp-stabilization/README.md`を正とします。以下は安定化仕様に吸収されていない一般保守だけを未完として扱います。
 
 ## High priority
 
@@ -28,10 +30,10 @@
     - Purge agent-specific saved snapshots on single-session close/force-close.
     - Clear ACP timeline state and release append timers/view state when clearing transcripts or killing panes.
   - Follow-up tasks:
-    - Add a repeatable memory regression checklist for `LazyAgentClose` / `LazyAgentConversation` / repeated open-close loops.
-    - Audit teardown symmetry across all ACP lifecycle paths: close, force-close, transcript clear, provider switch, restore/resession, client exit, and pane kill.
-    - Add debug visibility for retained resources such as `session_views`, pane buffers, timers, transcript paths, and ACP session IDs.
-    - Revisit whether runtime snapshots should ever retain heavy ACP history by default, or only when explicitly needed for restore/debug flows.
+    - [x] Add repeatable lifecycle regression coverage, including 50-cycle open/close loops (LA-STAB-08/09).
+    - [x] Audit teardown symmetry across ACP close, activation failure, process exit, provider switch, resession, hydration, permission, and view paths (LA-STAB-09 resource ownership report).
+    - [x] Add owner-attributed debug visibility for clients, callbacks, timers, permissions, hydration, sessions, transcripts, terminals, child processes, buffers, and views (LA-STAB-09).
+    - [x] Keep runtime/debug snapshots compact by default and expose full timelines only through explicit options (LA-STAB-09).
 
 ## Medium priority
 

@@ -514,6 +514,40 @@ function M.setup(deps)
     append_kv(lines, "Model", current_model_id(session))
     append_kv(lines, "Mode", current_mode_id(session))
 
+    local persisted_activation = session
+        and session.thread_record
+        and session.thread_record.metadata
+        and session.thread_record.metadata.activation
+      or {}
+    local attempts = session and session.activation_trace or persisted_activation.attempts or {}
+    local hydration = session and (
+      session.activation_hydrator and session.activation_hydrator:snapshot()
+      or session.activation_hydrator_snapshot
+    ) or {}
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "## Activation"
+    append_kv(lines, "Phase", session and session.activation_phase or "idle")
+    append_kv(lines, "Context", session and session.activation_context_continuity or persisted_activation.context_continuity)
+    append_kv(lines, "Visible history", session and session.activation_visible_history or persisted_activation.visible_history)
+    append_kv(lines, "History state", persisted_activation.history_state)
+    append_kv(lines, "History origin", persisted_activation.origin)
+    append_kv(lines, "Hydration state", hydration.state)
+    append_kv(lines, "Hydration updates", hydration.history_update_count or 0)
+    append_kv(lines, "Hydration bytes", format_bytes(hydration.byte_count or 0))
+    append_kv(lines, "Hydration duration", hydration.duration_ms and (tostring(hydration.duration_ms) .. " ms") or nil)
+    if #attempts == 0 then
+      lines[#lines + 1] = "- Attempts: none"
+    else
+      lines[#lines + 1] = "- Attempts:"
+      for index, attempt in ipairs(attempts) do
+        local detail = string.format("  %d. `%s` — %s", index, tostring(attempt.method or "unknown"),
+          tostring(attempt.outcome or "unknown"))
+        if attempt.code ~= nil then detail = detail .. " (" .. tostring(attempt.code) .. ")" end
+        if attempt.message and attempt.message ~= "" then detail = detail .. ": " .. tostring(attempt.message) end
+        lines[#lines + 1] = detail
+      end
+    end
+
     lines[#lines + 1] = ""
     append_usage_section(lines, usage)
 
@@ -577,6 +611,11 @@ function M.setup(deps)
     end
     if #permission_rules == 0 and session and session.auto_permission == nil then
       notes[#notes + 1] = "No permission rules are configured. Rules can match agent/cwd/tool/title/kind/path/text_pattern."
+    end
+    if (session and session.activation_context_continuity or persisted_activation.context_continuity) == "native_resume"
+      and (session and session.activation_visible_history or persisted_activation.visible_history) == "unavailable"
+    then
+      notes[#notes + 1] = "Native context resumed, but visible history is unavailable because the provider did not replay it."
     end
 
     lines[#lines + 1] = ""

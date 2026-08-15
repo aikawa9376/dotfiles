@@ -80,9 +80,13 @@ function M.run()
   end, 10), "backend thread should become ready")
 
   local runtime = backend.get_runtime_snapshot(pane_id)
+  assert_equal(runtime.acp_resume_strategy, nil, "LA-STAB-14 legacy runtime field is absent")
   assert(runtime.acp_thread_id ~= nil, "runtime thread identity")
   assert_equal(runtime.acp_provider_id, "ThreadFixture", "runtime provider identity")
   assert_equal(runtime.acp_thread_store_error, nil, "runtime thread persistence")
+  assert_equal(runtime.acp_conversation_timeline, nil, "compact runtime snapshot does not duplicate conversation history")
+  assert(type(backend.get_runtime_snapshot(pane_id, { include_timelines = true }).acp_conversation_timeline) == "table",
+    "explicit review caller can request full conversation timeline")
   assert(backend.set_read_only_guard(pane_id, "fixture-review", true, "fixture review is read-only"))
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_read_only_reason, "fixture review is read-only",
     "runtime exposes the active read-only guard")
@@ -96,6 +100,14 @@ function M.run()
   assert(persisted.process_id ~= nil, "process identity persistence")
   assert_equal(persisted.transcript_path, runtime.acp_transcript_path, "transcript persistence")
   assert_equal(persisted.metadata.editor.instance_id, "backend-editor", "editor ownership persistence")
+  assert_equal(persisted.metadata.activation.origin, "lazyagent", "new local thread origin")
+  assert_equal(persisted.metadata.activation.history_state, "missing", "new local thread history state")
+  assert_equal(persisted.metadata.activation.history_source, "none", "new local thread history source")
+  assert_equal(persisted.metadata.activation.context_continuity, "new", "new local thread context continuity")
+  assert_equal(persisted.metadata.activation.visible_history, "unavailable", "new local thread visible history")
+  assert_equal(#persisted.metadata.activation.attempts, 1, "new local thread activation trace")
+  assert_equal(runtime.acp_activation.phase, "ready", "E2E planner startup reaches ready")
+  assert_equal(#runtime.acp_activation.attempts, 1, "E2E planner startup exposes bounded trace")
   local renamed = assert(backend.rename_thread(runtime.acp_thread_id, "Manual thread title"))
   assert_equal(renamed.metadata.title_source, "manual", "backend rename marks a manual title")
   local renamed_runtime = backend.get_runtime_snapshot(pane_id)
@@ -211,6 +223,13 @@ function M.run()
   assert_equal(imported.provider_id, "ThreadFixture", "native thread provider")
   assert_equal(imported.native_session_id, "native-imported", "native thread session identity")
   assert_equal(imported.metadata.imported_from_native, true, "native thread import metadata")
+  assert_equal(imported.metadata.activation, {
+    schema_version = 1, origin = "native_import", history_state = "missing", history_source = "none",
+  }, "META-01 native import history provenance")
+  assert_equal(imported.metadata.native_summary, "import fixture", "LA-STAB-00 native import summary evidence")
+  assert_equal(imported.history_path, nil, "LA-STAB-00 native import has no structured history")
+  assert_equal(imported.transcript_path, "", "LA-STAB-00 native import has no transcript history")
+  assert_equal(imported.metadata.has_user_prompt, nil, "LA-STAB-00 native import has no local prompt evidence")
   local duplicate, duplicate_created = backend.import_native_session(pane_id, {
     sessionId = "native-imported",
     cwd = root,
@@ -218,11 +237,187 @@ function M.run()
   assert_equal(duplicate.thread_id, imported.thread_id, "native thread import deduplication")
   assert_equal(duplicate_created, false, "native thread duplicate result")
 
+  assert(backend.update_thread(imported.thread_id, {
+    draft = "imported draft",
+    unread = false,
+    view_state = { follow_output = false, view = { lnum = 4, topline = 2 } },
+    checkpoint = { state = "reviewed" },
+    change_journal = { turns = { { turn_id = "imported-existing", state = "completed", changes = {} } } },
+  }))
+  local util = require("lazyagent.util")
+  local previous_fire_event = util.fire_event
+  local replay_edit_events = 0
+  util.fire_event = function(name, ...)
+    if name == "EditDone" then replay_edit_events = replay_edit_events + 1 end
+    return previous_fire_event(name, ...)
+  end
+  local imported_pane
+  backend.split(nil, 10, false, {
+    on_split = function(created) imported_pane = created end,
+    acp = {
+      agent_name = "ThreadFixture",
+      thread_id = imported.thread_id,
+      command = fake_command,
+      env = { LAZYAGENT_FAKE_REPLAY_ON_LOAD = "1", LAZYAGENT_FAKE_REPLAY_TOOL = "1" },
+      cwd = root,
+      root_dir = root,
+      additional_directories = { root .. "/tests" },
+    },
+  })
+  assert(vim.wait(5000, function()
+    local snapshot = backend.get_runtime_snapshot(imported_pane)
+    return snapshot and (snapshot.acp_ready == true or snapshot.acp_failed == true)
+  end, 10), "E2E-01 imported activation should finish")
+  local imported_runtime = assert(backend.get_runtime_snapshot(imported_pane))
+  assert_equal(imported_runtime.acp_ready, true, "E2E-01 imported activation succeeds")
+  assert_equal(imported_runtime.acp_activation.context_continuity, "native_load",
+    "E2E-01 imported missing history uses load")
+  local hydrated_import = assert(backend.get_thread(imported.thread_id))
+  assert_equal(hydrated_import.metadata.activation.history_source, "native_replay", "E2E-01 native replay provenance")
+  assert(hydrated_import.history_path and vim.fn.filereadable(hydrated_import.history_path) == 1,
+    "E2E-01 native replay structured history")
+  local hydrated_text = table.concat(vim.fn.readfile(hydrated_import.transcript_path), "\n")
+  local _, replay_user_count = hydrated_text:gsub("older question", "")
+  assert_equal(replay_user_count, 1, "E2E-01 native replay appears exactly once")
+  assert_equal(replay_edit_events, 0, "E2E-11 replayed edit fires no live EditDone")
+  assert_equal(hydrated_import.draft, "imported draft", "E2E-15 hydration preserves draft")
+  assert_equal(hydrated_import.checkpoint.state, "reviewed", "E2E-15 hydration preserves checkpoint")
+  assert_equal(#hydrated_import.change_journal.turns, 1, "E2E-11 replay does not alter change journal")
+  assert(backend.show_doctor(imported_pane), "activation Doctor opens")
+  local doctor_bufnr = vim.api.nvim_get_current_buf()
+  local doctor_text = table.concat(vim.api.nvim_buf_get_lines(doctor_bufnr, 0, -1, false), "\n")
+  assert(doctor_text:find("## Activation", 1, true), "Doctor activation section")
+  assert(doctor_text:find("Context: native_load", 1, true), "Doctor context continuity")
+  assert(doctor_text:find("Visible history: native_replay", 1, true), "Doctor visible history")
+  assert(doctor_text:find("Hydration duration:", 1, true), "Doctor hydration duration")
+  assert(doctor_text:find("`load` — success", 1, true), "Doctor normalized activation attempt")
+  assert(not doctor_text:find("older question", 1, true), "Doctor does not expose replay bodies")
+  vim.api.nvim_buf_delete(doctor_bufnr, { force = true })
+  backend.kill_pane(imported_pane)
+  util.fire_event = previous_fire_event
+
+  for _, request_kind in ipairs({ "fs_write", "terminal", "permission" }) do
+    local guarded = assert(backend.import_native_session(pane_id, {
+      sessionId = "native-guard-" .. request_kind,
+      cwd = root,
+      title = "guard " .. request_kind,
+    }))
+    local guarded_pane
+    backend.split(nil, 10, false, {
+      on_split = function(created) guarded_pane = created end,
+      acp = {
+        agent_name = "ThreadFixture",
+        thread_id = guarded.thread_id,
+        command = fake_command,
+        env = { LAZYAGENT_FAKE_LOAD_HOST_REQUEST = request_kind },
+        cwd = root,
+        root_dir = root,
+        additional_directories = { root .. "/tests" },
+      },
+    })
+    assert(vim.wait(5000, function()
+      local snapshot = backend.get_runtime_snapshot(guarded_pane)
+      return snapshot and (snapshot.acp_ready == true or snapshot.acp_failed == true)
+    end, 10), "HYDRATE-14 guarded host request should finish: " .. request_kind)
+    local guarded_runtime = assert(backend.get_runtime_snapshot(guarded_pane))
+    assert_equal(guarded_runtime.acp_ready, true, "HYDRATE-14 host request rejected: " .. request_kind)
+    assert_equal(guarded_runtime.acp_terminal_count, 0, "HYDRATE-14 no replay terminal: " .. request_kind)
+    assert_equal(backend.get_pending_permission(guarded_pane), nil,
+      "HYDRATE-14 no replay permission UI: " .. request_kind)
+    backend.kill_pane(guarded_pane)
+    assert(backend.delete_thread(guarded.thread_id))
+  end
+
+  local function exercise_activation_failure(name, env, expected_ready, expected_methods, bootstrap)
+    local candidate = assert(backend.import_native_session(pane_id, {
+      sessionId = "native-" .. name,
+      cwd = root,
+      title = name,
+    }))
+    assert(backend.update_thread(candidate.thread_id, { draft = "preserve-" .. name }))
+    local candidate_pane
+    backend.split(nil, 10, false, {
+      on_split = function(created) candidate_pane = created end,
+      acp = {
+        agent_name = "ThreadFixture",
+        thread_id = candidate.thread_id,
+        command = fake_command,
+        env = env,
+        request_timeout_ms = 60,
+        session_bootstrap = bootstrap,
+        cwd = root,
+        root_dir = root,
+        additional_directories = { root .. "/tests" },
+      },
+    })
+    assert(vim.wait(5000, function()
+      local snapshot = backend.get_runtime_snapshot(candidate_pane)
+      return snapshot and (snapshot.acp_ready == true or snapshot.acp_failed == true)
+    end, 10), "activation scenario should finish: " .. name)
+    local candidate_runtime = assert(backend.get_runtime_snapshot(candidate_pane))
+    assert_equal(candidate_runtime.acp_ready, expected_ready, "activation result: " .. name)
+    assert_equal(vim.tbl_map(function(item) return item.method end, candidate_runtime.acp_activation.attempts),
+      expected_methods, "activation attempt order: " .. name)
+    assert_equal(assert(backend.get_thread(candidate.thread_id)).draft, "preserve-" .. name,
+      "activation failure preserves local fields: " .. name)
+    backend.kill_pane(candidate_pane)
+    assert(backend.delete_thread(candidate.thread_id))
+  end
+
+  exercise_activation_failure("method-fallback", {
+    LAZYAGENT_FAKE_LOAD_ERROR = "method_not_found",
+  }, true, { "load", "resume" })
+  exercise_activation_failure("history-unavailable", {
+    LAZYAGENT_FAKE_DISABLE_LOAD = "1",
+    LAZYAGENT_FAKE_DISABLE_RESUME = "1",
+  }, false, {})
+  exercise_activation_failure("load-timeout", {
+    LAZYAGENT_FAKE_HANG_LOAD = "1",
+  }, false, { "load" })
+  exercise_activation_failure("explicit-load", {
+    LAZYAGENT_FAKE_LOAD_ERROR = "method_not_found",
+  }, false, { "load" }, { session_mode = "load", session_id = "native-explicit-load" })
+
   backend.kill_pane(pane_id)
   local closed = assert(store:get(runtime.acp_thread_id))
   assert_equal(closed.status, "closed", "closed persisted thread")
   assert_equal(closed.process_id, nil, "closed process detachment")
   assert_equal(backend.get_debug_snapshot().session_count, 0, "closed backend ownership")
+  assert(closed.history_path and vim.fn.filereadable(closed.history_path) == 1,
+    "LA-STAB-00 local reopen fixture has readable structured history")
+  local local_history = assert(require("lazyagent.acp.structured_history").read(closed.history_path))
+  assert(#local_history > 0, "LA-STAB-00 local reopen fixture has usable history records")
+  assert_equal(closed.metadata.activation.history_state, "complete", "local turn promotes history provenance")
+  assert_equal(closed.metadata.activation.history_source, "local_structured", "local turn structured history source")
+
+  local missing_native_pane
+  backend.split(nil, 10, false, {
+    on_split = function(created) missing_native_pane = created end,
+    acp = {
+      agent_name = "ThreadFixture",
+      thread_id = runtime.acp_thread_id,
+      command = fake_command,
+      env = {
+        LAZYAGENT_FAKE_DISABLE_RESUME = "1",
+        LAZYAGENT_FAKE_LOAD_ERROR = "session_not_found",
+      },
+      cwd = root,
+      root_dir = root,
+      additional_directories = { root .. "/tests" },
+    },
+  })
+  assert(vim.wait(5000, function()
+    local snapshot = backend.get_runtime_snapshot(missing_native_pane)
+    return snapshot and (snapshot.acp_ready == true or snapshot.acp_failed == true)
+  end, 10), "E2E-08 missing native session fallback should finish")
+  local missing_native_runtime = assert(backend.get_runtime_snapshot(missing_native_pane))
+  assert_equal(missing_native_runtime.acp_ready, true, "E2E-08 local carryover succeeds")
+  assert_equal(missing_native_runtime.acp_activation.context_continuity, "local_carryover",
+    "E2E-08 context continuity")
+  assert_equal(vim.tbl_map(function(item) return item.method end, missing_native_runtime.acp_activation.attempts),
+    { "load", "new" }, "E2E-08 skips remaining native attempts")
+  assert_equal(missing_native_runtime.acp_has_pending_carryover, true, "E2E-08 retains local snapshot")
+  backend.kill_pane(missing_native_pane)
 
   pane_id = nil
   backend.split(nil, 10, false, {
@@ -238,7 +433,7 @@ function M.run()
       additional_directories = { root .. "/tests" },
     },
   })
-  assert_equal(pane_id, "thread-test-pane-2", "reopened backend pane")
+  assert_equal(pane_id, "thread-test-pane-11", "reopened backend pane")
   assert(vim.wait(5000, function()
     local snapshot = backend.get_runtime_snapshot(pane_id)
     return snapshot and snapshot.acp_ready == true
@@ -247,7 +442,9 @@ function M.run()
   local reopened_runtime = backend.get_runtime_snapshot(pane_id)
   assert_equal(reopened_runtime.acp_thread_id, runtime.acp_thread_id, "reopened thread identity")
   assert_equal(reopened_runtime.acp_transcript_path, runtime.acp_transcript_path, "reopened transcript identity")
-  assert_equal(reopened_runtime.acp_resume_strategy, "native_resume", "native resume strategy")
+  assert_equal(reopened_runtime.acp_activation.context_continuity, "native_resume", "native resume continuity")
+  assert_equal(reopened_runtime.acp_activation.context_continuity, "native_resume", "E2E-02 context continuity")
+  assert_equal(reopened_runtime.acp_activation.visible_history, "local_snapshot", "E2E-02 visible local history")
   assert_equal(reopened_runtime.acp_has_pending_carryover, false, "native resume carryover")
   assert_equal(#assert(backend.list_threads({ include_archived = true })), 2, "reopen and import should not duplicate threads")
   assert_equal(assert(backend.get_thread(runtime.acp_thread_id)).status, "active", "reopened persisted status")
@@ -291,7 +488,9 @@ function M.run()
     return snapshot and snapshot.acp_ready == true
   end, 10), "local carryover thread should become ready")
   local fallback_runtime = backend.get_runtime_snapshot(pane_id)
-  assert_equal(fallback_runtime.acp_resume_strategy, "local_carryover", "local carryover strategy")
+  assert_equal(fallback_runtime.acp_activation.context_continuity, "local_carryover", "local carryover continuity")
+  assert_equal(fallback_runtime.acp_activation.context_continuity, "local_carryover", "E2E-05 context continuity")
+  assert_equal(fallback_runtime.acp_activation.visible_history, "local_snapshot", "E2E-05 visible local history")
   assert_equal(fallback_runtime.acp_has_pending_carryover, true, "local carryover prompt context")
   assert_equal(fallback_runtime.acp_thread_draft, "saved thread draft", "restored thread draft")
   assert_equal(fallback_runtime.acp_thread_unread, true, "restored unread state")
@@ -321,7 +520,8 @@ function M.run()
   end, 10), "background assistant output should mark thread unread")
   state.open_agent = previous_open_agent
   local fallback_thread = assert(backend.get_thread(runtime.acp_thread_id))
-  assert_equal(fallback_thread.metadata.resume_strategy, "local_carryover", "persisted resume strategy")
+  assert_equal(fallback_thread.metadata.activation.context_continuity, "local_carryover",
+    "persisted context continuity")
   assert(
     backend.capture_pane_sync(pane_id):find("Continuation: local transcript carryover", 1, true),
     "local carryover should be visible in transcript"
@@ -360,6 +560,12 @@ function M.run()
   local parallel_debug = backend.get_debug_snapshot()
   assert_equal(parallel_debug.session_count, 2, "parallel backend sessions")
   assert_equal(parallel_debug.child_process_count, 2, "parallel child processes")
+  local owner_keys = {}
+  for _, owner in ipairs(parallel_debug.owners) do
+    local key = table.concat({ owner.owner_class, owner.owner_id, owner.resource_class, owner.resource_id }, ":")
+    assert(not owner_keys[key], "E2E-13 resource has one owner: " .. key)
+    owner_keys[key] = true
+  end
   backend.kill_pane(parallel_panes[1])
   assert_equal(backend.get_debug_snapshot().session_count, 1, "independent parallel close")
   assert_equal(assert(backend.get_thread(second_parallel.acp_thread_id)).status, "active", "surviving parallel thread")
@@ -401,6 +607,8 @@ function M.run()
   assert(vim.wait(3000, function()
     return backend.get_pending_permission(cancel_pane) ~= nil
   end, 10), "cancel backend should expose its pending permission")
+  assert(vim.tbl_contains(vim.tbl_map(function(owner) return owner.resource_class end,
+    backend.get_debug_snapshot().owners), "permission"), "pending permission names its client owner")
   assert(backend.send_keys(cancel_pane, { "C-c" }))
   assert(vim.wait(5000, function()
     return backend.capture_pane_sync(cancel_pane):find("Turn cancelled", 1, true) ~= nil
@@ -408,6 +616,67 @@ function M.run()
   local cancelled_tools = backend.get_runtime_snapshot(cancel_pane, { include_timelines = true }).acp_tool_timeline
   assert_equal(cancelled_tools[#cancelled_tools].status, "cancelled", "cancelled backend tool status")
   backend.kill_pane(cancel_pane)
+
+  local legacy_transcript = cache_dir .. "/legacy-transcript.log"
+  vim.fn.writefile({ "# User", "legacy question", "", "# Assistant", "legacy answer" }, legacy_transcript)
+  local legacy = assert(store:create({
+    provider_id = "ThreadFixture",
+    cwd = root,
+    transcript_path = legacy_transcript,
+    status = "closed",
+    metadata = { legacy_marker = "preserve" },
+  }))
+  local legacy_pane
+  backend.split(nil, 10, false, {
+    on_split = function(created) legacy_pane = created end,
+    acp = {
+      agent_name = "ThreadFixture",
+      thread_id = legacy.thread_id,
+      command = fake_command,
+      cwd = root,
+      root_dir = root,
+      additional_directories = { root .. "/tests" },
+    },
+  })
+  assert(vim.wait(5000, function()
+    local snapshot = backend.get_runtime_snapshot(legacy_pane)
+    return snapshot and snapshot.acp_ready == true
+  end, 10), "legacy provenance thread should become ready")
+  local inferred_legacy = assert(backend.get_thread(legacy.thread_id))
+  assert_equal(inferred_legacy.metadata.activation.history_state, "partial", "legacy User transcript inference")
+  assert_equal(inferred_legacy.metadata.activation.history_source, "transcript_only", "legacy transcript provenance")
+  assert_equal(inferred_legacy.metadata.legacy_marker, "preserve", "legacy unrelated metadata survives inference")
+  local hydration_owner_thread = assert(backend.import_native_session(legacy_pane, {
+    sessionId = "native-hydration-owner", cwd = root, title = "hydration owner",
+  }))
+  backend.kill_pane(legacy_pane)
+  local hydration_owner_pane
+  backend.split(nil, 10, false, {
+    on_split = function(created) hydration_owner_pane = created end,
+    acp = {
+      agent_name = "ThreadFixture",
+      thread_id = hydration_owner_thread.thread_id,
+      command = fake_command,
+      env = { LAZYAGENT_FAKE_HANG_LOAD = "1" },
+      request_timeout_ms = 1000,
+      cwd = root,
+      root_dir = root,
+      additional_directories = { root .. "/tests" },
+    },
+  })
+  assert(vim.wait(1000, function()
+    local snapshot = backend.get_runtime_snapshot(hydration_owner_pane)
+    return snapshot and snapshot.acp_activation.phase == "hydrating"
+  end, 5), "hydration owner enters collecting phase")
+  local hydration_debug = backend.get_debug_snapshot()
+  assert(vim.tbl_contains(vim.tbl_map(function(owner) return owner.resource_class end,
+    hydration_debug.owners), "hydration_generation"), "hydration generation has an activation-attempt owner")
+  backend.kill_pane(hydration_owner_pane)
+  assert(vim.wait(3000, function()
+    local snapshot = backend.get_debug_snapshot()
+    return snapshot.session_count == 0 and #snapshot.owners == 0
+  end, 10), "all runtime, closing-client, hydration, and view owners return to baseline")
+  assert(backend.delete_thread(hydration_owner_thread.thread_id))
 
   vim.ui.select = previous_cancel_select
   state.opts.acp.auto_permission = previous_auto_permission

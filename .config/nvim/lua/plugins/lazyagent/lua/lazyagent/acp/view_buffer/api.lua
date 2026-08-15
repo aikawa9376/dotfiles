@@ -254,6 +254,7 @@ function M.attach(api, ctx)
       active_timer_count = 0,
       dedicated_window_count = 0,
       panes = {},
+      owners = {},
     }
 
     for _ in pairs(pane_config) do
@@ -274,11 +275,25 @@ function M.attach(api, ctx)
         window_count = #windows,
         configured = pane_config[tostring(pane_id)] ~= nil,
       }
+      snapshot.owners[#snapshot.owners + 1] = {
+        owner_class = "view_adapter",
+        owner_id = tostring(pane_id),
+        resource_class = "buffer",
+        resource_id = tostring(bufnr),
+        count = 1,
+      }
     end
     for _, entry in pairs(layout_state) do
       snapshot.layout_count = snapshot.layout_count + 1
       if type(entry) == "table" and entry.markdown_render_timer ~= nil then
         snapshot.active_timer_count = snapshot.active_timer_count + 1
+        snapshot.owners[#snapshot.owners + 1] = {
+          owner_class = "view_adapter",
+          owner_id = tostring(entry.pane_id or "layout"),
+          resource_class = "render_timer",
+          resource_id = tostring(entry.pane_id or "layout"),
+          count = 1,
+        }
       end
     end
     for _ in pairs(dedicated_transcript_windows) do
