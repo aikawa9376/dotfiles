@@ -97,6 +97,7 @@ export EDITOR='nvim'
 export PAGER='bat'
 export XDG_CONFIG_HOME="$HOME/.config"
 export XDG_CACHE_HOME="$HOME/.cache"
+export NVIM_LOG_FILE="${TMPDIR:-/tmp}/nvim-${UID}.log"
 export BAT_CONFIG_PATH="$XDG_CONFIG_HOME/bat/conf"
 export RIPGREP_CONFIG_PATH="$XDG_CONFIG_HOME/rg/conf"
 export NODE_REPL_HISTORY="$XDG_CACHE_HOME/node/history"
