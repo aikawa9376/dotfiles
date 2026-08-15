@@ -174,6 +174,8 @@ function M.run()
   assert_equal(live.valid_buffer_count, 1, "live valid buffer")
   assert_equal(live.config_count, 1, "live pane configuration")
   assert(live.window_count >= 1, "live transcript should have a window")
+  assert(#live.owners >= 1 and live.owners[1].owner_class == "view_adapter",
+    "live view resources name their owner class and ID")
 
   vim.wait(300)
   render_updates = 0
@@ -398,6 +400,7 @@ function M.run()
   assert_equal(closed.config_count, 0, "closed pane configuration")
   assert_equal(closed.layout_count, 0, "closed layout state")
   assert_equal(closed.active_timer_count, 0, "closed view timers")
+  assert_equal(#closed.owners, 0, "closed view has no retained owners")
   assert_equal(session.view_state.pending_append, nil, "closed append payload")
   assert_equal(session.view_state.pending_append_chunks, nil, "closed append chunks")
   assert(vim.wait(200, function() return #render_manager.buffers == 0 end, 5),
@@ -411,6 +414,7 @@ function M.run()
   assert_equal(backend_debug.child_process_count, 0, "closed child processes")
   assert_equal(backend_debug.timer_count, 0, "closed backend timers")
   assert_equal(backend_debug.callback_count, 0, "closed backend callbacks")
+  assert_equal(#backend_debug.owners, 0, "closed backend has no retained resource owners")
 
   local remaining_win = vim.api.nvim_get_current_win()
   if vim.api.nvim_buf_is_valid(source_bufnr) then

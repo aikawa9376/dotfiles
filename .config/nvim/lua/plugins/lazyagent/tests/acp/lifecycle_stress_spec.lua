@@ -15,7 +15,7 @@ local function exercise_repeated_view_lifecycle(base)
   local view = require("lazyagent.acp.view_buffer")
   local transcript = base .. "/repeat.log"
   vim.fn.writefile({ "# System", "repeat lifecycle" }, transcript)
-  for index = 1, 5 do
+  for index = 1, 50 do
     local pane_id
     local pane_state
     view.create_pane({
@@ -41,6 +41,7 @@ local function exercise_repeated_view_lifecycle(base)
     assert_equal(snapshot.pane_count, 0, "repeated pane teardown")
     assert_equal(snapshot.valid_buffer_count, 0, "repeated buffer teardown")
     assert_equal(snapshot.active_timer_count, 0, "repeated timer teardown")
+    assert_equal(#(snapshot.owners or {}), 0, "repeated view owner teardown")
   end
 end
 

@@ -32,6 +32,19 @@ function M.run()
     transcript_path = base .. "/thread.log",
     config = { model = "gpt-5" },
     view_state = { follow_output = false, view = { lnum = 12, topline = 8 } },
+    metadata = {
+      continuity_probe = {
+        schema_version = 1,
+        phase = "prepared",
+        evidence = {
+          source = "fixture",
+          attempts = {
+            { method = "inspect", outcome = "observed" },
+            { method = "publish", outcome = "pending" },
+          },
+        },
+      },
+    },
     change_journal = {
       turns = { {
         turn_id = THREAD_ID .. ":1",
@@ -57,8 +70,32 @@ function M.run()
   assert_equal(#manifest.threads, 1, "persisted thread count")
 
   local reopened = ThreadStore.new({ dir = base })
-  assert_equal(assert(reopened:get(THREAD_ID)).native_session_id, "native-1", "cross-instance load")
+  local reopened_thread = assert(reopened:get(THREAD_ID))
+  assert_equal(reopened_thread.native_session_id, "native-1", "cross-instance load")
+  assert_equal(reopened_thread.metadata.continuity_probe, thread.metadata.continuity_probe,
+    "LA-STAB-00 nested metadata round-trips under schema v1")
+  assert_equal(assert(reopened:load()).schema_version, 1, "LA-STAB-00 nested metadata keeps manifest schema v1")
   assert_equal(#assert(reopened:list()), 1, "active thread listing")
+
+  local before_read_only = table.concat(vim.fn.readfile(store.path), "\n")
+  assert(store:get(THREAD_ID))
+  assert(store:list({ include_archived = true }))
+  assert_equal(table.concat(vim.fn.readfile(store.path), "\n"), before_read_only,
+    "legacy read-only listing does not rewrite the manifest")
+
+  local replaced = assert(store:update(THREAD_ID, {
+    metadata = {
+      continuity_probe = thread.metadata.continuity_probe,
+      activation = {
+        schema_version = 1,
+        attempts = { { method = "resume", outcome = "success" } },
+      },
+    },
+  }, { replace_metadata = true }))
+  assert_equal(#replaced.metadata.activation.attempts, 1, "META-06 replacement keeps exact attempt list")
+  assert_equal(replaced.metadata.continuity_probe, thread.metadata.continuity_probe,
+    "META-07 unrelated metadata survives explicit replacement")
+  assert_equal(assert(store:load()).schema_version, 1, "META-06 metadata replacement keeps manifest schema v1")
 
   local renamed = assert(store:rename(THREAD_ID, "  Persistent thread  "))
   assert_equal(renamed.title, "Persistent thread", "rename")

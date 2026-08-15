@@ -24,6 +24,7 @@ function M.run()
     ["thread-a"] = {
       acp_ready = true,
       acp_busy = true,
+      acp_activation = { phase = "ready", context_continuity = "native_resume", visible_history = "local_snapshot" },
       acp_usage_stats = { cumulative = { total_tokens = 1234, cost = 0.125 } },
       acp_model_catalog = { currentModelId = "runtime-opus" },
     },
@@ -31,12 +32,26 @@ function M.run()
   local rendered = table.concat(lines, "\n")
   assert(rendered:find("## /tmp/project%-a"), "project A group")
   assert(rendered:find("## /tmp/project%-b"), "project B group")
-  assert(rendered:find("%[running%]%s+claude · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2 · First"), "thread card columns")
+  assert(rendered:find("%[running%]%s+claude · model:runtime%-opus · unread · usage:1234tok/%$0%.1250 · changes:2 · ctx:resume · hist:local · First"), "thread card columns")
   assert(rendered:find("external = another Neovim", 1, true), "cockpit lifecycle legend")
   assert(rendered:find("`?` actions", 1, true), "cockpit action menu key hint")
   assert(rendered:find("`n` new agent", 1, true), "cockpit new agent key hint")
   assert(rendered:find("`<CR>` latest/mirror", 1, true), "cockpit preview mode key hint")
   assert(rendered:find("`s` preview layout", 1, true), "cockpit preview layout key hint")
+  local activation_summary = Cockpit.activation_summary(threads[2], {
+    acp_activation = { phase = "ready", context_continuity = "native_resume", visible_history = "unavailable" },
+  })
+  assert(activation_summary.context_label == "resume" and activation_summary.history_label == "unavailable",
+    "Cockpit keeps context and history distinct")
+  local explicit = Cockpit.explicit_activation_actions({ native_session_id = "native" }, {
+    acp_agent_capabilities = { loadSession = true },
+    acp_session_capabilities = { resume = {} },
+  })
+  assert(#explicit == 2 and explicit[1].mode == "load" and explicit[2].mode == "resume",
+    "Cockpit exposes supported explicit activation actions")
+  assert(#Cockpit.explicit_activation_actions({ native_session_id = "native" }, {
+    acp_agent_capabilities = { loadSession = false }, acp_session_capabilities = {},
+  }) == 0, "Cockpit hides unsupported explicit activation actions")
   local current_root_lines = Cockpit.render(threads, {}, { current_root = "/tmp/project-b" })
   local current_root_rendered = table.concat(current_root_lines, "\n")
   assert(

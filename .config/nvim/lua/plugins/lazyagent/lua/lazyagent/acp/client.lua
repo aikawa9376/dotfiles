@@ -5,6 +5,7 @@ Client.__index = Client
 local mcp_servers = require("lazyagent.acp.mcp_servers")
 local ProtocolLog = require("lazyagent.acp.protocol_log")
 local V2Adapter = require("lazyagent.acp.v2_adapter")
+local SessionActivation = require("lazyagent.acp.session_activation")
 
 local PROTOCOL_VERSION = 1
 local ERR = {
@@ -296,6 +297,23 @@ function Client:_clear_stop_timer()
 end
 
 function Client:debug_snapshot()
+  local owner_id = self.pid and ("pid:" .. tostring(self.pid)) or "client:disconnected"
+  local owners = {}
+  local function own(kind, id, count)
+    if (tonumber(count) or 0) > 0 then
+      owners[#owners + 1] = { owner_class = "acp_client", owner_id = owner_id, resource_class = kind,
+        resource_id = tostring(id), count = tonumber(count) or 1 }
+    end
+  end
+  own("process", owner_id, self.process ~= nil and 1 or 0)
+  own("stdio", owner_id .. ":stdin", self.stdin ~= nil and 1 or 0)
+  own("stdio", owner_id .. ":stdout", self.stdout ~= nil and 1 or 0)
+  own("stdio", owner_id .. ":stderr", self.stderr ~= nil and 1 or 0)
+  own("request_callback", owner_id .. ":callbacks", vim.tbl_count(self.callbacks or {}))
+  own("request_timer", owner_id .. ":callback-timers", vim.tbl_count(self.callback_timers or {}))
+  own("stop_timer", owner_id .. ":stop", self.stop_timer ~= nil and 1 or 0)
+  own("permission", owner_id .. ":permissions", vim.tbl_count(self.pending_permission_requests or {}))
+  own("elicitation", owner_id .. ":elicitations", vim.tbl_count(self.pending_elicitation_requests or {}))
   return {
     state = self.state,
     pid = self.pid,
@@ -310,6 +328,7 @@ function Client:debug_snapshot()
     pending_elicitations = vim.tbl_count(self.pending_elicitation_requests or {}),
     stdout_buffer_bytes = tonumber(self.stdout_buffer_size) or 0,
     prompt_state = self.prompt_state,
+    owners = owners,
   }
 end
 
@@ -401,6 +420,7 @@ function Client:_reject_pending(reason)
       pcall(callback, nil, {
         code = ERR.transport,
         message = reason or "ACP transport stopped",
+        data = { lazyagent = { kind = "process_exit" } },
       })
     end)
   end
@@ -536,6 +556,7 @@ function Client:_send_request(method, params, callback)
         pcall(cb, nil, {
           code = ERR.transport,
           message = "ACP transport not available",
+          data = { lazyagent = { kind = "transport" } },
         })
       end)
     end
@@ -559,6 +580,7 @@ function Client:_send_request(method, params, callback)
         pcall(cb, nil, {
           code = ERR.transport,
           message = string.format("ACP request timed out after %dms: %s", timeout_ms, method),
+          data = { lazyagent = { kind = "timeout" } },
         })
       end)
     end)
@@ -691,6 +713,7 @@ function Client:_ensure_connected(callback)
   callback(nil, {
     code = ERR.invalid_request,
     message = "ACP client is not connected",
+    data = { lazyagent = { kind = "transport" } },
   })
   return false
 end
@@ -1365,6 +1388,7 @@ function Client:start(callback, opts)
     callback(nil, {
       code = ERR.transport,
       message = "Failed to spawn ACP process: " .. tostring(self.command),
+      data = { lazyagent = { kind = "transport" } },
     })
     return
   end
@@ -1382,6 +1406,7 @@ function Client:start(callback, opts)
         pcall(self.on_error, {
           code = ERR.transport,
           message = "ACP stdout error: " .. tostring(err),
+          data = { lazyagent = { kind = "transport" } },
         })
       end)
       return
@@ -1430,63 +1455,44 @@ function Client:start(callback, opts)
         return
       end
 
-      local mode = opts.session_mode or "new"
-      local resume_strategy = "new"
-      if mode == "auto" then
-        if opts.session_id and opts.session_id ~= "" and self:supports_session_resume() then
-          mode = "resume"
-          resume_strategy = "native_resume"
-        elseif opts.session_id and opts.session_id ~= "" and self:supports_session_load() then
-          mode = "load"
-          resume_strategy = "native_load"
-        else
-          mode = "new"
-          resume_strategy = "local_carryover"
-        end
-      elseif mode == "resume" then
-        resume_strategy = "native_resume"
-      elseif mode == "load" then
-        resume_strategy = "native_load"
+      local activation = type(opts.activation) == "table" and vim.deepcopy(opts.activation) or {
+        request = {
+          requested_mode = opts.session_mode or "new",
+          session_id = opts.session_id,
+          origin = "legacy",
+          history_state = "missing",
+          has_local_history = false,
+        },
+        hooks = {},
+      }
+      local request = vim.deepcopy(activation.request or {})
+      request.capabilities = {
+        load = self:supports_session_load(),
+        resume = self:supports_session_resume(),
+      }
+      local activation_plan, plan_err = SessionActivation.plan(request)
+      if not activation_plan then
+        self:stop()
+        callback(nil, plan_err)
+        return
       end
-      local attempted_auth = false
-      local start_session
-      local done = function(session_result, session_err)
-        if session_err and tonumber(session_err.code) == -32000 and not attempted_auth then
-          attempted_auth = true
-          self:_authenticate_for_session(function(_, auth_err)
-            if auth_err then
-              self:stop()
-              callback(nil, auth_err)
-              return
-            end
-            start_session()
-          end)
-          return
-        end
-        if session_err then
+      SessionActivation.run(self, activation_plan, activation.hooks or {}, function(run_result, activation_err)
+        if activation_err then
           self:stop()
-          callback(nil, session_err)
+          callback(nil, activation_err)
           return
         end
-        session_result = type(session_result) == "table" and session_result or {}
+        local session_result = type(run_result.result) == "table" and run_result.result or {}
         session_result._meta = type(session_result._meta) == "table" and session_result._meta or {}
-        session_result._meta.lazyagentResumeStrategy = resume_strategy
-        vim.schedule(function()
-          pcall(self.on_ready, session_result or {})
-        end)
-        callback(client, nil, session_result or {})
-      end
-
-      start_session = function()
-        if mode == "load" then
-          self:load_session(opts.session_id, done)
-        elseif mode == "resume" then
-          self:resume_session(opts.session_id, done)
-        else
-          self:new_session(done)
-        end
-      end
-      start_session()
+        session_result._meta.lazyagentActivation = {
+          trace = vim.deepcopy(run_result.trace or {}),
+          invalidatedSessionId = run_result.invalidated_session_id == true,
+          contextContinuity = run_result.attempt.context_continuity,
+          visibleHistory = run_result.attempt.visible_history,
+        }
+        vim.schedule(function() pcall(self.on_ready, session_result) end)
+        callback(client, nil, session_result)
+      end)
     end)
   end)
 end

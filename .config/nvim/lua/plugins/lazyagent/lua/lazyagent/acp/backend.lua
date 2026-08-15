@@ -25,6 +25,7 @@ local ThreadStore = require("lazyagent.acp.thread_store")
 local WorkspaceSnapshot = require("lazyagent.acp.workspace_snapshot")
 local TurnJournal = require("lazyagent.acp.turn_journal")
 local StructuredHistory = require("lazyagent.acp.structured_history")
+local SessionActivation = require("lazyagent.acp.session_activation")
 local Watch = require("lazyagent.watch")
 local BlobStore = require("lazyagent.acp.blob_store")
 local ChangeReview = require("lazyagent.acp.change_review")
@@ -81,11 +82,11 @@ local actions_helpers
 local host_helpers
 local complete_pending_turn
 
-local function sync_thread_record(session, changes)
+local function sync_thread_record(session, changes, update_opts)
   if not session or not session.thread_store or not session.thread_id then
     return nil
   end
-  local opts = {}
+  local opts = vim.deepcopy(update_opts or {})
   if changes and changes.process_id == vim.NIL and session.client and session.client.pid then
     opts.expected_process_id = session.client.pid
   end
@@ -387,6 +388,17 @@ local function finish_change_turn(session, completion_state)
   local synced = sync_thread_record(session, {
     change_journal = finished_journal,
     history_path = history_ok and history_path or session.thread_record.history_path,
+    metadata = history_ok and {
+      activation = {
+        schema_version = 1,
+        origin = session.thread_record.metadata
+            and session.thread_record.metadata.activation
+            and session.thread_record.metadata.activation.origin
+          or "lazyagent",
+        history_state = "complete",
+        history_source = "local_structured",
+      },
+    } or nil,
   })
   if synced then
     util.fire_event("ChangeJournal", {
@@ -587,6 +599,7 @@ host_helpers = backend_host.setup({
 
 local function create_backend(default_view)
   local backend = {}
+  local closing_clients = {}
   local thread_store = ThreadStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/threads" })
   local blob_store = BlobStore.new({ dir = cache_logic.get_cache_dir() .. "/acp/blobs" })
   local change_apply = ChangeApply.new({
@@ -912,15 +925,38 @@ local function create_backend(default_view)
     end
 
     local transcript_path = existing_thread and existing_thread.transcript_path ~= "" and existing_thread.transcript_path
+      or (existing_thread and (
+        cache_logic.get_cache_dir() .. "/acp/transcripts/" .. sanitize_filename_component(existing_thread.thread_id) .. ".log"
+      ))
       or state_helpers.build_transcript_path(acp.agent_name, acp.source_bufnr)
     local carryover_lines = nil
     local carryover_conversation = {}
+    local carryover_history_count = 0
+    local carryover_history_error
+    local inferred_activation
     if existing_thread and vim.fn.filereadable(transcript_path) == 1 then
       carryover_lines = state_helpers.read_path_lines(transcript_path)
     end
     if existing_thread and existing_thread.history_path then
-      local records = StructuredHistory.read(existing_thread.history_path)
-      if records then carryover_conversation = StructuredHistory.conversation(records) end
+      local records, history_err = StructuredHistory.read(existing_thread.history_path)
+      if records then
+        carryover_history_count = #records
+        carryover_conversation = StructuredHistory.conversation(records)
+      else
+        carryover_history_error = tostring(history_err)
+      end
+    end
+    if existing_thread and not (existing_thread.metadata and existing_thread.metadata.activation) then
+      local activation, diagnostic = SessionActivation.infer_history({
+        structured_history_count = carryover_history_count,
+        structured_history_error = carryover_history_error,
+        transcript_has_user = transcript_lines_have_user_prompt(carryover_lines),
+      })
+      inferred_activation = activation
+      existing_thread.metadata = vim.tbl_deep_extend("force", vim.deepcopy(existing_thread.metadata or {}), {
+        activation = activation,
+      })
+      if diagnostic then carryover_history_error = diagnostic.message end
     end
     local initial_text = conversation_helpers.render_section_block("System", "Connecting ACP session for " .. acp.agent_name .. "...")
     if not existing_thread then
@@ -990,6 +1026,7 @@ local function create_backend(default_view)
         preparing_prompt = false,
         command = acp.command,
         env = acp.env or {},
+        request_timeout_ms = acp.request_timeout_ms,
         cwd = acp.cwd or vim.fn.getcwd(),
         source_bufnr = acp.source_bufnr,
         root_dir = acp.root_dir,
@@ -1043,6 +1080,11 @@ local function create_backend(default_view)
         transcript_compaction = vim.deepcopy(acp.transcript_compaction or {}),
         runtime_compaction = vim.deepcopy(acp.runtime_compaction or {}),
         initial_config_applied = false,
+        structured_history_error = carryover_history_error,
+        activation_phase = "idle",
+        activation_hydrator = nil,
+        activation_trace = {},
+        cache_dir = cache_logic.get_cache_dir(),
         session_info = {},
         usage_stats = {},
         protocol_events = {},
@@ -1062,6 +1104,15 @@ local function create_backend(default_view)
       local thread_metadata = vim.tbl_deep_extend("force", {
         editor = vim.deepcopy(acp.editor or {}),
       }, vim.deepcopy(acp.thread_metadata or {}))
+      if inferred_activation then thread_metadata.activation = vim.deepcopy(inferred_activation) end
+      if not existing_thread and thread_metadata.activation == nil then
+        thread_metadata.activation = {
+          schema_version = 1,
+          origin = "lazyagent",
+          history_state = "missing",
+          history_source = "none",
+        }
+      end
       if acp.thread_title and acp.thread_title ~= "" and thread_metadata.title_source == nil then
         thread_metadata.title_source = "configured"
       end
@@ -1086,6 +1137,14 @@ local function create_backend(default_view)
       if thread then
         session.thread_id = thread.thread_id
         session.thread_record = thread
+        local activation = thread.metadata and thread.metadata.activation or {}
+        session.activation_request = {
+          requested_mode = session.session_bootstrap and session.session_bootstrap.session_mode or "auto",
+          session_id = session.session_bootstrap and session.session_bootstrap.session_id or thread.native_session_id,
+          origin = activation.origin or "legacy",
+          history_state = activation.history_state or "missing",
+          has_local_history = #carryover_conversation > 0 or transcript_lines_have_user_prompt(carryover_lines),
+        }
       else
         session.thread_store_error = tostring(thread_err)
       end
@@ -1668,6 +1727,12 @@ local function create_backend(default_view)
         imported_from_native = true,
         native_summary = native_session.summary,
         native_updated_at = native_session.updatedAt,
+        activation = {
+          schema_version = 1,
+          origin = "native_import",
+          history_state = "missing",
+          history_source = "none",
+        },
       },
     })
     if not thread then
@@ -1745,8 +1810,21 @@ local function create_backend(default_view)
         or nil,
       acp_thread_store_error = session.thread_store_error,
       acp_workspace_snapshot_error = session.workspace_snapshot_error,
+      acp_structured_history_error = session.structured_history_error,
       acp_follow_agent = session.follow_agent == true,
-      acp_resume_strategy = session.resume_strategy,
+      acp_activation = {
+        phase = session.activation_phase or "idle",
+        context_continuity = session.activation_context_continuity,
+        visible_history = session.activation_visible_history,
+        origin = session.thread_record
+            and session.thread_record.metadata
+            and session.thread_record.metadata.activation
+            and session.thread_record.metadata.activation.origin
+          or nil,
+        attempts = SessionActivation.bound_trace(session.activation_trace or {}),
+        hydrator = session.activation_hydrator and session.activation_hydrator:snapshot()
+          or vim.deepcopy(session.activation_hydrator_snapshot),
+      },
       acp_has_pending_carryover = session.pending_switch_history ~= nil,
       acp_thread_draft = session.thread_record and session.thread_record.draft or "",
       acp_thread_unread = session.thread_record and session.thread_record.unread == true or false,
@@ -1768,6 +1846,7 @@ local function create_backend(default_view)
       acp_view_timer_count = session.view_state and session.view_state.append_timer and 1 or 0,
       acp_terminal_count = table_count(session.terminals),
       acp_read_only_reason = ReadOnlyGuard.reason(session),
+      acp_last_read = vim.deepcopy(session.last_read),
       acp_prompt_queue = PromptQueue.list(session),
       acp_transcript_debug = {
         owned = session.transcript_path ~= nil and session.transcript_path ~= "",
@@ -1811,13 +1890,24 @@ local function create_backend(default_view)
       callback_count = 0,
       sessions = {},
       views = {},
+      owners = {},
     }
+    local function add_owner(owner)
+      if type(owner) == "table" and (tonumber(owner.count) or 0) > 0 then
+        snapshot.owners[#snapshot.owners + 1] = vim.deepcopy(owner)
+      end
+    end
     local seen_views = {}
 
     for pane_id, session in pairs(sessions) do
       snapshot.session_count = snapshot.session_count + 1
+      local runtime_owner = tostring(session.thread_id or pane_id)
+      add_owner({ owner_class = "thread_runtime", owner_id = runtime_owner,
+        resource_class = "runtime", resource_id = tostring(pane_id), count = 1 })
       if session.transcript_path and session.transcript_path ~= "" then
         snapshot.transcript_owner_count = snapshot.transcript_owner_count + 1
+        add_owner({ owner_class = "thread_runtime", owner_id = runtime_owner,
+          resource_class = "transcript", resource_id = runtime_owner .. ":transcript", count = 1 })
       end
       snapshot.terminal_count = snapshot.terminal_count + table_count(session.terminals)
       if session.view_state and session.view_state.append_timer then
@@ -1826,6 +1916,7 @@ local function create_backend(default_view)
 
       local client_debug = session.client and session.client:debug_snapshot() or nil
       if client_debug then
+        for _, owner in ipairs(client_debug.owners or {}) do add_owner(owner) end
         if client_debug.process == true then
           snapshot.child_process_count = snapshot.child_process_count + 1
         end
@@ -1834,6 +1925,11 @@ local function create_backend(default_view)
           + (tonumber(client_debug.stop_timer) or 0)
         snapshot.callback_count = snapshot.callback_count + (tonumber(client_debug.callbacks) or 0)
       end
+      if session.activation_hydrator then add_owner(session.activation_hydrator:snapshot().owner) end
+      for terminal_id in pairs(session.terminals or {}) do
+        add_owner({ owner_class = "thread_runtime", owner_id = runtime_owner,
+          resource_class = "terminal", resource_id = tostring(terminal_id), count = 1 })
+      end
       snapshot.sessions[tostring(pane_id)] = backend.get_runtime_snapshot(pane_id)
 
       local view = session.view
@@ -1841,6 +1937,7 @@ local function create_backend(default_view)
         seen_views[view] = true
         local view_debug = view.debug_snapshot()
         snapshot.views[#snapshot.views + 1] = view_debug
+        for _, owner in ipairs(view_debug.owners or {}) do add_owner(owner) end
         snapshot.timer_count = snapshot.timer_count + (tonumber(view_debug.active_timer_count) or 0)
       end
     end
@@ -1849,8 +1946,29 @@ local function create_backend(default_view)
     if fallback_view and not seen_views[fallback_view] and type(fallback_view.debug_snapshot) == "function" then
       local view_debug = fallback_view.debug_snapshot()
       snapshot.views[#snapshot.views + 1] = view_debug
+      for _, owner in ipairs(view_debug.owners or {}) do add_owner(owner) end
       snapshot.timer_count = snapshot.timer_count + (tonumber(view_debug.active_timer_count) or 0)
     end
+
+    for owner_id, entry in pairs(closing_clients) do
+      local client_debug = entry.client and entry.client:debug_snapshot() or nil
+      if client_debug then
+        if client_debug.process == true then snapshot.child_process_count = snapshot.child_process_count + 1 end
+        snapshot.timer_count = snapshot.timer_count
+          + (tonumber(client_debug.callback_timers) or 0)
+          + (tonumber(client_debug.stop_timer) or 0)
+        snapshot.callback_count = snapshot.callback_count + (tonumber(client_debug.callbacks) or 0)
+        for _, owner in ipairs(client_debug.owners or {}) do add_owner(owner) end
+      end
+      add_owner({ owner_class = "closing_runtime", owner_id = owner_id,
+        resource_class = "release_lease", resource_id = owner_id, count = 1 })
+    end
+
+    table.sort(snapshot.owners, function(left, right)
+      local l = table.concat({ left.owner_class or "", left.owner_id or "", left.resource_class or "", left.resource_id or "" }, ":")
+      local r = table.concat({ right.owner_class or "", right.owner_id or "", right.resource_class or "", right.resource_id or "" }, ":")
+      return l < r
+    end)
 
     return snapshot
   end
@@ -1948,6 +2066,12 @@ local function create_backend(default_view)
       sessions[pane_id] = nil
       if session.client then
         local client = session.client
+        local client_debug = client:debug_snapshot()
+        local closing_owner_id = tostring(session.thread_id or pane_id) .. ":closing"
+        if client_debug.process == true or client_debug.stdin == true or client_debug.stdout == true or client_debug.stderr == true then
+          closing_clients[closing_owner_id] = { client = client }
+          session.on_client_released = function() closing_clients[closing_owner_id] = nil end
+        end
         local stopped = false
         local stop_client = function()
           if stopped then

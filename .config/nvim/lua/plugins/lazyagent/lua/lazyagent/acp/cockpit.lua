@@ -57,6 +57,48 @@ local status_highlights = {
   archived = "LazyAgentACPCockpitStatusArchived",
 }
 
+local context_labels = {
+  native_load = "load",
+  native_resume = "resume",
+  local_carryover = "carryover",
+  new = "new",
+  none = "none",
+}
+
+local history_labels = {
+  native_replay = "replay",
+  local_snapshot = "local",
+  unavailable = "unavailable",
+}
+
+function M.activation_summary(thread, runtime)
+  local persisted = thread and thread.metadata and thread.metadata.activation or {}
+  local active = runtime and runtime.acp_activation or {}
+  local context = active.context_continuity or persisted.context_continuity
+  local history = active.visible_history or persisted.visible_history
+  return {
+    phase = active.phase,
+    context = context,
+    history = history,
+    context_label = context_labels[context],
+    history_label = history_labels[history],
+  }
+end
+
+function M.explicit_activation_actions(thread, runtime)
+  if not thread or not thread.native_session_id or thread.native_session_id == "" or not runtime then return {} end
+  local agent_caps = runtime.acp_agent_capabilities or {}
+  local session_caps = runtime.acp_session_capabilities or {}
+  local actions = {}
+  if agent_caps.loadSession == true then
+    actions[#actions + 1] = { mode = "load", label = "Load with history" }
+  end
+  if session_caps.resume == true or type(session_caps.resume) == "table" then
+    actions[#actions + 1] = { mode = "resume", label = "Resume without replay" }
+  end
+  return actions
+end
+
 local function setup_highlights()
   local definitions = {
     LazyAgentACPCockpitTitle = { default = true, link = "Title" },
@@ -321,6 +363,7 @@ local function card_line(thread, runtime, conflicts, opts)
   local raw_title = M.prompt_title(thread) or ""
   local show_title = raw_title ~= ""
   local is_open = opts.open_thread_id == thread.thread_id
+  local activation = M.activation_summary(thread, runtime)
 
   local fields = {}
   local team = runtime and runtime.lazyagent_team
@@ -354,6 +397,12 @@ local function card_line(thread, runtime, conflicts, opts)
       or "LazyAgentACPCockpitTestRunning"
     fields[#fields + 1] = { "test:" .. test_status, test_group, "test" }
   end
+  if activation.context_label then
+    fields[#fields + 1] = { "ctx:" .. activation.context_label, "LazyAgentACPCockpitMuted", "activation" }
+  end
+  if activation.history_label then
+    fields[#fields + 1] = { "hist:" .. activation.history_label, "LazyAgentACPCockpitMuted", "activation" }
+  end
 
   local function fixed_width()
     local status_padding = math.max(1, (opts.status_width or display_width(status)) - display_width(status) + 1)
@@ -364,7 +413,7 @@ local function card_line(thread, runtime, conflicts, opts)
     return width
   end
 
-  local removal_order = { "usage", "model", "changes", "test", "unread", "conflict", "queue", "team" }
+  local removal_order = { "activation", "usage", "model", "changes", "test", "unread", "conflict", "queue", "team" }
   local minimum_tail_width = show_title and 12 or 0
   while max_width and max_width - fixed_width() < minimum_tail_width do
     local removed = false
@@ -514,6 +563,8 @@ function M.filter(threads, query, runtimes, opts)
         or "",
       runtime and runtime.lazyagent_team and vim.inspect(runtime.lazyagent_team) or "",
       thread.unread == true and "unread" or "read",
+      (M.activation_summary(thread, runtime).context_label or ""),
+      (M.activation_summary(thread, runtime).history_label or ""),
     }, " "):lower()
     return text:find(query, 1, true) ~= nil
   end, meaningful)

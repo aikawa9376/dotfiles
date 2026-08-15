@@ -1,7 +1,10 @@
 # LazyAgent ACP roadmap
 
-> Status: in progress — Milestone 0
-> Last reviewed: 2026-07-20
+> Status: core Milestone 0–5 complete; historical implementation record / experimental backlog
+> Last reviewed: 2026-08-15
+> Current authority: Obsidian `notes/LazyAgent ACP安定化/docs/acp-stabilization/README.md`
+
+現在の安定化、support tier、release gateは上記の安定化仕様書を正とします。このroadmapの完了済みchecklistは実装履歴として保持し、未完のExperimental ideasは安定化作業を妨げないbacklogです。安定化によって直接解決した項目だけをここへ反映します。
 
 この文書は、LazyAgent の ACP 機能を Zed の External Agent 相当まで高めつつ、
 tmux / agentmux、provider 切替、mobile、brain 連携といった既存の強みを伸ばすための実装計画です。
@@ -19,7 +22,7 @@ tmux / agentmux、provider 切替、mobile、brain 連携といった既存の�
 - project / worktree / status を横断して確認できる Session Cockpit を持つ。
 - ACP未対応機能を表示せず、unstable機能は feature flag の後ろに隔離する。
 
-## Current baseline
+## Historical baseline (roadmap開始時)
 
 すでに実装済みの主な土台:
 
@@ -149,7 +152,7 @@ generic ACP agentに対して、会話履歴まで巻き戻ったようには見
   - [x] `:LazyAgentACPThreads` pickerと`:LazyAgentACPThreadNew` / `ThreadOpen` commandを追加する。
 - [x] provider native sessionのlist/importをthread storeへ統合する。
   - [x] native session pickerからprovider / native session IDで重複排除してThreadStoreへimportする。
-- [x] 再開時は`resume`、`load`、local carryoverの順にcapability-drivenで選ぶ。
+- [x] 再開時はcapabilityとlocal history provenanceに応じて`load` / `resume` / local carryover / newを選ぶ（安定化LA-STAB-01〜07で固定priorityを解消）。
 - [x] native resumeとlocal carryoverをUI上で明確に区別する。
 - [x] draft、scroll position、selected config、unread stateをthread単位で保存する。
   - [x] draft、selected config、read/unreadをThreadStoreへ同期し、scratch open/closeとbackground outputへ接続する。

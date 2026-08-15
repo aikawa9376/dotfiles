@@ -40,16 +40,136 @@ local function fail(id, message)
   })
 end
 
+local replay_on_load = vim.env.LAZYAGENT_FAKE_REPLAY_ON_LOAD == "1"
+local replay_tool = vim.env.LAZYAGENT_FAKE_REPLAY_TOOL == "1"
+local load_error = vim.env.LAZYAGENT_FAKE_LOAD_ERROR
+local resume_error = vim.env.LAZYAGENT_FAKE_RESUME_ERROR
+local hang_load = vim.env.LAZYAGENT_FAKE_HANG_LOAD == "1"
+local auth_on_load = vim.env.LAZYAGENT_FAKE_AUTH_ON_LOAD == "1"
+local load_host_request = vim.env.LAZYAGENT_FAKE_LOAD_HOST_REQUEST
+local auth_enabled = vim.env.LAZYAGENT_FAKE_AUTH_FLOW == "1" or auth_on_load
+
+local conflicts = 0
+for _, enabled in ipairs({
+  load_error ~= nil and load_error ~= "",
+  hang_load,
+  auth_on_load,
+}) do
+  if enabled then conflicts = conflicts + 1 end
+end
+if conflicts > 1
+  or (hang_load and (replay_on_load or load_host_request ~= nil))
+  or (load_error ~= nil and load_error ~= "" and (replay_on_load or load_host_request ~= nil))
+  or (replay_tool and not replay_on_load)
+then
+  io.stderr:write("conflicting activation controls\n")
+  io.stderr:flush()
+  os.exit(2)
+end
+
+local valid_activation_errors = {
+  method_not_found = true,
+  session_not_found = true,
+  auth_required = true,
+  agent_error = true,
+}
+if (load_error and not valid_activation_errors[load_error]) or (resume_error and not valid_activation_errors[resume_error]) then
+  io.stderr:write("invalid activation error control\n")
+  io.stderr:flush()
+  os.exit(2)
+end
+if load_host_request
+  and load_host_request ~= "fs_write"
+  and load_host_request ~= "terminal"
+  and load_host_request ~= "permission"
+then
+  io.stderr:write("invalid load host request control\n")
+  io.stderr:flush()
+  os.exit(2)
+end
+
 local pending_prompt_id
 local permission_complete = false
 local read_complete = false
 local cancel_received = false
 local permission_cancelled = false
 local cancel_prompt_finished = false
-local authenticated = vim.env.LAZYAGENT_FAKE_AUTH_FLOW ~= "1"
+local authenticated = not auth_enabled
 local scope_rejected = false
 local write_complete = false
 local terminal_complete = false
+local pending_activation
+
+local function activation_error(id, method, value)
+  local shapes = {
+    method_not_found = { code = -32601, message = "Method not found: " .. method },
+    session_not_found = { code = -32000, message = "Session not found" },
+    auth_required = { code = -32000, message = "Authentication required" },
+    agent_error = { code = -32042, message = "Fake activation failure" },
+  }
+  local shape = shapes[value]
+  send({ jsonrpc = "2.0", id = id, error = shape })
+end
+
+local function replay(session_id)
+  local function update(value)
+    send({ jsonrpc = "2.0", method = "session/update", params = { sessionId = session_id, update = value } })
+  end
+  update({ sessionUpdate = "user_message_chunk", messageId = "replay-user-1", content = { type = "text", text = "older " } })
+  update({ sessionUpdate = "user_message_chunk", messageId = "replay-user-1", content = { type = "text", text = "question" } })
+  update({ sessionUpdate = "agent_message_chunk", messageId = "replay-agent-1", content = { type = "text", text = "older " } })
+  update({ sessionUpdate = "agent_message_chunk", messageId = "replay-agent-1", content = { type = "text", text = "answer" } })
+  if replay_tool then
+    update({
+      sessionUpdate = "tool_call",
+      toolCallId = "replay-tool-1",
+      title = "Historical edit",
+      kind = "edit",
+      status = "pending",
+      locations = { { path = "fixture.lua", line = 1 } },
+    })
+    update({
+      sessionUpdate = "tool_call_update",
+      toolCallId = "replay-tool-1",
+      kind = "edit",
+      status = "completed",
+    })
+  end
+  update({ sessionUpdate = "session_info_update", title = "Replayed native session" })
+end
+
+local function finish_activation_request()
+  if not pending_activation then return end
+  local request = pending_activation
+  pending_activation = nil
+  send(response(request.id, vim.empty_dict()))
+end
+
+local function request_during_load(message)
+  if not load_host_request then return false end
+  pending_activation = { id = message.id, method = message.method, session_id = message.params.sessionId }
+  local methods = {
+    fs_write = {
+      method = "fs/write_text_file",
+      params = { sessionId = message.params.sessionId, path = "/fixture/replay.txt", content = "historical content" },
+    },
+    terminal = {
+      method = "terminal/create",
+      params = { sessionId = message.params.sessionId, command = "historical-command", args = {} },
+    },
+    permission = {
+      method = "session/request_permission",
+      params = {
+        sessionId = message.params.sessionId,
+        toolCall = { toolCallId = "replay-permission", title = "Historical permission", status = "pending" },
+        options = {},
+      },
+    },
+  }
+  local request = methods[load_host_request]
+  send({ jsonrpc = "2.0", id = 980, method = request.method, params = request.params })
+  return true
+end
 
 local function has_additional_directory(params)
   local directories = params and params.additionalDirectories
@@ -133,7 +253,7 @@ for line in io.lines() do
       send_fragmented(response(message.id, {
         protocolVersion = protocol_version,
         agentCapabilities = {
-          auth = vim.env.LAZYAGENT_FAKE_AUTH_FLOW == "1" and {
+          auth = auth_enabled and {
             logout = vim.empty_dict(),
           } or nil,
           loadSession = vim.env.LAZYAGENT_FAKE_DISABLE_LOAD ~= "1",
@@ -162,7 +282,7 @@ for line in io.lines() do
             supported = true,
           },
         },
-        authMethods = vim.env.LAZYAGENT_FAKE_AUTH_FLOW == "1" and {
+        authMethods = auth_enabled and {
           {
             id = "test-auth",
             name = "Test authentication",
@@ -210,8 +330,32 @@ for line in io.lines() do
       fail(message.id, message.method .. " additionalDirectories missing")
     elseif not has_mcp_servers(message.params) then
       fail(message.id, message.method .. " mcpServers missing")
+    elseif message.method == "session/load" and hang_load then
+      -- Intentionally leave the request pending for timeout coverage.
+    elseif message.method == "session/load" and load_error then
+      activation_error(message.id, "session/load", load_error)
+    elseif message.method == "session/resume" and resume_error then
+      activation_error(message.id, "session/resume", resume_error)
+    elseif message.method == "session/load" and auth_on_load and not authenticated then
+      activation_error(message.id, "session/load", "auth_required")
     else
-      send(response(message.id, vim.empty_dict()))
+      if message.method == "session/load" and replay_on_load then replay(message.params.sessionId) end
+      if message.method ~= "session/load" or not request_during_load(message) then
+        send(response(message.id, vim.empty_dict()))
+      end
+    end
+  elseif message.id == 980 and pending_activation then
+    local rejected = message.error ~= nil
+      or (load_host_request == "permission"
+        and message.result
+        and message.result.outcome
+        and message.result.outcome.outcome == "cancelled")
+    if rejected then
+      finish_activation_request()
+    else
+      io.stderr:write("load host request was not rejected\n")
+      io.stderr:flush()
+      os.exit(3)
     end
   elseif message.method == "session/list" then
     if vim.env.LAZYAGENT_FAKE_HANG_LIST ~= "1" then

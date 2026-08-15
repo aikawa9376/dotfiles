@@ -191,6 +191,12 @@ function M.run()
   assert_equal(actions.open_thread(THREAD_ID), true, "open closed workspace thread")
   assert_equal(opened.root_dir, workspace, "closed thread keeps persisted workspace")
   assert_equal(vim.api.nvim_buf_get_name(opened.source_bufnr), source_path, "closed thread restores source anchor")
+  records[THREAD_ID].native_session_id = "native-explicit"
+  opened = nil
+  assert_equal(actions.open_thread(THREAD_ID, { activation_mode = "load" }), true,
+    "explicit load uses the shared thread-open path")
+  assert_equal(opened.acp.session_bootstrap.session_mode, "load", "explicit load mode remains explicit")
+  assert_equal(opened.acp.session_bootstrap.session_id, "native-explicit", "explicit load native identity")
 
   local FOREIGN_ID = "123e4567-e89b-42d3-a456-426614174099"
   records[THREAD_ID].change_journal = { turns = {} }

@@ -402,6 +402,23 @@ agent scratch で `#notes` を入力すると補完と preview が表示され�
 
 ACP を使う場合は `acp.enabled = true` にします。`view = "buffer"` は transcript を Neovim buffer に表示し、`view = "tmux"` は tmux pane に tail 表示します。
 
+ACP機能の **stable core** は、実測済みのCodex ACP 1.3.0 / Copilot ACP 1.0.80におけるprompt・cancel・native reopen・close・隔離workspace mutation・owned-process crash・timeout/late update・pending permission中のcancel/closeを対象にします。stable v1 fake-agent contract、resource teardown、filesystem境界、履歴復元も自動テスト済みです。未実測のoptional capabilityやClaude/Geminiはstable対象に含めません。providerがadvertiseしないcapabilityは非対応として扱い、対応UIも表示しません。
+
+### Thread再開と履歴の深さ
+
+Cockpitから停止済みthreadを開くと、provider capabilityと保存済み履歴のprovenanceを見て経路を選びます。context（agentが覚えている範囲）とvisible history（LazyAgentに表示できる範囲）は別物です。
+
+| 経路 | Agent context | LazyAgentのvisible history | 主な制約 |
+| --- | --- | --- | --- |
+| native `session/load` | native sessionを復元 | provider replayを隔離収集して一度だけ表示 | replayが空なら履歴を捏造せず警告する |
+| native `session/resume` | native sessionを復元 | 保存済みlocal historyを再利用。無い場合は表示不能 | providerは過去updateを再送しない |
+| local carryover | 新しいnative session | 保存済みlocal snapshot | bounded textを次promptへ注入する再構成であり、native復元ではない |
+| new | 新しいnative session | なし | 過去context/historyを引き継がない |
+
+local historyが欠けるimport threadは`load`を優先し、completeなlocal historyがあるthreadは`resume`を優先します。timeout、process exit、transport failure、未分類errorでは別方式へ自動fallbackせず、古いpromptも再送しません。Cockpitの`L`（Load with history）と`M`（Resume without replay）はcapabilityがある場合だけ表示され、明示実行時はfallbackしません。`Context ...`と`History ...`はCockpit/footer、詳細な試行履歴は`:LazyAgentACPDoctor`で確認できます。
+
+すべてのsession作成・再開は同じhistory-aware activation planner/runnerを通ります。既存ThreadRecordや履歴fileはactivation方式の選択時にも削除しません。
+
 Neovim自身がtmux pane内で動作し、`agentmux`が`PATH`にある場合、`view = "buffer"` のACP sessionはagentmuxへ自動公開されます。単一sessionは`Codex (ACP)`のような名前で、複数sessionは一つの`LazyAgent: ...`項目に集約されます。状態はACP lifecycleに合わせて`working` / `blocked` / `idle`へ更新され、previewにはNeovimの編集中bufferではなく、選択されたACP sessionのlive transcriptが末尾追従で表示されます。最後のACP sessionを閉じるかNeovimを終了するとowner確認付きで解除されます。pluginの読み込みだけではagentmux同期を実行しません。連携を使わない場合は`agentmux.enabled = false`にすると、agentmux commandとautocmdを登録しません。
 
 ```lua
@@ -787,7 +804,6 @@ backend.set_agent_backend("Gemini", "mybackend")
 
 ## Roadmap
 
-ACP の次期実装計画、Zed External Agent との差分、milestoneと完了条件は
-[ACP_ROADMAP.md](ACP_ROADMAP.md) で管理します。
+過去の機能拡張milestoneと未完のexperimental案は[ACP_ROADMAP.md](ACP_ROADMAP.md)に残しています。現在のACP安定化・release判断はObsidian vaultの `notes/LazyAgent ACP安定化/docs/acp-stabilization/README.md` を正本とします。
 
 plugin全体の保守課題、multi-instance対応、削除候補は [TODO.md](TODO.md) を参照してください。
