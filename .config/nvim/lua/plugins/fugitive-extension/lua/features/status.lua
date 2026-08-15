@@ -21,6 +21,33 @@ local repository_health_by_buf = {}
 local index_flags_by_buf = {}
 local index_flags_expanded_by_buf = {}
 
+local status_heading_highlights = {
+  { '^Head:', 'RainbowDelimiterBlue' },
+  { '^Help:', 'Comment' },
+  { '^Unmerged paths %(', 'RainbowDelimiterRed' },
+  { '^Untracked files %(', 'RainbowDelimiterOrange' },
+  { '^Unstaged changes %(', 'RainbowDelimiterYellow' },
+  { '^Staged changes %(', 'RainbowDelimiterGreen' },
+  { '^Unpulled ', 'RainbowDelimiterCyan' },
+  { '^Unpushed %[only%] %(', 'RainbowDelimiterViolet' },
+  { '^Commits %[latest 15%+%] %(', 'RainbowDelimiterViolet' },
+  { '^Repository health$', 'RainbowDelimiterBlue' },
+  { '^Submodules %(', 'RainbowDelimiterBlue' },
+  { '^Worktrees %(', 'RainbowDelimiterViolet' },
+  { '^Stashes %(', 'RainbowDelimiterOrange' },
+  { '^Pull requests %(', 'RainbowDelimiterGreen' },
+  { '^Index flags %[local%]', 'RainbowDelimiterCyan' },
+  { '^Bisecting', 'RainbowDelimiterYellow' },
+  { ' in progress', 'RainbowDelimiterYellow' },
+}
+
+local function status_heading_highlight(line)
+  for _, item in ipairs(status_heading_highlights) do
+    if line:match(item[1]) then return item[2] end
+  end
+  return nil
+end
+
 local function is_status_buffer(bufnr)
   return utils.is_valid_buf(bufnr)
     and (vim.b[bufnr].custom_git_status == true or vim.bo[bufnr].filetype == 'fugitivestatus')
@@ -171,6 +198,10 @@ local function capture_status_cursors_before_reload(bufnr)
 end
 
 local function find_status_cursor_row(lines, anchor, bufnr)
+  if anchor.position_only then
+    return math.min(math.max(anchor.row or 1, 1), math.max(#lines, 1))
+  end
+
   local best_row, best_distance
   for row = 1, #lines do
     local key_type, key = status_cursor_key(lines, row, bufnr)
@@ -201,6 +232,10 @@ local function restore_status_cursor(bufnr, anchor, target_win)
       vim.fn.winrestview(view)
     end)
   end)
+  if anchor.position_only then
+    local updated = capture_status_cursor(bufnr, winid)
+    if updated then status_cursor_anchor_by_buf[bufnr] = updated end
+  end
 end
 
 local function restore_status_cursors(bufnr, anchors)
@@ -317,7 +352,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   if warning then
     local warning_row = #native_lines + 1
     for row, line in ipairs(native_lines) do
-      if line == 'Help: g?' then warning_row = row + 1; break end
+      if line == 'Help: g?' then warning_row = row; break end
     end
     table.insert(native_lines, warning_row, warning)
     status_renderer.shift_entries(bufnr, warning_row, 1)
@@ -385,10 +420,10 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
         vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterViolet' })
         in_worktree, in_stash, in_pr = true, false, false
       elseif l:match('^Stashes') then
-        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'GitSignsChange' })
+        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterOrange' })
         in_worktree, in_stash, in_pr = false, true, false
       elseif l:match('^Pull requests') then
-        vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, 0, { end_col = #l, hl_group = 'GitSignsAdd' })
+        vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterGreen' })
         in_worktree, in_stash, in_pr = false, false, true
       elseif in_worktree then
         -- 形式: [path]  [branch]  [head] [sync_icon]
@@ -887,9 +922,14 @@ function M.setup(group)
         end)
       end
 
-      local function reload_status()
+      local function reload_status(position_only)
         if not utils.is_valid_buf(b) then return end
-        local anchors = capture_status_cursors_before_reload(b)
+        local anchors = position_only
+          and capture_status_cursors(b)
+          or capture_status_cursors_before_reload(b)
+        if position_only then
+          for _, anchor in ipairs(anchors) do anchor.position_only = true end
+        end
         if #anchors > 0 then pending_status_cursor_anchors_by_buf[b] = anchors end
         vim.schedule(refresh)
         fetch_pull_requests()
@@ -1019,22 +1059,17 @@ function M.setup(group)
             in_unpulled = false
           end
 
-          if line:match('^Staged') then
-            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 6, hl_group = 'GitSignsAdd' })
-          elseif line:match('^Bisecting') then
-            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
+          local heading_group = status_heading_highlight(line)
+          if heading_group then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = heading_group })
           elseif line:match('^Good:') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'GitSignsAdd' })
           elseif line:match('^Bad:') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'GitSignsDelete' })
           elseif line:match('^Bisect keys:') or line:match('^Start:') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'Comment' })
-          elseif line:match(' in progress') then
-            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
           elseif line:match('^Operation keys:') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'Comment' })
-          elseif line == 'Repository health' or line:match('^Submodules %(') then
-            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticInfo' })
           elseif line:match('^Submodule ') then
             local health_group = line:find('gone', 1, true) and 'DiagnosticWarn'
               or (line:find('dirty', 1, true) and 'GitSignsChange' or 'Directory')
@@ -1043,16 +1078,10 @@ function M.setup(group)
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
           elseif line:match('^Hidden changes: %d+ files? %(Index flags%)$') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
-          elseif line:match('^Index flags %[local%]') then
-            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'Comment' })
           elseif line:match('^  skip%s') or line:match('^  assume%s') then
             local flag_group = line:match('%[missing%]') and 'DiagnosticError'
               or (line:match('%[modified%]') and 'DiagnosticWarn' or 'Comment')
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = flag_group })
-          elseif line:match('^Unpulled') then
-            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 8, hl_group = 'GitSignsChange' })
-          elseif line:match('^Untracked') then
-            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 9, hl_group = 'GitSignsDelete' })
           end
 
           local commit_hash = line:match('^(%x%x%x%x%x%x%x+)%s')
@@ -1269,7 +1298,7 @@ function M.setup(group)
           vim.notify(err, vim.log.levels.WARN)
           return
         end
-        reload_status()
+        reload_status(true)
         notify_repo_changed()
       end
 

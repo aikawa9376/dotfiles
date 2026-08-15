@@ -20,7 +20,7 @@ end
 
 local function parse_status(work_tree)
   local result = run(work_tree, {
-    'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=normal',
+    'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
   })
   if result.code ~= 0 then return nil, vim.trim(result.stderr or 'git status failed') end
 
