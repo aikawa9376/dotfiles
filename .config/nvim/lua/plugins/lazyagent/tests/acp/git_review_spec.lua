@@ -32,7 +32,9 @@ function M.run()
   run({ "git", "commit", "-qm", "change" }, root)
   local head = run({ "git", "rev-parse", "HEAD" }, root)
 
-  local blobs = BlobStore.new({ dir = root .. "/blobs", max_blob_bytes = false })
+  local blob_dir = root .. "-blobs"
+  local review_dir = root .. "-reviews"
+  local blobs = BlobStore.new({ dir = blob_dir, max_blob_bytes = false })
   local review = assert(GitReview.create("HEAD~1..HEAD", { cwd = root, blob_store = blobs }))
   assert_equal(review.base, base, "review freezes base revision")
   assert_equal(review.head, head, "review freezes head revision")
@@ -89,7 +91,7 @@ function M.run()
   review.annotations = annotations
   review.status = "completed"
 
-  local review_store = ReviewStore.new({ dir = root .. "/reviews" })
+  local review_store = ReviewStore.new({ dir = review_dir })
   assert(review_store:save(review), "review is persisted")
   assert_equal(assert(review_store:get(review.review_id)).annotations[1].summary,
     "Return changed", "saved finding is restored")
@@ -110,9 +112,40 @@ function M.run()
     "Done.", "```lazyagent-review-replies",
     vim.json.encode({ review_id = review.review_id, replies = { { annotation_id = "comment-1", body = "Fixed and tested." } } }),
     "```",
-  }, "\n"))
+  }, "\n"), "OtherReviewer")
   assert_equal(updated.annotations[1].pending, false, "sent comment is no longer pending")
   assert_equal(updated.annotations[1].replies[1].body, "Fixed and tested.", "AI reply is attached to comment")
+  assert_equal(updated.annotations[1].replies[1].author.name, "OtherReviewer",
+    "reply records the selected feedback agent")
+
+  local logic_state = require("lazyagent.logic.state")
+  local saved_sessions, saved_opts = logic_state.sessions, logic_state.opts
+  local saved_buffer_backend = logic_state.backends.buffer_acp
+  local snapshots = {
+    original = { acp_ready = true, acp_thread_id = "thread-original", root_dir = root },
+    other = { acp_ready = true, acp_thread_id = "thread-other", cwd = root },
+    busy = { acp_ready = true, acp_thread_id = "thread-busy", root_dir = root, acp_busy = true },
+    foreign = { acp_ready = true, acp_thread_id = "thread-foreign", root_dir = root .. "-foreign" },
+  }
+  logic_state.sessions = {
+    ReviewFixture = { pane_id = "original", backend = "buffer_acp" },
+    OtherReviewer = { pane_id = "other", backend = "buffer_acp" },
+    BusyReviewer = { pane_id = "busy", backend = "buffer_acp" },
+    ForeignReviewer = { pane_id = "foreign", backend = "buffer_acp" },
+  }
+  logic_state.opts = { interactive_agents = {} }
+  logic_state.backends.buffer_acp = {
+    get_runtime_snapshot = function(pane_id) return snapshots[pane_id] end,
+    set_read_only_guard = function() return true end,
+  }
+  feedback_review.reviewer = "ReviewFixture"
+  feedback_review.reviewer_thread_id = "thread-original"
+  local feedback_targets = controller._feedback_candidates_for(feedback_review)
+  assert_equal(vim.tbl_map(function(item) return item.name end, feedback_targets),
+    { "OtherReviewer", "ReviewFixture" }, "feedback targets include every idle ACP thread in the review repository")
+  assert_equal(feedback_targets[2].original, true, "original reviewer is identified without excluding alternatives")
+  logic_state.sessions, logic_state.opts = saved_sessions, saved_opts
+  logic_state.backends.buffer_acp = saved_buffer_backend
 
   local thread = {
     thread_id = "git-review-" .. review.review_id,
@@ -141,7 +174,32 @@ function M.run()
     "consumed scratch buffer is cleared")
   vim.api.nvim_buf_delete(scratch_buf, { force = true })
 
+  vim.fn.writefile({ "local value = 3", "return value + 2" }, root .. "/review.lua")
+  run({ "git", "add", "review.lua" }, root)
+  vim.fn.writefile({ "local value = 4", "return value + 3" }, root .. "/review.lua")
+  vim.fn.writefile({ "untracked" }, root .. "/untracked.txt")
+
+  local index_review = assert(GitReview.create("staged", { cwd = root, blob_store = blobs }))
+  assert_equal(index_review.mode, "index", "staged alias creates an index review")
+  assert_equal(index_review.range, "HEAD..INDEX", "index review label")
+  assert_equal(index_review.source.kind, "index", "index ReviewSource kind")
+  assert_equal(#index_review.changes, 1, "index review excludes unstaged and untracked content")
+  assert_equal(blobs:get(index_review.changes[1].after_blob, { max_bytes = false }),
+    "local value = 3\nreturn value + 2\n", "index review freezes staged blob content")
+
+  local worktree_review = assert(GitReview.create("working", { cwd = root, blob_store = blobs }))
+  assert_equal(worktree_review.mode, "working_tree", "working alias creates a worktree review")
+  assert_equal(worktree_review.range, "HEAD..WORKTREE", "worktree review label")
+  assert_equal(worktree_review.source.kind, "working_tree", "worktree ReviewSource kind")
+  local worktree_by_path = {}
+  for _, change in ipairs(worktree_review.changes) do worktree_by_path[change.path] = change end
+  assert_equal(blobs:get(worktree_by_path["review.lua"].after_blob, { max_bytes = false }),
+    "local value = 4\nreturn value + 3\n", "worktree review freezes final filesystem content")
+  assert_equal(worktree_by_path["untracked.txt"].operation, "added", "worktree review includes untracked files")
+
   vim.fn.delete(root, "rf")
+  vim.fn.delete(blob_dir, "rf")
+  vim.fn.delete(review_dir, "rf")
 end
 
 return M
