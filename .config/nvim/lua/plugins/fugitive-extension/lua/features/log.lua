@@ -5,6 +5,9 @@ local help = require("features.help")
 local notes = require("features.notes")
 local commit_highlight = require("features.commit_highlight")
 
+local shortstat_cache = {}
+local shortstat_jobs = {}
+
 local function get_commit_at_line(bufnr, lnum)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
   if not line then return nil end
@@ -97,10 +100,14 @@ local function apply_log_syntax(bufnr)
       syntax match FugitiveLogAuthor /[^\t]\+/ contained nextgroup=FugitiveLogSep4
       syntax match FugitiveLogSep4 /\t/ contained nextgroup=FugitiveLogRefs
       syntax match FugitiveLogRefs /.*/ contained
+      syntax match FugitiveLogStatAdd /\d\+ insertions\?(+)/ containedin=FugitiveLogRefs
+      syntax match FugitiveLogStatDelete /\d\+ deletions\?(-)/ containedin=FugitiveLogRefs
 
       highlight default link FugitiveLogDate Directory
       highlight default link FugitiveLogAuthor Type
       highlight default link FugitiveLogRefs Comment
+      highlight default link FugitiveLogStatAdd GitSignsAdd
+      highlight default link FugitiveLogStatDelete GitSignsDelete
     ]])
   end)
 end
@@ -112,15 +119,98 @@ local function get_log_list(bufnr)
   end
   local work_tree = bufnr and utils.get_buf_work_tree(bufnr) or nil
   local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
-  local cmd = git_prefix .. "log --pretty=format:'%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
-  return vim.fn.systemlist(cmd)
+  local cmd = git_prefix .. "log --pretty=format:'%H%x09%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
+  local raw_output = vim.fn.systemlist(cmd)
+  local log_output = {}
+  local missing_hashes = {}
+  local cache = work_tree and shortstat_cache[work_tree] or {}
+  if work_tree then
+    shortstat_cache[work_tree] = cache
+  end
+
+  for _, line in ipairs(raw_output) do
+    local full_hash, commit_line = line:match('^(%x+)\t(.*)$')
+    if full_hash and commit_line then
+      local stat = cache[full_hash]
+      table.insert(log_output, commit_line .. '\t' .. (stat or ''))
+      if stat == nil then
+        table.insert(missing_hashes, full_hash)
+      end
+    end
+  end
+
+  return log_output, missing_hashes, work_tree
 end
 
-local function refresh_log_list(bufnr)
+local refresh_log_list
+
+local function load_shortstats(bufnr, work_tree, hashes)
+  if not work_tree or #hashes == 0 or shortstat_jobs[bufnr] then return end
+
+  local cmd = { 'git', '-C', work_tree, 'show', '--shortstat', '--format=%H' }
+  vim.list_extend(cmd, hashes)
+
+  local output = {}
+  local job
+  job = vim.fn.jobstart(cmd, {
+    stdout_buffered = true,
+    on_stdout = function(_, data)
+      output = data or {}
+    end,
+    on_exit = function(_, exit_code)
+      vim.schedule(function()
+        if shortstat_jobs[bufnr] == job then
+          shortstat_jobs[bufnr] = nil
+        end
+        if exit_code ~= 0 then return end
+
+        local cache = shortstat_cache[work_tree] or {}
+        shortstat_cache[work_tree] = cache
+        local current_hash
+        local stat_parts = {}
+
+        local function store_stat()
+          if current_hash then
+            cache[current_hash] = table.concat(stat_parts, ' ')
+          end
+        end
+
+        for _, line in ipairs(output) do
+          if line:match('^%x+$') and #line >= 40 then
+            store_stat()
+            current_hash = line
+            stat_parts = {}
+          else
+            local stat = vim.fn.trim(line)
+            if current_hash and stat ~= '' then
+              table.insert(stat_parts, stat)
+            end
+          end
+        end
+        store_stat()
+
+        if utils.is_valid_buf(bufnr) then
+          refresh_log_list(bufnr)
+        end
+      end)
+    end,
+  })
+
+  if job <= 0 then
+    shortstat_jobs[bufnr] = nil
+    return
+  end
+  shortstat_jobs[bufnr] = job
+end
+
+refresh_log_list = function(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
 
+  local missing_hashes
+  local work_tree
   utils.with_buf_modifiable(bufnr, function()
-    local log_output = get_log_list(bufnr)
+    local log_output
+    log_output, missing_hashes, work_tree = get_log_list(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, log_output)
   end)
 
@@ -129,6 +219,7 @@ local function refresh_log_list(bufnr)
   notes.apply_icons(bufnr, utils.get_buf_work_tree(bufnr), function(line)
     return line:match('^(%x+)')
   end)
+  load_shortstats(bufnr, work_tree, missing_hashes or {})
 end
 
 local function open_log_list(opts)
