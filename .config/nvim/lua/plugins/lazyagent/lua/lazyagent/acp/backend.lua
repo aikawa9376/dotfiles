@@ -58,6 +58,23 @@ local function table_count(value)
   return count
 end
 
+local function mcp_headers_with_thread_id(headers, thread_id)
+  local merged = {}
+  if type(headers) == "table" then
+    if vim.islist(headers) then
+      for _, header in ipairs(headers) do
+        if type(header) == "table" and header.name and header.value ~= nil then
+          merged[tostring(header.name)] = tostring(header.value)
+        end
+      end
+    else
+      merged = vim.deepcopy(headers)
+    end
+  end
+  if thread_id and thread_id ~= "" then merged["X-LazyAgent-Thread-Id"] = thread_id end
+  return merged
+end
+
 local function get_session(pane_id)
   return sessions[pane_id]
 end
@@ -1038,6 +1055,7 @@ local function create_backend(default_view)
         v2_adapter = vim.deepcopy(acp.v2_adapter or { enabled = false }),
         experimental = vim.deepcopy(acp.experimental or {}),
         mcp_url = acp.mcp_url,
+        mcp_headers = vim.deepcopy(acp.mcp_headers or {}),
         session_bootstrap = vim.deepcopy(acp.session_bootstrap or (existing_thread and existing_thread.native_session_id and {
           session_mode = "auto",
           session_id = existing_thread.native_session_id,
@@ -1137,6 +1155,7 @@ local function create_backend(default_view)
       if thread then
         session.thread_id = thread.thread_id
         session.thread_record = thread
+        session.mcp_headers = mcp_headers_with_thread_id(session.mcp_headers, session.thread_id)
         local activation = thread.metadata and thread.metadata.activation or {}
         session.activation_request = {
           requested_mode = session.session_bootstrap and session.session_bootstrap.session_mode or "auto",

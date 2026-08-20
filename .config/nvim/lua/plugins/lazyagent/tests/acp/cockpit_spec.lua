@@ -2,6 +2,7 @@ local M = {}
 
 function M.run()
   local Cockpit = require("lazyagent.acp.cockpit")
+  assert(Cockpit.agent_ref({ thread_id = "thread-a" }) == "agent:thread-a", "stable cockpit agent ref")
   assert(Cockpit.normalize_preview_layout(nil) == "split", "cockpit preview defaults to side split")
   assert(Cockpit.normalize_preview_layout("horizontal") == "horizontal", "horizontal preview layout")
   assert(Cockpit.normalize_preview_layout("unknown") == "split", "unknown preview layout falls back to split")

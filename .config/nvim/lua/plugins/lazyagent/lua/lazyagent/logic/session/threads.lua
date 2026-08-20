@@ -1280,6 +1280,14 @@ function M.setup(deps)
         if vim.api.nvim_buf_is_valid(bufnr) then refresh() end
       end, 50)
     end, { buffer = bufnr, silent = true, desc = "Message selected live ACP thread" })
+    vim.keymap.set("n", "<C-y>", function()
+      local thread = stored_thread(selected_thread_id())
+      local ref = require("lazyagent.acp.cockpit").agent_ref(thread)
+      if not ref then return end
+      vim.fn.setreg('"', ref)
+      pcall(vim.fn.setreg, "+", ref)
+      vim.notify("Copied LazyAgent ref: " .. ref, vim.log.levels.INFO)
+    end, { buffer = bufnr, silent = true, desc = "Copy selected ACP agent reference" })
     vim.keymap.set("n", "]a", function() jump_live(1) end, {
       buffer = bufnr, silent = true, desc = "Next live ACP thread",
     })
@@ -1433,6 +1441,7 @@ function M.setup(deps)
         { key = "O", description = "Open or resume thread and focus agent" },
         { key = "n", description = "Create agent in the project Neovim" },
         { key = "i", description = "Message live thread" },
+        { key = "<C-y>", description = "Copy stable agent reference" },
         { key = "v", description = "Open raw transcript" },
         { key = "b", description = "Branch latest completed turn" },
         { key = "]a", description = "Jump to next live thread" },

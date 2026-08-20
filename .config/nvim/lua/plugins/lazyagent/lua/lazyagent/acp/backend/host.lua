@@ -968,6 +968,7 @@ function M.setup(deps)
       v2_adapter = vim.deepcopy(base_session.v2_adapter or { enabled = false }),
       experimental = vim.deepcopy(base_session.experimental or {}),
       mcp_url = base_session.mcp_url,
+      mcp_headers = vim.deepcopy(base_session.mcp_headers or {}),
       protocol_log_path = base_session.protocol_log_path,
       auto_permission = base_session.auto_permission,
       question_policy = base_session.question_policy,
@@ -1043,6 +1044,7 @@ function M.setup(deps)
       env = temp_session.env,
       mcp_servers = temp_session.mcp_servers,
       mcp_url = temp_session.mcp_url,
+      mcp_headers = temp_session.mcp_headers,
       protocol_log_path = temp_session.protocol_log_path,
       v2_adapter = temp_session.v2_adapter,
       client_info = {
@@ -1248,6 +1250,7 @@ function M.setup(deps)
       request_timeout_ms = session.request_timeout_ms,
       mcp_servers = session.mcp_servers,
       mcp_url = session.mcp_url,
+      mcp_headers = session.mcp_headers,
       protocol_log_path = session.protocol_log_path,
       v2_adapter = session.v2_adapter,
       client_capabilities = client_capabilities,
