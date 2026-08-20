@@ -106,8 +106,10 @@ local function apply_log_syntax(bufnr)
       highlight default link FugitiveLogDate Directory
       highlight default link FugitiveLogAuthor Type
       highlight default link FugitiveLogRefs Comment
-      highlight default link FugitiveLogStatAdd GitSignsAdd
-      highlight default link FugitiveLogStatDelete GitSignsDelete
+      highlight default link FugitiveStatAdd GitSignsAdd
+      highlight default link FugitiveStatDelete GitSignsDelete
+      highlight default link FugitiveLogStatAdd FugitiveStatAdd
+      highlight default link FugitiveLogStatDelete FugitiveStatDelete
     ]])
   end)
 end

@@ -18,6 +18,51 @@ local function display_status(status)
   return status == '.' and ' ' or status
 end
 
+local function parse_numstat(work_tree, cached)
+  local args = { 'diff', '--numstat', '-z', '--no-ext-diff', '--no-renames' }
+  if cached then table.insert(args, '--cached') end
+  local result = run(work_tree, args)
+  if result.code ~= 0 then return {} end
+
+  local stats = {}
+  for _, record in ipairs(split_nul(result.stdout)) do
+    local added, deleted, path = record:match('^([^\t]+)\t([^\t]+)\t(.*)$')
+    if path and path ~= '' then
+      stats[path] = {
+        additions = tonumber(added) or 0,
+        deletions = tonumber(deleted) or 0,
+        binary = added == '-' or deleted == '-',
+      }
+    end
+  end
+  return stats
+end
+
+local function attach_numstat(entries, stats)
+  for _, entry in ipairs(entries) do
+    local paths = { entry.path }
+    if entry.old_path and entry.old_path ~= entry.path then table.insert(paths, entry.old_path) end
+
+    local found = false
+    local additions, deletions = 0, 0
+    local binary = false
+    for _, path in ipairs(paths) do
+      local stat = stats[path]
+      if stat then
+        found = true
+        additions = additions + stat.additions
+        deletions = deletions + stat.deletions
+        binary = binary or stat.binary
+      end
+    end
+    if found then
+      entry.additions = additions
+      entry.deletions = deletions
+      entry.binary = binary
+    end
+  end
+end
+
 local function parse_status(work_tree)
   local result = run(work_tree, {
     'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
@@ -84,6 +129,8 @@ local function parse_status(work_tree)
   local push_result = run(work_tree, { 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{push}' })
   if push_result.code == 0 then model.push = vim.trim(push_result.stdout or '') end
   if not model.push or model.push == '' then model.push = model.upstream end
+  attach_numstat(model.unstaged, parse_numstat(work_tree, false))
+  attach_numstat(model.staged, parse_numstat(work_tree, true))
   return model
 end
 
