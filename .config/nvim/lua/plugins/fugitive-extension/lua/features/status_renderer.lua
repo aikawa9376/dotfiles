@@ -157,11 +157,19 @@ local function diff_lines(model, entry)
     return lines
   end
 
-  local args = { 'diff', '--no-ext-diff', '--no-color' }
-  if entry.section == 'staged' then table.insert(args, '--cached') end
-  vim.list_extend(args, { '--', entry.path })
+  local args
+  if not model.oid or model.oid == '(initial)' then
+    args = {
+      'diff', '--no-index', '--no-ext-diff', '--no-color', '--',
+      '/dev/null', vim.fs.joinpath(model.work_tree, entry.path),
+    }
+  else
+    args = { 'diff', '--no-ext-diff', '--no-color', 'HEAD', '--' }
+    if entry.old_path then table.insert(args, entry.old_path) end
+    table.insert(args, entry.path)
+  end
   local result = run(model.work_tree, args)
-  if result.code ~= 0 then return {} end
+  if result.code ~= 0 and not (args[2] == '--no-index' and result.code == 1) then return {} end
   local all_lines, hunk_start = {}, nil
   for line in (result.stdout or ''):gmatch('[^\r\n]+') do
     table.insert(all_lines, line)
@@ -591,21 +599,12 @@ function M.diff_sides(bufnr, row)
     return nil, 'Cannot diff a directory'
   end
 
-  if entry.section == 'staged' then
-    return {
-      path = entry.path,
-      left = blob_lines(model, 'HEAD', entry.old_path or entry.path),
-      right = blob_lines(model, '', entry.path),
-      left_label = 'HEAD',
-      right_label = 'index',
-    }
-  end
   return {
     path = entry.path,
-    left = entry.section == 'untracked' and {} or blob_lines(model, '', entry.path),
+    left = entry.section == 'untracked' and {} or blob_lines(model, 'HEAD', entry.old_path or entry.path),
     right = worktree_lines(model, entry.path),
-    left_label = entry.section == 'untracked' and 'empty' or 'index',
-    right_label = 'worktree',
+    left_label = entry.section == 'untracked' and 'empty' or 'HEAD',
+    right_label = 'current file',
   }
 end
 

@@ -762,11 +762,7 @@ local function show_diff_side(winid, side, path, label)
   return bufnr
 end
 
-local function open_status_diff(bufnr, target_line, layout)
-  local row = vim.api.nvim_win_get_cursor(0)[1]
-  local sides, err = status_renderer.diff_sides(bufnr, row)
-  if not sides then vim.notify(err, vim.log.levels.WARN); return false end
-
+local function open_scratch_diff(sides, target_line, layout)
   vim.cmd('tabnew')
   local placeholder = vim.api.nvim_get_current_buf()
   local left_win = vim.api.nvim_get_current_win()
@@ -785,22 +781,67 @@ local function open_status_diff(bufnr, target_line, layout)
   return true
 end
 
+local function find_current_file_buffer(absolute)
+  local normalized = utils.normalize_path(absolute)
+  for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(candidate)
+      and vim.bo[candidate].buftype == ''
+      and utils.normalize_path(vim.api.nvim_buf_get_name(candidate)) == normalized
+    then
+      if not vim.api.nvim_buf_is_loaded(candidate) then pcall(vim.fn.bufload, candidate) end
+      return vim.api.nvim_buf_is_loaded(candidate) and candidate or nil
+    end
+  end
+
+  if vim.fn.filereadable(absolute) ~= 1 then return nil end
+  local candidate = vim.fn.bufadd(absolute)
+  local loaded = pcall(vim.fn.bufload, candidate)
+  return loaded and candidate or nil
+end
+
+local function open_diff_with_current_file(work_tree, sides, target_line, layout)
+  local absolute = utils.worktree_relative_abs_path(work_tree, sides.path)
+  local current_buf = absolute and find_current_file_buffer(absolute) or nil
+  if not current_buf then return open_scratch_diff(sides, target_line, layout) end
+
+  vim.cmd('tabnew')
+  local placeholder = vim.api.nvim_get_current_buf()
+  local current_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(current_win, current_buf)
+  if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
+    pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
+  end
+
+  vim.cmd(layout == 'horizontal' and 'aboveleft split' or 'leftabove vsplit')
+  local base_win = vim.api.nvim_get_current_win()
+  show_diff_side(base_win, sides.left, sides.path, sides.left_label)
+  vim.api.nvim_win_call(current_win, function() vim.cmd('diffthis') end)
+  vim.cmd('wincmd =')
+
+  if target_line then
+    local line_count = vim.api.nvim_buf_line_count(current_buf)
+    pcall(vim.api.nvim_win_set_cursor, current_win, { math.min(math.max(target_line, 1), line_count), 0 })
+    vim.api.nvim_win_call(current_win, function() vim.cmd('normal! zz') end)
+  end
+  vim.api.nvim_set_current_win(current_win)
+  return true
+end
+
+local function open_status_diff(bufnr, target_line, layout)
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local sides, err = status_renderer.diff_sides(bufnr, row)
+  if not sides then vim.notify(err, vim.log.levels.WARN); return false end
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if not work_tree then return false end
+  return open_diff_with_current_file(work_tree, sides, target_line, layout)
+end
+
 local function open_index_flag_diff(bufnr, entry, layout)
   local work_tree = utils.get_buf_work_tree(bufnr)
   if not work_tree then return false end
   local sides, err = index_flags.diff_sides(work_tree, entry)
   if not sides then vim.notify(err, vim.log.levels.WARN); return false end
-
-  vim.cmd('tabnew')
-  local placeholder = vim.api.nvim_get_current_buf()
-  local left_win = vim.api.nvim_get_current_win()
-  show_diff_side(left_win, sides.left, sides.path, sides.left_label)
-  if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
-    pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
-  end
-  vim.cmd(layout == 'horizontal' and 'rightbelow split' or 'rightbelow vsplit')
-  show_diff_side(vim.api.nvim_get_current_win(), sides.right, sides.path, sides.right_label)
-  return true
+  return open_diff_with_current_file(work_tree, sides, nil, layout)
 end
 
 local function open_conflict_diff(bufnr)
