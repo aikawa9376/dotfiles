@@ -57,7 +57,7 @@ end
 
 -- Main dispatcher: called by transport for every incoming JSON-RPC object
 -- cb(response_or_nil) — nil means notification (no response required)
-local function dispatcher(rpc, cb)
+local function dispatcher(rpc, cb, context)
   -- Validate JSON-RPC envelope
   if type(rpc) ~= "table" or rpc.jsonrpc ~= "2.0" then
     cb(err_response(vim.NIL, E.INVALID_REQUEST, "Invalid JSON-RPC 2.0 request"))
@@ -105,7 +105,7 @@ local function dispatcher(rpc, cb)
       cb(err_response(id, E.INVALID_PARAMS, "tools/call requires 'name'"))
       return
     end
-    local result, tool_err = tools.call(name, tool_params)
+    local result, tool_err = tools.call(name, tool_params, context)
     if tool_err then
       -- MCP spec: tool errors are returned as content with isError=true
       cb(ok_response(id, {

@@ -863,18 +863,27 @@ M.list = {
   },
   {
     name = "send_to_agent",
-    description = "Send a text prompt to an interactive agent (CLI session). Starts or reuses the agent session.",
+    description = "Send a message to a specific live LazyAgent. Use agent_ref for agent-to-agent communication; use get_agent_status to discover refs.",
     inputSchema = {
       type = "object",
       properties = {
         text = { type = "string", description = "The prompt/text to send." },
         agent_name = { type = "string", description = "Agent name (e.g. 'Copilot'). Defaults to the current open agent." },
+        agent_ref = { type = "string", description = "Stable live-agent reference, such as agent:<thread-id>." },
       },
       required = { "text" },
     },
-    handler = function(params)
+    handler = function(params, context)
       if not params.text or #params.text == 0 then
         return nil, { code = -32602, message = "'text' is required" }
+      end
+      if params.agent_ref and params.agent_ref ~= "" then
+        local result, err = require("lazyagent.logic.agent_comms").send(params, context, {
+          state = state,
+          backend_logic = backend_logic,
+        })
+        if not result then return nil, { code = -32602, message = tostring(err) } end
+        return result
       end
       local send = require("lazyagent.logic.send")
       send.send_to_cli(params.agent_name or "", params.text)
@@ -883,7 +892,7 @@ M.list = {
   },
   {
     name = "get_agent_status",
-    description = "Get the current status of all configured interactive agents (thinking/idle/waiting/no_session).",
+    description = "Get configured agent status and stable refs for live LazyAgent sessions. Pass a returned ref to send_to_agent.agent_ref.",
     inputSchema = {
       type = "object",
       properties = {
@@ -920,7 +929,13 @@ M.list = {
         end
         table.sort(agents, function(a, b) return a.name < b.name end)
       end
-      return { agents = agents }
+      return {
+        agents = agents,
+        live_agents = require("lazyagent.logic.agent_comms").list({
+          state = state,
+          backend_logic = backend_logic,
+        }),
+      }
     end,
   },
   {
@@ -962,12 +977,12 @@ for _, tool in ipairs(M.list) do
   M._by_name[tool.name] = tool
 end
 
-function M.call(name, params)
+function M.call(name, params, context)
   local tool = M._by_name[name]
   if not tool then
     return nil, { code = -32601, message = "Unknown tool: " .. tostring(name) }
   end
-  local ok, result, err = pcall(tool.handler, params or {})
+  local ok, result, err = pcall(tool.handler, params or {}, context or {})
   if not ok then
     return nil, { code = -32603, message = "Internal error: " .. tostring(result) }
   end

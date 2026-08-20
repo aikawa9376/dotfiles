@@ -219,7 +219,7 @@ local function handle_client(client, dispatcher)
             client:write(http_response("200 OK", "application/json", json))
             client:shutdown(function() client:close() end)
           end
-        end)
+        end, { headers = req.headers, path = req.path })
         return
       end
 
