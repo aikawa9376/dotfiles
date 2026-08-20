@@ -169,7 +169,7 @@ function M.diff_sides(work_tree, entry)
     left = blob_lines(work_tree, entry.path),
     right = worktree_lines(work_tree, entry.path),
     left_label = 'index',
-    right_label = entry.state == 'missing' and 'missing' or 'worktree',
+    right_label = entry.state == 'missing' and 'missing' or 'current file',
   }
 end
 
