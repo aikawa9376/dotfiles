@@ -824,6 +824,9 @@ local function open_conflict_diff(bufnr)
 end
 
 function M.setup(group)
+  vim.api.nvim_set_hl(0, 'FugitiveStatAdd', { default = true, link = 'GitSignsAdd' })
+  vim.api.nvim_set_hl(0, 'FugitiveStatDelete', { default = true, link = 'GitSignsDelete' })
+
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
     pattern = 'fugitivestatus',
@@ -1093,6 +1096,27 @@ function M.setup(group)
               end_col = #commit_hash,
               hl_group = commit_highlight.group(state),
             })
+          end
+
+          local stat_entry = status_renderer.entry_at(b, idx)
+          if stat_entry and not stat_entry.header and status_renderer.entry_row(b, idx) == idx then
+            local stat_text = {}
+            if stat_entry.binary then
+              table.insert(stat_text, { ' binary', 'Comment' })
+            else
+              if (stat_entry.additions or 0) > 0 then
+                table.insert(stat_text, { ' +' .. stat_entry.additions, 'FugitiveStatAdd' })
+              end
+              if (stat_entry.deletions or 0) > 0 then
+                table.insert(stat_text, { ' -' .. stat_entry.deletions, 'FugitiveStatDelete' })
+              end
+            end
+            if #stat_text > 0 then
+              vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, #line, {
+                virt_text = stat_text,
+                virt_text_pos = 'eol',
+              })
+            end
           end
 
           local filepath = line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
