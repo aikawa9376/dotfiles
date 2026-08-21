@@ -193,7 +193,7 @@ local function add_span(model, row, start_col, end_col, group)
 end
 
 local function build_model(vault_path)
-  local model = { lines = {}, highlights = {}, entries = {}, sections = {} }
+  local model = { lines = {}, highlights = {}, entries = {}, section_headers = {} }
   local unique = {}
   local updated_today = 0
   local today = os.date("%Y-%m-%d")
@@ -203,10 +203,10 @@ local function build_model(vault_path)
   add_line(model, "")
 
   for _, section in ipairs(config.sections or {}) do
-    local section_start = #model.lines + 1
     local files, total, root = collect_section(vault_path, section, config.show_aliases)
     local title = (section.title or section.dir or "Notes"):upper()
-    add_line(model, ("%-18s %s/  (%d)"):format(title, section.dir or "", total), "Title")
+    local header_row = add_line(model, ("%-18s %s/  (%d)"):format(title, section.dir or "", total), "Title")
+    model.section_headers[header_row + 1] = section
 
     if not root or not vim.uv.fs_stat(root) then
       add_line(model, "  (directory not found)", "DiagnosticWarn")
@@ -235,9 +235,6 @@ local function build_model(vault_path)
       end
     end
     add_line(model, "")
-    for line = section_start, #model.lines do
-      model.sections[line] = section
-    end
   end
 
   add_line(model, ("Visible %d notes  ·  updated today %d"):format(vim.tbl_count(unique), updated_today), "DiagnosticInfo")
@@ -267,7 +264,7 @@ local function render(bufnr, vault_path)
   vim.bo[bufnr].modifiable = false
   local state = state_by_buffer[bufnr] or {}
   state.entries = model.entries
-  state.sections = model.sections
+  state.section_headers = model.section_headers
   state.vault_path = vault_path
   state_by_buffer[bufnr] = state
 end
@@ -370,15 +367,7 @@ end
 local function add_note()
   local bufnr = vim.api.nvim_get_current_buf()
   local state = state_by_buffer[bufnr]
-  local section = state and state.sections[vim.api.nvim_win_get_cursor(0)[1]]
-  if not section then
-    vim.notify("Move the cursor into a dashboard section first", vim.log.levels.INFO)
-    return
-  end
-
-  local directories = section_directories(state.vault_path, section)
-  if #directories == 0 then
-    vim.notify("Dashboard section directory does not exist", vim.log.levels.WARN)
+  if not state then
     return
   end
 
@@ -392,6 +381,29 @@ local function add_note()
         create_note(state.vault_path, directory, name)
       end
     end)
+  end
+
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local entry = state.entries[row]
+  if entry then
+    local directory_path = vim.fs.dirname(entry.path)
+    ask_name({
+      path = directory_path,
+      relative_path = directory_path:sub(#state.vault_path + 2),
+    })
+    return
+  end
+
+  local section = state.section_headers[row]
+  if not section then
+    vim.notify("Use a on a note or section heading", vim.log.levels.INFO)
+    return
+  end
+
+  local directories = section_directories(state.vault_path, section)
+  if #directories == 0 then
+    vim.notify("Dashboard section directory does not exist", vim.log.levels.WARN)
+    return
   end
 
   if #directories == 1 then

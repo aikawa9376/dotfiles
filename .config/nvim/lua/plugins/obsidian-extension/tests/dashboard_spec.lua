@@ -68,6 +68,19 @@ dashboard.setup({
 assert(vim.fn.exists(":ObsidianDashboard") == 2, "dashboard command is registered")
 local model = dashboard._build_model(fixture)
 assert(vim.tbl_contains(model.lines, "NOTES              notes/  (2)"), "configured section is rendered")
+local heading_line
+local nested_note_line
+for line_number, line in ipairs(model.lines) do
+  if line == "NOTES              notes/  (2)" then
+    heading_line = line_number
+  elseif line:find("notes/nested/newest.md", 1, true) then
+    nested_note_line = line_number
+  end
+end
+assert(model.section_headers[heading_line].dir == "notes", "only the section heading selects folder choice")
+assert(model.section_headers[nested_note_line] == nil, "note rows do not trigger section folder choice")
+assert(vim.fs.dirname(model.entries[nested_note_line].path) == fixture .. "/notes/nested",
+  "note rows resolve their own directory")
 assert(model.lines[#model.lines]:find("<CR> open", 1, true), "dashboard help is rendered")
 assert(model.lines[#model.lines]:find("P preview", 1, true), "dashboard advertises right-side preview")
 assert(model.lines[#model.lines]:find("a add", 1, true), "dashboard advertises section note creation")
