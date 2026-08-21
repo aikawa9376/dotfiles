@@ -9,7 +9,9 @@ end
 function M.run()
   local state = require("lazyagent.logic.state")
   local status = require("lazyagent.logic.status")
+  local window = require("lazyagent.window")
   local previous_sessions = state.sessions
+  local original_set_title = window.set_title
 
   state.sessions = {
     ["Codex::11111111-1111-1111-1111-111111111111"] = {
@@ -48,6 +50,17 @@ function M.run()
   state.sessions.Cursor = { pane_id = "pane-6", provider_id = "Cursor" }
   assert_equal(status.get_status(), " ? ", "team and standalone provider groups coexist")
 
+  local scratch_title
+  window.set_title = function(title)
+    scratch_title = title
+  end
+  state.sessions.Cursor.acp_thread_title = "Conversation title"
+  state.sessions.Cursor.acp_thread_title_source = "manual"
+  state.sessions.Cursor.agent_status = "thinking"
+  status.refresh_session_title("Cursor")
+  assert_equal(scratch_title, " lazyagent ", "scratch title stays generic")
+
+  window.set_title = original_set_title
   state.sessions = previous_sessions
 end
 
