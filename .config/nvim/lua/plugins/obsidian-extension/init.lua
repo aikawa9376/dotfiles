@@ -13,7 +13,7 @@ return {
       preview_width = 0.45,
       folder_depth = 3,
       sections = {
-        { title = "Recent notes", dir = "notes", limit = 10, exclude = { "projects" } },
+        { title = "Recent notes", dir = "notes", limit = 10, exclude = { "projects", "agent-memory" } },
         { title = "Branch notes", dir = "notes/projects", limit = 8, exclude = { "index.md" } },
         { title = "Daily notes", dir = "daily", limit = 7 },
         { title = "Ideas", dir = "ideas", limit = 5 },

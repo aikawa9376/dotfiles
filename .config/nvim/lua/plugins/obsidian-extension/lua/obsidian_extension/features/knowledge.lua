@@ -12,7 +12,7 @@ local knowledge_base_lines = {
   "views:",
   "  - type: table",
   '    name: "Seeds"',
-  '    filters: \'status == "seed"\'',
+  '    filters: \'status == "seed" && type != "agent-memory"\'',
   "    order:",
   "      - file.name",
   "      - type",
@@ -22,7 +22,7 @@ local knowledge_base_lines = {
   "",
   "  - type: table",
   '    name: "Evergreen"',
-  '    filters: \'status == "evergreen"\'',
+  '    filters: \'status == "evergreen" && type != "agent-memory"\'',
   "    order:",
   "      - file.name",
   "      - type",
@@ -47,6 +47,14 @@ local knowledge_base_lines = {
   "      - status",
   "      - project",
   "      - artifact",
+  "      - updated",
+  "",
+  "  - type: table",
+  '    name: "Agent Memory"',
+  '    filters: \'type == "agent-memory"\'',
+  "    order:",
+  "      - file.name",
+  "      - project",
   "      - updated",
 }
 
@@ -159,5 +167,7 @@ function M.setup()
     desc = "Open the current note's artifact property",
   })
 end
+
+M._knowledge_base_lines = knowledge_base_lines
 
 return M

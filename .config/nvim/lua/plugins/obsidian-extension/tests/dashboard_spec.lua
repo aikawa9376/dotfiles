@@ -39,11 +39,13 @@ assert(#escaped == 0, "sections cannot escape the vault")
 vim.fn.mkdir(fixture .. "/notes/projects/dotfiles", "p")
 vim.fn.writefile({ "# Branch" }, fixture .. "/notes/projects/dotfiles/master.md")
 vim.fn.writefile({ "# Repository" }, fixture .. "/notes/projects/dotfiles/index.md")
+vim.fn.mkdir(fixture .. "/notes/agent-memory/dotfiles", "p")
+vim.fn.writefile({ "# Agent memory" }, fixture .. "/notes/agent-memory/dotfiles/dashboard.md")
 local recent, recent_total = dashboard._collect_section(fixture, {
   dir = "notes",
-  exclude = { "projects" },
+  exclude = { "projects", "agent-memory" },
 }, false)
-assert(#recent == 2 and recent_total == 2, "project notes can be excluded from recent notes")
+assert(#recent == 2 and recent_total == 2, "project and agent memory notes can be excluded from recent notes")
 local branches, branch_total = dashboard._collect_section(fixture, {
   dir = "notes/projects",
   exclude = { "index.md" },
@@ -52,7 +54,7 @@ assert(branch_total == 1 and branches[1].relative_path == "notes/projects/dotfil
   "branch section excludes repository index notes")
 local note_directories = dashboard._section_directories(fixture, {
   dir = "notes",
-  exclude = { "projects" },
+  exclude = { "projects", "agent-memory" },
 })
 assert(#note_directories == 2, "note creation lists the section root and allowed subdirectories")
 assert(note_directories[1].relative_path == "" and note_directories[2].relative_path == "nested",
@@ -73,7 +75,7 @@ assert(not dashboard._matches_query(searchable_note, searchable_section, "missin
 
 dashboard.setup({
   show_aliases = false,
-  sections = { { title = "Notes", dir = "notes", limit = 2, exclude = { "projects" } } },
+  sections = { { title = "Notes", dir = "notes", limit = 2, exclude = { "projects", "agent-memory" } } },
 })
 assert(vim.fn.exists(":ObsidianDashboard") == 2, "dashboard command is registered")
 local model = dashboard._build_model(fixture)
