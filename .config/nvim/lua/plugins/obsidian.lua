@@ -37,6 +37,7 @@ return {
     "Obsidian",
     "ObsidianMenu",
     "ObsidianSidebar",
+    "ObsidianDashboard",
   },
   dependencies = "obsidian-extension",
   opts = {
