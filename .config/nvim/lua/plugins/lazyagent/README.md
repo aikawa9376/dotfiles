@@ -194,7 +194,7 @@ global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ご�
 - skills: LazyAgent同梱skillsをコピー
 - teams: Codex Sol/maxのleadとLuna/mediumの部下2名からなる`teams.json` starterを作成
 - all: instructions、skills、teamsをまとめてinstall
-- 既存ファイルは上書きせず、不足しているファイルだけ追加
+- profile無しでは既存ファイルを上書きせず、不足分だけ追加。明示したinstructions profileだけ対象managed sectionを更新
 
 globalとprojectの両方に`AGENTS.md`がある場合はglobal→projectの順で重ね、provider-native instruction layerへ渡します。
 
