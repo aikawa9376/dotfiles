@@ -90,6 +90,22 @@ assert(note_context.repo_slug == "afiliate" and note_context.branch_name == "fea
 assert(note_context.branch_note_segments[1] == "feature" and note_context.branch_note_segments[2] == "campaign",
   "frontmatter branch is converted to branch-note segments")
 
+package.loaded["project"] = {
+  get_project_root = function(bufnr)
+    assert(bufnr == 42, "project root lookup receives the source buffer")
+    return "/workspace/monorepo/packages/app/"
+  end,
+}
+assert(context._project_root_for_buffer(42) == "/workspace/monorepo/packages/app",
+  "project.nvim supplies the branch-note project root")
+package.loaded["project"] = nil
+
+local selected_context = context.with_branch({ repo_slug = "dotfiles" }, "feature/campaign-test")
+assert(selected_context.branch_name == "feature/campaign-test"
+  and selected_context.branch_note_segments[1] == "feature"
+  and selected_context.branch_note_segments[2] == "campaign-test",
+  "selected branch rebuilds the branch-note path")
+
 local captured_lines, captured_opts
 package.loaded["fzf-lua"] = {
   actions = {

@@ -14,6 +14,17 @@ local function normalize_note_segment(text, fallback)
   return normalized ~= "" and normalized or fallback
 end
 
+local function branch_note_segments(branch_name)
+  local branch_segments = vim.split(branch_name, "/", { trimempty = true })
+  if vim.tbl_isempty(branch_segments) then branch_segments = { "HEAD" } end
+
+  local note_segments = {}
+  for index, segment in ipairs(branch_segments) do
+    note_segments[index] = normalize_note_segment(segment, ("branch-%d"):format(index))
+  end
+  return note_segments
+end
+
 local function unquote(text)
   text = trim(text)
   local quote = text:sub(1, 1)
@@ -35,11 +46,7 @@ local function git_context_from_frontmatter(lines)
   end
   if not project or project == "" then return nil end
 
-  local branch_segments = branch and vim.split(branch, "/", { trimempty = true }) or {}
-  local note_segments = {}
-  for index, segment in ipairs(branch_segments) do
-    note_segments[index] = normalize_note_segment(segment, ("branch-%d"):format(index))
-  end
+  local note_segments = branch and branch_note_segments(branch) or {}
   return {
     repo_name = project,
     repo_slug = normalize_note_segment(project, "project"),
@@ -75,6 +82,15 @@ local function current_context_dir()
   return vim.fn.getcwd()
 end
 
+local function project_root_for_buffer(bufnr)
+  local ok, project = pcall(require, "project")
+  if not ok or type(project.get_project_root) ~= "function" then return nil end
+
+  local root_ok, root = pcall(project.get_project_root, bufnr or 0)
+  if not root_ok or type(root) ~= "string" or root == "" then return nil end
+  return vim.fn.fnamemodify(root, ":p"):gsub("/+$", "")
+end
+
 function M.vault_path()
   local ok, obsidian = pcall(require, "obsidian")
   local client = ok and obsidian.get_client and obsidian.get_client() or nil
@@ -94,14 +110,15 @@ function M.git()
   local note_context = current_note_git_context()
   if note_context then return note_context end
 
-  local start_dir = current_context_dir()
+  local project_root = project_root_for_buffer(0)
+  local start_dir = project_root or current_context_dir()
   local repo_result = vim.system({ "git", "rev-parse", "--show-toplevel" }, {
     cwd = start_dir,
     text = true,
   }):wait()
   if repo_result.code ~= 0 then return nil, repo_result end
 
-  local repo_root = trim(repo_result.stdout or "")
+  local repo_root = project_root or trim(repo_result.stdout or "")
   local repo_name = vim.fs.basename(repo_root)
   local repo_slug = normalize_note_segment(repo_name, "project")
   local branch_result = vim.system({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, {
@@ -112,24 +129,42 @@ function M.git()
 
   local branch_name = trim(branch_result.stdout or "")
   if branch_name == "" then branch_name = "HEAD" end
-  local branch_segments = vim.split(branch_name, "/", { trimempty = true })
-  if vim.tbl_isempty(branch_segments) then branch_segments = { "HEAD" } end
-
-  local note_segments = {}
-  for index, segment in ipairs(branch_segments) do
-    note_segments[index] = normalize_note_segment(segment, ("branch-%d"):format(index))
-  end
-
   return {
     repo_root = repo_root,
     repo_name = repo_name,
     repo_slug = repo_slug,
     branch_name = branch_name,
-    branch_note_segments = note_segments,
+    branch_note_segments = branch_note_segments(branch_name),
     source = "git",
   }
 end
 
+function M.local_branches(git_context)
+  if not git_context or not git_context.repo_root then return {} end
+  local result = vim.system({
+    "git", "for-each-ref", "--format=%(refname:short)", "refs/heads",
+  }, {
+    cwd = git_context.repo_root,
+    text = true,
+  }):wait()
+  if result.code ~= 0 then return {} end
+
+  local branches = {}
+  for branch in (result.stdout or ""):gmatch("[^\r\n]+") do
+    branch = trim(branch)
+    if branch ~= "" then branches[#branches + 1] = branch end
+  end
+  return branches
+end
+
+function M.with_branch(git_context, branch_name)
+  local selected = vim.deepcopy(git_context)
+  selected.branch_name = branch_name
+  selected.branch_note_segments = branch_note_segments(branch_name)
+  return selected
+end
+
 M._git_context_from_frontmatter = git_context_from_frontmatter
+M._project_root_for_buffer = project_root_for_buffer
 
 return M

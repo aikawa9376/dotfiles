@@ -25,6 +25,7 @@ return {
         "composer.json",
         "docker-compose.yml",
         ".vimrc-local",
+        "=obsidian",
       },
 
       -- Show hidden files in telescope

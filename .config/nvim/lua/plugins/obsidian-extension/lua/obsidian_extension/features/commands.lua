@@ -1,5 +1,6 @@
 local M = {}
 local context = require("obsidian_extension.context")
+local open_or_create_note
 
 local function trim(text)
   return (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -56,6 +57,71 @@ local function branch_note_spec(context)
   }
 end
 
+local function existing_branch_notes(git_context)
+  local vault_path = context.vault_path()
+  if not vault_path then return {} end
+  local project_dir = vim.fs.joinpath(vault_path, "notes", "projects", git_context.repo_slug)
+  if not vim.uv.fs_stat(project_dir) then return {} end
+
+  local branches = {}
+  local files = vim.fs.find(function(name)
+    return name:sub(-3) == ".md"
+  end, { path = project_dir, type = "file", limit = math.huge })
+  for _, path in ipairs(files) do
+    local relative = path:sub(#project_dir + 2):gsub("\\", "/"):gsub("%.md$", "")
+    if relative ~= "index" then branches[#branches + 1] = relative end
+  end
+  return branches
+end
+
+local function related_branch_names(current, branches)
+  local unique = { [current] = true }
+  for _, branch in ipairs(branches or {}) do
+    if type(branch) == "string" and branch ~= "" then unique[branch] = true end
+  end
+
+  local base = current
+  for branch in pairs(unique) do
+    if current:sub(1, #branch + 1) == branch .. "-" and #branch < #base then
+      base = branch
+    end
+  end
+
+  local related = {}
+  for branch in pairs(unique) do
+    if branch == base or branch:sub(1, #base + 1) == base .. "-" then
+      related[#related + 1] = branch
+    end
+  end
+  table.sort(related, function(left, right)
+    if left == current then return true end
+    if right == current then return false end
+    if left == base then return true end
+    if right == base then return false end
+    return left < right
+  end)
+  return related
+end
+
+local function select_branch_note(git_context)
+  local branches = context.local_branches(git_context)
+  vim.list_extend(branches, existing_branch_notes(git_context))
+  local candidates = related_branch_names(git_context.branch_name, branches)
+  if #candidates == 1 then
+    open_or_create_note(branch_note_spec(git_context))
+    return
+  end
+
+  vim.ui.select(candidates, {
+    prompt = ("Branch note [%s]: "):format(git_context.repo_slug),
+    format_item = function(branch)
+      return branch == git_context.branch_name and branch .. "  (current)" or branch
+    end,
+  }, function(branch)
+    if branch then open_or_create_note(branch_note_spec(context.with_branch(git_context, branch))) end
+  end)
+end
+
 local function repo_note_spec(context)
   return {
     title = context.repo_name,
@@ -84,7 +150,7 @@ local function apply_note_metadata(note, spec)
   end
 end
 
-local function open_or_create_note(spec)
+open_or_create_note = function(spec)
   local client = require("obsidian").get_client()
   local note_path = client:new_note_path({
     id = spec.id,
@@ -258,7 +324,7 @@ function M.setup()
       return
     end
 
-    open_or_create_note(branch_note_spec(git_context))
+    select_branch_note(git_context)
   end, {
     desc = "Open or create a branch-scoped project note",
   })
@@ -275,5 +341,7 @@ function M.setup()
     desc = "Open or create a repo-scoped project note",
   })
 end
+
+M._related_branch_names = related_branch_names
 
 return M
