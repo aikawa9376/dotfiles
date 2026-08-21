@@ -24,6 +24,10 @@ function M.run()
     "team builder skill resources installed")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian/references/html-artifacts.md") == 1,
     "skill references installed recursively")
+  assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian-memory/SKILL.md") == 1,
+    "obsidian memory skill installed")
+  assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian-memory/scripts/resolve_vault.lua") == 1,
+    "obsidian memory skill resources installed recursively")
   local catalog = assert(require("lazyagent.teams.config").load_all(root .. "/.lazyagent/teams.json"))
   local team = assert(require("lazyagent.teams.config").select(catalog))
   assert_equal(team.members.sol_lead.model, "gpt-5.6-sol", "team template uses Sol for the lead")
