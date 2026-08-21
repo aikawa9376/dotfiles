@@ -36,9 +36,24 @@ assert(#missing == 0 and missing_total == 0, "missing directories are empty")
 local escaped = dashboard._collect_section(fixture, { dir = "../outside" }, false)
 assert(#escaped == 0, "sections cannot escape the vault")
 
+vim.fn.mkdir(fixture .. "/notes/projects/dotfiles", "p")
+vim.fn.writefile({ "# Branch" }, fixture .. "/notes/projects/dotfiles/master.md")
+vim.fn.writefile({ "# Repository" }, fixture .. "/notes/projects/dotfiles/index.md")
+local recent, recent_total = dashboard._collect_section(fixture, {
+  dir = "notes",
+  exclude = { "projects" },
+}, false)
+assert(#recent == 2 and recent_total == 2, "project notes can be excluded from recent notes")
+local branches, branch_total = dashboard._collect_section(fixture, {
+  dir = "notes/projects",
+  exclude = { "index.md" },
+}, false)
+assert(branch_total == 1 and branches[1].relative_path == "notes/projects/dotfiles/master.md",
+  "branch section excludes repository index notes")
+
 dashboard.setup({
   show_aliases = false,
-  sections = { { title = "Notes", dir = "notes", limit = 2 } },
+  sections = { { title = "Notes", dir = "notes", limit = 2, exclude = { "projects" } } },
 })
 assert(vim.fn.exists(":ObsidianDashboard") == 2, "dashboard command is registered")
 local model = dashboard._build_model(fixture)

@@ -8,7 +8,8 @@ local config = {}
 local defaults = {
   show_aliases = true,
   sections = {
-    { title = "Recent notes", dir = "notes", limit = 10 },
+    { title = "Recent notes", dir = "notes", limit = 10, exclude = { "projects" } },
+    { title = "Branch notes", dir = "notes/projects", limit = 8, exclude = { "index.md" } },
     { title = "Daily notes", dir = "daily", limit = 7 },
     { title = "Ideas", dir = "ideas", limit = 5 },
   },
@@ -74,6 +75,20 @@ local function collect_section(vault_path, section, show_aliases)
 
   local files = {}
   scan_markdown(root, section.recursive ~= false, files)
+  files = vim.tbl_filter(function(file)
+    local relative_path = file.path:sub(#root + 2)
+    for _, excluded in ipairs(section.exclude or {}) do
+      excluded = vim.fs.normalize(excluded):gsub("^%./", ""):gsub("/+$", "")
+      if
+        relative_path == excluded
+        or relative_path:sub(1, #excluded + 1) == excluded .. "/"
+        or vim.fs.basename(relative_path) == excluded
+      then
+        return false
+      end
+    end
+    return true
+  end, files)
   table.sort(files, function(left, right)
     if left.mtime == right.mtime then
       return left.path < right.path
