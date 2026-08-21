@@ -10,6 +10,16 @@ package.path = table.concat({
 
 local commands = require("obsidian_extension.features.commands")
 
+local branch_spec = commands._branch_note_spec({
+  repo_name = "dotfiles",
+  repo_slug = "dotfiles",
+  repo_root = "/home/aikawa/dotfiles",
+  branch_name = "master",
+  branch_note_segments = { "master" },
+})
+assert(branch_spec.metadata.project_path == "/home/aikawa/dotfiles",
+  "branch notes preserve the project.nvim root as project_path")
+
 local candidates = commands._related_branch_names("feature/hoge", {
   "main",
   "feature/hoge-test",
