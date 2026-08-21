@@ -44,6 +44,7 @@ assert(vim.fn.exists(":ObsidianDashboard") == 2, "dashboard command is registere
 local model = dashboard._build_model(fixture)
 assert(vim.tbl_contains(model.lines, "NOTES              notes/  (2)"), "configured section is rendered")
 assert(model.lines[#model.lines]:find("<CR> open", 1, true), "dashboard help is rendered")
+assert(model.lines[#model.lines]:find("gb knowledge", 1, true), "Knowledge Base does not shadow k movement")
 
 vim.fn.delete(fixture, "rf")
 print("ok - dashboard_spec")
