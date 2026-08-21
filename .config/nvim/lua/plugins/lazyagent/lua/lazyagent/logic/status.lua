@@ -170,17 +170,7 @@ end
 function M.refresh_session_title(agent_name)
   local session = state.sessions[agent_name]
   if not session then return end
-  local label = M.session_display_name(agent_name)
-  local status = session.agent_status
-  local suffix
-  if status == "thinking" then
-    suffix = "Thinking..."
-  elseif status == "waiting" then
-    suffix = session.agent_status_message or "Waiting..."
-  else
-    suffix = "Idle"
-  end
-  require("lazyagent.window").set_title(" " .. label .. " (" .. suffix .. ") ")
+  require("lazyagent.window").set_title(" lazyagent ")
 end
 
 -- Mark an agent as idle (called by MCP notify_done tool or internally)
