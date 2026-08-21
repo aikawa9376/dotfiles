@@ -10,6 +10,13 @@ package.path = table.concat({
 
 local related = require("obsidian_extension.features.related")
 local context = require("obsidian_extension.context")
+package.loaded["obsidian"] = {
+  get_client = function()
+    error("client is not ready")
+  end,
+}
+assert(context.vault_path() == nil, "vault lookup is safe while obsidian.nvim is still setting up")
+package.loaded["obsidian"] = nil
 local vault = "/vault"
 related._cache.root = vault
 

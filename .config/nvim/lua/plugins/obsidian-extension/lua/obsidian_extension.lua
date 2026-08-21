@@ -12,6 +12,7 @@ function M.setup(opts)
   require("obsidian_extension.features.related").setup()
   require("obsidian_extension.features.knowledge").setup()
   require("obsidian_extension.features.sidebar").setup()
+  require("obsidian_extension.features.project_root").setup()
   require("obsidian_extension.features.dashboard").setup(opts.dashboard)
   require("obsidian_extension.features.menu").setup()
 end

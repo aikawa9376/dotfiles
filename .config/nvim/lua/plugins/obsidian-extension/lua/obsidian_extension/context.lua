@@ -93,7 +93,13 @@ end
 
 function M.vault_path()
   local ok, obsidian = pcall(require, "obsidian")
-  local client = ok and obsidian.get_client and obsidian.get_client() or nil
+  local client
+  if ok and obsidian.get_client then
+    local client_ok, resolved = pcall(obsidian.get_client)
+    if client_ok then
+      client = resolved
+    end
+  end
   local path = client and client.dir and tostring(client.dir) or ""
   if path == "" then return nil end
   return vim.fn.fnamemodify(vim.fn.expand(path), ":p"):gsub("/+$", "")

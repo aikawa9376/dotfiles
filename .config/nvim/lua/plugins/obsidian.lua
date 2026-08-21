@@ -1,8 +1,8 @@
 return {
   "epwalsh/obsidian.nvim",
   event = {
-    "BufReadPre " .. vim.fn.expand("~/gdrive/share/obsidian/") .. "/**/*.md",
-    "BufNewFile " .. vim.fn.expand("~/gdrive/share/obsidian/") .. "/**/*.md",
+    "BufReadPre " .. vim.fn.expand("~/gdrive/share/obsidian/") .. "**/*.md",
+    "BufNewFile " .. vim.fn.expand("~/gdrive/share/obsidian/") .. "**/*.md",
   },
   cmd = {
     "ObsidianOpen",
