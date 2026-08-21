@@ -182,6 +182,7 @@ global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ご�
 :LazyAgentInstall project skills
 :LazyAgentInstall project teams
 :LazyAgentInstall global all
+:LazyAgentInstall global instructions obsidian
 ```
 
 引数なしではscope（`project` / `global`）と内容（`all` / `instructions` / `skills` / `teams`）を順に選択します。
@@ -189,6 +190,7 @@ global `skills` は `interactive_agents.<name>.skills = { ... }` で agent ご�
 - project: Git root（Git外では`cwd`）の`.lazyagent/`
 - global: `stdpath("data")/lazyagent/`。通常は`~/.local/share/nvim/lazyagent/`
 - instructions: 編集用の`AGENTS.md` starterを作成
+- instructions obsidian: 既存の他sectionを保ったまま、短いObsidian memory指示をmerge・更新
 - skills: LazyAgent同梱skillsをコピー
 - teams: Codex Sol/maxのleadとLuna/mediumの部下2名からなる`teams.json` starterを作成
 - all: instructions、skills、teamsをまとめてinstall

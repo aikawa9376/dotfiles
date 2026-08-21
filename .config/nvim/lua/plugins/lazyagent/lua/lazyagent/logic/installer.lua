@@ -69,6 +69,91 @@ local function install_instructions(target_dir, result)
   return true
 end
 
+local instruction_profiles = {
+  obsidian = {
+    heading = "Obsidian",
+    source = "skills/obsidian-memory/assets/global-instructions.md",
+  },
+}
+
+local function profile_lines(name)
+  local profile = instruction_profiles[name]
+  if not profile then return nil, "unknown instructions profile: " .. tostring(name) end
+  local path = module_root() .. profile.source
+  local ok, lines = pcall(vim.fn.readfile, path)
+  if not ok then return nil, "failed to read instructions profile " .. path .. ": " .. tostring(lines) end
+  return lines, profile
+end
+
+local function marker_range(lines, name)
+  local first, last
+  local start_marker = "<!-- lazyagent:instructions:" .. name .. ":start -->"
+  local end_marker = "<!-- lazyagent:instructions:" .. name .. ":end -->"
+  for index, line in ipairs(lines) do
+    if line == start_marker then first = index end
+    if first and line == end_marker then last = index; break end
+  end
+  if not first or not last then return nil, nil end
+  return first, last
+end
+
+local function heading_range(lines, heading)
+  local first, last
+  for index, line in ipairs(lines) do
+    if line:match("^##%s+") then
+      if first then
+        last = index - 1
+        break
+      end
+      if vim.trim(line:sub(3)) == heading then first = index end
+    end
+  end
+  return first, last or (first and #lines or nil)
+end
+
+local function merge_profile(lines, name, profile, replacement)
+  local first, last = marker_range(lines, name)
+  if not first then first, last = heading_range(lines, profile.heading) end
+
+  local merged = {}
+  if first then
+    vim.list_extend(merged, vim.list_slice(lines, 1, first - 1))
+    vim.list_extend(merged, replacement)
+    vim.list_extend(merged, vim.list_slice(lines, last + 1))
+  else
+    vim.list_extend(merged, lines)
+    if #merged > 0 and merged[#merged] ~= "" then merged[#merged + 1] = "" end
+    vim.list_extend(merged, replacement)
+  end
+  return merged
+end
+
+local function install_instruction_profile(target_dir, name, result)
+  local replacement, profile = profile_lines(name)
+  if not replacement then return nil, profile end
+
+  local target = target_dir .. "/AGENTS.md"
+  local lines = { "# LazyAgent instructions", "" }
+  if uv.fs_lstat(target) then
+    local ok, current = pcall(vim.fn.readfile, target)
+    if not ok then return nil, "failed to read " .. target .. ": " .. tostring(current) end
+    lines = current
+  end
+  local merged = merge_profile(lines, name, profile, replacement)
+  if vim.deep_equal(lines, merged) then
+    result.skipped[#result.skipped + 1] = target
+    return true
+  end
+
+  vim.fn.mkdir(target_dir, "p")
+  local existed = uv.fs_lstat(target) ~= nil
+  local ok, err = pcall(vim.fn.writefile, merged, target)
+  if not ok then return nil, "failed to install " .. target .. ": " .. tostring(err) end
+  local changed = existed and result.updated or result.created
+  changed[#changed + 1] = target
+  return true
+end
+
 local function install_teams(target_dir, result)
   local target = target_dir .. "/teams.json"
   if uv.fs_lstat(target) then
@@ -124,15 +209,30 @@ function M.install(opts)
   opts = opts or {}
   local scope = opts.scope or "project"
   local components = opts.components or "all"
+  local profile = opts.profile
   if scope ~= "project" and scope ~= "global" then return nil, "scope must be project or global" end
   if components ~= "all" and components ~= "instructions" and components ~= "skills" and components ~= "teams" then
     return nil, "components must be all, instructions, skills, or teams"
   end
+  if profile and components ~= "instructions" then return nil, "instructions profiles require the instructions component" end
 
   local target_dir = M.target_dir(scope, opts)
-  local result = { scope = scope, components = components, target_dir = target_dir, created = {}, skipped = {} }
+  local result = {
+    scope = scope,
+    components = components,
+    profile = profile,
+    target_dir = target_dir,
+    created = {},
+    updated = {},
+    skipped = {},
+  }
   if components == "all" or components == "instructions" then
-    local ok, err = install_instructions(target_dir, result)
+    local ok, err
+    if profile then
+      ok, err = install_instruction_profile(target_dir, profile, result)
+    else
+      ok, err = install_instructions(target_dir, result)
+    end
     if not ok then return nil, err end
   end
   if components == "all" or components == "skills" then
@@ -145,6 +245,12 @@ function M.install(opts)
     if not ok then return nil, err end
   end
   return result
+end
+
+function M.instruction_profiles()
+  local names = vim.tbl_keys(instruction_profiles)
+  table.sort(names)
+  return names
 end
 
 return M

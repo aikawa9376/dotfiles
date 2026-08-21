@@ -46,6 +46,37 @@ function M.run()
   assert_equal(vim.fn.readfile(root .. "/.lazyagent/AGENTS.md")[1], "# Custom project rules",
     "existing instructions are not overwritten")
 
+  vim.fn.writefile({
+    "# Custom project rules",
+    "",
+    "## Obsidian",
+    "",
+    "Old memory policy.",
+    "",
+    "## Personal",
+    "",
+    "Keep this rule.",
+  }, root .. "/.lazyagent/AGENTS.md")
+  local profiled = assert(installer.install({
+    scope = "project",
+    components = "instructions",
+    profile = "obsidian",
+    root_dir = root,
+  }))
+  assert_equal(#profiled.updated, 1, "instruction profile updates an existing file")
+  local profiled_text = table.concat(vim.fn.readfile(root .. "/.lazyagent/AGENTS.md"), "\n")
+  assert(profiled_text:find("lazyagent:instructions:obsidian:start", 1, true), "profile has managed markers")
+  assert(profiled_text:find("Use `obsidian-memory`", 1, true), "profile installs concise memory instructions")
+  assert(profiled_text:find("Keep this rule", 1, true), "profile merge preserves other sections")
+  assert(not profiled_text:find("Old memory policy", 1, true), "profile merge replaces its existing section")
+  local profiled_again = assert(installer.install({
+    scope = "project",
+    components = "instructions",
+    profile = "obsidian",
+    root_dir = root,
+  }))
+  assert_equal(#profiled_again.skipped, 1, "repeated profile install is idempotent")
+
   local global_dir = root .. "/local-share/lazyagent"
   local global_result = assert(installer.install({
     scope = "global",
@@ -61,6 +92,24 @@ function M.run()
   assert_equal(install_command._complete("g", "LazyAgentInstall g")[1], "global", "scope completion")
   assert_equal(install_command._complete("s", "LazyAgentInstall project s")[1], "skills", "component completion")
   assert_equal(install_command._complete("t", "LazyAgentInstall project t")[1], "teams", "teams completion")
+  assert_equal(install_command._complete("o", "LazyAgentInstall global instructions o")[1], "obsidian",
+    "instructions profile completion")
+  assert_equal(install_command._complete("", "LazyAgentInstall global instructions ")[1], "obsidian",
+    "instructions profile completion after a space")
+  local invalid_profile, profile_err = installer.install({
+    scope = "project",
+    components = "skills",
+    profile = "obsidian",
+    root_dir = root,
+  })
+  assert(invalid_profile == nil and profile_err:find("instructions", 1, true), "profiles require instructions")
+  local unknown_profile, unknown_err = installer.install({
+    scope = "project",
+    components = "instructions",
+    profile = "unknown",
+    root_dir = root,
+  })
+  assert(unknown_profile == nil and unknown_err:find("unknown", 1, true), "unknown profiles are rejected")
   vim.fn.delete(root, "rf")
 end
 

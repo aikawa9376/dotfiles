@@ -6,23 +6,28 @@ local scopes = { "project", "global" }
 local components = { "all", "instructions", "skills", "teams" }
 
 local function complete(arglead, cmdline)
-  local args = tostring(cmdline or ""):match("^%S+%s+(.*)$") or ""
-  local choices = args:find("%s") and components or scopes
+  local raw = tostring(cmdline or ""):match("^%S+%s+(.*)$") or ""
+  local args = vim.split(raw, "%s+", { trimempty = true })
+  local position = #args + (raw:match("%s$") and 1 or 0)
+  local choices = position <= 1 and scopes or position == 2 and components
+    or position == 3 and args[2] == "instructions" and installer.instruction_profiles()
+    or {}
   return vim.tbl_filter(function(value) return vim.startswith(value, arglead) end, choices)
 end
 
 local function notify_result(result)
   vim.notify(string.format(
-    "LazyAgentInstall: %s (%d created, %d kept)\n%s",
+    "LazyAgentInstall: %s (%d created, %d updated, %d kept)\n%s",
     result.scope,
     #result.created,
+    #result.updated,
     #result.skipped,
     result.target_dir
   ), vim.log.levels.INFO)
 end
 
-local function run(scope, selected)
-  local result, err = installer.install({ scope = scope, components = selected })
+local function run(scope, selected, profile)
+  local result, err = installer.install({ scope = scope, components = selected, profile = profile })
   if not result then
     vim.notify("LazyAgentInstall: " .. tostring(err), vim.log.levels.ERROR)
     return
@@ -39,9 +44,9 @@ end
 function M.register(create)
   create("LazyAgentInstall", function(cmdargs)
     local args = vim.split(vim.trim(cmdargs.args or ""), "%s+", { trimempty = true })
-    local scope, selected = args[1], args[2]
+    local scope, selected, profile = args[1], args[2], args[3]
     if scope and selected then
-      run(scope, selected)
+      run(scope, selected, profile)
     elseif scope then
       select_components(scope)
     else

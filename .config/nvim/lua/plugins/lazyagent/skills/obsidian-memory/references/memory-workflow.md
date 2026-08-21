@@ -10,9 +10,10 @@ Start narrow. Useful cues usually come from four groups:
 - decision: approach names, rejected alternatives, constraint, or invariant
 
 Search filenames and content with `rg`, then inspect context around matches.
-Prefer permanent notes under `notes/`; consult `daily/` only when reconstructing
-recent progress or when permanent-note search finds nothing. Follow links only
-when their titles or surrounding sentences indicate direct relevance.
+Search the relevant project/component under `notes/agent-memory/` first, then
+permanent notes under `notes/`; consult `daily/` only when reconstructing recent
+progress or when those searches find nothing. Follow links only when their
+titles or surrounding sentences indicate direct relevance.
 
 Stop when the evidence is sufficient to act. A useful retrieval result is a
 small set of concrete facts with note paths, not a catalog of every match.
@@ -34,18 +35,30 @@ Do not write when the result is merely a list of changed files, commands run,
 passing tests, conversational context, or a fact easily recovered from current
 source. Prefer updating one useful note over creating a session report.
 
+## Storage Tiers
+
+Use `notes/agent-memory/<project>/<component>.md` for working memory. Keep one
+note per component and revise it in place; do not create chronological task
+notes. Keep concise sections for current behavior, decisions, known failures,
+constraints, verification, and open work.
+
+Promote stable knowledge that is useful to people into the most relevant
+regular note under `notes/`. Update an existing canonical note before creating
+one, link it to working memory when useful, and remove or supersede stale
+working-memory claims.
+
 ## Note Shape
 
-Keep durable memories in the vault's existing `notes/` hierarchy rather than
-a separate memory silo. Preserve the vault's established frontmatter. A new
-agent-authored note should normally use this shape:
+Keep working memory under `notes/agent-memory/` and canonical knowledge in the
+vault's existing `notes/` hierarchy. Preserve established frontmatter. A new
+working-memory note should normally use this shape:
 
 ```markdown
 ---
 id: 1787273693-ABCD
 aliases: []
 tags: []
-type: knowledge
+type: agent-memory
 source: lazyagent
 status: seed
 created: YYYY-MM-DD
@@ -53,17 +66,17 @@ updated: YYYY-MM-DD
 project: <repository-slug>
 ---
 
-# Concrete stable title
+# Project / component memory
 
 One-sentence conclusion.
 
-## Decision or finding
+## Current behavior
 
-The durable fact and enough context to apply it correctly.
+The current state needed to continue safely.
 
-## Rationale
+## Decisions and failures
 
-Why this is true, including rejected alternatives when they may recur.
+Non-obvious choices, rejected approaches, root causes, and fixes.
 
 ## Verification
 
@@ -80,7 +93,8 @@ and preserve unknown properties.
 ## Updating and Superseding
 
 1. Search by title, aliases, project, component, and distinctive phrases.
-2. Update the most specific existing note that owns the knowledge.
+2. Update the component working-memory note and any canonical note that owns
+   stable human-facing knowledge.
 3. Replace stale statements rather than appending contradictory chronology.
 4. Preserve a short “Previously” or decision-history note only when knowing
    the old behavior prevents a future mistake.
