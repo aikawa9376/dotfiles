@@ -84,6 +84,7 @@ assert(vim.fs.dirname(model.entries[nested_note_line].path) == fixture .. "/note
 assert(model.lines[#model.lines]:find("<CR> open", 1, true), "dashboard help is rendered")
 assert(model.lines[#model.lines]:find("P preview", 1, true), "dashboard advertises right-side preview")
 assert(model.lines[#model.lines]:find("a add", 1, true), "dashboard advertises section note creation")
+assert(model.lines[#model.lines]:find("[[/]] sections", 1, true), "dashboard advertises section navigation")
 assert(model.lines[#model.lines]:find("gb knowledge", 1, true), "Knowledge Base does not shadow k movement")
 local filename_highlight
 for _, highlight in ipairs(model.highlights) do
@@ -93,6 +94,13 @@ for _, highlight in ipairs(model.highlights) do
   end
 end
 assert(filename_highlight == "newest.md", "dashboard colors only the filename")
+
+local section_headers = { [4] = true, [10] = true, [18] = true, [25] = true }
+assert(dashboard._section_target(section_headers, 4, 1, 1) == 10, "]] moves to the next section")
+assert(dashboard._section_target(section_headers, 15, -1, 1) == 10, "[[ moves to the section above")
+assert(dashboard._section_target(section_headers, 4, 1, 2) == 18, "section navigation honors a count")
+assert(dashboard._section_target(section_headers, 25, 1, 1) == nil, "]] does not wrap at the last section")
+assert(dashboard._section_target(section_headers, 4, -1, 1) == nil, "[[ does not wrap at the first section")
 
 vim.fn.delete(fixture, "rf")
 print("ok - dashboard_spec")

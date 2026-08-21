@@ -240,10 +240,44 @@ local function build_model(vault_path)
   add_line(model, ("Visible %d notes  ·  updated today %d"):format(vim.tbl_count(unique), updated_today), "DiagnosticInfo")
   add_line(
     model,
-    "<CR> open   P preview   a add   R refresh   t today   gb knowledge   / search   ? actions   q close",
+    "<CR> open   P preview   a add   [[/]] sections   R refresh   t today   gb knowledge   / search   ? actions   q close",
     "Comment"
   )
   return model
+end
+
+local function section_target(section_headers, current_row, direction, count)
+  local rows = vim.tbl_keys(section_headers or {})
+  table.sort(rows)
+
+  local target
+  local row = current_row
+  for _ = 1, math.max(tonumber(count) or 1, 1) do
+    local candidate
+    if direction > 0 then
+      for _, section_row in ipairs(rows) do
+        if section_row > row then
+          candidate = section_row
+          break
+        end
+      end
+    else
+      for index = #rows, 1, -1 do
+        if rows[index] < row then
+          candidate = rows[index]
+          break
+        end
+      end
+    end
+
+    if not candidate then
+      break
+    end
+    target = candidate
+    row = candidate
+  end
+
+  return target
 end
 
 local function render(bufnr, vault_path)
@@ -427,6 +461,20 @@ local function close_dashboard()
   state_by_buffer[bufnr] = nil
 end
 
+local function move_section(direction)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local state = state_by_buffer[bufnr]
+  if not state then
+    return
+  end
+
+  local current_row = vim.api.nvim_win_get_cursor(0)[1]
+  local target = section_target(state.section_headers, current_row, direction, vim.v.count1)
+  if target then
+    vim.api.nvim_win_set_cursor(0, { target, 0 })
+  end
+end
+
 local function configure_buffer(bufnr, vault_path)
   vim.bo[bufnr].buftype = "nofile"
   vim.bo[bufnr].bufhidden = "hide"
@@ -438,6 +486,12 @@ local function configure_buffer(bufnr, vault_path)
   vim.keymap.set("n", "<CR>", open_entry, { buffer = bufnr, silent = true, desc = "Open dashboard note" })
   vim.keymap.set("n", "P", toggle_preview, { buffer = bufnr, silent = true, desc = "Toggle note preview" })
   vim.keymap.set("n", "a", add_note, { buffer = bufnr, silent = true, desc = "Add a note to this section" })
+  vim.keymap.set("n", "]]", function()
+    move_section(1)
+  end, { buffer = bufnr, silent = true, desc = "Go to next dashboard section" })
+  vim.keymap.set("n", "[[", function()
+    move_section(-1)
+  end, { buffer = bufnr, silent = true, desc = "Go to previous dashboard section" })
   vim.keymap.set("n", "R", function()
     render(bufnr, vault_path)
   end, { buffer = bufnr, silent = true, desc = "Refresh Obsidian dashboard" })
@@ -511,6 +565,7 @@ M._collect_section = collect_section
 M._section_directories = section_directories
 M._build_model = build_model
 M._format_time = format_time
+M._section_target = section_target
 M._valid_note_name = valid_note_name
 
 return M
