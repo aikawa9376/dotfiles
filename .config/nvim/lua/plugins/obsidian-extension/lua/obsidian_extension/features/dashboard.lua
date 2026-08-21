@@ -303,25 +303,74 @@ local function render(bufnr, vault_path)
   state_by_buffer[bufnr] = state
 end
 
+local function release_preview_buffer(state, promote_path)
+  local preview_bufnr = state and state.preview_bufnr
+  if preview_bufnr and vim.api.nvim_buf_is_valid(preview_bufnr) then
+    local promote = promote_path
+      and vim.fs.normalize(vim.api.nvim_buf_get_name(preview_bufnr)) == vim.fs.normalize(promote_path)
+    vim.bo[preview_bufnr].buflisted = promote == true or state.preview_was_listed == true
+  end
+  if state then
+    state.preview_bufnr = nil
+    state.preview_was_listed = nil
+  end
+end
+
+local function close_preview(state, promote_path)
+  if state and state.preview_win and vim.api.nvim_win_is_valid(state.preview_win) then
+    vim.api.nvim_win_close(state.preview_win, true)
+  end
+  release_preview_buffer(state, promote_path)
+  if state then
+    state.preview_win = nil
+    state.preview_path = nil
+  end
+end
+
+local function preview_buffer(state, path)
+  release_preview_buffer(state)
+  local existing = vim.fn.bufnr(path)
+  local was_listed = existing >= 0 and vim.fn.buflisted(existing) == 1
+  local bufnr = vim.fn.bufadd(path)
+  vim.fn.bufload(bufnr)
+  vim.bo[bufnr].buflisted = false
+  state.preview_bufnr = bufnr
+  state.preview_was_listed = was_listed
+  return bufnr
+end
+
+local function update_preview(state, entry)
+  if not state or not entry or state.preview_path == entry.path then
+    return
+  end
+  if not state.preview_win or not vim.api.nvim_win_is_valid(state.preview_win) then
+    return
+  end
+
+  vim.api.nvim_win_set_buf(state.preview_win, preview_buffer(state, entry.path))
+  state.preview_path = entry.path
+end
+
+local function follow_preview(bufnr)
+  local state = state_by_buffer[bufnr]
+  if not state or not state.preview_win or not vim.api.nvim_win_is_valid(state.preview_win) then
+    return
+  end
+
+  update_preview(state, state.entries[vim.api.nvim_win_get_cursor(0)[1]])
+end
+
 local function open_entry()
   local bufnr = vim.api.nvim_get_current_buf()
   local state = state_by_buffer[bufnr]
   local entry = state and state.entries[vim.api.nvim_win_get_cursor(0)[1]]
   if entry then
-    if state.preview_win and vim.api.nvim_win_is_valid(state.preview_win) then
-      vim.api.nvim_win_close(state.preview_win, true)
+    close_preview(state, entry.path)
+    local entry_bufnr = vim.fn.bufnr(entry.path)
+    if entry_bufnr >= 0 then
+      vim.bo[entry_bufnr].buflisted = true
     end
     vim.cmd.edit(vim.fn.fnameescape(entry.path))
-  end
-end
-
-local function close_preview(state)
-  if state and state.preview_win and vim.api.nvim_win_is_valid(state.preview_win) then
-    vim.api.nvim_win_close(state.preview_win, true)
-  end
-  if state then
-    state.preview_win = nil
-    state.preview_path = nil
   end
 end
 
@@ -340,15 +389,14 @@ local function toggle_preview()
       close_preview(state)
       return
     end
-    local preview_bufnr = vim.fn.bufadd(entry.path)
-    vim.fn.bufload(preview_bufnr)
-    vim.api.nvim_win_set_buf(state.preview_win, preview_bufnr)
-    state.preview_path = entry.path
+    update_preview(state, entry)
     return
   end
 
-  vim.cmd("botright vsplit " .. vim.fn.fnameescape(entry.path))
+  local preview_bufnr = preview_buffer(state, entry.path)
+  vim.cmd("botright vsplit")
   state.preview_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(state.preview_win, preview_bufnr)
   state.preview_path = entry.path
   vim.wo[state.preview_win].previewwindow = true
   local width = config.preview_width
@@ -509,6 +557,12 @@ local function configure_buffer(bufnr, vault_path)
     callback = function()
       close_preview(state_by_buffer[bufnr])
       state_by_buffer[bufnr] = nil
+    end,
+  })
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = bufnr,
+    callback = function()
+      follow_preview(bufnr)
     end,
   })
 end
