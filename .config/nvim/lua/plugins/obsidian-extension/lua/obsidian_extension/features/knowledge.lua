@@ -1,6 +1,6 @@
 local M = {}
 
-local vault_path = vim.fn.expand("~/workspace/obsidian")
+local context = require("obsidian_extension.context")
 local statuses = { "seed", "evergreen", "archived" }
 
 local knowledge_base_lines = {
@@ -51,6 +51,12 @@ local knowledge_base_lines = {
 }
 
 local function open_knowledge_base()
+  local vault_path = context.vault_path()
+  if not vault_path then
+    vim.notify("Could not resolve the current Obsidian vault", vim.log.levels.ERROR)
+    return
+  end
+
   local path = vault_path .. "/bases/knowledge.base"
   if vim.fn.filereadable(path) ~= 1 then
     vim.fn.mkdir(vim.fs.dirname(path), "p")
@@ -108,6 +114,12 @@ local function open_note_artifact()
 
   if artifact:match("^https?://") then
     open_target(artifact)
+    return
+  end
+
+  local vault_path = context.vault_path()
+  if not vault_path then
+    vim.notify("Could not resolve the current Obsidian vault", vim.log.levels.ERROR)
     return
   end
 
