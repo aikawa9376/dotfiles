@@ -1,6 +1,6 @@
 ---
 name: obsidian-memory
-description: Retrieve and maintain durable cross-project memory in the locally configured Obsidian vault. Use before and after important tasks to reuse past decisions, failures, constraints, and progress without treating notes as more authoritative than current code or user instructions. Do not use for routine transient work or raw conversation archival.
+description: Retrieve and maintain cross-project working and durable memory in the configured Obsidian vault. Use before and after non-trivial or repeated work to reuse decisions, failures, constraints, and progress. Do not use for raw conversation archival.
 ---
 
 # Obsidian Memory
@@ -21,14 +21,15 @@ nvim --headless --clean -u NONE -l <skill-dir>/scripts/resolve_vault.lua
 Use its output as `VAULT_ROOT`. Never reuse a path from an earlier task or
 guess when resolution fails.
 
-## Before an Important Task
+## Before Non-trivial Work
 
 Read [memory workflow](references/memory-workflow.md), then:
 
 1. Derive a small set of retrieval cues from the repository or project,
    component, error or symptom, and decision being made.
-2. Search filenames and contents under `$VAULT_ROOT/notes` before broadening
-   to daily notes or archived material.
+2. Search the matching project/component under
+   `$VAULT_ROOT/notes/agent-memory` first, then the rest of `notes/` before
+   broadening to daily notes or archived material.
 3. Read only the matching sections and the few directly linked notes needed
    to understand them.
 4. Extract relevant decisions, known failures, constraints, and unfinished
@@ -36,23 +37,23 @@ Read [memory workflow](references/memory-workflow.md), then:
 5. Verify memory against current files, tests, external sources when needed,
    and the user's current instructions. Current evidence wins.
 
-Do not search merely to satisfy a ritual. Routine, low-risk tasks with no
-plausible reusable context do not need a memory pass.
+Treat related turns as one task. Search when work revisits an earlier decision,
+changes architecture/defaults/paths/workflows, retries a failed fix, or reaches
+a second correction turn. Routine, isolated, low-risk edits still need no pass.
 
 ## After the Task
 
-Write back only when the result is likely to change future work. Good memory
-includes a non-obvious decision and rationale, a repeated failure and its
-cause, a durable constraint, a reliable procedure, or progress needed to
-resume substantial unfinished work.
+Write back a concise working memory when the result may guide a later turn.
+This includes decisions, failures and causes, constraints, reliable procedures,
+or unfinished state. Prefer an imperfect useful memory over losing context.
 
-Search for an existing note first. Update it instead of creating a competing
-version, preserve useful frontmatter and links, and correct outdated claims
-explicitly. Create a concise atomic note only when no suitable note exists.
+Update `notes/agent-memory/<project>/<component>.md` rather than creating a
+note per task. Promote stable, human-facing knowledge into the most relevant
+regular note and link the two when useful. Read [memory workflow](references/memory-workflow.md)
+for storage and promotion details.
 
 Do not store full conversations, generic summaries, tool logs, routine status,
-temporary debugging observations, secrets, credentials, or facts already
-obvious from the current code. Never write memory just because a task ended.
+temporary observations, secrets, credentials, or facts obvious from the code.
 
 ## Authority and Conflicts
 
