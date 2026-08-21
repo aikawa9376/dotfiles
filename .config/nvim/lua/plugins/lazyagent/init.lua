@@ -90,6 +90,7 @@ return {
     "LazyAgentReview", "LazyAgentReviews",
     "LazyAgentACPPlanToggle",
     "LazyAgentImage", "LazyAgentScreenShot",
+    "LazyAgentInstall",
     "LazyAgentTeam", "LazyAgentTeamStatus", "LazyAgentTeamStop",
     "Antigravity", "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
