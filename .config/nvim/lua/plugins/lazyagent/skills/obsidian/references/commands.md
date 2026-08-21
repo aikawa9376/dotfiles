@@ -51,3 +51,41 @@ Prefer them over the external Obsidian CLI in this setup.
 - `:ObsidianOpenArtifact` — open the file or HTTPS URL in the current note's `artifact` property
 
 When the user is already inside Neovim and asks for an interactive note workflow, prefer these commands over manual file editing where possible.
+
+## Official Obsidian CLI
+
+Use the official `obsidian` CLI only when the user explicitly requests it, a
+needed operation is not exposed by `obsidian.nvim`, or developing an Obsidian
+plugin or theme. It requires a running Obsidian instance. Run `obsidian help`
+for the installed version's authoritative command list.
+
+Parameters use `name=value`; boolean flags have no value. Quote values with
+spaces. Many commands accept either `file=<wikilink-style name>` or an exact
+vault-relative `path=<path>`. Put `vault=<name>` first to target a vault other
+than the most recently focused one.
+
+```sh
+obsidian read file="My Note"
+obsidian create name="New Note" content="# Hello" silent
+obsidian append file="My Note" content="New line"
+obsidian search query="search term" limit=10
+obsidian property:set name="status" value="evergreen" file="My Note"
+obsidian backlinks file="My Note"
+```
+
+For plugin or theme development, reload first, inspect errors and console
+output, then verify with DOM inspection or a screenshot:
+
+```sh
+obsidian plugin:reload id=my-plugin
+obsidian dev:errors
+obsidian dev:console level=error
+obsidian dev:dom selector=".workspace-leaf" text
+obsidian dev:screenshot path=screenshot.png
+```
+
+Use `obsidian eval` only when built-in commands cannot express a read or
+development check; do not treat arbitrary app-context JavaScript as the
+default vault interface.
+
+Official CLI documentation: <https://help.obsidian.md/cli>
