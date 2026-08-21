@@ -50,6 +50,16 @@ local branches, branch_total = dashboard._collect_section(fixture, {
 }, false)
 assert(branch_total == 1 and branches[1].relative_path == "notes/projects/dotfiles/master.md",
   "branch section excludes repository index notes")
+local note_directories = dashboard._section_directories(fixture, {
+  dir = "notes",
+  exclude = { "projects" },
+})
+assert(#note_directories == 2, "note creation lists the section root and allowed subdirectories")
+assert(note_directories[1].relative_path == "" and note_directories[2].relative_path == "nested",
+  "note creation directories are sorted and respect exclusions")
+assert(dashboard._valid_note_name("Casual note.md") == "Casual note", "optional markdown suffix is removed")
+assert(dashboard._valid_note_name("nested/note") == nil, "note names cannot escape the selected directory")
+assert(dashboard._valid_note_name("  ") == nil, "empty note names are rejected")
 
 dashboard.setup({
   show_aliases = false,
@@ -59,6 +69,8 @@ assert(vim.fn.exists(":ObsidianDashboard") == 2, "dashboard command is registere
 local model = dashboard._build_model(fixture)
 assert(vim.tbl_contains(model.lines, "NOTES              notes/  (2)"), "configured section is rendered")
 assert(model.lines[#model.lines]:find("<CR> open", 1, true), "dashboard help is rendered")
+assert(model.lines[#model.lines]:find("P preview", 1, true), "dashboard advertises right-side preview")
+assert(model.lines[#model.lines]:find("a add", 1, true), "dashboard advertises section note creation")
 assert(model.lines[#model.lines]:find("gb knowledge", 1, true), "Knowledge Base does not shadow k movement")
 local filename_highlight
 for _, highlight in ipairs(model.highlights) do
