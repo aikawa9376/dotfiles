@@ -84,10 +84,26 @@ local function section_root(vault_path, directory)
   return candidate
 end
 
-local function collect_section(vault_path, section, show_aliases)
+local function matches_query(file, section, query, aliases)
+  query = vim.trim(tostring(query or "")):lower()
+  if query == "" then
+    return true
+  end
+
+  local text = table.concat({
+    file.relative_path or "",
+    vim.fs.basename(file.relative_path or file.path or ""),
+    section.title or "",
+    section.dir or "",
+    table.concat(aliases or file.aliases or {}, " "),
+  }, " "):lower()
+  return text:find(query, 1, true) ~= nil
+end
+
+local function collect_section(vault_path, section, show_aliases, query)
   local root = section_root(vault_path, section.dir)
   if not root or not vim.uv.fs_stat(root) then
-    return {}, 0, root
+    return {}, 0, root, 0
   end
 
   local files = {}
@@ -104,17 +120,31 @@ local function collect_section(vault_path, section, show_aliases)
   end)
 
   local total = #files
+  query = vim.trim(tostring(query or ""))
+  for _, file in ipairs(files) do
+    file.relative_path = file.path:sub(#vim.fs.normalize(vault_path) + 2)
+  end
+  if query ~= "" then
+    files = vim.tbl_filter(function(file)
+      local aliases = aliases_for(file.path)
+      if show_aliases then
+        file.aliases = aliases
+      end
+      return matches_query(file, section, query, aliases)
+    end, files)
+  end
+
+  local matched_total = #files
   local limit = math.max(tonumber(section.limit) or total, 0)
   while #files > limit do
     table.remove(files)
   end
 
   for _, file in ipairs(files) do
-    file.relative_path = file.path:sub(#vim.fs.normalize(vault_path) + 2)
-    file.aliases = show_aliases and aliases_for(file.path) or {}
+    file.aliases = file.aliases or (show_aliases and aliases_for(file.path) or {})
   end
 
-  return files, total, root
+  return files, total, root, matched_total
 end
 
 local function scan_directories(root, current, depth, max_depth, excluded_paths, directories)
@@ -192,26 +222,31 @@ local function add_span(model, row, start_col, end_col, group)
   }
 end
 
-local function build_model(vault_path)
+local function build_model(vault_path, query)
   local model = { lines = {}, highlights = {}, entries = {}, section_headers = {} }
   local unique = {}
   local updated_today = 0
   local today = os.date("%Y-%m-%d")
 
+  query = vim.trim(tostring(query or ""))
   add_line(model, "OBSIDIAN STATUS", "Title")
   add_line(model, "Vault  " .. vault_path, "Directory")
+  if query ~= "" then
+    add_line(model, "Filter " .. query, "String")
+  end
   add_line(model, "")
 
   for _, section in ipairs(config.sections or {}) do
-    local files, total, root = collect_section(vault_path, section, config.show_aliases)
+    local files, total, root, matched_total = collect_section(vault_path, section, config.show_aliases, query)
     local title = (section.title or section.dir or "Notes"):upper()
-    local header_row = add_line(model, ("%-18s %s/  (%d)"):format(title, section.dir or "", total), "Title")
+    local count = query ~= "" and ("%d/%d"):format(matched_total, total) or tostring(total)
+    local header_row = add_line(model, ("%-18s %s/  (%s)"):format(title, section.dir or "", count), "Title")
     model.section_headers[header_row + 1] = section
 
     if not root or not vim.uv.fs_stat(root) then
       add_line(model, "  (directory not found)", "DiagnosticWarn")
     elseif #files == 0 then
-      add_line(model, "  (no notes)", "Comment")
+      add_line(model, query ~= "" and "  (no matches)" or "  (no notes)", "Comment")
     else
       for _, file in ipairs(files) do
         if not unique[file.path] then
@@ -240,7 +275,7 @@ local function build_model(vault_path)
   add_line(model, ("Visible %d notes  ·  updated today %d"):format(vim.tbl_count(unique), updated_today), "DiagnosticInfo")
   add_line(
     model,
-    "<CR> open   P preview   a add   [[/]] sections   R refresh   t today   gb knowledge   / search   ? actions   q close",
+    "<CR> open   P preview   a add   [[/]] sections   R refresh   t today   gb knowledge   / filter   ? actions   q close",
     "Comment"
   )
   return model
@@ -281,7 +316,8 @@ local function section_target(section_headers, current_row, direction, count)
 end
 
 local function render(bufnr, vault_path)
-  local model = build_model(vault_path)
+  local state = state_by_buffer[bufnr] or {}
+  local model = build_model(vault_path, state.query)
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, model.lines)
   vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
@@ -296,7 +332,6 @@ local function render(bufnr, vault_path)
     )
   end
   vim.bo[bufnr].modifiable = false
-  local state = state_by_buffer[bufnr] or {}
   state.entries = model.entries
   state.section_headers = model.section_headers
   state.vault_path = vault_path
@@ -358,6 +393,39 @@ local function follow_preview(bufnr)
   end
 
   update_preview(state, state.entries[vim.api.nvim_win_get_cursor(0)[1]])
+end
+
+local function filter_dashboard()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local state = state_by_buffer[bufnr]
+  if not state then
+    return
+  end
+
+  vim.ui.input({ prompt = "Filter Obsidian dashboard: ", default = state.query or "" }, function(value)
+    if value == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+
+    local selected = state.entries[vim.api.nvim_win_get_cursor(0)[1]]
+    state.query = vim.trim(value)
+    render(bufnr, state.vault_path)
+    local rows = vim.tbl_keys(state.entries)
+    table.sort(rows)
+    local target = rows[1]
+    if selected then
+      for _, row in ipairs(rows) do
+        if state.entries[row].path == selected.path then
+          target = row
+          break
+        end
+      end
+    end
+    if target and vim.api.nvim_get_current_buf() == bufnr then
+      vim.api.nvim_win_set_cursor(0, { target, 0 })
+      follow_preview(bufnr)
+    end
+  end)
 end
 
 local function open_entry()
@@ -547,7 +615,7 @@ local function configure_buffer(bufnr, vault_path)
   end, { buffer = bufnr, silent = true, desc = "Refresh Obsidian dashboard" })
   vim.keymap.set("n", "t", "<Cmd>ObsidianToday<CR>", { buffer = bufnr, silent = true, desc = "Open today's note" })
   vim.keymap.set("n", "gb", "<Cmd>ObsidianKnowledgeBase<CR>", { buffer = bufnr, silent = true, desc = "Open Knowledge Base" })
-  vim.keymap.set("n", "/", "<Cmd>ObsidianSearch<CR>", { buffer = bufnr, silent = true, desc = "Search the vault" })
+  vim.keymap.set("n", "/", filter_dashboard, { buffer = bufnr, silent = true, desc = "Filter dashboard notes" })
   vim.keymap.set("n", "?", "<Cmd>ObsidianMenu<CR>", { buffer = bufnr, silent = true, desc = "Open Obsidian actions" })
   vim.keymap.set("n", "q", close_dashboard, { buffer = bufnr, silent = true, nowait = true, desc = "Close dashboard" })
 
@@ -622,6 +690,7 @@ M._collect_section = collect_section
 M._section_directories = section_directories
 M._build_model = build_model
 M._format_time = format_time
+M._matches_query = matches_query
 M._section_target = section_target
 M._valid_note_name = valid_note_name
 
