@@ -60,6 +60,16 @@ assert(note_directories[1].relative_path == "" and note_directories[2].relative_
 assert(dashboard._valid_note_name("Casual note.md") == "Casual note", "optional markdown suffix is removed")
 assert(dashboard._valid_note_name("nested/note") == nil, "note names cannot escape the selected directory")
 assert(dashboard._valid_note_name("  ") == nil, "empty note names are rejected")
+local searchable_note = {
+  path = fixture .. "/notes/nested/newest.md",
+  relative_path = "notes/nested/newest.md",
+  aliases = { "Newest alias" },
+}
+local searchable_section = { title = "Recent notes", dir = "notes" }
+assert(dashboard._matches_query(searchable_note, searchable_section, "NEWEST"), "filter ignores case")
+assert(dashboard._matches_query(searchable_note, searchable_section, "newest alias"), "filter matches aliases")
+assert(dashboard._matches_query(searchable_note, searchable_section, "recent"), "filter matches section names")
+assert(not dashboard._matches_query(searchable_note, searchable_section, "missing"), "filter rejects unrelated text")
 
 dashboard.setup({
   show_aliases = false,
@@ -85,6 +95,7 @@ assert(model.lines[#model.lines]:find("<CR> open", 1, true), "dashboard help is 
 assert(model.lines[#model.lines]:find("P preview", 1, true), "dashboard advertises right-side preview")
 assert(model.lines[#model.lines]:find("a add", 1, true), "dashboard advertises section note creation")
 assert(model.lines[#model.lines]:find("[[/]] sections", 1, true), "dashboard advertises section navigation")
+assert(model.lines[#model.lines]:find("/ filter", 1, true), "dashboard advertises in-place filtering")
 assert(model.lines[#model.lines]:find("gb knowledge", 1, true), "Knowledge Base does not shadow k movement")
 local filename_highlight
 for _, highlight in ipairs(model.highlights) do
@@ -94,6 +105,13 @@ for _, highlight in ipairs(model.highlights) do
   end
 end
 assert(filename_highlight == "newest.md", "dashboard colors only the filename")
+
+local filtered_model = dashboard._build_model(fixture, "newest")
+local filtered = table.concat(filtered_model.lines, "\n")
+assert(filtered:find("Filter newest", 1, true), "dashboard displays the active filter")
+assert(filtered:find("NOTES              notes/  (1/2)", 1, true), "filtered section shows matches and total")
+assert(filtered:find("notes/nested/newest.md", 1, true), "matching notes remain visible")
+assert(not filtered:find("notes/older.md", 1, true), "non-matching notes are hidden")
 
 local section_headers = { [4] = true, [10] = true, [18] = true, [25] = true }
 assert(dashboard._section_target(section_headers, 4, 1, 1) == 10, "]] moves to the next section")
