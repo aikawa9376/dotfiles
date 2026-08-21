@@ -454,10 +454,12 @@ local function add_note()
   }, ask_name)
 end
 
-local function close_dashboard()
-  local bufnr = vim.api.nvim_get_current_buf()
+local function close_dashboard(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
   close_preview(state_by_buffer[bufnr])
-  vim.cmd("silent! bdelete")
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    vim.api.nvim_buf_delete(bufnr, { force = true })
+  end
   state_by_buffer[bufnr] = nil
 end
 
@@ -560,6 +562,7 @@ function M.setup(opts)
 end
 
 M.open = open_dashboard
+M.close = close_dashboard
 M.refresh = render
 M._collect_section = collect_section
 M._section_directories = section_directories

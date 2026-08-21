@@ -139,6 +139,54 @@ return {
       end
     end
 
+    local function is_obsidian_dashboard_window(win)
+      if not vim.api.nvim_win_is_valid(win) then
+        return false
+      end
+
+      local buf = vim.api.nvim_win_get_buf(win)
+      if not vim.api.nvim_buf_is_valid(buf) then
+        return false
+      end
+
+      return vim.bo[buf].filetype == "obsidian-dashboard"
+        or vim.api.nvim_buf_get_name(buf):match("^obsidian%-dashboard://") ~= nil
+    end
+
+    local function obsidian_dashboard_is_open()
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if is_obsidian_dashboard_window(win) then
+          return true
+        end
+      end
+      return false
+    end
+
+    local function set_obsidian_dashboard_open(state)
+      if state then
+        local ok, err = pcall(vim.cmd, "ObsidianDashboard")
+        if not ok then
+          vim.notify("Obsidian dashboard failed: " .. tostring(err), vim.log.levels.ERROR)
+        end
+        return
+      end
+
+      local ok, dashboard = pcall(require, "obsidian_extension.features.dashboard")
+      local buffers = {}
+      for _, win in ipairs(vim.api.nvim_list_wins()) do
+        if is_obsidian_dashboard_window(win) then
+          buffers[vim.api.nvim_win_get_buf(win)] = true
+        end
+      end
+      for buf in pairs(buffers) do
+        if ok and type(dashboard.close) == "function" then
+          dashboard.close(buf)
+        else
+          pcall(vim.api.nvim_buf_delete, buf, { force = true })
+        end
+      end
+    end
+
     local function require_colorizer()
       load_plugins({ "nvim-colorizer.lua" })
 
@@ -272,6 +320,7 @@ return {
         { label = "o  Overseer tasks", run = function() toggle_snacks("overseer_tasks") end },
         { label = "u  DAP UI", run = function() toggle_snacks("dap_ui") end },
         { label = "g  Fugitive status", run = function() toggle_snacks("fugitive_status") end },
+        { label = "O  Obsidian dashboard", run = function() toggle_snacks("obsidian_dashboard") end },
         { label = "z  Colorizer", run = function() toggle_snacks("colorizer") end },
         { label = "r  Render markdown", run = function() toggle_snacks("render_markdown") end },
         { label = "G  Gitsigns signs", run = function() toggle_snacks("gitsigns_signs") end },
@@ -460,6 +509,15 @@ return {
       set = set_fugitive_status_open,
       notify = function(state)
         vim.notify((state and "Opened" or "Closed") .. " Fugitive status", vim.log.levels.INFO)
+      end,
+    })
+    snacks.toggle({
+      id = "obsidian_dashboard",
+      name = "Obsidian Dashboard",
+      get = obsidian_dashboard_is_open,
+      set = set_obsidian_dashboard_open,
+      notify = function(state)
+        vim.notify((state and "Opened" or "Closed") .. " Obsidian dashboard", vim.log.levels.INFO)
       end,
     })
     snacks.toggle({
