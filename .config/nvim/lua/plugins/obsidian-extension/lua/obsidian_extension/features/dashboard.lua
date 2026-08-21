@@ -155,8 +155,10 @@ local function build_model(vault_path)
         local prefix = "  " .. stamp .. "   "
         local aliases = #file.aliases > 0 and " [" .. table.concat(file.aliases, ", ") .. "]" or ""
         local row = add_line(model, prefix .. file.relative_path .. aliases, nil, file)
+        local file_name = vim.fs.basename(file.relative_path)
+        local file_name_start = #prefix + #file.relative_path - #file_name
         add_span(model, row, 2, 2 + #stamp, "Comment")
-        add_span(model, row, #prefix, #prefix + #file.relative_path, "Underlined")
+        add_span(model, row, file_name_start, file_name_start + #file_name, "Directory")
         if aliases ~= "" then
           add_span(model, row, #prefix + #file.relative_path, -1, "String")
         end

@@ -16,6 +16,19 @@ local alias_suffix = fzf_picker._alias_suffix({
 assert(alias_suffix == " [Quick switch alias, 日本語の別名]", "aliases use the compact searchable display")
 assert(fzf_picker._alias_suffix({ display = "No aliases" }) == "", "entries without aliases are unchanged")
 
+local original_utils = package.loaded["fzf-lua.utils"]
+package.loaded["fzf-lua.utils"] = {
+  ansi_from_hl = function(_, text)
+    return "\27[36m" .. text .. "\27[0m"
+  end,
+}
+local colored_name = fzf_picker._color_file_name(" notes/nested/topic.md", {
+  filename = "/vault/notes/nested/topic.md",
+})
+package.loaded["fzf-lua.utils"] = original_utils
+assert(colored_name:gsub("\27%[[0-9;]*[A-Za-z]", "") == " notes/nested/topic.md", "filename color preserves display text")
+assert(colored_name:find("notes/nested/\27[", 1, true), "only the basename starts the filename highlight")
+
 local alias_path = "/vault/notes/LazyAgent Obsidian skills architecture.md"
 local daily_path = "/vault/daily/2026-08-21.md"
 local fallback_locations = {
