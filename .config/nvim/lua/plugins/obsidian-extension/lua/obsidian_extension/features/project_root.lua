@@ -77,7 +77,12 @@ local function attach(bufnr)
   return attached
 end
 
-function M.setup()
+function M.setup(opts)
+  opts = opts or {}
+  if opts.enabled ~= true then
+    return
+  end
+
   vim.api.nvim_create_autocmd("BufEnter", {
     group = group,
     pattern = "*.md",

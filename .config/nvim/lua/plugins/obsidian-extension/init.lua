@@ -4,6 +4,9 @@ return {
   lazy = true,
   dependencies = "DrKJeff16/project.nvim",
   opts = {
+    project_root = {
+      enabled = false,
+    },
     dashboard = {
       show_aliases = true,
       winbar = false,

@@ -18,6 +18,9 @@ vim.fn.mkdir(second_dotfiles, "p")
 vim.fn.writefile({ "# dotfiles / master" }, vault .. "/notes/projects/dotfiles/master.md")
 
 local project_root = require("obsidian_extension.features.project_root")
+project_root.setup({ enabled = false })
+assert(vim.tbl_isempty(vim.api.nvim_get_autocmds({ group = "ObsidianExtensionProjectRoot" })),
+  "automatic project-root attachment is disabled by default")
 assert(project_root._project_slug_from_path(
   vault .. "/notes/projects/dotfiles/master.md",
   vault

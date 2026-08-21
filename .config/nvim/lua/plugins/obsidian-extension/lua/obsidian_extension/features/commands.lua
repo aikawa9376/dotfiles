@@ -49,6 +49,7 @@ local function branch_note_spec(context)
       type = "project",
       project = context.repo_slug,
       branch = context.branch_name,
+      project_path = context.repo_root,
     },
     metadata_defaults = {
       source = "manual",
@@ -343,5 +344,6 @@ function M.setup()
 end
 
 M._related_branch_names = related_branch_names
+M._branch_note_spec = branch_note_spec
 
 return M
