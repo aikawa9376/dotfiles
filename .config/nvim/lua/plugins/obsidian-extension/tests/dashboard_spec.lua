@@ -45,6 +45,14 @@ local model = dashboard._build_model(fixture)
 assert(vim.tbl_contains(model.lines, "NOTES              notes/  (2)"), "configured section is rendered")
 assert(model.lines[#model.lines]:find("<CR> open", 1, true), "dashboard help is rendered")
 assert(model.lines[#model.lines]:find("gb knowledge", 1, true), "Knowledge Base does not shadow k movement")
+local filename_highlight
+for _, highlight in ipairs(model.highlights) do
+  local line = model.lines[highlight.row + 1]
+  if highlight.group == "Directory" and line and line:find("notes/nested/newest.md", 1, true) then
+    filename_highlight = line:sub(highlight.start_col + 1, highlight.end_col)
+  end
+end
+assert(filename_highlight == "newest.md", "dashboard colors only the filename")
 
 vim.fn.delete(fixture, "rf")
 print("ok - dashboard_spec")

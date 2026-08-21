@@ -44,13 +44,49 @@ local function color_alias_suffix(suffix)
   return utils.ansi_from_hl("Comment", " [") .. utils.ansi_from_hl("String", aliases) .. utils.ansi_from_hl("Comment", "]")
 end
 
+local function color_file_name(display, entry)
+  if type(entry) ~= "table" or type(entry.filename) ~= "string" or entry.filename == "" then
+    return display
+  end
+
+  local ok, utils = pcall(require, "fzf-lua.utils")
+  if not ok then
+    return display
+  end
+
+  local filename = vim.fs.basename(entry.filename)
+  local start_col
+  local offset = 1
+  while true do
+    local candidate = display:find(filename, offset, true)
+    if not candidate then
+      break
+    end
+    start_col = candidate
+    offset = candidate + #filename
+  end
+  if not start_col then
+    return display
+  end
+
+  return display:sub(1, start_col - 1)
+    .. utils.ansi_from_hl("Directory", filename)
+    .. display:sub(start_col + #filename)
+end
+
 local function colored_displays(picker, values)
   local displays = {}
   for _, entry in ipairs(values or {}) do
+    local display = picker:_make_display(entry)
     local suffix = alias_suffix(entry)
+    local colored
     if suffix ~= "" then
-      local display = picker:_make_display(entry)
-      displays[display] = display:sub(1, #display - #suffix) .. color_alias_suffix(suffix)
+      colored = color_file_name(display:sub(1, #display - #suffix), entry) .. color_alias_suffix(suffix)
+    else
+      colored = color_file_name(display, entry)
+    end
+    if colored ~= display then
+      displays[display] = colored
     end
   end
   return displays
@@ -267,6 +303,7 @@ M._with_preview = with_preview
 M._aliases_for_entry = aliases_for_entry
 M._alias_suffix = alias_suffix
 M._color_alias_suffix = color_alias_suffix
+M._color_file_name = color_file_name
 M._colored_displays = colored_displays
 M._note_entries = note_entries
 M._display_keys = display_keys
