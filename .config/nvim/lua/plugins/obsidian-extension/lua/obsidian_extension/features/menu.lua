@@ -2,6 +2,11 @@ local M = {}
 
 local items = {
   {
+    label = "Dashboard",
+    description = "Vault の最近の更新と主要操作を一覧する",
+    command = "ObsidianDashboard",
+  },
+  {
     label = "Search",
     description = "Vault 全体から本文を検索する",
     command = "ObsidianSearch",
