@@ -26,14 +26,22 @@ Before creating a new note, search the vault for an existing note on the same to
 
 Route the task to the smallest relevant reference:
 
+- Read [upstream](references/upstream.md) when auditing this skill against,
+  updating from, or troubleshooting differences with Steph Ango's
+  `kepano/obsidian-skills` repository.
 - Read [conventions](references/conventions.md) whenever creating or rewriting a note.
-- Read [markdown](references/markdown.md) for Obsidian-specific links, embeds, callouts, or formatting.
+- Read [markdown](references/markdown.md) for Obsidian-specific links, embeds,
+  properties, callouts, comments, tags, math, diagrams, or formatting.
 - Read [workflows](references/workflows.md) for daily capture, permanent notes, agent results, refactors, and linking.
 - Read [web capture](references/web-capture.md) when a URL or online article should become a note.
 - Read [HTML artifacts](references/html-artifacts.md) when the request uses `#obsidian-html` or explicitly asks for an HTML companion.
-- Read [bases](references/bases.md) when creating a database-like table, card, or list view over notes.
-- Read [canvas](references/canvas.md) when creating a mind map, architecture map, or other `.canvas` visualization.
-- Read [commands](references/commands.md) for interactive work in Neovim. Use `obsidian.nvim`; do not depend on the Obsidian CLI.
+- Read [bases](references/bases.md) when creating or debugging a `.base` file,
+  including filters, formulas, summaries, and table, card, list, or map views.
+- Read [canvas](references/canvas.md) when creating or editing a mind map,
+  architecture map, or other `.canvas` visualization.
+- Read [commands](references/commands.md) for interactive work in Neovim or
+  when the user explicitly requests the official Obsidian CLI. Prefer
+  `obsidian.nvim` for normal work in this setup.
 
 ### Vault Conventions
 
@@ -63,6 +71,7 @@ When you create or rewrite a note directly, preserve that structure: frontmatter
 ## Available References
 
 - **[conventions](references/conventions.md)**: Vault layout, note shape, and writing conventions for this setup.
+- **[upstream](references/upstream.md)**: Source provenance, upstream mapping, and synchronization procedure.
 - **[markdown](references/markdown.md)**: Obsidian-specific Markdown, wikilinks, embeds, callouts, and validation.
 - **[commands](references/commands.md)**: `obsidian.nvim` commands available in the current Neovim configuration.
 - **[workflows](references/workflows.md)**: Practical workflows for daily notes, permanent notes, refactors, and linking.

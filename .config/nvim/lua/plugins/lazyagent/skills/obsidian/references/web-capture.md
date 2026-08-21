@@ -9,7 +9,7 @@ archive copy.
 Prefer the bundled Defuddle launcher:
 
 ```sh
-"$LAZYAGENTBIN/defuddle" parse "https://example.com/article" --markdown
+"$LAZYAGENTBIN/defuddle" parse "https://example.com/article" --md
 ```
 
 For metadata:
@@ -17,6 +17,12 @@ For metadata:
 ```sh
 "$LAZYAGENTBIN/defuddle" parse "https://example.com/article" --json
 ```
+
+Without an output flag Defuddle returns HTML. Use `--md` for readable content,
+`--json` when both extracted content and metadata are needed, or
+`-p title`, `-p description`, or `-p domain` for one metadata field. Avoid
+writing an intermediate extraction file unless it is itself a requested
+artifact.
 
 The launcher uses a pinned Defuddle version through `npx`. Its first run may
 need network access and populate the npm cache. If it is unavailable, use the
@@ -44,3 +50,5 @@ source_url: https://example.com/article
 
 Link related permanent notes and add the reference note to today's daily note.
 Use short quotations only when exact wording is important.
+
+Defuddle upstream: <https://github.com/kepano/defuddle>
