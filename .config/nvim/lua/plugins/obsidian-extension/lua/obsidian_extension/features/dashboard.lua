@@ -166,7 +166,7 @@ local function build_model(vault_path)
   end
 
   add_line(model, ("Visible %d notes  ·  updated today %d"):format(vim.tbl_count(unique), updated_today), "DiagnosticInfo")
-  add_line(model, "<CR> open   R refresh   t today   k knowledge   / search   ? actions   q close", "Comment")
+  add_line(model, "<CR> open   R refresh   t today   gb knowledge   / search   ? actions   q close", "Comment")
   return model
 end
 
@@ -216,7 +216,7 @@ local function configure_buffer(bufnr, vault_path)
     render(bufnr, vault_path)
   end, { buffer = bufnr, silent = true, desc = "Refresh Obsidian dashboard" })
   vim.keymap.set("n", "t", "<Cmd>ObsidianToday<CR>", { buffer = bufnr, silent = true, desc = "Open today's note" })
-  vim.keymap.set("n", "k", "<Cmd>ObsidianKnowledgeBase<CR>", { buffer = bufnr, silent = true, desc = "Open Knowledge Base" })
+  vim.keymap.set("n", "gb", "<Cmd>ObsidianKnowledgeBase<CR>", { buffer = bufnr, silent = true, desc = "Open Knowledge Base" })
   vim.keymap.set("n", "/", "<Cmd>ObsidianSearch<CR>", { buffer = bufnr, silent = true, desc = "Search the vault" })
   vim.keymap.set("n", "?", "<Cmd>ObsidianMenu<CR>", { buffer = bufnr, silent = true, desc = "Open Obsidian actions" })
   vim.keymap.set("n", "q", close_dashboard, { buffer = bufnr, silent = true, nowait = true, desc = "Close dashboard" })
