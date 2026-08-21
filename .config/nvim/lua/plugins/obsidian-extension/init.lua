@@ -6,6 +6,9 @@ return {
   opts = {
     dashboard = {
       show_aliases = true,
+      winbar = false,
+      preview_width = 0.45,
+      folder_depth = 3,
       sections = {
         { title = "Recent notes", dir = "notes", limit = 10, exclude = { "projects" } },
         { title = "Branch notes", dir = "notes/projects", limit = 8, exclude = { "index.md" } },
