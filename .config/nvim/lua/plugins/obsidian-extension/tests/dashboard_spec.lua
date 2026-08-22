@@ -128,12 +128,17 @@ assert(preview_state.opened_buffers[preview_bufnr],
 dashboard._cleanup_opened_buffers(preview_state.opened_buffers)
 assert(not vim.api.nvim_buf_is_valid(preview_bufnr),
   "tracked preview buffers are deleted when the dashboard session ends")
+assert(dashboard._write_pin(fixture .. "/notes/older.md", true), "dashboard pins are persisted in note frontmatter")
+local pinned, pinned_total, pinned_paths = dashboard._collect_pinned(fixture, false)
+assert(pinned_total == 1 and pinned[1].relative_path == "notes/older.md", "pinned notes are collected vault-wide")
+assert(pinned_paths[vim.fs.normalize(fixture .. "/notes/older.md")], "pinned paths are indexed for deduplication")
 local model = dashboard._build_model(fixture)
-assert(vim.tbl_contains(model.lines, "NOTES              notes/  (2)"), "configured section is rendered")
+assert(vim.tbl_contains(model.lines, "PINNED NOTES       (1)"), "pinned notes are rendered above configured sections")
+assert(vim.tbl_contains(model.lines, "RECENT NOTES       notes/  (1)"), "pinned notes are excluded from section counts")
 local heading_line
 local nested_note_line
 for line_number, line in ipairs(model.lines) do
-  if line == "NOTES              notes/  (2)" then
+  if line == "RECENT NOTES       notes/  (1)" then
     heading_line = line_number
   elseif line:find("notes/nested/newest.md", 1, true) then
     nested_note_line = line_number
@@ -146,6 +151,9 @@ assert(vim.fs.dirname(model.entries[nested_note_line].path) == fixture .. "/note
 assert(model.lines[#model.lines]:find("<CR> open", 1, true), "dashboard help is rendered")
 assert(model.lines[#model.lines]:find("P preview", 1, true), "dashboard advertises right-side preview")
 assert(model.lines[#model.lines]:find("a add", 1, true), "dashboard advertises section note creation")
+assert(model.lines[#model.lines]:find("p pin", 1, true), "dashboard advertises pin toggling")
+assert(model.lines[#model.lines]:find("r rename", 1, true), "dashboard advertises note renaming")
+assert(model.lines[#model.lines]:find("x delete", 1, true), "dashboard advertises note deletion")
 assert(model.lines[#model.lines]:find("[[/]] sections", 1, true), "dashboard advertises section navigation")
 assert(model.lines[#model.lines]:find("/ filter", 1, true), "dashboard advertises in-place filtering")
 assert(model.lines[#model.lines]:find("gb knowledge", 1, true), "Knowledge Base does not shadow k movement")
@@ -161,9 +169,14 @@ assert(filename_highlight == "newest.md", "dashboard colors only the filename")
 local filtered_model = dashboard._build_model(fixture, "newest")
 local filtered = table.concat(filtered_model.lines, "\n")
 assert(filtered:find("Filter newest", 1, true), "dashboard displays the active filter")
-assert(filtered:find("NOTES              notes/  (1/2)", 1, true), "filtered section shows matches and total")
+assert(filtered:find("RECENT NOTES       notes/  (1/1)", 1, true), "filtered section shows matches and unpinned total")
 assert(filtered:find("notes/nested/newest.md", 1, true), "matching notes remain visible")
 assert(not filtered:find("notes/older.md", 1, true), "non-matching notes are hidden")
+assert(dashboard._write_pin(fixture .. "/notes/older.md", false), "dashboard pins can be removed")
+local unpinned, unpinned_total = dashboard._collect_pinned(fixture, false)
+assert(#unpinned == 0 and unpinned_total == 0, "unpinning removes the note from the pinned collection")
+local unpinned_model = table.concat(dashboard._build_model(fixture).lines, "\n")
+assert(not unpinned_model:find("PINNED NOTES", 1, true), "the pinned section is hidden when it is empty")
 
 local section_headers = { [4] = true, [10] = true, [18] = true, [25] = true }
 assert(dashboard._section_target(section_headers, 4, 1, 1) == 10, "]] moves to the next section")
