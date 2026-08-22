@@ -10,6 +10,8 @@ local defaults = {
   winbar = false,
   preview_width = 0.45,
   folder_depth = 3,
+  pin_field = "dashboard_pin",
+  pinned_title = "Pinned notes",
   sections = {
     { title = "Recent notes", dir = "notes", limit = 10, exclude = { "projects", "agent-memory" } },
     { title = "Branch notes", dir = "notes/projects", limit = 8, exclude = { "index.md" } },
@@ -75,6 +77,21 @@ local function aliases_for(path)
   return vim.tbl_map(tostring, note.aliases)
 end
 
+local function note_for(path)
+  local ok, Note = pcall(require, "obsidian.note")
+  if not ok then
+    return nil
+  end
+
+  local note_ok, note = pcall(Note.from_file, path, { max_lines = 100 })
+  return note_ok and note or nil
+end
+
+local function is_pinned(path)
+  local note = note_for(path)
+  return note ~= nil and note:get_field(config.pin_field or defaults.pin_field) == true
+end
+
 local function section_root(vault_path, directory)
   local root = vim.fs.normalize(vault_path)
   local candidate = vim.fs.normalize(vim.fs.joinpath(root, directory or ""))
@@ -100,7 +117,7 @@ local function matches_query(file, section, query, aliases)
   return text:find(query, 1, true) ~= nil
 end
 
-local function collect_section(vault_path, section, show_aliases, query)
+local function collect_section(vault_path, section, show_aliases, query, ignored_paths)
   local root = section_root(vault_path, section.dir)
   if not root or not vim.uv.fs_stat(root) then
     return {}, 0, root, 0
@@ -111,6 +128,7 @@ local function collect_section(vault_path, section, show_aliases, query)
   files = vim.tbl_filter(function(file)
     local relative_path = file.path:sub(#root + 2)
     return not is_excluded(relative_path, section.exclude)
+      and not (ignored_paths and ignored_paths[vim.fs.normalize(file.path)])
   end, files)
   table.sort(files, function(left, right)
     if left.mtime == right.mtime then
@@ -145,6 +163,37 @@ local function collect_section(vault_path, section, show_aliases, query)
   end
 
   return files, total, root, matched_total
+end
+
+local function collect_pinned(vault_path, show_aliases, query)
+  local files = {}
+  scan_markdown(vim.fs.normalize(vault_path), true, files)
+  files = vim.tbl_filter(function(file)
+    return is_pinned(file.path)
+  end, files)
+  table.sort(files, function(left, right)
+    if left.mtime == right.mtime then
+      return left.path < right.path
+    end
+    return left.mtime > right.mtime
+  end)
+
+  local section = { title = config.pinned_title or defaults.pinned_title, dir = "" }
+  for _, file in ipairs(files) do
+    file.relative_path = file.path:sub(#vim.fs.normalize(vault_path) + 2)
+    file.aliases = show_aliases and aliases_for(file.path) or {}
+  end
+  local total = #files
+  local paths = {}
+  for _, file in ipairs(files) do
+    paths[vim.fs.normalize(file.path)] = true
+  end
+  if vim.trim(tostring(query or "")) ~= "" then
+    files = vim.tbl_filter(function(file)
+      return matches_query(file, section, query, file.aliases)
+    end, files)
+  end
+  return files, total, paths
 end
 
 local function scan_directories(root, current, depth, max_depth, excluded_paths, directories)
@@ -236,8 +285,52 @@ local function build_model(vault_path, query)
   end
   add_line(model, "")
 
+  local pinned, pinned_total, pinned_paths = collect_pinned(vault_path, config.show_aliases, query)
+
+  local function add_note(file, pinned_note)
+    if not unique[file.path] then
+      unique[file.path] = true
+      if os.date("%Y-%m-%d", file.mtime) == today then
+        updated_today = updated_today + 1
+      end
+    end
+
+    local stamp = format_time(file.mtime)
+    local icon = pinned_note and "󰐃 " or " "
+    local prefix = "  " .. stamp .. "  " .. icon
+    local aliases = #file.aliases > 0 and " [" .. table.concat(file.aliases, ", ") .. "]" or ""
+    local row = add_line(model, prefix .. file.relative_path .. aliases, nil, file)
+    local file_name = vim.fs.basename(file.relative_path)
+    local file_name_start = #prefix + #file.relative_path - #file_name
+    add_span(model, row, 2, 2 + #stamp, "Comment")
+    add_span(model, row, file_name_start, file_name_start + #file_name, "Directory")
+    if aliases ~= "" then
+      add_span(model, row, #prefix + #file.relative_path, -1, "String")
+    end
+  end
+
+  if pinned_total > 0 then
+    local count = #pinned
+    local label = query ~= "" and ("%d/%d"):format(count, pinned_total) or tostring(pinned_total)
+    add_line(model, ("%-18s (%s)"):format((config.pinned_title or defaults.pinned_title):upper(), label), "Title")
+    if #pinned == 0 then
+      add_line(model, "  (no matches)", "Comment")
+    else
+      for _, file in ipairs(pinned) do
+        add_note(file, true)
+      end
+    end
+    add_line(model, "")
+  end
+
   for _, section in ipairs(config.sections or {}) do
-    local files, total, root, matched_total = collect_section(vault_path, section, config.show_aliases, query)
+    local files, total, root, matched_total = collect_section(
+      vault_path,
+      section,
+      config.show_aliases,
+      query,
+      pinned_paths
+    )
     local title = (section.title or section.dir or "Notes"):upper()
     local count = query ~= "" and ("%d/%d"):format(matched_total, total) or tostring(total)
     local header_row = add_line(model, ("%-18s %s/  (%s)"):format(title, section.dir or "", count), "Title")
@@ -249,24 +342,7 @@ local function build_model(vault_path, query)
       add_line(model, query ~= "" and "  (no matches)" or "  (no notes)", "Comment")
     else
       for _, file in ipairs(files) do
-        if not unique[file.path] then
-          unique[file.path] = true
-          if os.date("%Y-%m-%d", file.mtime) == today then
-            updated_today = updated_today + 1
-          end
-        end
-
-        local stamp = format_time(file.mtime)
-        local prefix = "  " .. stamp .. "   "
-        local aliases = #file.aliases > 0 and " [" .. table.concat(file.aliases, ", ") .. "]" or ""
-        local row = add_line(model, prefix .. file.relative_path .. aliases, nil, file)
-        local file_name = vim.fs.basename(file.relative_path)
-        local file_name_start = #prefix + #file.relative_path - #file_name
-        add_span(model, row, 2, 2 + #stamp, "Comment")
-        add_span(model, row, file_name_start, file_name_start + #file_name, "Directory")
-        if aliases ~= "" then
-          add_span(model, row, #prefix + #file.relative_path, -1, "String")
-        end
+        add_note(file, false)
       end
     end
     add_line(model, "")
@@ -275,7 +351,7 @@ local function build_model(vault_path, query)
   add_line(model, ("Visible %d notes  ·  updated today %d"):format(vim.tbl_count(unique), updated_today), "DiagnosticInfo")
   add_line(
     model,
-    "<CR> open   P preview   a add   [[/]] sections   R refresh   t today   gb knowledge   / filter   ? actions   q close",
+    "<CR> open   P preview   a add   p pin   r rename   x delete   [[/]] sections   R refresh   t today   gb knowledge   / filter   ? actions   q close",
     "Comment"
   )
   return model
@@ -496,6 +572,148 @@ local function valid_note_name(name)
   return name
 end
 
+local function refresh_after_change(bufnr, row)
+  local state = state_by_buffer[bufnr]
+  if not state or not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  render(bufnr, state.vault_path)
+  if vim.api.nvim_get_current_buf() == bufnr then
+    local line_count = vim.api.nvim_buf_line_count(bufnr)
+    vim.api.nvim_win_set_cursor(0, { math.min(row or 1, line_count), 0 })
+    follow_preview(bufnr)
+  end
+end
+
+local function write_pin(path, pinned)
+  local existing = vim.fn.bufnr(path)
+  if existing >= 0 and vim.api.nvim_buf_is_valid(existing) and vim.bo[existing].modified then
+    return nil, "Save or discard the note's changes before changing its pin"
+  end
+
+  local note = note_for(path)
+  if not note then
+    return nil, "Could not read note frontmatter"
+  end
+
+  note:add_field(config.pin_field or defaults.pin_field, pinned and true or nil)
+  local ok, err = pcall(function()
+    if existing >= 0 and vim.api.nvim_buf_is_valid(existing) then
+      note:save_to_buffer({ bufnr = existing })
+      vim.api.nvim_buf_call(existing, function()
+        vim.cmd("silent write")
+      end)
+    else
+      note:save()
+    end
+  end)
+  if not ok then
+    return nil, tostring(err)
+  end
+  return true
+end
+
+local function toggle_pin()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local state = state_by_buffer[bufnr]
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local entry = state and state.entries[row]
+  if not entry then
+    vim.notify("Move the cursor onto a note to pin it", vim.log.levels.INFO)
+    return
+  end
+
+  local pinned = is_pinned(entry.path)
+  close_preview(state)
+  local ok, err = write_pin(entry.path, not pinned)
+  if not ok then
+    vim.notify("Could not update pin: " .. err, vim.log.levels.ERROR)
+    return
+  end
+  refresh_after_change(bufnr, row)
+  vim.notify((pinned and "Unpinned " or "Pinned ") .. entry.relative_path, vim.log.levels.INFO)
+end
+
+local function delete_entry()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local state = state_by_buffer[bufnr]
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local entry = state and state.entries[row]
+  if not entry then
+    vim.notify("Move the cursor onto a note to delete it", vim.log.levels.INFO)
+    return
+  end
+
+  local existing = vim.fn.bufnr(entry.path)
+  if existing >= 0 and vim.api.nvim_buf_is_valid(existing) and vim.bo[existing].modified then
+    vim.notify("Save or discard the note's changes before deleting it", vim.log.levels.WARN)
+    return
+  end
+  if vim.fn.confirm("Delete " .. entry.relative_path .. "?", "&Delete\n&Cancel", 2) ~= 1 then
+    return
+  end
+
+  close_preview(state)
+  if existing >= 0 and vim.api.nvim_buf_is_valid(existing) then
+    local buffer_ok, buffer_err = pcall(vim.api.nvim_buf_delete, existing, {})
+    if not buffer_ok then
+      vim.notify("Could not close note buffer: " .. tostring(buffer_err), vim.log.levels.ERROR)
+      return
+    end
+  end
+  local deleted, delete_err = vim.uv.fs_unlink(entry.path)
+  if not deleted then
+    vim.notify("Could not delete note: " .. tostring(delete_err), vim.log.levels.ERROR)
+    return
+  end
+
+  refresh_after_change(bufnr, row)
+  vim.notify("Deleted " .. entry.relative_path, vim.log.levels.INFO)
+end
+
+local function rename_entry()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local state = state_by_buffer[bufnr]
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local entry = state and state.entries[row]
+  if not entry then
+    vim.notify("Move the cursor onto a note to rename it", vim.log.levels.INFO)
+    return
+  end
+
+  local current_name = vim.fs.basename(entry.path):gsub("%.md$", "")
+  vim.ui.input({ prompt = "Rename note: ", default = current_name }, function(value)
+    if value == nil or not vim.api.nvim_buf_is_valid(bufnr) then
+      return
+    end
+    local new_name = valid_note_name(value)
+    if not new_name then
+      vim.notify("Enter a filename without path separators", vim.log.levels.WARN)
+      return
+    end
+
+    close_preview(state)
+    local existing = vim.fn.bufnr(entry.path)
+    local opened_by_dashboard = existing < 0
+    vim.cmd.edit(vim.fn.fnameescape(entry.path))
+    local renamed_bufnr = vim.api.nvim_get_current_buf()
+    local ok, err = pcall(vim.api.nvim_cmd, { cmd = "ObsidianRename", args = { new_name } }, {})
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      vim.api.nvim_set_current_buf(bufnr)
+    end
+    if opened_by_dashboard and vim.api.nvim_buf_is_valid(renamed_bufnr) then
+      state.opened_buffers = state.opened_buffers or {}
+      state.opened_buffers[renamed_bufnr] = true
+    end
+    if not ok then
+      vim.notify("Could not rename note: " .. tostring(err), vim.log.levels.ERROR)
+      return
+    end
+    refresh_after_change(bufnr, row)
+  end)
+end
+
 local function create_note(vault_path, directory, name)
   name = valid_note_name(name)
   if not name then
@@ -690,6 +908,9 @@ local function configure_buffer(bufnr, vault_path)
   vim.keymap.set("n", "<CR>", open_entry, { buffer = bufnr, silent = true, desc = "Open dashboard note" })
   vim.keymap.set("n", "P", toggle_preview, { buffer = bufnr, silent = true, desc = "Toggle note preview" })
   vim.keymap.set("n", "a", add_note, { buffer = bufnr, silent = true, desc = "Add a note to this section" })
+  vim.keymap.set("n", "p", toggle_pin, { buffer = bufnr, silent = true, desc = "Toggle dashboard note pin" })
+  vim.keymap.set("n", "r", rename_entry, { buffer = bufnr, silent = true, desc = "Rename dashboard note" })
+  vim.keymap.set("n", "x", delete_entry, { buffer = bufnr, silent = true, desc = "Delete dashboard note" })
   vim.keymap.set("n", "]]", function()
     move_section(1)
   end, { buffer = bufnr, silent = true, desc = "Go to next dashboard section" })
@@ -802,6 +1023,7 @@ M.close = close_dashboard
 M.is_open = is_open
 M.refresh = render
 M._collect_section = collect_section
+M._collect_pinned = collect_pinned
 M._section_directories = section_directories
 M._build_model = build_model
 M._configure_window = configure_window
@@ -813,5 +1035,6 @@ M._format_time = format_time
 M._matches_query = matches_query
 M._section_target = section_target
 M._valid_note_name = valid_note_name
+M._write_pin = write_pin
 
 return M
