@@ -344,9 +344,14 @@ local function release_preview_buffer(state, promote_path)
     local promote = promote_path
       and vim.fs.normalize(vim.api.nvim_buf_get_name(preview_bufnr)) == vim.fs.normalize(promote_path)
     vim.bo[preview_bufnr].buflisted = promote == true or state.preview_was_listed == true
+    if state.preview_created then
+      state.opened_buffers = state.opened_buffers or {}
+      state.opened_buffers[preview_bufnr] = true
+    end
   end
   if state then
     state.preview_bufnr = nil
+    state.preview_created = nil
     state.preview_was_listed = nil
   end
 end
@@ -370,6 +375,7 @@ local function preview_buffer(state, path)
   vim.fn.bufload(bufnr)
   vim.bo[bufnr].buflisted = false
   state.preview_bufnr = bufnr
+  state.preview_created = existing < 0
   state.preview_was_listed = was_listed
   return bufnr
 end
@@ -433,12 +439,19 @@ local function open_entry()
   local state = state_by_buffer[bufnr]
   local entry = state and state.entries[vim.api.nvim_win_get_cursor(0)[1]]
   if entry then
-    close_preview(state, entry.path)
     local entry_bufnr = vim.fn.bufnr(entry.path)
+    local opened_by_dashboard = entry_bufnr < 0
+      or (entry_bufnr == state.preview_bufnr and state.preview_created == true)
+    close_preview(state, entry.path)
+    entry_bufnr = vim.fn.bufnr(entry.path)
     if entry_bufnr >= 0 then
       vim.bo[entry_bufnr].buflisted = true
     end
     vim.cmd.edit(vim.fn.fnameescape(entry.path))
+    if opened_by_dashboard then
+      state.opened_buffers = state.opened_buffers or {}
+      state.opened_buffers[vim.api.nvim_get_current_buf()] = true
+    end
   end
 end
 
@@ -570,13 +583,86 @@ local function add_note()
   }, ask_name)
 end
 
-local function close_dashboard(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  close_preview(state_by_buffer[bufnr])
-  if vim.api.nvim_buf_is_valid(bufnr) then
+local function cleanup_opened_buffers(opened_buffers)
+  local kept = {}
+  for bufnr in pairs(opened_buffers or {}) do
+    if
+      vim.api.nvim_buf_is_valid(bufnr)
+      and (vim.bo[bufnr].modified or #vim.fn.win_findbuf(bufnr) > 0)
+    then
+      kept[bufnr] = true
+    elseif vim.api.nvim_buf_is_valid(bufnr) then
+      vim.api.nvim_buf_delete(bufnr, {})
+    end
+  end
+  return kept
+end
+
+local function cleanup_session(bufnr)
+  local state = state_by_buffer[bufnr]
+  if not state then
+    return
+  end
+
+  close_preview(state)
+  state.opened_buffers = cleanup_opened_buffers(state.opened_buffers)
+  if vim.api.nvim_buf_is_valid(bufnr) and #vim.fn.win_findbuf(bufnr) == 0 then
     vim.api.nvim_buf_delete(bufnr, { force = true })
   end
   state_by_buffer[bufnr] = nil
+end
+
+local function cleanup_closed_tabs()
+  local closed = {}
+  for bufnr, state in pairs(state_by_buffer) do
+    if state.tabpage and not vim.api.nvim_tabpage_is_valid(state.tabpage) then
+      closed[#closed + 1] = bufnr
+    end
+  end
+  for _, bufnr in ipairs(closed) do
+    cleanup_session(bufnr)
+  end
+end
+
+local function session_buffer(bufnr)
+  if bufnr and state_by_buffer[bufnr] then
+    return bufnr
+  end
+
+  local current_tabpage = vim.api.nvim_get_current_tabpage()
+  local fallback
+  for candidate, state in pairs(state_by_buffer) do
+    if state.tabpage and vim.api.nvim_tabpage_is_valid(state.tabpage) then
+      if state.tabpage == current_tabpage then
+        return candidate
+      end
+      fallback = fallback or candidate
+    end
+  end
+  return fallback
+end
+
+local function is_open()
+  return session_buffer() ~= nil
+end
+
+local function close_dashboard(bufnr)
+  bufnr = session_buffer(bufnr)
+  if not bufnr then
+    return
+  end
+  local state = state_by_buffer[bufnr]
+  if
+    state
+    and state.tabpage
+    and vim.api.nvim_tabpage_is_valid(state.tabpage)
+    and #vim.api.nvim_list_tabpages() > 1
+  then
+    vim.api.nvim_set_current_tabpage(state.tabpage)
+    vim.cmd.tabclose()
+    return
+  end
+  cleanup_session(bufnr)
 end
 
 local function move_section(direction)
@@ -635,6 +721,39 @@ local function configure_buffer(bufnr, vault_path)
   })
 end
 
+local function configure_window(winid)
+  if config.winbar == true then
+    vim.wo[winid].winbar = "%#Title# OBSIDIAN %*· Vault status"
+  elseif type(config.winbar) == "string" then
+    vim.wo[winid].winbar = config.winbar
+  end
+end
+
+local function show_in_tab(bufnr)
+  for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
+    for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
+      if vim.api.nvim_win_get_buf(winid) == bufnr then
+        vim.api.nvim_set_current_tabpage(tabpage)
+        vim.api.nvim_set_current_win(winid)
+        return winid
+      end
+    end
+  end
+
+  vim.cmd.tabnew()
+  local winid = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(winid, bufnr)
+  return winid
+end
+
+local function register_session(bufnr)
+  local state = state_by_buffer[bufnr] or {}
+  state.tabpage = vim.api.nvim_get_current_tabpage()
+  state.opened_buffers = state.opened_buffers or {}
+  state_by_buffer[bufnr] = state
+  return state
+end
+
 local function open_dashboard()
   local vault_path = context.vault_path()
   if not vault_path then
@@ -657,27 +776,22 @@ local function open_dashboard()
     configure_buffer(bufnr, vault_path)
   end
 
-  vim.api.nvim_win_set_buf(0, bufnr)
-  vim.wo.cursorline = true
-  vim.wo.foldcolumn = "0"
-  vim.wo.number = false
-  vim.wo.relativenumber = false
-  vim.wo.signcolumn = "no"
-  vim.wo.spell = false
-  vim.wo.wrap = false
-  if config.winbar == true then
-    vim.wo.winbar = "%#Title# OBSIDIAN %*· Vault status"
-  elseif type(config.winbar) == "string" then
-    vim.wo.winbar = config.winbar
-  else
-    vim.wo.winbar = ""
-  end
+  local winid = show_in_tab(bufnr)
+  configure_window(winid)
   render(bufnr, vault_path)
+  register_session(bufnr)
   return bufnr
 end
 
 function M.setup(opts)
   config = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts or {})
+  local group = vim.api.nvim_create_augroup("ObsidianExtensionDashboard", { clear = true })
+  vim.api.nvim_create_autocmd("TabClosed", {
+    group = group,
+    callback = function()
+      vim.schedule(cleanup_closed_tabs)
+    end,
+  })
   vim.api.nvim_create_user_command("ObsidianDashboard", open_dashboard, {
     desc = "Open the Obsidian vault status dashboard",
   })
@@ -685,10 +799,16 @@ end
 
 M.open = open_dashboard
 M.close = close_dashboard
+M.is_open = is_open
 M.refresh = render
 M._collect_section = collect_section
 M._section_directories = section_directories
 M._build_model = build_model
+M._configure_window = configure_window
+M._cleanup_opened_buffers = cleanup_opened_buffers
+M._release_preview_buffer = release_preview_buffer
+M._register_session = register_session
+M._show_in_tab = show_in_tab
 M._format_time = format_time
 M._matches_query = matches_query
 M._section_target = section_target

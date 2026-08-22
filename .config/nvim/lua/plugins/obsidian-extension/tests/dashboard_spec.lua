@@ -78,6 +78,56 @@ dashboard.setup({
   sections = { { title = "Notes", dir = "notes", limit = 2, exclude = { "projects", "agent-memory" } } },
 })
 assert(vim.fn.exists(":ObsidianDashboard") == 2, "dashboard command is registered")
+vim.wo.number = true
+vim.wo.signcolumn = "yes"
+vim.wo.wrap = true
+local original_tabpage = vim.api.nvim_get_current_tabpage()
+local original_bufnr = vim.api.nvim_get_current_buf()
+local dashboard_bufnr = vim.api.nvim_create_buf(false, true)
+local dashboard_winid = dashboard._show_in_tab(dashboard_bufnr)
+assert(vim.api.nvim_get_current_tabpage() ~= original_tabpage, "dashboard opens in a dedicated tab")
+assert(vim.api.nvim_win_get_buf(dashboard_winid) == dashboard_bufnr, "dashboard buffer is shown in the new tab")
+dashboard._configure_window(dashboard_winid)
+assert(vim.wo[dashboard_winid].number, "dashboard preserves the configured line numbers")
+assert(vim.wo[dashboard_winid].signcolumn == "yes", "dashboard preserves the configured sign column")
+assert(vim.wo[dashboard_winid].wrap, "dashboard preserves the configured line wrapping")
+assert(vim.api.nvim_win_get_buf(vim.api.nvim_tabpage_get_win(original_tabpage)) == original_bufnr,
+  "opening the dashboard preserves the original tab")
+local dashboard_tabpage = vim.api.nvim_get_current_tabpage()
+dashboard._show_in_tab(dashboard_bufnr)
+assert(vim.api.nvim_get_current_tabpage() == dashboard_tabpage, "an open dashboard tab is reused")
+dashboard._register_session(dashboard_bufnr)
+assert(dashboard.is_open(), "dashboard remains open when its tab shows another buffer")
+dashboard.close()
+vim.wait(100, function()
+  return not vim.api.nvim_buf_is_valid(dashboard_bufnr)
+end)
+assert(not dashboard.is_open(), "closing the dashboard ends its session")
+assert(vim.api.nvim_get_current_tabpage() == original_tabpage, "closing the dashboard returns to the original tab")
+assert(not vim.api.nvim_buf_is_valid(dashboard_bufnr), "closing the dashboard cleans up its hidden buffer")
+local disposable_bufnr = vim.api.nvim_create_buf(true, false)
+local modified_bufnr = vim.api.nvim_create_buf(true, false)
+vim.api.nvim_buf_set_lines(modified_bufnr, 0, -1, false, { "modified" })
+local kept = dashboard._cleanup_opened_buffers({
+  [disposable_bufnr] = true,
+  [modified_bufnr] = true,
+})
+assert(not vim.api.nvim_buf_is_valid(disposable_bufnr), "closing the dashboard tab deletes its unmodified buffers")
+assert(vim.api.nvim_buf_is_valid(modified_bufnr) and kept[modified_bufnr],
+  "closing the dashboard tab preserves modified buffers")
+vim.api.nvim_buf_delete(modified_bufnr, { force = true })
+local preview_bufnr = vim.api.nvim_create_buf(true, false)
+local preview_state = {
+  preview_bufnr = preview_bufnr,
+  preview_created = true,
+  preview_was_listed = false,
+}
+dashboard._release_preview_buffer(preview_state)
+assert(preview_state.opened_buffers[preview_bufnr],
+  "preview buffers created by the dashboard remain tracked after switching previews")
+dashboard._cleanup_opened_buffers(preview_state.opened_buffers)
+assert(not vim.api.nvim_buf_is_valid(preview_bufnr),
+  "tracked preview buffers are deleted when the dashboard session ends")
 local model = dashboard._build_model(fixture)
 assert(vim.tbl_contains(model.lines, "NOTES              notes/  (2)"), "configured section is rendered")
 local heading_line

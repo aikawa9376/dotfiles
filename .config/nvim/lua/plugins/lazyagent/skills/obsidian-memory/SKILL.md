@@ -1,6 +1,6 @@
 ---
 name: obsidian-memory
-description: Retrieve and maintain cross-project working and durable memory in the configured Obsidian vault. Use before and after non-trivial or repeated work to reuse decisions, failures, constraints, and progress. Do not use for raw conversation archival.
+description: Retrieve and maintain cross-project working and durable memory in the configured Obsidian vault. Use before and after work beyond minor changes, or repeated work, to reuse decisions, failures, constraints, and progress. Do not use for raw conversation archival.
 ---
 
 # Obsidian Memory
@@ -21,7 +21,7 @@ nvim --headless --clean -u NONE -l <skill-dir>/scripts/resolve_vault.lua
 Use its output as `VAULT_ROOT`. Never reuse a path from an earlier task or
 guess when resolution fails.
 
-## Before Non-trivial Work
+## Before Work Beyond Minor Changes
 
 Read [memory workflow](references/memory-workflow.md), then:
 
@@ -48,9 +48,15 @@ This includes decisions, failures and causes, constraints, reliable procedures,
 or unfinished state. Prefer an imperfect useful memory over losing context.
 
 Update `notes/agent-memory/<project>/<component>.md` rather than creating a
-note per task. Promote stable, human-facing knowledge into the most relevant
-regular note and link the two when useful. Read [memory workflow](references/memory-workflow.md)
-for storage and promotion details.
+note per task. Keep durable knowledge in agent memory by default. Create or
+update a human-facing regular note only when the user explicitly asks for the
+knowledge to be summarized into such a note, documented there, or promoted.
+Read [memory workflow](references/memory-workflow.md) for storage and
+promotion details.
+
+Research-derived specifications and designs may remain agent-only knowledge.
+When the user explicitly requests a human-facing specification, use the
+promotion and scoping rules in [memory workflow](references/memory-workflow.md).
 
 Do not store full conversations, generic summaries, tool logs, routine status,
 temporary observations, secrets, credentials, or facts obvious from the code.
