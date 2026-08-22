@@ -236,7 +236,7 @@ local function open_log_list(opts)
     return
   end
 
-  vim.cmd('botright new')
+  utils.open_half_height_split()
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree)
   pcall(vim.api.nvim_buf_set_name, bufnr, 'fugitive-log://' .. work_tree .. '//' .. args)

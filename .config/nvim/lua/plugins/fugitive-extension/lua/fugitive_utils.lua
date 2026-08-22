@@ -1,5 +1,18 @@
 local M = {}
 
+---Open a horizontal split below the current window, using half of its height.
+---An explicit height keeps the rest of an existing split layout unchanged.
+---@param target? string
+---@return integer winid
+function M.open_half_height_split(target)
+  local height = math.max(1, math.floor(vim.api.nvim_win_get_height(0) / 2))
+  local command = target
+      and string.format('keepalt belowright %dsplit %s', height, vim.fn.fnameescape(target))
+    or string.format('keepalt belowright %dnew', height)
+  vim.cmd(command)
+  return vim.api.nvim_get_current_win()
+end
+
 ---@param path string|nil
 ---@return string|nil
 function M.normalize_path(path)
