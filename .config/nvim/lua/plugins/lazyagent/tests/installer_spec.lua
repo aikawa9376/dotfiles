@@ -26,6 +26,8 @@ function M.run()
     "skill references installed recursively")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian-memory/SKILL.md") == 1,
     "obsidian memory skill installed")
+  assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian-memory/references/human-facing-notes.md") == 1,
+    "obsidian memory conditional references installed")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian-memory/scripts/resolve_vault.lua") == 1,
     "obsidian memory skill resources installed recursively")
   local catalog = assert(require("lazyagent.teams.config").load_all(root .. "/.lazyagent/teams.json"))
