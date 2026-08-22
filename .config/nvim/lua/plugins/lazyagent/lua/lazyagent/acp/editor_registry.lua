@@ -38,6 +38,23 @@ local function write_json(path, value)
   return written
 end
 
+local function touch_record()
+  if not record_path then return false end
+  local now = os.time()
+  local ok, touched = pcall((vim.uv or vim.loop).fs_utime, record_path, now, now)
+  return ok and touched ~= nil
+end
+
+local function last_seen_at(path, candidate)
+  local seen_at = tonumber(candidate and candidate.updated_at or 0) or 0
+  local ok, stat = pcall((vim.uv or vim.loop).fs_stat, path)
+  local mtime = ok and stat and stat.mtime or nil
+  if type(mtime) == "table" then
+    mtime = mtime.sec
+  end
+  return math.max(seen_at, tonumber(mtime or 0) or 0)
+end
+
 local function workspace_roots()
   local roots = {}
   local seen = {}
@@ -71,9 +88,8 @@ end
 local function refresh_record(focused)
   if not record or not record_path then return false end
   record.roots = workspace_roots()
-  record.updated_at = os.time()
   record.source_path = current_source_path()
-  if focused then record.focused_at = record.updated_at end
+  if focused then record.focused_at = os.time() end
   return write_json(record_path, record)
 end
 
@@ -133,7 +149,6 @@ function M.setup()
     server = server,
     token = vim.fn.sha256(instance_id .. ":" .. tostring((vim.uv or vim.loop).hrtime())),
     roots = {},
-    updated_at = os.time(),
     focused_at = os.time(),
   }
   refresh_record(true)
@@ -158,7 +173,10 @@ function M.setup()
   })
 
   heartbeat_timer = (vim.uv or vim.loop).new_timer()
-  heartbeat_timer:start(10000, 10000, vim.schedule_wrap(function() refresh_record(false) end))
+  -- Keep the presence lease alive without scheduling workspace discovery and a
+  -- full JSON rewrite on Neovim's main loop every ten seconds. That periodic
+  -- callback caused a visible TUI cursor blink while LazyAgent was loaded.
+  heartbeat_timer:start(10000, 10000, touch_record)
   return true
 end
 
@@ -172,15 +190,16 @@ function M.targets(root)
     if name:match("%.json$") then
       local path = registry_dir() .. "/" .. name
       local candidate = read_json(path)
+      local seen_at = last_seen_at(path, candidate)
       if candidate
         and type(candidate.server) == "string"
         and candidate.server ~= ""
-        and now - tonumber(candidate.updated_at or 0) <= 30
+        and now - seen_at <= 30
         and has_root(candidate, root)
       then
         candidate.label = label(candidate)
         candidates[#candidates + 1] = candidate
-      elseif candidate and now - tonumber(candidate.updated_at or 0) > 30 then
+      elseif candidate and now - seen_at > 30 then
         pcall(vim.fn.delete, path)
       end
     end
