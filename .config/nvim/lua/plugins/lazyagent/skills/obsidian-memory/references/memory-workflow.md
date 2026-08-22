@@ -42,10 +42,47 @@ note per component and revise it in place; do not create chronological task
 notes. Keep concise sections for current behavior, decisions, known failures,
 constraints, verification, and open work.
 
-Promote stable knowledge that is useful to people into the most relevant
-regular note under `notes/`. Update an existing canonical note before creating
+Keep durable knowledge in agent memory by default, even when it describes a
+specification or design. Create, update, or promote content into a human-facing
+regular note under `notes/` only when the user explicitly asks for it to be
+summarized into such a note, documented there, or made into a specification.
+When promotion is requested, update an existing canonical note before creating
 one, link it to working memory when useful, and remove or supersede stale
 working-memory claims.
+
+## Canonical Specifications
+
+Research may establish a specification, design, protocol, behavioral contract,
+or implementation plan and still remain agent-only knowledge. Do not create or
+update a human-facing canonical note merely because the research is durable or
+should guide future work.
+
+Create or update a human-facing specification only when the user explicitly
+asks for the knowledge to be summarized into a human-facing note, documented
+there, promoted, or made into a specification. A request to answer,
+investigate, or summarize within the conversation is not by itself
+authorization to create such a note.
+
+When the user requests a human-facing specification, choose scope by the
+lifetime of the knowledge:
+
+- project-wide or branch-independent knowledge belongs to the project's
+  canonical notes;
+- branch-specific proposals, temporary deviations, and unfinished designs
+  belong to the corresponding project or branch note;
+- after a branch-specific design becomes accepted project behavior, promote it
+  to the project-level specification and remove or supersede the temporary
+  branch-scoped version.
+
+Update an existing specification before creating a new one. When the subject
+needs multiple files, create a coherent specification directory with a clear
+index note that identifies the canonical documents. Keep the agent-memory note
+concise and link it to the specification rather than duplicating the full
+content.
+
+Without an explicit request for a human-facing document, capture qualifying
+behavior, constraints, interfaces, architecture, acceptance criteria, and
+decisions only in the relevant agent-memory note.
 
 ## Note Shape
 
@@ -93,8 +130,8 @@ and preserve unknown properties.
 ## Updating and Superseding
 
 1. Search by title, aliases, project, component, and distinctive phrases.
-2. Update the component working-memory note and any canonical note that owns
-   stable human-facing knowledge.
+2. Update the component working-memory note. Update a canonical human-facing
+   note only when the user explicitly requested that documentation work.
 3. Replace stale statements rather than appending contradictory chronology.
 4. Preserve a short “Previously” or decision-history note only when knowing
    the old behavior prevents a future mistake.

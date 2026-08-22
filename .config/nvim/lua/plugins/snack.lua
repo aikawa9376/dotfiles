@@ -154,6 +154,10 @@ return {
     end
 
     local function obsidian_dashboard_is_open()
+      local ok, dashboard = pcall(require, "obsidian_extension.features.dashboard")
+      if ok and type(dashboard.is_open) == "function" then
+        return dashboard.is_open()
+      end
       for _, win in ipairs(vim.api.nvim_list_wins()) do
         if is_obsidian_dashboard_window(win) then
           return true
@@ -172,6 +176,10 @@ return {
       end
 
       local ok, dashboard = pcall(require, "obsidian_extension.features.dashboard")
+      if ok and type(dashboard.close) == "function" and type(dashboard.is_open) == "function" then
+        dashboard.close()
+        return
+      end
       local buffers = {}
       for _, win in ipairs(vim.api.nvim_list_wins()) do
         if is_obsidian_dashboard_window(win) then
