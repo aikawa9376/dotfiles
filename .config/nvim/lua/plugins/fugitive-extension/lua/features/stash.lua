@@ -35,7 +35,7 @@ local function open_stash_list()
     return
   end
 
-  vim.cmd('botright split fugitive-stash://')
+  utils.open_half_height_split('fugitive-stash://')
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, utils.get_work_tree())
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, stash_output)
