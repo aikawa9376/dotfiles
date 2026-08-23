@@ -1,5 +1,6 @@
 local M = {}
 local utils = require("fugitive_utils")
+local help = require("features.help")
 local commands = require("features.commands")
 local syntax_highlight = require("features.syntax_highlight")
 local worktree = require("features.worktree")
@@ -1232,6 +1233,74 @@ function M.setup(group)
         end)
       end
 
+      local function stash_target_ref()
+        local count = math.max(vim.v.count, 0)
+        return 'stash@{' .. tostring(count) .. '}'
+      end
+
+      local function stash_push_with_mode(mode)
+        local args = ''
+        if mode == 'staged' then
+          args = ' --staged'
+        elseif mode == 'keep-index' then
+          args = ' --keep-index'
+        end
+        if vim.v.count > 1 then
+          args = args .. ' --all'
+        elseif vim.v.count > 0 then
+          args = args .. ' --include-untracked'
+        end
+        vim.cmd('Git stash push' .. args)
+        notify_repo_changed()
+      end
+
+      local function stash_apply(action, include_index)
+        local target = stash_target_ref()
+        local cmd = include_index and 'Git stash ' .. action .. ' --quiet --index ' .. target or 'Git stash ' .. action .. ' --quiet ' .. target
+        vim.cmd(cmd)
+        notify_repo_changed()
+      end
+
+      local function show_stash_help()
+        help.show('Stash keys', {
+          'cl     show stash list',
+          'cz<CR> stash changes',
+          'czz    stash all changes',
+          'czw    stash keep-index',
+          'cza    apply stash@{count}',
+          'czA    apply stash without index',
+          'czp    pop stash@{count}',
+          'czP    pop stash without index',
+          'czs    stash staged changes',
+          'czv    open stash diff',
+          'cw     reword commit / rename stash',
+          'q      close status',
+        })
+      end
+
+      vim.keymap.set('n', 'cz<Space>', ':Git stash<Space>', { buffer = b, nowait = true, silent = true, desc = 'Git stash...' })
+      vim.keymap.set('n', 'cz<CR>', ':Git stash<CR>', { buffer = b, nowait = true, silent = true, desc = 'Stash working tree' })
+      vim.keymap.set('n', 'cza', function() stash_apply('apply', true) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Apply stash@{count}' })
+      vim.keymap.set('n', 'czA', function() stash_apply('apply', false) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Apply stash without index' })
+      vim.keymap.set('n', 'czp', function() stash_apply('pop', true) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Pop stash@{count}' })
+      vim.keymap.set('n', 'czP', function() stash_apply('pop', false) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Pop stash without index' })
+      vim.keymap.set('n', 'czs', function() stash_push_with_mode('staged') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Stash staged changes' })
+      vim.keymap.set('n', 'czv', function()
+        local target = stash_target_ref()
+        if target then vim.cmd('Gedit ' .. target) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Open stash diff' })
+      vim.keymap.set('n', 'czw', function() stash_push_with_mode('keep-index') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Stash keep-index' })
+      vim.keymap.set('n', 'czz', function() stash_push_with_mode('default') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Stash all changes' })
+      vim.keymap.set('n', 'cz?', function() show_stash_help() end,
+        { buffer = b, nowait = true, silent = true, desc = 'Show stash key bindings' })
+
       vim.keymap.set('n', 'rr', perform_continue, { buffer = b, silent = true, desc = "Continue" })
       vim.keymap.set('n', 'rs', perform_skip, { buffer = b, silent = true, desc = "Skip" })
       vim.keymap.set('n', 'ra', perform_abort, { buffer = b, silent = true, desc = "Abort" })
@@ -1843,6 +1912,16 @@ function M.setup(group)
             { key = 'cF', label = 'Fixup unchanged message' },
             { key = 'cw', label = 'Reword commit / rename stash' },
             { key = 'rD', label = 'Review rewritten stack', enabled = health ~= nil and health.upstream ~= nil and not health.upstream.gone },
+          } },
+          { title = 'Stash', actions = {
+            { key = 'cl', label = 'Open stash list' },
+            { key = 'cz<CR>', label = 'Stash working tree' },
+            { key = 'czz', label = 'Stash all changes' },
+            { key = 'czw', label = 'Stash keep-index' },
+            { key = 'czs', label = 'Stash staged changes' },
+            { key = 'cza', label = 'Apply stash@{count}' },
+            { key = 'czp', label = 'Pop stash@{count}' },
+            { key = 'czv', label = 'Open stash diff' },
           } },
           { title = 'Operation', actions = {
             { key = 'rr', label = 'Continue', enabled = current_operation ~= nil and current_operation.kind ~= 'bisect' },
