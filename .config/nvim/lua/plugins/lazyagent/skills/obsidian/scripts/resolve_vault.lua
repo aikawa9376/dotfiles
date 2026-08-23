@@ -9,7 +9,16 @@ if not ok then
   error("failed to read Obsidian config at " .. config_path .. ": " .. tostring(spec))
 end
 
-local workspaces = spec and spec.opts and spec.opts.workspaces or nil
+local opts = spec and spec.opts or nil
+if type(opts) == "function" then
+  local opts_ok, resolved = pcall(opts)
+  if not opts_ok then
+    error("failed to resolve Obsidian opts from " .. config_path .. ": " .. tostring(resolved))
+  end
+  opts = resolved
+end
+
+local workspaces = opts and opts.workspaces or nil
 if type(workspaces) ~= "table" or #workspaces == 0 then
   error("Obsidian config has no opts.workspaces entries: " .. config_path)
 end
