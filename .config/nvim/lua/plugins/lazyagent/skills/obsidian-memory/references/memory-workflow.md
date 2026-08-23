@@ -50,7 +50,8 @@ Lifecycle, state ownership, ordering, data flow, interfaces, and invariants.
 
 ## Source anchors
 
-Stable entry points and symbols, with a short explanation of why each matters.
+Stable entry points and symbols; canonical-spec locators such as
+`docs/design.md:20 — Retry policy` or an external page, URL, and section.
 
 ## Decisions and failures
 
@@ -80,8 +81,10 @@ and sections that add no value. Keep `created` unchanged on updates, change
 3. Prefer current synthesized behavior over investigation chronology. Preserve
    a short `Previously` item only when the old behavior prevents a future
    mistake.
-4. Keep source anchors selective. Record architectural entry points and
-   important symbols, not a changed-file inventory or fragile line numbers.
+4. Keep source anchors selective. For code, record architectural entry points
+   and important symbols rather than a changed-file inventory. For canonical
+   specifications, include a precise path or page and a heading; add a line
+   number when useful as a navigation hint and refresh it when touched.
 5. If a claim is stale, replace it and re-check linked notes or an optional
    project index for the same claim.
 6. If evidence cannot resolve a conflict, state what is known, what is

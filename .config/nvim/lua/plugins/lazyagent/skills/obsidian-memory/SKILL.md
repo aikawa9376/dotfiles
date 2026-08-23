@@ -46,10 +46,10 @@ reaches a second correction turn. Routine isolated edits need no pass.
 ## Learn and Maintain Through Work
 
 Update the owning component note when work reveals or verifies reusable project
-knowledge, whether investigation was explicitly requested or happened
-incidentally. Preserve both future-useful non-obvious insight and ordinary facts
-needed to make the touched specification coherent. If the work did not improve
-project understanding, do not force an update. Valuable knowledge includes:
+knowledge, whether the investigation was requested or incidental. Preserve both
+future-useful non-obvious insight and ordinary facts needed to keep the touched
+specification coherent and current. If the work did not improve project
+understanding, do not force an update. Valuable knowledge includes:
 
 - component responsibilities and boundaries;
 - runtime or data flow, lifecycle, state ownership, and ordering;
@@ -67,6 +67,21 @@ Update `notes/agent-memory/<project>/<component>.md` in place; do not create a
 note per task. Treat these notes collectively as the project's agent-facing
 specification. Replace stale claims instead of appending contradictory history,
 and keep each note concise enough to retrieve selectively.
+
+## Existing Specifications
+
+Do not duplicate a coherent canonical specification already maintained in the
+repository or an available system such as Confluence. Instead, keep a compact
+retrieval index in the owning component note or project index: for repository
+documents, record a repository-relative `path.md:line` plus the heading or
+claim; for external pages, record the page title, stable URL or ID, and section.
+Treat line numbers as navigation hints that may drift and refresh them when
+touched. If the specification is current, sufficient, and matches the
+implementation, the locator alone is enough. When it is incomplete or disagrees
+with the implementation, add only durable missing context such as exceptions,
+ambiguity, or stale claims. Anchor both the expected specification and observed
+implementation; do not silently decide which is correct when the evidence does
+not resolve it.
 
 Write agent-memory headings and prose in English by default so source symbols,
 errors, and architectural terms remain directly searchable. Preserve Japanese
