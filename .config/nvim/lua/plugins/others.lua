@@ -96,13 +96,6 @@ return {
     },
     config = true
   },
-  -- {
-  --   "aikawa9376/atom-repeat.nvim",
-  --   event = "BufReadPost",
-  --   config = function()
-  --     require("atom-repeat").setup()
-  --   end,
-  -- }
   {
     "aikawa9376/auto-ime-insert.nvim",
     event = "BufRead",
