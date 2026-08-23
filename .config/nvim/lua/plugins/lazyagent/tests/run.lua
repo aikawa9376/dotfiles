@@ -84,6 +84,7 @@ local suites = {
   "tests.acp.thread_actions_spec",
   "tests.agent_spec",
   "tests.agent_comms_spec",
+  "tests.agent_bridge_spec",
   "tests.session_lifecycle_spec",
   "tests.status_spec",
 }

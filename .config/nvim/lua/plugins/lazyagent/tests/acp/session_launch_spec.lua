@@ -165,6 +165,7 @@ function M.run()
   assert_equal(state.sessions[key_a].show_thread_title, true, "thread title option stored on runtime session")
   assert_equal(splits[2].provider_id, "Codex", "second backend provider")
   assert_equal(splits[1].mcp_servers[1].name, "fixture", "MCP servers forwarded to ACP backend")
+  assert_equal(splits[1].env.LAZYAGENT_SESSION_KEY, key_a, "ACP child receives its LazyAgent session key")
   assert_equal(state.session_aliases.Codex, key_b, "legacy provider command alias")
 
   local reused_key
@@ -224,6 +225,7 @@ function M.run()
   vim.b[source_bufnr].lazyagent_workspace_root = previous_workspace_root
   assert_equal(mcp_start_count, 1, "non-ACP session launch starts MCP server lazily")
   assert_equal(legacy_splits[1].env.LAZYAGENT_MCP_URL, state.opts._mcp_url, "legacy session receives MCP URL")
+  assert_equal(legacy_splits[1].env.LAZYAGENT_SESSION_KEY, "Legacy", "legacy child receives its LazyAgent session key")
 end
 
 return M

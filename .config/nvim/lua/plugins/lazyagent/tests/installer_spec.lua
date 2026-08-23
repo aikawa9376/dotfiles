@@ -20,8 +20,16 @@ function M.run()
   assert_equal(project_result.target_dir, root .. "/.lazyagent", "project install target")
   assert(vim.fn.filereadable(root .. "/.lazyagent/AGENTS.md") == 1, "project instructions installed")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/brain/SKILL.md") == 1, "bundled skills installed")
-  assert(vim.fn.filereadable(root .. "/.lazyagent/skills/lazyagent-team-builder/scripts/validate.lua") == 1,
-    "team builder skill resources installed")
+  assert(vim.fn.filereadable(root .. "/.lazyagent/skills/lazyagent/SKILL.md") == 1,
+    "LazyAgent skill installed")
+  assert(vim.fn.filereadable(root .. "/.lazyagent/skills/lazyagent/references/communication.md") == 1,
+    "LazyAgent communication reference installed")
+  assert(vim.fn.filereadable(root .. "/.lazyagent/skills/lazyagent/scripts/validate.lua") == 1,
+    "LazyAgent team validation resources installed")
+  assert(vim.fn.isdirectory(root .. "/.lazyagent/skills/lazyagent-comms") == 0,
+    "legacy communication skill is consolidated")
+  assert(vim.fn.isdirectory(root .. "/.lazyagent/skills/lazyagent-team-builder") == 0,
+    "legacy Team skill is consolidated")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian/references/html-artifacts.md") == 1,
     "skill references installed recursively")
   assert(vim.fn.filereadable(root .. "/.lazyagent/skills/obsidian-memory/SKILL.md") == 1,
