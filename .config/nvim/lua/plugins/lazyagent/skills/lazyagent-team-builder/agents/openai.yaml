@@ -1,4 +1,0 @@
-interface:
-  display_name: "LazyAgent Team Builder"
-  short_description: "Compose minimal task-specific LazyAgent Teams"
-  default_prompt: "Use $lazyagent-team-builder to design the best LazyAgent Team for this request."

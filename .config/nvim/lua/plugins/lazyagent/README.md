@@ -157,7 +157,7 @@ require("lazyagent").setup({
 ```
 
 - `:LazyAgentInstall project skills`で`<git-root>/.lazyagent/skills/`、`:LazyAgentInstall global skills`で`stdpath("data")/lazyagent/skills/`へ同梱skillsをコピーします。
-- 同梱の`lazyagent-team-builder` skillは、要望とrepository構造から必要最小限のrole・report階層・worktree方針を決め、`.lazyagent/teams.json`を生成・検証します。
+- 同梱の`lazyagent` skillは、live agent間通信とTeam設計を用途別referenceへ分けています。Team workflowは要望とrepository構造から必要最小限のrole・report階層・worktree方針を決め、`.lazyagent/teams.json`を生成・検証します。
 - 同梱の`obsidian` skillはSteph Angoの`kepano/obsidian-skills`を仕様上流としてMarkdown・Bases・Canvas・CLI・Defuddleを扱い、`obsidian-memory` skillは軽微でないtask前後にcomponentの動作・責務・flow・interface・設計判断をVaultから検索・更新し、project固有のexpertiseを育てます。
 - installed project/global skillsがあれば、`skills.enabled = false`でもsourceとして有効になります。globalを先、projectを後に重ねます。
 - 何も指定しなければ `lazyagent/bin` を基準に、`bin/<os>-<arch>/`（例: `bin/linux-x64`, `bin/darwin-arm64`）があればそちらを優先して `LAZYAGENTBIN` に注入します。platform dir が無ければ従来どおり `lazyagent/bin` を使います。

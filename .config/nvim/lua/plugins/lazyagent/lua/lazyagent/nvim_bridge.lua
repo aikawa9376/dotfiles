@@ -445,6 +445,10 @@ local function command_terminal(req)
   error("unsupported terminal subcommand: " .. tostring(subcommand))
 end
 
+local function command_lazyagent_agent(req)
+  return require("lazyagent.agent_bridge").run(req.args or {}, req)
+end
+
 local handlers = {
   read = command_read,
   write = command_write,
@@ -463,6 +467,7 @@ local handlers = {
   ["qf-remove"] = command_qf_remove,
   connector = command_connector,
   terminal = command_terminal,
+  ["lazyagent-agent"] = command_lazyagent_agent,
 }
 
 local function process_request(path)
@@ -748,6 +753,26 @@ local function parse_cli_command(args)
     return command, payload
   end
 
+  if command == "lazyagent-agent" then
+    local subcommand = args[2] or "list"
+    if subcommand == "list" or subcommand == "status" then
+      if args[3] ~= nil then
+        die("lazyagent-agent " .. subcommand .. " does not accept arguments")
+      end
+      return command, { subcommand = subcommand }
+    end
+    if subcommand == "send" then
+      if args[3] == nil then die("lazyagent-agent send requires an agent ref") end
+      if args[4] == nil then die("lazyagent-agent send requires a message") end
+      return command, {
+        subcommand = subcommand,
+        agent_ref = args[3],
+        message = table.concat(args, " ", 4),
+      }
+    end
+    die("unsupported lazyagent-agent subcommand: " .. tostring(subcommand))
+  end
+
   return nil
 end
 
@@ -786,6 +811,7 @@ local function send_client_request(command, payload)
     command = command,
     args = payload,
     cwd = vim.fn.getcwd(),
+    sender_session_key = os.getenv("LAZYAGENT_SESSION_KEY"),
   })
 
   local response = nil

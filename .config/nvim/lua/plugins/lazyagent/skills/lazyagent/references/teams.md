@@ -1,9 +1,4 @@
----
-name: lazyagent-team-builder
-description: Design, create, and refine task-specific LazyAgent Teams in `.lazyagent/teams.json`. Use when the user asks to assemble an optimal team for a request, choose LazyAgent roles or reporting structure, generate or update a Teams JSON catalog, or prepare a project to run `LazyAgentTeam`.
----
-
-# LazyAgent Team Builder
+# Teams
 
 Turn a concrete request into the smallest useful LazyAgent Team, write it into the project's
 `.lazyagent/teams.json`, and validate it with LazyAgent's own config loader.
@@ -32,11 +27,11 @@ Turn a concrete request into the smallest useful LazyAgent Team, write it into t
    `.lazyagent/roles/<role>.md`; otherwise use inline `instructions`.
 8. Merge the team into the existing catalog. Preserve unrelated teams and root settings.
    Set `default_team` only when creating the first catalog or when the user asks to change it.
-9. Read [references/teams-json.md](references/teams-json.md), then validate:
+9. Read [Teams JSON](teams-json.md), then validate:
 
    ```bash
    nvim --headless -u NONE -l \
-     path/to/lazyagent-team-builder/scripts/validate.lua \
+     path/to/lazyagent/scripts/validate.lua \
      /absolute/project/.lazyagent/teams.json
    ```
 

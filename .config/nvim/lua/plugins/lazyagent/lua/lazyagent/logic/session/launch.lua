@@ -449,6 +449,7 @@ function M.setup(deps)
       if skills_launch and skills_launch.env then
         split_opts.env = merge_env(split_opts.env, skills_launch.env)
       end
+      split_opts.env.LAZYAGENT_SESSION_KEY = session_key
 
       if acp_logic.is_acp_backend(backend_name) then
         if provider_id == "Gemini" and not split_opts.env.GEMINI_CLI_HOME then

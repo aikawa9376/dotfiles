@@ -1,0 +1,4 @@
+interface:
+  display_name: "LazyAgent"
+  short_description: "Coordinate agents and design LazyAgent Teams"
+  default_prompt: "Use $lazyagent to coordinate live agents or configure a task-specific Team."
