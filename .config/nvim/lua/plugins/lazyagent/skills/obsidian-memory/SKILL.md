@@ -68,6 +68,12 @@ Keep the note concise enough to retrieve selectively. The result should help a
 future agent know what area and symbols to inspect, while still requiring
 verification against current source.
 
+Write agent-memory headings and prose in English by default so source symbols,
+errors, and architectural terms remain directly searchable. Preserve Japanese
+aliases and distinctive Japanese symptom phrases when they improve retrieval.
+Do not bulk-translate existing notes; migrate them when materially updating the
+owning component note.
+
 Do not store conversations, generic summaries, command logs, passing-test
 lists, secrets, credentials, or routine status.
 
