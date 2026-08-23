@@ -449,11 +449,19 @@ local function preview_buffer(state, path)
   local was_listed = existing >= 0 and vim.fn.buflisted(existing) == 1
   local bufnr = vim.fn.bufadd(path)
   vim.fn.bufload(bufnr)
+  if vim.bo[bufnr].filetype == "" then
+    vim.bo[bufnr].filetype = "markdown"
+  end
   vim.bo[bufnr].buflisted = false
   state.preview_bufnr = bufnr
   state.preview_created = existing < 0
   state.preview_was_listed = was_listed
   return bufnr
+end
+
+local function configure_preview_window(winid)
+  vim.wo[winid].previewwindow = true
+  vim.wo[winid].winhighlight = "Normal:Normal,NormalNC:Normal"
 end
 
 local function update_preview(state, entry)
@@ -555,7 +563,7 @@ local function toggle_preview()
   state.preview_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(state.preview_win, preview_bufnr)
   state.preview_path = entry.path
-  vim.wo[state.preview_win].previewwindow = true
+  configure_preview_window(state.preview_win)
   local width = config.preview_width
   if type(width) == "number" and width > 0 then
     local columns = width < 1 and math.floor(vim.o.columns * width) or math.floor(width)
@@ -1029,6 +1037,8 @@ M._build_model = build_model
 M._configure_window = configure_window
 M._cleanup_opened_buffers = cleanup_opened_buffers
 M._release_preview_buffer = release_preview_buffer
+M._preview_buffer = preview_buffer
+M._configure_preview_window = configure_preview_window
 M._register_session = register_session
 M._show_in_tab = show_in_tab
 M._format_time = format_time
