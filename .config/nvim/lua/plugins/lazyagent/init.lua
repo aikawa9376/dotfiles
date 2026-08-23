@@ -152,6 +152,8 @@ return {
     scratch_keymaps = {
       close = "q",
       send_and_clear = "<C-Space>",
+      steer_normal = "<C-S-s>",
+      steer_insert = "<C-S-s>",
       scroll_up = "<C-u>",
       scroll_down = "<C-d>",
       nav_up = "<C-k>",

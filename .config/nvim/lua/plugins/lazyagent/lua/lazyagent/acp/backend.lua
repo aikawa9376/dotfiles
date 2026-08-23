@@ -2525,10 +2525,12 @@ local function create_backend(default_view)
         callback(false, err)
         return
       end
+      local outcome = tostring(result and result.outcome or "sent")
       conversation_helpers.append_block(
         session,
-        "System",
-        "Steering: " .. tostring(result and result.outcome or "sent")
+        "User",
+        "[Steering]\n" .. prompt,
+        { steering = true, steering_outcome = outcome }
       )
       callback(true, result)
     end)

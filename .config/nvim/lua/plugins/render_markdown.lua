@@ -23,6 +23,9 @@ return {
       below = '▀',
       disable_background = { 'diff' },
     },
+    pipe_table = {
+      cell = 'trimmed',
+    },
     checkbox = {
       enabled = true,
       render_modes = false,
