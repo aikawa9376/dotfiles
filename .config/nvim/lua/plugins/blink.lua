@@ -52,6 +52,25 @@ return {
     ---@module 'blink.cmp'
     ---@type blink.cmp.Config
     opts = function()
+      local obsidian_path = vim.env.OBSIDIAN_VAULT
+      if not obsidian_path or obsidian_path == '' then
+        obsidian_path = '~/gdrive/share/obsidian'
+      end
+      local obsidian_root = vim.fs.normalize(vim.fn.expand(obsidian_path)) .. '/'
+
+      local function is_obsidian_markdown()
+        local path = vim.fs.normalize(vim.api.nvim_buf_get_name(0))
+        return vim.bo.filetype == 'markdown' and path ~= '' and vim.startswith(path, obsidian_root)
+      end
+
+      local function enable_obsidian_completion()
+        if not is_obsidian_markdown() then return false end
+        if not package.loaded.obsidian then
+          require('lazy').load({ plugins = { 'obsidian.nvim' } })
+        end
+        return package.loaded.obsidian ~= nil
+      end
+
       local function is_romaji_japanese_trigger(ctx)
         local trigger = type(ctx) == "table" and ctx.trigger or nil
         local character = type(trigger) == "table" and trigger.character or nil
@@ -224,7 +243,10 @@ return {
             AvanteInput = { 'avante', 'buffer', 'ripgrep', 'romaji_japanese', 'japanese' },
             sql = { 'connector', 'buffer', 'snippets'  },
             text = { 'buffer', 'ripgrep', 'romaji_japanese', 'japanese' },
-            markdown = { 'buffer', 'ripgrep', 'romaji_japanese', 'japanese', 'snippets' },
+            markdown = {
+              'buffer', 'ripgrep', 'romaji_japanese', 'japanese', 'snippets',
+              'obsidian', 'obsidian_new', 'obsidian_tags',
+            },
             lazyagent = { 'buffer', 'lazyagent_acp_buffer', 'ripgrep', 'romaji_japanese', 'japanese', 'tmux', 'lazyagent' },
             php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep', 'romaji_japanese', 'japanese'  },
           },
@@ -350,6 +372,27 @@ return {
               opts = {
                 cmp_name = 'nvim_lsp_document_symbol'
               }
+            },
+            obsidian = {
+              name = '[O]',
+              module = 'blink.compat.source',
+              enabled = enable_obsidian_completion,
+              async = true,
+              opts = { cmp_name = 'obsidian' },
+            },
+            obsidian_new = {
+              name = '[ON]',
+              module = 'blink.compat.source',
+              enabled = enable_obsidian_completion,
+              async = true,
+              opts = { cmp_name = 'obsidian_new' },
+            },
+            obsidian_tags = {
+              name = '[OT]',
+              module = 'blink.compat.source',
+              enabled = enable_obsidian_completion,
+              async = true,
+              opts = { cmp_name = 'obsidian_tags' },
             },
             avante = {
               module = 'blink-cmp-avante',
