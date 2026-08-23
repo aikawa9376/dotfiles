@@ -2,8 +2,9 @@
 
 Read this reference only when the user explicitly asks for agent knowledge to
 be summarized into a regular note, documented for people, promoted, or made
-into a specification. A request to answer, investigate, or summarize within the
-conversation is not authorization to create such a note.
+into a human-facing specification. This boundary does not apply to maintaining
+agent memory. A request to answer, investigate, or summarize within the
+conversation is not authorization to create a regular human-facing note.
 
 Keep durable specifications and designs in agent memory by default. When the
 user requests a human-facing document:
