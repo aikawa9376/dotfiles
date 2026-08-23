@@ -1,13 +1,13 @@
 ---
 name: obsidian-memory
-description: Build and reuse durable project expertise in the configured Obsidian vault. Use before and after work beyond minor changes, or repeated work, to retain component behavior, architecture, interfaces, decisions, failures, constraints, and progress. Do not use for raw conversation archival.
+description: Build and reuse durable project expertise while maintaining living component specifications in the configured Obsidian vault. Use before and after work beyond minor changes, or repeated work. Do not use for raw conversation archival.
 ---
 
 # Obsidian Memory
 
-Use the Obsidian vault as an external project brain. Grow component-level
-knowledge so future work starts from an experienced engineer's map of how the
-system behaves, where responsibilities live, and what code is likely to change.
+Use the Obsidian vault as an external project brain. Grow component notes into
+living specifications so future work starts with an experienced engineer's map
+of the system and the durable knowledge likely to affect later decisions.
 
 This skill handles retrieval and maintenance of agent-only expertise. Use the
 broader `obsidian` skill for ordinary notes, formatting, Bases, Canvas, and
@@ -43,12 +43,13 @@ Treat related turns as one task. Search again when work revisits a component,
 changes architecture, defaults, paths, or workflows, retries a failed fix, or
 reaches a second correction turn. Routine isolated edits need no pass.
 
-## Learn From the Work
+## Learn and Maintain Through Work
 
-After the task, update memory when investigation revealed durable project
-knowledge that would help a future engineer understand or change the system.
-Capture existing behavior even when no new design decision was made. Valuable
-knowledge includes:
+Update the owning component note when work reveals or verifies reusable project
+knowledge, whether investigation was explicitly requested or happened
+incidentally. Preserve both future-useful non-obvious insight and ordinary facts
+needed to make the touched specification coherent. If the work did not improve
+project understanding, do not force an update. Valuable knowledge includes:
 
 - component responsibilities and boundaries;
 - runtime or data flow, lifecycle, state ownership, and ordering;
@@ -57,16 +58,15 @@ knowledge includes:
 - design rationale, rejected alternatives, failures and causes, constraints,
   reliable verification, and substantial unfinished work.
 
-Keep synthesized knowledge that required tracing multiple files, connecting
-concepts, or resolving ambiguity, even though it can ultimately be derived
-from code. Skip facts obvious from one local source location and facts unlikely
-to affect future understanding or changes.
+Use each update to complete or correct the specification within the task's
+verified scope. Fill adjacent gaps when the evidence is already available, but
+do not audit unrelated components or guess. Prefer synthesis over copied source;
+skip ephemeral observations, redundant detail, and exhaustive inventories.
 
 Update `notes/agent-memory/<project>/<component>.md` in place; do not create a
-note per task. Replace stale claims instead of appending contradictory history.
-Keep the note concise enough to retrieve selectively. The result should help a
-future agent know what area and symbols to inspect, while still requiring
-verification against current source.
+note per task. Treat these notes collectively as the project's agent-facing
+specification. Replace stale claims instead of appending contradictory history,
+and keep each note concise enough to retrieve selectively.
 
 Write agent-memory headings and prose in English by default so source symbols,
 errors, and architectural terms remain directly searchable. Preserve Japanese
@@ -91,8 +91,8 @@ Apply this precedence:
 2. current code, configuration, tests, and authoritative external sources
 3. Obsidian memory
 
-When memory is stale, correct it if the result is durable. If current evidence
-cannot resolve a conflict, record the uncertainty and how to verify it.
+When memory is stale in the task's scope, correct it. If current evidence cannot
+resolve a conflict, record the uncertainty and how to verify it.
 
 ## Boundary with Conversation Memory
 
