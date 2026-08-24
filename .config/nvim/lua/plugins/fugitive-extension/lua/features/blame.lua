@@ -426,6 +426,7 @@ function M.setup(group)
       border = 'rounded',
       focusable = false,
     })
+    vim.api.nvim_set_option_value('wrap', false, { win = preview_state.win })
 
     vim.keymap.set('n', 'q', close_preview_window, { buffer = preview_state.buf })
 

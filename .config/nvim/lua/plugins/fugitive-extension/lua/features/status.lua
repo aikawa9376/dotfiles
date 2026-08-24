@@ -769,6 +769,7 @@ local function show_diff_side(winid, side, path, label)
   local filetype = vim.filetype.match({ filename = path })
   if filetype then vim.bo[bufnr].filetype = filetype end
   vim.api.nvim_win_set_buf(winid, bufnr)
+  vim.api.nvim_set_option_value('wrap', false, { win = winid })
   vim.api.nvim_win_call(winid, function() vim.cmd('diffthis') end)
   return bufnr
 end
@@ -819,6 +820,7 @@ local function open_diff_with_current_file(work_tree, sides, target_line, layout
   local placeholder = vim.api.nvim_get_current_buf()
   local current_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(current_win, current_buf)
+  vim.api.nvim_set_option_value('wrap', false, { win = current_win })
   if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
     pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
   end
