@@ -1885,81 +1885,279 @@ function M.setup(group)
         end
       end, { buffer = b, nowait = true, silent = true, desc = 'Drop selected commits' })
 
-      local function show_status_actions()
-        local row = vim.api.nvim_win_get_cursor(0)[1]
-        local on_commit = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s') ~= nil
-        local flagged_entry = index_flag_entry_at_cursor()
-        local entry = status_renderer.entry_at(b, row)
-        local conflicted = entry and not entry.header and entry.section == 'conflicted'
-        local work_tree = utils.get_buf_work_tree(b)
-        local current_operation = work_tree and operation.inspect(work_tree) or nil
-        local health = repository_health_by_buf[b]
-        local has_submodules = health ~= nil and #health.submodules > 0
-        local on_submodule = submodule_path_at_cursor() ~= nil
-        local branch = health and health.branch or 'unknown'
-        local context = 'Branch: ' .. tostring(branch)
-        if current_operation then context = context .. '  Operation: ' .. current_operation.kind end
-        if entry and not entry.header and entry.path then context = context .. '  Path: ' .. entry.path end
+      local function cursor_is_in_operation(lines, row, current_operation)
+        if not current_operation then return false end
+        local first, last
+        for candidate, line in ipairs(lines) do
+          if line:match(' in progress') or line:match('^Bisecting') then
+            first = candidate
+          elseif first and (line:match('^Operation keys:') or line:match('^Bisect keys:')) then
+            last = candidate
+            break
+          end
+        end
+        return first ~= nil and row >= first and row <= (last or first)
+      end
 
-        require('features.action_menu').show('Git status actions', {
-          { title = 'Changes', actions = {
-            { key = 'o', label = 'Toggle inline diff', enabled = entry ~= nil },
-            { key = 's', label = 'Stage / unstage', enabled = entry ~= nil },
-            { key = 'S', label = 'Stage all changes' },
-            { key = 'U', label = 'Unstage all changes' },
-            { key = 'P', label = 'Patch mode', enabled = entry ~= nil },
-            { key = 'X', label = 'Discard change / drop commit' },
-            { key = 'c3', label = 'Open base / ours / theirs', enabled = conflicted },
-            { key = 'co', label = 'Choose ours', enabled = conflicted },
-            { key = 'ct', label = 'Choose theirs', enabled = conflicted },
-            { key = 'cr', label = 'Mark resolved', enabled = conflicted },
-          } },
-          { title = 'Commit', actions = {
-            { key = 'gn', label = 'Show Git note', enabled = on_commit },
-            { key = 'gN', label = 'Add / edit Git note', enabled = on_commit },
-            { key = 'cc', label = 'Commit staged changes' },
-            { key = 'ca', label = 'Amend commit' },
-            { key = 'ce', label = 'Amend without editing message' },
+      local function status_context_at_cursor(current_operation)
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        local line = vim.api.nvim_get_current_line()
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then
+          return { kind = 'index_flag', label = 'Index flag: ' .. flagged.path, flagged = flagged }
+        end
+        if line:match('^Hidden changes:') then return { kind = 'index_flags_warning', label = 'Hidden changes' } end
+        if line:match('^Index flags %[local%]') then return { kind = 'index_flags_header', label = 'Index flags' } end
+
+        local entry = status_renderer.entry_at(b, row)
+        if entry then
+          local section_labels = {
+            conflicted = 'Conflicted',
+            untracked = 'Untracked',
+            unstaged = 'Unstaged',
+            staged = 'Staged',
+          }
+          local label = section_labels[entry.section] or entry.section
+          if entry.header then return { kind = 'change_section', label = label .. ' changes', entry = entry } end
+          return { kind = 'change', label = label .. ': ' .. entry.path, entry = entry }
+        end
+
+        local submodule = submodule_path_at_cursor()
+        if submodule then return { kind = 'submodule', label = 'Submodule: ' .. submodule, path = submodule } end
+        if line:match('^Submodules %(') then return { kind = 'submodules_header', label = 'Submodules' } end
+
+        local stash = stash_ref_from_line(line)
+        if stash then return { kind = 'stash', label = 'Stash: ' .. stash, stash = stash } end
+        if line:match('^Stashes %(') then return { kind = 'stash_header', label = 'Stashes' } end
+
+        local pr_number = pull_request_number_from_line(line)
+        if pr_number then
+          return { kind = 'pull_request', label = 'Pull request #' .. pr_number, number = pr_number }
+        end
+        if line:match('^Pull requests %(') then return { kind = 'pull_requests_header', label = 'Pull requests' } end
+
+        if line:match('^Worktrees %(') then return { kind = 'worktrees_header', label = 'Worktrees' } end
+        if is_cursor_in_worktree_area() then
+          local path = get_worktree_path_at_cursor()
+          return { kind = 'worktree', label = 'Worktree: ' .. tostring(path), path = path }
+        end
+
+        if cursor_is_in_operation(lines, row, current_operation) then
+          return { kind = 'operation', label = current_operation.label or current_operation.kind }
+        end
+
+        if is_cursor_on_commit_header() then return { kind = 'commits_header', label = 'Commit scope' } end
+        local commit = line:match('^(%x%x%x%x%x%x%x+)%s')
+        if commit then return { kind = 'commit', label = 'Commit: ' .. commit, commit = commit } end
+        return { kind = 'repository', label = line ~= '' and line or 'Repository' }
+      end
+
+      local function contextual_action_group(context, current_operation)
+        local kind = context.kind
+        if kind == 'change' then
+          local entry = context.entry
+          local actions = {
+            { key = '<CR>', label = 'Open file' },
+            { key = 'gf', label = 'Open file and close status' },
+            { key = 'o', label = 'Toggle inline diff' },
+            { key = 's', label = entry.section == 'staged' and 'Unstage file' or 'Stage file' },
+            { key = 'P', label = 'Open patch mode' },
+            { key = 'I', label = 'Stage / reset patch' },
+            { key = 'd', label = 'Open vertical diff' },
+            { key = 'dh', label = 'Open horizontal diff' },
+          }
+          if entry.section == 'staged' then table.insert(actions, { key = 'u', label = 'Unstage file' }) end
+          if entry.section == 'conflicted' then
+            vim.list_extend(actions, {
+              { key = 'c3', label = 'Open base / ours / theirs' },
+              { key = 'co', label = 'Choose ours' },
+              { key = 'ct', label = 'Choose theirs' },
+              { key = 'cr', label = 'Mark resolved' },
+            })
+          else
+            table.insert(actions, { key = 'X', label = 'Discard change' })
+          end
+          return { title = context.label, actions = actions }
+        end
+
+        if kind == 'change_section' then
+          local staged = context.entry.section == 'staged'
+          local actions = {
+            { key = 'o', label = 'Toggle section diffs' },
+            { key = '>', label = 'Expand section diffs' },
+            { key = '<', label = 'Collapse section diffs' },
+            { key = 's', label = staged and 'Unstage section' or 'Stage section' },
+          }
+          if staged then table.insert(actions, { key = 'u', label = 'Unstage section' }) end
+          return { title = context.label, actions = actions }
+        end
+
+        if kind == 'commit' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open commit' },
+            { key = 'gn', label = 'Show Git note' },
+            { key = 'gN', label = 'Add / edit Git note' },
+            { key = 'cw', label = 'Reword commit' },
             { key = 'cf', label = 'Fixup / reword with index' },
-            { key = 'cF', label = 'Fixup unchanged message' },
-            { key = 'cw', label = 'Reword commit / rename stash' },
-            { key = 'rD', label = 'Review rewritten stack', enabled = health ~= nil and health.upstream ~= nil and not health.upstream.gone },
-          } },
-          { title = 'Stash', actions = {
+            { key = 'cF', label = 'Fixup with unchanged message' },
+            { key = 'cW', label = 'Create reword fixup' },
+            { key = 'cs', label = 'Create squash commit' },
+            { key = 'cn', label = 'Create edited squash commit' },
+            { key = 'cS', label = 'Squash and autosquash' },
+            { key = 'gr', label = 'Revert commit' },
+            { key = 'X', label = 'Drop commit' },
+          } }
+        end
+
+        if kind == 'commits_header' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Toggle commit scope' },
+            { key = 'gS', label = 'Select commit scope' },
+          } }
+        end
+
+        if kind == 'stash' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open stash diff' },
+            { key = 'A', label = 'Apply selected stash' },
+            { key = 'P', label = 'Pop selected stash' },
+            { key = 'cw', label = 'Rename selected stash' },
+            { key = 'X', label = 'Drop selected stash' },
+            { key = 'cl', label = 'Open stash list' },
+          } }
+        end
+
+        if kind == 'stash_header' then
+          return { title = context.label, actions = {
             { key = 'cl', label = 'Open stash list' },
             { key = 'cz<CR>', label = 'Stash working tree' },
             { key = 'czz', label = 'Stash all changes' },
             { key = 'czw', label = 'Stash keep-index' },
             { key = 'czs', label = 'Stash staged changes' },
-            { key = 'cza', label = 'Apply stash@{count}' },
-            { key = 'czp', label = 'Pop stash@{count}' },
-            { key = 'czv', label = 'Open stash diff' },
-          } },
-          { title = 'Operation', actions = {
-            { key = 'rr', label = 'Continue', enabled = current_operation ~= nil and current_operation.kind ~= 'bisect' },
-            { key = 'rs', label = 'Skip', enabled = current_operation ~= nil and current_operation.kind ~= 'merge' and current_operation.kind ~= 'bisect' },
-            { key = 'ra', label = 'Abort', enabled = current_operation ~= nil and current_operation.kind ~= 'bisect' },
-            { key = 'gbs', label = 'Start bisect', enabled = current_operation == nil },
-            { key = 'gbg', label = 'Mark good', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-            { key = 'gbb', label = 'Mark bad', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-            { key = 'gbk', label = 'Skip candidate', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-            { key = 'gbx', label = 'Run test command', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-            { key = 'gbr', label = 'Reset bisect', enabled = current_operation ~= nil and current_operation.kind == 'bisect' },
-          } },
-          { title = 'Repository', actions = {
+            { key = 'cz?', label = 'Show all stash keys' },
+          } }
+        end
+
+        if kind == 'pull_request' then
+          return { title = context.label, actions = { { key = '<CR>', label = 'Open pull request' } } }
+        end
+        if kind == 'pull_requests_header' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Toggle pull request scope' },
+            { key = 'gS', label = 'Select pull request scope' },
+          } }
+        end
+
+        if kind == 'worktree' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open worktree' },
+            { key = 'X', label = 'Remove worktree' },
+            { key = 'gs', label = 'Sync current worktree to primary' },
+            { key = 'W', label = 'Open worktree list' },
+          } }
+        end
+        if kind == 'worktrees_header' then
+          return { title = context.label, actions = {
+            { key = 'gs', label = 'Sync current worktree to primary' },
+            { key = 'W', label = 'Open worktree list' },
+          } }
+        end
+
+        if kind == 'submodule' or kind == 'submodules_header' then
+          local selected = kind == 'submodule'
+          local actions = {}
+          if selected then table.insert(actions, { key = '<CR>', label = 'Open submodule status' }) end
+          vim.list_extend(actions, {
+            { key = 'mi', label = selected and 'Initialize selected submodule' or 'Initialize all submodules' },
+            { key = 'mu', label = selected and 'Update selected submodule' or 'Update all submodules' },
+            { key = 'ms', label = 'Synchronize submodule URLs' },
+          })
+          return { title = context.label, actions = actions }
+        end
+
+        if kind == 'index_flag' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open flagged file' },
+            { key = 'd', label = 'Diff worktree file against index' },
+            { key = 'X', label = 'Clear index flag' },
+            { key = 'gU', label = 'Change index flag' },
+          } }
+        end
+        if kind == 'index_flags_warning' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Reveal hidden changes' },
             { key = 'gU', label = 'Manage update-index flags' },
-            { key = 'X', label = 'Clear selected index flag', enabled = flagged_entry ~= nil },
-            { key = 'd', label = 'Diff flagged worktree file against index', enabled = flagged_entry ~= nil },
-            { key = 'mi', label = on_submodule and 'Initialize selected submodule' or 'Initialize all submodules', enabled = has_submodules },
-            { key = 'mu', label = on_submodule and 'Update selected submodule' or 'Update all submodules', enabled = has_submodules },
-            { key = 'ms', label = 'Synchronize submodule URLs', enabled = has_submodules },
-            { key = 'mU', label = 'Set branch upstream', enabled = health ~= nil and not health.detached },
-            { key = 'L', label = 'Open log' },
-            { key = 'B', label = 'Open branches' },
-            { key = 'W', label = 'Open worktrees' },
-            { key = 'R', label = 'Collapse and refresh' },
-          } },
-        }, { context = context })
+          } }
+        end
+        if kind == 'index_flags_header' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Expand / collapse index flags' },
+            { key = 'gU', label = 'Manage update-index flags' },
+          } }
+        end
+
+        if kind == 'operation' and current_operation then
+          if current_operation.kind == 'bisect' then
+            return { title = context.label, actions = {
+              { key = 'gbg', label = 'Mark candidate good' },
+              { key = 'gbb', label = 'Mark candidate bad' },
+              { key = 'gbk', label = 'Skip candidate' },
+              { key = 'gbx', label = 'Run test command' },
+              { key = 'gbv', label = 'View current candidate' },
+              { key = 'gbr', label = 'Reset bisect' },
+            } }
+          end
+          local actions = { { key = 'rr', label = 'Continue ' .. current_operation.kind } }
+          if current_operation.kind ~= 'merge' then table.insert(actions, { key = 'rs', label = 'Skip current step' }) end
+          table.insert(actions, { key = 'ra', label = 'Abort ' .. current_operation.kind })
+          return { title = context.label, actions = actions }
+        end
+        return nil
+      end
+
+      local function repository_action_group(context, health, current_operation)
+        local actions = {
+          { key = 'cc', label = 'Commit staged changes' },
+          { key = 'ca', label = 'Amend commit' },
+          { key = 'ce', label = 'Amend without editing message' },
+          { key = 'S', label = 'Stage all changes' },
+          { key = 'U', label = 'Unstage all changes' },
+          { key = 'L', label = 'Open log' },
+          { key = 'B', label = 'Open branches' },
+        }
+        if context.kind ~= 'worktree' and context.kind ~= 'worktrees_header' then
+          table.insert(actions, { key = 'W', label = 'Open worktrees' })
+        end
+        if context.kind ~= 'index_flag'
+          and context.kind ~= 'index_flags_warning'
+          and context.kind ~= 'index_flags_header'
+        then
+          table.insert(actions, { key = 'gU', label = 'Manage update-index flags' })
+        end
+        if health and not health.detached then table.insert(actions, { key = 'mU', label = 'Set branch upstream' }) end
+        if health and health.upstream and not health.upstream.gone then
+          table.insert(actions, { key = 'rD', label = 'Review outgoing stack' })
+        end
+        if not current_operation then table.insert(actions, { key = 'gbs', label = 'Start Git bisect' }) end
+        table.insert(actions, { key = 'R', label = 'Collapse and refresh' })
+        return { title = 'Repository', actions = actions }
+      end
+
+      local function show_status_actions()
+        local work_tree = utils.get_buf_work_tree(b)
+        local current_operation = work_tree and operation.inspect(work_tree) or nil
+        local health = repository_health_by_buf[b]
+        local context = status_context_at_cursor(current_operation)
+        local groups = {}
+        local contextual = contextual_action_group(context, current_operation)
+        if contextual then table.insert(groups, contextual) end
+        table.insert(groups, repository_action_group(context, health, current_operation))
+
+        local details = 'Cursor: ' .. context.label
+        details = details .. '  Branch: ' .. tostring(health and health.branch or 'unknown')
+        if current_operation then details = details .. '  Operation: ' .. current_operation.kind end
+        require('features.action_menu').show('Git status actions', groups, { context = details })
       end
       vim.keymap.set('n', 'g?', show_status_actions,
         { buffer = b, nowait = true, silent = true, desc = 'Show Git status actions' })
