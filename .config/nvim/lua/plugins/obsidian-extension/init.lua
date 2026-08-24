@@ -12,6 +12,12 @@ return {
       winbar = false,
       preview_width = 0.45,
       folder_depth = 3,
+      pin_field = "dashboard_pin",
+      pinned_title = "Pinned notes",
+      ignore_field = "dashboard_ignore",
+      ignored_title = "Ignored notes",
+      foldcolumn = "0",
+      foldlevel = 99,
       sections = {
         { title = "Recent notes", dir = "notes", limit = 10, exclude = { "projects", "agent-memory" } },
         { title = "Branch notes", dir = "notes/projects", limit = 8, exclude = { "index.md" } },

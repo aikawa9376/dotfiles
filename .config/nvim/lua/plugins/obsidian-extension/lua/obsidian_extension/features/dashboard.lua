@@ -12,6 +12,10 @@ local defaults = {
   folder_depth = 3,
   pin_field = "dashboard_pin",
   pinned_title = "Pinned notes",
+  ignore_field = "dashboard_ignore",
+  ignored_title = "Ignored notes",
+  foldcolumn = "0",
+  foldlevel = 99,
   sections = {
     { title = "Recent notes", dir = "notes", limit = 10, exclude = { "projects", "agent-memory" } },
     { title = "Branch notes", dir = "notes/projects", limit = 8, exclude = { "index.md" } },
@@ -92,6 +96,11 @@ local function is_pinned(path)
   return note ~= nil and note:get_field(config.pin_field or defaults.pin_field) == true
 end
 
+local function is_ignored(path)
+  local note = note_for(path)
+  return note ~= nil and note:get_field(config.ignore_field or defaults.ignore_field) == true
+end
+
 local function section_root(vault_path, directory)
   local root = vim.fs.normalize(vault_path)
   local candidate = vim.fs.normalize(vim.fs.joinpath(root, directory or ""))
@@ -165,35 +174,66 @@ local function collect_section(vault_path, section, show_aliases, query, ignored
   return files, total, root, matched_total
 end
 
-local function collect_pinned(vault_path, show_aliases, query)
+local function collect_marked(vault_path, show_aliases, query)
   local files = {}
   scan_markdown(vim.fs.normalize(vault_path), true, files)
-  files = vim.tbl_filter(function(file)
-    return is_pinned(file.path)
-  end, files)
-  table.sort(files, function(left, right)
-    if left.mtime == right.mtime then
-      return left.path < right.path
+  local marked = { pinned = {}, ignored = {} }
+  for _, file in ipairs(files) do
+    local note = note_for(file.path)
+    if note then
+      local kind
+      if note:get_field(config.pin_field or defaults.pin_field) == true then
+        kind = "pinned"
+      elseif note:get_field(config.ignore_field or defaults.ignore_field) == true then
+        -- Pinning wins if frontmatter was edited manually into a conflicting state.
+        kind = "ignored"
+      end
+      if kind then
+        local aliases = type(note.aliases) == "table" and vim.tbl_map(tostring, note.aliases) or {}
+        file.relative_path = file.path:sub(#vim.fs.normalize(vault_path) + 2)
+        file.aliases = show_aliases and aliases or {}
+        file.search_aliases = aliases
+        marked[kind][#marked[kind] + 1] = file
+      end
     end
-    return left.mtime > right.mtime
-  end)
+  end
 
-  local section = { title = config.pinned_title or defaults.pinned_title, dir = "" }
-  for _, file in ipairs(files) do
-    file.relative_path = file.path:sub(#vim.fs.normalize(vault_path) + 2)
-    file.aliases = show_aliases and aliases_for(file.path) or {}
+  local function finalize(kind, title)
+    local kind_files = marked[kind]
+    table.sort(kind_files, function(left, right)
+      if left.mtime == right.mtime then
+        return left.path < right.path
+      end
+      return left.mtime > right.mtime
+    end)
+    local total = #kind_files
+    local paths = {}
+    for _, file in ipairs(kind_files) do
+      paths[vim.fs.normalize(file.path)] = true
+    end
+    if vim.trim(tostring(query or "")) ~= "" then
+      local section = { title = title, dir = "" }
+      kind_files = vim.tbl_filter(function(file)
+        return matches_query(file, section, query, file.search_aliases)
+      end, kind_files)
+    end
+    return { files = kind_files, total = total, paths = paths }
   end
-  local total = #files
-  local paths = {}
-  for _, file in ipairs(files) do
-    paths[vim.fs.normalize(file.path)] = true
-  end
-  if vim.trim(tostring(query or "")) ~= "" then
-    files = vim.tbl_filter(function(file)
-      return matches_query(file, section, query, file.aliases)
-    end, files)
-  end
-  return files, total, paths
+
+  return {
+    pinned = finalize("pinned", config.pinned_title or defaults.pinned_title),
+    ignored = finalize("ignored", config.ignored_title or defaults.ignored_title),
+  }
+end
+
+local function collect_pinned(vault_path, show_aliases, query)
+  local result = collect_marked(vault_path, show_aliases, query).pinned
+  return result.files, result.total, result.paths
+end
+
+local function collect_ignored(vault_path, show_aliases, query)
+  local result = collect_marked(vault_path, show_aliases, query).ignored
+  return result.files, result.total, result.paths
 end
 
 local function scan_directories(root, current, depth, max_depth, excluded_paths, directories)
@@ -272,10 +312,27 @@ local function add_span(model, row, start_col, end_col, group)
 end
 
 local function build_model(vault_path, query)
-  local model = { lines = {}, highlights = {}, entries = {}, section_headers = {} }
+  local model = {
+    lines = {},
+    highlights = {},
+    entries = {},
+    section_headers = {},
+    navigation_headers = {},
+    fold_levels = {},
+  }
   local unique = {}
   local updated_today = 0
   local today = os.date("%Y-%m-%d")
+
+  local function mark_section_fold(header_row)
+    local header_line = header_row + 1
+    model.fold_levels[header_line] = ">1"
+    -- Keep the trailing blank separator outside the fold so closed sections
+    -- remain visually separated from the following section.
+    for line_number = header_line + 1, #model.lines - 1 do
+      model.fold_levels[line_number] = "1"
+    end
+  end
 
   query = vim.trim(tostring(query or ""))
   add_line(model, "OBSIDIAN STATUS", "Title")
@@ -285,9 +342,14 @@ local function build_model(vault_path, query)
   end
   add_line(model, "")
 
-  local pinned, pinned_total, pinned_paths = collect_pinned(vault_path, config.show_aliases, query)
+  local marked = collect_marked(vault_path, config.show_aliases, query)
+  local pinned, pinned_total, pinned_paths = marked.pinned.files, marked.pinned.total, marked.pinned.paths
+  local ignored, ignored_total, ignored_paths = marked.ignored.files, marked.ignored.total, marked.ignored.paths
+  for path in pairs(ignored_paths) do
+    pinned_paths[path] = true
+  end
 
-  local function add_note(file, pinned_note)
+  local function add_note(file, pinned_note, dimmed)
     if not unique[file.path] then
       unique[file.path] = true
       if os.date("%Y-%m-%d", file.mtime) == today then
@@ -296,23 +358,30 @@ local function build_model(vault_path, query)
     end
 
     local stamp = format_time(file.mtime)
-    local icon = pinned_note and "󰐃 " or " "
+    local icon = pinned_note and "󰐃 " or (dimmed and "󰈉 " or " ")
     local prefix = "  " .. stamp .. "  " .. icon
     local aliases = #file.aliases > 0 and " [" .. table.concat(file.aliases, ", ") .. "]" or ""
-    local row = add_line(model, prefix .. file.relative_path .. aliases, nil, file)
+    local row = add_line(model, prefix .. file.relative_path .. aliases, dimmed and "Comment" or nil, file)
     local file_name = vim.fs.basename(file.relative_path)
     local file_name_start = #prefix + #file.relative_path - #file_name
-    add_span(model, row, 2, 2 + #stamp, "Comment")
-    add_span(model, row, file_name_start, file_name_start + #file_name, "Directory")
-    if aliases ~= "" then
-      add_span(model, row, #prefix + #file.relative_path, -1, "String")
+    if not dimmed then
+      add_span(model, row, 2, 2 + #stamp, "Comment")
+      add_span(model, row, file_name_start, file_name_start + #file_name, "Directory")
+      if aliases ~= "" then
+        add_span(model, row, #prefix + #file.relative_path, -1, "String")
+      end
     end
   end
 
   if pinned_total > 0 then
     local count = #pinned
     local label = query ~= "" and ("%d/%d"):format(count, pinned_total) or tostring(pinned_total)
-    add_line(model, ("%-18s (%s)"):format((config.pinned_title or defaults.pinned_title):upper(), label), "Title")
+    local header_row = add_line(
+      model,
+      ("%-18s (%s)"):format((config.pinned_title or defaults.pinned_title):upper(), label),
+      "Title"
+    )
+    model.navigation_headers[header_row + 1] = true
     if #pinned == 0 then
       add_line(model, "  (no matches)", "Comment")
     else
@@ -321,6 +390,7 @@ local function build_model(vault_path, query)
       end
     end
     add_line(model, "")
+    mark_section_fold(header_row)
   end
 
   for _, section in ipairs(config.sections or {}) do
@@ -335,6 +405,7 @@ local function build_model(vault_path, query)
     local count = query ~= "" and ("%d/%d"):format(matched_total, total) or tostring(total)
     local header_row = add_line(model, ("%-18s %s/  (%s)"):format(title, section.dir or "", count), "Title")
     model.section_headers[header_row + 1] = section
+    model.navigation_headers[header_row + 1] = true
 
     if not root or not vim.uv.fs_stat(root) then
       add_line(model, "  (directory not found)", "DiagnosticWarn")
@@ -346,12 +417,33 @@ local function build_model(vault_path, query)
       end
     end
     add_line(model, "")
+    mark_section_fold(header_row)
+  end
+
+  if ignored_total > 0 then
+    local count = #ignored
+    local label = query ~= "" and ("%d/%d"):format(count, ignored_total) or tostring(ignored_total)
+    local header_row = add_line(
+      model,
+      ("%-18s (%s)"):format((config.ignored_title or defaults.ignored_title):upper(), label),
+      "Comment"
+    )
+    model.navigation_headers[header_row + 1] = true
+    if #ignored == 0 then
+      add_line(model, "  (no matches)", "Comment")
+    else
+      for _, file in ipairs(ignored) do
+        add_note(file, false, true)
+      end
+    end
+    add_line(model, "")
+    mark_section_fold(header_row)
   end
 
   add_line(model, ("Visible %d notes  ·  updated today %d"):format(vim.tbl_count(unique), updated_today), "DiagnosticInfo")
   add_line(
     model,
-    "<CR> open   P preview   a add   p pin   r rename   x delete   [[/]] sections   R refresh   t today   gb knowledge   / filter   ? actions   q close",
+    "<CR> open/fold   P preview   a add   p pin   i ignore   r rename   x delete   [[/]] sections   R refresh   t today   gb knowledge   / filter   ? actions   q close",
     "Comment"
   )
   return model
@@ -394,6 +486,12 @@ end
 local function render(bufnr, vault_path)
   local state = state_by_buffer[bufnr] or {}
   local model = build_model(vault_path, state.query)
+  state.entries = model.entries
+  state.section_headers = model.section_headers
+  state.navigation_headers = model.navigation_headers
+  state.fold_levels = model.fold_levels
+  state.vault_path = vault_path
+  state_by_buffer[bufnr] = state
   vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, model.lines)
   vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
@@ -408,10 +506,6 @@ local function render(bufnr, vault_path)
     )
   end
   vim.bo[bufnr].modifiable = false
-  state.entries = model.entries
-  state.section_headers = model.section_headers
-  state.vault_path = vault_path
-  state_by_buffer[bufnr] = state
 end
 
 local function release_preview_buffer(state, promote_path)
@@ -521,7 +615,8 @@ end
 local function open_entry()
   local bufnr = vim.api.nvim_get_current_buf()
   local state = state_by_buffer[bufnr]
-  local entry = state and state.entries[vim.api.nvim_win_get_cursor(0)[1]]
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local entry = state and state.entries[row]
   if entry then
     local entry_bufnr = vim.fn.bufnr(entry.path)
     local opened_by_dashboard = entry_bufnr < 0
@@ -536,6 +631,8 @@ local function open_entry()
       state.opened_buffers = state.opened_buffers or {}
       state.opened_buffers[vim.api.nvim_get_current_buf()] = true
     end
+  elseif state and state.navigation_headers[row] then
+    vim.cmd("normal! za")
   end
 end
 
@@ -594,10 +691,10 @@ local function refresh_after_change(bufnr, row)
   end
 end
 
-local function write_pin(path, pinned)
+local function write_marker(path, field, enabled, opposite_field)
   local existing = vim.fn.bufnr(path)
   if existing >= 0 and vim.api.nvim_buf_is_valid(existing) and vim.bo[existing].modified then
-    return nil, "Save or discard the note's changes before changing its pin"
+    return nil, "Save or discard the note's changes before changing its dashboard status"
   end
 
   local note = note_for(path)
@@ -605,7 +702,10 @@ local function write_pin(path, pinned)
     return nil, "Could not read note frontmatter"
   end
 
-  note:add_field(config.pin_field or defaults.pin_field, pinned and true or nil)
+  note:add_field(field, enabled and true or nil)
+  if enabled and opposite_field then
+    note:add_field(opposite_field, nil)
+  end
   local ok, err = pcall(function()
     if existing >= 0 and vim.api.nvim_buf_is_valid(existing) then
       note:save_to_buffer({ bufnr = existing })
@@ -620,6 +720,24 @@ local function write_pin(path, pinned)
     return nil, tostring(err)
   end
   return true
+end
+
+local function write_pin(path, pinned)
+  return write_marker(
+    path,
+    config.pin_field or defaults.pin_field,
+    pinned,
+    config.ignore_field or defaults.ignore_field
+  )
+end
+
+local function write_ignore(path, ignored)
+  return write_marker(
+    path,
+    config.ignore_field or defaults.ignore_field,
+    ignored,
+    config.pin_field or defaults.pin_field
+  )
 end
 
 local function toggle_pin()
@@ -641,6 +759,27 @@ local function toggle_pin()
   end
   refresh_after_change(bufnr, row)
   vim.notify((pinned and "Unpinned " or "Pinned ") .. entry.relative_path, vim.log.levels.INFO)
+end
+
+local function toggle_ignore()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local state = state_by_buffer[bufnr]
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local entry = state and state.entries[row]
+  if not entry then
+    vim.notify("Move the cursor onto a note to ignore it", vim.log.levels.INFO)
+    return
+  end
+
+  local ignored = is_ignored(entry.path) and not is_pinned(entry.path)
+  close_preview(state)
+  local ok, err = write_ignore(entry.path, not ignored)
+  if not ok then
+    vim.notify("Could not update ignore: " .. err, vim.log.levels.ERROR)
+    return
+  end
+  refresh_after_change(bufnr, row)
+  vim.notify((ignored and "Restored " or "Ignored ") .. entry.relative_path, vim.log.levels.INFO)
 end
 
 local function delete_entry()
@@ -899,7 +1038,7 @@ local function move_section(direction)
   end
 
   local current_row = vim.api.nvim_win_get_cursor(0)[1]
-  local target = section_target(state.section_headers, current_row, direction, vim.v.count1)
+  local target = section_target(state.navigation_headers, current_row, direction, vim.v.count1)
   if target then
     vim.api.nvim_win_set_cursor(0, { target, 0 })
   end
@@ -917,6 +1056,7 @@ local function configure_buffer(bufnr, vault_path)
   vim.keymap.set("n", "P", toggle_preview, { buffer = bufnr, silent = true, desc = "Toggle note preview" })
   vim.keymap.set("n", "a", add_note, { buffer = bufnr, silent = true, desc = "Add a note to this section" })
   vim.keymap.set("n", "p", toggle_pin, { buffer = bufnr, silent = true, desc = "Toggle dashboard note pin" })
+  vim.keymap.set("n", "i", toggle_ignore, { buffer = bufnr, silent = true, desc = "Toggle dashboard note ignore" })
   vim.keymap.set("n", "r", rename_entry, { buffer = bufnr, silent = true, desc = "Rename dashboard note" })
   vim.keymap.set("n", "x", delete_entry, { buffer = bufnr, silent = true, desc = "Delete dashboard note" })
   vim.keymap.set("n", "]]", function()
@@ -951,11 +1091,21 @@ local function configure_buffer(bufnr, vault_path)
 end
 
 local function configure_window(winid)
+  vim.wo[winid].foldmethod = "expr"
+  vim.wo[winid].foldexpr = "v:lua.require'obsidian_extension.features.dashboard'.foldexpr(v:lnum)"
+  vim.wo[winid].foldenable = true
+  vim.wo[winid].foldlevel = tonumber(config.foldlevel) or defaults.foldlevel
+  vim.wo[winid].foldcolumn = tostring(config.foldcolumn or defaults.foldcolumn)
   if config.winbar == true then
     vim.wo[winid].winbar = "%#Title# OBSIDIAN %*· Vault status"
   elseif type(config.winbar) == "string" then
     vim.wo[winid].winbar = config.winbar
   end
+end
+
+local function foldexpr(lnum)
+  local state = state_by_buffer[vim.api.nvim_get_current_buf()]
+  return state and state.fold_levels and state.fold_levels[tonumber(lnum)] or "0"
 end
 
 local function show_in_tab(bufnr)
@@ -1032,9 +1182,11 @@ M.is_open = is_open
 M.refresh = render
 M._collect_section = collect_section
 M._collect_pinned = collect_pinned
+M._collect_ignored = collect_ignored
 M._section_directories = section_directories
 M._build_model = build_model
 M._configure_window = configure_window
+M.foldexpr = foldexpr
 M._cleanup_opened_buffers = cleanup_opened_buffers
 M._release_preview_buffer = release_preview_buffer
 M._preview_buffer = preview_buffer
@@ -1046,5 +1198,6 @@ M._matches_query = matches_query
 M._section_target = section_target
 M._valid_note_name = valid_note_name
 M._write_pin = write_pin
+M._write_ignore = write_ignore
 
 return M

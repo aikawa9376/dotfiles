@@ -1,7 +1,32 @@
 return {
   "nvim-neo-tree/neo-tree.nvim",
   keys = {
-    { "<Leader>n", "<Cmd>Neotree reveal toggle<CR>", silent = true }
+    {
+      "<Leader>n",
+      function()
+        local buffer_name = vim.api.nvim_buf_get_name(0)
+        local uri_path = buffer_name:match("^%a[%w+.-]*://(/.*)$")
+        local uri_stat = uri_path and vim.uv.fs_stat(uri_path)
+
+        if uri_stat then
+          local args = {
+            source = "filesystem",
+            toggle = true,
+          }
+          if uri_stat.type == "directory" then
+            args.dir = uri_path
+          else
+            args.reveal_file = uri_path
+          end
+          require("neo-tree.command").execute(args)
+        elseif vim.bo.buftype == "" then
+          vim.cmd("Neotree reveal toggle")
+        else
+          vim.cmd("Neotree toggle")
+        end
+      end,
+      silent = true,
+    },
   },
   opts = function()
     local neotree_toggle_state = nil
