@@ -246,10 +246,7 @@ function M.snapshot(bufnr, work_tree)
   table.insert(lines, 'Help: g?')
 
   if model.upstream and model.behind > 0 then
-    local unpulled = commit_lines(work_tree, 'HEAD..' .. model.upstream)
-    table.insert(lines, '')
-    table.insert(lines, ('Unpulled from %s (%d)'):format(model.upstream, #unpulled))
-    vim.list_extend(lines, unpulled)
+    model.unpulled = commit_lines(work_tree, 'HEAD..' .. model.upstream)
   end
 
   local entries_by_row = {}
@@ -316,6 +313,12 @@ function M.unpushed_commits(bufnr)
   })
   if remotes.code ~= 0 or vim.trim(remotes.stdout or '') == '' then return {} end
   return commit_lines(model.work_tree, { 'HEAD', '--not', '--remotes' })
+end
+
+function M.unpulled_commits(bufnr)
+  local model = models[bufnr]
+  if not model or not model.unpulled then return nil, nil end
+  return model.unpulled, model.upstream
 end
 
 local section_entries

@@ -367,6 +367,14 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
       or ('Unpushed [only] (%d)'):format(#commit_lines)
     table.insert(final_lines, commit_header)
     for _, l in ipairs(commit_lines) do table.insert(final_lines, l) end
+
+    local unpulled, upstream = status_renderer.unpulled_commits(bufnr)
+    if unpulled then
+      table.insert(final_lines, '')
+      table.insert(final_lines, ('Unpulled from %s (%d)'):format(upstream, #unpulled))
+      vim.list_extend(final_lines, unpulled)
+    end
+
     vim.list_extend(final_lines, repository_health.status_lines(health))
 
     if worktree_summary and #worktree_summary > 0 then
