@@ -229,8 +229,9 @@ function M.is_owned(bufnr)
   return vim.api.nvim_buf_is_valid(bufnr) and vim.b[bufnr].custom_git_status == true
 end
 
-function M.snapshot(bufnr, work_tree)
+function M.snapshot(bufnr, work_tree, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then return nil, 'Invalid status buffer' end
+  opts = opts or {}
   local model, err = parse_status(work_tree)
   if not model then return nil, err end
   model.bufnr = bufnr
@@ -242,6 +243,7 @@ function M.snapshot(bufnr, work_tree)
     table.insert(lines, ('Upstream: %s (+%d/-%d)'):format(model.upstream, model.ahead, model.behind))
   end
   if model.push and model.push ~= model.upstream then table.insert(lines, 'Push: ' .. model.push) end
+  vim.list_extend(lines, opts.header_lines or {})
   for _, line in ipairs(operation.status_lines(operation.inspect(work_tree))) do table.insert(lines, line) end
   table.insert(lines, 'Help: g?')
 

@@ -334,7 +334,11 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   pending_status_cursor_anchors_by_buf[bufnr] = nil
   if not cursor_anchors then cursor_anchors = capture_status_cursors(bufnr) end
 
-  local native_lines, snapshot_err = status_renderer.snapshot(bufnr, work_tree)
+  local health = repository_health.inspect(work_tree)
+  repository_health_by_buf[bufnr] = health
+  local native_lines, snapshot_err = status_renderer.snapshot(bufnr, work_tree, {
+    header_lines = repository_health.repository_lines(health),
+  })
   if not native_lines then
     vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
     return
@@ -345,8 +349,6 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
 
   local commit_scope = commit_scope_by_buf[bufnr] or 'unpushed'
   local pull_requests = pull_requests_by_buf[bufnr]
-  local health = repository_health.inspect(work_tree)
-  repository_health_by_buf[bufnr] = health
   local flag_state = index_flags.inspect(work_tree)
   index_flags_by_buf[bufnr] = flag_state
   local warning = index_flags.warning_line(flag_state)
@@ -361,6 +363,12 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
 
   local function build_final_lines(commit_lines)
     local final_lines = {}
+    if stash_list and #stash_list > 0 then
+      table.insert(final_lines, '')
+      table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
+      for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
+    end
+
     table.insert(final_lines, '')
     local commit_header = commit_scope == 'recent'
       and ('Commits [latest 15+] (%d)'):format(#commit_lines)
@@ -375,17 +383,6 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
       vim.list_extend(final_lines, unpulled)
     end
 
-    vim.list_extend(final_lines, repository_health.status_lines(health))
-
-    if worktree_summary and #worktree_summary > 0 then
-      table.insert(final_lines, '')
-      for _, l in ipairs(worktree_summary) do table.insert(final_lines, l) end
-    end
-    if stash_list and #stash_list > 0 then
-      table.insert(final_lines, '')
-      table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
-      for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
-    end
     if pull_requests then
       local scope = pull_request_scope_by_buf[bufnr] or 'branch'
       local scope_label = scope == 'all'
@@ -398,6 +395,11 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
         local branch = pr.headRefName ~= '' and ('  ' .. pr.headRefName) or ''
         table.insert(final_lines, ('#%d%s %s%s'):format(pr.number, draft, pr.title, branch))
       end
+    end
+    vim.list_extend(final_lines, repository_health.submodule_lines(health))
+    if worktree_summary and #worktree_summary > 0 then
+      table.insert(final_lines, '')
+      for _, l in ipairs(worktree_summary) do table.insert(final_lines, l) end
     end
     vim.list_extend(final_lines, index_flags.status_lines(
       flag_state,

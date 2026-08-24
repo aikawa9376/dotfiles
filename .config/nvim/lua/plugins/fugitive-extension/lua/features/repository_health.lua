@@ -80,33 +80,41 @@ function M.inspect(work_tree)
   return state
 end
 
-function M.status_lines(state)
+function M.repository_lines(state)
   if not state then return {} end
-  local has_repository_issue = state.detached or (state.upstream and state.upstream.gone) or state.superproject
-  if not has_repository_issue and #state.submodules == 0 then return {} end
-
-  local lines = { '', 'Repository health' }
+  local lines = {}
   if state.detached then table.insert(lines, 'HEAD: detached') end
   if state.upstream and state.upstream.gone then
     table.insert(lines, 'Upstream: ' .. state.upstream.display .. ' [gone]')
   end
   if state.superproject then table.insert(lines, 'Superproject: ' .. state.superproject) end
-  if #state.submodules > 0 then
-    table.insert(lines, ('Submodules (%d)'):format(#state.submodules))
-    for _, item in ipairs(state.submodules) do
-      local flags = {}
-      if item.state == '-' then table.insert(flags, 'uninitialized') end
-      if item.state == '+' then table.insert(flags, 'recorded SHA differs') end
-      if item.state == 'U' then table.insert(flags, 'conflicted') end
-      if item.detached then table.insert(flags, 'detached') end
-      if item.dirty then table.insert(flags, 'dirty') end
-      if item.unpushed and item.unpushed > 0 then table.insert(flags, 'unpushed:' .. item.unpushed) end
-      if item.upstream and item.upstream.gone then table.insert(flags, 'upstream gone') end
-      local branch = item.branch and item.branch ~= '(detached)' and item.branch or '-'
-      local suffix = #flags > 0 and (' [' .. table.concat(flags, ', ') .. ']') or ''
-      table.insert(lines, ('Submodule [%s]  %s  %s%s'):format(item.path, item.hash, branch, suffix))
-    end
+  if #lines == 0 then return lines end
+  table.insert(lines, 1, 'Repository health')
+  return lines
+end
+
+function M.submodule_lines(state)
+  if not state or #state.submodules == 0 then return {} end
+  local lines = { '', ('Submodules (%d)'):format(#state.submodules) }
+  for _, item in ipairs(state.submodules) do
+    local flags = {}
+    if item.state == '-' then table.insert(flags, 'uninitialized') end
+    if item.state == '+' then table.insert(flags, 'recorded SHA differs') end
+    if item.state == 'U' then table.insert(flags, 'conflicted') end
+    if item.detached then table.insert(flags, 'detached') end
+    if item.dirty then table.insert(flags, 'dirty') end
+    if item.unpushed and item.unpushed > 0 then table.insert(flags, 'unpushed:' .. item.unpushed) end
+    if item.upstream and item.upstream.gone then table.insert(flags, 'upstream gone') end
+    local branch = item.branch and item.branch ~= '(detached)' and item.branch or '-'
+    local suffix = #flags > 0 and (' [' .. table.concat(flags, ', ') .. ']') or ''
+    table.insert(lines, ('Submodule [%s]  %s  %s%s'):format(item.path, item.hash, branch, suffix))
   end
+  return lines
+end
+
+function M.status_lines(state)
+  local lines = M.repository_lines(state)
+  vim.list_extend(lines, M.submodule_lines(state))
   return lines
 end
 
