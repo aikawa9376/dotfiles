@@ -13,14 +13,14 @@ return {
         group = vim.api.nvim_create_augroup("vim-treesitter-start", {}),
         callback = function(ctx)
           local lang = vim.treesitter.language.get_lang(ctx.match)
-          local has_parser = pcall(vim.treesitter.language.inspect, lang)
+          local treesitter = require"nvim-treesitter"
 
-          if not has_parser then
+          if not vim.list_contains(treesitter.get_available(), lang) then
             return
           end
 
           vim.schedule(function()
-            require"nvim-treesitter".install(lang):wait()
+            treesitter.install(lang):wait()
             if pcall(vim.treesitter.start) then
               vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
               vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
