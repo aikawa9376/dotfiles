@@ -92,6 +92,20 @@ local threads = session_threads.setup({
   editor_registry = require("lazyagent.acp.editor_registry"),
 })
 
+local native_restart = require("lazyagent.logic.session.native_restart").setup({
+  state = state,
+  acp_logic = acp_logic,
+  backend_logic = backend_logic,
+  cache_logic = cache_logic,
+  capture_scratch = session_acp.capture_switch_scratch_state,
+  open_thread = function(thread_id, opts)
+    return threads.open_thread(thread_id, opts)
+  end,
+  start_session = function(opts)
+    return launch.start_interactive_session(opts)
+  end,
+})
+
 local actions = session_actions.setup({
   state = state,
   acp_logic = acp_logic,
@@ -178,6 +192,9 @@ M.resume_conversation = actions.resume_conversation
 M.resume_acp_conversation = acp_actions.resume_acp_conversation
 M.restart_acp_session = acp_actions.restart_acp_session
 M.restore_acp_restart_state = acp_actions.restore_acp_restart_state
+M.capture_native_restart = native_restart.capture
+M.schedule_native_restart_restore = native_restart.schedule_restore
+M.restore_native_restart = native_restart.restore
 M.pick_acp_sessions = acp_actions.pick_acp_sessions
 M.detach_session = acp_actions.detach_session
 M.pick_acp_config = acp_actions.pick_acp_config

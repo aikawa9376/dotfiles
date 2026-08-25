@@ -185,6 +185,23 @@ function M.setup(deps)
     return nil, err or code
   end
 
+  local function claim_restart_thread(backend, thread, expected_process_id)
+    expected_process_id = tonumber(expected_process_id)
+    if not expected_process_id or tonumber(thread.process_id) ~= expected_process_id then
+      return nil, "owner_changed"
+    end
+    local recovered = backend.update_thread(thread.thread_id, {
+      status = "closed",
+      process_id = vim.NIL,
+    }, { expected_process_id = expected_process_id })
+    if recovered then return recovered end
+    if type(backend.get_thread) == "function" then
+      local latest = backend.get_thread(thread.thread_id, { include_live = true })
+      if latest and (latest.status ~= "active" or latest.process_id == nil) then return latest end
+    end
+    return nil, "owner_changed"
+  end
+
   function module.close_disconnected_thread(thread_id)
     local backend, thread = thread_backend(thread_id)
     if not backend or not thread then
@@ -244,6 +261,11 @@ function M.setup(deps)
       return false
     end
     local local_key = local_session_key(thread.thread_id)
+    if thread.status == "active" and thread.process_id ~= nil and not local_key and opts.restart_process_id ~= nil then
+      local claimed, claim_err = claim_restart_thread(backend, thread, opts.restart_process_id)
+      if not claimed then return false, claim_err end
+      thread = claimed
+    end
     if thread.status == "active" and thread.process_id ~= nil and not local_key then
       vim.notify(
         "LazyAgent ACP: live thread belongs to another Neovim or is disconnected; stop it there or force delete it first",
@@ -273,12 +295,13 @@ function M.setup(deps)
       source_winid = placement_winid or context_winid,
       origin_winid = placement_winid or vim.api.nvim_get_current_win(),
       reuse = true,
-      stay_hidden = false,
+      stay_hidden = opts.stay_hidden == true,
       open_input = false,
       focus_agent_view = opts.focus_agent_view ~= false,
       relocate_agent_view = opts.relocate_agent_view == true,
       on_ready = opts.on_ready,
       initial_input = opts.initial_input,
+      acp_reuse_view = opts.reuse_view,
     }
     if opts.open_input == true then launch_opts.open_input = true end
     if not local_key then

@@ -41,6 +41,7 @@ end
 M.restore_acp_restart_state = function(bundle_path)
   return session_logic.restore_acp_restart_state(bundle_path)
 end
+M.restore_native_restart = session_logic.restore_native_restart
 M.pick_acp_sessions = session_logic.pick_acp_sessions
 M.rename_acp_session = session_logic.rename_acp_session
 M.pick_named_acp_threads = session_logic.pick_named_acp_threads
@@ -135,6 +136,13 @@ end
 local function register_cleanup_autocmd()
   pcall(function()
     local group = vim.api.nvim_create_augroup("LazyAgentCleanup", { clear = true })
+    vim.api.nvim_create_autocmd("ExitPre", {
+      group = group,
+      callback = function()
+        session_logic.capture_native_restart()
+      end,
+      desc = "Capture lazyagent ACP sessions before native restart teardown",
+    })
     vim.api.nvim_create_autocmd("VimLeavePre", {
       group = group,
       callback = function()
@@ -165,6 +173,7 @@ function M.setup(opts)
   register_cleanup_autocmd()
   mcp_integration.setup(M.opts)
   require("lazyagent.acp.editor_registry").setup()
+  session_logic.schedule_native_restart_restore()
 end
 
 return M

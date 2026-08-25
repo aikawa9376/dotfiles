@@ -292,6 +292,17 @@ function M.run()
   opened = nil
   assert_equal(actions.open_thread(THREAD_ID), false, "foreign live thread open guard")
   assert_equal(opened, nil, "foreign live thread does not launch duplicate")
+  local changed_ok, changed_err = actions.open_thread(THREAD_ID, { restart_process_id = 98 })
+  assert_equal(changed_ok, false, "native restart rejects changed ownership")
+  assert_equal(changed_err, "owner_changed", "native restart ownership mismatch")
+  assert_equal(actions.open_thread(THREAD_ID, { restart_process_id = 99 }), true,
+    "native restart claims the captured process owner")
+  assert_equal(records[THREAD_ID].status, "closed", "native restart closes captured owner record")
+  assert_equal(records[THREAD_ID].process_id, nil, "native restart clears captured owner process")
+  assert_equal(opened.acp_thread_id, THREAD_ID, "native restart resumes the same thread")
+  records[THREAD_ID].process_id = 99
+  records[THREAD_ID].status = "active"
+  opened = nil
   assert_equal(actions.archive_thread(THREAD_ID), false, "active archive guard")
   assert_equal(actions.delete_thread(THREAD_ID), false, "active delete guard")
   local preserved_metadata = records[THREAD_ID].metadata
