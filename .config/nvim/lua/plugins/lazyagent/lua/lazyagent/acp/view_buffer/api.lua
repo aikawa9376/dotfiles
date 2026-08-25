@@ -173,7 +173,8 @@ function M.attach(api, ctx)
           bufnr = bufnr,
           winid = win,
           source_winid = anchor_win,
-          preserve_existing_transcript = reused_view == true,
+          preserve_existing_transcript = reused_view == true
+            and not (switch_view and switch_view.preserve_existing_transcript == false),
         })
       end)
     end

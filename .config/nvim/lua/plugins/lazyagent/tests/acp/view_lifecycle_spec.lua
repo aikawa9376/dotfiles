@@ -143,6 +143,44 @@ function M.run()
   vim.cmd("tabclose")
   render_attach_count = 0
 
+  local adopted_bufnr = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(adopted_bufnr, "lazyagent://acp/restart-restored-buffer")
+  vim.api.nvim_win_set_buf(0, adopted_bufnr)
+  local adopted_pane_id
+  local adopted_state
+  view.create_pane({
+    transcript_path = transcript_path,
+    size = 8,
+    is_vertical = false,
+    opts = {},
+    acp = {
+      agent_name = "restart-adoption-test",
+      source_winid = vim.api.nvim_get_current_win(),
+      source_bufnr = source_bufnr,
+      reuse_view = {
+        bufnr = adopted_bufnr,
+        pane_id = "pre-restart-pane",
+        preserve_existing_transcript = false,
+      },
+    },
+  }, function(created_pane_id, created_state)
+    adopted_pane_id = created_pane_id
+    adopted_state = created_state
+  end)
+  assert(vim.wait(1000, function() return adopted_pane_id ~= nil end, 10),
+    "restart-restored ACP buffer should be adopted")
+  assert_equal(adopted_state.bufnr, adopted_bufnr, "restart adoption keeps the session-restored buffer")
+  assert_equal(adopted_state.preserve_existing_transcript, false,
+    "restart adoption requests persisted transcript hydration")
+  view.kill_pane(adopted_pane_id, { pane_id = adopted_pane_id, transcript_path = transcript_path })
+  local adoption_fallback_bufnr = vim.api.nvim_get_current_buf()
+  if vim.api.nvim_win_is_valid(source_winid) and vim.api.nvim_buf_is_valid(source_bufnr) then
+    vim.api.nvim_win_set_buf(source_winid, source_bufnr)
+  end
+  if adoption_fallback_bufnr ~= source_bufnr and vim.api.nvim_buf_is_valid(adoption_fallback_bufnr) then
+    vim.api.nvim_buf_delete(adoption_fallback_bufnr, { force = true })
+  end
+
   view.create_pane({
     transcript_path = transcript_path,
     size = 8,
@@ -340,6 +378,7 @@ function M.run()
   vim.api.nvim_win_close(source_winid, true)
   assert_equal(#vim.api.nvim_tabpage_list_wins(0), 1, "transcript can become the only window")
   local replacement_bufnr = vim.api.nvim_create_buf(true, false)
+  vim.bo[replacement_bufnr].swapfile = false
   vim.api.nvim_buf_set_lines(replacement_bufnr, 0, -1, false, { "replacement file" })
   vim.api.nvim_win_set_buf(pane_state.winid, replacement_bufnr)
   for option, expected in pairs(expected_window_options) do

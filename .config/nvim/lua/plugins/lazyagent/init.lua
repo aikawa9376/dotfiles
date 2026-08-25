@@ -94,7 +94,13 @@ return {
     "LazyAgentTeam", "LazyAgentTeamStatus", "LazyAgentTeamStop",
     "Antigravity", "Claude", "Codex", "Gemini", "Copilot", "Cursor",
   },
-  init = function() end,
+  init = function()
+    if vim.v.startreason == "restart" then
+      vim.schedule(function()
+        require("lazy").load({ plugins = { "lazyagent" } })
+      end)
+    end
+  end,
   opts = {
     backend = "tmux",
     acp = {

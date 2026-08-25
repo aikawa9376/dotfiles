@@ -537,6 +537,8 @@ ACP session では以下の slash command を Neovim 側で処理します。
 
 agent が advertise していない `/...` は通常の prompt text として送信します。
 
+Neovim 0.13 の native `:restart` では、`ExitPre` で起動中の ACP thread ID、process ID、表示状態、未送信 scratch、transcript view を一時保存し、新しい Neovim process から同じ thread を再開します。replacement側は短期handoffに記録されたprocess IDとthread storeのownerが一致する場合だけ、そのownerを原子的に解放して同じthreadを回収します。終了待ちのpollingは行わず、別Nvimが後から取得したthreadも奪いません。native session が復元した `lazyagent://acp/...` buffer は新しい ACP runtime が再採用するため、元のwindow/layoutを維持したまま通常のtranscript bufferへ戻ります。まだpromptを送っていない空sessionは、thread recordが残っていれば同じthreadを回収し、終了時に削除済みなら同じprovider/workspaceの新sessionとしてbufferへ再接続します。ACP の stdio process 自体は旧 Neovim とともに終了しますが、provider が native session load / resume を提供する場合はその会話状態へ再接続し、それ以外でも LazyAgent transcript を使って会話の連続性を維持します。明示的に editor session を破棄する `:restart!` は復元対象外です。
+
 ### ACP transcript buffer keymaps
 
 ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。`:LazyAgentACPSessions [agent]` では provider 側が保持している native session を一覧し、現在の会話へ add するか、native load / resume できます。float は `q` または `<Esc>` で閉じます。

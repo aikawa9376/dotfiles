@@ -1821,6 +1821,8 @@ local function create_backend(default_view)
       acp_config_options = vim.deepcopy(session.config_options or {}),
       acp_session_id = session.session_id,
       acp_thread_id = session.thread_id,
+      acp_process_id = session.client and session.client.pid or nil,
+      acp_has_user_prompt = session.has_user_prompt == true,
       acp_provider_id = session.provider_id,
       acp_thread_title = session.thread_record and session.thread_record.title or nil,
       acp_thread_title_source = session.thread_record
