@@ -479,6 +479,9 @@ require("lazyagent").setup({
         { "cursor-agent", "--acp" },
       },
     },
+    Claude = {
+      acp_cmd = { "npx", "--yes", "--prefer-online", "@agentclientprotocol/claude-agent-acp@latest" },
+    },
   },
 })
 ```
