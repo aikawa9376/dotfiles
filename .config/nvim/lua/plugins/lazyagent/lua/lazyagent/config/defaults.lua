@@ -28,6 +28,10 @@ function M.build()
       }),
       Claude = vim.tbl_deep_extend("force", base_agent, {
         cmd = "claude",
+        acp_cmd = { "npx", "--yes", "--prefer-online", "@agentclientprotocol/claude-agent-acp@latest" },
+        acp_cmd_fallbacks = {
+          { "claude-agent-acp" },
+        },
         yolo_flag = "--dangerously-skip-permissions",
       }),
       Codex = vim.tbl_deep_extend("force", base_agent, {

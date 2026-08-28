@@ -173,6 +173,10 @@ return {
       Antigravity = { yolo = true, acp = false },
       Gemini = { yolo = true, mcp_context_dir_flag = "--include-directories" },
       Copilot = { yolo = true },
+      Claude = {
+        yolo = true,
+        acp_cmd = { "npx", "--yes", "--prefer-online", "@agentclientprotocol/claude-agent-acp@latest" },
+      },
       Codex = {
         yolo = true,
         default = true,
