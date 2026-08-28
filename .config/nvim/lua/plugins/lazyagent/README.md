@@ -405,7 +405,9 @@ agent scratch で `#notes` を入力すると補完と preview が表示され�
 
 ACP を使う場合は `acp.enabled = true` にします。`view = "buffer"` は transcript を Neovim buffer に表示し、`view = "tmux"` は tmux pane に tail 表示します。
 
-ACP機能の **stable core** は、実測済みのCodex ACP 1.3.0 / Copilot ACP 1.0.80におけるprompt・cancel・native reopen・close・隔離workspace mutation・owned-process crash・timeout/late update・pending permission中のcancel/closeを対象にします。stable v1 fake-agent contract、resource teardown、filesystem境界、履歴復元も自動テスト済みです。未実測のoptional capabilityやClaude/Geminiはstable対象に含めません。providerがadvertiseしないcapabilityは非対応として扱い、対応UIも表示しません。
+ACP機能の **stable core** はprompt・cancel・native reopen・close・隔離workspace mutation・owned-process crash・timeout/late update・pending permission中のcancel/closeを対象にします。stable v1 fake-agent contract、resource teardown、filesystem境界、履歴復元も自動テスト済みです。providerがadvertiseしないcapabilityは非対応として扱い、対応UIも表示しません。
+
+最新のCodex ACP / Claude Agent ACP向けには、provider-neutralなMarkdown plan、native subagent session、goal、permission presentationを扱います。ClaudeのAIR `asyncTasks`も交渉し、runtime snapshotへ保持します。Cursor CLIの`cursor/ask_question`・`cursor/create_plan`・`cursor/update_todos`・`cursor/task`・`cursor/generate_image`は標準elicitation・plan・subagent/tool表示へ変換します。`ga`の`Goal actions`はagentが広告した操作だけを表示します。
 
 ### Thread再開と履歴の深さ
 

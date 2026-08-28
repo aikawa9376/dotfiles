@@ -1104,6 +1104,11 @@ local function create_backend(default_view)
         activation_trace = {},
         cache_dir = cache_logic.get_cache_dir(),
         session_info = {},
+        goal = nil,
+        subagents = {},
+        async_tasks = {},
+        current_plan = {},
+        current_plan_artifact = nil,
         usage_stats = {},
         protocol_events = {},
         auth_methods = {},
@@ -1850,6 +1855,11 @@ local function create_backend(default_view)
       acp_thread_draft = session.thread_record and session.thread_record.draft or "",
       acp_thread_unread = session.thread_record and session.thread_record.unread == true or false,
       acp_session_info = vim.deepcopy(session.session_info or {}),
+      acp_goal = vim.deepcopy(session.goal),
+      acp_subagents = vim.deepcopy(session.subagents or {}),
+      acp_async_tasks = vim.deepcopy(session.async_tasks or {}),
+      acp_plan = vim.deepcopy(session.current_plan or {}),
+      acp_plan_artifact = vim.deepcopy(session.current_plan_artifact),
       acp_transcript_path = session.transcript_path,
       acp_protocol_log_path = session.protocol_log_path,
       acp_agent_info = vim.deepcopy(session.agent_info or {}),
@@ -2407,6 +2417,16 @@ local function create_backend(default_view)
           backend.move_prompt_queue(target_pane, item.id, -1)
         elseif action == "Move down" then
           backend.move_prompt_queue(target_pane, item.id, 1)
+        elseif action == "Steer now (keep current turn)" then
+          local steered, steer_err = backend.steer_prompt_queue(target_pane, item.id, function(ok, result_or_err)
+            if not ok then
+              local detail = type(result_or_err) == "table" and result_or_err.message or result_or_err
+              vim.notify("LazyAgent ACP queue steering failed; prompt restored: " .. tostring(detail), vim.log.levels.WARN)
+            end
+          end)
+          if not steered and steer_err then
+            vim.notify("LazyAgent ACP queue steering failed: " .. tostring(steer_err), vim.log.levels.WARN)
+          end
         elseif action == "Send Now (cancel current turn)" then
           backend.send_prompt_now(target_pane, item.id)
         end
@@ -2566,6 +2586,56 @@ local function create_backend(default_view)
   function backend.supports_steering(target_pane)
     local session = get_session(target_pane)
     return session ~= nil and session.client ~= nil and session.client:supports_steering()
+  end
+
+  function backend.supports_goal(target_pane)
+    local session = get_session(target_pane)
+    return session ~= nil and session.client ~= nil and session.client:supports_goal()
+  end
+
+  function backend.control_goal(target_pane, action, objective, callback)
+    callback = callback or function() end
+    local session = get_session(target_pane)
+    if not session or not session.client then return nil, "ACP session not found" end
+    if not session.client:supports_goal(action) then
+      return nil, "ACP provider does not advertise goal action: " .. tostring(action)
+    end
+    session.client:control_goal(action, objective, function(result, err)
+      if err then callback(false, err); return end
+      callback(true, result)
+    end)
+    return true
+  end
+
+  function backend.show_goal_actions(target_pane)
+    local session = get_session(target_pane)
+    if not session or not session.client or not session.client:supports_goal() then return false end
+    local actions = {}
+    for _, action in ipairs({ "set", "pause", "resume", "clear" }) do
+      if session.client:supports_goal(action) then
+        actions[#actions + 1] = { action = action, label = action:sub(1, 1):upper() .. action:sub(2) .. " goal" }
+      end
+    end
+    vim.ui.select(actions, {
+      prompt = session.goal and ("Goal: " .. tostring(session.goal.objective or session.goal.status or "active")) or "ACP goal action:",
+      format_item = function(item) return item.label end,
+    }, function(choice)
+      if not choice then return end
+      local function submit(objective)
+        local ok, err = backend.control_goal(target_pane, choice.action, objective, function(success, result_or_err)
+          if not success then vim.notify("LazyAgent ACP goal failed: " .. tostring(result_or_err.message or result_or_err), vim.log.levels.ERROR) end
+        end)
+        if not ok and err then vim.notify("LazyAgent ACP goal failed: " .. tostring(err), vim.log.levels.WARN) end
+      end
+      if choice.action == "set" then
+        vim.ui.input({ prompt = "Goal objective: ", default = session.goal and session.goal.objective or nil }, function(value)
+          if value and vim.trim(value) ~= "" then submit(value) end
+        end)
+      else
+        submit(nil)
+      end
+    end)
+    return true
   end
 
   function backend.supports_plan_actions(target_pane)
