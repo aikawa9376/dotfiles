@@ -47,6 +47,7 @@ function M.setup(deps)
   local Notifications = require("lazyagent.acp.notifications")
   local PermissionStore = require("lazyagent.acp.permission_store")
   local Elicitation = require("lazyagent.acp.elicitation")
+  local Extensions = require("lazyagent.acp.extensions")
   local UiQueue = require("lazyagent.acp.ui_queue")
   local config_values = require("lazyagent.acp.config_values")
   local SessionHydrator = require("lazyagent.acp.session_hydrator")
@@ -73,6 +74,27 @@ function M.setup(deps)
 
   local function hook_reload_enabled()
     return ((((state.opts or {}).hooks or {}).reload_mode) or "hook") ~= "watch"
+  end
+
+  local function scoped_tool_call(session, session_id, tool)
+    if type(tool) ~= "table"
+      or not session_id
+      or session_id == session.session_id
+      or not session.subagents
+      or not session.subagents[session_id]
+      or not tool.toolCallId
+    then
+      return tool
+    end
+    local scoped = vim.deepcopy(tool)
+    scoped._meta = type(scoped._meta) == "table" and scoped._meta or {}
+    local lazyagent_meta = type(scoped._meta.lazyagent) == "table" and scoped._meta.lazyagent or {}
+    scoped._meta.lazyagent = vim.tbl_extend("force", lazyagent_meta, {
+      originalToolCallId = scoped.toolCallId,
+      subagentSessionId = session_id,
+    })
+    scoped.toolCallId = "subagent:" .. tostring(session_id) .. ":" .. tostring(scoped.toolCallId)
+    return scoped
   end
 
   local module = {}
@@ -302,7 +324,10 @@ function M.setup(deps)
     session.auto_permission = latest_cfg.auto_permission
     session.permission_rules = vim.deepcopy(latest_cfg.permission_rules or {})
     vim.list_extend(session.permission_rules, PermissionStore.rules(session, store_opts))
-    local tool = merge_tool_update(session, params.toolCall or {})
+    local tool = merge_tool_update(session, scoped_tool_call(session, params.sessionId, params.toolCall or {}))
+    local permission_presentation = type(params._meta) == "table" and params._meta.permission or nil
+    permission_presentation = type(permission_presentation) == "table" and permission_presentation or {}
+    local permission_title = tostring(permission_presentation.title or tool.title or tool.toolCallId or "Tool permission")
     local tool_path = (extract_tool_paths(tool) or {})[1]
     local permission_finished = false
     local function finish_request()
@@ -330,10 +355,14 @@ function M.setup(deps)
       end)
       return true
     end
-    append_block(session, tool_heading(tool), tool.title or tool.toolCallId or "Permission requested", {
+    local permission_body = permission_title
+    if permission_presentation.description and permission_presentation.description ~= "" then
+      permission_body = permission_body .. "\n\n" .. tostring(permission_presentation.description)
+    end
+    append_block(session, tool_heading(tool), permission_body, {
       kind = "tool",
-      title = tool.title or tool.toolCallId or "Permission requested",
-      summary = tool.title or tool.toolCallId or "Permission requested",
+      title = permission_title,
+      summary = permission_title,
       toolCallId = tool.toolCallId,
       status = tool.status,
       path = (extract_tool_paths(tool) or {})[1],
@@ -459,7 +488,7 @@ function M.setup(deps)
     end
     session.pending_permission = {
       tool_call_id = tool.toolCallId,
-      title = tool.title or tool.toolCallId or "Tool permission",
+      title = permission_title,
       kind = tool.kind,
       path = tool_path,
       choices = mobile_choices,
@@ -471,11 +500,11 @@ function M.setup(deps)
       end,
     }
 
-    notify_attention("permission", session, tool.title or tool.toolCallId or "Tool permission")
+    notify_attention("permission", session, permission_title)
 
     vim.schedule(function()
       vim.ui.select(labels, {
-        prompt = string.format("%s permission: %s", session.agent_name, tool.title or tool.toolCallId or "tool"),
+        prompt = string.format("%s permission: %s", session.agent_name, permission_title),
       }, function(_, idx)
         select_choice(idx and choices[idx] or nil)
         end)
@@ -613,12 +642,17 @@ function M.setup(deps)
     local update = params.update
     local kind = update.sessionUpdate
     local message_stream = MessageStream.identity(update)
+    local source_session_id = params.sessionId
+    local source_subagent = source_session_id and session.subagents and session.subagents[source_session_id] or nil
+    local source_label = source_subagent and ("Subagent " .. tostring(source_subagent.name or source_session_id)) or nil
 
     if kind == "agent_message_chunk" then
       local text = render_content(update.content)
-      append_stream_chunk(session, message_stream.key, assistant_heading_label(session), text, {
+      local stream_key = source_subagent and ("subagent:" .. tostring(source_session_id) .. ":" .. message_stream.key) or message_stream.key
+      append_stream_chunk(session, stream_key, source_label or assistant_heading_label(session), text, {
         kind = message_stream.kind,
         messageId = message_stream.message_id,
+        subagentSessionId = source_subagent and source_session_id or nil,
       })
       local transcript_is_read = session.view
         and type(session.view.transcript_is_read) == "function"
@@ -637,23 +671,51 @@ function M.setup(deps)
     end
 
     if kind == "agent_thought_chunk" then
-      append_stream_chunk(session, message_stream.key, "Thinking", render_content(update.content), {
+      local stream_key = source_subagent and ("subagent:" .. tostring(source_session_id) .. ":" .. message_stream.key) or message_stream.key
+      append_stream_chunk(session, stream_key, source_label and (source_label .. " · Thinking") or "Thinking", render_content(update.content), {
         kind = message_stream.kind,
         messageId = message_stream.message_id,
+        subagentSessionId = source_subagent and source_session_id or nil,
       })
       return
     end
 
     if kind == "user_message_chunk" then
-      append_stream_chunk(session, message_stream.key, "User", render_content(update.content), {
+      local stream_key = source_subagent and ("subagent:" .. tostring(source_session_id) .. ":" .. message_stream.key) or message_stream.key
+      append_stream_chunk(session, stream_key, source_label and (source_label .. " · User") or "User", render_content(update.content), {
         kind = message_stream.kind,
         messageId = message_stream.message_id,
+        subagentSessionId = source_subagent and source_session_id or nil,
       })
       return
     end
 
     if kind == "plan" and type(update.entries) == "table" then
-      session.current_plan = vim.deepcopy(update.entries)
+      if source_subagent then
+        source_subagent.current_plan = vim.deepcopy(update.entries)
+        sync_runtime_session(session)
+        local lines = {}
+        for _, entry in ipairs(update.entries) do
+          if type(entry) == "table" then lines[#lines + 1] = string.format("- [%s] %s", entry.status or "pending", entry.content or "") end
+        end
+        append_block(session, source_label .. " · Plan", table.concat(lines, "\n"), {
+          kind = "plan", subagentSessionId = source_session_id,
+        })
+        return
+      end
+      local merge = update._meta and update._meta.lazyagent and update._meta.lazyagent.merge == true
+      if merge and type(session.current_plan) == "table" then
+        local by_id = {}
+        for index, entry in ipairs(session.current_plan) do
+          if type(entry) == "table" and entry.id ~= nil then by_id[tostring(entry.id)] = index end
+        end
+        for _, entry in ipairs(update.entries) do
+          local index = type(entry) == "table" and entry.id ~= nil and by_id[tostring(entry.id)] or nil
+          if index then session.current_plan[index] = vim.deepcopy(entry) else session.current_plan[#session.current_plan + 1] = vim.deepcopy(entry) end
+        end
+      else
+        session.current_plan = vim.deepcopy(update.entries)
+      end
       sync_runtime_session(session)
       local lines = {}
       for _, entry in ipairs(update.entries) do
@@ -665,13 +727,164 @@ function M.setup(deps)
       return
     end
 
+    if kind == "plan_update" and type(update.plan) == "table" then
+      if source_subagent then
+        source_subagent.plan_artifact = vim.deepcopy(update.plan)
+        sync_runtime_session(session)
+        append_block(session, source_label .. " · Plan", tostring(update.plan.content or ""), {
+          kind = "plan", planId = update.plan.planId, subagentSessionId = source_session_id,
+        })
+        return
+      end
+      session.current_plan_artifact = vim.deepcopy(update.plan)
+      sync_runtime_session(session)
+      append_block(session, "Plan", tostring(update.plan.content or ""), {
+        kind = "plan",
+        title = update.plan.title or "Plan",
+        planId = update.plan.planId,
+      })
+      return
+    end
+
+    if kind == "subagent_spawned" and update.subagentSessionId then
+      session.subagents = session.subagents or {}
+      session.subagents[tostring(update.subagentSessionId)] = {
+        sessionId = tostring(update.subagentSessionId),
+        parentSessionId = source_session_id,
+        name = update.name,
+        task = update.task,
+        state = "running",
+        capabilities = vim.deepcopy(update.capabilities or {}),
+      }
+      sync_runtime_session(session)
+      append_block(session, "Subagent", string.format("%s\n\n%s", tostring(update.name or update.subagentSessionId), tostring(update.task or "")), {
+        kind = "subagent",
+        subagentSessionId = tostring(update.subagentSessionId),
+        status = "running",
+      })
+      return
+    end
+
+    if kind == "subagent_state_update" and update.subagentSessionId then
+      session.subagents = session.subagents or {}
+      local id = tostring(update.subagentSessionId)
+      local child = session.subagents[id] or { sessionId = id, parentSessionId = source_session_id }
+      child.state = update.state
+      session.subagents[id] = child
+      sync_runtime_session(session)
+      append_block(session, "Subagent", string.format("%s: %s", tostring(child.name or id), tostring(update.state or "updated")), {
+        kind = "subagent",
+        subagentSessionId = id,
+        status = update.state,
+      })
+      return
+    end
+
+    if kind == "subagent_task" then
+      session.subagents = session.subagents or {}
+      local id = tostring(update.subagentSessionId or update.toolCallId or ("cursor-task-" .. tostring(#session.subagents + 1)))
+      session.subagents[id] = vim.tbl_deep_extend("force", session.subagents[id] or {}, {
+        sessionId = id,
+        name = update.name,
+        task = update.task,
+        state = update.state or "completed",
+        model = update.model,
+        durationMs = update.durationMs,
+        subagentType = vim.deepcopy(update.subagentType),
+      })
+      sync_runtime_session(session)
+      append_block(session, "Subagent", string.format("%s\n\n%s", tostring(update.name or id), tostring(update.task or "")), {
+        kind = "subagent",
+        subagentSessionId = id,
+        status = update.state or "completed",
+        toolCallId = update.toolCallId,
+      })
+      return
+    end
+
+    if kind == "async_task_spawned" and update.asyncTaskId then
+      session.async_tasks = session.async_tasks or {}
+      local id = tostring(update.asyncTaskId)
+      session.async_tasks[id] = {
+        asyncTaskId = id,
+        name = update.name,
+        taskType = update.taskType,
+        description = update.description,
+        showInTranscript = update.showInTranscript == true,
+        canStop = update.canStop == true,
+        outputFilePath = update.outputFilePath,
+        toolCallId = update.toolCallId,
+        state = "running",
+      }
+      sync_runtime_session(session)
+      if update.showInTranscript == true then
+        append_block(session, "Background task", tostring(update.name or update.description or id), {
+          kind = "async_task", asyncTaskId = id, status = "running", path = update.outputFilePath,
+        })
+      end
+      return
+    end
+
+    if kind == "async_task_progress" and update.asyncTaskId then
+      session.async_tasks = session.async_tasks or {}
+      local id = tostring(update.asyncTaskId)
+      local task = session.async_tasks[id] or { asyncTaskId = id, state = "running" }
+      for _, field in ipairs({ "description", "summary", "lastToolName", "usage", "outputFilePath", "toolCallId" }) do
+        if update[field] ~= nil then task[field] = vim.deepcopy(update[field]) end
+      end
+      session.async_tasks[id] = task
+      sync_runtime_session(session)
+      return
+    end
+
+    if kind == "async_task_state_update" and update.asyncTaskId then
+      session.async_tasks = session.async_tasks or {}
+      local id = tostring(update.asyncTaskId)
+      local task = session.async_tasks[id] or { asyncTaskId = id }
+      task.state = update.state
+      task.summary = update.summary or task.summary
+      task.outputFilePath = update.outputFilePath or task.outputFilePath
+      task.toolCallId = update.toolCallId or task.toolCallId
+      session.async_tasks[id] = task
+      sync_runtime_session(session)
+      if task.showInTranscript == true then
+        append_block(session, "Background task", tostring(task.summary or task.description or task.name or id), {
+          kind = "async_task", asyncTaskId = id, status = update.state, path = task.outputFilePath,
+        })
+      end
+      return
+    end
+
+    if kind == "generated_image" then
+      local body = tostring(update.description or "Generated image")
+      if update.filePath and update.filePath ~= "" then body = body .. "\n\n" .. tostring(update.filePath) end
+      append_block(session, "Generated image", body, {
+        kind = "tool",
+        title = update.description or "Generated image",
+        toolCallId = update.toolCallId,
+        path = update.filePath,
+        status = "completed",
+      })
+      return
+    end
+
     if kind == "available_commands_update" then
+      if source_subagent then
+        source_subagent.available_commands = normalize_available_commands(update.availableCommands)
+        sync_runtime_session(session)
+        return
+      end
       session.available_commands = normalize_available_commands(update.availableCommands)
       sync_runtime_session(session)
       return
     end
 
     if kind == "config_option_update" then
+      if source_subagent then
+        source_subagent.config_options = vim.deepcopy(update.configOptions or {})
+        sync_runtime_session(session)
+        return
+      end
       session.config_options = vim.deepcopy((session.client and session.client.config_options) or update.configOptions or {})
       sync_runtime_session(session)
       sync_thread(session, {
@@ -691,6 +904,12 @@ function M.setup(deps)
     end
 
     if kind == "current_mode_update" or kind == "current_model_update" then
+      if source_subagent then
+        source_subagent[kind == "current_mode_update" and "mode" or "model"] =
+          update.modeId or update.currentModeId or update.currentMode or update.modelId or update.currentModelId or update.currentModel
+        sync_runtime_session(session)
+        return
+      end
       if kind == "current_mode_update" and type(session.mode_catalog) == "table" then
         session.mode_catalog.currentModeId = update.modeId or update.currentModeId or update.currentMode or session.mode_catalog.currentModeId
       elseif kind == "current_model_update" and type(session.model_catalog) == "table" then
@@ -715,7 +934,18 @@ function M.setup(deps)
     end
 
     if kind == "session_info_update" then
+      if source_subagent then
+        source_subagent.session_info = vim.tbl_deep_extend("force", source_subagent.session_info or {}, vim.deepcopy(update))
+        if type(update._meta) == "table" and update._meta.goal ~= nil then
+          source_subagent.goal = update._meta.goal == vim.NIL and nil or vim.deepcopy(update._meta.goal)
+        end
+        sync_runtime_session(session)
+        return
+      end
       update_session_info(session, update)
+      if type(update._meta) == "table" and update._meta.goal ~= nil then
+        session.goal = update._meta.goal == vim.NIL and nil or vim.deepcopy(update._meta.goal)
+      end
       sync_runtime_session(session)
       local title_source = session.thread_record
           and session.thread_record.metadata
@@ -733,6 +963,11 @@ function M.setup(deps)
     end
 
     if kind == "usage_update" then
+      if source_subagent then
+        source_subagent.usage = vim.deepcopy(update)
+        sync_runtime_session(session)
+        return
+      end
       -- Merge usage info into model catalog so UI can display context/usage
       local model_id = update.modelId or update.currentModelId or (update.model and update.model.modelId) or nil
       local usage = type(update.usage) == "table" and vim.deepcopy(update.usage) or {}
@@ -804,7 +1039,7 @@ function M.setup(deps)
     end
 
     if kind == "tool_call" or kind == "tool_call_update" then
-      local tool = merge_tool_update(session, update)
+      local tool = merge_tool_update(session, scoped_tool_call(session, source_session_id, update))
       record_turn_event(session, "tool", {
         tool_call_id = tool.toolCallId,
         title = tool.title,
@@ -814,6 +1049,7 @@ function M.setup(deps)
         locations = vim.deepcopy(tool.locations or tool.location or {}),
       })
       local title = tool.title or tool.toolCallId or "tool"
+      if source_label then title = source_label .. " · " .. title end
       local body = render_tool_content(tool.content)
       if body == "" then
         body = render_tool_raw_output(tool.rawOutput)
@@ -992,6 +1228,11 @@ function M.setup(deps)
       initial_config_applied = true,
       session_info = {},
       usage_stats = {},
+      goal = nil,
+      subagents = {},
+      async_tasks = {},
+      current_plan = {},
+      current_plan_artifact = nil,
     }
   end
 
@@ -1225,6 +1466,64 @@ function M.setup(deps)
           end,
         })
       end
+    end
+    handlers.extension_request = function(method, params, done)
+      if method == "cursor/ask_question" then
+        if not handlers.elicitation then
+          done({ outcome = { outcome = "cancelled" } })
+          return true
+        end
+        local translated = Extensions.cursor_question_as_elicitation(params)
+        translated.sessionId = session.session_id
+        handlers.elicitation(translated, function(response, err)
+          if err then done(nil, err); return end
+          done(Extensions.cursor_question_response(params, response))
+        end)
+        return true
+      end
+      if method == "cursor/create_plan" then
+        session.current_plan = vim.deepcopy(params.todos or {})
+        session.current_plan_artifact = {
+          type = "markdown",
+          planId = params.toolCallId,
+          title = params.name,
+          content = Extensions.plan_text(params),
+          phases = vim.deepcopy(params.phases or {}),
+        }
+        sync_runtime_session(session)
+        append_block(session, params.name or "Plan", session.current_plan_artifact.content, {
+          kind = "plan",
+          title = params.name or "Plan",
+          planId = params.toolCallId,
+          status = "pending",
+        })
+        UiQueue.enqueue(function(release)
+          notify_attention("permission", session, params.name or "Plan approval")
+          local choices = {
+            { label = "Accept plan", outcome = "accepted" },
+            { label = "Reject plan", outcome = "rejected" },
+          }
+          vim.ui.select(choices, {
+            prompt = (params.name or "Cursor plan") .. ":",
+            format_item = function(item) return item.label end,
+          }, function(choice)
+            release()
+            done({ outcome = { outcome = choice and choice.outcome or "cancelled" } })
+          end)
+        end, {
+          kind = "permission",
+          label = params.name or "Cursor plan",
+          on_error = function(err) done(nil, { code = -32603, message = tostring(err) }) end,
+        })
+        return true
+      end
+      return false
+    end
+    handlers.extension_notification = function(method, params)
+      local update = Extensions.cursor_notification(method, params)
+      if not update then return false end
+      on_client_update(session, { sessionId = session.session_id, update = update })
+      return true
     end
     local client_capabilities = {}
     if handlers.elicitation then

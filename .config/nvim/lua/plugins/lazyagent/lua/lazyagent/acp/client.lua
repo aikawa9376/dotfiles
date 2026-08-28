@@ -22,11 +22,19 @@ local KNOWN_SESSION_UPDATES = {
   agent_message_chunk = true,
   agent_thought_chunk = true,
   available_commands_update = true,
+  async_task_progress = true,
+  async_task_spawned = true,
+  async_task_state_update = true,
   config_option_update = true,
   current_mode_update = true,
   current_model_update = true,
   plan = true,
+  plan_update = true,
   session_info_update = true,
+  subagent_spawned = true,
+  subagent_state_update = true,
+  subagent_task = true,
+  generated_image = true,
   tool_call = true,
   tool_call_update = true,
   usage_update = true,
@@ -175,6 +183,16 @@ local function default_client_capabilities(handlers)
   return {
     fs = fs_caps,
     terminal = handlers and handlers.create_terminal ~= nil or false,
+    plan = vim.empty_dict(),
+    subagents = vim.empty_dict(),
+    _meta = {
+      jetbrains = {
+        air = {
+          version = 1,
+          capabilities = { "nativeSubagentSessions", "asyncTasks" },
+        },
+      },
+    },
     session = {
       configOptions = {
         boolean = vim.empty_dict(),
@@ -249,6 +267,7 @@ function Client.new(opts)
     v2_adapter = V2Adapter.new(opts.v2_adapter),
     session_id = nil,
     pending_session_id = nil,
+    subagent_sessions = {},
     agent_capabilities = nil,
     agent_meta = {},
     agent_info = nil,
@@ -618,6 +637,7 @@ function Client:_attach_session(session_id, session_result)
   self:_convert_legacy_session_fields(session_result)
   self.session_id = session_id
   self.pending_session_id = nil
+  self.subagent_sessions = {}
   self:_set_state("ready")
   return session_result
 end
@@ -660,6 +680,39 @@ function Client:supports_steering()
   return self.agent_meta
     and self.agent_meta.steering
     and self.agent_meta.steering.supported == true
+end
+
+function Client:supports_goal(action)
+  local goal = type(self.agent_meta) == "table" and self.agent_meta.goal or nil
+  if type(goal) ~= "table" or type(goal.controlMethod) ~= "string" or goal.controlMethod == "" then return false end
+  if action == nil then return true end
+  for _, advertised in ipairs(type(goal.actions) == "table" and goal.actions or {}) do
+    if advertised == action then return true end
+  end
+  return false
+end
+
+function Client:control_goal(action, objective, callback)
+  callback = callback or function() end
+  if not self:_ensure_connected(callback) then return end
+  if not self.session_id then
+    callback(nil, { code = ERR.invalid_request, message = "ACP session is not ready" })
+    return
+  end
+  if not self:supports_goal(action) then
+    callback(nil, { code = ERR.invalid_request, message = "ACP agent does not advertise goal action: " .. tostring(action) })
+    return
+  end
+  local params = { sessionId = self.session_id, action = action }
+  if action == "set" then
+    objective = trim(objective)
+    if objective == "" then
+      callback(nil, { code = ERR.invalid_params, message = "Goal objective is required" })
+      return
+    end
+    params.objective = objective
+  end
+  self:_send_request(self.agent_meta.goal.controlMethod, params, callback)
 end
 
 function Client:supports_additional_directories()
@@ -1067,7 +1120,10 @@ function Client:_handle_update(params, adapted)
     return
   end
   local expected_session = self.session_id or self.pending_session_id
-  if expected_session and params.sessionId ~= expected_session then
+  local received_session = params.sessionId
+  local known_subagent = received_session and self.subagent_sessions[received_session] ~= nil
+  local is_root_session = expected_session == nil or received_session == expected_session
+  if expected_session and received_session ~= expected_session and not known_subagent then
     self:_record_protocol_event("session_scope_mismatch", {
       method = "session/update",
       expected_session_id = expected_session,
@@ -1085,12 +1141,23 @@ function Client:_handle_update(params, adapted)
         variant = variant,
       })
     end
-    if update.sessionUpdate == "config_option_update" and update.configOptions then
+    if variant == "subagent_spawned" and update.subagentSessionId then
+      self.subagent_sessions[tostring(update.subagentSessionId)] = {
+        parentSessionId = received_session,
+        name = update.name,
+        task = update.task,
+        capabilities = vim.deepcopy(update.capabilities or {}),
+      }
+    elseif variant == "subagent_state_update" and update.subagentSessionId then
+      local child = self.subagent_sessions[tostring(update.subagentSessionId)]
+      if child then child.state = update.state end
+    end
+    if is_root_session and update.sessionUpdate == "config_option_update" and update.configOptions then
       self.config_options = vim.deepcopy(update.configOptions)
       self._legacy_api = false
-    elseif update.sessionUpdate == "current_mode_update" then
+    elseif is_root_session and update.sessionUpdate == "current_mode_update" then
       update_config_option_current_value(self.config_options, { "mode" }, update.modeId or update.currentModeId or update.currentMode)
-    elseif update.sessionUpdate == "current_model_update" then
+    elseif is_root_session and update.sessionUpdate == "current_model_update" then
       update_config_option_current_value(self.config_options, { "model" }, update.modelId or update.currentModelId or update.currentModel)
     end
   end
@@ -1130,7 +1197,7 @@ function Client:_handle_server_request(id, method, params)
   local expected_session = self.session_id or self.pending_session_id
   if SESSION_SCOPED_SERVER_METHODS[method]
     and expected_session
-    and (not params or params.sessionId ~= expected_session)
+    and (not params or (params.sessionId ~= expected_session and self.subagent_sessions[params.sessionId] == nil))
   then
     self:_record_protocol_event("session_scope_mismatch", {
       id = id,
@@ -1267,6 +1334,21 @@ function Client:_handle_server_request(id, method, params)
     return
   end
 
+  if type(handlers.extension_request) == "function" then
+    local ok, handled = pcall(handlers.extension_request, method, params or {}, function(response, callback_err)
+      if callback_err then
+        self:_send_error(id, callback_err.code or ERR.internal, callback_err.message or tostring(callback_err), callback_err.data)
+      else
+        self:_send_result(id, response)
+      end
+    end)
+    if not ok then
+      self:_send_error(id, ERR.internal, tostring(handled))
+      return
+    end
+    if handled == true then return end
+  end
+
   self:_send_error(id, ERR.method_not_found, "Unknown ACP request: " .. tostring(method))
   self:_record_protocol_event("unknown_method", {
     id = id,
@@ -1302,6 +1384,15 @@ function Client:_handle_message(line)
     elseif message.method == "session/update" then
       self:_handle_update(message.params or {})
     else
+      local handler = self.handlers and self.handlers.extension_notification or nil
+      if type(handler) == "function" then
+        local ok, handled = pcall(handler, message.method, message.params or {})
+        if not ok then
+          self:_record_protocol_event("handler_error", { method = tostring(message.method), message = tostring(handled) })
+          return
+        end
+        if handled == true then return end
+      end
       self:_record_protocol_event("unknown_method", {
         method = tostring(message.method),
         request = false,
@@ -1369,6 +1460,7 @@ function Client:start(callback, opts)
     self.pid = nil
     self.session_id = nil
     self.pending_session_id = nil
+    self.subagent_sessions = {}
     self.prompt_state = "idle"
     self.prompt_request_id = nil
     self.stdout_buffer = ""
