@@ -2390,6 +2390,34 @@ local function create_backend(default_view)
     return item, "sent"
   end
 
+  function backend.steer_prompt_queue(target_pane, id, callback)
+    callback = callback or function() end
+    local session = get_session(target_pane)
+    if not session then return nil, "ACP session not found" end
+    if not session.client or not session.client:supports_steering() then
+      return nil, "ACP provider does not advertise native steering"
+    end
+    if session.busy ~= true then return nil, "ACP session has no active turn" end
+
+    local item, index_or_err = PromptQueue.take(session, id)
+    if not item then return nil, index_or_err end
+    local restored = false
+    local function restore()
+      if restored then return end
+      restored = true
+      PromptQueue.restore(session, item, index_or_err)
+    end
+    local accepted, steer_err = backend.steer_active_turn(target_pane, item.text, function(ok, result_or_err)
+      if not ok then restore() end
+      callback(ok, result_or_err, item)
+    end)
+    if not accepted then
+      restore()
+      return nil, steer_err
+    end
+    return item, "steering"
+  end
+
   function backend.show_prompt_queue(target_pane)
     local session = get_session(target_pane)
     if not session then return false end
@@ -2405,7 +2433,11 @@ local function create_backend(default_view)
       end,
     }, function(item)
       if not item then return end
-      local actions = { "Edit", "Remove", "Move up", "Move down", "Send Now (cancel current turn)" }
+      local actions = { "Edit", "Remove", "Move up", "Move down" }
+      if session.busy == true and session.client and session.client:supports_steering() then
+        actions[#actions + 1] = "Steer now (keep current turn)"
+      end
+      actions[#actions + 1] = "Send Now (cancel current turn)"
       vim.ui.select(actions, { prompt = "Queue action for " .. item.id .. ":" }, function(action)
         if action == "Edit" then
           vim.ui.input({ prompt = "Edit queued prompt: ", default = item.text }, function(value)

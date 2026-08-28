@@ -592,7 +592,7 @@ ACP composerでは`@diagnostics`を選ぶと、起点bufferのLSP diagnosticsを
 
 `@https://...`または`@url:https://...`はURLをclient側でfetchせず、ACP ResourceLinkとして添付します。`http` / `https`以外のschemeは受け付けません。
 
-生成中に送ったpromptはstable ID付きqueueへ入り、transcriptの`ga` → `Prompt queue`からedit / remove / move / Send Nowを操作できます。ACPのSend Nowは現在turnをcancelしてから対象promptを先頭送信するcancel-and-sendです。
+生成中に送ったpromptはstable ID付きqueueへ入り、transcriptの`ga` → `Prompt queue`からedit / remove / move / Send Nowを操作できます。active turn中でproviderがnative steeringを広告している場合は`Steer now (keep current turn)`も表示され、対象promptをcancelなしで注入します。送信失敗時はpromptをqueueの元の位置へ戻します。ACPのSend Nowは従来どおり現在turnをcancelしてから対象promptを先頭送信するcancel-and-sendです。
 
 transcriptの`ga` → `Search thread`はuser/assistant message、thinking、runtime compactionされたbody ref、展開tool content/raw outputを横断検索します。message結果は該当blockへjumpし、tool結果はdetail viewerを開きます。
 
