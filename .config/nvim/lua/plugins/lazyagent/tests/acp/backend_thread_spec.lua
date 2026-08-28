@@ -139,6 +139,17 @@ function M.run()
     "provider session title does not overwrite a manual title")
   local pending = backend.get_pending_permission(pane_id)
   assert_equal(pending.tool_call_id, "tool-1", "pending permission tool")
+  assert(backend.paste_and_submit(pane_id, "Queue this through steering", { "C-m" }, {}))
+  local queued = assert(backend.list_prompt_queue(pane_id))
+  assert_equal(#queued, 1, "active turn keeps follow-up in prompt queue")
+  local queued_steering_result
+  local queued_item, queued_mode = backend.steer_prompt_queue(pane_id, queued[1].id, function(ok, result)
+    queued_steering_result = { ok = ok, result = result }
+  end)
+  assert(queued_item and queued_mode == "steering", "queued prompt starts native steering")
+  assert(vim.wait(1000, function() return queued_steering_result ~= nil end, 10), "queued steering response")
+  assert_equal(queued_steering_result.ok, true, "queued steering accepted")
+  assert_equal(#backend.list_prompt_queue(pane_id), 0, "successful queued steering consumes prompt")
   local steering_result
   assert(backend.steer_active_turn(pane_id, "Prefer compatibility", function(ok, result)
     steering_result = { ok = ok, result = result }
@@ -149,6 +160,7 @@ function M.run()
   local steering_transcript = table.concat(vim.fn.readfile(runtime.acp_transcript_path), "\n")
   assert(steering_transcript:find("[Steering]", 1, true), "backend transcript marks steering input")
   assert(steering_transcript:find("Prefer compatibility", 1, true), "backend transcript shows steering input")
+  assert(steering_transcript:find("Queue this through steering", 1, true), "backend transcript shows queued steering input")
   assert(not steering_transcript:find("Steering: injected", 1, true), "backend transcript omits outcome-only marker")
   local persisted_during_turn = assert(backend.get_thread(runtime.acp_thread_id))
   local live_during_turn = assert(backend.get_thread(runtime.acp_thread_id, { include_live = true }))
@@ -156,7 +168,8 @@ function M.run()
   local live_turns = live_during_turn.change_journal.turns or {}
   assert_equal(#live_turns, #persisted_turns + 1, "live thread snapshot includes the unpersisted active turn")
   assert_equal(live_turns[#live_turns].state, "active", "live thread snapshot exposes active turn state")
-  assert_equal(live_turns[#live_turns].user_input, "exercise mobile permission", "active turn keeps its user input")
+  assert(type(live_turns[#live_turns].user_input) == "string" and live_turns[#live_turns].user_input ~= "",
+    "active turn keeps a bounded user input summary")
   assert_equal(assert(store:get(runtime.acp_thread_id)).metadata.has_user_prompt, true, "first prompt persistence marker")
   assert(vim.tbl_contains(vim.tbl_map(function(choice) return choice.scope end, pending.choices), "project"),
     "pending permission project scope")

@@ -48,9 +48,26 @@ function M.edit(session, id, text)
 end
 
 function M.remove(session, id)
+  local item = M.take(session, id)
+  return item
+end
+
+function M.take(session, id)
   local index = index_of(session, id)
   if not index then return nil, "queued prompt not found: " .. tostring(id) end
-  return vim.deepcopy(table.remove(queue(session), index))
+  return vim.deepcopy(table.remove(queue(session), index)), index
+end
+
+function M.restore(session, item, index)
+  if type(item) ~= "table" or not item.id or tostring(item.text or "") == "" then
+    return nil, "invalid queued prompt"
+  end
+  local existing_index, existing = index_of(session, item.id)
+  if existing then return vim.deepcopy(existing), existing_index end
+  local items = queue(session)
+  index = math.max(1, math.min(#items + 1, tonumber(index) or (#items + 1)))
+  table.insert(items, index, vim.deepcopy(item))
+  return vim.deepcopy(items[index]), index
 end
 
 function M.move(session, id, delta)
