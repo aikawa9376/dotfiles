@@ -445,6 +445,45 @@ for line in io.lines() do
           },
         })
       end
+      if vim.env.LAZYAGENT_FAKE_PROVIDER_EXTENSIONS == "1" then
+        for _, update_value in ipairs({
+          {
+            sessionUpdate = "plan_update",
+            plan = { type = "markdown", planId = "fixture-plan", content = "# Fixture plan" },
+          },
+          { sessionUpdate = "plan_removed", planId = "fixture-plan" },
+          {
+            sessionUpdate = "compaction_summary_chunk",
+            compactionId = "compact-1",
+            content = { type = "text", text = "Earlier work was summarized." },
+          },
+          { sessionUpdate = "compaction_update", compactionId = "compact-1", status = "completed" },
+          {
+            sessionUpdate = "session_info_update",
+            _meta = {
+              jetbrains = {
+                air = {
+                  version = 1,
+                  sessionFailure = {
+                    id = "fixture-turn:error",
+                    revision = 1,
+                    category = "connection",
+                    severity = "warning",
+                    title = "Retrying fixture connection",
+                    actions = { "retry" },
+                  },
+                },
+              },
+            },
+          },
+        }) do
+          send({
+            jsonrpc = "2.0",
+            method = "session/update",
+            params = { sessionId = "test-session", update = update_value },
+          })
+        end
+      end
       send_fragmented({
         jsonrpc = "2.0",
         method = "session/update",

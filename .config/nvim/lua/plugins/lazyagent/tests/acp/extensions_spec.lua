@@ -76,8 +76,15 @@ local function test_client_extension_contract()
   client:_handle_update({ sessionId = "stranger", update = {
     sessionUpdate = "agent_message_chunk", content = { type = "text", text = "drop" },
   } })
-  vim.wait(1000, function() return #updates == 2 end, 10)
-  assert_equal(2, #updates, "root and negotiated child updates only")
+  client:_handle_update({ sessionId = "root", update = { sessionUpdate = "plan_removed", planId = "plan-1" } })
+  client:_handle_update({ sessionId = "root", update = {
+    sessionUpdate = "compaction_summary_chunk", compactionId = "compact-1", content = { type = "text", text = "summary" },
+  } })
+  client:_handle_update({ sessionId = "root", update = {
+    sessionUpdate = "compaction_update", compactionId = "compact-1", status = "completed",
+  } })
+  vim.wait(1000, function() return #updates == 5 end, 10)
+  assert_equal(5, #updates, "root, negotiated child, plan removal, and compaction updates only")
   assert_equal("child", updates[2].sessionId, "child update identity")
 
   client._send_result = function(_, id, result) responses[#responses + 1] = { id = id, result = result } end
