@@ -54,8 +54,13 @@ function M.choices(options)
   local labels, choices = {}, {}
   for _, option in ipairs(options or {}) do
     local scope = tostring(option.kind or ""):match("_once$") and "once" or "agent"
-    labels[#labels + 1] = string.format("%s [%s] — %s", option.name or option.optionId or "Option",
+    local label = string.format("%s [%s] — %s", option.name or option.optionId or "Option",
       option.kind or "option", scope == "agent" and "agent-managed" or scope)
+    local presentation = type(option._meta) == "table" and option._meta.permission or nil
+    if type(presentation) == "table" and presentation.description and presentation.description ~= "" then
+      label = label .. "\n  " .. tostring(presentation.description)
+    end
+    labels[#labels + 1] = label
     choices[#choices + 1] = { option = option, scope = scope }
   end
   for _, learned in ipairs({

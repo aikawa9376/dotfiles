@@ -6,9 +6,14 @@ function M.run()
   local opts = { base_dir = base }
   local session = { agent_name = "Codex::thread", provider_id = "Codex", thread_id = "thread", root_dir = "/project" }
   local tool = { toolCallId = "tool-1", toolName = "write_file", kind = "edit", title = "Edit file" }
-  local option = { optionId = "allow", kind = "allow_once" }
+  local option = {
+    optionId = "allow",
+    kind = "allow_once",
+    _meta = { permission = { version = 1, description = "Run once without remembering." } },
+  }
   local labels, choices = Store.choices({ option, { optionId = "reject", kind = "reject_once", name = "Reject" } })
   assert(#labels == 8 and choices[3].scope == "session" and choices[5].scope == "global", "scoped permission choices")
+  assert(labels[1]:find("Run once without remembering.", 1, true), "permission presentation description")
   local session_rule = Store.rule(session, tool, option, "session", "/project/a.lua")
   assert(Store.remember(session, "session", session_rule, opts), "remember session permission")
   assert(Store.remember(session, "project", Store.rule(session, tool, option, "project", "/project/b.lua"), opts),
