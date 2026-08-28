@@ -48,6 +48,7 @@ function M.setup(deps)
   local PermissionStore = require("lazyagent.acp.permission_store")
   local Elicitation = require("lazyagent.acp.elicitation")
   local Extensions = require("lazyagent.acp.extensions")
+  local SessionFailure = require("lazyagent.acp.session_failure")
   local UiQueue = require("lazyagent.acp.ui_queue")
   local config_values = require("lazyagent.acp.config_values")
   local SessionHydrator = require("lazyagent.acp.session_hydrator")
@@ -57,6 +58,25 @@ function M.setup(deps)
       agent_name = session and session.agent_name or nil,
       message = message,
     })
+  end
+
+  local function record_session_failure(session, carrier, source_subagent)
+    local owner = source_subagent or session
+    local failure, status = SessionFailure.apply(owner, carrier)
+    if not failure then return nil, status end
+    if status == "ignored" then return failure, status end
+    local prefix = source_subagent and ("Subagent " .. tostring(source_subagent.name or source_subagent.sessionId) .. " ") or ""
+    local heading = prefix .. (failure.severity == "warning" and "Warning" or "Error")
+    append_block(session, heading, SessionFailure.render(failure), {
+      kind = "error",
+      failureId = failure.id,
+      failureRevision = failure.revision,
+      failureCategory = failure.category,
+      failureSeverity = failure.severity,
+      subagentSessionId = source_subagent and source_subagent.sessionId or nil,
+    })
+    sync_runtime_session(session)
+    return failure, status
   end
 
   local function first_number(...)
@@ -939,6 +959,7 @@ function M.setup(deps)
         if type(update._meta) == "table" and update._meta.goal ~= nil then
           source_subagent.goal = update._meta.goal == vim.NIL and nil or vim.deepcopy(update._meta.goal)
         end
+        record_session_failure(session, update, source_subagent)
         sync_runtime_session(session)
         return
       end
@@ -946,6 +967,7 @@ function M.setup(deps)
       if type(update._meta) == "table" and update._meta.goal ~= nil then
         session.goal = update._meta.goal == vim.NIL and nil or vim.deepcopy(update._meta.goal)
       end
+      record_session_failure(session, update)
       sync_runtime_session(session)
       local title_source = session.thread_record
           and session.thread_record.metadata
@@ -1231,6 +1253,10 @@ function M.setup(deps)
       goal = nil,
       subagents = {},
       async_tasks = {},
+      session_failures = {},
+      session_failure_order = {},
+      active_session_failure = nil,
+      provider_compactions = {},
       current_plan = {},
       current_plan_artifact = nil,
     }
@@ -1788,6 +1814,12 @@ function M.setup(deps)
   module.create_ephemeral_session = create_ephemeral_session
   module.apply_ephemeral_update = function(session, params)
     return on_client_update(session, params)
+  end
+  module.record_session_failure = record_session_failure
+  module.resolve_session_failure = function(session, id)
+    local resolved = SessionFailure.resolve(session, id)
+    if resolved then sync_runtime_session(session) end
+    return resolved
   end
   module.capture_native_session_for_session = capture_native_session_for_session
 
