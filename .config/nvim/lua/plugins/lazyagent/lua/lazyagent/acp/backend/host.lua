@@ -766,6 +766,63 @@ function M.setup(deps)
       return
     end
 
+    if kind == "plan_removed" and update.planId then
+      local owner = source_subagent or session
+      local artifact_key = source_subagent and "plan_artifact" or "current_plan_artifact"
+      local artifact = owner[artifact_key]
+      if type(artifact) == "table" and tostring(artifact.planId or "") == tostring(update.planId) then
+        owner[artifact_key] = nil
+      end
+      sync_runtime_session(session)
+      append_block(session, source_label and (source_label .. " · Plan") or "Plan", "Removed plan " .. tostring(update.planId), {
+        kind = "plan",
+        planId = update.planId,
+        removed = true,
+        subagentSessionId = source_subagent and source_session_id or nil,
+      })
+      return
+    end
+
+    if (kind == "compaction_update" or kind == "compaction_summary_chunk") and update.compactionId then
+      local owner = source_subagent or session
+      owner.provider_compactions = type(owner.provider_compactions) == "table" and owner.provider_compactions or {}
+      local id = tostring(update.compactionId)
+      local compaction = owner.provider_compactions[id] or { compactionId = id, summaryText = "" }
+      if kind == "compaction_summary_chunk" then
+        local chunk = render_content(update.content)
+        compaction.summaryText = tostring(compaction.summaryText or "") .. chunk
+        compaction.status = compaction.status or "in_progress"
+        owner.provider_compactions[id] = compaction
+        sync_runtime_session(session)
+        append_stream_chunk(session, "compaction:" .. tostring(source_session_id or session.session_id) .. ":" .. id,
+          source_label and (source_label .. " · Context compaction") or "Context compaction", chunk, {
+            kind = "system", compactionId = id, subagentSessionId = source_subagent and source_session_id or nil,
+          })
+        return
+      end
+      compaction.status = update.status or compaction.status
+      compaction.error = update.error
+      compaction.summary = vim.deepcopy(update.summary)
+      owner.provider_compactions[id] = compaction
+      sync_runtime_session(session)
+      close_stream(session)
+      local body = "Status: " .. tostring(compaction.status or "updated")
+      local summary_parts = {}
+      for _, content in ipairs(type(update.summary) == "table" and update.summary or {}) do
+        local rendered = render_content(content)
+        if rendered ~= "" then summary_parts[#summary_parts + 1] = rendered end
+      end
+      if #summary_parts > 0 then body = body .. "\n\n" .. table.concat(summary_parts, "\n") end
+      if update.error and update.error ~= "" then body = body .. "\n\n" .. tostring(update.error) end
+      append_block(session, source_label and (source_label .. " · Context compaction") or "Context compaction", body, {
+        kind = update.status == "failed" and "error" or "system",
+        compactionId = id,
+        status = update.status,
+        subagentSessionId = source_subagent and source_session_id or nil,
+      })
+      return
+    end
+
     if kind == "subagent_spawned" and update.subagentSessionId then
       session.subagents = session.subagents or {}
       session.subagents[tostring(update.subagentSessionId)] = {

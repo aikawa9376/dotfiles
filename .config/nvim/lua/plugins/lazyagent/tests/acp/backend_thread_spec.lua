@@ -68,7 +68,10 @@ function M.run()
       cwd = root,
       root_dir = root,
       additional_directories = { root .. "/tests" },
-      env = { LAZYAGENT_FAKE_SESSION_INFO_TITLE = "Provider generated title" },
+      env = {
+        LAZYAGENT_FAKE_SESSION_INFO_TITLE = "Provider generated title",
+        LAZYAGENT_FAKE_PROVIDER_EXTENSIONS = "1",
+      },
       editor = { instance_id = "backend-editor", owner_pid = vim.fn.getpid(), source_path = root .. "/README.md" },
     },
   })
@@ -139,6 +142,14 @@ function M.run()
     "provider session title does not overwrite a manual title")
   local pending = backend.get_pending_permission(pane_id)
   assert_equal(pending.tool_call_id, "tool-1", "pending permission tool")
+  local extension_runtime = backend.get_runtime_snapshot(pane_id)
+  assert_equal(extension_runtime.acp_plan_artifact, nil, "plan_removed clears the current plan artifact")
+  assert_equal(extension_runtime.acp_provider_compactions["compact-1"].status, "completed",
+    "provider compaction remains separate runtime state")
+  assert_equal(extension_runtime.acp_active_session_failure.id, "fixture-turn:error",
+    "typed session failure is active during the turn")
+  assert_equal(extension_runtime.acp_session_failures["fixture-turn:error"].revision, 1,
+    "typed session failure is retained in runtime history")
   assert(backend.paste_and_submit(pane_id, "Queue this through steering", { "C-m" }, {}))
   local queued = assert(backend.list_prompt_queue(pane_id))
   assert_equal(#queued, 1, "active turn keeps follow-up in prompt queue")
@@ -181,6 +192,11 @@ function M.run()
   vim.ui.select = previous_select
   agentmux.sync = previous_agentmux_sync
   state.sessions.ThreadFixture = previous_status_session
+
+  local extension_transcript = table.concat(vim.fn.readfile(runtime.acp_transcript_path), "\n")
+  assert(extension_transcript:find("Retrying fixture connection", 1, true), "typed failure is durable in transcript")
+  assert(extension_transcript:find("Earlier work was summarized.", 1, true), "provider compaction summary is visible")
+  assert(extension_transcript:find("Removed plan fixture-plan", 1, true), "plan removal is visible")
 
   local export_path = cache_dir .. "/exports/thread.md"
   assert_equal(backend.export_thread_markdown(pane_id, export_path), export_path, "thread Markdown export path")

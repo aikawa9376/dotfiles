@@ -492,6 +492,10 @@ require("lazyagent").setup({
 
 experimentalなACP RFDはcapability-drivenで扱います。`session_fork`対応providerでは`ga` → `Fork session`がnative forkを保存し、`next_edit_suggestions`対応providerでは`ga` → `Next edit suggestion`から現在fileへのedit候補を取得できます。plan update受信後は`ga` → `Plan actions`で承認・自律続行・修正依頼を送れます。providerがcapabilityをadvertiseしない操作は表示されません。
 
+AIR `sessionFailure`はincident ID・revision・severity・recovery actionを構造化してruntimeとtranscriptへ保存します。同一incidentの古いrevisionは無視し、error後にproviderが`retry`または`login`を提示した場合だけ`ga` → `Failure actions`へ安全に実行できる操作を表示します。追加sessionのownershipを確定できない`new_session`は現在表示しません。
+
+ACP `plan_removed`は一致するMarkdown plan artifactだけを解除します。provider contextの`compaction_update` / `compaction_summary_chunk`はtranscriptと専用runtime stateへ反映し、LazyAgent側の表示用`transcript_compaction`やmemory上限用`runtime_compaction`とは別の状態として扱います。Codexの`providers/*`とoptionalなmodel生成file-change reportは交渉せず、接続先設定とfile evidenceは既存のagent設定・turn journalを正本にします。
+
 providerがnative steering extensionを広告する場合は`ga` → `Steer active turn`で、現在turnをcancelせず追加指示を注入できます。非対応providerの`Send Now`は従来どおりcancel-and-sendです。workspace checkpointとlocal branchはfile/transcriptを復元しますが、providerが履歴rewind capabilityを持たない限りmodel内部状態のrewindを装いません。
 
 ACP scratch bufferではnormal / insert modeの`<M-s>`で、現在の内容をactive turnへのnative steeringとして送信できます。keyは`scratch_keymaps.steer_normal` / `scratch_keymaps.steer_insert`で変更でき、空文字または`false`で無効化できます。provider非対応・active turnなし・送信失敗の場合は通常promptへfallbackせず、scratch内容を保持します。
