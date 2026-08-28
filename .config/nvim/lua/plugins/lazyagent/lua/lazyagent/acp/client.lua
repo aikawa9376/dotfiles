@@ -189,7 +189,7 @@ local function default_client_capabilities(handlers)
       jetbrains = {
         air = {
           version = 1,
-          capabilities = { "nativeSubagentSessions", "asyncTasks" },
+          capabilities = { "nativeSubagentSessions", "asyncTasks", "sessionFailure" },
         },
       },
     },

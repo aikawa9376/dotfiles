@@ -699,15 +699,19 @@ local function create_backend(default_view)
       return false
     end
     session.pending_brain_turn = nil
-    finish_change_turn(session, "completed")
-    util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = pending.result })
+    finish_change_turn(session, pending.failure and "failed" or "completed")
+    if not pending.failure then
+      util.fire_event("AssistantResponse", { agent_name = session.agent_name, result = pending.result })
+      actions_helpers.maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
+      config_helpers.maybe_save_turn_to_brain(session, pending.prompt, pending.start_seq)
+    end
     util.fire_event("TurnDone", { agent_name = session.agent_name, result = pending.result })
-    actions_helpers.maybe_call_mcp_tool("notify_done", { agent_name = session.agent_name })
-    Notifications.emit(((state.opts or {}).acp or {}).notifications, "completion", {
-      agent_name = session.agent_name,
-      message = "Response completed",
-    })
-    config_helpers.maybe_save_turn_to_brain(session, pending.prompt, pending.start_seq)
+    if not pending.failure then
+      Notifications.emit(((state.opts or {}).acp or {}).notifications, "completion", {
+        agent_name = session.agent_name,
+        message = "Response completed",
+      })
+    end
     return true
   end
 
@@ -807,6 +811,14 @@ local function create_backend(default_view)
           state_helpers.clear_pending_switch_history(session)
         end
 
+        local failure = host_helpers.record_session_failure(session, result)
+        if failure and failure.severity == "error" then
+          session.last_failed_prompt = prompt
+        elseif not failure then
+          host_helpers.resolve_session_failure(session)
+          session.last_failed_prompt = nil
+        end
+
         local stop_reason = result and result.stopReason or nil
         if cancel_requested or stop_reason == "cancelled" then
           session.pending_brain_turn = nil
@@ -851,6 +863,7 @@ local function create_backend(default_view)
           prompt = prompt,
           start_seq = turn_start_seq,
           result = result,
+          failure = failure and failure.severity == "error" and vim.deepcopy(failure) or nil,
         }
         complete_pending_turn(session)
 
@@ -1109,6 +1122,10 @@ local function create_backend(default_view)
         async_tasks = {},
         current_plan = {},
         current_plan_artifact = nil,
+        session_failures = {},
+        session_failure_order = {},
+        active_session_failure = nil,
+        provider_compactions = {},
         usage_stats = {},
         protocol_events = {},
         auth_methods = {},
@@ -1860,6 +1877,9 @@ local function create_backend(default_view)
       acp_async_tasks = vim.deepcopy(session.async_tasks or {}),
       acp_plan = vim.deepcopy(session.current_plan or {}),
       acp_plan_artifact = vim.deepcopy(session.current_plan_artifact),
+      acp_session_failures = vim.deepcopy(session.session_failures or {}),
+      acp_active_session_failure = vim.deepcopy(session.active_session_failure),
+      acp_provider_compactions = vim.deepcopy(session.provider_compactions or {}),
       acp_transcript_path = session.transcript_path,
       acp_protocol_log_path = session.protocol_log_path,
       acp_agent_info = vim.deepcopy(session.agent_info or {}),
@@ -2618,6 +2638,49 @@ local function create_backend(default_view)
   function backend.supports_steering(target_pane)
     local session = get_session(target_pane)
     return session ~= nil and session.client ~= nil and session.client:supports_steering()
+  end
+
+  local function failure_actions(session)
+    local failure = session and session.active_session_failure or nil
+    if type(failure) ~= "table" or type(failure.actions) ~= "table" or session.busy == true then return {} end
+    local choices = {}
+    for _, action in ipairs(failure.actions) do
+      if action == "retry" and type(session.last_failed_prompt) == "string" and session.last_failed_prompt ~= "" then
+        choices[#choices + 1] = { action = action, label = "Retry last prompt" }
+      elseif action == "login" and session.client and #(session.auth_methods or {}) > 0 then
+        choices[#choices + 1] = { action = action, label = "Authenticate" }
+      end
+    end
+    return choices
+  end
+
+  function backend.supports_failure_actions(target_pane)
+    return #failure_actions(get_session(target_pane)) > 0
+  end
+
+  function backend.show_failure_actions(target_pane)
+    local session = get_session(target_pane)
+    local choices = failure_actions(session)
+    if #choices == 0 then return false end
+    vim.ui.select(choices, {
+      prompt = tostring(session.active_session_failure.title or "ACP failure") .. ":",
+      format_item = function(item) return item.label end,
+    }, function(choice)
+      if not choice then return end
+      if choice.action == "retry" then
+        PromptQueue.push(session, session.last_failed_prompt)
+        backend._drain_prompt_queue(target_pane)
+      elseif choice.action == "login" then
+        session.client:request_authentication(function(_, err)
+          if err then
+            vim.notify("LazyAgent ACP authentication failed: " .. tostring(err.message or err), vim.log.levels.ERROR)
+          else
+            vim.notify("LazyAgent ACP authentication completed", vim.log.levels.INFO)
+          end
+        end)
+      end
+    end)
+    return true
   end
 
   function backend.supports_goal(target_pane)

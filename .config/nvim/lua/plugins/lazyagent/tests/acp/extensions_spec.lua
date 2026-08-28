@@ -64,7 +64,7 @@ local function test_client_extension_contract()
   })
   assert_equal("table", type(client.client_capabilities.plan), "plan capability")
   assert_equal("table", type(client.client_capabilities.subagents), "subagent capability")
-  assert_equal({ "nativeSubagentSessions", "asyncTasks" },
+  assert_equal({ "nativeSubagentSessions", "asyncTasks", "sessionFailure" },
     client.client_capabilities._meta.jetbrains.air.capabilities, "AIR extension capabilities")
   client.session_id = "root"
   client:_handle_update({ sessionId = "root", update = {

@@ -58,6 +58,7 @@ local suites = {
   "tests.acp.ui_queue_spec",
   "tests.acp.elicitation_spec",
   "tests.acp.extensions_spec",
+  "tests.acp.session_failure_spec",
   "tests.acp.protocol_log_spec",
   "tests.acp.replay_spec",
   "tests.acp.v2_adapter_spec",

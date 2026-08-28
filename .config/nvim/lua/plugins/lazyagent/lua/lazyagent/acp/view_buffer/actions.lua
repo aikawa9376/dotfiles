@@ -1522,6 +1522,18 @@ function M.new(ctx)
       end
 
       if backend
+          and type(backend.show_failure_actions) == "function"
+          and type(backend.supports_failure_actions) == "function"
+          and backend.supports_failure_actions(pane_id_for_bufnr(bufnr)) then
+        actions[#actions + 1] = {
+          label = "Failure actions",
+          action = function()
+            backend.show_failure_actions(pane_id_for_bufnr(bufnr))
+          end,
+        }
+      end
+
+      if backend
           and type(backend.fork_current_session) == "function"
           and type(backend.supports_session_fork) == "function"
           and backend.supports_session_fork(pane_id_for_bufnr(bufnr)) then
