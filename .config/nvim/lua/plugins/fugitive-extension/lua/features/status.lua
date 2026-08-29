@@ -21,6 +21,7 @@ local pending_status_cursor_anchors_by_buf = {}
 local repository_health_by_buf = {}
 local index_flags_by_buf = {}
 local index_flags_expanded_by_buf = {}
+local status_snapshot_by_buf = {}
 
 local status_heading_highlights = {
   { '^Head:', 'RainbowDelimiterBlue' },
@@ -38,6 +39,7 @@ local status_heading_highlights = {
   { '^Stashes %(', 'RainbowDelimiterOrange' },
   { '^Pull requests %(', 'RainbowDelimiterGreen' },
   { '^Index flags %[local%]', 'RainbowDelimiterCyan' },
+  { '^Loading repository details', 'Comment' },
   { '^Bisecting', 'RainbowDelimiterYellow' },
   { ' in progress', 'RainbowDelimiterYellow' },
 }
@@ -326,61 +328,96 @@ local function reconcile_status_block(bufnr, start_row, end_row, new_lines)
   end
 end
 
-local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
+local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts)
   if not utils.is_valid_buf(bufnr) then return end
+  opts = opts or {}
   local work_tree = utils.get_buf_work_tree(bufnr)
   if not work_tree then return end
   local cursor_anchors = pending_status_cursor_anchors_by_buf[bufnr]
   pending_status_cursor_anchors_by_buf[bufnr] = nil
   if not cursor_anchors then cursor_anchors = capture_status_cursors(bufnr) end
 
-  local health = repository_health.inspect(work_tree)
-  repository_health_by_buf[bufnr] = health
-  local native_lines, snapshot_err = status_renderer.snapshot(bufnr, work_tree, {
-    header_lines = repository_health.repository_lines(health),
-  })
-  if not native_lines then
-    vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
-    return
-  end
-
-  local worktree_summary = worktree.get_summary(work_tree)
-  local stash_list = utils.get_stash_list(work_tree)
-
   local commit_scope = commit_scope_by_buf[bufnr] or 'unpushed'
-  local pull_requests = pull_requests_by_buf[bufnr]
-  local flag_state = index_flags.inspect(work_tree)
-  index_flags_by_buf[bufnr] = flag_state
-  local warning = index_flags.warning_line(flag_state)
-  if warning then
-    local warning_row = #native_lines + 1
-    for row, line in ipairs(native_lines) do
-      if line == 'Help: g?' then warning_row = row; break end
+  local snapshot = opts.snapshot or (opts.cached and status_snapshot_by_buf[bufnr] or nil)
+  if snapshot and snapshot.commit_scope ~= commit_scope then snapshot = nil end
+  if opts.snapshot and snapshot then status_snapshot_by_buf[bufnr] = snapshot end
+
+  if not snapshot then
+    local health = repository_health.inspect(work_tree)
+    repository_health_by_buf[bufnr] = health
+    local native_lines, snapshot_err = status_renderer.snapshot(bufnr, work_tree, {
+      header_lines = repository_health.repository_lines(health),
+    })
+    if not native_lines then
+      vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
+      return
     end
-    table.insert(native_lines, warning_row, warning)
-    status_renderer.shift_entries(bufnr, warning_row, 1)
+
+    local flag_state = index_flags.inspect(work_tree)
+    index_flags_by_buf[bufnr] = flag_state
+    local warning = index_flags.warning_line(flag_state)
+    if warning then
+      local warning_row = #native_lines + 1
+      for row, line in ipairs(native_lines) do
+        if line == 'Help: g?' then warning_row = row; break end
+      end
+      table.insert(native_lines, warning_row, warning)
+      status_renderer.shift_entries(bufnr, warning_row, 1)
+    end
+
+    local unpushed_commits = status_renderer.unpushed_commits(bufnr)
+    local commit_lines = unpushed_commits
+    if commit_scope == 'recent' and #commit_lines < 15 then
+      commit_lines = recent_commit_lines(work_tree, 15)
+    end
+    snapshot = {
+      commit_lines = commit_lines,
+      commit_scope = commit_scope,
+      flag_state = flag_state,
+      health = health,
+      native_lines = native_lines,
+      stash_list = utils.get_stash_list(work_tree),
+      unpushed_commits = unpushed_commits,
+      worktree_summary = worktree.get_summary(work_tree),
+    }
+    status_snapshot_by_buf[bufnr] = snapshot
+  else
+    repository_health_by_buf[bufnr] = snapshot.health
+    index_flags_by_buf[bufnr] = snapshot.flag_state
   end
+
+  local health = snapshot.health
+  local native_lines = snapshot.native_lines
+  local worktree_summary = snapshot.worktree_summary
+  local stash_list = snapshot.stash_list
+  local pull_requests = pull_requests_by_buf[bufnr]
+  local flag_state = snapshot.flag_state
 
   local function build_final_lines(commit_lines)
     local final_lines = {}
-    if stash_list and #stash_list > 0 then
+    if snapshot.loading_details then
+      table.insert(final_lines, '')
+      table.insert(final_lines, 'Loading repository details…')
+    elseif stash_list and #stash_list > 0 then
       table.insert(final_lines, '')
       table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
       for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
     end
 
-    table.insert(final_lines, '')
-    local commit_header = commit_scope == 'recent'
-      and ('Commits [latest 15+] (%d)'):format(#commit_lines)
-      or ('Unpushed [only] (%d)'):format(#commit_lines)
-    table.insert(final_lines, commit_header)
-    for _, l in ipairs(commit_lines) do table.insert(final_lines, l) end
-
-    local unpulled, upstream = status_renderer.unpulled_commits(bufnr)
-    if unpulled then
+    if not snapshot.loading_details then
       table.insert(final_lines, '')
-      table.insert(final_lines, ('Unpulled from %s (%d)'):format(upstream, #unpulled))
-      vim.list_extend(final_lines, unpulled)
+      local commit_header = commit_scope == 'recent'
+        and ('Commits [latest 15+] (%d)'):format(#commit_lines)
+        or ('Unpushed [only] (%d)'):format(#commit_lines)
+      table.insert(final_lines, commit_header)
+      for _, l in ipairs(commit_lines) do table.insert(final_lines, l) end
+
+      local unpulled, upstream = status_renderer.unpulled_commits(bufnr)
+      if unpulled then
+        table.insert(final_lines, '')
+        table.insert(final_lines, ('Unpulled from %s (%d)'):format(upstream, #unpulled))
+        vim.list_extend(final_lines, unpulled)
+      end
     end
 
     if pull_requests then
@@ -409,13 +446,24 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   end
 
   utils.with_buf_modifiable(bufnr, function()
-    unpushed_commits_by_buf[bufnr] = status_renderer.unpushed_commits(bufnr)
-    local commit_lines = unpushed_commits_by_buf[bufnr]
-    if commit_scope == 'recent' and #commit_lines < 15 then
-      commit_lines = recent_commit_lines(work_tree, 15)
+    unpushed_commits_by_buf[bufnr] = snapshot.unpushed_commits
+    local custom_lines = build_final_lines(snapshot.commit_lines)
+    local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local custom_start
+    if opts.cached then
+      for row, line in ipairs(current_lines) do
+        if line:match('^Stashes %(') or status_header_kind(line) == 'commit' then
+          custom_start = row > 1 and current_lines[row - 1] == '' and row - 1 or row
+          break
+        end
+      end
     end
-    local desired_lines = append_custom_status_lines(native_lines, build_final_lines(commit_lines))
-    reconcile_status_block(bufnr, 1, vim.api.nvim_buf_line_count(bufnr), desired_lines)
+    if custom_start then
+      reconcile_status_block(bufnr, custom_start, #current_lines, custom_lines)
+    else
+      local desired_lines = append_custom_status_lines(native_lines, custom_lines)
+      reconcile_status_block(bufnr, 1, #current_lines, desired_lines)
+    end
 
     -- Update extmarks based on the new buffer contents
     vim.api.nvim_buf_clear_namespace(bufnr, ns_worktree, 0, -1)
@@ -894,13 +942,60 @@ function M.setup(group)
       local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
       local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
       local pr_fetching, pr_fetch_pending = false, false
+      local refresh_scheduled = false
       local apply_icons
       pull_request_scope_by_buf[b] = pull_request_scope_by_buf[b] or 'branch'
       commit_scope_by_buf[b] = commit_scope_by_buf[b] or 'unpushed'
 
-      local function refresh()
-        refresh_status_sections(b, ns_worktree, ns_stash, ns_pr)
+      local function refresh(opts)
+        refresh_status_sections(b, ns_worktree, ns_stash, ns_pr, opts)
         if apply_icons then apply_icons() end
+      end
+
+      local function refresh_cached()
+        if status_snapshot_by_buf[b] then refresh({ cached = true }) end
+      end
+
+      local function schedule_refresh()
+        if refresh_scheduled then return end
+        refresh_scheduled = true
+        vim.schedule(function()
+          refresh_scheduled = false
+          if utils.is_valid_buf(b) then refresh() end
+        end)
+      end
+
+      local function render_initial_status()
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree then return end
+        status_renderer.snapshot_async(b, work_tree, {}, function(native_lines, snapshot_err)
+          if not utils.is_valid_buf(b) then return end
+          if status_snapshot_by_buf[b] then return end
+          if not native_lines then
+            vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
+            return
+          end
+
+          refresh({
+            snapshot = {
+              commit_lines = {},
+              commit_scope = commit_scope_by_buf[b] or 'unpushed',
+              flag_state = { entries = {}, changed_count = 0 },
+              health = nil,
+              loading_details = true,
+              native_lines = native_lines,
+              stash_list = {},
+              unpushed_commits = {},
+              worktree_summary = nil,
+            },
+          })
+
+          -- Let the lightweight status reach the screen before collecting the
+          -- expensive repository metadata and diff statistics.
+          vim.defer_fn(function()
+            if utils.is_valid_buf(b) then schedule_refresh() end
+          end, 500)
+        end)
       end
 
       local fetch_pull_requests
@@ -916,68 +1011,79 @@ function M.setup(group)
 
         pr_fetching = true
         local requested_scope = pull_request_scope_by_buf[b] or 'branch'
-        local branch = nil
-        if requested_scope == 'branch' then
-          local branch_result = vim.system(
-            { 'git', 'branch', '--show-current' },
-            { cwd = work_tree, text = true }
-          ):wait()
-          if branch_result.code == 0 then
-            branch = vim.trim(branch_result.stdout or '')
-          end
-          if not branch or branch == '' then
-            pull_requests_by_buf[b] = {}
-            pull_request_branch_by_buf[b] = nil
-            pr_fetching = false
-            refresh()
-            return
+        local function finish_fetch()
+          pr_fetching = false
+          if pr_fetch_pending then
+            pr_fetch_pending = false
+            fetch_pull_requests()
           end
         end
 
-        local args = {
-          'gh', 'pr', 'list', '--state', 'open',
-          '--limit', '100',
-          '--json', 'number,title,headRefName,isDraft,url',
-        }
-        if branch then
-          vim.list_extend(args, { '--head', branch })
-        end
+        local function request_pull_requests(branch)
+          local args = {
+            'gh', 'pr', 'list', '--state', 'open',
+            '--limit', '100',
+            '--json', 'number,title,headRefName,isDraft,url',
+          }
+          if branch then vim.list_extend(args, { '--head', branch }) end
 
-        vim.system(args, { cwd = work_tree, text = true }, function(result)
-          vim.schedule(function()
-            pr_fetching = false
-            if not utils.is_valid_buf(b) then return end
+          vim.system(args, { cwd = work_tree, text = true }, function(result)
+            vim.schedule(function()
+              if not utils.is_valid_buf(b) then return end
 
-            if result.code == 0 and pull_request_scope_by_buf[b] == requested_scope then
-              local ok, decoded = pcall(vim.json.decode, result.stdout or '')
-              local pull_requests = {}
-              if ok and type(decoded) == 'table' then
-                for _, pr in ipairs(decoded) do
-                  local number = tonumber(pr.number)
-                  if number then
-                    local url = type(pr.url) == 'string' and pr.url or ''
-                    table.insert(pull_requests, {
-                      number = number,
-                      title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
-                      headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
-                      isDraft = pr.isDraft == true,
-                      url = url,
-                      repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
-                    })
+              if result.code == 0 and pull_request_scope_by_buf[b] == requested_scope then
+                local ok, decoded = pcall(vim.json.decode, result.stdout or '')
+                local pull_requests = {}
+                if ok and type(decoded) == 'table' then
+                  for _, pr in ipairs(decoded) do
+                    local number = tonumber(pr.number)
+                    if number then
+                      local url = type(pr.url) == 'string' and pr.url or ''
+                      table.insert(pull_requests, {
+                        number = number,
+                        title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
+                        headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
+                        isDraft = pr.isDraft == true,
+                        url = url,
+                        repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
+                      })
+                    end
                   end
                 end
+                pull_requests_by_buf[b] = pull_requests
+                pull_request_branch_by_buf[b] = branch
+                refresh_cached()
               end
-              pull_requests_by_buf[b] = pull_requests
-              pull_request_branch_by_buf[b] = branch
-              refresh()
-            end
 
-            if pr_fetch_pending then
-              pr_fetch_pending = false
-              fetch_pull_requests()
-            end
+              finish_fetch()
+            end)
           end)
-        end)
+        end
+
+        if requested_scope == 'branch' then
+          vim.system({ 'git', 'branch', '--show-current' }, { cwd = work_tree, text = true }, function(result)
+            vim.schedule(function()
+              if not utils.is_valid_buf(b) then return end
+              if pull_request_scope_by_buf[b] ~= requested_scope then
+                finish_fetch()
+                return
+              end
+              local branch = result.code == 0 and vim.trim(result.stdout or '') or ''
+              if branch == '' then
+                if pull_request_scope_by_buf[b] == requested_scope then
+                  pull_requests_by_buf[b] = {}
+                  pull_request_branch_by_buf[b] = nil
+                  refresh_cached()
+                end
+                finish_fetch()
+                return
+              end
+              request_pull_requests(branch)
+            end)
+          end)
+        else
+          request_pull_requests(nil)
+        end
       end
 
       local function reload_status(position_only)
@@ -989,7 +1095,7 @@ function M.setup(group)
           for _, anchor in ipairs(anchors) do anchor.position_only = true end
         end
         if #anchors > 0 then pending_status_cursor_anchors_by_buf[b] = anchors end
-        vim.schedule(refresh)
+        schedule_refresh()
         fetch_pull_requests()
       end
 
@@ -999,7 +1105,10 @@ function M.setup(group)
 
       status_renderer.take_ownership(b)
       pending_status_cursor_anchors_by_buf[b] = nil
-      refresh()
+      utils.with_buf_modifiable(b, function()
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { 'Loading Git status…' })
+      end)
+      render_initial_status()
       fetch_pull_requests()
 
       vim.api.nvim_create_autocmd('BufWipeout', {
@@ -1017,6 +1126,7 @@ function M.setup(group)
           repository_health_by_buf[b] = nil
           index_flags_by_buf[b] = nil
           index_flags_expanded_by_buf[b] = nil
+          status_snapshot_by_buf[b] = nil
           status_renderer.cleanup(b)
         end,
       })
@@ -1048,7 +1158,7 @@ function M.setup(group)
       local function set_commit_scope(scope)
         if scope == commit_scope_by_buf[b] then return end
         commit_scope_by_buf[b] = scope
-        refresh()
+        schedule_refresh()
       end
 
       local function toggle_commit_scope()
@@ -1075,7 +1185,7 @@ function M.setup(group)
         if scope == pull_request_scope_by_buf[b] then return end
         pull_request_scope_by_buf[b] = scope
         pull_request_branch_by_buf[b] = nil
-        refresh()
+        refresh_cached()
         fetch_pull_requests()
       end
 
@@ -1796,7 +1906,7 @@ function M.setup(group)
 
       local function move_to_index_flags(expand)
         if expand ~= nil then index_flags_expanded_by_buf[b] = expand end
-        refresh()
+        refresh_cached()
         vim.schedule(function()
           if not utils.is_valid_buf(b) then return end
           local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
@@ -2216,7 +2326,7 @@ function M.setup(group)
         end
         if current_line:match('^Index flags %[local%]') then
           index_flags_expanded_by_buf[b] = not index_flags_expanded_by_buf[b]
-          refresh()
+          refresh_cached()
           return
         end
         local flagged = index_flag_entry_at_cursor()
@@ -2536,8 +2646,9 @@ function M.refresh_buffer(bufnr)
   end)
 end
 
-function M.focus_section(bufnr, section)
+function M.focus_section(bufnr, section, opts)
   bufnr = bufnr == 0 and vim.api.nvim_get_current_buf() or bufnr
+  opts = opts or {}
   local patterns = {
     conflicted = '^Unmerged',
     untracked = '^Untracked',
@@ -2563,7 +2674,7 @@ function M.focus_section(bufnr, section)
     end
     return false
   end
-  if not focus() then
+  if not focus() and opts.refresh ~= false then
     M.refresh_buffer(bufnr)
     if not focus() then vim.schedule(focus) end
   end
@@ -2638,12 +2749,18 @@ function M.open(opts)
     vim.api.nvim_win_set_buf(0, bufnr)
     if vim.bo[bufnr].filetype ~= 'fugitivestatus' then
       vim.bo[bufnr].filetype = 'fugitivestatus'
-    else
-      M.refresh_buffer(bufnr)
     end
   end
 
-  if opts.focus then M.focus_section(bufnr, opts.focus) end
+  if opts.focus then
+    if status_snapshot_by_buf[bufnr] then
+      M.focus_section(bufnr, opts.focus, { refresh = false })
+    else
+      vim.schedule(function()
+        M.focus_section(bufnr, opts.focus, { refresh = false })
+      end)
+    end
+  end
   configure_status_window(vim.fn.bufwinid(bufnr))
   return bufnr
 end

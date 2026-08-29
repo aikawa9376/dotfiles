@@ -63,10 +63,7 @@ local function attach_numstat(entries, stats)
   end
 end
 
-local function parse_status(work_tree)
-  local result = run(work_tree, {
-    'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
-  })
+local function parse_status_result(work_tree, result)
   if result.code ~= 0 then return nil, vim.trim(result.stderr or 'git status failed') end
 
   local model = {
@@ -126,6 +123,16 @@ local function parse_status(work_tree)
     end
     index = index + 1
   end
+  return model
+end
+
+local function parse_status(work_tree)
+  local result = run(work_tree, {
+    'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
+  })
+  local model, err = parse_status_result(work_tree, result)
+  if not model then return nil, err end
+
   local push_result = run(work_tree, { 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{push}' })
   if push_result.code == 0 then model.push = vim.trim(push_result.stdout or '') end
   if not model.push or model.push == '' then model.push = model.upstream end
@@ -229,11 +236,9 @@ function M.is_owned(bufnr)
   return vim.api.nvim_buf_is_valid(bufnr) and vim.b[bufnr].custom_git_status == true
 end
 
-function M.snapshot(bufnr, work_tree, opts)
+local function snapshot_from_model(bufnr, model, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then return nil, 'Invalid status buffer' end
   opts = opts or {}
-  local model, err = parse_status(work_tree)
-  if not model then return nil, err end
   model.bufnr = bufnr
 
   local lines = {
@@ -244,11 +249,13 @@ function M.snapshot(bufnr, work_tree, opts)
   end
   if model.push and model.push ~= model.upstream then table.insert(lines, 'Push: ' .. model.push) end
   vim.list_extend(lines, opts.header_lines or {})
-  for _, line in ipairs(operation.status_lines(operation.inspect(work_tree))) do table.insert(lines, line) end
+  if not opts.fast then
+    for _, line in ipairs(operation.status_lines(operation.inspect(model.work_tree))) do table.insert(lines, line) end
+  end
   table.insert(lines, 'Help: g?')
 
-  if model.upstream and model.behind > 0 then
-    model.unpulled = commit_lines(work_tree, 'HEAD..' .. model.upstream)
+  if not opts.fast and model.upstream and model.behind > 0 then
+    model.unpulled = commit_lines(model.work_tree, 'HEAD..' .. model.upstream)
   end
 
   local entries_by_row = {}
@@ -260,6 +267,29 @@ function M.snapshot(bufnr, work_tree, opts)
   models[bufnr] = model
   M.take_ownership(bufnr)
   return lines
+end
+
+function M.snapshot(bufnr, work_tree, opts)
+  local model, err = parse_status(work_tree)
+  if not model then return nil, err end
+  return snapshot_from_model(bufnr, model, opts)
+end
+
+function M.snapshot_async(bufnr, work_tree, opts, callback)
+  vim.system({
+    'git', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
+  }, { cwd = work_tree, text = true }, function(result)
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) then return end
+      local model, err = parse_status_result(work_tree, result)
+      if not model then callback(nil, err); return end
+      model.push = model.upstream
+      local lines, snapshot_err = snapshot_from_model(bufnr, model, vim.tbl_extend('force', opts or {}, {
+        fast = true,
+      }))
+      callback(lines, snapshot_err)
+    end)
+  end)
 end
 
 function M.entry_at(bufnr, row)
