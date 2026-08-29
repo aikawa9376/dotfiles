@@ -961,6 +961,7 @@ function M.setup(group)
                       title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
                       headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
                       isDraft = pr.isDraft == true,
+                      url = url,
                       repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
                     })
                   end
@@ -1076,6 +1077,15 @@ function M.setup(group)
         pull_request_branch_by_buf[b] = nil
         refresh()
         fetch_pull_requests()
+      end
+
+      local function pull_request_at_cursor()
+        local number = pull_request_number_from_line(vim.api.nvim_get_current_line())
+        if not number then return nil end
+        for _, pr in ipairs(pull_requests_by_buf[b] or {}) do
+          if pr.number == number then return pr end
+        end
+        return nil
       end
 
       local function toggle_pull_request_scope()
@@ -2040,7 +2050,10 @@ function M.setup(group)
         end
 
         if kind == 'pull_request' then
-          return { title = context.label, actions = { { key = '<CR>', label = 'Open pull request' } } }
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open pull request' },
+            { key = '<C-y>', label = 'Copy pull request URL' },
+          } }
         end
         if kind == 'pull_requests_header' then
           return { title = context.label, actions = {
@@ -2180,6 +2193,21 @@ function M.setup(group)
         if commit then notes.edit(utils.get_buf_work_tree(b), commit, apply_icons) end
       end, { buffer = b, nowait = true, silent = true, desc = 'Edit Git note' })
 
+      vim.keymap.set('n', '<C-y>', function()
+        local pr = pull_request_at_cursor()
+        if not pr then
+          vim.notify('No pull request found at cursor', vim.log.levels.WARN)
+          return
+        end
+        if pr.url == '' then
+          vim.notify('Pull request URL is unavailable', vim.log.levels.WARN)
+          return
+        end
+        vim.fn.setreg('+', pr.url)
+        vim.fn.setreg('"', pr.url)
+        vim.notify('Copied: ' .. pr.url, vim.log.levels.INFO)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Copy pull request URL' })
+
       local function open_status_item()
         local current_line = vim.api.nvim_get_current_line()
         if current_line:match('^Hidden changes: %d+ files? %(Index flags%)$') then
@@ -2221,14 +2249,9 @@ function M.setup(group)
           if p then worktree.open_worktree_path(p); return end
         end
         if is_cursor_in_pull_request_area() then
-          local number = pull_request_number_from_line(vim.api.nvim_get_current_line())
-          local repository = nil
-          for _, pr in ipairs(pull_requests_by_buf[b] or {}) do
-            if pr.number == number then
-              repository = pr.repository
-              break
-            end
-          end
+          local pr = pull_request_at_cursor()
+          local number = pr and pr.number or pull_request_number_from_line(vim.api.nvim_get_current_line())
+          local repository = pr and pr.repository or nil
           if number and repository then
             vim.cmd('tabnew')
             vim.cmd(('Octo pr edit %d %s'):format(number, repository))
