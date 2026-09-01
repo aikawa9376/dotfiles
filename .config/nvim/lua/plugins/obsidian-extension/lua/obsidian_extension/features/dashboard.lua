@@ -1091,6 +1091,7 @@ local function configure_buffer(bufnr, vault_path)
 end
 
 local function configure_window(winid)
+  vim.wo[winid].wrap = false
   vim.wo[winid].foldmethod = "expr"
   vim.wo[winid].foldexpr = "v:lua.require'obsidian_extension.features.dashboard'.foldexpr(v:lnum)"
   vim.wo[winid].foldenable = true

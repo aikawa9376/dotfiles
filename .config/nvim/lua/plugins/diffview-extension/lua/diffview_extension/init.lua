@@ -8,6 +8,7 @@ function M.setup()
   vim.g.diffview_extension_instance = vim.g.diffview_extension_instance or tostring((vim.uv or vim.loop).hrtime())
 
   local controller = require("lazyagent.acp.git_review_controller")
+  local commit_info = require("diffview_extension.commit_info")
   local snapshot = require("diffview_extension.snapshot")
   local review_view = require("diffview_extension.review_view")
 
@@ -25,7 +26,8 @@ function M.setup()
     end,
   })
 
-  local group = vim.api.nvim_create_augroup("DiffviewExtensionReview", { clear = true })
+  local group = vim.api.nvim_create_augroup("DiffviewExtension", { clear = true })
+  commit_info.setup(group)
   vim.api.nvim_create_autocmd("User", {
     group = group,
     pattern = { "DiffviewDiffBufWinEnter", "DiffviewSelectionChanged", "LazyAgentReviewCompleted" },

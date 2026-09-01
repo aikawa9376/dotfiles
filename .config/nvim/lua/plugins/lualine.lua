@@ -255,6 +255,14 @@ return {
             end,
             cond = conditions.project,
           },
+          {
+            function()
+              local commit_info = package.loaded["diffview_extension.commit_info"]
+              return commit_info and commit_info.statusline() or ""
+            end,
+            icon = "",
+            color = { fg = colors.yellow, bold = true },
+          },
           -- Worktree sync marker (separate component)
           {
             function()
