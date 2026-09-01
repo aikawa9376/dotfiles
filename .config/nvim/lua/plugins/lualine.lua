@@ -3,6 +3,15 @@ return {
   event = "BufReadPre",
   config = function()
     local lualine = require("lualine")
+    local multicursor_ns = vim.api.nvim_create_namespace("nvim.multicursor")
+
+    local function multicursor_active()
+      local bufnr = vim.api.nvim_get_current_buf()
+      if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+        return false
+      end
+      return #vim.api.nvim_buf_get_extmarks(bufnr, multicursor_ns, 0, -1, { limit = 1 }) > 0
+    end
 
     --------------------------------------------------------------------
     -- 1. Git情報非同期キャッシュ (Git Info Cache)
@@ -185,6 +194,7 @@ return {
       magenta = "#c678dd",
       blue = "#51afef",
       red = "#ec5f67",
+      multicursor = "#5fffff",
     }
 
     vim.api.nvim_set_hl(0, "LualineGitAdded",   { fg = colors.green,  bg = colors.bg, bold = true })
@@ -224,6 +234,7 @@ return {
         lualine_c = {
           {
             function()
+              local mode = vim.fn.mode()
               local mode_color = {
                 n = colors.red, i = colors.green, v = colors.blue, ["␖"] = colors.blue,
                 V = colors.blue, c = colors.magenta, no = colors.red, s = colors.orange,
@@ -231,7 +242,10 @@ return {
                 R = colors.violet, Rv = colors.violet, cv = colors.red, ce = colors.red,
                 r = colors.cyan, rm = colors.cyan, ["r?"] = colors.cyan, ["!"] = colors.red, t = colors.red,
               }
-              vim.api.nvim_command("hi! LualineMode guifg=" .. mode_color[vim.fn.mode()] .. " guibg=" .. colors.bg .. " gui=bold")
+              local is_multicursor = multicursor_active()
+              local color = is_multicursor and colors.multicursor or mode_color[mode]
+              vim.api.nvim_command("hi! LualineMode guifg=" .. color .. " guibg=" .. colors.bg .. " gui=bold")
+              if is_multicursor then return "M_CURSOR" end
               return require("lualine.utils.mode").get_mode()
             end,
             color = "LualineMode",
