@@ -156,16 +156,19 @@ local function capture_status_cursor(bufnr, winid)
   local cursor = vim.api.nvim_win_get_cursor(winid)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local key_type, key = status_cursor_key(lines, cursor[1], bufnr)
-  local view
-  pcall(function()
-    view = vim.api.nvim_win_call(winid, vim.fn.winsaveview)
-  end)
+  local view = vim.w[winid].fugitive_preserve_split_view
+  if view then view = vim.deepcopy(view) end
+  if not view then
+    pcall(function()
+      view = vim.api.nvim_win_call(winid, vim.fn.winsaveview)
+    end)
+  end
   return {
     key_type = key_type,
     key = key,
     row = cursor[1],
     col = cursor[2],
-    screen_offset = view and math.max(cursor[1] - (view.topline or cursor[1]), 0) or 0,
+    screen_offset = view and math.max((view.lnum or cursor[1]) - (view.topline or cursor[1]), 0) or 0,
     view = view,
     winid = winid,
   }
@@ -346,6 +349,8 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
     local cached_details = status_snapshot_by_buf[bufnr]
     local reusable = opts.reuse_details and cached_details and not cached_details.loading_details
       and cached_details or nil
+    local reusable_commits = reusable or (opts.reuse_commits and cached_details
+      and cached_details.commits_loaded and cached_details or nil)
     local health = reusable and reusable.health or repository_health.inspect(work_tree)
     repository_health_by_buf[bufnr] = health
     local native_lines, snapshot_err = status_renderer.snapshot(bufnr, work_tree, {
@@ -368,12 +373,12 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       status_renderer.shift_entries(bufnr, warning_row, 1)
     end
 
-    local unpushed_commits = reusable and reusable.unpushed_commits
+    local unpushed_commits = reusable_commits and reusable_commits.unpushed_commits
       or status_renderer.unpushed_commits(bufnr)
-    local commit_lines = reusable and reusable.commit_scope == commit_scope
-      and reusable.commit_lines
+    local commit_lines = reusable_commits and reusable_commits.commit_scope == commit_scope
+      and reusable_commits.commit_lines
       or unpushed_commits
-    if not (reusable and reusable.commit_scope == commit_scope)
+    if not (reusable_commits and reusable_commits.commit_scope == commit_scope)
       and commit_scope == 'recent' and #commit_lines < 15
     then
       commit_lines = recent_commit_lines(work_tree, 15)
@@ -405,16 +410,13 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
 
   local function build_final_lines(commit_lines)
     local final_lines = {}
-    if snapshot.loading_details then
-      table.insert(final_lines, '')
-      table.insert(final_lines, 'Loading repository details…')
-    elseif stash_list and #stash_list > 0 then
+    if not snapshot.loading_details and stash_list and #stash_list > 0 then
       table.insert(final_lines, '')
       table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
       for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
     end
 
-    if not snapshot.loading_details then
+    if not snapshot.loading_details or snapshot.commits_loaded then
       table.insert(final_lines, '')
       local commit_header = commit_scope == 'recent'
         and ('Commits [latest 15+] (%d)'):format(#commit_lines)
@@ -428,6 +430,11 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
         table.insert(final_lines, ('Unpulled from %s (%d)'):format(upstream, #unpulled))
         vim.list_extend(final_lines, unpulled)
       end
+    end
+
+    if snapshot.loading_details then
+      table.insert(final_lines, '')
+      table.insert(final_lines, 'Loading repository details…')
     end
 
     if pull_requests then
@@ -1006,16 +1013,43 @@ function M.setup(group)
             },
           })
 
-          -- Let the lightweight status reach the screen before collecting the
-          -- expensive repository metadata and diff statistics.
-          vim.defer_fn(function()
+          local function schedule_details()
+            -- Let the lightweight status and commits reach the screen before
+            -- collecting expensive repository metadata and diff statistics.
+            vim.defer_fn(function()
+              if not utils.is_valid_buf(b) or serial ~= fast_refresh_serial then return end
+              if reuse_details then
+                refresh({ reuse_details = true })
+              else
+                refresh({ reuse_commits = true })
+              end
+            end, 300)
+          end
+
+          if reuse_details and previous then
+            schedule_details()
+            return
+          end
+
+          status_renderer.unpushed_commits_async(b, function(unpushed)
             if not utils.is_valid_buf(b) or serial ~= fast_refresh_serial then return end
-            if reuse_details then
-              refresh({ reuse_details = true })
-            else
-              schedule_refresh()
+            local function publish(commit_lines)
+              if not utils.is_valid_buf(b) or serial ~= fast_refresh_serial then return end
+              local current = status_snapshot_by_buf[b]
+              if current then
+                current.unpushed_commits = unpushed
+                current.commit_lines = commit_lines
+                current.commits_loaded = true
+                refresh_cached()
+              end
+              schedule_details()
             end
-          end, 500)
+            if commit_scope_by_buf[b] == 'recent' and #unpushed < 15 then
+              status_renderer.recent_commits_async(b, 15, publish)
+            else
+              publish(unpushed)
+            end
+          end)
         end)
       end
 
@@ -1242,7 +1276,25 @@ function M.setup(group)
       local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
       utils.setup_repo_refresh(bufgroupt, b, function()
         reload_status()
-      end, { visible_only = true, ignore_source = true })
+      end, {
+        visible_only = true,
+        ignore_source = true,
+        refresh_on_enter = false,
+      })
+      vim.api.nvim_create_autocmd('BufWritePost', {
+        group = bufgroupt,
+        callback = function(write_ev)
+          if not utils.is_valid_buf(b) or not utils.is_buf_visible(b) then return end
+          local name = vim.api.nvim_buf_get_name(write_ev.buf)
+          local work_tree = utils.get_buf_work_tree(b)
+          if name == '' or not work_tree then return end
+          local absolute = utils.normalize_path(name)
+          local root = utils.normalize_path(work_tree)
+          if absolute and root and (absolute == root or absolute:sub(1, #root + 1) == root .. '/') then
+            reload_status(true, true)
+          end
+        end,
+      })
 
       apply_icons = function()
         if not utils.is_valid_buf(b) then return end

@@ -5,12 +5,37 @@ local M = {}
 ---@param target? string
 ---@return integer winid
 function M.open_half_height_split(target)
+  local source_win = vim.api.nvim_get_current_win()
+  local source_buf = vim.api.nvim_get_current_buf()
+  local source_view = vim.fn.winsaveview()
+  vim.w[source_win].fugitive_preserve_split_view = vim.deepcopy(source_view)
   local height = math.max(1, math.floor(vim.api.nvim_win_get_height(0) / 2))
   local command = target
       and string.format('keepalt belowright %dsplit %s', height, vim.fn.fnameescape(target))
     or string.format('keepalt belowright %dnew', height)
-  vim.cmd(command)
-  return vim.api.nvim_get_current_win()
+  local opened, open_err = pcall(vim.cmd, command)
+  if vim.api.nvim_win_is_valid(source_win) then
+    vim.w[source_win].fugitive_preserve_split_view = nil
+  end
+  if not opened then error(open_err) end
+
+  local target_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_create_autocmd('WinClosed', {
+    pattern = tostring(target_win),
+    once = true,
+    callback = function()
+      vim.schedule(function()
+        if vim.api.nvim_win_is_valid(source_win)
+          and vim.api.nvim_win_get_buf(source_win) == source_buf
+        then
+          pcall(vim.api.nvim_win_call, source_win, function()
+            vim.fn.winrestview(source_view)
+          end)
+        end
+      end)
+    end,
+  })
+  return target_win
 end
 
 ---@param path string|nil
