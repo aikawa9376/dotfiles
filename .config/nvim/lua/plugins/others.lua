@@ -106,6 +106,14 @@ return {
         }
       )
     end,
+  },
+  {
+    "aikawa9376/browser.nvim",
+    cmd = "Browser",
+    config = function()
+      require("browser").setup({
+        max_fps = 60,
+      })
+    end,
   }
-
 }
