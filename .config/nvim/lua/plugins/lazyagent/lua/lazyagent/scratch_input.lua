@@ -5,6 +5,49 @@ local window = require("lazyagent.window")
 
 local contexts = {}
 
+local function resolved_keymaps(overrides)
+  return vim.tbl_deep_extend(
+    "force",
+    {},
+    (state.opts and state.opts.scratch_keymaps) or {},
+    overrides or {}
+  )
+end
+
+local function register_keymap(bufnr, mode, lhs, callback, opts)
+  if type(lhs) ~= "string" or lhs == "" then return end
+  vim.keymap.set(mode, lhs, callback, vim.tbl_extend("force", {
+    buffer = bufnr,
+    noremap = true,
+    silent = true,
+  }, opts or {}))
+end
+
+local function register_input_keymaps(bufnr, opts)
+  local keys = resolved_keymaps(opts.scratch_keymaps)
+  local submit = function() M.submit(bufnr) end
+  local submit_desc = opts.submit_desc or "Submit LazyAgent input"
+  local normal_submit = keys.send_key_normal or "<CR>"
+  local insert_submit = keys.send_key_insert or "<C-s>"
+  local send_and_clear = keys.send_and_clear or "<C-Space>"
+
+  register_keymap(bufnr, "n", normal_submit, submit, { desc = submit_desc })
+  if insert_submit ~= normal_submit then
+    register_keymap(bufnr, "n", insert_submit, submit, { desc = submit_desc })
+  end
+  register_keymap(bufnr, "i", insert_submit, submit, { desc = submit_desc })
+  if send_and_clear ~= normal_submit and send_and_clear ~= insert_submit then
+    register_keymap(bufnr, "n", send_and_clear, submit, { desc = submit_desc })
+  end
+  if send_and_clear ~= insert_submit then
+    register_keymap(bufnr, "i", send_and_clear, submit, { desc = submit_desc })
+  end
+  register_keymap(bufnr, "n", keys.close or "q", function() M.close(bufnr) end, {
+    nowait = true,
+    desc = opts.cancel_desc or "Cancel LazyAgent input",
+  })
+end
+
 local function close_buffer(bufnr)
   if window.get_bufnr() == bufnr then
     window.close({ force = true })
@@ -104,25 +147,7 @@ function M.open(opts)
   if winid and vim.api.nvim_win_is_valid(winid) then
     vim.wo[winid].linebreak = true
   end
-  local submit_desc = opts.submit_desc or "Submit LazyAgent input"
-  for _, mode in ipairs({ "n", "i" }) do
-    vim.keymap.set(mode, "<C-Space>", function() M.submit(bufnr) end, {
-      buffer = bufnr,
-      silent = true,
-      desc = submit_desc,
-    })
-  end
-  vim.keymap.set("n", "ZZ", function() M.submit(bufnr) end, {
-    buffer = bufnr,
-    silent = true,
-    desc = submit_desc,
-  })
-  vim.keymap.set("n", "q", function() M.close(bufnr) end, {
-    buffer = bufnr,
-    silent = true,
-    nowait = true,
-    desc = opts.cancel_desc or "Cancel LazyAgent input",
-  })
+  register_input_keymaps(bufnr, opts)
   return bufnr, winid
 end
 

@@ -390,7 +390,7 @@ agent には `<code>...</code>` だけを返すよう指示します。parser �
 
 ## Notes
 
-コード上に AI への質問や指示を一時保存し、agent scratch からまとめて送れます。normal mode では現在行、visual range では選択行に Note を付けます。引数なしの `:LazyAgentNote` は通常の LazyAgent scratch と同じ `window_type`・focus 動作の入力画面を `LazyAgent Note` というタイトルで開き、`<C-Space>` / `ZZ` で保存します。短い Note は引数で直接追加できます。
+コード上に AI への質問や指示を一時保存し、agent scratch からまとめて送れます。normal mode では現在行、visual range では選択行に Note を付けます。引数なしの `:LazyAgentNote` は通常の LazyAgent scratch と同じ `window_type`・focus 動作・`scratch_keymaps` を使う入力画面を `LazyAgent Note` というタイトルで開きます。既定では normal mode の `<CR>`、insert mode の `<C-s>`、両 mode の `<C-Space>` で保存し、`q` で取り消します。短い Note は引数で直接追加できます。
 
 ```vim
 :LazyAgentNote ここはこの実装でよいか確認してください
