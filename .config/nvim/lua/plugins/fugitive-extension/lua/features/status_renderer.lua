@@ -218,7 +218,16 @@ local function append_section(lines, entries_by_row, model, title, section, entr
   end
 end
 
-local function commit_lines(work_tree, revisions)
+local function parse_commit_lines(result)
+  if result.code ~= 0 then return {}, false end
+  local commits = {}
+  for line in (result.stdout or ''):gmatch('[^\r\n]+') do
+    table.insert(commits, (line:gsub('\t', ' ', 1)))
+  end
+  return commits, true
+end
+
+local function commit_args(revisions)
   local args = { 'log', '--pretty=format:%h%x09%s', '-n', '256' }
   if type(revisions) == 'table' then
     vim.list_extend(args, revisions)
@@ -226,13 +235,18 @@ local function commit_lines(work_tree, revisions)
     table.insert(args, revisions)
   end
   table.insert(args, '--')
-  local result = run(work_tree, args)
-  if result.code ~= 0 then return {}, false end
-  local commits = {}
-  for line in (result.stdout or ''):gmatch('[^\r\n]+') do
-    table.insert(commits, (line:gsub('\t', ' ', 1)))
-  end
-  return commits, true
+  return args
+end
+
+local function commit_lines(work_tree, revisions)
+  return parse_commit_lines(run(work_tree, commit_args(revisions)))
+end
+
+local function commit_lines_async(work_tree, revisions, callback)
+  run_async(work_tree, commit_args(revisions), function(result)
+    local commits, ok = parse_commit_lines(result)
+    callback(commits, ok)
+  end)
 end
 
 function M.take_ownership(bufnr)
@@ -353,6 +367,36 @@ function M.unpushed_commits(bufnr)
   })
   if remotes.code ~= 0 or vim.trim(remotes.stdout or '') == '' then return {} end
   return commit_lines(model.work_tree, { 'HEAD', '--not', '--remotes' })
+end
+
+function M.unpushed_commits_async(bufnr, callback)
+  local model = models[bufnr]
+  if not model then callback({}); return end
+  local work_tree = model.work_tree
+  if model.push then
+    commit_lines_async(work_tree, model.push .. '..HEAD', function(commits, ok)
+      if ok then callback(commits); return end
+      callback({})
+    end)
+    return
+  end
+
+  run_async(work_tree, { 'remote' }, function(result)
+    if result.code ~= 0 or vim.trim(result.stdout or '') == '' then callback({}); return end
+    commit_lines_async(work_tree, { 'HEAD', '--not', '--remotes' }, function(commits)
+      callback(commits)
+    end)
+  end)
+end
+
+function M.recent_commits_async(bufnr, limit, callback)
+  local model = models[bufnr]
+  if not model then callback({}); return end
+  local args = { 'log', '--pretty=format:%h%x09%s', '-n', tostring(limit), 'HEAD', '--' }
+  run_async(model.work_tree, args, function(result)
+    local commits = parse_commit_lines(result)
+    callback(commits)
+  end)
 end
 
 function M.unpulled_commits(bufnr)
