@@ -147,7 +147,7 @@ return {
         { "aA", function() overrideAnyBracket("outer") end, mode = { "o", "x" } },
         { "iA", function() overrideAnyBracket("inner") end, mode = { "o", "x" } },
         { "B", function() require"various-textobjs".toNextClosingBracket() end, mode = { "o", "x" } },
-        { "Q", function() require"various-textobjs".toNextQuotationMark() end, mode = { "o", "x" } },
+        -- { "Q", function() require"various-textobjs".toNextQuotationMark() end, mode = { "o", "x" } },
         { "E", function() require"various-textobjs".entireBuffer() end, mode = { "o", "x" } },
         { "D", function() require"various-textobjs".diagnostic() end, mode = { "o", "x" } },
         { "L", function() require"various-textobjs".lastChange() end, mode = { "o", "x" } },
