@@ -1,9 +1,21 @@
 local M = {}
 
 local cache = {}
+local persistent_unavailable = {}
 local unavailable_commands = {}
+local workers = {}
 local preview = {}
 local last_search
+
+local function vim_case_prefix(input)
+  local smartcase_match = vim.o.smartcase and input:find("%u") ~= nil
+  return vim.o.ignorecase and not smartcase_match and "\\c" or "\\C"
+end
+
+local function pattern_key(input, engine)
+  local case = engine == "vim" and vim_case_prefix(input) or ""
+  return input .. "\0" .. engine .. "\0" .. case
+end
 
 function M.command()
   local local_rmigemo = vim.fn.stdpath("config") .. "/bin/rmigemo"
@@ -22,6 +34,137 @@ function M.command()
   end
 end
 
+local function worker_key(cmd, engine) return cmd .. "\0" .. engine end
+
+local function fail_requests(worker)
+  local pending = worker.pending
+  worker.pending = {}
+  for _, request in ipairs(pending) do
+    request.done = true
+    if request.callback then
+      local callback = request.callback
+      vim.schedule(function() callback(nil) end)
+    end
+  end
+end
+
+local function stop_worker(key, failed)
+  local worker = workers[key]
+  workers[key] = nil
+  if not worker then return end
+
+  worker.stopping = true
+  if failed then fail_requests(worker) end
+  if worker.job and worker.job > 0 then pcall(vim.fn.jobstop, worker.job) end
+end
+
+local function start_worker(cmd, engine)
+  local key = worker_key(cmd, engine)
+  local worker = {
+    exited = false,
+    pending = {},
+    partial = "",
+  }
+
+  local job = vim.fn.jobstart({ cmd, "-q", "--stdio", "-e", engine }, {
+    stdout_buffered = false,
+    on_stdout = function(_, data)
+      if not data then return end
+      for index, chunk in ipairs(data) do
+        if index == 1 then
+          worker.partial = worker.partial .. chunk
+        else
+          local request = table.remove(worker.pending, 1)
+          if request then
+            request.done = true
+            request.result = worker.partial
+            if request.callback then request.callback(worker.partial) end
+          end
+          worker.partial = chunk
+        end
+      end
+    end,
+    on_exit = function(_, code)
+      worker.exited = true
+      worker.exit_code = code
+      if not worker.stopping then
+        persistent_unavailable[cmd] = true
+        fail_requests(worker)
+      end
+    end,
+  })
+  if job <= 0 then return nil end
+
+  worker.job = job
+  workers[key] = worker
+  return worker
+end
+
+local function send_request(worker, input, callback)
+  local request = { callback = callback, done = false }
+  table.insert(worker.pending, request)
+  local ok, sent = pcall(vim.fn.chansend, worker.job, input .. "\n")
+  if ok and sent ~= 0 then return request end
+
+  if worker.pending[#worker.pending] == request then table.remove(worker.pending) end
+  request.done = true
+end
+
+local function persistent_pattern(cmd, input, engine)
+  if persistent_unavailable[cmd] then return nil end
+
+  local key = worker_key(cmd, engine)
+  local worker = workers[key]
+  if not worker or worker.exited then
+    stop_worker(key)
+    worker = start_worker(cmd, engine)
+  end
+  if not worker then
+    persistent_unavailable[cmd] = true
+    return nil
+  end
+
+  local request = send_request(worker, input)
+  if not request then
+    stop_worker(key, true)
+    return nil
+  end
+
+  local ready = vim.wait(1000, function() return request.done or worker.exited end, 1)
+  if ready and request.result ~= nil then return request.result end
+
+  stop_worker(key, true)
+  persistent_unavailable[cmd] = true
+  return nil
+end
+
+local function persistent_pattern_async(cmd, input, engine, callback)
+  if persistent_unavailable[cmd] then return false end
+
+  local key = worker_key(cmd, engine)
+  local worker = workers[key]
+  if not worker or worker.exited then
+    stop_worker(key)
+    worker = start_worker(cmd, engine)
+  end
+  if not worker then
+    persistent_unavailable[cmd] = true
+    return false
+  end
+
+  if send_request(worker, input, callback) then return true end
+
+  stop_worker(key, true)
+  return false
+end
+
+local function one_shot_pattern(cmd, input, engine)
+  local ok, result = pcall(vim.fn.system, { cmd, "-q", "-w", input, "-e", engine })
+  if ok and vim.v.shell_error == 0 then return result end
+
+  unavailable_commands[cmd] = true
+end
+
 --- Convert romaji input to migemo regex pattern.
 --- @param input string
 --- @param engine string? "vim" (default) | "egrep" | "grep" | "emacs"
@@ -31,27 +174,94 @@ function M.pattern(input, engine)
     return nil
   end
   engine = engine or "vim"
-  local key = input .. "\0" .. engine
+  local key = pattern_key(input, engine)
   if cache[key] then return cache[key] end
 
   local cmd = M.command()
   if not cmd then return nil end
 
-  local ok, result = pcall(vim.fn.system, { cmd, "-q", "-w", input, "-e", engine })
-  if not ok or vim.v.shell_error ~= 0 then
-    unavailable_commands[cmd] = true
-    return M.pattern(input, engine)
-  end
+  local result = persistent_pattern(cmd, input, engine) or one_shot_pattern(cmd, input, engine)
+  if not result then return M.pattern(input, engine) end
 
   local normalized = vim.trim(result)
   if normalized == "" then return nil end
+  if engine == "vim" then normalized = vim_case_prefix(input) .. normalized end
 
   cache[key] = normalized
   return normalized
 end
 
+--- Convert romaji input without blocking Neovim.
+--- @param input string
+--- @param engine string? "vim" (default) | "egrep" | "grep" | "emacs"
+--- @param callback fun(pattern: string|nil)
+function M.pattern_async(input, engine, callback)
+  engine = engine or "vim"
+  if input == "" or not input:match("[%w_-]") then
+    vim.schedule(function() callback(nil) end)
+    return
+  end
+
+  local key = pattern_key(input, engine)
+  if cache[key] then
+    local pattern = cache[key]
+    vim.schedule(function() callback(pattern) end)
+    return
+  end
+
+  local cmd = M.command()
+  if not cmd then
+    vim.schedule(function() callback(nil) end)
+    return
+  end
+
+  local function apply_result(result)
+    local normalized = vim.trim(result or "")
+    if normalized ~= "" and engine == "vim" then
+      normalized = vim_case_prefix(input) .. normalized
+    end
+    if normalized ~= "" then cache[key] = normalized end
+    callback(normalized ~= "" and normalized or nil)
+  end
+
+  local function fallback()
+    local ok = pcall(vim.system, { cmd, "-q", "-w", input, "-e", engine }, { text = true }, function(result)
+      vim.schedule(function()
+        if result.code ~= 0 then
+          unavailable_commands[cmd] = true
+          M.pattern_async(input, engine, callback)
+        else
+          apply_result(result.stdout)
+        end
+      end)
+    end)
+    if not ok then
+      unavailable_commands[cmd] = true
+      M.pattern_async(input, engine, callback)
+    end
+  end
+
+  local queued = persistent_pattern_async(cmd, input, engine, function(result)
+    vim.schedule(function()
+      if result == nil then
+        fallback()
+      else
+        apply_result(result)
+      end
+    end)
+  end)
+  if not queued then fallback() end
+end
+
+function M.stop()
+  local keys = vim.tbl_keys(workers)
+  for _, key in ipairs(keys) do
+    stop_worker(key)
+  end
+end
+
 local function flash_exact(pattern)
-  return "\\V" .. pattern:gsub("\\", "\\\\")
+  return vim_case_prefix(pattern) .. "\\V" .. pattern:gsub("\\", "\\\\")
 end
 
 local function split_search_offset(input, delimiter)
@@ -118,30 +328,10 @@ local function apply_cmdline_preview(pattern, generation)
   end)
 end
 
-local function generate_preview_pattern(query, key, generation)
-  local cmd = M.command()
-  if not cmd then
-    apply_cmdline_preview(query, generation)
-    return
-  end
-
-  local ok = pcall(vim.system, { cmd, "-q", "-w", query, "-e", "vim" }, { text = true }, function(result)
-    vim.schedule(function()
-      if result.code ~= 0 then
-        unavailable_commands[cmd] = true
-        generate_preview_pattern(query, key, generation)
-        return
-      end
-
-      local pattern = vim.trim(result.stdout or "")
-      if pattern ~= "" then cache[key] = pattern end
-      apply_cmdline_preview(pattern ~= "" and pattern or query, generation)
-    end)
+local function generate_preview_pattern(query, generation)
+  M.pattern_async(query, "vim", function(pattern)
+    apply_cmdline_preview(pattern or query, generation)
   end)
-  if not ok then
-    unavailable_commands[cmd] = true
-    generate_preview_pattern(query, key, generation)
-  end
 end
 
 local function update_cmdline_preview()
@@ -163,15 +353,15 @@ local function update_cmdline_preview()
     return
   end
 
-  local key = query .. "\0vim"
+  local key = pattern_key(query, "vim")
   if cache[key] then
     apply_cmdline_preview(cache[key], generation)
     return
   end
 
   -- Do not reset a valid previous-prefix match while an uncached rmigemo
-  -- process runs. Only the newest command-line generation may update the view.
-  generate_preview_pattern(query, key, generation)
+  -- request runs. Only the newest command-line generation may update the view.
+  generate_preview_pattern(query, generation)
 end
 
 local function finish_cmdline_preview()
@@ -277,41 +467,102 @@ local function convert_cmdline_search()
   end)
 end
 
---- Match only inside the range Flash is going to label.
----
---- Flash's default matcher is given a visible range, but `searchpos()` can
---- still scan to the end of the buffer before deciding there is no match in
---- that range. Stop at the range's last line to keep the cost bounded.
+--- Match only the lines Flash is going to label.
 local function flash_visible_matcher(win, state, opts)
   local matches = {}
-  local matcher = require("flash.search").new(win, state)
+  if state.pattern.search == "" then return matches end
   local Pos = require("flash.search.pos")
-  local Hacks = require("flash.hacks")
-  local stopline = opts.to and opts.to[1] or vim.api.nvim_buf_line_count(vim.api.nvim_win_get_buf(win))
+  local buf = vim.api.nvim_win_get_buf(win)
+  local line_count = vim.api.nvim_buf_line_count(buf)
+  local from = opts.from and Pos(opts.from) or Pos({ 1, 0 })
+  local to = opts.to and Pos(opts.to) or Pos({ line_count + 1, 0 })
+  local first_line = math.max(from[1], 1)
+  local last_line = math.min(to[1], line_count)
+  if last_line < first_line then return matches end
 
-  matcher:_call(opts.from or { 1, 0 }, function()
-    local flags = "cW"
+  local ok, regex = pcall(vim.regex, state.pattern.search)
+  if not ok then return matches end
+  local lines = vim.api.nvim_buf_get_lines(buf, first_line - 1, last_line, false)
+
+  for index, line in ipairs(lines) do
+    local line_number = first_line + index - 1
+    local offset = line_number == from[1] and from[2] or 0
     while true do
-      local ok, result = pcall(vim.fn.searchpos, state.pattern.search, flags, stopline)
-      if not ok or result[1] == 0 then break end
+      local start_offset, end_offset = regex:match_line(buf, line_number - 1, offset)
+      if start_offset == nil then break end
 
-      local pos = Pos({ result[1], result[2] - 1 })
-      if opts.to and pos > opts.to then break end
-      table.insert(matches, { win = win, pos = pos, end_pos = Hacks.get_end_pos(pos) })
-      flags = "W"
+      local start_col = offset + start_offset
+      local end_exclusive = offset + end_offset
+      local pos = Pos({ line_number, start_col })
+      if pos > to then break end
+
+      local end_col = start_col
+      if end_exclusive > start_col then
+        end_col = vim.fn.byteidx(line, vim.fn.charidx(line, end_exclusive - 1))
+      end
+      table.insert(matches, {
+        win = win,
+        pos = pos,
+        end_pos = Pos({ line_number, math.max(end_col, start_col) }),
+      })
+
+      offset = end_exclusive > offset and end_exclusive or offset + 1
     end
-  end)
+  end
 
   return matches
+end
+
+--- Skip labels that would be ambiguous with the character following a
+--- visible match, without searching the complete buffer again.
+local function flash_visible_labeler(_, state)
+  if not state._migemo_labeler then
+    local labeler = require("flash.labeler").new(state)
+    labeler.skip = function(_, win, labels)
+      local available = {}
+      for _, label in ipairs(labels) do
+        available[vim.o.ignorecase and label:lower() or label] = true
+      end
+
+      local skipped = {}
+      local lines = {}
+      for _, match in ipairs(state.results) do
+        if match.win == win then
+          local buf = vim.api.nvim_win_get_buf(win)
+          local row = match.end_pos[1]
+          local line_key = buf .. ":" .. row
+          local line = lines[line_key]
+          if not line then
+            line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
+            lines[line_key] = line
+          end
+
+          local last = vim.fn.strpart(line, match.end_pos[2], 1, true)
+          local following = vim.fn.strpart(line, match.end_pos[2] + #last, 1, true)
+          local key = vim.o.ignorecase and following:lower() or following
+          if available[key] then skipped[key] = true end
+        end
+      end
+
+      return vim.tbl_filter(function(label)
+        local key = vim.o.ignorecase and label:lower() or label
+        return not skipped[key]
+      end, labels)
+    end
+    state._migemo_labeler = labeler
+  end
+  state._migemo_labeler:update()
 end
 
 --- Setup flash.nvim integration and keymaps.
 function M.setup()
   local config = require("flash.config")
   config.modes.migemo = {
+    labeler = flash_visible_labeler,
     matcher = flash_visible_matcher,
     search = {
       mode = function(pattern)
+        if vim.fn.strchars(pattern) == 1 then return flash_exact(pattern) end
         return M.pattern(pattern, "vim") or flash_exact(pattern)
       end,
     },
@@ -336,6 +587,10 @@ function M.setup()
       convert_cmdline_search()
       if incsearch ~= nil then vim.o.incsearch = incsearch end
     end,
+  })
+  vim.api.nvim_create_autocmd("VimLeavePre", {
+    group = group,
+    callback = M.stop,
   })
   setup_noice_search_count()
 end
