@@ -2,7 +2,8 @@ return {
   "migemo",
   dir = os.getenv("XDG_CONFIG_HOME") .. "/nvim/lua/plugins/migemo",
   keys = {
-    { "<C-j>", "<C-k>", mode = { "n", "x" } },
+    { "/", mode = { "n", "x", "o" } },
+    { "?", mode = { "n", "x", "o" } },
     {
       "<A-m>",
       mode = "c",
