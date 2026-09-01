@@ -32,6 +32,7 @@ vim.fn.writefile({ "base" }, repo .. "/tracked.txt")
 vim.fn.writefile({ "ignored.txt" }, repo .. "/.gitignore")
 git(repo, { "add", "." })
 git(repo, { "commit", "-qm", "base" })
+local base_commit = git(repo, { "rev-parse", "HEAD" })
 vim.fn.writefile({ "staged" }, repo .. "/tracked.txt")
 git(repo, { "add", "tracked.txt" })
 vim.fn.writefile({ "final", "working" }, repo .. "/tracked.txt")
@@ -50,6 +51,19 @@ for _, change in ipairs(snapshot.changes) do by_path[change.path] = change end
 eq(blobs:get(by_path["tracked.txt"].after_blob, { max_bytes = false }), "final\nworking\n", "final worktree content wins over index")
 eq(by_path["untracked.txt"].operation, "added", "untracked file included")
 eq(by_path["ignored.txt"], nil, "ignored file excluded")
+
+local commit_info = require("diffview_extension.commit_info")
+eq(commit_info._target_commit({ right = { commit = base_commit } }), base_commit, "right commit is displayed")
+eq(commit_info._target_commit({ right = { type = "LOCAL" } }), nil, "working tree comparison has no commit info")
+local tabpage = vim.api.nvim_get_current_tabpage()
+commit_info._refresh({
+  tabpage = tabpage,
+  right = { commit = base_commit },
+  adapter = { ctx = { toplevel = repo } },
+})
+assert(vim.wait(2000, function() return commit_info.statusline() ~= "" end), "commit info was loaded")
+eq(commit_info.statusline(), base_commit:sub(1, 7) .. " base", "commit hash and subject displayed")
+commit_info._states[tabpage] = nil
 
 local GitReview = require("lazyagent.acp.git_review")
 local first = assert(GitReview.from_snapshot(snapshot, { clock = function() return "2026-08-01T00:00:00Z" end, nonce = 1 }))

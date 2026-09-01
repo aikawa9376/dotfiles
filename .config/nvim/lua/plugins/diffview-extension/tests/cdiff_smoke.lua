@@ -45,6 +45,11 @@ end, 10)
 local view = assert(require("diffview.lib").get_current_view(), "custom Diffview did not open")
 assert(view.files:len() == 1, "custom Diffview did not restore the saved file")
 assert(view.cur_entry and view.cur_entry.path == path, "custom Diffview did not select its first file")
+local expected_commit_info = vim.trim(vim.system({
+  "git", "-C", root, "show", "-s", "--no-show-signature", "--format=%h %s", head,
+}, { text = true }):wait().stdout)
+local commit_info = require("diffview_extension.commit_info")
+assert(vim.wait(2000, function() return commit_info.statusline() == expected_commit_info end), "commit info was not displayed")
 local windows = view.cur_layout.windows
 assert(windows[1].file.bufnr ~= windows[2].file.bufnr, "custom Diffview reused one buffer for both sides")
 assert(vim.deep_equal(vim.api.nvim_buf_get_lines(windows[1].file.bufnr, 0, -1, false), { "before" }), "left snapshot was not rendered")
