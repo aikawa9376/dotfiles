@@ -6,14 +6,24 @@ return {
       "<C-j>",
       mode = { "n", "x", "o" },
       function()
-        require("flash").jump({ search = { forward = true, wrap = false, incremental = true } })
+        require("lazy").load({ plugins = { "migemo" } })
+        require("flash").jump({
+          mode = "migemo",
+          search = { forward = true, wrap = false, incremental = true },
+        })
       end,
       desc = "Flash",
     },
     {
       "<C-k>",
       mode = { "n", "x", "o" },
-      function() require("flash").jump({ search = { forward = false , wrap = false, incremental = true } }) end,
+      function()
+        require("lazy").load({ plugins = { "migemo" } })
+        require("flash").jump({
+          mode = "migemo",
+          search = { forward = false, wrap = false, incremental = true },
+        })
+      end,
       desc = "Flash",
     },
     {

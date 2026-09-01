@@ -274,6 +274,8 @@ function M.fire_fugitive_changed(opts)
       data = {
         work_tree = work_tree,
         reason = opts.reason,
+        skip_source = opts.skip_source == true,
+        source_bufnr = opts.bufnr,
       },
     })
   end)
@@ -282,7 +284,7 @@ end
 ---@param group integer
 ---@param bufnr integer
 ---@param refresh fun(bufnr: integer, ev?: table)
----@param opts? {work_tree?: string, refresh_on_enter?: boolean, visible_only?: boolean}
+---@param opts? {work_tree?: string, refresh_on_enter?: boolean, visible_only?: boolean, ignore_source?: boolean}
 function M.setup_repo_refresh(group, bufnr, refresh, opts)
   opts = opts or {}
   local initial_work_tree = opts.work_tree or M.get_buf_work_tree(bufnr)
@@ -294,6 +296,13 @@ function M.setup_repo_refresh(group, bufnr, refresh, opts)
     end
 
     if opts.visible_only and not M.is_buf_visible(bufnr) then
+      return false
+    end
+
+    if opts.ignore_source
+      and ev and ev.data and ev.data.skip_source
+      and ev.data.source_bufnr == bufnr
+    then
       return false
     end
 

@@ -343,7 +343,10 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
   if opts.snapshot and snapshot then status_snapshot_by_buf[bufnr] = snapshot end
 
   if not snapshot then
-    local health = repository_health.inspect(work_tree)
+    local cached_details = status_snapshot_by_buf[bufnr]
+    local reusable = opts.reuse_details and cached_details and not cached_details.loading_details
+      and cached_details or nil
+    local health = reusable and reusable.health or repository_health.inspect(work_tree)
     repository_health_by_buf[bufnr] = health
     local native_lines, snapshot_err = status_renderer.snapshot(bufnr, work_tree, {
       header_lines = repository_health.repository_lines(health),
@@ -353,7 +356,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       return
     end
 
-    local flag_state = index_flags.inspect(work_tree)
+    local flag_state = reusable and reusable.flag_state or index_flags.inspect(work_tree)
     index_flags_by_buf[bufnr] = flag_state
     local warning = index_flags.warning_line(flag_state)
     if warning then
@@ -365,20 +368,27 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       status_renderer.shift_entries(bufnr, warning_row, 1)
     end
 
-    local unpushed_commits = status_renderer.unpushed_commits(bufnr)
-    local commit_lines = unpushed_commits
-    if commit_scope == 'recent' and #commit_lines < 15 then
+    local unpushed_commits = reusable and reusable.unpushed_commits
+      or status_renderer.unpushed_commits(bufnr)
+    local commit_lines = reusable and reusable.commit_scope == commit_scope
+      and reusable.commit_lines
+      or unpushed_commits
+    if not (reusable and reusable.commit_scope == commit_scope)
+      and commit_scope == 'recent' and #commit_lines < 15
+    then
       commit_lines = recent_commit_lines(work_tree, 15)
     end
+    local worktree_summary = reusable and reusable.worktree_summary or nil
+    if not reusable then worktree_summary = worktree.get_summary(work_tree) end
     snapshot = {
       commit_lines = commit_lines,
       commit_scope = commit_scope,
       flag_state = flag_state,
       health = health,
       native_lines = native_lines,
-      stash_list = utils.get_stash_list(work_tree),
+      stash_list = reusable and reusable.stash_list or utils.get_stash_list(work_tree),
       unpushed_commits = unpushed_commits,
-      worktree_summary = worktree.get_summary(work_tree),
+      worktree_summary = worktree_summary,
     }
     status_snapshot_by_buf[bufnr] = snapshot
   else
@@ -943,6 +953,8 @@ function M.setup(group)
       local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
       local pr_fetching, pr_fetch_pending = false, false
       local refresh_scheduled = false
+      local fast_refresh_serial = 0
+      local index_change_running = false
       local apply_icons
       pull_request_scope_by_buf[b] = pull_request_scope_by_buf[b] or 'branch'
       commit_scope_by_buf[b] = commit_scope_by_buf[b] or 'unpushed'
@@ -965,12 +977,16 @@ function M.setup(group)
         end)
       end
 
-      local function render_initial_status()
+      local function render_fast_status(reuse_cache, reuse_details)
         local work_tree = utils.get_buf_work_tree(b)
         if not work_tree then return end
-        status_renderer.snapshot_async(b, work_tree, {}, function(native_lines, snapshot_err)
+        fast_refresh_serial = fast_refresh_serial + 1
+        local serial = fast_refresh_serial
+        local previous = reuse_cache and status_snapshot_by_buf[b] or nil
+        local header_lines = previous and repository_health.repository_lines(previous.health) or nil
+        status_renderer.snapshot_async(b, work_tree, { header_lines = header_lines }, function(native_lines, snapshot_err)
           if not utils.is_valid_buf(b) then return end
-          if status_snapshot_by_buf[b] then return end
+          if serial ~= fast_refresh_serial then return end
           if not native_lines then
             vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
             return
@@ -978,22 +994,27 @@ function M.setup(group)
 
           refresh({
             snapshot = {
-              commit_lines = {},
+              commit_lines = previous and previous.commit_lines or {},
               commit_scope = commit_scope_by_buf[b] or 'unpushed',
-              flag_state = { entries = {}, changed_count = 0 },
-              health = nil,
-              loading_details = true,
+              flag_state = previous and previous.flag_state or { entries = {}, changed_count = 0 },
+              health = previous and previous.health or nil,
+              loading_details = previous == nil,
               native_lines = native_lines,
-              stash_list = {},
-              unpushed_commits = {},
-              worktree_summary = nil,
+              stash_list = previous and previous.stash_list or {},
+              unpushed_commits = previous and previous.unpushed_commits or {},
+              worktree_summary = previous and previous.worktree_summary or nil,
             },
           })
 
           -- Let the lightweight status reach the screen before collecting the
           -- expensive repository metadata and diff statistics.
           vim.defer_fn(function()
-            if utils.is_valid_buf(b) then schedule_refresh() end
+            if not utils.is_valid_buf(b) or serial ~= fast_refresh_serial then return end
+            if reuse_details then
+              refresh({ reuse_details = true })
+            else
+              schedule_refresh()
+            end
           end, 500)
         end)
       end
@@ -1086,7 +1107,7 @@ function M.setup(group)
         end
       end
 
-      local function reload_status(position_only)
+      local function reload_status(position_only, reuse_details)
         if not utils.is_valid_buf(b) then return end
         local anchors = position_only
           and capture_status_cursors(b)
@@ -1095,12 +1116,12 @@ function M.setup(group)
           for _, anchor in ipairs(anchors) do anchor.position_only = true end
         end
         if #anchors > 0 then pending_status_cursor_anchors_by_buf[b] = anchors end
-        schedule_refresh()
-        fetch_pull_requests()
+        render_fast_status(true, reuse_details)
+        if not reuse_details then fetch_pull_requests() end
       end
 
-      local function notify_repo_changed()
-        utils.fire_fugitive_changed({ bufnr = b })
+      local function notify_repo_changed(skip_source)
+        utils.fire_fugitive_changed({ bufnr = b, skip_source = skip_source == true })
       end
 
       status_renderer.take_ownership(b)
@@ -1108,7 +1129,7 @@ function M.setup(group)
       utils.with_buf_modifiable(b, function()
         vim.api.nvim_buf_set_lines(b, 0, -1, false, { 'Loading Git status…' })
       end)
-      render_initial_status()
+      render_fast_status(false)
       fetch_pull_requests()
 
       vim.api.nvim_create_autocmd('BufWipeout', {
@@ -1221,7 +1242,7 @@ function M.setup(group)
       local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
       utils.setup_repo_refresh(bufgroupt, b, function()
         reload_status()
-      end, { visible_only = true })
+      end, { visible_only = true, ignore_source = true })
 
       apply_icons = function()
         if not utils.is_valid_buf(b) then return end
@@ -1456,7 +1477,7 @@ function M.setup(group)
           end
           vim.notify(action == 'run' and message or summary, vim.log.levels.INFO)
           reload_status()
-          notify_repo_changed()
+          notify_repo_changed(true)
         end)
       end
 
@@ -1516,7 +1537,7 @@ function M.setup(group)
           if not ok then vim.notify(message, vim.log.levels.ERROR); return end
           vim.notify(message, vim.log.levels.INFO)
           reload_status()
-          notify_repo_changed()
+          notify_repo_changed(true)
         end)
       end
 
@@ -1553,19 +1574,27 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Amend without editing message' })
 
       local function change_index(action, first_row, last_row)
-        local row = vim.api.nvim_win_get_cursor(0)[1]
-        local changed, err
-        if first_row and last_row then
-          changed, err = status_renderer.change_index_range(b, first_row, last_row, action)
-        else
-          changed, err = status_renderer.change_index(b, row, action)
-        end
-        if not changed then
-          vim.notify(err, vim.log.levels.WARN)
+        if index_change_running then
+          vim.notify('An index update is already in progress', vim.log.levels.WARN)
           return
         end
-        reload_status(true)
-        notify_repo_changed()
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        index_change_running = true
+        local function complete(changed, err)
+          index_change_running = false
+          if not utils.is_valid_buf(b) then return end
+          if not changed then
+            vim.notify(err, vim.log.levels.WARN)
+            return
+          end
+          reload_status(true, true)
+          notify_repo_changed(true)
+        end
+        if first_row and last_row then
+          status_renderer.change_index_range_async(b, first_row, last_row, action, complete)
+        else
+          status_renderer.change_index_async(b, row, action, complete)
+        end
       end
 
       vim.keymap.set('n', '-', function() change_index('toggle') end,
@@ -1584,17 +1613,27 @@ function M.setup(group)
       end
 
       vim.keymap.set('n', 'U', function()
-        local changed, err = status_renderer.reset_index(b)
-        if not changed then vim.notify(err, vim.log.levels.WARN); return end
-        reload_status()
-        notify_repo_changed()
+        if index_change_running then return end
+        index_change_running = true
+        status_renderer.reset_index_async(b, function(changed, err)
+          index_change_running = false
+          if not utils.is_valid_buf(b) then return end
+          if not changed then vim.notify(err, vim.log.levels.WARN); return end
+          reload_status(false, true)
+          notify_repo_changed(true)
+        end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Unstage all changes' })
 
       vim.keymap.set('n', 'S', function()
-        local changed, err = status_renderer.stage_all(b)
-        if not changed then vim.notify(err, vim.log.levels.WARN); return end
-        reload_status()
-        notify_repo_changed()
+        if index_change_running then return end
+        index_change_running = true
+        status_renderer.stage_all_async(b, function(changed, err)
+          index_change_running = false
+          if not utils.is_valid_buf(b) then return end
+          if not changed then vim.notify(err, vim.log.levels.WARN); return end
+          reload_status(false, true)
+          notify_repo_changed(true)
+        end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Stage all changes' })
 
       local function set_entry_diff(value)
@@ -1650,7 +1689,7 @@ function M.setup(group)
         end
         if not changed then vim.notify(err, vim.log.levels.WARN); return end
         reload_status()
-        notify_repo_changed()
+        notify_repo_changed(true)
         if action == 'resolved' then
           vim.schedule(function()
             if utils.is_valid_buf(b) then M.focus_section(b, 'conflicted') end
@@ -1831,7 +1870,7 @@ function M.setup(group)
           reopen = false,
           on_complete = function()
             reload_status()
-            notify_repo_changed()
+            notify_repo_changed(true)
           end,
         })
       end, { buffer = b, nowait = true, silent = true, desc = 'Reword commit or rename stash' })
@@ -1887,7 +1926,7 @@ function M.setup(group)
         end
         commands.drop_commits(commits, function()
           reload_status()
-          notify_repo_changed()
+          notify_repo_changed(true)
         end)
         return true
       end
@@ -1929,7 +1968,7 @@ function M.setup(group)
         local action = flag and ('set to ' .. flag) or 'cleared'
         vim.notify(('Index flag %s: %s'):format(action, path), vim.log.levels.INFO)
         reload_status()
-        notify_repo_changed()
+        notify_repo_changed(true)
       end
 
       local function choose_index_flag_action(path)
@@ -1990,7 +2029,7 @@ function M.setup(group)
           local discarded, err = status_renderer.discard(b, vim.api.nvim_win_get_cursor(0)[1])
           if not discarded then vim.notify(err, vim.log.levels.WARN); return end
           reload_status()
-          notify_repo_changed()
+          notify_repo_changed(true)
           return
         end
         vim.notify('No discardable item at cursor', vim.log.levels.WARN)

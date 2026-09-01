@@ -10,6 +10,14 @@ local function run(work_tree, args)
   return vim.system(command, { cwd = work_tree, text = true }):wait()
 end
 
+local function run_async(work_tree, args, callback)
+  local command = { 'git' }
+  vim.list_extend(command, args)
+  vim.system(command, { cwd = work_tree, text = true }, function(result)
+    vim.schedule(function() callback(result) end)
+  end)
+end
+
 local function split_nul(value)
   return vim.split(value or '', '\0', { plain = true, trimempty = true })
 end
@@ -471,8 +479,8 @@ function M.update_diff(bufnr, row, mode)
   return true
 end
 
-local function change_entries(model, entries, action)
-  if #entries == 0 then return false, 'Section is empty' end
+local function change_entry_paths(entries, action)
+  if #entries == 0 then return nil, nil, 'Section is empty' end
   local stage_paths, unstage_paths = {}, {}
   local stage_seen, unstage_seen = {}, {}
   for _, item in ipairs(entries) do
@@ -486,7 +494,13 @@ local function change_entries(model, entries, action)
       table.insert(unstage_paths, item.path)
     end
   end
-  if #stage_paths == 0 and #unstage_paths == 0 then return false, 'Nothing to update here' end
+  if #stage_paths == 0 and #unstage_paths == 0 then return nil, nil, 'Nothing to update here' end
+  return stage_paths, unstage_paths
+end
+
+local function change_entries(model, entries, action)
+  local stage_paths, unstage_paths, path_err = change_entry_paths(entries, action)
+  if not stage_paths then return false, path_err end
 
   if #stage_paths > 0 then
     local args = { 'add', '--' }
@@ -508,6 +522,37 @@ local function change_entries(model, entries, action)
   return true
 end
 
+local function change_entries_async(model, entries, action, callback)
+  local stage_paths, unstage_paths, path_err = change_entry_paths(entries, action)
+  if not stage_paths then callback(false, path_err); return end
+
+  local function unstage()
+    if #unstage_paths == 0 then callback(true); return end
+    local args = { 'restore', '--staged', '--' }
+    vim.list_extend(args, unstage_paths)
+    run_async(model.work_tree, args, function(result)
+      if result.code == 0 then callback(true); return end
+      local fallback = { 'reset', '--' }
+      vim.list_extend(fallback, unstage_paths)
+      run_async(model.work_tree, fallback, function(reset_result)
+        if reset_result.code == 0 then callback(true); return end
+        callback(false, vim.trim(reset_result.stderr or 'Git reset failed'))
+      end)
+    end)
+  end
+
+  if #stage_paths == 0 then unstage(); return end
+  local args = { 'add', '--' }
+  vim.list_extend(args, stage_paths)
+  run_async(model.work_tree, args, function(result)
+    if result.code ~= 0 then
+      callback(false, vim.trim(result.stderr or 'Git add failed'))
+      return
+    end
+    unstage()
+  end)
+end
+
 function M.change_index(bufnr, row, action)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
@@ -527,6 +572,25 @@ function M.change_index_range(bufnr, first_row, last_row, action)
   return change_entries(model, entries, action)
 end
 
+function M.change_index_async(bufnr, row, action, callback)
+  local model = models[bufnr]
+  local entry = M.entry_at(bufnr, row)
+  if not model or not entry then callback(false, 'No status entry at cursor'); return end
+  local entries = entry.header and section_entries(model, entry.section) or { entry }
+  change_entries_async(model, entries, action, callback)
+end
+
+function M.change_index_range_async(bufnr, first_row, last_row, action, callback)
+  local model = models[bufnr]
+  if not model then callback(false, 'Status model is unavailable'); return end
+  local entries = {}
+  for row = first_row, last_row do
+    local entry = M.entry_at(bufnr, row)
+    if entry and not entry.header then table.insert(entries, entry) end
+  end
+  change_entries_async(model, entries, action, callback)
+end
+
 function M.reset_index(bufnr)
   local model = models[bufnr]
   if not model then return false, 'Status model is unavailable' end
@@ -541,6 +605,22 @@ function M.stage_all(bufnr)
   local result = run(model.work_tree, { 'add', '-A' })
   if result.code ~= 0 then return false, vim.trim(result.stderr or 'Git add failed') end
   return true
+end
+
+function M.reset_index_async(bufnr, callback)
+  local model = models[bufnr]
+  if not model then callback(false, 'Status model is unavailable'); return end
+  run_async(model.work_tree, { 'reset', '--quiet' }, function(result)
+    callback(result.code == 0, result.code == 0 and nil or vim.trim(result.stderr or 'Git reset failed'))
+  end)
+end
+
+function M.stage_all_async(bufnr, callback)
+  local model = models[bufnr]
+  if not model then callback(false, 'Status model is unavailable'); return end
+  run_async(model.work_tree, { 'add', '-A' }, function(result)
+    callback(result.code == 0, result.code == 0 and nil or vim.trim(result.stderr or 'Git add failed'))
+  end)
 end
 
 function M.collapse_all(bufnr)
