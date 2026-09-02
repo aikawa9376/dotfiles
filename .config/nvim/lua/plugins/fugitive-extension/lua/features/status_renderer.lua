@@ -222,13 +222,19 @@ local function parse_commit_lines(result)
   if result.code ~= 0 then return {}, false end
   local commits = {}
   for line in (result.stdout or ''):gmatch('[^\r\n]+') do
-    table.insert(commits, (line:gsub('\t', ' ', 1)))
+    table.insert(commits, (line:gsub('\t', ' ')))
   end
   return commits, true
 end
 
 local function commit_args(revisions)
-  local args = { 'log', '--pretty=format:%h%x09%s', '-n', '256' }
+  local args = {
+    'log',
+    '--date=format:%Y-%m-%d %H:%M',
+    '--pretty=format:%h%x09%ad%x09%s',
+    '-n',
+    '256',
+  }
   if type(revisions) == 'table' then
     vim.list_extend(args, revisions)
   else
@@ -392,7 +398,15 @@ end
 function M.recent_commits_async(bufnr, limit, callback)
   local model = models[bufnr]
   if not model then callback({}); return end
-  local args = { 'log', '--pretty=format:%h%x09%s', '-n', tostring(limit), 'HEAD', '--' }
+  local args = {
+    'log',
+    '--date=format:%Y-%m-%d %H:%M',
+    '--pretty=format:%h%x09%ad%x09%s',
+    '-n',
+    tostring(limit),
+    'HEAD',
+    '--',
+  }
   run_async(model.work_tree, args, function(result)
     local commits = parse_commit_lines(result)
     callback(commits)

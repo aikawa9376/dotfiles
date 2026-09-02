@@ -73,13 +73,16 @@ end
 
 local function recent_commit_lines(work_tree, limit)
   local result = vim.system({
-    'git', 'log', '--pretty=format:%h%x09%s', '-n', tostring(limit), 'HEAD', '--',
+    'git', 'log',
+    '--date=format:%Y-%m-%d %H:%M',
+    '--pretty=format:%h%x09%ad%x09%s',
+    '-n', tostring(limit), 'HEAD', '--',
   }, { cwd = work_tree, text = true }):wait()
   if result.code ~= 0 then return {} end
 
   local commits = {}
   for line in (result.stdout or ''):gmatch('[^\r\n]+') do
-    table.insert(commits, (line:gsub('\t', ' ', 1)))
+    table.insert(commits, (line:gsub('\t', ' ')))
   end
   return commits
 end
@@ -1343,6 +1346,13 @@ function M.setup(group)
               end_col = #commit_hash,
               hl_group = commit_highlight.group(state),
             })
+            local date_start, date_end = line:find('%d%d%d%d%-%d%d%-%d%d %d%d:%d%d', #commit_hash + 1)
+            if date_start then
+              vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, date_start - 1, {
+                end_col = date_end,
+                hl_group = 'Directory',
+              })
+            end
           end
 
           local stat_entry = status_renderer.entry_at(b, idx)
