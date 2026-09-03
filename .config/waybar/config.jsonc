@@ -1,0 +1,117 @@
+{
+    "layer": "top",
+    "position": "top",
+    "output": "DP-1",
+    "height": 34,
+    "spacing": 0,
+
+    "modules-left": [
+        "sway/workspaces",
+        "sway/mode",
+        "sway/window",
+        "custom/tmux",
+        "custom/docker"
+    ],
+    "modules-center": ["clock"],
+    "modules-right": [
+        "disk",
+        "cpu",
+        "memory",
+        "network",
+        // "pulseaudio",
+        "custom/vpn",
+        "custom/updates",
+        "custom/mozc",
+        // "tray",
+        "custom/power"
+    ],
+
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "all-outputs": true,
+        "format": "{name}"
+    },
+    "sway/mode": {
+        "format": "{}"
+    },
+    "sway/window": {
+        "format": "  {title}",
+        "max-length": 40,
+        "all-outputs": true
+    },
+    "clock": {
+        "interval": 1,
+        "format": " {:%Y-%m-%d %H:%M:%S}",
+        "tooltip-format": "<tt>{calendar}</tt>"
+    },
+    "disk": {
+        "interval": 180,
+        "path": "/",
+        "format": " {percentage_free}%"
+    },
+    "cpu": {
+        "interval": 3,
+        "format": " {usage}%"
+    },
+    "memory": {
+        "interval": 5,
+        "format": " {percentage}%"
+    },
+    "network": {
+        "interval": 3,
+        "format-wifi": "直{essid}:{signalStrength}%",
+        "format-ethernet": " {bandwidthUpBytes}:{bandwidthDownBytes}",
+        "format-linked": " {ifname}",
+        "format-disconnected": ""
+    },
+    "pulseaudio": {
+        "format": "{icon}  {volume}%",
+        "format-muted": "婢  muted",
+        "format-icons": ["", "", ""],
+        "scroll-step": 2
+    },
+    "tray": {
+        "icon-size": 18,
+        "spacing": 8
+    },
+    "custom/tmux": {
+        "exec": "$HOME/.config/polybar/scripts/info-tmux-sessions.sh",
+        "interval": 1,
+        "format": " {}",
+        "escape": true,
+        "hide-empty-text": true
+    },
+    "custom/docker": {
+        "exec": "$HOME/.config/polybar/scripts/info-docker.sh",
+        "interval": 60,
+        "format": " {}",
+        "escape": true,
+        "hide-empty-text": true
+    },
+    "custom/vpn": {
+        "exec": "$HOME/.config/polybar/scripts/vpnstatus.sh",
+        "interval": 5,
+        "format": "嬨{}",
+        "escape": true,
+        "hide-empty-text": true
+    },
+    "custom/updates": {
+        "exec": "$HOME/.config/polybar/scripts/updates-arch-combined.sh",
+        "interval": 1800,
+        "format": " {}",
+        "escape": true,
+        "hide-empty-text": true
+    },
+    "custom/mozc": {
+        "exec": "$HOME/.config/polybar/scripts/info-fcitx.sh",
+        "interval": 1,
+        "format": " {}",
+        "escape": true,
+        "hide-empty-text": true
+    },
+    "custom/power": {
+        "format": "",
+        "tooltip": false,
+        "on-click": "$HOME/.config/sway/scripts/power-menu.sh"
+    }
+}

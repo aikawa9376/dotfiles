@@ -169,15 +169,8 @@ switch-dev-hosts() {
         ;;
     esac
     # chrome://net-internals/#sockets をクリップボードへ
-    if command -v pbcopy >/dev/null 2>&1; then
-      print -rn -- "chrome://net-internals/#sockets" | pbcopy
-    elif command -v wl-copy >/dev/null 2>&1; then
-      print -rn -- "chrome://net-internals/#sockets" | wl-copy
-    elif command -v xclip >/dev/null 2>&1; then
-      print -rn -- "chrome://net-internals/#sockets" | xclip -selection clipboard
-    elif command -v xsel >/dev/null 2>&1; then
-      print -rn -- "chrome://net-internals/#sockets" | xsel --clipboard --input
-    fi
+    print -rn -- "chrome://net-internals/#sockets" \
+      | "$HOME/.config/zsh/scripts/clipboard-copy"
     echo "hosts switched -> $choice"
   else
     echo "hosts switch failed: $choice" >&2
@@ -348,7 +341,7 @@ paru-selecter() {
     --bind 'ctrl-i:execute(paru -Sy --noconfirm $(echo {2}))+reload(paru -Sl)' \
     --bind 'alt-d:execute(paru -Rs --noconfirm $(echo {2}))+reload(paru -Sl)' \
     --bind 'ctrl-r:execute(paru -Sy)+reload(paru -Sl)' \
-    --bind 'alt-c:execute(echo {2} | xclip -selection c)+reload(paru -Sl)' \
+    --bind 'alt-c:execute(echo {2} | $HOME/.config/zsh/scripts/clipboard-copy)+reload(paru -Sl)' \
 }
 
 rvim () {
@@ -431,7 +424,7 @@ f_history_toggle() {
       --bind 'ctrl-x:transform:[[ $FZF_PROMPT =~ global ]] &&
               printf "%s\n" "execute-silent($F_HISTORY_DELETE)+reload($F_HISTORY_GLOBAL)" ||
               printf "%s\n" "execute-silent($F_HISTORY_DELETE)+reload($F_HISTORY_DIR)"' \
-      --bind 'ctrl-e:execute-silent(printf %s {2..} | xclip -selection c)' \
+      --bind 'ctrl-e:execute-silent(printf %s {2..} | $HOME/.config/zsh/scripts/clipboard-copy)' \
       | perl -0ne 's/\0\z//; s/^[^\t]*\t//s; print; exit'
   )
 
@@ -671,7 +664,7 @@ dig_dir() {
     while cmd="$(
           fd --strip-cwd-prefix --type d --follow --hidden --color=always --exclude .git \
           | fzf --ansi --query="$q" --exit-0 \
-          --bind 'alt-c:execute(echo {} | xclip -selection c)' \
+          --bind 'alt-c:execute(echo {} | $HOME/.config/zsh/scripts/clipboard-copy)' \
           --print-query --expect=ctrl-j,ctrl-b,ctrl-g,ctrl-d \
           )"; do
         q="$(head -1 <<< "$cmd")"
@@ -717,7 +710,7 @@ hybrid_history() {
     c1="fc -rl 1 |"
     c1+="fzf --preview-window=hidden -n2..,.. --scheme=history "
     c1+="--ansi --query=${(qqq)LBUFFER} --exit-0 "
-    c1+="--bind 'alt-c:execute(echo {} | xclip -selection c)'"
+    c1+="--bind 'alt-c:execute(echo {} | $HOME/.config/zsh/scripts/clipboard-copy)'"
     c1+="--print-query --expect=ctrl-r"
 
     c2="command history search $ZSH_HISTORY_FILTER_OPTIONS"
@@ -784,7 +777,7 @@ notmuchfzfselect() {
         | sed -r "s/^.*body\{(.*)body\}.*$/\1/g" | perl -pe "s/<br>/\n/g"' \
       --bind 'ctrl-l:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | bat | less -r)' \
       --bind 'ctrl-v:execute(notmuch show --entire-thread=false $(echo {} | cut -f1 -d " ") | nvim -R)' \
-      --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
+      --bind 'alt-c:execute(echo {} | cut -f1 -d " " | $HOME/.config/zsh/scripts/clipboard-copy)'
 }
 
 # -------------------------------------
@@ -796,7 +789,7 @@ csvfzfviewer() {
       --preview-window right:30% --height 100% \
       --preview 'xsv slice -s $(expr $(echo {} | cut -f1 -d ",") - 2) \
         -e $(expr $(echo {} | cut -f1 -d ",") - 1) '$*'  | xsv flatten' \
-      --bind 'alt-c:execute(echo {} | cut -f1 -d " " | xclip -selection c)'
+      --bind 'alt-c:execute(echo {} | cut -f1 -d " " | $HOME/.config/zsh/scripts/clipboard-copy)'
 }
 
 # -------------------------------------
@@ -908,7 +901,7 @@ enhancd_useful() {
       fzf --tiebreak=index \
         --multi --ansi \
         --expect=ctrl-s \
-        --bind 'ctrl-e:execute-silent(printf {} | xclip -selection c -in)'
+        --bind 'ctrl-e:execute-silent(printf {} | $HOME/.config/zsh/scripts/clipboard-copy)'
     )}
   )
 

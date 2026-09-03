@@ -10,7 +10,7 @@ key)
   xdotool key --window $id "$keystroke" > /dev/null 2>&1
   ;;
 type)
-  echo -n "$keystroke" | xclip -i -selection clipboard
+  echo -n "$keystroke" | "$HOME/.config/zsh/scripts/clipboard-copy"
   xdotool key --window $id "ctrl+v" > /dev/null 2>&1
   ;;
 *)

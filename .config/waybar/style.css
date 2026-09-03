@@ -1,0 +1,70 @@
+* {
+    border: none;
+    border-radius: 0;
+    font-family: "Liga Plemol Console NF", "Symbols Nerd Font", sans-serif;
+    font-size: 20px;
+    min-height: 0;
+}
+
+window#waybar {
+    background: #000000;
+    color: #ffffff;
+}
+
+tooltip {
+    background: #2d2d2d;
+    border: 1px solid #555555;
+}
+
+tooltip label {
+    color: #ffffff;
+}
+
+#workspaces button {
+    padding: 0 10px;
+    background: transparent;
+    color: #ffffff;
+}
+
+#workspaces button.focused,
+#workspaces button.active {
+    box-shadow: inset 0 -2px #ded32e;
+}
+
+#workspaces button.urgent {
+    background: #d64937;
+}
+
+#mode,
+#window,
+#clock,
+#disk,
+#cpu,
+#memory,
+#network,
+#pulseaudio,
+#tray,
+#custom-tmux,
+#custom-docker,
+#custom-vpn,
+#custom-updates,
+#custom-mozc,
+#custom-power {
+    padding: 0 10px;
+    margin: 0 2px;
+}
+
+#mode { box-shadow: inset 0 -2px #ded32e; }
+#window { box-shadow: inset 0 -2px #32bbc2; }
+#clock { box-shadow: inset 0 -2px #3465a4; }
+#disk, #custom-tmux { box-shadow: inset 0 -2px #30c352; }
+#cpu, #custom-mozc { box-shadow: inset 0 -2px #d64937; }
+#memory { box-shadow: inset 0 -2px #32bbc2; }
+#network, #custom-vpn { box-shadow: inset 0 -2px #9f78e1; }
+#pulseaudio { box-shadow: inset 0 -2px #ded32e; }
+#custom-docker, #custom-updates { box-shadow: inset 0 -2px #1994d1; }
+#custom-power {
+    padding-left: 9px;
+    padding-right: 11px;
+    box-shadow: inset 0 -2px #9b59b6;
+}

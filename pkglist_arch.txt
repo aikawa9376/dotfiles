@@ -30,6 +30,7 @@ git-delta
 git-lfs
 github-cli
 github-copilot-cli
+grim
 i3-wm
 imagemagick
 insync
@@ -70,8 +71,10 @@ rsync
 rustup
 sassc
 sd
+slurp
 sudo
 sway
+swayidle
 tailspin
 tmux
 tree
@@ -82,9 +85,11 @@ ttf-nerd-fonts-symbols-mono
 unarchiver
 unzip
 vivaldi
+waybar
 wget
 which
 wl-clipboard
+wtype
 xclip
 xcolor
 xdotool

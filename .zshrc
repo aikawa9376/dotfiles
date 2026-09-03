@@ -396,9 +396,11 @@ chpwd() {
 }
 
 # -------------------------------------
-# Xserver start
+# Sway desktop start
 # -------------------------------------
-[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx i3
+if [[ -z ${DISPLAY:-} && -z ${WAYLAND_DISPLAY:-} && ${XDG_VTNR:-0} -eq 1 ]]; then
+  exec "$HOME/.config/sway/start"
+fi
 
 # -------------------------------------
 # abbr
