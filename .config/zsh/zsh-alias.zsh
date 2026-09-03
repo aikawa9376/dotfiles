@@ -66,10 +66,11 @@ alias i3wk='ps faux | grep "\_ i3" | head -n 1 | awk "{print \$2}" | xargs kill 
 alias hs="command history"
 alias zsup="zinit self-update"
 alias zup="zinit update"
-alias clp="gpick -o -s -c color_web_hex | xclip -sel c"
-alias clpr="gpick -o -s -c color_css_rgb | xclip -sel c"
+alias clp="gpick -o -s -c color_web_hex | $HOME/.config/zsh/scripts/clipboard-copy"
+alias clpr="gpick -o -s -c color_css_rgb | $HOME/.config/zsh/scripts/clipboard-copy"
 alias lg="lazygit"
 alias avante='nvim -c "lua vim.defer_fn(function()require(\"avante.api\").zen_mode()end, 100)"'
+alias sway-start='~/.config/sway/start'
 
 alias cd-="ecd -"
 alias cd.="ecd ."

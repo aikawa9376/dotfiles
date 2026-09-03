@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+runtime_dir=${XDG_RUNTIME_DIR:-"/run/user/$(id -u)"}
+
+if [ -n "${WAYLAND_DISPLAY:-}" ] &&
+        [ -S "$runtime_dir/$WAYLAND_DISPLAY" ] &&
+        command -v wl-copy >/dev/null 2>&1; then
+    exec wl-copy
+fi
+
+if command -v pbcopy >/dev/null 2>&1; then
+    exec pbcopy
+fi
+
+if [ -n "${DISPLAY:-}" ] && command -v xclip >/dev/null 2>&1; then
+    exec xclip -selection clipboard -in
+fi
+
+if [ -n "${DISPLAY:-}" ] && command -v xsel >/dev/null 2>&1; then
+    exec xsel --clipboard --input
+fi
+
+printf 'clipboard-copy: no supported clipboard backend is available\n' >&2
+exit 1

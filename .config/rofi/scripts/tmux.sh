@@ -26,8 +26,8 @@ FOUND=0
 ## - Get session working directory
 SESSION=$(echo "$SELECTED" | cut -f 1 -d ':')
 WINDOW=$(echo "$SELECTED" | cut -f 2 -d ':' | sed -r 's/[\*-]//g' )
-$(tmux switch-client -t $SESSION)
-$(tmux select-window -t $WINDOW)
+tmux switch-client -t "$SESSION" >/dev/null || exit 1
+tmux select-window -t "$SESSION:$WINDOW" >/dev/null || exit 1
 FOUND=1
 
 if (( $FOUND == 0 )); then
@@ -35,4 +35,8 @@ if (( $FOUND == 0 )); then
 	exit 1
 fi
 
-xdotool search --onlyvisible --class "kitty" windowactivate
+if [[ -n ${SWAYSOCK:-} ]]; then
+  swaymsg -s "$SWAYSOCK" '[app_id="kitty"] focus' >/dev/null
+else
+  xdotool search --onlyvisible --class "kitty" windowactivate >/dev/null
+fi

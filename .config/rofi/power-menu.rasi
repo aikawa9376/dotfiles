@@ -1,0 +1,54 @@
+configuration {
+    font: "Noto Sans CJK JP 12";
+}
+
+* {
+    background: #2d2d2d;
+    foreground: #ffffff;
+    accent: #9b59b6;
+}
+
+window {
+    location: northeast;
+    anchor: northeast;
+    y-offset: 42px;
+    width: 500px;
+    background-color: @background;
+    border: 1px;
+    border-color: #555555;
+    border-radius: 8px;
+    padding: 6px;
+}
+
+mainbox {
+    background-color: transparent;
+    children: [ listview ];
+}
+
+listview {
+    background-color: transparent;
+    layout: horizontal;
+    lines: 1;
+    columns: 4;
+    spacing: 4px;
+    scrollbar: false;
+    fixed-height: true;
+}
+
+element {
+    background-color: transparent;
+    text-color: @foreground;
+    border-radius: 5px;
+    padding: 7px 9px;
+}
+
+element selected.normal {
+    background-color: @accent;
+    text-color: @foreground;
+}
+
+element-text {
+    background-color: inherit;
+    text-color: inherit;
+    horizontal-align: 0.5;
+}

@@ -213,6 +213,29 @@ local function is_macos()
   return vim.fn.has("macunix") == 1
 end
 
+local function environment_value(name)
+  local value = vim.env[name]
+  return type(value) == "string" and value ~= "" and value or nil
+end
+
+local function screenshot_environment()
+  if is_macos() then
+    return "macos"
+  end
+  if is_windows() then
+    return "windows"
+  end
+
+  local session_type = (environment_value("XDG_SESSION_TYPE") or ""):lower()
+  if environment_value("WAYLAND_DISPLAY") or session_type == "wayland" then
+    return "wayland"
+  end
+  if environment_value("DISPLAY") or session_type == "x11" then
+    return "x11"
+  end
+  return "unknown"
+end
+
 local function powershell_executable()
   if not is_windows() then
     return nil
@@ -1121,9 +1144,16 @@ local function capture_from_grim_slurp(dir)
     return nil
   end
 
+  local selection = vim.system({ "slurp" }, { text = true }):wait()
+  local geometry = selection.stdout and vim.trim(selection.stdout) or ""
+  if selection.code ~= 0 or geometry == "" then
+    local stderr = selection.stderr and vim.trim(selection.stderr) or ""
+    local msg = stderr ~= "" and stderr or "slurp failed (canceled?)"
+    return nil, msg
+  end
+
   local path = build_destination(dir, "png")
-  local cmd = string.format('grim -g "$(slurp)" %s', vim.fn.shellescape(path))
-  local result = vim.system({ "sh", "-c", cmd }, { text = true }):wait()
+  local result = vim.system({ "grim", "-g", geometry, path }, { text = true }):wait()
   if result.code == 0 and file_exists(path) then
     return path, "grim+slurp"
   end
@@ -1134,7 +1164,7 @@ local function capture_from_grim_slurp(dir)
 
   local stderr = result.stderr and vim.trim(result.stderr) or ""
   local stdout = result.stdout and vim.trim(result.stdout) or ""
-  local msg = stderr ~= "" and stderr or stdout ~= "" and stdout or "grim+slurp failed (canceled?)"
+  local msg = stderr ~= "" and stderr or stdout ~= "" and stdout or "grim+slurp failed"
   return nil, msg
 end
 
@@ -1204,38 +1234,29 @@ exit 3
 end
 
 local function capture_screenshot_image(dir)
-  local path, source_or_err = capture_from_screencapture(dir)
-  if path then
-    return path, source_or_err
+  local environment = screenshot_environment()
+  if environment == "macos" then
+    local path, err = capture_from_screencapture(dir)
+    return path, err or "screenshot backend not found. Install macOS screencapture."
   end
-  local last_err = source_or_err
-
-  local path, source_or_err = capture_from_import(dir)
-  if path then
-    return path, source_or_err
+  if environment == "windows" then
+    local path, err = capture_from_windows_snipping(dir)
+    return path, err or "screenshot backend not found. Install Windows Snipping Tool."
   end
-  if source_or_err ~= nil then
-    last_err = source_or_err
+  if environment == "wayland" then
+    local path, err = capture_from_grim_slurp(dir)
+    return path, err or "Wayland screenshot backend not found. Install grim and slurp."
   end
-
-  path, source_or_err = capture_from_grim_slurp(dir)
-  if path then
-    return path, source_or_err
-  end
-  if source_or_err ~= nil then
-    last_err = source_or_err
+  if environment == "x11" then
+    local path, err = capture_from_import(dir)
+    return path, err or "X11 screenshot backend not found. Install ImageMagick (import)."
   end
 
-  path, source_or_err = capture_from_windows_snipping(dir)
-  if path then
-    return path, source_or_err
+  if vim.fn.executable("grim") == 1 and vim.fn.executable("slurp") == 1 then
+    return capture_from_grim_slurp(dir)
   end
-  if source_or_err ~= nil then
-    last_err = source_or_err
-  end
-
-  if last_err and last_err ~= "" then
-    return nil, last_err
+  if vim.fn.executable("import") == 1 then
+    return capture_from_import(dir)
   end
   return nil, "screenshot backend not found. Install ImageMagick (import), grim+slurp, use macOS screencapture, or use Windows Snipping Tool."
 end

@@ -1,0 +1,67 @@
+#!/bin/sh
+set -eu
+
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}
+config_file="$config_dir/sway/config"
+waybar_config_file="$config_dir/waybar/config.jsonc"
+
+if [ ! -r "$config_file" ]; then
+    printf 'sway-start: config not found: %s\n' "$config_file" >&2
+    exit 1
+fi
+
+if [ ! -r "$waybar_config_file" ]; then
+    printf 'sway-start: Waybar config not found: %s\n' "$waybar_config_file" >&2
+    exit 1
+fi
+
+for command_name in sway swayidle waybar kitty rofi fcitx5 copyq grim slurp wtype; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        printf 'sway-start: required command is not installed: %s\n' "$command_name" >&2
+        exit 1
+    fi
+done
+
+if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    printf 'sway-start: run this from a local Linux TTY, not another graphical session.\n' >&2
+    exit 1
+fi
+
+case $(tty 2>/dev/null || true) in
+    /dev/tty[0-9]*) ;;
+    *)
+        printf 'sway-start: a local Linux TTY is required (current terminal: %s).\n' "$(tty 2>/dev/null || printf unknown)" >&2
+        exit 1
+        ;;
+esac
+
+# Reuse the login session's user bus so browsers see the unlocked keyring.
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
+        [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    printf 'sway-start: the login session user D-Bus is unavailable.\n' >&2
+    exit 1
+fi
+
+export XDG_CURRENT_DESKTOP=sway
+export XDG_SESSION_DESKTOP=sway
+export XDG_SESSION_TYPE=wayland
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+export GLFW_IM_MODULE=ibus
+export GDK_BACKEND=wayland,x11
+export QT_QPA_PLATFORM='wayland;xcb'
+export MOZ_ENABLE_WAYLAND=1
+
+set -- --config "$config_file"
+
+# Sway requires this acknowledgement when the proprietary NVIDIA module is in use.
+if [ -d /sys/module/nvidia ]; then
+    set -- --unsupported-gpu "$@"
+fi
+
+printf 'Starting Sway. Exit with Super+Shift+Escape.\n' >&2
+exec sway "$@"
