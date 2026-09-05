@@ -630,6 +630,12 @@ function M.new(ctx)
     end
 
     pcall(function()
+      -- Native :restart can restore this URI as an ordinary file buffer.
+      -- Reapply scratch semantics for adopted views as well as new ones.
+      vim.bo[bufnr].buftype = "nofile"
+      vim.bo[bufnr].bufhidden = "hide"
+      vim.bo[bufnr].modifiable = false
+      vim.bo[bufnr].modified = false
       vim.bo[bufnr].filetype = ACP_TRANSCRIPT_FILETYPE
       vim.bo[bufnr].swapfile = false
       vim.bo[bufnr].undofile = false

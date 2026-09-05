@@ -143,8 +143,10 @@ function M.run()
   vim.cmd("tabclose")
   render_attach_count = 0
 
-  local adopted_bufnr = vim.api.nvim_create_buf(false, true)
+  -- Session restore recreates the URI as a normal buffer, not a scratch buffer.
+  local adopted_bufnr = vim.api.nvim_create_buf(true, false)
   vim.api.nvim_buf_set_name(adopted_bufnr, "lazyagent://acp/restart-restored-buffer")
+  vim.api.nvim_buf_set_lines(adopted_bufnr, 0, -1, false, { "restored transcript" })
   vim.api.nvim_win_set_buf(0, adopted_bufnr)
   local adopted_pane_id
   local adopted_state
@@ -172,6 +174,15 @@ function M.run()
   assert_equal(adopted_state.bufnr, adopted_bufnr, "restart adoption keeps the session-restored buffer")
   assert_equal(adopted_state.preserve_existing_transcript, false,
     "restart adoption requests persisted transcript hydration")
+  assert_equal(vim.bo[adopted_bufnr].buftype, "nofile", "adopted transcript is not a file")
+  assert_equal(vim.bo[adopted_bufnr].bufhidden, "hide", "adopted transcript survives hiding")
+  assert_equal(vim.bo[adopted_bufnr].modifiable, false, "adopted transcript is not editable")
+  assert_equal(vim.bo[adopted_bufnr].modified, false, "adopted transcript needs no write")
+  vim.cmd("split")
+  local quit_winid = vim.api.nvim_get_current_win()
+  vim.cmd("normal! ZZ")
+  assert_equal(vim.api.nvim_win_is_valid(quit_winid), false, "ZZ closes the restored transcript window")
+  assert_equal(vim.api.nvim_buf_is_valid(adopted_bufnr), true, "ZZ keeps the hidden transcript available")
   view.kill_pane(adopted_pane_id, { pane_id = adopted_pane_id, transcript_path = transcript_path })
   local adoption_fallback_bufnr = vim.api.nvim_get_current_buf()
   if vim.api.nvim_win_is_valid(source_winid) and vim.api.nvim_buf_is_valid(source_bufnr) then
@@ -180,6 +191,7 @@ function M.run()
   if adoption_fallback_bufnr ~= source_bufnr and vim.api.nvim_buf_is_valid(adoption_fallback_bufnr) then
     vim.api.nvim_buf_delete(adoption_fallback_bufnr, { force = true })
   end
+  render_attach_count = 0
 
   view.create_pane({
     transcript_path = transcript_path,
