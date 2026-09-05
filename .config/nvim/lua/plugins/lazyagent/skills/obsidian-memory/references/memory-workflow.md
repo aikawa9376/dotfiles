@@ -1,94 +1,53 @@
-# Agent Memory Maintenance
+# Note Structure and Reorganization
 
-Read this reference only when creating a component note, reorganizing or
-splitting one, or resolving stale or conflicting memory. Ordinary retrieval and
-focused updates are defined in `SKILL.md` and do not require this file.
+Use this reference for new component notes, splits, or conflict repair.
+The retrieval and update rules in `SKILL.md` also apply.
 
-## Placement
+## New Notes
 
-Keep working knowledge under `notes/agent-memory/<project>/`. Prefer one note
-per coherent component or responsibility. Revise it in place instead of
-creating chronological task notes.
-
-Choose component boundaries that match how engineers navigate the system. A
-component may be a subsystem, protocol, feature area, service, or cross-cutting
-responsibility. Split a note when unrelated concerns make selective retrieval
-difficult; do not split merely because the note has grown.
-
-When a project has many component notes or important cross-component flows, an
-optional `notes/agent-memory/<project>/index.md` may map responsibilities and
-links. Keep it architectural and stable rather than listing every file or task.
-
-## New Note Shape
-
-Preserve established frontmatter. A new note should normally use this shape:
+Choose one coherent responsibility under `notes/agent-memory/<project>/`.
+Use the existing vault conventions; a minimal note can start with:
 
 ```markdown
 ---
-id: 1787273693-ABCD
+id: <timestamp>-<suffix>
 aliases: []
-tags: []
 type: agent-memory
 source: lazyagent
 status: seed
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
-project: <repository-slug>
+project: <repository-name>
 ---
 
-# Project / component memory
+# Project / component
 
-One-sentence responsibility and conclusion.
+One-sentence responsibility and current design.
 
-## Responsibilities and boundaries
+## Behavior and Boundaries
 
-What this component owns, what it delegates, and what it must not do.
+Responsibilities, interfaces, flows, state ownership, and invariants.
 
-## Current behavior
+## Decisions and Evidence
 
-Lifecycle, state ownership, ordering, data flow, interfaces, and invariants.
+Design reasons, constraints, and source or test anchors for the claims above.
 
-## Source anchors
+## Open Work
 
-Stable entry points and symbols; canonical-spec locators such as
-`docs/design.md:20 — Retry policy` or an external page, URL, and section.
-
-## Decisions and failures
-
-Non-obvious rationale, rejected approaches, root causes, fixes, and constraints.
-
-## Verification
-
-Current source, tests, or authoritative references that confirmed the claims.
-
-## Open work
-
-Substantial unfinished work needed for safe continuation.
+Unresolved questions and what would settle them.
 ```
 
-Generate a fresh ID using the vault's existing timestamp-plus-suffix pattern;
-the values above only illustrate the shape. Replace or omit the example
-`project` property rather than copying a placeholder. Omit optional properties
-and sections that add no value. Keep `created` unchanged on updates, change
-`updated` only for meaningful content changes, and preserve unknown properties.
+Generate a fresh ID using the vault's timestamp-plus-suffix convention.
+Adapt headings to the component and omit empty sections. An existing canonical
+specification may need only a locator and any missing durable context.
 
-## Maintenance
+## Reorganization
 
-1. Search by project, component, responsibility, feature, title, aliases, and
-   distinctive behavior before creating a note.
-2. Update the note that owns the responsibility. Link another component note
-   rather than duplicating shared behavior.
-3. Prefer current synthesized behavior over investigation chronology. Preserve
-   a short `Previously` item only when the old behavior prevents a future
-   mistake.
-4. Keep source anchors selective. For code, record architectural entry points
-   and important symbols rather than a changed-file inventory. For canonical
-   specifications, include a precise path or page and a heading; add a line
-   number when useful as a navigation hint and refresh it when touched.
-5. If a claim is stale, replace it and re-check linked notes or an optional
-   project index for the same claim.
-6. If evidence cannot resolve a conflict, state what is known, what is
-   uncertain, and the exact source or test that can resolve it.
+Split when unrelated responsibilities make selective retrieval difficult,
+not merely because a note is long. Keep shared behavior with its owning
+component and link to it. An optional project `index.md` can map responsibilities
+and cross-component flows when discovery becomes difficult.
 
-Never promote a guess into durable knowledge. Do not create or update a daily
-note unless chronology itself is useful or the user requested it.
+For overlapping or conflicting notes, identify the owner, reconcile claims
+against current evidence, and repair affected links. Leave unresolved claims
+explicit; preserve the context needed to verify them.

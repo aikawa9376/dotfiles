@@ -1,116 +1,77 @@
 ---
 name: obsidian-memory
-description: Build and reuse durable project expertise while maintaining living component specifications in the configured Obsidian vault. Use before and after work beyond minor changes, or repeated work. Do not use for raw conversation archival.
+description: Build and reuse project knowledge as living design specifications in Obsidian. Use before and after non-minor work, and when revisiting or correcting prior work. Do not use for conversation archival.
 ---
 
 # Obsidian Memory
 
-Use the Obsidian vault as an external project brain. Grow component notes into
-living specifications so future work starts with an experienced engineer's map
-of the system and the durable knowledge likely to affect later decisions.
+Grow component notes into a coherent design specification as work teaches us
+how the project behaves and why. Future work should recover responsibilities,
+flows, constraints, and decisions without repeating the investigation.
 
-This skill handles retrieval and maintenance of agent-only expertise. Use the
-broader `obsidian` skill for ordinary notes, formatting, Bases, Canvas, and
-interactive Neovim workflows.
+User instructions and current evidence take precedence over memory. Check
+notes against code, tests, and authoritative specifications before relying on
+them; preserve unresolved differences rather than silently choosing a winner.
 
-## Resolve the Vault
+## Locate and Retrieve
 
-Before every vault operation, run the resolver relative to this skill:
+At the start of each retrieval or write-back pass, resolve the vault:
 
 ```sh
 nvim --headless --clean -u NONE -l <skill-dir>/scripts/resolve_vault.lua
 ```
 
-Use its output as `VAULT_ROOT`. Never reuse a path from an earlier task or
-guess when resolution fails.
+Use the output as `VAULT_ROOT`; do not guess on failure or reuse a path from
+an earlier task.
 
-## Retrieve Before Work Beyond Minor Changes
+1. Find candidate notes with `rg --files "$VAULT_ROOT/notes/agent-memory"`,
+   using repository, component, feature, and symptom cues. Reuse the existing
+   project owner: a plugin's notes may belong under `dotfiles/`. For a new
+   project, use the repository name rather than the current subdirectory.
+2. Search matching notes' headings and content with `rg`. Expand into the
+   rest of `notes/` only when needed. Read relevant sections and direct links,
+   then follow source anchors to verify the behavior involved in the task.
 
-1. Derive a few cues from the project, component, feature, symptom, and likely
-   responsibility involved.
-2. Search the matching project/component under
-   `$VAULT_ROOT/notes/agent-memory` first, then the rest of `notes/` only when
-   needed. Search filenames, headings, and distinctive terms with `rg`.
-3. Read only the relevant sections and the few directly linked notes needed to
-   act. Stop when the evidence is sufficient.
-4. Recover the component's current behavior and responsibilities, important
-   flows and interfaces, invariants, source anchors and likely change points,
-   plus relevant decisions, failures, constraints, and unfinished work.
-5. Verify memory against current code, tests, authoritative sources, and the
-   user's instructions. Use memory as a navigation map, not as source of truth.
+Treat related turns as one task. Search again when revisiting prior work,
+retrying a failed fix, or changing architecture, defaults, paths, or workflows.
+Routine isolated edits need no pass.
 
-Treat related turns as one task. Search again when work revisits a component,
-changes architecture, defaults, paths, or workflows, retries a failed fix, or
-reaches a second correction turn. Routine isolated edits need no pass.
+## Maintain the Specification
 
-## Learn and Maintain Through Work
+Integrate reusable knowledge learned deliberately or incidentally into
+`notes/agent-memory/<project>/<component>.md`. Update the owning note in place;
+if project understanding did not improve, do not force a write.
 
-Update the owning component note when work reveals or verifies reusable project
-knowledge, whether the investigation was requested or incidental. Preserve both
-future-useful non-obvious insight and ordinary facts needed to keep the touched
-specification coherent and current. If the work did not improve project
-understanding, do not force an update. Valuable knowledge includes:
+- Build coverage of responsibilities, interfaces, flows, state ownership,
+  invariants, design rationale, and substantial open work. Include ordinary
+  facts needed to make the design coherent, without auditing unrelated areas.
+- Distinguish implemented behavior, intended design, and unverified hypotheses.
+  Anchor material claims to source symbols or tests and the conditions they
+  actually cover. A note's update date does not mean every claim was rechecked.
+  For unresolved differences, retain both sources and how to resolve them.
+- When a coherent specification exists in the repository or a system such as
+  Confluence, keep a locator: repository-relative path plus symbol or heading,
+  or page title plus stable URL/ID and section. Add only missing durable context
+  or discrepancies. Line numbers are optional navigation hints.
+- Replace stale claims and consolidate overlapping passages. Reduce past
+  failures to the cause, constraint, or rejected approach that matters for
+  future decisions. Preserve useful reasoning while removing task chronology.
+- Preserve IDs, `created`, and unknown frontmatter; set `updated` to today's
+  date for meaningful content changes. Reread the touched section for
+  contradictions, duplicate claims, and broken source anchors.
 
-- component responsibilities and boundaries;
-- runtime or data flow, lifecycle, state ownership, and ordering;
-- interfaces, protocols, contracts, invariants, and accepted behavior;
-- source entry points, important symbols, and non-obvious change hotspots;
-- design rationale, rejected alternatives, failures and causes, constraints,
-  reliable verification, and substantial unfinished work.
+Write headings and prose in English, retaining Japanese aliases and distinctive
+symptoms when useful for retrieval. Migrate existing prose only when materially
+updating its component. Never store chats, logs, secrets, routine status, or
+passing-test lists.
 
-Use each update to complete or correct the specification within the task's
-verified scope. Fill adjacent gaps when the evidence is already available, but
-do not audit unrelated components or guess. Prefer synthesis over copied source;
-skip ephemeral observations, redundant detail, and exhaustive inventories.
+## Conditional References
 
-Update `notes/agent-memory/<project>/<component>.md` in place; do not create a
-note per task. Treat these notes collectively as the project's agent-facing
-specification. Replace stale claims instead of appending contradictory history,
-and keep each note concise enough to retrieve selectively.
-
-## Existing Specifications
-
-Do not duplicate a coherent canonical specification already maintained in the
-repository or an available system such as Confluence. Instead, keep a compact
-retrieval index in the owning component note or project index: for repository
-documents, record a repository-relative `path.md:line` plus the heading or
-claim; for external pages, record the page title, stable URL or ID, and section.
-Treat line numbers as navigation hints that may drift and refresh them when
-touched. If the specification is current, sufficient, and matches the
-implementation, the locator alone is enough. When it is incomplete or disagrees
-with the implementation, add only durable missing context such as exceptions,
-ambiguity, or stale claims. Anchor both the expected specification and observed
-implementation; do not silently decide which is correct when the evidence does
-not resolve it.
-
-Write agent-memory headings and prose in English by default so source symbols,
-errors, and architectural terms remain directly searchable. Preserve Japanese
-aliases and distinctive Japanese symptom phrases when they improve retrieval.
-Do not bulk-translate existing notes; migrate them when materially updating the
-owning component note.
-
-Do not store conversations, generic summaries, command logs, passing-test
-lists, secrets, credentials, or routine status.
-
-For a new component note, a note that needs splitting or conflict repair, read
-[memory maintenance](references/memory-workflow.md). Do not read it for an
-ordinary search or focused update. Create or update a human-facing regular note
-only when the user explicitly requests documentation; then read
-[human-facing notes](references/human-facing-notes.md).
-
-## Authority and Conflicts
-
-Apply this precedence:
-
-1. current user instructions
-2. current code, configuration, tests, and authoritative external sources
-3. Obsidian memory
-
-When memory is stale in the task's scope, correct it. If current evidence cannot
-resolve a conflict, record the uncertainty and how to verify it.
-
-## Boundary with Conversation Memory
-
-Use `brain` when missing chat wording or conversation history matters. Use this
-skill for curated project knowledge that should survive across sessions. Do not
-duplicate raw chat history into Obsidian.
+- For a new note, splitting, or conflict repair, read
+  [note structure](references/memory-workflow.md). Ordinary updates need only
+  this file.
+- Agent memory is maintained through normal work. Create or update regular
+  human-facing notes only when the user requests documentation; then read
+  [human-facing notes](references/human-facing-notes.md).
+- Use `obsidian` for general vault and editor workflows; use `brain` when exact
+  conversation history is needed.
