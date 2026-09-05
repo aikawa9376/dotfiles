@@ -1,5 +1,5 @@
-# Sway desktop session. Login on local TTY1 starts it through ~/.zshrc.
-# The launcher remains usable manually as: sway-start
+# Sway fallback desktop session. Start it manually from a local TTY with:
+# sway-start
 
 set $mod Mod4
 set $term kitty

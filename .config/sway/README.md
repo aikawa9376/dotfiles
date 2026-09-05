@@ -1,13 +1,14 @@
 # Sway desktop session
 
-Sway is the normal desktop started by the login shell on local TTY1. This does
-not use a display manager or enable a system service. The old i3 configuration
-remains available for an explicit `startx i3` from another TTY.
+Sway remains available as a manual fallback beside the normal Hyprland desktop.
+Neither session uses a display manager or enables a compositor system service.
+The old i3 configuration also remains available through an explicit
+`startx i3` from another TTY.
 
 ## Start and stop
 
-1. Log in on local TTY1; `~/.zshrc` executes `~/.config/sway/start`.
-2. To start it manually on another local TTY, run `sway-start`.
+To start Sway manually, log in on a local TTY other than TTY1 and run
+`sway-start`. TTY1 starts Hyprland automatically through `~/.zshrc`.
 3. Exit Sway with `Super+Shift+Escape`.
 
 Do not start Sway from a terminal inside i3. A compositor started there

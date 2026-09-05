@@ -37,6 +37,8 @@ fi
 
 if [[ -n ${SWAYSOCK:-} ]]; then
   swaymsg -s "$SWAYSOCK" '[app_id="kitty"] focus' >/dev/null
+elif [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+  hyprctl dispatch 'hl.dsp.focus({ window = "class:^kitty$" })' >/dev/null
 else
   xdotool search --onlyvisible --class "kitty" windowactivate >/dev/null
 fi
