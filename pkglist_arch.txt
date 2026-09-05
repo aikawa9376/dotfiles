@@ -30,6 +30,7 @@ git-delta
 git-lfs
 github-cli
 github-copilot-cli
+hyprland
 grim
 i3-wm
 imagemagick

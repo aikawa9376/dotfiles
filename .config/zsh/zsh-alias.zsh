@@ -71,6 +71,7 @@ alias clpr="gpick -o -s -c color_css_rgb | $HOME/.config/zsh/scripts/clipboard-c
 alias lg="lazygit"
 alias avante='nvim -c "lua vim.defer_fn(function()require(\"avante.api\").zen_mode()end, 100)"'
 alias sway-start='~/.config/sway/start'
+alias hyprland-start='~/.config/hypr/start'
 
 alias cd-="ecd -"
 alias cd.="ecd ."

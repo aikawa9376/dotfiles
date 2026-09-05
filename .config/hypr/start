@@ -1,0 +1,60 @@
+#!/bin/sh
+set -eu
+
+config_dir=${XDG_CONFIG_HOME:-"$HOME/.config"}
+config_file="$config_dir/hypr/hyprland.lua"
+waybar_config_file="$config_dir/waybar/hyprland.jsonc"
+
+if [ ! -r "$config_file" ]; then
+    printf 'hyprland-start: config not found: %s\n' "$config_file" >&2
+    exit 1
+fi
+
+if [ ! -r "$waybar_config_file" ]; then
+    printf 'hyprland-start: Waybar config not found: %s\n' "$waybar_config_file" >&2
+    exit 1
+fi
+
+for command_name in start-hyprland hyprctl swayidle waybar kitty rofi fcitx5 copyq grim slurp wtype; do
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        printf 'hyprland-start: required command is not installed: %s\n' "$command_name" >&2
+        exit 1
+    fi
+done
+
+if [ -n "${DISPLAY:-}" ] || [ -n "${WAYLAND_DISPLAY:-}" ]; then
+    printf 'hyprland-start: run this from a local Linux TTY, not another graphical session.\n' >&2
+    exit 1
+fi
+
+case $(tty 2>/dev/null || true) in
+    /dev/tty[0-9]*) ;;
+    *)
+        printf 'hyprland-start: a local Linux TTY is required (current terminal: %s).\n' "$(tty 2>/dev/null || printf unknown)" >&2
+        exit 1
+        ;;
+esac
+
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] &&
+        [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "$XDG_RUNTIME_DIR/bus" ]; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    printf 'hyprland-start: the login session user D-Bus is unavailable.\n' >&2
+    exit 1
+fi
+
+export XDG_CURRENT_DESKTOP=Hyprland
+export XDG_SESSION_DESKTOP=Hyprland
+export XDG_SESSION_TYPE=wayland
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+export GLFW_IM_MODULE=ibus
+export GDK_BACKEND=wayland,x11
+export QT_QPA_PLATFORM='wayland;xcb'
+export MOZ_ENABLE_WAYLAND=1
+export ELECTRON_OZONE_PLATFORM_HINT=auto
+
+printf 'Starting Hyprland. Exit with Super+Shift+Escape.\n' >&2
+exec start-hyprland -- --config "$config_file"

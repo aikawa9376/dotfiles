@@ -396,10 +396,10 @@ chpwd() {
 }
 
 # -------------------------------------
-# Sway desktop start
+# Hyprland desktop start
 # -------------------------------------
 if [[ -z ${DISPLAY:-} && -z ${WAYLAND_DISPLAY:-} && ${XDG_VTNR:-0} -eq 1 ]]; then
-  exec "$HOME/.config/sway/start"
+  exec "$HOME/.config/hypr/start"
 fi
 
 # -------------------------------------

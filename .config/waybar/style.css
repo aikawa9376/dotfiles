@@ -36,6 +36,7 @@ tooltip label {
 }
 
 #mode,
+#submap,
 #window,
 #clock,
 #disk,
@@ -51,10 +52,10 @@ tooltip label {
 #custom-mozc,
 #custom-power {
     padding: 0 10px;
-    margin: 0 2px;
+    margin: 0 4px;
 }
 
-#mode { box-shadow: inset 0 -2px #ded32e; }
+#mode, #submap { box-shadow: inset 0 -2px #ded32e; }
 #window { box-shadow: inset 0 -2px #32bbc2; }
 #clock { box-shadow: inset 0 -2px #3465a4; }
 #disk, #custom-tmux { box-shadow: inset 0 -2px #30c352; }
