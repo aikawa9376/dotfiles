@@ -19,13 +19,27 @@ return {
             return
           end
 
-          vim.schedule(function()
-            treesitter.install(lang):wait()
-            if pcall(vim.treesitter.start) then
-              vim.wo.foldexpr = "v:lua.vim.treesitter.foldexpr()"
-              vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          local function start()
+            if not vim.api.nvim_buf_is_loaded(ctx.buf) or vim.bo[ctx.buf].filetype ~= ctx.match then
+              return false
             end
-          end)
+            if not pcall(vim.treesitter.start, ctx.buf, lang) then
+              return false
+            end
+            vim.bo[ctx.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+            for _, win in ipairs(vim.fn.win_findbuf(ctx.buf)) do
+              vim.wo[win].foldexpr = "v:lua.vim.treesitter.foldexpr()"
+            end
+            return true
+          end
+
+          -- Installed parsers should highlight on FileType, before the first redraw.
+          if not start() then
+            vim.schedule(function()
+              treesitter.install(lang):wait()
+              start()
+            end)
+          end
         end,
       })
     end
