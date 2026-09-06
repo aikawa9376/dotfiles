@@ -550,6 +550,8 @@ Neovim 0.13 の native `:restart` では、`ExitPre` で起動中の ACP thread 
 
 ### ACP transcript buffer keymaps
 
+上向きのマウスホイールや上方向へのカーソル移動で、出力への追従を解除します。マウス操作はポインタ下のtranscriptを対象にし、解除後の画面調整や予約済みスクロールで追従を再開しません。下方向へ操作して末尾へ戻るか、`G` / `<End>` で追従を再開できます。
+
 ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。`:LazyAgentACPSessions [agent]` では provider 側が保持している native session を一覧し、現在の会話へ add するか、native load / resume できます。float は `q` または `<Esc>` で閉じます。
 
 `:LazyAgentACPCockpit`のpreviewは既定でACP bufferと同じ`pane_size`のside splitに表示し、`s`でbottom horizontal splitへ切り替えられます。previewには`PREVIEW` winbar/statuslineと専用背景を表示し、`o`で実agent bufferを開く際はpreviewを閉じます。既定layoutは`acp.cockpit_preview_layout = "horizontal"`で変更できます。

@@ -230,6 +230,35 @@ function M.run()
   vim.wait(300)
   render_updates = 0
   local transcript_bufnr = assert(live.panes[tostring(pane_id)]).bufnr
+  local smooth_scroll = require("lazyagent.acp.view_buffer.smooth_scroll")
+  local scroll_win = pane_state.winid
+  view.configure_pane(pane_id, { follow_output = false })
+  vim.api.nvim_win_call(scroll_win, function()
+    vim.fn.winrestview({ topline = 25, lnum = 28, col = 0 })
+  end)
+  local function topline()
+    return vim.api.nvim_win_call(scroll_win, function() return vim.fn.line("w0") end)
+  end
+  local previous_scroll = vim.wo[scroll_win].scroll
+  local distance = math.min(10, vim.api.nvim_win_get_height(scroll_win))
+  vim.wo[scroll_win].scroll = distance
+  for _, direction in ipairs({ -1, 1 }) do
+    local before = topline()
+    local frames = 0
+    local observer = vim.on_key(function(key)
+      if key == vim.keycode("<C-y>") or key == vim.keycode("<C-e>") then
+        frames = frames + 1
+      end
+    end)
+    local started = direction < 0 and view.scroll_up(pane_id) or view.scroll_down(pane_id)
+    local finished = vim.wait(1000, function() return not smooth_scroll.active(scroll_win) end, 5)
+    vim.on_key(nil, observer)
+    assert(started and finished, "manual scrolling completes with the follow input observer installed")
+    assert(frames > 1, "manual scrolling survives its first internal C-y/C-e frame")
+    assert_equal(topline() - before, direction * distance, "manual scrolling travels the full requested distance")
+  end
+  vim.wo[scroll_win].scroll = previous_scroll
+  view.configure_pane(pane_id, { follow_output = true })
   assert_equal(#vim.api.nvim_get_autocmds({
     group = render_group,
     event = "CmdlineChanged",

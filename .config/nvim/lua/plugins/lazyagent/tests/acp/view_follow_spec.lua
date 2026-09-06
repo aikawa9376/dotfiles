@@ -61,6 +61,44 @@ function M.run()
     return cursor_at_end
   end
 
+  api._on_scroll_input(win, "up")
+  assert_equal(pane_config["follow-test"].follow_output, false, "mouse input pauses before viewport movement")
+  api._sync_follow_after_scroll(bufnr, win, { topline = -1 })
+  assert_equal(pane_config["follow-test"].follow_output, false,
+    "upward mouse scroll pauses active follow even while the end remains visible")
+  api._sync_follow_after_cursor_moved(bufnr, win)
+  assert_equal(pane_config["follow-test"].follow_output, false,
+    "end cursor after mouse scrolling cannot re-enable follow")
+  topline = 82
+  api._sync_follow_after_scroll(bufnr, win, { topline = 2 })
+  assert_equal(pane_config["follow-test"].follow_output, false,
+    "scrolloff adjustment after mouse scrolling cannot re-enable follow")
+  windowing.pause_follow_output(bufnr, { reason = "focus", win = win })
+  api._resume_follow_if_at_end(bufnr, win)
+  assert_equal(pane_config["follow-test"].follow_output, false,
+    "focus changes preserve a manual scrollback pause")
+
+  api._on_scroll_input(win, "down")
+  api._on_scroll_input(win, "up")
+  vim.wait(20)
+  assert_equal(pane_config["follow-test"].follow_output, false,
+    "new upward input cancels an already scheduled downward resume")
+  assert_equal(scrolls_to_end, 0, "stale downward resume does not pull the view to the end")
+
+  api._resume_follow_output(bufnr, { scroll = false })
+  api._sync_follow_after_scroll(bufnr, win, { topline = 0, skipcol = -20 })
+  assert_equal(pane_config["follow-test"].follow_output, false,
+    "upward scrolling within a wrapped line pauses follow")
+
+  api._resume_follow_output(bufnr, { scroll = false })
+  cursor_at_end = false
+  api._sync_follow_after_cursor_moved(bufnr, win)
+  assert_equal(pane_config["follow-test"].follow_output, false,
+    "moving the cursor above the end pauses follow while the end stays visible")
+
+  cursor_at_end = true
+  api._resume_follow_output(bufnr, { scroll = false })
+  topline = 80
   windowing.pause_follow_output(bufnr, { reason = "focus", win = win })
   topline = 79
   api._sync_follow_after_scroll(bufnr, win)
@@ -85,6 +123,7 @@ function M.run()
   windowing.pause_follow_output(bufnr, { reason = "focus", win = win })
   topline = 79
   api._sync_follow_after_scroll(bufnr, win)
+  api._on_scroll_input(win, "down")
   topline = 80
   api._sync_follow_after_scroll(bufnr, win)
   assert_equal(pane_config["follow-test"].follow_output, true, "downward scroll to end resumes follow")
