@@ -500,6 +500,7 @@ providerがnative steering extensionを広告する場合は`ga` → `Steer acti
 
 ACP scratch bufferではnormal / insert modeの`<M-s>`で、現在の内容をactive turnへのnative steeringとして送信できます。keyは`scratch_keymaps.steer_normal` / `scratch_keymaps.steer_insert`で変更でき、空文字または`false`で無効化できます。provider非対応・active turnなし・送信失敗の場合は通常promptへfallbackせず、scratch内容を保持します。
 通常の buffer view は default で最新 `transcript_max_lines` 行だけを tail 表示します。全文を確認したい場合は `:LazyAgentACPFullTranscript` または `:LazyAgentACPRawTranscript` を使ってください。
+ストリーミング中に上限へ達した場合は、追記のたびの全体再読み込みを避けるため、上限の10%（最大1,024行）分の余裕を作って古い表示行をまとめて除きます。ディスク上の履歴は保持されます。
 
 古い transcript section をまとめて最近分を優先表示する `transcript_compaction` は default では無効です。必要な場合だけ `enabled = true` にしてください。`runtime_compaction` は default で有効で、古い runtime timeline は summary/pin 情報だけ残し、詳細本文は recent/pinned item と transcript file に寄せます。
 

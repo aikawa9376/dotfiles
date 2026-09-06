@@ -348,6 +348,7 @@ function M.new(ctx)
       next_config.follow_resume_scroll_armed = nil
     else
       next_config.follow_pause_reason = opts.reason or "manual"
+      next_config.follow_reflow_generations = nil
       next_config.follow_input_generation = (current_config.follow_input_generation or 0) + 1
       next_config.follow_pause_win = opts.win
       next_config.follow_pause_topline = opts.topline or (opts.win and M._window_topline(opts.win) or nil)
@@ -523,8 +524,29 @@ function M.new(ctx)
     return false
   end
 
+  function M._expect_follow_reflow(bufnr)
+    local opts = pane_opts_for_bufnr(bufnr)
+    if opts and opts.follow_output ~= false then
+      opts.follow_reflow_generations = {}
+      for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+        opts.follow_reflow_generations[win] = opts.follow_input_generation or 0
+      end
+    end
+  end
+
   function M._sync_follow_after_scroll(bufnr, win, scroll)
     if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
+      return false
+    end
+    local pane_opts = pane_opts_for_bufnr(bufnr)
+    local reflows = pane_opts.follow_reflow_generations
+    local generation = reflows and reflows[win]
+    if reflows then reflows[win] = nil end
+    if generation ~= nil and generation == (pane_opts.follow_input_generation or 0)
+      and should_follow_output(bufnr) and M._window_cursor_reaches_transcript_end(win, bufnr)
+    then
+      -- Evicting old lines moves the viewport upward even at the new end.
+      -- Input pauses invalidate this one-event exemption before scrolling.
       return false
     end
     -- Mouse scrolling can move up while the transcript end (or its cursor)
