@@ -155,6 +155,29 @@ function M.new(ctx)
     layout_autocmds_initialized = true
 
     local group = vim.api.nvim_create_augroup("LazyAgentACPLayout", { clear = true })
+    local wheel_up = vim.keycode("<ScrollWheelUp>")
+    local wheel_down = vim.keycode("<ScrollWheelDown>")
+    local line_up = vim.keycode("<C-y>")
+    local line_down = vim.keycode("<C-e>")
+    vim.on_key(function(key)
+      local win, direction
+      if key == wheel_up or key == wheel_down then
+        win = vim.fn.getmousepos().winid
+        direction = key == wheel_up and "up" or "down"
+      elseif key == line_up or key == line_down then
+        win = vim.api.nvim_get_current_win()
+        -- Animation frames execute :normal! C-y/C-e, which also reach on_key.
+        -- Ignore only that synchronous execution; real input still cancels
+        -- an animation between frames.
+        if smooth_scroll.applying(win) then
+          return
+        end
+        direction = key == line_up and "up" or "down"
+      end
+      if win then
+        M._on_scroll_input(win, direction)
+      end
+    end, vim.api.nvim_create_namespace("lazyagent_acp_follow_input"))
     vim.api.nvim_create_autocmd("FileType", {
       group = group,
       pattern = ACP_TRANSCRIPT_FILETYPE,
@@ -241,17 +264,17 @@ function M.new(ctx)
 
     vim.api.nvim_create_autocmd("WinScrolled", {
       group = group,
-      callback = function(args)
-        local win = tonumber(args.match) or vim.api.nvim_get_current_win()
-        if not win or not vim.api.nvim_win_is_valid(win) then
-          return
-        end
-        local bufnr = vim.api.nvim_win_get_buf(win)
-        if is_acp_buffer(bufnr) then
-          if smooth_scroll.active(win) then
-            return
+      callback = function()
+        -- The match names only the first changed window. A mouse wheel may
+        -- scroll an unfocused transcript alongside another changed window.
+        for key, scroll in pairs(vim.v.event) do
+          local win = tonumber(key)
+          if win and vim.api.nvim_win_is_valid(win) then
+            local bufnr = vim.api.nvim_win_get_buf(win)
+            if is_acp_buffer(bufnr) and not smooth_scroll.active(win) then
+              M._sync_follow_after_scroll(bufnr, win, scroll)
+            end
           end
-          M._sync_follow_after_scroll(bufnr, win)
         end
       end,
     })

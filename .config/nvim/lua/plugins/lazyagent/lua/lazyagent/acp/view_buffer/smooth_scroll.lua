@@ -1,6 +1,7 @@
 local M = {}
 
 local active = {}
+local applying = {}
 
 local DEFAULTS = {
   enabled = false,
@@ -78,12 +79,17 @@ function M.active(win)
   return entry ~= nil
 end
 
+function M.applying(win)
+  return applying[win] == true
+end
+
 local function normal_scroll(win, key, amount)
   if not win or not vim.api.nvim_win_is_valid(win) or amount <= 0 then
     return false
   end
 
   local moved = false
+  applying[win] = true
   pcall(vim.api.nvim_win_call, win, function()
     local before = vim.fn.winsaveview()
     local termcode = vim.api.nvim_replace_termcodes(key, true, false, true)
@@ -91,6 +97,7 @@ local function normal_scroll(win, key, amount)
     local after = vim.fn.winsaveview()
     moved = before.topline ~= after.topline or before.lnum ~= after.lnum or before.topfill ~= after.topfill
   end)
+  applying[win] = nil
   return moved
 end
 

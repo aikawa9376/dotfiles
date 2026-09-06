@@ -345,10 +345,13 @@ function M.new(ctx)
       next_config.follow_pause_win = nil
       next_config.follow_pause_topline = nil
       next_config.follow_pause_cursor_left_end = nil
+      next_config.follow_resume_scroll_armed = nil
     else
       next_config.follow_pause_reason = opts.reason or "manual"
+      next_config.follow_input_generation = (current_config.follow_input_generation or 0) + 1
       next_config.follow_pause_win = opts.win
       next_config.follow_pause_topline = opts.topline or (opts.win and M._window_topline(opts.win) or nil)
+      next_config.follow_resume_scroll_armed = false
       local cursor_left_end = opts.win and not M._window_cursor_reaches_transcript_end(opts.win, bufnr) or false
       if was_following then
         next_config.follow_pause_cursor_left_end = cursor_left_end
@@ -371,6 +374,10 @@ function M.new(ctx)
       return false
     end
     if not should_follow_output(bufnr) then
+      -- Entering/leaving a window must not weaken a manual scrollback pause.
+      if opts.reason == "focus" and pane_opts_for_bufnr(bufnr).follow_pause_reason == "manual" then
+        return false
+      end
       if opts.reason then
         set_follow_output(bufnr, false, opts)
         if type(M.refresh_footer) == "function" then
@@ -516,9 +523,18 @@ function M.new(ctx)
     return false
   end
 
-  function M._sync_follow_after_scroll(bufnr, win)
+  function M._sync_follow_after_scroll(bufnr, win, scroll)
     if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
       return false
+    end
+    -- Mouse scrolling can move up while the transcript end (or its cursor)
+    -- remains visible. Direction takes precedence over end visibility.
+    scroll = scroll or {}
+    local topline_delta = tonumber(scroll.topline) or 0
+    if topline_delta < 0
+      or (topline_delta == 0 and ((tonumber(scroll.skipcol) or 0) < 0 or (tonumber(scroll.topfill) or 0) > 0))
+    then
+      return pause_follow_output(bufnr, { reason = "manual", win = win })
     end
     if M._window_view_reaches_transcript_end(win, bufnr) then
       if should_follow_output(bufnr) then
@@ -527,6 +543,11 @@ function M.new(ctx)
       end
 
       local pane_opts = pane_opts_for_bufnr(bufnr)
+      -- scrolloff and footer adjustments also generate downward WinScrolled
+      -- events. Only user scroll input may resume a manual scrollback pause.
+      if pane_opts.follow_pause_reason == "manual" and pane_opts.follow_resume_scroll_armed ~= true then
+        return false
+      end
       local current_topline = M._window_topline(win)
       local paused_topline = tonumber(pane_opts.follow_pause_topline)
       if not current_topline or not paused_topline or current_topline <= paused_topline then
@@ -539,11 +560,48 @@ function M.new(ctx)
     return pause_follow_output(bufnr, { reason = "manual", win = win })
   end
 
+  function M._on_scroll_input(win, direction)
+    if not win or not vim.api.nvim_win_is_valid(win) then
+      return
+    end
+    local bufnr = vim.api.nvim_win_get_buf(win)
+    if not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
+      return
+    end
+    require("lazyagent.acp.view_buffer.smooth_scroll").stop_for_buffer(bufnr)
+    if direction == "up" then
+      pause_follow_output(bufnr, { reason = "manual", win = win })
+    end
+    local pane_opts = pane_opts_for_bufnr(bufnr)
+    local generation = (pane_opts.follow_input_generation or 0) + 1
+    pane_opts.follow_input_generation = generation
+    if direction ~= "down" or should_follow_output(bufnr) then
+      return
+    end
+    pane_opts.follow_resume_scroll_armed = true
+    -- Run after the key, including a wheel-down at the end that cannot move
+    -- the viewport and therefore emits no WinScrolled event.
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_win_is_valid(win)
+        or vim.api.nvim_win_get_buf(win) ~= bufnr
+      then
+        return
+      end
+      local current = pane_opts_for_bufnr(bufnr)
+      if current.follow_input_generation == generation and current.follow_resume_scroll_armed == true then
+        M._resume_follow_if_at_end(bufnr, win, { allow_view_end = true })
+      end
+    end)
+  end
+
   function M._sync_follow_after_cursor_moved(bufnr, win)
     if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
       return false
     end
-    if should_follow_output(bufnr) and not M._window_view_reaches_transcript_end(win, bufnr) then
+    if should_follow_output(bufnr)
+      and (not M._window_view_reaches_transcript_end(win, bufnr)
+        or not M._window_cursor_reaches_transcript_end(win, bufnr))
+    then
       return pause_follow_output(bufnr, { reason = "manual", win = win })
     end
     if should_follow_output(bufnr) then

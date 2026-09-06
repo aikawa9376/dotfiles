@@ -686,7 +686,12 @@ function M.attach(api, ctx)
 
     local cfg = smooth_scroll_config(bufnr)
     local scrolled = false
+    local pane_id = tostring(buffer_var(bufnr, "lazyagent_acp_pane_id") or "")
+    local generation = (pane_config[pane_id] or {}).follow_input_generation
     local function resume_if_needed()
+      if (pane_config[pane_id] or {}).follow_input_generation ~= generation then
+        return
+      end
       if opts.resume_at_end == true and M._any_window_at_transcript_end(bufnr) then
         M._resume_follow_output(bufnr)
       end
