@@ -40,7 +40,6 @@ alias dst='duster'
 alias fnd='finder'
 alias li='gwenview ./'
 alias reload='exec $SHELL -1'
-alias reboot='[ -n $(tmux ls | grep -n "attached") ] && reboot || tmux detach && reboot'
 alias suspend="systemctl suspend"
 alias vim='nvim'
 alias vv='fvim'
