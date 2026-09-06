@@ -426,16 +426,30 @@ local function write_text_ref(session, tool_call_id, kind, text)
   }
 end
 
-local function prune_runtime_timelines(session)
+local function prune_runtime_timelines(session, stream_item)
   if not session then
     return
   end
   local cfg = runtime_compaction_config(session)
   if not cfg.enabled then
+    session._stream_prune_signature = nil
     return
   end
 
   local conversation = session.conversation_timeline or {}
+  local signature = table.concat({ cfg.keep_recent_items, cfg.keep_recent_tools, cfg.body_limit, cfg.tool_output_limit,
+    #conversation, #(session.tool_timeline or {}) }, ":")
+  -- An existing stream changes only its own body. Structural updates still
+  -- run the full pass, as do changes to retention settings.
+  if stream_item and session._stream_prune_signature == signature then
+    if stream_item.body_ref then
+      stream_item.body = ""
+    else
+      stream_item.body = compact_old_text(stream_item.body, cfg.body_limit)
+    end
+    return
+  end
+  session._stream_prune_signature = signature
   local conversation_recent_start = math.max(1, #conversation - cfg.keep_recent_items + 1)
   for idx, item in ipairs(conversation) do
     if type(item) == "table" then
@@ -711,6 +725,8 @@ end
 local function append_stream_chunk(session, stream_key, heading, body, meta)
   body = normalize_text(body)
   if body == "" then return end
+  local continuing_item = session.current_stream_key == stream_key
+      and conversation_item_for_id(session, session.current_stream_item_id) or nil
   if session.current_stream_key ~= stream_key then
     close_stream(session)
     local item_meta = vim.tbl_extend("force", meta or {}, {
@@ -749,7 +765,7 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
       sync_tool_pin_state(session, item)
     end
   end
-  prune_runtime_timelines(session)
+  prune_runtime_timelines(session, continuing_item)
   local padded, next_at_line_start = pad_stream_chunk(body, session.current_stream_at_line_start)
   write_session_transcript(session, padded)
   note_transcript_write(session, padded)

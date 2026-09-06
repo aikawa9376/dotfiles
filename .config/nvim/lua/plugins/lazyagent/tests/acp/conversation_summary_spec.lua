@@ -37,6 +37,24 @@ function M.run()
     { kind = "assistant" }
   )
 
+  session.runtime_compaction = { enabled = true, body_limit = 256, keep_recent_items = 1 }
+  Conversation.append_stream_chunk(session, "assistant-1", "Assistant", " more")
+  Conversation.append_block(session, "User", "next")
+  Conversation.append_stream_chunk(session, "assistant-2", "Assistant", "new")
+  local old_item = session.conversation_timeline[1]
+  assert_equal(old_item.body, "", "referenced bodies remain released after structural changes")
+  local current = session.conversation_timeline[#session.conversation_timeline]
+  current.body_ref = nil
+  current.body = string.rep("x", 1000)
+  Conversation.append_stream_chunk(session, "assistant-2", "Assistant", " more")
+  assert(#current.body <= 256, "continuing streams still enforce body retention")
+  session.runtime_compaction.body_limit = 512
+  old_item.body_ref = nil
+  old_item.pinned = true
+  old_item.body = string.rep("x", 1000)
+  Conversation.append_stream_chunk(session, "assistant-2", "Assistant", " more")
+  assert(#old_item.body <= 512 and #old_item.body > 256, "changed retention settings invalidate stream shortcut")
+
   local summary = session.conversation_timeline[1].summary
   assert_equal(session.conversation_timeline[1].created_at, 1785850500, "conversation item stores epoch timestamp")
   assert(Conversation.render_section_block("Codex GPT-5.6-Sol", "done", {

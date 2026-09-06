@@ -130,6 +130,17 @@ function M.run()
   assert_equal(scrolls_to_end, 2, "downward return scrolls to end once")
   assert_equal(read_notifications, 2, "downward return marks the visible transcript read")
 
+  api._expect_follow_reflow(bufnr)
+  api._sync_follow_after_scroll(bufnr, win, { topline = -10 })
+  assert_equal(pane_config["follow-test"].follow_output, true, "history eviction preserves follow at the new end")
+  api._sync_follow_after_scroll(bufnr, win, { topline = -1 })
+  assert_equal(pane_config["follow-test"].follow_output, false, "reflow exemption is consumed once")
+  api._resume_follow_output(bufnr, { scroll = false })
+  api._expect_follow_reflow(bufnr)
+  api._on_scroll_input(win, "up")
+  api._sync_follow_after_scroll(bufnr, win, { topline = -1 })
+  assert_equal(pane_config["follow-test"].follow_output, false, "mouse input overrides pending automatic reflow")
+
   vim.api.nvim_win_set_buf(win, previous_bufnr)
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end

@@ -446,7 +446,7 @@ function M.new(ctx)
     local preserved_section_items = opts.preserve_display_metadata == true and entry.transcript_section_items or nil
     local preserved_display_meta = opts.preserve_display_metadata == true and current_display_meta or nil
     local metadata_lines = type(entry.metadata_source_lines) == "table"
-        and vim.deepcopy(entry.metadata_source_lines)
+        and entry.metadata_source_lines
       or vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local transcript_stop = transcript_line_count(bufnr)
     local replace_start = transcript_stop
@@ -468,9 +468,11 @@ function M.new(ctx)
     vim.list_extend(replacement, chunks)
     vim.list_extend(metadata_replacement, chunks)
 
-    local next_metadata_lines = {}
-    for idx = 1, replace_start do
-      next_metadata_lines[#next_metadata_lines + 1] = metadata_lines[idx]
+    -- This list belongs to the layout entry. Preserve its unchanged prefix;
+    -- copying the full history twice per flush creates avoidable GC pressure.
+    local next_metadata_lines = metadata_lines
+    for idx = #next_metadata_lines, replace_start + 1, -1 do
+      next_metadata_lines[idx] = nil
     end
     vim.list_extend(next_metadata_lines, metadata_replacement)
 
@@ -586,7 +588,7 @@ function M.new(ctx)
       return false
     end
 
-    local lines = read_transcript_lines(transcript_path, transcript_max_lines(bufnr))
+    local lines = read_transcript_lines(transcript_path, opts.max_lines or transcript_max_lines(bufnr))
     local display_lines, section_items, display_meta = compact_transcript_lines(bufnr, lines)
 
     set_buffer_lines(bufnr, display_lines, section_items, display_meta)
@@ -728,7 +730,12 @@ function M.new(ctx)
     local max_lines = transcript_max_lines(bufnr)
     if max_lines and max_lines > 0 and transcript_line_count(bufnr) > (max_lines + 1) then
       if visible then
-        refresh_buffer_from_path(bufnr, session.transcript_path)
+        -- Leave room for subsequent appends while keeping the configured bound.
+        -- Otherwise every newline after the limit triggers a complete rebuild.
+        local retained_lines = math.max(1, max_lines - math.min(1024, math.floor(max_lines / 10)))
+        if should_follow_output(bufnr) then M._expect_follow_reflow(bufnr) end
+        refresh_buffer_from_path(bufnr, session.transcript_path, { max_lines = retained_lines })
+        if should_follow_output(bufnr) then scroll_buffer_to_end(bufnr) end
         return true
       end
       local entry = layout_entry(bufnr)

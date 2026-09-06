@@ -2,6 +2,20 @@ local M = {}
 
 local uv = vim.uv or vim.loop
 local DEFAULT_CHUNK_BYTES = 64 * 1024
+-- A bounded, single-file index serves adjacent search/export references. No
+-- descriptors are retained; switching files or changing the file drops it.
+local cached_file
+local INDEX_STRIDE = 64
+local MAX_CHECKPOINTS = 4096
+
+local function file_cache(path, stat, chunk_bytes)
+  local signature = table.concat({ path, stat.dev or 0, stat.ino or 0, stat.size,
+    stat.mtime.sec, stat.mtime.nsec, stat.ctime.sec, stat.ctime.nsec, chunk_bytes }, ":")
+  if not cached_file or cached_file.signature ~= signature then
+    cached_file = { signature = signature, checkpoints = { [1] = 0 }, blocks = {} }
+  end
+  return cached_file
+end
 
 local function valid_ref(ref)
   return type(ref) == "table"
@@ -20,6 +34,9 @@ function M.each_chunk(ref, callback, opts)
     return nil, open_err
   end
   local chunk_bytes = math.max(1024, tonumber(opts.chunk_bytes) or DEFAULT_CHUNK_BYTES)
+  local stat = uv.fs_fstat(fd)
+  -- Do not retain arbitrarily large caller-selected read blocks.
+  local cache = stat and chunk_bytes <= DEFAULT_CHUNK_BYTES and file_cache(ref.path, stat, chunk_bytes) or nil
   local start_line = math.max(1, tonumber(ref.start_line) or 1)
   local end_line = tonumber(ref.end_line)
   if end_line then
@@ -27,18 +44,48 @@ function M.each_chunk(ref, callback, opts)
   end
   local offset = 0
   local line = 1
+  if cache then
+    local checkpoint = math.min(MAX_CHECKPOINTS - 1, math.floor((start_line - 1) / INDEX_STRIDE))
+    for idx = checkpoint, 0, -1 do
+      local candidate = idx * INDEX_STRIDE + 1
+      if cache.checkpoints[candidate] then
+        line, offset = candidate, cache.checkpoints[candidate]
+        break
+      end
+    end
+  end
   local stopped = false
   local ok, err = pcall(function()
     while not stopped and (not end_line or line <= end_line) do
-      local chunk, read_err = uv.fs_read(fd, chunk_bytes, offset)
+      local chunk, read_err
+      local chunk_cursor = 1
+      if cache then
+        local block_offset = math.floor(offset / chunk_bytes) * chunk_bytes
+        for _, block in ipairs(cache.blocks) do
+          if block.offset == block_offset then
+            chunk = block.text
+            break
+          end
+        end
+        if not chunk then
+          chunk, read_err = uv.fs_read(fd, chunk_bytes, block_offset)
+          if chunk then
+            table.insert(cache.blocks, 1, { offset = block_offset, text = chunk })
+            cache.blocks[3] = nil
+          end
+        end
+        chunk_cursor = offset - block_offset + 1
+      else
+        chunk, read_err = uv.fs_read(fd, chunk_bytes, offset)
+      end
       if chunk == nil then
         error(read_err or "failed to read text reference")
       end
-      if chunk == "" then
+      if chunk == "" or chunk_cursor > #chunk then
         break
       end
-      offset = offset + #chunk
-      local cursor = 1
+      offset = offset - chunk_cursor + 1 + #chunk
+      local cursor = chunk_cursor
       while cursor <= #chunk do
         local newline = chunk:find("\n", cursor, true)
         local stop = newline or #chunk
@@ -57,6 +104,9 @@ function M.each_chunk(ref, callback, opts)
         end
         line = line + 1
         cursor = newline + 1
+        if cache and (line - 1) % INDEX_STRIDE == 0 and line <= INDEX_STRIDE * (MAX_CHECKPOINTS - 1) + 1 then
+          cache.checkpoints[line] = offset - #chunk + newline
+        end
         if end_line and line > end_line then
           stopped = true
           break
