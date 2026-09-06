@@ -414,5 +414,5 @@ if [[ "$TERM" == "xterm-kitty" && -z "$TMUX" ]]; then
   (tmux start-server || tmux new-session -d) >/dev/null 2>&1 &!
 fi
 
-# Load last: CSI-u bindings mirror the final custom ZLE bindings above.
+# Load after keymaps exist; CSI-u decoding follows later plugin key bindings.
 loadlib $ZCONFDIR/zsh-csi-u.zsh

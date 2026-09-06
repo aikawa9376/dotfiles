@@ -27,12 +27,24 @@ Neovim and other applications are unaffected and negotiate their own modes.
 `.zshrc` therefore leaves `TERM` untouched: kitty supplies `xterm-kitty`
 directly, while tmux supplies `tmux-256color` to its panes.
 
-CSI-u Ctrl and Alt bindings are mirrored from every existing ZLE keymap when
-the file is sourced last from `.zshrc`.  This preserves custom history search,
-completion, and other bindings.  After changing a binding interactively, run
-`__zle_csi_u_mirror_bindings` to refresh its CSI-u equivalent.  The installed
-fzf 0.74.2 parser does not handle CSI-u letter keys, so the `fzf` shell wrapper
-temporarily suspends the mode when fzf is run inside a ZLE widget.
+CSI-u Ctrl and Alt keys are decoded with `bindkey -s` in every existing ZLE
+keymap. Once the complete sequence arrives, ZLE looks up the corresponding
+legacy key in the current keymap. The terminal still uses extended keys;
+this conversion happens only inside ZLE. Escape remains its own complete
+sequence, so Escape followed by a letter does not turn into Alt+letter.
+
+This follows bindings changed by deferred plugins (including autopair and
+fzf-tab), preserves string macros, and gives widgets the expected legacy
+`KEYS` value. Previously, the integration copied widget names once at startup,
+which missed later changes and bypassed key macros. Ordinary binding changes
+no longer require a refresh. Run `__zle_csi_u_mirror_bindings` after creating
+a new keymap that does not inherit the decoding bindings. Ctrl+C retains a
+`send-break` fallback in maps where its legacy binding was undefined or
+`self-insert` at installation time.
+
+The installed fzf 0.74.2 parser does not handle CSI-u letter keys, so the
+`fzf` shell wrapper temporarily suspends the mode when fzf is run inside a
+ZLE widget.
 
 ## Troubleshooting
 
@@ -52,18 +64,7 @@ tmux display-message -p '#{client_termfeatures} / #{pane_key_mode}'
 ```
 
 The first two should show `on` and `csi-u`; client features should include
-`extkeys`.  `pane_key_mode` is `Ext 2` while the debugger or ZLE requests it.
-
-Capture actual bytes for 20 seconds (override with
-`ZLE_KEY_DEBUG_SECONDS=60`):
-
-```console
-~/.config/zsh/sh/zle-key-debug.zsh auto
-```
-
-Run it once directly in kitty and once inside tmux.  Test Escape, Alt+n,
-Alt+f, Ctrl+C/D/R/W, Enter, Backspace, arrows, and function keys.  The terminal
-is restored automatically when the timeout expires.
+`extkeys`.  `pane_key_mode` is `Ext 2` while ZLE requests it.
 
 ## Disable
 

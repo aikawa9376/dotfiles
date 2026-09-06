@@ -28,12 +28,14 @@ __zle_csi_u_tmux_unmark() {
   command tmux set-option -pu -t "$TMUX_PANE" @zle_csi_u 2>/dev/null
 }
 
-# Copy the current legacy Ctrl/Alt widget to its CSI-u spelling.  This file is
-# loaded last from .zshrc, after the custom bindings have been installed.
+# Decode complete CSI-u keys back into ZLE's input queue. Resolving a widget
+# here would freeze the binding before deferred plugins load, and give widgets
+# the CSI-u sequence in $KEYS instead of the key they expect. String bindings
+# let ZLE resolve the current (including local) keymap and preserve key macros.
 __zle_csi_u_mirror_bindings() {
   local map binding widget letter upper legacy hex csi
   local -i index code
-  local -a maps bindings
+  local -a maps
 
   maps=(${(f)"$(bindkey -l)"})
   for map in $maps; do
@@ -43,68 +45,37 @@ __zle_csi_u_mirror_bindings() {
     # the prefix of a possible Alt binding, so the following key is independent.
     bindkey -M "$map" $'\e[27u' zle-csi-u-escape 2>/dev/null
 
-    # Resolve all legacy widgets in one subshell per keymap.  Calling bindkey
-    # through a separate command substitution for every key adds noticeable
-    # shell startup latency.
-    bindings=(${(f)"$(
-      for index in {1..26}; do
-        printf -v hex '%02x' $index
-        printf -v legacy '%b' "\\x$hex"
-        bindkey -M "$map" "$legacy" 2>/dev/null
-      done
-      for letter in {a..z}; do
-        bindkey -M "$map" $'\e'"$letter" 2>/dev/null
-      done
-      for letter in {a..z}; do
-        upper=${(U)letter}
-        bindkey -M "$map" $'\e'"$upper" 2>/dev/null
-      done
-      bindkey -M "$map" '^@' 2>/dev/null
-      bindkey -M "$map" $'\e[Z' 2>/dev/null
-    )"})
-
     index=1
     for letter in {a..z}; do
-      binding=$bindings[$index]
-      widget=${binding##* }
       code=$(( 96 + index ))
+      printf -v hex '%02x' $index
+      printf -v legacy '%b' "\\x$hex"
+      printf -v csi $'\e[%d;5u' $code
+      bindkey -M "$map" -s "$csi" "$legacy" 2>/dev/null
+
       # In legacy mode Ctrl+C is handled by the tty driver as SIGINT, so its
       # ZLE binding is normally undefined.  CSI-u bypasses the tty signal path.
-      if [[ $code == 99 && ($widget == undefined-key || $widget == self-insert) ]]; then
-        widget=send-break
-      fi
-      printf -v csi $'\e[%d;5u' $code
-      bindkey -M "$map" "$csi" "$widget" 2>/dev/null
-
-      binding=$bindings[$(( 26 + index ))]
-      if [[ -n $binding ]]; then
+      if [[ $code == 99 ]]; then
+        binding=$(bindkey -M "$map" "$legacy" 2>/dev/null)
         widget=${binding##* }
-        printf -v csi $'\e[%d;3u' $code
-        bindkey -M "$map" "$csi" "$widget" 2>/dev/null
+        if [[ $widget == undefined-key || $widget == self-insert ]]; then
+          bindkey -M "$map" "$csi" send-break 2>/dev/null
+        fi
       fi
 
-      binding=$bindings[$(( 52 + index ))]
-      if [[ -n $binding ]]; then
-        widget=${binding##* }
-        printf -v csi $'\e[%d;4u' $code
-        bindkey -M "$map" "$csi" "$widget" 2>/dev/null
-      fi
+      printf -v csi $'\e[%d;3u' $code
+      bindkey -M "$map" -s "$csi" $'\e'"$letter" 2>/dev/null
+      upper=${(U)letter}
+      printf -v csi $'\e[%d;4u' $code
+      bindkey -M "$map" -s "$csi" $'\e'"$upper" 2>/dev/null
       (( index++ ))
     done
 
     # Ctrl+Space is NUL in the legacy protocol and CSI 32;5u with flag 1.
-    binding=$bindings[79]
-    if [[ -n $binding ]]; then
-      widget=${binding##* }
-      bindkey -M "$map" $'\e[32;5u' "$widget" 2>/dev/null
-    fi
+    bindkey -M "$map" -s $'\e[32;5u' '^@' 2>/dev/null
 
     # tmux mode 2 emits BTab/Shift+Tab as CSI 9;2u rather than legacy CSI Z.
-    binding=$bindings[80]
-    if [[ -n $binding ]]; then
-      widget=${binding##* }
-      bindkey -M "$map" $'\e[9;2u' "$widget" 2>/dev/null
-    fi
+    bindkey -M "$map" -s $'\e[9;2u' $'\e[Z' 2>/dev/null
   done
 }
 
