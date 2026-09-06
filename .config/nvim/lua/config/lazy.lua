@@ -40,6 +40,7 @@ require("lazy").setup({
     { import = "plugins.flash-scope" },
     -- { import = "plugins.quick-scope" },
     { import = "plugins.multicursors" },
+    { import = "plugins.image-preview" },
     { import = "plugins.asterisk" },
     { import = "plugins.edgemotion" },
     { import = "plugins.textobjs" },
