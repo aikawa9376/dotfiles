@@ -402,8 +402,7 @@ function M.new(ctx)
     return session.monitor_timer ~= nil and session.agent_status ~= "thinking"
   end
 
-  local function session_status(agent_name, session)
-    local info_hl = ensure_footer_info_highlights()
+  local function session_status(agent_name, session, info_hl)
     if not session then
       return "◌ Connecting...", info_hl
     end
@@ -587,8 +586,8 @@ function M.new(ctx)
     return "Waiting for ACP session metadata..."
   end
 
-  local function blank_footer_line()
-    return { text = "", hl = ensure_footer_info_highlights() }
+  local function blank_footer_line(info_hl)
+    return { text = "", hl = info_hl }
   end
 
   local WRAP_SEPARATORS = { " · ", "  ", " " }
@@ -691,15 +690,14 @@ function M.new(ctx)
     return with_indent(final)
   end
 
-  local function footer_render_lines(agent_name, session, line_count)
-    local info_hl = ensure_footer_info_highlights()
+  local function footer_render_lines(agent_name, session, line_count, info_hl)
     local size = transcript_size_label(session)
     local provider = provider_label(agent_name, session)
     local local_thread_title = thread_title(session)
     local session_title = session_info_title(session)
     local session_summary = session_info_summary(session)
     local context = footer_context_text(agent_name, session)
-    local status_text, status_hl, status_animate = session_status(agent_name, session)
+    local status_text, status_hl, status_animate = session_status(agent_name, session, info_hl)
     local lines = {}
     local meta = {}
     local has_status = status_text and status_text ~= ""
@@ -727,12 +725,12 @@ function M.new(ctx)
     end
 
     if has_status then
-      table.insert(lines, blank_footer_line())
+      table.insert(lines, blank_footer_line(info_hl))
       table.insert(lines, { text = " " .. status_text, hl = status_hl or info_hl, animate = status_animate })
     end
 
     if #meta > 0 or has_context then
-      table.insert(lines, blank_footer_line())
+      table.insert(lines, blank_footer_line(info_hl))
     end
 
     if #meta > 0 then
@@ -770,7 +768,7 @@ function M.new(ctx)
     local rendered = {}
     local highlights = {}
     local animations = {}
-    for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name), line_count)) do
+    for _, line in ipairs(footer_render_lines(agent_name, session_for_agent(agent_name), line_count, info_hl)) do
       for _, wrapped in ipairs(wrap_footer_text(line.text or "", wrap_width)) do
         table.insert(rendered, wrapped)
         table.insert(highlights, line.hl or info_hl)
@@ -811,27 +809,21 @@ function M.new(ctx)
     footer_animation_timer = nil
   end
 
-  local function has_visible_animated_footer()
-    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-      if ctx.is_acp_buffer(bufnr) and ctx.buffer_is_visible(bufnr) then
-        local agent_name = ctx.agent_name_for_bufnr(bufnr)
-        if agent_name and session_has_animated_footer(session_for_agent(agent_name)) then
-          return true
+  local function visible_footer_buffers(animated_only)
+    local buffers, seen = {}, {}
+    for _, win in ipairs(vim.api.nvim_list_wins()) do
+      local bufnr = vim.api.nvim_win_get_buf(win)
+      if not seen[bufnr] then
+        seen[bufnr] = true
+        if ctx.is_acp_buffer(bufnr) and ctx.buffer_is_visible(bufnr) then
+          local agent_name = ctx.agent_name_for_bufnr(bufnr)
+          if not animated_only or (agent_name and session_has_animated_footer(session_for_agent(agent_name))) then
+            buffers[#buffers + 1] = bufnr
+          end
         end
       end
     end
-    return false
-  end
-
-  local function refresh_animated_footers()
-    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-      if ctx.is_acp_buffer(bufnr) and ctx.buffer_is_visible(bufnr) then
-        local agent_name = ctx.agent_name_for_bufnr(bufnr)
-        if agent_name and session_has_animated_footer(session_for_agent(agent_name)) then
-          api.refresh_footer(bufnr, { force = true })
-        end
-      end
-    end
+    return buffers
   end
 
   local function ensure_footer_animation_timer()
@@ -850,17 +842,20 @@ function M.new(ctx)
     end
 
     footer_animation_timer:start(FOOTER_ANIMATION_INTERVAL_MS, FOOTER_ANIMATION_INTERVAL_MS, vim.schedule_wrap(function()
-      if not has_visible_animated_footer() then
+      local buffers = visible_footer_buffers(true)
+      if #buffers == 0 then
         stop_footer_animation_timer()
         return
       end
       footer_animation.advance_frame()
-      refresh_animated_footers()
+      for _, bufnr in ipairs(buffers) do
+        api.refresh_footer(bufnr, { force = true, animation_tick = true })
+      end
     end))
   end
 
   local function sync_footer_animation_timer()
-    if has_visible_animated_footer() then
+    if #visible_footer_buffers(true) > 0 then
       ensure_footer_animation_timer()
     else
       stop_footer_animation_timer()
@@ -884,7 +879,6 @@ function M.new(ctx)
     footer_hls = footer_hls or {}
     footer_anims = footer_anims or {}
     local entry = ctx.layout_entry(bufnr)
-    entry.footer_extmark_ids = entry.footer_extmark_ids or {}
     entry.footer_extmark_ids = entry.footer_extmark_ids or {}
 
     -- 旧 virt_lines 実装で使っていた anchor extmark は不要なので明示破棄。
@@ -911,6 +905,8 @@ function M.new(ctx)
 
     -- 静的キャッシュ。非アニメ行の chunks は base_sig が同じ間は再利用。
     local cache = entry.footer_render_cache
+    local static_unchanged = opts.animation_tick == true and entry.footer_signature ~= nil
+      and cache and cache.base_sig == base_sig
     if not cache or cache.base_sig ~= base_sig then
       local rendered = {}
       for idx, line in ipairs(footer_lines) do
@@ -933,7 +929,7 @@ function M.new(ctx)
 
     local full_sig = cache.has_anim and (base_sig .. "@" .. tostring(footer_animation.frame())) or base_sig
     if not opts.force and entry.footer_signature == full_sig then
-      sync_footer_animation_timer()
+      if not opts.animation_tick then sync_footer_animation_timer() end
       return
     end
     entry.footer_signature = full_sig
@@ -944,7 +940,7 @@ function M.new(ctx)
         pcall(vim.api.nvim_buf_del_extmark, bufnr, footer_ns, id)
         entry.footer_extmark_ids[idx] = nil
       end
-      sync_footer_animation_timer()
+      if not opts.animation_tick then sync_footer_animation_timer() end
       return
     end
 
@@ -953,36 +949,45 @@ function M.new(ctx)
 
     for idx, item in ipairs(cache.rendered) do
       local row = math.min(math.max(0, line_count - 1), footer_base + idx - 1)
-      local chunks
-      if item.animate then
-        chunks = animated_footer_chunks(item.text) or { { item.text, "LazyAgentACPFooterActive" } }
-      else
-        chunks = item.chunks
-      end
-
-      local extmark_opts = {
-        virt_text = chunks,
-        virt_text_pos = "overlay",
-        hl_mode = "replace",
-        undo_restore = false,
-        right_gravity = true,
-      }
       local prev_id = entry.footer_extmark_ids[idx]
-      if prev_id then
-        extmark_opts.id = prev_id
+      local skip_static = false
+      if static_unchanged and not item.animate and prev_id then
+        -- Validate the anchor as well: appends, padding changes, or an external
+        -- namespace clear must still repair/reposition static rows.
+        local ok, position = pcall(vim.api.nvim_buf_get_extmark_by_id, bufnr, footer_ns, prev_id, {})
+        skip_static = ok and position[1] == row and position[2] == 0
       end
-
-      local ok, new_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, footer_ns, row, 0, extmark_opts)
-      if ok then
-        entry.footer_extmark_ids[idx] = new_id
-      else
-        -- id が失効していた場合は作り直す。
-        extmark_opts.id = nil
-        local retry_ok, retry_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, footer_ns, row, 0, extmark_opts)
-        if retry_ok then
-          entry.footer_extmark_ids[idx] = retry_id
+      if not skip_static then
+        local chunks
+        if item.animate then
+          chunks = animated_footer_chunks(item.text) or { { item.text, "LazyAgentACPFooterActive" } }
         else
-          entry.footer_extmark_ids[idx] = nil
+          chunks = item.chunks
+        end
+
+        local extmark_opts = {
+          virt_text = chunks,
+          virt_text_pos = "overlay",
+          hl_mode = "replace",
+          undo_restore = false,
+          right_gravity = true,
+        }
+        if prev_id then
+          extmark_opts.id = prev_id
+        end
+
+        local ok, new_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, footer_ns, row, 0, extmark_opts)
+        if ok then
+          entry.footer_extmark_ids[idx] = new_id
+        else
+          -- id が失効していた場合は作り直す。
+          extmark_opts.id = nil
+          local retry_ok, retry_id = pcall(vim.api.nvim_buf_set_extmark, bufnr, footer_ns, row, 0, extmark_opts)
+          if retry_ok then
+            entry.footer_extmark_ids[idx] = retry_id
+          else
+            entry.footer_extmark_ids[idx] = nil
+          end
         end
       end
     end
@@ -995,14 +1000,12 @@ function M.new(ctx)
       end
     end
 
-    sync_footer_animation_timer()
+    if not opts.animation_tick then sync_footer_animation_timer() end
   end
 
   function api.refresh_all_footers(opts)
-    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-      if ctx.is_acp_buffer(bufnr) and ctx.buffer_is_visible(bufnr) then
-        api.refresh_footer(bufnr, opts)
-      end
+    for _, bufnr in ipairs(visible_footer_buffers(false)) do
+      api.refresh_footer(bufnr, opts)
     end
   end
 
@@ -1010,11 +1013,8 @@ function M.new(ctx)
     if not agent_name or agent_name == "" then
       return
     end
-    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-      if ctx.is_acp_buffer(bufnr)
-        and ctx.agent_name_for_bufnr(bufnr) == agent_name
-        and ctx.buffer_is_visible(bufnr)
-      then
+    for _, bufnr in ipairs(visible_footer_buffers(false)) do
+      if ctx.agent_name_for_bufnr(bufnr) == agent_name then
         api.refresh_footer(bufnr, opts)
       end
     end

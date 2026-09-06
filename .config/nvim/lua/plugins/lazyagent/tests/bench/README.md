@@ -31,3 +31,18 @@ animation is disabled and follow is paused for repeatability. It does not measur
 physical display frame times, provider RSS, or Neovim native memory. Inspect max
 as well as p50: leaving headroom amortizes a limit rebuild but does not eliminate
 its individual latency.
+
+## Footer animation
+
+```sh
+LAZYAGENT_BENCH_OUT=/tmp/lazyagent-footer.json \
+nvim --headless --clean -u NONE -l tests/bench/footer.lua
+```
+
+This drives 200 timer frames with real buffers/extmarks and 500 hidden buffers.
+It records extmark writes, buffer/window scans, highlight lookups, padding writes,
+CPU wall time, and retained Lua heap delta. To compare an earlier implementation,
+set `LAZYAGENT_FOOTER_BASELINE` to a saved copy of `view_footer.lua`; the harness
+also checks equality of rendered frames across resize, metadata/state changes,
+appends, namespace clearing, and color changes. The timer is manually driven for
+repeatability, so these timings are processing cost rather than display FPS.
