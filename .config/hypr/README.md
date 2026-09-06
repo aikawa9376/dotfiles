@@ -6,6 +6,31 @@ installed alongside Sway and uses the same physical three-display layout,
 applications, Waybar style, and primary key bindings. It does not use a display
 manager or a graphical session chooser.
 
+## Configuration layout
+
+`hyprland.lua` is the entry point and explicitly loads `feature/` modules in
+order. `settings.lua` holds shared output names; runtime state stays local to
+the feature that owns it.
+
+- `feature/monitors.lua`: output geometry, workspace placement, and KVM hotplug
+  restoration, including placement handles and timers.
+- `feature/desktop.lua`: application environment, appearance, layout defaults,
+  animations, and input devices.
+- `feature/keybindings.lua`: application launch/focus and ordinary window keys.
+- `feature/win-edit.lua`: the window-editing submap.
+- `feature/window-rules.lua`: application placement and floating dialogs.
+- `feature/session.lua`: session autostart, delayed Fcitx startup, and exit keys.
+
+Use Hyprland's `require("feature.name")` for new features. Keep a feature's
+callbacks and their state together. Modules are resolved relative to the main
+config, so no custom loader or `package.path` modification is needed.
+
+Validate changes with:
+
+```sh
+Hyprland --verify-config --config ~/.config/hypr/hyprland.lua
+```
+
 ## Start and stop
 
 1. Log in on local TTY1; `~/.zshrc` executes `~/.config/hypr/start`.
