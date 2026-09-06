@@ -1101,6 +1101,42 @@ HELP
 # -------------------------------------
 # tmux
 # -------------------------------------
+# Clear the old alias when reloading an existing shell.
+unalias reboot 2>/dev/null
+reboot() (
+  emulate -L zsh
+  local clients client hooks hook_index
+  local token="reboot-detach-$$-$RANDOM-$RANDOM"
+
+  if command -v tmux >/dev/null 2>&1 && command tmux has-session 2>/dev/null; then
+    clients=$(command tmux list-clients -F '#{client_name}') || return 1
+    if [[ -n "$clients" ]]; then
+      hooks=$(command tmux show-hooks -g client-detached) || return 1
+      # Hook array entries run in order. Append a notification after saving.
+      hook_index=$(printf '%s\n' "$hooks" | awk -F '[][]' '
+        $2 ~ /^[0-9]+$/ && $2 >= next_index { next_index = $2 + 1 }
+        END { print next_index + 0 }
+      ') || return 1
+      # The subshell keeps this cleanup trap out of the interactive shell.
+      trap 'command tmux set-hook -gu "client-detached[$hook_index]"' EXIT
+      command tmux set-hook -g "client-detached[$hook_index]" \
+        "run-shell 'tmux wait-for -S $token-#{q:hook_client}'" || return 1
+      while IFS= read -r client; do
+        command tmux detach-client -t "$client" || return 1
+        # Detach alone returns before client-detached has finished saving.
+        if ! command timeout 120 tmux wait-for "$token-$client"; then
+          print -u2 'reboot: tmux detach/save did not finish; reboot cancelled'
+          return 1
+        fi
+      done <<< "$clients"
+      command tmux set-hook -gu "client-detached[$hook_index]" || return 1
+      trap - EXIT
+    fi
+  fi
+
+  command reboot "$@"
+)
+
 rtmux() {
   cd ~/.local/share/tmux/resurrect/ || exit # Your save path
   find . | sort | tail -n 1 | xargs rm

@@ -22,12 +22,12 @@ function M.run()
   local previous_schedule = vim.schedule
   local autocmds = 0
   local scheduled = 0
-  vim.api.nvim_create_augroup = function() return 1 end
-  vim.api.nvim_create_autocmd = function()
+  vim.api.nvim_create_augroup = function(_name, _opts) return 1 end
+  vim.api.nvim_create_autocmd = function(_event, _opts)
     autocmds = autocmds + 1
     return autocmds
   end
-  vim.schedule = function()
+  vim.schedule = function(_callback)
     scheduled = scheduled + 1
   end
   state.sessions = {}
