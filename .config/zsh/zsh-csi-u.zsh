@@ -4,8 +4,7 @@
 #   Alt+n  ==  ESC n  ==  1b 6e
 # Kitty's keyboard protocol flag 1 instead reports Escape as CSI 27 u and
 # Alt+n as CSI 110;3u.  tmux 3.7 understands modified CSI-u keys, but converts
-# an unmodified Escape back to 0x1b, so tmux.conf bridges Escape only while an
-# active ZLE pane is marked with @zle_csi_u.
+# an unmodified Escape back to 0x1b, so tmux.conf bridges Escape separately.
 #
 # Set ZLE_CSI_U_DISABLE=1 before sourcing this file to disable the integration.
 
@@ -113,19 +112,31 @@ __zle_csi_u_disable() {
   _ZLE_CSI_U_ACTIVE=0
 }
 
-# fzf 0.74.2 does not parse CSI-u letter keys in its light renderer.  fzf can
-# run synchronously inside a ZLE widget, where line-finish has not fired, so
-# temporarily restore the legacy keyboard mode around it.
+# Preserve fzf's existing key mode handling; tmux maps Escape to Ctrl+G while marked.
 if (( $+commands[fzf] )); then
   fzf() {
     local -i csi_u_was_active=$_ZLE_CSI_U_ACTIVE
     local -i csi_u_status
+    local -a csi_u_fzf_opts
+    local csi_u_fzf_mark
+    if [[ -n ${TMUX:-} && -n ${TMUX_PANE:-} ]]; then
+      csi_u_fzf_mark=$(command tmux show-option -pqv -t "$TMUX_PANE" @fzf_csi_u 2>/dev/null)
+      command tmux set-option -p -t "$TMUX_PANE" @fzf_csi_u 1 2>/dev/null
+      csi_u_fzf_opts=(--bind=ctrl-g:abort)
+    fi
     (( csi_u_was_active )) && __zle_csi_u_disable
     {
-      command fzf "$@"
+      command fzf "$@" "${csi_u_fzf_opts[@]}"
       csi_u_status=$?
     } always {
       (( csi_u_was_active )) && __zle_csi_u_enable
+      if [[ -n ${TMUX:-} && -n ${TMUX_PANE:-} ]]; then
+        if [[ -n $csi_u_fzf_mark ]]; then
+          command tmux set-option -p -t "$TMUX_PANE" @fzf_csi_u "$csi_u_fzf_mark" 2>/dev/null
+        else
+          command tmux set-option -pu -t "$TMUX_PANE" @fzf_csi_u 2>/dev/null
+        fi
+      fi
     }
     return $csi_u_status
   }
