@@ -52,6 +52,8 @@ session.
 - The config uses Hyprland 0.56's Lua format, not the deprecated hyprlang
   `hyprland.conf` syntax.
 - The GTX 970 proprietary driver already has DRM modeset and fbdev enabled.
+  These are startup prerequisites, not a guarantee of DPMS/hotplug recovery;
+  see the local Aquamarine fix below.
 - The hardware KVM disconnects `DP-1`, `HDMI-A-1`, and its USB hub. Workspace
   placement rules are suspended while an output is absent and restored 1.5
   seconds after it returns. This preserves Sway-like migration/restoration and
@@ -61,6 +63,76 @@ session.
 - `rawhid-rust` uses Hyprland IPC for native applications and recognizes
   layer-shell Rofi by its `rofi` namespace, so Rofi can remain native Wayland.
 - Screen sharing portals remain intentionally uninstalled, matching Sway.
+
+## Idle, suspend, and KVM wake-up
+
+Automatic display power-off after 10 minutes is required and remains enabled.
+The upper `DP-1` (workspace 1) and lower-right `HDMI-A-1` (workspace 3) switch
+through the KVM; lower-left `DVI-I-1` (workspace 2) stays connected to this PC
+and also sleeps during inactivity.
+
+`scripts/idle.sh` wakes displays on activity and logind's system-resume event;
+it does not request system suspend. Explicit suspend remains available in the
+power menu. Hyprland also enables DPMS on input. The 1.5-second hotplug timer
+restores workspace placement only, without an additional DPMS command.
+
+Adding resume/input/hotplug wake commands did not resolve the freeze: a repeat
+test returned images on outputs 1 and 3 but accepted no input, while output 2
+stayed dark. That boot had no system suspend event, so actual system sleep is
+not required to reproduce the symptom. Automatic DPMS combined with hotplug is
+a suspect, not a proven root cause. Disabling automatic DPMS was rejected
+because it sacrifices required behavior. Disabling display animations also
+failed to fix the incident and has been reverted. NVIDIA memory preservation
+and suspend/resume services were already enabled; USB keyboard/mouse
+registration alone does not prove that Hyprland was processing input.
+
+### Local Aquamarine CRTC fix
+
+The captured repeat test showed responsive Hyprland IPC and incoming libinput
+mouse events during the apparent freeze. DVI-I-1's sleeping CRTC 59 was released
+and given to HDMI-A-1 on KVM return; DVI-I-1 moved to 79. Atomic modesets then
+failed with `Invalid argument`, including DVI wake, despite IPC reporting DPMS
+on. This identifies a display-configuration failure, rather than evidence of a
+whole-compositor deadlock. The user confirmed a successful physical KVM/idle
+return with the local CRTC-retention library loaded and its opt-in enabled.
+This verifies the reported cycle, not every possible suspend/hotplug sequence.
+
+`patches/aquamarine-0.15.0-preserve-crtc.patch` keeps a connected, sleeping
+NVIDIA output's CRTC when `AQ_NVIDIA_PRESERVE_CRTC=1`. Disconnected outputs still
+release their assignments. This is specific to the three-output GTX 970 setup
+with four CRTCs; reserving sleeping outputs can limit hotplug on systems with
+too few CRTCs. It preserves real DPMS power-off.
+
+Build the isolated library with:
+
+```sh
+~/.config/hypr/scripts/build-aquamarine-kvm.sh
+```
+
+The script pins and checks the upstream source archive, applies the patch,
+builds it and runs the non-graphical upstream tests. It stores the result under
+the git-ignored `lib/` directory. `start` selects `lib/current` only while the
+installed Hyprland, Aquamarine and linked runtime-library package versions
+match the build stamp. After a package change it uses the system library until
+the patch is rebuilt
+or rebased. No system package is replaced. A session restart is required;
+config reload cannot replace an already loaded library. For rollback, start
+from a local TTY with `HYPRLAND_SYSTEM_AQUAMARINE=1 hyprland-start`.
+
+If it happens again, try a keyboard connected directly to the PC or SSH from
+another machine. From a terminal with this session's Hyprland environment, use:
+
+```sh
+timeout 5 hyprctl -j monitors all
+timeout 5 hyprctl dispatch 'hl.dsp.dpms({ action = "enable" })'
+journalctl -b -k --since '-10 min'
+journalctl -b -u systemd-suspend.service -u nvidia-resume.service --since '-10 min'
+```
+
+SSH responding while Hyprland IPC times out points to a compositor stall;
+responsive IPC with failed USB enumeration points toward the KVM/input path.
+The idle helper must be restarted (or the session restarted) after editing it;
+`hyprctl reload` alone does not restart autostart processes.
 
 After starting, inspect the detected outputs and input device names with:
 

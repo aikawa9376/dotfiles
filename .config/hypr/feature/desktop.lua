@@ -46,6 +46,9 @@ hl.config({
         enabled = true,
     },
     misc = {
+        -- Wake directly on input even if swayidle has lost its idle/resume pair.
+        key_press_enables_dpms = true,
+        mouse_move_enables_dpms = true,
         disable_hyprland_logo = true,
         disable_splash_rendering = true,
         force_default_wallpaper = 0,

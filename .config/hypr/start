@@ -56,5 +56,17 @@ export QT_QPA_PLATFORM='wayland;xcb'
 export MOZ_ENABLE_WAYLAND=1
 export ELECTRON_OZONE_PLATFORM_HINT=auto
 
+# Isolated, version-checked NVIDIA KVM fix; system packages stay authoritative.
+kvm_lib="$config_dir/hypr/lib/current"
+if [ "${HYPRLAND_SYSTEM_AQUAMARINE:-0}" != 1 ] && [ -r "$kvm_lib/packages" ]; then
+    if [ "$(cut -d ' ' -f 1 "$kvm_lib/packages" | xargs pacman -Q 2>/dev/null)" = "$(cat "$kvm_lib/packages")" ]; then
+        export LD_LIBRARY_PATH="$kvm_lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        export AQ_NVIDIA_PRESERVE_CRTC=1
+        printf 'Using local Aquamarine NVIDIA KVM CRTC fix.\n' >&2
+    else
+        printf 'Aquamarine dependencies changed; rebuild the local KVM fix. Using system library.\n' >&2
+    fi
+fi
+
 printf 'Starting Hyprland. Exit with Super+Shift+Escape.\n' >&2
 exec start-hyprland -- --config "$config_file"
