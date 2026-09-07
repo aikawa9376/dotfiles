@@ -8,7 +8,7 @@
   "blink-cmp-tmux": { "branch": "main", "commit": "112ddbf2e09d9cb4736de70dd01eb9654cf01d70" },
   "blink-copilot": { "branch": "main", "commit": "7ad8209b2f880a2840c94cdcd80ab4dc511d4f39" },
   "blink-ripgrep.nvim": { "branch": "main", "commit": "25a398a5bb5ed38db08f3b4cfa2ae832d27957a3" },
-  "blink.cmp": { "branch": "main", "commit": "8e5e03f1ef7991d74950c245910e6118f6d95e3b" },
+  "blink.cmp": { "branch": "main", "commit": "49d39fda6350d7f789d1da1053e86c9e256f8108" },
   "blink.compat": { "branch": "main", "commit": "1454f14a8d855a578ceeba77c62538fa1459a67c" },
   "blink.lib": { "branch": "main", "commit": "f55df8a6e0a7acccf45ef0ffbb4ce46110fcf7d0" },
   "browser.nvim": { "branch": "main", "commit": "00f7ac3f909d25a169188dc5b2a3e98cfa14b9cc" },
