@@ -6,6 +6,11 @@ installed alongside Sway and uses the same physical three-display layout,
 applications, Waybar style, and primary key bindings. It does not use a display
 manager or a graphical session chooser.
 
+The launcher selects `hyprland.lua` through `HYPRLAND_CONFIG`. Passing the same
+path with `start-hyprland -- --config` makes the 0.56.2 watchdog emit an
+unconditional `WARN` about forwarding arguments. Early `DEBUG` initialization
+messages may still appear and do not by themselves indicate a failure.
+
 ## Configuration layout
 
 `hyprland.lua` is the entry point and explicitly loads `feature/` modules in
