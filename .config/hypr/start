@@ -69,4 +69,6 @@ if [ "${HYPRLAND_SYSTEM_AQUAMARINE:-0}" != 1 ] && [ -r "$kvm_lib/packages" ]; th
 fi
 
 printf 'Starting Hyprland. Exit with Super+Shift+Escape.\n' >&2
-exec start-hyprland -- --config "$config_file"
+# Keep the explicit config without the watchdog's unconditional argument warning.
+export HYPRLAND_CONFIG="$config_file"
+exec start-hyprland
