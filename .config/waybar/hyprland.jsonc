@@ -12,7 +12,7 @@
         "custom/tmux",
         "custom/docker"
     ],
-    "modules-center": ["clock"],
+    "modules-center": ["cffi/calendar"],
     "modules-right": [
         "disk",
         "cpu",
@@ -40,10 +40,10 @@
         "max-length": 40,
         "separate-outputs": false
     },
-    "clock": {
-        "interval": 1,
-        "format": " {:%Y-%m-%d %H:%M:%S}",
-        "tooltip-format": "<tt>{calendar}</tt>"
+    "cffi/calendar": {
+        "module_path": "/home/aikawa/.config/waybar/modules/calendar.so",
+        "actions": { "on-click": "toggle" },
+        "tooltip": false
     },
     "disk": {
         "interval": 180,
@@ -52,11 +52,11 @@
     },
     "cpu": {
         "interval": 3,
-        "format": " {usage}%"
+        "format": " {usage}%"
     },
     "memory": {
         "interval": 5,
-        "format": " {percentage}%"
+        "format": " {percentage}%"
     },
     "network": {
         "interval": 3,
@@ -113,6 +113,14 @@
     "custom/power": {
         "format": "",
         "tooltip": false,
-        "on-click": "$HOME/.config/hypr/scripts/power-menu.sh"
+        "on-click": "",
+        "menu": "on-click",
+        "menu-file": "/home/aikawa/.config/waybar/power-menu.xml",
+        "menu-actions": {
+            "suspend": "systemctl suspend",
+            "reboot": "systemctl reboot",
+            "poweroff": "systemctl poweroff",
+            "logout": "hyprctl dispatch 'hl.dsp.exit()'"
+        }
     }
 }

@@ -27,14 +27,16 @@ rofi -no-config \
     -dmenu \
     -i \
     -no-custom \
+    -markup-rows \
+    -format i \
     -p '' \
     -window-title 'Waybar power menu' \
     -theme "$HOME/.config/rofi/power-menu.rasi" \
     >"$choice_file" <<'EOF' &
-󰤄  Suspend
-󰜉  Reboot
-󰐥  Power off
-󰗼  Exit Hyprland
+<span foreground="#cbb7df">󰤄  Suspend</span>
+<span foreground="#b4cbb0">󰜉  Reboot</span>
+<span foreground="#d6aaaa">󰐥  Power off</span>
+<span foreground="#adc3d6">󰗼  Exit Hyprland</span>
 EOF
 menu_pid=$!
 printf '%s\n' "$menu_pid" > "$pid_file"
@@ -45,8 +47,8 @@ fi
 
 choice=$(cat "$choice_file")
 case "$choice" in
-    *Suspend) systemctl suspend ;;
-    *Reboot) systemctl reboot ;;
-    *'Power off') systemctl poweroff ;;
-    *'Exit Hyprland') hyprctl dispatch 'hl.dsp.exit()' ;;
+    0) systemctl suspend ;;
+    1) systemctl reboot ;;
+    2) systemctl poweroff ;;
+    3) hyprctl dispatch 'hl.dsp.exit()' ;;
 esac

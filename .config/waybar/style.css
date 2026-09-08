@@ -55,9 +55,87 @@ tooltip label {
     margin: 0 4px;
 }
 
+menu#power-menu {
+    background: #2d2d2d;
+    border: 1px solid #555555;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+#power-menu menuitem,
+#power-menu menuitem:hover {
+    background: transparent;
+    padding: 5px 9px;
+}
+
+#power-menu label {
+    font-family: "Noto Sans CJK JP", "Symbols Nerd Font", sans-serif;
+    font-size: 16px;
+}
+
+#power-menu menuitem:hover label { font-weight: bold; }
+#power-menu #power-suspend { color: #cbb7df; }
+#power-menu #power-reboot { color: #b4cbb0; }
+#power-menu #power-off { color: #d6aaaa; }
+#power-menu #power-logout { color: #adc3d6; }
+
 #mode, #submap { box-shadow: inset 0 -2px #ded32e; }
 #window { box-shadow: inset 0 -2px #32bbc2; }
 #clock { box-shadow: inset 0 -2px #3465a4; }
+menu#calendar-popup {
+    background: #202020;
+    color: #dddddd;
+    border: 1px solid #444444;
+    border-radius: 6px;
+}
+
+#calendar-popup menuitem,
+#calendar-popup menuitem:hover {
+    background: transparent;
+    padding: 0;
+}
+
+#calendar-popup .calendar-content {
+    padding: 15px;
+    min-width: 298px;
+}
+
+#calendar-popup label {
+    font-family: "Noto Sans Mono CJK JP", monospace;
+    font-size: 18px;
+}
+
+#calendar-popup .calendar-heading {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+#calendar-popup .day,
+#calendar-popup .weekday {
+    min-width: 36px;
+    min-height: 25px;
+}
+
+#calendar-popup .sunday { color: #d6aaaa; }
+#calendar-popup .saturday { color: #adc3d6; }
+#calendar-popup .today {
+    background: #505050;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+#calendar-popup button {
+    background: transparent;
+    color: #999999;
+    padding: 3px 0;
+    box-shadow: none;
+    text-shadow: none;
+}
+
+#calendar-popup button label { font-size: 15px; }
+#calendar-popup button:hover,
+#calendar-popup button:focus { color: #ffffff; }
+#calendar-popup button:disabled { color: #555555; }
 #disk, #custom-tmux { box-shadow: inset 0 -2px #30c352; }
 #cpu, #custom-mozc { box-shadow: inset 0 -2px #d64937; }
 #memory { box-shadow: inset 0 -2px #32bbc2; }
