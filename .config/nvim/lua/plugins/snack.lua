@@ -480,6 +480,9 @@ return {
       },
       image = {
         enabled = true,
+        config = function()
+          require("config.snacks-terminal").setup()
+        end,
         convert = {
           notify = false,
         },
