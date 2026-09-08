@@ -33,8 +33,12 @@ function M.run()
   local killed = false
   local pane_seq = 0
   local transcript_is_read = false
+  local follow_resumed_for
   local on_transcript_read
   local view = {
+    resume_follow = function(pane_id)
+      follow_resumed_for = pane_id
+    end,
     create_pane = function(_, done)
       pane_seq = pane_seq + 1
       done("thread-test-pane-" .. tostring(pane_seq), {})
@@ -154,19 +158,25 @@ function M.run()
   local queued = assert(backend.list_prompt_queue(pane_id))
   assert_equal(#queued, 1, "active turn keeps follow-up in prompt queue")
   local queued_steering_result
+  follow_resumed_for = nil
   local queued_item, queued_mode = backend.steer_prompt_queue(pane_id, queued[1].id, function(ok, result)
     queued_steering_result = { ok = ok, result = result }
   end)
   assert(queued_item and queued_mode == "steering", "queued prompt starts native steering")
   assert(vim.wait(1000, function() return queued_steering_result ~= nil end, 10), "queued steering response")
   assert_equal(queued_steering_result.ok, true, "queued steering accepted")
+  assert_equal(follow_resumed_for, pane_id, "queued steering resumes transcript follow")
   assert_equal(#backend.list_prompt_queue(pane_id), 0, "successful queued steering consumes prompt")
   local steering_result
+  follow_resumed_for = nil
+  assert(not backend.steer_active_turn(pane_id, ""), "empty steering rejected")
+  assert_equal(follow_resumed_for, nil, "rejected steering preserves follow pause")
   assert(backend.steer_active_turn(pane_id, "Prefer compatibility", function(ok, result)
     steering_result = { ok = ok, result = result }
   end))
   assert(vim.wait(1000, function() return steering_result ~= nil end, 10), "backend steering response")
   assert_equal(steering_result.ok, true, "backend steering accepted")
+  assert_equal(follow_resumed_for, pane_id, "accepted steering resumes transcript follow")
   assert_equal(steering_result.result.outcome, "injected", "backend steering outcome")
   local steering_transcript = table.concat(vim.fn.readfile(runtime.acp_transcript_path), "\n")
   assert(steering_transcript:find("[Steering]", 1, true), "backend transcript marks steering input")
