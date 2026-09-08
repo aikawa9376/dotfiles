@@ -64,7 +64,6 @@ alias wdown="virtstop"
 alias i3wk='ps faux | grep "\_ i3" | head -n 1 | awk "{print \$2}" | xargs kill -s SIGCONT'
 alias hs="command history"
 alias zsup="zinit self-update"
-alias zup="zinit update"
 alias clp="gpick -o -s -c color_web_hex | $HOME/.config/zsh/scripts/clipboard-copy"
 alias clpr="gpick -o -s -c color_css_rgb | $HOME/.config/zsh/scripts/clipboard-copy"
 alias lg="lazygit"

@@ -5,6 +5,13 @@ has() {
   type "${1:?too few arguments}" &>/dev/null
 }
 
+unalias zup 2>/dev/null
+zup() {
+  zinit update "$@" &&
+    zinit cclear >/dev/null &&
+    zinit compinit >/dev/null
+}
+
 left-word-copy() {
   local temp
   temp=$(echo ${LBUFFER} | sed 's/ *$//' | sed 's/\\ /@@@/g')
