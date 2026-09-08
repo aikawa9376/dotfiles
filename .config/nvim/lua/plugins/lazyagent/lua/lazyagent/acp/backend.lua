@@ -2600,6 +2600,10 @@ local function create_backend(default_view)
         return
       end
       local outcome = tostring(result and result.outcome or "sent")
+      local view = session_view(session)
+      if view and type(view.resume_follow) == "function" then
+        view.resume_follow(target_pane)
+      end
       conversation_helpers.append_block(
         session,
         "User",
