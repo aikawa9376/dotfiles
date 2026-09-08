@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <object class="GtkMenu" id="menu">
+    <property name="name">power-menu</property>
+    <property name="reserve-toggle-size">False</property>
+    <child>
+      <object class="GtkMenuItem" id="suspend">
+        <property name="name">power-suspend</property>
+        <property name="label">󰤄  Suspend</property>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="right-attach">1</property>
+        <property name="top-attach">0</property>
+        <property name="bottom-attach">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="reboot">
+        <property name="name">power-reboot</property>
+        <property name="label">󰜉  Reboot</property>
+      </object>
+      <packing>
+        <property name="left-attach">1</property>
+        <property name="right-attach">2</property>
+        <property name="top-attach">0</property>
+        <property name="bottom-attach">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="poweroff">
+        <property name="name">power-off</property>
+        <property name="label">󰐥  Power off</property>
+      </object>
+      <packing>
+        <property name="left-attach">2</property>
+        <property name="right-attach">3</property>
+        <property name="top-attach">0</property>
+        <property name="bottom-attach">1</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="logout">
+        <property name="name">power-logout</property>
+        <property name="label">󰗼  Exit Hyprland</property>
+      </object>
+      <packing>
+        <property name="left-attach">3</property>
+        <property name="right-attach">4</property>
+        <property name="top-attach">0</property>
+        <property name="bottom-attach">1</property>
+      </packing>
+    </child>
+  </object>
+</interface>

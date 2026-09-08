@@ -48,6 +48,18 @@ hyprland-start
 Exit Hyprland with `Super+Shift+Escape`; the power menu includes an exit action.
 `Super+Ctrl+Shift+Escape` exits immediately if the display is unusable.
 
+Click the Waybar clock to open a compact monthly calendar below the bar.
+Use the previous/current/next month buttons; click the clock again, press
+Escape, or click outside to close it. The calendar runs inside Waybar as
+`cffi/calendar`, with individual day labels and CSS for Sunday, Saturday,
+and today. See `../waybar/modules/README.md` for build and maintenance.
+
+The Waybar power icon uses its built-in GTK menu, defined in
+`../waybar/power-menu.xml` and styled in `../waybar/style.css`. Its four
+English actions retain their muted colors; click the icon again, click
+outside, or press Escape to dismiss. The keyboard power-menu shortcut
+continues to use `scripts/power-menu.sh` as a Rofi fallback.
+
 Run `sway-start` from another local TTY when you want the established Sway
 session. Never start either compositor from a terminal inside another graphical
 session.
