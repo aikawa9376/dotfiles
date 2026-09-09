@@ -25,6 +25,8 @@ the feature that owns it.
 - `feature/win-edit.lua`: the window-editing submap.
 - `feature/window-rules.lua`: application placement and floating dialogs.
 - `feature/session.lua`: session autostart, delayed Fcitx startup, and exit keys.
+- `feature/wake-key.lua`: consumes ordinary wake-up typing while all displays
+  are powered off; loaded last so existing shortcuts take precedence.
 
 Use Hyprland's `require("feature.name")` for new features. Keep a feature's
 callbacks and their state together. Modules are resolved relative to the main
@@ -92,6 +94,16 @@ and also sleeps during inactivity.
 it does not request system suspend. Explicit suspend remains available in the
 power menu. Hyprland also enables DPMS on input. The 1.5-second hotplug timer
 restores workspace placement only, without an additional DPMS command.
+
+When all connected displays report DPMS off, `feature/wake-key.lua` consumes
+an otherwise unbound key press before it reaches the application or IME.
+This prevents the wake key from starting the normal fast repeat (150 ms delay,
+230 keys/second) while display modesetting delays its release. The next press
+after waking works normally. Existing compositor shortcuts remain available.
+The guard uses Hyprland's DPMS state; it does not cover wake events where that
+state already reports on, including some system-suspend or KVM sequences.
+Config reload applies this guard; a physical idle/wake test is still needed
+to confirm the reported repeat symptom is resolved.
 
 Adding resume/input/hotplug wake commands did not resolve the freeze: a repeat
 test returned images on outputs 1 and 3 but accepted no input, while output 2
