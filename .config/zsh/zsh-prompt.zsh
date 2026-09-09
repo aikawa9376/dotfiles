@@ -112,6 +112,9 @@
   # Add an empty line before each prompt.
   typeset -g POWERLEVEL9K_PROMPT_ADD_NEWLINE=true
 
+  # Let Kitty track prompt boundaries to mitigate redraw artifacts on resize.
+  typeset -g POWERLEVEL9K_TERM_SHELL_INTEGRATION=true
+
   # Connect left prompt lines with these symbols.
   typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_PREFIX=
   typeset -g POWERLEVEL9K_MULTILINE_NEWLINE_PROMPT_PREFIX=
