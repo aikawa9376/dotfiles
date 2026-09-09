@@ -247,10 +247,10 @@ end
 local function help_stdout()
   return table.concat({
     "Usage:",
-    "  nvim-cli-bridge connector context [--json]",
-    "  nvim-cli-bridge connector connections [--json]",
-    "  nvim-cli-bridge connector query [--format table|json|csv] [--limit N] [--connection ID] SQL",
-    "  nvim-cli-bridge connector execute --write [--format table|json|csv] [--limit N] [--connection ID] SQL",
+    "  nvim-cli connector context [--json]",
+    "  nvim-cli connector connections [--json]",
+    "  nvim-cli connector query [--format table|json|csv] [--limit N] [--connection ID] SQL",
+    "  nvim-cli connector execute --write [--format table|json|csv] [--limit N] [--connection ID] SQL",
     "",
     "Safety:",
     "  query refuses mutating SQL.",

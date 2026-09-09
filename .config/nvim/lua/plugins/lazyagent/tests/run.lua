@@ -90,6 +90,7 @@ local suites = {
   "tests.agent_spec",
   "tests.agent_comms_spec",
   "tests.agent_bridge_spec",
+  "tests.nvim_bridge_spec",
   "tests.session_lifecycle_spec",
   "tests.status_spec",
 }

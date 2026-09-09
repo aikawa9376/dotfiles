@@ -7,11 +7,16 @@ description: Interact with the active Neovim instance for editor-specific contex
 
 Interact with the active Neovim instance. The tool can access editor state such as unsaved buffers, windows, cursor position, quickfix entries, terminals, and LSP diagnostics.
 
-## Global Options
+## Connection and target selection
 
-- When launched from lazyagent, use `$LAZYAGENTBIN/nvim-cli-bridge` without `--server`. It is a shell wrapper around Neovim Lua and uses the `LAZYAGENT_NVIM_BRIDGE_*` environment to talk to the Neovim instance that started the agent, which works from sandboxed tool commands.
-- `$LAZYAGENTBIN/nvim-cli` is the raw socket client. Use it only when you intentionally want socket mode; sandboxed tool commands often cannot connect to sockets.
-- First try `nvim-cli-bridge` directly. If it is not on `PATH`, use `$LAZYAGENTBIN/nvim-cli-bridge`.
+- Use `$LAZYAGENTBIN/nvim-cli`, or `nvim-cli` on PATH. The native binary selects the parent's file bridge from injected `NVIM_CLI_BRIDGE_*` (legacy `LAZYAGENT_NVIM_BRIDGE_*` also works). No extra Neovim process is started.
+- With no target option, operate on the parent that launched the agent. Do not pass `--server` just to repeat inherited context: it forces RPC in auto mode.
+- `instances` returns JSON with instance ID, PID, cwd, current path, transport, parent marker and reachability. Linux also discovers same-user Neovim processes and owned listening sockets. `instances --no-probe` only reads metadata.
+- To operate on a different editor, use `--instance <exact-id> <command>` on each call. Choose the intended editor from the returned metadata. Never guess a target or silently fall back when it is unavailable.
+- `--server <socket>` explicitly selects RPC; socket syscalls may be restricted by the sandbox. Discovery does not grant permission to connect. `--transport rpc|bridge` forces a transport.
+- `--timeout-ms` defaults to 15000. A timed-out mutation may already have executed; inspect state before retrying.
+
+Start with `context` for cursor surroundings, buffers (including modified state), windows, diagnostics and LSP clients in a single request. Use `buffers` for just buffer metadata.
 
 ## Instructions
 

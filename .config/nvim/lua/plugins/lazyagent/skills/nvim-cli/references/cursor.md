@@ -12,5 +12,5 @@ Get information about the current state of the Neovim editor.
 ### cursor
 Get the current cursor position, file path, and surrounding code context.
 ```bash
-nvim-cli-bridge cursor
+nvim-cli cursor
 ```

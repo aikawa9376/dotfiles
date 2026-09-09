@@ -12,8 +12,8 @@ Retrieve LSP feedback from Neovim.
 Get LSP diagnostics. If a path is specified, it returns diagnostics for that file/directory. If omitted, returns all diagnostics for the current session.
 ```bash
 # Get all diagnostics
-nvim-cli-bridge diagnostics
+nvim-cli diagnostics
 
 # Get diagnostics for a specific file
-nvim-cli-bridge diagnostics src/main.rs
+nvim-cli diagnostics src/main.rs
 ```

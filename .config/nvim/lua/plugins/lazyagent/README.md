@@ -162,8 +162,10 @@ require("lazyagent").setup({
 - installed project/global skillsがあれば、`skills.enabled = false`でもsourceとして有効になります。globalを先、projectを後に重ねます。
 - 何も指定しなければ `lazyagent/bin` を基準に、`bin/<os>-<arch>/`（例: `bin/linux-x64`, `bin/darwin-arm64`）があればそちらを優先して `LAZYAGENTBIN` に注入します。platform dir が無ければ従来どおり `lazyagent/bin` を使います。
 - local CLI を使う skill は `$LAZYAGENTBIN/<tool>` を見れば OK です。
-- lazyagent から起動した agent には `LAZYAGENT_NVIM_BRIDGE_*` が注入され、bundled `nvim-cli-bridge` は socket ではなく file bridge 経由で親 Neovim を操作します。bridge client は shell wrapper + Neovim Lua です。sandbox 内で `NVIM_LISTEN_ADDRESS` の socket 接続が拒否される環境でもこの経路を使います。`nvim-cli` は従来どおり raw socket client のままです。
-- Neovim の内蔵 terminal は `nvim-cli-bridge terminal list` / `terminal capture` で確認できます。terminal buffer から ACP scratch を開いた場合は、terminal 出力の短い末尾（既定 40 行 / 約 2.4KB 上限）だけが editor context として自動添付されます。そこで判断できない場合は `nvim-cli-bridge terminal capture --bufnr <bufnr> --last N` で必要な scrollback だけ遡ります。同じ scratch で前回と同一の editor context は hash 付きの unchanged marker だけに圧縮されます。
+- lazyagent から起動した agent には `NVIM_CLI_BRIDGE_*`（移行用に `LAZYAGENT_NVIM_BRIDGE_*` も）が注入され、bundled `nvim-cli` が Rust から直接 file bridge を使います。呼び出しごとの headless Neovim 起動は不要です。受信側は nvim-cli 由来の `lua/nvim_cli/bridge.lua`、`lazyagent/nvim_bridge.lua` は connector / agent 操作の登録と環境受け渡しのみを担当します。`nvim-cli-bridge` は互換名として native binary に委譲します。
+- `nvim-cli context` で編集状況を一括取得し、`nvim-cli instances` で他の Neovim を確認できます。別の対象は `nvim-cli --instance <ID> context` のように明示します。指定がなければ起動元の親を使い、一覧の先頭へ自動で切り替わることはありません。Linux では同じユーザーの Neovim プロセスも列挙しますが、未登録・ソケット接続不可のプロセスは操作できません。
+- nvim-cli の更新時は、そのリポジトリの `scripts/install-to-lazyagent-bin.sh` でバイナリと同梱 receiver を一緒に更新します。ロード済みの旧 receiver / 既存 agent 環境は自動置換されないため、Neovim と agent を再起動して新しい環境を受け取ってください。
+- Neovim の内蔵 terminal は `nvim-cli terminal list` / `terminal capture` で確認できます。terminal buffer から ACP scratch を開いた場合は、terminal 出力の短い末尾（既定 40 行 / 約 2.4KB 上限）だけが editor context として自動添付されます。そこで判断できない場合は `nvim-cli terminal capture --bufnr <bufnr> --last N` で必要な scrollback だけ遡ります。同じ scratch で前回と同一の editor context は hash 付きの unchanged marker だけに圧縮されます。
 - 別ディレクトリを使いたいときだけ `skills.source` / `skills.sources` で override します。
 - bin 側を変えたいときは `skills.bin_dir` で override できます。
 - `mode = "flag"`: 起動 command に agent ごとの skills 用 flag を追加します。現状は Copilot で `--plugin-dir` をサポートします。
