@@ -7,14 +7,14 @@ Use LazyAgent's parent-Neovim bridge so cross-agent communication works even whe
 1. Discover current targets before sending:
 
    ```sh
-   "$LAZYAGENTBIN/nvim-cli-bridge" lazyagent-agent list
+   "$LAZYAGENTBIN/nvim-cli" lazyagent-agent list
    ```
 
 2. Match the requested target against `live_agents[].ref`, title, provider, workspace, and team metadata. Prefer an exact `agent:<thread-id>` supplied by the user. Do not guess when multiple live agents match.
 3. Send only when the user requested communication or when it is an authorized coordination step in the current task:
 
    ```sh
-   "$LAZYAGENTBIN/nvim-cli-bridge" lazyagent-agent send 'agent:<thread-id>' 'Message text'
+   "$LAZYAGENTBIN/nvim-cli" lazyagent-agent send 'agent:<thread-id>' 'Message text'
    ```
 
 4. Treat a JSON result with `success: true` and `accepted: true` as delivery acceptance. Report errors without silently switching identities or targets.

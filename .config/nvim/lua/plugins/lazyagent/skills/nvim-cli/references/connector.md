@@ -3,10 +3,10 @@
 Use connector.nvim through the active Neovim instance.
 
 ```bash
-$LAZYAGENTBIN/nvim-cli-bridge connector context
-$LAZYAGENTBIN/nvim-cli-bridge connector connections
-$LAZYAGENTBIN/nvim-cli-bridge connector query --format table 'select * from users limit 20'
-$LAZYAGENTBIN/nvim-cli-bridge connector execute --write --format table 'insert into users(name) values ("alice")'
+$LAZYAGENTBIN/nvim-cli connector context
+$LAZYAGENTBIN/nvim-cli connector connections
+$LAZYAGENTBIN/nvim-cli connector query --format table 'select * from users limit 20'
+$LAZYAGENTBIN/nvim-cli connector execute --write --format table 'insert into users(name) values ("alice")'
 ```
 
 Safety:

@@ -14,30 +14,30 @@ Operations for reading or changing content through the active Neovim instance.
 Read a file or directory. If a directory is specified, it returns contents of all files recursively.
 ```bash
 # Read a single file
-$LAZYAGENTBIN/nvim-cli-bridge read src/main.rs
+$LAZYAGENTBIN/nvim-cli read src/main.rs
 
 # Read a directory recursively
-$LAZYAGENTBIN/nvim-cli-bridge read src/
+$LAZYAGENTBIN/nvim-cli read src/
 ```
 
 ### write <path> [--start <line>] [--end <line>] <lines...>
 Write or replace lines in a file. If `--start` and `--end` are provided, it replaces the specified range (0-indexed).
 ```bash
 # Replace whole file
-$LAZYAGENTBIN/nvim-cli-bridge write README.md "Line 1" "Line 2"
+$LAZYAGENTBIN/nvim-cli write README.md "Line 1" "Line 2"
 
 # Replace lines 10 to 20
-$LAZYAGENTBIN/nvim-cli-bridge write src/main.rs --start 10 --end 20 "New line 10" "New line 11"
+$LAZYAGENTBIN/nvim-cli write src/main.rs --start 10 --end 20 "New line 10" "New line 11"
 ```
 
 ### open <files...>
 Open files in Neovim.
 ```bash
-$LAZYAGENTBIN/nvim-cli-bridge open src/main.rs src/tools.rs
+$LAZYAGENTBIN/nvim-cli open src/main.rs src/tools.rs
 ```
 
 ### close <files...>
 Close specific files in Neovim (deletes their buffers).
 ```bash
-$LAZYAGENTBIN/nvim-cli-bridge close src/main.rs
+$LAZYAGENTBIN/nvim-cli close src/main.rs
 ```
