@@ -1,7 +1,6 @@
 local M = {}
 
 local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer ..."
-local SYNTHETIC_MARKDOWN_FENCE_CLOSE = " ```"
 
 local function line_has_heading(line, heading)
   local needle = " " .. heading .. " "
@@ -72,6 +71,27 @@ end
 
 local function is_markdown_fence(line)
   return type(line) == "string" and line:match("^%s*```") ~= nil
+end
+
+-- Keep the delimiter, not just parity: shorter fences and language-tagged
+-- lines inside a block cannot close it. Python strings can contain both.
+local function advance_markdown_fence(fence, line)
+  line = tostring(line or "")
+  local indent, run, suffix = line:match("^( *)(`+)(.*)$")
+  if not run then
+    indent, run, suffix = line:match("^( *)(~+)(.*)$")
+  end
+  if not run or #indent > 3 or #run < 3 then
+    return fence
+  end
+  if fence then
+    if run:sub(1, 1) == fence:sub(1, 1) and #run >= #fence and suffix:match("^%s*$") then
+      return false
+    end
+  elseif run:sub(1, 1) ~= "`" or not suffix:find("`", 1, true) then
+    return run
+  end
+  return fence
 end
 
 local function code_block_target_row(lines, cur_row, forward)
@@ -211,37 +231,39 @@ local function balance_unclosed_markdown_fences(lines)
         end
       end
       -- Bound malformed Markdown to the ACP section that produced it.
-      balanced[#balanced + 1] = SYNTHETIC_MARKDOWN_FENCE_CLOSE
+      balanced[#balanced + 1] = " " .. inside_fence
       inside_fence = false
     end
 
     if balanced then
       balanced[#balanced + 1] = line
     end
-    if is_markdown_fence(line) then
-      inside_fence = not inside_fence
-    end
+    inside_fence = advance_markdown_fence(inside_fence, line)
   end
 
   return balanced or lines
 end
 
-local function trailing_section_has_open_markdown_fence(lines)
+local function markdown_fence_state(lines, initial_state)
   lines = type(lines) == "table" and lines or {}
-  local inside_fence = false
+  local inside_fence = initial_state or false
+  local before_tail = inside_fence
   for _, line in ipairs(lines) do
+    before_tail = inside_fence
     if section_heading_for_line(line) then
       inside_fence = false
     end
-    if is_markdown_fence(line) then
-      inside_fence = not inside_fence
-    end
+    inside_fence = advance_markdown_fence(inside_fence, line)
   end
-  return inside_fence
+  return inside_fence, before_tail
+end
+
+local function trailing_section_has_open_markdown_fence(lines)
+  return markdown_fence_state(lines) ~= false
 end
 
 local function append_crosses_unclosed_markdown_fence(lines, text)
-  local inside_fence = trailing_section_has_open_markdown_fence(lines)
+  local inside_fence = markdown_fence_state(lines)
   for _, line in ipairs(vim.split(tostring(text or ""), "\n", { plain = true })) do
     if section_heading_for_line(line) then
       if inside_fence then
@@ -249,9 +271,7 @@ local function append_crosses_unclosed_markdown_fence(lines, text)
       end
       inside_fence = false
     end
-    if is_markdown_fence(line) then
-      inside_fence = not inside_fence
-    end
+    inside_fence = advance_markdown_fence(inside_fence, line)
   end
   return false
 end
@@ -262,6 +282,8 @@ M.line_has_assistant_heading = line_has_assistant_heading
 M.section_style_for_line = section_style_for_line
 M.line_has_tail = line_has_tail
 M.is_markdown_fence = is_markdown_fence
+M.advance_markdown_fence = advance_markdown_fence
+M.markdown_fence_state = markdown_fence_state
 M.code_block_target_row = code_block_target_row
 M.SECTION_HEADINGS = SECTION_HEADINGS
 M.FANCY_SECTION_LABELS = FANCY_SECTION_LABELS
