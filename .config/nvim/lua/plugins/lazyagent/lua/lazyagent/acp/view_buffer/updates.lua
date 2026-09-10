@@ -1,4 +1,5 @@
 local M = {}
+local sections = require("lazyagent.acp.view_buffer.sections")
 
 function M.new(ctx)
   local api = ctx.api
@@ -39,7 +40,6 @@ function M.new(ctx)
   local to_bufnr = ctx.to_bufnr
   local session_for_agent = ctx.session_for_agent
   local agent_name_for_bufnr = ctx.agent_name_for_bufnr
-  local is_markdown_fence = ctx.is_markdown_fence
   local section_heading_for_line = ctx.section_heading_for_line
   local split_markdown_table_cells = ctx.split_markdown_table_cells
   local is_markdown_table_separator = ctx.is_markdown_table_separator
@@ -406,7 +406,7 @@ function M.new(ctx)
   end
 
   local function append_crosses_markdown_fence_state(initial_state, text)
-    local inside_fence = initial_state == true
+    local inside_fence = initial_state or false
     for _, line in ipairs(vim.split(tostring(text or ""), "\n", { plain = true })) do
       if section_heading_for_line(line) then
         if inside_fence then
@@ -414,25 +414,9 @@ function M.new(ctx)
         end
         inside_fence = false
       end
-      if is_markdown_fence(line) then
-        inside_fence = not inside_fence
-      end
+      inside_fence = sections.advance_markdown_fence(inside_fence, line)
     end
     return false
-  end
-
-  local function advanced_markdown_fence_state(initial_state, lines)
-    local inside_fence = initial_state == true
-    lines = type(lines) == "table" and lines or {}
-    for _, line in ipairs(lines) do
-      if section_heading_for_line(line) then
-        inside_fence = false
-      end
-      if is_markdown_fence(line) then
-        inside_fence = not inside_fence
-      end
-    end
-    return inside_fence
   end
 
   local function append_text_to_buffer(bufnr, text, opts)
@@ -491,8 +475,12 @@ function M.new(ctx)
     next_meta.table_tail_lines = (next_tail_context.state == "header" or next_tail_context.state == "separator")
         and next_tail_context.lines
       or {}
-    local prior_open_fence = current_display_meta.trailing_section_open_markdown_fence == true
-    next_meta.trailing_section_open_markdown_fence = advanced_markdown_fence_state(prior_open_fence, replacement)
+    -- The last line is replaced, so resume before it rather than counting its
+    -- delimiter twice. A fence itself may also arrive across multiple chunks.
+    next_meta.markdown_fence, next_meta.markdown_fence_before_tail = sections.markdown_fence_state(
+      metadata_replacement, current_display_meta.markdown_fence_before_tail
+    )
+    next_meta.trailing_section_open_markdown_fence = next_meta.markdown_fence ~= false
     entry.transcript_source_lines = nil
     entry.metadata_source_lines = next_metadata_lines
     entry.transcript_section_items = preserved_section_items or {}
@@ -532,11 +520,12 @@ function M.new(ctx)
     local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
     local cfg = transcript_compaction_config(bufnr)
     local pending_sections = pending_transcript_section_count(text)
-    if pending_sections > 0 and type(meta.trailing_section_open_markdown_fence) ~= "boolean" then
+    if meta.markdown_fence_before_tail == nil then
       return true
     end
-    local trailing_open_fence = meta.trailing_section_open_markdown_fence == true
-    if pending_sections > 0 and append_crosses_markdown_fence_state(trailing_open_fence, text) then
+    local metadata_lines = entry.metadata_source_lines or {}
+    local tail = metadata_lines[#metadata_lines] or ""
+    if pending_sections > 0 and append_crosses_markdown_fence_state(meta.markdown_fence_before_tail, tail .. text) then
       return true
     end
 

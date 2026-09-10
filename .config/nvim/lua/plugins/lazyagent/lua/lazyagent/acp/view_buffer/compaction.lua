@@ -1,4 +1,5 @@
 local M = {}
+local view_sections = require("lazyagent.acp.view_buffer.sections")
 
 function M.new(ctx)
   local pane_opts_for_bufnr = ctx.pane_opts_for_bufnr
@@ -6,7 +7,6 @@ function M.new(ctx)
   local runtime_conversation_timeline = ctx.runtime_conversation_timeline
   local layout_entry = ctx.layout_entry
   local trailing_markdown_table_context = ctx.trailing_markdown_table_context
-  local trailing_section_has_open_markdown_fence = ctx.trailing_section_has_open_markdown_fence
   local balance_unclosed_markdown_fences = ctx.balance_unclosed_markdown_fences
   local transform_markdown_tables = ctx.transform_markdown_tables
   local transcript_table_layout = ctx.transcript_table_layout
@@ -109,7 +109,8 @@ function M.new(ctx)
     meta.compacted = compacted == true
     meta.table_tail_state = tail_context.state
     meta.table_tail_lines = (tail_context.state == "header" or tail_context.state == "separator") and tail_context.lines or {}
-    meta.trailing_section_open_markdown_fence = trailing_section_has_open_markdown_fence(lines)
+    meta.markdown_fence, meta.markdown_fence_before_tail = view_sections.markdown_fence_state(lines)
+    meta.trailing_section_open_markdown_fence = meta.markdown_fence ~= false
     return meta
   end
 

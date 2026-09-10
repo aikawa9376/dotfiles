@@ -64,6 +64,8 @@ local suites = {
   "tests.acp.replay_spec",
   "tests.acp.v2_adapter_spec",
   "tests.acp.view_diff_spec",
+  "tests.acp.sections_spec",
+  "tests.acp.updates_spec",
   "tests.acp.view_footer_spec",
   "tests.acp.footer_animation_spec",
   "tests.acp.view_follow_spec",
