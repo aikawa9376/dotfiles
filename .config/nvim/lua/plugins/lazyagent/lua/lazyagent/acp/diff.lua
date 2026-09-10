@@ -315,6 +315,16 @@ function M.line_for_change(old_text, new_text, unified_diff_lines)
   return hunk.old_start
 end
 
+function M.code_fence(lines)
+  local length = 3
+  for _, line in ipairs(lines or {}) do
+    for run in tostring(line):gmatch("`+") do
+      length = math.max(length, #run + 1)
+    end
+  end
+  return string.rep("`", length)
+end
+
 function M.format_diff_item(item, opts)
   opts = opts or {}
   item = type(item) == "table" and item or {}
@@ -330,7 +340,8 @@ function M.format_diff_item(item, opts)
     lines[#lines + 1] = "Path: " .. path
   end
 
-  lines[#lines + 1] = "```" .. lang
+  local fence = M.code_fence(vim.list_extend(vim.list_slice(old_lines), new_lines))
+  lines[#lines + 1] = fence .. lang
 
   if #filtered.pairs == 0 then
     if #new_lines > 0 then
@@ -353,7 +364,7 @@ function M.format_diff_item(item, opts)
     end
   end
 
-  lines[#lines + 1] = "```"
+  lines[#lines + 1] = fence
   return lines
 end
 

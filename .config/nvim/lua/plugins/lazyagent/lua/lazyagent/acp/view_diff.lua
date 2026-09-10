@@ -259,6 +259,19 @@ function M.new(ctx)
       if tostring(line or ""):match("^%s*```") then
         if fence_start then
           local body_lines = vim.list_slice(lines, fence_start + 1, idx - 1)
+          -- Stored Markdown diffs may contain their own fences. Keep the
+          -- display wrapper longer so the parser cannot close it in the diff.
+          -- Only change the display copy; preserve row offsets and history.
+          if path_for_fence(lines, fence_start) then
+            local indent, opening, language = lines[fence_start]:match("^(%s*)(`+)(.*)$")
+            local closing_indent, closing = line:match("^(%s*)(`+)%s*$")
+            local fence = require("lazyagent.acp.diff").code_fence(body_lines)
+            if opening and closing and #fence > #opening then
+              lines[fence_start] = indent .. fence .. language
+              lines[idx] = closing_indent .. fence
+              changed = true
+            end
+          end
           local available_width = math.max(
             0,
             width - render_markdown_code_prefix_width(bufnr, lines[fence_start], body_lines, width)

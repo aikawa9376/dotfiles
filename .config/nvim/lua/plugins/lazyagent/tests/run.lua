@@ -63,6 +63,7 @@ local suites = {
   "tests.acp.protocol_log_spec",
   "tests.acp.replay_spec",
   "tests.acp.v2_adapter_spec",
+  "tests.acp.diff_spec",
   "tests.acp.view_diff_spec",
   "tests.acp.sections_spec",
   "tests.acp.updates_spec",
