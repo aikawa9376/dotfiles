@@ -79,6 +79,26 @@ function M.run()
   assert(vim.wo.conceallevel == 2, "truncation enables conceal in an existing transcript window")
   assert(vim.wo.concealcursor == "nvic", "truncation remains concealed on the cursor line in every mode")
 
+  local stored = {
+    "Path: README.md",
+    " ```markdown",
+    " + ```sh",
+    " + echo hello",
+    " + ```",
+    " - `````",
+    " ```",
+    "─ Assistant ─",
+    " normal reply",
+  }
+  local repaired, repaired_changed = view.normalize_diff_display_lines(bufnr, stored, 120, 0)
+  assert(repaired_changed, "stored diffs with embedded fences are repaired on display")
+  assert(repaired[2] == " ``````markdown" and repaired[7] == " ``````",
+    "both wrapper delimiters exceed every embedded backtick run")
+  assert(#repaired == #stored and repaired[8] == stored[8], "repair preserves transcript row offsets")
+  assert(stored[2] == " ```markdown", "repair leaves persisted source lines unchanged")
+  local again, changed_again = view.normalize_diff_display_lines(bufnr, repaired, 120, 0)
+  assert(not changed_again and vim.deep_equal(again, repaired), "fence repair is idempotent")
+
   package.loaded["render-markdown.state"] = original_render_markdown_state
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
