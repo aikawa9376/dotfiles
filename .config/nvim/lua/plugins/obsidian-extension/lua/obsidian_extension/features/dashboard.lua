@@ -626,7 +626,18 @@ local function open_entry()
     if entry_bufnr >= 0 then
       vim.bo[entry_bufnr].buflisted = true
     end
-    vim.cmd.edit(vim.fn.fnameescape(entry.path))
+    if state.note_win and vim.api.nvim_win_is_valid(state.note_win)
+      and vim.api.nvim_win_get_tabpage(state.note_win) == vim.api.nvim_get_current_tabpage()
+      and vim.api.nvim_win_get_buf(state.note_win) ~= bufnr
+    then
+      vim.api.nvim_set_current_win(state.note_win)
+      vim.cmd.edit(vim.fn.fnameescape(entry.path))
+    else
+      vim.cmd("botright vsplit " .. vim.fn.fnameescape(entry.path))
+      state.note_win = vim.api.nvim_get_current_win()
+      -- A split inherits the dashboard's window-local folding and display options.
+      vim.cmd("setlocal foldmethod< foldexpr< foldenable< foldlevel< foldcolumn< wrap< winbar<")
+    end
     if opened_by_dashboard then
       state.opened_buffers = state.opened_buffers or {}
       state.opened_buffers[vim.api.nvim_get_current_buf()] = true

@@ -90,7 +90,7 @@ assert(vim.api.nvim_win_get_buf(dashboard_winid) == dashboard_bufnr, "dashboard 
 dashboard._configure_window(dashboard_winid)
 assert(vim.wo[dashboard_winid].number, "dashboard preserves the configured line numbers")
 assert(vim.wo[dashboard_winid].signcolumn == "yes", "dashboard preserves the configured sign column")
-assert(vim.wo[dashboard_winid].wrap, "dashboard preserves the configured line wrapping")
+assert(not vim.wo[dashboard_winid].wrap, "dashboard disables line wrapping")
 assert(vim.wo[dashboard_winid].foldmethod == "expr", "dashboard uses its dedicated fold expression")
 assert(vim.wo[dashboard_winid].foldexpr:find("foldexpr", 1, true), "dashboard window calls the dashboard fold expression")
 assert(vim.wo[dashboard_winid].foldcolumn == "0", "dashboard hides fold markers from the gutter")
@@ -273,4 +273,89 @@ assert(dashboard._section_target(section_headers, 25, 1, 1) == nil, "]] does not
 assert(dashboard._section_target(section_headers, 4, -1, 1) == nil, "[[ does not wrap at the first section")
 
 vim.fn.delete(fixture, "rf")
+
+-- Preview buffers and window options.
+do
+  local fixture = vim.fn.tempname()
+  vim.fn.mkdir(fixture, "p")
+  local frontmatter_path = fixture .. "/frontmatter.md"
+  local plain_path = fixture .. "/plain.md"
+  vim.fn.writefile({ "---", "status: seed", "---", "# Frontmatter" }, frontmatter_path)
+  vim.fn.writefile({ "# Plain" }, plain_path)
+
+  local state = {}
+  local frontmatter_bufnr = dashboard._preview_buffer(state, frontmatter_path)
+  assert(vim.bo[frontmatter_bufnr].filetype == "markdown",
+    "preview detects markdown filetype for notes with frontmatter")
+  local plain_bufnr = dashboard._preview_buffer(state, plain_path)
+  assert(vim.bo[plain_bufnr].filetype == "markdown",
+    "preview detects markdown filetype for notes without frontmatter")
+  dashboard._release_preview_buffer(state)
+  dashboard._cleanup_opened_buffers(state.opened_buffers)
+
+  vim.cmd("vsplit")
+  local preview_winid = vim.api.nvim_get_current_win()
+  dashboard._configure_preview_window(preview_winid)
+  assert(vim.wo[preview_winid].previewwindow, "dashboard marks the note split as a preview window")
+  assert(vim.wo[preview_winid].winhighlight == "Normal:Normal,NormalNC:Normal",
+    "preview uses the normal editor background while inactive")
+  vim.api.nvim_win_close(preview_winid, true)
+
+  vim.fn.delete(fixture, "rf")
+end
+
+-- Opening notes keeps the dashboard visible.
+do
+  local fixture = vim.fn.tempname()
+  vim.fn.mkdir(fixture .. "/notes", "p")
+  vim.fn.writefile({ "# First" }, fixture .. "/notes/first.md")
+  vim.fn.writefile({ "# Second" }, fixture .. "/notes/second.md")
+  local context = require("obsidian_extension.context")
+  local original_vault_path = context.vault_path
+  context.vault_path = function() return fixture end
+  dashboard.setup({ show_aliases = false, sections = { { dir = "notes" } } })
+  local bufnr = dashboard.open()
+  local winid = vim.api.nvim_get_current_win()
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local function select_note(name)
+    vim.api.nvim_set_current_win(winid)
+    for row, line in ipairs(lines) do
+      if line:find("notes/" .. name .. ".md", 1, true) then
+        vim.api.nvim_win_set_cursor(winid, { row, 0 })
+        return
+      end
+    end
+    error("missing note: " .. name)
+  end
+  local function press(key)
+    vim.fn.maparg(key, "n", false, true).callback()
+  end
+  select_note("first")
+  press("<CR>")
+  local note_win = vim.api.nvim_get_current_win()
+  assert(note_win ~= winid, "notes open in a separate window")
+  assert(vim.api.nvim_win_get_buf(winid) == bufnr, "dashboard stays visible")
+  assert(vim.deep_equal(lines, vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)), "dashboard contents survive opening")
+  assert(vim.api.nvim_buf_get_name(0) == fixture .. "/notes/first.md", "selected note opens")
+  assert(vim.wo.foldexpr == vim.go.foldexpr, "note does not inherit dashboard fold expression")
+  select_note("second")
+  press("<CR>")
+  assert(vim.api.nvim_get_current_win() == note_win, "subsequent notes reuse the note window")
+  assert(#vim.api.nvim_tabpage_list_wins(0) == 2, "opening another note does not accumulate splits")
+  vim.api.nvim_win_close(note_win, true)
+  assert(vim.api.nvim_win_get_buf(winid) == bufnr, "closing the note leaves the dashboard")
+  select_note("first")
+  press("P")
+  press("<CR>")
+  assert(vim.api.nvim_win_get_buf(winid) == bufnr, "opening a previewed note preserves the dashboard")
+  assert(vim.bo.buflisted, "opened preview note becomes listed")
+  assert(not vim.wo.previewwindow, "opened note is an ordinary window")
+  assert(#vim.api.nvim_tabpage_list_wins(0) == 2, "preview is replaced with an editing split")
+  dashboard.close()
+  vim.wait(100, function() return not vim.api.nvim_buf_is_valid(bufnr) end)
+  assert(not dashboard.is_open(), "session closes from the note window")
+  vim.fn.delete(fixture, "rf")
+  context.vault_path = original_vault_path
+end
+
 print("ok - dashboard_spec")
