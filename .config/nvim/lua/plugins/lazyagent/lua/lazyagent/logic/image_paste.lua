@@ -558,10 +558,9 @@ local function normalize_image_path_text(text)
     end
   end
 
-  local ok_expand, expanded = pcall(vim.fn.expand, candidate)
-  if ok_expand and type(expanded) == "string" and expanded ~= "" then
-    candidate = expanded
-  end
+  -- Candidates come from arbitrary transcript text, including source code.
+  -- expand() can invoke a shell and expand braces/globs exponentially; only
+  -- normalize literal paths here (normalize also handles ~ and environment vars).
   local ok_normalize, normalized = pcall(vim.fs.normalize, candidate)
   if ok_normalize and type(normalized) == "string" and normalized ~= "" then
     candidate = normalized

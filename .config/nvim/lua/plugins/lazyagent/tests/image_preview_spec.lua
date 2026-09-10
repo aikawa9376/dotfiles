@@ -25,6 +25,8 @@ function M.run()
   local acp_bufnr
   local replacement_bufnr
   local image_path = vim.fn.tempname() .. ".png"
+  local literal_image_path = vim.fn.tempname() .. "-{left,right}.png"
+  local previous_expand = vim.fn.expand
 
   local function cleanup()
     local image_paste = package.loaded["lazyagent.logic.image_paste"]
@@ -42,7 +44,9 @@ function M.run()
     end
     package.loaded["snacks"] = previous_snacks
     state.opts.image_paste = previous_image_opts
+    vim.fn.expand = previous_expand
     vim.fn.delete(image_path)
+    vim.fn.delete(literal_image_path)
   end
 
   local ok, err = xpcall(function()
@@ -177,6 +181,23 @@ function M.run()
     assert(vim.wait(500, function()
       return #placements > acp_placement_count
     end, 10), "showing an ACP buffer recreates its preview")
+
+    -- Transcript code containing an image suffix must never enter shell globbing.
+    -- Stub expand so a regression cannot exhaust memory during the test itself.
+    local expand_calls = 0
+    vim.fn.expand = function(value)
+      expand_calls = expand_calls + 1
+      return value
+    end
+    vim.fn.writefile({ "literal-image-fixture" }, literal_image_path, "b")
+    vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, {
+      'json.loads({"code": "' .. string.rep("{left,right}", 32) .. '", "asset": "icon.svg"})',
+      "[image] @" .. literal_image_path .. " image/png",
+    })
+    image_paste.refresh_buffer_previews(acp_bufnr)
+    assert_equal(expand_calls, 0, "image candidates never invoke shell expansion")
+    assert_equal(placements[#placements].src, literal_image_path, "braces in image filenames stay literal")
+    vim.fn.expand = previous_expand
   end, debug.traceback)
 
   cleanup()
