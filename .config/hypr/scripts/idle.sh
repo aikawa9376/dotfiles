@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-# Preserve automatic display sleep, including DVI-I-1 while the KVM is away.
+# Only sleep while every configured monitor is present.
 exec swayidle -w \
-    timeout 600 "hyprctl dispatch 'hl.dsp.dpms({ action = \"disable\" })'" \
+    timeout 600 "hyprctl eval 'require(\"feature.idle\").sleep()'" \
     resume "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'" \
     after-resume "hyprctl dispatch 'hl.dsp.dpms({ action = \"enable\" })'"

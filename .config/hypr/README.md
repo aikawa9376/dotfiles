@@ -72,7 +72,7 @@ session.
   `hyprland.conf` syntax.
 - The GTX 970 proprietary driver already has DRM modeset and fbdev enabled.
   These are startup prerequisites, not a guarantee of DPMS/hotplug recovery;
-  see the local Aquamarine fix below.
+  see the conditional display sleep policy below.
 - The hardware KVM disconnects `DP-1`, `HDMI-A-1`, and its USB hub. Workspace
   placement rules are suspended while an output is absent and restored 1.5
   seconds after it returns. This preserves Sway-like migration/restoration and
@@ -85,10 +85,15 @@ session.
 
 ## Idle, suspend, and KVM wake-up
 
-Automatic display power-off after 10 minutes is required and remains enabled.
+Automatic display power-off after 10 minutes runs only when all three outputs
+in `settings.lua` are present. `feature/idle.lua` checks the current monitor
+list at the timeout; missing outputs or a failed IPC request skip power-off.
 The upper `DP-1` (workspace 1) and lower-right `HDMI-A-1` (workspace 3) switch
 through the KVM; lower-left `DVI-I-1` (workspace 2) stays connected to this PC
-and also sleeps during inactivity.
+and stays awake while either KVM output is absent. If an output is removed
+after display sleep, the remaining sleeping outputs are woken. Reconnection
+alone does not retry a skipped timeout: activity starts a fresh 10-minute idle
+period. Monitor presence/DPMS state does not prove healthy physical scanout.
 
 `scripts/idle.sh` wakes displays on activity and logind's system-resume event;
 it does not request system suspend. Explicit suspend remains available in the
@@ -110,43 +115,16 @@ test returned images on outputs 1 and 3 but accepted no input, while output 2
 stayed dark. That boot had no system suspend event, so actual system sleep is
 not required to reproduce the symptom. Automatic DPMS combined with hotplug is
 a suspect, not a proven root cause. Disabling automatic DPMS was rejected
-because it sacrifices required behavior. Disabling display animations also
+at that time. The current policy instead permits sleep only with all three
+outputs connected; this workaround still needs physical KVM testing. Disabling display animations also
 failed to fix the incident and has been reverted. NVIDIA memory preservation
 and suspend/resume services were already enabled; USB keyboard/mouse
 registration alone does not prove that Hyprland was processing input.
 
-### Local Aquamarine CRTC fix
+### KVM diagnostics
 
-The captured repeat test showed responsive Hyprland IPC and incoming libinput
-mouse events during the apparent freeze. DVI-I-1's sleeping CRTC 59 was released
-and given to HDMI-A-1 on KVM return; DVI-I-1 moved to 79. Atomic modesets then
-failed with `Invalid argument`, including DVI wake, despite IPC reporting DPMS
-on. This identifies a display-configuration failure, rather than evidence of a
-whole-compositor deadlock. The user confirmed a successful physical KVM/idle
-return with the local CRTC-retention library loaded and its opt-in enabled.
-This verifies the reported cycle, not every possible suspend/hotplug sequence.
-
-`patches/aquamarine-0.15.0-preserve-crtc.patch` keeps a connected, sleeping
-NVIDIA output's CRTC when `AQ_NVIDIA_PRESERVE_CRTC=1`. Disconnected outputs still
-release their assignments. This is specific to the three-output GTX 970 setup
-with four CRTCs; reserving sleeping outputs can limit hotplug on systems with
-too few CRTCs. It preserves real DPMS power-off.
-
-Build the isolated library with:
-
-```sh
-~/.config/hypr/scripts/build-aquamarine-kvm.sh
-```
-
-The script pins and checks the upstream source archive, applies the patch,
-builds it and runs the non-graphical upstream tests. It stores the result under
-the git-ignored `lib/` directory. `start` selects `lib/current` only while the
-installed Hyprland, Aquamarine and linked runtime-library package versions
-match the build stamp. After a package change it uses the system library until
-the patch is rebuilt
-or rebased. No system package is replaced. A session restart is required;
-config reload cannot replace an already loaded library. For rollback, start
-from a local TTY with `HYPRLAND_SYSTEM_AQUAMARINE=1 hyprland-start`.
+The local Aquamarine patch and build helper have been removed. Hyprland uses
+the system library; the conditional sleep policy needs no patch maintenance.
 
 If it happens again, try a keyboard connected directly to the PC or SSH from
 another machine. From a terminal with this session's Hyprland environment, use:
