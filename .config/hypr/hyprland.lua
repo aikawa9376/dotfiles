@@ -4,6 +4,7 @@
 -- Keep feature loading explicit so registration order is visible here.
 -- Hyprland resolves these modules relative to this configuration file.
 require("feature.monitors")
+require("feature.idle")
 require("feature.desktop")
 require("feature.keybindings")
 require("feature.win-edit")
