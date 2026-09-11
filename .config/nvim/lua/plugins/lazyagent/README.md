@@ -629,6 +629,18 @@ Cockpitの`t`は選択thread/worktreeのcwdでtest commandを非同期実行し�
 
 `:LazyAgentACPRegistry`は公式ACP Registry v1を取得し、agentを検索・登録・updateできます。npx/uvx distributionはversion-pinned launcherとしてdata directoryへ記録され、現在のNeovim設定にもACP agentとして追加されます。platform別binary distributionもmanaged data directoryへ展開し、公開されている場合はSHA-256を検証します。checksumがないarchiveは明示確認が必要です。
 
+Registry関連の実ファイルは`stdpath("data") .. "/lazyagent/acp/registry"`配下に保存されます。実際のdata directoryは`:echo stdpath('data')`で確認できます（Linuxの通常設定では`~/.local/share/nvim`）。
+
+| 相対path | 内容 |
+| --- | --- |
+| `installed.json` | 登録済みagentの正本。agent IDをkeyとし、version、distribution、起動command、envなどを保存。NeovimのLazyAgent setup時に読み込まれます。設定のLuaファイル自体は書き換えません。 |
+| `registry.json` | 取得した公式Registryのキャッシュ。登録情報とは別で、このファイルを削除してもagentの登録は解除されません。 |
+| `agents/<agent-id>/<version>/<platform>/` | binary distributionの展開先。`installed.json`の`command`に実行ファイルのpathが記録されます。 |
+
+npx/uvx distributionは登録時に起動commandを保存するだけで、package本体のglobal installは行いません。例えば`github-copilot-cli`は`npx -y @github/copilot@<version> --acp`として登録されます。起動時に取得される本体はnpm/uv側のキャッシュで管理され、上記の`agents/`配下には入りません。
+
+現在はRegistryの削除専用コマンドがありません。登録を解除するには、対象agentのsessionを終了してから`installed.json`の対象IDの項目を削除し、Neovimを再起動してください。他のagentの項目は残し、最後の1件を消す場合はファイル内容を`{}`にします。例えば`github-copilot-cli`の削除はそのIDの項目だけが対象です。binary本体も消す場合は、登録情報の`command`で展開先を確認し、対応する`agents/<agent-id>/`を削除します。npx/uvxのキャッシュは登録解除後も残りますが、登録解除のためにglobal uninstallやキャッシュ全体の削除は不要です。
+
 `acp.mcp_servers`（またはZed互換の`acp.context_servers`）へstdio/HTTP/SSE serverを設定すると、agent capabilityに応じて`session/new`、`session/load`、`session/resume`へforwardします。map形式の`env`/`headers`はACP v1のname/value listへ変換され、agent単位の同名server設定がglobal設定を上書きします。
 
 permission pickerではagent native optionに加え、Allow/Rejectをsession・project・global scopeで記憶できます。記憶ruleはtool/kind/path単位で、project/global ruleはdata directoryに保存されます。全判断はtool本文やenvを含めずJSONL auditへ記録され、`:LazyAgentACPPermissionAudit`で確認できます。`acp.permissions.audit = false`で記録を無効化し、`acp.permissions.dir`で保存先を変更できます。
