@@ -1,0 +1,21 @@
+# Sourced by tmux-resurrect's post-save-layout hook with the snapshot path in $1.
+# A failing external hook alone would not stop upstream save.sh.
+if ! awk -F '\t' '
+  $1 == "pane" {
+    panes[$2 SUBSEP $3] = 1
+    pane_count++
+  }
+  $1 == "window" {
+    if ($2 == "" || $3 == "" || $7 == "") invalid = 1
+    windows[$2 SUBSEP $3] = 1
+    window_count++
+  }
+  END {
+    if (!pane_count || !window_count || invalid) exit 1
+    for (key in panes) if (!(key in windows)) exit 1
+    for (key in windows) if (!(key in panes)) exit 1
+  }
+' "$1"; then
+  printf '%s\n' 'tmux-resurrect: save cancelled: missing windows, panes, or layouts; last was not updated.' >&2
+  exit 1
+fi
