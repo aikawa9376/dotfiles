@@ -112,12 +112,15 @@ local function exercise_provider_switch(base)
 end
 
 local function exercise_resession()
+  local alive = true
+  local resumed, resume_opts
+  local thread_id = "123e4567-e89b-42d3-a456-426614174099"
   local started
   local broke = 0
   local joined = 0
   local state = {
     sessions = {
-      Agent = { pane_id = "pane-1", backend = "buffer_acp", hidden = false, on_idle_callback = function() end },
+      Agent = { pane_id = "pane-1", backend = "buffer_acp", thread_id = thread_id, hidden = false, on_idle_callback = function() end },
     },
     session_views = {},
     open_agent = "Agent",
@@ -138,10 +141,15 @@ local function exercise_resession()
     session_view = function(name) return state.session_views[name] end,
     session_agents_for_name = function() return { "Agent" } end,
     resolve_saved_snapshot = function(_, snapshot)
-      return "buffer_acp", backend, true, { pane_id = snapshot.pane_id, backend = "buffer_acp" }
+      return "buffer_acp", backend, alive, { pane_id = snapshot.pane_id, backend = "buffer_acp" }
     end,
     current_editor_session_name = function() return "session-a" end,
     start_interactive_session = function(opts) started = opts.agent_name end,
+    open_thread = function(id, opts)
+      resumed, resume_opts = id, opts
+      opts.on_ready()
+      return true
+    end,
   })
 
   local snapshot = assert(runtime.resession_snapshot())
@@ -153,6 +161,18 @@ local function exercise_resession()
   assert(vim.wait(1000, function() return started == "Agent" end, 10), "resession reopens active agent")
   assert(state.sessions.Agent and state.sessions.Agent.session_scope == "session-a", "resession restores session")
   assert_equal(joined, 1, "resession rejoins visible pane")
+  runtime.resession_pre_load()
+  alive, started = false, nil
+  runtime.resession_post_load(snapshot)
+  assert(vim.wait(1000, function() return resumed ~= nil end, 10), "closed ACP pane reopens durable thread")
+  assert_equal(resumed, thread_id, "previous conversation is resumed by its saved thread ID")
+  assert_equal(started, nil, "closed pane does not start a new conversation")
+  assert(resume_opts.open_input and resume_opts.focus_agent_view and not resume_opts.stay_hidden)
+  resumed = nil
+  runtime.resession_post_load(snapshot)
+  runtime.resession_pre_load()
+  vim.wait(20)
+  assert_equal(resumed, nil, "another session load cancels queued conversation restoration")
 end
 
 local function exercise_two_instances(base)

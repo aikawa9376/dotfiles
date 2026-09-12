@@ -399,9 +399,21 @@ agent には `<code>...</code>` だけを返すよう指示します。parser �
 :'<,'>LazyAgentNote この範囲を共通関数にしてください
 ```
 
+Diffview／Fugitiveのレビュー用バッファや無名バッファにもNoteを付けられます。Fugitiveのcommit表示／`Git show`からのNoteは、`@<git-dir>//show/<commit>:<start>-<end>`で差分全体を参照します。LazyAgent内部で固定形式の`git show`（commitメタデータを除くpatch出力）を取得し、選択した表示行をその出力の行番号へ対応させます。`+`／`-`、hunk、ファイルをまたぐ選択も一つの範囲で送れます。ファイルごとに照合するため、別ファイルの同じ変更行とは区別します。
+
+DiffviewやFugitiveのファイル版は引き続き`@<git-dir>//<commit>/<path>:<line>`、ステージ版などは`@<git-dir>//blob/<保存時のblob OID>/<path>:<line>`で参照します。commitのないunified diffは変更前／変更後のblobへ解決し、両側をまたぐ選択など解決できないものは抜粋を添付します。参照できるNoteにはコード抜粋を送信しません。`#notes`には、その送信に含まれる参照形式の読み方と取得コマンドだけを一度追記します。
+
+visual選択からagent scratchを開くときも同じ解決処理を使います。commitの選択なら`//show/`参照と固定コマンドを入力欄へ入れます。通常ファイルは従来の`@path:line`形式で、参照を解決できないレビュー用bufferは選択内容を添付します。scratchを開くだけではNoteの追加・消費は行いません。
+
+一覧の`<CR>`はレビュー元を優先します。Diffviewは保存した比較条件で閉じたviewを開き直し、該当ファイル・side・行へ戻ります。Fugitiveのcommit表示／`Git show`からのNoteはそのcommit表示と該当diff行を開き直します。commit表示に紐づかないFugitiveのdiffは対象のFugitive blobを開きます。元のレビューを復元できない場合は保存時のblob、Gitオブジェクトを取得できない場合は本文・参照情報・抜粋のpreviewにフォールバックします。blob／commitの表示先は一覧より上の通常ウィンドウを優先し、なければ上にsplitを作ります。
+
+Noteが残っていれば、通常ファイル・Diffview・Fugitiveのbufferを閉じて開き直しても、ファイル／Gitオブジェクトの一致を確認してアイコン・範囲・本文previewを付け直します。元のdiffとblobの両方に表示でき、Note削除時は両方の印を消します。再接続はbufferの読込・表示時を中心に行い、最後のNoteを消すとイベント処理も解除します。参照元を特定できない無名bufferを新規作成した場合は、別bufferとして扱います。
+
 Note の位置は専用 extmark で保持するため、保存後に前方の行を編集しても対象範囲に追従します。既定では先頭行の文末にアイコンを表示し、単独行を含む対象範囲全体を `LazyAgentNoteRange` の控えめな背景色で示します。従来の sign column 表示は `notes.icon_position = "gutter"` で利用できます。本文はコード上へ描画せず、カーソルを止めると float preview が開きます。`:LazyAgentNoteShow` なら同じ float をfocusしてスクロールできます。Notes 一覧では `K` で本文を表示します。
 
-agent scratch で `#notes` を入力すると補完と preview が表示され、送信時には追加順の番号と `@path:line` / `@path:start-end` 形式の実指示へ展開されます。ファイルや行の位置にかかわらず追加順を維持するため、複数 Note を依頼の流れとして並べられます。`:LazyAgentNotes` の一覧も同じ追加順と番号を表示します。preview だけでは消えず、送信が受理されたときに展開対象の Notes が消えます。Notes は workspace ごとの Neovim session 内データで、ファイルには書き込みません。
+agent scratch で `#notes` を入力すると補完と preview が表示され、送信時には追加順の番号と `@path:line` / `@path:start-end` 形式の実指示へ展開されます。ファイルや行の位置にかかわらず追加順を維持するため、複数 Note を依頼の流れとして並べられます。`:LazyAgentNotes` の一覧も同じ追加順と番号を表示します。preview だけでは消えず、送信が受理されたときに展開対象の Notes が消えます。通常はworkspaceごとのメモリ上のデータです。Resessionの`lazyagent`拡張を有効にすると、セッション保存時に本文・参照・行範囲・表示設定を同じJSONの`lazyagent.notes`へ保存します。buffer番号やextmark IDは保存しません。復元はResession読込時だけ行い、セッション切替前のNotesを消して、buffer復元完了後に保存済みNotesと印を再構築します。Noteデータのない古いセッションは空として扱います。Neovim起動やファイルを開く操作だけでは保存済みNotesを読み込みません。
+
+このdotfilesの`:ResessionLoad`はcwdとGit branchで決まる前回のセッションを`stdpath("data")/dirsession`から読み込むラッパーで、終了時の保存にも同じResession拡張が使われます。agent panelは生存中のpaneへ再接続し、終了済みACPは保存されたthread IDから前回の会話を再開します。threadが見つからない／別のNeovimが所有している場合は、既存thread APIの判定に従います。
 
 ## ACP mode
 

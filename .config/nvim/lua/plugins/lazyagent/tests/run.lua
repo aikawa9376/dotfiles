@@ -19,6 +19,8 @@ local suites = {
   "tests.image_actions_spec",
   "tests.transforms_spec",
   "tests.notes_spec",
+  "tests.note_review_spec",
+  "tests.notes_session_spec",
   "tests.teams_spec",
   "tests.project_spec",
   "tests.installer_spec",
