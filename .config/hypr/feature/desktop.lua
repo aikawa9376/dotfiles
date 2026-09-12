@@ -23,7 +23,7 @@ hl.config({
             enabled = true,
             range = 10,
             render_power = 3,
-            color = 0x66000000,
+            color = "0x66000000",
         },
         blur = {
             enabled = true,
@@ -63,6 +63,6 @@ hl.animation({ leaf = "workspaces", enabled = true, speed = 4.0, bezier = "deskt
 -- Hyprland normalizes libinput names to lower-case, dash-separated identifiers.
 hl.device({
     name = "aikawa-keyball39ish-mouse",
-    accel_profile = "adaptive",
-    sensitivity = -0.3,
+    accel_profile = "flat",
+    sensitivity = 0.0,
 })
