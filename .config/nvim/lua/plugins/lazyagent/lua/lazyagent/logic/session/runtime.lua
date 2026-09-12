@@ -13,6 +13,7 @@ function M.setup(deps)
   local start_interactive_session = deps.start_interactive_session
 
   local module = {}
+  local load_generation = 0
   local ACP_SNAPSHOT_DROP_KEYS = {
     available_commands = true,
     config_options = true,
@@ -301,6 +302,7 @@ function M.setup(deps)
   end
 
   function module.resession_pre_load(_data)
+    load_generation = load_generation + 1
     local current = current_editor_session_name()
     if not current then
       return
@@ -321,6 +323,45 @@ function M.setup(deps)
     state.current_session_name = session_name
     state.session_views[session_name] = vim.deepcopy(data)
     module.restore_captured_session(session_name)
+    -- A persisted ACP pane ID is process-local. Reopen its durable thread when
+    -- no live runtime survived; the existing thread API enforces ownership.
+    load_generation = load_generation + 1
+    local generation = load_generation
+    local pending = {}
+    for agent_name, snapshot in pairs(data.agents or {}) do
+      if not state.sessions[agent_name] and type(snapshot) == "table"
+        and acp_logic.is_acp_backend(snapshot.backend) then
+        local thread_id = require("lazyagent.logic.session.identity").thread_id(agent_name, snapshot)
+          or snapshot.acp_thread_id
+        if thread_id then pending[#pending + 1] = { name = agent_name, thread_id = thread_id } end
+      end
+    end
+    table.sort(pending, function(a, b)
+      if a.name == data.open_agent then return false end
+      if b.name == data.open_agent then return true end
+      return a.name < b.name
+    end)
+    local index = 0
+    local function reopen_next()
+      if generation ~= load_generation or state.current_session_name ~= session_name then return end
+      index = index + 1
+      local saved = pending[index]
+      if not saved or not deps.open_thread then return end
+      local advanced = false
+      local function advance()
+        if advanced then return end
+        advanced = true
+        vim.schedule(reopen_next)
+      end
+      local ok, opened = pcall(deps.open_thread, saved.thread_id, {
+        stay_hidden = not (data.visible_agents or {})[saved.name],
+        focus_agent_view = saved.name == data.open_agent,
+        open_input = saved.name == data.open_agent,
+        on_ready = advance,
+      })
+      if not ok or opened == false then advance() end
+    end
+    if #pending > 0 then vim.schedule(reopen_next) end
     if data.open_agent and state.sessions[data.open_agent] and state.sessions[data.open_agent].pane_id then
       vim.schedule(function()
         if not (state.sessions[data.open_agent] and state.sessions[data.open_agent].pane_id) then

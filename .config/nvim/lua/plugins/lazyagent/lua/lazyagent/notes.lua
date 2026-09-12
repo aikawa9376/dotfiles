@@ -3,6 +3,7 @@ local M = {}
 local util = require("lazyagent.util")
 local state = require("lazyagent.logic.state")
 local scratch_input = require("lazyagent.scratch_input")
+local note_source = require("lazyagent.note_source")
 
 local namespace = vim.api.nvim_create_namespace("LazyAgentNotes")
 local entries = {}
@@ -12,6 +13,9 @@ local popup_buf
 local popup_win
 local popup_passive = false
 local editor_contexts = {}
+local lifecycle_group
+local refresh_pending = {}
+local refresh_ticks = {}
 
 local function normalize(path)
   if not path or path == "" then return "" end
@@ -36,7 +40,9 @@ local function context(opts)
   opts = opts or {}
   local bufnr = source_bufnr(opts.source_bufnr or opts.bufnr)
   local path = normalize(opts.path or (vim.api.nvim_buf_is_valid(bufnr) and vim.api.nvim_buf_get_name(bufnr) or ""))
-  return bufnr, path, root_for(bufnr, path, opts.root)
+  local root = root_for(bufnr, path, opts.root)
+  local source = vim.api.nvim_buf_is_valid(bufnr) and note_source.capture(bufnr, root) or nil
+  return bufnr, path, opts.root and root or (source and source.root or root), source
 end
 
 local function position(entry)
@@ -54,6 +60,7 @@ local function position(entry)
 end
 
 local function display_path(entry)
+  if entry.source then return entry.source.path or entry.source.name end
   local prefix = entry.root ~= "" and (entry.root .. "/") or ""
   if prefix ~= "" and entry.path:sub(1, #prefix) == prefix then
     return entry.path:sub(#prefix + 1)
@@ -62,9 +69,14 @@ local function display_path(entry)
 end
 
 local function ref_for(entry)
+  local reference = note_source.reference(entry.source)
   local start_line, end_line = position(entry)
+  if reference then
+    start_line = entry.source.start_line or entry.saved_start_line or entry.start_line
+    end_line = entry.source.end_line or entry.saved_end_line or entry.end_line
+  end
   local suffix = start_line == end_line and tostring(start_line) or string.format("%d-%d", start_line, end_line)
-  return string.format("@%s:%s", display_path(entry), suffix)
+  return string.format("@%s:%s", reference or display_path(entry), suffix)
 end
 
 local function matching(root)
@@ -78,6 +90,7 @@ end
 
 local function ensure_highlights()
   vim.api.nvim_set_hl(0, "LazyAgentNoteSign", { link = "DiagnosticInfo", default = true })
+  vim.api.nvim_set_hl(0, "LazyAgentNoteLineNr", { link = "DiagnosticInfo", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentNoteRange", { link = "CursorLine", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentNoteText", { link = "Comment", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentNoteHeader", { link = "Title", default = true })
@@ -106,6 +119,7 @@ local function create_marks(bufnr, start_line, end_line, opts)
     right_gravity = false,
     end_right_gravity = false,
     hl_group = "LazyAgentNoteRange",
+    number_hl_group = "LazyAgentNoteLineNr",
     hl_eol = true,
     priority = 40,
   })
@@ -151,17 +165,111 @@ local function popup_size(lines, max_height_ratio)
   return width, math.min(math.max(3, visual_rows), max_height)
 end
 
+local function binding_position(bufnr, binding)
+  local mark = vim.api.nvim_buf_get_extmark_by_id(bufnr, namespace, binding.marks[1], { details = true })
+  if #mark < 2 then return end
+  return mark[1] + 1, math.max(mark[1] + 1, (mark[3] or {}).end_row or mark[1] + 1)
+end
+
+local function bind(entry, bufnr, first, last)
+  entry.bindings = entry.bindings or {}
+  local existing = entry.bindings[bufnr]
+  if existing then
+    for i = 1, 3 do pcall(vim.api.nvim_buf_del_extmark, bufnr, namespace, existing.marks[i]) end
+  end
+  local count = vim.api.nvim_buf_line_count(bufnr)
+  first, last = math.max(1, math.min(first, count)), math.max(1, math.min(last, count))
+  local marks = { create_marks(bufnr, first, last, { icon_position = entry.icon_position, icon = entry.icon }) }
+  entry.bindings[bufnr] = { marks = marks }
+  if bufnr == entry.bufnr then
+    entry.mark_id, entry.background_mark_id, entry.icon_mark_id = marks[1], marks[2], marks[3]
+  end
+end
+
 local function entries_at(bufnr, lnum)
-  local path = normalize(vim.api.nvim_buf_get_name(bufnr))
   local found = {}
   for _, entry in pairs(entries) do
-    local start_line, end_line = position(entry)
-    if entry.path == path and lnum >= start_line and lnum <= end_line then
-      found[#found + 1] = entry
+    local binding = entry.bindings and entry.bindings[bufnr]
+    if binding then
+      local first, last = binding_position(bufnr, binding)
+      if first and lnum >= first and lnum <= last then found[#found + 1] = entry end
     end
   end
   table.sort(found, function(a, b) return a.id < b.id end)
   return found
+end
+
+-- Reattach only on buffer lifecycle events, never on cursor movement. Git
+-- identity is captured once per candidate buffer, and repeated events coalesce.
+function M.refresh_buffer(bufnr)
+  if not next(entries) or not vim.api.nvim_buf_is_loaded(bufnr) then return end
+  local name = vim.api.nvim_buf_get_name(bufnr)
+  local path = normalize(name)
+  local ft = vim.bo[bufnr].filetype
+  local diff = ft == "git" or ft == "fugitive"
+  local candidate_source, captured
+  for _, entry in pairs(entries) do
+    local source = entry.source
+    local binding = entry.bindings[bufnr]
+    if not binding or not binding_position(bufnr, binding) then
+      local first, last
+      if not source and path == entry.path then
+        first, last = entry.start_line, entry.end_line
+        entry.bufnr = bufnr
+      elseif source and source.kind ~= "buffer" then
+        if diff and source.inline_diff then
+          first, last = note_source.diff_range(bufnr, source, entry.excerpt)
+        elseif not diff and (name:match("^fugitive://") or name:match("^diffview://")
+          or vim.b[bufnr].lazyagent_note_source or path == normalize(source.root .. "/" .. (source.path or ""))) then
+          if not captured then
+            candidate_source = note_source.capture(bufnr, entry.root)
+            captured = true
+          end
+          if note_source.same(source, candidate_source) or (not candidate_source and not source.blob
+            and source.revision == "working-tree" and path == normalize(source.root .. "/" .. (source.path or ""))) then
+            first = source.start_line or entry.saved_start_line
+            last = source.end_line or entry.saved_end_line
+          end
+        end
+      end
+      if first then bind(entry, bufnr, first, last) end
+    end
+  end
+end
+
+local function setup_lifecycle()
+  if lifecycle_group then return end
+  lifecycle_group = vim.api.nvim_create_augroup("LazyAgentNotesLifecycle", { clear = true })
+  vim.api.nvim_create_autocmd({ "BufReadPost", "BufWinEnter", "FileType", "TextChanged" }, {
+    group = lifecycle_group,
+    callback = function(args)
+      if not next(entries) or refresh_pending[args.buf] then return end
+      if args.event == "TextChanged" and not vim.tbl_contains({ "git", "fugitive" }, vim.bo[args.buf].filetype) then return end
+      refresh_pending[args.buf] = true
+      vim.schedule(function()
+        refresh_pending[args.buf] = nil
+        if not next(entries) or not vim.api.nvim_buf_is_loaded(args.buf) then return end
+        local tick = table.concat({ vim.api.nvim_buf_get_changedtick(args.buf), vim.bo[args.buf].filetype, vim.api.nvim_buf_get_name(args.buf) }, ":")
+        if refresh_ticks[args.buf] == tick then return end
+        refresh_ticks[args.buf] = tick
+        M.refresh_buffer(args.buf)
+      end)
+    end,
+  })
+  vim.api.nvim_create_autocmd({ "BufUnload", "BufWipeout" }, {
+    group = lifecycle_group,
+    callback = function(args)
+      refresh_ticks[args.buf] = nil
+      for _, entry in pairs(entries) do
+        local binding = entry.bindings[args.buf]
+        if binding then
+          local first, last = binding_position(args.buf, binding)
+          if first and not entry.source then entry.start_line, entry.end_line = first, last end
+          entry.bindings[args.buf] = nil
+        end
+      end
+    end,
+  })
 end
 
 local function popup_lines(note_entries)
@@ -170,6 +278,12 @@ local function popup_lines(note_entries)
     if index > 1 then vim.list_extend(lines, { "", "---", "" }) end
     lines[#lines + 1] = "## " .. ref_for(entry):sub(2)
     lines[#lines + 1] = ""
+    if entry.source then
+      lines[#lines + 1] = note_source.describe(entry.source)
+      vim.list_extend(lines, { "", "Selected code (captured when noted):", "```" })
+      vim.list_extend(lines, entry.excerpt or {})
+      vim.list_extend(lines, { "```", "" })
+    end
     vim.list_extend(lines, vim.split(entry.text, "\n", { plain = true }))
   end
   return lines
@@ -246,9 +360,9 @@ end
 
 function M.add(opts)
   opts = opts or {}
-  local bufnr, path, root = context(opts)
-  if not vim.api.nvim_buf_is_valid(bufnr) or path == "" or vim.bo[bufnr].buftype ~= "" then
-    return nil, "Notes require a named file buffer"
+  local bufnr, path, root, source = context(opts)
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    return nil, "Notes require a loaded buffer"
   end
   local text = vim.trim(tostring(opts.text or ""))
   if text == "" then return nil, "Note text is empty" end
@@ -257,6 +371,8 @@ function M.add(opts)
   local start_line = math.max(1, math.min(tonumber(opts.start_line) or 1, line_count))
   local end_line = math.max(1, math.min(tonumber(opts.end_line) or start_line, line_count))
   if start_line > end_line then start_line, end_line = end_line, start_line end
+  source = note_source.capture(bufnr, root, start_line, end_line)
+  root = opts.root and root or (source and source.root or root)
   ensure_highlights()
 
   local mark_id, background_mark_id, icon_mark_id, icon_position = create_marks(
@@ -266,6 +382,8 @@ function M.add(opts)
     opts
   )
   local entry = {
+    source = source,
+    excerpt = source and vim.api.nvim_buf_get_lines(bufnr, start_line - 1, end_line, false) or nil,
     id = next_id,
     bufnr = bufnr,
     path = path,
@@ -277,10 +395,16 @@ function M.add(opts)
     background_mark_id = background_mark_id,
     icon_mark_id = icon_mark_id,
     icon_position = icon_position,
+    icon = select(2, visual_options(opts)),
+    saved_start_line = start_line,
+    saved_end_line = end_line,
+    bindings = { [bufnr] = { marks = { mark_id, background_mark_id, icon_mark_id } } },
   }
   next_id = next_id + 1
   entries[entry.id] = entry
   setup_hover_preview()
+  setup_lifecycle()
+  refresh_ticks = {}
   return vim.deepcopy(entry)
 end
 
@@ -303,6 +427,97 @@ function M.show(id)
   return open_popup({ entry }, { focus = true, relative = "editor" })
 end
 
+local function open_above(target, line)
+  for _, win in ipairs(vim.fn.win_findbuf(target)) do
+    if vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_set_current_win(win)
+      vim.api.nvim_win_set_cursor(win, { math.max(1, math.min(line, vim.api.nvim_buf_line_count(target))), 0 })
+      M.refresh_buffer(target)
+      return true
+    end
+  end
+  local current = vim.api.nvim_get_current_win()
+  local top = vim.api.nvim_win_get_position(current)[1]
+  local chosen
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    local config = vim.api.nvim_win_get_config(win)
+    local row = vim.api.nvim_win_get_position(win)[1]
+    if win ~= current and config.relative == "" and row < top
+      and not list_state[buf] and not vim.wo[win].diff
+      and (vim.bo[buf].buftype == "" or vim.b[buf].lazyagent_note_source) then
+      if not chosen or row > vim.api.nvim_win_get_position(chosen)[1] then chosen = win end
+    end
+  end
+  if chosen then
+    vim.api.nvim_set_current_win(chosen)
+  else
+    vim.cmd("aboveleft split")
+  end
+  vim.api.nvim_win_set_buf(0, target)
+  M.refresh_buffer(target)
+  vim.api.nvim_win_set_cursor(0, { math.max(1, math.min(line, vim.api.nvim_buf_line_count(target))), 0 })
+  return true
+end
+
+function M.jump(id, opts)
+  opts = opts or {}
+  local entry = entries[tonumber(id)]
+  if not entry then return false end
+  if not entry.source then return util.open_in_normal_win(entry.path, { line = position(entry) }) end
+  local source = entry.source
+  local saved_line = source.start_line or entry.saved_start_line
+  local ok, jumped = pcall(note_source.jump_diffview, source, saved_line)
+  if ok and jumped then return true end
+  if not opts.fallback then
+    if note_source.reopen_diffview(source, saved_line, function()
+      if entries[entry.id] then M.jump(entry.id, { fallback = true }) end
+    end) then return true end
+    if source.review_commit then
+      local review = note_source.fugitive_buffer(source, true)
+      if review then
+        local row = note_source.diff_range(review, source, entry.excerpt)
+        if row then return open_above(review, row) end
+      end
+    end
+  end
+  if source.kind == "fugitive" and source.blob then
+    local blob = note_source.fugitive_buffer(source, false)
+    if blob then return open_above(blob, saved_line) end
+  end
+  local target = entry.bufnr
+  local line = position(entry)
+  if not source.inline_diff and target and vim.api.nvim_buf_is_loaded(target) then
+    for _, win in ipairs(vim.fn.win_findbuf(target)) do
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_set_current_win(win)
+        vim.api.nvim_win_set_cursor(win, { math.min(line, vim.api.nvim_buf_line_count(target)), 0 })
+        return true
+      end
+    end
+    if not source.inline_diff then return open_above(target, line) end
+  end
+  target = entry.restored_bufnr
+  if not target or not vim.api.nvim_buf_is_loaded(target) then
+    local restored, lines = pcall(note_source.restore, source)
+    if not restored or not lines then return M.show(id) end
+    target = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(target, 0, -1, false, lines)
+    vim.bo[target].filetype = source.filetype
+    vim.bo[target].modifiable = false
+    vim.bo[target].readonly = true
+    vim.bo[target].bufhidden = "wipe"
+    local restored_source = vim.deepcopy(source)
+    restored_source.inline_diff = nil
+    restored_source.start_line, restored_source.end_line = nil, nil
+    vim.b[target].lazyagent_note_source = restored_source
+    local last = source.end_line or entry.end_line
+    entry.restored_bufnr = target
+    bind(entry, target, math.min(saved_line, #lines), math.min(last, #lines))
+  end
+  return open_above(target, saved_line)
+end
+
 function M.submit_editor(bufnr)
   return scratch_input.submit(bufnr)
 end
@@ -310,8 +525,8 @@ end
 function M.open_editor(opts)
   opts = opts or {}
   local bufnr, path = context(opts)
-  if not vim.api.nvim_buf_is_valid(bufnr) or path == "" or vim.bo[bufnr].buftype ~= "" then
-    vim.notify("LazyAgentNote: Notes require a named file buffer", vim.log.levels.ERROR)
+  if not vim.api.nvim_buf_is_valid(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then
+    vim.notify("LazyAgentNote: Notes require a loaded buffer", vim.log.levels.ERROR)
     return nil
   end
   local line_count = math.max(1, vim.api.nvim_buf_line_count(bufnr))
@@ -353,6 +568,7 @@ function M.open_editor(opts)
     bufnr = bufnr,
     start_line = start_line,
     end_line = end_line,
+    root = opts.root,
   }
   return editor_buf, winid
 end
@@ -371,11 +587,21 @@ function M.render(opts)
     "Address the following saved code Notes. Investigate and answer questions, and carry out instructions.",
     "",
   }
+  local sources = {}
+  for _, entry in ipairs(notes) do if entry.source then sources[#sources + 1] = entry.source end end
+  local instructions = note_source.instructions(sources)
+  if #instructions > 0 then vim.list_extend(lines, instructions); lines[#lines + 1] = "" end
   local ids = {}
   for index, entry in ipairs(notes) do
     local prefix = string.format("%d. ", index)
     local text = entry.text:gsub("\n", "\n" .. string.rep(" ", #prefix))
     lines[#lines + 1] = prefix .. ref_for(entry) .. " " .. text
+    if entry.source and not note_source.reference(entry.source) then
+      lines[#lines + 1] = "   Reference: " .. note_source.describe(entry.source)
+      lines[#lines + 1] = "   This is a review reference; investigate the current code before applying changes."
+      lines[#lines + 1] = "   Selected code (captured when noted):"
+      for _, line in ipairs(entry.excerpt or {}) do lines[#lines + 1] = "       " .. line end
+    end
     ids[#ids + 1] = entry.id
   end
   return table.concat(lines, "\n"), ids
@@ -384,12 +610,17 @@ end
 function M.remove(id)
   local entry = entries[tonumber(id)]
   if not entry then return false end
-  if entry.bufnr and vim.api.nvim_buf_is_valid(entry.bufnr) then
-    for _, key in ipairs({ "mark_id", "background_mark_id", "icon_mark_id" }) do
-      if entry[key] then pcall(vim.api.nvim_buf_del_extmark, entry.bufnr, namespace, entry[key]) end
+  for buf, binding in pairs(entry.bindings) do
+    if vim.api.nvim_buf_is_valid(buf) then
+      for i = 1, 3 do pcall(vim.api.nvim_buf_del_extmark, buf, namespace, binding.marks[i]) end
     end
   end
   entries[entry.id] = nil
+  if not next(entries) then
+    if lifecycle_group then vim.api.nvim_del_augroup_by_id(lifecycle_group); lifecycle_group = nil end
+    pcall(vim.api.nvim_del_augroup_by_name, "LazyAgentNotesPreview")
+    refresh_ticks = {}
+  end
   return true
 end
 
@@ -442,7 +673,8 @@ function M.open(opts)
   vim.cmd("botright split")
   local bufnr = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(0, bufnr)
-  vim.api.nvim_buf_set_name(bufnr, "lazyagent://notes")
+  vim.api.nvim_buf_set_name(bufnr, "lazyagent://notes/" .. bufnr)
+  vim.b[bufnr].lazyagent_note_source = { kind = "buffer", root = root, name = "Notes list" }
   vim.bo[bufnr].buftype = "nofile"
   vim.bo[bufnr].bufhidden = "wipe"
   vim.bo[bufnr].swapfile = false
@@ -456,7 +688,7 @@ function M.open(opts)
   vim.keymap.set("n", "<CR>", function()
     local state = list_state[bufnr]
     local entry = state and entries[state.line_map[vim.api.nvim_win_get_cursor(0)[1]]]
-    if entry then util.open_in_normal_win(entry.path, { line = position(entry) }) end
+    if entry then M.jump(entry.id) end
   end, map_opts)
   vim.keymap.set("n", "d", function()
     local state = list_state[bufnr]
@@ -473,6 +705,63 @@ function M.open(opts)
     refresh_list(bufnr, root)
   end, map_opts)
   return bufnr
+end
+
+-- Resession owns persistence. Never serialize buffer/window/extmark IDs.
+local saved_fields = { "path", "root", "text", "excerpt", "icon", "icon_position",
+  "start_line", "end_line", "saved_start_line", "saved_end_line" }
+local source_fields = { "kind", "root", "path", "revision", "side", "name", "git_dir",
+  "filetype", "blob", "inline_diff", "review_commit", "show", "review_args", "start_line", "end_line" }
+
+local function copy_saved(entry)
+  local saved = {}
+  for _, key in ipairs(saved_fields) do saved[key] = vim.deepcopy(entry[key]) end
+  if entry.source then
+    saved.source = {}
+    for _, key in ipairs(source_fields) do saved.source[key] = vim.deepcopy(entry.source[key]) end
+  end
+  return saved
+end
+
+function M.snapshot()
+  local ordered = vim.tbl_values(entries)
+  table.sort(ordered, function(a, b) return a.id < b.id end)
+  local result = { version = 1, entries = {} }
+  for _, entry in ipairs(ordered) do
+    local saved = copy_saved(entry)
+    saved.start_line, saved.end_line = position(entry)
+    result.entries[#result.entries + 1] = saved
+  end
+  return result
+end
+
+function M.restore(snapshot)
+  M._reset()
+  if type(snapshot) ~= "table" or snapshot.version ~= 1 or type(snapshot.entries) ~= "table" then return 0 end
+  for _, saved in ipairs(snapshot.entries) do
+    if type(saved) == "table" and type(saved.text) == "string" and saved.text ~= ""
+      and type(saved.root) == "string" and type(saved.path) == "string"
+      and type(saved.start_line) == "number" and saved.start_line >= 1
+      and type(saved.end_line) == "number" and saved.end_line >= saved.start_line
+      and (saved.source == nil or type(saved.source) == "table") then
+      local entry = copy_saved(saved)
+      entry.id, entry.bindings = next_id, {}
+      entry.saved_start_line = entry.saved_start_line or entry.start_line
+      entry.saved_end_line = entry.saved_end_line or entry.end_line
+      entries[next_id] = entry
+      next_id = next_id + 1
+    end
+  end
+  if next(entries) then
+    ensure_highlights()
+    setup_hover_preview()
+    setup_lifecycle()
+    refresh_ticks = {}
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_loaded(buf) then M.refresh_buffer(buf) end
+    end
+  end
+  return #vim.tbl_keys(entries)
 end
 
 function M._reset()

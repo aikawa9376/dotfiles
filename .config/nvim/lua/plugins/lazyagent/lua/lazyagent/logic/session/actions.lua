@@ -594,17 +594,8 @@ function M.setup(deps)
         local start_line = start_pos and start_pos[2] or nil
         local end_line = cursor and cursor[1] or nil
 
-        local file_path = vim.api.nvim_buf_get_name(0)
-        if file_path and file_path ~= "" then
-          file_path = vim.fn.fnamemodify(file_path, ":.")
-        end
-
-        if file_path and file_path ~= "" and start_line > 0 and end_line > 0 then
-          if start_line == end_line then
-            initial_input = string.format("@%s:%d", file_path, start_line)
-          else
-            initial_input = string.format("@%s:%d-%d", file_path, start_line, end_line)
-          end
+        if start_line and end_line and start_line > 0 and end_line > 0 then
+          initial_input = require("lazyagent.note_source").selection_text(vim.api.nvim_get_current_buf(), start_line, end_line)
         end
       end
 

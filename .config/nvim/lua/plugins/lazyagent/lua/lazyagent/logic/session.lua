@@ -72,6 +72,9 @@ local runtime = session_runtime.setup({
   session_agents_for_name = session_acp.session_agents_for_name,
   resolve_saved_snapshot = session_acp.resolve_saved_snapshot,
   current_editor_session_name = session_acp.current_editor_session_name,
+  open_thread = function(thread_id, opts)
+    return M.open_acp_thread(thread_id, opts)
+  end,
   start_interactive_session = function(opts)
     return M.start_interactive_session(opts)
   end,
