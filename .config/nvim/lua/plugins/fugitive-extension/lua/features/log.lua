@@ -3,6 +3,7 @@ local utils = require("fugitive_utils")
 local commands = require("features.commands")
 local help = require("features.help")
 local notes = require("features.notes")
+local commit_body = require('features.commit_body')
 local commit_highlight = require("features.commit_highlight")
 
 local shortstat_cache = {}
@@ -222,6 +223,7 @@ refresh_log_list = function(bufnr)
     return line:match('^(%x+)')
   end)
   load_shortstats(bufnr, work_tree, missing_hashes or {})
+  commit_body.refresh(bufnr)
 end
 
 local function open_log_list(opts)
@@ -259,6 +261,7 @@ local function show_log_help()
     'd           Diffview commit (or file if detected)',
     'C           commit info float',
     'gn / gN     show / edit Git note',
+    'gk          show commit message body',
     'O           Octo PR from commit',
     '<C-y>       copy short hash',
     '<Leader>cf  fixup commit into parent',
@@ -294,6 +297,7 @@ function M.setup(group)
     pattern = 'fugitivelog',
     callback = function(ev)
       local buf_group = vim.api.nvim_create_augroup('fugitive_log_buf_' .. ev.buf, { clear = true })
+      commit_body.attach(ev.buf)
       -- Syntax highlighting
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false
