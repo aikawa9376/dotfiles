@@ -777,6 +777,11 @@ end
 
 local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
 local attached_refreshers = {}
+local highlight_group = vim.api.nvim_create_augroup('FugitiveExtensionHighlights', { clear = true })
+vim.api.nvim_create_autocmd('ColorScheme', {
+  group = highlight_group,
+  callback = Highlighter.setup_groups,
+})
 
 function M.refresh(bufnr)
   local refresh = attached_refreshers[bufnr]
@@ -817,15 +822,17 @@ end
 
 function M.attach(bufnr)
   if not vim.api.nvim_buf_is_valid(bufnr) then return end
+  if attached_refreshers[bufnr] then return end
 
   Highlighter.setup_groups()
-  vim.api.nvim_create_autocmd('ColorScheme', { callback = Highlighter.setup_groups })
+  local group = vim.api.nvim_create_augroup('FugitiveExtensionSyntax' .. bufnr, { clear = true })
+  local active = true
 
   local legacy_regions = {}
   local refresh_scheduled = false
 
   local function refresh()
-    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    if not active or not vim.api.nvim_buf_is_loaded(bufnr) then return end
     vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 
     for _, region in ipairs(legacy_regions) do
@@ -855,15 +862,19 @@ function M.attach(bufnr)
   end
 
   vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI'}, {
+    group = group,
     buffer = bufnr,
     callback = schedule_refresh,
   })
 
-  vim.api.nvim_create_autocmd('BufWipeout', {
+  vim.api.nvim_create_autocmd({ 'BufUnload', 'BufWipeout' }, {
+    group = group,
     buffer = bufnr,
     once = true,
     callback = function()
+      active = false
       attached_refreshers[bufnr] = nil
+      pcall(vim.api.nvim_del_augroup_by_id, group)
     end,
   })
 end

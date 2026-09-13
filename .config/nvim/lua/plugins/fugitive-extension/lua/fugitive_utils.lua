@@ -361,6 +361,16 @@ function M.setup_repo_refresh(group, bufnr, refresh, opts)
     pattern = 'FugitiveChanged',
     callback = maybe_refresh,
   })
+
+  -- User autocmds are not buffer-local: wiping their buffer does not remove them.
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    group = group,
+    buffer = bufnr,
+    once = true,
+    callback = function()
+      pcall(vim.api.nvim_del_augroup_by_id, group)
+    end,
+  })
 end
 
 ---@param work_tree string|nil

@@ -231,10 +231,12 @@ function M.setup()
     local work_tree = get_work_tree_from_fugitive()
     if not work_tree then return end
 
+    local finish_progress = require('features.push_progress').start(work_tree)
     local output_lines = {}
-    vim.fn.jobstart("git -C " .. vim.fn.shellescape(work_tree) .. " push --force-with-lease", {
+    local started, job = pcall(vim.fn.jobstart, "git -C " .. vim.fn.shellescape(work_tree) .. " push --force-with-lease", {
       on_exit = function(_, exit_code)
         vim.schedule(function()
+          finish_progress()
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
             vim.notify("Push successful", vim.log.levels.INFO)
@@ -266,6 +268,11 @@ function M.setup()
         end
       end,
     })
+    if not started or job <= 0 then
+      finish_progress()
+      vim.notify('Failed to start push: ' .. tostring(job), vim.log.levels.ERROR)
+      if on_complete then on_complete(-1) end
+    end
   end
 
   vim.api.nvim_create_user_command("GitPush", function()

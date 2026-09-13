@@ -309,6 +309,7 @@ function M.snapshot_async(bufnr, work_tree, opts, callback)
   }, { cwd = work_tree, text = true }, function(result)
     vim.schedule(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then return end
+      if opts and opts.is_current and not opts.is_current() then return end
       local model, err = parse_status_result(work_tree, result)
       if not model then callback(nil, err); return end
       model.push = model.upstream
