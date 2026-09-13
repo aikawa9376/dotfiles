@@ -25,6 +25,7 @@ local status_snapshot_by_buf = {}
 local status_initialized_by_buf = {}
 local status_dirty_by_buf = {}
 local status_reload_by_buf = {}
+local pending_status_focus_by_buf = {}
 
 local status_heading_highlights = {
   { '^Head:', 'RainbowDelimiterBlue' },
@@ -567,6 +568,11 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
   end, 5)
   restore_status_cursors(bufnr, cursor_anchors)
   require('features.push_progress').render(bufnr)
+  local focus = pending_status_focus_by_buf[bufnr]
+  if focus then
+    pending_status_focus_by_buf[bufnr] = nil
+    M.focus_section(bufnr, focus, { refresh = false })
+  end
 end
 
 local function get_stash_ref_at_cursor(bufnr)
@@ -1193,6 +1199,7 @@ function M.setup(group)
           status_initialized_by_buf[b] = nil
           status_dirty_by_buf[b] = nil
           status_reload_by_buf[b] = nil
+          pending_status_focus_by_buf[b] = nil
           pull_requests_by_buf[b] = nil
           pull_request_scope_by_buf[b] = nil
           pull_request_branch_by_buf[b] = nil
@@ -1227,7 +1234,7 @@ function M.setup(group)
           local anchor = status_cursor_anchor_by_buf[b]
           if anchor then
             vim.schedule(function()
-              if is_live() then restore_status_cursor(b, anchor, winid) end
+              if is_live() then restore_status_cursor(b, status_cursor_anchor_by_buf[b] or anchor, winid) end
             end)
           end
         end,
@@ -1931,7 +1938,8 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Collapse selected inline diffs' })
 
       for key, section in pairs({
-        gu = 'untracked',
+        gu = 'unstaged',
+        gU = 'untracked',
         gs = 'staged',
         gp = 'unpushed',
         gP = 'unpulled',
@@ -2094,7 +2102,7 @@ function M.setup(group)
         end)
       end
 
-      vim.keymap.set('n', 'gU', show_index_flag_actions,
+      vim.keymap.set('n', 'gx', show_index_flag_actions,
         { buffer = b, nowait = true, silent = true, desc = 'Manage update-index flags' })
 
       vim.keymap.set('n', 'X', function()
@@ -2303,13 +2311,13 @@ function M.setup(group)
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open worktree' },
             { key = 'X', label = 'Remove worktree' },
-            { key = 'gs', label = 'Sync current worktree to primary' },
+            { key = 'gws', label = 'Sync current worktree to primary' },
             { key = 'W', label = 'Open worktree list' },
           } }
         end
         if kind == 'worktrees_header' then
           return { title = context.label, actions = {
-            { key = 'gs', label = 'Sync current worktree to primary' },
+            { key = 'gws', label = 'Sync current worktree to primary' },
             { key = 'W', label = 'Open worktree list' },
           } }
         end
@@ -2331,19 +2339,19 @@ function M.setup(group)
             { key = '<CR>', label = 'Open flagged file' },
             { key = 'd', label = 'Diff worktree file against index' },
             { key = 'X', label = 'Clear index flag' },
-            { key = 'gU', label = 'Change index flag' },
+            { key = 'gx', label = 'Change index flag' },
           } }
         end
         if kind == 'index_flags_warning' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Reveal hidden changes' },
-            { key = 'gU', label = 'Manage update-index flags' },
+            { key = 'gx', label = 'Manage update-index flags' },
           } }
         end
         if kind == 'index_flags_header' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Expand / collapse index flags' },
-            { key = 'gU', label = 'Manage update-index flags' },
+            { key = 'gx', label = 'Manage update-index flags' },
           } }
         end
 
@@ -2368,6 +2376,9 @@ function M.setup(group)
 
       local function repository_action_group(context, health, current_operation)
         local actions = {
+          { key = 'gu', label = 'Go to unstaged changes' },
+          { key = 'gU', label = 'Go to untracked files' },
+          { key = 'gs', label = 'Go to staged changes' },
           { key = 'cc', label = 'Commit staged changes' },
           { key = 'ca', label = 'Amend commit' },
           { key = 'ce', label = 'Amend without editing message' },
@@ -2383,7 +2394,7 @@ function M.setup(group)
           and context.kind ~= 'index_flags_warning'
           and context.kind ~= 'index_flags_header'
         then
-          table.insert(actions, { key = 'gU', label = 'Manage update-index flags' })
+          table.insert(actions, { key = 'gx', label = 'Manage update-index flags' })
         end
         if health and not health.detached then table.insert(actions, { key = 'mU', label = 'Set branch upstream' }) end
         if health and health.upstream and not health.upstream.gone then
@@ -2617,7 +2628,7 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Open git branch list' })
       vim.keymap.set('n', 'W', '<Cmd>Gworktree<CR>',
         { buffer = b, nowait = true, silent = true, desc = 'Open git worktree list' })
-      vim.keymap.set('n', 'gs', function()
+      vim.keymap.set('n', 'gws', function()
         worktree.sync_current_worktree_to_primary()
       end, { buffer = b, nowait = true, silent = true, desc = 'Sync current worktree to primary' })
 
@@ -2800,6 +2811,8 @@ function M.focus_section(bufnr, section, opts)
       if line:match(pattern) then
         local target = row < #lines and lines[row + 1] ~= '' and row + 1 or row
         pcall(vim.api.nvim_win_set_cursor, winid, { target, 0 })
+        local anchor = capture_status_cursor(bufnr, winid)
+        if anchor then status_cursor_anchor_by_buf[bufnr] = anchor end
         return true
       end
     end
@@ -2883,17 +2896,18 @@ function M.open(opts)
     end
   end
 
-  if status_dirty_by_buf[bufnr] and status_reload_by_buf[bufnr] then
+  local needs_reload = status_dirty_by_buf[bufnr] and status_reload_by_buf[bufnr] ~= nil
+  if needs_reload then
     status_reload_by_buf[bufnr]()
   end
 
-  if opts.focus then
+  local focus = opts.focus == nil and 'unstaged' or opts.focus
+  if focus then
     if status_snapshot_by_buf[bufnr] then
-      M.focus_section(bufnr, opts.focus, { refresh = false })
-    else
-      vim.schedule(function()
-        M.focus_section(bufnr, opts.focus, { refresh = false })
-      end)
+      M.focus_section(bufnr, focus, { refresh = false })
+    end
+    if needs_reload or not status_snapshot_by_buf[bufnr] then
+      pending_status_focus_by_buf[bufnr] = focus
     end
   end
   configure_status_window(vim.fn.bufwinid(bufnr))
