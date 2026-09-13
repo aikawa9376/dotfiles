@@ -22,6 +22,9 @@ local repository_health_by_buf = {}
 local index_flags_by_buf = {}
 local index_flags_expanded_by_buf = {}
 local status_snapshot_by_buf = {}
+local status_initialized_by_buf = {}
+local status_dirty_by_buf = {}
+local status_reload_by_buf = {}
 
 local status_heading_highlights = {
   { '^Head:', 'RainbowDelimiterBlue' },
@@ -563,6 +566,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
     end
   end, 5)
   restore_status_cursors(bufnr, cursor_anchors)
+  require('features.push_progress').render(bufnr)
 end
 
 local function get_stash_ref_at_cursor(bufnr)
@@ -954,7 +958,13 @@ function M.setup(group)
     pattern = 'fugitivestatus',
     callback = function(ev)
       local b = ev.buf
-      if not utils.get_buf_work_tree(b) then return end
+      if not utils.get_buf_work_tree(b) or status_initialized_by_buf[b] then return end
+      status_initialized_by_buf[b] = true
+      local active = true
+      local function is_live()
+        return active and utils.is_valid_buf(b) and vim.api.nvim_buf_is_loaded(b)
+      end
+      local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
       vim.opt_local.number, vim.opt_local.relativenumber = false, false
       configure_status_window(vim.api.nvim_get_current_win())
       local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
@@ -983,7 +993,7 @@ function M.setup(group)
         refresh_scheduled = true
         vim.schedule(function()
           refresh_scheduled = false
-          if utils.is_valid_buf(b) then refresh() end
+          if is_live() then refresh() end
         end)
       end
 
@@ -994,8 +1004,11 @@ function M.setup(group)
         local serial = fast_refresh_serial
         local previous = reuse_cache and status_snapshot_by_buf[b] or nil
         local header_lines = previous and repository_health.repository_lines(previous.health) or nil
-        status_renderer.snapshot_async(b, work_tree, { header_lines = header_lines }, function(native_lines, snapshot_err)
-          if not utils.is_valid_buf(b) then return end
+        status_renderer.snapshot_async(b, work_tree, {
+          header_lines = header_lines,
+          is_current = function() return is_live() and serial == fast_refresh_serial end,
+        }, function(native_lines, snapshot_err)
+          if not is_live() then return end
           if serial ~= fast_refresh_serial then return end
           if not native_lines then
             vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
@@ -1020,7 +1033,7 @@ function M.setup(group)
             -- Let the lightweight status and commits reach the screen before
             -- collecting expensive repository metadata and diff statistics.
             vim.defer_fn(function()
-              if not utils.is_valid_buf(b) or serial ~= fast_refresh_serial then return end
+              if not is_live() or serial ~= fast_refresh_serial then return end
               if reuse_details then
                 refresh({ reuse_details = true })
               else
@@ -1035,9 +1048,9 @@ function M.setup(group)
           end
 
           status_renderer.unpushed_commits_async(b, function(unpushed)
-            if not utils.is_valid_buf(b) or serial ~= fast_refresh_serial then return end
+            if not is_live() or serial ~= fast_refresh_serial then return end
             local function publish(commit_lines)
-              if not utils.is_valid_buf(b) or serial ~= fast_refresh_serial then return end
+              if not is_live() or serial ~= fast_refresh_serial then return end
               local current = status_snapshot_by_buf[b]
               if current then
                 current.unpushed_commits = unpushed
@@ -1058,7 +1071,7 @@ function M.setup(group)
 
       local fetch_pull_requests
       fetch_pull_requests = function()
-        if not utils.is_valid_buf(b) then return end
+        if not is_live() then return end
         if pr_fetching then
           pr_fetch_pending = true
           return
@@ -1087,7 +1100,7 @@ function M.setup(group)
 
           vim.system(args, { cwd = work_tree, text = true }, function(result)
             vim.schedule(function()
-              if not utils.is_valid_buf(b) then return end
+              if not is_live() then return end
 
               if result.code == 0 and pull_request_scope_by_buf[b] == requested_scope then
                 local ok, decoded = pcall(vim.json.decode, result.stdout or '')
@@ -1121,7 +1134,7 @@ function M.setup(group)
         if requested_scope == 'branch' then
           vim.system({ 'git', 'branch', '--show-current' }, { cwd = work_tree, text = true }, function(result)
             vim.schedule(function()
-              if not utils.is_valid_buf(b) then return end
+              if not is_live() then return end
               if pull_request_scope_by_buf[b] ~= requested_scope then
                 finish_fetch()
                 return
@@ -1145,7 +1158,8 @@ function M.setup(group)
       end
 
       local function reload_status(position_only, reuse_details)
-        if not utils.is_valid_buf(b) then return end
+        if not is_live() then return end
+        status_dirty_by_buf[b] = nil
         local anchors = position_only
           and capture_status_cursors(b)
           or capture_status_cursors_before_reload(b)
@@ -1156,6 +1170,7 @@ function M.setup(group)
         render_fast_status(true, reuse_details)
         if not reuse_details then fetch_pull_requests() end
       end
+      status_reload_by_buf[b] = reload_status
 
       local function notify_repo_changed(skip_source)
         utils.fire_fugitive_changed({ bufnr = b, skip_source = skip_source == true })
@@ -1169,11 +1184,15 @@ function M.setup(group)
       render_fast_status(false)
       fetch_pull_requests()
 
-      vim.api.nvim_create_autocmd('BufWipeout', {
-        group = group,
+      vim.api.nvim_create_autocmd({ 'BufUnload', 'BufWipeout' }, {
+        group = bufgroupt,
         buffer = b,
         once = true,
         callback = function()
+          active = false
+          status_initialized_by_buf[b] = nil
+          status_dirty_by_buf[b] = nil
+          status_reload_by_buf[b] = nil
           pull_requests_by_buf[b] = nil
           pull_request_scope_by_buf[b] = nil
           pull_request_branch_by_buf[b] = nil
@@ -1186,11 +1205,12 @@ function M.setup(group)
           index_flags_expanded_by_buf[b] = nil
           status_snapshot_by_buf[b] = nil
           status_renderer.cleanup(b)
+          pcall(vim.api.nvim_del_augroup_by_id, bufgroupt)
         end,
       })
 
       vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI', 'BufWinLeave', 'WinLeave' }, {
-        group = group,
+        group = bufgroupt,
         buffer = b,
         callback = function()
           local anchor = capture_status_cursor(b, vim.api.nvim_get_current_win())
@@ -1199,7 +1219,7 @@ function M.setup(group)
       })
 
       vim.api.nvim_create_autocmd({ 'BufWinEnter', 'WinEnter' }, {
-        group = group,
+        group = bufgroupt,
         buffer = b,
         callback = function()
           if not status_renderer.is_owned(b) then return end
@@ -1207,7 +1227,7 @@ function M.setup(group)
           local anchor = status_cursor_anchor_by_buf[b]
           if anchor then
             vim.schedule(function()
-              restore_status_cursor(b, anchor, winid)
+              if is_live() then restore_status_cursor(b, anchor, winid) end
             end)
           end
         end,
@@ -1276,31 +1296,37 @@ function M.setup(group)
         end)
       end
 
-      local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
       utils.setup_repo_refresh(bufgroupt, b, function()
-        reload_status()
+        if utils.is_buf_visible(b) then
+          reload_status()
+        else
+          status_dirty_by_buf[b] = true
+        end
       end, {
-        visible_only = true,
         ignore_source = true,
         refresh_on_enter = false,
       })
       vim.api.nvim_create_autocmd('BufWritePost', {
         group = bufgroupt,
         callback = function(write_ev)
-          if not utils.is_valid_buf(b) or not utils.is_buf_visible(b) then return end
+          if not is_live() then return end
           local name = vim.api.nvim_buf_get_name(write_ev.buf)
           local work_tree = utils.get_buf_work_tree(b)
           if name == '' or not work_tree then return end
           local absolute = utils.normalize_path(name)
           local root = utils.normalize_path(work_tree)
           if absolute and root and (absolute == root or absolute:sub(1, #root + 1) == root .. '/') then
-            reload_status(true, true)
+            if utils.is_buf_visible(b) then
+              reload_status(true, true)
+            else
+              status_dirty_by_buf[b] = true
+            end
           end
         end,
       })
 
       apply_icons = function()
-        if not utils.is_valid_buf(b) then return end
+        if not is_live() then return end
         vim.api.nvim_buf_clear_namespace(b, ns_id, 0, -1)
         local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
         local unpushed_hashes = commit_highlight.hash_set(unpushed_commits_by_buf[b])
@@ -1527,7 +1553,7 @@ function M.setup(group)
           return
         end
         operation.bisect(work_tree, action, args, function(ok, message)
-          if not utils.is_valid_buf(b) then return end
+          if not is_live() then return end
           if not ok then
             vim.notify(message, vim.log.levels.ERROR)
             return
@@ -1644,7 +1670,7 @@ function M.setup(group)
         index_change_running = true
         local function complete(changed, err)
           index_change_running = false
-          if not utils.is_valid_buf(b) then return end
+          if not is_live() then return end
           if not changed then
             vim.notify(err, vim.log.levels.WARN)
             return
@@ -1679,7 +1705,7 @@ function M.setup(group)
         index_change_running = true
         status_renderer.reset_index_async(b, function(changed, err)
           index_change_running = false
-          if not utils.is_valid_buf(b) then return end
+          if not is_live() then return end
           if not changed then vim.notify(err, vim.log.levels.WARN); return end
           reload_status(false, true)
           notify_repo_changed(true)
@@ -1691,7 +1717,7 @@ function M.setup(group)
         index_change_running = true
         status_renderer.stage_all_async(b, function(changed, err)
           index_change_running = false
-          if not utils.is_valid_buf(b) then return end
+          if not is_live() then return end
           if not changed then vim.notify(err, vim.log.levels.WARN); return end
           reload_status(false, true)
           notify_repo_changed(true)
@@ -1754,7 +1780,7 @@ function M.setup(group)
         notify_repo_changed(true)
         if action == 'resolved' then
           vim.schedule(function()
-            if utils.is_valid_buf(b) then M.focus_section(b, 'conflicted') end
+            if is_live() then M.focus_section(b, 'conflicted') end
           end)
         end
       end
@@ -2009,7 +2035,7 @@ function M.setup(group)
         if expand ~= nil then index_flags_expanded_by_buf[b] = expand end
         refresh_cached()
         vim.schedule(function()
-          if not utils.is_valid_buf(b) then return end
+          if not is_live() then return end
           local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
           for row, line in ipairs(lines) do
             if line:match('^Index flags %[local%]') then
@@ -2572,10 +2598,14 @@ function M.setup(group)
         end
       end, { buffer = b, nowait = true, silent = true })
 
-      -- Smart Close
+      -- Keep the initialized status buffer when closing a split.
       vim.keymap.set('n', 'q', function()
         if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then vim.api.nvim_win_close(vim.g.flog_win, true) end
-        require"utilities".smart_close()
+        if #vim.api.nvim_tabpage_list_wins(0) > 1 then
+          vim.api.nvim_win_close(0, false)
+        else
+          require('utilities').smart_close()
+        end
       end, { buffer = b, nowait = true, silent = true })
 
       vim.keymap.set('n', '<C-c>', '<C-w>c',
@@ -2596,7 +2626,7 @@ function M.setup(group)
         index_flags_expanded_by_buf[b] = false
         reload_status()
         vim.schedule(function()
-          if utils.is_valid_buf(b) then M.focus_section(b, 'unstaged') end
+          if is_live() then M.focus_section(b, 'unstaged') end
         end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Collapse all and refresh status' })
 
@@ -2735,7 +2765,7 @@ function M.setup(group)
 end
 
 function M.refresh_buffer(bufnr)
-  if not utils.is_valid_buf(bufnr) then return end
+  if not is_status_buffer(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then return end
   local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
   local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
   local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
@@ -2851,6 +2881,10 @@ function M.open(opts)
     if vim.bo[bufnr].filetype ~= 'fugitivestatus' then
       vim.bo[bufnr].filetype = 'fugitivestatus'
     end
+  end
+
+  if status_dirty_by_buf[bufnr] and status_reload_by_buf[bufnr] then
+    status_reload_by_buf[bufnr]()
   end
 
   if opts.focus then
