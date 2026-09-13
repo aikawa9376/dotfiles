@@ -12,6 +12,34 @@ local STATUS = {
 
 local Store = {}
 Store.__index = Store
+-- Instances for the same manifest share one current generation, not copies of history.
+-- The slot is released when no Store instance needs it.
+local manifest_caches = setmetatable({}, { __mode = "v" })
+
+local function fingerprint(path)
+  local stat = uv.fs_stat(path)
+  if not stat then return nil end
+  local function timestamp(value)
+    return type(value) == "table" and (tostring(value.sec) .. ":" .. tostring(value.nsec))
+      or tostring(value)
+  end
+  return table.concat({
+    tostring(stat.dev), tostring(stat.ino), tostring(stat.size),
+    timestamp(stat.mtime), timestamp(stat.ctime),
+  }, "/"), tostring(stat.dev) .. "/" .. tostring(stat.ino)
+end
+
+-- Internal records are immutable. Mutations replace a record in a private array;
+-- public APIs still deep-copy their results so callers cannot change the cache.
+local function manifest_view(manifest)
+  local threads = {}
+  for i, record in ipairs(manifest.threads) do threads[i] = record end
+  return {
+    schema_version = manifest.schema_version,
+    updated_at = manifest.updated_at,
+    threads = threads,
+  }
+end
 
 local function now_utc()
   return os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -194,6 +222,12 @@ function Store:_quarantine(reason)
 end
 
 function Store:_read()
+  local version = fingerprint(self.path)
+  local cache = self.cache
+  if version and version == cache.version and cache.manifest then
+    return manifest_view(cache.manifest)
+  end
+  cache.version, cache.manifest, cache.encoded = nil, nil, nil
   if vim.fn.filereadable(self.path) == 0 then
     return empty_manifest(self:_timestamp())
   end
@@ -224,6 +258,11 @@ function Store:_read()
       quarantine_error = quarantine_err,
     }
   end
+  -- A concurrent atomic replacement may occur during a read. Do not cache that
+  -- older result under the new file's identity; the next call must read again.
+  if version and version == fingerprint(self.path) then
+    cache.version, cache.manifest, cache.encoded = version, manifest_view(manifest), {}
+  end
   return manifest
 end
 
@@ -233,23 +272,46 @@ function Store:_write(manifest)
     return nil, dir_err
   end
   manifest.updated_at = self:_timestamp()
-  local ok_encode, encoded = pcall(json_encode, manifest)
+  local previous = self.cache.encoded or {}
+  local next_encoded = {}
+  local ok_encode, encoded = pcall(function()
+    local records = {}
+    for i, record in ipairs(manifest.threads) do
+      local text = previous[record] or json_encode(record)
+      records[i], next_encoded[record] = text, text
+    end
+    return '{"schema_version":' .. json_encode(manifest.schema_version)
+      .. ',"updated_at":' .. json_encode(manifest.updated_at)
+      .. ',"threads":[' .. table.concat(records, ',') .. ']}'
+  end)
   if not ok_encode then
     return nil, encoded
   end
   local suffix = tostring(vim.fn.getpid()) .. "." .. tostring(uv.hrtime())
   local temporary = self.path .. ".tmp." .. suffix
   local ok_write, write_err = pcall(vim.fn.writefile, { encoded }, temporary)
-  if not ok_write then
-    return nil, write_err
+  if not ok_write or write_err ~= 0 then
+    pcall(vim.fn.delete, temporary)
+    return nil, ok_write and "failed to write thread manifest" or write_err
   end
   if uv.fs_chmod then
     pcall(uv.fs_chmod, temporary, 384)
   end
+  local _, written_identity = fingerprint(temporary)
   local renamed, rename_err = uv.fs_rename(temporary, self.path)
   if not renamed then
     pcall(vim.fn.delete, temporary)
     return nil, rename_err
+  end
+  -- Publish the cache only after the atomic commit. Keep the temporary inode's
+  -- identity so a subsequent writer cannot make our old data look current.
+  -- rename may change ctime, so compare the committed file before caching it.
+  local committed_version, committed_identity = fingerprint(self.path)
+  self.cache.version, self.cache.manifest, self.cache.encoded = nil, nil, nil
+  if written_identity and written_identity == committed_identity then
+    self.cache.version = committed_version
+    self.cache.manifest = manifest_view(manifest)
+    self.cache.encoded = next_encoded
   end
   return true
 end
@@ -472,7 +534,14 @@ end
 function M.new(opts)
   opts = opts or {}
   local dir = tostring(opts.dir or (vim.fn.stdpath("cache") .. "/lazyagent/acp/threads"))
+  local cache_key = vim.fs.normalize(vim.fn.fnamemodify(dir .. "/manifest.json", ":p"))
+  local cache = manifest_caches[cache_key]
+  if not cache then
+    cache = {}
+    manifest_caches[cache_key] = cache
+  end
   return setmetatable({
+    cache = cache,
     dir = dir,
     path = dir .. "/manifest.json",
     lock_path = dir .. "/manifest.lock",

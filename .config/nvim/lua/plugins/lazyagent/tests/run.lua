@@ -77,6 +77,7 @@ local suites = {
   "tests.acp.view_lifecycle_spec",
   "tests.acp.lifecycle_stress_spec",
   "tests.acp.thread_store_spec",
+  "tests.acp.thread_store_cache_spec",
   "tests.acp.workspace_snapshot_spec",
   "tests.acp.blob_store_spec",
   "tests.acp.blob_gc_spec",
