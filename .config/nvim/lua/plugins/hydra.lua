@@ -54,20 +54,13 @@ return {
         return
       end
       hunkNavState.busy = true
-      suppressCursorGlow(function(maybeClear)
-        local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
-        require("gitsigns").nav_hunk(direction, is_fugitive and { target = 'all' } or {}, function(err)
-          hunkNavState.busy = false
-          if err then
-            clearCursorGlowSuppression()
-          else
-            vim.schedule(maybeClear)
-          end
-          vim.schedule(drainQueuedHunkNav)
-        end)
-      end, { defer = true })
+      local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
+      require("gitsigns").nav_hunk(direction, is_fugitive and { target = 'all' } or {}, function()
+        hunkNavState.busy = false
+        vim.schedule(drainQueuedHunkNav)
+      end)
     end
-    local navHunkWithoutCursorGlow = function(direction)
+    local navHunk = function(direction)
       hunkNavState.queue[#hunkNavState.queue + 1] = direction
       drainQueuedHunkNav()
     end
@@ -308,22 +301,18 @@ return {
         invoke_on_body = true,
         on_key = function() vim.wait(50) end,
         on_enter = function ()
-          navHunkWithoutCursorGlow('next')
+          navHunk('next')
         end
       },
       heads = {
         { ']', function ()
           if vim.wo.diff then return ']c' end
-          vim.schedule(function()
-            navHunkWithoutCursorGlow('next')
-          end)
+          navHunk('next')
           return '<Ignore>'
         end },
         { '[', function ()
           if vim.wo.diff then return '[c' end
-          vim.schedule(function()
-            navHunkWithoutCursorGlow('prev')
-          end)
+          navHunk('prev')
           return '<Ignore>'
         end },
       }
@@ -337,22 +326,18 @@ return {
         invoke_on_body = true,
         on_key = function() vim.wait(50) end,
         on_enter = function ()
-          navHunkWithoutCursorGlow('prev')
+          navHunk('prev')
         end
       },
       heads = {
         { ']', function ()
           if vim.wo.diff then return ']c' end
-          vim.schedule(function()
-            navHunkWithoutCursorGlow('next')
-          end)
+          navHunk('next')
           return '<Ignore>'
         end },
         { '[', function ()
           if vim.wo.diff then return '[c' end
-          vim.schedule(function()
-            navHunkWithoutCursorGlow('prev')
-          end)
+          navHunk('prev')
           return '<Ignore>'
         end },
       }
