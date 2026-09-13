@@ -11,6 +11,7 @@ local repository_health = require('features.repository_health')
 local notes = require('features.notes')
 local index_flags = require('features.index_flags')
 local commit_highlight = require('features.commit_highlight')
+local commit_body = require('features.commit_body')
 local pull_requests_by_buf = {}
 local pull_request_scope_by_buf = {}
 local pull_request_branch_by_buf = {}
@@ -568,6 +569,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
   end, 5)
   restore_status_cursors(bufnr, cursor_anchors)
   require('features.push_progress').render(bufnr)
+  commit_body.refresh(bufnr)
   local focus = pending_status_focus_by_buf[bufnr]
   if focus then
     pending_status_focus_by_buf[bufnr] = nil
@@ -966,6 +968,7 @@ function M.setup(group)
       local b = ev.buf
       if not utils.get_buf_work_tree(b) or status_initialized_by_buf[b] then return end
       status_initialized_by_buf[b] = true
+      commit_body.attach(b)
       local active = true
       local function is_live()
         return active and utils.is_valid_buf(b) and vim.api.nvim_buf_is_loaded(b)
@@ -2251,6 +2254,7 @@ function M.setup(group)
         if kind == 'commit' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open commit' },
+            { key = 'gk', label = 'Show commit message body' },
             { key = 'gn', label = 'Show Git note' },
             { key = 'gN', label = 'Add / edit Git note' },
             { key = 'cw', label = 'Reword commit' },
