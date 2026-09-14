@@ -166,7 +166,7 @@ return {
       nav_down = "<C-j>",
       interrupt = "<C-c>",
       esc = "<Esc>",
-      adjust_line = "<C-l>",
+      adjust_line = "L",
       clear = "c<space>d",
     },
     interactive_agents = {

@@ -59,6 +59,8 @@ return {
 
 `c<space>` はこの dotfiles の好みです。`c` は Neovim 標準の operator なので、衝突が気になる場合は `<leader>` 系に置き換えてください。
 
+この dotfiles では scratch の normal mode の `L` で ACP transcript の末尾追従を再開します。`scratch_keymaps.adjust_line` で変更できます。
+
 ## 基本設定
 
 ```lua
