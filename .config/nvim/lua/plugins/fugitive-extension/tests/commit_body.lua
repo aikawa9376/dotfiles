@@ -63,7 +63,7 @@ local log = buffer('fugitivelog', { log_line })
 body.refresh(log)
 assert(vim.wait(2000, function() return #vim.api.nvim_buf_get_extmarks(log, ns, 0, -1, {}) == 1 end, 10))
 marks = vim.api.nvim_buf_get_extmarks(log, ns, 0, -1, {})
-assert(marks[1][3] == #log_line:match('^(%x+\t[^\t]*\t[^\t]*)'), 'log icon was not after subject')
+assert(marks[1][3] == #log_line:match('^(%x+\t[^\t]*\t[^\t]*\t[^\t]*)'), 'log icon was not after author')
 vim.api.nvim_buf_delete(b, { force = true })
 vim.api.nvim_buf_delete(log, { force = true })
 -- Obsolete results, failure, and buffer reuse cannot annotate a different commit.

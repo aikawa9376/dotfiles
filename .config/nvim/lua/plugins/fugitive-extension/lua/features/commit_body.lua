@@ -48,8 +48,8 @@ local function render(bufnr, state)
       local col = #line
       if vim.bo[bufnr].filetype == 'fugitivelog' then
         -- hash <tab> date <tab> subject <tab> author <tab> refs/stats
-        local subject_end = line:match('^%x+\t[^\t]*\t[^\t]*()\t')
-        if subject_end then col = subject_end - 1 end
+        local author_end = line:match('^%x+\t[^\t]*\t[^\t]*\t[^\t]*()\t')
+        if author_end then col = author_end - 1 end
       end
       vim.api.nvim_buf_set_extmark(bufnr, namespace, row - 1, col, {
         virt_text = { { ' ' .. icon, 'Comment' } },
