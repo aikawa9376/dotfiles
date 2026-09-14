@@ -33,6 +33,10 @@ end
 
 local function root_for(bufnr, path, override)
   if override and override ~= "" then return normalize(override) end
+  if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "fugitivestatus" then
+    local worktree = vim.b[bufnr].fugitive_work_tree
+    if worktree and worktree ~= "" then return normalize(worktree) end
+  end
   return normalize(util.git_root_for_path(path) or vim.fn.getcwd())
 end
 
@@ -70,6 +74,7 @@ end
 
 local function ref_for(entry)
   local reference = note_source.reference(entry.source)
+  if entry.source and entry.source.status then return require("lazyagent.note_status").reference(entry.source) end
   local start_line, end_line = position(entry)
   if reference then
     start_line = entry.source.start_line or entry.saved_start_line or entry.start_line
@@ -114,8 +119,8 @@ local function create_marks(bufnr, start_line, end_line, opts)
     end_right_gravity = false,
   })
   local background = vim.api.nvim_buf_set_extmark(bufnr, namespace, start_line - 1, 0, {
-    end_row = end_line,
-    end_col = 0,
+    end_row = end_line - 1,
+    end_col = #vim.api.nvim_buf_get_lines(bufnr, end_line - 1, end_line, false)[1],
     right_gravity = false,
     end_right_gravity = false,
     hl_group = "LazyAgentNoteRange",
@@ -186,17 +191,33 @@ local function bind(entry, bufnr, first, last)
   end
 end
 
-local function entries_at(bufnr, lnum)
+local function entries_in_range(bufnr, first_row, last_row)
   local found = {}
   for _, entry in pairs(entries) do
     local binding = entry.bindings and entry.bindings[bufnr]
     if binding then
       local first, last = binding_position(bufnr, binding)
-      if first and lnum >= first and lnum <= last then found[#found + 1] = entry end
+      if first and first <= last_row and last >= first_row then found[#found + 1] = entry end
     end
   end
   table.sort(found, function(a, b) return a.id < b.id end)
   return found
+end
+
+-- Fold summaries read existing marks only; never resolve Git objects during redraw.
+function M.fold_chunks(bufnr, first, last)
+  local found = entries_in_range(bufnr, first, last)
+  if #found == 0 then return {} end
+  local icon = found[1].icon or '󰆉'
+  return { { ' ' .. icon .. (#found > 1 and (' ' .. #found) or ''), 'LazyAgentNoteSign' } }
+end
+
+local function entries_at(bufnr, lnum)
+  if bufnr == vim.api.nvim_get_current_buf() then
+    local first = vim.fn.foldclosed(lnum)
+    if first ~= -1 then return entries_in_range(bufnr, first, vim.fn.foldclosedend(lnum)) end
+  end
+  return entries_in_range(bufnr, lnum, lnum)
 end
 
 -- Reattach only on buffer lifecycle events, never on cursor movement. Git
@@ -211,7 +232,24 @@ function M.refresh_buffer(bufnr)
   for _, entry in pairs(entries) do
     local source = entry.source
     local binding = entry.bindings[bufnr]
-    if not binding or not binding_position(bufnr, binding) then
+    if source and source.status then
+      local first, last
+      local worktree_file = source.path and vim.bo[bufnr].buftype == ""
+        and path == normalize(source.root .. "/" .. source.path)
+      if worktree_file then
+        -- Keep a live file anchor tracking edits; status rows are reconciled separately.
+        if not binding or not binding_position(bufnr, binding) then
+          first, last = source.start_line or 1, source.end_line or source.start_line or 1
+        end
+      else
+        first, last = require("lazyagent.note_status").range(bufnr, source)
+      end
+      if first then bind(entry, bufnr, first, last)
+      elseif binding and not worktree_file then
+        for i = 1, 3 do pcall(vim.api.nvim_buf_del_extmark, bufnr, namespace, binding.marks[i]) end
+        entry.bindings[bufnr] = nil
+      end
+    elseif not binding or not binding_position(bufnr, binding) then
       local first, last
       if not source and path == entry.path then
         first, last = entry.start_line, entry.end_line
@@ -244,7 +282,7 @@ local function setup_lifecycle()
     group = lifecycle_group,
     callback = function(args)
       if not next(entries) or refresh_pending[args.buf] then return end
-      if args.event == "TextChanged" and not vim.tbl_contains({ "git", "fugitive" }, vim.bo[args.buf].filetype) then return end
+      if args.event == "TextChanged" and not vim.tbl_contains({ "git", "fugitive", "fugitivestatus" }, vim.bo[args.buf].filetype) then return end
       refresh_pending[args.buf] = true
       vim.schedule(function()
         refresh_pending[args.buf] = nil
@@ -265,6 +303,12 @@ local function setup_lifecycle()
         if binding then
           local first, last = binding_position(args.buf, binding)
           if first and not entry.source then entry.start_line, entry.end_line = first, last end
+          local source = entry.source
+          if first and source and source.status and source.start_line and source.path
+            and vim.bo[args.buf].buftype == ""
+            and normalize(vim.api.nvim_buf_get_name(args.buf)) == normalize(source.root .. "/" .. source.path) then
+            source.start_line, source.end_line = first, last
+          end
           entry.bindings[args.buf] = nil
         end
       end
@@ -405,6 +449,13 @@ function M.add(opts)
   setup_hover_preview()
   setup_lifecycle()
   refresh_ticks = {}
+  if source and source.status and source.path then
+    local target = normalize(source.root .. "/" .. source.path)
+    for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_loaded(candidate) and vim.bo[candidate].buftype == ""
+        and normalize(vim.api.nvim_buf_get_name(candidate)) == target then M.refresh_buffer(candidate) end
+    end
+  end
   return vim.deepcopy(entry)
 end
 
@@ -466,6 +517,7 @@ function M.jump(id, opts)
   if not entry then return false end
   if not entry.source then return util.open_in_normal_win(entry.path, { line = position(entry) }) end
   local source = entry.source
+  if source.status then return require("lazyagent.note_status").jump(source) end
   local saved_line = source.start_line or entry.saved_start_line
   local ok, jumped = pcall(note_source.jump_diffview, source, saved_line)
   if ok and jumped then return true end
@@ -584,7 +636,7 @@ function M.render(opts)
   if #notes == 0 then return "[No LazyAgent Notes are saved for this workspace.]", {} end
 
   local lines = {
-    "Address the following saved code Notes. Investigate and answer questions, and carry out instructions.",
+    "Address these code Notes:",
     "",
   }
   local sources = {}
@@ -596,7 +648,9 @@ function M.render(opts)
     local prefix = string.format("%d. ", index)
     local text = entry.text:gsub("\n", "\n" .. string.rep(" ", #prefix))
     lines[#lines + 1] = prefix .. ref_for(entry) .. " " .. text
-    if entry.source and not note_source.reference(entry.source) then
+    if entry.source and entry.source.status and entry.source.selection and not entry.source.start_line then
+      for _, line in ipairs(entry.excerpt or {}) do lines[#lines + 1] = "   > " .. line end
+    elseif entry.source and not entry.source.status and not note_source.reference(entry.source) then
       lines[#lines + 1] = "   Reference: " .. note_source.describe(entry.source)
       lines[#lines + 1] = "   This is a review reference; investigate the current code before applying changes."
       lines[#lines + 1] = "   Selected code (captured when noted):"
@@ -711,7 +765,7 @@ end
 local saved_fields = { "path", "root", "text", "excerpt", "icon", "icon_position",
   "start_line", "end_line", "saved_start_line", "saved_end_line" }
 local source_fields = { "kind", "root", "path", "revision", "side", "name", "git_dir",
-  "filetype", "blob", "inline_diff", "review_commit", "show", "review_args", "start_line", "end_line" }
+  "status", "section", "header", "hunk", "selection", "filetype", "blob", "inline_diff", "review_commit", "show", "review_args", "start_line", "end_line" }
 
 local function copy_saved(entry)
   local saved = {}
