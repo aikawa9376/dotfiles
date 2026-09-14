@@ -1179,11 +1179,30 @@ function M.setup(group)
         if not reuse_details then fetch_pull_requests() end
       end
       status_reload_by_buf[b] = reload_status
-      local stop_metadata_watch = require('features.status_watch').subscribe(vim.b[b].git_dir, function()
+      local function invalidate_status()
         if not is_live() then return end
         if utils.is_buf_visible(b) then reload_status()
         else status_dirty_by_buf[b] = true end
+      end
+      local stop_metadata_watch = require('features.status_watch').subscribe(vim.b[b].git_dir, function()
+        require('features.worktree_watch').refresh(utils.get_buf_work_tree(b))
+        invalidate_status()
       end)
+      local event_probe = require('features.status_probe').new(utils.get_buf_work_tree(b), invalidate_status)
+      event_probe.check()
+      local stop_worktree_watch = require('features.worktree_watch').subscribe(utils.get_buf_work_tree(b), function()
+        if is_live() then event_probe.check() end
+      end)
+      vim.api.nvim_create_autocmd({ 'BufEnter', 'WinEnter' }, {
+        group = bufgroupt, buffer = b,
+        callback = function() event_probe.check() end,
+      })
+      vim.api.nvim_create_autocmd({ 'FocusGained', 'TermLeave', 'ShellCmdPost' }, {
+        group = bufgroupt,
+        callback = function()
+          if is_live() and utils.is_buf_visible(b) then event_probe.check() end
+        end,
+      })
 
       local function notify_repo_changed(skip_source)
         utils.fire_fugitive_changed({ bufnr = b, skip_source = skip_source == true })
@@ -1204,6 +1223,8 @@ function M.setup(group)
         callback = function()
           active = false
           stop_metadata_watch()
+          stop_worktree_watch()
+          event_probe.stop()
           status_initialized_by_buf[b] = nil
           status_dirty_by_buf[b] = nil
           status_reload_by_buf[b] = nil
