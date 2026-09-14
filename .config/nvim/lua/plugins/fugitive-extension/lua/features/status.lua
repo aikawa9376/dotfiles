@@ -1180,6 +1180,11 @@ function M.setup(group)
         if not reuse_details then fetch_pull_requests() end
       end
       status_reload_by_buf[b] = reload_status
+      local stop_metadata_watch = require('features.status_watch').subscribe(vim.b[b].git_dir, function()
+        if not is_live() then return end
+        if utils.is_buf_visible(b) then reload_status()
+        else status_dirty_by_buf[b] = true end
+      end)
 
       local function notify_repo_changed(skip_source)
         utils.fire_fugitive_changed({ bufnr = b, skip_source = skip_source == true })
@@ -1199,6 +1204,7 @@ function M.setup(group)
         once = true,
         callback = function()
           active = false
+          stop_metadata_watch()
           status_initialized_by_buf[b] = nil
           status_dirty_by_buf[b] = nil
           status_reload_by_buf[b] = nil
