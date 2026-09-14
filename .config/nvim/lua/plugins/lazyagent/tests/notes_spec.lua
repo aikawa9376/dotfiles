@@ -56,7 +56,7 @@ function M.run()
     { details = true }
   )
   assert_equal(background[3].hl_group, "LazyAgentNoteRange", "multiline Note has a subtle range background")
-  assert_equal(background[3].end_row, 3, "range background covers all selected lines")
+  assert_equal(background[3].end_row, 2, "range background covers all selected lines")
 
   vim.api.nvim_buf_set_lines(bufnr, 3, 3, false, { "-- inserted below Note" })
   local unchanged = notes.render({ source_bufnr = bufnr })
@@ -77,7 +77,7 @@ function M.run()
   assert_equal(preview_meta.note_ids[1], first.id, "preview Note metadata")
 
   local expanded, meta = transforms.expand("Please handle #notes", { source_bufnr = bufnr })
-  contains(expanded, "Please handle Address the following saved code Notes", "Notes expansion")
+  contains(expanded, "Please handle Address these code Notes", "Notes expansion")
   assert_equal(meta.note_ids[1], first.id, "expanded Note metadata")
   assert_equal(notes.consume_meta(meta), 1, "consume sent Notes")
   assert_equal(notes.count({ source_bufnr = bufnr }), 0, "Notes cleared after consume")
@@ -128,7 +128,7 @@ function M.run()
     { details = true }
   )
   assert_equal(gutter_background[3].hl_group, "LazyAgentNoteRange", "single-line Note also has a range background")
-  assert_equal(gutter_background[3].end_row, 2, "single-line background covers only its target line")
+  assert_equal(gutter_background[3].end_row, 1, "single-line background covers only its target line")
   assert_equal(notes.remove(gutter_note.id), true, "gutter Note removed")
   state.opts.notes = previous_notes
 

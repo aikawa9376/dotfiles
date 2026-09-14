@@ -88,6 +88,10 @@ _G.fugitive_foldtext = function()
     table.insert(result, { " -" .. removed, "GitSignsDelete" })
   end
 
+  local notes = package.loaded['lazyagent.notes']
+  if notes and notes.fold_chunks then
+    vim.list_extend(result, notes.fold_chunks(vim.api.nvim_get_current_buf(), vim.v.foldstart, vim.v.foldend))
+  end
   table.insert(result, { " ", "Normal" })
 
   return result

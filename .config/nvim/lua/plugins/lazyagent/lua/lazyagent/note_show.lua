@@ -1,9 +1,9 @@
 -- Commit review coordinates belong to a reproducible patch, not either file side.
 local M = {}
 local flags = {
-  "show", "--format=", "--patch", "--no-color", "--no-ext-diff", "--no-textconv",
+  "show", "--format=", "-p", "--no-color", "--no-ext-diff", "--no-textconv",
   "--no-renames", "--full-index", "--diff-algorithm=myers", "--no-indent-heuristic",
-  "--unified=3", "--inter-hunk-context=0", "--src-prefix=a/", "--dst-prefix=b/",
+  "-U3", "--inter-hunk-context=0", "--src-prefix=a/", "--dst-prefix=b/",
   "--no-relative", "--no-notes", "--diff-merges=first-parent", "-O/dev/null",
 }
 

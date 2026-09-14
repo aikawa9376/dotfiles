@@ -90,6 +90,8 @@ function M.capture(bufnr, root, first, last)
   local name = vim.api.nvim_buf_get_name(bufnr)
   local saved = vim.b[bufnr].lazyagent_note_source
   if saved then return vim.deepcopy(saved) end
+  local status_source = require("lazyagent.note_status").capture(bufnr, root, first, last or first)
+  if status_source then return status_source end
   local source = note_show.capture(bufnr, root, first, last or first) or capture_diff(bufnr, root, first, last or first)
   -- Inspect only an already loaded Diffview, without loading it for ordinary files.
   local lib = package.loaded["diffview.lib"]
@@ -257,6 +259,7 @@ end
 function M.reference(source)
   if not source then return end
   local dir = source.git_dir or (source.root .. "/.git")
+  if source.status then return end
   if source.show then return dir .. "//show/" .. source.review_commit end
   if source.path and source.revision and source.revision:match("^%x+$") and source.blob then
     return dir .. "//" .. source.revision .. "/" .. source.path
@@ -275,7 +278,7 @@ function M.instructions(sources)
     end
   end
   if next(formats) then
-    lines[#lines + 1] = "Git references use 1-based output lines; read them with:"
+    lines[#lines + 1] = "Git references (1-based lines):"
     if formats.show then
       lines[#lines + 1] = "//show/<commit>: git --git-dir=<git-dir> " .. table.concat(require("lazyagent.note_show").command("<commit>"), " ")
     end
@@ -291,6 +294,13 @@ function M.selection_text(bufnr, first, last)
   local root = require("lazyagent.util").git_root_for_path(name) or vim.fn.getcwd()
   local source = M.capture(bufnr, root, first, last)
   local reference = M.reference(source)
+  if source and source.status then
+    local lines = { require("lazyagent.note_status").reference(source) }
+    if source.selection and not source.start_line then
+      for _, line in ipairs(source.selection) do lines[#lines + 1] = '> ' .. line end
+    end
+    return table.concat(lines, "\n")
+  end
   if reference then
     first, last = source.start_line or first, source.end_line or last
     local suffix = first == last and tostring(first) or string.format("%d-%d", first, last)
@@ -348,6 +358,7 @@ function M.jump_diffview(source, line)
 end
 
 function M.describe(source)
+  if source.status then return "Git status: " .. source.section .. (source.path and (" / " .. source.path) or "") end
   if source.kind == "buffer" then return "buffer snapshot: " .. source.name end
   return string.format("%s; revision=%s; side=%s; repository=%s", source.kind, source.revision, source.side, source.root)
 end
