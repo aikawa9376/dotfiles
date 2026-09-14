@@ -88,8 +88,6 @@ function M.repository_lines(state)
     table.insert(lines, 'Upstream: ' .. state.upstream.display .. ' [gone]')
   end
   if state.superproject then table.insert(lines, 'Superproject: ' .. state.superproject) end
-  if #lines == 0 then return lines end
-  table.insert(lines, 1, 'Repository health')
   return lines
 end
 

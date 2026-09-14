@@ -38,7 +38,6 @@ local status_heading_highlights = {
   { '^Unpulled ', 'RainbowDelimiterCyan' },
   { '^Unpushed %[only%] %(', 'RainbowDelimiterViolet' },
   { '^Commits %[latest 15%+%] %(', 'RainbowDelimiterViolet' },
-  { '^Repository health$', 'RainbowDelimiterBlue' },
   { '^Submodules %(', 'RainbowDelimiterBlue' },
   { '^Worktrees %(', 'RainbowDelimiterViolet' },
   { '^Stashes %(', 'RainbowDelimiterOrange' },
