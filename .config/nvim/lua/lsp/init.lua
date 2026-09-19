@@ -38,9 +38,11 @@ vim.lsp.start = function(config, opts)
     end
     -- このバッファに対して同じLSPが既にアタッチされている場合はスキップ
     local clients = vim.lsp.get_clients({ bufnr = opts.bufnr, name = config.name })
-    if #clients > 0 then
-      return
+    for _, client in ipairs(clients) do
+      if not client:is_stopped() then
+        return client.id
+      end
     end
   end
-  base_start(config, opts)
+  return base_start(config, opts)
 end
