@@ -70,6 +70,8 @@ alias lg="lazygit"
 alias avante='nvim -c "lua vim.defer_fn(function()require(\"avante.api\").zen_mode()end, 100)"'
 alias sway-start='~/.config/sway/start'
 alias hyprland-start='~/.config/hypr/start'
+alias screenshot='grim -g "$(slurp)"'
+alias colorpicker='grim -g "$(slurp -p -b 00000000)" -t ppm - | magick - -format '\''%[pixel:p{0,0}]'\'' txt:-'
 
 alias cd-="ecd -"
 alias cd.="ecd ."
