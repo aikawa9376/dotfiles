@@ -1075,6 +1075,18 @@ function M.setup(deps)
     end)
   end
 
+  function module.resume_acp_follow(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.send_keys) ~= "function" then
+        vim.notify("LazyAgentACP: backend does not support resuming output follow", vim.log.levels.WARN)
+        return
+      end
+      -- ACP Escape resumes transcript follow and synchronizes the thread view,
+      -- the same operation as the scratch buffer's adjust_line mapping.
+      backend_mod.send_keys(pane_id, { "Escape" })
+    end)
+  end
+
   function module.toggle_acp_follow(agent_name)
     with_acp_session(agent_name, function(_, pane_id, backend_mod)
       if not backend_mod or type(backend_mod.toggle_follow_agent) ~= "function" then

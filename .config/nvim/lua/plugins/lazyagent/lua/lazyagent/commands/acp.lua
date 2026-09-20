@@ -315,6 +315,11 @@ local commands = {
     handler = session_logic.show_acp_tool_review,
   },
   {
+    name = "LazyAgentACPResumeFollow",
+    desc = "Jump to the transcript bottom and resume following agent output",
+    handler = session_logic.resume_acp_follow,
+  },
+  {
     name = "LazyAgentACPFollow",
     desc = "Toggle following the current ACP tool location or changed file",
     handler = session_logic.toggle_acp_follow,

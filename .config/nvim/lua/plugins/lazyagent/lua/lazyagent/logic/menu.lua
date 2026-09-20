@@ -5,10 +5,11 @@ local M = {}
 local actions = {
   { "LazyAgentToggle", "Toggle agent input", "<Space>", target = true },
   { "LazyAgentACPModel", "Change model", "m", acp = true, target = true },
-  { "LazyAgentACPFollow", "Follow Agent (tool / changed file)", "f", acp = true, target = true },
+  { "LazyAgentACPResumeFollow", "Resume output follow (jump to bottom)", "f", acp = true, target = true },
   { "LazyAgentACPPlanToggle", "Toggle Plan / Agent mode", "M", acp = true, target = true },
   { "LazyAgentACPMode", "Change mode / permissions", acp = true, target = true },
   { "LazyAgentACPConfig", "Agent configuration", acp = true, target = true },
+  { "LazyAgentACPFollow", "Follow Agent (tool / changed file)", acp = true, target = true },
   { "LazyAgentOpenConversation", "Open agent conversation", "l", target = true, active = true },
   { "LazyAgentInstant", "Instant query", "i", target = true },
   { "LazyAgentImage", "Attach image", target = true },

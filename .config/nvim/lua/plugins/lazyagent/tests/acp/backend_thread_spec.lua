@@ -86,6 +86,20 @@ function M.run()
     return snapshot and snapshot.acp_ready == true
   end, 10), "backend thread should become ready")
 
+  local follow_actions = require("lazyagent.logic.session.acp_actions").setup({
+    with_acp_session = function(target, callback)
+      assert_equal(target, "ThreadFixture", "output follow target")
+      callback(target, pane_id, backend)
+    end,
+  })
+  local source_win = vim.api.nvim_get_current_win()
+  for _ = 1, 2 do
+    follow_resumed_for = nil
+    follow_actions.resume_acp_follow("ThreadFixture")
+    assert_equal(follow_resumed_for, pane_id, "output follow action resumes the transcript")
+    assert_equal(vim.api.nvim_get_current_win(), source_win, "output follow keeps editor focus")
+  end
+
   local runtime = backend.get_runtime_snapshot(pane_id)
   assert_equal(runtime.acp_resume_strategy, nil, "LA-STAB-14 legacy runtime field is absent")
   assert(runtime.acp_thread_id ~= nil, "runtime thread identity")

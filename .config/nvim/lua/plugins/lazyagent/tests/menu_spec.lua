@@ -45,6 +45,8 @@ function M.run()
     end
     menu.open()
     assert(items[1][1] == "LazyAgentToggle" and items[2][1] == "LazyAgentACPModel")
+    assert(contains(items, "LazyAgentACPResumeFollow")[3] == "f", "f resumes transcript follow")
+    assert(contains(items, "LazyAgentACPFollow")[3] == nil, "file follow stays menu-only")
     vim.b.lazyagent_agent = "CLI"
     callback(items[2])
     assert(vim.deep_equal(calls[1], { cmd = "LazyAgentACPModel", args = { "ACP" } }), "freeze target")
@@ -58,7 +60,7 @@ function M.run()
     callback(contains(items, "LazyAgentACPRename"))
 
     agent.team_lead_session = function() return "ACP" end
-    menu.run("LazyAgentACPFollow")
+    menu.run("LazyAgentACPResumeFollow")
     assert(calls[3].args[1] == "ACP", "team lead takes priority")
     agent.team_lead_session = function() return nil end
     vim.b.lazyagent_agent = nil
@@ -99,7 +101,7 @@ function M.run()
     for _, mode in ipairs({ "n", "x" }) do
       for _, case in ipairs({
         { "c  ", "toggle" }, { "c m", "LazyAgentACPModel" },
-        { "c f", "LazyAgentACPFollow" }, { "c M", "LazyAgentACPPlanToggle" },
+        { "c f", "LazyAgentACPResumeFollow" }, { "c M", "LazyAgentACPPlanToggle" },
         { "c ", "menu" },
       }) do
         invoked = {}
