@@ -55,9 +55,9 @@ return {
       },
       {
         "c<space>f",
-        function() require("lazyagent.logic.menu").run("LazyAgentACPFollow") end,
+        function() require("lazyagent.logic.menu").run("LazyAgentACPResumeFollow") end,
         mode = { "n", "x" },
-        desc = "Follow Agent",
+        desc = "Resume Agent Output Follow",
       },
       {
         "c<space>M",

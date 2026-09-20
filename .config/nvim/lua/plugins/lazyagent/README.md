@@ -68,7 +68,7 @@ return {
 | --- | --- |
 | `c<Space><Space>` | 従来どおり入力画面をトグル |
 | `c<Space>m` | ACP モデル変更 |
-| `c<Space>f` | ACP Follow Agent（tool location / changed file の追従） |
+| `c<Space>f` | ACP agent window の下端へ戻り、出力追従を再開 |
 | `c<Space>M` | ACP Plan / Agent 切替（従来の小文字 `m` から移動） |
 | `c<Space>l` | 会話表示 |
 | `c<Space>i` | Instant query |
@@ -606,6 +606,9 @@ filesystem checkpoint のcontent blobは4 MiB/fileを上限とし、それを超
 turn中はACP filesystem write、完了したedit tool、`BufWritePost`、filesystem watcherから判明した変更fileだけをcontent-addressed blobへ逐次保存します。turn終了時にはworkspace snapshotとbaseline/final Git HEADで再照合するため、途中でcommitされてcleanになったfileもbefore/after diffを保持します。workspace全体のblob化は行いません。
 
 `:LazyAgentACPFollow [agent]` はFollow Agentをthread単位で切り替え、現在のtool locationまたはchanged fileを通常の編集windowへ自動表示します。
+この操作は補助メニューから選択できます。
+`c<Space>f` / `:LazyAgentACPResumeFollow [agent]` は transcript の下端へ戻って出力追従を再開します。
+通常バッファから実行でき、繰り返し押しても追従は解除されません。
 
 `:LazyAgentACPBlobGCDryRun` は全thread（archivedを含む）のmanifestからblob参照を収集し、参照切れblobの件数・容量を削除せず表示します。`:LazyAgentACPBlobGC` は同じreportを表示したあと、24時間以上参照切れのblobだけを明示確認付きで削除します。active threadまたは既に欠損した参照がある場合は削除を拒否し、確認後にもmanifest lock内で再走査するため、表示後に参照状態が変わったblobは削除しません。
 
