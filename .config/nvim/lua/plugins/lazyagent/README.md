@@ -59,6 +59,28 @@ return {
 
 `c<space>` はこの dotfiles の好みです。`c` は Neovim 標準の operator なので、衝突が気になる場合は `<leader>` 系に置き換えてください。
 
+この dotfiles の設定では、normal / visual mode の `c<Space>` 単独で
+`vim.ui.select` の補助メニュー（`:LazyAgentMenu`）を開きます。
+`timeoutlen` 内に続きのキーを押せばメニューを開かず直接実行します。
+単独入力の表示には `timeout` が有効である必要があります。
+
+| キー | 操作 |
+| --- | --- |
+| `c<Space><Space>` | 従来どおり入力画面をトグル |
+| `c<Space>m` | ACP モデル変更 |
+| `c<Space>f` | ACP Follow Agent（tool location / changed file の追従） |
+| `c<Space>M` | ACP Plan / Agent 切替（従来の小文字 `m` から移動） |
+| `c<Space>l` | 会話表示 |
+| `c<Space>i` | Instant query |
+
+メニューは頻用操作を上に並べ、直接キーとコマンド名も表示します。
+fzf-lua ではこの順序を維持して検索できます。その他の既存キーは維持します。
+Team lead、buffer の agent、editor session の ACP 対象を優先し、対象が曖昧なら
+既存の agent picker で選びます。対象はメニュー表示時に固定し、ACP 専用項目は
+ACP 対象かつコマンドが登録されている場合のみ表示します。
+モデル・Follow・Plan の直接キーにも同じ対象判定を適用します。
+scratch buffer 内の既存 buffer-local keymap は優先されます。
+
 この dotfiles では scratch の normal mode の `L` で ACP transcript の末尾追従を再開します。`scratch_keymaps.adjust_line` で変更できます。
 
 ## 基本設定
@@ -740,7 +762,7 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentInstall [project\|global] [all\|instructions\|skills\|teams]` | projectまたは`stdpath("data")/lazyagent`へstarter `AGENTS.md`、同梱skills、Sol/Luna teamを非破壊install |
 | `:Antigravity` / `:Gemini` / `:Claude` / `:Codex` / `:Copilot` / `:Cursor` | agent を直接起動 |
 
-`c<space>m` でも現在の ACP session（Team 利用時は lead）の Plan / Agent mode を切り替えられます。
+`c<space>M` でも現在の ACP session（Team 利用時は lead）の Plan / Agent mode を切り替えられます。
 Codex ACP では権限用の `mode` を維持したまま `collaboration_mode` の `default` / `plan` を切り替えます。
 
 ## Scratch tokens

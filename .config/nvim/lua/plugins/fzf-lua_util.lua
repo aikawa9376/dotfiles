@@ -254,6 +254,9 @@ M.register_ui_select = function()
     opts = opts or {}
     local is_toggle_menu = opts.kind == "toggle-menu"
     local is_lazyagent_actions = opts.kind == "lazyagent-acp-actions"
+    if opts.kind == "lazyagent-menu" then
+      opts.fzf_opts = vim.tbl_extend("force", opts.fzf_opts or {}, { ["--no-sort"] = true })
+    end
     local is_lazyagent_names = opts.kind == "lazyagent-acp-names"
     local is_lazyagent_elicitation = opts.kind == "lazyagent-acp-elicitation"
     local requested_winopts = opts.winopts

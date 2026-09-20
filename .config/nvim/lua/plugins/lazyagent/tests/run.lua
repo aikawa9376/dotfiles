@@ -13,6 +13,7 @@ local suites = {
   "tests.watch_spec",
   "tests.window_spec",
   "tests.keymaps_spec",
+  "tests.menu_spec",
   "tests.image_preview_spec",
   "tests.image_picker_spec",
   "tests.image_attachment_spec",
