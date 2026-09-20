@@ -11,6 +11,10 @@ window#waybar {
     color: #ffffff;
 }
 
+#waybar > box {
+    padding: 0 15px;
+}
+
 tooltip {
     background: #2d2d2d;
     border: 1px solid #555555;
@@ -35,6 +39,11 @@ tooltip label {
     background: #d64937;
 }
 
+#custom-power {
+    padding: 0 10px;
+    margin: 0 0 0 4px;
+}
+
 #mode,
 #submap,
 #window,
@@ -49,8 +58,7 @@ tooltip label {
 #custom-docker,
 #custom-vpn,
 #custom-updates,
-#custom-mozc,
-#custom-power {
+#custom-mozc {
     padding: 0 10px;
     margin: 0 4px;
 }
