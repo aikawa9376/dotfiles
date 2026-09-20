@@ -5,6 +5,13 @@ return {
   keys = (function()
     local keys = {
       {
+        "c<space>",
+        function() require("lazyagent.logic.menu").open() end,
+        mode = { "n", "x" },
+        desc = "Agent menu",
+        nowait = false,
+      },
+      {
         "c<space><space>",
         function() require("lazyagent").toggle_session() end,
         mode = { "n", "x" },
@@ -42,7 +49,19 @@ return {
       },
       {
         "c<space>m",
-        function() require("lazyagent").toggle_acp_plan_mode() end,
+        function() require("lazyagent.logic.menu").run("LazyAgentACPModel") end,
+        mode = { "n", "x" },
+        desc = "Change Agent Model",
+      },
+      {
+        "c<space>f",
+        function() require("lazyagent.logic.menu").run("LazyAgentACPFollow") end,
+        mode = { "n", "x" },
+        desc = "Follow Agent",
+      },
+      {
+        "c<space>M",
+        function() require("lazyagent.logic.menu").run("LazyAgentACPPlanToggle") end,
         mode = { "n", "x" },
         desc = "Toggle ACP Plan/Agent Mode",
       },
@@ -77,6 +96,7 @@ return {
   end)(),
   -- Also load the plugin when these user commands are executed
   cmd = {
+    "LazyAgentMenu",
     "LazyAgent", "LazyAgentScratch", "LazyAgentToggle", "LazyAgentHistory",
     "LazyAgentHistoryList", "LazyAgentConversationList", "LazyAgentClose",
     "LazyAgentOpenConversation", "LazyAgentConversation", "LazyAgentResumeConversation", "LazyAgentSummary",

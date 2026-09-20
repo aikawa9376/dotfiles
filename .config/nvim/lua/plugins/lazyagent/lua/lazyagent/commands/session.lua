@@ -10,6 +10,10 @@ local function available_agents()
 end
 
 function M.register(create)
+  create("LazyAgentMenu", function()
+    require("lazyagent.logic.menu").open()
+  end, { nargs = 0, desc = "Choose an agent action for the current context" })
+
   create("LazyAgentScratch", function(cmdargs)
     local explicit = command.arg(cmdargs)
     agent_logic.resolve_target_agent(explicit, nil, function(chosen)
