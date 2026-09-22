@@ -1423,7 +1423,8 @@ function M.setup(group)
             if stat_entry.binary then
               table.insert(stat_text, { ' binary', 'Comment' })
             else
-              if (stat_entry.additions or 0) > 0 then
+              if (stat_entry.additions or 0) > 0
+                or (stat_entry.section == 'untracked' and stat_entry.additions == 0) then
                 table.insert(stat_text, { ' +' .. stat_entry.additions, 'FugitiveStatAdd' })
               end
               if (stat_entry.deletions or 0) > 0 then

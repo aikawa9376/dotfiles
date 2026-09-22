@@ -71,6 +71,38 @@ local function attach_numstat(entries, stats)
   end
 end
 
+local function untracked_numstat(path)
+  local stat = vim.uv.fs_lstat(path)
+  if not stat then return nil end
+  if stat.type == 'link' then
+    local target = vim.uv.fs_readlink(path)
+    if not target then return nil end
+    local _, count = target:gsub('\n', '')
+    return count + (target ~= '' and target:sub(-1) ~= '\n' and 1 or 0), false
+  end
+  -- Do not follow symlinks or try to read directories and special files.
+  if stat.type ~= 'file' then return nil end
+  local file = io.open(path, 'rb')
+  if not file then return nil end
+  local count, last, first = 0, '', true
+  while true do
+    local chunk, err = file:read(65536)
+    if err then file:close(); return nil end
+    if not chunk then break end
+    -- Match Git's default binary heuristic without loading the entire file.
+    if first and chunk:sub(1, 8000):find('\0', 1, true) then
+      file:close()
+      return 0, true
+    end
+    first = false
+    local _, newlines = chunk:gsub('\n', '')
+    count = count + newlines
+    last = chunk:sub(-1)
+  end
+  file:close()
+  return count + (last ~= '' and last ~= '\n' and 1 or 0), false
+end
+
 local function parse_status_result(work_tree, result)
   if result.code ~= 0 then return nil, vim.trim(result.stderr or 'git status failed') end
 
@@ -136,7 +168,7 @@ end
 
 local function parse_status(work_tree)
   local result = run(work_tree, {
-    'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
+    '--no-optional-locks', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
   })
   local model, err = parse_status_result(work_tree, result)
   if not model then return nil, err end
@@ -146,6 +178,10 @@ local function parse_status(work_tree)
   if not model.push or model.push == '' then model.push = model.upstream end
   attach_numstat(model.unstaged, parse_numstat(work_tree, false))
   attach_numstat(model.staged, parse_numstat(work_tree, true))
+  for _, entry in ipairs(model.untracked) do
+    entry.additions, entry.binary = untracked_numstat(vim.fs.joinpath(work_tree, entry.path))
+    if entry.additions ~= nil then entry.deletions = 0 end
+  end
   return model
 end
 
@@ -305,13 +341,30 @@ end
 
 function M.snapshot_async(bufnr, work_tree, opts, callback)
   vim.system({
-    'git', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
+    'git', '--no-optional-locks', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
   }, { cwd = work_tree, text = true }, function(result)
     vim.schedule(function()
       if not vim.api.nvim_buf_is_valid(bufnr) then return end
       if opts and opts.is_current and not opts.is_current() then return end
       local model, err = parse_status_result(work_tree, result)
       if not model then callback(nil, err); return end
+      -- Keep displayed statistics until enrichment replaces them. Never carry
+      -- counts across sections (staging), renames, or repositories.
+      local previous = models[bufnr]
+      if previous and previous.work_tree == work_tree then
+        for _, section in ipairs({ 'staged', 'unstaged', 'untracked' }) do
+          local entries = {}
+          for _, entry in ipairs(previous[section]) do entries[entry.path] = entry end
+          for _, entry in ipairs(model[section]) do
+            local cached = entries[entry.path]
+            if cached and cached.status == entry.status and cached.old_path == entry.old_path then
+              entry.additions = cached.additions
+              entry.deletions = cached.deletions
+              entry.binary = cached.binary
+            end
+          end
+        end
+      end
       model.push = model.upstream
       local lines, snapshot_err = snapshot_from_model(bufnr, model, vim.tbl_extend('force', opts or {}, {
         fast = true,
