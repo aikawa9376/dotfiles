@@ -94,7 +94,7 @@ return {
 
               -- ワークツリーの場合は同期状態を確認
               if is_worktree then
-                local ok, wt = pcall(require, "features.worktree")
+                local ok, wt = pcall(require, "git.features.worktree")
                 if ok and wt and type(wt.lualine_sync_status) == "function" then
                   sync_status = wt.lualine_sync_status()
                 end
@@ -289,6 +289,9 @@ return {
           },
           {
             function()
+              if vim.b.git_object then
+                return (require('git.display').name(vim.api.nvim_get_current_buf()):gsub('%%', '%%%%'))
+              end
               local name = vim.fn.expand("%=")
               if name == "" then return "" end
               if string.find(name, "term") then name = "TERM"
@@ -360,6 +363,9 @@ return {
         lualine_a = {
           {
             function()
+              if vim.b.git_object then
+                return (require('git.display').name(vim.api.nvim_get_current_buf()):gsub('%%', '%%%%'))
+              end
               local name = vim.fn.expand("%=")
               if name == "" then return "" end
               local icon = require("nvim-web-devicons").get_icon_by_filetype(vim.o.filetype)

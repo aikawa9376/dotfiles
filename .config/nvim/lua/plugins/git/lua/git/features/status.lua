@@ -1,0 +1,2962 @@
+local M = {}
+local utils = require("git.utils")
+local help = require("git.features.help")
+local commands = require("git.features.commands")
+local syntax_highlight = require("git.features.syntax_highlight")
+local worktree = require("git.features.worktree")
+local status_renderer = require("git.features.status_renderer")
+local operation = require('git.features.operation')
+local range_diff = require('git.features.range_diff')
+local repository_health = require('git.features.repository_health')
+local notes = require('git.features.notes')
+local index_flags = require('git.features.index_flags')
+local commit_highlight = require('git.features.commit_highlight')
+local commit_body = require('git.features.commit_body')
+local pull_requests_by_buf = {}
+local pull_request_scope_by_buf = {}
+local pull_request_branch_by_buf = {}
+local commit_scope_by_buf = {}
+local unpushed_commits_by_buf = {}
+local status_cursor_anchor_by_buf = {}
+local pending_status_cursor_anchors_by_buf = {}
+local repository_health_by_buf = {}
+local index_flags_by_buf = {}
+local index_flags_expanded_by_buf = {}
+local status_snapshot_by_buf = {}
+local status_initialized_by_buf = {}
+local status_dirty_by_buf = {}
+local status_reload_by_buf = {}
+local pending_status_focus_by_buf = {}
+
+local status_heading_highlights = {
+  { '^Head:', 'RainbowDelimiterBlue' },
+  { '^Help:', 'Comment' },
+  { '^Unmerged paths %(', 'RainbowDelimiterRed' },
+  { '^Untracked files %(', 'RainbowDelimiterOrange' },
+  { '^Unstaged changes %(', 'RainbowDelimiterYellow' },
+  { '^Staged changes %(', 'RainbowDelimiterGreen' },
+  { '^Unpulled ', 'RainbowDelimiterCyan' },
+  { '^Unpushed %[only%] %(', 'RainbowDelimiterViolet' },
+  { '^Commits %[latest 15%+%] %(', 'RainbowDelimiterViolet' },
+  { '^Submodules %(', 'RainbowDelimiterBlue' },
+  { '^Worktrees %(', 'RainbowDelimiterViolet' },
+  { '^Stashes %(', 'RainbowDelimiterOrange' },
+  { '^Pull requests %(', 'RainbowDelimiterGreen' },
+  { '^Index flags %[local%]', 'RainbowDelimiterCyan' },
+  { '^Loading repository details', 'Comment' },
+  { '^Bisecting', 'RainbowDelimiterYellow' },
+  { ' in progress', 'RainbowDelimiterYellow' },
+}
+
+local function status_heading_highlight(line)
+  for _, item in ipairs(status_heading_highlights) do
+    if line:match(item[1]) then return item[2] end
+  end
+  return nil
+end
+
+local function is_status_buffer(bufnr)
+  return utils.is_valid_buf(bufnr)
+    and (vim.b[bufnr].custom_git_status == true or vim.bo[bufnr].filetype == 'fugitivestatus')
+end
+
+local function configure_status_window(winid)
+  if not (winid and vim.api.nvim_win_is_valid(winid)) then return end
+  vim.api.nvim_set_option_value('foldmethod', 'manual', { win = winid })
+  vim.api.nvim_set_option_value('foldenable', false, { win = winid })
+  vim.api.nvim_set_option_value('foldcolumn', '0', { win = winid })
+end
+
+local function stash_ref_from_line(line)
+  return line and line:match('stash@%{%d+%}')
+end
+
+local function pull_request_number_from_line(line)
+  return line and tonumber(line:match('^#(%d+)%s'))
+end
+
+local function recent_commit_lines(work_tree, limit)
+  local result = vim.system({
+    'git', 'log',
+    '--date=format:%Y-%m-%d %H:%M',
+    '--pretty=format:%h%x09%ad%x09%s',
+    '-n', tostring(limit), 'HEAD', '--',
+  }, { cwd = work_tree, text = true }):wait()
+  if result.code ~= 0 then return {} end
+
+  local commits = {}
+  for line in (result.stdout or ''):gmatch('[^\r\n]+') do
+    table.insert(commits, (line:gsub('\t', ' ')))
+  end
+  return commits
+end
+
+local function append_custom_status_lines(lines, custom_lines)
+  local last_content = #lines
+  while last_content > 0 and lines[last_content] == '' do last_content = last_content - 1 end
+  local result = {}
+  for i = 1, last_content do table.insert(result, lines[i]) end
+  vim.list_extend(result, custom_lines)
+  for i = last_content + 1, #lines do table.insert(result, lines[i]) end
+  return result
+end
+
+local function status_header_kind(line)
+  if not line then return nil end
+  if line:match('^Unpushed %[only%] %(%d+%)$') or line:match('^Commits %[latest 15%+%] %(%d+%)$') then
+    return 'commit'
+  end
+  if line:match('^Pull requests %(') then return 'pull_request' end
+  if line:match('^Hidden changes: %d+ files? %(Index flags%)$') then return 'index_flags_warning' end
+  if line:match('^Index flags %[local%] %(%d+%) %[.+%]$') then return 'index_flags' end
+  return nil
+end
+
+local function status_cursor_key(lines, row, bufnr)
+  local line = lines[row] or ''
+  local rendered_entry = bufnr and status_renderer.entry_at(bufnr, row) or nil
+  if rendered_entry and not rendered_entry.header then return 'status_entry', rendered_entry.path end
+  local flagged_entry = bufnr and index_flags.entry_from_line(index_flags_by_buf[bufnr], line) or nil
+  if flagged_entry then return 'index_flag', flagged_entry.path end
+  local header = status_header_kind(line)
+  if header then return 'header', header end
+
+  local number = pull_request_number_from_line(line)
+  if number then return 'pull_request', tostring(number) end
+
+  local stash = stash_ref_from_line(line)
+  if stash then return 'stash', stash end
+
+  local hash = line:match('^(%x%x%x%x%x%x%x+)%s')
+  if hash then return 'commit', hash end
+
+  local submodule = repository_health.submodule_path(line)
+  if submodule then return 'submodule', submodule end
+
+  local status, path = line:match('^([MADRCUT?!][MADRCUT?!]?) (.+)$')
+  if status then
+    local _, renamed_path = path:match('^(.+) %-> (.+)$')
+    return 'status_entry', renamed_path or path
+  end
+
+  local section
+  for i = row, 1, -1 do
+    if lines[i]:match('^Worktrees') then
+      section = 'worktree'
+      break
+    end
+    if lines[i] == '' or lines[i]:match('^[A-Z][^/]-%s*[%[(]') then break end
+  end
+  if section == 'worktree' then
+    local worktree_path = line:match('^(%S+)')
+    if worktree_path then return section, worktree_path end
+  end
+
+  return 'line', line
+end
+
+local function capture_status_cursor(bufnr, winid)
+  if not (winid and vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr) then
+    return nil
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(winid)
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local key_type, key = status_cursor_key(lines, cursor[1], bufnr)
+  local view = vim.w[winid].fugitive_preserve_split_view
+  if view then view = vim.deepcopy(view) end
+  if not view then
+    pcall(function()
+      view = vim.api.nvim_win_call(winid, vim.fn.winsaveview)
+    end)
+  end
+  return {
+    key_type = key_type,
+    key = key,
+    row = cursor[1],
+    col = cursor[2],
+    screen_offset = view and math.max((view.lnum or cursor[1]) - (view.topline or cursor[1]), 0) or 0,
+    view = view,
+    winid = winid,
+  }
+end
+
+local function capture_status_cursors(bufnr)
+  local anchors = {}
+  local current_win = vim.api.nvim_get_current_win()
+  local current_anchor = capture_status_cursor(bufnr, current_win)
+  if current_anchor then table.insert(anchors, current_anchor) end
+  for _, winid in ipairs(vim.api.nvim_list_wins()) do
+    if winid ~= current_win then
+      local anchor = capture_status_cursor(bufnr, winid)
+      if anchor then table.insert(anchors, anchor) end
+    end
+  end
+  if #anchors > 0 then status_cursor_anchor_by_buf[bufnr] = anchors[1] end
+  return anchors
+end
+
+local function capture_status_cursors_before_reload(bufnr)
+  local saved_anchor = status_cursor_anchor_by_buf[bufnr]
+  local anchors = capture_status_cursors(bufnr)
+  if not saved_anchor then return anchors end
+
+  for i, anchor in ipairs(anchors) do
+    if anchor.winid == saved_anchor.winid then
+      anchors[i] = saved_anchor
+      return anchors
+    end
+  end
+  return anchors
+end
+
+local function find_status_cursor_row(lines, anchor, bufnr)
+  if anchor.position_only then
+    return math.min(math.max(anchor.row or 1, 1), math.max(#lines, 1))
+  end
+
+  local best_row, best_distance
+  for row = 1, #lines do
+    local key_type, key = status_cursor_key(lines, row, bufnr)
+    if key_type == anchor.key_type and key == anchor.key then
+      local distance = math.abs(row - (anchor.row or row))
+      if not best_distance or distance < best_distance then
+        best_row, best_distance = row, distance
+      end
+    end
+  end
+  return best_row or math.min(math.max(anchor.row or 1, 1), math.max(#lines, 1))
+end
+
+local function restore_status_cursor(bufnr, anchor, target_win)
+  if not anchor then return end
+  local winid = target_win or anchor.winid
+  if not (winid and vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr) then return end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local row = find_status_cursor_row(lines, anchor, bufnr)
+  local line = lines[row] or ''
+  pcall(function()
+    vim.api.nvim_win_call(winid, function()
+      local view = vim.deepcopy(anchor.view or vim.fn.winsaveview())
+      view.lnum = row
+      view.col = math.min(anchor.col or 0, #line)
+      view.topline = math.max(row - (anchor.screen_offset or 0), 1)
+      vim.fn.winrestview(view)
+    end)
+  end)
+  if anchor.position_only then
+    local updated = capture_status_cursor(bufnr, winid)
+    if updated then status_cursor_anchor_by_buf[bufnr] = updated end
+  end
+end
+
+local function restore_status_cursors(bufnr, anchors)
+  for _, anchor in ipairs(anchors or {}) do
+    restore_status_cursor(bufnr, anchor)
+  end
+end
+
+local function status_line_identity(lines, row)
+  local line = lines[row] or ''
+  if line:match('^Worktrees %(') then return 'header\0worktree' end
+  if line:match('^Stashes %(') then return 'header\0stash' end
+  local key_type, key = status_cursor_key(lines, row)
+  return key_type .. '\0' .. key
+end
+
+local function matching_status_lines(old_lines, new_lines)
+  local old_keys, new_keys = {}, {}
+  for row = 1, #old_lines do old_keys[row] = status_line_identity(old_lines, row) end
+  for row = 1, #new_lines do new_keys[row] = status_line_identity(new_lines, row) end
+
+  -- Keep semantically identical rows in place and edit only the gaps between them.
+  local lengths = { [0] = {} }
+  for j = 0, #new_lines do lengths[0][j] = 0 end
+  for i = 1, #old_lines do
+    lengths[i] = { [0] = 0 }
+    for j = 1, #new_lines do
+      if old_keys[i] == new_keys[j] then
+        lengths[i][j] = lengths[i - 1][j - 1] + 1
+      else
+        lengths[i][j] = math.max(lengths[i - 1][j], lengths[i][j - 1])
+      end
+    end
+  end
+
+  local reversed = {}
+  local i, j = #old_lines, #new_lines
+  while i > 0 and j > 0 do
+    if old_keys[i] == new_keys[j] then
+      table.insert(reversed, { old = i, new = j })
+      i, j = i - 1, j - 1
+    elseif lengths[i - 1][j] >= lengths[i][j - 1] then
+      i = i - 1
+    else
+      j = j - 1
+    end
+  end
+
+  local matches = { { old = 0, new = 0 } }
+  for index = #reversed, 1, -1 do table.insert(matches, reversed[index]) end
+  table.insert(matches, { old = #old_lines + 1, new = #new_lines + 1 })
+  return matches
+end
+
+local function reconcile_status_block(bufnr, start_row, end_row, new_lines)
+  local start_idx = start_row - 1
+  local old_lines = vim.api.nvim_buf_get_lines(bufnr, start_idx, end_row, false)
+  local matches = matching_status_lines(old_lines, new_lines)
+
+  for index = #matches, 2, -1 do
+    local current = matches[index]
+    local previous = matches[index - 1]
+
+    if current.old <= #old_lines and old_lines[current.old] ~= new_lines[current.new] then
+      vim.api.nvim_buf_set_lines(
+        bufnr,
+        start_idx + current.old - 1,
+        start_idx + current.old,
+        false,
+        { new_lines[current.new] }
+      )
+    end
+
+    local replacement = {}
+    for new_row = previous.new + 1, current.new - 1 do
+      table.insert(replacement, new_lines[new_row])
+    end
+    if current.old - previous.old > 1 or #replacement > 0 then
+      vim.api.nvim_buf_set_lines(
+        bufnr,
+        start_idx + previous.old,
+        start_idx + current.old - 1,
+        false,
+        replacement
+      )
+    end
+  end
+end
+
+local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts)
+  if not utils.is_valid_buf(bufnr) then return end
+  opts = opts or {}
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if not work_tree then return end
+  local cursor_anchors = pending_status_cursor_anchors_by_buf[bufnr]
+  pending_status_cursor_anchors_by_buf[bufnr] = nil
+  if not cursor_anchors then cursor_anchors = capture_status_cursors(bufnr) end
+
+  local commit_scope = commit_scope_by_buf[bufnr] or 'unpushed'
+  local snapshot = opts.snapshot or (opts.cached and status_snapshot_by_buf[bufnr] or nil)
+  if snapshot and snapshot.commit_scope ~= commit_scope then snapshot = nil end
+  if opts.snapshot and snapshot then status_snapshot_by_buf[bufnr] = snapshot end
+
+  if not snapshot then
+    local cached_details = status_snapshot_by_buf[bufnr]
+    local reusable = opts.reuse_details and cached_details and not cached_details.loading_details
+      and cached_details or nil
+    local reusable_commits = reusable or (opts.reuse_commits and cached_details
+      and cached_details.commits_loaded and cached_details or nil)
+    local health = reusable and reusable.health or repository_health.inspect(work_tree)
+    repository_health_by_buf[bufnr] = health
+    local native_lines, snapshot_err = status_renderer.snapshot(bufnr, work_tree, {
+      header_lines = repository_health.repository_lines(health),
+    })
+    if not native_lines then
+      vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
+      return
+    end
+
+    local flag_state = reusable and reusable.flag_state or index_flags.inspect(work_tree)
+    index_flags_by_buf[bufnr] = flag_state
+    local warning = index_flags.warning_line(flag_state)
+    if warning then
+      local warning_row = #native_lines + 1
+      for row, line in ipairs(native_lines) do
+        if line == 'Help: g?' then warning_row = row; break end
+      end
+      table.insert(native_lines, warning_row, warning)
+      status_renderer.shift_entries(bufnr, warning_row, 1)
+    end
+
+    local unpushed_commits = reusable_commits and reusable_commits.unpushed_commits
+      or status_renderer.unpushed_commits(bufnr)
+    local commit_lines = reusable_commits and reusable_commits.commit_scope == commit_scope
+      and reusable_commits.commit_lines
+      or unpushed_commits
+    if not (reusable_commits and reusable_commits.commit_scope == commit_scope)
+      and commit_scope == 'recent' and #commit_lines < 15
+    then
+      commit_lines = recent_commit_lines(work_tree, 15)
+    end
+    local worktree_summary = reusable and reusable.worktree_summary or nil
+    if not reusable then worktree_summary = worktree.get_summary(work_tree) end
+    snapshot = {
+      commit_lines = commit_lines,
+      commit_scope = commit_scope,
+      flag_state = flag_state,
+      health = health,
+      native_lines = native_lines,
+      stash_list = reusable and reusable.stash_list or utils.get_stash_list(work_tree),
+      unpushed_commits = unpushed_commits,
+      worktree_summary = worktree_summary,
+    }
+    status_snapshot_by_buf[bufnr] = snapshot
+  else
+    repository_health_by_buf[bufnr] = snapshot.health
+    index_flags_by_buf[bufnr] = snapshot.flag_state
+  end
+
+  local health = snapshot.health
+  local native_lines = snapshot.native_lines
+  local worktree_summary = snapshot.worktree_summary
+  local stash_list = snapshot.stash_list
+  local pull_requests = pull_requests_by_buf[bufnr]
+  local flag_state = snapshot.flag_state
+
+  local function build_final_lines(commit_lines)
+    local final_lines = {}
+    if not snapshot.loading_details and stash_list and #stash_list > 0 then
+      table.insert(final_lines, '')
+      table.insert(final_lines, 'Stashes (' .. #stash_list .. ')')
+      for _, l in ipairs(stash_list) do table.insert(final_lines, l) end
+    end
+
+    if not snapshot.loading_details or snapshot.commits_loaded then
+      table.insert(final_lines, '')
+      local commit_header = commit_scope == 'recent'
+        and ('Commits [latest 15+] (%d)'):format(#commit_lines)
+        or ('Unpushed [only] (%d)'):format(#commit_lines)
+      table.insert(final_lines, commit_header)
+      for _, l in ipairs(commit_lines) do table.insert(final_lines, l) end
+
+      local unpulled, upstream = status_renderer.unpulled_commits(bufnr)
+      if unpulled then
+        table.insert(final_lines, '')
+        table.insert(final_lines, ('Unpulled from %s (%d)'):format(upstream, #unpulled))
+        vim.list_extend(final_lines, unpulled)
+      end
+    end
+
+    if snapshot.loading_details then
+      table.insert(final_lines, '')
+      table.insert(final_lines, 'Loading repository details…')
+    end
+
+    if pull_requests then
+      local scope = pull_request_scope_by_buf[bufnr] or 'branch'
+      local scope_label = scope == 'all'
+        and 'all'
+        or ('branch: ' .. (pull_request_branch_by_buf[bufnr] or 'detached HEAD'))
+      table.insert(final_lines, '')
+      table.insert(final_lines, ('Pull requests (%d) [%s]'):format(#pull_requests, scope_label))
+      for _, pr in ipairs(pull_requests) do
+        local draft = pr.isDraft and ' [draft]' or ''
+        local branch = pr.headRefName ~= '' and ('  ' .. pr.headRefName) or ''
+        table.insert(final_lines, ('#%d%s %s%s'):format(pr.number, draft, pr.title, branch))
+      end
+    end
+    vim.list_extend(final_lines, repository_health.submodule_lines(health))
+    if worktree_summary and #worktree_summary > 0 then
+      table.insert(final_lines, '')
+      for _, l in ipairs(worktree_summary) do table.insert(final_lines, l) end
+    end
+    vim.list_extend(final_lines, index_flags.status_lines(
+      flag_state,
+      index_flags_expanded_by_buf[bufnr] == true
+    ))
+    return final_lines
+  end
+
+  utils.with_buf_modifiable(bufnr, function()
+    unpushed_commits_by_buf[bufnr] = snapshot.unpushed_commits
+    local custom_lines = build_final_lines(snapshot.commit_lines)
+    local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local custom_start
+    if opts.cached then
+      for row, line in ipairs(current_lines) do
+        if line:match('^Stashes %(') or status_header_kind(line) == 'commit' then
+          custom_start = row > 1 and current_lines[row - 1] == '' and row - 1 or row
+          break
+        end
+      end
+    end
+    if custom_start then
+      reconcile_status_block(bufnr, custom_start, #current_lines, custom_lines)
+    else
+      local desired_lines = append_custom_status_lines(native_lines, custom_lines)
+      reconcile_status_block(bufnr, 1, #current_lines, desired_lines)
+    end
+
+    -- Update extmarks based on the new buffer contents
+    vim.api.nvim_buf_clear_namespace(bufnr, ns_worktree, 0, -1)
+    vim.api.nvim_buf_clear_namespace(bufnr, ns_stash, 0, -1)
+    vim.api.nvim_buf_clear_namespace(bufnr, ns_pr, 0, -1)
+
+    local lines_after = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    local in_worktree, in_stash, in_pr = false, false, false
+    local current_wt_abs = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
+
+    for i, l in ipairs(lines_after) do
+      if l:match('^Worktrees') then
+        vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterViolet' })
+        in_worktree, in_stash, in_pr = true, false, false
+      elseif l:match('^Stashes') then
+        vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterOrange' })
+        in_worktree, in_stash, in_pr = false, true, false
+      elseif l:match('^Pull requests') then
+        vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterGreen' })
+        in_worktree, in_stash, in_pr = false, false, true
+      elseif in_worktree then
+        -- 形式: [path]  [branch]  [head] [sync_icon]
+        local p_part = l:match('^(%S+)')
+        if p_part then
+          local s_p, e_p = l:find(p_part, 1, true)
+          local path_hl = (vim.fn.fnamemodify(p_part, ':p'):gsub('/+$', '') == current_wt_abs) and 'DiagnosticOk' or 'Directory'
+          vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_p - 1, { end_col = e_p, hl_group = path_hl })
+
+          -- ブランチ
+          local br_part = l:sub(e_p + 1):match('%s+(%S+)')
+          local s_b, e_b
+          if br_part then
+            s_b, e_b = l:find(br_part, e_p + 1, true)
+            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_b - 1, { end_col = e_b, hl_group = 'Type' })
+          end
+
+          -- ハッシュ
+          local hd_part = l:sub((e_b or e_p) + 1):match('%s+(%S+)')
+          local s_h, e_h
+          if hd_part then
+            s_h, e_h = l:find(hd_part, (e_b or e_p) + 1, true)
+            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_h - 1, { end_col = e_h, hl_group = 'Comment' })
+          end
+
+          -- 同期アイコン (一番右)
+          local icon_str = '󰚰'
+          local icon_pos, icon_end = l:find(icon_str, (e_h or e_b or e_p), true)
+          if icon_pos then
+            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, icon_pos - 1, { end_col = icon_end, hl_group = 'DiagnosticOk' })
+          end
+        else
+          if l ~= '' then in_worktree = false end
+        end
+
+      elseif in_stash then
+        local ref = stash_ref_from_line(l)
+        if ref then
+          local s, e = l:find(ref, 1, true)
+          -- stash@{n} の部分を強調
+          if s and e then
+            vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, s - 1, { end_col = e, hl_group = 'GitSignsAdd' })
+            -- それ以降（メッセージ部分）をコメント色に
+            vim.api.nvim_buf_set_extmark(bufnr, ns_stash, i - 1, e, { end_col = #l, hl_group = 'Comment' })
+          end
+        else in_stash = false end
+      elseif in_pr then
+        local number = pull_request_number_from_line(l)
+        if number then
+          local number_end = #tostring(number) + 1
+          vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, 0, { end_col = number_end, hl_group = 'Identifier' })
+          local draft_start, draft_end = l:find('%[draft%]')
+          if draft_start then
+            vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, draft_start - 1, { end_col = draft_end, hl_group = 'Comment' })
+          end
+        else in_pr = false end
+      end
+    end
+  end, 5)
+  restore_status_cursors(bufnr, cursor_anchors)
+  require('git.features.push_progress').render(bufnr)
+  commit_body.refresh(bufnr)
+  local focus = pending_status_focus_by_buf[bufnr]
+  if focus then
+    pending_status_focus_by_buf[bufnr] = nil
+    M.focus_section(bufnr, focus, { refresh = false })
+  end
+end
+
+local function get_stash_ref_at_cursor(bufnr)
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1]
+  return stash_ref_from_line(line)
+end
+
+local function is_cursor_in_stash_area()
+  local line = vim.api.nvim_get_current_line()
+  if line:match('^%s*stash@%{%d+%}') then return true end
+  local s = line:find('Stashes')
+  return s ~= nil and (vim.api.nvim_win_get_cursor(0)[2] + 1) >= s
+end
+
+local function is_cursor_in_worktree_area()
+  local line = vim.api.nvim_get_current_line()
+  return line:match('^Worktrees') or line:match('^[~/]')
+end
+
+local function is_cursor_in_pull_request_area()
+  return pull_request_number_from_line(vim.api.nvim_get_current_line()) ~= nil
+end
+
+local function is_cursor_on_pull_request_header()
+  return vim.api.nvim_get_current_line():match('^Pull requests %(') ~= nil
+end
+
+local function is_cursor_on_commit_header()
+  local line = vim.api.nvim_get_current_line()
+  return line:match('^Unpushed %[only%] %(%d+%)$') ~= nil
+    or line:match('^Commits %[latest 15%+%] %(%d+%)$') ~= nil
+end
+
+local function submodule_path_at_cursor()
+  return repository_health.submodule_path(vim.api.nvim_get_current_line())
+end
+
+local function get_worktree_path_at_cursor()
+  local line = vim.api.nvim_get_current_line()
+  return line:match('^(%S+)')
+end
+
+local function status_entry_at_cursor()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local entry = status_renderer.entry_at(bufnr, row)
+  if entry and not entry.header then return entry.status, entry.path, entry end
+
+  local line = vim.api.nvim_get_current_line()
+  local status, path = line:match('^([MADRCUT?!][MADRCUT?!]?) (.+)$')
+  if not status then return nil, nil, nil end
+  local _, new_path = path:match('^(.+) %-> (.+)$')
+  return status, new_path or path, nil
+end
+
+local function worktree_relative_abs_path(path)
+  return utils.worktree_relative_abs_path(utils.get_buf_work_tree(vim.api.nvim_get_current_buf()), path)
+end
+
+local function delete_untracked_directory_at_cursor()
+  local status, path = status_entry_at_cursor()
+  if status ~= '?' and status ~= '??' then return false end
+
+  local abs = worktree_relative_abs_path(path)
+  if not abs or vim.fn.isdirectory(abs) ~= 1 then return false end
+
+  if vim.fn.delete(abs, 'rf') ~= 0 then
+    vim.notify('Failed to delete untracked directory: ' .. path, vim.log.levels.ERROR)
+    return true
+  end
+
+  vim.notify('Deleted untracked directory: ' .. path, vim.log.levels.INFO)
+  return true
+end
+
+local function preferred_target_window(status_win)
+  local function is_regular_window(winid)
+    if not (winid and winid ~= 0 and vim.api.nvim_win_is_valid(winid)) then return false end
+    local config = vim.api.nvim_win_get_config(winid)
+    return not config.external and (config.relative == nil or config.relative == '')
+  end
+
+  local function is_editing_window(winid)
+    if not is_regular_window(winid) then return false end
+    local bufnr = vim.api.nvim_win_get_buf(winid)
+    if is_status_buffer(bufnr) or vim.bo[bufnr].filetype == 'fugitive' then return false end
+    if vim.bo[bufnr].buftype ~= '' then return false end
+    if vim.b[bufnr].lazyagent_is_scratch == true or vim.b[bufnr].lazyagent_acp_transcript == true then
+      return false
+    end
+    local filetype = vim.bo[bufnr].filetype
+    return filetype ~= 'lazyagent' and filetype ~= 'lazyagent_acp'
+  end
+
+  local alt = vim.fn.win_getid(vim.fn.winnr('#'))
+  if alt ~= status_win and is_editing_window(alt) then return alt end
+
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= status_win and is_editing_window(win) then return win end
+  end
+  return nil
+end
+
+local function status_file_line_at_cursor(bufnr, row)
+  local entry = status_renderer.entry_at(bufnr, row)
+  if not entry or entry.header then return nil end
+  local direct_row = status_renderer.entry_row(bufnr, row)
+  if not direct_row or row <= direct_row then return nil end
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, direct_row, row, false)
+  local hunk_index, target_line
+  for index = #lines, 1, -1 do
+    local new_start = lines[index]:match('^@@ %-%d+,?%d* %+(%d+)')
+    if new_start then
+      hunk_index, target_line = index, tonumber(new_start)
+      break
+    end
+    if lines[index]:match('^@@ new file:') then
+      hunk_index, target_line = index, 1
+      break
+    end
+  end
+  if not hunk_index then return nil end
+
+  local offset = 0
+  for index = hunk_index + 1, #lines do
+    local line = lines[index]
+    if not line:match('^%-') and not line:match('^\\ No newline') then offset = offset + 1 end
+  end
+  return math.max(target_line + offset - 1, 1)
+end
+
+local function status_edit_command_at_cursor(bufnr)
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local entry = status_renderer.entry_at(bufnr, row)
+  if entry and not entry.header then
+    if entry.section == 'staged' then
+      return 'Gedit :0:' .. vim.fn.fnameescape(entry.path), nil, status_file_line_at_cursor(bufnr, row)
+    end
+    local work_tree = utils.get_buf_work_tree(bufnr)
+    if not work_tree then return nil, 'Git work tree not found' end
+    local absolute = vim.fs.joinpath(work_tree, entry.path)
+    return 'edit ' .. vim.fn.fnameescape(absolute), nil, status_file_line_at_cursor(bufnr, row)
+  end
+
+  local hash = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s')
+  if hash then return 'Gedit ' .. hash end
+  return nil, 'No file or commit found at cursor'
+end
+
+local function target_window_or_split(status_win)
+  local target_win = preferred_target_window(status_win)
+  if target_win and vim.api.nvim_win_is_valid(target_win) and target_win ~= status_win then
+    return target_win, false
+  end
+
+  vim.api.nvim_win_call(status_win, function()
+    vim.cmd('belowright split')
+    target_win = vim.api.nvim_get_current_win()
+  end)
+  return target_win, true
+end
+
+local function open_entry_from_status(bufnr, close_status)
+  if not utils.is_valid_buf(bufnr) then return end
+
+  local status_win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_buf(status_win) ~= bufnr then
+    status_win = vim.fn.bufwinid(bufnr)
+  end
+  if status_win == -1 or not vim.api.nvim_win_is_valid(status_win) then
+    vim.notify('Status window not found', vim.log.levels.WARN)
+    return
+  end
+
+  local selected_commit = vim.api.nvim_win_call(status_win, function()
+    local line = vim.api.nvim_get_current_line()
+    return line:match('^(%x%x%x%x%x%x%x+)%s')
+  end)
+  local cmd, command_err, target_line = vim.api.nvim_win_call(status_win, function()
+    return status_edit_command_at_cursor(bufnr)
+  end)
+  if not cmd then
+    vim.notify(command_err, vim.log.levels.WARN)
+    return
+  end
+
+  local target_win, created_target = target_window_or_split(status_win)
+  if not (target_win and vim.api.nvim_win_is_valid(target_win) and target_win ~= status_win) then
+    vim.notify('Target window not found', vim.log.levels.WARN)
+    return
+  end
+
+  local git_dir = vim.b[bufnr].git_dir
+  local ok, exec_err = pcall(vim.api.nvim_win_call, target_win, function()
+    if selected_commit then
+      require('git.features.commit').open({ work_tree = utils.get_buf_work_tree(bufnr), revision = selected_commit })
+      return
+    end
+    local had_fugitive_event = vim.fn.exists('g:fugitive_event') == 1
+    local previous_fugitive_event = vim.g.fugitive_event
+    vim.g.fugitive_event = git_dir
+    local executed, command_exec_err = pcall(vim.cmd, cmd)
+    if had_fugitive_event then
+      vim.g.fugitive_event = previous_fugitive_event
+    else
+      vim.g.fugitive_event = nil
+    end
+    if not executed then error(command_exec_err) end
+    if target_line then
+      local line_count = vim.api.nvim_buf_line_count(0)
+      vim.api.nvim_win_set_cursor(0, { math.min(math.max(target_line, 1), line_count), 0 })
+      vim.cmd('normal! zz')
+    end
+  end)
+  if not ok then
+    if created_target and vim.api.nvim_win_is_valid(target_win) then
+      pcall(vim.api.nvim_win_close, target_win, false)
+    end
+    vim.notify(tostring(exec_err), vim.log.levels.WARN)
+    return
+  end
+
+  if close_status then pcall(vim.api.nvim_win_close, status_win, false) end
+  if vim.api.nvim_win_is_valid(target_win) then
+    vim.api.nvim_set_current_win(target_win)
+  end
+end
+
+local function open_index_flag_file(bufnr, path)
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if not work_tree then return false end
+  local absolute = vim.fs.joinpath(work_tree, path)
+  if vim.fn.filereadable(absolute) ~= 1 and vim.fn.isdirectory(absolute) ~= 1 then
+    vim.notify('Flagged path is missing: ' .. path, vim.log.levels.WARN)
+    return false
+  end
+  local status_win = vim.fn.bufwinid(bufnr)
+  if status_win == -1 then return false end
+  local target_win = target_window_or_split(status_win)
+  if not target_win then return false end
+  vim.api.nvim_win_call(target_win, function()
+    vim.cmd('edit ' .. vim.fn.fnameescape(absolute))
+  end)
+  vim.api.nvim_set_current_win(target_win)
+  return true
+end
+
+local function open_oil_in_target(bufnr, path)
+  local status_win = vim.fn.bufwinid(bufnr)
+  if status_win == -1 or not vim.api.nvim_win_is_valid(status_win) then return false end
+  local target_win, created_target = target_window_or_split(status_win)
+  if not (target_win and vim.api.nvim_win_is_valid(target_win)) then return false end
+
+  local ok = pcall(function()
+    vim.api.nvim_win_call(target_win, function()
+      vim.cmd('Oil ' .. vim.fn.fnameescape(path))
+    end)
+  end)
+  if not ok and created_target and vim.api.nvim_win_is_valid(target_win) then
+    pcall(vim.api.nvim_win_close, target_win, false)
+  end
+  if ok and vim.api.nvim_win_is_valid(target_win) then vim.api.nvim_set_current_win(target_win) end
+  return ok
+end
+
+local diff_buffer_serial = 0
+
+local function show_diff_side(winid, side, path, label)
+  local bufnr = vim.api.nvim_create_buf(false, true)
+  diff_buffer_serial = diff_buffer_serial + 1
+  vim.api.nvim_buf_set_name(bufnr, ('git-diff://%d/%s/%s'):format(diff_buffer_serial, label, path))
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, #side > 0 and side or { '' })
+  vim.bo[bufnr].buftype = 'nofile'
+  vim.bo[bufnr].bufhidden = 'wipe'
+  vim.bo[bufnr].swapfile = false
+  vim.bo[bufnr].modifiable = false
+  vim.bo[bufnr].readonly = true
+  local filetype = vim.filetype.match({ filename = path })
+  if filetype then vim.bo[bufnr].filetype = filetype end
+  vim.api.nvim_win_set_buf(winid, bufnr)
+  vim.api.nvim_set_option_value('wrap', false, { win = winid })
+  vim.api.nvim_win_call(winid, function() vim.cmd('diffthis') end)
+  return bufnr
+end
+
+local function open_scratch_diff(sides, target_line, layout)
+  vim.cmd('tabnew')
+  local placeholder = vim.api.nvim_get_current_buf()
+  local left_win = vim.api.nvim_get_current_win()
+  show_diff_side(left_win, sides.left, sides.path, sides.left_label)
+  if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
+    pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
+  end
+  vim.cmd(layout == 'horizontal' and 'rightbelow split' or 'rightbelow vsplit')
+  local right_win = vim.api.nvim_get_current_win()
+  local right_buf = show_diff_side(right_win, sides.right, sides.path, sides.right_label)
+  if target_line then
+    local line_count = vim.api.nvim_buf_line_count(right_buf)
+    pcall(vim.api.nvim_win_set_cursor, right_win, { math.min(math.max(target_line, 1), line_count), 0 })
+    vim.api.nvim_win_call(right_win, function() vim.cmd('normal! zz') end)
+  end
+  return true
+end
+
+local function find_current_file_buffer(absolute)
+  local normalized = utils.normalize_path(absolute)
+  for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(candidate)
+      and vim.bo[candidate].buftype == ''
+      and utils.normalize_path(vim.api.nvim_buf_get_name(candidate)) == normalized
+    then
+      if not vim.api.nvim_buf_is_loaded(candidate) then pcall(vim.fn.bufload, candidate) end
+      return vim.api.nvim_buf_is_loaded(candidate) and candidate or nil
+    end
+  end
+
+  if vim.fn.filereadable(absolute) ~= 1 then return nil end
+  local candidate = vim.fn.bufadd(absolute)
+  local loaded = pcall(vim.fn.bufload, candidate)
+  return loaded and candidate or nil
+end
+
+local function open_diff_with_current_file(work_tree, sides, target_line, layout)
+  local absolute = utils.worktree_relative_abs_path(work_tree, sides.path)
+  local current_buf = absolute and find_current_file_buffer(absolute) or nil
+  if not current_buf then return open_scratch_diff(sides, target_line, layout) end
+
+  vim.cmd('tabnew')
+  local placeholder = vim.api.nvim_get_current_buf()
+  local current_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(current_win, current_buf)
+  vim.api.nvim_set_option_value('wrap', false, { win = current_win })
+  if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
+    pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
+  end
+
+  vim.cmd(layout == 'horizontal' and 'aboveleft split' or 'leftabove vsplit')
+  local base_win = vim.api.nvim_get_current_win()
+  show_diff_side(base_win, sides.left, sides.path, sides.left_label)
+  vim.api.nvim_win_call(current_win, function() vim.cmd('diffthis') end)
+  vim.cmd('wincmd =')
+
+  if target_line then
+    local line_count = vim.api.nvim_buf_line_count(current_buf)
+    pcall(vim.api.nvim_win_set_cursor, current_win, { math.min(math.max(target_line, 1), line_count), 0 })
+    vim.api.nvim_win_call(current_win, function() vim.cmd('normal! zz') end)
+  end
+  vim.api.nvim_set_current_win(current_win)
+  return true
+end
+
+local function open_status_diff(bufnr, target_line, layout)
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local sides, err = status_renderer.diff_sides(bufnr, row)
+  if not sides then vim.notify(err, vim.log.levels.WARN); return false end
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if not work_tree then return false end
+  return open_diff_with_current_file(work_tree, sides, target_line, layout)
+end
+
+local function open_index_flag_diff(bufnr, entry, layout)
+  local work_tree = utils.get_buf_work_tree(bufnr)
+  if not work_tree then return false end
+  local sides, err = index_flags.diff_sides(work_tree, entry)
+  if not sides then vim.notify(err, vim.log.levels.WARN); return false end
+  return open_diff_with_current_file(work_tree, sides, nil, layout)
+end
+
+local function open_conflict_diff(bufnr)
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local sides, err = status_renderer.conflict_sides(bufnr, row)
+  if not sides then vim.notify(err, vim.log.levels.WARN); return false end
+
+  vim.cmd('tabnew')
+  local placeholder = vim.api.nvim_get_current_buf()
+  local first_win = vim.api.nvim_get_current_win()
+  show_diff_side(first_win, sides[1].lines, sides.path, sides[1].label)
+  if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
+    pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
+  end
+  for index = 2, #sides do
+    vim.cmd('rightbelow vsplit')
+    show_diff_side(vim.api.nvim_get_current_win(), sides[index].lines, sides.path, sides[index].label)
+  end
+  vim.cmd('wincmd =')
+  return true
+end
+
+function M.setup(group)
+  vim.api.nvim_set_hl(0, 'FugitiveStatAdd', { default = true, link = 'GitSignsAdd' })
+  vim.api.nvim_set_hl(0, 'FugitiveStatDelete', { default = true, link = 'GitSignsDelete' })
+
+  vim.api.nvim_create_autocmd('FileType', {
+    group = group,
+    pattern = 'fugitivestatus',
+    callback = function(ev)
+      local b = ev.buf
+      if not utils.get_buf_work_tree(b) or status_initialized_by_buf[b] then return end
+      status_initialized_by_buf[b] = true
+      commit_body.attach(b)
+      local active = true
+      local function is_live()
+        return active and utils.is_valid_buf(b) and vim.api.nvim_buf_is_loaded(b)
+      end
+      local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
+      vim.opt_local.number, vim.opt_local.relativenumber = false, false
+      configure_status_window(vim.api.nvim_get_current_win())
+      local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
+      local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
+      local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
+      local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
+      local pr_fetching, pr_fetch_pending = false, false
+      local refresh_scheduled = false
+      local fast_refresh_serial = 0
+      local index_change_running = false
+      local apply_icons
+      pull_request_scope_by_buf[b] = pull_request_scope_by_buf[b] or 'branch'
+      commit_scope_by_buf[b] = commit_scope_by_buf[b] or 'unpushed'
+
+      local function refresh(opts)
+        refresh_status_sections(b, ns_worktree, ns_stash, ns_pr, opts)
+        if apply_icons then apply_icons() end
+      end
+
+      local function refresh_cached()
+        if status_snapshot_by_buf[b] then refresh({ cached = true }) end
+      end
+
+      local function schedule_refresh()
+        if refresh_scheduled then return end
+        refresh_scheduled = true
+        vim.schedule(function()
+          refresh_scheduled = false
+          if is_live() then refresh() end
+        end)
+      end
+
+      local function render_fast_status(reuse_cache, reuse_details)
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree then return end
+        fast_refresh_serial = fast_refresh_serial + 1
+        local serial = fast_refresh_serial
+        local previous = reuse_cache and status_snapshot_by_buf[b] or nil
+        local header_lines = previous and repository_health.repository_lines(previous.health) or nil
+        status_renderer.snapshot_async(b, work_tree, {
+          header_lines = header_lines,
+          is_current = function() return is_live() and serial == fast_refresh_serial end,
+        }, function(native_lines, snapshot_err)
+          if not is_live() then return end
+          if serial ~= fast_refresh_serial then return end
+          if not native_lines then
+            vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
+            return
+          end
+
+          refresh({
+            snapshot = {
+              commit_lines = previous and previous.commit_lines or {},
+              commit_scope = commit_scope_by_buf[b] or 'unpushed',
+              flag_state = previous and previous.flag_state or { entries = {}, changed_count = 0 },
+              health = previous and previous.health or nil,
+              loading_details = previous == nil,
+              native_lines = native_lines,
+              stash_list = previous and previous.stash_list or {},
+              unpushed_commits = previous and previous.unpushed_commits or {},
+              worktree_summary = previous and previous.worktree_summary or nil,
+            },
+          })
+
+          local function schedule_details()
+            -- Let the lightweight status and commits reach the screen before
+            -- collecting expensive repository metadata and diff statistics.
+            vim.defer_fn(function()
+              if not is_live() or serial ~= fast_refresh_serial then return end
+              if reuse_details then
+                refresh({ reuse_details = true })
+              else
+                refresh({ reuse_commits = true })
+              end
+            end, 300)
+          end
+
+          if reuse_details and previous then
+            schedule_details()
+            return
+          end
+
+          status_renderer.unpushed_commits_async(b, function(unpushed)
+            if not is_live() or serial ~= fast_refresh_serial then return end
+            local function publish(commit_lines)
+              if not is_live() or serial ~= fast_refresh_serial then return end
+              local current = status_snapshot_by_buf[b]
+              if current then
+                current.unpushed_commits = unpushed
+                current.commit_lines = commit_lines
+                current.commits_loaded = true
+                refresh_cached()
+              end
+              schedule_details()
+            end
+            if commit_scope_by_buf[b] == 'recent' and #unpushed < 15 then
+              status_renderer.recent_commits_async(b, 15, publish)
+            else
+              publish(unpushed)
+            end
+          end)
+        end)
+      end
+
+      local fetch_pull_requests
+      fetch_pull_requests = function()
+        if not is_live() then return end
+        if pr_fetching then
+          pr_fetch_pending = true
+          return
+        end
+
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree or vim.fn.executable('gh') ~= 1 then return end
+
+        pr_fetching = true
+        local requested_scope = pull_request_scope_by_buf[b] or 'branch'
+        local function finish_fetch()
+          pr_fetching = false
+          if pr_fetch_pending then
+            pr_fetch_pending = false
+            fetch_pull_requests()
+          end
+        end
+
+        local function request_pull_requests(branch)
+          local args = {
+            'gh', 'pr', 'list', '--state', 'open',
+            '--limit', '100',
+            '--json', 'number,title,headRefName,isDraft,url',
+          }
+          if branch then vim.list_extend(args, { '--head', branch }) end
+
+          vim.system(args, { cwd = work_tree, text = true }, function(result)
+            vim.schedule(function()
+              if not is_live() then return end
+
+              if result.code == 0 and pull_request_scope_by_buf[b] == requested_scope then
+                local ok, decoded = pcall(vim.json.decode, result.stdout or '')
+                local pull_requests = {}
+                if ok and type(decoded) == 'table' then
+                  for _, pr in ipairs(decoded) do
+                    local number = tonumber(pr.number)
+                    if number then
+                      local url = type(pr.url) == 'string' and pr.url or ''
+                      table.insert(pull_requests, {
+                        number = number,
+                        title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
+                        headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
+                        isDraft = pr.isDraft == true,
+                        url = url,
+                        repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
+                      })
+                    end
+                  end
+                end
+                pull_requests_by_buf[b] = pull_requests
+                pull_request_branch_by_buf[b] = branch
+                refresh_cached()
+              end
+
+              finish_fetch()
+            end)
+          end)
+        end
+
+        if requested_scope == 'branch' then
+          vim.system({ 'git', 'branch', '--show-current' }, { cwd = work_tree, text = true }, function(result)
+            vim.schedule(function()
+              if not is_live() then return end
+              if pull_request_scope_by_buf[b] ~= requested_scope then
+                finish_fetch()
+                return
+              end
+              local branch = result.code == 0 and vim.trim(result.stdout or '') or ''
+              if branch == '' then
+                if pull_request_scope_by_buf[b] == requested_scope then
+                  pull_requests_by_buf[b] = {}
+                  pull_request_branch_by_buf[b] = nil
+                  refresh_cached()
+                end
+                finish_fetch()
+                return
+              end
+              request_pull_requests(branch)
+            end)
+          end)
+        else
+          request_pull_requests(nil)
+        end
+      end
+
+      local function reload_status(position_only, reuse_details)
+        if not is_live() then return end
+        status_dirty_by_buf[b] = nil
+        local anchors = position_only
+          and capture_status_cursors(b)
+          or capture_status_cursors_before_reload(b)
+        if position_only then
+          for _, anchor in ipairs(anchors) do anchor.position_only = true end
+        end
+        if #anchors > 0 then pending_status_cursor_anchors_by_buf[b] = anchors end
+        render_fast_status(true, reuse_details)
+        if not reuse_details then fetch_pull_requests() end
+      end
+      status_reload_by_buf[b] = reload_status
+      local function invalidate_status()
+        if not is_live() then return end
+        if utils.is_buf_visible(b) then reload_status()
+        else status_dirty_by_buf[b] = true end
+      end
+      local stop_metadata_watch = require('git.features.status_watch').subscribe(vim.b[b].git_dir, function()
+        require('git.features.worktree_watch').refresh(utils.get_buf_work_tree(b))
+        invalidate_status()
+      end)
+      local event_probe = require('git.features.status_probe').new(utils.get_buf_work_tree(b), invalidate_status)
+      event_probe.check()
+      local stop_worktree_watch = require('git.features.worktree_watch').subscribe(utils.get_buf_work_tree(b), function()
+        if is_live() then event_probe.check() end
+      end)
+      vim.api.nvim_create_autocmd({ 'BufEnter', 'WinEnter' }, {
+        group = bufgroupt, buffer = b,
+        callback = function() event_probe.check() end,
+      })
+      vim.api.nvim_create_autocmd({ 'FocusGained', 'TermLeave', 'ShellCmdPost' }, {
+        group = bufgroupt,
+        callback = function()
+          if is_live() and utils.is_buf_visible(b) then event_probe.check() end
+        end,
+      })
+
+      local function notify_repo_changed(skip_source)
+        utils.fire_fugitive_changed({ bufnr = b, skip_source = skip_source == true })
+      end
+
+      status_renderer.take_ownership(b)
+      pending_status_cursor_anchors_by_buf[b] = nil
+      utils.with_buf_modifiable(b, function()
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { 'Loading Git status…' })
+      end)
+      render_fast_status(false)
+      fetch_pull_requests()
+
+      vim.api.nvim_create_autocmd({ 'BufUnload', 'BufWipeout' }, {
+        group = bufgroupt,
+        buffer = b,
+        once = true,
+        callback = function()
+          active = false
+          stop_metadata_watch()
+          stop_worktree_watch()
+          event_probe.stop()
+          status_initialized_by_buf[b] = nil
+          status_dirty_by_buf[b] = nil
+          status_reload_by_buf[b] = nil
+          pending_status_focus_by_buf[b] = nil
+          pull_requests_by_buf[b] = nil
+          pull_request_scope_by_buf[b] = nil
+          pull_request_branch_by_buf[b] = nil
+          commit_scope_by_buf[b] = nil
+          unpushed_commits_by_buf[b] = nil
+          status_cursor_anchor_by_buf[b] = nil
+          pending_status_cursor_anchors_by_buf[b] = nil
+          repository_health_by_buf[b] = nil
+          index_flags_by_buf[b] = nil
+          index_flags_expanded_by_buf[b] = nil
+          status_snapshot_by_buf[b] = nil
+          status_renderer.cleanup(b)
+          pcall(vim.api.nvim_del_augroup_by_id, bufgroupt)
+        end,
+      })
+
+      vim.api.nvim_create_autocmd({ 'CursorMoved', 'CursorMovedI', 'BufWinLeave', 'WinLeave' }, {
+        group = bufgroupt,
+        buffer = b,
+        callback = function()
+          local anchor = capture_status_cursor(b, vim.api.nvim_get_current_win())
+          if anchor then status_cursor_anchor_by_buf[b] = anchor end
+        end,
+      })
+
+      vim.api.nvim_create_autocmd({ 'BufWinEnter', 'WinEnter' }, {
+        group = bufgroupt,
+        buffer = b,
+        callback = function()
+          if not status_renderer.is_owned(b) then return end
+          local winid = vim.api.nvim_get_current_win()
+          local anchor = status_cursor_anchor_by_buf[b]
+          if anchor then
+            vim.schedule(function()
+              if is_live() then restore_status_cursor(b, status_cursor_anchor_by_buf[b] or anchor, winid) end
+            end)
+          end
+        end,
+      })
+
+      local function set_commit_scope(scope)
+        if scope == commit_scope_by_buf[b] then return end
+        commit_scope_by_buf[b] = scope
+        schedule_refresh()
+      end
+
+      local function toggle_commit_scope()
+        set_commit_scope(commit_scope_by_buf[b] == 'recent' and 'unpushed' or 'recent')
+      end
+
+      local function select_commit_scope()
+        local choices = {
+          { scope = 'unpushed', label = 'Unpushed only' },
+          { scope = 'recent', label = 'Latest 15 (keep all unpushed)' },
+        }
+        vim.ui.select(choices, {
+          prompt = 'Commit scope:',
+          format_item = function(item)
+            local selected = item.scope == commit_scope_by_buf[b] and ' (current)' or ''
+            return item.label .. selected
+          end,
+        }, function(choice)
+          if choice then set_commit_scope(choice.scope) end
+        end)
+      end
+
+      local function set_pull_request_scope(scope)
+        if scope == pull_request_scope_by_buf[b] then return end
+        pull_request_scope_by_buf[b] = scope
+        pull_request_branch_by_buf[b] = nil
+        refresh_cached()
+        fetch_pull_requests()
+      end
+
+      local function pull_request_at_cursor()
+        local number = pull_request_number_from_line(vim.api.nvim_get_current_line())
+        if not number then return nil end
+        for _, pr in ipairs(pull_requests_by_buf[b] or {}) do
+          if pr.number == number then return pr end
+        end
+        return nil
+      end
+
+      local function toggle_pull_request_scope()
+        set_pull_request_scope(pull_request_scope_by_buf[b] == 'all' and 'branch' or 'all')
+      end
+
+      local function select_pull_request_scope()
+        local choices = {
+          { scope = 'branch', label = 'Current branch' },
+          { scope = 'all', label = 'All open pull requests' },
+        }
+        vim.ui.select(choices, {
+          prompt = 'Pull request scope:',
+          format_item = function(item)
+            local selected = item.scope == pull_request_scope_by_buf[b] and ' (current)' or ''
+            return item.label .. selected
+          end,
+        }, function(choice)
+          if choice then set_pull_request_scope(choice.scope) end
+        end)
+      end
+
+      utils.setup_repo_refresh(bufgroupt, b, function()
+        if utils.is_buf_visible(b) then
+          reload_status()
+        else
+          status_dirty_by_buf[b] = true
+        end
+      end, {
+        ignore_source = true,
+        refresh_on_enter = false,
+      })
+      vim.api.nvim_create_autocmd('BufWritePost', {
+        group = bufgroupt,
+        callback = function(write_ev)
+          if not is_live() then return end
+          local name = vim.api.nvim_buf_get_name(write_ev.buf)
+          local work_tree = utils.get_buf_work_tree(b)
+          if name == '' or not work_tree then return end
+          local absolute = utils.normalize_path(name)
+          local root = utils.normalize_path(work_tree)
+          if absolute and root and (absolute == root or absolute:sub(1, #root + 1) == root .. '/') then
+            if utils.is_buf_visible(b) then
+              reload_status(true, true)
+            else
+              status_dirty_by_buf[b] = true
+            end
+          end
+        end,
+      })
+
+      apply_icons = function()
+        if not is_live() then return end
+        vim.api.nvim_buf_clear_namespace(b, ns_id, 0, -1)
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local unpushed_hashes = commit_highlight.hash_set(unpushed_commits_by_buf[b])
+        local in_unpulled = false
+        for idx, line in ipairs(lines) do
+          if line:match('^Unpulled ') then
+            in_unpulled = true
+          elseif in_unpulled and not line:match('^%x%x%x%x%x%x%x+%s') then
+            in_unpulled = false
+          end
+
+          local heading_group = status_heading_highlight(line)
+          if heading_group then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = heading_group })
+          elseif line:match('^Good:') then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'GitSignsAdd' })
+          elseif line:match('^Bad:') then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'GitSignsDelete' })
+          elseif line:match('^Bisect keys:') or line:match('^Start:') then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'Comment' })
+          elseif line:match('^Operation keys:') then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'Comment' })
+          elseif line:match('^Submodule ') then
+            local health_group = line:find('gone', 1, true) and 'DiagnosticWarn'
+              or (line:find('dirty', 1, true) and 'GitSignsChange' or 'Directory')
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = health_group })
+          elseif line:match('^Upstream:.*%[gone%]') or line == 'HEAD: detached' then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
+          elseif line:match('^Hidden changes: %d+ files? %(Index flags%)$') then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
+          elseif line:match('^  skip%s') or line:match('^  assume%s') then
+            local flag_group = line:match('%[missing%]') and 'DiagnosticError'
+              or (line:match('%[modified%]') and 'DiagnosticWarn' or 'Comment')
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = flag_group })
+          end
+
+          local commit_hash = line:match('^(%x%x%x%x%x%x%x+)%s')
+          if commit_hash then
+            local state = in_unpulled and 'unpulled'
+              or (commit_scope_by_buf[b] == 'recent' and unpushed_hashes[commit_hash] and 'unpushed')
+              or 'default'
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, {
+              end_col = #commit_hash,
+              hl_group = commit_highlight.group(state),
+            })
+            local date_start, date_end = line:find('%d%d%d%d%-%d%d%-%d%d %d%d:%d%d', #commit_hash + 1)
+            if date_start then
+              vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, date_start - 1, {
+                end_col = date_end,
+                hl_group = 'Directory',
+              })
+            end
+          end
+
+          local stat_entry = status_renderer.entry_at(b, idx)
+          if stat_entry and not stat_entry.header and status_renderer.entry_row(b, idx) == idx then
+            local stat_text = require('git.features.change_display').statistics(stat_entry, 'FugitiveStatAdd', 'FugitiveStatDelete')
+            if #stat_text > 0 then
+              vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, #line, {
+                virt_text = stat_text,
+                virt_text_pos = 'eol',
+              })
+            end
+          end
+
+          local filepath = line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
+          if filepath then
+            local status = line:sub(1, 1)
+            if status == 'A' then vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 1, hl_group = 'GitSignsAdd' })
+            elseif status == 'D' then vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 1, hl_group = 'GitSignsDelete' }) end
+
+            local icon, icon_hl = utils.get_devicon(filepath)
+            local f_start = line:find(filepath, 1, true)
+            if f_start then
+              vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, f_start - 1, { end_col = f_start - 1 + #filepath, hl_group = icon_hl })
+              vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, f_start - 1, { virt_text = { { icon .. ' ', icon_hl } }, virt_text_pos = 'inline' })
+            end
+          end
+        end
+        notes.apply_icons(b, utils.get_buf_work_tree(b), function(line)
+          return line:match('^(%x%x%x%x%x%x%x+)%s')
+        end)
+      end
+      apply_icons()
+
+      local function perform_continue()
+        local git_dir = vim.b[b].git_dir
+        if not git_dir or git_dir == '' then return end
+        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --continue")
+        elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then vim.cmd("Git cherry-pick --continue")
+        elseif vim.fn.filereadable(git_dir .. "/MERGE_HEAD") == 1 then vim.cmd("Git merge --continue")
+        elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then vim.cmd("Git revert --continue")
+        else vim.notify("No operation in progress.", vim.log.levels.WARN) end
+      end
+
+      local function perform_skip()
+        local git_dir = vim.b[b].git_dir
+        if not git_dir or git_dir == '' then return end
+        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --skip")
+        elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then vim.cmd("Git cherry-pick --skip")
+        elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then vim.cmd("Git revert --skip")
+        else vim.notify("Skip not applicable.", vim.log.levels.WARN) end
+      end
+
+      local function perform_abort()
+        local git_dir = vim.b[b].git_dir
+        if not git_dir or git_dir == '' then return end
+        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --abort")
+        elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then vim.cmd("Git cherry-pick --abort")
+        elseif vim.fn.filereadable(git_dir .. "/MERGE_HEAD") == 1 then vim.cmd("Git merge --abort")
+        elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then vim.cmd("Git revert --abort")
+        else vim.notify("No operation to abort.", vim.log.levels.WARN) end
+      end
+
+      local function status_git_prefix()
+        local work_tree = utils.get_buf_work_tree(b)
+        return work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or nil
+      end
+
+      local function rename_stash_at_cursor(r)
+        local line = vim.api.nvim_get_current_line()
+        local current_msg = line:match('^%s*stash@%{%d+%}:%s*(.*)') or ""
+        vim.ui.input({ prompt = 'New name for ' .. r .. ': ', default = current_msg }, function(input)
+          if not input or input == '' or input == current_msg then return end
+          local git = status_git_prefix()
+          if not git then
+            vim.notify('Not in a git repository', vim.log.levels.WARN)
+            return
+          end
+          local hash = vim.fn.trim(vim.fn.system(git .. 'rev-parse ' .. vim.fn.shellescape(r)))
+          if vim.v.shell_error ~= 0 then return end
+          vim.fn.system(git .. 'stash drop ' .. vim.fn.shellescape(r))
+          vim.fn.system(git .. 'stash store -m ' .. vim.fn.shellescape(input) .. ' ' .. vim.fn.shellescape(hash))
+          notify_repo_changed()
+        end)
+      end
+
+      local function stash_target_ref()
+        local count = math.max(vim.v.count, 0)
+        return 'stash@{' .. tostring(count) .. '}'
+      end
+
+      local function stash_push_with_mode(mode)
+        local args = ''
+        if mode == 'staged' then
+          args = ' --staged'
+        elseif mode == 'keep-index' then
+          args = ' --keep-index'
+        end
+        if vim.v.count > 1 then
+          args = args .. ' --all'
+        elseif vim.v.count > 0 then
+          args = args .. ' --include-untracked'
+        end
+        vim.cmd('Git stash push' .. args)
+        notify_repo_changed()
+      end
+
+      local function stash_apply(action, include_index)
+        local target = stash_target_ref()
+        local cmd = include_index and 'Git stash ' .. action .. ' --quiet --index ' .. target or 'Git stash ' .. action .. ' --quiet ' .. target
+        vim.cmd(cmd)
+        notify_repo_changed()
+      end
+
+      local function show_stash_help()
+        help.show('Stash keys', {
+          'cl     show stash list',
+          'cz<CR> stash changes',
+          'czz    stash all changes',
+          'czw    stash keep-index',
+          'cza    apply stash@{count}',
+          'czA    apply stash without index',
+          'czp    pop stash@{count}',
+          'czP    pop stash without index',
+          'czs    stash staged changes',
+          'czv    open stash diff',
+          'cw     reword commit / rename stash',
+          'q      close status',
+        })
+      end
+
+      vim.keymap.set('n', 'cz<Space>', ':Git stash<Space>', { buffer = b, nowait = true, silent = true, desc = 'Git stash...' })
+      vim.keymap.set('n', 'cz<CR>', ':Git stash<CR>', { buffer = b, nowait = true, silent = true, desc = 'Stash working tree' })
+      vim.keymap.set('n', 'cza', function() stash_apply('apply', true) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Apply stash@{count}' })
+      vim.keymap.set('n', 'czA', function() stash_apply('apply', false) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Apply stash without index' })
+      vim.keymap.set('n', 'czp', function() stash_apply('pop', true) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Pop stash@{count}' })
+      vim.keymap.set('n', 'czP', function() stash_apply('pop', false) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Pop stash without index' })
+      vim.keymap.set('n', 'czs', function() stash_push_with_mode('staged') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Stash staged changes' })
+      vim.keymap.set('n', 'czv', function()
+        local target = stash_target_ref()
+        if target then vim.cmd('Gedit ' .. target) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Open stash diff' })
+      vim.keymap.set('n', 'czw', function() stash_push_with_mode('keep-index') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Stash keep-index' })
+      vim.keymap.set('n', 'czz', function() stash_push_with_mode('default') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Stash all changes' })
+      vim.keymap.set('n', 'cz?', function() show_stash_help() end,
+        { buffer = b, nowait = true, silent = true, desc = 'Show stash key bindings' })
+
+      vim.keymap.set('n', 'rr', perform_continue, { buffer = b, silent = true, desc = "Continue" })
+      vim.keymap.set('n', 'rs', perform_skip, { buffer = b, silent = true, desc = "Skip" })
+      vim.keymap.set('n', 'ra', perform_abort, { buffer = b, silent = true, desc = "Abort" })
+
+      local function bisect(action, args)
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree then
+          vim.notify('Not in a Git repository', vim.log.levels.WARN)
+          return
+        end
+        operation.bisect(work_tree, action, args, function(ok, message)
+          if not is_live() then return end
+          if not ok then
+            vim.notify(message, vim.log.levels.ERROR)
+            return
+          end
+          local output_lines = vim.split(message, '\n', { plain = true, trimempty = true })
+          local summary = output_lines[#output_lines] or message
+          for _, line in ipairs(output_lines) do
+            if line:match('is the first bad commit') then summary = line; break end
+          end
+          vim.notify(action == 'run' and message or summary, vim.log.levels.INFO)
+          reload_status()
+          notify_repo_changed(true)
+        end)
+      end
+
+      vim.keymap.set('n', 'gbs', function()
+        local work_tree = utils.get_buf_work_tree(b)
+        local current = work_tree and operation.inspect(work_tree) or nil
+        if current and current.kind == 'bisect' then
+          vim.notify('A bisect operation is already in progress', vim.log.levels.WARN)
+          return
+        end
+        vim.ui.input({ prompt = 'Known bad revision: ', default = 'HEAD' }, function(bad)
+          if not bad or vim.trim(bad) == '' then return end
+          vim.ui.input({ prompt = 'Known good revision: ' }, function(good)
+            if not good or vim.trim(good) == '' then return end
+            bisect('start', { vim.trim(bad), vim.trim(good) })
+          end)
+        end)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Start Git bisect' })
+      vim.keymap.set('n', 'gbg', function() bisect('good') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Mark bisect commit good' })
+      vim.keymap.set('n', 'gbb', function() bisect('bad') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Mark bisect commit bad' })
+      vim.keymap.set('n', 'gbk', function() bisect('skip') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Skip bisect commit' })
+      vim.keymap.set('n', 'gbr', function() bisect('reset') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Reset Git bisect' })
+      vim.keymap.set('n', 'gbx', function()
+        vim.ui.input({ prompt = 'Bisect run command: ' }, function(command)
+          if not command or vim.trim(command) == '' then return end
+          bisect('run', { 'sh', '-c', command })
+        end)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Run command through Git bisect' })
+      vim.keymap.set('n', 'gbv', function()
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local in_bisect = false
+        for row, line in ipairs(lines) do
+          if line:match('^Bisecting') then
+            in_bisect = true
+          elseif in_bisect and line:match('^%x%x%x%x%x%x%x+%s') then
+            local winid = vim.fn.bufwinid(b)
+            if winid ~= -1 then
+              vim.api.nvim_win_set_cursor(winid, { row, 0 })
+              open_entry_from_status(b, false)
+            end
+            return
+          elseif in_bisect and line == '' then
+            break
+          end
+        end
+        vim.notify('No active bisect candidate', vim.log.levels.WARN)
+      end, { buffer = b, nowait = true, silent = true, desc = 'View current bisect candidate' })
+
+      local function health_command(args)
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree then return end
+        repository_health.run(work_tree, args, function(ok, message)
+          if not ok then vim.notify(message, vim.log.levels.ERROR); return end
+          vim.notify(message, vim.log.levels.INFO)
+          reload_status()
+          notify_repo_changed(true)
+        end)
+      end
+
+      local function current_submodule_args(args)
+        local path = submodule_path_at_cursor()
+        if path then vim.list_extend(args, { '--', path }) end
+        return args
+      end
+
+      vim.keymap.set('n', 'mi', function()
+        health_command(current_submodule_args({ 'submodule', 'update', '--init', '--recursive' }))
+      end, { buffer = b, nowait = true, silent = true, desc = 'Initialize/update submodule' })
+      vim.keymap.set('n', 'mu', function()
+        health_command(current_submodule_args({ 'submodule', 'update', '--recursive' }))
+      end, { buffer = b, nowait = true, silent = true, desc = 'Update submodule to recorded commit' })
+      vim.keymap.set('n', 'ms', function()
+        health_command(current_submodule_args({ 'submodule', 'sync', '--recursive' }))
+      end, { buffer = b, nowait = true, silent = true, desc = 'Synchronize submodule URLs' })
+      vim.keymap.set('n', 'mU', function()
+        local state = repository_health_by_buf[b]
+        local default = state and state.upstream and state.upstream.display or ''
+        vim.ui.input({ prompt = 'Set upstream to: ', default = default }, function(target)
+          if not target or vim.trim(target) == '' then return end
+          health_command({ 'branch', '--set-upstream-to=' .. vim.trim(target) })
+        end)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Set current branch upstream' })
+      vim.keymap.set('n', 'cc', '<cmd>Git commit<CR>',
+        { buffer = b, nowait = true, silent = true, desc = 'Commit' })
+      vim.keymap.set('n', 'c<CR>', '<cmd>Git commit<CR>',
+        { buffer = b, nowait = true, silent = true, desc = 'Commit' })
+      vim.keymap.set('n', 'ca', '<cmd>Git commit --amend<CR>',
+        { buffer = b, nowait = true, silent = true, desc = 'Amend commit' })
+      vim.keymap.set('n', 'ce', '<cmd>Git commit --amend --no-edit<CR>',
+        { buffer = b, nowait = true, silent = true, desc = 'Amend without editing message' })
+
+      local function change_index(action, first_row, last_row)
+        if index_change_running then
+          vim.notify('An index update is already in progress', vim.log.levels.WARN)
+          return
+        end
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        index_change_running = true
+        local function complete(changed, err)
+          index_change_running = false
+          if not is_live() then return end
+          if not changed then
+            vim.notify(err, vim.log.levels.WARN)
+            return
+          end
+          reload_status(true, true)
+          notify_repo_changed(true)
+        end
+        if first_row and last_row then
+          status_renderer.change_index_range_async(b, first_row, last_row, action, complete)
+        else
+          status_renderer.change_index_async(b, row, action, complete)
+        end
+      end
+
+      vim.keymap.set('n', '-', function() change_index('toggle') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Stage/unstage entry' })
+      vim.keymap.set('n', 's', function() change_index('toggle') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Stage/unstage entry' })
+      vim.keymap.set('n', 'u', function() change_index('unstage') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Unstage entry' })
+      for key, action in pairs({ ['-'] = 'toggle', s = 'toggle', u = 'unstage' }) do
+        local selected_action = action
+        vim.keymap.set('x', key, function()
+          local first_row = math.min(vim.fn.line('v'), vim.fn.line('.'))
+          local last_row = math.max(vim.fn.line('v'), vim.fn.line('.'))
+          change_index(selected_action, first_row, last_row)
+        end, { buffer = b, nowait = true, silent = true, desc = 'Update selected status entries' })
+      end
+
+      vim.keymap.set('n', 'U', function()
+        if index_change_running then return end
+        index_change_running = true
+        status_renderer.reset_index_async(b, function(changed, err)
+          index_change_running = false
+          if not is_live() then return end
+          if not changed then vim.notify(err, vim.log.levels.WARN); return end
+          reload_status(false, true)
+          notify_repo_changed(true)
+        end)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Unstage all changes' })
+
+      vim.keymap.set('n', 'S', function()
+        if index_change_running then return end
+        index_change_running = true
+        status_renderer.stage_all_async(b, function(changed, err)
+          index_change_running = false
+          if not is_live() then return end
+          if not changed then vim.notify(err, vim.log.levels.WARN); return end
+          reload_status(false, true)
+          notify_repo_changed(true)
+        end)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Stage all changes' })
+
+      local function set_entry_diff(value)
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        local entry_row = status_renderer.entry_row(b, row)
+        local mode = value == nil and 'toggle' or (value and 'show' or 'hide')
+        if status_renderer.update_diff(b, row, mode) and entry_row then
+          local line_count = vim.api.nvim_buf_line_count(b)
+          pcall(vim.api.nvim_win_set_cursor, 0, { math.min(entry_row, line_count), 0 })
+        end
+      end
+
+      vim.keymap.set('n', '=', function() set_entry_diff(nil) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Toggle inline diff' })
+      vim.keymap.set('n', 'o', function() set_entry_diff(nil) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Toggle inline diff' })
+      vim.keymap.set('n', '>', function() set_entry_diff(true) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Expand inline diff' })
+      vim.keymap.set('n', '<', function() set_entry_diff(false) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Collapse inline diff' })
+
+      local function is_status_file_line(line)
+        return line:match('^[MADRCUT?!][MADRCUT?!]? ') ~= nil
+      end
+
+      local function is_status_item_line(line)
+        return is_status_file_line(line) or line:match('^@@') ~= nil or line:match('^%x%x%x%x%x%x%x+%s') ~= nil
+      end
+
+      local function move_to_match(direction, predicate, count)
+        count = count or 1
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        for _ = 1, count do
+          local candidate = row + direction
+          while candidate >= 1 and candidate <= #lines and not predicate(lines[candidate], candidate) do
+            candidate = candidate + direction
+          end
+          if candidate < 1 or candidate > #lines then break end
+          row = candidate
+        end
+        vim.api.nvim_win_set_cursor(0, { row, 0 })
+        return row
+      end
+
+      local function conflict_action(action)
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        local changed, err
+        if action == 'resolved' then
+          changed, err = status_renderer.mark_resolved(b, row)
+        else
+          changed, err = status_renderer.resolve_conflict(b, row, action)
+        end
+        if not changed then vim.notify(err, vim.log.levels.WARN); return end
+        reload_status()
+        notify_repo_changed(true)
+        if action == 'resolved' then
+          vim.schedule(function()
+            if is_live() then M.focus_section(b, 'conflicted') end
+          end)
+        end
+      end
+
+      vim.keymap.set('n', 'co', function() conflict_action('ours') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Choose ours for conflicted file' })
+      vim.keymap.set('n', 'ct', function() conflict_action('theirs') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Choose theirs for conflicted file' })
+      vim.keymap.set('n', 'cr', function() conflict_action('resolved') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Mark conflicted file resolved' })
+      vim.keymap.set('n', 'c3', function() open_conflict_diff(b) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Open base/ours/theirs conflict diff' })
+      vim.keymap.set('n', ']x', function()
+        move_to_match(1, function(_, candidate)
+          local entry = status_renderer.entry_at(b, candidate)
+          return entry and not entry.header and entry.section == 'conflicted'
+        end, vim.v.count1)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Next conflicted file' })
+      vim.keymap.set('n', '[x', function()
+        move_to_match(-1, function(_, candidate)
+          local entry = status_renderer.entry_at(b, candidate)
+          return entry and not entry.header and entry.section == 'conflicted'
+        end, vim.v.count1)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Previous conflicted file' })
+
+      local function expand_at_cursor()
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        return status_renderer.update_diff(b, row, 'show')
+      end
+
+      local function next_expanded_item(count)
+        for _ = 1, count do
+          expand_at_cursor()
+          move_to_match(1, function(line) return is_status_file_line(line) or line:match('^@@') end, 1)
+        end
+      end
+
+      local function next_hunk(count)
+        for _ = 1, count do
+          expand_at_cursor()
+          local row = move_to_match(1, function(line) return is_status_file_line(line) or line:match('^@@') end, 1)
+          local line = vim.api.nvim_buf_get_lines(b, row - 1, row, false)[1] or ''
+          if is_status_file_line(line) then
+            expand_at_cursor()
+            local next_line = vim.api.nvim_buf_get_lines(b, row, row + 1, false)[1] or ''
+            if next_line:match('^@@') then vim.api.nvim_win_set_cursor(0, { row + 1, 0 }) end
+          end
+        end
+      end
+
+      local function previous_hunk(count)
+        for _ = 1, count do
+          local original_row = vim.api.nvim_win_get_cursor(0)[1]
+          local before = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+          if (before[original_row] or ''):match('^@@') and is_status_file_line(before[original_row - 1] or '') then
+            original_row = original_row - 1
+            vim.api.nvim_win_set_cursor(0, { original_row, 0 })
+          end
+          local row = move_to_match(-1, function(line) return is_status_file_line(line) or line:match('^@@') end, 1)
+          local line = vim.api.nvim_buf_get_lines(b, row - 1, row, false)[1] or ''
+          if is_status_file_line(line) then
+            expand_at_cursor()
+            local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+            local last_hunk = nil
+            for candidate = row + 1, #lines do
+              if is_status_file_line(lines[candidate]) or lines[candidate] == '' then break end
+              if lines[candidate]:match('^@@') then last_hunk = candidate end
+            end
+            if last_hunk then vim.api.nvim_win_set_cursor(0, { last_hunk, 0 }) end
+          end
+        end
+      end
+
+      local function move_file(direction, count)
+        for _ = 1, count do
+          local row = vim.api.nvim_win_get_cursor(0)[1]
+          status_renderer.update_diff(b, row, 'hide')
+          move_to_match(direction, is_status_file_line, 1)
+        end
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        status_renderer.update_diff(b, row, 'hide')
+      end
+
+      vim.keymap.set('n', 'i', function()
+        next_expanded_item(vim.v.count1)
+        vim.cmd('normal! zt')
+      end,
+        { buffer = b, nowait = true, silent = true, desc = 'Expand and jump to next diff item' })
+      for _, key in ipairs({ 'J', ']c' }) do
+        vim.keymap.set('n', key, function() next_hunk(vim.v.count1) end,
+          { buffer = b, nowait = true, silent = true, desc = 'Next diff hunk' })
+      end
+      for _, key in ipairs({ 'K', '[c' }) do
+        vim.keymap.set('n', key, function() previous_hunk(vim.v.count1) end,
+          { buffer = b, nowait = true, silent = true, desc = 'Previous diff hunk' })
+      end
+      for _, key in ipairs({ ']m', ']/' }) do
+        vim.keymap.set('n', key, function() move_file(1, vim.v.count1) end,
+          { buffer = b, nowait = true, silent = true, desc = 'Next changed file' })
+      end
+      for _, key in ipairs({ '[m', '[/' }) do
+        vim.keymap.set('n', key, function() move_file(-1, vim.v.count1) end,
+          { buffer = b, nowait = true, silent = true, desc = 'Previous changed file' })
+      end
+      vim.keymap.set('n', ')', function() move_to_match(1, is_status_item_line, vim.v.count1) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Next status item' })
+      vim.keymap.set('n', '(', function() move_to_match(-1, is_status_item_line, vim.v.count1) end,
+        { buffer = b, nowait = true, silent = true, desc = 'Previous status item' })
+
+      local function move_file_expanded(direction, count)
+        move_file(direction, count)
+        expand_at_cursor()
+        vim.cmd('normal! zt')
+      end
+
+      vim.keymap.set('n', ']]', function()
+        move_file_expanded(1, vim.v.count1)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Collapse current and expand next file' })
+      vim.keymap.set('n', '[[', function()
+        move_file_expanded(-1, vim.v.count1)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Collapse current and expand previous file' })
+
+      local function set_selected_diffs(mode)
+        local first_row = math.min(vim.fn.line('v'), vim.fn.line('.'))
+        local last_row = math.max(vim.fn.line('v'), vim.fn.line('.'))
+        local seen = {}
+        local changed = false
+        for row = first_row, last_row do
+          local entry = status_renderer.entry_at(b, row)
+          local key = entry and (entry.section .. '\0' .. tostring(entry.path or 'header')) or nil
+          if key and not seen[key] then
+            seen[key] = true
+            if mode == 'toggle' then
+              changed = status_renderer.toggle_diff(b, row) or changed
+            else
+              changed = status_renderer.set_diff(b, row, mode == 'show') or changed
+            end
+          end
+        end
+        if changed then refresh() end
+      end
+
+      vim.keymap.set('x', '=', function() set_selected_diffs('toggle') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Toggle selected inline diffs' })
+      vim.keymap.set('x', '>', function() set_selected_diffs('show') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Expand selected inline diffs' })
+      vim.keymap.set('x', '<', function() set_selected_diffs('hide') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Collapse selected inline diffs' })
+
+      for key, section in pairs({
+        gu = 'unstaged',
+        gU = 'untracked',
+        gs = 'staged',
+        gp = 'unpushed',
+        gP = 'unpulled',
+      }) do
+        local target_section = section
+        vim.keymap.set('n', key, function() M.focus_section(b, target_section) end,
+          { buffer = b, nowait = true, silent = true, desc = 'Go to ' .. section .. ' section' })
+      end
+
+      -- Reword the commit selected in status with the shared commit editor.
+      vim.keymap.set('n', 'cw', function()
+        local stash_ref = stash_ref_from_line(vim.api.nvim_get_current_line())
+        if stash_ref then
+          rename_stash_at_cursor(stash_ref)
+          return
+        end
+
+        local commit = vim.api.nvim_get_current_line():match('^%s*(%x%x%x%x%x%x%x+)')
+        if not commit then
+          vim.notify('No commit or stash found at cursor', vim.log.levels.WARN)
+          return
+        end
+        require('git.features.commit').open_edit_commit(commit, b, {
+          reopen = false,
+          on_complete = function()
+            reload_status()
+            notify_repo_changed(true)
+          end,
+        })
+      end, { buffer = b, nowait = true, silent = true, desc = 'Reword commit or rename stash' })
+
+      vim.keymap.set('n', 'A', function()
+        if is_cursor_in_stash_area() then
+          local r = get_stash_ref_at_cursor(b)
+          if r then vim.cmd('Git stash apply ' .. r); notify_repo_changed() end
+          return
+        end
+        vim.cmd('Git commit --amend --no-edit')
+        notify_repo_changed()
+      end, { buffer = b, nowait = true, silent = true })
+
+      vim.keymap.set('n', 'cl', function()
+        vim.cmd('Gstash')
+      end, { buffer = b, nowait = true, silent = true, desc = 'Stash changes' })
+
+      vim.keymap.set('n', 'P', function()
+        if is_cursor_in_stash_area() then
+          local r = get_stash_ref_at_cursor(b)
+          if r then vim.cmd('Git stash pop ' .. r); notify_repo_changed() end
+          return
+        end
+        local cmd, err = status_renderer.patch_command(b, vim.api.nvim_win_get_cursor(0)[1])
+        if not cmd then vim.notify(err, vim.log.levels.WARN); return end
+        vim.cmd(cmd)
+      end, { buffer = b, nowait = true, silent = true })
+
+      vim.keymap.set('n', 'I', function()
+        local cmd, err = status_renderer.patch_command(b, vim.api.nvim_win_get_cursor(0)[1])
+        if not cmd then vim.notify(err, vim.log.levels.WARN); return end
+        vim.cmd(cmd)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Stage/reset patch' })
+
+      local function drop_status_commits(first_row, last_row)
+        local commits, seen = {}, {}
+        for row = first_row, last_row do
+          local line = vim.api.nvim_buf_get_lines(b, row - 1, row, false)[1] or ''
+          local commit = line:match('^(%x%x%x%x%x%x%x+)%s')
+          if commit and not seen[commit] then
+            seen[commit] = true
+            table.insert(commits, commit)
+          end
+        end
+        if #commits == 0 then return false end
+
+        local summary = #commits == 1
+          and commits[1]:sub(1, 7)
+          or ('%s ... %s (%d commits)'):format(commits[1]:sub(1, 7), commits[#commits]:sub(1, 7), #commits)
+        if vim.fn.confirm(('Drop %d commit(s)?\n%s'):format(#commits, summary), '&Yes\n&No', 2) ~= 1 then
+          return true
+        end
+        commands.drop_commits(commits, function()
+          reload_status()
+          notify_repo_changed(true)
+        end)
+        return true
+      end
+
+      local function index_flag_entry_at_cursor()
+        return index_flags.entry_from_line(index_flags_by_buf[b], vim.api.nvim_get_current_line())
+      end
+
+      local function index_flag_path_at_cursor()
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then return flagged.path end
+        local entry = status_renderer.entry_at(b, vim.api.nvim_win_get_cursor(0)[1])
+        if entry and not entry.header and entry.section ~= 'untracked' then return entry.path end
+        return nil
+      end
+
+      local function move_to_index_flags(expand)
+        if expand ~= nil then index_flags_expanded_by_buf[b] = expand end
+        refresh_cached()
+        vim.schedule(function()
+          if not is_live() then return end
+          local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+          for row, line in ipairs(lines) do
+            if line:match('^Index flags %[local%]') then
+              local target = index_flags_expanded_by_buf[b] and math.min(row + 1, #lines) or row
+              pcall(vim.api.nvim_win_set_cursor, 0, { target, 0 })
+              vim.cmd('normal! zz')
+              return
+            end
+          end
+        end)
+      end
+
+      local function update_index_flag(path, flag)
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree then return end
+        local ok, err = index_flags.update(work_tree, path, flag)
+        if not ok then vim.notify(err, vim.log.levels.ERROR); return end
+        local action = flag and ('set to ' .. flag) or 'cleared'
+        vim.notify(('Index flag %s: %s'):format(action, path), vim.log.levels.INFO)
+        reload_status()
+        notify_repo_changed(true)
+      end
+
+      local function choose_index_flag_action(path)
+        local current = index_flags.flag_for_path(index_flags_by_buf[b], path)
+        local choices = {}
+        if current then
+          table.insert(choices, { flag = nil, label = 'Clear ' .. current })
+        end
+        if current ~= 'skip' then
+          table.insert(choices, { flag = 'skip', label = 'Set skip-worktree' })
+        end
+        if current ~= 'assume' then
+          table.insert(choices, { flag = 'assume', label = 'Set assume-unchanged (performance hint)' })
+        end
+        vim.ui.select(choices, {
+          prompt = 'Index flag for ' .. path .. ':',
+          format_item = function(choice) return choice.label end,
+        }, function(choice)
+          if choice then update_index_flag(path, choice.flag) end
+        end)
+      end
+
+      local function show_index_flag_actions()
+        local path = index_flag_path_at_cursor()
+        if path then choose_index_flag_action(path); return end
+        local work_tree = utils.get_buf_work_tree(b)
+        if not work_tree then return end
+        local paths, err = index_flags.tracked_paths(work_tree)
+        if #paths == 0 then
+          vim.notify(err or 'No tracked files', vim.log.levels.WARN)
+          return
+        end
+        vim.ui.select(paths, { prompt = 'Select tracked file for index flag:' }, function(selected)
+          if selected then choose_index_flag_action(selected) end
+        end)
+      end
+
+      vim.keymap.set('n', 'gx', show_index_flag_actions,
+        { buffer = b, nowait = true, silent = true, desc = 'Manage update-index flags' })
+
+      vim.keymap.set('n', 'X', function()
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then update_index_flag(flagged.path, nil); return end
+        if is_cursor_in_worktree_area() then
+          local p = get_worktree_path_at_cursor()
+          if p then worktree.remove_worktree_path(p) end
+          return
+        end
+        if is_cursor_in_stash_area() then
+          local r = get_stash_ref_at_cursor(b)
+          if r then vim.cmd('Git stash drop ' .. r); notify_repo_changed() end
+          return
+        end
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        if drop_status_commits(row, row) then return end
+        local _, _, entry = status_entry_at_cursor()
+        if entry then
+          local discarded, err = status_renderer.discard(b, vim.api.nvim_win_get_cursor(0)[1])
+          if not discarded then vim.notify(err, vim.log.levels.WARN); return end
+          reload_status()
+          notify_repo_changed(true)
+          return
+        end
+        vim.notify('No discardable item at cursor', vim.log.levels.WARN)
+      end, { buffer = b, nowait = true, silent = true })
+
+      vim.keymap.set('x', 'X', function()
+        local first_row = math.min(vim.fn.line('v'), vim.fn.line('.'))
+        local last_row = math.max(vim.fn.line('v'), vim.fn.line('.'))
+        vim.cmd('normal! \27')
+        if not drop_status_commits(first_row, last_row) then
+          vim.notify('No commits found', vim.log.levels.WARN)
+        end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Drop selected commits' })
+
+      local function cursor_is_in_operation(lines, row, current_operation)
+        if not current_operation then return false end
+        local first, last
+        for candidate, line in ipairs(lines) do
+          if line:match(' in progress') or line:match('^Bisecting') then
+            first = candidate
+          elseif first and (line:match('^Operation keys:') or line:match('^Bisect keys:')) then
+            last = candidate
+            break
+          end
+        end
+        return first ~= nil and row >= first and row <= (last or first)
+      end
+
+      local function status_context_at_cursor(current_operation)
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        local line = vim.api.nvim_get_current_line()
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then
+          return { kind = 'index_flag', label = 'Index flag: ' .. flagged.path, flagged = flagged }
+        end
+        if line:match('^Hidden changes:') then return { kind = 'index_flags_warning', label = 'Hidden changes' } end
+        if line:match('^Index flags %[local%]') then return { kind = 'index_flags_header', label = 'Index flags' } end
+
+        local entry = status_renderer.entry_at(b, row)
+        if entry then
+          local section_labels = {
+            conflicted = 'Conflicted',
+            untracked = 'Untracked',
+            unstaged = 'Unstaged',
+            staged = 'Staged',
+          }
+          local label = section_labels[entry.section] or entry.section
+          if entry.header then return { kind = 'change_section', label = label .. ' changes', entry = entry } end
+          return { kind = 'change', label = label .. ': ' .. entry.path, entry = entry }
+        end
+
+        local submodule = submodule_path_at_cursor()
+        if submodule then return { kind = 'submodule', label = 'Submodule: ' .. submodule, path = submodule } end
+        if line:match('^Submodules %(') then return { kind = 'submodules_header', label = 'Submodules' } end
+
+        local stash = stash_ref_from_line(line)
+        if stash then return { kind = 'stash', label = 'Stash: ' .. stash, stash = stash } end
+        if line:match('^Stashes %(') then return { kind = 'stash_header', label = 'Stashes' } end
+
+        local pr_number = pull_request_number_from_line(line)
+        if pr_number then
+          return { kind = 'pull_request', label = 'Pull request #' .. pr_number, number = pr_number }
+        end
+        if line:match('^Pull requests %(') then return { kind = 'pull_requests_header', label = 'Pull requests' } end
+
+        if line:match('^Worktrees %(') then return { kind = 'worktrees_header', label = 'Worktrees' } end
+        if is_cursor_in_worktree_area() then
+          local path = get_worktree_path_at_cursor()
+          return { kind = 'worktree', label = 'Worktree: ' .. tostring(path), path = path }
+        end
+
+        if cursor_is_in_operation(lines, row, current_operation) then
+          return { kind = 'operation', label = current_operation.label or current_operation.kind }
+        end
+
+        if is_cursor_on_commit_header() then return { kind = 'commits_header', label = 'Commit scope' } end
+        local commit = line:match('^(%x%x%x%x%x%x%x+)%s')
+        if commit then return { kind = 'commit', label = 'Commit: ' .. commit, commit = commit } end
+        return { kind = 'repository', label = line ~= '' and line or 'Repository' }
+      end
+
+      local function contextual_action_group(context, current_operation)
+        local kind = context.kind
+        if kind == 'change' then
+          local entry = context.entry
+          local actions = {
+            { key = '<CR>', label = 'Open file' },
+            { key = 'gf', label = 'Open file and close status' },
+            { key = 'o', label = 'Toggle inline diff' },
+            { key = 's', label = entry.section == 'staged' and 'Unstage file' or 'Stage file' },
+            { key = 'P', label = 'Open patch mode' },
+            { key = 'I', label = 'Stage / reset patch' },
+            { key = 'd', label = 'Open vertical diff' },
+            { key = 'dh', label = 'Open horizontal diff' },
+          }
+          if entry.section == 'staged' then table.insert(actions, { key = 'u', label = 'Unstage file' }) end
+          if entry.section == 'conflicted' then
+            vim.list_extend(actions, {
+              { key = 'c3', label = 'Open base / ours / theirs' },
+              { key = 'co', label = 'Choose ours' },
+              { key = 'ct', label = 'Choose theirs' },
+              { key = 'cr', label = 'Mark resolved' },
+            })
+          else
+            table.insert(actions, { key = 'X', label = 'Discard change' })
+          end
+          return { title = context.label, actions = actions }
+        end
+
+        if kind == 'change_section' then
+          local staged = context.entry.section == 'staged'
+          local actions = {
+            { key = 'o', label = 'Toggle section diffs' },
+            { key = '>', label = 'Expand section diffs' },
+            { key = '<', label = 'Collapse section diffs' },
+            { key = 's', label = staged and 'Unstage section' or 'Stage section' },
+          }
+          if staged then table.insert(actions, { key = 'u', label = 'Unstage section' }) end
+          return { title = context.label, actions = actions }
+        end
+
+        if kind == 'commit' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open commit' },
+            { key = 'gk', label = 'Show commit message body' },
+            { key = 'gn', label = 'Show Git note' },
+            { key = 'gN', label = 'Add / edit Git note' },
+            { key = 'cw', label = 'Reword commit' },
+            { key = 'cf', label = 'Fixup / reword with index' },
+            { key = 'cF', label = 'Fixup with unchanged message' },
+            { key = 'cW', label = 'Create reword fixup' },
+            { key = 'cs', label = 'Create squash commit' },
+            { key = 'cn', label = 'Create edited squash commit' },
+            { key = 'cS', label = 'Squash and autosquash' },
+            { key = 'gr', label = 'Revert commit' },
+            { key = 'X', label = 'Drop commit' },
+          } }
+        end
+
+        if kind == 'commits_header' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Toggle commit scope' },
+            { key = 'gS', label = 'Select commit scope' },
+          } }
+        end
+
+        if kind == 'stash' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open stash diff' },
+            { key = 'A', label = 'Apply selected stash' },
+            { key = 'P', label = 'Pop selected stash' },
+            { key = 'cw', label = 'Rename selected stash' },
+            { key = 'X', label = 'Drop selected stash' },
+            { key = 'cl', label = 'Open stash list' },
+          } }
+        end
+
+        if kind == 'stash_header' then
+          return { title = context.label, actions = {
+            { key = 'cl', label = 'Open stash list' },
+            { key = 'cz<CR>', label = 'Stash working tree' },
+            { key = 'czz', label = 'Stash all changes' },
+            { key = 'czw', label = 'Stash keep-index' },
+            { key = 'czs', label = 'Stash staged changes' },
+            { key = 'cz?', label = 'Show all stash keys' },
+          } }
+        end
+
+        if kind == 'pull_request' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open pull request' },
+            { key = '<C-y>', label = 'Copy pull request URL' },
+          } }
+        end
+        if kind == 'pull_requests_header' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Toggle pull request scope' },
+            { key = 'gS', label = 'Select pull request scope' },
+          } }
+        end
+
+        if kind == 'worktree' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open worktree' },
+            { key = 'X', label = 'Remove worktree' },
+            { key = 'gws', label = 'Sync current worktree to primary' },
+            { key = 'W', label = 'Open worktree list' },
+          } }
+        end
+        if kind == 'worktrees_header' then
+          return { title = context.label, actions = {
+            { key = 'gws', label = 'Sync current worktree to primary' },
+            { key = 'W', label = 'Open worktree list' },
+          } }
+        end
+
+        if kind == 'submodule' or kind == 'submodules_header' then
+          local selected = kind == 'submodule'
+          local actions = {}
+          if selected then table.insert(actions, { key = '<CR>', label = 'Open submodule status' }) end
+          vim.list_extend(actions, {
+            { key = 'mi', label = selected and 'Initialize selected submodule' or 'Initialize all submodules' },
+            { key = 'mu', label = selected and 'Update selected submodule' or 'Update all submodules' },
+            { key = 'ms', label = 'Synchronize submodule URLs' },
+          })
+          return { title = context.label, actions = actions }
+        end
+
+        if kind == 'index_flag' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Open flagged file' },
+            { key = 'd', label = 'Diff worktree file against index' },
+            { key = 'X', label = 'Clear index flag' },
+            { key = 'gx', label = 'Change index flag' },
+          } }
+        end
+        if kind == 'index_flags_warning' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Reveal hidden changes' },
+            { key = 'gx', label = 'Manage update-index flags' },
+          } }
+        end
+        if kind == 'index_flags_header' then
+          return { title = context.label, actions = {
+            { key = '<CR>', label = 'Expand / collapse index flags' },
+            { key = 'gx', label = 'Manage update-index flags' },
+          } }
+        end
+
+        if kind == 'operation' and current_operation then
+          if current_operation.kind == 'bisect' then
+            return { title = context.label, actions = {
+              { key = 'gbg', label = 'Mark candidate good' },
+              { key = 'gbb', label = 'Mark candidate bad' },
+              { key = 'gbk', label = 'Skip candidate' },
+              { key = 'gbx', label = 'Run test command' },
+              { key = 'gbv', label = 'View current candidate' },
+              { key = 'gbr', label = 'Reset bisect' },
+            } }
+          end
+          local actions = { { key = 'rr', label = 'Continue ' .. current_operation.kind } }
+          if current_operation.kind ~= 'merge' then table.insert(actions, { key = 'rs', label = 'Skip current step' }) end
+          table.insert(actions, { key = 'ra', label = 'Abort ' .. current_operation.kind })
+          return { title = context.label, actions = actions }
+        end
+        return nil
+      end
+
+      local function repository_action_group(context, health, current_operation)
+        local actions = {
+          { key = 'gu', label = 'Go to unstaged changes' },
+          { key = 'gU', label = 'Go to untracked files' },
+          { key = 'gs', label = 'Go to staged changes' },
+          { key = 'cc', label = 'Commit staged changes' },
+          { key = 'ca', label = 'Amend commit' },
+          { key = 'ce', label = 'Amend without editing message' },
+          { key = 'S', label = 'Stage all changes' },
+          { key = 'U', label = 'Unstage all changes' },
+          { key = 'L', label = 'Open log' },
+          { key = 'B', label = 'Open branches' },
+        }
+        if context.kind ~= 'worktree' and context.kind ~= 'worktrees_header' then
+          table.insert(actions, { key = 'W', label = 'Open worktrees' })
+        end
+        if context.kind ~= 'index_flag'
+          and context.kind ~= 'index_flags_warning'
+          and context.kind ~= 'index_flags_header'
+        then
+          table.insert(actions, { key = 'gx', label = 'Manage update-index flags' })
+        end
+        if health and not health.detached then table.insert(actions, { key = 'mU', label = 'Set branch upstream' }) end
+        if health and health.upstream and not health.upstream.gone then
+          table.insert(actions, { key = 'rD', label = 'Review outgoing stack' })
+        end
+        if not current_operation then table.insert(actions, { key = 'gbs', label = 'Start Git bisect' }) end
+        table.insert(actions, { key = 'R', label = 'Collapse and refresh' })
+        return { title = 'Repository', actions = actions }
+      end
+
+      local function show_status_actions()
+        local work_tree = utils.get_buf_work_tree(b)
+        local current_operation = work_tree and operation.inspect(work_tree) or nil
+        local health = repository_health_by_buf[b]
+        local context = status_context_at_cursor(current_operation)
+        local groups = {}
+        local contextual = contextual_action_group(context, current_operation)
+        if contextual then table.insert(groups, contextual) end
+        table.insert(groups, repository_action_group(context, health, current_operation))
+
+        local details = 'Cursor: ' .. context.label
+        details = details .. '  Branch: ' .. tostring(health and health.branch or 'unknown')
+        if current_operation then details = details .. '  Operation: ' .. current_operation.kind end
+        require('git.features.action_menu').show('Git status actions', groups, { context = details })
+      end
+      vim.keymap.set('n', 'g?', show_status_actions,
+        { buffer = b, nowait = true, silent = true, desc = 'Show Git status actions' })
+      vim.keymap.set('n', '?', show_status_actions,
+        { buffer = b, nowait = true, silent = true, desc = 'Show Git status actions' })
+
+      local function note_target()
+        local commit = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s')
+        if not commit then vim.notify('No commit found at cursor', vim.log.levels.WARN) end
+        return commit
+      end
+
+      vim.keymap.set('n', 'gn', function()
+        local commit = note_target()
+        if commit then notes.show(utils.get_buf_work_tree(b), commit, apply_icons) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Show Git note' })
+
+      vim.keymap.set('n', 'gN', function()
+        local commit = note_target()
+        if commit then notes.edit(utils.get_buf_work_tree(b), commit, apply_icons) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Edit Git note' })
+
+      vim.keymap.set('n', '<C-y>', function()
+        local pr = pull_request_at_cursor()
+        if not pr then
+          vim.notify('No pull request found at cursor', vim.log.levels.WARN)
+          return
+        end
+        if pr.url == '' then
+          vim.notify('Pull request URL is unavailable', vim.log.levels.WARN)
+          return
+        end
+        vim.fn.setreg('+', pr.url)
+        vim.fn.setreg('"', pr.url)
+        vim.notify('Copied: ' .. pr.url, vim.log.levels.INFO)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Copy pull request URL' })
+
+      local function open_status_item()
+        local current_line = vim.api.nvim_get_current_line()
+        if current_line:match('^Hidden changes: %d+ files? %(Index flags%)$') then
+          move_to_index_flags(true)
+          return
+        end
+        if current_line:match('^Index flags %[local%]') then
+          index_flags_expanded_by_buf[b] = not index_flags_expanded_by_buf[b]
+          refresh_cached()
+          return
+        end
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then
+          open_index_flag_file(b, flagged.path)
+          return
+        end
+        if is_cursor_on_commit_header() then
+          toggle_commit_scope()
+          return
+        end
+        if is_cursor_on_pull_request_header() then
+          toggle_pull_request_scope()
+          return
+        end
+        local submodule_path = submodule_path_at_cursor()
+        if submodule_path then
+          local root = utils.get_buf_work_tree(b)
+          local child = root and vim.fs.joinpath(root, submodule_path) or nil
+          if child and utils.get_git_dir(child) then
+            vim.cmd('tabnew')
+            M.open({ work_tree = child })
+          else
+            vim.notify('Submodule is not initialized: ' .. submodule_path, vim.log.levels.WARN)
+          end
+          return
+        end
+        if is_cursor_in_worktree_area() then
+          local p = get_worktree_path_at_cursor()
+          if p then worktree.open_worktree_path(p); return end
+        end
+        if is_cursor_in_pull_request_area() then
+          local pr = pull_request_at_cursor()
+          local number = pr and pr.number or pull_request_number_from_line(vim.api.nvim_get_current_line())
+          local repository = pr and pr.repository or nil
+          if number and repository then
+            vim.cmd('tabnew')
+            vim.cmd(('Octo pr edit %d %s'):format(number, repository))
+          elseif number then
+            vim.notify('Could not determine repository for PR #' .. number, vim.log.levels.WARN)
+          end
+          return
+        end
+        if is_cursor_in_stash_area() then
+          local r = get_stash_ref_at_cursor(b)
+          if r then vim.cmd('Gvsplit ' .. r); return end
+        end
+        local f = utils.get_filepath_at_cursor(b)
+        if f then
+          local wt = utils.get_buf_work_tree(b)
+          local abs = wt and vim.fn.fnamemodify(wt .. '/' .. f, ':p') or nil
+          -- Only open Oil when cursor is directly on the status line for that path
+          local cur_line = vim.api.nvim_get_current_line()
+          local cur_match = cur_line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
+          if cur_match then
+            local _, new = cur_match:match('^(.+) %-> (.+)$')
+            cur_match = new or cur_match
+          end
+          if abs and cur_match == f and vim.fn.isdirectory(abs) == 1 then
+            open_oil_in_target(b, abs)
+            return
+          end
+        end
+        open_entry_from_status(b, false)
+      end
+
+      vim.keymap.set('n', '<CR>', open_status_item, { buffer = b, nowait = true, silent = true })
+      vim.keymap.set('n', '<2-LeftMouse>', open_status_item, { buffer = b, nowait = true, silent = true })
+
+      vim.keymap.set('n', 'gS', function()
+        if is_cursor_on_commit_header() then
+          select_commit_scope()
+        elseif is_cursor_on_pull_request_header() then
+          select_pull_request_scope()
+        else
+          vim.notify('No selectable scope at cursor', vim.log.levels.WARN)
+        end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Select status section scope' })
+
+      local function add_ignore_patterns(first_row, last_row, repository_ignore)
+        local paths = status_renderer.paths_in_range(b, first_row, last_row)
+        if #paths == 0 then
+          vim.notify('No file found at cursor', vim.log.levels.WARN)
+          return
+        end
+        for index, path in ipairs(paths) do paths[index] = '/' .. path end
+
+        local work_tree = utils.get_buf_work_tree(b)
+        local git_dir = vim.b[b].git_dir
+        local target = repository_ignore
+          and work_tree and vim.fs.joinpath(work_tree, '.gitignore')
+          or git_dir and vim.fs.joinpath(git_dir, 'info', 'exclude')
+        if not target then
+          vim.notify('Git ignore file could not be resolved', vim.log.levels.WARN)
+          return
+        end
+        if not repository_ignore then vim.fn.mkdir(vim.fs.dirname(target), 'p') end
+
+        vim.cmd('belowright split ' .. vim.fn.fnameescape(target))
+        local target_buf = vim.api.nvim_get_current_buf()
+        local existing = vim.api.nvim_buf_get_lines(target_buf, 0, -1, false)
+        local first_inserted
+        if #existing == 1 and existing[1] == '' then
+          vim.api.nvim_buf_set_lines(target_buf, 0, -1, false, paths)
+          first_inserted = 1
+        else
+          first_inserted = #existing + 1
+          vim.api.nvim_buf_set_lines(target_buf, #existing, #existing, false, paths)
+        end
+        vim.api.nvim_win_set_cursor(0, { first_inserted, 0 })
+      end
+
+      vim.keymap.set('n', 'gE', function()
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        add_ignore_patterns(row, row, false)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Add path to .git/info/exclude' })
+      vim.keymap.set('x', 'gE', function()
+        add_ignore_patterns(math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.')), false)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Add paths to .git/info/exclude' })
+      vim.keymap.set('n', 'gI', function()
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        add_ignore_patterns(row, row, true)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Add path to .gitignore' })
+      vim.keymap.set('x', 'gI', function()
+        add_ignore_patterns(math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.')), true)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Add paths to .gitignore' })
+
+      vim.keymap.set('n', 'gf', function()
+        open_entry_from_status(b, true)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Open file and close status' })
+
+      -- Toggle Flog
+      vim.keymap.set('n', '<C-Space>', function()
+        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+          vim.api.nvim_win_close(vim.g.flog_win, false); vim.g.flog_win, vim.g.flog_bufnr = nil, nil
+        else
+          local cw = vim.api.nvim_get_current_win()
+          require('git.graph').open()
+          vim.g.flog_bufnr, vim.g.flog_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+          utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
+          vim.api.nvim_set_current_win(cw)
+        end
+      end, { buffer = b, nowait = true, silent = true })
+
+      -- Keep the initialized status buffer when closing a split.
+      vim.keymap.set('n', 'q', function()
+        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then vim.api.nvim_win_close(vim.g.flog_win, true) end
+        if #vim.api.nvim_tabpage_list_wins(0) > 1 then
+          vim.api.nvim_win_close(0, false)
+        else
+          require('utilities').smart_close()
+        end
+      end, { buffer = b, nowait = true, silent = true })
+
+      vim.keymap.set('n', '<C-c>', '<C-w>c',
+        { buffer = b, nowait = true, silent = true, desc = 'Close status window' })
+
+      vim.keymap.set('n', 'L', '<Cmd>FugitiveLog<CR>',
+        { buffer = b, nowait = true, silent = true, desc = 'Open git log' })
+      vim.keymap.set('n', 'B', '<Cmd>Gbranch<CR>',
+        { buffer = b, nowait = true, silent = true, desc = 'Open git branch list' })
+      vim.keymap.set('n', 'W', '<Cmd>Gworktree<CR>',
+        { buffer = b, nowait = true, silent = true, desc = 'Open git worktree list' })
+      vim.keymap.set('n', 'gws', function()
+        worktree.sync_current_worktree_to_primary()
+      end, { buffer = b, nowait = true, silent = true, desc = 'Sync current worktree to primary' })
+
+      vim.keymap.set('n', 'R', function()
+        status_renderer.collapse_all(b)
+        index_flags_expanded_by_buf[b] = false
+        reload_status()
+        vim.schedule(function()
+          if is_live() then M.focus_section(b, 'unstaged') end
+        end)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Collapse all and refresh status' })
+
+      vim.keymap.set('n', 'rD', function()
+        local work_tree = utils.get_buf_work_tree(b)
+        if work_tree then range_diff.open(work_tree) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Review outgoing stack with range-diff' })
+
+      local function commit_hash_at_cursor()
+        local l = vim.api.nvim_get_current_line()
+        local h = l:match('^(%x+)')
+        if not h then vim.notify('No commit found at cursor', vim.log.levels.WARN); return nil end
+        return h
+      end
+
+      -- cf: Extension action: fixup/reword with the index, then autosquash.
+      vim.keymap.set('n', 'cf', function()
+        local h = commit_hash_at_cursor()
+        if not h then return end
+        commands.mix_index_with_input(h)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Fixup/Reword commit under cursor with index' })
+
+      -- cF: Fugitive-compatible action: fixup with the index, then autosquash.
+      vim.keymap.set('n', 'cF', function()
+        local h = commit_hash_at_cursor()
+        if not h then return end
+        commands.mix_index(h)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Fixup commit under cursor with index and autosquash' })
+
+      vim.keymap.set('n', 'cW', function()
+        local h = commit_hash_at_cursor()
+        if h then vim.cmd('Git commit --fixup=reword:' .. h) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Create reword fixup for commit under cursor' })
+
+      vim.keymap.set('n', 'cs', function()
+        local h = commit_hash_at_cursor()
+        if h then vim.cmd('Git commit --no-edit --squash=' .. h) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Create squash commit for commit under cursor' })
+
+      vim.keymap.set('n', 'cn', function()
+        local h = commit_hash_at_cursor()
+        if h then vim.cmd('Git commit --edit --squash=' .. h) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Create edited squash commit for commit under cursor' })
+
+      vim.keymap.set('n', 'cS', function()
+        local h = commit_hash_at_cursor()
+        if not h then return end
+        local committed, err = pcall(vim.cmd, 'Git commit --no-edit --squash=' .. h)
+        if not committed then vim.notify(tostring(err), vim.log.levels.ERROR); return end
+        vim.cmd('Git -c sequence.editor=true rebase --interactive --autosquash ' .. h .. '^')
+      end, { buffer = b, nowait = true, silent = true, desc = 'Squash commit under cursor and autosquash' })
+
+      -- <Leader>cf: Squash commit under cursor into its parent (Fixup)
+      vim.keymap.set('n', '<Leader>cf', function()
+        local h = commit_hash_at_cursor()
+        if not h then return end
+        commands.fixup_commit(h)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Fixup/Reword commit under cursor into its parent' })
+
+      -- gr: Revert commit under cursor
+      vim.keymap.set('n', 'gr', function()
+        local l = vim.api.nvim_get_current_line()
+        local h = l:match('^(%x+)')
+        if not h then vim.notify('No commit found at cursor', vim.log.levels.WARN) return end
+        local confirm = vim.fn.confirm('Revert ' .. h:sub(1, 7) .. '?', '&Yes\n&No', 2)
+        if confirm ~= 1 then return end
+        commands.revert_commits({ h })
+      end, { buffer = b, nowait = true, silent = true, desc = 'Revert commit under cursor' })
+
+      local function open_diff_at_cursor(layout)
+        local flagged = index_flag_entry_at_cursor()
+        if flagged then
+          open_index_flag_diff(b, flagged, layout)
+          return
+        end
+        local target_line = nil
+        local current_line_idx = vim.api.nvim_win_get_cursor(0)[1]
+        local hunk_line = nil
+
+        for lnum = current_line_idx, 1, -1 do
+          local line = vim.api.nvim_buf_get_lines(b, lnum - 1, lnum, false)[1]
+          if line then
+            local line_num = line:match('^@@ %-%d+,?%d* %+(%d+)')
+            if line_num then
+              hunk_line = lnum
+              target_line = tonumber(line_num)
+              break
+            end
+            if line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$') then break end
+          end
+        end
+
+        if target_line and hunk_line then
+          local offset = 0
+          for lnum = hunk_line + 1, current_line_idx do
+            local line = vim.api.nvim_buf_get_lines(b, lnum - 1, lnum, false)[1]
+            if line and not line:match('^%-') then offset = offset + 1 end
+          end
+          target_line = target_line + offset - 1
+        end
+
+        open_status_diff(b, target_line, layout)
+      end
+
+      vim.keymap.set('n', 'd', function() open_diff_at_cursor('vertical') end,
+        { buffer = b, nowait = true, silent = true, desc = 'Open file diff in new tab' })
+      for _, key in ipairs({ 'dd', 'dv' }) do
+        vim.keymap.set('n', key, function() open_diff_at_cursor('vertical') end,
+          { buffer = b, nowait = true, silent = true, desc = 'Open vertical file diff' })
+      end
+      for _, key in ipairs({ 'dh', 'ds' }) do
+        vim.keymap.set('n', key, function() open_diff_at_cursor('horizontal') end,
+          { buffer = b, nowait = true, silent = true, desc = 'Open horizontal file diff' })
+      end
+
+      -- Load syntax
+      syntax_highlight.attach(b)
+
+      -- <Leader>wd: Toggle word diff style
+      vim.keymap.set('n', '<Leader>wd', function()
+        local new_style = syntax_highlight.cycle_word_diff_style()
+        vim.notify('Word diff style: ' .. new_style, vim.log.levels.INFO)
+      end, { buffer = b, silent = true, desc = 'Toggle word diff style (diffs/lazygit/github)' })
+    end,
+  })
+
+  vim.api.nvim_create_autocmd('BufWinEnter', {
+    group = group,
+    pattern = 'git-status://*',
+    callback = function() configure_status_window(vim.api.nvim_get_current_win()) end,
+  })
+
+  vim.api.nvim_create_user_command('GitStatus', function()
+    M.open({ focus = 'unstaged', split = true })
+  end, { desc = 'Open custom Git status' })
+end
+
+function M.refresh_buffer(bufnr)
+  if not is_status_buffer(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then return end
+  local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
+  local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
+  local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
+  pcall(function()
+    refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
+  end)
+  notes.apply_icons(bufnr, utils.get_buf_work_tree(bufnr), function(line)
+    return line:match('^(%x%x%x%x%x%x%x+)%s')
+  end)
+end
+
+function M.focus_section(bufnr, section, opts)
+  bufnr = bufnr == 0 and vim.api.nvim_get_current_buf() or bufnr
+  opts = opts or {}
+  local patterns = {
+    conflicted = '^Unmerged',
+    untracked = '^Untracked',
+    unstaged = '^Unstaged',
+    staged = '^Staged',
+    unpulled = '^Unpulled ',
+    unpushed = '^Unpushed %[only%]',
+  }
+  local pattern = patterns[section]
+  if not pattern then return false end
+
+  local function focus()
+    if not utils.is_valid_buf(bufnr) then return end
+    local winid = vim.fn.bufwinid(bufnr)
+    if winid == -1 then return false end
+    local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+    for row, line in ipairs(lines) do
+      if line:match(pattern) then
+        local target = row < #lines and lines[row + 1] ~= '' and row + 1 or row
+        pcall(vim.api.nvim_win_set_cursor, winid, { target, 0 })
+        local anchor = capture_status_cursor(bufnr, winid)
+        if anchor then status_cursor_anchor_by_buf[bufnr] = anchor end
+        return true
+      end
+    end
+    return false
+  end
+  if not focus() and opts.refresh ~= false then
+    M.refresh_buffer(bufnr)
+    if not focus() then vim.schedule(focus) end
+  end
+  return true
+end
+
+local function resolve_status_work_tree(opts)
+  if opts and opts.work_tree then return utils.normalize_path(opts.work_tree) end
+  local current_buf = vim.api.nvim_get_current_buf()
+  if vim.b[current_buf].fugitive_work_tree then
+    local known = utils.get_buf_work_tree(current_buf)
+    if known and utils.get_git_dir(known) then return known end
+  end
+
+  local base = vim.fn.getcwd()
+  local name = vim.api.nvim_buf_get_name(current_buf)
+  if name ~= '' and vim.bo[current_buf].buftype == '' then
+    base = vim.fn.isdirectory(name) == 1 and name or vim.fs.dirname(name)
+  end
+  local result = vim.system({ 'git', '-C', base, 'rev-parse', '--show-toplevel' }, { text = true }):wait()
+  if result.code ~= 0 then return nil end
+  return utils.normalize_path(vim.trim(result.stdout or ''))
+end
+
+function M.open(opts)
+  opts = opts or {}
+  local work_tree = resolve_status_work_tree(opts)
+  if not work_tree then
+    vim.notify('Not in a Git repository', vim.log.levels.WARN)
+    return nil
+  end
+
+  local bufnr
+  for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
+    if is_status_buffer(candidate) and utils.get_buf_work_tree(candidate) == work_tree then
+      bufnr = candidate
+      break
+    end
+  end
+
+  local winid = bufnr and vim.fn.bufwinid(bufnr) or -1
+  if winid ~= -1 then
+    vim.api.nvim_set_current_win(winid)
+  else
+    if not bufnr then
+      bufnr = vim.api.nvim_create_buf(false, true)
+      vim.api.nvim_buf_set_name(bufnr, 'git-status://' .. work_tree)
+      vim.bo[bufnr].buftype = 'nofile'
+      vim.bo[bufnr].bufhidden = 'hide'
+      vim.bo[bufnr].swapfile = false
+      vim.bo[bufnr].undofile = false
+      vim.bo[bufnr].modifiable = false
+      vim.bo[bufnr].readonly = true
+      utils.set_buf_work_tree(bufnr, work_tree)
+    end
+    if opts.split then
+      local current_win = vim.api.nvim_get_current_win()
+      local config = vim.api.nvim_win_get_config(current_win)
+      if config.external or (config.relative and config.relative ~= '') then
+        for _, candidate in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+          local candidate_config = vim.api.nvim_win_get_config(candidate)
+          if not candidate_config.external
+            and (candidate_config.relative == nil or candidate_config.relative == '')
+          then
+            vim.api.nvim_set_current_win(candidate)
+            break
+          end
+        end
+      end
+      vim.cmd('keepalt split')
+    end
+    vim.api.nvim_win_set_buf(0, bufnr)
+    if vim.bo[bufnr].filetype ~= 'fugitivestatus' then
+      vim.bo[bufnr].filetype = 'fugitivestatus'
+    end
+  end
+
+  local needs_reload = status_dirty_by_buf[bufnr] and status_reload_by_buf[bufnr] ~= nil
+  if needs_reload then
+    status_reload_by_buf[bufnr]()
+  end
+
+  local focus = opts.focus == nil and 'unstaged' or opts.focus
+  if focus then
+    if status_snapshot_by_buf[bufnr] then
+      M.focus_section(bufnr, focus, { refresh = false })
+    end
+    if needs_reload or not status_snapshot_by_buf[bufnr] then
+      pending_status_focus_by_buf[bufnr] = focus
+    end
+  end
+  configure_status_window(vim.fn.bufwinid(bufnr))
+  return bufnr
+end
+
+function M.reload_buffer(bufnr)
+  if not utils.is_valid_buf(bufnr) then return end
+  local anchors = capture_status_cursors_before_reload(bufnr)
+  if #anchors > 0 then pending_status_cursor_anchors_by_buf[bufnr] = anchors end
+  vim.schedule(function()
+    M.refresh_buffer(bufnr)
+  end)
+end
+
+function M.refresh_all()
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if is_status_buffer(bufnr) then
+      M.refresh_buffer(bufnr)
+    end
+  end
+end
+
+return M

@@ -296,7 +296,7 @@ return {
     end
 
     local function require_blame_heatmap()
-      return require_or_load("features.blame", "fugitive-extension")
+      return require_or_load("git.features.blame", "git")
     end
 
     local function blame_heatmap_is_enabled()

@@ -1,18 +1,90 @@
-# Fugitive extension
+# Git
 
-Preserved optional Fugitive configuration, including legacy commit/blame views.
-The active dotfiles configuration now imports `plugins.git`; see
-[the independent Git plugin](../git/README.md). This directory is not loaded by
-default. To use it, select `plugins.fugitive` and `plugins.fugitive-extension`
-instead of `plugins.git`. Do not enable both command providers together.
-The current `plugins.flog` spec uses the independent Git backend; a legacy
-Flog configuration should retain Flog’s default Fugitive backend.
+Standalone Neovim Git UI, loaded by `plugins.git`. It does not load vim-fugitive
+or fugitive-extension. Flog is available lazily through a native Git backend. The old extension and its plugin specifications
+remain available as an alternative configuration; do not enable both command
+providers together. Legacy commit/blame views and their switches live only there.
+
+## Commands
+
+| Command | Behavior |
+| --- | --- |
+| `G`, `Git`, `Git status`, `GitStatus` | Open the custom status panel |
+| `Git <args>` | Run Git in the current buffer's repository; quoted arguments and `%` paths are supported |
+| `Gedit`, `Gsplit`, `Gvsplit`, `Gtabedit [object]` | Open a commit, tree, or file blob; no argument opens the current file's index |
+| `Gedit HEAD:%`, `Gedit :0:%` | Current file at HEAD or in the index; `:1:`, `:2:`, `:3:` select conflict stages |
+| `Gwrite[!] [path]`, `Gwq[!] [path]` | Write and stage the current content, optionally to another worktree path; `:0:path` writes only the index |
+| `Gread[!] [object]` | Replace buffer content from the index/object; a range inserts after its last line; unsaved replacement requires `!` |
+| `Gdiff`, `Gdiffsplit`, `Gvdiffsplit`, `Ghdiffsplit [revision]` | Diff the current file against index/revision; an index buffer defaults to its working file; `!` shows available conflict sides |
+| `Gclog[!]`, `Gllog[!] [args]` | File history (repository history outside a file) in quickfix/location list |
+| `Glog`, `FugitiveLog [args]` | Custom log panel |
+| `Gblame`, `GitBlame`, `GitHeatmap` | Custom paired blame and heatmap |
+| `Gbranch`, `Gstash`, `Greflog`, `Gworktree`, `GworktreeSync` | Existing repository panels/actions |
+| `Gcd`, `Glcd [directory]` | Change directory relative to the buffer's worktree root |
+| `Gmove`, `Grename <path>`, `Gremove`, `Gdelete` | Git file moves/removals and matching buffer updates |
+| `GeditHeadAtFile`, `GitCommit [revision]`, `GitPush` | File's latest commit, commit detail, existing force-with-lease push action |
+| `Ggraph [native / flog]` | Open either graph; omitted backend uses the selected default |
+| `GgraphBackend [native / flog]` | Change the default for graph keys; no argument opens a picker |
+
+Existing leader mappings are owned by `init.lua`. `<C-Space>` in repository
+panels opens the selected graph. The default is `flog`, including the existing `<C-Space>` panel keys. Use
+`:GgraphBackend native` for the independent graph, or `:GgraphBackend flog` to switch back.
+Set `vim.g.git_graph_backend` in your config to persist the preference.
+`:Ggraph flog` / `:Ggraph native` overrides it for one open. Direct `Flog`,
+`Flogsplit`, and `Floggit` commands also work without loading Fugitive.
+Flog uses its documented backend hooks to obtain repository context, run Git,
+complete arguments, and open commits through the independent Gsplit command. `Git diff`/`Git show` output supports file/hunk
+navigation (`]]`, `[[`, `i`), folds (`o`), and Enter to inspect the file/commit.
+
+Completion follows each command's argument type: object commands suggest refs,
+then paths inside `revision:` / `:0:`; `Git` suggests subcommands only in its first
+argument and uses options, refs, remotes or paths afterwards. Worktree path and
+directory completions use the buffer repository, and spaces are escaped.
+`Gedit feature/DMM:%` resolves `%` to the current file's repository-relative path.
+If the file did not exist at that revision, it reports the object, repository and
+Git's missing-path reason while preserving the current window/buffer.
+`Gedit ~1` and `Gedit ^` open the current file at the relative commit; from a
+commit view they open the relative commit itself. A normal worktree file uses HEAD
+as the base, while a historical blob uses its pinned revision. Numeric forms
+(`~2`, `^2`), explicit paths (`~1:other.txt`), and Fugitive's `>~1` spelling also
+work. The same relative objects are accepted by Gsplit/Gvsplit/Gtabedit, Gread,
+and Gdiff commands, with completion for common forms.
+
+Git commands run with argv, without shell interpolation. Commands needing prompts,
+network interaction or an editor use a terminal job. `git.editor` supplies Git's
+editor/sequence-editor command, opens the requested file in the same Neovim, and
+resumes Git after that buffer closes (`:wq`). Explicit `commit -m`, `-F`, and
+`--no-edit` run synchronously so chained status actions can observe failure.
+
+`git-object://<worktree>//<revision>/<path>` buffers preserve repository/path
+metadata; index buffers use `//0/<path>` (conflict stages use 1–3). Like Fugitive,
+path separators remain literal, with only percent, `#`, `?` and control characters
+escaped. Tab/status/inactive-window labels show `file.lua [abcdef0]` or
+`file.lua [0]`, while the URI keeps full repository/revision identity. Old fully
+escaped URIs still reload from sessions, quickfix and jump lists. Revision blobs are
+read-only and pin symbolic revisions to a commit. Stage 0 supports `:write` to
+update only the index, rejecting writes if its blob changed since loading.
+When Gitsigns is installed, a file opened from another revision or branch
+compares against the current repository's HEAD file. `Gedit HEAD:<path>` shows
+the changes made by HEAD against its first parent (or the empty tree for a root
+commit). Index blobs compare against HEAD. This uses the committed HEAD version,
+so uncommitted worktree edits are not part of the comparison. Tree objects have
+no file-level signs.
+`:Gwrite` additionally writes the worktree and stages it. Binary object editing
+is rejected. Buffer repository context takes priority over cwd, including linked
+worktrees. URI buffers can reload from quickfix and jump lists.
+
+The supported surface is deliberately bounded: shell pipelines, Fugitive's full
+object shorthand language, line-range `Gclog -L` syntax and every deprecated alias
+are not reproduced. Pass ordinary Git arguments to `Git` for other operations.
+Existing highlight/filetype names, `FugitiveChanged`, and Note metadata stay
+compatible with the surrounding dotfiles; they do not require Fugitive code.
 
 ## Commit details
 
-`features.commit` owns the custom commit view. Status and log selections, commit
-previews, `:GitCommit [revision]`, and Fugitive commit-object URIs open it by
-default. File/index/blob objects continue to use Fugitive.
+`git.features.commit` owns the custom commit view. Status and log selections, commit
+previews, `:GitCommit [revision]`, and `:Gedit <revision>` open it.
+`git.objects` owns independent file/index/blob buffers.
 
 The view shows immutable changes against the first parent (the empty tree for a
 root commit). `gp` selects another parent of a merge. File rows, addition/deletion
@@ -25,7 +97,7 @@ information, including HEAD relationship, relative dates and refs. The model
 caches this header until it is reloaded; editable message text stays separate.
 Help is available through g?.
 
-Clean commit buffers use Fugitive's `bufhidden=delete` lifecycle: they disappear
+Clean commit buffers use a `bufhidden=delete` lifecycle: they disappear
 from bufferline when no window displays them. Merely focusing another window does
 not delete a still-visible commit. Unwritten message edits are kept when hidden.
 Deleted commit URIs reload on reentry, restoring the selected parent, file
@@ -38,8 +110,11 @@ When Gitsigns is available, an explicit repository context compares
 the blob with the selected parent (using the old path for renames). New files
 receive addition signs; binary files skip this integration. Panel display options stay
 local to the panel. Bufferline displays the short commit hash,
-and the URI ends with the full hash. Flog ownership follows commit navigation;
-closing the commit view with q also closes Flog.
+and the URI ends with the full hash. Preview blob URIs use
+`git-commit-blob://<worktree>//<revision>/<path>` without an open counter. They
+remain separate from Gedit buffers because previews wipe on hide and can use a
+selected merge parent for their signs. Graph ownership follows commit navigation;
+closing the commit view with q also closes the graph.
 
 | Keys | Action |
 | --- | --- |
@@ -54,11 +129,10 @@ closing the commit view with q also closes Flog.
 | `gA` | Original message-edit float |
 | `X` (normal/visual) | Remove file, hunk, or selected lines; choose Hard or Mixed |
 | `~` / `p` / `gp` | Parent / previous commit affecting the file / merge parent |
-| `C` / `<C-Space>` / `O` | Commit information / Flog / pull request |
+| `C` / `<C-Space>` / `O` | Commit information / graph / pull request |
 | `gq` / `<C-y>` | File quickfix / copy short hash |
 | `<Leader>wd` | Cycle word-diff style |
 | `R` / `q` / `g?` | Collapse and reload / close / help |
-| `gL` | Open this commit in the legacy view |
 
 Inside the message, ordinary text-editing keys such as `i`, `o`, `d`, `cw`, `A`,
 `p`, and `J` retain their native meaning. Expanding diffs preserves a draft,
@@ -81,20 +155,6 @@ LazyAgent Notes retain immutable file/line identity and follow a file header whe
 its diff is collapsed, returning to their selection on expansion. Their source
 identity is preserved by the existing Notes session persistence.
 
-## Legacy view
-
-The original implementation is retained in `features.commit_legacy`.
-`:GitCommitLegacy [revision]`, `:GitCommit! [revision]`, or `gL` opens it explicitly.
-To keep it as the default, set:
-
-```lua
-vim.g.fugitive_extension_commit_view = 'legacy'
-```
-
-`features.commit.open_edit_commit()` and the original message-float callbacks
-remain compatible with status and other consumers. The original global
-`fugitive_foldtext()` remains available for legacy folds.
-
 ## Implementation and checks
 
 - `commit.lua`: view, editable-message validation, navigation, actions, routing.
@@ -107,7 +167,10 @@ Run checks from this directory with
 `nvim --headless --clean -u NONE -l tests/<name>.lua`.
 The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`,
 `commit_notes`, `commit_lifecycle`, `commit_entrypoints`, and `commit_blob_return`
-(the last two use installed vim-fugitive; `commit_blob_return` also uses Gitsigns).
+(`commit_blob_return` uses installed Gitsigns). No check loads Fugitive.
+`commands` checks actual Git mutations and object lifetimes; `lazy_loading` checks
+Lazy command registration and the active imports. `editor` uses a local Unix socket
+to exercise Git’s real editor process and requires socket permission.
 
 ## Reflog recovery markers
 
@@ -133,8 +196,7 @@ Initial blame loads into a hidden buffer before the split is opened at its final
 content width; moving away cancels that pending opening. View restoration runs
 with binding disabled, and cursor synchronization has a single owner rather than
 combining cursorbind with CursorMoved updates. The annotation panel has no winbar; the code winbar shows its path, revision and
-commit subject (HEAD subject for the working tree). They load fugitive-extension directly; Fugitive is not needed
-for the new view. `features.blame` owns the view and paired history;
+commit subject (HEAD subject for the working tree). They load the Git plugin directly. `git.features.blame` owns the view and paired history;
 `blame_model` parses line-porcelain metadata and maps new lines back to old lines.
 The leftmost range markers and hashes share deterministic commit colors. Hash,
 date, and author appear only on the first row of each contiguous commit group;
@@ -199,15 +261,13 @@ the original pair. Both sides of a blame diff map q to a deferred tab close and
 return to the blame panel, without quitting Neovim. Float layout updates are
 coalesced after window events and run only while the blame tab is current. Historical buffers remain unlisted and are released at exit.
 
-`:GitBlameLegacy [flags]` retains the original Fugitive view and extensions in
-`features.blame_legacy`; raw `:Git blame` remains available. Specialized Fugitive
-modes (such as reverse/range blame and its generic Git-operation mappings) remain
-in that legacy entry point. The new panel's commit opening always uses the custom
-commit view, including boundary commits; `p` opens the following diff float.
+`:Git blame` opens the paired view. With additional flags it runs the Git CLI
+and displays its output. Reverse/range blame's original interactive extensions
+remain in the preserved `fugitive-extension` configuration.
 
 Validation: `tests/blame_layout.lua` checks deep-file cursor/scroll stability and
 no loading split; `tests/blame_model.lua`, `tests/blame_view.lua`, and
 `tests/blame_history.lua` cover quoted/Unicode paths, renames, insertion/deletion
 line mapping, merge parents, root boundaries, real Ctrl-o/Ctrl-i mappings,
 following floats, date modes, live edits, source blobs, commit/diff entry points,
-legacy extensions, heatmaps, cleanup and pending-result rejection.
+heatmaps, cleanup and pending-result rejection.
