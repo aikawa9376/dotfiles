@@ -97,7 +97,6 @@ require("lazy").setup({
     { import = "plugins.oil" },
     { import = "plugins.spider" },
     -- { import = "plugins.relativenumber" },
-    { import = "plugins.diff-dim" },
     { import = "plugins.git-search" },
     { import = "plugins.linediff" },
     { import = "plugins.quick-toggle" },

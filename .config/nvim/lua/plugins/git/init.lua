@@ -6,7 +6,7 @@ return {
   cmd = {
     "G", "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit", "Gstash",
     "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit", "GitPush",
-    "Gworktree", "Gbranch", "FugitiveLog", "GitHeatmap", "GitBlame", "GitStatus", "GitCommit", "Greflog", "Glog", "Gllog", "Glcd", "Gtabedit", "Gsplit", "Gvdiffsplit", "Ghdiffsplit", "Gremove", "Gdelete", "Gmove", "Grename", "Gwq", "Gblame", "Ggraph", "GgraphBackend", "GCherryPick", "GworktreeSync", "UndoFugitive", "RedoFugitive"
+    "Gworktree", "Gbranch", "FugitiveLog", "GitHeatmap", "GitBlame", "GitStatus", "GitCommit", "Greflog", "Glog", "Gllog", "Glcd", "Gtabedit", "Gsplit", "Gvdiffsplit", "Ghdiffsplit", "Gremove", "Gdelete", "Gmove", "Grename", "Gwq", "Gblame", "Ggraph", "GgraphBackend", "GCherryPick", "GworktreeSync", "UndoFugitive", "RedoFugitive", "DiffDim"
   },
   keys = {
     { "<Leader>gb", "<cmd>GitBlame<CR>", silent = true },

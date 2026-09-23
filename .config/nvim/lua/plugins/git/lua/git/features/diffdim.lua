@@ -1,9 +1,11 @@
-return {
-  "diff-dim",
-  dir = os.getenv("XDG_CONFIG_HOME") .. "/nvim/lua/plugins/diff-dim",
-  cmd = "DiffDim",
-  config = function()
+local M = {}
+local initialized = false
+
+function M.setup()
+    if initialized then return end
+    initialized = true
     local ns_id = vim.api.nvim_create_namespace("DimNonDiffLines")
+    local panel_ns = vim.api.nvim_create_namespace("GitBlameDiffDim")
     local blame_state = {}
     local blame_commands = {
       clear = true,
@@ -12,12 +14,15 @@ return {
       newer = true,
     }
 
-    local function git_systemlist(cmd)
-      local result = vim.fn.systemlist(cmd)
-      if vim.v.shell_error ~= 0 then
-        return nil
-      end
-      return result
+    local function git_systemlist(args)
+      local result = vim.system(args, { text = true }):wait()
+      if result.code ~= 0 then return nil end
+      return vim.split(vim.trim(result.stdout or ''), '\n', { plain = true })
+    end
+
+    local function reset_base(bufnr)
+      local ok, gitsigns = pcall(require, 'gitsigns')
+      if ok then pcall(vim.api.nvim_buf_call, bufnr, gitsigns.reset_base) end
     end
 
     local function get_git_context(bufnr)
@@ -28,9 +33,7 @@ return {
       end
 
       local filedir = vim.fn.fnamemodify(filepath, ":h")
-      local root_result = git_systemlist(
-        "git -C " .. vim.fn.shellescape(filedir) .. " rev-parse --show-toplevel"
-      )
+      local root_result = git_systemlist({ 'git', '-C', filedir, 'rev-parse', '--show-toplevel' })
       if not root_result or not root_result[1] or root_result[1] == "" then
         vim.notify("DiffDim requires a file inside a git repository.", vim.log.levels.WARN)
         return nil
@@ -52,9 +55,32 @@ return {
       local target_bufnr = bufnr == 0 and vim.api.nvim_get_current_buf()
         or bufnr
         or vim.api.nvim_get_current_buf()
-      require("gitsigns").reset_base()
+      reset_base(target_bufnr)
       vim.api.nvim_buf_clear_namespace(target_bufnr, ns_id, 0, -1)
       blame_state[target_bufnr] = nil
+      local blame = package.loaded['git.features.blame']
+      if blame and blame.clear_dim_for_buffer then blame.clear_dim_for_buffer(target_bufnr) end
+    end
+
+    function M.clear_blame(bufnr)
+      if vim.api.nvim_buf_is_valid(bufnr) then
+        vim.api.nvim_buf_clear_namespace(bufnr, panel_ns, 0, -1)
+      end
+    end
+
+    function M.select_blame(bufnr, rows, commit)
+      if not vim.api.nvim_buf_is_valid(bufnr) then return false end
+      M.clear_blame(bufnr)
+      local line_count = vim.api.nvim_buf_line_count(bufnr)
+      for line = 1, line_count do
+        if not rows[line] or rows[line].commit ~= commit then
+          vim.api.nvim_buf_set_extmark(bufnr, panel_ns, line - 1, 0, {
+            line_hl_group = 'LineNr',
+            priority = 100,
+          })
+        end
+      end
+      return true
     end
 
     local function set_diff_marks(hunks, bufnr, rev)
@@ -110,12 +136,9 @@ return {
         return nil
       end
 
-      local blame_output = git_systemlist(
-        "git -C "
-          .. vim.fn.shellescape(git_context.git_root)
-          .. " blame --line-porcelain -- "
-          .. vim.fn.shellescape(git_context.relative_path)
-      )
+      local blame_output = git_systemlist({
+        'git', '-C', git_context.git_root, 'blame', '--line-porcelain', '--', git_context.relative_path,
+      })
       if not blame_output or #blame_output == 0 then
         vim.notify("Could not read git blame information for this file.", vim.log.levels.WARN)
         return nil
@@ -194,7 +217,7 @@ return {
     end
 
     local function apply_blame_dim(bufnr, state, commit_info)
-      require("gitsigns").reset_base()
+      reset_base(bufnr)
       vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
       local line_count = vim.api.nvim_buf_line_count(bufnr)
@@ -247,9 +270,7 @@ return {
       apply_blame_dim(bufnr, state, state.ordered_commits[index])
     end
 
-    local function complete_diffdim(arg_lead, cmd_line, cursor_pos)
-      local _ = cmd_line
-      local __ = cursor_pos
+    local function complete_diffdim(arg_lead)
       local matches = {}
       local seen = {}
 
@@ -260,7 +281,7 @@ return {
         end
       end
 
-      for _, item in ipairs(require("utilities").get_git_completions(arg_lead, cmd_line, cursor_pos) or {}) do
+      for _, item in ipairs(require('git.completion').refs(arg_lead)) do
         if not seen[item] then
           matches[#matches + 1] = item
           seen[item] = true
@@ -284,10 +305,14 @@ return {
       end
 
       local marks = vim.api.nvim_buf_get_extmarks(0, ns_id, 0, -1, { limit = 1 })
-      if #marks > 0 and command == nil then
+      local panel_marks = vim.api.nvim_buf_get_extmarks(0, panel_ns, 0, -1, { limit = 1 })
+      if (#marks > 0 or #panel_marks > 0) and command == nil then
         clear_marks(0)
         print("Dimmed lines cleared.")
       else
+        local blame = package.loaded['git.features.blame']
+        if command == nil and blame and blame.toggle_dim_for_buffer
+          and blame.toggle_dim_for_buffer(vim.api.nvim_get_current_buf()) then return end
         dim_lines(args)
         print("Diff lines dimmed.")
       end
@@ -295,5 +320,6 @@ return {
       nargs = "?",
       complete = complete_diffdim,
     })
-  end,
-}
+end
+
+return M
