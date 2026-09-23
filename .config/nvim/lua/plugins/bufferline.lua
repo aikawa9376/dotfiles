@@ -11,6 +11,8 @@ return {
         style = 'icon'
       },
       name_formatter = function(buf)
+        local hash = buf.bufnr and vim.b[buf.bufnr].fugitive_commit
+        if hash then return hash:sub(1, 7) end
         if buf.name:match('%.md') then
           return vim.fn.fnamemodify(buf.name, ':t:r')
         end

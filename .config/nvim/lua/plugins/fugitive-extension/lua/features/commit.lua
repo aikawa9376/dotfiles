@@ -1,1284 +1,581 @@
+-- Custom commit view; the original Fugitive extension remains in commit_legacy.
 local M = {}
-local utils = require("fugitive_utils")
-local commands = require("features.commands")
-local syntax_highlight = require("features.syntax_highlight")
-
-local is_navigating = false
-
-local function get_commit_from_buffer(bufnr)
-  local commit = utils.get_commit(bufnr)
-
-  if not commit or commit == '' then
-    local line = vim.api.nvim_get_current_line()
-    commit = line:match('^commit (%x+)') or line:match('^(%x%x%x%x%x%x%x+)')
-  end
-
-  if not commit then
-     local lnum = vim.fn.line('.')
-     while lnum > 0 do
-       local l = vim.fn.getline(lnum)
-       local c = l:match('^commit (%x+)')
-       if c then
-         commit = c
-         break
-       end
-       lnum = lnum - 1
-     end
-  end
-  return commit
+local utils = require('fugitive_utils')
+local legacy = require('features.commit_legacy')
+local model_api = require('features.commit_model')
+local display = require('features.change_display')
+local rewrite = require('features.commit_rewrite')
+local syntax = require('features.syntax_highlight')
+local states = {}
+local ns = vim.api.nvim_create_namespace('fugitive_commit_view')
+local serial = 0
+local legacy_opening = false
+local function buffer_name(root, hash, id)
+  return ('git-commit://%s/%d/%s'):format(root, id, hash)
 end
+local function close_flog()
+  local win = vim.g.flog_win
+  vim.g.flog_win, vim.g.flog_bufnr, vim.g.flog_opener_bufnr = nil, nil, nil
+  if win and vim.api.nvim_win_is_valid(win) then pcall(vim.api.nvim_win_close, win, false) end
+end
+local function show_buffer(buf)
+  local previous = vim.api.nvim_get_current_buf()
+  if previous ~= buf and vim.g.flog_opener_bufnr == previous then
+    vim.g.flog_opener_bufnr = buf
+  end
+  vim.api.nvim_win_set_buf(0, buf)
+end
+local function notify(err) vim.notify(tostring(err), vim.log.levels.ERROR) end
+local function state(buf) return states[buf == 0 and vim.api.nvim_get_current_buf() or buf] end
+function M.model(buf) local s = state(buf); return s and s.model end
 
-_G.fugitive_foldtext = function()
-  local line = vim.fn.getline(vim.v.foldstart)
-  local filename = line:match("^diff %-%-git [ab]/(.+) [ab]/") or line:match("^(%S+)") or "folding"
-
-  local icon, icon_hl = utils.get_devicon(filename)
-
-  -- ファイルの状態を判定（削除/リネーム）
-  local is_deleted = false
-  local is_renamed = false
-  local new_filename = nil
-
-  for i = vim.v.foldstart, vim.v.foldstart + 10 do
-    local l = vim.fn.getline(i)
-    if l:match("^deleted file mode") then
-      is_deleted = true
-      break
-    elseif l:match("^rename from") then
-      is_renamed = true
-    elseif l:match("^rename to") then
-      new_filename = l:match("^rename to (.+)$")
+local function message(s)
+  local lines = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
+  if #lines < #s.prefix + #s.suffix + 1 then return nil, 'Only the commit message may be edited' end
+  for i, text in ipairs(s.prefix) do
+    if lines[i] ~= text then return nil, 'Commit metadata is read-only; undo that edit before saving' end
+  end
+  local tail = #lines - #s.suffix
+  for i, text in ipairs(s.suffix) do
+    if lines[tail + i] ~= text then return nil, 'Diffs are read-only; undo that edit before saving' end
+  end
+  return vim.list_slice(lines, #s.prefix + 1, tail)
+end
+local function message_dirty(s)
+  local current = message(s)
+  return not current or not vim.deep_equal(current, s.model.message)
+end
+local function editable_row(s, row)
+  return row > #s.prefix and row <= vim.api.nvim_buf_line_count(s.buf) - #s.suffix
+end
+function M.entry_at(buf, row)
+  local s = state(buf)
+  if not s then return nil end
+  -- Message edits can shift every file row before the next render.
+  local delta = vim.api.nvim_buf_line_count(s.buf) - s.line_count
+  if editable_row(s, row) or row <= #s.prefix then return nil end
+  local info = s.rows[row - delta]
+  return info and info.entry, info
+end
+local function in_message(s) return editable_row(s, vim.api.nvim_win_get_cursor(0)[1]) end
+local function render(s, edited)
+  local model = s.model
+  local prefix = { 'commit ' .. model.hash, 'tree ' .. model.tree }
+  for _, parent in ipairs(model.parents) do prefix[#prefix + 1] = 'parent ' .. parent end
+  prefix[#prefix + 1] = 'author ' .. model.author .. ' ' .. model.date
+  prefix[#prefix + 1] = 'committer ' .. model.committer .. ' ' .. model.commit_date
+  if model.encoding ~= '' and model.encoding ~= '<unknown>' then prefix[#prefix + 1] = 'encoding ' .. model.encoding end
+  prefix[#prefix + 1] = ''
+  local msg = edited or model.message
+  if #msg == 0 then msg = { '' } end
+  local lines = vim.list_extend(vim.deepcopy(prefix), msg)
+  local suffix_start = #lines + 1
+  vim.list_extend(lines, { '', ('Changes (%d)'):format(#model.entries) })
+  local rows = {}
+  for _, entry in ipairs(model.entries) do
+    lines[#lines + 1] = display.line(entry)
+    rows[#lines] = { entry = entry, header = true }
+    if s.expanded[entry.path] then
+      local diff, start = model_api.inline(model, entry)
+      if not diff then notify(start); diff = {} end
+      for i, line in ipairs(diff) do
+        lines[#lines + 1] = line
+        rows[#lines] = { entry = entry, patch_row = start and start + i - 1 }
+      end
     end
   end
-
-  local added, removed, changed = 0, 0, 0
-  for i = vim.v.foldstart, vim.v.foldend do
-    local l = vim.fn.getline(i)
-    if l:match("^%+[^%+]") then
-      added = added + 1
-    elseif l:match("^%-[^%-]") then
-      removed = removed + 1
-    elseif l:match("^~") then
-      changed = changed + 1
+  s.prefix, s.suffix = prefix, vim.list_slice(lines, suffix_start)
+  s.rows, s.line_count = rows, #lines
+  vim.bo[s.buf].modifiable = true
+  vim.bo[s.buf].readonly = false
+  vim.api.nvim_buf_set_lines(s.buf, 0, -1, false, lines)
+  vim.bo[s.buf].modified = not vim.deep_equal(msg, model.message)
+  vim.bo[s.buf].bufhidden = vim.bo[s.buf].modified and 'hide' or 'delete'
+  vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
+  vim.api.nvim_buf_set_extmark(s.buf, ns, suffix_start, 0, { end_col = #lines[suffix_start + 1], hl_group = 'Title' })
+  for row, info in pairs(rows) do
+    if info.header then
+      local entry = info.entry
+      local chunks = display.statistics(entry)
+      if #chunks > 0 then vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 0, { virt_text = chunks, virt_text_pos = 'eol' }) end
+      local icon, hl = utils.get_devicon(entry.path)
+      vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 2, { end_col = #lines[row], hl_group = hl,
+        virt_text = { { icon .. ' ', hl } }, virt_text_pos = 'inline' })
     end
   end
-  local result = {}
-
-  if is_deleted then
-    table.insert(result, { icon .. " ", icon_hl })
-    table.insert(result, { filename, "GitSignsDelete" })
-  elseif is_renamed then
-    table.insert(result, { icon .. " ", icon_hl })
-    table.insert(result, { filename, "GitSignsChange" })
-    if new_filename then
-      table.insert(result, { " → " .. new_filename, "GitSignsChange" })
-    end
-  else
-    table.insert(result, { icon .. " ", icon_hl })
-    table.insert(result, { filename, icon_hl })
-  end
-
-  if added > 0 then
-    table.insert(result, { " +" .. added, "GitSignsAdd" })
-  end
-  if changed > 0 then
-    table.insert(result, { " ~" .. changed, "GitSignsChange" })
-  end
-  if removed > 0 then
-    table.insert(result, { " -" .. removed, "GitSignsDelete" })
-  end
-
+  vim.api.nvim_exec_autocmds('TextChanged', { buffer = s.buf })
   local notes = package.loaded['lazyagent.notes']
-  if notes and notes.fold_chunks then
-    vim.list_extend(result, notes.fold_chunks(vim.api.nvim_get_current_buf(), vim.v.foldstart, vim.v.foldend))
-  end
-  table.insert(result, { " ", "Normal" })
-
-  return result
+  if notes then notes.refresh_buffer(s.buf) end
 end
-
--- Helpers for X: discard diff changes from commit
-local function get_diff_context_at_line(bufnr, lnum)
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local on_file_header = (lines[lnum] or ''):match('^diff %-%-git') ~= nil
-  local filepath, file_lnum = nil, nil
-  for i = lnum, 1, -1 do
-    local p = lines[i]:match('^diff %-%-git [ab]/(.+) [ab]/')
-    if p then filepath, file_lnum = p, i; break end
-  end
-  local hunk_start = nil
-  if not on_file_header then
-    for i = lnum, 1, -1 do
-      if lines[i]:match('^@@') then hunk_start = i; break end
-      if lines[i]:match('^diff %-%-git') then break end
-    end
-  end
-  return filepath, file_lnum, on_file_header, hunk_start, lines
-end
-
-local function get_diff_target_at_cursor(bufnr)
-  local lnum = vim.api.nvim_win_get_cursor(0)[1]
-  local filepath = utils.get_filepath_at_cursor(bufnr)
-  local context = { get_diff_context_at_line(bufnr, lnum) }
-  local on_file_header = context[3]
-  local hunk_start = context[4]
-  local lines = context[5]
-  if not filepath then
-    return nil
-  end
-
-  if on_file_header or not hunk_start then
-    return filepath
-  end
-
-  local hunk_header = lines[hunk_start]
-  local new_start = tonumber(hunk_header and hunk_header:match('^@@ %-%d+,?%d* %+(%d+),?%d* @@'))
-  if not new_start then
-    return filepath
-  end
-
-  local target_line = new_start
-  local new_lnum = new_start
-
-  for i = hunk_start + 1, lnum do
-    local prefix = (lines[i] or ''):sub(1, 1)
-    if prefix == ' ' or prefix == '+' then
-      target_line = new_lnum
-      new_lnum = new_lnum + 1
-    elseif prefix == '-' then
-      target_line = new_lnum
-    end
-  end
-
-  return filepath, target_line
-end
-
-local function collect_file_patch(lines, file_lnum)
-  local result = {}
-  for i = file_lnum, #lines do
-    if i > file_lnum and lines[i]:match('^diff %-%-git') then break end
-    table.insert(result, lines[i])
-  end
-  return result
-end
-
-local function collect_hunk_patch(lines, file_lnum, hunk_start)
-  local result = {}
-  for i = file_lnum, hunk_start - 1 do
-    local l = lines[i]
-    if l:match('^diff %-%-git') or l:match('^index ') or l:match('^old mode')
-      or l:match('^new mode') or l:match('^new file') or l:match('^deleted file')
-      or l:match('^rename') or l:match('^similarity')
-      or l:match('^%-%-%-') or l:match('^%+%+%+') then
-      table.insert(result, l)
-    end
-  end
-  table.insert(result, lines[hunk_start])
-  for i = hunk_start + 1, #lines do
-    local l = lines[i]
-    if l:match('^@@') or l:match('^diff %-%-git') then break end
-    table.insert(result, l)
-  end
-  return result
-end
-
--- Build a patch that individually reverses only the selected +/- lines (zero-context hunks)
-local function build_partial_reverse_patch(filepath, lines, hunk_start, sel_start, sel_end)
-  local header = lines[hunk_start]
-  local old_s, new_s = header:match('^@@ %-(%d+),?%d* %+(%d+),?%d* @@')
-  if not old_s then return nil end
-  local old_cur, new_cur = tonumber(old_s), tonumber(new_s)
-  local sub_hunks = {}
-  for i = hunk_start + 1, #lines do
-    local l = lines[i]
-    if l:match('^@@') or l:match('^diff %-%-git') then break end
-    local prefix, content = l:sub(1, 1), l:sub(2)
-    local in_sel = (i >= sel_start and i <= sel_end)
-    if prefix == ' ' then
-      old_cur, new_cur = old_cur + 1, new_cur + 1
-    elseif prefix == '-' then
-      if in_sel then
-        -- Add back the deleted line at the current position in the new (commit) file
-        table.insert(sub_hunks, '@@ -' .. new_cur .. ',0 +' .. new_cur .. ',1 @@')
-        table.insert(sub_hunks, '+' .. content)
-      end
-      old_cur = old_cur + 1
-    elseif prefix == '+' then
-      if in_sel then
-        -- Remove the added line at the current position in the new (commit) file
-        table.insert(sub_hunks, '@@ -' .. new_cur .. ',1 +' .. new_cur .. ',0 @@')
-        table.insert(sub_hunks, '-' .. content)
-      end
-      new_cur = new_cur + 1
-    end
-  end
-  if #sub_hunks == 0 then return nil end
-  local patch = {
-    'diff --git a/' .. filepath .. ' b/' .. filepath,
-    '--- a/' .. filepath,
-    '+++ b/' .. filepath,
-  }
-  vim.list_extend(patch, sub_hunks)
-  return patch
-end
-
-local function commit_auto_stash(work_tree)
-  return utils.auto_stash(work_tree, {
-    message = 'fugitive-ext commit auto-stash',
-    keep_index = true,
-    notify_stashed = true,
-  })
-end
-
-local function commit_auto_pop(work_tree)
-  return utils.pop_auto_stash(work_tree, { notify_popped = true })
-end
-
-local function cleanup_view_file(path)
-  if path then
-    os.remove(path)
-  end
-end
-
-local function clamp_line(line, max_line)
-  return math.max(1, math.min(line, math.max(max_line, 1)))
-end
-
-local function find_file_header_line(lines, filepath)
-  if not filepath then
-    return nil
-  end
-
-  local pattern = '^diff %-%-git [ab]/' .. vim.pesc(filepath) .. ' [ab]/'
-  for i, line in ipairs(lines) do
-    if line:match(pattern) then
-      return i
-    end
-  end
-end
-
-local function find_file_end_line(lines, file_lnum)
-  if not file_lnum then
-    return #lines
-  end
-
-  for i = file_lnum + 1, #lines do
-    if lines[i]:match('^diff %-%-git') then
-      return i - 1
-    end
-  end
-
-  return #lines
-end
-
-local function find_hunk_header_line(lines, file_lnum, hunk_header)
-  if not file_lnum or not hunk_header then
-    return nil
-  end
-
-  for i = file_lnum + 1, #lines do
-    local line = lines[i]
-    if line:match('^diff %-%-git') then
-      break
-    end
-    if line == hunk_header then
-      return i
-    end
-  end
-end
-
-local function find_hunk_end_line(lines, hunk_lnum)
-  if not hunk_lnum then
-    return #lines
-  end
-
-  for i = hunk_lnum + 1, #lines do
-    local line = lines[i]
-    if line:match('^@@') or line:match('^diff %-%-git') then
-      return i - 1
-    end
-  end
-
-  return #lines
-end
-
-local function open_file_fold(file_lnum)
-  if not file_lnum or vim.fn.foldclosed(file_lnum) == -1 then
-    return false
-  end
-
-  return pcall(function()
-    vim.cmd(('silent! %dfoldopen!'):format(file_lnum))
-  end)
-end
-
-local function save_commit_view_state(bufnr)
-  local win = vim.api.nvim_get_current_win()
-  local lnum = vim.api.nvim_win_get_cursor(win)[1]
-  local filepath, file_lnum, _, hunk_start, lines = get_diff_context_at_line(bufnr, lnum)
-  local state = {
-    win = win,
-    view = vim.fn.winsaveview(),
-    view_file = vim.fn.tempname(),
-    filepath = filepath,
-    file_offset = file_lnum and (lnum - file_lnum) or nil,
-    hunk_header = hunk_start and lines[hunk_start] or nil,
-    hunk_offset = hunk_start and (lnum - hunk_start) or nil,
-  }
-
-  local ok = pcall(function()
-    vim.api.nvim_win_call(win, function()
-      vim.cmd('silent! mkview! ' .. vim.fn.fnameescape(state.view_file))
-    end)
-  end)
-
-  if not ok then
-    cleanup_view_file(state.view_file)
-    state.view_file = nil
-  end
-
-  return state
-end
-
-local function restore_commit_view_state(state)
-  if not state then
-    return
-  end
-
-  if not vim.api.nvim_win_is_valid(state.win) then
-    cleanup_view_file(state.view_file)
-    return
-  end
-
-  vim.api.nvim_win_call(state.win, function()
-    if state.view_file then
-      pcall(function()
-        vim.cmd('silent! loadview ' .. vim.fn.fnameescape(state.view_file))
-      end)
-    end
-
-    local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    local max_line = math.max(#lines, 1)
-    local target_line = clamp_line(state.view.lnum or 1, max_line)
-    local file_lnum = find_file_header_line(lines, state.filepath)
-
-    if file_lnum then
-      local hunk_lnum = find_hunk_header_line(lines, file_lnum, state.hunk_header)
-      if hunk_lnum and state.hunk_offset then
-        target_line = clamp_line(
-          math.min(hunk_lnum + state.hunk_offset, find_hunk_end_line(lines, hunk_lnum)),
-          max_line
-        )
-      elseif state.file_offset then
-        target_line = clamp_line(
-          math.min(file_lnum + state.file_offset, find_file_end_line(lines, file_lnum)),
-          max_line
-        )
-      else
-        target_line = clamp_line(file_lnum, max_line)
-      end
-    end
-
-    local view = vim.deepcopy(state.view)
-    local screen_offset = math.max((state.view.lnum or 1) - (state.view.topline or 1), 0)
-    view.lnum = target_line
-    view.topline = clamp_line(target_line - screen_offset, max_line)
-    pcall(function()
-      vim.fn.winrestview(view)
-    end)
-
-    local opened = open_file_fold(file_lnum)
-    pcall(function()
-      vim.cmd('silent! normal! zv')
-    end)
-    if opened then
-      pcall(function()
-        vim.fn.winrestview(view)
-      end)
-    end
-  end)
-
-  cleanup_view_file(state.view_file)
-end
-
-local function reopen_commit_preserving_view(new_hash, state)
-  if new_hash == '' then
-    restore_commit_view_state(state)
-    return
-  end
-
-  vim.schedule(function()
-    local ok, err = pcall(function()
-      vim.cmd('Gedit ' .. new_hash)
-    end)
-    if not ok then
-      cleanup_view_file(state and state.view_file or nil)
-      vim.notify('Failed to reopen commit: ' .. err, vim.log.levels.ERROR)
-      return
-    end
-
-    vim.schedule(function()
-      restore_commit_view_state(state)
-    end)
-  end)
-end
-
--- Run git rebase -i (stop at commit), apply/reverse the patch, amend, then continue
-local function apply_patch_and_amend(git_dir, commit, filepath, patch_lines, use_reverse)
-  local patch_file = vim.fn.tempname()
-  local f = io.open(patch_file, 'w')
-  if not f then
-    vim.notify('Failed to create temp file', vim.log.levels.ERROR)
-    return false
-  end
-  f:write(table.concat(patch_lines, '\n') .. '\n')
-  f:close()
-
-  local rebase_cmd = 'cd ' .. vim.fn.shellescape(git_dir)
-    .. " && GIT_SEQUENCE_EDITOR=\"sed -i '/" .. commit:sub(1, 7)
-    .. "/s/^pick/edit/'\" git rebase -i " .. commit .. '^ 2>&1'
-  local out = vim.fn.system(rebase_cmd)
-  if not out:match('Stopped at') then
-    vim.notify('Rebase failed: ' .. out:sub(1, 120), vim.log.levels.ERROR)
-    os.remove(patch_file)
-    return false
-  end
-
-  local rev = use_reverse and '--reverse ' or ''
-  out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir)
-    .. ' && git apply ' .. rev .. '--unidiff-zero ' .. vim.fn.shellescape(patch_file)
-    .. ' && git add ' .. vim.fn.shellescape(filepath)
-    .. ' && git commit --amend --allow-empty --no-edit 2>&1')
-  if vim.v.shell_error ~= 0 then
-    vim.notify('Apply failed: ' .. out:sub(1, 120), vim.log.levels.ERROR)
-    vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
-    os.remove(patch_file)
-    return false
-  end
-
-  out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && GIT_EDITOR=true git rebase --continue 2>&1')
-  if not (out:match('Successfully rebased') or vim.v.shell_error == 0) then
-    vim.notify('Rebase continue failed: ' .. out:sub(1, 120), vim.log.levels.ERROR)
-    vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
-    os.remove(patch_file)
-    return false
-  end
-
-  os.remove(patch_file)
+local function render_preserving_message(s)
+  local current, err = message(s)
+  if not current then notify(err); return false end
+  render(s, current)
   return true
 end
-
-local function apply_patch_to_worktree(git_dir, patch_lines, use_reverse)
-  local patch_file = vim.fn.tempname()
-  local f = io.open(patch_file, 'w')
-  if not f then
-    vim.notify('Failed to create temp file', vim.log.levels.ERROR)
-    return false
+local function configure_window()
+  vim.wo.foldmethod, vim.wo.foldenable, vim.wo.foldcolumn = 'manual', false, '0'
+  vim.wo.wrap, vim.wo.number, vim.wo.relativenumber = false, false, false
+end
+local function focus_path(s, path)
+  for row, info in pairs(s.rows) do
+    if info.header and info.entry.path == path then
+      local delta = vim.api.nvim_buf_line_count(s.buf) - s.line_count
+      vim.api.nvim_win_set_cursor(0, { row + delta, 0 }); return
+    end
   end
-
-  f:write(table.concat(patch_lines, '\n') .. '\n')
-  f:close()
-
-  local rev = use_reverse and '--reverse ' or ''
-  local out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir)
-    .. ' && git apply ' .. rev .. '--unidiff-zero ' .. vim.fn.shellescape(patch_file) .. ' 2>&1')
-  os.remove(patch_file)
-
-  if vim.v.shell_error ~= 0 then
-    vim.notify('Failed to restore unstaged changes: ' .. out:sub(1, 120), vim.log.levels.ERROR)
-    return false
-  end
-
+end
+local function replace_model(s, hash)
+  local model, err = model_api.load(s.model.root, hash, s.model.parent_index)
+  if not model then notify(err); return false end
+  s.model = model
+  s.expected_head = vim.trim(model_api.git(model.root, { 'rev-parse', 'HEAD' }) or '')
+  vim.b[s.buf].fugitive_commit = model.hash
+  vim.api.nvim_buf_set_name(s.buf, buffer_name(model.root, model.hash, s.view_id))
+  render(s)
   return true
 end
-
--- Commit message edit float + amend flow
-local edit_float_win = nil
-local edit_float_buf = nil
-local edit_context_by_buf = {}
-
-local function close_edit_commit_float(bufnr)
-  bufnr = bufnr or edit_float_buf
-  -- Mark buffer as intentionally closing to skip unload prompt
-  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(function() vim.b[bufnr].amend_closing = true end)
-  end
-
-  if edit_float_win and vim.api.nvim_win_is_valid(edit_float_win) then
-    pcall(vim.api.nvim_win_close, edit_float_win, true)
-  end
-  if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
-    pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
-  end
-  if bufnr then edit_context_by_buf[bufnr] = nil end
-  edit_float_win = nil
-  edit_float_buf = nil
+function M.expand_file(buf, path)
+  local s = state(buf)
+  if not s then return false end
+  s.expanded[path] = true
+  return render_preserving_message(s)
 end
-
-local function do_amend_commit_from_file(git_dir, commit, message_file, view_state, opts)
-  opts = opts or {}
-  if not git_dir or git_dir == '' then
-    vim.notify('Not in a git repository', vim.log.levels.ERROR)
-    return false
-  end
-  -- Rewording must not leave staged files in the index: an amend would otherwise
-  -- accidentally include them, and an interactive rebase rejects a dirty index.
-  local stashed = utils.auto_stash(git_dir, {
-    message = 'fugitive-ext reword auto-stash',
-    notify_stashed = true,
-  })
-  if stashed == nil then return false end
-
-  local resolved = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse ' .. vim.fn.shellescape(commit) .. ' 2>/dev/null'):gsub('%s+', '')
-  local head = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
-
-  if resolved == '' then
-    vim.notify('Failed to resolve commit: ' .. tostring(commit), vim.log.levels.ERROR)
-    if stashed then commit_auto_pop(git_dir) end
-    return false
-  end
-
-  local new_hash = ''
-  if resolved == head then
-    -- Amend HEAD
-    local cmd = 'git -C ' .. vim.fn.shellescape(git_dir)
-      .. ' commit --amend --only --allow-empty -F ' .. vim.fn.shellescape(message_file) .. ' 2>&1'
-    local out = vim.fn.system(cmd)
-    if vim.v.shell_error ~= 0 then
-      vim.notify('Amend failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
-      if stashed then commit_auto_pop(git_dir) end
-      return false
-    end
-    new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
-  else
-    -- Interactive rebase edit the commit
-    local parent = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir)
-      .. ' rev-parse --verify ' .. vim.fn.shellescape(resolved .. '^') .. ' 2>/dev/null'):gsub('%s+', '')
-    local base = parent ~= '' and vim.fn.shellescape(parent) or '--root'
-    local sequence_editor = "sed -i '/^pick " .. resolved:sub(1, 7) .. "/s/^pick/edit/'"
-    local rebase_cmd = 'cd ' .. vim.fn.shellescape(git_dir)
-      .. ' && GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(sequence_editor)
-      .. ' git rebase -i ' .. base .. ' 2>&1'
-    local out = vim.fn.system(rebase_cmd)
-    local rebase_exit = vim.v.shell_error
-    local repository_dir = utils.get_git_dir(git_dir)
-    local rebase_active = repository_dir ~= nil
-      and (vim.fn.isdirectory(vim.fs.joinpath(repository_dir, 'rebase-merge')) == 1
-        or vim.fn.isdirectory(vim.fs.joinpath(repository_dir, 'rebase-apply')) == 1)
-    if rebase_exit ~= 0 or not rebase_active then
-      vim.notify('Rebase failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
-      if rebase_active then
-        vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir) .. ' rebase --abort')
-      end
-      if stashed then commit_auto_pop(git_dir) end
-      return false
-    end
-
-    local amend_cmd = 'git -C ' .. vim.fn.shellescape(git_dir) .. ' commit --amend -F ' .. vim.fn.shellescape(message_file) .. ' --allow-empty 2>&1'
-    out = vim.fn.system(amend_cmd)
-    if vim.v.shell_error ~= 0 then
-      vim.notify('Amend failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
-      vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
-      if stashed then commit_auto_pop(git_dir) end
-      return false
-    end
-    -- Capture the rewritten target before continuing; after the rebase HEAD is
-    -- the tip commit, which is not necessarily the commit the user edited.
-    new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir)
-      .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
-
-    out = vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && GIT_EDITOR=true git rebase --continue 2>&1')
-    if not (out:match('Successfully rebased') or vim.v.shell_error == 0) then
-      vim.notify('Rebase continue failed: ' .. out:sub(1, 200), vim.log.levels.ERROR)
-      vim.fn.system('cd ' .. vim.fn.shellescape(git_dir) .. ' && git rebase --abort')
-      if stashed then commit_auto_pop(git_dir) end
-      return false
-    end
-  end
-
-  if stashed then commit_auto_pop(git_dir) end
-
-  if opts.reopen ~= false then
-    reopen_commit_preserving_view(new_hash, view_state)
-  end
-  if opts.on_complete then pcall(opts.on_complete, new_hash) end
-  vim.notify('Amended commit ' .. (resolved:sub(1,7)) .. ' → ' .. (new_hash and new_hash:sub(1,7) or ''), vim.log.levels.INFO)
+function M.write(buf)
+  local s = state(buf)
+  if not s or s.writing then return false end
+  local current, err = message(s)
+  if not current then notify(err); return false end
+  if vim.deep_equal(current, s.model.message) then vim.bo[s.buf].modified = false; return true end
+  s.writing = true
+  local ok, hash, warning = pcall(rewrite.apply, s.model.root, s.model.hash, { message = current, expected_head = s.expected_head })
+  s.writing = false
+  if not ok or not hash then notify(ok and warning or hash); return false end
+  replace_model(s, hash)
+  if warning then vim.notify(warning, vim.log.levels.WARN) end
   return true
 end
-
-local function open_edit_commit_float(commit, origin_buf, view_state, opts)
-  -- If float already open, replace content
-  pcall(close_edit_commit_float)
-
-  local work_tree = utils.get_buf_work_tree(origin_buf)
-    or utils.set_buf_work_tree(origin_buf, utils.get_work_tree({ bufnr = origin_buf }))
-  local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
-  local msg = vim.fn.systemlist(git_prefix .. 'show -s --format=%B ' .. vim.fn.shellescape(commit))
-  if vim.v.shell_error ~= 0 or not msg then msg = { '' } end
-  while #msg > 0 and msg[#msg] == '' do table.remove(msg) end
-
-  edit_float_buf = vim.api.nvim_create_buf(false, true)
-  vim.bo[edit_float_buf].buftype = 'nofile'
-  vim.bo[edit_float_buf].bufhidden = 'wipe'
-  vim.bo[edit_float_buf].swapfile = false
-  vim.bo[edit_float_buf].filetype = 'gitcommit'
-  vim.api.nvim_buf_set_lines(edit_float_buf, 0, -1, false, msg)
-  vim.bo[edit_float_buf].modifiable = true
-
-  local width = math.min(80, vim.o.columns - 4)
-  local height = math.min(30, math.max(6, #msg))
-  local col = math.floor((vim.o.columns - width) / 2)
-  local row = math.floor((vim.o.lines - height) / 2)
-
-  edit_float_win = vim.api.nvim_open_win(edit_float_buf, true, {
-    relative = 'editor', width = width, height = height, col = col, row = row,
-    style = 'minimal', border = 'single', title = ' Amend commit ', title_pos = 'center',
-  })
-
-  -- Keymaps: 'q' and <Esc> will trigger the close-with-prompt flow. <Leader>a still triggers amend directly.
-  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', 'q', [[:lua require('features.commit')._close_edit_float()<CR>]],
-    { noremap = true, silent = true, nowait = true })
-  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', '<Esc>', [[:lua require('features.commit')._close_edit_float()<CR>]], { noremap = true, silent = true })
-  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', '<Leader>a', [[:lua require('features.commit')._do_amend_from_buffer()<CR>]], { noremap = true, silent = true })
-
-  -- Store state for the buffer via buffer variable
-  vim.b[edit_float_buf].amend_target = commit
-  vim.b[edit_float_buf].amend_origin_buf = origin_buf
-  vim.b[edit_float_buf].amend_work_tree = work_tree
-  vim.b[edit_float_buf].amend_view_state = view_state
-  vim.b[edit_float_buf].amend_original_text = table.concat(msg, '\n')
-  edit_context_by_buf[edit_float_buf] = opts or {}
-
-  -- Prompt on unexpected buffer unload/close: if buffer is unloaded while not intentionally closing, run prompt handler
-  vim.api.nvim_create_autocmd({ 'BufUnload' }, {
-    buffer = edit_float_buf,
-    callback = function(ev)
-      vim.schedule(function()
-        local b = ev.buf
-        -- If buffer is already invalid, nothing to do
-        if not b or not pcall(vim.api.nvim_buf_is_valid, b) or not vim.api.nvim_buf_is_valid(b) then
-          return
-        end
-        -- If buffer is flagged as intentionally closing, do nothing
-        if vim.b[b] and vim.b[b].amend_closing then
-          return
-        end
-        -- Otherwise, invoke the close-with-prompt handler
-        pcall(function()
-          require('features.commit')._close_edit_float(b)
-        end)
-      end)
-    end,
-  })
+local function clean_action(s)
+  if message_dirty(s) then notify('Save or undo message edits before this action'); return false end
+  return true
 end
-
--- Close-with-prompt wrapper. If buffer content changed, ask user to apply (amend) or discard changes.
-M._close_edit_float = function(bufnr)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then return end
-
-  -- If flagged as intentionally closing, just close
-  if vim.b[bufnr] and vim.b[bufnr].amend_closing then
-    close_edit_commit_float(bufnr)
-    return
+local function toggle(s, mode, first, last)
+  local current, err = message(s)
+  if not current then notify(err); return end
+  local selected = {}
+  for row = first or vim.fn.line('.'), last or vim.fn.line('.') do
+    local entry = M.entry_at(s.buf, row)
+    if entry then selected[entry.path] = true end
   end
-
-  local orig = vim.b[bufnr] and vim.b[bufnr].amend_original_text or nil
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local cur = table.concat(lines, '\n')
-
-  if not orig or orig == cur then
-    -- Nothing changed
-    close_edit_commit_float(bufnr)
-    return
+  if next(selected) == nil then
+    for _, entry in ipairs(s.model.entries) do selected[entry.path] = true end
   end
-
-  local commit = vim.b[bufnr] and vim.b[bufnr].amend_target or ''
-  local short = (commit and commit ~= '') and tostring(commit):sub(1,7) or ''
-
-  local choice = vim.fn.confirm(
-    string.format('Apply changes to commit %s?', short),
-    '&Yes\n&No\n&Cancel', 1
-  )
-
-  if choice == 1 then
-    -- Apply (amend) and close
-    M._do_amend_from_buffer(bufnr, true)
-    return
-  elseif choice == 2 then
-    -- Close without applying
-    close_edit_commit_float(bufnr)
-    return
-  else
-    -- Cancel: keep open
-    return
-  end
+  local cursor_entry = M.entry_at(s.buf, vim.fn.line('.'))
+  for path in pairs(selected) do s.expanded[path] = mode == 'show' or (mode == 'toggle' and not s.expanded[path]) end
+  render(s, current)
+  if cursor_entry then focus_path(s, cursor_entry.path) end
 end
-
--- Perform amend from given buffer (or current buf)
-M._do_amend_from_buffer = function(bufnr, skip_confirm)
-  bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local commit = vim.b[bufnr] and vim.b[bufnr].amend_target or nil
-  local origin_buf = vim.b[bufnr] and vim.b[bufnr].amend_origin_buf or nil
-  local view_state = vim.b[bufnr] and vim.b[bufnr].amend_view_state or nil
-  local opts = edit_context_by_buf[bufnr] or {}
-  if not commit then
-    vim.notify('No amend target', vim.log.levels.ERROR)
-    return
-  end
-
-  -- Light confirmation unless explicitly skipped
-  if not skip_confirm then
-    local short = tostring(commit):sub(1, 7)
-    local choice = vim.fn.confirm('Amend commit ' .. short .. '?', '&Yes\n&No', 1)
-    if choice ~= 1 then
-      vim.notify('Amend cancelled', vim.log.levels.INFO)
-      return
+local function move(s, direction, hunks, expand)
+  if not render_preserving_message(s) then return end
+  for _ = 1, vim.v.count1 do
+    local entry = M.entry_at(s.buf, vim.fn.line('.'))
+    if hunks and entry and not s.expanded[entry.path] then toggle(s, 'show') end
+    local row = vim.fn.line('.')
+    local lines = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
+    for candidate = row + direction, direction == 1 and #lines or 1, direction do
+      local info = s.rows[candidate]
+      if info and (info.header or (hunks and lines[candidate]:match('^@@'))) then
+        if not hunks and entry then s.expanded[entry.path] = false end
+        vim.api.nvim_win_set_cursor(0, { candidate, 0 })
+        if expand or (hunks and info.header) then
+          toggle(s, 'show')
+          if hunks then
+            local next_row = vim.fn.line('.') + 1
+            if (vim.api.nvim_buf_get_lines(s.buf, next_row - 1, next_row, false)[1] or ''):match('^@@') then
+              vim.api.nvim_win_set_cursor(0, { next_row, 0 })
+            end
+          end
+        elseif not hunks then
+          toggle(s, 'hide')
+        end
+        break
+      end
     end
   end
-
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local temp = vim.fn.tempname()
-  local f = io.open(temp, 'w')
-  if not f then vim.notify('Failed to create temp file', vim.log.levels.ERROR); return end
-  f:write(table.concat(lines, '\n') .. '\n')
-  f:close()
-
-  local git_dir = vim.b[bufnr] and vim.b[bufnr].amend_work_tree
-    or (origin_buf and utils.get_buf_work_tree(origin_buf))
-  if not git_dir then
-    vim.notify('Not in a git repository', vim.log.levels.ERROR)
-    os.remove(temp)
-    return
-  end
-  local ok = do_amend_commit_from_file(git_dir, commit, temp, view_state, opts)
-  os.remove(temp)
-  if ok then close_edit_commit_float(bufnr) end
 end
-
-
-local function confirm_discard_mode(scope, commit)
-  local choice = vim.fn.confirm(
-    table.concat({
-      string.format('Discard %s changes from commit %s?', scope, commit:sub(1, 7)),
-      '',
-      'Hard: remove them from the commit and worktree',
-      'Mixed: remove them from the commit and keep them unstaged',
-    }, '\n'),
-    '&Hard\n&Mixed\n&Cancel',
-    3
-  )
-
-  if choice == 1 then
-    return 'hard'
-  end
-  if choice == 2 then
-    return 'mixed'
-  end
-end
-
--- Post-discard: stash pop, check empty commit, reload buffer
-local function do_discard(git_dir, commit, filepath, patch, use_reverse, scope, stashed, reset_mode)
-  local view_state = save_commit_view_state(vim.api.nvim_get_current_buf())
-  local ok = apply_patch_and_amend(git_dir, commit, filepath, patch, use_reverse)
-  if not ok then
-    if stashed then commit_auto_pop(git_dir) end
-    vim.cmd('checktime')
-    restore_commit_view_state(view_state)
-    return
-  end
-
-  local stash_popped = true
-  if stashed then
-    stash_popped = commit_auto_pop(git_dir)
-  end
-
-  local new_hash = vim.fn.system('git -C ' .. vim.fn.shellescape(git_dir)
-    .. ' rev-parse HEAD 2>/dev/null'):gsub('%s+', '')
-
-  -- Check if commit became empty
-  local diff_out = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(git_dir)
-    .. ' diff-tree --no-commit-id -r ' .. new_hash .. ' 2>/dev/null')
-  if #diff_out == 0 and new_hash ~= '' then
-    if vim.fn.confirm(
-      'Commit ' .. new_hash:sub(1, 7) .. ' is now empty. Drop it?',
-      '&Yes\n&No', 1
-    ) == 1 then
-      vim.fn.system('cd ' .. vim.fn.shellescape(git_dir)
-        .. " && GIT_SEQUENCE_EDITOR=\"sed -i '1s/^pick/drop/'\" GIT_EDITOR=true git rebase -i HEAD^ 2>&1")
-      vim.notify('Dropped empty commit ' .. new_hash:sub(1, 7), vim.log.levels.INFO)
-      if reset_mode == 'mixed' then
-        if stash_popped then
-          apply_patch_to_worktree(git_dir, patch, not use_reverse)
-        else
-          vim.notify('Skipped restoring unstaged changes because auto-stash pop failed', vim.log.levels.WARN)
-        end
+local function target_line(s, info, before)
+  if not info or not info.patch_row then return 1 end
+  local patch = model_api.patch(s.model, info.entry)
+  local n
+  for i = info.patch_row, 1, -1 do
+    n = tonumber(patch[i]:match(before and '^@@ %-(%d+)' or '^@@ %-%d+,?%d* %+(%d+)'))
+    if n then
+      for j = i + 1, info.patch_row - 1 do
+        if patch[j]:match(before and '^[ %-]' or '^[ +]') then n = n + 1 end
       end
-      utils.fire_fugitive_changed({ work_tree = git_dir })
-      vim.cmd('checktime')
-      cleanup_view_file(view_state.view_file)
-      vim.schedule(function() require('utilities').smart_close() end)
-      return
+      return math.max(1, n)
     end
   end
-
-  local restored_to_worktree = reset_mode ~= 'mixed'
-  if reset_mode == 'mixed' then
-    if stash_popped then
-      if not apply_patch_to_worktree(git_dir, patch, not use_reverse) then
-        utils.fire_fugitive_changed({ work_tree = git_dir })
-        reopen_commit_preserving_view(new_hash, view_state)
-        return
-      end
-      restored_to_worktree = true
+  return 1
+end
+local function blob(s, entry, before)
+  local rev = before and s.model.base or s.model.hash
+  local path = before and (entry.old_path or entry.path) or entry.path
+  if (before and entry.status == 'A') or (not before and entry.status == 'D') then return {} end
+  local content, err = model_api.git(s.model.root, { 'show', rev .. ':' .. path })
+  if not content then return nil, err end
+  return model_api.lines(content)
+end
+local function show_blob(s, entry, before)
+  local content, err = blob(s, entry, before)
+  if not content then notify(err); return end
+  local b = vim.api.nvim_create_buf(false, true)
+  local rev = before and s.model.base or s.model.hash
+  local path = before and (entry.old_path or entry.path) or entry.path
+  serial = serial + 1
+  vim.api.nvim_buf_set_name(b, ('git-commit-blob://%d/%s/%s'):format(serial, rev, path))
+  utils.set_buf_work_tree(b, s.model.root)
+  local oid = model_api.git(s.model.root, { 'rev-parse', '--verify', rev .. ':' .. path })
+  vim.b[b].lazyagent_note_source = { kind = 'fugitive', root = s.model.root, path = path,
+    git_dir = vim.b[s.buf].git_dir, revision = rev, blob = oid and vim.trim(oid), side = before and 'a' or 'b' }
+  vim.api.nvim_buf_set_lines(b, 0, -1, false, content)
+  vim.bo[b].bufhidden, vim.bo[b].buftype = 'wipe', 'nofile'
+  vim.bo[b].filetype = vim.filetype.match({ filename = path }) or ''
+  vim.bo[b].modifiable, vim.bo[b].readonly = false, true
+  vim.api.nvim_win_set_buf(0, b)
+  vim.wo.wrap = false
+  return b
+end
+local function diff(s, layout)
+  local entry, info = M.entry_at(s.buf, vim.fn.line('.'))
+  if not entry then
+    local args = s.model.base .. '..' .. s.model.hash
+    vim.cmd('DiffviewOpen ' .. args); return
+  end
+  if entry.binary then vim.notify('Binary file; use D for Diffview', vim.log.levels.INFO); return end
+  vim.cmd('tabnew')
+  show_blob(s, entry, true)
+  vim.cmd('diffthis')
+  vim.cmd(layout == 'horizontal' and 'belowright split' or 'rightbelow vsplit')
+  local b = show_blob(s, entry, false)
+  if b then
+    vim.cmd('diffthis')
+    vim.api.nvim_win_set_cursor(0, { math.min(target_line(s, info), vim.api.nvim_buf_line_count(b)), 0 })
+  end
+  vim.cmd('wincmd =')
+end
+local function discard(s, first, last)
+  if not clean_action(s) then return end
+  local entry, info = M.entry_at(s.buf, first or vim.fn.line('.'))
+  if not entry then notify('Select a changed file or hunk'); return end
+  local patch, err = model_api.patch(s.model, entry)
+  if not patch then notify(err); return end
+  local scope, reverse = 'file', true
+  local hunk
+  if info.patch_row then
+    for i = info.patch_row, 1, -1 do if patch[i]:match('^@@') then hunk = i; break end end
+  end
+  if first then
+    local last_entry, last_info = M.entry_at(s.buf, last)
+    if last_entry ~= entry or not hunk or not last_info.patch_row then notify('Select diff lines within one hunk'); return end
+    for i = info.patch_row + 1, last_info.patch_row do
+      if patch[i]:match('^@@') then notify('Select diff lines within one hunk'); return end
+    end
+    patch = legacy.build_partial_reverse_patch(entry.path, patch, hunk, info.patch_row, last_info.patch_row)
+    scope, reverse = 'selection', false
+  elseif hunk then
+    patch = legacy.collect_hunk_patch(patch, 1, hunk)
+    scope = 'hunk'
+  end
+  if not patch then notify('No changed lines selected'); return end
+  local mode = legacy.confirm_discard_mode(scope, s.model.hash)
+  if not mode then return end
+  local hash, warning = rewrite.apply(s.model.root, s.model.hash, {
+    patch = patch, reverse = reverse, mixed = mode == 'mixed', expected_head = s.expected_head,
+  })
+  if not hash then notify(warning); return end
+  replace_model(s, hash)
+  focus_path(s, entry.path)
+  if warning then vim.notify(warning, vim.log.levels.WARN) end
+  if not warning and #s.model.entries == 0 and #s.model.parents < 2
+    and vim.fn.confirm('Commit is now empty. Drop it?', '&Yes\n&No', 2) == 1 then
+    local next_hash, drop_error = rewrite.apply(s.model.root, hash, { drop = true, expected_head = s.expected_head })
+    if next_hash then replace_model(s, next_hash) end
+    if drop_error then notify(drop_error) end
+  end
+end
+local function open_related(s, revision, path)
+  if not clean_action(s) then return end
+  local b = M.open({ work_tree = s.model.root, revision = revision })
+  if b and path then
+    states[b].expanded[path] = true
+    render(states[b]); focus_path(states[b], path)
+  end
+end
+local function attach(s)
+  local b = s.buf
+  vim.api.nvim_buf_attach(b, false, { on_lines = function()
+    -- Set this before a command checks whether it may hide a modified buffer.
+    vim.bo[b].bufhidden = 'hide'
+  end })
+  local function map(keys, callback, opts)
+    for _, key in ipairs(type(keys) == 'table' and keys or { keys }) do
+      vim.keymap.set('n', key, function()
+        -- Keep ordinary text editing available in the message region.
+        if (opts or {}).native and in_message(s) then
+          vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), 'n', false)
+        else callback() end
+      end, { buffer = b, silent = true, nowait = not (opts or {}).prefix, desc = (opts or {}).desc })
+    end
+  end
+  map({ 'o', '=' }, function() toggle(s, 'toggle') end, { native = true })
+  map('i', function() move(s, 1, true, false); vim.cmd('normal! zt') end, { native = true })
+  map('>', function() toggle(s, 'show') end, { native = true })
+  map('<', function() toggle(s, 'hide') end, { native = true })
+  for key, mode in pairs({ ['='] = 'toggle', ['>'] = 'show', ['<'] = 'hide' }) do
+    local chosen = mode
+    vim.keymap.set('x', key, function()
+      local first, last = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
+      vim.cmd('normal! \27')
+      toggle(s, chosen, first, last)
+    end, { buffer = b, silent = true })
+  end
+  map({ ']m', ']/', ')' }, function() move(s, 1, false, false) end)
+  map({ '[m', '[/', '(' }, function() move(s, -1, false, false) end)
+  map({ 'J', ']c' }, function() move(s, 1, true, false) end, { native = true })
+  map({ 'K', '[c' }, function() move(s, -1, true, false) end, { native = true })
+  map(']]', function() move(s, 1, false, true) end)
+  map('[[', function() move(s, -1, false, true) end)
+  map('d', function() diff(s, 'vertical') end, { native = true, prefix = true })
+  map({ 'dd', 'dv' }, function() diff(s, 'vertical') end, { native = true })
+  map({ 'dh', 'ds' }, function() diff(s, 'horizontal') end, { native = true })
+  map('D', function() vim.cmd('DiffviewOpen ' .. s.model.base .. '..' .. s.model.hash) end, { native = true })
+  map('<CR>', function()
+    local entry, info = M.entry_at(b, vim.fn.line('.'))
+    if not entry then return end
+    if not clean_action(s) then return end
+    local buf = show_blob(s, entry, entry.status == 'D')
+    if buf then vim.api.nvim_win_set_cursor(0, { math.min(target_line(s, info, entry.status == 'D'), vim.api.nvim_buf_line_count(buf)), 0 }) end
+  end)
+  map('gf', function()
+    local entry, info = M.entry_at(b, vim.fn.line('.'))
+    if not entry or not clean_action(s) then return end
+    vim.cmd('edit ' .. vim.fn.fnameescape(vim.fs.joinpath(s.model.root, entry.path)))
+    vim.api.nvim_win_set_cursor(0, { math.min(target_line(s, info), vim.api.nvim_buf_line_count(0)), 0 })
+  end)
+  map('gq', function()
+    local items = {}
+    for _, entry in ipairs(s.model.entries) do items[#items + 1] = { filename = vim.fs.joinpath(s.model.root, entry.path), lnum = 1 } end
+    vim.fn.setqflist({}, ' ', { title = s.model.hash, items = items }); vim.cmd('copen')
+  end, { native = true })
+  map({ 'A', 'cw' }, function()
+    vim.api.nvim_win_set_cursor(0, { #s.prefix + 1, 0 })
+    vim.cmd('startinsert')
+  end, { native = true })
+  map('gA', function()
+    if not clean_action(s) then return end
+    legacy.open_edit_commit(s.model.hash, b, { reopen = false,
+      rewrite_message = function(lines)
+        if states[b] ~= s then return nil, 'The commit view has been closed' end
+        return rewrite.apply(s.model.root, s.model.hash, { message = lines, expected_head = s.expected_head })
+      end,
+      on_complete = function(hash)
+        if states[b] == s then replace_model(s, hash) end
+      end,
+    })
+  end)
+  map('X', function() discard(s) end, { native = true })
+  vim.keymap.set('x', 'X', function()
+    local first, last = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
+    vim.cmd('normal! \27'); discard(s, first, last)
+  end, { buffer = b, silent = true })
+  map('~', function() if s.model.parents[s.model.parent_index] then open_related(s, s.model.parents[s.model.parent_index]) end end, { native = true })
+  map('p', function()
+    local entry = M.entry_at(b, vim.fn.line('.'))
+    if not entry then return end
+    local hash = model_api.git(s.model.root, { '--literal-pathspecs', 'log', '--format=%H', '--skip=1', '-n', '1', s.model.hash, '--', entry.path })
+    if hash and vim.trim(hash) ~= '' then open_related(s, vim.trim(hash), entry.path) end
+  end, { native = true })
+  map('gp', function()
+    if #s.model.parents < 2 then return end
+    vim.ui.select(s.model.parents, { prompt = 'Compare against parent:' }, function(_, index)
+      if not index or states[b] ~= s then return end
+      local current, err = message(s)
+      if not current then notify(err); return end
+      local model, load_err = model_api.load(s.model.root, s.model.hash, index)
+      if not model then notify(load_err); return end
+      s.model = model; render(s, current)
+    end)
+  end)
+  map('<C-y>', function()
+    vim.fn.setreg('"', s.model.hash:sub(1, 7)); vim.fn.setreg('+', s.model.hash:sub(1, 7))
+  end)
+  map('C', function() require('features.commands').show_commit_info_float(s.model.hash, true, true) end, { native = true })
+  map('O', function() vim.cmd('OctoPrFromSha ' .. s.model.hash) end, { native = true })
+  map('<C-Space>', function()
+    if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+      vim.api.nvim_win_close(vim.g.flog_win, false)
+      vim.g.flog_win, vim.g.flog_bufnr, vim.g.flog_opener_bufnr = nil, nil, nil
     else
-      vim.notify('Skipped restoring unstaged changes because auto-stash pop failed', vim.log.levels.WARN)
+      local win = vim.api.nvim_get_current_win()
+      vim.cmd('Flogsplit -open-cmd=vertical\\ rightbelow\\ 60vsplit')
+      vim.g.flog_bufnr, vim.g.flog_win, vim.g.flog_opener_bufnr = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win(), b
+      utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
+      utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, s.model.hash)
+      vim.api.nvim_set_current_win(win)
+    end
+  end)
+  map('R', function()
+    if not clean_action(s) then return end
+    s.expanded = {}; replace_model(s, s.model.hash)
+  end, { native = true })
+  map('<Leader>wd', function() vim.notify('Word diff style: ' .. syntax.cycle_word_diff_style()) end)
+  map('gL', function() if clean_action(s) then M.open_legacy({ work_tree = s.model.root, revision = s.model.hash }) end end)
+  map('q', function()
+    if message_dirty(s) then
+      local choice = vim.fn.confirm('Save edited commit message?', '&Save\n&Discard\n&Cancel', 3)
+      if choice == 1 then if not M.write(b) then return end
+      elseif choice == 2 then render(s)
+      else return end
+    end
+    close_flog()
+    local commands = require('features.commands')
+    if commands.close_commit_info_float then commands.close_commit_info_float() end
+    if #vim.api.nvim_tabpage_list_wins(0) > 1 then vim.api.nvim_win_close(0, false)
+    else require('utilities').smart_close() end
+  end)
+  map({ 'g?', '?' }, function()
+    require('features.help').show('Commit view', {
+      'Message: edit directly; :w rewrites the displayed commit (and descendants)',
+      'A / cw   edit message     gA  legacy message float',
+      'o / =    toggle diff      > / <  expand / collapse',
+      ']m / [m  next / previous file    J / K  next / previous hunk',
+      ']] / [[  move and expand file   R  collapse / reload',
+      '<CR>     committed file   gf  worktree file',
+      'd / dv   vertical diff    dh  horizontal diff    D  Diffview',
+      'X        remove file / hunk / selected lines (Hard / Mixed)',
+      '~        parent commit   gp  select merge parent    p  previous file commit',
+      'C        commit info     <C-Space>  Flog    O  pull request',
+      'gq       quickfix        <C-y>  copy hash    <Leader>wd  word diff style',
+      'gL       legacy view     q  close (prompts for unsaved message)',
+      'Normal text editing keys retain their meaning inside the message.',
+    })
+  end)
+  local group = vim.api.nvim_create_augroup('FugitiveCommitView' .. b, { clear = true })
+  vim.api.nvim_create_autocmd('BufWriteCmd', { group = group, buffer = b, callback = function(ev)
+    local name = buffer_name(s.model.root, s.model.hash, s.view_id)
+    if ev.match ~= name then error('Use :w without a filename to reword this commit') end
+    if not M.write(b) then error('Commit message was not saved') end
+  end })
+  vim.api.nvim_create_autocmd('BufWinEnter', { group = group, buffer = b, callback = configure_window })
+  vim.api.nvim_create_autocmd('BufWinLeave', { group = group, buffer = b, callback = function()
+    -- Fugitive deletes clean hidden objects. A draft must survive window changes.
+    vim.bo[b].bufhidden = vim.bo[b].modified and 'hide' or 'delete'
+  end })
+  vim.api.nvim_create_autocmd({ 'BufEnter', 'CursorMoved' }, { group = group, buffer = b, callback = function()
+    utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, s.model.hash)
+    local commands = require('features.commands')
+    if commands.schedule_update_preview then commands.schedule_update_preview(s.model.hash) end
+  end })
+  vim.api.nvim_create_autocmd({ 'BufUnload', 'BufWipeout' }, { group = group, buffer = b, once = true, callback = function()
+    states[b] = nil
+    if vim.g.flog_opener_bufnr == b and vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+      close_flog()
+    end
+    pcall(vim.api.nvim_del_augroup_by_id, group)
+  end })
+  syntax.attach(b)
+end
+function M.open(opts)
+  opts = opts or {}
+  if opts.legacy or vim.g.fugitive_extension_commit_view == 'legacy' then return M.open_legacy(opts) end
+  local root = opts.work_tree or utils.get_buf_work_tree(vim.api.nvim_get_current_buf()) or utils.get_work_tree({})
+  if not root then notify('Not in a Git repository'); return end
+  root = utils.normalize_path(root)
+  local revision = opts.revision or 'HEAD'
+  local model, err = model_api.load(root, revision, opts.parent)
+  if not model then notify(err); return end
+  for b, s in pairs(states) do
+    if not opts.bufnr and vim.api.nvim_buf_is_loaded(b) and s.model.root == root and s.model.hash == model.hash and s.model.parent_index == model.parent_index then
+      if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
+      show_buffer(b); configure_window(); return b
     end
   end
-
-  if restored_to_worktree then
-    vim.notify(
-      string.format('Removed %s from %s and restored it as unstaged changes', scope, commit:sub(1, 7)),
-      vim.log.levels.INFO
-    )
-  else
-    vim.notify(string.format('Discarded %s from %s', scope, commit:sub(1, 7)), vim.log.levels.INFO)
-  end
-  -- Trigger log buffer refresh via standard fugitive event
-  utils.fire_fugitive_changed({ work_tree = git_dir })
-  -- Reload the buffer to reflect the amended commit
-  reopen_commit_preserving_view(new_hash, view_state)
+  local b = opts.bufnr or vim.api.nvim_create_buf(true, false)
+  serial = serial + 1
+  local view_id = opts.view_id or serial
+  vim.api.nvim_buf_set_name(b, buffer_name(root, model.hash, view_id))
+  vim.bo[b].buflisted = true
+  vim.bo[b].buftype, vim.bo[b].bufhidden, vim.bo[b].swapfile = 'acwrite', 'delete', false
+  vim.bo[b].undofile = false
+  utils.set_buf_work_tree(b, root)
+  vim.b[b].fugitive_commit = model.hash
+  vim.b[b].custom_git_commit = true
+  local s = { buf = b, view_id = view_id, model = model, expanded = {}, expected_head = vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
+  states[b] = s
+  render(s)
+  if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
+  show_buffer(b)
+  vim.bo[b].filetype = 'fugitivecommit'
+  vim.bo[b].syntax = 'git'
+  configure_window(); attach(s)
+  vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  return b
 end
-
-function M.setup(group)
-  vim.api.nvim_create_autocmd('FileType', {
-    group = group,
-    pattern = "git",
-    callback = function()
-      vim.opt_local.foldmethod = "syntax"
-      vim.opt_local.foldlevel = 0
-      vim.opt_local.foldenable = true
-      vim.opt_local.foldtext = "v:lua.fugitive_foldtext()"
-    end,
-  })
-
-  vim.api.nvim_create_autocmd('FileType', {
-    group = group,
-    pattern = 'git',
-    callback = function(ev)
-      utils.set_buf_work_tree(ev.buf, utils.get_work_tree({ bufnr = ev.buf }))
-
-      -- Highlight diff paths
-      local ns_id = vim.api.nvim_create_namespace('git_diff_path_highlight')
-
-      local function apply_diff_highlights()
-        if not vim.api.nvim_buf_is_valid(ev.buf) then
-          return
-        end
-        vim.api.nvim_buf_clear_namespace(ev.buf, ns_id, 0, -1)
-
-        local lines = vim.api.nvim_buf_get_lines(ev.buf, 0, -1, false)
-        for idx, line in ipairs(lines) do
-          if line:match('^diff') or line:match('^@') then
-            local win_width = vim.api.nvim_win_get_width(0)
-            local line_len = vim.fn.strdisplaywidth(line)
-            local pad = win_width - line_len - 1
-            if pad > 0 then
-              vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, 0, {
-                virt_text = {{ " " .. string.rep("·", pad), "Comment" }},
-                virt_text_pos = 'eol',
-                hl_mode = 'combine',
-              })
-            end
-          end
-
-          if line:match('^diff') then
-            local prefix_a = 'diff --git a/'
-            local path1_start_col_0based = #prefix_a
-
-            local b_start_1based, _ = line:find(' b/', #prefix_a + 1)
-
-            if b_start_1based then
-              local path1_end_col_0based = b_start_1based - 1
-
-              vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, path1_start_col_0based, {
-                end_col = path1_end_col_0based,
-                hl_group = 'GitSignsChange',
-              })
-
-              local path2_start_col_0based = b_start_1based + #' b/' - 1
-              vim.api.nvim_buf_set_extmark(ev.buf, ns_id, idx - 1, path2_start_col_0based, {
-                end_col = #line,
-                hl_group = 'GitSignsAdd',
-              })
-            end
-          end
-        end
-      end
-
-      apply_diff_highlights()
-
-      vim.api.nvim_create_autocmd({ 'BufEnter', 'TextChanged' }, {
-        buffer = ev.buf,
-        callback = function()
-          vim.schedule(apply_diff_highlights)
-        end,
-      })
-
-      -- Enable syntax highlighting for diffs
-      syntax_highlight.attach(ev.buf)
-
-      local function update_flog_highlight()
-        if not vim.api.nvim_buf_is_valid(ev.buf) then return end
-        utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, utils.get_commit(ev.buf))
-      end
-
-      -- BufEnter時にハイライト更新
-      vim.api.nvim_create_autocmd('BufEnter', {
-        buffer = ev.buf,
-        callback = function()
-          vim.schedule(update_flog_highlight)
-        end,
-      })
-
-      -- Update flog highlight and commit info float on cursor movement.
-      -- We only update the float if it already exists (create_if_missing=false).
-      vim.api.nvim_create_autocmd('CursorMoved', {
-        buffer = ev.buf,
-        callback = function()
-          vim.schedule(function()
-            if not vim.api.nvim_buf_is_valid(ev.buf) then return end
-            update_flog_highlight()
-            local commit = utils.get_commit(ev.buf) or vim.api.nvim_get_current_line():match('^(%x+)')
-            if commit and commit ~= '' then
-              commands.schedule_update_preview(commit)
-            end
-          end)
-        end,
-      })
-
-      -- <C-Space>: Flogウィンドウトグル
-      vim.keymap.set('n', '<C-Space>', function()
-        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
-          vim.api.nvim_win_close(vim.g.flog_win, false)
-          vim.g.flog_win = nil
-          vim.g.flog_bufnr = nil
-          vim.g.flog_opener_bufnr = nil
-        else
-          local current_win = vim.api.nvim_get_current_win()
-          vim.cmd("Flogsplit -open-cmd=vertical\\ rightbelow\\ 60vsplit")
-          vim.g.flog_bufnr = vim.api.nvim_get_current_buf()
-          vim.g.flog_win = vim.api.nvim_get_current_win()
-          vim.g.flog_opener_bufnr = ev.buf
-
-          utils.setup_flog_window(vim.g.flog_win, vim.g.flog_bufnr)
-          update_flog_highlight()
-          vim.api.nvim_set_current_win(current_win)
-        end
-      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Toggle Flog window' })
-
-      vim.api.nvim_create_autocmd('BufUnload', {
-        buffer = ev.buf,
-        callback = function(args)
-          if is_navigating then
-            return
-          end
-          if vim.g.flog_opener_bufnr and vim.g.flog_opener_bufnr == args.buf then
-            if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
-              vim.api.nvim_win_close(vim.g.flog_win, true)
-              vim.g.flog_win = nil
-              vim.g.flog_bufnr = nil
-              vim.g.flog_opener_bufnr = nil
-            end
-          end
-
-          commands.close_commit_info_float()
-        end,
-      })
-
-      -- d: Diffview
-      vim.keymap.set('n', 'd', function()
-        local commit = get_commit_from_buffer(ev.buf)
-
-        if not commit then
-          return
-        end
-
-        local filepath = utils.get_filepath_at_cursor(ev.buf)
-
-        vim.schedule(function()
-          if filepath then
-            vim.cmd('DiffviewOpen ' .. commit .. '^..' .. commit .. ' --selected-file=' .. filepath)
-          else
-            vim.cmd('DiffviewOpen ' .. commit .. '^..' .. commit)
-          end
-        end)
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- C: コミット概要をフロートウィンドウで表示
-      vim.keymap.set('n', 'C', function()
-        local commit = get_commit_from_buffer(ev.buf)
-
-        if not commit then
-          print('No commit found')
-          return
-        end
-
-        commands.show_commit_info_float(commit, true, true)
-      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Show commit info in float window' })
-
-      -- A: コミットメッセージをフロートで編集して amend 実行
-      vim.keymap.set('n', 'A', function()
-        local commit = get_commit_from_buffer(ev.buf)
-
-        if not commit then
-          print('No commit found')
-          return
-        end
-
-        local view_state = save_commit_view_state(ev.buf)
-
-        open_edit_commit_float(commit, ev.buf, view_state)
-      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Edit/amend commit message in float' })
-
-      -- Override Fugitive's built-in `cw` (which always amends HEAD) so the
-      -- commit currently displayed by this buffer is reworded instead.
-      vim.keymap.set('n', 'cw', function()
-        local commit = get_commit_from_buffer(ev.buf)
-        if not commit then
-          vim.notify('No commit found', vim.log.levels.WARN)
-          return
-        end
-        open_edit_commit_float(commit, ev.buf, save_commit_view_state(ev.buf))
-      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Reword displayed commit' })
-
-      -- p: カーソル位置ファイルの前のコミット
-      vim.keymap.set('n', 'p', function()
-        local commit = get_commit_from_buffer(ev.buf)
-        if not commit then
-          return
-        end
-        local filepath = utils.get_filepath_at_cursor(ev.buf)
-        if not filepath then
-          return
-        end
-
-        local work_tree = utils.get_buf_work_tree(ev.buf)
-        if not work_tree then
-          vim.notify('Not in a git repository', vim.log.levels.WARN)
-          return
-        end
-        local result = vim.fn.systemlist(
-          'git -C '
-            .. vim.fn.shellescape(work_tree)
-            .. ' log --format=%H --skip=1 -n 1 '
-            .. vim.fn.shellescape(commit)
-            .. ' -- '
-            .. vim.fn.shellescape(filepath)
-        )
-        if not result or #result == 0 or result[1] == '' then
-          print('No previous commit found for ' .. filepath)
-          return
-        end
-
-        local prev_commit = result[1]
-        is_navigating = true
-        vim.schedule(function()
-          vim.cmd('Gedit ' .. prev_commit)
-          utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, prev_commit)
-          commands.show_commit_info_float(prev_commit, false, false)
-          vim.schedule(function()
-            local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-            for i, line in ipairs(lines) do
-              if line:match('^diff %-%-git [ab]/' .. vim.pesc(filepath) .. ' ') then
-                vim.api.nvim_win_set_cursor(0, { i, 0 })
-                vim.cmd('normal! zO')
-                break
-              end
-            end
-            is_navigating = false
-          end)
-        end)
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- ~: 前のコミット
-      vim.keymap.set('n', '~', function()
-        is_navigating = true
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<Plug>fugitive:~', true, false, true), 'n')
-        vim.schedule(function()
-          is_navigating = false
-        end)
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- <C-o>: Jump back (original behavior) and update flog highlight + commit float if open.
-      -- We explicitly do not create a float if it's not already open.
-      vim.keymap.set('n', '<C-o>', function()
-        is_navigating = true
-        -- Do the original <C-o> jump
-        vim.fn.feedkeys(vim.api.nvim_replace_termcodes('<C-o>', true, false, true), 'n')
-        vim.schedule(function()
-          -- We need to check the current buffer after the jump
-          local curr_buf = vim.api.nvim_get_current_buf()
-          local commit = utils.get_commit(curr_buf) or vim.api.nvim_get_current_line():match('^(%x+)')
-          if commit and commit ~= '' then
-            utils.highlight_flog_commit(vim.g.flog_bufnr, vim.g.flog_win, commit)
-            commands.show_commit_info_float(commit, false, false)
-          end
-          is_navigating = false
-        end)
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- O: Octo PR
-      vim.keymap.set('n', 'O', function()
-        local commit = get_commit_from_buffer(ev.buf)
-        if not commit then
-          return
-        end
-        vim.cmd('OctoPrFromSha ' .. commit)
-      end, { buffer = ev.buf, nowait = true, silent = true, noremap = true })
-
-      -- gf: カーソル位置のファイルを開く
-      vim.keymap.set('n', 'gf', function()
-        local filepath, target_line = get_diff_target_at_cursor(ev.buf)
-        filepath = filepath or utils.get_filepath_at_cursor(ev.buf)
-        if filepath then
-          local abs_path = utils.worktree_relative_abs_path(utils.get_buf_work_tree(ev.buf), filepath)
-          if not abs_path then
-            vim.notify('Could not resolve file from repository root: ' .. filepath, vim.log.levels.WARN)
-            return
-          end
-          vim.cmd('edit ' .. vim.fn.fnameescape(abs_path))
-          if target_line then
-            local max_line = vim.api.nvim_buf_line_count(0)
-            vim.api.nvim_win_set_cursor(0, { clamp_line(target_line, max_line), 0 })
-          end
-        end
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- gq: ファイル一覧をQuickfixに追加
-      vim.keymap.set('n', 'gq', function()
-        local lines = vim.api.nvim_buf_get_lines(ev.buf, 0, -1, false)
-        local qf_list = {}
-        for _, line in ipairs(lines) do
-          local filepath = line:match('^diff %-%-git [ab]/(.+) [ab]/')
-          if filepath then
-            table.insert(qf_list, { filename = filepath, lnum = 1 })
-          end
-        end
-        if #qf_list > 0 then
-          vim.fn.setqflist(qf_list)
-          vim.cmd('copen')
-        else
-          print('No files found')
-        end
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- Ctrl-y: コミットハッシュをクリップボードにコピー
-      vim.keymap.set('n', '<C-y>', function()
-        local commit = get_commit_from_buffer(ev.buf)
-        if not commit then
-          print('No commit found')
-          return
-        end
-        local short_commit = commit:sub(1, 7)
-        vim.fn.setreg('+', short_commit)
-        vim.fn.setreg('"', short_commit)
-        print('Copied: ' .. short_commit)
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- X: Discard diff changes from commit (hunk / file / visual selection)
-      vim.keymap.set('n', 'X', function()
-        local lnum = vim.fn.line('.')
-        local filepath, file_lnum, on_file_header, hunk_start, lines =
-          get_diff_context_at_line(ev.buf, lnum)
-        if not filepath or (not on_file_header and not hunk_start) then
-          vim.notify('Not in a diff section', vim.log.levels.WARN)
-          return
-        end
-        local commit = get_commit_from_buffer(ev.buf)
-        if not commit then
-          vim.notify('No commit found', vim.log.levels.WARN)
-          return
-        end
-        local scope = on_file_header and 'file' or 'hunk'
-        local reset_mode = confirm_discard_mode(scope, commit)
-        if not reset_mode then return end
-        local git_dir = utils.get_buf_work_tree(ev.buf)
-        if not git_dir then
-          vim.notify('Not in a git repository', vim.log.levels.WARN)
-          return
-        end
-        local stashed = commit_auto_stash(git_dir)
-        if stashed == nil then return end
-        local patch
-        if on_file_header then
-          patch = collect_file_patch(lines, file_lnum)
-        else
-          patch = collect_hunk_patch(lines, file_lnum, hunk_start)
-        end
-        do_discard(git_dir, commit, filepath, patch, true, scope, stashed, reset_mode)
-      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Discard diff changes from commit' })
-
-      vim.keymap.set('v', 'X', function()
-        vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'x', false)
-        local sel_start = vim.fn.line("'<")
-        local sel_end   = vim.fn.line("'>")
-        local filepath, _, _, hunk_start, lines =
-          get_diff_context_at_line(ev.buf, sel_start)
-        if not filepath or not hunk_start then
-          vim.notify('No hunk in selection', vim.log.levels.WARN)
-          return
-        end
-        local commit = get_commit_from_buffer(ev.buf)
-        if not commit then
-          vim.notify('No commit found', vim.log.levels.WARN)
-          return
-        end
-        local reset_mode = confirm_discard_mode('selected', commit)
-        if not reset_mode then return end
-        local git_dir = utils.get_buf_work_tree(ev.buf)
-        if not git_dir then
-          vim.notify('Not in a git repository', vim.log.levels.WARN)
-          return
-        end
-        local stashed = commit_auto_stash(git_dir)
-        if stashed == nil then return end
-        local patch = build_partial_reverse_patch(filepath, lines, hunk_start, sel_start, sel_end)
-        if not patch then
-          vim.notify('No diff lines in selection', vim.log.levels.WARN)
-          if stashed then commit_auto_pop(git_dir) end
-          return
-        end
-        do_discard(git_dir, commit, filepath, patch, false, 'selection', stashed, reset_mode)
-      end, { buffer = ev.buf, silent = true, desc = 'Discard selected diff changes from commit' })
-
-      -- q: Close window and flog window
-      vim.keymap.set('n', 'q', function()
-        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
-          vim.api.nvim_win_close(vim.g.flog_win, false)
-          vim.g.flog_win = nil
-          vim.g.flog_bufnr = nil
-          vim.g.flog_opener_bufnr = nil
-        end
-        require"utilities".smart_close()
-      end, { buffer = ev.buf, nowait = true, silent = true })
-
-      -- all close
-      vim.keymap.set('n', 'R', function() vim.cmd('e!') end, { buffer = ev.buf, silent = true })
-
-      -- <Leader>wd: Toggle word diff style
-      vim.keymap.set('n', '<Leader>wd', function()
-        local new_style = syntax_highlight.cycle_word_diff_style()
-        vim.notify('Word diff style: ' .. new_style, vim.log.levels.INFO)
-      end, { buffer = ev.buf, silent = true, desc = 'Toggle word diff style (diffs/lazygit/github)' })
-    end,
-  })
-end
-
-M.open_edit_commit = function(commit, origin_buf, opts)
+function M.open_legacy(opts)
   opts = opts or {}
-  local view_state = opts.reopen == false and nil or save_commit_view_state(origin_buf)
-  open_edit_commit_float(commit, origin_buf, view_state, opts)
+  local root = opts.work_tree or utils.get_buf_work_tree(vim.api.nvim_get_current_buf()) or utils.get_work_tree({})
+  local git_dir = root and utils.get_git_dir(root)
+  if not git_dir then notify('Not in a Git repository'); return end
+  local hash, err = model_api.git(root, { 'rev-parse', '--verify', '--end-of-options', (opts.revision or 'HEAD') .. '^{commit}' })
+  if not hash then notify(err); return end
+  legacy_opening = true
+  local ok, open_err = pcall(function()
+    local name = 'fugitive://' .. git_dir .. '//' .. vim.trim(hash)
+    local command = opts.tab and 'tabedit ' or (opts.split and 'split ' or 'edit ')
+    vim.cmd(command .. vim.fn.fnameescape(name))
+    vim.b.fugitive_extension_legacy = true
+  end)
+  legacy_opening = false
+  if not ok then notify(open_err); return end
+  return vim.api.nvim_get_current_buf()
 end
-
+function M.open_edit_commit(commit, origin_buf, opts)
+  local s = state(origin_buf)
+  if s then
+    if not clean_action(s) then return end
+    vim.api.nvim_win_set_cursor(0, { #s.prefix + 1, 0 }); vim.cmd('startinsert'); return
+  end
+  return legacy.open_edit_commit(commit, origin_buf, opts)
+end
+M._close_edit_float = legacy._close_edit_float
+M._do_amend_from_buffer = legacy._do_amend_from_buffer
+function M.setup(group)
+  -- Legacy callbacks remain available for ordinary git output and explicit opt-out.
+  legacy.setup(group)
+  vim.api.nvim_create_autocmd('BufReadCmd', { group = group, pattern = 'git-commit://*', callback = function(ev)
+    local root, id, hash = ev.match:match('^git%-commit://(.*)/(%d+)/(%x+)$')
+    if not root then error('Invalid commit URI') end
+    M.open({ work_tree = root, revision = hash, bufnr = ev.buf, view_id = tonumber(id) })
+  end })
+  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'FugitiveCommit', callback = function(ev)
+    local b = ev.buf
+    if legacy_opening or vim.g.fugitive_extension_commit_view == 'legacy' or vim.b[b].fugitive_extension_legacy then return end
+    local hash = utils.get_commit(b)
+    local root = utils.get_buf_work_tree(b)
+    if not hash or not root then return end
+    vim.schedule(function()
+      if not vim.api.nvim_buf_is_valid(b) or vim.b[b].fugitive_extension_legacy then return end
+      for _, win in ipairs(vim.fn.win_findbuf(b)) do
+        vim.api.nvim_win_call(win, function() M.open({ work_tree = root, revision = hash }) end)
+      end
+    end)
+  end })
+  vim.api.nvim_create_user_command('GitCommit', function(args)
+    M.open({ revision = args.args ~= '' and args.args or 'HEAD', legacy = args.bang })
+  end, { nargs = '?', bang = true, desc = 'Open commit detail (! uses legacy Fugitive)' })
+  vim.api.nvim_create_user_command('GitCommitLegacy', function(args)
+    M.open_legacy({ revision = args.args ~= '' and args.args or 'HEAD' })
+  end, { nargs = '?', desc = 'Open legacy Fugitive commit detail' })
+end
 return M

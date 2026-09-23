@@ -88,6 +88,9 @@ end
 
 function M.capture(bufnr, root, first, last)
   local name = vim.api.nvim_buf_get_name(bufnr)
+  if vim.b[bufnr].custom_git_commit then
+    return require('features.commit_notes').capture(bufnr, first, last or first)
+  end
   local saved = vim.b[bufnr].lazyagent_note_source
   if saved then return vim.deepcopy(saved) end
   local status_source = require("lazyagent.note_status").capture(bufnr, root, first, last or first)

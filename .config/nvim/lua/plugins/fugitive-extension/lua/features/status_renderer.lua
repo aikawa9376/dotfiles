@@ -1,5 +1,6 @@
 local M = {}
 local operation = require('features.operation')
+local change_display = require('features.change_display')
 
 local models = {}
 local expanded = {}
@@ -20,10 +21,6 @@ end
 
 local function split_nul(value)
   return vim.split(value or '', '\0', { plain = true, trimempty = true })
-end
-
-local function display_status(status)
-  return status == '.' and ' ' or status
 end
 
 local function parse_numstat(work_tree, cached)
@@ -242,8 +239,7 @@ local function append_section(lines, entries_by_row, model, title, section, entr
   table.insert(lines, ('%s (%d)'):format(title, #entries))
   entries_by_row[#lines] = { section = section, header = true }
   for _, entry in ipairs(entries) do
-    local path = entry.display_path or entry.path
-    table.insert(lines, display_status(entry.status) .. ' ' .. path)
+    table.insert(lines, change_display.line(entry))
     entries_by_row[#lines] = entry
     if expanded[model.bufnr] and expanded[model.bufnr][entry_key(entry)] then
       for _, diff_line in ipairs(diff_lines(model, entry)) do

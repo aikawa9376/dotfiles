@@ -1,0 +1,70 @@
+local source = debug.getinfo(1, 'S').source:sub(2)
+local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(source, ':p')))
+package.path = plugin .. '/lua/?.lua;' .. package.path
+vim.cmd('syntax enable')
+local root = vim.fn.tempname(); vim.fn.mkdir(root, 'p')
+local function git(args)
+  local argv = { 'git', '-C', root, '-c', 'user.name=Author', '-c', 'user.email=test@example.invalid' }
+  vim.list_extend(argv, args)
+  local r = vim.system(argv, { text = true }):wait(); assert(r.code == 0, r.stderr); return vim.trim(r.stdout or '')
+end
+git({ 'init', '-q' })
+vim.fn.writefile({ 'one' }, root .. '/file.txt'); git({ 'add', '.' }); git({ 'commit', '-qm', 'first' })
+local first = git({ 'rev-parse', 'HEAD' })
+vim.fn.writefile({ 'two' }, root .. '/file.txt'); git({ 'add', '.' }); git({ 'commit', '-qm', 'second' })
+local second = git({ 'rev-parse', 'HEAD' })
+local api = require('features.commit')
+api.setup(vim.api.nvim_create_augroup('CommitLifecycleTest', { clear = true }))
+vim.api.nvim_create_user_command('Flogsplit', function() vim.cmd('vnew') end, { nargs = '*' })
+local b = api.open({ work_tree = root, revision = second, split = true })
+local name = vim.api.nvim_buf_get_name(b)
+local function press(key) assert(vim.fn.maparg(key, 'n', false, true).callback, key)() end
+local function find(text)
+  for row, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do if line:find(text, 1, true) then return row end end
+end
+assert(vim.fn.fnamemodify(name, ':t') == second)
+local config = dofile(vim.fs.dirname(plugin) .. '/bufferline.lua')
+assert(config.opts.options.name_formatter({ bufnr = b, name = second }) == second:sub(1, 7))
+local native = git({ 'show', '-s', '--format=tree %T%nparent %P%nauthor %an <%ae> %ad%ncommitter %cn <%ce> %cd', second })
+local text = table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n')
+assert(text:find(native, 1, true), 'legacy header fields differ')
+assert(not text:find('Help:', 1, true) and not text:find('Message:', 1, true))
+assert(vim.fn.synIDattr(vim.fn.synID(find('tree '), 1, 1), 'name') == 'gitKeyword')
+assert(vim.fn.synIDattr(vim.fn.synID(find('author '), 1, 1), 'name') == 'gitIdentityKeyword')
+press('<C-Space>')
+local flog = vim.g.flog_win
+local commit_win = vim.api.nvim_get_current_win()
+vim.api.nvim_set_current_win(flog)
+assert(vim.api.nvim_buf_is_loaded(b), 'focusing another window deleted a visible commit')
+vim.api.nvim_set_current_win(commit_win)
+vim.api.nvim_win_set_cursor(0, { find('M file.txt'), 0 })
+press('p')
+local parent = vim.api.nvim_get_current_buf()
+assert(api.model(parent).hash == first)
+assert(not vim.api.nvim_buf_is_loaded(b) and not vim.bo[b].buflisted and not api.model(b))
+assert(vim.api.nvim_win_is_valid(flog) and vim.g.flog_opener_bufnr == parent, 'Flog not transferred on navigation')
+press('q')
+assert(not vim.api.nvim_win_is_valid(flog) and vim.g.flog_win == nil, 'q left Flog open')
+assert(not vim.api.nvim_buf_is_loaded(parent))
+-- Deleted URI can be reopened by jump/edit without an empty buffer.
+vim.cmd('split ' .. vim.fn.fnameescape(name))
+b = vim.api.nvim_get_current_buf()
+assert(api.model(b).hash == second)
+press('~')
+assert(api.model(0).hash == first and not vim.api.nvim_buf_is_loaded(b))
+-- Unsaved message survives hiding; clean views do not accumulate.
+b = api.open({ work_tree = root, revision = second })
+local row = find('second')
+vim.api.nvim_buf_set_lines(b, row - 1, row, false, { 'draft message' })
+vim.cmd('hide enew')
+assert(vim.api.nvim_buf_is_loaded(b) and vim.bo[b].modified and vim.bo[b].bufhidden == 'hide')
+vim.api.nvim_set_current_buf(b)
+assert(find('draft message'))
+vim.fn.confirm = function() return 2 end
+press('q')
+assert(not vim.api.nvim_buf_is_loaded(b))
+for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+  if vim.b[buf].custom_git_commit then assert(not vim.bo[buf].buflisted, 'abandoned commit remains in bufferline') end
+end
+vim.fn.delete(root, 'rf')
+print('PASS: header fields/colors, bufferline hash, p/~ cleanup, Flog transfer/close, URI reload, draft preservation')

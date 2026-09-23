@@ -4,6 +4,7 @@ function M.setup()
   local group = vim.api.nvim_create_augroup('fugitive_custom', { clear = true })
   local nowrap_filetypes = {
     git = true,
+    fugitivecommit = true,
     fugitive = true,
     fugitivestatus = true,
     fugitiveblame = true,
