@@ -893,6 +893,11 @@ END {
   local preview_update_pending_commit = nil
 
   local function open_with_fugitive(win, commit, work_tree)
+    if vim.g.fugitive_extension_commit_view ~= 'legacy' then
+      return vim.api.nvim_win_call(win, function()
+        return require('features.commit').open({ work_tree = work_tree, revision = commit })
+      end)
+    end
     local ok, _ = pcall(function()
       local buf = vim.api.nvim_win_get_buf(win)
       utils.set_buf_work_tree(buf, work_tree)
@@ -960,12 +965,12 @@ END {
     local current_win = vim.api.nvim_get_current_win()
 
     local function finalize_preview(buf)
-      vim.api.nvim_set_option_value('buflisted', false, { buf = buf })
-      vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = buf })
+      vim.api.nvim_set_option_value('buflisted', vim.b[buf].custom_git_commit == true, { buf = buf })
+      vim.api.nvim_set_option_value('bufhidden', vim.b[buf].custom_git_commit and (vim.bo[buf].modified and 'hide' or 'delete') or 'wipe', { buf = buf })
       vim.api.nvim_set_option_value('swapfile', false, { buf = buf })
       vim.api.nvim_set_option_value('winfixwidth', true, { win = preview_win })
       local current_ft = vim.api.nvim_get_option_value('filetype', { buf = buf })
-      if current_ft ~= 'git' then
+      if current_ft ~= 'git' and not vim.b[buf].custom_git_commit then
         vim.api.nvim_set_option_value('filetype', 'git', { buf = buf })
         vim.api.nvim_exec_autocmds('FileType', { buffer = buf })
       end

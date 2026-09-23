@@ -728,7 +728,7 @@ function M.setup(group)
       vim.keymap.set('n', '<CR>', function()
         local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
         if commit then
-          vim.cmd('tab Git show ' .. commit)
+          require('features.commit').open({ work_tree = utils.get_buf_work_tree(ev.buf), revision = commit, tab = true })
         end
       end, { buffer = ev.buf, silent = true, desc = "Open commit in tab" })
 

@@ -492,6 +492,10 @@ end
 
 ---@return string|nil
 function M.get_filepath_at_cursor(bufnr)
+  if vim.b[bufnr].custom_git_commit then
+    local entry = require('features.commit').entry_at(bufnr, vim.api.nvim_win_get_cursor(0)[1])
+    return entry and entry.path or nil
+  end
   local current_line = vim.api.nvim_win_get_cursor(0)[1]
   for lnum = current_line, 1, -1 do
     local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
@@ -525,6 +529,8 @@ function M.get_commit(bufnr)
   if not M.is_valid_buf(bufnr) then
     return nil
   end
+  if vim.b[bufnr].fugitive_commit then return vim.b[bufnr].fugitive_commit end
+  if vim.fn.exists('*FugitiveParse') == 0 then return nil end
   local result = vim.fn.FugitiveParse(vim.api.nvim_buf_get_name(bufnr))
   return result and result[1] or nil
 end

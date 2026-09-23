@@ -750,6 +750,10 @@ local function open_entry_from_status(bufnr, close_status)
     return
   end
 
+  local selected_commit = vim.api.nvim_win_call(status_win, function()
+    local line = vim.api.nvim_get_current_line()
+    return line:match('^(%x%x%x%x%x%x%x+)%s')
+  end)
   local cmd, command_err, target_line = vim.api.nvim_win_call(status_win, function()
     return status_edit_command_at_cursor(bufnr)
   end)
@@ -766,6 +770,10 @@ local function open_entry_from_status(bufnr, close_status)
 
   local git_dir = vim.b[bufnr].git_dir
   local ok, exec_err = pcall(vim.api.nvim_win_call, target_win, function()
+    if selected_commit then
+      require('features.commit').open({ work_tree = utils.get_buf_work_tree(bufnr), revision = selected_commit })
+      return
+    end
     local had_fugitive_event = vim.fn.exists('g:fugitive_event') == 1
     local previous_fugitive_event = vim.g.fugitive_event
     vim.g.fugitive_event = git_dir
@@ -1419,18 +1427,7 @@ function M.setup(group)
 
           local stat_entry = status_renderer.entry_at(b, idx)
           if stat_entry and not stat_entry.header and status_renderer.entry_row(b, idx) == idx then
-            local stat_text = {}
-            if stat_entry.binary then
-              table.insert(stat_text, { ' binary', 'Comment' })
-            else
-              if (stat_entry.additions or 0) > 0
-                or (stat_entry.section == 'untracked' and stat_entry.additions == 0) then
-                table.insert(stat_text, { ' +' .. stat_entry.additions, 'FugitiveStatAdd' })
-              end
-              if (stat_entry.deletions or 0) > 0 then
-                table.insert(stat_text, { ' -' .. stat_entry.deletions, 'FugitiveStatDelete' })
-              end
-            end
+            local stat_text = require('features.change_display').statistics(stat_entry, 'FugitiveStatAdd', 'FugitiveStatDelete')
             if #stat_text > 0 then
               vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, #line, {
                 virt_text = stat_text,
