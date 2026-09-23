@@ -1,9 +1,9 @@
 # Git
 
-Standalone Neovim Git UI, loaded by `plugins.git`. It does not load vim-fugitive
-or fugitive-extension. Flog is available lazily through a native Git backend. The old extension and its plugin specifications
-remain available as an alternative configuration; do not enable both command
-providers together. Legacy commit/blame views and their switches live only there.
+Standalone Neovim Git UI, loaded by `plugins.git`. It does not load vim-fugitive.
+Flog is available lazily through a native Git backend. The retired
+`fugitive-extension` source and its old plugin specification can be restored by
+reverting the commit that removed them.
 
 ## Commands
 
@@ -40,7 +40,7 @@ Completion follows each command's argument type: object commands suggest refs,
 then paths inside `revision:` / `:0:`; `Git` suggests subcommands only in its first
 argument and uses options, refs, remotes or paths afterwards. Worktree path and
 directory completions use the buffer repository, and spaces are escaped.
-`Gedit feature/DMM:%` resolves `%` to the current file's repository-relative path.
+`Gedit feature/hoge:%` resolves `%` to the current file's repository-relative path.
 If the file did not exist at that revision, it reports the object, repository and
 Git's missing-path reason while preserving the current window/buffer.
 `Gedit ~1` and `Gedit ^` open the current file at the relative commit; from a
@@ -263,7 +263,7 @@ coalesced after window events and run only while the blame tab is current. Histo
 
 `:Git blame` opens the paired view. With additional flags it runs the Git CLI
 and displays its output. Reverse/range blame's original interactive extensions
-remain in the preserved `fugitive-extension` configuration.
+are outside this plugin's supported commands.
 
 Validation: `tests/blame_layout.lua` checks deep-file cursor/scroll stability and
 no loading split; `tests/blame_model.lua`, `tests/blame_view.lua`, and

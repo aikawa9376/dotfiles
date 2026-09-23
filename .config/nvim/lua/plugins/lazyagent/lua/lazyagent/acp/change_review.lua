@@ -24,9 +24,8 @@ local operation_highlight = {
 }
 
 local function setup_highlights()
-  -- Keep these available even when fugitive-extension is lazy-loaded after
-  -- Changes. Otherwise `default` would permanently link this buffer to the
-  -- plainer built-in Diff groups for the rest of the session.
+  -- Keep these shared Git diff colors available even when the Git UI loads
+  -- after Changes. Otherwise `default` would keep the plain Diff links.
   vim.api.nvim_set_hl(0, "FugitiveExtAdd", { bg = "#23384C", default = true })
   vim.api.nvim_set_hl(0, "FugitiveExtDelete", { bg = "#321e1e", default = true })
   vim.api.nvim_set_hl(0, "FugitiveExtAddText", { bg = "#005f5f", default = true })

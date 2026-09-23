@@ -233,7 +233,7 @@ function M.refresh_buffer(bufnr)
     local source = entry.source
     local binding = entry.bindings[bufnr]
     if source and source.custom_commit and vim.b[bufnr].custom_git_commit then
-      local first, last = require(package.loaded['features.commit'] and 'features.commit_notes' or 'git.features.commit_notes').range(bufnr, source)
+      local first, last = require('git.features.commit_notes').range(bufnr, source)
       if first then bind(entry, bufnr, first, last)
       elseif binding then
         for i = 1, 3 do pcall(vim.api.nvim_buf_del_extmark, bufnr, namespace, binding.marks[i]) end
@@ -524,7 +524,7 @@ function M.jump(id, opts)
   if not entry then return false end
   if not entry.source then return util.open_in_normal_win(entry.path, { line = position(entry) }) end
   local source = entry.source
-  if source.custom_commit then return require(package.loaded['features.commit'] and 'features.commit_notes' or 'git.features.commit_notes').jump(source) end
+  if source.custom_commit then return require('git.features.commit_notes').jump(source) end
   if source.status then return require("lazyagent.note_status").jump(source) end
   local saved_line = source.start_line or entry.saved_start_line
   local ok, jumped = pcall(note_source.jump_diffview, source, saved_line)

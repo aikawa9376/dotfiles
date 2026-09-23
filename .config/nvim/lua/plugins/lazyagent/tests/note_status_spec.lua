@@ -2,7 +2,7 @@ local M = {}
 function M.run()
   local notes = require('lazyagent.notes')
   local source = require('lazyagent.note_source')
-  local old = package.loaded['features.status_renderer']
+  local old = package.loaded['git.features.status_renderer']
   local repo = vim.fn.tempname()
   local b = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_name(b, 'git-status://' .. repo)
@@ -12,7 +12,7 @@ function M.run()
   local entry = { section = 'unstaged', path = 'a file.lua' }
   local staged = { section = 'staged', path = 'a file.lua' }
   local model = {}
-  package.loaded['features.status_renderer'] = {
+  package.loaded['git.features.status_renderer'] = {
     entry_at = function(buf, row) return buf == b and model[row] end,
     entry_row = function(_, row)
       local target = model[row]
@@ -63,18 +63,18 @@ function M.run()
   local window = vim.api.nvim_get_current_win()
   local previous = vim.api.nvim_get_current_buf()
   vim.api.nvim_set_current_buf(b)
-  local old_status = package.loaded['features.status']
-  package.loaded['features.status'] = { open = function() return b end }
-  package.loaded['features.status_renderer'].update_diff = function() render(true, true) end
+  local old_status = package.loaded['git.features.status']
+  package.loaded['git.features.status'] = { open = function() return b end }
+  package.loaded['git.features.status_renderer'].update_diff = function() render(true, true) end
   assert(notes.jump(snapshot.entries[1].id or 1))
   assert(vim.api.nvim_win_get_cursor(window)[1] == 5, 'jump should reopen the selected diff')
-  package.loaded['features.status'] = old_status
+  package.loaded['git.features.status'] = old_status
   vim.api.nvim_set_current_buf(previous)
   model = {}
   notes.refresh_buffer(b)
   assert(icon_row() == nil, 'removed status entry must not leave a misplaced icon')
   notes._reset()
   vim.api.nvim_buf_delete(b, { force = true })
-  package.loaded['features.status_renderer'] = old
+  package.loaded['git.features.status_renderer'] = old
 end
 return M

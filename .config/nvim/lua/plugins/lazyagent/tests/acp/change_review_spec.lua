@@ -107,7 +107,7 @@ function M.run()
   )
   assert(#highlighted >= 8, "drawer should include title, status, path, and decision highlights")
   assert_equal(vim.api.nvim_get_hl(0, { name = "LazyAgentACPChangesDiffAdd", link = true }).link,
-    "FugitiveExtAdd", "Changes always uses fugitive-extension add colors")
+    "FugitiveExtAdd", "Changes keeps the shared Git diff colors")
   assert_equal(vim.api.nvim_get_hl(0, { name = "LazyAgentACPChangesNote", link = true }).link,
     "GitSignsChange", "change notes follow fugitive status colors")
   vim.api.nvim_buf_delete(bufnr, { force = true })

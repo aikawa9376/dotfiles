@@ -90,7 +90,7 @@ function M.capture(bufnr, root, first, last)
   root = vim.b[bufnr].fugitive_work_tree or root
   local name = vim.api.nvim_buf_get_name(bufnr)
   if vim.b[bufnr].custom_git_commit then
-    return require(package.loaded['features.commit'] and 'features.commit_notes' or 'git.features.commit_notes').capture(bufnr, first, last or first)
+    return require('git.features.commit_notes').capture(bufnr, first, last or first)
   end
   local saved = vim.b[bufnr].lazyagent_note_source
   if saved then return vim.deepcopy(saved) end
