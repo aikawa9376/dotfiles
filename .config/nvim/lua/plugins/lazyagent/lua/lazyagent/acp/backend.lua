@@ -728,6 +728,27 @@ local function create_backend(default_view)
     })
   end
 
+  local function request_session_cancel(session)
+    if not session or not session.client then
+      return false
+    end
+
+    local runtime = state.sessions and state.sessions[session.agent_name]
+    local active = session.busy == true
+      or session.preparing_prompt == true
+      or session.pending_brain_turn ~= nil
+      or (runtime and runtime.agent_status == "thinking")
+    session.cancel_requested = active == true
+
+    if active then
+      pcall(function()
+        require("lazyagent.logic.status").stop_thinking(session.agent_name)
+      end)
+    end
+    host_helpers.release_all_terminals(session)
+    return session.client:cancel()
+  end
+
   function backend._drain_prompt_queue(pane_id)
     local session = get_session(pane_id)
     if not session or session.failed or session.busy or session.preparing_prompt or not session.ready or not session.client then
@@ -750,7 +771,7 @@ local function create_backend(default_view)
         session.preparing_prompt = false
         conversation_helpers.append_block(session, "System", "Prompt cancelled before send")
         pcall(function()
-          require("lazyagent.logic.status").set_waiting(session.agent_name, "Cancelled")
+          require("lazyagent.logic.status").stop_thinking(session.agent_name)
         end)
         if #session.prompt_queue > 0 then
           vim.schedule(function()
@@ -835,7 +856,7 @@ local function create_backend(default_view)
             cancelled = true,
           })
           pcall(function()
-            require("lazyagent.logic.status").set_waiting(session.agent_name, "Cancelled")
+            require("lazyagent.logic.status").stop_thinking(session.agent_name)
           end)
           if #session.prompt_queue > 0 then
             backend._drain_prompt_queue(pane_id)
@@ -2049,9 +2070,7 @@ local function create_backend(default_view)
         literal_mode = true
       elseif normalized == "C-c" or normalized == string.char(3) then
         if session.client then
-          session.cancel_requested = session.busy == true or session.preparing_prompt == true
-          host_helpers.release_all_terminals(session)
-          session.client:cancel()
+          request_session_cancel(session)
           conversation_helpers.append_block(session, "System", "Cancellation requested")
         end
         return true
@@ -2396,9 +2415,7 @@ local function create_backend(default_view)
     local item, promote_err = PromptQueue.promote(session, id)
     if not item then return nil, promote_err end
     if session.busy == true or session.preparing_prompt == true then
-      session.cancel_requested = true
-      host_helpers.release_all_terminals(session)
-      session.client:cancel()
+      request_session_cancel(session)
       conversation_helpers.append_block(
         session,
         "System",

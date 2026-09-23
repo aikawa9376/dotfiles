@@ -197,6 +197,19 @@ function M.set_idle(agent_name)
   end
 end
 
+function M.stop_thinking(agent_name)
+  local s = state.sessions[agent_name]
+  if not s then return end
+  stop_monitor_timer(s)
+  if s.agent_status == "thinking" then
+    s.agent_status = "idle"
+    s.agent_status_message = nil
+    agentmux.sync()
+    M.refresh_session_title(agent_name)
+    refresh_ui()
+  end
+end
+
 -- Mark an agent as waiting for input (called by MCP notify_waiting tool)
 function M.set_waiting(agent_name, msg)
   local s = state.sessions[agent_name]
