@@ -36,6 +36,9 @@ return {
       end
       local a = vim.api
       local bufname = a.nvim_buf_get_name(props.buf)
+      if vim.b[props.buf].git_object then
+        return require('git.display').name(props.buf) .. (vim.bo[props.buf].modified and ' [+]' or '')
+      end
       local res = bufname ~= "" and vim.fn.substitute(vim.fn.fnamemodify(bufname, ":p"), vim.fn.getcwd(), "", "g")
         or "[No Name]"
       if vim.bo[props.buf].modified then

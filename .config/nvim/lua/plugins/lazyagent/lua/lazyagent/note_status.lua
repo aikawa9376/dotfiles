@@ -2,7 +2,7 @@
 local M = {}
 local function renderer(buf)
   if vim.bo[buf].filetype ~= 'fugitivestatus' then return end
-  return package.loaded['features.status_renderer']
+  return (package.loaded['git.features.status_renderer'] or package.loaded['features.status_renderer'])
 end
 
 local function file_range(lines, row, first, last)
@@ -92,7 +92,7 @@ function M.range(buf, source)
 end
 
 function M.jump(source)
-  local status = package.loaded['features.status']
+  local status = (package.loaded['git.features.status'] or package.loaded['features.status'])
   if not status then return false end
   local buf = status.open({ work_tree = source.root, split = true, focus = false })
   if not buf then return false end

@@ -1,0 +1,53 @@
+local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))
+package.path = plugin .. '/lua/?.lua;' .. package.path
+local root = vim.fn.tempname(); vim.fn.mkdir(root, 'p')
+local function git(args)
+  local argv = { 'git', '-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid' }
+  vim.list_extend(argv, args)
+  local r = vim.system(argv):wait(); assert(r.code == 0, r.stderr)
+  return vim.trim(r.stdout or '')
+end
+git({ 'init', '-q' })
+vim.fn.writefile({ 'first' }, root .. '/file.txt')
+git({ 'add', '.' }); git({ 'commit', '-qm', 'first' })
+local first = git({ 'rev-parse', 'HEAD' })
+vim.fn.writefile({ 'second' }, root .. '/file.txt')
+git({ 'add', '.' }); git({ 'commit', '-qm', 'second' })
+local second = git({ 'rev-parse', 'HEAD' })
+vim.fn.writefile({ 'other' }, root .. '/other.txt')
+git({ 'add', '.' }); git({ 'commit', '-qm', 'unrelated' })
+require('git').setup()
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/file.txt'))
+vim.cmd('Gedit ~1')
+assert(vim.b.git_object.revision == second and vim.b.git_object.path == 'file.txt')
+assert(vim.api.nvim_get_current_line() == 'second')
+vim.cmd('Gedit ~1')
+assert(vim.b.git_object.revision == first and vim.api.nvim_get_current_line() == 'first')
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/file.txt'))
+vim.cmd('Gedit >~2')
+assert(vim.b.git_object.revision == first and vim.api.nvim_get_current_line() == 'first')
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/file.txt'))
+vim.cmd('Gedit ^:file.txt')
+assert(vim.b.git_object.revision == second and vim.api.nvim_get_current_line() == 'second')
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/file.txt'))
+vim.cmd('Gedit HEAD')
+assert(vim.b.custom_git_commit)
+vim.cmd('Gedit ~1')
+assert(vim.b.custom_git_commit and vim.b.fugitive_commit == second)
+local completion = require('git.completion')
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/file.txt'))
+vim.cmd('Gread! ~1')
+assert(vim.api.nvim_get_current_line() == 'second')
+vim.cmd('edit! ' .. vim.fn.fnameescape(root .. '/file.txt'))
+vim.cmd('Gdiff ~1')
+local compared = false
+for _, win in ipairs(vim.api.nvim_list_wins()) do
+  local object = vim.b[vim.api.nvim_win_get_buf(win)].git_object
+  if object and object.revision == second and object.path == 'file.txt' then compared = true end
+end
+assert(compared, 'Gdiff shorthand should open the relative file version')
+assert(vim.tbl_contains(completion.objects('~'), '~1'))
+assert(vim.tbl_contains(completion.objects('~1:'), '~1:file.txt'))
+for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, { force = true }) end
+vim.fn.delete(root, 'rf')
+print('PASS: Gedit, Gread and Gdiff relative shorthand and completion')

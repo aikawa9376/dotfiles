@@ -1,7 +1,9 @@
 return {
   "rbong/vim-flog",
+  dependencies = { "git" },
   cmd = { "Flog", "Flogsplit", "Floggit" },
   config = function()
+    require("git.flog").setup()
     vim.g.flog_enable_dynamic_commit_hl = true
     vim.g.flog_enable_extended_chars = true
 

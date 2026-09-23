@@ -87,9 +87,10 @@ local function capture_diff(bufnr, root, first, last)
 end
 
 function M.capture(bufnr, root, first, last)
+  root = vim.b[bufnr].fugitive_work_tree or root
   local name = vim.api.nvim_buf_get_name(bufnr)
   if vim.b[bufnr].custom_git_commit then
-    return require('features.commit_notes').capture(bufnr, first, last or first)
+    return require(package.loaded['features.commit'] and 'features.commit_notes' or 'git.features.commit_notes').capture(bufnr, first, last or first)
   end
   local saved = vim.b[bufnr].lazyagent_note_source
   if saved then return vim.deepcopy(saved) end
@@ -230,6 +231,13 @@ function M.fugitive_buffer(source, commit_view)
   local object = commit_view and source.review_commit or
     (source.path and source.revision:match("^%x+$") and (source.revision .. ":" .. source.path) or source.blob)
   if not object then return end
+  local native_ok, objects = pcall(require, 'git.objects')
+  if native_ok and not commit_view then
+    local uri = objects.uri(source.root, object)
+    local buf = vim.fn.bufadd(uri)
+    local loaded = pcall(vim.fn.bufload, buf)
+    if loaded and vim.api.nvim_buf_is_loaded(buf) then return buf end
+  end
   local ok, uri = pcall(vim.fn["fugitive#Find"], object, source.git_dir or (source.root .. "/.git"))
   if not ok or type(uri) ~= "string" or not uri:match("^fugitive://") then return end
   local buf = vim.fn.bufadd(uri)
