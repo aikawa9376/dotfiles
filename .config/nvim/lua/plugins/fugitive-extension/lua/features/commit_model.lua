@@ -36,6 +36,9 @@ function M.load(root, revision, parent_index)
   local model = { root = root, hash = hash, parents = parents, parent_index = parent_index,
     base = base, author = fields[3], date = fields[4], message = message, entries = {},
     tree = fields[6], committer = fields[7], commit_date = fields[8], encoding = vim.trim(fields[9]) }
+  local header, header_err = require('features.commit_info').header(root, hash)
+  if not header then return nil, header_err end
+  model.header = header
   local names, names_err = M.git(root, { 'diff', '--name-status', '-z', '--find-renames', '--no-ext-diff', base, hash, '--' })
   if not names then return nil, names_err end
   local records, i = nul(names), 1

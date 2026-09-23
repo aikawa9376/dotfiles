@@ -43,7 +43,7 @@ focus('M a file.txt'); press('o')
 assert(text():find('-two', 1, true) and text():find('+changed', 1, true))
 assert(api.entry_at(b, find('+changed')).path == 'a file.txt')
 assert(require('fugitive_utils').get_commit(b) == second)
-local subject = find('second')
+local subject = #api.model(b).header + 1
 vim.api.nvim_buf_set_lines(b, subject - 1, subject, false, { 'edited second', 'extra paragraph' })
 focus('M a file.txt'); press('o')
 assert(text():find('extra paragraph', 1, true) and vim.bo[b].modified)
@@ -66,7 +66,7 @@ assert(vim.fn.readfile(root .. '/untracked.txt')[1] == 'keep' and not vim.bo[b].
 local old_head = git({ 'rev-parse', 'HEAD' })
 vim.api.nvim_buf_set_lines(b, 0, 1, false, { 'damaged metadata' })
 assert(not api.write(b) and git({ 'rev-parse', 'HEAD' }) == old_head)
-vim.api.nvim_buf_set_lines(b, 0, 1, false, { 'commit ' .. rewritten }); vim.bo[b].modified = false
+vim.api.nvim_buf_set_lines(b, 0, 1, false, { api.model(b).header[1] }); vim.bo[b].modified = false
 -- A commit hook rejection aborts the rebase, restores work, and keeps the draft.
 write('.git/hooks/commit-msg', { '#!/bin/sh', 'exit 1' })
 vim.fn.setfperm(root .. '/.git/hooks/commit-msg', 'rwxr-xr-x')
