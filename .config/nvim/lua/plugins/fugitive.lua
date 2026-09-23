@@ -3,13 +3,12 @@ return {
   cmd = {
     "G", "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit", "Gstash",
     "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit", "GitPush",
-    "Gworktree", "Gbranch", "FugitiveLog", "GitHeatmap"
+    "Gworktree", "Gbranch", "FugitiveLog", "GitHeatmap", "GitBlameLegacy"
   },
   dependencies = "fugitive-extension",
   keys = {
     { "<Leader>gs", function() require('features.status').open({ focus = 'unstaged', split = true }) end, silent = true },
     { "<Leader>gg", "<cmd>GeditHeadAtFile<CR>", silent = true },
-    { "<Leader>gb", "<cmd>Git blame -w --date=format:'%Y-%m-%d %H:%M'<CR>", silent = true },
     { "<Leader>gr", "<cmd>Git! rm --cached %<CR>", silent = true },
     { "<Leader>gM", "<cmd>Git! commit -m 'tmp'<CR>", silent = true },
     { "<Leader>gA", "<cmd>Gwrite<CR>", silent = true },

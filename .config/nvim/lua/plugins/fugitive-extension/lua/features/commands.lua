@@ -110,7 +110,9 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
     end
     float_buf = vim.api.nvim_create_buf(false, true)
     vim.bo[float_buf].modifiable = false
-    vim.bo[float_buf].filetype = 'git'
+    vim.bo[float_buf].bufhidden = 'wipe'
+    vim.bo[float_buf].filetype = 'gitcommitinfo'
+    vim.bo[float_buf].syntax = 'git'
 
     local width = math.min(80, vim.o.columns - 4)
     local height = math.min(30, vim.o.lines - 4)
@@ -133,14 +135,9 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
     vim.api.nvim_set_option_value('cursorline', false, { win = float_win })
   end
 
-  -- Use git show with custom format to get pre-formatted date
-  local command = "git -C " .. vim.fn.shellescape(work_tree)
-    .. " show -s --date=format:'%Y-%m-%d %H:%M'"
-    .. " --format='tree %T%nparent %P%nauthor %an <%ae> %ad%ncommitter %cn <%ce> %ad%n%n%B' "
-    .. vim.fn.shellescape(commit)
-  local commit_info = vim.fn.systemlist(command)
+  local commit_info = require('features.commit_info').lines(work_tree, commit)
 
-  if vim.v.shell_error == 0 then
+  if commit_info then
     -- Trim trailing empty lines from the output
     while #commit_info > 0 and commit_info[#commit_info] == '' do
       table.remove(commit_info)

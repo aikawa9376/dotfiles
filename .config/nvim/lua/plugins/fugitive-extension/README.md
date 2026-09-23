@@ -11,7 +11,11 @@ root commit). `gp` selects another parent of a merge. File rows, addition/deleti
 counts, and syntax/word-diff highlighting share the status presentation. Files
 start collapsed; patches are loaded only when expanded. The header retains
 Fugitive's tree, parent, author, committer, and optional encoding fields, plus the
-commit hash, using the native Git syntax colors. Help is available through g?.
+commit hash, using the native Git syntax colors. Header metadata comes from
+`commit_info.header()`, the same formatter used by C floats and pinned blame
+information, including HEAD relationship, relative dates and refs. The model
+caches this header until it is reloaded; editable message text stays separate.
+Help is available through g?.
 
 Clean commit buffers use Fugitive's `bufhidden=delete` lifecycle: they disappear
 from bufferline when no window displays them. Merely focusing another window does
@@ -111,3 +115,91 @@ invented. Only the exact destination selector is green; duplicate-hash navigatio
 and highlighting remain independent. `FugitiveReflogCheckpoint` defaults to
 `GitSignsAdd`. See `tests/reflog_checkpoints.lua` for real Git and truncated/
 ongoing/aborted rebase cases.
+
+## Blame
+
+`<Leader>gb` and `:GitBlame` open an independent, Git-backed blame panel beside
+its code window. Panel names use the stable repository/revision/path identity
+`git-blame://<root>//<revision-or-worktree>/<path>` rather than a session counter.
+Initial blame loads into a hidden buffer before the split is opened at its final
+content width; moving away cancels that pending opening. View restoration runs
+with binding disabled, and cursor synchronization has a single owner rather than
+combining cursorbind with CursorMoved updates. The annotation panel has no winbar; the code winbar shows its path, revision and
+commit subject (HEAD subject for the working tree). They load fugitive-extension directly; Fugitive is not needed
+for the new view. `features.blame` owns the view and paired history;
+`blame_model` parses line-porcelain metadata and maps new lines back to old lines.
+The leftmost range markers and hashes share deterministic commit colors. Hash,
+date, and author appear only on the first row of each contiguous commit group;
+continuations contain only the marker, without trailing spaces. The panel disables
+list characters and fits its content width plus one right-padding column while
+reserving room for code. The
+commit under the cursor uses `#002b36` for all its rows; all other
+commits use `#073642`. There is no special cursor-row color,
+underline, or foreground override.
+Uncommitted groups show only a right-aligned virtual `Not committed` label, with
+no date or zero hash; tab settings do not affect its alignment. Dates retain the existing 13-color
+heatmap, including the global absolute/relative mode and ColorScheme refresh.
+The independent `GitHeatmap`/Snacks file-background toggle is unchanged.
+
+| Keys in blame | Action |
+| --- | --- |
+| `-` / `s` / `u` | Reblame at the commit that introduced this line |
+| `~` / `<BS>` | Reblame before the change; counts follow first parents |
+| `{count}P` | Reblame at the numbered parent of a merge |
+| `Ctrl-o` / `Ctrl-i` | Back/forward through paired blame and code views |
+| `gk` | Toggle full commit message near the code cursor; follows the cursor |
+| `Ctrl-p` / `p` | Toggle/open a following commit diff preview |
+| `<CR>` / `i` / double click | Open the commit at its file/diff line in another tab; `q` or jumping back to blame with `Ctrl-o` returns to the preserved blame/code pair |
+| `o` / `O` | Open the commit in a split/tab, keeping blame |
+| `d` | Open an immutable before/after diff in a new tab |
+| `c` | Switch absolute/relative date coloring |
+| `(` / `)` | Previous/next contiguous commit block |
+| `y` | Copy the full commit hash |
+| `.` | Insert the commit hash on the command line |
+| `A` / `C` / `D` | Fit full content/show hash/show date columns |
+| `R` | Refresh working-tree blame |
+| `g?` / `<F1>` | Show available actions |
+| `q` / `gq` | Close blame and restore the original code buffer/view |
+
+When viewing a historical revision, a separate top-right Commit Info float shows
+the viewed revision’s hash, tree, parents, author/committer dates and message. It
+uses the shared `commit_info` metadata also used by C floats: an exact HEAD~N
+label on the first-parent chain, explicit merged/diverged/ahead relationships
+otherwise, relative author/committer dates, and directly attached branch/tag refs.
+It stays pinned as the cursor moves between attributed commits, updates on history
+navigation and closes on return to the working tree or session exit. The `gk`
+float removes Git’s trailing separator blank lines while preserving message
+paragraphs. It is independent and anchors to the selected code row, choosing above/below
+to fit the window. Both floats adjust to resizing/scrolling.
+
+`gk`, `Ctrl-p`, and paired history keys also work in the code pane. Existing
+buffer-local mappings are restored when the session ends. Initial working-tree
+blame includes unsaved buffer contents and refreshes after edits/writes. Untracked
+files or files without a committed version are rejected with a notification
+before any buffer/window is created or source options are changed. History
+frames retain both panes' cursor/scroll positions and immutable historical code;
+returning to the working tree restores the real buffer, preserving edits.
+Rename-aware porcelain metadata and diff line mapping keep the target aligned;
+newly inserted lines map to an adjacent old line when no exact old line exists.
+Root/file-creation boundaries report that no previous version exists.
+
+A source custom blob is kept alive while the session uses it, then regains its
+original hidden-buffer behavior. Closing either paired window, wiping the panel,
+or replacing the code window's buffer cleans up the session, pending requests,
+floats and historical buffers. Opening a commit/diff in another split/tab keeps
+the original pair. Both sides of a blame diff map q to a deferred tab close and
+return to the blame panel, without quitting Neovim. Float layout updates are
+coalesced after window events and run only while the blame tab is current. Historical buffers remain unlisted and are released at exit.
+
+`:GitBlameLegacy [flags]` retains the original Fugitive view and extensions in
+`features.blame_legacy`; raw `:Git blame` remains available. Specialized Fugitive
+modes (such as reverse/range blame and its generic Git-operation mappings) remain
+in that legacy entry point. The new panel's commit opening always uses the custom
+commit view, including boundary commits; `p` opens the following diff float.
+
+Validation: `tests/blame_layout.lua` checks deep-file cursor/scroll stability and
+no loading split; `tests/blame_model.lua`, `tests/blame_view.lua`, and
+`tests/blame_history.lua` cover quoted/Unicode paths, renames, insertion/deletion
+line mapping, merge parents, root boundaries, real Ctrl-o/Ctrl-i mappings,
+following floats, date modes, live edits, source blobs, commit/diff entry points,
+legacy extensions, heatmaps, cleanup and pending-result rejection.

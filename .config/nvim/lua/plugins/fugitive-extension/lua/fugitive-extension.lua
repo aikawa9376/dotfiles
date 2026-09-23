@@ -8,6 +8,7 @@ function M.setup()
     fugitive = true,
     fugitivestatus = true,
     fugitiveblame = true,
+    gitblame = true,
     fugitivebranch = true,
     fugitivelog = true,
     fugitivereflog = true,

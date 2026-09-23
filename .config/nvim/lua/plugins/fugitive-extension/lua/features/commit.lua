@@ -41,6 +41,25 @@ local function close_flog()
   vim.g.flog_win, vim.g.flog_bufnr, vim.g.flog_opener_bufnr = nil, nil, nil
   if win and vim.api.nvim_win_is_valid(win) then pcall(vim.api.nvim_win_close, win, false) end
 end
+local function close_inspection()
+  close_flog()
+  local commands = require('features.commands')
+  if commands.close_commit_info_float then commands.close_commit_info_float() end
+  local return_win = vim.w.fugitive_commit_return_win
+  local regular_windows = 0
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local config = vim.api.nvim_win_get_config(win)
+    if config.relative == '' and not config.external then regular_windows = regular_windows + 1 end
+  end
+  if regular_windows > 1 then
+    vim.api.nvim_win_close(0, false)
+  elseif #vim.api.nvim_list_tabpages() > 1 then
+    vim.cmd('tabclose')
+  else
+    require('utilities').smart_close()
+  end
+  if return_win and vim.api.nvim_win_is_valid(return_win) then vim.api.nvim_set_current_win(return_win) end
+end
 local function show_buffer(buf)
   local previous = vim.api.nvim_get_current_buf()
   if previous ~= buf and vim.g.flog_opener_bufnr == previous then
@@ -83,12 +102,7 @@ end
 local function in_message(s) return editable_row(s, vim.api.nvim_win_get_cursor(0)[1]) end
 local function render(s, edited)
   local model = s.model
-  local prefix = { 'commit ' .. model.hash, 'tree ' .. model.tree }
-  for _, parent in ipairs(model.parents) do prefix[#prefix + 1] = 'parent ' .. parent end
-  prefix[#prefix + 1] = 'author ' .. model.author .. ' ' .. model.date
-  prefix[#prefix + 1] = 'committer ' .. model.committer .. ' ' .. model.commit_date
-  if model.encoding ~= '' and model.encoding ~= '<unknown>' then prefix[#prefix + 1] = 'encoding ' .. model.encoding end
-  prefix[#prefix + 1] = ''
+  local prefix = vim.deepcopy(model.header)
   local msg = edited or model.message
   if #msg == 0 then msg = { '' } end
   local lines = vim.list_extend(vim.deepcopy(prefix), msg)
@@ -480,11 +494,7 @@ local function attach(s)
       elseif choice == 2 then render(s)
       else return end
     end
-    close_flog()
-    local commands = require('features.commands')
-    if commands.close_commit_info_float then commands.close_commit_info_float() end
-    if #vim.api.nvim_tabpage_list_wins(0) > 1 then vim.api.nvim_win_close(0, false)
-    else require('utilities').smart_close() end
+    close_inspection()
   end)
   map({ 'g?', '?' }, function()
     require('features.help').show('Commit view', {
@@ -610,6 +620,21 @@ end
 M._close_edit_float = legacy._close_edit_float
 M._do_amend_from_buffer = legacy._do_amend_from_buffer
 function M.setup(group)
+  vim.api.nvim_create_autocmd('BufEnter', { group = group, callback = function(ev)
+    local win = vim.api.nvim_get_current_win()
+    local return_win = vim.w[win].fugitive_commit_return_win
+    if not return_win or return_win == win or not vim.api.nvim_win_is_valid(return_win)
+      or vim.api.nvim_win_get_buf(return_win) ~= ev.buf then return end
+    -- Jump lists can pass through blobs or tabnew's placeholder, where commit
+    -- mappings are absent. Redirect only once the actual origin is reached.
+    vim.schedule(function()
+      if vim.api.nvim_get_current_win() == win and vim.api.nvim_win_is_valid(return_win)
+        and vim.api.nvim_get_current_buf() == ev.buf
+        and vim.api.nvim_win_get_buf(return_win) == ev.buf then
+        close_inspection()
+      end
+    end)
+  end })
   -- Legacy callbacks remain available for ordinary git output and explicit opt-out.
   legacy.setup(group)
   vim.api.nvim_create_autocmd('BufWipeout', { group = group, callback = function(ev) saved_views[ev.buf] = nil end })
