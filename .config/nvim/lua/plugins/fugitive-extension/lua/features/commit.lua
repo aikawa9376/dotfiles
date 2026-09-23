@@ -7,6 +7,29 @@ local display = require('features.change_display')
 local rewrite = require('features.commit_rewrite')
 local syntax = require('features.syntax_highlight')
 local states = {}
+-- Deleted buffers leave only view metadata behind, never full patches/models.
+local saved_views = {}
+local function remember_view(s)
+  local saved = saved_views[s.buf] or { windows = {} }
+  saved.expanded, saved.parent = vim.deepcopy(s.expanded), s.model.parent_index
+  local win = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_get_buf(win) == s.buf then
+    saved.view = vim.fn.winsaveview()
+    saved.windows[win] = saved.view
+  end
+  saved_views[s.buf] = saved
+end
+local function restore_view(s)
+  local saved = saved_views[s.buf]
+  if not saved or vim.api.nvim_get_current_buf() ~= s.buf then return end
+  local view = saved.windows[vim.api.nvim_get_current_win()] or saved.view
+  if view then vim.fn.winrestview(vim.deepcopy(view)) end
+end
+local function ordinary_window()
+  for _, name in ipairs({ 'number', 'relativenumber', 'wrap', 'foldmethod', 'foldenable', 'foldcolumn' }) do
+    vim.api.nvim_set_option_value(name, vim.api.nvim_get_option_value(name, { scope = 'global' }), { win = 0, scope = 'local' })
+  end
+end
 local ns = vim.api.nvim_create_namespace('fugitive_commit_view')
 local serial = 0
 local legacy_opening = false
@@ -114,8 +137,10 @@ local function render_preserving_message(s)
   return true
 end
 local function configure_window()
-  vim.wo.foldmethod, vim.wo.foldenable, vim.wo.foldcolumn = 'manual', false, '0'
-  vim.wo.wrap, vim.wo.number, vim.wo.relativenumber = false, false, false
+  for name, value in pairs({ foldmethod = 'manual', foldenable = false, foldcolumn = '0',
+    wrap = false, number = false, relativenumber = false }) do
+    vim.api.nvim_set_option_value(name, value, { win = 0, scope = 'local' })
+  end
 end
 local function focus_path(s, path)
   for row, info in pairs(s.rows) do
@@ -227,11 +252,11 @@ local function blob(s, entry, before)
   return model_api.lines(content)
 end
 local function show_blob(s, entry, before)
+  local rev = before and s.model.base or s.model.hash
+  local path = before and (entry.old_path or entry.path) or entry.path
   local content, err = blob(s, entry, before)
   if not content then notify(err); return end
   local b = vim.api.nvim_create_buf(false, true)
-  local rev = before and s.model.base or s.model.hash
-  local path = before and (entry.old_path or entry.path) or entry.path
   serial = serial + 1
   vim.api.nvim_buf_set_name(b, ('git-commit-blob://%d/%s/%s'):format(serial, rev, path))
   utils.set_buf_work_tree(b, s.model.root)
@@ -240,10 +265,24 @@ local function show_blob(s, entry, before)
     git_dir = vim.b[s.buf].git_dir, revision = rev, blob = oid and vim.trim(oid), side = before and 'a' or 'b' }
   vim.api.nvim_buf_set_lines(b, 0, -1, false, content)
   vim.bo[b].bufhidden, vim.bo[b].buftype = 'wipe', 'nofile'
-  vim.bo[b].filetype = vim.filetype.match({ filename = path }) or ''
   vim.bo[b].modifiable, vim.bo[b].readonly = false, true
+  vim.cmd("normal! m'")
   vim.api.nvim_win_set_buf(0, b)
-  vim.wo.wrap = false
+  ordinary_window()
+  vim.bo[b].filetype = vim.filetype.match({ filename = path }) or ''
+  vim.keymap.set('n', 'C', function()
+    require('features.commands').show_commit_info_float(rev, true, true)
+  end, { buffer = b, silent = true, nowait = true, desc = 'Toggle blob commit information' })
+  -- Custom nofile URIs need an explicit repository context for Gitsigns.
+  -- The right side compares with the selected parent, including renamed paths.
+  local ok, gitsigns = pcall(require, 'gitsigns')
+  if ok and not entry.binary then
+    gitsigns.attach({ bufnr = b, force = true, ctx = {
+      file = before and path or (entry.old_path or path),
+      toplevel = s.model.root, gitdir = utils.get_git_dir(s.model.root),
+      base = s.model.base,
+    } })
+  end
   return b
 end
 local function diff(s, layout)
@@ -354,8 +393,11 @@ local function attach(s)
     local entry, info = M.entry_at(b, vim.fn.line('.'))
     if not entry then return end
     if not clean_action(s) then return end
-    local buf = show_blob(s, entry, entry.status == 'D')
-    if buf then vim.api.nvim_win_set_cursor(0, { math.min(target_line(s, info, entry.status == 'D'), vim.api.nvim_buf_line_count(buf)), 0 }) end
+    local patch_line = info and info.patch_row and model_api.patch(s.model, entry)[info.patch_row]
+    local before = entry.status == 'D' or (patch_line ~= nil and patch_line:sub(1, 1) == '-')
+    local line = target_line(s, info, before)
+    local buf = show_blob(s, entry, before)
+    if buf then vim.api.nvim_win_set_cursor(0, { math.min(line, vim.api.nvim_buf_line_count(buf)), 0 }) end
   end)
   map('gf', function()
     local entry, info = M.entry_at(b, vim.fn.line('.'))
@@ -467,8 +509,13 @@ local function attach(s)
     if ev.match ~= name then error('Use :w without a filename to reword this commit') end
     if not M.write(b) then error('Commit message was not saved') end
   end })
-  vim.api.nvim_create_autocmd('BufWinEnter', { group = group, buffer = b, callback = configure_window })
+  vim.api.nvim_create_autocmd('BufWinEnter', { group = group, buffer = b, callback = function()
+    configure_window()
+    restore_view(s)
+  end })
+  vim.api.nvim_create_autocmd('WinLeave', { group = group, buffer = b, callback = function() remember_view(s) end })
   vim.api.nvim_create_autocmd('BufWinLeave', { group = group, buffer = b, callback = function()
+    remember_view(s)
     -- Fugitive deletes clean hidden objects. A draft must survive window changes.
     vim.bo[b].bufhidden = vim.bo[b].modified and 'hide' or 'delete'
   end })
@@ -493,7 +540,8 @@ function M.open(opts)
   if not root then notify('Not in a Git repository'); return end
   root = utils.normalize_path(root)
   local revision = opts.revision or 'HEAD'
-  local model, err = model_api.load(root, revision, opts.parent)
+  local saved = opts.bufnr and saved_views[opts.bufnr]
+  local model, err = model_api.load(root, revision, opts.parent or (saved and saved.parent))
   if not model then notify(err); return end
   for b, s in pairs(states) do
     if not opts.bufnr and vim.api.nvim_buf_is_loaded(b) and s.model.root == root and s.model.hash == model.hash and s.model.parent_index == model.parent_index then
@@ -511,7 +559,7 @@ function M.open(opts)
   utils.set_buf_work_tree(b, root)
   vim.b[b].fugitive_commit = model.hash
   vim.b[b].custom_git_commit = true
-  local s = { buf = b, view_id = view_id, model = model, expanded = {}, expected_head = vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
+  local s = { buf = b, view_id = view_id, model = model, expanded = saved and vim.deepcopy(saved.expanded) or {}, expected_head = vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
   states[b] = s
   render(s)
   if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
@@ -519,7 +567,18 @@ function M.open(opts)
   vim.bo[b].filetype = 'fugitivecommit'
   vim.bo[b].syntax = 'git'
   configure_window(); attach(s)
-  vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  if saved then
+    restore_view(s)
+    local win = vim.api.nvim_get_current_win()
+    -- Jump commands finish positioning after BufReadCmd returns.
+    vim.schedule(function()
+      if states[b] == s and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == b then
+        vim.api.nvim_win_call(win, function() restore_view(s) end)
+      end
+    end)
+  else
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+  end
   return b
 end
 function M.open_legacy(opts)
@@ -553,6 +612,7 @@ M._do_amend_from_buffer = legacy._do_amend_from_buffer
 function M.setup(group)
   -- Legacy callbacks remain available for ordinary git output and explicit opt-out.
   legacy.setup(group)
+  vim.api.nvim_create_autocmd('BufWipeout', { group = group, callback = function(ev) saved_views[ev.buf] = nil end })
   vim.api.nvim_create_autocmd('BufReadCmd', { group = group, pattern = 'git-commit://*', callback = function(ev)
     local root, id, hash = ev.match:match('^git%-commit://(.*)/(%d+)/(%x+)$')
     if not root then error('Invalid commit URI') end

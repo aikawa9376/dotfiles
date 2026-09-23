@@ -16,7 +16,16 @@ commit hash, using the native Git syntax colors. Help is available through g?.
 Clean commit buffers use Fugitive's `bufhidden=delete` lifecycle: they disappear
 from bufferline when no window displays them. Merely focusing another window does
 not delete a still-visible commit. Unwritten message edits are kept when hidden.
-Deleted commit URIs reload on reentry. Bufferline displays the short commit hash,
+Deleted commit URIs reload on reentry, restoring the selected parent, file
+expansion, cursor, and scroll position. Only view metadata survives unloading;
+explicitly wiping the buffer discards it. Blob files use custom read-only buffers and normal window defaults, including
+line numbers. Enter on a removed (`-`) line opens the selected parent blob at
+the old line; added and context lines open the displayed commit at the new line.
+Deleted file headers also open the parent, using the old path for renames.
+When Gitsigns is available, an explicit repository context compares
+the blob with the selected parent (using the old path for renames). New files
+receive addition signs; binary files skip this integration. Panel display options stay
+local to the panel. Bufferline displays the short commit hash,
 and the URI ends with the full hash. Flog ownership follows commit navigation;
 closing the commit view with q also closes Flog.
 
@@ -85,7 +94,8 @@ remain compatible with status and other consumers. The original global
 Run checks from this directory with
 `nvim --headless --clean -u NONE -l tests/<name>.lua`.
 The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`,
-`commit_notes`, `commit_lifecycle`, and `commit_entrypoints` (the last uses installed vim-fugitive).
+`commit_notes`, `commit_lifecycle`, `commit_entrypoints`, and `commit_blob_return`
+(the last two use installed vim-fugitive; `commit_blob_return` also uses Gitsigns).
 
 ## Reflog recovery markers
 
