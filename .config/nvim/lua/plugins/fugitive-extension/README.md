@@ -86,3 +86,18 @@ Run checks from this directory with
 `nvim --headless --clean -u NONE -l tests/<name>.lua`.
 The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`,
 `commit_notes`, `commit_lifecycle`, and `commit_entrypoints` (the last uses installed vim-fugitive).
+
+## Reflog recovery markers
+
+`Greflog` colors a `HEAD@{n}` selector green when it identifies the state before
+an amend, a reset that changed HEAD, or the start of an entire rebase. Rebase
+internal amend/reset records do not create additional markers. Ordinary commits,
+checkouts, and no-op resets are not marked. The marker identifies a history
+recovery candidate; it does not execute a reset or restore worktree contents.
+
+Detection follows Git's reflog operation labels in chronological order. If a
+rebase start is outside the 1000-entry window, no pre-rebase destination is
+invented. Only the exact destination selector is green; duplicate-hash navigation
+and highlighting remain independent. `FugitiveReflogCheckpoint` defaults to
+`GitSignsAdd`. See `tests/reflog_checkpoints.lua` for real Git and truncated/
+ongoing/aborted rebase cases.

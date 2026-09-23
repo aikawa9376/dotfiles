@@ -36,6 +36,34 @@ local function operation_parts(subject)
   return operation, detail
 end
 
+local function mark_recovery_points(entries)
+  -- Walk in time order so amend/reset records inside a rebase are not
+  -- mistaken for independent recovery points. The oldest rebase record can
+  -- belong to an operation whose start fell outside the history limit.
+  local in_rebase = false
+  for row = #entries, 1, -1 do
+    local action = entries[row].action
+    if action:match('^rebase') then
+      in_rebase = not action:match('%(start%)$')
+      break
+    end
+  end
+  for row = #entries, 1, -1 do
+    local entry = entries[row]
+    local previous = entries[row + 1]
+    local adjacent = previous and previous.index == entry.index + 1
+    if entry.action:match('^rebase.*%(start%)$') then
+      if adjacent then previous.recovery_point = true end
+      in_rebase = true
+    elseif entry.action:match('^rebase.*%(finish%)$') or entry.action:match('^rebase.*%(abort%)$') then
+      in_rebase = false
+    elseif not in_rebase and adjacent and previous.hash ~= entry.hash
+      and (entry.operation == 'amend' or entry.operation == 'reset') then
+      previous.recovery_point = true
+    end
+  end
+end
+
 local function get_reflog_entries(bufnr)
   local work_tree = utils.get_buf_work_tree(bufnr)
   if not work_tree then return {}, 'Git work tree not found' end
@@ -56,6 +84,8 @@ local function get_reflog_entries(bufnr)
         selector = ('HEAD@{%d}'):format(index - 1),
         timestamp = timestamp,
         operation = operation,
+        action = subject:match('^(.-):') or '',
+        index = index - 1,
         detail = detail,
       }
       table.insert(entries, entry)
@@ -63,6 +93,7 @@ local function get_reflog_entries(bufnr)
     end
   end
   for _, entry in ipairs(entries) do entry.same_count = counts[entry.hash] end
+  mark_recovery_points(entries)
   return entries
 end
 
@@ -93,7 +124,8 @@ local function apply_static_highlights(bufnr, lines, entries)
   vim.api.nvim_buf_clear_namespace(bufnr, static_ns, 0, -1)
   for row, entry in ipairs(entries) do
     local line = lines[row]
-    local next_col = highlight_range(bufnr, row, line, entry.selector, 1, 'Directory')
+    local next_col = highlight_range(bufnr, row, line, entry.selector, 1,
+      entry.recovery_point and 'FugitiveReflogCheckpoint' or 'Directory')
     next_col = highlight_range(bufnr, row, line, date_label(entry.timestamp), next_col, 'Comment')
     next_col = highlight_range(bufnr, row, line, entry.short_hash, next_col,
       entry.same_count > 1 and 'DiagnosticInfo' or 'String')
@@ -173,6 +205,7 @@ end
 local function show_reflog_help()
   help.show('Reflog recovery actions', {
     'g?          show this help',
+    'Green HEAD@{n}: state before rebase, amend, or reset',
     '<CR>        inspect selected destination',
     ']s / [s     next / previous visit to same hash',
     'y           copy reflog selector (HEAD@{n})',
@@ -226,6 +259,7 @@ local function move_same_hash(bufnr, direction)
 end
 
 function M.setup(group)
+  vim.api.nvim_set_hl(0, 'FugitiveReflogCheckpoint', { default = true, link = 'GitSignsAdd' })
   vim.api.nvim_create_user_command('Greflog', open_reflog_list, {
     bang = false,
     desc = 'Open recovery-oriented Git reflog',
