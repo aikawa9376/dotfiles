@@ -32,6 +32,15 @@ local function ordinary_window()
   end
 end
 local ns = vim.api.nvim_create_namespace('fugitive_commit_view')
+local status_highlights = {
+  A = 'GitSignsAdd',
+  M = 'Structure',
+  D = 'GitSignsDelete',
+  R = 'Structure',
+  C = 'Structure',
+  T = 'Structure',
+  U = 'Structure',
+}
 local serial = 0
 local function buffer_name(root, hash, id)
   return ('git-commit://%s/%d/%s'):format(root, id, hash)
@@ -133,6 +142,10 @@ local function render(s, edited)
   for row, info in pairs(rows) do
     if info.header then
       local entry = info.entry
+      local status_hl = status_highlights[entry.status]
+      if status_hl then
+        vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 0, { end_col = 1, hl_group = status_hl })
+      end
       local chunks = display.statistics(entry)
       if #chunks > 0 then vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 0, { virt_text = chunks, virt_text_pos = 'eol' }) end
       local icon, hl = utils.get_devicon(entry.path)

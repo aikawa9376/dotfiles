@@ -1,11 +1,13 @@
 local M = {}
 local utils = require("git.utils")
+local diffdim = require('git.features.diffdim')
 
 local BLAME_COLORS = {
   '#50c878', '#70cd80', '#90d288', '#b0d790', '#d0dc98', '#f0e1a0', '#ffc580',
   '#ffb060', '#ff9b40', '#ff8620', '#ff7100', '#e85040', '#d03030',
 }
 local heatmap_ns = vim.api.nvim_create_namespace('fugitive_blame_heatmap')
+local panel_winbar = '%=Blame panel%='
 
 local function hex_rgb(color)
   color = tostring(color or ''):gsub('^#', '')
@@ -287,21 +289,27 @@ local function preview(s)
 end
 local function history_info(s, refresh)
   local f = s.history[s.index]
-  if not f or not f.revision then
+  local revision = f and (f.pinned_commit or f.revision)
+  if not revision or (f.pinned_commit and f.pin_info_hidden) then
     if valid(s.info_win) then vim.api.nvim_win_close(s.info_win, true) end
     s.info_win = nil
     return
   end
-  if refresh or s.info_revision ~= f.revision then
-    s.info_revision = f.revision
-    s.info_lines = require('git.features.commit_info').lines(s.root, f.revision) or { 'Could not load commit information' }
+  if refresh or s.info_revision ~= revision then
+    s.info_revision = revision
+    if revision:match('^0+$') then
+      s.info_lines = { 'Not committed yet', '', 'This line includes working-tree or unsaved changes.' }
+    else
+      s.info_lines = require('git.features.commit_info').lines(s.root, revision) or { 'Could not load commit information' }
+    end
   end
   local lines = s.info_lines
   local width = math.max(1, math.min(80, vim.api.nvim_win_get_width(s.code_win) - 4))
   local config = { relative = 'win', win = s.code_win, row = 0,
     col = math.max(0, vim.api.nvim_win_get_width(s.code_win) - width - 2),
     width = width, height = math.max(1, math.min(#lines, vim.api.nvim_win_get_height(s.code_win) - 4)),
-    style = 'minimal', border = 'single', focusable = false, title = ' Commit Info ', zindex = 50 }
+    style = 'minimal', border = 'single', focusable = false,
+    title = f.pinned_commit and ' Dimmed Commit ' or ' Commit Info ', zindex = 50 }
   if not valid(s.info_win) then
     local b = vim.api.nvim_create_buf(false, true)
     vim.bo[b].bufhidden = 'wipe'
@@ -327,6 +335,29 @@ local function hash_group(hash)
   vim.api.nvim_set_hl(0, name, { fg = channel(r) * 0x10000 + channel(g) * 0x100 + channel(b) })
   return name
 end
+local function update_panel_winbar(s)
+  if not valid(s.win) then return end
+  local f = s.history[s.index]
+  local top = vim.api.nvim_win_call(s.win, function() return vim.fn.line('w0') end)
+  local record = f and f.rows[top]
+  local label = panel_winbar
+  if record and top > 1 and f.rows[top - 1] and f.rows[top - 1].commit == record.commit then
+    if record.uncommitted then
+      label = '%=Not committed%='
+    else
+      local hash = record.commit:sub(1, 8)
+      local date = os.date('%Y-%m-%d %H:%M', record.timestamp or os.time())
+      local width = vim.api.nvim_win_get_width(s.win) - 2
+      local suffix = width >= #hash + #date + 1 and (' ' .. date) or ''
+      local author = record.author or ''
+      if author ~= '' and vim.fn.strdisplaywidth(hash .. suffix .. ' ' .. author) <= width then
+        suffix = suffix .. ' ' .. author
+      end
+      label = '%=%#' .. hash_group(record.commit) .. '#' .. hash .. '%*' .. suffix:gsub('%%', '%%%%') .. '%='
+    end
+  end
+  if vim.wo[s.win].winbar ~= label then vim.wo[s.win].winbar = label end
+end
 local function fit_width(s)
   local total = vim.api.nvim_win_get_width(s.win) + vim.api.nvim_win_get_width(s.code_win)
   local requested = (s.width_override or s.content_width or 1) + 1
@@ -348,9 +379,17 @@ local function highlight_selected(s)
   local r, f = current(s)
   vim.api.nvim_buf_clear_namespace(s.buf, selected_ns, 0, -1)
   if not r then return end
+  local selected = f.pinned_commit or r.commit
   for row, entry in ipairs(f.rows) do
     vim.api.nvim_buf_set_extmark(s.buf, selected_ns, row - 1, 0, { end_row = row, end_col = 0, hl_eol = true,
-      hl_group = entry.commit == r.commit and 'GitBlameSelected' or 'GitBlameUnselected', hl_mode = 'combine' })
+      hl_group = entry.commit == selected and 'GitBlameSelected' or 'GitBlameUnselected', hl_mode = 'combine' })
+  end
+end
+local function sync_dim(s)
+  if s.dimmed_buf then diffdim.clear_blame(s.dimmed_buf); s.dimmed_buf = nil end
+  local f = s.history[s.index]
+  if f and f.pinned_commit and f.code_buf and diffdim.select_blame(f.code_buf, f.rows, f.pinned_commit) then
+    s.dimmed_buf = f.code_buf
   end
 end
 local function annotation_lines(f)
@@ -396,7 +435,7 @@ local function paint(s, f)
     if start then vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, 4, { end_col = 12, hl_group = group }) end
   end
   fit_width(s)
-  local_options(s.win, { winbar = '' })
+  update_panel_winbar(s)
 end
 local show_frame, bind, cleanup
 show_frame = function(s, f)
@@ -428,6 +467,8 @@ show_frame = function(s, f)
   end
   for _, win in ipairs({ s.win, s.code_win }) do local_options(win, { scrollbind = true, cursorbind = false }) end
   s.switching = false
+  update_panel_winbar(s)
+  sync_dim(s)
   highlight_selected(s)
   history_info(s, true)
   preview(s)
@@ -468,6 +509,12 @@ local function request(s, path, revision, line, contents, initial, replace_index
     if replace_index then
       local replaced = s.history[replace_index]
       f.code_buf, f.code_view, f.panel_view = replaced.code_buf, replaced.code_view, replaced.panel_view
+      for _, entry in ipairs(f.rows) do
+        if entry.commit == replaced.pinned_commit then
+          f.pinned_commit, f.pin_info_hidden = replaced.pinned_commit, replaced.pin_info_hidden
+          break
+        end
+      end
       s.history[replace_index] = f
       if s.index == replace_index then show_frame(s, f) end
       return
@@ -566,6 +613,7 @@ end
 cleanup = function(s)
   if not s.active then return end
   s.active = false
+  if s.dimmed_buf then diffdim.clear_blame(s.dimmed_buf); s.dimmed_buf = nil end
   sessions[s.buf] = nil
   if s.job then s.job:kill(15) end
   close_float(s)
@@ -603,8 +651,33 @@ bind = function(s, b, code)
   end
   map('<C-o>', function() history(s, -1) end)
   map('<C-i>', function() history(s, 1) end)
+  local function move_block(direction)
+    local r, f, row = current(s); if not r then return end
+    for _ = 1, vim.v.count1 do
+      local hash = f.rows[row].commit
+      repeat row = row + direction until not f.rows[row] or f.rows[row].commit ~= hash
+      row = math.max(1, math.min(#f.rows, row))
+    end
+    for _, win in ipairs({ s.win, s.code_win }) do
+      if valid(win) then
+        local col = win == s.win and 0 or vim.api.nvim_win_get_cursor(win)[2]
+        vim.api.nvim_win_set_cursor(win, { row, col })
+      end
+    end
+    highlight_selected(s)
+    preview(s)
+  end
+  map(']]', function() move_block(1) end)
+  map('[[', function() move_block(-1) end)
   map('gk', function() if s.preview == 'message' then s.preview = nil else s.preview = 'message' end; close_float(s); preview(s) end)
   map('<C-p>', function() if s.preview == 'diff' then s.preview = nil else s.preview = 'diff' end; close_float(s); preview(s) end)
+  map('gD', function() M.toggle_dim_for_buffer(b) end)
+  map('gC', function()
+    local f = s.history[s.index]
+    if not f or not f.pinned_commit then tell('Pin a commit with gD first'); return end
+    f.pin_info_hidden = not f.pin_info_hidden
+    history_info(s)
+  end)
   if code then return end
   map({ 'q', 'gq' }, function() cleanup(s) end)
   map({ '-', 's', 'u' }, function() navigate(s) end)
@@ -630,15 +703,7 @@ bind = function(s, b, code)
   end
   for key, direction in pairs({ [')'] = 1, ['('] = -1 }) do
     local step = direction
-    map(key, function()
-      local r, f, row = current(s); if not r then return end
-      for _ = 1, vim.v.count1 do
-        local hash = f.rows[row].commit
-        repeat row = row + step until not f.rows[row] or f.rows[row].commit ~= hash
-        row = math.max(1, math.min(#f.rows, row))
-      end
-      vim.api.nvim_win_set_cursor(s.win, { row, 0 })
-    end)
+    map(key, function() move_block(step) end)
   end
   map({ 'g?', '<F1>' }, function() require('git.features.help').show_text('Git blame', {
     '- / s / u    blame at the selected commit',
@@ -650,7 +715,10 @@ bind = function(s, b, code)
     '<CR> / i     inspect commit in a tab (q returns)',
     'o / O        open commit in split / tab',
     'd            compare before/after the change',
+    'gD           pin/unpin commit and dim other code lines',
+    'gC           hide/show the dimmed commit info',
     'c            absolute / relative date heatmap',
+    '[[ / ]]      previous / next commit block (count supported)',
     '( / )        previous / next commit block',
     'y            copy full hash',
     '.            put hash on command line',
@@ -708,6 +776,37 @@ bind = function(s, b, code)
     vim.api.nvim_win_set_cursor(0, { math.min(r.original, vim.api.nvim_buf_line_count(0)), 0 })
   end)
 end
+function M.toggle_dim_for_buffer(bufnr)
+  for _, s in pairs(sessions) do
+    local f = s.history[s.index]
+    if s.active and f and (s.buf == bufnr or f.code_buf == bufnr) then
+      local r = current(s)
+      if not r then return false end
+      if f.pinned_commit == r.commit then f.pinned_commit = nil else f.pinned_commit = r.commit end
+      f.pin_info_hidden = false
+      sync_dim(s)
+      highlight_selected(s)
+      history_info(s, true)
+      update_panel_winbar(s)
+      return true
+    end
+  end
+  return false
+end
+function M.clear_dim_for_buffer(bufnr)
+  for _, s in pairs(sessions) do
+    local f = s.history[s.index]
+    if s.active and f and (f.code_buf == bufnr or s.buf == bufnr) and f.pinned_commit then
+      f.pinned_commit = nil
+      f.pin_info_hidden = false
+      sync_dim(s)
+      highlight_selected(s)
+      history_info(s, true)
+      return true
+    end
+  end
+  return false
+end
 function M.open(opts)
   opts = opts or {}
   local origin, code_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
@@ -761,7 +860,7 @@ function M.open(opts)
     local_options(code_win, { scrollbind = false, cursorbind = false })
     width = math.max(1, math.min(width + 1, vim.api.nvim_win_get_width(code_win) - math.max(20, vim.o.winminwidth) - 1))
     local win = vim.api.nvim_open_win(b, true, { split = 'left', win = code_win, width = width })
-    local_options(win, { winbar = '', cursorline = false, winfixwidth = true, list = false, number = false, relativenumber = false, wrap = false, foldenable = false, foldcolumn = '0', signcolumn = 'no', scrollbind = false, cursorbind = false })
+    local_options(win, { winbar = panel_winbar, cursorline = false, winfixwidth = true, list = false, number = false, relativenumber = false, wrap = false, foldenable = false, foldcolumn = '0', signcolumn = 'no', scrollbind = false, cursorbind = false })
     local s = { id = serial, buf = b, win = win, code_win = code_win, origin = origin, root = root,
       origin_view = origin_view, origin_hidden = origin_hidden, options = options, active = true, generation = 0, history = {}, index = 0,
       messages = {}, maps = {}, owned = {}, group = vim.api.nvim_create_augroup('GitBlame' .. b, { clear = true }) }
@@ -804,7 +903,7 @@ function M.open(opts)
         s.layout_pending = false
         if not s.active or s.switching or not valid(s.win) or not valid(s.code_win)
           or vim.api.nvim_win_get_tabpage(s.win) ~= vim.api.nvim_get_current_tabpage() then return end
-        fit_width(s); history_info(s); preview(s)
+        fit_width(s); update_panel_winbar(s); history_info(s); preview(s)
       end)
     end })
     vim.api.nvim_create_autocmd('WinClosed', { group = s.group, callback = function(ev)
@@ -839,6 +938,7 @@ function M.open(opts)
 end
 
 function M.setup(group)
+  diffdim.setup()
   setup_blame_gradients()
   setup_selected_highlight()
 

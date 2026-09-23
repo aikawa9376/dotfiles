@@ -19,6 +19,7 @@ reverting the commit that removed them.
 | `Gclog[!]`, `Gllog[!] [args]` | File history (repository history outside a file) in quickfix/location list |
 | `Glog`, `FugitiveLog [args]` | Custom log panel |
 | `Gblame`, `GitBlame`, `GitHeatmap` | Custom paired blame and heatmap |
+| `DiffDim [revision / latest / older / newer / clear]` | Dim lines outside a Git diff or selected blame commit |
 | `Gbranch`, `Gstash`, `Greflog`, `Gworktree`, `GworktreeSync` | Existing repository panels/actions |
 | `Gcd`, `Glcd [directory]` | Change directory relative to the buffer's worktree root |
 | `Gmove`, `Grename <path>`, `Gremove`, `Gdelete` | Git file moves/removals and matching buffer updates |
@@ -195,7 +196,10 @@ its code window. Panel names use the stable repository/revision/path identity
 Initial blame loads into a hidden buffer before the split is opened at its final
 content width; moving away cancels that pending opening. View restoration runs
 with binding disabled, and cursor synchronization has a single owner rather than
-combining cursorbind with CursorMoved updates. The annotation panel has no winbar; the code winbar shows its path, revision and
+combining cursorbind with CursorMoved updates. The annotation panel has a centered
+`Blame panel` winbar so its lines align with the code. When a long commit block's
+header scrolls out of view, the winbar carries its hash, date and, if it fits,
+author until the next block. The code winbar shows its path, revision and
 commit subject (HEAD subject for the working tree). They load the Git plugin directly. `git.features.blame` owns the view and paired history;
 `blame_model` parses line-porcelain metadata and maps new lines back to old lines.
 The leftmost range markers and hashes share deterministic commit colors. Hash,
@@ -204,7 +208,12 @@ continuations contain only the marker, without trailing spaces. The panel disabl
 list characters and fits its content width plus one right-padding column while
 reserving room for code. The
 commit under the cursor uses `#002b36` for all its rows; all other
-commits use `#073642`. There is no special cursor-row color,
+commits use `#073642`. `gD` in either pane pins that commit's highlight and dims other
+lines in the paired code buffer until toggled, `:DiffDim clear`, or closing blame.
+Bare `:DiffDim` also selects the cursor-line commit while blame is open. Pinning
+automatically shows that commit's shared `C` metadata in a float. `gC` hides or
+restores the float without clearing the dim; unpinning restores the viewed
+revision's info when browsing history. There is no special cursor-row color,
 underline, or foreground override.
 Uncommitted groups show only a right-aligned virtual `Not committed` label, with
 no date or zero hash; tab settings do not affect its alignment. Dates retain the existing 13-color
@@ -222,7 +231,10 @@ The independent `GitHeatmap`/Snacks file-background toggle is unchanged.
 | `<CR>` / `i` / double click | Open the commit at its file/diff line in another tab; `q` or jumping back to blame with `Ctrl-o` returns to the preserved blame/code pair |
 | `o` / `O` | Open the commit in a split/tab, keeping blame |
 | `d` | Open an immutable before/after diff in a new tab |
+| `gD` | Pin/unpin the cursor-line commit and dim other code lines |
+| `gC` | Hide/show the pinned commit info while dimming |
 | `c` | Switch absolute/relative date coloring |
+| `[[` / `]]` | Previous/next contiguous commit block in either pane; count supported |
 | `(` / `)` | Previous/next contiguous commit block |
 | `y` | Copy the full commit hash |
 | `.` | Insert the commit hash on the command line |
@@ -232,7 +244,8 @@ The independent `GitHeatmap`/Snacks file-background toggle is unchanged.
 | `q` / `gq` | Close blame and restore the original code buffer/view |
 
 When viewing a historical revision, a separate top-right Commit Info float shows
-the viewed revision’s hash, tree, parents, author/committer dates and message. It
+the viewed revision’s hash, tree, parents, author/committer dates and message;
+while dimming, it shows the pinned commit instead. It
 uses the shared `commit_info` metadata also used by C floats: an exact HEAD~N
 label on the first-parent chain, explicit merged/diverged/ahead relationships
 otherwise, relative author/committer dates, and directly attached branch/tag refs.

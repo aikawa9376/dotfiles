@@ -31,14 +31,25 @@ local b = assert(api.open({ work_tree = root, revision = second }))
 assert(vim.bo[b].filetype == 'fugitivecommit' and vim.bo[b].buftype == 'acwrite')
 local function press(key) local mapping = vim.fn.maparg(key, 'n', false, true); assert(mapping.callback, key); mapping.callback() end
 local function content() return vim.api.nvim_buf_get_lines(b, 0, -1, false) end
-local function find(pattern)
-  for row, line in ipairs(content()) do if line:find(pattern, 1, true) then return row end end
+local function find(pattern, buf)
+  for row, line in ipairs(vim.api.nvim_buf_get_lines(buf or b, 0, -1, false)) do
+    if line:find(pattern, 1, true) then return row end
+  end
   error('missing line: ' .. pattern)
 end
 local function focus(pattern) vim.api.nvim_win_set_cursor(0, { find(pattern), 0 }) end
 local function text() return table.concat(content(), '\n') end
+local function assert_status_highlight(buf, row, group)
+  local ns = assert(vim.api.nvim_get_namespaces().fugitive_commit_view)
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { row - 1, 0 }, { row - 1, -1 }, { details = true })) do
+    if mark[2] == row - 1 and mark[3] == 0 and mark[4].end_col == 1 and mark[4].hl_group == group then return end
+  end
+  error(('missing %s status highlight on row %d'):format(group, row))
+end
 assert(text():find('message body', 1, true))
 assert(text():find('M a file.txt', 1, true) and not text():find('@@'))
+assert_status_highlight(b, find('M a file.txt'), 'Structure')
+assert_status_highlight(b, find('A deleted.txt'), 'GitSignsAdd')
 focus('M a file.txt'); press('o')
 assert(text():find('-two', 1, true) and text():find('+changed', 1, true))
 assert(api.entry_at(b, find('+changed')).path == 'a file.txt')
@@ -98,6 +109,9 @@ vim.cmd('tabclose'); vim.api.nvim_set_current_buf(b)
 for _, key in ipairs({ 'X', 'A', 'cw', 'gA', 'C', 'O', 'p', '~', 'gf', 'gq', '<C-y>', '<C-Space>', 'gp', 'q', 'R', 'g?' }) do
   assert(vim.fn.maparg(key, 'n') ~= '', 'missing inherited action: ' .. key)
 end
+local tip_buf = assert(api.open({ work_tree = root, revision = tip }))
+assert_status_highlight(tip_buf, find('D deleted.txt', tip_buf), 'GitSignsDelete')
+vim.api.nvim_buf_delete(tip_buf, { force = true })
 vim.api.nvim_buf_delete(b, { force = true }); assert(api.model(b) == nil)
 vim.fn.delete(root, 'rf')
 print('PASS: custom commit, drafts, reword ancestor, dirty state, immutable diff, root/rename/binary, actions, teardown')
