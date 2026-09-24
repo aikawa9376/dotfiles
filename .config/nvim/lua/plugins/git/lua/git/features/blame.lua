@@ -6,6 +6,9 @@ local BLAME_COLORS = {
   '#50c878', '#70cd80', '#90d288', '#b0d790', '#d0dc98', '#f0e1a0', '#ffc580',
   '#ffb060', '#ff9b40', '#ff8620', '#ff7100', '#e85040', '#d03030',
 }
+local UNSELECTED_BG = '#073642'
+local UNSELECTED_META_FG = '#586e75'
+local hash_group_cache = {}
 local heatmap_ns = vim.api.nvim_create_namespace('fugitive_blame_heatmap')
 local panel_winbar = '%=Blame panel%='
 
@@ -37,6 +40,7 @@ local function first_path(value)
 end
 
 local function setup_blame_gradients()
+  hash_group_cache = {}
   local background = normal_background()
   for index, color in ipairs(BLAME_COLORS) do
     vim.api.nvim_set_hl(0, 'FugitiveBlameDate' .. (index - 1), { fg = color })
@@ -227,6 +231,33 @@ local function close_float(s)
   if valid(s.float_win) then vim.api.nvim_win_close(s.float_win, true) end
   s.float_win = nil
 end
+local function adjacent_same_commit_block(f, commit, row, direction, count)
+  local blocks = {}
+  for first, entry in ipairs(f.rows) do
+    if entry.commit == commit and (first == 1 or f.rows[first - 1].commit ~= commit) then
+      local last = first
+      while f.rows[last + 1] and f.rows[last + 1].commit == commit do last = last + 1 end
+      blocks[#blocks + 1] = { first = first, last = last }
+    end
+  end
+  local passed = 0
+  if direction > 0 then
+    for _, block in ipairs(blocks) do
+      if block.first > row then
+        passed = passed + 1
+        if passed == count then return block.first end
+      end
+    end
+  else
+    for index = #blocks, 1, -1 do
+      local block = blocks[index]
+      if block.last < row then
+        passed = passed + 1
+        if passed == count then return block.first end
+      end
+    end
+  end
+end
 local function current(s)
   local f = s.history[s.index]
   local win = vim.api.nvim_get_current_win() == s.code_win and s.code_win or s.win
@@ -328,14 +359,58 @@ local function history_info(s, refresh)
   end
   local_options(s.info_win, { wrap = false, list = false })
 end
-local function hash_group(hash)
+local function relative_luminance(color)
+  local r, g, b = hex_rgb(color)
+  local function linear(channel)
+    channel = channel / 255
+    return channel <= 0.04045 and channel / 12.92 or ((channel + 0.055) / 1.055) ^ 2.4
+  end
+  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
+end
+local function contrast_ratio(first, second)
+  local a, b = relative_luminance(first), relative_luminance(second)
+  return (math.max(a, b) + 0.05) / (math.min(a, b) + 0.05)
+end
+local function readable_hash_color(color, muted)
+  if muted then color = blend_color(color, '#000000', 0.78) end
+  local backgrounds = { normal_background(), '#002b36', '#073642' }
+  local function minimum_contrast(candidate)
+    local minimum = math.huge
+    for _, background in ipairs(backgrounds) do
+      minimum = math.min(minimum, contrast_ratio(candidate, background))
+    end
+    return minimum
+  end
+  if minimum_contrast(color) >= 3 then return color end
+
+  local best, best_mix, best_contrast = color, 1, minimum_contrast(color)
+  for _, endpoint in ipairs({ '#000000', '#ffffff' }) do
+    for step = 1, 20 do
+      local mix = step / 20
+      local candidate = blend_color(endpoint, color, mix)
+      local contrast = minimum_contrast(candidate)
+      if contrast >= 3 then
+        if mix < best_mix then best, best_mix = candidate, mix end
+        break
+      elseif contrast > best_contrast then
+        best, best_contrast = candidate, contrast
+      end
+    end
+  end
+  return best
+end
+local function hash_group(hash, muted)
   local r, g, b = hash:match('(%x)%x(%x)%x(%x)')
   local function channel(c)
     local n = tonumber(c, 16)
     return math.min(0xdf, 0x20 + math.floor((n * 0x10 + (15 - n)) * 0.75))
   end
-  local name = 'GitBlameHash' .. r .. g .. b
-  vim.api.nvim_set_hl(0, name, { fg = channel(r) * 0x10000 + channel(g) * 0x100 + channel(b) })
+  local name = 'GitBlameHash' .. r .. g .. b .. (muted and 'Muted' or '')
+  if hash_group_cache[name] then return name end
+  local color = string.format('#%02x%02x%02x', channel(r), channel(g), channel(b))
+  color = readable_hash_color(color, muted)
+  vim.api.nvim_set_hl(0, name, { fg = color })
+  hash_group_cache[name] = true
   return name
 end
 local function update_panel_winbar(s)
@@ -374,19 +449,69 @@ local function save_frame(s)
   if valid(s.code_win) then f.code_view = view(s.code_win) end
 end
 local function setup_selected_highlight()
-  vim.api.nvim_set_hl(0, 'GitBlameSelected', { bg = '#002b36' })
-  vim.api.nvim_set_hl(0, 'GitBlameUnselected', { bg = '#073642' })
+  vim.api.nvim_set_hl(0, 'GitBlameSelected', { bg = '#002b36', bold = true })
+  vim.api.nvim_set_hl(0, 'GitBlameUniform', { bg = '#002b36' })
+  vim.api.nvim_set_hl(0, 'GitBlameUnselected', { bg = UNSELECTED_BG })
+  vim.api.nvim_set_hl(0, 'GitBlameUnselectedMeta', { fg = UNSELECTED_META_FG })
+end
+
+local function set_style_mark(bufnr, row, id, col, end_col, group)
+  if not id then return end
+  vim.api.nvim_buf_set_extmark(bufnr, ui_ns, row - 1, col, {
+    id = id, end_col = end_col, hl_group = group, hl_mode = 'combine', priority = 120,
+  })
 end
 
 local function highlight_selected(s)
   local r, f = current(s)
-  vim.api.nvim_buf_clear_namespace(s.buf, selected_ns, 0, -1)
   if not r then return end
   local selected = f.pinned_commit or r.commit
-  for row, entry in ipairs(f.rows) do
-    vim.api.nvim_buf_set_extmark(s.buf, selected_ns, row - 1, 0, { end_row = row, end_col = 0, hl_eol = true,
-      hl_group = entry.commit == selected and 'GitBlameSelected' or 'GitBlameUnselected', hl_mode = 'combine' })
+  local uniform = s.uniform_commit_style == true
+  if s.highlight_frame == f and s.selected_commit == selected and s.applied_uniform_style == uniform then return end
+
+  local function update_row(row, entry)
+    local is_selected = uniform or entry.commit == selected
+    local selection = { end_row = row, end_col = 0, hl_eol = true,
+      hl_group = uniform and 'GitBlameUniform' or (is_selected and 'GitBlameSelected' or 'GitBlameUnselected'),
+      hl_mode = 'combine', priority = 50 }
+    local old_selection = s.selection_marks[row]
+    if old_selection then selection.id = old_selection end
+    s.selection_marks[row] = vim.api.nvim_buf_set_extmark(s.buf, selected_ns, row - 1, 0, selection)
+
+    local styles = s.style_marks[row]
+    if styles then
+      local hash = hash_group(entry.commit, not is_selected)
+      set_style_mark(s.buf, row, styles.edge_id, 0, 3, hash)
+      set_style_mark(s.buf, row, styles.hash_id, 4, 12, hash)
+      if styles.date_id then
+        set_style_mark(s.buf, row, styles.date_id, styles.date_start,
+          is_selected and styles.date_end or styles.line_end,
+          is_selected and ('FugitiveBlameDate' .. styles.bucket) or 'GitBlameUnselectedMeta')
+      end
+    end
   end
+
+  if s.highlight_frame ~= f or s.applied_uniform_style ~= uniform then
+    vim.api.nvim_buf_clear_namespace(s.buf, selected_ns, 0, -1)
+    s.selection_marks, s.commit_rows = {}, {}
+    for row, entry in ipairs(f.rows) do
+      local rows = s.commit_rows[entry.commit] or {}
+      rows[#rows + 1] = row
+      s.commit_rows[entry.commit] = rows
+      update_row(row, entry)
+    end
+    s.highlight_frame = f
+  else
+    local affected = {}
+    for _, commit in ipairs({ s.selected_commit, selected }) do
+      if commit and not affected[commit] then
+        affected[commit] = true
+        for _, row in ipairs(s.commit_rows[commit] or {}) do update_row(row, f.rows[row]) end
+      end
+    end
+  end
+  s.selected_commit = selected
+  s.applied_uniform_style = uniform
 end
 local function sync_dim(s)
   if s.dimmed_buf then diffdim.clear_blame(s.dimmed_buf); s.dimmed_buf = nil end
@@ -419,14 +544,23 @@ local function paint(s, f)
   vim.api.nvim_buf_set_lines(s.buf, 0, -1, false, #lines > 0 and lines or { 'No lines to blame' })
   vim.bo[s.buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(s.buf, ui_ns, 0, -1)
+  vim.api.nvim_buf_clear_namespace(s.buf, selected_ns, 0, -1)
+  s.style_marks = {}
+  s.highlight_frame, s.selected_commit, s.applied_uniform_style = nil, nil, nil
   s.content_width = 1
   for row, line in ipairs(lines) do
     s.content_width = math.max(s.content_width, vim.fn.strdisplaywidth(line))
     local start, finish = line:find('%d%d%d%d%-%d%d%-%d%d %d%d:%d%d')
-    if start then
-      vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, start - 1, { end_col = finish, hl_group = 'FugitiveBlameDate' .. buckets[row] })
-    end
     local record, previous = f.rows[row], f.rows[row - 1]
+    local styles = not record.uncommitted and {} or nil
+    s.style_marks[row] = styles
+    if start and styles then
+      styles.date_id = vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, start - 1, {
+        end_col = finish, hl_group = 'FugitiveBlameDate' .. buckets[row],
+      })
+      styles.date_start, styles.date_end = start - 1, finish
+      styles.line_end, styles.bucket = #line, buckets[row]
+    end
     if record.uncommitted and (not previous or not previous.uncommitted) then
       s.content_width = math.max(s.content_width, vim.fn.strdisplaywidth('Not committed') + 2)
       vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, 0, {
@@ -434,8 +568,11 @@ local function paint(s, f)
       })
     end
     local group = record.uncommitted and 'Comment' or hash_group(record.commit)
-    vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, 0, { end_col = 3, hl_group = group })
-    if start then vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, 4, { end_col = 12, hl_group = group }) end
+    local edge_id = vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, 0, { end_col = 3, hl_group = group })
+    if styles then styles.edge_id = edge_id end
+    if start and styles then
+      styles.hash_id = vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, 4, { end_col = 12, hl_group = group })
+    end
   end
   fit_width(s)
   update_panel_winbar(s)
@@ -654,30 +791,48 @@ bind = function(s, b, code)
   end
   map('<C-o>', function() history(s, -1) end)
   map('<C-i>', function() history(s, 1) end)
-  local function move_block(direction)
-    local r, f, row = current(s); if not r then return end
-    for _ = 1, vim.v.count1 do
-      local hash = f.rows[row].commit
-      repeat row = row + direction until not f.rows[row] or f.rows[row].commit ~= hash
-      row = math.max(1, math.min(#f.rows, row))
-    end
+  local function move_pair_cursor(row)
     for _, win in ipairs({ s.win, s.code_win }) do
       if valid(win) then
         local col = win == s.win and 0 or vim.api.nvim_win_get_cursor(win)[2]
         vim.api.nvim_win_set_cursor(win, { row, col })
       end
     end
+  end
+  local function move_block(direction, same_hash_only)
+    local r, f, row = current(s); if not r then return end
+    if same_hash_only and f.pinned_commit then
+      local target = adjacent_same_commit_block(f, f.pinned_commit, row, direction, vim.v.count1)
+      if not target then
+        tell(direction > 0 and 'No next block for the dimmed commit' or 'No previous block for the dimmed commit')
+        return
+      end
+      move_pair_cursor(target)
+      preview(s)
+      return
+    end
+    for _ = 1, vim.v.count1 do
+      local hash = f.rows[row].commit
+      repeat row = row + direction until not f.rows[row] or f.rows[row].commit ~= hash
+      row = math.max(1, math.min(#f.rows, row))
+    end
+    move_pair_cursor(row)
     highlight_selected(s)
     preview(s)
   end
-  map(']]', function() move_block(1) end)
-  map('[[', function() move_block(-1) end)
+  map(']]', function() move_block(1, true) end)
+  map('[[', function() move_block(-1, true) end)
   map('gk', function() if s.preview == 'message' then s.preview = nil else s.preview = 'message' end; close_float(s); preview(s) end)
   map('<C-p>', function() if s.preview == 'diff' then s.preview = nil else s.preview = 'diff' end; close_float(s); preview(s) end)
-  map('gD', function() M.toggle_dim_for_buffer(b) end)
+  map('gd', function() M.toggle_dim_for_buffer(b) end)
+  map('f', function()
+    s.uniform_commit_style = not s.uniform_commit_style
+    highlight_selected(s)
+    tell(s.uniform_commit_style and 'Uniform blame highlighting enabled' or 'Selected commit highlighting enabled')
+  end)
   map('gC', function()
     local f = s.history[s.index]
-    if not f or not f.pinned_commit then tell('Pin a commit with gD first'); return end
+    if not f or not f.pinned_commit then tell('Pin a commit with gd first'); return end
     f.pin_info_hidden = not f.pin_info_hidden
     history_info(s)
   end)
@@ -706,7 +861,7 @@ bind = function(s, b, code)
   end
   for key, direction in pairs({ [')'] = 1, ['('] = -1 }) do
     local step = direction
-    map(key, function() move_block(step) end)
+    map(key, function() move_block(step, false) end)
   end
   map({ 'g?', '<F1>' }, function() require('git.features.help').show_text('Git blame', {
     '- / s / u    blame at the selected commit',
@@ -718,11 +873,12 @@ bind = function(s, b, code)
     '<CR> / i     inspect commit in a tab (q returns)',
     'o / O        open commit in split / tab',
     'd            compare before/after the change',
-    'gD           pin/unpin commit and dim other code lines',
+    'f            toggle uniform selected-row styling (no bold)',
+    'gd           pin/unpin commit and dim other code lines',
     'gC           hide/show the dimmed commit info',
-    'c            absolute / relative date heatmap',
-    '[[ / ]]      previous / next commit block (count supported)',
-    '( / )        previous / next commit block',
+    'c            set absolute / relative GitHeatmap mode',
+    '[[ / ]]      previous / next block; while dimmed, jump between same-hash blocks',
+    '( / )        previous / next commit block (cursor navigation)',
     'y            copy full hash',
     '.            put hash on command line',
     'A / C / D    full / hash / date panel width',
@@ -879,9 +1035,16 @@ function M.open(opts)
       local other = w == s.win and s.code_win or s.win
       if valid(other) and vim.api.nvim_win_get_cursor(other)[1] ~= row then
         local cursor = vim.api.nvim_win_get_cursor(other)
+        s.syncing_cursor = true
         pcall(vim.api.nvim_win_set_cursor, other, { row, cursor[2] })
+        s.syncing_cursor = false
       end
-      highlight_selected(s)
+      if s.syncing_cursor then return end
+      s.highlight_generation = (s.highlight_generation or 0) + 1
+      local highlight_generation = s.highlight_generation
+      vim.defer_fn(function()
+        if s.active and highlight_generation == s.highlight_generation then highlight_selected(s) end
+      end, 20)
       s.preview_generation = (s.preview_generation or 0) + 1
       local generation = s.preview_generation
       vim.defer_fn(function() if s.active and generation == s.preview_generation then preview(s) end end, 80)
@@ -938,6 +1101,21 @@ function M.open(opts)
   end
   load_initial()
   return b
+end
+
+function M.toggle()
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_get_current_buf()
+  local tab = vim.api.nvim_get_current_tabpage()
+  for _, s in pairs(sessions) do
+    if s.active and (s.win == win or s.code_win == win or s.origin == buf or s.buf == buf
+      or (valid(s.win) and vim.api.nvim_win_get_tabpage(s.win) == tab)
+    ) then
+      cleanup(s)
+      return true
+    end
+  end
+  return M.open()
 end
 
 function M.setup(group)

@@ -12,7 +12,7 @@ return {
     "GgraphBackend", "GCherryPick", "GworktreeSync", "UndoFugitive", "RedoFugitive", "DiffDim"
   },
   keys = {
-    { "<Leader>gb", "<cmd>GitBlame<CR>", silent = true },
+    { "<Leader>gb", function() require('git.features.blame').toggle() end, silent = true, desc = "Toggle Git blame panel" },
     { "<Leader>gs", function() require('git.features.status').open({ focus = 'unstaged', split = true }) end, silent = true },
     { "<Leader>gg", "<cmd>GeditHeadAtFile<CR>", silent = true },
     { "<Leader>gr", "<cmd>Git! rm --cached %<CR>", silent = true },

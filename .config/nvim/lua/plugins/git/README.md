@@ -237,8 +237,8 @@ ongoing/aborted rebase cases.
 
 ## Blame
 
-`<Leader>gb` and `:GitBlame` open an independent, Git-backed blame panel beside
-its code window. Panel names use the stable repository/revision/path identity
+`<Leader>gb` toggles the current tab's independent, Git-backed blame panel;
+`:GitBlame` opens or focuses it. Panel names use the stable repository/revision/path identity
 `git-blame://<root>//<revision-or-worktree>/<path>` rather than a session counter.
 Initial blame loads into a hidden buffer before the split is opened at its final
 content width; moving away cancels that pending opening. View restoration runs
@@ -254,18 +254,24 @@ date, and author appear only on the first row of each contiguous commit group;
 continuations contain only the marker, without trailing spaces. The panel disables
 list characters and fits its content width plus one right-padding column while
 reserving room for code. The
-commit under the cursor uses `#002b36` for all its rows; all other
-commits use `#073642`. `gD` in either pane pins that commit's highlight and dims other
+commit under the cursor uses `#002b36` for all its rows by default; `f`
+switches to a uniform view where every row uses that background, each hash keeps
+its full commit color, all dates retain the recency heatmap, and bold is removed.
+DiffDim pinning is unchanged. All other
+commits use `#073642`; their hashes are muted and date/author text uses the
+theme's subdued `#586e75` foreground. `gd` in either pane pins that commit and dims other
 lines in the paired code buffer until toggled, `:DiffDim clear`, or closing blame.
 Bare `:DiffDim` also selects the cursor-line commit while blame is open. Pinning
 automatically shows that commit's shared `C` metadata in a float. `gC` hides or
 restores the float without clearing the dim; unpinning restores the viewed
-revision's info when browsing history. There is no special cursor-row color,
-underline, or foreground override.
+revision's info when browsing history. Selected-commit rows are bold; other rows
+use muted hash and date/author foregrounds.
 Uncommitted groups show only a right-aligned virtual `Not committed` label, with
-no date or zero hash; tab settings do not affect its alignment. Dates retain the existing 13-color
-heatmap, including the global absolute/relative mode and ColorScheme refresh.
-The independent `GitHeatmap`/Snacks file-background toggle is unchanged.
+no date or zero hash; tab settings do not affect its alignment. Dates on the
+selected commit retain the 13-color recency palette. Other commits use the same
+subdued `#586e75` foreground for dates and author names. `c` sets the shared
+absolute or relative recency mode used by `GitHeatmap`; its 13-color
+file-background heatmap and Snacks toggle are unchanged.
 
 | Keys in blame | Action |
 | --- | --- |
@@ -278,11 +284,12 @@ The independent `GitHeatmap`/Snacks file-background toggle is unchanged.
 | `<CR>` / `i` / double click | Open the commit at its file/diff line in another tab; `q` or jumping back to blame with `Ctrl-o` returns to the preserved blame/code pair |
 | `o` / `O` | Open the commit in a split/tab, keeping blame |
 | `d` | Open an immutable before/after diff in a new tab |
-| `gD` | Pin/unpin the cursor-line commit and dim other code lines |
+| `f` | Toggle uniform selected-row background/heatmap without bold |
+| `gd` | Pin/unpin the cursor-line commit and dim other code lines |
 | `gC` | Hide/show the pinned commit info while dimming |
-| `c` | Switch absolute/relative date coloring |
-| `[[` / `]]` | Previous/next contiguous commit block in either pane; count supported |
-| `(` / `)` | Previous/next contiguous commit block |
+| `c` | Set absolute/relative recency mode for `GitHeatmap` |
+| `[[` / `]]` | Previous/next block; while dimmed, jump between blocks with the pinned hash while keeping that target; count supported |
+| `(` / `)` | Previous/next contiguous commit block by moving the cursor |
 | `y` | Copy the full commit hash |
 | `.` | Insert the commit hash on the command line |
 | `A` / `C` / `D` | Fit full content/show hash/show date columns |
