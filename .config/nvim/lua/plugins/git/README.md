@@ -29,6 +29,15 @@ reverting the commit that removed them.
 | `GbranchSpinoff [commit]`, `GbranchSpinout [commit]` | Move outgoing commits, optionally starting at a selected commit, to a new tracking branch |
 | `GitWipEnable`, `GitWipDisable`, `GitWipSave`, `GitWipLog`, `GitWipRestore [number]` | Save, inspect, and restore tracked work-in-progress snapshots |
 
+Successful `:Git` mutations refresh repository panels without opening a result
+window. Read-only commands such as `:Git log` still open their output. From a
+Git panel, commands that normally use a terminal run in the background, while
+the commit/rebase editor still opens when needed. Elsewhere, their terminal
+closes after completion. Failures are reported by notification, including the
+last Git output lines. Use `:Git!` to keep a terminal open explicitly, or to
+show output from a synchronous mutation as a notification. Interactive patch
+mode still opens a terminal for its prompts.
+
 In the status panel, `<Tab>` opens or closes the section under the cursor; an
 arrow in the gutter shows its state. Untracked, unstaged, staged, and commit sections
 start open. Other sections start closed when they contain at least three items.
