@@ -31,6 +31,28 @@ assert(vim.wait(5000, function()
 end, 20))
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'cold open did not focus unstaged entry')
 local function press(key) vim.fn.maparg(key, 'n', false, true).callback() end
+local untracked_row
+for row, line in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
+  if line:match('^Untracked files') then untracked_row = row; break end
+end
+assert(untracked_row and vim.wo.foldenable and vim.wo.foldcolumn == '0' and vim.wo.signcolumn == 'yes:1')
+local head = vim.api.nvim_buf_get_lines(b, 0, 1, false)[1]
+local subject = assert(head:find('initial', 1, true))
+local ns = vim.api.nvim_create_namespace('fugitive_status_icons')
+local muted, heading_priority = nil, nil
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(b, ns, { 0, 0 }, { 0, -1 }, { details = true })) do
+  if mark[4].hl_group == 'RainbowDelimiterBlue' then heading_priority = mark[4].priority end
+  if mark[3] == subject - 1 and mark[4].hl_group == 'GitStatusCommitSubject' then
+    muted = mark[4].priority
+  end
+end
+assert(muted and heading_priority and muted > heading_priority,
+  'HEAD tip subject highlight is covered by the full-heading highlight')
+vim.api.nvim_win_set_cursor(0, { untracked_row, 0 })
+press('<Tab>')
+assert(vim.fn.foldclosed(untracked_row) == untracked_row, 'Tab did not close the status section')
+press('<Tab>')
+assert(vim.fn.foldclosed(untracked_row) == -1, 'Tab did not reopen the status section')
 press('gU')
 assert(vim.api.nvim_get_current_line():match('new%.txt$'), 'gU did not focus untracked entry')
 press('gu')
@@ -95,6 +117,21 @@ end, 20))
 press('gU')
 status.refresh_buffer(b)
 assert(vim.api.nvim_get_current_line():match('new%.txt$'), 'missing section left a delayed cursor jump')
+local status_win = vim.api.nvim_get_current_win()
+local normal = vim.api.nvim_create_buf(true, false)
+vim.api.nvim_buf_set_lines(normal, 0, -1, false, { 'one', 'two', 'three' })
+vim.api.nvim_win_set_buf(status_win, normal)
+assert(not vim.wo.foldtext:find('git.features.status_folds', 1, true),
+  'status foldtext leaked into a normal file in the same window')
+assert(not vim.wo.winhighlight:find('GitStatusFolded', 1, true),
+  'status folded highlight leaked into a normal file')
+assert(not vim.wo.fillchars:find('fold: ', 1, true) and vim.wo.signcolumn ~= 'yes:1',
+  'status gutter/fill settings leaked into a normal file')
+vim.cmd('1,3fold')
+assert(vim.fn.foldtextresult(1) ~= 'one', 'normal folding kept the status heading formatter')
+vim.api.nvim_win_set_buf(status_win, b)
+assert(vim.wo.foldtext:find('git.features.status_folds', 1, true),
+  'returning to status did not restore its fold formatter')
 vim.api.nvim_buf_delete(b, { force = true })
 vim.fn.delete(root, 'rf')
 print('PASS: cold/warm focus, gu/gU/gx, help labels, missing unstaged section')

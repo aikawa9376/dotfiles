@@ -5,6 +5,7 @@ local commands = require("git.features.commands")
 local syntax_highlight = require("git.features.syntax_highlight")
 local worktree = require("git.features.worktree")
 local status_renderer = require("git.features.status_renderer")
+local status_folds = require('git.features.status_folds')
 local operation = require('git.features.operation')
 local range_diff = require('git.features.range_diff')
 local repository_health = require('git.features.repository_health')
@@ -28,33 +29,6 @@ local status_dirty_by_buf = {}
 local status_reload_by_buf = {}
 local pending_status_focus_by_buf = {}
 
-local status_heading_highlights = {
-  { '^Head:', 'RainbowDelimiterBlue' },
-  { '^Help:', 'Comment' },
-  { '^Unmerged paths %(', 'RainbowDelimiterRed' },
-  { '^Untracked files %(', 'RainbowDelimiterOrange' },
-  { '^Unstaged changes %(', 'RainbowDelimiterYellow' },
-  { '^Staged changes %(', 'RainbowDelimiterGreen' },
-  { '^Unpulled ', 'RainbowDelimiterCyan' },
-  { '^Unpushed %[only%] %(', 'RainbowDelimiterViolet' },
-  { '^Commits %[latest 15%+%] %(', 'RainbowDelimiterViolet' },
-  { '^Submodules %(', 'RainbowDelimiterBlue' },
-  { '^Worktrees %(', 'RainbowDelimiterViolet' },
-  { '^Stashes %(', 'RainbowDelimiterOrange' },
-  { '^Pull requests %(', 'RainbowDelimiterGreen' },
-  { '^Index flags %[local%]', 'RainbowDelimiterCyan' },
-  { '^Loading repository details', 'Comment' },
-  { '^Bisecting', 'RainbowDelimiterYellow' },
-  { ' in progress', 'RainbowDelimiterYellow' },
-}
-
-local function status_heading_highlight(line)
-  for _, item in ipairs(status_heading_highlights) do
-    if line:match(item[1]) then return item[2] end
-  end
-  return nil
-end
-
 local function is_status_buffer(bufnr)
   return utils.is_valid_buf(bufnr)
     and (vim.b[bufnr].custom_git_status == true or vim.bo[bufnr].filetype == 'fugitivestatus')
@@ -62,9 +36,8 @@ end
 
 local function configure_status_window(winid)
   if not (winid and vim.api.nvim_win_is_valid(winid)) then return end
-  vim.api.nvim_set_option_value('foldmethod', 'manual', { win = winid })
-  vim.api.nvim_set_option_value('foldenable', false, { win = winid })
-  vim.api.nvim_set_option_value('foldcolumn', '0', { win = winid })
+  status_folds.setup_window(winid)
+  status_folds.rebuild(vim.api.nvim_win_get_buf(winid))
 end
 
 local function stash_ref_from_line(line)
@@ -340,6 +313,7 @@ end
 
 local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts)
   if not utils.is_valid_buf(bufnr) then return end
+  status_folds.capture(bufnr)
   opts = opts or {}
   local work_tree = utils.get_buf_work_tree(bufnr)
   if not work_tree then return end
@@ -414,6 +388,11 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
   local stash_list = snapshot.stash_list
   local pull_requests = pull_requests_by_buf[bufnr]
   local flag_state = snapshot.flag_state
+  if index_flags_expanded_by_buf[bufnr] == nil and flag_state and not snapshot.loading_details
+    and #(flag_state.entries or {}) > 0
+  then
+    index_flags_expanded_by_buf[bufnr] = #(flag_state.entries or {}) < 3
+  end
 
   local function build_final_lines(commit_lines)
     local final_lines = {}
@@ -567,6 +546,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
     end
   end, 5)
   restore_status_cursors(bufnr, cursor_anchors)
+  status_folds.rebuild(bufnr)
   require('git.features.push_progress').render(bufnr)
   commit_body.refresh(bufnr)
   local focus = pending_status_focus_by_buf[bufnr]
@@ -1248,6 +1228,7 @@ function M.setup(group)
           index_flags_by_buf[b] = nil
           index_flags_expanded_by_buf[b] = nil
           status_snapshot_by_buf[b] = nil
+          status_folds.cleanup(b)
           status_renderer.cleanup(b)
           pcall(vim.api.nvim_del_augroup_by_id, bufgroupt)
         end,
@@ -1382,7 +1363,7 @@ function M.setup(group)
             in_unpulled = false
           end
 
-          local heading_group = status_heading_highlight(line)
+          local heading_group = status_folds.heading_group(line)
           if heading_group then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = heading_group })
           elseif line:match('^Good:') then
@@ -1405,6 +1386,17 @@ function M.setup(group)
             local flag_group = line:match('%[missing%]') and 'DiagnosticError'
               or (line:match('%[modified%]') and 'DiagnosticWarn' or 'Comment')
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = flag_group })
+          end
+
+          local subject_start = (line:match('^Head: .-  ()')
+            or line:match('^Upstream: .-  ()')
+            or line:match('^Push: .-  ()'))
+          if subject_start then
+            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, subject_start - 1, {
+              end_col = #line,
+              hl_group = 'GitStatusCommitSubject',
+              priority = 5000,
+            })
           end
 
           local commit_hash = line:match('^(%x%x%x%x%x%x%x+)%s')
@@ -2440,6 +2432,11 @@ function M.setup(group)
         local context = status_context_at_cursor(current_operation)
         local groups = {}
         local contextual = contextual_action_group(context, current_operation)
+        local line = vim.api.nvim_get_current_line()
+        if status_folds.is_header(line) or line:match('^Index flags %[local%]') then
+          contextual = contextual or { title = 'Section', actions = {} }
+          table.insert(contextual.actions, 1, { key = '<Tab>', label = 'Toggle section' })
+        end
         if contextual then table.insert(groups, contextual) end
         table.insert(groups, repository_action_group(context, health, current_operation))
 
@@ -2561,6 +2558,14 @@ function M.setup(group)
 
       vim.keymap.set('n', '<CR>', open_status_item, { buffer = b, nowait = true, silent = true })
       vim.keymap.set('n', '<2-LeftMouse>', open_status_item, { buffer = b, nowait = true, silent = true })
+      vim.keymap.set('n', '<Tab>', function()
+        if vim.api.nvim_get_current_line():match('^Index flags %[local%]') then
+          index_flags_expanded_by_buf[b] = not index_flags_expanded_by_buf[b]
+          refresh_cached()
+        else
+          status_folds.toggle(b, vim.api.nvim_win_get_cursor(0)[1])
+        end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Toggle status section' })
 
       vim.keymap.set('n', 'gS', function()
         if is_cursor_on_commit_header() then
@@ -2796,6 +2801,19 @@ function M.setup(group)
     group = group,
     pattern = 'git-status://*',
     callback = function() configure_status_window(vim.api.nvim_get_current_win()) end,
+  })
+
+  vim.api.nvim_create_autocmd('BufWinEnter', {
+    group = group,
+    callback = function(ev)
+      if is_status_buffer(ev.buf) or vim.api.nvim_buf_get_name(ev.buf):match('^git%-status://') then return end
+      status_folds.restore_window(vim.api.nvim_get_current_win())
+    end,
+  })
+
+  vim.api.nvim_create_autocmd('WinClosed', {
+    group = group,
+    callback = function(ev) status_folds.forget_window(tonumber(ev.match)) end,
   })
 
   vim.api.nvim_create_user_command('GitStatus', function()

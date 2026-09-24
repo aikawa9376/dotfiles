@@ -27,6 +27,12 @@ reverting the commit that removed them.
 | `Ggraph [native / flog]` | Open either graph; omitted backend uses the selected default |
 | `GgraphBackend [native / flog]` | Change the default for graph keys; no argument opens a picker |
 
+In the status panel, `<Tab>` opens or closes the section under the cursor; an
+arrow in the gutter shows its state. Untracked, unstaged, staged, and commit sections
+start open. Other sections start closed when they contain at least three items.
+The choice is preserved across status refreshes. Enter keeps each section's
+existing action, including commit and pull-request scope changes.
+
 Existing leader mappings are owned by `init.lua`. `<C-Space>` in repository
 panels opens the selected graph. The default is `flog`, including the existing `<C-Space>` panel keys. Use
 `:GgraphBackend native` for the independent graph, or `:GgraphBackend flog` to switch back.
