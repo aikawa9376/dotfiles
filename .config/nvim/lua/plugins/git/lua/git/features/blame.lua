@@ -232,28 +232,22 @@ local function close_float(s)
   s.float_win = nil
 end
 local function adjacent_same_commit_block(f, commit, row, direction, count)
-  local blocks = {}
-  for first, entry in ipairs(f.rows) do
-    if entry.commit == commit and (first == 1 or f.rows[first - 1].commit ~= commit) then
-      local last = first
-      while f.rows[last + 1] and f.rows[last + 1].commit == commit do last = last + 1 end
-      blocks[#blocks + 1] = { first = first, last = last }
-    end
-  end
-  local passed = 0
   if direction > 0 then
-    for _, block in ipairs(blocks) do
-      if block.first > row then
-        passed = passed + 1
-        if passed == count then return block.first end
+    for first = row + 1, #f.rows do
+      if f.rows[first].commit == commit and f.rows[first - 1].commit ~= commit then
+        count = count - 1
+        if count == 0 then return first end
       end
     end
   else
-    for index = #blocks, 1, -1 do
-      local block = blocks[index]
-      if block.last < row then
-        passed = passed + 1
-        if passed == count then return block.first end
+    for last = row - 1, 1, -1 do
+      if f.rows[last].commit == commit and (not f.rows[last + 1] or f.rows[last + 1].commit ~= commit) then
+        count = count - 1
+        if count == 0 then
+          local first = last
+          while first > 1 and f.rows[first - 1].commit == commit do first = first - 1 end
+          return first
+        end
       end
     end
   end
@@ -367,17 +361,19 @@ local function relative_luminance(color)
   end
   return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
 end
-local function contrast_ratio(first, second)
-  local a, b = relative_luminance(first), relative_luminance(second)
-  return (math.max(a, b) + 0.05) / (math.min(a, b) + 0.05)
-end
 local function readable_hash_color(color, muted)
   if muted then color = blend_color(color, '#000000', 0.78) end
-  local backgrounds = { normal_background(), '#002b36', '#073642' }
+  local backgrounds = {
+    relative_luminance(normal_background()),
+    relative_luminance('#002b36'),
+    relative_luminance(UNSELECTED_BG),
+  }
   local function minimum_contrast(candidate)
+    local luminance = relative_luminance(candidate)
     local minimum = math.huge
     for _, background in ipairs(backgrounds) do
-      minimum = math.min(minimum, contrast_ratio(candidate, background))
+      minimum = math.min(minimum,
+        (math.max(luminance, background) + 0.05) / (math.min(luminance, background) + 0.05))
     end
     return minimum
   end
@@ -1035,11 +1031,8 @@ function M.open(opts)
       local other = w == s.win and s.code_win or s.win
       if valid(other) and vim.api.nvim_win_get_cursor(other)[1] ~= row then
         local cursor = vim.api.nvim_win_get_cursor(other)
-        s.syncing_cursor = true
         pcall(vim.api.nvim_win_set_cursor, other, { row, cursor[2] })
-        s.syncing_cursor = false
       end
-      if s.syncing_cursor then return end
       s.highlight_generation = (s.highlight_generation or 0) + 1
       local highlight_generation = s.highlight_generation
       vim.defer_fn(function()
@@ -1107,13 +1100,20 @@ function M.toggle()
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_get_current_buf()
   local tab = vim.api.nvim_get_current_tabpage()
+  local matching_buffer, in_tab
   for _, s in pairs(sessions) do
-    if s.active and (s.win == win or s.code_win == win or s.origin == buf or s.buf == buf
-      or (valid(s.win) and vim.api.nvim_win_get_tabpage(s.win) == tab)
-    ) then
-      cleanup(s)
-      return true
+    if s.active and valid(s.win) and vim.api.nvim_win_get_tabpage(s.win) == tab then
+      if s.win == win or s.code_win == win then
+        cleanup(s)
+        return true
+      end
+      if s.origin == buf or s.buf == buf then matching_buffer = s end
+      in_tab = in_tab or s
     end
+  end
+  if matching_buffer or in_tab then
+    cleanup(matching_buffer or in_tab)
+    return true
   end
   return M.open()
 end
