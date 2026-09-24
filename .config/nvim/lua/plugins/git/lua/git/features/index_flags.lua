@@ -51,7 +51,40 @@ local function display_line(entry)
   return ('  %-7s %s%s'):format(entry.flag, entry.path, state)
 end
 
-function M.inspect(work_tree)
+local function fingerprint(path)
+  local stat = (vim.uv or vim.loop).fs_lstat(path)
+  if not stat then return 'missing' end
+  local function time(value)
+    return value and (tostring(value.sec) .. ':' .. tostring(value.nsec)) or ''
+  end
+  return table.concat({ stat.type or '', stat.size or 0, stat.mode or 0,
+    stat.ino or 0, time(stat.mtime), time(stat.ctime) }, ':')
+end
+
+local function index_path(work_tree)
+  local result = run(work_tree, { 'rev-parse', '--git-path', 'index' })
+  if result.code ~= 0 then return nil end
+  local path = vim.trim(result.stdout or '')
+  if path == '' then return nil end
+  if not vim.startswith(path, '/') then path = vim.fs.joinpath(work_tree, path) end
+  return path
+end
+
+local function unchanged(work_tree, previous)
+  local cache = previous and previous.cache
+  if not cache or cache.work_tree ~= work_tree then return false end
+  if fingerprint(cache.index_path) ~= cache.index_fingerprint then return false end
+  for _, entry in ipairs(previous.entries) do
+    if entry.mode == '160000' then return false end
+    if fingerprint(vim.fs.joinpath(work_tree, entry.path)) ~= cache.files[entry.path] then
+      return false
+    end
+  end
+  return true
+end
+
+function M.inspect(work_tree, previous)
+  if unchanged(work_tree, previous) then return previous end
   local result = run(work_tree, { 'ls-files', '-v', '-z' })
   if result.code ~= 0 then
     return { entries = {}, changed_count = 0, error = vim.trim(result.stderr or 'git ls-files failed') }
@@ -82,6 +115,20 @@ function M.inspect(work_tree)
     end
   end
   table.sort(state.entries, function(left, right) return left.path < right.path end)
+  local path = previous and previous.cache and previous.cache.work_tree == work_tree
+    and previous.cache.index_path or index_path(work_tree)
+  if path then
+    local files = {}
+    for _, entry in ipairs(state.entries) do
+      files[entry.path] = fingerprint(vim.fs.joinpath(work_tree, entry.path))
+    end
+    state.cache = {
+      work_tree = work_tree,
+      index_path = path,
+      index_fingerprint = fingerprint(path),
+      files = files,
+    }
+  end
   return state
 end
 
