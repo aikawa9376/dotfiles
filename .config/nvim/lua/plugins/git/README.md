@@ -26,12 +26,21 @@ reverting the commit that removed them.
 | `GeditHeadAtFile`, `GitCommit [revision]`, `GitPush` | File's latest commit, commit detail, existing force-with-lease push action |
 | `Ggraph [native / flog]` | Open either graph; omitted backend uses the selected default |
 | `GgraphBackend [native / flog]` | Change the default for graph keys; no argument opens a picker |
+| `GbranchSpinoff`, `GbranchSpinout` | Move the current branch's outgoing commits to a new tracking branch |
 
 In the status panel, `<Tab>` opens or closes the section under the cursor; an
 arrow in the gutter shows its state. Untracked, unstaged, staged, and commit sections
 start open. Other sections start closed when they contain at least three items.
 The choice is preserved across status refreshes. Enter keeps each section's
 existing action, including commit and pull-request scope changes.
+
+In `Gbranch`, `bs` spins off the current branch and checks out the new branch;
+`bS` spins out and stays on the current branch when the worktree is clean. If
+there are uncommitted changes, spin-out checks out the new branch so those
+changes follow it. Both actions make the new branch track the original branch.
+When the original branch has outgoing commits, it is moved back to the merge
+base with its upstream; without an upstream or outgoing commits it stays put.
+The branch name and any reset are confirmed before changing refs.
 
 Existing leader mappings are owned by `init.lua`. `<C-Space>` in repository
 panels opens the selected graph. The default is `flog`, including the existing `<C-Space>` panel keys. Use
