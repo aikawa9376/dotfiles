@@ -1,5 +1,7 @@
+local cached_icons
 local function get()
-  return {
+  if cached_icons then return cached_icons end
+  cached_icons = {
     "\27[36m\27[0m :cod-account",
     "\27[36m\27[0m :cod-activate_breakpoints",
     "\27[36m\27[0m :cod-add",
@@ -10996,5 +10998,6 @@ local function get()
     "\27[36m\27[0m :weather-wind_west",
     "\27[36m\27[0m :weather-windy",
   }
+  return cached_icons
 end
 return { get = get }
