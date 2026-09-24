@@ -19,7 +19,13 @@ return {
     { "<Leader>gM", "<cmd>Git! commit -m 'tmp'<CR>", silent = true },
     { "<Leader>gA", "<cmd>Gwrite<CR>", silent = true },
     { "g<space>p", "<cmd>GitPush<CR>", silent = true },
-    { "g<space>l", "<cmd>FugitiveLog<CR>", silent = true },
+    { "g<space>l", "<cmd>Glog<CR>", silent = true },
+    { "g<space>l", function()
+      local first = math.min(vim.fn.line('v'), vim.fn.line('.'))
+      local last = math.max(vim.fn.line('v'), vim.fn.line('.'))
+      vim.cmd('normal! \27')
+      vim.api.nvim_cmd({ cmd = 'Glog', range = { first, last } }, {})
+    end, mode = 'x', silent = true, desc = 'Log history for selected lines' },
     { "g<space>d", "<cmd>G diff<CR>", silent = true },
     { "g<space>r", "<cmd>Greflog<CR>", silent = true },
     { "g<space>s", "<cmd>G show<CR>", silent = true },

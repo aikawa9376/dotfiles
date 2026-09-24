@@ -206,6 +206,62 @@ function M.expand_file(buf, path)
   s.expanded[path] = true
   return render_preserving_message(s)
 end
+function M.focus_range(buf, focus)
+  local s = state(buf)
+  if not s or vim.api.nvim_get_current_buf() ~= s.buf or type(focus) ~= 'table' then return false end
+  local entry
+  for _, candidate in ipairs(s.model.entries) do
+    if candidate.path == focus.path or candidate.old_path == focus.path then
+      entry = candidate
+      break
+    end
+  end
+  if not entry then return false end
+  local patch = model_api.patch(s.model, entry)
+  if not patch then return false end
+  if not s.expanded[entry.path] then
+    s.expanded[entry.path] = true
+    if not render_preserving_message(s) then
+      s.expanded[entry.path] = nil
+      return false
+    end
+  end
+
+  local row_by_patch, header_row = {}, nil
+  for row, info in pairs(s.rows) do
+    if info.entry == entry then
+      if info.header then header_row = row end
+      if info.patch_row then row_by_patch[info.patch_row] = row end
+    end
+  end
+  local first = tonumber(focus.first) or 1
+  local last = first + math.max(tonumber(focus.count) or 1, 1) - 1
+  local new_line, best_row, best_distance, best_priority
+  for index, line in ipairs(patch) do
+    local hunk_start = line:match('^@@ %-%d+,?%d* %+(%d+)')
+    if hunk_start then
+      new_line = tonumber(hunk_start)
+    elseif new_line and line:sub(1, 1) == ' ' then
+      new_line = new_line + 1
+    elseif new_line and (line:sub(1, 1) == '+' or line:sub(1, 1) == '-') then
+      local row = row_by_patch[index]
+      if row then
+        local distance = math.max(first - new_line, new_line - last, 0)
+        local priority = line:sub(1, 1) == '+' and 0 or 1
+        if not best_row or distance < best_distance
+          or (distance == best_distance and priority < best_priority) then
+          best_row, best_distance, best_priority = row, distance, priority
+        end
+      end
+      if line:sub(1, 1) == '+' then new_line = new_line + 1 end
+    end
+  end
+  local target = best_row or header_row
+  if not target then return false end
+  local delta = vim.api.nvim_buf_line_count(s.buf) - s.line_count
+  vim.api.nvim_win_set_cursor(0, { target + delta, 0 })
+  return true
+end
 function M.write(buf)
   local s = state(buf)
   if not s or s.writing then return false end

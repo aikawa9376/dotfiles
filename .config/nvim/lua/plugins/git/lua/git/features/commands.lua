@@ -836,11 +836,22 @@ END {
   local preview_work_tree = nil
   local preview_update_timer = nil
   local preview_update_pending_commit = nil
+  local preview_update_pending_focus = nil
 
   local function open_with_fugitive(win, commit, work_tree)
     return vim.api.nvim_win_call(win, function()
       return require('git.features.commit').open({ work_tree = work_tree, revision = commit })
     end)
+  end
+
+  local function position_preview(win, buf, focus)
+    if focus and vim.b[buf].custom_git_commit then
+      local ok, moved = pcall(vim.api.nvim_win_call, win, function()
+        return require('git.features.commit').focus_range(buf, focus)
+      end)
+      if ok and moved then return end
+    end
+    pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
   end
 
   function M.is_preview_open()
@@ -855,6 +866,7 @@ END {
     preview_commit = nil
     preview_buf = nil
     preview_work_tree = nil
+    preview_update_pending_focus = nil
     if preview_update_timer then
       pcall(vim.fn.timer_stop, preview_update_timer)
       preview_update_timer = nil
@@ -887,7 +899,7 @@ END {
     return true
   end
 
-  function M.open_preview_window(commit, work_tree)
+  function M.open_preview_window(commit, work_tree, focus)
     if not commit or commit == '' then
       return
     end
@@ -907,7 +919,7 @@ END {
         vim.api.nvim_set_option_value('filetype', 'git', { buf = buf })
         vim.api.nvim_exec_autocmds('FileType', { buffer = buf })
       end
-      pcall(vim.api.nvim_win_set_cursor, preview_win, {1, 0})
+      position_preview(preview_win, buf, focus)
       if vim.api.nvim_win_is_valid(current_win) then
         vim.api.nvim_set_current_win(current_win)
       end
@@ -995,20 +1007,23 @@ END {
     preview_buf = buf
   end
 
-  function M.update_preview(commit)
+  function M.update_preview(commit, focus)
     if not M.is_preview_open() then return end
     if not commit or commit == '' then
       return
     end
     if preview_commit == commit then
+      if focus and preview_buf and vim.api.nvim_buf_is_valid(preview_buf) then
+        position_preview(preview_win, preview_buf, focus)
+      end
       return
     end
 
     -- Use git show to load the commit; open_preview_window will reuse the window/buffer.
-    M.open_preview_window(commit, preview_work_tree)
+    M.open_preview_window(commit, preview_work_tree, focus)
   end
 
-  function M.toggle_preview(commit)
+  function M.toggle_preview(commit, focus)
     if M.is_preview_open() then
       M.close_preview()
       return false
@@ -1016,12 +1031,13 @@ END {
     if not commit or commit == '' then
       return false
     end
-    M.open_preview_window(commit)
+    M.open_preview_window(commit, nil, focus)
     return true
   end
 
-  function M.schedule_update_preview(commit)
+  function M.schedule_update_preview(commit, focus)
     preview_update_pending_commit = commit
+    preview_update_pending_focus = focus
     if preview_update_timer then
       pcall(vim.fn.timer_stop, preview_update_timer)
       preview_update_timer = nil
@@ -1029,9 +1045,11 @@ END {
     preview_update_timer = vim.fn.timer_start(120, function()
       preview_update_timer = nil
       local to_commit = preview_update_pending_commit
+      local to_focus = preview_update_pending_focus
       preview_update_pending_commit = nil
+      preview_update_pending_focus = nil
       vim.schedule(function()
-        M.update_preview(to_commit)
+        M.update_preview(to_commit, to_focus)
       end)
     end)
   end

@@ -17,7 +17,7 @@ reverting the commit that removed them.
 | `Gread[!] [object]` | Replace buffer content from the index/object; a range inserts after its last line; unsaved replacement requires `!` |
 | `Gdiff`, `Gdiffsplit`, `Gvdiffsplit`, `Ghdiffsplit [revision]` | Diff the current file against index/revision; an index buffer defaults to its working file; `!` shows available conflict sides |
 | `Gclog[!]`, `Gllog[!] [args]` | File history (repository history outside a file) in quickfix/location list |
-| `Glog`, `FugitiveLog [args]` | Custom log panel |
+| `Glog`, `FugitiveLog [args]` | Custom log panel; a line range follows the selected file lines with `git log -L` |
 | `Gblame`, `GitBlame`, `GitHeatmap` | Custom paired blame and heatmap |
 | `DiffDim [revision / latest / older / newer / clear]` | Dim lines outside a Git diff or selected blame commit |
 | `Gbranch`, `Gstash`, `Greflog`, `Gworktree`, `GworktreeSync` | Existing repository panels/actions |
@@ -37,6 +37,13 @@ closes after completion. Failures are reported by notification, including the
 last Git output lines. Use `:Git!` to keep a terminal open explicitly, or to
 show output from a synchronous mutation as a notification. Interactive patch
 mode still opens a terminal for its prompts.
+
+In a file buffer, select lines and press `g<Space>l` to open their history in
+the custom log panel. `:10,20Glog` and `:10,20FugitiveLog` do the same; without
+a range, `g<Space>l` and `Glog` keep their repository-wide log behavior. The
+range starts from the displayed revision in a Git object buffer, or `HEAD` in a
+worktree file. In a line-range log, `<C-p>` and `<CR>` open the selected commit
+with the corresponding file expanded and the cursor on its relevant diff line.
 
 In the status panel, `<Tab>` opens or closes the section under the cursor; an
 arrow in the gutter shows its state. Untracked, unstaged, staged, and commit sections

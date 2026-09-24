@@ -5,6 +5,7 @@ local help = require("git.features.help")
 local notes = require("git.features.notes")
 local commit_body = require('git.features.commit_body')
 local commit_highlight = require("git.features.commit_highlight")
+local objects = require('git.objects')
 
 local shortstat_cache = {}
 local shortstat_jobs = {}
@@ -13,6 +14,11 @@ local function get_commit_at_line(bufnr, lnum)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
   if not line then return nil end
   return line:match("^([^\t]+)")
+end
+
+local function focus_for_commit(bufnr, commit)
+  local targets = vim.b[bufnr].fugitive_log_line_focus
+  return type(targets) == 'table' and targets[commit] or nil
 end
 
 local function apply_highlights(bufnr)
@@ -28,28 +34,31 @@ local function apply_highlights(bufnr)
   if args == "" then args = "HEAD" end
   local target = vim.fn.trim(args)
 
-  local current_branch = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref HEAD"):gsub("\n", "")
+  local line_history = vim.b[bufnr].fugitive_log_line_history
   local diverged_commits = {}
   local unpushed_commits = {}
   local cmd_diverged = nil
   local cmd_unpushed = nil
 
-  if target == "HEAD" or target == current_branch then
-    -- If viewing current branch, compare against upstream for unpushed (Red)
-    local upstream = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
-    if vim.v.shell_error == 0 and upstream ~= "" then
-      cmd_unpushed = git_prefix .. "log " .. target .. " --not " .. upstream .. " --format='%h'"
-    end
-  else
-    -- If viewing another branch:
-    -- 1. Compare against HEAD (current branch) for diverged (Orange)
-    cmd_diverged = git_prefix .. "log " .. target .. " --not HEAD --format='%h'"
+  if not line_history then
+    local current_branch = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref HEAD"):gsub("\n", "")
+    if target == "HEAD" or target == current_branch then
+      -- If viewing current branch, compare against upstream for unpushed (Red)
+      local upstream = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
+      if vim.v.shell_error == 0 and upstream ~= "" then
+        cmd_unpushed = git_prefix .. "log " .. target .. " --not " .. upstream .. " --format='%h'"
+      end
+    else
+      -- If viewing another branch:
+      -- 1. Compare against HEAD (current branch) for diverged (Orange)
+      cmd_diverged = git_prefix .. "log " .. target .. " --not HEAD --format='%h'"
 
-    -- 2. Compare against its own upstream for unpushed (Red)
-    -- This handles the case where we view a branch that has unpushed commits relative to ITS upstream
-    local upstream = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
-    if vim.v.shell_error == 0 and upstream ~= "" then
-      cmd_unpushed = git_prefix .. "log " .. target .. " --not " .. upstream .. " --format='%h'"
+      -- 2. Compare against its own upstream for unpushed (Red)
+      -- This handles the case where we view a branch that has unpushed commits relative to ITS upstream
+      local upstream = vim.fn.system(git_prefix .. "rev-parse --abbrev-ref " .. target .. "@{u} 2>/dev/null"):gsub("\n", "")
+      if vim.v.shell_error == 0 and upstream ~= "" then
+        cmd_unpushed = git_prefix .. "log " .. target .. " --not " .. upstream .. " --format='%h'"
+      end
     end
   end
 
@@ -115,15 +124,62 @@ local function apply_log_syntax(bufnr)
   end)
 end
 
-local function get_log_list(bufnr)
+local function line_history_output(work_tree, range, args)
+  local extra_args = require('git.commands').argv(args)
+  local argv = { 'git', '-C', work_tree, '-c', 'core.quotePath=false', 'log',
+    '--pretty=format:LAZYAGENT_LOG_COMMIT%x09%H%x09%h%x09%as%x09%s%x09%an%x09%d',
+    '--abbrev-commit', '-n', '1000', '--no-color', '--no-ext-diff',
+    '-L', string.format('%d,%d:%s', range.first, range.last, range.path),
+  }
+  if range.revision and #extra_args == 0 then argv[#argv + 1] = range.revision end
+  vim.list_extend(argv, extra_args)
+  local result = vim.system(argv, { text = true }):wait()
+  if result.code ~= 0 then return nil, nil, vim.trim(result.stderr or 'Git log failed') end
+
+  local headers, focus = {}, {}
+  local commit, short_commit, old_path, new_path
+  for line in (result.stdout or ''):gmatch('[^\n]+') do
+    local header = line:match('^LAZYAGENT_LOG_COMMIT\t(.*)$')
+    if header then
+      headers[#headers + 1] = header
+      commit, short_commit = header:match('^(%x+)\t(%x+)\t')
+      old_path, new_path = nil, nil
+    elseif commit then
+      old_path = line:match('^%-%-%- a/(.*)\t$') or line:match('^%-%-%- a/(.*)$') or old_path
+      new_path = line:match('^%+%+%+ b/(.*)\t$') or line:match('^%+%+%+ b/(.*)$') or new_path
+      local first, count = line:match('^@@ %-%d+,?%d* %+(%d+),?(%d*) @@')
+      if first and not focus[commit] then
+        local target = { path = new_path or old_path or range.path,
+          first = tonumber(first), count = tonumber(count) or 1 }
+        focus[commit], focus[short_commit] = target, target
+      end
+    end
+  end
+  return headers, focus
+end
+
+local function get_log_list(bufnr, reuse_line_history)
   local args = ""
   if bufnr then
     args = vim.b[bufnr].fugitive_log_args or ""
   end
   local work_tree = bufnr and utils.get_buf_work_tree(bufnr) or nil
   local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
-  local cmd = git_prefix .. "log --pretty=format:'%H%x09%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
-  local raw_output = vim.fn.systemlist(cmd)
+  local line_history = bufnr and vim.b[bufnr].fugitive_log_line_history or nil
+  local raw_output
+  if line_history then
+    raw_output = reuse_line_history and vim.b[bufnr].fugitive_log_line_output or nil
+    if not raw_output then
+      local focus, err
+      raw_output, focus, err = line_history_output(work_tree, line_history, args)
+      if not raw_output then return nil, nil, work_tree, err end
+      vim.b[bufnr].fugitive_log_line_output = raw_output
+      vim.b[bufnr].fugitive_log_line_focus = focus
+    end
+  else
+    local cmd = git_prefix .. "log --pretty=format:'%H%x09%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
+    raw_output = vim.fn.systemlist(cmd)
+  end
   local log_output = {}
   local missing_hashes = {}
   local cache = work_tree and shortstat_cache[work_tree] or {}
@@ -193,7 +249,7 @@ local function load_shortstats(bufnr, work_tree, hashes)
         store_stat()
 
         if utils.is_valid_buf(bufnr) then
-          refresh_log_list(bufnr)
+          refresh_log_list(bufnr, true)
         end
       end)
     end,
@@ -206,16 +262,18 @@ local function load_shortstats(bufnr, work_tree, hashes)
   shortstat_jobs[bufnr] = job
 end
 
-refresh_log_list = function(bufnr)
+refresh_log_list = function(bufnr, reuse_line_history)
   if not utils.is_valid_buf(bufnr) then return end
 
   local missing_hashes
   local work_tree
+  local err
   utils.with_buf_modifiable(bufnr, function()
     local log_output
-    log_output, missing_hashes, work_tree = get_log_list(bufnr)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, log_output)
+    log_output, missing_hashes, work_tree, err = get_log_list(bufnr, reuse_line_history)
+    if log_output then vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, log_output) end
   end)
+  if err then vim.notify(err, vim.log.levels.ERROR); return end
 
   apply_highlights(bufnr)
   apply_log_syntax(bufnr)
@@ -238,22 +296,48 @@ local function open_log_list(opts)
     return
   end
 
+  local line_history, initial_output, initial_focus
+  if opts and opts.range and opts.range > 0 then
+    local _, path, source = objects.context(source_bufnr)
+    if not path then
+      vim.notify('Line history requires a file buffer', vim.log.levels.WARN)
+      return
+    end
+    line_history = {
+      first = opts.line1,
+      last = opts.line2,
+      path = path,
+      revision = source and source.revision ~= 'blob' and source.revision or nil,
+    }
+    local err
+    initial_output, initial_focus, err = line_history_output(work_tree, line_history, args)
+    if not initial_output then vim.notify(err, vim.log.levels.ERROR); return end
+  end
+
   utils.open_half_height_split()
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree)
-  pcall(vim.api.nvim_buf_set_name, bufnr, 'fugitive-log://' .. work_tree .. '//' .. args)
+  local scope = line_history and string.format('L%d,%d:%s', line_history.first, line_history.last,
+    line_history.path) or args
+  pcall(vim.api.nvim_buf_set_name, bufnr, 'fugitive-log://' .. work_tree .. '//' .. scope)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.bo[bufnr].filetype = 'fugitivelog'
   vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.opt_local.list = false
+  vim.bo[bufnr].modifiable = false
+  vim.bo[bufnr].readonly = true
 
   vim.b[bufnr].fugitive_log_args = args
-  refresh_log_list(bufnr)
-
-  apply_highlights(bufnr)
+  if line_history then
+    vim.b[bufnr].fugitive_log_line_history = line_history
+    vim.b[bufnr].fugitive_log_line_output = initial_output
+    vim.b[bufnr].fugitive_log_line_focus = initial_focus
+  end
+  refresh_log_list(bufnr, line_history ~= nil)
 end
+M.open = open_log_list
 
 local function show_log_help()
   help.show('Log buffer keys', {
@@ -280,6 +364,7 @@ function M.setup(group)
   vim.api.nvim_create_user_command('FugitiveLog', open_log_list, {
     bang = false,
     nargs = '*',
+    range = true,
     desc = "Open git log list",
     complete = require("git.completion").log,
   })
@@ -599,7 +684,7 @@ function M.setup(group)
       -- <C-p>: Toggle preview
       vim.keymap.set('n', '<C-p>', function()
         local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
-        commands.toggle_preview(commit)
+        commands.toggle_preview(commit, focus_for_commit(ev.buf, commit))
       end, { buffer = ev.buf, silent = true, desc = "Toggle commit preview" })
 
       -- Update preview on cursor move (debounced)
@@ -609,7 +694,7 @@ function M.setup(group)
         callback = function()
           if commands.is_preview_open() then
             local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
-            commands.schedule_update_preview(commit)
+            commands.schedule_update_preview(commit, focus_for_commit(ev.buf, commit))
           end
         end
       })
@@ -738,7 +823,10 @@ function M.setup(group)
       vim.keymap.set('n', '<CR>', function()
         local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
         if commit then
-          require('git.features.commit').open({ work_tree = utils.get_buf_work_tree(ev.buf), revision = commit, tab = true })
+          local commit_view = require('git.features.commit')
+          local focus = focus_for_commit(ev.buf, commit)
+          local buf = commit_view.open({ work_tree = utils.get_buf_work_tree(ev.buf), revision = commit, tab = true })
+          if buf and focus then commit_view.focus_range(buf, focus) end
         end
       end, { buffer = ev.buf, silent = true, desc = "Open commit in tab" })
 

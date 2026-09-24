@@ -266,7 +266,8 @@ function M.setup(group)
   end, { nargs = '?', complete = completion.dirs }) end
   command('Gclog', function(o) history(o, false) end, { nargs = '*', bang = true, complete = completion.log })
   command('Gllog', function(o) history(o, true) end, { nargs = '*', bang = true, complete = completion.log })
-  command('Glog', function(o) vim.cmd('FugitiveLog ' .. o.args) end, { nargs = '*', complete = completion.log })
+  command('Glog', function(o) require('git.features.log').open(o) end,
+    { nargs = '*', range = true, complete = completion.log })
   for _, name in ipairs({ 'Gremove', 'Gdelete' }) do command(name, function(o)
     local root, path = objects.context(); assert(path, 'No current file')
     assert(o.bang or not vim.bo.modified, 'Unsaved changes; use Gremove!')
