@@ -285,7 +285,10 @@ local function preview(s)
   vim.api.nvim_buf_set_lines(b, 0, -1, false, lines)
   vim.bo[b].modifiable = false
   vim.bo[b].filetype = s.preview == 'message' and 'gitcommit' or 'diff'
-  local_options(s.float_win, { wrap = s.preview == 'message', list = false })
+  local_options(s.float_win, { wrap = s.preview == 'message', list = false, spell = false })
+  if s.preview == 'message' and vim.diagnostic and vim.diagnostic.enable then
+    vim.diagnostic.enable(false, { bufnr = b })
+  end
 end
 local function history_info(s, refresh)
   local f = s.history[s.index]

@@ -134,7 +134,20 @@ local function render(s, edited)
   s.rows, s.line_count = rows, #lines
   vim.bo[s.buf].modifiable = true
   vim.bo[s.buf].readonly = false
-  vim.api.nvim_buf_set_lines(s.buf, 0, -1, false, lines)
+  local previous = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
+  local first = 0
+  while first < math.min(#previous, #lines) and previous[first + 1] == lines[first + 1] do
+    first = first + 1
+  end
+  local tail = 0
+  while tail < math.min(#previous, #lines) - first
+    and previous[#previous - tail] == lines[#lines - tail] do
+    tail = tail + 1
+  end
+  if first < #previous or first < #lines then
+    vim.api.nvim_buf_set_lines(s.buf, first, #previous - tail, false,
+      vim.list_slice(lines, first + 1, #lines - tail))
+  end
   vim.bo[s.buf].modified = not vim.deep_equal(msg, model.message)
   vim.bo[s.buf].bufhidden = vim.bo[s.buf].modified and 'hide' or 'delete'
   vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
@@ -223,22 +236,35 @@ local function toggle(s, mode, first, last)
     for _, entry in ipairs(s.model.entries) do selected[entry.path] = true end
   end
   local cursor_entry = M.entry_at(s.buf, vim.fn.line('.'))
-  for path in pairs(selected) do s.expanded[path] = mode == 'show' or (mode == 'toggle' and not s.expanded[path]) end
+  local changed = false
+  for path in pairs(selected) do
+    local expanded = mode == 'show' or (mode == 'toggle' and not s.expanded[path])
+    if (s.expanded[path] == true) ~= expanded then changed = true end
+    s.expanded[path] = expanded
+  end
+  if not changed then return end
   render(s, current)
   if cursor_entry then focus_path(s, cursor_entry.path) end
 end
 local function move(s, direction, hunks, expand)
-  if not render_preserving_message(s) then return end
+  local current, err = message(s)
+  if not current then notify(err); return end
   for _ = 1, vim.v.count1 do
     local entry = M.entry_at(s.buf, vim.fn.line('.'))
     if hunks and entry and not s.expanded[entry.path] then toggle(s, 'show') end
     local row = vim.fn.line('.')
     local lines = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
+    local delta = #lines - s.line_count
     for candidate = row + direction, direction == 1 and #lines or 1, direction do
-      local info = s.rows[candidate]
+      local info = s.rows[candidate - delta]
       if info and (info.header or (hunks and lines[candidate]:match('^@@'))) then
-        if not hunks and entry then s.expanded[entry.path] = false end
-        vim.api.nvim_win_set_cursor(0, { candidate, 0 })
+        if not hunks and entry and s.expanded[entry.path] then
+          s.expanded[entry.path] = false
+          render(s, current)
+          focus_path(s, info.entry.path)
+        else
+          vim.api.nvim_win_set_cursor(0, { candidate, 0 })
+        end
         if expand or (hunks and info.header) then
           toggle(s, 'show')
           if hunks then
@@ -247,8 +273,6 @@ local function move(s, direction, hunks, expand)
               vim.api.nvim_win_set_cursor(0, { next_row, 0 })
             end
           end
-        elseif not hunks then
-          toggle(s, 'hide')
         end
         break
       end
