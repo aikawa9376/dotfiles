@@ -538,6 +538,12 @@ function M.new(ctx)
     if not bufnr or not is_acp_buffer(bufnr) or not M._follow_auto_resume_enabled(bufnr) then
       return false
     end
+    scroll = scroll or {}
+    -- WinScrolled also reports viewport movement caused by window resizing.
+    -- A split or terminal resize can move the topline without user scrolling.
+    if (tonumber(scroll.width) or 0) ~= 0 or (tonumber(scroll.height) or 0) ~= 0 then
+      return false
+    end
     local pane_opts = pane_opts_for_bufnr(bufnr)
     local reflows = pane_opts.follow_reflow_generations
     local generation = reflows and reflows[win]
@@ -551,7 +557,6 @@ function M.new(ctx)
     end
     -- Mouse scrolling can move up while the transcript end (or its cursor)
     -- remains visible. Direction takes precedence over end visibility.
-    scroll = scroll or {}
     local topline_delta = tonumber(scroll.topline) or 0
     if topline_delta < 0
       or (topline_delta == 0 and ((tonumber(scroll.skipcol) or 0) < 0 or (tonumber(scroll.topfill) or 0) > 0))
