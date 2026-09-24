@@ -23,7 +23,7 @@ function M.run()
       provider_id = "Codex",
     },
   }
-  assert_equal(status.get_status(), "2", "same-provider sessions use a count")
+  assert_equal(status.get_status(), "2", "same-provider sessions use a count")
 
   state.sessions = {
     ["Codex::33333333-3333-3333-3333-333333333333"] = {

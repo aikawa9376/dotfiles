@@ -48,6 +48,10 @@ local function normalize_table_layout(value)
   return "table"
 end
 
+local function normalize_assistant_icon(value)
+  return tostring(value or "bubble"):lower() == "provider" and "provider" or "bubble"
+end
+
 local SMOOTH_SCROLL_DEFAULTS = {
   enabled = false,
   duration_ms = 140,
@@ -333,6 +337,7 @@ local function resolve_from_config(agent_cfg)
       global_cfg.show_thread_title,
       false
     ),
+    assistant_icon = normalize_assistant_icon(agent_acp.assistant_icon or global_cfg.assistant_icon),
     fancy_mode = resolve_boolean_option(agent_acp.fancy_mode, global_cfg.fancy_mode, false),
     table_layout = normalize_table_layout(agent_acp.table_layout or global_cfg.table_layout),
     smooth_scroll = merge_smooth_scroll_config(agent_acp.smooth_scroll, global_cfg.smooth_scroll),
@@ -401,6 +406,7 @@ function M.resolve(agent_name, agent_cfg)
       question_policy = session.question_policy,
       default_mode = session.default_mode,
       initial_model = session.initial_model,
+      assistant_icon = session.assistant_icon or "bubble",
       initial_effort = session.initial_effort,
       table_layout = session.table_layout,
       smooth_scroll = vim.deepcopy(session.smooth_scroll or {}),

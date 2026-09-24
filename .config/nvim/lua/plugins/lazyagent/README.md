@@ -482,6 +482,7 @@ require("lazyagent").setup({
     show_context_notes = false,
     show_session_summary = false,
     show_thread_title = false,
+    assistant_icon = "bubble", -- "bubble" | "provider"
     transcript_max_lines = 12000,
     render_markdown_debounce_ms = 900,
     release_buffer_on_hide = true,
@@ -805,7 +806,7 @@ lazyagent.status()
 lazyagent.install({ scope = "global", components = "all" })
 ```
 
-`lazyagent.status()` は、同じAIのセッションを `2` のように集約し、Teamのメンバーはチームごとに1つの `` として表示します。実行中・入力待ちの状態表示も集約後のアイコンに反映されます。
+`lazyagent.status()` は、Codex を ``、Claude を ``、Copilot を `` で表示し、同じAIのセッションを `2` のように集約します。Teamのメンバーはチームごとに1つの `` として表示します。実行中・入力待ちの状態表示も集約後のアイコンに反映されます。ACP会話の Assistant 見出しは `acp.assistant_icon = "bubble"`（既定値）で吹き出し `󰭹`、`"provider"` で判別可能な Codex / Claude / Copilot のアイコンを表示します。過去 transcript の見出しもバッファ表示時に設定へ合わせます。
 
 低レベル API は `lazyagent.logic.*` にあります。外部から使う場合は、できるだけ `require("lazyagent")` の facade を優先してください。
 

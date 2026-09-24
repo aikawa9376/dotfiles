@@ -1,6 +1,7 @@
 local M = {}
 
 local agent_logic = require("lazyagent.logic.agent")
+local session_identity = require("lazyagent.logic.session.identity")
 local image_paste = require("lazyagent.logic.image_paste")
 local state = require("lazyagent.logic.state")
 local view_diff = require("lazyagent.acp.view_diff")
@@ -401,6 +402,18 @@ local function session_for_agent(agent_name)
   return agent_name and state.sessions and state.sessions[agent_name] or nil
 end
 
+local function assistant_icon_mode_for_bufnr(bufnr)
+  local agent_key = agent_name_for_bufnr(bufnr)
+  local session = session_for_agent(agent_key)
+  local agent_acp = type(session and session.agent_cfg and session.agent_cfg.acp) == "table"
+    and session.agent_cfg.acp or {}
+  local global_acp = state.opts and state.opts.acp or {}
+  return agent_acp.assistant_icon
+    or global_acp.assistant_icon
+    or (session and session.assistant_icon)
+    or "bubble"
+end
+
 local view_sections = require("lazyagent.acp.view_buffer.sections")
 local line_has_heading = view_sections.line_has_heading
 local replace_heading_token = view_sections.replace_heading_token
@@ -772,6 +785,11 @@ local transform_markdown_tables = view_tables.transform_markdown_tables
 local trailing_markdown_table_context = view_tables.trailing_markdown_table_context
 
 local view_render = require("lazyagent.acp.view_buffer.render").new({
+  provider_for_bufnr = function(bufnr)
+    local agent_key = agent_name_for_bufnr(bufnr)
+    return session_identity.provider_id(agent_key, session_for_agent(agent_key))
+  end,
+  assistant_icon_mode_for_bufnr = assistant_icon_mode_for_bufnr,
   section_heading_for_line = section_heading_for_line,
   replace_heading_token = replace_heading_token,
   fancy_section_labels = FANCY_SECTION_LABELS,
@@ -1043,6 +1061,9 @@ local view_updates = require("lazyagent.acp.view_buffer.updates").new({
   session_for_agent = session_for_agent,
   agent_name_for_bufnr = function(bufnr)
     return agent_name_for_bufnr(bufnr)
+  end,
+  assistant_icon_mode_for_bufnr = function(bufnr)
+    return assistant_icon_mode_for_bufnr(bufnr)
   end,
   append_crosses_unclosed_markdown_fence = append_crosses_unclosed_markdown_fence,
   section_heading_for_line = section_heading_for_line,

@@ -4,6 +4,7 @@ local backend_logic = require("lazyagent.logic.backend")
 local state = require("lazyagent.logic.state")
 local session_identity = require("lazyagent.logic.session.identity")
 local agentmux = require("lazyagent.integrations.agentmux")
+local provider_icons = require("lazyagent.logic.provider_icons")
 
 local transient_tasks = {}
 local next_task_id = 0
@@ -35,10 +36,10 @@ local function active_task_ids()
 end
 
 local icons = {
-  Claude = "󰛨", -- 󰛨 (lightbulb/spark) or similar
-  Codex = "", --  (chip)
+  Claude = provider_icons.Claude,
+  Codex = provider_icons.Codex,
   Gemini = "󰠠", -- 󰠠 (star/sparkle)
-  Copilot = "", --  (github copilot icon usually)
+  Copilot = provider_icons.Copilot,
   Cursor = "", --  (edit/cursor)
   -- Fallback
   Default = "",

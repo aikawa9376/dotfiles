@@ -1,5 +1,6 @@
 local M = {}
 local sections = require("lazyagent.acp.view_buffer.sections")
+local session_identity = require("lazyagent.logic.session.identity")
 
 function M.new(ctx)
   local api = ctx.api
@@ -40,6 +41,7 @@ function M.new(ctx)
   local to_bufnr = ctx.to_bufnr
   local session_for_agent = ctx.session_for_agent
   local agent_name_for_bufnr = ctx.agent_name_for_bufnr
+  local assistant_icon_mode_for_bufnr = ctx.assistant_icon_mode_for_bufnr or function(_) return "bubble" end
   local section_heading_for_line = ctx.section_heading_for_line
   local split_markdown_table_cells = ctx.split_markdown_table_cells
   local is_markdown_table_separator = ctx.is_markdown_table_separator
@@ -578,6 +580,13 @@ function M.new(ctx)
     end
 
     local lines = read_transcript_lines(transcript_path, opts.max_lines or transcript_max_lines(bufnr))
+    local agent_key = agent_name_for_bufnr(bufnr)
+    local session = session_for_agent(agent_key)
+    local provider = session_identity.provider_id(agent_key, session)
+    local assistant_icon_mode = assistant_icon_mode_for_bufnr(bufnr)
+    for idx, line in ipairs(lines) do
+      lines[idx] = sections.resolve_assistant_icon(line, provider, assistant_icon_mode)
+    end
     local display_lines, section_items, display_meta = compact_transcript_lines(bufnr, lines)
 
     set_buffer_lines(bufnr, display_lines, section_items, display_meta)

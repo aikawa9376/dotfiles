@@ -1,6 +1,7 @@
 
 local M = {}
 local ContentBlocks = require("lazyagent.acp.content_blocks")
+local provider_icons = require("lazyagent.logic.provider_icons")
 
 function M.setup(deps)
   local diff_utils = deps.diff_utils
@@ -114,6 +115,12 @@ end
 
 local function section_icon_for_heading(heading, meta)
   local kind = section_kind(heading, meta)
+  if kind == "Assistant" then
+    if type(meta) == "table" and meta.assistant_icon == "provider" then
+      local icon = provider_icons.get(meta.provider_id or meta.agent_name)
+      if icon then return icon end
+    end
+  end
   if kind == "Tool" then
     return "󱁤"
   end
@@ -684,6 +691,8 @@ append_block = function(session, heading, body, meta)
   close_stream(session)
   local item_meta = vim.tbl_extend("force", meta or {}, {
     created_at = tonumber(meta and meta.created_at) or now(),
+    agent_name = meta and meta.agent_name or session.agent_name,
+    assistant_icon = meta and meta.assistant_icon or session.assistant_icon or "bubble",
   })
   local prefix = session.transcript_has_content and "\n" or ""
   ensure_transcript_position(session)
@@ -732,6 +741,8 @@ local function append_stream_chunk(session, stream_key, heading, body, meta)
     local item_meta = vim.tbl_extend("force", meta or {}, {
       stream_key = stream_key,
       created_at = tonumber(meta and meta.created_at) or now(),
+      agent_name = meta and meta.agent_name or session.agent_name,
+      assistant_icon = meta and meta.assistant_icon or session.assistant_icon or "bubble",
     })
     local prefix = session.transcript_has_content and "\n" or ""
     ensure_transcript_position(session)

@@ -15,6 +15,8 @@ function M.new(ctx)
   local pinned_rows_for_buffer = ctx.pinned_rows_for_buffer
   local line_has_tail = ctx.line_has_tail
   local section_style_for_line = ctx.section_style_for_line
+  local provider_for_bufnr = ctx.provider_for_bufnr or function(_) return nil end
+  local resolve_assistant_icon = require("lazyagent.acp.view_buffer.sections").resolve_assistant_icon
   local diff_view = setmetatable({}, {
     __index = function(_, key)
       local view = ctx.diff_view and ctx.diff_view() or nil
@@ -246,14 +248,12 @@ function M.new(ctx)
   normalize_header_lines = function(bufnr, lines)
     local width = header_target_width(bufnr)
     local fancy = fancy_mode_enabled(bufnr)
-    if (not width or width <= 0) and not fancy then
-      return lines, false
-    end
-
+    local provider = provider_for_bufnr(bufnr)
+    local assistant_icon_mode = ctx.assistant_icon_mode_for_bufnr and ctx.assistant_icon_mode_for_bufnr(bufnr) or "bubble"
     local changed = false
     local normalized = nil
     for idx, line in ipairs(lines) do
-      local rebuilt = line
+      local rebuilt = resolve_assistant_icon(line, provider, assistant_icon_mode)
       if fancy and (rebuilt:match("^─ ") or rebuilt:match("^╭─ ")) then
         rebuilt = fancy_header_line(rebuilt)
       end

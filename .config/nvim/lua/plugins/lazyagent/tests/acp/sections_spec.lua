@@ -2,6 +2,17 @@ local M = {}
 
 function M.run()
   local sections = require("lazyagent.acp.view_buffer.sections")
+  local icons = require("lazyagent.logic.provider_icons")
+  local old_heading = "─ " .. icons.Bubble .. " Assistant ─"
+  assert(sections.resolve_assistant_icon(old_heading, "Codex::thread", "provider")
+    == "─ " .. icons.Codex .. " Assistant ─", "provider icon uses thread owner")
+  assert(sections.resolve_assistant_icon("╭─ " .. icons.Codex .. " Assistant ─", nil, "bubble")
+    == "╭─ " .. icons.Bubble .. " Assistant ─", "stored provider icon falls back to bubble")
+  assert(sections.line_has_assistant_heading("─ " .. icons.Copilot .. " Assistant ─"),
+    "provider icon remains an assistant heading")
+  assert(not sections.line_has_assistant_heading("─ Tool ─"), "tool header stays distinct")
+  assert(sections.resolve_assistant_icon("─ Tool ─", "Codex", "provider") == "─ Tool ─",
+    "other headers are unchanged")
   local heading = "─ Assistant ─"
   for _, fence in ipairs({ "```", "````", "~~~", "~~~~" }) do
     local lines = { "─ Tool ─", " python3 - <<'PY'", ' text = """', " " .. fence .. "python" }

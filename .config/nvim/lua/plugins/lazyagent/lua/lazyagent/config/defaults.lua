@@ -85,6 +85,7 @@ function M.build()
       show_context_notes = false,
       show_session_summary = false,
       show_thread_title = false,
+      assistant_icon = "bubble",
       fancy_mode = false,
       table_layout = "table",
       smooth_scroll = false,

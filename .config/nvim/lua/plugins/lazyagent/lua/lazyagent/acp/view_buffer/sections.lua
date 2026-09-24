@@ -1,4 +1,5 @@
 local M = {}
+local provider_icons = require("lazyagent.logic.provider_icons")
 
 local TRANSCRIPT_TRUNCATED_MARKER = "... earlier transcript omitted from buffer ..."
 
@@ -27,14 +28,24 @@ local function replace_heading_token(line, heading, replacement)
 end
 
 local function line_has_assistant_heading(line)
+  if type(line) ~= "string" then return false end
   if line_has_heading(line, "Assistant") then
     return true
   end
+  local icon = line:match("^[─━╭┌ ]+(%S+)%s")
+  return provider_icons.is_icon(icon)
+end
+
+local function resolve_assistant_icon(line, provider, mode)
   if type(line) ~= "string" then
-    return false
+    return line
   end
-  line = line:gsub("^%s+", "")
-  return line:match("^[─━╭┌ ]+" .. vim.pesc("󰭹") .. "%s") ~= nil
+  local prefix, current, space, suffix = line:match("^([─━╭┌ ]+)(%S+)(%s)(.*)$")
+  if not prefix or not provider_icons.is_icon(current) then return line end
+  local desired = mode == "provider" and provider_icons.get(provider) or provider_icons.Bubble
+  desired = desired or provider_icons.Bubble
+  if current == desired then return line end
+  return prefix .. desired .. space .. suffix
 end
 
 local function section_style_for_line(line)
@@ -279,6 +290,7 @@ end
 M.line_has_heading = line_has_heading
 M.replace_heading_token = replace_heading_token
 M.line_has_assistant_heading = line_has_assistant_heading
+M.resolve_assistant_icon = resolve_assistant_icon
 M.section_style_for_line = section_style_for_line
 M.line_has_tail = line_has_tail
 M.is_markdown_fence = is_markdown_fence
