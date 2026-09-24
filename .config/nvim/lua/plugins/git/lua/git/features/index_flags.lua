@@ -1,9 +1,10 @@
 local M = {}
+local change_display = require('git.features.change_display')
 
 local function run(work_tree, args, opts)
   local command = { 'git' }
   vim.list_extend(command, args)
-  local system_opts = { cwd = work_tree, text = true }
+  local system_opts = { cwd = work_tree, text = not (opts and opts.binary) }
   if opts and opts.stdin ~= nil then system_opts.stdin = opts.stdin end
   return vim.system(command, system_opts):wait()
 end
@@ -46,9 +47,39 @@ local function local_state(work_tree, entry)
   return oid == entry.oid and 'clean' or 'modified'
 end
 
-local function display_line(entry)
-  local state = entry.state == 'clean' and '' or ('  [' .. entry.state .. ']')
-  return ('  %-7s %s%s'):format(entry.flag, entry.path, state)
+local function worktree_bytes(work_tree, entry)
+  local absolute = vim.fs.joinpath(work_tree, entry.path)
+  local stat = (vim.uv or vim.loop).fs_lstat(absolute)
+  if not stat then return '' end
+  if stat.type == 'link' then return (vim.uv or vim.loop).fs_readlink(absolute) end
+  if stat.type ~= 'file' then return nil end
+  local file = io.open(absolute, 'rb')
+  if not file then return nil end
+  local content = file:read('*a')
+  file:close()
+  return content
+end
+
+local function inspect_diff(work_tree, entry)
+  if entry.state == 'clean' or entry.mode == '160000' then return end
+  local blob = run(work_tree, { 'show', ':' .. entry.path }, { binary = true })
+  local current = worktree_bytes(work_tree, entry)
+  if blob.code ~= 0 or current == nil then return end
+  local original = blob.stdout or ''
+  if original:find('\0', 1, true) or current:find('\0', 1, true) then
+    entry.binary = true
+    return
+  end
+  local ok, hunks = pcall(vim.diff, original, current, { result_type = 'indices' })
+  if not ok then return end
+  entry.additions, entry.deletions = 0, 0
+  for _, hunk in ipairs(hunks) do
+    entry.deletions = entry.deletions + hunk[2]
+    entry.additions = entry.additions + hunk[4]
+  end
+  local patch = vim.diff(original, current, { result_type = 'unified', ctxlen = 3 })
+  entry.patch_lines = patch ~= ''
+    and vim.split(patch:gsub('\n$', ''), '\n', { plain = true }) or {}
 end
 
 local function fingerprint(path)
@@ -109,7 +140,11 @@ function M.inspect(work_tree, previous)
         oid = index_entry.oid,
       }
       entry.state = local_state(work_tree, entry)
-      entry.line = display_line(entry)
+      entry.status = entry.state == 'missing' and 'D'
+        or (entry.state == 'modified' and 'M' or '.')
+      entry.section = 'index_flags'
+      entry.line = change_display.line(entry)
+      inspect_diff(work_tree, entry)
       if entry.state ~= 'clean' then state.changed_count = state.changed_count + 1 end
       table.insert(state.entries, entry)
     end
@@ -132,9 +167,9 @@ function M.inspect(work_tree, previous)
   return state
 end
 
-function M.header_line(state, expanded)
+function M.header_line(state)
   if not state or #state.entries == 0 then return nil end
-  return ('Index flags [local] (%d) [%s]'):format(#state.entries, expanded and 'expanded' or 'collapsed')
+  return ('Index flags [local] (%d)'):format(#state.entries)
 end
 
 function M.warning_line(state)
@@ -145,12 +180,15 @@ function M.warning_line(state)
   )
 end
 
-function M.status_lines(state, expanded)
-  local header = M.header_line(state, expanded)
+function M.status_lines(state, expanded_paths)
+  local header = M.header_line(state)
   if not header then return {} end
   local lines = { '', header }
-  if expanded then
-    for _, entry in ipairs(state.entries) do table.insert(lines, entry.line) end
+  for _, entry in ipairs(state.entries) do
+    table.insert(lines, entry.line)
+    if expanded_paths and expanded_paths[entry.path] then
+      vim.list_extend(lines, entry.patch_lines or {})
+    end
   end
   return lines
 end
@@ -160,6 +198,17 @@ function M.entry_from_line(state, line)
     if entry.line == line then return entry end
   end
   return nil
+end
+
+function M.entry_at_row(state, lines, row)
+  if not state then return nil end
+  local found, found_row
+  for candidate = row, 1, -1 do
+    local line = lines[candidate] or ''
+    if line:match('^Index flags %[local%]') then return found, found_row end
+    if line == '' then return nil end
+    if not found then found, found_row = M.entry_from_line(state, line), candidate end
+  end
 end
 
 function M.flag_for_path(state, path)

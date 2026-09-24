@@ -43,6 +43,7 @@ local headers = {
   { '^Pull requests %(', 'pull_requests' },
   { '^Submodules %(', 'submodules' },
   { '^Worktrees %(', 'worktrees' },
+  { '^Index flags %[local%] %(', 'index_flags' },
 }
 
 local always_open = { untracked = true, unstaged = true, staged = true, commits = true }
@@ -125,14 +126,6 @@ local function render_markers(bufnr, found, states)
       sign_hl_group = M.heading_group(line) or 'Normal',
     })
   end
-  for row, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
-    if line:match('^Index flags %[local%]') then
-      vim.api.nvim_buf_set_extmark(bufnr, marker_ns, row - 1, 0, {
-        sign_text = line:match('%[collapsed%]$') and '▸' or '▾',
-        sign_hl_group = M.heading_group(line) or 'Normal',
-      })
-    end
-  end
 end
 
 function M.capture(bufnr)
@@ -159,7 +152,8 @@ function M.rebuild(bufnr, opts)
   folded_by_buf[bufnr] = states
   for _, section in ipairs(found) do
     if states[section.key] == nil then
-      states[section.key] = not always_open[section.key] and section.count >= 3
+      states[section.key] = section.key == 'index_flags'
+        or (not always_open[section.key] and section.count >= 3)
     end
   end
   local windows = vim.fn.win_findbuf(bufnr)
@@ -189,6 +183,13 @@ function M.toggle(bufnr, row)
   folded_by_buf[bufnr] = states
   M.rebuild(bufnr, { skip_capture = true })
   return true
+end
+
+function M.set(bufnr, key, folded)
+  local states = folded_by_buf[bufnr] or {}
+  states[key] = folded
+  folded_by_buf[bufnr] = states
+  M.rebuild(bufnr, { skip_capture = true })
 end
 
 function M.cleanup(bufnr)
