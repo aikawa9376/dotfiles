@@ -22,7 +22,7 @@ local status_cursor_anchor_by_buf = {}
 local pending_status_cursor_anchors_by_buf = {}
 local repository_health_by_buf = {}
 local index_flags_by_buf = {}
-local index_flags_expanded_by_buf = {}
+local index_flag_diffs_by_buf = {}
 local status_snapshot_by_buf = {}
 local status_initialized_by_buf = {}
 local status_dirty_by_buf = {}
@@ -81,7 +81,7 @@ local function status_header_kind(line)
   end
   if line:match('^Pull requests %(') then return 'pull_request' end
   if line:match('^Hidden changes: %d+ files? %(Index flags%)$') then return 'index_flags_warning' end
-  if line:match('^Index flags %[local%] %(%d+%) %[.+%]$') then return 'index_flags' end
+  if line:match('^Index flags %[local%] %(%d+%)$') then return 'index_flags' end
   return nil
 end
 
@@ -89,7 +89,7 @@ local function status_cursor_key(lines, row, bufnr)
   local line = lines[row] or ''
   local rendered_entry = bufnr and status_renderer.entry_at(bufnr, row) or nil
   if rendered_entry and not rendered_entry.header then return 'status_entry', rendered_entry.path end
-  local flagged_entry = bufnr and index_flags.entry_from_line(index_flags_by_buf[bufnr], line) or nil
+  local flagged_entry = bufnr and index_flags.entry_at_row(index_flags_by_buf[bufnr], lines, row) or nil
   if flagged_entry then return 'index_flag', flagged_entry.path end
   local header = status_header_kind(line)
   if header then return 'header', header end
@@ -128,6 +128,36 @@ local function status_cursor_key(lines, row, bufnr)
   return 'line', line
 end
 
+local change_section_order = { 'conflicted', 'untracked', 'unstaged', 'staged' }
+
+local function status_file_position(bufnr, row)
+  local entry = status_renderer.entry_at(bufnr, row)
+  if not entry or entry.header then return nil end
+  local direct_row = status_renderer.entry_row(bufnr, row) or row
+  local ordinal = 0
+  local seen = {}
+  for candidate = 1, direct_row do
+    local item = status_renderer.entry_at(bufnr, candidate)
+    if item and not item.header and not seen[item] then
+      seen[item] = true
+      if item.section == entry.section then ordinal = ordinal + 1 end
+    end
+  end
+  return entry, direct_row, ordinal
+end
+
+local function set_status_file_anchor(anchor, bufnr, row, preferred_section)
+  local entry, direct_row, ordinal = status_file_position(bufnr, row)
+  if not entry then return false end
+  anchor.key_type = 'status_entry'
+  anchor.key = entry.path
+  anchor.section = entry.section
+  anchor.file_ordinal = ordinal
+  anchor.preferred_section = preferred_section
+  anchor.row = direct_row
+  return true
+end
+
 local function capture_status_cursor(bufnr, winid)
   if not (winid and vim.api.nvim_win_is_valid(winid) and vim.api.nvim_win_get_buf(winid) == bufnr) then
     return nil
@@ -143,7 +173,7 @@ local function capture_status_cursor(bufnr, winid)
       view = vim.api.nvim_win_call(winid, vim.fn.winsaveview)
     end)
   end
-  return {
+  local anchor = {
     key_type = key_type,
     key = key,
     row = cursor[1],
@@ -152,6 +182,8 @@ local function capture_status_cursor(bufnr, winid)
     view = view,
     winid = winid,
   }
+  set_status_file_anchor(anchor, bufnr, cursor[1])
+  return anchor
 end
 
 local function capture_status_cursors(bufnr)
@@ -188,6 +220,70 @@ local function find_status_cursor_row(lines, anchor, bufnr)
     return math.min(math.max(anchor.row or 1, 1), math.max(#lines, 1))
   end
 
+  if anchor.key_type == 'status_entry' and anchor.section and bufnr then
+    local section_rows, section_headers = {}, {}
+    for _, section in ipairs(change_section_order) do section_rows[section] = {} end
+    local seen = {}
+    for row = 1, #lines do
+      local entry = status_renderer.entry_at(bufnr, row)
+      if entry and entry.header and section_rows[entry.section] then
+        section_headers[entry.section] = row
+      end
+      if entry and not entry.header and section_rows[entry.section]
+        and not seen[entry]
+      then
+        seen[entry] = true
+        table.insert(section_rows[entry.section], { row = row, path = entry.path })
+      end
+    end
+    local function matching_file(section)
+      for _, item in ipairs(section_rows[section] or {}) do
+        if item.path == anchor.key then return item.row end
+      end
+    end
+    local preferred = anchor.preferred_section or anchor.section
+    local original_section = section_rows[anchor.section]
+    local exact = matching_file(anchor.section)
+    if exact then return exact end
+    if anchor.preferred_section and original_section and #original_section > 0 then
+      return original_section[math.min(anchor.file_ordinal or 1, #original_section)].row
+    end
+    if anchor.preferred_section and section_headers[anchor.preferred_section] then
+      return section_headers[anchor.preferred_section]
+    end
+    exact = matching_file(preferred)
+    if exact then
+      return anchor.preferred_section and (section_headers[preferred] or exact) or exact
+    end
+    for _, section in ipairs(change_section_order) do
+      exact = matching_file(section)
+      if exact then
+        return anchor.preferred_section and (section_headers[section] or exact) or exact
+      end
+    end
+
+    if original_section and #original_section > 0 then
+      return original_section[math.min(anchor.file_ordinal or 1, #original_section)].row
+    end
+    local preferred_rows = section_rows[preferred]
+    if preferred_rows and #preferred_rows > 0 then return preferred_rows[1].row end
+    local original_index = 1
+    for index, section in ipairs(change_section_order) do
+      if section == anchor.section then original_index = index; break end
+    end
+    for index = original_index + 1, #change_section_order do
+      local candidates = section_rows[change_section_order[index]]
+      if #candidates > 0 then return candidates[1].row end
+    end
+    for index = original_index - 1, 1, -1 do
+      local candidates = section_rows[change_section_order[index]]
+      if #candidates > 0 then return candidates[#candidates].row end
+    end
+    for row, line in ipairs(lines) do
+      if line == 'Help: g?' then return row end
+    end
+  end
+
   local best_row, best_distance
   for row = 1, #lines do
     local key_type, key = status_cursor_key(lines, row, bufnr)
@@ -218,7 +314,7 @@ local function restore_status_cursor(bufnr, anchor, target_win)
       vim.fn.winrestview(view)
     end)
   end)
-  if anchor.position_only then
+  if winid == vim.api.nvim_get_current_win() then
     local updated = capture_status_cursor(bufnr, winid)
     if updated then status_cursor_anchor_by_buf[bufnr] = updated end
   end
@@ -392,11 +488,6 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
   local stash_list = snapshot.stash_list
   local pull_requests = pull_requests_by_buf[bufnr]
   local flag_state = snapshot.flag_state
-  if index_flags_expanded_by_buf[bufnr] == nil and flag_state and not snapshot.loading_details
-    and #(flag_state.entries or {}) > 0
-  then
-    index_flags_expanded_by_buf[bufnr] = #(flag_state.entries or {}) < 3
-  end
 
   local function build_final_lines(commit_lines)
     local final_lines = {}
@@ -447,7 +538,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
     end
     vim.list_extend(final_lines, index_flags.status_lines(
       flag_state,
-      index_flags_expanded_by_buf[bufnr] == true
+      index_flag_diffs_by_buf[bufnr]
     ))
     return final_lines
   end
@@ -1161,12 +1252,13 @@ function M.setup(group)
         end
       end
 
-      local function reload_status(position_only, reuse_details)
+      local function reload_status(position_only, reuse_details, cursor_anchors)
         if not is_live() then return end
+        local was_dirty = status_dirty_by_buf[b]
         status_dirty_by_buf[b] = nil
-        local anchors = position_only
+        local anchors = cursor_anchors or (position_only
           and capture_status_cursors(b)
-          or capture_status_cursors_before_reload(b)
+          or (was_dirty and capture_status_cursors_before_reload(b) or capture_status_cursors(b)))
         if position_only then
           for _, anchor in ipairs(anchors) do anchor.position_only = true end
         end
@@ -1234,7 +1326,7 @@ function M.setup(group)
           pending_status_cursor_anchors_by_buf[b] = nil
           repository_health_by_buf[b] = nil
           index_flags_by_buf[b] = nil
-          index_flags_expanded_by_buf[b] = nil
+          index_flag_diffs_by_buf[b] = nil
           status_snapshot_by_buf[b] = nil
           status_folds.cleanup(b)
           status_renderer.cleanup(b)
@@ -1390,10 +1482,6 @@ function M.setup(group)
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
           elseif line:match('^Hidden changes: %d+ files? %(Index flags%)$') then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
-          elseif line:match('^  skip%s') or line:match('^  assume%s') then
-            local flag_group = line:match('%[missing%]') and 'DiagnosticError'
-              or (line:match('%[modified%]') and 'DiagnosticWarn' or 'Comment')
-            vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = flag_group })
           end
 
           local subject_start = (line:match('^Head: .-  ()')
@@ -1425,8 +1513,14 @@ function M.setup(group)
             end
           end
 
-          local stat_entry = status_renderer.entry_at(b, idx)
-          if stat_entry and not stat_entry.header and status_renderer.entry_row(b, idx) == idx then
+          local flagged_entry = index_flags.entry_from_line(index_flags_by_buf[b], line)
+          if flagged_entry and not index_flags.entry_at_row(index_flags_by_buf[b], lines, idx) then
+            flagged_entry = nil
+          end
+          local stat_entry = status_renderer.entry_at(b, idx) or flagged_entry
+          if stat_entry and not stat_entry.header
+            and (flagged_entry or status_renderer.entry_row(b, idx) == idx)
+          then
             local stat_text = require('git.features.change_display').statistics(stat_entry, 'FugitiveStatAdd', 'FugitiveStatDelete')
             if #stat_text > 0 then
               vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, #line, {
@@ -1436,7 +1530,8 @@ function M.setup(group)
             end
           end
 
-          local filepath = line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
+          local filepath = flagged_entry and flagged_entry.path
+            or line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
           if filepath then
             local status = line:sub(1, 1)
             if status == 'A' then vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = 1, hl_group = 'GitSignsAdd' })
@@ -1701,6 +1796,32 @@ function M.setup(group)
           return
         end
         local row = vim.api.nvim_win_get_cursor(0)[1]
+        local anchors = capture_status_cursors(b)
+        local first = first_row or row
+        local last = last_row or row
+        local selected_row
+        for candidate = first, last do
+          local entry = status_renderer.entry_at(b, candidate)
+          if entry and not entry.header then selected_row = candidate; break end
+          if entry and entry.header then
+            local next_row = candidate + 1
+            local next_entry = status_renderer.entry_at(b, next_row)
+            if next_entry and not next_entry.header and next_entry.section == entry.section then
+              selected_row = next_row
+              break
+            end
+          end
+        end
+        for _, anchor in ipairs(anchors) do
+          if anchor.winid == vim.api.nvim_get_current_win() and selected_row then
+            local entry = status_renderer.entry_at(b, selected_row)
+            local destination = entry.section == 'staged' and 'unstaged' or 'staged'
+            if set_status_file_anchor(anchor, b, selected_row, destination) then
+              anchor.screen_offset = math.max(anchor.row - (anchor.view and anchor.view.topline or anchor.row), 0)
+            end
+            break
+          end
+        end
         index_change_running = true
         local function complete(changed, err)
           index_change_running = false
@@ -1709,7 +1830,7 @@ function M.setup(group)
             vim.notify(err, vim.log.levels.WARN)
             return
           end
-          reload_status(true, true)
+          reload_status(false, true, anchors)
           notify_repo_changed(true)
         end
         if first_row and last_row then
@@ -1730,6 +1851,7 @@ function M.setup(group)
         vim.keymap.set('x', key, function()
           local first_row = math.min(vim.fn.line('v'), vim.fn.line('.'))
           local last_row = math.max(vim.fn.line('v'), vim.fn.line('.'))
+          vim.cmd('normal! \27')
           change_index(selected_action, first_row, last_row)
         end, { buffer = b, nowait = true, silent = true, desc = 'Update selected status entries' })
       end
@@ -1760,6 +1882,20 @@ function M.setup(group)
 
       local function set_entry_diff(value)
         local row = vim.api.nvim_win_get_cursor(0)[1]
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local flagged, flagged_row = index_flags.entry_at_row(index_flags_by_buf[b], lines, row)
+        if flagged then
+          local expanded = index_flag_diffs_by_buf[b] or {}
+          local show = value == nil and not expanded[flagged.path] or value
+          if show and #(flagged.patch_lines or {}) == 0 then return end
+          local target = show and true or nil
+          if expanded[flagged.path] == target then return end
+          expanded[flagged.path] = target
+          index_flag_diffs_by_buf[b] = expanded
+          refresh_cached()
+          pcall(vim.api.nvim_win_set_cursor, 0, { flagged_row, 0 })
+          return
+        end
         local entry_row = status_renderer.entry_row(b, row)
         local mode = value == nil and 'toggle' or (value and 'show' or 'hide')
         if status_renderer.update_diff(b, row, mode) and entry_row then
@@ -1842,6 +1978,11 @@ function M.setup(group)
 
       local function expand_at_cursor()
         local row = vim.api.nvim_win_get_cursor(0)[1]
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        if index_flags.entry_at_row(index_flags_by_buf[b], lines, row) then
+          set_entry_diff(true)
+          return true
+        end
         return status_renderer.update_diff(b, row, 'show')
       end
 
@@ -1889,13 +2030,20 @@ function M.setup(group)
       end
 
       local function move_file(direction, count)
-        for _ = 1, count do
+        local function hide_current_diff()
           local row = vim.api.nvim_win_get_cursor(0)[1]
-          status_renderer.update_diff(b, row, 'hide')
+          local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+          if index_flags.entry_at_row(index_flags_by_buf[b], lines, row) then
+            set_entry_diff(false)
+          else
+            status_renderer.update_diff(b, row, 'hide')
+          end
+        end
+        for _ = 1, count do
+          hide_current_diff()
           move_to_match(direction, is_status_file_line, 1)
         end
-        local row = vim.api.nvim_win_get_cursor(0)[1]
-        status_renderer.update_diff(b, row, 'hide')
+        hide_current_diff()
       end
 
       vim.keymap.set('n', 'i', function()
@@ -1941,8 +2089,19 @@ function M.setup(group)
         local first_row = math.min(vim.fn.line('v'), vim.fn.line('.'))
         local last_row = math.max(vim.fn.line('v'), vim.fn.line('.'))
         local seen = {}
-        local changed = false
+        local changed, flags_changed = false, false
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local expanded = index_flag_diffs_by_buf[b] or {}
         for row = first_row, last_row do
+          local flagged = index_flags.entry_at_row(index_flags_by_buf[b], lines, row)
+          if flagged and not seen['flag\0' .. flagged.path] then
+            seen['flag\0' .. flagged.path] = true
+            local show = mode == 'toggle' and not expanded[flagged.path] or mode == 'show'
+            if not show or #(flagged.patch_lines or {}) > 0 then
+              expanded[flagged.path] = show or nil
+              flags_changed = true
+            end
+          end
           local entry = status_renderer.entry_at(b, row)
           local key = entry and (entry.section .. '\0' .. tostring(entry.path or 'header')) or nil
           if key and not seen[key] then
@@ -1954,7 +2113,9 @@ function M.setup(group)
             end
           end
         end
-        if changed then refresh() end
+        index_flag_diffs_by_buf[b] = expanded
+        if changed then refresh()
+        elseif flags_changed then refresh_cached() end
       end
 
       vim.keymap.set('x', '=', function() set_selected_diffs('toggle') end,
@@ -2055,7 +2216,9 @@ function M.setup(group)
       end
 
       local function index_flag_entry_at_cursor()
-        return index_flags.entry_from_line(index_flags_by_buf[b], vim.api.nvim_get_current_line())
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        return index_flags.entry_at_row(index_flags_by_buf[b], lines, row)
       end
 
       local function index_flag_path_at_cursor()
@@ -2067,14 +2230,13 @@ function M.setup(group)
       end
 
       local function move_to_index_flags(expand)
-        if expand ~= nil then index_flags_expanded_by_buf[b] = expand end
-        refresh_cached()
+        if expand then status_folds.set(b, 'index_flags', false) end
         vim.schedule(function()
           if not is_live() then return end
           local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
           for row, line in ipairs(lines) do
             if line:match('^Index flags %[local%]') then
-              local target = index_flags_expanded_by_buf[b] and math.min(row + 1, #lines) or row
+              local target = expand and math.min(row + 1, #lines) or row
               pcall(vim.api.nvim_win_set_cursor, 0, { target, 0 })
               vim.cmd('normal! zz')
               return
@@ -2187,7 +2349,8 @@ function M.setup(group)
         local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
         local flagged = index_flag_entry_at_cursor()
         if flagged then
-          return { kind = 'index_flag', label = 'Index flag: ' .. flagged.path, flagged = flagged }
+          local mode = flagged.flag == 'skip' and 'skip-worktree' or 'assume-unchanged'
+          return { kind = 'index_flag', label = ('Index flag (%s): %s'):format(mode, flagged.path), flagged = flagged }
         end
         if line:match('^Hidden changes:') then return { kind = 'index_flags_warning', label = 'Hidden changes' } end
         if line:match('^Index flags %[local%]') then return { kind = 'index_flags_header', label = 'Index flags' } end
@@ -2504,8 +2667,7 @@ function M.setup(group)
           return
         end
         if current_line:match('^Index flags %[local%]') then
-          index_flags_expanded_by_buf[b] = not index_flags_expanded_by_buf[b]
-          refresh_cached()
+          status_folds.toggle(b, vim.api.nvim_win_get_cursor(0)[1])
           return
         end
         local flagged = index_flag_entry_at_cursor()
@@ -2575,12 +2737,7 @@ function M.setup(group)
       vim.keymap.set('n', '<CR>', open_status_item, { buffer = b, nowait = true, silent = true })
       vim.keymap.set('n', '<2-LeftMouse>', open_status_item, { buffer = b, nowait = true, silent = true })
       vim.keymap.set('n', '<Tab>', function()
-        if vim.api.nvim_get_current_line():match('^Index flags %[local%]') then
-          index_flags_expanded_by_buf[b] = not index_flags_expanded_by_buf[b]
-          refresh_cached()
-        else
-          status_folds.toggle(b, vim.api.nvim_win_get_cursor(0)[1])
-        end
+        status_folds.toggle(b, vim.api.nvim_win_get_cursor(0)[1])
       end, { buffer = b, nowait = true, silent = true, desc = 'Toggle status section' })
 
       vim.keymap.set('n', 'gS', function()
@@ -2689,7 +2846,8 @@ function M.setup(group)
 
       vim.keymap.set('n', 'R', function()
         status_renderer.collapse_all(b)
-        index_flags_expanded_by_buf[b] = false
+        index_flag_diffs_by_buf[b] = {}
+        status_folds.set(b, 'index_flags', true)
         reload_status()
         vim.schedule(function()
           if is_live() then M.focus_section(b, 'unstaged') end

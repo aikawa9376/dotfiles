@@ -51,4 +51,13 @@ stash = render(2)
 assert(vim.fn.foldclosed(stash) == -1, 'two stashes should start open')
 assert(not folds.toggle(bufnr, 1), 'ordinary header should not toggle')
 
+vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { 'Head: main', '', 'Index flags [local] (1)', 'M hidden.txt' })
+folds.rebuild(bufnr)
+assert(vim.fn.foldclosed(3) == 3, 'Index flags should start closed even with one file')
+assert(marker(3) == '▸', 'Index flags should use the regular closed-fold arrow')
+assert(vim.fn.foldtextresult(3) == 'Index flags [local] (1)',
+  'closed Index flags heading should keep the same appearance')
+assert(folds.toggle(bufnr, 3) and vim.fn.foldclosed(3) == -1,
+  'Index flags should use the regular Tab fold')
+
 print('PASS: status section fold defaults, toggle, and refresh persistence')
