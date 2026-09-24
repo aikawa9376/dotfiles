@@ -29,19 +29,98 @@ local function output(root, args, content)
   vim.keymap.set('n', 'q', '<cmd>close<CR>', { buffer = b, silent = true })
   return b
 end
-local function terminal(root, args)
+local function error_output(lines, code)
+  local last = {}
+  for _, line in ipairs(lines or {}) do
+    line = vim.trim(line:gsub('\27%[[0-9;]*[A-Za-z]', ''))
+    if line ~= '' then
+      last[#last + 1] = line
+      if #last > 8 then table.remove(last, 1) end
+    end
+  end
+  return #last > 0 and table.concat(last, '\n') or ('Git exited with status ' .. code)
+end
+
+local function background(root, args)
+  local argv = { 'git', '-C', root }; vim.list_extend(argv, args)
+  local lines = {}
+  local function collect(_, data)
+    for _, line in ipairs(data or {}) do if line ~= '' then lines[#lines + 1] = line end end
+  end
+  local job = vim.fn.jobstart(argv, {
+    env = require('git.editor').environment(),
+    stdout_buffered = true,
+    stderr_buffered = true,
+    on_stdout = collect,
+    on_stderr = collect,
+    on_exit = function(_, code)
+      vim.schedule(function()
+        utils.fire_fugitive_changed({ work_tree = root })
+        if code ~= 0 then vim.notify(error_output(lines, code), vim.log.levels.ERROR) end
+      end)
+    end,
+  })
+  if job <= 0 then vim.notify('Could not start Git', vim.log.levels.ERROR) end
+  return job
+end
+
+local function terminal(root, args, keep_open)
+  local source_win = vim.api.nvim_get_current_win()
   vim.cmd('botright new')
   local b = vim.api.nvim_get_current_buf()
+  local win = vim.api.nvim_get_current_win()
   utils.set_buf_work_tree(b, root)
+  vim.bo[b].bufhidden = 'wipe'
   local argv = { 'git', '-C', root }; vim.list_extend(argv, args)
   local env = require('git.editor').environment()
   vim.fn.jobstart(argv, { term = true, env = env, on_exit = function(_, code)
     vim.schedule(function()
       utils.fire_fugitive_changed({ work_tree = root })
-      if code ~= 0 then vim.notify('Git exited with status ' .. code, vim.log.levels.ERROR) end
+      if code ~= 0 then
+        local lines = vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_get_lines(b, 0, -1, false) or {}
+        vim.notify(error_output(lines, code), vim.log.levels.ERROR)
+      end
+      if not keep_open and vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == b then
+        if #vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win)) > 1 then
+          local focused = vim.api.nvim_get_current_win() == win
+          vim.api.nvim_win_close(win, true)
+          if focused and vim.api.nvim_win_is_valid(source_win) then vim.api.nvim_set_current_win(source_win) end
+        end
+      end
     end)
   end })
   vim.cmd('startinsert')
+end
+
+local function from_panel(bufnr)
+  local filetype = vim.bo[bufnr].filetype
+  return filetype:match('^fugitive') ~= nil
+    or (vim.bo[bufnr].buftype == 'nofile' and vim.b[bufnr].fugitive_work_tree ~= nil)
+end
+
+local function mutates_repository(args)
+  local sub = args[1]
+  if vim.tbl_contains({ 'add', 'am', 'apply', 'checkout', 'clean', 'commit', 'fetch', 'merge',
+    'mv', 'pull', 'push', 'rebase', 'reset', 'restore', 'revert', 'rm', 'switch', 'update-index' }, sub)
+  then return true end
+  if sub == 'stash' then return not vim.tbl_contains({ 'list', 'show' }, args[2]) end
+  if sub == 'worktree' then return args[2] ~= 'list' end
+  if sub == 'branch' then
+    if #args == 1 then return false end
+    for _, arg in ipairs(args) do
+      if vim.tbl_contains({ '-d', '-D', '-m', '-M', '-c', '-C', '-f', '--delete', '--move',
+        '--copy', '--force', '--set-upstream-to', '--unset-upstream', '--track', '--no-track' }, arg)
+        or arg:match('^%-%-set%-upstream%-to=')
+      then return true end
+    end
+    return args[2]:sub(1, 1) ~= '-'
+  end
+  if sub == 'tag' then
+    if #args == 1 then return false end
+    return not vim.tbl_contains({ '-l', '--list', '-n', '--contains', '--points-at' }, args[2])
+  end
+  if sub == 'remote' then return vim.tbl_contains({ 'add', 'remove', 'rename', 'set-url', 'set-head', 'prune', 'update' }, args[2]) end
+  return false
 end
 function M.git(opts)
   local root, path = objects.context()
@@ -54,11 +133,20 @@ function M.git(opts)
   local explicit_message = vim.tbl_contains(args, '--no-edit') or vim.tbl_contains(args, '-m') or vim.tbl_contains(args, '--message') or vim.tbl_contains(args, '-F')
   if sub == 'commit' and not explicit_message or sub == 'merge' or sub == 'rebase' or sub == 'cherry-pick' or sub == 'revert'
     or sub == 'push' or sub == 'pull' or sub == 'fetch' or sub == 'add' and vim.tbl_contains(args, '-p')
-    or sub == '-c' then return terminal(root, args) end
-  local content = objects.run(root, args)
-  utils.fire_fugitive_changed({ work_tree = root })
+    or sub == '-c' then
+    local patch_prompt = (sub == 'add' or sub == 'reset' or sub == 'restore')
+      and (vim.tbl_contains(args, '-p') or vim.tbl_contains(args, '--patch'))
+    if from_panel(vim.api.nvim_get_current_buf()) and not opts.bang and not patch_prompt then
+      return background(root, args)
+    end
+    return terminal(root, args, opts.bang)
+  end
+  local ok, content = pcall(objects.run, root, args)
+  if not ok then vim.notify(content, vim.log.levels.ERROR); return end
+  local mutation = mutates_repository(args)
+  if mutation then utils.fire_fugitive_changed({ work_tree = root }) end
   if opts.bang then if content ~= '' then vim.notify(vim.trim(content)) end
-  elseif content ~= '' then return output(root, args, content) end
+  elseif not mutation and content ~= '' then return output(root, args, content) end
 end
 function M.diff(opts, vertical)
   local root, path, source = objects.context()
