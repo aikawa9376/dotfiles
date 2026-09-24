@@ -311,6 +311,17 @@ local function reconcile_status_block(bufnr, start_row, end_row, new_lines)
   end
 end
 
+local function insert_index_flag_warning(bufnr, lines, flag_state)
+  local warning = index_flags.warning_line(flag_state)
+  if not warning then return end
+  local warning_row = #lines + 1
+  for row, line in ipairs(lines) do
+    if line == 'Help: g?' then warning_row = row; break end
+  end
+  table.insert(lines, warning_row, warning)
+  status_renderer.shift_entries(bufnr, warning_row, 1)
+end
+
 local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts)
   if not utils.is_valid_buf(bufnr) then return end
   status_folds.capture(bufnr)
@@ -342,17 +353,10 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       return
     end
 
-    local flag_state = reusable and reusable.flag_state or index_flags.inspect(work_tree)
+    local flag_state = reusable and reusable.flag_state
+      or index_flags.inspect(work_tree, cached_details and cached_details.flag_state)
     index_flags_by_buf[bufnr] = flag_state
-    local warning = index_flags.warning_line(flag_state)
-    if warning then
-      local warning_row = #native_lines + 1
-      for row, line in ipairs(native_lines) do
-        if line == 'Help: g?' then warning_row = row; break end
-      end
-      table.insert(native_lines, warning_row, warning)
-      status_renderer.shift_entries(bufnr, warning_row, 1)
-    end
+    insert_index_flag_warning(bufnr, native_lines, flag_state)
 
     local unpushed_commits = reusable_commits and reusable_commits.unpushed_commits
       or status_renderer.unpushed_commits(bufnr)
@@ -1009,6 +1013,10 @@ function M.setup(group)
           if not native_lines then
             vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
             return
+          end
+
+          if previous then
+            insert_index_flag_warning(b, native_lines, previous.flag_state)
           end
 
           refresh({

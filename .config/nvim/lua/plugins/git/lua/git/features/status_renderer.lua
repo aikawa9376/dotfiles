@@ -194,6 +194,7 @@ local function parse_status(bufnr, work_tree)
       oid = vim.trim(resolved.stdout or '')
     end
     if oid == '' then return nil end
+    if ref == model.upstream then model.upstream_oid = oid end
     local cached = subjects[ref]
     if cached and cached.oid == oid then return cached.subject end
     local result = run(work_tree, { 'log', '-1', '--format=%s', '--end-of-options', oid })
@@ -381,7 +382,16 @@ local function snapshot_from_model(bufnr, model, opts)
   table.insert(lines, 'Help: g?')
 
   if not opts.fast and model.upstream and model.behind > 0 then
-    model.unpulled = commit_lines(model.work_tree, 'HEAD..' .. model.upstream)
+    local previous = models[bufnr]
+    if previous and previous.work_tree == model.work_tree and previous.oid == model.oid
+      and previous.upstream == model.upstream and model.upstream_oid
+      and previous.upstream_oid == model.upstream_oid and previous.behind == model.behind
+      and previous.unpulled
+    then
+      model.unpulled = previous.unpulled
+    else
+      model.unpulled = commit_lines(model.work_tree, 'HEAD..' .. model.upstream)
+    end
   end
 
   local entries_by_row = {}
@@ -414,6 +424,12 @@ function M.snapshot_async(bufnr, work_tree, opts, callback)
       -- counts across sections (staging), renames, or repositories.
       local previous = models[bufnr]
       if previous and previous.work_tree == work_tree then
+        if previous.oid == model.oid and previous.upstream == model.upstream
+          and previous.behind == model.behind
+        then
+          model.unpulled = previous.unpulled
+          model.upstream_oid = previous.upstream_oid
+        end
         for _, section in ipairs({ 'staged', 'unstaged', 'untracked' }) do
           local entries = {}
           for _, entry in ipairs(previous[section]) do entries[entry.path] = entry end

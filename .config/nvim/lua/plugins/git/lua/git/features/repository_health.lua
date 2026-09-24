@@ -26,7 +26,7 @@ local function configured_upstream(work_tree, branch)
 end
 
 local function inspect_repository(work_tree)
-  local status = run(work_tree, { 'status', '--porcelain=v2', '--branch', '--untracked-files=normal' })
+  local status = run(work_tree, { '--no-optional-locks', 'status', '--porcelain=v2', '--branch', '--untracked-files=normal' })
   if status.code ~= 0 then return {} end
   local repository = { dirty = false }
   for line in (status.stdout or ''):gmatch('[^\r\n]+') do
