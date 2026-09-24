@@ -16,7 +16,7 @@ local function value(work_tree, args)
   return vim.trim(result.stdout or '')
 end
 
-function M.plan(work_tree, mode)
+function M.plan(work_tree, mode, from)
   if mode ~= 'spinoff' and mode ~= 'spinout' then return nil, 'Unknown spin mode' end
   local branch = value(work_tree, { 'symbolic-ref', '--quiet', '--short', 'HEAD' })
   if not branch or branch == '' then return nil, 'Spin requires a checked-out branch' end
@@ -37,6 +37,21 @@ function M.plan(work_tree, mode)
     ahead = tonumber(value(work_tree, { 'rev-list', '--count', upstream .. '..' .. branch })) or 0
     if ahead > 0 then base = value(work_tree, { 'merge-base', branch, upstream }) end
   end
+  if from and from ~= '' then
+    local selected = value(work_tree, { 'rev-parse', '--verify', '--end-of-options', from .. '^{commit}' })
+    if not selected then return nil, 'Selected commit does not exist' end
+    local first_parent = value(work_tree, { 'rev-list', '--first-parent', 'HEAD' }) or ''
+    if not ('\n' .. first_parent .. '\n'):find('\n' .. selected .. '\n', 1, true) then
+      return nil, 'Selected commit is not on the current branch first-parent history'
+    end
+    if upstream and upstream ~= '' then
+      local shared = run(work_tree, { 'merge-base', '--is-ancestor', selected, upstream })
+      if shared.code == 0 then return nil, 'Selected commit is already in the upstream' end
+    end
+    base = value(work_tree, { 'rev-parse', '--verify', selected .. '^' })
+    if not base then return nil, 'Cannot spin from the root commit' end
+    from = selected
+  end
   if base == tip then base = nil end
 
   return {
@@ -46,16 +61,18 @@ function M.plan(work_tree, mode)
     upstream = upstream,
     base = base,
     ahead = ahead or 0,
+    from = from,
     dirty = dirty,
     checkout = mode == 'spinoff' or dirty,
   }
 end
 
-function M.run(work_tree, name, mode, expected)
-  local plan, err = M.plan(work_tree, mode)
+function M.run(work_tree, name, mode, expected, from)
+  from = from or (expected and expected.from)
+  local plan, err = M.plan(work_tree, mode, from)
   if not plan then return nil, err end
   if expected and (plan.branch ~= expected.branch or plan.tip ~= expected.tip
-    or plan.base ~= expected.base or plan.dirty ~= expected.dirty)
+    or plan.base ~= expected.base or plan.dirty ~= expected.dirty or plan.upstream ~= expected.upstream)
   then
     return nil, 'Branch state changed while preparing the spin; retry it'
   end

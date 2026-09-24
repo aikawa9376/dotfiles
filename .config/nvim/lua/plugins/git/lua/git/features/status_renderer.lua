@@ -1,9 +1,20 @@
 local M = {}
 local operation = require('git.features.operation')
 local change_display = require('git.features.change_display')
+local status_patch = require('git.features.status_patch')
 
 local models = {}
 local expanded = {}
+local subjects_by_buf = {}
+
+local function subject_cache(bufnr, work_tree)
+  local cache = subjects_by_buf[bufnr]
+  if not cache or cache.work_tree ~= work_tree then
+    cache = { work_tree = work_tree }
+    subjects_by_buf[bufnr] = cache
+  end
+  return cache
+end
 
 local function run(work_tree, args)
   local command = { 'git' }
@@ -163,7 +174,7 @@ local function parse_status_result(work_tree, result)
   return model
 end
 
-local function parse_status(work_tree)
+local function parse_status(bufnr, work_tree)
   local result = run(work_tree, {
     '--no-optional-locks', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
   })
@@ -173,14 +184,26 @@ local function parse_status(work_tree)
   local push_result = run(work_tree, { 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{push}' })
   if push_result.code == 0 then model.push = vim.trim(push_result.stdout or '') end
   if not model.push or model.push == '' then model.push = model.upstream end
-  local function subject(ref)
+  local subjects = subject_cache(bufnr, work_tree)
+  local function subject(ref, known_oid)
     if not ref then return nil end
-    local result = run(work_tree, { 'log', '-1', '--format=%s', '--end-of-options', ref })
+    local oid = known_oid
+    if not oid then
+      local resolved = run(work_tree, { 'rev-parse', '--verify', '--end-of-options', ref .. '^{commit}' })
+      if resolved.code ~= 0 then return nil end
+      oid = vim.trim(resolved.stdout or '')
+    end
+    if oid == '' then return nil end
+    local cached = subjects[ref]
+    if cached and cached.oid == oid then return cached.subject end
+    local result = run(work_tree, { 'log', '-1', '--format=%s', '--end-of-options', oid })
     if result.code ~= 0 then return nil end
     local value = vim.trim(result.stdout or '')
-    return value ~= '' and value or nil
+    local current = value ~= '' and value or nil
+    subjects[ref] = { oid = oid, subject = current }
+    return current
   end
-  if model.oid and model.oid ~= '(initial)' then model.head_subject = subject('HEAD') end
+  if model.oid and model.oid ~= '(initial)' then model.head_subject = subject('HEAD', model.oid) end
   model.upstream_subject = subject(model.upstream)
   if model.push ~= model.upstream then model.push_subject = subject(model.push) end
   attach_numstat(model.unstaged, parse_numstat(work_tree, false))
@@ -215,19 +238,8 @@ local function diff_lines(model, entry)
     return lines
   end
 
-  local args
-  if not model.oid or model.oid == '(initial)' then
-    args = {
-      'diff', '--no-index', '--no-ext-diff', '--no-color', '--',
-      '/dev/null', vim.fs.joinpath(model.work_tree, entry.path),
-    }
-  else
-    args = { 'diff', '--no-ext-diff', '--no-color', 'HEAD', '--' }
-    if entry.old_path then table.insert(args, entry.old_path) end
-    table.insert(args, entry.path)
-  end
-  local result = run(model.work_tree, args)
-  if result.code ~= 0 and not (args[2] == '--no-index' and result.code == 1) then return {} end
+  local result = status_patch.diff(model.work_tree, entry.section, entry.path)
+  if result.code ~= 0 then return {} end
   local all_lines, hunk_start = {}, nil
   for line in (result.stdout or ''):gmatch('[^\r\n]+') do
     table.insert(all_lines, line)
@@ -237,6 +249,39 @@ local function diff_lines(model, entry)
   local lines = {}
   for index = hunk_start, #all_lines do table.insert(lines, all_lines[index]) end
   return lines
+end
+
+local function patch_selection(bufnr, model, first_row, last_row, action, visual)
+  local first = M.entry_at(bufnr, first_row)
+  local last = M.entry_at(bufnr, last_row)
+  if not first or first ~= last or first.header then return nil end
+  if first.section ~= 'staged' and first.section ~= 'unstaged' then return nil end
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local header_row
+  for row = first_row, 1, -1 do
+    if model.entries_by_row[row] ~= first then break end
+    if lines[row] and lines[row]:match('^@@') then header_row = row; break end
+  end
+  if not header_row then return nil end
+  if action == 'unstage' and first.section ~= 'staged' then return false, 'Only staged changes can be unstaged' end
+  local hunk_number = 0
+  for row = 1, header_row do
+    if model.entries_by_row[row] == first and lines[row] and lines[row]:match('^@@') then
+      hunk_number = hunk_number + 1
+    end
+  end
+  local selected = {}
+  local final_row = header_row
+  while model.entries_by_row[final_row + 1] == first and not (lines[final_row + 1] or ''):match('^@@') do
+    final_row = final_row + 1
+  end
+  if last_row > final_row then return false, 'Select lines within one hunk' end
+  if visual and first_row > header_row then
+    for row = first_row, last_row do selected[row - header_row] = true end
+  end
+  local expected = {}
+  for row = header_row, final_row do expected[#expected + 1] = lines[row] end
+  return status_patch.apply(model.work_tree, first.section, first.path, hunk_number, selected, expected)
 end
 
 local function entry_key(entry)
@@ -351,7 +396,7 @@ local function snapshot_from_model(bufnr, model, opts)
 end
 
 function M.snapshot(bufnr, work_tree, opts)
-  local model, err = parse_status(work_tree)
+  local model, err = parse_status(bufnr, work_tree)
   if not model then return nil, err end
   return snapshot_from_model(bufnr, model, opts)
 end
@@ -382,7 +427,16 @@ function M.snapshot_async(bufnr, work_tree, opts, callback)
           end
         end
       end
-      model.push = model.upstream
+      local subjects = subject_cache(bufnr, work_tree)
+      local head = subjects.HEAD
+      if head and head.oid == model.oid then model.head_subject = head.subject end
+      local upstream = model.upstream and subjects[model.upstream]
+      if upstream then model.upstream_subject = upstream.subject end
+      model.push = previous and previous.upstream == model.upstream and previous.push or model.upstream
+      if model.push and model.push ~= model.upstream then
+        local push = subjects[model.push]
+        if push then model.push_subject = push.subject end
+      end
       local lines, snapshot_err = snapshot_from_model(bufnr, model, vim.tbl_extend('force', opts or {}, {
         fast = true,
       }))
@@ -684,6 +738,8 @@ function M.change_index(bufnr, row, action)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
   if not model or not entry then return false, 'No status entry at cursor' end
+  local patched, err = patch_selection(bufnr, model, row, row, action)
+  if patched ~= nil then return patched, err end
   local entries = entry.header and section_entries(model, entry.section) or { entry }
   return change_entries(model, entries, action)
 end
@@ -691,6 +747,8 @@ end
 function M.change_index_range(bufnr, first_row, last_row, action)
   local model = models[bufnr]
   if not model then return false, 'Status model is unavailable' end
+  local patched, err = patch_selection(bufnr, model, first_row, last_row, action, true)
+  if patched ~= nil then return patched, err end
   local entries = {}
   for row = first_row, last_row do
     local entry = M.entry_at(bufnr, row)
@@ -703,6 +761,8 @@ function M.change_index_async(bufnr, row, action, callback)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
   if not model or not entry then callback(false, 'No status entry at cursor'); return end
+  local patched, err = patch_selection(bufnr, model, row, row, action)
+  if patched ~= nil then callback(patched, err); return end
   local entries = entry.header and section_entries(model, entry.section) or { entry }
   change_entries_async(model, entries, action, callback)
 end
@@ -710,6 +770,8 @@ end
 function M.change_index_range_async(bufnr, first_row, last_row, action, callback)
   local model = models[bufnr]
   if not model then callback(false, 'Status model is unavailable'); return end
+  local patched, err = patch_selection(bufnr, model, first_row, last_row, action, true)
+  if patched ~= nil then callback(patched, err); return end
   local entries = {}
   for row = first_row, last_row do
     local entry = M.entry_at(bufnr, row)
@@ -869,6 +931,7 @@ end
 function M.cleanup(bufnr)
   models[bufnr] = nil
   expanded[bufnr] = nil
+  subjects_by_buf[bufnr] = nil
 end
 
 return M
