@@ -17,6 +17,7 @@ local pull_requests_by_buf = {}
 local pull_request_scope_by_buf = {}
 local pull_request_branch_by_buf = {}
 local commit_scope_by_buf = {}
+local scope_state_by_buf = {}
 local unpushed_commits_by_buf = {}
 local status_cursor_anchor_by_buf = {}
 local pending_status_cursor_anchors_by_buf = {}
@@ -28,6 +29,27 @@ local status_initialized_by_buf = {}
 local status_dirty_by_buf = {}
 local status_reload_by_buf = {}
 local pending_status_focus_by_buf = {}
+
+local function update_auto_commit_scope(bufnr, count)
+  local state = scope_state_by_buf[bufnr] or {}
+  scope_state_by_buf[bufnr] = state
+  local previous = state.unpushed_count
+  local target
+  if previous == nil then
+    target = count == 0 and 'recent' or 'unpushed'
+  elseif count > previous then
+    target = 'unpushed'
+  elseif count == 0 and previous > 0 and not state.commit_manual then
+    target = 'recent'
+  end
+  state.unpushed_count = count
+  if not target then return false end
+  state.commit_manual = false
+  local changed = commit_scope_by_buf[bufnr] ~= target
+  commit_scope_by_buf[bufnr] = target
+  status_folds.set(bufnr, 'commits', target == 'recent', { rebuild = false })
+  return changed
+end
 
 local function is_status_buffer(bufnr)
   return utils.is_valid_buf(bufnr)
@@ -420,8 +442,8 @@ end
 
 local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts)
   if not utils.is_valid_buf(bufnr) then return end
-  status_folds.capture(bufnr)
   opts = opts or {}
+  if not opts.skip_fold_capture then status_folds.capture(bufnr) end
   local work_tree = utils.get_buf_work_tree(bufnr)
   if not work_tree then return end
   local cursor_anchors = pending_status_cursor_anchors_by_buf[bufnr]
@@ -456,6 +478,9 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
 
     local unpushed_commits = reusable_commits and reusable_commits.unpushed_commits
       or status_renderer.unpushed_commits(bufnr)
+    if update_auto_commit_scope(bufnr, #unpushed_commits) then
+      commit_scope = commit_scope_by_buf[bufnr]
+    end
     local commit_lines = reusable_commits and reusable_commits.commit_scope == commit_scope
       and reusable_commits.commit_lines
       or unpushed_commits
@@ -518,7 +543,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       table.insert(final_lines, 'Loading repository details…')
     end
 
-    if pull_requests then
+    if pull_requests and #pull_requests > 0 then
       local scope = pull_request_scope_by_buf[bufnr] or 'branch'
       local scope_label = scope == 'all'
         and 'all'
@@ -1062,7 +1087,7 @@ function M.setup(group)
       local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
       local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
       local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
-      local pr_fetching, pr_fetch_pending = false, false
+      local pr_state = { fetching = false, pending = false, generation = 0 }
       local refresh_scheduled = false
       local fast_refresh_serial = 0
       local index_change_running = false
@@ -1075,8 +1100,12 @@ function M.setup(group)
         if apply_icons then apply_icons() end
       end
 
-      local function refresh_cached()
-        if status_snapshot_by_buf[b] then refresh({ cached = true }) end
+      local function refresh_cached(opts)
+        if status_snapshot_by_buf[b] then
+          opts = opts or {}
+          opts.cached = true
+          refresh(opts)
+        end
       end
 
       local function schedule_refresh()
@@ -1144,14 +1173,16 @@ function M.setup(group)
 
           status_renderer.unpushed_commits_async(b, function(unpushed)
             if not is_live() or serial ~= fast_refresh_serial then return end
+            update_auto_commit_scope(b, #unpushed)
             local function publish(commit_lines)
               if not is_live() or serial ~= fast_refresh_serial then return end
               local current = status_snapshot_by_buf[b]
               if current then
                 current.unpushed_commits = unpushed
                 current.commit_lines = commit_lines
+                current.commit_scope = commit_scope_by_buf[b]
                 current.commits_loaded = true
-                refresh_cached()
+                refresh_cached({ skip_fold_capture = true })
               end
               schedule_details()
             end
@@ -1167,25 +1198,25 @@ function M.setup(group)
       local fetch_pull_requests
       fetch_pull_requests = function()
         if not is_live() then return end
-        if pr_fetching then
-          pr_fetch_pending = true
+        if pr_state.fetching then
+          pr_state.pending = true
           return
         end
 
         local work_tree = utils.get_buf_work_tree(b)
         if not work_tree or vim.fn.executable('gh') ~= 1 then return end
 
-        pr_fetching = true
-        local requested_scope = pull_request_scope_by_buf[b] or 'branch'
+        pr_state.fetching = true
+        local generation = pr_state.generation
         local function finish_fetch()
-          pr_fetching = false
-          if pr_fetch_pending then
-            pr_fetch_pending = false
+          pr_state.fetching = false
+          if pr_state.pending then
+            pr_state.pending = false
             fetch_pull_requests()
           end
         end
 
-        local function request_pull_requests(branch)
+        local function request_pull_requests(branch, callback)
           local args = {
             'gh', 'pr', 'list', '--state', 'open',
             '--limit', '100',
@@ -1196,60 +1227,82 @@ function M.setup(group)
           vim.system(args, { cwd = work_tree, text = true }, function(result)
             vim.schedule(function()
               if not is_live() then return end
-
-              if result.code == 0 and pull_request_scope_by_buf[b] == requested_scope then
-                local ok, decoded = pcall(vim.json.decode, result.stdout or '')
-                local pull_requests = {}
-                if ok and type(decoded) == 'table' then
-                  for _, pr in ipairs(decoded) do
-                    local number = tonumber(pr.number)
-                    if number then
-                      local url = type(pr.url) == 'string' and pr.url or ''
-                      table.insert(pull_requests, {
-                        number = number,
-                        title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
-                        headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
-                        isDraft = pr.isDraft == true,
-                        url = url,
-                        repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
-                      })
-                    end
-                  end
+              if result.code ~= 0 then callback(nil); return end
+              local ok, decoded = pcall(vim.json.decode, result.stdout or '')
+              if not ok or type(decoded) ~= 'table' then callback(nil); return end
+              local pull_requests = {}
+              for _, pr in ipairs(decoded) do
+                local number = tonumber(pr.number)
+                if number then
+                  local url = type(pr.url) == 'string' and pr.url or ''
+                  table.insert(pull_requests, {
+                    number = number,
+                    title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
+                    headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
+                    isDraft = pr.isDraft == true,
+                    url = url,
+                    repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
+                  })
                 end
-                pull_requests_by_buf[b] = pull_requests
-                pull_request_branch_by_buf[b] = branch
-                refresh_cached()
               end
+              callback(pull_requests)
+            end)
+          end)
+        end
 
+        local function publish(scope, branch, pull_requests, reset_fold)
+          if generation == pr_state.generation then
+            local previous_scope = pull_request_scope_by_buf[b]
+            pull_request_scope_by_buf[b] = scope
+            pull_request_branch_by_buf[b] = branch
+            pull_requests_by_buf[b] = pull_requests
+            if reset_fold or previous_scope ~= scope then
+              status_folds.set(b, 'pull_requests', scope == 'all', { rebuild = false })
+            end
+            refresh_cached({ skip_fold_capture = true })
+          end
+          finish_fetch()
+        end
+
+        vim.system({ 'git', 'branch', '--show-current' }, { cwd = work_tree, text = true }, function(result)
+          vim.schedule(function()
+            if not is_live() then return end
+            if result.code ~= 0 or generation ~= pr_state.generation then
               finish_fetch()
-            end)
-          end)
-        end
-
-        if requested_scope == 'branch' then
-          vim.system({ 'git', 'branch', '--show-current' }, { cwd = work_tree, text = true }, function(result)
-            vim.schedule(function()
-              if not is_live() then return end
-              if pull_request_scope_by_buf[b] ~= requested_scope then
+              return
+            end
+            local branch = vim.trim(result.stdout or '')
+            local function branch_ready(branch_prs)
+              if not branch_prs or generation ~= pr_state.generation then
                 finish_fetch()
                 return
               end
-              local branch = result.code == 0 and vim.trim(result.stdout or '') or ''
-              if branch == '' then
-                if pull_request_scope_by_buf[b] == requested_scope then
-                  pull_requests_by_buf[b] = {}
-                  pull_request_branch_by_buf[b] = nil
-                  refresh_cached()
-                end
-                finish_fetch()
-                return
+              local scope_state = scope_state_by_buf[b] or {}
+              scope_state_by_buf[b] = scope_state
+              local previous_count = scope_state.branch_pr_count
+              local count = #branch_prs
+              local increased = previous_count ~= nil and count > previous_count
+              if previous_count == nil or increased or (previous_count > 0 and count == 0) then
+                scope_state.pr_manual = false
               end
-              request_pull_requests(branch)
-            end)
+              scope_state.branch_pr_count = count
+              local scope = scope_state.pr_manual
+                and pr_state.manual_scope
+                or (count > 0 and 'branch' or 'all')
+              local reset_fold = previous_count == nil or increased
+              if scope == 'branch' then
+                publish(scope, branch ~= '' and branch or nil, branch_prs, reset_fold)
+              else
+                request_pull_requests(nil, function(all_prs)
+                  if not all_prs then finish_fetch(); return end
+                  publish(scope, nil, all_prs, reset_fold)
+                end)
+              end
+            end
+            if branch == '' then branch_ready({})
+            else request_pull_requests(branch, branch_ready) end
           end)
-        else
-          request_pull_requests(nil)
-        end
+        end)
       end
 
       local function reload_status(position_only, reuse_details, cursor_anchors)
@@ -1321,6 +1374,7 @@ function M.setup(group)
           pull_request_scope_by_buf[b] = nil
           pull_request_branch_by_buf[b] = nil
           commit_scope_by_buf[b] = nil
+          scope_state_by_buf[b] = nil
           unpushed_commits_by_buf[b] = nil
           status_cursor_anchor_by_buf[b] = nil
           pending_status_cursor_anchors_by_buf[b] = nil
@@ -1360,7 +1414,10 @@ function M.setup(group)
 
       local function set_commit_scope(scope)
         if scope == commit_scope_by_buf[b] then return end
+        scope_state_by_buf[b] = scope_state_by_buf[b] or {}
+        scope_state_by_buf[b].commit_manual = true
         commit_scope_by_buf[b] = scope
+        status_folds.set(b, 'commits', scope == 'recent', { rebuild = false })
         schedule_refresh()
       end
 
@@ -1386,9 +1443,11 @@ function M.setup(group)
 
       local function set_pull_request_scope(scope)
         if scope == pull_request_scope_by_buf[b] then return end
-        pull_request_scope_by_buf[b] = scope
-        pull_request_branch_by_buf[b] = nil
-        refresh_cached()
+        scope_state_by_buf[b] = scope_state_by_buf[b] or {}
+        scope_state_by_buf[b].pr_manual = true
+        pr_state.manual_scope = scope
+        pr_state.generation = pr_state.generation + 1
+        status_folds.set(b, 'pull_requests', scope == 'all', { rebuild = false })
         fetch_pull_requests()
       end
 

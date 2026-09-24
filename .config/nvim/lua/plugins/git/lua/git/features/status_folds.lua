@@ -185,11 +185,13 @@ function M.toggle(bufnr, row)
   return true
 end
 
-function M.set(bufnr, key, folded)
+function M.set(bufnr, key, folded, opts)
   local states = folded_by_buf[bufnr] or {}
   states[key] = folded
   folded_by_buf[bufnr] = states
-  M.rebuild(bufnr, { skip_capture = true })
+  if not (opts and opts.rebuild == false) then
+    M.rebuild(bufnr, { skip_capture = true })
+  end
 end
 
 function M.cleanup(bufnr)
