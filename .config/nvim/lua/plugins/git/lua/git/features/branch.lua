@@ -4,6 +4,7 @@ local M = {}
 local utils = require("git.utils")
 local commands = require("git.features.commands")
 local help = require("git.features.help")
+local branch_spin = require('git.features.branch_spin')
 
 local branch_name_ns = vim.api.nvim_create_namespace("fugitive_branch_names")
 local branch_fade_ns = vim.api.nvim_create_namespace("fugitive_branch_fade")
@@ -570,6 +571,34 @@ local function duplicate_branch(bufnr)
   end
 end
 
+local function spin_branch(bufnr, mode)
+  local work_tree = get_buffer_work_tree(bufnr, true)
+  if not work_tree then return end
+  local plan, err = branch_spin.plan(work_tree, mode)
+  if not plan then vim.notify(err, vim.log.levels.ERROR); return end
+
+  local label = mode == 'spinoff' and 'Spin off' or 'Spin out'
+  local name = vim.trim(vim.fn.input(label .. ' ' .. plan.branch .. ' as: '))
+  vim.cmd('redraw')
+  if name == '' then return end
+
+  if plan.base then
+    local message = ('%s %d outgoing commit(s) into %s?\n%s will reset to %s.'):format(
+      label, plan.ahead, name, plan.branch, plan.base:sub(1, 12)
+    )
+    if mode == 'spinout' and plan.dirty then
+      message = message .. '\nUncommitted changes will follow the new branch.'
+    end
+    if vim.fn.confirm(message, '&Spin\n&Cancel', 2) ~= 1 then return end
+  end
+
+  local result, run_err = branch_spin.run(work_tree, name, mode, plan)
+  if not result then vim.notify(run_err, vim.log.levels.ERROR); return end
+  notify_branch_changed(bufnr, work_tree)
+  local action = result.checkout and 'checked out' or 'created'
+  vim.notify(('Branch %s %s from %s'):format(name, action, result.branch), vim.log.levels.INFO)
+end
+
 local function create_worktree(bufnr)
   local branch = get_branch_name_from_line()
   if not branch then
@@ -988,6 +1017,8 @@ local function show_branch_help()
     '<Leader>gp  git push',
     'O           open PR (Octo)',
     'bw          rename branch',
+    'bs          spin off current branch (check out new branch)',
+    'bS          spin out current branch (stay if clean)',
     'cod         duplicate branch',
     'cot         create worktree',
     'X (n/V)     delete branch(es)',
@@ -1006,6 +1037,12 @@ function M.setup(group)
     bang = false,
     desc = "Open git branch list",
   })
+  vim.api.nvim_create_user_command('GbranchSpinoff', function()
+    spin_branch(vim.api.nvim_get_current_buf(), 'spinoff')
+  end, { desc = 'Spin off outgoing commits to a new checked-out branch' })
+  vim.api.nvim_create_user_command('GbranchSpinout', function()
+    spin_branch(vim.api.nvim_get_current_buf(), 'spinout')
+  end, { desc = 'Spin out outgoing commits while staying on the current branch when clean' })
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
@@ -1100,6 +1137,13 @@ function M.setup(group)
       vim.keymap.set('n', 'bw', function()
         rename_branch(bufnr)
       end, { buffer = bufnr, silent = true, desc = "Rename branch" })
+
+      vim.keymap.set('n', 'bs', function()
+        spin_branch(bufnr, 'spinoff')
+      end, { buffer = bufnr, silent = true, desc = 'Spin off current branch' })
+      vim.keymap.set('n', 'bS', function()
+        spin_branch(bufnr, 'spinout')
+      end, { buffer = bufnr, silent = true, desc = 'Spin out current branch' })
 
       -- bd: Duplicate branch (prompt for a new name and create local branch from selected one)
       vim.keymap.set('n', 'cod', function()
