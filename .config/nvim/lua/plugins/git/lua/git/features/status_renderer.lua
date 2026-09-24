@@ -173,6 +173,16 @@ local function parse_status(work_tree)
   local push_result = run(work_tree, { 'rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{push}' })
   if push_result.code == 0 then model.push = vim.trim(push_result.stdout or '') end
   if not model.push or model.push == '' then model.push = model.upstream end
+  local function subject(ref)
+    if not ref then return nil end
+    local result = run(work_tree, { 'log', '-1', '--format=%s', '--end-of-options', ref })
+    if result.code ~= 0 then return nil end
+    local value = vim.trim(result.stdout or '')
+    return value ~= '' and value or nil
+  end
+  if model.oid and model.oid ~= '(initial)' then model.head_subject = subject('HEAD') end
+  model.upstream_subject = subject(model.upstream)
+  if model.push ~= model.upstream then model.push_subject = subject(model.push) end
   attach_numstat(model.unstaged, parse_numstat(work_tree, false))
   attach_numstat(model.staged, parse_numstat(work_tree, true))
   for _, entry in ipairs(model.untracked) do
@@ -300,14 +310,25 @@ local function snapshot_from_model(bufnr, model, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then return nil, 'Invalid status buffer' end
   opts = opts or {}
   model.bufnr = bufnr
+  local function with_subject(line, subject)
+    return subject and (line .. '  ' .. subject) or line
+  end
 
   local lines = {
-    'Head: ' .. ((model.branch and model.branch ~= '(detached)') and model.branch or (model.oid or 'unknown'):sub(1, 12)),
+    with_subject(
+      'Head: ' .. ((model.branch and model.branch ~= '(detached)') and model.branch or (model.oid or 'unknown'):sub(1, 12)),
+      model.head_subject
+    ),
   }
   if model.upstream then
-    table.insert(lines, ('Upstream: %s (+%d/-%d)'):format(model.upstream, model.ahead, model.behind))
+    table.insert(lines, with_subject(
+      ('Upstream: %s (+%d/-%d)'):format(model.upstream, model.ahead, model.behind),
+      model.upstream_subject
+    ))
   end
-  if model.push and model.push ~= model.upstream then table.insert(lines, 'Push: ' .. model.push) end
+  if model.push and model.push ~= model.upstream then
+    table.insert(lines, with_subject('Push: ' .. model.push, model.push_subject))
+  end
   vim.list_extend(lines, opts.header_lines or {})
   if not opts.fast then
     for _, line in ipairs(operation.status_lines(operation.inspect(model.work_tree))) do table.insert(lines, line) end
