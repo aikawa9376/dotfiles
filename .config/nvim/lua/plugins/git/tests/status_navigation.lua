@@ -31,6 +31,8 @@ assert(vim.wait(5000, function()
 end, 20))
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'cold open did not focus unstaged entry')
 local function press(key) vim.fn.maparg(key, 'n', false, true).callback() end
+assert(vim.fn.maparg('bs', 'n', false, true).callback and vim.fn.maparg('bS', 'n', false, true).callback,
+  'status does not expose branch spin actions')
 local untracked_row
 for row, line in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
   if line:match('^Untracked files') then untracked_row = row; break end

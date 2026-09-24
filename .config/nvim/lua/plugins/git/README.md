@@ -26,13 +26,21 @@ reverting the commit that removed them.
 | `GeditHeadAtFile`, `GitCommit [revision]`, `GitPush` | File's latest commit, commit detail, existing force-with-lease push action |
 | `Ggraph [native / flog]` | Open either graph; omitted backend uses the selected default |
 | `GgraphBackend [native / flog]` | Change the default for graph keys; no argument opens a picker |
-| `GbranchSpinoff`, `GbranchSpinout` | Move the current branch's outgoing commits to a new tracking branch |
+| `GbranchSpinoff [commit]`, `GbranchSpinout [commit]` | Move outgoing commits, optionally starting at a selected commit, to a new tracking branch |
+| `GitWipEnable`, `GitWipDisable`, `GitWipSave`, `GitWipLog`, `GitWipRestore [number]` | Save, inspect, and restore tracked work-in-progress snapshots |
 
 In the status panel, `<Tab>` opens or closes the section under the cursor; an
 arrow in the gutter shows its state. Untracked, unstaged, staged, and commit sections
 start open. Other sections start closed when they contain at least three items.
 The choice is preserved across status refreshes. Enter keeps each section's
 existing action, including commit and pull-request scope changes.
+
+Expand a staged or unstaged file with `o`. On a displayed hunk, `s`/`-`
+stages or unstages that hunk; `u` unstages a staged hunk. Select added or
+removed lines within one hunk in Visual mode and press the same key to update
+only those lines. File headers and section headings retain file/section-wide
+actions. The displayed staged diff is index versus `HEAD`; the unstaged diff is
+worktree versus index. `I` keeps the interactive Git patch command available.
 
 In `Gbranch`, `bs` spins off the current branch and checks out the new branch;
 `bS` spins out and stays on the current branch when the worktree is clean. If
@@ -41,6 +49,21 @@ changes follow it. Both actions make the new branch track the original branch.
 When the original branch has outgoing commits, it is moved back to the merge
 base with its upstream; without an upstream or outgoing commits it stays put.
 The branch name and any reset are confirmed before changing refs.
+The same `bs` / `bS` keys work in status and log. On a commit row they move
+that commit and everything after it; elsewhere they use the upstream merge
+base. `:GbranchSpinoff <commit>` and `:GbranchSpinout <commit>` expose that
+boundary directly. The commit must be on the current branch's first-parent
+history and outside its upstream.
+
+WIP snapshots are off by default. `:GitWipEnable` enables automatic saving
+after file writes and Git actions for the current Neovim session; setting
+`vim.g.git_wip_enabled = true` in config enables it on startup. `:GitWipSave`
+saves explicitly, and `:GitWipLog` lists the current branch's snapshots (`a`
+restores one). `:GitWipRestore [number]` restores the newest snapshot by
+default, or an older reflog entry by number, to a clean tracked worktree.
+Snapshots retain the staged/unstaged split and leave the live worktree alone.
+They cover tracked changes only; untracked files need a regular stash or
+commit. Repeated saves of unchanged content do not add history entries.
 
 Existing leader mappings are owned by `init.lua`. `<C-Space>` in repository
 panels opens the selected graph. The default is `flog`, including the existing `<C-Space>` panel keys. Use

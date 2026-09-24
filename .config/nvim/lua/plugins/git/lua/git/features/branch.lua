@@ -571,10 +571,10 @@ local function duplicate_branch(bufnr)
   end
 end
 
-local function spin_branch(bufnr, mode)
+local function spin_branch(bufnr, mode, from)
   local work_tree = get_buffer_work_tree(bufnr, true)
   if not work_tree then return end
-  local plan, err = branch_spin.plan(work_tree, mode)
+  local plan, err = branch_spin.plan(work_tree, mode, from)
   if not plan then vim.notify(err, vim.log.levels.ERROR); return end
 
   local label = mode == 'spinoff' and 'Spin off' or 'Spin out'
@@ -583,9 +583,10 @@ local function spin_branch(bufnr, mode)
   if name == '' then return end
 
   if plan.base then
-    local message = ('%s %d outgoing commit(s) into %s?\n%s will reset to %s.'):format(
-      label, plan.ahead, name, plan.branch, plan.base:sub(1, 12)
-    )
+    local moved = plan.from and ('commits from ' .. plan.from:sub(1, 12))
+      or (plan.ahead .. ' outgoing commit(s)')
+    local message = ('%s %s into %s?\n%s will reset to %s.'):format(
+      label, moved, name, plan.branch, plan.base:sub(1, 12))
     if mode == 'spinout' and plan.dirty then
       message = message .. '\nUncommitted changes will follow the new branch.'
     end
@@ -1037,12 +1038,12 @@ function M.setup(group)
     bang = false,
     desc = "Open git branch list",
   })
-  vim.api.nvim_create_user_command('GbranchSpinoff', function()
-    spin_branch(vim.api.nvim_get_current_buf(), 'spinoff')
-  end, { desc = 'Spin off outgoing commits to a new checked-out branch' })
-  vim.api.nvim_create_user_command('GbranchSpinout', function()
-    spin_branch(vim.api.nvim_get_current_buf(), 'spinout')
-  end, { desc = 'Spin out outgoing commits while staying on the current branch when clean' })
+  vim.api.nvim_create_user_command('GbranchSpinoff', function(opts)
+    spin_branch(vim.api.nvim_get_current_buf(), 'spinoff', opts.args ~= '' and opts.args or nil)
+  end, { nargs = '?', desc = 'Spin off outgoing commits from an optional commit' })
+  vim.api.nvim_create_user_command('GbranchSpinout', function(opts)
+    spin_branch(vim.api.nvim_get_current_buf(), 'spinout', opts.args ~= '' and opts.args or nil)
+  end, { nargs = '?', desc = 'Spin out outgoing commits from an optional commit' })
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,

@@ -270,6 +270,7 @@ local function show_log_help()
     'X (n/V)     drop commit(s)',
     'gr (n/V)    revert commit(s)',
     'cw          reword commit',
+    'bs / bS     spin off / spin out from commit',
     '<C-p>       toggle commit preview',
     '<Leader>R   reset --mixed to commit',
   })
@@ -586,6 +587,14 @@ function M.setup(group)
           end
         end)
       end, { buffer = ev.buf, silent = true, desc = "Reword commit" })
+
+      for key, command in pairs({ bs = 'GbranchSpinoff', bS = 'GbranchSpinout' }) do
+        vim.keymap.set('n', key, function()
+          local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+          if commit and not commit:match('^%x+$') then commit = nil end
+          vim.cmd(command .. (commit and (' ' .. commit) or ''))
+        end, { buffer = ev.buf, silent = true, desc = command .. ' from selected commit' })
+      end
 
       -- <C-p>: Toggle preview
       vim.keymap.set('n', '<C-p>', function()

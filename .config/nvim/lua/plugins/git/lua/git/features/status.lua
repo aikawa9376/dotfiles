@@ -2194,7 +2194,9 @@ function M.setup(group)
           }
           local label = section_labels[entry.section] or entry.section
           if entry.header then return { kind = 'change_section', label = label .. ' changes', entry = entry } end
-          return { kind = 'change', label = label .. ': ' .. entry.path, entry = entry }
+          local in_hunk = (entry.section == 'staged' or entry.section == 'unstaged')
+            and (line:match('^@@') or line:match('^[ +%-]')) ~= nil
+          return { kind = 'change', label = label .. ': ' .. entry.path, entry = entry, in_hunk = in_hunk }
         end
 
         local submodule = submodule_path_at_cursor()
@@ -2235,13 +2237,17 @@ function M.setup(group)
             { key = '<CR>', label = 'Open file' },
             { key = 'gf', label = 'Open file and close status' },
             { key = 'o', label = 'Toggle inline diff' },
-            { key = 's', label = entry.section == 'staged' and 'Unstage file' or 'Stage file' },
+            { key = 's', label = entry.section == 'staged'
+              and (context.in_hunk and 'Unstage hunk' or 'Unstage file')
+              or (context.in_hunk and 'Stage hunk' or 'Stage file') },
             { key = 'P', label = 'Open patch mode' },
             { key = 'I', label = 'Stage / reset patch' },
             { key = 'd', label = 'Open vertical diff' },
             { key = 'dh', label = 'Open horizontal diff' },
           }
-          if entry.section == 'staged' then table.insert(actions, { key = 'u', label = 'Unstage file' }) end
+          if entry.section == 'staged' then
+            table.insert(actions, { key = 'u', label = context.in_hunk and 'Unstage hunk' or 'Unstage file' })
+          end
           if entry.section == 'conflicted' then
             vim.list_extend(actions, {
               { key = 'c3', label = 'Open base / ours / theirs' },
@@ -2270,6 +2276,8 @@ function M.setup(group)
         if kind == 'commit' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open commit' },
+            { key = 'bs', label = 'Spin off commits from here' },
+            { key = 'bS', label = 'Spin out commits from here' },
             { key = 'gk', label = 'Show commit message body' },
             { key = 'gn', label = 'Show Git note' },
             { key = 'gN', label = 'Add / edit Git note' },
@@ -2659,6 +2667,12 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Open git log' })
       vim.keymap.set('n', 'B', '<Cmd>Gbranch<CR>',
         { buffer = b, nowait = true, silent = true, desc = 'Open git branch list' })
+      for key, command in pairs({ bs = 'GbranchSpinoff', bS = 'GbranchSpinout' }) do
+        vim.keymap.set('n', key, function()
+          local commit = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s')
+          vim.cmd(command .. (commit and (' ' .. commit) or ''))
+        end, { buffer = b, nowait = true, silent = true, desc = command .. ' from selected commit' })
+      end
       vim.keymap.set('n', 'W', '<Cmd>Gworktree<CR>',
         { buffer = b, nowait = true, silent = true, desc = 'Open git worktree list' })
       vim.keymap.set('n', 'gws', function()

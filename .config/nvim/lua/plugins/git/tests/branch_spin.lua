@@ -35,6 +35,19 @@ local function fixture()
 end
 
 local root, base, tip = fixture()
+local first = git(root, { 'rev-parse', 'HEAD^' })
+local selected = assert(spin.plan(root, 'spinout', tip))
+assert(selected.base == first and selected.from == tip)
+assert(spin.run(root, 'last-only', 'spinout', selected))
+assert(git(root, { 'rev-parse', 'main' }) == first)
+assert(git(root, { 'rev-parse', 'last-only' }) == tip)
+
+root, base, tip = fixture()
+local initial = git(root, { 'rev-parse', 'HEAD~2' })
+assert(not spin.plan(root, 'spinoff', initial), 'upstream commit was accepted as FROM')
+assert(not spin.plan(root, 'spinoff', 'missing-commit'), 'unknown FROM was accepted')
+
+root, base, tip = fixture()
 local plan = assert(spin.plan(root, 'spinoff'))
 assert(plan.branch == 'main' and plan.base == base and plan.ahead == 2 and plan.checkout)
 local result = assert(spin.run(root, 'feature', 'spinoff', plan))
@@ -96,6 +109,32 @@ vim.fn.input, vim.fn.confirm = input, confirm
 assert(git(root, { 'branch', '--show-current' }) == 'ui-feature', 'branch list spin-off did not check out')
 assert(git(root, { 'rev-parse', 'main' }) == base and git(root, { 'rev-parse', 'ui-feature' }) == tip)
 vim.api.nvim_buf_delete(branch_buf, { force = true })
+vim.cmd('cd ' .. vim.fn.fnameescape(old_cwd))
+
+root, base, tip = fixture()
+vim.cmd('cd ' .. vim.fn.fnameescape(root))
+vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/file.txt'))
+require('git.features.commands').setup()
+require('git.features.log').setup(vim.api.nvim_create_augroup('BranchSpinLogTest', { clear = true }))
+vim.cmd('FugitiveLog')
+local log_buf = vim.api.nvim_get_current_buf()
+local log_map = vim.fn.maparg('bS', 'n', false, true)
+assert(log_map.callback, 'log has no spin-out action')
+local tip_row
+for row, line in ipairs(vim.api.nvim_buf_get_lines(log_buf, 0, -1, false)) do
+  if line:match('^' .. tip:sub(1, 7)) then tip_row = row; break end
+end
+assert(tip_row, 'log did not show tip commit')
+vim.api.nvim_win_set_cursor(0, { tip_row, 0 })
+input, confirm = vim.fn.input, vim.fn.confirm
+vim.fn.input = function() return 'log-feature' end
+vim.fn.confirm = function() return 1 end
+log_map.callback()
+vim.fn.input, vim.fn.confirm = input, confirm
+assert(git(root, { 'rev-parse', 'main' }) == git(root, { 'rev-parse', tip .. '^' }),
+  'log spin-out ignored the commit boundary')
+assert(git(root, { 'rev-parse', 'log-feature' }) == tip)
+vim.api.nvim_buf_delete(log_buf, { force = true })
 vim.cmd('cd ' .. vim.fn.fnameescape(old_cwd))
 
 for _, path in ipairs(roots) do vim.fn.delete(path, 'rf') end
