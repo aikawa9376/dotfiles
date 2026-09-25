@@ -8,6 +8,8 @@ local branch_spin = require('git.features.branch_spin')
 
 local branch_name_ns = vim.api.nvim_create_namespace("fugitive_branch_names")
 local branch_fade_ns = vim.api.nvim_create_namespace("fugitive_branch_fade")
+local branch_filter_ns = vim.api.nvim_create_namespace('fugitive_branch_filter')
+local filters = { all = 'All', local_ = 'Local', remote = 'Remote', tags = 'Tags' }
 
 local function notify_branch_changed(bufnr, work_tree)
   utils.fire_fugitive_changed({
@@ -64,31 +66,45 @@ local function get_ahead_behind(branch, upstream, cmd_prefix)
   return tonumber(ahead) or 0, tonumber(behind) or 0
 end
 
-local function get_branch_list(bufnr)
+local function get_branch_list(bufnr, filter)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local cmd_prefix = get_git_prefix(bufnr)
   if not cmd_prefix then
-    return {}, {}, {}, false, 0
+    return {}, {}, {}, false, {}
   end
 
-  local local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
-  local local_ok = vim.v.shell_error == 0
-  local remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
-  local remote_ok = vim.v.shell_error == 0
-  if not local_ok or not remote_ok then
-    return {}, {}, {}, false, 0
+  filter = filter or vim.b[bufnr].branch_filter or 'all'
+  local local_branches, remote_branches, tags = {}, {}, {}
+  if filter == 'all' or filter == 'local_' then
+    local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
+    if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
+  end
+  if filter == 'all' or filter == 'remote' then
+    remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(symref)|%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
+    if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
+  end
+  if filter == 'all' or filter == 'tags' then
+    tags = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-creatordate --format=' |%(refname:lstrip=2)||%(creatordate:relative)|%(authorname)|%(contents:subject)' refs/tags/")
+    if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
   end
 
-  -- Combine local branches first, then remote branches
   local raw_branches = {}
-  for _, line in ipairs(local_branches) do
-    table.insert(raw_branches, line)
+  if filter == 'all' or filter == 'local_' then
+    for _, line in ipairs(local_branches) do
+      raw_branches[#raw_branches + 1] = { line = line, kind = 'local_' }
+    end
   end
-  for _, line in ipairs(remote_branches) do
-    -- Skip "origin" alone (origin/HEAD symref)
-    local branch = line:match('^[* ]?|([^|]+)')
-    if branch and branch ~= 'origin' then
-      table.insert(raw_branches, line)
+  if filter == 'all' or filter == 'remote' then
+    for _, line in ipairs(remote_branches) do
+      local symref, fields = line:match('^([^|]*)|(.*)$')
+      if symref == '' then
+        raw_branches[#raw_branches + 1] = { line = fields, kind = 'remote' }
+      end
+    end
+  end
+  if filter == 'all' or filter == 'tags' then
+    for _, line in ipairs(tags) do
+      raw_branches[#raw_branches + 1] = { line = line, kind = 'tags' }
     end
   end
 
@@ -99,14 +115,13 @@ local function get_branch_list(bufnr)
   local max_date_len = 0
   local max_author_len = 0
 
-  for _, line in ipairs(raw_branches) do
-    local head, branch, upstream, date, author, subject = line:match('^([* ]?)|(.-)|(.-)|(.-)|(.-)|(.*)')
+  for _, ref in ipairs(raw_branches) do
+    local head, branch, upstream, date, author, subject = ref.line:match('^([* ]?)|(.-)|(.-)|(.-)|(.-)|(.*)')
     if branch then
       local ahead, behind = 0, 0
-      -- Only calculate ahead/behind for local branches
-      if not branch:match('^origin/') then
+      if ref.kind == 'local_' then
          -- Pass cmd_prefix to use correct git context for rev-list
-         ahead, behind = get_ahead_behind(branch, upstream, cmd_prefix)
+         ahead, behind = get_ahead_behind('refs/heads/' .. branch, upstream, cmd_prefix)
       end
 
       local push_info = ''
@@ -131,6 +146,7 @@ local function get_branch_list(bufnr)
       date = date:gsub(' seconds?', 's')
 
       table.insert(branches, {
+        kind = ref.kind,
         head = head == '*' and '* ' or '  ',
         branch = branch,
         push_info = push_info,
@@ -279,11 +295,13 @@ local function get_branch_list(bufnr)
   end
 
   local branch_names = {}
+  local branch_kinds = {}
   for i, b in ipairs(branches) do
     branch_names[i] = b.branch
+    branch_kinds[i] = b.kind
   end
 
-  return formatted, branch_names, truncated_info, true, #local_branches
+  return formatted, branch_names, truncated_info, true, branch_kinds
 end
 
 local function apply_fade_highlight(bufnr, truncated_info)
@@ -342,6 +360,7 @@ local function apply_branch_highlight(bufnr)
 
   vim.api.nvim_set_hl(0, "FugitiveBranchName", { link = "Directory", default = true })
   vim.api.nvim_set_hl(0, "FugitiveBranchCurrent", { link = "String", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveBranchTag", { link = "Special", default = true })
   vim.api.nvim_buf_clear_namespace(bufnr, branch_name_ns, 0, -1)
 
   for lnum, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
@@ -350,28 +369,29 @@ local function apply_branch_highlight(bufnr)
     if prefix_end and branch then
       vim.api.nvim_buf_set_extmark(bufnr, branch_name_ns, lnum - 1, prefix_end, {
         end_col = prefix_end + #branch,
-        hl_group = line:match("^%s*%*") and "FugitiveBranchCurrent" or "FugitiveBranchName",
+        hl_group = (vim.b[bufnr].branch_kinds or {})[lnum] == 'tags' and 'FugitiveBranchTag'
+          or line:match("^%s*%*") and "FugitiveBranchCurrent" or "FugitiveBranchName",
         priority = 80,
       })
     end
   end
 end
 
-local function get_branch_name_from_line(line)
-  if not line then
-    -- If no line provided, use current cursor line and lookup in buffer variable
-    local bufnr = vim.api.nvim_get_current_buf()
-    local cursor_line = vim.fn.line('.')
-    local branch_map = vim.b[bufnr].branch_map
-    if branch_map and branch_map[cursor_line] then
-      return branch_map[cursor_line]
-    end
-  end
+local function get_branch_name_from_line()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local row = vim.fn.line('.')
+  if (vim.b[bufnr].branch_kinds or {})[row] == 'tags' then return nil end
+  return (vim.b[bufnr].branch_map or {})[row]
+end
 
-  line = line or vim.api.nvim_get_current_line()
-  -- Extract branch name (after * or spaces, before first double space)
-  local branch = line:match('^[* ]%s*(%S+)')
-  return branch
+local function get_ref_at_cursor(bufnr)
+  local row = vim.fn.line('.')
+  local name = (vim.b[bufnr].branch_map or {})[row]
+  if not name then return nil end
+  if (vim.b[bufnr].branch_kinds or {})[row] == 'tags' then
+    return 'refs/tags/' .. name
+  end
+  return name
 end
 
 _G.fugitive_upstream_completion = function(arg_lead)
@@ -395,15 +415,27 @@ end
 local function refresh_branch_list(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
 
-  local branch_output, branch_names, truncated_info, _, local_count = get_branch_list(bufnr)
+  local branch_output, branch_names, truncated_info, _, branch_kinds = get_branch_list(bufnr)
+  local old_row = vim.fn.line('.')
+  local selected = (vim.b[bufnr].branch_map or {})[old_row]
+  local selected_kind = (vim.b[bufnr].branch_kinds or {})[old_row]
   utils.with_buf_modifiable(bufnr, function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
     vim.b[bufnr].branch_map = branch_names
-    vim.b[bufnr].local_branch_count = local_count
+    vim.b[bufnr].branch_kinds = branch_kinds
     apply_fade_highlight(bufnr, truncated_info)
     apply_branch_highlight(bufnr)
   end)
   vim.bo[bufnr].modifiable = false
+  if vim.api.nvim_get_current_buf() == bufnr then
+    for row, name in ipairs(branch_names) do
+      if name == selected and branch_kinds[row] == selected_kind then
+        vim.api.nvim_win_set_cursor(0, { row, 0 })
+        return
+      end
+    end
+    vim.api.nvim_win_set_cursor(0, { math.min(old_row, math.max(#branch_names, 1)), 0 })
+  end
 end
 
 local function upstream_branch_at_cursor(bufnr)
@@ -412,7 +444,7 @@ local function upstream_branch_at_cursor(bufnr)
     vim.notify('No branch found on this line', vim.log.levels.WARN)
     return nil
   end
-  if vim.fn.line('.') > (vim.b[bufnr].local_branch_count or 0) then
+  if (vim.b[bufnr].branch_kinds or {})[vim.fn.line('.')] ~= 'local_' then
     vim.notify('Select a local branch to change its upstream', vim.log.levels.WARN)
     return nil
   end
@@ -563,7 +595,7 @@ local function rename_branch(bufnr)
   end
 
   -- Can't rename remote branches directly.
-  if old_name:match('^origin/') then
+  if (vim.b[bufnr].branch_kinds or {})[vim.fn.line('.')] ~= 'local_' then
     vim.notify("Cannot rename remote branches directly.", vim.log.levels.WARN)
     return
   end
@@ -1053,7 +1085,7 @@ local function open_branch_list()
     return
   end
 
-  local branch_output, branch_names, truncated_info, ok, local_count = get_branch_list(source_bufnr)
+  local branch_output, branch_names, truncated_info, ok, branch_kinds = get_branch_list(source_bufnr, 'all')
   if not ok then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
@@ -1067,11 +1099,12 @@ local function open_branch_list()
   utils.open_half_height_split('fugitive-branch://' .. git_dir)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree, git_dir)
+  vim.b[bufnr].branch_filter = 'all'
 
   utils.with_buf_modifiable(bufnr, function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
     vim.b[bufnr].branch_map = branch_names
-    vim.b[bufnr].local_branch_count = local_count
+    vim.b[bufnr].branch_kinds = branch_kinds
     apply_fade_highlight(bufnr, truncated_info)
     apply_branch_highlight(bufnr)
   end)
@@ -1084,10 +1117,18 @@ local function open_branch_list()
   vim.bo[bufnr].modifiable = false
 end
 
+local function set_branch_filter(bufnr, filter)
+  if vim.b[bufnr].branch_filter == filter then return end
+  vim.b[bufnr].branch_filter = filter
+  refresh_branch_list(bufnr)
+end
+
 local function show_branch_help()
   help.show('Branch buffer keys', {
     'g?          show this help',
-    '<CR>        Gedit branch',
+    'ga/gl/gr/gt show all/local/remote/tag refs',
+    '<CR>        Gedit selected ref',
+    'L           log for selected ref',
     'coo         checkout branch',
     'R           refresh list',
     'cP          cherry-pick register (+)',
@@ -1112,6 +1153,18 @@ local function show_branch_help()
 end
 
 function M.setup(group)
+  vim.api.nvim_set_decoration_provider(branch_filter_ns, {
+    on_win = function(_, _, bufnr, toprow)
+      if vim.bo[bufnr].filetype ~= 'fugitivebranch' then return false end
+      vim.api.nvim_buf_set_extmark(bufnr, branch_filter_ns, toprow, 0, {
+        virt_text = { { ' ' .. (filters[vim.b[bufnr].branch_filter or 'all'] or 'All') .. ' ', 'Comment' } },
+        virt_text_pos = 'right_align',
+        ephemeral = true,
+        priority = 200,
+      })
+      return false
+    end,
+  })
   vim.api.nvim_create_user_command('Gbranch', open_branch_list, {
     bang = false,
     desc = "Open git branch list",
@@ -1162,6 +1215,12 @@ function M.setup(group)
       vim.keymap.set('n', 'g?', function()
         show_branch_help()
       end, { buffer = bufnr, silent = true, desc = "Help" })
+      for key, filter in pairs({ ga = 'all', gl = 'local_', gr = 'remote', gt = 'tags' }) do
+        vim.keymap.set('n', key, function()
+          set_branch_filter(bufnr, filter)
+        end, { buffer = bufnr, nowait = true, silent = true,
+          desc = 'Show ' .. filters[filter] .. ' refs' })
+      end
 
       -- Add checkout keymap
       vim.keymap.set('n', 'coo', function()
@@ -1169,7 +1228,7 @@ function M.setup(group)
       end, { buffer = bufnr, silent = true, desc = "Checkout branch" })
 
       vim.keymap.set('n', '<CR>', function()
-        local branch = get_branch_name_from_line()
+        local branch = get_ref_at_cursor(bufnr)
         if not branch then
           vim.notify("No branch found on this line", vim.log.levels.WARN)
           return
@@ -1291,8 +1350,8 @@ function M.setup(group)
 
         local branches = {}
         for i = start_line, end_line do
-          local line = vim.fn.getline(i)
-          local branch = get_branch_name_from_line(line)
+          local branch = (vim.b[bufnr].branch_kinds or {})[i] ~= 'tags'
+            and (vim.b[bufnr].branch_map or {})[i] or nil
           if branch then
             table.insert(branches, branch)
           end
@@ -1303,7 +1362,7 @@ function M.setup(group)
 
       -- L: Open log for branch under cursor
       vim.keymap.set('n', 'L', function()
-        local branch = get_branch_name_from_line()
+        local branch = get_ref_at_cursor(bufnr)
         if not branch then
           vim.notify("No branch found on this line", vim.log.levels.WARN)
           return
@@ -1313,7 +1372,7 @@ function M.setup(group)
 
       -- <C-Space>: Flog window toggle for current branch
       vim.keymap.set('n', '<C-Space>', function()
-        local branch = get_branch_name_from_line()
+        local branch = get_ref_at_cursor(bufnr)
         if not branch then
           vim.notify("No branch found on this line", vim.log.levels.WARN)
           return
@@ -1342,7 +1401,7 @@ function M.setup(group)
         group = buf_group,
         callback = function()
           if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) and vim.g.flog_branch_bufnr == bufnr then
-            local branch = get_branch_name_from_line()
+            local branch = get_ref_at_cursor(bufnr)
             if branch then
               local current_win = vim.api.nvim_get_current_win()
 

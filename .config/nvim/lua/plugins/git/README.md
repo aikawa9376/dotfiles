@@ -67,6 +67,10 @@ In `Gbranch`, `bs` spins off the current branch and checks out the new branch;
 `bS` spins out and stays on the current branch when the worktree is clean. If
 there are uncommitted changes, spin-out checks out the new branch so those
 changes follow it. Both actions make the new branch track the original branch.
+The branch panel shows local branches, remote branches, and tags. Use `ga`,
+`gl`, `gr`, or `gt` to show all refs, local branches, remote branches, or tags;
+the active view is labeled at the upper right. `<CR>` and `L` inspect a selected
+tag as well as a branch. Branch-changing actions do not apply to tag rows.
 On a local branch row, `bu` sets its upstream with completion for local and
 remote branches; `bU` removes its upstream. These keys also work on a local
 branch other than the currently checked-out one.
