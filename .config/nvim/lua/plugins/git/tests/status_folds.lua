@@ -60,4 +60,16 @@ assert(vim.fn.foldtextresult(3) == 'Index flags [local] (1)',
 assert(folds.toggle(bufnr, 3) and vim.fn.foldclosed(3) == -1,
   'Index flags should use the regular Tab fold')
 
+folds.cleanup(bufnr)
+vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+  'Head: main', '', 'Unmerged paths (3)', 'UU a.txt', 'UU b.txt', 'UU c.txt',
+})
+folds.rebuild(bufnr)
+assert(vim.fn.foldclosed(3) == -1 and marker(3) == '▾',
+  'Unmerged paths should start open even with three files')
+assert(folds.is_header('Unmerged paths (3)') and folds.toggle(bufnr, 3)
+  and vim.fn.foldclosed(3) == 3, 'Unmerged paths should remain foldable')
+folds.rebuild(bufnr)
+assert(vim.fn.foldclosed(3) == 3, 'explicit Unmerged paths fold was lost on refresh')
+
 print('PASS: status section fold defaults, toggle, and refresh persistence')

@@ -6,6 +6,9 @@ local status_patch = require('git.features.status_patch')
 local models = {}
 local expanded = {}
 local subjects_by_buf = {}
+local operation_cache_by_buf = {}
+local chosen_conflict_side_by_buf = {}
+local conflict_diff_cache_by_buf = {}
 
 local function subject_cache(bufnr, work_tree)
   local cache = subjects_by_buf[bufnr]
@@ -162,9 +165,17 @@ local function parse_status_result(work_tree, result)
         end
       end
     elseif record:sub(1, 2) == 'u ' then
-      local xy, path = record:match('^u ([^ ]+) [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (.*)$')
+      local xy, base, ours, theirs, path = record:match(
+        '^u ([^ ]+) [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (%x+) (%x+) (%x+) (.*)$'
+      )
       if xy and path then
-        table.insert(model.conflicted, { section = 'conflicted', status = xy, path = path })
+        local function present(hash)
+          return hash and hash:find('[^0]') and hash or nil
+        end
+        table.insert(model.conflicted, {
+          section = 'conflicted', status = xy, path = path,
+          conflict_stages = { [1] = present(base), [2] = present(ours), [3] = present(theirs) },
+        })
       end
     elseif record:sub(1, 2) == '? ' then
       table.insert(model.untracked, { section = 'untracked', status = '?', path = record:sub(3) })
@@ -216,7 +227,77 @@ local function parse_status(bufnr, work_tree)
   return model
 end
 
+local function conflict_stages(model, entry)
+  local result = run(model.work_tree, { 'ls-files', '-u', '-z', '--', entry.path })
+  if result.code ~= 0 then return nil, vim.trim(result.stderr or 'Could not read conflict stages') end
+  local stages = {}
+  for _, record in ipairs(split_nul(result.stdout)) do
+    local hash, stage = record:match('^%d+ (%x+) ([123])\t')
+    if hash then stages[tonumber(stage)] = hash end
+  end
+  if not next(stages) then return nil, 'Conflict is no longer present; refresh status' end
+  return stages
+end
+
+local function conflict_diff_lines(model, entry)
+  local stages, err = entry.conflict_stages, nil
+  if not stages then stages, err = conflict_stages(model, entry) end
+  if not stages then return { '  ' .. err } end
+  entry.conflict_stages = stages
+  local function content(stage)
+    if not stages[stage] then return '' end
+    local result = run(model.work_tree, { 'cat-file', 'blob', stages[stage] })
+    return result.code == 0 and result.stdout or nil
+  end
+  local ours, theirs
+  local label = 'stage 2 (ours) -> stage 3 (theirs)'
+  local chosen = chosen_conflict_side_by_buf[model.bufnr]
+  chosen = chosen and chosen[entry.path]
+  if chosen and not vim.deep_equal(chosen.stages, stages) then
+    chosen_conflict_side_by_buf[model.bufnr][entry.path] = nil
+    chosen = nil
+  end
+  local cache = conflict_diff_cache_by_buf[model.bufnr]
+  local cache_key = not chosen and table.concat({ stages[2] or '', stages[3] or '' }, '\0') or nil
+  local cached = cache and cache[entry.path]
+  if cache_key and cached and cached.key == cache_key then return cached.lines end
+  if chosen then
+    local absolute = vim.fs.joinpath(model.work_tree, entry.path)
+    local stat = vim.uv.fs_lstat(absolute)
+    local worktree
+    if stat and stat.type == 'link' then
+      worktree = vim.uv.fs_readlink(absolute)
+    elseif stat and stat.type == 'file' then
+      local file = io.open(absolute, 'rb')
+      if file then worktree = file:read('*a'); file:close() end
+    end
+    if worktree == nil then return { '  Could not read selected worktree content' } end
+    ours, theirs = content(1), worktree
+    label = ('stage 1 (base) -> worktree (chosen %s)'):format(chosen.side)
+  else
+    ours, theirs = content(2), content(3)
+  end
+  if not ours or not theirs then return { '  Could not read conflict blobs' } end
+  if ours:find('\0', 1, true) or theirs:find('\0', 1, true) then
+    return { '  Binary conflict: ' .. label }
+  end
+  local diff = vim.diff(ours, theirs, { result_type = 'unified', ctxlen = 3 })
+  if diff == '' then return { '  No content difference: ' .. label } end
+  local lines = vim.split(diff, '\n', { plain = true, trimempty = true })
+  for index, line in ipairs(lines) do
+    if line:match('^@@') then
+      lines[index] = line .. '  ' .. label
+    end
+  end
+  if cache_key then
+    conflict_diff_cache_by_buf[model.bufnr] = conflict_diff_cache_by_buf[model.bufnr] or {}
+    conflict_diff_cache_by_buf[model.bufnr][entry.path] = { key = cache_key, lines = lines }
+  end
+  return lines
+end
+
 local function diff_lines(model, entry)
+  if entry.section == 'conflicted' then return conflict_diff_lines(model, entry) end
   if entry.section == 'untracked' then
     local paths = { entry.path }
     local absolute = vim.fs.joinpath(model.work_tree, entry.path)
@@ -292,6 +373,11 @@ local function entry_key(entry)
   return entry.section .. '\0' .. entry.path
 end
 
+local function is_expanded(bufnr, entry)
+  local value = expanded[bufnr] and expanded[bufnr][entry_key(entry)]
+  return value == true
+end
+
 local function append_section(lines, entries_by_row, model, title, section, entries)
   if #entries == 0 then return end
   table.insert(lines, '')
@@ -300,7 +386,7 @@ local function append_section(lines, entries_by_row, model, title, section, entr
   for _, entry in ipairs(entries) do
     table.insert(lines, change_display.line(entry))
     entries_by_row[#lines] = entry
-    if expanded[model.bufnr] and expanded[model.bufnr][entry_key(entry)] then
+    if is_expanded(model.bufnr, entry) then
       for _, diff_line in ipairs(diff_lines(model, entry)) do
         table.insert(lines, diff_line)
         entries_by_row[#lines] = entry
@@ -359,6 +445,30 @@ local function snapshot_from_model(bufnr, model, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then return nil, 'Invalid status buffer' end
   opts = opts or {}
   model.bufnr = bufnr
+  local previous = models[bufnr]
+  if previous and previous.work_tree ~= model.work_tree then
+    expanded[bufnr] = nil
+    operation_cache_by_buf[bufnr] = nil
+    chosen_conflict_side_by_buf[bufnr] = nil
+    conflict_diff_cache_by_buf[bufnr] = nil
+  end
+  local active_conflicts = {}
+  for _, entry in ipairs(model.conflicted) do active_conflicts[entry.path] = true end
+  local conflict_prefix = 'conflicted\0'
+  for key in pairs(expanded[bufnr] or {}) do
+    if key:sub(1, #conflict_prefix) == conflict_prefix
+      and not active_conflicts[key:sub(#conflict_prefix + 1)]
+    then
+      expanded[bufnr][key] = nil
+    end
+  end
+  local function prune_conflict_cache(cache)
+    for path in pairs(cache or {}) do
+      if not active_conflicts[path] then cache[path] = nil end
+    end
+  end
+  prune_conflict_cache(chosen_conflict_side_by_buf[bufnr])
+  prune_conflict_cache(conflict_diff_cache_by_buf[bufnr])
   local function with_subject(line, subject)
     return subject and (line .. '  ' .. subject) or line
   end
@@ -379,13 +489,27 @@ local function snapshot_from_model(bufnr, model, opts)
     table.insert(lines, with_subject('Push: ' .. model.push, model.push_subject))
   end
   vim.list_extend(lines, opts.header_lines or {})
-  if not opts.fast then
-    for _, line in ipairs(operation.status_lines(operation.inspect(model.work_tree))) do table.insert(lines, line) end
+  local cached_operation = operation_cache_by_buf[bufnr]
+  local git_dir = vim.b[bufnr].git_dir or (cached_operation and cached_operation.git_dir)
+  local signature, resolved_git_dir = operation.signature(model.work_tree, git_dir, model.oid)
+  local operation_lines
+  if cached_operation and cached_operation.work_tree == model.work_tree
+    and cached_operation.signature == signature
+  then
+    operation_lines = cached_operation.lines
+  elseif not opts.fast then
+    operation_lines = operation.status_lines(operation.inspect(model.work_tree))
+    operation_cache_by_buf[bufnr] = {
+      work_tree = model.work_tree,
+      git_dir = resolved_git_dir,
+      signature = signature,
+      lines = operation_lines,
+    }
   end
+  for _, line in ipairs(operation_lines or {}) do table.insert(lines, line) end
   table.insert(lines, 'Help: g?')
 
   if not opts.fast and model.upstream and model.behind > 0 then
-    local previous = models[bufnr]
     if previous and previous.work_tree == model.work_tree and previous.oid == model.oid
       and previous.upstream == model.upstream and model.upstream_oid
       and previous.upstream_oid == model.upstream_oid and previous.behind == model.behind
@@ -571,13 +695,13 @@ function M.toggle_diff(bufnr, row)
     local entries = section_entries(models[bufnr], entry.section)
     local expand = false
     for _, item in ipairs(entries) do
-      if not expanded[bufnr][entry_key(item)] then expand = true; break end
+      if not is_expanded(bufnr, item) then expand = true; break end
     end
     for _, item in ipairs(entries) do expanded[bufnr][entry_key(item)] = expand end
     return #entries > 0
   end
   local key = entry_key(entry)
-  expanded[bufnr][key] = not expanded[bufnr][key]
+  expanded[bufnr][key] = not is_expanded(bufnr, entry)
   return true
 end
 
@@ -637,13 +761,13 @@ function M.update_diff(bufnr, row, mode)
   if mode == 'toggle' then
     expand = false
     for _, entry in ipairs(entries) do
-      if not expanded[bufnr][entry_key(entry)] then expand = true; break end
+      if not is_expanded(bufnr, entry) then expand = true; break end
     end
   end
   local changed_entries = {}
   for _, entry in ipairs(entries) do
     local key = entry_key(entry)
-    if expanded[bufnr][key] ~= expand then table.insert(changed_entries, entry) end
+    if is_expanded(bufnr, entry) ~= expand then table.insert(changed_entries, entry) end
     expanded[bufnr][key] = expand
   end
   if #changed_entries == 0 then return true end
@@ -753,10 +877,45 @@ local function change_entries_async(model, entries, action, callback)
   end)
 end
 
+local function accept_conflict(bufnr, row)
+  local model = models[bufnr]
+  local entry = M.entry_at(bufnr, row)
+  local chosen = entry and chosen_conflict_side_by_buf[bufnr]
+  chosen = chosen and chosen[entry.path]
+  if chosen then
+    local stages, err = conflict_stages(model, entry)
+    if not stages then return false, err end
+    if not vim.deep_equal(stages, chosen.stages)
+      or (entry.conflict_stages and not vim.deep_equal(stages, entry.conflict_stages))
+    then
+      return false, 'The displayed conflict has changed; refresh status'
+    end
+    return M.mark_resolved(bufnr, row)
+  end
+  return M.resolve_conflict(bufnr, row, 'theirs', true)
+end
+
 function M.change_index(bufnr, row, action)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
   if not model or not entry then return false, 'No status entry at cursor' end
+  if entry.section == 'conflicted' then
+    if action == 'unstage' then return false, 'Only staged changes can be unstaged' end
+    if entry.header then
+      local rows = {}
+      for _, item in ipairs(model.conflicted) do
+        local direct = direct_row_for_entry(model, item)
+        if direct then rows[#rows + 1] = direct end
+      end
+      if #rows == 0 then return false, 'Section is empty' end
+      for _, direct in ipairs(rows) do
+        local ok, err = accept_conflict(bufnr, direct)
+        if not ok then return false, err end
+      end
+      return true
+    end
+    return accept_conflict(bufnr, row)
+  end
   local patched, err = patch_selection(bufnr, model, row, row, action)
   if patched ~= nil then return patched, err end
   local entries = entry.header and section_entries(model, entry.section) or { entry }
@@ -769,10 +928,28 @@ function M.change_index_range(bufnr, first_row, last_row, action)
   local patched, err = patch_selection(bufnr, model, first_row, last_row, action, true)
   if patched ~= nil then return patched, err end
   local entries = {}
+  local conflict_rows, seen = {}, {}
   for row = first_row, last_row do
     local entry = M.entry_at(bufnr, row)
-    if entry and not entry.header then table.insert(entries, entry) end
+    if entry and not entry.header then
+      if entry.section == 'conflicted' then
+        if row ~= M.entry_row(bufnr, row) then
+          return false, 'Select the conflict file row to choose the whole side'
+        end
+        if not seen[entry] then conflict_rows[#conflict_rows + 1] = row; seen[entry] = true end
+      else
+        entries[#entries + 1] = entry
+      end
+    end
   end
+  if #conflict_rows > 0 and action == 'unstage' then
+    return false, 'Only staged changes can be unstaged'
+  end
+  for _, row in ipairs(conflict_rows) do
+    local ok, err = accept_conflict(bufnr, row)
+    if not ok then return false, err end
+  end
+  if #entries == 0 then return #conflict_rows > 0 end
   return change_entries(model, entries, action)
 end
 
@@ -780,6 +957,10 @@ function M.change_index_async(bufnr, row, action, callback)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
   if not model or not entry then callback(false, 'No status entry at cursor'); return end
+  if entry.section == 'conflicted' then
+    callback(M.change_index(bufnr, row, action))
+    return
+  end
   local patched, err = patch_selection(bufnr, model, row, row, action)
   if patched ~= nil then callback(patched, err); return end
   local entries = entry.header and section_entries(model, entry.section) or { entry }
@@ -789,6 +970,13 @@ end
 function M.change_index_range_async(bufnr, first_row, last_row, action, callback)
   local model = models[bufnr]
   if not model then callback(false, 'Status model is unavailable'); return end
+  for row = first_row, last_row do
+    local entry = M.entry_at(bufnr, row)
+    if entry and not entry.header and entry.section == 'conflicted' then
+      callback(M.change_index_range(bufnr, first_row, last_row, action))
+      return
+    end
+  end
   local patched, err = patch_selection(bufnr, model, first_row, last_row, action, true)
   if patched ~= nil then callback(patched, err); return end
   local entries = {}
@@ -841,7 +1029,9 @@ function M.discard(bufnr, row)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
   if not model or not entry or entry.header then return false, 'No status entry at cursor' end
-  if entry.section == 'conflicted' then return false, 'Resolve the conflict before discarding it' end
+  if entry.section == 'conflicted' then
+    return M.resolve_conflict(bufnr, row, 'ours', true)
+  end
   if entry.section == 'untracked' then
     local absolute = vim.fs.joinpath(model.work_tree, entry.path)
     local flags = vim.fn.isdirectory(absolute) == 1 and 'rf' or ''
@@ -875,7 +1065,6 @@ function M.discard_range(bufnr, first_row, last_row)
       if row ~= direct_rows[entry] then
         return false, 'Select changed lines within one hunk, or select file rows'
       end
-      if entry.section == 'conflicted' then return false, 'Resolve the conflict before discarding it' end
       local previous = by_path[entry.path]
       if not previous then
         entries[#entries + 1] = entry
@@ -893,7 +1082,7 @@ function M.discard_range(bufnr, first_row, last_row)
   return true
 end
 
-function M.resolve_conflict(bufnr, row, side)
+function M.resolve_conflict(bufnr, row, side, mark_resolved)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
   if not model or not entry or entry.header or entry.section ~= 'conflicted' then
@@ -901,10 +1090,30 @@ function M.resolve_conflict(bufnr, row, side)
   end
   if side ~= 'ours' and side ~= 'theirs' then return false, 'Unknown conflict side' end
 
-  local result = run(model.work_tree, { 'checkout', '--' .. side, '--', entry.path })
+  local stages, err = conflict_stages(model, entry)
+  if not stages then return false, err end
+  if entry.conflict_stages and not vim.deep_equal(stages, entry.conflict_stages) then
+    return false, 'The displayed conflict has changed; refresh status'
+  end
+  local present = stages[side == 'ours' and 2 or 3] ~= nil
+
+  -- A missing stage means that side deleted the path. Checkout cannot select it.
+  local args = present and { 'checkout', '--' .. side, '--', entry.path }
+    or { 'rm', '--', entry.path }
+  local result = run(model.work_tree, args)
   if result.code ~= 0 then
     return false, vim.trim(result.stderr or ('Failed to choose ' .. side .. ' for ' .. entry.path))
   end
+  if mark_resolved and present then
+    local staged = run(model.work_tree, { 'add', '-A', '--', entry.path })
+    if staged.code ~= 0 then
+      return false, 'Selected ' .. side .. ', but could not stage it: '
+        .. vim.trim(staged.stderr or 'Git add failed')
+    end
+  end
+  chosen_conflict_side_by_buf[bufnr] = chosen_conflict_side_by_buf[bufnr] or {}
+  chosen_conflict_side_by_buf[bufnr][entry.path] = not mark_resolved and present
+    and { side = side, stages = stages } or nil
   return true
 end
 
@@ -916,6 +1125,7 @@ function M.mark_resolved(bufnr, row)
   end
   local result = run(model.work_tree, { 'add', '-A', '--', entry.path })
   if result.code ~= 0 then return false, vim.trim(result.stderr or 'Failed to mark conflict resolved') end
+  if chosen_conflict_side_by_buf[bufnr] then chosen_conflict_side_by_buf[bufnr][entry.path] = nil end
   return true
 end
 
@@ -987,6 +1197,9 @@ function M.cleanup(bufnr)
   models[bufnr] = nil
   expanded[bufnr] = nil
   subjects_by_buf[bufnr] = nil
+  operation_cache_by_buf[bufnr] = nil
+  chosen_conflict_side_by_buf[bufnr] = nil
+  conflict_diff_cache_by_buf[bufnr] = nil
 end
 
 return M

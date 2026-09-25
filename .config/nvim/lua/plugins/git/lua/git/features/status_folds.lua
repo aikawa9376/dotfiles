@@ -22,6 +22,7 @@ local heading_highlights = {
   { '^Index flags %[local%]', 'RainbowDelimiterCyan' },
   { '^Loading repository details', 'Comment' },
   { '^Bisecting', 'RainbowDelimiterYellow' },
+  { '^Merge Current:', 'RainbowDelimiterYellow' },
   { ' in progress', 'RainbowDelimiterYellow' },
 }
 
@@ -46,7 +47,7 @@ local headers = {
   { '^Index flags %[local%] %(', 'index_flags' },
 }
 
-local always_open = { untracked = true, unstaged = true, staged = true, commits = true }
+local always_open = { conflicted = true, untracked = true, unstaged = true, staged = true, commits = true }
 
 local function header(line)
   for _, item in ipairs(headers) do

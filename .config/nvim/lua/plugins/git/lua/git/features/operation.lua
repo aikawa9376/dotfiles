@@ -114,6 +114,41 @@ local function rebase_state(work_tree, git_dir)
   }
 end
 
+-- Index and worktree updates do not change operation progress. Keep this key
+-- independent of the index so status can reuse the expensive commit summaries.
+function M.signature(work_tree, git_dir, head_oid)
+  git_dir = git_dir or utils.get_git_dir(work_tree)
+  if not git_dir then return nil, nil end
+  local function stamp(path)
+    local stat = vim.uv.fs_stat(path)
+    if not stat then return '' end
+    return table.concat({ stat.size, stat.mtime.sec, stat.mtime.nsec }, ':')
+  end
+  if vim.fn.filereadable(git_dir .. '/BISECT_START') == 1 then
+    return table.concat({ 'bisect', head_oid or '', stamp(git_dir .. '/BISECT_START'),
+      stamp(git_dir .. '/refs/bisect'), stamp(git_dir .. '/refs/bisect/bad'),
+      stamp(git_dir .. '/packed-refs') }, '\0'), git_dir
+  end
+  local rebase_dir = vim.fn.isdirectory(git_dir .. '/rebase-merge') == 1 and git_dir .. '/rebase-merge'
+    or (vim.fn.isdirectory(git_dir .. '/rebase-apply') == 1 and git_dir .. '/rebase-apply' or nil)
+  if rebase_dir then
+    return table.concat({ 'rebase', head_oid or '', rebase_dir,
+      read_first(rebase_dir .. '/msgnum') or read_first(rebase_dir .. '/next') or '',
+      read_first(rebase_dir .. '/end') or read_first(rebase_dir .. '/last') or '',
+      read_first(rebase_dir .. '/stopped-sha') or read_first(git_dir .. '/REBASE_HEAD') or '',
+      stamp(rebase_dir .. '/done'), stamp(rebase_dir .. '/git-rebase-todo'),
+    }, '\0'), git_dir
+  end
+  for _, marker in ipairs({ 'CHERRY_PICK_HEAD', 'MERGE_HEAD', 'REVERT_HEAD' }) do
+    local revision = read_first(git_dir .. '/' .. marker)
+    if revision then
+      return table.concat({ marker, head_oid or '', revision,
+        stamp(git_dir .. '/sequencer/done'), stamp(git_dir .. '/sequencer/todo') }, '\0'), git_dir
+    end
+  end
+  return 'none', git_dir
+end
+
 function M.inspect(work_tree)
   local git_dir = utils.get_git_dir(work_tree)
   if not git_dir then return nil end
@@ -151,8 +186,13 @@ function M.status_lines(state)
     if state.current_step and state.total_steps and state.total_steps > 0 then
       label = label .. (' (%d/%d)'):format(state.current_step, state.total_steps)
     end
-    local lines = { label }
-    if state.current then table.insert(lines, 'Current: ' .. summary_line(state.current)) end
+    local lines
+    if state.kind == 'merge' and state.current then
+      lines = { 'Merge Current: ' .. summary_line(state.current) }
+    else
+      lines = { label }
+      if state.current then table.insert(lines, 'Current: ' .. summary_line(state.current)) end
+    end
     table.insert(lines, 'Operation keys: rr continue  rs skip  ra abort')
     return lines
   end

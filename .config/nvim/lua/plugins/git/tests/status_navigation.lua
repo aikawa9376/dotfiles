@@ -33,6 +33,10 @@ assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'cold open did not
 local function press(key) vim.fn.maparg(key, 'n', false, true).callback() end
 assert(vim.fn.maparg('bs', 'n', false, true).callback and vim.fn.maparg('bS', 'n', false, true).callback,
   'status does not expose branch spin actions')
+press('gp')
+assert(vim.api.nvim_get_current_line():match('^Commits %[latest 15%+%]'),
+  'gp did not focus the collapsed latest-commits section')
+press('gu')
 local untracked_row
 for row, line in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
   if line:match('^Untracked files') then untracked_row = row; break end
@@ -82,6 +86,7 @@ assert(actions.gu == 'Go to unstaged changes')
 assert(actions.gU == 'Go to untracked files')
 assert(actions.gx == 'Manage update-index flags')
 assert(actions.gs == 'Go to staged changes')
+assert(actions.gm == 'Go to unmerged paths' and actions.gp == 'Go to commits')
 vim.bo[b].modifiable = true
 vim.bo[b].readonly = false
 vim.api.nvim_buf_set_lines(b, -1, -1, false, { '', 'Worktrees (1)' })

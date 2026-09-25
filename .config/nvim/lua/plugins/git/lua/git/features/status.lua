@@ -1065,7 +1065,7 @@ local function open_index_flag_diff(bufnr, entry, layout)
   return open_diff_with_current_file(work_tree, sides, nil, layout)
 end
 
-local function open_conflict_diff(bufnr)
+local function open_conflict_diff(bufnr, layout)
   local row = vim.api.nvim_win_get_cursor(0)[1]
   local sides, err = status_renderer.conflict_sides(bufnr, row)
   if not sides then vim.notify(err, vim.log.levels.WARN); return false end
@@ -1078,7 +1078,7 @@ local function open_conflict_diff(bufnr)
     pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
   end
   for index = 2, #sides do
-    vim.cmd('rightbelow vsplit')
+    vim.cmd(layout == 'horizontal' and 'rightbelow split' or 'rightbelow vsplit')
     show_diff_side(vim.api.nvim_get_current_win(), sides[index].lines, sides.path, sides[index].label)
   end
   vim.cmd('wincmd =')
@@ -2037,8 +2037,6 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Choose theirs for conflicted file' })
       vim.keymap.set('n', 'cr', function() conflict_action('resolved') end,
         { buffer = b, nowait = true, silent = true, desc = 'Mark conflicted file resolved' })
-      vim.keymap.set('n', 'c3', function() open_conflict_diff(b) end,
-        { buffer = b, nowait = true, silent = true, desc = 'Open base/ours/theirs conflict diff' })
       vim.keymap.set('n', ']x', function()
         move_to_match(1, function(_, candidate)
           local entry = status_renderer.entry_at(b, candidate)
@@ -2202,10 +2200,11 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Collapse selected inline diffs' })
 
       for key, section in pairs({
+        gm = 'conflicted',
         gu = 'unstaged',
         gU = 'untracked',
         gs = 'staged',
-        gp = 'unpushed',
+        gp = 'commits',
         gP = 'unpulled',
       }) do
         local target_section = section
@@ -2411,7 +2410,7 @@ function M.setup(group)
         if not current_operation then return false end
         local first, last
         for candidate, line in ipairs(lines) do
-          if line:match(' in progress') or line:match('^Bisecting') then
+          if line:match(' in progress') or line:match('^Merge Current:') or line:match('^Bisecting') then
             first = candidate
           elseif first and (line:match('^Operation keys:') or line:match('^Bisect keys:')) then
             last = candidate
@@ -2486,7 +2485,8 @@ function M.setup(group)
             { key = '<CR>', label = 'Open file' },
             { key = 'gf', label = 'Open file and close status' },
             { key = 'o', label = 'Toggle inline diff' },
-            { key = 's', label = entry.section == 'staged'
+            { key = 's', label = entry.section == 'conflicted' and 'Accept incoming or chosen worktree'
+              or entry.section == 'staged'
               and (context.in_hunk and 'Unstage hunk' or 'Unstage file')
               or (context.in_hunk and 'Stage hunk' or 'Stage file') },
             { key = 'P', label = 'Open patch mode' },
@@ -2499,11 +2499,14 @@ function M.setup(group)
           end
           if entry.section == 'conflicted' then
             vim.list_extend(actions, {
-              { key = 'c3', label = 'Open base / ours / theirs' },
+              { key = 'X', label = 'Keep current side (stage 2)' },
               { key = 'co', label = 'Choose ours' },
               { key = 'ct', label = 'Choose theirs' },
-              { key = 'cr', label = 'Mark resolved' },
+              { key = 'cr', label = 'Resolve with worktree state' },
             })
+            for _, action in ipairs(actions) do
+              if action.key == 'd' then action.label = 'Open base / ours / theirs' end
+            end
           else
             table.insert(actions, { key = 'X', label = 'Discard change' })
           end
@@ -2516,7 +2519,9 @@ function M.setup(group)
             { key = 'o', label = 'Toggle section diffs' },
             { key = '>', label = 'Expand section diffs' },
             { key = '<', label = 'Collapse section diffs' },
-            { key = 's', label = staged and 'Unstage section' or 'Stage section' },
+            { key = 's', label = context.entry.section == 'conflicted'
+              and 'Accept incoming side for all conflicts'
+              or staged and 'Unstage section' or 'Stage section' },
           }
           if staged then table.insert(actions, { key = 'u', label = 'Unstage section' }) end
           return { title = context.label, actions = actions }
@@ -2653,9 +2658,11 @@ function M.setup(group)
 
       local function repository_action_group(context, health, current_operation)
         local actions = {
+          { key = 'gm', label = 'Go to unmerged paths' },
           { key = 'gu', label = 'Go to unstaged changes' },
           { key = 'gU', label = 'Go to untracked files' },
           { key = 'gs', label = 'Go to staged changes' },
+          { key = 'gp', label = 'Go to commits' },
           { key = 'cc', label = 'Commit staged changes' },
           { key = 'ca', label = 'Amend commit' },
           { key = 'ce', label = 'Amend without editing message' },
@@ -3004,6 +3011,12 @@ function M.setup(group)
           open_index_flag_diff(b, flagged, layout)
           return
         end
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        local entry = status_renderer.entry_at(b, row)
+        if entry and not entry.header and entry.section == 'conflicted' then
+          open_conflict_diff(b, layout)
+          return
+        end
         local target_line = nil
         local current_line_idx = vim.api.nvim_win_get_cursor(0)[1]
         local hunk_line = nil
@@ -3095,13 +3108,15 @@ end
 function M.focus_section(bufnr, section, opts)
   bufnr = bufnr == 0 and vim.api.nvim_get_current_buf() or bufnr
   opts = opts or {}
+  local commit_header = function(line) return status_header_kind(line) == 'commit' end
   local patterns = {
     conflicted = '^Unmerged',
     untracked = '^Untracked',
     unstaged = '^Unstaged',
     staged = '^Staged',
     unpulled = '^Unpulled ',
-    unpushed = '^Unpushed %[only%]',
+    unpushed = commit_header,
+    commits = commit_header,
   }
   local pattern = patterns[section]
   if not pattern then return false end
@@ -3112,8 +3127,15 @@ function M.focus_section(bufnr, section, opts)
     if winid == -1 then return false end
     local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
     for row, line in ipairs(lines) do
-      if line:match(pattern) then
+      local matches = type(pattern) == 'function' and pattern(line)
+        or type(pattern) == 'string' and line:match(pattern)
+      if matches then
         local target = row < #lines and lines[row + 1] ~= '' and row + 1 or row
+        if target > row and vim.api.nvim_win_call(winid, function()
+          return vim.fn.foldclosed(row) == row
+        end) then
+          target = row
+        end
         pcall(vim.api.nvim_win_set_cursor, winid, { target, 0 })
         local anchor = capture_status_cursor(bufnr, winid)
         if anchor then status_cursor_anchor_by_buf[bufnr] = anchor end

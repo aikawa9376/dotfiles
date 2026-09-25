@@ -46,10 +46,12 @@ worktree file. In a line-range log, `<C-p>` and `<CR>` open the selected commit
 with the corresponding file expanded and the cursor on its relevant diff line.
 
 In the status panel, `<Tab>` opens or closes the section under the cursor; an
-arrow in the gutter shows its state. Untracked, unstaged, staged, and commit sections
-start open. Other sections start closed when they contain at least three items.
+arrow in the gutter shows its state. Unmerged, untracked, unstaged, staged, and
+commit sections start open. Other sections start closed at three or more items.
 The choice is preserved across status refreshes. Enter keeps each section's
 existing action, including commit and pull-request scope changes.
+`gm` jumps to Unmerged paths. `gp` jumps to whichever commit section is shown:
+`Unpushed [only]` or `Commits [latest 15+]`.
 
 Expand a staged or unstaged file with `o`. On a displayed hunk, `s`/`-`
 stages or unstages that hunk; `u` unstages a staged hunk. Select added or
@@ -62,6 +64,25 @@ selected file rows. Staged selections are removed from both the index and
 worktree; unstaged selections affect only the worktree. If the worktree has
 overlapping edits that prevent a staged patch from applying cleanly, `X` leaves
 the selection unchanged and reports the conflict.
+Expand an unmerged path with `o` to see the diff from Git's stage 2 (ours) to
+stage 3 (theirs). `UD` therefore shows removed lines; `DU` shows added lines.
+After `co` or `ct` chooses a present side, the still-unmerged path instead
+shows the adopted worktree content against stage 1 (base), including edits made
+after choosing that side. An `AA` conflict has an empty base, so the adopted
+file appears as added lines.
+`s` accepts stage 3 by default; after `co` or `ct`, it stages the chosen
+worktree content instead. `X` keeps stage 2 and resolves the file. These keys
+act on the whole conflicted file, even with the cursor on a
+displayed hunk; Visual selections inside a conflict diff are rejected. `cr`
+instead stages the current worktree content, allowing a manual merge. `co` and
+`ct` still check out either side without staging it; choosing a deleted side
+necessarily removes the path and resolves it. `d` opens base, ours, and theirs
+for a conflicted file; for other files it keeps the usual two-way diff.
+The Unmerged paths section starts open even with three or more files. Individual
+file diffs start closed and can be expanded with `o`.
+An active merge uses a single `Merge Current: <commit> <subject>` heading.
+During rebase, Git's stage 2 is the branch being rebased onto and stage 3 is
+the replayed commit, so the diff direction and `s`/`X` meanings stay the same.
 
 In `Gbranch`, `bs` spins off the current branch and checks out the new branch;
 `bS` spins out and stays on the current branch when the worktree is clean. If
