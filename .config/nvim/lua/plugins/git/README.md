@@ -57,11 +57,19 @@ removed lines within one hunk in Visual mode and press the same key to update
 only those lines. File headers and section headings retain file/section-wide
 actions. The displayed staged diff is index versus `HEAD`; the unstaged diff is
 worktree versus index. `I` keeps the interactive Git patch command available.
+Visual `X` discards selected changed lines within one displayed hunk, or the
+selected file rows. Staged selections are removed from both the index and
+worktree; unstaged selections affect only the worktree. If the worktree has
+overlapping edits that prevent a staged patch from applying cleanly, `X` leaves
+the selection unchanged and reports the conflict.
 
 In `Gbranch`, `bs` spins off the current branch and checks out the new branch;
 `bS` spins out and stays on the current branch when the worktree is clean. If
 there are uncommitted changes, spin-out checks out the new branch so those
 changes follow it. Both actions make the new branch track the original branch.
+On a local branch row, `bu` sets its upstream with completion for local and
+remote branches; `bU` removes its upstream. These keys also work on a local
+branch other than the currently checked-out one.
 When the original branch has outgoing commits, it is moved back to the merge
 base with its upstream; without an upstream or outgoing commits it stays put.
 The branch name and any reset are confirmed before changing refs.

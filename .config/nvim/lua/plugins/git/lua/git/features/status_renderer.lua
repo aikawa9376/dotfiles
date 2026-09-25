@@ -282,6 +282,9 @@ local function patch_selection(bufnr, model, first_row, last_row, action, visual
   end
   local expected = {}
   for row = header_row, final_row do expected[#expected + 1] = lines[row] end
+  if action == 'discard' then
+    return status_patch.discard(model.work_tree, first.section, first.path, hunk_number, selected, expected)
+  end
   return status_patch.apply(model.work_tree, first.section, first.path, hunk_number, selected, expected)
 end
 
@@ -851,6 +854,42 @@ function M.discard(bufnr, row)
   vim.list_extend(args, { '--', entry.path })
   local result = run(model.work_tree, args)
   if result.code ~= 0 then return false, vim.trim(result.stderr or 'Git restore failed') end
+  return true
+end
+
+function M.discard_range(bufnr, first_row, last_row)
+  local model = models[bufnr]
+  if not model then return false, 'Status model is unavailable' end
+  local patched, err = patch_selection(bufnr, model, first_row, last_row, 'discard', true)
+  if patched ~= nil then return patched, err end
+
+  local direct_rows = {}
+  for row = 1, last_row do
+    local entry = model.entries_by_row[row]
+    if entry and not entry.header and not direct_rows[entry] then direct_rows[entry] = row end
+  end
+  local entries, by_path = {}, {}
+  for row = first_row, last_row do
+    local entry = model.entries_by_row[row]
+    if entry and not entry.header then
+      if row ~= direct_rows[entry] then
+        return false, 'Select changed lines within one hunk, or select file rows'
+      end
+      if entry.section == 'conflicted' then return false, 'Resolve the conflict before discarding it' end
+      local previous = by_path[entry.path]
+      if not previous then
+        entries[#entries + 1] = entry
+        by_path[entry.path] = #entries
+      elseif entry.section == 'staged' then
+        entries[previous] = entry
+      end
+    end
+  end
+  if #entries == 0 then return false, 'No discardable item in selection' end
+  for _, entry in ipairs(entries) do
+    local ok, discard_err = M.discard(bufnr, direct_rows[entry])
+    if not ok then return false, discard_err end
+  end
   return true
 end
 

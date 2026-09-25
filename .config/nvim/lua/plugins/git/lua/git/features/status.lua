@@ -168,7 +168,7 @@ local function status_file_position(bufnr, row)
   return entry, direct_row, ordinal
 end
 
-local function set_status_file_anchor(anchor, bufnr, row, preferred_section)
+local function set_status_file_anchor(anchor, bufnr, row, preferred_section, lines)
   local entry, direct_row, ordinal = status_file_position(bufnr, row)
   if not entry then return false end
   anchor.key_type = 'status_entry'
@@ -176,6 +176,9 @@ local function set_status_file_anchor(anchor, bufnr, row, preferred_section)
   anchor.section = entry.section
   anchor.file_ordinal = ordinal
   anchor.preferred_section = preferred_section
+  anchor.entry_offset = not preferred_section and row > direct_row and row - direct_row or nil
+  anchor.entry_text = anchor.entry_offset
+    and (lines and lines[row] or vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1]) or nil
   anchor.row = direct_row
   return true
 end
@@ -204,7 +207,7 @@ local function capture_status_cursor(bufnr, winid)
     view = view,
     winid = winid,
   }
-  set_status_file_anchor(anchor, bufnr, cursor[1])
+  set_status_file_anchor(anchor, bufnr, cursor[1], nil, lines)
   return anchor
 end
 
@@ -238,10 +241,6 @@ local function capture_status_cursors_before_reload(bufnr)
 end
 
 local function find_status_cursor_row(lines, anchor, bufnr)
-  if anchor.position_only then
-    return math.min(math.max(anchor.row or 1, 1), math.max(#lines, 1))
-  end
-
   if anchor.key_type == 'status_entry' and anchor.section and bufnr then
     local section_rows, section_headers = {}, {}
     for _, section in ipairs(change_section_order) do section_rows[section] = {} end
@@ -258,9 +257,31 @@ local function find_status_cursor_row(lines, anchor, bufnr)
         table.insert(section_rows[entry.section], { row = row, path = entry.path })
       end
     end
+    local function entry_row(direct_row)
+      if not anchor.entry_offset then return direct_row end
+      local entry = status_renderer.entry_at(bufnr, direct_row)
+      local last_row = direct_row
+      while last_row < #lines and status_renderer.entry_at(bufnr, last_row + 1) == entry do
+        last_row = last_row + 1
+      end
+      local target = math.min(direct_row + anchor.entry_offset, last_row)
+      local best_row, best_distance
+      for row = direct_row + 1, last_row do
+        if lines[row] == anchor.entry_text then
+          local distance = math.abs(row - target)
+          if not best_distance or distance < best_distance then
+            best_row, best_distance = row, distance
+          end
+        end
+      end
+      return best_row or target
+    end
     local function matching_file(section)
       for _, item in ipairs(section_rows[section] or {}) do
-        if item.path == anchor.key then return item.row end
+        if item.path == anchor.key then
+          return section == anchor.section and not anchor.preferred_section
+            and entry_row(item.row) or item.row
+        end
       end
     end
     local preferred = anchor.preferred_section or anchor.section
@@ -1305,16 +1326,12 @@ function M.setup(group)
         end)
       end
 
-      local function reload_status(position_only, reuse_details, cursor_anchors)
+      local function reload_status(reuse_details, cursor_anchors)
         if not is_live() then return end
         local was_dirty = status_dirty_by_buf[b]
         status_dirty_by_buf[b] = nil
-        local anchors = cursor_anchors or (position_only
-          and capture_status_cursors(b)
-          or (was_dirty and capture_status_cursors_before_reload(b) or capture_status_cursors(b)))
-        if position_only then
-          for _, anchor in ipairs(anchors) do anchor.position_only = true end
-        end
+        local anchors = cursor_anchors
+          or (was_dirty and capture_status_cursors_before_reload(b) or capture_status_cursors(b))
         if #anchors > 0 then pending_status_cursor_anchors_by_buf[b] = anchors end
         render_fast_status(true, reuse_details)
         if not reuse_details then fetch_pull_requests() end
@@ -1501,7 +1518,7 @@ function M.setup(group)
           local root = utils.normalize_path(work_tree)
           if absolute and root and (absolute == root or absolute:sub(1, #root + 1) == root .. '/') then
             if utils.is_buf_visible(b) then
-              reload_status(true, true)
+              reload_status(true)
             else
               status_dirty_by_buf[b] = true
             end
@@ -1889,7 +1906,7 @@ function M.setup(group)
             vim.notify(err, vim.log.levels.WARN)
             return
           end
-          reload_status(false, true, anchors)
+          reload_status(true, anchors)
           notify_repo_changed(true)
         end
         if first_row and last_row then
@@ -1922,7 +1939,7 @@ function M.setup(group)
           index_change_running = false
           if not is_live() then return end
           if not changed then vim.notify(err, vim.log.levels.WARN); return end
-          reload_status(false, true)
+          reload_status(true)
           notify_repo_changed(true)
         end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Unstage all changes' })
@@ -1934,7 +1951,7 @@ function M.setup(group)
           index_change_running = false
           if not is_live() then return end
           if not changed then vim.notify(err, vim.log.levels.WARN); return end
-          reload_status(false, true)
+          reload_status(true)
           notify_repo_changed(true)
         end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Stage all changes' })
@@ -2383,10 +2400,12 @@ function M.setup(group)
         local first_row = math.min(vim.fn.line('v'), vim.fn.line('.'))
         local last_row = math.max(vim.fn.line('v'), vim.fn.line('.'))
         vim.cmd('normal! \27')
-        if not drop_status_commits(first_row, last_row) then
-          vim.notify('No commits found', vim.log.levels.WARN)
-        end
-      end, { buffer = b, nowait = true, silent = true, desc = 'Drop selected commits' })
+        if drop_status_commits(first_row, last_row) then return end
+        local discarded, err = status_renderer.discard_range(b, first_row, last_row)
+        if not discarded then vim.notify(err, vim.log.levels.WARN); return end
+        reload_status()
+        notify_repo_changed(true)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Discard selected changes or drop commits' })
 
       local function cursor_is_in_operation(lines, row, current_operation)
         if not current_operation then return false end

@@ -68,7 +68,7 @@ local function get_branch_list(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local cmd_prefix = get_git_prefix(bufnr)
   if not cmd_prefix then
-    return {}, {}, {}, false
+    return {}, {}, {}, false, 0
   end
 
   local local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
@@ -76,7 +76,7 @@ local function get_branch_list(bufnr)
   local remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:short)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
   local remote_ok = vim.v.shell_error == 0
   if not local_ok or not remote_ok then
-    return {}, {}, {}, false
+    return {}, {}, {}, false, 0
   end
 
   -- Combine local branches first, then remote branches
@@ -283,7 +283,7 @@ local function get_branch_list(bufnr)
     branch_names[i] = b.branch
   end
 
-  return formatted, branch_names, truncated_info, true
+  return formatted, branch_names, truncated_info, true, #local_branches
 end
 
 local function apply_fade_highlight(bufnr, truncated_info)
@@ -374,17 +374,92 @@ local function get_branch_name_from_line(line)
   return branch
 end
 
+_G.fugitive_upstream_completion = function(arg_lead)
+  local work_tree = get_buffer_work_tree(vim.api.nvim_get_current_buf())
+  if not work_tree then return {} end
+  local result = vim.system({ 'git', 'for-each-ref', '--format=%(refname:short)',
+    'refs/heads', 'refs/remotes' }, { cwd = work_tree, text = true }):wait()
+  if result.code ~= 0 then return {} end
+  local current = get_branch_name_from_line()
+  local matches = {}
+  for branch in (result.stdout or ''):gmatch('[^\n]+') do
+    if branch ~= current and not branch:match('/HEAD$')
+      and branch:sub(1, #arg_lead) == arg_lead then
+      matches[#matches + 1] = branch
+    end
+  end
+  table.sort(matches)
+  return matches
+end
+
 local function refresh_branch_list(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
 
-  local branch_output, branch_names, truncated_info = get_branch_list(bufnr)
+  local branch_output, branch_names, truncated_info, _, local_count = get_branch_list(bufnr)
   utils.with_buf_modifiable(bufnr, function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
     vim.b[bufnr].branch_map = branch_names
+    vim.b[bufnr].local_branch_count = local_count
     apply_fade_highlight(bufnr, truncated_info)
     apply_branch_highlight(bufnr)
   end)
   vim.bo[bufnr].modifiable = false
+end
+
+local function upstream_branch_at_cursor(bufnr)
+  local branch = get_branch_name_from_line()
+  if not branch then
+    vim.notify('No branch found on this line', vim.log.levels.WARN)
+    return nil
+  end
+  if vim.fn.line('.') > (vim.b[bufnr].local_branch_count or 0) then
+    vim.notify('Select a local branch to change its upstream', vim.log.levels.WARN)
+    return nil
+  end
+  local work_tree = get_buffer_work_tree(bufnr, true)
+  if not work_tree then return nil end
+  local local_ref = vim.system({ 'git', 'show-ref', '--verify', '--quiet',
+    'refs/heads/' .. branch }, { cwd = work_tree, text = true }):wait()
+  if local_ref.code ~= 0 then
+    vim.notify('Select a local branch to change its upstream', vim.log.levels.WARN)
+    return nil
+  end
+  return branch, work_tree
+end
+
+local function change_upstream(bufnr, unset)
+  local branch, work_tree = upstream_branch_at_cursor(bufnr)
+  if not branch then return end
+  local current_result = vim.system({ 'git', 'rev-parse', '--abbrev-ref', '--symbolic-full-name',
+    branch .. '@{upstream}' }, { cwd = work_tree, text = true }):wait()
+  local current = current_result.code == 0 and vim.trim(current_result.stdout or '') or ''
+  local args, target
+  if unset then
+    local configured = vim.system({ 'git', 'config', '--get', 'branch.' .. branch .. '.merge' },
+      { cwd = work_tree, text = true }):wait()
+    if configured.code ~= 0 then
+      vim.notify(branch .. ' has no upstream', vim.log.levels.INFO)
+      return
+    end
+    args = { 'git', 'branch', '--unset-upstream', branch }
+  else
+    target = vim.fn.input('Upstream for ' .. branch .. ': ', current,
+      'customlist,v:lua.fugitive_upstream_completion')
+    vim.cmd('redraw')
+    target = vim.trim(target or '')
+    if target == '' or target == current then return end
+    args = { 'git', 'branch', '--set-upstream-to=' .. target, branch }
+  end
+  local result = vim.system(args, { cwd = work_tree, text = true }):wait()
+  if result.code ~= 0 then
+    local message = vim.trim(result.stderr or '')
+    vim.notify(message ~= '' and message or 'Could not update upstream', vim.log.levels.ERROR)
+    return
+  end
+  refresh_branch_list(bufnr)
+  notify_branch_changed(bufnr, work_tree)
+  vim.notify(('Upstream for %s: %s'):format(branch, unset and 'none' or target),
+    vim.log.levels.INFO)
 end
 
 
@@ -978,7 +1053,7 @@ local function open_branch_list()
     return
   end
 
-  local branch_output, branch_names, truncated_info, ok = get_branch_list(source_bufnr)
+  local branch_output, branch_names, truncated_info, ok, local_count = get_branch_list(source_bufnr)
   if not ok then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
@@ -996,6 +1071,7 @@ local function open_branch_list()
   utils.with_buf_modifiable(bufnr, function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
     vim.b[bufnr].branch_map = branch_names
+    vim.b[bufnr].local_branch_count = local_count
     apply_fade_highlight(bufnr, truncated_info)
     apply_branch_highlight(bufnr)
   end)
@@ -1020,6 +1096,8 @@ local function show_branch_help()
     'bw          rename branch',
     'bs          spin off current branch (check out new branch)',
     'bS          spin out current branch (stay if clean)',
+    'bu          set upstream of selected local branch',
+    'bU          unset upstream of selected local branch',
     'cod         duplicate branch',
     'cot         create worktree',
     'X (n/V)     delete branch(es)',
@@ -1145,6 +1223,12 @@ function M.setup(group)
       vim.keymap.set('n', 'bS', function()
         spin_branch(bufnr, 'spinout')
       end, { buffer = bufnr, silent = true, desc = 'Spin out current branch' })
+      vim.keymap.set('n', 'bu', function()
+        change_upstream(bufnr, false)
+      end, { buffer = bufnr, silent = true, desc = 'Set upstream of selected branch' })
+      vim.keymap.set('n', 'bU', function()
+        change_upstream(bufnr, true)
+      end, { buffer = bufnr, silent = true, desc = 'Unset upstream of selected branch' })
 
       -- bd: Duplicate branch (prompt for a new name and create local branch from selected one)
       vim.keymap.set('n', 'cod', function()
