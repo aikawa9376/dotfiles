@@ -1973,8 +1973,10 @@ function M.setup(group)
           return
         end
         local entry_row = status_renderer.entry_row(b, row)
+        local entry = status_renderer.entry_at(b, row)
         local mode = value == nil and 'toggle' or (value and 'show' or 'hide')
         if status_renderer.update_diff(b, row, mode) and entry_row then
+          if entry and entry.section == 'conflicted' then syntax_highlight.refresh(b) end
           local line_count = vim.api.nvim_buf_line_count(b)
           pcall(vim.api.nvim_win_set_cursor, 0, { math.min(entry_row, line_count), 0 })
         end

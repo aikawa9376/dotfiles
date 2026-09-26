@@ -239,6 +239,126 @@ local function conflict_stages(model, entry)
   return stages
 end
 
+local function conflict_blocks(worktree)
+  local blocks, block, phase, width = {}, nil, nil, nil
+  for row, line in ipairs(vim.split(worktree, '\n', { plain = true })) do
+    local marker_line = line:gsub('\r$', '')
+    local opener = marker_line:match('^(<+) ')
+    if not phase and opener and #opener >= 7 then
+      width = #opener
+      block = { ours = {}, theirs = {}, first = row }
+      phase = 'ours'
+    elseif phase == 'ours' and marker_line:sub(1, width + 1) == string.rep('|', width) .. ' ' then
+      phase = 'base'
+    elseif (phase == 'ours' or phase == 'base') and marker_line == string.rep('=', width) then
+      phase = 'theirs'
+    elseif phase == 'theirs' and marker_line:sub(1, width + 1) == string.rep('>', width) .. ' ' then
+      block.last = row
+      blocks[#blocks + 1] = block
+      block, phase, width = nil, nil, nil
+    elseif phase == 'ours' then
+      block.ours[#block.ours + 1] = line
+    elseif phase == 'theirs' then
+      block.theirs[#block.theirs + 1] = line
+    end
+  end
+  if phase then return nil end
+  return blocks
+end
+
+local function read_worktree_content(work_tree, path)
+  local absolute = vim.fs.joinpath(work_tree, path)
+  local stat = vim.uv.fs_lstat(absolute)
+  if stat and stat.type == 'link' then return vim.uv.fs_readlink(absolute) end
+  if not stat or stat.type ~= 'file' then return nil end
+  local file = io.open(absolute, 'rb')
+  if not file then return nil end
+  local content = file:read('*a')
+  file:close()
+  return content
+end
+
+local function resolve_conflict_blocks(worktree, blocks, side)
+  local source = vim.split(worktree, '\n', { plain = true })
+  local result, next_row = {}, 1
+  for _, block in ipairs(blocks) do
+    for row = next_row, block.first - 1 do result[#result + 1] = source[row] end
+    vim.list_extend(result, block[side])
+    next_row = block.last + 1
+  end
+  for row = next_row, #source do result[#result + 1] = source[row] end
+  return table.concat(result, '\n')
+end
+
+local function block_text(lines)
+  return #lines > 0 and table.concat(lines, '\n') .. '\n' or ''
+end
+
+local function base_changes_overlap(left, right)
+  local a, ac, b, bc = left[1], left[2], right[1], right[2]
+  if ac == 0 and bc == 0 then return a == b end
+  if ac == 0 then return a >= b and a <= b + bc end
+  if bc == 0 then return b >= a and b <= a + ac end
+  return a <= b + bc - 1 and b <= a + ac - 1
+end
+
+local function conflict_diff_rows(base, ours, theirs, worktree, diff_lines)
+  local ours_changes = vim.diff(base, ours, { result_type = 'indices', ctxlen = 0 })
+  local theirs_changes = vim.diff(base, theirs, { result_type = 'indices', ctxlen = 0 })
+  local ours_lines = vim.split(ours, '\n', { plain = true })
+  local theirs_lines = vim.split(theirs, '\n', { plain = true })
+  local function same_edit(left, right)
+    if left[1] ~= right[1] or left[2] ~= right[2] or left[4] ~= right[4] then
+      return false
+    end
+    for offset = 0, left[4] - 1 do
+      if ours_lines[left[3] + offset] ~= theirs_lines[right[3] + offset] then
+        return false
+      end
+    end
+    return true
+  end
+  local conflicts = {}
+  for _, left in ipairs(ours_changes) do
+    for _, right in ipairs(theirs_changes) do
+      if base_changes_overlap(left, right) and not same_edit(left, right) then
+        conflicts[#conflicts + 1] = left
+        break
+      end
+    end
+  end
+  if #conflicts == 0 then return {} end
+
+  local old_rows, new_rows = {}, {}
+  for _, change in ipairs(vim.diff(base, worktree, { result_type = 'indices', ctxlen = 0 })) do
+    local overlaps = false
+    for _, conflict in ipairs(conflicts) do
+      if base_changes_overlap(change, conflict) then overlaps = true; break end
+    end
+    if overlaps then
+      for row = change[1], change[1] + change[2] - 1 do old_rows[row] = true end
+      for row = change[3], change[3] + change[4] - 1 do new_rows[row] = true end
+    end
+  end
+
+  local highlighted, old_row, new_row = {}, 0, 0
+  for index, line in ipairs(diff_lines) do
+    local old_start, new_start = line:match('^@@ %-(%d+),?%d* %+(%d+),?%d* @@')
+    if old_start then
+      old_row, new_row = tonumber(old_start), tonumber(new_start)
+    elseif line:sub(1, 1) == '-' then
+      if old_rows[old_row] then highlighted[index] = true end
+      old_row = old_row + 1
+    elseif line:sub(1, 1) == '+' then
+      if new_rows[new_row] then highlighted[index] = true end
+      new_row = new_row + 1
+    elseif line:sub(1, 1) == ' ' then
+      old_row, new_row = old_row + 1, new_row + 1
+    end
+  end
+  return highlighted
+end
+
 local function conflict_diff_lines(model, entry)
   local stages, err = entry.conflict_stages, nil
   if not stages then stages, err = conflict_stages(model, entry) end
@@ -258,22 +378,26 @@ local function conflict_diff_lines(model, entry)
     chosen = nil
   end
   local cache = conflict_diff_cache_by_buf[model.bufnr]
-  local cache_key = not chosen and table.concat({ stages[2] or '', stages[3] or '' }, '\0') or nil
+  local worktree
+  local both_sides = stages[2] and stages[3]
+  if both_sides or chosen then
+    worktree = read_worktree_content(model.work_tree, entry.path)
+  end
+  local cache_key = not chosen and table.concat({ stages[2] or '', stages[3] or '',
+    both_sides and worktree and vim.fn.sha256(worktree) or '' }, '\0') or nil
   local cached = cache and cache[entry.path]
-  if cache_key and cached and cached.key == cache_key then return cached.lines end
+  if cache_key and cached and cached.key == cache_key then
+    entry.conflict_highlight_lines = cached.highlight_lines
+    return cached.lines
+  end
+  local blocks = both_sides and not chosen and worktree and conflict_blocks(worktree)
   if chosen then
-    local absolute = vim.fs.joinpath(model.work_tree, entry.path)
-    local stat = vim.uv.fs_lstat(absolute)
-    local worktree
-    if stat and stat.type == 'link' then
-      worktree = vim.uv.fs_readlink(absolute)
-    elseif stat and stat.type == 'file' then
-      local file = io.open(absolute, 'rb')
-      if file then worktree = file:read('*a'); file:close() end
-    end
     if worktree == nil then return { '  Could not read selected worktree content' } end
     ours, theirs = content(1), worktree
     label = ('stage 1 (base) -> worktree (chosen %s)'):format(chosen.side)
+  elseif blocks and #blocks == 0 then
+    ours, theirs = content(1), worktree
+    label = 'stage 1 (base) -> worktree (manually resolved)'
   else
     ours, theirs = content(2), content(3)
   end
@@ -281,17 +405,44 @@ local function conflict_diff_lines(model, entry)
   if ours:find('\0', 1, true) or theirs:find('\0', 1, true) then
     return { '  Binary conflict: ' .. label }
   end
-  local diff = vim.diff(ours, theirs, { result_type = 'unified', ctxlen = 3 })
-  if diff == '' then return { '  No content difference: ' .. label } end
-  local lines = vim.split(diff, '\n', { plain = true, trimempty = true })
-  for index, line in ipairs(lines) do
-    if line:match('^@@') then
-      lines[index] = line .. '  ' .. label
+  local lines = {}
+  if blocks and #blocks > 0 then
+    for number, block in ipairs(blocks) do
+      local diff = vim.diff(block_text(block.ours), block_text(block.theirs),
+        { result_type = 'unified', ctxlen = 0 })
+      for _, line in ipairs(vim.split(diff, '\n', { plain = true, trimempty = true })) do
+        lines[#lines + 1] = line:match('^@@') and
+          (line .. ('  worktree ours -> theirs, conflict %d'):format(number)) or line
+      end
+    end
+  else
+    if both_sides and not chosen and worktree and not blocks then
+      lines = { '  Incomplete conflict markers in worktree; edit them and use cr' }
+    else
+      local diff = vim.diff(ours, theirs, { result_type = 'unified', ctxlen = 3 })
+      if diff == '' then return { '  No content difference: ' .. label } end
+      lines = vim.split(diff, '\n', { plain = true, trimempty = true })
+      for index, line in ipairs(lines) do
+        if line:match('^@@') then lines[index] = line .. '  ' .. label end
+      end
+    end
+  end
+  entry.conflict_highlight_lines = nil
+  if (chosen or (blocks and #blocks == 0)) and both_sides and #lines > 0
+    and lines[1]:match('^@@')
+  then
+    local base = ours
+    local stage_ours, stage_theirs = content(2), content(3)
+    if base and stage_ours and stage_theirs then
+      entry.conflict_highlight_lines = conflict_diff_rows(base, stage_ours,
+        stage_theirs, worktree, lines)
     end
   end
   if cache_key then
     conflict_diff_cache_by_buf[model.bufnr] = conflict_diff_cache_by_buf[model.bufnr] or {}
-    conflict_diff_cache_by_buf[model.bufnr][entry.path] = { key = cache_key, lines = lines }
+    conflict_diff_cache_by_buf[model.bufnr][entry.path] = {
+      key = cache_key, lines = lines, highlight_lines = entry.conflict_highlight_lines,
+    }
   end
   return lines
 end
@@ -591,6 +742,29 @@ end
 function M.entry_at(bufnr, row)
   local model = models[bufnr]
   return model and model.entries_by_row[row] or nil
+end
+
+function M.apply_conflict_highlights(bufnr, ns)
+  local model = models[bufnr]
+  if not model then return end
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for row, entry in pairs(model.entries_by_row) do
+    local previous = model.entries_by_row[row - 1]
+    if entry.section == 'conflicted' and not entry.header and previous ~= entry then
+      for offset in pairs(entry.conflict_highlight_lines or {}) do
+        local target = row + offset
+        local line = lines[target]
+        if model.entries_by_row[target] == entry and line
+          and (line:sub(1, 1) == '+' or line:sub(1, 1) == '-')
+        then
+          vim.api.nvim_buf_set_extmark(bufnr, ns, target - 1, 0, {
+            end_row = target, end_col = 0, hl_group = 'GitStatusConflictLine',
+            hl_eol = true, priority = 205,
+          })
+        end
+      end
+    end
+  end
 end
 
 function M.shift_entries(bufnr, from_row, delta)
@@ -1082,6 +1256,23 @@ function M.discard_range(bufnr, first_row, last_row)
   return true
 end
 
+local function prepare_conflict_undo_buffer(absolute)
+  local file_buf = vim.fn.bufadd(absolute)
+  if vim.bo[file_buf].modified then
+    return nil, 'Save or discard unsaved edits in ' .. absolute .. ' before choosing a side'
+  end
+  local loaded, load_err = pcall(vim.fn.bufload, file_buf)
+  if not loaded then return nil, 'Could not load ' .. absolute .. ': ' .. tostring(load_err) end
+  if vim.bo[file_buf].modified then
+    return nil, 'Save or discard unsaved edits in ' .. absolute .. ' before choosing a side'
+  end
+  -- Reload any external edits first so the next reload's undo state is the
+  -- worktree content immediately before the checkout.
+  local ok, err = pcall(vim.api.nvim_buf_call, file_buf, function() vim.cmd('edit!') end)
+  if not ok then return nil, 'Could not refresh ' .. absolute .. ': ' .. tostring(err) end
+  return file_buf
+end
+
 function M.resolve_conflict(bufnr, row, side, mark_resolved)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
@@ -1097,12 +1288,56 @@ function M.resolve_conflict(bufnr, row, side, mark_resolved)
   end
   local present = stages[side == 'ours' and 2 or 3] ~= nil
 
+  local chosen = chosen_conflict_side_by_buf[bufnr]
+  chosen = chosen and chosen[entry.path]
+  local absolute = vim.fs.joinpath(model.work_tree, entry.path)
+  local stat = vim.uv.fs_lstat(absolute)
+  local worktree = mark_resolved and not chosen and stages[2] and stages[3]
+    and stat and stat.type == 'file' and read_worktree_content(model.work_tree, entry.path)
+  local cache = conflict_diff_cache_by_buf[bufnr]
+  local displayed = cache and cache[entry.path]
+  if worktree and displayed and is_expanded(bufnr, entry) then
+    local current_key = table.concat({ stages[2], stages[3], vim.fn.sha256(worktree) }, '\0')
+    if displayed.key ~= current_key then
+      return false, 'The displayed conflict has changed; refresh status'
+    end
+  end
+  local blocks = worktree and conflict_blocks(worktree)
+  if worktree and not blocks then
+    return false, 'Incomplete conflict markers in worktree; edit them and use cr'
+  end
+  if blocks and #blocks == 0 then
+    if mark_resolved then return M.mark_resolved(bufnr, row) end
+    return false, 'No conflict markers in worktree; use cr to stage the edited result'
+  end
+  if blocks and #blocks > 0 then
+    local file, open_err = io.open(absolute, 'wb')
+    if not file then return false, open_err or ('Could not write ' .. entry.path) end
+    local ok, write_err = file:write(resolve_conflict_blocks(worktree, blocks, side))
+    file:close()
+    if not ok then return false, write_err or ('Could not write ' .. entry.path) end
+    local staged = run(model.work_tree, { 'add', '-A', '--', entry.path })
+    if staged.code ~= 0 then
+      return false, 'Resolved conflict markers, but could not stage result: '
+        .. vim.trim(staged.stderr or 'Git add failed')
+    end
+    if chosen_conflict_side_by_buf[bufnr] then chosen_conflict_side_by_buf[bufnr][entry.path] = nil end
+    return true
+  end
+
   -- A missing stage means that side deleted the path. Checkout cannot select it.
+  local file_buf, buffer_err = prepare_conflict_undo_buffer(absolute)
+  if not file_buf then return false, buffer_err end
   local args = present and { 'checkout', '--' .. side, '--', entry.path }
     or { 'rm', '--', entry.path }
   local result = run(model.work_tree, args)
   if result.code ~= 0 then
     return false, vim.trim(result.stderr or ('Failed to choose ' .. side .. ' for ' .. entry.path))
+  end
+  local reloaded, reload_err = pcall(vim.api.nvim_buf_call, file_buf, function() vim.cmd('edit!') end)
+  if not reloaded then
+    return false, 'Selected ' .. side .. ', but could not refresh the file buffer: '
+      .. tostring(reload_err)
   end
   if mark_resolved and present then
     local staged = run(model.work_tree, { 'add', '-A', '--', entry.path })

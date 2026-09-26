@@ -526,6 +526,7 @@ function Highlighter.setup_groups()
   -- DiffAdd bg: #23384C, DiffDelete bg: #321e1e (approx)
   vim.api.nvim_set_hl(0, 'FugitiveExtAdd', { bg = "#23384C", default = true })
   vim.api.nvim_set_hl(0, 'FugitiveExtDelete', { bg = "#321e1e", default = true })
+  vim.api.nvim_set_hl(0, 'GitStatusConflictLine', { bg = '#453e2b', default = true })
 
   -- Word diff highlights (intra-line)
   vim.api.nvim_set_hl(0, 'FugitiveExtAddText', { bg = "#005f5f", default = true })
@@ -886,6 +887,7 @@ function M.attach(bufnr)
         Highlighter.apply_legacy(bufnr, hunk, legacy_regions)
       end
     end
+    require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns)
   end
 
   attached_refreshers[bufnr] = refresh

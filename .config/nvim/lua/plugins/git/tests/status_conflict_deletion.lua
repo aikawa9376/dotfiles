@@ -116,11 +116,34 @@ local function expand(name)
   return row + 1, table.concat(lines, '\n')
 end
 choose('i.txt', 'ours')
+local chosen_buf = vim.fn.bufnr(root .. '/i.txt')
+assert(chosen_buf > 0 and vim.api.nvim_buf_is_loaded(chosen_buf),
+  'co did not load the real file buffer for undo')
+vim.cmd.edit(vim.fn.fnameescape(root .. '/i.txt'))
+assert(vim.api.nvim_get_current_buf() == chosen_buf,
+  'opening after co did not reuse the undo-bearing file buffer')
+vim.cmd('normal! u')
+assert(vim.api.nvim_buf_get_lines(chosen_buf, 0, 1, false)[1]:match('^<<<<<<<'),
+  'u did not restore the pre-co conflict in the real file buffer')
+vim.cmd('normal! \18')
+assert(vim.api.nvim_buf_get_lines(chosen_buf, 0, 1, false)[1] == 'ours new',
+  'redo did not restore the co result')
 local _, adopted = expand('i.txt')
 assert(adopted:find('+ours new', 1, true)
   and not adopted:find('-theirs new', 1, true)
   and adopted:find('stage 1 (base) -> worktree (chosen ours)', 1, true),
   'AA co did not show the adopted addition from base')
+require('git.features.syntax_highlight').attach(bufnr)
+local highlight_ns = assert(vim.api.nvim_get_namespaces().fugitive_extension_syntax)
+local yellow = vim.api.nvim_buf_get_extmarks(bufnr, highlight_ns,
+  0, -1, { details = true })
+local chosen_yellow = false
+for _, mark in ipairs(yellow) do
+  if mark[4].hl_group == 'GitStatusConflictLine'
+    and vim.api.nvim_buf_get_lines(bufnr, mark[2], mark[2] + 1, false)[1] == '+ours new'
+  then chosen_yellow = true end
+end
+assert(chosen_yellow, 'chosen AA conflict did not receive the yellow background')
 write('i.txt', 'edited after choosing ours')
 adopted = select(2, expand('i.txt'))
 assert(adopted:find('+edited after choosing ours', 1, true),
@@ -130,6 +153,21 @@ assert(ok, err)
 assert(git({ 'show', ':i.txt' }) == 'edited after choosing ours',
   's after co did not stage the displayed worktree content')
 
+local dirty_buf = vim.fn.bufadd(root .. '/j.txt')
+vim.fn.bufload(dirty_buf)
+vim.api.nvim_buf_set_lines(dirty_buf, 0, 1, false, { 'unsaved edit' })
+local blocked, blocked_err = renderer.resolve_conflict(bufnr, row_for('j.txt'), 'theirs')
+assert(not blocked and blocked_err:find('unsaved edits', 1, true)
+  and vim.api.nvim_buf_get_lines(dirty_buf, 0, 1, false)[1] == 'unsaved edit',
+  'ct discarded unsaved file-buffer edits')
+vim.api.nvim_buf_call(dirty_buf, function() vim.cmd('edit!') end)
+choose('j.txt', 'theirs')
+vim.api.nvim_buf_call(dirty_buf, function() vim.cmd('normal! u') end)
+assert(vim.api.nvim_buf_get_lines(dirty_buf, 0, 1, false)[1]:match('^<<<<<<<'),
+  'u did not restore the pre-ct conflict')
+vim.api.nvim_buf_call(dirty_buf, function() vim.cmd('write') end)
+assert(vim.fn.readfile(root .. '/j.txt')[1]:match('^<<<<<<<'),
+  'writing the undone file did not restore conflict markers on disk')
 choose('j.txt', 'theirs')
 adopted = select(2, expand('j.txt'))
 assert(adopted:find('-base', 1, true) and adopted:find('+theirs changed', 1, true)
@@ -188,5 +226,9 @@ assert(inspections == 2, 'completed merge did not invalidate operation summary')
 
 operation.inspect = inspect
 vim.api.nvim_buf_delete(bufnr, { force = true })
+for _, name in ipairs({ 'a.txt', 'b.txt', 'i.txt', 'j.txt' }) do
+  local file_buf = vim.fn.bufnr(root .. '/' .. name)
+  if file_buf > 0 then vim.api.nvim_buf_delete(file_buf, { force = true }) end
+end
 vim.fn.delete(root, 'rf')
 print('PASS: conflict diff directions, chosen-side previews, operation cache, and resolution actions')

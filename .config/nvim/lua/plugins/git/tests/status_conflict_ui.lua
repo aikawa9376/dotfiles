@@ -118,6 +118,20 @@ press('d')
 assert(#vim.api.nvim_tabpage_list_wins(0) == 2, 'd on ordinary file should retain two-way diff')
 vim.cmd('tabclose')
 
+write('changed.txt', 'manual result')
+vim.api.nvim_win_set_cursor(0, { assert(row_for('^UU changed%.txt$')), 0 })
+press('o')
+local result_row = assert(row_for('^%+manual result$'))
+local highlight_ns = assert(vim.api.nvim_get_namespaces().fugitive_extension_syntax)
+assert(vim.wait(2000, function()
+  local marks = vim.api.nvim_buf_get_extmarks(bufnr, highlight_ns,
+    { result_row - 1, 0 }, { result_row - 1, -1 }, { details = true })
+  for _, mark in ipairs(marks) do
+    if mark[4].hl_group == 'GitStatusConflictLine' then return true end
+  end
+  return false
+end), 'actual status refresh did not highlight the manually resolved conflict')
+
 vim.api.nvim_buf_delete(bufnr, { force = true })
 vim.fn.delete(root, 'rf')
 print('PASS: open conflict section, closed file diffs, context-sensitive d, and merged Current actions')
