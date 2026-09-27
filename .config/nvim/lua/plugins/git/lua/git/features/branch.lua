@@ -1211,6 +1211,7 @@ function M.setup(group)
     callback = function(ev)
       local bufnr = ev.buf
       local buf_group = vim.api.nvim_create_augroup('fugitive_branch_buf_' .. bufnr, { clear = true })
+      require('git.features.magit_actions').attach(bufnr)
 
       vim.keymap.set('n', 'g?', function()
         show_branch_help()

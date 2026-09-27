@@ -1097,6 +1097,7 @@ function M.setup(group)
       if not utils.get_buf_work_tree(b) or status_initialized_by_buf[b] then return end
       status_initialized_by_buf[b] = true
       commit_body.attach(b)
+      require('git.features.magit_actions').attach(b)
       local active = true
       local function is_live()
         return active and utils.is_valid_buf(b) and vim.api.nvim_buf_is_loaded(b)

@@ -146,6 +146,7 @@ end
 local function entry_at(bufnr, row)
   return entries_by_buf[bufnr] and entries_by_buf[bufnr][row] or nil
 end
+M.entry_at = entry_at
 
 local function highlight_linked_entries(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
@@ -271,6 +272,7 @@ function M.setup(group)
     callback = function(ev)
       local b = ev.buf
       local buf_group = vim.api.nvim_create_augroup('fugitive_reflog_buf_' .. b, { clear = true })
+      require('git.features.magit_actions').attach(b)
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false
       vim.opt_local.number = false

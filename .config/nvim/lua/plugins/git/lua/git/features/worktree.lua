@@ -475,6 +475,7 @@ function M.setup(group)
   vim.api.nvim_create_autocmd('FileType', { group = group, pattern = 'fugitiveworktree', callback = function(ev)
     local b = ev.buf
     local buf_group = vim.api.nvim_create_augroup('fugitive_worktree_buf_' .. b, { clear = true })
+    require('git.features.magit_actions').attach(b)
     vim.opt_local.number, vim.opt_local.relativenumber, vim.opt_local.signcolumn = false, false, 'no'
     vim.keymap.set('n', 'g?', function() help.show('Worktree keys', { 'g? help', '<CR> open', 'gs sync', 'a add', 'X remove', 'R refresh', 'q close' }) end, { buffer = b })
     vim.keymap.set('n', '<CR>', function() local e = entry_at_cursor(b); if e then M.open_worktree_path(e.path) end end, { buffer = b })

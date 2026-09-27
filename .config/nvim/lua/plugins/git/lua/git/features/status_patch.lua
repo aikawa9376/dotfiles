@@ -89,6 +89,8 @@ local function build_patch(work_tree, section, path, hunk_number, selected, expe
   return table.concat(patch, '\n') .. '\n'
 end
 
+M.build_patch = build_patch
+
 function M.apply(work_tree, section, path, hunk_number, selected, expected)
   local patch, err = build_patch(work_tree, section, path, hunk_number, selected, expected, section == 'staged')
   if not patch then return false, err end

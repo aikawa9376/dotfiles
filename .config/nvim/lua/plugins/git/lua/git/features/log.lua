@@ -9,6 +9,7 @@ local objects = require('git.objects')
 
 local shortstat_cache = {}
 local shortstat_jobs = {}
+local graph_ns = vim.api.nvim_create_namespace('fugitivelog_graph')
 
 local function get_commit_at_line(bufnr, lnum)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
@@ -158,13 +159,36 @@ local function line_history_output(work_tree, range, args)
   return headers, focus
 end
 
+local function display_options(args, menu_flags)
+  local result = { decorate = not menu_flags, signature = false, color = false }
+  local takes_value = { ['-G'] = true, ['-S'] = true, ['-L'] = true, ['-n'] = true,
+    ['--max-count'] = true, ['--author'] = true, ['--grep'] = true,
+    ['--since'] = true, ['--until'] = true, ['--format'] = true, ['--pretty'] = true }
+  local skip = false
+  for _, arg in ipairs(args) do
+    if skip then skip = false
+    elseif arg == '--' then break
+    elseif takes_value[arg] then skip = true
+    elseif arg == '--decorate' or arg:match('^%-%-decorate=') then
+      result.decorate = arg ~= '--decorate=no'
+    elseif arg == '--no-decorate' then result.decorate = false
+    elseif arg == '--show-signature' then result.signature = true
+    elseif arg == '--no-show-signature' then result.signature = false
+    elseif arg == '--color' or arg:match('^%-%-color=') then result.color = arg ~= '--color=never'
+    elseif arg == '--no-color' then result.color = false end
+  end
+  return result
+end
+
 local function get_log_list(bufnr, reuse_line_history)
   local args = ""
   if bufnr then
     args = vim.b[bufnr].fugitive_log_args or ""
   end
   local work_tree = bufnr and utils.get_buf_work_tree(bufnr) or nil
-  local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
+  local extra_args = require('git.commands').argv(args)
+  local menu_flags = bufnr and vim.b[bufnr].fugitive_log_menu_flags
+  local display = display_options(extra_args, menu_flags)
   local line_history = bufnr and vim.b[bufnr].fugitive_log_line_history or nil
   local raw_output
   if line_history then
@@ -177,19 +201,46 @@ local function get_log_list(bufnr, reuse_line_history)
       vim.b[bufnr].fugitive_log_line_focus = focus
     end
   else
-    local cmd = git_prefix .. "log --pretty=format:'%H%x09%h%x09%as%x09%s%x09%an%x09%d' --abbrev-commit -n 1000 " .. args
-    raw_output = vim.fn.systemlist(cmd)
+    local format = '%H%x09%h%x09%as%x09%s%x09%an%x09' .. (display.decorate and '%d' or '')
+      .. (display.signature and '%x1e%G?%x1e%GS' or '')
+    local argv = { 'git', 'log', '--pretty=format:' .. format, '--abbrev-commit' }
+    -- The menu owns its limit; clearing -n must not restore the ordinary default.
+    if not menu_flags then vim.list_extend(argv, { '-n', '1000' }) end
+    vim.list_extend(argv, extra_args)
+    local result = vim.system(argv, { cwd = work_tree, text = true }):wait()
+    if result.code ~= 0 then return nil, nil, work_tree, vim.trim(result.stderr) end
+    raw_output = vim.split(result.stdout, '\n', { plain = true })
   end
   local log_output = {}
   local missing_hashes = {}
+  local graph_columns = {}
   local cache = work_tree and shortstat_cache[work_tree] or {}
   if work_tree then
     shortstat_cache[work_tree] = cache
   end
 
   for _, line in ipairs(raw_output) do
-    local full_hash, commit_line = line:match('^(%x+)\t(.*)$')
-    if full_hash and commit_line then
+    line = line:gsub('\27%[[%d;]*m', '')
+    local graph, full_hash, commit_line = line:match('^(.-)(%x+)\t(.*)$')
+    if full_hash and #full_hash >= 40 and commit_line then
+      local signature, signer = commit_line:match('\30([GBUXYREN])\30(.*)$')
+      if signature then
+        commit_line = commit_line:gsub('\30[GBUXYREN]\30.*$', '')
+        local names = { G = 'good', B = 'bad', U = 'good (untrusted)',
+          X = 'expired', Y = 'expired key', R = 'revoked key',
+          E = 'cannot verify', N = 'none' }
+        commit_line = commit_line .. '  Signature: ' .. names[signature]
+        if signer ~= '' then commit_line = commit_line .. ' (' .. signer .. ')' end
+      end
+      if graph ~= '' then
+        local before_subject = commit_line:match('^([^\t]*\t[^\t]*\t)')
+        if before_subject then
+          if display.color then
+            graph_columns[#log_output + 1] = { #before_subject, #before_subject + #graph }
+          end
+          commit_line = before_subject .. graph .. commit_line:sub(#before_subject + 1)
+        end
+      end
       local stat = cache[full_hash]
       table.insert(log_output, commit_line .. '\t' .. (stat or ''))
       if stat == nil then
@@ -198,7 +249,7 @@ local function get_log_list(bufnr, reuse_line_history)
     end
   end
 
-  return log_output, missing_hashes, work_tree
+  return log_output, missing_hashes, work_tree, nil, graph_columns
 end
 
 local refresh_log_list
@@ -268,13 +319,19 @@ refresh_log_list = function(bufnr, reuse_line_history)
   local missing_hashes
   local work_tree
   local err
+  local graph_columns
   utils.with_buf_modifiable(bufnr, function()
     local log_output
-    log_output, missing_hashes, work_tree, err = get_log_list(bufnr, reuse_line_history)
+    log_output, missing_hashes, work_tree, err, graph_columns = get_log_list(bufnr, reuse_line_history)
     if log_output then vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, log_output) end
   end)
   if err then vim.notify(err, vim.log.levels.ERROR); return end
 
+  vim.api.nvim_buf_clear_namespace(bufnr, graph_ns, 0, -1)
+  for row, columns in pairs(graph_columns or {}) do
+    vim.api.nvim_buf_set_extmark(bufnr, graph_ns, row - 1, columns[1],
+      { end_col = columns[2], hl_group = 'DiagnosticInfo' })
+  end
   apply_highlights(bufnr)
   apply_log_syntax(bufnr)
   notes.apply_icons(bufnr, utils.get_buf_work_tree(bufnr), function(line)
@@ -330,6 +387,7 @@ local function open_log_list(opts)
   vim.bo[bufnr].readonly = true
 
   vim.b[bufnr].fugitive_log_args = args
+  vim.b[bufnr].fugitive_log_menu_flags = opts and opts.menu_flags or false
   if line_history then
     vim.b[bufnr].fugitive_log_line_history = line_history
     vim.b[bufnr].fugitive_log_line_output = initial_output
@@ -385,6 +443,7 @@ function M.setup(group)
     callback = function(ev)
       local buf_group = vim.api.nvim_create_augroup('fugitive_log_buf_' .. ev.buf, { clear = true })
       commit_body.attach(ev.buf)
+      require('git.features.magit_actions').attach(ev.buf)
       -- Syntax highlighting
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false

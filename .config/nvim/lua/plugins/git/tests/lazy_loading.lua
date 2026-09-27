@@ -6,6 +6,8 @@ require('lazy').setup({ spec = { spec }, install = { missing = false }, checker 
   performance = { rtp = { reset = false }, cache = { enabled = false } } })
 assert(not package.loaded['git'], 'Git loaded before a trigger')
 assert(vim.fn.exists(':G') == 2 and vim.fn.exists(':Gclog') == 2)
+assert(vim.fn.exists(':GitApply') == 2 and vim.fn.exists(':GitReverse') == 2,
+  'patch commands were unavailable before the plugin loaded')
 require('lazy').load({ plugins = { 'git' } })
 assert(package.loaded['git'] and not package.loaded['fugitive-extension'])
 for _, name in ipairs(spec.cmd) do assert(vim.fn.exists(':' .. name) == 2, 'Missing command: ' .. name) end

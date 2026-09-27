@@ -138,6 +138,59 @@ Flog uses its documented backend hooks to obtain repository context, run Git,
 complete arguments, and open commits through the independent Gsplit command. `Git diff`/`Git show` output supports file/hunk
 navigation (`]]`, `[[`, `i`), folds (`o`), and Enter to inspect the file/commit.
 
+`<Space><Space>` opens a separate Git action menu in status, log, branch,
+reflog, and worktree panels. It uses the file, commit, ref, reflog destination,
+or worktree under the cursor, with no repeated
+title/context header. The root offers Magit-style prefixes for cherry-pick
+(`A`), apply variants (`v`), bisect (`B`), clone (`C`), commit (`c`), diff (`d`), pull (`F`), fetch
+(`f`), log (`l`), remote (`M`), merge (`m`), submodule (`o`), push (`P`), rebase
+(`r`), tag (`t`), revert (`V`), reset (`X`), references (`y`), stash (`z`),
+and worktree (`Z`), plus ignore (`i`) and commit copy (`Y`) when applicable.
+Each operation panel shows its arguments and
+execution keys. Toggle an argument with its displayed key, then press an
+execution key; `q` or `<Esc>` closes the menu. An active cherry-pick, revert,
+merge, rebase, or bisect shows its sequence actions. The root arranges actions
+in two columns when the editor is wide enough. The default layout is a bottom
+split. Set `vim.g.git_action_menu_layout = 'float'` for a lower-right float.
+Operation panels place whole argument/action groups side by side when they fit
+and wrap them on narrower screens. Set
+`vim.g.git_action_menu_group_layout = 'vertical'` to restore the previous
+one-group-per-row layout; unset it or use `'horizontal'` for the new layout.
+The existing panel keys and `g?` help remain separate.
+
+The other operation panels also expose Magit's Git flags, including value
+options for commit identity/signing, diff context and algorithms, merge/rebase
+strategy, push options, clone setup, and tag signing. Toggle switches or enter
+values before choosing an action. Active Git arguments are highlighted inside
+parentheses; a specified value also shows a checkmark. Options apply to the
+relevant Git action in that panel (for example, submodule update flags apply to
+update, and the stash push arguments apply to `P`).
+
+The log (`l`) panel groups Magit-style commit limits, history simplification,
+ordering, and formatting flags. Value flags such as `-n`, `-A`, `-G`, `-S`,
+`-L`, `-o`, and the file limit `--` prompt for a value; an empty answer clears
+it. Active options show a checkmark and highlight their Git argument. `-f`
+(`--follow`) requires a single file limit, and `-L` line evolution cannot be
+combined with that file limit. The default `-n` limit is 256 commits.
+
+In status, a selected commit, staged file, or expanded staged hunk offers
+`a` in its context group; `<Space><Space>a` applies that patch directly to the
+worktree. `<Space><Space>v` opens the **Apply variants** menu in supported
+panels, and is the route to patch actions outside status. It offers `a` apply,
+`v` reverse, `k` discard a status change, `C` cherry-pick and commit, and `V`
+revert and commit when applicable.
+Its `-3` flag uses a three-way fallback for apply/reverse and stages the result.
+`:GitApply[!] [revision]` and `:GitReverse[!] [revision]` expose the same patch
+operations as commands; `!` enables three-way fallback, which also stages the
+result. In a commit view, they
+use the commit, file, or expanded hunk at the cursor, and `a`/`v` call the
+commands outside the editable message. The stash list's `<CR>` opens its commit
+view, where a changed file can use these patch actions. In the cherry-pick panel, `A a` applies a
+commit without committing, while `A h` harvests a selected commit from another
+local branch and `A d` donates one from the current branch to another local
+branch. Harvest/donate require a clean worktree and a non-merge commit; when
+Git stops on a conflict, resolve or abort its sequence before retrying.
+
 Completion follows each command's argument type: object commands suggest refs,
 then paths inside `revision:` / `:0:`; `Git` suggests subcommands only in its first
 argument and uses options, refs, remotes or paths afterwards. Worktree path and

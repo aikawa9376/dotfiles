@@ -100,6 +100,9 @@ end
 
 local function mutates_repository(args)
   local sub = args[1]
+  if sub == 'bisect' then return #args > 1 and args[2] ~= 'log' and args[2] ~= 'visualize' end
+  if sub == 'submodule' then return vim.tbl_contains({ 'add', 'update', 'deinit', 'sync',
+    'init', 'absorbgitdirs', 'set-url', 'set-branch' }, args[2]) end
   if vim.tbl_contains({ 'add', 'am', 'apply', 'checkout', 'clean', 'commit', 'fetch', 'merge',
     'mv', 'pull', 'push', 'rebase', 'reset', 'restore', 'revert', 'rm', 'switch', 'update-index' }, sub)
   then return true end
@@ -123,7 +126,8 @@ local function mutates_repository(args)
   return false
 end
 function M.git(opts)
-  local root, path = objects.context()
+  local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
+  local root, path = objects.context(bufnr)
   local args = M.argv(opts.args)
   for i, arg in ipairs(args) do if arg == '%' then args[i] = assert(path, 'No current file') end end
   if #args == 0 or (#args == 1 and args[1] == 'status') then return require('git.features.status').open({ split = true }) end
@@ -132,11 +136,15 @@ function M.git(opts)
   local sub = args[1]
   local explicit_message = vim.tbl_contains(args, '--no-edit') or vim.tbl_contains(args, '-m') or vim.tbl_contains(args, '--message') or vim.tbl_contains(args, '-F')
   if sub == 'commit' and not explicit_message or sub == 'merge' or sub == 'rebase' or sub == 'cherry-pick' or sub == 'revert'
-    or sub == 'push' or sub == 'pull' or sub == 'fetch' or sub == 'add' and vim.tbl_contains(args, '-p')
+    or sub == 'push' or sub == 'pull' or sub == 'fetch' or sub == 'clone'
+    or sub == 'tag' and (vim.tbl_contains(args, '--edit') or vim.tbl_contains(args, '-e'))
+    or sub == 'submodule' and args[2] ~= 'status'
+    or sub == 'bisect' and args[2] == 'run'
+    or sub == 'add' and vim.tbl_contains(args, '-p')
     or sub == '-c' then
     local patch_prompt = (sub == 'add' or sub == 'reset' or sub == 'restore')
       and (vim.tbl_contains(args, '-p') or vim.tbl_contains(args, '--patch'))
-    if from_panel(vim.api.nvim_get_current_buf()) and not opts.bang and not patch_prompt then
+    if from_panel(bufnr) and not opts.bang and not patch_prompt then
       return background(root, args)
     end
     return terminal(root, args, opts.bang)

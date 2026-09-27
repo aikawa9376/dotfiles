@@ -539,6 +539,10 @@ local function attach(s)
     })
   end)
   map('X', function() discard(s) end, { native = true })
+  map('a', function() vim.cmd('GitApply') end, { native = true,
+    desc = 'Apply selected commit patch to worktree' })
+  map('v', function() vim.cmd('GitReverse') end, { native = true,
+    desc = 'Reverse selected commit patch in worktree' })
   vim.keymap.set('x', 'X', function()
     local first, last = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
     vim.cmd('normal! \27'); discard(s, first, last)
@@ -610,6 +614,8 @@ local function attach(s)
       'dh       horizontal diff',
       'D        Diffview',
       'X        remove file / hunk / selected lines (Hard / Mixed)',
+      'a / v    apply / reverse selected file or hunk in worktree',
+      ':GitApply[!] / :GitReverse[!]  apply / reverse (bang: three-way)',
       '~        parent commit',
       'gp       select merge parent',
       'p        previous file commit',

@@ -15,6 +15,7 @@ function M.setup()
     fugitivestash = true,
     fugitiveworktree = true,
     fugitiveactionmenu = true,
+    gitactionmenu = true,
     gitrebase = true,
     gitcommit = true,
   }
@@ -61,6 +62,7 @@ function M.setup()
   require('git.features.status').setup(group)
   require('git.features.blame').setup(group)
   require('git.features.commit').setup(group)
+  require('git.features.magit_apply').setup()
   require('git.features.stash').setup(group)
   require('git.features.branch').setup(group)
   require('git.features.log').setup(group)
