@@ -17,7 +17,7 @@ write('a.txt', { 'initial' }); local initial = commit('root')
 local new_root = assert(rewrite.apply(root, initial, { message = { 'new root' } }))
 assert(git({ 'rev-parse', 'HEAD' }) == new_root)
 write('b.txt', { 'second' }); local second = commit('second')
-local rewritten_root = assert(rewrite.apply(root, new_root, { message = { 'rewritten historical root' } }))
+local rewritten_root = assert(rewrite.apply(root, new_root:sub(1, 7), { message = { 'rewritten historical root' } }))
 assert(git({ 'rev-parse', 'HEAD^' }) == rewritten_root)
 assert(git({ 'show', '-s', '--format=%s', 'HEAD' }) == 'second')
 -- Reject stale HEAD, unrelated commits, and an ongoing Git operation.

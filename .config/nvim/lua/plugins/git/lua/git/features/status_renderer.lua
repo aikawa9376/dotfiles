@@ -278,12 +278,16 @@ local function read_worktree_content(work_tree, path)
   return content
 end
 
-local function resolve_conflict_blocks(worktree, blocks, side)
+local function resolve_conflict_blocks(worktree, blocks, side, selected)
   local source = vim.split(worktree, '\n', { plain = true })
   local result, next_row = {}, 1
-  for _, block in ipairs(blocks) do
+  for number, block in ipairs(blocks) do
     for row = next_row, block.first - 1 do result[#result + 1] = source[row] end
-    vim.list_extend(result, block[side])
+    if not selected or selected == number then
+      vim.list_extend(result, block[side])
+    else
+      for row = block.first, block.last do result[#result + 1] = source[row] end
+    end
     next_row = block.last + 1
   end
   for row = next_row, #source do result[#result + 1] = source[row] end
@@ -409,7 +413,7 @@ local function conflict_diff_lines(model, entry)
   if blocks and #blocks > 0 then
     for number, block in ipairs(blocks) do
       local diff = vim.diff(block_text(block.ours), block_text(block.theirs),
-        { result_type = 'unified', ctxlen = 0 })
+        { result_type = 'unified', ctxlen = math.max(#block.ours, #block.theirs) })
       for _, line in ipairs(vim.split(diff, '\n', { plain = true, trimempty = true })) do
         lines[#lines + 1] = line:match('^@@') and
           (line .. ('  worktree ours -> theirs, conflict %d'):format(number)) or line
@@ -1206,6 +1210,8 @@ function M.discard(bufnr, row)
   if entry.section == 'conflicted' then
     return M.resolve_conflict(bufnr, row, 'ours', true)
   end
+  local patched, err = patch_selection(bufnr, model, row, row, 'discard')
+  if patched ~= nil then return patched, err end
   if entry.section == 'untracked' then
     local absolute = vim.fs.joinpath(model.work_tree, entry.path)
     local flags = vim.fn.isdirectory(absolute) == 1 and 'rf' or ''
@@ -1292,7 +1298,7 @@ function M.resolve_conflict(bufnr, row, side, mark_resolved)
   chosen = chosen and chosen[entry.path]
   local absolute = vim.fs.joinpath(model.work_tree, entry.path)
   local stat = vim.uv.fs_lstat(absolute)
-  local worktree = mark_resolved and not chosen and stages[2] and stages[3]
+  local worktree = not chosen and stages[2] and stages[3]
     and stat and stat.type == 'file' and read_worktree_content(model.work_tree, entry.path)
   local cache = conflict_diff_cache_by_buf[bufnr]
   local displayed = cache and cache[entry.path]
@@ -1311,17 +1317,39 @@ function M.resolve_conflict(bufnr, row, side, mark_resolved)
     return false, 'No conflict markers in worktree; use cr to stage the edited result'
   end
   if blocks and #blocks > 0 then
+    local selected
+    local direct_row = M.entry_row(bufnr, row)
+    if row > direct_row then
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+      for candidate = row, direct_row + 1, -1 do
+        if lines[candidate] and lines[candidate]:match('^@@') then
+          selected = tonumber(lines[candidate]:match('conflict (%d+)'))
+          break
+        end
+      end
+      if not selected or not blocks[selected] then
+        return false, 'No conflict marker for the selected hunk; select the file row'
+      end
+    end
+    local file_buf, buffer_err = prepare_conflict_undo_buffer(absolute)
+    if not file_buf then return false, buffer_err end
     local file, open_err = io.open(absolute, 'wb')
     if not file then return false, open_err or ('Could not write ' .. entry.path) end
-    local ok, write_err = file:write(resolve_conflict_blocks(worktree, blocks, side))
+    local ok, write_err = file:write(resolve_conflict_blocks(worktree, blocks, side, selected))
     file:close()
     if not ok then return false, write_err or ('Could not write ' .. entry.path) end
-    local staged = run(model.work_tree, { 'add', '-A', '--', entry.path })
-    if staged.code ~= 0 then
-      return false, 'Resolved conflict markers, but could not stage result: '
-        .. vim.trim(staged.stderr or 'Git add failed')
+    local reloaded, reload_err = pcall(vim.api.nvim_buf_call, file_buf, function() vim.cmd('edit!') end)
+    if not reloaded then return false, 'Could not refresh ' .. entry.path .. ': ' .. tostring(reload_err) end
+    if mark_resolved and (not selected or #blocks == 1) then
+      local staged = run(model.work_tree, { 'add', '-A', '--', entry.path })
+      if staged.code ~= 0 then
+        return false, 'Resolved conflict markers, but could not stage result: '
+          .. vim.trim(staged.stderr or 'Git add failed')
+      end
     end
-    if chosen_conflict_side_by_buf[bufnr] then chosen_conflict_side_by_buf[bufnr][entry.path] = nil end
+    chosen_conflict_side_by_buf[bufnr] = chosen_conflict_side_by_buf[bufnr] or {}
+    chosen_conflict_side_by_buf[bufnr][entry.path] = not mark_resolved
+      and (not selected or #blocks == 1) and { side = side, stages = stages } or nil
     return true
   end
 

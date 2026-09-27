@@ -183,15 +183,18 @@ function M.status_lines(state)
   if not state then return {} end
   if state.kind ~= 'bisect' then
     local label = state.label
+    local progress = ''
     if state.current_step and state.total_steps and state.total_steps > 0 then
-      label = label .. (' (%d/%d)'):format(state.current_step, state.total_steps)
+      progress = (' (%d/%d)'):format(state.current_step, state.total_steps)
+      label = label .. progress
     end
     local lines
-    if state.kind == 'merge' and state.current then
-      lines = { 'Merge Current: ' .. summary_line(state.current) }
+    if state.current then
+      local operation_name = ({ merge = 'Merge', cherry_pick = 'Cherry-pick',
+        revert = 'Revert', rebase = 'Rebase' })[state.kind] or state.kind
+      lines = { operation_name .. progress .. ': ' .. summary_line(state.current) }
     else
       lines = { label }
-      if state.current then table.insert(lines, 'Current: ' .. summary_line(state.current)) end
     end
     table.insert(lines, 'Operation keys: rr continue  rs skip  ra abort')
     return lines

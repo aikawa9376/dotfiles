@@ -145,6 +145,13 @@ assert(vim.fn.mode() == 'n' and vim.wait(5000, function() return lines()[10] == 
   'Visual X did not discard the selected status diff line')
 assert(lines()[12] == 'TWELVE' and vim.fn.filereadable(root .. '/untracked.txt') == 1,
   'Visual X discarded an unselected change')
+status.refresh_buffer(b)
+local remaining = assert(find_row('sample.txt', find_row('Unstaged changes') + 1))
+assert(renderer.update_diff(b, remaining, 'show'))
+local normal_hunk = assert(find_row('+TWELVE', remaining))
+local normal_ok, normal_err = renderer.discard(b, normal_hunk)
+assert(normal_ok, normal_err)
+assert(lines()[12] == 'twelve', 'normal X on a hunk did not discard its selected change')
 
 vim.fn.executable = executable
 vim.api.nvim_buf_delete(b, { force = true })

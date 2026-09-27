@@ -9,6 +9,9 @@ local function run(root, args, opts)
 end
 function M.apply(root, commit, opts)
   opts = opts or {}
+  local resolved, resolve_err = git(root, { 'rev-parse', '--verify', commit .. '^{commit}' })
+  if not resolved then return nil, resolve_err end
+  commit = vim.trim(resolved)
   local git_dir = utils.get_git_dir(root)
   if not git_dir then return nil, 'Git directory not found' end
   for _, path in ipairs({ 'rebase-merge', 'rebase-apply', 'MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'BISECT_START' }) do

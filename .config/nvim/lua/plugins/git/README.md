@@ -69,6 +69,8 @@ markers, the diff compares the live ours/theirs text only inside each marked
 region; clean auto-merged edits stay out of the diff. Other conflicts compare
 Git's stage 2 (ours) to stage 3 (theirs): `UD` shows removed lines and `DU`
 shows added lines.
+Each conflict marker block appears as one hunk, including unchanged lines
+between edits inside that block.
 After `co` or `ct` chooses a present side, the still-unmerged path instead
 shows the adopted worktree content against stage 1 (base), including edits made
 after choosing that side. An `AA` conflict has an empty base, so the adopted
@@ -82,10 +84,11 @@ keys replace only the marked regions with the chosen side and preserve edits
 outside them. After `co` or `ct`, `s` stages the chosen worktree content instead.
 After a manual resolution removes all conflict markers, `s` stages the current
 worktree content as well.
-These keys act on the whole conflicted file, even with the cursor on a
-displayed hunk; Visual selections inside a conflict diff are rejected. `cr`
+On an expanded conflict hunk, these keys and `co`/`ct` choose only that marker
+block; on the file row they choose every block. The file remains unmerged until
+the last block is accepted and staged. Visual selections inside a conflict diff are rejected. `cr`
 stages the current worktree content regardless of markers. `co` and
-`ct` still check out either side without staging it; choosing a deleted side
+`ct` choose either side without staging it; choosing a deleted side
 necessarily removes the path and resolves it. `d` opens base, ours, and theirs
 for a conflicted file; for other files it keeps the usual two-way diff.
 `co` and `ct` load the real file buffer before checkout and record the change
@@ -94,7 +97,7 @@ contents, then write it to restore the contents on disk. The status buffer's
 `u` remains the unstage action; file-buffer undo does not change the Git index.
 The Unmerged paths section starts open even with three or more files. Individual
 file diffs start closed and can be expanded with `o`.
-An active merge uses a single `Merge Current: <commit> <subject>` heading.
+An active operation uses one `<operation>: <commit> <subject>` heading.
 During rebase, Git's stage 2 is the branch being rebased onto and stage 3 is
 the replayed commit, so the diff direction and `s`/`X` meanings stay the same.
 

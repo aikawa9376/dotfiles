@@ -60,9 +60,9 @@ local function snapshot()
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   return table.concat(lines, '\n')
 end
-local function row_for(pattern)
+local function row_for(pattern, after)
   for row, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
-    if line:match(pattern) then return row end
+    if row > (after or 0) and line:match(pattern) then return row end
   end
   error('missing ' .. pattern)
 end
@@ -79,6 +79,17 @@ assert(not displayed:find('[-+]ours clean') and not displayed:find('[-+]theirs c
 assert(not displayed:find('<<<<<<<', 1, true) and not displayed:find('|||||||', 1, true),
   'UU showed conflict marker text')
 assert(select(2, displayed:gsub('conflict %d+', '')) >= 2, 'multiple conflict blocks collapsed')
+local original_markers = vim.fn.readfile(root .. '/changed.txt')
+write('changed.txt', { '<<<<<<< HEAD', 'first ours', 'shared 1', 'shared 2',
+  'shared 3', 'last ours', '=======', 'first theirs', 'shared 1', 'shared 2',
+  'shared 3', 'last theirs', '>>>>>>> other' })
+displayed = snapshot()
+assert(select(2, displayed:gsub('conflict 1', '')) == 1
+  and displayed:find('-first ours', 1, true)
+  and displayed:find('+last theirs', 1, true),
+  'one marker block was split into multiple displayed hunks')
+write('changed.txt', original_markers)
+displayed = snapshot()
 
 assert(renderer.update_diff(bufnr, row_for('^AA added%.txt$'), 'show'))
 displayed = snapshot()
@@ -165,6 +176,15 @@ assert(not ok and err:find('Incomplete conflict markers', 1, true),
 
 write('changed.txt', edited)
 snapshot()
+assert(renderer.update_diff(bufnr, row_for('^UU changed%.txt$'), 'show'))
+snapshot()
+ok, err = renderer.change_index(bufnr,
+  row_for('conflict 1$', row_for('^UU changed%.txt$')), 'toggle')
+assert(ok, err)
+assert(select(2, table.concat(vim.fn.readfile(root .. '/changed.txt'), '\n'):gsub('<<<<<<<', '')) == 1
+  and git({ 'ls-files', '-u', '--', 'changed.txt' }).stdout ~= '',
+  's on a conflict hunk accepted every marker')
+snapshot()
 ok, err = renderer.change_index(bufnr, row_for('^UU changed%.txt$'), 'toggle')
 assert(ok, err)
 local resolved = git({ 'show', ':changed.txt' }).stdout
@@ -176,16 +196,26 @@ assert(resolved:find('ours clean', 1, true)
 assert(not resolved:find('ours revised 1', 1, true)
   and not resolved:find('<<<<<<<', 1, true), 's left conflict markers behind')
 snapshot()
-ok, err = renderer.discard(bufnr, row_for('^UU kept%.txt$'))
+assert(renderer.update_diff(bufnr, row_for('^UU kept%.txt$'), 'show'))
+snapshot()
+ok, err = renderer.resolve_conflict(bufnr, row_for('conflict 1$', row_for('^UU kept%.txt$')), 'theirs')
 assert(ok, err)
+local partly_resolved = table.concat(vim.fn.readfile(root .. '/kept.txt'), '\n')
+assert(partly_resolved:find('theirs conflict 1', 1, true)
+  and partly_resolved:find('ours conflict 2', 1, true)
+  and select(2, partly_resolved:gsub('<<<<<<<', '')) == 1
+  and git({ 'ls-files', '-u', '--', 'kept.txt' }).stdout ~= '',
+  'ct on a hunk changed another marker or staged an incomplete file: ' .. partly_resolved)
+snapshot()
+ok, err = renderer.discard(bufnr, row_for('conflict 1$', row_for('^UU kept%.txt$')))
+assert(ok, err)
+assert(git({ 'ls-files', '-u', '--', 'kept.txt' }).stdout == '',
+  'X on the remaining hunk did not stage the completed result')
 local retained = git({ 'show', ':kept.txt' }).stdout
-assert(retained:find('ours clean', 1, true)
-  and retained:find('theirs clean', 1, true)
-  and retained:find('ours conflict 1', 1, true)
+assert(retained:find('theirs conflict 1', 1, true)
   and retained:find('ours conflict 2', 1, true)
-  and not retained:find('theirs conflict 1', 1, true)
   and not retained:find('<<<<<<<', 1, true),
-  'X discarded clean merged edits or failed to keep current conflict blocks')
+  'X on a hunk changed an already chosen conflict')
 snapshot()
 ok, err = renderer.discard(bufnr, row_for('^AA added%.txt$'))
 assert(ok, err)

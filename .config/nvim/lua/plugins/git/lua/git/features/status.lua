@@ -2413,7 +2413,8 @@ function M.setup(group)
         if not current_operation then return false end
         local first, last
         for candidate, line in ipairs(lines) do
-          if line:match(' in progress') or line:match('^Merge Current:') or line:match('^Bisecting') then
+          if line:match(' in progress') or line:match('^Merge[%s:]') or line:match('^Cherry%-pick[%s:]')
+            or line:match('^Revert[%s:]') or line:match('^Rebase[%s:]') or line:match('^Bisecting') then
             first = candidate
           elseif first and (line:match('^Operation keys:') or line:match('^Bisect keys:')) then
             last = candidate

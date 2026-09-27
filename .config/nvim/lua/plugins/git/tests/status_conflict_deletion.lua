@@ -92,7 +92,7 @@ assert(renderer.update_diff(bufnr, first_row, 'show'))
 local fast_lines
 renderer.snapshot_async(bufnr, root, {}, function(lines) fast_lines = lines end)
 assert(vim.wait(2000, function() return fast_lines ~= nil end), 'fast snapshot did not finish')
-assert(table.concat(fast_lines, '\n'):find('Merge Current:', 1, true),
+assert(table.concat(fast_lines, '\n'):find('Merge:', 1, true),
   'fast stage refresh hid the cached operation header')
 assert(inspections == 1, 'fast stage refresh re-inspected operation')
 

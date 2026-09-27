@@ -98,7 +98,7 @@ assert(#vim.api.nvim_tabpage_list_wins(0) == 3 and vim.fn.winlayout()[1] == 'col
   'dh on a conflict did not open a horizontal three-way diff')
 vim.cmd('tabclose')
 
-local merge_row = assert(row_for('^Merge Current:'))
+local merge_row = assert(row_for('^Merge:'))
 assert(not row_for('^Current:'), 'merge current summary still occupies a second row')
 vim.api.nvim_win_set_cursor(0, { merge_row, 0 })
 local groups
@@ -111,6 +111,17 @@ for _, group in ipairs(groups or {}) do
   end
 end
 assert(has_continue, 'merged Current header lost operation actions')
+local operation = require('git.features.operation')
+for kind, title in pairs({ cherry_pick = 'Cherry-pick', revert = 'Revert', rebase = 'Rebase' }) do
+  local rendered = operation.status_lines({ kind = kind, label = title .. ' in progress',
+    current = { hash = 'abcdef0', subject = 'subject' } })
+  assert(rendered[1] == title .. ': abcdef0 subject' and not rendered[2]:match('^Current:'),
+    title .. ' operation still uses a separate Current row')
+end
+local progressing = operation.status_lines({ kind = 'cherry_pick', label = 'Cherry-pick in progress',
+  current_step = 2, total_steps = 3, current = { hash = 'abcdef0', subject = 'subject' } })
+assert(progressing[1] == 'Cherry-pick (2/3): abcdef0 subject',
+  'combined operation heading lost sequencer progress')
 
 local plain = assert(row_for('^%? plain%.txt$'))
 vim.api.nvim_win_set_cursor(0, { plain, 0 })
