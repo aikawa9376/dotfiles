@@ -60,6 +60,10 @@ The choice is preserved across status refreshes. Enter keeps each section's
 existing action, including commit and pull-request scope changes.
 `gm` jumps to Unmerged paths. `gp` jumps to whichever commit section is shown:
 `Unpushed [only]` or `Commits [latest 15+]`.
+The header shows `Head`, the configured `Upstream` (the usual Pull source), a
+separate `Remote` row for a distinct Push destination branch when applicable,
+and the nearest current/next tags with their commit distances. `Tag` is omitted
+in repositories without tags.
 
 Expand a staged or unstaged file with `o`. On a displayed hunk, `s`/`-`
 stages or unstages that hunk; `u` unstages a staged hunk. Select added or

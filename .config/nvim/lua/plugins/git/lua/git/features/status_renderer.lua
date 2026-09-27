@@ -185,6 +185,37 @@ local function parse_status_result(work_tree, result)
   return model
 end
 
+local function tag_summary(work_tree)
+  local function describe(args)
+    local result = run(work_tree, args)
+    if result.code ~= 0 then return nil end
+    local name = vim.trim(result.stdout or '')
+    return name ~= '' and name or nil
+  end
+  local current = describe({ 'describe', '--tags', '--abbrev=0', 'HEAD' })
+  local next_tag = describe({ 'describe', '--tags', '--contains', '--abbrev=0', 'HEAD' })
+  -- --contains describes an ancestor as tag~N (or tag^N for a merge).
+  if next_tag then next_tag = next_tag:match('^[^~^]+') end
+  if next_tag and next_tag == current then
+    next_tag = describe({ 'describe', '--tags', '--contains', '--abbrev=0',
+      '--exclude=' .. current, 'HEAD' })
+    if next_tag then next_tag = next_tag:match('^[^~^]+') end
+  end
+  local tags = {}
+  for _, item in ipairs({ { current, 'HEAD' }, { next_tag, 'next' } }) do
+    local name = item[1]
+    if name then
+      local ref = 'refs/tags/' .. name
+      local range = item[2] == 'HEAD' and ref .. '..HEAD' or 'HEAD..' .. ref
+      local result = run(work_tree, { 'rev-list', '--count', range })
+      if result.code == 0 then
+        tags[#tags + 1] = { name = name, count = tonumber(vim.trim(result.stdout or '')) or 0 }
+      end
+    end
+  end
+  return tags
+end
+
 local function parse_status(bufnr, work_tree)
   local result = run(work_tree, {
     '--no-optional-locks', 'status', '--porcelain=v2', '-z', '--branch', '--untracked-files=all',
@@ -218,6 +249,7 @@ local function parse_status(bufnr, work_tree)
   if model.oid and model.oid ~= '(initial)' then model.head_subject = subject('HEAD', model.oid) end
   model.upstream_subject = subject(model.upstream)
   if model.push ~= model.upstream then model.push_subject = subject(model.push) end
+  if model.oid and model.oid ~= '(initial)' then model.tags = tag_summary(work_tree) end
   attach_numstat(model.unstaged, parse_numstat(work_tree, false))
   attach_numstat(model.staged, parse_numstat(work_tree, true))
   for _, entry in ipairs(model.untracked) do
@@ -662,7 +694,14 @@ local function snapshot_from_model(bufnr, model, opts)
     ))
   end
   if model.push and model.push ~= model.upstream then
-    table.insert(lines, with_subject('Push: ' .. model.push, model.push_subject))
+    table.insert(lines, with_subject('Remote: ' .. model.push, model.push_subject))
+  end
+  if model.tags and #model.tags > 0 then
+    local labels = {}
+    for _, tag in ipairs(model.tags) do
+      labels[#labels + 1] = tag.name .. (tag.count > 0 and (' (%d)'):format(tag.count) or '')
+    end
+    table.insert(lines, (#labels == 1 and 'Tag: ' or 'Tags: ') .. table.concat(labels, ', '))
   end
   vim.list_extend(lines, opts.header_lines or {})
   local cached_operation = operation_cache_by_buf[bufnr]
@@ -683,7 +722,6 @@ local function snapshot_from_model(bufnr, model, opts)
     }
   end
   for _, line in ipairs(operation_lines or {}) do table.insert(lines, line) end
-  table.insert(lines, 'Help: g?')
 
   if not opts.fast and model.upstream and model.behind > 0 then
     if previous and previous.work_tree == model.work_tree and previous.oid == model.oid
@@ -733,6 +771,7 @@ function M.snapshot_async(bufnr, work_tree, opts, callback)
           model.unpulled = previous.unpulled
           model.upstream_oid = previous.upstream_oid
         end
+        if previous.oid == model.oid then model.tags = previous.tags end
         for _, section in ipairs({ 'staged', 'unstaged', 'untracked' }) do
           local entries = {}
           for _, entry in ipairs(previous[section]) do entries[entry.path] = entry end

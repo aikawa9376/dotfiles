@@ -322,9 +322,7 @@ local function find_status_cursor_row(lines, anchor, bufnr)
       local candidates = section_rows[change_section_order[index]]
       if #candidates > 0 then return candidates[#candidates].row end
     end
-    for row, line in ipairs(lines) do
-      if line == 'Help: g?' then return row end
-    end
+    return 1 -- No changes remain; settle on the Head row.
   end
 
   local best_row, best_distance
@@ -454,8 +452,12 @@ local function insert_index_flag_warning(bufnr, lines, flag_state)
   local warning = index_flags.warning_line(flag_state)
   if not warning then return end
   local warning_row = #lines + 1
-  for row, line in ipairs(lines) do
-    if line == 'Help: g?' then warning_row = row; break end
+  for row = 1, #lines do
+    local entry = status_renderer.entry_at(bufnr, row)
+    if entry and entry.header then
+      warning_row = row > 1 and lines[row - 1] == '' and row - 1 or row
+      break
+    end
   end
   table.insert(lines, warning_row, warning)
   status_renderer.shift_entries(bufnr, warning_row, 1)
@@ -1567,7 +1569,7 @@ function M.setup(group)
 
           local subject_start = (line:match('^Head: .-  ()')
             or line:match('^Upstream: .-  ()')
-            or line:match('^Push: .-  ()'))
+            or line:match('^Remote: .-  ()'))
           if subject_start then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, subject_start - 1, {
               end_col = #line,

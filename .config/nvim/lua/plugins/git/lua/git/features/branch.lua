@@ -1125,7 +1125,6 @@ end
 
 local function show_branch_help()
   help.show('Branch buffer keys', {
-    'g?          show this help',
     'ga/gl/gr/gt show all/local/remote/tag refs',
     '<CR>        Gedit selected ref',
     'L           log for selected ref',

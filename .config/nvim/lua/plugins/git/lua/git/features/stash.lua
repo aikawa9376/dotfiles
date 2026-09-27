@@ -48,7 +48,6 @@ end
 
 local function show_stash_help()
   help.show('Stash buffer keys', {
-    'g?     show this help',
     'A      apply stash',
     'P      pop stash',
     'X      drop stash',

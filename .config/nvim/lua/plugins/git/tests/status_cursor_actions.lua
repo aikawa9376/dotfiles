@@ -105,7 +105,7 @@ for _ = 1, 4 do
   press('X')
   assert(vim.wait(5000, function() return not vim.tbl_contains(rows(), selected) end, 20))
 end
-assert(cursor_line() == 'Help: g?', 'empty status did not settle on the Help row')
+assert(cursor_line():match('^Head:'), 'empty status did not settle on the Head row')
 
 vim.api.nvim_buf_delete(b, { force = true })
 vim.fn.executable = executable

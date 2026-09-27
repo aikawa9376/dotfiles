@@ -67,7 +67,7 @@ for _, mode in ipairs({ 'bdelete', 'bwipeout' }) do
     assert(not syntax.refresh(b), mode .. ' retained a syntax refresher')
     assert(not pending.opts.is_current(), mode .. ' kept an async snapshot alive')
     -- Simulate a Git result arriving after unload, when bdelete can leave a valid buffer ID.
-    pending.callback({ 'Head: stale', 'Help: g?' })
+    pending.callback({ 'Head: stale' })
     assert(commits == before_commits, 'late result started more work after teardown')
     if vim.api.nvim_buf_is_valid(b) then vim.api.nvim_buf_delete(b, { force = true }) end
   end

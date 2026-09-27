@@ -205,7 +205,6 @@ end
 
 local function show_reflog_help()
   help.show('Reflog recovery actions', {
-    'g?          show this help',
     'Green HEAD@{n}: state before rebase, amend, or reset',
     '<CR>        inspect selected destination',
     ']s / [s     next / previous visit to same hash',

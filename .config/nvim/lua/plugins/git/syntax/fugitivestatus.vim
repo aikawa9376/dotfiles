@@ -9,12 +9,10 @@ syn include @fugitiveDiff syntax/diff.vim
 
 syn match fugitiveHeader /^[A-Z][a-z][^:]*:/
 syn match fugitiveHeader /^Head:/ nextgroup=fugitiveHash,fugitiveSymbolicRef skipwhite
-syn match fugitiveHeader /^Upstream:\|^Push:\|^Pull:\|^Rebase:\|^Merge:/ nextgroup=fugitiveSymbolicRef skipwhite
-syn match fugitiveHelpHeader /^Help:/ nextgroup=fugitiveHelpTag skipwhite
-syn match fugitiveHelpTag /\S\+/ contained
+syn match fugitiveHeader /^Upstream:\|^Remote:\|^Pull:\|^Rebase:\|^Merge:/ nextgroup=fugitiveSymbolicRef skipwhite
 syn match fugitiveAheadBehind /(+\d\+\/-\d\+)/
 
-syn region fugitiveSection start=/^\%(.*(\d\++\=)$\)\@=/ contains=fugitiveHeading end=/^$/ fold
+syn region fugitiveSection start=/^\%(Tags\?:\)\@!\%(.*(\d\++\=)$\)\@=/ contains=fugitiveHeading end=/^$/ fold
 syn cluster fugitiveSection contains=fugitiveSection
 syn match fugitiveHeading /^[A-Z][a-z][^:]*\ze (\d\++\=)$/ contains=fugitivePreposition contained nextgroup=fugitiveCount skipwhite
 syn match fugitiveCount /(\d\++\=)/hs=s+1,he=e-1 contained
@@ -38,9 +36,7 @@ for s:section in ['Untracked', 'Unstaged', 'Staged']
 endfor
 unlet s:section
 
-hi def link fugitiveHelpHeader fugitiveHeader
 hi def link fugitiveHeader Label
-hi def link fugitiveHelpTag Tag
 hi def link fugitiveHeading PreProc
 hi def link fugitiveUntrackedHeading PreCondit
 hi def link fugitiveUnstagedHeading Macro

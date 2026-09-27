@@ -7,7 +7,6 @@ local marker_ns = vim.api.nvim_create_namespace('git_status_fold_markers')
 
 local heading_highlights = {
   { '^Head:', 'RainbowDelimiterBlue' },
-  { '^Help:', 'Comment' },
   { '^Unmerged paths %(', 'RainbowDelimiterRed' },
   { '^Untracked files %(', 'RainbowDelimiterOrange' },
   { '^Unstaged changes %(', 'RainbowDelimiterYellow' },

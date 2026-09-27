@@ -399,7 +399,6 @@ M.open = open_log_list
 
 local function show_log_help()
   help.show('Log buffer keys', {
-    'g?          show this help',
     'd (n/V)     Diffview commit or selected commit range',
     'C           commit info float',
     'gn / gN     show / edit Git note',
