@@ -6,6 +6,26 @@ package.path = plugin .. '/lua/?.lua;' .. package.path
 local folds = require('git.features.status_folds')
 local bufnr = vim.api.nvim_get_current_buf()
 vim.wo.fillchars = 'fold:·'
+vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+  'Head: main  first', 'Upstream: origin/main', 'Remote: publish/main', 'Tag: v1', '',
+  'Untracked files (1)', '? file.txt',
+})
+folds.rebuild(bufnr)
+assert(folds.is_header('Head: main  first') and vim.fn.foldclosed(1) == -1,
+  'repository header should start open and be foldable')
+assert(folds.toggle(bufnr, 1) and vim.fn.foldclosed(1) == 1
+  and vim.fn.foldclosedend(1) == 4 and vim.fn.foldtextresult(1) == 'Head: main  first',
+  'folded repository header should display only Head')
+vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+  'Head: main  second', 'Upstream: origin/main', 'Tags: v1 (1), v2 (2)', '',
+  'Untracked files (1)', '? file.txt',
+})
+folds.rebuild(bufnr)
+assert(vim.fn.foldclosed(1) == 1 and vim.fn.foldclosedend(1) == 3,
+  'repository header fold was lost when its lines changed')
+assert(folds.toggle(bufnr, 1) and vim.fn.foldclosed(1) == -1,
+  'repository header did not reopen')
+folds.cleanup(bufnr)
 local function render(stash_count)
   local lines = { 'Head: main', '', 'Untracked files (3)', '? a', '? b', '? c', '',
     ('Stashes (%d)'):format(stash_count) }

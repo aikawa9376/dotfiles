@@ -32,6 +32,7 @@ function M.heading_group(line)
 end
 
 local headers = {
+  { '^Head:', 'header' },
   { '^Unmerged paths %(', 'conflicted' },
   { '^Untracked files %(', 'untracked' },
   { '^Unstaged changes %(', 'unstaged' },
@@ -46,7 +47,7 @@ local headers = {
   { '^Index flags %[local%] %(', 'index_flags' },
 }
 
-local always_open = { conflicted = true, untracked = true, unstaged = true, staged = true, commits = true }
+local always_open = { header = true, conflicted = true, untracked = true, unstaged = true, staged = true, commits = true }
 
 local function header(line)
   for _, item in ipairs(headers) do
@@ -178,6 +179,11 @@ function M.toggle(bufnr, row)
   local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1]
   local key = header(line or '')
   if not key then return false end
+  local foldable = false
+  for _, section in ipairs(sections(bufnr)) do
+    if section.first == row then foldable = true; break end
+  end
+  if not foldable then return false end
   local states = folded_by_buf[bufnr] or {}
   states[key] = not states[key]
   folded_by_buf[bufnr] = states

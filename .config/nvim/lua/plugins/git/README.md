@@ -9,7 +9,8 @@ reverting the commit that removed them.
 
 | Command | Behavior |
 | --- | --- |
-| `G`, `Git`, `Git status`, `GitStatus` | Open the custom status panel |
+| `G`, `Git`, `Git status`, `GitStatus` | Open the custom status panel in a split |
+| `G!`, `G! status`, `<Leader>gS` | Open the custom status panel in a tab; reuse its existing status tab |
 | `Git <args>` | Run Git in the current buffer's repository; quoted arguments and `%` paths are supported |
 | `Gedit`, `Gsplit`, `Gvsplit`, `Gtabedit [object]` | Open a commit, tree, or file blob; no argument opens the current file's index |
 | `Gedit HEAD:%`, `Gedit :0:%` | Current file at HEAD or in the index; `:1:`, `:2:`, `:3:` select conflict stages |
@@ -56,6 +57,7 @@ its existing commit and stash inspection actions.
 In the status panel, `<Tab>` opens or closes the section under the cursor; an
 arrow in the gutter shows its state. Unmerged, untracked, unstaged, staged, and
 commit sections start open. Other sections start closed at three or more items.
+The `Head` header also starts open; fold it to show only the `Head` row.
 The choice is preserved across status refreshes. Enter keeps each section's
 existing action, including commit and pull-request scope changes.
 `gm` jumps to Unmerged paths. `gp` jumps to whichever commit section is shown:

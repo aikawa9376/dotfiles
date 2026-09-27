@@ -130,7 +130,9 @@ function M.git(opts)
   local root, path = objects.context(bufnr)
   local args = M.argv(opts.args)
   for i, arg in ipairs(args) do if arg == '%' then args[i] = assert(path, 'No current file') end end
-  if #args == 0 or (#args == 1 and args[1] == 'status') then return require('git.features.status').open({ split = true }) end
+  if #args == 0 or (#args == 1 and args[1] == 'status') then
+    return require('git.features.status').open({ split = not opts.bang, tab = opts.bang })
+  end
   if #args == 1 and args[1] == 'blame' then return require('git.features.blame').open() end
   -- A terminal preserves prompts, signing, hooks and Git's editor protocol.
   local sub = args[1]

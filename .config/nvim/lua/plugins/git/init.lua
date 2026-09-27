@@ -15,6 +15,7 @@ return {
   keys = {
     { "<Leader>gb", function() require('git.features.blame').toggle() end, silent = true, desc = "Toggle Git blame panel" },
     { "<Leader>gs", function() require('git.features.status').open({ focus = 'unstaged', split = true }) end, silent = true },
+    { "<Leader>gS", "<cmd>G!<CR>", silent = true, desc = "Open Git status in a tab" },
     { "<Leader>gg", "<cmd>GeditHeadAtFile<CR>", silent = true },
     { "<Leader>gr", "<cmd>Git! rm --cached %<CR>", silent = true },
     { "<Leader>gM", "<cmd>Git! commit -m 'tmp'<CR>", silent = true },

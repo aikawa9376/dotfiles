@@ -3223,8 +3223,26 @@ function M.open(opts)
     end
   end
 
-  local winid = bufnr and vim.fn.bufwinid(bufnr) or -1
+  local winid, target_tab = -1, nil
+  if opts.tab then
+    for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+      local ok, tab_work_tree = pcall(vim.api.nvim_tabpage_get_var, tab, 'git_status_work_tree')
+      if ok and tab_work_tree == work_tree then
+        for _, candidate in ipairs(vim.api.nvim_tabpage_list_wins(tab)) do
+          if vim.api.nvim_win_get_buf(candidate) == bufnr then
+            winid = candidate
+            target_tab = tab
+            break
+          end
+        end
+      end
+      if winid ~= -1 then break end
+    end
+  else
+    winid = bufnr and vim.fn.bufwinid(bufnr) or -1
+  end
   if winid ~= -1 then
+    if target_tab then vim.api.nvim_set_current_tabpage(target_tab) end
     vim.api.nvim_set_current_win(winid)
   else
     if not bufnr then
@@ -3238,7 +3256,10 @@ function M.open(opts)
       vim.bo[bufnr].readonly = true
       utils.set_buf_work_tree(bufnr, work_tree)
     end
-    if opts.split then
+    if opts.tab then
+      vim.cmd('tabnew')
+      vim.api.nvim_tabpage_set_var(0, 'git_status_work_tree', work_tree)
+    elseif opts.split then
       local current_win = vim.api.nvim_get_current_win()
       local config = vim.api.nvim_win_get_config(current_win)
       if config.external or (config.relative and config.relative ~= '') then
