@@ -3010,6 +3010,18 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true, desc = 'Revert commit under cursor' })
 
       local function open_diff_at_cursor(layout)
+        local line = vim.api.nvim_get_current_line()
+        local diff = require('git.features.commit_diff')
+        local work_tree = utils.get_buf_work_tree(b)
+        local commit = line:match('^(%x%x%x%x%x%x%x+)%s')
+        local stash_ref = stash_ref_from_line(line)
+        if commit or stash_ref then
+          local ok, err
+          if commit then ok, err = diff.open_selected(work_tree, { commit })
+          else ok, err = diff.open_stashes(work_tree, { stash_ref }) end
+          if not ok then vim.notify(err, vim.log.levels.WARN) end
+          return
+        end
         local flagged = index_flag_entry_at_cursor()
         if flagged then
           open_index_flag_diff(b, flagged, layout)
@@ -3052,6 +3064,22 @@ function M.setup(group)
 
       vim.keymap.set('n', 'd', function() open_diff_at_cursor('vertical') end,
         { buffer = b, nowait = true, silent = true, desc = 'Open file diff in new tab' })
+      vim.keymap.set('x', 'd', function()
+        local diff = require('git.features.commit_diff')
+        local first, last = diff.visual_rows()
+        local items, err = diff.status_items(b, first, last)
+        if not items then vim.notify(err, vim.log.levels.WARN); return end
+        local work_tree = utils.get_buf_work_tree(b)
+        local ok, open_err
+        if items.kind == 'commits' then
+          ok, open_err = diff.open_selected(work_tree, items.values)
+        elseif items.kind == 'stashes' then
+          ok, open_err = diff.open_stashes(work_tree, items.values)
+        else
+          ok, open_err = diff.open_paths(work_tree, items.values, items.section)
+        end
+        if not ok then vim.notify(open_err, vim.log.levels.WARN) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Diffview selected commits or files' })
       for _, key in ipairs({ 'dd', 'dv' }) do
         vim.keymap.set('n', key, function() open_diff_at_cursor('vertical') end,
           { buffer = b, nowait = true, silent = true, desc = 'Open vertical file diff' })

@@ -67,6 +67,33 @@ vim.cmd('close')
 vim.cmd('Glog')
 assert_read_only()
 assert(subjects():find('other line', 1, true) and subjects():find('selected line', 1, true))
+local diff_args
+vim.api.nvim_create_user_command('DiffviewOpen', function(opts) diff_args = opts.fargs end, { nargs = '*' })
+local log_rows = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+local newer_row, older_row, newer_hash, older_hash
+for index, line in ipairs(log_rows) do
+  if line:find('other line', 1, true) then newer_row, newer_hash = index, line:match('^(%x+)') end
+  if line:find('selected line', 1, true) then older_row, older_hash = index, line:match('^(%x+)') end
+end
+assert(older_row == newer_row + 1)
+vim.api.nvim_win_set_cursor(0, { newer_row, 0 })
+vim.cmd('normal! Vj')
+local visual_diff = vim.fn.maparg('d', 'x', false, true)
+assert(type(visual_diff.callback) == 'function', 'log Visual d mapping is missing')
+visual_diff.callback()
+assert(vim.wait(2000, function() return diff_args ~= nil end, 10))
+local base = git({ 'rev-parse', older_hash .. '^' })
+assert(vim.tbl_contains(diff_args, base .. '..' .. git({ 'rev-parse', newer_hash })),
+  'log Visual d did not open selected commit range in Diffview')
+vim.api.nvim_win_set_cursor(0, { newer_row, 0 })
+vim.cmd('normal! Vj')
+local visual_menu = vim.fn.maparg('<Space><Space>', 'x', false, true)
+assert(type(visual_menu.callback) == 'function', 'log Visual action menu is missing')
+visual_menu.callback()
+assert(vim.b.git_action_menu_kind == 'root'
+  and subjects():find('2 selected commits', 1, true),
+  'log Visual action menu lost the selected commits')
+vim.cmd('close')
 vim.cmd('close')
 
 assert(vim.api.nvim_get_current_buf() == file_buf)

@@ -33,6 +33,23 @@ reflog.setup(vim.api.nvim_create_augroup('ReflogCheckpointTest', { clear = true 
 require('git.utils').set_buf_work_tree(0, root)
 vim.cmd('Greflog')
 local b = vim.api.nvim_get_current_buf()
+local repeated_row
+for row = 1, vim.api.nvim_buf_line_count(b) - 1 do
+  local left, right = reflog.entry_at(b, row), reflog.entry_at(b, row + 1)
+  if left and right and left.hash == right.hash then repeated_row = row; break end
+end
+assert(repeated_row, 'fixture lacks adjacent visits to one destination')
+local diff_args
+vim.api.nvim_create_user_command('DiffviewOpen', function(opts) diff_args = opts.fargs end, { nargs = '*' })
+vim.api.nvim_win_set_cursor(0, { repeated_row, 0 })
+vim.cmd('normal! Vj')
+local visual_diff = vim.fn.maparg('d', 'x', false, true)
+assert(type(visual_diff.callback) == 'function', 'reflog Visual d mapping is missing')
+visual_diff.callback()
+assert(vim.wait(2000, function() return diff_args ~= nil end, 10)
+  and vim.tbl_contains(diff_args, git({ 'rev-parse', reflog.entry_at(b, repeated_row).hash .. '^' })
+    .. '..' .. reflog.entry_at(b, repeated_row).hash),
+  'reflog Visual d did not open the selected destination in Diffview')
 local function green_rows()
   local rows = {}
   local ns = vim.api.nvim_create_namespace('fugitive_reflog_static')

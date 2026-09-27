@@ -88,6 +88,16 @@ local function target_commit(ctx, callback)
   end)
 end
 
+local function target_commits(ctx, reverse, callback)
+  if ctx.commits then
+    local commits = vim.deepcopy(ctx.commits)
+    if reverse then commits = vim.fn.reverse(commits) end
+    callback(commits)
+  else
+    target_commit(ctx, function(commit) callback({ commit }) end)
+  end
+end
+
 local function input(prompt, callback, default)
   vim.ui.input({ prompt = prompt, default = default }, function(value)
     if value and vim.trim(value) ~= '' then callback(vim.trim(value)) end
@@ -173,7 +183,7 @@ local function cherry_menu(ctx, ui)
   local state = { reference = false, no_commit = false, signoff = false,
     ff = true, edit = false }
   local function pick(no_commit)
-    target_commit(ctx, function(commit)
+    target_commits(ctx, true, function(commits)
       local args = { 'cherry-pick' }
       vim.list_extend(args, flag_args(state))
       if state.reference then args[#args + 1] = '-x' end
@@ -182,7 +192,7 @@ local function cherry_menu(ctx, ui)
       if state.strategy then args[#args + 1] = '--strategy=' .. state.strategy end
       if state.gpg_sign then args[#args + 1] = '--gpg-sign=' .. state.gpg_sign end
       if no_commit or state.no_commit then args[#args + 1] = '--no-commit' end
-      args[#args + 1] = commit
+      vim.list_extend(args, commits)
       git(args, ctx)
     end)
   end
@@ -215,7 +225,8 @@ local function cherry_menu(ctx, ui)
     end)
   end
   return show_submenu({ kind = 'cherry-pick', title = 'Cherry-pick',
-    context = ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12)) or 'Choose a commit on execution',
+    context = ctx.commits and ('%d selected commits'):format(#ctx.commits)
+      or ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12)) or 'Choose a commit on execution',
     groups = {
       { title = 'Arguments', actions = {
         exclusive_flag('-x', 'Reference source commit', state, 'reference', 'ff', '-x'),
@@ -231,13 +242,13 @@ local function cherry_menu(ctx, ui)
         { key = 'A', label = 'Pick commit', run = function() pick(false) end },
         { key = 'a', label = 'Apply changes without committing',
           run = function() pick(true) end },
-        { key = 'h', label = 'Harvest commit from another branch',
+        { key = 'h', label = 'Harvest commit from another branch', enabled = not ctx.commits,
           run = function() move('harvest') end },
-        { key = 'd', label = 'Donate commit to another branch',
+        { key = 'd', label = 'Donate commit to another branch', enabled = not ctx.commits,
           run = function() move('donate') end },
-        { key = 's', label = 'Spin off selected commits',
+        { key = 's', label = 'Spin off selected commits', enabled = not ctx.commits,
           run = function() existing_key('bs') end },
-        { key = 'n', label = 'Spin out selected commits',
+        { key = 'n', label = 'Spin out selected commits', enabled = not ctx.commits,
           run = function() existing_key('bS') end },
       } },
     },
@@ -297,7 +308,7 @@ local function revert_menu(ctx, ui)
   end
   local state = { no_commit = false, no_edit = false, edit = false, signoff = false }
   local function revert(no_commit)
-    target_commit(ctx, function(commit)
+    target_commits(ctx, false, function(commits)
       local args = { 'revert' }
       vim.list_extend(args, flag_args(state))
       if no_commit or state.no_commit then args[#args + 1] = '--no-commit' end
@@ -305,12 +316,13 @@ local function revert_menu(ctx, ui)
       if state.edit then args[#args + 1] = '--edit' end
       if state.strategy then args[#args + 1] = '--strategy=' .. state.strategy end
       if state.gpg_sign then args[#args + 1] = '--gpg-sign=' .. state.gpg_sign end
-      args[#args + 1] = commit
+      vim.list_extend(args, commits)
       git(args, ctx)
     end)
   end
   return show_submenu({ kind = 'revert', title = 'Revert',
-    context = ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12)) or 'Choose a commit on execution',
+    context = ctx.commits and ('%d selected commits'):format(#ctx.commits)
+      or ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12)) or 'Choose a commit on execution',
     groups = {
       { title = 'Arguments', actions = {
         flag('-n', 'Apply without committing', state, 'no_commit', '--no-commit'),
@@ -874,11 +886,67 @@ local function fetch_menu(ctx, ui)
   }, ui)
 end
 
-function M.open(bufnr)
+function M.open(bufnr, selection)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local ctx = context(bufnr)
   if not ctx then
     return false, 'Action menu is available in status, log, branch, reflog, and worktree panels'
+  end
+  if selection then
+    local diff = require('git.features.commit_diff')
+    local count = #selection.values
+    if selection.kind == 'commits' then
+      ctx.commits = selection.values
+      ctx.commit = selection.values[1]
+      return menu.show({ kind = 'root', context = ('%d selected commits'):format(count),
+        groups = { { title = 'Selected commits', actions = {
+          { key = 'd', label = 'Diff selected range', run = function()
+            local ok, err = diff.open_selected(ctx.work_tree, ctx.commits)
+            if not ok then vim.notify(err, vim.log.levels.WARN) end
+          end },
+          { key = 'A', label = 'Cherry-pick…', run = function(ui) cherry_menu(ctx, ui) end },
+          { key = 'V', label = 'Revert…', run = function(ui) revert_menu(ctx, ui) end },
+        } } },
+      })
+    end
+    if selection.kind == 'stashes' then
+      return menu.show({ kind = 'root', context = ('%d selected stashes'):format(count),
+        groups = { { title = 'Selected stashes', actions = {
+          { key = 'd', label = 'Compare stash snapshots', run = function()
+            local ok, err = diff.open_stashes(ctx.work_tree, selection.values)
+            if not ok then vim.notify(err, vim.log.levels.WARN) end
+          end },
+        } } },
+      })
+    end
+    ctx.paths = selection.values
+    ctx.section = selection.section
+    local function update(action)
+      local renderer = require('git.features.status_renderer')
+      local ok, err
+      if action == 'discard' then
+        ok, err = renderer.discard_range(bufnr, selection.first, selection.last)
+      else
+        ok, err = renderer.change_index_range(bufnr, selection.first, selection.last, action)
+      end
+      if not ok then vim.notify(err, vim.log.levels.WARN); return end
+      require('git.features.status').refresh_buffer(bufnr)
+      utils.fire_fugitive_changed({ work_tree = ctx.work_tree })
+    end
+    return menu.show({ kind = 'root', context = ('%d selected %s files'):format(count, ctx.section),
+      groups = { { title = 'Selected files', actions = {
+        { key = 'd', label = 'Diff selected files', run = function()
+          local ok, err = diff.open_paths(ctx.work_tree, ctx.paths, ctx.section)
+          if not ok then vim.notify(err, vim.log.levels.WARN) end
+        end },
+        { key = 's', label = ctx.section == 'staged' and 'Unstage selected files'
+          or ctx.section == 'conflicted' and 'Accept selected conflicts'
+          or 'Stage selected files', run = function() update('toggle') end },
+        { key = 'u', label = 'Unstage selected files', enabled = ctx.section == 'staged',
+          reason = 'Select staged files', run = function() update('unstage') end },
+        { key = 'D', label = 'Discard selected files', run = function() update('discard') end },
+      } } },
+    })
   end
   local groups = {}
   if ctx.panel == 'status' and ctx.path then
@@ -969,6 +1037,36 @@ function M.attach(bufnr)
     local ok, err = M.open(bufnr)
     if not ok then vim.notify(err, vim.log.levels.WARN) end
   end, { buffer = bufnr, nowait = true, silent = true, desc = 'Git action menu' })
+  local panel = ({ fugitivestatus = 'status', fugitivelog = 'log',
+    fugitivereflog = 'reflog' })[vim.bo[bufnr].filetype]
+  if panel then
+    vim.keymap.set('x', '<Space><Space>', function()
+      local diff = require('git.features.commit_diff')
+      local first, last = diff.visual_rows()
+      local selection, err
+      if panel == 'status' then
+        selection, err = diff.status_items(bufnr, first, last)
+      else
+        local commits = {}
+        for row = first, last do
+          local commit
+          if panel == 'reflog' then
+            local entry = require('git.features.reflog').entry_at(bufnr, row)
+            commit = entry and entry.hash
+          else
+            local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+            commit = line:match('^(%x%x%x%x%x%x%x+)')
+          end
+          if not commit then err = 'Select only commit rows'; break end
+          if commits[#commits] ~= commit then commits[#commits + 1] = commit end
+        end
+        if not err then selection = { kind = 'commits', values = commits } end
+      end
+      if not selection then vim.notify(err, vim.log.levels.WARN); return end
+      local ok, open_err = M.open(bufnr, selection)
+      if not ok then vim.notify(open_err, vim.log.levels.WARN) end
+    end, { buffer = bufnr, nowait = true, silent = true, desc = 'Git actions for selection' })
+  end
 end
 
 return M

@@ -44,6 +44,14 @@ a range, `g<Space>l` and `Glog` keep their repository-wide log behavior. The
 range starts from the displayed revision in a Git object buffer, or `HEAD` in a
 worktree file. In a line-range log, `<C-p>` and `<CR>` open the selected commit
 with the corresponding file expanded and the cursor on its relevant diff line.
+In log or reflog, select commit rows and press `d` to compare the selected
+history in Diffview, including the oldest selected commit. The same Visual `d`
+works on status commit rows. Selections whose commits are not on one ancestry
+chain are rejected.
+In status, normal `d` on a commit row opens that commit in Diffview. On a
+stash row it compares the stash with its base commit; Visual `d` across stash
+rows compares the oldest selected stash snapshot with the newest. Enter keeps
+its existing commit and stash inspection actions.
 
 In the status panel, `<Tab>` opens or closes the section under the cursor; an
 arrow in the gutter shows its state. Unmerged, untracked, unstaged, staged, and
@@ -64,6 +72,11 @@ selected file rows. Staged selections are removed from both the index and
 worktree; unstaged selections affect only the worktree. If the worktree has
 overlapping edits that prevent a staged patch from applying cleanly, `X` leaves
 the selection unchanged and reports the conflict.
+Visual `d` on file rows in one status section opens Diffview limited to those
+paths; staged rows compare `HEAD` with the index, and other rows use the
+worktree view. Visual `<Space><Space>` offers actions for selected commits,
+stashes, or files, including range diff, cherry-pick/revert, and file
+stage/unstage/discard.
 Expand an unmerged path with `o`. For `UU` and `AA` files with conflict
 markers, the diff compares the live ours/theirs text only inside each marked
 region; clean auto-merged edits stay out of the diff. Other conflicts compare

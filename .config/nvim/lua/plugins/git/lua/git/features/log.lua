@@ -400,7 +400,7 @@ M.open = open_log_list
 local function show_log_help()
   help.show('Log buffer keys', {
     'g?          show this help',
-    'd           Diffview commit (or file if detected)',
+    'd (n/V)     Diffview commit or selected commit range',
     'C           commit info float',
     'gn / gN     show / edit Git note',
     'gk          show commit message body',
@@ -501,6 +501,16 @@ function M.setup(group)
           vim.cmd(diff_cmd)
         end)
       end, { buffer = ev.buf, nowait = true, silent = true })
+      vim.keymap.set('x', 'd', function()
+        local diff = require('git.features.commit_diff')
+        local commits, err = diff.selected_commits(ev.buf, function(bufnr, row)
+          local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+          return line:match('^(%x%x%x%x%x%x%x+)')
+        end)
+        if not commits then vim.notify(err, vim.log.levels.WARN); return end
+        local ok, open_err = diff.open_selected(utils.get_buf_work_tree(ev.buf), commits)
+        if not ok then vim.notify(open_err, vim.log.levels.WARN) end
+      end, { buffer = ev.buf, nowait = true, silent = true, desc = 'Diffview selected commits' })
 
       -- C: Show commit info
       vim.keymap.set('n', 'C', function()

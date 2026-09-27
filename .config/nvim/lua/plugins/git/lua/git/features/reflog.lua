@@ -213,7 +213,7 @@ local function show_reflog_help()
     '<C-y>       copy short hash',
     'B           create rescue branch at destination',
     '<Leader>R   reset --mixed to destination',
-    'd           Diffview selected commit',
+    'd (n/V)     Diffview commit or selected commit range',
     'C           commit info float',
     '<C-p>       toggle commit preview',
     'R           reload reflog',
@@ -291,6 +291,16 @@ function M.setup(group)
         local entry = entry_at(b, vim.fn.line('.'))
         if entry then vim.schedule(function() vim.cmd('DiffviewOpen ' .. entry.hash .. '^..' .. entry.hash) end) end
       end, { buffer = b, nowait = true, silent = true, desc = 'Diffview commit' })
+      vim.keymap.set('x', 'd', function()
+        local diff = require('git.features.commit_diff')
+        local commits, err = diff.selected_commits(b, function(bufnr, row)
+          local entry = entry_at(bufnr, row)
+          return entry and entry.hash or nil
+        end)
+        if not commits then vim.notify(err, vim.log.levels.WARN); return end
+        local ok, open_err = diff.open_selected(utils.get_buf_work_tree(b), commits)
+        if not ok then vim.notify(open_err, vim.log.levels.WARN) end
+      end, { buffer = b, nowait = true, silent = true, desc = 'Diffview selected commits' })
 
       vim.keymap.set('n', 'C', function()
         local entry = entry_at(b, vim.fn.line('.'))
