@@ -1,6 +1,14 @@
 local M = {}
 local ns = vim.api.nvim_create_namespace('git_transient_menu')
 vim.api.nvim_set_hl(0, 'GitActionMenuKey', { link = 'Identifier', default = true })
+vim.api.nvim_set_hl(0, 'GitActionMenuTarget', { link = 'DiagnosticHint', default = true })
+vim.api.nvim_set_hl(0, 'GitActionMenuHeading', { link = 'Statement', default = true })
+
+local function target_end(value)
+  local target = value:match('^Commit: %x+') or value:match('^Ref: .+')
+    or value:match('^Selected: .+')
+  return target and #target or nil
+end
 
 local function layout()
   return vim.g.git_action_menu_layout == 'float' and 'float' or 'split'
@@ -147,10 +155,21 @@ function M.show(spec, opts)
       vim.api.nvim_buf_set_extmark(buf, ns, 0, 0,
         { end_col = #lines[1], hl_group = 'Title' })
     end
+    if spec.context and spec.context ~= '' then
+      local row = spec.title and 2 or 1
+      local finish = target_end(lines[row])
+      if finish then
+        vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0,
+          { end_col = finish, hl_group = 'GitActionMenuTarget' })
+      end
+    end
     for row, spans in pairs(headings) do
       for _, span in ipairs(spans) do
+        local heading = lines[row]:sub(span[1] + 1, span[2])
+        local finish = target_end(heading)
         vim.api.nvim_buf_set_extmark(buf, ns, row - 1, span[1],
-          { end_col = span[2], hl_group = 'Type' })
+          { end_col = finish and span[1] + finish or span[2],
+            hl_group = finish and 'GitActionMenuTarget' or 'GitActionMenuHeading' })
       end
     end
     for row, cells in pairs(rows) do

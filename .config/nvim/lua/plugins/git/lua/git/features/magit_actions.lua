@@ -114,6 +114,19 @@ local function git_value(ctx, args)
   return value ~= '' and value or nil
 end
 
+local function commit_label(ctx)
+  return ctx.commit_label or ('Commit: ' .. ctx.commit:sub(1, 12))
+end
+
+local function short_target(ctx)
+  if ctx.commit then return ctx.commit:sub(1, 7) end
+  if ctx.branch then
+    return vim.fn.strchars(ctx.branch) > 18
+      and vim.fn.strcharpart(ctx.branch, 0, 17) .. '…' or ctx.branch
+  end
+  return 'ref'
+end
+
 local function branch_remotes(ctx)
   local branch = git_value(ctx, { 'symbolic-ref', '--quiet', '--short', 'HEAD' })
   if not branch then return nil end
@@ -130,6 +143,45 @@ local function branch_remotes(ctx)
   local push_remote = values[prefix .. 'pushremote'] or values['remote.pushdefault'] or upstream
   return { branch = branch, upstream = upstream, merge_ref = merge_ref,
     push_remote = push_remote }
+end
+
+local function selected_transfer(ctx)
+  if ctx.panel ~= 'branch' or not ctx.branch then
+    return ctx.commit and { source = ctx.commit, kind = 'commit' } or nil
+  end
+  local branch, kind = ctx.branch, ctx.branch_kind
+  if kind == 'tags' then
+    return { source = 'refs/tags/' .. branch, destination = 'refs/tags/' .. branch,
+      kind = 'tag' }
+  end
+  if kind == 'local_' then
+    local prefix = 'branch.' .. branch .. '.'
+    local upstream_remote = git_value(ctx, { 'config', '--get', prefix .. 'remote' })
+    local upstream_ref = git_value(ctx, { 'config', '--get', prefix .. 'merge' })
+    local push_remote = git_value(ctx, { 'config', '--get', prefix .. 'pushRemote' })
+      or git_value(ctx, { 'config', '--get', 'remote.pushDefault' }) or upstream_remote
+    return { source = 'refs/heads/' .. branch, destination = 'refs/heads/' .. branch,
+      push_remote = push_remote, pull_remote = upstream_remote, pull_ref = upstream_ref,
+      kind = 'local_' }
+  end
+  if kind == 'remote' then
+    local remotes = git_value(ctx, { 'remote' }) or ''
+    local matched
+    for remote in remotes:gmatch('[^\n]+') do
+      if branch:sub(1, #remote + 1) == remote .. '/'
+        and (not matched or #remote > #matched) then
+        matched = remote
+      end
+    end
+    if matched then
+      local name = branch:sub(#matched + 2)
+      return { source = 'refs/remotes/' .. branch,
+        destination = 'refs/heads/' .. name,
+        push_remote = matched, pull_remote = matched,
+        pull_ref = 'refs/heads/' .. name, kind = 'remote' }
+    end
+  end
+  return nil
 end
 
 local function show_submenu(spec, ui)
@@ -226,7 +278,7 @@ local function cherry_menu(ctx, ui)
   end
   return show_submenu({ kind = 'cherry-pick', title = 'Cherry-pick',
     context = ctx.commits and ('%d selected commits'):format(#ctx.commits)
-      or ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12)) or 'Choose a commit on execution',
+      or ctx.commit and commit_label(ctx) or 'Choose a commit on execution',
     groups = {
       { title = 'Arguments', actions = {
         exclusive_flag('-x', 'Reference source commit', state, 'reference', 'ff', '-x'),
@@ -268,9 +320,9 @@ local function apply_variants_menu(ctx, ui)
   local staged = ctx.panel == 'status' and ctx.path and ctx.section == 'staged'
   local can_patch = target or staged
   local can_discard = ctx.panel == 'status' and ctx.path ~= nil
-  local context_label = ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12))
+  local context_label = ctx.commit and commit_label(ctx)
     or ctx.path and ((ctx.hunk and 'Hunk: ' or 'File: ') .. ctx.path)
-    or ctx.branch and ('Selected: ' .. ctx.branch)
+    or ctx.branch and ('Ref: ' .. ctx.branch)
     or ctx.target_worktree and ('Worktree: ' .. ctx.target_worktree)
   return show_submenu({ kind = 'apply-variants', title = 'Apply variants',
     context = context_label, groups = {
@@ -322,7 +374,7 @@ local function revert_menu(ctx, ui)
   end
   return show_submenu({ kind = 'revert', title = 'Revert',
     context = ctx.commits and ('%d selected commits'):format(#ctx.commits)
-      or ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12)) or 'Choose a commit on execution',
+      or ctx.commit and commit_label(ctx) or 'Choose a commit on execution',
     groups = {
       { title = 'Arguments', actions = {
         flag('-n', 'Apply without committing', state, 'no_commit', '--no-commit'),
@@ -381,7 +433,7 @@ local function commit_menu(ctx, ui)
         { key = 'a', label = 'Amend HEAD', run = function() commit({ '--amend' }) end },
         { key = 'e', label = 'Amend without editing message',
           run = function() commit({ '--amend', '--no-edit' }) end },
-        { key = 'w', label = ctx.commit and 'Reword selected commit' or 'Reword HEAD',
+        { key = 'w', label = ctx.commit and ('Reword ' .. short_target(ctx)) or 'Reword HEAD',
           run = function()
             if ctx.commit then existing_key('cw')
             else commit({ '--amend', '--only', '--edit' }) end
@@ -517,8 +569,8 @@ local function branch_menu(ctx, ui)
     })
   end
   return show_submenu({ kind = 'branch', title = 'Branch',
-    context = ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12))
-      or chosen and ('Selected: ' .. chosen) or 'No branch selected',
+    context = ctx.commit and commit_label(ctx)
+      or chosen and ('Ref: ' .. chosen) or 'No branch selected',
     groups = {
       { title = 'Arguments', actions = {
         flag('-m', 'Merge local modifications', state, 'merge', '--merge'),
@@ -564,8 +616,8 @@ local function merge_menu(ctx, ui)
     end)
   end
   return show_submenu({ kind = 'merge', title = 'Merge',
-    context = ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12))
-      or ctx.branch and ('Selected: ' .. ctx.branch) or 'Choose a branch on execution',
+    context = ctx.commit and commit_label(ctx)
+      or ctx.branch and ('Ref: ' .. ctx.branch) or 'Choose a branch on execution',
     groups = {
       { title = 'Arguments', actions = {
         exclusive_flag('-f', 'Fast-forward only', state, 'ff_only', 'no_ff', '--ff-only'),
@@ -581,7 +633,7 @@ local function merge_menu(ctx, ui)
         flag('=s', 'Add Signed-off-by', state, 'signoff', '--signoff'),
       } },
       { title = 'Actions', actions = {
-        { key = 'm', label = 'Merge selected ref', run = function() merge() end },
+        { key = 'm', label = 'Merge ' .. short_target(ctx), run = function() merge() end },
         { key = 'e', label = 'Merge and edit message',
           run = function() merge({ '--edit' }) end },
         { key = 'n', label = 'Merge without commit',
@@ -666,7 +718,7 @@ local function rebase_menu(ctx, ui)
         flag('=s', 'Add Signed-off-by', state, 'signoff', '--signoff'),
       } },
       { title = 'Actions', actions = {
-        { key = 'r', label = 'Rebase onto selected ref', run = function() rebase() end },
+        { key = 'r', label = 'Rebase onto ' .. short_target(ctx), run = function() rebase() end },
         { key = 'p', label = 'Rebase onto push remote', run = function()
           if remotes and remotes.push_remote then
             rebase(nil, remotes.push_remote == '.' and remotes.branch
@@ -687,7 +739,7 @@ local function rebase_menu(ctx, ui)
       } },
     }
   if ctx.commit and (ctx.panel == 'status' or ctx.panel == 'log') then
-    groups[#groups + 1] = { title = 'Selected commit', actions = {
+    groups[#groups + 1] = { title = 'Commit actions', actions = {
       { key = 'w', label = 'Reword commit and descendants',
         run = function() existing_key('cw') end },
       { key = 'd', label = 'Drop commit and rewrite descendants',
@@ -695,14 +747,15 @@ local function rebase_menu(ctx, ui)
     } }
   end
   return show_submenu({ kind = 'rebase', title = 'Rebase',
-    context = ctx.commit and ('Commit: ' .. ctx.commit:sub(1, 12))
-      or ctx.branch and ('Selected: ' .. ctx.branch) or 'Choose an upstream on execution',
+    context = ctx.commit and commit_label(ctx)
+      or ctx.branch and ('Ref: ' .. ctx.branch) or 'Choose an upstream on execution',
     groups = groups,
   }, ui)
 end
 
 local function push_menu(ctx, ui)
   local remotes = branch_remotes(ctx)
+  local selected = selected_transfer(ctx)
   local state = { upstream = false, force_lease = false, tags = false,
     follow_tags = false, dry_run = false, no_verify = false }
   local function push(extra)
@@ -722,8 +775,9 @@ local function push_menu(ctx, ui)
     if extra then vim.list_extend(args, extra) end
     git(args, ctx)
   end
-  return show_submenu({ kind = 'push', title = 'Push',
-    context = 'Repository: ' .. (ctx.work_tree or ''), groups = {
+  local spec = { kind = 'push', title = 'Push',
+    context = selected and (ctx.commit and commit_label(ctx) or 'Ref: ' .. ctx.branch)
+      or 'Repository: ' .. (ctx.work_tree or ''), groups = {
       { title = 'Arguments', actions = {
         exclusive_flag('-f', 'Force with lease', state, 'force_lease', 'force', '--force-with-lease'),
         exclusive_flag('-F', 'Force', state, 'force', 'force_lease', '--force'),
@@ -780,11 +834,32 @@ local function push_menu(ctx, ui)
         end },
       } },
     },
-  }, ui)
+  }
+  if selected then
+    table.insert(spec.groups[2].actions, 1, {
+      key = 's', label = 'Push ' .. short_target(ctx)
+        .. (selected.push_remote and (' to ' .. selected.push_remote) or ' to remote'),
+      run = function()
+        local function send(remote)
+          if selected.kind == 'commit' then
+            input('Destination branch: ', function(branch)
+              push({ remote, selected.source .. ':refs/heads/' .. branch })
+            end)
+          else
+            push({ remote, selected.source .. ':' .. selected.destination })
+          end
+        end
+        if selected.push_remote then send(selected.push_remote)
+        else input('Remote: ', send) end
+      end,
+    })
+  end
+  return show_submenu(spec, ui)
 end
 
 local function pull_menu(ctx, ui)
   local remotes = branch_remotes(ctx)
+  local selected = selected_transfer(ctx)
   local state = { rebase = false, ff_only = false, autostash = false, tags = false }
   local function pull(extra)
     local args = { 'pull' }
@@ -797,8 +872,9 @@ local function pull_menu(ctx, ui)
     if extra then vim.list_extend(args, extra) end
     git(args, ctx)
   end
-  return show_submenu({ kind = 'pull', title = 'Pull',
-    context = 'Repository: ' .. (ctx.work_tree or ''), groups = {
+  local spec = { kind = 'pull', title = 'Pull',
+    context = selected and (selected.kind == 'local_' or selected.kind == 'remote')
+      and ('Ref: ' .. ctx.branch) or 'Repository: ' .. (ctx.work_tree or ''), groups = {
       { title = 'Arguments', actions = {
         exclusive_flag('-f', 'Fast-forward only', state, 'ff_only', 'rebase', '--ff-only'),
         exclusive_flag('-r', 'Rebase after fetching', state, 'rebase', 'ff_only', '--rebase'),
@@ -829,7 +905,17 @@ local function pull_menu(ctx, ui)
         end },
       } },
     },
-  }, ui)
+  }
+  if selected and selected.kind ~= 'tag' and selected.kind ~= 'commit' then
+    table.insert(spec.groups[2].actions, 1, {
+      key = 's', label = (selected.kind == 'local_' and 'Pull upstream of '
+        or 'Pull ') .. short_target(ctx) .. ' into HEAD',
+      enabled = not not (selected.pull_remote and selected.pull_ref),
+      reason = 'Selected branch has no configured upstream',
+      run = function() pull({ selected.pull_remote, selected.pull_ref }) end,
+    })
+  end
+  return show_submenu(spec, ui)
 end
 
 local function fetch_menu(ctx, ui)
@@ -948,6 +1034,11 @@ function M.open(bufnr, selection)
       } } },
     })
   end
+  if ctx.commit then
+    local subject = git_value(ctx, { 'show', '-s', '--format=%s', ctx.commit })
+    ctx.commit_label = 'Commit: ' .. ctx.commit:sub(1, 12)
+      .. (subject and (' (' .. subject .. ')') or '')
+  end
   local groups = {}
   if ctx.panel == 'status' and ctx.path then
     local file_actions = {
@@ -961,18 +1052,18 @@ function M.open(bufnr, selection)
     end
     groups[#groups + 1] = { title = 'File: ' .. ctx.path, actions = file_actions }
   elseif ctx.panel == 'status' and ctx.commit then
-    groups[#groups + 1] = { title = 'Commit: ' .. ctx.commit:sub(1, 12), actions = {
+    groups[#groups + 1] = { title = commit_label(ctx), actions = {
       { key = 'a', label = 'Apply to worktree',
         run = function() apply_patch(ctx, false) end },
     } }
   elseif ctx.panel == 'log' and ctx.commit then
-    groups[#groups + 1] = { title = 'Commit: ' .. ctx.commit:sub(1, 12), actions = {
+    groups[#groups + 1] = { title = commit_label(ctx), actions = {
       { key = 'o', label = 'Inspect commit', run = function() existing_key('<CR>') end },
       { key = 'w', label = 'Reword commit', run = function() existing_key('cw') end },
     } }
   elseif ctx.panel == 'branch' and ctx.branch then
     groups[#groups + 1] = { title = 'Ref: ' .. ctx.branch, actions = {
-      { key = 'L', label = 'Log selected ref', run = function() existing_key('L') end },
+      { key = 'L', label = 'Log ' .. short_target(ctx), run = function() existing_key('L') end },
     } }
   elseif ctx.panel == 'reflog' and ctx.commit then
     groups[#groups + 1] = { title = 'Reflog: ' .. ctx.reflog_selector, actions = {

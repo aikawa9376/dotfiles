@@ -97,6 +97,30 @@ press('dh')
 assert(#vim.api.nvim_tabpage_list_wins(0) == 3 and vim.fn.winlayout()[1] == 'col',
   'dh on a conflict did not open a horizontal three-way diff')
 vim.cmd('tabclose')
+local changed_file_row = assert(row_for('^UU changed%.txt$'))
+vim.api.nvim_win_set_cursor(0, { changed_file_row, 0 })
+press('o')
+local incoming_row
+for index = changed_file_row + 1, #lines() do
+  if lines()[index] == '+theirs' then incoming_row = index; break end
+end
+assert(incoming_row)
+local worktree_row
+for index, line in ipairs(vim.fn.readfile(root .. '/changed.txt')) do
+  if line == 'theirs' then worktree_row = index; break end
+end
+assert(worktree_row)
+local status_win = vim.api.nvim_get_current_win()
+vim.api.nvim_win_set_cursor(status_win, { incoming_row, 0 })
+press('<CR>')
+assert(vim.api.nvim_buf_get_name(0) == root .. '/changed.txt'
+  and vim.api.nvim_win_get_cursor(0)[1] == worktree_row,
+  'Enter on a conflict diff row did not open its worktree marker line: '
+    .. vim.api.nvim_buf_get_name(0) .. ':' .. vim.api.nvim_win_get_cursor(0)[1]
+    .. ' expected ' .. root .. '/changed.txt:' .. worktree_row)
+vim.api.nvim_set_current_win(status_win)
+vim.api.nvim_win_set_cursor(0, { changed_file_row, 0 })
+press('o')
 
 local merge_row = assert(row_for('^Merge:'))
 assert(not row_for('^Current:'), 'merge current summary still occupies a second row')

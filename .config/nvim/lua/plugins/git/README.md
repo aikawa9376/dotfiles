@@ -84,6 +84,9 @@ Git's stage 2 (ours) to stage 3 (theirs): `UD` shows removed lines and `DU`
 shows added lines.
 Each conflict marker block appears as one hunk, including unchanged lines
 between edits inside that block.
+Pressing `<CR>` on a conflict diff line opens the worktree file at that
+line's actual ours/theirs marker position; unchanged context uses the ours
+position.
 After `co` or `ct` chooses a present side, the still-unmerged path instead
 shows the adopted worktree content against stage 1 (base), including edits made
 after choosing that side. An `AA` conflict has an empty base, so the adopted
@@ -173,6 +176,13 @@ and wrap them on narrower screens. Set
 `vim.g.git_action_menu_group_layout = 'vertical'` to restore the previous
 one-group-per-row layout; unset it or use `'horizontal'` for the new layout.
 The existing panel keys and `g?` help remain separate.
+
+Push and Pull keep their existing current-HEAD actions. Their `s` action uses
+the ref under the cursor: Push sends a selected branch to its push remote (or
+prompts for one), and can send a selected commit to a named destination branch.
+Pull fetches the selected branch's configured upstream, or a selected
+remote-tracking branch, into the currently checked-out HEAD. Pull `s` is
+unavailable when that source cannot be resolved.
 
 The other operation panels also expose Magit's Git flags, including value
 options for commit identity/signing, diff context and algorithms, merge/rebase

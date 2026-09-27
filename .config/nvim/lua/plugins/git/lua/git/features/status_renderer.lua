@@ -251,6 +251,7 @@ local function conflict_blocks(worktree)
     elseif phase == 'ours' and marker_line:sub(1, width + 1) == string.rep('|', width) .. ' ' then
       phase = 'base'
     elseif (phase == 'ours' or phase == 'base') and marker_line == string.rep('=', width) then
+      block.theirs_first = row + 1
       phase = 'theirs'
     elseif phase == 'theirs' and marker_line:sub(1, width + 1) == string.rep('>', width) .. ' ' then
       block.last = row
@@ -392,6 +393,7 @@ local function conflict_diff_lines(model, entry)
   local cached = cache and cache[entry.path]
   if cache_key and cached and cached.key == cache_key then
     entry.conflict_highlight_lines = cached.highlight_lines
+    entry.conflict_worktree_lines = cached.worktree_lines
     return cached.lines
   end
   local blocks = both_sides and not chosen and worktree and conflict_blocks(worktree)
@@ -410,15 +412,33 @@ local function conflict_diff_lines(model, entry)
     return { '  Binary conflict: ' .. label }
   end
   local lines = {}
+  entry.conflict_worktree_lines = nil
   if blocks and #blocks > 0 then
+    local worktree_lines = {}
     for number, block in ipairs(blocks) do
       local diff = vim.diff(block_text(block.ours), block_text(block.theirs),
         { result_type = 'unified', ctxlen = math.max(#block.ours, #block.theirs) })
+      local old_row, new_row = 0, 0
       for _, line in ipairs(vim.split(diff, '\n', { plain = true, trimempty = true })) do
         lines[#lines + 1] = line:match('^@@') and
           (line .. ('  worktree ours -> theirs, conflict %d'):format(number)) or line
+        local old_start, new_start = line:match('^@@ %-(%d+),?%d* %+(%d+),?%d* @@')
+        if old_start then
+          old_row, new_row = tonumber(old_start), tonumber(new_start)
+          worktree_lines[#lines] = block.first + math.max(old_row, 1)
+        elseif line:sub(1, 1) == '-' then
+          worktree_lines[#lines] = block.first + old_row
+          old_row = old_row + 1
+        elseif line:sub(1, 1) == '+' then
+          worktree_lines[#lines] = block.theirs_first + new_row - 1
+          new_row = new_row + 1
+        elseif line:sub(1, 1) == ' ' then
+          worktree_lines[#lines] = block.first + old_row
+          old_row, new_row = old_row + 1, new_row + 1
+        end
       end
     end
+    entry.conflict_worktree_lines = worktree_lines
   else
     if both_sides and not chosen and worktree and not blocks then
       lines = { '  Incomplete conflict markers in worktree; edit them and use cr' }
@@ -446,6 +466,7 @@ local function conflict_diff_lines(model, entry)
     conflict_diff_cache_by_buf[model.bufnr] = conflict_diff_cache_by_buf[model.bufnr] or {}
     conflict_diff_cache_by_buf[model.bufnr][entry.path] = {
       key = cache_key, lines = lines, highlight_lines = entry.conflict_highlight_lines,
+      worktree_lines = entry.conflict_worktree_lines,
     }
   end
   return lines
@@ -746,6 +767,14 @@ end
 function M.entry_at(bufnr, row)
   local model = models[bufnr]
   return model and model.entries_by_row[row] or nil
+end
+
+function M.conflict_worktree_line(bufnr, row)
+  local entry = M.entry_at(bufnr, row)
+  if not entry or entry.section ~= 'conflicted' or entry.header then return nil end
+  local direct = M.entry_row(bufnr, row)
+  return direct and entry.conflict_worktree_lines
+    and entry.conflict_worktree_lines[row - direct] or nil
 end
 
 function M.apply_conflict_highlights(bufnr, ns)

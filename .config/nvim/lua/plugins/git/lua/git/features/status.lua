@@ -804,6 +804,10 @@ local function status_file_line_at_cursor(bufnr, row)
   if not entry or entry.header then return nil end
   local direct_row = status_renderer.entry_row(bufnr, row)
   if not direct_row or row <= direct_row then return nil end
+  if entry.section == 'conflicted' then
+    local worktree_line = status_renderer.conflict_worktree_line(bufnr, row)
+    if worktree_line then return worktree_line end
+  end
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, direct_row, row, false)
   local hunk_index, target_line

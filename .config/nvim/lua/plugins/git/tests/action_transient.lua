@@ -267,14 +267,27 @@ vim.b[branch].branch_kinds = { 'local_' }
 press('<Space><Space>')
 assert(kind() == 'root' and text():find('Ref: feature', 1, true),
   'branch menu did not identify the selected branch')
+assert(text():find('Log feature', 1, true),
+  'branch action did not name its target')
+local target_ns = vim.api.nvim_get_namespaces().git_transient_menu
+local branch_marks = vim.api.nvim_buf_get_extmarks(0, target_ns, 0, -1, { details = true })
+assert(vim.iter(branch_marks):any(function(mark)
+  return mark[2] == 0 and mark[3] == 0 and mark[4].hl_group == 'GitActionMenuTarget'
+    and mark[4].end_col == #'Ref: feature'
+end), 'branch menu did not highlight the selected ref')
 assert(text():find('Remote…', 1, true) and not text():find('Stash…', 1, true),
   'branch menu did not filter operations for the selected ref')
 assert(text():find('Apply variants', 1, true)
   and not text():find('Apply to worktree', 1, true),
   'branch panel exposed direct apply instead of apply variants')
 press('v')
-assert(kind() == 'apply-variants' and text():find('Selected: feature', 1, true),
+assert(kind() == 'apply-variants' and text():find('Ref: feature', 1, true),
   'apply variants lost the selected branch')
+local ref_marks = vim.api.nvim_buf_get_extmarks(0, target_ns, 0, -1, { details = true })
+assert(vim.iter(ref_marks):any(function(mark)
+  return mark[2] == 1 and mark[3] == 0 and mark[4].hl_group == 'GitActionMenuTarget'
+    and mark[4].end_col == #'Ref: feature'
+end), 'branch operation did not highlight its target')
 press('a')
 assert(patch_calls[#patch_calls].commit == 'feature',
   'branch apply variants did not target the selected ref')
@@ -394,7 +407,7 @@ assert(text():find('Worktree: ' .. root .. '/other', 1, true)
   and not text():find('Stash…', 1, true),
   'worktree action menu lost the selected worktree or showed unrelated actions')
 press('v')
-assert(kind() == 'apply-variants' and text():find('Selected: feature', 1, true),
+assert(kind() == 'apply-variants' and text():find('Ref: feature', 1, true),
   'worktree apply variants lost the selected branch')
 press('a')
 assert(patch_calls[#patch_calls].commit == hash,

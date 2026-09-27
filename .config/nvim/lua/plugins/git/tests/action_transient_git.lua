@@ -17,6 +17,23 @@ local function press(key)
   assert(type(map.callback) == 'function', 'Missing menu key ' .. key)
   map.callback()
 end
+local function text()
+  return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+end
+local function target_span(expected, row)
+  row = row or 0
+  local buf = vim.api.nvim_get_current_buf()
+  local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
+  assert(line:sub(1, #expected) == expected, 'menu target text is missing')
+  local namespace = vim.api.nvim_get_namespaces().git_transient_menu
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, namespace, 0, -1,
+    { details = true })) do
+    if mark[2] == row and mark[3] == 0
+      and mark[4].hl_group == 'GitActionMenuTarget'
+      and mark[4].end_col == #expected then return end
+  end
+  error('menu target highlight also covers the commit subject or is missing')
+end
 
 git({ 'init', '-qb', 'main' })
 git({ 'config', 'user.name', 'Test' })
@@ -34,6 +51,18 @@ utils.set_buf_work_tree(log, root)
 vim.bo[log].filetype = 'fugitivelog'
 vim.api.nvim_set_current_buf(log)
 actions.attach(log)
+
+press('<Space><Space>')
+target_span('Commit: ' .. hash:sub(1, 12))
+assert(vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+  == 'Commit: ' .. hash:sub(1, 12) .. ' (base)',
+  'commit menu did not show the subject after the highlighted hash')
+press('A')
+target_span('Commit: ' .. hash:sub(1, 12), 1)
+assert(vim.api.nvim_buf_get_lines(0, 1, 2, false)[1]
+  == 'Commit: ' .. hash:sub(1, 12) .. ' (base)',
+  'operation menu lost the selected commit subject')
+press('q')
 
 local original_input = vim.ui.input
 vim.ui.input = function(_, callback) callback('release-test') end
@@ -112,6 +141,56 @@ press('F')
 press('u')
 assert(vim.deep_equal(sent, { 'pull', 'origin', 'refs/heads/main' }),
   'pull upstream used the wrong remote')
+git({ 'branch', 'feature' })
+git({ 'config', 'branch.feature.remote', 'origin' })
+git({ 'config', 'branch.feature.merge', 'refs/heads/topic' })
+git({ 'config', 'branch.feature.pushRemote', 'backup' })
+git({ 'remote', 'add', 'origin', root })
+git({ 'update-ref', 'refs/remotes/origin/topic', hash })
+local branch = vim.api.nvim_create_buf(true, false)
+vim.api.nvim_buf_set_lines(branch, 0, -1, false, { 'feature', 'origin/topic' })
+utils.set_buf_work_tree(branch, root)
+vim.bo[branch].filetype = 'fugitivebranch'
+vim.b[branch].branch_map = { 'feature', 'origin/topic' }
+vim.b[branch].branch_kinds = { 'local_', 'remote' }
+vim.api.nvim_set_current_buf(branch)
+actions.attach(branch)
+press('<Space><Space>'); press('P')
+assert(text():find('Ref: feature', 1, true)
+  and text():find('Push feature to backup', 1, true),
+  'push menu did not resolve the cursor branch and its push remote')
+press('s')
+assert(vim.deep_equal(sent, { 'push', 'backup',
+  'refs/heads/feature:refs/heads/feature' }),
+  'selected local branch push used HEAD or the current branch remote')
+press('<Space><Space>'); press('F')
+assert(text():find('Pull upstream of feature into HEAD', 1, true),
+  'pull menu did not identify the selected branch upstream')
+press('s')
+assert(vim.deep_equal(sent, { 'pull', 'origin', 'refs/heads/topic' }),
+  'selected local branch pull ignored its configured upstream')
+vim.api.nvim_win_set_cursor(0, { 2, 0 })
+press('<Space><Space>'); press('P'); press('s')
+assert(vim.deep_equal(sent, { 'push', 'origin',
+  'refs/remotes/origin/topic:refs/heads/topic' }),
+  'selected remote-tracking ref push resolved the wrong remote or destination')
+press('<Space><Space>'); press('F'); press('s')
+assert(vim.deep_equal(sent, { 'pull', 'origin', 'refs/heads/topic' }),
+  'selected remote-tracking ref pull resolved the wrong source')
+vim.api.nvim_set_current_buf(status)
+vim.api.nvim_buf_set_lines(status, 0, -1, false, { hash .. ' base' })
+vim.api.nvim_win_set_cursor(0, { 1, 0 })
+local answers = { 'origin', 'saved-commit' }
+vim.ui.input = function(_, callback) callback(table.remove(answers, 1)) end
+press('<Space><Space>'); press('P')
+assert(text():find('Commit: ' .. hash:sub(1, 12), 1, true),
+  'push menu lost the cursor commit')
+press('s')
+assert(vim.deep_equal(sent, { 'push', 'origin', hash .. ':refs/heads/saved-commit' }),
+  'selected commit push did not use the hash as its source')
+vim.ui.input = original_input
+vim.api.nvim_buf_set_lines(status, 0, -1, false, { ' M file.txt' })
+vim.api.nvim_buf_delete(branch, { force = true })
 press('<Space><Space>')
 press('r')
 press('p')

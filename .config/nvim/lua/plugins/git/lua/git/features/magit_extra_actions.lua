@@ -19,9 +19,18 @@ local function selected_ref(ctx, label, callback)
 end
 
 local function selected_context(ctx)
-  if ctx.commit then return 'Commit: ' .. ctx.commit:sub(1, 12) end
-  if ctx.branch then return 'Selected: ' .. ctx.branch end
+  if ctx.commit then return ctx.commit_label or ('Commit: ' .. ctx.commit:sub(1, 12)) end
+  if ctx.branch then return 'Ref: ' .. ctx.branch end
   return nil
+end
+
+local function short_target(ctx)
+  if ctx.commit then return ctx.commit:sub(1, 7) end
+  if ctx.branch then
+    return vim.fn.strchars(ctx.branch) > 18
+      and vim.fn.strcharpart(ctx.branch, 0, 17) .. '…' or ctx.branch
+  end
+  return 'ref'
 end
 
 local function selected_path(ctx, label, callback)
@@ -274,7 +283,7 @@ function M.root(ctx, helpers)
       end)
     end
     show({ kind = 'reset', title = 'Reset', context = selected_context(ctx), groups = {
-      { title = 'Reset HEAD to selected commit', actions = {
+      { title = 'Reset HEAD to ' .. short_target(ctx), actions = {
         { key = 's', label = 'Soft: HEAD only', run = function() reset('soft') end },
         { key = 'm', label = 'Mixed: HEAD and index', run = function() reset('mixed') end },
         { key = 'h', label = 'Hard: HEAD, index, worktree', run = function() reset('hard') end },
@@ -386,7 +395,7 @@ function M.root(ctx, helpers)
         option_arg('-u', 'Sign as', state, 'sign_as', '--local-user='),
       } },
       { title = 'Actions', actions = {
-        { key = 't', label = 'Create tag at selected commit', run = function()
+        { key = 't', label = 'Create tag at ' .. short_target(ctx), run = function()
           prompt('New tag name: ', function(name)
             local args = { 'tag' }
             if state.force then args[#args + 1] = '-f' end

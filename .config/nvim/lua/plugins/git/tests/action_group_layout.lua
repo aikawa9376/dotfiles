@@ -28,6 +28,13 @@ local ui = menu.show(spec)
 assert(lines(ui)[1]:find('Arguments', 1, true)
   and lines(ui)[1]:find('Actions', 1, true),
   'wide action menu did not place complete groups side by side')
+local heading_count = 0
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(ui.bufnr, -1, 0, -1, { details = true })) do
+  if mark[2] == 0 and mark[4].hl_group == 'GitActionMenuHeading' then
+    heading_count = heading_count + 1
+  end
+end
+assert(heading_count == 2, 'action group headings did not use the menu heading color')
 local row = lines(ui)[2]
 vim.api.nvim_win_set_cursor(ui.winid, { 2, row:find('x', 1, true) - 1 })
 local enter = vim.fn.maparg('<CR>', 'n', false, true)

@@ -88,6 +88,11 @@ assert(select(2, displayed:gsub('conflict 1', '')) == 1
   and displayed:find('-first ours', 1, true)
   and displayed:find('+last theirs', 1, true),
   'one marker block was split into multiple displayed hunks')
+assert(renderer.conflict_worktree_line(bufnr, row_for('-first ours')) == 2
+  and renderer.conflict_worktree_line(bufnr, row_for('+first theirs')) == 8
+  and renderer.conflict_worktree_line(bufnr, row_for('^ shared 3$')) == 5
+  and renderer.conflict_worktree_line(bufnr, row_for('+last theirs')) == 12,
+  'conflict diff rows did not map to the corresponding worktree marker lines')
 write('changed.txt', original_markers)
 displayed = snapshot()
 
