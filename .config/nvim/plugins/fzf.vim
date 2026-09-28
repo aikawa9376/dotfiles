@@ -345,7 +345,7 @@ imap <expr> <C-t> fzf#complete({
 " ------------------------------------------------------------------
 " Directory And FileName Selector
 " ------------------------------------------------------------------
-imap <expr> <C-_> fzf#complete({
+imap <expr> <C-/> fzf#complete({
     \ 'source': <SID>dir_file_completion(<SID>fzf_last_word()),
     \ 'reducer': function('<SID>dir_file_sink'),
     \ 'window': 'call OpenFloatingWin()',

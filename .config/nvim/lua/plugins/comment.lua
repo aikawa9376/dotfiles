@@ -1,9 +1,9 @@
 return {
   "numToStr/Comment.nvim",
   keys = {
-    { "<C-_>", mode = { "n" } },
-    { "<C-_>", "<ESC><CMD>lua require(\"Comment.api\").toggle.linewise(vim.fn.visualmode())<CR>", mode = { "x" }, silent = true },
-    { "<Leader><C-_>", "<ESC><CMD>lua require(\"Comment.api\").toggle.blockwise(vim.fn.visualmode())<CR>", mode = { "x" }, silent = true },
+    { "<C-/>", mode = { "n" } },
+    { "<C-/>", "<ESC><CMD>lua require(\"Comment.api\").toggle.linewise(vim.fn.visualmode())<CR>", mode = { "x" }, silent = true },
+    { "<Leader><C-/>", "<ESC><CMD>lua require(\"Comment.api\").toggle.blockwise(vim.fn.visualmode())<CR>", mode = { "x" }, silent = true },
   },
   config = function ()
     ---@diagnostic disable-next-line: missing-fields
@@ -13,8 +13,8 @@ return {
         extra = false,
       },
       toggler = {
-        line = '<C-_>',
-        block = '<Leader><C-_>',
+        line = '<C-/>',
+        block = '<Leader><C-/>',
       },
       opleader = {
         line = 'gc',
