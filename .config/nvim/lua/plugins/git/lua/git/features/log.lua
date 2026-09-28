@@ -6,6 +6,7 @@ local notes = require("git.features.notes")
 local commit_body = require('git.features.commit_body')
 local commit_highlight = require("git.features.commit_highlight")
 local objects = require('git.objects')
+local github_open = require('git.features.github_open')
 
 local shortstat_cache = {}
 local shortstat_jobs = {}
@@ -404,6 +405,7 @@ local function show_log_help()
     'gn / gN     show / edit Git note',
     'gk          show commit message body',
     'O           Octo PR from commit',
+    'gx          open pushed commit on GitHub',
     '<C-y>       copy short hash',
     '<Leader>cf  fixup commit into parent',
     'cf          fixup/reword commit with index',
@@ -451,6 +453,12 @@ function M.setup(group)
       vim.keymap.set('n', 'g?', function()
         show_log_help()
       end, { buffer = ev.buf, silent = true, desc = "Help" })
+      vim.keymap.set('n', 'gx', function()
+        local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+        local root = utils.get_buf_work_tree(ev.buf)
+        github_open.open(github_open.commit_url(root, commit),
+          'Commit has no known GitHub remote ref')
+      end, { buffer = ev.buf, silent = true, desc = 'Open pushed commit on GitHub' })
       apply_log_syntax(ev.buf)
       apply_highlights(ev.buf)
       notes.apply_icons(ev.buf, utils.get_buf_work_tree(ev.buf), function(line)

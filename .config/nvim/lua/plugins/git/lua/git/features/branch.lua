@@ -5,6 +5,7 @@ local utils = require("git.utils")
 local commands = require("git.features.commands")
 local help = require("git.features.help")
 local branch_spin = require('git.features.branch_spin')
+local github_open = require('git.features.github_open')
 
 local branch_name_ns = vim.api.nvim_create_namespace("fugitive_branch_names")
 local branch_fade_ns = vim.api.nvim_create_namespace("fugitive_branch_fade")
@@ -1127,6 +1128,7 @@ local function show_branch_help()
   help.show('Branch buffer keys', {
     'ga/gl/gr/gt show all/local/remote/tag refs',
     '<CR>        Gedit selected ref',
+    'gx          open pushed branch on GitHub',
     'L           log for selected ref',
     'coo         checkout branch',
     'R           refresh list',
@@ -1235,6 +1237,15 @@ function M.setup(group)
         end
         vim.cmd('Gedit ' .. branch)
       end, { buffer = bufnr, silent = true, desc = "Gedit branch" })
+
+      vim.keymap.set('n', 'gx', function()
+        local row = vim.fn.line('.')
+        local branch = (vim.b[bufnr].branch_map or {})[row]
+        local kind = (vim.b[bufnr].branch_kinds or {})[row]
+        local root = get_buffer_work_tree(bufnr)
+        github_open.open(github_open.branch_url(root, branch, kind),
+          'Branch has no known GitHub remote ref')
+      end, { buffer = bufnr, silent = true, desc = 'Open pushed branch on GitHub' })
 
       vim.keymap.set('n', 'R', function()
         refresh_branch_list(bufnr)

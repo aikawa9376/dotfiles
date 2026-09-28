@@ -67,6 +67,12 @@ separate `Remote` row for a distinct Push destination branch when applicable,
 and the nearest current/next tags with their commit distances. `Tag` is omitted
 in repositories without tags.
 
+In status, `gx` opens a PR row, a pushed commit row, or a pushed `Head` /
+`Upstream` / `Remote` branch on GitHub. It also works on branch-list branches, log
+commits, and commit detail views. Branch and commit links require a matching
+local remote-tracking ref with a GitHub remote; unpushed items show a notice.
+`gi` manages index flags from the status panel.
+
 Expand a staged or unstaged file with `o`. On a displayed hunk, `s`/`-`
 stages or unstages that hunk; `u` unstages a staged hunk. Select added or
 removed lines within one hunk in Visual mode and press the same key to update
@@ -317,6 +323,7 @@ closing the commit view with q also closes the graph.
 | `X` (normal/visual) | Remove file, hunk, or selected lines; choose Hard or Mixed |
 | `~` / `p` / `gp` | Parent / previous commit affecting the file / merge parent |
 | `C` / `<C-Space>` / `O` | Commit information / graph / pull request |
+| `gx` | Open pushed commit on GitHub |
 | `gq` / `<C-y>` | File quickfix / copy short hash |
 | `<Leader>wd` | Cycle word-diff style |
 | `R` / `q` / `g?` | Collapse and reload / close / help |

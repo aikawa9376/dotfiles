@@ -7,6 +7,7 @@ local model_api = require('git.features.commit_model')
 local display = require('git.features.change_display')
 local rewrite = require('git.features.commit_rewrite')
 local syntax = require('git.features.syntax_highlight')
+local github_open = require('git.features.github_open')
 local states = {}
 -- Deleted buffers leave only view metadata behind, never full patches/models.
 local saved_views = {}
@@ -588,6 +589,10 @@ local function attach(s)
     s.expanded = {}; replace_model(s, s.model.hash)
   end, { native = true })
   map('<Leader>wd', function() vim.notify('Word diff style: ' .. syntax.cycle_word_diff_style()) end)
+  map('gx', function()
+    github_open.open(github_open.commit_url(s.model.root, s.model.hash),
+      'Commit has no known GitHub remote ref')
+  end, { desc = 'Open pushed commit on GitHub' })
   map('q', function()
     if message_dirty(s) then
       local choice = vim.fn.confirm('Save edited commit message?', '&Save\n&Discard\n&Cancel', 3)
@@ -622,6 +627,7 @@ local function attach(s)
       'C        commit info',
       '<C-Space>  graph',
       'O        pull request',
+      'gx       pushed commit on GitHub',
       'gq       quickfix',
       '<C-y>    copy hash',
       '<Leader>wd  word diff style',

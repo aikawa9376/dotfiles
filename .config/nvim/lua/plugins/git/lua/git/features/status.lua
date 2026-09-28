@@ -11,6 +11,7 @@ local range_diff = require('git.features.range_diff')
 local repository_health = require('git.features.repository_health')
 local notes = require('git.features.notes')
 local index_flags = require('git.features.index_flags')
+local github_open = require('git.features.github_open')
 local commit_highlight = require('git.features.commit_highlight')
 local commit_body = require('git.features.commit_body')
 local pull_requests_by_buf = {}
@@ -2375,7 +2376,7 @@ function M.setup(group)
         end)
       end
 
-      vim.keymap.set('n', 'gx', show_index_flag_actions,
+      vim.keymap.set('n', 'gi', show_index_flag_actions,
         { buffer = b, nowait = true, silent = true, desc = 'Manage update-index flags' })
 
       vim.keymap.set('n', 'X', function()
@@ -2484,6 +2485,13 @@ function M.setup(group)
         if is_cursor_on_commit_header() then return { kind = 'commits_header', label = 'Commit scope' } end
         local commit = line:match('^(%x%x%x%x%x%x%x+)%s')
         if commit then return { kind = 'commit', label = 'Commit: ' .. commit, commit = commit } end
+        local branch = line:match('^Head: ([^%s]+)')
+          or line:match('^Upstream: ([^%s]+)')
+          or line:match('^Remote: ([^%s]+)')
+        if branch and line:match('^Head:') and (repository_health_by_buf[b] or {}).detached then
+          return { kind = 'commit', label = 'Commit: ' .. branch, commit = branch }
+        end
+        if branch then return { kind = 'branch', label = 'Branch: ' .. branch, branch = branch } end
         return { kind = 'repository', label = line ~= '' and line or 'Repository' }
       end
 
@@ -2540,6 +2548,7 @@ function M.setup(group)
         if kind == 'commit' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open commit' },
+            { key = 'gx', label = 'Open pushed commit on GitHub' },
             { key = 'bs', label = 'Spin off commits from here' },
             { key = 'bS', label = 'Spin out commits from here' },
             { key = 'gk', label = 'Show commit message body' },
@@ -2589,7 +2598,13 @@ function M.setup(group)
         if kind == 'pull_request' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open pull request' },
+            { key = 'gx', label = 'Open pull request on GitHub' },
             { key = '<C-y>', label = 'Copy pull request URL' },
+          } }
+        end
+        if kind == 'branch' then
+          return { title = context.label, actions = {
+            { key = 'gx', label = 'Open pushed branch on GitHub' },
           } }
         end
         if kind == 'pull_requests_header' then
@@ -2631,19 +2646,19 @@ function M.setup(group)
             { key = '<CR>', label = 'Open flagged file' },
             { key = 'd', label = 'Diff worktree file against index' },
             { key = 'X', label = 'Clear index flag' },
-            { key = 'gx', label = 'Change index flag' },
+            { key = 'gi', label = 'Change index flag' },
           } }
         end
         if kind == 'index_flags_warning' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Reveal hidden changes' },
-            { key = 'gx', label = 'Manage update-index flags' },
+            { key = 'gi', label = 'Manage update-index flags' },
           } }
         end
         if kind == 'index_flags_header' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Expand / collapse index flags' },
-            { key = 'gx', label = 'Manage update-index flags' },
+            { key = 'gi', label = 'Manage update-index flags' },
           } }
         end
 
@@ -2688,7 +2703,7 @@ function M.setup(group)
           and context.kind ~= 'index_flags_warning'
           and context.kind ~= 'index_flags_header'
         then
-          table.insert(actions, { key = 'gx', label = 'Manage update-index flags' })
+          table.insert(actions, { key = 'gi', label = 'Manage update-index flags' })
         end
         if health and not health.detached then table.insert(actions, { key = 'mU', label = 'Set branch upstream' }) end
         if health and health.upstream and not health.upstream.gone then
@@ -2754,6 +2769,34 @@ function M.setup(group)
         vim.fn.setreg('"', pr.url)
         vim.notify('Copied: ' .. pr.url, vim.log.levels.INFO)
       end, { buffer = b, nowait = true, silent = true, desc = 'Copy pull request URL' })
+
+      vim.keymap.set('n', 'gx', function()
+        local root = utils.get_buf_work_tree(b)
+        local line = vim.api.nvim_get_current_line()
+        local pr = pull_request_at_cursor()
+        if pr then
+          github_open.open(pr.url ~= '' and pr.url or nil, 'Pull request URL is unavailable')
+          return
+        end
+        local commit = line:match('^(%x%x%x%x%x%x%x+)%s')
+        if commit then
+          github_open.open(github_open.commit_url(root, commit), 'Commit has no known GitHub remote ref')
+          return
+        end
+        local branch = line:match('^Head: ([^%s]+)')
+          or line:match('^Upstream: ([^%s]+)')
+          or line:match('^Remote: ([^%s]+)')
+        if branch then
+          if line:match('^Head:') and (repository_health_by_buf[b] or {}).detached then
+            github_open.open(github_open.commit_url(root, branch), 'Commit has no known GitHub remote ref')
+            return
+          end
+          local kind = line:match('^Head:') and 'local_' or 'remote'
+          github_open.open(github_open.branch_url(root, branch, kind), 'Branch has no known GitHub remote ref')
+          return
+        end
+        vim.notify('No GitHub link for this line', vim.log.levels.INFO)
+      end, { buffer = b, nowait = true, silent = true, desc = 'Open selected item on GitHub' })
 
       local function open_status_item()
         local current_line = vim.api.nvim_get_current_line()

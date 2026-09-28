@@ -9,11 +9,16 @@ local function git(args)
   vim.list_extend(cmd, args)
   local result = vim.system(cmd, { text = true }):wait()
   assert(result.code == 0, result.stderr)
+  return vim.trim(result.stdout or '')
 end
 git({ 'init', '-q' })
 vim.fn.writefile({ 'one' }, root .. '/sample.txt')
 git({ 'add', 'sample.txt' })
 git({ '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'initial' })
+local branch = git({ 'branch', '--show-current' })
+local initial = git({ 'rev-parse', 'HEAD' })
+git({ 'remote', 'add', 'origin', 'git@github.com:example/project.git' })
+git({ 'update-ref', 'refs/remotes/origin/' .. branch, initial })
 vim.fn.writefile({ 'one', 'two' }, root .. '/sample.txt')
 vim.fn.writefile({ 'new' }, root .. '/new.txt')
 vim.fn.writefile({ 'staged' }, root .. '/staged.txt')
@@ -31,6 +36,21 @@ assert(vim.wait(5000, function()
 end, 20))
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'cold open did not focus unstaged entry')
 local function press(key) vim.fn.maparg(key, 'n', false, true).callback() end
+local opened
+vim.ui.open = function(url) opened = url; return true end
+vim.api.nvim_win_set_cursor(0, { 1, 0 })
+press('gx')
+assert(opened == 'https://github.com/example/project/tree/' .. branch,
+  'gx did not open the pushed HEAD branch')
+local commit_row
+for row, line in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
+  if line:match('^' .. initial:sub(1, 7)) then commit_row = row; break end
+end
+assert(commit_row, 'recent commit row missing')
+vim.api.nvim_win_set_cursor(0, { commit_row, 0 })
+press('gx')
+assert(opened == 'https://github.com/example/project/commit/' .. initial,
+  'gx did not open the pushed commit')
 assert(vim.fn.maparg('bs', 'n', false, true).callback and vim.fn.maparg('bS', 'n', false, true).callback,
   'status does not expose branch spin actions')
 press('gp')
@@ -73,8 +93,8 @@ assert(vim.fn.maparg('gw', 'n') == '', 'gw should not have a competing mapping')
 press('gu')
 local prompt
 vim.ui.select = function(_, opts) prompt = opts.prompt end
-press('gx')
-assert(prompt == 'Index flag for sample.txt:', 'gx did not retain index flag management')
+press('gi')
+assert(prompt == 'Index flag for sample.txt:', 'gi did not open index flag management')
 local groups
 require('git.features.action_menu').show = function(_, value) groups = value end
 press('g?')
@@ -84,7 +104,7 @@ for _, group in ipairs(groups) do
 end
 assert(actions.gu == 'Go to unstaged changes')
 assert(actions.gU == 'Go to untracked files')
-assert(actions.gx == 'Manage update-index flags')
+assert(actions.gi == 'Manage update-index flags')
 assert(actions.gs == 'Go to staged changes')
 assert(actions.gm == 'Go to unmerged paths' and actions.gp == 'Go to commits')
 vim.bo[b].modifiable = true
@@ -141,4 +161,4 @@ assert(vim.wo.foldtext:find('git.features.status_folds', 1, true),
   'returning to status did not restore its fold formatter')
 vim.api.nvim_buf_delete(b, { force = true })
 vim.fn.delete(root, 'rf')
-print('PASS: cold/warm focus, gu/gU/gx, help labels, missing unstaged section')
+print('PASS: cold/warm focus, gu/gU/gi, help labels, missing unstaged section')
