@@ -1,6 +1,14 @@
 return {
   'stevearc/overseer.nvim',
-  cmd = { 'OverseerRun', 'OverseerToggle', 'OverseerWatch' },
+  dependencies = {
+    { dir = vim.fn.stdpath('config') .. '/local/overseer-http.nvim', name = 'overseer-http.nvim', lazy = true },
+  },
+  cmd = {
+    'OverseerRun', 'OverseerToggle', 'OverseerWatch',
+    'OverseerHttpRun', 'OverseerHttpSelect', 'OverseerHttpRunAll',
+    'OverseerHttpNext', 'OverseerHttpPrev', 'OverseerHttpRepeat',
+    'OverseerHttpBody', 'OverseerHttpHeaders', 'OverseerHttpToggleResponse', 'OverseerHttpCopyCurl',
+  },
   opts = {
     template_dirs = { 'tasks', 'overseer.template' },
     templates = {
@@ -12,6 +20,8 @@ return {
   },
   config = function(_, opts)
     local overseer = require('overseer')
+    local http = require('overseer_http')
+    opts.actions = vim.tbl_extend('force', opts.actions or {}, require('overseer_http.actions').build())
     local template_completion_cache = {}
 
     local function get_search_params()
@@ -29,7 +39,7 @@ return {
     end
 
     local function get_cache_key(search)
-      return string.format('%s\0%s', search.dir, search.filetype or '')
+      return string.format('%s\0%s\0%s', search.dir, search.filetype or '', vim.api.nvim_buf_get_name(0))
     end
 
     local function normalize_completion_item(item)
@@ -139,14 +149,22 @@ return {
     end
 
     overseer.setup(opts)
+    http.setup()
     override_overseer_run_command()
     create_overseer_watch_command()
 
     local group = vim.api.nvim_create_augroup('overseer_completion_cache', { clear = true })
-    vim.api.nvim_create_autocmd({ 'VimEnter', 'BufEnter', 'DirChanged' }, {
+    vim.api.nvim_create_autocmd({ 'VimEnter', 'BufEnter', 'BufWritePost', 'DirChanged' }, {
       group = group,
       callback = function()
         refresh_template_completion_cache()
+      end,
+    })
+    vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, {
+      group = group,
+      pattern = { '*.http', '*.rest' },
+      callback = function()
+        template_completion_cache[get_cache_key(get_search_params())] = nil
       end,
     })
     refresh_template_completion_cache()

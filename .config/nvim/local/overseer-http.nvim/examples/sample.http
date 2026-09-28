@@ -1,0 +1,14 @@
+### Get users
+GET {{base_url}}/users
+Accept: application/json
+
+### Create user
+POST {{base_url}}/users
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{"name":"foo"}
+
+### Get test endpoint
+GET https://jsonplaceholder.typicode.com/todos/1
+Accept: application/json
