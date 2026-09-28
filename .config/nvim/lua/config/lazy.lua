@@ -90,7 +90,7 @@ require("lazy").setup({
     { import = "plugins.neotest" },
     { import = "plugins.overseer" },
     { import = "plugins.resession" },
-    { import = "plugins.kulala" },
+    -- { import = "plugins.kulala" },
     { import = "plugins.lazyagent" },
     { import = "plugins.lazyconflict" },
     { import = "plugins.octo" },
