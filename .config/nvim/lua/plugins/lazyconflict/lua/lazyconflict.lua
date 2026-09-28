@@ -203,27 +203,65 @@ local function marker(text, char, width, allow_label)
   return #run
 end
 
-local function regions_from_items(items)
+local function is_markdown(path, bufnr)
+  local filetype = bufnr and vim.bo[bufnr].filetype or nil
+  if filetype == "markdown" or filetype == "mdx" or filetype == "quarto" then
+    return true
+  end
+  local extension = type(path) == "string" and path:lower():match("%.([^.]+)$") or nil
+  return extension == "md" or extension == "markdown" or extension == "mdx"
+    or extension == "qmd" or extension == "rmd"
+end
+
+local function fenced_lines(lines)
+  local ignored = {}
+  local active_char, active_width
+  for lnum, line in ipairs(lines) do
+    local indent, fence, rest = line:match("^( *)([`~]+)(.*)$")
+    local char = fence and fence:sub(1, 1)
+    local valid = indent and #indent <= 3 and #fence >= 3
+      and (fence:match("^`+$") or fence:match("^~+$"))
+    if active_char then
+      ignored[lnum] = true
+      if valid and char == active_char and #fence >= active_width and rest:match("^%s*$") then
+        active_char, active_width = nil, nil
+      end
+    elseif valid and (char == "~" or not rest:find("`", 1, true)) then
+      ignored[lnum] = true
+      active_char, active_width = char, #fence
+    end
+  end
+  return ignored
+end
+
+local function markdown_ignored_lines(path, lines, bufnr)
+  if not is_markdown(path, bufnr) then return nil end
+  return fenced_lines(lines)
+end
+
+local function regions_from_items(items, ignored)
   local regions = {}
   local current
   for _, item in ipairs(items or {}) do
-    local text = item.text or ""
-    if not current then
-      local width = marker(text, "<", nil, true)
-      if width then
-        current = { start = item.lnum, width = width }
+    if not (ignored and ignored[item.lnum]) then
+      local text = item.text or ""
+      if not current then
+        local width = marker(text, "<", nil, true)
+        if width then
+          current = { start = item.lnum, width = width }
+        end
+      elseif not current.sep then
+        if not current.base and marker(text, "|", current.width, true) then
+          current.base = item.lnum
+        elseif marker(text, "=", current.width, false) then
+          current.sep = item.lnum
+        end
+      elseif marker(text, ">", current.width, true) then
+        current.finish = item.lnum
+        current.width = nil
+        table.insert(regions, current)
+        current = nil
       end
-    elseif not current.sep then
-      if not current.base and marker(text, "|", current.width, true) then
-        current.base = item.lnum
-      elseif marker(text, "=", current.width, false) then
-        current.sep = item.lnum
-      end
-    elseif marker(text, ">", current.width, true) then
-      current.finish = item.lnum
-      current.width = nil
-      table.insert(regions, current)
-      current = nil
     end
   end
   return regions
@@ -239,14 +277,25 @@ end
 
 local function set_conflicts(entries)
   local by_file = {}
+  local ignored_by_file = {}
   for _, entry in ipairs(entries) do
     if entry.file and entry.file ~= "" then
-      local info = by_file[entry.file]
-      if not info then
-        info = { file = entry.file, items = {} }
-        by_file[entry.file] = info
+      if ignored_by_file[entry.file] == nil then
+        local ignored = false
+        if is_markdown(entry.file) then
+          local ok, lines = pcall(fn.readfile, entry.file)
+          if ok then ignored = fenced_lines(lines) end
+        end
+        ignored_by_file[entry.file] = ignored
       end
-      table.insert(info.items, { lnum = entry.lnum, text = entry.text or "" })
+      if not (ignored_by_file[entry.file] and ignored_by_file[entry.file][entry.lnum]) then
+        local info = by_file[entry.file]
+        if not info then
+          info = { file = entry.file, items = {} }
+          by_file[entry.file] = info
+        end
+        table.insert(info.items, { lnum = entry.lnum, text = entry.text or "" })
+      end
     end
   end
   for _, info in pairs(by_file) do
@@ -477,8 +526,8 @@ function M.apply_buffer(bufnr)
     return
   end
 
-  -- Even if git doesn't report it yet, if we found markers in the buffer, we should treat it as a conflict.
-  -- Even if git reported conflicts, let's update them with live buffer state to keep statusline real-time
+  -- Keep the count in sync with the live buffer; marker mode also accepts
+  -- buffers that Git has not reported as conflicted.
   if regions and #regions > 0 then
     local path = get_buf_path(bufnr)
     if path and path ~= "" then
@@ -882,11 +931,13 @@ function M.build_regions(bufnr)
     return {}
   end
 
+  local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local ignored = markdown_ignored_lines(api.nvim_buf_get_name(bufnr), lines, bufnr)
   local items = {}
-  for lnum, text in ipairs(api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+  for lnum, text in ipairs(lines) do
     table.insert(items, { lnum = lnum, text = text })
   end
-  return regions_from_items(items)
+  return regions_from_items(items, ignored)
 end
 
 local function find_conflict_region(bufnr)

@@ -29,6 +29,29 @@ assert_eq(1, #regions, "only complete blocks are parsed")
 assert_eq(1, regions[1].start, "custom marker width start")
 assert_eq(5, regions[1].finish, "custom marker width end")
 
+local markdown = set_lines({
+  "~~~markdown",
+  "<<<<<<< example",
+  "=======",
+  ">>>>>>> example",
+  "~~~",
+  "````md",
+  "<<<<<<< another example",
+  "=======",
+  ">>>>>>> another example",
+  "```", -- shorter fence must not close the block
+  "````",
+  "<<<<<<< real",
+  "current",
+  "=======",
+  "incoming",
+  ">>>>>>> real",
+})
+vim.bo[markdown].filetype = "markdown"
+local markdown_regions = conflict.build_regions(markdown)
+assert_eq(1, #markdown_regions, "fenced Markdown examples are ignored")
+assert_eq(12, markdown_regions[1].start, "real conflict after fences is found")
+
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, "p")
 local function git(...)
@@ -93,5 +116,29 @@ assert_eq("0", conflict.statusline(), "stale asynchronous results are ignored")
 
 conflict.disable()
 assert_eq("0", conflict.statusline(), "disable clears the count")
+for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+  if vim.api.nvim_buf_get_name(buf):sub(1, #root + 1) == root .. "/" then
+    vim.api.nvim_buf_delete(buf, { force = true })
+  end
+end
 vim.fn.delete(root, "rf")
+
+local docs_root = vim.fn.tempname()
+vim.fn.mkdir(docs_root, "p")
+vim.fn.writefile({ "```text", "<<<<<<< docs", "sample", "=======", "sample", ">>>>>>> docs", "```" },
+  docs_root .. "/example.md")
+vim.fn.writefile({ "<<<<<<< real", "ours", "=======", "theirs", ">>>>>>> real" },
+  docs_root .. "/actual.md")
+conflict.setup({
+  detection = { auto = false, cwd = docs_root, mode = "marker" },
+  statusline = { formatter = tostring },
+  disable_diagnostics = false,
+  keymaps = { enabled = false },
+})
+assert(vim.wait(3000, function() return conflict.statusline() == "1" end),
+  "marker mode should count only the real Markdown conflict")
+conflict.populate_quickfix()
+assert_eq(2, #vim.fn.getqflist(), "fenced Markdown examples are absent from quickfix")
+conflict.disable()
+vim.fn.delete(docs_root, "rf")
 print("lazyconflict tests: ok")
