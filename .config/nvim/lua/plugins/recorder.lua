@@ -3,7 +3,6 @@ return {
   keys = {
     { "@", desc = " Start Recording" },
     { "@@", desc = " Play Recording" },
-    { "q", "<nop>", desc = "Disabled (use nvim-recorder instead)" },
   },
   opts = {
     mapping = {

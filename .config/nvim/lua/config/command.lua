@@ -2,23 +2,28 @@ local MyAutoCmd = vim.api.nvim_create_augroup("MyAutoCmd", { clear = true })
 
 vim.cmd("filetype plugin indent on")
 
+local function valid_buffer(bufnr)
+  return bufnr and vim.api.nvim_buf_is_valid(bufnr)
+end
+
+local function buffer_is_application(bufnr)
+  return valid_buffer(bufnr)
+    and (vim.api.nvim_buf_get_name(bufnr) == ""
+      or vim.bo[bufnr].buftype ~= ""
+      or not vim.bo[bufnr].buflisted)
+end
+
+local function application_buffer_is_disposable(bufnr)
+  return buffer_is_application(bufnr)
+    and not vim.bo[bufnr].modified
+    and not (vim.b[bufnr] and vim.b[bufnr].lazyagent_is_scratch == true)
+end
+
 local function no_name_buffer_should_prune(bufnr)
-  if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
-    return false
-  end
-  if (vim.api.nvim_buf_get_name(bufnr) or "") ~= "" then
-    return false
-  end
-  if vim.bo[bufnr].buftype ~= "" then
-    return false
-  end
-  if vim.b[bufnr] and vim.b[bufnr].lazyagent_is_scratch == true then
-    return false
-  end
-  if vim.bo[bufnr].modified then
-    return false
-  end
-  return #vim.fn.win_findbuf(bufnr) == 0
+  return application_buffer_is_disposable(bufnr)
+    and vim.api.nvim_buf_get_name(bufnr) == ""
+    and vim.bo[bufnr].buftype == ""
+    and #vim.fn.win_findbuf(bufnr) == 0
 end
 
 local function prune_orphaned_no_name_buffers()
@@ -32,6 +37,91 @@ end
 local function schedule_no_name_prune()
   vim.schedule(prune_orphaned_no_name_buffers)
 end
+
+local function window_path(node, winid, path)
+  if node[1] == "leaf" then return node[2] == winid end
+  for index, child in ipairs(node[2]) do
+    path[#path + 1] = { node, index }
+    if window_path(child, winid, path) then return true end
+    path[#path] = nil
+  end
+  return false
+end
+
+local function branch_windows(node, windows)
+  if node[1] == "leaf" then
+    windows[#windows + 1] = node[2]
+  else
+    for _, child in ipairs(node[2]) do branch_windows(child, windows) end
+  end
+  return windows
+end
+
+local function disposable_branch(node, current_win)
+  local windows = branch_windows(node, {})
+  for _, winid in ipairs(windows) do
+    if winid == current_win or not vim.api.nvim_win_is_valid(winid)
+      or vim.api.nvim_win_get_config(winid).relative ~= ""
+      or not application_buffer_is_disposable(vim.api.nvim_win_get_buf(winid)) then
+      return nil
+    end
+  end
+  return #windows > 0 and windows or nil
+end
+
+local function close_branch(windows)
+  for _, winid in ipairs(windows) do
+    if vim.api.nvim_win_is_valid(winid) then vim.api.nvim_win_close(winid, true) end
+  end
+end
+
+local function close_application_split_or_run_q()
+  local bufnr, current_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+  if not buffer_is_application(bufnr) then
+    local path = {}
+    if window_path(vim.fn.winlayout(), current_win, path) then
+      -- Close the nearest eligible branch above or below first.
+      for depth = #path, 1, -1 do
+        local node, index = unpack(path[depth])
+        if node[1] == "col" then
+          for distance = 1, #node[2] do
+            for _, sibling_index in ipairs({ index + distance, index - distance }) do
+              local windows = node[2][sibling_index]
+                and disposable_branch(node[2][sibling_index], current_win)
+              if windows then close_branch(windows); return end
+            end
+          end
+        end
+      end
+
+      -- Otherwise close the leftmost eligible branch beside it.
+      local candidates = {}
+      for depth = #path, 1, -1 do
+        local node, index = unpack(path[depth])
+        if node[1] == "row" then
+          for sibling_index, sibling in ipairs(node[2]) do
+            local windows = sibling_index ~= index and disposable_branch(sibling, current_win)
+            if windows then
+              local left = math.huge
+              for _, winid in ipairs(windows) do
+                left = math.min(left, vim.api.nvim_win_get_position(winid)[2])
+              end
+              candidates[#candidates + 1] = { left, windows }
+            end
+          end
+        end
+      end
+      table.sort(candidates, function(a, b) return a[1] < b[1] end)
+      if candidates[1] then close_branch(candidates[1][2]); return end
+    end
+  end
+  vim.api.nvim_feedkeys("q", "n", false)
+end
+
+vim.keymap.set("n", "q", close_application_split_or_run_q, {
+  silent = true,
+  desc = "Close an application split or run the native q key",
+})
 
 vim.api.nvim_create_autocmd({ "BufHidden", "WinClosed" }, {
   group = MyAutoCmd,
