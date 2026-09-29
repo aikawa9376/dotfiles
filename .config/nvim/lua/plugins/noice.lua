@@ -34,6 +34,13 @@ return {
       backend = "cmp", -- backend to use to show regular cmdline completions
       -- You can specify options for nui under `config.views.popupmenu`
     },
+    views = {
+      confirm = {
+        position = { row = "50%", col = "50%" },
+        -- Keep the question when Noice receives it on the same line as the choices.
+        format = { "{message}" },
+      },
+    },
     history = {
       -- options for the message history that you get with `:Noice`
       view = "split",
@@ -107,5 +114,9 @@ return {
         },
       },
     },
-  }
+  },
+  config = function(_, opts)
+    require("noice").setup(opts)
+    require("plugins.noice_util").patch_confirm_lifecycle()
+  end,
 }
