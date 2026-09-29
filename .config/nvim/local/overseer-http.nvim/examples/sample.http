@@ -1,3 +1,5 @@
+@base_url = https://api.example.com
+
 ### Get users
 GET {{base_url}}/users
 Accept: application/json

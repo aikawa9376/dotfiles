@@ -3,6 +3,8 @@
 Run requests from `.http` or `.rest` files as [overseer.nvim](https://github.com/stevearc/overseer.nvim) tasks. Requires Neovim, Overseer, and `curl`.
 
 ```http
+@base_url = https://api.example.com
+
 ### Get users
 GET {{base_url}}/users
 Accept: application/json
@@ -58,7 +60,7 @@ Each request becomes an Overseer task. The task name shows the HTTP status after
 
 HTTP request lines, headers, variables, and JSON request bodies have fallback syntax highlighting even when the HTTP Tree-sitter parser is unavailable. When a request receives an HTTP response, its Overseer output pane shows the body by default, including 4xx/5xx responses. Body/Headers actions switch that same pane without opening another split. Curl transport failures leave the original task output visible. The response view uses Content-Type as its filetype. JSON responses are pretty-printed by `jq` when available; the response file on disk remains unchanged. Invalid JSON and systems without `jq` display the original body.
 
-Open the task action menu (`<CR>` in the Overseer task list) for **HTTP: Open Body**, **HTTP: Open Headers**, **HTTP: Copy cURL**, **HTTP: Repeat Request**, and **HTTP: Open Source Request**. A copied cURL command can contain credentials; treat the clipboard accordingly.
+Open the task action menu (`<CR>` in the Overseer task list) for **HTTP: Open Body**, **HTTP: Open Headers**, **HTTP: Save Body to File**, **HTTP: Copy cURL**, **HTTP: Repeat Request**, and **HTTP: Open Source Request**. After a task completes, Save Body copies the raw response to a chosen path, relative to the request file when needed, and confirms before overwriting an existing file. The saved file remains after the task is disposed. A copied cURL command can contain credentials; treat the clipboard accordingly.
 
 Configuration defaults:
 
@@ -72,7 +74,25 @@ require('overseer_http').setup({
 })
 ```
 
-Variables expand in the URL, header values, and body. Configuration variables take precedence, followed by `.env` files (later files override earlier ones), then process environment. `.env` files are resolved beside the request file and support simple `KEY=value` lines. Missing variables stop execution before curl starts. The parser accepts `###` separators, optional request names, the methods GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS, headers, and a body after the first blank line. Body blank lines are preserved.
+Variables expand in the URL, header values, and body. Define file variables with `@name = value` before a request, optionally in a block before the first `###` separator. File variables take precedence over configuration variables, followed by `.env` files (later files override earlier ones), then process environment. File variables are available to every request in the file; the last definition of a name wins. `.env` files are resolved beside the request file and support simple `KEY=value` lines. Missing variables stop execution before curl starts. The parser accepts `###` separators, optional request names, the methods GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS, headers, and a body after the first blank line. Lines beginning with `#` or `//` are comments before the request or among its headers. Body lines, including comment-looking lines and blank lines, are preserved.
+
+Add curl options with `@curl_*` directives before a request. They apply only to that request:
+
+| Directive | curl option | Effect |
+| --- | --- | --- |
+| `@curl_insecure` | `--insecure` | Skip TLS certificate verification |
+| `@curl_location` | `--location` | Follow redirects |
+| `@curl_compressed` | `--compressed` | Request and decode a compressed response |
+| `@curl_max_time 10` | `--max-time 10` | Limit the whole transfer to 10 seconds |
+| `@curl_connect_timeout 3` | `--connect-timeout 3` | Limit connection setup to 3 seconds |
+
+Timeouts accept positive decimal seconds. `@curl_insecure` is intended for trusted development endpoints because it disables certificate verification.
+
+```http
+### Local development
+@curl_insecure
+GET https://localhost:8443/health
+```
 
 The task command uses an argv array, so execution does not go through a shell. Response files are kept for the life of the task. Request bodies and headers may contain secrets; they are not used in generated task titles, but cURL arguments, task metadata, and copied commands can contain them. This version targets text request and response bodies; binary response display in a Neovim buffer is not byte preserving.
 

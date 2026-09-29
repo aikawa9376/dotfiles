@@ -6,6 +6,20 @@ function M.build(request, paths, executable)
     '--request', request.method, '--dump-header', paths.headers,
     '--output', paths.body, '--write-out', '%{http_code}\n',
   }
+  local options = request.curl_options or {}
+  for _, option in ipairs({
+    { 'insecure', '--insecure' },
+    { 'location', '--location' },
+    { 'compressed', '--compressed' },
+    { 'max_time', '--max-time', true },
+    { 'connect_timeout', '--connect-timeout', true },
+  }) do
+    local value = options[option[1]]
+    if value then
+      args[#args + 1] = option[2]
+      if option[3] then args[#args + 1] = value end
+    end
+  end
   if request.method == 'HEAD' then
     args[#args + 1] = '--head'
   end

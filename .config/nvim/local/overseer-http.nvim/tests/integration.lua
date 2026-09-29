@@ -17,6 +17,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', '99')
         self.end_headers()
     def do_GET(self):
+        if self.path == '/redirect':
+            self.send_response(302)
+            self.send_header('Location', '/health')
+            self.end_headers()
+            return
         self.send_response(200)
         self.send_header('Content-Type', 'application/json')
         self.end_headers()
@@ -83,6 +88,31 @@ local ok, err = xpcall(function()
   assert(from_template.result.http.status_code == 200)
   from_template:dispose(true)
 
+  local inline_request = assert(require('overseer_http.parser').parse({
+    '@base_url = http://127.0.0.1:' .. port,
+    '',
+    '### Inline health',
+    '@curl_insecure',
+    '@curl_location',
+    '@curl_compressed',
+    '@curl_max_time 5',
+    '@curl_connect_timeout 2',
+    'GET {{base_url}}/redirect',
+  }, file))[1]
+  http.config.variables.base_url = 'http://127.0.0.1:1'
+  local inline_task = assert(require('overseer_http.runner').run(inline_request))
+  http.config.variables.base_url = nil
+  assert(vim.wait(5000, function() return inline_task:is_complete() end))
+  assert(inline_task.status == overseer.STATUS.SUCCESS, vim.inspect(inline_task.result))
+  assert(inline_task.metadata.overseer_http.request.url == 'http://127.0.0.1:' .. port .. '/redirect')
+  assert(vim.tbl_contains(inline_task.metadata.overseer_http.args, '--insecure'))
+  assert(vim.tbl_contains(inline_task.metadata.overseer_http.args, '--location'))
+  assert(vim.tbl_contains(inline_task.metadata.overseer_http.args, '--compressed'))
+  assert(vim.tbl_contains(inline_task.metadata.overseer_http.args, '--max-time'))
+  assert(vim.tbl_contains(inline_task.metadata.overseer_http.args, '--connect-timeout'))
+  assert(vim.fn.readfile(inline_task.result.http.body_path)[1] == '{"ok":true}')
+  inline_task:dispose(true)
+
   vim.api.nvim_win_set_cursor(0, { 2, 0 })
   local first = assert(http.run_current())
   assert(vim.wait(5000, function() return first:is_complete() end))
@@ -121,6 +151,25 @@ local ok, err = xpcall(function()
     end), 'jq did not format the JSON response view')
     assert(vim.fn.readfile(first.result.http.body_path)[1] == '{"ok":true}')
   end
+  local saved_response = fixture .. '/saved-response.json'
+  local original_input, original_select = vim.ui.input, vim.ui.select
+  vim.ui.input = function(opts, callback)
+    assert(opts.prompt:find('response body', 1, true))
+    callback(saved_response)
+  end
+  overseer.run_action(first, 'HTTP: Save Body to File')
+  assert(vim.fn.readfile(saved_response)[1] == '{"ok":true}')
+  vim.fn.writefile({ 'keep me' }, saved_response)
+  vim.ui.select = function(_, _, callback) callback('Cancel') end
+  overseer.run_action(first, 'HTTP: Save Body to File')
+  assert(vim.fn.readfile(saved_response)[1] == 'keep me')
+  vim.ui.select = function(_, _, callback) callback('Overwrite') end
+  overseer.run_action(first, 'HTTP: Save Body to File')
+  vim.ui.input = function(_, callback) callback('relative-response.json') end
+  overseer.run_action(first, 'HTTP: Save Body to File')
+  vim.ui.input, vim.ui.select = original_input, original_select
+  assert(vim.fn.readfile(saved_response)[1] == '{"ok":true}')
+  assert(vim.fn.readfile(fixture .. '/relative-response.json')[1] == '{"ok":true}')
   overseer.run_action(first, 'HTTP: Open Headers')
   assert(vim.bo[task_buf].filetype == 'http')
   assert(vim.b[task_buf].overseer_http_response_view == 'headers')
@@ -177,6 +226,7 @@ local ok, err = xpcall(function()
   assert(vim.bo[transport:get_bufnr()].filetype == 'OverseerOutput')
   transport:dispose(true)
   first:dispose(true)
+  assert(vim.fn.readfile(saved_response)[1] == '{"ok":true}')
   print('PASS: HTTP provider, curl task, status, response, restart, disposal')
 end, debug.traceback)
 vim.fn.jobstop(server_job)

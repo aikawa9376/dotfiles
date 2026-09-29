@@ -15,6 +15,10 @@ function M.build()
       condition = is_http,
       run = result.open_headers,
     },
+    ['HTTP: Save Body to File'] = {
+      condition = is_http,
+      run = result.save_body,
+    },
     ['HTTP: Copy cURL'] = {
       condition = is_http,
       run = result.copy_curl,

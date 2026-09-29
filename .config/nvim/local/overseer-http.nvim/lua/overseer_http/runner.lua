@@ -26,6 +26,9 @@ function M.definition(request)
     return nil, 'curl executable not found: ' .. config.curl.executable
   end
   local env = require('overseer_http.variables').environment(request.source_file, config)
+  for key, value in pairs(request.variables or {}) do
+    env[key] = value
+  end
   local expanded, err = require('overseer_http.variables').expand_request(request, env)
   if not expanded then return nil, err end
   if expanded.url:find('[\r\n]') then return nil, 'Invalid URL: newline is not allowed' end

@@ -23,14 +23,17 @@ local ok, err = xpcall(function()
   assert(not specs['overseer.nvim']._.loaded)
   assert(vim.fn.exists(':OverseerHttpSelect') == 2)
   local file = fixture .. '/api.http'
-  vim.fn.writefile({ '### Health', 'GET https://example.test/health' }, file)
+  vim.fn.writefile({ '# local API', '@base_url = https://example.test', '', '### Health', '@curl_insecure', 'GET {{base_url}}/health' }, file)
   vim.cmd.edit(vim.fn.fnameescape(file))
   vim.bo.filetype = 'http'
   local http_map = vim.fn.maparg('<CR>', 'n', false, true)
   assert(http_map.buffer == 1 and http_map.rhs:find('OverseerHttpRun', 1, true))
   assert(vim.fn.maparg('<leader>Rs', 'n', false, true).buffer == 1)
   assert(vim.b.current_syntax == 'overseer_http')
-  assert(vim.fn.synIDattr(vim.fn.synID(2, 2, 1), 'name') == 'OverseerHttpMethod')
+  assert(vim.fn.synIDattr(vim.fn.synID(1, 2, 1), 'name') == 'OverseerHttpComment')
+  assert(vim.fn.synIDattr(vim.fn.synID(2, 2, 1), 'name') == 'OverseerHttpDefinitionName')
+  assert(vim.fn.synIDattr(vim.fn.synID(5, 2, 1), 'name') == 'OverseerHttpCurlOption')
+  assert(vim.fn.synIDattr(vim.fn.synID(6, 2, 1), 'name') == 'OverseerHttpMethod')
   local selected
   vim.ui.select = function(items) selected = items end
   vim.cmd('OverseerHttpSelect')

@@ -62,6 +62,56 @@ function M.open_body(task) return show_file(task, 'body', true) end
 function M.open_headers(task) return show_file(task, 'headers', true) end
 function M.show_default(task) return show_file(task, 'body', false) end
 
+function M.save_body(task)
+  local info = metadata(task)
+  if not info then return end
+  if not task:is_complete() then
+    vim.notify('HTTP response is not complete yet', vim.log.levels.WARN)
+    return
+  end
+  local source = info.paths.body
+  if vim.fn.filereadable(source) == 0 then
+    vim.notify('HTTP body is not available', vim.log.levels.WARN)
+    return
+  end
+  local source_dir = vim.fn.fnamemodify(info.request.source_file, ':p:h')
+  vim.ui.input({
+    prompt = 'Save HTTP response body to: ',
+    default = source_dir .. '/response-' .. task.id .. '.body',
+  }, function(input)
+    if not input or input == '' then return end
+    local destination = input
+    if destination:sub(1, 1) == '~' then destination = vim.fn.expand(destination) end
+    if not destination:match('^/') then destination = source_dir .. '/' .. destination end
+    destination = vim.fs.normalize(destination)
+    if destination == source then
+      vim.notify('Choose a different path for the HTTP response body', vim.log.levels.ERROR)
+      return
+    end
+
+    local function copy(overwrite)
+      if vim.fn.filereadable(source) == 0 then
+        vim.notify('HTTP body is no longer available', vim.log.levels.ERROR)
+        return
+      end
+      -- 1 is UV_FS_COPYFILE_EXCL: leave existing files untouched until confirmed.
+      local ok, err = vim.uv.fs_copyfile(source, destination, overwrite and 0 or 1)
+      if ok then
+        vim.notify('Saved HTTP response body to ' .. destination)
+      elseif not overwrite and err and err:match('^EEXIST:') then
+        vim.ui.select({ 'Overwrite', 'Cancel' }, {
+          prompt = 'File exists: ' .. destination,
+        }, function(choice)
+          if choice == 'Overwrite' then copy(true) end
+        end)
+      else
+        vim.notify('Could not save HTTP response body: ' .. tostring(err), vim.log.levels.ERROR)
+      end
+    end
+    copy(false)
+  end)
+end
+
 function M.copy_curl(task)
   local info = metadata(task)
   if not info then return end

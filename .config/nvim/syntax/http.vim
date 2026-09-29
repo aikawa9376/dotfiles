@@ -6,8 +6,11 @@ endif
 syntax include @OverseerHttpJson syntax/json.vim
 syntax case match
 
-syntax match OverseerHttpComment /^#\s.*$/
+syntax match OverseerHttpComment /^\s*\%(#\|\/\/\).*$/
 syntax match OverseerHttpSeparator /^\s*###.*$/
+syntax match OverseerHttpDefinition /^\s*@[A-Za-z_][A-Za-z0-9_]*\s*=.*$/ contains=OverseerHttpDefinitionName,OverseerHttpVariable
+syntax match OverseerHttpDefinitionName /^\s*@[A-Za-z_][A-Za-z0-9_]*\ze\s*=/ contained
+syntax match OverseerHttpCurlOption /^\s*@curl_[A-Za-z_]\+/
 syntax match OverseerHttpStatus /^HTTP\/\S\+\s\+\d\{3\}.*$/
 syntax match OverseerHttpRequest /^\s*\%(GET\|POST\|PUT\|PATCH\|DELETE\|HEAD\|OPTIONS\)\s\+\S.*$/ contains=OverseerHttpMethod,OverseerHttpUrl,OverseerHttpVariable
 syntax match OverseerHttpMethod /^\s*\%(GET\|POST\|PUT\|PATCH\|DELETE\|HEAD\|OPTIONS\)\ze\s/ contained
@@ -20,6 +23,8 @@ syntax match OverseerHttpVariable /{{\s*\w\+\s*}}/ containedin=ALL
 
 highlight default link OverseerHttpComment Comment
 highlight default link OverseerHttpSeparator Title
+highlight default link OverseerHttpDefinitionName Identifier
+highlight default link OverseerHttpCurlOption Special
 highlight default link OverseerHttpStatus Constant
 highlight default link OverseerHttpRequest Normal
 highlight default link OverseerHttpMethod Statement
