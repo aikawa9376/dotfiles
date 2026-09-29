@@ -10,6 +10,20 @@ return {
       require("undo-glow").highlight_changes(ugOpts)
       vim.fn.feedkeys(vim.api.nvim_replace_termcodes(key, true, true, true), 'n')
     end
+    local function pasteWithYankyOrDefaultRegister(yanky_key, before, is_visual)
+      require("lazy").load({ plugins = { "yanky.nvim" } })
+
+      local history = require("yanky.history").all()
+      if #history > 0 then
+        pasteWithGlow(yanky_key)
+        return
+      end
+
+      local register = require("yanky.utils").get_default_register()
+      local visual_delete = is_visual and '"_d' or ""
+      local put = before and "P" or "p"
+      pasteWithGlow(visual_delete .. '"' .. register .. put)
+    end
     local clearCursorGlowSuppression = function()
       vim.g.ug_ignore_cursor_moved = nil
     end
@@ -178,11 +192,11 @@ return {
         hint = false,
         invoke_on_body = true,
         on_enter = function()
-          local is_visual = vim.fn.mode():match("v")
+          local is_visual = vim.fn.mode():match("^[vV\22]") ~= nil
           if is_visual then
-            pasteWithGlow('"_d<Plug>(YankyPutBefore)')
+            pasteWithYankyOrDefaultRegister('"_d<Plug>(YankyPutBefore)', true, true)
           else
-            pasteWithGlow('<Plug>(YankyPutAfter)')
+            pasteWithYankyOrDefaultRegister('<Plug>(YankyPutAfter)', false, false)
           end
         end
       },
@@ -202,11 +216,11 @@ return {
         hint = false,
         invoke_on_body = true,
         on_enter = function()
-          local is_visual = vim.fn.mode():match("v")
+          local is_visual = vim.fn.mode():match("^[vV\22]") ~= nil
           if is_visual then
-            pasteWithGlow('"_d<Plug>(YankyPutBefore)')
+            pasteWithYankyOrDefaultRegister('"_d<Plug>(YankyPutBefore)', true, true)
           else
-            pasteWithGlow('<Plug>(YankyPutBefore)')
+            pasteWithYankyOrDefaultRegister('<Plug>(YankyPutBefore)', true, false)
           end
         end
       },
