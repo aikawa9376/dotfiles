@@ -233,7 +233,7 @@ local function open_worktree_list()
   local entries = get_worktrees(true, current_root)
   if #entries == 0 then return end
 
-  utils.open_half_height_split('fugitive-worktree://')
+  utils.open_panel_split('fugitive-worktree://')
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, current_root)
 

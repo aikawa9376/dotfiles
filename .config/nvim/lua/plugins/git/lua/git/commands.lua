@@ -19,7 +19,7 @@ function M.argv(text)
   return result
 end
 local function output(root, args, content)
-  vim.cmd('botright new')
+  utils.open_panel_split()
   local b = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(b, root)
   vim.bo[b].buftype, vim.bo[b].bufhidden, vim.bo[b].swapfile = 'nofile', 'wipe', false
@@ -66,7 +66,7 @@ end
 
 local function terminal(root, args, keep_open)
   local source_win = vim.api.nvim_get_current_win()
-  vim.cmd('botright new')
+  utils.open_panel_split()
   local b = vim.api.nvim_get_current_buf()
   local win = vim.api.nvim_get_current_win()
   utils.set_buf_work_tree(b, root)

@@ -979,7 +979,7 @@ END {
     end
 
     -- Open split and populate buffer (reuse the buffer created by :new to avoid stray [No Name] buffers)
-    vim.cmd('vertical rightbelow new')
+    utils.open_panel_split()
     preview_win = vim.api.nvim_get_current_win()
     local buf = vim.api.nvim_get_current_buf()
 

@@ -1,18 +1,22 @@
 local M = {}
 
----Open a horizontal split below the current window, using half of its height.
----An explicit height keeps the rest of an existing split layout unchanged.
+---Open a panel beside the source window when it meets the configured minimum width.
+---Explicit sizing limits the split to the current window's layout.
+---g:git_panel_min_width defaults to 200 columns.
 ---@param target? string
+---@param opts? { min_width?: number }
 ---@return integer winid
-function M.open_half_height_split(target)
+function M.open_panel_split(target, opts)
   local source_win = vim.api.nvim_get_current_win()
   local source_buf = vim.api.nvim_get_current_buf()
   local source_view = vim.fn.winsaveview()
   vim.w[source_win].fugitive_preserve_split_view = vim.deepcopy(source_view)
-  local height = math.max(1, math.floor(vim.api.nvim_win_get_height(0) / 2))
-  local command = target
-      and string.format('keepalt belowright %dsplit %s', height, vim.fn.fnameescape(target))
-    or string.format('keepalt belowright %dnew', height)
+  local min_width = (opts and opts.min_width) or tonumber(vim.g.git_panel_min_width) or 200
+  local vertical = vim.api.nvim_win_get_width(source_win) >= min_width
+  local extent = vertical and vim.api.nvim_win_get_width(source_win) or vim.api.nvim_win_get_height(source_win)
+  local size = math.max(1, math.floor(extent / 2))
+  local command = string.format('keepalt belowright %s%d%s', vertical and 'vertical ' or '', size,
+    target and ('split ' .. vim.fn.fnameescape(target)) or 'new')
   local opened, open_err = pcall(vim.cmd, command)
   if vim.api.nvim_win_is_valid(source_win) then
     vim.w[source_win].fugitive_preserve_split_view = nil

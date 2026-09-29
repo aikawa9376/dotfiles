@@ -372,7 +372,7 @@ local function open_log_list(opts)
     if not initial_output then vim.notify(err, vim.log.levels.ERROR); return end
   end
 
-  utils.open_half_height_split()
+  utils.open_panel_split()
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree)
   local scope = line_history and string.format('L%d,%d:%s', line_history.first, line_history.last,

@@ -1097,7 +1097,7 @@ local function open_branch_list()
     return
   end
 
-  utils.open_half_height_split('fugitive-branch://' .. git_dir)
+  utils.open_panel_split('fugitive-branch://' .. git_dir)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree, git_dir)
   vim.b[bufnr].branch_filter = 'all'

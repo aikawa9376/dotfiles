@@ -1,5 +1,21 @@
 # Git
 
+Panels open to the right when the selected window is at least the configured
+minimum width; otherwise they open below. Regular panels default to 200 columns.
+Status uses its own 240-column minimum, so a narrower source window opens status
+below.
+
+```lua
+vim.g.git_panel_min_width = 200
+vim.g.git_status_min_columns = 240
+```
+
+This applies to status, log (`L`), branch (`B`), stash, worktree, reflog, WIP,
+Git command output, and commit preview panels. Existing visible panels are reused
+where supported. Tab opens, explicit object/diff split commands, the paired blame
+view, and `magit-hint`/transient menus retain their own layouts.
+
+
 Standalone Neovim Git UI, loaded by `plugins.git`. It does not load vim-fugitive.
 Flog is available lazily through a native Git backend. The retired
 `fugitive-extension` source and its old plugin specification can be restored by

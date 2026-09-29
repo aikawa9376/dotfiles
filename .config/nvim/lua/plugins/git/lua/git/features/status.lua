@@ -1,5 +1,6 @@
 local M = {}
 local utils = require("git.utils")
+local status_min_columns = tonumber(vim.g.git_status_min_columns) or 240
 local help = require("git.features.help")
 local commands = require("git.features.commands")
 local syntax_highlight = require("git.features.syntax_highlight")
@@ -3316,7 +3317,9 @@ function M.open(opts)
           end
         end
       end
-      vim.cmd('keepalt split')
+      utils.open_panel_split(nil, {
+        min_width = status_min_columns,
+      })
     end
     vim.api.nvim_win_set_buf(0, bufnr)
     if vim.bo[bufnr].filetype ~= 'fugitivestatus' then

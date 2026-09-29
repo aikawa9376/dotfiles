@@ -97,7 +97,7 @@ local function open_log(root)
   local entries, err = M.list(root)
   if not entries then vim.notify(err, vim.log.levels.WARN); return end
   if #entries == 0 then vim.notify('No WIP snapshots for this branch', vim.log.levels.INFO); return end
-  vim.cmd('botright split')
+  utils.open_panel_split()
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(0, buf)
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].filetype = 'nofile', 'wipe', 'gitwip'

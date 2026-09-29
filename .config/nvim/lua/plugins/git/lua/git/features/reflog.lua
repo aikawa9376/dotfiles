@@ -192,7 +192,7 @@ local function open_reflog_list()
   local work_tree = utils.get_buf_work_tree(current_buf)
     or utils.get_work_tree({ bufnr = current_buf, notify = true })
   if not work_tree then return end
-  vim.cmd('botright new')
+  utils.open_panel_split()
   local bufnr = vim.api.nvim_get_current_buf()
   vim.api.nvim_buf_set_name(bufnr, 'fugitive-reflog://' .. work_tree)
   utils.set_buf_work_tree(bufnr, work_tree)
