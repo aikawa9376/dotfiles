@@ -8,6 +8,8 @@ local maps = {
   { '<leader>Rf', 'OverseerHttpSelect', 'Find HTTP request' },
   { '<leader>Rn', 'OverseerHttpNext', 'Next HTTP request' },
   { '<leader>Rp', 'OverseerHttpPrev', 'Previous HTTP request' },
+  { ']]', 'OverseerHttpNext', 'Next HTTP request' },
+  { '[[', 'OverseerHttpPrev', 'Previous HTTP request' },
   { '<leader>Rr', 'OverseerHttpRepeat', 'Repeat last HTTP request' },
   { '<leader>Rt', 'OverseerHttpToggleResponse', 'Toggle HTTP body/headers' },
   { '<leader>Rb', 'OverseerHttpBody', 'Open HTTP response body' },

@@ -49,7 +49,7 @@ The dotfiles install adds these normal-mode maps only to file-backed `http` and 
 | `<CR>`, `<leader>Rs` | Send current request |
 | `<leader>Ra` | Send all requests |
 | `<leader>Rf` | Select a request |
-| `<leader>Rn`, `<leader>Rp` | Jump to next or previous request |
+| `]]`, `[[` or `<leader>Rn`, `<leader>Rp` | Jump to next or previous request |
 | `<leader>Rr` | Repeat the most recent request from this file |
 | `<leader>Rt` | Alternate between response body and headers |
 | `<leader>Rb`, `<leader>Rh` | Open response body or headers |
