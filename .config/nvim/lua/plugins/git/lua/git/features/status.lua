@@ -3282,6 +3282,66 @@ function M.focus_section(bufnr, section, opts)
   return true
 end
 
+function M.navigation(buf, win)
+  local anchor = capture_status_cursor(buf, win)
+  if anchor then
+    anchor.winid, anchor.view = nil, nil
+    if anchor.key_type == 'stash' then
+      anchor.stash_hash = vim.trim(require('git.objects').run(utils.get_buf_work_tree(buf),
+        { 'rev-parse', '--verify', anchor.key }))
+    elseif anchor.key_type == 'commit' then
+      anchor.commit_hash = vim.trim(require('git.objects').run(utils.get_buf_work_tree(buf),
+        { 'rev-parse', '--verify', anchor.key }))
+    end
+  end
+  return anchor
+end
+
+function M.restore_navigation(buf, anchor)
+  if not status_snapshot_by_buf[buf] or status_snapshot_by_buf[buf].loading_details then return false end
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  if anchor.commit_hash then
+    anchor = vim.deepcopy(anchor)
+    anchor.key = nil
+    for _, text in ipairs(lines) do
+      local hash = text:match('^(%x%x%x%x%x%x%x+)%s')
+      if hash and anchor.commit_hash:sub(1, #hash) == hash then anchor.key = hash; break end
+    end
+    if not anchor.key then return true end
+  end
+  if anchor.stash_hash then
+    anchor = vim.deepcopy(anchor)
+    anchor.key = nil
+    for _, text in ipairs(lines) do
+      local ref = stash_ref_from_line(text)
+      if ref then
+        local ok, hash = pcall(require('git.objects').run, utils.get_buf_work_tree(buf),
+          { 'rev-parse', '--verify', ref })
+        if ok and vim.trim(hash) == anchor.stash_hash then anchor.key = ref; break end
+      end
+    end
+    if not anchor.key then return true end
+  end
+  local row = find_status_cursor_row(lines, anchor, buf)
+  if not row then return true end
+  if anchor.entry_offset then
+    local entry = status_renderer.entry_at(buf, row)
+    if entry and entry.path == anchor.key and status_renderer.set_diff(buf, row, true) then
+      M.refresh_buffer(buf)
+      lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+      row = find_status_cursor_row(lines, anchor, buf) or row
+    end
+  end
+  local win = vim.fn.bufwinid(buf)
+  if win ~= -1 then
+    local text = lines[row] or ''
+    vim.api.nvim_win_call(win, function() vim.cmd('silent! ' .. row .. 'foldopen!') end)
+    vim.api.nvim_win_set_cursor(win, { row, math.min(anchor.col or 0, #text) })
+    status_cursor_anchor_by_buf[buf] = capture_status_cursor(buf, win)
+  end
+  return true
+end
+
 local function resolve_status_work_tree(opts)
   if opts and opts.work_tree then return utils.normalize_path(opts.work_tree) end
   local current_buf = vim.api.nvim_get_current_buf()

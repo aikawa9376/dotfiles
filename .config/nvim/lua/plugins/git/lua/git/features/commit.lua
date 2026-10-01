@@ -207,6 +207,32 @@ function M.expand_file(buf, path)
   s.expanded[path] = true
   return render_preserving_message(s)
 end
+-- Serializable navigation only; message drafts remain owned by the buffer.
+function M.navigation(buf, row)
+  local s = state(buf)
+  if not s then return nil end
+  local entry, info = M.entry_at(buf, row)
+  return { revision = s.model.hash, parent = s.model.parent_index,
+    expanded = vim.deepcopy(s.expanded), path = entry and entry.path,
+    patch_row = info and info.patch_row }
+end
+function M.restore_navigation(buf, nav)
+  local s = state(buf)
+  if not s then return false end
+  for path, value in pairs(nav.expanded or {}) do s.expanded[path] = value end
+  if nav.patch_row and nav.path then s.expanded[nav.path] = true end
+  if not render_preserving_message(s) then return false end
+  if nav.path then
+    focus_path(s, nav.path)
+    for row, info in pairs(s.rows) do
+      if info.entry.path == nav.path and info.patch_row == nav.patch_row and nav.patch_row then
+        local delta = vim.api.nvim_buf_line_count(buf) - s.line_count
+        vim.api.nvim_win_set_cursor(0, { row + delta, 0 }); break
+      end
+    end
+  end
+  return true
+end
 function M.focus_range(buf, focus)
   local s = state(buf)
   if not s or vim.api.nvim_get_current_buf() ~= s.buf or type(focus) ~= 'table' then return false end
@@ -378,6 +404,7 @@ local function show_blob(s, entry, before)
     vim.api.nvim_buf_set_name(b, name)
   end
   vim.b[b].git_blob_base = s.model.base
+  vim.b[b].git_blob_base_path = before and path or (entry.old_path or path)
   utils.set_buf_work_tree(b, s.model.root)
   local oid = model_api.git(s.model.root, { 'rev-parse', '--verify', rev .. ':' .. path })
   vim.b[b].lazyagent_note_source = { kind = 'fugitive', root = s.model.root, path = path,

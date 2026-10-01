@@ -9,12 +9,12 @@ function M.select(backend)
   if backend and backend ~= '' then set(backend)
   else vim.ui.select({ 'flog', 'native' }, { prompt = 'Git graph backend' }, set) end
 end
-function M.open(revision, backend)
+function M.open(revision, backend, opts)
   backend = backend or vim.g.git_graph_backend or 'flog'
   assert(backend == 'native' or backend == 'flog', 'Graph backend must be native or flog')
-  if backend == 'flog' then return require('git.flog').open(revision) end
+  if backend == 'flog' then return require('git.flog').open(revision, opts) end
   local objects, utils = require('git.objects'), require('git.utils')
-  local root = objects.context()
+  local root = opts and opts.work_tree or objects.context()
   local args = { 'log', '--graph', '--decorate', '--format=%h %s %d', '-2000' }
   vim.list_extend(args, revision and { revision, '--' } or { '--all' })
   local text = objects.run(root, args)
@@ -22,6 +22,7 @@ function M.open(revision, backend)
   vim.cmd('vertical rightbelow 60new')
   local b = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(b, root)
+  vim.b[b].git_graph = { backend = 'native', revision = revision }
   vim.api.nvim_buf_set_lines(b, 0, -1, false, vim.split(text:gsub('\n$', ''), '\n'))
   vim.bo[b].buftype, vim.bo[b].bufhidden, vim.bo[b].filetype = 'nofile', 'wipe', 'git'
   vim.bo[b].modifiable = false

@@ -187,21 +187,23 @@ local function refresh_reflog_list(bufnr)
   highlight_linked_entries(bufnr)
 end
 
-local function open_reflog_list()
+local function open_reflog_list(opts)
   local current_buf = vim.api.nvim_get_current_buf()
-  local work_tree = utils.get_buf_work_tree(current_buf)
+  local work_tree = opts and opts.work_tree or utils.get_buf_work_tree(current_buf)
     or utils.get_work_tree({ bufnr = current_buf, notify = true })
   if not work_tree then return end
-  utils.open_panel_split()
+  utils.open_panel_split('fugitive-reflog://' .. work_tree)
   local bufnr = vim.api.nvim_get_current_buf()
-  vim.api.nvim_buf_set_name(bufnr, 'fugitive-reflog://' .. work_tree)
   utils.set_buf_work_tree(bufnr, work_tree)
   vim.bo[bufnr].buftype = 'nofile'
   vim.bo[bufnr].bufhidden = 'wipe'
   vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].modifiable = false
   vim.bo[bufnr].filetype = 'fugitivereflog'
+  refresh_reflog_list(bufnr)
+  return bufnr
 end
+M.open = open_reflog_list
 
 local function show_reflog_help()
   help.show('Reflog recovery actions', {

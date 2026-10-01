@@ -76,6 +76,43 @@ aliases because the unchanged Magit layer calls them internally. They are omitte
 from the normal key guide; this also means `b` remains a mapping prefix on panels
 with those spin aliases. Global leader mappings in `init.lua` remain separate.
 
+## Harpoon pins
+
+The existing Harpoon `multiple` list accepts ordinary file positions and Git
+views together. Press `ma` to pin/unpin the target under the cursor, and `mm` to
+select a pin. The existing `mx` fuzzy picker also opens, previews and removes
+these pins; its quickfix action remains for ordinary files. Harpoon keeps its
+existing cwd-based list storage, and saved Git entries carry their own worktree
+root, so selecting from another repository uses the saved repository.
+
+| View | Saved target and reopening behavior |
+| --- | --- |
+| Status | Refresh the repository, then locate the file/section/commit/stash; expanded file diffs retain their selected context |
+| Branch / Worktree | Refresh the list and locate the selected ref/worktree; branch filters are preserved |
+| Log | Restore arguments or line-history scope and locate the selected commit; line history retains its starting revision |
+| Reflog / Stash / WIP | Locate the saved commit/snapshot; stash selectors are resolved again after numbering changes |
+| Commit | Pin the full hash, comparison parent, expanded files and selected file/diff position |
+| Git object / commit preview file | Reopen the immutable revision/path or live index stage and line; preview comparison bases are retained |
+| Blame | Restore the currently viewed revision/path/line as a code/annotation pair; an existing matching pair is reused |
+| Native / Flog graph | Restore the backend, scope and selected commit; Flog options are preserved |
+| Git command output | Reopen the saved output text; the command is not run again |
+
+Git pins use serializable target metadata rather than buffer/window IDs or URI
+counters. File pins keep their existing path/line behavior. List pins identify
+items semantically instead of trusting their old row numbers; a missing item
+does not trigger an action on another item. Missing repositories or immutable
+objects are reported without substituting the current repository or HEAD.
+Transient menus, terminals and temporary conflict/blame diff panes are not
+persistent pin targets.
+
+The quick menu remains editable for ordering/deleting pins and adding ordinary
+file rows. Git labels are display text: remove and pin again to change a Git
+target. Previewing reads file/Git data without opening panels or running Git
+mutations. `plugins.harpoon_git` owns capture/reopen/preview, while
+`plugins.harpoon_items` supplies shared structured item access for the menu,
+icons, previews and fuzzy picker. `tests/harpoon_git.lua` uses installed Harpoon,
+Flog and fzf-lua with isolated Harpoon storage and temporary Git repositories.
+
 ## Commands
 
 | Command | Behavior |

@@ -23,8 +23,8 @@ local function refresh_stash_list(bufnr)
   end
 end
 
-local function open_stash_list()
-  local work_tree = utils.get_work_tree({ bufnr = vim.api.nvim_get_current_buf() })
+local function open_stash_list(opts)
+  local work_tree = opts and opts.work_tree or utils.get_work_tree({ bufnr = vim.api.nvim_get_current_buf() })
   if not work_tree then vim.notify('Not a git repository', vim.log.levels.WARN); return end
   local stash_output = utils.get_stash_list(work_tree)
   if vim.v.shell_error ~= 0 then
@@ -37,16 +37,19 @@ local function open_stash_list()
     return
   end
 
-  utils.open_panel_split('fugitive-stash://')
+  utils.open_panel_split('fugitive-stash://' .. work_tree)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree)
+  vim.bo[bufnr].modifiable = true
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, stash_output)
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.bo[bufnr].filetype = 'fugitivestash'
   vim.bo[bufnr].modifiable = false
+  return bufnr
 end
+M.open = open_stash_list
 
 function M.rename(bufnr, ref)
   local root = utils.get_buf_work_tree(bufnr)

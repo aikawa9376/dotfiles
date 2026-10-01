@@ -11,19 +11,10 @@ local owner_buf_leave_autocmd = nil
 local owner_win_enter_autocmd = nil
 local owner_win_closed_autocmd = nil
 
-local prev_row = nil
+local prev_item = nil
 local preview_group = api.nvim_create_augroup("HarpoonPreviewLifecycle", { clear = false })
 
-local function get_current_file()
-    local line = api.nvim_get_current_line()
-    local file_path = vim.fn.expand(line)
-    local item = vim.split(file_path, ":")
-    if vim.fn.filereadable(item[1]) == 0 then
-        -- print("ファイルが存在しません: " .. item[1])
-        return
-    end
-    return item
-end
+local items = require('plugins.harpoon_items')
 
 local ns_cursor = vim.api.nvim_create_namespace("my_harpoon_preview")
 
@@ -118,7 +109,7 @@ function M.close()
   end
   preview_win = nil
   preview_buf = nil
-  prev_row = nil
+  prev_item = nil
 end
 
 -- プレビューを開く関数
@@ -134,8 +125,17 @@ function M.open(parent, float_opts)
     focusable = false,
   }, float_opts)
 
-  local item = get_current_file()
-  if not item then return end
+  local item = items.menu_item(parent.bufnr, api.nvim_win_get_cursor(parent.win_id)[1])
+  if not item then M.close(); return end
+  local ok, lines, row, col, filetype = pcall(items.preview, item)
+  if not ok then lines, row, col, filetype = { tostring(lines) }, 1, 0, 'text' end
+  if #lines == 0 then lines = { '' } end
+  row = math.max(1, math.min(row or 1, #lines))
+  col = math.max(0, math.min(col or 0, #lines[row]))
+  float_opts.height = math.max(1, math.min(float_opts.height, vim.o.lines - 3))
+  float_opts.width = math.max(1, math.min(float_opts.width, vim.o.columns - 2))
+  float_opts.row = math.max(0, math.min(float_opts.row, vim.o.lines - float_opts.height - 2))
+  float_opts.col = math.max(0, math.min(float_opts.col, vim.o.columns - float_opts.width - 1))
 
   attach_owner(parent)
 
@@ -162,30 +162,20 @@ function M.open(parent, float_opts)
       preview_buf,
       false
     ) end, { buffer = parent.bufnr })
-    prev_row = nil
+    prev_item = nil
   end
 
-  if prev_row ~= tonumber(item[2]) then
-    api.nvim_buf_call(preview_buf, function()
-      local lines = vim.fn.readfile(vim.fn.fnameescape(item[1]))
-      if type(lines) == "table" then
-        -- バッファに内容を設定する（既存の内容を完全に置き換える）
-        vim.api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
-      end
-      vim.cmd("doautocmd BufRead " .. vim.fn.fnameescape(item[1]))
-      pcall(vim.treesitter.start,preview_buf)
-    end)
-
-    api.nvim_win_set_cursor(preview_win, { tonumber(item[2]), tonumber(item[3]) })
-
-    -- 該当行をハイライト
-    highlight_cursor(preview_buf, tonumber(item[2]) - 1)
-
-    vim.api.nvim_buf_call(preview_buf, function()
-      vim.cmd("normal! zz")
-    end)
-
-    prev_row = tonumber(item[2])
+  local identity = vim.json.encode(item)
+  if prev_item ~= identity then
+    pcall(vim.treesitter.stop, preview_buf)
+    api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
+    -- Syntax only: previewing must not trigger the actual Git panel's FileType actions.
+    vim.bo[preview_buf].syntax = filetype or 'text'
+    pcall(vim.treesitter.start, preview_buf, filetype)
+    api.nvim_win_set_cursor(preview_win, { row, col })
+    highlight_cursor(preview_buf, row - 1)
+    api.nvim_win_call(preview_win, function() vim.cmd('normal! zz') end)
+    prev_item = identity
   end
 
   return { win_id = preview_win, buf_id = preview_buf, item = item }

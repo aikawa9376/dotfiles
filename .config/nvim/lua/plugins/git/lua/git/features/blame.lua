@@ -1129,6 +1129,40 @@ function M.toggle()
   return M.open()
 end
 
+-- The panel name describes the initial frame, not the revision reached by history.
+function M.navigation(buf)
+  for _, s in pairs(sessions) do
+    local f = s.history[s.index]
+    if s.active and f and (buf == s.buf or buf == f.code_buf) then
+      return { root = s.root, path = f.path, revision = f.revision }
+    end
+  end
+end
+
+function M.open_navigation(nav)
+  for _, s in pairs(sessions) do
+    local f = s.history[s.index]
+    if s.active and f and s.root == nav.root and f.path == nav.path and f.revision == nav.revision then
+      vim.api.nvim_set_current_win(s.win)
+      local row = math.max(1, math.min(nav.row or 1, #f.lines))
+      vim.api.nvim_win_set_cursor(s.win, { row, 0 })
+      vim.api.nvim_win_set_cursor(s.code_win, { row, math.min(nav.col or 0, #(f.lines[row] or '')) })
+      return s.buf
+    end
+  end
+  -- Keep any existing pair intact when selecting a different pinned frame.
+  if M.navigation(vim.api.nvim_get_current_buf()) then vim.cmd('tabnew') end
+  if nav.revision then
+    require('git.objects').open(nav.revision .. ':' .. nav.path, 'edit', nav.root)
+  else
+    vim.cmd('edit ' .. vim.fn.fnameescape(nav.root .. '/' .. nav.path))
+  end
+  local row = math.max(1, math.min(nav.row or 1, vim.api.nvim_buf_line_count(0)))
+  local text = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1] or ''
+  vim.api.nvim_win_set_cursor(0, { row, math.min(nav.col or 0, #text) })
+  return M.open({ work_tree = nav.root, path = nav.path, revision = nav.revision })
+end
+
 function M.setup(group)
   diffdim.setup()
   setup_blame_gradients()

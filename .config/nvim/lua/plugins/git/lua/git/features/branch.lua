@@ -1076,17 +1076,25 @@ local function merge_with_input(bufnr, default_target)
   notify_branch_changed(bufnr, work_tree)
 end
 
-local function open_branch_list()
+local function open_branch_list(opts)
   local source_bufnr = vim.api.nvim_get_current_buf()
-  local work_tree = get_buffer_work_tree(source_bufnr, true)
+  local work_tree = opts and opts.work_tree or get_buffer_work_tree(source_bufnr, true)
   if not work_tree then return end
-  local git_dir = utils.normalize_path(vim.b[source_bufnr].git_dir) or utils.get_git_dir(work_tree)
+  local git_dir = opts and opts.work_tree and utils.get_git_dir(work_tree)
+    or utils.normalize_path(vim.b[source_bufnr].git_dir) or utils.get_git_dir(work_tree)
   if not git_dir then
     vim.notify("Could not determine git dir.", vim.log.levels.ERROR)
     return
   end
 
-  local branch_output, branch_names, truncated_info, ok, branch_kinds = get_branch_list(source_bufnr, 'all')
+  local inventory_buf = source_bufnr
+  if opts and opts.work_tree then
+    inventory_buf = vim.api.nvim_create_buf(false, true)
+    utils.set_buf_work_tree(inventory_buf, work_tree, git_dir)
+  end
+  local filter = opts and opts.filter or 'all'
+  local branch_output, branch_names, truncated_info, ok, branch_kinds = get_branch_list(inventory_buf, filter)
+  if inventory_buf ~= source_bufnr then vim.api.nvim_buf_delete(inventory_buf, { force = true }) end
   if not ok then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
@@ -1100,7 +1108,7 @@ local function open_branch_list()
   utils.open_panel_split('fugitive-branch://' .. git_dir)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree, git_dir)
-  vim.b[bufnr].branch_filter = 'all'
+  vim.b[bufnr].branch_filter = filter
 
   utils.with_buf_modifiable(bufnr, function()
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
@@ -1116,7 +1124,9 @@ local function open_branch_list()
   vim.wo[vim.api.nvim_get_current_win()].wrap = false
   vim.bo[bufnr].filetype = 'fugitivebranch'
   vim.bo[bufnr].modifiable = false
+  return bufnr
 end
+M.open = open_branch_list
 
 local function set_branch_filter(bufnr, filter)
   if vim.b[bufnr].branch_filter == filter then return end

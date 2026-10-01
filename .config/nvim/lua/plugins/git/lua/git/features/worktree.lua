@@ -228,12 +228,12 @@ function M.refresh_worktree_list(bufnr)
   apply_highlights(bufnr)
 end
 
-local function open_worktree_list()
-  local current_root = get_work_tree()
+local function open_worktree_list(opts)
+  local current_root = get_work_tree(opts and opts.work_tree)
   local entries = get_worktrees(true, current_root)
   if #entries == 0 then return end
 
-  utils.open_panel_split('fugitive-worktree://')
+  utils.open_panel_split('fugitive-worktree://' .. current_root)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, current_root)
 
@@ -244,7 +244,9 @@ local function open_worktree_list()
   vim.bo[bufnr].filetype = 'fugitiveworktree'
 
   M.refresh_worktree_list(bufnr)
+  return bufnr
 end
+M.open = open_worktree_list
 
 local function entry_at_cursor(bufnr)
   local entries = vim.b[bufnr].worktree_entries

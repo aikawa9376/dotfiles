@@ -34,19 +34,43 @@ function M.setup()
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].filetype == 'floggraph'
         and (not ev.data or not ev.data.work_tree or vim.b[buf].fugitive_work_tree == ev.data.work_tree) then
-        vim.api.nvim_buf_call(buf, function() pcall(vim.cmd, 'Flogupdate') end)
+        vim.api.nvim_buf_call(buf, function() pcall(vim.fn['flog#floggraph#buf#Update']) end)
       end
     end
   end })
 end
-function M.open(revision)
+function M.open(revision, opts)
   if vim.fn.exists(':Flogsplit') ~= 2 then
     require('lazy').load({ plugins = { 'vim-flog' } })
   end
   -- The command also resolves Lazy’s placeholder before invoking Flog.
   local args = '-open-cmd=vertical\\ rightbelow\\ 60vsplit'
   if revision then args = args .. ' -rev=' .. vim.fn.fnameescape(revision) end
-  vim.cmd('Flogsplit ' .. args)
+  if opts and opts.work_tree then
+    -- Resolve repository context without changing the source buffer or cwd.
+    local source = vim.api.nvim_create_buf(false, true)
+    require('git.utils').set_buf_work_tree(source, opts.work_tree)
+    local ok, target = pcall(vim.api.nvim_buf_call, source, function()
+      vim.cmd('Flogsplit ' .. args)
+      return vim.api.nvim_get_current_buf()
+    end)
+    vim.api.nvim_buf_delete(source, { force = true })
+    if not ok then error(target) end
+    for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+      if vim.api.nvim_win_get_buf(win) == target then
+        vim.api.nvim_set_current_win(win); break
+      end
+    end
+  else
+    vim.cmd('Flogsplit ' .. args)
+  end
+  if opts and opts.flog_opts then
+    local state = vim.fn['flog#state#GetBufState']()
+    local restored = vim.deepcopy(opts.flog_opts)
+    restored.open_cmd = state.opts.open_cmd
+    vim.fn['flog#state#SetOpts'](state, restored)
+    vim.fn['flog#floggraph#buf#Update']()
+  end
   return vim.api.nvim_get_current_buf()
 end
 return M

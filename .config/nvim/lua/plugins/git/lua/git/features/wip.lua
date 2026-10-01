@@ -108,6 +108,7 @@ local function open_log(root)
     local next_entries, list_error = M.list(root)
     if not next_entries then vim.notify(list_error, vim.log.levels.WARN); return end
     entries = next_entries
+    vim.b[buf].git_wip_entries = entries
     local lines = { 'WIP snapshots — Enter inspect, a restore, gy copy, R refresh, ? help, q close' }
     local selected_row
     for index, entry in ipairs(entries) do
@@ -143,7 +144,9 @@ local function open_log(root)
     if entry then return { kind = 'snapshot', commit = entry.hash, value = entry.hash:sub(1, 7), label = entry.hash:sub(1, 7) } end
     return { kind = 'repository', label = 'WIP snapshots' }
   end })
+  return buf
 end
+M.open = open_log
 
 function M.setup(group)
   vim.api.nvim_create_user_command('GitWipEnable', function()

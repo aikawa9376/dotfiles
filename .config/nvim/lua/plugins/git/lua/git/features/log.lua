@@ -347,7 +347,7 @@ local function open_log_list(opts)
   -- タブ区切り: hash <tab> date <tab> subject <tab> author <tab> refs
   local args = opts and opts.args or ""
   local source_bufnr = vim.api.nvim_get_current_buf()
-  local work_tree = utils.get_buf_work_tree(source_bufnr)
+  local work_tree = opts and opts.work_tree or utils.get_buf_work_tree(source_bufnr)
     or utils.set_buf_work_tree(source_bufnr, utils.get_work_tree({ bufnr = source_bufnr }))
     or utils.get_work_tree({ notify = true })
   if not work_tree then
@@ -355,6 +355,12 @@ local function open_log_list(opts)
   end
 
   local line_history, initial_output, initial_focus
+  if opts and opts.line_history then
+    line_history = vim.deepcopy(opts.line_history)
+    local err
+    initial_output, initial_focus, err = line_history_output(work_tree, line_history, args)
+    if not initial_output then vim.notify(err, vim.log.levels.ERROR); return end
+  end
   if opts and opts.range and opts.range > 0 then
     local _, path, source = objects.context(source_bufnr)
     if not path then
@@ -395,6 +401,7 @@ local function open_log_list(opts)
     vim.b[bufnr].fugitive_log_line_focus = initial_focus
   end
   refresh_log_list(bufnr, line_history ~= nil)
+  return bufnr
 end
 M.open = open_log_list
 
