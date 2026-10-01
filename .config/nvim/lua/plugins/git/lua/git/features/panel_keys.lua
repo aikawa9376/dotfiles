@@ -207,7 +207,7 @@ function M.configure(buf, opts)
     move('co', 'mo'); move('ct', 'mt'); move('cr', 'mr')
     for _, key in ipairs({ 'mi', 'mu', 'ms' }) do move(key, nil, 'operations') end
     move('mU', nil, 'operations', 'Set current branch upstream')
-    move('A', nil); move('P', nil)
+    move('P', nil)
     move('rD', 'dR', nil, 'Compare outgoing stack with range-diff')
     for _, key in ipairs({ 'cF', 'cW', 'cs', 'cn', 'cS' }) do move(key, nil, 'history') end
   elseif panel == 'stash' then

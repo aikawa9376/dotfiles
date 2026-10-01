@@ -104,8 +104,8 @@ press('cza'); vim.ui.select = ui_select
 write('stash created during picker'); git({ 'stash', 'push', '-qm', 'during picker' })
 pick(items[1])
 assert(vim.fn.readfile(root .. '/file.txt')[1] == 'tip', 'stale picker applied a different stash')
-for _, key in ipairs({ 'mo', 'mt', 'mr', 'cos', 'coS', 'cZs', 'gy', 'a', 'gH', 'gD', 'gO' }) do assert(vim.fn.maparg(key, 'n', false, true).callback, key) end
-for _, key in ipairs({ 'co', 'ct', 'cr', 'A', 'P', '<Leader>cf', '<Leader>wd', 'gws' }) do assert(vim.fn.maparg(key, 'n') == '', 'retired key remains: ' .. key) end
+for _, key in ipairs({ 'mo', 'mt', 'mr', 'cos', 'coS', 'cZs', 'gy', 'a', 'A', 'gH', 'gD', 'gO' }) do assert(vim.fn.maparg(key, 'n', false, true).callback, key) end
+for _, key in ipairs({ 'co', 'ct', 'cr', 'P', '<Leader>cf', '<Leader>wd', 'gws' }) do assert(vim.fn.maparg(key, 'n') == '', 'retired key remains: ' .. key) end
 -- Exercise actual input and check the waiting policy independently of callback order.
 local diff_kind
 vim.keymap.set('n', 'dh', function() diff_kind = 'horizontal' end, { buffer = status, nowait = true })

@@ -2254,14 +2254,8 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true, desc = 'Reword commit or rename stash' })
 
       vim.keymap.set('n', 'A', function()
-        if is_cursor_in_stash_area() then
-          local r = get_stash_ref_at_cursor(b)
-          if r then vim.cmd('Git stash apply ' .. r); notify_repo_changed() end
-          return
-        end
         vim.cmd('Git commit --amend --no-edit')
-        notify_repo_changed()
-      end, { buffer = b, nowait = true, silent = true })
+      end, { buffer = b, nowait = true, silent = true, desc = 'Amend HEAD with staged changes' })
 
       vim.keymap.set('n', 'cl', function()
         vim.cmd('Gstash')
@@ -2508,7 +2502,7 @@ function M.setup(group)
         local sections = {}
         for row = 1, vim.api.nvim_buf_line_count(b) do
           local entry = status_renderer.entry_at(b, row)
-          if entry and not entry.header then sections[entry.section] = true end
+          if entry then sections[entry.section] = true end
         end
         return sections
       end
@@ -2698,14 +2692,18 @@ function M.setup(group)
 
       local function repository_action_group(context, health, current_operation)
         local actions = {}
+        local sections = available_change_sections()
+        local work_tree = utils.get_buf_work_tree(b)
+        if sections.staged and not sections.conflicted and not current_operation and work_tree
+          and vim.system({ 'git', '-C', work_tree, 'rev-parse', '--verify', 'HEAD' }, { text = true }):wait().code == 0 then
+          table.insert(actions, { key = 'A', label = 'Amend HEAD with staged changes' })
+        end
         if context.kind == 'repository' then
-          local sections = available_change_sections()
           if sections.staged then
             table.insert(actions, { key = 'U', label = 'Unstage all changes' })
             if not sections.conflicted then table.insert(actions, { key = 'cc', label = 'Commit staged changes' }) end
           end
           if sections.unstaged or sections.untracked then table.insert(actions, { key = 'S', label = 'Stage all changes' }) end
-          local work_tree = utils.get_buf_work_tree(b)
           if health and not current_operation and work_tree
             and vim.system({ 'git', '-C', work_tree, 'rev-parse', '--verify', 'HEAD' }, { text = true }):wait().code == 0 then
             table.insert(actions, { key = 'ca', label = 'Amend commit' })

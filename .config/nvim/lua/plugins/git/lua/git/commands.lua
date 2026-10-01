@@ -134,6 +134,11 @@ function M.git(opts)
     return require('git.features.status').open({ split = not opts.bang, tab = opts.bang })
   end
   if #args == 1 and args[1] == 'blame' then return require('git.features.blame').open() end
+  if #args == 3 and args[1] == 'commit' and vim.tbl_contains(args, '--amend') and vim.tbl_contains(args, '--no-edit') then
+    local patch, err = require('git.features.history_rewrite').index_patch(root)
+    if not patch then vim.notify(err, vim.log.levels.ERROR); return end
+    if patch == '' then return end
+  end
   -- A terminal preserves prompts, signing, hooks and Git's editor protocol.
   local sub = args[1]
   local explicit_message = vim.tbl_contains(args, '--no-edit') or vim.tbl_contains(args, '-m') or vim.tbl_contains(args, '--message') or vim.tbl_contains(args, '-F')

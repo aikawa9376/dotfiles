@@ -33,6 +33,7 @@ context. Magit's `<Space><Space>` panels retain their existing keys and layout.
 | `C` | Commit/ref information; Blame also uses this for metadata |
 | `gy` | Copy identifier: commit hash, ref, reflog/stash selector, file/worktree path, or PR URL; Visual log selections copy hashes |
 | `cw` | Reword commit, rename stash, or rename selected local branch |
+| `A` (Status) | Amend HEAD with the current stage; no staged difference does nothing, on any row |
 | `a` | Apply selected patch/stash or restore selected WIP snapshot; Status patch apply requires a commit or staged change |
 | `X` | Contextual discard/remove; Reflog offers Mixed / Hard / Cancel before resetting to the selected entry |
 | `L` / `B` | Existing Log / Branch entries; Branch also has `B` to open its list |
@@ -70,6 +71,15 @@ Status and Commit `R` preserve expanded diffs; use `<` to collapse explicitly.
 `d` waits for its `dd` / `dv` / `dh` / `ds` suffixes. Status also uses `dR` for
 outgoing-stack range-diff. The Commit message float saves through `:w`,
 `<C-s>`, or `ZZ`.
+
+Unchanged commit messages do not start stash/commit/rebase, including `cw`,
+the Commit message float and reword-with-index when the index is unchanged.
+Terminal message separator blank lines are ignored for this comparison.
+Plain `commit --amend --no-edit` (`A` / `ce`) also returns before committing
+when the index matches HEAD. Explicit author/date/signing and `--allow-empty`
+arguments retain Git's normal behavior. Status `?` lists `A` when staged changes
+can be amended. Stash operations retain their `cz` keys and the shared lowercase
+`a` apply action; uppercase `A` always refers to HEAD's staged amend.
 
 The old `bs` / `bS`, Reflog `B` / `y`, and Worktree `gs` remain compatibility
 aliases because the unchanged Magit layer calls them internally. They are omitted
@@ -495,6 +505,8 @@ The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`, `commit
 `history_edits` checks real move/drop/fixup operations, index contributions,
 dirty-state preservation, conflicts and rollback. `commit_patch` checks special
 paths, EOF, file creation/deletion, renames, historical Mixed removal and recovery.
+`history_noop` checks actual Status A/ce and unchanged message saves, including
+the absence of mutation commands and stable hashes, reflog and stash identity.
 `commands` checks actual Git mutations and object lifetimes; `lazy_loading` checks
 Lazy command registration and the active imports. `panel_help` checks long/wide-key alignment, colors, and action execution.
 `panel_keymaps` covers reset
