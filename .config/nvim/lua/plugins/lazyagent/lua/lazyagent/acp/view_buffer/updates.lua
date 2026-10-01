@@ -768,6 +768,10 @@ function M.new(ctx)
       end
       decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
       diff_view.decorate_diff_blocks(bufnr)
+      -- The incremental path has already decorated the new transcript. Keep
+      -- the layout cache current so the following BufEnter/WinEnter does not
+      -- normalize and decorate the whole history again just for its new length.
+      entry.transcript_count = transcript_line_count(bufnr)
       queue_markdown_rendering(bufnr)
       M.refresh_footer(bufnr)
       if should_follow_output(bufnr) then

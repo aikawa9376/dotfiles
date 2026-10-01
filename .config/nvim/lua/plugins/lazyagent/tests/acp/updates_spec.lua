@@ -39,6 +39,41 @@ function M.run()
     view.kill_pane(pane, session)
     vim.fn.delete(path)
   end
+
+  local path = vim.fn.tempname() .. "-focus.log"
+  local history = { "─ Assistant ─" }
+  for i = 2, 500 do history[i] = " reply " .. i end
+  vim.fn.writefile(history, path)
+  local pane, pane_state
+  view.create_pane({
+    transcript_path = path,
+    size = 12,
+    acp = { agent_name = "focus-test", source_winid = vim.api.nvim_get_current_win() },
+  }, function(id, state) pane, pane_state = id, state end)
+  assert(vim.wait(1000, function() return pane ~= nil end, 10), "focus pane created")
+  local session = { pane_id = pane, agent_name = "focus-test", transcript_path = path, view_state = {} }
+  view.on_session_created(session)
+  vim.wait(160)
+  vim.fn.writefile({ " appended reply" }, path, "a")
+  view.on_transcript_updated(session, " appended reply\n", "a")
+  assert(vim.wait(2000, function() return session.view_state.append_timer == nil end, 10), "append flushed")
+  assert(table.concat(vim.api.nvim_buf_get_lines(pane_state.bufnr, 0, -1, false), "\n")
+    :find("appended reply", 1, true), "latest response remains visible")
+
+  local get_lines = vim.api.nvim_buf_get_lines
+  local full_reads = 0
+  vim.api.nvim_buf_get_lines = function(buf, start_row, end_row, strict)
+    if buf == pane_state.bufnr and start_row == 0 and (end_row == -1 or end_row > 400) then
+      full_reads = full_reads + 1
+    end
+    return get_lines(buf, start_row, end_row, strict)
+  end
+  local ok, err = pcall(vim.api.nvim_set_current_win, pane_state.winid)
+  vim.api.nvim_buf_get_lines = get_lines
+  assert(ok, err)
+  assert(full_reads == 0, "entering after an incremental flush must not rebuild the decorated history")
+  view.kill_pane(pane, session)
+  vim.fn.delete(path)
 end
 
 return M

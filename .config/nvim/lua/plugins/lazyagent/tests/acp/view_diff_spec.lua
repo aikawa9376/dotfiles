@@ -99,6 +99,56 @@ function M.run()
   local again, changed_again = view.normalize_diff_display_lines(bufnr, repaired, 120, 0)
   assert(not changed_again and vim.deep_equal(again, repaired), "fence repair is idempotent")
 
+  -- Focus/scroll must not synchronously parse every offscreen injection in a
+  -- long history. Conceal still applies everywhere; colors follow the viewport.
+  local history = {}
+  for _ = 1, 400 do
+    vim.list_extend(history, { "```lua", 'local message = "' .. string.rep("long text ", 12) .. '"', "```", "" })
+  end
+  local lookups = {}
+  local viewport_ns = vim.api.nvim_create_namespace("lazyagent_acp_view_diff_viewport_spec")
+  local viewport_view = require("lazyagent.acp.view_diff").new({
+    diff_utils = {},
+    diff_ns = viewport_ns,
+    transcript_line_count = function() return #history end,
+    captures_at_pos = function(_, row)
+      lookups[row] = (lookups[row] or 0) + 1
+      return { { capture = "string", lang = "lua" } }
+    end,
+  })
+  local displayed = viewport_view.normalize_diff_display_lines(bufnr, history, 28, 0)
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, displayed)
+  vim.cmd("normal! ggzt")
+  vim.cmd("redraw")
+  viewport_view.decorate_diff_blocks(bufnr)
+  local first_count = vim.tbl_count(lookups)
+  assert(first_count > 0 and first_count < 40, "capture work is bounded by the viewport")
+  assert(lookups[#history - 3] == nil, "opening does not parse offscreen code")
+  local concealed = 0
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, viewport_ns, 0, -1, { details = true })) do
+    if mark[4].conceal == "" then concealed = concealed + 1 end
+  end
+  assert(concealed == 400, "syntax suffixes remain concealed throughout the history")
+  viewport_view.decorate_diff_blocks(bufnr)
+  for _, count in pairs(lookups) do assert(count == 1, "unchanged captures are reused") end
+
+  vim.cmd("normal! Gzt")
+  vim.cmd("redraw")
+  vim.api.nvim_exec_autocmds("CursorMoved", { buffer = bufnr })
+  assert(vim.wait(1000, function() return lookups[#history - 3] ~= nil end, 10),
+    "newly visible code gets its ellipsis color after a mouse/cursor or scroll event")
+  local marks_before = #vim.api.nvim_buf_get_extmarks(bufnr, viewport_ns, 0, -1, {})
+  vim.api.nvim_exec_autocmds("CursorMoved", { buffer = bufnr })
+  vim.wait(20)
+  assert(#vim.api.nvim_buf_get_extmarks(bufnr, viewport_ns, 0, -1, {}) == marks_before,
+    "repeated viewport refresh does not accumulate extmarks")
+
+  -- A text change invalidates colors even if the viewport has not moved.
+  local final_row = #history - 3
+  vim.api.nvim_buf_set_lines(bufnr, final_row, final_row + 1, false, { displayed[final_row + 1] })
+  vim.api.nvim_exec_autocmds("CursorMoved", { buffer = bufnr })
+  assert(vim.wait(1000, function() return lookups[final_row] == 2 end, 10), "changed text invalidates capture cache")
+
   package.loaded["render-markdown.state"] = original_render_markdown_state
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end

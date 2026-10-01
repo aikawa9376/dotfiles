@@ -32,6 +32,24 @@ physical display frame times, provider RSS, or Neovim native memory. Inspect max
 as well as p50: leaving headroom amortizes a limit rebuild but does not eliminate
 its individual latency.
 
+## Transcript focus with a pending reply
+
+```sh
+LAZYAGENT_BENCH_OUT=/tmp/lazyagent-view-focus.json \
+nvim --headless --clean -u NONE -l tests/bench/view_focus.lua
+```
+
+This requires installed Markdown and Lua parsers and uses a generated 4,950-line
+code history. It measures synchronous BufEnter/WinEnter processing when moving
+from the source window into an already visible transcript with a batched reply
+pending. Capture lookup counts distinguish viewport work from parsing old code
+throughout the history. Three entries cover the initial and subsequent visits;
+each checks that the pending response was flushed and retained. The fixture
+does not contact a provider or use user transcripts. This headless test does
+not send physical mouse input. For same-machine comparisons,
+`LAZYAGENT_FOCUS_BASELINE_DIR` may point to saved `view_diff.lua` and `updates.lua`
+modules from the previous implementation.
+
 ## Footer animation
 
 ```sh

@@ -7,6 +7,27 @@ function M.new(ctx)
   local truncated_code_rows = {}
   local captures_at_pos = ctx.captures_at_pos or vim.treesitter.get_captures_at_pos
   local util = require("lazyagent.util")
+  local ellipsis_refresh_pending = {}
+
+  local function visible_row_ranges(bufnr)
+    local ranges = {}
+    for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+      local info = vim.fn.getwininfo(win)[1]
+      if info then
+        local top = math.max(1, info.topline or 1)
+        local bottom = math.max(top, info.botline or top)
+        ranges[#ranges + 1] = { math.max(0, top - 21), bottom + 20 }
+      end
+    end
+    return ranges
+  end
+
+  local function row_is_visible(row, ranges)
+    for _, range in ipairs(ranges) do
+      if row >= range[1] and row < range[2] then return true end
+    end
+    return false
+  end
 
   local function session_for_agent(agent_name)
     return ctx.session_for_agent(agent_name)
@@ -331,7 +352,7 @@ function M.new(ctx)
     return "@" .. selected.capture .. suffix
   end
 
-  local function decorate_truncated_ellipses(bufnr)
+  local function decorate_truncated_ellipses(bufnr, force)
     local tracked_rows = truncated_code_rows[bufnr]
     if type(tracked_rows) ~= "table" then
       return
@@ -350,35 +371,87 @@ function M.new(ctx)
     end
 
     local line_count = vim.api.nvim_buf_line_count(bufnr)
+    local changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
+    local visible_ranges = visible_row_ranges(bufnr)
     for row, mark in pairs(tracked_rows) do
-      if row >= 0 and row < line_count and type(mark) == "table" then
+      local visible = row_is_visible(row, visible_ranges)
+      if row >= 0 and row < line_count and type(mark) == "table"
+        and (force or mark.decoration_tick ~= changedtick or (visible and mark.highlight_tick ~= changedtick)) then
         local line = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or {})[1] or ""
         local ellipsis_col = tonumber(mark.ellipsis_col)
         local suffix_len = math.max(0, tonumber(mark.syntax_suffix_len) or 0)
         local ellipsis_end_col = math.min(#line, (ellipsis_col or 0) + 3)
         if ellipsis_col and line:sub(ellipsis_col + 1, ellipsis_end_col) == "..." then
-          local hl_group = ellipsis_highlight_group(bufnr, row, ellipsis_col)
+          -- A capture lookup synchronously parses injections and visits the
+          -- language trees. Doing it for every old code line makes a pending
+          -- stream flush in BufEnter/WinEnter block mouse focus for seconds.
+          -- Resolve only the viewport and reuse colors until the text changes.
+          if visible and mark.highlight_tick ~= changedtick then
+            mark.hl_group = ellipsis_highlight_group(bufnr, row, ellipsis_col)
+            mark.highlight_tick = changedtick
+          end
+          local hl_group = mark.hl_group
           if hl_group then
-            pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
+            local ok, id = pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_col, {
+              id = mark.highlight_id,
               end_row = row,
               end_col = ellipsis_end_col,
               hl_group = hl_group,
               hl_mode = "combine",
               priority = 210,
             })
+            if ok then mark.highlight_id = id end
+          elseif mark.highlight_id then
+            pcall(vim.api.nvim_buf_del_extmark, bufnr, diff_ns, mark.highlight_id)
+            mark.highlight_id = nil
           end
           if suffix_len > 0 and ellipsis_end_col < #line then
-            pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_end_col, {
+            local ok, id = pcall(vim.api.nvim_buf_set_extmark, bufnr, diff_ns, row, ellipsis_end_col, {
+              id = mark.conceal_id,
               end_row = row,
               end_col = math.min(#line, ellipsis_end_col + suffix_len),
               conceal = "",
               priority = 209,
             })
+            if ok then mark.conceal_id = id end
           end
+          mark.decoration_tick = changedtick
         end
       end
     end
   end
+
+  local group = vim.api.nvim_create_augroup("LazyAgentACPDiffViewport" .. diff_ns, { clear = true })
+  vim.api.nvim_create_autocmd({ "WinScrolled", "BufWinEnter", "CursorMoved" }, {
+    group = group,
+    callback = function(args)
+      local buffers = { [args.buf] = true }
+      if args.event == "WinScrolled" then
+        for key in pairs(vim.v.event) do
+          local win = tonumber(key)
+          if win and vim.api.nvim_win_is_valid(win) then
+            buffers[vim.api.nvim_win_get_buf(win)] = true
+          end
+        end
+      end
+      for bufnr in pairs(buffers) do
+        if next(truncated_code_rows[bufnr] or {}) and not ellipsis_refresh_pending[bufnr] then
+          ellipsis_refresh_pending[bufnr] = true
+          vim.schedule(function()
+            ellipsis_refresh_pending[bufnr] = nil
+            if vim.api.nvim_buf_is_valid(bufnr) then decorate_truncated_ellipses(bufnr) end
+          end)
+        end
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("BufWipeout", {
+    group = group,
+    callback = function(args)
+      truncated_code_rows[args.buf] = nil
+      ellipsis_refresh_pending[args.buf] = nil
+    end,
+  })
 
   local function find_diff_block_at_row(bufnr, row)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
@@ -866,7 +939,7 @@ function M.new(ctx)
         end
       end
     end
-    decorate_truncated_ellipses(bufnr)
+    decorate_truncated_ellipses(bufnr, true)
   end
 
   return api
