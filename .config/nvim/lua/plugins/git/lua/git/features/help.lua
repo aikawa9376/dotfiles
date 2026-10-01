@@ -27,7 +27,9 @@ end
 ---Show longer key guides as one readable column, independent of action-menu keys.
 ---@param title string
 ---@param entries string[]
-function M.show_text(title, entries)
+---@param opts? {headings?: table<string, boolean>}
+function M.show_text(title, entries, opts)
+  opts = opts or {}
   local lines = { title, '' }
   vim.list_extend(lines, entries or {})
   vim.list_extend(lines, { '', 'q / <Esc>  close' })
@@ -51,8 +53,17 @@ function M.show_text(title, entries)
   })
   vim.wo[win].wrap, vim.wo[win].linebreak, vim.wo[win].breakindent = true, true, true
   vim.wo[win].breakindentopt = 'shift:2'
-  vim.api.nvim_buf_set_extmark(buf, vim.api.nvim_create_namespace('git_help'), 0, 0,
+  local ns = vim.api.nvim_create_namespace('git_help')
+  vim.api.nvim_buf_set_extmark(buf, ns, 0, 0,
     { end_col = #title, hl_group = 'Title' })
+  for row, line in ipairs(lines) do
+    local key = line:match('^(.-)%s%s+')
+    if line == 'Visual selections' or (opts.headings or {})[line] then
+      vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0, { end_col = #line, hl_group = 'Type' })
+    elseif key then
+      vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0, { end_col = #key, hl_group = 'Special' })
+    end
+  end
   local function close() if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end end
   for _, key in ipairs({ 'q', '<Esc>' }) do
     vim.keymap.set('n', key, close, { buffer = buf, silent = true, nowait = true })

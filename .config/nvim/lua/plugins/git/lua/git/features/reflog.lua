@@ -279,7 +279,7 @@ function M.setup(group)
       vim.opt_local.cursorline = true
       refresh_reflog_list(b)
 
-      vim.keymap.set('n', 'g?', show_reflog_help,
+      vim.keymap.set('n', '?', show_reflog_help,
         { buffer = b, nowait = true, silent = true, desc = 'Help' })
       vim.keymap.set('n', ']s', function() move_same_hash(b, 1) end,
         { buffer = b, nowait = true, silent = true, desc = 'Next visit to same reflog destination' })
@@ -359,30 +359,34 @@ function M.setup(group)
         end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Create rescue branch' })
 
-      vim.keymap.set('n', '<Leader>R', function()
+      vim.keymap.set('n', 'X', function()
         local entry = entry_at(b, vim.fn.line('.'))
         local work_tree = utils.get_buf_work_tree(b)
         if not entry or not work_tree then return end
-        local branch_result = run(work_tree, { 'branch', '--show-current' })
-        local branch = vim.trim(branch_result.stdout or '')
-        if branch == '' then branch = 'detached HEAD' end
-        local dirty = run(work_tree, { 'status', '--porcelain' })
-        local dirty_note = vim.trim(dirty.stdout or '') ~= '' and '\nWorking tree changes will be kept; index will be reset.' or ''
+        local branch = vim.trim(run(work_tree, { 'branch', '--show-current' }).stdout or '')
+        local head = vim.trim(run(work_tree, { 'rev-parse', 'HEAD' }).stdout or '')
         local message = table.concat({
-          ('Reset %s to %s (%s)?'):format(branch, entry.selector, entry.short_hash),
+          ('Reset %s to %s (%s)?'):format(branch ~= '' and branch or 'detached HEAD', entry.selector, entry.short_hash),
           'Effect: ' .. reset_effect(work_tree, entry.hash),
-          'Mode: git reset --mixed' .. dirty_note,
+          'Mixed: reset HEAD and index; keep worktree files.',
+          'Hard: reset HEAD, index and tracked worktree files.',
+          'Neither mode restores historical uncommitted edits.',
         }, '\n')
-        if vim.fn.confirm(message, '&Reset\n&Cancel', 2) ~= 1 then return end
-        local result = run(work_tree, { 'reset', '--mixed', entry.hash })
-        if result.code ~= 0 then
-          vim.notify(vim.trim(result.stderr or 'Reset failed'), vim.log.levels.ERROR)
-          return
+        local choice = vim.fn.confirm(message, '&Mixed\n&Hard\n&Cancel', 3)
+        if choice ~= 1 and choice ~= 2 then return end
+        if vim.trim(run(work_tree, { 'rev-parse', 'HEAD' }).stdout or '') ~= head
+          or vim.trim(run(work_tree, { 'branch', '--show-current' }).stdout or '') ~= branch then
+          vim.notify('HEAD changed; reopen the reset confirmation', vim.log.levels.WARN); return
         end
-        vim.notify('Reset to ' .. entry.selector .. ' (' .. entry.short_hash .. ')', vim.log.levels.INFO)
+        local mode = choice == 1 and 'mixed' or 'hard'
+        local result = run(work_tree, { 'reset', '--' .. mode, entry.hash })
+        if result.code ~= 0 then
+          vim.notify(vim.trim(result.stderr or 'Reset failed'), vim.log.levels.ERROR); return
+        end
+        vim.notify('Reset (' .. mode .. ') to ' .. entry.selector .. ' (' .. entry.short_hash .. ')', vim.log.levels.INFO)
         utils.fire_fugitive_changed({ work_tree = work_tree })
         refresh_reflog_list(b)
-      end, { buffer = b, nowait = true, silent = true, desc = 'Reset --mixed to destination' })
+      end, { buffer = b, nowait = true, silent = true, desc = 'Reset HEAD to selected destination (choose Mixed / Hard)' })
 
       vim.keymap.set('n', 'R', function() refresh_reflog_list(b) end,
         { buffer = b, nowait = true, silent = true, desc = 'Reload reflog' })
@@ -405,6 +409,7 @@ function M.setup(group)
           commands.close_commit_info_float()
         end,
       })
+      require('git.features.panel_keys').configure(b)
       utils.setup_repo_refresh(buf_group, b, function(bufnr) refresh_reflog_list(bufnr) end,
         { visible_only = true })
     end,

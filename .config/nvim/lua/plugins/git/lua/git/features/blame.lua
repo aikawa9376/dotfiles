@@ -317,8 +317,8 @@ local function preview(s)
 end
 local function history_info(s, refresh)
   local f = s.history[s.index]
-  local revision = f and (f.pinned_commit or f.revision)
-  if not revision or (f.pinned_commit and f.pin_info_hidden) then
+  local revision = f and (f.pinned_commit or f.info_commit or f.revision)
+  if not revision or f.info_hidden then
     if valid(s.info_win) then vim.api.nvim_win_close(s.info_win, true) end
     s.info_win = nil
     return
@@ -645,9 +645,10 @@ local function request(s, path, revision, line, contents, initial, replace_index
     if replace_index then
       local replaced = s.history[replace_index]
       f.code_buf, f.code_view, f.panel_view = replaced.code_buf, replaced.code_view, replaced.panel_view
+      f.info_commit, f.info_hidden = replaced.info_commit, replaced.info_hidden
       for _, entry in ipairs(f.rows) do
         if entry.commit == replaced.pinned_commit then
-          f.pinned_commit, f.pin_info_hidden = replaced.pinned_commit, replaced.pin_info_hidden
+          f.pinned_commit = replaced.pinned_commit
           break
         end
       end
@@ -821,65 +822,75 @@ bind = function(s, b, code)
   map('gk', function() if s.preview == 'message' then s.preview = nil else s.preview = 'message' end; close_float(s); preview(s) end)
   map('<C-p>', function() if s.preview == 'diff' then s.preview = nil else s.preview = 'diff' end; close_float(s); preview(s) end)
   map('gd', function() M.toggle_dim_for_buffer(b) end)
-  map('f', function()
+  local function toggle_uniform()
     s.uniform_commit_style = not s.uniform_commit_style
     highlight_selected(s)
     tell(s.uniform_commit_style and 'Uniform blame highlighting enabled' or 'Selected commit highlighting enabled')
-  end)
-  map('gC', function()
-    local f = s.history[s.index]
-    if not f or not f.pinned_commit then tell('Pin a commit with gd first'); return end
-    f.pin_info_hidden = not f.pin_info_hidden
-    history_info(s)
+  end
+  map('gf', toggle_uniform)
+  map('C', function()
+    local r, f = current(s)
+    if not f then return end
+    f.info_hidden = valid(s.info_win)
+    if not f.info_hidden and not f.pinned_commit then
+      if not r then return end
+      f.info_commit = r.commit
+    end
+    history_info(s, true)
   end)
   if code then return end
-  map({ 'q', 'gq' }, function() cleanup(s) end)
+  map('q', function() cleanup(s) end)
   map({ '-', 's', 'u' }, function() navigate(s) end)
   map({ '~', '<BS>' }, function() navigate(s, true) end)
   map('P', function() if vim.v.count == 0 then tell('Use ~, or a parent number such as 2P'); else navigate(s, true, true) end end)
   map({ '<CR>', '<2-LeftMouse>', 'i' }, function() open_commit(s, 'tab') end)
   map('o', function() open_commit(s, 'split') end)
   map('O', function() open_commit(s, 'tab') end)
-  map('p', function() s.preview = 'diff'; close_float(s); preview(s) end)
   map('R', function() refresh_worktree(s) end)
-  map('c', function()
+  local function toggle_recency()
     vim.g.fugitive_blame_gradient_mode = vim.g.fugitive_blame_gradient_mode == 'absolute' and 'relative' or 'absolute'
     local f = s.history[s.index]; if f then paint(s, f); highlight_selected(s) end
-  end)
-  map('y', function() local r = current(s); if r then vim.fn.setreg('"', r.commit); vim.fn.setreg('+', r.commit) end end)
-  map('.', function() local r = current(s); if r then vim.fn.feedkeys(':' .. (r.uncommitted and 'HEAD' or r.commit) .. ' ', 'n') end end)
-  for key, width in pairs({ A = 0, C = 10, D = 27 }) do
-    local size = width
-    map(key, function()
-      s.width_override = size > 0 and (size + vim.v.count) or nil
-      fit_width(s); history_info(s); preview(s)
-    end)
   end
+  map('gy', function() local r = current(s); if r then vim.fn.setreg('"', r.commit); vim.fn.setreg('+', r.commit) end end)
+  map('gY', function() local r = current(s); if r then vim.fn.feedkeys(':' .. (r.uncommitted and 'HEAD' or r.commit) .. ' ', 'n') end end)
+  map('gD', function()
+    local function width(size)
+      if not s.active then return end
+      s.width_override = size
+      fit_width(s); history_info(s); preview(s)
+    end
+    require('git.features.action_menu').show('Blame display settings', { { title = 'Display', actions = {
+      { key = 'a', label = 'Fit full content', callback = function() width(nil) end },
+      { key = 'h', label = 'Fit hash column', callback = function() width(10) end },
+      { key = 'd', label = 'Fit date column', callback = function() width(27) end },
+      { key = 'c', label = 'Toggle absolute / relative recency', callback = toggle_recency },
+      { key = 'f', label = 'Toggle uniform highlighting', callback = toggle_uniform },
+    } } })
+  end)
   for key, direction in pairs({ [')'] = 1, ['('] = -1 }) do
     local step = direction
     map(key, function() move_block(step, false) end)
   end
-  map({ 'g?', '<F1>' }, function() require('git.features.help').show_text('Git blame', {
+  map('?', function() require('git.features.help').show_text('Git blame', {
     '- / s / u    blame at the selected commit',
     '~ / <BS>     blame before the change (count supported)',
     '{count}P     blame a numbered parent',
     '<C-o> / <C-i>  back / forward (code and blame together)',
     'gk           toggle following commit message',
-    '<C-p> / p    toggle / open following diff preview',
+    '<C-p>        toggle following diff preview',
     '<CR> / i     inspect commit in a tab (q returns)',
     'o / O        open commit in split / tab',
     'd            compare before/after the change',
-    'f            toggle uniform selected-row styling (no bold)',
+    'gD           display settings: width, recency, uniform styling',
+    'gf           toggle uniform highlighting',
     'gd           pin/unpin commit and dim other code lines',
-    'gC           hide/show the dimmed commit info',
-    'c            set absolute / relative GitHeatmap mode',
     '[[ / ]]      previous / next block; while dimmed, jump between same-hash blocks',
     '( / )        previous / next commit block (cursor navigation)',
-    'y            copy full hash',
-    '.            put hash on command line',
-    'A / C / D    full / hash / date panel width',
+    'gy           copy selected commit full hash',
+    'gY           put hash on command line',
+    'C            toggle commit info (dimmed pin / cursor commit)',
     'R            refresh working-tree blame',
-    'q / gq       close and restore original file',
+    'q            close and restore original file',
   }) end)
   map('d', function()
     local r, f = current(s); if not r then return end
@@ -938,7 +949,7 @@ function M.toggle_dim_for_buffer(bufnr)
       local r = current(s)
       if not r then return false end
       if f.pinned_commit == r.commit then f.pinned_commit = nil else f.pinned_commit = r.commit end
-      f.pin_info_hidden = false
+      f.info_commit, f.info_hidden = nil, false
       sync_dim(s)
       highlight_selected(s)
       history_info(s, true)
@@ -953,7 +964,7 @@ function M.clear_dim_for_buffer(bufnr)
     local f = s.history[s.index]
     if s.active and f and (f.code_buf == bufnr or s.buf == bufnr) and f.pinned_commit then
       f.pinned_commit = nil
-      f.pin_info_hidden = false
+      f.info_commit, f.info_hidden = nil, false
       sync_dim(s)
       highlight_selected(s)
       history_info(s, true)

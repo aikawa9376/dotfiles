@@ -1150,6 +1150,7 @@ local function show_branch_help()
     'm<Space>    merge branch (input)',
     'r<Space>    stash -> fetch -> rebase (input)',
     '<C-Space>   toggle Flog graph',
+    'q           close panel',
   })
 end
 
@@ -1214,9 +1215,12 @@ function M.setup(group)
       local buf_group = vim.api.nvim_create_augroup('fugitive_branch_buf_' .. bufnr, { clear = true })
       require('git.features.magit_actions').attach(bufnr)
 
-      vim.keymap.set('n', 'g?', function()
+      vim.keymap.set('n', '?', function()
         show_branch_help()
       end, { buffer = bufnr, silent = true, desc = "Help" })
+      vim.keymap.set('n', 'q', function()
+        require('utilities').smart_close()
+      end, { buffer = bufnr, nowait = true, silent = true, desc = 'Close branch list' })
       for key, filter in pairs({ ga = 'all', gl = 'local_', gr = 'remote', gt = 'tags' }) do
         vim.keymap.set('n', key, function()
           set_branch_filter(bufnr, filter)
@@ -1451,6 +1455,7 @@ function M.setup(group)
       vim.opt_local.relativenumber = false
       vim.opt_local.signcolumn = 'no'
 
+      require('git.features.panel_keys').configure(bufnr)
       -- Setup highlighting for branch names
       apply_branch_highlight(bufnr)
 

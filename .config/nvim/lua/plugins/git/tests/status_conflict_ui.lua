@@ -124,17 +124,20 @@ press('o')
 
 local merge_row = assert(row_for('^Merge:'))
 assert(not row_for('^Current:'), 'merge current summary still occupies a second row')
+vim.api.nvim_win_set_cursor(0, { assert(row_for('^UU changed%.txt$')), 0 })
+press('?')
+local conflict_help = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+assert(conflict_help:find('mo', 1, true) and conflict_help:find('mt', 1, true) and conflict_help:find('mr', 1, true),
+  'conflict help lost migrated keys')
+assert(not conflict_help:find('Reword commit', 1, true) and not conflict_help:find('Apply selected stash', 1, true),
+  'conflict help includes unrelated actions')
+press('q')
 vim.api.nvim_win_set_cursor(0, { merge_row, 0 })
-local groups
-require('git.features.action_menu').show = function(_, value) groups = value end
-press('g?')
-local has_continue = false
-for _, group in ipairs(groups or {}) do
-  for _, action in ipairs(group.actions) do
-    if action.key == 'rr' then has_continue = true end
-  end
-end
-assert(has_continue, 'merged Current header lost operation actions')
+press('?')
+local guide = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+assert(guide:find('rr', 1, true) and guide:find('Continue', 1, true),
+  'merged operation heading lost continue help')
+press('q')
 local operation = require('git.features.operation')
 for kind, title in pairs({ cherry_pick = 'Cherry-pick', revert = 'Revert', rebase = 'Rebase' }) do
   local rendered = operation.status_lines({ kind = kind, label = title .. ' in progress',

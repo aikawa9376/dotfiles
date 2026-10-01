@@ -60,6 +60,8 @@ assert(line_change and line_change.first > 0 and line_change.old_end < closed_co
   'opening one diff should replace only its lines')
 assert(text():find('-two', 1, true) and text():find('+changed', 1, true))
 assert(api.entry_at(b, find('+changed')).path == 'a file.txt')
+press('R')
+assert(text():find('-two', 1, true) and text():find('+changed', 1, true), 'R collapsed an expanded commit diff')
 local expanded_tick = vim.api.nvim_buf_get_changedtick(b)
 focus('M a file.txt'); press('>')
 assert(vim.api.nvim_buf_get_changedtick(b) == expanded_tick, 'showing an open diff must not redraw it')
@@ -130,7 +132,7 @@ local buffers = {}
 for _, win in ipairs(wins) do buffers[#buffers + 1] = table.concat(vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(win), 0, -1, false), '\n') end
 assert(vim.tbl_contains(buffers, 'one\ntwo') and vim.tbl_contains(buffers, 'one\nchanged'))
 vim.cmd('tabclose'); vim.api.nvim_set_current_buf(b)
-for _, key in ipairs({ 'X', 'A', 'cw', 'gA', 'C', 'O', 'p', '~', 'gf', 'gq', '<C-y>', '<C-Space>', 'gp', 'q', 'R', 'g?' }) do
+for _, key in ipairs({ 'X', 'A', 'cw', 'gH', 'gD', 'C', 'O', 'p', '~', 'gf', 'gq', 'gy', '<C-Space>', 'gp', 'q', 'R', '?' }) do
   assert(vim.fn.maparg(key, 'n') ~= '', 'missing inherited action: ' .. key)
 end
 local tip_buf = assert(api.open({ work_tree = root, revision = tip }))

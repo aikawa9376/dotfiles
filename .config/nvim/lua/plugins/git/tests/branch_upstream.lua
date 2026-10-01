@@ -56,7 +56,7 @@ vim.fn.input = function(p, d, c)
   prompt, default, completion = p, d, c
   return 'origin/main'
 end
-press('bu')
+press('cou')
 vim.fn.input = input
 assert(prompt == 'Upstream for feature: ' and default == ''
   and completion == 'customlist,v:lua.fugitive_upstream_completion',
@@ -71,23 +71,23 @@ vim.fn.input = function(p, d, c)
   prompt, default, completion = p, d, c
   return 'main'
 end
-press('bu')
+press('cou')
 vim.fn.input = input
 assert(default == 'origin/main' and git({ 'rev-parse', '--abbrev-ref', 'feature@{upstream}' }) == 'main',
   'set upstream did not replace an existing upstream')
 
 select_branch('feature')
-press('bU')
+press('coU')
 local _, missing = git({ 'rev-parse', '--abbrev-ref', 'feature@{upstream}' }, true)
 assert(missing.code ~= 0, 'unset upstream kept the tracking branch')
 assert(not (vim.api.nvim_buf_get_lines(b, row_for('feature') - 1, row_for('feature'), false)[1] or '')
   :find('[main]', 1, true), 'branch panel did not refresh after clearing upstream')
-press('bU')
+press('coU')
 assert(git({ 'branch', '--show-current' }) == 'main', 'no-op unset changed branches')
 
 select_branch('feature')
 vim.fn.input = function() return 'missing-ref' end
-press('bu')
+press('cou')
 vim.fn.input = input
 _, missing = git({ 'rev-parse', '--abbrev-ref', 'feature@{upstream}' }, true)
 assert(missing.code ~= 0, 'invalid upstream changed branch configuration')
@@ -95,17 +95,17 @@ assert(missing.code ~= 0, 'invalid upstream changed branch configuration')
 select_branch('origin/main')
 local called = false
 vim.fn.input = function() called = true; return 'main' end
-press('bu')
+press('cou')
 vim.fn.input = input
 assert(not called, 'remote branch was accepted for upstream configuration')
 assert(git({ 'branch', '--show-current' }) == 'main')
 
 select_branch('feature')
 vim.fn.input = function() return 'origin/main' end
-press('bu')
+press('cou')
 vim.fn.input = input
 git({ 'update-ref', '-d', 'refs/remotes/origin/main' })
-press('bU')
+press('coU')
 local _, stale = git({ 'config', '--get', 'branch.feature.merge' }, true)
 assert(stale.code ~= 0, 'unset did not clear an upstream whose remote ref disappeared')
 

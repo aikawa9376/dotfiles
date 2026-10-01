@@ -349,11 +349,19 @@ local function open_edit_commit_float(commit, origin_buf, view_state, opts)
     style = 'minimal', border = 'single', title = ' Amend commit ', title_pos = 'center',
   })
 
-  -- Keymaps: 'q' and <Esc> will trigger the close-with-prompt flow. <Leader>a still triggers amend directly.
+  -- Closing prompts for the draft; explicit saves use the same captured commit target.
   vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', 'q', [[:lua require('git.features.commit_actions')._close_edit_float()<CR>]],
     { noremap = true, silent = true, nowait = true })
   vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', '<Esc>', [[:lua require('git.features.commit_actions')._close_edit_float()<CR>]], { noremap = true, silent = true })
-  vim.api.nvim_buf_set_keymap(edit_float_buf, 'n', '<Leader>a', [[:lua require('git.features.commit_actions')._do_amend_from_buffer()<CR>]], { noremap = true, silent = true })
+  vim.api.nvim_buf_set_name(edit_float_buf, 'git-commit-message://' .. work_tree .. '//' .. commit)
+  vim.bo[edit_float_buf].buftype = 'acwrite'
+  local save_buf = edit_float_buf
+  local function save() M._do_amend_from_buffer(save_buf) end
+  vim.keymap.set({ 'n', 'i' }, '<C-s>', save, { buffer = edit_float_buf, silent = true, desc = 'Save commit message' })
+  vim.keymap.set('n', 'ZZ', save, { buffer = edit_float_buf, silent = true, desc = 'Save commit message' })
+  vim.api.nvim_create_autocmd('BufWriteCmd', { buffer = edit_float_buf, callback = function(ev)
+    M._do_amend_from_buffer(ev.buf)
+  end })
 
   -- Store state for the buffer via buffer variable
   vim.b[edit_float_buf].amend_target = commit

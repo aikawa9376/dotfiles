@@ -602,7 +602,7 @@ local function attach(s)
     end
     close_inspection()
   end)
-  map({ 'g?', '?' }, function()
+  map('?', function()
     require('git.features.help').show_text('Commit view', {
       'Message: edit directly; :w rewrites the displayed commit (and descendants)',
       'A / cw   edit message',
@@ -634,6 +634,20 @@ local function attach(s)
       'Normal text editing keys retain their meaning inside the message.',
     })
   end)
+  map('R', function()
+    if clean_action(s) then replace_model(s, s.model.hash) end
+  end, { native = true, desc = 'Refresh commit, preserving expanded files' })
+  require('git.features.panel_keys').configure(b, { context = function()
+    local entry, info = M.entry_at(b, vim.fn.line('.'))
+    if entry then return { kind = 'commit_patch', path = entry.path,
+      label = entry.path .. (info and info.patch_row and ' (diff)' or ''),
+      in_hunk = info and info.patch_row ~= nil, commit = s.model.hash } end
+    return { kind = 'commit', commit = s.model.hash, label = s.model.hash:sub(1, 7) }
+  end, guide = { '', 'Message: edit normally; :w rewrites this commit and descendants.',
+    'X in a diff removes selected changes (Hard / Mixed); a / v apply / reverse.',
+    ']m / [m files; ]c / [c hunks; ]] / [[ move and expand.',
+    '~ parent; p previous file commit; gp compare against a merge parent.',
+    'Normal editing keys retain their meaning inside the message.' } })
   local group = vim.api.nvim_create_augroup('FugitiveCommitView' .. b, { clear = true })
   vim.api.nvim_create_autocmd('BufWriteCmd', { group = group, buffer = b, callback = function(ev)
     local name = buffer_name(s.model.root, s.model.hash, s.view_id)

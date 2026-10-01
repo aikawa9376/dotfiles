@@ -83,44 +83,37 @@ press('gU')
 assert(vim.api.nvim_get_current_line():match('new%.txt$'), 'gU did not focus untracked entry')
 press('gu')
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'gu did not focus unstaged entry')
+press('o')
+vim.fn.writefile({ 'one', 'two', 'three' }, root .. '/sample.txt')
+press('R')
+assert(vim.wait(5000, function()
+  return table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n'):find('+three', 1, true) ~= nil
+end, 20), 'R did not refresh the expanded status diff')
+assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'R changed the selected file')
+press('<')
 local syncs = 0
 require('git.features.worktree').sync_current_worktree_to_primary = function() syncs = syncs + 1 end
 press('gs')
 assert(vim.api.nvim_get_current_line():match('staged%.txt$') and syncs == 0, 'gs should only navigate to staged')
-press('gws')
-assert(syncs == 1, 'gws did not invoke worktree sync')
+press('cZs')
+assert(syncs == 1, 'cZs did not invoke worktree sync')
 assert(vim.fn.maparg('gw', 'n') == '', 'gw should not have a competing mapping')
 press('gu')
 local prompt
 vim.ui.select = function(_, opts) prompt = opts.prompt end
 press('gi')
 assert(prompt == 'Index flag for sample.txt:', 'gi did not open index flag management')
-local groups
-require('git.features.action_menu').show = function(_, value) groups = value end
-press('g?')
-local actions = {}
-for _, group in ipairs(groups) do
-  for _, action in ipairs(group.actions) do actions[action.key] = action.label end
+press('?')
+local guide = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+for _, key in ipairs({ 'gi', 'gy', 'I', 'd', 'X', 'gD', 'R' }) do
+  assert(guide:find(key, 1, true), 'help omits ' .. key)
 end
-assert(actions.gu == 'Go to unstaged changes')
-assert(actions.gU == 'Go to untracked files')
-assert(actions.gi == 'Manage update-index flags')
-assert(actions.gs == 'Go to staged changes')
-assert(actions.gm == 'Go to unmerged paths' and actions.gp == 'Go to commits')
-vim.bo[b].modifiable = true
-vim.bo[b].readonly = false
-vim.api.nvim_buf_set_lines(b, -1, -1, false, { '', 'Worktrees (1)' })
-vim.bo[b].modifiable = false
-vim.bo[b].readonly = true
-vim.api.nvim_win_set_cursor(0, { vim.api.nvim_buf_line_count(b), 0 })
-press('g?')
-local sync_key
-for _, group in ipairs(groups) do
-  for _, action in ipairs(group.actions) do
-    if action.label == 'Sync current worktree to primary' then sync_key = action.key end
-  end
-end
-assert(sync_key == 'gws', 'worktree help retained old sync key')
+assert(not guide:find('gws', 1, true), 'help retained old worktree sync key')
+assert(not guide:find('Choose ours', 1, true) and not guide:find('Reword commit', 1, true)
+  and not guide:find('Go to unmerged', 1, true), 'file help includes unrelated actions')
+assert(vim.bo.filetype == 'fugitiveactionmenu' and vim.api.nvim_buf_line_count(0) <= 26,
+  'file help should be a compact action menu')
+press('q')
 -- A queued WinEnter restore must not undo the new opening position.
 press('gU')
 press('q')

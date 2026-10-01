@@ -23,10 +23,10 @@ local name = vim.api.nvim_buf_get_name(b)
 local function press(key) assert(vim.fn.maparg(key, 'n', false, true).callback, key)() end
 local original_columns = vim.o.columns
 vim.o.columns = 62
-press('g?')
+press('?')
 local guide = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-assert(guide[1] == 'Commit view' and vim.wo.wrap and vim.api.nvim_win_get_width(0) <= 58)
-assert(vim.tbl_contains(guide, 'gA       message float') and vim.tbl_contains(guide, 'gf       worktree file'))
+assert(guide[1] == 'Git commit' and vim.wo.wrap and vim.api.nvim_win_get_width(0) <= 58)
+assert(table.concat(guide, '\n'):find('gH', 1, true) and table.concat(guide, '\n'):find('Open worktree file', 1, true))
 assert(not table.concat(guide, '\n'):find('edit message     gA', 1, true), 'help must not combine actions into columns')
 press('q')
 assert(vim.api.nvim_get_current_buf() == b)

@@ -25,7 +25,13 @@ function M.show(title, groups, opts)
   vim.bo[buf].swapfile = false
   vim.bo[buf].filetype = 'fugitiveactionmenu'
 
-  local lines, actions_by_row, headings = {}, {}, {}
+  local lines, actions_by_row, headings, key_ranges = {}, {}, {}, {}
+  local key_width = 0
+  for _, group in ipairs(groups) do
+    for _, action in ipairs(group.actions) do
+      key_width = math.max(key_width, vim.fn.strdisplaywidth(action.display_key or action.key))
+    end
+  end
   table.insert(lines, title)
   if opts.context and opts.context ~= '' then table.insert(lines, opts.context) end
   table.insert(lines, '')
@@ -35,7 +41,10 @@ function M.show(title, groups, opts)
     for _, action in ipairs(group.actions) do
       if action.enabled == nil then action.enabled = true end
       local marker = action.enabled and ' ' or '·'
-      table.insert(lines, ('%s %-10s %s'):format(marker, action.display_key or action.key, action.label))
+      local key = action.display_key or action.key
+      table.insert(lines, marker .. ' ' .. key
+        .. string.rep(' ', key_width - vim.fn.strdisplaywidth(key) + 2) .. action.label)
+      key_ranges[#lines] = { first = #marker + 1, last = #marker + 1 + #key }
       actions_by_row[#lines] = action
     end
     table.insert(lines, '')
@@ -63,6 +72,10 @@ function M.show(title, groups, opts)
   for row, action in pairs(actions_by_row) do
     if not action.enabled then
       vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0, { end_col = #lines[row], hl_group = 'Comment' })
+    else
+      local range = key_ranges[row]
+      vim.api.nvim_buf_set_extmark(buf, ns, row - 1, range.first,
+        { end_col = range.last, hl_group = 'Special' })
     end
   end
 
@@ -84,6 +97,7 @@ function M.show(title, groups, opts)
         { buffer = buf, nowait = true, silent = true })
     end
   end
+  return buf, win
 end
 
 return M

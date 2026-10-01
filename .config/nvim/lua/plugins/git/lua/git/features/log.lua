@@ -450,7 +450,7 @@ function M.setup(group)
       vim.opt_local.list = false
       vim.opt_local.tabstop = 1
 
-      vim.keymap.set('n', 'g?', function()
+      vim.keymap.set('n', '?', function()
         show_log_help()
       end, { buffer = ev.buf, silent = true, desc = "Help" })
       vim.keymap.set('n', 'gx', function()
@@ -906,6 +906,11 @@ function M.setup(group)
         end
       end, { buffer = ev.buf, silent = true, desc = "Open commit in tab" })
 
+      vim.keymap.set('n', 'a', function()
+        local commit = get_commit_at_line(ev.buf, vim.fn.line('.'))
+        if commit then vim.cmd('GitApply ' .. commit) end
+      end, { buffer = ev.buf, silent = true, desc = 'Apply selected commit patch to worktree' })
+      require('git.features.panel_keys').configure(ev.buf)
       -- Clean up float window on unload
       vim.api.nvim_create_autocmd('BufUnload', {
         buffer = ev.buf,

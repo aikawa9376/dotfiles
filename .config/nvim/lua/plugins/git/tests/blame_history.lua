@@ -64,8 +64,12 @@ local warnings = {}; local notify = vim.notify; vim.notify = function(msg) warni
 press('~'); assert(#warnings == 1 and revision() == base, 'root parent must not replace either pane')
 vim.notify = notify
 press('<C-o>'); assert(revision() == merge)
-press('C'); assert(vim.api.nvim_win_get_width(panel) == 11)
-press('A'); assert(vim.api.nvim_win_get_width(panel) > 10)
+local function display(key)
+  press('gD')
+  press(key)
+end
+display('h'); assert(vim.api.nvim_win_get_width(panel) == 11)
+display('a'); assert(vim.api.nvim_win_get_width(panel) > 10)
 press('d')
 assert(vim.wo.diff and #vim.api.nvim_tabpage_list_wins(0) == 2)
 assert(vim.api.nvim_get_current_line() == 'merged line')

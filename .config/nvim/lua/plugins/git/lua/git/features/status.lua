@@ -1665,32 +1665,40 @@ function M.setup(group)
         else vim.notify("No operation to abort.", vim.log.levels.WARN) end
       end
 
-      local function status_git_prefix()
-        local work_tree = utils.get_buf_work_tree(b)
-        return work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or nil
-      end
-
       local function rename_stash_at_cursor(r)
-        local line = vim.api.nvim_get_current_line()
-        local current_msg = line:match('^%s*stash@%{%d+%}:%s*(.*)') or ""
-        vim.ui.input({ prompt = 'New name for ' .. r .. ': ', default = current_msg }, function(input)
-          if not input or input == '' or input == current_msg then return end
-          local git = status_git_prefix()
-          if not git then
-            vim.notify('Not in a git repository', vim.log.levels.WARN)
-            return
-          end
-          local hash = vim.fn.trim(vim.fn.system(git .. 'rev-parse ' .. vim.fn.shellescape(r)))
-          if vim.v.shell_error ~= 0 then return end
-          vim.fn.system(git .. 'stash drop ' .. vim.fn.shellescape(r))
-          vim.fn.system(git .. 'stash store -m ' .. vim.fn.shellescape(input) .. ' ' .. vim.fn.shellescape(hash))
-          notify_repo_changed()
-        end)
+        require('git.features.stash').rename(b, r)
       end
 
-      local function stash_target_ref()
-        local count = math.max(vim.v.count, 0)
-        return 'stash@{' .. tostring(count) .. '}'
+      local function with_stash_target(callback)
+        local win = vim.api.nvim_get_current_win()
+        local target = vim.v.count > 0 and ('stash@{' .. vim.v.count .. '}')
+          or get_stash_ref_at_cursor(b)
+        local function use(ref)
+          if not ref or not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= b then return end
+          vim.api.nvim_set_current_win(win)
+          callback(ref)
+        end
+        if target then use(target); return end
+        local choices = utils.get_stash_list(utils.get_buf_work_tree(b))
+        if #choices == 0 then vim.notify('No stashes found', vim.log.levels.INFO); return end
+        local root = utils.get_buf_work_tree(b)
+        local identities = {}
+        local function hash(ref)
+          local result = vim.system({ 'git', '-C', root, 'rev-parse', '--verify', ref }, { text = true }):wait()
+          return result.code == 0 and vim.trim(result.stdout) or nil
+        end
+        for _, choice in ipairs(choices) do
+          local ref = choice:match('^(stash@{%d+})')
+          if ref then identities[ref] = hash(ref) end
+        end
+        vim.ui.select(choices, { prompt = 'Select stash:' }, function(choice)
+          local ref = choice and choice:match('^(stash@{%d+})')
+          if not ref then return end
+          if not identities[ref] or hash(ref) ~= identities[ref] then
+            vim.notify('Stash list changed; select the stash again', vim.log.levels.WARN); return
+          end
+          use(ref)
+        end)
       end
 
       local function stash_push_with_mode(mode)
@@ -1710,10 +1718,11 @@ function M.setup(group)
       end
 
       local function stash_apply(action, include_index)
-        local target = stash_target_ref()
-        local cmd = include_index and 'Git stash ' .. action .. ' --quiet --index ' .. target or 'Git stash ' .. action .. ' --quiet ' .. target
-        vim.cmd(cmd)
-        notify_repo_changed()
+        with_stash_target(function(target)
+          require('git.commands').git({ bufnr = b,
+            args = 'stash ' .. action .. ' --quiet ' .. (include_index and '--index ' or '') .. target })
+          notify_repo_changed()
+        end)
       end
 
       local function show_stash_help()
@@ -1722,9 +1731,9 @@ function M.setup(group)
           'cz<CR> stash changes',
           'czz    stash all changes',
           'czw    stash keep-index',
-          'cza    apply stash@{count}',
+          'cza    apply selected stash (count overrides; otherwise picker)',
           'czA    apply stash without index',
-          'czp    pop stash@{count}',
+          'czp    pop selected stash (count overrides; otherwise picker)',
           'czP    pop stash without index',
           'czs    stash staged changes',
           'czv    open stash diff',
@@ -1736,18 +1745,17 @@ function M.setup(group)
       vim.keymap.set('n', 'cz<Space>', ':Git stash<Space>', { buffer = b, nowait = true, silent = true, desc = 'Git stash...' })
       vim.keymap.set('n', 'cz<CR>', ':Git stash<CR>', { buffer = b, nowait = true, silent = true, desc = 'Stash working tree' })
       vim.keymap.set('n', 'cza', function() stash_apply('apply', true) end,
-        { buffer = b, nowait = true, silent = true, desc = 'Apply stash@{count}' })
+        { buffer = b, nowait = true, silent = true, desc = 'Apply selected stash with index (count overrides; otherwise picker)' })
       vim.keymap.set('n', 'czA', function() stash_apply('apply', false) end,
         { buffer = b, nowait = true, silent = true, desc = 'Apply stash without index' })
       vim.keymap.set('n', 'czp', function() stash_apply('pop', true) end,
-        { buffer = b, nowait = true, silent = true, desc = 'Pop stash@{count}' })
+        { buffer = b, nowait = true, silent = true, desc = 'Pop selected stash with index (count overrides; otherwise picker)' })
       vim.keymap.set('n', 'czP', function() stash_apply('pop', false) end,
         { buffer = b, nowait = true, silent = true, desc = 'Pop stash without index' })
       vim.keymap.set('n', 'czs', function() stash_push_with_mode('staged') end,
         { buffer = b, nowait = true, silent = true, desc = 'Stash staged changes' })
       vim.keymap.set('n', 'czv', function()
-        local target = stash_target_ref()
-        if target then vim.cmd('Gedit ' .. target) end
+        with_stash_target(function(target) vim.cmd('Gedit ' .. target) end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Open stash diff' })
       vim.keymap.set('n', 'czw', function() stash_push_with_mode('keep-index') end,
         { buffer = b, nowait = true, silent = true, desc = 'Stash keep-index' })
@@ -2496,38 +2504,46 @@ function M.setup(group)
         return { kind = 'repository', label = line ~= '' and line or 'Repository' }
       end
 
+      local function available_change_sections()
+        local sections = {}
+        for row = 1, vim.api.nvim_buf_line_count(b) do
+          local entry = status_renderer.entry_at(b, row)
+          if entry and not entry.header then sections[entry.section] = true end
+        end
+        return sections
+      end
+
       local function contextual_action_group(context, current_operation)
         local kind = context.kind
         if kind == 'change' then
           local entry = context.entry
+          local staged, conflicted = entry.section == 'staged', entry.section == 'conflicted'
           local actions = {
             { key = '<CR>', label = 'Open file' },
             { key = 'gf', label = 'Open file and close status' },
             { key = 'o', label = 'Toggle inline diff' },
-            { key = 's', label = entry.section == 'conflicted' and 'Accept incoming or chosen worktree'
-              or entry.section == 'staged'
-              and (context.in_hunk and 'Unstage hunk' or 'Unstage file')
+            { key = 's', label = conflicted and 'Accept incoming or resolved worktree'
+              or staged and (context.in_hunk and 'Unstage hunk' or 'Unstage file')
               or (context.in_hunk and 'Stage hunk' or 'Stage file') },
-            { key = 'P', label = 'Open patch mode' },
-            { key = 'I', label = 'Stage / reset patch' },
-            { key = 'd', label = 'Open vertical diff' },
+            { key = 'I', label = staged and 'Reset patch interactively' or 'Stage interactively' },
+            { key = 'd', label = conflicted and 'Compare base / ours / theirs' or 'Open vertical diff' },
             { key = 'dh', label = 'Open horizontal diff' },
+            { key = 'gy', label = 'Copy file path' },
           }
-          if entry.section == 'staged' then
-            table.insert(actions, { key = 'u', label = context.in_hunk and 'Unstage hunk' or 'Unstage file' })
+          if staged then
+            table.insert(actions, { key = 'a', label = context.in_hunk and 'Apply staged hunk to worktree' or 'Apply staged file patch to worktree' })
           end
-          if entry.section == 'conflicted' then
+          if conflicted then
             vim.list_extend(actions, {
-              { key = 'X', label = 'Keep current side (stage 2)' },
-              { key = 'co', label = 'Choose ours' },
-              { key = 'ct', label = 'Choose theirs' },
-              { key = 'cr', label = 'Resolve with worktree state' },
+              { key = 'X', label = 'Keep ours / resolve conflict' },
+              { key = 'mo', label = 'Choose ours without staging' },
+              { key = 'mt', label = 'Choose theirs without staging' },
+              { key = 'mr', label = 'Stage current worktree content' },
             })
-            for _, action in ipairs(actions) do
-              if action.key == 'd' then action.label = 'Open base / ours / theirs' end
-            end
           else
-            table.insert(actions, { key = 'X', label = 'Discard change' })
+            table.insert(actions, { key = 'X', label = entry.section == 'untracked' and 'Delete untracked path'
+              or staged and 'Discard changes from index and worktree' or 'Discard worktree changes' })
+            if entry.section ~= 'untracked' then table.insert(actions, { key = 'gi', label = 'Manage index flags' }) end
           end
           return { title = context.label, actions = actions }
         end
@@ -2549,19 +2565,15 @@ function M.setup(group)
         if kind == 'commit' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open commit' },
-            { key = 'gx', label = 'Open pushed commit on GitHub' },
-            { key = 'bs', label = 'Spin off commits from here' },
-            { key = 'bS', label = 'Spin out commits from here' },
-            { key = 'gk', label = 'Show commit message body' },
-            { key = 'gn', label = 'Show Git note' },
-            { key = 'gN', label = 'Add / edit Git note' },
+            { key = 'd', label = 'Compare commit in Diffview' },
+            { key = 'C', label = 'Show commit information' },
+            { key = 'gy', label = 'Copy commit hash' },
+            { key = 'a', label = 'Apply commit patch to worktree' },
             { key = 'cw', label = 'Reword commit' },
             { key = 'cf', label = 'Fixup / reword with index' },
-            { key = 'cF', label = 'Fixup with unchanged message' },
-            { key = 'cW', label = 'Create reword fixup' },
-            { key = 'cs', label = 'Create squash commit' },
-            { key = 'cn', label = 'Create edited squash commit' },
-            { key = 'cS', label = 'Squash and autosquash' },
+            { key = 'gH', label = 'More history editing actions' },
+            { key = 'cos', label = 'Spin off commits from here' },
+            { key = 'coS', label = 'Spin out commits from here' },
             { key = 'gr', label = 'Revert commit' },
             { key = 'X', label = 'Drop commit' },
           } }
@@ -2577,34 +2589,38 @@ function M.setup(group)
         if kind == 'stash' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open stash diff' },
-            { key = 'A', label = 'Apply selected stash' },
-            { key = 'P', label = 'Pop selected stash' },
+            { key = 'a', label = 'Apply selected stash (without index)' },
+            { key = 'czp', label = 'Pop selected stash with index' },
             { key = 'cw', label = 'Rename selected stash' },
+            { key = 'C', label = 'Show stash information' },
+            { key = 'gy', label = 'Copy stash selector' },
             { key = 'X', label = 'Drop selected stash' },
             { key = 'cl', label = 'Open stash list' },
           } }
         end
 
         if kind == 'stash_header' then
-          return { title = context.label, actions = {
-            { key = 'cl', label = 'Open stash list' },
-            { key = 'cz<CR>', label = 'Stash working tree' },
-            { key = 'czz', label = 'Stash all changes' },
-            { key = 'czw', label = 'Stash keep-index' },
-            { key = 'czs', label = 'Stash staged changes' },
-            { key = 'cz?', label = 'Show all stash keys' },
-          } }
+          local actions = { { key = 'cl', label = 'Open stash list' } }
+          local sections = available_change_sections()
+          if not sections.conflicted and (sections.staged or sections.unstaged) then
+            table.insert(actions, { key = 'czz', label = 'Stash tracked changes' })
+            table.insert(actions, { key = 'czw', label = 'Stash, keeping index' })
+            if sections.staged then table.insert(actions, { key = 'czs', label = 'Stash staged changes' }) end
+          end
+          return { title = context.label, actions = actions }
         end
 
         if kind == 'pull_request' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open pull request' },
             { key = 'gx', label = 'Open pull request on GitHub' },
-            { key = '<C-y>', label = 'Copy pull request URL' },
+            { key = 'gy', label = 'Copy pull request URL' },
           } }
         end
         if kind == 'branch' then
           return { title = context.label, actions = {
+            { key = 'C', label = 'Show branch commit information' },
+            { key = 'gy', label = 'Copy branch ref' },
             { key = 'gx', label = 'Open pushed branch on GitHub' },
           } }
         end
@@ -2619,13 +2635,13 @@ function M.setup(group)
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open worktree' },
             { key = 'X', label = 'Remove worktree' },
-            { key = 'gws', label = 'Sync current worktree to primary' },
+            { key = 'cZs', label = 'Sync current worktree to primary' },
             { key = 'W', label = 'Open worktree list' },
           } }
         end
         if kind == 'worktrees_header' then
           return { title = context.label, actions = {
-            { key = 'gws', label = 'Sync current worktree to primary' },
+            { key = 'cZs', label = 'Sync current worktree to primary' },
             { key = 'W', label = 'Open worktree list' },
           } }
         end
@@ -2635,9 +2651,7 @@ function M.setup(group)
           local actions = {}
           if selected then table.insert(actions, { key = '<CR>', label = 'Open submodule status' }) end
           vim.list_extend(actions, {
-            { key = 'mi', label = selected and 'Initialize selected submodule' or 'Initialize all submodules' },
-            { key = 'mu', label = selected and 'Update selected submodule' or 'Update all submodules' },
-            { key = 'ms', label = 'Synchronize submodule URLs' },
+            { key = 'gO', label = 'Submodule actions' },
           })
           return { title = context.label, actions = actions }
         end
@@ -2683,36 +2697,32 @@ function M.setup(group)
       end
 
       local function repository_action_group(context, health, current_operation)
-        local actions = {
-          { key = 'gm', label = 'Go to unmerged paths' },
-          { key = 'gu', label = 'Go to unstaged changes' },
-          { key = 'gU', label = 'Go to untracked files' },
-          { key = 'gs', label = 'Go to staged changes' },
-          { key = 'gp', label = 'Go to commits' },
-          { key = 'cc', label = 'Commit staged changes' },
-          { key = 'ca', label = 'Amend commit' },
-          { key = 'ce', label = 'Amend without editing message' },
-          { key = 'S', label = 'Stage all changes' },
-          { key = 'U', label = 'Unstage all changes' },
+        local actions = {}
+        if context.kind == 'repository' then
+          local sections = available_change_sections()
+          if sections.staged then
+            table.insert(actions, { key = 'U', label = 'Unstage all changes' })
+            if not sections.conflicted then table.insert(actions, { key = 'cc', label = 'Commit staged changes' }) end
+          end
+          if sections.unstaged or sections.untracked then table.insert(actions, { key = 'S', label = 'Stage all changes' }) end
+          local work_tree = utils.get_buf_work_tree(b)
+          if health and not current_operation and work_tree
+            and vim.system({ 'git', '-C', work_tree, 'rev-parse', '--verify', 'HEAD' }, { text = true }):wait().code == 0 then
+            table.insert(actions, { key = 'ca', label = 'Amend commit' })
+          end
+        end
+        vim.list_extend(actions, {
           { key = 'L', label = 'Open log' },
           { key = 'B', label = 'Open branches' },
-        }
-        if context.kind ~= 'worktree' and context.kind ~= 'worktrees_header' then
-          table.insert(actions, { key = 'W', label = 'Open worktrees' })
+          { key = 'W', label = 'Open worktrees' },
+          { key = 'gO', label = 'Repository actions' },
+          { key = 'R', label = 'Refresh, keeping expanded diffs' },
+        })
+        if context.entry and (context.entry.section == 'staged' or context.entry.section == 'unstaged') then
+          table.insert(actions, { key = 'gD', label = 'Diff display settings' })
         end
-        if context.kind ~= 'index_flag'
-          and context.kind ~= 'index_flags_warning'
-          and context.kind ~= 'index_flags_header'
-        then
-          table.insert(actions, { key = 'gi', label = 'Manage update-index flags' })
-        end
-        if health and not health.detached then table.insert(actions, { key = 'mU', label = 'Set branch upstream' }) end
-        if health and health.upstream and not health.upstream.gone then
-          table.insert(actions, { key = 'rD', label = 'Review outgoing stack' })
-        end
-        if not current_operation then table.insert(actions, { key = 'gbs', label = 'Start Git bisect' }) end
-        table.insert(actions, { key = 'R', label = 'Collapse and refresh' })
-        return { title = 'Repository', actions = actions }
+        table.insert(actions, { key = 'q', label = 'Close menu' })
+        return { title = 'Panels / view', actions = actions }
       end
 
       local function show_status_actions()
@@ -2728,15 +2738,38 @@ function M.setup(group)
           table.insert(contextual.actions, 1, { key = '<Tab>', label = 'Toggle section' })
         end
         if contextual then table.insert(groups, contextual) end
+        if current_operation and context.kind ~= 'operation' then
+          local active = contextual_action_group({ kind = 'operation', label = current_operation.label or current_operation.kind }, current_operation)
+          if active then table.insert(groups, active) end
+        end
         table.insert(groups, repository_action_group(context, health, current_operation))
 
-        local details = 'Cursor: ' .. context.label
-        details = details .. '  Branch: ' .. tostring(health and health.branch or 'unknown')
-        if current_operation then details = details .. '  Operation: ' .. current_operation.kind end
-        require('git.features.action_menu').show('Git status actions', groups, { context = details })
+        -- Retain only registered actions and capture the source row for execution.
+        local win, row = vim.api.nvim_get_current_win(), vim.fn.line('.')
+        local seen = {}
+        for _, group in ipairs(groups) do
+          local available = {}
+          for _, action in ipairs(group.actions) do
+            local map = vim.fn.maparg(action.key, 'n', false, true)
+            local rewriting = context.kind == 'commit' and vim.tbl_contains({ 'cw', 'cf', 'gH', 'cos', 'coS', 'gr', 'X' }, action.key)
+            if map.buffer == 1 and not seen[action.key] and not (current_operation and rewriting) then
+              seen[action.key] = true
+              action.callback = function()
+                if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= b then return end
+                if vim.api.nvim_buf_get_lines(b, row - 1, row, false)[1] ~= line then
+                  vim.notify('Selected item changed; reopen the action menu', vim.log.levels.WARN); return
+                end
+                vim.api.nvim_win_set_cursor(win, { row, 0 })
+                if map.callback then map.callback()
+                else vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(map.rhs, true, false, true), 'n', false) end
+              end
+              table.insert(available, action)
+            end
+          end
+          group.actions = available
+        end
+        require('git.features.action_menu').show('Git status actions', groups)
       end
-      vim.keymap.set('n', 'g?', show_status_actions,
-        { buffer = b, nowait = true, silent = true, desc = 'Show Git status actions' })
       vim.keymap.set('n', '?', show_status_actions,
         { buffer = b, nowait = true, silent = true, desc = 'Show Git status actions' })
 
@@ -3147,6 +3180,22 @@ function M.setup(group)
         local new_style = syntax_highlight.cycle_word_diff_style()
         vim.notify('Word diff style: ' .. new_style, vim.log.levels.INFO)
       end, { buffer = b, silent = true, desc = 'Toggle word diff style (diffs/lazygit/github)' })
+      vim.keymap.set('n', 'a', function()
+        local context = status_context_at_cursor(operation.inspect(utils.get_buf_work_tree(b)))
+        if context.stash then stash_apply('apply', false)
+        else vim.cmd('GitApply') end
+      end, { buffer = b, silent = true, desc = 'Apply selected patch or stash to worktree' })
+      vim.keymap.set('n', 'R', function() reload_status() end,
+        { buffer = b, silent = true, desc = 'Refresh status, preserving expansion and selection' })
+      require('git.features.panel_keys').configure(b, { help = show_status_actions, context = function()
+        local context = status_context_at_cursor(operation.inspect(utils.get_buf_work_tree(b)))
+        context.path = context.path or (context.entry and context.entry.path) or (context.flagged and context.flagged.path)
+        if context.kind == 'pull_request' then
+          local pr = pull_request_at_cursor()
+          context.value = pr and pr.url
+        end
+        return context
+      end })
     end,
   })
 

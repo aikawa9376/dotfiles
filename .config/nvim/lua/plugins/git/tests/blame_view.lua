@@ -21,8 +21,10 @@ local original, code_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_curr
 vim.wo.wrap, vim.wo.foldenable, vim.wo.list = true, true, true
 vim.api.nvim_buf_set_lines(original, 4, 5, false, { 'unsaved' })
 vim.api.nvim_win_set_cursor(0, { 3, 2 })
-local old_map_called = false
+local old_map_called, old_C_called, old_gf_called = false, false, false
 vim.keymap.set('n', 'gk', function() old_map_called = true end, { buffer = original })
+vim.keymap.set('n', 'C', function() old_C_called = true end, { buffer = original })
+vim.keymap.set('n', 'gf', function() old_gf_called = true end, { buffer = original })
 local api = require('git.features.blame')
 api.setup(vim.api.nvim_create_augroup('BlameTest', { clear = true }))
 local initial_view = vim.fn.winsaveview()
@@ -39,17 +41,18 @@ local function press(key) local m = vim.fn.maparg(key, 'n', false, true); assert
 wait(function() return vim.api.nvim_buf_line_count(b) == 5 end, 'initial blame')
 local original_columns = vim.o.columns
 vim.o.columns = 54
-press('g?')
+press('?')
 local guide = vim.api.nvim_buf_get_lines(0, 0, -1, false)
 assert(guide[1] == 'Git blame' and vim.wo.wrap and vim.api.nvim_win_get_width(0) <= 50)
 assert(vim.tbl_contains(guide, '<C-o> / <C-i>  back / forward (code and blame together)'))
-assert(vim.tbl_contains(guide, 'gC           hide/show the dimmed commit info'))
-assert(vim.tbl_contains(guide, 'f            toggle uniform selected-row styling (no bold)'))
+assert(vim.tbl_contains(guide, 'C            toggle commit info (dimmed pin / cursor commit)'))
+assert(vim.tbl_contains(guide, 'gD           display settings: width, recency, uniform styling'))
 press('q')
 assert(vim.api.nvim_get_current_buf() == b)
-for _, key in ipairs({ 'd', 'f', 'gd' }) do
+for _, key in ipairs({ 'd', 'gD', 'gf', 'gd', 'gy', 'C' }) do
   assert(vim.fn.maparg(key, 'n', false, true).callback, 'missing blame mapping: ' .. key)
 end
+assert(vim.fn.maparg('gC', 'n') == '', 'blame info should have only the C entry')
 vim.o.columns = original_columns
 assert(vim.wo[panel].winbar == '%=Blame panel%=', 'panel winbar should name the view and align code rows')
 assert(vim.wo[code_win].winbar:find('change', 1, true), 'code winbar should show commit subject')
@@ -76,7 +79,11 @@ for _, mark in ipairs(selected_marks) do
   assert(mark[4].hl_group == expected, 'whole current commit must use Normal, other commits NormalNC')
 end
 assert(vim.api.nvim_get_hl(0, { name = 'GitBlameUnselected' }).bg ~= selected_hl.bg)
-press('f')
+local function display(key)
+  press('gD')
+  press(key)
+end
+press('gf')
 selected_marks = vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('git_blame_selected'), 0, -1, { details = true })
 for _, mark in ipairs(selected_marks) do
   assert(mark[4].hl_group == 'GitBlameUniform', 'f uniform mode should give all rows the selected background')
@@ -89,13 +96,21 @@ for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_names
   assert(group ~= 'GitBlameUnselectedMeta', 'f uniform mode should keep all dates heatmapped and authors at normal color')
 end
 assert(uniform_dates > 0, 'f uniform mode should retain the date heatmap')
-press('f')
+display('f')
 selected_marks = vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('git_blame_selected'), 0, -1, { details = true })
 for _, mark in ipairs(selected_marks) do
   local expected = (mark[2] == 1 or mark[2] == 2) and 'GitBlameSelected' or 'GitBlameUnselected'
   assert(mark[4].hl_group == expected, 'f should restore per-commit highlighting')
 end
 local dim_ns = vim.api.nvim_create_namespace('GitBlameDiffDim')
+vim.api.nvim_set_current_win(code_win)
+press('gf')
+assert(not old_gf_called and vim.api.nvim_get_current_buf() == original,
+  'code-side gf should use the blame display toggle during the session')
+selected_marks = vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('git_blame_selected'), 0, -1, { details = true })
+assert(selected_marks[1][4].hl_group == 'GitBlameUniform', 'code-side gf did not toggle uniform styling')
+press('gf')
+vim.api.nvim_set_current_win(panel)
 local function dim_info()
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local title = vim.api.nvim_win_get_config(win).title
@@ -104,21 +119,53 @@ local function dim_info()
     end
   end
 end
+local function info_windows()
+  local wins = {}
+  for _, win in ipairs(vim.api.nvim_list_wins()) do
+    local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
+    if ft == 'gitblameinfo' or ft == 'gitcommitinfo' then wins[#wins + 1] = win end
+  end
+  return wins
+end
+assert(#info_windows() == 0)
+press('C')
+local normal_info = info_windows()
+assert(#normal_info == 1 and text(vim.api.nvim_win_get_buf(normal_info[1])):find(second, 1, true),
+  'undimmed C must show one cursor-commit float')
+vim.api.nvim_win_set_cursor(panel, { 1, 0 })
+press('C'); assert(#info_windows() == 0, 'C must toggle the existing float off even after cursor movement')
+press('C')
+normal_info = info_windows()
+assert(#normal_info == 1 and text(vim.api.nvim_win_get_buf(normal_info[1])):find(first, 1, true),
+  'reopening undimmed info must use the current cursor commit')
+press('C')
+vim.api.nvim_exec_autocmds('WinScrolled', { pattern = tostring(panel) })
+vim.wait(30, function() return false end, 10)
+assert(#info_windows() == 0, 'layout must not reopen hidden undimmed info')
+vim.api.nvim_win_set_cursor(panel, { 3, 0 })
+press('C')
+local before_pin_info = assert(info_windows()[1])
 vim.cmd('DiffDim')
 local dimmed = vim.api.nvim_buf_get_extmarks(original, dim_ns, 0, -1, { details = true })
 assert(#dimmed == 3 and dimmed[1][4].line_hl_group == 'LineNr',
   'bare DiffDim in blame should dim lines outside the cursor-line commit')
 assert(select(2, dim_info()):find(second, 1, true), 'dimmed commit should show the shared C metadata')
-press('gC')
+assert(#info_windows() == 1, 'pinning must use the same float owner as C')
+assert(info_windows()[1] == before_pin_info, 'pinning must reuse the normal information window')
+press('C')
 assert(not dim_info() and #vim.api.nvim_buf_get_extmarks(original, dim_ns, 0, -1, {}) == 3,
-  'gC should hide only the pinned commit info')
+  'C should hide only the pinned commit info')
 vim.api.nvim_exec_autocmds('WinScrolled', { pattern = tostring(panel) })
 vim.wait(30, function() return false end, 10)
 assert(not dim_info(), 'layout refresh must respect the hidden info state')
-press('gC')
-assert(dim_info(), 'gC should reopen the pinned commit info')
+press('C')
+assert(dim_info(), 'C should reopen the pinned commit info')
+assert(#info_windows() == 1, 'C while dimmed must not create a second information float')
 vim.api.nvim_win_set_cursor(panel, { 1, 0 })
 vim.api.nvim_exec_autocmds('CursorMoved', { buffer = b })
+press('C'); press('C')
+assert(#info_windows() == 1 and select(2, dim_info()):find(second, 1, true),
+  'dimmed C must keep the pin target even when the cursor selects another commit')
 selected_marks = vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('git_blame_selected'), 0, -1, { details = true })
 assert(selected_marks[2][4].hl_group == 'GitBlameSelected' and selected_marks[1][4].hl_group == 'GitBlameUnselected',
   'pinned blame highlight must stay on its commit when the cursor moves')
@@ -129,8 +176,8 @@ press('gd'); assert(#vim.api.nvim_buf_get_extmarks(original, dim_ns, 0, -1, {}) 
   'code-side d must unpin the selected commit')
 press('gd'); assert(#vim.api.nvim_buf_get_extmarks(original, dim_ns, 0, -1, {}) == 3,
   'code-side d must pin the cursor-line commit')
-press('gC'); assert(not dim_info(), 'code-side gC should hide the pinned info')
-press('gC'); assert(dim_info(), 'code-side gC should reopen the pinned info')
+press('C'); assert(not dim_info(), 'code-side C should hide the pinned info')
+press('C'); assert(dim_info(), 'code-side C should reopen the pinned info')
 vim.cmd('DiffDim clear')
 assert(#vim.api.nvim_buf_get_extmarks(original, dim_ns, 0, -1, {}) == 0,
   'DiffDim clear must release the paired blame pin')
@@ -156,6 +203,10 @@ assert(not dim_info())
 vim.api.nvim_win_set_cursor(panel, { 5, 0 }); press('gd')
 assert(select(2, dim_info()):find('Not committed yet', 1, true), 'uncommitted lines need readable pinned info')
 press('gd'); assert(not dim_info())
+press('C')
+assert(#info_windows() == 1 and text(vim.api.nvim_win_get_buf(info_windows()[1])):find('Not committed yet', 1, true),
+  'undimmed uncommitted rows should have readable information')
+press('C'); assert(#info_windows() == 0)
 vim.api.nvim_win_set_cursor(panel, { 3, 0 })
 local marks = vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('git_blame_panel'), 0, -1, { details = true })
 local rendered = vim.api.nvim_buf_get_lines(b, 0, -1, false)
@@ -175,7 +226,7 @@ for _, mark in ipairs(marks) do
 end
 assert(edge_color == hash_color and hash_color == continuation_color and hash_color:match('^GitBlameHash'))
 assert(vim.api.nvim_get_hl(0, { name = hash_color }).fg ~= nil)
-local mode = vim.g.fugitive_blame_gradient_mode; press('c'); assert(vim.g.fugitive_blame_gradient_mode ~= mode)
+local mode = vim.g.fugitive_blame_gradient_mode; display('c'); assert(vim.g.fugitive_blame_gradient_mode ~= mode)
 vim.api.nvim_win_set_cursor(panel, { 3, 0 })
 press('gk')
 local function float_text(kind)
@@ -200,7 +251,7 @@ wait(function() return vim.api.nvim_buf_line_count(b) == 4 end, 'parent blame ac
 local historic = vim.api.nvim_win_get_buf(code_win)
 assert(float_text('info'):find(first, 1, true), 'history info must show the viewed revision')
 press('gd'); assert(dim_info(), 'pinning a historical frame should replace its revision info')
-press('gC'); assert(not dim_info(), 'hidden pin info must stay hidden while dimming')
+press('C'); assert(not dim_info(), 'hidden pin info must stay hidden while dimming')
 press('gd'); assert(float_text('info'):find(first, 1, true), 'unpinning should restore historical revision info')
 local info_config = select(2, float_text('info'))
 assert(info_config.row == 0 and info_config.col + info_config.width + 2 == vim.api.nvim_win_get_width(code_win))
@@ -232,6 +283,8 @@ assert(vim.api.nvim_win_get_buf(code_win) == original and vim.bo[original].modif
 assert(vim.wo[code_win].wrap and vim.wo[code_win].foldenable and not vim.wo[code_win].scrollbind)
 assert(vim.wo[code_win].winbar == '' and vim.go.winbar == '', 'blame winbar leaked into ordinary windows')
 vim.api.nvim_set_current_win(code_win); press('gk'); assert(old_map_called)
+press('C'); assert(old_C_called, 'code-side C must be restored after blame closes')
+press('gf'); assert(old_gf_called, 'code-side gf must be restored after blame closes')
 assert(vim.api.nvim_win_get_cursor(code_win)[1] == 3)
 -- Heatmap remains available on the original unsaved buffer.
 assert(api.set_heatmap_enabled(original, true))

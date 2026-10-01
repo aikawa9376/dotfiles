@@ -21,6 +21,61 @@ Flog is available lazily through a native Git backend. The retired
 `fugitive-extension` source and its old plugin specification can be restored by
 reverting the commit that removed them.
 
+## Panel keys
+
+Normal panel keys use the selected row, file, hunk, or Visual selection as their
+context. Magit's `<Space><Space>` panels retain their existing keys and layout.
+
+| Keys | Intent and context |
+| --- | --- |
+| `<CR>` / `q` / `?` / `R` | Open / close / contextual key guide / refresh; Stash and WIP also support help and refresh |
+| `d` / `D` | Compare selected item / whole-commit Diffview where supported |
+| `C` | Commit/ref information; Blame also uses this for metadata |
+| `gy` | Copy identifier: commit hash, ref, reflog/stash selector, file/worktree path, or PR URL; Visual log selections copy hashes |
+| `cw` | Reword commit, rename stash, or rename selected local branch |
+| `a` | Apply selected patch/stash or restore selected WIP snapshot; Status patch apply requires a commit or staged change |
+| `X` | Contextual discard/remove; Reflog offers Mixed / Hard / Cancel before resetting to the selected entry |
+| `L` / `B` | Existing Log / Branch entries; Branch also has `B` to open its list |
+| `gH` / `gD` / `gO` | History editing / display settings / repository actions, on panels with those actions |
+
+`gH`, `gD`, and `gO` are ordinary action choosers, separate from Magit. They retain
+exact operations such as parent fixup, commit reordering, clipboard cherry-pick,
+current-branch force-with-lease push, and composite pull actions. Status `?` opens
+a compact, colored action menu for the current file, hunk, commit, stash, section,
+or active operation, plus panel/view entries. It omits unrelated operations and
+uses the migrated keys. Other shared guides combine aliases for the same action.
+The Git action menu has a separate highlighted heading and visible
+`<Space><Space>` shortcut; literal space keys never appear as blank columns.
+Key columns use display width so long key names stay aligned; titles, groups and
+keys retain semantic colors. Unsupported targets report a notice rather than
+selecting an unrelated commit. Normal editing keys keep their meaning inside the
+Commit message and Blame code pane.
+
+Branch actions use `coo` checkout, `cod` duplicate, `cos` spin-off, `coS` spin-out,
+`cou` set upstream, and `coU` unset upstream. Rename uses `cw`; removal uses `X`.
+Worktree actions use `cZa` add, `cZt` create from a Branch row, and `cZs` sync
+(current worktree in Status, selected worktree in the Worktree list). Conflicts
+use `mo` ours, `mt` theirs, and `mr` stage the current worktree content. These maps
+are installed throughout Status's lifetime and guard the selected Unmerged item
+when executed.
+
+Stash `a` applies without restoring the index. `cza` / `czp` apply / pop with
+index restoration, and `czA` / `czP` apply / pop without it. In Status these keys
+use an explicit count first, then the stash row, otherwise a stash picker. A
+changed stash selector during the picker is rejected. `cw` renames the selected
+stash. WIP `a` retains its clean tracked-worktree requirement and restores the
+snapshot's staged/unstaged split without moving HEAD.
+
+Status and Commit `R` preserve expanded diffs; use `<` to collapse explicitly.
+`d` waits for its `dd` / `dv` / `dh` / `ds` suffixes. Status also uses `dR` for
+outgoing-stack range-diff. The Commit message float saves through `:w`,
+`<C-s>`, or `ZZ`.
+
+The old `bs` / `bS`, Reflog `B` / `y`, and Worktree `gs` remain compatibility
+aliases because the unchanged Magit layer calls them internally. They are omitted
+from the normal key guide; this also means `b` remains a mapping prefix on panels
+with those spin aliases. Global leader mappings in `init.lua` remain separate.
+
 ## Commands
 
 | Command | Behavior |
@@ -115,7 +170,7 @@ between edits inside that block.
 Pressing `<CR>` on a conflict diff line opens the worktree file at that
 line's actual ours/theirs marker position; unchanged context uses the ours
 position.
-After `co` or `ct` chooses a present side, the still-unmerged path instead
+After `mo` or `mt` chooses a present side, the still-unmerged path instead
 shows the adopted worktree content against stage 1 (base), including edits made
 after choosing that side. An `AA` conflict has an empty base, so the adopted
 file appears as added lines. A manually resolved worktree with no conflict
@@ -125,17 +180,17 @@ from the original conflict have a muted yellow background. Clean changes keep
 their usual diff colors.
 `s` accepts theirs by default; `X` keeps ours. With conflict markers, both
 keys replace only the marked regions with the chosen side and preserve edits
-outside them. After `co` or `ct`, `s` stages the chosen worktree content instead.
+outside them. After `mo` or `mt`, `s` stages the chosen worktree content instead.
 After a manual resolution removes all conflict markers, `s` stages the current
 worktree content as well.
-On an expanded conflict hunk, these keys and `co`/`ct` choose only that marker
+On an expanded conflict hunk, these keys and `mo`/`mt` choose only that marker
 block; on the file row they choose every block. The file remains unmerged until
-the last block is accepted and staged. Visual selections inside a conflict diff are rejected. `cr`
-stages the current worktree content regardless of markers. `co` and
-`ct` choose either side without staging it; choosing a deleted side
+the last block is accepted and staged. Visual selections inside a conflict diff are rejected. `mr`
+stages the current worktree content regardless of markers. `mo` and
+`mt` choose either side without staging it; choosing a deleted side
 necessarily removes the path and resolves it. `d` opens base, ours, and theirs
 for a conflicted file; for other files it keeps the usual two-way diff.
-`co` and `ct` load the real file buffer before checkout and record the change
+`mo` and `mt` load the real file buffer before checkout and record the change
 in its undo history. Open that file and press `u` to restore its previous
 contents, then write it to restore the contents on disk. The status buffer's
 `u` remains the unstage action; file-buffer undo does not change the Git index.
@@ -145,21 +200,21 @@ An active operation uses one `<operation>: <commit> <subject>` heading.
 During rebase, Git's stage 2 is the branch being rebased onto and stage 3 is
 the replayed commit, so the diff direction and `s`/`X` meanings stay the same.
 
-In `Gbranch`, `bs` spins off the current branch and checks out the new branch;
-`bS` spins out and stays on the current branch when the worktree is clean. If
+In `Gbranch`, `cos` spins off the current branch and checks out the new branch;
+`coS` spins out and stays on the current branch when the worktree is clean. If
 there are uncommitted changes, spin-out checks out the new branch so those
 changes follow it. Both actions make the new branch track the original branch.
 The branch panel shows local branches, remote branches, and tags. Use `ga`,
 `gl`, `gr`, or `gt` to show all refs, local branches, remote branches, or tags;
 the active view is labeled at the upper right. `<CR>` and `L` inspect a selected
 tag as well as a branch. Branch-changing actions do not apply to tag rows.
-On a local branch row, `bu` sets its upstream with completion for local and
-remote branches; `bU` removes its upstream. These keys also work on a local
+On a local branch row, `cou` sets its upstream with completion for local and
+remote branches; `coU` removes its upstream. These keys also work on a local
 branch other than the currently checked-out one.
 When the original branch has outgoing commits, it is moved back to the merge
 base with its upstream; without an upstream or outgoing commits it stays put.
 The branch name and any reset are confirmed before changing refs.
-The same `bs` / `bS` keys work in status and log. On a commit row they move
+The same `cos` / `coS` keys work in status and log. On a commit row they move
 that commit and everything after it; elsewhere they use the upstream merge
 base. `:GbranchSpinoff <commit>` and `:GbranchSpinout <commit>` expose that
 boundary directly. The commit must be on the current branch's first-parent
@@ -203,7 +258,7 @@ Operation panels place whole argument/action groups side by side when they fit
 and wrap them on narrower screens. Set
 `vim.g.git_action_menu_group_layout = 'vertical'` to restore the previous
 one-group-per-row layout; unset it or use `'horizontal'` for the new layout.
-The existing panel keys and `g?` help remain separate.
+The existing panel keys and `?` help remain separate.
 
 Push and Pull keep their existing current-HEAD actions. Their `s` action uses
 the ref under the cursor: Push sends a selected branch to its push remote (or
@@ -304,7 +359,7 @@ commit hash, using the native Git syntax colors. Header metadata comes from
 `commit_info.header()`, the same formatter used by C floats and pinned blame
 information, including HEAD relationship, relative dates and refs. The model
 caches this header until it is reloaded; editable message text stays separate.
-Help is available through g?.
+Help is available through `?`.
 
 Clean commit buffers use a `bufhidden=delete` lifecycle: they disappear
 from bufferline when no window displays them. Merely focusing another window does
@@ -335,14 +390,14 @@ closing the commit view with q also closes the graph.
 | `D` | Open Diffview for the commit |
 | `A`, `cw` | Move to the editable message |
 | `:w` | Reword the displayed commit |
-| `gA` | Original message-edit float |
+| `gH` | History editing, including the message-edit float |
 | `X` (normal/visual) | Remove file, hunk, or selected lines; choose Hard or Mixed |
 | `~` / `p` / `gp` | Parent / previous commit affecting the file / merge parent |
 | `C` / `<C-Space>` / `O` | Commit information / graph / pull request |
 | `gx` | Open pushed commit on GitHub |
-| `gq` / `<C-y>` | File quickfix / copy short hash |
-| `<Leader>wd` | Cycle word-diff style |
-| `R` / `q` / `g?` | Collapse and reload / close / help |
+| `gq` / `gy` | File quickfix / copy selected path or commit hash |
+| `gD` | Display settings, including word-diff style |
+| `R` / `q` / `?` | Reload preserving expanded files / close / help |
 
 Inside the message, ordinary text-editing keys such as `i`, `o`, `d`, `cw`, `A`,
 `p`, and `J` retain their native meaning. Expanding diffs preserves a draft,
@@ -372,6 +427,7 @@ identity is preserved by the existing Notes session persistence.
 - `commit_rewrite.lua`: guarded history changes and worktree restoration.
 - `commit_notes.lua`: optional Notes identity and row mapping.
 - `change_display.lua`: file rows and statistics shared with status.
+- `panel_keys.lua`: normal key migration, contextual identifiers/help, and ordinary action choosers.
 
 Run checks from this directory with
 `nvim --headless --clean -u NONE -l tests/<name>.lua`.
@@ -379,8 +435,12 @@ The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`,
 `commit_notes`, `commit_lifecycle`, `commit_entrypoints`, and `commit_blob_return`
 (`commit_blob_return` uses installed Gitsigns). No check loads Fugitive.
 `commands` checks actual Git mutations and object lifetimes; `lazy_loading` checks
-Lazy command registration and the active imports. `editor` uses a local Unix socket
-to exercise Git’s real editor process and requires socket permission.
+Lazy command registration and the active imports. `panel_help` checks long/wide-key alignment, colors, and action execution.
+`panel_keymaps` covers reset
+modes/cancel, selected stash/WIP identity, copy/edit/apply, and prefix input.
+`editor` and `operation_output` use local Unix sockets and require socket permission.
+`panel_layout` needs normal startup to apply editor-grid resize events:
+`nvim --headless --clean -u NONE '+lua dofile("tests/panel_layout.lua")' +qa!`.
 
 ## Reflog recovery markers
 
@@ -416,7 +476,7 @@ date, and author appear only on the first row of each contiguous commit group;
 continuations contain only the marker, without trailing spaces. The panel disables
 list characters and fits its content width plus one right-padding column while
 reserving room for code. The
-commit under the cursor uses `#002b36` for all its rows by default; `f`
+commit under the cursor uses `#002b36` for all its rows by default; `gf` (or `gD` → `f`)
 switches to a uniform view where every row uses that background, each hash keeps
 its full commit color, all dates retain the recency heatmap, and bold is removed.
 DiffDim pinning is unchanged. All other
@@ -424,14 +484,17 @@ commits use `#073642`; their hashes are muted and date/author text uses the
 theme's subdued `#586e75` foreground. `gd` in either pane pins that commit and dims other
 lines in the paired code buffer until toggled, `:DiffDim clear`, or closing blame.
 Bare `:DiffDim` also selects the cursor-line commit while blame is open. Pinning
-automatically shows that commit's shared `C` metadata in a float. `gC` hides or
-restores the float without clearing the dim; unpinning restores the viewed
-revision's info when browsing history. Selected-commit rows are bold; other rows
+automatically shows that commit's metadata in the same session-owned info float
+used by `C`. `C` in either pane toggles this float without clearing the dim:
+while dimmed it targets the pinned commit; otherwise reopening targets the
+cursor-line commit. Unpinning restores the viewed revision's info when browsing
+history, or closes it in the working tree. The former `gC` mapping is removed.
+Selected-commit rows are bold; other rows
 use muted hash and date/author foregrounds.
 Uncommitted groups show only a right-aligned virtual `Not committed` label, with
 no date or zero hash; tab settings do not affect its alignment. Dates on the
 selected commit retain the 13-color recency palette. Other commits use the same
-subdued `#586e75` foreground for dates and author names. `c` sets the shared
+subdued `#586e75` foreground for dates and author names. `gD` → `c` sets the shared
 absolute or relative recency mode used by `GitHeatmap`; its 13-color
 file-background heatmap and Snacks toggle are unchanged.
 
@@ -442,36 +505,37 @@ file-background heatmap and Snacks toggle are unchanged.
 | `{count}P` | Reblame at the numbered parent of a merge |
 | `Ctrl-o` / `Ctrl-i` | Back/forward through paired blame and code views |
 | `gk` | Toggle full commit message near the code cursor; follows the cursor |
-| `Ctrl-p` / `p` | Toggle/open a following commit diff preview |
+| `Ctrl-p` | Toggle a following commit diff preview |
 | `<CR>` / `i` / double click | Open the commit at its file/diff line in another tab; `q` or jumping back to blame with `Ctrl-o` returns to the preserved blame/code pair |
 | `o` / `O` | Open the commit in a split/tab, keeping blame |
 | `d` | Open an immutable before/after diff in a new tab |
-| `f` | Toggle uniform selected-row background/heatmap without bold |
+| `gD` | Display chooser: width, recency mode, and uniform background/heatmap |
+| `gf` | Toggle uniform background/heatmap directly (both panes) |
 | `gd` | Pin/unpin the cursor-line commit and dim other code lines |
-| `gC` | Hide/show the pinned commit info while dimming |
-| `c` | Set absolute/relative recency mode for `GitHeatmap` |
 | `[[` / `]]` | Previous/next block; while dimmed, jump between blocks with the pinned hash while keeping that target; count supported |
 | `(` / `)` | Previous/next contiguous commit block by moving the cursor |
-| `y` | Copy the full commit hash |
-| `.` | Insert the commit hash on the command line |
-| `A` / `C` / `D` | Fit full content/show hash/show date columns |
+| `gy` | Copy the full commit hash |
+| `gY` | Insert the commit hash on the command line |
+| `C` | Toggle info: pinned commit while dimmed, cursor commit otherwise (both panes) |
 | `R` | Refresh working-tree blame |
-| `g?` / `<F1>` | Show available actions |
-| `q` / `gq` | Close blame and restore the original code buffer/view |
+| `?` | Show available actions |
+| `q` | Close blame and restore the original code buffer/view |
 
-When viewing a historical revision, a separate top-right Commit Info float shows
+When viewing a historical revision, the session-owned top-right info float initially shows
 the viewed revision’s hash, tree, parents, author/committer dates and message;
 while dimming, it shows the pinned commit instead. It
 uses the shared `commit_info` metadata also used by C floats: an exact HEAD~N
 label on the first-parent chain, explicit merged/diverged/ahead relationships
 otherwise, relative author/committer dates, and directly attached branch/tag refs.
-It stays pinned as the cursor moves between attributed commits, updates on history
-navigation and closes on return to the working tree or session exit. The `gk`
+The displayed target stays fixed as the cursor moves; `C` hides it and reopens
+at the current cursor commit when undimmed. History navigation restores each
+frame's display state. The float closes on return to an unpinned working-tree
+frame without explicit info, and on session exit. The `gk`
 float removes Git’s trailing separator blank lines while preserving message
 paragraphs. It is independent and anchors to the selected code row, choosing above/below
 to fit the window. Both floats adjust to resizing/scrolling.
 
-`gk`, `Ctrl-p`, and paired history keys also work in the code pane. Existing
+`C`, `gf`, `gk`, `Ctrl-p`, and paired history keys also work in the code pane. Existing
 buffer-local mappings are restored when the session ends. Initial working-tree
 blame includes unsaved buffer contents and refreshes after edits/writes. Untracked
 files or files without a committed version are rejected with a notification

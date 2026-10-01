@@ -15,9 +15,13 @@ local actions = require('git.features.commit_actions')
 local result
 actions.open_edit_commit(first, origin, { reopen = false, on_complete = function(hash) result = hash end })
 local draft = vim.api.nvim_get_current_buf()
-assert(draft ~= origin and vim.fn.maparg('<Leader>a', 'n'):find('git.features.commit_actions', 1, true))
+assert(draft ~= origin and vim.fn.maparg('<C-s>', 'n', false, true).callback)
+assert(vim.fn.maparg('<Leader>a', 'n') == '', 'message save must not need Leader')
 vim.api.nvim_buf_set_lines(draft, 0, -1, false, { 'reword ancestor from float' })
-actions._do_amend_from_buffer(draft, true)
+local confirm = vim.fn.confirm
+vim.fn.confirm = function() return 1 end
+vim.cmd('write')
+vim.fn.confirm = confirm
 assert(result and git({ 'log', '-1', '--format=%s', 'HEAD^' }) == 'reword ancestor from float')
 assert(git({ 'show', ':file.txt' }) == 'staged' and vim.fn.readfile(root .. '/file.txt')[1] == 'unstaged')
 assert(not vim.api.nvim_buf_is_valid(draft))

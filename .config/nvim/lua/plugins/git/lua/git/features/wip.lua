@@ -102,24 +102,47 @@ local function open_log(root)
   vim.api.nvim_win_set_buf(0, buf)
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].filetype = 'nofile', 'wipe', 'gitwip'
   utils.set_buf_work_tree(buf, root)
-  local lines = { 'WIP snapshots — <CR> inspect, a restore, q close' }
-  for index, entry in ipairs(entries) do
-    lines[#lines + 1] = ('%2d  %s  %s'):format(index - 1, entry.hash:sub(1, 12), entry.age)
+  local function refresh()
+    local row = vim.api.nvim_win_get_cursor(0)[1]
+    local selected = entries[row - 1]
+    local next_entries, list_error = M.list(root)
+    if not next_entries then vim.notify(list_error, vim.log.levels.WARN); return end
+    entries = next_entries
+    local lines = { 'WIP snapshots — Enter inspect, a restore, gy copy, R refresh, ? help, q close' }
+    local selected_row
+    for index, entry in ipairs(entries) do
+      lines[#lines + 1] = ('%2d  %s  %s'):format(index - 1, entry.hash:sub(1, 12), entry.age)
+      if selected and selected.hash == entry.hash then selected_row = index + 1 end
+    end
+    vim.bo[buf].modifiable = true
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].modifiable = false
+    vim.api.nvim_win_set_cursor(0, { selected_row or math.min(row, #lines), 0 })
   end
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  vim.bo[buf].modifiable = false
-  vim.keymap.set('n', 'q', '<Cmd>close<CR>', { buffer = buf, silent = true })
+  refresh()
+  vim.keymap.set('n', 'q', '<Cmd>close<CR>', { buffer = buf, silent = true, desc = 'Close WIP snapshots' })
   vim.keymap.set('n', '<CR>', function()
     local entry = entries[vim.api.nvim_win_get_cursor(0)[1] - 1]
     if entry then require('git.features.commit').open({ work_tree = root, revision = entry.hash }) end
-  end, { buffer = buf, silent = true })
+  end, { buffer = buf, silent = true, desc = 'Inspect selected snapshot' })
   vim.keymap.set('n', 'a', function()
     local number = vim.api.nvim_win_get_cursor(0)[1] - 2
-    if number < 0 or not entries[number + 1] then return end
-    if vim.fn.confirm('Restore WIP snapshot ' .. number .. '?', '&Restore\n&Cancel', 2) ~= 1 then return end
+    local entry = entries[number + 1]
+    if not entry then return end
+    if vim.fn.confirm('Restore WIP snapshot ' .. number .. ' (' .. entry.hash:sub(1, 7) .. ')?', '&Restore\n&Cancel', 2) ~= 1 then return end
+    local current = M.list(root)
+    if not current or not current[number + 1] or current[number + 1].hash ~= entry.hash then
+      vim.notify('WIP history changed; refresh and select the snapshot again', vim.log.levels.WARN); return
+    end
     local ok, restore_err = M.restore(root, tostring(number))
     vim.notify(ok and 'WIP snapshot restored' or restore_err, ok and vim.log.levels.INFO or vim.log.levels.ERROR)
-  end, { buffer = buf, silent = true })
+  end, { buffer = buf, silent = true, desc = 'Restore selected snapshot and its index state' })
+  vim.keymap.set('n', 'R', refresh, { buffer = buf, silent = true, desc = 'Refresh WIP snapshots' })
+  require('git.features.panel_keys').configure(buf, { context = function()
+    local entry = entries[vim.api.nvim_win_get_cursor(0)[1] - 1]
+    if entry then return { kind = 'snapshot', commit = entry.hash, value = entry.hash:sub(1, 7), label = entry.hash:sub(1, 7) } end
+    return { kind = 'repository', label = 'WIP snapshots' }
+  end })
 end
 
 function M.setup(group)

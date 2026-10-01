@@ -82,7 +82,7 @@ assert(logged_ref == 'refs/tags/feature', 'tag log did not use an unambiguous ta
 local input = vim.fn.input
 local prompted = false
 vim.fn.input = function() prompted = true; return 'main' end
-press('bu')
+press('cou')
 vim.fn.input = input
 assert(not prompted, 'tag accepted branch upstream action')
 local confirm = vim.fn.confirm
