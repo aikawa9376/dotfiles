@@ -460,10 +460,10 @@ local function discard(s, first, last)
     for i = info.patch_row + 1, last_info.patch_row do
       if patch[i]:match('^@@') then notify('Select diff lines within one hunk'); return end
     end
-    patch = actions.build_partial_reverse_patch(entry.path, patch, hunk, info.patch_row, last_info.patch_row)
-    scope, reverse = 'selection', false
+    patch = require('git.features.commit_patch').selection(patch, hunk, info.patch_row, last_info.patch_row)
+    scope = 'selection'
   elseif hunk then
-    patch = actions.collect_hunk_patch(patch, 1, hunk)
+    patch = require('git.features.commit_patch').hunk(patch, hunk)
     scope = 'hunk'
   end
   if not patch then notify('No changed lines selected'); return end

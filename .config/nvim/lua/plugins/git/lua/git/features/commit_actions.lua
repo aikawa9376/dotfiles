@@ -1,4 +1,4 @@
--- Shared patch selection and message editing for the independent commit UI.
+-- Message editing and view restoration for the independent commit UI.
 local M = {}
 local utils = require("git.utils")
 
@@ -19,66 +19,6 @@ local function get_diff_context_at_line(bufnr, lnum)
     end
   end
   return filepath, file_lnum, on_file_header, hunk_start, lines
-end
-
-local function collect_hunk_patch(lines, file_lnum, hunk_start)
-  local result = {}
-  for i = file_lnum, hunk_start - 1 do
-    local l = lines[i]
-    if l:match('^diff %-%-git') or l:match('^index ') or l:match('^old mode')
-      or l:match('^new mode') or l:match('^new file') or l:match('^deleted file')
-      or l:match('^rename') or l:match('^similarity')
-      or l:match('^%-%-%-') or l:match('^%+%+%+') then
-      table.insert(result, l)
-    end
-  end
-  table.insert(result, lines[hunk_start])
-  for i = hunk_start + 1, #lines do
-    local l = lines[i]
-    if l:match('^@@') or l:match('^diff %-%-git') then break end
-    table.insert(result, l)
-  end
-  return result
-end
-
--- Build a patch that individually reverses only the selected +/- lines (zero-context hunks)
-local function build_partial_reverse_patch(filepath, lines, hunk_start, sel_start, sel_end)
-  local header = lines[hunk_start]
-  local old_s, new_s = header:match('^@@ %-(%d+),?%d* %+(%d+),?%d* @@')
-  if not old_s then return nil end
-  local old_cur, new_cur = tonumber(old_s), tonumber(new_s)
-  local sub_hunks = {}
-  for i = hunk_start + 1, #lines do
-    local l = lines[i]
-    if l:match('^@@') or l:match('^diff %-%-git') then break end
-    local prefix, content = l:sub(1, 1), l:sub(2)
-    local in_sel = (i >= sel_start and i <= sel_end)
-    if prefix == ' ' then
-      old_cur, new_cur = old_cur + 1, new_cur + 1
-    elseif prefix == '-' then
-      if in_sel then
-        -- Add back the deleted line at the current position in the new (commit) file
-        table.insert(sub_hunks, '@@ -' .. new_cur .. ',0 +' .. new_cur .. ',1 @@')
-        table.insert(sub_hunks, '+' .. content)
-      end
-      old_cur = old_cur + 1
-    elseif prefix == '+' then
-      if in_sel then
-        -- Remove the added line at the current position in the new (commit) file
-        table.insert(sub_hunks, '@@ -' .. new_cur .. ',1 +' .. new_cur .. ',0 @@')
-        table.insert(sub_hunks, '-' .. content)
-      end
-      new_cur = new_cur + 1
-    end
-  end
-  if #sub_hunks == 0 then return nil end
-  local patch = {
-    'diff --git a/' .. filepath .. ' b/' .. filepath,
-    '--- a/' .. filepath,
-    '+++ b/' .. filepath,
-  }
-  vim.list_extend(patch, sub_hunks)
-  return patch
 end
 
 local function cleanup_view_file(path)
@@ -296,8 +236,9 @@ end
 local function do_amend_commit_from_file(git_dir, commit, message_file, view_state, opts)
   opts = opts or {}
   if opts.rewrite_message then
-    local hash, err = opts.rewrite_message(vim.fn.readfile(message_file))
+    local hash, err, changed = opts.rewrite_message(vim.fn.readfile(message_file))
     if not hash then vim.notify(err, vim.log.levels.ERROR); return false end
+    if changed == false then cleanup_view_file(view_state and view_state.view_file); return true end
     if opts.on_complete then opts.on_complete(hash) end
     if err then vim.notify(err, vim.log.levels.WARN) end
     return true
@@ -306,10 +247,11 @@ local function do_amend_commit_from_file(git_dir, commit, message_file, view_sta
     vim.notify('Not in a git repository', vim.log.levels.ERROR)
     return false
   end
-  local new_hash, err = require('git.features.commit_rewrite').apply(git_dir, commit, {
+  local new_hash, err, changed = require('git.features.commit_rewrite').apply(git_dir, commit, {
     message = vim.fn.readfile(message_file),
   })
   if not new_hash then vim.notify(err, vim.log.levels.ERROR); return false end
+  if changed == false then cleanup_view_file(view_state and view_state.view_file); return true end
   if err then vim.notify(err, vim.log.levels.WARN) end
 
   if opts.reopen ~= false then
@@ -449,6 +391,13 @@ M._do_amend_from_buffer = function(bufnr, skip_confirm)
     return
   end
 
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  if table.concat(lines, '\n'):gsub('\n+$', '') == (vim.b[bufnr].amend_original_text or ''):gsub('\n+$', '') then
+    cleanup_view_file(view_state and view_state.view_file)
+    close_edit_commit_float(bufnr)
+    return
+  end
+
   -- Light confirmation unless explicitly skipped
   if not skip_confirm then
     local short = tostring(commit):sub(1, 7)
@@ -459,7 +408,6 @@ M._do_amend_from_buffer = function(bufnr, skip_confirm)
     end
   end
 
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local temp = vim.fn.tempname()
   local f = io.open(temp, 'w')
   if not f then vim.notify('Failed to create temp file', vim.log.levels.ERROR); return end
@@ -505,9 +453,6 @@ M.open_edit_commit = function(commit, origin_buf, opts)
   open_edit_commit_float(commit, origin_buf, view_state, opts)
 end
 
--- Shared patch selection semantics for the custom commit view.
-M.collect_hunk_patch = collect_hunk_patch
-M.build_partial_reverse_patch = build_partial_reverse_patch
 M.confirm_discard_mode = confirm_discard_mode
 
 return M

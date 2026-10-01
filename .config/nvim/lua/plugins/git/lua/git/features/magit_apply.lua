@@ -78,7 +78,7 @@ function M.context(bufnr, row, revision)
         if patch[index]:match('^@@') then hunk = index; break end
       end
       if hunk then
-        patch = require('git.features.commit_actions').collect_hunk_patch(patch, 1, hunk)
+        patch = require('git.features.commit_patch').hunk(patch, hunk)
       end
     end
     return { work_tree = model.root, patch = table.concat(patch, '\n') .. '\n' }

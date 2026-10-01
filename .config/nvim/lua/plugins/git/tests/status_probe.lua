@@ -70,7 +70,10 @@ vim.fn.executable = executable
 vim.fn.delete(root, 'rf')
 -- Pending and scheduled probes must not outlive their owning buffer.
 local callbacks, kills, changes = {}, 0, 0
-vim.system = function(_, _, callback)
+vim.system = function(argv, opts, callback)
+  -- Status enrichment may still settle after its panel closes. Only intercept
+  -- the isolated probe below, not unrelated renderer queries from that panel.
+  if opts.cwd ~= '/tmp' then return system(argv, opts, callback) end
   callbacks[#callbacks + 1] = callback
   return { kill = function() kills = kills + 1 end }
 end

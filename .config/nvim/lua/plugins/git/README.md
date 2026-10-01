@@ -453,6 +453,23 @@ keeps the stash and reports recovery information. An empty commit can be kept or
 explicitly dropped after discarding its changes. Dropping merges or the sole root
 commit is not supported by this action.
 
+Log/Status reword, adjacent commit moves, drop, parent fixup, and index fixup
+share this saved-worktree and rollback mechanism. History actions resolve full
+hashes and validate Git's rebase todo before changing it. Moves, drop and fixup
+select commits on the current first-parent history; merge targets are rejected
+for these actions. Dropping every commit is also rejected. A contiguous drop
+through HEAD can use reset internally. Index fixup commits the staged changes
+and restores only the remaining unstaged/untracked work; on failure it restores
+the original index as well. Root commits support reword and index fixup.
+
+File, hunk and selected-line removal use forward patches, reversed against the
+target commit. Selected-line patches retain quoted paths and EOF markers, count
+one hunk, and leave unselected edits intact. A line selection on a rename keeps
+its current name. Mixed restores the removed patch as unstaged changes after
+the user's saved changes return. If either restoration conflicts, recovery
+information retains the stash and/or removed patch. These actions run
+synchronously, so replaying a long history can block Neovim.
+
 LazyAgent Notes retain immutable file/line identity and follow a file header when
 its diff is collapsed, returning to their selection on expansion. Their source
 identity is preserved by the existing Notes session persistence.
@@ -461,16 +478,23 @@ identity is preserved by the existing Notes session persistence.
 
 - `commit.lua`: view, editable-message validation, navigation, actions, routing.
 - `commit_model.lua`: immutable metadata, file inventory, statistics, lazy patches.
-- `commit_rewrite.lua`: guarded history changes and worktree restoration.
+- `commit_rewrite.lua`: target amend, descendant replay, and Hard/Mixed removal.
+- `history_rewrite.lua`: validation, rebase todo edits, stash ownership and rollback.
+- `history_edits.lua`: log/status move, drop, parent fixup and index fixup.
+- `commit_patch.lua`: pure file/hunk/line patch selection.
+- `commit_actions.lua`: message editing, view restoration and discard confirmation.
 - `commit_notes.lua`: optional Notes identity and row mapping.
 - `change_display.lua`: file rows and statistics shared with status.
 - `panel_keys.lua`: normal key migration, contextual identifiers/help, and ordinary action choosers.
 
 Run checks from this directory with
 `nvim --headless --clean -u NONE -l tests/<name>.lua`.
-The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`,
+The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`, `commit_patch`,
 `commit_notes`, `commit_lifecycle`, `commit_entrypoints`, and `commit_blob_return`
 (`commit_blob_return` uses installed Gitsigns). No check loads Fugitive.
+`history_edits` checks real move/drop/fixup operations, index contributions,
+dirty-state preservation, conflicts and rollback. `commit_patch` checks special
+paths, EOF, file creation/deletion, renames, historical Mixed removal and recovery.
 `commands` checks actual Git mutations and object lifetimes; `lazy_loading` checks
 Lazy command registration and the active imports. `panel_help` checks long/wide-key alignment, colors, and action execution.
 `panel_keymaps` covers reset

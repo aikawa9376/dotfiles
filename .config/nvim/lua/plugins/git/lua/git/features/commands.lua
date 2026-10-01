@@ -369,226 +369,37 @@ function M.setup()
     reflog_redo()
   end, {})
 
+  local function rewrite_result(hash, warning, on_complete, changed)
+    if not hash then vim.notify(warning, vim.log.levels.ERROR); return end
+    if warning then vim.notify(warning, vim.log.levels.WARN) end
+    if changed ~= false and on_complete then vim.schedule(on_complete) end
+    return hash
+  end
+
   function M.reword_commit(commit_hash, new_message, on_complete)
-    if not commit_hash or commit_hash == '' then
-      vim.notify('No commit hash provided', vim.log.levels.ERROR)
-      return
-    end
-    if not new_message or new_message == '' then
-      vim.notify('New commit message is empty', vim.log.levels.WARN)
-      return
-    end
-
-    local work_tree = get_work_tree_from_fugitive()
-    if not work_tree then return end
-
-    local stashed = apply_auto_stash(work_tree)
-    if stashed == nil then return end
-
-    local short_commit_hash = commit_hash:sub(1, 7)
-
-    -- Sequence editor: mark target commit for reword
-    local seq_file = vim.fn.tempname()
-    local seq_script = string.format('#!/bin/sh\nsed -i "s/^pick %s/reword %s/" "$1"\n', short_commit_hash, short_commit_hash)
-    local f_seq = io.open(seq_file, 'w')
-    if not f_seq then
-      if stashed then pop_auto_stash(work_tree) end
-      vim.notify('Failed to create sequence editor script', vim.log.levels.ERROR)
-      return
-    end
-    f_seq:write(seq_script)
-    f_seq:close()
-    vim.fn.system('chmod +x ' .. vim.fn.shellescape(seq_file))
-
-    -- Editor script: replace message with provided text
-    local msg_file = vim.fn.tempname()
-    local f_msg = io.open(msg_file, 'w')
-    if not f_msg then
-      if stashed then pop_auto_stash(work_tree) end
-      vim.fn.delete(seq_file)
-      vim.notify('Failed to create message file', vim.log.levels.ERROR)
-      return
-    end
-    f_msg:write(new_message .. '\n')
-    f_msg:close()
-
-    local editor_file = vim.fn.tempname()
-    local editor_script = string.format('#!/bin/sh\ncat %s > "$1"\n', vim.fn.shellescape(msg_file))
-    local f_editor = io.open(editor_file, 'w')
-    if not f_editor then
-      if stashed then pop_auto_stash(work_tree) end
-      vim.fn.delete(seq_file)
-      vim.fn.delete(msg_file)
-      vim.notify('Failed to create editor script', vim.log.levels.ERROR)
-      return
-    end
-    f_editor:write(editor_script)
-    f_editor:close()
-    vim.fn.system('chmod +x ' .. vim.fn.shellescape(editor_file))
-
-    local rebase_cmd = string.format(
-      'GIT_SEQUENCE_EDITOR=%s GIT_EDITOR=%s git -C %s rebase -i %s',
-      vim.fn.shellescape(seq_file),
-      vim.fn.shellescape(editor_file),
-      vim.fn.shellescape(work_tree),
-      vim.fn.shellescape(commit_hash .. '^')
-    )
-
-    local result = vim.fn.system(rebase_cmd)
-
-    vim.fn.delete(seq_file)
-    vim.fn.delete(editor_file)
-    vim.fn.delete(msg_file)
-    if stashed then pop_auto_stash(work_tree) end
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify('Reword failed: ' .. result, vim.log.levels.ERROR)
-    else
-      utils.fire_fugitive_changed({ work_tree = work_tree })
-      if on_complete then
-        vim.schedule(on_complete)
-      end
-    end
+    if not commit_hash or commit_hash == '' then vim.notify('No commit provided', vim.log.levels.WARN); return end
+    if not new_message or vim.trim(new_message) == '' then vim.notify('New commit message is empty', vim.log.levels.WARN); return end
+    local root = get_work_tree_from_fugitive()
+    if not root then return end
+    local hash, warning, changed = require('git.features.commit_rewrite').apply(root, commit_hash,
+      { message = vim.split(new_message, '\n', { plain = true }) })
+    return rewrite_result(hash, warning, on_complete, changed)
   end
 
   function M.fixup_commit(commit_hash, on_complete)
-    if not commit_hash or commit_hash == '' then
-      vim.notify('No commit hash provided', vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree = get_work_tree_from_fugitive()
-    if not work_tree then return end
-
-    local stashed = apply_auto_stash(work_tree)
-    if stashed == nil then return end
-
-    -- Get the parent commit hash
-    local parent_commit_hash_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. commit_hash .. '^'
-    local parent_commit_hash = vim.fn.trim(vim.fn.system(parent_commit_hash_cmd))
-    if vim.v.shell_error ~= 0 then
-      if stashed then pop_auto_stash(work_tree) end
-      vim.notify('Failed to get parent commit for ' .. commit_hash, vim.log.levels.ERROR)
-      return
-    end
-
-    -- Create a temporary script file
-    local tmpfile = vim.fn.tempname()
-    local short_commit_hash = commit_hash:sub(1, 7)
-    local script_content = string.format('#!/bin/sh\nsed -i \'s/^pick %s/fixup %s/\' "$1"\n', short_commit_hash, short_commit_hash)
-
-    local f = io.open(tmpfile, 'w')
-    if not f then
-      vim.notify('Failed to create temp script', vim.log.levels.ERROR)
-      return
-    end
-
-    f:write(script_content)
-    f:close()
-    vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
-
-    -- Run rebase with GIT_SEQUENCE_EDITOR
-    local rebase_cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(parent_commit_hash .. '^')
-    local result = vim.fn.system(rebase_cmd)
-    vim.fn.delete(tmpfile)
-
-    if stashed then pop_auto_stash(work_tree) end
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify('Rebase failed: ' .. result, vim.log.levels.ERROR)
-    else
-      utils.fire_fugitive_changed({ work_tree = work_tree })
-      if on_complete then
-        vim.schedule(on_complete)
-      end
-    end
+    if not commit_hash or commit_hash == '' then vim.notify('No commit provided', vim.log.levels.WARN); return end
+    local root = get_work_tree_from_fugitive()
+    if not root then return end
+    local hash, warning = require('git.features.history_edits').fixup(root, commit_hash)
+    return rewrite_result(hash, warning, on_complete)
   end
 
   function M.mix_index(commit_hash, on_complete, new_message)
-    if not commit_hash or commit_hash == '' then
-      vim.notify('No commit hash provided', vim.log.levels.ERROR)
-      return
-    end
-
-    local work_tree = get_work_tree_from_fugitive()
-    if not work_tree then return end
-
-    -- Check if there are staged changes
-    vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' diff --cached --quiet')
-    -- exit_code is 1 if there are differences (dirty), 0 if clean
-    local is_clean = (vim.v.shell_error == 0)
-
-    local allow_empty = ''
-    if is_clean then
-       if not new_message or new_message == '' then
-          vim.notify("No staged changes to fixup", vim.log.levels.WARN)
-          return
-       end
-       allow_empty = ' --allow-empty'
-    end
-
-    -- 1. Create the fixup/amend commit using the index
-    -- Note: 'git commit --fixup=amend:<commit> -m <msg>' is not supported.
-    -- We must manually construct the commit message for autosquash if we have a new message.
-
-    local commit_cmd = ''
-    local msg_file = nil
-
-    if new_message and new_message ~= '' then
-       -- Get the subject of the target commit for "amend!" prefix
-       local subject_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' log -1 --format=%s ' .. commit_hash
-       local subject = vim.fn.trim(vim.fn.system(subject_cmd))
-
-       if vim.v.shell_error ~= 0 then
-          vim.notify("Failed to get commit subject", vim.log.levels.ERROR)
-          return
-       end
-
-       -- Construct message: "amend! <subject>\n\n<new_message>"
-       msg_file = vim.fn.tempname()
-       local f = io.open(msg_file, 'w')
-       if not f then return end
-       -- 'amend!' prefix triggers fixup -C (reword) in autosquash
-       f:write('amend! ' .. subject .. '\n\n' .. new_message)
-       f:close()
-
-       commit_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' commit ' .. allow_empty .. ' -F ' .. vim.fn.shellescape(msg_file)
-    else
-       -- Standard fixup (no message change)
-       commit_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' commit ' .. allow_empty .. ' --fixup=' .. commit_hash
-    end
-
-    local commit_res = vim.fn.system(commit_cmd)
-
-    if msg_file then vim.fn.delete(msg_file) end
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify("Commit failed: " .. commit_res, vim.log.levels.ERROR)
-      return
-    end
-
-    -- 2. Auto stash unstaged changes
-    local stashed = apply_auto_stash(work_tree)
-    if stashed == nil then return end -- Error in stashing
-
-    -- 3. Rebase --autosquash
-    local parent_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. commit_hash .. '^'
-    local parent_hash = vim.fn.trim(vim.fn.system(parent_cmd))
-
-    local rebase_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i --autosquash ' .. vim.fn.shellescape(parent_hash)
-
-    rebase_cmd = 'GIT_SEQUENCE_EDITOR=: ' .. rebase_cmd
-
-    local rebase_res = vim.fn.system(rebase_cmd)
-
-    if stashed then pop_auto_stash(work_tree) end
-
-     if vim.v.shell_error ~= 0 then
-        vim.notify("Rebase failed: " .. rebase_res, vim.log.levels.ERROR)
-     else
-       utils.fire_fugitive_changed({ work_tree = work_tree })
-       if on_complete then vim.schedule(on_complete) end
-     end
+    if not commit_hash or commit_hash == '' then vim.notify('No commit provided', vim.log.levels.WARN); return end
+    local root = get_work_tree_from_fugitive()
+    if not root then return end
+    local hash, warning, changed = require('git.features.history_edits').mix_index(root, commit_hash, new_message)
+    return rewrite_result(hash, warning, on_complete, changed)
   end
 
   function M.mix_index_with_input(commit_hash)
@@ -610,189 +421,19 @@ function M.setup()
   end
 
   function M.move_commit(current_commit, target_commit, direction, on_complete)
-    if not current_commit or current_commit == '' or not target_commit or target_commit == '' then
-      vim.notify('Invalid commits', vim.log.levels.WARN)
-      return
-    end
-
-    local work_tree = get_work_tree_from_fugitive()
-    if not work_tree then return end
-    local git = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' '
-
-    local current_branch = vim.fn.system(git .. 'rev-parse --abbrev-ref HEAD'):gsub('\n', '')
-    if current_branch == 'HEAD' then
-      vim.notify('Cannot move commits in detached HEAD state', vim.log.levels.ERROR)
-      return
-    end
-
-    -- Determine the base commit for rebase (parent of the older commit)
-    local base_commit
-    if direction == 'down' then
-      base_commit = target_commit .. '^'
-    else
-      base_commit = current_commit .. '^'
-    end
-
-    local stashed = apply_auto_stash(work_tree)
-    if stashed == nil then return end
-
-    -- Create awk script - simplest approach
-    local tmpfile = vim.fn.tempname()
-    local script = string.format([[
-#!/bin/bash
-awk '
-/^pick %s/ { line1=NR; save1=$0; next }
-/^pick %s/ { line2=NR; save2=$0; next }
-{ lines[NR]=$0 }
-END {
-  for (i=1; i<=NR+2; i++) {
-    if (i==line1) print save2
-    else if (i==line2) print save1
-    else if (lines[i]) print lines[i]
-  }
-}
-' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
-]], current_commit:sub(1,7), target_commit:sub(1,7))
-
-    local f = io.open(tmpfile, 'w')
-    if not f then
-      if stashed then pop_auto_stash(work_tree) end
-      vim.notify('Failed to create temp rebase script', vim.log.levels.ERROR)
-      return
-    end
-    f:write(script)
-    f:close()
-    vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
-
-    local cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile)
-      .. ' ' .. git .. 'rebase -i ' .. vim.fn.shellescape(base_commit)
-    local output = vim.fn.system(cmd)
-    vim.fn.delete(tmpfile)
-
-    if stashed then pop_auto_stash(work_tree) end
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify('Failed to swap commits:\n' .. output, vim.log.levels.ERROR)
-    else
-      if on_complete then
-        vim.schedule(on_complete)
-      else
-        M.reload_log()
-      end
-    end
+    if not current_commit or not target_commit then vim.notify('Invalid commits', vim.log.levels.WARN); return end
+    local root = get_work_tree_from_fugitive()
+    if not root then return end
+    local hash, warning = require('git.features.history_edits').move(root, current_commit, target_commit, direction)
+    return rewrite_result(hash, warning, on_complete)
   end
 
   function M.drop_commits(commits, on_complete)
     if not commits or #commits == 0 then return end
-
-    local work_tree = get_work_tree_from_fugitive()
-    if not work_tree then return end
-
-    local stashed = apply_auto_stash(work_tree)
-    if stashed == nil then return end
-
-    -- Sort commits to find the oldest one (last in chronological order)
-    local commits_args = table.concat(commits, " ")
-    local sort_cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-list --no-walk --date-order ' .. commits_args
-    local sorted_commits = vim.fn.systemlist(sort_cmd)
-
-    if vim.v.shell_error ~= 0 or #sorted_commits == 0 then
-        if stashed then pop_auto_stash(work_tree) end
-        vim.notify('Failed to process commits', vim.log.levels.ERROR)
-        return
-    end
-
-    -- The last one in rev-list output (date-order) is the oldest
-    local oldest_commit = sorted_commits[#sorted_commits]
-
-    -- Check if oldest commit has a parent
-    vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse ' .. oldest_commit .. '^ 2>/dev/null')
-    local rebase_base = oldest_commit .. '^'
-
-    if vim.v.shell_error ~= 0 then
-      -- No parent (root commit). Need --root option.
-      rebase_base = '--root'
-    end
-
-    -- Check if we are dropping all commits in the rebase range (which causes empty todo list error)
-    local range = nil
-    if rebase_base == '--root' then
-       range = 'HEAD'
-    else
-       range = rebase_base .. '..HEAD'
-    end
-
-    local commits_in_range = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-list ' .. range)
-
-    local all_dropped = true
-    for _, rev in ipairs(commits_in_range) do
-       local found = false
-       for _, dropped in ipairs(commits) do
-          if rev:match('^' .. dropped) or dropped:match('^' .. rev) then
-             found = true
-             break
-          end
-       end
-       if not found then
-          all_dropped = false
-          break
-       end
-    end
-
-    if all_dropped and rebase_base ~= '--root' then
-          -- If dropping all commits in range, use reset --hard
-          local cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' reset --hard ' .. vim.fn.shellescape(rebase_base)
-          local out = vim.fn.system(cmd)
-          if vim.v.shell_error ~= 0 then
-             vim.notify('Drop (reset) failed: ' .. out, vim.log.levels.ERROR)
-          else
-             if stashed then pop_auto_stash(work_tree) end
-             if on_complete then
-               vim.schedule(on_complete)
-             else
-               M.reload_log()
-             end
-          end
-          return
-    end
-
-    local tmpfile = vim.fn.tempname()
-    local f = io.open(tmpfile, 'w')
-    if not f then
-       if stashed then pop_auto_stash(work_tree) end
-       vim.notify('Failed to create temp file', vim.log.levels.ERROR)
-       return
-    end
-
-    f:write('#!/bin/sh\n')
-    -- Use sed to delete lines matching the commits
-    for _, commit in ipairs(commits) do
-        local short = commit:sub(1, 7)
-        -- Match any command (pick, reword, etc) followed by the hash
-        f:write('sed -i "/^[a-z]\\+ ' .. short .. '/d" "$1"\n')
-    end
-    -- Special handling for root commit: if we are dropping the root commit,
-    -- git rebase -i --root will show it as "pick <hash>".
-    -- If we delete that line, the rebase might fail if it results in empty commit history?
-    -- Actually git rebase -i --root allows deleting the root commit.
-    f:close()
-    vim.fn.system('chmod +x ' .. vim.fn.shellescape(tmpfile))
-
-    local rebase_cmd = 'GIT_SEQUENCE_EDITOR=' .. vim.fn.shellescape(tmpfile) .. ' git -C ' .. vim.fn.shellescape(work_tree) .. ' rebase -i ' .. vim.fn.shellescape(rebase_base)
-    local result = vim.fn.system(rebase_cmd)
-    vim.fn.delete(tmpfile)
-
-    if stashed then pop_auto_stash(work_tree) end
-
-    if vim.v.shell_error ~= 0 then
-      vim.notify('Drop failed: ' .. result, vim.log.levels.ERROR)
-    else
-      if on_complete then
-        vim.schedule(on_complete)
-      else
-        M.reload_log()
-      end
-    end
+    local root = get_work_tree_from_fugitive()
+    if not root then return end
+    local hash, warning = require('git.features.history_edits').drop(root, commits)
+    return rewrite_result(hash, warning, on_complete)
   end
 
   -- Revert commits -------------------------------------------------------
