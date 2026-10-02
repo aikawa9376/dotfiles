@@ -95,7 +95,8 @@ these pins; its quickfix action remains for ordinary files. Harpoon keeps its
 existing cwd-based list storage, and saved Git entries carry their own worktree
 root, so selecting from another repository uses the saved repository. Lists are
 shared across branches within the same cwd; switching branches does not create
-a separate list.
+a separate list. Hook icons mark ordinary file pins only, including in the
+quick menu; Git pins still participate in its nearest-target cursor selection.
 
 | View | Saved target and reopening behavior |
 | --- | --- |

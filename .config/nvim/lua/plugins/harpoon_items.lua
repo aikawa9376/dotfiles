@@ -90,15 +90,7 @@ function M.menu_item(buf, row)
   if text and text ~= '' and not text:find(' · ', 1, true) then return M.create(list.config, text) end
 end
 function M.matches(item, buf)
-  if item.context.git then
-    local ok, nav = pcall(git.capture, buf, { item.context.row or 1, item.context.col or 0 })
-    if not ok or not nav then return false end
-    local target = item.context.git
-    if target.view == 'object' or target.view == 'blame' then
-      nav.row = target.row
-    end
-    return git.identity(nav) == git.identity(target)
-  end
+  if item.context.git then return false end
   return api.nvim_buf_get_name(buf) == absolute(item)
 end
 function M.preview(item)

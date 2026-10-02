@@ -13,7 +13,7 @@ function M.set_buffer_icon(config, buf)
   local list = require('harpoon'):list('multiple')
   for index = 1, list:length() do
     local item = list:get(index)
-    -- Panel rows are dynamic. The menu marks their surface; file signs track lines.
+    -- Icons belong to ordinary file pins; Git panels retain their own presentation.
     if item and not item.context.git and items.matches(item, buf) then
       local row = math.max(1, math.min(item.context.row or 1, vim.api.nvim_buf_line_count(buf)))
       if config.icon_position == 'signcolumn' then
@@ -33,8 +33,10 @@ function M.set_current_buffer_icon(cx, config)
   for row = 1, #cx.contents do
     local item = items.menu_item(cx.bufnr, row)
     if item and items.same_surface(item, source) then
-      vim.api.nvim_buf_set_extmark(cx.bufnr, ns, row - 1, 0,
-        { virt_text = { { config.icon, 'DevIconQt' } }, virt_text_pos = 'eol' })
+      if not item.context.git then
+        vim.api.nvim_buf_set_extmark(cx.bufnr, ns, row - 1, 0,
+          { virt_text = { { config.icon, 'DevIconQt' } }, virt_text_pos = 'eol' })
+      end
       local d = math.abs((source.context.row or 1) - (item.context.row or 1))
       if items.equals(item, source) then d = -1 end
       if not distance or d < distance then nearest, distance = row, d end
