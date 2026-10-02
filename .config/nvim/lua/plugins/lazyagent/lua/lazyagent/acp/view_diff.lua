@@ -923,6 +923,12 @@ function M.new(ctx)
 
     local transcript_stop = transcript_line_count(bufnr)
     vim.api.nvim_buf_clear_namespace(bufnr, diff_ns, 0, -1)
+    -- Clearing also removes ellipsis marks. Their old IDs may be allocated to
+    -- new diff backgrounds below; keep cached colors, but allocate fresh IDs.
+    for _, mark in pairs(truncated_code_rows[bufnr] or {}) do
+      mark.highlight_id = nil
+      mark.conceal_id = nil
+    end
     if transcript_stop <= 0 then
       return
     end

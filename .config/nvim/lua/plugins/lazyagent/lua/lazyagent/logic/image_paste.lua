@@ -783,17 +783,33 @@ local function extract_image_reference(line, opts)
   local url_starts = opts.include_managed_refs and preview_url_candidate_starts or url_candidate_starts
   local lower = line:lower()
   local best = nil
+  -- A reference cannot span separate quoted strings or markup delimiters.
+  -- Without these boundaries, every suffix in a code/JSON line retries all
+  -- earlier words and paths, normalizing ever longer slices of source code.
+  -- Keep spaces and braces inside a candidate: both are valid in image paths.
+  local boundaries = {}
+  for pos in line:gmatch("()[\"'`<>]") do
+    boundaries[#boundaries + 1] = pos
+  end
 
   for _, suffix in ipairs(IMAGE_EXTENSION_SUFFIXES) do
     local init = 1
+    local boundary_idx = 1
+    local segment_start = 1
     while true do
       local ext_start, ext_end = lower:find(suffix, init, true)
       if not ext_start then
         break
       end
 
+      while boundaries[boundary_idx] and boundaries[boundary_idx] < ext_start do
+        segment_start = boundaries[boundary_idx] + 1
+        boundary_idx = boundary_idx + 1
+      end
+      local segment = line:sub(segment_start, ext_start)
       local candidate_stop = candidate_end_position(line, ext_end)
-      for _, start_pos in ipairs(path_starts(line, ext_start)) do
+      for _, relative_start in ipairs(path_starts(segment, #segment)) do
+        local start_pos = segment_start + relative_start - 1
         local raw = line:sub(start_pos, candidate_stop)
         local source_path = normalize_image_path_text(raw)
         local source_url = source_path == nil and normalize_image_url_text(raw) or nil

@@ -26,7 +26,9 @@ function M.run()
   local replacement_bufnr
   local image_path = vim.fn.tempname() .. ".png"
   local literal_image_path = vim.fn.tempname() .. "-{left,right}.png"
+  local spaced_image_path = vim.fn.tempname() .. " with spaces.png"
   local previous_expand = vim.fn.expand
+  local previous_fs_stat = vim.uv.fs_stat
 
   local function cleanup()
     local image_paste = package.loaded["lazyagent.logic.image_paste"]
@@ -45,8 +47,10 @@ function M.run()
     package.loaded["snacks"] = previous_snacks
     state.opts.image_paste = previous_image_opts
     vim.fn.expand = previous_expand
+    vim.uv.fs_stat = previous_fs_stat
     vim.fn.delete(image_path)
     vim.fn.delete(literal_image_path)
+    vim.fn.delete(spaced_image_path)
   end
 
   local ok, err = xpcall(function()
@@ -198,6 +202,35 @@ function M.run()
     assert_equal(expand_calls, 0, "image candidates never invoke shell expansion")
     assert_equal(placements[#placements].src, literal_image_path, "braces in image filenames stay literal")
     vim.fn.expand = previous_expand
+
+    -- Reentering a transcript scans its viewport even when it is decorated.
+    -- Each quoted code reference must not probe every earlier word in the line.
+    local repeats = 64
+    local stat_calls = 0
+    vim.uv.fs_stat = function(...)
+      stat_calls = stat_calls + 1
+      return previous_fs_stat(...)
+    end
+    vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, {
+      string.rep('local value = "some/path/icon.svg"; ', repeats) .. '"' .. image_path .. '"',
+    })
+    image_paste.refresh_buffer_previews(acp_bufnr)
+    assert_truthy(stat_calls <= repeats * 5, "quoted code image candidates have bounded filesystem probes")
+    assert_equal(placements[#placements].src, image_path, "a real image after many code strings is still previewed")
+    vim.uv.fs_stat = previous_fs_stat
+
+    vim.fn.writefile({ "spaced-image-fixture" }, spaced_image_path, "b")
+    vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, {
+      '[image] @' .. spaced_image_path .. ' image/png',
+    })
+    image_paste.refresh_buffer_previews(acp_bufnr)
+    assert_equal(placements[#placements].src, spaced_image_path, "reference boundaries preserve spaces in filenames")
+
+    vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, {
+      'json = {"asset": "https://example.test/image.png"}',
+    })
+    image_paste.refresh_buffer_previews(acp_bufnr)
+    assert_equal(placements[#placements].src, "https://example.test/image.png", "quoted remote image references remain valid")
   end, debug.traceback)
 
   cleanup()

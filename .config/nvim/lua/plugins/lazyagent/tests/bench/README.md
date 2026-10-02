@@ -82,6 +82,20 @@ not send physical mouse input. For same-machine comparisons,
 `LAZYAGENT_FOCUS_BASELINE_DIR` may point to saved `view_diff.lua` and `updates.lua`
 modules from the previous implementation.
 
+## Repeated image-reference scans
+
+```sh
+LAZYAGENT_BENCH_OUT=/tmp/lazyagent-image-scan.json \
+nvim --headless --clean -u NONE -l tests/bench/image_scan.lua
+```
+
+This measures first and unchanged repeated viewport scans of generated code
+lines containing 16/64/128/256 quoted `icon.svg` references. Missing fixture paths
+exercise detection without an image renderer or provider. Results include source
+bytes, processing time and filesystem probe counts; there are no timing thresholds.
+It measures the image scan called by entry events, not the complete editor redraw.
+`LAZYAGENT_IMAGE_SCAN_BASELINE` can point to an older `logic/image_paste.lua`.
+
 ## Large thread manifest saves
 
 ```sh

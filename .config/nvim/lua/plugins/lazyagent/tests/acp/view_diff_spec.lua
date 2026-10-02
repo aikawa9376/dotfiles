@@ -149,6 +149,48 @@ function M.run()
   vim.api.nvim_exec_autocmds("CursorMoved", { buffer = bufnr })
   assert(vim.wait(1000, function() return lookups[final_row] == 2 end, 10), "changed text invalidates capture cache")
 
+  -- Rebuilding diff backgrounds allocates new IDs in the same namespace as
+  -- ellipses. Cached IDs from the old pass must not replace newly added rows.
+  local mixed_ns = vim.api.nvim_create_namespace("lazyagent_acp_view_diff_mixed_spec")
+  local mixed_view = require("lazyagent.acp.view_diff").new({
+    diff_utils = require("lazyagent.acp.diff"),
+    diff_ns = mixed_ns,
+    transcript_line_count = function() return vim.api.nvim_buf_line_count(bufnr) end,
+    captures_at_pos = function() return { { capture = "string", lang = "lua" } } end,
+  })
+  local mixed_source = {
+    "```lua",
+    '- local value = "' .. string.rep("old text ", 12) .. '"',
+    '+ local value = "' .. string.rep("new text ", 12) .. '"',
+    "+ local added = 1",
+    "```",
+  }
+  local mixed_display = mixed_view.normalize_diff_display_lines(bufnr, mixed_source, 28, 0)
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, mixed_display)
+  vim.cmd("normal! ggzt")
+  mixed_view.decorate_diff_blocks(bufnr)
+  local appended = { "```lua", "+ local later = 2", "+ local later = 3", "+ local later = 4", "```" }
+  vim.api.nvim_buf_set_lines(bufnr, -1, -1, false, appended)
+  local function check_diff_backgrounds()
+    local rows = {}
+    local suffixes = 0
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, mixed_ns, 0, -1, { details = true })) do
+      if mark[4].hl_group == "LazyAgentACPDiffAdd" or mark[4].hl_group == "LazyAgentACPDiffDelete" then
+        rows[mark[2]] = true
+      end
+      if mark[4].conceal == "" then suffixes = suffixes + 1 end
+    end
+    for _, row in ipairs({ 1, 2, 3, 6, 7, 8 }) do
+      assert(rows[row], "ellipsis refresh must preserve diff background at row " .. row)
+    end
+    assert(suffixes == 2, "diff rebuild preserves both concealed string suffixes")
+    return #vim.api.nvim_buf_get_extmarks(bufnr, mixed_ns, 0, -1, {})
+  end
+  mixed_view.decorate_diff_blocks(bufnr)
+  local mixed_count = check_diff_backgrounds()
+  mixed_view.decorate_diff_blocks(bufnr)
+  assert(check_diff_backgrounds() == mixed_count, "repeated mixed decoration keeps stable extmark counts")
+
   package.loaded["render-markdown.state"] = original_render_markdown_state
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
