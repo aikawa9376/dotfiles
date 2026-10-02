@@ -2907,7 +2907,9 @@ function M.setup(group)
       vim.keymap.set('n', '<CR>', open_status_item, { buffer = b, nowait = true, silent = true })
       vim.keymap.set('n', '<2-LeftMouse>', open_status_item, { buffer = b, nowait = true, silent = true })
       vim.keymap.set('n', '<Tab>', function()
-        status_folds.toggle(b, vim.api.nvim_win_get_cursor(0)[1])
+        local ctx = require('git.features.magit_actions').context(b)
+        if ctx and ctx.commit then require('git.features.patch_collection').open(ctx)
+        else status_folds.toggle(b, vim.api.nvim_win_get_cursor(0)[1]) end
       end, { buffer = b, nowait = true, silent = true, desc = 'Toggle status section' })
 
       vim.keymap.set('n', 'gS', function()

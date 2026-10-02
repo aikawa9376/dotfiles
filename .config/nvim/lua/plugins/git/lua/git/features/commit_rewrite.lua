@@ -14,6 +14,9 @@ function M.apply(root, revision, opts)
     return nil, 'Cannot drop a merge or the only root commit with this action'
   end
   local has_patch = opts.patch and #opts.patch > 0
+  if opts.split and (not has_patch or not opts.message or #parents > 1) then
+    return nil, 'Splitting requires a patch, a new commit message and a non-merge commit'
+  end
   if not opts.drop and not has_patch then
     if not opts.message then return commit, nil, false end
     local same, message_err = history.same_message(root, commit, table.concat(opts.message, '\n'))
@@ -59,9 +62,19 @@ function M.apply(root, revision, opts)
       tx:run(args, { stdin = table.concat(opts.patch, '\n') .. '\n' })
     end
     local amend = { 'commit', '--amend', '--allow-empty' }
-    if opts.message then vim.list_extend(amend, { '--only', '--cleanup=verbatim', '-F', '-' })
+    if opts.message and not opts.split then vim.list_extend(amend, { '--only', '--cleanup=verbatim', '-F', '-' })
     else amend[#amend + 1] = '--no-edit' end
-    tx:run(amend, opts.message and { stdin = table.concat(opts.message, '\n') .. '\n' } or nil)
+    tx:run(amend, opts.message and not opts.split and { stdin = table.concat(opts.message, '\n') .. '\n' } or nil)
+    if opts.split then
+      -- Recompute after removal: reapplying a partial addition's original
+      -- context can conflict with the very lines that were just removed.
+      local extracted = tx:run({ 'diff', '--binary', '--full-index', '--no-color',
+        '--no-ext-diff', '--no-textconv', 'HEAD', commit, '--' })
+      if extracted == '' then error('The selected patch does not change this commit', 0) end
+      tx:run({ 'apply', '--index', '--binary', '-' }, { stdin = extracted })
+      tx:run({ 'commit', '--cleanup=verbatim', '-F', '-' },
+        { stdin = table.concat(opts.message, '\n') .. '\n' })
+    end
     -- The view follows the target, not the tip created by replaying descendants.
     local target = vim.trim(tx:run({ 'rev-parse', 'HEAD' }))
     if commit ~= tx.head then tx:run({ 'rebase', '--continue' }, { env = { GIT_EDITOR = 'true' } }) end

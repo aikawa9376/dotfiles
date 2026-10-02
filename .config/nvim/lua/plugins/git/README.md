@@ -300,13 +300,16 @@ complete arguments, and open commits through the independent Gsplit command. `Gi
 navigation (`]]`, `[[`, `i`), folds (`o`), and Enter to inspect the file/commit.
 
 `<Space><Space>` opens a separate Git action menu in status, log, branch,
-reflog, and worktree panels. It uses the file, commit, ref, reflog destination,
+reflog, worktree, and commit-detail panels. It uses the file, commit, ref, reflog destination,
 or worktree under the cursor, with no repeated
 title/context header. The root offers Magit-style prefixes for cherry-pick
 (`A`), apply variants (`v`), bisect (`B`), clone (`C`), commit (`c`), diff (`d`), pull (`F`), fetch
 (`f`), log (`l`), remote (`M`), merge (`m`), submodule (`o`), push (`P`), rebase
 (`r`), tag (`t`), revert (`V`), reset (`X`), references (`y`), stash (`z`),
 and worktree (`Z`), plus ignore (`i`) and commit copy (`Y`) when applicable.
+History (`H`) is available throughout these panels and offers operation Undo/Redo,
+fixup-target detection, and patch collection. A selected commit also exposes
+`<Tab>` to open patch collection directly from the menu.
 Each operation panel shows its arguments and
 execution keys. Toggle an argument with its displayed key, then press an
 execution key; `q` or `<Esc>` closes the menu. An active cherry-pick, revert,
@@ -526,6 +529,82 @@ modes/cancel, selected stash/WIP identity, copy/edit/apply, and prefix input.
 `editor` and `operation_output` use local Unix sockets and require socket permission.
 `panel_layout` needs normal startup to apply editor-grid resize events:
 `nvim --headless --clean -u NONE '+lua dofile("tests/panel_layout.lua")' +qa!`.
+
+## Fixup target, argument presets, patch collection, and Undo/Redo
+
+`GitFixupBase`, History `H f`, or Commit `c F` finds the commit behind the
+current staged logical change. If the index is empty it examines tracked changes
+against HEAD. Detection leaves the index unchanged. Deleted/replaced lines use
+range blame; addition-only changes use their neighbouring lines. When deletion
+hunks exist, pure additions are assumed related and the picker says so.
+Configured `vim.g.git_main_branches` (default `{ 'main', 'master' }`) are excluded.
+Multiple targets require staging a smaller logical change. The picker offers
+inspection, fixup creation, or amending the target from staged changes; HEAD and
+staged content are checked again before mutation. New files without existing
+neighbours cannot be attributed automatically.
+
+Operation menus support argument presets with the following keys:
+
+| Key | Behavior |
+| --- | --- |
+| `<C-w>` | Save this operation's arguments for the session and worktree |
+| `<C-s>` | Save default arguments for all worktrees |
+| `<C-r>` | Save default arguments for this worktree |
+| `<C-h>` | Recall recent executed argument sets for this operation/worktree |
+| `<C-d>` | Clear this operation's global and current-worktree saves; restore built-in defaults |
+
+Session saves take precedence over worktree saves, which take precedence over
+shared saves. Unsaved toggles remain local to the open menu. Execution history
+keeps at most 20 distinct sets per operation/worktree. Persistent defaults and
+history use `stdpath('state')/git-ui/transient-presets.json`; the menu still shows
+which arguments are active. Selection targets are not saved as arguments.
+
+`GitPatch [commit]` opens a dedicated tab with the existing commit view on the
+left and an editable new-commit message plus accumulated patch preview on the
+right. `<Tab>` from Log/Reflog/Commit detail, or a commit row in Status, opens
+this tab. Status section rows retain their fold toggle.
+
+| Where / key | Behavior |
+| --- | --- |
+| Left `<CR>`, `o`, `=`, `>` | Load and show the selected file diff |
+| Left `<Space>` | Toggle the whole file or current hunk in the collection |
+| Left Visual `<Space>` | Toggle changed lines within one hunk |
+| Either `<Tab>` | Move between source and collected patch |
+| Right `c` | Confirm splitting the selected changes into a new commit after the source |
+| Right `r` / `R` | Clear the selection / restore the generated preview |
+| Either `q` | Close the tab and release its selection and owned buffers |
+
+The collection belongs to one immutable source commit and can span files and
+noncontiguous changed lines. It does not follow a different commit implicitly.
+Edit only the message above the separator; edited preview text is rejected at
+split time. Splitting rejects merge commits, validates HEAD, preserves WIP via
+the shared rewrite transaction, recomputes the removed diff, creates the new
+commit, and replays descendants. Failures roll back history; a failed WIP
+restore retains a recovery stash and reports its identity. The final view opens
+the newly created commit. Closing the tab during a rewrite lets the transaction
+finish, while read-only collection jobs are cancelled or their results ignored.
+
+History `H u` / `H r`, `UndoFugitive`, and `RedoFugitive` interpret HEAD reflog
+operation boundaries. Commit/reset/pull-style Undo uses soft reset; completed
+rebase Undo treats the whole rebase as one operation and uses hard reset.
+Checkout Undo restores the original branch/ref. Redo uses hard reset or checkout.
+`[nvim git undo]` / `[nvim git redo]` reflog marks reconstruct the position after
+restart, scoped naturally to this worktree's HEAD reflog. The confirmation shows
+the operation and reset mode. HEAD, branch and reflog are checked again after
+confirmation. Active Git operations, incomplete boundaries, and unsupported
+reflog entries are rejected rather than guessed. Worktree edits, stash actions,
+branch creation/deletion and remote pushes are not independently undoable.
+
+New workflows run Git sequentially through asynchronous subprocess callbacks;
+heavy rebase/apply sequences do not wait in the editor event loop. A worktree
+admits only one new history workflow at a time; the generic Git command also
+refuses conflicting mutations. External Git processes can still modify a repo,
+so the same HEAD/staleness guards remain necessary. Exit stops outstanding jobs
+without waiting for editor callbacks; interrupted Git state and any saved stash
+must be recovered using Git's continue/abort/reflog tools.
+
+Checks: `tests/history_workflows.lua`, `tests/transient_presets.lua`, and
+`tests/async_lifecycle.lua`.
 
 ## Reflog recovery markers
 

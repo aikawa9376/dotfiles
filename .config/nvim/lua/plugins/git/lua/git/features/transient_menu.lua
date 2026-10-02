@@ -18,6 +18,8 @@ function M.show(spec, opts)
   opts = opts or {}
   local source_win = opts.source_win or vim.api.nvim_get_current_win()
   local source_buf = opts.source_buf or vim.api.nvim_win_get_buf(source_win)
+  local remember = require('git.features.transient_presets').bind(spec,
+    require('git.utils').get_buf_work_tree(source_buf))
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].bufhidden = 'wipe'
@@ -256,7 +258,10 @@ function M.show(spec, opts)
       vim.notify(action.reason or 'Action is unavailable here', vim.log.levels.WARN)
       return
     end
-    if not action.keep_open then close() end
+    if not action.keep_open then
+      if remember then remember(true) end
+      close()
+    end
     if action.run then action.run({
       source_win = source_win, source_buf = source_buf,
       layout = opts.layout or layout(), render = render, close = close,

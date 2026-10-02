@@ -8,11 +8,13 @@ local function context(bufnr, row)
   local ft = vim.bo[bufnr].filetype
   local panel = ({ fugitivestatus = 'status', fugitivelog = 'log',
     fugitivebranch = 'branch', fugitivereflog = 'reflog',
-    fugitiveworktree = 'worktree' })[ft]
+    fugitiveworktree = 'worktree', fugitivecommit = 'commit',
+    gitpatchcollection = 'commit' })[ft]
   if not panel then return nil end
   row = row or vim.api.nvim_win_get_cursor(0)[1]
   local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
   local commit = line:match('^(%x%x%x%x%x%x%x+)')
+  if panel == 'commit' then commit = vim.b[bufnr].fugitive_commit end
   local branch = panel == 'branch' and (vim.b[bufnr].branch_map or {})[row] or nil
   local kind = panel == 'branch' and (vim.b[bufnr].branch_kinds or {})[row] or nil
   local reflog = panel == 'reflog' and require('git.features.reflog').entry_at(bufnr, row) or nil
@@ -440,6 +442,9 @@ local function commit_menu(ctx, ui)
           end },
         { key = 'f', label = 'Create fixup commit', run = function()
           target_commit(ctx, function(ref) commit({ '--fixup=' .. ref }) end)
+        end },
+        { key = 'F', label = 'Find fixup target from changes', run = function()
+          require('git.features.fixup_target').open(ctx)
         end },
         { key = 's', label = 'Create squash commit', run = function()
           target_commit(ctx, function(ref) commit({ '--squash=' .. ref }) end)
@@ -1081,6 +1086,32 @@ function M.open(bufnr, selection)
     } }
   end
   local operations = {}
+  operations[#operations + 1] = { key = 'H', label = 'History…', run = function(ui)
+    show_submenu({ kind = 'history', title = 'History', context = 'Repository: ' .. (ctx.work_tree or ''), groups = {
+      { title = 'Recovery', actions = {
+        { key = 'u', label = 'Undo last logical operation', run = function()
+          require('git.features.history_undo').open(ctx.work_tree, false)
+        end },
+        { key = 'r', label = 'Redo operation', run = function()
+          require('git.features.history_undo').open(ctx.work_tree, true)
+        end },
+        { key = 'l', label = 'Inspect reflog', run = function() git({ 'reflog' }, ctx) end },
+      } },
+      { title = 'Edit history', actions = {
+        { key = 'f', label = 'Find fixup target', run = function()
+          require('git.features.fixup_target').open(ctx)
+        end },
+        { key = '<Tab>', label = 'Collect patch and split commit', run = function()
+          require('git.features.patch_collection').open(ctx)
+        end },
+      } },
+    } }, ui)
+  end }
+  if ctx.commit then
+    operations[#operations + 1] = { key = '<Tab>', label = 'Collect patch and split commit', run = function()
+      require('git.features.patch_collection').open(ctx)
+    end }
+  end
   if ctx.panel == 'status' or ctx.panel == 'log' or ctx.panel == 'reflog' then
     vim.list_extend(operations, {
       { key = 'A', label = 'Cherry-pick…', run = function(ui) cherry_menu(ctx, ui) end },
@@ -1128,6 +1159,12 @@ function M.attach(bufnr)
     local ok, err = M.open(bufnr)
     if not ok then vim.notify(err, vim.log.levels.WARN) end
   end, { buffer = bufnr, nowait = true, silent = true, desc = 'Git action menu' })
+  if vim.bo[bufnr].filetype ~= 'fugitivestatus' then
+    vim.keymap.set('n', '<Tab>', function()
+      local ctx = context(bufnr)
+      if ctx then require('git.features.patch_collection').open(ctx) end
+    end, { buffer = bufnr, silent = true, desc = 'Collect patch in a dedicated tab' })
+  end
   local panel = ({ fugitivestatus = 'status', fugitivelog = 'log',
     fugitivereflog = 'reflog' })[vim.bo[bufnr].filetype]
   if panel then

@@ -10,6 +10,7 @@ end
 
 function M.flag(key, label, state, name, argument, excludes)
   return { key = key, label = argument and (label .. ' (' .. argument .. ')') or label,
+    option = { state = state, name = name, type = 'boolean', excludes = excludes },
     highlight_argument = argument ~= nil, keep_open = true,
     state = function() return state[name] end,
     run = function(ui)
@@ -25,6 +26,7 @@ end
 
 function M.value(key, label, state, name, argument, validate, excludes)
   return { key = key, keep_open = true, highlight_argument = true,
+    option = { state = state, name = name, type = 'string', validate = validate, excludes = excludes },
     state = function() return state[name] ~= nil end,
     marker = function(active) return active and '✓' or ' ' end,
     label = function() return label .. ' (' .. argument .. (state[name] or '') .. ')' end,

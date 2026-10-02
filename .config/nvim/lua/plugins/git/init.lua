@@ -10,7 +10,7 @@ return {
     "GitCommit", "Greflog", "Glog", "Gllog", "Glcd", "Gtabedit", "Gsplit", "Gvdiffsplit",
     "Ghdiffsplit", "Gremove", "Gdelete", "Gmove", "Grename", "Gwq", "Gblame", "Ggraph",
     "GgraphBackend", "GCherryPick", "GworktreeSync", "UndoFugitive", "RedoFugitive", "DiffDim",
-    "GitApply", "GitReverse"
+    "GitApply", "GitReverse", "GitFixupBase", "GitPatch"
   },
   keys = {
     { "<Leader>gb", function() require('git.features.blame').toggle() end, silent = true, desc = "Toggle Git blame panel" },

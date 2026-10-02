@@ -709,10 +709,11 @@ function M.open(opts)
   root = utils.normalize_path(root)
   local revision = opts.revision or 'HEAD'
   local saved = opts.bufnr and saved_views[opts.bufnr]
-  local model, err = model_api.load(root, revision, opts.parent or (saved and saved.parent))
+  local model, err = opts.model, nil
+  if not model then model, err = model_api.load(root, revision, opts.parent or (saved and saved.parent)) end
   if not model then notify(err); return end
   for b, s in pairs(states) do
-    if not opts.bufnr and vim.api.nvim_buf_is_loaded(b) and s.model.root == root and s.model.hash == model.hash and s.model.parent_index == model.parent_index then
+    if not opts.new and not opts.bufnr and vim.api.nvim_buf_is_loaded(b) and s.model.root == root and s.model.hash == model.hash and s.model.parent_index == model.parent_index then
       if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
       show_buffer(b); configure_window(); return b
     end
@@ -727,7 +728,7 @@ function M.open(opts)
   utils.set_buf_work_tree(b, root)
   vim.b[b].fugitive_commit = model.hash
   vim.b[b].custom_git_commit = true
-  local s = { buf = b, view_id = view_id, model = model, expanded = saved and vim.deepcopy(saved.expanded) or {}, expected_head = vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
+  local s = { buf = b, view_id = view_id, model = model, expanded = saved and vim.deepcopy(saved.expanded) or {}, expected_head = opts.expected_head or vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
   states[b] = s
   render(s)
   if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
@@ -735,6 +736,7 @@ function M.open(opts)
   vim.bo[b].filetype = 'fugitivecommit'
   vim.bo[b].syntax = 'git'
   configure_window(); attach(s)
+  require('git.features.magit_actions').attach(b)
   if saved then
     restore_view(s)
     local win = vim.api.nvim_get_current_win()

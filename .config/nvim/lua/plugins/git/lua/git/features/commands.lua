@@ -4,7 +4,6 @@ local utils = require("git.utils")
 local float_win = nil
 local float_buf = nil
 
-local reflog_redo_stack = {}
 
 local function get_work_tree_from_fugitive()
   local bufnr = vim.api.nvim_get_current_buf()
@@ -314,52 +313,20 @@ function M.setup()
   end, { register = true })
 
   local function reflog_undo()
-    local work_tree = get_work_tree_from_fugitive()
-    if not work_tree then return end
-
-    local prev_commit = vim.fn.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse --verify --quiet HEAD@{1}'))
-    if prev_commit == '' or vim.v.shell_error ~= 0 then
-      vim.notify('No older reflog entries', vim.log.levels.WARN)
-      return
-    end
-
-    local current_commit = vim.fn.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse HEAD'))
-    if current_commit == '' or vim.v.shell_error ~= 0 then
-      vim.notify('Failed to resolve current HEAD', vim.log.levels.ERROR)
-      return
-    end
-    local ok = hard_reset_to_commit(work_tree, prev_commit)
-    if not ok then return end
-
-    table.insert(reflog_redo_stack, current_commit)
-    M.reload_log()
+    return require('git.features.history_undo').open(get_work_tree_from_fugitive(), false)
   end
 
   local function reflog_redo()
-    if #reflog_redo_stack == 0 then
-      vim.notify('Nothing to redo', vim.log.levels.WARN)
-      return
-    end
-
-    local work_tree = get_work_tree_from_fugitive()
-    if not work_tree then return end
-
-    local target_commit = table.remove(reflog_redo_stack)
-    local current_commit = vim.fn.trim(vim.fn.system('git -C ' .. vim.fn.shellescape(work_tree) .. ' rev-parse HEAD'))
-    if current_commit == '' or vim.v.shell_error ~= 0 then
-      vim.notify('Failed to resolve current HEAD', vim.log.levels.ERROR)
-      table.insert(reflog_redo_stack, target_commit)
-      return
-    end
-    local ok = hard_reset_to_commit(work_tree, target_commit)
-    if not ok then
-      table.insert(reflog_redo_stack, target_commit)
-      return
-    end
-
-    vim.notify(string.format('Redo to %s', target_commit:sub(1, 7)), vim.log.levels.INFO)
-    M.reload_log()
+    return require('git.features.history_undo').open(get_work_tree_from_fugitive(), true)
   end
+
+  vim.api.nvim_create_user_command('GitFixupBase', function()
+    require('git.features.fixup_target').open({ work_tree = get_work_tree_from_fugitive() })
+  end, {})
+  vim.api.nvim_create_user_command('GitPatch', function(opts)
+    require('git.features.patch_collection').open({ work_tree = get_work_tree_from_fugitive(),
+      commit = opts.args ~= '' and opts.args or nil })
+  end, { nargs = '?' })
 
   vim.api.nvim_create_user_command("UndoFugitive", function()
     reflog_undo()

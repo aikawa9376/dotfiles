@@ -23,14 +23,16 @@ end
 -- Return a forward patch whose reverse removes only the selected changes.
 -- Unselected additions become context; unselected deletions disappear. One
 -- counted hunk avoids overlapping one-line hunks and preserves EOF markers.
-function M.selection(lines, start, selected_first, selected_last)
+function M.selection(lines, start, selected_first, selected_last, selected_lines)
   local first, header_end, last = bounds(lines, start)
   if not first or selected_first < start or selected_last > last then return nil end
   local new_start = tonumber(lines[start]:match('^@@ %-%d+,?%d* %+(%d+),?%d* @@'))
   if not new_start then return nil end
   local body, old_count, new_count, changed, kept = {}, 0, 0, 0, false
   for row = start + 1, last do
-    local line, selected = lines[row], row >= selected_first and row <= selected_last
+    local line = lines[row]
+    local selected = selected_lines and selected_lines[row]
+      or (not selected_lines and row >= selected_first and row <= selected_last)
     local kind = line:sub(1, 1)
     if kind == '+' or kind == '-' then
       kept = selected or kind == '+'

@@ -129,6 +129,10 @@ function M.git(opts)
   local bufnr = opts.bufnr or vim.api.nvim_get_current_buf()
   local root, path = objects.context(bufnr)
   local args = M.argv(opts.args)
+  if require('git.features.async').busy(root) and mutates_repository(args) then
+    vim.notify('A Git history operation is already running', vim.log.levels.WARN)
+    return
+  end
   for i, arg in ipairs(args) do if arg == '%' then args[i] = assert(path, 'No current file') end end
   if #args == 0 or (#args == 1 and args[1] == 'status') then
     return require('git.features.status').open({ split = not opts.bang, tab = opts.bang })

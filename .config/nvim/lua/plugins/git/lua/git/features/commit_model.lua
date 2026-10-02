@@ -1,6 +1,8 @@
 -- Immutable commit data; only expanded files require patch collection.
 local M = {}
 function M.git(root, args, opts)
+  local async = require('git.features.async')
+  if async.running() then return async.git(root, args, opts) end
   local argv = { 'git', '--no-optional-locks', '-c', 'core.quotePath=false' }
   vim.list_extend(argv, args)
   opts = vim.tbl_extend('force', { cwd = root, text = false }, opts or {})
