@@ -2714,7 +2714,7 @@ function M.setup(group)
           { key = 'B', label = 'Open branches' },
           { key = 'W', label = 'Open worktrees' },
           { key = 'gO', label = 'Repository actions' },
-          { key = 'R', label = 'Refresh, keeping expanded diffs' },
+          { key = 'R', label = 'Collapse all diffs and refresh' },
         })
         if context.entry and (context.entry.section == 'staged' or context.entry.section == 'unstaged') then
           table.insert(actions, { key = 'gD', label = 'Diff display settings' })
@@ -3017,12 +3017,8 @@ function M.setup(group)
       vim.keymap.set('n', 'R', function()
         status_renderer.collapse_all(b)
         index_flag_diffs_by_buf[b] = {}
-        status_folds.set(b, 'index_flags', true)
         reload_status()
-        vim.schedule(function()
-          if is_live() then M.focus_section(b, 'unstaged') end
-        end)
-      end, { buffer = b, nowait = true, silent = true, desc = 'Collapse all and refresh status' })
+      end, { buffer = b, nowait = true, silent = true, desc = 'Collapse all diffs and refresh status' })
 
       vim.keymap.set('n', 'rD', function()
         local work_tree = utils.get_buf_work_tree(b)
@@ -3183,8 +3179,6 @@ function M.setup(group)
         if context.stash then stash_apply('apply', false)
         else vim.cmd('GitApply') end
       end, { buffer = b, silent = true, desc = 'Apply selected patch or stash to worktree' })
-      vim.keymap.set('n', 'R', function() reload_status() end,
-        { buffer = b, silent = true, desc = 'Refresh status, preserving expansion and selection' })
       require('git.features.panel_keys').configure(b, { help = show_status_actions, context = function()
         local context = status_context_at_cursor(operation.inspect(utils.get_buf_work_tree(b)))
         context.path = context.path or (context.entry and context.entry.path) or (context.flagged and context.flagged.path)

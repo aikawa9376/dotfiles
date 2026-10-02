@@ -93,6 +93,23 @@ vim.fn.maparg('<CR>', 'n', false, true).callback()
 assert(vim.wait(1000, function() return vim.fn.foldclosed(heading) == -1 end, 20),
   'Hidden changes did not reveal Index flags')
 
+vim.api.nvim_win_set_cursor(0, { row_matching('^M modified%.txt$'), 0 })
+vim.fn.maparg('=', 'n', false, true).callback()
+assert(row_matching('^@@ '), 'flagged diff did not reopen before R')
+vim.fn.maparg('R', 'n', false, true).callback()
+assert(vim.wait(5000, function()
+  heading = row_matching('^Index flags %[local%]')
+  return heading and vim.fn.foldclosed(heading) == -1 and not row_matching('^@@ ')
+end, 20), 'R must close Index flags diffs while keeping the section open')
+assert(vim.api.nvim_get_current_line():match('^M modified%.txt$'), 'R changed the selected flagged file')
+vim.api.nvim_win_set_cursor(0, { heading, 0 })
+vim.fn.maparg('<Tab>', 'n', false, true).callback()
+status.refresh_buffer(b)
+assert(vim.fn.foldclosed(heading) == heading, 'refresh lost the closed Index flags section')
+vim.api.nvim_win_set_cursor(0, { heading, 0 })
+vim.fn.maparg('<Tab>', 'n', false, true).callback()
+assert(not row_matching('^@@ '), 'refresh or reopening the section restored a diff collapsed by R')
+
 vim.api.nvim_buf_delete(b, { force = true })
 vim.fn.executable = executable
 vim.fn.delete(root, 'rf')

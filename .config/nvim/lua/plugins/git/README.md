@@ -67,7 +67,9 @@ changed stash selector during the picker is rejected. `cw` renames the selected
 stash. WIP `a` retains its clean tracked-worktree requirement and restores the
 snapshot's staged/unstaged split without moving HEAD.
 
-Status and Commit `R` preserve expanded diffs; use `<` to collapse explicitly.
+Status and Commit `R` collapse all expanded diffs and reload. Status retains
+section fold state and the selected entry, including in Index flags. Automatic
+refreshes retain expansion and fold state; `<` collapses only its selected scope.
 `d` waits for its `dd` / `dv` / `dh` / `ds` suffixes. Status also uses `dR` for
 outgoing-stack range-diff. The Commit message float saves through `:w`,
 `<C-s>`, or `ZZ`.
@@ -454,7 +456,7 @@ closing the commit view with q also closes the graph.
 | `gx` | Open pushed commit on GitHub |
 | `gq` / `gy` | File quickfix / copy selected path or commit hash |
 | `gD` | Display settings, including word-diff style |
-| `R` / `q` / `?` | Reload preserving expanded files / close / help |
+| `R` / `q` / `?` | Collapse all file diffs and reload / close / help |
 
 Inside the message, ordinary text-editing keys such as `i`, `o`, `d`, `cw`, `A`,
 `p`, and `J` retain their native meaning. Expanding diffs preserves a draft,

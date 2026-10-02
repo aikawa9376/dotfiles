@@ -85,11 +85,31 @@ press('gu')
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'gu did not focus unstaged entry')
 press('o')
 vim.fn.writefile({ 'one', 'two', 'three' }, root .. '/sample.txt')
+local folds = require('git.features.status_folds')
+folds.toggle(b, untracked_row)
+press('gu')
+local section_states = {}
+for row, line in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
+  if folds.is_header(line) and vim.fn.foldlevel(row) > 0 then
+    section_states[line] = vim.fn.foldclosed(row) == row
+  end
+end
 press('R')
 assert(vim.wait(5000, function()
-  return table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n'):find('+three', 1, true) ~= nil
-end, 20), 'R did not refresh the expanded status diff')
+  local text = table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n')
+  return not text:find('@@', 1, true) and not text:find('Loading', 1, true)
+end, 20), 'R did not collapse the status diffs')
+for row, line in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
+  if section_states[line] ~= nil then
+    assert((vim.fn.foldclosed(row) == row) == section_states[line], 'R changed section fold state: ' .. line)
+  end
+end
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'R changed the selected file')
+-- Reopening diffs after the asynchronous reload must use the changed file.
+press('gu'); press('o')
+assert(vim.wait(5000, function()
+  return table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n'):find('+three', 1, true) ~= nil
+end, 20), 'R did not refresh the status diff data')
 press('<')
 local syncs = 0
 require('git.features.worktree').sync_current_worktree_to_primary = function() syncs = syncs + 1 end

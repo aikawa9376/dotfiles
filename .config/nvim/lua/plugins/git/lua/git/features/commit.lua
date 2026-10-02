@@ -614,7 +614,7 @@ local function attach(s)
   map('R', function()
     if not clean_action(s) then return end
     s.expanded = {}; replace_model(s, s.model.hash)
-  end, { native = true })
+  end, { native = true, desc = 'Collapse all file diffs and refresh commit' })
   map('<Leader>wd', function() vim.notify('Word diff style: ' .. syntax.cycle_word_diff_style()) end)
   map('gx', function()
     github_open.open(github_open.commit_url(s.model.root, s.model.hash),
@@ -661,9 +661,6 @@ local function attach(s)
       'Normal text editing keys retain their meaning inside the message.',
     })
   end)
-  map('R', function()
-    if clean_action(s) then replace_model(s, s.model.hash) end
-  end, { native = true, desc = 'Refresh commit, preserving expanded files' })
   require('git.features.panel_keys').configure(b, { context = function()
     local entry, info = M.entry_at(b, vim.fn.line('.'))
     if entry then return { kind = 'commit_patch', path = entry.path,
