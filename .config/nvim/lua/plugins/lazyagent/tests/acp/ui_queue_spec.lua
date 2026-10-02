@@ -32,6 +32,29 @@ function M.run()
   finishers[3]()
   assert(vim.wait(1000, function() return queue.snapshot().active == nil end, 10), "queue should become idle")
   assert_equal(#queue.snapshot().pending, 0, "queue drains all requests")
+
+  local owner, other = {}, {}
+  local old_finish, is_current, cancelled, other_started = nil, nil, 0, false
+  queue.enqueue(function(finish, valid) old_finish, is_current = finish, valid end, {
+    owner = owner, on_cancel = function() cancelled = cancelled + 1 end,
+  })
+  local payload = { body = string.rep('history', 100000) }
+  local weak = setmetatable({ payload }, { __mode = 'v' })
+  do
+    local captured = payload
+    queue.enqueue(function() error(captured.body) end, {
+      owner = owner, on_cancel = function() cancelled = cancelled + 1 end,
+    })
+  end
+  payload = nil
+  queue.enqueue(function(finish) other_started = true; finish() end, { owner = other })
+  assert_equal(queue.cancel(owner), 2, "cancel removes only the owner's active and pending requests")
+  assert_equal(cancelled, 2, "cancel settles each request once")
+  assert_equal(is_current(), false, "cancel invalidates the old UI request")
+  assert_equal(old_finish(), false, "late UI response cannot finish a cancelled request")
+  assert(vim.wait(200, function() return other_started end, 5), "cancelled owner blocked another session's UI")
+  collectgarbage('collect')
+  assert(weak[1] == nil, "cancelled queue retained the request's history closure")
   queue._reset()
 end
 

@@ -40,6 +40,33 @@ function M.run()
   assert_equal(events[missing_agents], nil, "missing agent metadata event ignored")
   watch.remove(directory_handle)
 
+  local buffer = vim.api.nvim_create_buf(true, false)
+  vim.api.nvim_buf_set_name(buffer, file)
+  vim.api.nvim_buf_call(buffer, function() vim.cmd('edit') end)
+  watch.enable()
+  watch.disable()
+  vim.wait(250, function() return false end, 5)
+  assert_equal(#watch.list(), 0, "queued update cannot recreate watchers after disable")
+  vim.api.nvim_buf_delete(buffer, { force = true })
+
+  -- Stopping an in-flight poll kills the job and ignores its late result.
+  local system, executable = vim.system, vim.fn.executable
+  local poll_done, killed
+  vim.fn.executable = function() return 0 end
+  vim.system = function(_, _, done)
+    poll_done = done
+    return { kill = function() killed = true end }
+  end
+  local before_windows = #vim.api.nvim_list_wins()
+  assert(watch.start_follow({ dir = test_dir, interval_ms = 10 }))
+  assert(vim.wait(200, function() return poll_done ~= nil end, 5))
+  watch.stop_follow()
+  assert(killed, "stop_follow left the find subprocess running")
+  poll_done({ code = 0, stdout = file })
+  vim.wait(20, function() return false end, 5)
+  assert_equal(#vim.api.nvim_list_wins(), before_windows, "late poll reopened a stopped follow window")
+  vim.system, vim.fn.executable = system, executable
+
   watch.stop_all()
   vim.fn.delete(test_dir, "rf")
 end

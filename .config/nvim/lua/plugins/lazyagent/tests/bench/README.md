@@ -14,7 +14,36 @@ nvim --headless --clean -u NONE -l tests/bench/run.lua
 
 The JSON records environment metadata, fixed-GC memory points, resource counts, total p50/p95/max time, provider/RPC wall time, and separately instrumented LazyAgent handler time. These intervals are reported independently and are not assumed to add up. Scenarios cover cold load/first command, new/resume/load activation, Cockpit at 10/100/500 threads, 100/1,000 replay updates, ten-turn growth, repeated open/close, and provider-switch/resession snapshot work.
 
+`resources.lua` counts actual live libuv handles, loaded/valid buffers, terminals,
+autocommands by group, Lua heap, and Neovim process RSS. Closing handles are
+excluded. RSS includes native allocations and allocator reserves; it excludes
+the agent child's RSS. The replay-update scenarios hydrate without rendering.
+
 Compare only runs from the same machine and settings. Keep raw output under an explicit temporary path; commit only a concise reviewed summary.
+
+## Visible backend lifetime
+
+```sh
+LAZYAGENT_BENCH_OUT=/tmp/lazyagent-lifecycle.json \
+LAZYAGENT_BENCH_LIFECYCLE_LOOPS=20 \
+nvim --headless --clean -u NONE -l tests/bench/lifecycle.lua
+```
+
+This starts real local fake ACP child processes and real transcript windows.
+Each iteration tests an empty new-thread close and a prompted thread's
+resume/load, explicit hide, three native window closes/reopens, and final close.
+It checks session/client ownership, callback release, weak client references,
+UI queues, view buffers/layout/configuration, global buffers, autocommands,
+timers, watchers and child handles. It preserves one growing history thread in
+a temporary store; empty promptless threads must be deleted.
+
+Samples run two full GC passes, allowing finalizers and their released references
+to settle. The runner also fires `SafeState`: headless `-l` and `vim.wait` do not
+enter the ordinary editor input loop, so otherwise the standard matchparen
+plugin's one-shot idle callbacks accumulate artificially. The close probe waits
+for the bounded one-second session-close fallback before checking references.
+Post-GC heap/RSS changes remain measurements, without memory thresholds; this
+fixture does not reproduce every installed plugin or a real provider session.
 
 ## Visible transcript streaming
 
@@ -49,6 +78,23 @@ does not contact a provider or use user transcripts. This headless test does
 not send physical mouse input. For same-machine comparisons,
 `LAZYAGENT_FOCUS_BASELINE_DIR` may point to saved `view_diff.lua` and `updates.lua`
 modules from the previous implementation.
+
+## Large thread manifest saves
+
+```sh
+LAZYAGENT_BENCH_OUT=/tmp/lazyagent-thread-store.json \
+nvim --headless --clean -u NONE -l tests/bench/thread_store.lua
+```
+
+This creates 223 synthetic closed threads with roughly 96KB of detail each,
+then reads the manifest and saves one thread's view state ten times. Optional
+`LAZYAGENT_BENCH_THREADS` and `LAZYAGENT_BENCH_RECORD_BYTES` adjust the fixture.
+It measures operation time, Lua heap and process RSS immediately after each
+operation, and Lua heap after GC. These samples are not continuous peak memory
+measurements. Fixture generation occurs before measurement; user history and
+providers are never accessed. The on-disk schema remains v1. Large manifests
+still retain decoded records and cached per-record JSON; this benchmark does
+not establish that retention is bounded independently of history size.
 
 ## Footer animation
 

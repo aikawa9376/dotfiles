@@ -9,6 +9,7 @@ local samples = math.max(1, tonumber(vim.env.LAZYAGENT_BENCH_SAMPLES) or 3)
 local warmup = math.max(0, tonumber(vim.env.LAZYAGENT_BENCH_WARMUP) or 1)
 local lifecycle_loops = math.max(1, tonumber(vim.env.LAZYAGENT_BENCH_LIFECYCLE_LOOPS) or 50)
 local uv = vim.uv or vim.loop
+local ResourceCounts = require('tests.bench.resources')
 local temp_root = vim.fn.tempname() .. "-lazyagent-bench"
 assert(vim.fn.mkdir(temp_root, "p") == 1)
 
@@ -19,14 +20,7 @@ local function percentile(values, ratio)
 end
 
 local function resources()
-  local buffers = 0
-  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_valid(bufnr) then buffers = buffers + 1 end
-  end
-  return {
-    processes = 0, timers = 0, callbacks = 0, autocmds = #vim.api.nvim_get_autocmds({}),
-    watchers = 0, buffers = buffers, terminals = 0, views = 0,
-  }
+  return ResourceCounts.capture()
 end
 
 local function measure(fn)

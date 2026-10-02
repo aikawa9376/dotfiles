@@ -45,6 +45,21 @@ function M.run()
     assert(disk().schema_version == 1, 'on-disk schema changed')
     assert(#disk().threads == 2 and disk().threads[2].metadata.padding ~= nil)
 
+    -- Persistence writes valid v1 JSON without one manifest-sized Lua string.
+    -- Escaped newlines/quotes remain record data, not separators between records.
+    local written_lines
+    vim.fn.writefile = function(lines, path, ...)
+      if path:find('/manifest.json.tmp.', 1, true) then written_lines = lines end
+      return writefile(lines, path, ...)
+    end
+    local special = 'Japanese 日本語\n"quoted"\r\tend'
+    assert(store:update(A, { metadata = { special = special } }))
+    vim.fn.writefile = writefile
+    assert(written_lines and #written_lines > 2, 'write assembled the entire manifest into one line')
+    assert(decode(table.concat(written_lines, '\n')).threads[1].metadata.special == special)
+    assert(disk().threads[2].metadata.padding == store:get(B).metadata.padding,
+      'record separators changed unrelated history')
+
     -- No mutable public result may escape into the shared cache.
     local thread = assert(store:get(A))
     thread.metadata.nested.keep = 'mutated'

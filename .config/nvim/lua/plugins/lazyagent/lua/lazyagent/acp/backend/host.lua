@@ -335,7 +335,7 @@ function M.setup(deps)
       or resolve_permission_option(options, "allow_once")
   end
 
-  local function handle_permission_request(session, params, done, on_finished)
+  local function handle_permission_request(session, params, done, on_finished, is_current)
     local acp_opts = state.opts and state.opts.acp
     local permission_cfg = type(acp_opts) == "table" and acp_opts.permissions or {}
     permission_cfg = type(permission_cfg) == "table" and permission_cfg or {}
@@ -356,7 +356,7 @@ function M.setup(deps)
       if callback then callback() end
     end
     local function respond(outcome, metadata)
-      if permission_finished then return false end
+      if permission_finished or (is_current and not is_current()) then return false end
       if session.client and next(session.client.pending_permission_requests or {}) == nil then
         permission_finished = true
         session.pending_permission = nil
@@ -472,6 +472,7 @@ function M.setup(deps)
     local labels, choices = PermissionStore.choices(params.options or {})
 
     local function select_choice(choice)
+      if permission_finished or (is_current and not is_current()) then return false end
       if not choice then
         local rejected = resolve_permission_option(params.options or {}, "reject_once")
         if rejected then
@@ -523,6 +524,11 @@ function M.setup(deps)
     notify_attention("permission", session, permission_title)
 
     vim.schedule(function()
+      if (is_current and not is_current()) or session.closing_intentionally or (session.client
+        and next(session.client.pending_permission_requests or {}) == nil) then
+        finish_request()
+        return
+      end
       vim.ui.select(labels, {
         prompt = string.format("%s permission: %s", session.agent_name, permission_title),
       }, function(_, idx)
@@ -1179,6 +1185,7 @@ function M.setup(deps)
   end
 
   local function on_client_exit(session, code, signal, stderr_text)
+    UiQueue.cancel(session)
     release_all_terminals(session)
     if session and session.activation_hydrator then
       session.activation_hydrator:discard("client_exit")
@@ -1438,6 +1445,12 @@ function M.setup(deps)
         create_session = false,
       })
   end
+  function module.cancel_ui_requests(session)
+    local cancelled = UiQueue.cancel(session)
+    if session then session.pending_permission = nil end
+    return cancelled
+  end
+
   function module.start_client(session, opts)
     opts = opts or {}
     local drain_prompt_queue = opts.drain_prompt_queue
@@ -1450,10 +1463,12 @@ function M.setup(deps)
       request_permission = function(params, done)
         local rejected = hydration_rejection("session/request_permission")
         if rejected then done(nil, rejected); return end
-        UiQueue.enqueue(function(release)
-          handle_permission_request(session, params, done, release)
+        UiQueue.enqueue(function(release, is_current)
+          handle_permission_request(session, params, done, release, is_current)
         end, {
           kind = "permission",
+          owner = session,
+          on_cancel = function() done({ outcome = "cancelled" }) end,
           label = params and params.toolCall and (params.toolCall.title or params.toolCall.toolCallId) or nil,
           on_error = function(err)
             done(nil, { code = -32603, message = tostring(err) })
@@ -1464,11 +1479,12 @@ function M.setup(deps)
         UiQueue.enqueue(function(release)
           notify_attention("elicitation", session, "Choose an authentication method")
           select_auth_method(methods, function(...)
-            release()
-            done(...)
+            if release() then done(...) end
           end)
         end, {
           kind = "authentication",
+          owner = session,
+          on_cancel = function() done(nil) end,
           label = session.agent_name,
           on_error = function()
             done(nil)
@@ -1533,17 +1549,19 @@ function M.setup(deps)
           Elicitation.handle(params, {
             question_policy = session.question_policy or "prompt",
           }, function(...)
+            if not release() then return end
             local response = select(1, ...)
             append_block(session, "System", Elicitation.describe_response(params, response), {
               kind = "elicitation",
               title = params.message or "ACP elicitation",
               status = type(response) == "table" and response.action or "error",
             })
-            release()
             done(...)
           end)
         end, {
           kind = "elicitation",
+          owner = session,
+          on_cancel = function() done({ action = "cancel" }) end,
           label = params.message or session.agent_name,
           on_error = function(err)
             done(nil, { code = -32603, message = tostring(err) })
@@ -1591,11 +1609,14 @@ function M.setup(deps)
             prompt = (params.name or "Cursor plan") .. ":",
             format_item = function(item) return item.label end,
           }, function(choice)
-            release()
-            done({ outcome = { outcome = choice and choice.outcome or "cancelled" } })
+            if release() then
+              done({ outcome = { outcome = choice and choice.outcome or "cancelled" } })
+            end
           end)
         end, {
           kind = "permission",
+          owner = session,
+          on_cancel = function() done({ outcome = { outcome = "cancelled" } }) end,
           label = params.name or "Cursor plan",
           on_error = function(err) done(nil, { code = -32603, message = tostring(err) }) end,
         })

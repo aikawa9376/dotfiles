@@ -81,6 +81,21 @@ function M.run()
   assert(#updates == 1 and #updates[1].update.content == 2, "v2 tool content chunks accumulate")
   assert(updates[1].update.sessionUpdate == "tool_call_update", "v2 tool chunk normalized")
 
+  for _, status in ipairs({ 'completed', 'failed', 'cancelled' }) do
+    local final_content = { { type = 'text', text = 'final ' .. status } }
+    local final = adapter:updates({ sessionId = 'session-1', update = {
+      sessionUpdate = 'tool_call_update', toolCallId = 'tool-1', status = status, content = final_content,
+    } })
+    assert(vim.deep_equal(final[1].update.content, final_content), 'terminal update lost its final tool output')
+    assert(next(adapter.tool_content) == nil, 'finished tool retained a second full-content history')
+  end
+  adapter:updates({ sessionId = 'session-1', update = {
+    sessionUpdate = 'tool_call_content_chunk', toolCallId = 'live', content = { type = 'text', text = 'active' },
+  } })
+  assert(adapter.tool_content.live ~= nil, 'active tool content was discarded')
+  adapter:reset()
+  assert(next(adapter.tool_content) == nil and next(adapter.message_seen) == nil, 'reset retained process history')
+
   local permission = adapter:permission_params({
     title = "Allow shell command?",
     subject = {

@@ -14,6 +14,7 @@ M.host = nil
 M.token = nil
 
 local event_clients = {}
+local connections = {}
 local heartbeat_timer = nil
 local event_poll_timer = nil
 local event_signatures = {}
@@ -1134,6 +1135,7 @@ local function sse_headers(cors_origin)
 end
 
 local function close_event_client(client)
+  connections[client] = nil
   if event_clients[client] then
     event_clients[client] = nil
   end
@@ -1430,14 +1432,15 @@ local function handle_request(req)
 end
 
 local function close_client(client)
-  pcall(function()
-    client:shutdown(function()
-      pcall(function() client:close() end)
-    end)
+  if client:is_closing() then connections[client] = nil; return end
+  local ok, result = pcall(function()
+    return client:shutdown(function() close_event_client(client) end)
   end)
+  if not ok or not result then close_event_client(client) end
 end
 
 local function handle_client(client)
+  connections[client] = true
   local buf = ""
   local max_body_bytes = tonumber(config().max_body_bytes)
   if not max_body_bytes or max_body_bytes <= 0 then
@@ -1445,7 +1448,7 @@ local function handle_client(client)
   end
   client:read_start(function(err, data)
     if err or not data then
-      pcall(function() client:close() end)
+      close_event_client(client)
       return
     end
 
@@ -1472,6 +1475,7 @@ local function handle_client(client)
     local raw = buf
     buf = ""
     vim.schedule(function()
+      if client:is_closing() then return end
       local req = parse_http_request(raw)
       if not req then
         client:write(http_response("400 Bad Request", "text/plain; charset=utf-8", "Bad Request"))
@@ -1553,7 +1557,7 @@ function M.start(on_ready, opts)
           return
         end
         local client = uv.new_tcp()
-        server:accept(client)
+        if not server:accept(client) then close_event_client(client); return end
         handle_client(client)
       end)
     end)
@@ -1603,7 +1607,7 @@ function M.stop()
   if M._server then
     pcall(function() M._server:close() end)
   end
-  for client in pairs(event_clients) do
+  for client in pairs(connections) do
     close_event_client(client)
   end
   if stop_heartbeat then

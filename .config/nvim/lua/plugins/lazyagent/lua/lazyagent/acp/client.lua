@@ -1464,6 +1464,7 @@ function Client:start(callback, opts)
     self.session_id = nil
     self.pending_session_id = nil
     self.subagent_sessions = {}
+    self.v2_adapter:reset()
     self.prompt_state = "idle"
     self.prompt_request_id = nil
     self.stdout_buffer = ""

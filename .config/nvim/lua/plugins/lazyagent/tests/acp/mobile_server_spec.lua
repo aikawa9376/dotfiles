@@ -126,6 +126,21 @@ function M.run()
       "Authorization: Bearer " .. token,
     })
     assert_truthy(no_actions:match("HTTP/1%.1 400 Bad Request"), "actions require an active ACP session")
+
+    local peer = vim.uv.new_tcp()
+    local connected, eof
+    peer:connect(host, port, function(connect_err)
+      assert_truthy(not connect_err, tostring(connect_err))
+      connected = true
+      peer:read_start(function(_, data) if data == nil then eof = true end end)
+      peer:write("POST /api/send HTTP/1.1\r\nHost: localhost\r\n")
+    end)
+    assert_truthy(vim.wait(500, function() return connected end, 5), "incomplete peer connected")
+    vim.wait(20, function() return false end, 5)
+    mobile.stop()
+    local closed = vim.wait(500, function() return eof end, 5)
+    peer:close()
+    assert_truthy(closed, "mobile stop retained an incomplete HTTP connection")
   end, debug.traceback)
 
   mobile.stop()

@@ -285,6 +285,7 @@ function M.run()
   assert_equal(vim.bo.readonly, true, "raw transcript readonly")
   assert_equal(vim.wo.wrap, false, "raw transcript nowrap")
   vim.cmd("tabclose")
+  pcall(vim.api.nvim_buf_delete, vim.fn.bufnr(transcript_path), { force = true })
   vim.fn.delete(transcript_path)
 
   records[THREAD_ID].process_id = 99
@@ -500,6 +501,30 @@ function M.run()
     "Normal:TestOtherActive,NormalNC:TestOtherUsual",
     "closing cockpit restores other ACP background"
   )
+  local resource_counts = require("tests.bench.resources")
+  vim.wait(1100, function() return false end, 10)
+  vim.api.nvim_exec_autocmds("SafeState", {})
+  local cockpit_baseline = resource_counts.capture()
+  for index = 1, 20 do
+    assert_equal(actions.open_cockpit(), true, "reopen cockpit lifecycle fixture")
+    local owner_win = vim.api.nvim_get_current_win()
+    if index % 2 == 0 then
+      vim.cmd("normal q")
+    else
+      vim.api.nvim_win_close(owner_win, true)
+    end
+    assert(vim.wait(500, function()
+      for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_get_name(buffer):find("LazyAgent ACP Cockpit", 1, true) then return false end
+      end
+      return true
+    end, 5), "closing cockpit retained its preview buffer on cycle " .. index)
+  end
+  vim.api.nvim_exec_autocmds("SafeState", {})
+  local cockpit_final = resource_counts.capture()
+  for _, kind in ipairs({ "buffers", "autocmds", "timers", "watchers" }) do
+    assert_equal(cockpit_final[kind], cockpit_baseline[kind], "cockpit lifecycle releases " .. kind)
+  end
   vim.api.nvim_win_close(other_acp_winid, true)
   vim.api.nvim_win_close(selected_acp_winid, true)
   pcall(vim.api.nvim_buf_delete, other_acp_bufnr, { force = true })

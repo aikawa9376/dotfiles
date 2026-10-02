@@ -388,7 +388,18 @@ for line in io.lines() do
     send(response(message.id, vim.empty_dict()))
   elseif message.method == "session/prompt" then
     pending_prompt_id = message.id
-    if vim.env.LAZYAGENT_FAKE_CANCEL_FLOW == "1" then
+    if vim.env.LAZYAGENT_FAKE_SIMPLE_PROMPT == "1" then
+      for _ = 1, 32 do
+        send({ jsonrpc = "2.0", method = "session/update", params = {
+          sessionId = "test-session",
+          update = { sessionUpdate = "agent_message_chunk", content = {
+            type = "text", text = string.rep("fixture response ", 16) .. "\n",
+          } },
+        } })
+      end
+      send(response(pending_prompt_id, { stopReason = "end_turn" }))
+      pending_prompt_id = nil
+    elseif vim.env.LAZYAGENT_FAKE_CANCEL_FLOW == "1" then
       cancel_received = false
       permission_cancelled = false
       cancel_prompt_finished = false

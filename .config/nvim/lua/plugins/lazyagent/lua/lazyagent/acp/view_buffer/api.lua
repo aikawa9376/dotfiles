@@ -557,6 +557,10 @@ function M.attach(api, ctx)
     })
     apply_transcript_window_opts(win, is_vertical, pane_config[tostring(pane_id)])
     refresh_buffer_from_path(bufnr, session and session.transcript_path or buffer_var(bufnr, "lazyagent_acp_transcript_path"))
+    if pane_opts.hidden_view then
+      M.restore_thread_view(pane_id, pane_opts.hidden_view)
+      pane_config[tostring(pane_id)].hidden_view = nil
+    end
 
     if anchor_win and anchor_win ~= win then
       pcall(vim.api.nvim_set_current_win, anchor_win)

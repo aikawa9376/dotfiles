@@ -486,6 +486,47 @@ function M.run()
   assert(vim.wait(200, function() return #render_manager.buffers == 0 end, 5),
     "wiped ACP buffers are pruned from render-markdown state")
 
+  -- General q/:close uses nvim_win_close, bypassing the backend's break_pane.
+  -- release_buffer_on_hide must cover that path without killing the session.
+  local native_pane, native_state
+  view.create_pane({
+    transcript_path = transcript_path,
+    size = 8,
+    acp = { agent_name = "native-close", source_winid = fallback_winid, release_buffer_on_hide = true },
+  }, function(id, created) native_pane, native_state = id, created end)
+  assert(vim.wait(1000, function() return native_pane ~= nil end, 5))
+  local native_session = { pane_id = native_pane, agent_name = "native-close", transcript_path = transcript_path }
+
+  -- A buffer hidden only during a same-turn move must survive the queued cleanup.
+  local native_buf = native_state.bufnr
+  vim.api.nvim_win_set_buf(native_state.winid, source_bufnr)
+  vim.api.nvim_win_set_buf(native_state.winid, native_buf)
+  vim.wait(20, function() return false end)
+  assert(vim.api.nvim_buf_is_valid(native_buf), "transient buffer move released a visible transcript")
+
+  for _ = 1, 20 do
+    local win = vim.fn.bufwinid(native_buf)
+    assert(win > 0)
+    view.configure_pane(native_pane, { follow_output = false })
+    vim.api.nvim_win_set_cursor(win, { 10, 0 })
+    vim.api.nvim_win_close(win, true)
+    assert(vim.wait(200, function() return not vim.api.nvim_buf_is_valid(native_buf) end, 5),
+      "native window close retained a release-on-hide transcript")
+    local hidden = view.debug_snapshot()
+    assert_equal(hidden.buffer_count, 0, "native close releases transcript ownership")
+    assert_equal(hidden.layout_count, 0, "native close releases layout data")
+    assert_equal(hidden.active_timer_count, 0, "native close releases rendering timers")
+    assert_equal(hidden.config_count, 1, "native close preserves reopen configuration")
+    local reopened
+    view.join_pane(native_pane, 8, false, function(ok) reopened = ok end, native_session)
+    assert(vim.wait(1000, function() return reopened ~= nil end, 5) and reopened)
+    native_buf = vim.api.nvim_win_get_buf(vim.fn.bufwinid("lazyagent://acp/native-close-" .. native_pane))
+    local restored = view.capture_thread_view(native_pane)
+    assert_equal(restored.follow_output, false, "native close preserves paused follow")
+    assert_equal(restored.view.lnum, 10, "native close preserves transcript cursor")
+  end
+  view.kill_pane(native_pane, native_session)
+
   local backend = require("lazyagent.acp.backend").new(view)
   local backend_debug = backend.get_debug_snapshot()
   assert_equal(backend_debug.session_count, 0, "closed backend sessions")

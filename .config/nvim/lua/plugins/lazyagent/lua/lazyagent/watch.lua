@@ -66,30 +66,35 @@ end
 local function debounce(fn, ms)
   ms = ms or DEFAULT_REFRESH_MS
   local timer = nil
-  return function(...)
-    local args = { ... }
+  local generation = 0
+  local function cancel()
+    generation = generation + 1
     if timer then
       pcall(function() timer:stop() end)
       pcall(function() timer:close() end)
       timer = nil
     end
-    timer = uv.new_timer()
-    timer:start(ms, 0, function()
-      pcall(function() timer:stop() end)
-      pcall(function() timer:close() end)
-      timer = nil
+  end
+  return function(...)
+    cancel()
+    local args, token = { ... }, generation
+    local current = uv.new_timer()
+    timer = current
+    current:start(ms, 0, function()
+      pcall(function() current:stop(); current:close() end)
+      if timer == current then timer = nil end
       vim.schedule(function()
-        pcall(fn, _safe_unpack(args))
+        if token == generation then pcall(fn, _safe_unpack(args)) end
       end)
     end)
-  end
+  end, cancel
 end
 
 -- Global debounced refresh to call checktime.
 local function refresh()
   vim.cmd.checktime()
 end
-local refresh_debounced = debounce(refresh, DEFAULT_REFRESH_MS)
+local refresh_debounced, cancel_refresh = debounce(refresh, DEFAULT_REFRESH_MS)
 
 local function is_missing_agent_metadata(path)
   if not path or uv.fs_stat(path) then return false end
@@ -126,6 +131,7 @@ local function schedule_debounce(w, path, ms)
     end)
     -- Call callbacks on the main loop
     vim.schedule_wrap(function()
+      if watchers[w.dir] ~= w then return end
       local pending_paths = w.pending_paths or {}
       w.pending_paths = {}
       local changed = false
@@ -166,6 +172,7 @@ local function create_watcher_for_dir(dir, opts)
     if handle then
       w.handle = handle
       local function on_event(err, filename)
+        if watchers[dir] ~= w then return end
         if err and err ~= "" then
           pcall(function()
             vim.schedule(function()
@@ -267,6 +274,7 @@ function M.stop(path_or_key)
   if w.autocmd_group then
     pcall(vim.api.nvim_del_augroup_by_id, w.autocmd_group)
   end
+  w.cbs, w.pending_paths = {}, {}
   watchers[key] = nil
   M.watches = watchers
 end
@@ -309,7 +317,8 @@ function M.update()
 end
 
 -- Debounced update (protect against rapid Buf events)
-M.update = debounce(M.update, DEFAULT_REFRESH_MS)
+local update_debounced, cancel_update = debounce(M.update, DEFAULT_REFRESH_MS)
+M.update = update_debounced
 
 -- Add a specific path (file or dir) watcher and register a callback (cb receives absolute path).
 -- Returns a handle you can use with M.remove()
@@ -395,7 +404,11 @@ function M.suspend(p, ms)
   if type(p) == "number" then path = vim.api.nvim_buf_get_name(p) end
   local abs = abs_path(path)
   if not abs then return false end
-  ignore_until[abs] = uv.now() + ms
+  local now = uv.now()
+  for ignored, expires in pairs(ignore_until) do
+    if expires <= now then ignore_until[ignored] = nil end
+  end
+  ignore_until[abs] = now + ms
   return true
 end
 
@@ -412,6 +425,9 @@ end
 
 -- Stop and clear all watchers.
 function M.stop_all()
+  cancel_update()
+  cancel_refresh()
+  ignore_until = {}
   for k, w in pairs(watchers) do
     if w.handle and w.handle.stop and w.handle.close then
       pcall(function() w.handle:stop() end)
@@ -425,6 +441,7 @@ function M.stop_all()
       pcall(vim.api.nvim_del_augroup_by_id, w.autocmd_group)
     end
     watchers[k] = nil
+    w.cbs, w.pending_paths = {}, {}
   end
   M.watches = watchers
 end
@@ -443,6 +460,8 @@ local _follow_job   = nil   -- jobstart id for event-driven watcher
 local _follow_timer = nil   -- uv timer used only for polling fallback
 local _follow_marker = nil  -- temp file for find -newer (polling only)
 local _follow_running = false -- guard against concurrent poll runs
+local _follow_poll = nil
+local _follow_generation = 0
 local _follow_opts  = {}
 local _follow_win   = nil   -- dedicated split window for "split" mode
 
@@ -482,6 +501,7 @@ end
 
 -- Event-driven backend: inotifywait (Linux).
 local function start_inotifywait(watch_dir)
+  local generation = _follow_generation
   local job = vim.fn.jobstart({
     "inotifywait", "-m", "-r", "-q",
     "-e", "close_write,moved_to,create",
@@ -492,6 +512,7 @@ local function start_inotifywait(watch_dir)
     on_stdout = function(_, data)
       if not data then return end
       vim.schedule(function()
+        if generation ~= _follow_generation then return end
         for _, fpath in ipairs(data) do
           if fpath ~= "" then follow_open_file(fpath) end
         end
@@ -503,6 +524,7 @@ end
 
 -- Event-driven backend: fswatch (macOS / Linux).
 local function start_fswatch(watch_dir)
+  local generation = _follow_generation
   local job = vim.fn.jobstart({
     "fswatch", "-r",
     "--event", "Updated", "--event", "MovedTo",
@@ -512,6 +534,7 @@ local function start_fswatch(watch_dir)
     on_stdout = function(_, data)
       if not data then return end
       vim.schedule(function()
+        if generation ~= _follow_generation then return end
         for _, fpath in ipairs(data) do
           if fpath ~= "" then follow_open_file(fpath) end
         end
@@ -523,6 +546,7 @@ end
 
 -- Polling fallback: find -newer marker (works everywhere, higher CPU).
 local function start_polling(watch_dir, interval_ms)
+  local generation = _follow_generation
   local marker = vim.fn.tempname()
   vim.fn.writefile({}, marker)
   _follow_marker = marker
@@ -536,10 +560,12 @@ local function start_polling(watch_dir, interval_ms)
   local timer = uv.new_timer()
   _follow_timer = timer
   timer:start(interval_ms, interval_ms, vim.schedule_wrap(function()
-    if _follow_running then return end
+    if generation ~= _follow_generation or _follow_running then return end
     _follow_running = true
-    vim.system({ "sh", "-c", cmd }, { text = true }, function(result)
+    _follow_poll = vim.system({ "sh", "-c", cmd }, { text = true }, function(result)
       vim.schedule(function()
+        if generation ~= _follow_generation then return end
+        _follow_poll = nil
         _follow_running = false
         vim.fn.writefile({}, marker)
         if not result or (result.stdout or "") == "" then return end
@@ -573,6 +599,11 @@ function M.start_follow(opts)
 end
 
 function M.stop_follow()
+  _follow_generation = _follow_generation + 1
+  if _follow_poll then
+    pcall(function() _follow_poll:kill(15) end)
+    _follow_poll = nil
+  end
   if _follow_job then
     pcall(vim.fn.jobstop, _follow_job)
     _follow_job = nil
@@ -617,7 +648,6 @@ end
 
 -- Disable file system watching and stop all active watches
 function M.disable()
-  if not M.enabled then return end
   M.enabled = false
   pcall(vim.api.nvim_clear_autocmds, { group = AUTOCMD_GROUP_NAME })
   pcall(vim.api.nvim_del_augroup_by_name, AUTOCMD_GROUP_NAME)

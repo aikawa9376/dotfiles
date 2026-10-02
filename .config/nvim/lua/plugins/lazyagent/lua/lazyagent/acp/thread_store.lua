@@ -274,22 +274,27 @@ function Store:_write(manifest)
   manifest.updated_at = self:_timestamp()
   local previous = self.cache.encoded or {}
   local next_encoded = {}
-  local ok_encode, encoded = pcall(function()
-    local records = {}
+  local ok_encode, lines = pcall(function()
+    -- JSON permits whitespace between records. Write separate lines rather
+    -- than allocating several manifest-sized strings on every view-state save.
+    local records = {
+      '{"schema_version":' .. json_encode(manifest.schema_version)
+        .. ',"updated_at":' .. json_encode(manifest.updated_at) .. ',"threads":[',
+    }
     for i, record in ipairs(manifest.threads) do
       local text = previous[record] or json_encode(record)
-      records[i], next_encoded[record] = text, text
+      if i > 1 then records[#records + 1] = ',' end
+      records[#records + 1], next_encoded[record] = text, text
     end
-    return '{"schema_version":' .. json_encode(manifest.schema_version)
-      .. ',"updated_at":' .. json_encode(manifest.updated_at)
-      .. ',"threads":[' .. table.concat(records, ',') .. ']}'
+    records[#records + 1] = ']}'
+    return records
   end)
   if not ok_encode then
-    return nil, encoded
+    return nil, lines
   end
   local suffix = tostring(vim.fn.getpid()) .. "." .. tostring(uv.hrtime())
   local temporary = self.path .. ".tmp." .. suffix
-  local ok_write, write_err = pcall(vim.fn.writefile, { encoded }, temporary)
+  local ok_write, write_err = pcall(vim.fn.writefile, lines, temporary)
   if not ok_write or write_err ~= 0 then
     pcall(vim.fn.delete, temporary)
     return nil, ok_write and "failed to write thread manifest" or write_err

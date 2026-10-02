@@ -745,6 +745,7 @@ local function create_backend(default_view)
         require("lazyagent.logic.status").stop_thinking(session.agent_name)
       end)
     end
+    host_helpers.cancel_ui_requests(session)
     host_helpers.release_all_terminals(session)
     return session.client:cancel()
   end
@@ -2112,6 +2113,7 @@ local function create_backend(default_view)
       end
       state_helpers.clear_pending_switch_history(session)
       session.closing_intentionally = true
+      host_helpers.cancel_ui_requests(session)
       if session.nes_session_id and session.client then
         session.client:close_nes(session.nes_session_id)
         session.nes_session_id = nil

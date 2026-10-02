@@ -24,6 +24,8 @@ function M.new(ctx)
   local cleanup_markdown_rendering = ctx.cleanup_markdown_rendering
   local pane_buffers = ctx.pane_buffers
   local layout_state = ctx.layout_state
+  local should_release_buffer_on_hide = ctx.should_release_buffer_on_hide
+  local release_transcript_buffer = ctx.release_transcript_buffer
   local dedicated_transcript_windows = ctx.dedicated_transcript_windows
   local reset_appearance_cache = ctx.reset_appearance_cache
   local suppress_transcript_window_refresh = ctx.suppress_transcript_window_refresh
@@ -318,6 +320,33 @@ function M.new(ctx)
         end
         vim.schedule(function()
           refresh_transcript_window(bufnr, win)
+        end)
+      end,
+    })
+
+    vim.api.nvim_create_autocmd("BufWinLeave", {
+      group = group,
+      callback = function(args)
+        local pane_id = buffer_var(args.buf, "lazyagent_acp_pane_id")
+        if pane_id ~= nil and should_release_buffer_on_hide(pane_id) then
+          pane_opts_for_bufnr(args.buf).hidden_view = M.capture_thread_view(pane_id)
+        end
+      end,
+    })
+
+    vim.api.nvim_create_autocmd("BufHidden", {
+      group = group,
+      callback = function(args)
+        local bufnr = args.buf
+        local pane_id = buffer_var(bufnr, "lazyagent_acp_pane_id")
+        if pane_id == nil or not should_release_buffer_on_hide(pane_id) then return end
+        -- Native window closure bypasses break_pane. Defer deletion so moving
+        -- the buffer between windows in the same turn does not discard it.
+        vim.schedule(function()
+          if vim.api.nvim_buf_is_valid(bufnr) and to_bufnr(pane_id) == bufnr
+            and not buffer_is_visible(bufnr) and should_release_buffer_on_hide(pane_id) then
+            release_transcript_buffer(pane_id, bufnr)
+          end
         end)
       end,
     })

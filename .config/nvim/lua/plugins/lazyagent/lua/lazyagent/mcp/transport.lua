@@ -15,12 +15,21 @@ local state = require("lazyagent.logic.state")
 M._server = nil
 M.port = nil
 M._sse_clients = {}  -- registered SSE (GET /events) connections
+local connections = {}
+
+local function close_client(client)
+  connections[client] = nil
+  for index = #M._sse_clients, 1, -1 do
+    if M._sse_clients[index] == client then table.remove(M._sse_clients, index) end
+  end
+  if not client:is_closing() then client:close() end
+end
 
 -- Find a free TCP port on localhost
 local function find_free_port(cb)
   local s = uv.new_tcp()
-  s:bind("127.0.0.1", 0)
-  local addr = s:getsockname()
+  local bound = s:bind("127.0.0.1", 0)
+  local addr = bound and s:getsockname()
   local port = addr and addr.port
   s:close()
   cb(port)
@@ -93,7 +102,7 @@ function M.push_event(data)
   local msg = sse_event(json, "message")
   for i = #M._sse_clients, 1, -1 do
     local ok = pcall(function() M._sse_clients[i]:write(msg) end)
-    if not ok then table.remove(M._sse_clients, i) end
+    if not ok then close_client(M._sse_clients[i]) end
   end
 end
 
@@ -115,10 +124,11 @@ end
 
 -- Handle a single client connection
 local function handle_client(client, dispatcher)
+  connections[client] = true
   local buf = ""
   client:read_start(function(err, data)
     if err or not data then
-      client:close()
+      close_client(client)
       return
     end
     buf = buf .. data
@@ -130,10 +140,11 @@ local function handle_client(client, dispatcher)
     local raw = buf
     buf = ""
     vim.schedule(function()
+      if client:is_closing() then return end
       local req = parse_http_request(raw)
       if not req then
         client:write(http_response("400 Bad Request", "text/plain", "Bad Request"))
-        client:close()
+        close_client(client)
         return
       end
 
@@ -142,7 +153,7 @@ local function handle_client(client, dispatcher)
         client:write(http_response("200 OK", "text/plain", "", {
           "Access-Control-Allow-Origin: *",
         }))
-        client:shutdown(function() client:close() end)
+        client:shutdown(function() close_client(client) end)
         return
       end
 
@@ -151,7 +162,7 @@ local function handle_client(client, dispatcher)
         if req.method == "GET" and (req.path == "/" or req.path == "/ui") then
           local html = get_webui_html()
           client:write(http_response("200 OK", "text/html; charset=utf-8", html))
-          client:shutdown(function() client:close() end)
+          client:shutdown(function() close_client(client) end)
           return
         end
         -- SSE event stream for real-time push notifications
@@ -170,7 +181,7 @@ local function handle_client(client, dispatcher)
           return  -- keep connection alive; push_event() writes to it later
         end
         client:write(http_response("404 Not Found", "text/plain", "Not Found"))
-        client:shutdown(function() client:close() end)
+        client:shutdown(function() close_client(client) end)
         return
       end
 
@@ -178,7 +189,7 @@ local function handle_client(client, dispatcher)
       -- Return 405 to signal "SSE not supported"; client falls back to POST-only mode.
       if req.method == "GET" then
         client:write(http_response("405 Method Not Allowed", "text/plain", "SSE not supported"))
-        client:shutdown(function() client:close() end)
+        client:shutdown(function() close_client(client) end)
         return
       end
 
@@ -188,7 +199,7 @@ local function handle_client(client, dispatcher)
         if not ok or type(rpc) ~= "table" then
           client:write(http_response("400 Bad Request", "application/json",
             vim.fn.json_encode({ jsonrpc = "2.0", error = { code = -32700, message = "Parse error" }, id = vim.NIL })))
-          client:shutdown(function() client:close() end)
+          client:shutdown(function() close_client(client) end)
           return
         end
 
@@ -196,10 +207,11 @@ local function handle_client(client, dispatcher)
         local want_sse = accept:find("text/event%-stream") ~= nil
 
         dispatcher(rpc, function(response)
+          if client:is_closing() then return end
           if not response then
             -- Notification (no id): return 202 Accepted with empty body
             client:write(http_response("202 Accepted", "application/json", ""))
-            client:shutdown(function() client:close() end)
+            client:shutdown(function() close_client(client) end)
             return
           end
           local json = vim.fn.json_encode(response)
@@ -214,17 +226,17 @@ local function handle_client(client, dispatcher)
             }, "\r\n")
             client:write(header)
             client:write(sse_event(json, "message"))
-            client:shutdown(function() client:close() end)
+            client:shutdown(function() close_client(client) end)
           else
             client:write(http_response("200 OK", "application/json", json))
-            client:shutdown(function() client:close() end)
+            client:shutdown(function() close_client(client) end)
           end
         end, { headers = req.headers, path = req.path })
         return
       end
 
       client:write(http_response("405 Method Not Allowed", "text/plain", "Method Not Allowed"))
-      client:shutdown(function() client:close() end)
+      client:shutdown(function() close_client(client) end)
     end)
   end)
 end
@@ -244,25 +256,29 @@ function M.start(dispatcher, on_ready, opts)
   local host = opts.host or "127.0.0.1"
 
   local function do_listen_tcp(port)
-    M.port = port
-    M.sock_path = nil
-
     local server = uv.new_tcp()
-    local ok, err = pcall(function() server:bind(host, port) end)
-    if not ok then
-      vim.notify("[lazyagent MCP] bind error on " .. host .. ":" .. port .. ": " .. tostring(err), vim.log.levels.ERROR)
+    local ok, result, err = pcall(function() return server:bind(host, port) end)
+    if not ok or not result then
+      server:close()
+      vim.notify("[lazyagent MCP] bind error on " .. host .. ":" .. port .. ": " .. tostring(ok and err or result), vim.log.levels.ERROR)
       return
     end
-    server:listen(128, function(lerr)
+    local listening, listen_err = server:listen(128, function(lerr)
       if lerr then
         vim.notify("[lazyagent MCP] listen error: " .. tostring(lerr), vim.log.levels.ERROR)
         return
       end
       local client = uv.new_tcp()
-      server:accept(client)
+      if not server:accept(client) then close_client(client); return end
       handle_client(client, dispatcher)
     end)
+    if not listening then
+      server:close()
+      vim.notify("[lazyagent MCP] listen error: " .. tostring(listen_err), vim.log.levels.ERROR)
+      return
+    end
     M._server = server
+    M.port, M.sock_path = port, nil
 
     if state.opts and state.opts.debug then
       vim.notify("[lazyagent MCP] Listening on http://" .. host .. ":" .. port .. "/mcp", vim.log.levels.INFO)
@@ -272,28 +288,33 @@ function M.start(dispatcher, on_ready, opts)
   end
 
   local function do_listen_sock(path)
-    M.port = nil
-    M.sock_path = path
-
     -- remove stale socket file if present
     pcall(function() vim.loop.fs_unlink(path) end)
 
     local server = uv.new_pipe(false)
-    local ok, err = pcall(function() server:bind(path) end)
-    if not ok then
-      vim.notify("[lazyagent MCP] bind error on socket " .. path .. ": " .. tostring(err), vim.log.levels.ERROR)
+    local ok, result, err = pcall(function() return server:bind(path) end)
+    if not ok or not result then
+      server:close()
+      vim.notify("[lazyagent MCP] bind error on socket " .. path .. ": " .. tostring(ok and err or result), vim.log.levels.ERROR)
       return
     end
-    server:listen(128, function(lerr)
+    local listening, listen_err = server:listen(128, function(lerr)
       if lerr then
         vim.notify("[lazyagent MCP] listen error: " .. tostring(lerr), vim.log.levels.ERROR)
         return
       end
       local client = uv.new_pipe(false)
-      server:accept(client)
+      if not server:accept(client) then close_client(client); return end
       handle_client(client, dispatcher)
     end)
+    if not listening then
+      server:close()
+      pcall(uv.fs_unlink, path)
+      vim.notify("[lazyagent MCP] listen error: " .. tostring(listen_err), vim.log.levels.ERROR)
+      return
+    end
     M._server = server
+    M.port, M.sock_path = nil, path
 
     if state.opts and state.opts.debug then
       vim.notify("[lazyagent MCP] Listening on unix socket " .. path, vim.log.levels.INFO)
@@ -318,10 +339,8 @@ function M.start(dispatcher, on_ready, opts)
 end
 
 function M.stop()
-  -- Close all SSE connections
-  for _, client in ipairs(M._sse_clients) do
-    pcall(function() client:shutdown(function() client:close() end) end)
-  end
+  -- Accepted peers own request buffers/callbacks even before becoming SSE.
+  for client in pairs(connections) do close_client(client) end
   M._sse_clients = {}
   if M._server then
     pcall(function() M._server:close() end)

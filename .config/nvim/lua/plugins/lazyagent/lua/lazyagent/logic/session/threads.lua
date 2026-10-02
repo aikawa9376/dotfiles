@@ -788,9 +788,9 @@ function M.setup(deps)
         or vim.fn.getcwd()
     end
     current_root = normalize_path(current_root)
-    local bufnr = vim.api.nvim_create_buf(false, true)
     vim.cmd("tabnew")
-    vim.api.nvim_win_set_buf(0, bufnr)
+    local bufnr = vim.api.nvim_get_current_buf()
+    vim.bo[bufnr].buflisted = false
     vim.api.nvim_buf_set_name(bufnr, "LazyAgent ACP Cockpit [" .. tostring(bufnr) .. "]")
     vim.bo[bufnr].buftype = "nofile"
     vim.bo[bufnr].bufhidden = "wipe"
@@ -1539,6 +1539,19 @@ function M.setup(deps)
           preview_timer:close()
           preview_timer = nil
         end
+        local orphan_win, orphan_buf = preview_winid, preview_bufnr
+        preview_winid, preview_bufnr = nil, nil
+        -- A native :close only removes the cockpit window, unlike q/tabclose.
+        -- Wait for that window operation to finish before closing its preview.
+        vim.schedule(function()
+          if orphan_win and vim.api.nvim_win_is_valid(orphan_win) then
+            pcall(vim.api.nvim_win_close, orphan_win, true)
+          end
+          if orphan_buf and vim.api.nvim_buf_is_valid(orphan_buf)
+            and vim.fn.bufwinid(orphan_buf) < 0 then
+            pcall(vim.api.nvim_buf_delete, orphan_buf, { force = true })
+          end
+        end)
       end,
     })
     refresh()

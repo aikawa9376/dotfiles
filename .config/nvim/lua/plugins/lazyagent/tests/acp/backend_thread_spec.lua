@@ -638,7 +638,8 @@ function M.run()
   local previous_cancel_select = vim.ui.select
   state.opts.acp.auto_permission = nil
   state.opts.acp_auto_permission = nil
-  vim.ui.select = function() end
+  local cancel_select_callback
+  vim.ui.select = function(_, _, callback) cancel_select_callback = callback end
 
   local cancel_pane
   backend.split(nil, 10, false, {
@@ -662,16 +663,34 @@ function M.run()
   end, 10), "cancel backend should become ready")
   assert(backend.paste_and_submit(cancel_pane, "cancel this backend turn", { "C-m" }, {}))
   assert(vim.wait(3000, function()
-    return backend.get_pending_permission(cancel_pane) ~= nil
+    return backend.get_pending_permission(cancel_pane) ~= nil and cancel_select_callback ~= nil
   end, 10), "cancel backend should expose its pending permission")
   assert(vim.tbl_contains(vim.tbl_map(function(owner) return owner.resource_class end,
     backend.get_debug_snapshot().owners), "permission"), "pending permission names its client owner")
   assert(backend.send_keys(cancel_pane, { "C-c" }))
+  local ui_queue = require("lazyagent.acp.ui_queue")
+  assert(ui_queue.snapshot().active == nil and #ui_queue.snapshot().pending == 0,
+    "cancelling an ACP turn retained the unresolved permission UI")
   assert(vim.wait(5000, function()
     return backend.capture_pane_sync(cancel_pane):find("Turn cancelled", 1, true) ~= nil
   end, 10), "cancel backend should finalize its active tool without a callback error")
   local cancelled_tools = backend.get_runtime_snapshot(cancel_pane, { include_timelines = true }).acp_tool_timeline
   assert_equal(cancelled_tools[#cancelled_tools].status, "cancelled", "cancelled backend tool status")
+  local stale_select = cancel_select_callback
+  cancel_select_callback = nil
+  assert(vim.wait(5000, function() return not backend.is_busy(cancel_pane) end, 10),
+    "cancelled prompt should settle before starting another turn")
+  assert(backend.paste_and_submit(cancel_pane, "another cancelled turn", { "C-m" }, {}))
+  assert(vim.wait(3000, function()
+    return backend.get_pending_permission(cancel_pane) ~= nil and cancel_select_callback ~= nil
+  end, 10), "new turn should expose a fresh permission UI")
+  local fresh_ui_id = assert(ui_queue.snapshot().active).id
+  stale_select(nil, 1)
+  assert(backend.get_pending_permission(cancel_pane) ~= nil,
+    "late cancelled UI response cleared the new turn's permission")
+  assert_equal(assert(ui_queue.snapshot().active).id, fresh_ui_id,
+    "late cancelled UI response released the new request")
+  assert(backend.send_keys(cancel_pane, { "C-c" }))
   backend.kill_pane(cancel_pane)
 
   local legacy_transcript = cache_dir .. "/legacy-transcript.log"

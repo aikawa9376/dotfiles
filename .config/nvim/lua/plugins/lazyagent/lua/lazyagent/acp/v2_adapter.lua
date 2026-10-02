@@ -33,6 +33,10 @@ function M.new(opts)
   }, Adapter)
 end
 
+function Adapter:reset()
+  self.message_seen, self.tool_content = {}, {}
+end
+
 function Adapter:outbound(method, params)
   if not self.enabled then return method, params end
   params = copy(params or {})
@@ -118,8 +122,14 @@ function Adapter:updates(params)
 
   if variant == "tool_call_update" then
     local tool_id = update.toolCallId
-    if tool_id and type(update.content) == "table" then
-      self.tool_content[tool_id] = copy(update.content)
+    if tool_id then
+      if update.status == "completed" or update.status == "failed" or update.status == "cancelled" then
+        -- The frontend already received the accumulated content. Only live
+        -- tools need the adapter's additional full-content copy for chunks.
+        self.tool_content[tool_id] = nil
+      elseif type(update.content) == "table" then
+        self.tool_content[tool_id] = copy(update.content)
+      end
     end
     return { params }
   end
