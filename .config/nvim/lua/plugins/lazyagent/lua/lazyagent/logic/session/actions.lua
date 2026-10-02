@@ -321,6 +321,8 @@ function M.setup(deps)
   end
 
   function module.close_all_sessions(sync)
+    call_watch("disable")
+    call_watch("stop_follow")
     local seen_backends = {}
     local closed_panes = {}
     for name, s in pairs(state.sessions) do
@@ -414,7 +416,7 @@ function M.setup(deps)
       state.session_views[session_name] = nil
     end
     state.current_session_name = nil
-    call_watch("disable")
+    if sync then persistence.flush() end
     refresh_acp_command_visibility()
 
     for backend_mod, _ in pairs(seen_backends) do

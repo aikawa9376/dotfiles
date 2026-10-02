@@ -96,9 +96,11 @@ return {
   init = function ()
     local function get_session_name()
       local name = vim.fn.getcwd()
-      local branch = vim.trim(vim.fn.system("git branch --show-current"))
-      if vim.v.shell_error == 0 then
-        return name .. '-' .. branch
+      local ok, result = pcall(function()
+        return vim.system({ "git", "branch", "--show-current" }, { text = true }):wait(1000)
+      end)
+      if ok and result.code == 0 then
+        return name .. '-' .. vim.trim(result.stdout or "")
       else
         return name
       end

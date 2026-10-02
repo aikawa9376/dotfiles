@@ -18,9 +18,23 @@ local function split_zero(value)
   return result
 end
 
-local function default_run(argv)
+local function with_deadline(opts)
+  opts = vim.tbl_extend("force", {}, opts or {})
+  opts.deadline_ns = opts.deadline_ns or (uv.hrtime() + (tonumber(opts.timeout_ms) or 10000) * 1e6)
+  return opts
+end
+
+local function remaining_ms(opts)
+  local remaining = math.floor((opts.deadline_ns - uv.hrtime()) / 1e6)
+  if remaining <= 0 then error("workspace snapshot timed out", 0) end
+  return remaining
+end
+
+local function default_run(argv, opts)
+  opts = opts or with_deadline()
   if vim.system then
-    local result = vim.system(argv, { text = false }):wait()
+    local result = vim.system(argv, { text = false }):wait(remaining_ms(opts))
+    if result.code == 124 then error("workspace snapshot timed out: " .. table.concat(argv, " "), 0) end
     return {
       code = result.code,
       stdout = result.stdout or "",
@@ -41,6 +55,7 @@ local function relative_path(root, path)
 end
 
 local function file_record(root, path, opts)
+  remaining_ms(opts)
   local absolute = root:gsub("/$", "") .. "/" .. path
   local stat = opts.stat(absolute)
   if not stat then
@@ -153,10 +168,12 @@ local function filesystem_snapshot(cwd, opts)
   local pending = { root }
   local truncated = false
   while #pending > 0 do
+    remaining_ms(opts)
     local directory = table.remove(pending)
     local handle = uv.fs_scandir(directory)
     if handle then
       while true do
+        remaining_ms(opts)
         local name, kind = uv.fs_scandir_next(handle)
         if not name then
           break
@@ -189,8 +206,8 @@ local function filesystem_snapshot(cwd, opts)
 end
 
 function M.capture(cwd, opts)
-  opts = opts or {}
-  opts.run = opts.run or default_run
+  opts = with_deadline(opts)
+  opts.run = opts.run or function(argv) return default_run(argv, opts) end
   opts.stat = opts.stat or uv.fs_stat
   opts.max_files = math.max(1, tonumber(opts.max_files) or 20000)
   cwd = vim.fn.fnamemodify(tostring(cwd or vim.fn.getcwd()), ":p"):gsub("/$", "")
@@ -250,14 +267,14 @@ local function blob_too_large(store, size)
 end
 
 function M.git_blob(snapshot, path, opts)
-  opts = opts or {}
+  opts = with_deadline(opts)
   local store = opts.blob_store
   if not store or type(snapshot) ~= "table" or type(snapshot.vcs) ~= "table"
     or snapshot.vcs.kind ~= "git" or not snapshot.root or not path
   then
     return nil, "git blob source is unavailable"
   end
-  local run_cmd = opts.run or default_run
+  local run_cmd = opts.run or function(argv) return default_run(argv, opts) end
   local ref_name = (snapshot.vcs.head and snapshot.vcs.head ~= "") and snapshot.vcs.head or "HEAD"
   local object_name = ref_name .. ":" .. path
   if store.max_blob_bytes ~= nil then
@@ -304,7 +321,7 @@ local function apply_git_blob(record, snapshot, path, opts)
 end
 
 function M.diff(before, after, opts)
-  opts = opts or {}
+  opts = with_deadline(opts)
   local previous = file_index(before)
   local current = file_index(after)
   local baseline_renames = {}
@@ -343,6 +360,7 @@ function M.diff(before, after, opts)
   end
 
   for path in pairs(paths) do
+    remaining_ms(opts)
     if not consumed[path] then
       local left = previous[path]
       local right = current[path]

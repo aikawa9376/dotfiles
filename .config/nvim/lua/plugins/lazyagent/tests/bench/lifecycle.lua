@@ -6,17 +6,18 @@ package.path = root .. '/?.lua;' .. root .. '/?/init.lua;' .. package.path
 local output = assert(vim.env.LAZYAGENT_BENCH_OUT, 'set LAZYAGENT_BENCH_OUT')
 local loops = math.max(1, tonumber(vim.env.LAZYAGENT_BENCH_LIFECYCLE_LOOPS) or 20)
 local temporary = vim.fn.tempname() .. '-lifecycle-bench'
-vim.fn.mkdir(temporary, 'p')
+local workspace = temporary .. '/workspace'
+vim.fn.mkdir(workspace, 'p')
 local state = require('lazyagent.logic.state')
 state.opts = {
-  cache = { dir = temporary },
+  cache = { dir = temporary .. '/cache' },
   acp = { auto_permission = 'allow_once', footer_animation = false, permissions = { dir = temporary .. '/permissions' } },
 }
 local view = require('lazyagent.acp.view_buffer')
 local backend = require('lazyagent.acp.backend').new(view)
 local resources = require('tests.bench.resources')
 local source_buf = vim.api.nvim_get_current_buf()
-vim.api.nvim_buf_set_name(source_buf, temporary .. '/source.lua')
+vim.api.nvim_buf_set_name(source_buf, workspace .. '/source.lua')
 local source_win = vim.api.nvim_get_current_win()
 local fake = { vim.v.progpath, '--headless', '--clean', '-u', 'NONE', '-l', root .. '/tests/acp/fake_agent.lua' }
 local report = { loops = loops, samples = {} }
@@ -58,7 +59,7 @@ local function open(thread_id, index)
     on_split = function(id) pane = id end,
     acp = {
       agent_name = 'LifecycleFixture', thread_id = thread_id, command = fake,
-      cwd = temporary, root_dir = temporary, additional_directories = { root .. '/tests' },
+      cwd = workspace, root_dir = workspace, additional_directories = { root .. '/tests' },
       agent_cfg = { yolo = true }, release_buffer_on_hide = true, footer_animation = false,
       transcript_max_lines = 12000, source_winid = source_win, source_bufnr = source_buf,
       env = vim.tbl_extend('force', { LAZYAGENT_FAKE_SIMPLE_PROMPT = '1' }, forced_load

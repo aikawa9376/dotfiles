@@ -4,7 +4,9 @@ local state = require("lazyagent.logic.state")
 
 local initialized = false
 local running = false
+local running_job
 local pending = nil
+local stopping = false
 local persisted_identity_hashes = {}
 
 local function enabled()
@@ -27,7 +29,7 @@ local function executable()
 end
 
 local function run_next()
-  if running or not pending then
+  if stopping or running or not pending then
     return
   end
   local argv = pending
@@ -38,6 +40,7 @@ local function run_next()
     stderr_buffered = true,
     on_exit = vim.schedule_wrap(function(_, code)
       running = false
+      running_job = nil
       if code ~= 0 and state.opts and state.opts.debug then
         vim.notify("LazyAgent: agentmux status bridge failed", vim.log.levels.DEBUG)
       end
@@ -47,6 +50,8 @@ local function run_next()
   if not ok or type(job) ~= "number" or job <= 0 then
     running = false
     run_next()
+  else
+    running_job = job
   end
 end
 
@@ -125,7 +130,7 @@ local function persist_thread_identities(sessions, pane)
 end
 
 function M.sync()
-  if not enabled() then return false end
+  if stopping or not enabled() then return false end
   local binary = executable()
   local pane = enclosing_tmux_pane()
   if not binary or not pane then
@@ -176,14 +181,24 @@ function M.sync()
 end
 
 function M.clear_sync()
+  -- Exit callbacks can run queued status updates while waiting for a child.
+  -- Prevent them from publishing again after the final withdrawal.
+  stopping = true
+  pending = nil
+  if running_job then
+    pcall(vim.fn.jobstop, running_job)
+    running_job = nil
+  end
   if not enabled() then return false end
   local binary = executable()
   local pane = enclosing_tmux_pane()
   if not binary or not pane then
     return false
   end
-  pcall(vim.fn.system, { binary, "withdraw", pane, "--owner", "lazyagent" })
-  return vim.v.shell_error == 0
+  local ok, result = pcall(function()
+    return vim.system({ binary, "withdraw", pane, "--owner", "lazyagent" }, { text = true }):wait(300)
+  end)
+  return ok and result.code == 0
 end
 
 function M.setup()

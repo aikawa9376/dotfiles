@@ -36,6 +36,9 @@ It checks session/client ownership, callback release, weak client references,
 UI queues, view buffers/layout/configuration, global buffers, autocommands,
 timers, watchers and child handles. It preserves one growing history thread in
 a temporary store; empty promptless threads must be deleted.
+The cache lives beside the workspace, outside the snapshot root. Putting it
+inside the workspace causes the journal to capture its own growing history and
+distorts both memory and shutdown measurements.
 
 Samples run two full GC passes, allowing finalizers and their released references
 to settle. The runner also fires `SafeState`: headless `-l` and `vim.wait` do not

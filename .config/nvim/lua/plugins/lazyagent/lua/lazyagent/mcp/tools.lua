@@ -978,6 +978,9 @@ for _, tool in ipairs(M.list) do
 end
 
 function M.call(name, params, context)
+  if vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil then
+    return nil, { code = -32603, message = "Neovim is exiting" }
+  end
   local tool = M._by_name[name]
   if not tool then
     return nil, { code = -32601, message = "Unknown tool: " .. tostring(name) }

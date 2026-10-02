@@ -346,24 +346,32 @@ local function finish_change_turn(session, completion_state)
     return nil
   end
 
-  local captured, final_snapshot = pcall(
-    WorkspaceSnapshot.capture,
-    (active_turn.baseline and active_turn.baseline.root) or session.root_dir or session.cwd,
-    {
+  local exiting = vim.v.exiting ~= vim.NIL and vim.v.exiting ~= nil
+  local budget_ms = (exiting or session.closing_intentionally) and 1000 or 10000
+  local deadline_ns = (vim.uv or vim.loop).hrtime() + budget_ms * 1e6
+  local captured, result = pcall(function()
+    local final_snapshot = WorkspaceSnapshot.capture(
+      (active_turn.baseline and active_turn.baseline.root) or session.root_dir or session.cwd,
+      {
+        blob_store = session.blob_store,
+        only_dirty_blobs = true,
+        deadline_ns = deadline_ns,
+      }
+    )
+    local changes = WorkspaceSnapshot.diff(active_turn.baseline, final_snapshot, {
       blob_store = session.blob_store,
-      only_dirty_blobs = true,
-    }
-  )
+      realtime_blobs = active_turn.file_revisions,
+      deadline_ns = deadline_ns,
+    })
+    return { snapshot = final_snapshot, changes = changes }
+  end)
+  local final_snapshot
   local capture_error = nil
   local changes = {}
   if captured then
-    changes = WorkspaceSnapshot.diff(active_turn.baseline, final_snapshot, {
-      blob_store = session.blob_store,
-      realtime_blobs = active_turn.file_revisions,
-    })
+    final_snapshot, changes = result.snapshot, result.changes
   else
-    capture_error = tostring(final_snapshot)
-    final_snapshot = nil
+    capture_error = tostring(result)
   end
   local finished_at = final_snapshot and final_snapshot.captured_at or os.date("!%Y-%m-%dT%H:%M:%SZ")
   local annotations = vim.deepcopy(active_turn.annotations or {})
@@ -2104,6 +2112,7 @@ local function create_backend(default_view)
   function backend.kill_pane(pane_id)
     local session = get_session(pane_id)
     if session then
+      session.closing_intentionally = true
       local discard_empty_thread = session.has_user_prompt ~= true
       if next(session.tool_calls or {}) == nil then
         complete_pending_turn(session)
@@ -2112,7 +2121,6 @@ local function create_backend(default_view)
         finish_change_turn(session, "interrupted")
       end
       state_helpers.clear_pending_switch_history(session)
-      session.closing_intentionally = true
       host_helpers.cancel_ui_requests(session)
       if session.nes_session_id and session.client then
         session.client:close_nes(session.nes_session_id)
@@ -2147,11 +2155,14 @@ local function create_backend(default_view)
           session.on_client_released = function() closing_clients[closing_owner_id] = nil end
         end
         local stopped = false
+        local close_timer
         local stop_client = function()
           if stopped then
             return
           end
           stopped = true
+          if close_timer and not close_timer:is_closing() then close_timer:close() end
+          close_timer = nil
           client:stop()
         end
 
@@ -2159,11 +2170,14 @@ local function create_backend(default_view)
           client:close_session(session.session_id, function()
             stop_client()
           end)
-          vim.defer_fn(function()
-            if client:is_connected() then
-              stop_client()
-            end
-          end, 1000)
+          if not stopped then
+            close_timer = vim.defer_fn(function()
+              close_timer = nil
+              if client:is_connected() then
+                stop_client()
+              end
+            end, 1000)
+          end
         else
           stop_client()
         end
@@ -2178,7 +2192,20 @@ local function create_backend(default_view)
   end
 
   function backend.kill_pane_sync(pane_id)
+    local session = get_session(pane_id)
+    local client = session and session.client
     backend.kill_pane(pane_id)
+    local function released()
+      if client.process ~= nil then return false end
+      for _, closing in pairs(closing_clients) do
+        if closing.client == client then return false end
+      end
+      return true
+    end
+    if client and not vim.wait(100, released, 5) then
+      client:stop_sync()
+      vim.wait(100, released, 5)
+    end
   end
 
   function backend.get_pane_info(pane_id, on_info)

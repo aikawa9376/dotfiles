@@ -1,4 +1,11 @@
 local uv = vim.uv or vim.loop
+local stubborn_exit = vim.env.LAZYAGENT_FAKE_STUBBORN_EXIT == "1"
+if stubborn_exit then
+  -- Unix shutdown fixture: neither session/close nor SIGTERM may stop it.
+  local ffi = require("ffi")
+  ffi.cdef("typedef void (*lazyagent_test_signal_handler)(int); lazyagent_test_signal_handler signal(int, lazyagent_test_signal_handler);")
+  ffi.C.signal(15, ffi.cast("lazyagent_test_signal_handler", 1))
+end
 
 local function encode(value)
   return vim.json.encode(value)
@@ -697,9 +704,12 @@ for line in io.lines() do
       },
     })
   elseif message.method == "session/close" then
-    send(response(message.id, vim.empty_dict()))
-    io.stderr:write("fake-agent-exit\n")
-    io.stderr:flush()
-    break
+    if not stubborn_exit then
+      send(response(message.id, vim.empty_dict()))
+      io.stderr:write("fake-agent-exit\n")
+      io.stderr:flush()
+      break
+    end
   end
 end
+if stubborn_exit then uv.sleep(60000) end

@@ -17,3 +17,12 @@ so this command remains the complete contract run.
 fragmented and batched JSON-RPC messages, unknown updates, host requests, capability negotiation,
 request timeout/cancellation, session lifecycle methods, and process teardown without requiring a
 real ACP provider or external test framework.
+
+`tests/acp/shutdown_spec.lua` starts separate Neovim processes and executes real
+`:qa!` commands. It covers empty, idle, hidden and busy ACP sessions, a provider
+that ignores graceful close and SIGTERM, stalled agentmux withdrawal, and
+stalled Git status/blob reads (including a pending journal preview). In this
+dotfiles checkout it also exercises the adjacent resession configuration's
+branch lookup. The Unix fixtures use Git, a POSIX shell and LuaJIT FFI; no real
+provider or user session is stopped. Assertions cover process exit, released
+owners, durable session removal, and truthful journal errors after a timeout.

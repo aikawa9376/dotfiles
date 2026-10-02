@@ -31,6 +31,7 @@ local suites = {
   "tests.acp.fake_agent_activation_spec",
   "tests.acp.session_hydrator_spec",
   "tests.acp.cancellation_spec",
+  "tests.acp.shutdown_spec",
   "tests.acp.path_guard_spec",
   "tests.acp.read_only_guard_spec",
   "tests.acp.file_writer_spec",

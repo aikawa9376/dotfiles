@@ -1745,4 +1745,14 @@ function Client:stop()
   end
 end
 
+-- VimLeavePre cannot rely on deferred kill timers running after it returns.
+function Client:stop_sync()
+  self:stop()
+  if vim.wait(100, function() return self.process == nil end, 5) then return true end
+  if self.process and not self.process:is_closing() then
+    pcall(function() self.process:kill(9) end)
+  end
+  return vim.wait(100, function() return self.process == nil end, 5)
+end
+
 return Client
