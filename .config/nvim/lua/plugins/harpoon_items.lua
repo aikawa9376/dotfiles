@@ -11,7 +11,7 @@ function M.create(config, name, quiet)
   local pos = api.nvim_win_get_cursor(0)
   local supplied = name ~= nil
   if not name then
-    local nav = git.capture(0, pos)
+    local nav = git.capture(0, pos, not quiet)
     if nav then return { value = 'harpoon-git:' .. git.identity(nav), context = { git = nav, row = pos[1], col = pos[2] } } end
     name = api.nvim_buf_get_name(0)
     if name == '' or vim.bo.buftype ~= '' or name:match('^%a[%w+.-]*://') then

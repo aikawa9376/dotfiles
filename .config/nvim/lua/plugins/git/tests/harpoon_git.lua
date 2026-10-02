@@ -57,6 +57,11 @@ items.toggle(); assert(list:length() == 0, 'ma failed to remove ordinary pin')
 items.toggle()
 local ordinary = list:get(1)
 assert(ordinary.value == path and ordinary.context.row == 2)
+-- Harpoon storage follows cwd, not the current Git branch, for both item types.
+run({ 'checkout', '-qb', 'pin-storage-check' })
+assert(harpoon:list('multiple') == list and list:length() == 1)
+run({ 'checkout', '-q', 'main' })
+run({ 'branch', '-D', 'pin-storage-check' })
 local legacy = { value = path, context = { row = 99, col = 99 } }
 items.select(legacy); assert(api.nvim_win_get_cursor(0)[1] == 3 and api.nvim_win_get_cursor(0)[2] == 4, 'legacy clamp')
 local preview_lines = items.preview(ordinary); assert(preview_lines[2] == 'changed')
@@ -75,6 +80,9 @@ assert(file_row)
 api.nvim_win_set_cursor(0, { file_row, 0 })
 local status_pin = pin()
 assert(status_pin.context.git.anchor.key == path)
+local status_lines, status_row = items.preview(status_pin)
+assert(vim.deep_equal(status_lines, api.nvim_buf_get_lines(status, 0, -1, false)))
+assert(status_row == file_row, 'status preview used CLI row numbers')
 items.toggle(); assert(list:length() == 2)
 items.toggle(); assert(list:length() == 1, 'ma failed to remove status pin')
 vim.fn.writefile({ 'new' }, root .. '/000-new.txt')
@@ -98,9 +106,28 @@ for row = 1, api.nvim_buf_line_count(b) do
   if entry and info.patch_row then api.nvim_win_set_cursor(0, { row, 0 }); break end
 end
 local commit_pin = pin(); assert(commit_pin.context.git.patch_row)
+local commit_lines, commit_row, commit_col, _, commit_display = items.preview(commit_pin)
+assert(vim.deep_equal(commit_lines, api.nvim_buf_get_lines(b, 0, -1, false)))
+assert(commit_row == api.nvim_win_get_cursor(0)[1] and commit_col == api.nvim_win_get_cursor(0)[2])
+assert(#commit_display.marks > 0, 'commit renderer colors were not retained')
+local without_preview = vim.deepcopy(commit_pin.context.git); without_preview.preview = nil
+assert(adapter.identity(without_preview) == adapter.identity(commit_pin.context.git), 'display changed target identity')
 b = reopen(commit_pin)
 local entry, info = c.entry_at(b, api.nvim_win_get_cursor(0)[1])
 assert(entry.path == path and info.patch_row == commit_pin.context.git.patch_row)
+-- Persisting a preview must not turn an editable commit draft into stored data.
+local message_row = #c.model(b).header + 1
+local saved_message = api.nvim_buf_get_lines(b, message_row - 1, message_row, false)
+api.nvim_buf_set_lines(b, message_row - 1, message_row, false, { 'Harpoon must not save this draft' })
+local draft_pin = pin()
+assert(not draft_pin.context.git.preview)
+assert(not vim.json.encode(draft_pin):find('Harpoon must not save this draft', 1, true))
+api.nvim_buf_set_lines(b, message_row - 1, message_row, false, saved_message)
+vim.bo[b].modified = false
+run({ 'checkout', '-qb', 'git-pin-storage-check' })
+list:add(commit_pin)
+assert(harpoon:list('multiple') == list and items.equals(list:get(list:length()), commit_pin))
+list:remove(commit_pin); run({ 'checkout', '-q', 'main' }); run({ 'branch', '-D', 'git-pin-storage-check' })
 -- Preview blob converts to durable object identity; index pins remain live.
 source(); objects.open(second .. ':' .. path, 'edit', root)
 api.nvim_win_set_cursor(0, { 2, 2 })
@@ -206,12 +233,24 @@ assert(paired == 2)
 blame.toggle()
 -- Real Harpoon menu reordering keeps structured context; preview never opens Git panels.
 source(); list:clear(); list:prepend(ordinary); list:prepend(commit_pin)
+-- Rendered previews survive source deletion and perform no Git subprocess query.
+local system = vim.system
+vim.system = function() error('rendered preview must use saved buffer display') end
+assert(vim.deep_equal(items.preview(commit_pin), commit_lines))
+assert(vim.deep_equal(items.preview(status_pin), status_lines))
+vim.system = system
 local win_count = #api.nvim_list_wins()
 items.menu(); local menu = harpoon.ui.bufnr
 assert(items.menu_item(menu, 1).context.git.revision == second)
+api.nvim_win_set_cursor(harpoon.ui.win_id, { 1, 0 })
 local snapshot = require('plugins.harpoon_preview').open({ bufnr = menu, win_id = harpoon.ui.win_id })
 assert(snapshot and #api.nvim_list_wins() == win_count + 2, 'preview opened a Git panel')
 assert(api.nvim_get_current_win() == harpoon.ui.win_id, 'preview stole focus')
+assert(vim.deep_equal(api.nvim_buf_get_lines(snapshot.buf_id, 0, -1, false), commit_lines))
+assert(vim.deep_equal(api.nvim_win_get_cursor(snapshot.win_id), { commit_row, commit_col }), 'quick preview lost diff cursor')
+local display_ns = api.nvim_get_namespaces().HarpoonPreviewDisplay
+assert(#api.nvim_buf_get_extmarks(snapshot.buf_id, display_ns, 0, -1, {}) == #commit_display.marks)
+assert(vim.bo[snapshot.buf_id].filetype == '', 'preview attached Git FileType handlers')
 local lines = api.nvim_buf_get_lines(menu, 0, -1, false)
 api.nvim_buf_set_lines(menu, 0, -1, false, { lines[2], lines[1] })
 assert(items.menu_item(menu, 2).context.git.revision == second)
@@ -226,6 +265,7 @@ local owner = { bufnr = menu, win_id = harpoon.ui.win_id }
 api.nvim_win_set_cursor(owner.win_id, { 1, 0 })
 local first_preview = require('plugins.harpoon_preview').open(owner)
 assert(api.nvim_buf_get_lines(first_preview.buf_id, 0, 1, false)[1] == 'one')
+assert(#api.nvim_buf_get_extmarks(first_preview.buf_id, display_ns, 0, -1, {}) == 0, 'Git colors leaked into file preview')
 api.nvim_win_set_cursor(owner.win_id, { 2, 0 })
 local next_preview = require('plugins.harpoon_preview').open(owner)
 assert(api.nvim_buf_get_lines(next_preview.buf_id, 0, 1, false)[1] == 'other preview', 'same-row preview stayed on the previous file')
@@ -250,6 +290,9 @@ assert(#choices == 2)
 local previewer = opts.previewer._ctor()
 local entry = previewer:parse_entry(choices[2])
 assert(entry._scratch_buf and #api.nvim_buf_get_lines(entry._scratch_buf, 0, -1, false) > 1)
+assert(entry.lnum == commit_row and entry.col == commit_col + 1, 'fzf preview lost diff cursor')
+assert(vim.deep_equal(api.nvim_buf_get_lines(entry._scratch_buf, 0, -1, false), commit_lines))
+assert(#api.nvim_buf_get_extmarks(entry._scratch_buf, display_ns, 0, -1, {}) == #commit_display.marks)
 api.nvim_buf_delete(entry._scratch_buf, { force = true })
 opts.actions.enter({ choices[2] }); assert(c.model(0).hash == second)
 opts.actions['ctrl-d']({ choices[2] }); assert(list:length() == 1 and not list:get(1).context.git)

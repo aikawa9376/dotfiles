@@ -127,7 +127,7 @@ function M.open(parent, float_opts)
 
   local item = items.menu_item(parent.bufnr, api.nvim_win_get_cursor(parent.win_id)[1])
   if not item then M.close(); return end
-  local ok, lines, row, col, filetype = pcall(items.preview, item)
+  local ok, lines, row, col, filetype, display = pcall(items.preview, item)
   if not ok then lines, row, col, filetype = { tostring(lines) }, 1, 0, 'text' end
   if #lines == 0 then lines = { '' } end
   row = math.max(1, math.min(row or 1, #lines))
@@ -167,11 +167,7 @@ function M.open(parent, float_opts)
 
   local identity = vim.json.encode(item)
   if prev_item ~= identity then
-    pcall(vim.treesitter.stop, preview_buf)
-    api.nvim_buf_set_lines(preview_buf, 0, -1, false, lines)
-    -- Syntax only: previewing must not trigger the actual Git panel's FileType actions.
-    vim.bo[preview_buf].syntax = filetype or 'text'
-    pcall(vim.treesitter.start, preview_buf, filetype)
+    require('plugins.harpoon_preview_buffer').fill(preview_buf, lines, filetype, display)
     api.nvim_win_set_cursor(preview_win, { row, col })
     highlight_cursor(preview_buf, row - 1)
     api.nvim_win_call(preview_win, function() vim.cmd('normal! zz') end)

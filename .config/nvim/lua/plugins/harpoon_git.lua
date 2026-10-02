@@ -17,7 +17,7 @@ local function commit(root, revision)
 end
 local function line(buf, row) return api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or '' end
 
-function M.capture(buf, pos)
+function M.capture(buf, pos, with_preview)
   buf = (not buf or buf == 0) and api.nvim_get_current_buf() or buf
   pos = pos or api.nvim_win_get_cursor(0)
   local ft, name = vim.bo[buf].filetype, api.nvim_buf_get_name(buf)
@@ -88,6 +88,13 @@ function M.capture(buf, pos)
   else
     -- Output can originate from any Git invocation. Reopen a snapshot, never rerun it.
     nav.view, nav.args, nav.lines = 'output', vim.b[buf].git_command, api.nvim_buf_get_lines(buf, 0, -1, false)
+  end
+  -- Retain the renderer's rows instead of trying to map them onto `git show`.
+  -- Draft messages stay in Neovim, outside persisted Harpoon data.
+  if with_preview and nav.view ~= 'object'
+    and not (nav.view == 'commit' and vim.bo[buf].modified) then
+    nav.preview = require('plugins.harpoon_preview_buffer').capture(buf, pos)
+    if nav.view == 'output' then nav.preview.lines = nil end
   end
   return vim.deepcopy(nav)
 end
@@ -250,6 +257,9 @@ function M.open(nav)
 end
 
 function M.preview(nav)
+  if nav.preview then
+    return nav.preview.lines or nav.lines, nav.preview.row, nav.preview.col, nav.preview.syntax, nav.preview
+  end
   local args, row = nil, 1
   if nav.view == 'output' then return nav.lines, nav.row, nav.col, 'git' end
   if nav.view == 'object' then

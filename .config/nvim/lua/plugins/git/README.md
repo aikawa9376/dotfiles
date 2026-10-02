@@ -93,7 +93,9 @@ views together. Press `ma` to pin/unpin the target under the cursor, and `mm` to
 select a pin. The existing `mx` fuzzy picker also opens, previews and removes
 these pins; its quickfix action remains for ordinary files. Harpoon keeps its
 existing cwd-based list storage, and saved Git entries carry their own worktree
-root, so selecting from another repository uses the saved repository.
+root, so selecting from another repository uses the saved repository. Lists are
+shared across branches within the same cwd; switching branches does not create
+a separate list.
 
 | View | Saved target and reopening behavior |
 | --- | --- |
@@ -117,8 +119,15 @@ persistent pin targets.
 
 The quick menu remains editable for ordering/deleting pins and adding ordinary
 file rows. Git labels are display text: remove and pin again to change a Git
-target. Previewing reads file/Git data without opening panels or running Git
-mutations. `plugins.harpoon_git` owns capture/reopen/preview, while
+target. New panel pins preview a copy of the rendered buffer at pin time,
+including expanded diffs, colors and the saved cursor position. This display
+survives closing the source panel; selecting the pin still refreshes live lists
+and restores their semantic target. Previews have their own scratch buffers and
+do not attach panel actions. Existing pins without display data, and commit
+message drafts, retain the read-only Git-data fallback; re-pin to capture a
+rendered preview. Object/index and paired-blame code previews read file/Git data.
+Previewing does not open panels or run Git mutations.
+`plugins.harpoon_git` owns capture/reopen/preview, while
 `plugins.harpoon_items` supplies shared structured item access for the menu,
 icons, previews and fuzzy picker. `tests/harpoon_git.lua` uses installed Harpoon,
 Flog and fzf-lua with isolated Harpoon storage and temporary Git repositories.

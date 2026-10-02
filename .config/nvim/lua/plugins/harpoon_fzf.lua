@@ -26,17 +26,15 @@ function M.open(winopts, fullopts)
       function Previewer:parse_entry(text)
         local item = resolve(text)
         if not item then return {} end
-        local ok, lines, row, col, ft = pcall(items.preview, item)
+        local ok, lines, row, col, ft, display = pcall(items.preview, item)
         if not ok then lines, row, col, ft = { tostring(lines) }, 1, 0, 'text' end
         if #lines == 0 then lines = { '' } end
         row = math.max(1, math.min(row or 1, #lines))
         col = math.min(col or 0, #lines[row])
         local buf = vim.api.nvim_create_buf(false, true)
         vim.bo[buf].bufhidden = 'wipe'
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-        -- Use syntax without running the target panel's FileType handlers.
+        require('plugins.harpoon_preview_buffer').fill(buf, lines, ft, display)
         self.syntax = false
-        vim.bo[buf].syntax = ft or 'text'
         return { _scratch_buf = buf, path = items.display(item), lnum = row, col = col + 1, do_not_cache = true }
       end
       return Previewer
