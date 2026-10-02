@@ -437,6 +437,7 @@ function M.open_float(bufnr, opts)
 
   local gid = vim.api.nvim_create_augroup("LazyAgentFloat" .. tostring(winid), { clear = true })
   float_autocmd_group_id = gid
+  local focus_close_pending = false
   vim.api.nvim_create_autocmd("WinEnter", {
     group = gid,
     callback = function()
@@ -452,7 +453,19 @@ function M.open_float(bufnr, opts)
         end
       else
         if opts and opts.close_on_focus_lost then
-          close_float_window()
+          -- Pickers briefly visit the previous window while restoring focus.
+          -- Closing here invalidates their saved return window mid-restoration.
+          if not focus_close_pending then
+            focus_close_pending = true
+            local pending_win = winid
+            vim.schedule(function()
+              focus_close_pending = false
+              if winid == pending_win and vim.api.nvim_win_is_valid(pending_win)
+                and vim.api.nvim_get_current_win() ~= pending_win then
+                close_float_window()
+              end
+            end)
+          end
           return
         end
 

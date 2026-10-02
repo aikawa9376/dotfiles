@@ -26,6 +26,32 @@ function M.run()
   window.close({ keep_buffer = true })
   assert_equal(close_count, 1, "open-time on_close callback only runs once")
 
+  local float = window.open(scratch_buf, {
+    window_type = "float",
+    close_on_focus_lost = true,
+    on_close = function() close_count = close_count + 1 end,
+  })
+  -- fzf-lua restore_lastwin visits the editor before returning to its origin.
+  vim.api.nvim_set_current_win(original_win)
+  assert_equal(vim.api.nvim_win_is_valid(float), true, "temporary focus change keeps picker origin valid")
+  vim.api.nvim_set_current_win(float)
+  vim.wait(20)
+  assert_equal(vim.api.nvim_win_is_valid(float), true, "restored scratch survives scheduled focus check")
+  assert_equal(close_count, 1, "temporary focus change does not call on_close")
+
+  vim.api.nvim_set_current_win(original_win)
+  assert(vim.wait(200, function() return not vim.api.nvim_win_is_valid(float) end, 5),
+    "scratch closes when focus remains elsewhere")
+  assert_equal(close_count, 2, "genuine focus loss calls on_close once")
+
+  float = window.open(scratch_buf, { window_type = "float", close_on_focus_lost = true })
+  vim.api.nvim_set_current_win(original_win)
+  window.close({ keep_buffer = true })
+  local replacement = window.open(scratch_buf, { window_type = "float", close_on_focus_lost = true })
+  vim.wait(20)
+  assert_equal(vim.api.nvim_win_is_valid(replacement), true, "stale focus check cannot close a replacement scratch")
+  window.close({ keep_buffer = true })
+
   if vim.api.nvim_win_is_valid(original_win) and vim.api.nvim_buf_is_valid(original_buf) then
     vim.api.nvim_win_set_buf(original_win, original_buf)
     vim.api.nvim_set_current_win(original_win)
