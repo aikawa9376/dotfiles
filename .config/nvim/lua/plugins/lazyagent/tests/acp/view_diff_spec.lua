@@ -192,6 +192,45 @@ function M.run()
   assert(check_diff_backgrounds() == mixed_count, "repeated mixed decoration keeps stable extmark counts")
 
   package.loaded["render-markdown.state"] = original_render_markdown_state
+  -- Ellipsis colors must not force a pending native parse to finish on focus.
+  local native_highlighter = vim.treesitter.highlighter.active[bufnr]
+  local native_captures = vim.treesitter.get_captures_at_pos
+  local ready, color_calls, parse_calls, parsed = false, 0, 0, nil
+  vim.treesitter.get_captures_at_pos = function()
+    color_calls = color_calls + 1
+    return { { capture = "string", lang = "lua" } }
+  end
+  vim.treesitter.highlighter.active[bufnr] = { tree = {
+    is_valid = function() return ready end,
+    parse = function(_, _, callback)
+      assert(type(callback) == "function", "ellipsis preparation parses asynchronously")
+      parse_calls, parsed = parse_calls + 1, callback
+    end,
+  } }
+  local async_view = require("lazyagent.acp.view_diff").new({
+    diff_ns = vim.api.nvim_create_namespace("lazyagent_test_async_ellipsis"),
+    transcript_line_count = function() return 4 end,
+  })
+  local async_lines = async_view.normalize_diff_display_lines(bufnr, lines, 28, 0)
+  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, async_lines)
+  vim.cmd("normal! ggzt")
+  async_view.decorate_diff_blocks(bufnr)
+  async_view.decorate_diff_blocks(bufnr)
+  assert(color_calls == 0 and parse_calls == 1, "pending parses coalesce without synchronous color lookups")
+  ready = true
+  parsed(nil, {})
+  assert(vim.wait(1000, function() return color_calls == 1 end, 10), "ellipsis colors return when the parse completes")
+  ready = false
+  vim.api.nvim_buf_set_lines(bufnr, 1, 2, false, { async_lines[2] })
+  async_view.decorate_diff_blocks(bufnr)
+  local old_parse = parsed
+  vim.api.nvim_buf_set_lines(bufnr, 1, 2, false, { async_lines[2] })
+  ready = true
+  old_parse(nil, {})
+  vim.wait(20)
+  assert(color_calls == 1, "old ellipsis parse callbacks do not recolor changed text")
+  vim.treesitter.get_captures_at_pos = native_captures
+  vim.treesitter.highlighter.active[bufnr] = native_highlighter
   vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 

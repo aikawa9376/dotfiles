@@ -721,6 +721,7 @@ function M.new(ctx)
       vim.bo[bufnr].bufhidden = "hide"
       vim.bo[bufnr].modifiable = false
       vim.bo[bufnr].modified = false
+      pcall(require("lazyagent.acp.highlighter").start, bufnr)
       vim.bo[bufnr].filetype = ACP_TRANSCRIPT_FILETYPE
       vim.bo[bufnr].swapfile = false
       vim.bo[bufnr].undofile = false
@@ -945,6 +946,7 @@ function M.new(ctx)
       vim.bo[bufnr].buflisted = false
       vim.bo[bufnr].undofile = false
       vim.b[bufnr].lazyagent_acp_transcript = true
+      pcall(require("lazyagent.acp.highlighter").start, bufnr)
       vim.bo[bufnr].filetype = ACP_TRANSCRIPT_FILETYPE
       vim.api.nvim_buf_set_name(bufnr, string.format("lazyagent://acp/%s-%s", safe_agent_name, pane_key))
       vim.b[bufnr].lazyagent_acp_pane_id = pane_key

@@ -1,4 +1,5 @@
 local M = {}
+local viewport = require("lazyagent.acp.view_buffer.viewport")
 
 function M.new(ctx)
   local section_heading_for_line = ctx.section_heading_for_line
@@ -26,8 +27,6 @@ function M.new(ctx)
   local transcript_ns = ctx.transcript_ns
   local ACP_PIN_ICON = ctx.acp_pin_icon
   local DECORATE_PREFETCH_MARGIN = ctx.decorate_prefetch_margin
-  local DECORATE_SYNC_LINE_LIMIT = ctx.decorate_sync_line_limit
-  local DECORATE_CHUNK_SIZE = ctx.decorate_chunk_size
   local ensure_highlights = ctx.ensure_highlights
   local INCREMENTAL_NORMALIZE_LOOKBACK = 256
 
@@ -174,7 +173,7 @@ function M.new(ctx)
     return math.min(transcript_stop, boundary_row)
   end
 
-  local function normalize_transcript_display(bufnr, start_idx)
+  local function normalize_transcript_display(bufnr, start_idx, ranges)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
       return nil
     end
@@ -189,15 +188,57 @@ function M.new(ctx)
       normalize_start = incremental_normalize_start(bufnr, normalize_start)
     end
 
-    local normalized = transcript_source_lines(bufnr, normalize_start, transcript_stop)
-    normalized = select(1, normalize_header_lines(bufnr, normalized))
+    local entry = layout_entry(bufnr)
+    if not entry.transcript_source_lines then
+      entry.transcript_source_lines = shallow_list_copy(entry.metadata_source_lines
+        or vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false))
+    end
+    local source = transcript_source_lines(bufnr, normalize_start, transcript_stop)
+    local normalized = source
+    if not ranges then
+      normalized = select(1, normalize_header_lines(bufnr, normalized))
+    else
+      normalized = shallow_list_copy(source)
+      for _, range in ipairs(ranges) do
+        local headers = normalize_header_lines(bufnr, vim.list_slice(source, range[1] + 1, range[2]))
+        for idx, line in ipairs(headers) do normalized[range[1] + idx] = line end
+      end
+    end
     if diff_view and type(diff_view.normalize_diff_display_lines) == "function" then
       normalized = select(1, diff_view.normalize_diff_display_lines(
         bufnr,
         normalized,
         header_target_width(bufnr),
-        normalize_start
+        normalize_start,
+        ranges
       ))
+    end
+
+    if ranges then
+      local changed_start
+      -- Repair wrapper fences outside the viewport too: their delimiter length
+      -- controls Markdown injection boundaries throughout the buffer.
+      for idx, line in ipairs(normalized) do
+        if line ~= source[idx] and line:match("^%s*```") then
+          local row = idx - 1
+          local current = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+          if current ~= line then
+            replace_buffer_lines(bufnr, row, row + 1, { line })
+            changed_start = changed_start and math.min(changed_start, row) or row
+          end
+        end
+      end
+      for _, range in ipairs(ranges) do
+        local current = vim.api.nvim_buf_get_lines(bufnr, range[1], range[2], false)
+        local target = vim.list_slice(normalized, range[1] + 1, range[2])
+        local first, last, target_last = line_diff_range(current, target)
+        if first then
+          local row = range[1] + first - 1
+          replace_buffer_lines(bufnr, row, range[1] + last, vim.list_slice(target, first, target_last))
+          changed_start = changed_start and math.min(changed_start, row) or row
+        end
+      end
+      return changed_start
     end
 
     local current = vim.api.nvim_buf_get_lines(bufnr, normalize_start, transcript_stop, false)
@@ -215,34 +256,8 @@ function M.new(ctx)
     return normalize_start + first_diff - 1
   end
 
-  local function cancel_deferred_decoration(bufnr)
-    local entry = layout_entry(bufnr)
-    entry.decoration_generation = (entry.decoration_generation or 0) + 1
-    return entry.decoration_generation
-  end
-
-  local function visible_transcript_range(bufnr)
-    local transcript_stop = transcript_line_count(bufnr)
-    if transcript_stop <= 0 then
-      return 0, 0
-    end
-
-    local win = first_visible_window(bufnr)
-    if not win or not vim.api.nvim_win_is_valid(win) then
-      return 0, math.min(transcript_stop, DECORATE_CHUNK_SIZE)
-    end
-
-    local ok, info = pcall(vim.fn.getwininfo, win)
-    local bounds = ok and type(info) == "table" and info[1] or nil
-    if type(bounds) ~= "table" then
-      return 0, math.min(transcript_stop, DECORATE_CHUNK_SIZE)
-    end
-
-    local top = math.max(1, tonumber(bounds.topline) or 1)
-    local bottom = math.max(top, tonumber(bounds.botline) or top)
-    local range_start = math.max(0, top - 1 - DECORATE_PREFETCH_MARGIN)
-    local range_stop = math.min(transcript_stop, bottom + DECORATE_PREFETCH_MARGIN)
-    return range_start, math.max(range_start, range_stop)
+  local function visible_transcript_ranges(bufnr, margin)
+    return viewport.ranges(bufnr, margin, transcript_line_count(bufnr))
   end
 
   normalize_header_lines = function(bufnr, lines)
@@ -342,79 +357,61 @@ function M.new(ctx)
     end
   end
 
-  local function queue_deferred_transcript_decoration(bufnr, ranges, generation)
-    if not vim.api.nvim_buf_is_valid(bufnr) then
-      return
-    end
-
+  local function refresh_viewport(bufnr, force, changed_start)
+    if not vim.api.nvim_buf_is_valid(bufnr) or not buffer_is_visible(bufnr) then return false end
     local entry = layout_entry(bufnr)
-    local function step(range_idx, cursor)
-      if not vim.api.nvim_buf_is_valid(bufnr) or entry.decoration_generation ~= generation then
-        return
+    local tick = vim.api.nvim_buf_get_changedtick(bufnr)
+    local width = header_target_width(bufnr)
+    local stop = transcript_line_count(bufnr)
+    local painted_ranges = entry.viewport_ranges or {}
+    if type(changed_start) == "number" and entry.viewport_count and stop >= entry.viewport_count
+      and stop - entry.viewport_count <= DECORATE_PREFETCH_MARGIN then
+      painted_ranges = vim.deepcopy(painted_ranges)
+      local next_ranges = visible_transcript_ranges(bufnr, DECORATE_PREFETCH_MARGIN)
+      for _, range in ipairs(painted_ranges) do
+        if range[2] == entry.viewport_count then
+          for _, next_range in ipairs(next_ranges) do
+            if next_range[1] < range[2] and next_range[2] > range[1] then
+              range[1] = math.max(range[1], next_range[1])
+              range[2] = next_range[2]
+              break
+            end
+          end
+        end
       end
-      if not buffer_is_visible(bufnr) then
-        entry.pending_full_refresh = true
-        return
-      end
-
-      local range = ranges[range_idx]
-      if not range then
-        return
-      end
-
-      local start_idx = cursor or range[1]
-      local next_stop = math.min(range[2], start_idx + DECORATE_CHUNK_SIZE)
-      decorate_transcript_range(bufnr, start_idx, next_stop)
-      if next_stop < range[2] then
-        vim.schedule(function()
-          step(range_idx, next_stop)
-        end)
-        return
-      end
-
-      vim.schedule(function()
-        step(range_idx + 1)
-      end)
     end
-
-    vim.schedule(function()
-      step(1)
-    end)
+    local visible = visible_transcript_ranges(bufnr, 20)
+    local covered = entry.viewport_width == width and viewport.contains(painted_ranges, visible)
+    if not force and entry.viewport_tick == tick and covered then return false end
+    local ranges = covered and painted_ranges or visible_transcript_ranges(bufnr, DECORATE_PREFETCH_MARGIN)
+    local normalize_ranges = ranges
+    if covered and type(changed_start) == "number" then
+      local boundary = incremental_normalize_start(bufnr, changed_start)
+      normalize_ranges = {}
+      for _, range in ipairs(ranges) do
+        if range[2] > boundary then
+          normalize_ranges[#normalize_ranges + 1] = { math.max(range[1], boundary), range[2] }
+        end
+      end
+    end
+    normalize_transcript_display(bufnr, nil, normalize_ranges)
+    vim.api.nvim_buf_clear_namespace(bufnr, transcript_ns, 0, -1)
+    for _, range in ipairs(ranges) do
+      decorate_transcript_range(bufnr, range[1], range[2])
+    end
+    diff_view.decorate_diff_blocks(bufnr)
+    entry.viewport_ranges = ranges
+    entry.viewport_width = width
+    entry.viewport_tick = vim.api.nvim_buf_get_changedtick(bufnr)
+    entry.viewport_count = stop
+    return true
   end
 
   local function decorate_buffer(bufnr)
-    if not vim.api.nvim_buf_is_valid(bufnr) then
-      return
+    if not vim.api.nvim_buf_is_valid(bufnr) then return end
+    if buffer_is_visible(bufnr) then
+      refresh_viewport(bufnr, true)
     end
-
-    local transcript_stop = transcript_line_count(bufnr)
-    local generation = cancel_deferred_decoration(bufnr)
-    if transcript_stop <= 0 then
-      return
-    end
-
-    normalize_transcript_display(bufnr)
-
-    if transcript_stop <= DECORATE_SYNC_LINE_LIMIT or not buffer_is_visible(bufnr) then
-      decorate_transcript_range(bufnr, 0, transcript_stop)
-      diff_view.decorate_diff_blocks(bufnr)
-      return
-    end
-
-    local visible_start, visible_stop = visible_transcript_range(bufnr)
-    decorate_transcript_range(bufnr, visible_start, visible_stop)
-
-    local ranges = {}
-    if visible_start > 0 then
-      ranges[#ranges + 1] = { 0, visible_start }
-    end
-    if visible_stop < transcript_stop then
-      ranges[#ranges + 1] = { visible_stop, transcript_stop }
-    end
-    if #ranges > 0 then
-      queue_deferred_transcript_decoration(bufnr, ranges, generation)
-    end
-    diff_view.decorate_diff_blocks(bufnr)
   end
 
   return {
@@ -425,6 +422,7 @@ function M.new(ctx)
     normalize_header_lines = normalize_header_lines,
     decorate_transcript_range = decorate_transcript_range,
     decorate_buffer = decorate_buffer,
+    refresh_viewport = refresh_viewport,
   }
 end
 

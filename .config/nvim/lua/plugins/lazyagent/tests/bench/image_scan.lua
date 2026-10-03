@@ -26,20 +26,28 @@ end
 local samples = {}
 local ok, err = xpcall(function()
   -- These paths intentionally do not exist; no renderer or provider is needed.
-  for _, count in ipairs({ 16, 64, 128, 256 }) do
-    local line = string.rep('local value = "lazyagent-image-scan-missing/path/icon.svg"; ', count)
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { line })
-    local sample = { references = count, source_bytes = #line, refreshes = {} }
-    for _ = 1, 2 do
-      stat_calls = 0
-      local started = uv.hrtime()
-      image.refresh_buffer_previews(bufnr)
-      sample.refreshes[#sample.refreshes + 1] = {
-        elapsed_ms = (uv.hrtime() - started) / 1e6,
-        filesystem_probes = stat_calls,
-      }
+  for _, kind in ipairs({ "quoted", "bare", "bare_unique" }) do
+    for _, count in ipairs({ 16, 64, 128, 256 }) do
+      local parts = {}
+      for idx = 1, count do
+        parts[idx] = kind == "quoted" and 'local value = "lazyagent-image-scan-missing/path/icon.svg"; '
+          or kind == "bare" and "lazyagent-image-scan-missing/path/icon.svg "
+          or ("lazyagent-image-scan-missing/path/icon_" .. idx .. ".svg ")
+      end
+      local line = table.concat(parts)
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { line })
+      local sample = { kind = kind, references = count, source_bytes = #line, refreshes = {} }
+      for _ = 1, 2 do
+        stat_calls = 0
+        local started = uv.hrtime()
+        image.refresh_buffer_previews(bufnr)
+        sample.refreshes[#sample.refreshes + 1] = {
+          elapsed_ms = (uv.hrtime() - started) / 1e6,
+          filesystem_probes = stat_calls,
+        }
+      end
+      samples[#samples + 1] = sample
     end
-    samples[#samples + 1] = sample
   end
 end, debug.traceback)
 

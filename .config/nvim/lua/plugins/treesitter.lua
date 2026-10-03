@@ -23,7 +23,10 @@ return {
             if not vim.api.nvim_buf_is_loaded(ctx.buf) or vim.bo[ctx.buf].filetype ~= ctx.match then
               return false
             end
-            if not pcall(vim.treesitter.start, ctx.buf, lang) then
+            local highlight = ctx.match == 'lazyagent_acp'
+              and require('lazyagent.acp.highlighter').start
+              or function(buf) vim.treesitter.start(buf, lang) end
+            if not pcall(highlight, ctx.buf) then
               return false
             end
             vim.bo[ctx.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"

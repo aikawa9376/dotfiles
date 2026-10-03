@@ -1,4 +1,5 @@
 local M = {}
+local viewport = require("lazyagent.acp.view_buffer.viewport")
 
 function M.new(ctx)
   local diff_utils = ctx.diff_utils
@@ -8,18 +9,13 @@ function M.new(ctx)
   local captures_at_pos = ctx.captures_at_pos or vim.treesitter.get_captures_at_pos
   local util = require("lazyagent.util")
   local ellipsis_refresh_pending = {}
+  local ellipsis_parse_pending = {}
+  local async_parse_supported = vim.fn.has("nvim-0.11") == 1
+  local diff_blocks = {}
+  local viewport_margin = ctx.decorate_prefetch_margin
 
   local function visible_row_ranges(bufnr)
-    local ranges = {}
-    for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
-      local info = vim.fn.getwininfo(win)[1]
-      if info then
-        local top = math.max(1, info.topline or 1)
-        local bottom = math.max(top, info.botline or top)
-        ranges[#ranges + 1] = { math.max(0, top - 21), bottom + 20 }
-      end
-    end
-    return ranges
+    return viewport.ranges(bufnr, 20)
   end
 
   local function row_is_visible(row, ranges)
@@ -110,6 +106,18 @@ function M.new(ctx)
     local code = ok_config and type(config) == "table" and type(config.code) == "table" and config.code or nil
     if not code or config.enabled == false or code.enabled == false then
       return 0
+    end
+
+    -- Integer padding does not depend on the widest line in the block.
+    -- Avoid measuring thousands of offscreen rows for the usual configuration.
+    local needs_content_width = false
+    for _, value in ipairs({ code.language_pad or 0, code.left_pad or 0, code.right_pad or 0, code.left_margin or 0 }) do
+      value = tonumber(value) or 0
+      needs_content_width = needs_content_width or (value > 0 and value < 1)
+    end
+    if not needs_content_width then
+      return math.max(0, math.floor(tonumber(code.left_pad) or 0))
+        + math.max(0, math.floor(tonumber(code.left_margin) or 0))
     end
 
     local content_width = strdisplaywidth(opening_line or "")
@@ -259,13 +267,13 @@ function M.new(ctx)
     return safe, true, suffix_len
   end
 
-  local function normalize_diff_display_lines(bufnr, lines, width, start_row)
+  local function normalize_diff_display_lines(bufnr, lines, width, start_row, ranges)
     lines = type(lines) == "table" and vim.deepcopy(lines) or {}
     width = math.max(0, tonumber(width) or 0)
     start_row = math.max(0, tonumber(start_row) or 0)
     local tracked_rows = truncated_code_rows[bufnr] or {}
     for row in pairs(tracked_rows) do
-      if row >= start_row then
+      if row >= start_row and (not ranges or row_is_visible(row, ranges)) then
         tracked_rows[row] = nil
       end
     end
@@ -298,17 +306,19 @@ function M.new(ctx)
             width - render_markdown_code_prefix_width(bufnr, lines[fence_start], body_lines, width)
           )
           for body_idx = fence_start + 1, idx - 1 do
-            local display_line, line_changed, syntax_suffix_len = truncate_code_block_line(
-              lines[body_idx],
-              available_width
-            )
-            if line_changed then
-              lines[body_idx] = display_line
-              tracked_rows[start_row + body_idx - 1] = {
-                ellipsis_col = math.max(0, #display_line - 3 - syntax_suffix_len),
-                syntax_suffix_len = syntax_suffix_len,
-              }
-              changed = true
+            if not ranges or row_is_visible(start_row + body_idx - 1, ranges) then
+              local display_line, line_changed, syntax_suffix_len = truncate_code_block_line(
+                lines[body_idx],
+                available_width
+              )
+              if line_changed then
+                lines[body_idx] = display_line
+                tracked_rows[start_row + body_idx - 1] = {
+                  ellipsis_col = math.max(0, #display_line - 3 - syntax_suffix_len),
+                  syntax_suffix_len = syntax_suffix_len,
+                }
+                changed = true
+              end
             end
           end
           fence_start = nil
@@ -352,7 +362,8 @@ function M.new(ctx)
     return "@" .. selected.capture .. suffix
   end
 
-  local function decorate_truncated_ellipses(bufnr, force)
+  local decorate_truncated_ellipses
+  decorate_truncated_ellipses = function(bufnr, force)
     local tracked_rows = truncated_code_rows[bufnr]
     if type(tracked_rows) ~= "table" then
       return
@@ -373,20 +384,39 @@ function M.new(ctx)
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     local changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
     local visible_ranges = visible_row_ranges(bufnr)
+    local colors_ready = true
+    local highlighter = not ctx.captures_at_pos and vim.treesitter.highlighter.active[bufnr]
+    if async_parse_supported and highlighter and #visible_ranges > 0
+      and not highlighter.tree:is_valid(false, visible_ranges) then
+      colors_ready = false
+      if not ellipsis_parse_pending[bufnr] then
+        local token = {}
+        ellipsis_parse_pending[bufnr] = token
+        highlighter.tree:parse(visible_ranges, function(err, trees)
+          vim.schedule(function()
+            if ellipsis_parse_pending[bufnr] ~= token then return end
+            ellipsis_parse_pending[bufnr] = nil
+            if not err and trees and vim.api.nvim_buf_is_valid(bufnr)
+              and vim.api.nvim_buf_get_changedtick(bufnr) == changedtick then
+              decorate_truncated_ellipses(bufnr)
+            end
+          end)
+        end)
+      end
+    end
     for row, mark in pairs(tracked_rows) do
       local visible = row_is_visible(row, visible_ranges)
       if row >= 0 and row < line_count and type(mark) == "table"
+        and (not viewport_margin or row_is_visible(row, (diff_blocks[bufnr] or {}).ranges or {}))
         and (force or mark.decoration_tick ~= changedtick or (visible and mark.highlight_tick ~= changedtick)) then
         local line = (vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false) or {})[1] or ""
         local ellipsis_col = tonumber(mark.ellipsis_col)
         local suffix_len = math.max(0, tonumber(mark.syntax_suffix_len) or 0)
         local ellipsis_end_col = math.min(#line, (ellipsis_col or 0) + 3)
         if ellipsis_col and line:sub(ellipsis_col + 1, ellipsis_end_col) == "..." then
-          -- A capture lookup synchronously parses injections and visits the
-          -- language trees. Doing it for every old code line makes a pending
-          -- stream flush in BufEnter/WinEnter block mouse focus for seconds.
-          -- Resolve only the viewport and reuse colors until the text changes.
-          if visible and mark.highlight_tick ~= changedtick then
+          -- Only query current trees. A color lookup must not turn the native
+          -- async parse into a synchronous full-injection parse on focus.
+          if visible and colors_ready and mark.highlight_tick ~= changedtick then
             mark.hl_group = ellipsis_highlight_group(bufnr, row, ellipsis_col)
             mark.highlight_tick = changedtick
           end
@@ -421,6 +451,7 @@ function M.new(ctx)
     end
   end
 
+  local refresh_diff_viewport
   local group = vim.api.nvim_create_augroup("LazyAgentACPDiffViewport" .. diff_ns, { clear = true })
   vim.api.nvim_create_autocmd({ "WinScrolled", "BufWinEnter", "CursorMoved" }, {
     group = group,
@@ -435,11 +466,14 @@ function M.new(ctx)
         end
       end
       for bufnr in pairs(buffers) do
-        if next(truncated_code_rows[bufnr] or {}) and not ellipsis_refresh_pending[bufnr] then
+        if (diff_blocks[bufnr] or next(truncated_code_rows[bufnr] or {})) and not ellipsis_refresh_pending[bufnr] then
           ellipsis_refresh_pending[bufnr] = true
           vim.schedule(function()
             ellipsis_refresh_pending[bufnr] = nil
-            if vim.api.nvim_buf_is_valid(bufnr) then decorate_truncated_ellipses(bufnr) end
+            if vim.api.nvim_buf_is_valid(bufnr) then
+              if refresh_diff_viewport then refresh_diff_viewport(bufnr) end
+              decorate_truncated_ellipses(bufnr)
+            end
           end)
         end
       end
@@ -449,7 +483,9 @@ function M.new(ctx)
     group = group,
     callback = function(args)
       truncated_code_rows[args.buf] = nil
+      diff_blocks[args.buf] = nil
       ellipsis_refresh_pending[args.buf] = nil
+      ellipsis_parse_pending[args.buf] = nil
     end,
   })
 
@@ -857,8 +893,8 @@ function M.new(ctx)
 
   local api = {}
 
-  function api.normalize_diff_display_lines(bufnr, lines, width, start_row)
-    return normalize_diff_display_lines(bufnr, lines, width, start_row)
+  function api.normalize_diff_display_lines(bufnr, lines, width, start_row, ranges)
+    return normalize_diff_display_lines(bufnr, lines, width, start_row, ranges)
   end
 
   function api.open_diff_block_under_cursor(bufnr)
@@ -921,6 +957,12 @@ function M.new(ctx)
       return
     end
 
+    if viewport_margin then
+      refresh_diff_viewport(bufnr)
+      decorate_truncated_ellipses(bufnr)
+      return
+    end
+
     local transcript_stop = transcript_line_count(bufnr)
     vim.api.nvim_buf_clear_namespace(bufnr, diff_ns, 0, -1)
     -- Clearing also removes ellipsis marks. Their old IDs may be allocated to
@@ -946,6 +988,48 @@ function M.new(ctx)
       end
     end
     decorate_truncated_ellipses(bufnr, true)
+  end
+
+  refresh_diff_viewport = function(bufnr)
+    if not viewport_margin then return end
+    local tick = vim.api.nvim_buf_get_changedtick(bufnr)
+    local cached = diff_blocks[bufnr]
+    local transcript_stop = transcript_line_count(bufnr)
+    local ranges = viewport.ranges(bufnr, viewport_margin, transcript_stop)
+    local visible = viewport.ranges(bufnr, 20, transcript_stop)
+    if cached and cached.tick == tick then
+      if viewport.contains(cached.ranges, visible) then return end
+    else
+      -- Fence indexing is a cheap text scan. Width calculations, inline diffs
+      -- and extmark creation below are restricted to the viewport's margin.
+      cached = { tick = tick, blocks = {} }
+      local lines = vim.api.nvim_buf_get_lines(bufnr, 0, transcript_stop, false)
+      local fence_start
+      for idx, line in ipairs(lines) do
+        if line:match("^%s*```") then
+          if fence_start then
+            cached.blocks[#cached.blocks + 1] = { fence_start, idx - 2 }
+            fence_start = nil
+          else
+            fence_start = idx
+          end
+        end
+      end
+    end
+    cached.ranges = ranges
+    diff_blocks[bufnr] = cached
+    vim.api.nvim_buf_clear_namespace(bufnr, diff_ns, 0, -1)
+    for _, mark in pairs(truncated_code_rows[bufnr] or {}) do
+      mark.highlight_id, mark.conceal_id, mark.decoration_tick = nil, nil, nil
+    end
+    for _, block in ipairs(cached.blocks) do
+      for _, range in ipairs(ranges) do
+        -- One extra row preserves a delete/add pair crossing the boundary.
+        local start_row = math.max(block[1], range[1] - 1)
+        local end_row = math.min(block[2], range[2])
+        if start_row <= end_row then decorate_diff_block(bufnr, start_row, end_row) end
+      end
+    end
   end
 
   return api

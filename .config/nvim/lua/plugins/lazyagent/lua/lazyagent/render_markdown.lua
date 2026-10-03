@@ -38,6 +38,29 @@ local function is_lazyagent_acp_buffer(buf)
   return vim.bo[buf].filetype == "lazyagent_acp"
 end
 
+function M.enable_async_view_parse()
+  if M.async_view_parse_enabled or vim.fn.has("nvim-0.11") == 0 then return end
+  local View = require("render-markdown.request.view")
+  local Context = require("render-markdown.request.context")
+  local parse = View.parse
+  View.parse = function(self, parser, callback)
+    local buf = self.buf
+    if not is_lazyagent_acp_buffer(buf) then return parse(self, parser, callback) end
+    local tick = vim.api.nvim_buf_get_changedtick(buf)
+    local mode = vim.api.nvim_get_mode().mode
+    parser:parse(self.ranges, function(err, trees)
+      if err or not trees or not vim.api.nvim_buf_is_valid(buf)
+        or vim.api.nvim_buf_get_changedtick(buf) ~= tick or #vim.fn.win_findbuf(buf) == 0
+        or vim.api.nvim_get_mode().mode ~= mode then return end
+      local ok, context = pcall(Context.get, buf)
+      -- An update or resize may have replaced this request while parsing.
+      if ok and context.view == self and vim.api.nvim_win_is_valid(context.win)
+        and vim.api.nvim_win_get_buf(context.win) == buf then callback() end
+    end)
+  end
+  M.async_view_parse_enabled = true
+end
+
 local function is_diff_header(line)
   return line:match("^@@")
     or line:match("^diff %-%-git")
@@ -151,7 +174,8 @@ function M.parse(ctx)
 
   local query = ts.parse("markdown", markdown_query)
   local renders = {
-    code = require("render-markdown.render.markdown.code"),
+    code = is_lazyagent_acp_buffer(ctx.buf) and require("lazyagent.render_markdown_code")
+      or require("render-markdown.render.markdown.code"),
     dash = require("render-markdown.render.markdown.dash"),
     document = require("render-markdown.render.markdown.document"),
     footnote = require("render-markdown.render.common.footnote"),
@@ -166,9 +190,16 @@ function M.parse(ctx)
   local context = Context.get(ctx.buf)
   local marks = Marks.new(context, false)
   local skip_ranges = transcript_skip_ranges(ctx.buf)
+  local seen_code = {}
   context.view:nodes(ctx.root, query, function(capture, node)
     if should_skip_render(ctx.buf, capture, node, skip_ranges) then
       return
+    end
+
+    if capture == "code" and is_lazyagent_acp_buffer(ctx.buf) then
+      local key = table.concat({ node.start_row, node.start_col, node.end_row, node.end_col }, ":")
+      if seen_code[key] then return end
+      seen_code[key] = true
     end
 
     local render = renders[capture]

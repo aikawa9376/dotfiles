@@ -538,7 +538,7 @@ local function strip_wrapping_delimiters(text)
   return text
 end
 
-local function normalize_image_path_text(text)
+local function normalize_literal_image_path(text)
   local candidate = vim.trim(text or "")
   if candidate == "" then
     return nil
@@ -566,10 +566,12 @@ local function normalize_image_path_text(text)
     candidate = normalized
   end
 
-  if not is_image_file(candidate) then
-    return nil
-  end
   return candidate
+end
+
+local function normalize_image_path_text(text)
+  local candidate = normalize_literal_image_path(text)
+  return candidate and is_image_file(candidate) and candidate or nil
 end
 
 local function normalize_image_url_text(text)
@@ -792,6 +794,39 @@ local function extract_image_reference(line, opts)
     boundaries[#boundaries + 1] = pos
   end
 
+  local segment_starts = {}
+  local directory_cache = {}
+  local failed_starts = {}
+  local has_parent_components = line:find("[/\\]%.%.[/\\]") ~= nil
+  local function candidate_directory_exists(start_pos, ext_start)
+    -- normalize() can remove an earlier nonexistent component before '..'.
+    -- Let the complete-path resolver handle those references.
+    if has_parent_components then return true end
+    if failed_starts[start_pos] then return false end
+    local prefix = lower:sub(start_pos):gsub("^%[image%]%s*", ""):gsub("^@%s*", "")
+    -- URLs have different separators and URI decoding rules.
+    if prefix:match("^https?://") or prefix:match("^file://") then return true end
+    local slash = line:find("/", start_pos, true)
+    while slash and slash < ext_start do
+      local raw = line:sub(start_pos, slash)
+      local exists = directory_cache[raw]
+      if exists == nil then
+        local directory = normalize_literal_image_path(raw)
+        local stat = directory and uv.fs_stat(directory) or nil
+        exists = stat ~= nil and stat.type == "directory"
+        directory_cache[raw] = exists
+      end
+      if not exists then
+        -- A missing directory cannot become a valid prefix for a later suffix
+        -- on the same line. Do not retry increasingly long candidate paths.
+        failed_starts[start_pos] = true
+        return false
+      end
+      slash = line:find("/", slash + 1, true)
+    end
+    return true
+  end
+
   for _, suffix in ipairs(IMAGE_EXTENSION_SUFFIXES) do
     local init = 1
     local boundary_idx = 1
@@ -806,24 +841,33 @@ local function extract_image_reference(line, opts)
         segment_start = boundaries[boundary_idx] + 1
         boundary_idx = boundary_idx + 1
       end
-      local segment = line:sub(segment_start, ext_start)
+      local starts = segment_starts[segment_start]
+      if not starts then
+        local segment_stop = (boundaries[boundary_idx] or (#line + 1)) - 1
+        local segment = line:sub(segment_start, segment_stop)
+        starts = path_starts(segment, #segment)
+        segment_starts[segment_start] = starts
+      end
       local candidate_stop = candidate_end_position(line, ext_end)
-      for _, relative_start in ipairs(path_starts(segment, #segment)) do
+      for _, relative_start in ipairs(starts) do
         local start_pos = segment_start + relative_start - 1
-        local raw = line:sub(start_pos, candidate_stop)
-        local source_path = normalize_image_path_text(raw)
-        local source_url = source_path == nil and normalize_image_url_text(raw) or nil
-        if source_path or source_url then
-          local candidate = {
-            start_col = start_pos,
-            end_col = candidate_stop,
-            raw = raw,
-            source_path = source_path,
-            source_url = source_url,
-            is_remote = source_url ~= nil,
-          }
-          if not best or #candidate.raw > #best.raw then
-            best = candidate
+        if start_pos > ext_start then break end
+        if candidate_directory_exists(start_pos, ext_start) then
+          local raw = line:sub(start_pos, candidate_stop)
+          local source_path = normalize_image_path_text(raw)
+          local source_url = source_path == nil and normalize_image_url_text(raw) or nil
+          if source_path or source_url then
+            local candidate = {
+              start_col = start_pos,
+              end_col = candidate_stop,
+              raw = raw,
+              source_path = source_path,
+              source_url = source_url,
+              is_remote = source_url ~= nil,
+            }
+            if not best or #candidate.raw > #best.raw then
+              best = candidate
+            end
           end
         end
       end

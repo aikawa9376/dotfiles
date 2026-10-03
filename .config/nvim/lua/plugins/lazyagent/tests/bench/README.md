@@ -82,6 +82,41 @@ not send physical mouse input. For same-machine comparisons,
 `LAZYAGENT_FOCUS_BASELINE_DIR` may point to saved `view_diff.lua` and `updates.lua`
 modules from the previous implementation.
 
+## Transcript viewport materialization
+
+```sh
+LAZYAGENT_BENCH_OUT=/tmp/lazyagent-viewport.json \
+nvim --headless --clean -u NONE -l tests/bench/view_viewport.lua
+```
+
+This opens a generated 7,000-line code/diff transcript with real buffers and
+extmarks. It measures synchronous opening time, width calculations, extmark
+writes including scheduled decoration, and retained diff marks. It excludes
+Tree-sitter and external Markdown rendering to isolate LazyAgent's own display
+work. `LAZYAGENT_VIEWPORT_BASELINE_DIR` accepts saved `render.lua` and
+`view_diff.lua` modules from the former full-history renderer. The contract
+suite `view_viewport_spec.lua` separately covers large-block context, direct
+jumps, split windows, resize, and streaming during scrollback.
+
+## External Markdown viewport contract
+
+```sh
+LAZYAGENT_BENCH_OUT=/tmp/lazyagent-markdown-viewport.json \
+LAZYAGENT_MARKDOWN_RTP=/path/to/render-markdown.nvim \
+LAZYAGENT_PARSER_RTP=/path/to/nvim/site \
+nvim --headless --clean -u NONE -l tests/bench/markdown_viewport.lua
+```
+
+This requires installed Markdown/Lua parsers and render-markdown. It compares
+actual visible code marks with the upstream renderer for 30/7,000-row fences,
+indentation, empty lines, padding, full/block width, disabled backgrounds and
+disjoint/middle viewport ranges. It checks bounded body marks, injected Lua
+syntax and buffer-local removal of native line-conceal queries. Width summaries
+still inspect the full block to preserve uniform borders; timing samples have
+no thresholds. Async request cancellation and ellipsis parse readiness are
+covered separately by `markdown_rendering_spec.lua` and `view_diff_spec.lua`.
+This integration contract measures rendering work, not TUI input latency.
+
 ## Repeated image-reference scans
 
 ```sh
@@ -90,7 +125,8 @@ nvim --headless --clean -u NONE -l tests/bench/image_scan.lua
 ```
 
 This measures first and unchanged repeated viewport scans of generated code
-lines containing 16/64/128/256 quoted `icon.svg` references. Missing fixture paths
+lines containing 16/64/128/256 quoted, bare repeated, or bare unique `icon.svg`
+references. Missing fixture paths
 exercise detection without an image renderer or provider. Results include source
 bytes, processing time and filesystem probe counts; there are no timing thresholds.
 It measures the image scan called by entry events, not the complete editor redraw.

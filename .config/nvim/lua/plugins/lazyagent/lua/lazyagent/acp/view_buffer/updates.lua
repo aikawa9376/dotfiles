@@ -51,6 +51,7 @@ function M.new(ctx)
   local trailing_markdown_table_context = ctx.trailing_markdown_table_context
   local normalize_transcript_display = ctx.normalize_transcript_display
   local decorate_transcript_range = ctx.decorate_transcript_range
+  local refresh_viewport = ctx.refresh_viewport
   local queue_markdown_rendering = ctx.queue_markdown_rendering
   local request_buffer_redraw = ctx.request_buffer_redraw or function(_) end
   local invalidate_transcript_section_cache = ctx.invalidate_transcript_section_cache or function(_) end
@@ -64,6 +65,21 @@ function M.new(ctx)
     end,
   })
   local layout_autocmds_initialized = false
+  local viewport_refresh_pending = {}
+
+  local function queue_viewport_refresh(bufnr)
+    if not refresh_viewport or viewport_refresh_pending[bufnr] then return end
+    viewport_refresh_pending[bufnr] = true
+    vim.schedule(function()
+      viewport_refresh_pending[bufnr] = nil
+      if vim.api.nvim_buf_is_valid(bufnr) and buffer_is_visible(bufnr) then
+        if refresh_viewport(bufnr) then
+          queue_markdown_rendering(bufnr)
+          request_buffer_redraw(bufnr)
+        end
+      end
+    end)
+  end
   local scroll_buffer_to_end
   local transcript_line_count
   local refresh_buffer_from_path
@@ -220,6 +236,7 @@ function M.new(ctx)
           refresh_transcript_window(bufnr, win)
         end
         pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
+        queue_viewport_refresh(bufnr)
       end,
     })
 
@@ -234,6 +251,7 @@ function M.new(ctx)
         pause_follow_output(bufnr, { reason = "focus", win = vim.api.nvim_get_current_win() })
         refresh_transcript_window(bufnr, vim.api.nvim_get_current_win())
         pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
+        queue_viewport_refresh(bufnr)
       end,
     })
 
@@ -249,6 +267,7 @@ function M.new(ctx)
         pause_follow_output(bufnr, { reason = "focus", win = win })
         refresh_transcript_window(bufnr, win)
         pcall(resume_deferred_updates_for_buffer, bufnr, { refresh_layout = true })
+        queue_viewport_refresh(bufnr)
       end,
     })
 
@@ -275,8 +294,9 @@ function M.new(ctx)
           local win = tonumber(key)
           if win and vim.api.nvim_win_is_valid(win) then
             local bufnr = vim.api.nvim_win_get_buf(win)
-            if is_acp_buffer(bufnr) and not smooth_scroll.active(win) then
-              M._sync_follow_after_scroll(bufnr, win, scroll)
+            if is_acp_buffer(bufnr) then
+              queue_viewport_refresh(bufnr)
+              if not smooth_scroll.active(win) then M._sync_follow_after_scroll(bufnr, win, scroll) end
             end
           end
         end
@@ -289,6 +309,7 @@ function M.new(ctx)
         local bufnr = tonumber(args.buf)
         local win = vim.api.nvim_get_current_win()
         if bufnr and is_acp_buffer(bufnr) then
+          queue_viewport_refresh(bufnr)
           if smooth_scroll.active(win) then
             return
           end
@@ -791,12 +812,15 @@ function M.new(ctx)
 
     clear_deferred_incremental_refresh(bufnr)
     if changed_start ~= nil then
-      local display_start = normalize_transcript_display(bufnr, changed_start)
-      if type(display_start) == "number" then
-        changed_start = math.min(changed_start, display_start)
+      if should_follow_output(bufnr) then scroll_buffer_to_end(bufnr) end
+      if refresh_viewport then
+        refresh_viewport(bufnr, true, changed_start)
+      else
+        local display_start = normalize_transcript_display(bufnr, changed_start)
+        if type(display_start) == "number" then changed_start = math.min(changed_start, display_start) end
+        decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
+        diff_view.decorate_diff_blocks(bufnr)
       end
-      decorate_transcript_range(bufnr, changed_start, transcript_line_count(bufnr))
-      diff_view.decorate_diff_blocks(bufnr)
       -- The incremental path has already decorated the new transcript. Keep
       -- the layout cache current so the following BufEnter/WinEnter does not
       -- normalize and decorate the whole history again just for its new length.

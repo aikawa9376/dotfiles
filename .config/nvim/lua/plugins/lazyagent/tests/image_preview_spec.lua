@@ -27,6 +27,8 @@ function M.run()
   local image_path = vim.fn.tempname() .. ".png"
   local literal_image_path = vim.fn.tempname() .. "-{left,right}.png"
   local spaced_image_path = vim.fn.tempname() .. " with spaces.png"
+  local image_suffix_dir = vim.fn.tempname() .. "-folder.png with spaces"
+  local nested_image_path = image_suffix_dir .. "/actual image.svg"
   local previous_expand = vim.fn.expand
   local previous_fs_stat = vim.uv.fs_stat
 
@@ -51,6 +53,7 @@ function M.run()
     vim.fn.delete(image_path)
     vim.fn.delete(literal_image_path)
     vim.fn.delete(spaced_image_path)
+    vim.fn.delete(image_suffix_dir, "rf")
   end
 
   local ok, err = xpcall(function()
@@ -217,6 +220,21 @@ function M.run()
     image_paste.refresh_buffer_previews(acp_bufnr)
     assert_truthy(stat_calls <= repeats * 5, "quoted code image candidates have bounded filesystem probes")
     assert_equal(placements[#placements].src, image_path, "a real image after many code strings is still previewed")
+
+    -- Bare paths have no quote boundary. Index starts once and stop retrying a
+    -- candidate after its first nonexistent directory, including mixed suffixes.
+    local bare_paths = {}
+    for idx = 1, 256 do
+      bare_paths[#bare_paths + 1] = "lazyagent-missing-dir/path/icon_" .. idx
+        .. ({ ".svg", ".png", ".jpeg" })[(idx % 3) + 1]
+    end
+    stat_calls = 0
+    vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, {
+      table.concat(bare_paths, " ") .. " " .. image_path,
+    })
+    image_paste.refresh_buffer_previews(acp_bufnr)
+    assert_truthy(stat_calls < #bare_paths * 5, "bare path candidates have bounded filesystem probes")
+    assert_equal(placements[#placements].src, image_path, "a real image after bare paths remains previewed")
     vim.uv.fs_stat = previous_fs_stat
 
     vim.fn.writefile({ "spaced-image-fixture" }, spaced_image_path, "b")
@@ -226,11 +244,31 @@ function M.run()
     image_paste.refresh_buffer_previews(acp_bufnr)
     assert_equal(placements[#placements].src, spaced_image_path, "reference boundaries preserve spaces in filenames")
 
+    vim.fn.mkdir(image_suffix_dir, "p")
+    vim.fn.writefile({ "nested-image-fixture" }, nested_image_path, "b")
+    vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, { nested_image_path })
+    image_paste.refresh_buffer_previews(acp_bufnr)
+    assert_equal(placements[#placements].src, nested_image_path,
+      "directory checks preserve spaces and image suffixes within real directory names")
+
+    vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, {
+      image_suffix_dir .. "/absent/../actual image.svg",
+    })
+    image_paste.refresh_buffer_previews(acp_bufnr)
+    assert_equal(placements[#placements].src, nested_image_path,
+      "normalization can remove a nonexistent component before a parent traversal")
+
     vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, {
       'json = {"asset": "https://example.test/image.png"}',
     })
     image_paste.refresh_buffer_previews(acp_bufnr)
     assert_equal(placements[#placements].src, "https://example.test/image.png", "quoted remote image references remain valid")
+
+    vim.api.nvim_buf_set_lines(acp_bufnr, 0, -1, false, {
+      "[image] @https://example.test/image.png image/png",
+    })
+    image_paste.refresh_buffer_previews(acp_bufnr)
+    assert_equal(placements[#placements].src, "https://example.test/image.png", "managed URL references bypass local directory checks")
   end, debug.traceback)
 
   cleanup()

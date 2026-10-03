@@ -21,9 +21,7 @@ local ACP_TRANSCRIPT_FILETYPE = "lazyagent_acp"
 local ACP_PIN_ICON = "󰐃"
 local APPEND_BATCH_MS = 60
 local MARKDOWN_RENDER_BATCH_MS = 120
-local DECORATE_PREFETCH_MARGIN = 80
-local DECORATE_SYNC_LINE_LIMIT = 600
-local DECORATE_CHUNK_SIZE = 400
+local DECORATE_PREFETCH_MARGIN = 500
 local first_visible_window
 local replace_buffer_lines
 local set_buffer_lines
@@ -310,7 +308,7 @@ local function refresh_markdown_rendering(bufnr)
 
   local entry = type(layout_entry) == "function" and layout_entry(bufnr) or nil
   if not entry or entry.render_markdown_attached ~= true then
-    pcall(vim.treesitter.start, bufnr, "markdown")
+    pcall(require("lazyagent.acp.highlighter").start, bufnr)
   end
 
   local ok_manager, manager = pcall(require, "render-markdown.core.manager")
@@ -826,8 +824,6 @@ local view_render = require("lazyagent.acp.view_buffer.render").new({
   transcript_ns = transcript_ns,
   acp_pin_icon = ACP_PIN_ICON,
   decorate_prefetch_margin = DECORATE_PREFETCH_MARGIN,
-  decorate_sync_line_limit = DECORATE_SYNC_LINE_LIMIT,
-  decorate_chunk_size = DECORATE_CHUNK_SIZE,
   ensure_highlights = ensure_highlights,
 })
 local header_target_width = view_render.header_target_width
@@ -836,6 +832,7 @@ transcript_source_lines = view_render.transcript_source_lines
 local normalize_transcript_display = view_render.normalize_transcript_display
 local decorate_transcript_range = view_render.decorate_transcript_range
 local decorate_buffer = view_render.decorate_buffer
+local refresh_viewport = view_render.refresh_viewport
 
 local view_windowing = require("lazyagent.acp.view_buffer.windowing").new({
   api = M,
@@ -1075,6 +1072,7 @@ local view_updates = require("lazyagent.acp.view_buffer.updates").new({
   trailing_markdown_table_context = trailing_markdown_table_context,
   normalize_transcript_display = normalize_transcript_display,
   decorate_transcript_range = decorate_transcript_range,
+  refresh_viewport = refresh_viewport,
   diff_view = function()
     return diff_view
   end,
@@ -1096,6 +1094,7 @@ local queue_append = view_updates.queue_append
 
 diff_view = view_diff.new({
   diff_utils = require("lazyagent.acp.diff"),
+  decorate_prefetch_margin = DECORATE_PREFETCH_MARGIN,
   diff_ns = diff_ns,
   session_for_agent = session_for_agent,
   transcript_line_count = function(bufnr)
@@ -1161,6 +1160,8 @@ refresh_buffer_layout = function(bufnr, opts)
   entry.footer_width = footer_width
   entry.transcript_count = transcript_count
 
+  -- Materialize the destination, rather than the old viewport, on open/follow.
+  if should_follow_output(bufnr) then scroll_buffer_to_end(bufnr) end
   if decorate_needed then
     decorate_buffer(bufnr)
   end
