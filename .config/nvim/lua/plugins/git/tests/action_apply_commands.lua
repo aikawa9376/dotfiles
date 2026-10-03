@@ -31,6 +31,8 @@ git({ 'commit', '-qam', 'two hunks' })
 local selected = git({ 'rev-parse', 'HEAD' })
 git({ 'switch', '-q', 'main' })
 
+dofile(vim.fs.dirname(vim.fs.dirname(plugin)) .. '/config/keymap.lua')
+vim.o.timeoutlen = 50
 local view = require('git.features.commit')
 view.setup(vim.api.nvim_create_augroup('ApplyCommandsTest', { clear = true }))
 require('git.features.magit_apply').setup()
@@ -47,6 +49,9 @@ local function press(key)
   assert(type(mapping.callback) == 'function', 'missing ' .. key)
   mapping.callback()
 end
+for _, key in ipairs({ 'v', 'V', '<C-v>' }) do
+  assert(vim.fn.maparg(key, 'n', false, true).buffer ~= 1, 'Visual entry was overridden: ' .. key)
+end
 focus('M multi.txt')
 vim.cmd('GitApply')
 assert(vim.deep_equal(read(), changed), 'GitApply did not apply commit-panel file')
@@ -57,8 +62,8 @@ focus('@@')
 press('a')
 assert(read()[2] == changed[2] and read()[24] == original[24],
   'commit-panel a applied more than the selected hunk')
-press('v')
-assert(vim.deep_equal(read(), original), 'commit-panel v did not reverse the hunk')
+vim.api.nvim_feedkeys('cv', 'xt', false)
+assert(vim.deep_equal(read(), original), 'commit-panel cv did not reverse the hunk')
 assert(git({ 'rev-parse', 'HEAD' }) == base and git({ 'diff', '--cached', '--name-only' }) == '',
   'regular apply/reverse changed HEAD or index')
 
@@ -90,8 +95,8 @@ assert(stash_file_row, 'stash commit panel omitted the changed file')
 vim.api.nvim_win_set_cursor(0, { stash_file_row, 0 })
 press('a')
 assert(vim.deep_equal(read(), changed), 'commit-panel a did not apply the stash file patch')
-press('v')
-assert(vim.deep_equal(read(), original), 'commit-panel v did not reverse the stash file patch')
+press('cv')
+assert(vim.deep_equal(read(), original), 'commit-panel cv did not reverse the stash file patch')
 
 local ours = vim.deepcopy(original)
 ours[2] = 'conflicting local commit'

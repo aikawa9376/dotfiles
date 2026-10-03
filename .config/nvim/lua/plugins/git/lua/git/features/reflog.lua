@@ -25,6 +25,7 @@ local function operation_parts(subject)
   elseif operation:match('^commit') then operation = 'commit'
   elseif operation:match('^rebase') then operation = 'rebase'
   elseif operation:match('^reset') then operation = 'reset'
+  elseif operation == '[nvim git drop]' then operation = 'drop'
   elseif operation:match('^checkout') then operation = 'checkout'
   elseif operation:match('^cherry%-pick') then operation = 'cherry-pick' end
   if operation == 'checkout' then
@@ -58,7 +59,7 @@ local function mark_recovery_points(entries)
     elseif entry.action:match('^rebase.*%(finish%)$') or entry.action:match('^rebase.*%(abort%)$') then
       in_rebase = false
     elseif not in_rebase and adjacent and previous.hash ~= entry.hash
-      and (entry.operation == 'amend' or entry.operation == 'reset') then
+      and (entry.operation == 'amend' or entry.operation == 'reset' or entry.operation == 'drop') then
       previous.recovery_point = true
     end
   end

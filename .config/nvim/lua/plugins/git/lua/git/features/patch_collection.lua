@@ -3,6 +3,7 @@ local M = {}
 local model_api = require('git.features.commit_model')
 local commit = require('git.features.commit')
 local async = require('git.features.async')
+local syntax = require('git.features.syntax_highlight')
 local sessions = {}
 local function notify(message) vim.notify(message, vim.log.levels.WARN) end
 local function active(s)
@@ -63,6 +64,8 @@ local function render(s)
   else vim.list_extend(content, patch) end
   vim.api.nvim_buf_set_lines(s.right, 0, -1, false, content)
   vim.bo[s.right].modified = false
+  syntax.refresh(s.right)
+  require('git.features.panel_highlight').patch(s)
 end
 
 local function close(s)
@@ -199,10 +202,23 @@ function M.open(ctx)
     sessions[tab] = s
     vim.api.nvim_buf_set_lines(right, 0, -1, false, { '# Split from ' .. model.hash:sub(1, 12),
       '# Edit message below; <Space> collects, c splits, r clears, q closes', '', '', '', '# --- Collected patch (read-only) ---' })
+    syntax.attach(right, { first_line = function()
+      for row, line in ipairs(vim.api.nvim_buf_get_lines(right, 0, -1, false)) do
+        if line == '# --- Collected patch (read-only) ---' then return row + 1 end
+      end
+      return vim.api.nvim_buf_line_count(right) + 1
+    end })
     render(s)
-    local function expand()
+    local function expand(mode)
       local entry = commit.entry_at(left, vim.fn.line('.'))
       if not entry then return end
+      local expanded = commit.navigation(left, vim.fn.line('.')).expanded[entry.path]
+      if mode == 'hide' or (mode == 'toggle' and expanded) then
+        commit.expand_file(left, entry.path, false)
+        require('git.features.panel_highlight').patch(s)
+        vim.bo[left].modifiable, vim.bo[left].bufhidden = false, 'wipe'
+        return
+      end
       local task
       task = async.run(root, function()
         local patch, err = model_api.patch(model, entry)
@@ -210,7 +226,7 @@ function M.open(ctx)
       end, function(success, err)
         if task then s.tasks[task] = nil end
         if active(s) then
-          if success then commit.expand_file(left, entry.path); vim.bo[left].modifiable = false; vim.bo[left].bufhidden = 'wipe'
+          if success then commit.expand_file(left, entry.path); require('git.features.panel_highlight').patch(s); vim.bo[left].modifiable = false; vim.bo[left].bufhidden = 'wipe'
           else notify(err) end
         end
       end)
@@ -223,7 +239,12 @@ function M.open(ctx)
         if vim.api.nvim_win_is_valid(target) then vim.api.nvim_set_current_win(target) end
       end, { buffer = b, silent = true })
     end
-    for _, key in ipairs({ '<CR>', 'o', '=', '>' }) do vim.keymap.set('n', key, expand, { buffer = left, silent = true }) end
+    for key, mode in pairs({ ['<CR>'] = 'toggle', o = 'toggle', ['='] = 'toggle', ['>'] = 'show', ['<'] = 'hide' }) do
+      local chosen = mode
+      vim.keymap.set('n', key, function() expand(chosen) end,
+        { buffer = left, silent = true, desc = chosen == 'toggle' and 'Toggle selected diff'
+          or chosen == 'show' and 'Expand selected diff' or 'Collapse selected diff' })
+    end
     vim.keymap.set('n', '<Space>', function() M.collect(s, vim.fn.line('.')) end, { buffer = left, silent = true })
     vim.keymap.set('x', '<Space>', function()
       local a, b = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
@@ -234,6 +255,11 @@ function M.open(ctx)
     vim.keymap.set('n', 'R', function() render(s) end, { buffer = right, silent = true })
     vim.bo[left].bufhidden = 'wipe'
     local group = vim.api.nvim_create_augroup('GitPatchCollection' .. right, { clear = true })
+    for _, b in ipairs({ left, right }) do
+      vim.api.nvim_create_autocmd({ 'TextChanged', 'TextChangedI' }, { group = group, buffer = b, callback = function()
+        if active(s) then require('git.features.panel_highlight').patch(s) end
+      end })
+    end
     local function unload()
         if not s.closed then
           s.closed = true; sessions[tab] = nil

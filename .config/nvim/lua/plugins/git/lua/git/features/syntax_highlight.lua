@@ -460,7 +460,7 @@ function Parser.get_lang_info(filename)
   return ft, nil
 end
 
-function Parser.parse_buffer(bufnr)
+function Parser.parse_buffer(bufnr, first_line)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local hunks = {}
   local state = {
@@ -485,7 +485,8 @@ function Parser.parse_buffer(bufnr)
     state.lines = {}
   end
 
-  for i, line in ipairs(lines) do
+  for i = first_line or 1, #lines do
+    local line = lines[i]
     local filename = line:match('^[%s]*[MADRCU%?!][MADRCU%?!%s]*%s+(.+)$') or line:match('^diff %-%-git a/.+ b/(.+)$')
 
     if filename then
@@ -583,11 +584,12 @@ function Highlighter.apply_legacy(bufnr, hunk, regions)
     vim.api.nvim_buf_set_var(bufnr, included_var, true)
   end
 
-  local start_row = hunk.start_line
-  local last_line = start_row + #hunk.lines - 1
+  -- The header's one-based row precedes the code body; include the final EOL.
+  local start_row = hunk.start_line + 1
+  local last_line = hunk.start_line + #hunk.lines
   local region_name = 'FugitiveExtRegion_' .. start_row
 
-  vim.cmd(string.format('syntax region %s start=/\\%%%dl/ end=/\\%%%dl/ contains=@%s keepend', region_name, start_row, last_line, ft_group))
+  vim.cmd(string.format('syntax region %s start=/\\%%%dl/ end=/\\%%%dl$/ contains=@%s keepend', region_name, start_row, last_line, ft_group))
   table.insert(regions, region_name)
 end
 
@@ -860,7 +862,7 @@ function M.cycle_word_diff_style()
   return next_style
 end
 
-function M.attach(bufnr)
+function M.attach(bufnr, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then return end
   if attached_refreshers[bufnr] then return end
 
@@ -873,21 +875,23 @@ function M.attach(bufnr)
 
   local function refresh()
     if not active or not vim.api.nvim_buf_is_loaded(bufnr) then return end
-    vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+    vim.api.nvim_buf_call(bufnr, function()
+      vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 
-    for _, region in ipairs(legacy_regions) do
-      vim.cmd('silent! syntax clear ' .. region)
-    end
-    legacy_regions = {}
-
-    local hunks = Parser.parse_buffer(bufnr)
-    for _, hunk in ipairs(hunks) do
-      Highlighter.process_hunk(bufnr, ns, hunk)
-      if not hunk.lang and hunk.ft then
-        Highlighter.apply_legacy(bufnr, hunk, legacy_regions)
+      for _, region in ipairs(legacy_regions) do
+        vim.cmd('silent! syntax clear ' .. region)
       end
-    end
-    require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns)
+      legacy_regions = {}
+
+      local hunks = Parser.parse_buffer(bufnr, opts and opts.first_line and opts.first_line())
+      for _, hunk in ipairs(hunks) do
+        Highlighter.process_hunk(bufnr, ns, hunk)
+        if not hunk.lang and hunk.ft then
+          Highlighter.apply_legacy(bufnr, hunk, legacy_regions)
+        end
+      end
+      require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns)
+    end)
   end
 
   attached_refreshers[bufnr] = refresh

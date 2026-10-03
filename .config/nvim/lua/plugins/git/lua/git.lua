@@ -1,6 +1,8 @@
 local M = {}
 
-function M.setup()
+function M.setup(opts)
+  opts = opts or {}
+  require('git.features.custom_commands').setup(opts.custom_commands or vim.g.git_custom_commands or {})
   local group = vim.api.nvim_create_augroup('fugitive_custom', { clear = true })
   local nowrap_filetypes = {
     git = true,
@@ -17,6 +19,8 @@ function M.setup()
     fugitiveactionmenu = true,
     gitactionmenu = true,
     gitrebase = true,
+    gitrebaseplan = true,
+    gitstatustree = true,
     gitcommit = true,
   }
 

@@ -96,6 +96,8 @@ fixture({ { a, 'reset: moving to HEAD' }, { a, 'checkout: moving from topic to m
 -- Refresh replaces, rather than accumulates, green marks.
 fixture({ { a, 'commit (amend): amended' }, { c, 'commit: before' } }, { 2 })
 fixture({ { a, 'commit: plain' }, { c, 'commit: before' } }, {})
+fixture({ { a, '[nvim git drop]: updating HEAD' }, { c, 'commit: before drop' } }, { 2 })
+assert(reflog.entry_at(b, 1).operation == 'drop', 'logical drop label was lost')
 vim.system = system
 vim.api.nvim_buf_delete(b, { force = true }); vim.fn.delete(root, 'rf')
 print('PASS: real amend/rebase/reset recovery selectors, internal/ongoing/truncated/aborted rebases, no-op reset, refresh cleanup')

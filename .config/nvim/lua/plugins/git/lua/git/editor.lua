@@ -1,14 +1,17 @@
 -- Git's editor process waits for this editor's buffer to close.
 local M = { pending = {} }
-function M.open(path, token)
+function M.open(path, token, work_tree)
   M.pending[token] = true
   vim.schedule(function()
     local ok, err = pcall(function()
+      local root = work_tree or require('git.utils').get_work_tree({ bufnr = vim.api.nvim_get_current_buf() })
       vim.cmd('stopinsert')
       vim.cmd('botright split ' .. vim.fn.fnameescape(path))
       local buf = vim.api.nvim_get_current_buf()
       vim.bo[buf].bufhidden = 'wipe'
-      if path:match('git%-rebase%-todo$') then vim.bo[buf].filetype = 'gitrebase'
+      if path:match('git%-rebase%-todo$') then
+        vim.bo[buf].filetype = 'gitrebase'
+        require('git.features.rebase_todo').attach(buf, { root = root })
       else vim.bo[buf].filetype = 'gitcommit' end
       vim.api.nvim_create_autocmd('BufUnload', { buffer = buf, once = true, callback = function() M.pending[token] = nil end })
     end)

@@ -21,13 +21,24 @@ vim.cmd('Git rebase -i HEAD~1')
 job = vim.b.terminal_job_id
 assert(vim.wait(10000, function() return vim.bo.filetype == 'gitrebase' end, 20), 'Sequence editor did not open')
 local todo = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-for i, line in ipairs(todo) do if line:match('^pick ') then todo[i] = line:gsub('^pick ', 'reword '); break end end
-vim.api.nvim_buf_set_lines(0, 0, -1, false, todo); vim.cmd('write'); vim.cmd('close')
+assert(vim.fn.maparg('gk', 'n', false, true).callback, 'Todo message preview was not attached with its repository')
+local action = vim.fn.maparg('cr', 'n', false, true).callback
+assert(action, 'Todo action editing was not attached')
+for i, line in ipairs(todo) do if line:match('^pick ') then vim.api.nvim_win_set_cursor(0, { i, 0 }); break end end
+action(); assert(vim.api.nvim_get_current_line():match('^reword '))
+local input = vim.ui.input
+vim.ui.input = function(_, cb) cb('printf todo-exec > todo-exec-result') end
+assert(vim.fn.maparg('cx', 'n', false, true).callback)()
+vim.ui.input = input
+assert(vim.api.nvim_get_current_line() == 'exec printf todo-exec > todo-exec-result')
+action(); assert(vim.api.nvim_get_current_line():match('^exec '), 'action helper rewrote an exec row')
+vim.cmd('write'); vim.cmd('close')
 assert(vim.wait(10000, function() return vim.bo.filetype == 'gitcommit' end, 20), 'Reword editor did not open')
 vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'reword through sequence editor' }); vim.cmd('write'); vim.cmd('close')
 assert(vim.wait(10000, function() return vim.fn.jobwait({ job }, 0)[1] ~= -1 end, 20), 'Rebase did not exit')
 assert(vim.trim(git({ 'log', '-1', '--format=%s' })) == 'reword through sequence editor')
+assert(vim.fn.readfile(root .. '/todo-exec-result')[1] == 'todo-exec')
 assert(vim.fn.exists('*FugitiveGitDir') == 0)
 for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, { force = true }) end
 vim.fn.delete(root, 'rf')
-print('PASS: real Git editor RPC, commit and interactive rebase/reword, save/close and completion without Fugitive')
+print('PASS: real Git editor RPC, commit and interactive rebase/reword/exec insertion, save/close and completion without Fugitive')

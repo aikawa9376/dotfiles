@@ -137,6 +137,7 @@ function M.signature(work_tree, git_dir, head_oid)
       read_first(rebase_dir .. '/end') or read_first(rebase_dir .. '/last') or '',
       read_first(rebase_dir .. '/stopped-sha') or read_first(git_dir .. '/REBASE_HEAD') or '',
       stamp(rebase_dir .. '/done'), stamp(rebase_dir .. '/git-rebase-todo'),
+      stamp(rebase_dir .. '/applying'), stamp(rebase_dir .. '/final-commit'),
     }, '\0'), git_dir
   end
   for _, marker in ipairs({ 'CHERRY_PICK_HEAD', 'MERGE_HEAD', 'REVERT_HEAD' }) do
@@ -156,6 +157,12 @@ function M.inspect(work_tree)
   local bisect = inspect_bisect(work_tree, git_dir)
   if bisect then return bisect end
 
+  if vim.fn.filereadable(git_dir .. '/rebase-apply/applying') == 1 then
+    local dir = git_dir .. '/rebase-apply'
+    return { kind = 'am', label = 'Mail patch application in progress',
+      current_step = tonumber(read_first(dir .. '/next')), total_steps = tonumber(read_first(dir .. '/last')),
+      current = { hash = 'patch', subject = read_first(dir .. '/final-commit') or '' } }
+  end
   local rebase = rebase_state(work_tree, git_dir)
   if rebase then
     return rebase
@@ -191,12 +198,13 @@ function M.status_lines(state)
     local lines
     if state.current then
       local operation_name = ({ merge = 'Merge', cherry_pick = 'Cherry-pick',
-        revert = 'Revert', rebase = 'Rebase' })[state.kind] or state.kind
+        revert = 'Revert', rebase = 'Rebase', am = 'Mail patch' })[state.kind] or state.kind
       lines = { operation_name .. progress .. ': ' .. summary_line(state.current) }
     else
       lines = { label }
     end
-    table.insert(lines, 'Operation keys: rr continue  rs skip  ra abort')
+    table.insert(lines, state.kind == 'am' and 'Mail patch keys: <Space><Space> w — w continue  s skip  a abort'
+      or 'Operation keys: rr continue  rs skip  ra abort')
     return lines
   end
 

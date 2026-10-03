@@ -51,7 +51,7 @@ function M.drop(root, revisions)
   return history.execute(tx, function()
     if base and positions[oldest] == count then
       tx.mutated = true
-      tx:run({ 'reset', '--hard', base })
+      tx:run({ 'reset', '--hard', base }, { env = { GIT_REFLOG_ACTION = '[nvim git drop]' } })
     else tx:rebase(base, { action = 'drop', commits = commits }) end
     return vim.trim(tx:run({ 'rev-parse', 'HEAD' }))
   end)

@@ -300,13 +300,15 @@ complete arguments, and open commits through the independent Gsplit command. `Gi
 navigation (`]]`, `[[`, `i`), folds (`o`), and Enter to inspect the file/commit.
 
 `<Space><Space>` opens a separate Git action menu in status, log, branch,
-reflog, worktree, and commit-detail panels. It uses the file, commit, ref, reflog destination,
+reflog, worktree, commit-detail, and changed-files tree panels. It uses the file, commit, ref, reflog destination,
 or worktree under the cursor, with no repeated
 title/context header. The root offers Magit-style prefixes for cherry-pick
 (`A`), apply variants (`v`), bisect (`B`), clone (`C`), commit (`c`), diff (`d`), pull (`F`), fetch
 (`f`), log (`l`), remote (`M`), merge (`m`), submodule (`o`), push (`P`), rebase
 (`r`), tag (`t`), revert (`V`), reset (`X`), references (`y`), stash (`z`),
-and worktree (`Z`), plus ignore (`i`) and commit copy (`Y`) when applicable.
+and worktree (`Z`), plus sparse checkout (`>`), Subtree (`O`), Bundle (`U`),
+plain patches (`W`), mail patches (`w`), Notes (`T`), custom commands (`!`),
+and changed-files tree (`=t`, Status/tree only). Ignore (`i`) and commit copy (`Y`) appear when applicable.
 History (`H`) is available throughout these panels and offers operation Undo/Redo,
 fixup-target detection, and patch collection. A selected commit also exposes
 `<Tab>` to open patch collection directly from the menu.
@@ -354,7 +356,7 @@ Its `-3` flag uses a three-way fallback for apply/reverse and stages the result.
 `:GitApply[!] [revision]` and `:GitReverse[!] [revision]` expose the same patch
 operations as commands; `!` enables three-way fallback, which also stages the
 result. In a commit view, they
-use the commit, file, or expanded hunk at the cursor, and `a`/`v` call the
+use the commit, file, or expanded hunk at the cursor, and `a`/`cv` call the
 commands outside the editable message. The stash list's `<CR>` opens its commit
 view, where a changed file can use these patch actions. In the cherry-pick panel, `A a` applies a
 commit without committing, while `A h` harvests a selected commit from another
@@ -454,6 +456,7 @@ closing the commit view with q also closes the graph.
 | `:w` | Reword the displayed commit |
 | `gH` | History editing, including the message-edit float |
 | `X` (normal/visual) | Remove file, hunk, or selected lines; choose Hard or Mixed |
+| `a` / `cv` | Apply / reverse the selected file or hunk in the worktree |
 | `~` / `p` / `gp` | Parent / previous commit affecting the file / merge parent |
 | `C` / `<C-Space>` / `O` | Commit information / graph / pull request |
 | `gx` | Open pushed commit on GitHub |
@@ -566,7 +569,8 @@ this tab. Status section rows retain their fold toggle.
 
 | Where / key | Behavior |
 | --- | --- |
-| Left `<CR>`, `o`, `=`, `>` | Load and show the selected file diff |
+| Left `<CR>`, `o`, `=` | Toggle the selected file diff |
+| Left `>` / `<` | Expand / collapse the selected file diff |
 | Left `<Space>` | Toggle the whole file or current hunk in the collection |
 | Left Visual `<Space>` | Toggle changed lines within one hunk |
 | Either `<Tab>` | Move between source and collected patch |
@@ -576,6 +580,11 @@ this tab. Status section rows retain their fold toggle.
 
 The collection belongs to one immutable source commit and can span files and
 noncontiguous changed lines. It does not follow a different commit implicitly.
+Titles, hashes, hunk headers and selection indicators are colored consistently
+with Status/Log, alongside the preview's diff/code highlighting.
+Visual entry keys keep their existing mappings (`v`, `vv`, `V`, and `<C-v>`);
+commit patch reverse is `cv`. The collected preview uses the same diff backgrounds, word changes, and
+code syntax highlighting as the source; the editable message is excluded.
 Edit only the message above the separator; edited preview text is rejected at
 split time. Splitting rejects merge commits, validates HEAD, preserves WIP via
 the shared rewrite transaction, recomputes the removed diff, creates the new
@@ -584,9 +593,12 @@ restore retains a recovery stash and reports its identity. The final view opens
 the newly created commit. Closing the tab during a rewrite lets the transaction
 finish, while read-only collection jobs are cancelled or their results ignored.
 
-History `H u` / `H r`, `UndoFugitive`, and `RedoFugitive` interpret HEAD reflog
+History `H u` / `H r`, `GitUndo`, and `GitRedo` interpret HEAD reflog
 operation boundaries. Commit/reset/pull-style Undo uses soft reset; completed
 rebase Undo treats the whole rebase as one operation and uses hard reset.
+Dropping a suffix through this UI records `[nvim git drop]` so Undo restores
+both history and file contents with hard reset, including the optimized path
+that skips rebase. Older unmarked resets retain soft-reset semantics.
 Checkout Undo restores the original branch/ref. Redo uses hard reset or checkout.
 `[nvim git undo]` / `[nvim git redo]` reflog marks reconstruct the position after
 restart, scoped naturally to this worktree's HEAD reflog. The confirmation shows
@@ -594,6 +606,12 @@ the operation and reset mode. HEAD, branch and reflog are checked again after
 confirmation. Active Git operations, incomplete boundaries, and unsupported
 reflog entries are rejected rather than guessed. Worktree edits, stash actions,
 branch creation/deletion and remote pushes are not independently undoable.
+
+Redo after several soft Undos keeps later undone changes staged until those
+commits are redone. Independently staged changes are preserved; incompatible
+staging is rejected before changing history. The saved index is checked again
+before mutation. Unstaged and untracked changes use the shared stash transaction;
+if restoration conflicts, the original recovery stash is retained and reported.
 
 New workflows run Git sequentially through asynchronous subprocess callbacks;
 heavy rebase/apply sequences do not wait in the editor event loop. A worktree
@@ -603,14 +621,211 @@ so the same HEAD/staleness guards remain necessary. Exit stops outstanding jobs
 without waiting for editor callbacks; interrupted Git state and any saved stash
 must be recovered using Git's continue/abort/reflog tools.
 
-Checks: `tests/history_workflows.lua`, `tests/transient_presets.lua`, and
+Checks: `tests/history_undo.lua` covers repeated Undo/Redo, checkout/drop across
+branches, actual Neovim process restarts, external rebase, detached HEAD, linked
+worktrees, staged/unstaged/untracked changes, recovery stashes, cancellation and
+stale-state rejection. Its baseline sequences follow lazygit's
+[commit](https://github.com/jesseduffield/lazygit/blob/master/pkg/integration/tests/undo/undo_commit.go)
+and [checkout/drop](https://github.com/jesseduffield/lazygit/blob/master/pkg/integration/tests/undo/undo_checkout_and_drop.go)
+integration tests; this is coverage of those scenarios, not full UI parity.
+Related checks: `tests/history_workflows.lua`, `tests/transient_presets.lua`, and
 `tests/async_lifecycle.lua`.
+
+## Rebase plans
+
+`GitRebasePlan [old-base [new-base]]` opens an editable plan, oldest commit
+first. `<Space><Space> H p` opens the same panel from Git views. A selected
+commit and its descendants are included unless a base has been marked.
+Otherwise the default is the upstream merge base, falling back to the latest
+20 commits when no useful upstream base is available.
+
+The old base is **excluded** from the replay range. Mark it from a commit list
+with `<Space><Space> H b` or `GitRebaseBase [commit]`; its row shows a `B` sign
+and `[rebase base]`. Repeating either action on the same commit clears the mark;
+choosing another commit moves it. Marks belong to the current worktree and
+Neovim session; `GitRebaseBase!` clears one. An explicit old base overrides the mark.
+`GitRebasePlan --root` includes the root commit.
+
+| Key | Plan editing |
+| --- | --- |
+| `dd` then `p` / `P` | Cut and move commit rows using native Neovim operations, including counts and registers |
+| `i` / `A` | Edit the subject inline; a changed message automatically becomes reword |
+| `gk` | Edit the full message and body in a float; `:w`, Ctrl-s or ZZ saves it to the plan |
+| `u` / Ctrl-r | Undo / redo draft edits, including saved body drafts and base changes |
+| `ca` | Choose pick, reword, edit, squash, fixup or drop |
+| `cp` / `cr` / `ce` / `cs` / `cf` / `cd` | Set those actions directly |
+| Ctrl-a / Ctrl-x | Cycle those six actions forward / backward with dial.nvim; counts and Visual selection work |
+| `cb` / `cx` | Insert break / a prompted exec shell command after the cursor row |
+| Ctrl-x Ctrl-u | Complete the action at the start of a row |
+| `mb` | Mark this original commit as old base and keep only its descendants in the plan |
+| `mo` | Choose the new base by branch or revision |
+| Enter | Inspect the original commit in a separate tab |
+| `:w` / Ctrl-s | Validate, confirm and execute the entire plan; continue a paused plan |
+| `cC` / `cS` / `cA` / `cT` | Continue / skip / abort / edit the live todo of a paused plan |
+| `g?` / `q` | Help / close the draft, prompting before discarding edits |
+
+For a stacked branch, mark the last commit of its old parent stack, open the
+plan, and use `mo` to select the new parent tip. Only the displayed descendants
+are replayed onto that tip, following Git's
+[`rebase --onto` semantics](https://git-scm.com/docs/git-rebase#_transplanting_a_topic_branch_with_onto).
+Other branch refs retain their original targets.
+
+Plans support linear ranges; merge topology uses the ordinary Interactive
+rebase action. `edit` pauses for manual amendment; use reword for a message
+prepared in the plan. The plan rejects duplicate/out-of-range
+hashes and invalid fixup/squash order. Deleted rows are drops, counted in the
+execution confirmation; an empty plan is rejected. Subjects on fixup/squash
+rows retain their original text; edit the retained commit with reword instead.
+Plan edits leave Git untouched until execution. HEAD/branch changes invalidate
+the plan, and changes while confirmation is open require another review.
+Execution preserves staged/unstaged/untracked changes. Ordinary plans roll
+back failed replays. Plans containing edit/break/exec retain an active rebase
+on a stop or conflict, letting you amend/resolve and continue. A failed exec
+is consumed rather than automatically rerun; use edit-todo to retry it.
+The paused plan is read-only; its banner lists continuation keys. Saved WIP
+stays in stash until completion/abort, while editor scripts and messages persist
+in the worktree's Git directory across Neovim restarts. `GitRebaseContinue`,
+`GitRebaseSkip` and `GitRebaseAbort` work without reopening the panel, and the
+existing `Git rebase --continue/--skip/--abort` actions route through the same
+owner. If external Git already finished or aborted, GitRebaseContinue restores
+the saved WIP on the original branch. Restore conflicts retain the original
+recovery stash and report its hash. Completed plans use GitUndo/GitRedo.
+
+Both GitRebasePlan and GitPatch use theme-linked accents consistent with the
+Status/Log panels: titles, action names, hashes, refs, guides and hunk headers.
+GitPatch shows green selection signs and collected/partly-collected file labels;
+its generated diff retains addition/deletion backgrounds and code highlighting.
+The dial action cycle also works in the live gitrebase todo. It only changes a
+commit row's leading action, leaving hashes, subjects and exec commands intact;
+other filetypes keep the existing numeric/date/boolean dial rules.
+
+The ordinary Git sequence-editor buffer also gets `ca`, `cp/cr/ce/cs/cf/cd`,
+`cb`/`cx` insertion, action completion, dial action cycling, `gk` message preview
+and `g?` help. In that live Git todo,
+subject text is descriptive; `cr` marks reword and Git subsequently opens its
+message editor. Its normal write/close workflow remains available.
+
+Checks: `tests/rebase_plan.lua` covers real replay, partial onto, root messages,
+squash/fixup/drop, WIP restoration, conflict rollback, native editing/completion,
+body/base undo, marks, commands, menu dispatch and stale drafts, plus break/edit,
+exec failure, continuation/abort/skip, restart with pending reword, worktree
+isolation and recovery-stash retention. `tests/editor.lua` exercises reword
+and exec insertion in Git's actual sequence-editor RPC workflow.
+`tests/dial_rebase.lua` runs the installed dial plugin through Lazy and actual
+normal/Visual key input, including counts, reverse cycling and hash protection.
+
+## Additional Git workflows
+
+Open `<Space><Space>` first. Existing Magit prefixes and suffixes are retained
+where those operations exist; Bundle `U`, tree `=t`, custom command keys and
+extra Notes sync/review actions are local choices. Log reword in this menu is
+`cw`, leaving `w` for mail patches. Native `v` still enters Visual selection.
+
+| Prefix | Actions after the prefix |
+| --- | --- |
+| `>` sparse checkout | `e` enable/restore, `s` replace directories/patterns, `a` add, `r` reapply, `d` disable, `l` list |
+| `O` Subtree | `i a` import repository/ref, `i c` add existing commit, `i m` merge, `i f` pull; `e s` split and `e p` push |
+| `U` Bundle | `c` create, `v` verify prerequisites, `l` list refs, `u` import objects without moving refs, `f` fetch an explicit refspec |
+| `W` plain patches | `c` format-patch from selected commits/range, `s` save selected/current diff, `a` plain apply submenu |
+| `w` mail patches | `w` patch files/mbox, `m` Maildir, `a` plain apply; during `am`: `w` continue, `s` skip, `a` abort, `p` inspect current mail |
+| `T` Notes | `T` edit, `s` show, `r` remove, `p` prune, `m` merge; `f` fetch into incoming notes ref, `P` push explicit notes ref; during merge: `c` commit, `a` abort |
+| `P v` | Review range-diff against the push ref, falling back to upstream; push remains a separate action |
+| `!` | Run configured custom Git commands |
+| `=t` | Open changed files as a directory tree; also `:GitStatusTree` |
+
+Sparse mode arguments apply to enable/set/reapply; add preserves the existing
+mode. Sparse index requires cone mode. Directory/pattern lists and patch file
+lists accept quoted paths containing spaces. Subtree import offers prefix,
+squash and message arguments; export offers split branch, annotate, onto,
+rejoin and ignore-joins. Bundle creation accepts all refs or explicit revision
+arguments, including incremental bundles whose prerequisites must exist at the
+receiver. Existing bundle/patch exports are refused. Numbered patch output must
+use an empty directory.
+
+Visual Log `<Space><Space> W c` writes only the selected commits, oldest first.
+`W s` exports the selected commit or Status files, including binary changes;
+without a commit/file selection it exports the current tracked diff, using the
+index in the staged section. The plain apply submenu offers check, reverse,
+index-only/index-and-worktree, three-way, reject and whitespace flags. Three-way
+conflicts remain available for resolution. Mail patches preserve author and
+message through Git `am`; Status recognizes `am` separately from rebase and its
+`rr`/`rs`/`ra` controls dispatch to the matching operation. Skip/abort require a
+confirmation. These operations use Git's normal dirty-worktree checks.
+
+Range-diff compares two commit series by matching their patches, showing edits,
+added/dropped commits and correspondence after rebasing. The Commit panel shows
+one commit's changes. `P v` opens Git's range-diff output in a read-only tab;
+file/hunk expansion belongs to the Commit panel. It uses the local push-tracking
+ref, falling back to upstream, against HEAD. It does not fetch or push, so fetch
+first when the comparison should reflect current remote history.
+
+Notes synchronize independently of branch push. Fetch puts the chosen
+`refs/notes/<name>` into `refs/notes/incoming/<name>`; merge it into the active
+notes ref with `T m`. Push sends one explicit notes ref. Neither automatically
+replaces local notes or force-pushes divergent history. Edit/show/merge use Git's
+configured default notes ref unless `-r` overrides it. Resolve merge conflicts
+in Git's `NOTES_MERGE_WORKTREE`, then use `T c` or `T a`.
+
+The tree uses Status's porcelain-v2 parser and separate staged, unstaged,
+untracked and conflicted sections. `o`/Tab folds a directory, Enter opens a file,
+`s` stages or unstages all displayed changed descendants of the selected node,
+`u` unstages, `d` compares, `R` refreshes, and `q` closes. Directory mutations
+pass only the captured leaf paths with literal pathspecs, including rename
+origins. Staging a conflicted file stages the current worktree content. Native
+Visual editing keys remain free. Return to Status for hunk selection/discard.
+
+Declare custom commands through `require('git').setup({ custom_commands = ... })`
+or set `vim.g.git_custom_commands` before the plugin loads:
+
+```lua
+vim.g.git_custom_commands = {
+  {
+    key = 'l', label = 'History of selected paths',
+    panels = { 'status', 'tree' },
+    args = { 'log', '--oneline', '--', '{paths}' },
+    mutation = false,
+  },
+  {
+    key = 't', label = 'Create annotated tag',
+    panels = { 'log', 'commit', 'reflog' },
+    args = { 'tag', '-a', '{tag_name}', '-m', '{message}', '{commit}' },
+    inputs = {
+      { name = 'tag_name', prompt = 'Tag name' },
+      { name = 'message', prompt = 'Tag message', default = 'Release' },
+    },
+    confirm = true, output = false,
+  },
+}
+```
+
+Templates accept `{commit}`, `{branch}`, `{ref}`, `{path}`, `{worktree}` and
+named inputs. `{paths}` and `{commits}` expand the captured selection to multiple
+argv entries only as whole tokens.
+Commit/ref/path come from the captured selection; `{branch}` falls back to the
+current branch when none is selected. Missing values refuse execution. Inputs
+may declare `choices`; cancellation runs nothing. Values stay literal Git argv,
+including spaces, quotes and shell metacharacters. Definitions come only from
+Neovim configuration. Commands default to mutation ownership; use
+`mutation = false` for reads. Editor-capable Git commands get the Neovim editor
+bridge automatically; `editor = true/false` overrides this. `confirm = true`
+shows the concrete argv, `output = false` uses a completion notice, and `panels`
+limits availability. Visual Status/Log action menus expose `!` with their
+captured paths/commits. Definitions require unique keys and input names.
+
+These workflows run asynchronously against the worktree captured when the
+menu opens, emit refresh events after mutations (including conflict failures),
+and reuse transient argument presets. Repository lists/recent switching are
+outside this plugin's scope; Issue/PR authoring belongs to Octo. WIP timing and
+untracked snapshot policy remain unchanged. `tests/magit_workflows.lua` covers
+real sparse, subtree, full/incremental bundle, plain/binary/selected-commit and
+mail/Maildir operations, conflict continuation/skip/abort, Notes sync/merge,
+literal custom inputs, root-menu dispatch and tree staging isolation.
 
 ## Reflog recovery markers
 
 `Greflog` colors a `HEAD@{n}` selector green when it identifies the state before
-an amend, a reset that changed HEAD, or the start of an entire rebase. Rebase
-internal amend/reset records do not create additional markers. Ordinary commits,
+an amend, a reset or UI suffix drop that changed HEAD, or the start of an entire
+rebase. Internal amend/reset records do not create additional markers. Ordinary commits,
 checkouts, and no-op resets are not marked. The marker identifies a history
 recovery candidate; it does not execute a reset or restore worktree contents.
 

@@ -323,16 +323,39 @@ function M.setup()
   vim.api.nvim_create_user_command('GitFixupBase', function()
     require('git.features.fixup_target').open({ work_tree = get_work_tree_from_fugitive() })
   end, {})
+  vim.api.nvim_create_user_command('GitStatusTree', function()
+    require('git.features.status_tree').open({ work_tree = get_work_tree_from_fugitive() })
+  end, {})
   vim.api.nvim_create_user_command('GitPatch', function(opts)
     require('git.features.patch_collection').open({ work_tree = get_work_tree_from_fugitive(),
       commit = opts.args ~= '' and opts.args or nil })
   end, { nargs = '?' })
+  vim.api.nvim_create_user_command('GitRebasePlan', function(opts)
+    if #opts.fargs > 2 then vim.notify('Usage: GitRebasePlan [old-base [new-base]]', vim.log.levels.WARN); return end
+    require('git.features.rebase_plan').open({ work_tree = get_work_tree_from_fugitive(),
+      base = opts.fargs[1], onto = opts.fargs[2] })
+  end, { nargs = '*', complete = function(lead)
+    return require('git.features.rebase_plan').complete_refs(lead)
+  end })
+  for name, action in pairs({ GitRebaseContinue = 'continue', GitRebaseSkip = 'skip', GitRebaseAbort = 'abort' }) do
+    vim.api.nvim_create_user_command(name, function()
+      require('git.features.rebase_plan_session').open(get_work_tree_from_fugitive(), action)
+    end, {})
+  end
+  vim.api.nvim_create_user_command('GitRebaseBase', function(opts)
+    local root = get_work_tree_from_fugitive()
+    if opts.bang then require('git.features.rebase_plan').clear_mark(root); return end
+    local buf = vim.api.nvim_get_current_buf()
+    local context = require('git.features.magit_actions').context(buf)
+    local revision = opts.args ~= '' and opts.args or (context and context.commit) or utils.get_commit(buf)
+    require('git.features.rebase_plan').mark(root, revision)
+  end, { nargs = '?', bang = true })
 
-  vim.api.nvim_create_user_command("UndoFugitive", function()
+  vim.api.nvim_create_user_command("GitUndo", function()
     reflog_undo()
   end, {})
 
-  vim.api.nvim_create_user_command("RedoFugitive", function()
+  vim.api.nvim_create_user_command("GitRedo", function()
     reflog_redo()
   end, {})
 

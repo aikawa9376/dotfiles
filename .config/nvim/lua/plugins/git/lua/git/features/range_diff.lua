@@ -1,55 +1,29 @@
 local M = {}
-
-local function run(work_tree, args)
-  local command = { 'git' }
-  vim.list_extend(command, args)
-  return vim.system(command, { cwd = work_tree, text = true }):wait()
-end
-
-local function comparison_ref(work_tree)
-  for _, revision in ipairs({ '@{push}', '@{upstream}' }) do
-    local result = run(work_tree, {
-      'rev-parse', '--abbrev-ref', '--symbolic-full-name', revision,
-    })
-    if result.code == 0 and vim.trim(result.stdout or '') ~= '' then
-      return vim.trim(result.stdout)
-    end
-  end
-  return nil
-end
-
+local model = require('git.features.commit_model')
 function M.open(work_tree)
-  local reference = comparison_ref(work_tree)
-  if not reference then
-    vim.notify('No push remote or upstream is configured for range-diff', vim.log.levels.WARN)
-    return false
-  end
-
-  local result = run(work_tree, {
-    'range-diff', '--no-color', reference .. '...HEAD',
-  })
-  if result.code ~= 0 then
-    vim.notify(vim.trim(result.stderr or 'git range-diff failed'), vim.log.levels.ERROR)
-    return false
-  end
-
-  local output = vim.split((result.stdout or ''):gsub('\r\n', '\n'), '\n', { plain = true })
-  if output[#output] == '' then table.remove(output) end
-  if #output == 0 then output = { 'No differences between ' .. reference .. ' and HEAD.' } end
-
-  vim.cmd('tabnew')
-  local bufnr = vim.api.nvim_get_current_buf()
-  vim.bo[bufnr].buftype = 'nofile'
-  vim.bo[bufnr].bufhidden = 'wipe'
-  vim.bo[bufnr].swapfile = false
-  vim.bo[bufnr].undofile = false
-  vim.api.nvim_buf_set_name(bufnr, 'git-range-diff://' .. reference .. '...HEAD')
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, output)
-  vim.bo[bufnr].filetype = 'git'
-  vim.bo[bufnr].modifiable = false
-  vim.bo[bufnr].readonly = true
-  vim.keymap.set('n', 'q', '<Cmd>tabclose<CR>', { buffer = bufnr, silent = true, nowait = true })
-  return true
+  if not work_tree then vim.notify('Git work tree not found', vim.log.levels.WARN); return false end
+  return require('git.features.async').run(work_tree, function()
+    local reference
+    for _, revision in ipairs({ '@{push}', '@{upstream}' }) do
+      local output = model.git(work_tree, { 'rev-parse', '--abbrev-ref', '--symbolic-full-name', revision })
+      if output and vim.trim(output) ~= '' then reference = vim.trim(output); break end
+    end
+    if not reference then error('No push remote or upstream is configured for range-diff', 0) end
+    local output, err = model.git(work_tree, { 'range-diff', '--no-color', reference .. '...HEAD' })
+    if not output then error(err, 0) end
+    if vim.trim(output) == '' then output = 'No differences between ' .. reference .. ' and HEAD.\n' end
+    return reference, output
+  end, function(ok, reference, output)
+    if not ok then vim.notify(reference, vim.log.levels.WARN); return end
+    vim.cmd('tabnew')
+    local buf = vim.api.nvim_get_current_buf()
+    vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile = 'nofile', 'wipe', false
+    vim.bo[buf].undofile = false
+    vim.api.nvim_buf_set_name(buf, 'git-range-diff://' .. buf .. '/' .. reference .. '...HEAD')
+    require('git.utils').set_buf_work_tree(buf, work_tree)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(output:gsub('\n$', ''), '\n', { plain = true }))
+    vim.bo[buf].filetype, vim.bo[buf].modifiable, vim.bo[buf].readonly = 'git', false, true
+    vim.keymap.set('n', 'q', '<Cmd>tabclose<CR>', { buffer = buf, silent = true, nowait = true })
+  end)
 end
-
 return M

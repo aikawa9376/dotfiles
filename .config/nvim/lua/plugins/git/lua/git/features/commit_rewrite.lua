@@ -43,7 +43,7 @@ function M.apply(root, revision, opts)
   return history.execute(tx, function()
     if opts.drop and commit == tx.head then
       tx.mutated = true
-      tx:run({ 'reset', '--hard', parents[1] })
+      tx:run({ 'reset', '--hard', parents[1] }, { env = { GIT_REFLOG_ACTION = '[nvim git drop]' } })
       return parents[1]
     end
     if commit ~= tx.head then

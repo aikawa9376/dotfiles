@@ -1639,7 +1639,8 @@ function M.setup(group)
       local function perform_continue()
         local git_dir = vim.b[b].git_dir
         if not git_dir or git_dir == '' then return end
-        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --continue")
+        if vim.fn.filereadable(git_dir .. "/rebase-apply/applying") == 1 then vim.cmd("Git am --continue")
+        elseif vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --continue")
         elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then vim.cmd("Git cherry-pick --continue")
         elseif vim.fn.filereadable(git_dir .. "/MERGE_HEAD") == 1 then vim.cmd("Git merge --continue")
         elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then vim.cmd("Git revert --continue")
@@ -1649,7 +1650,8 @@ function M.setup(group)
       local function perform_skip()
         local git_dir = vim.b[b].git_dir
         if not git_dir or git_dir == '' then return end
-        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --skip")
+        if vim.fn.filereadable(git_dir .. "/rebase-apply/applying") == 1 then vim.cmd("Git am --skip")
+        elseif vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --skip")
         elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then vim.cmd("Git cherry-pick --skip")
         elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then vim.cmd("Git revert --skip")
         else vim.notify("Skip not applicable.", vim.log.levels.WARN) end
@@ -1658,7 +1660,8 @@ function M.setup(group)
       local function perform_abort()
         local git_dir = vim.b[b].git_dir
         if not git_dir or git_dir == '' then return end
-        if vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --abort")
+        if vim.fn.filereadable(git_dir .. "/rebase-apply/applying") == 1 then vim.cmd("Git am --abort")
+        elseif vim.fn.isdirectory(git_dir .. "/rebase-merge") == 1 or vim.fn.isdirectory(git_dir .. "/rebase-apply") == 1 then vim.cmd("Git rebase --abort")
         elseif vim.fn.filereadable(git_dir .. "/CHERRY_PICK_HEAD") == 1 then vim.cmd("Git cherry-pick --abort")
         elseif vim.fn.filereadable(git_dir .. "/MERGE_HEAD") == 1 then vim.cmd("Git merge --abort")
         elseif vim.fn.filereadable(git_dir .. "/REVERT_HEAD") == 1 then vim.cmd("Git revert --abort")

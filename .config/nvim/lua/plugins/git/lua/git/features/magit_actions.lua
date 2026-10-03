@@ -9,7 +9,7 @@ local function context(bufnr, row)
   local panel = ({ fugitivestatus = 'status', fugitivelog = 'log',
     fugitivebranch = 'branch', fugitivereflog = 'reflog',
     fugitiveworktree = 'worktree', fugitivecommit = 'commit',
-    gitpatchcollection = 'commit' })[ft]
+    gitpatchcollection = 'commit', gitstatustree = 'tree' })[ft]
   if not panel then return nil end
   row = row or vim.api.nvim_win_get_cursor(0)[1]
   local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
@@ -21,7 +21,9 @@ local function context(bufnr, row)
   local worktree = panel == 'worktree' and (vim.b[bufnr].worktree_entries or {})[row] or nil
   if reflog then commit = reflog.hash end
   if worktree then branch = worktree.branch end
-  local entry = panel == 'status' and require('git.features.status_renderer').entry_at(bufnr, row) or nil
+  local tree_node = panel == 'tree' and require('git.features.status_tree').entry_at(bufnr, row) or nil
+  local entry = panel == 'status' and require('git.features.status_renderer').entry_at(bufnr, row)
+    or (tree_node and tree_node.entry) or nil
   local hunk
   if entry and entry.section == 'staged' and not entry.header then
     local renderer = require('git.features.status_renderer')
@@ -52,7 +54,7 @@ local function context(bufnr, row)
     panel = panel, bufnr = bufnr, work_tree = utils.get_buf_work_tree(bufnr),
     source_win = vim.api.nvim_get_current_win(),
     commit = commit, branch = branch, branch_kind = kind, path = path,
-    section = entry and entry.section or nil,
+    section = entry and entry.section or (tree_node and tree_node.section),
     hunk = hunk,
     reflog_selector = reflog and reflog.selector or nil,
     target_worktree = worktree and worktree.path or nil,
@@ -794,6 +796,7 @@ local function push_menu(ctx, ui)
         value_flag('-o', 'Push options (comma separated)', state, 'push_options', '--push-option='),
       } },
       { title = 'Actions', actions = {
+        { key = 'v', label = 'Review range-diff before push', run = function() require('git.features.range_diff').open(ctx.work_tree) end },
         { key = 'p', label = 'Push current to push remote', run = function()
           if remotes and remotes.push_remote then
             push({ remotes.push_remote, 'HEAD:refs/heads/' .. remotes.branch })
@@ -997,6 +1000,12 @@ function M.open(bufnr, selection)
           end },
           { key = 'A', label = 'Cherry-pick…', run = function(ui) cherry_menu(ctx, ui) end },
           { key = 'V', label = 'Revert…', run = function(ui) revert_menu(ctx, ui) end },
+          { key = '!', label = 'Custom Git commands…', run = function(ui)
+            require('git.features.custom_commands').open(ctx, ui, show_submenu)
+          end },
+          { key = 'W', label = 'Create selected commit patches…', run = function(ui)
+            require('git.features.magit_workflows').patch(ctx, ui, show_submenu)
+          end },
         } } },
       })
     end
@@ -1026,6 +1035,12 @@ function M.open(bufnr, selection)
     end
     return menu.show({ kind = 'root', context = ('%d selected %s files'):format(count, ctx.section),
       groups = { { title = 'Selected files', actions = {
+        { key = '!', label = 'Custom Git commands…', run = function(ui)
+          require('git.features.custom_commands').open(ctx, ui, show_submenu)
+        end },
+        { key = 'W', label = 'Save selected diff…', run = function(ui)
+          require('git.features.magit_workflows').patch(ctx, ui, show_submenu)
+        end },
         { key = 'd', label = 'Diff selected files', run = function()
           local ok, err = diff.open_paths(ctx.work_tree, ctx.paths, ctx.section)
           if not ok then vim.notify(err, vim.log.levels.WARN) end
@@ -1064,7 +1079,7 @@ function M.open(bufnr, selection)
   elseif ctx.panel == 'log' and ctx.commit then
     groups[#groups + 1] = { title = commit_label(ctx), actions = {
       { key = 'o', label = 'Inspect commit', run = function() existing_key('<CR>') end },
-      { key = 'w', label = 'Reword commit', run = function() existing_key('cw') end },
+      { key = 'cw', label = 'Reword commit', run = function() existing_key('cw') end },
     } }
   elseif ctx.panel == 'branch' and ctx.branch then
     groups[#groups + 1] = { title = 'Ref: ' .. ctx.branch, actions = {
@@ -1098,6 +1113,12 @@ function M.open(bufnr, selection)
         { key = 'l', label = 'Inspect reflog', run = function() git({ 'reflog' }, ctx) end },
       } },
       { title = 'Edit history', actions = {
+        { key = 'b', label = 'Toggle old rebase base (excluded)', enabled = ctx.commit ~= nil, run = function()
+          require('git.features.rebase_plan').mark(ctx.work_tree, ctx.commit)
+        end },
+        { key = 'p', label = 'Edit rebase plan', run = function()
+          require('git.features.rebase_plan').open(ctx)
+        end },
         { key = 'f', label = 'Find fixup target', run = function()
           require('git.features.fixup_target').open(ctx)
         end },
@@ -1147,6 +1168,15 @@ function M.open(bufnr, selection)
       { key = 'f', label = 'Fetch…', run = function(ui) fetch_menu(ctx, ui) end },
     })
   end
+  operations[#operations + 1] = { key = '!', label = 'Custom Git commands…', run = function(ui)
+    require('git.features.custom_commands').open(ctx, ui, show_submenu)
+  end }
+  if ctx.panel == 'status' or ctx.panel == 'tree' then
+    operations[#operations + 1] = { key = '=t', label = 'Changed files tree', run = function()
+      require('git.features.status_tree').open({ work_tree = ctx.work_tree })
+    end }
+  end
+  vim.list_extend(operations, require('git.features.magit_workflows').root(ctx, { show = show_submenu }))
   vim.list_extend(operations, require('git.features.magit_extra_actions').root(ctx, {
     git = git, show = show_submenu,
   }))

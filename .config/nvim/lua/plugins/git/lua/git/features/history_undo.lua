@@ -20,7 +20,7 @@ function M.parse(output, redo)
     local hash, label = line:match('^(%x+)%z(.*)$')
     if hash then entries[#entries + 1] = { hash = hash, label = label } end
   end
-  local counter, ending = 0, nil
+  local counter, ending, pending = 0, nil, {}
   for i, entry in ipairs(entries) do
     local label, previous, action = entry.label, entries[i + 1]
     if ending then
@@ -37,6 +37,9 @@ function M.parse(output, redo)
     else
       local from, to = label:match('^checkout: moving from (%S+) to (%S+)$')
       if from then action = { kind = 'checkout', from = from, to = to }
+      elseif label:match('^%[nvim git drop%]') then
+        if not previous then return nil, 'Previous destination is unavailable in reflog' end
+        action = { kind = 'drop', from = previous.hash, to = entry.hash }
       elseif label:match('^commit') or label:match('^reset:') or label:match('^pull')
         or label:match('^cherry%-pick:') or label:match('^revert:') or label:match('^merge') then
         if not previous then return nil, 'Previous destination is unavailable in reflog' end
@@ -46,8 +49,12 @@ function M.parse(output, redo)
       end
     end
     if action and action.from ~= action.to then
-      if (not redo and counter == 0) or (redo and counter == 1) then return action end
+      if (not redo and counter == 0) or (redo and counter == 1) then
+        action.pending = pending
+        return action
+      end
       if redo and counter == 0 then return nil, 'Nothing to redo' end
+      if redo and counter > 1 then pending[#pending + 1] = action end
       counter = counter - 1
     end
   end
@@ -61,9 +68,37 @@ function M.plan(root, redo)
   local action, failure = M.parse(saved.log, redo)
   if not action then error(failure, 0) end
   action.target = redo and action.to or action.from
-  action.mode = action.kind == 'checkout' and 'checkout' or ((redo or action.kind == 'rebase') and 'hard' or 'soft')
+  action.mode = action.kind == 'checkout' and 'checkout' or ((redo or action.kind ~= 'commit') and 'hard' or 'soft')
   action.snapshot, action.redo, action.root = saved, redo, root
   return action
+end
+
+local function redo_index(plan)
+  local root = plan.root
+  local index, err = git(root, { 'write-tree' })
+  if not index then return nil, err end
+  index = vim.trim(index)
+  local target = vim.trim(run(root, { 'rev-parse', plan.target .. '^{tree}' }))
+  if index == target then return index, nil, index end
+  -- Multiple soft Undos retain the newest undone tree in the index. Redoing
+  -- only part of that chain must keep its remaining contribution staged.
+  for _, action in ipairs(plan.pending or {}) do
+    if action.kind == 'commit' and git(root, { 'merge-base', '--is-ancestor', plan.target, action.to }) then
+      local tree = vim.trim(run(root, { 'rev-parse', action.to .. '^{tree}' }))
+      if tree == index then return index, nil, index end
+      local patch = run(root, { 'diff', '--binary', '--full-index', '--no-color', '--no-ext-diff',
+        '--no-textconv', '--src-prefix=a/', '--dst-prefix=b/', plan.snapshot.head, action.to, '--' })
+      if patch == '' or git(root, { 'apply', '--cached', '--reverse', '--check', '-' }, { stdin = patch }) then
+        return index, nil, index
+      end
+    end
+  end
+  -- Independently changed staging (including discarding the undone changes)
+  -- is merged with the redone commit before any reference or worktree changes.
+  local merged, failure = git(root, { 'merge-tree', '--write-tree', '--merge-base=' .. plan.snapshot.head,
+    plan.target, index })
+  if not merged then return nil, 'Redo conflicts with current staged changes; history was left unchanged: ' .. failure end
+  return merged:match('^(%x+)'), nil, index
 end
 
 function M.execute(plan)
@@ -78,14 +113,12 @@ function M.execute(plan)
     return out ~= nil and plan.target or nil, failure
   end
   -- The shared transaction preserves staged, unstaged and untracked changes.
-  local consume_index = false
+  local consume_index, restored_index, expected_index = false, nil, nil
   if plan.redo and plan.kind == 'commit' then
-    -- Soft Undo leaves exactly the undone tree staged. After Redo that
-    -- contribution is committed again, so restore only index-to-worktree WIP.
-    -- An independently edited index must retain the normal restoration path.
-    local index = git(root, { 'write-tree' })
-    local target_tree = git(root, { 'rev-parse', plan.target .. '^{tree}' })
-    consume_index = index ~= nil and index == target_tree
+    restored_index, err, expected_index = redo_index(plan)
+    if not restored_index then return nil, err end
+    consume_index = true
+    if not same(snapshot(root), plan.snapshot) then return nil, 'HEAD, branch or reflog changed; reopen Undo/Redo' end
   end
   return require('git.features.history_rewrite').execute(tx, function()
     if plan.mode == 'checkout' then
@@ -95,9 +128,10 @@ function M.execute(plan)
     else
       tx.mutated = true
       tx:run({ 'reset', '--hard', plan.target }, { env = env })
+      if restored_index then tx:run({ 'read-tree', '--reset', '-u', restored_index }) end
     end
     return plan.target
-  end, { consume_index = consume_index })
+  end, { consume_index = consume_index, expected_index = expected_index })
 end
 
 function M.open(root, redo)

@@ -6,11 +6,11 @@ return {
   cmd = {
     "G", "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit", "Gstash",
     "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit", "GitPush",
-    "Gworktree", "Gbranch", "FugitiveLog", "GitHeatmap", "GitBlame", "GitStatus",
+    "Gworktree", "Gbranch", "FugitiveLog", "GitHeatmap", "GitBlame", "GitStatus", "GitStatusTree",
     "GitCommit", "Greflog", "Glog", "Gllog", "Glcd", "Gtabedit", "Gsplit", "Gvdiffsplit",
     "Ghdiffsplit", "Gremove", "Gdelete", "Gmove", "Grename", "Gwq", "Gblame", "Ggraph",
-    "GgraphBackend", "GCherryPick", "GworktreeSync", "UndoFugitive", "RedoFugitive", "DiffDim",
-    "GitApply", "GitReverse", "GitFixupBase", "GitPatch"
+    "GgraphBackend", "GCherryPick", "GworktreeSync", "GitUndo", "GitRedo", "DiffDim",
+    "GitApply", "GitReverse", "GitFixupBase", "GitPatch", "GitRebasePlan", "GitRebaseBase", "GitRebaseContinue", "GitRebaseSkip", "GitRebaseAbort"
   },
   keys = {
     { "<Leader>gb", function() require('git.features.blame').toggle() end, silent = true, desc = "Toggle Git blame panel" },

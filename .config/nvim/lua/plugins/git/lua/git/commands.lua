@@ -100,6 +100,21 @@ end
 
 local function mutates_repository(args)
   local sub = args[1]
+  if sub == 'sparse-checkout' then return args[2] ~= 'list' and args[2] ~= 'check-rules' end
+  if sub == 'subtree' then
+    if args[2] ~= 'split' then return true end
+    for _, arg in ipairs(args) do if arg == '--rejoin' or arg == '-b' or arg:match('^%-%-branch=') then return true end end
+    return false
+  end
+  if sub == 'am' then
+    for _, arg in ipairs(args) do if arg:match('^%-%-show%-current%-patch') then return false end end
+    return true
+  end
+  if sub == 'notes' then
+    for _, arg in ipairs(args) do if vim.tbl_contains({ 'add', 'append', 'copy', 'edit', 'merge', 'prune', 'remove' }, arg) then return true end end
+    return false
+  end
+  if sub == 'bundle' then return args[2] == 'unbundle' end
   if sub == 'bisect' then return #args > 1 and args[2] ~= 'log' and args[2] ~= 'visualize' end
   if sub == 'submodule' then return vim.tbl_contains({ 'add', 'update', 'deinit', 'sync',
     'init', 'absorbgitdirs', 'set-url', 'set-branch' }, args[2]) end
@@ -133,6 +148,12 @@ function M.git(opts)
     vim.notify('A Git history operation is already running', vim.log.levels.WARN)
     return
   end
+  if #args == 2 and args[1] == 'rebase' and vim.tbl_contains({ '--continue', '--skip', '--abort' }, args[2]) then
+    local session = require('git.features.rebase_plan_session')
+    local ok, saved = pcall(session.pending, root)
+    if not ok then vim.notify(saved, vim.log.levels.WARN); return end
+    if saved then return session.open(root, args[2]:sub(3)) end
+  end
   for i, arg in ipairs(args) do if arg == '%' then args[i] = assert(path, 'No current file') end end
   if #args == 0 or (#args == 1 and args[1] == 'status') then
     return require('git.features.status').open({ split = not opts.bang, tab = opts.bang })
@@ -147,6 +168,8 @@ function M.git(opts)
   local sub = args[1]
   local explicit_message = vim.tbl_contains(args, '--no-edit') or vim.tbl_contains(args, '-m') or vim.tbl_contains(args, '--message') or vim.tbl_contains(args, '-F')
   if sub == 'commit' and not explicit_message or sub == 'merge' or sub == 'rebase' or sub == 'cherry-pick' or sub == 'revert'
+    or sub == 'am' and not (args[2] or ''):match('^%-%-show%-current%-patch')
+    or sub == 'subtree'
     or sub == 'push' or sub == 'pull' or sub == 'fetch' or sub == 'clone'
     or sub == 'tag' and (vim.tbl_contains(args, '--edit') or vim.tbl_contains(args, '-e'))
     or sub == 'submodule' and args[2] ~= 'status'

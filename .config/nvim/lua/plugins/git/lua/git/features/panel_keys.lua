@@ -73,7 +73,7 @@ local labels = {
   gf = 'Open worktree file', gq = 'Populate file quickfix',
   d = 'Compare selected item', dd = 'Vertical diff', dv = 'Vertical diff', dh = 'Horizontal diff', ds = 'Horizontal diff',
   D = 'Diffview for entire commit', A = 'Edit commit message', cw = 'Edit selected message or name',
-  a = 'Apply selected patch or snapshot', v = 'Reverse selected patch', X = 'Discard / remove selected item',
+  a = 'Apply selected patch or snapshot', cv = 'Reverse selected patch', X = 'Discard / remove selected item',
   ['~'] = 'Open parent commit', p = 'Previous commit affecting selected file', gp = 'Select comparison parent',
   C = 'Show commit information', O = 'Open pull request', ['<C-Space>'] = 'Toggle graph',
 }

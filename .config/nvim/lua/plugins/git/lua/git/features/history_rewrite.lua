@@ -119,40 +119,12 @@ function M.todo(lines, plan)
   return result
 end
 
-function M.execute(tx, change, opts)
-  local stash, result
-  local ok, failure = pcall(function()
-    if tx:run({ 'status', '--porcelain', '--untracked-files=all' }) ~= '' then
-      local previous = git(tx.root, { 'rev-parse', '--verify', 'refs/stash' })
-      tx:run({ 'stash', 'push', '--include-untracked', '-m', 'nvim Git history rewrite' })
-      local saved = git(tx.root, { 'rev-parse', '--verify', 'refs/stash' })
-      if saved and saved ~= previous then stash = vim.trim(saved) end
-      if tx:run({ 'status', '--porcelain', '--untracked-files=all' }) ~= '' then
-        error('Could not save all worktree changes; history was left unchanged', 0)
-      end
-    end
-    result = change(tx)
-  end)
-  for _, path in ipairs(tx.files) do os.remove(path) end
-  if not ok and tx.mutated then
-    local recovered, recovery_err
-    if active_rebase(tx.dir) then
-      recovered, recovery_err = git(tx.root, { 'rebase', '--abort' })
-      -- Abort returns to the rebase start, which may include our fixup helper.
-      -- The transaction began before that helper existed.
-      if recovered then recovered, recovery_err = git(tx.root, { 'reset', '--hard', tx.head }) end
-    else recovered, recovery_err = git(tx.root, { 'reset', '--hard', tx.head }) end
-    if not recovered then
-      utils.fire_fugitive_changed({ work_tree = tx.root })
-      return nil, tostring(failure) .. '\nHistory rollback failed: ' .. recovery_err
-        .. (stash and ('\nSaved changes remain in stash ' .. stash) or '')
-    end
-  end
+function M.restore_saved(tx, stash, opts, successful)
   local warning
   if stash then
     local restored, restore_err = pcall(function()
       local restore = stash
-      if ok and opts and opts.consume_index then
+      if successful and opts and opts.consume_index then
         -- The staged contribution is already committed. Use its saved index as
         -- the merge base so only index-to-worktree edits are restored. Applying
         -- the original stash directly can conflict with that same contribution.
@@ -176,6 +148,51 @@ function M.execute(tx, change, opts)
       end
     end
   end
+  return warning
+end
+
+function M.execute(tx, change, opts)
+  local stash, result
+  local ok, failure = pcall(function()
+    if tx:run({ 'status', '--porcelain', '--untracked-files=all' }) ~= '' then
+      local previous = git(tx.root, { 'rev-parse', '--verify', 'refs/stash' })
+      tx:run({ 'stash', 'push', '--include-untracked', '-m', 'nvim Git history rewrite' })
+      local saved = git(tx.root, { 'rev-parse', '--verify', 'refs/stash' })
+      if saved and saved ~= previous then stash = vim.trim(saved) end
+      if tx:run({ 'status', '--porcelain', '--untracked-files=all' }) ~= '' then
+        error('Could not save all worktree changes; history was left unchanged', 0)
+      end
+    end
+    if opts and opts.expected_index then
+      local index = stash and tx:run({ 'rev-parse', stash .. '^2^{tree}' }) or tx:run({ 'write-tree' })
+      if vim.trim(index) ~= opts.expected_index then error('Index changed; reopen Undo/Redo', 0) end
+    end
+    if opts and opts.before_change then opts.before_change(tx, stash) end
+    result = change(tx)
+  end)
+  if tx.mutated and active_rebase(tx.dir) and opts and opts.suspend then
+    local saved, paused = pcall(opts.suspend, tx, stash, ok, failure)
+    if saved and paused then
+      utils.fire_fugitive_changed({ work_tree = tx.root })
+      return paused.head, paused.warning, true, true
+    elseif not saved then ok, failure = false, paused end
+  end
+  for _, path in ipairs(tx.files) do os.remove(path) end
+  if not ok and tx.mutated then
+    local recovered, recovery_err
+    if active_rebase(tx.dir) then
+      recovered, recovery_err = git(tx.root, { 'rebase', '--abort' })
+      -- Abort returns to the rebase start, which may include our fixup helper.
+      -- The transaction began before that helper existed.
+      if recovered then recovered, recovery_err = git(tx.root, { 'reset', '--hard', tx.head }) end
+    else recovered, recovery_err = git(tx.root, { 'reset', '--hard', tx.head }) end
+    if not recovered then
+      utils.fire_fugitive_changed({ work_tree = tx.root })
+      return nil, tostring(failure) .. '\nHistory rollback failed: ' .. recovery_err
+        .. (stash and ('\nSaved changes remain in stash ' .. stash) or '')
+    end
+  end
+  local warning = M.restore_saved(tx, stash, opts, ok)
   if ok and opts and opts.after_restore then
     local finished, finish_warning = pcall(opts.after_restore, warning)
     if finished then warning = finish_warning

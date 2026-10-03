@@ -201,11 +201,13 @@ local function replace_model(s, hash)
   render(s)
   return true
 end
-function M.expand_file(buf, path)
+function M.expand_file(buf, path, expanded)
   local s = state(buf)
   if not s then return false end
-  s.expanded[path] = true
-  return render_preserving_message(s)
+  s.expanded[path] = expanded ~= false
+  if not render_preserving_message(s) then return false end
+  if expanded == false and vim.api.nvim_get_current_buf() == buf then focus_path(s, path) end
+  return true
 end
 -- Serializable navigation only; message drafts remain owned by the buffer.
 function M.navigation(buf, row)
@@ -569,7 +571,7 @@ local function attach(s)
   map('X', function() discard(s) end, { native = true })
   map('a', function() vim.cmd('GitApply') end, { native = true,
     desc = 'Apply selected commit patch to worktree' })
-  map('v', function() vim.cmd('GitReverse') end, { native = true,
+  map('cv', function() vim.cmd('GitReverse') end, { native = true,
     desc = 'Reverse selected commit patch in worktree' })
   vim.keymap.set('x', 'X', function()
     local first, last = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
@@ -646,7 +648,7 @@ local function attach(s)
       'dh       horizontal diff',
       'D        Diffview',
       'X        remove file / hunk / selected lines (Hard / Mixed)',
-      'a / v    apply / reverse selected file or hunk in worktree',
+      'a / cv   apply / reverse selected file or hunk in worktree',
       ':GitApply[!] / :GitReverse[!]  apply / reverse (bang: three-way)',
       '~        parent commit',
       'gp       select merge parent',
@@ -668,7 +670,7 @@ local function attach(s)
       in_hunk = info and info.patch_row ~= nil, commit = s.model.hash } end
     return { kind = 'commit', commit = s.model.hash, label = s.model.hash:sub(1, 7) }
   end, guide = { '', 'Message: edit normally; :w rewrites this commit and descendants.',
-    'X in a diff removes selected changes (Hard / Mixed); a / v apply / reverse.',
+    'X in a diff removes selected changes (Hard / Mixed); a / cv apply / reverse.',
     ']m / [m files; ]c / [c hunks; ]] / [[ move and expand.',
     '~ parent; p previous file commit; gp compare against a merge parent.',
     'Normal editing keys retain their meaning inside the message.' } })

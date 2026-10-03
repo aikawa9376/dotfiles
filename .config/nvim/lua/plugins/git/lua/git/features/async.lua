@@ -20,7 +20,7 @@ function M.git(root, args, opts)
     local err = vim.trim(result.stderr or result.stdout or '')
     return nil, err ~= '' and err or ('Git failed (exit ' .. result.code .. ')')
   end
-  return result.stdout or ''
+  return result.stdout or '', nil, result
 end
 
 function M.run(root, fn, callback, opts)
