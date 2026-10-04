@@ -410,6 +410,59 @@ compatible with the surrounding dotfiles; they do not require Fugitive code.
 
 ## Commit details
 
+Status and Commit default to the `delta` word-diff style. In `gD` (Display
+settings), choose “Cycle word-diff style” to cycle through `diffs`, `delta`,
+`treesitter`, and `github`. These styles compute changes inside Neovim; no `delta`
+or `difft` executable is required. The former `lazygit` setting is now named
+`delta`, matching the renderer configured in this repository's LazyGit settings.
+Its Lua comparator follows delta 0.19.2's default word alignment: Unicode words,
+grapheme-separated punctuation, forward line matching at a distance threshold of
+0.6, and the same edit-group and whitespace rules. Tabs expand to eight spaces for
+comparison while highlights retain original byte positions. Delta's default
+32-line buffer limit also affects pairing in long replacement groups. Unpaired
+rows keep ordinary line backgrounds, including addition-only/deletion-only groups.
+Repeated comparisons reuse a bounded cache. This reproduces default word emphasis;
+custom delta options, whitespace-error decoration and long-line truncation are
+not applied. Code colors and muted line/word backgrounds remain those of this UI.
+
+With a Tree-sitter parser, `treesitter` style
+compares syntax tokens across each replacement block, preserving common tokens
+when lines are split or joined.
+Identifiers and operators use syntax boundaries; strings, comments and prose use
+word boundaries. Literal content is kept separate from code when finding common
+tokens. Formatting whitespace gets no word emphasis, except literal whitespace
+and statement indentation in Python/YAML. Corresponding statements and properties
+are compared locally, so a shared closing bracket in another statement cannot
+make an unrelated addition look like a word edit. Statements without a counterpart
+keep the ordinary line background. Within corresponding statements, changed
+tokens receive stronger word backgrounds even when every word on a row changes.
+Pure insertions/deletions occupying their own rows use the ordinary background;
+an argument or callback added to a partly retained row can still receive word
+emphasis. This distinguishes a replaced argument row from an entirely new one.
+Addition-only or deletion-only groups also keep the ordinary line background
+without word emphasis.
+When no parser or usable syntax fragment is available, `treesitter` falls back to
+the `delta` comparator. `github` keeps ordinal
+line pairing, and `diffs` keeps its character comparison.
+In all word-diff styles, code colors use Tree-sitter when a parser is available,
+with Vim syntax as the fallback. The `+`/`-` prefixes are visually hidden with a
+space overlay; the underlying patch text remains intact.
+
+`tests/delta_word_diff.lua` compares exact source byte ranges with checked-in
+fixtures captured from delta 0.19.2. Run it with
+`nvim --headless --clean -u NONE -l tests/delta_word_diff.lua` from this plugin's
+directory. `tests/generate_delta_fixtures.py` regenerates the oracle with that
+version of delta installed. Unicode 16 word/grapheme tables and their pinned
+source URLs are maintained by `tests/generate_delta_unicode.py`; upstream notices
+are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+In `treesitter` style, syntax and word comparison share a parsed old/new hunk;
+a bounded cache reuses unchanged fragments on redraw. Parsing remains hunk-based,
+so code whose string or comment opener lies outside the hunk may lack that context.
+Complete syntax children inside incomplete hunks can still supply token boundaries; untrusted
+regions use text boundaries. This does not perform a complete AST comparison or
+require full-file Git/blob reads.
+
 `git.features.commit` owns the custom commit view. Status and log selections, commit
 previews, `:GitCommit [revision]`, and `:Gedit <revision>` open it.
 `git.objects` owns independent file/index/blob buffers.

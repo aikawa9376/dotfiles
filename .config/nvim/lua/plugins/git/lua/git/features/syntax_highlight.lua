@@ -1,11 +1,14 @@
 local M = {}
+local syntax_word_diff = require('git.features.syntax_word_diff')
+local delta_word_diff = require('git.features.delta_word_diff')
 
 -- 'diffs':   diffs.nvim-style group diff -> line pairing -> byte diff
--- 'lazygit': similarity-based line pairing
+-- 'delta': delta 0.19.2 token alignment and forward line pairing
+-- 'treesitter': structural block tokens, with delta text fallback
 -- 'github':  sequential line pairing (old[i] <-> new[i])
-M.config = { word_diff_style = 'lazygit' }
+M.config = { word_diff_style = 'delta' }
 
-local WORD_DIFF_STYLES = { 'diffs', 'lazygit', 'github' }
+local WORD_DIFF_STYLES = { 'diffs', 'delta', 'treesitter', 'github' }
 
 local PRIORITY_BG = 200
 local PRIORITY_SYNTAX = 210
@@ -58,33 +61,6 @@ function Utils.tokenize(str)
   return tokens, ranges
 end
 
-function Utils.levenshtein(str1, str2)
-  local len1 = #str1
-  local len2 = #str2
-  local matrix = {}
-
-  if (len1 == 0) then return len2 end
-  if (len2 == 0) then return len1 end
-  if (str1 == str2) then return 0 end
-
-  for i = 0, len1 do
-    matrix[i] = {[0] = i}
-  end
-
-  for j = 0, len2 do
-    matrix[0][j] = j
-  end
-
-  for i = 1, len1 do
-    for j = 1, len2 do
-      local cost = (str1:byte(i) == str2:byte(j)) and 0 or 1
-      matrix[i][j] = math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost)
-    end
-  end
-
-  return matrix[len1][len2]
-end
-
 function Utils.common_prefix_len(str1, str2)
   local len = math.min(#str1, #str2)
   for i = 1, len do
@@ -93,10 +69,6 @@ function Utils.common_prefix_len(str1, str2)
     end
   end
   return len
-end
-
-function Utils.trim(s)
-  return s:match("^%s*(.-)%s*$") or ""
 end
 
 function Utils.merge_ranges(ranges, text)
@@ -283,6 +255,8 @@ function Utils.extract_change_groups(hunk_lines)
     elseif prefix == '+' then
       in_del = false
       add_buf[#add_buf + 1] = { idx = i, text = line:sub(2) }
+    elseif line:match('^\\ No newline at end of file') then
+      -- The marker occupies a display row but does not split a replacement.
     else
       flush()
       in_del = false
@@ -503,7 +477,7 @@ function Parser.parse_buffer(bufnr, first_line)
       state.hunk_start = i -- line index of the header line
     elseif state.hunk_start then
       local prefix = line:sub(1, 1)
-      if prefix == ' ' or prefix == '+' or prefix == '-' then
+      if prefix == ' ' or prefix == '+' or prefix == '-' or line:match('^\\ No newline at end of file') then
         table.insert(state.lines, line)
       elseif line == '' or line:match('^[%s]*[MADRCU%?!]') or line:match('^diff ') or line:match('^index ') or line:match('^Binary ') then
         flush()
@@ -534,36 +508,39 @@ function Highlighter.setup_groups()
   vim.api.nvim_set_hl(0, 'FugitiveExtDeleteText', { bg = "#8c3b40", default = true })
 end
 
-function Highlighter.apply_treesitter(bufnr, ns, code_lines, lang, line_map, col_offset)
+function Highlighter.apply_treesitter(bufnr, ns, code_lines, lang, line_map, col_offset, source)
   local code = table.concat(code_lines, '\n')
   if code == '' then return end
 
-  local ok, parser = pcall(vim.treesitter.get_string_parser, code, lang)
-  if not ok or not parser then return end
-
-  local trees = parser:parse()
-  if not trees or #trees == 0 then return end
+  local tree = source and source.tree
+  if not tree then
+    local ok, parser = pcall(vim.treesitter.get_string_parser, code, lang)
+    if not ok or not parser then return end
+    local parsed, trees = pcall(parser.parse, parser)
+    if not parsed or not trees or #trees == 0 then return end
+    tree = trees[1]
+  end
 
   local query = vim.treesitter.query.get(lang, 'highlights')
   if not query then return end
 
-  for id, node, metadata in query:iter_captures(trees[1]:root(), code) do
+  for id, node, metadata in query:iter_captures(tree:root(), code) do
     local capture_name = '@' .. query.captures[id] .. '.' .. lang
     local sr, sc, er, ec = node:range()
 
-    local buf_sr = line_map[sr + 1]
-    if buf_sr then
-      local buf_er = line_map[er + 1] or buf_sr
-      local buf_sc = sc + col_offset
-      local buf_ec = ec + col_offset
+    -- A multiline capture must not cross inserted opposite-side rows.
+    for row = sr, er do
+      local buf_row = line_map[row + 1]
+      local first = row == sr and sc or 0
+      local last = row == er and ec or #(code_lines[row + 1] or '')
       local priority = (tonumber(metadata.priority) or 100) + PRIORITY_SYNTAX
-
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, buf_sr, buf_sc, {
-        end_row = buf_er,
-        end_col = buf_ec,
-        hl_group = capture_name,
-        priority = priority,
-      })
+      if buf_row and last > first then
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, buf_row, first + col_offset, {
+          end_col = last + col_offset,
+          hl_group = capture_name,
+          priority = priority,
+        })
+      end
     end
   end
 end
@@ -653,165 +630,105 @@ end
 
 function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
   if #group_old == 0 or #group_new == 0 then return end
-
-  -- Apply word-level highlights for a matched old/new line pair
-  local function highlight_pair(old_text, new_text, old_line_idx, new_line_idx)
-    local diffs = Utils.compute_word_diffs(old_text, new_text)
-    local old_highlights = {}
-    local new_highlights = {}
-
-    for _, d in ipairs(diffs) do
-      if d[1] then table.insert(old_highlights, { d[1], d[2] }) end
-      if d[3] then table.insert(new_highlights, { d[3], d[4] }) end
-    end
-
-    old_highlights = Utils.merge_ranges(old_highlights, old_text)
-    new_highlights = Utils.merge_ranges(new_highlights, new_text)
-
-    for _, r in ipairs(old_highlights) do
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, old_line_idx, r[1], {
-        end_col = r[2] + 1,
-        hl_group = 'FugitiveExtDeleteText',
-        priority = PRIORITY_SYNTAX + 150
-      })
-    end
-
-    for _, r in ipairs(new_highlights) do
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, new_line_idx, r[1], {
-        end_col = r[2] + 1,
-        hl_group = 'FugitiveExtAddText',
-        priority = PRIORITY_SYNTAX + 150
-      })
-    end
-  end
-
-  -- GitHub style: sequential pairing (old[i] <-> new[i])
+  local changes
   if M.config.word_diff_style == 'github' then
+    changes = { old = {}, new = {} }
     for i = 1, math.min(#group_old, #group_new) do
-      highlight_pair(group_old[i], group_new[i], group_old_lines[i], group_new_lines[i])
+      local old, new = {}, {}
+      for _, diff in ipairs(Utils.compute_word_diffs(group_old[i], group_new[i])) do
+        if diff[1] then old[#old + 1] = { diff[1], diff[2] } end
+        if diff[3] then new[#new + 1] = { diff[3], diff[4] } end
+      end
+      changes.old[i] = Utils.merge_ranges(old, group_old[i])
+      changes.new[i] = Utils.merge_ranges(new, group_new[i])
     end
-    return
+  else
+    changes = delta_word_diff.compare(group_old, group_new)
   end
-
-  -- Lazygit style: similarity-based pairing (default)
-  local candidates = {}
-  local MAX_INDEX_DIST = 4
-
-  for i, old_text in ipairs(group_old) do
-    local old_trim = Utils.trim(old_text)
-    for j, new_text in ipairs(group_new) do
-       if math.abs(i - j) <= MAX_INDEX_DIST then
-         local new_trim = Utils.trim(new_text)
-
-         local dist_trim = Utils.levenshtein(old_trim, new_trim)
-         local max_trim_len = math.max(#old_trim, #new_trim)
-         local min_trim_len = math.min(#old_trim, #new_trim)
-         local prefix_trim_len = Utils.common_prefix_len(old_trim, new_trim)
-
-         local ratio_trim = 1.0
-         if max_trim_len > 0 then
-           ratio_trim = dist_trim / max_trim_len
-         elseif #old_trim == 0 and #new_trim == 0 then
-           ratio_trim = 0
-         end
-
-         local is_content_prefix_match = (min_trim_len > 1) and ((prefix_trim_len / min_trim_len) > 0.7)
-
-         if ratio_trim <= 0.6 or is_content_prefix_match then
-           local prefix_ratio = (max_trim_len > 0) and (prefix_trim_len / max_trim_len) or 0
-           local score = ratio_trim + (math.abs(i - j) * 0.01) - (prefix_ratio * 0.2)
-
-           if is_content_prefix_match then score = score - 0.5 end
-           if old_trim == new_trim and #old_trim > 0 then score = score - 1.0 end
-
-           table.insert(candidates, { old_idx = i, new_idx = j, ratio = ratio_trim, score = score })
-         end
-       end
+  for _, side in ipairs({ { changes.old, group_old_lines, 'FugitiveExtDeleteText' },
+    { changes.new, group_new_lines, 'FugitiveExtAddText' } }) do
+    for row, ranges in pairs(side[1]) do
+      for _, range in ipairs(ranges) do
+        vim.api.nvim_buf_set_extmark(bufnr, ns, side[2][row], range[1], {
+          end_col = range[2] + 1, hl_group = side[3], priority = PRIORITY_SYNTAX + 150,
+        })
+      end
     end
   end
+end
 
-  table.sort(candidates, function(a, b) return a.score < b.score end)
-
-  local used_old = {}
-  local used_new = {}
-
-  for _, cand in ipairs(candidates) do
-    if not used_old[cand.old_idx] and not used_new[cand.new_idx] then
-      used_old[cand.old_idx] = true
-      used_new[cand.new_idx] = true
-      highlight_pair(
-        group_old[cand.old_idx], group_new[cand.new_idx],
-        group_old_lines[cand.old_idx], group_new_lines[cand.new_idx]
-      )
+function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, row_maps, inverse_maps)
+  for _, group in ipairs(Utils.extract_change_groups(hunk.lines)) do
+    local rows, texts, displayed = { old = {}, new = {} }, { old = {}, new = {} }, { old = {}, new = {} }
+    for _, side in ipairs({ 'old', 'new' }) do
+      for _, line in ipairs(side == 'old' and group.del_lines or group.add_lines) do
+        local buf_row = hunk.start_line + line.idx - 1
+        rows[side][#rows[side] + 1] = inverse_maps[side][buf_row]
+        texts[side][#texts[side] + 1] = line.text
+        displayed[side][#displayed[side] + 1] = buf_row
+      end
+    end
+    local changes = syntax_word_diff.compare(sources.old, sources.new, rows.old, rows.new)
+    if hunk.lang and table.concat(texts.old):match('^%s*$') and table.concat(texts.new):match('^%s*$') then
+      changes = { old = {}, new = {} }
+    end
+    if not changes then
+      Highlighter.apply_word_diffs(bufnr, ns, texts.old, texts.new, displayed.old, displayed.new)
+    else
+      for _, side in ipairs({ 'old', 'new' }) do
+        for row, ranges in pairs(changes[side]) do
+          for _, range in ipairs(Utils.merge_ranges(ranges, sources[side].lines[row])) do
+            vim.api.nvim_buf_set_extmark(bufnr, ns, row_maps[side][row], range[1], {
+              end_col = range[2] + 1,
+              hl_group = side == 'old' and 'FugitiveExtDeleteText' or 'FugitiveExtAddText',
+              priority = PRIORITY_SYNTAX + 150,
+            })
+          end
+        end
+      end
     end
   end
 end
 
 function Highlighter.process_hunk(bufnr, ns, hunk)
-  -- 1. Background
   Highlighter.apply_background(bufnr, ns, hunk)
-
-  -- 2. Word Diffs & Syntax Prep
-  local word_style = M.config.word_diff_style
-  if word_style == 'diffs' then
-    Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
-  end
-
-  local group_old = {}
-  local group_new = {}
-  local group_old_lines = {}
-  local group_new_lines = {}
-
-  local new_code = {}
-  local new_map = {}
-  local old_code = {}
-  local old_map = {}
-
-  local function flush_groups()
-    if word_style ~= 'diffs' then
-      Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
-    end
-    group_old = {}
-    group_new = {}
-    group_old_lines = {}
-    group_new_lines = {}
-  end
-
+  local code, maps, inverse = { old = {}, new = {} }, { old = {}, new = {} }, { old = {}, new = {} }
+  local colors = { old = {}, new = {} }
   for i, line in ipairs(hunk.lines) do
-    local prefix = line:sub(1, 1)
-    local content = line:sub(2)
-    local buf_line = hunk.start_line + i - 1
-
-    -- Collect code for syntax highlighting
-    if prefix == '+' or prefix == ' ' then
-      table.insert(new_code, content)
-      new_map[#new_code] = buf_line
-    end
-    if prefix == '-' or prefix == ' ' then
-      table.insert(old_code, content)
-      old_map[#old_code] = buf_line
-    end
-
-    -- Collect groups for word diff
-    if word_style ~= 'diffs' then
-      if prefix == '-' then
-        if #group_new > 0 then flush_groups() end
-        table.insert(group_old, content)
-        table.insert(group_old_lines, buf_line)
-      elseif prefix == '+' then
-        table.insert(group_new, content)
-        table.insert(group_new_lines, buf_line)
-      else
-        flush_groups()
+    local prefix, content, buf_row = line:sub(1, 1), line:sub(2), hunk.start_line + i - 1
+    for _, side in ipairs({ 'old', 'new' }) do
+      if prefix == ' ' or prefix == (side == 'old' and '-' or '+') then
+        table.insert(code[side], content)
+        maps[side][#code[side]] = buf_row
+        inverse[side][buf_row] = #code[side]
+        -- Shared context is displayed with the new source's syntax only.
+        if prefix ~= ' ' or side == 'new' then colors[side][#code[side]] = buf_row end
       end
     end
   end
-  flush_groups()
-
-  -- 3. Syntax Highlighting (Treesitter)
+  local sources = {}
+  if M.config.word_diff_style == 'treesitter' then
+    for _, side in ipairs({ 'old', 'new' }) do sources[side] = syntax_word_diff.parse(code[side], hunk.lang) end
+    Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, maps, inverse)
+  elseif M.config.word_diff_style == 'diffs' then
+    Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
+  else
+    -- Delta follows forward line pairing; GitHub pairs lines sequentially.
+    for _, group in ipairs(Utils.extract_change_groups(hunk.lines)) do
+      local old, new, old_rows, new_rows = {}, {}, {}, {}
+      for _, line in ipairs(group.del_lines) do
+        old[#old + 1], old_rows[#old_rows + 1] = line.text, hunk.start_line + line.idx - 1
+      end
+      for _, line in ipairs(group.add_lines) do
+        new[#new + 1], new_rows[#new_rows + 1] = line.text, hunk.start_line + line.idx - 1
+      end
+      Highlighter.apply_word_diffs(bufnr, ns, old, new, old_rows, new_rows)
+    end
+  end
   if hunk.lang then
-    Highlighter.apply_treesitter(bufnr, ns, new_code, hunk.lang, new_map, 1)
-    Highlighter.apply_treesitter(bufnr, ns, old_code, hunk.lang, old_map, 1)
+    for _, side in ipairs({ 'old', 'new' }) do
+      Highlighter.apply_treesitter(bufnr, ns, code[side], hunk.lang, colors[side], 1, sources[side])
+    end
   end
 end
 
