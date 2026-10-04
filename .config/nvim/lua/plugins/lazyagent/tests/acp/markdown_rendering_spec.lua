@@ -94,7 +94,7 @@ function M.run()
       assert(query:find('(#set! conceal "")', 1, true), "character conceal is preserved")
       assert(query:find("@markup.heading.1", 1, true), "syntax captures are preserved")
       created = created + 1
-      vim.treesitter.highlighter.active[source] = {}
+      vim.treesitter.highlighter.active[source] = { tree = fake_parser }
     end,
   }
   local highlighter = require("lazyagent.acp.highlighter")

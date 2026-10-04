@@ -117,6 +117,25 @@ no thresholds. Async request cancellation and ellipsis parse readiness are
 covered separately by `markdown_rendering_spec.lua` and `view_diff_spec.lua`.
 This integration contract measures rendering work, not TUI input latency.
 
+## Native highlight timeout recovery
+
+```sh
+LAZYAGENT_PARSER_RTP=/path/to/nvim/site \
+LAZYAGENT_MARKDOWN_RTP=/path/to/render-markdown.nvim \
+nvim --headless --clean -u NONE -l tests/bench/highlighter_timeout.lua
+```
+
+This uses the real native highlighter and Markdown/Lua parsers on a 7,200-line
+fixture. It injects one deterministic async timeout, then requires native
+`_on_start` to leave its waiting state and the actual Lua query to capture a
+visible keyword. It does not call a synchronous capture lookup to repair the
+trees. The contract suite separately covers bounded retries, edits, hiding,
+and cleanup after exhausted retries.
+It also injects a timeout into the installed external renderer's parse of a
+7,000-row code fence, then requires actual visible code decorations through the
+LazyAgent custom handler, with retained Markdown marks proportional to the
+visible rows rather than the full block.
+
 ## Repeated image-reference scans
 
 ```sh
