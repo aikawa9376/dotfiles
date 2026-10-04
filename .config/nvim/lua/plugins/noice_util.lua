@@ -12,7 +12,10 @@ function M.patch_confirm_lifecycle()
   local on_confirm = cmdline.on_confirm
   local on_hide = cmdline.on_hide
   local confirm_content
+  local confirm_prompt
   local confirm_active = false
+  local confirm_prompt_visible = false
+  local confirm_redraw_pending = false
   local confirm_generation = 0
 
   cmdline.on_confirm = function(message)
@@ -25,22 +28,39 @@ function M.patch_confirm_lifecycle()
         kind = message.kind,
         text = message:content(),
       }
+      confirm_prompt = nil
+      confirm_prompt_visible = false
+      confirm_redraw_pending = false
     end
     return handled
   end
 
   local on_show = cmdline.on_show
-  cmdline.on_show = function(...)
-    if confirm_active and confirm_content and not cmdline.confirm_message then
-      -- Invalid keys hide and immediately redraw the cmdline without another
-      -- msg_show.confirm event. Reattach the saved question to that prompt.
-      cmdline.confirm_message = Message(confirm_content.event, confirm_content.kind, confirm_content.text)
+  cmdline.on_show = function(event, content, pos, firstc, prompt, indent, level)
+    local looks_like_confirm = firstc == "" and prompt ~= ""
+    local matches_confirm = looks_like_confirm and (not confirm_prompt or prompt == confirm_prompt)
+    local paired_confirm = cmdline.confirm_message ~= nil
+
+    if not paired_confirm and confirm_active and confirm_content and matches_confirm then
+      if confirm_prompt_visible then
+        -- A repeated show without a hide is a redraw, not a second prompt.
+        return
+      end
+
+      if confirm_redraw_pending or not confirm_prompt then
+        -- Invalid keys hide and immediately redraw the cmdline without another
+        -- msg_show.confirm event. Reattach the saved question to that prompt.
+        cmdline.confirm_message = Message(confirm_content.event, confirm_content.kind, confirm_content.text)
+        paired_confirm = true
+      end
     end
 
-    local paired_confirm = cmdline.confirm_message ~= nil
-    local result = on_show(...)
+    local result = on_show(event, content, pos, firstc, prompt, indent, level)
 
     if paired_confirm then
+      confirm_prompt = prompt
+      confirm_prompt_visible = true
+      confirm_redraw_pending = false
       -- Invalidate hide timers from earlier invalid-key redraws.
       confirm_generation = confirm_generation + 1
       state.clear("msg_show")
@@ -51,6 +71,10 @@ function M.patch_confirm_lifecycle()
 
   cmdline.on_hide = function(event, level)
     local was_confirm = confirm_active
+    if was_confirm and confirm_prompt_visible then
+      confirm_prompt_visible = false
+      confirm_redraw_pending = true
+    end
     on_hide(event, level)
 
     if was_confirm then
@@ -61,6 +85,9 @@ function M.patch_confirm_lifecycle()
         if confirm_generation == generation then
           confirm_active = false
           confirm_content = nil
+          confirm_prompt = nil
+          confirm_prompt_visible = false
+          confirm_redraw_pending = false
           state.clear("msg_show")
         end
       end, 50)
