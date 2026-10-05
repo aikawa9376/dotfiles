@@ -60,8 +60,8 @@ local function rendered_spans(buf, projection)
     if target then
       if details.virt_text then assert(details.virt_text[1][1] == '▏') end
       local side, row = unpack(target)
-      local groups = side == 'old' and { 'FugitiveExtDelete', 'FugitiveExtDeleteText' }
-        or { 'FugitiveExtAdd', 'FugitiveExtAddText' }
+      local groups = side == 'old' and { 'FugitiveExtSyntaxDelete', 'FugitiveExtSyntaxDeleteText' }
+        or { 'FugitiveExtSyntaxAdd', 'FugitiveExtSyntaxAddText' }
       for level, group in ipairs(groups) do
         if details.hl_group == group then
           assert(not details.hl_eol and details.end_row == mark[2], 'whole-line background survived')

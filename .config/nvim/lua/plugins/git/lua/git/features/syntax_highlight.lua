@@ -561,6 +561,11 @@ function Highlighter.setup_groups()
   -- Word diff highlights (intra-line)
   vim.api.nvim_set_hl(0, 'FugitiveExtAddText', { bg = "#005f5f", default = true })
   vim.api.nvim_set_hl(0, 'FugitiveExtDeleteText', { bg = "#8c3b40", default = true })
+  -- Structural spans have their own palette; other styles keep their colors.
+  vim.api.nvim_set_hl(0, 'FugitiveExtSyntaxAdd', { bg = '#1f4534', default = true })
+  vim.api.nvim_set_hl(0, 'FugitiveExtSyntaxDelete', { bg = '#4a2a2e', default = true })
+  vim.api.nvim_set_hl(0, 'FugitiveExtSyntaxAddText', { bg = '#1f6648', default = true })
+  vim.api.nvim_set_hl(0, 'FugitiveExtSyntaxDeleteText', { bg = '#ad5258', default = true })
   vim.api.nvim_set_hl(0, 'FugitiveExtAddPrefix', { link = 'GitSignsAdd', default = true })
   vim.api.nvim_set_hl(0, 'FugitiveExtDeletePrefix', { link = 'GitSignsDelete', default = true })
   -- Difftastic emits ANSI bright red/green on dark backgrounds and ordinary
@@ -920,8 +925,8 @@ function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, layout, em
         if full_hunk and context then row = row + context.projections[side].offset end
         local line = texts[side][index]
         for _, level in ipairs({
-          { changes[side], side == 'old' and 'FugitiveExtDelete' or 'FugitiveExtAdd', 150 },
-          { changes.emphasis[side], side == 'old' and 'FugitiveExtDeleteText' or 'FugitiveExtAddText', 151 },
+          { changes[side], side == 'old' and 'FugitiveExtSyntaxDelete' or 'FugitiveExtSyntaxAdd', 150 },
+          { changes.emphasis[side], side == 'old' and 'FugitiveExtSyntaxDeleteText' or 'FugitiveExtSyntaxAddText', 151 },
         }) do
           for _, range in ipairs(Utils.merge_ranges(vim.deepcopy(level[1][row] or {}), line)) do
             emit(bufnr, ns, buf_row, range[1], {

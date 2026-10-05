@@ -54,8 +54,8 @@ local function check(buf)
   local marks, rows = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }), {}
   for _, mark in ipairs(marks) do
     local details = mark[4]
-    if details.hl_group == 'FugitiveExtAdd' or details.hl_group == 'FugitiveExtDelete'
-      or details.hl_group == 'FugitiveExtAddText' or details.hl_group == 'FugitiveExtDeleteText' then
+    if details.hl_group == 'FugitiveExtSyntaxAdd' or details.hl_group == 'FugitiveExtSyntaxDelete'
+      or details.hl_group == 'FugitiveExtSyntaxAddText' or details.hl_group == 'FugitiveExtSyntaxDeleteText' then
       assert(not details.hl_eol and details.end_row == mark[2], 'PHP retained whole-line background')
       rows[mark[2]] = rows[mark[2]] or {}
       rows[mark[2]][#rows[mark[2]] + 1] = { mark[3], details.end_col - 1 }
@@ -158,10 +158,10 @@ local function check_inline(buf)
   for _, row in ipairs({ 2, 3 }) do
     local ranges = {}
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { row, 0 }, { row, -1 }, { details = true })) do
-      if mark[4].hl_group == 'FugitiveExtAdd' or mark[4].hl_group == 'FugitiveExtDelete' then
+      if mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxDelete' then
         ranges[#ranges + 1] = { mark[3], mark[4].end_col - 1 }
       end
-      assert(mark[4].hl_group ~= 'FugitiveExtAddText' and mark[4].hl_group ~= 'FugitiveExtDeleteText')
+      assert(mark[4].hl_group ~= 'FugitiveExtSyntaxAddText' and mark[4].hl_group ~= 'FugitiveExtSyntaxDeleteText')
     end
     assert(vim.deep_equal(mask(ranges, row == 2 and before or after), mask({ { 11, 27 } }, before)),
       'tagless PHP lost the changed identifier: ' .. vim.inspect(ranges))
@@ -207,9 +207,9 @@ assert(html_case)
 for _, side in ipairs({ 'old', 'new' }) do
   local row, spans, emphasis = side == 'old' and 2 or 3, {}, {}
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { row, 0 }, { row, -1 }, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtAdd' or mark[4].hl_group == 'FugitiveExtDelete' then
+    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxDelete' then
       spans[#spans + 1] = { mark[3], mark[4].end_col - 1 }
-    elseif mark[4].hl_group == 'FugitiveExtAddText' or mark[4].hl_group == 'FugitiveExtDeleteText' then
+    elseif mark[4].hl_group == 'FugitiveExtSyntaxAddText' or mark[4].hl_group == 'FugitiveExtSyntaxDeleteText' then
       emphasis[#emphasis + 1] = { mark[3], mark[4].end_col - 1 }
     end
   end

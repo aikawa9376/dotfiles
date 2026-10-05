@@ -113,7 +113,7 @@ do
   end
   local painted, heartbeat = 0, nil
   vim.api.nvim_buf_set_extmark = function(buffer, namespace, row, col, options)
-    if (options.hl_group or ''):match('^@') or options.hl_group == 'FugitiveExtAdd' then
+    if (options.hl_group or ''):match('^@') or options.hl_group == 'FugitiveExtSyntaxAdd' then
       painted = painted + 1
       if painted == 1 then vim.schedule(function() heartbeat = painted end) end
     end
@@ -211,7 +211,7 @@ do
   settle(second)
   local added = false
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(second, ns, 0, -1, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtAdd' then
+    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' then
       local line = patch[mark[2] + 1]
       if line:sub(mark[3] + 1, mark[4].end_col):find('y', 1, true) then added = true end
     end
@@ -259,7 +259,7 @@ assert(vim.deep_equal(old.comparison.result, compare(old, new)), 'cooperative re
 assert(vim.wait(1000, function()
   if syntax.is_pending(long_buf) then return false end
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(long_buf, ns, 0, -1, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtAdd' then return false end
+    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' then return false end
   end
   return true
 end, 1), 'finished structure did not replace provisional plus backgrounds')

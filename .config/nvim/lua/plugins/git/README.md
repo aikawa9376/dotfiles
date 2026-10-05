@@ -436,6 +436,10 @@ stronger background for changed words inside it when enough common words remain,
 following the reference's two levels of coloring. Unrelated comment replacements
 remain wholly muted. Adjacent spans bridge whitespace without crossing unchanged
 code or extending to the end of the screen row.
+Structural backgrounds use `#1f4534` for added spans and `#4a2a2e` for deleted
+spans; changed words inside matched literals/comments use `#1f6648` and
+`#ad5258`, respectively. These `FugitiveExtSyntax*` groups belong only to
+`treesitter`; the other styles retain their existing palette.
 
 Only `treesitter` uses a green/red left-aligned `▏` overlay in place of `+`/`-`, linked to
 `GitSignsAdd`/`GitSignsDelete`. Other styles retain their space overlay.

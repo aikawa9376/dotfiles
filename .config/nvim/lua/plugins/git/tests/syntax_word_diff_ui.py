@@ -125,7 +125,7 @@ y=x['ready'];normal=y['normal']['bg'];in_md=False
 for line,row in zip(y['lines'],y['rows']):
  if line.startswith('M THIRD_'):in_md=True
  if line.startswith('+') and in_md and len(line)>1:
-  assert all(cell[1].get('background',normal)==0x23384c for cell in row[1:len(line)]), (line,'MD prose background')
+  assert all(cell[1].get('background',normal)==0x1f4534 for cell in row[1:len(line)]), (line,'MD prose background')
  if line.startswith(('-function Utils','+function Utils','-  "','+  "')):
   end=line.index(',') if line.startswith('+function Utils') else (line.index('{') if line.startswith(('-  "','+  "')) else len(line))
   assert all(cell[1].get('background',normal)==normal for cell in row[1:end]), (line,'unchanged foreground span received BG')

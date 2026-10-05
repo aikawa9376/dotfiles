@@ -212,7 +212,7 @@ local function preview_adds()
   end, 1), 'collected preview highlighting did not finish')
   local rows, seen = {}, {}
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(ui.right, syntax_ns, 0, -1, { details = true })) do
-    if (mark[4].hl_group == 'FugitiveExtAdd' or mark[4].hl_group == 'FugitiveExtAddText') and not seen[mark[2]] then
+    if (mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxAddText') and not seen[mark[2]] then
       rows[#rows + 1], seen[mark[2]] = mark[2] + 1, true
     end
   end

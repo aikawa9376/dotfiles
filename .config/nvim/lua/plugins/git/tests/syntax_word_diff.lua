@@ -25,7 +25,8 @@ local function open(name, before, after, context, opts)
 end
 local function words(buf, side, strong)
   local found = {}
-  local group = side == 'old' and 'FugitiveExtDelete' or 'FugitiveExtAdd'
+  local prefix = syntax.config.word_diff_style == 'treesitter' and 'FugitiveExtSyntax' or 'FugitiveExt'
+  local group = prefix .. (side == 'old' and 'Delete' or 'Add')
   if strong ~= false then group = group .. 'Text' end
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
     if mark[4].hl_group == group then
@@ -82,7 +83,7 @@ for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = 
     assert(details.virt_text[1][1] == '▏', 'treesitter lost its gutter marker')
     assert(details.virt_text[1][2] == (mark[2] == 2 and 'FugitiveExtDeletePrefix' or 'FugitiveExtAddPrefix'))
     prefix_count = prefix_count + 1
-  elseif details.hl_group == 'FugitiveExtAdd' or details.hl_group == 'FugitiveExtDelete' then
+  elseif details.hl_group == 'FugitiveExtSyntaxAdd' or details.hl_group == 'FugitiveExtSyntaxDelete' then
     assert(not details.hl_eol and details.end_row == mark[2], 'structural background extended past its source span')
     local line = vim.api.nvim_buf_get_lines(buf, mark[2], mark[2] + 1, false)[1]
     assert(line:sub(mark[3] + 1, details.end_col):match('^%a+_value$'), 'unchanged code received a background')
@@ -173,7 +174,7 @@ vim.api.nvim_buf_delete(buf, { force = true })
 -- Formatting-only changes have markers without colored syntax backgrounds.
 buf = open('layout.lua', { 'foo(a, b)' }, { 'foo(', '  a,', '  b', ')' })
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-  assert(not (mark[4].hl_group or ''):match('^FugitiveExt[AD]'), 'layout-only edit acquired a background')
+  assert(not (mark[4].hl_group or ''):match('^FugitiveExtSyntax[AD]'), 'layout-only edit acquired a background')
   assert(not (mark[4].hl_group or ''):match('^FugitiveExtNovel'), 'layout-only edit acquired a diff foreground')
 end
 vim.api.nvim_buf_delete(buf, { force = true })
@@ -214,7 +215,7 @@ for _, before_after in ipairs({ { {}, { 'local x = 1' } }, { { 'local x = 1' }, 
   assert(words(buf, 'old') == '' and words(buf, 'new') == '', 'one-sided file got word emphasis')
   local painted = false
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtAdd' or mark[4].hl_group == 'FugitiveExtDelete' then
+    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxDelete' then
       painted = true
       assert(mark[3] > 0 and not mark[4].hl_eol, 'one-sided edit colored its entire row')
     end
@@ -229,7 +230,7 @@ syntax.attach(buf)
 settle(buf)
 local changed, context_bg = {}, false
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-  if mark[4].hl_group == 'FugitiveExtAdd' or mark[4].hl_group == 'FugitiveExtDelete' then
+  if mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxDelete' then
     changed[mark[2]] = true
     context_bg = context_bg or mark[2] == 4 or mark[2] == 6
   end
