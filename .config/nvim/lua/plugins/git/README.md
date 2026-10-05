@@ -453,8 +453,12 @@ cover only displayed source intervals, projected through the hunk's original
 old/new line numbers. Identical hunk text at different source coordinates has
 independent captures: the same text can be code in one place and a string in
 another. Every projected row must match the displayed patch, so stale files or
-filter-transformed content cannot supply unrelated colors. The comparison
-source pair remains hunk-local. Missing source metadata, conflict views, read
+filter-transformed content cannot supply unrelated colors or comparison trees.
+PHP comparison reuses both verified complete trees, preserving opening tags,
+enclosing classes and embedded HTML; one comparison is shared across all hunks
+of the same old/new file pair. Its source-coordinate ranges are projected only
+onto displayed changed rows. Other languages compare hunk-local source pairs.
+Missing source metadata, conflict views, read
 failures and oversized/binary files keep available hunk captures, with Normal
 for uncovered bytes.
 Without a parser, the included Vim syntax has a Normal parent region; its
@@ -464,6 +468,9 @@ blocks are retried structurally. Lua declaration-only blocks receive a temporary
 empty body for comparing parameters. Blocks that still cannot be compared, or
 lack a parser, use the reference's local Histogram text matching; only changed
 word ranges receive backgrounds, with whole-line text tints omitted.
+Without verified complete PHP context, tagless fragments use this muted Text
+comparison instead of mistaking PHP code for a single HTML text atom. PHP also
+uses Text if the complete file has parse errors or exceeds graph limits.
 Markdown uses Text comparison, matching Difftastic; Tree-sitter still supplies
 its syntax colors. This also preserves fenced-block prose, whose bytes are not
 fully covered by Markdown block-node children.
@@ -516,6 +523,10 @@ mixed-context multiline declaration, Markdown license prose and Vim fallback.
 Pass `nordfox` to repeat with this repository's theme settings.
 `tests/syntax_source_context.lua` exercises actual staged/unstaged/renamed Commit
 sources, shared reads across disjoint hunks, warm caches and canceled-read reopen.
+`tests/syntax_php_context.lua` checks native PHP ranges in real staged/unstaged
+and renamed Commit views, omitted tags/classes, embedded HTML, shared file
+comparison, source-context invalidation, missing queries, Text fallback and
+closing one view while another still needs the shared comparison.
 
 `tests/delta_word_diff.lua` compares exact source byte ranges with checked-in
 fixtures captured from delta 0.19.2. Run it with
@@ -526,7 +537,9 @@ source URLs are maintained by `tests/generate_delta_unicode.py`; upstream notice
 are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 In `treesitter` style, comparison retains the parsed old/new hunk, while coloring
-uses complete source context when available. Both use the same asynchronous
+uses complete source context when available. PHP additionally retains those
+complete trees for comparison, sharing pending and finished comparisons across
+its hunks. Both use the same asynchronous
 parser and 16-entry cache for sources up to 1,000,000 bytes; open buffers also
 retain their current hunk parses, comparison results and highlight plans, so
 shared-cache eviction does not force open views to recompute. Unchanged buffers
@@ -582,11 +595,13 @@ cold display without parsing, single-hunk edits, shifted/rebuilt rows, dense
 painting between editor callbacks, shared recovery after closing its first
 view, cooperative completion and cancellation.
 This is a local adaptation verified against the recorded cases, not a guarantee
-of identical results for every Difftastic language/input. Parsing remains
-hunk-based: omitted enclosing syntax can cause text fallback, and changes across
-separate hunks cannot be matched. The reference uses whole files, additional
-language rules and preprocessing/slider heuristics; these can produce different
-correspondences. No full-file Git/blob reads or external diff commands are added.
+of identical results for every Difftastic language/input. Except for PHP with
+verified complete sources, comparison remains hunk-based: omitted enclosing
+syntax can cause text fallback, and changes across separate hunks cannot be
+matched. The reference uses whole files, additional language rules and
+preprocessing/slider heuristics; these can produce different correspondences.
+PHP comparison reuses the file reads and trees already needed for coloring;
+no external diff command is executed.
 
 `git.features.commit` owns the custom commit view. Status and log selections, commit
 previews, `:GitCommit [revision]`, and `:Gedit <revision>` open it.

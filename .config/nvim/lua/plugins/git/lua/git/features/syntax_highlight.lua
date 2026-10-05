@@ -17,6 +17,23 @@ local PRIORITY_SYNTAX = 210
 local spinner_frames = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 local spinner_frame = 1
 
+-- PHP hunks often omit both the opening tag and the enclosing class. Reuse
+-- verified complete trees rather than guessing whether a fragment is HTML,
+-- a free function, or a class method. Other languages retain hunk comparison.
+local function comparison_sources(cached)
+  local context = cached.prepared and cached.prepared.comparison_context
+  return context and context.sources or cached.sources, context
+end
+
+local function comparison_version(cached)
+  local sources, context = comparison_sources(cached)
+  local version = syntax_word_diff.version(sources and sources.old, sources and sources.new)
+  if context then
+    return version .. ':' .. syntax_word_diff.version(cached.sources.old, cached.sources.new)
+  end
+  return version
+end
+
 -- --- Utilities ---
 
 local Utils = {}
@@ -600,6 +617,9 @@ function Highlighter.prepare(cached, code, lang, query, bufnr)
     local function capture()
       jobs.run(function(checkpoint)
         local result = { query = query, source_key = job.source_key, captures = {} }
+        if lang == 'php' and colored.old and colored.new then
+          result.comparison_context = { sources = colored, projections = projections }
+        end
         for _, side in ipairs({ 'old', 'new' }) do
           result.captures[side] = Highlighter.capture_treesitter(
             colored[side] or cached.sources[side], lang, query, checkpoint, projections[side])
@@ -615,7 +635,7 @@ function Highlighter.prepare(cached, code, lang, query, bufnr)
         syntax_word_diff.request_refresh(bufnr)
       end)
     end
-    if not cached.color_spec or not lang or not query then capture(); return end
+    if not cached.color_spec or not lang or (not query and lang ~= 'php') then capture(); return end
     cached.source_session.request(cached.color_spec, valid, function(full)
       if not valid() then return end
       if not full then capture(); return end
@@ -850,12 +870,22 @@ function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old
   end
 end
 
-function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, layout, emit, checkpoint)
+function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, layout, emit, checkpoint, context)
   emit = emit or Highlighter.set_mark
   checkpoint = checkpoint or function() end
   -- Compare once across context as well as replacement groups. This retains
   -- structural anchors around inserted statements and paired delimiters.
-  local structural, pending = syntax_word_diff.compare_async(sources.old, sources.new, bufnr)
+  local compared = context and context.sources or sources
+  local structural, pending
+  -- A tagless PHP fragment is valid HTML text according to the PHP grammar.
+  -- If complete context is unavailable, prefer word matching to painting that
+  -- entire text atom as changed. Never guess an opening tag or class wrapper.
+  local tagless_php = hunk.lang == 'php' and not context
+    and not table.concat(layout.code.old, '\n'):find('<?', 1, true)
+    and not table.concat(layout.code.new, '\n'):find('<?', 1, true)
+  if not tagless_php then
+    structural, pending = syntax_word_diff.compare_async(compared.old, compared.new, bufnr)
+  end
   local loading = pending
   for _, group in ipairs(layout.groups) do
     checkpoint()
@@ -865,6 +895,11 @@ function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, layout, em
     if not changes and pending then
       -- Wait for the complete comparison instead of starting duplicate graph
       -- searches for fragments. Interim text ranges stay muted.
+      group.fallback = group.fallback or syntax_word_diff.text_fallback(texts.old, texts.new)
+      changes = group.fallback
+    elseif not changes and hunk.lang == 'php' then
+      -- Broken complete files cannot establish PHP structural correspondence;
+      -- reparsing a tagless method as HTML would incorrectly color everything.
       group.fallback = group.fallback or syntax_word_diff.text_fallback(texts.old, texts.new)
       changes = group.fallback
     elseif not changes then
@@ -882,6 +917,7 @@ function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, layout, em
         if index % 32 == 0 then checkpoint() end
         local buf_row = hunk.start_line + relative
         local row = full_hunk and rows[side][index] or index
+        if full_hunk and context then row = row + context.projections[side].offset end
         local line = texts[side][index]
         for _, level in ipairs({
           { changes[side], side == 'old' and 'FugitiveExtDelete' or 'FugitiveExtAdd', 150 },
@@ -908,15 +944,20 @@ end
 
 function Highlighter.background(cached, bufnr, ns, hunk)
   local sources = cached.sources
-  local version = syntax_word_diff.version(sources.old, sources.new)
+  local _, context = comparison_sources(cached)
+  local version = comparison_version(cached)
   local foreground = M.config.changed_fg
   local result = cached.background_result
-  if result and result.version == version and result.foreground == foreground then return result.plan, result.loading end
-  if not cached.background_job or cached.background_job.version ~= version or cached.background_job.foreground ~= foreground then
-    local job = { version = version, foreground = foreground }
+  if result and result.version == version and result.foreground == foreground and result.context == context then
+    return result.plan, result.loading
+  end
+  if not cached.background_job or cached.background_job.version ~= version or cached.background_job.foreground ~= foreground
+    or cached.background_job.context ~= context then
+    local job = { version = version, foreground = foreground, context = context }
     cached.background_job = job
     local function valid()
       return cached.active and cached.background_job == job and vim.api.nvim_buf_is_loaded(bufnr)
+        and select(2, comparison_sources(cached)) == context
         and M.config.word_diff_style == 'treesitter'
         and M.config.changed_fg == foreground
     end
@@ -925,8 +966,8 @@ function Highlighter.background(cached, bufnr, ns, hunk)
       local function emit(_, _, row, col, options)
         plan[#plan + 1] = { row = row - hunk.start_line, col = col, opts = options }
       end
-      local loading = Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, cached.layout, emit, checkpoint)
-      return { plan = plan, loading = loading, version = version, foreground = foreground }
+      local loading = Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, cached.layout, emit, checkpoint, context)
+      return { plan = plan, loading = loading, version = version, foreground = foreground, context = context }
     end, valid, function(ready, err)
       if not valid() then return end
       cached.background_job = nil
@@ -1108,7 +1149,9 @@ function M.is_pending(bufnr)
     if cached.preparing or cached.paint_job or cached.foreground_job or cached.background_job
       or cached.ready_background_revision ~= (cached.background_revision or 0)
       or cached.ready_version ~= (cached.preparation_version or 0)
-      or cached.version ~= syntax_word_diff.version(sources.old, sources.new) then return true end
+      or cached.version ~= comparison_version(cached) then return true end
+    local compared = comparison_sources(cached)
+    if compared.old and compared.old.jobs and compared.old.jobs[compared.new] then return true end
     local owner = sources.old or sources.new
     if owner then
       if owner.jobs and owner.jobs[sources.new or sources.old] then return true end
@@ -1247,7 +1290,7 @@ function M.attach(bufnr, opts)
           if cached.query ~= current_query(hunk.lang) or cached.settings ~= settings
             or cached.ready_background_revision ~= (cached.background_revision or 0)
             or cached.ready_version ~= (cached.preparation_version or 0)
-            or cached.version ~= syntax_word_diff.version(cached.sources.old, cached.sources.new) then stable = false end
+            or cached.version ~= comparison_version(cached) then stable = false end
         end
         if stable then
           conflict_marks = require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns) or {}
@@ -1296,7 +1339,7 @@ function M.attach(bufnr, opts)
         cached.source_starts = { old = hunk.old_start, new = hunk.new_start }
         local query = current_query(hunk.lang)
         local owner = cached.sources and (cached.sources.old or cached.sources.new)
-        local version = syntax_word_diff.version(cached.sources and cached.sources.old, cached.sources and cached.sources.new)
+        local version = comparison_version(cached)
         if cached.marks and live and not marks_at(cached.marks, hunk.start_line, live) then
           remove_marks(cached.marks)
           for _, mark in ipairs(cached.marks) do
@@ -1315,11 +1358,17 @@ function M.attach(bufnr, opts)
           cached.ready_version = cached.preparation_version or 0
           cached.ready_background_revision = cached.background_revision or 0
           owner = cached.sources and (cached.sources.old or cached.sources.new)
-          cached.version = syntax_word_diff.version(cached.sources.old, cached.sources.new)
+          cached.version = comparison_version(cached)
         end
         if owner then
           sources[owner] = sources[owner] or {}
           sources[owner][cached.sources.new or cached.sources.old] = true
+        end
+        local compared = comparison_sources(cached)
+        local full_owner = compared and (compared.old or compared.new)
+        if full_owner then
+          sources[full_owner] = sources[full_owner] or {}
+          sources[full_owner][compared.new or compared.old] = true
         end
         if live then for _, mark in ipairs(cached.marks) do kept[mark.id] = true end end
         if not hunk.lang and hunk.ft then Highlighter.apply_legacy(bufnr, hunk, legacy_regions) end

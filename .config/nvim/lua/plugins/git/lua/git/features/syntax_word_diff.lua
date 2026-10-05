@@ -121,6 +121,7 @@ local rules = {
   javascript = { atoms = { 'string', 'template_string', 'regex' }, angle = true,
     trailing = { 'object', 'object_pattern', 'array', 'array_pattern', 'arguments', 'formal_parameters', 'named_imports' } },
   python = { atoms = { 'string' }, trailing = { 'dictionary', 'list', 'set', 'argument_list', 'parameters' } },
+  php = { atoms = { 'string', 'encapsed_string' }, text_atoms = { 'text' } },
   yaml = { atoms = { 'string_scalar', 'double_quote_scalar', 'single_quote_scalar', 'block_scalar' } },
   bash = { atoms = { 'string', 'raw_string', 'heredoc_body', 'simple_expansion' } },
   c = { atoms = { 'string_literal', 'char_literal' } },
@@ -162,12 +163,13 @@ local function syntax_tree(source, checkpoint)
     local kind, text = node:type(), source.code:sub(first + 1, last)
     if text == '' or kind == '\n' then return nil end
     local comment = kind:find('comment', 1, true) ~= nil
-    local atom = vim.list_contains(rule.atoms or {}, kind)
+    local text_atom = vim.list_contains(rule.text_atoms or {}, kind)
+    local atom = text_atom or vim.list_contains(rule.atoms or {}, kind)
       or not rules[source.lang] and (kind:find('string', 1, true) or kind:find('scalar', 1, true))
     if atom or comment or node:child_count() == 0 then
       if text:sub(-1) == '\n' then text, last = text:sub(1, -2), last - 1 end
       return { first = first, last = last, text = text,
-        kind = comment and 'comment' or atom and (source.lang == 'markdown' and 'text' or 'string') or 'normal' }
+        kind = comment and 'comment' or atom and ((text_atom or source.lang == 'markdown') and 'text' or 'string') or 'normal' }
     end
     local nodes, opening, closing = {}, nil, nil
     for child in node:iter_children() do nodes[#nodes + 1] = child end
