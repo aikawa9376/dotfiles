@@ -207,9 +207,14 @@ vim.api.nvim_feedkeys(' ', 'xt', false)
 assert(vim.wait(10000, function() return #collection.patch(ui) > 0 end, 5))
 local syntax_ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
 local function preview_adds()
-  local rows = {}
+  assert(vim.wait(10000, function()
+    return not require('git.features.syntax_highlight').is_pending(ui.right)
+  end, 1), 'collected preview highlighting did not finish')
+  local rows, seen = {}, {}
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(ui.right, syntax_ns, 0, -1, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtAdd' then rows[#rows + 1] = mark[2] + 1 end
+    if (mark[4].hl_group == 'FugitiveExtAdd' or mark[4].hl_group == 'FugitiveExtAddText') and not seen[mark[2]] then
+      rows[#rows + 1], seen[mark[2]] = mark[2] + 1, true
+    end
   end
   return rows
 end
@@ -228,11 +233,11 @@ vim.treesitter.language.inspect = function(lang)
   return inspect_language(lang)
 end
 require('git.features.syntax_highlight').refresh(ui.right)
-vim.treesitter.language.inspect = inspect_language
 local code_highlight = vim.api.nvim_buf_call(ui.right, function()
   return vim.fn.synIDattr(vim.fn.synID(preview_adds()[1], 2, 1), 'name')
 end)
 assert(code_highlight:match('^lua'), 'collected preview lost Lua syntax: ' .. code_highlight)
+vim.treesitter.language.inspect = inspect_language
 -- Draft text that resembles a patch remains editable prose, even after resize.
 vim.api.nvim_buf_set_lines(ui.right, 3, 4, false, { 'diff --git a/draft b/draft', '@@ -0,0 +1 @@', '+draft' })
 collection.collect(ui, selected_row, selected_row)

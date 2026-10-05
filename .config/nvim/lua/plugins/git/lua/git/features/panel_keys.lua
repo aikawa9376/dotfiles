@@ -234,6 +234,12 @@ function M.configure(buf, opts)
   end
   move('<Leader>cf', nil, 'history', 'Fixup selected commit into its parent')
   move('<Leader>wd', nil, 'display', 'Cycle word-diff style')
+  if panel == 'status' or panel == 'commit' then
+    state.display[#state.display + 1] = { label = 'Toggle diff foreground colors', callback = function()
+      local value = require('git.features.syntax_highlight').toggle_changed_fg()
+      vim.notify('Diff foreground: ' .. value, vim.log.levels.INFO)
+    end }
+  end
   local old_copy = mapping(buf, '<C-y>', 'x')
   if old_copy.buffer == 1 and old_copy.callback then
     bind(buf, 'gy', old_copy.callback, 'Copy selected commit hashes', 'x')

@@ -9,19 +9,24 @@ end
 local syntax = require('git.features.syntax_highlight')
 local tokens = require('git.features.syntax_word_diff')
 local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
-local function open(name, before, after, context)
-  local lines = { 'M ' .. name, '@@ -1 +1 @@' }
+local function settle(buf)
+  assert(vim.wait(10000, function() return not syntax.is_pending(buf) end, 1), 'highlight preparation did not finish')
+end
+local function open(name, before, after, context, opts)
+  local lines = { 'M ' .. name, ('@@ -%d +%d @@'):format(opts and opts.old_start or 1, opts and opts.new_start or 1) }
   for _, line in ipairs(context or {}) do lines[#lines + 1] = ' ' .. line end
   for _, line in ipairs(before) do lines[#lines + 1] = '-' .. line end
   for _, line in ipairs(after) do lines[#lines + 1] = '+' .. line end
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  syntax.attach(buf)
+  syntax.attach(buf, opts)
+  settle(buf)
   return buf
 end
-local function words(buf, side)
+local function words(buf, side, strong)
   local found = {}
-  local group = side == 'old' and 'FugitiveExtDeleteText' or 'FugitiveExtAddText'
+  local group = side == 'old' and 'FugitiveExtDelete' or 'FugitiveExtAdd'
+  if strong ~= false then group = group .. 'Text' end
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
     if mark[4].hl_group == group then
       local line = vim.api.nvim_buf_get_lines(buf, mark[2], mark[2] + 1, false)[1]
@@ -31,15 +36,20 @@ local function words(buf, side)
   table.sort(found)
   return table.concat(found, '|')
 end
-local function expect(name, before, after, old, new)
+local function expect(name, before, after, old, new, strong)
   local buf = open(name, before, after)
-  assert(words(buf, 'old') == old, name .. ' old: ' .. words(buf, 'old'))
-  assert(words(buf, 'new') == new, name .. ' new: ' .. words(buf, 'new'))
+  assert(words(buf, 'old', strong) == old, name .. ' old: ' .. words(buf, 'old', strong))
+  assert(words(buf, 'new', strong) == new, name .. ' new: ' .. words(buf, 'new', strong))
+  if strong == false then
+    assert(words(buf, 'old') == '' and words(buf, 'new') == '', name .. ': text fallback acquired strong accents')
+  end
   vim.api.nvim_buf_delete(buf, { force = true })
 end
 
--- Delta's textual path is the default; structural matching is opt-in.
-assert(syntax.config.word_diff_style == 'delta', 'delta is no longer the default')
+-- Treesitter is selected for trying the structural renderer. The delta path
+-- remains independent of structural comparison when explicitly selected.
+assert(syntax.config.word_diff_style == 'treesitter', 'treesitter is no longer the default')
+syntax.config.word_diff_style = 'delta'
 local compare = tokens.compare
 tokens.compare = function() error('delta called structural word comparison') end
 expect('default.lua', { 'return 1' }, { 'return 2' }, '1', '2')
@@ -51,6 +61,7 @@ vim.api.nvim_buf_set_lines(eof, 0, -1, false, {
   '+return 2', '\\ No newline at end of file',
 })
 syntax.attach(eof)
+settle(eof)
 assert(words(eof, 'old') == '1' and words(eof, 'new') == '2', 'EOF markers shifted word ranges')
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(eof, ns, 0, -1, { details = true })) do
   assert(mark[2] ~= 3 and mark[2] ~= 5, 'EOF marker received a source highlight')
@@ -61,87 +72,114 @@ for _, style in ipairs({ 'treesitter', 'github', 'diffs', 'delta' }) do
 end
 syntax.config.word_diff_style = 'treesitter'
 
--- Unpaired statements remain additions/deletions inside a mixed block.
-local replaced = { '  flush_groups()', '', '  -- 3. Syntax Highlighting (Treesitter)' }
-local replacement = vim.split([=[  local sources = {}
-  if M.config.word_diff_style == 'treesitter' then
-    for _, side in ipairs({ 'old', 'new' }) do sources[side] = syntax_word_diff.parse(code[side], hunk.lang) end
-    Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, maps, inverse)
-  elseif M.config.word_diff_style == 'diffs' then
-    Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
-  else
-    -- Sequential GitHub pairing retains the existing textual word comparison.
-    for _, group in ipairs(Utils.extract_change_groups(hunk.lines)) do
-      local old, new, old_rows, new_rows = {}, {}, {}, {}
-      for _, line in ipairs(group.del_lines) do
-        old[#old + 1], old_rows[#old_rows + 1] = line.text, hunk.start_line + line.idx - 1
-      end
-      for _, line in ipairs(group.add_lines) do
-        new[#new + 1], new_rows[#new_rows + 1] = line.text, hunk.start_line + line.idx - 1
-      end
-      Highlighter.apply_word_diffs(bufnr, ns, old, new, old_rows, new_rows)
-    end
-  end]=], '\n', { plain = true })
-expect('replacement.lua', replaced, replacement, '', '')
-expect('replacement_reverse.lua', replacement, replaced, '', '')
-expect('mixed_replacement.lua', vim.list_extend({ 'keep(old_argument)' }, replaced),
-  vim.list_extend({ 'keep(new_argument)' }, replacement), 'old_argument', 'new_argument')
-expect('whole_line.lua', { 'old_call(old_argument)' }, { 'new_call(new_argument)' },
-  'old_argument|old_call', 'new_argument|new_call')
-expect('whole_identifier.lua', { 'very_long_old_function_name()' }, { 'very_long_new_function_name()' },
-  'very_long_old_function_name', 'very_long_new_function_name')
-expect('changed_argument.lua', { 'foo(', '  old_argument', ')' },
-  { 'foo(', '  new_argument', ')' }, 'old_argument', 'new_argument')
-expect('changed_split_argument.lua', { 'foo(old_argument)' },
-  { 'foo(', '  new_argument', ')' }, 'old_argument', 'new_argument')
-expect('inline_argument.lua', { 'foo(a, b)' }, { 'foo(a, b, c)' }, '', ', c')
-expect('new_statement.lua', { 'foo(a)' }, { 'foo(b)', 'entirely_new(statement)' }, 'a', 'b')
-expect('removed_statement.lua', { 'foo(a)', 'entirely_removed(statement)' }, { 'foo(b)' }, 'a', 'b')
-expect('return.lua', { 'return 1' }, { 'return 2' }, '1', '2')
-expect('new_nested.lua', { 'if flag then', '  foo(a)', 'end' },
-  { 'if flag then', '  foo(b)', '  entirely_new(statement)', 'end' }, 'a', 'b')
-expect('new_property.json', { '{"keep": "old"}' }, { '{', '"keep": "new",', '"added": "novel"', '}' }, 'old', ',|new')
+-- Structural backgrounds never extend into indentation or past EOL. Both
+-- prefix overlays preserve the underlying Git patch for navigation/staging.
+local buf = open('markers.lua', { '  return old_value' }, { '  return new_value' })
+local prefix_count, backgrounds = 0, 0
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+  local details = mark[4]
+  if details.virt_text then
+    assert(details.virt_text[1][1] == '▏', 'treesitter lost its gutter marker')
+    assert(details.virt_text[1][2] == (mark[2] == 2 and 'FugitiveExtDeletePrefix' or 'FugitiveExtAddPrefix'))
+    prefix_count = prefix_count + 1
+  elseif details.hl_group == 'FugitiveExtAdd' or details.hl_group == 'FugitiveExtDelete' then
+    assert(not details.hl_eol and details.end_row == mark[2], 'structural background extended past its source span')
+    local line = vim.api.nvim_buf_get_lines(buf, mark[2], mark[2] + 1, false)[1]
+    assert(line:sub(mark[3] + 1, details.end_col):match('^%a+_value$'), 'unchanged code received a background')
+    backgrounds = backgrounds + 1
+  end
+end
+assert(prefix_count == 2 and backgrounds == 2)
+assert(vim.api.nvim_buf_get_lines(buf, 2, 4, false)[1] == '-  return old_value', 'marker rewrote the actionable patch')
+assert(vim.api.nvim_get_hl(0, { name = 'FugitiveExtAddPrefix', link = true }).link == 'GitSignsAdd')
+assert(vim.api.nvim_get_hl(0, { name = 'FugitiveExtDeletePrefix', link = true }).link == 'GitSignsDelete')
+vim.api.nvim_buf_delete(buf, { force = true })
 
--- Layout changes do not replace identifiers or punctuation that still exist.
-expect('call.lua', { 'foo(a, b)' }, { 'foo(', '  a,', '  b,', '  c', ')' }, '', ',')
-expect('join.lua', { 'foo(', '  a,', '  b,', '  c', ')' }, { 'foo(a, b)' }, ',', '')
-expect('layout.lua', { 'foo(a, b)' }, { 'foo(', '  a,', '  b', ')' }, '', '')
-expect('indent.lua', { 'foo(a, b)' }, { '  foo(a, b)' }, '', '')
-expect('blank.lua', { '' }, { '  ' }, '', '')
-expect('partial.lua', { 'function f()', '  foo(a, b)' }, { 'function f()', '  foo(', '    a,', '    b', '  )' }, '', '')
-expect('attach.lua', { 'syntax_highlight.attach(b)', 'end' },
-  { 'syntax_highlight.attach(b, { diff_source = function(hunk)',
-    '  return status_renderer.highlight_source(b, hunk.start_line)', 'end })', 'end' }, '',
-  ', { diff_source = function(hunk)|end }')
--- Changed operators are atomic syntax tokens; identifiers stay whole in UTF-8.
-expect('operator.lua', { 'return a == b' }, { 'return a ~= b' }, '==', '~=')
-expect('unicode.js', { 'const 日本語 = 1;' }, { 'const 日本人 = 1;' }, '日本語', '日本人')
-expect('quoted.lua', { 'local s = "the old stale word"' }, { 'local s = "the new fresh word"' },
-  'old stale', 'new fresh')
-expect('comment.lua', { '-- the old stale word' }, { '-- the new fresh word' }, 'old stale', 'new fresh')
-expect('literal_space.lua', { 'local s = "a b"' }, { 'local s = "a  b"' }, ' ', '  ')
--- Literal words must not become anchors for identifiers or property keys.
-expect('roles.lua', { 'local value = "target"' }, { 'local target = "value"' },
-  'target|value', 'target|value')
-expect('json.json', { '{"item": "old", "keep": 1}' }, { '{', '  "item": "new",', '  "keep": 1', '}' }, 'old', 'new')
-expect('key.json', { '{"old key": 1}' }, { '{"new key": 1}' }, 'old', 'new')
-expect('roles.json', { '{"left": "right"}' }, { '{"right": "left"}' }, 'left|right', 'left|right')
-expect('indent.py', { 'if flag:', '    first()', 'second()' },
-  { 'if flag:', '    first()', '    second()' }, '', '    ')
-expect('layout.py', { 'foo(a, b)' }, { 'foo(', '    a,', '    b', ')' }, '', '')
-expect('compound.py', { 'if a is not b: pass' }, { 'if a is   not b: pass' }, '', '')
-if pcall(vim.treesitter.language.inspect, 'yaml') then
-  expect('indent.yml', { 'parent:', '  child: one', 'sibling: two' },
-    { 'parent:', '  child: one', '  sibling: two' }, '', '  ')
-  expect('flow.yml', { 'items: [one, two]' }, { 'items: [', '  one,', '  two', ']' }, '', '')
-  expect('block.yml', { 'message: |', '  the old word' }, { 'message: |', '  the new word' }, 'old', 'new')
+-- Read actual surrounding source for incomplete hunk headers. It must supply
+-- real captures, with no omitted source rows projected onto the patch.
+for _, case in ipairs({
+  { 'fragment.lua', 'function Utils.group(x)', 'function Utils.group(x, y)', '@keyword.function.lua', 1, 9 },
+  { 'fragment.json', '  "first-key": {"commit": "old"},', '  "first-key": {"commit": "new"},', '@property.json', 3, 14 },
+}) do
+  local json = case[1]:match('json$') ~= nil
+  local function full(line)
+    return json and '{\n' .. line .. '\n  "following": {}\n}\n' or line .. '\nend\n'
+  end
+  buf = open(case[1], { case[2] }, { case[3] }, nil, {
+    old_start = json and 2 or 1, new_start = json and 2 or 1,
+    diff_source = function() return { old = { text = full(case[2]) }, new = { text = full(case[3]) } } end,
+  })
+  local seen = {}
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+    if mark[4].hl_group == case[4] and mark[3] == case[5] and mark[4].end_col == case[6] then
+      seen[mark[2]] = true
+    end
+    if (mark[4].hl_group or ''):match('^@') then
+      assert(mark[2] == 2 or mark[2] == 3, 'omitted source escaped onto a patch/header row')
+    end
+  end
+  assert(seen[2] and seen[3], case[1] .. ': incomplete fragment lost its leading syntax color')
+  vim.api.nvim_buf_delete(buf, { force = true })
 end
-if pcall(vim.treesitter.language.inspect, 'markdown') then
-  expect('reflow.md', { 'The old value stays.' }, { 'The new value', 'stays.' }, 'old', 'new')
+
+-- Only detected changes receive native diff foregrounds. Switching back to
+-- syntax colors reuses parses/comparisons and removes the extra color marks.
+assert(syntax.config.changed_fg == 'syntax', 'diff foreground must be opt-in')
+assert(syntax.toggle_changed_fg() == 'difft')
+buf = open('changed_colors.lua', { 'function Colors.group(x)' }, { 'function Colors.group(x, y)' })
+local colored = false
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+  if mark[4].hl_group == 'FugitiveExtNovelAdd' then
+    assert(mark[3] > #'function Colors.group(x', 'unchanged declaration got a diff foreground')
+    colored = true
+  end
 end
+assert(colored, 'detected addition has no native diff foreground')
+local get_parser, compare_colors = vim.treesitter.get_string_parser, tokens.compare
+vim.treesitter.get_string_parser = function() error('foreground switch reparsed source') end
+tokens.compare = function() error('foreground switch recomputed comparison') end
+assert(syntax.toggle_changed_fg() == 'syntax')
+settle(buf)
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+  assert(not (mark[4].hl_group or ''):match('^FugitiveExtNovel'), 'syntax mode retained a native diff foreground')
+end
+vim.treesitter.get_string_parser, tokens.compare = get_parser, compare_colors
+syntax.config.changed_fg = 'syntax'
+vim.api.nvim_buf_delete(buf, { force = true })
+
+-- Identical text can be a string in one place and code in another. Changing
+-- just the source coordinates must invalidate captures, not the parsed tree.
+local roles_code = 'local text = [[\nfunction Hidden()\n]]\nfunction Hidden()\n  return 1\nend\n'
+buf = open('roles.lua', {}, { 'function Hidden()' }, nil, { new_start = 2,
+  diff_source = function() return { old = { text = '' }, new = {
+    text = roles_code,
+  } } end,
+})
+local function role(group)
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+    if mark[2] == 2 and mark[4].hl_group == group then return true end
+  end
+  return false
+end
+assert(role('@string.lua') and not role('@keyword.function.lua'), 'source context mistook a string for code')
+vim.api.nvim_buf_set_lines(buf, 1, 2, false, { '@@ -0,0 +4 @@' })
+syntax.refresh(buf); settle(buf)
+assert(role('@keyword.function.lua') and not role('@string.lua'), 'identical hunk text reused the wrong source coordinates')
+roles_code = 'local text = [[\nfunction Hidden()\n]]\n-- function Hidden()\n  return 1\n'
+syntax.refresh(buf); settle(buf)
+assert(not role('@comment.lua'), 'mismatched source text lent a stale patch its comment color')
+vim.api.nvim_buf_delete(buf, { force = true })
+
+-- Formatting-only changes have markers without colored syntax backgrounds.
+buf = open('layout.lua', { 'foo(a, b)' }, { 'foo(', '  a,', '  b', ')' })
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+  assert(not (mark[4].hl_group or ''):match('^FugitiveExt[AD]'), 'layout-only edit acquired a background')
+  assert(not (mark[4].hl_group or ''):match('^FugitiveExtNovel'), 'layout-only edit acquired a diff foreground')
+end
+vim.api.nvim_buf_delete(buf, { force = true })
 
 -- Syntax captures are clipped to each row, across interleaved old/new lines.
-local buf = open('multiline.lua', { 'local s = [[', 'old word', ']]' }, { 'local s = [[', 'new word', ']]' })
+buf = open('multiline.lua', { 'local s = [[', 'old word', ']]' }, { 'local s = [[', 'new word', ']]' })
 assert(words(buf, 'old') == 'old' and words(buf, 'new') == 'new')
 local captured = {}
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
@@ -159,6 +197,7 @@ buf = vim.api.nvim_create_buf(false, true)
 vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'M context.lua', '@@ -1,3 +1,2 @@',
   '-local s = [[', '+local s = ""', ' -- actual comment', '-]]' })
 syntax.attach(buf)
+settle(buf)
 local comment = false
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
   if mark[2] == 4 then
@@ -169,31 +208,49 @@ end
 assert(comment, 'shared context lost the new comment role')
 vim.api.nvim_buf_delete(buf, { force = true })
 
--- Isolated additions/deletions and context separators remain ordinary lines.
+-- Isolated additions/deletions receive syntax backgrounds without word emphasis.
 for _, before_after in ipairs({ { {}, { 'local x = 1' } }, { { 'local x = 1' }, {} } }) do
   buf = open('pure.lua', before_after[1], before_after[2])
   assert(words(buf, 'old') == '' and words(buf, 'new') == '', 'one-sided file got word emphasis')
+  local painted = false
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+    if mark[4].hl_group == 'FugitiveExtAdd' or mark[4].hl_group == 'FugitiveExtDelete' then
+      painted = true
+      assert(mark[3] > 0 and not mark[4].hl_eol, 'one-sided edit colored its entire row')
+    end
+  end
+  assert(painted, 'one-sided file has no syntax backgrounds')
   vim.api.nvim_buf_delete(buf, { force = true })
 end
 buf = vim.api.nvim_create_buf(false, true)
 vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'M groups.lua', '@@ -1,3 +1,4 @@', '-foo(a)', '+foo(b)',
   ' separator()', '+inserted()', ' last()' })
 syntax.attach(buf)
-assert(words(buf, 'old') == 'a' and words(buf, 'new') == 'b', 'context did not isolate addition-only group')
+settle(buf)
+local changed, context_bg = {}, false
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+  if mark[4].hl_group == 'FugitiveExtAdd' or mark[4].hl_group == 'FugitiveExtDelete' then
+    changed[mark[2]] = true
+    context_bg = context_bg or mark[2] == 4 or mark[2] == 6
+  end
+end
+assert(changed[2] and changed[3] and changed[5] and not context_bg, 'context/adjoining insertion projection failed')
 vim.api.nvim_buf_delete(buf, { force = true })
 
 -- Existing textual fallback and other styles remain available.
-expect('README.md', { 'The old value stays.' }, { 'The new value stays.' }, 'old', 'new')
+expect('README.md', { 'The old value stays.' }, { 'The new value stays.' }, 'old', 'new', false)
 local get_parser = vim.treesitter.get_string_parser
 vim.treesitter.get_string_parser = function() error('parser unavailable') end
-expect('missing.lua', { 'different(1)' }, { 'different(2)' }, '1', '2')
+expect('missing.lua', { 'different(1)' }, { 'different(2)' }, '1', '2', false)
 expect('missing_whole.lua', { 'parser_unavailable_before()' }, { 'parser_unavailable_after()' },
-  '', '')
+  'parser_unavailable_before', 'parser_unavailable_after', false)
+expect('missing_added.lua', {}, { 'added(1)' }, '', 'added(1)', false)
+expect('missing_deleted.lua', { 'removed(1)' }, {}, 'removed(1)', '', false)
 vim.treesitter.get_string_parser = get_parser
-assert(not tokens.compare(tokens.parse({ '@@@' }, 'lua'), tokens.parse({ '???' }, 'lua'), { 1 }, { 1 }),
+assert(not tokens.compare(tokens.parse({ '@@@' }, 'lua'), tokens.parse({ '???' }, 'lua')),
   'wholly erroneous fragments acquired structural roles')
 assert(not tokens.compare(tokens.parse({ '-- valid context', '@@@' }, 'lua'),
-  tokens.parse({ '-- valid context', '???' }, 'lua'), { 2 }, { 2 }),
+  tokens.parse({ '-- valid context', '???' }, 'lua')),
   'valid context enabled structural comparison for an erroneous change group')
 for _, style in ipairs({ 'delta', 'github', 'diffs' }) do
   syntax.config.word_diff_style = style
@@ -206,8 +263,10 @@ buf = open('styles.lua', { 'foo(a, b)' }, { 'foo(', '  a,', '  b', ')' })
 assert(words(buf, 'old') == '' and words(buf, 'new') == '')
 syntax.config.word_diff_style = 'delta'
 syntax.refresh_all()
+settle(buf)
 assert(words(buf, 'old') ~= '' or words(buf, 'new') ~= '', 'delta did not restore line pairing')
 assert(syntax.cycle_word_diff_style() == 'treesitter')
+settle(buf)
 assert(words(buf, 'old') == '' and words(buf, 'new') == '', 'treesitter cycle did not repaint')
 vim.api.nvim_buf_delete(buf, { force = true })
 
@@ -225,16 +284,41 @@ assert(parses == 2, 'warm refresh reparsed unchanged fragments')
 print(string.format('PERF: 50 cached repaints %.1f ms, no new parses', (vim.uv.hrtime() - start) / 1e6))
 vim.treesitter.query.set('lua', 'highlights', '(identifier) @constant')
 syntax.refresh(buf)
+settle(buf)
 local changed_query = false
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
   if mark[4].hl_group == '@constant.lua' then changed_query = true end
 end
 assert(changed_query and parses == 2, 'cached tree ignored query changes or reparsed unnecessarily')
 vim.treesitter.query.set('lua', 'highlights', nil)
+-- Parser availability can change without an edit; retained hunks must still
+-- switch to legacy syntax and restore their Tree-sitter colors on recovery.
+local function has_syntax_marks()
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
+    if (mark[4].hl_group or ''):match('^@') then return true end
+  end
+  return false
+end
+local inspect = vim.treesitter.language.inspect
+vim.treesitter.language.inspect = function(lang)
+  if lang == 'lua' then error('parser temporarily unavailable') end
+  return inspect(lang)
+end
+syntax.refresh(buf)
+settle(buf)
+assert(not has_syntax_marks(), 'unchanged view retained unavailable parser colors')
+vim.treesitter.language.inspect = inspect
+syntax.refresh(buf)
+settle(buf)
+assert(has_syntax_marks() and parses == 2, 'parser recovery lost cached syntax or reparsed')
 for i = 1, 17 do tokens.parse({ 'eviction_' .. i .. '()' }, 'lua') end
 local before_eviction = parses
 syntax.refresh(buf)
-assert(parses == before_eviction + 2, 'bounded cache retained evicted sources')
+settle(buf)
+assert(parses == before_eviction, 'an open view lost its resident parses after shared-cache eviction')
 vim.api.nvim_buf_delete(buf, { force = true })
+local evicted = tokens.parse({ 'shared_cache_eviction()' }, 'lua')
+for i = 1, 17 do tokens.parse({ 'another_eviction_' .. i .. '()' }, 'lua') end
+assert(tokens.parse({ 'shared_cache_eviction()' }, 'lua') ~= evicted, 'shared cache is no longer bounded')
 vim.treesitter.get_string_parser = get_parser
-print('PASS: block split/join/layout, syntax tokens, Unicode, literal roles, strings/comments, source byte mapping, syntax projection, fallbacks and caching')
+print('PASS: token-only backgrounds, colored patch overlays, literal emphasis, syntax projection, fallbacks, switching and caching')

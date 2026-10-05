@@ -410,12 +410,12 @@ compatible with the surrounding dotfiles; they do not require Fugitive code.
 
 ## Commit details
 
-Status and Commit default to the `delta` word-diff style. In `gD` (Display
+Status and Commit default to the `treesitter` word-diff style. In `gD` (Display
 settings), choose “Cycle word-diff style” to cycle through `diffs`, `delta`,
 `treesitter`, and `github`. These styles compute changes inside Neovim; no `delta`
 or `difft` executable is required. The former `lazygit` setting is now named
 `delta`, matching the renderer configured in this repository's LazyGit settings.
-Its Lua comparator follows delta 0.19.2's default word alignment: Unicode words,
+The `delta` comparator follows delta 0.19.2's default word alignment: Unicode words,
 grapheme-separated punctuation, forward line matching at a distance threshold of
 0.6, and the same edit-group and whitespace rules. Tabs expand to eight spaces for
 comparison while highlights retain original byte positions. Delta's default
@@ -425,28 +425,97 @@ Repeated comparisons reuse a bounded cache. This reproduces default word emphasi
 custom delta options, whitespace-error decoration and long-line truncation are
 not applied. Code colors and muted line/word backgrounds remain those of this UI.
 
-With a Tree-sitter parser, `treesitter` style
-compares syntax tokens across each replacement block, preserving common tokens
-when lines are split or joined.
-Identifiers and operators use syntax boundaries; strings, comments and prose use
-word boundaries. Literal content is kept separate from code when finding common
-tokens. Formatting whitespace gets no word emphasis, except literal whitespace
-and statement indentation in Python/YAML. Corresponding statements and properties
-are compared locally, so a shared closing bracket in another statement cannot
-make an unrelated addition look like a word edit. Statements without a counterpart
-keep the ordinary line background. Within corresponding statements, changed
-tokens receive stronger word backgrounds even when every word on a row changes.
-Pure insertions/deletions occupying their own rows use the ordinary background;
-an argument or callback added to a partly retained row can still receive word
-emphasis. This distinguishes a replaced argument row from an entirely new one.
-Addition-only or deletion-only groups also keep the ordinary line background
-without word emphasis.
-When no parser or usable syntax fragment is available, `treesitter` falls back to
-the `delta` comparator. `github` keeps ordinal
-line pairing, and `diffs` keeps its character comparison.
-In all word-diff styles, code colors use Tree-sitter when a parser is available,
-with Vim syntax as the fallback. The `+`/`-` prefixes are visually hidden with a
-space overlay; the underlying patch text remains intact.
+With a Tree-sitter parser, `treesitter` style converts syntax into atoms and
+lists with paired opening/closing delimiters, then finds a lowest-cost matching
+path using Difftastic 0.71.0's cost rules. Unchanged identifiers and delimiters
+survive line splitting/joining; added arguments, statements and one-sided files
+receive backgrounds on their syntax spans. Syntax foreground colors remain
+those of the current theme. Formatting whitespace outside syntax is uncolored.
+Changed strings/comments use a muted background for the changed atom and a
+stronger background for changed words inside it when enough common words remain,
+following the reference's two levels of coloring. Unrelated comment replacements
+remain wholly muted. Adjacent spans bridge whitespace without crossing unchanged
+code or extending to the end of the screen row.
+
+Only `treesitter` uses a green/red left-aligned `▏` overlay in place of `+`/`-`, linked to
+`GitSignsAdd`/`GitSignsDelete`. Other styles retain their space overlay.
+Underlying patch bytes are preserved for navigation, staging and selections.
+There is no whole-line addition/deletion background in this style: unchanged
+code keeps the normal background, including the retained side of a deletion.
+Source text has the Normal foreground below syntax captures, so incomplete
+hunks with no capture for a leading key/keyword cannot inherit red/green diff
+foregrounds. Theme changes update that foreground without changing backgrounds.
+Status and Commit coloring asynchronously reads complete old/new files instead
+of guessing missing braces or function bodies. Status records immutable HEAD
+and index blob IDs from porcelain v2 and reads the worktree for unstaged changes;
+Commit reads the selected parent and commit, honoring renamed paths. Queries
+cover only displayed source intervals, projected through the hunk's original
+old/new line numbers. Identical hunk text at different source coordinates has
+independent captures: the same text can be code in one place and a string in
+another. Every projected row must match the displayed patch, so stale files or
+filter-transformed content cannot supply unrelated colors. The comparison
+source pair remains hunk-local. Missing source metadata, conflict views, read
+failures and oversized/binary files keep available hunk captures, with Normal
+for uncovered bytes.
+Without a parser, the included Vim syntax has a Normal parent region; its
+keywords/strings keep their own colors instead of being covered by that base.
+When a hunk has parse errors or exceeds comparison limits, individual change
+blocks are retried structurally. Lua declaration-only blocks receive a temporary
+empty body for comparing parameters. Blocks that still cannot be compared, or
+lack a parser, use the reference's local Histogram text matching; only changed
+word ranges receive backgrounds, with whole-line text tints omitted.
+Markdown uses Text comparison, matching Difftastic; Tree-sitter still supplies
+its syntax colors. This also preserves fenced-block prose, whose bytes are not
+fully covered by Markdown block-node children.
+Text matching and its word-limit fallback always use muted backgrounds. Strong
+backgrounds are reserved for changed words inside structurally matched
+strings/comments/text. Native underline marks those inner word changes; native
+bold also styles ordinary keywords/types/delimiters and does not denote moves.
+Syntax styling stays with the current theme rather than becoming strong diff
+backgrounds. Native text matching skips individual words when either side of
+a changed section exceeds 1,000 split elements (words, spaces and punctuation);
+that section then receives muted content spans here. Long structural literals
+have no such word-count cutoff: common character prefixes/suffixes reduce exact
+similarity work before Histogram word matching.
+`github` retains ordinal line pairing; `diffs` retains character comparison. All styles use Tree-sitter
+code colors when available, with Vim syntax as the fallback.
+
+Diff foreground colors are optional and off by default:
+`syntax_highlight.config.changed_fg = 'syntax'` keeps syntax colors within changes.
+In `gD` (Display settings), “Toggle diff foreground colors” switches between
+`syntax` and `difft` for `treesitter` style. With `difft`, detected spans use the
+theme's terminal red/green palette, matching
+Difftastic's ANSI bright red/green (9/10) on dark backgrounds and ordinary
+red/green (1/2) on light backgrounds. Unchanged spans retain syntax colors.
+Background strength and gutter colors remain independent. Switching reuses
+parsed trees and comparisons. The same setting can be enabled directly:
+
+```vim
+:lua local s = require('git.features.syntax_highlight'); s.config.changed_fg = 'difft'; s.refresh_all()
+```
+
+Set `changed_fg` back to `syntax` in the same command to restore the default.
+
+`tests/difftastic_word_diff.lua` compares both background levels against 153
+checked-in cases captured from the installed Difftastic 0.71.0, covering calls,
+wrapping, paired delimiters, added/removed syntax, strings/comments, Unicode,
+JSON, Python, YAML, layout changes and a 100-line file with repeated edits.
+Of these, 132 compare structural results and 21 compare text matching, including
+parse-error fallback, repeated-word alignment, long literals/comments, inputs
+over the former 128 KiB limit, and the exact 1,000-element boundary. Text cases
+also check the deliberately muted rendering policy. Four reported examples are
+also projected onto actual patches, checking both background levels and cache
+reuse on refresh. `tests/generate_difftastic_fixtures.py`
+regenerates token spans from JSON and changed-word emphasis from inline ANSI.
+Tests normalize this UI's whitespace bridges and clip native EOF positions.
+`tests/syntax_word_diff.lua` checks rendering, patch overlays, syntax projection,
+style switching, text fallback and cache lifetime.
+`python tests/syntax_word_diff_ui.py` checks cold/ready foreground composition
+in a real TUI, including the leading JSON key, declaration-only function and
+mixed-context multiline declaration, Markdown license prose and Vim fallback.
+Pass `nordfox` to repeat with this repository's theme settings.
+`tests/syntax_source_context.lua` exercises actual staged/unstaged/renamed Commit
+sources, shared reads across disjoint hunks, warm caches and canceled-read reopen.
 
 `tests/delta_word_diff.lua` compares exact source byte ranges with checked-in
 fixtures captured from delta 0.19.2. Run it with
@@ -456,12 +525,68 @@ version of delta installed. Unicode 16 word/grapheme tables and their pinned
 source URLs are maintained by `tests/generate_delta_unicode.py`; upstream notices
 are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-In `treesitter` style, syntax and word comparison share a parsed old/new hunk;
-a bounded cache reuses unchanged fragments on redraw. Parsing remains hunk-based,
-so code whose string or comment opener lies outside the hunk may lack that context.
-Complete syntax children inside incomplete hunks can still supply token boundaries; untrusted
-regions use text boundaries. This does not perform a complete AST comparison or
-require full-file Git/blob reads.
+In `treesitter` style, comparison retains the parsed old/new hunk, while coloring
+uses complete source context when available. Both use the same asynchronous
+parser and 16-entry cache for sources up to 1,000,000 bytes; open buffers also
+retain their current hunk parses, comparison results and highlight plans, so
+shared-cache eviction does not force open views to recompute. Unchanged buffers
+skip rebuilding hunks/marks. On edits, changed hunks, coloring source identities
+or coordinates, and query/style settings regenerate relevant highlights; intact marks move with their raw patch rows,
+and cached plans restore them after buffer reconstruction. Closed hunks/buffers
+release their resident results.
+
+Complete coloring sources use `highlight_sources` sessions per attached view:
+up to two asynchronous file requests run at once, identical pending requests
+share listeners, and eight completed source pairs are retained. Inputs are
+checked against the 1,000,000-byte parsing bound and binary content is rejected.
+Immutable blob identities avoid rereading unrelated files when the index changes.
+Worktree fingerprints reject changes during reads. Closing a hunk releases its
+listener; a remaining listener keeps the shared read alive. Closing the view
+terminates Git jobs and closes file reads. Reopening cannot join a killed job,
+and late callbacks cannot publish closed-view results.
+
+Cold hunks first display their gutters and normal source foreground with an
+animated loading icon. A shared 100 ms timer updates only pending icons; it
+does not refresh hunks or restart analysis, and stops when no icons remain.
+Neovim's asynchronous parser API splits parsing into
+short steps; pending identical sources share a job. Highlight queries run in
+cooperative 3 ms slices and cache their source-coordinate captures. Dense
+background/syntax mark plans also paint in batches, allowing editor callbacks
+between them; relative plans follow moved rows and cancel when invalidated.
+Background range construction yields between groups/rows as well. Foreground
+painting has an independent lifetime, so partial background results cannot
+restart it. Existing marks are reused by their relative span/style; completing
+a comparison updates changed backgrounds without rebuilding syntax marks.
+Namespace-wide mark details are read only after buffer edits, not on background
+job completion. Hunk layouts and provisional text spans remain cached.
+Neither parsing nor structural search starts inline on a cold attach. A common
+FIFO queue starts one slice at a time across views instead of running every
+hunk's time budget in one refresh. Completed results refresh only their waiting
+buffers, coalesced per buffer. Closing a queued cold hunk skips parsing entirely.
+
+Graph search uses the reference's 3,000,000-vertex default bound. Unchanged ends
+and substantial equal subtrees split comparisons before search. Longer work
+resumes cooperatively with a 5 ms target per scheduled slice; elapsed time alone
+does not force text fallback. Private conversion graphs share parsed trees and
+keep suspended searches from mutating each other's sibling links. Pending
+comparisons temporarily show muted text spans; completion refreshes only waiting
+views, coalesced per buffer. Jobs cancel when their source pair closes/changes or
+the style switches. Block-recovery results belong to the cached source pair;
+fragment/declaration recovery also parses asynchronously and shares source
+trees. Its listeners belong to the source pair, so closing the initiating view
+preserves work still needed by another view; canceled parses can be retried.
+Parser/capture/search/painting steps cooperate on the main thread rather
+than running in a separate process. Individual native calls can exceed the
+slice target. `tests/syntax_word_diff_perf.lua` checks many open hunks/views,
+cold display without parsing, single-hunk edits, shifted/rebuilt rows, dense
+painting between editor callbacks, shared recovery after closing its first
+view, cooperative completion and cancellation.
+This is a local adaptation verified against the recorded cases, not a guarantee
+of identical results for every Difftastic language/input. Parsing remains
+hunk-based: omitted enclosing syntax can cause text fallback, and changes across
+separate hunks cannot be matched. The reference uses whole files, additional
+language rules and preprocessing/slider heuristics; these can produce different
+correspondences. No full-file Git/blob reads or external diff commands are added.
 
 `git.features.commit` owns the custom commit view. Status and log selections, commit
 previews, `:GitCommit [revision]`, and `:Gedit <revision>` open it.

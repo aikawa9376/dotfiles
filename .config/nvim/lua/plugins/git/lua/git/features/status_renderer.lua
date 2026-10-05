@@ -144,24 +144,28 @@ local function parse_status_result(work_tree, result)
         model.behind = tonumber(value:match('%-(%d+)')) or 0
       end
     elseif record:sub(1, 2) == '1 ' then
-      local xy, path = record:match('^1 ([^ ]+) [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (.*)$')
+      local xy, head_blob, index_blob, path = record:match('^1 ([^ ]+) [^ ]+ [^ ]+ [^ ]+ [^ ]+ (%x+) (%x+) (.*)$')
       if xy and path then
         local x, y = xy:sub(1, 1), xy:sub(2, 2)
-        if x ~= '.' then table.insert(model.staged, { section = 'staged', status = x, path = path }) end
-        if y ~= '.' then table.insert(model.unstaged, { section = 'unstaged', status = y, path = path }) end
+        head_blob = head_blob:find('[^0]') and head_blob or nil
+        index_blob = index_blob:find('[^0]') and index_blob or nil
+        if x ~= '.' then table.insert(model.staged, { section = 'staged', status = x, path = path, head_blob = head_blob, index_blob = index_blob }) end
+        if y ~= '.' then table.insert(model.unstaged, { section = 'unstaged', status = y, path = path, head_blob = head_blob, index_blob = index_blob }) end
       end
     elseif record:sub(1, 2) == '2 ' then
-      local xy, path = record:match('^2 ([^ ]+) [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (.*)$')
+      local xy, head_blob, index_blob, path = record:match('^2 ([^ ]+) [^ ]+ [^ ]+ [^ ]+ [^ ]+ (%x+) (%x+) [^ ]+ (.*)$')
       local old_path = records[index + 1]
       if xy and path and old_path then
         index = index + 1
         local x, y = xy:sub(1, 1), xy:sub(2, 2)
+        head_blob = head_blob:find('[^0]') and head_blob or nil
+        index_blob = index_blob:find('[^0]') and index_blob or nil
         local display_path = old_path .. ' -> ' .. path
         if x ~= '.' then
-          table.insert(model.staged, { section = 'staged', status = x, path = path, old_path = old_path, display_path = display_path })
+          table.insert(model.staged, { section = 'staged', status = x, path = path, old_path = old_path, display_path = display_path, head_blob = head_blob, index_blob = index_blob })
         end
         if y ~= '.' then
-          table.insert(model.unstaged, { section = 'unstaged', status = y, path = path, old_path = old_path, display_path = display_path })
+          table.insert(model.unstaged, { section = 'unstaged', status = y, path = path, old_path = old_path, display_path = display_path, head_blob = head_blob, index_blob = index_blob })
         end
       end
     elseif record:sub(1, 2) == 'u ' then
@@ -808,6 +812,27 @@ function M.entry_at(bufnr, row)
   return model and model.entries_by_row[row] or nil
 end
 
+function M.highlight_source(bufnr, row)
+  local model, entry = models[bufnr], M.entry_at(bufnr, row)
+  if not model or not entry or entry.header or entry.section == 'conflicted'
+    or entry.binary then return nil end
+  local spec = { root = model.work_tree, path = entry.path }
+  -- Porcelain v2 already supplies immutable blob identities. Reading :0:path
+  -- later would race staging and invalidate every file on any index rewrite.
+  local head = entry.head_blob and { object = entry.head_blob } or { text = '' }
+  local index = entry.index_blob and { object = entry.index_blob } or { text = '' }
+  if entry.section == 'staged' then
+    spec.old, spec.new = head, index
+  elseif entry.section == 'unstaged' then
+    spec.old = index
+    spec.new = entry.status == 'D' and { text = '' }
+      or { path = vim.fs.joinpath(model.work_tree, entry.path) }
+  elseif entry.section == 'untracked' then
+    spec.old, spec.new = { text = '' }, { path = vim.fs.joinpath(model.work_tree, entry.path) }
+  else return nil end
+  return spec
+end
+
 function M.conflict_worktree_line(bufnr, row)
   local entry = M.entry_at(bufnr, row)
   if not entry or entry.section ~= 'conflicted' or entry.header then return nil end
@@ -819,24 +844,26 @@ end
 function M.apply_conflict_highlights(bufnr, ns)
   local model = models[bufnr]
   if not model then return end
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local marks = {}
   for row, entry in pairs(model.entries_by_row) do
     local previous = model.entries_by_row[row - 1]
     if entry.section == 'conflicted' and not entry.header and previous ~= entry then
       for offset in pairs(entry.conflict_highlight_lines or {}) do
         local target = row + offset
-        local line = lines[target]
-        if model.entries_by_row[target] == entry and line
-          and (line:sub(1, 1) == '+' or line:sub(1, 1) == '-')
+        local line = model.entries_by_row[target] == entry
+          and vim.api.nvim_buf_get_lines(bufnr, target - 1, target, false)[1]
+        if line and (line:sub(1, 1) == '+' or line:sub(1, 1) == '-')
         then
-          vim.api.nvim_buf_set_extmark(bufnr, ns, target - 1, 0, {
+          local id = vim.api.nvim_buf_set_extmark(bufnr, ns, target - 1, 0, {
             end_row = target, end_col = 0, hl_group = 'GitStatusConflictLine',
             hl_eol = true, priority = 205,
           })
+          marks[#marks + 1] = { id = id }
         end
       end
     end
   end
+  return marks
 end
 
 function M.shift_entries(bufnr, from_row, delta)

@@ -1,17 +1,21 @@
 local M = {}
+local jobs = require('git.features.highlight_jobs')
 local syntax_word_diff = require('git.features.syntax_word_diff')
 local delta_word_diff = require('git.features.delta_word_diff')
+local highlight_sources = require('git.features.highlight_sources')
 
 -- 'diffs':   diffs.nvim-style group diff -> line pairing -> byte diff
 -- 'delta': delta 0.19.2 token alignment and forward line pairing
--- 'treesitter': structural block tokens, with delta text fallback
+-- 'treesitter': paired syntax lists and atoms, with token-only backgrounds
 -- 'github':  sequential line pairing (old[i] <-> new[i])
-M.config = { word_diff_style = 'delta' }
+M.config = { word_diff_style = 'treesitter', changed_fg = 'syntax' }
 
 local WORD_DIFF_STYLES = { 'diffs', 'delta', 'treesitter', 'github' }
 
 local PRIORITY_BG = 200
 local PRIORITY_SYNTAX = 210
+local spinner_frames = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
+local spinner_frame = 1
 
 -- --- Utilities ---
 
@@ -230,14 +234,14 @@ function Utils.split_bytes(str)
   return bytes
 end
 
-function Utils.extract_change_groups(hunk_lines)
+function Utils.extract_change_groups(hunk_lines, include_one_sided)
   local groups = {}
   local del_buf = {}
   local add_buf = {}
   local in_del = false
 
   local function flush()
-    if #del_buf > 0 and #add_buf > 0 then
+    if #del_buf > 0 and #add_buf > 0 or include_one_sided and (#del_buf > 0 or #add_buf > 0) then
       groups[#groups + 1] = { del_lines = del_buf, add_lines = add_buf }
     end
     del_buf = {}
@@ -452,6 +456,7 @@ function Parser.parse_buffer(bufnr, first_line)
         lang = state.lang,
         ft = state.ft,
         start_line = state.hunk_start,
+        old_start = state.old_start, new_start = state.new_start,
         lines = state.lines,
       })
     end
@@ -475,6 +480,8 @@ function Parser.parse_buffer(bufnr, first_line)
     elseif line:match('^@@.-@@') then
       flush()
       state.hunk_start = i -- line index of the header line
+      local old, new = line:match('^@@ %-(%d+),?%d* %+(%d+),?%d* @@')
+      state.old_start, state.new_start = tonumber(old), tonumber(new)
     elseif state.hunk_start then
       local prefix = line:sub(1, 1)
       if prefix == ' ' or prefix == '+' or prefix == '-' or line:match('^\\ No newline at end of file') then
@@ -495,8 +502,39 @@ end
 -- --- Highlighter ---
 
 local Highlighter = {}
+local recording = {}
+
+function Highlighter.record_mark(cached, bufnr, ns, row, col, options)
+  local key = table.concat({ row, col, options.end_row or '', options.end_col or '', options.hl_group or '',
+    options.priority or '', options.hl_eol and 1 or 0, options.virt_text_pos or '',
+    options.virt_text_pos == 'eol' and 'loading' or options.virt_text and vim.mpack.encode(options.virt_text) or '' }, '\0')
+  local mark = cached.mark_map[key]
+  if not mark then
+    local absolute = vim.tbl_extend('force', {}, options)
+    if absolute.end_row then absolute.end_row = absolute.end_row + cached.start_line end
+    mark = { row = row, col = col, opts = options, key = key }
+    mark.id = vim.api.nvim_buf_set_extmark(bufnr, ns, cached.start_line + row, col, absolute)
+    cached.marks[#cached.marks + 1], cached.mark_map[key] = mark, mark
+  end
+  mark.generation = cached.mark_generation
+  if options.virt_text_pos == 'eol' then cached.loading_mark = mark end
+  return mark.id
+end
+
+function Highlighter.set_mark(bufnr, ns, row, col, options)
+  local cached = recording[bufnr]
+  if not cached then return vim.api.nvim_buf_set_extmark(bufnr, ns, row, col, options) end
+  options = vim.tbl_extend('force', {}, options)
+  if options.end_row then options.end_row = options.end_row - cached.start_line end
+  return Highlighter.record_mark(cached, bufnr, ns, row - cached.start_line, col, options)
+end
 
 function Highlighter.setup_groups()
+  -- Diff syntax supplies red/green foregrounds below our extmarks. An ERROR
+  -- tree may have no capture for the first key/keyword; restore source color
+  -- independently of capture coverage. Keep backgrounds owned by diff spans.
+  local normal = vim.api.nvim_get_hl(0, { name = 'Normal', link = false })
+  vim.api.nvim_set_hl(0, 'FugitiveExtCode', { fg = normal.fg, ctermfg = normal.ctermfg })
   -- Define custom groups
   -- DiffAdd bg: #23384C, DiffDelete bg: #321e1e (approx)
   vim.api.nvim_set_hl(0, 'FugitiveExtAdd', { bg = "#23384C", default = true })
@@ -506,43 +544,184 @@ function Highlighter.setup_groups()
   -- Word diff highlights (intra-line)
   vim.api.nvim_set_hl(0, 'FugitiveExtAddText', { bg = "#005f5f", default = true })
   vim.api.nvim_set_hl(0, 'FugitiveExtDeleteText', { bg = "#8c3b40", default = true })
+  vim.api.nvim_set_hl(0, 'FugitiveExtAddPrefix', { link = 'GitSignsAdd', default = true })
+  vim.api.nvim_set_hl(0, 'FugitiveExtDeletePrefix', { link = 'GitSignsDelete', default = true })
+  -- Difftastic emits ANSI bright red/green on dark backgrounds and ordinary
+  -- red/green on light ones. Resolve those through the theme's terminal palette.
+  local red, green = vim.o.background == 'dark' and 9 or 1, vim.o.background == 'dark' and 10 or 2
+  vim.api.nvim_set_hl(0, 'FugitiveExtNovelDelete', {
+    fg = vim.g['terminal_color_' .. red] or (red == 9 and '#ff5555' or '#aa0000'), ctermfg = red,
+  })
+  vim.api.nvim_set_hl(0, 'FugitiveExtNovelAdd', {
+    fg = vim.g['terminal_color_' .. green] or (green == 10 and '#55ff55' or '#00aa00'), ctermfg = green,
+  })
 end
 
-function Highlighter.apply_treesitter(bufnr, ns, code_lines, lang, line_map, col_offset, source)
-  local code = table.concat(code_lines, '\n')
-  if code == '' then return end
-
-  local tree = source and source.tree
-  if not tree then
-    local ok, parser = pcall(vim.treesitter.get_string_parser, code, lang)
-    if not ok or not parser then return end
-    local parsed, trees = pcall(parser.parse, parser)
-    if not parsed or not trees or #trees == 0 then return end
-    tree = trees[1]
-  end
-
-  local query = vim.treesitter.query.get(lang, 'highlights')
-  if not query then return end
-
-  for id, node, metadata in query:iter_captures(tree:root(), code) do
+function Highlighter.capture_treesitter(source, lang, query, checkpoint, projection)
+  local captures = {}
+  if not source or not query or source.code == '' then return captures end
+  local count = 0
+  local first_row = projection and projection.offset or 0
+  local last_row = first_row + #(projection and projection.original or source.lines)
+  for id, node, metadata in query:iter_captures(source.tree:root(), source.code, first_row, last_row) do
     local capture_name = '@' .. query.captures[id] .. '.' .. lang
     local sr, sc, er, ec = node:range()
 
     -- A multiline capture must not cross inserted opposite-side rows.
-    for row = sr, er do
-      local buf_row = line_map[row + 1]
+    for row = math.max(sr, first_row), math.min(er, last_row - 1) do
+      local projected = row - (projection and projection.offset or 0)
       local first = row == sr and sc or 0
-      local last = row == er and ec or #(code_lines[row + 1] or '')
+      local last = row == er and ec or #(source.lines[row + 1] or '')
       local priority = (tonumber(metadata.priority) or 100) + PRIORITY_SYNTAX
-      if buf_row and last > first then
-        pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, buf_row, first + col_offset, {
-          end_col = last + col_offset,
-          hl_group = capture_name,
-          priority = priority,
-        })
+      local line = (projection and projection.original or source.lines)[projected + 1]
+      last = math.min(last, #(line or ''))
+      if line and last > first then
+        captures[#captures + 1] = { row = projected + 1, first = first, last = last, group = capture_name, priority = priority }
       end
+      count = count + 1
+      if count % 128 == 0 then checkpoint() end
     end
   end
+  return captures
+end
+
+function Highlighter.prepare(cached, code, lang, query, bufnr)
+  if cached.preparing and cached.preparing.query == query and cached.preparing.source_key == cached.source_key then return false end
+  if cached.prepared and cached.prepared.query == query and cached.prepared.source_key == cached.source_key then return true end
+  cached.sources = cached.sources or {}
+  local job = { query = query, source_key = cached.source_key }
+  cached.preparing = job
+  local function valid()
+    return cached.active and cached.preparing == job and vim.api.nvim_buf_is_loaded(bufnr)
+  end
+  local function parsed()
+    if not valid() then return end
+    local colored, projections = {}, {}
+    local function capture()
+      jobs.run(function(checkpoint)
+        local result = { query = query, source_key = job.source_key, captures = {} }
+        for _, side in ipairs({ 'old', 'new' }) do
+          result.captures[side] = Highlighter.capture_treesitter(
+            colored[side] or cached.sources[side], lang, query, checkpoint, projections[side])
+          checkpoint()
+        end
+        return result
+      end, valid, function(result, err)
+        if not valid() then return end
+        cached.preparing = nil
+        if not result then error(err) end
+        cached.prepared = result
+        cached.preparation_version = (cached.preparation_version or 0) + 1
+        syntax_word_diff.request_refresh(bufnr)
+      end)
+    end
+    if not cached.color_spec or not lang or not query then capture(); return end
+    cached.source_session.request(cached.color_spec, valid, function(full)
+      if not valid() then return end
+      if not full then capture(); return end
+      local remaining = 2
+      local function ready()
+        remaining = remaining - 1
+        if remaining == 0 then capture() end
+      end
+      for _, side in ipairs({ 'old', 'new' }) do
+        syntax_word_diff.parse_async(full[side], lang, valid, function(source)
+          if not valid() then return end
+          local original = code[side]
+          local offset = math.max(0, (cached.source_starts[side] or 1) - 1)
+          jobs.run(function(checkpoint)
+            -- A stale patch, filter or concurrently edited file must not lend
+            -- another source's colors to these rows. Verify every projected row.
+            if not source then return false end
+            for row, line in ipairs(original) do
+              if source.lines[offset + row] ~= line then return false end
+              if row % 128 == 0 then checkpoint() end
+            end
+            return true
+          end, valid, function(matches, err)
+            if not valid() then return end
+            if matches == nil then error(err) end
+            if matches then
+              colored[side] = source
+              projections[side] = { offset = offset, original = original }
+            end
+            ready()
+          end)
+        end)
+      end
+    end)
+  end
+  if cached.parsed then parsed(); return false end
+  local remaining = 2
+  for _, side in ipairs({ 'old', 'new' }) do
+    syntax_word_diff.parse_async(code[side], lang, valid, function(source)
+      cached.sources[side] = source
+      remaining = remaining - 1
+      if remaining == 0 then cached.parsed = true; parsed() end
+    end)
+  end
+  return false
+end
+
+function Highlighter.apply_treesitter(bufnr, ns, captures, line_map, emit, checkpoint)
+  emit = emit or Highlighter.set_mark
+  for i, capture in ipairs(captures or {}) do
+    local buf_row = line_map[capture.row]
+    if buf_row then
+      emit(bufnr, ns, buf_row, capture.first + 1, {
+        end_col = capture.last + 1, hl_group = capture.group, priority = capture.priority,
+      })
+    end
+    if checkpoint and i % 128 == 0 then checkpoint() end
+  end
+end
+
+function Highlighter.finish_loading(cached, bufnr, ns)
+  if cached.preparing or cached.foreground_job or cached.paint_job or cached.comparison_pending then return end
+  for i = #cached.marks, 1, -1 do
+    local mark = cached.marks[i]
+    if mark.opts.virt_text_pos == 'eol' then
+      vim.api.nvim_buf_del_extmark(bufnr, ns, mark.id)
+      cached.mark_map[mark.key] = nil
+      if cached.loading_mark == mark then cached.loading_mark = nil end
+      table.remove(cached.marks, i)
+    end
+  end
+end
+
+function Highlighter.foreground(cached, bufnr, ns, colors)
+  local prepared = cached.prepared
+  if cached.foreground_ready == prepared
+    or cached.foreground_job and cached.foreground_job.prepared == prepared then
+    for _, mark in ipairs(cached.marks) do
+      if (mark.opts.hl_group or ''):match('^@') then mark.generation = cached.mark_generation end
+    end
+    return
+  end
+  local job = { prepared = prepared }
+  cached.foreground_job = job
+  local function valid()
+    return cached.active and cached.foreground_job == job and cached.query == prepared.query
+      and vim.api.nvim_buf_is_loaded(bufnr)
+  end
+  jobs.run(function(checkpoint)
+    local count = 0
+    local function emit(_, _, row, col, options)
+      Highlighter.record_mark(cached, bufnr, ns, row, col, options)
+      count = count + 1
+      if count % 64 == 0 then checkpoint() end
+    end
+    for _, side in ipairs({ 'old', 'new' }) do
+      Highlighter.apply_treesitter(bufnr, ns, prepared.captures[side], colors[side], emit, checkpoint)
+    end
+    return true
+  end, valid, function(result, err)
+    if not valid() then return end
+    cached.foreground_job = nil
+    if not result then error(err) end
+    cached.foreground_ready = prepared
+    Highlighter.finish_loading(cached, bufnr, ns)
+  end)
 end
 
 function Highlighter.apply_legacy(bufnr, hunk, regions)
@@ -557,7 +736,10 @@ function Highlighter.apply_legacy(bufnr, hunk, regions)
   pcall(function() is_included = vim.api.nvim_buf_get_var(bufnr, included_var) end)
 
   if not is_included then
+    local had_syntax, current_syntax = pcall(vim.api.nvim_buf_get_var, bufnr, 'current_syntax')
+    vim.b.current_syntax = nil
     vim.cmd(string.format('silent! syntax include @%s syntax/%s.vim', ft_group, hunk.ft))
+    vim.b.current_syntax = had_syntax and current_syntax or nil
     vim.api.nvim_buf_set_var(bufnr, included_var, true)
   end
 
@@ -566,7 +748,10 @@ function Highlighter.apply_legacy(bufnr, hunk, regions)
   local last_line = hunk.start_line + #hunk.lines
   local region_name = 'FugitiveExtRegion_' .. start_row
 
-  vim.cmd(string.format('syntax region %s start=/\\%%%dl/ end=/\\%%%dl$/ contains=@%s keepend', region_name, start_row, last_line, ft_group))
+  -- A Normal parent clears diff foregrounds for uncaptured prose while the
+  -- contained Vim syntax still owns its keyword/string colors.
+  vim.cmd('highlight default link ' .. region_name .. ' Normal')
+  vim.cmd(string.format('syntax region %s start=/\\%%%dl^/ end=/\\%%%dl$/ contains=@%s containedin=ALL keepend', region_name, start_row, last_line, ft_group))
   table.insert(regions, region_name)
 end
 
@@ -575,23 +760,31 @@ function Highlighter.apply_background(bufnr, ns, hunk)
     local prefix = line:sub(1, 1)
     local buf_line = hunk.start_line + i - 1
 
+    if M.config.word_diff_style == 'treesitter' and (hunk.lang or not hunk.ft) and #line > 1 then
+      Highlighter.set_mark(bufnr, ns, buf_line, 1, {
+        end_col = #line, hl_group = 'FugitiveExtCode', priority = PRIORITY_SYNTAX,
+      })
+    end
+
     if prefix == '+' or prefix == '-' then
       local hl_group = (prefix == '+') and 'FugitiveExtAdd' or 'FugitiveExtDelete'
       local prefix_hl = (prefix == '+') and 'FugitiveExtAddPrefix' or 'FugitiveExtDeletePrefix'
 
-      -- Background highlight
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, buf_line, 0, {
-        end_row = buf_line + 1,
-        end_col = 0,
-        hl_group = hl_group,
-        hl_eol = true,
-        priority = PRIORITY_BG,
-        strict = false,
-      })
+      -- Structural style colors syntax spans only, including one-sided edits.
+      if M.config.word_diff_style ~= 'treesitter' then
+        pcall(Highlighter.set_mark, bufnr, ns, buf_line, 0, {
+          end_row = buf_line + 1,
+          end_col = 0,
+          hl_group = hl_group,
+          hl_eol = true,
+          priority = PRIORITY_BG,
+          strict = false,
+        })
+      end
 
       -- Hide prefix
-      pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, buf_line, 0, {
-        virt_text = { { ' ', prefix_hl } },
+      pcall(Highlighter.set_mark, bufnr, ns, buf_line, 0, {
+        virt_text = { { M.config.word_diff_style == 'treesitter' and '▏' or ' ', prefix_hl } },
         virt_text_pos = 'overlay',
         priority = PRIORITY_BG + 1,
       })
@@ -613,7 +806,7 @@ function Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
     end
 
     local buf_line = hunk.start_line + span.line - 1
-    pcall(vim.api.nvim_buf_set_extmark, bufnr, ns, buf_line, span.col_start, {
+    pcall(Highlighter.set_mark, bufnr, ns, buf_line, span.col_start, {
       end_col = span.col_end,
       hl_group = hl_group,
       priority = PRIORITY_SYNTAX + 150,
@@ -649,7 +842,7 @@ function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old
     { changes.new, group_new_lines, 'FugitiveExtAddText' } }) do
     for row, ranges in pairs(side[1]) do
       for _, range in ipairs(ranges) do
-        vim.api.nvim_buf_set_extmark(bufnr, ns, side[2][row], range[1], {
+        Highlighter.set_mark(bufnr, ns, side[2][row], range[1], {
           end_col = range[2] + 1, hl_group = side[3], priority = PRIORITY_SYNTAX + 150,
         })
       end
@@ -657,59 +850,151 @@ function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old
   end
 end
 
-function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, row_maps, inverse_maps)
-  for _, group in ipairs(Utils.extract_change_groups(hunk.lines)) do
-    local rows, texts, displayed = { old = {}, new = {} }, { old = {}, new = {} }, { old = {}, new = {} }
+function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, layout, emit, checkpoint)
+  emit = emit or Highlighter.set_mark
+  checkpoint = checkpoint or function() end
+  -- Compare once across context as well as replacement groups. This retains
+  -- structural anchors around inserted statements and paired delimiters.
+  local structural, pending = syntax_word_diff.compare_async(sources.old, sources.new, bufnr)
+  local loading = pending
+  for _, group in ipairs(layout.groups) do
+    checkpoint()
+    local rows, texts, displayed = group.rows, group.texts, group.displayed
+    local changes = structural
+    local full_hunk = changes ~= nil
+    if not changes and pending then
+      -- Wait for the complete comparison instead of starting duplicate graph
+      -- searches for fragments. Interim text ranges stay muted.
+      group.fallback = group.fallback or syntax_word_diff.text_fallback(texts.old, texts.new)
+      changes = group.fallback
+    elseif not changes then
+      -- A cut-off enclosing function or a difficult region must not force
+      -- independent comments/expressions elsewhere onto text matching.
+      local recovering
+      changes, recovering = syntax_word_diff.recover(sources.old, sources.new, texts.old, texts.new, hunk.lang, bufnr)
+      loading = loading or recovering
+    end
+    if hunk.lang and group.whitespace_only then
+      changes = { old = {}, new = {}, emphasis = { old = {}, new = {} } }
+    end
     for _, side in ipairs({ 'old', 'new' }) do
-      for _, line in ipairs(side == 'old' and group.del_lines or group.add_lines) do
-        local buf_row = hunk.start_line + line.idx - 1
-        rows[side][#rows[side] + 1] = inverse_maps[side][buf_row]
-        texts[side][#texts[side] + 1] = line.text
-        displayed[side][#displayed[side] + 1] = buf_row
-      end
-    end
-    local changes = syntax_word_diff.compare(sources.old, sources.new, rows.old, rows.new)
-    if hunk.lang and table.concat(texts.old):match('^%s*$') and table.concat(texts.new):match('^%s*$') then
-      changes = { old = {}, new = {} }
-    end
-    if not changes then
-      Highlighter.apply_word_diffs(bufnr, ns, texts.old, texts.new, displayed.old, displayed.new)
-    else
-      for _, side in ipairs({ 'old', 'new' }) do
-        for row, ranges in pairs(changes[side]) do
-          for _, range in ipairs(Utils.merge_ranges(ranges, sources[side].lines[row])) do
-            vim.api.nvim_buf_set_extmark(bufnr, ns, row_maps[side][row], range[1], {
-              end_col = range[2] + 1,
-              hl_group = side == 'old' and 'FugitiveExtDeleteText' or 'FugitiveExtAddText',
-              priority = PRIORITY_SYNTAX + 150,
+      for index, relative in ipairs(displayed[side]) do
+        if index % 32 == 0 then checkpoint() end
+        local buf_row = hunk.start_line + relative
+        local row = full_hunk and rows[side][index] or index
+        local line = texts[side][index]
+        for _, level in ipairs({
+          { changes[side], side == 'old' and 'FugitiveExtDelete' or 'FugitiveExtAdd', 150 },
+          { changes.emphasis[side], side == 'old' and 'FugitiveExtDeleteText' or 'FugitiveExtAddText', 151 },
+        }) do
+          for _, range in ipairs(Utils.merge_ranges(vim.deepcopy(level[1][row] or {}), line)) do
+            emit(bufnr, ns, buf_row, range[1], {
+              end_col = range[2] + 1, hl_group = level[2], priority = PRIORITY_SYNTAX + level[3],
             })
+            if M.config.changed_fg == 'difft' then
+              emit(bufnr, ns, buf_row, range[1], {
+                end_col = range[2] + 1,
+                hl_group = side == 'old' and 'FugitiveExtNovelDelete' or 'FugitiveExtNovelAdd',
+                priority = PRIORITY_SYNTAX + level[3],
+              })
+            end
           end
         end
       end
     end
   end
+  return loading
 end
 
-function Highlighter.process_hunk(bufnr, ns, hunk)
-  Highlighter.apply_background(bufnr, ns, hunk)
-  local code, maps, inverse = { old = {}, new = {} }, { old = {}, new = {} }, { old = {}, new = {} }
-  local colors = { old = {}, new = {} }
-  for i, line in ipairs(hunk.lines) do
-    local prefix, content, buf_row = line:sub(1, 1), line:sub(2), hunk.start_line + i - 1
-    for _, side in ipairs({ 'old', 'new' }) do
-      if prefix == ' ' or prefix == (side == 'old' and '-' or '+') then
-        table.insert(code[side], content)
-        maps[side][#code[side]] = buf_row
-        inverse[side][buf_row] = #code[side]
-        -- Shared context is displayed with the new source's syntax only.
-        if prefix ~= ' ' or side == 'new' then colors[side][#code[side]] = buf_row end
+function Highlighter.background(cached, bufnr, ns, hunk)
+  local sources = cached.sources
+  local version = syntax_word_diff.version(sources.old, sources.new)
+  local foreground = M.config.changed_fg
+  local result = cached.background_result
+  if result and result.version == version and result.foreground == foreground then return result.plan, result.loading end
+  if not cached.background_job or cached.background_job.version ~= version or cached.background_job.foreground ~= foreground then
+    local job = { version = version, foreground = foreground }
+    cached.background_job = job
+    local function valid()
+      return cached.active and cached.background_job == job and vim.api.nvim_buf_is_loaded(bufnr)
+        and M.config.word_diff_style == 'treesitter'
+        and M.config.changed_fg == foreground
+    end
+    jobs.run(function(checkpoint)
+      local plan = {}
+      local function emit(_, _, row, col, options)
+        plan[#plan + 1] = { row = row - hunk.start_line, col = col, opts = options }
       end
+      local loading = Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, cached.layout, emit, checkpoint)
+      return { plan = plan, loading = loading, version = version, foreground = foreground }
+    end, valid, function(ready, err)
+      if not valid() then return end
+      cached.background_job = nil
+      if not ready then error(err) end
+      cached.background_result = ready
+      cached.background_revision = (cached.background_revision or 0) + 1
+      syntax_word_diff.request_refresh(bufnr)
+    end)
+  end
+  -- Keep the previous spans while a new result is computed. Syntax painting
+  -- proceeds independently; a partial comparison must not restart it.
+  for _, mark in ipairs(cached.marks) do
+    if mark.opts.priority == PRIORITY_SYNTAX + 150 or mark.opts.priority == PRIORITY_SYNTAX + 151 then
+      mark.generation = cached.mark_generation
     end
   end
-  local sources = {}
+  return {}, true
+end
+
+function Highlighter.process_hunk(bufnr, ns, hunk, cached, query)
+  cached.marks, cached.mark_map = cached.marks or {}, cached.mark_map or {}
+  cached.mark_generation = (cached.mark_generation or 0) + 1
+  recording[bufnr] = cached
+  if cached.background_style == M.config.word_diff_style then
+    for _, mark in ipairs(cached.marks) do
+      local options = mark.opts
+      if options.hl_group == 'FugitiveExtCode' or options.virt_text_pos == 'overlay'
+        or options.hl_eol and options.priority == PRIORITY_BG then mark.generation = cached.mark_generation end
+    end
+  else
+    Highlighter.apply_background(bufnr, ns, hunk)
+    cached.background_style = M.config.word_diff_style
+  end
+  if not cached.layout then
+    local layout = { code = { old = {}, new = {} }, colors = { old = {}, new = {} }, groups = {} }
+    local inverse = { old = {}, new = {} }
+    for i, line in ipairs(hunk.lines) do
+      local prefix, content, relative = line:sub(1, 1), line:sub(2), i - 1
+      for _, side in ipairs({ 'old', 'new' }) do
+        if prefix == ' ' or prefix == (side == 'old' and '-' or '+') then
+          local code = layout.code[side]
+          code[#code + 1] = content
+          inverse[side][relative] = #code
+          if prefix ~= ' ' or side == 'new' then layout.colors[side][#code] = relative end
+        end
+      end
+    end
+    for _, change in ipairs(Utils.extract_change_groups(hunk.lines, true)) do
+      local group = { rows = { old = {}, new = {} }, texts = { old = {}, new = {} }, displayed = { old = {}, new = {} } }
+      for _, side in ipairs({ 'old', 'new' }) do
+        for _, line in ipairs(side == 'old' and change.del_lines or change.add_lines) do
+          local relative = line.idx - 1
+          group.rows[side][#group.rows[side] + 1] = inverse[side][relative]
+          group.texts[side][#group.texts[side] + 1] = line.text
+          group.displayed[side][#group.displayed[side] + 1] = relative
+        end
+      end
+      group.whitespace_only = table.concat(group.texts.old):match('^%s*$') and table.concat(group.texts.new):match('^%s*$')
+      layout.groups[#layout.groups + 1] = group
+    end
+    cached.layout = layout
+  end
+  local code, colors = cached.layout.code, cached.layout.colors
+  local prepared = Highlighter.prepare(cached, code, hunk.lang, query, bufnr)
+  local plan = {}
+  local loading = not prepared
   if M.config.word_diff_style == 'treesitter' then
-    for _, side in ipairs({ 'old', 'new' }) do sources[side] = syntax_word_diff.parse(code[side], hunk.lang) end
-    Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, maps, inverse)
+    if prepared then plan, loading = Highlighter.background(cached, bufnr, ns, hunk) end
   elseif M.config.word_diff_style == 'diffs' then
     Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
   else
@@ -725,17 +1010,124 @@ function Highlighter.process_hunk(bufnr, ns, hunk)
       Highlighter.apply_word_diffs(bufnr, ns, old, new, old_rows, new_rows)
     end
   end
-  if hunk.lang then
-    for _, side in ipairs({ 'old', 'new' }) do
-      Highlighter.apply_treesitter(bufnr, ns, code[side], hunk.lang, colors[side], 1, sources[side])
-    end
+  if M.config.word_diff_style ~= 'treesitter' or not prepared then cached.background_job = nil end
+  if M.config.word_diff_style ~= 'treesitter' then cached.background_result = nil end
+  if hunk.lang and prepared then
+    -- Foreground painting has its own lifetime. Background comparisons often
+    -- finish in several stages; they must not repeatedly cancel this job.
+    Highlighter.foreground(cached, bufnr, ns, colors)
+  else
+    cached.foreground_job, cached.foreground_ready = nil, nil
   end
+  cached.comparison_pending = loading
+  local function finish_plan()
+    local kept, count = 0, #cached.marks
+    for i = 1, count do
+      local mark = cached.marks[i]
+      if mark.generation ~= cached.mark_generation then
+        vim.api.nvim_buf_del_extmark(bufnr, ns, mark.id)
+        cached.mark_map[mark.key] = nil
+        if cached.loading_mark == mark then cached.loading_mark = nil end
+      else
+        kept = kept + 1
+        cached.marks[kept] = mark
+      end
+    end
+    for i = count, kept + 1, -1 do cached.marks[i] = nil end
+  end
+  if #plan > 256 then
+    local job = {}
+    cached.paint_job = job
+    local function valid()
+      return cached.active and cached.paint_job == job and vim.api.nvim_buf_is_loaded(bufnr)
+    end
+    jobs.run(function(checkpoint)
+      for i, mark in ipairs(plan) do
+        Highlighter.record_mark(cached, bufnr, ns, mark.row, mark.col, mark.opts)
+        if i % 64 == 0 then checkpoint() end
+      end
+      return true
+    end, valid, function(result, err)
+      if not valid() then return end
+      cached.paint_job = nil
+      if not result then error(err) end
+      finish_plan()
+      Highlighter.finish_loading(cached, bufnr, ns)
+    end)
+  else
+    for _, mark in ipairs(plan) do
+      Highlighter.record_mark(cached, bufnr, ns, mark.row, mark.col, mark.opts)
+    end
+    -- The indicator is recorded below, so clean obsolete entries afterwards.
+  end
+  if M.config.word_diff_style == 'treesitter' and (loading or cached.paint_job or cached.foreground_job) then
+    Highlighter.set_mark(bufnr, ns, hunk.start_line - 1, 0, {
+      virt_text = { { '  ' .. spinner_frames[spinner_frame], 'Comment' } }, virt_text_pos = 'eol', priority = PRIORITY_BG,
+    })
+    M.start_spinner()
+  end
+  if not cached.paint_job then finish_plan() end
+  recording[bufnr] = nil
 end
 
 -- --- Main ---
 
 local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
 local attached_refreshers = {}
+local attached_hunks = {}
+local active_sources = {}
+local spinner_scheduled = false
+
+function M.start_spinner()
+  if spinner_scheduled then return end
+  spinner_scheduled = true
+  vim.defer_fn(function()
+    spinner_scheduled = false
+    spinner_frame = spinner_frame % #spinner_frames + 1
+    local active = false
+    for bufnr, hunks in pairs(attached_hunks) do
+      if vim.api.nvim_buf_is_loaded(bufnr) then
+        for _, cached in pairs(hunks) do
+          local mark = cached.loading_mark
+          if cached.active and mark then
+            mark.opts.virt_text = { { '  ' .. spinner_frames[spinner_frame], 'Comment' } }
+            local options = vim.tbl_extend('force', {}, mark.opts, { id = mark.id })
+            vim.api.nvim_buf_set_extmark(bufnr, ns, cached.start_line + mark.row, mark.col, options)
+            active = true
+          end
+        end
+      end
+    end
+    if active then M.start_spinner() end
+  end, 100)
+end
+
+function M.is_pending(bufnr)
+  for _, cached in pairs(attached_hunks[bufnr] or {}) do
+    local sources = cached.sources or {}
+    if cached.preparing or cached.paint_job or cached.foreground_job or cached.background_job
+      or cached.ready_background_revision ~= (cached.background_revision or 0)
+      or cached.ready_version ~= (cached.preparation_version or 0)
+      or cached.version ~= syntax_word_diff.version(sources.old, sources.new) then return true end
+    local owner = sources.old or sources.new
+    if owner then
+      if owner.jobs and owner.jobs[sources.new or sources.old] then return true end
+      local recovery = owner.recoveries and owner.recoveries[sources.new or sources.old]
+      for _, fragments in pairs(recovery and recovery.fragments or {}) do
+        if fragments.parsing then return true end
+        for _, source in pairs(fragments) do
+          if type(source) == 'table' and next(source.jobs or {}) then return true end
+        end
+      end
+    end
+  end
+  return false
+end
+
+function M.source_is_active(bufnr, source, opposite)
+  local pairs = active_sources[bufnr] and active_sources[bufnr][source]
+  return pairs and (not opposite or pairs[opposite] == true)
+end
 local highlight_group = vim.api.nvim_create_augroup('FugitiveExtensionHighlights', { clear = true })
 vim.api.nvim_create_autocmd('ColorScheme', {
   group = highlight_group,
@@ -779,35 +1171,167 @@ function M.cycle_word_diff_style()
   return next_style
 end
 
+function M.toggle_changed_fg()
+  M.config.changed_fg = M.config.changed_fg == 'difft' and 'syntax' or 'difft'
+  M.refresh_all()
+  return M.config.changed_fg
+end
+
+local function source_key(spec, hunk)
+  return spec and vim.mpack.encode({ highlight_sources.key(spec), hunk.old_start, hunk.new_start }) or nil
+end
+
 function M.attach(bufnr, opts)
   if not vim.api.nvim_buf_is_valid(bufnr) then return end
   if attached_refreshers[bufnr] then return end
 
   Highlighter.setup_groups()
+  vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
   local group = vim.api.nvim_create_augroup('FugitiveExtensionSyntax' .. bufnr, { clear = true })
   local active = true
+  local source_session = highlight_sources.new()
 
   local legacy_regions = {}
   local refresh_scheduled = false
+  local hunk_cache, conflict_marks = {}, {}
+  local seen_tick, seen_first_line, parsed_hunks
+
+  local function remove_marks(marks)
+    for _, mark in ipairs(marks or {}) do vim.api.nvim_buf_del_extmark(bufnr, ns, mark.id) end
+  end
+  local function options_at(mark, start)
+    local options = vim.tbl_extend('force', {}, mark.opts)
+    if options.end_row then options.end_row = options.end_row + start end
+    return options
+  end
+  local function marks_at(marks, start, live)
+    for _, mark in ipairs(marks) do
+      local current = live[mark.id]
+      local options = options_at(mark, start)
+      if not current or current[2] ~= start + mark.row or current[3] ~= mark.col
+        or options.end_col and (current[4].end_col ~= options.end_col
+          or current[4].end_row ~= (options.end_row or start + mark.row)) then return false end
+    end
+    return true
+  end
 
   local function refresh()
     if not active or not vim.api.nvim_buf_is_loaded(bufnr) then return end
     vim.api.nvim_buf_call(bufnr, function()
-      vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-
+      remove_marks(conflict_marks)
+      conflict_marks = {}
+      local tick = vim.api.nvim_buf_get_changedtick(bufnr)
+      local first_line = opts and opts.first_line and opts.first_line()
+      local settings = M.config.word_diff_style .. '\0' .. (M.config.changed_fg or 'syntax') .. '\0' .. vim.o.diffopt
+      local queries = {}
+      local function current_query(lang)
+        if not lang then return nil end
+        if queries[lang] == nil then queries[lang] = vim.treesitter.query.get(lang, 'highlights') or false end
+        return queries[lang] or nil
+      end
+      if tick == seen_tick and first_line == seen_first_line then
+        local stable = true
+        local languages = {}
+        for _, hunk in ipairs(parsed_hunks) do
+          local cached = hunk_cache[hunk.cache_key]
+          local spec = hunk.lang and opts and opts.diff_source and hunk.old_start and opts.diff_source(hunk) or nil
+          if cached.source_key ~= source_key(spec, hunk) then stable = false; break end
+          if hunk.ft then
+            if languages[hunk.ft] == nil then
+              local lang = vim.treesitter.language.get_lang(hunk.ft)
+              languages[hunk.ft] = lang and pcall(vim.treesitter.language.inspect, lang) and lang or false
+            end
+            local lang = languages[hunk.ft] or nil
+            if hunk.lang ~= lang then hunk.lang, stable = lang, false end
+          end
+          if cached.query ~= current_query(hunk.lang) or cached.settings ~= settings
+            or cached.ready_background_revision ~= (cached.background_revision or 0)
+            or cached.ready_version ~= (cached.preparation_version or 0)
+            or cached.version ~= syntax_word_diff.version(cached.sources.old, cached.sources.new) then stable = false end
+        end
+        if stable then
+          conflict_marks = require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns) or {}
+          return
+        end
+      else
+        parsed_hunks = Parser.parse_buffer(bufnr, first_line)
+      end
+      local live
+      -- Async completions do not move buffer rows. Reading every extmark's
+      -- details here dominated refreshes on long files; only edits need it.
+      if seen_tick ~= nil and tick ~= seen_tick then
+        live = {}
+        for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, ns, 0, -1, { details = true })) do
+          live[mark[1]] = mark
+        end
+      end
       for _, region in ipairs(legacy_regions) do
         vim.cmd('silent! syntax clear ' .. region)
       end
       legacy_regions = {}
 
-      local hunks = Parser.parse_buffer(bufnr, opts and opts.first_line and opts.first_line())
+      local hunks = parsed_hunks
+      local retained, occurrences = {}, {}
       for _, hunk in ipairs(hunks) do
-        Highlighter.process_hunk(bufnr, ns, hunk)
-        if not hunk.lang and hunk.ft then
-          Highlighter.apply_legacy(bufnr, hunk, legacy_regions)
-        end
+        local content = vim.mpack.encode({ hunk.filename or '', hunk.lang or '', hunk.ft or '', hunk.lines })
+        occurrences[content] = (occurrences[content] or 0) + 1
+        hunk.cache_key = content .. '\0' .. occurrences[content]
+        retained[hunk.cache_key] = hunk_cache[hunk.cache_key] or {}
       end
-      require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns)
+      for key, cached in pairs(hunk_cache) do
+        if not retained[key] then cached.active = false; remove_marks(cached.marks) end
+      end
+      local kept, sources = {}, {}
+      for _, hunk in ipairs(hunks) do
+        local cached = retained[hunk.cache_key]
+        cached.active = true
+        cached.start_line = hunk.start_line
+        local spec = hunk.lang and opts and opts.diff_source and hunk.old_start and opts.diff_source(hunk) or nil
+        local key = source_key(spec, hunk)
+        if cached.source_key ~= key then
+          cached.prepared, cached.preparing = nil, nil
+          cached.source_key = key
+        end
+        cached.color_spec, cached.source_session = spec, source_session
+        cached.source_starts = { old = hunk.old_start, new = hunk.new_start }
+        local query = current_query(hunk.lang)
+        local owner = cached.sources and (cached.sources.old or cached.sources.new)
+        local version = syntax_word_diff.version(cached.sources and cached.sources.old, cached.sources and cached.sources.new)
+        if cached.marks and live and not marks_at(cached.marks, hunk.start_line, live) then
+          remove_marks(cached.marks)
+          for _, mark in ipairs(cached.marks) do
+            mark.id = vim.api.nvim_buf_set_extmark(bufnr, ns, hunk.start_line + mark.row, mark.col,
+              options_at(mark, hunk.start_line))
+          end
+        end
+        if not cached.marks or cached.query ~= query or cached.version ~= version or cached.settings ~= settings
+          or cached.ready_source_key ~= key
+          or cached.ready_background_revision ~= (cached.background_revision or 0)
+          or cached.ready_version ~= (cached.preparation_version or 0) then
+          cached.paint_job = nil
+          Highlighter.process_hunk(bufnr, ns, hunk, cached, query)
+          cached.query, cached.settings = query, settings
+          cached.ready_source_key = key
+          cached.ready_version = cached.preparation_version or 0
+          cached.ready_background_revision = cached.background_revision or 0
+          owner = cached.sources and (cached.sources.old or cached.sources.new)
+          cached.version = syntax_word_diff.version(cached.sources.old, cached.sources.new)
+        end
+        if owner then
+          sources[owner] = sources[owner] or {}
+          sources[owner][cached.sources.new or cached.sources.old] = true
+        end
+        if live then for _, mark in ipairs(cached.marks) do kept[mark.id] = true end end
+        if not hunk.lang and hunk.ft then Highlighter.apply_legacy(bufnr, hunk, legacy_regions) end
+      end
+      for id in pairs(live or {}) do
+        if not kept[id] then vim.api.nvim_buf_del_extmark(bufnr, ns, id) end
+      end
+      source_session.prune()
+      hunk_cache, active_sources[bufnr] = retained, sources
+      attached_hunks[bufnr] = retained
+      seen_tick, seen_first_line = tick, first_line
+      conflict_marks = require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns) or {}
     end)
   end
 
@@ -835,7 +1359,11 @@ function M.attach(bufnr, opts)
     once = true,
     callback = function()
       active = false
+      source_session.close()
       attached_refreshers[bufnr] = nil
+      for _, cached in pairs(hunk_cache) do cached.active = false end
+      attached_hunks[bufnr] = nil
+      active_sources[bufnr], hunk_cache = nil, {}
       pcall(vim.api.nvim_del_augroup_by_id, group)
     end,
   })

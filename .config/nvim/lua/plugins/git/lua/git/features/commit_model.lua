@@ -96,4 +96,11 @@ function M.inline(model, entry)
   end
   return result
 end
+function M.highlight_source(model, entry)
+  if not entry or entry.binary then return nil end
+  return { root = model.root, path = entry.path,
+    old = entry.status == 'A' and { text = '' }
+      or { object = model.base .. ':' .. (entry.old_path or entry.path) },
+    new = entry.status == 'D' and { text = '' } or { object = model.hash .. ':' .. entry.path } }
+end
 return M

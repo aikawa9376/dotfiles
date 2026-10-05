@@ -702,7 +702,9 @@ local function attach(s)
     end
     pcall(vim.api.nvim_del_augroup_by_id, group)
   end })
-  syntax.attach(b)
+  syntax.attach(b, { diff_source = function(hunk)
+    return model_api.highlight_source(s.model, M.entry_at(b, hunk.start_line))
+  end })
 end
 function M.open(opts)
   opts = opts or {}
