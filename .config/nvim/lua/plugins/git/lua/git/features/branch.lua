@@ -51,22 +51,6 @@ _G.fugitive_branch_completion = function(arg_lead, ...)
   return matches
 end
 
-local function get_ahead_behind(branch, upstream, cmd_prefix)
-  if not upstream or upstream == '' then
-    return 0, 0
-  end
-
-  cmd_prefix = cmd_prefix or 'git '
-  local range = vim.fn.shellescape(branch .. '...' .. upstream)
-  local result = vim.fn.system(cmd_prefix .. 'rev-list --left-right --count ' .. range .. ' 2>/dev/null')
-  if vim.v.shell_error ~= 0 then
-    return 0, 0
-  end
-
-  local ahead, behind = result:match('(%d+)%s+(%d+)')
-  return tonumber(ahead) or 0, tonumber(behind) or 0
-end
-
 local function get_branch_list(bufnr, filter)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local cmd_prefix = get_git_prefix(bufnr)
@@ -77,15 +61,15 @@ local function get_branch_list(bufnr, filter)
   filter = filter or vim.b[bufnr].branch_filter or 'all'
   local local_branches, remote_branches, tags = {}, {}, {}
   if filter == 'all' or filter == 'local_' then
-    local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
+    local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(upstream:track)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
     if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
   end
   if filter == 'all' or filter == 'remote' then
-    remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(symref)|%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
+    remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(symref)|%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(upstream:track)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
     if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
   end
   if filter == 'all' or filter == 'tags' then
-    tags = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-creatordate --format=' |%(refname:lstrip=2)||%(creatordate:relative)|%(authorname)|%(contents:subject)' refs/tags/")
+    tags = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-creatordate --format=' |%(refname:lstrip=2)|||%(creatordate:relative)|%(authorname)|%(contents:subject)' refs/tags/")
     if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
   end
 
@@ -117,12 +101,12 @@ local function get_branch_list(bufnr, filter)
   local max_author_len = 0
 
   for _, ref in ipairs(raw_branches) do
-    local head, branch, upstream, date, author, subject = ref.line:match('^([* ]?)|(.-)|(.-)|(.-)|(.-)|(.*)')
+    local head, branch, upstream, track, date, author, subject = ref.line:match('^([* ]?)|(.-)|(.-)|(.-)|(.-)|(.-)|(.*)')
     if branch then
       local ahead, behind = 0, 0
       if ref.kind == 'local_' then
-         -- Pass cmd_prefix to use correct git context for rev-list
-         ahead, behind = get_ahead_behind('refs/heads/' .. branch, upstream, cmd_prefix)
+        ahead = tonumber(track:match('ahead%s+(%d+)')) or 0
+        behind = tonumber(track:match('behind%s+(%d+)')) or 0
       end
 
       local push_info = ''
