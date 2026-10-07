@@ -992,7 +992,11 @@ function M.compare(old, new, opts)
       local next_left, next_right = last_left and last_left.next, last_right and last_right.next
       if last_left then last_left.next = nil end
       if last_right then last_right.next = nil end
-      local end_vertex = route(l[1], r[1], checkpoint)
+      local end_vertex, handled
+      if opts and opts.native then
+        end_vertex, handled = require('git.features.syntax_native').route(l[1], r[1], checkpoint, opts.native, opts.background)
+      end
+      if not handled then end_vertex = route(l[1], r[1], checkpoint) end
       if last_left then last_left.next = next_left end
       if last_right then last_right.next = next_right end
       if not end_vertex then old.comparison = { new = new, result = false }; return nil end
@@ -1050,7 +1054,7 @@ end
 
 -- Private conversion graphs allow suspended comparisons to coexist without
 -- mutating the cached hunk's sibling links/content IDs. Parsing remains shared.
-function M.compare_async(old, new, bufnr, owner, opposite, full_file)
+function M.compare_async(old, new, bufnr, owner, opposite, full_file, background)
   if not old or not new then return nil, false end
   if not full_file and (not structural_language(old.lang) or not structural_language(new.lang)) then return nil, false end
   -- Complete-file mode also owns a shared Text fallback. Keep its cache apart
@@ -1072,6 +1076,7 @@ function M.compare_async(old, new, bufnr, owner, opposite, full_file)
   local job = pending_jobs[new]
   local request = { source = owner or old, opposite = opposite or new }
   local function register(target)
+    if not background then target.background = false end
     local waiting = target.waiters[bufnr] or {}
     target.waiters[bufnr] = waiting
     waiting[request.source] = waiting[request.source] or {}
@@ -1086,10 +1091,27 @@ function M.compare_async(old, new, bufnr, owner, opposite, full_file)
   local function private(source)
     return { code = source.code, lines = source.lines, offsets = source.offsets, lang = source.lang, tree = source.tree }
   end
-  job = { waiters = {}, owners = {} }
+  job = { waiters = {}, owners = {}, background = background == true }
   register(job)
   pending_jobs[new] = job
   local deadline
+  local function live()
+    local style = package.loaded['git.features.syntax_highlight']
+    for buf, waiting in pairs(job.waiters) do
+      if not vim.api.nvim_buf_is_loaded(buf) or style and style.config.word_diff_style ~= 'treesitter' then
+        job.waiters[buf] = nil
+      elseif style then
+        for source, opposites in pairs(waiting) do
+          for opposite in pairs(opposites) do
+            if not style.source_is_active(buf, source, opposite) then opposites[opposite] = nil end
+          end
+          if next(opposites) == nil then waiting[source] = nil end
+        end
+        if next(waiting) == nil then job.waiters[buf] = nil end
+      end
+    end
+    return next(job.waiters) ~= nil
+  end
   job.thread = coroutine.create(function()
     local function checkpoint()
       if vim.uv.hrtime() >= deadline then coroutine.yield() end
@@ -1098,27 +1120,14 @@ function M.compare_async(old, new, bufnr, owner, opposite, full_file)
     if full_file and structural_language(old.lang) and not old.tree:root():has_error() and not new.tree:root():has_error() then
       scope_pair(left, right, checkpoint)
     end
-    local result = M.compare(left, right, { checkpoint = checkpoint })
+    local result = M.compare(left, right, { checkpoint = checkpoint, native = live,
+      background = function() return job.background end })
     if not result and full_file then result = M.text_fallback(old.lines, new.lines, checkpoint) end
     return result
   end)
   local function resume(initial)
     if not initial then
-      local style = package.loaded['git.features.syntax_highlight']
-      for buf, waiting in pairs(job.waiters) do
-        if not vim.api.nvim_buf_is_loaded(buf) or style and style.config.word_diff_style ~= 'treesitter' then
-          job.waiters[buf] = nil
-        elseif style then
-          for source, opposites in pairs(waiting) do
-            for opposite in pairs(opposites) do
-              if not style.source_is_active(buf, source, opposite) then opposites[opposite] = nil end
-            end
-            if next(opposites) == nil then waiting[source] = nil end
-          end
-          if next(waiting) == nil then job.waiters[buf] = nil end
-        end
-      end
-      if next(job.waiters) == nil then pending_jobs[new] = nil; return end
+      if not live() then pending_jobs[new] = nil; return end
     end
     deadline = vim.uv.hrtime() + 5e6
     local ok, result = coroutine.resume(job.thread)
@@ -1143,7 +1152,9 @@ function M.compare_async(old, new, bufnr, owner, opposite, full_file)
       end
       return result, false
     end
-    jobs.schedule(function() resume(false) end)
+    if type(result) == 'table' and result.wait then
+      result.wait(function() jobs.schedule(function() resume(false) end) end)
+    else jobs.schedule(function() resume(false) end) end
     return nil, true
   end
   jobs.schedule(function() resume(false) end)

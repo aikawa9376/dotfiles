@@ -704,6 +704,13 @@ local function attach(s)
   end })
   syntax.attach(b, { diff_source = function(hunk)
     return model_api.highlight_source(s.model, M.entry_at(b, hunk.start_line))
+  end, prefetch = function()
+    local candidates = {}
+    for _, entry in ipairs(s.model.entries) do
+      local spec = model_api.highlight_source(s.model, entry)
+      if spec then candidates[#candidates + 1] = { filename = entry.path, spec = spec } end
+    end
+    return candidates
   end })
 end
 function M.open(opts)

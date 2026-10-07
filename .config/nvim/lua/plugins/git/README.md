@@ -577,6 +577,43 @@ which cached hunks overlap the changed rows. Only those retained hunks need thei
 mark positions checked; expanding another file does not read existing marks.
 Closed hunks/buffers release their resident results.
 
+An optional Rust worker accelerates structural search without changing the
+Tree-sitter syntax colors, correspondence rules or background projection. Build
+it from this plugin directory with:
+
+```sh
+cargo build --release --offline --manifest-path native/Cargo.toml
+```
+
+The worker uses only Rust's standard library and does not invoke `difft`.
+`syntax_native.config.backend` defaults to `auto`: when the release executable
+exists, asynchronous comparisons send regions with at least 64 nodes to it.
+Smaller regions use Lua. Missing, failed or incompatible workers use the Lua
+search; both retain the 3,000,000-state limit and the same tie order.
+At most two workers run at once, foreground requests take queue priority, and
+closed/changed source pairs cancel queued or running requests. Waiting for a
+worker suspends the comparison instead of repeatedly scheduling empty slices.
+For an explicit Lua-only run, set
+`require('git.features.syntax_native').config.backend = 'lua'`.
+An alternative executable can be set with that module's `config.command`.
+The compiled `native/target/` directory is ignored by Git; rebuild after changing
+the Rust source or when installing these dotfiles on another machine.
+
+Status and Commit also prepare up to eight file pairs after a 200 ms debounce,
+including files whose diffs are still collapsed. This is enabled with an
+available worker and `syntax_highlight.config.prefetch` (default `true`), and
+prepares one file at a time. It uses the view's existing read session and parse
+cache; resident prepared trees/results survive shared-LRU eviction. Opening a
+prepared file needs only syntax queries and painting. Opening a file while its
+comparison is pending joins that graph and promotes its queued worker request.
+Blob identities and worktree fingerprints reject obsolete prepared sources;
+refreshing the file list, changing style or unloading the view releases them.
+Preparing a collapsed file does not add a spinner or highlights to its header.
+`tests/syntax_native.lua` compares exact Lua/Rust ranges across all recorded
+cases and covers missing/crashing/invalid workers and cancellation.
+`tests/syntax_prefetch.lua` checks the eight-pair bound, no repeat IO/parsing/search
+on opening, shared pending work, stale-file rejection and unload cancellation.
+
 Complete coloring sources use `highlight_sources` sessions per attached view:
 up to two asynchronous file requests run at once, identical pending requests
 share listeners, and eight completed source pairs are retained. Inputs are

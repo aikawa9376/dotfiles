@@ -3222,7 +3222,7 @@ function M.setup(group)
       -- Load syntax
       syntax_highlight.attach(b, { diff_source = function(hunk)
         return status_renderer.highlight_source(b, hunk.start_line)
-      end })
+      end, prefetch = function() return status_renderer.highlight_candidates(b) end })
 
       -- <Leader>wd: Toggle word diff style
       vim.keymap.set('n', '<Leader>wd', function()

@@ -114,6 +114,11 @@ function M.new()
   function session.request(spec, valid, callback)
     if session.closed then return end
     local key = M.key(spec)
+    local retained = session.retained and session.retained(key)
+    if retained then
+      if valid() then callback(retained) end
+      return
+    end
     local cached = session.cache[key]
     if cached then
       session.clock = session.clock + 1; cached.used = session.clock

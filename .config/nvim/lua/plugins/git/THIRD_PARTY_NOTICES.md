@@ -92,6 +92,7 @@ DEALINGS IN THE SOFTWARE.
 lua/git/features/syntax_word_diff.lua adapts the atom/list conversion, graph
 edge costs, paired delimiter stacks, unchanged-region splitting, nested delimiter
 slider correction, literal/comment word emphasis and text fallback from Difftastic 0.71.0.
+native/src/main.rs implements the same adapted shortest-path search in Rust.
 Language coverage and preprocessing are limited as described in README.md.
 
 Source: [Difftastic 0.71.0](https://github.com/Wilfred/difftastic/tree/0.71.0).

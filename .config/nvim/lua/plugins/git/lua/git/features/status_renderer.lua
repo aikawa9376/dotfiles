@@ -813,7 +813,10 @@ function M.entry_at(bufnr, row)
 end
 
 function M.highlight_source(bufnr, row)
-  local model, entry = models[bufnr], M.entry_at(bufnr, row)
+  return M.entry_highlight_source(models[bufnr], M.entry_at(bufnr, row))
+end
+
+function M.entry_highlight_source(model, entry)
   if not model or not entry or entry.header or entry.section == 'conflicted'
     or entry.binary then return nil end
   local spec = { root = model.work_tree, path = entry.path }
@@ -831,6 +834,18 @@ function M.highlight_source(bufnr, row)
     spec.old, spec.new = { text = '' }, { path = vim.fs.joinpath(model.work_tree, entry.path) }
   else return nil end
   return spec
+end
+
+function M.highlight_candidates(bufnr)
+  local model, result = models[bufnr], {}
+  if not model then return result end
+  for _, entries in ipairs({ model.unstaged, model.staged, model.untracked }) do
+    for _, entry in ipairs(entries) do
+      local spec = M.entry_highlight_source(model, entry)
+      if spec then result[#result + 1] = { filename = entry.path, spec = spec } end
+    end
+  end
+  return result
 end
 
 function M.conflict_worktree_line(bufnr, row)

@@ -8,7 +8,7 @@ local highlight_sources = require('git.features.highlight_sources')
 -- 'delta': delta 0.19.2 token alignment and forward line pairing
 -- 'treesitter': paired syntax lists and atoms, with token-only backgrounds
 -- 'github':  sequential line pairing (old[i] <-> new[i])
-M.config = { word_diff_style = 'treesitter', changed_fg = 'syntax' }
+M.config = { word_diff_style = 'treesitter', changed_fg = 'syntax', prefetch = true }
 
 local WORD_DIFF_STYLES = { 'diffs', 'delta', 'treesitter', 'github' }
 
@@ -663,9 +663,12 @@ function Highlighter.prepare(cached, code, lang, query, bufnr)
         remaining = remaining - 1
         if remaining == 0 then finish() end
       end
+      full.parsed = full.parsed or {}
+      full.parsed[lang] = full.parsed[lang] or {}
       for _, side in ipairs({ 'old', 'new' }) do
-        syntax_word_diff.parse_async(full[side], lang, valid, function(source)
+        local function parsed_source(source)
           if not valid() then return end
+          full.parsed[lang][side] = source or false
           local original = code[side]
           local offset = math.max(0, (cached.source_starts[side] or 1) - 1)
           jobs.run(function(checkpoint)
@@ -686,7 +689,9 @@ function Highlighter.prepare(cached, code, lang, query, bufnr)
             end
             ready()
           end)
-        end)
+        end
+        if full.parsed[lang][side] ~= nil then parsed_source(full.parsed[lang][side])
+        else syntax_word_diff.parse_async(full[side], lang, valid, parsed_source) end
       end
     end)
   end
@@ -1123,6 +1128,7 @@ local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
 local attached_refreshers = {}
 local attached_hunks = {}
 local active_sources = {}
+local warmers = {}
 local spinner_scheduled = false
 
 function M.start_spinner()
@@ -1177,6 +1183,7 @@ end
 function M.source_is_active(bufnr, source, opposite)
   local pairs = active_sources[bufnr] and active_sources[bufnr][source]
   return pairs and (not opposite or pairs[opposite] == true)
+    or warmers[bufnr] and warmers[bufnr].is_active(source, opposite)
 end
 local highlight_group = vim.api.nvim_create_augroup('FugitiveExtensionHighlights', { clear = true })
 vim.api.nvim_create_autocmd('ColorScheme', {
@@ -1251,6 +1258,17 @@ function M.attach(bufnr, opts)
   local group = vim.api.nvim_create_augroup('FugitiveExtensionSyntax' .. bufnr, { clear = true })
   local active = true
   local source_session = highlight_sources.new()
+  local warmer
+  if opts and opts.prefetch then
+    warmer = require('git.features.syntax_prefetch').new(bufnr, source_session, function()
+      return active and vim.api.nvim_buf_is_loaded(bufnr) and M.config.prefetch
+        and M.config.word_diff_style == 'treesitter' and require('git.features.syntax_native').command() ~= nil
+    end)
+    warmers[bufnr], source_session.retained = warmer, warmer.retained
+  end
+  local function prefetch()
+    if warmer then warmer.update(opts.prefetch()) end
+  end
 
   local legacy_regions = {}
   local refresh_scheduled = false
@@ -1329,6 +1347,7 @@ function M.attach(bufnr, opts)
 
   local function refresh(changes)
     if not active or not vim.api.nvim_buf_is_loaded(bufnr) then return end
+    if warmer then warmer.ready() end
     vim.api.nvim_buf_call(bufnr, function()
       local tick = vim.api.nvim_buf_get_changedtick(bufnr)
       local first_line = opts and opts.first_line and opts.first_line()
@@ -1396,6 +1415,7 @@ function M.attach(bufnr, opts)
         end
         if stable then
           conflict_marks = require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns) or {}
+          prefetch()
           return
         end
       else
@@ -1432,6 +1452,7 @@ function M.attach(bufnr, opts)
       attached_hunks[bufnr] = retained
       seen_tick, seen_first_line, seen_settings = tick, first_line, settings
       conflict_marks = require('git.features.status_renderer').apply_conflict_highlights(bufnr, ns) or {}
+      prefetch()
     end)
   end
 
@@ -1480,6 +1501,8 @@ function M.attach(bufnr, opts)
     once = true,
     callback = function()
       active = false
+      if warmer then warmer.close() end
+      warmers[bufnr] = nil
       source_session.close()
       attached_refreshers[bufnr] = nil
       for _, cached in pairs(hunk_cache) do cached.active = false end
