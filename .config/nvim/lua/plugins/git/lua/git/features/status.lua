@@ -1731,6 +1731,7 @@ function M.setup(group)
       local function show_stash_help()
         help.show('Stash keys', {
           'cl     show stash list',
+          'cz<Space> Git stash...',
           'cz<CR> stash changes',
           'czz    stash all changes',
           'czw    stash keep-index',
@@ -1741,6 +1742,7 @@ function M.setup(group)
           'czs    stash staged changes',
           'czv    open stash diff',
           'cw     reword commit / rename stash',
+          'cz?    show this guide',
           'q      close status',
         })
       end
@@ -2518,17 +2520,22 @@ function M.setup(group)
           local actions = {
             { key = '<CR>', label = 'Open file' },
             { key = 'gf', label = 'Open file and close status' },
-            { key = 'o', label = 'Toggle inline diff' },
-            { key = 's', label = conflicted and 'Accept incoming or resolved worktree'
+            { key = 'o', label = 'Toggle inline diff (=)' },
+            { key = 'i', label = 'Expand and jump to next diff item' },
+            { key = 's', label = (conflicted and 'Accept incoming or resolved worktree'
               or staged and (context.in_hunk and 'Unstage hunk' or 'Unstage file')
-              or (context.in_hunk and 'Stage hunk' or 'Stage file') },
+              or (context.in_hunk and 'Stage hunk' or 'Stage file')) .. (conflicted and '' or ' (- also toggles)' ) },
             { key = 'I', label = staged and 'Reset patch interactively' or 'Stage interactively' },
+            { key = 'P', label = 'Stage / reset patch interactively' },
+            { key = 'gE', label = 'Add path to .git/info/exclude' },
+            { key = 'gI', label = 'Add path to .gitignore' },
             { key = 'd', label = conflicted and 'Compare base / ours / theirs' or 'Open vertical diff' },
             { key = 'dh', label = 'Open horizontal diff' },
             { key = 'gy', label = 'Copy file path' },
           }
           if staged then
             table.insert(actions, { key = 'a', label = context.in_hunk and 'Apply staged hunk to worktree' or 'Apply staged file patch to worktree' })
+            table.insert(actions, { key = 'u', label = 'Unstage file' })
           end
           if conflicted then
             vim.list_extend(actions, {
@@ -2536,6 +2543,8 @@ function M.setup(group)
               { key = 'mo', label = 'Choose ours without staging' },
               { key = 'mt', label = 'Choose theirs without staging' },
               { key = 'mr', label = 'Stage current worktree content' },
+              { key = '[x', label = 'Previous conflict' },
+              { key = ']x', label = 'Next conflict' },
             })
           else
             table.insert(actions, { key = 'X', label = entry.section == 'untracked' and 'Delete untracked path'
@@ -2562,9 +2571,14 @@ function M.setup(group)
         if kind == 'commit' then
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open commit' },
+            { key = '<Tab>', label = 'Open patch collection' },
             { key = 'd', label = 'Compare commit in Diffview' },
             { key = 'C', label = 'Show commit information' },
             { key = 'gy', label = 'Copy commit hash' },
+            { key = 'gD', label = 'Diff display settings' },
+            { key = 'gn', label = 'Show Git note' },
+            { key = 'gN', label = 'Edit Git note' },
+            { key = 'gx', label = 'Open commit on GitHub' },
             { key = 'a', label = 'Apply commit patch to worktree' },
             { key = 'cw', label = 'Reword commit' },
             { key = 'cf', label = 'Fixup / reword with index' },
@@ -2587,8 +2601,13 @@ function M.setup(group)
           return { title = context.label, actions = {
             { key = '<CR>', label = 'Open stash diff' },
             { key = 'a', label = 'Apply selected stash (without index)' },
+            { key = 'P', label = 'Pop selected stash (without index)' },
+            { key = 'czv', label = 'Open stash diff' },
             { key = 'czp', label = 'Pop selected stash with index' },
+            { key = 'czA', label = 'Apply stash without index' },
+            { key = 'czP', label = 'Pop stash without index' },
             { key = 'cw', label = 'Rename selected stash' },
+            { key = 'cz?', label = 'Show stash key bindings' },
             { key = 'C', label = 'Show stash information' },
             { key = 'gy', label = 'Copy stash selector' },
             { key = 'X', label = 'Drop selected stash' },
@@ -2597,7 +2616,17 @@ function M.setup(group)
         end
 
         if kind == 'stash_header' then
-          local actions = { { key = 'cl', label = 'Open stash list' } }
+          local actions = {
+            { key = 'cl', label = 'Open stash list' },
+            { key = 'cz?', label = 'Show stash key bindings' },
+            { key = 'cz<Space>', label = 'Run Git stash command' },
+            { key = 'cz<CR>', label = 'Stash working tree' },
+            { key = 'cza', label = 'Apply selected stash with index' },
+            { key = 'czA', label = 'Apply stash without index' },
+            { key = 'czp', label = 'Pop selected stash with index' },
+            { key = 'czP', label = 'Pop stash without index' },
+            { key = 'czv', label = 'Open stash diff' },
+          }
           local sections = available_change_sections()
           if not sections.conflicted and (sections.staged or sections.unstaged) then
             table.insert(actions, { key = 'czz', label = 'Stash tracked changes' })
@@ -2612,6 +2641,7 @@ function M.setup(group)
             { key = '<CR>', label = 'Open pull request' },
             { key = 'gx', label = 'Open pull request on GitHub' },
             { key = 'gy', label = 'Copy pull request URL' },
+            { key = '<C-y>', label = 'Copy pull request URL' },
           } }
         end
         if kind == 'branch' then
@@ -2704,7 +2734,11 @@ function M.setup(group)
         if context.kind == 'repository' then
           if sections.staged then
             table.insert(actions, { key = 'U', label = 'Unstage all changes' })
-            if not sections.conflicted then table.insert(actions, { key = 'cc', label = 'Commit staged changes' }) end
+            if not sections.conflicted then
+              table.insert(actions, { key = 'cc', label = 'Commit staged changes' })
+              table.insert(actions, { key = 'c<CR>', label = 'Commit staged changes' })
+              table.insert(actions, { key = 'ce', label = 'Amend without editing message' })
+            end
           end
           if sections.unstaged or sections.untracked then table.insert(actions, { key = 'S', label = 'Stage all changes' }) end
           if health and not current_operation and work_tree
@@ -2721,6 +2755,20 @@ function M.setup(group)
         })
         if context.entry and (context.entry.section == 'staged' or context.entry.section == 'unstaged') then
           table.insert(actions, { key = 'gD', label = 'Diff display settings' })
+        end
+        if context.kind == 'repository' then
+          vim.list_extend(actions, {
+            { key = 'dR', label = 'Review outgoing stack with range-diff' },
+            { key = 'gm', label = 'Go to Conflicted section' },
+            { key = 'gu', label = 'Go to Unstaged section' },
+            { key = 'gU', label = 'Go to Untracked section' },
+            { key = 'gs', label = 'Go to Staged section' },
+            { key = 'gp', label = 'Go to Commits section' },
+            { key = 'gP', label = 'Go to Unpulled section' },
+            { key = '<C-Space>', label = 'Toggle commit graph' },
+            { key = 'gD', label = 'Display settings' },
+          })
+          if not current_operation then table.insert(actions, { key = 'gbs', label = 'Start Git bisect' }) end
         end
         table.insert(actions, { key = 'q', label = 'Close menu' })
         return { title = 'Panels / view', actions = actions }

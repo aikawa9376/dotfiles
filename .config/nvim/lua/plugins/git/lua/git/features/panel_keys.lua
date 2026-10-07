@@ -173,7 +173,7 @@ local function chooser(buf, title, actions)
   local ctx = M.context(buf)
   local choices = {}
   for index, action in ipairs(actions) do
-    choices[#choices + 1] = { key = tostring(index), label = action.label, callback = function()
+    choices[#choices + 1] = { key = action.menu_key or tostring(index), label = action.label, callback = function()
       if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= buf then return end
       if vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] ~= line then
         vim.notify('Selected item changed; reopen the action chooser', vim.log.levels.WARN); return
@@ -190,12 +190,14 @@ function M.configure(buf, opts)
   local state = { context = opts.context, help = opts.help, guide = opts.guide, hidden = {}, history = {}, display = {}, operations = {} }
   configured[buf] = state
   local panel = panels[vim.bo[buf].filetype]
-  local function move(old, new, group, label, keep)
+  local function move(old, new, group, label, keep, menu_key)
     local map = mapping(buf, old)
     if map.buffer ~= 1 or not (map.callback or map.rhs) then return end
     local callback = function() return invoke(map) end
     if new then bind(buf, new, callback, label or map.desc, 'n', map.nowait == 1) end
-    if group then state[group][#state[group] + 1] = { label = label or map.desc or old, callback = callback } end
+    if group then state[group][#state[group] + 1] = {
+      label = label or map.desc or old, callback = callback, menu_key = menu_key,
+    } end
     if keep then state.hidden[map.lhs] = true else vim.keymap.del('n', old, { buffer = buf }) end
   end
   -- These aliases are still called by Magit's existing_key(). Do not modify that layer.
@@ -205,37 +207,56 @@ function M.configure(buf, opts)
   if panel == 'worktree' then move('gs', 'cZs', nil, 'Sync primary to selected HEAD', true); move('a', 'cZa', nil, 'Add worktree') end
   if panel == 'status' then
     move('co', 'mo'); move('ct', 'mt'); move('cr', 'mr')
-    for _, key in ipairs({ 'mi', 'mu', 'ms' }) do move(key, nil, 'operations') end
-    move('mU', nil, 'operations', 'Set current branch upstream')
+    for _, pair in ipairs({ { 'mi', 's' }, { 'mu', 'S' }, { 'ms', 'U' } }) do
+      move(pair[1], nil, 'operations', nil, false, pair[2])
+    end
+    move('mU', nil, 'operations', 'Set current branch upstream', false, 'u')
     move('P', nil)
     move('rD', 'dR', nil, 'Compare outgoing stack with range-diff')
-    for _, key in ipairs({ 'cF', 'cW', 'cs', 'cn', 'cS' }) do move(key, nil, 'history') end
+    for _, pair in ipairs({ { 'cF', 'A' }, { 'cW', 'r' }, { 'cs', 's' },
+      { 'cn', 'e' }, { 'cS', 'S' } }) do
+      move(pair[1], nil, 'history', nil, false, pair[2])
+    end
   elseif panel == 'stash' then
     move('A', 'a'); move('P', 'czp')
   elseif panel == 'branch' then
-    move('<Leader>gp', nil, 'operations', 'Push current branch with force-with-lease')
-    move('cP', nil, 'operations', 'Cherry-pick clipboard commits')
-    move('f', nil, 'operations', 'Fetch all remotes')
-    move('p', nil, 'operations', 'Pull current branch')
-    move('P', nil, 'operations', 'Pull selected branch')
-    move('r<Space>', nil, 'operations', 'Stash, fetch, rebase selected branch')
-    move('m<Space>', nil, 'operations', 'Merge selected branch')
+    move('<Leader>gp', nil, 'operations', 'Push current branch with force-with-lease', false, 'F')
+    move('cP', nil, 'operations', 'Cherry-pick clipboard commits', false, 'A')
+    move('f', nil, 'operations', 'Fetch all remotes', false, 'f')
+    move('p', nil, 'operations', 'Pull current branch', false, 'p')
+    move('P', nil, 'operations', 'Pull selected branch', false, 'P')
+    move('r<Space>', 'coR', 'operations', 'Stash, fetch, rebase selected branch', false, 'R')
+    move('m<Space>', 'coM', 'operations', 'Merge selected branch', false, 'M')
     bind(buf, 'B', '<Cmd>Gbranch<CR>', 'Open branch list')
   elseif panel == 'reflog' then
     move('B', 'con', nil, 'Create rescue branch at selected destination', true)
     move('<C-y>', nil, 'operations', 'Copy selected commit hash')
     state.hidden.y = true -- selector alias used by Magit
   elseif panel == 'log' then
-    move('<Leader>R', nil, 'history', 'Reset HEAD to selected commit (mixed)')
-    move('<M-j>', nil, 'history', 'Move commit down')
-    move('<M-k>', nil, 'history', 'Move commit up')
+    move('<Leader>R', nil, 'history', 'Reset HEAD to selected commit (mixed)', false, 'R')
+    move('<M-j>', nil, 'history', 'Move commit down', false, 'J')
+    move('<M-k>', nil, 'history', 'Move commit up', false, 'K')
   elseif panel == 'commit' then
     move('gA', nil, 'history', 'Edit message in a float')
   end
-  move('<Leader>cf', nil, 'history', 'Fixup selected commit into its parent')
-  move('<Leader>wd', nil, 'display', 'Cycle word-diff style')
+  move('<Leader>cf', nil, 'history', 'Fixup selected commit into its parent', false,
+    (panel == 'status' or panel == 'log') and 'F' or nil)
+  -- gD exposes explicit style choices instead of the former single cycle action.
+  move('<Leader>wd', nil)
   if panel == 'status' or panel == 'commit' then
-    state.display[#state.display + 1] = { label = 'Toggle diff foreground colors', callback = function()
+    for _, choice in ipairs({
+      { key = 'l', style = 'delta', label = 'Change word-diff style delta (LazyGit-style)' },
+      { key = 'g', style = 'github', label = 'Change word-diff style github' },
+      { key = 'd', style = 'diffs', label = 'Change word-diff style diffs' },
+      { key = 's', style = 'treesitter', label = 'Change word-diff style treesitter' },
+    }) do
+      local style, label, menu_key = choice.style, choice.label, choice.key
+      state.display[#state.display + 1] = {
+        label = label, menu_key = menu_key,
+        callback = function() require('git.features.syntax_highlight').set_word_diff_style(style) end,
+      }
+    end
+    state.display[#state.display + 1] = { menu_key = 't', label = 'Toggle diff foreground colors', callback = function()
       local value = require('git.features.syntax_highlight').toggle_changed_fg()
       vim.notify('Diff foreground: ' .. value, vim.log.levels.INFO)
     end }

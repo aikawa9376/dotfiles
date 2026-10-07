@@ -118,7 +118,7 @@ press('gH')
 vim.bo[status].modifiable = true; vim.bo[status].readonly = false
 vim.api.nvim_buf_set_lines(status, 0, 1, false, { 'changed source row' })
 vim.bo[status].modifiable = false; vim.bo[status].readonly = true
-press('1')
+press('A')
 assert(vim.api.nvim_get_current_buf() == status and git({ 'rev-parse', 'HEAD' }) == tip)
 press('mo'); assert(git({ 'rev-parse', 'HEAD' }) == tip, 'conflict key mutated a non-conflict row')
 -- WIP refresh retains the selected snapshot rather than its moving entry number.

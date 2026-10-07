@@ -125,14 +125,33 @@ press('gi')
 assert(prompt == 'Index flag for sample.txt:', 'gi did not open index flag management')
 press('?')
 local guide = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
-for _, key in ipairs({ 'gi', 'gy', 'I', 'd', 'X', 'gD', 'R' }) do
+for _, key in ipairs({ 'gi', 'gy', 'I', 'P', 'i', 'gE', 'gI', 'd', 'X', 'gD', 'R' }) do
   assert(guide:find(key, 1, true), 'help omits ' .. key)
 end
 assert(not guide:find('gws', 1, true), 'help retained old worktree sync key')
 assert(not guide:find('Choose ours', 1, true) and not guide:find('Reword commit', 1, true)
   and not guide:find('Go to unmerged', 1, true), 'file help includes unrelated actions')
 assert(vim.bo.filetype == 'fugitiveactionmenu' and vim.api.nvim_buf_line_count(0) <= 26,
-  'file help should be a compact action menu')
+  ('file help should be a compact action menu (%d lines)'):format(vim.api.nvim_buf_line_count(0)))
+press('q')
+local repository_row
+for row, line in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
+  if line == '' then repository_row = row; break end
+end
+assert(repository_row, 'repository context row missing')
+vim.api.nvim_win_set_cursor(0, { repository_row, 0 })
+press('?')
+guide = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+for _, key in ipairs({ 'gm', 'gu', 'gU', 'gs', 'gp', 'gP', '<C-Space>', 'gD', 'dR', 'gbs' }) do
+  assert(guide:find(key, 1, true), 'repository help omits ' .. key)
+end
+press('q')
+vim.api.nvim_win_set_cursor(0, { commit_row, 0 })
+press('?')
+guide = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+for _, key in ipairs({ '<Tab>', 'gD', 'gn', 'gN', 'gx', 'gr', 'gH' }) do
+  assert(guide:find(key, 1, true), 'commit help omits ' .. key)
+end
 press('q')
 -- A queued WinEnter restore must not undo the new opening position.
 press('gU')
