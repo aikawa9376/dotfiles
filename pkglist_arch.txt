@@ -11,6 +11,7 @@ cmake
 copyq
 ctags
 dhcpcd
+difftastic
 docker
 docker-buildx
 docker-compose
@@ -30,8 +31,8 @@ git-delta
 git-lfs
 github-cli
 github-copilot-cli
-hyprland
 grim
+hyprland
 i3-wm
 imagemagick
 insync
@@ -87,6 +88,7 @@ unarchiver
 unzip
 vivaldi
 waybar
+webkit2gtk-4.1
 wget
 which
 wl-clipboard
