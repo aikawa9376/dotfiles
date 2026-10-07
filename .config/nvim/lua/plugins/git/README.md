@@ -607,14 +607,30 @@ mark positions checked; expanding another file does not read existing marks.
 Closed hunks/buffers release their resident results.
 
 An optional Rust worker accelerates structural search without changing the
-Tree-sitter syntax colors, correspondence rules or background projection. Build
-it from this plugin directory with:
+Tree-sitter syntax colors, correspondence rules or background projection.
+When `rustc` is on PATH, the first native availability check builds a missing or
+outdated worker in the background. Lua handles comparisons while it builds;
+later requests automatically use the completed worker. No Cargo or network
+access is needed: the worker uses only Rust's standard library and does not
+invoke `difft`.
+
+Executables live in this repository's `.config/nvim/bin/<os>-<arch>/` directory:
+`linux-x64/git-syntax-search`, `darwin-arm64/git-syntax-search` for Apple Silicon,
+or `darwin-x64/git-syntax-search` for Intel Macs. Each machine builds for its own
+OS/CPU. Changing `native/src/main.rs` triggers a rebuild when its modification
+time is newer than the binary. A failed build is attempted only once per source
+revision in an editor session and continues with Lua.
+
+To build manually from this plugin directory (adjust the destination for your
+machine):
 
 ```sh
-cargo build --release --offline --manifest-path native/Cargo.toml
+mkdir -p ../../../bin/darwin-arm64
+rustc --edition=2021 --crate-name git_syntax_search -C opt-level=3 -C lto=yes \
+  -C codegen-units=1 -C panic=abort -C strip=symbols native/src/main.rs \
+  -o ../../../bin/darwin-arm64/git-syntax-search
 ```
 
-The worker uses only Rust's standard library and does not invoke `difft`.
 `syntax_native.config.backend` defaults to `auto`: when the release executable
 exists, asynchronous comparisons send regions with at least 64 nodes to it.
 Smaller regions use Lua. Missing, failed or incompatible workers use the Lua
@@ -625,8 +641,9 @@ worker suspends the comparison instead of repeatedly scheduling empty slices.
 For an explicit Lua-only run, set
 `require('git.features.syntax_native').config.backend = 'lua'`.
 An alternative executable can be set with that module's `config.command`.
-The compiled `native/target/` directory is ignored by Git; rebuild after changing
-the Rust source or when installing these dotfiles on another machine.
+Lua-only mode and an explicit `config.command` bypass automatic building.
+Automatic builds write a temporary file beside the executable and rename it
+only on success; they do not create `native/target/` or install into `.cargo`.
 
 Status and Commit also prepare up to eight file pairs after a 200 ms debounce,
 including files whose diffs are still collapsed. This is enabled with an
@@ -640,6 +657,8 @@ refreshing the file list, changing style or unloading the view releases them.
 Preparing a collapsed file does not add a spinner or highlights to its header.
 `tests/syntax_native.lua` compares exact Lua/Rust ranges across all recorded
 cases and covers missing/crashing/invalid workers and cancellation.
+`tests/syntax_native_build.lua` checks Linux/Mac binary paths, asynchronous
+rustc-only compilation, rebuilding, atomic publication and build-failure fallback.
 `tests/syntax_prefetch.lua` checks the eight-pair bound, no repeat IO/parsing/search
 on opening, shared pending work, stale-file rejection and unload cancellation.
 

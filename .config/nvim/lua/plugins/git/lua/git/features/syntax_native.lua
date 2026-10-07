@@ -3,13 +3,17 @@ local M = { config = { backend = 'auto', min_nodes = 64, workers = 2 },
   stats = { started = 0, completed = 0, failed = 0, cancelled = 0 } }
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(
   vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))))
+local binary = require('git.features.syntax_native_build').new(plugin .. '/native/src/main.rs',
+  plugin .. '/../../../bin')
 local queue, running, active = {}, {}, 0
 local pump
 
 function M.command()
   if M.config.backend == 'lua' then return nil end
-  local command = M.config.command or plugin .. '/native/target/release/git-syntax-search'
-  return vim.fn.executable(command) == 1 and command or nil
+  if M.config.command then
+    return vim.fn.executable(M.config.command) == 1 and M.config.command or nil
+  end
+  return binary.command()
 end
 
 local function request(command, input, valid, done, background)

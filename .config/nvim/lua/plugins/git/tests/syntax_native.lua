@@ -1,11 +1,12 @@
--- Build native/Cargo.toml --release first; nvim --headless --clean -u NONE -l tests/syntax_native.lua
+-- nvim --headless --clean -u NONE -l tests/syntax_native.lua (rustc builds a missing worker).
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))
 vim.opt.rtp:prepend(plugin)
 vim.opt.rtp:append(vim.fn.stdpath('data') .. '/site')
 vim.opt.rtp:prepend(vim.fn.stdpath('data') .. '/lazy/nvim-treesitter/runtime')
 local structural = require('git.features.syntax_word_diff')
 local native = require('git.features.syntax_native')
-assert(native.command(), 'build the release Rust worker first')
+assert(vim.wait(120000, function() return native.command() ~= nil end, 10),
+  'Rust worker unavailable; install rustc or set syntax_native.config.command')
 native.config.min_nodes = 0
 local fixtures = vim.json.decode(table.concat(vim.fn.readfile(plugin .. '/tests/fixtures/difftastic_word_diff.json'), '\n'))
 -- Exercise the exact full-file scoping pass without adding a production API for tests.
