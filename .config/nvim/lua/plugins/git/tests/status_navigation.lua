@@ -2,6 +2,7 @@
 local source = debug.getinfo(1, 'S').source:sub(2)
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(source, ':p')))
 package.path = plugin .. '/lua/?.lua;' .. package.path
+vim.g.git_status_auto_fetch = false -- This fixture uses a non-routable GitHub URL for gx.
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, 'p')
 local function git(args)

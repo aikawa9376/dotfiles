@@ -197,6 +197,8 @@ it never integrates fetched commits into the current branch. It runs at most onc
 per repository per 180 seconds by default. Set `vim.g.git_status_auto_fetch = false`
 to disable it, or `vim.g.git_status_auto_fetch_interval` to change the interval
 in seconds.
+While Git panels are open, Lualine shows an animated operation indicator for
+fetch, pull, push, and fetch/rebase activity, including in inactive Git windows.
 The header shows `Head`, the configured `Upstream` (the usual Pull source), a
 separate `Remote` row for a distinct Push destination branch when applicable,
 and the nearest current/next tags with their commit distances. `Tag` is omitted

@@ -62,6 +62,14 @@ local function green_rows()
   return rows
 end
 local hashes = vim.split(git({ 'reflog', '--format=%H' }), '\n', { plain = true })
+local first_line = vim.api.nvim_buf_get_lines(b, 0, 1, false)[1]
+local date_start, date_end = assert(first_line:find('%d%d%d%d%-%d%d%-%d%d'))
+local date_marked = false
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('fugitive_reflog_static'),
+  { 0, date_start - 1 }, { 0, date_end }, { details = true })) do
+  if mark[3] == date_start - 1 and mark[4].hl_group == 'Directory' then date_marked = true end
+end
+assert(date_marked, 'reflog date should share the Directory color used by Log and Status dates')
 local marked = {}
 for _, row in ipairs(green_rows()) do marked[#marked + 1] = hashes[row] end
 assert(#marked == 3, vim.inspect(marked))

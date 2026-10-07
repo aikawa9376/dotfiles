@@ -44,6 +44,8 @@ end
 local function background(root, args)
   local argv = { 'git', '-C', root }; vim.list_extend(argv, args)
   local lines = {}
+  local kind = ({ fetch = 'fetch', pull = 'pull', push = 'push' })[args[1]]
+  local finish_progress = kind and require('git.features.operation_progress').start(root, kind)
   local function collect(_, data)
     for _, line in ipairs(data or {}) do if line ~= '' then lines[#lines + 1] = line end end
   end
@@ -55,12 +57,16 @@ local function background(root, args)
     on_stderr = collect,
     on_exit = function(_, code)
       vim.schedule(function()
+        if finish_progress then finish_progress() end
         utils.fire_fugitive_changed({ work_tree = root })
         if code ~= 0 then vim.notify(error_output(lines, code), vim.log.levels.ERROR) end
       end)
     end,
   })
-  if job <= 0 then vim.notify('Could not start Git', vim.log.levels.ERROR) end
+  if job <= 0 then
+    if finish_progress then finish_progress() end
+    vim.notify('Could not start Git', vim.log.levels.ERROR)
+  end
   return job
 end
 

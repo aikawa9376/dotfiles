@@ -1,6 +1,7 @@
 local source = debug.getinfo(1, 'S').source:sub(2)
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(source, ':p')))
 package.path = plugin .. '/lua/?.lua;' .. package.path
+vim.g.git_status_auto_fetch = false -- The fixture controls its own remote refs.
 -- Deliberately disable OS notifications: editor events must be sufficient.
 package.loaded['git.features.status_watch'] = { subscribe = function() return function() end end }
 package.loaded['git.features.worktree_watch'] = { subscribe = function() return function() end end }

@@ -31,6 +31,49 @@ local status_initialized_by_buf = {}
 local status_dirty_by_buf = {}
 local status_reload_by_buf = {}
 local pending_status_focus_by_buf = {}
+local auto_fetch_by_work_tree = {}
+local auto_fetch_interval = 180
+
+local function auto_fetch_status_repo(work_tree, opts)
+  if opts.auto_fetch == false or vim.g.git_status_auto_fetch == false then return end
+
+  local async = require('git.features.async')
+  if async.busy(work_tree) then return end
+
+  local now = vim.uv.hrtime() / 1e9
+  local interval = math.max(0, tonumber(vim.g.git_status_auto_fetch_interval) or auto_fetch_interval)
+  local state = auto_fetch_by_work_tree[work_tree]
+  if state and (state.fetching or (interval > 0 and now - state.last_attempt < interval)) then return end
+  state = state or {}
+  state.fetching, state.last_attempt = true, now
+  auto_fetch_by_work_tree[work_tree] = state
+
+  local finish_progress
+  local task, err = async.run(work_tree, function()
+    local remotes, remote_err = async.git(work_tree, { 'remote' })
+    if not remotes then error(remote_err, 0) end
+    if vim.trim(remotes) == '' then return false end
+
+    finish_progress = require('git.features.operation_progress').start(work_tree, 'fetch')
+    local _, fetch_err = async.git(work_tree, { 'fetch' })
+    if fetch_err then error(fetch_err, 0) end
+    return true
+  end, function(ok, fetched_or_err)
+    if finish_progress then finish_progress() end
+    if auto_fetch_by_work_tree[work_tree] ~= state then return end
+    state.fetching = false
+    if not ok then
+      vim.notify('Git auto-fetch failed: ' .. tostring(fetched_or_err), vim.log.levels.WARN)
+    elseif fetched_or_err then
+      utils.fire_fugitive_changed({ work_tree = work_tree, reason = 'status-auto-fetch' })
+    end
+  end)
+  if not task then
+    if finish_progress then finish_progress() end
+    state.fetching = false
+    if err then vim.notify('Git auto-fetch failed: ' .. tostring(err), vim.log.levels.WARN) end
+  end
+end
 
 local function update_auto_commit_scope(bufnr, count)
   local state = scope_state_by_buf[bufnr] or {}
@@ -3498,6 +3541,7 @@ function M.open(opts)
     end
   end
   configure_status_window(vim.fn.bufwinid(bufnr))
+  auto_fetch_status_repo(work_tree, opts)
   return bufnr
 end
 

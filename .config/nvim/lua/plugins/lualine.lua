@@ -172,6 +172,15 @@ return {
       return " " .. table.concat(parts, " ")
     end
 
+    local function git_operation_statusline()
+      local progress = package.loaded["git.features.operation_progress"]
+      return progress and progress.status() or ""
+    end
+
+    local function git_operation_is_active()
+      return git_operation_statusline() ~= ""
+    end
+
     vim.api.nvim_create_autocmd("User", {
       pattern = { "OverseerListUpdate", "OverseerListClose" },
       callback = function()
@@ -316,6 +325,12 @@ return {
             cond = conditions.hide_in_width,
           },
           {
+            git_operation_statusline,
+            cond = git_operation_is_active,
+            color = { fg = colors.magenta, gui = "bold" },
+            padding = { left = 0, right = 1 },
+          },
+          {
             "diagnostics",
             sources = { "nvim_diagnostic" },
             symbols = { error = " ", warn = " ", info = " " },
@@ -372,6 +387,12 @@ return {
               return (icon or "") .. " " .. vim.fn.fnamemodify(name, ":.")
             end,
             cond = conditions.buffer_not_empty,
+          },
+          {
+            git_operation_statusline,
+            cond = git_operation_is_active,
+            color = { fg = colors.magenta, gui = "bold" },
+            padding = { left = 0, right = 1 },
           },
         },
         lualine_b = {}, lualine_c = {}, lualine_x = {}, lualine_y = {}, lualine_z = {},

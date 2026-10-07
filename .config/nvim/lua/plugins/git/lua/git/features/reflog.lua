@@ -127,7 +127,7 @@ local function apply_static_highlights(bufnr, lines, entries)
     local line = lines[row]
     local next_col = highlight_range(bufnr, row, line, entry.selector, 1,
       entry.recovery_point and 'FugitiveReflogCheckpoint' or 'Directory')
-    next_col = highlight_range(bufnr, row, line, date_label(entry.timestamp), next_col, 'Comment')
+    next_col = highlight_range(bufnr, row, line, date_label(entry.timestamp), next_col, 'Directory')
     next_col = highlight_range(bufnr, row, line, entry.short_hash, next_col,
       entry.same_count > 1 and 'DiagnosticInfo' or 'String')
     local operation_group = ({

@@ -68,6 +68,42 @@ local feature_line = vim.api.nvim_buf_get_lines(bufnr, row_for_kind(bufnr, 'feat
   row_for_kind(bufnr, 'feature', 'local_'), false)[1]
 assert(feature_line:find('↓1↑1', 1, true),
   'upstream ahead/behind counts were not rendered from for-each-ref: ' .. feature_line)
+local feature_row = row_for_kind(bufnr, 'feature', 'local_')
+local branch_ns = vim.api.nvim_get_namespaces().fugitive_branch_names
+local branch_marks = vim.api.nvim_buf_get_extmarks(bufnr, branch_ns, { feature_row - 1, 0 },
+  { feature_row - 1, -1 }, { details = true })
+local groups = {}
+local subject_start = assert(feature_line:find('local feature', 1, true)) - 1
+for _, mark in ipairs(branch_marks) do
+  local details = mark[4]
+  groups[details.hl_group] = true
+  assert(not (mark[3] < subject_start + #'local feature' and details.end_col > subject_start),
+    'branch highlight spilled into the commit subject: ' .. vim.inspect({ mark = mark, line = feature_line,
+      subject_start = subject_start }))
+end
+assert(groups.FugitiveBranchDate and groups.FugitiveBranchAuthor and groups.FugitiveBranchUpstream,
+  'branch date, author, and upstream columns were not colored')
+assert(vim.api.nvim_get_hl(0, { name = 'FugitiveBranchUpstream', link = true }).link == 'FugitiveStatAdd',
+  'upstream should use the muted green used for added-file counts')
+assert(groups.GitSignsDelete and groups.GitSignsAdd,
+  'behind/ahead counts did not reuse Git add/delete colors')
+local function name_highlight(row, name)
+  local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1]
+  local name_start = assert(line:find(name, 1, true)) - 1
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(bufnr, branch_ns, { row - 1, 0 },
+    { row - 1, -1 }, { details = true })) do
+    if mark[3] == name_start and mark[4].end_col == name_start + #name then
+      return mark[4].hl_group
+    end
+  end
+end
+assert(name_highlight(feature_row, 'feature') == 'FugitiveBranchName'
+  and name_highlight(row_for_kind(bufnr, 'origin/main', 'remote'), 'origin/main') == 'FugitiveBranchName',
+  'local and remote branch names should share the original color')
+assert(name_highlight(row_for_kind(bufnr, 'main', 'local_'), 'main') == 'FugitiveBranchCurrent',
+  'current branch lost its original color')
+assert(name_highlight(row_for_kind(bufnr, 'release', 'tags'), 'release') == 'FugitiveBranchTag',
+  'tag lost its original color')
 assert(not row_for(bufnr, 'origin/HEAD'), 'remote symbolic HEAD appeared as a branch')
 assert(vim.b[bufnr].branch_kinds[row_for(bufnr, 'release')] == 'tags')
 assert(not vim.bo[bufnr].modifiable, 'branch panel became editable')

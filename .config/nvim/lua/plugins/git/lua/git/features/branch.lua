@@ -6,6 +6,7 @@ local commands = require("git.features.commands")
 local help = require("git.features.help")
 local branch_spin = require('git.features.branch_spin')
 local github_open = require('git.features.github_open')
+local operation_progress = require('git.features.operation_progress')
 
 local branch_name_ns = vim.api.nvim_create_namespace("fugitive_branch_names")
 local branch_fade_ns = vim.api.nvim_create_namespace("fugitive_branch_fade")
@@ -224,6 +225,7 @@ local function get_branch_list(bufnr, filter)
 
   local formatted = {}
   local truncated_info = {}
+  local branch_columns = {}
   for _, b in ipairs(branches) do
     -- Combine branch name with push info
     local branch_block = b.branch
@@ -233,7 +235,7 @@ local function get_branch_list(bufnr, filter)
 
     local subject = b.subject
     local branch_str, truncated_branch_mode, branch_content_len = pad_right(branch_block, max_branch_len, 'left')
-    local date_str, _ = pad_right(b.date, max_date_len)
+    local date_str, _, date_content_len = pad_right(b.date, max_date_len)
     local author_str, truncated_author_mode, author_content_len = pad_right(b.author, max_author_len, 'right')
     local subject_str, truncated_subject_mode, subject_content_len = pad_right(subject, max_subject_len, 'right')
 
@@ -246,6 +248,18 @@ local function get_branch_list(bufnr, filter)
       line = line:gsub('%s+$', '')
     end
     table.insert(formatted, line)
+
+    local date_start = #b.head + #branch_str + 2
+    local author_start = date_start + #date_str + 2
+    local upstream_start = b.upstream_str ~= '' and (#line - #b.upstream_str) or nil
+    branch_columns[#formatted] = {
+      date_start = date_start,
+      date_len = date_content_len,
+      author_start = author_start,
+      author_len = author_content_len,
+      upstream_start = upstream_start,
+      upstream_len = upstream_start and #b.upstream_str or nil,
+    }
 
     if truncated_branch_mode then
       table.insert(truncated_info, {
@@ -286,7 +300,7 @@ local function get_branch_list(bufnr, filter)
     branch_kinds[i] = b.kind
   end
 
-  return formatted, branch_names, truncated_info, true, branch_kinds
+  return formatted, branch_names, truncated_info, true, branch_kinds, branch_columns
 end
 
 local function apply_fade_highlight(bufnr, truncated_info)
@@ -346,18 +360,49 @@ local function apply_branch_highlight(bufnr)
   vim.api.nvim_set_hl(0, "FugitiveBranchName", { link = "Directory", default = true })
   vim.api.nvim_set_hl(0, "FugitiveBranchCurrent", { link = "String", default = true })
   vim.api.nvim_set_hl(0, "FugitiveBranchTag", { link = "Special", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveBranchDate", { link = "Directory", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveBranchAuthor", { link = "Type", default = true })
+  vim.api.nvim_set_hl(0, "FugitiveBranchUpstream", { link = "FugitiveStatAdd", default = true })
   vim.api.nvim_buf_clear_namespace(bufnr, branch_name_ns, 0, -1)
 
+  local columns = vim.b[bufnr].branch_columns or {}
   for lnum, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
     local _, prefix_end = line:find("^%s*%*?%s*")
     local branch = line:match("^%s*%*?%s*(%S+)")
     if prefix_end and branch then
+      local kind = (vim.b[bufnr].branch_kinds or {})[lnum]
       vim.api.nvim_buf_set_extmark(bufnr, branch_name_ns, lnum - 1, prefix_end, {
         end_col = prefix_end + #branch,
-        hl_group = (vim.b[bufnr].branch_kinds or {})[lnum] == 'tags' and 'FugitiveBranchTag'
-          or line:match("^%s*%*") and "FugitiveBranchCurrent" or "FugitiveBranchName",
+        hl_group = kind == 'tags' and 'FugitiveBranchTag'
+          or line:match("^%s*%*") and 'FugitiveBranchCurrent' or 'FugitiveBranchName',
         priority = 80,
       })
+
+      local layout = columns[lnum]
+      if layout then
+        for _, field in ipairs({
+          { layout.date_start, layout.date_len, 'FugitiveBranchDate' },
+          { layout.author_start, layout.author_len, 'FugitiveBranchAuthor' },
+          { layout.upstream_start, layout.upstream_len, 'FugitiveBranchUpstream' },
+        }) do
+          local start_col, length, group = unpack(field)
+          if start_col and length and length > 0 then
+            vim.api.nvim_buf_set_extmark(bufnr, branch_name_ns, lnum - 1, start_col, {
+              end_col = start_col + length, hl_group = group, priority = 80,
+            })
+          end
+        end
+      end
+
+      local branch_field_end = layout and layout.date_start - 2 or #line
+      for arrow, group in pairs({ ['↓'] = 'GitSignsDelete', ['↑'] = 'GitSignsAdd' }) do
+        local start_col, end_col = line:find(arrow .. '%d+', prefix_end + 1)
+        if start_col and end_col <= branch_field_end then
+          vim.api.nvim_buf_set_extmark(bufnr, branch_name_ns, lnum - 1, start_col - 1, {
+            end_col = end_col, hl_group = group, priority = 85,
+          })
+        end
+      end
     end
   end
 end
@@ -400,7 +445,7 @@ end
 local function refresh_branch_list(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
 
-  local branch_output, branch_names, truncated_info, _, branch_kinds = get_branch_list(bufnr)
+  local branch_output, branch_names, truncated_info, _, branch_kinds, branch_columns = get_branch_list(bufnr)
   local old_row = vim.fn.line('.')
   local selected = (vim.b[bufnr].branch_map or {})[old_row]
   local selected_kind = (vim.b[bufnr].branch_kinds or {})[old_row]
@@ -408,6 +453,7 @@ local function refresh_branch_list(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
     vim.b[bufnr].branch_map = branch_names
     vim.b[bufnr].branch_kinds = branch_kinds
+    vim.b[bufnr].branch_columns = branch_columns
     apply_fade_highlight(bufnr, truncated_info)
     apply_branch_highlight(bufnr)
   end)
@@ -724,8 +770,10 @@ local function fetch_all(bufnr)
   -- vim.notify("Fetching...", vim.log.levels.INFO)
   local git, work_tree = get_git_prefix(bufnr, true)
   if not git then return end
-  vim.fn.jobstart(git .. "fetch --all --prune", {
+  local finish_progress = operation_progress.start(work_tree, 'fetch')
+  local job = vim.fn.jobstart(git .. "fetch --all --prune", {
     on_exit = function(_, exit_code)
+      finish_progress()
       if exit_code == 0 then
         notify_branch_changed(bufnr, work_tree)
       else
@@ -733,6 +781,7 @@ local function fetch_all(bufnr)
       end
     end
   })
+  if job <= 0 then finish_progress() end
 end
 
 local function handle_pull_error(work_tree, message, args, on_success)
@@ -800,8 +849,9 @@ local function pull_branch(bufnr)
   if stashed == nil then return end
 
   -- vim.notify("Pulling...", vim.log.levels.INFO)
+  local finish_progress = operation_progress.start(work_tree, 'pull')
   local output_lines = {}
-  vim.fn.jobstart(git .. "pull" .. args, {
+  local job = vim.fn.jobstart(git .. "pull" .. args, {
     on_stdout = function(_, data)
       if data then
         for _, line in ipairs(data) do
@@ -822,6 +872,7 @@ local function pull_branch(bufnr)
     end,
     on_exit = function(_, exit_code)
       vim.schedule(function()
+        finish_progress()
         if stashed then commands.pop_auto_stash(work_tree) end
         local message = table.concat(output_lines, "\n")
         if exit_code == 0 then
@@ -841,6 +892,7 @@ local function pull_branch(bufnr)
       end)
     end
   })
+  if job <= 0 then finish_progress() end
 end
 
 local function pull_branch_under_cursor(bufnr)
@@ -887,8 +939,9 @@ local function pull_branch_under_cursor(bufnr)
   end
 
   -- vim.notify("Pulling " .. branch .. "...", vim.log.levels.INFO)
+  local finish_progress = operation_progress.start(work_tree, 'pull')
   local output_lines = {}
-  vim.fn.jobstart(git .. "pull" .. args, {
+  local job = vim.fn.jobstart(git .. "pull" .. args, {
     on_stdout = function(_, data)
       if data then
         for _, line in ipairs(data) do
@@ -909,6 +962,7 @@ local function pull_branch_under_cursor(bufnr)
     end,
     on_exit = function(_, exit_code)
       vim.schedule(function()
+        finish_progress()
         local message = table.concat(output_lines, "\n")
         local pull_success = (exit_code == 0)
 
@@ -939,6 +993,7 @@ local function pull_branch_under_cursor(bufnr)
       end)
     end
   })
+  if job <= 0 then finish_progress() end
 end
 
 local function get_default_origin_head(bufnr)
@@ -967,8 +1022,10 @@ local function diff_against_default(bufnr)
   vim.notify("Fetching origin...", vim.log.levels.INFO)
 
   -- Use jobstart for async fetch
-  vim.fn.jobstart(git .. "fetch origin", {
+  local finish_progress = operation_progress.start(work_tree, 'fetch')
+  local job = vim.fn.jobstart(git .. "fetch origin", {
     on_exit = function(_, exit_code)
+      finish_progress()
       if exit_code ~= 0 then
         vim.notify("Fetch failed", vim.log.levels.ERROR)
         return
@@ -985,6 +1042,7 @@ local function diff_against_default(bufnr)
       end)
     end
   })
+  if job <= 0 then finish_progress() end
 end
 
 local function rebase_with_stash_fetch(bufnr, default_target)
@@ -1004,8 +1062,9 @@ local function rebase_with_stash_fetch(bufnr, default_target)
 
   vim.notify("Running: " .. cmd, vim.log.levels.INFO)
 
+  local finish_progress = operation_progress.start(work_tree, 'sync')
   local output_lines = {}
-  vim.fn.jobstart(cmd, {
+  local job = vim.fn.jobstart(cmd, {
     on_stdout = function(_, data)
       if data then
         for _, line in ipairs(data) do
@@ -1022,6 +1081,7 @@ local function rebase_with_stash_fetch(bufnr, default_target)
     end,
     on_exit = function(_, exit_code)
       vim.schedule(function()
+        finish_progress()
         local message = table.concat(output_lines, "\n")
         if exit_code == 0 then
           if stashed then
@@ -1044,6 +1104,7 @@ local function rebase_with_stash_fetch(bufnr, default_target)
       end)
     end
   })
+  if job <= 0 then finish_progress() end
 end
 
 local function merge_with_input(bufnr, default_target)
@@ -1077,7 +1138,7 @@ local function open_branch_list(opts)
     utils.set_buf_work_tree(inventory_buf, work_tree, git_dir)
   end
   local filter = opts and opts.filter or 'all'
-  local branch_output, branch_names, truncated_info, ok, branch_kinds = get_branch_list(inventory_buf, filter)
+  local branch_output, branch_names, truncated_info, ok, branch_kinds, branch_columns = get_branch_list(inventory_buf, filter)
   if inventory_buf ~= source_bufnr then vim.api.nvim_buf_delete(inventory_buf, { force = true }) end
   if not ok then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
@@ -1098,6 +1159,7 @@ local function open_branch_list(opts)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
     vim.b[bufnr].branch_map = branch_names
     vim.b[bufnr].branch_kinds = branch_kinds
+    vim.b[bufnr].branch_columns = branch_columns
     apply_fade_highlight(bufnr, truncated_info)
     apply_branch_highlight(bufnr)
   end)
