@@ -192,6 +192,11 @@ The choice is preserved across status refreshes. Enter keeps each section's
 existing action, including commit and pull-request scope changes.
 `gm` jumps to Unmerged paths. `gp` jumps to whichever commit section is shown:
 `Unpushed [only]` or `Commits [latest 15+]`.
+Opening Status starts a background `git fetch` for the configured default remote;
+it never integrates fetched commits into the current branch. It runs at most once
+per repository per 180 seconds by default. Set `vim.g.git_status_auto_fetch = false`
+to disable it, or `vim.g.git_status_auto_fetch_interval` to change the interval
+in seconds.
 The header shows `Head`, the configured `Upstream` (the usual Pull source), a
 separate `Remote` row for a distinct Push destination branch when applicable,
 and the nearest current/next tags with their commit distances. `Tag` is omitted
@@ -458,23 +463,28 @@ old/new line numbers. Identical hunk text at different source coordinates has
 independent captures: the same text can be code in one place and a string in
 another. Every projected row must match the displayed patch, so stale files or
 filter-transformed content cannot supply unrelated colors or comparison trees.
-PHP comparison reuses both verified complete trees, preserving opening tags,
-enclosing classes and embedded HTML; one comparison is shared across all hunks
-of the same old/new file pair. Its source-coordinate ranges are projected only
-onto displayed changed rows. Other languages compare hunk-local source pairs.
-Missing source metadata, conflict views, read
-failures and oversized/binary files keep available hunk captures, with Normal
+Comparison reuses both verified complete trees for every available language,
+preserving enclosing functions, classes, delimiters and PHP/HTML context.
+Conversion and search start at the parent containing the changed byte range
+(such as a function or method), leaving unrelated syntax out. Strings/comments
+remain whole atoms. Separate edits or moves expand to a shared enclosing region;
+top-level changes retain neighboring nodes as correspondence anchors.
+One comparison is shared across all hunks of the same old/new file pair; its
+source-coordinate ranges are projected only onto displayed changed rows.
+Missing source metadata, conflict views, read failures and oversized/binary
+files keep available hunk captures, with Normal
 for uncovered bytes.
 Without a parser, the included Vim syntax has a Normal parent region; its
 keywords/strings keep their own colors instead of being covered by that base.
-When a hunk has parse errors or exceeds comparison limits, individual change
-blocks are retried structurally. Lua declaration-only blocks receive a temporary
+If complete-file structural comparison fails or uses Text (including Markdown),
+the complete pair receives a shared, cooperative Histogram Text comparison.
+Without verified complete sources, hunk comparison retries individual change
+blocks structurally. Lua declaration-only blocks receive a temporary
 empty body for comparing parameters. Blocks that still cannot be compared, or
 lack a parser, use the reference's local Histogram text matching; only changed
 word ranges receive backgrounds, with whole-line text tints omitted.
 Without verified complete PHP context, tagless fragments use this muted Text
-comparison instead of mistaking PHP code for a single HTML text atom. PHP also
-uses Text if the complete file has parse errors or exceeds graph limits.
+comparison instead of mistaking PHP code for a single HTML text atom.
 Markdown uses Text comparison, matching Difftastic; Tree-sitter still supplies
 its syntax colors. This also preserves fenced-block prose, whose bytes are not
 fully covered by Markdown block-node children.
@@ -482,6 +492,8 @@ Text matching and its word-limit fallback always use muted backgrounds. Strong
 backgrounds are reserved for changed words inside structurally matched
 strings/comments/text. Native underline marks those inner word changes; native
 bold also styles ordinary keywords/types/delimiters and does not denote moves.
+Text-mode novel words can include indentation; those bytes retain their muted
+backgrounds instead of being blanket-trimmed.
 Syntax styling stays with the current theme rather than becoming strong diff
 backgrounds. Native text matching skips individual words when either side of
 a changed section exceeds 1,000 split elements (words, spaces and punctuation);
@@ -527,6 +539,18 @@ mixed-context multiline declaration, Markdown license prose and Vim fallback.
 Pass `nordfox` to repeat with this repository's theme settings.
 `tests/syntax_source_context.lua` exercises actual staged/unstaged/renamed Commit
 sources, shared reads across disjoint hunks, warm caches and canceled-read reopen.
+`tests/syntax_full_file_context.lua` checks complete-file comparison against
+native ranges across the recorded structural cases, including the reported Lua
+indentation case, malformed JSON and Markdown. Comparisons remain shared with
+missing color queries, and unchanged views neither compare nor repaint again.
+The real `syntax_highlight.lua` rewrite also checks that nested edits split into
+small searches rather than one graph containing several changed functions.
+The `syntax_word_diff.lua` comparison-body fixture checks that shrinking keeps
+unique function anchors. Long addition/deletion fixtures assert zero graph
+searches and retain native token backgrounds without tinting indentation.
+`tests/syntax_parent_scope.lua` checks that a single edit in 6,400 lines / 400
+functions converts only its enclosing function, preserves full-tree ranges and
+source coordinates, and shares an expanded region across disjoint edits.
 `tests/syntax_php_context.lua` checks native PHP ranges in real staged/unstaged
 and renamed Commit views, omitted tags/classes, embedded HTML, shared file
 comparison, source-context invalidation, missing queries, Text fallback and
@@ -540,17 +564,18 @@ version of delta installed. Unicode 16 word/grapheme tables and their pinned
 source URLs are maintained by `tests/generate_delta_unicode.py`; upstream notices
 are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-In `treesitter` style, comparison retains the parsed old/new hunk, while coloring
-uses complete source context when available. PHP additionally retains those
-complete trees for comparison, sharing pending and finished comparisons across
-its hunks. Both use the same asynchronous
-parser and 16-entry cache for sources up to 1,000,000 bytes; open buffers also
-retain their current hunk parses, comparison results and highlight plans, so
+In `treesitter` style, coloring and comparison retain complete old/new sources
+when available, sharing pending and finished comparisons across their hunks.
+Hunk parsing is deferred until complete sources cannot be used. Both use the
+same asynchronous parser and 16-entry cache for sources up to 1,000,000 bytes; open buffers also
+retain their current source trees, comparison results and highlight plans, so
 shared-cache eviction does not force open views to recompute. Unchanged buffers
 skip rebuilding hunks/marks. On edits, changed hunks, coloring source identities
 or coordinates, and query/style settings regenerate relevant highlights; intact marks move with their raw patch rows,
-and cached plans restore them after buffer reconstruction. Closed hunks/buffers
-release their resident results.
+and cached plans restore them after buffer reconstruction. A buffer edit records
+which cached hunks overlap the changed rows. Only those retained hunks need their
+mark positions checked; expanding another file does not read existing marks.
+Closed hunks/buffers release their resident results.
 
 Complete coloring sources use `highlight_sources` sessions per attached view:
 up to two asynchronous file requests run at once, identical pending requests
@@ -565,6 +590,9 @@ and late callbacks cannot publish closed-view results.
 Cold hunks first display their gutters and normal source foreground with an
 animated loading icon. A shared 100 ms timer updates only pending icons; it
 does not refresh hunks or restart analysis, and stops when no icons remain.
+While comparison or structural recovery is pending, syntax colors remain
+visible and diff backgrounds wait for the hunk's final results. Provisional
+Text ranges and previous source-context backgrounds are not displayed.
 Neovim's asynchronous parser API splits parsing into
 short steps; pending identical sources share a job. Highlight queries run in
 cooperative 3 ms slices and cache their source-coordinate captures. Dense
@@ -574,19 +602,51 @@ Background range construction yields between groups/rows as well. Foreground
 painting has an independent lifetime, so partial background results cannot
 restart it. Existing marks are reused by their relative span/style; completing
 a comparison updates changed backgrounds without rebuilding syntax marks.
-Namespace-wide mark details are read only after buffer edits, not on background
-job completion. Hunk layouts and provisional text spans remain cached.
+Mark ownership is retained per hunk; position checks read only an edited hunk's
+row range, avoiding namespace-wide inventories. Hunk layouts and final Text
+fallback spans remain cached.
 Neither parsing nor structural search starts inline on a cold attach. A common
 FIFO queue starts one slice at a time across views instead of running every
-hunk's time budget in one refresh. Completed results refresh only their waiting
-buffers, coalesced per buffer. Closing a queued cold hunk skips parsing entirely.
+hunk's time budget in one refresh. Completed results refresh only the waiting
+hunks or source pairs, coalesced per buffer. Unaffected hunks do not reread source
+fingerprints, serialize patch text or rebuild marks on those notifications.
+Shared recovery graphs retain every waiting source pair in a buffer, so closing
+one hunk cannot discard another's completion. Buffer edits and explicit refreshes
+still check the whole view for changed content or settings.
+Closing a queued cold hunk skips parsing entirely.
+`tests/syntax_multi_open.lua` expands 16 dense file diffs past the shared cache
+limits, checking that only new sources are parsed/compared/queried/painted, no
+existing marks are inventoried, and shared graph recipients receive completion.
 
+Complete files are still parsed for reliable context, but only the enclosing
+changed region is converted into a comparison graph. A large changed class or
+edits spread throughout a file can therefore still need substantial work.
 Graph search uses the reference's 3,000,000-vertex default bound. Unchanged ends
-and substantial equal subtrees split comparisons before search. Longer work
-resumes cooperatively with a 5 ms target per scheduled slice; elapsed time alone
+and substantial equal subtrees split comparisons before search. Inside changed
+parents, the same unique-subtree test separates mostly unchanged nested elements,
+and each resulting region trims its unchanged ends again. This keeps adjacent
+insertions from pulling a whole nested function into the same search. Shrinking
+can expose new sibling lists; unique unchanged named functions in
+those lists remain anchors. Repeated statements in different branches stay in
+the graph to avoid choosing a different duplicate correspondence.
+Once an anchored region has nodes on only one side, its tokens are marked
+directly without graph search, similarity scoring or word comparison. A Git
+`+`/`-` block alone is insufficient: wrapping or moved syntax can have matches
+elsewhere, so this shortcut follows structural preprocessing.
+Immutable delimiter stacks/chains are interned and reused, with exact numeric
+identities for search variants. Chains retain actual node identities because
+node numbers restart on each side. State costs sit in their node-pair bucket;
+the delimiter phase uses its numeric key instead of additional nested tables.
+The frontier uses integer cost buckets and newest-first ties, preserving the
+previous binary heap's search order while avoiding repeated heap sorting.
+Literal similarity scores are reused per atom pair. These changes reduce
+allocation/search overhead without lowering graph limits or changing which
+syntax correspondence is accepted. A sufficiently large changed region can
+still require many states, even after unchanged subtrees have been removed.
+Longer work resumes cooperatively with a 5 ms target per scheduled slice; elapsed time alone
 does not force text fallback. Private conversion graphs share parsed trees and
 keep suspended searches from mutating each other's sibling links. Pending
-comparisons temporarily show muted text spans; completion refreshes only waiting
+comparisons keep syntax colors and the loading icon; completion refreshes only waiting
 views, coalesced per buffer. Jobs cancel when their source pair closes/changes or
 the style switches. Block-recovery results belong to the cached source pair;
 fragment/declaration recovery also parses asynchronously and shares source
@@ -599,12 +659,12 @@ cold display without parsing, single-hunk edits, shifted/rebuilt rows, dense
 painting between editor callbacks, shared recovery after closing its first
 view, cooperative completion and cancellation.
 This is a local adaptation verified against the recorded cases, not a guarantee
-of identical results for every Difftastic language/input. Except for PHP with
-verified complete sources, comparison remains hunk-based: omitted enclosing
-syntax can cause text fallback, and changes across separate hunks cannot be
-matched. The reference uses whole files, additional language rules and
-preprocessing/slider heuristics; these can produce different correspondences.
-PHP comparison reuses the file reads and trees already needed for coloring;
+of identical results for every Difftastic language/input. Verified complete
+sources allow correspondence across separate hunks. Missing or mismatched
+sources still use hunk comparison, where omitted enclosing syntax can cause
+Text fallback. Parser versions, language rules, limits and preprocessing/slider
+heuristics can produce different correspondences from the reference.
+Comparison reuses the file reads and trees already needed for coloring;
 no external diff command is executed.
 
 `git.features.commit` owns the custom commit view. Status and log selections, commit

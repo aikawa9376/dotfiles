@@ -6,6 +6,7 @@ vim.opt.rtp:prepend(vim.fn.stdpath('data') .. '/lazy/nvim-treesitter/runtime')
 local syntax = require('git.features.syntax_highlight')
 local renderer = require('git.features.status_renderer')
 local models = require('git.features.commit_model')
+local structural = require('git.features.syntax_word_diff')
 local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
 local root = vim.fn.tempname() .. ' syntax context'
 vim.fn.mkdir(root, 'p')
@@ -80,22 +81,29 @@ local function check(buf)
   end
   assert(keywords >= 2 and properties >= 6, 'fixture did not expose enough contextual fragments')
 end
-local system, parser, setmark = vim.system, vim.treesitter.get_string_parser, vim.api.nvim_buf_set_extmark
-local counts = { reads = 0, parses = 0, marks = 0 }
+local system, parser, setmark, compare = vim.system, vim.treesitter.get_string_parser, vim.api.nvim_buf_set_extmark, structural.compare
+local counts = { reads = 0, parses = 0, marks = 0, comparisons = 0 }
 vim.system = function(argv, ...)
   if argv[1] == 'git' and argv[3] == 'show' then counts.reads = counts.reads + 1 end
   return system(argv, ...)
 end
 vim.treesitter.get_string_parser = function(...) counts.parses = counts.parses + 1; return parser(...) end
 vim.api.nvim_buf_set_extmark = function(...) counts.marks = counts.marks + 1; return setmark(...) end
+structural.compare = function(old, new, ...)
+  counts.comparisons = counts.comparisons + 1
+  assert(#old.lines > 30 and #new.lines > 30, 'Lua/JSON compared a contextless fragment')
+  return compare(old, new, ...)
+end
 syntax.attach(buffer, { diff_source = function(hunk) return renderer.highlight_source(buffer, hunk.start_line) end })
-assert(counts.reads == 0 and counts.parses == 0, 'full source reads/parsing blocked cold attach')
+assert(counts.reads == 0 and counts.parses == 0 and counts.comparisons == 0, 'full source analysis blocked cold attach')
 settle(buffer); check(buffer)
 assert(counts.reads == 6, 'multiple hunks reread files, or staged/unstaged sources were mixed: ' .. counts.reads)
+assert(counts.comparisons == 4, 'Lua/JSON did not share comparisons across hunks: ' .. counts.comparisons)
 local warm = vim.deepcopy(counts)
 for _ = 1, 50 do syntax.refresh(buffer) end
 assert(vim.deep_equal(counts, warm), 'unchanged full-source colors recomputed or repainted')
 vim.system, vim.treesitter.get_string_parser, vim.api.nvim_buf_set_extmark = system, parser, setmark
+structural.compare = compare
 vim.api.nvim_buf_delete(buffer, { force = true }); renderer.cleanup(buffer)
 
 -- Exercise the actual Commit attachment and renamed old-path lookup too.

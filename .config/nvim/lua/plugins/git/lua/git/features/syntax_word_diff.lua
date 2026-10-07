@@ -19,12 +19,19 @@ function M.version(old, new)
   return owner and owner.versions and owner.versions[new or old] or 0
 end
 
-local function refresh_when_ready(bufnr)
-  if ready_buffers[bufnr] then return end
-  ready_buffers[bufnr] = true
+local function refresh_when_ready(bufnr, target, opposite)
+  local ready = ready_buffers[bufnr]
+  local scheduled = ready ~= nil
+  if not ready then ready = { hunks = {}, sources = {} }; ready_buffers[bufnr] = ready end
+  if opposite then
+    ready.sources[target] = ready.sources[target] or {}
+    ready.sources[target][opposite] = true
+  elseif target then ready.hunks[target] = true
+  else ready.all = true end
+  if scheduled then return end
   vim.defer_fn(function()
     ready_buffers[bufnr] = nil
-    require('git.features.syntax_highlight').refresh(bufnr)
+    require('git.features.syntax_highlight').refresh(bufnr, not ready.all and ready or nil)
   end, 16)
 end
 M.request_refresh = refresh_when_ready
@@ -49,7 +56,9 @@ function M.parse(lines, lang, cache_parse)
   if not lang then return nil end
   local code = table.concat(lines, '\n')
   if #code > MAX_BYTES then return nil end
-  local key = cache_parse ~= false and lang .. '\0' .. code or nil
+  -- Empty files and a single blank source row have the same parser text but
+  -- different projection coordinates; they must not share a source identity.
+  local key = cache_parse ~= false and lang .. '\0' .. #lines .. '\0' .. code or nil
   clock = clock + 1
   if key and cache[key] then cache[key].used = clock; return cache[key].source end
   local ok, parser = pcall(vim.treesitter.get_string_parser, code, lang)
@@ -68,7 +77,7 @@ function M.parse_async(lines, lang, valid, callback, cancelled)
   if not lang then callback(nil); return end
   local code = table.concat(lines, '\n')
   if #code > MAX_BYTES then callback(nil); return end
-  local key = lang .. '\0' .. code
+  local key = lang .. '\0' .. #lines .. '\0' .. code
   clock = clock + 1
   if cache[key] then cache[key].used = clock; callback(cache[key].source); return end
   local listener = { valid = valid, callback = callback, cancelled = cancelled }
@@ -136,6 +145,98 @@ rules.typescript.atoms[#rules.typescript.atoms + 1] = 'predefined_type'
 rules.tsx = rules.typescript
 local common_delims = { { '(', ')' }, { '{', '}' }, { '[', ']' } }
 
+-- Compare the enclosing syntax, not every unchanged node in the file. A byte
+-- envelope includes all edits on both sides, so separate changed functions or
+-- moves expand to their common ancestor rather than becoming independent diffs.
+local function scope_pair(old, new, checkpoint)
+  local a, b, first, limit = old.code, new.code, 0, math.min(#old.code, #new.code)
+  local block = 4096
+  while first + block <= limit and a:sub(first + 1, first + block) == b:sub(first + 1, first + block) do
+    first = first + block
+    checkpoint()
+  end
+  while first < limit and a:byte(first + 1) == b:byte(first + 1) do first = first + 1 end
+  local suffix, remaining = 0, limit - first
+  while suffix + block <= remaining and a:sub(#a - suffix - block + 1, #a - suffix) == b:sub(#b - suffix - block + 1, #b - suffix) do
+    suffix = suffix + block
+    checkpoint()
+  end
+  while suffix < remaining and a:byte(#a - suffix) == b:byte(#b - suffix) do suffix = suffix + 1 end
+  if first == #a and first == #b then old.nodes, new.nodes = {}, {}; return end
+  local function position(source, byte)
+    local low, high = 1, #source.offsets
+    while low <= high do
+      local middle = math.floor((low + high) / 2)
+      if source.offsets[middle] <= byte then low = middle + 1 else high = middle - 1 end
+    end
+    local row = math.max(1, high)
+    return row - 1, byte - (source.offsets[row] or 0)
+  end
+  local function parent(source, last)
+    local root = source.tree:root()
+    if first == last then return root end -- An insertion/deletion needs both surrounding anchors.
+    local sr, sc = position(source, first)
+    local er, ec = position(source, last)
+    local node = root:named_descendant_for_range(sr, sc, er, ec) or root
+    local rule = rules[source.lang] or {}
+    -- A grammar may expose children inside a string (PHP interpolation, for
+    -- example), while our comparator treats the entire literal as one atom.
+    -- Never cut that atom away from its word-matching context.
+    local ancestor = node
+    while ancestor do
+      local kind = ancestor:type()
+      if kind:find('comment', 1, true) or vim.list_contains(rule.atoms or {}, kind)
+        or vim.list_contains(rule.text_atoms or {}, kind)
+        or not rules[source.lang] and (kind:find('string', 1, true) or kind:find('scalar', 1, true)) then
+        node = ancestor:parent() or ancestor
+      end
+      ancestor = ancestor:parent()
+    end
+    local enclosing = node
+    while enclosing do
+      local kind = enclosing:type()
+      if kind:find('function', 1, true) or kind:find('method', 1, true)
+        or kind:find('class', 1, true) then return enclosing end
+      enclosing = enclosing:parent()
+    end
+    while node:parent() and (node:child_count() == 0 or node:type():find('comment', 1, true)
+      or vim.list_contains(rule.atoms or {}, node:type()) or vim.list_contains(rule.text_atoms or {}, node:type())) do
+      node = node:parent()
+    end
+    return node
+  end
+  local left, right = parent(old, #a - suffix), parent(new, #b - suffix)
+  local ancestors = {}
+  local node = left
+  while node do
+    ancestors[node:type()] = ancestors[node:type()] or node
+    node = node:parent()
+  end
+  while right and not ancestors[right:type()] do right = right:parent() end
+  if not right then return end
+  left = ancestors[right:type()]
+  local function nodes(source, enclosing, last)
+    if enclosing:id() ~= source.tree:root():id() then return { enclosing } end
+    local children, begin, finish = {}, nil, nil
+    for child in enclosing:iter_children() do
+      children[#children + 1] = child
+      local start_byte, end_byte = bounds(source, child)
+      if end_byte >= first and start_byte <= last then begin, finish = begin or #children, #children end
+      if #children % 128 == 0 then checkpoint() end
+    end
+    if not begin then
+      -- A gap between top-level nodes still needs its neighbors for matching.
+      begin = #children + 1
+      for index, child in ipairs(children) do
+        if bounds(source, child) >= first then begin = index; break end
+      end
+      finish = begin - 1
+    end
+    return vim.list_slice(children, math.max(1, begin - 1), math.min(#children, finish + 1))
+  end
+  old.nodes, new.nodes = nodes(old, left, #a - suffix), nodes(new, right, #b - suffix)
+end
+
 local function syntax_tree(source, checkpoint)
   if source.syntax ~= nil then return source.syntax or nil end
   -- Incomplete Git hunks can still be syntax-colored, but an erroneous tree
@@ -149,6 +250,11 @@ local function syntax_tree(source, checkpoint)
     return { children = children, open = open, close = close }
   end
   local function stamp(part, node)
+    local kind = node:type()
+    if part and (kind:find('function', 1, true) or kind:find('method', 1, true))
+      and not kind:find('call', 1, true) and #node:field('name') > 0 and #node:field('body') > 0 then
+      part.declaration = true
+    end
     if part and source.lang == 'python' and node:type():match('_statement$') then
       local row, col = node:start()
       if (source.lines[row + 1] or ''):sub(1, col):match('^%s*$') then part.statement_indent = col end
@@ -210,9 +316,14 @@ local function syntax_tree(source, checkpoint)
     return stamp(list(before), node)
   end
   local children = {}
-  for child in source.tree:root():iter_children() do
+  local function append_child(child)
     local part = convert(child)
     if part then children[#children + 1] = part end
+  end
+  if source.nodes then
+    for _, child in ipairs(source.nodes) do append_child(child) end
+  else
+    for child in source.tree:root():iter_children() do append_child(child) end
   end
   -- Keep a common virtual root; the reference returns top-level siblings,
   -- rather than collapsing the parser root on a one-statement file.
@@ -254,45 +365,6 @@ local function content_ids(root, ids, checkpoint)
   local key = vim.json.encode(parts)
   if not ids[key] then ids.count = ids.count + 1; ids[key] = ids.count end
   root.content_id = ids[key]
-end
-
--- Persistent parent stacks preserve paired delimiter entry/exit. Separate
--- entries allow a node to retain its identity when wrapped at another depth.
-local function push(stack, a, b, both)
-  if not both and stack and not stack.both then
-    return { prev = stack.prev, left = a and { node = a, prev = stack.left } or stack.left,
-      right = b and { node = b, prev = stack.right } or stack.right }
-  end
-  return { prev = stack, both = both, left = a and { node = a }, right = b and { node = b } }
-end
-local function pop(a, b, stack)
-  while stack do
-    if stack.both then
-      if a or b then break end
-      a, b, stack = stack.left.node.next, stack.right.node.next, stack.prev
-    elseif not a and stack.left then
-      a = stack.left.node.next
-      local left = stack.left.prev
-      stack = (left or stack.right) and { prev = stack.prev, left = left, right = stack.right } or stack.prev
-    elseif not b and stack.right then
-      b = stack.right.node.next
-      local right = stack.right.prev
-      stack = (stack.left or right) and { prev = stack.prev, left = stack.left, right = right } or stack.prev
-    else break end
-  end
-  return a, b, stack
-end
-local function stack_key(stack)
-  if not stack then return '' end
-  if stack.key then return stack.key end
-  local parts = { stack_key(stack.prev), stack.both and 'B' or 'E' }
-  for _, side in ipairs({ 'left', 'right' }) do
-    parts[#parts + 1] = side
-    local p = stack[side]
-    while p do parts[#parts + 1] = p.node.id; p = p.prev end
-  end
-  stack.key = table.concat(parts, ':')
-  return stack.key
 end
 
 local function characters(text, checkpoint)
@@ -338,62 +410,118 @@ local function similarity(a, b, checkpoint)
 end
 
 local function route(lhs, rhs, checkpoint)
-  local heap, seen, buckets, serial, count, iterations = {}, {}, {}, 0, 0, 0
-  local function less(a, b) return a.cost < b.cost or a.cost == b.cost and a.serial > b.serial end
-  local function enqueue(value)
-    heap[#heap + 1] = value
-    local i = #heap
-    while i > 1 do
-      local parent = math.floor(i / 2)
-      if not less(heap[i], heap[parent]) then break end
-      heap[i], heap[parent], i = heap[parent], heap[i], parent
+  local queue, buckets, count, iterations = {}, {}, 0, 0
+  local queued, minimum = 0, 0
+  -- Canonical immutable stacks/chains avoid rebuilding the same delimiter
+  -- history for every explored edge. IDs preserve exact stack variants.
+  local stacks, chains, similarities, identities = {}, {}, {}, 0
+  local function chain(node, previous)
+    -- IDs restart on each side. The stored node must retain its actual side
+    -- so popping a shared chain cannot jump into the opposite sibling list.
+    local index = chains[node]
+    if not index then index = {}; chains[node] = index end
+    local key = previous and previous.key or 0
+    if not index[key] then
+      identities = identities + 1
+      index[key] = { node = node, prev = previous, key = identities }
     end
+    return index[key]
+  end
+  local function stack(previous, left, right, both)
+    local key = previous and previous.key or 0
+    local index = stacks[key]
+    if not index then index = {}; stacks[key] = index end
+    key = both and 1 or 0
+    if not index[key] then index[key] = {} end
+    index = index[key]
+    key = left and left.key or 0
+    if not index[key] then index[key] = {} end
+    index = index[key]
+    key = right and right.key or 0
+    if not index[key] then
+      identities = identities + 1
+      index[key] = { prev = previous, left = left, right = right, both = both, key = identities }
+    end
+    return index[key]
+  end
+  local function push(parent, a, b, both)
+    if not both and parent and not parent.both then
+      return stack(parent.prev, a and chain(a, parent.left) or parent.left,
+        b and chain(b, parent.right) or parent.right)
+    end
+    return stack(parent, a and chain(a), b and chain(b), both)
+  end
+  local function pop(a, b, parent)
+    while parent do
+      if parent.both then
+        if a or b then break end
+        a, b, parent = parent.left.node.next, parent.right.node.next, parent.prev
+      elseif not a and parent.left then
+        a = parent.left.node.next
+        local left = parent.left.prev
+        parent = (left or parent.right) and stack(parent.prev, left, parent.right) or parent.prev
+      elseif not b and parent.right then
+        b = parent.right.node.next
+        local right = parent.right.prev
+        parent = (parent.left or right) and stack(parent.prev, parent.left, right) or parent.prev
+      else break end
+    end
+    return a, b, parent
+  end
+  -- All edge costs are positive integers bounded by 600. Dijkstra never
+  -- inserts below the last extracted cost, so use cost buckets instead of
+  -- repeatedly sorting a binary heap. Pop each bucket as a stack to preserve
+  -- the existing newest-first tie order exactly.
+  local function enqueue(value)
+    local pending = queue[value.cost]
+    if not pending then pending = {}; queue[value.cost] = pending end
+    pending[#pending + 1] = value
+    queued = queued + 1
   end
   local function dequeue()
-    local first, tail = heap[1], table.remove(heap)
-    if #heap > 0 then
-      heap[1] = tail
-      local i = 1
-      while i * 2 <= #heap do
-        local child = i * 2
-        if heap[child + 1] and less(heap[child + 1], heap[child]) then child = child + 1 end
-        if not less(heap[child], heap[i]) then break end
-        heap[child], heap[i], i = heap[i], heap[child], child
-      end
-    end
+    while not queue[minimum] do minimum = minimum + 1 end
+    local pending = queue[minimum]
+    local first = table.remove(pending)
+    if #pending == 0 then queue[minimum] = nil end
+    queued = queued - 1
     return first
   end
   local function step(from, a, b, stack, cost, action, pct)
     a, b, stack = pop(a, b, stack)
-    local bucket_key = (a and a.id or ('p' .. (stack and stack.left and stack.left.node.id or 0)))
-      .. '/' .. (b and b.id or ('p' .. (stack and stack.right and stack.right.node.id or 0)))
-      .. '/' .. (stack and not stack.both and 'E' or 'B')
-    local parent_key = stack_key(stack)
-    local bucket = buckets[bucket_key]
-    if not bucket then bucket = {}; buckets[bucket_key] = bucket end
-    -- Like the reference, retain at most two delimiter stack variants per
-    -- node pair. Exact stacks would grow exponentially with nesting depth.
+    local left_key = a and a.id or -(stack and stack.left and stack.left.node.id or 0)
+    local right_key = b and b.id or -(stack and stack.right and stack.right.node.id or 0)
+    local phase = stack and not stack.both and 1 or 2
+    local parent_key = stack and stack.key or 0
+    local left = buckets[left_key]
+    if not left then left = {}; buckets[left_key] = left end
+    -- The sign preserves exhausted-parent identities; the low bit records
+    -- the delimiter phase without another nested table for every node pair.
+    local key = right_key * 2 + phase - 1
+    local bucket = left[key]
+    if not bucket then bucket = {}; left[key] = bucket end
+    -- Like the reference, retain at most two exact delimiter stack variants
+    -- per node pair. Keep costs inline rather than allocating a second table.
     local variant
-    for i, value in ipairs(bucket) do if value == parent_key then variant = i; break end end
-    if not variant then
-      if #bucket >= 2 then return end
-      bucket[#bucket + 1] = parent_key; variant = #bucket
-    end
-    local key = bucket_key .. '/' .. variant
+    if bucket[1] == parent_key then variant = 1
+    elseif bucket[2] == parent_key then variant = 2
+    elseif bucket[1] == nil then bucket[1], variant = parent_key, 1
+    elseif bucket[2] == nil then bucket[2], variant = parent_key, 2
+    else return end
     cost = cost + (from and from.cost or 0)
-    if seen[key] and seen[key] <= cost then return end
-    if not seen[key] then count = count + 1 end
-    seen[key] = cost; serial = serial + 1
+    local previous = variant == 1 and bucket.cost1 or bucket.cost2
+    if previous and previous <= cost then return end
+    if not previous then count = count + 1 end
+    if variant == 1 then bucket.cost1 = cost else bucket.cost2 = cost end
     enqueue({ a = a, b = b, stack = stack, cost = cost, prev = from, action = action, pct = pct,
-      serial = serial, key = key })
+      bucket = bucket, variant = variant })
   end
   step(nil, lhs, rhs, nil, 0)
-  while #heap > 0 do
+  while queued > 0 do
     if count > MAX_GRAPH then return nil end
     if checkpoint and iterations % 256 == 0 then checkpoint() end
     iterations = iterations + 1
     local v = dequeue()
-    if v.cost == seen[v.key] then
+    if v.cost == (v.variant == 1 and v.bucket.cost1 or v.bucket.cost2) then
       local a, b, stack = v.a, v.b, v.stack
       if not a and not b and not stack then return v end
       if a and b then
@@ -408,7 +536,10 @@ local function route(lhs, rhs, checkpoint)
           step(v, a.children[1], b.children[1], push(stack, a, b, true), 10 + depth, 'delimiters')
         elseif not a.children and not b.children and a.kind == b.kind
           and (a.kind == 'string' or a.kind == 'comment' or a.kind == 'text') and a.text ~= b.text then
-          local pct = similarity(a.text, b.text, checkpoint)
+          local scores = similarities[a.id]
+          if not scores then scores = {}; similarities[a.id] = scores end
+          local pct = scores[b.id]
+          if pct == nil then pct = similarity(a.text, b.text, checkpoint); scores[b.id] = pct end
           step(v, a.next, b.next, stack, 600 - pct, 'replace', pct)
         end
       end
@@ -478,12 +609,15 @@ end
 -- The reference's line_parser: changed lines carry a muted base; a Histogram
 -- word comparison supplies accents. Empty accents on a retained side never
 -- mean that the whole line should be promoted to a strong background.
-function M.text_compare(old_lines, new_lines)
+function M.text_compare(old_lines, new_lines, checkpoint)
   local result = { old = {}, new = {}, emphasis = { old = {}, new = {} } }
   local rows = { old = {}, new = {} }
   for _, side in ipairs({ 'old', 'new' }) do
     local lines = side == 'old' and old_lines or new_lines
-    for row, line in ipairs(lines) do rows[side][row] = { text = line, row = row } end
+    for row, line in ipairs(lines) do
+      rows[side][row] = { text = line, row = row }
+      if checkpoint and row % 128 == 0 then checkpoint() end
+    end
   end
   local left, right = {}, {}
   local function flush()
@@ -491,11 +625,12 @@ function M.text_compare(old_lines, new_lines)
     local tokens, lengths, exceeded = { old = {}, new = {} }, { old = {}, new = {} }, {}
     for _, side in ipairs({ 'old', 'new' }) do
       local lines = side == 'old' and left or right
-      for _, line in ipairs(lines) do
+      for index, line in ipairs(lines) do
+        if checkpoint and index % 128 == 0 then checkpoint() end
         lengths[side][line.row] = #line.text
         if #line.text > 0 then result[side][line.row] = { { 1, #line.text } } end
         if not exceeded[side] then
-          local parts = words({ text = line.text .. '\n', first = 0 }, true, nil, 1000 - #tokens[side])
+          local parts = words({ text = line.text .. '\n', first = 0 }, true, checkpoint, 1000 - #tokens[side])
           if not parts then exceeded[side] = true
           else
             for _, part in ipairs(parts) do
@@ -516,14 +651,17 @@ function M.text_compare(old_lines, new_lines)
     end
     if exceeded.old or exceeded.new then
       for _, side in ipairs({ 'old', 'new' }) do
+        local count = 0
         for row, spans in pairs(lengths[side]) do
+          count = count + 1
+          if checkpoint and count % 128 == 0 then checkpoint() end
           if spans > 0 then result.emphasis[side][row] = { { 1, spans } } end
         end
       end
     else
       linear_diff(tokens.old, tokens.new, function(part) return part.text end, function(side, part)
         if side ~= 'both' then accent(side, part) end
-      end)
+      end, checkpoint)
     end
     left, right = {}, {}
   end
@@ -531,13 +669,13 @@ function M.text_compare(old_lines, new_lines)
     if side == 'both' then flush()
     elseif side == 'old' then left[#left + 1] = line
     else right[#right + 1] = line end
-  end)
+  end, checkpoint)
   flush()
   return result
 end
 
-function M.text_fallback(old_lines, new_lines)
-  local result = M.text_compare(old_lines, new_lines)
+function M.text_fallback(old_lines, new_lines, checkpoint)
+  local result = M.text_compare(old_lines, new_lines, checkpoint)
   -- Text NovelWord includes uncertain matching and word-limit fallback.
   -- Keep its ranges, without strong backgrounds or the whole-line base tint.
   result.old, result.new = result.emphasis.old, result.emphasis.new
@@ -594,7 +732,7 @@ function M.recover(old, new, old_lines, new_lines, lang, bufnr)
           owner.versions = owner.versions or setmetatable({}, { __mode = 'k' })
           owner.versions[opposite] = (owner.versions[opposite] or 0) + 1
           for buffer in pairs(fragments.waiters) do
-            if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_buf_is_loaded(buffer) then refresh_when_ready(buffer) end
+            if vim.api.nvim_buf_is_valid(buffer) and vim.api.nvim_buf_is_loaded(buffer) then refresh_when_ready(buffer, owner, opposite) end
           end
         end
       end
@@ -648,6 +786,7 @@ function M.compare(old, new, opts)
     return cached
   end
   local checkpoint = opts and opts.checkpoint
+  local stats = opts and opts.stats
   local lhs, rhs = syntax_tree(old, checkpoint), syntax_tree(new, checkpoint)
   if not lhs or not rhs then return nil end
   local ids = { count = 0 }; content_ids(lhs, ids, checkpoint); content_ids(rhs, ids, checkpoint)
@@ -729,7 +868,7 @@ function M.compare(old, new, opts)
   end
   count_nodes('old', lhs); count_nodes('new', rhs)
   local function mostly(a, b)
-    if not a.children or not b.children then return false end
+    if not a or not b or not a.children or not b.children then return false end
     local opposite = {}
     local function collect(node)
       tick()
@@ -748,7 +887,43 @@ function M.compare(old, new, opts)
   end
   local split_nodes
   local function region(left, right)
+    -- Equal subtrees already establish this region's boundaries. Trim its
+    -- unchanged ends again: a changed function between two anchors otherwise
+    -- carries its whole body into the shortest-path search.
+    local shrunk, trimmed_left, trimmed_right = shrink(left, right)
+    left, right = trimmed_left, trimmed_right
+    if #left == 0 and #right == 0 then return {} end
+    -- Removing a singleton parent's unchanged header/ends can expose several
+    -- children with equal named functions. Re-anchor only unique declarations:
+    -- identical statements in different branches are ambiguous and must stay
+    -- in the graph, rather than acquiring Histogram's different tie choices.
+    if shrunk then return split_nodes(left, right, true) end
     local a, b = left[1], right[1]
+    -- Apply the same unique-subtree test inside changed parents too. An
+    -- edited nested function plus an adjacent insertion must not become one
+    -- graph containing the function's otherwise unchanged body.
+    local first_left, first_right, end_left, end_right = 1, 1, #left, #right
+    local leading, trailing = {}, {}
+    while (first_left < end_left or first_right < end_right)
+      and mostly(left[first_left], right[first_right]) do
+      vim.list_extend(leading, region({ left[first_left] }, { right[first_right] }))
+      first_left, first_right = first_left + 1, first_right + 1
+    end
+    while (first_left < end_left or first_right < end_right)
+      and end_left >= first_left and end_right >= first_right
+      and mostly(left[end_left], right[end_right]) do
+      trailing[#trailing + 1] = { left[end_left], right[end_right] }
+      end_left, end_right = end_left - 1, end_right - 1
+    end
+    if first_left > 1 or end_left < #left then
+      -- Slice siblings once, rather than copying the remaining list and
+      -- recursing once per function in a large changed parent.
+      vim.list_extend(leading, region(vim.list_slice(left, first_left, end_left), vim.list_slice(right, first_right, end_right)))
+      for index = #trailing, 1, -1 do
+        vim.list_extend(leading, region({ trailing[index][1] }, { trailing[index][2] }))
+      end
+      return leading
+    end
     if #left == 1 and #right == 1 and a.children and b.children
       and (a.open and a.open.text or '') == (b.open and b.open.text or '')
       and (a.close and a.close.text or '') == (b.close and b.close.text or '') then
@@ -760,13 +935,15 @@ function M.compare(old, new, opts)
     end
     return { { kind = 'region', left = left, right = right } }
   end
-  split_nodes = function(left, right)
+  split_nodes = function(left, right, declarations_only)
     local plans, l, r = {}, {}, {}
     local function flush()
       if #l > 0 or #r > 0 then vim.list_extend(plans, region(l, r)); l, r = {}, {} end
     end
     linear_diff(left, right, function(node) return node.content_id end, function(side, node, opposite)
-      if side == 'both' and node.children and node.descendants >= 10 then
+      if side == 'both' and node.children and node.descendants >= 10
+        and (not declarations_only or node.declaration
+          and counts.old[node.content_id] == 1 and counts.new[node.content_id] == 1) then
         flush(); plans[#plans + 1] = { kind = 'equal', a = node, b = opposite }
       elseif side == 'both' then l[#l + 1], r[#r + 1] = node, opposite
       elseif side == 'old' then l[#l + 1] = node
@@ -794,8 +971,23 @@ function M.compare(old, new, opts)
     tick()
     if plan.kind == 'equal' then equal(plan.a, plan.b)
     elseif plan.kind == 'delimiters' then status[plan.a], status[plan.b] = plan.b, plan.a
+    elseif #plan.left == 0 or #plan.right == 0 then
+      -- With no counterpart inside an anchored syntax region there is no
+      -- correspondence to search for. Walk its tokens directly, keeping the
+      -- same source spans/slider handling as the unique one-sided graph path.
+      if stats then stats.one_sided_regions = (stats.one_sided_regions or 0) + 1 end
+      for _, node in ipairs(plan.left) do deep_novel(node) end
+      for _, node in ipairs(plan.right) do deep_novel(node) end
     else
       local l, r = plan.left, plan.right
+      if stats then
+        local size = 0
+        for _, nodes in ipairs({ l, r }) do
+          for _, node in ipairs(nodes) do size = size + 1 + (node.descendants or 0) end
+        end
+        stats.searches = (stats.searches or 0) + 1
+        stats.largest_region = math.max(stats.largest_region or 0, size)
+      end
       local last_left, last_right = l[#l], r[#r]
       local next_left, next_right = last_left and last_left.next, last_right and last_right.next
       if last_left then last_left.next = nil end
@@ -858,23 +1050,32 @@ end
 
 -- Private conversion graphs allow suspended comparisons to coexist without
 -- mutating the cached hunk's sibling links/content IDs. Parsing remains shared.
-function M.compare_async(old, new, bufnr, owner, opposite)
+function M.compare_async(old, new, bufnr, owner, opposite, full_file)
   if not old or not new then return nil, false end
-  if not structural_language(old.lang) or not structural_language(new.lang) then return nil, false end
-  if old.comparison and old.comparison.new == new then
-    local result = old.comparison.result
+  if not full_file and (not structural_language(old.lang) or not structural_language(new.lang)) then return nil, false end
+  -- Complete-file mode also owns a shared Text fallback. Keep its cache apart
+  -- from structural-only hunk/recovery calls, which need a failure signal.
+  local last_key, done_key, jobs_key = 'comparison', 'completed', 'jobs'
+  if full_file then last_key, done_key, jobs_key = 'full_comparison', 'full_completed', 'full_jobs' end
+  if old[last_key] and old[last_key].new == new then
+    local result = old[last_key].result
     return result ~= false and result or nil, false
   end
-  old.completed = old.completed or setmetatable({}, { __mode = 'k' })
-  if old.completed[new] ~= nil then
-    local result = old.completed[new]
+  old[done_key] = old[done_key] or setmetatable({}, { __mode = 'k' })
+  local completed = old[done_key]
+  if completed[new] ~= nil then
+    local result = completed[new]
     return result ~= false and result or nil, false
   end
-  old.jobs = old.jobs or {}
-  local job = old.jobs[new]
+  old[jobs_key] = old[jobs_key] or {}
+  local pending_jobs = old[jobs_key]
+  local job = pending_jobs[new]
   local request = { source = owner or old, opposite = opposite or new }
   local function register(target)
-    target.waiters[bufnr] = request
+    local waiting = target.waiters[bufnr] or {}
+    target.waiters[bufnr] = waiting
+    waiting[request.source] = waiting[request.source] or {}
+    waiting[request.source][request.opposite] = true
     target.owners[request.source] = target.owners[request.source] or {}
     target.owners[request.source][request.opposite] = true
   end
@@ -887,41 +1088,58 @@ function M.compare_async(old, new, bufnr, owner, opposite)
   end
   job = { waiters = {}, owners = {} }
   register(job)
-  old.jobs[new] = job
+  pending_jobs[new] = job
   local deadline
   job.thread = coroutine.create(function()
-    return M.compare(private(old), private(new), { checkpoint = function()
+    local function checkpoint()
       if vim.uv.hrtime() >= deadline then coroutine.yield() end
-    end })
+    end
+    local left, right = private(old), private(new)
+    if full_file and structural_language(old.lang) and not old.tree:root():has_error() and not new.tree:root():has_error() then
+      scope_pair(left, right, checkpoint)
+    end
+    local result = M.compare(left, right, { checkpoint = checkpoint })
+    if not result and full_file then result = M.text_fallback(old.lines, new.lines, checkpoint) end
+    return result
   end)
   local function resume(initial)
     if not initial then
       local style = package.loaded['git.features.syntax_highlight']
-      for buf, request in pairs(job.waiters) do
+      for buf, waiting in pairs(job.waiters) do
         if not vim.api.nvim_buf_is_loaded(buf) or style and style.config.word_diff_style ~= 'treesitter' then
           job.waiters[buf] = nil
-        elseif style and not style.source_is_active(buf, request.source, request.opposite) then
-          job.waiters[buf] = nil
+        elseif style then
+          for source, opposites in pairs(waiting) do
+            for opposite in pairs(opposites) do
+              if not style.source_is_active(buf, source, opposite) then opposites[opposite] = nil end
+            end
+            if next(opposites) == nil then waiting[source] = nil end
+          end
+          if next(waiting) == nil then job.waiters[buf] = nil end
         end
       end
-      if next(job.waiters) == nil then old.jobs[new] = nil; return end
+      if next(job.waiters) == nil then pending_jobs[new] = nil; return end
     end
     deadline = vim.uv.hrtime() + 5e6
     local ok, result = coroutine.resume(job.thread)
     if not ok then
-      old.jobs[new] = nil
+      pending_jobs[new] = nil
       error(result)
     end
     if coroutine.status(job.thread) == 'dead' then
-      old.jobs[new] = nil
-      old.completed[new] = result or false
-      old.comparison = { new = new, result = result or false }
+      pending_jobs[new] = nil
+      completed[new] = result or false
+      old[last_key] = { new = new, result = result or false }
       for source, opposites in pairs(job.owners) do
         source.versions = source.versions or setmetatable({}, { __mode = 'k' })
         for opposite in pairs(opposites) do source.versions[opposite] = (source.versions[opposite] or 0) + 1 end
       end
       if not initial then
-        for buf in pairs(job.waiters) do refresh_when_ready(buf) end
+        for buf, waiting in pairs(job.waiters) do
+          for source, opposites in pairs(waiting) do
+            for opposite in pairs(opposites) do refresh_when_ready(buf, source, opposite) end
+          end
+        end
       end
       return result, false
     end

@@ -222,10 +222,10 @@ vim.api.nvim_buf_delete(buf, { force = true })
 
 -- Closing the first view during a suspended whole-file graph must preserve
 -- the shared comparison needed by the other view.
-local started, completed = 0, 0
+local started, completed, held = 0, 0, true
 structural.compare = function(old, new, options)
   started = started + 1
-  coroutine.yield()
+  while held do coroutine.yield() end
   local result = compare(old, new, options)
   completed = completed + 1
   return result
@@ -233,12 +233,35 @@ end
 spec = { root = root, path = 'shared.php',
   old = { text = '<?php\n' .. before .. '\n// Shared source lifetime' },
   new = { text = '<?php\n' .. after .. '\n// Shared source lifetime' } }
+syntax.config.changed_fg = 'difft'
+local fallback, text_calls = structural.text_fallback, 0
+structural.text_fallback = function(...)
+  text_calls = text_calls + 1
+  return fallback(...)
+end
 local first, second = inline(spec), inline(spec)
 assert(vim.wait(5000, function() return started == 1 end, 1), 'shared PHP graph did not start')
+for _, buffer in ipairs({ first, second }) do
+  assert(vim.wait(1000, function()
+    local has_syntax, has_spinner = false, false
+    for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buffer, ns, 0, -1, { details = true })) do
+      local group = mark[4].hl_group or ''
+      assert(not group:match('^FugitiveExtSyntax') and not group:match('^FugitiveExtNovel'),
+        'pending PHP comparison painted provisional diff spans')
+      has_syntax = has_syntax or group:match('^@') ~= nil
+      has_spinner = has_spinner or mark[4].virt_text_pos == 'eol'
+    end
+    return has_syntax and has_spinner
+  end, 1), 'pending PHP comparison lost syntax colors or its loading icon')
+end
+assert(text_calls == 0, 'pending PHP comparison computed a provisional text fallback')
 vim.api.nvim_buf_delete(first, { force = true })
+held = false
 settle(second); check_inline(second)
 assert(started == 1 and completed == 1, 'closing one PHP view canceled or duplicated shared work')
 vim.api.nvim_buf_delete(second, { force = true })
 structural.compare = compare
+structural.text_fallback = fallback
+syntax.config.changed_fg = 'syntax'
 vim.fn.delete(root, 'rf')
 print('PASS: native PHP spans in real staged/unstaged/renamed Commit views, tagless methods, embedded HTML, shared async comparison and warm caches')

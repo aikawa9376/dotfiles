@@ -1,5 +1,5 @@
--- Complete files for syntax coloring only. Structural comparison retains its
--- hunk-local sources. Each view shares reads between its displayed hunks.
+-- Complete files shared by source coloring and structural comparison.
+-- Each view shares reads between its displayed hunks.
 local M = {}
 local jobs = require('git.features.highlight_jobs')
 local MAX_BYTES, CACHE_SIZE, CONCURRENCY = 1000000, 8, 2
@@ -53,7 +53,7 @@ function M.new()
     local function loaded(text)
       if not live(entry) then finish(entry); return end
       if not text or #text > MAX_BYTES or text:find('\0', 1, true) then finish(entry); return end
-      local lines = vim.split(text:gsub('\r\n', '\n'), '\n', { plain = true })
+      local lines = text == '' and {} or vim.split(text:gsub('\r\n', '\n'), '\n', { plain = true })
       if text:sub(-1) == '\n' then lines[#lines] = nil end
       callback(lines)
     end

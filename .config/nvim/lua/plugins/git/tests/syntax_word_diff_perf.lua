@@ -177,6 +177,14 @@ do
   end
   local icon_id, frame = icon(first)
   assert(icon_id and not frame:find('読み込み', 1, true), 'pending hunk has no loading icon')
+  local has_syntax = false
+  for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(first, ns, 0, -1, { details = true })) do
+    local group = mark[4].hl_group or ''
+    assert(not group:match('^FugitiveExtSyntax') and not group:match('^FugitiveExtNovel'),
+      'pending structural recovery painted provisional diff spans')
+    has_syntax = has_syntax or group:match('^@') ~= nil
+  end
+  assert(has_syntax, 'pending recovery hid source syntax colors')
   local work, animation = 0, 0
   local refresh = syntax.refresh
   syntax.refresh = function(...) work = work + 1; return refresh(...) end

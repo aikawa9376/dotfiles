@@ -31,6 +31,13 @@ with tempfile.TemporaryDirectory(prefix='difftastic-oracle-') as directory:
                                 text=True, capture_output=True, check=True)
         native = json.loads(result.stdout)
         case['language'] = native['language']
+        if case.get('complete_file'):
+            patch = subprocess.run(['git', 'diff', '--no-index', '--unified=3',
+                                    paths['old'], paths['new']], text=True, capture_output=True)
+            assert patch.returncode in (0, 1), patch.stderr
+            rows = patch.stdout.splitlines()
+            first = next((index for index, row in enumerate(rows) if row.startswith('@@ ')), len(rows))
+            case['patch'] = rows[first:]
         case['expected'] = {side: [[] for _ in case[field]]
                             for side, field in [('old', 'before'), ('new', 'after')]}
         case['emphasis'] = {side: [[] for _ in case[field]]
