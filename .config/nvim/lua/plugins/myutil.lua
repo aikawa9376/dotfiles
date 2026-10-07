@@ -110,6 +110,7 @@ return {
           args[1] = table.concat(opts.fargs, ' ')
         end
         vim.schedule(function()
+          require('lazy').load({ plugins = { 'git' } })
           vim.cmd('tabnew ' .. vim.fn.expand('%:p'))
           require('gitsigns').diffthis(unpack(args))
         end)

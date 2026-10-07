@@ -857,23 +857,57 @@ function Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
   end
 end
 
-function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
-  if #group_old == 0 or #group_new == 0 then return end
+-- Shared source-coordinate comparators for unified and split views. Ranges
+-- are one-based inclusive bytes; callers own row projection and presentation.
+function M.word_diff_ranges(old_lines, new_lines, style)
+  if #old_lines == 0 or #new_lines == 0 then return { old = {}, new = {} } end
+  if style == 'diffs' then
+    local patch, mapping = {}, {}
+    for _, side in ipairs({ { old_lines, '-', 'old' }, { new_lines, '+', 'new' } }) do
+      for row, line in ipairs(side[1]) do
+        patch[#patch + 1], mapping[#patch + 1] = side[2] .. line, { side[3], row }
+      end
+    end
+    local result = { old = {}, new = {} }
+    local intra = Utils.compute_diffs_style_word_diffs(patch)
+    local whitespace = Utils.whitespace_only_lines(patch)
+    for _, spans in ipairs({ intra and intra.del_spans or {}, intra and intra.add_spans or {} }) do
+      for _, span in ipairs(spans) do
+        if not whitespace[span.line] then
+          local target = mapping[span.line]
+          local ranges = result[target[1]][target[2]] or {}
+          result[target[1]][target[2]] = ranges
+          ranges[#ranges + 1] = { span.col_start, span.col_end - 1 }
+        end
+      end
+    end
+    return result
+  end
   local changes
-  if M.config.word_diff_style == 'github' then
+  if style == 'github' then
     changes = { old = {}, new = {} }
-    for i = 1, math.min(#group_old, #group_new) do
+    for i = 1, math.min(#old_lines, #new_lines) do
       local old, new = {}, {}
-      for _, diff in ipairs(Utils.compute_word_diffs(group_old[i], group_new[i])) do
+      for _, diff in ipairs(Utils.compute_word_diffs(old_lines[i], new_lines[i])) do
         if diff[1] then old[#old + 1] = { diff[1], diff[2] } end
         if diff[3] then new[#new + 1] = { diff[3], diff[4] } end
       end
-      changes.old[i] = Utils.merge_ranges(old, group_old[i])
-      changes.new[i] = Utils.merge_ranges(new, group_new[i])
+      changes.old[i] = Utils.merge_ranges(old, old_lines[i])
+      changes.new[i] = Utils.merge_ranges(new, new_lines[i])
     end
   else
-    changes = delta_word_diff.compare(group_old, group_new)
+    changes = delta_word_diff.compare(old_lines, new_lines)
   end
+  return changes
+end
+
+function M.diff_opts() return Utils.diff_opts() end
+function M.setup_groups() Highlighter.setup_groups() end
+function M.merge_ranges(ranges, line) return Utils.merge_ranges(vim.deepcopy(ranges or {}), line) end
+
+function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
+  if #group_old == 0 or #group_new == 0 then return end
+  local changes = M.word_diff_ranges(group_old, group_new, M.config.word_diff_style)
   for _, side in ipairs({ { changes.old, group_old_lines, 'FugitiveExtDeleteText' },
     { changes.new, group_new_lines, 'FugitiveExtAddText' } }) do
     for row, ranges in pairs(side[1]) do
@@ -1177,13 +1211,15 @@ function M.is_pending(bufnr)
       end
     end
   end
-  return false
+  local split = package.loaded['git.features.split_diff']
+  return split and split.is_pending(bufnr) or false
 end
 
 function M.source_is_active(bufnr, source, opposite)
   local pairs = active_sources[bufnr] and active_sources[bufnr][source]
   return pairs and (not opposite or pairs[opposite] == true)
     or warmers[bufnr] and warmers[bufnr].is_active(source, opposite)
+    or package.loaded['git.features.split_diff'] and package.loaded['git.features.split_diff'].source_is_active(bufnr, source, opposite)
 end
 local highlight_group = vim.api.nvim_create_augroup('FugitiveExtensionHighlights', { clear = true })
 vim.api.nvim_create_autocmd('ColorScheme', {
@@ -1193,11 +1229,10 @@ vim.api.nvim_create_autocmd('ColorScheme', {
 
 function M.refresh(bufnr, changes)
   local refresh = attached_refreshers[bufnr]
-  if not refresh then
-    return false
-  end
-  refresh(changes)
-  return true
+  local split = package.loaded['git.features.split_diff']
+  local refreshed = split and split.refresh_for(bufnr, changes) or false
+  if refresh then refresh(changes); return true end
+  return refreshed
 end
 
 function M.refresh_all()
@@ -1210,7 +1245,8 @@ function M.refresh_all()
       attached_refreshers[bufnr] = nil
     end
   end
-  return refreshed
+  local split = package.loaded['git.features.split_diff']
+  return split and split.refresh_all() or refreshed
 end
 
 function M.cycle_word_diff_style()

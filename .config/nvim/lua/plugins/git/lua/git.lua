@@ -2,6 +2,11 @@ local M = {}
 
 function M.setup(opts)
   opts = opts or {}
+  if opts.word_diff_style then
+    local selected, err = require('git.features.syntax_highlight').set_word_diff_style(opts.word_diff_style)
+    assert(selected, err)
+  end
+  require('git.features.split_diff').setup()
   require('git.features.custom_commands').setup(opts.custom_commands or vim.g.git_custom_commands or {})
   local group = vim.api.nvim_create_augroup('fugitive_custom', { clear = true })
   local nowrap_filetypes = {

@@ -521,6 +521,33 @@ parsed trees and comparisons. The same setting can be enabled directly:
 
 Set `changed_fg` back to `syntax` in the same command to restore the default.
 
+Native two-pane split diffs use the same selected word-diff style. This includes
+Status/Commit/Blame `d`, the `Gdiff` commands, `:Diff` (still opened by Gitsigns),
+and Diffview's two-pane layouts. `gD` style changes in a Git panel update open
+splits too; `require('git').setup({ word_diff_style = 'treesitter' })` can set the
+initial preference. Diffview's logical `a`/`b` sides determine deletion/addition
+colors even if its layout is rotated.
+
+Native diff alignment, filler rows, folds, scrolling and `do`/`dp` remain in
+place. Only the content highlights change: `treesitter` keeps source syntax
+colors and paints confirmed token/word backgrounds, with a loading icon while
+comparison is pending. It has no `▏` gutter because the separate panes already
+identify before/after. Other styles use their ordinary line and word palettes.
+Complete in-memory buffer contents are compared, preserving unsaved worktree or
+index edits and PHP's enclosing context. Parsing, comparisons and paint plans
+are asynchronous; the Rust worker and shared full-file comparison cache apply
+here too. Style/foreground switches reuse ready trees/results. Source edits,
+Diffview file switches, `diffoff` and window closure invalidate obsolete jobs.
+
+Decorations are emitted only for drawn rows in the paired windows. Displaying
+the same buffer in an ordinary window or another comparison does not share its
+diff backgrounds. Native highlight mappings are restored on teardown; global
+theme diff groups are unchanged. Three/four-pane conflict layouts retain their
+native rendering. `tests/split_diff.lua`, `tests/split_diff_views.lua` and
+`tests/split_diff_ui.py` cover selected styles, exact source coordinates,
+native cancellation, real provider integration, null sides, and actual TUI
+syntax/background composition and window isolation.
+
 `tests/difftastic_word_diff.lua` compares both background levels against 153
 checked-in cases captured from the installed Difftastic 0.71.0, covering calls,
 wrapping, paired delimiters, added/removed syntax, strings/comments, Unicode,
