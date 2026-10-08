@@ -75,7 +75,7 @@ local function close_branch(windows)
   end
 end
 
-local function close_application_split_or_run_q()
+local function close_application_split()
   local bufnr, current_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
   if not buffer_is_application(bufnr) then
     local path = {}
@@ -115,12 +115,11 @@ local function close_application_split_or_run_q()
       if candidates[1] then close_branch(candidates[1][2]); return end
     end
   end
-  vim.api.nvim_feedkeys("q", "n", false)
 end
 
-vim.keymap.set("n", "q", close_application_split_or_run_q, {
+vim.keymap.set("n", "q", close_application_split, {
   silent = true,
-  desc = "Close an application split or run the native q key",
+  desc = "Close an application split",
 })
 
 vim.api.nvim_create_autocmd({ "BufHidden", "WinClosed" }, {
