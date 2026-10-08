@@ -2,28 +2,29 @@
 -- Each view shares reads between its displayed hunks.
 local M = {}
 local jobs = require('git.features.highlight_jobs')
+local fs = require('git.fs')
+local queue = require('git.queue')
 local MAX_BYTES, CACHE_SIZE, CONCURRENCY = 1000000, 8, 2
-
-local function fingerprint(path)
-  local stat = path and vim.uv.fs_lstat(path)
-  if not stat then return '-' end
-  return table.concat({ stat.type, stat.ino, stat.size, stat.mtime.sec, stat.mtime.nsec,
-    stat.ctime.sec, stat.ctime.nsec }, ':')
-end
 
 function M.key(spec)
   local function side(source)
-    return source.path and { source.path, fingerprint(source.path) } or { source.object or '', source.text or '' }
+    return source.path and { source.path, fs.fingerprint(source.path) } or { source.object or '', source.text or '' }
   end
   return vim.mpack.encode({ spec.root or '', spec.path or '', side(spec.old), side(spec.new),
-    spec.index_path and fingerprint(spec.index_path) or '' })
+    spec.index_path and fs.fingerprint(spec.index_path) or '' })
 end
 
 function M.new()
-  local session = { cache = {}, pending = {}, queue = {}, count = 0, clock = 0 }
+  local session = { cache = {}, pending = {}, queue = queue.new(), count = 0, clock = 0 }
+  local scheduled = false
   local pump
+  local function schedule()
+    if session.closed or scheduled then return end
+    scheduled = true
+    jobs.schedule(function() scheduled = false; pump() end)
+  end
   local function live(entry)
-    if session.closed then return false end
+    if session.closed or entry.cancelled then return false end
     for _, listener in ipairs(entry.listeners) do if listener.valid() then return true end end
     return false
   end
@@ -46,7 +47,7 @@ function M.new()
         if listener.valid() then listener.callback(sources) end
       end
     end
-    if not session.closed then jobs.schedule(pump) end
+    schedule()
   end
   local function load(entry, source, callback)
     if not live(entry) then finish(entry); return end
@@ -100,9 +101,9 @@ function M.new()
     end)
   end
   pump = function()
-    while not session.closed and session.count < CONCURRENCY and #session.queue > 0 do
-      local entry = table.remove(session.queue, 1)
-      if not live(entry) then finish(entry)
+    while not session.closed and session.count < CONCURRENCY and not session.queue.empty() do
+      local entry = session.queue.pop()
+      if entry.finished or not live(entry) then finish(entry)
       else
         session.count, entry.started = session.count + 1, true
         load(entry, entry.spec.old, function(old)
@@ -132,9 +133,9 @@ function M.new()
     end
     local entry = { key = key, spec = spec, listeners = { listener } }
     session.pending[key] = entry
-    session.queue[#session.queue + 1] = entry
+    session.queue.push(entry)
     -- No Git reads or source splitting starts on the attach/refresh stack.
-    jobs.schedule(pump)
+    schedule()
   end
   function session.prune()
     local cancelled = {}
@@ -152,7 +153,7 @@ function M.new()
   function session.close()
     session.closed = true
     session.prune()
-    session.cache, session.queue = {}, {}
+    session.cache, session.queue = {}, queue.new()
   end
   return session
 end

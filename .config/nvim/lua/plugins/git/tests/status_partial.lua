@@ -107,6 +107,35 @@ local staged_new = git({ 'show', ':new.txt' })
 assert(not staged_new:find('alpha', 1, true) and staged_new:find('beta', 1, true),
   'partial unstage of a new file removed too much')
 
+-- Public row lookup must stay valid after bulk expansion, collapse, and a
+-- warning inserted above the file sections, including after warming its cache.
+local function check_entry_rows()
+  for row = 1, vim.api.nvim_buf_line_count(b) do
+    local entry = renderer.entry_at(b, row)
+    local direct = renderer.entry_row(b, row)
+    if entry then
+      assert(direct and direct <= row and renderer.entry_at(b, direct) == entry)
+      assert(renderer.entry_at(b, direct - 1) ~= entry, 'lookup returned a diff row instead of its file')
+    else
+      assert(not direct, 'lookup retained a removed entry')
+    end
+  end
+end
+snapshot()
+check_entry_rows()
+staged_section = assert(row_containing('Staged changes'))
+assert(renderer.update_diff(b, staged_section, 'hide'))
+check_entry_rows()
+assert(renderer.update_diff(b, staged_section, 'show'))
+check_entry_rows()
+vim.api.nvim_buf_set_lines(b, 0, 0, false, { 'warning' })
+renderer.shift_entries(b, 1, 1)
+check_entry_rows()
+assert(renderer.update_diff(b, staged_section + 1, 'hide'))
+check_entry_rows()
+snapshot()
+check_entry_rows()
+
 renderer.cleanup(b)
 vim.fn.delete(root, 'rf')
 print('PASS: status hunk and selected-line staging/unstaging')

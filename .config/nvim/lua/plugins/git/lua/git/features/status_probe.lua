@@ -1,5 +1,7 @@
 -- Revalidate on editor events, including worktree edits that never touch .git.
 local M = {}
+local fs = require('git.fs')
+local record_fields = { ['1'] = 8, ['2'] = 9, u = 10, ['?'] = 1 }
 
 function M.new(root, changed)
   local active, pending, queued = true, false, false
@@ -31,7 +33,7 @@ function M.new(root, changed)
           if skip then skip = false
           else
             local kind = record:sub(1, 1)
-            local fields = ({ ['1'] = 8, ['2'] = 9, u = 10, ['?'] = 1 })[kind]
+            local fields = record_fields[kind]
             if fields then
               local position = 1
               for _ = 1, fields do
@@ -48,8 +50,7 @@ function M.new(root, changed)
         if remaining == 0 then finish(output); return end
         for i, path in ipairs(paths) do
           vim.uv.fs_lstat(root .. '/' .. path, function(_, stat)
-            parts[i + 1] = stat and table.concat({ stat.ino, stat.size,
-              stat.mtime.sec, stat.mtime.nsec, stat.ctime.sec, stat.ctime.nsec }, ':') or '-'
+            parts[i + 1] = fs.stat_key(stat)
             remaining = remaining - 1
             if remaining == 0 then
               vim.schedule(function() finish(table.concat(parts, '\0')) end)

@@ -1,20 +1,20 @@
 -- One scheduled slice at a time across all views. Starting every hunk's
 -- coroutine in the same refresh still blocks input for their combined budget.
 local M = {}
-local queue, pending = {}, false
+local queue, pending = require('git.queue').new(), false
 local pump
 pump = function()
-  if pending or #queue == 0 then return end
+  if pending or queue.empty() then return end
   pending = true
   vim.defer_fn(function()
     pending = false
-    local next_callback = table.remove(queue, 1)
+    local next_callback = queue.pop()
     pump()
     next_callback()
   end, 1)
 end
 function M.schedule(callback)
-  queue[#queue + 1] = callback
+  queue.push(callback)
   pump()
 end
 

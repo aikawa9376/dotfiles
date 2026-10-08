@@ -6,24 +6,7 @@ vim.opt.rtp:prepend(vim.fn.stdpath('data') .. '/lazy/nvim-treesitter/runtime')
 local structural = require('git.features.syntax_word_diff')
 local fixture = vim.json.decode(table.concat(vim.fn.readfile(plugin .. '/tests/fixtures/difftastic_word_diff.json'), '\n'))
 
--- Normalize the view's deliberate whitespace bridges, clipping native EOF
--- positions to real bytes. Unchanged non-whitespace may never be bridged.
-local function mask(ranges, line)
-  local bytes = {}
-  for _, range in ipairs(ranges or {}) do
-    for col = range[1], math.min(range[2], #line) do bytes[col] = true end
-  end
-  local previous
-  for col = 1, #line do
-    if bytes[col] then
-      if previous and line:sub(previous + 1, col - 1):match('^%s*$') then
-        for gap = previous + 1, col - 1 do bytes[gap] = true end
-      end
-      previous = col
-    end
-  end
-  return bytes
-end
+local mask = dofile(plugin .. '/tests/helpers/spans.lua').mask
 local failures, compared, fallback, rendered, recovered = {}, 0, 0, 0, 0
 local syntax = require('git.features.syntax_highlight')
 local function settle(buf)

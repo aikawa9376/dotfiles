@@ -2,6 +2,7 @@ local M = {}
 local operation = require('git.features.operation')
 local change_display = require('git.features.change_display')
 local status_patch = require('git.features.status_patch')
+local statistics = require('git.features.status_statistics')
 
 local models = {}
 local expanded = {}
@@ -35,83 +36,6 @@ end
 
 local function split_nul(value)
   return vim.split(value or '', '\0', { plain = true, trimempty = true })
-end
-
-local function parse_numstat(work_tree, cached)
-  local args = { 'diff', '--numstat', '-z', '--no-ext-diff', '--no-renames' }
-  if cached then table.insert(args, '--cached') end
-  local result = run(work_tree, args)
-  if result.code ~= 0 then return {} end
-
-  local stats = {}
-  for _, record in ipairs(split_nul(result.stdout)) do
-    local added, deleted, path = record:match('^([^\t]+)\t([^\t]+)\t(.*)$')
-    if path and path ~= '' then
-      stats[path] = {
-        additions = tonumber(added) or 0,
-        deletions = tonumber(deleted) or 0,
-        binary = added == '-' or deleted == '-',
-      }
-    end
-  end
-  return stats
-end
-
-local function attach_numstat(entries, stats)
-  for _, entry in ipairs(entries) do
-    local paths = { entry.path }
-    if entry.old_path and entry.old_path ~= entry.path then table.insert(paths, entry.old_path) end
-
-    local found = false
-    local additions, deletions = 0, 0
-    local binary = false
-    for _, path in ipairs(paths) do
-      local stat = stats[path]
-      if stat then
-        found = true
-        additions = additions + stat.additions
-        deletions = deletions + stat.deletions
-        binary = binary or stat.binary
-      end
-    end
-    if found then
-      entry.additions = additions
-      entry.deletions = deletions
-      entry.binary = binary
-    end
-  end
-end
-
-local function untracked_numstat(path)
-  local stat = vim.uv.fs_lstat(path)
-  if not stat then return nil end
-  if stat.type == 'link' then
-    local target = vim.uv.fs_readlink(path)
-    if not target then return nil end
-    local _, count = target:gsub('\n', '')
-    return count + (target ~= '' and target:sub(-1) ~= '\n' and 1 or 0), false
-  end
-  -- Do not follow symlinks or try to read directories and special files.
-  if stat.type ~= 'file' then return nil end
-  local file = io.open(path, 'rb')
-  if not file then return nil end
-  local count, last, first = 0, '', true
-  while true do
-    local chunk, err = file:read(65536)
-    if err then file:close(); return nil end
-    if not chunk then break end
-    -- Match Git's default binary heuristic without loading the entire file.
-    if first and chunk:sub(1, 8000):find('\0', 1, true) then
-      file:close()
-      return 0, true
-    end
-    first = false
-    local _, newlines = chunk:gsub('\n', '')
-    count = count + newlines
-    last = chunk:sub(-1)
-  end
-  file:close()
-  return count + (last ~= '' and last ~= '\n' and 1 or 0), false
 end
 
 local function parse_status_result(work_tree, result)
@@ -254,12 +178,7 @@ local function parse_status(bufnr, work_tree)
   model.upstream_subject = subject(model.upstream)
   if model.push ~= model.upstream then model.push_subject = subject(model.push) end
   if model.oid and model.oid ~= '(initial)' then model.tags = tag_summary(work_tree) end
-  attach_numstat(model.unstaged, parse_numstat(work_tree, false))
-  attach_numstat(model.staged, parse_numstat(work_tree, true))
-  for _, entry in ipairs(model.untracked) do
-    entry.additions, entry.binary = untracked_numstat(vim.fs.joinpath(work_tree, entry.path))
-    if entry.additions ~= nil then entry.deletions = 0 end
-  end
+  statistics.enrich(bufnr, model)
   return model
 end
 
@@ -889,17 +808,25 @@ function M.shift_entries(bufnr, from_row, delta)
     shifted[row >= from_row and row + delta or row] = entry
   end
   model.entries_by_row = shifted
+  model.rows_by_entry = nil
+end
+
+local function direct_row_for_entry(model, entry)
+  if not model.rows_by_entry then
+    local rows = {}
+    for candidate, value in pairs(model.entries_by_row) do
+      if not rows[value] or candidate < rows[value] then rows[value] = candidate end
+    end
+    model.rows_by_entry = rows
+  end
+  return model.rows_by_entry[entry]
 end
 
 function M.entry_row(bufnr, row)
   local model = models[bufnr]
   local entry = M.entry_at(bufnr, row)
   if not model or not entry then return nil end
-  local direct_row
-  for candidate, value in pairs(model.entries_by_row) do
-    if value == entry and (not direct_row or candidate < direct_row) then direct_row = candidate end
-  end
-  return direct_row
+  return direct_row_for_entry(model, entry)
 end
 
 function M.paths_in_range(bufnr, first_row, last_row)
@@ -1027,15 +954,9 @@ local function update_entry_rows(model, direct_row, end_row, entry, replacement_
   end
   for offset = 1, replacement_count do updated[direct_row + offset] = entry end
   model.entries_by_row = updated
+  model.rows_by_entry = nil
 end
 
-local function direct_row_for_entry(model, entry)
-  local row
-  for candidate, value in pairs(model.entries_by_row) do
-    if value == entry and (not row or candidate < row) then row = candidate end
-  end
-  return row
-end
 
 function M.update_diff(bufnr, row, mode)
   local model = models[bufnr]
@@ -1073,7 +994,8 @@ function M.update_diff(bufnr, row, mode)
   vim.bo[bufnr].readonly = false
   local ok, err = pcall(function()
     for _, item in ipairs(ordered) do
-      local direct_row = direct_row_for_entry(model, item.entry)
+      -- Changes below this entry cannot move its original row.
+      local direct_row = item.row
       local end_row = direct_row
       while model.entries_by_row[end_row + 1] == item.entry do end_row = end_row + 1 end
       local replacement = expand and diff_lines(model, item.entry) or {}
@@ -1567,6 +1489,7 @@ function M.conflict_sides(bufnr, row)
 end
 
 function M.cleanup(bufnr)
+  statistics.cleanup(bufnr)
   models[bufnr] = nil
   expanded[bufnr] = nil
   subjects_by_buf[bufnr] = nil

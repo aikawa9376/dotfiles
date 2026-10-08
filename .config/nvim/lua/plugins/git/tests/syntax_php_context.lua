@@ -23,21 +23,7 @@ local function settle(buf)
   syntax.refresh(buf)
   assert(vim.wait(15000, function() return not syntax.is_pending(buf) end, 1), 'PHP comparison did not finish')
 end
-local function mask(ranges, line)
-  local result, previous = {}, nil
-  for _, range in ipairs(ranges or {}) do
-    for col = range[1], math.min(range[2], #line) do result[col] = true end
-  end
-  for col = 1, #line do
-    if result[col] then
-      if previous and line:sub(previous + 1, col - 1):match('^%s*$') then
-        for gap = previous + 1, col - 1 do result[gap] = true end
-      end
-      previous = col
-    end
-  end
-  return result
-end
+local mask = dofile(plugin .. '/tests/helpers/spans.lua').mask
 local function check(buf)
   local hunks, hunk = {}, nil
   for row, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do

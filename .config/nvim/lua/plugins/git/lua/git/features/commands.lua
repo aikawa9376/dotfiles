@@ -56,29 +56,6 @@ local function handle_cherry_pick_error(work_tree, message)
   return false, nil, true -- Not handled, Default behavior (Pop stash?)
 end
 
-local function hard_reset_to_commit(work_tree, commit)
-  if not commit or commit == '' then
-    vim.notify("No commit to reset to", vim.log.levels.WARN)
-    return false
-  end
-
-  local stashed = apply_auto_stash(work_tree)
-  if stashed == nil then return false end
-
-  local cmd = "git -C " .. vim.fn.shellescape(work_tree) .. " reset --hard " .. vim.fn.shellescape(commit)
-  local output = vim.fn.system(cmd)
-
-  if stashed then pop_auto_stash(work_tree) end
-
-  if vim.v.shell_error ~= 0 then
-    vim.notify("Reset failed: " .. output, vim.log.levels.ERROR)
-    return false
-  end
-
-  utils.fire_git_changed({ work_tree = work_tree })
-  return true
-end
-
 function M.close_commit_info_float()
   if float_win and vim.api.nvim_win_is_valid(float_win) then
     vim.api.nvim_win_close(float_win, true)

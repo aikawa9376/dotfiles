@@ -10,7 +10,9 @@ return {
     "GitCommit", "Greflog", "Glog", "Gllog", "Glcd", "Gtabedit", "Gsplit", "Gvdiffsplit",
     "Ghdiffsplit", "Gremove", "Gdelete", "Gmove", "Grename", "Gwq", "Gblame", "Ggraph",
     "GgraphBackend", "GCherryPick", "GworktreeSync", "GitUndo", "GitRedo", "DiffDim",
-    "GitApply", "GitReverse", "GitFixupBase", "GitPatch", "GitRebasePlan", "GitRebaseBase", "GitRebaseContinue", "GitRebaseSkip", "GitRebaseAbort"
+    "GitApply", "GitReverse", "GitFixupBase", "GitPatch", "GitRebasePlan", "GitRebaseBase", "GitRebaseContinue", "GitRebaseSkip", "GitRebaseAbort",
+    "GitWipEnable", "GitWipDisable", "GitWipSave", "GitWipLog", "GitWipRestore",
+    "GbranchSpinoff", "GbranchSpinout",
   },
   keys = {
     { "<Leader>gb", function() require('git.features.blame').toggle() end, silent = true, desc = "Toggle Git blame panel" },

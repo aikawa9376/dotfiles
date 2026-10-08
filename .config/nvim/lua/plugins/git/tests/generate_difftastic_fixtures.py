@@ -5,6 +5,7 @@ JSON supplies colored token positions (including weak literal coloring).
 Inline ANSI additionally supplies bold/underlined changed-word emphasis.
 The command is an oracle only; Neovim does not execute it at runtime.
 """
+import argparse
 import json
 import os
 from pathlib import Path
@@ -16,10 +17,18 @@ TARGET = Path(__file__).resolve().parent / 'fixtures/difftastic_word_diff.json'
 VERSION = subprocess.check_output(['difft', '--version'], text=True).splitlines()[0]
 assert VERSION == 'Difftastic 0.71.0', VERSION
 fixture = json.loads(TARGET.read_text())
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--case', action='append', default=[], help='Regenerate only this case (repeatable)')
+selected_cases = set(parser.parse_args().case)
+unknown = selected_cases - {case['name'] for case in fixture['cases']}
+if unknown:
+    parser.error('Unknown cases: ' + ', '.join(sorted(unknown)))
 CSI = re.compile(r'\x1b\[([0-9;]*)m')
 
 with tempfile.TemporaryDirectory(prefix='difftastic-oracle-') as directory:
     for case in fixture['cases']:
+        if selected_cases and case['name'] not in selected_cases:
+            continue
         paths = {}
         for side, field in [('old', 'before'), ('new', 'after')]:
             path = Path(directory) / (side + Path(case['name']).suffix)
@@ -116,4 +125,4 @@ fixture['oracle'] = VERSION + ' --display=json and --display=inline --syntax-hig
 TARGET.write_text('{"oracle":' + json.dumps(fixture['oracle']) + ',"patches":'
     + json.dumps(fixture.get('patches', {}), ensure_ascii=False) + ',"cases":[\n' + ',\n'.join(
     json.dumps(case, ensure_ascii=False, separators=(',', ':')) for case in fixture['cases']) + '\n]}\n')
-print(f'Recorded {len(fixture["cases"])} cases from {VERSION}')
+print(f'Recorded {len(selected_cases) if selected_cases else len(fixture["cases"])} cases from {VERSION}')

@@ -1,6 +1,11 @@
 local source = debug.getinfo(1, 'S').source:sub(2)
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(source, ':p')))
 package.path = plugin .. '/lua/?.lua;' .. package.path
+-- Preset actions write persistent state; never read or replace the user's data.
+local test_state = vim.fn.tempname()
+vim.fn.mkdir(test_state, 'p')
+local stdpath = vim.fn.stdpath
+vim.fn.stdpath = function(kind) return kind == 'state' and test_state or stdpath(kind) end
 local options = require('git.features.transient_options')
 local menu = require('git.features.transient_menu')
 local root = vim.fn.tempname(); vim.fn.mkdir(root, 'p')
@@ -36,4 +41,6 @@ press('q')
 local other = vim.fn.tempname(); vim.fn.mkdir(other, 'p'); require('git.utils').set_buf_work_tree(source_buf, other)
 state = show(); assert(not state.signoff and not state.author); press('q')
 vim.fn.delete(root, 'rf'); vim.fn.delete(other, 'rf')
+vim.fn.stdpath = stdpath
+vim.fn.delete(test_state, 'rf')
 print('PASS: session save, persistent worktree preset, history across reload, repository isolation')

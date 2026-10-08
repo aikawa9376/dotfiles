@@ -7,6 +7,7 @@ local syntax_highlight = require("git.features.syntax_highlight")
 local worktree = require("git.features.worktree")
 local status_renderer = require("git.features.status_renderer")
 local status_folds = require('git.features.status_folds')
+local status_reconcile = require('git.features.status_reconcile')
 local operation = require('git.features.operation')
 local range_diff = require('git.features.range_diff')
 local repository_health = require('git.features.repository_health')
@@ -153,7 +154,7 @@ local function status_header_kind(line)
   return nil
 end
 
-local function status_cursor_key(lines, row, bufnr)
+local function status_cursor_key(lines, row, bufnr, section)
   local line = lines[row] or ''
   local rendered_entry = bufnr and status_renderer.entry_at(bufnr, row) or nil
   if rendered_entry and not rendered_entry.header then return 'status_entry', rendered_entry.path end
@@ -180,13 +181,14 @@ local function status_cursor_key(lines, row, bufnr)
     return 'status_entry', renamed_path or path
   end
 
-  local section
-  for i = row, 1, -1 do
-    if lines[i]:match('^Worktrees') then
-      section = 'worktree'
-      break
+  if section == nil then
+    for i = row, 1, -1 do
+      if lines[i]:match('^Worktrees') then
+        section = 'worktree'
+        break
+      end
+      if lines[i] == '' or lines[i]:match('^[A-Z][^/]-%s*[%[(]') then break end
     end
-    if lines[i] == '' or lines[i]:match('^[A-Z][^/]-%s*[%[(]') then break end
   end
   if section == 'worktree' then
     local worktree_path = line:match('^(%S+)')
@@ -413,85 +415,28 @@ local function restore_status_cursors(bufnr, anchors)
   end
 end
 
-local function status_line_identity(lines, row)
-  local line = lines[row] or ''
-  if line:match('^Worktrees %(') then return 'header\0worktree' end
-  if line:match('^Stashes %(') then return 'header\0stash' end
-  local key_type, key = status_cursor_key(lines, row)
-  return key_type .. '\0' .. key
-end
-
-local function matching_status_lines(old_lines, new_lines)
-  local old_keys, new_keys = {}, {}
-  for row = 1, #old_lines do old_keys[row] = status_line_identity(old_lines, row) end
-  for row = 1, #new_lines do new_keys[row] = status_line_identity(new_lines, row) end
-
-  -- Keep semantically identical rows in place and edit only the gaps between them.
-  local lengths = { [0] = {} }
-  for j = 0, #new_lines do lengths[0][j] = 0 end
-  for i = 1, #old_lines do
-    lengths[i] = { [0] = 0 }
-    for j = 1, #new_lines do
-      if old_keys[i] == new_keys[j] then
-        lengths[i][j] = lengths[i - 1][j - 1] + 1
-      else
-        lengths[i][j] = math.max(lengths[i - 1][j], lengths[i][j - 1])
-      end
+local function status_line_keys(lines)
+  local keys, section = {}, false
+  for row, line in ipairs(lines) do
+    if line:match('^Worktrees') then
+      section = 'worktree'
+    elseif line == '' or line:match('^[A-Z][^/]-%s*[%[(]') then
+      section = false
     end
-  end
-
-  local reversed = {}
-  local i, j = #old_lines, #new_lines
-  while i > 0 and j > 0 do
-    if old_keys[i] == new_keys[j] then
-      table.insert(reversed, { old = i, new = j })
-      i, j = i - 1, j - 1
-    elseif lengths[i - 1][j] >= lengths[i][j - 1] then
-      i = i - 1
+    if line:match('^Worktrees %(') then
+      keys[row] = 'header\0worktree'
+    elseif line:match('^Stashes %(') then
+      keys[row] = 'header\0stash'
     else
-      j = j - 1
+      local key_type, key = status_cursor_key(lines, row, nil, section)
+      keys[row] = key_type .. '\0' .. key
     end
   end
-
-  local matches = { { old = 0, new = 0 } }
-  for index = #reversed, 1, -1 do table.insert(matches, reversed[index]) end
-  table.insert(matches, { old = #old_lines + 1, new = #new_lines + 1 })
-  return matches
+  return keys
 end
 
 local function reconcile_status_block(bufnr, start_row, end_row, new_lines)
-  local start_idx = start_row - 1
-  local old_lines = vim.api.nvim_buf_get_lines(bufnr, start_idx, end_row, false)
-  local matches = matching_status_lines(old_lines, new_lines)
-
-  for index = #matches, 2, -1 do
-    local current = matches[index]
-    local previous = matches[index - 1]
-
-    if current.old <= #old_lines and old_lines[current.old] ~= new_lines[current.new] then
-      vim.api.nvim_buf_set_lines(
-        bufnr,
-        start_idx + current.old - 1,
-        start_idx + current.old,
-        false,
-        { new_lines[current.new] }
-      )
-    end
-
-    local replacement = {}
-    for new_row = previous.new + 1, current.new - 1 do
-      table.insert(replacement, new_lines[new_row])
-    end
-    if current.old - previous.old > 1 or #replacement > 0 then
-      vim.api.nvim_buf_set_lines(
-        bufnr,
-        start_idx + previous.old,
-        start_idx + current.old - 1,
-        false,
-        replacement
-      )
-    end
-  end
+  status_reconcile.apply(bufnr, start_row, end_row, new_lines, status_line_keys)
 end
 
 local function insert_index_flag_warning(bufnr, lines, flag_state)
@@ -797,26 +742,6 @@ local function status_entry_at_cursor()
   if not status then return nil, nil, nil end
   local _, new_path = path:match('^(.+) %-> (.+)$')
   return status, new_path or path, nil
-end
-
-local function worktree_relative_abs_path(path)
-  return utils.worktree_relative_abs_path(utils.get_buf_work_tree(vim.api.nvim_get_current_buf()), path)
-end
-
-local function delete_untracked_directory_at_cursor()
-  local status, path = status_entry_at_cursor()
-  if status ~= '?' and status ~= '??' then return false end
-
-  local abs = worktree_relative_abs_path(path)
-  if not abs or vim.fn.isdirectory(abs) ~= 1 then return false end
-
-  if vim.fn.delete(abs, 'rf') ~= 0 then
-    vim.notify('Failed to delete untracked directory: ' .. path, vim.log.levels.ERROR)
-    return true
-  end
-
-  vim.notify('Deleted untracked directory: ' .. path, vim.log.levels.INFO)
-  return true
 end
 
 local function preferred_target_window(status_win)

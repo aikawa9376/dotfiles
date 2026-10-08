@@ -51,6 +51,8 @@ assert(success and child, warning or child); assert(not warning, warning)
 assert(sg({ 'log', '-4', '--format=%s' }) == 'descendant\nextracted\nsource\nbase')
 assert(sg({ 'show', child .. '^:new file' }) == 'second'); assert(sg({ 'show', child .. ':new file' }) == 'first\nsecond')
 assert(vim.fn.readfile(split_root .. '/untracked')[1] == 'dirty'); assert(sg({ 'stash', 'list' }) == '')
+-- Keep split/Undo integration here; generic Undo/Redo and stale-plan guards
+-- are covered by history_undo.lua.
 local undo = require('git.features.history_undo')
 local planned, plan = task(split_root, function() return undo.plan(split_root, false) end)
 assert(planned, plan); assert(plan.kind == 'rebase' and plan.target == before)
@@ -60,13 +62,6 @@ package.loaded['git.features.history_undo'] = nil; undo = require('git.features.
 local redone, redo_plan = task(split_root, function() return undo.plan(split_root, true) end); assert(redone, redo_plan)
 local replayed, result, redo_warn = task(split_root, function() return undo.execute(redo_plan) end)
 assert(replayed and result, redo_warn or result); assert(sg({ 'log', '-4', '--format=%s' }) == 'descendant\nextracted\nsource\nbase')
-
-local checkout_root, cg = repo(); cg({ 'commit', '--allow-empty', '-qm', 'feature' }); cg({ 'switch', 'main' })
-local cp_ok, cp = task(checkout_root, function() return undo.plan(checkout_root, false) end); assert(cp_ok and cp.kind == 'checkout', cp)
-local c_ok, c_value, c_err = task(checkout_root, function() return undo.execute(cp) end)
-assert(c_ok and c_value, c_err); assert(cg({ 'branch', '--show-current' }) == 'feature')
-local r_ok, rp = task(checkout_root, function() return undo.plan(checkout_root, true) end); assert(r_ok, rp)
-assert(select(2, task(checkout_root, function() return undo.execute(rp) end))); assert(cg({ 'branch', '--show-current' }) == 'main')
 
 local collection = require('git.features.patch_collection')
 local origin = vim.api.nvim_get_current_win(); local initial_tabs = #vim.api.nvim_list_tabpages()
@@ -87,21 +82,6 @@ local text = table.concat(vim.api.nvim_buf_get_lines(session.right, 0, -1, false
 vim.api.nvim_set_current_win(session.right_win); vim.fn.maparg('q', 'n', false, true).callback()
 assert(#vim.api.nvim_list_tabpages() == initial_tabs)
 assert(not vim.api.nvim_buf_is_valid(session.right)); assert(not vim.api.nvim_buf_is_valid(session.left)); assert(collection.session(session.tab) == nil)
--- Undo a commit keeps its changes staged; redo restores the commit and WIP.
-local soft_root, hg = repo()
-vim.fn.writefile({ 'changed' }, soft_root .. '/base'); hg({ 'add', 'base' }); hg({ 'commit', '-qm', 'change' })
-local changed_hash = hg({ 'rev-parse', 'HEAD' })
-vim.fn.writefile({ 'changed', 'unstaged' }, soft_root .. '/base')
-local so, sp = task(soft_root, function() return undo.plan(soft_root, false) end)
-assert(so and sp.mode == 'soft', sp)
-local uo, uv, uw = task(soft_root, function() return undo.execute(sp) end); assert(uo and uv and not uw, uw)
-assert(hg({ 'diff', '--cached' }):find('+changed', 1, true))
-local ro, rr = task(soft_root, function() return undo.plan(soft_root, true) end); assert(ro, rr)
-local eo, ev, ew = task(soft_root, function() return undo.execute(rr) end); assert(eo and ev and not ew, ew)
-assert(hg({ 'rev-parse', 'HEAD' }) == changed_hash)
-assert(vim.fn.readfile(soft_root .. '/base')[2] == 'unstaged')
-assert(hg({ 'diff', '--cached' }) == '')
-
 -- Readonly attribution and rendering still leave the event loop responsive.
 local ticks = 0
 local timer = vim.uv.new_timer()
@@ -259,14 +239,5 @@ assert(ug({ 'show', 'HEAD^:part.lua' }) == 'local beta = 2')
 assert(ug({ 'show', 'HEAD:part.lua' }) == 'local alpha = 1\nlocal beta = 2')
 vim.cmd('tabclose!')
 
--- A changed HEAD invalidates the already-confirmed undo plan.
-local stale_ok, stale = task(checkout_root, function() return undo.plan(checkout_root, false) end)
-assert(stale_ok, stale)
-cg({ 'commit', '--allow-empty', '-qm', 'new action' })
-local unchanged = cg({ 'rev-parse', 'HEAD' })
-local handled, rejected, reason = task(checkout_root, function() return undo.execute(stale) end)
-assert(handled and rejected == nil and reason:find('changed', 1, true))
-assert(cg({ 'rev-parse', 'HEAD' }) == unchanged)
-
 for _, path in ipairs(roots) do vim.fn.delete(path, 'rf') end
-print('PASS: fixup attribution, split with descendants/WIP, rebase and checkout undo/redo, collection tab lifetime')
+print('PASS: fixup attribution, split with descendants/WIP, split rebase undo/redo, collection tab lifetime')

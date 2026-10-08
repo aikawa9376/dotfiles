@@ -112,5 +112,29 @@ assert(not row_matching('^@@ '), 'refresh or reopening the section restored a di
 
 vim.api.nvim_buf_delete(b, { force = true })
 vim.fn.executable = executable
+
+-- Read flags and stage-zero metadata together, preserving path bytes. Lowercase
+-- 's' (both flags set) still takes skip-worktree precedence.
+local unusual_path = '日本語\tline\r\nname.txt'
+vim.fn.writefile({ 'before' }, root .. '/' .. unusual_path)
+git({ 'add', '--', unusual_path })
+git({ 'update-index', '--skip-worktree', '--', unusual_path })
+git({ 'update-index', '--assume-unchanged', '--', unusual_path })
+local system, scans = vim.system, 0
+vim.system = function(argv, ...)
+  if argv[1] == 'git' and argv[2] == 'ls-files' then scans = scans + 1 end
+  return system(argv, ...)
+end
+local state = require('git.features.index_flags').inspect(root)
+vim.system = system
+assert(scans == 1, 'flag inspection scanned the index more than once')
+assert(#state.entries == 4, 'combined index scan lost flagged entries')
+local unusual
+for _, entry in ipairs(state.entries) do
+  if entry.path == unusual_path then unusual = entry end
+end
+assert(unusual and unusual.flag == 'skip' and unusual.state == 'clean' and unusual.mode == '100644',
+  'combined index scan changed path bytes or flag precedence')
+
 vim.fn.delete(root, 'rf')
 print('PASS: flagged files use change rows, +/- statistics, inline diffs and regular folds')

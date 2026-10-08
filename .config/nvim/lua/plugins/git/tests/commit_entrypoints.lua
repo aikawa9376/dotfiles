@@ -20,12 +20,15 @@ vim.cmd('GitCommit ' .. hash)
 assert(api.model(0).hash == hash)
 assert(vim.fn.exists(':GitCommitLegacy') == 0)
 local commands = require('git.features.commands')
-commands.setup()
+local existing_windows = {}
+for _, win in ipairs(vim.api.nvim_list_wins()) do existing_windows[win] = true end
 commands.open_preview_window(hash, root)
 local preview_custom = false
 for _, win in ipairs(vim.api.nvim_list_wins()) do
-  local buf = vim.api.nvim_win_get_buf(win)
-  if vim.b[buf].custom_git_commit then
+  if not existing_windows[win] then
+    local buf = vim.api.nvim_win_get_buf(win)
+    assert(vim.b[buf].custom_git_commit and api.model(buf).hash == hash,
+      'new preview bypassed custom commit view')
     preview_custom = true
     assert(vim.bo[buf].filetype == 'gitcommitview' and vim.bo[buf].bufhidden == 'delete')
   end

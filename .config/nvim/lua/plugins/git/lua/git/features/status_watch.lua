@@ -1,6 +1,7 @@
 -- OS notifications invalidate cached status after Git commands outside Neovim.
 local M = {}
 local uv = vim.uv
+local fs = require('git.fs')
 local repositories = {}
 local check, enqueue
 
@@ -87,8 +88,7 @@ check = function(repo)
       local parts, remaining = { head, common }, #paths
       for i, path in ipairs(paths) do
         uv.fs_stat(path, function(_, stat)
-          parts[i + 2] = stat and table.concat({ stat.ino, stat.size,
-            stat.mtime.sec, stat.mtime.nsec, stat.ctime.sec, stat.ctime.nsec }, ':') or '-'
+          parts[i + 2] = fs.stat_key(stat)
           remaining = remaining - 1
           if remaining == 0 then
             vim.schedule(function()

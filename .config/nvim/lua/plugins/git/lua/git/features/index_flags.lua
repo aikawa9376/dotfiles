@@ -1,5 +1,6 @@
 local M = {}
 local change_display = require('git.features.change_display')
+local fingerprint = require('git.fs').fingerprint
 
 local function run(work_tree, args, opts)
   local command = { 'git' }
@@ -11,17 +12,6 @@ end
 
 local function nul_records(value)
   return vim.split(value or '', '\0', { plain = true, trimempty = true })
-end
-
-local function index_entries(work_tree)
-  local result = run(work_tree, { 'ls-files', '--stage', '-z' })
-  if result.code ~= 0 then return {} end
-  local entries = {}
-  for _, record in ipairs(nul_records(result.stdout)) do
-    local mode, oid, stage, path = record:match('^(%d+) (%x+) (%d+)\t(.*)$')
-    if mode and stage == '0' then entries[path] = { mode = mode, oid = oid } end
-  end
-  return entries
 end
 
 local function worktree_oid(work_tree, entry)
@@ -82,16 +72,6 @@ local function inspect_diff(work_tree, entry)
     and vim.split(patch:gsub('\n$', ''), '\n', { plain = true }) or {}
 end
 
-local function fingerprint(path)
-  local stat = (vim.uv or vim.loop).fs_lstat(path)
-  if not stat then return 'missing' end
-  local function time(value)
-    return value and (tostring(value.sec) .. ':' .. tostring(value.nsec)) or ''
-  end
-  return table.concat({ stat.type or '', stat.size or 0, stat.mode or 0,
-    stat.ino or 0, time(stat.mtime), time(stat.ctime) }, ':')
-end
-
 local function index_path(work_tree)
   local result = run(work_tree, { 'rev-parse', '--git-path', 'index' })
   if result.code ~= 0 then return nil end
@@ -116,28 +96,28 @@ end
 
 function M.inspect(work_tree, previous)
   if unchanged(work_tree, previous) then return previous end
-  local result = run(work_tree, { 'ls-files', '-v', '-z' })
+  local result = run(work_tree, { 'ls-files', '-v', '--stage', '-z' }, { binary = true })
   if result.code ~= 0 then
     return { entries = {}, changed_count = 0, error = vim.trim(result.stderr or 'git ls-files failed') }
   end
 
-  local staged = index_entries(work_tree)
   local state = { entries = {}, changed_count = 0 }
-  for _, record in ipairs(nul_records(result.stdout)) do
-    local tag, path = record:match('^(.) (.*)$')
+  for record in (result.stdout or ''):gmatch('[^%z]+') do
+    local tag = record:sub(1, 1)
     local flag
     if tag and tag:upper() == 'S' then
       flag = 'skip'
     elseif tag and tag:match('%l') then
       flag = 'assume'
     end
-    local index_entry = path and staged[path] or nil
-    if flag and index_entry then
+    local mode, oid, stage, path
+    if flag then mode, oid, stage, path = record:match('^. (%d+) (%x+) (%d+)\t(.*)$') end
+    if mode and stage == '0' then
       local entry = {
         flag = flag,
         path = path,
-        mode = index_entry.mode,
-        oid = index_entry.oid,
+        mode = mode,
+        oid = oid,
       }
       entry.state = local_state(work_tree, entry)
       entry.status = entry.state == 'missing' and 'D'

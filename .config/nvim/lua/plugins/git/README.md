@@ -545,11 +545,11 @@ native rendering. `tests/split_diff.lua`, `tests/split_diff_views.lua` and
 native cancellation, real provider integration, null sides, and actual TUI
 syntax/background composition and window isolation.
 
-`tests/difftastic_word_diff.lua` compares both background levels against 153
+`tests/difftastic_word_diff.lua` compares both background levels against 170
 checked-in cases captured from the installed Difftastic 0.71.0, covering calls,
 wrapping, paired delimiters, added/removed syntax, strings/comments, Unicode,
 JSON, Python, YAML, layout changes and a 100-line file with repeated edits.
-Of these, 132 compare structural results and 21 compare text matching, including
+Of these, 147 compare structural results and 23 compare text matching, including
 parse-error fallback, repeated-word alignment, long literals/comments, inputs
 over the former 128 KiB limit, and the exact 1,000-element boundary. Text cases
 also check the deliberately muted rendering policy. Four reported examples are
@@ -843,6 +843,20 @@ identity is preserved by the existing Notes session persistence.
 
 ## Implementation and checks
 
+- `git/fs.lua`: shared file fingerprints for status watchers and source/statistics caches.
+- `git/queue.lua`: FIFO scheduling without moving the remaining entries on each dequeue.
+- `status_reconcile.lua`: status row reconciliation using Neovim's native minimal
+  diff over interned semantic keys. Unchanged blocks skip key/diff computation;
+  changed headings keep their row anchors through in-line text updates. Section
+  context is collected in one forward pass instead of rescanning preceding rows.
+  The renderer caches entry-to-row lookup within each model and invalidates it
+  when a warning or inline diff shifts entries.
+- `index_flags.lua`: reads flags and stage-zero metadata in one binary-safe
+  `ls-files -v --stage -z` pass, parsing metadata only for flagged records.
+- `status_statistics.lua`: tracked diff statistics and per-view untracked line-count caches.
+  Empty staged/unstaged sections skip their diff queries. Untracked counts are reused
+  while file type, device/inode, mode, size, mtime and ctime match. Failed or racing
+  reads are retried; leaving the untracked set or closing the view releases the cache.
 - `commit.lua`: view, editable-message validation, navigation, actions, routing.
 - `commit_model.lua`: immutable metadata, file inventory, statistics, lazy patches.
 - `commit_rewrite.lua`: target amend, descendant replay, and Hard/Mixed removal.
@@ -854,8 +868,41 @@ identity is preserved by the existing Notes session persistence.
 - `change_display.lua`: file rows and statistics shared with status.
 - `panel_keys.lua`: normal key migration, contextual identifiers/help, and ordinary action choosers.
 
-Run checks from this directory with
+Run all standalone Lua and TUI checks from this directory with
+`python3 tests/run.py -j 3`, or select checks by stem, for example
+`python3 tests/run.py status_statistics_cache highlight_lifecycle`.
+The runner isolates each check's state/cache directories, retains installed
+plugins/parsers, handles the layout check's normal-startup requirement, and
+returns a failure status for test errors/timeouts. Editor bridge checks need
+local Unix sockets and TUI checks need a PTY.
+
+Run an individual Lua check with
 `nvim --headless --clean -u NONE -l tests/<name>.lua`.
+`status_reconcile` owns row-edit boundary cases, duplicate/arbitrary semantic
+keys, surviving anchors and unchanged-buffer short circuits. `status_partial`
+checks row lookup after bulk diff changes and warning insertion;
+`index_flags_view` also checks single-pass index inspection and unusual path bytes.
+`status_statistics_cache` checks reuse, replacement/racing-read invalidation,
+failed-read retries and view/repository ownership. `highlight_lifecycle` checks
+FIFO/reentrant scheduling, coalesced read batches, and permanent cancellation
+even when a view's validity predicate becomes true again. Source-read sessions
+schedule one pending pump each; canceled reads cannot start their next side or
+reenter the queue after reopening.
+
+The structural checks intentionally share fixtures across distinct boundaries:
+`difftastic_word_diff` checks algorithm output, `syntax_full_file_context` checks
+complete-source projection and cache reuse in the view, and `syntax_native`
+checks Lua/Rust equivalence. Their test-only byte-span normalization lives in
+`tests/helpers/spans.lua`. Repeated-refresh stress belongs to
+`syntax_word_diff_perf`; complete-file fixture checks perform one warm refresh.
+`syntax_source_context` covers actual Git source acquisition, while canceled-read
+reopening belongs to `highlight_lifecycle`. Generic Undo/Redo and stale-plan
+guards belong to `history_undo`; `history_workflows` retains split/Undo integration
+and patch collection. Keep these ownership boundaries when adding regressions.
+
+Regenerate one structural oracle case with
+`python3 tests/generate_difftastic_fixtures.py --case <filename>`; omit `--case`
+to regenerate all cases using the generator's pinned Difftastic version.
 The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`, `commit_patch`,
 `commit_notes`, `commit_lifecycle`, `commit_entrypoints`, and `commit_blob_return`
 (`commit_blob_return` uses installed Gitsigns). Checks exercise the standalone

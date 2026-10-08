@@ -10,21 +10,7 @@ local fixture = vim.json.decode(table.concat(vim.fn.readfile(plugin .. '/tests/f
 local function settle(buf)
   assert(vim.wait(15000, function() return not syntax.is_pending(buf) end, 1), 'complete-file comparison did not finish')
 end
-local function mask(ranges, line)
-  local result, previous = {}, nil
-  for _, range in ipairs(ranges or {}) do
-    for col = range[1], math.min(range[2], #line) do result[col] = true end
-  end
-  for col = 1, #line do
-    if result[col] then
-      if previous and line:sub(previous + 1, col - 1):match('^%s*$') then
-        for gap = previous + 1, col - 1 do result[gap] = true end
-      end
-      previous = col
-    end
-  end
-  return result
-end
+local mask = dofile(plugin .. '/tests/helpers/spans.lua').mask
 local function check(case, buf)
   local text_mode = case.language:match('^Text') ~= nil
   local patch = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -112,7 +98,9 @@ for _, case in ipairs(fixture.cases) do
     assert(counts.compares == before.compares + 1, 'complete-file comparison was duplicated across hunks')
     if case.name == 'complete_pending_display.lua' then assert(hunks >= 3, 'reported diff did not exercise separate hunks') end
     local warm = vim.deepcopy(counts)
-    for _ = 1, 50 do syntax.refresh(buf) end
+    -- Check cache reuse for every fixture; repeated-refresh stress belongs to
+    -- syntax_word_diff_perf.lua rather than running 50 times for each case.
+    syntax.refresh(buf)
     assert(vim.deep_equal(counts, warm), 'unchanged complete-file comparison recomputed or repainted')
     -- Losing the coloring query must retain complete-file correspondence and
     -- reuse its result, rather than falling back to contextless word matching.

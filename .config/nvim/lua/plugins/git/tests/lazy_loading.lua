@@ -5,6 +5,10 @@ require('lazy').setup({ spec = { spec }, install = { missing = false }, checker 
   change_detection = { enabled = false }, lockfile = vim.fn.tempname(),
   performance = { rtp = { reset = false }, cache = { enabled = false } } })
 assert(not package.loaded['git'], 'Git loaded before a trigger')
+for _, name in ipairs({ 'GitWipEnable', 'GitWipDisable', 'GitWipSave', 'GitWipLog', 'GitWipRestore',
+  'GbranchSpinoff', 'GbranchSpinout' }) do
+  assert(vim.fn.exists(':' .. name) == 2, 'Missing lazy trigger: ' .. name)
+end
 assert(vim.fn.exists(':GitStatusTree') == 2, 'tree command was unavailable before loading')
 assert(vim.fn.exists(':G') == 2 and vim.fn.exists(':Gclog') == 2)
 assert(vim.fn.exists(':GitApply') == 2 and vim.fn.exists(':GitReverse') == 2,

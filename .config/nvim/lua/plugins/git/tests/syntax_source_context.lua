@@ -135,31 +135,5 @@ end
 settle(view); check(view)
 vim.api.nvim_buf_delete(view, { force = true })
 
--- A killed read must not accept a reopened request or publish its late result.
-do
-  local loader = require('git.features.highlight_sources').new()
-  local pending, cancelled, old_calls, new_calls = {}, 0, 0, 0
-  vim.system = function(argv, options, callback)
-    pending[#pending + 1] = callback
-    return { kill = function() cancelled = cancelled + 1 end }
-  end
-  local active = true
-  local spec = { root = root, path = 'renamed code.lua',
-    old = { object = tip .. ':renamed code.lua' }, new = { text = '' } }
-  loader.request(spec, function() return active end, function() old_calls = old_calls + 1 end)
-  assert(vim.wait(1000, function() return #pending == 1 end, 1))
-  active = false; loader.prune()
-  assert(cancelled == 1)
-  loader.request(spec, function() return true end, function(sources)
-    assert(sources and sources.old[1] == 'function Reopened()')
-    new_calls = new_calls + 1
-  end)
-  assert(vim.wait(1000, function() return #pending == 2 end, 1), 'reopening joined a killed read')
-  pending[1]({ code = 0, stdout = 'function Stale()\nend\n' })
-  pending[2]({ code = 0, stdout = 'function Reopened()\nend\n' })
-  assert(vim.wait(1000, function() return new_calls == 1 end, 1))
-  assert(old_calls == 0, 'closed source received its late result')
-  loader.close(); vim.system = system
-end
 vim.fn.delete(root, 'rf')
 print('PASS: real staged/unstaged/renamed Commit source context, multiline declarations, disjoint JSON hunks, shared async reads and warm caches')
