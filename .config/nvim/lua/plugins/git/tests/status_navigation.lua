@@ -29,7 +29,12 @@ local executable = vim.fn.executable
 vim.fn.executable = function(name) return name == 'gh' and 0 or executable(name) end
 local status = require('git.features.status')
 status.setup(vim.api.nvim_create_augroup('StatusNavigationTest', { clear = true }))
+vim.go.list, vim.go.listchars = true, 'trail:-'
+local source_win = vim.api.nvim_get_current_win()
+vim.api.nvim_set_option_value('list', true, { scope = 'local', win = source_win })
 local b = assert(status.open({ work_tree = root, split = true }))
+assert(vim.go.list and vim.wo[source_win].list and not vim.wo.list,
+  'status panel should hide global listchars markers locally')
 assert(vim.api.nvim_get_current_line():find('Loading'), 'initial status should be asynchronous')
 assert(vim.wait(5000, function()
   local text = table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n')
@@ -181,6 +186,7 @@ local status_win = vim.api.nvim_get_current_win()
 local normal = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_buf_set_lines(normal, 0, -1, false, { 'one', 'two', 'three' })
 vim.api.nvim_win_set_buf(status_win, normal)
+assert(vim.wo.list and vim.go.list, 'status list option leaked into a normal buffer or changed its global default')
 assert(not vim.wo.foldtext:find('git.features.status_folds', 1, true),
   'status foldtext leaked into a normal file in the same window')
 assert(not vim.wo.winhighlight:find('GitStatusFolded', 1, true),

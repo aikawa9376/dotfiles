@@ -77,26 +77,32 @@ function M.setup_window(winid)
   if not vim.api.nvim_win_is_valid(winid) then return end
   if not window_options[winid] then
     local saved = {}
-    for _, name in ipairs({ 'foldmethod', 'foldenable', 'foldcolumn', 'signcolumn', 'foldtext', 'fillchars', 'winhighlight' }) do
-      saved[name] = vim.api.nvim_get_option_value(name, { win = winid })
+    for _, name in ipairs({
+      'foldmethod', 'foldenable', 'foldcolumn', 'signcolumn', 'foldtext', 'fillchars', 'winhighlight', 'list',
+    }) do
+      saved[name] = vim.api.nvim_get_option_value(name, { scope = 'local', win = winid })
     end
     window_options[winid] = saved
   end
-  vim.api.nvim_set_option_value('foldmethod', 'manual', { win = winid })
-  vim.api.nvim_set_option_value('foldenable', true, { win = winid })
-  vim.api.nvim_set_option_value('foldcolumn', '0', { win = winid })
-  vim.api.nvim_set_option_value('signcolumn', 'yes:1', { win = winid })
-  vim.api.nvim_set_option_value('foldtext', 'v:lua.require("git.features.status_folds").foldtext()', { win = winid })
-  local fillchars = vim.api.nvim_get_option_value('fillchars', { win = winid })
+  vim.api.nvim_set_option_value('foldmethod', 'manual', { scope = 'local', win = winid })
+  vim.api.nvim_set_option_value('foldenable', true, { scope = 'local', win = winid })
+  vim.api.nvim_set_option_value('foldcolumn', '0', { scope = 'local', win = winid })
+  vim.api.nvim_set_option_value('signcolumn', 'yes:1', { scope = 'local', win = winid })
+  vim.api.nvim_set_option_value('foldtext', 'v:lua.require("git.features.status_folds").foldtext()', { scope = 'local', win = winid })
+  local fillchars = vim.api.nvim_get_option_value('fillchars', { scope = 'local', win = winid })
   local parts = vim.tbl_filter(function(part) return part ~= '' and not part:match('^fold:') end,
     vim.split(fillchars, ',', { plain = true }))
   table.insert(parts, 'fold: ')
   local blank_fold = table.concat(parts, ',')
-  if fillchars ~= blank_fold then vim.api.nvim_set_option_value('fillchars', blank_fold, { win = winid }) end
-  local highlights = vim.api.nvim_get_option_value('winhighlight', { win = winid })
+  if fillchars ~= blank_fold then
+    vim.api.nvim_set_option_value('fillchars', blank_fold, { scope = 'local', win = winid })
+  end
+  local highlights = vim.api.nvim_get_option_value('winhighlight', { scope = 'local', win = winid })
   local value, replacements = highlights:gsub('Folded:[^,]+', 'Folded:GitStatusFolded')
   if replacements == 0 then value = highlights == '' and 'Folded:GitStatusFolded' or highlights .. ',Folded:GitStatusFolded' end
-  if value ~= highlights then vim.api.nvim_set_option_value('winhighlight', value, { win = winid }) end
+  if value ~= highlights then
+    vim.api.nvim_set_option_value('winhighlight', value, { scope = 'local', win = winid })
+  end
 end
 
 function M.restore_window(winid)
@@ -104,7 +110,7 @@ function M.restore_window(winid)
   window_options[winid] = nil
   if not saved or not vim.api.nvim_win_is_valid(winid) then return end
   for name, value in pairs(saved) do
-    vim.api.nvim_set_option_value(name, value, { win = winid })
+    vim.api.nvim_set_option_value(name, value, { scope = 'local', win = winid })
   end
 end
 

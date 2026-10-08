@@ -104,6 +104,7 @@ end
 local function configure_status_window(winid)
   if not (winid and vim.api.nvim_win_is_valid(winid)) then return end
   status_folds.setup_window(winid)
+  vim.api.nvim_set_option_value('list', false, { scope = 'local', win = winid })
   status_folds.rebuild(vim.api.nvim_win_get_buf(winid))
 end
 
