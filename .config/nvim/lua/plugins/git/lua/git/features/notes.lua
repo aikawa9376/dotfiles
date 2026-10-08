@@ -1,6 +1,6 @@
 local M = {}
 
-local namespace = vim.api.nvim_create_namespace('fugitive_commit_notes')
+local namespace = vim.api.nvim_create_namespace('git_commit_notes')
 local note_icon = '󰍡'
 local active_float = { win = nil, buf = nil }
 

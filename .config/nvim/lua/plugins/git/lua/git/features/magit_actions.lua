@@ -6,15 +6,15 @@ local flag, value_flag, exclusive_flag = options.flag, options.value, options.ex
 
 local function context(bufnr, row)
   local ft = vim.bo[bufnr].filetype
-  local panel = ({ fugitivestatus = 'status', fugitivelog = 'log',
-    fugitivebranch = 'branch', fugitivereflog = 'reflog',
-    fugitiveworktree = 'worktree', fugitivecommit = 'commit',
+  local panel = ({ gitstatus = 'status', gitlog = 'log',
+    gitbranch = 'branch', gitreflog = 'reflog',
+    gitworktree = 'worktree', gitcommitview = 'commit',
     gitpatchcollection = 'commit', gitstatustree = 'tree' })[ft]
   if not panel then return nil end
   row = row or vim.api.nvim_win_get_cursor(0)[1]
   local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
   local commit = line:match('^(%x%x%x%x%x%x%x+)')
-  if panel == 'commit' then commit = vim.b[bufnr].fugitive_commit end
+  if panel == 'commit' then commit = vim.b[bufnr].git_commit end
   local branch = panel == 'branch' and (vim.b[bufnr].branch_map or {})[row] or nil
   local kind = panel == 'branch' and (vim.b[bufnr].branch_kinds or {})[row] or nil
   local reflog = panel == 'reflog' and require('git.features.reflog').entry_at(bufnr, row) or nil
@@ -1031,7 +1031,7 @@ function M.open(bufnr, selection)
       end
       if not ok then vim.notify(err, vim.log.levels.WARN); return end
       require('git.features.status').refresh_buffer(bufnr)
-      utils.fire_fugitive_changed({ work_tree = ctx.work_tree })
+      utils.fire_git_changed({ work_tree = ctx.work_tree })
     end
     return menu.show({ kind = 'root', context = ('%d selected %s files'):format(count, ctx.section),
       groups = { { title = 'Selected files', actions = {
@@ -1189,14 +1189,14 @@ function M.attach(bufnr)
     local ok, err = M.open(bufnr)
     if not ok then vim.notify(err, vim.log.levels.WARN) end
   end, { buffer = bufnr, nowait = true, silent = true, desc = 'Git action menu' })
-  if vim.bo[bufnr].filetype ~= 'fugitivestatus' then
+  if vim.bo[bufnr].filetype ~= 'gitstatus' then
     vim.keymap.set('n', '<Tab>', function()
       local ctx = context(bufnr)
       if ctx then require('git.features.patch_collection').open(ctx) end
     end, { buffer = bufnr, silent = true, desc = 'Collect patch in a dedicated tab' })
   end
-  local panel = ({ fugitivestatus = 'status', fugitivelog = 'log',
-    fugitivereflog = 'reflog' })[vim.bo[bufnr].filetype]
+  local panel = ({ gitstatus = 'status', gitlog = 'log',
+    gitreflog = 'reflog' })[vim.bo[bufnr].filetype]
   if panel then
     vim.keymap.set('x', '<Space><Space>', function()
       local diff = require('git.features.commit_diff')

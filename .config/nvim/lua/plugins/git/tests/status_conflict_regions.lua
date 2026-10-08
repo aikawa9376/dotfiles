@@ -133,7 +133,7 @@ assert(displayed:find('+manual merge', 1, true)
   and displayed:find('+theirs clean', 1, true),
   'manual preview omitted the resolved or clean merged changes')
 require('git.features.syntax_highlight').attach(bufnr)
-local highlight_ns = assert(vim.api.nvim_get_namespaces().fugitive_extension_syntax)
+local highlight_ns = assert(vim.api.nvim_get_namespaces().git_extension_syntax)
 local function conflict_yellow(pattern)
   local row = row_for(pattern)
   local marks = vim.api.nvim_buf_get_extmarks(bufnr, highlight_ns,

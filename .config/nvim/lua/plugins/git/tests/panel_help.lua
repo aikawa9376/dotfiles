@@ -22,7 +22,7 @@ for _, label in ipairs({ 'Compare', 'Open', 'Display' }) do
   end
 end
 local highlights = {}
-for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_create_namespace('fugitive_action_menu'), 0, -1, { details = true })) do
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_create_namespace('git_action_menu'), 0, -1, { details = true })) do
   highlights[mark[4].hl_group] = true
 end
 assert(highlights.Title and highlights.Type and highlights.Special and highlights.Comment, 'menu lost semantic colors')
@@ -30,7 +30,7 @@ vim.fn.maparg('d', 'n', false, true).callback()
 assert(called and not vim.api.nvim_win_is_valid(win) and vim.api.nvim_get_current_buf() == source,
   'menu action should execute in the source window')
 
-vim.bo[source].filetype = 'fugitivestash'
+vim.bo[source].filetype = 'gitstash'
 vim.keymap.set('n', 'd', function() end, { buffer = source, desc = 'Compare' })
 vim.keymap.set('n', 'dd', function() end, { buffer = source, desc = 'Compare' })
 vim.keymap.set('n', '<F12>', function() end, { buffer = source, desc = 'Open' })

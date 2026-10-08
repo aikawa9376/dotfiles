@@ -160,7 +160,7 @@ write('changed.txt', 'manual result')
 vim.api.nvim_win_set_cursor(0, { assert(row_for('^UU changed%.txt$')), 0 })
 press('o')
 local result_row = assert(row_for('^%+manual result$'))
-local highlight_ns = assert(vim.api.nvim_get_namespaces().fugitive_extension_syntax)
+local highlight_ns = assert(vim.api.nvim_get_namespaces().git_extension_syntax)
 assert(vim.wait(2000, function()
   local marks = vim.api.nvim_buf_get_extmarks(bufnr, highlight_ns,
     { result_row - 1, 0 }, { result_row - 1, -1 }, { details = true })

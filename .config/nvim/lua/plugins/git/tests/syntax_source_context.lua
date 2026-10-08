@@ -7,7 +7,7 @@ local syntax = require('git.features.syntax_highlight')
 local renderer = require('git.features.status_renderer')
 local models = require('git.features.commit_model')
 local structural = require('git.features.syntax_word_diff')
-local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local ns = vim.api.nvim_create_namespace('git_extension_syntax')
 local root = vim.fn.tempname() .. ' syntax context'
 vim.fn.mkdir(root, 'p')
 local function git(args)
@@ -68,7 +68,7 @@ local function check(buf)
       seen[mark[2]] = seen[mark[2]] or {}
       seen[mark[2]][group] = true
     end
-    assert(not group:match('^FugitiveExtNovel'), 'default unexpectedly recolored changed text')
+    assert(not group:match('^GitExtNovel'), 'default unexpectedly recolored changed text')
   end
   for row, line in ipairs(patch) do
     if line:match('^[ +-]function ') then

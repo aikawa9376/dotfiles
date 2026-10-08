@@ -125,9 +125,9 @@ return {
       callback = function(ev) git_cache[ev.buf] = nil end,
     })
 
-    -- 追加のイベント: 保存や Fugitive の変更でキャッシュを更新
+    -- 追加のイベント: 保存や Git の変更でキャッシュを更新
     vim.api.nvim_create_autocmd("BufWritePost", { callback = function() update_git_cache() end })
-    vim.api.nvim_create_autocmd("User", { pattern = "FugitiveChanged", callback = function() update_git_cache() end })
+    vim.api.nvim_create_autocmd("User", { pattern = "GitChanged", callback = function() update_git_cache() end })
 
     -- 起動時の初期更新
     update_git_cache()

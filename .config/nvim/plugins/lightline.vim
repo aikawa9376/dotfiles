@@ -110,28 +110,8 @@ function! MyRootDir()
   endif
 endfunction
 
-function! MyFugitive()
-  try
-    if &ft !~? 'help\|defx\|mundo' && exists('*fugitive#head')
-      let _ = fugitive#head()
-      return strlen(_) ? "\u2b60 "._ : ''
-    endif
-  catch
-  endtry
-  return ''
-endfunction
-
 function! MyProject()
-  let s:prod = ''
-  if MyFugitive() != ''
-    let s:prod = MyFugitive()
-  endif
-  if s:prod == ''
-    let s:prod = MyRootDir()
-  else
-    let s:prod = s:prod . ' ' . MyRootDir()
-  endif
-  return winwidth('.') > 100 ? s:prod : ''
+  return winwidth('.') > 100 ? MyRootDir() : ''
 endfunction
 
 function! MyFiletype()

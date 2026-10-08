@@ -137,7 +137,7 @@ function M.open(ctx)
         if hash(root, 'HEAD') ~= result.head or diff(root, true) ~= result.diff then error('HEAD or staged changes changed; run detection again', 0) end
         if choice == choices[2] then
           run(root, { 'commit', '--fixup=' .. c.hash })
-          require('git.utils').fire_fugitive_changed({ work_tree = root })
+          require('git.utils').fire_git_changed({ work_tree = root })
           return hash(root, 'HEAD')
         end
         local target, warning = require('git.features.history_edits').mix_index(root, c.hash)

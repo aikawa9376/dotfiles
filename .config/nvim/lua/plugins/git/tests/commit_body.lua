@@ -3,7 +3,7 @@ local source = debug.getinfo(1, 'S').source:sub(2)
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(source, ':p')))
 package.path = plugin .. '/lua/?.lua;' .. package.path
 local body = require('git.features.commit_body')
-local ns = vim.api.nvim_create_namespace('fugitive_commit_body')
+local ns = vim.api.nvim_create_namespace('git_commit_body')
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, 'p')
 local function git(args)
@@ -21,7 +21,7 @@ local full = git({ 'rev-parse', 'HEAD' })
 local function buffer(ft, lines)
   local b = vim.api.nvim_create_buf(false, true)
   vim.bo[b].filetype = ft
-  vim.b[b].fugitive_work_tree = root
+  vim.b[b].git_work_tree = root
   vim.b[b].git_dir = root .. '/.git'
   vim.api.nvim_buf_set_lines(b, 0, -1, false, lines)
   body.attach(b)
@@ -34,7 +34,7 @@ vim.system = function(argv, opts, callback)
   return system(argv, opts, callback)
 end
 local lines = { full:sub(1, 7) .. ' 2026-09-13 12:34 Subject with body', empty:sub(1, 7) .. ' 2026-09-13 12:33 Subject only' }
-local b = buffer('fugitivestatus', lines)
+local b = buffer('gitstatus', lines)
 vim.api.nvim_set_current_buf(b)
 body.refresh(b)
 body.refresh(b)
@@ -59,7 +59,7 @@ body.show(b)
 assert(vim.api.nvim_get_current_line() == 'No commit message body.')
 vim.fn.maparg('q', 'n', false, true).callback()
 local log_line = full:sub(1, 7) .. '\t2026-09-13\tSubject with body\tAuthor\t (HEAD)\tstat'
-local log = buffer('fugitivelog', { log_line })
+local log = buffer('gitlog', { log_line })
 body.refresh(log)
 assert(vim.wait(2000, function() return #vim.api.nvim_buf_get_extmarks(log, ns, 0, -1, {}) == 1 end, 10))
 marks = vim.api.nvim_buf_get_extmarks(log, ns, 0, -1, {})
@@ -72,7 +72,7 @@ vim.system = function(_, _, callback)
   requests[#requests + 1] = callback
   return { kill = function() killed = killed + 1 end }
 end
-b = buffer('fugitivestatus', { full:sub(1, 7) .. ' old' })
+b = buffer('gitstatus', { full:sub(1, 7) .. ' old' })
 body.refresh(b)
 vim.api.nvim_buf_set_lines(b, 0, -1, false, { empty:sub(1, 7) .. ' new' })
 body.refresh(b)
@@ -87,7 +87,7 @@ vim.api.nvim_buf_delete(b, { force = true })
 assert(killed == 1, 'teardown left body lookup running')
 requests[3]({ code = 0, stdout = empty .. '\0late body\0\n' })
 vim.wait(10, function() return false end)
-assert(not pcall(vim.api.nvim_get_autocmds, { group = 'FugitiveCommitBody' .. b }), 'teardown leaked handlers')
+assert(not pcall(vim.api.nvim_get_autocmds, { group = 'GitCommitBody' .. b }), 'teardown leaked handlers')
 vim.system = system
 -- Exercise the actual list renderers, including their later enrichment refresh.
 git({ 'remote', 'add', 'origin', root })
@@ -103,9 +103,9 @@ assert(vim.wait(5000, function()
   return not contents:find('Loading') and #vim.api.nvim_buf_get_extmarks(status_buf, ns, 0, -1, {}) == 1
 end, 20), 'status enrichment did not retain the body icon')
 assert(vim.fn.maparg('gk', 'n', false, true).desc == 'Show commit message body')
-vim.cmd('FugitiveLog')
+vim.cmd('GitLog')
 local log_buf = vim.api.nvim_get_current_buf()
-assert(vim.bo[log_buf].filetype == 'fugitivelog')
+assert(vim.bo[log_buf].filetype == 'gitlog')
 assert(vim.wait(5000, function()
   return #vim.api.nvim_buf_get_extmarks(log_buf, ns, 0, -1, {}) == 1
 end, 20), 'log renderer did not request body icons')

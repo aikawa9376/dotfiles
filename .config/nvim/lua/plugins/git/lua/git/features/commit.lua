@@ -32,7 +32,7 @@ local function ordinary_window()
     vim.api.nvim_set_option_value(name, vim.api.nvim_get_option_value(name, { scope = 'global' }), { win = 0, scope = 'local' })
   end
 end
-local ns = vim.api.nvim_create_namespace('fugitive_commit_view')
+local ns = vim.api.nvim_create_namespace('git_commit_view')
 local status_highlights = {
   A = 'GitSignsAdd',
   M = 'Structure',
@@ -55,7 +55,7 @@ local function close_inspection()
   close_flog()
   local commands = require('git.features.commands')
   if commands.close_commit_info_float then commands.close_commit_info_float() end
-  local return_win = vim.w.fugitive_commit_return_win
+  local return_win = vim.w.git_commit_return_win
   local regular_windows = 0
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     local config = vim.api.nvim_win_get_config(win)
@@ -196,7 +196,7 @@ local function replace_model(s, hash)
   if not model then notify(err); return false end
   s.model = model
   s.expected_head = vim.trim(model_api.git(model.root, { 'rev-parse', 'HEAD' }) or '')
-  vim.b[s.buf].fugitive_commit = model.hash
+  vim.b[s.buf].git_commit = model.hash
   vim.api.nvim_buf_set_name(s.buf, buffer_name(model.root, model.hash, s.view_id))
   render(s)
   return true
@@ -409,7 +409,7 @@ local function show_blob(s, entry, before)
   vim.b[b].git_blob_base_path = before and path or (entry.old_path or path)
   utils.set_buf_work_tree(b, s.model.root)
   local oid = model_api.git(s.model.root, { 'rev-parse', '--verify', rev .. ':' .. path })
-  vim.b[b].lazyagent_note_source = { kind = 'fugitive', root = s.model.root, path = path,
+  vim.b[b].lazyagent_note_source = { kind = 'git', root = s.model.root, path = path,
     git_dir = vim.b[s.buf].git_dir, revision = rev, blob = oid and vim.trim(oid), side = before and 'a' or 'b' }
   vim.bo[b].modifiable = true
   vim.api.nvim_buf_set_lines(b, 0, -1, false, content)
@@ -674,7 +674,7 @@ local function attach(s)
     ']m / [m files; ]c / [c hunks; ]] / [[ move and expand.',
     '~ parent; p previous file commit; gp compare against a merge parent.',
     'Normal editing keys retain their meaning inside the message.' } })
-  local group = vim.api.nvim_create_augroup('FugitiveCommitView' .. b, { clear = true })
+  local group = vim.api.nvim_create_augroup('GitCommitView' .. b, { clear = true })
   vim.api.nvim_create_autocmd('BufWriteCmd', { group = group, buffer = b, callback = function(ev)
     local name = buffer_name(s.model.root, s.model.hash, s.view_id)
     if ev.match ~= name then error('Use :w without a filename to reword this commit') end
@@ -687,7 +687,7 @@ local function attach(s)
   vim.api.nvim_create_autocmd('WinLeave', { group = group, buffer = b, callback = function() remember_view(s) end })
   vim.api.nvim_create_autocmd('BufWinLeave', { group = group, buffer = b, callback = function()
     remember_view(s)
-    -- Fugitive deletes clean hidden objects. A draft must survive window changes.
+    -- Git deletes clean hidden objects. A draft must survive window changes.
     vim.bo[b].bufhidden = vim.bo[b].modified and 'hide' or 'delete'
   end })
   vim.api.nvim_create_autocmd({ 'BufEnter', 'CursorMoved' }, { group = group, buffer = b, callback = function()
@@ -737,14 +737,14 @@ function M.open(opts)
   vim.bo[b].buftype, vim.bo[b].bufhidden, vim.bo[b].swapfile = 'acwrite', 'delete', false
   vim.bo[b].undofile = false
   utils.set_buf_work_tree(b, root)
-  vim.b[b].fugitive_commit = model.hash
+  vim.b[b].git_commit = model.hash
   vim.b[b].custom_git_commit = true
   local s = { buf = b, view_id = view_id, model = model, expanded = saved and vim.deepcopy(saved.expanded) or {}, expected_head = opts.expected_head or vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
   states[b] = s
   render(s)
   if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
   show_buffer(b)
-  vim.bo[b].filetype = 'fugitivecommit'
+  vim.bo[b].filetype = 'gitcommitview'
   vim.bo[b].syntax = 'git'
   configure_window(); attach(s)
   require('git.features.magit_actions').attach(b)
@@ -775,7 +775,7 @@ M._do_amend_from_buffer = actions._do_amend_from_buffer
 function M.setup(group)
   vim.api.nvim_create_autocmd('BufEnter', { group = group, callback = function(ev)
     local win = vim.api.nvim_get_current_win()
-    local return_win = vim.w[win].fugitive_commit_return_win
+    local return_win = vim.w[win].git_commit_return_win
     if not return_win or return_win == win or not vim.api.nvim_win_is_valid(return_win)
       or vim.api.nvim_win_get_buf(return_win) ~= ev.buf then return end
     -- Jump lists can pass through blobs or tabnew's placeholder, where commit

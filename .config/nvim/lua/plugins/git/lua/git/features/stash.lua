@@ -37,7 +37,7 @@ local function open_stash_list(opts)
     return
   end
 
-  utils.open_panel_split('fugitive-stash://' .. work_tree)
+  utils.open_panel_split('git-stash://' .. work_tree)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree)
   vim.bo[bufnr].modifiable = true
@@ -45,7 +45,7 @@ local function open_stash_list(opts)
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
-  vim.bo[bufnr].filetype = 'fugitivestash'
+  vim.bo[bufnr].filetype = 'gitstash'
   vim.bo[bufnr].modifiable = false
   return bufnr
 end
@@ -74,8 +74,8 @@ function M.rename(bufnr, ref)
     if stored.code ~= 0 then
       vim.notify('Stash rename failed. Recover with git stash store ' .. hash .. '\n' .. vim.trim(stored.stderr), vim.log.levels.ERROR)
     end
-    utils.fire_fugitive_changed({ work_tree = root })
-    if utils.is_valid_buf(bufnr) and vim.bo[bufnr].filetype == 'fugitivestash' then refresh_stash_list(bufnr) end
+    utils.fire_git_changed({ work_tree = root })
+    if utils.is_valid_buf(bufnr) and vim.bo[bufnr].filetype == 'gitstash' then refresh_stash_list(bufnr) end
   end)
 end
 
@@ -98,7 +98,7 @@ function M.setup(group)
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = 'fugitivestash',
+    pattern = 'gitstash',
     callback = function(ev)
       local bufnr = ev.buf
 
@@ -109,14 +109,14 @@ function M.setup(group)
         require('utilities').smart_close()
       end, { buffer = bufnr, nowait = true, silent = true, desc = 'Close stash list' })
 
-      -- Let fugitive know how to find the git object on each line
-      vim.b[bufnr].fugitive_object_pattern = [[\v(stash@\{[0-9]+\})]]
+      -- Let git know how to find the git object on each line
+      vim.b[bufnr].git_object_pattern = [[\v(stash@\{[0-9]+\})]]
 
       vim.keymap.set('n', 'A', function()
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Git stash apply ' .. stash_ref)
-          utils.fire_fugitive_changed({ bufnr = bufnr })
+          utils.fire_git_changed({ bufnr = bufnr })
         end
       end, { buffer = bufnr, silent = true, desc = "Apply stash" })
 
@@ -124,7 +124,7 @@ function M.setup(group)
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Git stash pop --index ' .. stash_ref)
-          utils.fire_fugitive_changed({ bufnr = bufnr })
+          utils.fire_git_changed({ bufnr = bufnr })
         end
       end, { buffer = bufnr, silent = true, desc = "Pop stash" })
 
@@ -132,7 +132,7 @@ function M.setup(group)
         local stash_ref = get_stash_ref()
         if stash_ref then
           vim.cmd('Git stash drop ' .. stash_ref)
-          utils.fire_fugitive_changed({ bufnr = bufnr })
+          utils.fire_git_changed({ bufnr = bufnr })
         end
       end, { buffer = bufnr, silent = true, desc = "Drop stash" })
 
@@ -175,7 +175,7 @@ function M.setup(group)
       vim.opt_local.signcolumn = 'no'
 
 
-      local buf_group = vim.api.nvim_create_augroup('fugitive_stash_buf_' .. bufnr, { clear = true })
+      local buf_group = vim.api.nvim_create_augroup('git_stash_buf_' .. bufnr, { clear = true })
       utils.setup_repo_refresh(buf_group, bufnr, function(target_bufnr)
         refresh_stash_list(target_bufnr)
       end, { visible_only = true })

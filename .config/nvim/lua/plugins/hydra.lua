@@ -68,8 +68,8 @@ return {
         return
       end
       hunkNavState.busy = true
-      local is_fugitive = vim.fn.expand('%'):match('^fugitive://') ~= nil
-      require("gitsigns").nav_hunk(direction, is_fugitive and { target = 'all' } or {}, function()
+      local is_git_object = vim.b[vim.api.nvim_get_current_buf()].git_object ~= nil
+      require("gitsigns").nav_hunk(direction, is_git_object and { target = 'all' } or {}, function()
         hunkNavState.busy = false
         vim.schedule(drainQueuedHunkNav)
       end)

@@ -64,22 +64,17 @@ function M.mapping(display, canonical)
 end
 
 function M.capture(bufnr, root, first, last)
-  if not first or not vim.tbl_contains({ "git", "fugitive" }, vim.bo[bufnr].filetype) then return end
+  if not first or vim.bo[bufnr].filetype ~= 'git' then return end
+  root = vim.b[bufnr].git_work_tree or root
   local display = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local name = vim.api.nvim_buf_get_name(bufnr)
-  local ok, parsed = pcall(vim.fn["fugitive#Parse"], name)
-  local commit = ok and parsed[1] and parsed[1]:match("^(%x+):?$")
+  local commit
   for i = first, 1, -1 do
     local hash = display[i]:match("^commit (%x+)")
     if hash then commit = hash; break end
   end
   if not commit then return end
   for i = first + 1, last do if display[i]:match("^commit %x+") then return end end
-  local dir_ok, dir = pcall(vim.fn.FugitiveGitDir, bufnr)
-  if dir_ok and dir ~= "" then
-    local work_ok, worktree = pcall(vim.fn.FugitiveWorkTree, dir)
-    if work_ok and worktree ~= "" then root = worktree end
-  end
   local resolved = vim.system({ "git", "-C", root, "rev-parse", "--verify", commit .. "^{commit}" }, { text = true }):wait(3000)
   if resolved.code ~= 0 then return end
   commit = vim.trim(resolved.stdout)
@@ -94,7 +89,7 @@ function M.capture(bufnr, root, first, last)
     if not mapping[i] or mapping[i] <= previous then return end
     previous = mapping[i]
   end
-  return { kind = "fugitive", root = root, revision = commit, review_commit = commit,
+  return { kind = "git", root = root, revision = commit, review_commit = commit,
     show = true, inline_diff = true, side = "patch", name = name,
     start_line = start_line, end_line = end_line, filetype = "git" }
 end

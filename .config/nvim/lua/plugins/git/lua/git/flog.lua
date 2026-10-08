@@ -1,4 +1,4 @@
--- Flog's documented backend hooks, without loading Fugitive.
+-- Connect Flog's documented backend hooks to this native Git provider.
 local M = {}
 function M.setup()
   local utils = require('git.utils')
@@ -30,10 +30,10 @@ function M.setup()
   vim.g.flog_backend_user_cmd = 'Git'
   vim.g.flog_backend_user_split_cmd = 'Gsplit'
   local group = vim.api.nvim_create_augroup('GitFlogBackend', { clear = true })
-  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'FugitiveChanged', callback = function(ev)
+  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitChanged', callback = function(ev)
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].filetype == 'floggraph'
-        and (not ev.data or not ev.data.work_tree or vim.b[buf].fugitive_work_tree == ev.data.work_tree) then
+        and (not ev.data or not ev.data.work_tree or vim.b[buf].git_work_tree == ev.data.work_tree) then
         vim.api.nvim_buf_call(buf, function() pcall(vim.fn['flog#floggraph#buf#Update']) end)
       end
     end

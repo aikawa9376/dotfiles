@@ -9,7 +9,7 @@ local BLAME_COLORS = {
 local UNSELECTED_BG = '#073642'
 local UNSELECTED_META_FG = '#586e75'
 local hash_group_cache = {}
-local heatmap_ns = vim.api.nvim_create_namespace('fugitive_blame_heatmap')
+local heatmap_ns = vim.api.nvim_create_namespace('git_blame_heatmap')
 local panel_winbar = '%=Blame panel%='
 
 local function hex_rgb(color)
@@ -43,8 +43,8 @@ local function setup_blame_gradients()
   hash_group_cache = {}
   local background = normal_background()
   for index, color in ipairs(BLAME_COLORS) do
-    vim.api.nvim_set_hl(0, 'FugitiveBlameDate' .. (index - 1), { fg = color })
-    vim.api.nvim_set_hl(0, 'FugitiveBlameHeat' .. (index - 1), {
+    vim.api.nvim_set_hl(0, 'GitBlameDate' .. (index - 1), { fg = color })
+    vim.api.nvim_set_hl(0, 'GitBlameHeat' .. (index - 1), {
       bg = blend_color(color, background, 0.22),
     })
   end
@@ -115,12 +115,12 @@ local function apply_heatmap(bufnr, records)
   if not utils.is_valid_buf(bufnr) then return end
   clear_heatmap(bufnr)
   local line_count = vim.api.nvim_buf_line_count(bufnr)
-  local buckets = heatmap_buckets(records, os.time(), vim.g.fugitive_blame_gradient_mode)
+  local buckets = heatmap_buckets(records, os.time(), vim.g.git_blame_gradient_mode)
   for line, bucket in pairs(buckets) do
     if line >= 1 and line <= line_count then
       vim.api.nvim_buf_set_extmark(bufnr, heatmap_ns, line - 1, 0, {
         end_row = line,
-        hl_group = 'FugitiveBlameHeat' .. bucket,
+        hl_group = 'GitBlameHeat' .. bucket,
         hl_eol = true,
         priority = 50,
       })
@@ -130,7 +130,7 @@ end
 
 function M.is_heatmap_enabled(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
-  return utils.is_valid_buf(bufnr) and vim.b[bufnr].fugitive_blame_heatmap_enabled == true
+  return utils.is_valid_buf(bufnr) and vim.b[bufnr].git_blame_heatmap_enabled == true
 end
 
 function M.refresh_heatmap(bufnr, opts)
@@ -164,8 +164,8 @@ function M.refresh_heatmap(bufnr, opts)
   local relative_path = path:sub(#work_tree + 2)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local input = table.concat(lines, '\n') .. '\n'
-  local generation = (tonumber(vim.b[bufnr].fugitive_blame_heatmap_generation) or 0) + 1
-  vim.b[bufnr].fugitive_blame_heatmap_generation = generation
+  local generation = (tonumber(vim.b[bufnr].git_blame_heatmap_generation) or 0) + 1
+  vim.b[bufnr].git_blame_heatmap_generation = generation
 
   vim.system({ 'git', '-C', work_tree, 'blame', '--line-porcelain', '--contents', '-', '--', relative_path }, {
     text = true,
@@ -174,7 +174,7 @@ function M.refresh_heatmap(bufnr, opts)
     vim.schedule(function()
       if not utils.is_valid_buf(bufnr)
         or not M.is_heatmap_enabled(bufnr)
-        or vim.b[bufnr].fugitive_blame_heatmap_generation ~= generation
+        or vim.b[bufnr].git_blame_heatmap_generation ~= generation
       then
         return
       end
@@ -195,12 +195,12 @@ end
 function M.set_heatmap_enabled(bufnr, enabled, opts)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   if not utils.is_valid_buf(bufnr) then return false end
-  vim.b[bufnr].fugitive_blame_heatmap_enabled = enabled == true
+  vim.b[bufnr].git_blame_heatmap_enabled = enabled == true
   if enabled then
     return M.refresh_heatmap(bufnr, opts)
   end
-  vim.b[bufnr].fugitive_blame_heatmap_generation =
-    (tonumber(vim.b[bufnr].fugitive_blame_heatmap_generation) or 0) + 1
+  vim.b[bufnr].git_blame_heatmap_generation =
+    (tonumber(vim.b[bufnr].git_blame_heatmap_generation) or 0) + 1
   clear_heatmap(bufnr)
   return true
 end
@@ -482,7 +482,7 @@ local function highlight_selected(s)
       if styles.date_id then
         set_style_mark(s.buf, row, styles.date_id, styles.date_start,
           is_selected and styles.date_end or styles.line_end,
-          is_selected and ('FugitiveBlameDate' .. styles.bucket) or 'GitBlameUnselectedMeta')
+          is_selected and ('GitBlameDate' .. styles.bucket) or 'GitBlameUnselectedMeta')
       end
     end
   end
@@ -535,7 +535,7 @@ local function annotation_lines(f)
 end
 local function paint(s, f)
   local lines = annotation_lines(f)
-  local buckets = heatmap_buckets(f.rows, os.time(), vim.g.fugitive_blame_gradient_mode)
+  local buckets = heatmap_buckets(f.rows, os.time(), vim.g.git_blame_gradient_mode)
   vim.bo[s.buf].modifiable = true
   vim.api.nvim_buf_set_lines(s.buf, 0, -1, false, #lines > 0 and lines or { 'No lines to blame' })
   vim.bo[s.buf].modifiable = false
@@ -552,7 +552,7 @@ local function paint(s, f)
     s.style_marks[row] = styles
     if start and styles then
       styles.date_id = vim.api.nvim_buf_set_extmark(s.buf, ui_ns, row - 1, start - 1, {
-        end_col = finish, hl_group = 'FugitiveBlameDate' .. buckets[row],
+        end_col = finish, hl_group = 'GitBlameDate' .. buckets[row],
       })
       styles.date_start, styles.date_end = start - 1, finish
       styles.line_end, styles.bucket = #line, buckets[row]
@@ -584,7 +584,7 @@ show_frame = function(s, f)
     vim.api.nvim_buf_set_lines(b, 0, -1, false, #f.lines > 0 and f.lines or { '' })
     vim.bo[b].bufhidden, vim.bo[b].modifiable, vim.bo[b].readonly = 'hide', false, true
     utils.set_buf_work_tree(b, s.root)
-    vim.b[b].lazyagent_note_source = { kind = 'fugitive', root = s.root, path = f.path, revision = f.revision }
+    vim.b[b].lazyagent_note_source = { kind = 'git', root = s.root, path = f.path, revision = f.revision }
     s.owned[b] = true
     bind(s, b, true)
   end
@@ -728,7 +728,7 @@ local function open_commit(s, layout)
   if b then
     -- Keep the blame/code pair intact, including its history and window views.
     -- Window-local ownership survives commit parent navigation and jump-list returns.
-    vim.w.fugitive_commit_return_win = s.win
+    vim.w.git_commit_return_win = s.win
     local commit = require('git.features.commit')
     commit.expand_file(b, path)
     local line_number, target
@@ -848,7 +848,7 @@ bind = function(s, b, code)
   map('O', function() open_commit(s, 'tab') end)
   map('R', function() refresh_worktree(s) end)
   local function toggle_recency()
-    vim.g.fugitive_blame_gradient_mode = vim.g.fugitive_blame_gradient_mode == 'absolute' and 'relative' or 'absolute'
+    vim.g.git_blame_gradient_mode = vim.g.git_blame_gradient_mode == 'absolute' and 'relative' or 'absolute'
     local f = s.history[s.index]; if f then paint(s, f); highlight_selected(s) end
   end
   map('gy', function() local r = current(s); if r then vim.fn.setreg('"', r.commit); vim.fn.setreg('+', r.commit) end end)
@@ -982,7 +982,7 @@ function M.open(opts)
   local source = vim.b[origin].lazyagent_note_source
   local absolute = vim.api.nvim_buf_get_name(origin)
   local root, path, revision = opts.work_tree, opts.path, opts.revision
-  if source and source.kind == 'fugitive' then root, path, revision = source.root, source.path, source.revision end
+  if source and source.kind == 'git' then root, path, revision = source.root, source.path, source.revision end
   if not root then
     if vim.bo[origin].buftype ~= '' or absolute == '' then tell('Open a file or a commit blob to blame'); return end
     root = model.git(vim.fs.dirname(absolute), { 'rev-parse', '--show-toplevel' })
@@ -1169,7 +1169,7 @@ function M.setup(group)
   setup_selected_highlight()
 
   -- グラデーションモード: 'absolute' または 'relative'
-  vim.g.fugitive_blame_gradient_mode = vim.g.fugitive_blame_gradient_mode or 'absolute'
+  vim.g.git_blame_gradient_mode = vim.g.git_blame_gradient_mode or 'absolute'
 
   vim.api.nvim_create_autocmd('ColorScheme', {
     group = group,
@@ -1196,7 +1196,7 @@ function M.setup(group)
     elseif action == 'off' then
       M.set_heatmap_enabled(bufnr, false)
     elseif action == 'refresh' then
-      if not M.is_heatmap_enabled(bufnr) then vim.b[bufnr].fugitive_blame_heatmap_enabled = true end
+      if not M.is_heatmap_enabled(bufnr) then vim.b[bufnr].git_blame_heatmap_enabled = true end
       M.refresh_heatmap(bufnr)
     else
       M.toggle_heatmap(bufnr)

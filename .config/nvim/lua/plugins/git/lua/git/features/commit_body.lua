@@ -1,6 +1,6 @@
 local M = {}
 local utils = require('git.utils')
-local namespace = vim.api.nvim_create_namespace('fugitive_commit_body')
+local namespace = vim.api.nvim_create_namespace('git_commit_body')
 local states = {}
 local preview
 local icon = '󰍡'
@@ -46,7 +46,7 @@ local function render(bufnr, state)
     local hash = commit_at(line)
     if hash and state.bodies[hash] and state.bodies[hash] ~= '' then
       local col = #line
-      if vim.bo[bufnr].filetype == 'fugitivelog' then
+      if vim.bo[bufnr].filetype == 'gitlog' then
         -- hash <tab> date <tab> subject <tab> author <tab> refs/stats
         local author_end = line:match('^%x+\t[^\t]*\t[^\t]*\t[^\t]*()\t')
         if author_end then col = author_end - 1 end
@@ -139,7 +139,7 @@ function M.attach(bufnr)
   if states[bufnr] then return end
   local state = { bodies = {} }
   states[bufnr] = state
-  local group = vim.api.nvim_create_augroup('FugitiveCommitBody' .. bufnr, { clear = true })
+  local group = vim.api.nvim_create_augroup('GitCommitBody' .. bufnr, { clear = true })
   vim.keymap.set('n', 'gk', function() M.show(bufnr) end,
     { buffer = bufnr, nowait = true, silent = true, desc = 'Show commit message body' })
   vim.api.nvim_create_autocmd({ 'BufUnload', 'BufWipeout' }, {

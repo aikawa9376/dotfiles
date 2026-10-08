@@ -5,7 +5,7 @@ vim.opt.rtp:append(vim.fn.stdpath('data') .. '/site')
 vim.opt.rtp:prepend(vim.fn.stdpath('data') .. '/lazy/nvim-treesitter/runtime')
 local syntax = require('git.features.syntax_highlight')
 local tokens = require('git.features.syntax_word_diff')
-local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local ns = vim.api.nvim_create_namespace('git_extension_syntax')
 local function settle(buf)
   assert(vim.wait(10000, function() return not syntax.is_pending(buf) end, 1), 'highlight preparation did not finish')
 end
@@ -113,7 +113,7 @@ do
   end
   local painted, heartbeat = 0, nil
   vim.api.nvim_buf_set_extmark = function(buffer, namespace, row, col, options)
-    if (options.hl_group or ''):match('^@') or options.hl_group == 'FugitiveExtSyntaxAdd' then
+    if (options.hl_group or ''):match('^@') or options.hl_group == 'GitExtSyntaxAdd' then
       painted = painted + 1
       if painted == 1 then vim.schedule(function() heartbeat = painted end) end
     end
@@ -180,7 +180,7 @@ do
   local has_syntax = false
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(first, ns, 0, -1, { details = true })) do
     local group = mark[4].hl_group or ''
-    assert(not group:match('^FugitiveExtSyntax') and not group:match('^FugitiveExtNovel'),
+    assert(not group:match('^GitExtSyntax') and not group:match('^GitExtNovel'),
       'pending structural recovery painted provisional diff spans')
     has_syntax = has_syntax or group:match('^@') ~= nil
   end
@@ -219,7 +219,7 @@ do
   settle(second)
   local added = false
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(second, ns, 0, -1, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' then
+    if mark[4].hl_group == 'GitExtSyntaxAdd' then
       local line = patch[mark[2] + 1]
       if line:sub(mark[3] + 1, mark[4].end_col):find('y', 1, true) then added = true end
     end
@@ -267,7 +267,7 @@ assert(vim.deep_equal(old.comparison.result, compare(old, new)), 'cooperative re
 assert(vim.wait(1000, function()
   if syntax.is_pending(long_buf) then return false end
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(long_buf, ns, 0, -1, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' then return false end
+    if mark[4].hl_group == 'GitExtSyntaxAdd' then return false end
   end
   return true
 end, 1), 'finished structure did not replace provisional plus backgrounds')

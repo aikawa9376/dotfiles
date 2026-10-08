@@ -69,7 +69,7 @@ function M.resume(root, action)
     if not ok or owner[1] ~= state.owner then return nil, 'Another rebase is active; saved plan WIP was retained' end
     local out, err = git(root, { 'rebase', '--' .. action }, { env = { GIT_EDITOR = assert(state.editor, 'Saved message editor missing') } })
     if vim.uv.fs_stat(gitdir .. '/rebase-merge') then
-      utils.fire_fugitive_changed({ work_tree = root })
+      utils.fire_git_changed({ work_tree = root })
       return vim.trim(assert(git(root, { 'rev-parse', 'HEAD' }))), err or 'Rebase paused; continue or abort when ready', true, true
     end
     if not out then return nil, err end
@@ -90,7 +90,7 @@ function M.resume(root, action)
   end
   local warning = history.restore_saved(tx, state.stash, nil, true)
   vim.fn.delete(dir, 'rf') -- A failed restoration retains the stash itself.
-  utils.fire_fugitive_changed({ work_tree = root })
+  utils.fire_git_changed({ work_tree = root })
   return vim.trim(tx:run({ 'rev-parse', 'HEAD' })), warning, true, false
 end
 

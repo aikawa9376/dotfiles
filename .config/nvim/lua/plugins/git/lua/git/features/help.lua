@@ -10,7 +10,7 @@ local function parse_line(line)
   return { key = key, display_key = display_key, label = label }
 end
 
----Show help using the shared Fugitive action menu.
+---Show help using the shared Git action menu.
 ---@param title string
 ---@param lines string[]
 function M.show(title, lines)

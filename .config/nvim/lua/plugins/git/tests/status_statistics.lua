@@ -48,11 +48,11 @@ assert(vim.wait(5000, function()
 end, 10))
 local function displayed_counts()
   local values = {}
-  local ns = vim.api.nvim_create_namespace('fugitive_status_icons')
+  local ns = vim.api.nvim_create_namespace('git_status_icons')
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(b, ns, 0, -1, { details = true })) do
     local value = renderer.entry_at(b, mark[2] + 1)
     for _, chunk in ipairs(mark[4].virt_text or {}) do
-      if chunk[2] == 'FugitiveStatAdd' and value then
+      if chunk[2] == 'GitStatAdd' and value then
         values[value.section .. ':' .. value.path] = chunk[1]
       end
     end

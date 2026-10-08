@@ -25,7 +25,7 @@ local function check(width, minimum, expected, target)
     assert(pos[1] > origin_pos[1] and pos[2] == origin_pos[2], 'expected lower split')
   end
   assert(vim.api.nvim_win_get_width(sibling) == sibling_width, 'unrelated window resized')
-  assert(vim.w[origin].fugitive_preserve_split_view == nil)
+  assert(vim.w[origin].git_preserve_split_view == nil)
   if target then assert(vim.api.nvim_buf_get_name(0) == target) end
   vim.api.nvim_win_close(panel, true)
   vim.wait(10)

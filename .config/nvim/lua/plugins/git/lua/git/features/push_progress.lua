@@ -1,6 +1,6 @@
 local M = {}
 local utils = require('git.utils')
-local namespace = vim.api.nvim_create_namespace('fugitive_push_progress')
+local namespace = vim.api.nvim_create_namespace('git_push_progress')
 local active = {}
 local frames = { '⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏' }
 local frame = 1
@@ -24,7 +24,7 @@ end
 
 local function render_all()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].filetype == 'fugitivestatus' then
+    if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].filetype == 'gitstatus' then
       M.render(bufnr)
     end
   end

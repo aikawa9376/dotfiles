@@ -41,7 +41,7 @@ function M.context(buf)
   if not path and name:sub(1, #root + 1) == root .. '/' then path = name:sub(#root + 2) end
   return root, path, source
 end
--- Match Fugitive's path encoding: keep directory separators and ordinary
+-- Match Git's path encoding: keep directory separators and ordinary
 -- characters readable, escaping only URI delimiters, percent and controls.
 local function encode_path(path)
   return (path:gsub('[%%#?%c]', function(c) return ('%%%02X'):format(c:byte()) end))
@@ -70,14 +70,14 @@ end
 function M.resolve(arg, buf)
   buf = buf or vim.api.nvim_get_current_buf()
   local root, path, source = M.context(buf)
-  -- Fugitive's >~1 form follows the current file through a relative commit.
+  -- Git's >~1 form follows the current file through a relative commit.
   -- Accept the shorter ~1 spelling as well; from a commit view there is no
   -- file path, so the same spelling opens the relative commit itself.
   local shorthand = arg:sub(1, 1) == '>' and arg:sub(2) or arg
   local relative, suffix = shorthand:match('^([~^]%d*)(:.*)$')
   if not relative and shorthand:match('^[~^]%d*$') then relative = shorthand end
   if relative then
-    local revision = vim.b[buf].fugitive_commit or (source and source.revision)
+    local revision = vim.b[buf].git_commit or (source and source.revision)
     if not (type(revision) == 'string' and revision:match('^%x%x%x%x%x%x%x+$')) then revision = 'HEAD' end
     if suffix == ':%' then suffix = ':' .. assert(path, 'No current file') end
     arg = revision .. relative .. (suffix or (path and ':' .. path or ''))
@@ -106,7 +106,7 @@ function M.load(buf, root, object)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   utils.set_buf_work_tree(buf, root)
   vim.b[buf].git_object = { root = root, object = object, path = path, revision = rev, stage = stage, blob = oid }
-  vim.b[buf].lazyagent_note_source = { kind = 'fugitive', root = root, git_dir = utils.get_git_dir(root), path = path,
+  vim.b[buf].lazyagent_note_source = { kind = 'git', root = root, git_dir = utils.get_git_dir(root), path = path,
     revision = rev or 'blob', blob = oid }
   vim.bo[buf].buftype, vim.bo[buf].bufhidden = 'acwrite', 'hide'
   vim.bo[buf].endofline, vim.bo[buf].fixendofline = eol, false
@@ -137,7 +137,7 @@ function M.write(buf)
   s.blob = oid; vim.b[buf].git_object = s
   local source = vim.b[buf].lazyagent_note_source; source.blob = oid; vim.b[buf].lazyagent_note_source = source
   vim.bo[buf].modified = false
-  utils.fire_fugitive_changed({ work_tree = s.root })
+  utils.fire_git_changed({ work_tree = s.root })
 end
 function M.open(arg, command, root)
   local object

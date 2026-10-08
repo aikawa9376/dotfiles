@@ -6,8 +6,8 @@ function M.run()
   local repo = vim.fn.tempname()
   local b = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_name(b, 'git-status://' .. repo)
-  vim.bo[b].filetype = 'fugitivestatus'
-  vim.b[b].fugitive_work_tree = repo
+  vim.bo[b].filetype = 'gitstatus'
+  vim.b[b].git_work_tree = repo
   vim.b[b].git_dir = repo .. '/.git'
   local entry = { section = 'unstaged', path = 'a file.lua' }
   local staged = { section = 'staged', path = 'a file.lua' }

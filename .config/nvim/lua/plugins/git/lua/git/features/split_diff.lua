@@ -100,18 +100,18 @@ local function publish(s, revision, changes)
         local added = side == 'new'
         if not structural_style then
           add(plan[side], row, 0, { end_row = row + 1, end_col = 0, hl_eol = true,
-            hl_group = added and 'FugitiveExtAdd' or 'FugitiveExtDelete', priority = 200 })
+            hl_group = added and 'GitExtAdd' or 'GitExtDelete', priority = 200 })
         end
-        for _, level in ipairs({ { changes[side], structural_style and (added and 'FugitiveExtSyntaxAdd' or 'FugitiveExtSyntaxDelete')
-            or (added and 'FugitiveExtAddText' or 'FugitiveExtDeleteText'), 360 },
-          { changes.emphasis and changes.emphasis[side] or {}, added and 'FugitiveExtSyntaxAddText' or 'FugitiveExtSyntaxDeleteText', 361 } }) do
+        for _, level in ipairs({ { changes[side], structural_style and (added and 'GitExtSyntaxAdd' or 'GitExtSyntaxDelete')
+            or (added and 'GitExtAddText' or 'GitExtDeleteText'), 360 },
+          { changes.emphasis and changes.emphasis[side] or {}, added and 'GitExtSyntaxAddText' or 'GitExtSyntaxDeleteText', 361 } }) do
           for _, range in ipairs(syntax.merge_ranges(level[1][row + 1], lines[row + 1])) do
             local first, last = math.max(0, range[1] - 1), math.min(#lines[row + 1], range[2])
             if last > first then
               add(plan[side], row, first, { end_col = last, hl_group = level[2], priority = level[3] })
               if structural_style and syntax.config.changed_fg == 'difft' then
                 add(plan[side], row, first, { end_col = last,
-                  hl_group = added and 'FugitiveExtNovelAdd' or 'FugitiveExtNovelDelete', priority = 362 })
+                  hl_group = added and 'GitExtNovelAdd' or 'GitExtNovelDelete', priority = 362 })
               end
             end
           end

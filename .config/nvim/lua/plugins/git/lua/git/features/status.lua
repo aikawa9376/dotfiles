@@ -65,7 +65,7 @@ local function auto_fetch_status_repo(work_tree, opts)
     if not ok then
       vim.notify('Git auto-fetch failed: ' .. tostring(fetched_or_err), vim.log.levels.WARN)
     elseif fetched_or_err then
-      utils.fire_fugitive_changed({ work_tree = work_tree, reason = 'status-auto-fetch' })
+      utils.fire_git_changed({ work_tree = work_tree, reason = 'status-auto-fetch' })
     end
   end)
   if not task then
@@ -98,7 +98,7 @@ end
 
 local function is_status_buffer(bufnr)
   return utils.is_valid_buf(bufnr)
-    and (vim.b[bufnr].custom_git_status == true or vim.bo[bufnr].filetype == 'fugitivestatus')
+    and (vim.b[bufnr].custom_git_status == true or vim.bo[bufnr].filetype == 'gitstatus')
 end
 
 local function configure_status_window(winid)
@@ -237,7 +237,7 @@ local function capture_status_cursor(bufnr, winid)
   local cursor = vim.api.nvim_win_get_cursor(winid)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local key_type, key = status_cursor_key(lines, cursor[1], bufnr)
-  local view = vim.w[winid].fugitive_preserve_split_view
+  local view = vim.w[winid].git_preserve_split_view
   if view then view = vim.deepcopy(view) end
   if not view then
     pcall(function()
@@ -829,7 +829,7 @@ local function preferred_target_window(status_win)
   local function is_editing_window(winid)
     if not is_regular_window(winid) then return false end
     local bufnr = vim.api.nvim_win_get_buf(winid)
-    if is_status_buffer(bufnr) or vim.bo[bufnr].filetype == 'fugitive' then return false end
+    if is_status_buffer(bufnr) or vim.bo[bufnr].filetype == 'git' then return false end
     if vim.bo[bufnr].buftype ~= '' then return false end
     if vim.b[bufnr].lazyagent_is_scratch == true or vim.b[bufnr].lazyagent_acp_transcript == true then
       return false
@@ -941,21 +941,12 @@ local function open_entry_from_status(bufnr, close_status)
     return
   end
 
-  local git_dir = vim.b[bufnr].git_dir
   local ok, exec_err = pcall(vim.api.nvim_win_call, target_win, function()
     if selected_commit then
       require('git.features.commit').open({ work_tree = utils.get_buf_work_tree(bufnr), revision = selected_commit })
       return
     end
-    local had_fugitive_event = vim.fn.exists('g:fugitive_event') == 1
-    local previous_fugitive_event = vim.g.fugitive_event
-    vim.g.fugitive_event = git_dir
     local executed, command_exec_err = pcall(vim.cmd, cmd)
-    if had_fugitive_event then
-      vim.g.fugitive_event = previous_fugitive_event
-    else
-      vim.g.fugitive_event = nil
-    end
     if not executed then error(command_exec_err) end
     if target_line then
       local line_count = vim.api.nvim_buf_line_count(0)
@@ -1138,12 +1129,12 @@ local function open_conflict_diff(bufnr, layout)
 end
 
 function M.setup(group)
-  vim.api.nvim_set_hl(0, 'FugitiveStatAdd', { default = true, link = 'GitSignsAdd' })
-  vim.api.nvim_set_hl(0, 'FugitiveStatDelete', { default = true, link = 'GitSignsDelete' })
+  vim.api.nvim_set_hl(0, 'GitStatAdd', { default = true, link = 'GitSignsAdd' })
+  vim.api.nvim_set_hl(0, 'GitStatDelete', { default = true, link = 'GitSignsDelete' })
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = 'fugitivestatus',
+    pattern = 'gitstatus',
     callback = function(ev)
       local b = ev.buf
       if not utils.get_buf_work_tree(b) or status_initialized_by_buf[b] then return end
@@ -1154,13 +1145,13 @@ function M.setup(group)
       local function is_live()
         return active and utils.is_valid_buf(b) and vim.api.nvim_buf_is_loaded(b)
       end
-      local bufgroupt = vim.api.nvim_create_augroup('FugitiveStatusRefresh' .. b, { clear = true })
+      local bufgroupt = vim.api.nvim_create_augroup('GitStatusRefresh' .. b, { clear = true })
       vim.opt_local.number, vim.opt_local.relativenumber = false, false
       configure_status_window(vim.api.nvim_get_current_win())
-      local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
-      local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
-      local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
-      local ns_id = vim.api.nvim_create_namespace('fugitive_status_icons')
+      local ns_stash = vim.api.nvim_create_namespace('git_status_stash')
+      local ns_worktree = vim.api.nvim_create_namespace('git_status_worktree')
+      local ns_pr = vim.api.nvim_create_namespace('git_status_pull_requests')
+      local ns_id = vim.api.nvim_create_namespace('git_status_icons')
       local pr_state = { fetching = false, pending = false, generation = 0 }
       local refresh_scheduled = false
       local fast_refresh_serial = 0
@@ -1416,7 +1407,7 @@ function M.setup(group)
       })
 
       local function notify_repo_changed(skip_source)
-        utils.fire_fugitive_changed({ bufnr = b, skip_source = skip_source == true })
+        utils.fire_git_changed({ bufnr = b, skip_source = skip_source == true })
       end
 
       status_renderer.take_ownership(b)
@@ -1650,7 +1641,7 @@ function M.setup(group)
           if stat_entry and not stat_entry.header
             and (flagged_entry or status_renderer.entry_row(b, idx) == idx)
           then
-            local stat_text = require('git.features.change_display').statistics(stat_entry, 'FugitiveStatAdd', 'FugitiveStatDelete')
+            local stat_text = require('git.features.change_display').statistics(stat_entry, 'GitStatAdd', 'GitStatDelete')
             if #stat_text > 0 then
               vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, #line, {
                 virt_text = stat_text,
@@ -3095,7 +3086,7 @@ function M.setup(group)
       vim.keymap.set('n', '<C-c>', '<C-w>c',
         { buffer = b, nowait = true, silent = true, desc = 'Close status window' })
 
-      vim.keymap.set('n', 'L', '<Cmd>FugitiveLog<CR>',
+      vim.keymap.set('n', 'L', '<Cmd>GitLog<CR>',
         { buffer = b, nowait = true, silent = true, desc = 'Open git log' })
       vim.keymap.set('n', 'B', '<Cmd>Gbranch<CR>',
         { buffer = b, nowait = true, silent = true, desc = 'Open git branch list' })
@@ -3136,7 +3127,7 @@ function M.setup(group)
         commands.mix_index_with_input(h)
       end, { buffer = b, nowait = true, silent = true, desc = 'Fixup/Reword commit under cursor with index' })
 
-      -- cF: Fugitive-compatible action: fixup with the index, then autosquash.
+      -- cF: fix up with the index, then autosquash.
       vim.keymap.set('n', 'cF', function()
         local h = commit_hash_at_cursor()
         if not h then return end
@@ -3316,9 +3307,9 @@ end
 
 function M.refresh_buffer(bufnr)
   if not is_status_buffer(bufnr) or not vim.api.nvim_buf_is_loaded(bufnr) then return end
-  local ns_worktree = vim.api.nvim_create_namespace('fugitive_status_worktree')
-  local ns_stash = vim.api.nvim_create_namespace('fugitive_status_stash')
-  local ns_pr = vim.api.nvim_create_namespace('fugitive_status_pull_requests')
+  local ns_worktree = vim.api.nvim_create_namespace('git_status_worktree')
+  local ns_stash = vim.api.nvim_create_namespace('git_status_stash')
+  local ns_pr = vim.api.nvim_create_namespace('git_status_pull_requests')
   pcall(function()
     refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
   end)
@@ -3436,7 +3427,7 @@ end
 local function resolve_status_work_tree(opts)
   if opts and opts.work_tree then return utils.normalize_path(opts.work_tree) end
   local current_buf = vim.api.nvim_get_current_buf()
-  if vim.b[current_buf].fugitive_work_tree then
+  if vim.b[current_buf].git_work_tree then
     local known = utils.get_buf_work_tree(current_buf)
     if known and utils.get_git_dir(known) then return known end
   end
@@ -3522,8 +3513,8 @@ function M.open(opts)
       })
     end
     vim.api.nvim_win_set_buf(0, bufnr)
-    if vim.bo[bufnr].filetype ~= 'fugitivestatus' then
-      vim.bo[bufnr].filetype = 'fugitivestatus'
+    if vim.bo[bufnr].filetype ~= 'gitstatus' then
+      vim.bo[bufnr].filetype = 'gitstatus'
     end
   end
 

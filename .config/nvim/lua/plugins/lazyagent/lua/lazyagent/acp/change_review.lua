@@ -26,10 +26,10 @@ local operation_highlight = {
 local function setup_highlights()
   -- Keep these shared Git diff colors available even when the Git UI loads
   -- after Changes. Otherwise `default` would keep the plain Diff links.
-  vim.api.nvim_set_hl(0, "FugitiveExtAdd", { bg = "#23384C", default = true })
-  vim.api.nvim_set_hl(0, "FugitiveExtDelete", { bg = "#321e1e", default = true })
-  vim.api.nvim_set_hl(0, "FugitiveExtAddText", { bg = "#005f5f", default = true })
-  vim.api.nvim_set_hl(0, "FugitiveExtDeleteText", { bg = "#8c3b40", default = true })
+  vim.api.nvim_set_hl(0, "GitExtAdd", { bg = "#23384C", default = true })
+  vim.api.nvim_set_hl(0, "GitExtDelete", { bg = "#321e1e", default = true })
+  vim.api.nvim_set_hl(0, "GitExtAddText", { bg = "#005f5f", default = true })
+  vim.api.nvim_set_hl(0, "GitExtDeleteText", { bg = "#8c3b40", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesAdded", { link = "GitSignsAdd", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesModified", { link = "GitSignsChange", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDeleted", { link = "GitSignsDelete", default = true })
@@ -39,16 +39,16 @@ local function setup_highlights()
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesApprovedLine", { link = "DiffAdd", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesRejectedLine", { link = "DiffDelete", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffAdd", {
-    link = "FugitiveExtAdd", default = true,
+    link = "GitExtAdd", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffDelete", {
-    link = "FugitiveExtDelete", default = true,
+    link = "GitExtDelete", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffAddText", {
-    link = "FugitiveExtAddText", default = true,
+    link = "GitExtAddText", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesDiffDeleteText", {
-    link = "FugitiveExtDeleteText", default = true,
+    link = "GitExtDeleteText", default = true,
   })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesNote", { link = "GitSignsChange", default = true })
   vim.api.nvim_set_hl(0, "LazyAgentACPChangesContext", { link = "Comment", default = true })

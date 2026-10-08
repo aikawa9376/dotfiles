@@ -17,7 +17,7 @@ local function fail(result, phase)
 end
 
 local function changed(root)
-  require('git.utils').fire_fugitive_changed({ work_tree = root })
+  require('git.utils').fire_git_changed({ work_tree = root })
 end
 
 local function changed_failure(root, result, phase)

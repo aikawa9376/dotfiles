@@ -19,7 +19,7 @@ renderer.unpushed_commits_async = function() commits = commits + 1 end
 vim.system = function()
   return { wait = function() return { code = 1, stdout = '', stderr = 'test' } end }
 end
-status.setup(vim.api.nvim_create_augroup('FugitiveLifecycleTest', { clear = true }))
+status.setup(vim.api.nvim_create_augroup('GitLifecycleTest', { clear = true }))
 
 local function group_exists(name)
   return pcall(vim.api.nvim_get_autocmds, { group = name })
@@ -32,14 +32,14 @@ end
 -- q hides a split status and retains its initialized buffer across repeated opens.
 local cached = open()
 local initial_snapshots = #snapshots
-local initial_events = #vim.api.nvim_get_autocmds({ group = 'FugitiveStatusRefresh' .. cached })
+local initial_events = #vim.api.nvim_get_autocmds({ group = 'GitStatusRefresh' .. cached })
 for _ = 1, 50 do
   vim.fn.maparg('q', 'n', false, true).callback()
   assert(vim.api.nvim_buf_is_loaded(cached), 'q discarded the warm status buffer')
   assert(open() == cached, 'opening status created a new buffer')
   vim.api.nvim_exec_autocmds('FileType', { buffer = cached })
   assert(#snapshots == initial_snapshots, 'reopening/repeated FileType started more work')
-  assert(#vim.api.nvim_get_autocmds({ group = 'FugitiveStatusRefresh' .. cached }) == initial_events)
+  assert(#vim.api.nvim_get_autocmds({ group = 'GitStatusRefresh' .. cached }) == initial_events)
 end
 
 -- Changes while hidden invalidate the cache without running Git until reopening.
@@ -50,7 +50,7 @@ vim.api.nvim_exec_autocmds('BufWritePost', { buffer = source })
 assert(#snapshots == initial_snapshots, 'hidden status started work on file write')
 assert(open() == cached and #snapshots == initial_snapshots + 1)
 vim.fn.maparg('q', 'n', false, true).callback()
-vim.api.nvim_exec_autocmds('User', { pattern = 'FugitiveChanged', data = { work_tree = root } })
+vim.api.nvim_exec_autocmds('User', { pattern = 'GitChanged', data = { work_tree = root } })
 assert(#snapshots == initial_snapshots + 1, 'hidden status started work on repo change')
 assert(open() == cached and #snapshots == initial_snapshots + 2)
 vim.api.nvim_buf_delete(source, { force = true })
@@ -62,8 +62,8 @@ for _, mode in ipairs({ 'bdelete', 'bwipeout' }) do
     local pending = snapshots[#snapshots]
     local before_commits = commits
     vim.cmd(mode)
-    assert(not group_exists('FugitiveStatusRefresh' .. b), mode .. ' leaked status handlers')
-    assert(not group_exists('FugitiveExtensionSyntax' .. b), mode .. ' leaked syntax handlers')
+    assert(not group_exists('GitStatusRefresh' .. b), mode .. ' leaked status handlers')
+    assert(not group_exists('GitExtensionSyntax' .. b), mode .. ' leaked syntax handlers')
     assert(not syntax.refresh(b), mode .. ' retained a syntax refresher')
     assert(not pending.opts.is_current(), mode .. ' kept an async snapshot alive')
     -- Simulate a Git result arriving after unload, when bdelete can leave a valid buffer ID.
@@ -72,18 +72,18 @@ for _, mode in ipairs({ 'bdelete', 'bwipeout' }) do
     if vim.api.nvim_buf_is_valid(b) then vim.api.nvim_buf_delete(b, { force = true }) end
   end
 end
-assert(#vim.api.nvim_get_autocmds({ event = 'ColorScheme', group = 'FugitiveExtensionHighlights' }) == 1)
+assert(#vim.api.nvim_get_autocmds({ event = 'ColorScheme', group = 'GitExtensionHighlights' }) == 1)
 
 -- Shared repository listeners used by branch/stash/etc. also die with their buffer.
 for _ = 1, 50 do
   local b = vim.api.nvim_create_buf(false, true)
-  vim.b[b].fugitive_work_tree, vim.b[b].git_dir = root, root .. '/.git'
+  vim.b[b].git_work_tree, vim.b[b].git_dir = root, root .. '/.git'
   local group = vim.api.nvim_create_augroup('RepoLifetime' .. b, { clear = true })
   utils.setup_repo_refresh(group, b, function() error('dead listener invoked') end)
   vim.api.nvim_buf_delete(b, { force = true })
   assert(not group_exists('RepoLifetime' .. b))
 end
-vim.api.nvim_exec_autocmds('User', { pattern = 'FugitiveChanged' })
+vim.api.nvim_exec_autocmds('User', { pattern = 'GitChanged' })
 
 -- Reattaching syntax is idempotent; a queued refresh cannot revive an unloaded buffer.
 local b = vim.api.nvim_create_buf(false, true)

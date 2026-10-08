@@ -50,7 +50,7 @@ function M.apply(ctx, three_way, reverse)
   if reverse then args[#args + 1] = '--reverse' end
   local result = run(ctx.work_tree, args, source.stdout)
   -- Three-way apply can leave real conflicts even when Git exits nonzero.
-  require('git.utils').fire_fugitive_changed({ work_tree = ctx.work_tree })
+  require('git.utils').fire_git_changed({ work_tree = ctx.work_tree })
   if result.code ~= 0 then return false, vim.trim(result.stderr) end
   return true
 end
@@ -64,7 +64,7 @@ function M.context(bufnr, row, revision)
   if revision and revision ~= '' then
     return { work_tree = root, commit = revision }
   end
-  if vim.bo[bufnr].filetype == 'fugitivecommit' then
+  if vim.bo[bufnr].filetype == 'gitcommitview' then
     local view = require('git.features.commit')
     local model = view.model(bufnr)
     if not model then return nil, 'Commit view is no longer available' end

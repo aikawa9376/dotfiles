@@ -8,7 +8,7 @@ for _, lang in ipairs({ 'lua', 'json', 'javascript', 'python' }) do
 end
 local syntax = require('git.features.syntax_highlight')
 local tokens = require('git.features.syntax_word_diff')
-local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local ns = vim.api.nvim_create_namespace('git_extension_syntax')
 local function settle(buf)
   assert(vim.wait(10000, function() return not syntax.is_pending(buf) end, 1), 'highlight preparation did not finish')
 end
@@ -25,7 +25,7 @@ local function open(name, before, after, context, opts)
 end
 local function words(buf, side, strong)
   local found = {}
-  local prefix = syntax.config.word_diff_style == 'treesitter' and 'FugitiveExtSyntax' or 'FugitiveExt'
+  local prefix = syntax.config.word_diff_style == 'treesitter' and 'GitExtSyntax' or 'GitExt'
   local group = prefix .. (side == 'old' and 'Delete' or 'Add')
   if strong ~= false then group = group .. 'Text' end
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
@@ -81,9 +81,9 @@ for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = 
   local details = mark[4]
   if details.virt_text then
     assert(details.virt_text[1][1] == '▏', 'treesitter lost its gutter marker')
-    assert(details.virt_text[1][2] == (mark[2] == 2 and 'FugitiveExtDeletePrefix' or 'FugitiveExtAddPrefix'))
+    assert(details.virt_text[1][2] == (mark[2] == 2 and 'GitExtDeletePrefix' or 'GitExtAddPrefix'))
     prefix_count = prefix_count + 1
-  elseif details.hl_group == 'FugitiveExtSyntaxAdd' or details.hl_group == 'FugitiveExtSyntaxDelete' then
+  elseif details.hl_group == 'GitExtSyntaxAdd' or details.hl_group == 'GitExtSyntaxDelete' then
     assert(not details.hl_eol and details.end_row == mark[2], 'structural background extended past its source span')
     local line = vim.api.nvim_buf_get_lines(buf, mark[2], mark[2] + 1, false)[1]
     assert(line:sub(mark[3] + 1, details.end_col):match('^%a+_value$'), 'unchanged code received a background')
@@ -92,8 +92,8 @@ for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = 
 end
 assert(prefix_count == 2 and backgrounds == 2)
 assert(vim.api.nvim_buf_get_lines(buf, 2, 4, false)[1] == '-  return old_value', 'marker rewrote the actionable patch')
-assert(vim.api.nvim_get_hl(0, { name = 'FugitiveExtAddPrefix', link = true }).link == 'GitSignsAdd')
-assert(vim.api.nvim_get_hl(0, { name = 'FugitiveExtDeletePrefix', link = true }).link == 'GitSignsDelete')
+assert(vim.api.nvim_get_hl(0, { name = 'GitExtAddPrefix', link = true }).link == 'GitSignsAdd')
+assert(vim.api.nvim_get_hl(0, { name = 'GitExtDeletePrefix', link = true }).link == 'GitSignsDelete')
 vim.api.nvim_buf_delete(buf, { force = true })
 
 -- Read actual surrounding source for incomplete hunk headers. It must supply
@@ -130,7 +130,7 @@ assert(syntax.toggle_changed_fg() == 'difft')
 buf = open('changed_colors.lua', { 'function Colors.group(x)' }, { 'function Colors.group(x, y)' })
 local colored = false
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-  if mark[4].hl_group == 'FugitiveExtNovelAdd' then
+  if mark[4].hl_group == 'GitExtNovelAdd' then
     assert(mark[3] > #'function Colors.group(x', 'unchanged declaration got a diff foreground')
     colored = true
   end
@@ -142,7 +142,7 @@ tokens.compare = function() error('foreground switch recomputed comparison') end
 assert(syntax.toggle_changed_fg() == 'syntax')
 settle(buf)
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-  assert(not (mark[4].hl_group or ''):match('^FugitiveExtNovel'), 'syntax mode retained a native diff foreground')
+  assert(not (mark[4].hl_group or ''):match('^GitExtNovel'), 'syntax mode retained a native diff foreground')
 end
 vim.treesitter.get_string_parser, tokens.compare = get_parser, compare_colors
 syntax.config.changed_fg = 'syntax'
@@ -174,8 +174,8 @@ vim.api.nvim_buf_delete(buf, { force = true })
 -- Formatting-only changes have markers without colored syntax backgrounds.
 buf = open('layout.lua', { 'foo(a, b)' }, { 'foo(', '  a,', '  b', ')' })
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-  assert(not (mark[4].hl_group or ''):match('^FugitiveExtSyntax[AD]'), 'layout-only edit acquired a background')
-  assert(not (mark[4].hl_group or ''):match('^FugitiveExtNovel'), 'layout-only edit acquired a diff foreground')
+  assert(not (mark[4].hl_group or ''):match('^GitExtSyntax[AD]'), 'layout-only edit acquired a background')
+  assert(not (mark[4].hl_group or ''):match('^GitExtNovel'), 'layout-only edit acquired a diff foreground')
 end
 vim.api.nvim_buf_delete(buf, { force = true })
 
@@ -215,7 +215,7 @@ for _, before_after in ipairs({ { {}, { 'local x = 1' } }, { { 'local x = 1' }, 
   assert(words(buf, 'old') == '' and words(buf, 'new') == '', 'one-sided file got word emphasis')
   local painted = false
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxDelete' then
+    if mark[4].hl_group == 'GitExtSyntaxAdd' or mark[4].hl_group == 'GitExtSyntaxDelete' then
       painted = true
       assert(mark[3] > 0 and not mark[4].hl_eol, 'one-sided edit colored its entire row')
     end
@@ -230,7 +230,7 @@ syntax.attach(buf)
 settle(buf)
 local changed, context_bg = {}, false
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-  if mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxDelete' then
+  if mark[4].hl_group == 'GitExtSyntaxAdd' or mark[4].hl_group == 'GitExtSyntaxDelete' then
     changed[mark[2]] = true
     context_bg = context_bg or mark[2] == 4 or mark[2] == 6
   end

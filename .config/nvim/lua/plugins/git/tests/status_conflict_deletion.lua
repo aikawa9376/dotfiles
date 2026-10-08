@@ -134,7 +134,7 @@ assert(adopted:find('+ours new', 1, true)
   and adopted:find('stage 1 (base) -> worktree (chosen ours)', 1, true),
   'AA co did not show the adopted addition from base')
 require('git.features.syntax_highlight').attach(bufnr)
-local highlight_ns = assert(vim.api.nvim_get_namespaces().fugitive_extension_syntax)
+local highlight_ns = assert(vim.api.nvim_get_namespaces().git_extension_syntax)
 local yellow = vim.api.nvim_buf_get_extmarks(bufnr, highlight_ns,
   0, -1, { details = true })
 local chosen_yellow = false

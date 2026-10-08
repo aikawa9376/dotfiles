@@ -48,7 +48,7 @@ local utils = require('git.utils')
 local log = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_buf_set_lines(log, 0, -1, false, { hash .. '\tbase' })
 utils.set_buf_work_tree(log, root)
-vim.bo[log].filetype = 'fugitivelog'
+vim.bo[log].filetype = 'gitlog'
 vim.api.nvim_set_current_buf(log)
 actions.attach(log)
 
@@ -101,7 +101,7 @@ vim.fn.writefile({ 'base', 'edited' }, root .. '/file.txt')
 local status = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_buf_set_lines(status, 0, -1, false, { ' M file.txt' })
 utils.set_buf_work_tree(status, root)
-vim.bo[status].filetype = 'fugitivestatus'
+vim.bo[status].filetype = 'gitstatus'
 vim.api.nvim_set_current_buf(status)
 actions.attach(status)
 press('<Space><Space>')
@@ -150,7 +150,7 @@ git({ 'update-ref', 'refs/remotes/origin/topic', hash })
 local branch = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_buf_set_lines(branch, 0, -1, false, { 'feature', 'origin/topic' })
 utils.set_buf_work_tree(branch, root)
-vim.bo[branch].filetype = 'fugitivebranch'
+vim.bo[branch].filetype = 'gitbranch'
 vim.b[branch].branch_map = { 'feature', 'origin/topic' }
 vim.b[branch].branch_kinds = { 'local_', 'remote' }
 vim.api.nvim_set_current_buf(branch)
@@ -233,7 +233,7 @@ local graph_line = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
 assert(graph_line and graph_line:match('^%x+\t') and graph_line:find('*', 1, true),
   'graph/color flags prevented the custom log from parsing commit rows')
 local graph_marks = vim.api.nvim_buf_get_extmarks(0,
-  vim.api.nvim_get_namespaces().fugitivelog_graph, 0, -1, { details = true })
+  vim.api.nvim_get_namespaces().gitlog_graph, 0, -1, { details = true })
 assert(#graph_marks > 0 and graph_marks[1][4].hl_group == 'DiagnosticInfo',
   'color flag did not color the graph in the custom log')
 vim.api.nvim_win_close(0, true)
@@ -274,7 +274,7 @@ vim.api.nvim_win_close(0, true)
 vim.api.nvim_set_current_buf(status)
 require('git.features.log').open({ args = '--max-count=1 --graph --color=never' })
 assert(#vim.api.nvim_buf_get_extmarks(0,
-  vim.api.nvim_get_namespaces().fugitivelog_graph, 0, -1, {}) == 0,
+  vim.api.nvim_get_namespaces().gitlog_graph, 0, -1, {}) == 0,
   'color=never still highlighted the graph')
 vim.api.nvim_win_close(0, true)
 vim.api.nvim_set_current_buf(status)

@@ -9,10 +9,40 @@ local function git(root, args)
   if ok and result.code == 0 then return vim.trim(result.stdout) end
 end
 
+local function unquote_git_path(path)
+  if path:sub(1, 1) ~= '"' then return path end
+  if path:sub(-1) ~= '"' then return nil end
+  local escapes = {
+    a = '\a', b = '\b', t = '\t', n = '\n', v = '\v', f = '\f', r = '\r',
+    ['\\'] = '\\', ['"'] = '"',
+  }
+  local out, i, finish = {}, 2, #path - 1
+  while i <= finish do
+    local char = path:sub(i, i)
+    if char ~= '\\' then
+      out[#out + 1] = char
+      i = i + 1
+    else
+      local octal = path:sub(i + 1, i + 3)
+      if octal:match('^[0-7][0-7][0-7]$') then
+        out[#out + 1] = string.char(tonumber(octal, 8))
+        i = i + 4
+      else
+        local decoded = escapes[path:sub(i + 1, i + 1)]
+        if not decoded then return nil end
+        out[#out + 1] = decoded
+        i = i + 2
+      end
+    end
+  end
+  return table.concat(out)
+end
+
 -- Unified diff rows are not file rows. Resolve only an unambiguous, single-side
 -- selection inside one hunk; everything else keeps the captured excerpt.
 local function capture_diff(bufnr, root, first, last)
-  if not first or not vim.tbl_contains({ "git", "fugitive" }, vim.bo[bufnr].filetype) then return end
+  if not first or vim.bo[bufnr].filetype ~= 'git' then return end
+  root = vim.b[bufnr].git_work_tree or root
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local header, hunk
   for i = first, 1, -1 do
@@ -39,24 +69,17 @@ local function capture_diff(bufnr, root, first, last)
     if raw then
       raw = raw:match("^[^\t]+")
       if raw:sub(1, 1) == '"' then
-        local ok, decoded = pcall(vim.fn["fugitive#Unquote"], raw)
-        if not ok then return end
-        raw = decoded
+        raw = unquote_git_path(raw)
+        if not raw then return end
       end
       path = raw:match("^[abciow12]/(.+)$")
     end
   end
   if not path then return end
-  local dir_ok, dir = pcall(vim.fn.FugitiveGitDir, bufnr)
-  if dir_ok and dir ~= "" then
-    local ok, worktree = pcall(vim.fn.FugitiveWorkTree, dir)
-    if ok and worktree ~= "" then root = worktree end
-  end
   local blob = oid and git(root, { "rev-parse", "--verify", oid .. "^{blob}" })
   local revision = "working-tree"
   local name = vim.api.nvim_buf_get_name(bufnr)
-  local ok, parsed = pcall(vim.fn["fugitive#Parse"], name)
-  local commit = ok and parsed[1] and parsed[1]:match("^(%x+):?$")
+  local commit
   for i = header - 1, 1, -1 do
     local hash = lines[i]:match("^commit (%x+)")
     if hash then commit = hash; break end
@@ -80,14 +103,14 @@ local function capture_diff(bufnr, root, first, last)
     if prefix == " " or prefix == "+" then new = new + 1 end
   end
   if not start_line or start_line < 1 then return end
-  return { kind = "fugitive", root = root, path = path, revision = revision,
+  return { kind = "git", root = root, path = path, revision = revision,
     side = side, blob = blob, name = name, inline_diff = true,
     review_commit = commit and git(root, { "rev-parse", "--verify", commit .. "^{commit}" }) or nil,
     start_line = start_line, end_line = end_line }
 end
 
 function M.capture(bufnr, root, first, last)
-  root = vim.b[bufnr].fugitive_work_tree or root
+  root = vim.b[bufnr].git_work_tree or root
   local name = vim.api.nvim_buf_get_name(bufnr)
   if vim.b[bufnr].custom_git_commit then
     return require('git.features.commit_notes').capture(bufnr, first, last or first)
@@ -130,25 +153,6 @@ function M.capture(bufnr, root, first, last)
       end
     end)
   end
-  if not source and name:match("^fugitive://") then
-    pcall(function()
-      local parsed = vim.fn["fugitive#Parse"](name)
-      local spec, dir = parsed[1], parsed[2]
-      local revision, path = spec:match("^(:?[^:]+):(.+)$")
-      if not revision and spec:match("^%x+$") then
-        local repo = vim.fn.FugitiveWorkTree(dir)
-        local blob = git(repo, { "rev-parse", "--verify", spec .. "^{blob}" })
-        if blob then
-          source = { kind = "fugitive", root = repo, revision = "blob", blob = blob,
-            side = "revision", name = name }
-        end
-      end
-      if revision and path then
-        source = { kind = "fugitive", root = vim.fn.FugitiveWorkTree(dir),
-          path = path, revision = revision, side = "revision", name = name }
-      end
-    end)
-  end
   -- Closed Diffview panes still carry a URI; commit and index formats come
   -- from vcs/file.lua. Panels and custom revisions intentionally fall back.
   if not source then
@@ -167,7 +171,7 @@ function M.capture(bufnr, root, first, last)
   end
   if source then
     source.root = vim.fs.normalize(type(source.root) == "string" and source.root ~= "" and source.root or root)
-    if source.kind == "fugitive" and not source.inline_diff then
+    if source.kind == "git" and not source.inline_diff then
       local panes = {}
       for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
         if vim.wo[win].diff then panes[#panes + 1] = win end
@@ -226,24 +230,31 @@ function M.diff_range(bufnr, source, excerpt)
   end
 end
 
-function M.fugitive_buffer(source, commit_view)
-  if not source.blob and not (commit_view and source.review_commit) then return end
-  local object = commit_view and source.review_commit or
-    (source.path and source.revision:match("^%x+$") and (source.revision .. ":" .. source.path) or source.blob)
+function M.git_source_buffer(source, commit_view)
+  if commit_view and source.review_commit then
+    local lines = note_show.read(source.root, source.review_commit)
+    if not lines then return end
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_name(buf, 'git-show://' .. vim.uri_encode(source.root) .. '/' .. source.review_commit)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.bo[buf].buftype, vim.bo[buf].bufhidden = 'nofile', 'hide'
+    vim.bo[buf].swapfile, vim.bo[buf].filetype = false, 'git'
+    vim.bo[buf].modifiable, vim.bo[buf].readonly = false, true
+    vim.b[buf].git_work_tree = source.root
+    vim.b[buf].lazyagent_note_source = vim.deepcopy(source)
+    return buf
+  end
+  if not source.blob then return end
+  local object = source.path and type(source.revision) == 'string'
+    and source.revision:match("^%x+$") and (source.revision .. ":" .. source.path) or source.blob
   if not object then return end
   local native_ok, objects = pcall(require, 'git.objects')
-  if native_ok and not commit_view then
+  if native_ok then
     local uri = objects.uri(source.root, object)
     local buf = vim.fn.bufadd(uri)
     local loaded = pcall(vim.fn.bufload, buf)
     if loaded and vim.api.nvim_buf_is_loaded(buf) then return buf end
   end
-  local ok, uri = pcall(vim.fn["fugitive#Find"], object, source.git_dir or (source.root .. "/.git"))
-  if not ok or type(uri) ~= "string" or not uri:match("^fugitive://") then return end
-  local buf = vim.fn.bufadd(uri)
-  local loaded = pcall(vim.fn.bufload, buf)
-  if not loaded or not vim.api.nvim_buf_is_loaded(buf) then return end
-  return buf
 end
 
 function M.reopen_diffview(source, line, fallback)

@@ -212,7 +212,7 @@ command! MRUWritesCWD call fzf#run({
 function! s:mru_files_for_cwd(flag)
   return s:color_filename(map(filter(
   \  systemlist("sed -n '2,$p' $XDG_CACHE_HOME/neomru/" . a:flag),
-  \  "v:val =~ '^" . getcwd() . "' && v:val !~ '__Tagbar__\\|\\[YankRing]\\|fugitive:\\|NERD_tree\\|^/tmp/\\|.git/'"
+  \  "v:val =~ '^" . getcwd() . "' && v:val !~ '__Tagbar__\\|\\[YankRing]\\|git-object:\\|NERD_tree\\|^/tmp/\\|.git/'"
   \ ), 'fnamemodify(v:val, ":p:.")'))
 endfunction
 
@@ -235,7 +235,7 @@ command! MRUWrites call fzf#run({
 function! s:mru_files_for_all(flag)
   return s:color_filename(map(filter(
   \  systemlist("sed -n '2,$p' $XDG_CACHE_HOME/neomru/" . a:flag),
-  \  "v:val !~ '__Tagbar__\\|\\[YankRing]\\|fugitive:\\|NERD_tree\\|^/tmp/\\|.git/'"
+  \  "v:val !~ '__Tagbar__\\|\\[YankRing]\\|git-object:\\|NERD_tree\\|^/tmp/\\|.git/'"
   \ ), 'fnamemodify(v:val, ":p:.")'))
 endfunction
 

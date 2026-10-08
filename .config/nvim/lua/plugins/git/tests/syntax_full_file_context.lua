@@ -5,7 +5,7 @@ vim.opt.rtp:append(vim.fn.stdpath('data') .. '/site')
 vim.opt.rtp:prepend(vim.fn.stdpath('data') .. '/lazy/nvim-treesitter/runtime')
 local syntax = require('git.features.syntax_highlight')
 local structural = require('git.features.syntax_word_diff')
-local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local ns = vim.api.nvim_create_namespace('git_extension_syntax')
 local fixture = vim.json.decode(table.concat(vim.fn.readfile(plugin .. '/tests/fixtures/difftastic_word_diff.json'), '\n'))
 local function settle(buf)
   assert(vim.wait(15000, function() return not syntax.is_pending(buf) end, 1), 'complete-file comparison did not finish')
@@ -46,7 +46,7 @@ local function check(case, buf)
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
     local details, target = mark[4], rows[mark[2]]
     spinner = spinner or details.virt_text_pos == 'eol'
-    if (details.hl_group or ''):match('^FugitiveExtSyntax') then
+    if (details.hl_group or ''):match('^GitExtSyntax') then
       assert(target and not details.hl_eol and details.end_row == mark[2], 'background escaped displayed changed source bytes')
       local spans = details.hl_group:match('Text$') and target.emphasis or target.spans
       spans[#spans + 1] = { mark[3], details.end_col - 1 }

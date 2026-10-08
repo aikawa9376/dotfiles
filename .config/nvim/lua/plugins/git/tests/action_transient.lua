@@ -38,7 +38,7 @@ local function kind()
 end
 
 local hash = string.rep('a', 40)
-local status = panel('fugitivestatus', { hash .. ' selected commit' })
+local status = panel('gitstatus', { hash .. ' selected commit' })
 local help = function() end
 vim.keymap.set('n', 'g?', help, { buffer = status })
 actions.attach(status)
@@ -92,7 +92,7 @@ press('k')
 assert(discarded, 'apply variants discard did not reuse the status action')
 renderer.entry_at = original_entry_at
 
-local log = panel('fugitivelog', { hash .. ' selected commit' })
+local log = panel('gitlog', { hash .. ' selected commit' })
 local log_opens = {}
 require('git.features.log').open = function(opts) log_opens[#log_opens + 1] = opts.args end
 press('<Space><Space>')
@@ -261,7 +261,7 @@ assert(commands[#commands] == 'tag release-test ' .. hash,
   'tag did not target the selected commit')
 vim.ui.input = old_input
 
-local branch = panel('fugitivebranch', { 'feature' })
+local branch = panel('gitbranch', { 'feature' })
 vim.b[branch].branch_map = { 'feature' }
 vim.b[branch].branch_kinds = { 'local_' }
 press('<Space><Space>')
@@ -318,7 +318,7 @@ assert(kind() == 'merge' and text():find('Continue merge', 1, true)
 press('a')
 assert(commands[#commands] == 'merge --abort', 'merge abort used the wrong command')
 operation.inspect = function() return { kind = 'revert' } end
-local active_log = panel('fugitivelog', { hash .. ' selected commit' })
+local active_log = panel('gitlog', { hash .. ' selected commit' })
 press('<Space><Space>')
 press('A')
 assert(kind() == 'revert' and text():find('Revert', 1, true),
@@ -380,7 +380,7 @@ local original_reflog_entry = reflog_module.entry_at
 reflog_module.entry_at = function(_, row)
   return row == 1 and { hash = hash, selector = 'HEAD@{0}' } or nil
 end
-local reflog_panel = panel('fugitivereflog', { 'HEAD@{0}  ' .. hash:sub(1, 7) })
+local reflog_panel = panel('gitreflog', { 'HEAD@{0}  ' .. hash:sub(1, 7) })
 local copied_selector
 vim.keymap.set('n', 'y', function() copied_selector = 'HEAD@{0}' end,
   { buffer = reflog_panel })
@@ -397,7 +397,7 @@ press('Y')
 assert(copied_selector == 'HEAD@{0}', 'reflog selector action did not reuse panel mapping')
 reflog_module.entry_at = original_reflog_entry
 
-local worktree_panel = panel('fugitiveworktree', { '* /tmp/other  feature  ' .. hash:sub(1, 7) })
+local worktree_panel = panel('gitworktree', { '* /tmp/other  feature  ' .. hash:sub(1, 7) })
 vim.b[worktree_panel].worktree_entries = {
   { path = root .. '/other', branch = 'feature', head = hash },
 }

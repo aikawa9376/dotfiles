@@ -3,9 +3,9 @@ local M = {}
 local utils = require('git.utils')
 local configured = {}
 local panels = {
-  fugitivestatus = 'status', fugitivelog = 'log', fugitivebranch = 'branch',
-  fugitivereflog = 'reflog', fugitivestash = 'stash', fugitiveworktree = 'worktree',
-  fugitivecommit = 'commit', gitwip = 'wip',
+  gitstatus = 'status', gitlog = 'log', gitbranch = 'branch',
+  gitreflog = 'reflog', gitstash = 'stash', gitworktree = 'worktree',
+  gitcommitview = 'commit', gitwip = 'wip',
 }
 
 local function mapping(buf, key, mode)
@@ -133,7 +133,7 @@ function M.help(buf)
     if menu_key and map.desc then menu_heading = map.desc end
     if not menu_key and not (state.hidden or {})[map.lhs] and not aliases[map.lhs] and not irrelevant then
       local label = dynamic_label(map.lhs, ctx, map.desc or labels[map.lhs])
-      if map.lhs == 'X' and vim.bo[buf].filetype == 'fugitivecommit' and ctx.kind == 'commit' then
+      if map.lhs == 'X' and vim.bo[buf].filetype == 'gitcommitview' and ctx.kind == 'commit' then
         label = 'Select a changed file or hunk to remove its changes (Hard / Mixed)'
       end
       if label then

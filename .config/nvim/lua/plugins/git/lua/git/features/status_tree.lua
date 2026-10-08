@@ -146,7 +146,7 @@ function M.open(opts)
   vim.keymap.set('n', 'R', function() M.refresh(buf) end, { buffer = buf })
   vim.keymap.set('n', 'q', '<Cmd>close<CR>', { buffer = buf })
   local group = vim.api.nvim_create_augroup('GitStatusTree' .. buf, { clear = true })
-  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'FugitiveChanged', callback = function(ev)
+  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitChanged', callback = function(ev)
     if not ev.data or not ev.data.work_tree or ev.data.work_tree == root then M.refresh(buf) end
   end })
   vim.api.nvim_create_autocmd('BufEnter', { group = group, buffer = buf, callback = function() M.refresh(buf) end })

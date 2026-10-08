@@ -7,7 +7,7 @@ function M.capture(buf, first, last)
   local entry, info = api().entry_at(buf, first)
   local last_entry = api().entry_at(buf, last or first)
   if not entry or last_entry ~= entry then return nil end
-  local source = { kind = 'fugitive', root = model.root, git_dir = vim.b[buf].git_dir,
+  local source = { kind = 'git', root = model.root, git_dir = vim.b[buf].git_dir,
     path = entry.path, revision = model.hash, review_commit = model.hash, side = 'b',
     custom_commit = true, parent_index = model.parent_index, inline_diff = true,
     name = vim.api.nvim_buf_get_name(buf), filetype = vim.filetype.match({ filename = entry.path }) or '',

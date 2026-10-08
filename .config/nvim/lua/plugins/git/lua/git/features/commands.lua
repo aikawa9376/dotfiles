@@ -5,7 +5,7 @@ local float_win = nil
 local float_buf = nil
 
 
-local function get_work_tree_from_fugitive()
+local function current_work_tree()
   local bufnr = vim.api.nvim_get_current_buf()
   local work_tree = utils.get_buf_work_tree(bufnr)
   if work_tree then
@@ -75,7 +75,7 @@ local function hard_reset_to_commit(work_tree, commit)
     return false
   end
 
-  utils.fire_fugitive_changed({ work_tree = work_tree })
+  utils.fire_git_changed({ work_tree = work_tree })
   return true
 end
 
@@ -100,7 +100,7 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
     end
   end
 
-  local work_tree = get_work_tree_from_fugitive()
+  local work_tree = current_work_tree()
   if not work_tree then return end
 
   if not (float_win and vim.api.nvim_win_is_valid(float_win)) then
@@ -178,7 +178,7 @@ function M.setup()
     opts = opts or {}
     local on_complete = opts.on_complete
 
-    local work_tree = get_work_tree_from_fugitive()
+    local work_tree = current_work_tree()
     if not work_tree then return end
 
     local finish_progress = require('git.features.push_progress').start(work_tree)
@@ -192,7 +192,7 @@ function M.setup()
           local message = table.concat(output_lines, "\n")
           if exit_code == 0 then
             vim.notify("Push successful", vim.log.levels.INFO)
-            utils.fire_fugitive_changed({ work_tree = work_tree })
+            utils.fire_git_changed({ work_tree = work_tree })
           else
             vim.notify("Push failed\n" .. message, vim.log.levels.ERROR)
           end
@@ -258,7 +258,7 @@ function M.setup()
       return
     end
 
-    local work_tree = get_work_tree_from_fugitive()
+    local work_tree = current_work_tree()
     if not work_tree then return end
 
     local stashed = apply_auto_stash(work_tree)
@@ -273,13 +273,13 @@ function M.setup()
           if exit_code == 0 then
             if stashed then pop_auto_stash(work_tree) end
             vim.notify("Cherry-pick successful", vim.log.levels.INFO)
-            utils.fire_fugitive_changed({ work_tree = work_tree })
+            utils.fire_git_changed({ work_tree = work_tree })
           else
             local handled, err_msg, should_pop = handle_cherry_pick_error(work_tree, message)
             if handled then
                if should_pop and stashed then pop_auto_stash(work_tree) end
                if err_msg then vim.notify(err_msg, vim.log.levels.WARN) end
-               utils.fire_fugitive_changed({ work_tree = work_tree })
+               utils.fire_git_changed({ work_tree = work_tree })
             else
                if stashed then pop_auto_stash(work_tree) end
                vim.notify("Cherry-pick failed\n" .. message, vim.log.levels.ERROR)
@@ -316,37 +316,37 @@ function M.setup()
   end, { register = true })
 
   local function reflog_undo()
-    return require('git.features.history_undo').open(get_work_tree_from_fugitive(), false)
+    return require('git.features.history_undo').open(current_work_tree(), false)
   end
 
   local function reflog_redo()
-    return require('git.features.history_undo').open(get_work_tree_from_fugitive(), true)
+    return require('git.features.history_undo').open(current_work_tree(), true)
   end
 
   vim.api.nvim_create_user_command('GitFixupBase', function()
-    require('git.features.fixup_target').open({ work_tree = get_work_tree_from_fugitive() })
+    require('git.features.fixup_target').open({ work_tree = current_work_tree() })
   end, {})
   vim.api.nvim_create_user_command('GitStatusTree', function()
-    require('git.features.status_tree').open({ work_tree = get_work_tree_from_fugitive() })
+    require('git.features.status_tree').open({ work_tree = current_work_tree() })
   end, {})
   vim.api.nvim_create_user_command('GitPatch', function(opts)
-    require('git.features.patch_collection').open({ work_tree = get_work_tree_from_fugitive(),
+    require('git.features.patch_collection').open({ work_tree = current_work_tree(),
       commit = opts.args ~= '' and opts.args or nil })
   end, { nargs = '?' })
   vim.api.nvim_create_user_command('GitRebasePlan', function(opts)
     if #opts.fargs > 2 then vim.notify('Usage: GitRebasePlan [old-base [new-base]]', vim.log.levels.WARN); return end
-    require('git.features.rebase_plan').open({ work_tree = get_work_tree_from_fugitive(),
+    require('git.features.rebase_plan').open({ work_tree = current_work_tree(),
       base = opts.fargs[1], onto = opts.fargs[2] })
   end, { nargs = '*', complete = function(lead)
     return require('git.features.rebase_plan').complete_refs(lead)
   end })
   for name, action in pairs({ GitRebaseContinue = 'continue', GitRebaseSkip = 'skip', GitRebaseAbort = 'abort' }) do
     vim.api.nvim_create_user_command(name, function()
-      require('git.features.rebase_plan_session').open(get_work_tree_from_fugitive(), action)
+      require('git.features.rebase_plan_session').open(current_work_tree(), action)
     end, {})
   end
   vim.api.nvim_create_user_command('GitRebaseBase', function(opts)
-    local root = get_work_tree_from_fugitive()
+    local root = current_work_tree()
     if opts.bang then require('git.features.rebase_plan').clear_mark(root); return end
     local buf = vim.api.nvim_get_current_buf()
     local context = require('git.features.magit_actions').context(buf)
@@ -372,7 +372,7 @@ function M.setup()
   function M.reword_commit(commit_hash, new_message, on_complete)
     if not commit_hash or commit_hash == '' then vim.notify('No commit provided', vim.log.levels.WARN); return end
     if not new_message or vim.trim(new_message) == '' then vim.notify('New commit message is empty', vim.log.levels.WARN); return end
-    local root = get_work_tree_from_fugitive()
+    local root = current_work_tree()
     if not root then return end
     local hash, warning, changed = require('git.features.commit_rewrite').apply(root, commit_hash,
       { message = vim.split(new_message, '\n', { plain = true }) })
@@ -381,7 +381,7 @@ function M.setup()
 
   function M.fixup_commit(commit_hash, on_complete)
     if not commit_hash or commit_hash == '' then vim.notify('No commit provided', vim.log.levels.WARN); return end
-    local root = get_work_tree_from_fugitive()
+    local root = current_work_tree()
     if not root then return end
     local hash, warning = require('git.features.history_edits').fixup(root, commit_hash)
     return rewrite_result(hash, warning, on_complete)
@@ -389,7 +389,7 @@ function M.setup()
 
   function M.mix_index(commit_hash, on_complete, new_message)
     if not commit_hash or commit_hash == '' then vim.notify('No commit provided', vim.log.levels.WARN); return end
-    local root = get_work_tree_from_fugitive()
+    local root = current_work_tree()
     if not root then return end
     local hash, warning, changed = require('git.features.history_edits').mix_index(root, commit_hash, new_message)
     return rewrite_result(hash, warning, on_complete, changed)
@@ -408,14 +408,14 @@ function M.setup()
 
   function M.reload_log()
     local cursor_pos = vim.api.nvim_win_get_cursor(0)
-    local work_tree = get_work_tree_from_fugitive()
+    local work_tree = current_work_tree()
     pcall(vim.api.nvim_win_set_cursor, 0, cursor_pos)
-    utils.fire_fugitive_changed({ work_tree = work_tree })
+    utils.fire_git_changed({ work_tree = work_tree })
   end
 
   function M.move_commit(current_commit, target_commit, direction, on_complete)
     if not current_commit or not target_commit then vim.notify('Invalid commits', vim.log.levels.WARN); return end
-    local root = get_work_tree_from_fugitive()
+    local root = current_work_tree()
     if not root then return end
     local hash, warning = require('git.features.history_edits').move(root, current_commit, target_commit, direction)
     return rewrite_result(hash, warning, on_complete)
@@ -423,7 +423,7 @@ function M.setup()
 
   function M.drop_commits(commits, on_complete)
     if not commits or #commits == 0 then return end
-    local root = get_work_tree_from_fugitive()
+    local root = current_work_tree()
     if not root then return end
     local hash, warning = require('git.features.history_edits').drop(root, commits)
     return rewrite_result(hash, warning, on_complete)
@@ -433,7 +433,7 @@ function M.setup()
   function M.revert_commits(commits, on_complete)
     if not commits or #commits == 0 then return end
 
-    local work_tree = get_work_tree_from_fugitive()
+    local work_tree = current_work_tree()
     if not work_tree then return end
 
     local results = {}
@@ -472,7 +472,7 @@ function M.setup()
   local preview_update_pending_commit = nil
   local preview_update_pending_focus = nil
 
-  local function open_with_fugitive(win, commit, work_tree)
+  local function open_commit_view(win, commit, work_tree)
     return vim.api.nvim_win_call(win, function()
       return require('git.features.commit').open({ work_tree = work_tree, revision = commit })
     end)
@@ -538,7 +538,7 @@ function M.setup()
       return
     end
 
-    work_tree = work_tree or preview_work_tree or get_work_tree_from_fugitive()
+    work_tree = work_tree or preview_work_tree or current_work_tree()
     if not work_tree then return end
     preview_work_tree = work_tree
     local current_win = vim.api.nvim_get_current_win()
@@ -569,10 +569,10 @@ function M.setup()
         preview_buf = nil
       end
 
-      local buf_from_fugitive = open_with_fugitive(preview_win, commit, work_tree)
-      if buf_from_fugitive and vim.api.nvim_buf_is_valid(buf_from_fugitive) then
-        finalize_preview(buf_from_fugitive)
-        preview_buf = buf_from_fugitive
+      local buf_from_commit_view = open_commit_view(preview_win, commit, work_tree)
+      if buf_from_commit_view and vim.api.nvim_buf_is_valid(buf_from_commit_view) then
+        finalize_preview(buf_from_commit_view)
+        preview_buf = buf_from_commit_view
         return
       end
 
@@ -617,10 +617,10 @@ function M.setup()
     preview_win = vim.api.nvim_get_current_win()
     local buf = vim.api.nvim_get_current_buf()
 
-    local buf_from_fugitive = open_with_fugitive(preview_win, commit, work_tree)
-    local ok = type(buf_from_fugitive) == 'number' and vim.api.nvim_buf_is_valid(buf_from_fugitive)
-    if ok and type(buf_from_fugitive) == 'number' then
-      buf = buf_from_fugitive
+    local buf_from_commit_view = open_commit_view(preview_win, commit, work_tree)
+    local ok = type(buf_from_commit_view) == 'number' and vim.api.nvim_buf_is_valid(buf_from_commit_view)
+    if ok and type(buf_from_commit_view) == 'number' then
+      buf = buf_from_commit_view
     else
       ok = load_commit_into_buf(commit, buf, work_tree)
     end

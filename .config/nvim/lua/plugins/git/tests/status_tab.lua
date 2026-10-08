@@ -24,7 +24,7 @@ vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/file.txt'))
 local file_win = vim.api.nvim_get_current_win()
 vim.cmd('G')
 local status_buf = vim.api.nvim_get_current_buf()
-assert(vim.bo.filetype == 'fugitivestatus' and #vim.api.nvim_list_tabpages() == 1
+assert(vim.bo.filetype == 'gitstatus' and #vim.api.nvim_list_tabpages() == 1
   and #vim.api.nvim_tabpage_list_wins(0) == 2, 'G should open status in a split')
 
 vim.api.nvim_set_current_win(file_win)

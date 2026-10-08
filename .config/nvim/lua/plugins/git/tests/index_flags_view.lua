@@ -48,7 +48,7 @@ assert(row_matching('^M modified%.txt$') and row_matching('^D missing%.txt$')
   and row_matching('^  clean%.txt$'), 'flagged file rows do not use normal change markers')
 assert(not table.concat(lines(), '\n'):find('  skip ', 1, true), 'flag type leaked into file rows')
 
-local icon_ns = vim.api.nvim_create_namespace('fugitive_status_icons')
+local icon_ns = vim.api.nvim_create_namespace('git_status_icons')
 local function statistics(row)
   local marks = vim.api.nvim_buf_get_extmarks(b, icon_ns, { row - 1, 0 }, { row - 1, -1 }, { details = true })
   for _, mark in ipairs(marks) do

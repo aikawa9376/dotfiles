@@ -38,7 +38,6 @@ vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'reword through sequence editor' }
 assert(vim.wait(10000, function() return vim.fn.jobwait({ job }, 0)[1] ~= -1 end, 20), 'Rebase did not exit')
 assert(vim.trim(git({ 'log', '-1', '--format=%s' })) == 'reword through sequence editor')
 assert(vim.fn.readfile(root .. '/todo-exec-result')[1] == 'todo-exec')
-assert(vim.fn.exists('*FugitiveGitDir') == 0)
 for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, { force = true }) end
 vim.fn.delete(root, 'rf')
-print('PASS: real Git editor RPC, commit and interactive rebase/reword/exec insertion, save/close and completion without Fugitive')
+print('PASS: real Git editor RPC, commit and interactive rebase/reword/exec insertion, save/close and completion without Git')

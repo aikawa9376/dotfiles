@@ -23,7 +23,7 @@ function M.show(title, groups, opts)
   vim.bo[buf].buftype = 'nofile'
   vim.bo[buf].bufhidden = 'wipe'
   vim.bo[buf].swapfile = false
-  vim.bo[buf].filetype = 'fugitiveactionmenu'
+  vim.bo[buf].filetype = 'gitactionmenu'
 
   local lines, actions_by_row, headings, key_ranges = {}, {}, {}, {}
   local key_width = 0
@@ -64,7 +64,7 @@ function M.show(title, groups, opts)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = false
 
-  local ns = vim.api.nvim_create_namespace('fugitive_action_menu')
+  local ns = vim.api.nvim_create_namespace('git_action_menu')
   vim.api.nvim_buf_set_extmark(buf, ns, 0, 0, { end_col = #lines[1], hl_group = 'Title' })
   for row in pairs(headings) do
     vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0, { end_col = #lines[row], hl_group = 'Type' })

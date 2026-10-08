@@ -191,24 +191,19 @@ function M.run()
   assert(multi_note.source.show and multi_note.source.start_line == old_row and multi_note.source.end_line == #canonical,
     "selection across files maps without confusing identical added lines")
   notes._reset()
-  -- Fugitive's public Parse and WorkTree contracts; plugin need not be installed.
-  vim.cmd([[function! FugitiveWorkTree(dir) abort
-    return g:note_test_root
-  endfunction]])
-  local autoload = root .. "/autoload"
-  vim.fn.mkdir(autoload, "p")
-  vim.fn.writefile({ 'function! fugitive#Parse(url) abort', 'return [g:note_test_commit . ":a file.lua", g:note_test_root . "/.git"]', 'endfunction' }, autoload .. "/fugitive.vim")
-  vim.cmd("source " .. vim.fn.fnameescape(autoload .. "/fugitive.vim"))
-  vim.g.note_test_root, vim.g.note_test_commit = root, commit
-  local fugitive = buffer("fugitive://" .. root .. "/.git//" .. commit .. "/a file.lua", { "old first", "old second" })
-  local f = assert(notes.add({ bufnr = fugitive, text = "fugitive review" }))
-  assert(f.source.kind == "fugitive" and f.source.revision == commit and f.root == root)
+  local uri = "git-object://" .. root .. "//" .. commit .. "/a%20file.lua"
+  local object = buffer(uri, { "old first", "old second" })
+  vim.bo[object].filetype = "lua"
+  vim.b[object].git_work_tree = root
+  vim.b[object].lazyagent_note_source = {
+    kind = "git", root = root, git_dir = root .. "/.git", path = "a file.lua",
+    revision = commit, blob = git("rev-parse", "HEAD:a file.lua"), side = "revision",
+  }
+  local f = assert(notes.add({ bufnr = object, text = "git object review" }))
+  assert(f.source.kind == "git" and f.source.revision == commit and f.root == root)
   notes._reset()
-  vim.api.nvim_buf_delete(fugitive, { force = true })
+  vim.api.nvim_buf_delete(object, { force = true })
   vim.api.nvim_buf_delete(b, { force = true })
-  vim.cmd("delfunction FugitiveWorkTree")
-  vim.cmd("delfunction fugitive#Parse")
-  vim.g.note_test_root, vim.g.note_test_commit = nil, nil
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if not initial_windows[win] then pcall(vim.api.nvim_win_close, win, true) end
   end

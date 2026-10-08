@@ -6,7 +6,7 @@ vim.opt.rtp:prepend(vim.fn.stdpath('data') .. '/lazy/nvim-treesitter/runtime')
 local syntax = require('git.features.syntax_highlight')
 local structural = require('git.features.syntax_word_diff')
 local renderer = require('git.features.status_renderer')
-local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local ns = vim.api.nvim_create_namespace('git_extension_syntax')
 local fixture = vim.json.decode(table.concat(vim.fn.readfile(plugin .. '/tests/fixtures/difftastic_word_diff.json'), '\n'))
 local case
 for _, value in ipairs(fixture.cases) do if value.name == 'php_full_context.php' then case = value end end
@@ -54,8 +54,8 @@ local function check(buf)
   local marks, rows = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true }), {}
   for _, mark in ipairs(marks) do
     local details = mark[4]
-    if details.hl_group == 'FugitiveExtSyntaxAdd' or details.hl_group == 'FugitiveExtSyntaxDelete'
-      or details.hl_group == 'FugitiveExtSyntaxAddText' or details.hl_group == 'FugitiveExtSyntaxDeleteText' then
+    if details.hl_group == 'GitExtSyntaxAdd' or details.hl_group == 'GitExtSyntaxDelete'
+      or details.hl_group == 'GitExtSyntaxAddText' or details.hl_group == 'GitExtSyntaxDeleteText' then
       assert(not details.hl_eol and details.end_row == mark[2], 'PHP retained whole-line background')
       rows[mark[2]] = rows[mark[2]] or {}
       rows[mark[2]][#rows[mark[2]] + 1] = { mark[3], details.end_col - 1 }
@@ -158,10 +158,10 @@ local function check_inline(buf)
   for _, row in ipairs({ 2, 3 }) do
     local ranges = {}
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { row, 0 }, { row, -1 }, { details = true })) do
-      if mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxDelete' then
+      if mark[4].hl_group == 'GitExtSyntaxAdd' or mark[4].hl_group == 'GitExtSyntaxDelete' then
         ranges[#ranges + 1] = { mark[3], mark[4].end_col - 1 }
       end
-      assert(mark[4].hl_group ~= 'FugitiveExtSyntaxAddText' and mark[4].hl_group ~= 'FugitiveExtSyntaxDeleteText')
+      assert(mark[4].hl_group ~= 'GitExtSyntaxAddText' and mark[4].hl_group ~= 'GitExtSyntaxDeleteText')
     end
     assert(vim.deep_equal(mask(ranges, row == 2 and before or after), mask({ { 11, 27 } }, before)),
       'tagless PHP lost the changed identifier: ' .. vim.inspect(ranges))
@@ -207,9 +207,9 @@ assert(html_case)
 for _, side in ipairs({ 'old', 'new' }) do
   local row, spans, emphasis = side == 'old' and 2 or 3, {}, {}
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { row, 0 }, { row, -1 }, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxDelete' then
+    if mark[4].hl_group == 'GitExtSyntaxAdd' or mark[4].hl_group == 'GitExtSyntaxDelete' then
       spans[#spans + 1] = { mark[3], mark[4].end_col - 1 }
-    elseif mark[4].hl_group == 'FugitiveExtSyntaxAddText' or mark[4].hl_group == 'FugitiveExtSyntaxDeleteText' then
+    elseif mark[4].hl_group == 'GitExtSyntaxAddText' or mark[4].hl_group == 'GitExtSyntaxDeleteText' then
       emphasis[#emphasis + 1] = { mark[3], mark[4].end_col - 1 }
     end
   end
@@ -246,7 +246,7 @@ for _, buffer in ipairs({ first, second }) do
     local has_syntax, has_spinner = false, false
     for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buffer, ns, 0, -1, { details = true })) do
       local group = mark[4].hl_group or ''
-      assert(not group:match('^FugitiveExtSyntax') and not group:match('^FugitiveExtNovel'),
+      assert(not group:match('^GitExtSyntax') and not group:match('^GitExtNovel'),
         'pending PHP comparison painted provisional diff spans')
       has_syntax = has_syntax or group:match('^@') ~= nil
       has_spinner = has_spinner or mark[4].virt_text_pos == 'eol'

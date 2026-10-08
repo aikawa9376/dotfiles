@@ -877,7 +877,13 @@ local mruFilesForCwd = function(flag, notCwd)
   return vim.fn.map(vim.fn.filter(
     result,
     function(_, val)
-      return (val:match("^" .. cwd) or notCwd) and not val:match("__Tagbar__|\\[YankRing]|fugitive:|NERD_tree|^/tmp/|.git")
+      local excluded = val:find("__Tagbar__", 1, true)
+        or val:find("[YankRing]", 1, true)
+        or val:match("^git%-[%w%-]+://")
+        or val:find("NERD_tree", 1, true)
+        or val:find("/tmp/", 1, true)
+        or val:find(".git/", 1, true)
+      return (val:match("^" .. cwd) or notCwd) and not excluded
     end
   ),
     function(_, val) return vim.fn.fnamemodify(val, ":p:.") end

@@ -43,11 +43,11 @@ local function press(key)
 end
 
 select_branch('feature')
-local choices = _G.fugitive_upstream_completion('')
+local choices = _G.git_upstream_completion('')
 assert(vim.tbl_contains(choices, 'main') and vim.tbl_contains(choices, 'origin/main')
   and not vim.tbl_contains(choices, 'feature') and not vim.tbl_contains(choices, 'origin/HEAD'),
   'upstream completion did not offer local and remote branches cleanly')
-assert(vim.deep_equal(_G.fugitive_upstream_completion('origin/'), { 'origin/main' }),
+assert(vim.deep_equal(_G.git_upstream_completion('origin/'), { 'origin/main' }),
   'upstream completion did not filter by prefix')
 
 local input = vim.fn.input
@@ -59,7 +59,7 @@ end
 press('cou')
 vim.fn.input = input
 assert(prompt == 'Upstream for feature: ' and default == ''
-  and completion == 'customlist,v:lua.fugitive_upstream_completion',
+  and completion == 'customlist,v:lua.git_upstream_completion',
   'set upstream did not provide branch completion')
 assert(git({ 'rev-parse', '--abbrev-ref', 'feature@{upstream}' }) == 'origin/main')
 assert((vim.api.nvim_buf_get_lines(b, row_for('feature') - 1, row_for('feature'), false)[1] or '')

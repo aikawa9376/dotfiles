@@ -32,7 +32,7 @@ for index = 1, 12 do
 end
 local buf = vim.api.nvim_create_buf(false, true)
 vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'M prefetch_1.lua' })
-local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local ns = vim.api.nvim_create_namespace('git_extension_syntax')
 syntax.attach(buf, { diff_source = function(hunk) return specs[hunk.filename] end,
   prefetch = function() return candidates end })
 assert(counts.reads == 0 and counts.parses == 0 and counts.comparisons == 0, 'collapsed attach started work inline')

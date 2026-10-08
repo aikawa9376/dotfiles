@@ -32,8 +32,8 @@ vim.lsp.start = function(config, opts)
     if vim.bo[opts.bufnr].filetype == "bigfile" then
       return
     end
-    -- fugitive系のbufferの場合はスキップ
-    if vim.b[opts.bufnr].fugitive_type then
+    -- git系のbufferの場合はスキップ
+    if vim.b[opts.bufnr].git_type then
       return
     end
     -- このバッファに対して同じLSPが既にアタッチされている場合はスキップ

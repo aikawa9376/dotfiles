@@ -38,7 +38,7 @@ vim.api.nvim_create_autocmd('VimEnter',{once=true,callback=function()vim.schedul
  for _,line in ipairs(vim.fn.readfile('/tmp/git-ts-followup/notices.patch'))do
   if line:sub(1,1)=='+' and line:sub(1,3)~='+++' then lines[#lines+1]=line end
  end
- vim.api.nvim_buf_set_lines(buf,0,-1,false,lines);vim.bo.filetype='fugitivestatus'
+ vim.api.nvim_buf_set_lines(buf,0,-1,false,lines);vim.bo.filetype='gitstatus'
  vim.wo.foldenable=false;vim.wo.number=false;vim.wo.relativenumber=false;vim.wo.signcolumn='no';vim.wo.foldcolumn='0';vim.wo.cursorline=false
  syntax.attach(buf,{diff_source=function(hunk)
   if hunk.filename=='lazy-lock.json' then
@@ -53,7 +53,7 @@ vim.api.nvim_create_autocmd('VimEnter',{once=true,callback=function()vim.schedul
  local function snapshot()
   vim.cmd('redraw!');vim.api.nvim__inspect_cell(1,0,0);vim.cmd('redraw!')
   local results={normal=vim.api.nvim_get_hl(0,{name='Normal',link=false}),lines=lines,rows={}}
-  for key,name in pairs({keyword_fg='@keyword.function.lua',property_fg='@property.json',parameter_fg='@variable.parameter.lua',add_fg='FugitiveExtNovelAdd',delete_fg='FugitiveExtNovelDelete'})do
+  for key,name in pairs({keyword_fg='@keyword.function.lua',property_fg='@property.json',parameter_fg='@variable.parameter.lua',add_fg='GitExtNovelAdd',delete_fg='GitExtNovelDelete'})do
    results[key]=vim.api.nvim_get_hl(0,{name=name,link=false}).fg
   end
   for row=0,#lines-1 do
@@ -77,7 +77,7 @@ vim.api.nvim_create_autocmd('VimEnter',{once=true,callback=function()vim.schedul
    syntax.refresh(buf);vim.defer_fn(finish,10);return
   end
   local legacy=snapshot();legacy.keyword=vim.fn.synIDattr(vim.fn.synID(9,2,1),'name')
-  legacy.cluster=vim.fn.execute('silent! syntax list @FugitiveExt_lua');legacy.fun=vim.fn.execute('silent! syntax list luaFunctionBlock');legacy.iskeyword=vim.bo.iskeyword
+  legacy.cluster=vim.fn.execute('silent! syntax list @GitExt_lua');legacy.fun=vim.fn.execute('silent! syntax list luaFunctionBlock');legacy.iskeyword=vim.bo.iskeyword
   legacy.keyword_fg=vim.api.nvim_get_hl(0,{name=legacy.keyword,link=false}).fg
   vim.treesitter.language.inspect=inspect
   vim.fn.writefile({vim.json.encode({cold=cold,ready=ready,syntax_ready=syntax_ready,legacy=legacy})},'/tmp/git-ts-followup/cells.json');vim.cmd('qa!')

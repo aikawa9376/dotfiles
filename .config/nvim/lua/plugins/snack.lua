@@ -103,18 +103,15 @@ return {
       local filetype = vim.bo[buf].filetype
       local name = vim.api.nvim_buf_get_name(buf)
       if vim.b[buf].custom_git_status == true
-        or filetype == "fugitivestatus"
+        or filetype == "gitstatus"
         or name:match("^git%-status://")
       then
         return true
       end
-      if filetype ~= "fugitive" then return false end
-
-      local ok, status = pcall(vim.api.nvim_win_get_var, win, "fugitive_status")
-      return vim.b[buf].fugitive_type == "index" or (ok and status ~= nil)
+      return false
     end
 
-    local function fugitive_status_is_open()
+    local function git_status_is_open()
       for _, win in ipairs(vim.api.nvim_list_wins()) do
         if is_git_status_window(win) then
           return true
@@ -123,11 +120,11 @@ return {
       return false
     end
 
-    local function set_fugitive_status_open(state)
+    local function set_git_status_open(state)
       if state then
         local ok, err = pcall(vim.cmd, "GitStatus")
         if not ok then
-          vim.notify("Fugitive status failed: " .. tostring(err), vim.log.levels.ERROR)
+          vim.notify("Git status failed: " .. tostring(err), vim.log.levels.ERROR)
         end
         return
       end
@@ -327,7 +324,7 @@ return {
         { label = "s  Spell check", run = function() toggle_snacks("spell") end },
         { label = "o  Overseer tasks", run = function() toggle_snacks("overseer_tasks") end },
         { label = "u  DAP UI", run = function() toggle_snacks("dap_ui") end },
-        { label = "g  Fugitive status", run = function() toggle_snacks("fugitive_status") end },
+        { label = "g  Git status", run = function() toggle_snacks("git_status") end },
         { label = "O  Obsidian dashboard", run = function() toggle_snacks("obsidian_dashboard") end },
         { label = "z  Colorizer", run = function() toggle_snacks("colorizer") end },
         { label = "r  Render markdown", run = function() toggle_snacks("render_markdown") end },
@@ -514,12 +511,12 @@ return {
       end,
     })
     snacks.toggle({
-      id = "fugitive_status",
-      name = "Fugitive Status",
-      get = fugitive_status_is_open,
-      set = set_fugitive_status_open,
+      id = "git_status",
+      name = "Git Status",
+      get = git_status_is_open,
+      set = set_git_status_open,
       notify = function(state)
-        vim.notify((state and "Opened" or "Closed") .. " Fugitive status", vim.log.levels.INFO)
+        vim.notify((state and "Opened" or "Closed") .. " Git status", vim.log.levels.INFO)
       end,
     })
     snacks.toggle({

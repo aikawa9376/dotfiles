@@ -255,10 +255,10 @@ local function ensure_highlights()
   highlights_defined = true
 
   local defs = {
-    FugitiveExtAdd = { default = true, bg = "#23384C" },
-    FugitiveExtDelete = { default = true, bg = "#321e1e" },
-    FugitiveExtAddText = { default = true, bg = "#005f5f" },
-    FugitiveExtDeleteText = { default = true, bg = "#8c3b40" },
+    GitExtAdd = { default = true, bg = "#23384C" },
+    GitExtDelete = { default = true, bg = "#321e1e" },
+    GitExtAddText = { default = true, bg = "#005f5f" },
+    GitExtDeleteText = { default = true, bg = "#8c3b40" },
     LazyAgentACPUserHeader = { default = true, fg = "#e0af68", bold = true },
     LazyAgentACPAssistantHeader = { default = true, fg = "#9ece6a", bold = true },
     LazyAgentACPThinkingHeader = { default = true, fg = "#bb9af7", bold = true },
@@ -276,10 +276,10 @@ local function ensure_highlights()
     LazyAgentACPFooterMeta = { default = true, link = "SpecialComment" },
     LazyAgentACPCardTitle = { default = true, link = "Title" },
     LazyAgentACPCardField = { default = true, link = "Identifier" },
-    LazyAgentACPDiffDelete = { default = true, link = "FugitiveExtDelete" },
-    LazyAgentACPDiffAdd = { default = true, link = "FugitiveExtAdd" },
-    LazyAgentACPDiffDeleteWord = { default = true, link = "FugitiveExtDeleteText" },
-    LazyAgentACPDiffAddWord = { default = true, link = "FugitiveExtAddText" },
+    LazyAgentACPDiffDelete = { default = true, link = "GitExtDelete" },
+    LazyAgentACPDiffAdd = { default = true, link = "GitExtAdd" },
+    LazyAgentACPDiffDeleteWord = { default = true, link = "GitExtDeleteText" },
+    LazyAgentACPDiffAddWord = { default = true, link = "GitExtAddText" },
   }
 
   for name, spec in pairs(defs) do

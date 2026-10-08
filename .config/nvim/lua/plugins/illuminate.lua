@@ -4,7 +4,16 @@ return {
   config = function ()
     require('illuminate').configure({
       filetypes_denylist = {
-        'fugitive',
+        'git',
+        'gitstatus',
+        'gitcommitview',
+        'gitblame',
+        'gitbranch',
+        'gitlog',
+        'gitreflog',
+        'gitstash',
+        'gitworktree',
+        'gitactionmenu',
         'harpoon',
         'lazyagent_acp',
         'bigfile',

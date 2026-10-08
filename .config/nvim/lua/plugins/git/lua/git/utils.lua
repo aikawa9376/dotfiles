@@ -10,7 +10,7 @@ function M.open_panel_split(target, opts)
   local source_win = vim.api.nvim_get_current_win()
   local source_buf = vim.api.nvim_get_current_buf()
   local source_view = vim.fn.winsaveview()
-  vim.w[source_win].fugitive_preserve_split_view = vim.deepcopy(source_view)
+  vim.w[source_win].git_preserve_split_view = vim.deepcopy(source_view)
   local min_width = (opts and opts.min_width) or tonumber(vim.g.git_panel_min_width) or 200
   local vertical = vim.api.nvim_win_get_width(source_win) >= min_width
   local extent = vertical and vim.api.nvim_win_get_width(source_win) or vim.api.nvim_win_get_height(source_win)
@@ -19,7 +19,7 @@ function M.open_panel_split(target, opts)
     target and ('split ' .. vim.fn.fnameescape(target)) or 'new')
   local opened, open_err = pcall(vim.cmd, command)
   if vim.api.nvim_win_is_valid(source_win) then
-    vim.w[source_win].fugitive_preserve_split_view = nil
+    vim.w[source_win].git_preserve_split_view = nil
   end
   if not opened then error(open_err) end
 
@@ -206,7 +206,7 @@ end
 function M.get_work_tree(opts)
   opts = opts or {}
   local buf = opts.bufnr or vim.api.nvim_get_current_buf()
-  local stored = vim.b[buf].fugitive_work_tree
+  local stored = vim.b[buf].git_work_tree
   if stored and not opts.git_dir then return M.normalize_path(stored) end
   if opts.git_dir then
     local root = get_work_tree_from_git_dir(opts.git_dir)
@@ -231,7 +231,7 @@ function M.set_buf_work_tree(bufnr, work_tree, git_dir)
 
   local normalized = normalize_work_tree_path(work_tree)
   if normalized then
-    vim.b[bufnr].fugitive_work_tree = normalized
+    vim.b[bufnr].git_work_tree = normalized
     local normalized_git_dir = M.normalize_path(git_dir) or M.get_git_dir(normalized)
     if normalized_git_dir then
       vim.b[bufnr].git_dir = normalized_git_dir
@@ -250,9 +250,9 @@ function M.get_buf_work_tree(bufnr, opts)
     return nil
   end
 
-  local work_tree = normalize_work_tree_path(vim.b[bufnr].fugitive_work_tree)
+  local work_tree = normalize_work_tree_path(vim.b[bufnr].git_work_tree)
   if work_tree then
-    vim.b[bufnr].fugitive_work_tree = work_tree
+    vim.b[bufnr].git_work_tree = work_tree
     if not M.normalize_path(vim.b[bufnr].git_dir) then
       M.set_buf_work_tree(bufnr, work_tree)
     end
@@ -264,7 +264,7 @@ function M.get_buf_work_tree(bufnr, opts)
 end
 
 ---@param opts? {bufnr?: integer, work_tree?: string, git_dir?: string, reason?: string}
-function M.fire_fugitive_changed(opts)
+function M.fire_git_changed(opts)
   opts = opts or {}
 
   local work_tree = opts.work_tree
@@ -281,7 +281,7 @@ function M.fire_fugitive_changed(opts)
   work_tree = M.normalize_path(work_tree)
   vim.schedule(function()
     vim.api.nvim_exec_autocmds('User', {
-      pattern = 'FugitiveChanged',
+      pattern = 'GitChanged',
       data = {
         work_tree = work_tree,
         reason = opts.reason,
@@ -344,7 +344,7 @@ function M.setup_repo_refresh(group, bufnr, refresh, opts)
 
   vim.api.nvim_create_autocmd('User', {
     group = group,
-    pattern = 'FugitiveChanged',
+    pattern = 'GitChanged',
     callback = maybe_refresh,
   })
 
@@ -389,7 +389,7 @@ function M.auto_stash(work_tree, opts)
     return false
   end
 
-  local msg = opts.message or "fugitive-ext auto-stash"
+  local msg = opts.message or "git-ext auto-stash"
   local keep_index = opts.keep_index and " -k" or ""
   vim.fn.system(
     "git -C "
@@ -425,7 +425,7 @@ function M.pop_auto_stash(work_tree, opts)
     vim.notify("Auto-stash popped", vim.log.levels.INFO)
   end
   if opts.reload_status then
-    M.fire_fugitive_changed({ work_tree = work_tree })
+    M.fire_git_changed({ work_tree = work_tree })
   end
   return true
 end
@@ -486,7 +486,7 @@ function M.get_filepath_at_cursor(bufnr)
   for lnum = current_line, 1, -1 do
     local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
     if line then
-      -- For fugitive status buffer
+      -- For git status buffer
       local status_match = line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
       if status_match then
         -- Handle rename "R old -> new"
@@ -515,7 +515,7 @@ function M.get_commit(bufnr)
   if not M.is_valid_buf(bufnr) then
     return nil
   end
-  if vim.b[bufnr].fugitive_commit then return vim.b[bufnr].fugitive_commit end
+  if vim.b[bufnr].git_commit then return vim.b[bufnr].git_commit end
   local source = vim.b[bufnr].lazyagent_note_source
   return source and source.revision or nil
 end

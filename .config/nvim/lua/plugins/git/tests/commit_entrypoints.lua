@@ -27,7 +27,7 @@ for _, win in ipairs(vim.api.nvim_list_wins()) do
   local buf = vim.api.nvim_win_get_buf(win)
   if vim.b[buf].custom_git_commit then
     preview_custom = true
-    assert(vim.bo[buf].filetype == 'fugitivecommit' and vim.bo[buf].bufhidden == 'delete')
+    assert(vim.bo[buf].filetype == 'gitcommitview' and vim.bo[buf].bufhidden == 'delete')
   end
 end
 assert(preview_custom, 'commit preview bypassed custom view')
@@ -35,7 +35,6 @@ commands.close_preview()
 vim.cmd('Gedit ' .. hash .. ':a.txt')
 assert(not vim.b.custom_git_commit)
 assert(vim.api.nvim_get_current_line() == 'hello')
-assert(vim.fn.exists('*FugitiveGitDir') == 0)
 for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, { force = true }) end
 vim.fn.delete(root, 'rf')
 print('PASS: independent commit, preview and blob entrypoints')

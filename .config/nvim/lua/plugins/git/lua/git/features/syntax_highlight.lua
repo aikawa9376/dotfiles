@@ -550,30 +550,30 @@ function Highlighter.setup_groups()
   -- tree may have no capture for the first key/keyword; restore source color
   -- independently of capture coverage. Keep backgrounds owned by diff spans.
   local normal = vim.api.nvim_get_hl(0, { name = 'Normal', link = false })
-  vim.api.nvim_set_hl(0, 'FugitiveExtCode', { fg = normal.fg, ctermfg = normal.ctermfg })
+  vim.api.nvim_set_hl(0, 'GitExtCode', { fg = normal.fg, ctermfg = normal.ctermfg })
   -- Define custom groups
   -- DiffAdd bg: #23384C, DiffDelete bg: #321e1e (approx)
-  vim.api.nvim_set_hl(0, 'FugitiveExtAdd', { bg = "#23384C", default = true })
-  vim.api.nvim_set_hl(0, 'FugitiveExtDelete', { bg = "#321e1e", default = true })
+  vim.api.nvim_set_hl(0, 'GitExtAdd', { bg = "#23384C", default = true })
+  vim.api.nvim_set_hl(0, 'GitExtDelete', { bg = "#321e1e", default = true })
   vim.api.nvim_set_hl(0, 'GitStatusConflictLine', { bg = '#453e2b', default = true })
 
   -- Word diff highlights (intra-line)
-  vim.api.nvim_set_hl(0, 'FugitiveExtAddText', { bg = "#005f5f", default = true })
-  vim.api.nvim_set_hl(0, 'FugitiveExtDeleteText', { bg = "#8c3b40", default = true })
+  vim.api.nvim_set_hl(0, 'GitExtAddText', { bg = "#005f5f", default = true })
+  vim.api.nvim_set_hl(0, 'GitExtDeleteText', { bg = "#8c3b40", default = true })
   -- Structural spans have their own palette; other styles keep their colors.
-  vim.api.nvim_set_hl(0, 'FugitiveExtSyntaxAdd', { bg = '#1f4534', default = true, bold = true })
-  vim.api.nvim_set_hl(0, 'FugitiveExtSyntaxDelete', { bg = '#4a2a2e', default = true, bold = true })
-  vim.api.nvim_set_hl(0, 'FugitiveExtSyntaxAddText', { bg = '#1f6648', default = true, bold = true })
-  vim.api.nvim_set_hl(0, 'FugitiveExtSyntaxDeleteText', { bg = '#ad5258', default = true, bold = true })
-  vim.api.nvim_set_hl(0, 'FugitiveExtAddPrefix', { link = 'GitSignsAdd', default = true })
-  vim.api.nvim_set_hl(0, 'FugitiveExtDeletePrefix', { link = 'GitSignsDelete', default = true })
+  vim.api.nvim_set_hl(0, 'GitExtSyntaxAdd', { bg = '#1f4534', default = true, bold = true })
+  vim.api.nvim_set_hl(0, 'GitExtSyntaxDelete', { bg = '#4a2a2e', default = true, bold = true })
+  vim.api.nvim_set_hl(0, 'GitExtSyntaxAddText', { bg = '#1f6648', default = true, bold = true })
+  vim.api.nvim_set_hl(0, 'GitExtSyntaxDeleteText', { bg = '#ad5258', default = true, bold = true })
+  vim.api.nvim_set_hl(0, 'GitExtAddPrefix', { link = 'GitSignsAdd', default = true })
+  vim.api.nvim_set_hl(0, 'GitExtDeletePrefix', { link = 'GitSignsDelete', default = true })
   -- Difftastic emits ANSI bright red/green on dark backgrounds and ordinary
   -- red/green on light ones. Resolve those through the theme's terminal palette.
   local red, green = vim.o.background == 'dark' and 9 or 1, vim.o.background == 'dark' and 10 or 2
-  vim.api.nvim_set_hl(0, 'FugitiveExtNovelDelete', {
+  vim.api.nvim_set_hl(0, 'GitExtNovelDelete', {
     fg = vim.g['terminal_color_' .. red] or (red == 9 and '#ff5555' or '#aa0000'), ctermfg = red,
   })
-  vim.api.nvim_set_hl(0, 'FugitiveExtNovelAdd', {
+  vim.api.nvim_set_hl(0, 'GitExtNovelAdd', {
     fg = vim.g['terminal_color_' .. green] or (green == 10 and '#55ff55' or '#00aa00'), ctermfg = green,
   })
 end
@@ -764,8 +764,8 @@ function Highlighter.apply_legacy(bufnr, hunk, regions)
   if not hunk.ft then return end
 
   local ft_clean = hunk.ft:gsub('[^%w]', '_')
-  local ft_group = 'FugitiveExt_' .. ft_clean
-  local included_var = 'fugitive_ext_included_' .. ft_group
+  local ft_group = 'GitExt_' .. ft_clean
+  local included_var = 'git_ext_included_' .. ft_group
 
   -- Include syntax if not already done
   local is_included = false
@@ -782,7 +782,7 @@ function Highlighter.apply_legacy(bufnr, hunk, regions)
   -- The header's one-based row precedes the code body; include the final EOL.
   local start_row = hunk.start_line + 1
   local last_line = hunk.start_line + #hunk.lines
-  local region_name = 'FugitiveExtRegion_' .. start_row
+  local region_name = 'GitExtRegion_' .. start_row
 
   -- A Normal parent clears diff foregrounds for uncaptured prose while the
   -- contained Vim syntax still owns its keyword/string colors.
@@ -798,13 +798,13 @@ function Highlighter.apply_background(bufnr, ns, hunk)
 
     if M.config.word_diff_style == 'treesitter' and (hunk.lang or not hunk.ft) and #line > 1 then
       Highlighter.set_mark(bufnr, ns, buf_line, 1, {
-        end_col = #line, hl_group = 'FugitiveExtCode', priority = PRIORITY_SYNTAX,
+        end_col = #line, hl_group = 'GitExtCode', priority = PRIORITY_SYNTAX,
       })
     end
 
     if prefix == '+' or prefix == '-' then
-      local hl_group = (prefix == '+') and 'FugitiveExtAdd' or 'FugitiveExtDelete'
-      local prefix_hl = (prefix == '+') and 'FugitiveExtAddPrefix' or 'FugitiveExtDeletePrefix'
+      local hl_group = (prefix == '+') and 'GitExtAdd' or 'GitExtDelete'
+      local prefix_hl = (prefix == '+') and 'GitExtAddPrefix' or 'GitExtDeletePrefix'
 
       -- Structural style colors syntax spans only, including one-sided edits.
       if M.config.word_diff_style ~= 'treesitter' then
@@ -850,10 +850,10 @@ function Highlighter.apply_diffs_style_word_diffs(bufnr, ns, hunk)
   end
 
   for _, span in ipairs(intra.del_spans) do
-    apply_span(span, 'FugitiveExtDeleteText')
+    apply_span(span, 'GitExtDeleteText')
   end
   for _, span in ipairs(intra.add_spans) do
-    apply_span(span, 'FugitiveExtAddText')
+    apply_span(span, 'GitExtAddText')
   end
 end
 
@@ -908,8 +908,8 @@ function M.merge_ranges(ranges, line) return Utils.merge_ranges(vim.deepcopy(ran
 function Highlighter.apply_word_diffs(bufnr, ns, group_old, group_new, group_old_lines, group_new_lines)
   if #group_old == 0 or #group_new == 0 then return end
   local changes = M.word_diff_ranges(group_old, group_new, M.config.word_diff_style)
-  for _, side in ipairs({ { changes.old, group_old_lines, 'FugitiveExtDeleteText' },
-    { changes.new, group_new_lines, 'FugitiveExtAddText' } }) do
+  for _, side in ipairs({ { changes.old, group_old_lines, 'GitExtDeleteText' },
+    { changes.new, group_new_lines, 'GitExtAddText' } }) do
     for row, ranges in pairs(side[1]) do
       for _, range in ipairs(ranges) do
         Highlighter.set_mark(bufnr, ns, side[2][row], range[1], {
@@ -968,8 +968,8 @@ function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, layout, em
         if full_hunk and context then row = row + context.projections[side].offset end
         local line = texts[side][index]
         for _, level in ipairs({
-          { changes[side], side == 'old' and 'FugitiveExtSyntaxDelete' or 'FugitiveExtSyntaxAdd', 150 },
-          { changes.emphasis[side], side == 'old' and 'FugitiveExtSyntaxDeleteText' or 'FugitiveExtSyntaxAddText', 151 },
+          { changes[side], side == 'old' and 'GitExtSyntaxDelete' or 'GitExtSyntaxAdd', 150 },
+          { changes.emphasis[side], side == 'old' and 'GitExtSyntaxDeleteText' or 'GitExtSyntaxAddText', 151 },
         }) do
           for _, range in ipairs(Utils.merge_ranges(vim.deepcopy(level[1][row] or {}), line)) do
             emit(bufnr, ns, buf_row, range[1], {
@@ -978,7 +978,7 @@ function Highlighter.apply_block_word_diffs(bufnr, ns, hunk, sources, layout, em
             if M.config.changed_fg == 'difft' then
               emit(bufnr, ns, buf_row, range[1], {
                 end_col = range[2] + 1,
-                hl_group = side == 'old' and 'FugitiveExtNovelDelete' or 'FugitiveExtNovelAdd',
+                hl_group = side == 'old' and 'GitExtNovelDelete' or 'GitExtNovelAdd',
                 priority = PRIORITY_SYNTAX + level[3],
               })
             end
@@ -1039,7 +1039,7 @@ function Highlighter.process_hunk(bufnr, ns, hunk, cached, query)
   if cached.background_style == M.config.word_diff_style then
     for _, mark in ipairs(cached.marks) do
       local options = mark.opts
-      if options.hl_group == 'FugitiveExtCode' or options.virt_text_pos == 'overlay'
+      if options.hl_group == 'GitExtCode' or options.virt_text_pos == 'overlay'
         or options.hl_eol and options.priority == PRIORITY_BG then mark.generation = cached.mark_generation end
     end
   else
@@ -1158,7 +1158,7 @@ end
 
 -- --- Main ---
 
-local ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local ns = vim.api.nvim_create_namespace('git_extension_syntax')
 local attached_refreshers = {}
 local attached_hunks = {}
 local active_sources = {}
@@ -1221,7 +1221,7 @@ function M.source_is_active(bufnr, source, opposite)
     or warmers[bufnr] and warmers[bufnr].is_active(source, opposite)
     or package.loaded['git.features.split_diff'] and package.loaded['git.features.split_diff'].source_is_active(bufnr, source, opposite)
 end
-local highlight_group = vim.api.nvim_create_augroup('FugitiveExtensionHighlights', { clear = true })
+local highlight_group = vim.api.nvim_create_augroup('GitExtensionHighlights', { clear = true })
 vim.api.nvim_create_autocmd('ColorScheme', {
   group = highlight_group,
   callback = Highlighter.setup_groups,
@@ -1291,7 +1291,7 @@ function M.attach(bufnr, opts)
 
   Highlighter.setup_groups()
   vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
-  local group = vim.api.nvim_create_augroup('FugitiveExtensionSyntax' .. bufnr, { clear = true })
+  local group = vim.api.nvim_create_augroup('GitExtensionSyntax' .. bufnr, { clear = true })
   local active = true
   local source_session = highlight_sources.new()
   local warmer

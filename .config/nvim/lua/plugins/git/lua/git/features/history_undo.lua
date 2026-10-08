@@ -109,7 +109,7 @@ function M.execute(plan)
   local env = { GIT_REFLOG_ACTION = plan.redo and '[nvim git redo]' or '[nvim git undo]' }
   if plan.mode == 'soft' then
     local out, failure = git(root, { 'reset', '--soft', plan.target }, { env = env })
-    if out then require('git.utils').fire_fugitive_changed({ work_tree = root }) end
+    if out then require('git.utils').fire_git_changed({ work_tree = root }) end
     return out ~= nil and plan.target or nil, failure
   end
   -- The shared transaction preserves staged, unstaged and untracked changes.

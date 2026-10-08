@@ -54,9 +54,9 @@ local function run(indices)
     local last = selected[#selected]:end_()
     assert(first < targets[indices[1]] and last >= targets[indices[#indices]], 'shared region omitted an edit')
   end
-  local ns, added = vim.api.nvim_create_namespace('fugitive_extension_syntax'), 0
+  local ns, added = vim.api.nvim_create_namespace('git_extension_syntax'), 0
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })) do
-    if mark[4].hl_group == 'FugitiveExtSyntaxAdd' then
+    if mark[4].hl_group == 'GitExtSyntaxAdd' then
       assert(mark[3] == 10 and mark[4].end_col == 18, 'parent scope lost original source columns')
       added = added + 1
     end

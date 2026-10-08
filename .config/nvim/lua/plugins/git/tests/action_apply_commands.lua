@@ -85,7 +85,7 @@ git({ 'reset', '-q', '--hard' })
 write(changed)
 git({ 'stash', 'push', '-qm', 'apply test' })
 local stash_buf = assert(require('git.objects').open('stash@{0}', 'vsplit', root))
-assert(vim.bo[stash_buf].filetype == 'fugitivecommit',
+assert(vim.bo[stash_buf].filetype == 'gitcommitview',
   'opening a stash object did not reach the commit panel')
 local stash_file_row
 for row, line in ipairs(vim.api.nvim_buf_get_lines(stash_buf, 0, -1, false)) do
@@ -103,11 +103,11 @@ ours[2] = 'conflicting local commit'
 write(ours)
 git({ 'commit', '-qam', 'conflicting local commit' })
 local utils = require('git.utils')
-local original_changed, refreshed = utils.fire_fugitive_changed, false
-utils.fire_fugitive_changed = function(opts) refreshed = opts.work_tree == root end
+local original_changed, refreshed = utils.fire_git_changed, false
+utils.fire_git_changed = function(opts) refreshed = opts.work_tree == root end
 local applied, apply_err = require('git.features.magit_apply').apply(
   { work_tree = root, commit = selected }, true, false)
-utils.fire_fugitive_changed = original_changed
+utils.fire_git_changed = original_changed
 assert(not applied and apply_err ~= '' and git({ 'ls-files', '-u' }) ~= '',
   'fixture did not leave a three-way conflict')
 assert(refreshed, 'three-way conflicts did not refresh repository panels')

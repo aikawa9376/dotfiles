@@ -44,12 +44,12 @@ local linked = note("notes/lazyagent-usage.md", {
   "# lazyagent の使い方",
   "Neovimからagentを起動する。",
 })
-local same_project = note("notes/fugitive.md", {
+local same_project = note("notes/git.md", {
   "---",
   "project: dotfiles",
   "branch: master",
   "---",
-  "# Fugitive",
+  "# Git",
 })
 local unrelated = note("notes/marketing.md", {
   "---",

@@ -7,7 +7,16 @@ return {
     local timer = nil
     local excluded_filetypes = {
       -- "oil",
-      "fugitive",
+      "git",
+      "gitstatus",
+      "gitcommitview",
+      "gitblame",
+      "gitbranch",
+      "gitlog",
+      "gitreflog",
+      "gitstash",
+      "gitworktree",
+      "gitactionmenu",
     }
 
     local augroup = vim.api.nvim_create_augroup("ToggleRelativeNumber", { clear = true })

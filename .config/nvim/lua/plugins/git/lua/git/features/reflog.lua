@@ -5,8 +5,8 @@ local help = require('git.features.help')
 
 local entries_by_buf = {}
 local rows_by_hash_by_buf = {}
-local static_ns = vim.api.nvim_create_namespace('fugitive_reflog_static')
-local linked_ns = vim.api.nvim_create_namespace('fugitive_reflog_linked')
+local static_ns = vim.api.nvim_create_namespace('git_reflog_static')
+local linked_ns = vim.api.nvim_create_namespace('git_reflog_linked')
 
 local function run(work_tree, args)
   local command = { 'git' }
@@ -126,7 +126,7 @@ local function apply_static_highlights(bufnr, lines, entries)
   for row, entry in ipairs(entries) do
     local line = lines[row]
     local next_col = highlight_range(bufnr, row, line, entry.selector, 1,
-      entry.recovery_point and 'FugitiveReflogCheckpoint' or 'Directory')
+      entry.recovery_point and 'GitReflogCheckpoint' or 'Directory')
     next_col = highlight_range(bufnr, row, line, date_label(entry.timestamp), next_col, 'Directory')
     next_col = highlight_range(bufnr, row, line, entry.short_hash, next_col,
       entry.same_count > 1 and 'DiagnosticInfo' or 'String')
@@ -193,14 +193,14 @@ local function open_reflog_list(opts)
   local work_tree = opts and opts.work_tree or utils.get_buf_work_tree(current_buf)
     or utils.get_work_tree({ bufnr = current_buf, notify = true })
   if not work_tree then return end
-  utils.open_panel_split('fugitive-reflog://' .. work_tree)
+  utils.open_panel_split('git-reflog://' .. work_tree)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree)
   vim.bo[bufnr].buftype = 'nofile'
   vim.bo[bufnr].bufhidden = 'wipe'
   vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].modifiable = false
-  vim.bo[bufnr].filetype = 'fugitivereflog'
+  vim.bo[bufnr].filetype = 'gitreflog'
   refresh_reflog_list(bufnr)
   return bufnr
 end
@@ -262,7 +262,7 @@ local function move_same_hash(bufnr, direction)
 end
 
 function M.setup(group)
-  vim.api.nvim_set_hl(0, 'FugitiveReflogCheckpoint', { default = true, link = 'GitSignsAdd' })
+  vim.api.nvim_set_hl(0, 'GitReflogCheckpoint', { default = true, link = 'GitSignsAdd' })
   vim.api.nvim_create_user_command('Greflog', open_reflog_list, {
     bang = false,
     desc = 'Open recovery-oriented Git reflog',
@@ -270,10 +270,10 @@ function M.setup(group)
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = 'fugitivereflog',
+    pattern = 'gitreflog',
     callback = function(ev)
       local b = ev.buf
-      local buf_group = vim.api.nvim_create_augroup('fugitive_reflog_buf_' .. b, { clear = true })
+      local buf_group = vim.api.nvim_create_augroup('git_reflog_buf_' .. b, { clear = true })
       require('git.features.magit_actions').attach(b)
       vim.opt_local.conceallevel = 0
       vim.opt_local.list = false
@@ -358,7 +358,7 @@ function M.setup(group)
             return
           end
           vim.notify(('Created %s at %s'):format(name, entry.short_hash), vim.log.levels.INFO)
-          utils.fire_fugitive_changed({ work_tree = work_tree })
+          utils.fire_git_changed({ work_tree = work_tree })
         end)
       end, { buffer = b, nowait = true, silent = true, desc = 'Create rescue branch' })
 
@@ -387,7 +387,7 @@ function M.setup(group)
           vim.notify(vim.trim(result.stderr or 'Reset failed'), vim.log.levels.ERROR); return
         end
         vim.notify('Reset (' .. mode .. ') to ' .. entry.selector .. ' (' .. entry.short_hash .. ')', vim.log.levels.INFO)
-        utils.fire_fugitive_changed({ work_tree = work_tree })
+        utils.fire_git_changed({ work_tree = work_tree })
         refresh_reflog_list(b)
       end, { buffer = b, nowait = true, silent = true, desc = 'Reset HEAD to selected destination (choose Mixed / Hard)' })
 

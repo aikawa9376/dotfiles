@@ -65,9 +65,9 @@ assert(notifications[#notifications].level == vim.log.levels.ERROR
 local panel = vim.api.nvim_create_buf(false, true)
 vim.api.nvim_set_current_buf(panel)
 require('git.utils').set_buf_work_tree(panel, root)
-vim.bo[panel].filetype = 'fugitivebranch'
+vim.bo[panel].filetype = 'gitbranch'
 local changed = 0
-vim.api.nvim_create_autocmd('User', { pattern = 'FugitiveChanged', callback = function() changed = changed + 1 end })
+vim.api.nvim_create_autocmd('User', { pattern = 'GitChanged', callback = function() changed = changed + 1 end })
 local panel_job = require('git.commands').git({ args = 'fetch origin', bang = false })
 assert(#vim.api.nvim_list_wins() == 1, 'panel Git operation opened a result window')
 assert(vim.wait(10000, function()

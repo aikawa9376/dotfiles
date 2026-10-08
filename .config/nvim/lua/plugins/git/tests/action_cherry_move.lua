@@ -84,7 +84,7 @@ local actions = require('git.features.magit_actions')
 local utils = require('git.utils')
 local status = vim.api.nvim_create_buf(true, false)
 utils.set_buf_work_tree(status, root)
-vim.bo[status].filetype = 'fugitivestatus'
+vim.bo[status].filetype = 'gitstatus'
 vim.api.nvim_set_current_buf(status)
 vim.api.nvim_buf_set_lines(status, 0, -1, false, assert(renderer.snapshot(status, root)))
 local file_row

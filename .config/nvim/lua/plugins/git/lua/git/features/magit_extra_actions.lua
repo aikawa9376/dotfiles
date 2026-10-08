@@ -554,7 +554,7 @@ function M.root(ctx, helpers)
           prompt('Ignore pattern: ', function(pattern)
             if pattern:find('[\r\n]') then return end
             vim.fn.writefile({ pattern }, ctx.work_tree .. '/.gitignore', 'a')
-            require('git.utils').fire_fugitive_changed({ work_tree = ctx.work_tree })
+            require('git.utils').fire_git_changed({ work_tree = ctx.work_tree })
           end, ctx.path)
         end },
         { key = 'p', label = 'Private repository exclude', run = function()
@@ -567,7 +567,7 @@ function M.root(ctx, helpers)
             if not vim.startswith(path, '/') then path = ctx.work_tree .. '/' .. path end
             vim.fn.mkdir(vim.fs.dirname(path), 'p')
             vim.fn.writefile({ pattern }, path, 'a')
-            require('git.utils').fire_fugitive_changed({ work_tree = ctx.work_tree })
+            require('git.utils').fire_git_changed({ work_tree = ctx.work_tree })
           end, ctx.path)
         end },
       } },

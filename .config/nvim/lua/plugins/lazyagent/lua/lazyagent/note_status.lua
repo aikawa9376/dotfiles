@@ -1,7 +1,7 @@
 -- Status rows are transient; retain section/path and selected hunk identity.
 local M = {}
 local function renderer(buf)
-  if vim.bo[buf].filetype ~= 'fugitivestatus' then return end
+  if vim.bo[buf].filetype ~= 'gitstatus' then return end
   return package.loaded['git.features.status_renderer']
 end
 
@@ -52,7 +52,7 @@ function M.capture(buf, root, first, last)
   if first > row and entry.section ~= 'staged' then
     start_line, end_line = file_range(lines, row, first, last)
   end
-  return { kind = 'status', root = vim.b[buf].fugitive_work_tree or root,
+  return { kind = 'status', root = vim.b[buf].git_work_tree or root,
     git_dir = vim.b[buf].git_dir, path = entry.path, section = entry.section,
     start_line = start_line, end_line = end_line,
     status = true, header = entry.header == true, hunk = hunk,
@@ -63,7 +63,7 @@ end
 
 function M.range(buf, source)
   local model = renderer(buf)
-  if not model or vim.b[buf].fugitive_work_tree ~= source.root then return end
+  if not model or vim.b[buf].git_work_tree ~= source.root then return end
   local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
   for row = 1, #lines do
     local entry = model.entry_at(buf, row)

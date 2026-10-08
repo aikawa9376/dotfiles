@@ -16,10 +16,9 @@ where supported. Tab opens, explicit object/diff split commands, the paired blam
 view, and `magit-hint`/transient menus retain their own layouts.
 
 
-Standalone Neovim Git UI, loaded by `plugins.git`. It does not load vim-fugitive.
-Flog is available lazily through a native Git backend. The retired
-`fugitive-extension` source and its old plugin specification can be restored by
-reverting the commit that removed them.
+Standalone Neovim Git UI, loaded by `plugins.git`. It owns its status, log,
+object, blame, and commit buffers directly. Flog is available lazily through
+the native Git backend.
 
 ## Panel keys
 
@@ -148,7 +147,7 @@ Flog and fzf-lua with isolated Harpoon storage and temporary Git repositories.
 | `Gread[!] [object]` | Replace buffer content from the index/object; a range inserts after its last line; unsaved replacement requires `!` |
 | `Gdiff`, `Gdiffsplit`, `Gvdiffsplit`, `Ghdiffsplit [revision]` | Diff the current file against index/revision; an index buffer defaults to its working file; `!` shows available conflict sides |
 | `Gclog[!]`, `Gllog[!] [args]` | File history (repository history outside a file) in quickfix/location list |
-| `Glog`, `FugitiveLog [args]` | Custom log panel; a line range follows the selected file lines with `git log -L` |
+| `Glog`, `GitLog [args]` | Custom log panel; a line range follows the selected file lines with `git log -L` |
 | `Gblame`, `GitBlame`, `GitHeatmap` | Custom paired blame and heatmap |
 | `DiffDim [revision / latest / older / newer / clear]` | Dim lines outside a Git diff or selected blame commit |
 | `Gbranch`, `Gstash`, `Greflog`, `Gworktree`, `GworktreeSync` | Existing repository panels/actions |
@@ -170,7 +169,7 @@ show output from a synchronous mutation as a notification. Interactive patch
 mode still opens a terminal for its prompts.
 
 In a file buffer, select lines and press `g<Space>l` to open their history in
-the custom log panel. `:10,20Glog` and `:10,20FugitiveLog` do the same; without
+the custom log panel. `:10,20Glog` and `:10,20GitLog` do the same; without
 a range, `g<Space>l` and `Glog` keep their repository-wide log behavior. The
 range starts from the displayed revision in a Git object buffer, or `HEAD` in a
 worktree file. In a line-range log, `<C-p>` and `<CR>` open the selected commit
@@ -301,8 +300,7 @@ panels opens the selected graph. The default is `flog`, including the existing `
 `:GgraphBackend native` for the independent graph, or `:GgraphBackend flog` to switch back.
 Set `vim.g.git_graph_backend` in your config to persist the preference.
 `:Ggraph flog` / `:Ggraph native` overrides it for one open. Direct `Flog`,
-`Flogsplit`, and `Floggit` commands also work without loading Fugitive.
-Flog uses its documented backend hooks to obtain repository context, run Git,
+`Flogsplit`, and `Floggit` use its documented backend hooks to obtain repository context, run Git,
 complete arguments, and open commits through the independent Gsplit command. `Git diff`/`Git show` output supports file/hunk
 navigation (`]]`, `[[`, `i`), folds (`o`), and Enter to inspect the file/commit.
 
@@ -381,7 +379,7 @@ Git's missing-path reason while preserving the current window/buffer.
 `Gedit ~1` and `Gedit ^` open the current file at the relative commit; from a
 commit view they open the relative commit itself. A normal worktree file uses HEAD
 as the base, while a historical blob uses its pinned revision. Numeric forms
-(`~2`, `^2`), explicit paths (`~1:other.txt`), and Fugitive's `>~1` spelling also
+(`~2`, `^2`), explicit paths (`~1:other.txt`), and the `>~1` spelling also
 work. The same relative objects are accepted by Gsplit/Gvsplit/Gtabedit, Gread,
 and Gdiff commands, with completion for common forms.
 
@@ -392,8 +390,8 @@ resumes Git after that buffer closes (`:wq`). Explicit `commit -m`, `-F`, and
 `--no-edit` run synchronously so chained status actions can observe failure.
 
 `git-object://<worktree>//<revision>/<path>` buffers preserve repository/path
-metadata; index buffers use `//0/<path>` (conflict stages use 1–3). Like Fugitive,
-path separators remain literal, with only percent, `#`, `?` and control characters
+metadata; index buffers use `//0/<path>` (conflict stages use 1–3). Path
+separators remain literal, with only percent, `#`, `?` and control characters
 escaped. Tab/status/inactive-window labels show `file.lua [abcdef0]` or
 `file.lua [0]`, while the URI keeps full repository/revision identity. Old fully
 escaped URIs still reload from sessions, quickfix and jump lists. Revision blobs are
@@ -409,11 +407,10 @@ no file-level signs.
 is rejected. Buffer repository context takes priority over cwd, including linked
 worktrees. URI buffers can reload from quickfix and jump lists.
 
-The supported surface is deliberately bounded: shell pipelines, Fugitive's full
-object shorthand language, line-range `Gclog -L` syntax and every deprecated alias
-are not reproduced. Pass ordinary Git arguments to `Git` for other operations.
-Existing highlight/filetype names, `FugitiveChanged`, and Note metadata stay
-compatible with the surrounding dotfiles; they do not require Fugitive code.
+The supported surface is deliberately bounded: shell pipelines, alternate object
+shorthand forms, line-range `Gclog -L` syntax and deprecated aliases are not
+reproduced. Pass ordinary Git arguments to `Git` for other operations. The UI
+uses `git*` filetypes and metadata, and publishes `GitChanged` after mutations.
 
 ## Commit details
 
@@ -445,7 +442,7 @@ remain wholly muted. Adjacent spans bridge whitespace without crossing unchanged
 code or extending to the end of the screen row.
 Structural backgrounds use `#1f4534` for added spans and `#4a2a2e` for deleted
 spans; changed words inside matched literals/comments use `#1f6648` and
-`#ad5258`, respectively. These `FugitiveExtSyntax*` groups belong only to
+`#ad5258`, respectively. These `GitExtSyntax*` groups belong only to
 `treesitter`; the other styles retain their existing palette.
 
 Only `treesitter` uses a green/red left-aligned `▏` overlay in place of `+`/`-`, linked to
@@ -759,9 +756,9 @@ previews, `:GitCommit [revision]`, and `:Gedit <revision>` open it.
 The view shows immutable changes against the first parent (the empty tree for a
 root commit). `gp` selects another parent of a merge. File rows, addition/deletion
 counts, and syntax/word-diff highlighting share the status presentation. Files
-start collapsed; patches are loaded only when expanded. The header retains
-Fugitive's tree, parent, author, committer, and optional encoding fields, plus the
-commit hash, using the native Git syntax colors. Header metadata comes from
+start collapsed; patches are loaded only when expanded. The header shows the
+tree, parent, author, committer, optional encoding fields, and commit hash using
+the native Git syntax colors. Header metadata comes from
 `commit_info.header()`, the same formatter used by C floats and pinned blame
 information, including HEAD relationship, relative dates and refs. The model
 caches this header until it is reloaded; editable message text stays separate.
@@ -861,7 +858,8 @@ Run checks from this directory with
 `nvim --headless --clean -u NONE -l tests/<name>.lua`.
 The commit checks are `commit_view`, `commit_rewrite`, `commit_discard`, `commit_patch`,
 `commit_notes`, `commit_lifecycle`, `commit_entrypoints`, and `commit_blob_return`
-(`commit_blob_return` uses installed Gitsigns). No check loads Fugitive.
+(`commit_blob_return` uses installed Gitsigns). Checks exercise the standalone
+provider and its Gitsigns integration.
 `history_edits` checks real move/drop/fixup operations, index contributions,
 dirty-state preservation, conflicts and rollback. `commit_patch` checks special
 paths, EOF, file creation/deletion, renames, historical Mixed removal and recovery.
@@ -1174,7 +1172,7 @@ recovery candidate; it does not execute a reset or restore worktree contents.
 Detection follows Git's reflog operation labels in chronological order. If a
 rebase start is outside the 1000-entry window, no pre-rebase destination is
 invented. Only the exact destination selector is green; duplicate-hash navigation
-and highlighting remain independent. `FugitiveReflogCheckpoint` defaults to
+and highlighting remain independent. `GitReflogCheckpoint` defaults to
 `GitSignsAdd`. See `tests/reflog_checkpoints.lua` for real Git and truncated/
 ongoing/aborted rebase cases.
 

@@ -10,7 +10,7 @@ local github_open = require('git.features.github_open')
 
 local shortstat_cache = {}
 local shortstat_jobs = {}
-local graph_ns = vim.api.nvim_create_namespace('fugitivelog_graph')
+local graph_ns = vim.api.nvim_create_namespace('gitlog_graph')
 
 local function get_commit_at_line(bufnr, lnum)
   local line = vim.api.nvim_buf_get_lines(bufnr, lnum - 1, lnum, false)[1]
@@ -19,12 +19,12 @@ local function get_commit_at_line(bufnr, lnum)
 end
 
 local function focus_for_commit(bufnr, commit)
-  local targets = vim.b[bufnr].fugitive_log_line_focus
+  local targets = vim.b[bufnr].git_log_line_focus
   return type(targets) == 'table' and targets[commit] or nil
 end
 
 local function apply_highlights(bufnr)
-  local ns_id = vim.api.nvim_create_namespace('fugitivelog_highlight')
+  local ns_id = vim.api.nvim_create_namespace('gitlog_highlight')
   vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -32,11 +32,11 @@ local function apply_highlights(bufnr)
   local git_prefix = work_tree and ('git -C ' .. vim.fn.shellescape(work_tree) .. ' ') or 'git '
 
   -- Get list of unpushed/diverged commit hashes
-  local args = vim.b[bufnr].fugitive_log_args or "HEAD"
+  local args = vim.b[bufnr].git_log_args or "HEAD"
   if args == "" then args = "HEAD" end
   local target = vim.fn.trim(args)
 
-  local line_history = vim.b[bufnr].fugitive_log_line_history
+  local line_history = vim.b[bufnr].git_log_line_history
   local diverged_commits = {}
   local unpushed_commits = {}
   local cmd_diverged = nil
@@ -103,25 +103,25 @@ local function apply_log_syntax(bufnr)
   vim.api.nvim_buf_call(bufnr, function()
     vim.cmd([[
       syntax clear
-      syntax match FugitiveLogHash /^[^\t]\+/ nextgroup=FugitiveLogSep1
-      syntax match FugitiveLogSep1 /\t/ contained nextgroup=FugitiveLogDate
-      syntax match FugitiveLogDate /[^\t]\+/ contained nextgroup=FugitiveLogSep2
-      syntax match FugitiveLogSep2 /\t/ contained nextgroup=FugitiveLogSubject
-      syntax match FugitiveLogSubject /[^\t]\+/ contained nextgroup=FugitiveLogSep3
-      syntax match FugitiveLogSep3 /\t/ contained nextgroup=FugitiveLogAuthor
-      syntax match FugitiveLogAuthor /[^\t]\+/ contained nextgroup=FugitiveLogSep4
-      syntax match FugitiveLogSep4 /\t/ contained nextgroup=FugitiveLogRefs
-      syntax match FugitiveLogRefs /.*/ contained
-      syntax match FugitiveLogStatAdd /\d\+ insertions\?(+)/ containedin=FugitiveLogRefs
-      syntax match FugitiveLogStatDelete /\d\+ deletions\?(-)/ containedin=FugitiveLogRefs
+      syntax match GitLogHash /^[^\t]\+/ nextgroup=GitLogSep1
+      syntax match GitLogSep1 /\t/ contained nextgroup=GitLogDate
+      syntax match GitLogDate /[^\t]\+/ contained nextgroup=GitLogSep2
+      syntax match GitLogSep2 /\t/ contained nextgroup=GitLogSubject
+      syntax match GitLogSubject /[^\t]\+/ contained nextgroup=GitLogSep3
+      syntax match GitLogSep3 /\t/ contained nextgroup=GitLogAuthor
+      syntax match GitLogAuthor /[^\t]\+/ contained nextgroup=GitLogSep4
+      syntax match GitLogSep4 /\t/ contained nextgroup=GitLogRefs
+      syntax match GitLogRefs /.*/ contained
+      syntax match GitLogStatAdd /\d\+ insertions\?(+)/ containedin=GitLogRefs
+      syntax match GitLogStatDelete /\d\+ deletions\?(-)/ containedin=GitLogRefs
 
-      highlight default link FugitiveLogDate Directory
-      highlight default link FugitiveLogAuthor Type
-      highlight default link FugitiveLogRefs Comment
-      highlight default link FugitiveStatAdd GitSignsAdd
-      highlight default link FugitiveStatDelete GitSignsDelete
-      highlight default link FugitiveLogStatAdd FugitiveStatAdd
-      highlight default link FugitiveLogStatDelete FugitiveStatDelete
+      highlight default link GitLogDate Directory
+      highlight default link GitLogAuthor Type
+      highlight default link GitLogRefs Comment
+      highlight default link GitStatAdd GitSignsAdd
+      highlight default link GitStatDelete GitSignsDelete
+      highlight default link GitLogStatAdd GitStatAdd
+      highlight default link GitLogStatDelete GitStatDelete
     ]])
   end)
 end
@@ -184,22 +184,22 @@ end
 local function get_log_list(bufnr, reuse_line_history)
   local args = ""
   if bufnr then
-    args = vim.b[bufnr].fugitive_log_args or ""
+    args = vim.b[bufnr].git_log_args or ""
   end
   local work_tree = bufnr and utils.get_buf_work_tree(bufnr) or nil
   local extra_args = require('git.commands').argv(args)
-  local menu_flags = bufnr and vim.b[bufnr].fugitive_log_menu_flags
+  local menu_flags = bufnr and vim.b[bufnr].git_log_menu_flags
   local display = display_options(extra_args, menu_flags)
-  local line_history = bufnr and vim.b[bufnr].fugitive_log_line_history or nil
+  local line_history = bufnr and vim.b[bufnr].git_log_line_history or nil
   local raw_output
   if line_history then
-    raw_output = reuse_line_history and vim.b[bufnr].fugitive_log_line_output or nil
+    raw_output = reuse_line_history and vim.b[bufnr].git_log_line_output or nil
     if not raw_output then
       local focus, err
       raw_output, focus, err = line_history_output(work_tree, line_history, args)
       if not raw_output then return nil, nil, work_tree, err end
-      vim.b[bufnr].fugitive_log_line_output = raw_output
-      vim.b[bufnr].fugitive_log_line_focus = focus
+      vim.b[bufnr].git_log_line_output = raw_output
+      vim.b[bufnr].git_log_line_focus = focus
     end
   else
     local format = '%H%x09%h%x09%as%x09%s%x09%an%x09' .. (display.decorate and '%d' or '')
@@ -383,22 +383,22 @@ local function open_log_list(opts)
   utils.set_buf_work_tree(bufnr, work_tree)
   local scope = line_history and string.format('L%d,%d:%s', line_history.first, line_history.last,
     line_history.path) or args
-  pcall(vim.api.nvim_buf_set_name, bufnr, 'fugitive-log://' .. work_tree .. '//' .. scope)
+  pcall(vim.api.nvim_buf_set_name, bufnr, 'git-log://' .. work_tree .. '//' .. scope)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
-  vim.bo[bufnr].filetype = 'fugitivelog'
+  vim.bo[bufnr].filetype = 'gitlog'
   vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.opt_local.list = false
   vim.bo[bufnr].modifiable = false
   vim.bo[bufnr].readonly = true
 
-  vim.b[bufnr].fugitive_log_args = args
-  vim.b[bufnr].fugitive_log_menu_flags = opts and opts.menu_flags or false
+  vim.b[bufnr].git_log_args = args
+  vim.b[bufnr].git_log_menu_flags = opts and opts.menu_flags or false
   if line_history then
-    vim.b[bufnr].fugitive_log_line_history = line_history
-    vim.b[bufnr].fugitive_log_line_output = initial_output
-    vim.b[bufnr].fugitive_log_line_focus = initial_focus
+    vim.b[bufnr].git_log_line_history = line_history
+    vim.b[bufnr].git_log_line_output = initial_output
+    vim.b[bufnr].git_log_line_focus = initial_focus
   end
   refresh_log_list(bufnr, line_history ~= nil)
   return bufnr
@@ -427,7 +427,7 @@ local function show_log_help()
 end
 
 function M.setup(group)
-  vim.api.nvim_create_user_command('FugitiveLog', open_log_list, {
+  vim.api.nvim_create_user_command('GitLog', open_log_list, {
     bang = false,
     nargs = '*',
     range = true,
@@ -437,19 +437,19 @@ function M.setup(group)
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = 'fugitive',
+    pattern = 'git',
     callback = function(ev)
       vim.keymap.set('n', 'L', function()
-        vim.cmd('FugitiveLog')
+        vim.cmd('GitLog')
       end, { buffer = ev.buf, silent = true, desc = "Open git log" })
     end
   })
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = 'fugitivelog',
+    pattern = 'gitlog',
     callback = function(ev)
-      local buf_group = vim.api.nvim_create_augroup('fugitive_log_buf_' .. ev.buf, { clear = true })
+      local buf_group = vim.api.nvim_create_augroup('git_log_buf_' .. ev.buf, { clear = true })
       commit_body.attach(ev.buf)
       require('git.features.magit_actions').attach(ev.buf)
       -- Syntax highlighting
@@ -487,7 +487,7 @@ function M.setup(group)
       end, { visible_only = true })
 
 
-      -- Load fugitive's default mappings
+      -- Load Neovim's Git filetype mappings
       vim.cmd('runtime! ftplugin/git.vim ftplugin/git_*.vim after/ftplugin/git.vim')
 
       -- Keymaps (Inherited functionality)

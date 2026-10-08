@@ -14,7 +14,7 @@ return {
         if buf.bufnr and vim.b[buf.bufnr].git_object then
           return require('git.display').name(buf.bufnr)
         end
-        local hash = buf.bufnr and vim.b[buf.bufnr].fugitive_commit
+        local hash = buf.bufnr and vim.b[buf.bufnr].git_commit
         if hash then return hash:sub(1, 7) end
         if buf.name:match('%.md') then
           return vim.fn.fnamemodify(buf.name, ':t:r')

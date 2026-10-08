@@ -70,7 +70,7 @@ end
 assert(untracked_row and vim.wo.foldenable and vim.wo.foldcolumn == '0' and vim.wo.signcolumn == 'yes:1')
 local head = vim.api.nvim_buf_get_lines(b, 0, 1, false)[1]
 local subject = assert(head:find('initial', 1, true))
-local ns = vim.api.nvim_create_namespace('fugitive_status_icons')
+local ns = vim.api.nvim_create_namespace('git_status_icons')
 local muted, heading_priority = nil, nil
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(b, ns, { 0, 0 }, { 0, -1 }, { details = true })) do
   if mark[4].hl_group == 'RainbowDelimiterBlue' then heading_priority = mark[4].priority end
@@ -137,7 +137,7 @@ end
 assert(not guide:find('gws', 1, true), 'help retained old worktree sync key')
 assert(not guide:find('Choose ours', 1, true) and not guide:find('Reword commit', 1, true)
   and not guide:find('Go to unmerged', 1, true), 'file help includes unrelated actions')
-assert(vim.bo.filetype == 'fugitiveactionmenu' and vim.api.nvim_buf_line_count(0) <= 26,
+assert(vim.bo.filetype == 'gitactionmenu' and vim.api.nvim_buf_line_count(0) <= 26,
   ('file help should be a compact action menu (%d lines)'):format(vim.api.nvim_buf_line_count(0)))
 press('q')
 local repository_row
@@ -167,7 +167,7 @@ vim.wait(10, function() return false end)
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'warm open restored an obsolete cursor anchor')
 press('gU')
 press('q')
-vim.api.nvim_exec_autocmds('User', { pattern = 'FugitiveChanged', data = { work_tree = root } })
+vim.api.nvim_exec_autocmds('User', { pattern = 'GitChanged', data = { work_tree = root } })
 assert(status.open({ work_tree = root, split = true }) == b)
 vim.wait(500, function() return false end)
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'dirty reopen restored the pre-refresh anchor')

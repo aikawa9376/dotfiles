@@ -8,20 +8,17 @@ function M.setup(opts)
   end
   require('git.features.split_diff').setup()
   require('git.features.custom_commands').setup(opts.custom_commands or vim.g.git_custom_commands or {})
-  local group = vim.api.nvim_create_augroup('fugitive_custom', { clear = true })
+  local group = vim.api.nvim_create_augroup('git_custom', { clear = true })
   local nowrap_filetypes = {
     git = true,
-    fugitivecommit = true,
-    fugitive = true,
-    fugitivestatus = true,
-    fugitiveblame = true,
+    gitcommitview = true,
+    gitstatus = true,
     gitblame = true,
-    fugitivebranch = true,
-    fugitivelog = true,
-    fugitivereflog = true,
-    fugitivestash = true,
-    fugitiveworktree = true,
-    fugitiveactionmenu = true,
+    gitbranch = true,
+    gitlog = true,
+    gitreflog = true,
+    gitstash = true,
+    gitworktree = true,
     gitactionmenu = true,
     gitrebase = true,
     gitrebaseplan = true,
@@ -33,7 +30,8 @@ function M.setup(opts)
     if not (buf and vim.api.nvim_buf_is_valid(buf)) then return false end
     if nowrap_filetypes[vim.bo[buf].filetype] then return true end
     local name = vim.api.nvim_buf_get_name(buf)
-    return name:match('^fugitive://') ~= nil
+    return name:match('^git%-object://') ~= nil
+      or name:match('^git%-show://') ~= nil
       or name:match('^git%-diff://') ~= nil
       or name:match('^git%-range%-diff://') ~= nil
   end

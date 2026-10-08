@@ -51,12 +51,12 @@ assert(not find_operation_component(captured_config.sections.lualine_x),
 local inactive_component = assert(find_operation_component(captured_config.inactive_sections.lualine_a),
   'inactive Git operation component was not placed beside the filename')
 local bufnr = vim.api.nvim_get_current_buf()
-vim.bo[bufnr].filetype = 'fugitivestatus'
-vim.b[bufnr].fugitive_work_tree = root
+vim.bo[bufnr].filetype = 'gitstatus'
+vim.b[bufnr].git_work_tree = root
 assert(active_component.cond() and active_component[1]():find('Fetching', 1, true),
   'Lualine did not show operation state in a Git buffer')
 vim.bo[bufnr].filetype = 'lua'
-vim.b[bufnr].fugitive_work_tree = nil
+vim.b[bufnr].git_work_tree = nil
 vim.api.nvim_buf_set_name(bufnr, root .. '/file.lua')
 assert(active_component.cond() and active_component[1]():find('Fetching ×3', 1, true),
   'Lualine hid background Git operations in a normal file buffer')

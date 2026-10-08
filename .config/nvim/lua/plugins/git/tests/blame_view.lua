@@ -56,7 +56,7 @@ assert(vim.fn.maparg('gC', 'n') == '', 'blame info should have only the C entry'
 vim.o.columns = original_columns
 assert(vim.wo[panel].winbar == '%=Blame panel%=', 'panel winbar should name the view and align code rows')
 assert(vim.wo[code_win].winbar:find('change', 1, true), 'code winbar should show commit subject')
-assert(vim.fn.exists(':Git') ~= 2, 'test must not depend on Fugitive')
+assert(vim.fn.exists(':Git') ~= 2, 'test must not depend on Git')
 assert(text(b):find('2020%-01%-01') and text(b):find('2025%-01%-01'))
 local function uncommitted_label()
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('git_blame_panel'), 0, -1, { details = true })) do
@@ -91,7 +91,7 @@ end
 local uniform_dates = 0
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('git_blame_panel'), 0, -1, { details = true })) do
   local group = mark[4].hl_group or ''
-  if group:match('^FugitiveBlameDate') then uniform_dates = uniform_dates + 1 end
+  if group:match('^GitBlameDate') then uniform_dates = uniform_dates + 1 end
   assert(not group:match('Muted$'), 'f uniform mode should keep every hash at full color')
   assert(group ~= 'GitBlameUnselectedMeta', 'f uniform mode should keep all dates heatmapped and authors at normal color')
 end
@@ -226,7 +226,7 @@ for _, mark in ipairs(marks) do
 end
 assert(edge_color == hash_color and hash_color == continuation_color and hash_color:match('^GitBlameHash'))
 assert(vim.api.nvim_get_hl(0, { name = hash_color }).fg ~= nil)
-local mode = vim.g.fugitive_blame_gradient_mode; display('c'); assert(vim.g.fugitive_blame_gradient_mode ~= mode)
+local mode = vim.g.git_blame_gradient_mode; display('c'); assert(vim.g.git_blame_gradient_mode ~= mode)
 vim.api.nvim_win_set_cursor(panel, { 3, 0 })
 press('gk')
 local function float_text(kind)
@@ -288,7 +288,7 @@ press('gf'); assert(old_gf_called, 'code-side gf must be restored after blame cl
 assert(vim.api.nvim_win_get_cursor(code_win)[1] == 3)
 -- Heatmap remains available on the original unsaved buffer.
 assert(api.set_heatmap_enabled(original, true))
-wait(function() return #vim.api.nvim_buf_get_extmarks(original, vim.api.nvim_create_namespace('fugitive_blame_heatmap'), 0, -1, {}) == 5 end, 'heatmap')
+wait(function() return #vim.api.nvim_buf_get_extmarks(original, vim.api.nvim_create_namespace('git_blame_heatmap'), 0, -1, {}) == 5 end, 'heatmap')
 api.set_heatmap_enabled(original, false)
 -- Close while blame is still running: late results must not create windows.
 b = api.open(); assert(vim.api.nvim_buf_get_name(b) == panel_name, 'reopen must keep stable blame name'); vim.api.nvim_buf_delete(b, { force = true })
@@ -301,7 +301,7 @@ vim.api.nvim_buf_set_name(blob, 'git-commit-blob://test/' .. second .. '/new nam
 vim.api.nvim_buf_set_lines(blob, 0, -1, false, { 'alpha', 'inserted', 'new', 'omega', 'tail' })
 vim.bo[blob].bufhidden = 'wipe'
 vim.bo[blob].modifiable = false
-vim.b[blob].lazyagent_note_source = { kind = 'fugitive', root = root, path = 'new name.txt', revision = second }
+vim.b[blob].lazyagent_note_source = { kind = 'git', root = root, path = 'new name.txt', revision = second }
 vim.api.nvim_set_current_buf(blob)
 vim.api.nvim_win_set_cursor(0, { 3, 0 })
 b = api.open()
@@ -319,7 +319,7 @@ local return_tab = vim.api.nvim_get_current_tabpage()
 local panel_view = vim.fn.winsaveview()
 local code_view = vim.api.nvim_win_call(code_win, vim.fn.winsaveview)
 press('<CR>')
-assert(vim.bo.filetype == 'fugitivecommit' and vim.b.fugitive_commit == second)
+assert(vim.bo.filetype == 'gitcommitview' and vim.b.git_commit == second)
 assert(vim.api.nvim_get_current_line() == '+new', 'commit should focus the attributed diff line')
 assert(vim.api.nvim_get_current_tabpage() ~= return_tab)
 local commit_buf = vim.api.nvim_get_current_buf()

@@ -56,4 +56,4 @@ assert(git({ 'show', ':' .. path }) == 'index')
 assert(objects.uri(root, hash .. ':' .. path) ~= objects.uri(root .. '-other', hash .. ':' .. path))
 for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, { force = true }) end
 vim.fn.delete(root, 'rf')
-print('PASS: Fugitive-style readable paths, compact labels, legacy URI reload, Unicode/percent/space paths, writable index')
+print('PASS: Git-style readable paths, compact labels, legacy URI reload, Unicode/percent/space paths, writable index')

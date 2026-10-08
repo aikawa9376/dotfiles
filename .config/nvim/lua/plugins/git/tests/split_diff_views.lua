@@ -134,7 +134,7 @@ assert(next(second.plan.old) == nil and second.plan.new[0], 'Diffview addition p
 for _, mark in ipairs(second.plan.new[0]) do
   assert(mark.col >= 2 and not mark.options.sign_text and not mark.options.hl_eol,
     'one-sided code addition tinted indentation, gutter or the whole line')
-  assert(mark.options.hl_group == 'FugitiveExtSyntaxAdd', 'one-sided addition incorrectly emphasized words')
+  assert(mark.options.hl_group == 'GitExtSyntaxAdd', 'one-sided addition incorrectly emphasized words')
 end
 view:close()
 assert(vim.wait(1000, function() return not second.active end, 5), 'Diffview close retained session')

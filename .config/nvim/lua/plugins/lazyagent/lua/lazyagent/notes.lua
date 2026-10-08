@@ -33,8 +33,8 @@ end
 
 local function root_for(bufnr, path, override)
   if override and override ~= "" then return normalize(override) end
-  if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "fugitivestatus" then
-    local worktree = vim.b[bufnr].fugitive_work_tree
+  if vim.api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype == "gitstatus" then
+    local worktree = vim.b[bufnr].git_work_tree
     if worktree and worktree ~= "" then return normalize(worktree) end
   end
   return normalize(util.git_root_for_path(path) or vim.fn.getcwd())
@@ -227,7 +227,7 @@ function M.refresh_buffer(bufnr)
   local name = vim.api.nvim_buf_get_name(bufnr)
   local path = normalize(name)
   local ft = vim.bo[bufnr].filetype
-  local diff = ft == "git" or ft == "fugitive"
+  local diff = ft == "git"
   local candidate_source, captured
   for _, entry in pairs(entries) do
     local source = entry.source
@@ -264,7 +264,7 @@ function M.refresh_buffer(bufnr)
       elseif source and source.kind ~= "buffer" then
         if diff and source.inline_diff then
           first, last = note_source.diff_range(bufnr, source, entry.excerpt)
-        elseif not diff and (name:match("^fugitive://") or name:match("^diffview://")
+        elseif not diff and (name:match("^git%-object://") or name:match("^git%-show://") or name:match("^diffview://")
           or vim.b[bufnr].lazyagent_note_source or path == normalize(source.root .. "/" .. (source.path or ""))) then
           if not captured then
             candidate_source = note_source.capture(bufnr, entry.root)
@@ -289,7 +289,7 @@ local function setup_lifecycle()
     group = lifecycle_group,
     callback = function(args)
       if not next(entries) or refresh_pending[args.buf] then return end
-      if args.event == "TextChanged" and not vim.tbl_contains({ "git", "fugitive", "fugitivestatus", "fugitivecommit" }, vim.bo[args.buf].filetype) then return end
+      if args.event == "TextChanged" and not vim.tbl_contains({ "git", "gitstatus", "gitcommitview" }, vim.bo[args.buf].filetype) then return end
       refresh_pending[args.buf] = true
       vim.schedule(function()
         refresh_pending[args.buf] = nil
@@ -533,16 +533,16 @@ function M.jump(id, opts)
     if note_source.reopen_diffview(source, saved_line, function()
       if entries[entry.id] then M.jump(entry.id, { fallback = true }) end
     end) then return true end
-    if source.review_commit then
-      local review = note_source.fugitive_buffer(source, true)
+    if source.show and source.review_commit then
+      local review = note_source.git_source_buffer(source, true)
       if review then
         local row = note_source.diff_range(review, source, entry.excerpt)
         if row then return open_above(review, row) end
       end
     end
   end
-  if source.kind == "fugitive" and source.blob then
-    local blob = note_source.fugitive_buffer(source, false)
+  if source.kind == "git" and source.blob then
+    local blob = note_source.git_source_buffer(source, false)
     if blob then return open_above(blob, saved_line) end
   end
   local target = entry.bufnr

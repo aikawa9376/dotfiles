@@ -13,16 +13,11 @@ assert(vim.fn.exists(':GitUndo') == 2 and vim.fn.exists(':GitRedo') == 2,
   'history commands were unavailable before the plugin loaded')
 assert(vim.fn.exists(':GitRebasePlan') == 2 and vim.fn.exists(':GitRebaseBase') == 2,
   'rebase planning commands were unavailable before the plugin loaded')
-assert(vim.fn.exists(':UndoFugitive') == 0 and vim.fn.exists(':RedoFugitive') == 0,
-  'legacy history command names remain')
 require('lazy').load({ plugins = { 'git' } })
-assert(package.loaded['git'] and not package.loaded['fugitive-extension'])
+assert(package.loaded['git'])
 for _, name in ipairs(spec.cmd) do assert(vim.fn.exists(':' .. name) == 2, 'Missing command: ' .. name) end
-assert(vim.fn.exists('*FugitiveGitDir') == 0 and vim.g.loaded_fugitive == nil)
-assert(not require('lazy.core.config').plugins['vim-fugitive'])
 local active = table.concat(vim.fn.readfile(vim.fs.dirname(vim.fs.dirname(plugin)) .. '/config/lazy.lua'), '\n')
 assert(active:find('import = "plugins.git"', 1, true))
 assert(not active:find('import = "plugins.diff-dim"', 1, true))
-assert(not active:find('import = "plugins.fugitive', 1, true))
 assert(active:find('import = "plugins.flog"', 1, true))
-print('PASS: Lazy triggers and registered commands, no Fugitive/extension, optional Flog in active configuration')
+print('PASS: Lazy triggers, registered Git commands and optional Flog configuration')

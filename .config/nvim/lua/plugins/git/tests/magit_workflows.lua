@@ -176,7 +176,7 @@ assert(vim.api.nvim_buf_get_name(0):find('git-range-diff://', 1, true) and requi
 local actions = require('git.features.magit_actions')
 local sourcebuf = vim.api.nvim_create_buf(true, false)
 vim.api.nvim_buf_set_lines(sourcebuf, 0, -1, false, { annotated .. ' selected commit' })
-vim.bo[sourcebuf].filetype = 'fugitivelog'; require('git.utils').set_buf_work_tree(sourcebuf, parent)
+vim.bo[sourcebuf].filetype = 'gitlog'; require('git.utils').set_buf_work_tree(sourcebuf, parent)
 vim.api.nvim_set_current_buf(sourcebuf); actions.attach(sourcebuf)
 for prefix, kind in pairs({ ['>'] = 'sparse-checkout', O = 'subtree', U = 'bundle', W = 'patch', w = 'am', T = 'notes', ['!'] = 'custom-commands' }) do
   vim.api.nvim_set_current_buf(sourcebuf); vim.fn.maparg('<Space><Space>', 'n', false, true).callback()

@@ -58,7 +58,7 @@ local function background(root, args)
     on_exit = function(_, code)
       vim.schedule(function()
         if finish_progress then finish_progress() end
-        utils.fire_fugitive_changed({ work_tree = root })
+        utils.fire_git_changed({ work_tree = root })
         if code ~= 0 then vim.notify(error_output(lines, code), vim.log.levels.ERROR) end
       end)
     end,
@@ -81,7 +81,7 @@ local function terminal(root, args, keep_open)
   local env = require('git.editor').environment()
   vim.fn.jobstart(argv, { term = true, env = env, on_exit = function(_, code)
     vim.schedule(function()
-      utils.fire_fugitive_changed({ work_tree = root })
+      utils.fire_git_changed({ work_tree = root })
       if code ~= 0 then
         local lines = vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_get_lines(b, 0, -1, false) or {}
         vim.notify(error_output(lines, code), vim.log.levels.ERROR)
@@ -100,8 +100,8 @@ end
 
 local function from_panel(bufnr)
   local filetype = vim.bo[bufnr].filetype
-  return filetype:match('^fugitive') ~= nil
-    or (vim.bo[bufnr].buftype == 'nofile' and vim.b[bufnr].fugitive_work_tree ~= nil)
+  return filetype:match('^git') ~= nil
+    or (vim.bo[bufnr].buftype == 'nofile' and vim.b[bufnr].git_work_tree ~= nil)
 end
 
 local function mutates_repository(args)
@@ -192,7 +192,7 @@ function M.git(opts)
   local ok, content = pcall(objects.run, root, args)
   if not ok then vim.notify(content, vim.log.levels.ERROR); return end
   local mutation = mutates_repository(args)
-  if mutation then utils.fire_fugitive_changed({ work_tree = root }) end
+  if mutation then utils.fire_git_changed({ work_tree = root }) end
   if opts.bang then if content ~= '' then vim.notify(vim.trim(content)) end
   elseif not mutation and content ~= '' then return output(root, args, content) end
 end
@@ -287,7 +287,7 @@ function M.setup(group)
       vim.api.nvim_buf_call(buf, function() vim.cmd('write' .. (o.bang and '!' or '')) end)
       objects.run(root, { 'add', '--', target })
     end
-    utils.fire_fugitive_changed({ work_tree = root })
+    utils.fire_git_changed({ work_tree = root })
   end
   command('Gwrite', write, { nargs = '?', bang = true, complete = completion.files })
   command('Gwq', function(o) write(o); vim.cmd('quit' .. (o.bang and '!' or '')) end, { nargs = '?', bang = true, complete = completion.files })
@@ -321,7 +321,7 @@ function M.setup(group)
     assert(o.bang or not vim.bo.modified, 'Unsaved changes; use Gremove!')
     local args = { 'rm' }; if o.bang then args[#args + 1] = '-f' end
     vim.list_extend(args, { '--', path }); objects.run(root, args)
-    utils.fire_fugitive_changed({ work_tree = root }); vim.cmd('bdelete' .. (o.bang and '!' or ''))
+    utils.fire_git_changed({ work_tree = root }); vim.cmd('bdelete' .. (o.bang and '!' or ''))
   end, { bang = true }) end
   for _, name in ipairs({ 'Gmove', 'Grename' }) do command(name, function(o)
     local root, path = objects.context(); assert(path, 'No current file')
@@ -331,7 +331,7 @@ function M.setup(group)
     vim.list_extend(argv, { '--', path, destination }); objects.run(root, argv)
     if vim.fn.isdirectory(root .. '/' .. destination) == 1 then destination = destination .. '/' .. vim.fs.basename(path) end
     vim.api.nvim_buf_set_name(0, root .. '/' .. destination)
-    utils.fire_fugitive_changed({ work_tree = root })
+    utils.fire_git_changed({ work_tree = root })
   end, { nargs = 1, bang = true, complete = completion.files }) end
 end
 return M

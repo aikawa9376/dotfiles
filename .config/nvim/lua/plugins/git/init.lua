@@ -6,7 +6,7 @@ return {
   cmd = {
     "G", "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit", "Gstash",
     "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit", "GitPush",
-    "Gworktree", "Gbranch", "FugitiveLog", "GitHeatmap", "GitBlame", "GitStatus", "GitStatusTree",
+    "Gworktree", "Gbranch", "GitLog", "GitHeatmap", "GitBlame", "GitStatus", "GitStatusTree",
     "GitCommit", "Greflog", "Glog", "Gllog", "Glcd", "Gtabedit", "Gsplit", "Gvdiffsplit",
     "Ghdiffsplit", "Gremove", "Gdelete", "Gmove", "Grename", "Gwq", "Gblame", "Ggraph",
     "GgraphBackend", "GCherryPick", "GworktreeSync", "GitUndo", "GitRedo", "DiffDim",
@@ -33,7 +33,7 @@ return {
     { "g<space>s", "<cmd>G show<CR>", silent = true },
     { "g<space>b", "<cmd>Gbranch<CR>", silent = true },
     { "g<space>L", function() vim.cmd(
-      'FugitiveLog -- ' .. vim.fn.expand('%')
+      'GitLog -- ' .. vim.fn.expand('%')
     ) end, silent = true, desc = "Log for current file" },
   },
 }

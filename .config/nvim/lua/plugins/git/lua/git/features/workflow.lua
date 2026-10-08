@@ -44,7 +44,7 @@ function M.run(root, args, opts)
     return opts.include_stderr and (output .. (result and result.stderr or '')) or output
   end, function(ok, result)
     -- am/apply/subtree can leave conflict state even when Git exits nonzero.
-    if opts.mutation ~= false then utils.fire_fugitive_changed({ work_tree = root }) end
+    if opts.mutation ~= false then utils.fire_git_changed({ work_tree = root }) end
     if opts.callback then opts.callback(ok, result)
     elseif not ok then vim.notify(result, vim.log.levels.ERROR)
     elseif opts.output then M.output(root, opts.title or table.concat(args, ' '), result)

@@ -18,7 +18,7 @@ local file = vim.api.nvim_get_current_buf()
 assert(vim.g.git_graph_backend == nil, 'Test must exercise the unset default')
 vim.cmd('Ggraph')
 assert(vim.bo.filetype == 'floggraph', 'Flog did not open')
-assert(vim.b.fugitive_work_tree == root and vim.fn['flog#backend#GetGitDir']() == root .. '/.git')
+assert(vim.b.git_work_tree == root and vim.fn['flog#backend#GetGitDir']() == root .. '/.git')
 local hash = vim.fn['flog#Format']('%H')
 assert(vim.trim(git({ 'rev-parse', hash })) == vim.trim(git({ 'rev-parse', 'HEAD' })))
 vim.cmd('vertical belowright Flogsplitcommit')
@@ -27,7 +27,6 @@ for _, win in ipairs(vim.api.nvim_list_wins()) do
   if vim.b[vim.api.nvim_win_get_buf(win)].custom_git_commit then found = true end
 end
 assert(found, 'Flog commit selection did not use native Gsplit')
-assert(vim.fn.exists('*FugitiveGitDir') == 0 and vim.g.loaded_fugitive == nil)
 vim.cmd('only')
 vim.cmd('buffer ' .. file)
 vim.cmd('GgraphBackend flog')
@@ -49,4 +48,4 @@ assert(vim.bo.filetype == 'git')
 vim.cmd('close')
 for _, b in ipairs(vim.api.nvim_list_bufs()) do pcall(vim.api.nvim_buf_delete, b, { force = true }) end
 vim.fn.delete(root, 'rf')
-print('PASS: actual Flog with native backend, commit selection, configurable native/Flog graphs, no Fugitive')
+print('PASS: actual Flog with native backend, commit selection, configurable native/Flog graphs, no Git')

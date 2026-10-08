@@ -25,6 +25,6 @@ vim.fn.confirm = confirm
 assert(result and git({ 'log', '-1', '--format=%s', 'HEAD^' }) == 'reword ancestor from float')
 assert(git({ 'show', ':file.txt' }) == 'staged' and vim.fn.readfile(root .. '/file.txt')[1] == 'unstaged')
 assert(not vim.api.nvim_buf_is_valid(draft))
-assert(_G.fugitive_foldtext == nil, 'Legacy view globals leaked into the independent actions')
+assert(_G.git_foldtext == nil, 'Legacy view globals leaked into the independent actions')
 vim.api.nvim_buf_delete(origin, { force = true }); vim.fn.delete(root, 'rf')
 print('PASS: shared message float uses guarded rewrite, preserving staged/unstaged work without legacy view setup')

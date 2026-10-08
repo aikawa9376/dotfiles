@@ -205,14 +205,14 @@ vim.api.nvim_win_set_cursor(0, { selected_row, 0 })
 vim.api.nvim_feedkeys('v', 'xt', false)
 vim.api.nvim_feedkeys(' ', 'xt', false)
 assert(vim.wait(10000, function() return #collection.patch(ui) > 0 end, 5))
-local syntax_ns = vim.api.nvim_create_namespace('fugitive_extension_syntax')
+local syntax_ns = vim.api.nvim_create_namespace('git_extension_syntax')
 local function preview_adds()
   assert(vim.wait(10000, function()
     return not require('git.features.syntax_highlight').is_pending(ui.right)
   end, 1), 'collected preview highlighting did not finish')
   local rows, seen = {}, {}
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(ui.right, syntax_ns, 0, -1, { details = true })) do
-    if (mark[4].hl_group == 'FugitiveExtSyntaxAdd' or mark[4].hl_group == 'FugitiveExtSyntaxAddText') and not seen[mark[2]] then
+    if (mark[4].hl_group == 'GitExtSyntaxAdd' or mark[4].hl_group == 'GitExtSyntaxAddText') and not seen[mark[2]] then
       rows[#rows + 1], seen[mark[2]] = mark[2] + 1, true
     end
   end

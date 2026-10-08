@@ -63,7 +63,7 @@ for _, style in ipairs({ 'delta', 'github', 'diffs' }) do
   local whole, word = false, false
   for _, mark in ipairs(session.plan.new[0]) do
     whole = whole or mark.options.hl_eol == true
-    word = word or mark.options.hl_group == 'FugitiveExtAddText'
+    word = word or mark.options.hl_group == 'GitExtAddText'
   end
   assert(whole and word, style .. ': selected style was not projected')
 end
@@ -71,7 +71,7 @@ syntax.set_word_diff_style('treesitter'); ready()
 assert(compares == count and parses == saved_parses, 'style changes repeated parsing/structural search')
 syntax.toggle_changed_fg(); ready()
 local novel = false
-for _, mark in ipairs(session.plan.new[0]) do novel = novel or mark.options.hl_group == 'FugitiveExtNovelAdd' end
+for _, mark in ipairs(session.plan.new[0]) do novel = novel or mark.options.hl_group == 'GitExtNovelAdd' end
 assert(novel, 'split ignored optional native foregrounds')
 syntax.toggle_changed_fg(); ready()
 assert(compares == count, 'foreground toggle repeated search')

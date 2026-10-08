@@ -173,7 +173,7 @@ function M.execute(tx, change, opts)
   if tx.mutated and active_rebase(tx.dir) and opts and opts.suspend then
     local saved, paused = pcall(opts.suspend, tx, stash, ok, failure)
     if saved and paused then
-      utils.fire_fugitive_changed({ work_tree = tx.root })
+      utils.fire_git_changed({ work_tree = tx.root })
       return paused.head, paused.warning, true, true
     elseif not saved then ok, failure = false, paused end
   end
@@ -187,7 +187,7 @@ function M.execute(tx, change, opts)
       if recovered then recovered, recovery_err = git(tx.root, { 'reset', '--hard', tx.head }) end
     else recovered, recovery_err = git(tx.root, { 'reset', '--hard', tx.head }) end
     if not recovered then
-      utils.fire_fugitive_changed({ work_tree = tx.root })
+      utils.fire_git_changed({ work_tree = tx.root })
       return nil, tostring(failure) .. '\nHistory rollback failed: ' .. recovery_err
         .. (stash and ('\nSaved changes remain in stash ' .. stash) or '')
     end
@@ -198,7 +198,7 @@ function M.execute(tx, change, opts)
     if finished then warning = finish_warning
     else warning = (warning and warning .. '\n' or '') .. 'History rewritten; final worktree update failed: ' .. tostring(finish_warning) end
   end
-  utils.fire_fugitive_changed({ work_tree = tx.root })
+  utils.fire_git_changed({ work_tree = tx.root })
   if not ok then return nil, tostring(failure) .. (warning and ('\n' .. warning) or '') end
   return result, warning, true
 end

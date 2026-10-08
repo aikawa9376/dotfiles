@@ -88,7 +88,7 @@ vim.api.nvim_buf_set_lines(buf, 0, -1, false, { 'M held.lua' })
 syntax.refresh(buf)
 assert(vim.wait(10000, function() return killed > 0 end, 1), 'closed hunk kept its native worker alive')
 assert(not syntax.is_pending(buf), 'closed hunk retained pending native comparison')
-assert(#vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_create_namespace('fugitive_extension_syntax'), 0, -1, {}) == 0,
+assert(#vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_create_namespace('git_extension_syntax'), 0, -1, {}) == 0,
   'native completion painted a closed hunk')
 vim.api.nvim_buf_delete(buf, { force = true })
 vim.system = system

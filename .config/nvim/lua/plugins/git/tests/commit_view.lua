@@ -28,7 +28,7 @@ local api = require('git.features.commit')
 local models = require('git.features.commit_model')
 api.setup(vim.api.nvim_create_augroup('CommitViewTest', { clear = true }))
 local b = assert(api.open({ work_tree = root, revision = second }))
-assert(vim.bo[b].filetype == 'fugitivecommit' and vim.bo[b].buftype == 'acwrite')
+assert(vim.bo[b].filetype == 'gitcommitview' and vim.bo[b].buftype == 'acwrite')
 local function press(key) local mapping = vim.fn.maparg(key, 'n', false, true); assert(mapping.callback, key); mapping.callback() end
 local function content() return vim.api.nvim_buf_get_lines(b, 0, -1, false) end
 local function find(pattern, buf)
@@ -40,7 +40,7 @@ end
 local function focus(pattern) vim.api.nvim_win_set_cursor(0, { find(pattern), 0 }) end
 local function text() return table.concat(content(), '\n') end
 local function assert_status_highlight(buf, row, group)
-  local ns = assert(vim.api.nvim_get_namespaces().fugitive_commit_view)
+  local ns = assert(vim.api.nvim_get_namespaces().git_commit_view)
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(buf, ns, { row - 1, 0 }, { row - 1, -1 }, { details = true })) do
     if mark[2] == row - 1 and mark[3] == 0 and mark[4].end_col == 1 and mark[4].hl_group == group then return end
   end

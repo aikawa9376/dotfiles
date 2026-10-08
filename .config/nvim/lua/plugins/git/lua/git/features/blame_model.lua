@@ -1,4 +1,4 @@
--- Git-only blame data. No Fugitive buffer names or commands are required.
+-- Git-only blame data. No Git buffer names or commands are required.
 local M = {}
 function M.git(root, args)
   local argv = { 'git', '--no-optional-locks', '-C', root }

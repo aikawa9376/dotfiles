@@ -16,7 +16,7 @@ local CACHE_TTL = 5 -- 秒
 local function current_buffer_work_tree()
   local ok, bufnr = pcall(vim.api.nvim_get_current_buf)
   if not ok or not utils.is_valid_buf(bufnr) then return nil end
-  if not vim.b[bufnr].fugitive_work_tree then return nil end
+  if not vim.b[bufnr].git_work_tree then return nil end
   return utils.get_buf_work_tree(bufnr)
 end
 
@@ -157,7 +157,7 @@ local function apply_highlights(bufnr)
   local entries = vim.b[bufnr].worktree_entries
   if not entries then return end
 
-  local ns = vim.api.nvim_create_namespace('fugitiveworktree_highlight')
+  local ns = vim.api.nvim_create_namespace('gitworktree_highlight')
   vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
   local current_root = utils.get_buf_work_tree(bufnr) or get_work_tree()
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
@@ -200,7 +200,7 @@ end
 
 local function refresh_all_worktree_buffers()
   for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
-    if utils.is_valid_buf(bufnr) and vim.bo[bufnr].filetype == 'fugitiveworktree' then
+    if utils.is_valid_buf(bufnr) and vim.bo[bufnr].filetype == 'gitworktree' then
       M.refresh_worktree_list(bufnr)
     end
   end
@@ -233,7 +233,7 @@ local function open_worktree_list(opts)
   local entries = get_worktrees(true, current_root)
   if #entries == 0 then return end
 
-  utils.open_panel_split('fugitive-worktree://' .. current_root)
+  utils.open_panel_split('git-worktree://' .. current_root)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, current_root)
 
@@ -241,7 +241,7 @@ local function open_worktree_list(opts)
   vim.api.nvim_set_option_value('buflisted', false, { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
-  vim.bo[bufnr].filetype = 'fugitiveworktree'
+  vim.bo[bufnr].filetype = 'gitworktree'
 
   M.refresh_worktree_list(bufnr)
   return bufnr
@@ -267,7 +267,7 @@ local function perform_sync(primary_path, target_head)
 
   M.clear_cache()
   refresh_all_worktree_buffers()
-  utils.fire_fugitive_changed({ work_tree = primary_path })
+  utils.fire_git_changed({ work_tree = primary_path })
 end
 
 function M.sync_current_worktree_to_primary()
@@ -398,7 +398,7 @@ function M.remove_worktree_path(path, force)
     vim.notify("Failed: " .. vim.fn.trim(output), vim.log.levels.ERROR); return false
   end
   M.clear_cache()
-  utils.fire_fugitive_changed({ work_tree = primary.path })
+  utils.fire_git_changed({ work_tree = primary.path })
   return true
 end
 
@@ -431,7 +431,7 @@ local function add_worktree(bufnr)
     if vim.v.shell_error == 0 then
       vim.notify(string.format("Added worktree '%s'", branch))
       M.clear_cache()
-      utils.fire_fugitive_changed({ bufnr = bufnr, work_tree = primary.path })
+      utils.fire_git_changed({ bufnr = bufnr, work_tree = primary.path })
     else
       vim.notify("Failed: " .. vim.fn.trim(output), vim.log.levels.ERROR)
     end
@@ -469,14 +469,14 @@ function M.setup(group)
   vim.api.nvim_create_user_command('Gworktree', open_worktree_list, {})
   vim.api.nvim_create_user_command('GworktreeSync', M.sync_current_worktree_to_primary, {})
 
-  vim.api.nvim_create_autocmd('FileType', { group = group, pattern = 'fugitive', callback = function(ev)
+  vim.api.nvim_create_autocmd('FileType', { group = group, pattern = 'git', callback = function(ev)
     vim.keymap.set('n', 'W', ':Gworktree<CR>', { buffer = ev.buf, silent = true })
     vim.keymap.set('n', 'gs', M.sync_current_worktree_to_primary, { buffer = ev.buf, silent = true })
   end })
 
-  vim.api.nvim_create_autocmd('FileType', { group = group, pattern = 'fugitiveworktree', callback = function(ev)
+  vim.api.nvim_create_autocmd('FileType', { group = group, pattern = 'gitworktree', callback = function(ev)
     local b = ev.buf
-    local buf_group = vim.api.nvim_create_augroup('fugitive_worktree_buf_' .. b, { clear = true })
+    local buf_group = vim.api.nvim_create_augroup('git_worktree_buf_' .. b, { clear = true })
     require('git.features.magit_actions').attach(b)
     vim.opt_local.number, vim.opt_local.relativenumber, vim.opt_local.signcolumn = false, false, 'no'
     vim.keymap.set('n', '?', function() help.show('Worktree keys', { '<CR> open', 'gs sync', 'a add', 'X remove', 'R refresh', 'q close' }) end, { buffer = b })
@@ -500,7 +500,7 @@ function M.setup(group)
   end })
 
   vim.api.nvim_create_autocmd({'DirChanged', 'BufEnter', 'BufWritePost'}, { group = group, callback = M.clear_cache })
-  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'FugitiveChanged', callback = M.clear_cache })
+  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitChanged', callback = M.clear_cache })
 end
 
 return M

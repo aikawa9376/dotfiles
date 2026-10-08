@@ -75,7 +75,7 @@ function M.restore(root, selector)
   if status.stdout ~= '' then return false, 'Commit or stash tracked changes before restoring WIP' end
   local applied = run(root, { 'stash', 'apply', '--index', revision })
   if applied.code ~= 0 then return false, error_text(applied) end
-  utils.fire_fugitive_changed({ work_tree = root })
+  utils.fire_git_changed({ work_tree = root })
   return true
 end
 
@@ -181,7 +181,7 @@ function M.setup(group)
     if name == '' or name:match('^%w[%w-]*://') then return end
     schedule(utils.get_buf_work_tree(ev.buf))
   end })
-  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'FugitiveChanged', callback = function(ev)
+  vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitChanged', callback = function(ev)
     schedule(ev.data and ev.data.work_tree)
   end })
 end

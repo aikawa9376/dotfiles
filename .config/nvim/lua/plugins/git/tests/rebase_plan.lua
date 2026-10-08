@@ -258,7 +258,7 @@ end)
 test('marking HEAD before new work and visible marks on source commit lists', function()
   local root, base = repo()
   local buf = vim.api.nvim_create_buf(false, true); vim.api.nvim_set_current_buf(buf)
-  vim.bo[buf].filetype = 'fugitivelog'; require('git.utils').set_buf_work_tree(buf, root)
+  vim.bo[buf].filetype = 'gitlog'; require('git.utils').set_buf_work_tree(buf, root)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { base:sub(1, 12) .. ' base' })
   local marked = ui.mark(root, base)
   assert(vim.wait(5000, function() return marked.completed end, 5))
@@ -294,7 +294,7 @@ test('commands, reference completion and History menu reach the same scoped plan
   require('git').setup()
   local root, base = repo(); local tip = commit(root, 'child')
   local buf = vim.api.nvim_create_buf(true, false); vim.api.nvim_set_current_buf(buf)
-  require('git.utils').set_buf_work_tree(buf, root); vim.bo[buf].filetype = 'fugitivelog'
+  require('git.utils').set_buf_work_tree(buf, root); vim.bo[buf].filetype = 'gitlog'
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, { base:sub(1, 12) .. ' base', tip:sub(1, 12) .. ' child' })
   assert(vim.tbl_contains(vim.fn.getcompletion('GitRebasePlan ma', 'cmdline'), 'main'))
   local actions = require('git.features.magit_actions'); actions.attach(buf)

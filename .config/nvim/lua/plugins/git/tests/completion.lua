@@ -15,7 +15,7 @@ has('Git bl', 'blame')
 has('Git --no-pager bl', 'blame')
 has('Git -c color.ui=false checkout feature/', 'feature/DMM')
 assert(#complete('Git commit -m bl') == 0)
-for _, command in ipairs({ 'Gedit', 'Gsplit', 'Gvsplit', 'Gtabedit', 'Gread', 'Gdiff', 'Gdiffsplit', 'Gclog', 'Gllog', 'Glog', 'FugitiveLog', 'GitCommit' }) do
+for _, command in ipairs({ 'Gedit', 'Gsplit', 'Gvsplit', 'Gtabedit', 'Gread', 'Gdiff', 'Gdiffsplit', 'Gclog', 'Gllog', 'Glog', 'GitLog', 'GitCommit' }) do
   has(command .. ' feature/', 'feature/DMM')
   assert(not vim.tbl_contains(complete(command .. ' bl'), 'blame'), 'subcommand leaked into ' .. command)
 end

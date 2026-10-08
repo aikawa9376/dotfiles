@@ -40,12 +40,12 @@ vim.cmd('edit ' .. vim.fn.fnameescape(root .. '/a file.txt'))
 local file_buf = vim.api.nvim_get_current_buf()
 vim.cmd('2,2Glog')
 assert_read_only()
-vim.api.nvim_exec_autocmds('User', { pattern = 'FugitiveChanged', data = { work_tree = root } })
+vim.api.nvim_exec_autocmds('User', { pattern = 'GitChanged', data = { work_tree = root } })
 assert_read_only()
 local selected = subjects()
 assert(selected:find('selected line', 1, true) and selected:find('initial', 1, true))
 assert(not selected:find('other line', 1, true), 'range log included an unrelated change')
-local range = vim.b.fugitive_log_line_history
+local range = vim.b.git_log_line_history
 assert(range.first == 2 and range.last == 2 and range.path == 'a file.txt')
 vim.cmd('close')
 
@@ -53,14 +53,14 @@ require('git.objects').open(initial_hash .. ':a file.txt', nil, root)
 vim.cmd('2,2Glog')
 assert(subjects():find('initial', 1, true) and not subjects():find('selected line', 1, true),
   'historical blob range should start from its displayed revision')
-assert(vim.b.fugitive_log_line_history.revision == initial_hash)
+assert(vim.b.git_log_line_history.revision == initial_hash)
 vim.cmd('close')
 vim.cmd('2,2Glog HEAD')
 assert(subjects():find('selected line', 1, true), 'explicit revision overrides the displayed blob')
 vim.cmd('close')
 vim.api.nvim_set_current_buf(file_buf)
 
-vim.cmd('1,1FugitiveLog')
+vim.cmd('1,1GitLog')
 assert(subjects():find('other line', 1, true) and not subjects():find('selected line', 1, true))
 vim.cmd('close')
 
@@ -107,7 +107,7 @@ vim.api.nvim_win_set_cursor(0, { 2, 0 })
 vim.cmd('normal! Vj')
 assert(vim.fn.mode() == 'V', 'test must be in Visual Line mode')
 visual_mapping()
-range = vim.b.fugitive_log_line_history
+range = vim.b.git_log_line_history
 assert(range and range.first == 2 and range.last == 3, 'Visual mapping lost selected row range')
 assert(subjects():find('selected line', 1, true) and not subjects():find('other line', 1, true))
 vim.cmd('close')
@@ -118,7 +118,7 @@ write({ 'prefix', 'ONE', 'TWO', 'three' }); commit('line shift')
 vim.cmd('edit!')
 vim.cmd('3,3Glog')
 local log_buf = vim.api.nvim_get_current_buf()
-local focus_by_commit = vim.b[log_buf].fugitive_log_line_focus
+local focus_by_commit = vim.b[log_buf].git_log_line_focus
 local selected_row, selected_hash, initial_row
 for row, line in ipairs(vim.api.nvim_buf_get_lines(log_buf, 0, -1, false)) do
   if line:find('selected line', 1, true) then
@@ -136,7 +136,7 @@ assert(preview_map.callback, 'log preview mapping is missing')
 preview_map.callback()
 local preview_win
 for _, win in ipairs(vim.api.nvim_list_wins()) do
-  if win ~= log_win and vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'fugitivecommit' then
+  if win ~= log_win and vim.bo[vim.api.nvim_win_get_buf(win)].filetype == 'gitcommitview' then
     preview_win = win
   end
 end
@@ -158,7 +158,7 @@ vim.api.nvim_win_set_cursor(log_win, { selected_row, 0 })
 local enter_map = vim.fn.maparg('<CR>', 'n', false, true)
 assert(enter_map.callback, 'log Enter mapping is missing')
 enter_map.callback()
-assert(vim.bo.filetype == 'fugitivecommit' and vim.api.nvim_get_current_line() == '+TWO',
+assert(vim.bo.filetype == 'gitcommitview' and vim.api.nvim_get_current_line() == '+TWO',
   'Enter did not focus the selected line diff in the commit panel')
 vim.cmd('tabclose')
 vim.cmd('close')

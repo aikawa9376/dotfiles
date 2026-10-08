@@ -228,9 +228,9 @@ local function ft_keymap(filetypes, mode, lhs, rhs, opts)
 end
 
 ft_keymap({ 'help', 'qf' }, 'n', '<CR>', '<CR>')
-ft_keymap({ 'help', 'qf', 'fugitive' }, 'n', 'q', '<C-w>c', { nowait = true })
+ft_keymap({ 'help', 'qf', 'git' }, 'n', 'q', '<C-w>c', { nowait = true })
 ft_keymap('noice', 'n', '<ESC>', '<C-w>c', { nowait = true })
-ft_keymap({ 'help', 'qf', 'fugitive', 'defx', 'vista', 'neo-tree' }, 'n', '<C-c>', '<C-w>c', { nowait = true })
+ft_keymap({ 'help', 'qf', 'git', 'defx', 'vista', 'neo-tree' }, 'n', '<C-c>', '<C-w>c', { nowait = true })
 ft_keymap('gitcommit', 'n', 'q', ':<c-u>wq<CR>', { nowait = true })
 ft_keymap('gitcommit', 'n', '<C-c>', ':<c-u>wq<CR>', { nowait = true })
 ft_keymap({ 'Avante', 'AvanteInput', 'AvanteSelectedFiles' }, 'n', 'q', ':AvanteToggle<CR>', { nowait = true, silent = true })

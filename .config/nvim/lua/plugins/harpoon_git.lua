@@ -1,8 +1,8 @@
 -- Git view identities for Harpoon. Never persist buffer/window IDs or replay actions.
 local M = {}
 local api = vim.api
-local panels = { fugitivestatus = 'status', fugitivelog = 'log', fugitivebranch = 'branch',
-  fugitivereflog = 'reflog', fugitivestash = 'stash', fugitiveworktree = 'worktree', gitwip = 'wip' }
+local panels = { gitstatus = 'status', gitlog = 'log', gitbranch = 'branch',
+  gitreflog = 'reflog', gitstash = 'stash', gitworktree = 'worktree', gitwip = 'wip' }
 
 local function git(root, args)
   local argv = { 'git', '--no-pager', '--no-optional-locks', '-C', root }
@@ -60,9 +60,9 @@ function M.capture(buf, pos, with_preview)
     local entry = (vim.b[buf].worktree_entries or {})[pos[1]]
     nav.path = entry and entry.path
   elseif view == 'log' then
-    nav.args = vim.b[buf].fugitive_log_args or ''
-    nav.menu_flags = vim.b[buf].fugitive_log_menu_flags
-    nav.line_history = vim.b[buf].fugitive_log_line_history
+    nav.args = vim.b[buf].git_log_args or ''
+    nav.menu_flags = vim.b[buf].git_log_menu_flags
+    nav.line_history = vim.b[buf].git_log_line_history
     if nav.line_history then
       nav.line_history.revision = commit(root, nav.line_history.revision or 'HEAD')
     end

@@ -8,13 +8,13 @@ local branch_spin = require('git.features.branch_spin')
 local github_open = require('git.features.github_open')
 local operation_progress = require('git.features.operation_progress')
 
-local branch_name_ns = vim.api.nvim_create_namespace("fugitive_branch_names")
-local branch_fade_ns = vim.api.nvim_create_namespace("fugitive_branch_fade")
-local branch_filter_ns = vim.api.nvim_create_namespace('fugitive_branch_filter')
+local branch_name_ns = vim.api.nvim_create_namespace("git_branch_names")
+local branch_fade_ns = vim.api.nvim_create_namespace("git_branch_fade")
+local branch_filter_ns = vim.api.nvim_create_namespace('git_branch_filter')
 local filters = { all = 'All', local_ = 'Local', remote = 'Remote', tags = 'Tags' }
 
 local function notify_branch_changed(bufnr, work_tree)
-  utils.fire_fugitive_changed({
+  utils.fire_git_changed({
     bufnr = bufnr,
     work_tree = work_tree,
   })
@@ -38,7 +38,7 @@ local function get_git_prefix(bufnr, notify)
 end
 
 ---@diagnostic disable-next-line: unused-vararg
-_G.fugitive_branch_completion = function(arg_lead, ...)
+_G.git_branch_completion = function(arg_lead, ...)
   local git = get_git_prefix(vim.api.nvim_get_current_buf())
   if not git then return {} end
   local branches = vim.fn.systemlist(git .. "branch -a --format='%(refname:short)'")
@@ -357,12 +357,12 @@ end
 local function apply_branch_highlight(bufnr)
   if not utils.is_valid_buf(bufnr) then return end
 
-  vim.api.nvim_set_hl(0, "FugitiveBranchName", { link = "Directory", default = true })
-  vim.api.nvim_set_hl(0, "FugitiveBranchCurrent", { link = "String", default = true })
-  vim.api.nvim_set_hl(0, "FugitiveBranchTag", { link = "Special", default = true })
-  vim.api.nvim_set_hl(0, "FugitiveBranchDate", { link = "Directory", default = true })
-  vim.api.nvim_set_hl(0, "FugitiveBranchAuthor", { link = "Type", default = true })
-  vim.api.nvim_set_hl(0, "FugitiveBranchUpstream", { link = "FugitiveStatAdd", default = true })
+  vim.api.nvim_set_hl(0, "GitBranchName", { link = "Directory", default = true })
+  vim.api.nvim_set_hl(0, "GitBranchCurrent", { link = "String", default = true })
+  vim.api.nvim_set_hl(0, "GitBranchTag", { link = "Special", default = true })
+  vim.api.nvim_set_hl(0, "GitBranchDate", { link = "Directory", default = true })
+  vim.api.nvim_set_hl(0, "GitBranchAuthor", { link = "Type", default = true })
+  vim.api.nvim_set_hl(0, "GitBranchUpstream", { link = "GitStatAdd", default = true })
   vim.api.nvim_buf_clear_namespace(bufnr, branch_name_ns, 0, -1)
 
   local columns = vim.b[bufnr].branch_columns or {}
@@ -373,17 +373,17 @@ local function apply_branch_highlight(bufnr)
       local kind = (vim.b[bufnr].branch_kinds or {})[lnum]
       vim.api.nvim_buf_set_extmark(bufnr, branch_name_ns, lnum - 1, prefix_end, {
         end_col = prefix_end + #branch,
-        hl_group = kind == 'tags' and 'FugitiveBranchTag'
-          or line:match("^%s*%*") and 'FugitiveBranchCurrent' or 'FugitiveBranchName',
+        hl_group = kind == 'tags' and 'GitBranchTag'
+          or line:match("^%s*%*") and 'GitBranchCurrent' or 'GitBranchName',
         priority = 80,
       })
 
       local layout = columns[lnum]
       if layout then
         for _, field in ipairs({
-          { layout.date_start, layout.date_len, 'FugitiveBranchDate' },
-          { layout.author_start, layout.author_len, 'FugitiveBranchAuthor' },
-          { layout.upstream_start, layout.upstream_len, 'FugitiveBranchUpstream' },
+          { layout.date_start, layout.date_len, 'GitBranchDate' },
+          { layout.author_start, layout.author_len, 'GitBranchAuthor' },
+          { layout.upstream_start, layout.upstream_len, 'GitBranchUpstream' },
         }) do
           local start_col, length, group = unpack(field)
           if start_col and length and length > 0 then
@@ -424,7 +424,7 @@ local function get_ref_at_cursor(bufnr)
   return name
 end
 
-_G.fugitive_upstream_completion = function(arg_lead)
+_G.git_upstream_completion = function(arg_lead)
   local work_tree = get_buffer_work_tree(vim.api.nvim_get_current_buf())
   if not work_tree then return {} end
   local result = vim.system({ 'git', 'for-each-ref', '--format=%(refname:short)',
@@ -507,7 +507,7 @@ local function change_upstream(bufnr, unset)
     args = { 'git', 'branch', '--unset-upstream', branch }
   else
     target = vim.fn.input('Upstream for ' .. branch .. ': ', current,
-      'customlist,v:lua.fugitive_upstream_completion')
+      'customlist,v:lua.git_upstream_completion')
     vim.cmd('redraw')
     target = vim.trim(target or '')
     if target == '' or target == current then return end
@@ -1050,7 +1050,7 @@ local function rebase_with_stash_fetch(bufnr, default_target)
   if not git then return end
 
   local target_default = default_target or get_default_origin_head(bufnr)
-  local target = vim.fn.input('Rebase on: ', target_default, 'customlist,v:lua.fugitive_branch_completion')
+  local target = vim.fn.input('Rebase on: ', target_default, 'customlist,v:lua.git_branch_completion')
   vim.cmd('redraw')
   if target == '' then return end
 
@@ -1111,7 +1111,7 @@ local function merge_with_input(bufnr, default_target)
   local work_tree = get_buffer_work_tree(bufnr, true)
   if not work_tree then return end
   local target_default = default_target or get_default_origin_head(bufnr)
-  local target = vim.fn.input('Merge: ', target_default, 'customlist,v:lua.fugitive_branch_completion')
+  local target = vim.fn.input('Merge: ', target_default, 'customlist,v:lua.git_branch_completion')
   vim.cmd('redraw')
   if target == '' then return end
 
@@ -1150,7 +1150,7 @@ local function open_branch_list(opts)
     return
   end
 
-  utils.open_panel_split('fugitive-branch://' .. git_dir)
+  utils.open_panel_split('git-branch://' .. git_dir)
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree, git_dir)
   vim.b[bufnr].branch_filter = filter
@@ -1168,7 +1168,7 @@ local function open_branch_list(opts)
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
   vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
   vim.wo[vim.api.nvim_get_current_win()].wrap = false
-  vim.bo[bufnr].filetype = 'fugitivebranch'
+  vim.bo[bufnr].filetype = 'gitbranch'
   vim.bo[bufnr].modifiable = false
   return bufnr
 end
@@ -1213,7 +1213,7 @@ end
 function M.setup(group)
   vim.api.nvim_set_decoration_provider(branch_filter_ns, {
     on_win = function(_, _, bufnr, toprow)
-      if vim.bo[bufnr].filetype ~= 'fugitivebranch' then return false end
+      if vim.bo[bufnr].filetype ~= 'gitbranch' then return false end
       vim.api.nvim_buf_set_extmark(bufnr, branch_filter_ns, toprow, 0, {
         virt_text = { { ' ' .. (filters[vim.b[bufnr].branch_filter or 'all'] or 'All') .. ' ', 'Comment' } },
         virt_text_pos = 'right_align',
@@ -1236,7 +1236,7 @@ function M.setup(group)
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = 'fugitive',
+    pattern = 'git',
     callback = function(ev)
       vim.keymap.set('n', 'B', function()
         vim.cmd('Gbranch')
@@ -1244,31 +1244,31 @@ function M.setup(group)
     end
   })
 
-  -- fugitive://スキームと同様に、fugitive-branch://スキームもファイルとして扱わないように設定する
+  -- Git object and branch URIs must not be treated as filesystem paths.
   -- これによりセッション復元時などのE212エラー（ディレクトリへの書き込み試行）を防ぐ
   vim.api.nvim_create_autocmd({ 'BufReadCmd', 'BufNewFile' }, {
     group = group,
-    pattern = 'fugitive-branch://*',
+    pattern = 'git-branch://*',
     callback = function(ev)
       local bufnr = ev.buf
       local buf_name = vim.api.nvim_buf_get_name(bufnr)
-      local git_dir = buf_name:sub(#'fugitive-branch://' + 1)
+      local git_dir = buf_name:sub(#'git-branch://' + 1)
       local work_tree = utils.get_work_tree({ git_dir = git_dir })
       utils.set_buf_work_tree(bufnr, work_tree, git_dir)
       vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
       vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
       vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
-      vim.bo[bufnr].filetype = 'fugitivebranch'
+      vim.bo[bufnr].filetype = 'gitbranch'
       refresh_branch_list(bufnr)
     end,
   })
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
-    pattern = 'fugitivebranch',
+    pattern = 'gitbranch',
     callback = function(ev)
       local bufnr = ev.buf
-      local buf_group = vim.api.nvim_create_augroup('fugitive_branch_buf_' .. bufnr, { clear = true })
+      local buf_group = vim.api.nvim_create_augroup('git_branch_buf_' .. bufnr, { clear = true })
       require('git.features.magit_actions').attach(bufnr)
 
       vim.keymap.set('n', '?', function()
@@ -1438,7 +1438,7 @@ function M.setup(group)
           vim.notify("No branch found on this line", vim.log.levels.WARN)
           return
         end
-        vim.cmd("FugitiveLog " .. vim.fn.fnameescape(branch))
+        vim.cmd("GitLog " .. vim.fn.fnameescape(branch))
       end, { buffer = bufnr, silent = true, desc = "Open log for branch" })
 
       -- <C-Space>: Flog window toggle for current branch

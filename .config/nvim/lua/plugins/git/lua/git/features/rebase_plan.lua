@@ -104,7 +104,7 @@ end
 function M.paint_mark(buf)
   if not vim.api.nvim_buf_is_loaded(buf) then return end
   local ft = vim.bo[buf].filetype
-  if not vim.tbl_contains({ 'fugitivestatus', 'fugitivelog', 'fugitivereflog', 'fugitivecommit' }, ft) then return end
+  if not vim.tbl_contains({ 'gitstatus', 'gitlog', 'gitreflog', 'gitcommitview' }, ft) then return end
   vim.api.nvim_buf_clear_namespace(buf, mark_ns, 0, -1)
   local hash = marks[utils.get_buf_work_tree(buf)]
   if not hash then return end

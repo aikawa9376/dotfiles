@@ -36,7 +36,7 @@ assert(initial_remote_tip ~= remote_tip, 'local clone already has the remote upd
 
 local auto_fetch_event = false
 vim.api.nvim_create_autocmd('User', {
-  pattern = 'FugitiveChanged',
+  pattern = 'GitChanged',
   callback = function(ev)
     if ev.data and ev.data.reason == 'status-auto-fetch' then auto_fetch_event = true end
   end,
