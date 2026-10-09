@@ -45,6 +45,28 @@ function M.run()
     assert(disk().schema_version == 1, 'on-disk schema changed')
     assert(#disk().threads == 2 and disk().threads[2].metadata.padding ~= nil)
 
+    -- Read marks and unchanged drafts are checked against disk under the lock;
+    -- no-op updates must neither rewrite history nor bypass process ownership.
+    local no_op_bytes = table.concat(readfile(store.path), '\n')
+    local writes = 0
+    vim.fn.writefile = function(lines, path, ...)
+      if path:find('/manifest.json.tmp.', 1, true) then writes = writes + 1 end
+      return writefile(lines, path, ...)
+    end
+    assert(store:update(A, { unread = false }, { skip_unchanged = true }))
+    assert(store:update(A, { draft = 'draft' }, { skip_unchanged = true }))
+    assert(writes == 0, 'unchanged read/draft state rewrote the manifest')
+    assert(table.concat(readfile(store.path), '\n') == no_op_bytes, 'no-op changed persisted bytes')
+    local rejected_no_op, ownership = store:update(A, { unread = false },
+      { skip_unchanged = true, expected_process_id = 999 })
+    assert(rejected_no_op == nil and ownership.code == 'stale_process', 'no-op bypassed process ownership')
+    local unread_external = disk()
+    unread_external.threads[1].unread = true
+    replace(unread_external)
+    assert(store:update(A, { unread = false }, { skip_unchanged = true }))
+    assert(writes == 1 and disk().threads[1].unread == false, 'external unread update was skipped')
+    vim.fn.writefile = writefile
+
     -- Persistence writes valid v1 JSON without one manifest-sized Lua string.
     -- Escaped newlines/quotes remain record data, not separators between records.
     local written_lines

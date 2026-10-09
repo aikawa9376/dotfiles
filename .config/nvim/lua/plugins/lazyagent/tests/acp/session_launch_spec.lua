@@ -67,6 +67,8 @@ function M.run()
   }
   local ready = {}
   local mcp_start_count = 0
+  local prepare_count, root_lookups = 0, 0
+  local launch_executable = "fake-acp"
   local launch = require("lazyagent.logic.session.launch").setup({
     state = state,
     acp_logic = {
@@ -78,8 +80,9 @@ function M.run()
       end,
     },
     agent_logic = {
+      get_interactive_agent = function() return {} end,
       resolve_launch_spec = function()
-        return { command = { "fake-acp" } }
+        return { command = { launch_executable } }
       end,
     },
     backend_logic = {
@@ -90,14 +93,21 @@ function M.run()
         return "buffer_acp", backend
       end,
     },
-    keymaps_logic = {},
+    keymaps_logic = { register_scratch_keymaps = function() end },
     send_logic = {},
     skills_logic = {
-      prepare = function()
+      prepare = function(provider)
+        prepare_count = prepare_count + 1
+        if provider == "Copilot" then
+          return { append_args = { "--plugin-dir", "/tmp/fixture-skills" }, env = { SKILLS_FIXTURE = "prepared" } }
+        end
         return {}
       end,
+      apply_command = function(command, args)
+        return vim.list_extend(vim.deepcopy(command), args)
+      end,
     },
-    window = {},
+    window = require("lazyagent.window"),
     persistence = {
       get_session = function()
         return nil
@@ -105,6 +115,7 @@ function M.run()
     },
     util = {
       project_root_for_buf = function(bufnr)
+        root_lookups = root_lookups + 1
         if bufnr == source_bufnr then return "/tmp/lazyagent-project-root" end
         return nil
       end,
@@ -169,6 +180,7 @@ function M.run()
   assert_equal(state.session_aliases.Codex, key_b, "legacy provider command alias")
 
   local reused_key
+  local before_reuse_prepare, before_reuse_root = prepare_count, root_lookups
   launch.ensure_session(key_a, {
     source_bufnr = vim.api.nvim_get_current_buf(),
   }, true, function(pane_id, session_key)
@@ -177,6 +189,8 @@ function M.run()
   end)
   assert_equal(reused_key, key_a, "runtime-key command reuse")
   assert_equal(#splits, 2, "runtime-key command must not launch a duplicate")
+  assert_equal(prepare_count, before_reuse_prepare, "reusing a running pane does not rebuild skills")
+  assert_equal(root_lookups, before_reuse_root, "reusing a running pane does not look up project roots")
   assert_equal(mcp_start_count, 0, "ACP session launch must not start legacy MCP server")
 
   local hidden_key
@@ -199,6 +213,7 @@ function M.run()
   assert_equal(state.sessions[hidden_key].hidden, true, "hidden ACP runtime remains marked hidden")
   assert_equal(splits[3].cwd, non_git_dir, "non-Git source directory wins over Neovim cwd")
   local revealed_key
+  before_reuse_prepare, before_reuse_root = prepare_count, root_lookups
   launch.ensure_session(hidden_key, {
     source_bufnr = non_git_bufnr,
     stay_hidden = false,
@@ -211,6 +226,8 @@ function M.run()
   assert_equal(joined_panes[1], state.sessions[hidden_key].pane_id, "hidden ACP session rejoins a window")
   assert_equal(state.sessions[hidden_key].hidden, false, "revealed ACP session is no longer hidden")
   assert_equal(state.sessions[hidden_key].mode, nil, "revealed ACP session leaves instant mode")
+  assert_equal(prepare_count, before_reuse_prepare, "revealing a hidden pane does not rebuild skills")
+  assert_equal(root_lookups, before_reuse_root, "revealing a hidden pane does not look up project roots")
   vim.api.nvim_buf_delete(non_git_bufnr, { force = true })
   vim.fn.delete(non_git_dir, "rf")
 
@@ -226,6 +243,58 @@ function M.run()
   assert_equal(mcp_start_count, 1, "non-ACP session launch starts MCP server lazily")
   assert_equal(legacy_splits[1].env.LAZYAGENT_MCP_URL, state.opts._mcp_url, "legacy session receives MCP URL")
   assert_equal(legacy_splits[1].env.LAZYAGENT_SESSION_KEY, "Legacy", "legacy child receives its LazyAgent session key")
+
+  local flag_ready
+  launch.ensure_session("Copilot", {}, false, function(pane) flag_ready = pane end)
+  assert(vim.wait(1000, function() return flag_ready ~= nil end, 10))
+  local flag_session = state.sessions.Copilot
+  assert(vim.deep_equal(splits[#splits].command, { "fake-acp", "--plugin-dir", "/tmp/fixture-skills" }), "launch retains skill arguments")
+  assert_equal(splits[#splits].env.SKILLS_FIXTURE, "prepared", "launch retains skill environment")
+  before_reuse_prepare = prepare_count
+  launch.ensure_session("Copilot", {}, true, function(pane)
+    assert_equal(pane, flag_ready, "flag-provider scratch reuses its pane")
+  end)
+  assert_equal(prepare_count, before_reuse_prepare, "flag-provider reopen does not prepare skills")
+
+  -- Pre-change runtime snapshots have only the command with appended flags.
+  flag_session.launch_base_cmd = nil
+  launch.ensure_session("Copilot", {}, true, function(pane)
+    assert_equal(pane, flag_ready, "older runtime with skill flags is reused")
+  end)
+  assert_equal(prepare_count, before_reuse_prepare + 1, "older runtime prepares compatibility signature once")
+  launch.ensure_session("Copilot", {}, true, function() end)
+  assert_equal(prepare_count, before_reuse_prepare + 1, "compatibility upgrade avoids later skill preparation")
+
+  launch_executable = "changed-acp"
+  local changed_ready
+  launch.ensure_session("Copilot", {}, true, function(pane) changed_ready = pane end)
+  assert(vim.wait(1000, function() return changed_ready ~= nil end, 10))
+  assert(changed_ready ~= flag_ready, "a changed base command still launches a new pane")
+  assert(vim.deep_equal(splits[#splits].command, { "changed-acp", "--plugin-dir", "/tmp/fixture-skills" }), "changed launch still includes skills")
+
+  local snapshot = { acp_thread_id = THREAD_A, acp_thread_unread = false, acp_thread_draft = "saved draft" }
+  local marked_read = 0
+  backend.get_runtime_snapshot = function() return vim.deepcopy(snapshot) end
+  backend.mark_thread_read = function()
+    marked_read = marked_read + 1
+    snapshot.acp_thread_unread = false
+  end
+  local input_buf
+  launch.start_interactive_session({ agent_name = "Copilot", reuse = true,
+    on_ready = function(_, _, buf) input_buf = buf end })
+  assert(vim.wait(500, function()
+    return input_buf and vim.api.nvim_buf_get_lines(input_buf, 0, -1, false)[1] == "saved draft"
+  end, 10), "saved draft is restored without a read-state write")
+  assert_equal(marked_read, 0, "opening an already-read scratch skips read-state persistence")
+  local window = require("lazyagent.window")
+  vim.api.nvim_buf_set_lines(input_buf, 0, -1, false, { "user edited draft" })
+  window.close({ keep_buffer = true })
+  snapshot.acp_thread_unread = true
+  launch.start_interactive_session({ agent_name = "Copilot", reuse = true })
+  assert_equal(marked_read, 1, "opening an unread thread still persists its read state")
+  assert_equal(vim.api.nvim_buf_get_lines(input_buf, 0, -1, false)[1], "user edited draft", "reopen preserves edited input")
+  window.close({ keep_buffer = true })
+  vim.api.nvim_buf_delete(input_buf, { force = true })
 end
 
 return M

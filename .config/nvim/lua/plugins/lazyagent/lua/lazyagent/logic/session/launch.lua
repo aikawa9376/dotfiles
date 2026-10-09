@@ -170,18 +170,19 @@ function M.setup(deps)
       agent_cfg = vim.tbl_deep_extend("force", {}, agent_cfg or {}, { acp_thread_id = requested_thread_id })
     end
     local launch_spec, launch_err = agent_logic.resolve_launch_spec(provider_id, agent_cfg)
-    local root_dir = resolve_root_dir(agent_cfg)
-    local skills_launch = skills_logic.prepare(provider_id, agent_cfg, {
-      root_dir = root_dir,
-    })
-    if launch_spec and skills_launch and skills_launch.append_args and not vim.tbl_isempty(skills_launch.append_args) then
-      launch_spec = vim.tbl_deep_extend("force", {}, launch_spec, {
-        command = skills_logic.apply_command(launch_spec.command, skills_launch.append_args),
-      })
-    end
+    local requested_base_key = serialize_launch_command(launch_spec and launch_spec.command or nil)
+    local requested_launch_cmd = launch_spec and launch_spec.command or nil
+    local requested_launch_key = serialize_launch_command(requested_launch_cmd)
+    local root_dir, skills_launch
+    local skills_prepared = false
     local session_key = identity.key(provider_id, agent_cfg)
     agent_name = session_key
     local function notify_ready(pane_id)
+      local session = state.sessions[session_key]
+      if session and not session.launch_base_cmd and launch_spec
+        and (not session.launch_cmd or session.launch_cmd == requested_launch_key) then
+        session.launch_base_cmd = requested_base_key
+      end
       identity.activate(state, session_key, state.sessions[session_key])
       on_ready(pane_id, session_key)
     end
@@ -192,8 +193,23 @@ function M.setup(deps)
     end
 
     local backend_name, backend_mod = backend_logic.resolve_backend_for_agent(provider_id, agent_cfg)
-    local requested_launch_cmd = launch_spec and launch_spec.command or nil
-    local requested_launch_key = serialize_launch_command(requested_launch_cmd)
+    local function prepare_launch()
+      root_dir = resolve_root_dir(agent_cfg)
+      skills_launch = skills_logic.prepare(provider_id, agent_cfg, { root_dir = root_dir })
+      skills_prepared = true
+      if launch_spec and skills_launch and skills_launch.append_args and not vim.tbl_isempty(skills_launch.append_args) then
+        launch_spec = vim.tbl_deep_extend("force", {}, launch_spec, {
+          command = skills_logic.apply_command(launch_spec.command, skills_launch.append_args),
+        })
+        requested_launch_cmd = launch_spec.command
+        requested_launch_key = serialize_launch_command(requested_launch_cmd)
+      end
+    end
+    -- Older runtime snapshots contain only the command with skill arguments.
+    -- Resolve it once, then remember the base command for subsequent UI reopens.
+    if reuse and existing_session and existing_session.launch_cmd and not existing_session.launch_base_cmd then
+      prepare_launch()
+    end
 
     if module.backend_supports_persistence(backend_name)
       and not (state.sessions[agent_name] and state.sessions[agent_name].pane_id)
@@ -201,6 +217,7 @@ function M.setup(deps)
       local persisted_pane = persistence.get_session(agent_name)
       if persisted_pane and persisted_pane ~= "" then
         if backend_mod and type(backend_mod.pane_exists) == "function" and backend_mod.pane_exists(persisted_pane) then
+          root_dir = root_dir or resolve_root_dir(agent_cfg)
           local watch_enabled_val = watch_enabled_for_session(agent_cfg, backend_name)
           state.sessions[agent_name] = {
             pane_id = persisted_pane,
@@ -307,7 +324,10 @@ function M.setup(deps)
         maybe_disable_watchers()
       end
 
-      if state.sessions[agent_name].launch_cmd and requested_launch_key and state.sessions[agent_name].launch_cmd ~= requested_launch_key then
+      local session = state.sessions[agent_name]
+      local previous_command = session.launch_base_cmd or session.launch_cmd
+      local requested_command = launch_spec and (session.launch_base_cmd and requested_base_key or requested_launch_key) or nil
+      if previous_command and requested_command and previous_command ~= requested_command then
         -- fall through to create a new session
       else
         if backend_mod and type(backend_mod.pane_exists) == "function" then
@@ -328,6 +348,8 @@ function M.setup(deps)
         end
       end
     end
+
+    if not skills_prepared then prepare_launch() end
 
     local project_instructions_native = false
     local split_opts
@@ -351,6 +373,7 @@ function M.setup(deps)
           backend = backend_name,
           watch_enabled = watch_enabled_val,
           launch_cmd = requested_launch_key,
+          launch_base_cmd = requested_base_key,
           cwd = root_dir,
           session_scope = current_editor_session_name(),
           provider_id = provider_id,
@@ -720,7 +743,8 @@ function M.setup(deps)
       local runtime = preserve_scratch and backend_mod and type(backend_mod.get_runtime_snapshot) == "function"
           and backend_mod.get_runtime_snapshot(pane_id)
         or nil
-      if runtime and runtime.acp_thread_id and type(backend_mod.mark_thread_read) == "function" then
+      if runtime and runtime.acp_thread_id and runtime.acp_thread_unread ~= false
+        and type(backend_mod.mark_thread_read) == "function" then
         backend_mod.mark_thread_read(runtime.acp_thread_id)
       end
 

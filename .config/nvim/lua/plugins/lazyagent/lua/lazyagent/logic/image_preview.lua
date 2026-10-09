@@ -510,8 +510,13 @@ function M.new(ctx)
     if not valid_buffer(bufnr) then
       return nil
     end
+    local existing = buffers[bufnr]
+    local process_changes_enabled = not is_acp_buffer(bufnr)
+    if existing and existing.process_changes_enabled == process_changes_enabled then
+      return bufnr
+    end
     local buf_state = ensure_tracking(bufnr)
-    buf_state.process_changes_enabled = not is_acp_buffer(bufnr)
+    buf_state.process_changes_enabled = process_changes_enabled
     schedule_refresh(bufnr, { process_changes = buf_state.process_changes_enabled, immediate = true })
     return bufnr
   end

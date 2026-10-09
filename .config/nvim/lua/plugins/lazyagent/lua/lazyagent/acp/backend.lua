@@ -1827,11 +1827,11 @@ local function create_backend(default_view)
   end
 
   function backend.set_thread_draft(thread_id, draft)
-    return backend.update_thread(thread_id, { draft = tostring(draft or "") })
+    return backend.update_thread(thread_id, { draft = tostring(draft or "") }, { skip_unchanged = true })
   end
 
   function backend.mark_thread_read(thread_id)
-    return backend.update_thread(thread_id, { unread = false })
+    return backend.update_thread(thread_id, { unread = false }, { skip_unchanged = true })
   end
 
   function backend.get_pane_pid(pane_id)

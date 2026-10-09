@@ -463,6 +463,16 @@ function Store:update(thread_id, changes, opts)
         current_process_id = current.process_id,
       }
     end
+    if opts.skip_unchanged == true then
+      local unchanged = true
+      for field, value in pairs(changes) do
+        if not vim.deep_equal(current[field], value) then
+          unchanged = false
+          break
+        end
+      end
+      if unchanged then return copy(current), warning end
+    end
     changes.thread_id = current.thread_id
     changes.provider_id = current.provider_id
     changes.created_at = current.created_at

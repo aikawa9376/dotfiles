@@ -93,7 +93,10 @@ local function apply_scratch_buffer_defaults(bufnr, filetype)
     vim.bo[bufnr].swapfile = false
     vim.bo[bufnr].undofile = false
     vim.bo[bufnr].modifiable = true
-    vim.bo[bufnr].filetype = filetype or vim.bo[bufnr].filetype or "lazyagent"
+    local target_filetype = filetype or vim.bo[bufnr].filetype or "lazyagent"
+    if vim.bo[bufnr].filetype ~= target_filetype then
+      vim.bo[bufnr].filetype = target_filetype
+    end
     vim.b[bufnr].lazyagent_is_scratch = true
     vim.b[bufnr].lazyagent_scratch_filetype = vim.bo[bufnr].filetype
   end)

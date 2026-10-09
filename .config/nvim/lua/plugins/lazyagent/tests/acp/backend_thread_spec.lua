@@ -560,6 +560,19 @@ function M.run()
 
   assert(backend.mark_thread_read(runtime.acp_thread_id))
   assert_equal(backend.get_runtime_snapshot(pane_id).acp_thread_unread, false, "thread read state")
+  local writefile = vim.fn.writefile
+  local read_mark_writes = 0
+  vim.fn.writefile = function(lines, path, ...)
+    if path:find('/manifest.json.tmp.', 1, true) then read_mark_writes = read_mark_writes + 1 end
+    return writefile(lines, path, ...)
+  end
+  local read_ok, read_err = pcall(function()
+    assert(backend.mark_thread_read(runtime.acp_thread_id))
+    assert(backend.set_thread_draft(runtime.acp_thread_id, fallback_runtime.acp_thread_draft))
+  end)
+  vim.fn.writefile = writefile
+  assert(read_ok, read_err)
+  assert_equal(read_mark_writes, 0, "already-read state and unchanged draft do not write history")
   assert_equal(type(on_transcript_read), "function", "transcript read callback")
   assert(backend.update_thread(runtime.acp_thread_id, { unread = true }))
   on_transcript_read()
