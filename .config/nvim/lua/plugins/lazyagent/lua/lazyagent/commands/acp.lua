@@ -260,6 +260,11 @@ local commands = {
     handler = session_logic.reopen_acp_window,
   },
   {
+    name = "LazyAgentACPConversationToggle",
+    desc = "Toggle between the full ACP transcript and user/assistant messages",
+    handler = session_logic.toggle_acp_conversation_only,
+  },
+  {
     name = "LazyAgentACPRawTranscript",
     desc = "Open the uncompacted ACP transcript for an ACP-enabled agent",
     handler = session_logic.open_raw_acp_transcript,

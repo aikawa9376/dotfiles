@@ -2281,6 +2281,15 @@ local function create_backend(default_view)
     return backend.break_pane(pane_id)
   end
 
+  function backend.toggle_conversation_only(pane_id)
+    local session = get_session(pane_id)
+    local view = session_view(session)
+    if view and type(view.toggle_conversation_only) == "function" then
+      return view.toggle_conversation_only(pane_id, session)
+    end
+    return nil, "conversation-only display requires the ACP buffer view"
+  end
+
   function backend.open_fullscreen_transcript(pane_id)
     local session = get_session(pane_id)
     local view = session_view(session)

@@ -1102,6 +1102,19 @@ function M.setup(deps)
     end)
   end
 
+  function module.toggle_acp_conversation_only(agent_name)
+    with_acp_session(agent_name, function(_, pane_id, backend_mod)
+      if not backend_mod or type(backend_mod.toggle_conversation_only) ~= "function" then
+        vim.notify("LazyAgentACP: conversation-only display is unavailable", vim.log.levels.WARN)
+        return
+      end
+      local enabled, err = backend_mod.toggle_conversation_only(pane_id)
+      if enabled == nil then
+        vim.notify("LazyAgentACP: " .. tostring(err), vim.log.levels.WARN)
+      end
+    end)
+  end
+
   function module.open_raw_transcript(agent_name)
     with_acp_session(agent_name, function(chosen, pane_id, backend_mod)
       local session = state.sessions[chosen]

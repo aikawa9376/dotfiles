@@ -1,6 +1,7 @@
 local M = {}
 local sections = require("lazyagent.acp.view_buffer.sections")
 local session_identity = require("lazyagent.logic.session.identity")
+local conversation_filter = require("lazyagent.acp.view_buffer.conversation_filter")
 
 function M.new(ctx)
   local api = ctx.api
@@ -709,12 +710,18 @@ function M.new(ctx)
   local function apply_pending_append(bufnr, pending)
     local entry = layout_entry(bufnr)
     local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
+    local conversation_only = pane_opts_for_bufnr(bufnr).conversation_only == true
+    if conversation_only then
+      local action = conversation_filter.append_action(entry.conversation_filter_state, pending)
+      if action == "refresh" then return nil, 0, true end
+      if action == "skip" then return nil, 0, false end
+    end
     local pending_sections = pending_transcript_section_count(pending)
     if append_requires_full_refresh(bufnr, pending) then
       return nil, pending_sections, true
     end
 
-    local preserve_display_metadata = meta.compacted == true and pending_sections == 0
+    local preserve_display_metadata = (meta.compacted == true or conversation_only) and pending_sections == 0
     local changed_start = append_text_to_buffer(bufnr, pending, {
       preserve_display_metadata = preserve_display_metadata,
     })
@@ -748,6 +755,7 @@ function M.new(ctx)
     end
 
     local pending = take_pending_append(session.view_state)
+    layout_entry(bufnr).pending_append_session = nil
     if pending == "" then
       return false
     end
@@ -892,6 +900,7 @@ function M.new(ctx)
 
     session.view_state = session.view_state or {}
     push_pending_append(session.view_state, text)
+    layout_entry(bufnr).pending_append_session = session
 
     if session.view_state.append_timer then
       return

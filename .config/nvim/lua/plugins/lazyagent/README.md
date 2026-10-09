@@ -590,6 +590,8 @@ Neovim 0.13 の native `:restart` では、`ExitPre` で起動中の ACP thread 
 
 ### ACP transcript buffer keymaps
 
+ACP 履歴上の `gC` または `:LazyAgentACPConversationToggle [agent]` で、通常表示と User / Assistant の会話だけの表示を切り替えられます。既定は通常表示です。会話表示では Thinking / Tool / Edited / Terminal / Plan / System / Error を隠し、返信は引き続き更新されます。切り替えは pane 単位で、閉じて再表示しても維持されます。保存ログはそのまま残り、会話表示中も通常の `transcript_max_lines` の範囲を表示します。会話表示中は section compaction を適用せず、全文 tab / raw log は全ログを表示します。
+
 上向きのマウスホイールや上方向へのカーソル移動で、出力への追従を解除します。マウス操作はポインタ下のtranscriptを対象にし、解除後の画面調整や予約済みスクロールで追従を再開しません。下方向へ操作して末尾へ戻るか、`G` / `<End>` で追従を再開できます。
 
 ACP transcript buffer では `ga` で action menu、`<space><space>` でカーソル下の block / tool metadata を近くの float で開けます。`<localleader>s` で ACP provider（Copilot / Gemini / Cursor など）を会話途中で切り替え、既存 transcript は維持したまま次の prompt に会話履歴を引き継げます。` :LazyAgentACPResumeConversation [agent]` では保存済みの ACP conversation log を同じ carryover 方式で新しい ACP session に読み込めます。`:LazyAgentACPSessions [agent]` では provider 側が保持している native session を一覧し、現在の会話へ add するか、native load / resume できます。float は `q` または `<Esc>` で閉じます。
@@ -742,6 +744,7 @@ MCP integration は cache 配下に hook scripts と MCP config を生成しま�
 | `:LazyAgentACPRename [title]` | 現在のLazyAgent ACP threadへ手動の表示名を付ける |
 | `:LazyAgentACPNames` | 手動で命名したthreadをpreviewしてACP sessionとして再開 |
 | `:LazyAgentACPFullTranscript [agent]` | compaction と display transform を切った ACP transcript を全画面 tab で開く |
+| `:LazyAgentACPConversationToggle [agent]` | ACP buffer の通常表示と User / Assistant の会話だけの表示を切り替える |
 | `:LazyAgentACPRawTranscript [agent]` | compaction なしの ACP live transcript を開く |
 | `:LazyAgentOpenConversation [agent]` | live pane / transcript を保存して開く |
 | `:LazyAgentSummary [open\|copy]` | summary Markdown を開く / path をコピー |

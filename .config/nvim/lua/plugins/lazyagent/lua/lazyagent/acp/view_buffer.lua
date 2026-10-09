@@ -976,6 +976,12 @@ end
 set_buffer_lines = function(bufnr, lines, section_items, display_meta)
   local entry = layout_entry(bufnr)
   invalidate_transcript_section_cache(bufnr)
+  -- A shorter projection invalidates painted ranges from the previous layout;
+  -- reusing them can normalize past the new transcript into footer padding.
+  entry.viewport_ranges = nil
+  entry.viewport_width = nil
+  entry.viewport_tick = nil
+  entry.viewport_count = nil
   entry.footer_padding_count = 0
   entry.footer_signature = nil
   entry.transcript_source_lines = nil
@@ -1208,6 +1214,7 @@ require("lazyagent.acp.view_buffer.api").attach(M, {
   end,
   refresh_buffer_from_file = refresh_buffer_from_file,
   resume_deferred_updates_for_buffer = resume_deferred_updates_for_buffer,
+  flush_pending_append = view_updates.flush_pending_append,
   refresh_buffer_layout = function(...)
     return refresh_buffer_layout(...)
   end,

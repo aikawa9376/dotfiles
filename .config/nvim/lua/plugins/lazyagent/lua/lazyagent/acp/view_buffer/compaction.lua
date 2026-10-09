@@ -1,5 +1,6 @@
 local M = {}
 local view_sections = require("lazyagent.acp.view_buffer.sections")
+local conversation_filter = require("lazyagent.acp.view_buffer.conversation_filter")
 
 function M.new(ctx)
   local pane_opts_for_bufnr = ctx.pane_opts_for_bufnr
@@ -24,7 +25,7 @@ function M.new(ctx)
     local keep_recent_sections = tonumber(cfg.keep_recent_sections) or 24
     local summary_items = tonumber(cfg.summary_items) or 6
     return {
-      enabled = cfg.enabled == true,
+      enabled = cfg.enabled == true and opts.conversation_only ~= true,
       min_sections = math.max(2, math.floor(min_sections)),
       keep_recent_sections = math.max(1, math.floor(keep_recent_sections)),
       summary_items = math.max(1, math.floor(summary_items)),
@@ -184,6 +185,13 @@ function M.new(ctx)
     local cfg = transcript_compaction_config(bufnr)
     local sections = collect_transcript_sections(raw_lines)
     local items = transcript_items_for_sections(bufnr, sections)
+    if pane_opts_for_bufnr(bufnr).conversation_only == true then
+      layout_entry(bufnr).conversation_filter_state = conversation_filter.tail_state(raw_lines, sections)
+      raw_lines, items = conversation_filter.project(raw_lines, sections, items)
+      sections = collect_transcript_sections(raw_lines)
+    else
+      layout_entry(bufnr).conversation_filter_state = nil
+    end
     if not cfg.enabled or #sections < cfg.min_sections then
       local balanced_lines = balance_unclosed_markdown_fences(raw_lines)
       local transformed, _, meta = transform_markdown_tables(balanced_lines, transcript_table_layout(bufnr))

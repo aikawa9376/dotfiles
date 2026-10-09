@@ -213,6 +213,10 @@ function M.attach(api, ctx)
       session.view_state.pending_append = ""
       session.view_state.pending_append_chunks = nil
       session.view_state.pending_append_size = 0
+      local bufnr = to_bufnr(session.pane_id)
+      if bufnr and layout_state[tostring(bufnr)] then
+        layout_state[tostring(bufnr)].pending_append_session = nil
+      end
       close_timer(session.view_state.append_timer)
       session.view_state.append_timer = nil
       refresh_buffer_from_file(session)
@@ -587,6 +591,7 @@ function M.attach(api, ctx)
       pane_size = nil,
       is_vertical = false,
       follow_output = false,
+      conversation_only = false,
       fancy_mode = false,
       table_layout = "table",
       release_buffer_on_hide = false,
@@ -634,6 +639,31 @@ function M.attach(api, ctx)
     })
 
     return true
+  end
+
+  function M.toggle_conversation_only(pane_id, session)
+    pane_id = tostring(pane_id or "")
+    local config = pane_config[pane_id]
+    if not config then return nil, "ACP transcript pane is unavailable" end
+    local bufnr = to_bufnr(pane_id)
+    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      -- Consume queued output before reading the same bytes from disk, otherwise
+      -- the next append timer would duplicate text in the newly projected view.
+      local entry = layout_state[tostring(bufnr)] or {}
+      local pending_session = entry.pending_append_session or session
+      if pending_session then ctx.flush_pending_append(pending_session) end
+      resume_deferred_updates_for_buffer(bufnr)
+    end
+    config.conversation_only = config.conversation_only ~= true
+    if bufnr and vim.api.nvim_buf_is_valid(bufnr) then
+      refresh_buffer_from_path(bufnr,
+        session and session.transcript_path or buffer_var(bufnr, "lazyagent_acp_transcript_path"),
+        { force = true })
+      if ctx.should_follow_output(bufnr) then ctx.scroll_buffer_to_end(bufnr) end
+    end
+    vim.notify("LazyAgent ACP: " .. (config.conversation_only and "conversation only" or "full transcript"),
+      vim.log.levels.INFO)
+    return config.conversation_only
   end
 
   function M.copy_mode()
