@@ -329,6 +329,31 @@ and wrap them on narrower screens. Set
 one-group-per-row layout; unset it or use `'horizontal'` for the new layout.
 The existing panel keys and `?` help remain separate.
 
+In the Branch (`b`) menu, `u` sets upstream when unset and removes it when
+configured, including when its remote-tracking ref has disappeared. `U` sets
+or replaces upstream, with local/remote ref completion. Status and Log use the
+checked-out branch; Branch uses the selected local branch. Remote/tag rows and
+detached HEAD do not implicitly edit a local branch. `C` chooses a local branch
+and opens its configuration menu without checking it out. Push (`P`), Pull
+(`F`) and Fetch (`f`) also offer this `C` entry.
+
+Branch configuration includes description (`d`), pull rebase mode (`r`), push
+remote (`p`), repository pull mode (`R`), default push remote (`P`), and branch
+creation defaults (`a m` / `a r`). Values are applied immediately to repository
+local Git configuration and refresh matching panels; they are separate from
+saved transient arguments. Choose `(unset)` or submit a blank text value to
+clear a local override; canceling input leaves it unchanged. Previous-branch
+checkout is now `b v`, leaving `b r` for rebase configuration. `b s` / `b S`
+also expose spin-off/spin-out from Branch, operating on the checked-out branch.
+
+The Remote (`M`) menu shows configuration for the branch's upstream remote,
+falling back to `origin` or the first remote. `C` chooses a different remote.
+`u` / `s` edit fetch/push URLs, `U` / `S` edit fetch/push refspecs, and `O`
+sets tag fetching. For fields with multiple values, select an entry to edit
+or remove it (blank), or select **Add value**; sibling values are preserved.
+Remote removal uses `k`, with `x` retained as an alias. Configuration menus show
+local overrides; clearing one allows inherited Git configuration to apply.
+
 Push and Pull keep their existing current-HEAD actions. Their `s` action uses
 the ref under the cursor: Push sends a selected branch to its push remote (or
 prompts for one), and can send a selected commit to a named destination branch.

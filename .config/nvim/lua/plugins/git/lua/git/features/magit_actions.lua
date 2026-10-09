@@ -193,6 +193,12 @@ local function show_submenu(spec, ui)
     layout = ui.layout })
 end
 
+local function branch_config_action(ctx)
+  return { key = 'C', label = 'Configure branch…', run = function(ui)
+    require('git.features.magit_config').open_branch(ctx, ui, show_submenu)
+  end }
+end
+
 local function mainline_flag(state)
   return value_flag('-m', 'Replay merge relative to parent', state, 'mainline', '--mainline=',
     function(value)
@@ -466,6 +472,8 @@ end
 
 local function branch_menu(ctx, ui)
   local chosen = ctx.branch
+  local config = require('git.features.magit_config')
+  local branch = config.branch(ctx)
   local state = { recurse_submodules = false }
   local actions = {
     { key = 'b', label = 'Check out branch or revision', run = function()
@@ -518,7 +526,7 @@ local function branch_menu(ctx, ui)
         git(args, ctx)
       end, chosen and ctx.branch_kind == 'local_' and chosen or nil)
     end },
-    { key = 'r', label = 'Check out previous branch',
+    { key = 'v', label = 'Check out previous branch',
       run = function()
         local args = { 'switch' }
         if state.recurse_submodules then args[#args + 1] = '--recurse-submodules' end
@@ -540,6 +548,7 @@ local function branch_menu(ctx, ui)
         end)
       end)
     end },
+    branch_config_action(ctx),
   }
   if chosen and ctx.branch_kind ~= 'tags' then
     vim.list_extend(actions, {
@@ -554,11 +563,6 @@ local function branch_menu(ctx, ui)
           git({ 'branch', '-d', chosen }, ctx)
         end
       end },
-      { key = 'C', label = 'Set upstream for ' .. chosen, run = function()
-        input('Upstream ref: ', function(ref)
-          git({ 'branch', '--set-upstream-to=' .. ref, chosen }, ctx)
-        end)
-      end },
       { key = 'X', label = 'Reset branch to ref', run = function()
         input('Reset ' .. chosen .. ' to ref: ', function(ref)
           if vim.fn.confirm('Move branch ' .. chosen .. ' to ' .. ref .. '?',
@@ -569,23 +573,25 @@ local function branch_menu(ctx, ui)
       end },
     })
   end
-  if ctx.panel == 'status' or ctx.panel == 'log' then
+  if ctx.panel == 'status' or ctx.panel == 'log' or ctx.panel == 'branch' then
     vim.list_extend(actions, {
       { key = 's', label = 'Spin off outgoing commits', run = function() existing_key('bs') end },
       { key = 'S', label = 'Spin out outgoing commits', run = function() existing_key('bS') end },
     })
   end
+  local groups = config.branch_groups(ctx, branch)
+  vim.list_extend(groups, {
+    { title = 'Arguments', actions = {
+      flag('-m', 'Merge local modifications', state, 'merge', '--merge'),
+      flag('-r', 'Recurse submodules when checking out', state,
+        'recurse_submodules', '--recurse-submodules'),
+    } },
+    { title = 'Actions', actions = actions },
+  })
   return show_submenu({ kind = 'branch', title = 'Branch',
     context = ctx.commit and commit_label(ctx)
-      or chosen and ('Ref: ' .. chosen) or 'No branch selected',
-    groups = {
-      { title = 'Arguments', actions = {
-        flag('-m', 'Merge local modifications', state, 'merge', '--merge'),
-        flag('-r', 'Recurse submodules when checking out', state,
-          'recurse_submodules', '--recurse-submodules'),
-      } },
-      { title = 'Actions', actions = actions },
-    },
+      or (chosen or branch) and ('Ref: ' .. (chosen or branch)) or 'No local branch selected',
+    groups = groups,
   }, ui)
 end
 
@@ -797,6 +803,7 @@ local function push_menu(ctx, ui)
       } },
       { title = 'Actions', actions = {
         { key = 'v', label = 'Review range-diff before push', run = function() require('git.features.range_diff').open(ctx.work_tree) end },
+        branch_config_action(ctx),
         { key = 'p', label = 'Push current to push remote', run = function()
           if remotes and remotes.push_remote then
             push({ remotes.push_remote, 'HEAD:refs/heads/' .. remotes.branch })
@@ -896,6 +903,7 @@ local function pull_menu(ctx, ui)
         flag('-F', 'Force', state, 'force', '--force'),
       } },
       { title = 'Actions', actions = {
+        branch_config_action(ctx),
         { key = 'p', label = 'Pull from push remote', run = function()
           if remotes and remotes.push_remote then
             pull({ remotes.push_remote, remotes.branch })
@@ -949,6 +957,7 @@ local function fetch_menu(ctx, ui)
         flag('-F', 'Force', state, 'force', '--force'),
       } },
       { title = 'Actions', actions = {
+        branch_config_action(ctx),
         { key = 'f', label = 'Fetch default remote', run = function() fetch() end },
         { key = 'p', label = 'Fetch push remote', run = function()
           if remotes and remotes.push_remote then fetch({ remotes.push_remote })

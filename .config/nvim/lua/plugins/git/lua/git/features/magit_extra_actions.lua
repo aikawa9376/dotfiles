@@ -510,11 +510,17 @@ function M.root(ctx, helpers)
 
   local function remote_menu(ui)
     local state = { fetch_after_add = false }
-    show({ kind = 'remote', title = 'Remote', groups = {
+    local config = require('git.features.magit_config')
+    local remote = config.remote(ctx)
+    local groups = remote and config.remote_groups(ctx, remote) or {}
+    vim.list_extend(groups, {
       { title = 'Arguments for add', actions = {
         toggle('-f', 'Fetch after add', state, 'fetch_after_add', '-f'),
       } },
       { title = 'Actions', actions = {
+        { key = 'C', label = 'Configure remote…', run = function(source)
+          config.open_remote(ctx, source, show)
+        end },
         { key = 'a', label = 'Add remote', run = function()
           prompt('Remote name: ', function(name)
             prompt('Remote URL: ', function(url)
@@ -532,7 +538,7 @@ function M.root(ctx, helpers)
             end)
           end)
         end },
-        { key = 'x', label = 'Remove remote', run = function()
+        { key = 'k', aliases = { 'x' }, label = 'Remove remote', run = function()
           prompt('Remote to remove: ', function(name)
             confirm('Remove remote ' .. name .. '?', function()
               git({ 'remote', 'remove', name }, ctx)
@@ -544,7 +550,9 @@ function M.root(ctx, helpers)
         end },
         { key = 'l', label = 'List remotes', run = function() git({ 'remote', '-v' }, ctx) end },
       } },
-    } }, ui)
+    })
+    show({ kind = 'remote', title = 'Remote', context = remote and ('Remote: ' .. remote),
+      groups = groups }, ui)
   end
 
   local function ignore_menu(ui)
