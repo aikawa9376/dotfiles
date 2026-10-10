@@ -41,6 +41,12 @@ function M.load(root, revision, parent_index)
   local header, header_err = require('git.features.commit_info').header(root, hash)
   if not header then return nil, header_err end
   model.header = header
+  return M.changes(model)
+end
+-- Commit and PR views share the same immutable two-tree change model.
+function M.changes(model)
+  local root, base, hash = model.root, model.base, model.hash
+  model.entries = {}
   local names, names_err = M.git(root, { 'diff', '--name-status', '-z', '--find-renames', '--no-ext-diff', base, hash, '--' })
   if not names then return nil, names_err end
   local records, i = nul(names), 1

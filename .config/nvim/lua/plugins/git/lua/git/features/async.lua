@@ -9,13 +9,18 @@ end
 
 function M.busy(root) return owners[root] ~= nil end
 
+-- GitHub and Git share cancellation, scheduling and worktree ownership.
+function M.system(root, argv, opts)
+  local task = assert(M.running(), 'Workflow must run inside async.run')
+  if leaving or task.cancelled then error('Workflow cancelled', 0) end
+  return coroutine.yield({ argv = argv,
+    opts = vim.tbl_extend('force', { cwd = root, text = true, timeout = 120000 }, opts or {}) })
+end
+
 function M.git(root, args, opts)
-  local task = assert(M.running(), 'Git workflow must run inside async.run')
-  if leaving or task.cancelled then error('Git workflow cancelled', 0) end
   local argv = { 'git', '--no-optional-locks', '-c', 'core.quotePath=false' }
   vim.list_extend(argv, args)
-  local result = coroutine.yield({ argv = argv,
-    opts = vim.tbl_extend('force', { cwd = root, text = false, timeout = 120000 }, opts or {}) })
+  local result = M.system(root, argv, vim.tbl_extend('force', { text = false }, opts or {}))
   if result.code ~= 0 then
     local err = vim.trim(result.stderr or result.stdout or '')
     return nil, err ~= '' and err or ('Git failed (exit ' .. result.code .. ')')

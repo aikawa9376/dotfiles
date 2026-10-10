@@ -35,6 +35,14 @@ local pending_status_focus_by_buf = {}
 local auto_fetch_by_work_tree = {}
 local auto_fetch_interval = 180
 
+function M.pull_request_at(buf, row)
+  local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ''
+  local number = tonumber(line:match('^#(%d+)'))
+  for _, pr in ipairs(pull_requests_by_buf[buf] or {}) do
+    if pr.number == number then return pr end
+  end
+end
+
 local function auto_fetch_status_repo(work_tree, opts)
   if opts.auto_fetch == false or vim.g.git_status_auto_fetch == false then return end
 
@@ -567,7 +575,8 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       for _, pr in ipairs(pull_requests) do
         local draft = pr.isDraft and ' [draft]' or ''
         local branch = pr.headRefName ~= '' and ('  ' .. pr.headRefName) or ''
-        table.insert(final_lines, ('#%d%s %s%s'):format(pr.number, draft, pr.title, branch))
+        table.insert(final_lines, ('#%d%s %s%s  [%s]'):format(pr.number, draft, pr.title, branch,
+          require('git.features.github').summary(pr)))
       end
     end
     vim.list_extend(final_lines, repository_health.submodule_lines(health))
@@ -1210,7 +1219,7 @@ function M.setup(group)
           local args = {
             'gh', 'pr', 'list', '--state', 'open',
             '--limit', '100',
-            '--json', 'number,title,headRefName,isDraft,url',
+            '--json', 'number,title,headRefName,isDraft,url,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup',
           }
           if branch then vim.list_extend(args, { '--head', branch }) end
 
@@ -1230,6 +1239,10 @@ function M.setup(group)
                     title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
                     headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
                     isDraft = pr.isDraft == true,
+                    reviewDecision = pr.reviewDecision,
+                    mergeable = pr.mergeable,
+                    mergeStateStatus = pr.mergeStateStatus,
+                    statusCheckRollup = pr.statusCheckRollup,
                     url = url,
                     repository = url:match('^https?://[^/]+/([^/]+/[^/]+)/pull/%d+'),
                   })
@@ -2885,8 +2898,7 @@ function M.setup(group)
           local number = pr and pr.number or pull_request_number_from_line(vim.api.nvim_get_current_line())
           local repository = pr and pr.repository or nil
           if number and repository then
-            vim.cmd('tabnew')
-            vim.cmd(('Octo pr edit %d %s'):format(number, repository))
+            require('git.features.pr').open({ root = utils.get_buf_work_tree(b), url = pr.url })
           elseif number then
             vim.notify('Could not determine repository for PR #' .. number, vim.log.levels.WARN)
           end

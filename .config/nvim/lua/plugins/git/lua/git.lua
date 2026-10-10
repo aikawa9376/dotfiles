@@ -12,6 +12,7 @@ function M.setup(opts)
   local nowrap_filetypes = {
     git = true,
     gitcommitview = true,
+    gitpr = true,
     gitstatus = true,
     gitblame = true,
     gitbranch = true,
@@ -69,6 +70,8 @@ function M.setup(opts)
   require('git.features.status').setup(group)
   require('git.features.blame').setup(group)
   require('git.features.commit').setup(group)
+  require('git.features.pr').setup(group)
+  require('git.features.github_actions').setup()
   require('git.features.magit_apply').setup()
   require('git.features.stash').setup(group)
   require('git.features.branch').setup(group)

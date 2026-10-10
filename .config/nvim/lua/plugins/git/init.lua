@@ -13,6 +13,7 @@ return {
     "GitApply", "GitReverse", "GitFixupBase", "GitPatch", "GitRebasePlan", "GitRebaseBase", "GitRebaseContinue", "GitRebaseSkip", "GitRebaseAbort",
     "GitWipEnable", "GitWipDisable", "GitWipSave", "GitWipLog", "GitWipRestore",
     "GbranchSpinoff", "GbranchSpinout",
+    "GitHub", "GitPr", "GitPrCreate", "GitPrWorktree",
     "GMove", "GRename", "GRemove", "GDelete", "GUnlink", "Gpedit", "Gdrop", "Gw", "Gr",
   },
   keys = {

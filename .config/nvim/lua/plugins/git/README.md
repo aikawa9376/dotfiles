@@ -221,6 +221,93 @@ commits, and commit detail views. Branch and commit links require a matching
 local remote-tracking ref with a GitHub remote; unpushed items show a notice.
 `gi` manages index flags from the status panel.
 
+## GitHub and PR status
+
+`N` in Git panels, or `<Space><Space> N`, opens the GitHub menu. `:GitHub`
+also opens it from a repository file. Status PR rows now show CI, review and
+mergeability summaries; Enter opens the native PR status panel. Octo remains
+available through the GitHub menu for discussion and full review.
+
+| GitHub menu key | Action |
+|---|---|
+| `p` / `l` | Open current/selected PR status / choose an open PR |
+| `c` | Create a PR using Octo's editor |
+| `C` | Quick creation: input only the title |
+| `e` / `r` | Open in Octo / start an Octo review |
+| `w` | Create and open a separate PR worktree |
+| `k` / `a` | CI checks / GitHub Actions runs |
+| `d` / `m` | Toggle draft/ready / choose a merge method |
+| `i` / `n` | Octo issues / notifications |
+
+`:GitPr [number|URL]` opens PR status. An omitted argument uses the current
+branch's PR; a worktree created by this plugin remembers its PR URL, including
+the Enterprise host. The panel displays state, draft status, review decision,
+mergeability, CI checks, title and description above the changed files.
+
+| PR status key | Action |
+|---|---|
+| `cw` / `A` | Move to the editable title and description |
+| `:w` | Save title and description to GitHub |
+| `o` / `=` / `<Tab>` | Expand/collapse the selected file's unified diff |
+| `>` / `<` | Expand/collapse files; from a heading, all files; Visual selection supported |
+| `]m` / `[m`, `]]` / `[[` | Next/previous file; move and expand |
+| `J` / `K`, `]c` / `[c` | Next/previous diff hunk |
+| `d` / `dv`, `dh` | Vertical / horizontal two-revision file diff |
+| `D` | Entire PR in Diffview |
+| `<CR>` | Open a marked comment thread, or the PR head file |
+| `gc` | Read/reply to threads on the selected file or marked diff line |
+| `O` | Start a full review in Octo |
+| `gf` / `gq` | Worktree file / changed files in quickfix |
+| `gD` | Shared word-diff display settings |
+| `gx` / `gy` | Browser at cursor / copy PR URL |
+| `R` / `?` / `q` | Refresh / key guide / close |
+
+Keep a blank line between the title and description. Normal editing keys retain
+their meaning inside that region. The other metadata and diffs are read-only
+when saving: protected edits must be undone. Failed saves preserve the draft;
+saving checks that the remote title/description still matches the loaded version.
+Refresh keeps edits made while the request was running; if the remote metadata
+also changed, saving requires resolving that conflict by preserving the draft and
+reloading. `R` outside the editable region offers to discard a dirty draft before
+reloading; hidden PR buffers preserve drafts until explicitly closed.
+
+Unified diffs use the existing syntax/word-diff renderer. They compare the PR's
+merge base with its head, independently of the checked-out branch or index.
+PR refs are fetched under `refs/nvim-pr/<host>/<owner>/<repo>/<number>/`; fetched
+SHAs must match the metadata before publishing a snapshot. Added, deleted,
+renamed and binary files use the shared commit change model. Binary comparisons
+open Diffview. Review-thread `💬` markers appear on file headers and applicable
+LEFT/RIGHT diff lines. File/outdated threads remain available through the file
+header. The thread popup shows existing replies and an editable reply area;
+`:w` sends the reply, and a failed send retains the draft. New review comments,
+suggestions, approval and change requests use Octo's review UI.
+
+In PR status, `gx` on a CI check opens its actual job/check URL (including external
+CI providers), on the CI summary opens PR checks, and on the Actions row opens
+branch-filtered runs. On a marked diff line it opens the comment; elsewhere it
+opens the PR. The `k` and `a` list panels also support `gx`/Enter for the selected
+check or workflow run.
+
+`:GitPrCreate` is the same quick route as `N C`: publish the current branch with
+a regular, non-force push to its configured push remote, then run
+`gh pr create --head ... --fill --title ...`. The body comes from commits;
+base branch and remaining options use GitHub CLI defaults. It creates a ready
+PR, uses the fork owner in `--head` when needed, and opens the resulting PR status.
+Detached HEAD, push failures and unavailable GitHub defaults fail with a notice.
+
+`:GitPrWorktree [number|URL]` asks only for a directory, fetches the current PR
+head, creates `pr-<number>`, and opens Status in a new tab with a tab-local cwd.
+The source branch, editing buffers and uncommitted changes remain available.
+Existing branches/directories are never reset or overwritten. This is a local
+review branch; it does not change the source repository's upstream/push policy.
+
+GitHub commands require authenticated `gh`; Octo and Diffview commands use their
+existing lazy-loaded plugins. API processes, PR fetches and patch reads are
+asynchronous, and capture their original worktree before menus or input UIs open.
+Remote writes use literal argv and JSON stdin. `tests/pr_model.lua`,
+`tests/pr_view.lua`, `tests/pr_lifecycle.lua` and `tests/github_actions.lua` exercise real local Git
+repositories/worktrees with mocked GitHub responses and writes.
+
 Expand a staged or unstaged file with `o`. On a displayed hunk, `s`/`-`
 stages or unstages that hunk; `u` unstages a staged hunk. Select added or
 removed lines within one hunk in Visual mode and press the same key to update
@@ -1250,7 +1337,8 @@ captured paths/commits. Definitions require unique keys and input names.
 These workflows run asynchronously against the worktree captured when the
 menu opens, emit refresh events after mutations (including conflict failures),
 and reuse transient argument presets. Repository lists/recent switching are
-outside this plugin's scope; Issue/PR authoring belongs to Octo. WIP timing and
+outside this plugin's scope. Issue authoring and full PR review use Octo; PR
+metadata editing and thread replies also have the native UI described above. WIP timing and
 untracked snapshot policy remain unchanged. `tests/magit_workflows.lua` covers
 real sparse, subtree, full/incremental bundle, plain/binary/selected-commit and
 mail/Maildir operations, conflict continuation/skip/abort, Notes sync/merge,

@@ -1180,6 +1180,9 @@ function M.open(bufnr, selection)
   operations[#operations + 1] = { key = '!', label = 'Custom Git commands…', run = function(ui)
     require('git.features.custom_commands').open(ctx, ui, show_submenu)
   end }
+  operations[#operations + 1] = { key = 'N', label = 'GitHub / pull requests…', run = function()
+    require('git.features.github_actions').open(require('git.features.github_actions').context(bufnr))
+  end }
   if ctx.panel == 'status' or ctx.panel == 'tree' then
     operations[#operations + 1] = { key = '=t', label = 'Changed files tree', run = function()
       require('git.features.status_tree').open({ work_tree = ctx.work_tree })
@@ -1194,6 +1197,7 @@ function M.open(bufnr, selection)
 end
 
 function M.attach(bufnr)
+  require('git.features.github_actions').attach(bufnr)
   vim.keymap.set('n', '<Space><Space>', function()
     local ok, err = M.open(bufnr)
     if not ok then vim.notify(err, vim.log.levels.WARN) end
