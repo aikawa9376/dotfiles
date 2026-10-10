@@ -532,7 +532,11 @@ local function delete_branches(bufnr, branches)
     return
   end
 
-  local branch_list = table.concat(branches, ", ")
+  local branch_names = {}
+  for _, branch in ipairs(branches) do
+    branch_names[#branch_names + 1] = branch.name
+  end
+  local branch_list = table.concat(branch_names, ", ")
   local confirm = vim.fn.confirm(
     string.format("Delete %d branch(es)?\n%s", #branches, branch_list),
     "&Yes\n&No",
@@ -549,13 +553,15 @@ local function delete_branches(bufnr, branches)
   local deleted = {}
   local failed = {}
 
-  for _, branch in ipairs(branches) do
+  for _, entry in ipairs(branches) do
+    local branch = entry.name
+    local remote = entry.kind == 'remote' and ' --remote' or ''
     -- Skip current branch (with *)
     if branch:match('^%*') then
       table.insert(failed, branch .. " (current branch)")
     else
       -- Try to delete branch
-      local result = vim.fn.system(git .. 'branch -d ' .. vim.fn.shellescape(branch) .. ' 2>&1')
+      local result = vim.fn.system(git .. 'branch -d' .. remote .. ' -- ' .. vim.fn.shellescape(branch) .. ' 2>&1')
       if vim.v.shell_error ~= 0 then
         -- If normal delete fails, ask for force delete
         if result:match("not fully merged") then
@@ -565,7 +571,7 @@ local function delete_branches(bufnr, branches)
             2
           )
           if force_confirm == 1 then
-            result = vim.fn.system(git .. 'branch -D ' .. vim.fn.shellescape(branch) .. ' 2>&1')
+            result = vim.fn.system(git .. 'branch -D' .. remote .. ' -- ' .. vim.fn.shellescape(branch) .. ' 2>&1')
             if vim.v.shell_error == 0 then
               table.insert(deleted, branch)
             else
@@ -1374,7 +1380,8 @@ function M.setup(group)
       vim.keymap.set('n', 'X', function()
         local branch = get_branch_name_from_line()
         if branch then
-          delete_branches(bufnr, {branch})
+          local kind = (vim.b[bufnr].branch_kinds or {})[vim.fn.line('.')]
+          delete_branches(bufnr, { { name = branch, kind = kind } })
         end
       end, { buffer = bufnr, silent = true, desc = "Delete branch" })
 
@@ -1424,7 +1431,7 @@ function M.setup(group)
           local branch = (vim.b[bufnr].branch_kinds or {})[i] ~= 'tags'
             and (vim.b[bufnr].branch_map or {})[i] or nil
           if branch then
-            table.insert(branches, branch)
+            table.insert(branches, { name = branch, kind = (vim.b[bufnr].branch_kinds or {})[i] })
           end
         end
 

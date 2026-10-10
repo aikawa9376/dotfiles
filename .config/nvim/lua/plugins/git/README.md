@@ -285,6 +285,9 @@ The branch panel shows local branches, remote branches, and tags. Use `ga`,
 `gl`, `gr`, or `gt` to show all refs, local branches, remote branches, or tags;
 the active view is labeled at the upper right. `<CR>` and `L` inspect a selected
 tag as well as a branch. Branch-changing actions do not apply to tag rows.
+`X` deletes local branches with `git branch -d` and remote-tracking branches
+with `git branch -d --remote`, including mixed Visual selections. It removes
+the local tracking ref; the branch on the remote server remains unchanged.
 On a local branch row, `cou` sets its upstream with completion for local and
 remote branches; `coU` removes its upstream. These keys also work on a local
 branch other than the currently checked-out one.
