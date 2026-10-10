@@ -927,6 +927,9 @@ function M.new(ctx)
     if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
       return false
     end
+    -- The layout points to the backend session, unlike the public runtime.
+    -- Cancel its batch before dropping that owner; reopening rereads the file.
+    if ctx.discard_pending_append then ctx.discard_pending_append(bufnr) end
     cleanup_markdown_rendering(bufnr)
     layout_state[tostring(bufnr)] = nil
     if pane_buffers[tostring(pane_id)] == bufnr then

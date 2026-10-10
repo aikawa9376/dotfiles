@@ -34,6 +34,7 @@ local queue_markdown_rendering
 local is_acp_buffer
 local layout_entry
 local buffer_is_visible
+local discard_pending_append
 local set_window_size
 local diff_view
 local footer_view
@@ -835,6 +836,9 @@ local decorate_buffer = view_render.decorate_buffer
 local refresh_viewport = view_render.refresh_viewport
 
 local view_windowing = require("lazyagent.acp.view_buffer.windowing").new({
+  discard_pending_append = function(bufnr)
+    if discard_pending_append then discard_pending_append(bufnr) end
+  end,
   api = M,
   pane_config = pane_config,
   pane_buffers = pane_buffers,
@@ -1097,6 +1101,7 @@ refresh_buffer_from_path = view_updates.refresh_buffer_from_path
 local refresh_buffer_from_file = view_updates.refresh_buffer_from_file
 local resume_deferred_updates_for_buffer = view_updates.resume_deferred_updates_for_buffer
 local queue_append = view_updates.queue_append
+discard_pending_append = view_updates.discard_pending_append
 
 diff_view = view_diff.new({
   diff_utils = require("lazyagent.acp.diff"),

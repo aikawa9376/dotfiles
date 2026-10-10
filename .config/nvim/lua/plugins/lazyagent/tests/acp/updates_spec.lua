@@ -74,6 +74,59 @@ function M.run()
   assert(full_reads == 0, "entering after an incremental flush must not rebuild the decorated history")
   view.kill_pane(pane, session)
   vim.fn.delete(path)
+
+  -- The public runtime is not the backend session that owns the append timer.
+  -- Hide inside the append batch, then reopen and keep streaming on that session.
+  local state = require("lazyagent.logic.state")
+  for _, close_mode in ipairs({ "break", "native", "wipe" }) do
+    local agent_name = "pending-hide-" .. close_mode
+    local hide_path = vim.fn.tempname() .. "-pending-hide.log"
+    vim.fn.writefile({ "# User", "old prompt", "# Assistant", "old reply" }, hide_path)
+    local hide_pane, hide_state
+    view.create_pane({
+      transcript_path = hide_path,
+      size = 12,
+      acp = { agent_name = agent_name, release_buffer_on_hide = true },
+    }, function(id, created) hide_pane, hide_state = id, created end)
+    assert(vim.wait(1000, function() return hide_pane ~= nil end, 5))
+    local backend_session = { pane_id = hide_pane, agent_name = agent_name,
+      transcript_path = hide_path, view_state = {} }
+    state.sessions[agent_name] = { pane_id = hide_pane, acp_ready = true,
+      acp_transcript_path = hide_path, agent_status = "idle" }
+    local function append(text)
+      local file = assert(io.open(hide_path, "a")); file:write(text); file:close()
+      view.on_transcript_updated(backend_session, text, "a")
+    end
+    append("\n# Assistant\nqueued before hide\n")
+    assert(backend_session.view_state.append_timer, "append batch is pending before hide")
+    if close_mode == "break" then
+      view.break_pane(hide_pane)
+    else
+      if close_mode == "wipe" then
+        vim.api.nvim_buf_delete(hide_state.bufnr, { force = true })
+      else
+        vim.api.nvim_win_close(hide_state.winid, true)
+      end
+      assert(vim.wait(200, function() return not vim.api.nvim_buf_is_valid(hide_state.bufnr) end, 5))
+      -- Let the old one-shot timer fire while the released buffer is absent.
+      vim.wait(100, function() return false end, 5)
+    end
+    assert(backend_session.view_state.append_timer == nil, "hide releases the backend append timer")
+    assert(backend_session.view_state.pending_append_size == 0, "hide discards bytes already saved on disk")
+    view.join_pane(hide_pane, 12, false, nil, backend_session)
+    append("\n# User\ninput after reopen\n# Assistant\nreply after reopen\n")
+    assert(vim.wait(1000, function() return backend_session.view_state.append_timer == nil end, 5),
+      "reopened transcript schedules and completes a fresh batch")
+    local hide_buf = view.debug_snapshot().panes[hide_pane].bufnr
+    local text = table.concat(vim.api.nvim_buf_get_lines(hide_buf, 0, -1, false), "\n")
+    assert(text:find("input after reopen", 1, true) and text:find("reply after reopen", 1, true),
+      "reopened transcript displays new inputs and replies")
+    local _, count = text:gsub("queued before hide", "")
+    assert(count == 1, "reopening does not replay the disk-backed batch twice")
+    view.kill_pane(hide_pane, backend_session)
+    state.sessions[agent_name] = nil
+    vim.fn.delete(hide_path)
+  end
 end
 
 return M

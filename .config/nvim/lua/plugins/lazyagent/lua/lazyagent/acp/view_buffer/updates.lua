@@ -138,6 +138,17 @@ function M.new(ctx)
     return pending
   end
 
+  local function discard_pending_append(bufnr)
+    local entry = layout_state[tostring(bufnr)]
+    local session = entry and entry.pending_append_session
+    if session and session.view_state then
+      close_timer(session.view_state.append_timer)
+      session.view_state.append_timer = nil
+      clear_pending_append(session.view_state)
+    end
+    if entry then entry.pending_append_session = nil end
+  end
+
   local function shallow_table_copy(value)
     local out = {}
     if type(value) == "table" then
@@ -740,16 +751,13 @@ function M.new(ctx)
 
   flush_pending_append = function(session, opts)
     opts = opts or {}
-    local bufnr = to_bufnr(session and session.pane_id)
-    if not bufnr then
-      return false
-    end
-
+    if not session then return false end
     session.view_state = session.view_state or {}
     close_timer(session.view_state.append_timer)
     session.view_state.append_timer = nil
 
-    if not vim.api.nvim_buf_is_valid(bufnr) then
+    local bufnr = to_bufnr(session.pane_id)
+    if not bufnr or not vim.api.nvim_buf_is_valid(bufnr) then
       clear_pending_append(session.view_state)
       return false
     end
@@ -929,6 +937,7 @@ function M.new(ctx)
     refresh_buffer_from_path = refresh_buffer_from_path,
     refresh_buffer_from_file = refresh_buffer_from_file,
     flush_pending_append = flush_pending_append,
+    discard_pending_append = discard_pending_append,
     resume_deferred_updates_for_buffer = resume_deferred_updates_for_buffer,
     resume_deferred_transcript_updates = resume_deferred_transcript_updates,
     queue_append = queue_append,
