@@ -65,6 +65,7 @@ function M.objects(lead)
   end
   if not prefix then
     local refs = M.refs(lead)
+    vim.list_extend(refs, M.files(lead))
     vim.list_extend(refs, finish({ '%', ':', ':0:%', ':1:%', ':2:%', ':3:%', '~1', '~2', '^', '^2', '>~1' }, lead))
     return refs
   end
@@ -94,6 +95,14 @@ function M.files(lead, _, _, directories)
   return finish(items, lead)
 end
 function M.dirs(lead) return M.files(lead, nil, nil, true) end
+function M.rename(lead)
+  local repo = root(); if not repo then return {} end
+  if lead:sub(1, 1) == '/' or lead:sub(1, 1) == ':' then return M.files(lead) end
+  local _, path = objects.context()
+  local directory = path and path:match('^(.*)/')
+  local prefix = directory and directory .. '/' or ''
+  return vim.tbl_map(function(item) return item:sub(#prefix + 1) end, M.files(prefix .. lead))
+end
 local function before(lead, line, pos)
   local text = line:sub(1, pos or #line)
   text = text:sub(1, #text - #lead)

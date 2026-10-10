@@ -141,23 +141,35 @@ Flog and fzf-lua with isolated Harpoon storage and temporary Git repositories.
 | `G`, `Git`, `Git status`, `GitStatus` | Open the custom status panel in a split |
 | `G!`, `G! status`, `<Leader>gS` | Open the custom status panel in a tab; reuse its existing status tab |
 | `Git <args>` | Run Git in the current buffer's repository; quoted arguments and `%` paths are supported |
-| `Gedit`, `Gsplit`, `Gvsplit`, `Gtabedit [object]` | Open a commit, tree, or file blob; no argument opens the current file's index |
+| `Gedit[!]`, `Gsplit`, `Gvsplit`, `Gtabedit`, `Gpedit`, `Gdrop [object]` | Open a worktree file, commit, tree, or blob; defaults to index from a worktree file and worktree from an object buffer; supports modifiers, split sizes, `+cmd`, and `++opt` |
 | `Gedit HEAD:%`, `Gedit :0:%` | Current file at HEAD or in the index; `:1:`, `:2:`, `:3:` select conflict stages |
-| `Gwrite[!] [path]`, `Gwq[!] [path]` | Write and stage the current content, optionally to another worktree path; `:0:path` writes only the index |
-| `Gread[!] [object]` | Replace buffer content from the index/object; a range inserts after its last line; unsaved replacement requires `!` |
-| `Gdiff`, `Gdiffsplit`, `Gvdiffsplit`, `Ghdiffsplit [revision]` | Diff the current file against index/revision; an index buffer defaults to its working file; `!` shows available conflict sides |
-| `Gclog[!]`, `Gllog[!] [args]` | File history (repository history outside a file) in quickfix/location list |
+| `Gwrite[!] [path]`, `Gwq[!] [path]` | Write and stage content; writing another source over uncommitted destination changes requires `!`; `%` names the current path; `:0:path` writes only the index; `!` also force-adds ignored files |
+| `Gread[!] [object]` | Undoable buffer replacement, including unsaved changes; defaults to index from a worktree file and worktree from an object buffer; one address inserts after that line; two addresses replace that range; no disk/index write |
+| `Gdiff`, `Gdiffsplit`, `Gvdiffsplit`, `Ghdiffsplit [revision]` | Diff worktree files against index (base during conflicts), or object files against worktree; `!` retains focus and compares conflict sides, index against HEAD, or a historical file against all parents; explicit revisions take precedence |
+| `Gclog[!]`, `Gllog[!] [args]` | Repository history in quickfix/location list; `0Gclog` / `0Gllog` follows the current file through renames; positive ranges show line history; jump to the first result unless `!` |
 | `Glog`, `GitLog [args]` | Custom log panel; a line range follows the selected file lines with `git log -L` |
 | `Gblame`, `GitBlame`, `GitHeatmap` | Custom paired blame and heatmap |
 | `DiffDim [revision / latest / older / newer / clear]` | Dim lines outside a Git diff or selected blame commit |
 | `Gbranch`, `Gstash`, `Greflog`, `Gworktree`, `GworktreeSync` | Existing repository panels/actions |
-| `Gcd`, `Glcd [directory]` | Change directory relative to the buffer's worktree root |
-| `Gmove`, `Grename <path>`, `Gremove`, `Gdelete` | Git file moves/removals and matching buffer updates |
+| `Gcd`, `Glcd [directory]` | Change directory relative to the buffer's worktree root, or use an absolute / explicit `./` / `../` path |
+| `GMove`, `GRename <path>` | Move a worktree/index file; rename is relative to its parent directory; historical/conflict sources are rejected; lowercase aliases remain available |
+| `GRemove`, `GUnlink`, `GDelete` | Remove a file (only from index in an index buffer); Remove/Unlink retain an empty buffer, Delete closes it; lowercase aliases remain available |
 | `GeditHeadAtFile`, `GitCommit [revision]`, `GitPush` | File's latest commit, commit detail, existing force-with-lease push action |
 | `Ggraph [native / flog]` | Open either graph; omitted backend uses the selected default |
 | `GgraphBackend [native / flog]` | Change the default for graph keys; no argument opens a picker |
 | `GbranchSpinoff [commit]`, `GbranchSpinout [commit]` | Move outgoing commits, optionally starting at a selected commit, to a new tracking branch |
 | `GitWipEnable`, `GitWipDisable`, `GitWipSave`, `GitWipLog`, `GitWipRestore [number]` | Save, inspect, and restore tracked work-in-progress snapshots |
+
+`Gedit %` refers to the current file/object, `Gedit :` opens Status, and plain
+file paths open worktree files. `HEAD:%` explicitly selects the committed file.
+`%`, `#`, numbered alternate buffers and owner revisions such as `!~1:%` are
+expanded using repository context. `Gw` and `Gr` alias Gwrite and Gread.
+Gdiffsplit respects `vertical` / `horizontal` modifiers and `diffopt`; its
+automatic fit can be disabled with `vim.g.git_diffsplit_directional_fit = false`
+(the old Fugitive setting is also accepted).
+Multi-parent/conflict comparisons provide `d2o` / `d3o` to select a side.
+These convenience commands follow Fugitive file semantics; custom panels and
+`G` / `Git` execution and output retain their existing independent behavior.
 
 Successful `:Git` mutations refresh repository panels without opening a result
 window. Read-only commands such as `:Git log` still open their output. From a
@@ -867,6 +879,14 @@ its diff is collapsed, returning to their selection on expansion. Their source
 identity is preserved by the existing Notes session persistence.
 
 ## Implementation and checks
+
+Convenience-command semantics are shared by `lua/git/objects.lua` (context,
+paths and reloadable objects), `file_commands.lua` (writes, moves and removals),
+`diff_commands.lua` (comparison targets and windows), and `history_commands.lua`
+(quickfix/location history). `tests/fugitive_commands.lua` covers destination
+protection, index-only removal, moved index metadata, contextual defaults,
+range replacement, preview/split routing, conflict/merge comparisons, and
+history scope/focus/rename following against behaviors verified with Fugitive.
 
 - `git/fs.lua`: shared file fingerprints for status watchers and source/statistics caches.
 - `git/queue.lua`: FIFO scheduling without moving the remaining entries on each dequeue.

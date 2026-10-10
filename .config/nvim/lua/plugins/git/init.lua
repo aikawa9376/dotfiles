@@ -13,6 +13,7 @@ return {
     "GitApply", "GitReverse", "GitFixupBase", "GitPatch", "GitRebasePlan", "GitRebaseBase", "GitRebaseContinue", "GitRebaseSkip", "GitRebaseAbort",
     "GitWipEnable", "GitWipDisable", "GitWipSave", "GitWipLog", "GitWipRestore",
     "GbranchSpinoff", "GbranchSpinout",
+    "GMove", "GRename", "GRemove", "GDelete", "GUnlink", "Gpedit", "Gdrop", "Gw", "Gr",
   },
   keys = {
     { "<Leader>gb", function() require('git.features.blame').toggle() end, silent = true, desc = "Toggle Git blame panel" },

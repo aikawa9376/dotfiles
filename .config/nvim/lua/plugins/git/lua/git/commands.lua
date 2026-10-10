@@ -197,112 +197,78 @@ function M.git(opts)
   elseif not mutation and content ~= '' then return output(root, args, content) end
 end
 function M.diff(opts, vertical)
-  local root, path, source = objects.context()
-  local args = M.argv(opts.args); assert(#args <= 1, 'Expected one revision or object')
-  opts = vim.tbl_extend('force', opts, { args = args[1] or '' })
-  assert(path, 'No current file')
-  if opts.args ~= '' then
-    local _, resolved = objects.resolve(opts.args)
-    opts.args = resolved
-  end
-  local original = vim.api.nvim_get_current_win()
-  if opts.args == '' and source and source.stage then
-    vim.cmd((vertical and 'leftabove vsplit ' or 'leftabove split ') .. vim.fn.fnameescape(root .. '/' .. path))
-    vim.cmd('diffthis'); vim.api.nvim_set_current_win(original); vim.cmd('diffthis'); return
-  end
-  local targets = {}
-  if opts.bang then
-    local unmerged = objects.run(root, { 'ls-files', '-u', '--', path })
-    if unmerged ~= '' then
-      for _, stage in ipairs({ '2', '3' }) do
-        if unmerged:match(' ' .. stage .. '\t') then targets[#targets + 1] = ':' .. stage .. ':' .. path end
-      end
-    end
-  end
-  if #targets == 0 then
-    local rev = opts.args ~= '' and opts.args or (source and source.revision and source.revision .. '^' or ':0')
-    if rev:sub(-2) == ':%' then rev = rev:sub(1, -2) .. path end
-    targets = { rev:find(':', 2, true) and rev or rev .. ':' .. path }
-  end
-  for _, target in ipairs(targets) do
-    -- Resolve before changing the layout, so an invalid revision leaves it intact.
-    objects.run(root, { 'rev-parse', '--verify', '--end-of-options', target })
-    vim.api.nvim_set_current_win(original)
-    objects.open(target, vertical and 'leftabove vsplit' or 'leftabove split', root)
-    vim.cmd('diffthis')
-  end
-  vim.api.nvim_set_current_win(original); vim.cmd('diffthis')
-end
-local function history(opts, location)
-  local root, path = objects.context()
-  local args = { 'log', '--format=%H%x09%s' }
-  vim.list_extend(args, M.argv(opts.args))
-  if path then vim.list_extend(args, { '--', path }) end
-  local rows = objects.run(root, args)
-  local items = {}
-  for row in rows:gmatch('[^\n]+') do
-    local hash, subject = row:match('^(%x+)\t(.*)$')
-    if hash then
-      local name = path and objects.uri(root, hash .. ':' .. path) or ('git-commit://' .. root .. '/0/' .. hash)
-      if name then items[#items + 1] = { filename = name, lnum = 1, text = hash:sub(1, 8) .. ' ' .. subject } end
-    end
-  end
-  if location then vim.fn.setloclist(0, {}, ' ', { title = 'Git file history', items = items }); vim.cmd('lopen')
-  else vim.fn.setqflist({}, ' ', { title = 'Git file history', items = items }); vim.cmd('copen') end
+  return require('git.diff_commands').open(opts, vertical)
 end
 function M.setup(group)
   objects.setup(group)
   local completion = require('git.completion')
-  local function command(name, fn, opts) vim.api.nvim_create_user_command(name, fn, vim.tbl_extend('force', { force = true }, opts or {})) end
+  local files = require('git.file_commands')
+  local function command(name, fn, opts)
+    vim.api.nvim_create_user_command(name, fn, vim.tbl_extend('force', { force = true }, opts or {}))
+  end
   for _, name in ipairs({ 'G', 'Git' }) do command(name, M.git, { nargs = '*', bang = true, complete = completion.git }) end
-  for name, layout in pairs({ Gedit = 'edit', Gsplit = 'split', Gvsplit = 'vsplit', Gtabedit = 'tabedit' }) do
+  for name, layout in pairs({ Gedit = 'edit', Gsplit = 'split', Gvsplit = 'vsplit', Gtabedit = 'tabedit', Gpedit = 'pedit', Gdrop = 'drop' }) do
     command(name, function(o)
-      local args = M.argv(o.args); assert(#args <= 1, 'Expected one Git object')
-      local ok, err = pcall(objects.open, args[1] or '', o.smods.vertical and layout == 'split' and 'vsplit' or layout)
-      if not ok then vim.notify(tostring(err), vim.log.levels.ERROR) end
-    end, { nargs = '?', complete = completion.objects })
+      local args = M.argv(o.args)
+      local after, edit_options = {}, ''
+      while args[1] and args[1]:sub(1, 1) == '+' do
+        local arg = table.remove(args, 1)
+        if arg:sub(1, 2) == '++' then edit_options = edit_options .. ' ' .. arg
+        else after[#after + 1] = arg == '+' and '$' or arg:sub(2) end
+      end
+      assert(#args <= 1, 'Expected one Git object')
+      local cmd = o.mods ~= '' and o.mods .. ' ' or ''
+      local action, size = layout, ''
+      if o.range > 0 and (layout == 'split' or layout == 'vsplit') then
+        action = o.count == 0 and 'edit' or layout
+        size = o.count > 0 and tostring(o.count) or ''
+      elseif o.range > 0 and layout == 'tabedit' then size = tostring(o.count) end
+      cmd = cmd .. size .. action .. (o.bang and '!' or '') .. edit_options
+      local original = vim.api.nvim_get_current_win()
+      local ok, result = pcall(objects.open, args[1] or '', cmd)
+      if not ok then vim.notify(tostring(result), vim.log.levels.ERROR)
+      else
+        if layout == 'pedit' and #after > 0 then
+          for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+            if vim.api.nvim_win_get_buf(win) == result then vim.api.nvim_set_current_win(win); break end
+          end
+        end
+        for _, action in ipairs(after) do vim.cmd(action) end
+        if layout == 'pedit' then vim.api.nvim_set_current_win(original) end
+      end
+    end, { nargs = '*', bang = true, range = (layout == 'split' or layout == 'vsplit' or layout == 'tabedit') and -1 or nil,
+      addr = (layout == 'split' or layout == 'vsplit') and 'other' or (layout == 'tabedit' and 'tabs' or nil),
+      complete = completion.objects })
   end
-  for name, vertical in pairs({ Gdiff = true, Gdiffsplit = false, Gvdiffsplit = true, Ghdiffsplit = false }) do
-    command(name, function(o) M.diff(o, vertical) end, { nargs = '?', bang = true, complete = completion.objects })
+  for name, vertical in pairs({ Gdiff = true, Gvdiffsplit = true, Ghdiffsplit = false }) do
+    command(name, function(o) M.diff(o, vertical) end, { nargs = '*', bang = true, complete = completion.objects })
   end
-  local function write(o)
-    local root, path, source = objects.context()
-    local args = M.argv(o.args); assert(#args <= 1, 'Expected one path')
-    local target = args[1] or path
-    assert(target, 'No current file; specify a destination')
-    if target:sub(1, 3) == ':0:' then
-      local destination = target:sub(4); if destination == '%' then destination = assert(path, 'No current file') end
-      local text = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n') .. (vim.bo.endofline and '\n' or '')
-      local mode = objects.run(root, { 'ls-files', '--stage', '--', destination }):match('^(%d+) ') or '100644'
-      local oid = vim.trim(objects.run(root, { 'hash-object', '-w', '--stdin' }, text))
-      objects.run(root, { 'update-index', '--add', '--cacheinfo', mode, oid, destination })
-    elseif not source and not args[1] then
-      vim.cmd('write' .. (o.bang and '!' or '')); objects.run(root, { 'add', '--', path })
-    else
-      local destination = assert(utils.worktree_relative_abs_path(root, target), 'Destination must be inside the worktree')
-      local buf = vim.fn.bufadd(destination); vim.fn.bufload(buf)
-      assert(o.bang or not vim.bo[buf].modified, 'Destination has unsaved changes; use Gwrite!')
-      local lines, eol = vim.api.nvim_buf_get_lines(0, 0, -1, false), vim.bo.endofline
-      vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines); vim.bo[buf].endofline = eol
-      vim.api.nvim_buf_call(buf, function() vim.cmd('write' .. (o.bang and '!' or '')) end)
-      objects.run(root, { 'add', '--', target })
-    end
-    utils.fire_git_changed({ work_tree = root })
+  command('Gdiffsplit', function(o) M.diff(o) end, { nargs = '*', bang = true, complete = completion.objects })
+  for _, name in ipairs({ 'Gwrite', 'Gw' }) do
+    command(name, files.write, { nargs = '*', bang = true, complete = completion.files })
   end
-  command('Gwrite', write, { nargs = '?', bang = true, complete = completion.files })
-  command('Gwq', function(o) write(o); vim.cmd('quit' .. (o.bang and '!' or '')) end, { nargs = '?', bang = true, complete = completion.files })
+  command('Gwq', function(o) files.write(o); vim.cmd('quit' .. (o.bang and '!' or '')) end,
+    { nargs = '*', bang = true, complete = completion.files })
   command('Gblame', function() require('git.features.blame').open() end)
-  command('Gread', function(o)
-    assert(o.range > 0 or o.bang or not vim.bo.modified, 'Unsaved changes; use Gread! to replace')
+  local function read(o)
     local args = M.argv(o.args); assert(#args <= 1, 'Expected one Git object')
-    local root, object = objects.resolve(args[1] or '')
-    local text = objects.run(root, { 'show', object })
+    local root, object, _, kind = objects.resolve(args[1] or '')
+    local text = objects.read(root, object, kind)
     assert(not text:find('\0', 1, true), 'Binary Git object')
     local lines = vim.split(text:gsub('\n$', ''), '\n', { plain = true })
-    if o.range > 0 then vim.api.nvim_buf_set_lines(0, o.line2, o.line2, false, lines)
-    else vim.api.nvim_buf_set_lines(0, 0, -1, false, lines) end
-    vim.bo.endofline = text:sub(-1) == '\n'
-  end, { nargs = '?', bang = true, range = true, complete = completion.objects })
+    if text == '' and o.range > 0 then lines = {} end
+    if o.range == 2 then vim.api.nvim_buf_set_lines(0, math.max(0, o.line1 - 1), o.line2, false, lines)
+    elseif o.range > 0 then vim.api.nvim_buf_set_lines(0, o.line2, o.line2, false, lines)
+    else vim.api.nvim_buf_set_lines(0, 0, -1, false, lines); vim.bo.endofline = text:sub(-1) == '\n' end
+    if kind == 'object' and (vim.b.git_object or {}).object == object then
+      local source = vim.b.git_object
+      source.blob = vim.trim(objects.run(root, { 'rev-parse', '--verify', object })); vim.b.git_object = source
+    end
+    vim.cmd('diffupdate')
+  end
+  for _, name in ipairs({ 'Gread', 'Gr' }) do
+    command(name, read, { nargs = '?', bang = true, range = -1, complete = completion.objects })
+  end
   command('Ggraph', function(o) require('git.graph').open(nil, o.args ~= '' and o.args or nil) end, {
     nargs = '?', complete = function() return { 'native', 'flog' } end,
   })
@@ -310,28 +276,24 @@ function M.setup(group)
     nargs = '?', complete = function() return { 'native', 'flog' } end,
   })
   for name, cd in pairs({ Gcd = 'cd', Glcd = 'lcd' }) do command(name, function(o)
-    local root = objects.context(); vim.cmd(cd .. ' ' .. vim.fn.fnameescape(root .. (o.args ~= '' and '/' .. o.args or '')))
-  end, { nargs = '?', complete = completion.dirs }) end
-  command('Gclog', function(o) history(o, false) end, { nargs = '*', bang = true, complete = completion.log })
-  command('Gllog', function(o) history(o, true) end, { nargs = '*', bang = true, complete = completion.log })
+    local root = objects.context()
+    local parsed = M.argv(o.args)
+    local arg = (#parsed == 1 and parsed[1] or o.args):gsub('^:/:?', ''):gsub('^:%([^)]*%)', '')
+    local target = arg ~= '' and objects.file_path(root, arg) or root
+    vim.cmd(cd .. ' ' .. vim.fn.fnameescape(target))
+  end, { nargs = '?', bang = true, complete = completion.dirs }) end
+  for name, location in pairs({ Gclog = false, Gllog = true }) do
+    command(name, function(o) require('git.history_commands').open(o, location) end,
+      { nargs = '*', bang = true, range = -1, complete = completion.log })
+  end
   command('Glog', function(o) require('git.features.log').open(o) end,
     { nargs = '*', range = true, complete = completion.log })
-  for _, name in ipairs({ 'Gremove', 'Gdelete' }) do command(name, function(o)
-    local root, path = objects.context(); assert(path, 'No current file')
-    assert(o.bang or not vim.bo.modified, 'Unsaved changes; use Gremove!')
-    local args = { 'rm' }; if o.bang then args[#args + 1] = '-f' end
-    vim.list_extend(args, { '--', path }); objects.run(root, args)
-    utils.fire_git_changed({ work_tree = root }); vim.cmd('bdelete' .. (o.bang and '!' or ''))
-  end, { bang = true }) end
-  for _, name in ipairs({ 'Gmove', 'Grename' }) do command(name, function(o)
-    local root, path = objects.context(); assert(path, 'No current file')
-    local args = M.argv(o.args); assert(#args == 1, 'Expected one destination')
-    local destination = args[1]
-    local argv = { 'mv' }; if o.bang then argv[#argv + 1] = '-f' end
-    vim.list_extend(argv, { '--', path, destination }); objects.run(root, argv)
-    if vim.fn.isdirectory(root .. '/' .. destination) == 1 then destination = destination .. '/' .. vim.fs.basename(path) end
-    vim.api.nvim_buf_set_name(0, root .. '/' .. destination)
-    utils.fire_git_changed({ work_tree = root })
-  end, { nargs = 1, bang = true, complete = completion.files }) end
+  for name, delete in pairs({ Gremove = false, GRemove = false, GUnlink = false, Gdelete = true, GDelete = true }) do
+    command(name, function(o) files.remove(o, delete) end, { bang = true })
+  end
+  for name, rename in pairs({ Gmove = false, GMove = false, Grename = true, GRename = true }) do
+    command(name, function(o) files.move(o, rename) end,
+      { nargs = 1, bang = true, complete = rename and completion.rename or completion.files })
+  end
 end
 return M
