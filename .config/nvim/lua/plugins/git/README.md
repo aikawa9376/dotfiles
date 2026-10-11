@@ -348,14 +348,14 @@ unchanged comparisons reuse the already loaded history.
 | `cw` / `A` | Move to the editable title and description |
 | `:w` | Save title and description to GitHub |
 | `<C-s>` | Save title and description to GitHub |
-| `o` / `=` / `<Tab>` | Toggle header details, Commits, Changes, or the selected file's unified diff |
+| `o` / `=` / `<Tab>` | Toggle header details, CI results, Commits, Changes, or the selected file's unified diff |
 | `>` / `<` | Expand/collapse the selected section or file; Visual selection supports multiple files |
 | `]m` / `[m`, `]]` / `[[` | Next/previous file; move and expand |
 | `J` / `K`, `]c` / `[c` | Next/previous diff hunk |
 | `]C` / `[C` | Next/previous comment position and preview; counts supported |
 | `d` / `dv`, `dh` | Vertical / horizontal two-revision file diff |
 | `D` | Entire PR in Diffview |
-| `<CR>` | Toggle the Commits/Changes heading; open commit details, a marked thread, or the PR head file |
+| `<CR>` | Toggle the CI/Commits/Changes heading; open commit details, a marked thread, or the PR head file |
 | `gk` | Preview conversation near cursor; repeat to focus the popup |
 | `gc` | Read/reply to threads on the selected file or marked diff line |
 | `gC` | New PR conversation comment, immediate diff comment, or pending review comment |
@@ -419,9 +419,13 @@ PR number/state, with the editable title/description and
 file diffs still visible. Header folding preserves unsaved metadata and file
 expansion state and performs no Git/GitHub requests. `gx` on the first line's
 repository name opens the repository; elsewhere on that line it opens the PR.
-The branch row retains its inline `[Actions]` target.
 The CI/review summary and its check list finish the expanded Repo details,
-after your pending/last review rows. Collapsing Repo hides this CI block too.
+after your pending/last review rows. CI results start collapsed and have their own
+gutter marker. On the CI summary or a result row, `o` / `=` / `<Tab>` toggles
+the results and `>` / `<` expands/collapses them; Enter on the summary also
+toggles them. Results align at column zero without nesting indentation.
+Collapsing Repo hides this CI block too, retaining its expansion state.
+CI folding preserves drafts/file diffs, performs no requests, and survives refreshes.
 
 Changes starts expanded and folds independently of Repo, Commits and each
 file's diff. Its heading uses the same gutter marker and `o` / `=` / `<Tab>` /
@@ -624,10 +628,9 @@ check GitHub before retrying an immediate comment. Suggestions can be written as
 Markdown; Octo remains available for its dedicated suggestion/review tools.
 
 In PR status, `gx` on a CI check opens its actual job/check URL (including external
-CI providers), and on the CI summary opens PR checks. The compact `[Actions]`
-link at the end of the branch/author line opens branch-filtered runs with
-`gx` or Enter when the cursor is on the link. CI represents all PR checks,
-including external providers; Actions is a separate navigation target.
+CI providers), and on the CI summary opens PR checks. CI represents all PR
+checks, including external providers. GitHub Actions runs remain available
+through `a` in the PR actions menu (`N` / `<Space><Space>`).
 On a marked diff line `gx` opens the comment; elsewhere it
 opens the PR. The `k` and `a` list panels also support `gx`/Enter for the selected
 check or workflow run.

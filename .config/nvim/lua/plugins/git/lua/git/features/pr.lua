@@ -112,9 +112,10 @@ end
 local function render(s, current)
   s.rendering = true
   local model, pr = s.model, s.model.pr
-  local header = require('git.features.pr_header').build(model, s.header_expanded ~= false)
+  local header = require('git.features.pr_header').build(model, s.header_expanded ~= false, s.ci_expanded)
   local prefix, highlights = header.lines, header.highlights
   s.links = header.links
+  s.ci_section = header.ci_section
   vim.list_extend(prefix, { '', 'Title / description · edit below, <C-s> / :w saves to GitHub' })
   local original = { pr.title, '' }
   if pr.body and pr.body ~= '' and pr.body ~= vim.NIL then vim.list_extend(original, vim.split(pr.body, '\n', { plain = true })) end
@@ -182,6 +183,10 @@ local function render(s, current)
   vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
   vim.api.nvim_buf_set_extmark(s.buf, ns, 0, 0, { sign_text = s.header_expanded == false and '▸' or '▾',
     sign_hl_group = 'GitPrHeaderLabel', priority = 200 })
+  if s.ci_section then
+    vim.api.nvim_buf_set_extmark(s.buf, ns, s.ci_section.first - 1, 0,
+      { sign_text = s.ci_expanded and '▾' or '▸', sign_hl_group = 'GitPrHeaderLabel', priority = 200 })
+  end
   vim.api.nvim_buf_set_extmark(s.buf, ns, commit_first - 1, 0,
     { sign_text = s.commits_expanded and '▾' or '▸', sign_hl_group = 'Title', priority = 200 })
   vim.api.nvim_buf_set_extmark(s.buf, ns, changes_row - 1, 0,
@@ -234,6 +239,13 @@ end
 local function toggle(s, mode, first, last, done)
   local current, err = draft(s)
   if not current then notify(err); return end
+  if not first and s.ci_section and vim.fn.line('.') >= s.ci_section.first and vim.fn.line('.') <= s.ci_section.last then
+    s.ci_expanded = mode == 'show' or (mode == 'toggle' and not s.ci_expanded)
+    render(s, current)
+    vim.api.nvim_win_set_cursor(0, { s.ci_section.first, 0 })
+    if done then done() end
+    return
+  end
   if not first and vim.fn.line('.') <= #s.prefix then
     s.header_expanded = mode == 'show' or (mode == 'toggle' and s.header_expanded == false)
     render(s, current)
@@ -535,7 +547,7 @@ local function show_help()
       { '<C-s>', 'Save title and description to GitHub' },
     } },
     { title = 'Diff navigation', entries = {
-      { 'o / = / <Tab>', 'Toggle header / commits / changes / file diff' },
+      { 'o / = / <Tab>', 'Toggle header / CI / commits / changes / file diff' },
       { '> / <', 'Expand / collapse section or files' },
       { 'i', 'Expand and move to next file / hunk' },
       { ']m / [m', 'Next / previous file' },
@@ -546,7 +558,7 @@ local function show_help()
       { 'd / dd / dv', 'Vertical file diff' },
       { 'dh / ds', 'Horizontal file diff' },
       { 'D', 'Entire PR in Diffview' },
-      { '<CR>', 'Open link / commit / thread / file' },
+      { '<CR>', 'Toggle section / open target' },
       { 'gf', 'Open worktree file' },
       { 'gq', 'Changed files in quickfix' },
       { 'gD', 'Diff display settings' },
@@ -656,7 +668,7 @@ function M.action_groups(buf)
       action('E', 'Edit title / description', function()
         vim.api.nvim_win_set_cursor(0, { #s.prefix + 1, 0 }); vim.cmd('startinsert')
       end),
-      action('o', 'Toggle header / commits / changes / file diff', function() toggle(s, 'toggle') end),
+      action('o', 'Toggle header / CI / commits / changes / file diff', function() toggle(s, 'toggle') end),
       action('>', 'Expand section / file diffs', function() toggle(s, 'show') end),
       action('<', 'Collapse section / file diffs', function() toggle(s, 'hide') end),
       action('R', 'Refresh PR status', function() refresh_prompt(s) end),
@@ -694,7 +706,7 @@ local function attach(s)
       end, { buffer = b, silent = true, nowait = not vim.tbl_contains({ 'd', 'g', '[', ']', 'gc', 'gr' }, key), desc = description })
     end
   end
-  map({ 'o', '=', '<Tab>' }, function() toggle(s, 'toggle') end, 'Toggle PR header / commits / changes / file diff', true)
+  map({ 'o', '=', '<Tab>' }, function() toggle(s, 'toggle') end, 'Toggle PR header / CI / commits / changes / file diff', true)
   map('>', function() toggle(s, 'show') end, 'Expand PR section / file diffs', true)
   map('<', function() toggle(s, 'hide') end, 'Collapse PR section / file diffs', true)
   for _, key in ipairs({ 'o', '=', '>', '<' }) do
@@ -752,6 +764,7 @@ local function attach(s)
     end, { buffer = b, silent = true, desc = 'Comment on selected PR diff lines' })
   end
   map('<CR>', function()
+    if s.ci_section and vim.fn.line('.') == s.ci_section.first then toggle(s, 'toggle'); return end
     local link = link_at(s)
     if link then vim.ui.open(link); return end
     local commit = M.commit_at(b, vim.fn.line('.'))
@@ -764,7 +777,7 @@ local function attach(s)
     local entry, info = M.entry_at(b, vim.fn.line('.'))
     if info and #info.threads > 0 then comments(s)
     elseif entry then blob(s, entry, false, info.coordinate) end
-  end, 'Open link, commit, thread or PR head file', true)
+  end, 'Toggle PR section / open link, commit, thread or head file', true)
   map('gf', function()
     local entry = M.entry_at(b, vim.fn.line('.'))
     if entry then
@@ -780,7 +793,7 @@ local function attach(s)
     local commit = M.commit_at(b, vim.fn.line('.'))
     local commit_url = commit and ('https://%s/%s/commit/%s'):format(s.ctx.host, s.ctx.repo, commit.hash)
     vim.ui.open(link_at(s) or commit_url or (thread and thread.url) or s.ctx.url)
-  end, 'Open PR / commit / CI check / Actions / comment on GitHub')
+  end, 'Open PR / commit / CI check / comment on GitHub')
   map('gy', function() vim.fn.setreg('"', s.ctx.url); pcall(vim.fn.setreg, '+', s.ctx.url) end, 'Copy PR URL')
   map('gq', function()
     local items = {}

@@ -19,7 +19,7 @@ local function outcome(state)
   if state == 'NEUTRAL' or state == 'SKIPPED' or state == 'COMMENTED' or state == 'DISMISSED' then return '·', 'Comment', 3 end
   return '◷', 'DiagnosticWarn', 2
 end
-function M.build(model, expanded)
+function M.build(model, expanded, checks_expanded)
   local pr, ctx = model.pr, model.ctx
   local result = { lines = {}, highlights = {}, links = {} }
   local function row(chunks, url)
@@ -80,11 +80,8 @@ function M.build(model, expanded)
       end
       row(chunks)
     end
-    local branch_row = row({ { 'From: ', 'GitPrHeaderLabel' }, { pr.headRefName, 'Normal' },
-      { '  Into: ', 'GitPrHeaderLabel' }, { pr.baseRefName, 'Normal' }, { '  [Actions]', 'Underlined' } })
-    local actions_start = result.lines[branch_row]:find('[Actions]', 1, true) - 1
-    result.links[branch_row] = { start_col = actions_start, end_col = #result.lines[branch_row],
-      url = github.actions_url(ctx, pr.headRefName) }
+    row({ { 'From: ', 'GitPrHeaderLabel' }, { pr.headRefName, 'Normal' },
+      { '  Into: ', 'GitPrHeaderLabel' }, { pr.baseRefName, 'Normal' } })
     local add, del = tonumber(github.scalar(pr.additions)) or 0, tonumber(github.scalar(pr.deletions)) or 0
     local total = add + del
     local unit = total > 0 and math.ceil(total / 5) or 1
@@ -116,17 +113,18 @@ function M.build(model, expanded)
         github.scalar(submitted.html_url) or (pr.url .. '#pullrequestreview-' .. submitted.id))
       if hash and hash ~= model.hash then result.lines[at] = result.lines[at] .. ' · earlier commit ' .. hash:sub(1, 7) end
     end
-    row(github.summary_chunks(pr), pr.url .. '/checks')
-    local checks = github.checks(pr)
+    local summary_row = row(github.summary_chunks(pr), pr.url .. '/checks')
+    local checks = checks_expanded and github.checks(pr) or {}
     table.sort(checks, function(a, b)
       local _, _, x = outcome(a.result); local _, _, y = outcome(b.result)
       return x < y or (x == y and a.label < b.label)
     end)
     for _, check in ipairs(checks) do
       local icon, group = outcome(check.result)
-      row({ { '  ' .. icon .. ' ', group }, { check.label, check.result == 'SUCCESS' and 'GitPrPositive' or 'Normal' } },
+      row({ { icon .. ' ', group }, { check.label, check.result == 'SUCCESS' and 'GitPrPositive' or 'Normal' } },
         check.url or pr.url .. '/checks')
     end
+    result.ci_section = { first = summary_row, last = #result.lines }
   end
   return result
 end

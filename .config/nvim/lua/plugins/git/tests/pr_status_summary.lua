@@ -13,7 +13,7 @@ local function colored(text, group)
   local line = vim.api.nvim_buf_get_lines(ui.buf, row - 1, row, false)[1]
   local start, finish = line:find(text, 1, true)
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(ui.buf, ns, { row - 1, 0 }, { row - 1, -1 }, { details = true })) do
-    if mark[4].hl_group == group and mark[3] <= start - 1 and mark[4].end_col >= finish then return true end
+    if mark[4].end_col and mark[4].hl_group == group and mark[3] <= start - 1 and mark[4].end_col >= finish then return true end
   end
   return false
 end
@@ -26,6 +26,7 @@ end
 -- draft threads must not inflate the count of unresolved conversations.
 f.thread_pages = { { thread(101, false), thread(201, false) }, { thread(301, true), thread(901, false, 'PENDING') } }
 ui.open()
+ui.key('>', ui.row('CI:'))
 assert(ui.row('2 unresolved') and not pcall(ui.row, 'Your last review:'))
 assert(colored('CI', 'GitPrHeaderLabel') and colored('Review', 'GitPrHeaderLabel'))
 assert(colored('✗ 1/2', 'DiagnosticError') and colored('review required', 'DiagnosticWarn'))

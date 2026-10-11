@@ -37,6 +37,28 @@ vim.ui.open = original_open
 assert(ui.row('Commits: 1  Changed files: 4  (+3 -2 ■■■■■)'))
 absent('Assignees:'); absent('Labels:'); absent('Milestone:'); absent('Reviewers:')
 absent(f.pr.url); absent('No one assigned'); absent('None yet')
+absent('[Actions]'); absent('test:'); absent('external:')
+local function ci_gutter(expected)
+  local row = ui.row('CI:')
+  local marks = vim.api.nvim_buf_get_extmarks(ui.buf, vim.api.nvim_create_namespace('git_pr_status'),
+    { row - 1, 0 }, { row - 1, -1 }, { details = true })
+  for _, mark in ipairs(marks) do if mark[4].sign_text then
+    assert(mark[4].sign_text:gsub('%s+$', '') == expected)
+    return
+  end end
+  error('CI fold marker missing')
+end
+ci_gutter('▸')
+local calls_before_fold = #f.calls
+ui.key('<Tab>', ui.row('CI:')); assert(ui.row('test:') and ui.row('external:')); ci_gutter('▾')
+for _, text in ipairs({ 'test:', 'external:' }) do
+  assert(not lines()[ui.row(text)]:match('^%s'), 'CI result should have no nesting indent')
+end
+ui.key('=', ui.row('test:')); absent('test:'); assert(ui.row('Created by:')); ci_gutter('▸')
+ui.key('>', ui.row('CI:')); assert(ui.row('test:'))
+ui.key('<', ui.row('external:')); absent('external:'); assert(ui.row('CI:'))
+ui.key('<CR>', ui.row('CI:')); assert(ui.row('test:')); ci_gutter('▾')
+assert(#f.calls == calls_before_fold, 'CI folding performed network or Git work')
 local stats_row = ui.row('Commits:')
 local stats = vim.api.nvim_buf_get_extmarks(ui.buf, vim.api.nvim_create_namespace('git_pr_status'),
   { stats_row - 1, 0 }, { stats_row - 1, -1 }, { details = true })
@@ -64,7 +86,7 @@ assert(ui.row('Reviewers: @requested ◷  @reviewer ✓  @team ◷'))
 absent('@private')
 assert(ui.row('Your review:') < ui.row('Your last review:'))
 assert(ui.row('Your last review:') < ui.row('CI:') and ui.row('CI:') < ui.row('test:'))
-local header = require('git.features.pr_header').build(view.model(ui.buf), true)
+local header = require('git.features.pr_header').build(view.model(ui.buf), true, true)
 assert(header.lines[#header.lines]:find('external:', 1, true), 'CI checks should finish the Repo header')
 -- Header folding changes only its metadata, preserving the editable draft and
 -- expanded file diffs; all three Status aliases are available on the header.
@@ -73,6 +95,10 @@ local title = ui.row('PR title')
 vim.api.nvim_buf_set_lines(ui.buf, title - 1, title, false, { 'Unsaved title' })
 vim.api.nvim_buf_set_lines(ui.buf, title + 1, title + 1, false, { 'Unsaved body' })
 local calls = #f.calls
+ui.key('<', ui.row('CI:')); absent('test:')
+assert(ui.row('Unsaved title') and ui.row('Unsaved body') and ui.row('+TWO') and vim.bo[ui.buf].modified)
+assert(view.entry_at(ui.buf, ui.row('+TWO')).path == 'file name.txt')
+ui.key('o', ui.row('CI:')); assert(ui.row('test:'))
 ui.key('o', 1)
 assert(lines()[1] == first_line); absent('CI:')
 gutter('▸')
@@ -82,6 +108,7 @@ assert(ui.row('Unsaved title') and ui.row('Unsaved body') and ui.row('+TWO') and
 assert(view.entry_at(ui.buf, ui.row('+TWO')).path == 'file name.txt')
 assert(#f.calls == calls, 'Header fold performed network or Git work')
 ui.key('<Tab>', 1); assert(ui.row('Created by:')); gutter('▾')
+assert(ui.row('test:')); ci_gutter('▾')
 ui.key('=', ui.row('Created by:')); absent('Created by:'); gutter('▸')
 ui.key('>', 1); assert(ui.row('Commits:'))
 ui.key('<', 1); absent('Commits:')
@@ -92,10 +119,12 @@ vim.api.nvim_buf_set_lines(ui.buf, title - 1, title, false, { 'PR title' })
 vim.api.nvim_buf_set_lines(ui.buf, title + 1, title + 2, false, {})
 ui.refresh(); absent('Created by:'); assert(lines()[1] == first_line); gutter('▸')
 ui.key('>', 1)
+ui.key('<', ui.row('CI:'))
 f.pr.assignees, f.pr.labels, f.pr.milestone, f.pr.reviewRequests = {}, {}, vim.NIL, {}
 f.pr.createdAt, f.pr.updatedAt, f.pr.mergeStateStatus = vim.NIL, vim.NIL, 'UNKNOWN'
 f.reviews = {}; f.pr.additions, f.pr.deletions = 0, 0
 ui.refresh()
+absent('test:'); ci_gutter('▸')
 for _, text in ipairs({ 'Created:', 'Updated:', 'Assignees:', 'Milestone:', 'Labels:', 'Reviewers:', 'Merge:' }) do absent(text) end
 assert(ui.row('(+0 -0 ■■■■■)'))
 vim.api.nvim_buf_delete(ui.buf, { force = true }); f.cleanup()
