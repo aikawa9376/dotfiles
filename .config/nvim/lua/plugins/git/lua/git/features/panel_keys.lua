@@ -1,6 +1,5 @@
 -- Normal panel keys. Magit's transient specifications are deliberately separate.
 local M = {}
-local utils = require('git.utils')
 local configured = {}
 local panels = {
   gitstatus = 'status', gitlog = 'log', gitbranch = 'branch',

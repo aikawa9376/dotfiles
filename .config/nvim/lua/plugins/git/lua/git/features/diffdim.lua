@@ -1,11 +1,32 @@
 local M = {}
 local initialized = false
+local panel_ns = vim.api.nvim_create_namespace("GitBlameDiffDim")
+
+-- Blame panels use these helpers before the Ex command is registered.
+function M.clear_blame(bufnr)
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    vim.api.nvim_buf_clear_namespace(bufnr, panel_ns, 0, -1)
+  end
+end
+
+function M.select_blame(bufnr, rows, commit)
+  if not vim.api.nvim_buf_is_valid(bufnr) then return false end
+  M.clear_blame(bufnr)
+  for line = 1, vim.api.nvim_buf_line_count(bufnr) do
+    if not rows[line] or rows[line].commit ~= commit then
+      vim.api.nvim_buf_set_extmark(bufnr, panel_ns, line - 1, 0, {
+        line_hl_group = 'LineNr',
+        priority = 100,
+      })
+    end
+  end
+  return true
+end
 
 function M.setup()
     if initialized then return end
     initialized = true
     local ns_id = vim.api.nvim_create_namespace("DimNonDiffLines")
-    local panel_ns = vim.api.nvim_create_namespace("GitBlameDiffDim")
     local blame_state = {}
     local blame_commands = {
       clear = true,
@@ -60,27 +81,6 @@ function M.setup()
       blame_state[target_bufnr] = nil
       local blame = package.loaded['git.features.blame']
       if blame and blame.clear_dim_for_buffer then blame.clear_dim_for_buffer(target_bufnr) end
-    end
-
-    function M.clear_blame(bufnr)
-      if vim.api.nvim_buf_is_valid(bufnr) then
-        vim.api.nvim_buf_clear_namespace(bufnr, panel_ns, 0, -1)
-      end
-    end
-
-    function M.select_blame(bufnr, rows, commit)
-      if not vim.api.nvim_buf_is_valid(bufnr) then return false end
-      M.clear_blame(bufnr)
-      local line_count = vim.api.nvim_buf_line_count(bufnr)
-      for line = 1, line_count do
-        if not rows[line] or rows[line].commit ~= commit then
-          vim.api.nvim_buf_set_extmark(bufnr, panel_ns, line - 1, 0, {
-            line_hl_group = 'LineNr',
-            priority = 100,
-          })
-        end
-      end
-      return true
     end
 
     local function set_diff_marks(hunks, bufnr, rev)

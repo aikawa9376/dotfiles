@@ -583,7 +583,17 @@ local function show_help()
     if #lines > 0 then lines[#lines + 1] = '' end
     lines[#lines + 1], headings[group.title] = group.title, true
     for _, entry in ipairs(group.entries) do
-      lines[#lines + 1] = entry[1] .. string.rep(' ', width - vim.fn.strdisplaywidth(entry[1]) + 2) .. entry[2]
+      local prefix = entry[1] .. string.rep(' ', width - vim.fn.strdisplaywidth(entry[1]) + 2)
+      local available = math.max(1, vim.o.columns - 4 - width - 2)
+      local label = ''
+      for word in entry[2]:gmatch('%S+') do
+        local next_label = label == '' and word or label .. ' ' .. word
+        if label ~= '' and vim.fn.strdisplaywidth(next_label) > available then
+          lines[#lines + 1] = prefix .. label
+          prefix, label = string.rep(' ', width + 2), word
+        else label = next_label end
+      end
+      lines[#lines + 1] = prefix .. label
     end
   end
   vim.list_extend(lines, { '',

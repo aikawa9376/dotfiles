@@ -10,7 +10,6 @@ local function active(s)
   return not s.closed and vim.api.nvim_tabpage_is_valid(s.tab)
     and vim.api.nvim_buf_is_loaded(s.right) and vim.api.nvim_buf_is_loaded(s.left)
 end
-local function lines(text) return vim.split(text, '\n', { plain = true }) end
 local function message(s)
   if not vim.api.nvim_buf_is_valid(s.right) then return s.message end
   local all = vim.api.nvim_buf_get_lines(s.right, 0, -1, false)

@@ -5,7 +5,7 @@ local plugin = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(
   vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))))
 local binary = require('git.features.syntax_native_build').new(plugin .. '/native/src/main.rs',
   plugin .. '/../../../bin')
-local queue, running, active = {}, {}, 0
+local queue, active = {}, 0
 local pump
 
 function M.command()
@@ -30,14 +30,14 @@ pump = function()
     local task = table.remove(queue, selected)
     if not task.valid() then task.done(nil)
     else
-      active, running[task] = active + 1, true
+      active = active + 1
       local timer = vim.uv.new_timer()
       local finished = false
       local function finish(output)
         if finished then return end
         finished = true
         timer:stop(); timer:close()
-        active, running[task] = active - 1, nil
+        active = active - 1
         task.input, task.process = nil, nil
         if output then M.stats.completed = M.stats.completed + 1
         elseif not task.cancelled then M.stats.failed = M.stats.failed + 1 end

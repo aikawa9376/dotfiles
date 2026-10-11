@@ -136,8 +136,15 @@ function M.show_commit_info_float(commit, toggle, create_if_missing)
   vim.api.nvim_set_option_value('cursorline', false, { win = float_win })
 end
 
-function M.setup()
-  vim.api.nvim_create_user_command('GeditHeadAtFile', function()
+local command_definitions = {}
+local function define_command(name, callback, opts)
+  command_definitions[#command_definitions + 1] = { name = name, callback = callback, opts = opts }
+end
+
+-- Export panel helpers on require; setup only installs their Ex entrypoints.
+-- Panels can be opened directly, before the provider's setup has run.
+do
+  define_command('GeditHeadAtFile', function()
     local root, path = require('git.objects').context()
     local hash = require('git.objects').run(root, { 'log', '-1', '--format=%H', '--', path })
     if vim.trim(hash) == '' then error('No commits for ' .. path) end
@@ -205,7 +212,7 @@ function M.setup()
     end
   end
 
-  vim.api.nvim_create_user_command("GitPush", function()
+  define_command("GitPush", function()
     git_push({})
   end, {})
 
@@ -288,7 +295,7 @@ function M.setup()
     })
   end
 
-  vim.api.nvim_create_user_command("GCherryPick", function(cmd_opts)
+  define_command("GCherryPick", function(cmd_opts)
     git_cherry_pick({ reg = cmd_opts.reg })
   end, { register = true })
 
@@ -300,17 +307,17 @@ function M.setup()
     return require('git.features.history_undo').open(current_work_tree(), true)
   end
 
-  vim.api.nvim_create_user_command('GitFixupBase', function()
+  define_command('GitFixupBase', function()
     require('git.features.fixup_target').open({ work_tree = current_work_tree() })
   end, {})
-  vim.api.nvim_create_user_command('GitStatusTree', function()
+  define_command('GitStatusTree', function()
     require('git.features.status_tree').open({ work_tree = current_work_tree() })
   end, {})
-  vim.api.nvim_create_user_command('GitPatch', function(opts)
+  define_command('GitPatch', function(opts)
     require('git.features.patch_collection').open({ work_tree = current_work_tree(),
       commit = opts.args ~= '' and opts.args or nil })
   end, { nargs = '?' })
-  vim.api.nvim_create_user_command('GitRebasePlan', function(opts)
+  define_command('GitRebasePlan', function(opts)
     if #opts.fargs > 2 then vim.notify('Usage: GitRebasePlan [old-base [new-base]]', vim.log.levels.WARN); return end
     require('git.features.rebase_plan').open({ work_tree = current_work_tree(),
       base = opts.fargs[1], onto = opts.fargs[2] })
@@ -318,11 +325,11 @@ function M.setup()
     return require('git.features.rebase_plan').complete_refs(lead)
   end })
   for name, action in pairs({ GitRebaseContinue = 'continue', GitRebaseSkip = 'skip', GitRebaseAbort = 'abort' }) do
-    vim.api.nvim_create_user_command(name, function()
+    define_command(name, function()
       require('git.features.rebase_plan_session').open(current_work_tree(), action)
     end, {})
   end
-  vim.api.nvim_create_user_command('GitRebaseBase', function(opts)
+  define_command('GitRebaseBase', function(opts)
     local root = current_work_tree()
     if opts.bang then require('git.features.rebase_plan').clear_mark(root); return end
     local buf = vim.api.nvim_get_current_buf()
@@ -331,11 +338,11 @@ function M.setup()
     require('git.features.rebase_plan').mark(root, revision)
   end, { nargs = '?', bang = true })
 
-  vim.api.nvim_create_user_command("GitUndo", function()
+  define_command("GitUndo", function()
     reflog_undo()
   end, {})
 
-  vim.api.nvim_create_user_command("GitRedo", function()
+  define_command("GitRedo", function()
     reflog_redo()
   end, {})
 
@@ -413,29 +420,32 @@ function M.setup()
     local work_tree = current_work_tree()
     if not work_tree then return end
 
-    local results = {}
+    local changed = false
     for _, commit in ipairs(commits) do
-      -- Detect merge commit (more than one parent)
-      local parent_count = vim.fn.system(
-        'git -C ' .. vim.fn.shellescape(work_tree) .. ' cat-file -p ' .. commit .. ' | grep -c "^parent "'
-      )
-      local extra = (tonumber(parent_count) or 0) >= 2 and ' -m 1' or ''
-
-      local cmd = 'git -C ' .. vim.fn.shellescape(work_tree) .. ' revert --no-edit' .. extra .. ' ' .. commit
-      local out = vim.fn.system(cmd)
-      if vim.v.shell_error ~= 0 then
-        table.insert(results, 'revert ' .. commit:sub(1, 7) .. ' failed: ' .. out)
+      local parents = vim.system({ 'git', '-C', work_tree, 'rev-list', '--parents', '-n', '1', commit }, { text = true }):wait()
+      if parents.code ~= 0 then
+        if changed then utils.fire_git_changed({ work_tree = work_tree }) end
+        vim.notify('Could not read commit parents: ' .. (parents.stderr or ''), vim.log.levels.ERROR)
+        return
       end
-    end
-
-    if #results > 0 then
-      vim.notify(table.concat(results, '\n'), vim.log.levels.ERROR)
-    else
-      vim.notify('Reverted ' .. #commits .. ' commit(s)', vim.log.levels.INFO)
-      if on_complete then
-        vim.schedule(on_complete)
+      local args = { 'git', '-C', work_tree, 'revert', '--no-edit' }
+      if #vim.split(vim.trim(parents.stdout or ''), '%s+') > 2 then
+        vim.list_extend(args, { '-m', '1' })
       end
+      args[#args + 1] = commit
+      local result = vim.system(args, { text = true }):wait()
+      if result.code ~= 0 then
+        -- Conflicts also mutate the index/worktree. Keep the sequence for recovery
+        -- and stop before attempting another selected commit.
+        utils.fire_git_changed({ work_tree = work_tree })
+        vim.notify('revert ' .. commit:sub(1, 7) .. ' failed: ' .. (result.stderr or ''), vim.log.levels.ERROR)
+        return
+      end
+      changed = true
     end
+    utils.fire_git_changed({ work_tree = work_tree })
+    vim.notify('Reverted ' .. #commits .. ' commit(s)', vim.log.levels.INFO)
+    if on_complete then vim.schedule(on_complete) end
   end
 
   -- Preview helpers ------------------------------------------------------
@@ -670,6 +680,12 @@ function M.setup()
   M.git_cherry_pick = git_cherry_pick
   M.reflog_undo = reflog_undo
   M.reflog_redo = reflog_redo
+end
+
+function M.setup()
+  for _, definition in ipairs(command_definitions) do
+    vim.api.nvim_create_user_command(definition.name, definition.callback, definition.opts)
+  end
 end
 
 return M
