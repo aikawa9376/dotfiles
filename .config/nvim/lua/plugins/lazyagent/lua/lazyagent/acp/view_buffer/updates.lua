@@ -584,6 +584,11 @@ function M.new(ctx)
     local meta = type(entry.transcript_display_meta) == "table" and entry.transcript_display_meta or {}
     local cfg = transcript_compaction_config(bufnr)
     local pending_sections = pending_transcript_section_count(text)
+    -- An oversized section may be the entire bounded tail. Once the next
+    -- section arrives, reread at that safe boundary before carrying state on.
+    if meta.truncated_prefix and pending_sections > 0 then
+      return true
+    end
     if meta.markdown_fence_before_tail == nil then
       return true
     end

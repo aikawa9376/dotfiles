@@ -2,6 +2,41 @@ local M = {}
 
 function M.run()
   local view = require("lazyagent.acp.view_buffer")
+  -- An oversized live section survives a bounded read, then yields to a safe
+  -- boundary as soon as the next section arrives through the incremental path.
+  do
+    local path = vim.fn.tempname() .. "-truncated-live.log"
+    local raw = { "─ Tool ─", " ```lua" }
+    for i = 1, 30 do raw[#raw + 1] = " previous code " .. i end
+    vim.fn.writefile(raw, path)
+    local pane, created
+    view.create_pane({ transcript_path = path, size = 12,
+      acp = { agent_name = "truncated-live-test", transcript_max_lines = 12,
+        source_winid = vim.api.nvim_get_current_win() },
+    }, function(id, result) pane, created = id, result end)
+    assert(vim.wait(1000, function() return pane ~= nil end, 10), "bounded pane created")
+    local session = { pane_id = pane, agent_name = "truncated-live-test",
+      transcript_path = path, view_state = {} }
+    view.on_session_created(session)
+    assert(vim.wait(1000, function() return session.view_state.refresh_pending ~= true end, 10))
+    local shown = vim.api.nvim_buf_get_lines(created.bufnr, 0, -1, false)
+    assert(shown[2] == " previous code 19", "oversized live output is retained")
+    local long_line = ' + local message = "' .. string.rep("long code ", 20) .. '"'
+    local output = "─ Assistant ─\n ```lua\n" .. long_line .. "\n ```\n"
+    local file = assert(io.open(path, "a")); file:write(output); file:close()
+    view.on_transcript_updated(session, output, "a")
+    assert(vim.wait(2000, function()
+      return session.view_state.append_timer == nil and session.view_state.refresh_pending ~= true
+    end, 10), "new section flushed")
+    shown = vim.api.nvim_buf_get_lines(created.bufnr, 0, -1, false)
+    assert(require("lazyagent.acp.view_buffer.sections").section_heading_for_line(shown[2]) == "Assistant",
+      "streaming discards only the omitted section fragment")
+    assert(shown[4] ~= long_line and shown[4]:find("...", 1, true), "the new code block is clipped")
+    assert(vim.deep_equal(vim.fn.readfile(path), vim.list_extend(vim.deepcopy(raw),
+      { "─ Assistant ─", " ```lua", long_line, " ```" })), "raw history remains complete")
+    view.kill_pane(pane, session)
+    vim.fn.delete(path)
+  end
   for _, fence in ipairs({ "```", "````", "~~~" }) do
     local path = vim.fn.tempname() .. "-fences.log"
     -- Deliberately omit a final newline: providers can split a fence anywhere.

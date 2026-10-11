@@ -107,6 +107,8 @@ function M.new(ctx)
     meta = type(meta) == "table" and meta or {}
     local tail_context = trailing_markdown_table_context(lines)
     meta.raw_section_count = #(sections or {})
+    meta.truncated_prefix = lines[1] == TRANSCRIPT_TRUNCATED_MARKER
+      and (#sections == 0 or sections[1].start_row > 2)
     meta.compacted = compacted == true
     meta.table_tail_state = tail_context.state
     meta.table_tail_lines = (tail_context.state == "header" or tail_context.state == "separator") and tail_context.lines or {}
@@ -243,6 +245,25 @@ function M.new(ctx)
     return transformed, out_items, with_transcript_display_meta(meta, sections, true, balanced_out_lines)
   end
 
+  local function bounded_transcript_tail(data, max_lines)
+    if not max_lines or max_lines <= 0 or #data <= max_lines then
+      return data
+    end
+    local start_row = #data - max_lines + 1
+    -- A tail can start with the closing fence of an omitted code block.
+    -- Retain complete ACP sections so that Markdown state starts outside code.
+    -- Keep an oversized live section's tail if there is no later boundary yet.
+    for row = start_row, #data do
+      if view_sections.section_heading_for_line(data[row]) then
+        start_row = row
+        break
+      end
+    end
+    local lines = { TRANSCRIPT_TRUNCATED_MARKER }
+    append_line_range(lines, data, start_row, #data)
+    return lines
+  end
+
   read_transcript_lines = function(path, max_lines)
     if not path or path == "" or vim.fn.filereadable(path) ~= 1 then
       return {}
@@ -252,11 +273,7 @@ function M.new(ctx)
     if max_lines and max_lines > 0 and vim.fn.executable("tail") == 1 then
       local data = vim.fn.systemlist({ "tail", "-n", tostring(max_lines + 1), path })
       if vim.v.shell_error == 0 and type(data) == "table" then
-        if #data > max_lines then
-          data = vim.list_slice(data, #data - max_lines + 1, #data)
-          table.insert(data, 1, TRANSCRIPT_TRUNCATED_MARKER)
-        end
-        return data
+        return bounded_transcript_tail(data, max_lines)
       end
     end
 
@@ -264,11 +281,7 @@ function M.new(ctx)
     if not ok or not data then
       return {}
     end
-    if max_lines and max_lines > 0 and #data > max_lines then
-      data = vim.list_slice(data, #data - max_lines + 1, #data)
-      table.insert(data, 1, TRANSCRIPT_TRUNCATED_MARKER)
-    end
-    return data
+    return bounded_transcript_tail(data, max_lines)
   end
 
   return {

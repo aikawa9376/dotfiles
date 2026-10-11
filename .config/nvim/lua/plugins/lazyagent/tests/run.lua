@@ -75,6 +75,7 @@ local suites = {
   "tests.acp.markdown_rendering_spec",
   "tests.acp.highlighter_spec",
   "tests.acp.sections_spec",
+  "tests.acp.compaction_spec",
   "tests.acp.updates_spec",
   "tests.acp.conversation_filter_spec",
   "tests.acp.view_footer_spec",
