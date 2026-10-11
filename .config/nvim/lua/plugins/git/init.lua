@@ -14,6 +14,7 @@ return {
     "GitWipEnable", "GitWipDisable", "GitWipSave", "GitWipLog", "GitWipRestore",
     "GbranchSpinoff", "GbranchSpinout",
     "GitHub", "GitPr", "GitPrCreate", "GitPrWorktree",
+    "GitInit",
     "GMove", "GRename", "GRemove", "GDelete", "GUnlink", "Gpedit", "Gdrop", "Gw", "Gr",
   },
   keys = {

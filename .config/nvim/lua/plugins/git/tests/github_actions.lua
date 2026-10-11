@@ -4,14 +4,15 @@ package.path = plugin .. '/lua/?.lua;' .. plugin .. '/tests/?.lua;' .. package.p
 local f = require('helpers.pr_fixture').new()
 local actions = require('git.features.github_actions')
 local ctx = { root = f.root, url = f.pr.url }
-local captured_input
-vim.ui.input = function(_, cb) captured_input = cb end
+local captured_input, input_opts
+vim.ui.input = function(opts, cb) captured_input, input_opts = cb, opts end
 local view = require('git.features.pr')
 local opened
 local original_open = view.open
 view.open = function(opts) opened = opts end
 actions.create_quick(ctx)
-assert(captured_input)
+assert(vim.wait(5000, function() return captured_input ~= nil end, 10))
+assert(input_opts.default == 'topic', 'Default PR title did not use the latest commit subject')
 -- Input may switch buffers/cwd; every subprocess still belongs to the origin.
 vim.cmd('cd /tmp')
 captured_input('Title $(literal) `ticks`')
@@ -74,6 +75,22 @@ local octo_calls = {}
 vim.api.nvim_create_user_command('Octo', function(args)
   octo_calls[#octo_calls + 1] = { args = args.args, cwd = vim.fn.getcwd() }
 end, { nargs = '*' })
+-- The actual default-PR menu entry asks only for a title, without opening Octo.
+ui = actions.open(ctx)
+local menu_lines = vim.api.nvim_buf_get_lines(ui.bufnr, 0, -1, false)
+local default_row, octo_row
+for i, line in ipairs(menu_lines) do
+  if line:find('Create default PR', 1, true) then default_row = i end
+  if line:find('Create PR (Octo editor)', 1, true) then octo_row = i end
+end
+assert(default_row and octo_row and default_row < octo_row)
+input_before = captured_input
+local before_default = #f.calls
+vim.api.nvim_buf_call(ui.bufnr, function() vim.fn.maparg('C', 'n', false, true).callback() end)
+assert(vim.wait(5000, function() return captured_input ~= input_before end, 10))
+assert(input_opts.default == 'topic' and #octo_calls == 0)
+captured_input(nil)
+assert(#f.calls == before_default, 'Cancelled default PR reached GitHub')
 package.loaded['octo.utils'] = { get_current_buffer = function()
   return { node = {}, ready = true, isPullRequest = function() return true end }
 end }

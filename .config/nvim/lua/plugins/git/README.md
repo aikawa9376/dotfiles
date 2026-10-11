@@ -141,6 +141,7 @@ Flog and fzf-lua with isolated Harpoon storage and temporary Git repositories.
 | `G`, `Git`, `Git status`, `GitStatus` | Open the custom status panel in a split |
 | `G!`, `G! status`, `<Leader>gS` | Open the custom status panel in a tab; reuse its existing status tab |
 | `Git <args>` | Run Git in the current buffer's repository; quoted arguments and `%` paths are supported |
+| `GitInit [directory]` | Open repository setup, including outside Git repositories |
 | `Gedit[!]`, `Gsplit`, `Gvsplit`, `Gtabedit`, `Gpedit`, `Gdrop [object]` | Open a worktree file, commit, tree, or blob; defaults to index from a worktree file and worktree from an object buffer; supports modifiers, split sizes, `+cmd`, and `++opt` |
 | `Gedit HEAD:%`, `Gedit :0:%` | Current file at HEAD or in the index; `:1:`, `:2:`, `:3:` select conflict stages |
 | `Gwrite[!] [path]`, `Gwq[!] [path]` | Write and stage content; writing another source over uncommitted destination changes requires `!`; `%` names the current path; `:0:path` writes only the index; `!` also force-adds ignored files |
@@ -221,6 +222,73 @@ commits, and commit detail views. Branch and commit links require a matching
 local remote-tracking ref with a GitHub remote; unpushed items show a notice.
 `gi` manages index flags from the status panel.
 
+## Repository initialization
+
+`<Space><Space> I` opens **Repository setup** in Git panels. Outside a Git
+repository, use `:GitInit` (or `:GitInit /path/to/project`) to open the same menu.
+This follows Magit's root `I` / `magit-init` entry, extended with starter files
+and GitHub creation.
+
+| Setup key | Action |
+| --- | --- |
+| `i` | Initialize only if the directory is not already a repository |
+| `d` | Init if needed, and create missing `README.md` and `.gitignore` |
+| `g` | Default files, GitHub/origin setup, `main`, empty initial commit, and initial push; fill only missing pieces |
+| `p` | Ensure `main` and an empty initial commit if needed, then initial push to existing `origin` |
+
+The directory prompt defaults to the captured worktree in a Git panel, or cwd
+for `:GitInit`. Relative paths resolve against that directory even if cwd changes
+while a menu or input UI is open. Missing directories are created. Existing
+repositories skip init. Creating a nested repository still requires Continue.
+Plain/default-file init honors Git's `init.defaultBranch` and templates.
+
+Default files are written only if missing, including protection against replacing
+symlinks. README contains `# <directory-name>`, or the selected repository name
+when creating a new GitHub repository. The general `.gitignore` excludes
+editor swap/backup files, OS metadata, and local `.env` files while allowing
+`.env.example` and `.env.sample`. Customize either template with lists of lines:
+
+```lua
+require('git').setup({ repository_init = { files = {
+  ['README.md'] = { '# My project', '', 'Project description' },
+  ['.gitignore'] = { '.env', 'node_modules/', 'dist/' },
+} } })
+```
+
+GitHub setup (`g`) works for new and existing repositories. If `origin` already
+exists, it keeps that connection and skips GitHub creation and its prompts. It
+can therefore also fill missing setup for a repository hosted elsewhere.
+Otherwise it asks for a repository name (`name` or `OWNER/name`, defaulting to
+the project folder name) and visibility (private first, or public), uses the
+active `gh` authentication and configured Git protocol, and connects `origin`.
+
+Both `g` and `p` keep an existing local `main`. If it is missing, they rename the
+current branch to `main` without force; from detached HEAD they create `main`
+without switching the current checkout. When that branch has no commits, they
+create `Initial commit` with `git commit --allow-empty --only`: the commit is
+empty even when changes are already staged. README/gitignore remain untracked
+unless you staged them beforehand, and existing staged/worktree changes are kept.
+Existing history gets no additional initial commit.
+
+Initial push checks the push destination for `refs/heads/main`. Only if missing
+does it run `git push -u origin main`. When the remote branch already exists,
+it skips pushing (including newer local commits), and fetches/configures
+`origin/main` as upstream only when that setting is missing. An upstream already
+pointing elsewhere is retained; an initial push then omits `-u`. No force push is
+used. This is repository setup; use the regular Push menu for later commits.
+`p` needs an existing repository and `origin`, and creates no default files.
+
+All setup actions open Status afterward. On a failure after init, local files,
+history and any connected remote are retained. Retry the same action after
+correcting the error; after a push failure `p` can finish without another commit
+or remote creation. A remote created before a later connection failure may need
+to be connected through the Remote (`M`) menu before retrying.
+
+`git.features.repository_init` owns target resolution, templates, preflight and
+creation. `tests/repository_init.lua` covers real Git initialization, empty commits,
+index/worktree preservation and pushes to temporary local bare repositories.
+GitHub calls are mocked; validation does not create or push to GitHub repositories.
+
 ## GitHub and PR status
 
 `N` in Git panels, or `<Space><Space> N`, opens the GitHub menu. `:GitHub`
@@ -231,8 +299,8 @@ available through the GitHub menu for discussion and full review.
 | GitHub menu key | Action |
 |---|---|
 | `p` / `l` | Open current/selected PR status / choose an open PR |
+| `C` | Create default PR: edit only the prefilled title |
 | `c` | Create a PR using Octo's editor |
-| `C` | Quick creation: input only the title |
 | `e` / `r` | Open in Octo / start an Octo review |
 | `w` | Create and open a separate PR worktree |
 | `k` / `a` | CI checks / GitHub Actions runs |
@@ -271,6 +339,11 @@ also changed, saving requires resolving that conflict by preserving the draft an
 reloading. `R` outside the editable region offers to discard a dirty draft before
 reloading; hidden PR buffers preserve drafts until explicitly closed.
 
+Outside the title/description, `i` follows Status: expand the current file if
+closed, then jump to the next file header or diff hunk and scroll it to the top.
+Counts such as `2i` repeat that movement. Inside the editable region, `i` retains
+normal insertion behavior.
+
 Unified diffs use the existing syntax/word-diff renderer. They compare the PR's
 merge base with its head, independently of the checked-out branch or index.
 PR refs are fetched under `refs/nvim-pr/<host>/<owner>/<repo>/<number>/`; fetched
@@ -283,12 +356,16 @@ header. The thread popup shows existing replies and an editable reply area;
 suggestions, approval and change requests use Octo's review UI.
 
 In PR status, `gx` on a CI check opens its actual job/check URL (including external
-CI providers), on the CI summary opens PR checks, and on the Actions row opens
-branch-filtered runs. On a marked diff line it opens the comment; elsewhere it
+CI providers), and on the CI summary opens PR checks. The compact `[Actions]`
+link at the end of the branch/author line opens branch-filtered runs with
+`gx` or Enter when the cursor is on the link. CI represents all PR checks,
+including external providers; Actions is a separate navigation target.
+On a marked diff line `gx` opens the comment; elsewhere it
 opens the PR. The `k` and `a` list panels also support `gx`/Enter for the selected
 check or workflow run.
 
-`:GitPrCreate` is the same quick route as `N C`: publish the current branch with
+`:GitPrCreate` is the same **Create default PR** route as `N C`: prefill the
+title with the latest commit subject and let you edit only that field, publish the current branch with
 a regular, non-force push to its configured push remote, then run
 `gh pr create --head ... --fill --title ...`. The body comes from commits;
 base branch and remaining options use GitHub CLI defaults. It creates a ready
@@ -411,7 +488,7 @@ reflog, worktree, commit-detail, and changed-files tree panels. It uses the file
 or worktree under the cursor, with no repeated
 title/context header. The root offers Magit-style prefixes for cherry-pick
 (`A`), apply variants (`v`), bisect (`B`), clone (`C`), commit (`c`), diff (`d`), pull (`F`), fetch
-(`f`), log (`l`), remote (`M`), merge (`m`), submodule (`o`), push (`P`), rebase
+(`f`), initialization (`I`), log (`l`), remote (`M`), merge (`m`), submodule (`o`), push (`P`), rebase
 (`r`), tag (`t`), revert (`V`), reset (`X`), references (`y`), stash (`z`),
 and worktree (`Z`), plus sparse checkout (`>`), Subtree (`O`), Bundle (`U`),
 plain patches (`W`), mail patches (`w`), Notes (`T`), custom commands (`!`),

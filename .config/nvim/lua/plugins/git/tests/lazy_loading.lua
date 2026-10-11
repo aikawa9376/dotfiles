@@ -5,6 +5,7 @@ require('lazy').setup({ spec = { spec }, install = { missing = false }, checker 
   change_detection = { enabled = false }, lockfile = vim.fn.tempname(),
   performance = { rtp = { reset = false }, cache = { enabled = false } } })
 assert(not package.loaded['git'], 'Git loaded before a trigger')
+assert(vim.fn.exists(':GitInit') == 2, 'repository setup was unavailable before loading')
 for _, name in ipairs({ 'GitWipEnable', 'GitWipDisable', 'GitWipSave', 'GitWipLog', 'GitWipRestore',
   'GbranchSpinoff', 'GbranchSpinout' }) do
   assert(vim.fn.exists(':' .. name) == 2, 'Missing lazy trigger: ' .. name)

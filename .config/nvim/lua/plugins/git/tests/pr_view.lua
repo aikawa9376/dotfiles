@@ -10,10 +10,10 @@ local function row(value)
   for i, line in ipairs(lines()) do if line:find(value, 1, true) then return i end end
   error('Missing row: ' .. value)
 end
-local function key(name, at)
+local function key(name, at, col)
   local win = vim.fn.bufwinid(b)
   vim.api.nvim_set_current_win(win)
-  if at then vim.api.nvim_win_set_cursor(win, { at, 0 }) end
+  if at then vim.api.nvim_win_set_cursor(win, { at, col or 0 }) end
   vim.fn.maparg(name, 'n', false, true).callback()
 end
 local opened = {}
@@ -22,8 +22,20 @@ key('gx', row('CI · test'))
 assert(opened[#opened]:find('/job/12', 1, true), 'CI gx did not open exact job')
 key('gx', row('CI · external'))
 assert(opened[#opened] == 'https://ci.example.test/build/1')
-key('gx', row('GitHub Actions'))
+key('gx', row('CI:'))
+assert(opened[#opened] == f.pr.url .. '/checks', 'CI summary no longer opens PR checks')
+local actions_row = row('[Actions]')
+local actions_col = assert(lines()[actions_row]:find('[Actions]', 1, true)) - 1
+assert(actions_row == 2 and not table.concat(lines(), '\n'):find('gx opens branch runs', 1, true))
+key('gx', actions_row, actions_col)
 assert(vim.uri_decode(opened[#opened]):find('/actions?query=branch:topic', 1, true))
+key('<CR>', actions_row, actions_col + 2)
+assert(vim.uri_decode(opened[#opened]):find('/actions?query=branch:topic', 1, true))
+key('gx', actions_row, actions_col - 1)
+assert(opened[#opened] == f.pr.url, 'Branch metadata was mistaken for the Actions link')
+local action_marks = vim.api.nvim_buf_get_extmarks(b, vim.api.nvim_create_namespace('git_pr_status'),
+  { actions_row - 1, actions_col }, { actions_row - 1, -1 }, { details = true })
+assert(#action_marks > 0 and action_marks[1][4].hl_group == 'Underlined', 'Actions link is not visually distinguished')
 local file = row('M file name.txt')
 key('o', file)
 assert(vim.wait(5000, function() return vim.tbl_contains(lines(), '+TWO') end, 10), table.concat(f.notifications, '\n'))
@@ -80,6 +92,17 @@ assert(commands[1]:find(f.base .. '..' .. f.head, 1, true))
 key('d', row('M file name.txt'))
 assert(vim.wo.diff and vim.api.nvim_get_current_line() ~= 'uncommitted')
 vim.cmd('tabclose')
+-- The Actions target remains available when the PR has no checks at all.
+f.pr.statusCheckRollup = vim.NIL
+view.refresh(b, true)
+assert(vim.wait(5000, function() return (lines()[3] or ''):find('CI: —', 1, true) ~= nil end, 10))
+actions_row = row('[Actions]')
+actions_col = assert(lines()[actions_row]:find('[Actions]', 1, true)) - 1
+assert(actions_row == 2)
+key('gx', actions_row, actions_col)
+assert(vim.uri_decode(opened[#opened]):find('/actions?query=branch:topic', 1, true))
+key('gx', row('CI:'))
+assert(opened[#opened] == f.pr.url .. '/checks')
 vim.api.nvim_buf_delete(b, { force = true })
 f.cleanup()
 print('PASS: PR metadata edit/save, protected diffs, lazy expansion, comment icons/replies, failure drafts, contextual gx, split diff and Diffview')

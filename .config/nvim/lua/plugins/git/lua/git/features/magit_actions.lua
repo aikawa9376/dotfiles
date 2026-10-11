@@ -1183,6 +1183,9 @@ function M.open(bufnr, selection)
   operations[#operations + 1] = { key = 'N', label = 'GitHub / pull requests…', run = function()
     require('git.features.github_actions').open(require('git.features.github_actions').context(bufnr))
   end }
+  operations[#operations + 1] = { key = 'I', label = 'Repository setup…', run = function()
+    require('git.features.repository_init').open({ base = ctx.work_tree })
+  end }
   if ctx.panel == 'status' or ctx.panel == 'tree' then
     operations[#operations + 1] = { key = '=t', label = 'Changed files tree', run = function()
       require('git.features.status_tree').open({ work_tree = ctx.work_tree })

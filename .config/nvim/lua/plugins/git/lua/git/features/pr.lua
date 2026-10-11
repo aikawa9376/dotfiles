@@ -63,6 +63,12 @@ end
 local function editable_row(s, row)
   return row > #s.prefix and row <= vim.api.nvim_buf_line_count(s.buf) - #s.suffix
 end
+local function link_at(s)
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local link = s.links[cursor[1]]
+  if type(link) ~= 'table' then return link end
+  if cursor[2] >= link.start_col and cursor[2] < link.end_col then return link.url end
+end
 local function render(s, current)
   local model, pr = s.model, s.model.pr
   local prefix = {
@@ -72,12 +78,14 @@ local function render(s, current)
     pr.url,
   }
   s.links = { [3] = pr.url .. '/checks' }
+  local actions_col = #prefix[2] + 2
+  prefix[2] = prefix[2] .. '  [Actions]'
+  s.links[2] = { start_col = actions_col, end_col = #prefix[2],
+    url = github.actions_url(model.ctx, pr.headRefName) }
   for _, check in ipairs(github.checks(pr)) do
     prefix[#prefix + 1] = '  CI · ' .. check.label:gsub('[\r\n]', ' ')
     s.links[#prefix] = check.url or pr.url .. '/checks'
   end
-  prefix[#prefix + 1] = 'GitHub Actions · gx opens branch runs'
-  s.links[#prefix] = github.actions_url(model.ctx, pr.headRefName)
   vim.list_extend(prefix, { '', 'Title / description · edit below, :w saves to GitHub' })
   local original = { pr.title, '' }
   if pr.body and pr.body ~= '' and pr.body ~= vim.NIL then vim.list_extend(original, vim.split(pr.body, '\n', { plain = true })) end
@@ -119,6 +127,12 @@ local function render(s, current)
   for _, row in ipairs({ 1, 3, 4, #prefix, suffix_start + 1, #lines }) do
     vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 0, { end_col = #lines[row], hl_group = row == 3 and 'DiagnosticInfo' or 'Title' })
   end
+  for row, link in pairs(s.links) do
+    if type(link) == 'table' then
+      vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, link.start_col,
+        { end_col = link.end_col, hl_group = 'Underlined' })
+    end
+  end
   for row, info in pairs(rows) do
     local chunks = info.header and display.statistics(info.entry) or {}
     if #info.threads > 0 then chunks[#chunks + 1] = { ' 💬 ' .. #info.threads, 'DiagnosticInfo' } end
@@ -127,14 +141,16 @@ local function render(s, current)
       local group = info.entry.status == 'A' and 'GitSignsAdd' or info.entry.status == 'D' and 'GitSignsDelete' or 'Structure'
       vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 0, { end_col = 1, hl_group = group })
       local icon, hl = utils.get_devicon(info.entry.path)
-      vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 2, { virt_text = { { icon .. ' ', hl } }, virt_text_pos = 'inline' })
+      vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 2, { end_col = #lines[row], hl_group = hl,
+        virt_text = { { icon .. ' ', hl } }, virt_text_pos = 'inline' })
     end
   end
   syntax.refresh(s.buf)
 end
-local function focus(s, path)
+local function focus(s, path, win)
+  if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= s.buf then return end
   for row, info in pairs(s.rows) do if info.header and info.entry.path == path then
-    vim.api.nvim_win_set_cursor(0, { row + delta(s), 0 }); return
+    vim.api.nvim_win_set_cursor(win, { row + delta(s), 0 }); return
   end end
 end
 local function toggle(s, mode, first, last, done)
@@ -147,6 +163,7 @@ local function toggle(s, mode, first, last, done)
   end
   if vim.tbl_isempty(paths) then for _, entry in ipairs(s.model.entries) do paths[entry.path] = entry end end
   local cursor = M.entry_at(s.buf, vim.fn.line('.'))
+  local source_win = vim.api.nvim_get_current_win()
   local expanded = vim.deepcopy(s.expanded)
   local missing = false
   for path, entry in pairs(paths) do
@@ -168,15 +185,39 @@ local function toggle(s, mode, first, last, done)
         local latest, read_err = draft(s)
         if not latest then notify(read_err); return end
         s.expanded = expanded; render(s, latest)
-        if cursor then focus(s, cursor.path) end
+        if cursor then focus(s, cursor.path, source_win) end
         if done then done() end
       end)
       s.patch_task = task
       return
   end
   s.expanded = expanded; render(s, current)
-  if cursor then focus(s, cursor.path) end
+  if cursor then focus(s, cursor.path, source_win) end
   if done then done() end
+end
+local function next_diff_item(s, count, win)
+  local function advance()
+    if not live(s) or vim.api.nvim_get_current_win() ~= win or vim.api.nvim_win_get_buf(win) ~= s.buf then return end
+    while count > 0 do
+      local row = vim.api.nvim_win_get_cursor(win)[1]
+      local entry = M.entry_at(s.buf, row)
+      if entry and not s.expanded[entry.path] then
+        toggle(s, 'show', row, row, advance)
+        return
+      end
+      local lines = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
+      local target
+      for at = row + 1, #lines do
+        local _, info = M.entry_at(s.buf, at)
+        if info and (info.header or lines[at]:match('^@@')) then target = at; break end
+      end
+      if not target then break end
+      vim.api.nvim_win_set_cursor(win, { target, 0 })
+      count = count - 1
+    end
+    vim.cmd('normal! zt')
+  end
+  advance()
 end
 local function move(s, direction, hunks, expand)
   local entry = M.entry_at(s.buf, vim.fn.line('.'))
@@ -328,6 +369,14 @@ local function attach(s)
     end, { buffer = b, silent = true, desc = 'Toggle / expand / collapse selected PR files' })
   end
   map({ ']m', ']/' }, function() move(s, 1) end, 'Next PR file')
+  vim.keymap.set('n', 'i', function()
+    if not s.model then return '' end
+    if editable_row(s, vim.fn.line('.')) then return 'i' end
+    local count, win = vim.v.count1, vim.api.nvim_get_current_win()
+    -- Expression mappings cannot edit buffers; lazy expansion starts next tick.
+    vim.schedule(function() next_diff_item(s, count, win) end)
+    return ''
+  end, { buffer = b, expr = true, silent = true, nowait = true, desc = 'Expand and jump to next PR diff item' })
   map({ '[m', '[/' }, function() move(s, -1) end, 'Previous PR file')
   map(']]', function() move(s, 1, false, true) end, 'Next file and expand')
   map('[[', function() move(s, -1, false, true) end, 'Previous file and expand')
@@ -338,10 +387,12 @@ local function attach(s)
   map('D', function() M.diffview(b) end, 'Open entire PR in Diffview', true)
   map('gc', function() comments(s) end, 'Open review thread / reply')
   map('<CR>', function()
+    local link = link_at(s)
+    if link then vim.ui.open(link); return end
     local entry, info = M.entry_at(b, vim.fn.line('.'))
     if info and #info.threads > 0 then comments(s)
     elseif entry then blob(s, entry, false, info.coordinate) end
-  end, 'Open thread or PR head file', true)
+  end, 'Open link, thread or PR head file', true)
   map('gf', function()
     local entry = M.entry_at(b, vim.fn.line('.'))
     if entry then
@@ -354,7 +405,7 @@ local function attach(s)
   map('gx', function()
     local _, info = M.entry_at(b, vim.fn.line('.'))
     local thread = info and info.threads[1]
-    vim.ui.open(s.links[vim.fn.line('.')] or (thread and thread.url) or s.ctx.url)
+    vim.ui.open(link_at(s) or (thread and thread.url) or s.ctx.url)
   end, 'Open PR / CI check / Actions / comment on GitHub')
   map('gy', function() vim.fn.setreg('"', s.ctx.url); pcall(vim.fn.setreg, '+', s.ctx.url) end, 'Copy PR URL')
   map('gq', function()
@@ -389,9 +440,10 @@ local function attach(s)
   map('?', function() require('git.features.help').show_text('PR status', {
     'cw / A   edit title and description; :w saves to GitHub',
     'o / = / Tab  toggle diff; > / < expand / collapse (Visual supported)',
+    'i        expand current file and move to next file / hunk (outside title/description)',
     ']m / [m files; ]] / [[ move and expand; J / K or ]c / [c hunks',
     'd / dv   vertical diff; dh horizontal; D entire PR in Diffview',
-    '<CR>     open comment thread (if present) or PR head file; gf worktree file',
+    '<CR>     open link, comment thread or PR head file; gf worktree file',
     'gc       read / reply to review threads; select file or a marked diff line',
     'O        review in Octo; N / <Space><Space> GitHub actions',
     'R refresh; gx browser; gy copy URL; gq quickfix; gD diff display; q close',
