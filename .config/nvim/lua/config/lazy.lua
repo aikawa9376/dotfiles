@@ -120,6 +120,7 @@ require("lazy").setup({
     { "mrcjkb/rustaceanvim", ft = "rust" },
     { "aikawa9376/neomru.vim", branch = "mrw", event = "BufReadPre" },
     { "cseickel/diagnostic-window.nvim", cmd = { "DiagWindowShow" } },
+    { "aikawa9376/color-chooser.nvim", cmd = { "ColorChooser" } },
   },
   performance = {
     rtp = {
