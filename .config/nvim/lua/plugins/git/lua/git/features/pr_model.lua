@@ -126,12 +126,14 @@ function M.load(ctx, opts)
         model.entries = {}
         for i, entry in ipairs(previous.entries) do model.entries[i] = vim.tbl_extend('force', {}, entry) end
         model.commit_count = previous.commit_count
+        model.commits = previous.commits
       else
         local err
         model, err = commit.changes(model)
         if not model then error(err, 0) end
-        model.commit_count = tonumber(git(ctx.root, { 'rev-list', '--count', base .. '..' .. head, '--' }))
       end
+      if not model.commits then model.commits = require('git.features.pr_commits').load(ctx.root, base, head) end
+      model.commit_count = #model.commits
       -- Expanded files must not block the UI with synchronous patch reads
       -- when a refresh brings new revisions. Collapsed files stay lazy.
       for _, entry in ipairs(model.entries) do
@@ -166,7 +168,18 @@ function M.load(ctx, opts)
   if status_ok then
     for _, thread in ipairs(model.threads) do
       local remote = status.by_id[thread.id]
-      if remote then thread.node_id, thread.resolved = remote.id, remote.isResolved end
+      if remote then
+        if not remote.pending then thread.node_id, thread.resolved = remote.id, remote.isResolved end
+        -- Review-specific REST listings can omit all line/side fields. Use the
+        -- current GraphQL thread anchor only when it belongs to this snapshot.
+        if status.head == model.hash and remote.path == thread.path then
+          thread.line, thread.start_line = nil, nil
+          if remote.isOutdated == false and remote.subjectType == 'LINE' then
+            thread.line, thread.start_line = github.scalar(remote.line), github.scalar(remote.startLine)
+            thread.side = github.scalar(remote.diffSide)
+          end
+        end
+      end
     end
   end
   return model

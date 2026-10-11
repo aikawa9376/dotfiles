@@ -2,6 +2,7 @@
 local M = {}
 function M.buffer(prefix, comments, viewer)
   local lines, spans = vim.deepcopy(prefix), {}
+  if #lines > 0 and comments and #comments > 0 and lines[#lines] ~= '' then lines[#lines + 1] = '' end
   for index, comment in ipairs(comments or {}) do
     if index > 1 then lines[#lines + 1] = '' end
     local first = #lines
@@ -24,7 +25,13 @@ function M.buffer(prefix, comments, viewer)
   local ns = vim.api.nvim_create_namespace('git_pr_history')
   for at, line in ipairs(prefix) do
     vim.api.nvim_buf_set_extmark(buf, ns, at - 1, 0, { end_col = #line,
-      hl_group = at == #prefix and 'NonText' or at >= #prefix - 1 and 'GitPrCommentInstruction' or 'GitPrCommentContext', priority = 160 })
+      hl_group = 'GitPrCommentContext', priority = 160 })
+    for label, group in pairs({ ['✅ resolved'] = 'GitPrPositive', ['💬 unresolved'] = 'DiagnosticInfo',
+      ['💬 status unavailable'] = 'Comment', ['📝 pending'] = 'DiagnosticWarn' }) do
+      local start, finish = line:find(label, 1, true)
+      if start then vim.api.nvim_buf_set_extmark(buf, ns, at - 1, start - 1,
+        { end_col = finish, hl_group = group, priority = 170 }) end
+    end
   end
   for _, span in ipairs(spans) do
     for at = span.first, span.last - 1 do
@@ -36,7 +43,7 @@ function M.buffer(prefix, comments, viewer)
   end
   return buf, lines
 end
-function M.attach(input, win, comments, viewer, prefix, close)
+function M.attach(input, win, comments, viewer, prefix, close, hint)
   local buf, lines = M.buffer(prefix, comments, viewer)
   local config = vim.api.nvim_win_get_config(win)
   local context_height, content_height = 0, 0
@@ -49,7 +56,9 @@ function M.attach(input, win, comments, viewer, prefix, close)
   local row = math.max(0, math.floor((vim.o.lines - total - 2) / 2))
   vim.api.nvim_win_set_config(win, { relative = 'editor', col = config.col, row = row + height + 2 })
   local history = vim.api.nvim_open_win(buf, false, { relative = 'editor', style = 'minimal', border = 'rounded',
-    width = config.width, height = height, col = config.col, row = row, title = ' Context / conversation · read-only · Tab: input ' })
+    width = config.width, height = height, col = config.col, row = row,
+    title = { { ' Context / conversation ', 'Title' },
+      { '· ' .. (hint and (hint .. ' · ') or '') .. 'Tab input · <C-s> send · q ', 'GitPrCommentInstruction' } } })
   vim.wo[history].wrap, vim.wo[history].linebreak = true, true
   vim.b[input].git_pr_context = buf
   if comments and #comments > 0 then vim.b[input].git_pr_history = buf end

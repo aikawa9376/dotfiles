@@ -33,13 +33,42 @@ end
 function M.repo_arg(ctx) return ctx.host .. '/' .. ctx.repo end
 function M.command(ctx, args, opts)
   local argv = { 'gh' }; vim.list_extend(argv, args)
+  if args[1] == 'api' then
+    -- Explicit JSON/preview negotiation, following Octo rather than gh's */*.
+    -- Thread creation uses GraphQL; these headers do not fix legacy REST writes.
+    vim.list_extend(argv, { '--header', 'Accept: application/vnd.github+json, application/vnd.github.comfort-fade-preview+json',
+      '--header', 'X-GitHub-Api-Version: 2022-11-28' })
+  end
   local env = { GH_PROMPT_DISABLED = '1' }
   if ctx.host then env.GH_HOST = ctx.host end
   local result = async.system(ctx.root, argv, vim.tbl_extend('force', {
     env = env,
   }, opts or {}))
-  if result.code ~= 0 then error(vim.trim(result.stderr or '') ~= '' and vim.trim(result.stderr)
-    or ('GitHub command failed (exit ' .. result.code .. ')'), 0) end
+  if result.code ~= 0 then
+    local message = vim.trim(result.stderr or '')
+    if message == '' then message = 'GitHub command failed (exit ' .. result.code .. ')' end
+    -- gh prints the HTTP response body to stdout, even on failure. Keep the
+    -- useful validation reasons without dumping arbitrary response contents.
+    if args[1] == 'api' then
+      local ok, response = pcall(vim.json.decode, result.stdout or '')
+      if ok and type(response) == 'table' then
+        local function append(detail)
+          if type(detail) == 'string' and detail ~= '' and not message:find(detail, 1, true) then
+            message = message .. '\n' .. detail
+          end
+        end
+        append(response.message)
+        if type(response.errors) == 'table' then
+          for _, detail in ipairs(response.errors) do
+            if type(detail) == 'table' then
+              append(detail.message or (detail.field and detail.code and (detail.field .. ': ' .. detail.code)))
+            else append(detail) end
+          end
+        end
+      end
+    end
+    error(message, 0)
+  end
   return result.stdout or ''
 end
 function M.json(ctx, args, opts)
@@ -84,8 +113,12 @@ function M.resolve(opts)
 end
 function M.pr(ctx)
   local args = { 'pr', 'view' }
-  if ctx.number then args[#args + 1] = tostring(ctx.number) end
-  vim.list_extend(args, { '--repo', M.repo_arg(ctx), '--json', M.fields })
+  if ctx.number then
+    vim.list_extend(args, { tostring(ctx.number), '--repo', M.repo_arg(ctx) })
+  end
+  -- --repo requires a selector. Without a number, let gh resolve the current
+  -- branch and its tracking/fork association from the captured worktree.
+  vim.list_extend(args, { '--json', M.fields })
   local pr = M.json(ctx, args)
   pr.author = scalar(pr.author) or {}
   pr.body = scalar(pr.body) or ''

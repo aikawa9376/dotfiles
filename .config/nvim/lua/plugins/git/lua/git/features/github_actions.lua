@@ -14,6 +14,7 @@ function M.context(buf)
     pr = require('git.features.status').pull_request_at(buf, vim.fn.line('.'))
     if pr then ctx.url = pr.url end
   end
+  ctx.bufnr = buf
   return ctx
 end
 function M.run(opts, fn, callback, mutation, on_error)
@@ -153,11 +154,15 @@ function M.modify(opts, action)
 end
 function M.merge(opts)
   M.run(opts, github.pr, function(pr, ctx)
-    vim.ui.select({ 'squash', 'merge', 'rebase' }, { prompt = 'Merge PR #' .. pr.number .. ' using:' }, function(method)
-      if not method then return end
+    vim.ui.select({
+      { method = 'merge', label = 'Create a merge commit' },
+      { method = 'squash', label = 'Squash and merge' },
+      { method = 'rebase', label = 'Rebase and merge' },
+    }, { prompt = 'Merge pull request #' .. pr.number, format_item = function(item) return item.label end }, function(item)
+      if not item then return end
       M.run(ctx, function(resolved)
         return github.command(resolved, { 'pr', 'merge', tostring(resolved.number), '--repo', github.repo_arg(resolved),
-          '--' .. method, '--match-head-commit', pr.headRefOid })
+          '--' .. item.method, '--match-head-commit', pr.headRefOid })
       end, function() vim.notify('PR merged or queued') end, true)
     end)
   end)
@@ -172,6 +177,27 @@ local function octo_command(opts, command)
 end
 function M.open(opts)
   opts = vim.deepcopy(opts or M.context())
+  local source = opts.bufnr or vim.api.nvim_get_current_buf()
+  local pr_panel = vim.api.nvim_buf_is_valid(source) and vim.bo[source].filetype == 'gitpr'
+  local model = pr_panel and require('git.features.pr').model(source)
+  if model and ((opts.root and opts.root ~= model.root) or (opts.url and opts.url ~= model.ctx.url)) then pr_panel = false end
+  if pr_panel then
+    local pr = require('git.features.pr')
+    opts = vim.tbl_extend('force', vim.deepcopy(model and model.ctx or {}), opts, { bufnr = source })
+    local groups = pr.action_groups(source)
+    groups[#groups + 1] = { title = 'GitHub', actions = {
+      { key = 'k', label = 'CI checks', run = function() require('git.features.github_checks').checks(opts) end },
+      { key = 'a', label = 'GitHub Actions runs', run = function() require('git.features.github_checks').runs(opts) end },
+      { key = 'd', label = 'Toggle draft / ready', enabled = model ~= nil, run = function() M.modify(opts, 'ready') end },
+      { key = 'm', label = 'Merge PR…', enabled = model ~= nil, run = function() M.merge(opts) end },
+      { key = 'w', label = 'Checkout PR in new worktree', enabled = model ~= nil, run = function() M.worktree(opts) end },
+      { key = 'b', label = 'Open PR in browser', enabled = model ~= nil, run = function() vim.ui.open(opts.url) end },
+      { key = 'e', label = 'Edit / discuss in Octo', enabled = model ~= nil, run = function() M.octo(opts) end },
+      { key = 'O', label = 'Review in Octo', enabled = model ~= nil, run = function() M.octo(opts, true) end },
+    } }
+    return require('git.features.transient_menu').show({ kind = 'pr-actions', title = 'PR actions',
+      context = opts.url or opts.root or '', groups = groups })
+  end
   local actions = {
     { key = 'p', label = 'Current / selected PR status', run = function() require('git.features.pr').open(opts) end },
     { key = 'l', label = 'List pull requests', run = function() M.list(opts) end },

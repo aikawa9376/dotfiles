@@ -2,10 +2,7 @@ local M = {}
 local api = require('git.features.pr_review_model')
 local actions = require('git.features.github_actions')
 local composer = require('git.features.pr_composer')
-local function location(target)
-  if not target.line then return target.path .. ' (file)' end
-  return target.path .. ':' .. (target.start_line and (target.start_line .. '-') or '') .. target.line .. ' (' .. target.side .. ')'
-end
+local location = require('git.features.pr_comment_location').format
 function M.target(buf, first, last)
   local view = require('git.features.pr')
   local entry, info = view.entry_at(buf, first)
@@ -25,7 +22,8 @@ function M.target(buf, first, last)
   return { path = entry.path, line = finish, side = side,
     start_line = first ~= last and start or nil, start_side = first ~= last and side or nil }
 end
-function M.new_comment(model, target)
+function M.new_comment(model, target, opts)
+  opts = opts or {}
   -- Capture revision, target and existing review identity before opening a menu.
   local ctx, hash = vim.deepcopy(model.ctx), model.hash
   local base = model.pr.baseRefOid
@@ -37,14 +35,19 @@ function M.new_comment(model, target)
     local label = general and 'PR comment' or review and 'Review draft comment' or 'Diff comment'
     return composer.open({ ctx = ctx, title = label,
       prefix = { 'PR #' .. ctx.number .. ' · ' .. (at and location(at) or 'Conversation'),
-        at and ('Head: ' .. hash:sub(1, 7)) or ctx.url, '' },
-      instruction = review and '<C-s> / :w saves to pending review · gr submits it later' or '<C-s> / :w posts this comment immediately to GitHub',
+        '', at and ('Head: ' .. hash:sub(1, 7)) or ctx.url },
+      action = review and 'save' or 'post',
       success = review and 'Comment saved to pending review' or 'Comment posted',
       submit = function(resolved, body)
         if review then return api.comment(resolved, hash, at, body, id, base, function(saved) id = saved.id end) end
         return api.comment(resolved, hash, at, body, false, base)
       end,
     })
+  end
+  if opts.destination then
+    if opts.destination == 'p' or (opts.destination == 'c' and not target) then return open(false, true) end
+    if not target then vim.notify('Select a PR diff line or file for a review draft', vim.log.levels.WARN); return end
+    return open(opts.destination == 'r')
   end
   return require('git.features.transient_menu').show({ kind = 'pr-comment', title = 'New PR comment',
     context = target and location(target) or ctx.url, groups = { { title = 'Comment destination', actions = {
@@ -140,7 +143,7 @@ function M.edit(ctx, id, comment)
     prefix = { 'PR #' .. ctx.number .. ' · Review #' .. id, location({ path = comment.path,
       line = require('git.features.github').scalar(comment.line), side = comment.side,
       start_line = require('git.features.github').scalar(comment.start_line) }), '' },
-    instruction = '<C-s> / :w updates this draft · gX deletes it · gr submits the review later', success = 'Review draft updated',
+    action = 'save', success = 'Review draft updated',
     submit = function(resolved, body) return api.edit(resolved, id, comment, body) end,
     delete_prompt = ('Delete pending comment #%d on %s and discard local edits?'):format(comment.id, comment.path),
     delete = function(resolved) return api.remove(resolved, id, comment) end,
@@ -154,10 +157,13 @@ function M.drafts(ctx, pending)
     return comment.path .. ' · ' .. (comment.body or ''):gsub('[\r\n]', ' ')
   end }, function(comment) if comment then M.edit(ctx, pending.id, comment) end end)
 end
-function M.menu(model)
+function M.menu(model, opts)
+  opts = opts or {}
   local ctx, hash = vim.deepcopy(model.ctx), model.hash
   local base = model.pr.baseRefOid
   local source_win, source_buf = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+  local _, info = require('git.features.pr').entry_at(source_buf, vim.fn.line('.'))
+  local threads = vim.deepcopy(info and info.threads or model.threads)
   return actions.run(ctx, api.load, function(state)
     if not vim.api.nvim_win_is_valid(source_win) or vim.api.nvim_win_get_buf(source_win) ~= source_buf
       or vim.api.nvim_get_current_win() ~= source_win then return end
@@ -168,23 +174,22 @@ function M.menu(model)
     local function summary(review)
       composer.open({ ctx = ctx, title = 'Review summary draft', body = review.body or '', allow_empty = true,
         prefix = { 'PR #' .. ctx.number .. ' · Review #' .. review.id, '' },
-        instruction = '<C-s> / :w saves summary to pending review · gr submits it later', success = 'Review summary saved',
+        action = 'save', success = 'Review summary saved',
         submit = function(resolved, body) return api.summary(resolved, review.id, review.body or '', body) end,
       })
     end
     local function submit(event)
       local labels = { APPROVE = 'Approve', REQUEST_CHANGES = 'Request changes', COMMENT = 'Submit comments' }
-      local instruction = event == 'REQUEST_CHANGES' and '<C-s> / :w submits review · summary required · q cancels'
-        or event == 'APPROVE' and '<C-s> / :w approves review · summary optional · q cancels'
-        or pending and #pending.comments > 0 and '<C-s> / :w submits saved comments · summary optional · q cancels'
-        or '<C-s> / :w submits review · q cancels'
+      local hint = (event == 'APPROVE' or (event == 'COMMENT' and pending and #pending.comments > 0))
+        and 'summary optional' or 'summary required'
       composer.open({ ctx = ctx, title = labels[event] .. ' · review', body = pending and pending.body or '', allow_empty = true,
         prefix = { 'PR #' .. ctx.number .. ' · ' .. labels[event], 'Head: ' .. hash:sub(1, 7),
           ('Pending comments: %d'):format(pending and #pending.comments or 0), '' },
-        instruction = instruction, success = 'Review submitted: ' .. labels[event],
+        action = event == 'APPROVE' and 'approve' or 'submit', hint = hint, success = 'Review submitted: ' .. labels[event],
         submit = function(resolved, body) return api.submit(resolved, hash, pending, event, body, base) end,
       })
     end
+    if opts.submit then return submit(opts.submit) end
     local status = pending and ('Review #%d · %d draft comments · review commit %s'):format(pending.id, #pending.comments,
       pending.commit_id:sub(1, 7)) or 'No pending review'
     require('git.features.transient_menu').show({ kind = 'pr-review', title = 'PR review', context = status,
@@ -210,6 +215,11 @@ function M.menu(model)
           { key = 'a', label = 'Approve…', run = function() submit('APPROVE') end },
           { key = 'r', label = 'Request changes…', run = function() submit('REQUEST_CHANGES') end },
           { key = 'm', label = 'Submit comments…', run = function() submit('COMMENT') end },
+        } },
+        { title = 'Threads', actions = {
+          { key = 'R', label = 'Resolve / reopen selected thread',
+            enabled = #vim.tbl_filter(function(thread) return not thread.pending end, threads) > 0,
+            run = function() require('git.features.pr_thread_status').toggle(ctx, threads) end },
         } },
         { title = 'Other', actions = {
           { key = 'x', label = 'Discard pending review…', enabled = pending ~= nil, run = function()

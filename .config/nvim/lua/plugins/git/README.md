@@ -291,12 +291,12 @@ GitHub calls are mocked; validation does not create or push to GitHub repositori
 
 ## GitHub and PR status
 
-`N` in Git panels, or `<Space><Space> N`, opens the GitHub menu. `:GitHub`
-also opens it from a repository file. Status PR rows now show CI, review and
+`N` in ordinary Git panels, or `<Space><Space> N`, opens the repository GitHub
+menu. `:GitHub` also opens it from a repository file. Status PR rows now show CI, review and
 mergeability summaries; Enter opens the native PR status panel. Octo remains
 available through the GitHub menu as an alternative discussion/review UI.
 
-| GitHub menu key | Action |
+| Repository GitHub menu key | Action |
 |---|---|
 | `p` / `l` | Open current/selected PR status / choose an open PR |
 | `C` | Create default PR: edit only the prefilled title |
@@ -307,29 +307,63 @@ available through the GitHub menu as an alternative discussion/review UI.
 | `d` / `m` | Toggle draft/ready / choose a merge method |
 | `i` / `n` | Octo issues / notifications |
 
+In PR status, `<Space><Space>`, `N` and `:GitHub` open a **PR actions** menu.
+It is the common entry point for the current PR, including the existing comment
+and review submenus. Opening it from a diff retains the source file/line when
+entering a submenu. It omits PR creation, the redundant current-PR opener, PR
+listing, Issues and notifications; those remain in the ordinary repository menu.
+
+| PR actions menu key | Action |
+|---|---|
+| `c` | New comment destination menu (same as `gC`) |
+| `r` | Native review / Resolve menu (same as `gr`; `R` inside resolves/reopens a thread) |
+| `t` / `v` | Read/reply to threads / preview conversation at the source row |
+| `f` / `D` / `s` | Compare selected file / entire PR in Diffview / diff display settings |
+| `E` | Edit title / description |
+| `o` / `>` / `<` | Toggle / expand / collapse the source section or file diff |
+| `R` / `?` | Refresh PR status / key guide |
+| `k` / `a` | CI checks / GitHub Actions runs |
+| `d` / `m` / `w` | Draft/ready / merge / separate PR worktree |
+| `b` | Open this PR in the browser |
+| `e` / `O` | Edit/discuss in Octo / resume an Octo review |
+
+`c` and `r` in this PR menu mean native comments/review. In the repository menu
+they retain their existing PR-creation / Octo-review meanings.
+
 `:GitPr [number|URL]` opens PR status. An omitted argument uses the current
 branch's PR; a worktree created by this plugin remembers its PR URL, including
-the Enterprise host. The panel displays state, draft status, review decision,
+the Enterprise host. Current-branch lookup uses gh's local branch/tracking
+association; explicit numbers and saved URLs select their repository directly.
+The panel displays state, draft status, review decision,
 mergeability, CI checks, title and description above the changed files.
+Between the description and Changes, `Commits (N)` lists the PR's
+merge-base-to-head history, newest first, and starts collapsed. Its gutter arrow
+uses the same open/close keys as the header. Rows use GitLog's short hash, date,
+subject and author columns/colors; Enter opens commit details and `gx` opens
+that commit on GitHub. The list and its open/closed state survive refreshes;
+unchanged comparisons reuse the already loaded history.
 
 | PR status key | Action |
 |---|---|
 | `cw` / `A` | Move to the editable title and description |
 | `:w` | Save title and description to GitHub |
 | `<C-s>` | Save title and description to GitHub |
-| `o` / `=` / `<Tab>` | Toggle the header details or the selected file's unified diff |
-| `>` / `<` | Expand/collapse header or files; from Changes, all files; Visual selection supported |
+| `o` / `=` / `<Tab>` | Toggle header details, Commits, Changes, or the selected file's unified diff |
+| `>` / `<` | Expand/collapse the selected section or file; Visual selection supports multiple files |
 | `]m` / `[m`, `]]` / `[[` | Next/previous file; move and expand |
 | `J` / `K`, `]c` / `[c` | Next/previous diff hunk |
 | `]C` / `[C` | Next/previous comment position and preview; counts supported |
 | `d` / `dv`, `dh` | Vertical / horizontal two-revision file diff |
 | `D` | Entire PR in Diffview |
-| `<CR>` | Open a marked comment thread, or the PR head file |
+| `<CR>` | Toggle the Commits/Changes heading; open commit details, a marked thread, or the PR head file |
 | `gk` | Preview conversation near cursor; repeat to focus the popup |
 | `gc` | Read/reply to threads on the selected file or marked diff line |
 | `gC` | New PR conversation comment, immediate diff comment, or pending review comment |
+| `gcn` / `gcr` / `gcp` | Open a contextual comment / review draft / PR conversation input directly |
 | Visual `gC` | Comment on a continuous range of diff lines on one side |
-| `gr` | Native review menu: start/resume, migrate, draft comments/summary, submit or discard |
+| `gr` | Native review menu: start/resume, migrate, draft comments/summary, resolve, submit or discard |
+| `gr R` / `gR` | Resolve / reopen the selected thread (also `gR` in the focused preview) |
+| `gra` / `grm` / `grr` | Open approval / comment review / change request input directly |
 | `O` | Start or resume a review in Octo |
 | `gf` / `gq` | Worktree file / changed files in quickfix |
 | `gD` | Shared word-diff display settings |
@@ -380,12 +414,23 @@ Headers start expanded. On a read-only header row, `o`, `=`, or `<Tab>` toggles
 the details; `>` / `<` expands/collapses them. The fold marker `▾` / `▸` lives in
 a fixed sign gutter rather than the buffer text, keeping the first line aligned
 with the other blocks. PR windows restore their original gutter options when
-switching to another buffer. The collapsed header retains the repository,
-PR number/state and CI/review summary, with the editable title/description and
+switching to another buffer. The collapsed header retains the repository and
+PR number/state, with the editable title/description and
 file diffs still visible. Header folding preserves unsaved metadata and file
 expansion state and performs no Git/GitHub requests. `gx` on the first line's
 repository name opens the repository; elsewhere on that line it opens the PR.
 The branch row retains its inline `[Actions]` target.
+The CI/review summary and its check list finish the expanded Repo details,
+after your pending/last review rows. Collapsing Repo hides this CI block too.
+
+Changes starts expanded and folds independently of Repo, Commits and each
+file's diff. Its heading uses the same gutter marker and `o` / `=` / `<Tab>` /
+`<CR>` controls; `>` / `<` opens/closes that section. Section folding retains
+individual file choices, draft edits and the review-thread footer, and performs
+no Git/GitHub requests. Refresh preserves the section state. `i`, file/hunk
+navigation and `]C` / `[C` reveal a closed Changes section before moving.
+Opening Changes does not expand every file; select file rows with Visual `>`
+to expand multiple diffs together.
 
 Unified diffs use the existing syntax/word-diff renderer. They compare the PR's
 merge base with its head, independently of the checked-out branch or index.
@@ -421,11 +466,16 @@ the panel closes the preview.
 Conversation history inserts blank separators only between comments and omits
 trailing blank display lines, so the latest comment ends at the popup's bottom.
 
-The thread editor puts its context, instructions and conversation in a separate
+The thread editor puts its context and conversation in a separate
 read-only Markdown panel above a body-only textarea. All composers use the same
-immutable context panel, including new comments and review submissions. Target
-labels use `GitPrCommentContext`, instructions use `GitPrCommentInstruction`, and
-the separator is muted. Input windows are at most 80 columns wide and five lines
+immutable context panel, including new comments and review submissions. Locations
+use `file:L20-L25 (RIGHT)` or `(LEFT)` for ranges and `file:L20` for a single line.
+A blank line separates the location from the following context/history; previews
+still end on the last comment without a trailing blank. Target
+labels use `GitPrCommentContext`; shortcuts and summary requirements are displayed
+only in window titles, using `GitPrCommentInstruction`. The `gk` cursor preview
+also keeps its reply/focus/navigation/close shortcuts in its title. Input windows
+are at most 80 columns wide and five lines
 high, with wrapped text and scrolling for longer drafts.
 Own messages and their author labels use `GitPrCommentSelf` (DiagnosticInfo by
 default; dotfiles uses its existing light blue `#81a1c1`), others use
@@ -434,20 +484,34 @@ between history and input. `<C-s>` or `:w` sends the reply, and a failed send re
 the draft and history; sending or closing the input also closes the history.
 A pending thread opens
 its draft comment for editing instead of posting a public reply.
-Pending comments with missing displayed line numbers use original coordinates
-only when their original revision equals the displayed head. Other drafts stay
-on file headers/the summary instead of being guessed onto changed code. Private
+Review-specific REST listings may omit line numbers and diff sides. The existing
+GraphQL thread read supplies current line/range/side anchors for both public and
+pending badges, only when its head matches the displayed head. File-level and
+outdated threads stay on file headers/the summary. Without GraphQL coordinates,
+pending comments can use original coordinates only for the displayed revision. Private
 replies remain accessible even when their public parent is absent; a failed
 public-comment read does not hide successfully fetched private drafts.
 
 `gC` opens a destination menu: `p` writes a PR conversation comment, `c` posts a
 diff comment immediately, and `r` saves a private comment to a pending review.
+`gcn`, `gcr` and `gcp` open these inputs directly, including Visual ranges.
+`gcn` uses the diff line/file under the cursor, or the PR conversation outside
+the file section. `gcr` requires a file/diff target; `gcp` always uses the PR
+conversation. These shortcuts open drafts; `<C-s>` / `:w` still performs the write.
 File headers target the whole file; diff lines target RIGHT for additions/context
 or LEFT for deletions. Visual `gC` supports contiguous lines from one side of one
 file. Markdown composers show the captured target and revision above the draft;
 `<C-s>` or `:w` sends/saves it. New immediate diff comments are blocked while you have a pending
 review so they cannot accidentally publish that review. PR conversation comments
 can be posted independently.
+Immediate diff posting creates an isolated pending review, adds the LINE/FILE
+thread through GraphQL, then submits that single comment as COMMENT. It never
+uses the standalone REST endpoint that rejects line/file payloads on some hosts.
+If any step fails, local text and any saved pending draft remain available; inspect
+the PR and `gr c` / `gr m` before retrying. A retry cannot adopt an existing pending
+review. Submission verifies that the isolated review still contains only the
+newly returned comment ID and its original body/path, then checks the full snapshot
+again so drafts added or edited in another client are not published inadvertently.
 
 In `gr`, `s` starts or resumes your GitHub pending review, `c` reads/edits draft
 comments (`gX` deletes the selected draft after confirmation), and `b` saves a
@@ -464,6 +528,14 @@ existing review rather than unconditionally creating one.
 All PR inputs accept `<C-s>` in Normal and Insert modes to send/save, including
 unchanged empty review summaries; `:w` remains available. `<Leader>w` keeps its
 configured `:update` behavior, which skips unchanged buffers.
+While a comment/review request runs, an animated indicator appears at the right
+edge of its input title; the title and shortcuts remain in place. Repeated saves
+from either panel keep the one in-flight request, without posting again or showing
+a submission error. Failure stops the indicator and restores the editable draft
+and its title for an explicit retry; actual API errors are still reported.
+
+`gra`, `grm` and `grr` open those submission composers directly after rereading
+your review state, with the same identity, SHA and pending-draft guards.
 
 `Your review` is hidden when the authenticated viewer has no pending review.
 It displays a pending review even with zero comments, or a read/recovery error
@@ -481,9 +553,22 @@ The review-thread footer displays the number of published, unresolved GitHub
 conversations, including outdated threads. Replies do not increase that count;
 private draft threads are excluded. Resolution comes from paginated GraphQL
 `isResolved` state and is independent of the local unread count. Reading a thread
-does not resolve it. Resolve/unresolve currently requires GitHub or Octo.
+does not resolve it. `gr R` or `gR` on a diff line or file header resolves the selected
+published thread, or reopens it if already resolved; multiple threads open a picker.
+The focused `gk` preview also accepts `gR`. Each operation rechecks the thread's
+identity, current state and GitHub permission before writing, then refreshes the PR.
+GitHub-change refreshes preserve an unsaved title/description and detect remote
+metadata conflicts; explicit `R` retains its discard/reload confirmation.
+Resolved threads add a green `✅` count beside the comment markers. Preview and
+reply context show `✅ resolved` / `💬 unresolved` for each thread; the picker also
+shows its state. This is separate from unread counts and pending review drafts.
 Resolution read failures show `unresolved: unavailable` while retaining readable
 comments and diffs.
+
+Only the title / description accepts native text editing. Outside it, `a`, `I`
+and other native editing keys do nothing; `i` keeps its next-diff navigation.
+Edits spanning into protected metadata or diffs are restored with the last valid
+draft, including paste, range operators and Insert-mode boundary crossings.
 
 `GitPrPositive` highlights approval, successful CI/checks/Actions runs, mergeable
 states, merged PRs and zero unresolved threads. It defaults to
@@ -498,6 +583,11 @@ SHA migration is an optional custom action, never a prerequisite for continuatio
 Diff comments and submissions verify the displayed PR head and base immediately
 before writing, so a push after opening a composer requires refreshing the panel.
 The existing review's creation SHA need not equal that displayed head.
+GitHub does not allow approving your own PR; use `gr m` to submit comments instead.
+Approval of another author's PR can have an empty summary. API requests explicitly
+select the JSON/comfort-fade media types (as Octo does for line/range comments)
+and REST version `2022-11-28`. Failed API responses show their validation reasons
+alongside the CLI error, while keeping the composer editable.
 
 Use `gr u` when you want to move saved drafts to the current head: preview with
 `p`, then apply with `a`. Unchanged lines/ranges with unique surviving context
@@ -562,7 +652,7 @@ asynchronous, and capture their original worktree before menus or input UIs open
 Remote writes use literal argv and JSON stdin. `tests/pr_model.lua`,
 `tests/pr_view.lua`, `tests/pr_lifecycle.lua`, `tests/pr_comments.lua`,
 `tests/pr_reviews.lua`, `tests/pr_markers.lua`, `tests/pr_review_migration.lua`,
-`tests/pr_help.lua`, `tests/pr_loading.lua` and `tests/github_actions.lua` exercise
+`tests/pr_help.lua`, `tests/pr_commits.lua`, `tests/pr_loading.lua` and `tests/github_actions.lua` exercise
 real local Git repositories/worktrees with mocked GitHub responses and writes.
 Live GitHub writes are not part of these checks.
 

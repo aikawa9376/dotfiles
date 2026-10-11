@@ -57,6 +57,18 @@ function M.new(f)
     view.refresh(ui.buf)
     ui.wait(function() return view.model(ui.buf) ~= old and not async.busy(f.root) end)
   end
+  function ui.expand_files()
+    ui.source(); ui.key('>', ui.row('Changes ('))
+    local first, last
+    for row = 1, vim.api.nvim_buf_line_count(ui.buf) do
+      local _, info = view.entry_at(ui.buf, row)
+      if info and info.header then first, last = first or row, row end
+    end
+    if not first then return end
+    vim.api.nvim_win_set_cursor(0, { first, 0 }); vim.cmd('normal! V')
+    vim.api.nvim_win_set_cursor(0, { last, 0 })
+    vim.fn.maparg('>', 'x', false, true).callback()
+  end
   function ui.close_draft(buf) vim.api.nvim_buf_delete(buf, { force = true }) end
   return ui
 end

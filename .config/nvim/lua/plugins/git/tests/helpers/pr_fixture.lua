@@ -53,7 +53,11 @@ function M.new()
     f.calls[#f.calls + 1] = { argv = vim.deepcopy(argv), opts = vim.deepcopy(opts) }
     local data, raw, error_code
     if argv[2] == 'repo' then data = { nameWithOwner = 'org/repo', url = 'https://ghe.example.test/org/repo', defaultBranchRef = { name = 'main' } }
-    elseif argv[2] == 'pr' and argv[3] == 'view' then data = vim.deepcopy(f.pr)
+    elseif argv[2] == 'pr' and argv[3] == 'view' then
+      -- Real gh rejects --repo without a number/URL/branch selector.
+      if vim.tbl_contains(argv, '--repo') and (not argv[4] or argv[4]:sub(1, 1) == '-') then
+        error_code = 1; raw = ''
+      else data = vim.deepcopy(f.pr) end
     elseif argv[2] == 'pr' and argv[3] == 'list' then data = { f.pr }
     elseif argv[2] == 'pr' and argv[3] == 'create' then raw = f.pr.url .. '\n'
     elseif argv[2] == 'run' then data = f.runs or { { databaseId = 11, name = 'Tests', status = 'completed', conclusion = 'failure', url = 'https://ghe.example.test/org/repo/actions/runs/11', headBranch = 'topic' } }
@@ -107,23 +111,62 @@ function M.new()
         f.last_event = payload.event
         for _, comment in ipairs(review.comments) do f.comments[1][#f.comments[1] + 1] = vim.deepcopy(comment) end
         data = review
-      elseif id and path:match('/comments$') then data = { vim.deepcopy(review.comments) }
+      elseif id and path:match('/comments$') then
+        local comments = vim.deepcopy(review.comments)
+        if f.legacy_review_coordinates then
+          for _, comment in ipairs(comments) do
+            for _, field in ipairs({ 'line', 'start_line', 'original_line', 'original_start_line', 'side', 'start_side', 'subject_type' }) do
+              comment[field] = nil
+            end
+          end
+        end
+        data = { comments }
       elseif path == 'graphql' then
         if not payload.variables.input then
           if f.thread_status_error then data = { errors = { { message = 'Thread status rejected' } } }
           else
-            local nodes = {}
-            for _, page in ipairs(f.comments) do for _, comment in ipairs(page) do
+            local nodes, indexed = {}, {}
+            local scalar = require('git.features.github').scalar
+            local function add_thread(comment, state)
               if not comment.in_reply_to_id or comment.in_reply_to_id == vim.NIL then
-                nodes[#nodes + 1] = { id = 'THREAD' .. comment.id, isResolved = (f.resolved or {})[comment.id] == true,
-                  comments = { nodes = { { fullDatabaseId = tostring(comment.id), pullRequestReview = { state = 'COMMENTED' } } } } }
+                if indexed[comment.id] then return end
+                indexed[comment.id] = true
+                local anchor = (f.thread_anchors or {})[comment.id] or {}
+                local revision = scalar(comment.original_commit_id) or scalar(comment.commit_id)
+                local line, start = scalar(comment.line), scalar(comment.start_line)
+                if state == 'PENDING' and revision == f.head and comment.subject_type ~= 'file' then
+                  line = line or scalar(comment.original_line)
+                  start = start or scalar(comment.original_start_line)
+                end
+                nodes[#nodes + 1] = vim.tbl_extend('force', { id = 'THREAD' .. comment.id,
+                  isResolved = (f.resolved or {})[comment.id] == true,
+                  viewerCanResolve = f.can_resolve ~= false, viewerCanUnresolve = f.can_unresolve ~= false,
+                  isOutdated = revision ~= nil and revision ~= f.head,
+                  path = comment.path, line = line or vim.NIL, startLine = start or vim.NIL,
+                  diffSide = comment.side, subjectType = comment.subject_type and comment.subject_type:upper() or (line and 'LINE' or 'FILE'),
+                  comments = { nodes = { { fullDatabaseId = tostring(comment.id), pullRequestReview = { state = state } } } } }, anchor)
               end
+            end
+            for _, review_item in ipairs(f.reviews) do if review_item.state == 'PENDING' then
+              for _, comment in ipairs(review_item.comments) do add_thread(comment, 'PENDING') end
             end end
+            for _, page in ipairs(f.comments) do for _, comment in ipairs(page) do add_thread(comment, 'COMMENTED') end end
             local pages = f.thread_pages or { nodes }
             local page = payload.variables.cursor and tonumber(payload.variables.cursor) or 1
-            data = { data = { repository = { pullRequest = { reviewThreads = {
+            data = { data = { repository = { pullRequest = { headRefOid = f.thread_head or f.pr.headRefOid, reviewThreads = {
               nodes = pages[page], pageInfo = { hasNextPage = page < #pages, endCursor = tostring(page + 1) },
             } } } } }
+          end
+        elseif payload.variables.input.threadId then
+          if f.resolve_error then data = { errors = { { message = 'Resolution rejected' } } }
+          else
+            local input = payload.variables.input
+            local comment_id = tonumber(input.threadId:match('^THREAD(%d+)$'))
+            assert(comment_id, 'Invalid resolution target')
+            local action = payload.query:find('unresolveReviewThread', 1, true) and 'unresolveReviewThread' or 'resolveReviewThread'
+            f.resolved = f.resolved or {}
+            f.resolved[comment_id] = action == 'resolveReviewThread'
+            data = { data = { [action] = { thread = { id = input.threadId, isResolved = f.resolved[comment_id] } } } }
           end
         elseif f.graphql_error then data = { errors = { { message = 'GraphQL rejected thread' } } }
         else
@@ -131,7 +174,8 @@ function M.new()
           for _, item in ipairs(f.reviews) do if item.node_id == input.pullRequestReviewId then review = item end end
           local comment = new_comment(input)
           review.comments[#review.comments + 1] = comment
-          data = { data = { addPullRequestReviewThread = { thread = { id = 'THREAD' .. comment.id } } } }
+          data = { data = { addPullRequestReviewThread = { thread = { id = 'THREAD' .. comment.id,
+            comments = { nodes = { { fullDatabaseId = tostring(comment.id) } } } } } } }
         end
       elseif method == 'PATCH' and path:match('/pulls/comments/') then
         local comment_id = tonumber(path:match('/(%d+)$'))
@@ -147,13 +191,19 @@ function M.new()
       elseif path == 'repos/org/repo/issues/7/comments' then
         data = new_comment(payload); f.discussion[#f.discussion + 1] = data
       elseif path == 'repos/org/repo/pulls/7/comments' and method == 'POST' then
-        data = new_comment(payload); f.comments[1][#f.comments[1] + 1] = data
+        -- The reported failure persists even with the comfort-fade header.
+        error_code = 1
+        raw = vim.json.encode({ message = 'Invalid request.', errors = {
+          'No subschema in "oneOf" matched.', '"positioning" wasn\'t supplied.',
+          '"subject_type" is not a permitted key.', '"line" is not a permitted key.' } })
       elseif opts.stdin then
         if f.reply_error then error_code = 1; raw = '' else data = { id = 401 } end
       else data = vim.deepcopy(f.comments) end
       if f.api_after and f.api_after(path, method, payload, data) then error_code = 1; raw = '' end
     else raw = '' end
-    local result = { code = error_code or 0, stdout = raw or vim.json.encode(data), stderr = error_code and 'server rejected write' or '' }
+    local result = { code = error_code or 0,
+      stdout = error_code and f.api_error_response or raw or vim.json.encode(data),
+      stderr = error_code and (f.api_error_stderr or 'server rejected write') or '' }
     local handle = { wait = function() return result end, kill = function() end }
     if callback then vim.defer_fn(function() callback(result) end, f.delay) end
     return handle

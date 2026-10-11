@@ -10,7 +10,7 @@ local first_line = 'Repo: org/repo [ PR #7 ] [OPEN]'
 local function gutter(expected)
   local marks = vim.api.nvim_buf_get_extmarks(ui.buf, vim.api.nvim_create_namespace('git_pr_status'), 0, -1, { details = true })
   local count = 0
-  for _, mark in ipairs(marks) do if mark[4].sign_text then
+  for _, mark in ipairs(marks) do if mark[2] == 0 and mark[4].sign_text then
     count = count + 1
     assert(mark[2] == 0 and mark[4].sign_text:gsub('%s+$', '') == expected and mark[4].sign_hl_group == 'GitPrHeaderLabel')
   end end
@@ -55,11 +55,17 @@ f.reviews = {
   { id = 400, user = { login = 'reviewer' }, state = 'CHANGES_REQUESTED', submitted_at = '2026-10-09T00:00:00Z' },
   { id = 401, user = { login = 'reviewer' }, state = 'APPROVED', submitted_at = '2026-10-10T00:00:00Z' },
   { id = 800, user = { login = 'private' }, state = 'PENDING' },
+  { id = 402, user = { login = f.viewer }, state = 'COMMENTED', submitted_at = '2026-10-10T00:00:00Z', commit_id = f.head },
+  { id = 403, node_id = 'REVIEW403', user = { login = f.viewer }, state = 'PENDING', commit_id = f.head, body = '', comments = {} },
 }
 ui.refresh()
 assert(ui.row('Assignees: assigned') and ui.row('Labels: 日本語, bug') and ui.row('Milestone: Version 1'))
 assert(ui.row('Reviewers: @requested ◷  @reviewer ✓  @team ◷'))
 absent('@private')
+assert(ui.row('Your review:') < ui.row('Your last review:'))
+assert(ui.row('Your last review:') < ui.row('CI:') and ui.row('CI:') < ui.row('test:'))
+local header = require('git.features.pr_header').build(view.model(ui.buf), true)
+assert(header.lines[#header.lines]:find('external:', 1, true), 'CI checks should finish the Repo header')
 -- Header folding changes only its metadata, preserving the editable draft and
 -- expanded file diffs; all three Status aliases are available on the header.
 ui.key('o', ui.row('M file name.txt')); ui.wait(function() return pcall(ui.row, '+TWO') end)
@@ -68,9 +74,10 @@ vim.api.nvim_buf_set_lines(ui.buf, title - 1, title, false, { 'Unsaved title' })
 vim.api.nvim_buf_set_lines(ui.buf, title + 1, title + 1, false, { 'Unsaved body' })
 local calls = #f.calls
 ui.key('o', 1)
-assert(lines()[1] == first_line and ui.row('CI: ✗ 1/2'))
+assert(lines()[1] == first_line); absent('CI:')
 gutter('▸')
 absent('Commits:'); absent('[Actions]'); absent('Assignees:')
+absent('Your review:'); absent('Your last review:'); absent('test:'); absent('external:')
 assert(ui.row('Unsaved title') and ui.row('Unsaved body') and ui.row('+TWO') and vim.bo[ui.buf].modified)
 assert(view.entry_at(ui.buf, ui.row('+TWO')).path == 'file name.txt')
 assert(#f.calls == calls, 'Header fold performed network or Git work')

@@ -68,7 +68,8 @@ end end
 assert(sent.body == 'Reply `literal` $(never execute)\nSecond line', 'Reply body did not preserve bytes')
 assert(vim.wait(5000, function() return not require('git.features.async').busy(f.root) end, 10))
 vim.wait(80, function() return false end, 10)
-key('>', row('Changes ('))
+local file_ui = require('helpers.pr_ui').new(f)
+file_ui.buf = b; file_ui.expand_files()
 assert(vim.wait(5000, function() return vim.tbl_contains(lines(), '+new') and vim.tbl_contains(lines(), '-delete this') end, 10), 'Expand all missed files')
 -- The title/body region can grow while immutable diff row metadata still works.
 local title = row('PR title')

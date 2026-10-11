@@ -77,7 +77,7 @@ function M.add_thread(ctx, pending, target, body)
     startLine = target.start_line, startSide = target.start_side }
   assert(type(input.pullRequestReviewId) == 'string', 'GitHub did not return a pending review node ID')
   local result = github.api(ctx, 'graphql', {
-    query = 'mutation($input:AddPullRequestReviewThreadInput!){addPullRequestReviewThread(input:$input){thread{id}}}',
+    query = 'mutation($input:AddPullRequestReviewThreadInput!){addPullRequestReviewThread(input:$input){thread{id comments(first:1){nodes{fullDatabaseId}}}}}',
     variables = { input = input },
   })
   if result.errors and #result.errors > 0 then error(result.errors[1].message, 0) end
@@ -127,8 +127,37 @@ function M.comment(ctx, hash, target, body, pending_id, base, capture_review)
   local state = M.load(ctx)
   ready(state)
   if state.pending then error('A pending review exists; add this comment to it or submit/discard it before posting a standalone diff comment.', 0) end
-  return github.api(ctx, endpoint(ctx, 'comments'), vim.tbl_extend('force', target, { commit_id = hash, body = body,
-    subject_type = target.line and 'line' or 'file' }))
+  -- Standalone REST line/file creation is rejected by some current hosts.
+  -- Use the same GraphQL thread operation as draft comments, then submit only
+  -- the isolated review we created. Never adopt or publish an existing review.
+  local created
+  local ok, result = pcall(function()
+    created = github.api(ctx, endpoint(ctx, 'reviews'), { commit_id = hash })
+    local fresh = M.load(ctx)
+    ready(fresh)
+    local pending = fresh.pending
+    assert(pending and pending.id == created.id and pending.body == '' and #pending.comments == 0,
+      'The newly created review changed before adding the immediate comment')
+    M.check_head(ctx, hash, base)
+    local added = M.add_thread(ctx, pending, target, body)
+    local thread = added.data.addPullRequestReviewThread.thread
+    local first = thread.comments and thread.comments.nodes and thread.comments.nodes[1]
+    local comment_id = first and tonumber(github.scalar(first.fullDatabaseId))
+    assert(comment_id, 'GitHub did not return the new comment ID; inspect the pending review before retrying')
+    fresh = M.load(ctx)
+    ready(fresh)
+    pending = fresh.pending
+    local comment = pending and pending.comments[1]
+    assert(pending and pending.id == created.id and pending.body == '' and #pending.comments == 1
+      and comment.id == comment_id and comment.body == body and comment.path == target.path,
+      'The immediate review changed; inspect its drafts before submitting')
+    return M.submit(ctx, hash, pending, 'COMMENT', '', base)
+  end)
+  if not ok then
+    error(tostring(result) .. '\nImmediate comment stopped. Check the PR and ' .. (created and ('review #' .. created.id .. ' with ') or '')
+      .. 'gr c / gr m before retrying; saved drafts and local text are preserved.', 0)
+  end
+  return result
 end
 local function check_comment(ctx, id, comment)
   local pending = current(ctx, id)
@@ -155,9 +184,13 @@ function M.summary(ctx, id, original, body)
 end
 function M.submit(ctx, hash, expected, event, body, base)
   assert(vim.tbl_contains({ 'COMMENT', 'APPROVE', 'REQUEST_CHANGES' }, event), 'Invalid review event')
-  M.check_head(ctx, hash, base)
+  local pr = M.check_head(ctx, hash, base)
   local state = M.load(ctx)
   ready(state)
+  local author = github.scalar(pr.author.login)
+  if event == 'APPROVE' and type(author) == 'string' and author:lower() == state.viewer:lower() then
+    error('GitHub does not allow approving your own PR. Use Submit comments (gr m). Your draft is preserved.', 0)
+  end
   local pending = state.pending
   local id = expected and expected.id
   if (pending and pending.id or nil) ~= id then error('Pending review changed; reopen the review menu before submitting. Your draft is preserved.', 0) end

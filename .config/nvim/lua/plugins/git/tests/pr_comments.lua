@@ -4,16 +4,19 @@ local f = require('helpers.pr_fixture').new()
 local ui = require('helpers.pr_ui').new(f)
 local before = f.git({ 'status', '--porcelain' })
 ui.open()
-ui.key('>', ui.row('Changes ('))
+ui.expand_files()
 ui.wait(function() return pcall(ui.row, '+TWO') end)
 -- PR conversation comments preserve literal text and captured worktree context.
 ui.key('gC', 1); ui.key('p')
 local buf = ui.body({ 'Comment `literal` $(do not execute)', 'Second line' })
 vim.cmd('lcd /tmp')
 f.comment_error = true
-ui.failed(buf, 'server rejected write')
+f.api_error_stderr = 'gh: Invalid request. (HTTP 422)'
+f.api_error_response = vim.json.encode({ message = 'Invalid request.', errors = {
+  'No subschema in "oneOf" matched.', '"line" is not a permitted key.' } })
+ui.failed(buf, '"line" is not a permitted key.')
 assert(vim.bo[buf].modified)
-f.comment_error = false
+f.comment_error = false; f.api_error_response = nil; f.api_error_stderr = nil
 ui.send(buf)
 assert(f.discussion[1].body == 'Comment `literal` $(do not execute)\nSecond line')
 local function comment(row, lines, key)
@@ -29,12 +32,18 @@ assert(removed.line == 2 and removed.side == 'LEFT')
 local file = comment(ui.row('M file name.txt'), { 'Whole file' })
 assert(file.line == vim.NIL and file.path == 'file name.txt')
 local file_payload
-for _, call in ipairs(f.calls) do if call.opts.stdin and vim.tbl_contains(call.argv, 'repos/org/repo/pulls/7/comments') then
+for _, call in ipairs(f.calls) do if call.opts.stdin and vim.tbl_contains(call.argv, 'repos/org/repo/pulls/7/reviews') then
   local payload = vim.json.decode(call.opts.stdin)
   assert(payload.commit_id == f.head, 'Diff comment used a working-copy or stale revision')
-  if payload.body == 'Whole file' then file_payload = payload end
-end end
-assert(file_payload.subject_type == 'file' and file_payload.line == nil)
+elseif call.opts.stdin and vim.tbl_contains(call.argv, 'graphql') then
+  local input = vim.json.decode(call.opts.stdin).variables.input
+  if input and input.body == 'Whole file' then file_payload = input end
+end
+  assert(not (vim.tbl_contains(call.argv, 'repos/org/repo/pulls/7/comments') and vim.tbl_contains(call.argv, 'POST')),
+    'Immediate comment still used the rejected REST endpoint')
+end
+assert(file_payload.subjectType == 'FILE' and file_payload.line == nil)
+assert(f.last_event == 'COMMENT' and require('git.features.pr').model(ui.buf).review.pending == nil)
 -- Exercise the actual Visual mapping and modern line/side range fields.
 ui.source(); vim.api.nvim_win_set_cursor(0, { ui.row('+TWO'), 0 }); vim.cmd('normal! Vj')
 vim.fn.maparg('gC', 'x', false, true).callback(); ui.key('c')
@@ -64,7 +73,7 @@ f.pr.baseRefOid = f.base_head
 -- Duplicate :w and q during submission do not close or duplicate a request.
 f.delay = 30
 vim.cmd('write')
-assert(not pcall(vim.cmd, 'write'))
+assert(pcall(vim.cmd, 'write'), 'A duplicate save raised an error while the first send was still running')
 ui.key('q')
 assert(vim.api.nvim_buf_is_valid(buf) and not vim.bo[buf].modifiable)
 ui.wait(function() return not vim.api.nvim_buf_is_valid(buf) end); ui.loaded()

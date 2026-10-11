@@ -11,20 +11,24 @@ local states = {}
 local window_options = {}
 local ns = vim.api.nvim_create_namespace('git_pr_status')
 local function comment_markers(threads, unread, expanded)
-  local published, pending, unread_count = 0, 0, 0
+  local published, pending, unread_count, resolved = 0, 0, 0, 0
   for _, thread in ipairs(threads) do
     local has_public, has_draft = false, false
     for _, comment in ipairs(thread.comments) do
       if comment.pending then has_draft = true else has_public = true end
       if unread[comment.id] then unread_count = unread_count + 1 end
     end
-    if has_public then published = published + 1 end
+    if has_public then
+      published = published + 1
+      if thread.resolved then resolved = resolved + 1 end
+    end
     if has_draft then pending = pending + 1 end
   end
   local chunks = {}
   if published > 0 then chunks[#chunks + 1] = { ' 💬 ' .. (expanded and unread_count or published), 'DiagnosticInfo' } end
   if not expanded and unread_count > 0 then chunks[#chunks + 1] = { ' 🆕', 'DiagnosticWarn' } end
   if pending > 0 then chunks[#chunks + 1] = { ' 📝 ' .. pending .. ' [pending]', 'DiagnosticWarn' } end
+  if resolved > 0 then chunks[#chunks + 1] = { ' ✅ ' .. resolved, 'GitPrPositive' } end
   return chunks
 end
 local function configure_window(win)
@@ -78,6 +82,10 @@ function M.entry_at(buf, row)
   local info = s.rows[row - delta(s)]
   return info and info.entry, info
 end
+function M.commit_at(buf, row)
+  local s = states[buf]
+  return s and s.commit_rows and s.commit_rows[row - delta(s)]
+end
 local function editable_row(s, row)
   return row > #s.prefix and row <= vim.api.nvim_buf_line_count(s.buf) - #s.suffix
 end
@@ -102,6 +110,7 @@ local function paint_comments(s)
     vim.api.nvim_buf_line_count(s.buf) - 1, 0, { virt_text = summary, virt_text_pos = 'eol' }) end
 end
 local function render(s, current)
+  s.rendering = true
   local model, pr = s.model, s.model.pr
   local header = require('git.features.pr_header').build(model, s.header_expanded ~= false)
   local prefix, highlights = header.lines, header.highlights
@@ -112,10 +121,26 @@ local function render(s, current)
   local message = current or original
   local lines = vim.list_extend(vim.deepcopy(prefix), message)
   local suffix_start = #lines + 1
+  vim.list_extend(lines, { '', ('Commits (%d)'):format(model.commit_count) })
+  local commit_first, commit_rows = #lines, {}
+  if s.commits_expanded then
+    for _, commit in ipairs(model.commits) do
+      local line, col = '', 0
+      for _, chunk in ipairs(require('git.features.pr_commits').chunks(commit)) do
+        line = line .. chunk[1]
+        highlights[#highlights + 1] = { row = #lines + 1, start = col, finish = col + #chunk[1], group = chunk[2] }
+        col = col + #chunk[1]
+      end
+      lines[#lines + 1] = line
+      commit_rows[#lines] = commit
+    end
+  end
+  s.commit_section, s.commit_rows = { first = commit_first, last = #lines }, commit_rows
   vim.list_extend(lines, { '', ('Changes (%d) · merge-base %s → %s'):format(#model.entries, model.base:sub(1, 7), model.hash:sub(1, 7)) })
+  local changes_row = #lines
   if model.comments_error then lines[#lines + 1] = 'Comments unavailable: ' .. model.comments_error:gsub('[\r\n]', ' ') end
   local rows = {}
-  for _, entry in ipairs(model.entries) do
+  for _, entry in ipairs(s.changes_expanded ~= false and model.entries or {}) do
     lines[#lines + 1] = display.line(entry)
     rows[#lines] = { entry = entry, header = true, threads = model_api.threads_at(model, entry) }
     if s.expanded[entry.path] then
@@ -130,13 +155,14 @@ local function render(s, current)
       end
     end
   end
+  s.changes_section = { first = changes_row, last = #lines }
   -- File/outdated comments are also accessible without a matching displayed line.
   lines[#lines + 1] = ''
   if model.thread_status_error then
     lines[#lines + 1] = 'Thread status unavailable: ' .. model.thread_status_error:gsub('[\r\n]', ' ')
   end
   local resolution = model.thread_status and ('%d unresolved'):format(model.thread_status.unresolved) or 'unresolved: unavailable'
-  lines[#lines + 1] = ('Review threads (%d) · %s · gc opens · gC writes · gr reviews'):format(#model.threads, resolution)
+  lines[#lines + 1] = ('Review threads (%d) · %s · gc opens · gR resolves · gC writes · gr reviews'):format(#model.threads, resolution)
   if model.thread_status then
     local start, finish = lines[#lines]:find(resolution, 1, true)
     highlights[#highlights + 1] = { row = #lines, start = start - 1, finish = finish,
@@ -156,8 +182,12 @@ local function render(s, current)
   vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
   vim.api.nvim_buf_set_extmark(s.buf, ns, 0, 0, { sign_text = s.header_expanded == false and '▸' or '▾',
     sign_hl_group = 'GitPrHeaderLabel', priority = 200 })
+  vim.api.nvim_buf_set_extmark(s.buf, ns, commit_first - 1, 0,
+    { sign_text = s.commits_expanded and '▾' or '▸', sign_hl_group = 'Title', priority = 200 })
+  vim.api.nvim_buf_set_extmark(s.buf, ns, changes_row - 1, 0,
+    { sign_text = s.changes_expanded == false and '▸' or '▾', sign_hl_group = 'Title', priority = 200 })
   s.comment_marks = {}
-  local title_rows = { #prefix, suffix_start + 1, #lines }
+  local title_rows = { #prefix, commit_first, changes_row, #lines }
   for _, row in ipairs(title_rows) do
     vim.api.nvim_buf_set_extmark(s.buf, ns, row - 1, 0, { end_col = #lines[row], hl_group = 'Title' })
   end
@@ -182,12 +212,24 @@ local function render(s, current)
   end
   paint_comments(s)
   syntax.refresh(s.buf)
+  s.rendering = false
+  if s.edit_guard then s.edit_guard.sync() end
 end
 local function focus(s, path, win)
   if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= s.buf then return end
   for row, info in pairs(s.rows) do if info.header and info.entry.path == path then
     vim.api.nvim_win_set_cursor(win, { row + delta(s), 0 }); return
   end end
+end
+local function unfold_changes(s, win, from_end)
+  if s.changes_expanded ~= false then return true end
+  local current, err = draft(s)
+  if not current then notify(err); return false end
+  local first, row = s.changes_section.first + delta(s), vim.api.nvim_win_get_cursor(win)[1]
+  s.changes_expanded = true; render(s, current)
+  if row >= first then row = from_end and vim.api.nvim_buf_line_count(s.buf) or s.changes_section.first + delta(s) end
+  vim.api.nvim_win_set_cursor(win, { row, 0 })
+  return true
 end
 local function toggle(s, mode, first, last, done)
   local current, err = draft(s)
@@ -196,6 +238,21 @@ local function toggle(s, mode, first, last, done)
     s.header_expanded = mode == 'show' or (mode == 'toggle' and s.header_expanded == false)
     render(s, current)
     vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    if done then done() end
+    return
+  end
+  local row = vim.fn.line('.') - delta(s)
+  if not first and row >= s.commit_section.first and row <= s.commit_section.last then
+    s.commits_expanded = mode == 'show' or (mode == 'toggle' and not s.commits_expanded)
+    render(s, current)
+    vim.api.nvim_win_set_cursor(0, { s.commit_section.first, 0 })
+    if done then done() end
+    return
+  end
+  if not first and row == s.changes_section.first then
+    s.changes_expanded = mode == 'show' or (mode == 'toggle' and s.changes_expanded == false)
+    render(s, current)
+    vim.api.nvim_win_set_cursor(0, { s.changes_section.first + delta(s), 0 })
     if done then done() end
     return
   end
@@ -241,6 +298,7 @@ end
 local function next_diff_item(s, count, win)
   local function advance()
     if not live(s) or vim.api.nvim_get_current_win() ~= win or vim.api.nvim_win_get_buf(win) ~= s.buf then return end
+    if not unfold_changes(s, win) then return end
     while count > 0 do
       local row = vim.api.nvim_win_get_cursor(win)[1]
       local entry = M.entry_at(s.buf, row)
@@ -263,6 +321,7 @@ local function next_diff_item(s, count, win)
   advance()
 end
 local function move(s, direction, hunks, expand)
+  if not unfold_changes(s, vim.api.nvim_get_current_win(), direction < 0) then return end
   local entry = M.entry_at(s.buf, vim.fn.line('.'))
   if hunks and entry and not s.expanded[entry.path] then
     toggle(s, 'show', nil, nil, function() move(s, direction, hunks, expand) end)
@@ -286,12 +345,17 @@ local function comments(s)
     s.model.review and s.model.review.viewer)
 end
 local move_comment
+local function resolve_comments(s)
+  local _, info = M.entry_at(s.buf, vim.fn.line('.'))
+  require('git.features.pr_thread_status').toggle(s.ctx, info and info.threads or s.model.threads)
+end
 local function preview_comments(s, focus_preview)
   local _, info = M.entry_at(s.buf, vim.fn.line('.'))
   require('git.features.pr_comment_preview').show({ buf = s.buf, win = vim.api.nvim_get_current_win(),
     ctx = s.ctx, viewer = s.model.review and s.model.review.viewer,
     threads = info and info.threads or s.model.threads, focus = focus_preview,
     reply = function() comments(s) end,
+    resolve = function() resolve_comments(s) end,
     navigate = function(direction, count) move_comment(s, direction, count) end })
 end
 local function comment_targets(s)
@@ -326,6 +390,7 @@ move_comment = function(s, direction, count)
   local advance
   advance = function()
     if not active() then return end
+    if not unfold_changes(s, win, direction < 0) then return end
     while count > 0 do
       local row, target = vim.api.nvim_win_get_cursor(win)[1], nil
       for at, item in pairs(comment_targets(s)) do
@@ -403,12 +468,12 @@ function M.diffview(buf, path)
     vim.api.nvim_cmd({ cmd = 'DiffviewOpen', args = args }, {})
   end)
 end
-function M.refresh(buf, discard)
+function M.refresh(buf, discard, preserve)
   local s = states[buf]
   if not s or s.loading or s.saving or s.expanding then return end
   if s.model and edited(s) then
-    if not discard then vim.notify('Save or undo the PR draft before refreshing', vim.log.levels.WARN); return end
-    render(s)
+    if not discard and not preserve then vim.notify('Save or undo the PR draft before refreshing', vim.log.levels.WARN); return end
+    if discard then render(s) end
   end
   s.loading = true
   local expected = s.model
@@ -470,8 +535,8 @@ local function show_help()
       { '<C-s>', 'Save title and description to GitHub' },
     } },
     { title = 'Diff navigation', entries = {
-      { 'o / = / <Tab>', 'Toggle header / file diff' },
-      { '> / <', 'Expand / collapse header or files' },
+      { 'o / = / <Tab>', 'Toggle header / commits / changes / file diff' },
+      { '> / <', 'Expand / collapse section or files' },
       { 'i', 'Expand and move to next file / hunk' },
       { ']m / [m', 'Next / previous file' },
       { ']] / [[', 'Next / previous file and expand' },
@@ -481,7 +546,7 @@ local function show_help()
       { 'd / dd / dv', 'Vertical file diff' },
       { 'dh / ds', 'Horizontal file diff' },
       { 'D', 'Entire PR in Diffview' },
-      { '<CR>', 'Open link, thread or PR head file' },
+      { '<CR>', 'Open link / commit / thread / file' },
       { 'gf', 'Open worktree file' },
       { 'gq', 'Changed files in quickfix' },
       { 'gD', 'Diff display settings' },
@@ -490,13 +555,16 @@ local function show_help()
       { ']C / [C', 'Next / previous comment and preview' },
       { 'gk', 'Preview conversation (repeat to focus)' },
       { 'gc', 'Read / reply to review threads' },
+      { 'gR', 'Resolve / reopen a published review thread' },
       { 'gC', 'New PR / diff / review draft comment' },
+      { 'gcn / gcr / gcp', 'Direct comment / review draft / PR comment' },
       { 'gr', 'Start / resume / migrate / submit review' },
+      { 'gra / grm / grr', 'Direct approval / comment review / change request' },
       { 'O', 'Review PR in Octo' },
     } },
     { title = 'GitHub / panel', entries = {
-      { 'N', 'GitHub actions (also <Space><Space>)' },
-      { 'gx', 'Browser: PR / CI / Actions / comment' },
+      { '<Space><Space> / N', 'PR actions: comments, review, diffs and GitHub' },
+      { 'gx', 'Browser: PR / commit / CI / comment' },
       { 'gy', 'Copy PR URL' },
       { 'R', 'Refresh PR status' },
       { 'q', 'Close PR status' },
@@ -525,27 +593,106 @@ local function show_help()
   })
   return require('git.features.help').show_text('PR status', lines, { headings = headings })
 end
+local function display_menu()
+  local choices = {}
+  for _, style in ipairs({ 'delta', 'github', 'diffs', 'treesitter' }) do
+    choices[#choices + 1] = { key = style:sub(1, 1), label = style, run = function() syntax.set_word_diff_style(style) end }
+  end
+  choices[1].key = 'l'
+  return require('git.features.transient_menu').show({ kind = 'pr-display', title = 'PR diff display',
+    groups = { { title = 'Word diff', actions = choices } } })
+end
+local function refresh_prompt(s)
+  if s.model and edited(s) then
+    if vim.fn.confirm('Discard PR draft and reload from GitHub?', '&Reload\n&Keep', 2) ~= 1 then return end
+    M.refresh(s.buf, true)
+  else M.refresh(s.buf) end
+end
+function M.action_groups(buf)
+  local s = states[buf]
+  local win = vim.api.nvim_get_current_win()
+  local expected, cursor = s and s.model, vim.api.nvim_win_get_cursor(win)
+  local entry = s and s.model and M.entry_at(buf, vim.fn.line('.'))
+  local function action(key, label, fn, available)
+    return { key = key, label = label, enabled = s and s.model ~= nil and available ~= false or false,
+      run = function()
+        if not live(s) or vim.api.nvim_get_current_win() ~= win or vim.api.nvim_win_get_buf(win) ~= buf then
+          vim.notify('PR source window changed; reopen the action menu', vim.log.levels.WARN); return
+        end
+        if s.model ~= expected or not vim.deep_equal(vim.api.nvim_win_get_cursor(win), cursor) then
+          vim.notify('PR context changed; reopen the action menu', vim.log.levels.WARN); return
+        end
+        fn()
+      end }
+  end
+  return {
+    { title = 'Comments / review', actions = {
+      action('c', 'New comment…', function()
+        local review = require('git.features.pr_review')
+        local target, err = review.target(buf, vim.fn.line('.'), vim.fn.line('.'))
+        if err then notify(err); return end
+        review.new_comment(s.model, target)
+      end),
+      action('r', 'Review / resolve threads…', function() require('git.features.pr_review').menu(s.model) end),
+      action('t', 'Read / reply to threads…', function() comments(s) end),
+      action('v', 'Preview conversation', function() preview_comments(s, true) end),
+    } },
+    { title = 'Diff / files', actions = {
+      action('f', 'Compare selected file', function() diff(s) end, entry ~= nil),
+      action('D', 'Open PR in Diffview', function() M.diffview(buf) end),
+      action('s', 'Diff display settings…', display_menu),
+    } },
+    { title = 'PR panel', actions = {
+      action('E', 'Edit title / description', function()
+        vim.api.nvim_win_set_cursor(0, { #s.prefix + 1, 0 }); vim.cmd('startinsert')
+      end),
+      action('o', 'Toggle header / commits / changes / file diff', function() toggle(s, 'toggle') end),
+      action('>', 'Expand section / file diffs', function() toggle(s, 'show') end),
+      action('<', 'Collapse section / file diffs', function() toggle(s, 'hide') end),
+      action('R', 'Refresh PR status', function() refresh_prompt(s) end),
+      action('?', 'PR status key guide', show_help),
+    } },
+  }
+end
 local function attach(s)
   local b = s.buf
+  local function native_key(key)
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(key, true, false, true), 'ni', false)
+  end
+  s.edit_guard = require('git.features.pr_edit_guard').attach(s, function(message) render(s, message) end)
+  -- Native entry/operator keys only belong to the editable draft. The line
+  -- guard also catches ranges, paste and Insert-mode edits crossing its edges.
+  for _, key in ipairs({ 'a', 'I', 'gI', '<Insert>', 's', 'S', 'C', 'c', 'x', 'X', 'r', 'p', 'P', 'gp', 'gP', '~', 'g~', 'gu', 'gU' }) do
+    vim.keymap.set('n', key, function()
+      return s.model and editable_row(s, vim.fn.line('.')) and key or ''
+    end, { buffer = b, expr = true, silent = true, desc = 'Edit only PR title / description' })
+  end
+  for _, key in ipairs({ 'c', 's', 'S', 'C', 'd', 'x', 'X', 'p', 'P', 'r', '~' }) do
+    vim.keymap.set('x', key, function()
+      local first, last = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
+      return s.model and editable_row(s, first) and editable_row(s, last) and key or '<Esc>'
+    end, { buffer = b, expr = true, silent = true, desc = 'Edit only selected PR title / description' })
+  end
   local function map(keys, fn, description, native)
     for _, key in ipairs(type(keys) == 'table' and keys or { keys }) do
       vim.keymap.set('n', key, function()
         if not s.model then return end
         if native and editable_row(s, vim.fn.line('.')) then
-          vim.cmd.normal({ args = { key }, bang = true }); return
+          native_key(key); return
         end
         fn()
-      end, { buffer = b, silent = true, nowait = not vim.tbl_contains({ 'd', 'g', '[', ']' }, key), desc = description })
+      end, { buffer = b, silent = true, nowait = not vim.tbl_contains({ 'd', 'g', '[', ']', 'gc', 'gr' }, key), desc = description })
     end
   end
-  map({ 'o', '=', '<Tab>' }, function() toggle(s, 'toggle') end, 'Toggle PR header / file diff', true)
-  map('>', function() toggle(s, 'show') end, 'Expand PR header / file diffs', true)
-  map('<', function() toggle(s, 'hide') end, 'Collapse PR header / file diffs', true)
+  map({ 'o', '=', '<Tab>' }, function() toggle(s, 'toggle') end, 'Toggle PR header / commits / changes / file diff', true)
+  map('>', function() toggle(s, 'show') end, 'Expand PR section / file diffs', true)
+  map('<', function() toggle(s, 'hide') end, 'Collapse PR section / file diffs', true)
   for _, key in ipairs({ 'o', '=', '>', '<' }) do
     local mode = ({ o = 'toggle', ['='] = 'toggle', ['>'] = 'show', ['<'] = 'hide' })[key]
     vim.keymap.set('x', key, function()
       local first, last = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
-      if editable_row(s, first) then vim.cmd.normal({ args = { key }, bang = true }); return end
+      if editable_row(s, first) and editable_row(s, last) then native_key(key); return end
+      if editable_row(s, first) then vim.cmd('normal! \27'); return end
       vim.cmd('normal! \27'); toggle(s, mode, first, last)
     end, { buffer = b, silent = true, desc = 'Toggle / expand / collapse selected PR files' })
   end
@@ -567,30 +714,47 @@ local function attach(s)
   map({ 'dh', 'ds' }, function() diff(s, true) end, 'Compare PR file horizontally')
   map('D', function() M.diffview(b) end, 'Open entire PR in Diffview', true)
   map('gc', function() comments(s) end, 'Open review thread / reply')
+  map('gR', function() resolve_comments(s) end, 'Resolve / reopen review thread')
   map('gk', function() preview_comments(s, true) end, 'Preview PR conversation', true)
   map(']C', function() move_comment(s, 1, vim.v.count1) end, 'Next PR comment and preview')
   map('[C', function() move_comment(s, -1, vim.v.count1) end, 'Previous PR comment and preview')
-  local function new_comment(first, last)
+  local function new_comment(first, last, destination)
     local review = require('git.features.pr_review')
     local target, err = review.target(b, first, last)
     if err then notify(err); return end
-    review.new_comment(s.model, target)
+    review.new_comment(s.model, target, { destination = destination })
   end
   map('gC', function() new_comment(vim.fn.line('.'), vim.fn.line('.')) end, 'Write PR / diff / review comment')
+  for key, destination in pairs({ gcn = 'c', gcr = 'r', gcp = 'p' }) do
+    map(key, function() new_comment(vim.fn.line('.'), vim.fn.line('.'), destination) end, 'Direct PR / diff / review draft comment')
+  end
   map('gr', function() require('git.features.pr_review').menu(s.model) end, 'Start / resume / submit PR review')
-  vim.keymap.set('x', 'gC', function()
-    if not s.model then return end
-    local first, last = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
-    if editable_row(s, first) then notify('Select diff lines outside the title / description'); return end
-    vim.cmd('normal! \27'); new_comment(first, last)
-  end, { buffer = b, silent = true, desc = 'Comment on selected PR diff lines' })
+  for key, event in pairs({ gra = 'APPROVE', grm = 'COMMENT', grr = 'REQUEST_CHANGES' }) do
+    map(key, function() require('git.features.pr_review').menu(s.model, { submit = event }) end, 'Direct PR review submission composer')
+  end
+  for _, key in ipairs({ 'gC', 'gcn', 'gcr', 'gcp' }) do
+    local destination = ({ gcn = 'c', gcr = 'r', gcp = 'p' })[key]
+    vim.keymap.set('x', key, function()
+      if not s.model then return end
+      local first, last = math.min(vim.fn.line('v'), vim.fn.line('.')), math.max(vim.fn.line('v'), vim.fn.line('.'))
+      if editable_row(s, first) then notify('Select diff lines outside the title / description'); return end
+      vim.cmd('normal! \27'); new_comment(first, last, destination)
+    end, { buffer = b, silent = true, desc = 'Comment on selected PR diff lines' })
+  end
   map('<CR>', function()
     local link = link_at(s)
     if link then vim.ui.open(link); return end
+    local commit = M.commit_at(b, vim.fn.line('.'))
+    if commit then
+      require('git.features.commit').open({ work_tree = s.model.root, revision = commit.hash, split = true })
+      return
+    end
+    if vim.fn.line('.') - delta(s) == s.commit_section.first then toggle(s, 'toggle'); return end
+    if vim.fn.line('.') - delta(s) == s.changes_section.first then toggle(s, 'toggle'); return end
     local entry, info = M.entry_at(b, vim.fn.line('.'))
     if info and #info.threads > 0 then comments(s)
     elseif entry then blob(s, entry, false, info.coordinate) end
-  end, 'Open link, thread or PR head file', true)
+  end, 'Open link, commit, thread or PR head file', true)
   map('gf', function()
     local entry = M.entry_at(b, vim.fn.line('.'))
     if entry then
@@ -603,8 +767,10 @@ local function attach(s)
   map('gx', function()
     local _, info = M.entry_at(b, vim.fn.line('.'))
     local thread = info and info.threads[1]
-    vim.ui.open(link_at(s) or (thread and thread.url) or s.ctx.url)
-  end, 'Open PR / CI check / Actions / comment on GitHub')
+    local commit = M.commit_at(b, vim.fn.line('.'))
+    local commit_url = commit and ('https://%s/%s/commit/%s'):format(s.ctx.host, s.ctx.repo, commit.hash)
+    vim.ui.open(link_at(s) or commit_url or (thread and thread.url) or s.ctx.url)
+  end, 'Open PR / commit / CI check / Actions / comment on GitHub')
   map('gy', function() vim.fn.setreg('"', s.ctx.url); pcall(vim.fn.setreg, '+', s.ctx.url) end, 'Copy PR URL')
   map('gq', function()
     local items = {}
@@ -614,32 +780,24 @@ local function attach(s)
     end
     vim.fn.setqflist({}, ' ', { title = 'PR #' .. s.ctx.number, items = items }); vim.cmd('copen')
   end, 'PR files in quickfix')
-  map('gD', function()
-    local choices = {}
-    for _, style in ipairs({ 'delta', 'github', 'diffs', 'treesitter' }) do
-      choices[#choices + 1] = { key = style:sub(1, 1), label = style, run = function() syntax.set_word_diff_style(style) end }
-    end
-    choices[1].key = 'l'
-    require('git.features.transient_menu').show({ kind = 'pr-display', title = 'PR diff display',
-      groups = { { title = 'Word diff', actions = choices } } })
-  end, 'PR diff display settings')
+  map('gD', display_menu, 'PR diff display settings')
   -- Loading and failed requests still need an exit even without a model.
   vim.keymap.set('n', 'q', function()
     if s.model and edited(s) and vim.fn.confirm('Discard unsaved PR title/description?', '&Discard\n&Keep', 2) ~= 1 then return end
     vim.api.nvim_buf_delete(b, { force = true })
   end, { buffer = b, silent = true, desc = 'Close PR status' })
   vim.keymap.set('n', 'R', function()
-    if s.model and editable_row(s, vim.fn.line('.')) then vim.cmd('normal! R'); return end
-    if s.model and edited(s) then
-      if vim.fn.confirm('Discard PR draft and reload from GitHub?', '&Reload\n&Keep', 2) ~= 1 then return end
-      M.refresh(b, true)
-    else M.refresh(b) end
+    if s.model and editable_row(s, vim.fn.line('.')) then native_key('R'); return end
+    refresh_prompt(s)
   end, { buffer = b, silent = true, desc = 'Refresh PR status' })
   map('?', show_help, 'PR status key guide')
   actions.attach(b)
-  vim.keymap.set('n', '<Space><Space>', function() actions.open(s.ctx) end,
-    { buffer = b, silent = true, desc = 'GitHub action menu' })
+  vim.keymap.set('n', '<Space><Space>', function() actions.open(actions.context(b)) end,
+    { buffer = b, silent = true, desc = 'PR action menu' })
   local group = vim.api.nvim_create_augroup('GitPr' .. b, { clear = true })
+  vim.api.nvim_create_autocmd({ 'InsertEnter', 'CursorMovedI' }, { group = group, buffer = b, callback = function()
+    if not s.model or not editable_row(s, vim.fn.line('.')) then vim.cmd('stopinsert') end
+  end })
   vim.api.nvim_create_autocmd('BufWriteCmd', { group = group, buffer = b, callback = function(ev)
     if ev.match ~= vim.api.nvim_buf_get_name(b) then error('Use :w without a filename to save PR metadata') end
     M.write(b)
@@ -649,7 +807,7 @@ local function attach(s)
   vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitHubChanged', callback = function(ev)
     local ctx = ev.data or {}
     if s.model and ctx.host == s.ctx.host and ctx.repo == s.ctx.repo and (not ctx.number or ctx.number == s.ctx.number) then
-      M.refresh(b)
+      M.refresh(b, false, true)
     end
   end })
   vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitPrCommentsRead', callback = function(ev)
@@ -681,6 +839,7 @@ function M.open(opts)
   for b, s in pairs(states) do if s.identity == identity and vim.api.nvim_buf_is_loaded(b) then
     local win = vim.fn.bufwinid(b)
     if win ~= -1 then vim.api.nvim_set_current_win(win) else utils.open_panel_split(); vim.api.nvim_win_set_buf(0, b) end
+    if not s.model then M.refresh(b) end
     return b
   end end
   local b = vim.api.nvim_create_buf(true, false)

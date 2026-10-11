@@ -97,20 +97,9 @@ function M.build(model, expanded)
       { string.rep('■', math.max(0, 5 - green - red)), 'Comment' }, { ')', 'GitPrHeaderLabel' } }
     row(chunks)
   end
-  row(github.summary_chunks(pr), pr.url .. '/checks')
   if expanded then
     local merge = github.scalar(pr.mergeStateStatus)
     if merge and merge ~= 'UNKNOWN' and merge ~= 'CLEAN' and pr.state ~= 'MERGED' then detail('Merge', merge) end
-    local checks = github.checks(pr)
-    table.sort(checks, function(a, b)
-      local _, _, x = outcome(a.result); local _, _, y = outcome(b.result)
-      return x < y or (x == y and a.label < b.label)
-    end)
-    for _, check in ipairs(checks) do
-      local icon, group = outcome(check.result)
-      row({ { '  ' .. icon .. ' ', group }, { check.label, check.result == 'SUCCESS' and 'GitPrPositive' or 'Normal' } },
-        check.url or pr.url .. '/checks')
-    end
     local pending = model.review and model.review.pending
     if model.review_error then detail('Your review', 'unavailable · ' .. clean(model.review_error), 'DiagnosticWarn')
     elseif model.review and model.review.migration and model.review.migration.phase ~= 'planned' then
@@ -126,6 +115,17 @@ function M.build(model, expanded)
         submitted.state == 'APPROVED' and 'GitPrPositive' or submitted.state == 'CHANGES_REQUESTED' and 'DiagnosticWarn' or 'Comment',
         github.scalar(submitted.html_url) or (pr.url .. '#pullrequestreview-' .. submitted.id))
       if hash and hash ~= model.hash then result.lines[at] = result.lines[at] .. ' · earlier commit ' .. hash:sub(1, 7) end
+    end
+    row(github.summary_chunks(pr), pr.url .. '/checks')
+    local checks = github.checks(pr)
+    table.sort(checks, function(a, b)
+      local _, _, x = outcome(a.result); local _, _, y = outcome(b.result)
+      return x < y or (x == y and a.label < b.label)
+    end)
+    for _, check in ipairs(checks) do
+      local icon, group = outcome(check.result)
+      row({ { '  ' .. icon .. ' ', group }, { check.label, check.result == 'SUCCESS' and 'GitPrPositive' or 'Normal' } },
+        check.url or pr.url .. '/checks')
     end
   end
   return result

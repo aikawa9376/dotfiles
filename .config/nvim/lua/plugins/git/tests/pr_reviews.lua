@@ -25,7 +25,7 @@ local count = starts()
 ui.menu('gr'); ui.key('s')
 ui.wait(function() return vim.bo.filetype == 'gitactionmenu' end); ui.key('q'); ui.loaded()
 assert(starts() == count and f.reviews[2].id == id, 'Resume created another review')
-ui.key('>', ui.row('Changes (')); ui.wait(function() return pcall(ui.row, '+TWO') end)
+ui.expand_files(); ui.wait(function() return pcall(ui.row, '+TWO') end)
 ui.key('gC', ui.row('+TWO')); ui.key('r')
 local buf = ui.body({ 'Private draft `literal` $(not executed)', 'More context' })
 f.graphql_error = true
@@ -103,6 +103,13 @@ ui.key('gC', ui.row('M file name.txt')); ui.key('c'); buf = ui.body({ 'Immediate
 ui.failed(buf, 'A pending review exists'); ui.close_draft(buf)
 -- External draft edits during the submit composer are detected before sending.
 ui.menu('gr'); ui.key('a'); buf = ui.body({ 'Approval summary' })
+local author = f.pr.author.login
+f.pr.author.login = f.viewer:upper()
+local requests = #f.calls
+ui.failed(buf, 'does not allow approving your own PR')
+for i = requests + 1, #f.calls do assert(not vim.tbl_contains(f.calls[i].argv, 'POST')) end
+assert(pending.state == 'PENDING' and vim.bo[buf].modified and #pending.comments == 2)
+f.pr.author.login = author
 pending.comments[1].body = 'Edited in Octo'
 ui.failed(buf, 'drafts changed on GitHub')
 assert(pending.state == 'PENDING' and vim.bo[buf].modified)
@@ -111,8 +118,12 @@ f.pr.headRefOid = f.base
 ui.failed(buf, 'PR head changed')
 f.pr.headRefOid = f.head
 f.comment_error = true
-ui.failed(buf, 'server rejected write')
-f.comment_error = false; ui.send(buf)
+f.api_error_stderr = 'gh: Unprocessable Entity (HTTP 422)'
+f.api_error_response = vim.json.encode({ message = 'Validation Failed', errors = {
+  { resource = 'PullRequestReview', field = 'event', code = 'invalid', message = 'Review cannot be submitted in this state' } } })
+ui.failed(buf, 'Review cannot be submitted in this state')
+assert(pending.state == 'PENDING' and vim.bo[buf].modified)
+f.comment_error = false; f.api_error_response = nil; f.api_error_stderr = nil; ui.send(buf)
 assert(f.last_event == 'APPROVE' and pending.state == 'APPROVED' and not view.model(ui.buf).review.pending)
 assert(not pcall(ui.row, 'Your review:'), 'Submitted review should hide the pending-review status')
 assert(f.reviews[1].id == 77 and f.reviews[1].state == 'PENDING')
@@ -123,6 +134,18 @@ buf = ui.body({ 'Please fix this' }); ui.send(buf)
 assert(f.last_event == 'REQUEST_CHANGES')
 ui.menu('gr'); ui.key('m'); buf = ui.body({ 'General review feedback' }); ui.send(buf)
 assert(f.last_event == 'COMMENT')
+-- Approval may have no summary, but authors must use COMMENT instead.
+f.pr.author.login = f.viewer
+ui.menu('gr'); ui.key('a'); buf = ui.body({ '' })
+requests = #f.calls
+ui.failed(buf, 'does not allow approving your own PR')
+for i = requests + 1, #f.calls do assert(not vim.tbl_contains(f.calls[i].argv, 'POST')) end
+ui.close_draft(buf)
+ui.menu('gr'); ui.key('m'); buf = ui.body({ 'Author review comments are allowed' }); ui.send(buf)
+assert(f.last_event == 'COMMENT')
+f.pr.author.login = author
+ui.menu('gr'); ui.key('a'); buf = ui.body({ '' }); ui.send(buf)
+assert(f.last_event == 'APPROVE')
 -- Old-head reviews continue normally without automatic copying or deletion.
 local old = { id = 900, node_id = 'OLD_REVIEW', state = 'PENDING', commit_id = f.base, body = 'Old summary',
   user = { login = f.viewer }, comments = { { id = 901, body = 'Retained draft', path = 'file name.txt',
@@ -134,7 +157,7 @@ count = starts()
 ui.menu('gr'); ui.key('s')
 ui.wait(function() return vim.bo.filetype == 'gitactionmenu' end); ui.key('q'); ui.loaded()
 assert(starts() == count and old.id == 900 and old.commit_id == f.base)
-ui.key('>', ui.row('Changes (')); ui.wait(function() return pcall(ui.row, '+TWO') end)
+ui.expand_files(); ui.wait(function() return pcall(ui.row, '+TWO') end)
 ui.key('gC', ui.row('+TWO')); ui.key('r'); buf = ui.body({ 'Added after push' }); ui.send(buf)
 assert(old.id == 900 and #old.comments == 2 and old.comments[1].body == 'Retained draft')
 ui.menu('gr'); ui.key('a'); buf = ui.body({ 'Continuing this review' }); ui.send(buf)

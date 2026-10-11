@@ -21,6 +21,11 @@ local function preview()
   assert(win ~= -1)
   assert(vim.api.nvim_win_get_cursor(win)[1] == vim.api.nvim_buf_line_count(buf), 'Preview did not start at the latest comment')
   assert(not vim.api.nvim_buf_get_lines(buf, -2, -1, false)[1]:match('^%s*$'), 'Preview ends in a blank padding row')
+  local title = table.concat(vim.tbl_map(function(chunk) return chunk[1] end, vim.api.nvim_win_get_config(win).title))
+  assert(title:find('gc reply', 1, true) and title:find('gk focus', 1, true) and title:find(']C/[C move', 1, true))
+  local content = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
+  assert(not content:find('gc replies · gk focuses', 1, true) and not content:find('────────────────', 1, true),
+    'Preview still displays its instructions / separator inside the conversation')
   return buf, win
 end
 vim.api.nvim_win_set_cursor(0, { 1, 0 })
@@ -47,13 +52,14 @@ assert(vim.deep_equal(vim.api.nvim_buf_get_lines(input, 0, -1, false), { '' }), 
 local context = assert(vim.b[input].git_pr_context)
 assert(vim.bo[context].readonly and not vim.bo[context].modifiable)
 assert(not pcall(vim.api.nvim_buf_set_lines, context, 0, 1, false, { 'tampered' }))
-local target, instruction, separator = false, false, false
+local target = false
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(context, vim.api.nvim_create_namespace('git_pr_history'), 0, -1, { details = true })) do
   target = target or mark[4].hl_group == 'GitPrCommentContext'
-  instruction = instruction or mark[4].hl_group == 'GitPrCommentInstruction'
-  separator = separator or mark[4].hl_group == 'NonText'
 end
-assert(target and instruction and separator, 'Context / instructions / separator lack colors')
+assert(target, 'Context labels lack colors')
+local title = table.concat(vim.tbl_map(function(chunk) return chunk[1] end, vim.api.nvim_win_get_config(0).title))
+assert(title:find('<C-s>/:w send', 1, true) and title:find('Tab', 1, true), 'Input title lost operation shortcuts')
+assert(not table.concat(vim.api.nvim_buf_get_lines(context, 0, -1, false), '\n'):find('<C-s>', 1, true), 'Instructions remain inside the conversation')
 ui.body(long); assert(vim.api.nvim_win_get_height(0) == 5, 'Long input expanded the textarea')
 ui.close_draft(input); assert(not vim.api.nvim_buf_is_valid(context))
 jump(']C', 'new.txt'); preview()

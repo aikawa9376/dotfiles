@@ -27,7 +27,7 @@ f.reviews = { pending }
 -- Some servers also include the viewer's private comments in the public endpoint.
 f.comments[2][#f.comments[2] + 1] = vim.deepcopy(pending.comments[1])
 ui.open()
-ui.key('>', ui.row('Changes (')); ui.wait(function() return pcall(ui.row, '+TWO') end)
+ui.expand_files(); ui.wait(function() return pcall(ui.row, '+TWO') end)
 local function marks(row)
   local chunks = {}
   for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(ui.buf, vim.api.nvim_create_namespace('git_pr_status'),
@@ -82,7 +82,9 @@ f.api_before = nil; ui.refresh()
 -- Existing private comments submit without writing an extra review summary.
 ui.menu('gr'); ui.key('m')
 buf = vim.api.nvim_get_current_buf()
-assert(table.concat(vim.api.nvim_buf_get_lines(vim.b[buf].git_pr_context, 0, -1, false), '\n'):find('summary optional', 1, true))
+local context_win = vim.fn.bufwinid(vim.b[buf].git_pr_context)
+assert(table.concat(vim.tbl_map(function(chunk) return chunk[1] end,
+  vim.api.nvim_win_get_config(context_win).title)):find('summary optional', 1, true))
 assert(not vim.bo[buf].modified)
 local calls = #f.calls
 vim.api.nvim_feedkeys(' w', 'xt', false)

@@ -52,7 +52,7 @@ assert(current.entries ~= previous.entries)
 local found
 for _, item in ipairs(current.entries) do if item.path == entry.path then found = item end end
 assert(found ~= entry and found.patch == entry.patch, 'Refresh discarded the immutable patch cache')
-assert(count('fetch', start) == 0 and count('diff', start) == 0 and count('rev-list', start) == 0,
+assert(count('fetch', start) == 0 and count('diff', start) == 0 and count('log', start) == 0,
   'Unchanged revisions repeated Git network/diff work')
 -- Changed head fetches and rebuilds only the expanded patch, asynchronously.
 vim.fn.writefile({ 'one', 'TWO', 'THREE', 'four' }, f.root .. '/file name.txt')

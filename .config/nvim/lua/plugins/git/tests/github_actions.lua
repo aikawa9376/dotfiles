@@ -110,14 +110,34 @@ assert(octo_calls[1].args == f.pr.url and #octo_calls == 1, 'Octo review selecte
 ui = actions.open(ctx)
 vim.api.nvim_buf_call(ui.bufnr, function() vim.fn.maparg('c', 'n', false, true).callback() end)
 assert(octo_calls[#octo_calls].args == 'pr create' and octo_calls[#octo_calls].cwd == f.root)
-vim.ui.select = function(items, _, cb) cb(items[1]) end
-local merged
+local labels = { 'Create a merge commit', 'Squash and merge', 'Rebase and merge' }
+local methods = { '--merge', '--squash', '--rebase' }
+for selection, method in ipairs(methods) do
+  vim.ui.select = function(items, opts, cb)
+    assert(opts.prompt == 'Merge pull request #' .. f.pr.number)
+    for i, label in ipairs(labels) do assert(opts.format_item(items[i]) == label) end
+    cb(items[selection])
+  end
+  local before_merge, merged = #f.calls
+  actions.merge(ctx)
+  assert(vim.wait(5000, function()
+    for i = before_merge + 1, #f.calls do
+      local call = f.calls[i]
+      if call.argv[2] == 'pr' and call.argv[3] == 'merge' then merged = call; return true end
+    end
+  end, 10))
+  for _, flag in ipairs(methods) do assert(vim.tbl_contains(merged.argv, flag) == (flag == method)) end
+  assert(vim.tbl_contains(merged.argv, '--match-head-commit') and vim.tbl_contains(merged.argv, f.head))
+  assert(vim.wait(5000, function() return not require('git.features.async').busy(f.root) end, 10))
+end
+local cancelled = false
+vim.ui.select = function(_, _, cb) cancelled = true; cb(nil) end
+local before_cancel = #f.calls
 actions.merge(ctx)
-assert(vim.wait(5000, function()
-  for _, call in ipairs(f.calls) do if call.argv[2] == 'pr' and call.argv[3] == 'merge' then merged = call; return true end end
-end, 10))
-assert(vim.tbl_contains(merged.argv, '--squash') and vim.tbl_contains(merged.argv, '--match-head-commit') and vim.tbl_contains(merged.argv, f.head))
-assert(vim.wait(5000, function() return not require('git.features.async').busy(f.root) end, 10))
+assert(vim.wait(5000, function() return cancelled and not require('git.features.async').busy(f.root) end, 10))
+for i = before_cancel + 1, #f.calls do
+  assert(f.calls[i].argv[3] ~= 'merge', 'Cancelled merge reached GitHub')
+end
 vim.cmd('tcd /tmp')
 f.git({ 'worktree', 'remove', '--', path })
 f.cleanup()

@@ -21,8 +21,7 @@ function M.show(opts)
   local comments = {}
   for _, thread in ipairs(opts.threads) do vim.list_extend(comments, thread.comments) end
   table.sort(comments, function(a, b) return a.id < b.id end)
-  local prefix = { ('PR #%d · %s'):format(opts.ctx.number, opts.threads[1].path or 'Review threads'),
-    'gc replies · gk focuses · q closes', '────────────────────────────' }
+  local prefix = require('git.features.pr_thread_status').context(opts.ctx, opts.threads)
   local buf, lines = require('git.features.pr_history').buffer(prefix, comments, opts.viewer)
   local width = math.max(1, math.min(80, vim.o.columns - 4))
   local size = 0
@@ -32,7 +31,10 @@ function M.show(opts)
   local above = vim.o.lines - screen.row - 3 < height and screen.row > height + 2
   local win = vim.api.nvim_open_win(buf, false, { relative = 'cursor', border = 'rounded', style = 'minimal',
     width = width, height = height, row = above and -1 or 1, anchor = above and 'SW' or 'NW',
-    col = math.min(0, vim.o.columns - screen.col - width - 2), title = ' PR conversation · gc: reply · q: close ' })
+    col = math.min(0, vim.o.columns - screen.col - width - 2), title = {
+      { ' PR conversation ', 'Title' },
+      { '· gc reply · gR toggle · gk focus · ]C/[C move · q ', 'GitPrCommentInstruction' },
+    } })
   vim.wo[win].wrap, vim.wo[win].linebreak = true, true
   vim.api.nvim_win_set_cursor(win, { #lines, 0 })
   vim.api.nvim_win_call(win, function() vim.cmd('normal! zb') end)
@@ -48,6 +50,8 @@ function M.show(opts)
   vim.keymap.set('n', { 'q', '<Esc>' }, close, { buffer = buf, silent = true })
   vim.keymap.set('n', 'gc', function() if source() then M.close(opts.buf); opts.reply() end end,
     { buffer = buf, silent = true, desc = 'Reply to PR conversation' })
+  vim.keymap.set('n', 'gR', function() if source() then M.close(opts.buf); opts.resolve() end end,
+    { buffer = buf, silent = true, desc = 'Resolve / reopen PR conversation' })
   for key, direction in pairs({ [']C'] = 1, ['[C'] = -1 }) do
     vim.keymap.set('n', key, function()
       local count = vim.v.count1
