@@ -629,6 +629,11 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
         in_worktree, in_stash, in_pr = false, true, false
       elseif l:match('^Pull requests') then
         vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterGreen' })
+        local prefix, branch = l:match('^(Pull requests %(%d+%) %[branch: )(.*)%]$')
+        if prefix and branch ~= '' then
+          vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, #prefix,
+            { end_col = #prefix + #branch, hl_group = 'Type', priority = 110 })
+        end
         in_worktree, in_stash, in_pr = false, false, true
       elseif in_worktree then
         -- 形式: [path]  [branch]  [head] [sync_icon]
@@ -683,6 +688,21 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
           local draft_start, draft_end = l:find('%[draft%]')
           if draft_start then
             vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, draft_start - 1, { end_col = draft_end, hl_group = 'Comment' })
+          end
+          local pr = M.pull_request_at(bufnr, i)
+          if pr then
+            local github = require('git.features.github')
+            local prefix = ('#%d%s %s'):format(pr.number, pr.isDraft and ' [draft]' or '', pr.title)
+            if pr.headRefName ~= '' then
+              vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, #prefix + 2,
+                { end_col = #prefix + 2 + #pr.headRefName, hl_group = 'Type' })
+            end
+            local col = #l - #github.summary(pr) - 1
+            for _, chunk in ipairs(github.summary_chunks(pr)) do
+              vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, col,
+                { end_col = col + #chunk[1], hl_group = chunk[2] })
+              col = col + #chunk[1]
+            end
           end
         else in_pr = false end
       end

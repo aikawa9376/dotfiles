@@ -43,7 +43,7 @@ function M.octo(ctx, review)
       if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_get_current_win() ~= win then return end
       local buffer = require('octo.utils').get_current_buffer()
       if buffer and buffer.ready and buffer.node and buffer:isPullRequest() then
-        vim.cmd('Octo review start')
+        require('octo.reviews').start_or_resume_review()
       elseif (vim.uv.hrtime() - started) / 1e9 < 15 then vim.defer_fn(ready, 50)
       else notify('Octo did not finish loading the PR') end
     end

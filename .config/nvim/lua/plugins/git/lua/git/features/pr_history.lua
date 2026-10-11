@@ -1,0 +1,72 @@
+-- Context and conversation live above the compact input in an immutable buffer.
+local M = {}
+function M.buffer(prefix, comments, viewer)
+  local lines, spans = vim.deepcopy(prefix), {}
+  for index, comment in ipairs(comments or {}) do
+    if index > 1 then lines[#lines + 1] = '' end
+    local first = #lines
+    local author = comment.user and comment.user.login or 'unknown'
+    lines[#lines + 1] = '@' .. author .. (author == viewer and ' · you' or '')
+      .. (comment.pending and ' [pending]' or '') .. ' · ' .. (comment.created_at or '')
+    local body = vim.split(comment.body or '', '\n', { plain = true })
+    while #body > 0 and body[#body]:match('^%s*$') do table.remove(body) end
+    vim.list_extend(lines, body)
+    spans[#spans + 1] = { first = first, last = #lines, own = author == viewer }
+  end
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[buf].bufhidden, vim.bo[buf].filetype, vim.bo[buf].swapfile = 'wipe', 'markdown', false
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  vim.bo[buf].modifiable, vim.bo[buf].readonly, vim.bo[buf].modified = false, true, false
+  vim.api.nvim_set_hl(0, 'GitPrCommentSelf', { default = true, link = 'DiagnosticInfo' })
+  vim.api.nvim_set_hl(0, 'GitPrCommentOther', { default = true, link = 'Normal' })
+  vim.api.nvim_set_hl(0, 'GitPrCommentContext', { default = true, link = 'Title' })
+  vim.api.nvim_set_hl(0, 'GitPrCommentInstruction', { default = true, link = 'Comment' })
+  local ns = vim.api.nvim_create_namespace('git_pr_history')
+  for at, line in ipairs(prefix) do
+    vim.api.nvim_buf_set_extmark(buf, ns, at - 1, 0, { end_col = #line,
+      hl_group = at == #prefix and 'NonText' or at >= #prefix - 1 and 'GitPrCommentInstruction' or 'GitPrCommentContext', priority = 160 })
+  end
+  for _, span in ipairs(spans) do
+    for at = span.first, span.last - 1 do
+      vim.api.nvim_buf_set_extmark(buf, ns, at, 0, { end_col = #lines[at + 1],
+        hl_group = span.own and 'GitPrCommentSelf' or 'GitPrCommentOther', priority = 150 })
+    end
+    vim.api.nvim_buf_set_extmark(buf, ns, span.first, 0, { end_col = #lines[span.first + 1],
+      hl_group = span.own and 'GitPrCommentSelf' or 'DiagnosticWarn', priority = 160 })
+  end
+  return buf, lines
+end
+function M.attach(input, win, comments, viewer, prefix, close)
+  local buf, lines = M.buffer(prefix, comments, viewer)
+  local config = vim.api.nvim_win_get_config(win)
+  local context_height, content_height = 0, 0
+  for at, line in ipairs(lines) do
+    local size = math.max(1, math.ceil(vim.fn.strdisplaywidth(line) / config.width))
+    if at <= #prefix then context_height = context_height + size else content_height = content_height + size end
+  end
+  local height = math.max(1, math.min(context_height + math.min(content_height, 10), vim.o.lines - config.height - 9))
+  local total = height + config.height + 4
+  local row = math.max(0, math.floor((vim.o.lines - total - 2) / 2))
+  vim.api.nvim_win_set_config(win, { relative = 'editor', col = config.col, row = row + height + 2 })
+  local history = vim.api.nvim_open_win(buf, false, { relative = 'editor', style = 'minimal', border = 'rounded',
+    width = config.width, height = height, col = config.col, row = row, title = ' Context / conversation · read-only · Tab: input ' })
+  vim.wo[history].wrap, vim.wo[history].linebreak = true, true
+  vim.b[input].git_pr_context = buf
+  if comments and #comments > 0 then vim.b[input].git_pr_history = buf end
+  vim.keymap.set('n', '<Tab>', function() if vim.api.nvim_win_is_valid(history) then vim.api.nvim_set_current_win(history) end end,
+    { buffer = input, silent = true, desc = 'Read conversation history' })
+  vim.keymap.set('n', '<Tab>', function() if vim.api.nvim_win_is_valid(win) then vim.api.nvim_set_current_win(win) end end,
+    { buffer = buf, silent = true, desc = 'Return to comment input' })
+  vim.keymap.set('n', 'q', close, { buffer = buf, silent = true })
+  vim.keymap.set('n', '<C-s>', function() vim.api.nvim_buf_call(input, function() vim.cmd('write') end) end,
+    { buffer = buf, silent = true, desc = 'Send / save PR draft' })
+  local function cleanup()
+    if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
+  end
+  local group = vim.api.nvim_create_augroup('GitPrHistory' .. input, { clear = true })
+  vim.api.nvim_create_autocmd('WinClosed', { group = group, pattern = tostring(win), once = true, callback = cleanup })
+  vim.api.nvim_create_autocmd('BufWipeout', { group = group, buffer = input, once = true, callback = function()
+    cleanup(); pcall(vim.api.nvim_del_augroup_by_id, group)
+  end })
+end
+return M

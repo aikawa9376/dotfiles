@@ -294,14 +294,14 @@ GitHub calls are mocked; validation does not create or push to GitHub repositori
 `N` in Git panels, or `<Space><Space> N`, opens the GitHub menu. `:GitHub`
 also opens it from a repository file. Status PR rows now show CI, review and
 mergeability summaries; Enter opens the native PR status panel. Octo remains
-available through the GitHub menu for discussion and full review.
+available through the GitHub menu as an alternative discussion/review UI.
 
 | GitHub menu key | Action |
 |---|---|
 | `p` / `l` | Open current/selected PR status / choose an open PR |
 | `C` | Create default PR: edit only the prefilled title |
 | `c` | Create a PR using Octo's editor |
-| `e` / `r` | Open in Octo / start an Octo review |
+| `e` / `r` | Open in Octo / start or resume an Octo review |
 | `w` | Create and open a separate PR worktree |
 | `k` / `a` | CI checks / GitHub Actions runs |
 | `d` / `m` | Toggle draft/ready / choose a merge method |
@@ -316,19 +316,29 @@ mergeability, CI checks, title and description above the changed files.
 |---|---|
 | `cw` / `A` | Move to the editable title and description |
 | `:w` | Save title and description to GitHub |
-| `o` / `=` / `<Tab>` | Expand/collapse the selected file's unified diff |
-| `>` / `<` | Expand/collapse files; from a heading, all files; Visual selection supported |
+| `<C-s>` | Save title and description to GitHub |
+| `o` / `=` / `<Tab>` | Toggle the header details or the selected file's unified diff |
+| `>` / `<` | Expand/collapse header or files; from Changes, all files; Visual selection supported |
 | `]m` / `[m`, `]]` / `[[` | Next/previous file; move and expand |
 | `J` / `K`, `]c` / `[c` | Next/previous diff hunk |
+| `]C` / `[C` | Next/previous comment position and preview; counts supported |
 | `d` / `dv`, `dh` | Vertical / horizontal two-revision file diff |
 | `D` | Entire PR in Diffview |
 | `<CR>` | Open a marked comment thread, or the PR head file |
+| `gk` | Preview conversation near cursor; repeat to focus the popup |
 | `gc` | Read/reply to threads on the selected file or marked diff line |
-| `O` | Start a full review in Octo |
+| `gC` | New PR conversation comment, immediate diff comment, or pending review comment |
+| Visual `gC` | Comment on a continuous range of diff lines on one side |
+| `gr` | Native review menu: start/resume, migrate, draft comments/summary, submit or discard |
+| `O` | Start or resume a review in Octo |
 | `gf` / `gq` | Worktree file / changed files in quickfix |
 | `gD` | Shared word-diff display settings |
 | `gx` / `gy` | Browser at cursor / copy PR URL |
 | `R` / `?` / `q` | Refresh / key guide / close |
+
+The `?` guide groups editing, navigation, comparisons, review and panel actions.
+Each action has its own row with aligned key aliases; Visual keys have a separate
+section, using the same colored, wrapping help popup as the other panels.
 
 Keep a blank line between the title and description. Normal editing keys retain
 their meaning inside that region. The other metadata and diffs are read-only
@@ -344,16 +354,184 @@ closed, then jump to the next file header or diff hunk and scroll it to the top.
 Counts such as `2i` repeat that movement. Inside the editable region, `i` retains
 normal insertion behavior.
 
+The PR header uses Octo-style labeled rows for the repository, author, dates,
+assignees, milestone, labels, reviewers, branches and change totals. Empty
+metadata is omitted rather than showing `No …` placeholders. The Commits row
+includes the snapshot's commit count, changed files, additions/deletions and a
+five-cell green/red diffstat. Requested reviewers and submitted reviewers carry
+state markers; private pending reviews do not appear as submitted reviewers.
+Checks are grouped by outcome with status symbols and exact browser targets.
+The existing `CI: … · Review: … · mergeable` summary remains.
+The first line is `Repo: owner/name [ PR #N ] [STATE]`, followed immediately by
+the available metadata. Header items align with the other blocks at column zero;
+labels use `GitPrHeaderLabel` (DiagnosticInfo by default, `#7bb8c1` in dotfiles)
+and the CI/review summary colors only the labels and present status values.
+`CI` / `Review` stay blue; colons, separators and absent `—` values use Normal.
+CI uses `✓ N` for all successful/neutral/skipped checks, `◷ N/T` for pending
+checks and `✗ N/T` for failed checks (failures take precedence). Status values
+are green/yellow/red respectively. Review shows `approved`, `review required`,
+or `changes requested` in green/yellow/red; `—` means no aggregate GitHub review
+decision, even if a comment-only review has been submitted. Normal `Merge: CLEAN`
+state is omitted to keep the summary compact; BLOCKED/DIRTY and other additional
+states remain. MERGEABLE concerns merge conflicts, while CLEAN also includes
+passing commit status, so the two fields are not semantically identical.
+
+Headers start expanded. On a read-only header row, `o`, `=`, or `<Tab>` toggles
+the details; `>` / `<` expands/collapses them. The fold marker `▾` / `▸` lives in
+a fixed sign gutter rather than the buffer text, keeping the first line aligned
+with the other blocks. PR windows restore their original gutter options when
+switching to another buffer. The collapsed header retains the repository,
+PR number/state and CI/review summary, with the editable title/description and
+file diffs still visible. Header folding preserves unsaved metadata and file
+expansion state and performs no Git/GitHub requests. `gx` on the first line's
+repository name opens the repository; elsewhere on that line it opens the PR.
+The branch row retains its inline `[Actions]` target.
+
 Unified diffs use the existing syntax/word-diff renderer. They compare the PR's
 merge base with its head, independently of the checked-out branch or index.
 PR refs are fetched under `refs/nvim-pr/<host>/<owner>/<repo>/<number>/`; fetched
-SHAs must match the metadata before publishing a snapshot. Added, deleted,
+SHAs must match the metadata before publishing a snapshot. Git diffs, review
+state and comment/thread reads run concurrently, then publish one complete
+layout. Matching private base/head refs skip the next network fetch after fresh
+PR metadata confirms both SHAs. Refreshes reuse immutable diff/patch data when
+the comparison is unchanged; expanded patches for changed revisions load in
+the background before rendering. API state is always reread. Added, deleted,
 renamed and binary files use the shared commit change model. Binary comparisons
-open Diffview. Review-thread `💬` markers appear on file headers and applicable
-LEFT/RIGHT diff lines. File/outdated threads remain available through the file
-header. The thread popup shows existing replies and an editable reply area;
-`:w` sends the reply, and a failed send retains the draft. New review comments,
-suggestions, approval and change requests use Octo's review UI.
+open Diffview. Published threads use blue `💬` markers; private review drafts use
+amber `📝 [pending]` markers. On collapsed file headers, `💬` counts threads and
+adds `🆕` when the file has unread comments. On expanded file headers and
+LEFT/RIGHT diff lines, `💬` counts unread comments, including replies; it remains
+visible at zero so the conversation is still accessible. `📝` continues to count
+threads with private drafts. The thread summary keeps total thread counts and an
+unread indicator. File/outdated threads remain available through the file header.
+Opening a conversation or its preview marks its displayed comments read. Only other people's
+published comments count as unread; own comments and private drafts do not.
+Receipts persist locally per GitHub host/repository/PR/viewer across reopening
+and restarting Neovim. New replies or changes to previously read comments become
+unread on refresh. This state is independent of GitHub notifications and Octo.
+
+`]C` / `[C` lazily expand files and jump to comment anchors. A range thread is
+one target; threads sharing a line share one preview. File/outdated comments use
+their file header, and missing-file comments remain accessible at the summary.
+Movement stops at the first/last target without wrapping. Navigation opens a
+read-only cursor popup at the bottom of the conversation without creating an
+input buffer or taking focus. `gk` opens the same popup and repeats to focus it
+for scrolling; `gc` from the popup opens the reply editor. Moving away or leaving
+the panel closes the preview.
+Conversation history inserts blank separators only between comments and omits
+trailing blank display lines, so the latest comment ends at the popup's bottom.
+
+The thread editor puts its context, instructions and conversation in a separate
+read-only Markdown panel above a body-only textarea. All composers use the same
+immutable context panel, including new comments and review submissions. Target
+labels use `GitPrCommentContext`, instructions use `GitPrCommentInstruction`, and
+the separator is muted. Input windows are at most 80 columns wide and five lines
+high, with wrapped text and scrolling for longer drafts.
+Own messages and their author labels use `GitPrCommentSelf` (DiagnosticInfo by
+default; dotfiles uses its existing light blue `#81a1c1`), others use
+`GitPrCommentOther` (normal text with a contrasting author label). `Tab` switches
+between history and input. `<C-s>` or `:w` sends the reply, and a failed send retains
+the draft and history; sending or closing the input also closes the history.
+A pending thread opens
+its draft comment for editing instead of posting a public reply.
+Pending comments with missing displayed line numbers use original coordinates
+only when their original revision equals the displayed head. Other drafts stay
+on file headers/the summary instead of being guessed onto changed code. Private
+replies remain accessible even when their public parent is absent; a failed
+public-comment read does not hide successfully fetched private drafts.
+
+`gC` opens a destination menu: `p` writes a PR conversation comment, `c` posts a
+diff comment immediately, and `r` saves a private comment to a pending review.
+File headers target the whole file; diff lines target RIGHT for additions/context
+or LEFT for deletions. Visual `gC` supports contiguous lines from one side of one
+file. Markdown composers show the captured target and revision above the draft;
+`<C-s>` or `:w` sends/saves it. New immediate diff comments are blocked while you have a pending
+review so they cannot accidentally publish that review. PR conversation comments
+can be posted independently.
+
+In `gr`, `s` starts or resumes your GitHub pending review, `c` reads/edits draft
+comments (`gX` deletes the selected draft after confirmation), and `b` saves a
+review summary without submitting. `a`, `r` and `m` open
+composers for approval, change requests and comment-only reviews; `<C-s>` or `:w` submits the
+summary and pending comments together. With saved draft comments, `gr m` followed
+by `<C-s>` submits them without an additional summary; the composer explicitly labels
+the summary optional. Approvals can have an empty summary and no inline comments;
+change requests need one. A comment-only review needs a summary or pending
+comments. `x` discards the pending review and its comments after confirmation;
+`o` continues in Octo. Both `O` and the GitHub menu's Octo review action resume an
+existing review rather than unconditionally creating one.
+
+All PR inputs accept `<C-s>` in Normal and Insert modes to send/save, including
+unchanged empty review summaries; `:w` remains available. `<Leader>w` keeps its
+configured `:update` behavior, which skips unchanged buffers.
+
+`Your review` is hidden when the authenticated viewer has no pending review.
+It displays a pending review even with zero comments, or a read/recovery error
+that needs attention. Diff markers add `[pending]` for unpublished comments.
+`Your last review` separately displays your latest submitted review (including
+comments, change requests and dismissed reviews), with an `earlier commit` hint
+when it refers to a previous PR head. `gx` on that row opens the submitted review.
+GitHub owns saved drafts, so
+reopening the panel recovers a review created here or in Octo. Each write rechecks
+the viewer/review identity; comment edits and summary saves reject concurrent
+body changes. Submission/discard also checks the full pending comment snapshot
+so an unseen Octo edit is not silently submitted or removed.
+
+The review-thread footer displays the number of published, unresolved GitHub
+conversations, including outdated threads. Replies do not increase that count;
+private draft threads are excluded. Resolution comes from paginated GraphQL
+`isResolved` state and is independent of the local unread count. Reading a thread
+does not resolve it. Resolve/unresolve currently requires GitHub or Octo.
+Resolution read failures show `unresolved: unavailable` while retaining readable
+comments and diffs.
+
+`GitPrPositive` highlights approval, successful CI/checks/Actions runs, mergeable
+states, merged PRs and zero unresolved threads. It defaults to
+`DiagnosticOk`; the dotfiles color scheme uses its existing green `#98be65`.
+
+Saved pending reviews are shared GitHub state. Normal start/resume, draft additions
+and submission keep your existing review ID, even when its commit is older than
+the current PR head. A `review commit` hint identifies that earlier revision without
+blocking the review. GitHub's individual outdated threads are a separate concept.
+SHA migration is an optional custom action, never a prerequisite for continuation.
+
+Diff comments and submissions verify the displayed PR head and base immediately
+before writing, so a push after opening a composer requires refreshing the panel.
+The existing review's creation SHA need not equal that displayed head.
+
+Use `gr u` when you want to move saved drafts to the current head: preview with
+`p`, then apply with `a`. Unchanged lines/ranges with unique surviving context
+follow line shifts and
+identified renames; file comments follow their file. Changed/deleted code,
+ambiguous positions, targets outside the new PR diff and reply drafts require
+explicit reattachment. Refreshing the panel only reads state.
+
+When a draft needs a migration target, select a current diff line, Visual range
+or file header and use
+`gC m`, then choose the preserved draft. Moving a reply into a new thread needs
+confirmation. The old review stays intact until every draft has a target.
+Its comments and summary remain readable/editable while planning; remote edits
+invalidate the plan rather than overwriting unseen changes.
+Previewing or reattaching only prepares a local plan and does not block normal
+review operations. Submitting the existing review clears its unused plan.
+
+GitHub cannot retarget an existing review's SHA, so migration rebuilds your pending
+review. Before deleting it, all bodies/anchors are saved to a private `0600` JSON
+file under `stdpath('state')/git-pr-review-migrations/`. Its journal survives
+Neovim restarts and is removed only after the replacement's complete comments and
+summary are verified. Failed or uncertain deletion/creation/thread/summary writes
+can be resumed with `gr u`; reconciliation avoids copying a draft twice. Another
+push during recovery re-plans all preserved drafts, including ones not yet copied.
+Unrelated reviews and externally changed/submitted reviews are not adopted.
+Once an explicit migration starts deleting/rebuilding the review, ordinary
+resume/add/submit actions require recovery via `gr u` before continuing, so an
+incompletely copied review cannot be submitted. Recovery is never started automatically.
+
+Failed requests retain editable local
+drafts, and hidden composers keep them within the current Neovim session. Writes
+are never automatically retried. If a network failure leaves posting uncertain,
+check GitHub before retrying an immediate comment. Suggestions can be written as
+Markdown; Octo remains available for its dedicated suggestion/review tools.
 
 In PR status, `gx` on a CI check opens its actual job/check URL (including external
 CI providers), and on the CI summary opens PR checks. The compact `[Actions]`
@@ -382,8 +560,11 @@ GitHub commands require authenticated `gh`; Octo and Diffview commands use their
 existing lazy-loaded plugins. API processes, PR fetches and patch reads are
 asynchronous, and capture their original worktree before menus or input UIs open.
 Remote writes use literal argv and JSON stdin. `tests/pr_model.lua`,
-`tests/pr_view.lua`, `tests/pr_lifecycle.lua` and `tests/github_actions.lua` exercise real local Git
-repositories/worktrees with mocked GitHub responses and writes.
+`tests/pr_view.lua`, `tests/pr_lifecycle.lua`, `tests/pr_comments.lua`,
+`tests/pr_reviews.lua`, `tests/pr_markers.lua`, `tests/pr_review_migration.lua`,
+`tests/pr_help.lua`, `tests/pr_loading.lua` and `tests/github_actions.lua` exercise
+real local Git repositories/worktrees with mocked GitHub responses and writes.
+Live GitHub writes are not part of these checks.
 
 Expand a staged or unstaged file with `o`. On a displayed hunk, `s`/`-`
 stages or unstages that hunk; `u` unstages a staged hunk. Select added or
@@ -1414,8 +1595,8 @@ captured paths/commits. Definitions require unique keys and input names.
 These workflows run asynchronously against the worktree captured when the
 menu opens, emit refresh events after mutations (including conflict failures),
 and reuse transient argument presets. Repository lists/recent switching are
-outside this plugin's scope. Issue authoring and full PR review use Octo; PR
-metadata editing and thread replies also have the native UI described above. WIP timing and
+outside this plugin's scope. Issue authoring uses Octo; PR metadata, comments and
+review also have the native UI described above. WIP timing and
 untracked snapshot policy remain unchanged. `tests/magit_workflows.lua` covers
 real sparse, subtree, full/incremental bundle, plain/binary/selected-commit and
 mail/Maildir operations, conflict continuation/skip/abort, Notes sync/merge,

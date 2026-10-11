@@ -18,15 +18,15 @@ local function key(name, at, col)
 end
 local opened = {}
 vim.ui.open = function(url) opened[#opened + 1] = url end
-key('gx', row('CI · test'))
+key('gx', row('test: FAILURE'))
 assert(opened[#opened]:find('/job/12', 1, true), 'CI gx did not open exact job')
-key('gx', row('CI · external'))
+key('gx', row('external: PENDING'))
 assert(opened[#opened] == 'https://ci.example.test/build/1')
 key('gx', row('CI:'))
 assert(opened[#opened] == f.pr.url .. '/checks', 'CI summary no longer opens PR checks')
 local actions_row = row('[Actions]')
 local actions_col = assert(lines()[actions_row]:find('[Actions]', 1, true)) - 1
-assert(actions_row == 2 and not table.concat(lines(), '\n'):find('gx opens branch runs', 1, true))
+assert(lines()[actions_row]:find('From: topic  Into: main', 1, true) and not table.concat(lines(), '\n'):find('gx opens branch runs', 1, true))
 key('gx', actions_row, actions_col)
 assert(vim.uri_decode(opened[#opened]):find('/actions?query=branch:topic', 1, true))
 key('<CR>', actions_row, actions_col + 2)
@@ -48,7 +48,9 @@ key('gc', comment_row)
 local reply = vim.api.nvim_get_current_buf()
 assert(vim.bo[reply].filetype == 'markdown')
 local reply_lines = vim.api.nvim_buf_get_lines(reply, 0, -1, false)
-assert(vim.tbl_contains(reply_lines, 'Existing reply'))
+local history = assert(vim.b[reply].git_pr_history)
+assert(vim.tbl_contains(vim.api.nvim_buf_get_lines(history, 0, -1, false), 'Existing reply'))
+assert(not vim.bo[history].modifiable and vim.bo[history].readonly)
 vim.api.nvim_buf_set_lines(reply, #reply_lines - 1, -1, false, { 'Reply `literal` $(never execute)', 'Second line' })
 f.reply_error = true
 vim.cmd('write')
@@ -56,8 +58,9 @@ assert(vim.wait(5000, function() return vim.tbl_contains(f.notifications, 'serve
 assert(vim.api.nvim_buf_is_valid(reply) and vim.bo[reply].modified, 'Failed reply lost draft')
 f.reply_error = false
 vim.wait(80, function() return false end, 10)
-vim.cmd('write')
+vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('i<C-s>', true, false, true), 'xt', false)
 assert(vim.wait(5000, function() return not vim.api.nvim_buf_is_valid(reply) end, 10))
+assert(not vim.api.nvim_buf_is_valid(history), 'Reply submission left an orphan history window')
 local sent
 for _, call in ipairs(f.calls) do if call.opts.stdin and vim.tbl_contains(call.argv, 'repos/org/repo/pulls/7/comments/101/replies') then
   sent = vim.json.decode(call.opts.stdin)
@@ -74,16 +77,16 @@ vim.api.nvim_buf_set_lines(b, title + 1, title + 1, false, { 'Additional body li
 assert(view.entry_at(b, row('M file name.txt')).path == 'file name.txt')
 key('<', row('M file name.txt'))
 assert(vim.tbl_contains(lines(), 'Edited title') and vim.tbl_contains(lines(), 'Additional body line'), 'Toggle erased draft')
-local save_body
-vim.api.nvim_buf_call(b, function() vim.cmd('write') end)
+vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<C-s>', true, false, true), 'xt', false)
 assert(vim.wait(5000, function() return f.pr.title == 'Edited title' and not vim.bo[b].modified end, 10), table.concat(f.notifications, '\n'))
 assert(f.pr.body:find('Additional body line', 1, true))
 -- Protected edits never reach GitHub.
 local count = #f.calls
+local header_line = lines()[1]
 vim.api.nvim_buf_set_lines(b, 0, 1, false, { 'tampered state' })
 local ok = pcall(view.write, b)
 assert(not ok and #f.calls == count, 'Protected metadata was submitted')
-vim.api.nvim_buf_set_lines(b, 0, 1, false, { 'PR #7 · OPEN' })
+vim.api.nvim_buf_set_lines(b, 0, 1, false, { header_line })
 -- Split diff and Diffview use fixed PR snapshots, not working-copy revisions.
 local commands = {}
 vim.api.nvim_create_user_command('DiffviewOpen', function(args) commands[#commands + 1] = args.args end, { nargs = '*' })
@@ -95,10 +98,10 @@ vim.cmd('tabclose')
 -- The Actions target remains available when the PR has no checks at all.
 f.pr.statusCheckRollup = vim.NIL
 view.refresh(b, true)
-assert(vim.wait(5000, function() return (lines()[3] or ''):find('CI: —', 1, true) ~= nil end, 10))
+assert(vim.wait(5000, function() return table.concat(lines(), '\n'):find('CI: —', 1, true) ~= nil end, 10))
 actions_row = row('[Actions]')
 actions_col = assert(lines()[actions_row]:find('[Actions]', 1, true)) - 1
-assert(actions_row == 2)
+assert(lines()[actions_row]:find('From: topic  Into: main', 1, true))
 key('gx', actions_row, actions_col)
 assert(vim.uri_decode(opened[#opened]):find('/actions?query=branch:topic', 1, true))
 key('gx', row('CI:'))

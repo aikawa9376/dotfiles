@@ -2,7 +2,9 @@
 local M = {}
 local async = require('git.features.async')
 local utils = require('git.utils')
-M.fields = 'number,title,body,url,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,author'
+vim.api.nvim_set_hl(0, 'GitPrPositive', { default = true, link = 'DiagnosticOk' })
+vim.api.nvim_set_hl(0, 'GitPrHeaderLabel', { default = true, link = 'DiagnosticInfo' })
+M.fields = 'number,title,body,url,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,author,createdAt,updatedAt,assignees,milestone,labels,reviewRequests,additions,deletions,changedFiles'
 local function scalar(value)
   if value == vim.NIL or value == '' then return nil end
   return value
@@ -14,6 +16,7 @@ function M.checks(pr)
     result[#result + 1] = {
       label = (check.name or check.context or 'Check') .. ': ' .. (scalar(check.conclusion) or scalar(check.state) or scalar(check.status) or 'pending'),
       url = scalar(check.detailsUrl) or scalar(check.targetUrl),
+      result = scalar(check.conclusion) or scalar(check.state) or scalar(check.status),
     }
   end
   return result
@@ -104,6 +107,24 @@ function M.summary(pr)
   local review = ({ APPROVED = 'approved', CHANGES_REQUESTED = 'changes requested', REVIEW_REQUIRED = 'review required' })[scalar(pr.reviewDecision)] or '—'
   local merge = ({ MERGEABLE = 'mergeable', CONFLICTING = 'conflicts', UNKNOWN = 'checking' })[scalar(pr.mergeable)]
   return ci .. ' · Review: ' .. review .. (merge and (' · ' .. merge) or '')
+end
+-- Status lists and PR headers share label/value colors and neutral separators.
+function M.summary_chunks(pr)
+  local parts = vim.split(M.summary(pr), ' · ', { plain = true })
+  local ci, review = parts[1]:match('^CI: (.*)$'), parts[2]:match('^Review: (.*)$')
+  local ci_group = ci:find('✓', 1, true) == 1 and 'GitPrPositive'
+    or ci:find('✗', 1, true) == 1 and 'DiagnosticError'
+    or ci:find('◷', 1, true) == 1 and 'DiagnosticWarn' or 'Normal'
+  local review_group = ({ APPROVED = 'GitPrPositive', CHANGES_REQUESTED = 'DiagnosticError',
+    REVIEW_REQUIRED = 'DiagnosticWarn' })[scalar(pr.reviewDecision)] or 'Normal'
+  local chunks = { { 'CI', 'GitPrHeaderLabel' }, { ': ', 'Normal' }, { ci, ci_group },
+    { ' · ', 'Normal' }, { 'Review', 'GitPrHeaderLabel' }, { ': ', 'Normal' }, { review, review_group } }
+  if parts[3] then
+    chunks[#chunks + 1] = { ' · ', 'Normal' }
+    chunks[#chunks + 1] = { parts[3], ({ MERGEABLE = 'GitPrPositive', CONFLICTING = 'DiagnosticError',
+      UNKNOWN = 'DiagnosticWarn' })[scalar(pr.mergeable)] or 'Normal' }
+  end
+  return chunks
 end
 function M.changed(ctx)
   utils.fire_git_changed({ work_tree = ctx.root })

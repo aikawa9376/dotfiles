@@ -1,6 +1,7 @@
 local M = {}
 local github = require('git.features.github')
 local actions = require('git.features.github_actions')
+local ns = vim.api.nvim_create_namespace('git_github_checks')
 function M.panel(ctx, title, entries, fallback)
   local lines = { title, 'gx / Enter opens the selected check or Actions run', '' }
   local links = {}
@@ -10,6 +11,13 @@ function M.panel(ctx, title, entries, fallback)
   end
   if #entries == 0 then lines[#lines + 1] = 'No results' end
   local buf = require('git.features.workflow').output(ctx.root, title, table.concat(lines, '\n'))
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  for i, entry in ipairs(entries) do
+    if entry.result and entry.result:upper() == 'SUCCESS' then
+      vim.api.nvim_buf_set_extmark(buf, ns, i + 2, 0,
+        { end_col = #lines[i + 3], hl_group = 'GitPrPositive', priority = 200 })
+    end
+  end
   local function browse() vim.ui.open(links[vim.fn.line('.')] or fallback) end
   vim.keymap.set('n', 'gx', browse, { buffer = buf, silent = true, desc = 'Open selected CI / Actions details' })
   vim.keymap.set('n', '<CR>', browse, { buffer = buf, silent = true })
@@ -35,7 +43,8 @@ function M.runs(opts)
     local entries = {}
     for _, run in ipairs(runs) do
       entries[#entries + 1] = { label = ('#%s %s · %s · %s'):format(run.databaseId, run.name or run.displayTitle or 'Workflow',
-        github.scalar(run.conclusion) or run.status, run.headBranch or ''), url = run.url }
+        github.scalar(run.conclusion) or run.status, run.headBranch or ''), url = run.url,
+        result = github.scalar(run.conclusion) or run.status }
     end
     M.panel(ctx, 'GitHub Actions', entries, github.actions_url(ctx))
   end)

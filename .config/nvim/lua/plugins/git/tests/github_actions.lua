@@ -57,12 +57,20 @@ require('git.features.status').open = status_open
 local checks = require('git.features.github_checks')
 local browser
 vim.ui.open = function(url) browser = url end
+f.pr.statusCheckRollup[2].state = 'SUCCESS'
 checks.checks(ctx)
 assert(vim.wait(5000, function() return vim.api.nvim_get_current_line():find('CI checks', 1, true) ~= nil end, 10))
+local marks = vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace('git_github_checks'), 0, -1, { details = true })
+assert(#marks == 1 and marks[1][2] == 4 and marks[1][4].hl_group == 'GitPrPositive', 'Only successful checks should be green')
 vim.api.nvim_win_set_cursor(0, { 4, 0 }); vim.fn.maparg('gx', 'n', false, true).callback()
 assert(browser:find('/job/12', 1, true))
+f.runs = { { databaseId = 11, name = 'Tests', status = 'completed', conclusion = 'success',
+  url = 'https://ghe.example.test/org/repo/actions/runs/11', headBranch = 'topic' },
+  { databaseId = 12, name = 'Lint', status = 'completed', conclusion = 'failure', headBranch = 'topic' } }
 checks.runs(ctx)
 assert(vim.wait(5000, function() return vim.api.nvim_get_current_line() == 'GitHub Actions' end, 10))
+marks = vim.api.nvim_buf_get_extmarks(0, vim.api.nvim_create_namespace('git_github_checks'), 0, -1, { details = true })
+assert(#marks == 1 and marks[1][2] == 3 and marks[1][4].hl_group == 'GitPrPositive', 'Only successful Actions runs should be green')
 vim.api.nvim_win_set_cursor(0, { 4, 0 }); vim.fn.maparg('gx', 'n', false, true).callback()
 assert(browser == 'https://ghe.example.test/org/repo/actions/runs/11')
 -- The menu exposes a reachable quick action and both kinds of CI entry.
@@ -94,9 +102,11 @@ assert(#f.calls == before_default, 'Cancelled default PR reached GitHub')
 package.loaded['octo.utils'] = { get_current_buffer = function()
   return { node = {}, ready = true, isPullRequest = function() return true end }
 end }
+local review_resumed = false
+package.loaded['octo.reviews'] = { start_or_resume_review = function() review_resumed = true end }
 actions.octo(ctx, true)
-assert(vim.wait(5000, function() return #octo_calls >= 2 end, 10))
-assert(octo_calls[1].args == f.pr.url and octo_calls[2].args == 'review start', 'Octo review selected another PR')
+assert(vim.wait(5000, function() return review_resumed end, 10))
+assert(octo_calls[1].args == f.pr.url and #octo_calls == 1, 'Octo review selected another PR or started over a pending review')
 ui = actions.open(ctx)
 vim.api.nvim_buf_call(ui.bufnr, function() vim.fn.maparg('c', 'n', false, true).callback() end)
 assert(octo_calls[#octo_calls].args == 'pr create' and octo_calls[#octo_calls].cwd == f.root)

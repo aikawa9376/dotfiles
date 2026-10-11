@@ -11,12 +11,16 @@ local function at(b, value)
   error('Missing ' .. value)
 end
 vim.wo.number, vim.wo.list = true, true
+vim.wo.signcolumn, vim.wo.statuscolumn, vim.wo.foldcolumn = 'no', '%l ', '1'
 local b = view.open({ root = f.root, url = f.pr.url }); loaded(b)
 local pr_win = vim.fn.bufwinid(b)
 assert(not vim.wo[pr_win].number and not vim.wo[pr_win].list)
+assert(vim.wo[pr_win].signcolumn == 'yes:1' and vim.wo[pr_win].statuscolumn == '%s' and vim.wo[pr_win].foldcolumn == '0')
 local scratch = vim.api.nvim_create_buf(false, true)
 vim.api.nvim_win_set_buf(pr_win, scratch)
 assert(vim.wo[pr_win].number and vim.wo[pr_win].list, 'PR options leaked to an ordinary buffer')
+assert(vim.wo[pr_win].signcolumn == 'no' and vim.wo[pr_win].statuscolumn == '%l ' and vim.wo[pr_win].foldcolumn == '1',
+  'PR gutter settings leaked to an ordinary buffer')
 vim.api.nvim_win_set_buf(pr_win, b)
 local b2 = view.open({ root = f.root, number = 7 }); loaded(b2)
 local count = #f.calls

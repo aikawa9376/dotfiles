@@ -1,6 +1,7 @@
 local M = {}
 local github = require('git.features.github')
 local commit = require('git.features.commit_model')
+local async = require('git.features.async')
 local function git(root, args)
   local result, err = commit.git(root, args)
   if not result then error(err, 0) end
@@ -23,10 +24,23 @@ function M.fetch(ctx, pr)
   assert(type(pr.headRefOid) == 'string' and pr.headRefOid:match('^%x+$'), 'Invalid PR head SHA')
   -- Private refs never check out or alter the caller's branch/index/worktree.
   local prefix = ('refs/nvim-pr/%s/%s/%d'):format(ctx.host, ctx.repo, pr.number)
-  git(ctx.root, { 'check-ref-format', 'refs/heads/' .. pr.baseRefName })
+  local refs = git(ctx.root, { 'for-each-ref', '--format=%(refname) %(objectname)', prefix .. '/' })
+  local cached = {}
+  for ref, oid in refs:gmatch('([^\n ]+) (%x+)') do cached[ref] = oid end
+  -- Fresh API SHAs define the snapshot. Only our verified private refs can
+  -- bypass the network fetch.
+  if cached[prefix .. '/base'] == pr.baseRefOid and cached[prefix .. '/head'] == pr.headRefOid then
+    return git(ctx.root, { 'merge-base', pr.baseRefOid, pr.headRefOid }), pr.headRefOid
+  end
+  -- API base SHAs can lag the current base branch even for open PRs. Fetch
+  -- that exact revision, rather than treating branch advancement as PR drift.
+  -- Closed PR heads are historical too; open heads still use the advertised
+  -- PR ref so a push during loading cannot mix snapshots.
+  local historical = pr.state == 'MERGED' or pr.state == 'CLOSED'
+  local head_source = historical and pr.headRefOid or 'refs/pull/' .. pr.number .. '/head'
   git(ctx.root, { 'fetch', '--no-tags', M.remote(ctx),
-    '+refs/heads/' .. pr.baseRefName .. ':' .. prefix .. '/base',
-    '+refs/pull/' .. pr.number .. '/head:' .. prefix .. '/head' })
+    '+' .. pr.baseRefOid .. ':' .. prefix .. '/base',
+    '+' .. head_source .. ':' .. prefix .. '/head' })
   local base = git(ctx.root, { 'rev-parse', prefix .. '/base' })
   local head = git(ctx.root, { 'rev-parse', prefix .. '/head' })
   if base ~= pr.baseRefOid or head ~= pr.headRefOid then
@@ -34,18 +48,44 @@ function M.fetch(ctx, pr)
   end
   return git(ctx.root, { 'merge-base', base, head }), head
 end
-function M.threads(ctx)
-  local pages = github.json(ctx, { 'api', '--hostname', ctx.host, '--paginate', '--slurp',
+function M.threads(ctx, pending, hash, pages)
+  pages = pages or github.json(ctx, { 'api', '--hostname', ctx.host, '--paginate', '--slurp',
     ('repos/%s/pulls/%d/comments?per_page=100'):format(ctx.repo, ctx.number) })
+  if pending then
+    -- The review endpoint includes the viewer's unpublished comments. Merge
+    -- them once even on servers that also return them in the public listing.
+    local ids = {}
+    for _, comment in ipairs(pending.comments) do ids[comment.id] = true; comment.pending = true end
+    for i, page in ipairs(pages) do
+      pages[i] = vim.tbl_filter(function(comment) return not ids[comment.id] end, page)
+    end
+    pages[#pages + 1] = pending.comments
+  end
   local by_id, threads = {}, {}
+  local function make_thread(comment)
+    local line, start = github.scalar(comment.line), github.scalar(comment.start_line)
+    -- Unpublished REST comments may lack displayed coordinates. Original
+    -- coordinates are safe only when they belong to the displayed revision.
+    local revision = github.scalar(comment.original_commit_id) or github.scalar(comment.commit_id)
+      or (comment.pending and pending.commit_id)
+    if comment.pending and hash and revision == hash and comment.subject_type ~= 'file' then
+      if not line then
+        line, start = github.scalar(comment.original_line), github.scalar(comment.original_start_line)
+      elseif line == github.scalar(comment.original_line) and not start then
+        start = github.scalar(comment.original_start_line)
+      end
+    end
+    local result = { id = comment.id, path = comment.path, side = comment.side,
+      line = line, start_line = start, comments = { comment }, url = comment.html_url,
+      pending = comment.pending, review_id = comment.pending and pending.id or nil }
+    threads[#threads + 1] = result
+    return result
+  end
   for _, page in ipairs(pages) do
     for _, comment in ipairs(page) do
       by_id[comment.id] = comment
       if comment.in_reply_to_id == nil or comment.in_reply_to_id == vim.NIL then
-        threads[#threads + 1] = { id = comment.id, path = comment.path, side = comment.side,
-          line = comment.line ~= vim.NIL and comment.line or nil,
-          start_line = comment.start_line ~= vim.NIL and comment.start_line or nil,
-          comments = { comment }, url = comment.html_url }
+        make_thread(comment)
       end
     end
   end
@@ -59,19 +99,76 @@ function M.threads(ctx)
         seen[parent.id] = true; parent = by_id[parent.in_reply_to_id]
       end
       local thread = parent and indexed[parent.id]
-      if thread then thread.comments[#thread.comments + 1] = comment end
+      if thread then thread.comments[#thread.comments + 1] = comment
+      elseif comment.pending and github.scalar(comment.in_reply_to_id) then
+        -- Keep a private reply accessible even if its public parent is not in
+        -- the listing (permissions, deletion or server pagination differences).
+        make_thread(comment)
+      end
     end
+  end
+  for _, thread in ipairs(threads) do
+    for _, comment in ipairs(thread.comments) do if comment.pending then thread.has_pending = true end end
   end
   return threads
 end
-function M.load(ctx)
+function M.load(ctx, opts)
+  opts = opts or {}
   local pr = github.pr(ctx)
-  local base, head = M.fetch(ctx, pr)
-  local model, err = commit.changes({ root = ctx.root, base = base, hash = head, pr = pr, ctx = ctx })
-  if not model then error(err, 0) end
+  local reads = async.gather({
+    function()
+      local base, head = M.fetch(ctx, pr)
+      local model = { root = ctx.root, base = base, hash = head, pr = pr, ctx = ctx }
+      local previous = opts.previous
+      if previous and previous.root == ctx.root and previous.base == base and previous.hash == head then
+        -- Reuse immutable diffs, including lazy patches; mutable API state is
+        -- always reloaded and entries belong to the new snapshot.
+        model.entries = {}
+        for i, entry in ipairs(previous.entries) do model.entries[i] = vim.tbl_extend('force', {}, entry) end
+        model.commit_count = previous.commit_count
+      else
+        local err
+        model, err = commit.changes(model)
+        if not model then error(err, 0) end
+        model.commit_count = tonumber(git(ctx.root, { 'rev-list', '--count', base .. '..' .. head, '--' }))
+      end
+      -- Expanded files must not block the UI with synchronous patch reads
+      -- when a refresh brings new revisions. Collapsed files stay lazy.
+      for _, entry in ipairs(model.entries) do
+        if opts.expanded and opts.expanded[entry.path] then
+          local patch, err = commit.patch(model, entry)
+          if not patch then error(err, 0) end
+        end
+      end
+      return model
+    end,
+    function() return require('git.features.pr_review_model').load(ctx) end,
+    function()
+      return github.json(ctx, { 'api', '--hostname', ctx.host, '--paginate', '--slurp',
+        ('repos/%s/pulls/%d/comments?per_page=100'):format(ctx.repo, ctx.number) })
+    end,
+    function() return require('git.features.pr_thread_status').load(ctx) end,
+  })
+  if not reads[1].ok then error(reads[1].value, 0) end
+  local model = reads[1].value
   -- Comment permissions/network failures must not hide otherwise readable diffs.
-  local ok, threads = pcall(M.threads, ctx)
-  model.threads, model.comments_error = ok and threads or {}, not ok and tostring(threads) or nil
+  local review_ok, review = reads[2].ok, reads[2].value
+  model.review, model.review_error = review_ok and review or nil, not review_ok and tostring(review) or nil
+  local ok, pages = reads[3].ok, reads[3].value
+  local pending = model.review and model.review.pending
+  local grouped, threads = pcall(M.threads, ctx, pending, model.hash, ok and pages or {})
+  model.threads = grouped and threads or {}
+  model.comments_error = not ok and tostring(pages) or not grouped and tostring(threads) or nil
+  -- A failed public-comment read must not hide already fetched private drafts.
+  if not grouped and pending then model.threads = M.threads(ctx, pending, model.hash, {}) end
+  local status_ok, status = reads[4].ok, reads[4].value
+  model.thread_status, model.thread_status_error = status_ok and status or nil, not status_ok and tostring(status) or nil
+  if status_ok then
+    for _, thread in ipairs(model.threads) do
+      local remote = status.by_id[thread.id]
+      if remote then thread.node_id, thread.resolved = remote.id, remote.isResolved end
+    end
+  end
   return model
 end
 function M.coordinates(patch)
