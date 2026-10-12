@@ -86,6 +86,10 @@ function M.commit_at(buf, row)
   local s = states[buf]
   return s and s.commit_rows and s.commit_rows[row - delta(s)]
 end
+function M.check_at(buf, row)
+  local s = states[buf]
+  return s and s.ci_rows and s.ci_rows[row]
+end
 local function editable_row(s, row)
   return row > #s.prefix and row <= vim.api.nvim_buf_line_count(s.buf) - #s.suffix
 end
@@ -116,6 +120,7 @@ local function render(s, current)
   local prefix, highlights = header.lines, header.highlights
   s.links = header.links
   s.ci_section = header.ci_section
+  s.ci_rows = header.ci_rows
   vim.list_extend(prefix, { '', 'Title / description · edit below, <C-s> / :w saves to GitHub' })
   local original = { pr.title, '' }
   if pr.body and pr.body ~= '' and pr.body ~= vim.NIL then vim.list_extend(original, vim.split(pr.body, '\n', { plain = true })) end
@@ -219,6 +224,23 @@ local function render(s, current)
   syntax.refresh(s.buf)
   s.rendering = false
   if s.edit_guard then s.edit_guard.sync() end
+end
+function M.show_checks(buf)
+  local s = states[buf]
+  if not s or not s.model then return end
+  local current, err = draft(s)
+  if not current then notify(err); return end
+  local win
+  for _, candidate in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(candidate) == buf then win = candidate; break end
+  end
+  if not win then return end
+  s.header_expanded, s.ci_expanded = true, true
+  render(s, current)
+  vim.api.nvim_set_current_win(win)
+  local row = s.ci_section.first
+  vim.api.nvim_win_set_cursor(win, { s.ci_rows[row + 1] and row + 1 or row, 0 })
+  return buf
 end
 local function focus(s, path, win)
   if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= s.buf then return end
@@ -558,7 +580,7 @@ local function show_help()
       { 'd / dd / dv', 'Vertical file diff' },
       { 'dh / ds', 'Horizontal file diff' },
       { 'D', 'Entire PR in Diffview' },
-      { '<CR>', 'Toggle section / open target' },
+      { '<CR>', 'Toggle section / open target or CI details' },
       { 'gf', 'Open worktree file' },
       { 'gq', 'Changed files in quickfix' },
       { 'gD', 'Diff display settings' },
@@ -763,8 +785,17 @@ local function attach(s)
       vim.cmd('normal! \27'); new_comment(first, last, destination)
     end, { buffer = b, silent = true, desc = 'Comment on selected PR diff lines' })
   end
+  local ci_detail_key = ((vim.g.git_ci or {}).keys or {}).details
+  if ci_detail_key and ci_detail_key ~= '<CR>' then
+    map(ci_detail_key, function()
+      local check = M.check_at(b, vim.fn.line('.'))
+      if check then require('git.features.ci.view').open(s.ctx, check) end
+    end, 'Open selected CI check details', true)
+  end
   map('<CR>', function()
     if s.ci_section and vim.fn.line('.') == s.ci_section.first then toggle(s, 'toggle'); return end
+    local check = M.check_at(b, vim.fn.line('.'))
+    if check and (ci_detail_key == nil or ci_detail_key == '<CR>') then require('git.features.ci.view').open(s.ctx, check); return end
     local link = link_at(s)
     if link then vim.ui.open(link); return end
     local commit = M.commit_at(b, vim.fn.line('.'))

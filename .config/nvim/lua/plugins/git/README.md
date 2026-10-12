@@ -355,7 +355,7 @@ unchanged comparisons reuse the already loaded history.
 | `]C` / `[C` | Next/previous comment position and preview; counts supported |
 | `d` / `dv`, `dh` | Vertical / horizontal two-revision file diff |
 | `D` | Entire PR in Diffview |
-| `<CR>` | Toggle the CI/Commits/Changes heading; open commit details, a marked thread, or the PR head file |
+| `<CR>` | Toggle the CI/Commits/Changes heading; open CI details, commit details, a marked thread, or the PR head file |
 | `gk` | Preview conversation near cursor; repeat to focus the popup |
 | `gc` | Read/reply to threads on the selected file or marked diff line |
 | `gC` | New PR conversation comment, immediate diff comment, or pending review comment |
@@ -634,6 +634,85 @@ through `a` in the PR actions menu (`N` / `<Space><Space>`).
 On a marked diff line `gx` opens the comment; elsewhere it
 opens the PR. The `k` and `a` list panels also support `gx`/Enter for the selected
 check or workflow run.
+
+CI result rows open native details with Enter. The CI summary keeps Enter as its
+fold toggle and `gx` as its PR-checks browser target. There is no new check popup;
+`gk` keeps its conversation-preview behavior. `k` in the native PR action menu
+reveals this same result list, preserving edited title/description text.
+
+| CI screen | Key | Action |
+|---|---|---|
+| PR result / repository checks list | Enter | Open the selected check in a normal detail tab |
+| Detail tab | `s` / `v` | Open the selected step log in a horizontal / vertical split |
+| Detail tab | `R` | Refresh that check and discard cached logs; existing logs show an outdated notice |
+| Detail tab | `o` / `gx` | Open its validated web URL |
+| Detail tab | `q` | Close owned CI windows and return to the captured source tab/cursor |
+| Log split | `R` | Retry with fresh download credentials |
+| Log split | `q` | Close only that log window |
+
+Details focus the first failed step. Same-check tabs and same-step log windows
+are reused. Different steps can be opened side by side; normal `/`, yank and
+window commands work in the read-only `log` buffers. Foreign windows added to
+a CI tab survive `q`. Requests are asynchronous and cancelled when their view
+closes; there is no polling, rerun/cancel action or disk log cache.
+
+| Provider | Native details/logs | Fallback |
+|---|---|---|
+| GitHub Actions | Check output/annotations, verified workflow job, steps and zero-based step logs | Older servers may return a clearly labeled **Job log**; unavailable/ambiguous jobs retain description and web link |
+| CircleCI Cloud / configured Server | Verify numbered job, workflow/pipeline and repository/SHA; prefer v3 job steps with per-execution stdout/stderr | OAuth `gh/owner/repo` jobs use v1.1 actions and fresh signed output URLs when v3 is unavailable; unsupported App/server responses retain metadata and web link |
+| Other Check Run / Commit Status | Status, description, available check output and annotations | Web link; native logs are unavailable |
+
+GitHub uses existing `gh` authentication (`gh auth status`). Private Actions logs
+require repository read access and Actions read permission. CircleCI uses the
+`CIRCLE_TOKEN` environment variable and `curl`; no prompt asks for a token.
+Without it, check rows and web navigation still work. V2/v1.1 requests use
+Circle-Token, v3 uses Bearer authorization; signed output downloads receive no
+API token. A job is never selected by name alone: duplicate names, reruns and
+parallel executions retain separate identifiers. Status histories reduce to the
+latest entry for each context during API enrichment. Opening details keeps the
+source PR's captured head SHA; refresh the PR first to inspect a newly pushed head.
+
+Optional configuration (set before opening a PR/detail buffer):
+
+```lua
+vim.g.git_ci = {
+  circleci_host = 'circleci.com', -- bare HTTPS Server hostname when applicable
+  timeout_ms = 30000,
+  max_log_bytes = 2 * 1024 * 1024,
+  -- log_hosts = { 'logs.example.com' }, -- extra trusted signed-output hosts
+  -- github_api_version = '2022-11-28', -- override server-specific negotiation
+  keys = {
+    details = '<CR>', -- PR result entry; false restores browser Enter
+    horizontal = 's', vertical = 'v', refresh = 'R', browser = 'o', close = 'q',
+  },
+}
+```
+
+Detail/log action keys can be disabled with `false` or remapped here. GitHub
+Cloud defaults to API version 2026-03-10; Enterprise defaults to 2022-11-28.
+HTTPS URLs are validated, web URLs omit query credentials, and CircleCI download
+hosts are limited to the configured host, CircleCI/AWS storage or explicit
+`log_hosts`. Redirects on CircleCI downloads are rejected. Auth failures,
+permissions, missing/expired output, rate limits, malformed JSON and timeouts
+have retry/fallback messages without raw headers or signed URLs. ANSI/control
+sequences and configured environment-token values are removed from displayed
+output. GitHub log buffers truncate at the byte limit; CircleCI downloads over
+that limit stop with a size-limit message.
+
+Provider and lifecycle checks:
+`python3 tests/run.py ci_model ci_providers ci_circleci ci_transport ci_view -j 4`.
+Fixtures cover nonmatching check/job IDs, rerun attempts, pagination, mixed
+outcomes, latest statuses, CircleCI OAuth/App wire formats and parallel indexes,
+expired signatures, tab/split ownership, drafts, cache invalidation and late
+results. CircleCI API response shapes are checked against the
+[official v3 reference](https://circleci.com/docs/api/v3) and
+[circleci-cli v1.5.0 job client](https://github.com/CircleCI-Public/circleci-cli/blob/v1.5.0/internal/apiclient/job.go).
+A live public GitHub Actions job also verified job/check association and the
+clearly labeled whole-job fallback when the step endpoint returns 404, including
+current gh CLI ANSI-output opt-in and display sanitization.
+CircleCI authenticated production jobs and older/private Enterprise servers
+still need environment-specific validation; unsupported identity/response shapes
+fail to metadata and web navigation instead of substituting another job.
 
 `:GitPrCreate` is the same **Create default PR** route as `N C`: prefill the
 title with the latest commit subject and let you edit only that field, publish the current branch with
@@ -1352,6 +1431,11 @@ history scope/focus/rename following against behaviors verified with Fugitive.
 - `commit_actions.lua`: message editing, view restoration and discard confirmation.
 - `commit_notes.lua`: optional Notes identity and row mapping.
 - `change_display.lua`: file rows and statistics shared with status.
+- `ci/model.lua`: normalized check identities/outcomes and URL validation.
+- `ci/transport.lua`: bounded, redacted read-only gh/curl requests and pagination.
+- `ci/service.lua`: exact check resolution, annotations and provider dispatch.
+- `ci/github_actions.lua`, `ci/circleci.lua`: verified jobs, steps and logs.
+- `ci/view.lua`: detail tabs, log splits, per-view session cache and cancellation.
 - `panel_keys.lua`: normal key migration, contextual identifiers/help, and ordinary action choosers.
 
 Run all standalone Lua and TUI checks from this directory with

@@ -21,7 +21,7 @@ local function outcome(state)
 end
 function M.build(model, expanded, checks_expanded)
   local pr, ctx = model.pr, model.ctx
-  local result = { lines = {}, highlights = {}, links = {} }
+  local result = { lines = {}, highlights = {}, links = {}, ci_rows = {} }
   local function row(chunks, url)
     local text, at = '', #result.lines + 1
     for _, chunk in ipairs(chunks) do
@@ -114,15 +114,16 @@ function M.build(model, expanded, checks_expanded)
       if hash and hash ~= model.hash then result.lines[at] = result.lines[at] .. ' · earlier commit ' .. hash:sub(1, 7) end
     end
     local summary_row = row(github.summary_chunks(pr), pr.url .. '/checks')
-    local checks = checks_expanded and github.checks(pr) or {}
-    table.sort(checks, function(a, b)
-      local _, _, x = outcome(a.result); local _, _, y = outcome(b.result)
-      return x < y or (x == y and a.label < b.label)
-    end)
+    local ci = require('git.features.ci.model')
+    local checks = checks_expanded and ci.rollup(pr, ctx) or {}
     for _, check in ipairs(checks) do
-      local icon, group = outcome(check.result)
-      row({ { icon .. ' ', group }, { check.label, check.result == 'SUCCESS' and 'GitPrPositive' or 'Normal' } },
+      local icon, group = ci.symbol(check.state)
+      local label = check.name .. ': ' .. check.state
+      local at = row({ { icon .. ' ', group }, { label, check.bucket == 'pass' and 'GitPrPositive' or 'Normal' },
+        { ' · ' .. ({ github_actions = 'GitHub Actions', circleci = 'CircleCI', generic = 'Other CI' })[check.provider]
+          .. ' · ' .. ci.duration(check.started_at, check.completed_at), 'Comment' } },
         check.url or pr.url .. '/checks')
+      result.ci_rows[at] = check
     end
     result.ci_section = { first = summary_row, last = #result.lines }
   end
