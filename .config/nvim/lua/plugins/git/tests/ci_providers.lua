@@ -19,6 +19,11 @@ assert(log.scope == 'Step log' and log.text == 'FAIL\nExpected 200\n' and f.coun
 f.responses['repos/org/repo/actions/jobs/12/steps/1/logs'] = { code = 1, stderr = 'Not Found (HTTP 404)' }
 log = run(function() return service.log(ctx, details.check, details.steps[2]) end)
 assert(log.scope:find('Job log') and log.text:find('FULL JOB'))
+assert(log.scope == 'Job log · all steps' and log.job_wide)
+f.responses['repos/org/repo/actions/jobs/12/steps/0/logs'] = { code = 1, stderr = 'Not Found (HTTP 404)' }
+f.responses['repos/org/repo/actions/jobs/12/logs'] = { raw = '\239\187\191FULL JOB\n' }
+local setup_log = run(function() return service.log(ctx, details.check, details.steps[1]) end)
+assert(setup_log.text == log.text and setup_log.text:sub(1, 3) ~= '\239\187\191', 'Fallbacks share the full job body, with BOM removed')
 f.ci_job.check_run_url = 'https://ghe.example.test/api/v3/repos/org/repo/check-runs/12'
 details = run(function() return service.details(ctx, seed) end)
 assert(#details.steps == 0 and details.message:find('identity mismatch'), 'Equal check/job IDs must not be assumed')

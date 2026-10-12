@@ -37,6 +37,8 @@ assert(not ok and err:find('302') and not err:find('signature'), 'Redirects must
 local saved_token = vim.env.CIRCLE_TOKEN; vim.env.CIRCLE_TOKEN = 'TEST$TOKEN.*literal'
 assert(transport.clean('a TEST$TOKEN.*literal b') == 'a [redacted] b')
 assert(transport.clean('x\27]8;;https://hidden.example\7y\27]8;;\7\0z') == 'xyz')
+assert(transport.clean('\239\187\1912026-08-02T12:05:39Z runner\r\n') == '2026-08-02T12:05:39Z runner\n', 'Leading UTF-8 BOM should be removed')
+assert(transport.clean('body \239\187\191text') == 'body \239\187\191text', 'Only a stream-leading BOM should be removed')
 vim.env.CIRCLE_TOKEN = saved_token
 vim.g.git_ci = nil; f.cleanup()
 print('PASS: gh ANSI opt-in/reuse, bounded log output, strict download hosts, redirect rejection and token/OSC/control sanitization')

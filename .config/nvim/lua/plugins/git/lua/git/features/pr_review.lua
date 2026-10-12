@@ -34,6 +34,8 @@ function M.new_comment(model, target, opts)
     local at = not general and target or nil
     local label = general and 'PR comment' or review and 'Review draft comment' or 'Diff comment'
     return composer.open({ ctx = ctx, title = label,
+      history = general and model.conversation and model.conversation.entries or nil,
+      viewer = model.review and model.review.viewer or model.viewed and model.viewed.viewer,
       prefix = { 'PR #' .. ctx.number .. ' · ' .. (at and location(at) or 'Conversation'),
         '', at and ('Head: ' .. hash:sub(1, 7)) or ctx.url },
       action = review and 'save' or 'post',

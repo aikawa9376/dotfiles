@@ -150,12 +150,25 @@ function M.load(ctx, opts)
         ('repos/%s/pulls/%d/comments?per_page=100'):format(ctx.repo, ctx.number) })
     end,
     function() return require('git.features.pr_thread_status').load(ctx) end,
+    function() return require('git.features.pr_viewed_state').load(ctx) end,
+    function() return require('git.features.pr_conversation').load(ctx) end,
   })
   if not reads[1].ok then error(reads[1].value, 0) end
   local model = reads[1].value
+  -- Cached Git entries must not retain old viewer state after a failed read.
+  for _, entry in ipairs(model.entries) do entry.viewed_state = nil end
   -- Comment permissions/network failures must not hide otherwise readable diffs.
   local review_ok, review = reads[2].ok, reads[2].value
   model.review, model.review_error = review_ok and review or nil, not review_ok and tostring(review) or nil
+  local conversation_ok, conversation = reads[6].ok, reads[6].value
+  local errors = {}
+  if not conversation_ok then errors[#errors + 1] = 'PR comments unavailable: ' .. tostring(conversation) end
+  if not review_ok then errors[#errors + 1] = 'Review summaries unavailable: ' .. tostring(review) end
+  model.conversation = require('git.features.pr_conversation').build(ctx,
+    conversation_ok and conversation or {}, review_ok and review.reviews or {}, errors)
+  local viewed_ok, viewed = reads[5].ok, reads[5].value
+  if viewed_ok then viewed_ok, viewed = pcall(require('git.features.pr_viewed_state').apply, model, viewed) end
+  if not viewed_ok then model.viewed_error = tostring(viewed) end
   local ok, pages = reads[3].ok, reads[3].value
   local pending = model.review and model.review.pending
   local grouped, threads = pcall(M.threads, ctx, pending, model.hash, ok and pages or {})

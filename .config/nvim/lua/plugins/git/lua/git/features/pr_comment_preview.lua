@@ -33,7 +33,7 @@ function M.show(opts)
     width = width, height = height, row = above and -1 or 1, anchor = above and 'SW' or 'NW',
     col = math.min(0, vim.o.columns - screen.col - width - 2), title = {
       { ' PR conversation ', 'Title' },
-      { '· gc reply · gR toggle · gk focus · ]C/[C move · q ', 'GitPrCommentInstruction' },
+      { '· gc reply · gR toggle · gk focus · ]t/[t move · q ', 'GitPrCommentInstruction' },
     } })
   vim.wo[win].wrap, vim.wo[win].linebreak = true, true
   vim.api.nvim_win_set_cursor(win, { #lines, 0 })
@@ -52,7 +52,7 @@ function M.show(opts)
     { buffer = buf, silent = true, desc = 'Reply to PR conversation' })
   vim.keymap.set('n', 'gR', function() if source() then M.close(opts.buf); opts.resolve() end end,
     { buffer = buf, silent = true, desc = 'Resolve / reopen PR conversation' })
-  for key, direction in pairs({ [']C'] = 1, ['[C'] = -1 }) do
+  for key, direction in pairs({ [']t'] = 1, ['[t'] = -1, [']C'] = 1, ['[C'] = -1 }) do
     vim.keymap.set('n', key, function()
       local count = vim.v.count1
       if source() then M.close(opts.buf); opts.navigate(direction, count) end

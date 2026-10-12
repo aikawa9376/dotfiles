@@ -94,21 +94,24 @@ function M.match(selected, candidates)
   if #matches == 1 then return matches[1] end
   return nil, #matches > 1 and 'Ambiguous check identity; use gx to inspect it on the web.' or 'Selected check could not be identified for this commit; use gx to inspect it on the web.'
 end
+function M.timestamp(value)
+  if type(value) ~= 'string' then return nil end
+  local y, m, d, h, min, sec, suffix = value:match('^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)(.*)$')
+  if not y then return nil end
+  local fraction = tonumber('0.' .. (suffix:match('^%.(%d+)') or '0'))
+  suffix = suffix:gsub('^%.%d+', '')
+  if suffix ~= 'Z' and not suffix:match('^[+-]%d%d:%d%d$') then return nil end
+  local local_time = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = tonumber(h), min = tonumber(min), sec = tonumber(sec), isdst = false })
+  local utc_table = os.date('!*t', local_time); utc_table.isdst = false
+  local utc = local_time + os.difftime(local_time, os.time(utc_table))
+  local sign, oh, om = suffix:match('([+-])(%d%d):(%d%d)$')
+  if sign then utc = utc - (sign == '+' and 1 or -1) * (tonumber(oh) * 3600 + tonumber(om) * 60) end
+  return utc + fraction
+end
 function M.duration(started, completed)
-  local function timestamp(value)
-    if type(value) ~= 'string' then return nil end
-    local y, m, d, h, min, sec, suffix = value:match('^(%d%d%d%d)%-(%d%d)%-(%d%d)T(%d%d):(%d%d):(%d%d)(.*)$')
-    if not y then return nil end
-    local local_time = os.time({ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = tonumber(h), min = tonumber(min), sec = tonumber(sec), isdst = false })
-    local utc_table = os.date('!*t', local_time); utc_table.isdst = false
-    local utc = local_time + os.difftime(local_time, os.time(utc_table))
-    local sign, oh, om = suffix:match('([+-])(%d%d):(%d%d)$')
-    if sign then utc = utc - (sign == '+' and 1 or -1) * (tonumber(oh) * 3600 + tonumber(om) * 60) end
-    return utc
-  end
-  local first, last = timestamp(started), timestamp(completed)
+  local first, last = M.timestamp(started), M.timestamp(completed)
   if not first then return '—' end
-  local seconds = math.max(0, (last or os.time()) - first)
+  local seconds = math.floor(math.max(0, (last or os.time()) - first))
   return seconds < 60 and ('%ds'):format(seconds) or ('%dm %ds'):format(math.floor(seconds / 60), seconds % 60)
 end
 return M

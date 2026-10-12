@@ -6,7 +6,7 @@ local allow_escape = false
 function M.config() return vim.g.git_ci or {} end
 function M.limit() return math.max(1024, tonumber(M.config().max_log_bytes) or 2 * 1024 * 1024) end
 function M.clean(value)
-  value = tostring(value or ''):gsub('\r\n', '\n'):gsub('\r', '\n')
+  value = tostring(value or ''):gsub('^\239\187\191', ''):gsub('\r\n', '\n'):gsub('\r', '\n')
   value = value:gsub('\27%][^\7\27]*\7', ''):gsub('\27%][^\27]*\27\\', '')
     :gsub('\27%[[0-?]*[ -/]*[@-~]', ''):gsub('\27[ -/]*[@-~]', '')
   for _, name in ipairs({ 'CIRCLE_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN' }) do

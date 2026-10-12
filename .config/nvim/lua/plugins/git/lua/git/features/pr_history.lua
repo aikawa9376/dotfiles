@@ -9,6 +9,7 @@ function M.buffer(prefix, comments, viewer)
     local author = comment.user and comment.user.login or 'unknown'
     lines[#lines + 1] = '@' .. author .. (author == viewer and ' · you' or '')
       .. (comment.pending and ' [pending]' or '') .. ' · ' .. (comment.created_at or '')
+      .. (comment.review_state and (' · Review ' .. comment.review_state) or '')
     local body = vim.split(comment.body or '', '\n', { plain = true })
     while #body > 0 and body[#body]:match('^%s*$') do table.remove(body) end
     vim.list_extend(lines, body)

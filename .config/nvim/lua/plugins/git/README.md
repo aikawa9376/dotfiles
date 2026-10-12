@@ -318,6 +318,7 @@ listing, Issues and notifications; those remain in the ordinary repository menu.
 | `c` | New comment destination menu (same as `gC`) |
 | `r` | Native review / Resolve menu (same as `gr`; `R` inside resolves/reopens a thread) |
 | `t` / `v` | Read/reply to threads / preview conversation at the source row |
+| `p` | Reveal and read the PR-wide Conversation section |
 | `f` / `D` / `s` | Compare selected file / entire PR in Diffview / diff display settings |
 | `E` | Edit title / description |
 | `o` / `>` / `<` | Toggle / expand / collapse the source section or file diff |
@@ -348,16 +349,24 @@ unchanged comparisons reuse the already loaded history.
 | `cw` / `A` | Move to the editable title and description |
 | `:w` | Save title and description to GitHub |
 | `<C-s>` | Save title and description to GitHub |
-| `o` / `=` / `<Tab>` | Toggle header details, CI results, Commits, Changes, or the selected file's unified diff |
+| `o` / `=` / `<Tab>` | Toggle header details, CI results, Conversation, Commits, Changes, or the selected file's unified diff |
 | `>` / `<` | Expand/collapse the selected section or file; Visual selection supports multiple files |
+| `gu` | Go to the changed-files section |
+| `gp` | Go to the commits section |
+| `gh` | Go to the Repo header |
+| `gU` | Go to the CI section (UnitTest); `gc` keeps its comment action |
+| `gd` | Go to Conversation (Discussion) |
 | `]m` / `[m`, `]]` / `[[` | Next/previous file; move and expand |
 | `J` / `K`, `]c` / `[c` | Next/previous diff hunk |
-| `]C` / `[C` | Next/previous comment position and preview; counts supported |
+| `]t` / `[t` (also `]C` / `[C`) | Next/previous comment position and preview; counts supported |
+| `gF` | Toggle the selected file's Viewed state on GitHub |
+| `]u` / `[u` | Next/previous unviewed file; counts supported |
 | `d` / `dv`, `dh` | Vertical / horizontal two-revision file diff |
 | `D` | Entire PR in Diffview |
 | `<CR>` | Toggle the CI/Commits/Changes heading; open CI details, commit details, a marked thread, or the PR head file |
 | `gk` | Preview conversation near cursor; repeat to focus the popup |
 | `gc` | Read/reply to threads on the selected file or marked diff line |
+| `gc` / Enter inside Conversation | Read PR-wide history and write a PR comment; Enter on its heading toggles the section |
 | `gC` | New PR conversation comment, immediate diff comment, or pending review comment |
 | `gcn` / `gcr` / `gcp` | Open a contextual comment / review draft / PR conversation input directly |
 | Visual `gC` | Comment on a continuous range of diff lines on one side |
@@ -374,7 +383,49 @@ The `?` guide groups editing, navigation, comparisons, review and panel actions.
 Each action has its own row with aligned key aliases; Visual keys have a separate
 section, using the same colored, wrapping help popup as the other panels.
 
-Keep a blank line between the title and description. Normal editing keys retain
+Section jumps focus the first item of an expanded section or its heading when
+collapsed/empty, preserving folds and unsaved text. `gU` reveals a hidden Repo
+header while retaining CI's own fold state. These keys also navigate from the
+editable draft; they do not fetch patches or refresh GitHub.
+
+The editable PR title uses `GitPrTitle` (light cyan `#8fdbed` and bold in the
+dotfiles theme), distinct from the title/description instruction heading.
+Only its text uses this style. The title highlight follows edits and header
+folding without inserting display labels
+into the saved metadata or rerendering the panel on every keystroke.
+
+`Conversation (n)` follows the editable description and defaults closed. Open
+it with Enter / `o` / `=` / Tab, or `p` in the PR action menu. It combines
+paginated PR-wide issue comments with public review summaries/results in
+chronological order, showing author, date and review state. Pending/private
+summaries and empty COMMENTED wrappers around file comments are excluded;
+approval/change-request/dismissal results remain visible even without a body.
+File/diff comments stay in their existing Review threads routes and are not
+copied into Conversation. Each item/body row carries its own browser target for
+`gx`, independently of text that resembles a file or section heading.
+
+With configured `render-markdown.nvim` and the `markdown` / `markdown_inline`
+parsers available, the editable description and expanded Conversation bodies
+render Markdown headings, links, tables and code blocks. Each body is parsed
+independently, so an unfinished code fence cannot consume the next comment or
+other sections. The title, instructions, author/date rows and diffs retain
+their own presentation. Description edits and folds update the rendering
+without changing stored text, undo or GitHub save content. The usual
+`:RenderMarkdown toggle` applies; without the plugin/parsers, text stays plain.
+The dotfiles renderer configuration adds `gitpr` support and suppresses its
+extra signs to preserve the PR fold gutter.
+
+`gc` or Enter on a Conversation item opens the normal PR comment composer with
+immutable history; `gcp` also includes this history. The text input posts only
+its draft through the existing PR-comment route. Read-only Conversation text
+never enters the saved title/description, and its independent fold survives
+refresh and other section toggles. `gk` there reveals the inline conversation;
+`gR` does not resolve unrelated file threads. Read failures show an incomplete
+section with available entries and source-specific errors, keeping diffs and
+unsaved metadata usable. This is a discussion/review-summary list, not a full
+timeline of pushes, labels, CI events or all other GitHub activity.
+
+Keep a blank line between the title and description. Other normal editing keys retain
 their meaning inside that region. The other metadata and diffs are read-only
 when saving: protected edits must be undone. Failed saves preserve the draft;
 saving checks that the remote title/description still matches the loaded version.
@@ -432,7 +483,7 @@ file's diff. Its heading uses the same gutter marker and `o` / `=` / `<Tab>` /
 `<CR>` controls; `>` / `<` opens/closes that section. Section folding retains
 individual file choices, draft edits and the review-thread footer, and performs
 no Git/GitHub requests. Refresh preserves the section state. `i`, file/hunk
-navigation and `]C` / `[C` reveal a closed Changes section before moving.
+navigation and `]t` / `[t` reveal a closed Changes section before moving.
 Opening Changes does not expand every file; select file rows with Visual `>`
 to expand multiple diffs together.
 
@@ -459,7 +510,26 @@ Receipts persist locally per GitHub host/repository/PR/viewer across reopening
 and restarting Neovim. New replies or changes to previously read comments become
 unread on refresh. This state is independent of GitHub notifications and Octo.
 
-`]C` / `[C` lazily expand files and jump to comment anchors. A range thread is
+File review progress uses GitHub's Viewed state. Only a viewed file's path is
+dimmed with `GitPrViewedFile`; change letters, file icons, diff syntax and
+comment/draft/resolution colors remain visible. The Changes heading shows
+`Viewed n/total`. `gF` on a file header or any of its diff lines toggles that
+file on GitHub. Opening/expanding a diff never marks it viewed. `]u` / `[u`
+skip viewed files, include files changed since their last review, support
+counts, and stop at the first/last remaining file without wrapping or fetching
+patches. They reveal a collapsed Changes section as needed.
+
+Viewed status is paginated and reread with PR refresh, so browser/Octo updates
+and GitHub's `DISMISSED` state restore the ordinary filename color. The toggle
+rechecks the PR revision, viewer and file state, then displays only confirmed
+API results. Repeated keys during an update do not duplicate it. Failures leave
+diffs and unsaved metadata usable; unavailable reads show `Viewed unavailable`
+and disable Viewed operations until a successful refresh. No per-file badge or
+local Viewed cache is added. `gV` retains the configured pasted-range selection;
+`]c` / `[c` retain hunk navigation. Comment navigation also works with `]t` /
+`[t` inside the focused conversation preview; `]C` / `[C` remain aliases.
+
+`]t` / `[t` (also `]C` / `[C`) lazily expand files and jump to comment anchors. A range thread is
 one target; threads sharing a line share one preview. File/outdated comments use
 their file header, and missing-file comments remain accessible at the summary.
 Movement stops at the first/last target without wrapping. Navigation opens a
@@ -643,22 +713,44 @@ reveals this same result list, preserving edited title/description text.
 | CI screen | Key | Action |
 |---|---|---|
 | PR result / repository checks list | Enter | Open the selected check in a normal detail tab |
-| Detail tab | `s` / `v` | Open the selected step log in a horizontal / vertical split |
+| Detail tab | Enter / `s` | Open the selected step log in a vertical / horizontal split |
 | Detail tab | `R` | Refresh that check and discard cached logs; existing logs show an outdated notice |
 | Detail tab | `o` / `gx` | Open its validated web URL |
 | Detail tab | `q` | Close owned CI windows and return to the captured source tab/cursor |
+| Log split | `gf` | Open the source location in this diagnostic block |
 | Log split | `R` | Retry with fresh download credentials |
 | Log split | `q` | Close only that log window |
 
-Details focus the first failed step. Same-check tabs and same-step log windows
+Details focus the first failed step. `v` keeps normal Visual selection. Titles
+and section headings are bold; metadata labels, state badges, step names,
+timings, links and annotation locations have separate highlights. Failed step
+names use bold red text. Key hints follow configured action keys. Same-check tabs and same-step log windows
 are reused. Different steps can be opened side by side; normal `/`, yank and
 window commands work in the read-only `log` buffers. Foreign windows added to
 a CI tab survive `q`. Requests are asynchronous and cancelled when their view
 closes; there is no polling, rerun/cancel action or disk log cache.
 
+Log `gf` recognizes `path:line:column` and `path:line` against the captured
+repository root, independently of the current directory. Compiler/LuaLS
+`warning`/`error` blocks with an `-->` location also work from their message,
+blank separator and numbered code excerpt rows, including timestamped Actions
+logs. Other paragraphs work when they contain one unambiguous location.
+The source uses one reusable source tab per worktree root across CI checks and
+different files, while an already displayed target is focused directly. Source
+tabs use ordinary editor defaults (numbers, wrapping, status/sign columns and
+folding), preserving the log. File switches retain unsaved buffers, even with
+`nohidden`. A closed or user-repurposed source window is preserved/replaced as
+appropriate; failed loads restore the previous buffer or remove the newly
+created tab. Existing worktree files are editable when a configured
+remote matches the CI repository. Foreign repositories and missing files open
+a read-only Git object at the captured CI commit; a same-named file in an
+unrelated worktree is not used. Missing objects, ambiguous blocks and paths outside the
+repository do not open empty buffers. Runner-specific absolute path remapping
+and Quickfix population are not implemented.
+
 | Provider | Native details/logs | Fallback |
 |---|---|---|
-| GitHub Actions | Check output/annotations, verified workflow job, steps and zero-based step logs | Older servers may return a clearly labeled **Job log**; unavailable/ambiguous jobs retain description and web link |
+| GitHub Actions | Check output/annotations, verified workflow job, steps and zero-based step logs | A step-endpoint 404 returns **Job log · all steps**; unavailable/ambiguous jobs retain description and web link |
 | CircleCI Cloud / configured Server | Verify numbered job, workflow/pipeline and repository/SHA; prefer v3 job steps with per-execution stdout/stderr | OAuth `gh/owner/repo` jobs use v1.1 actions and fresh signed output URLs when v3 is unavailable; unsupported App/server responses retain metadata and web link |
 | Other Check Run / Commit Status | Status, description, available check output and annotations | Web link; native logs are unavailable |
 
@@ -683,7 +775,7 @@ vim.g.git_ci = {
   -- github_api_version = '2022-11-28', -- override server-specific negotiation
   keys = {
     details = '<CR>', -- PR result entry; false restores browser Enter
-    horizontal = 's', vertical = 'v', refresh = 'R', browser = 'o', close = 'q',
+    horizontal = 's', vertical = '<CR>', source = 'gf', refresh = 'R', browser = 'o', close = 'q',
   },
 }
 ```
@@ -696,7 +788,11 @@ hosts are limited to the configured host, CircleCI/AWS storage or explicit
 permissions, missing/expired output, rate limits, malformed JSON and timeouts
 have retry/fallback messages without raw headers or signed URLs. ANSI/control
 sequences and configured environment-token values are removed from displayed
-output. GitHub log buffers truncate at the byte limit; CircleCI downloads over
+output, including a stream-leading UTF-8 BOM. A whole-job fallback uses
+**Job log · all steps** and names the requested step as **Selected step**.
+Step and whole-job logs open at the start of the body, including after loading,
+retry and cached reopen; completion never takes focus from another window.
+GitHub log buffers truncate at the byte limit; CircleCI downloads over
 that limit stop with a size-limit message.
 
 Provider and lifecycle checks:

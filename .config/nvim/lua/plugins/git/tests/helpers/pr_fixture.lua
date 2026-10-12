@@ -51,7 +51,7 @@ function M.new()
   vim.system = function(argv, opts, callback)
     if argv[1] ~= 'gh' then return system(argv, opts, callback) end
     f.calls[#f.calls + 1] = { argv = vim.deepcopy(argv), opts = vim.deepcopy(opts) }
-    local data, raw, error_code
+    local data, raw, error_code, error_stderr
     if argv[2] == 'repo' then data = { nameWithOwner = 'org/repo', url = 'https://ghe.example.test/org/repo', defaultBranchRef = { name = 'main' } }
     elseif argv[2] == 'pr' and argv[3] == 'view' then
       -- Real gh rejects --repo without a number/URL/branch selector.
@@ -102,6 +102,9 @@ function M.new()
           f.reviews[#f.reviews + 1] = data
           if payload.event then f.last_event = payload.event end
         end
+      elseif path == 'repos/org/repo/issues/7/comments' and method == 'GET' then
+        if f.discussion_error then error_code = 1; raw = ''; error_stderr = 'Discussion read failed'
+        else data = vim.deepcopy(f.discussion_pages or { f.discussion }) end
       elseif id and method == 'DELETE' then
         data = review
         f.reviews = vim.tbl_filter(function(item) return item.id ~= id end, f.reviews)
@@ -122,7 +125,37 @@ function M.new()
         end
         data = { comments }
       elseif path == 'graphql' then
-        if not payload.variables.input then
+        if payload.query:find('viewerViewedState', 1, true) then
+          if f.viewed_error then data = { errors = { { message = 'Viewed status rejected' } } }
+          else
+            local nodes = {}
+            local paths = f.git({ 'diff', '--name-only', '-z', f.pr.baseRefOid .. '...' .. f.pr.headRefOid })
+            for _, file in ipairs(vim.split(paths, '\0', { plain = true, trimempty = true })) do
+              nodes[#nodes + 1] = { path = file, viewerViewedState = (f.viewed_states or {})[file] or 'UNVIEWED' }
+            end
+            local pages = f.viewed_pages or { nodes }
+            local page = payload.variables.cursor and tonumber(payload.variables.cursor) or 1
+            data = { data = { viewer = { login = f.viewed_viewer or f.viewer }, repository = { pullRequest = {
+              id = f.viewed_id or 'PR7', headRefOid = f.viewed_head or f.pr.headRefOid, baseRefOid = f.viewed_base or f.pr.baseRefOid,
+              files = { nodes = pages[page], pageInfo = f.viewed_page_info or { hasNextPage = page < #pages, endCursor = tostring(page + 1) } },
+            } } } }
+          end
+        elseif payload.variables.input and payload.variables.input.pullRequestId then
+          if f.viewed_mutation_error then data = { errors = { { message = 'Viewed update rejected' } } }
+          else
+            local input = payload.variables.input
+            assert(input.pullRequestId == (f.viewed_id or 'PR7'), 'Invalid Viewed PR ID')
+            local action = payload.query:find('unmarkFileAsViewed', 1, true) and 'unmarkFileAsViewed' or 'markFileAsViewed'
+            f.viewed_states = f.viewed_states or {}
+            f.viewed_states[input.path] = action == 'markFileAsViewed' and 'VIEWED' or 'UNVIEWED'
+            for _, page in ipairs(f.viewed_pages or {}) do for _, file in ipairs(page) do
+              if file.path == input.path then file.viewerViewedState = f.viewed_states[input.path] end
+            end end
+            f.viewed_writes = (f.viewed_writes or 0) + 1
+            data = { data = { [action] = { pullRequest = { id = input.pullRequestId,
+              headRefOid = f.viewed_head or f.pr.headRefOid, baseRefOid = f.viewed_base or f.pr.baseRefOid } } } }
+          end
+        elseif not payload.variables.input then
           if f.thread_status_error then data = { errors = { { message = 'Thread status rejected' } } }
           else
             local nodes, indexed = {}, {}
@@ -203,7 +236,7 @@ function M.new()
     else raw = '' end
     local result = { code = error_code or 0,
       stdout = error_code and f.api_error_response or raw or vim.json.encode(data),
-      stderr = error_code and (f.api_error_stderr or 'server rejected write') or '' }
+      stderr = error_code and (error_stderr or f.api_error_stderr or 'server rejected write') or '' }
     local handle = { wait = function() return result end, kill = function() end }
     if callback then vim.defer_fn(function() callback(result) end, f.delay) end
     return handle

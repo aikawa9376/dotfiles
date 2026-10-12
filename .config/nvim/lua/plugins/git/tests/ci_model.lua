@@ -28,4 +28,7 @@ for _, url in ipairs({ 'file:///tmp/file', 'javascript:alert(1)', 'http://exampl
 assert(model.web_url('https://example.test/path?secret=signature#x') == 'https://example.test/path')
 assert(model.duration('2026-10-12T01:00:00Z', '2026-10-12T01:00:42Z') == '42s')
 assert(model.duration('2026-10-12T10:00:00+09:00', '2026-10-12T01:00:42Z') == '42s')
+local instant = model.timestamp('2026-10-12T01:00:00Z')
+assert(math.abs(model.timestamp('2026-10-12T10:00:00.125+09:00') - instant - 0.125) < 0.000001)
+assert(not model.timestamp('2026-10-12T01:00:00Z command') and not model.timestamp('Loading log'))
 print('PASS: stable provider IDs, outcome sorting, latest statuses, ambiguous identities, safe web URLs and timezone durations')

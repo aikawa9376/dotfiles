@@ -65,6 +65,6 @@ function M.log(ctx, check, step)
   -- Older GHES versions lack this endpoint. Never call a whole-job log a step log.
   if not tostring(text):find('HTTP 404', 1, true) then error(text, 0) end
   local full, cut = transport.github(ctx, base .. '/logs', true)
-  return { text = full, truncated = cut, scope = 'Job log (step endpoint unavailable)' }
+  return { text = full, truncated = cut, scope = 'Job log · all steps', job_wide = true }
 end
 return M

@@ -46,7 +46,7 @@ function M.setup(opts)
       target_win = buf and vim.fn.bufwinid(buf) or -1
     end
     if target_win ~= -1 and vim.api.nvim_win_is_valid(target_win) then
-      vim.api.nvim_set_option_value('wrap', false, { win = target_win })
+    vim.api.nvim_set_option_value('wrap', false, { win = target_win, scope = 'local' })
     end
   end
 

@@ -30,6 +30,8 @@ for _, line in ipairs(lines) do
   end
 end
 assert(entries >= 20 and seen['gc'] and seen['O'] and seen['i'] and seen[':w'] and seen['<C-s>'], 'PR key guide lost actions')
+for _, key in ipairs({ 'gu', 'gp', 'gh', 'gU', 'gd' }) do assert(seen[key], 'PR key guide lost section navigation: ' .. key) end
+for _, key in ipairs({ 'gF', ']u / [u', ']t / [t' }) do assert(seen[key], 'PR key guide lost review navigation: ' .. key) end
 local colored = {}
 local aliases_colored = false
 for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(help, vim.api.nvim_create_namespace('git_help'), 0, -1, { details = true })) do

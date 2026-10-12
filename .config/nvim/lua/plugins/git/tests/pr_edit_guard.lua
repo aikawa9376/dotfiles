@@ -7,8 +7,20 @@ local function press(keys)
 end
 local function contents() return vim.api.nvim_buf_get_lines(ui.buf, 0, -1, false) end
 local function settle() vim.wait(30, function() return false end, 5) end
+dofile(plugin .. '/../../config/colorScheme.lua')
+vim.api.nvim_exec_autocmds('ColorScheme', { pattern = 'git-test' })
+local function title_style(value)
+  settle()
+  local row = ui.row(value)
+  local marks = vim.api.nvim_buf_get_extmarks(ui.buf, vim.api.nvim_create_namespace('git_pr_title'), 0, -1, { details = true })
+  assert(#marks == 1 and marks[1][2] == row - 1 and marks[1][3] == 0
+    and marks[1][4].end_row == row - 1 and marks[1][4].end_col == #value, 'Title style includes body or misses edited text')
+  local style = vim.api.nvim_get_hl(0, { name = marks[1][4].hl_group })
+  assert(style.bold and style.fg == tonumber('8fdbed', 16), 'Editable title lacks color/bold')
+end
 ui.open(); ui.key('>', ui.row('M file name.txt'))
 ui.wait(function() return pcall(ui.row, '+TWO') end)
+title_style('PR title')
 local original = contents()
 -- Actual native input keys must neither enter Insert mode nor alter a diff.
 for _, key in ipairs({ 'a', 'I', 'gI', '<Insert>', 's', 'S', 'C', 'x', 'X', 'p', 'P' }) do
@@ -21,8 +33,10 @@ end
 vim.api.nvim_win_set_cursor(0, { ui.row('PR title'), 0 }); press('aX<Esc>')
 assert(ui.row('PXR title'))
 press('IY<Esc>'); assert(ui.row('YPXR title'))
+title_style('YPXR title')
 vim.api.nvim_win_set_cursor(0, { ui.row('Second line'), 0 }); press('oNew paragraph<Esc>')
 assert(ui.row('New paragraph') and vim.bo[ui.buf].modified)
+title_style('YPXR title')
 local accepted = contents()
 -- Bypassing a mapping or crossing into a diff from a legal draft row is caught
 -- by the buffer guard. The most recent valid draft must survive unchanged.
@@ -41,6 +55,8 @@ assert(vim.deep_equal(contents(), accepted) and vim.api.nvim_get_mode().mode == 
 -- Rendering/folding is trusted and keeps the draft; navigation remains intact.
 ui.key('<', ui.row('M file name.txt'))
 assert(not pcall(ui.row, '+TWO') and ui.row('YPXR title') and ui.row('New paragraph'))
+ui.key('<', 1); title_style('YPXR title')
+ui.key('>', 1); title_style('YPXR title')
 vim.api.nvim_win_set_cursor(0, { 1, 0 }); press('i')
 ui.wait(function() return require('git.features.pr').entry_at(ui.buf, vim.fn.line('.')) ~= nil end)
 assert(vim.api.nvim_get_mode().mode == 'n')

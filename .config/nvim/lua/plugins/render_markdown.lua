@@ -1,12 +1,15 @@
 return {
   "MeanderingProgrammer/render-markdown.nvim",
-  ft = { 'markdown', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp' },
+  ft = { 'markdown', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr' },
   opts = {
     -- restart_highlighter = true,
     anti_conceal = {
       enabled = false,
     },
-    file_types = { 'markdown', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp' },
+    file_types = { 'markdown', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr' },
+    ignore = function(buf)
+      return vim.bo[buf].filetype == 'gitpr' and vim.b[buf].git_pr_markdown_ranges == nil
+    end,
     heading = {
       sign = false,
       position = "inline",
@@ -59,6 +62,7 @@ return {
         parse = function(ctx)
           local bufnr = ctx and ctx.buf or nil
           local ft = bufnr and vim.bo[bufnr].filetype or ""
+          if ft == 'gitpr' then return require('git.features.pr_markdown').parse(ctx) end
           if ft == "lazyagent" or ft == "lazyagent_acp" then
             return require("lazyagent.render_markdown").parse(ctx)
           end
@@ -73,6 +77,11 @@ return {
     },
     overrides = {
       filetype = {
+        gitpr = {
+          sign = { enabled = false },
+          heading = { sign = false },
+          code = { sign = false },
+        },
         lazyagent = {
           debounce = 300,
           render_modes = { 'n', 't' },

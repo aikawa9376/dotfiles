@@ -36,9 +36,11 @@ assert(model.thread_status.total == 3 and model.threads[3].resolved and model.th
 local cursors = {}
 for _, call in ipairs(f.calls) do if vim.tbl_contains(call.argv, 'graphql') then
   local payload = vim.json.decode(call.opts.stdin)
+  if payload.query:find('reviewThreads', 1, true) then
   assert(payload.query:find('fullDatabaseId', 1, true))
   assert(payload.variables.owner == 'org' and payload.variables.name == 'repo' and payload.variables.number == 7)
   cursors[#cursors + 1] = payload.variables.cursor or 'first'
+  end
 end end
 assert(vim.deep_equal(cursors, { 'first', '2' }))
 for _, item in ipairs(model.threads) do require('git.features.pr_read_state').mark(model.ctx, f.viewer, item.comments) end
