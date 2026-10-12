@@ -207,6 +207,17 @@ return {
           documentation = {
             auto_show = true,
             auto_show_delay_ms = 300,
+            draw = function(opts)
+              opts.default_implementation()
+              local buf = opts.window:get_buf()
+              -- Blink draws before opening the window and reuses its buffer for each item.
+              vim.schedule(function()
+                local win = opts.window:get_win()
+                if win and vim.api.nvim_win_get_buf(win) == buf then
+                  require('render-markdown').render({ buf = buf, win = win })
+                end
+              end)
+            end,
           },
           ghost_text = {
             enabled = true,

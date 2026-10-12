@@ -1,12 +1,14 @@
+local code_padding = { language_pad = 1, left_pad = 1, right_pad = 1, min_width = 40 }
+
 return {
   "MeanderingProgrammer/render-markdown.nvim",
-  ft = { 'markdown', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr' },
+  ft = { 'markdown', 'blink-cmp-documentation', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr' },
   opts = {
     -- restart_highlighter = true,
     anti_conceal = {
       enabled = false,
     },
-    file_types = { 'markdown', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr' },
+    file_types = { 'markdown', 'blink-cmp-documentation', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr' },
     ignore = function(buf)
       return vim.bo[buf].filetype == 'gitpr' and vim.b[buf].git_pr_markdown_ranges == nil
     end,
@@ -18,10 +20,10 @@ return {
       sign = false,
       position = "right",
       width = "block",
-      language_pad = 1,
-      left_pad = 1,
-      right_pad = 1,
-      min_width = 40,
+      language_pad = code_padding.language_pad,
+      left_pad = code_padding.left_pad,
+      right_pad = code_padding.right_pad,
+      min_width = code_padding.min_width,
       above = '▄',
       below = '▀',
       disable_background = { 'diff' },
@@ -76,17 +78,40 @@ return {
       },
     },
     overrides = {
+      buftype = {
+        nofile = {
+          -- LSP floats measure buffer text before virtual padding is rendered.
+          code = {
+            language_pad = 0,
+            left_pad = 0,
+            right_pad = 0,
+            min_width = 0,
+          },
+        },
+      },
       filetype = {
+        ['blink-cmp-documentation'] = {
+          -- Blink already delays item updates; render each completed draw immediately.
+          debounce = 0,
+          win_options = {
+            concealcursor = { rendered = 'nvic' },
+          },
+        },
+        -- Preserve padding in the other scratch views that also use nofile buffers.
+        Avante = { code = code_padding },
+        fzf = { code = code_padding },
         gitpr = {
           sign = { enabled = false },
           heading = { sign = false },
-          code = { sign = false },
+          code = vim.tbl_extend('force', code_padding, { sign = false }),
         },
         lazyagent = {
+          code = code_padding,
           debounce = 300,
           render_modes = { 'n', 't' },
         },
         lazyagent_acp = {
+          code = code_padding,
           debounce = 300,
           render_modes = { 'n', 't' },
         },
@@ -94,6 +119,8 @@ return {
     },
   },
   init = function ()
+    vim.treesitter.language.register('markdown', 'blink-cmp-documentation')
+
     -- H1 ～ H6 のフォアグラウンド（文字色）と背景色の設定
     vim.api.nvim_set_hl(0, "@markup.heading.1.markdown", { fg = "#61afef", bg = "NONE", bold = true })
     vim.api.nvim_set_hl(0, "@markup.heading.2.markdown", { fg = "#e5c07b", bg = "NONE", bold = true })
