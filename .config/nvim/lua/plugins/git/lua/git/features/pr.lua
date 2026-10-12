@@ -732,7 +732,7 @@ local function show_help()
       { 'gp', 'Go to commits' },
       { 'gh', 'Go to header' },
       { 'gU', 'Go to CI (UnitTest)' },
-      { 'gd', 'Go to Conversation (Discussion)' },
+      { 'gco', 'Go to Conversation' },
       { ']u / [u', 'Next / previous unviewed file' },
       { 'o / = / <Tab>', 'Toggle section / file diff' },
       { '> / <', 'Expand / collapse section or files' },
@@ -910,7 +910,7 @@ local function attach(s)
       end, { buffer = b, silent = true, nowait = not vim.tbl_contains({ 'd', 'g', '[', ']', 'gc', 'gr' }, key), desc = description })
     end
   end
-  for key, section in pairs({ gu = 'changes', gp = 'commits', gh = 'header', gU = 'ci', gd = 'conversation' }) do
+  for key, section in pairs({ gu = 'changes', gp = 'commits', gh = 'header', gU = 'ci', gco = 'conversation' }) do
     local target = section
     map(key, function() focus_section(s, target) end, 'Go to PR ' .. target .. ' section')
   end

@@ -355,7 +355,7 @@ unchanged comparisons reuse the already loaded history.
 | `gp` | Go to the commits section |
 | `gh` | Go to the Repo header |
 | `gU` | Go to the CI section (UnitTest); `gc` keeps its comment action |
-| `gd` | Go to Conversation (Discussion) |
+| `gco` | Go to Conversation |
 | `]m` / `[m`, `]]` / `[[` | Next/previous file; move and expand |
 | `J` / `K`, `]c` / `[c` | Next/previous diff hunk |
 | `]t` / `[t` (also `]C` / `[C`) | Next/previous comment position and preview; counts supported |

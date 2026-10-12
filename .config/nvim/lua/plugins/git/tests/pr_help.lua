@@ -30,7 +30,7 @@ for _, line in ipairs(lines) do
   end
 end
 assert(entries >= 20 and seen['gc'] and seen['O'] and seen['i'] and seen[':w'] and seen['<C-s>'], 'PR key guide lost actions')
-for _, key in ipairs({ 'gu', 'gp', 'gh', 'gU', 'gd' }) do assert(seen[key], 'PR key guide lost section navigation: ' .. key) end
+for _, key in ipairs({ 'gu', 'gp', 'gh', 'gU', 'gco' }) do assert(seen[key], 'PR key guide lost section navigation: ' .. key) end
 for _, key in ipairs({ 'gF', ']u / [u', ']t / [t' }) do assert(seen[key], 'PR key guide lost review navigation: ' .. key) end
 local colored = {}
 local aliases_colored = false
