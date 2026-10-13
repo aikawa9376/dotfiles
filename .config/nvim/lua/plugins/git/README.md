@@ -444,7 +444,9 @@ assignees, milestone, labels, reviewers, branches and change totals. Empty
 metadata is omitted rather than showing `No …` placeholders. The Commits row
 includes the snapshot's commit count, changed files, additions/deletions and a
 five-cell green/red diffstat. Requested reviewers and submitted reviewers carry
-state markers; private pending reviews do not appear as submitted reviewers.
+compact name/icon pairs on one `Reviewers:` row: green `✓` for approval, red `✗`
+for changes requested, yellow `◷` for review required, and gray `·` / `⊘` for
+commented / dismissed. Private pending reviews do not appear as submitted reviewers.
 Checks are grouped by outcome with status symbols and exact browser targets.
 The existing `CI: … · Review: … · mergeable` summary remains.
 The first line is `Repo: owner/name [ PR #N ] [STATE]`, followed immediately by

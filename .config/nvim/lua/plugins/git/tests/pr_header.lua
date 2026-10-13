@@ -82,7 +82,7 @@ f.reviews = {
 }
 ui.refresh()
 assert(ui.row('Assignees: assigned') and ui.row('Labels: 日本語, bug') and ui.row('Milestone: Version 1'))
-assert(ui.row('Reviewers: @requested ◷  @reviewer ✓  @team ◷'))
+assert(lines()[ui.row('Reviewers:')] == 'Reviewers: @requested ◷  @reviewer ✓  @team ◷  @viewer ·')
 absent('@private')
 assert(ui.row('Your review:') < ui.row('Your last review:'))
 assert(ui.row('Your last review:') < ui.row('CI:') and ui.row('CI:') < ui.row('test:'))

@@ -14,9 +14,10 @@ end
 local function outcome(state)
   if state == 'SUCCESS' or state == 'APPROVED' then return '✓', 'GitPrPositive', 4 end
   if vim.tbl_contains({ 'FAILURE', 'ERROR', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE', 'STALE', 'CHANGES_REQUESTED' }, state) then
-    return '✗', 'DiagnosticWarn', 1
+    return '✗', 'DiagnosticError', 1
   end
-  if state == 'NEUTRAL' or state == 'SKIPPED' or state == 'COMMENTED' or state == 'DISMISSED' then return '·', 'Comment', 3 end
+  if state == 'DISMISSED' then return '⊘', 'Comment', 3 end
+  if state == 'NEUTRAL' or state == 'SKIPPED' or state == 'COMMENTED' then return '·', 'Comment', 3 end
   return '◷', 'DiagnosticWarn', 2
 end
 function M.build(model, expanded, checks_expanded)
