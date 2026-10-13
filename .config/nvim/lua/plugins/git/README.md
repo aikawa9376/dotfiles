@@ -305,6 +305,7 @@ available through the GitHub menu as an alternative discussion/review UI.
 | `w` | Create and open a separate PR worktree |
 | `k` / `a` | CI checks / GitHub Actions runs |
 | `d` / `m` | Toggle draft/ready / choose a merge method |
+| `x` / `M` | Close/reopen the PR / change labels, assignees and review requests |
 | `i` / `n` | Octo issues / notifications |
 
 In PR status, `<Space><Space>`, `N` and `:GitHub` open a **PR actions** menu.
@@ -321,10 +322,12 @@ listing, Issues and notifications; those remain in the ordinary repository menu.
 | `p` | Reveal and read the PR-wide Conversation section |
 | `f` / `D` / `s` | Compare selected file / entire PR in Diffview / diff display settings |
 | `E` | Edit title / description |
+| `M` | Change labels, assignees and review requests |
 | `o` / `>` / `<` | Toggle / expand / collapse the source section or file diff |
 | `R` / `?` | Refresh PR status / key guide |
 | `k` / `a` | CI checks / GitHub Actions runs |
 | `d` / `m` / `w` | Draft/ready / merge / separate PR worktree |
+| `x` | Close / reopen PR (unavailable for merged PRs) |
 | `b` | Open this PR in the browser |
 | `e` / `O` | Edit/discuss in Octo / resume an Octo review |
 
@@ -372,6 +375,8 @@ unchanged comparisons reuse the already loaded history.
 | Visual `gC` | Comment on a continuous range of diff lines on one side |
 | `gr` | Native review menu: start/resume, migrate, draft comments/summary, resolve, submit or discard |
 | `gr R` / `gR` | Resolve / reopen the selected thread (also `gR` in the focused preview) |
+| `gA` | Selected comment: reactions, edit/delete, or apply a suggested change |
+| `gE` | Change the header field under the cursor; elsewhere open the metadata panel |
 | `gra` / `grm` / `grr` | Open approval / comment review / change request input directly |
 | `O` | Start or resume a review in Octo |
 | `gf` / `gq` | Worktree file / changed files in quickfix |
@@ -443,12 +448,23 @@ The PR header uses Octo-style labeled rows for the repository, author, dates,
 assignees, milestone, labels, reviewers, branches and change totals. Empty
 metadata is omitted rather than showing `No …` placeholders. The Commits row
 includes the snapshot's commit count, changed files, additions/deletions and a
-five-cell green/red diffstat. Requested reviewers and submitted reviewers carry
+five-cell green/red diffstat. Requested reviewers and people who submitted an
+approval, change request or dismissed review carry
 compact name/icon pairs on one `Reviewers:` row: green `✓` for approval, red `✗`
-for changes requested, yellow `◷` for review required, and gray `·` / `⊘` for
-commented / dismissed. Private pending reviews do not appear as submitted reviewers.
+for changes requested, yellow `◷` for review required, and gray `⊘` for
+dismissed. Comment-only participation does not add a reviewer or
+overwrite a previous approval/change request. Explicit requests take precedence
+and show the waiting icon. Private pending reviews do not add reviewers.
 Checks are grouped by outcome with status symbols and exact browser targets.
+`gE` on Labels, Assignees or Reviewers opens a searchable `vim.ui.select`
+picker with current selections marked. Choose an item to add/remove just that
+membership; the picker reopens for additional changes. Select Done or cancel
+to finish. Empty fields can be changed through `gE` elsewhere or `M` in the PR
+actions/repository GitHub menu. Review requests support users and `team:slug`;
+completed review decisions remain visible independently of outstanding requests.
 The existing `CI: … · Review: … · mergeable` summary remains.
+For merged PRs it shows green `merged`, regardless of the mergeability value.
+`checking` indicates an unknown mergeability decision, not merge execution progress.
 The first line is `Repo: owner/name [ PR #N ] [STATE]`, followed immediately by
 the available metadata. Header items align with the other blocks at column zero;
 labels use `GitPrHeaderLabel` (DiagnosticInfo by default, `#7bb8c1` in dotfiles)
@@ -568,6 +584,26 @@ pending comments can use original coordinates only for the displayed revision. P
 replies remain accessible even when their public parent is absent; a failed
 public-comment read does not hide successfully fetched private drafts.
 
+`gA` on a Conversation comment, or a selected comment inside the focused preview
+or composer history, opens the same comment action panel. On file/diff rows it
+first lets you choose among the comments there. Reactions use all eight GitHub
+types; choosing your existing reaction removes it, and choosing an absent one
+adds it. Counts appear below each comment. Own published issue/inline comments
+can be edited or deleted; deletion asks for confirmation. Own submitted review
+summaries can be edited but not deleted. Writes reread the author/body before
+mutation; a stale edit keeps its draft instead of overwriting newer text.
+
+For an inline comment containing a fenced `suggestion`, `gA` then `s` opens a
+diff preview. `l` applies it locally without staging, committing or pushing;
+the worktree must be at the current PR head and the target file must have no
+staged, saved or unsaved changes. Other local edits are preserved. `g` opens a
+commit-message composer; `<C-s>` / `:w` creates a commit directly on GitHub's PR
+head branch, including forks when you have permission. The server checks the
+expected head SHA atomically. This remote route leaves the local checkout alone.
+Current RIGHT-side line/range suggestions, including `suggestion:-N+M` ranges,
+are supported; outdated, LEFT-side, binary and symlink targets are rejected.
+Applying a suggestion does not automatically resolve its conversation.
+
 `gC` opens a destination menu: `p` writes a PR conversation comment, `c` posts a
 diff comment immediately, and `r` saves a private comment to a pending review.
 `gcn`, `gcr` and `gcp` open these inputs directly, including Visual ranges.
@@ -616,9 +652,9 @@ your review state, with the same identity, SHA and pending-draft guards.
 `Your review` is hidden when the authenticated viewer has no pending review.
 It displays a pending review even with zero comments, or a read/recovery error
 that needs attention. Diff markers add `[pending]` for unpublished comments.
-`Your last review` separately displays your latest submitted review (including
-comments, change requests and dismissed reviews), with an `earlier commit` hint
-when it refers to a previous PR head. `gx` on that row opens the submitted review.
+Submitted reviews appear in Conversation and as reviewer icons; there is no
+separate `Your last review` row. The `Review: …` summary retains GitHub's
+aggregate PR decision, independently of the viewer's own review.
 GitHub owns saved drafts, so
 reopening the panel recovers a review created here or in Octo. Each write rechecks
 the viewer/review identity; comment edits and summary saves reject concurrent
@@ -717,6 +753,7 @@ reveals this same result list, preserving edited title/description text.
 | PR result / repository checks list | Enter | Open the selected check in a normal detail tab |
 | Detail tab | Enter / `s` | Open the selected step log in a vertical / horizontal split |
 | Detail tab | `R` | Refresh that check and discard cached logs; existing logs show an outdated notice |
+| Detail tab | `a` | Rerun / cancel the containing workflow |
 | Detail tab | `o` / `gx` | Open its validated web URL |
 | Detail tab | `q` | Close owned CI windows and return to the captured source tab/cursor |
 | Log split | `gf` | Open the source location in this diagnostic block |
@@ -730,7 +767,15 @@ names use bold red text. Key hints follow configured action keys. Same-check tab
 are reused. Different steps can be opened side by side; normal `/`, yank and
 window commands work in the read-only `log` buffers. Foreign windows added to
 a CI tab survive `q`. Requests are asynchronous and cancelled when their view
-closes; there is no polling, rerun/cancel action or disk log cache.
+closes; there is no polling or disk log cache.
+
+`a` in the CI detail view opens workflow actions: `r` reruns the whole workflow,
+`f` reruns failed jobs, and `x` cancels the workflow after confirmation. These
+actions support GitHub Actions and CircleCI and apply to the containing workflow,
+not just the displayed job or step. A fresh check/job/run or pipeline identity
+check precedes each write. Reruns require a finished workflow; cancellation
+requires an active one. API permissions and `CIRCLE_TOKEN` apply as usual.
+Successful requests refresh the details and invalidate old log caches.
 
 Log `gf` recognizes `path:line:column` and `path:line` against the captured
 repository root, independently of the current directory. Compiler/LuaLS
@@ -777,7 +822,7 @@ vim.g.git_ci = {
   -- github_api_version = '2022-11-28', -- override server-specific negotiation
   keys = {
     details = '<CR>', -- PR result entry; false restores browser Enter
-    horizontal = 's', vertical = '<CR>', source = 'gf', refresh = 'R', browser = 'o', close = 'q',
+    horizontal = 's', vertical = '<CR>', source = 'gf', refresh = 'R', actions = 'a', browser = 'o', close = 'q',
   },
 }
 ```

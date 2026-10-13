@@ -79,13 +79,21 @@ f.reviews = {
   { id = 800, user = { login = 'private' }, state = 'PENDING' },
   { id = 402, user = { login = f.viewer }, state = 'COMMENTED', submitted_at = '2026-10-10T00:00:00Z', commit_id = f.head },
   { id = 403, node_id = 'REVIEW403', user = { login = f.viewer }, state = 'PENDING', commit_id = f.head, body = '', comments = {} },
+  { id = 404, user = { login = f.pr.author.login }, state = 'COMMENTED', submitted_at = '2026-10-11T00:00:00Z' },
+  { id = 405, user = { login = 'reviewer' }, state = 'COMMENTED', submitted_at = '2026-10-11T00:00:00Z' },
 }
 ui.refresh()
 assert(ui.row('Assignees: assigned') and ui.row('Labels: 日本語, bug') and ui.row('Milestone: Version 1'))
-assert(lines()[ui.row('Reviewers:')] == 'Reviewers: @requested ◷  @reviewer ✓  @team ◷  @viewer ·')
+assert(lines()[ui.row('Reviewers:')] == 'Reviewers: @requested ◷  @reviewer ✓  @team ◷',
+  'Comment-only authors/viewers must not appear or overwrite an approval')
 absent('@private')
-assert(ui.row('Your review:') < ui.row('Your last review:'))
-assert(ui.row('Your last review:') < ui.row('CI:') and ui.row('CI:') < ui.row('test:'))
+absent('Your last review:')
+assert(ui.row('Your review:') < ui.row('CI:') and ui.row('CI:') < ui.row('test:'))
+-- A comment-only viewer belongs in the list when explicitly requested.
+f.pr.reviewRequests[#f.pr.reviewRequests + 1] = { login = f.viewer }
+ui.refresh()
+assert(lines()[ui.row('Reviewers:')] == 'Reviewers: @requested ◷  @reviewer ✓  @team ◷  @viewer ◷')
+table.remove(f.pr.reviewRequests); ui.refresh()
 local header = require('git.features.pr_header').build(view.model(ui.buf), true, true)
 assert(header.lines[#header.lines]:find('external:', 1, true), 'CI checks should finish the Repo header')
 -- Header folding changes only its metadata, preserving the editable draft and

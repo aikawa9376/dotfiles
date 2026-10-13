@@ -162,6 +162,7 @@ local function render(s, current)
   s.links = header.links
   s.ci_section = header.ci_section
   s.ci_rows = header.ci_rows
+  s.metadata_rows = header.metadata_rows
   vim.list_extend(prefix, { '', 'Title / description · edit below, <C-s> / :w saves to GitHub' })
   local original = { pr.title, '' }
   if pr.body and pr.body ~= '' and pr.body ~= vim.NIL then vim.list_extend(original, vim.split(pr.body, '\n', { plain = true })) end
@@ -535,6 +536,23 @@ local function comments(s)
   require('git.features.pr_threads').select(s.model.ctx, info and info.threads or s.model.threads,
     s.model.review and s.model.review.viewer)
 end
+local function comment_actions(s)
+  local item = M.conversation_at(s.buf, vim.fn.line('.'))
+  local selected = {}
+  if item then selected = { item }
+  elseif conversation_selected(s) then selected = s.model.conversation and s.model.conversation.entries or {}
+  else
+    local _, info = M.entry_at(s.buf, vim.fn.line('.'))
+    for _, thread in ipairs(info and info.threads or s.model.threads) do
+      for _, comment in ipairs(thread.comments) do
+        local copy = vim.deepcopy(comment)
+        copy.kind, copy.review_id = 'inline', thread.review_id
+        selected[#selected + 1] = copy
+      end
+    end
+  end
+  require('git.features.pr_comment_actions').select(s.ctx, selected, s.model.review and s.model.review.viewer)
+end
 local move_comment
 local function resolve_comments(s)
   if conversation_selected(s) then notify('PR conversation comments do not have review-thread resolution'); return end
@@ -755,6 +773,7 @@ local function show_help()
       { ']t / [t', 'Comment and preview (also ]C / [C)' },
       { 'gk', 'Preview conversation (repeat to focus)' },
       { 'gc', 'Read / reply to review threads' },
+      { 'gA', 'Reactions / edit / delete / apply suggestion' },
       { 'gc (Conversation)', 'Read history / write PR comment' },
       { 'gR', 'Resolve / reopen a published review thread' },
       { 'gC', 'New PR / diff / review draft comment' },
@@ -764,6 +783,7 @@ local function show_help()
       { 'O', 'Review PR in Octo' },
     } },
     { title = 'GitHub / panel', entries = {
+      { 'gE', 'Change header metadata / open metadata menu' },
       { '<Space><Space> / N', 'PR actions: comments, review, diffs and GitHub' },
       { 'gx', 'Browser: PR / commit / CI / comment' },
       { 'gy', 'Copy PR URL' },
@@ -848,6 +868,7 @@ function M.action_groups(buf)
       action('t', 'Read / reply to threads…', function() comments(s) end),
       action('p', 'Read PR conversation', function() M.show_conversation(buf) end),
       action('v', 'Preview conversation', function() preview_comments(s, true) end),
+      action('A', 'Comment reactions / edit / delete / suggestion…', function() comment_actions(s) end),
     } },
     { title = 'Diff / files', actions = {
       action('f', 'Compare selected file', function() diff(s) end, entry ~= nil),
@@ -858,6 +879,7 @@ function M.action_groups(buf)
       action('E', 'Edit title / description', function()
         vim.api.nvim_win_set_cursor(0, { #s.prefix + 1, 0 }); vim.cmd('startinsert')
       end),
+      action('M', 'Change labels / assignees / review requests…', function() require('git.features.pr_metadata').menu(s.ctx) end),
       action('o', 'Toggle header / CI / conversation / commits / changes / file diff', function() toggle(s, 'toggle') end),
       action('>', 'Expand section / file diffs', function() toggle(s, 'show') end),
       action('<', 'Collapse section / file diffs', function() toggle(s, 'hide') end),
@@ -947,6 +969,12 @@ local function attach(s)
   map({ 'dh', 'ds' }, function() diff(s, true) end, 'Compare PR file horizontally')
   map('D', function() M.diffview(b) end, 'Open entire PR in Diffview', true)
   map('gc', function() comments(s) end, 'Open review thread / reply')
+  map('gA', function() comment_actions(s) end, 'Comment reactions / edit / delete / apply suggestion')
+  map('gE', function()
+    local field = s.metadata_rows and s.metadata_rows[vim.fn.line('.')]
+    local metadata = require('git.features.pr_metadata')
+    if field then metadata.choose(s.ctx, field) else metadata.menu(s.ctx) end
+  end, 'Change labels / assignees / review requests')
   map('gR', function() resolve_comments(s) end, 'Resolve / reopen review thread')
   map('gk', function() preview_comments(s, true) end, 'Preview PR conversation', true)
   map({ ']t', ']C' }, function() move_comment(s, 1, vim.v.count1) end, 'Next PR comment and preview')

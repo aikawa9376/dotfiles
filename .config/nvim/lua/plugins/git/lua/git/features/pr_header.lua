@@ -22,7 +22,7 @@ local function outcome(state)
 end
 function M.build(model, expanded, checks_expanded)
   local pr, ctx = model.pr, model.ctx
-  local result = { lines = {}, highlights = {}, links = {}, ci_rows = {} }
+  local result = { lines = {}, highlights = {}, links = {}, ci_rows = {}, metadata_rows = {} }
   local function row(chunks, url)
     local text, at = '', #result.lines + 1
     for _, chunk in ipairs(chunks) do
@@ -50,14 +50,18 @@ function M.build(model, expanded, checks_expanded)
     for _, entry in ipairs({ { 'Created', pr.createdAt }, { 'Updated', pr.updatedAt } }) do
       if github.scalar(entry[2]) then detail(entry[1], entry[2]:sub(1, 10)) end
     end
-    detail('Assignees', names(pr.assignees, 'login'))
+    local at = detail('Assignees', names(pr.assignees, 'login'))
+    if at then result.metadata_rows[at] = 'assignees' end
     local milestone = github.scalar(pr.milestone)
     detail('Milestone', milestone and milestone.title)
-    detail('Labels', names(pr.labels, 'name'))
+    at = detail('Labels', names(pr.labels, 'name'))
+    if at then result.metadata_rows[at] = 'labels' end
     local reviewers = {}
     for _, review in ipairs(model.review and model.review.reviews or {}) do
       local name = review.user and github.scalar(review.user.login)
-      if name and review.state ~= 'PENDING' then
+      -- Comment-only participation does not assign a reviewer or supersede
+      -- their latest approval/change request. Dismissals retain revocation.
+      if name and vim.tbl_contains({ 'APPROVED', 'CHANGES_REQUESTED', 'DISMISSED' }, review.state) then
         local previous = reviewers[name]
         local date = github.scalar(review.submitted_at) or ''
         if not previous or date > previous.date or (date == previous.date and review.id > previous.id) then
@@ -79,7 +83,7 @@ function M.build(model, expanded, checks_expanded)
         chunks[#chunks + 1] = { (i > 1 and '  ' or '') .. '@' .. name .. ' ', 'Identifier' }
         chunks[#chunks + 1] = { icon, group }
       end
-      row(chunks)
+      result.metadata_rows[row(chunks)] = 'reviewers'
     end
     row({ { 'From: ', 'GitPrHeaderLabel' }, { pr.headRefName, 'Normal' },
       { '  Into: ', 'GitPrHeaderLabel' }, { pr.baseRefName, 'Normal' } })
@@ -105,14 +109,6 @@ function M.build(model, expanded, checks_expanded)
     elseif pending then
       detail('Your review', ('PENDING #%d · %d comments%s · gr'):format(pending.id, #pending.comments,
         pending.commit_id ~= model.hash and (' · review commit ' .. pending.commit_id:sub(1, 7)) or ''), 'DiagnosticWarn')
-    end
-    local submitted = model.review and model.review.submitted
-    if submitted then
-      local hash = github.scalar(submitted.commit_id)
-      local at = detail('Your last review', submitted.state,
-        submitted.state == 'APPROVED' and 'GitPrPositive' or submitted.state == 'CHANGES_REQUESTED' and 'DiagnosticWarn' or 'Comment',
-        github.scalar(submitted.html_url) or (pr.url .. '#pullrequestreview-' .. submitted.id))
-      if hash and hash ~= model.hash then result.lines[at] = result.lines[at] .. ' · earlier commit ' .. hash:sub(1, 7) end
     end
     local summary_row = row(github.summary_chunks(pr), pr.url .. '/checks')
     local ci = require('git.features.ci.model')

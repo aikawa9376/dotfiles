@@ -18,6 +18,7 @@ function M.build(ctx, comments, reviews, errors)
     local updated = github.scalar(source.updated_at) or date
     local entry = { key = key, id = id, kind = kind, user = source.user, created_at = date, updated_at = updated,
       body = github.scalar(source.body) or '', review_state = kind == 'review' and source.state or nil,
+      reactions = github.scalar(source.reactions),
       url = github.scalar(source.html_url) or ctx.url .. (kind == 'review' and '#pullrequestreview-' or '#issuecomment-') .. id }
     if not indexed[key] or updated >= indexed[key].updated_at then indexed[key] = entry end
   end
@@ -69,6 +70,11 @@ function M.append(lines, highlights, conversation, viewer, markdown)
       if own then highlights[#highlights + 1] = { row = #lines, start = 0, finish = #line, group = 'GitPrCommentSelf', priority = markdown and 90 or 200 } end
     end
     if #lines > body_start then ranges[#ranges + 1] = { body_start, #lines } end
+    local reactions = require('git.features.pr_reactions').format(entry.reactions)
+    if reactions ~= '' then
+      lines[#lines + 1] = reactions
+      highlights[#highlights + 1] = { row = #lines, start = 0, finish = #reactions, group = 'Comment' }
+    end
     for row = header, #lines do rows[row] = entry end
   end
   return rows, first, ranges

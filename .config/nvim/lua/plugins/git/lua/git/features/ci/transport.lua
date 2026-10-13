@@ -1,4 +1,4 @@
--- Read-only requests with bounded output and deliberately terse/redacted errors.
+-- Bounded requests with deliberately terse/redacted errors.
 local M = {}
 local async = require('git.features.async')
 local model = require('git.features.ci.model')
@@ -82,7 +82,7 @@ function M.pages(ctx, endpoint, field)
 end
 function M.circle_host() return M.config().circleci_host or 'circleci.com' end
 local function quote(value) return '"' .. value:gsub('\\', '\\\\'):gsub('"', '\\"') .. '"' end
-function M.download(ctx, url, token, logs, bearer)
+function M.download(ctx, url, token, logs, bearer, request)
   local host = model.url_parts(url)
   -- Keep the original signed query only in the transient request, never in UI/cache.
   if not host then error('Unsafe download URL; open the check on the web.', 0) end
@@ -95,6 +95,11 @@ function M.download(ctx, url, token, logs, bearer)
   -- Secrets/URLs travel through stdin, not argv. Redirects are rejected for
   -- both API and signed-log downloads.
   local config = 'url = ' .. quote(url) .. '\n'
+  if request then
+    assert(request.method == 'POST', 'Unsupported CircleCI mutation')
+    config = config .. 'request = "POST"\nheader = "Content-Type: application/json"\ndata = '
+      .. quote(vim.json.encode(request.body or vim.empty_dict())) .. '\n'
+  end
   if token then
     if token:find('[%c]') then error('Invalid CIRCLE_TOKEN', 0) end
     config = config .. 'header = ' .. quote((bearer and 'Authorization: Bearer ' or 'Circle-Token: ') .. token) .. '\n'
@@ -121,6 +126,16 @@ function M.circle_json(ctx, path)
   local output = M.circle_raw(ctx, path, false)
   local ok, decoded = pcall(vim.json.decode, output)
   if not ok or type(decoded) ~= 'table' then error('Invalid JSON response from CircleCI', 0) end
+  return decoded
+end
+function M.circle_post(ctx, path, payload)
+  local token, host = vim.env.CIRCLE_TOKEN, M.circle_host()
+  assert(token and token ~= '', 'CircleCI authentication required: set CIRCLE_TOKEN')
+  assert(host:match('^[%w%.%-]+$') and not path:find('%.%.') and path:match('^/api/v2/workflow/'), 'Invalid CircleCI mutation path')
+  local output = M.download(ctx, 'https://' .. host .. path, token, false, false, { method = 'POST', body = payload })
+  if output == '' then return true end
+  local ok, decoded = pcall(vim.json.decode, output)
+  assert(ok, 'Invalid JSON response from CircleCI')
   return decoded
 end
 return M

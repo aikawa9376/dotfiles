@@ -77,14 +77,18 @@ function M.json(ctx, args, opts)
   if not ok then error('Invalid JSON from GitHub CLI', 0) end
   return decoded
 end
-function M.api(ctx, endpoint, payload)
+function M.api(ctx, endpoint, payload, method)
   local args = { 'api', '--hostname', ctx.host, endpoint }
   local opts
   if payload then
-    vim.list_extend(args, { '--method', 'POST', '--input', '-' })
+    vim.list_extend(args, { '--method', method or 'POST', '--input', '-' })
     opts = { stdin = vim.json.encode(payload) }
-  end
-  return M.json(ctx, args, opts)
+  elseif method then vim.list_extend(args, { '--method', method }) end
+  local output = M.command(ctx, args, opts)
+  if vim.trim(output) == '' then return nil end -- Successful 204 mutations.
+  local ok, decoded = pcall(vim.json.decode, output)
+  if not ok then error('Invalid JSON from GitHub CLI', 0) end
+  return decoded
 end
 function M.resolve(opts)
   opts = opts or {}
@@ -138,7 +142,8 @@ function M.summary(pr)
   local ci = total == 0 and 'CI: —' or failed > 0 and ('CI: ✗ %d/%d'):format(failed, total)
     or pending > 0 and ('CI: ◷ %d/%d'):format(pending, total) or ('CI: ✓ %d'):format(total)
   local review = ({ APPROVED = 'approved', CHANGES_REQUESTED = 'changes requested', REVIEW_REQUIRED = 'review required' })[scalar(pr.reviewDecision)] or '—'
-  local merge = ({ MERGEABLE = 'mergeable', CONFLICTING = 'conflicts', UNKNOWN = 'checking' })[scalar(pr.mergeable)]
+  local merge = pr.state == 'MERGED' and 'merged'
+    or ({ MERGEABLE = 'mergeable', CONFLICTING = 'conflicts', UNKNOWN = 'checking' })[scalar(pr.mergeable)]
   return ci .. ' · Review: ' .. review .. (merge and (' · ' .. merge) or '')
 end
 -- Status lists and PR headers share label/value colors and neutral separators.
@@ -154,8 +159,9 @@ function M.summary_chunks(pr)
     { ' · ', 'Normal' }, { 'Review', 'GitPrHeaderLabel' }, { ': ', 'Normal' }, { review, review_group } }
   if parts[3] then
     chunks[#chunks + 1] = { ' · ', 'Normal' }
-    chunks[#chunks + 1] = { parts[3], ({ MERGEABLE = 'GitPrPositive', CONFLICTING = 'DiagnosticError',
-      UNKNOWN = 'DiagnosticWarn' })[scalar(pr.mergeable)] or 'Normal' }
+    chunks[#chunks + 1] = { parts[3], pr.state == 'MERGED' and 'GitPrPositive'
+      or ({ MERGEABLE = 'GitPrPositive', CONFLICTING = 'DiagnosticError',
+        UNKNOWN = 'DiagnosticWarn' })[scalar(pr.mergeable)] or 'Normal' }
   end
   return chunks
 end

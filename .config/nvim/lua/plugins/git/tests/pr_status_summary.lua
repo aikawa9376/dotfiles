@@ -57,30 +57,25 @@ f.pr.reviewDecision, f.pr.mergeStateStatus = 'APPROVED', 'CLEAN'
 f.pr.statusCheckRollup = { { name = 'test', status = 'COMPLETED', conclusion = 'SUCCESS' }, { context = 'external', state = 'SUCCESS' } }
 f.thread_pages = { { thread(101, true), thread(201, true), thread(301, true) } }
 ui.refresh()
-assert(ui.row('Your review: PENDING') and ui.row('Your last review: APPROVED'))
+assert(ui.row('Your review: PENDING') and ui.row('@viewer ✓') and not pcall(ui.row, 'Your last review:'))
 assert(view.model(ui.buf).review.submitted.id == 501)
 assert(not pcall(ui.row, 'Merge: CLEAN'), 'Clean merge state repeats the mergeable summary')
-for _, text in ipairs({ '✓ 2', 'approved', 'mergeable', 'test: SUCCESS', 'external: SUCCESS', 'Your last review: APPROVED', '0 unresolved' }) do
-  local token = text == 'Your last review: APPROVED' and 'APPROVED' or text
-  assert(colored(token, 'GitPrPositive'), 'Missing positive status highlight: ' .. token)
+for _, text in ipairs({ '✓', '✓ 2', 'approved', 'mergeable', 'test: SUCCESS', 'external: SUCCESS', '0 unresolved' }) do
+  assert(colored(text, 'GitPrPositive'), 'Missing positive status highlight: ' .. text)
 end
 assert(not colored('CI: ✓ 2', 'GitPrPositive') and not colored('Review: approved', 'GitPrPositive'))
-local opened, open = nil, vim.ui.open
-vim.ui.open = function(url) opened = url end
-ui.key('gx', ui.row('Your last review:'))
-assert(opened == f.pr.url .. '#pullrequestreview-501')
-vim.ui.open = open
 f.reviews[4] = nil; f.reviews[2].commit_id = f.base
 ui.refresh()
-assert(not pcall(ui.row, 'Your review:') and ui.row('Your last review: APPROVED · earlier commit ' .. f.base:sub(1, 7)))
+assert(not pcall(ui.row, 'Your review:') and not pcall(ui.row, 'Your last review:'))
+assert(view.model(ui.buf).review.submitted.commit_id == f.base)
 -- Dismissed or later change-request reviews never retain approval coloring.
 f.reviews[2].state = 'DISMISSED'; ui.refresh()
-assert(colored('DISMISSED', 'Comment') and not colored('DISMISSED', 'GitPrPositive'))
+assert(ui.row('@viewer ⊘') and colored('⊘', 'Comment') and not colored('⊘', 'GitPrPositive'))
 f.reviews[#f.reviews + 1] = { id = 600, state = 'CHANGES_REQUESTED', submitted_at = '2026-10-11T00:00:00Z',
   commit_id = f.head, user = { login = f.viewer } }
 f.pr.reviewDecision, f.pr.mergeable, f.pr.mergeStateStatus = 'CHANGES_REQUESTED', 'CONFLICTING', 'DIRTY'
 f.pr.statusCheckRollup[1].conclusion = 'FAILURE'; ui.refresh()
-assert(colored('CHANGES_REQUESTED', 'DiagnosticWarn'))
+assert(ui.row('@viewer ✗') and colored('✗', 'DiagnosticError'))
 assert(colored('✗ 1/2', 'DiagnosticError') and colored('changes requested', 'DiagnosticError') and colored('conflicts', 'DiagnosticError'))
 assert(not colored('CI: ✗ 1/2', 'GitPrPositive') and not colored('Review: changes requested', 'GitPrPositive'))
 assert(not colored('conflicts', 'GitPrPositive') and not colored('DIRTY', 'GitPrPositive'))
@@ -105,9 +100,17 @@ for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(ui.buf, ns, { summary_row - 
   if text == ': ' then colon_count = colon_count + 1; assert(mark[4].hl_group == 'Normal') end
 end
 assert(dash_count == 2 and colon_count == 2, 'Both absent statuses and their colons should be normal')
+-- Completed merges take precedence over an unknown/stale mergeability value.
+f.pr.state, f.pr.reviewDecision = 'MERGED', 'APPROVED'
+for _, mergeable in ipairs({ 'UNKNOWN', 'CONFLICTING', 'MERGEABLE' }) do
+  f.pr.mergeable = mergeable; ui.refresh()
+  assert(ui.row('CI: — · Review: approved · merged') and colored('merged', 'GitPrPositive'))
+  assert(not pcall(ui.row, 'checking') and not pcall(ui.row, 'conflicts') and not pcall(ui.row, 'mergeable'))
+end
+f.pr.state, f.pr.reviewDecision, f.pr.mergeable = 'OPEN', vim.NIL, 'UNKNOWN'
 f.pr.statusCheckRollup = { { name = 'queued', status = 'QUEUED', conclusion = vim.NIL },
   { name = 'passed', status = 'COMPLETED', conclusion = 'SUCCESS' } }
 ui.refresh()
 assert(ui.row('CI: ◷ 1/2') and colored('◷ 1/2', 'DiagnosticWarn') and not colored('CI: ◷ 1/2', 'DiagnosticWarn'))
 vim.api.nvim_buf_delete(ui.buf, { force = true }); f.cleanup()
-print('PASS: paginated resolution vs read receipts/drafts, latest own submitted review, old commit hint, browser anchor, positive/mixed/negative colors and isolated read failures')
+print('PASS: paginated resolution vs read receipts/drafts, latest own submitted review, compact reviewer icons, aggregate status colors, merged precedence and isolated read failures')

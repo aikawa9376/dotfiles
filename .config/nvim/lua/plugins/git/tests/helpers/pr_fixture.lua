@@ -64,12 +64,20 @@ function M.new()
     elseif argv[2] == 'api' then
       local path, method
       for i, arg in ipairs(argv) do
-        if arg == 'user' or arg == 'graphql' or arg:match('^repos/') then path = arg:gsub('%?.*$', '') end
+        if arg == 'user' or arg == 'graphql' or arg:match('^repos/') or arg:match('^orgs/') then path = arg:gsub('%?.*$', '') end
         if arg == '--method' then method = argv[i + 1] end
       end
       method = method or 'GET'
       local payload = opts.stdin and vim.json.decode(opts.stdin)
       if payload and method == 'GET' then method = 'POST' end
+      if f.api_response then
+        local response = f.api_response(path, method, payload, opts)
+        if response then
+          local result = { code = response.code or 0, stdout = response.raw or vim.json.encode(response.data), stderr = response.stderr or '' }
+          if callback then vim.defer_fn(function() callback(result) end, f.delay) end
+          return { wait = function() return result end, kill = function() end }
+        end
+      end
       local reject = f.api_before and f.api_before(path, method, payload)
       local id = path and tonumber(path:match('/reviews/(%d+)'))
       local review

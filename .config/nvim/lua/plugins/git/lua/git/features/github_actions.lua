@@ -167,6 +167,16 @@ function M.merge(opts)
     end)
   end)
 end
+function M.lifecycle(opts, expected)
+  M.run(opts, function(ctx)
+    local pr = github.pr(ctx)
+    assert(pr.state == 'OPEN' or pr.state == 'CLOSED', 'A merged PR cannot be closed or reopened')
+    assert(not expected or expected == pr.state, 'PR state changed; reopen the action menu')
+    local state = pr.state == 'OPEN' and 'closed' or 'open'
+    github.api(ctx, ('repos/%s/pulls/%d'):format(ctx.repo, ctx.number), { state = state }, 'PATCH')
+    return state
+  end, function(state) vim.notify(state == 'open' and 'PR reopened' or 'PR closed') end, true)
+end
 local function octo_command(opts, command)
   -- Octo's creation/issue commands discover their repository through cwd.
   -- A separate tab keeps that context stable throughout asynchronous prompts.
@@ -190,6 +200,8 @@ function M.open(opts)
       { key = 'a', label = 'GitHub Actions runs', run = function() require('git.features.github_checks').runs(opts) end },
       { key = 'd', label = 'Toggle draft / ready', enabled = model ~= nil, run = function() M.modify(opts, 'ready') end },
       { key = 'm', label = 'Merge PR…', enabled = model ~= nil, run = function() M.merge(opts) end },
+      { key = 'x', label = model and model.pr.state == 'CLOSED' and 'Reopen PR' or 'Close PR',
+        enabled = model ~= nil and model.pr.state ~= 'MERGED', run = function() M.lifecycle(opts, model.pr.state) end },
       { key = 'w', label = 'Checkout PR in new worktree', enabled = model ~= nil, run = function() M.worktree(opts) end },
       { key = 'b', label = 'Open PR in browser', enabled = model ~= nil, run = function() vim.ui.open(opts.url) end },
       { key = 'e', label = 'Edit / discuss in Octo', enabled = model ~= nil, run = function() M.octo(opts) end },
@@ -214,6 +226,10 @@ function M.open(opts)
     { key = 'a', label = 'GitHub Actions runs', run = function() require('git.features.github_checks').runs(opts) end },
     { key = 'd', label = 'Toggle draft / ready', run = function() M.modify(opts, 'ready') end },
     { key = 'm', label = 'Merge PR…', run = function() M.merge(opts) end },
+    { key = 'x', label = 'Close / reopen PR', run = function() M.lifecycle(opts) end },
+    { key = 'M', label = 'PR labels / assignees / review requests…', run = function()
+      M.run(opts, github.pr, function(_, ctx) require('git.features.pr_metadata').menu(ctx) end)
+    end },
     { key = 'i', label = 'Issues (Octo)', run = function() octo_command(opts, 'Octo issue list') end },
     { key = 'n', label = 'Notifications (Octo)', run = function() octo_command(opts, 'Octo notification list') end },
   }

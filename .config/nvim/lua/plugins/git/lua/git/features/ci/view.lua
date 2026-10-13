@@ -153,7 +153,7 @@ local function render(s, focus_failure)
   end
   if details.annotation_error then row({ { 'Annotations: ', 'GitPrHeaderLabel' }, { details.annotation_error, 'DiagnosticWarn' } }) end
   lines[#lines + 1] = ''
-  row(hints({ { 'refresh', 'R', 'refresh' }, { 'browser', 'o', 'web' }, { 'close', 'q', 'close' } }))
+  row(hints({ { 'refresh', 'R', 'refresh' }, { 'actions', 'a', 'workflow actions' }, { 'browser', 'o', 'web' }, { 'close', 'q', 'close' } }))
   s.rows = rows
   write(s.buf, lines)
   vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
@@ -372,6 +372,9 @@ function M.open(ctx, check)
   bind(s.buf, 'horizontal', 's', function() open_log(s, false) end, 'Open selected step log in horizontal split')
   bind(s.buf, 'vertical', '<CR>', function() open_log(s, true) end, 'Open selected step log in vertical split')
   bind(s.buf, 'refresh', 'R', function() refresh(s) end, 'Refresh CI check details and invalidate logs')
+  bind(s.buf, 'actions', 'a', function()
+    require('git.features.ci.actions').menu(s.ctx, s.details and s.details.check or s.check, function() refresh(s) end)
+  end, 'Rerun / cancel CI workflow')
   bind(s.buf, 'close', 'q', function() close(s) end, 'Close owned CI windows and return to PR')
   local function browse()
     local url = s.details and s.details.check.url or s.check.url

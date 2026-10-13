@@ -22,7 +22,7 @@ function M.show(opts)
   for _, thread in ipairs(opts.threads) do vim.list_extend(comments, thread.comments) end
   table.sort(comments, function(a, b) return a.id < b.id end)
   local prefix = require('git.features.pr_thread_status').context(opts.ctx, opts.threads)
-  local buf, lines = require('git.features.pr_history').buffer(prefix, comments, opts.viewer)
+  local buf, lines, rows = require('git.features.pr_history').buffer(prefix, comments, opts.viewer)
   local width = math.max(1, math.min(80, vim.o.columns - 4))
   local size = 0
   for _, line in ipairs(lines) do size = size + math.max(1, math.ceil(vim.fn.strdisplaywidth(line) / width)) end
@@ -33,7 +33,7 @@ function M.show(opts)
     width = width, height = height, row = above and -1 or 1, anchor = above and 'SW' or 'NW',
     col = math.min(0, vim.o.columns - screen.col - width - 2), title = {
       { ' PR conversation ', 'Title' },
-      { '· gc reply · gR toggle · gk focus · ]t/[t move · q ', 'GitPrCommentInstruction' },
+      { '· gc reply · gA actions · gR toggle · gk focus · ]t/[t move · q ', 'GitPrCommentInstruction' },
     } })
   vim.wo[win].wrap, vim.wo[win].linebreak = true, true
   vim.api.nvim_win_set_cursor(win, { #lines, 0 })
@@ -48,6 +48,13 @@ function M.show(opts)
   end
   local function close() M.close(opts.buf); source() end
   vim.keymap.set('n', { 'q', '<Esc>' }, close, { buffer = buf, silent = true })
+  vim.keymap.set('n', 'gA', function()
+    local item = rows[vim.fn.line('.')]
+    if item and source() then
+      M.close(opts.buf)
+      require('git.features.pr_comment_actions').menu(opts.ctx, item, opts.viewer)
+    end
+  end, { buffer = buf, silent = true, desc = 'Comment reactions / edit / delete / apply suggestion' })
   vim.keymap.set('n', 'gc', function() if source() then M.close(opts.buf); opts.reply() end end,
     { buffer = buf, silent = true, desc = 'Reply to PR conversation' })
   vim.keymap.set('n', 'gR', function() if source() then M.close(opts.buf); opts.resolve() end end,

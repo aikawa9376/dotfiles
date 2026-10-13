@@ -1,7 +1,7 @@
 -- Context and conversation live above the compact input in an immutable buffer.
 local M = {}
 function M.buffer(prefix, comments, viewer)
-  local lines, spans = vim.deepcopy(prefix), {}
+  local lines, spans, rows = vim.deepcopy(prefix), {}, {}
   if #lines > 0 and comments and #comments > 0 and lines[#lines] ~= '' then lines[#lines + 1] = '' end
   for index, comment in ipairs(comments or {}) do
     if index > 1 then lines[#lines + 1] = '' end
@@ -13,6 +13,9 @@ function M.buffer(prefix, comments, viewer)
     local body = vim.split(comment.body or '', '\n', { plain = true })
     while #body > 0 and body[#body]:match('^%s*$') do table.remove(body) end
     vim.list_extend(lines, body)
+    local reactions = require('git.features.pr_reactions').format(comment.reactions)
+    if reactions ~= '' then lines[#lines + 1] = reactions end
+    for at = first + 1, #lines do rows[at] = comment end
     spans[#spans + 1] = { first = first, last = #lines, own = author == viewer }
   end
   local buf = vim.api.nvim_create_buf(false, true)
@@ -42,10 +45,10 @@ function M.buffer(prefix, comments, viewer)
     vim.api.nvim_buf_set_extmark(buf, ns, span.first, 0, { end_col = #lines[span.first + 1],
       hl_group = span.own and 'GitPrCommentSelf' or 'DiagnosticWarn', priority = 160 })
   end
-  return buf, lines
+  return buf, lines, rows
 end
 function M.attach(input, win, comments, viewer, prefix, close, hint)
-  local buf, lines = M.buffer(prefix, comments, viewer)
+  local buf, lines, rows = M.buffer(prefix, comments, viewer)
   local config = vim.api.nvim_win_get_config(win)
   local context_height, content_height = 0, 0
   for at, line in ipairs(lines) do
@@ -62,6 +65,10 @@ function M.attach(input, win, comments, viewer, prefix, close, hint)
       { '· ' .. (hint and (hint .. ' · ') or '') .. 'Tab input · <C-s> send · q ', 'GitPrCommentInstruction' } } })
   vim.wo[history].wrap, vim.wo[history].linebreak = true, true
   vim.b[input].git_pr_context = buf
+  vim.keymap.set('n', 'gA', function()
+    local item = rows[vim.fn.line('.')]
+    if item then require('git.features.pr_comment_actions').menu(vim.b[input].git_pr_ctx, item, viewer) end
+  end, { buffer = buf, silent = true, desc = 'Comment reactions / edit / delete / apply suggestion' })
   if comments and #comments > 0 then vim.b[input].git_pr_history = buf end
   vim.keymap.set('n', '<Tab>', function() if vim.api.nvim_win_is_valid(history) then vim.api.nvim_set_current_win(history) end end,
     { buffer = input, silent = true, desc = 'Read conversation history' })

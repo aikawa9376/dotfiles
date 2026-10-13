@@ -11,6 +11,7 @@ function M.open(opts)
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile, vim.bo[buf].undofile = 'acwrite', 'hide', false, false
   vim.api.nvim_buf_set_name(buf, ('git-pr-compose://%s/%s/%d/%d'):format(opts.ctx.host, opts.ctx.repo, opts.ctx.number, serial))
   vim.bo[buf].filetype = 'markdown'
+  vim.b[buf].git_pr_ctx = opts.ctx
   require('git.utils').set_buf_work_tree(buf, opts.ctx.root)
   local initial = vim.split(opts.body or '', '\n', { plain = true })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, initial)
@@ -77,8 +78,8 @@ function M.open(opts)
     vim.keymap.set('n', 'gX', function()
       if saving then return end
       if vim.fn.confirm(opts.delete_prompt, '&Delete\n&Keep', 2) ~= 1 then return end
-      send(opts.delete, 'Pending comment deleted')
-    end, { buffer = buf, silent = true, desc = 'Delete pending review comment' })
+      send(opts.delete, opts.delete_success or 'Pending comment deleted')
+    end, { buffer = buf, silent = true, desc = 'Delete selected comment' })
   end
   local group = vim.api.nvim_create_augroup('GitPrComposer' .. buf, { clear = true })
   vim.api.nvim_create_autocmd('BufWriteCmd', { group = group, buffer = buf, callback = function(ev)

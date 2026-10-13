@@ -53,6 +53,8 @@ function M.details(ctx, check, details)
   local job = transport.circle_json(ctx, '/api/v2/project/' .. locator.slug .. '/job/' .. locator.number)
   if tostring(job.number) ~= locator.number or job.project and job.project.slug ~= locator.slug then error('CircleCI job/project mismatch', 0) end
   local workflow_id = locator.workflow or job.latest_workflow and job.latest_workflow.id
+  assert(not locator.workflow or not job.latest_workflow or job.latest_workflow.id == locator.workflow,
+    'CircleCI job/workflow identity mismatch')
   local pipeline_id = job.pipeline and job.pipeline.id
   if workflow_id then
     if not uuid(workflow_id) then error('Invalid CircleCI workflow identity', 0) end
@@ -60,9 +62,11 @@ function M.details(ctx, check, details)
     if workflow.id ~= workflow_id then error('CircleCI workflow identity mismatch', 0) end
     pipeline_id = workflow.pipeline_id
     details.workflow = workflow.name
+    details.workflow_status = workflow.status
   end
   if not uuid(pipeline_id) then error('CircleCI pipeline identity unavailable; use o for the web view.', 0) end
   verify_pipeline(ctx, check, transport.circle_json(ctx, '/api/v2/pipeline/' .. pipeline_id))
+  details.workflow_id = workflow_id -- Publish writable identity only after verification.
   details.started_at, details.completed_at = scalar(job.started_at), scalar(job.stopped_at)
   details.steps = {}
   -- Workflow job UUIDs are distinct from per-project job numbers. Resolve the
