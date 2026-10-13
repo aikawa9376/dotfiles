@@ -848,74 +848,34 @@ vim.cmd([[command! -nargs=* AstGrepTxtLua lua require"plugins.fzf-lua_util".fzf_
 -- MRU Navigator
 -- ------------------------------------------------------------------
 
-local getMruOpts = function (func, name)
-  local opts = {}
-  opts.prompt = name .. " " .. getHomeName() .. ' >'
-  opts.previewer = "builtin"
-  opts.actions = vim.tbl_deep_extend("force", defaultActions, {
-    ["ctrl-t"] = { function() func() end },
-    ["ctrl-q"] = fzf_lua.actions.file_sel_to_qf,
-  })
-  opts.fzf_opts = {
-    ["-x"] = "",
-    ["--multi"] = "",
-    ["--tiebreak"] = "index",
-    ["--scheme"] = "history",
-    ["--no-unicode"] = "",
-  }
-
-  return opts
-end
-
--- MRU ファイルを取得する関数
-local mruFilesForCwd = function(flag, notCwd)
-  notCwd = notCwd or false
-
-  local result = vim.fn.systemlist("sed -n '2,$p' $XDG_CACHE_HOME/neomru/" .. flag)
-  local cwd = escapePattern(vim.fn.getcwd())
-
-  return vim.fn.map(vim.fn.filter(
-    result,
-    function(_, val)
-      local excluded = val:find("__Tagbar__", 1, true)
-        or val:find("[YankRing]", 1, true)
-        or val:match("^git%-[%w%-]+://")
-        or val:find("NERD_tree", 1, true)
-        or val:find("/tmp/", 1, true)
-        or val:find(".git/", 1, true)
-      return (val:match("^" .. cwd) or notCwd) and not excluded
-    end
-  ),
-    function(_, val) return vim.fn.fnamemodify(val, ":p:.") end
-  )
+local function openMru(kind, scope, opts)
+  opts = vim.tbl_deep_extend("force", {
+    kind = kind,
+    scope = scope,
+    picker = {
+      fzf_opts = {
+        ["-x"] = "",
+        ["--no-unicode"] = "",
+      },
+    },
+  }, opts or {})
+  return require("mru.fzf").open(opts)
 end
 
 M.fzf_mru_files = function(opts)
-  fzf_lua.fzf_exec(
-    colorFilename(mruFilesForCwd("file", true)),
-    getMruOpts(M.fzf_mrw_files, "MRU ALL")
-  )
+  return openMru("file", "all", opts)
 end
 
 M.fzf_mrw_files = function(opts)
-  fzf_lua.fzf_exec(
-    colorFilename(mruFilesForCwd("write", true)),
-    getMruOpts(M.fzf_mru_files, "MRW ALL")
-  )
+  return openMru("write", "all", opts)
 end
 
 M.fzf_mru_files_cwd = function(opts)
-  fzf_lua.fzf_exec(
-    colorFilename(mruFilesForCwd("file")),
-    getMruOpts(M.fzf_mrw_files_cwd, "MRU")
-  )
+  return openMru("file", "cwd", opts)
 end
 
 M.fzf_mrw_files_cwd = function(opts)
-  fzf_lua.fzf_exec(
-    colorFilename(mruFilesForCwd("write")),
-    getMruOpts(M.fzf_mru_files_cwd, "MRW")
-  )
+  return openMru("write", "cwd", opts)
 end
 
 vim.cmd([[command! -nargs=* MruFilesCdwLua lua require"plugins.fzf-lua_util".fzf_mru_files_cwd()]])
