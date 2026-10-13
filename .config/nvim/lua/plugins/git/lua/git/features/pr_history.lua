@@ -6,17 +6,24 @@ function M.buffer(prefix, comments, viewer)
   for index, comment in ipairs(comments or {}) do
     if index > 1 then lines[#lines + 1] = '' end
     local first = #lines
-    local author = comment.user and comment.user.login or 'unknown'
-    lines[#lines + 1] = '@' .. author .. (author == viewer and ' · you' or '')
-      .. (comment.pending and ' [pending]' or '') .. ' · ' .. (comment.created_at or '')
-      .. (comment.review_state and (' · Review ' .. comment.review_state) or '')
-    local body = vim.split(comment.body or '', '\n', { plain = true })
-    while #body > 0 and body[#body]:match('^%s*$') do table.remove(body) end
-    vim.list_extend(lines, body)
-    local reactions = require('git.features.pr_reactions').format(comment.reactions)
-    if reactions ~= '' then lines[#lines + 1] = reactions end
-    for at = first + 1, #lines do rows[at] = comment end
-    spans[#spans + 1] = { first = first, last = #lines, own = author == viewer }
+    if require('git.features.pr_timeline').is_event(comment) then
+      local chunks, line = require('git.features.pr_timeline').chunks(comment, viewer), ''
+      for _, chunk in ipairs(chunks) do chunk[1] = chunk[1]:gsub('[\r\n\t]', ' '); line = line .. chunk[1] end
+      lines[#lines + 1], rows[#lines + 1] = line, comment
+      spans[#spans + 1] = { first = first, chunks = chunks }
+    else
+      local author = comment.user and comment.user.login or 'unknown'
+      lines[#lines + 1] = '@' .. author .. (author == viewer and ' · you' or '')
+        .. (comment.pending and ' [pending]' or '') .. ' · ' .. (comment.created_at or '')
+        .. (comment.review_state and (' · Review ' .. comment.review_state) or '')
+      local body = vim.split(comment.body or '', '\n', { plain = true })
+      while #body > 0 and body[#body]:match('^%s*$') do table.remove(body) end
+      vim.list_extend(lines, body)
+      local reactions = require('git.features.pr_reactions').format(comment.reactions)
+      if reactions ~= '' then lines[#lines + 1] = reactions end
+      for at = first + 1, #lines do rows[at] = comment end
+      spans[#spans + 1] = { first = first, last = #lines, own = author == viewer }
+    end
   end
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].bufhidden, vim.bo[buf].filetype, vim.bo[buf].swapfile = 'wipe', 'markdown', false
@@ -38,12 +45,21 @@ function M.buffer(prefix, comments, viewer)
     end
   end
   for _, span in ipairs(spans) do
-    for at = span.first, span.last - 1 do
-      vim.api.nvim_buf_set_extmark(buf, ns, at, 0, { end_col = #lines[at + 1],
-        hl_group = span.own and 'GitPrCommentSelf' or 'GitPrCommentOther', priority = 150 })
+    if span.chunks then
+      local col = 0
+      for _, chunk in ipairs(span.chunks) do
+        vim.api.nvim_buf_set_extmark(buf, ns, span.first, col,
+          { end_col = col + #chunk[1], hl_group = chunk[2], priority = 160 })
+        col = col + #chunk[1]
+      end
+    else
+      for at = span.first, span.last - 1 do
+        vim.api.nvim_buf_set_extmark(buf, ns, at, 0, { end_col = #lines[at + 1],
+          hl_group = span.own and 'GitPrCommentSelf' or 'GitPrCommentOther', priority = 150 })
+      end
+      vim.api.nvim_buf_set_extmark(buf, ns, span.first, 0, { end_col = #lines[span.first + 1],
+        hl_group = span.own and 'GitPrCommentSelf' or 'DiagnosticWarn', priority = 160 })
     end
-    vim.api.nvim_buf_set_extmark(buf, ns, span.first, 0, { end_col = #lines[span.first + 1],
-      hl_group = span.own and 'GitPrCommentSelf' or 'DiagnosticWarn', priority = 160 })
   end
   return buf, lines, rows
 end

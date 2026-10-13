@@ -133,7 +133,17 @@ function M.new()
         end
         data = { comments }
       elseif path == 'graphql' then
-        if payload.query:find('viewerViewedState', 1, true) then
+        if payload.query:find('timelineItems', 1, true) then
+          if f.timeline_error then data = { errors = { { message = 'Timeline rejected' } } }
+          else
+            local pages = f.timeline_pages or { {} }
+            local page = payload.variables.cursor and tonumber(payload.variables.cursor) or 1
+            data = { data = { repository = { pullRequest = {
+              headRefOid = f.timeline_head or f.pr.headRefOid, timelineItems = { nodes = pages[page],
+                pageInfo = f.timeline_page_info or { hasNextPage = page < #pages, endCursor = tostring(page + 1) } },
+            } } } }
+          end
+        elseif payload.query:find('viewerViewedState', 1, true) then
           if f.viewed_error then data = { errors = { { message = 'Viewed status rejected' } } }
           else
             local nodes = {}

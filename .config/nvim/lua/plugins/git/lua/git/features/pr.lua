@@ -1011,7 +1011,11 @@ local function attach(s)
   end
   map('<CR>', function()
     if vim.fn.line('.') - delta(s) == s.conversation_section.first then toggle(s, 'toggle'); return end
-    if conversation_selected(s) then comments(s); return end
+    if conversation_selected(s) then
+      local item = M.conversation_at(b, vim.fn.line('.'))
+      if require('git.features.pr_timeline').is_event(item) then vim.ui.open(item.url) else comments(s) end
+      return
+    end
     if s.ci_section and vim.fn.line('.') == s.ci_section.first then toggle(s, 'toggle'); return end
     local check = M.check_at(b, vim.fn.line('.'))
     if check and (ci_detail_key == nil or ci_detail_key == '<CR>') then require('git.features.ci.view').open(s.ctx, check); return end

@@ -401,7 +401,8 @@ into the saved metadata or rerendering the panel on every keystroke.
 
 `Conversation (n)` follows the editable description and defaults closed. Open
 it with Enter / `o` / `=` / Tab, or `p` in the PR action menu. It combines
-paginated PR-wide issue comments with public review summaries/results in
+paginated PR-wide issue comments, public review summaries/results and GitHub
+timeline activity in
 chronological order, showing author, date and review state. Pending/private
 summaries and empty COMMENTED wrappers around file comments are excluded;
 approval/change-request/dismissal results remain visible even without a body.
@@ -427,8 +428,23 @@ never enters the saved title/description, and its independent fold survives
 refresh and other section toggles. `gk` there reveals the inline conversation;
 `gR` does not resolve unrelated file threads. Read failures show an incomplete
 section with available entries and source-specific errors, keeping diffs and
-unsaved metadata usable. This is a discussion/review-summary list, not a full
-timeline of pushes, labels, CI events or all other GitHub activity.
+unsaved metadata usable. The timeline includes commits, force-pushes, merges,
+close/reopen, draft/ready transitions and head-branch deletion/restoration.
+Events occupy one compact read-only row; Enter or `gx` opens their browser
+target. `gA` applies only to comments/review summaries, and `gR` does not resolve
+events. The same activity rows appear in PR-comment composer history.
+
+Conversation follows the paginated GitHub `timelineItems` order. It does not
+sort activity by Git author/committer timestamps: a commit authored before a
+review can have been pushed after it. Commit rows explicitly label their
+displayed timestamp as `commit date`, not push time. The independent Commits
+section still shows the current merge-base-to-head Git history. Timeline
+node IDs distinguish activity items; comment/review references join the
+existing REST records by node ID or public permalink, preserving their bodies,
+reactions and action identities without duplicate entries. Newly observed
+REST-only comments remain visible after the known timeline. A failed timeline
+read shows `PR timeline unavailable` and keeps available comments/reviews and
+diffs. Labels, assignees, project events and CI activity are not yet included.
 
 Keep a blank line between the title and description. Other normal editing keys retain
 their meaning inside that region. The other metadata and diffs are read-only

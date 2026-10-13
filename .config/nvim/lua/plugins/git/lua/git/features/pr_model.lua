@@ -152,6 +152,7 @@ function M.load(ctx, opts)
     function() return require('git.features.pr_thread_status').load(ctx) end,
     function() return require('git.features.pr_viewed_state').load(ctx) end,
     function() return require('git.features.pr_conversation').load(ctx) end,
+    function() return require('git.features.pr_timeline').load(ctx, pr.headRefOid) end,
   })
   if not reads[1].ok then error(reads[1].value, 0) end
   local model = reads[1].value
@@ -164,8 +165,10 @@ function M.load(ctx, opts)
   local errors = {}
   if not conversation_ok then errors[#errors + 1] = 'PR comments unavailable: ' .. tostring(conversation) end
   if not review_ok then errors[#errors + 1] = 'Review summaries unavailable: ' .. tostring(review) end
+  local timeline_ok, timeline = reads[7].ok, reads[7].value
+  if not timeline_ok then errors[#errors + 1] = 'PR timeline unavailable: ' .. tostring(timeline) end
   model.conversation = require('git.features.pr_conversation').build(ctx,
-    conversation_ok and conversation or {}, review_ok and review.reviews or {}, errors)
+    conversation_ok and conversation or {}, review_ok and review.reviews or {}, errors, timeline_ok and timeline or nil)
   local viewed_ok, viewed = reads[5].ok, reads[5].value
   if viewed_ok then viewed_ok, viewed = pcall(require('git.features.pr_viewed_state').apply, model, viewed) end
   if not viewed_ok then model.viewed_error = tostring(viewed) end

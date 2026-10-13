@@ -52,6 +52,7 @@ function M.toggle_reaction(ctx, item, content)
 end
 function M.menu(ctx, original, viewer)
   local item = vim.deepcopy(original)
+  if require('git.features.pr_timeline').is_event(item) then vim.notify('Timeline events have no comment actions'); return end
   if item.pending then
     return require('git.features.pr_review').drafts(ctx, { id = item.pull_request_review_id or item.review_id, comments = { item } })
   end
@@ -99,6 +100,7 @@ function M.menu(ctx, original, viewer)
   end)
 end
 function M.select(ctx, items, viewer)
+  items = vim.tbl_filter(function(item) return not require('git.features.pr_timeline').is_event(item) end, items)
   if #items == 0 then vim.notify('No comment at this location'); return end
   if #items == 1 then return M.menu(ctx, items[1], viewer) end
   vim.ui.select(items, { prompt = 'Comment actions', format_item = function(item)
