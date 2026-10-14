@@ -527,8 +527,29 @@ local function move(s, direction, hunks, expand)
     end
   end
   table.sort(candidates, function(a, b) return direction > 0 and a < b or direction < 0 and a > b end)
-  local target = candidates[math.min(vim.v.count1, #candidates)]
-  if target then vim.api.nvim_win_set_cursor(0, { target, 0 }); if expand then toggle(s, 'show') end end
+  local index = math.min(vim.v.count1, #candidates)
+  local target = candidates[index]
+  if not target then return end
+  local changed = false
+  if expand then
+    local current, err = draft(s)
+    if not current then notify(err); return end
+    local destination = M.entry_at(s.buf, target)
+    local function collapse(item)
+      if item and item.path ~= destination.path and s.expanded[item.path] then
+        s.expanded[item.path], changed = false, true
+      end
+    end
+    collapse(entry)
+    for skipped = 1, index - 1 do collapse(M.entry_at(s.buf, candidates[skipped])) end
+    if changed then
+      render(s, current)
+      -- Collapsing earlier diffs changes row numbers; retain the target by path.
+      focus(s, destination.path, vim.api.nvim_get_current_win())
+    end
+  end
+  if not changed then vim.api.nvim_win_set_cursor(0, { target, 0 }) end
+  if expand then toggle(s, 'show') end
 end
 local function comments(s)
   if conversation_selected(s) then return require('git.features.pr_review').new_comment(s.model, nil, { destination = 'p' }) end
@@ -766,7 +787,7 @@ local function show_help()
       { '> / <', 'Expand / collapse section or files' },
       { 'i', 'Expand and move to next file / hunk' },
       { ']m / [m', 'Next / previous file' },
-      { ']] / [[', 'Next / previous file and expand' },
+      { ']] / [[', 'Collapse current and expand next / previous file' },
       { 'J / K', 'Next / previous hunk (also ]c / [c)' },
     } },
     { title = 'Compare / open', entries = {
@@ -984,8 +1005,8 @@ local function attach(s)
     return ''
   end, { buffer = b, expr = true, silent = true, nowait = true, desc = 'Expand and jump to next PR diff item' })
   map({ '[m', '[/' }, function() move(s, -1) end, 'Previous PR file')
-  map(']]', function() move(s, 1, false, true) end, 'Next file and expand')
-  map('[[', function() move(s, -1, false, true) end, 'Previous file and expand')
+  map(']]', function() move(s, 1, false, true) end, 'Collapse current and expand next file')
+  map('[[', function() move(s, -1, false, true) end, 'Collapse current and expand previous file')
   map({ 'J', ']c' }, function() move(s, 1, true) end, 'Next PR hunk', true)
   map({ 'K', '[c' }, function() move(s, -1, true) end, 'Previous PR hunk', true)
   map({ 'd', 'dd', 'dv' }, function() diff(s) end, 'Compare selected PR file', true)

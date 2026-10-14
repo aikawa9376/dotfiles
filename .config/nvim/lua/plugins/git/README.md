@@ -360,7 +360,8 @@ unchanged comparisons reuse the already loaded history.
 | `gh` | Go to the Repo header |
 | `gU` | Go to the CI section (UnitTest); `gc` keeps its comment action |
 | `gco` | Go to Conversation |
-| `]m` / `[m`, `]]` / `[[` | Next/previous file; move and expand |
+| `]m` / `[m` | Next/previous file |
+| `]]` / `[[` | Close departing file diffs and expand the next/previous file; counts supported |
 | `J` / `K`, `]c` / `[c` | Next/previous diff hunk |
 | `]t` / `[t` (also `]C` / `[C`) | Next/previous comment position and preview; counts supported |
 | `gF` | Toggle the selected file's Viewed state on GitHub |
