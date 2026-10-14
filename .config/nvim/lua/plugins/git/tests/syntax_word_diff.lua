@@ -73,6 +73,37 @@ for _, style in ipairs({ 'treesitter', 'github', 'diffs', 'delta' }) do
 end
 syntax.config.word_diff_style = 'treesitter'
 
+-- Context containing a status-like table key is source, not a file row.
+-- Keep every following change decorated and still recognize the next file.
+local status_context = vim.api.nvim_create_buf(false, true)
+local status_lines = { 'M commit.lua', '@@ -42,10 +42,7 @@ local status_highlights = {',
+  "   T = 'Structure',", "   U = 'Structure',", ' }',
+  '-local serial = 0', '-local function buffer_name(root, hash, id)',
+  "-  return ('git-commit://%s/%d/%s'):format(root, id, hash)", '-end',
+  "+local names = require('git.buffer_names')", ' local function close_flog()',
+  '   local win = vim.g.flog_win',
+  '   vim.g.flog_win, vim.g.flog_bufnr, vim.g.flog_opener_bufnr = nil, nil, nil',
+  'M following.lua', '@@ -1 +1 @@', '-return 1', '+return 2' }
+vim.api.nvim_buf_set_lines(status_context, 0, -1, false, status_lines)
+syntax.attach(status_context)
+settle(status_context)
+local decorated = {}
+for _, mark in ipairs(vim.api.nvim_buf_get_extmarks(status_context, ns, 0, -1, { details = true })) do
+  if mark[4].virt_text_pos == 'overlay' then decorated[mark[2] + 1] = true end
+end
+for row, line in ipairs(status_lines) do
+  local changed = line:sub(1, 1) == '+' or line:sub(1, 1) == '-'
+  assert((decorated[row] == true) == changed, 'status-like context lost/misplaced the gutter at row ' .. row)
+end
+assert(words(status_context, 'new', false):find('names', 1, true), 'status-like context lost change backgrounds')
+vim.api.nvim_buf_delete(status_context, { force = true })
+for _, status in ipairs({ 'M', 'A', 'D', 'R', 'C', 'U', '?', '!' }) do
+  local context = open('status_keys.lua', { 'return old_value' }, { 'return new_value' },
+    { 'local statuses = {', "  " .. status .. " = 'Structure',", '}' })
+  assert(words(context, 'new', false) ~= '', 'context key ' .. status .. ' interrupted the hunk')
+  vim.api.nvim_buf_delete(context, { force = true })
+end
+
 -- Structural backgrounds never extend into indentation or past EOL. Both
 -- prefix overlays preserve the underlying Git patch for navigation/staging.
 local buf = open('markers.lua', { '  return old_value' }, { '  return new_value' })

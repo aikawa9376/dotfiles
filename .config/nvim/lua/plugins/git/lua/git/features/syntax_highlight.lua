@@ -483,6 +483,9 @@ function Parser.parse_buffer(bufnr, first_line)
   for i = first_line or 1, #lines do
     local line = lines[i]
     local filename = line:match('^[%s]*[MADRCU%?!][MADRCU%?!%s]*%s+(.+)$') or line:match('^diff %-%-git a/.+ b/(.+)$')
+    -- Inside a hunk, a leading space denotes source context. A table key
+    -- such as "   U = 'Structure'," must not become a status file row.
+    if state.hunk_start and line:sub(1, 1) == ' ' then filename = nil end
 
     if filename then
       -- Handle rename syntax "old -> new"
