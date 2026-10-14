@@ -384,6 +384,43 @@ unchanged comparisons reuse the already loaded history.
 | `gx` / `gy` | Browser at cursor / copy PR URL |
 | `R` / `?` / `q` | Refresh / key guide / close |
 
+Native two-pane diffs opened by PR status's `d` / `dv` / `dh` / `ds` retain
+that PR's exact repository, host and merge-base/head comparison. Both code panes
+show `💬` thread counts, `📝 [pending]` draft counts and `✅` resolved counts at
+their LEFT/RIGHT anchors. Range threads show their badge at the last line and
+can be read anywhere in the range. This uses the captured PR association;
+ordinary `Gdiff`, Status and Commit splits do not discover PRs.
+
+| PR split key | Action |
+|---|---|
+| `gk` / `gc` | Preview conversation (repeat to focus) / read, reply or edit a pending draft |
+| `gA` / `gR` | Comment reactions, edit/delete and suggestions / resolve or reopen |
+| `]t` / `[t` (also `]C` / `[C`) | Next/previous comment across LEFT then RIGHT; counts, no wrapping |
+| `gct` | All PR threads, including file-level, outdated and other-file threads |
+| `gC` / `gcn` / `gcr` | Comment destination / immediate diff comment / pending review draft |
+| Visual `gC` / `gcn` / `gcr` | Comment on a continuous code-line range within one PR diff hunk |
+| `gcp` / `gr` | PR conversation input / existing native review menu |
+| `gx` / `gp` | Browser for the selected thread or PR / return to PR status |
+| `R` / `q` / `?` | Refresh comments/review state / close owned diff panes / key guide |
+
+These actions use the same native composers and GitHub write guards as PR
+status. Opening a preview creates no input or remote write. New inline comments
+require lines in the captured PR patch; unrelated full-file lines are rejected.
+Public badges require current-head GraphQL anchors; unavailable anchors keep
+threads readable through `gct`. Current-head private drafts retain the existing
+legacy-coordinate fallback. Added/deleted sides never receive invented anchors.
+Refreshing rereads GitHub state asynchronously; successful comment/review writes
+refresh the split too. A changed PR head or base removes badges and disables
+coordinate-based actions until the diff is reopened from refreshed PR status.
+The `gct` list remains available. Source title/description drafts are preserved.
+Decorations belong only to the captured windows. Closing/replacing a pane,
+editing its immutable content or `diffoff` cancels its PR attachment and restores
+temporary keys/winbars. `q` preserves foreign windows added to the diff tab and
+returns to the captured source window. Native diff navigation and word colors
+keep their existing behavior. `tests/pr_split.lua` covers real Git snapshots
+and mocked GitHub writes; `tests/pr_split_ui.py` checks actual displayed badges
+and their isolation from ordinary windows.
+
 The `?` guide groups editing, navigation, comparisons, review and panel actions.
 Each action has its own row with aligned key aliases; Visual keys have a separate
 section, using the same colored, wrapping help popup as the other panels.

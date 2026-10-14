@@ -661,12 +661,16 @@ local function diff(s, horizontal)
   local entry, info = M.entry_at(s.buf, vim.fn.line('.'))
   if not entry then M.diffview(s.buf); return end
   if entry.binary then M.diffview(s.buf, entry.path); return end
+  local source = vim.api.nvim_get_current_win()
   vim.cmd('tabnew')
-  blob(s, entry, true, info.coordinate); vim.cmd('diffthis')
+  if not blob(s, entry, true, info.coordinate) then vim.cmd('tabclose'); return end
+  vim.cmd('diffthis')
   local left = vim.api.nvim_get_current_win()
   vim.cmd(horizontal and 'belowright split' or 'rightbelow vsplit')
-  blob(s, entry, false, info.coordinate); vim.cmd('diffthis')
+  if not blob(s, entry, false, info.coordinate) then vim.cmd('tabclose'); return end
+  vim.cmd('diffthis')
   require('git.features.split_diff').attach(left, vim.api.nvim_get_current_win())
+  require('git.features.pr_split').attach(s.model, entry, left, vim.api.nvim_get_current_win(), source)
   vim.cmd('wincmd =')
 end
 function M.diffview(buf, path)
