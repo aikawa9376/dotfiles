@@ -1323,6 +1323,10 @@ closing one view while another still needs the shared comparison.
 adjacent PHP/Lua files, actual query compile/predicate failures, missing/restored
 parsers and `T` file headings. The syntax TUI check also verifies visible PHP
 backgrounds and gutters with unavailable parsers and broken queries.
+The same failure/recovery matrix covers Lua, JavaScript, TypeScript/TSX,
+Python, Go, Rust, C/C++, JSON, YAML, TOML, Bash, Markdown, HTML, CSS, Ruby,
+SQL and Vimscript, checking normal syntax captures, query compile/predicate
+failures, missing queries/parsers, and restoration without patch edits.
 
 `tests/delta_word_diff.lua` compares exact source byte ranges with checked-in
 fixtures captured from delta 0.19.2. Run it with
