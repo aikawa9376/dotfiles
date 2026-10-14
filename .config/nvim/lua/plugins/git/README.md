@@ -1157,6 +1157,20 @@ the changes made by HEAD against its first parent (or the empty tree for a root
 commit). Index blobs compare against HEAD. This uses the committed HEAD version,
 so uncommitted worktree edits are not part of the comparison. Tree objects have
 no file-level signs.
+
+Git panel URIs use repository and target identity instead of an opening counter:
+`git-commit://<worktree>//<hash>`,
+`git-pr://<worktree>//<host>/<owner>/<repo>/pull/<number>`, and
+`git-workflow://<worktree>//<operation>`. CI checks/logs, PR comment drafts,
+blame/diff snapshots and rebase plans/messages follow the same rule. Non-default
+merge-parent commit views add `/parent-<index>`. Percent, `#`, `?` and controls
+are escaped so repository/path characters cannot become URI delimiters.
+If the exact same target already owns a buffer, a separate view/draft adds
+`?view=<buffer-id>`; simultaneous drafts and snapshots keep their own contents.
+Closing and reopening an ordinary view does not introduce a new counter in its
+URI. Older `git-commit://<worktree>/<serial>/<hash>` quickfix/jump/session entries
+still reload. Git object index stages (`//0/`, `//1/` etc.) are meaningful Git
+identities and retain their stage numbers.
 `:Gwrite` additionally writes the worktree and stages it. Binary object editing
 is rejected. Buffer repository context takes priority over cwd, including linked
 worktrees. URI buffers can reload from quickfix and jump lists.

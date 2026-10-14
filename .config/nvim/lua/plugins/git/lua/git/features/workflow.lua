@@ -11,7 +11,8 @@ function M.output(root, title, content)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_win_set_buf(0, buf)
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile = 'nofile', 'wipe', false
-  vim.api.nvim_buf_set_name(buf, 'git-workflow://' .. title:gsub('[ /]', '-') .. '/' .. buf)
+  local names = require('git.buffer_names')
+  names.assign(buf, names.uri('git-workflow', root, title:gsub('[ /]', '-')))
   utils.set_buf_work_tree(buf, root)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(content:gsub('\n$', ''), '\n', { plain = true }))
   vim.bo[buf].filetype, vim.bo[buf].modifiable = 'git', false

@@ -640,7 +640,8 @@ local function blob(s, entry, before, coordinate)
   if not missing then content, err = changes.git(s.model.root, { 'show', revision .. ':' .. path }) end
   if not content then notify(err); return end
   local b = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_name(b, ('git-pr-blob://%d/%s/%s'):format(b, revision, path))
+  local names = require('git.buffer_names')
+  names.assign(b, names.uri('git-pr-blob', s.model.root, revision .. '/' .. (missing and 'missing/' or '') .. path))
   vim.bo[b].buftype, vim.bo[b].bufhidden, vim.bo[b].swapfile = 'nofile', 'wipe', false
   vim.api.nvim_buf_set_lines(b, 0, -1, false, changes.lines(content))
   vim.bo[b].modifiable, vim.bo[b].readonly = false, true
@@ -708,6 +709,8 @@ function M.refresh(buf, discard, preserve)
     if not dirty then s.metadata_conflict = false
     elseif s.model.pr.title ~= model.pr.title or s.model.pr.body ~= model.pr.body then s.metadata_conflict = true end
     s.model, s.ctx = model, model.ctx
+    local names = require('git.buffer_names')
+    names.assign(s.buf, names.uri('git-pr', model.root, model.ctx.host .. '/' .. model.ctx.repo .. '/pull/' .. model.ctx.number))
     render(s, dirty and current or nil)
   end, true, function(err)
     s.loading = false
@@ -1127,8 +1130,13 @@ function M.open(opts)
   opts = vim.deepcopy(opts or {})
   opts.root = opts.root or utils.get_buf_work_tree(vim.api.nvim_get_current_buf()) or utils.get_work_tree({})
   if not opts.root then notify('Not in a Git repository'); return end
+  opts.root = utils.normalize_path(opts.root)
   local identity = opts.url or (opts.root .. '/' .. tostring(opts.number or 'current'))
-  for b, s in pairs(states) do if s.identity == identity and vim.api.nvim_buf_is_loaded(b) then
+  local requested = github.url_context(opts.url) or (opts.host and opts.repo and opts.number and opts)
+  for b, s in pairs(states) do
+    local same_pr = requested and s.ctx.host == requested.host and s.ctx.repo == requested.repo and s.ctx.number == requested.number
+    local same_seed = s.identity == identity and (not opts.host or s.ctx.host == opts.host) and (not opts.repo or s.ctx.repo == opts.repo)
+    if (same_seed or same_pr) and s.ctx.root == opts.root and vim.api.nvim_buf_is_loaded(b) then
     local win = vim.fn.bufwinid(b)
     if win ~= -1 then vim.api.nvim_set_current_win(win) else utils.open_panel_split(); vim.api.nvim_win_set_buf(0, b) end
     if not s.model then M.refresh(b) end
@@ -1137,7 +1145,8 @@ function M.open(opts)
   local b = vim.api.nvim_create_buf(true, false)
   local s = { buf = b, ctx = opts, identity = identity, expanded = {} }
   states[b] = s
-  vim.api.nvim_buf_set_name(b, 'git-pr://' .. b .. '/' .. identity)
+  local names = require('git.buffer_names')
+  names.assign(b, names.uri('git-pr', opts.root, opts.url or ('pull/' .. tostring(opts.number or 'current'))))
   vim.bo[b].buftype, vim.bo[b].bufhidden, vim.bo[b].swapfile, vim.bo[b].undofile = 'acwrite', 'hide', false, false
   utils.set_buf_work_tree(b, opts.root)
   vim.api.nvim_buf_set_lines(b, 0, -1, false, { 'Loading PR metadata and revisions…' })

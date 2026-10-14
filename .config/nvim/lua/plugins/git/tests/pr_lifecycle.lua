@@ -13,6 +13,9 @@ end
 vim.wo.number, vim.wo.list = true, true
 vim.wo.signcolumn, vim.wo.statuscolumn, vim.wo.foldcolumn = 'no', '%l ', '1'
 local b = view.open({ root = f.root, url = f.pr.url }); loaded(b)
+local ctx = view.model(b).ctx
+assert(vim.api.nvim_buf_get_name(b) == require('git.buffer_names').uri('git-pr', f.root, ctx.host .. '/' .. ctx.repo .. '/pull/' .. ctx.number), 'PR status retained an opening counter')
+assert(view.open({ root = f.root .. '/', host = ctx.host, repo = ctx.repo, number = ctx.number }) == b, 'Equivalent PR selectors duplicated the existing draft')
 local pr_win = vim.fn.bufwinid(b)
 assert(not vim.wo[pr_win].number and not vim.wo[pr_win].list)
 assert(vim.wo[pr_win].signcolumn == 'yes:1' and vim.wo[pr_win].statuscolumn == '%s' and vim.wo[pr_win].foldcolumn == '0')

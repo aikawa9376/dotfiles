@@ -580,7 +580,8 @@ show_frame = function(s, f)
   if not f.code_buf or not vim.api.nvim_buf_is_valid(f.code_buf) then
     local b = vim.api.nvim_create_buf(false, true)
     f.code_buf = b
-    vim.api.nvim_buf_set_name(b, ('git-blame-code://%d/%s/%s'):format(s.id, f.revision or 'worktree', f.path))
+    local names = require('git.buffer_names')
+    names.assign(b, names.uri('git-blame-code', s.root, (f.revision or 'worktree') .. '/' .. f.path))
     vim.api.nvim_buf_set_lines(b, 0, -1, false, #f.lines > 0 and f.lines or { '' })
     vim.bo[b].bufhidden, vim.bo[b].modifiable, vim.bo[b].readonly = 'hide', false, true
     utils.set_buf_work_tree(b, s.root)
@@ -904,8 +905,6 @@ bind = function(s, b, code)
       old = model.git(s.root, { 'show', (r.previous or (r.commit .. '^')) .. ':' .. (r.previous_path or path) }) or ''
       new = model.git(s.root, { 'show', r.commit .. ':' .. path }) or ''
     end
-    serial = serial + 1
-    local diff_id = serial
     vim.cmd('tabnew')
     local diff_tab = vim.api.nvim_get_current_tabpage()
     local diff_buffers = {}
@@ -928,7 +927,9 @@ bind = function(s, b, code)
     for i, text in ipairs({ old, new }) do
       if i == 2 then vim.cmd('rightbelow vnew') end
       local buf = vim.api.nvim_get_current_buf()
-      vim.api.nvim_buf_set_name(buf, ('git-blame-diff://%d/%s/%s'):format(diff_id, i == 1 and 'before' or 'after', path))
+      local names = require('git.buffer_names')
+      local revision = i == 1 and (r.uncommitted and 'HEAD' or r.previous or (r.commit .. '^')) or (r.uncommitted and 'worktree' or r.commit)
+      names.assign(buf, names.uri('git-blame-diff', s.root, revision .. '/' .. (i == 1 and 'before/' or 'after/') .. path))
       local_options(0, { wrap = false, number = vim.go.number, relativenumber = vim.go.relativenumber })
       vim.bo[buf].buftype, vim.bo[buf].bufhidden = 'nofile', 'wipe'
       local lines = vim.split(text, '\n', { plain = true }); if lines[#lines] == '' then table.remove(lines) end

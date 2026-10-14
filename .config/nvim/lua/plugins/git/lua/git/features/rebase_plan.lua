@@ -254,7 +254,8 @@ function M.open(ctx)
     if not ok then warn(m); return end
     local buf = vim.api.nvim_create_buf(true, false)
     local state = { model = m, buf = buf, messages = {}, snapshots = {} }; sessions[buf] = state
-    vim.api.nvim_buf_set_name(buf, 'git-rebase-plan://' .. root .. '//' .. buf)
+    local names = require('git.buffer_names')
+    names.assign(buf, names.uri('git-rebase-plan', root, (m.base or 'root') .. '..' .. m.head .. '/onto/' .. (m.onto or 'root')))
     vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile = 'acwrite', 'hide', false
     vim.bo[buf].undofile = false
     vim.bo[buf].filetype, vim.bo[buf].syntax = 'gitrebaseplan', 'gitrebase'

@@ -1,15 +1,17 @@
 -- An immutable context panel and one Markdown draft. Failed requests keep it;
 -- a successful :w closes it so another write cannot duplicate the operation.
 local M = {}
-local serial = 0
 function M.open(opts)
   opts = vim.tbl_extend('force', opts, { ctx = vim.deepcopy(opts.ctx) })
-  serial = serial + 1
   local prefix = vim.deepcopy(opts.prefix or {})
   while #prefix > 0 and prefix[#prefix]:match('^%s*$') do table.remove(prefix) end
   local buf = vim.api.nvim_create_buf(true, false)
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile, vim.bo[buf].undofile = 'acwrite', 'hide', false, false
-  vim.api.nvim_buf_set_name(buf, ('git-pr-compose://%s/%s/%d/%d'):format(opts.ctx.host, opts.ctx.repo, opts.ctx.number, serial))
+  local names = require('git.buffer_names')
+  local comment = opts.history and opts.history[1]
+  local target = ('%s/%s/pull/%d/%s'):format(opts.ctx.host, opts.ctx.repo, opts.ctx.number, opts.title:gsub('[ /]', '-'))
+  if comment and comment.id then target = target .. '/comment-' .. comment.id end
+  names.assign(buf, names.uri('git-pr-compose', opts.ctx.root, target))
   vim.bo[buf].filetype = 'markdown'
   vim.b[buf].git_pr_ctx = opts.ctx
   require('git.utils').set_buf_work_tree(buf, opts.ctx.root)

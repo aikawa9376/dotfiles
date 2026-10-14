@@ -42,10 +42,7 @@ local status_highlights = {
   T = 'Structure',
   U = 'Structure',
 }
-local serial = 0
-local function buffer_name(root, hash, id)
-  return ('git-commit://%s/%d/%s'):format(root, id, hash)
-end
+local names = require('git.buffer_names')
 local function close_flog()
   local win = vim.g.flog_win
   vim.g.flog_win, vim.g.flog_bufnr, vim.g.flog_opener_bufnr = nil, nil, nil
@@ -197,7 +194,7 @@ local function replace_model(s, hash)
   s.model = model
   s.expected_head = vim.trim(model_api.git(model.root, { 'rev-parse', 'HEAD' }) or '')
   vim.b[s.buf].git_commit = model.hash
-  vim.api.nvim_buf_set_name(s.buf, buffer_name(model.root, model.hash, s.view_id))
+  s.name = names.assign(s.buf, names.commit(model.root, model.hash, model.parent_index))
   render(s)
   return true
 end
@@ -676,8 +673,7 @@ local function attach(s)
     'Normal editing keys retain their meaning inside the message.' } })
   local group = vim.api.nvim_create_augroup('GitCommitView' .. b, { clear = true })
   vim.api.nvim_create_autocmd('BufWriteCmd', { group = group, buffer = b, callback = function(ev)
-    local name = buffer_name(s.model.root, s.model.hash, s.view_id)
-    if ev.match ~= name then error('Use :w without a filename to reword this commit') end
+    if ev.match ~= s.name or vim.api.nvim_buf_get_name(b) ~= s.name then error('Use :w without a filename to reword this commit') end
     if not M.write(b) then error('Commit message was not saved') end
   end })
   vim.api.nvim_create_autocmd('BufWinEnter', { group = group, buffer = b, callback = function()
@@ -723,23 +719,31 @@ function M.open(opts)
   local model, err = opts.model, nil
   if not model then model, err = model_api.load(root, revision, opts.parent or (saved and saved.parent)) end
   if not model then notify(err); return end
+  local canonical = names.commit(root, model.hash, model.parent_index)
+  local existing = not opts.new and not opts.bufnr and names.find(canonical)
+  if existing and not vim.api.nvim_buf_is_loaded(existing) then
+    -- Loading a URI runs BufReadCmd. Finish that reload before rendering so
+    -- nvim_buf_set_lines cannot reenter it and insert a second copy of the view.
+    vim.fn.bufload(existing)
+  end
   for b, s in pairs(states) do
     if not opts.new and not opts.bufnr and vim.api.nvim_buf_is_loaded(b) and s.model.root == root and s.model.hash == model.hash and s.model.parent_index == model.parent_index then
       if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
       show_buffer(b); configure_window(); return b
     end
   end
-  local b = opts.bufnr or vim.api.nvim_create_buf(true, false)
-  serial = serial + 1
-  local view_id = opts.view_id or serial
-  vim.api.nvim_buf_set_name(b, buffer_name(root, model.hash, view_id))
+  local b = opts.bufnr or existing
+  if b and not opts.bufnr and vim.api.nvim_buf_is_loaded(b) then b = nil end
+  b = b or vim.api.nvim_create_buf(true, false)
+  saved = saved or saved_views[b]
+  local name = names.assign(b, canonical)
   vim.bo[b].buflisted = true
   vim.bo[b].buftype, vim.bo[b].bufhidden, vim.bo[b].swapfile = 'acwrite', 'delete', false
   vim.bo[b].undofile = false
   utils.set_buf_work_tree(b, root)
   vim.b[b].git_commit = model.hash
   vim.b[b].custom_git_commit = true
-  local s = { buf = b, view_id = view_id, model = model, expanded = saved and vim.deepcopy(saved.expanded) or {}, expected_head = opts.expected_head or vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
+  local s = { buf = b, name = name, model = model, expanded = saved and vim.deepcopy(saved.expanded) or {}, expected_head = opts.expected_head or vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
   states[b] = s
   render(s)
   if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
@@ -790,9 +794,9 @@ function M.setup(group)
   end })
   vim.api.nvim_create_autocmd('BufWipeout', { group = group, callback = function(ev) saved_views[ev.buf] = nil end })
   vim.api.nvim_create_autocmd('BufReadCmd', { group = group, pattern = 'git-commit://*', callback = function(ev)
-    local root, id, hash = ev.match:match('^git%-commit://(.*)/(%d+)/(%x+)$')
+    local root, hash, parent = names.parse_commit(ev.match)
     if not root then error('Invalid commit URI') end
-    M.open({ work_tree = root, revision = hash, bufnr = ev.buf, view_id = tonumber(id) })
+    M.open({ work_tree = root, revision = hash, bufnr = ev.buf, parent = parent })
   end })
   vim.api.nvim_create_user_command('GitCommit', function(args)
     M.open({ revision = args.args ~= '' and args.args or 'HEAD' })

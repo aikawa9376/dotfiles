@@ -19,7 +19,9 @@ function M.message_float(message, title, save, owner)
   vim.bo[buf].bufhidden, vim.bo[buf].swapfile = 'wipe', false
   vim.bo[buf].buftype = save and 'acwrite' or 'nofile'
   vim.bo[buf].filetype = 'gitcommit'
-  vim.api.nvim_buf_set_name(buf, 'git-rebase-message://' .. buf)
+  local names = require('git.buffer_names')
+  local root = owner and require('git.utils').get_buf_work_tree(owner) or vim.fn.getcwd()
+  names.assign(buf, names.uri('git-rebase-message', root or vim.fn.getcwd(), title))
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(message, '\n', { plain = true }))
   vim.bo[buf].modified = false
   local width = math.max(1, math.min(90, vim.o.columns - 4))

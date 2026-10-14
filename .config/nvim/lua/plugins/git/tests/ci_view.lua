@@ -17,6 +17,7 @@ local title = ui.row('PR title'); vim.api.nvim_buf_set_lines(ui.buf, title - 1, 
 local tabs = #vim.api.nvim_list_tabpages()
 ui.key('<CR>', check_row)
 local detail, detail_win, detail_tab = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win(), vim.api.nvim_get_current_tabpage()
+assert(vim.api.nvim_buf_get_name(detail) == require('git.buffer_names').uri('git-ci', f.root, seed.id .. '/check'), 'CI detail retained a buffer counter')
 assert(#vim.api.nvim_list_tabpages() == tabs + 1 and detail_tab ~= source_tab and vim.bo[detail].filetype == 'gitcicheck')
 ui.wait(function() return ci.details(detail) ~= nil end)
 assert(text(detail):find('Test suite') and text(detail):find('Annotations') and text(detail):find('src/test.lua:42'), text(detail))
@@ -59,6 +60,7 @@ local setup_row
 for row = 1, vim.api.nvim_buf_line_count(detail) do local step = ci.step_at(detail, row); if step and step.name == 'Setup' then setup_row = row end end
 vim.api.nvim_win_set_cursor(detail_win, { assert(setup_row), 0 }); key('<CR>')
 local log2 = vim.api.nvim_get_current_buf(); ui.wait(function() return text(log2):find('SETUP', 1, true) ~= nil end)
+assert(vim.api.nvim_buf_get_name(log2):find('/log/', 1, true) and vim.api.nvim_buf_get_name(log2) ~= vim.api.nvim_buf_get_name(log1_again), 'CI log target identity disappeared')
 assert(vim.api.nvim_win_get_position(0)[2] > vim.api.nvim_win_get_position(detail_win)[2], 'Enter should open a vertical split')
 assert(#vim.api.nvim_tabpage_list_wins(detail_tab) == 3 and log2 ~= log1_again, 'Multiple step logs cannot be compared')
 vim.api.nvim_set_current_win(detail_win); key('R')

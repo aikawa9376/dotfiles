@@ -19,7 +19,8 @@ function M.open(work_tree)
     local buf = vim.api.nvim_get_current_buf()
     vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile = 'nofile', 'wipe', false
     vim.bo[buf].undofile = false
-    vim.api.nvim_buf_set_name(buf, 'git-range-diff://' .. buf .. '/' .. reference .. '...HEAD')
+    local names = require('git.buffer_names')
+    names.assign(buf, names.uri('git-range-diff', work_tree, reference .. '...HEAD'))
     require('git.utils').set_buf_work_tree(buf, work_tree)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(output:gsub('\n$', ''), '\n', { plain = true }))
     vim.bo[buf].filetype, vim.bo[buf].modifiable, vim.bo[buf].readonly = 'git', false, true

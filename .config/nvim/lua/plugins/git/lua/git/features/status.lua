@@ -959,12 +959,11 @@ local function open_oil_in_target(bufnr, path)
   return ok
 end
 
-local diff_buffer_serial = 0
-
-local function show_diff_side(winid, side, path, label)
+local function show_diff_side(winid, side, path, label, root)
   local bufnr = vim.api.nvim_create_buf(false, true)
-  diff_buffer_serial = diff_buffer_serial + 1
-  vim.api.nvim_buf_set_name(bufnr, ('git-diff://%d/%s/%s'):format(diff_buffer_serial, label, path))
+  local names = require('git.buffer_names')
+  names.assign(bufnr, names.uri('git-diff', root, label .. '/' .. path))
+  utils.set_buf_work_tree(bufnr, root)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, #side > 0 and side or { '' })
   vim.bo[bufnr].buftype = 'nofile'
   vim.bo[bufnr].bufhidden = 'wipe'
@@ -979,17 +978,17 @@ local function show_diff_side(winid, side, path, label)
   return bufnr
 end
 
-local function open_scratch_diff(sides, target_line, layout)
+local function open_scratch_diff(sides, target_line, layout, root)
   vim.cmd('tabnew')
   local placeholder = vim.api.nvim_get_current_buf()
   local left_win = vim.api.nvim_get_current_win()
-  show_diff_side(left_win, sides.left, sides.path, sides.left_label)
+  show_diff_side(left_win, sides.left, sides.path, sides.left_label, root)
   if vim.api.nvim_buf_is_valid(placeholder) and vim.api.nvim_buf_get_name(placeholder) == '' then
     pcall(vim.api.nvim_buf_delete, placeholder, { force = true })
   end
   vim.cmd(layout == 'horizontal' and 'rightbelow split' or 'rightbelow vsplit')
   local right_win = vim.api.nvim_get_current_win()
-  local right_buf = show_diff_side(right_win, sides.right, sides.path, sides.right_label)
+  local right_buf = show_diff_side(right_win, sides.right, sides.path, sides.right_label, root)
   if target_line then
     local line_count = vim.api.nvim_buf_line_count(right_buf)
     pcall(vim.api.nvim_win_set_cursor, right_win, { math.min(math.max(target_line, 1), line_count), 0 })
@@ -1019,7 +1018,7 @@ end
 local function open_diff_with_current_file(work_tree, sides, target_line, layout)
   local absolute = utils.worktree_relative_abs_path(work_tree, sides.path)
   local current_buf = absolute and find_current_file_buffer(absolute) or nil
-  if not current_buf then return open_scratch_diff(sides, target_line, layout) end
+  if not current_buf then return open_scratch_diff(sides, target_line, layout, work_tree) end
 
   vim.cmd('tabnew')
   local placeholder = vim.api.nvim_get_current_buf()
@@ -1032,7 +1031,7 @@ local function open_diff_with_current_file(work_tree, sides, target_line, layout
 
   vim.cmd(layout == 'horizontal' and 'aboveleft split' or 'leftabove vsplit')
   local base_win = vim.api.nvim_get_current_win()
-  show_diff_side(base_win, sides.left, sides.path, sides.left_label)
+  show_diff_side(base_win, sides.left, sides.path, sides.left_label, work_tree)
   vim.api.nvim_win_call(current_win, function() vim.cmd('diffthis') end)
   vim.cmd('wincmd =')
 

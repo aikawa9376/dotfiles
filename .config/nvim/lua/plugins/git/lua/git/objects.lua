@@ -219,7 +219,7 @@ function M.open(arg, command, root)
     kind = vim.trim(M.run(root, { 'cat-file', '-t', oid }))
   end
   if kind == 'commit' then
-    local name = 'git-commit://' .. root .. '/0/' .. oid
+    local name = require('git.buffer_names').commit(root, oid)
     vim.cmd((command or 'edit') .. ' ' .. vim.fn.fnameescape(name))
     return vim.fn.bufnr(name)
   end

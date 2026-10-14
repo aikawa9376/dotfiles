@@ -57,7 +57,8 @@ local function close(s)
 end
 local function scratch(ctx, name, filetype)
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_name(buf, 'git-ci://' .. buf .. '/' .. name)
+  local names = require('git.buffer_names')
+  names.assign(buf, names.uri('git-ci', ctx.root, name))
   vim.bo[buf].buftype, vim.bo[buf].bufhidden = 'nofile', 'wipe'
   vim.bo[buf].swapfile, vim.bo[buf].undofile = false, false
   vim.bo[buf].filetype = filetype
@@ -307,7 +308,7 @@ local function open_log(s, vertical)
   vim.api.nvim_set_current_win(s.win)
   vim.cmd(vertical and 'botright vsplit' or 'botright split')
   local win = vim.api.nvim_get_current_win()
-  local buf = scratch(s.ctx, 'log', 'log')
+  local buf = scratch(s.ctx, s.check.id .. '/log/' .. tostring(step.id or step.name), 'log')
   local log = { buf = buf, win = win, key = key, step = step }
   s.logs[key] = log
   vim.api.nvim_win_set_buf(win, buf)
@@ -361,7 +362,7 @@ function M.open(ctx, check)
   vim.cmd('tabnew')
   s.tab, s.win = vim.api.nvim_get_current_tabpage(), vim.api.nvim_get_current_win()
   local empty = vim.api.nvim_get_current_buf()
-  s.buf = scratch(ctx, 'PR-' .. check.pr_number .. '-check', 'gitcicheck')
+  s.buf = scratch(ctx, check.id .. '/check', 'gitcicheck')
   vim.api.nvim_win_set_buf(s.win, s.buf)
   if vim.api.nvim_buf_is_valid(empty) and vim.api.nvim_buf_get_name(empty) == '' and not vim.bo[empty].modified then pcall(vim.api.nvim_buf_delete, empty, {}) end
   for name, value in pairs({ wrap = false, number = false, relativenumber = false }) do

@@ -123,7 +123,8 @@ function M.open(opts)
   utils.open_panel_split()
   local buf = vim.api.nvim_create_buf(false, true); vim.api.nvim_win_set_buf(0, buf)
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile, vim.bo[buf].filetype = 'nofile', 'wipe', false, 'gitstatustree'
-  vim.api.nvim_buf_set_name(buf, 'git-status-tree://' .. buf)
+  local names = require('git.buffer_names')
+  names.assign(buf, names.uri('git-status-tree', root, 'status'))
   utils.set_buf_work_tree(buf, root)
   local state = { root = root, modelbuf = vim.api.nvim_create_buf(false, true), closed = {}, rows = {}, entries = {}, generation = 0 }
   states[buf] = state

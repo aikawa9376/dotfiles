@@ -1,6 +1,6 @@
 local M = {}
 local objects = require('git.objects')
-local function commit_name(root, hash) return 'git-commit://' .. root .. '/0/' .. hash end
+local commit_name = require('git.buffer_names').commit
 
 function M.open(o, location)
   local root, path, source = objects.context()
