@@ -281,7 +281,7 @@ return {
           {
             function()
               local commit_info = package.loaded["diffview_extension.commit_info"]
-              return commit_info and commit_info.statusline() or ""
+              return commit_info and commit_info.statusline(math.max(32, math.floor(vim.fn.winwidth(0) * 0.55))):gsub('%%', '%%%%') or ""
             end,
             icon = "",
             color = { fg = colors.yellow, bold = true },

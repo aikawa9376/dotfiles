@@ -49,7 +49,12 @@ local expected_commit_info = vim.trim(vim.system({
   "git", "-C", root, "show", "-s", "--no-show-signature", "--format=%h %s", head,
 }, { text = true }):wait().stdout)
 local commit_info = require("diffview_extension.commit_info")
-assert(vim.wait(2000, function() return commit_info.statusline() == expected_commit_info end), "commit info was not displayed")
+assert(vim.wait(2000, function()
+  local state = commit_info.state()
+  return state and not state.request and state.context.custom and state.context.right.commit == head
+    and commit_info.statusline():find('Snapshot', 1, true)
+    and state.metadata[head].short .. ' ' .. state.metadata[head].subject == expected_commit_info
+end), "snapshot comparison context was not displayed")
 local windows = view.cur_layout.windows
 assert(windows[1].file.bufnr ~= windows[2].file.bufnr, "custom Diffview reused one buffer for both sides")
 assert(vim.deep_equal(vim.api.nvim_buf_get_lines(windows[1].file.bufnr, 0, -1, false), { "before" }), "left snapshot was not rendered")

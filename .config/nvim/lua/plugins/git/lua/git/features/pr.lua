@@ -677,6 +677,9 @@ function M.diffview(buf, path)
     local args = { '-C=' .. s.model.root, s.model.base .. '..' .. s.model.hash }
     if path then vim.list_extend(args, { '--', path }) end
     vim.api.nvim_cmd({ cmd = 'DiffviewOpen', args = args }, {})
+    local lib, bridge = package.loaded['diffview.lib'], package.loaded['diffview_extension.github_context']
+    local view = lib and lib.get_current_view()
+    if bridge and view then bridge.associate(view, s.ctx) end
   end)
 end
 function M.refresh(buf, discard, preserve)

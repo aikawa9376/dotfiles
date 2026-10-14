@@ -61,7 +61,7 @@ commit_info._refresh({
   right = { commit = base_commit },
   adapter = { ctx = { toplevel = repo } },
 })
-assert(vim.wait(2000, function() return commit_info.statusline() ~= "" end), "commit info was loaded")
+assert(vim.wait(2000, function() return not commit_info.state(tabpage).request end), "commit info was loaded")
 eq(commit_info.statusline(), base_commit:sub(1, 7) .. " base", "commit hash and subject displayed")
 commit_info._states[tabpage] = nil
 

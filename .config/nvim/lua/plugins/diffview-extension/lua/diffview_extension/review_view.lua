@@ -121,12 +121,15 @@ local function render_panel(view)
     })
   end
   for row, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
-    for path, count in pairs(counts) do
-      if line:find(vim.pesc(vim.fn.fnamemodify(path, ":t"))) then
-        vim.api.nvim_buf_set_extmark(bufnr, panel_ns, row - 1, 0, {
-          virt_text = { { "  💬" .. count, "DiagnosticInfo" } }, virt_text_pos = "eol",
-        })
-        break
+    local context = view._github_component and view._github_component.comp
+    if not context or row <= context.lstart then
+      for path, count in pairs(counts) do
+        if line:find(vim.pesc(vim.fn.fnamemodify(path, ":t"))) then
+          vim.api.nvim_buf_set_extmark(bufnr, panel_ns, row - 1, 0, {
+            virt_text = { { "  💬" .. count, "DiagnosticInfo" } }, virt_text_pos = "eol",
+          })
+          break
+        end
       end
     end
   end

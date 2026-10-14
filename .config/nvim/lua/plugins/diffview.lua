@@ -30,16 +30,28 @@ return {
       disable_defaults = false, -- Disable the default keymaps
       view = {
         { "n", "q", "<CMD>tabclose<CR>" },
+        { "n", "gp", function() require('diffview_extension.github_context').open() end, { desc = 'Open related PR' } },
+        { "n", "gA", function() require('diffview_extension.github_context').actions() end, { desc = 'Related PR actions' } },
+        { "n", "gR", function() require('diffview_extension.github_context').refresh(nil, true) end, { desc = 'Refresh related PRs' } },
         { "n", "]C", function() require("diffview_extension.commit_navigation").older() end, { desc = "Older commit" } },
         { "n", "[C", function() require("diffview_extension.commit_navigation").newer() end, { desc = "Newer commit" } },
       },
       file_panel = {
         { "n", "q", "<CMD>tabclose<CR>" },
+        { "n", "<cr>", function() require('diffview_extension.github_context').select_entry() end, { desc = 'Open file or related PR' } },
+        { "n", "<2-LeftMouse>", function() require('diffview_extension.github_context').select_entry() end, { desc = 'Open file or related PR' } },
+        { "n", "gp", function() require('diffview_extension.github_context').open() end, { desc = 'Open related PR' } },
+        { "n", "gA", function() require('diffview_extension.github_context').actions() end, { desc = 'Related PR actions' } },
+        { "n", "gR", function() require('diffview_extension.github_context').refresh(nil, true) end, { desc = 'Refresh related PRs' } },
         { "n", "]C", function() require("diffview_extension.commit_navigation").older() end, { desc = "Older commit" } },
         { "n", "[C", function() require("diffview_extension.commit_navigation").newer() end, { desc = "Newer commit" } },
       },
       file_history_panel = {
         { "n", "q", "<CMD>tabclose<CR>" },
+        { "n", "<cr>", function() require('diffview_extension.github_context').select_entry() end, { desc = 'Open file or related PR' } },
+        { "n", "gp", function() require('diffview_extension.github_context').open() end, { desc = 'Open related PR' } },
+        { "n", "gA", function() require('diffview_extension.github_context').actions() end, { desc = 'Related PR actions' } },
+        { "n", "gR", function() require('diffview_extension.github_context').refresh(nil, true) end, { desc = 'Refresh related PRs' } },
         { "n", "]C", function() require("diffview_extension.commit_navigation").older() end, { desc = "Older commit" } },
         { "n", "[C", function() require("diffview_extension.commit_navigation").newer() end, { desc = "Newer commit" } },
       },

@@ -63,7 +63,13 @@ root(); press('s'); kind('pr-display'); press('q')
 -- Opening a diff or section action uses source rows, not the action-menu row.
 local diffview
 vim.api.nvim_create_user_command('DiffviewOpen', function(args) diffview = args.args end, { nargs = '*' })
+local old_lib, old_bridge = package.loaded['diffview.lib'], package.loaded['diffview_extension.github_context']
+local target_view, association = {}, nil
+package.loaded['diffview.lib'] = { get_current_view = function() return target_view end }
+package.loaded['diffview_extension.github_context'] = { associate = function(target, ctx) association = { target = target, ctx = ctx } end }
 root(); press('D'); assert(diffview:find(f.base .. '..' .. f.head, 1, true))
+assert(association.target == target_view and association.ctx.url == f.pr.url and association.ctx.root == f.root)
+package.loaded['diffview.lib'], package.loaded['diffview_extension.github_context'] = old_lib, old_bridge
 root(ui.row('M file name.txt')); press('o'); assert(not pcall(ui.row, '+TWO'))
 root(ui.row('M file name.txt')); press('o'); ui.wait(function() return pcall(ui.row, '+TWO') end)
 root(1); press('E'); press('<Esc>'); assert(vim.fn.line('.') == ui.row('Unsaved title'))

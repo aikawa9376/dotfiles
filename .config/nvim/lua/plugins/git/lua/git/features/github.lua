@@ -96,7 +96,7 @@ function M.resolve(opts)
   ctx.root = utils.normalize_path(opts.root or opts.work_tree
     or utils.get_buf_work_tree(opts.bufnr or vim.api.nvim_get_current_buf()) or utils.get_work_tree({}))
   if not ctx.root then error('Not in a Git repository', 0) end
-  if not ctx.number and not opts.url then
+  if not ctx.number and not opts.url and not opts.repository_only then
     local branch = async.git(ctx.root, { 'branch', '--show-current' })
     if branch and vim.trim(branch) ~= '' then
       local saved = async.git(ctx.root, { 'config', '--get', 'branch.' .. vim.trim(branch) .. '.pullRequestUrl' })
