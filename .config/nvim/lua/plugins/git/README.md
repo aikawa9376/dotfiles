@@ -992,8 +992,9 @@ panels opens the selected graph. The default is `flog`, including the existing `
 Set `vim.g.git_graph_backend` in your config to persist the preference.
 `:Ggraph flog` / `:Ggraph native` overrides it for one open. Direct `Flog`,
 `Flogsplit`, and `Floggit` use its documented backend hooks to obtain repository context, run Git,
-complete arguments, and open commits through the independent Gsplit command. `Git diff`/`Git show` output supports file/hunk
-navigation (`]]`, `[[`, `i`), folds (`o`), and Enter to inspect the file/commit.
+complete arguments, and open commits through the independent Gsplit command. `Git diff`/`Git show` output supports
+cyclic hunk navigation (`]]`, `[[`), forward hunk movement (`i`), folds (`o`),
+and Enter to inspect the file/commit.
 
 `<Space><Space>` opens a separate Git action menu in status, log, branch,
 reflog, worktree, commit-detail, and changed-files tree panels. It uses the file, commit, ref, reflog destination,
@@ -1260,6 +1261,20 @@ native rendering. `tests/split_diff.lua`, `tests/split_diff_views.lua` and
 `tests/split_diff_ui.py` cover selected styles, exact source coordinates,
 native cancellation, real provider integration, null sides, and actual TUI
 syntax/background composition and window isolation.
+
+Outside inline panels, `]]` / `[[` cycle through next / previous hunks, wrapping
+at either end; counts are supported. Native diff windows (Status/Commit/PR/Blame
+splits, Gdiff, Gitsigns and Diffview, including conflict layouts) use Neovim's
+own diff motions and settings. Standalone Git diff/show output and `diff`
+buffers and the GitPatch collection pane cycle through unified hunk headers
+across files. Opening a `diff` buffer or enabling native diff loads the Git
+navigation module when needed. No hunks means no
+movement. Temporary split mappings restore the buffer's ordinary keys when
+entering it outside diff or after `diffoff`. Status/Commit/PR inline panels
+retain their `]]` / `[[` file navigation.
+`tests/diff_navigation.lua` and `tests/diff_navigation_cold.lua` verify wrapping,
+counts, deletion filler, conflicts, diff options, key restoration and cold
+entry points; the provider integration check verifies the actual split keys.
 
 `tests/difftastic_word_diff.lua` compares both background levels against 170
 checked-in cases captured from the installed Difftastic 0.71.0, covering calls,

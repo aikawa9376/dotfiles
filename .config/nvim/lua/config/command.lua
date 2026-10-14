@@ -202,12 +202,9 @@ vim.api.nvim_create_autocmd('OptionSet', {
       vim.api.nvim_set_hl(ev.buf, "NormalNC", { bg = "None" })
       vim.diagnostic.enable(false, { bufnr = ev.buf })
       vim.keymap.set('n', 'q', ':tabclose<CR>', { buffer = ev.buf, nowait = true, silent = true })
-      vim.keymap.set("n", "]]", function()
-        require("gitsigns").nav_hunk('next', { target = 'all' })
-      end, { buffer = ev.buf, nowait = true, silent = true })
-      vim.keymap.set("n", "[[", function()
-        require("gitsigns").nav_hunk('prev', { target = 'all' })
-      end, { buffer = ev.buf, nowait = true, silent = true })
+      -- Compare the displayed panes, including arbitrary revisions/conflicts.
+      -- The Git module owns temporary hunk maps and restores ordinary keys.
+      vim.schedule(function() require('lazy').load({ plugins = { 'git' } }) end)
     else
       vim.api.nvim_set_hl(ev.buf, "NormalNC", { bg = "#073642" })
     end

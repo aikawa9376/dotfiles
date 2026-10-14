@@ -3,6 +3,7 @@ return {
   dir = vim.fn.stdpath("config") .. "/lua/plugins/git",
   main = "git",
   config = true,
+  ft = 'diff',
   cmd = {
     "G", "Git", "Gdiff", "Gwrite", "Gread", "Gdiffsplit", "Gstash",
     "Gedit", "Gcd", "Gclog", "GeditHeadAtFile", "Gvsplit", "GitPush",

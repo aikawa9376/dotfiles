@@ -5,8 +5,7 @@ function M.setup(group)
     local function map(key, fn) vim.keymap.set('n', key, fn, { buffer = ev.buf, silent = true }) end
     vim.bo[ev.buf].syntax = 'git'
     vim.wo.foldmethod = 'syntax'
-    map(']]', function() vim.fn.search('^diff --git ', 'W'); vim.cmd('silent! normal! zv') end)
-    map('[[', function() vim.fn.search('^diff --git ', 'bW'); vim.cmd('silent! normal! zv') end)
+    require('git.features.diff_navigation').attach_unified(ev.buf)
     map('i', function() vim.fn.search('^@@ ', 'W'); vim.cmd('silent! normal! zvzt') end)
     map('o', 'za')
     map('q', '<cmd>close<CR>')

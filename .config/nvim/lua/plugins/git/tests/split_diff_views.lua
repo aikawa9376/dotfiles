@@ -34,6 +34,12 @@ local function wait_pair(label)
     return false
   end, 5), label .. ': no ready split session')
   assert(vim.wo[session.old.win].diff and vim.wo[session.new.win].diff, label .. ': native alignment disabled')
+  for _, win in ipairs({ session.old.win, session.new.win }) do
+    vim.api.nvim_win_call(win, function()
+      assert(vim.fn.maparg(']]', 'n', false, true).desc == 'Next diff hunk (wrap)', label .. ': missing next hunk mapping')
+      assert(vim.fn.maparg('[[', 'n', false, true).desc == 'Previous diff hunk (wrap)', label .. ': missing previous hunk mapping')
+    end)
+  end
   return session
 end
 local function press(key) assert(vim.fn.maparg(key, 'n', false, true).callback, key)() end

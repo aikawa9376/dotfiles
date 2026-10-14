@@ -302,6 +302,7 @@ end
 function M.setup()
   if initialized then return end
   initialized = true
+  require('git.features.diff_navigation').setup()
   syntax.setup_groups()
   api.nvim_set_hl(0, 'GitSplitDiffNeutral', {})
   local group = api.nvim_create_augroup('GitSplitDiff', { clear = true })
