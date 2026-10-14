@@ -797,7 +797,7 @@ local function show_help()
       { '<Space><Space> / N', 'PR actions: comments, review, diffs and GitHub' },
       { 'gx', 'Browser: PR / commit / CI / comment' },
       { 'gy', 'Copy PR URL' },
-      { 'R', 'Refresh PR status' },
+      { 'R', 'Collapse all diffs and refresh' },
       { 'q', 'Close PR status' },
     } },
     { title = 'Visual selections', entries = {
@@ -844,10 +844,23 @@ local function display_menu()
     groups = { { title = 'Word diff', actions = choices } } })
 end
 local function refresh_prompt(s)
-  if s.model and edited(s) then
+  if s.saving or s.viewed_pending then return end
+  local discard = s.model and edited(s)
+  if discard then
     if vim.fn.confirm('Discard PR draft and reload from GitHub?', '&Reload\n&Keep', 2) ~= 1 then return end
-    M.refresh(s.buf, true)
-  else M.refresh(s.buf) end
+  end
+  if s.model then
+    local win = vim.api.nvim_get_current_win()
+    local entry = M.entry_at(s.buf, vim.api.nvim_win_get_cursor(win)[1])
+    local current = not discard and draft(s) or nil
+    -- Cancel a pending expansion before clearing its saved file choices.
+    -- An existing refresh can finish, but its result must keep them closed.
+    if s.patch_task then s.patch_task.cancel() end
+    s.patch_task, s.expanding, s.expanded = nil, false, {}
+    render(s, current)
+    if entry then focus(s, entry.path, win) end
+  end
+  M.refresh(s.buf, discard)
 end
 function M.action_groups(buf)
   local s = states[buf]
@@ -893,7 +906,7 @@ function M.action_groups(buf)
       action('o', 'Toggle header / CI / conversation / commits / changes / file diff', function() toggle(s, 'toggle') end),
       action('>', 'Expand section / file diffs', function() toggle(s, 'show') end),
       action('<', 'Collapse section / file diffs', function() toggle(s, 'hide') end),
-      action('R', 'Refresh PR status', function() refresh_prompt(s) end),
+      action('R', 'Collapse all diffs and refresh', function() refresh_prompt(s) end),
       action('?', 'PR status key guide', show_help),
     } },
   }
@@ -1076,7 +1089,7 @@ local function attach(s)
   vim.keymap.set('n', 'R', function()
     if s.model and editable_row(s, vim.fn.line('.')) then native_key('R'); return end
     refresh_prompt(s)
-  end, { buffer = b, silent = true, desc = 'Refresh PR status' })
+  end, { buffer = b, silent = true, desc = 'Collapse all diffs and refresh PR status' })
   map('?', show_help, 'PR status key guide')
   actions.attach(b)
   vim.keymap.set('n', '<Space><Space>', function() actions.open(actions.context(b)) end,

@@ -66,9 +66,10 @@ changed stash selector during the picker is rejected. `cw` renames the selected
 stash. WIP `a` retains its clean tracked-worktree requirement and restores the
 snapshot's staged/unstaged split without moving HEAD.
 
-Status and Commit `R` collapse all expanded diffs and reload. Status retains
-section fold state and the selected entry, including in Index flags. Automatic
-refreshes retain expansion and fold state; `<` collapses only its selected scope.
+Status, Commit and PR status `R` collapse all expanded file diffs and reload.
+Status and PR status retain section fold state and the selected file, including
+Status Index flags. Automatic refreshes retain expansion and fold state;
+`<` collapses only its selected scope.
 `d` waits for its `dd` / `dv` / `dh` / `ds` suffixes. Status also uses `dR` for
 outgoing-stack range-diff. The Commit message float saves through `:w`,
 `<C-s>`, or `ZZ`.
@@ -382,7 +383,8 @@ unchanged comparisons reuse the already loaded history.
 | `gf` / `gq` | Worktree file / changed files in quickfix |
 | `gD` | Shared word-diff display settings |
 | `gx` / `gy` | Browser at cursor / copy PR URL |
-| `R` / `?` / `q` | Refresh / key guide / close |
+| `R` | Collapse all file diffs and refresh PR status |
+| `?` / `q` | Key guide / close |
 
 Native two-pane diffs opened by PR status's `d` / `dv` / `dh` / `ds` retain
 that PR's exact repository, host and merge-base/head comparison. Both code panes
@@ -429,6 +431,13 @@ Section jumps focus the first item of an expanded section or its heading when
 collapsed/empty, preserving folds and unsaved text. `gU` reveals a hidden Repo
 header while retaining CI's own fold state. These keys also navigate from the
 editable draft; they do not fetch patches or refresh GitHub.
+
+On read-only rows, `R` closes all file diffs before reloading, including files
+hidden by a folded Changes section and expansions still loading their patches.
+Section folds remain as selected. A selected diff row returns to its file
+heading. Automatic refreshes preserve expanded diffs. Unsaved title/description
+edits retain the existing discard-or-keep prompt; Keep cancels both collapse and
+reload. In the editable title/description, `R` retains native Replace mode.
 
 The editable PR title uses `GitPrTitle` (light cyan `#8fdbed` and bold in the
 dotfiles theme), distinct from the title/description instruction heading.
@@ -928,7 +937,7 @@ GitHub commands require authenticated `gh`; Octo and Diffview commands use their
 existing lazy-loaded plugins. API processes, PR fetches and patch reads are
 asynchronous, and capture their original worktree before menus or input UIs open.
 Remote writes use literal argv and JSON stdin. `tests/pr_model.lua`,
-`tests/pr_view.lua`, `tests/pr_lifecycle.lua`, `tests/pr_comments.lua`,
+`tests/pr_view.lua`, `tests/pr_lifecycle.lua`, `tests/pr_refresh.lua`, `tests/pr_comments.lua`,
 `tests/pr_reviews.lua`, `tests/pr_markers.lua`, `tests/pr_review_migration.lua`,
 `tests/pr_help.lua`, `tests/pr_commits.lua`, `tests/pr_loading.lua` and `tests/github_actions.lua` exercise
 real local Git repositories/worktrees with mocked GitHub responses and writes.
