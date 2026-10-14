@@ -53,6 +53,8 @@ vim.api.nvim_create_autocmd('VimEnter',{once=true,callback=function()vim.schedul
  local function snapshot()
   vim.cmd('redraw!');vim.api.nvim__inspect_cell(1,0,0);vim.cmd('redraw!')
   local results={normal=vim.api.nvim_get_hl(0,{name='Normal',link=false}),lines=lines,rows={}}
+  results.add_bg=vim.api.nvim_get_hl(0,{name='GitExtSyntaxAdd',link=false}).bg
+  results.delete_bg=vim.api.nvim_get_hl(0,{name='GitExtSyntaxDelete',link=false}).bg
   for key,name in pairs({keyword_fg='@keyword.function.lua',property_fg='@property.json',parameter_fg='@variable.parameter.lua',add_fg='GitExtNovelAdd',delete_fg='GitExtNovelDelete'})do
    results[key]=vim.api.nvim_get_hl(0,{name=name,link=false}).fg
   end
@@ -80,7 +82,22 @@ vim.api.nvim_create_autocmd('VimEnter',{once=true,callback=function()vim.schedul
   legacy.cluster=vim.fn.execute('silent! syntax list @GitExt_lua');legacy.fun=vim.fn.execute('silent! syntax list luaFunctionBlock');legacy.iskeyword=vim.bo.iskeyword
   legacy.keyword_fg=vim.api.nvim_get_hl(0,{name=legacy.keyword,link=false}).fg
   vim.treesitter.language.inspect=inspect
-  vim.fn.writefile({vim.json.encode({cold=cold,ready=ready,syntax_ready=syntax_ready,legacy=legacy})},'/tmp/git-ts-followup/cells.json');vim.cmd('qa!')
+  local php={}
+  for _,mode in ipairs({'no_parser','bad_query','bad_predicate','restored'})do
+   if mode=='no_parser' then
+    vim.treesitter.language.inspect=function(lang)if lang=='php'then error('parser unavailable')end;return inspect(lang)end
+   elseif mode=='bad_query' then
+    vim.treesitter.query.set('php','highlights','(git_test_nonexistent_php_node) @keyword')
+   elseif mode=='bad_predicate' then
+    vim.treesitter.query.set('php','highlights','((name) @function (#lua-match? @function "["))')
+   end
+   lines={'Head: master','Unstaged changes (1)','M sample.php','@@ -1,2 +1,2 @@',' <?php','-return oldCall();','+return newCall();'}
+   vim.api.nvim_buf_set_lines(buf,0,-1,false,lines);syntax.refresh(buf)
+   assert(vim.wait(10000,function()return not syntax.is_pending(buf)end,1),'PHP portability rendering did not finish')
+   php[mode]=snapshot()
+   vim.treesitter.language.inspect=inspect;vim.treesitter.query.set('php','highlights',nil)
+  end
+  vim.fn.writefile({vim.json.encode({cold=cold,ready=ready,syntax_ready=syntax_ready,legacy=legacy,php=php})},'/tmp/git-ts-followup/cells.json');vim.cmd('qa!')
  end
  vim.defer_fn(finish,10)
 end)end})
@@ -125,11 +142,19 @@ y=x['ready'];normal=y['normal']['bg'];in_md=False
 for line,row in zip(y['lines'],y['rows']):
  if line.startswith('M THIRD_'):in_md=True
  if line.startswith('+') and in_md and len(line)>1:
-  assert all(cell[1].get('background',normal)==0x1f4534 for cell in row[1:len(line)]), (line,'MD prose background')
+  assert all(cell[1].get('background',normal)==y['add_bg'] for cell in row[1:len(line)]), (line,'MD prose background')
  if line.startswith(('-function Utils','+function Utils','-  "','+  "')):
   end=line.index(',') if line.startswith('+function Utils') else (line.index('{') if line.startswith(('-  "','+  "')) else len(line))
   assert all(cell[1].get('background',normal)==normal for cell in row[1:end]), (line,'unchanged foreground span received BG')
 legacy=x['legacy'];assert legacy['keyword'].startswith('lua'), {key:legacy[key] for key in ('keyword','cluster','fun','iskeyword')}
 assert legacy['rows'][8][1][1].get('foreground',legacy['normal']['fg'])==legacy['keyword_fg'], 'normal foreground masked Vim syntax'
-print('PASS: cold/ready TUI, recovered Tree-sitter key/keyword colors, native/syntax changed foregrounds, Markdown prose and Vim fallback')
+for mode,y in x['php'].items():
+ for index,word,background in ((5,'oldCall','delete_bg'),(6,'newCall','add_bg')):
+  line,row=y['lines'][index],y['rows'][index]
+  assert row[0][0]=='▏', (mode,line,'PHP gutter')
+  for col in range(line.index(word),line.index(word)+len(word)):
+   assert row[col][1].get('background')==y[background], (mode,line,'PHP change background',row[col])
+   assert row[col][1].get('foreground') not in (0x00cc20,0xe00020), (mode,line,'PHP inherited diff foreground',row[col])
+  assert all(cell[1].get('background',y['normal']['bg'])==y['normal']['bg'] for cell in row[len(line):]), (mode,line,'PHP EOL background')
+print('PASS: cold/ready TUI, recovered Tree-sitter colors, native/syntax foregrounds, Markdown, Vim fallback and PHP parser/query failure backgrounds/gutters')
 workspace.cleanup()

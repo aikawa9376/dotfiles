@@ -1192,6 +1192,13 @@ files keep available hunk captures, with Normal
 for uncovered bytes.
 Without a parser, the included Vim syntax has a Normal parent region; its
 keywords/strings keep their own colors instead of being covered by that base.
+Missing or incompatible Tree-sitter highlight queries, including errors in
+capture predicates, keep diff backgrounds and prefix overlays working. Failed
+source coloring uses Normal foreground without blocking complete-source
+comparison, later files, or loading completion. After a query or parser is
+restored, refreshing the view restores available syntax colors without editing
+the patch. Inside a hunk, space-prefixed status-like PHP constants or Lua table
+keys remain source context rather than being mistaken for file headings.
 If complete-file structural comparison fails or uses Text (including Markdown),
 the complete pair receives a shared, cooperative Histogram Text comparison.
 Without verified complete sources, hunk comparison retries individual change
@@ -1312,6 +1319,10 @@ source coordinates, and shares an expanded region across disjoint edits.
 and renamed Commit views, omitted tags/classes, embedded HTML, shared file
 comparison, source-context invalidation, missing queries, Text fallback and
 closing one view while another still needs the shared comparison.
+`tests/syntax_highlight_portability.lua` checks PHP status-like context,
+adjacent PHP/Lua files, actual query compile/predicate failures, missing/restored
+parsers and `T` file headings. The syntax TUI check also verifies visible PHP
+backgrounds and gutters with unavailable parsers and broken queries.
 
 `tests/delta_word_diff.lua` compares exact source byte ranges with checked-in
 fixtures captured from delta 0.19.2. Run it with

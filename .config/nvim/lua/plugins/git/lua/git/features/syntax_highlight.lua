@@ -482,7 +482,7 @@ function Parser.parse_buffer(bufnr, first_line)
 
   for i = first_line or 1, #lines do
     local line = lines[i]
-    local filename = line:match('^[%s]*[MADRCU%?!][MADRCU%?!%s]*%s+(.+)$') or line:match('^diff %-%-git a/.+ b/(.+)$')
+    local filename = line:match('^[%s]*[MADRCUT%?!][MADRCUT%?!%s]*%s+(.+)$') or line:match('^diff %-%-git a/.+ b/(.+)$')
     -- Inside a hunk, a leading space denotes source context. A table key
     -- such as "   U = 'Structure'," must not become a status file row.
     if state.hunk_start and line:sub(1, 1) == ' ' then filename = nil end
@@ -505,7 +505,7 @@ function Parser.parse_buffer(bufnr, first_line)
       local prefix = line:sub(1, 1)
       if prefix == ' ' or prefix == '+' or prefix == '-' or line:match('^\\ No newline at end of file') then
         table.insert(state.lines, line)
-      elseif line == '' or line:match('^[%s]*[MADRCU%?!]') or line:match('^diff ') or line:match('^index ') or line:match('^Binary ') then
+      elseif line == '' or line:match('^[%s]*[MADRCUT%?!]') or line:match('^diff ') or line:match('^index ') or line:match('^Binary ') then
         flush()
         state.filename = nil
         state.lang = nil
@@ -628,8 +628,11 @@ function Highlighter.prepare(cached, code, lang, query, bufnr)
           result.comparison_context = { sources = colored, projections = projections }
         end
         for _, side in ipairs({ 'old', 'new' }) do
-          result.captures[side] = Highlighter.capture_treesitter(
+          -- Predicates can fail during capture even when the query compiled.
+          -- Preserve complete-source comparison and finish loading either way.
+          local ok, captures = pcall(Highlighter.capture_treesitter,
             colored[side] or cached.sources[side], lang, query, checkpoint, projections[side])
+          result.captures[side] = ok and captures or {}
           checkpoint()
         end
         return result
@@ -1394,7 +1397,12 @@ function M.attach(bufnr, opts)
       local queries = {}
       local function current_query(lang)
         if not lang then return nil end
-        if queries[lang] == nil then queries[lang] = vim.treesitter.query.get(lang, 'highlights') or false end
+        if queries[lang] == nil then
+          -- Parser and query versions can differ across machines. Color-query
+          -- failure must not prevent diff spans/gutters or later files.
+          local ok, query = pcall(vim.treesitter.query.get, lang, 'highlights')
+          queries[lang] = ok and query or false
+        end
         return queries[lang] or nil
       end
       if changes and tick == seen_tick and first_line == seen_first_line and settings == seen_settings then
