@@ -78,8 +78,10 @@ function M.show(opts)
     if vim.api.nvim_buf_is_valid(opts.buf) then vim.b[opts.buf].git_pr_preview = nil end
     pcall(vim.api.nvim_del_augroup_by_id, group)
   end })
-  local ok, err = pcall(require('git.features.pr_read_state').mark, opts.ctx, opts.viewer, comments)
-  if not ok then vim.notify('Could not save comment read state: ' .. tostring(err), vim.log.levels.WARN) end
+  if opts.viewer then
+    local ok, err = pcall(require('git.features.pr_read_state').mark, opts.ctx, opts.viewer, comments)
+    if not ok then vim.notify('Could not save comment read state: ' .. tostring(err), vim.log.levels.WARN) end
+  end
   return buf
 end
 return M

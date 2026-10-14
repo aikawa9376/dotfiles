@@ -112,6 +112,23 @@ function M.threads(ctx, pending, hash, pages)
   end
   return threads
 end
+-- REST review listings can omit location fields. Adopt current GraphQL
+-- anchors only when their head/path belongs to this immutable snapshot.
+function M.apply_thread_status(threads, status, hash)
+  for _, thread in ipairs(threads) do
+    local remote = status.by_id[thread.id]
+    if remote then
+      if not remote.pending then thread.node_id, thread.resolved = remote.id, remote.isResolved end
+      if status.head == hash and remote.path == thread.path then
+        thread.line, thread.start_line = nil, nil
+        if remote.isOutdated == false and remote.subjectType == 'LINE' then
+          thread.line, thread.start_line = github.scalar(remote.line), github.scalar(remote.startLine)
+          thread.side = github.scalar(remote.diffSide)
+        end
+      end
+    end
+  end
+end
 function M.load(ctx, opts)
   opts = opts or {}
   local pr = github.pr(ctx)
@@ -182,21 +199,7 @@ function M.load(ctx, opts)
   local status_ok, status = reads[4].ok, reads[4].value
   model.thread_status, model.thread_status_error = status_ok and status or nil, not status_ok and tostring(status) or nil
   if status_ok then
-    for _, thread in ipairs(model.threads) do
-      local remote = status.by_id[thread.id]
-      if remote then
-        if not remote.pending then thread.node_id, thread.resolved = remote.id, remote.isResolved end
-        -- Review-specific REST listings can omit all line/side fields. Use the
-        -- current GraphQL thread anchor only when it belongs to this snapshot.
-        if status.head == model.hash and remote.path == thread.path then
-          thread.line, thread.start_line = nil, nil
-          if remote.isOutdated == false and remote.subjectType == 'LINE' then
-            thread.line, thread.start_line = github.scalar(remote.line), github.scalar(remote.startLine)
-            thread.side = github.scalar(remote.diffSide)
-          end
-        end
-      end
-    end
+    M.apply_thread_status(model.threads, status, model.hash)
   end
   return model
 end

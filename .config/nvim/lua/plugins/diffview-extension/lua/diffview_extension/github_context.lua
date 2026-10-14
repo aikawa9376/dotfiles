@@ -9,10 +9,14 @@ local function current_view()
   local lib = package.loaded['diffview.lib']
   return lib and lib.get_current_view()
 end
+local function changed(tab)
+  api.nvim_exec_autocmds('User', { pattern = 'DiffviewRelatedPRsUpdated', modeline = false, data = { tabpage = tab } })
+end
 local function stop(tab)
   local state = states[tab]
   states[tab] = nil
   if state and state.task then state.task.cancel() end
+  changed(tab)
 end
 local function item(pr, ctx)
   local github = require('git.features.github')
@@ -123,7 +127,8 @@ local function render(view)
     for _, pr in ipairs(result.items) do
       local icon = ({ open = '●', draft = '◷', closed = '✗', merged = '✓' })[pr.status]
       prs:add_text('  ' .. icon .. ' #' .. pr.number, pr.status == 'merged' and 'DiagnosticOk' or pr.status == 'closed' and 'DiagnosticError' or 'DiagnosticInfo')
-      prs:add_line(' ' .. pr.title, 'DiffviewFilePanelPath')
+      local comments = view._github_comment_summary and view._github_comment_summary[pr.url]
+      prs:add_line(' ' .. pr.title .. (comments and (' · ' .. comments) or ''), 'DiffviewFilePanelPath')
     end
     local scope = result.explicit and 'PR comparison' or ('%d commit(s) checked'):format(result.scanned)
     if context.custom then scope = 'Snapshot provenance · ' .. scope end
@@ -132,6 +137,7 @@ local function render(view)
     if #result.errors > 0 then component.hint.comp:add_line('Lookup incomplete · gR to retry', 'DiagnosticWarn') end
   end
   component.hint.comp:add_line('gp PR · gA actions · gR refresh', 'DiffviewDim1')
+  if view._github_comment_hint then component.hint.comp:add_line(view._github_comment_hint, 'DiffviewDim1') end
   -- Extend native j/k constraints while keeping file components and identities.
   local native = panel.components
   local constraints = {}
@@ -169,6 +175,7 @@ function M.refresh(view, force)
   stop(view.tabpage)
   state = { view = view, key = context.key, loading = true }
   states[view.tabpage] = state
+  changed(view.tabpage)
   local explicit = view._github_association
   if explicit and explicit.key ~= context.key then explicit = nil; view._github_association = nil end
   local function begin()
@@ -178,9 +185,13 @@ function M.refresh(view, force)
       if states[view.tabpage] ~= state or not api.nvim_tabpage_is_valid(view.tabpage) then return end
       state.task, state.loading, state.loaded_at = nil, false, vim.uv.hrtime()
       if ok then state.result = result else state.error = clean(result) end
+      changed(view.tabpage)
       redraw(view)
     end)
-    if not task then state.loading, state.error, state.loaded_at = false, clean(err), vim.uv.hrtime() end
+    if not task then
+      state.loading, state.error, state.loaded_at = false, clean(err), vim.uv.hrtime()
+      changed(view.tabpage)
+    end
     if task and not task.completed then state.task = task end
   end
   -- Rapid FileHistory navigation and initial revision setup should settle
@@ -242,5 +253,6 @@ function M.setup(group)
     for tab in pairs(states) do if not api.nvim_tabpage_is_valid(tab) then stop(tab) end end
   end })
 end
+function M.state(tab) return states[tab] end
 M._states, M._fetch, M._item = states, fetch, item
 return M

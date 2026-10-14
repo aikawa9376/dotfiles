@@ -37,7 +37,10 @@ a file keeps Diffview's file action.
 | --- | --- |
 | `gp` | Open a related PR, selecting among several when needed |
 | `gA` | Existing GitHub action menu for the selected related PR |
-| `gR` | Refresh related PRs |
+| `gR` | Refresh related PRs and comments |
+| `gk` | Open and focus the PR conversation covering the cursor line |
+| `]t` / `[t` | Cycle mapped PR comments across both panes of the current file |
+| `gct` | List all related PR review threads, including outdated and file-level comments |
 
 These keys work in diff buffers, the file panel and the history panel. The PR
 screen provides conversation, reviews, metadata and CI operations. Its `D`
@@ -58,6 +61,34 @@ come from the captured view, and historical comparisons skip current-branch PR
 URL inference. Closing or changing a view cancels obsolete reads; GitHub failures
 leave the diff readable and provide a retry action.
 
+Public inline review threads appear at their corresponding code as `💬 N`,
+where N is the number of conversations ending on that line. Unresolved threads
+use an info color; a group of resolved threads uses a positive color. Related
+PR rows also show the total thread count. Comments covering several lines can
+be opened with `gk` anywhere in that range; overlapping threads or multiple PRs
+present a picker. In the focused conversation, `gc` replies, `gA` opens the
+existing reaction/edit/delete/suggestion menu, `gR` resolves/reopens the thread,
+and `q` returns to the source. These actions retain the exact source PR/thread.
+
+The current branch is one way to discover a PR. Native PR → Diffview handoff,
+commit ranges and FileHistory can also show comments for their related PRs.
+Placement requires fresh GitHub thread anchors for the captured PR head, the
+corresponding Git blob locally, and unchanged code in the displayed pane.
+RIGHT anchors use the PR head; LEFT anchors use its local merge base, including
+renamed files. No automatic Git fetch is performed. Small insertions/deletions
+before a comment can shift its displayed position, provided the target code
+and unique nearby context still match. Edited, deleted, outdated or ambiguous
+anchors are available through `gct` instead of being assigned a guessed line.
+File-level threads also stay in the list. Source/display buffers over 1 MiB,
+binary/null files and conflict layouts do not receive line markers. Discovery
+coverage remains the related-PR coverage described above.
+
+Comment reads and projection have their own cancellable view state, separate
+from LazyAgent review findings. File switches and local edits recompute the
+placement without querying GitHub again; `gR` or a native GitHub mutation reloads
+the remote state. Ephemeral window decorations prevent markers from leaking
+into ordinary editing windows that share a Diffview worktree buffer.
+
 Verification uses real temporary Git repositories and installed Diffview with
 mocked GitHub responses; it does not perform live GitHub mutations. Run:
 
@@ -65,6 +96,8 @@ mocked GitHub responses; it does not perform live GitHub mutations. Run:
 nvim --headless --clean -u NONE -i NONE -l tests/run.lua
 nvim --headless --clean -u NONE -i NONE -l tests/comparison.lua
 nvim --headless --clean -u NONE -i NONE -l tests/github_context.lua
+nvim --headless --clean -u NONE -i NONE -l tests/comment_projection.lua
+nvim --headless --clean -u NONE -i NONE -l tests/pr_comments.lua
 ```
 
 The existing custom-review and commit-navigation smoke checks require the full

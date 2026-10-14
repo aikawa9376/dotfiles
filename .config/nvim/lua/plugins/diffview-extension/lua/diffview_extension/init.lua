@@ -27,6 +27,7 @@ function M.setup()
   })
 
   local group = vim.api.nvim_create_augroup("DiffviewExtension", { clear = true })
+  require('diffview_extension.pr_comments').setup(group)
   require('diffview_extension.github_context').setup(group)
   commit_info.setup(group)
   vim.api.nvim_create_autocmd("User", {
