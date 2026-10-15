@@ -18,7 +18,6 @@ package.loaded["obsidian"] = {
 assert(context.vault_path() == nil, "vault lookup is safe while obsidian.nvim is still setting up")
 package.loaded["obsidian"] = nil
 local vault = "/vault"
-related._cache.root = vault
 
 local function note(path, lines)
   return related._parse_note(vault .. "/" .. path, path, lines)
@@ -74,11 +73,40 @@ local git_context = {
   branch_name = "master",
   branch_note_segments = { "master" },
 }
-local ranked = related._rank_entries(entries, git_context, "Neovimから")
-assert(ranked[1].entry == linked, "linked branch note with matching content ranks first")
-assert(ranked[1].score > ranked[2].score, "link and query boosts affect ordering")
-assert(vim.tbl_contains(ranked[1].reasons, "linked"), "ranking explains link relevance")
-assert(vim.tbl_contains(ranked[1].reasons, "content"), "ranking explains content relevance")
+local ranked = related._rank_entries(entries, git_context, "Neovimから", vault)
+assert(ranked[1].entry == branch and ranked[2].entry == linked,
+  "direct branch note should lead linked notes with a small content match")
+assert(ranked[2].score > ranked[3].score, "link and query boosts affect ordering")
+assert(vim.tbl_contains(ranked[2].reasons, "linked"), "ranking explains link relevance")
+assert(vim.tbl_contains(ranked[2].reasons, "content"), "ranking explains content relevance")
+local contextual = related._rank_entries(entries, git_context, "", vault)
+local branch_score, other_branch_score
+for _, candidate in ipairs(contextual) do
+  if candidate.entry == branch then
+    branch_score = candidate.score
+    assert(vim.tbl_contains(candidate.reasons, "branch_note"), "canonical branch note explains its extra relevance")
+  elseif candidate.entry == same_project then other_branch_score = candidate.score end
+end
+assert(branch_score == other_branch_score + 150, "canonical current branch note must outweigh indirect link bonuses")
+-- A reciprocal link hub must not push the branch note outside an eight-row shelf.
+local crowded = { [branch.path] = branch }
+for index = 1, 12 do
+  local name = "linked-" .. index
+  branch.links[name] = true
+  local entry = note("notes/" .. name .. ".md", {
+    "---", "project: dotfiles", "branch: master", "---", "# " .. name,
+    "[[notes/projects/dotfiles/master]]",
+  })
+  entry.mtime = 2000000000 + index
+  crowded[entry.path] = entry
+end
+local hub = related._rank_entries(crowded, git_context, "", vault)
+assert(hub[1].entry == branch and hub[1].score == 350, "current branch note disappeared behind reciprocal links")
+assert(hub[2].score == 325 and vim.tbl_contains(hub[2].reasons, "backlink"))
+local other_context = context.with_branch(git_context, "other")
+for _, candidate in ipairs(related._rank_entries(entries, other_context, "", vault)) do
+  if candidate.entry == branch then assert(not vim.tbl_contains(candidate.reasons, "branch_note"), "another branch must not receive the boost") end
+end
 
 local unscoped = related._rank_entries(entries, nil, "")
 assert(#unscoped == 4, "empty query without Git context keeps every note searchable")

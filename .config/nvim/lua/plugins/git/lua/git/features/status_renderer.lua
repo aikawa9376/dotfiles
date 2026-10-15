@@ -811,6 +811,28 @@ function M.shift_entries(bufnr, from_row, delta)
   model.rows_by_entry = nil
 end
 
+function M.remap_entries(bufnr, mapping)
+  local model = models[bufnr]
+  if not model then return end
+  local rows = {}
+  for row, entry in pairs(model.entries_by_row) do
+    if mapping[row] then rows[mapping[row]] = entry end
+  end
+  model.entries_by_row, model.rows_by_entry = rows, nil
+end
+
+function M.context(bufnr)
+  local model = models[bufnr]
+  if not model then return nil end
+  local paths, seen = {}, {}
+  for _, entries in ipairs({ model.conflicted, model.untracked, model.unstaged, model.staged }) do
+    for _, entry in ipairs(entries) do
+      if not seen[entry.path] then paths[#paths + 1] = entry.path; seen[entry.path] = true end
+    end
+  end
+  return { bufnr = bufnr, root = model.work_tree, branch = model.branch, oid = model.oid, paths = paths }
+end
+
 local function direct_row_for_entry(model, entry)
   if not model.rows_by_entry then
     local rows = {}

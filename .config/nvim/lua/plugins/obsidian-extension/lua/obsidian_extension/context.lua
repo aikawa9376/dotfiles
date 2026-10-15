@@ -125,8 +125,6 @@ function M.git()
   if repo_result.code ~= 0 then return nil, repo_result end
 
   local repo_root = project_root or trim(repo_result.stdout or "")
-  local repo_name = vim.fs.basename(repo_root)
-  local repo_slug = normalize_note_segment(repo_name, "project")
   local branch_result = vim.system({ "git", "rev-parse", "--abbrev-ref", "HEAD" }, {
     cwd = repo_root,
     text = true,
@@ -135,10 +133,18 @@ function M.git()
 
   local branch_name = trim(branch_result.stdout or "")
   if branch_name == "" then branch_name = "HEAD" end
+  return M.for_repository(repo_root, branch_name)
+end
+
+-- Build the same note identity from a captured repository snapshot without
+-- consulting the current window, cwd, project.nvim, or Git again.
+function M.for_repository(repo_root, branch_name)
+  local repo_name = vim.fs.basename(repo_root)
+  branch_name = branch_name and branch_name ~= "(detached)" and branch_name or "HEAD"
   return {
     repo_root = repo_root,
     repo_name = repo_name,
-    repo_slug = repo_slug,
+    repo_slug = normalize_note_segment(repo_name, "project"),
     branch_name = branch_name,
     branch_note_segments = branch_note_segments(branch_name),
     source = "git",

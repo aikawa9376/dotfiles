@@ -8,6 +8,7 @@ function M.setup(opts)
   end
   require('git.features.split_diff').setup()
   require('git.features.custom_commands').setup(opts.custom_commands or vim.g.git_custom_commands or {})
+  require('git.features.status_modules').setup(opts.status_modules or {})
   local group = vim.api.nvim_create_augroup('git_custom', { clear = true })
   local nowrap_filetypes = {
     git = true,

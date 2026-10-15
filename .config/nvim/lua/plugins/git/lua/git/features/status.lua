@@ -8,6 +8,7 @@ local worktree = require("git.features.worktree")
 local status_renderer = require("git.features.status_renderer")
 local status_folds = require('git.features.status_folds')
 local status_reconcile = require('git.features.status_reconcile')
+local status_modules = require('git.features.status_modules')
 local operation = require('git.features.operation')
 local range_diff = require('git.features.range_diff')
 local repository_health = require('git.features.repository_health')
@@ -36,6 +37,7 @@ local auto_fetch_by_work_tree = {}
 local auto_fetch_interval = 180
 
 function M.pull_request_at(buf, row)
+  if status_modules.at(buf, row) then return nil end
   local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ''
   local number = tonumber(line:match('^#(%d+)'))
   for _, pr in ipairs(pull_requests_by_buf[buf] or {}) do
@@ -163,6 +165,8 @@ local function status_header_kind(line)
 end
 
 local function status_cursor_key(lines, row, bufnr, section)
+  local module_key = bufnr and status_modules.key(bufnr, row)
+  if module_key then return 'module', module_key end
   local line = lines[row] or ''
   local rendered_entry = bufnr and status_renderer.entry_at(bufnr, row) or nil
   if rendered_entry and not rendered_entry.header then return 'status_entry', rendered_entry.path end
@@ -443,8 +447,8 @@ local function status_line_keys(lines)
   return keys
 end
 
-local function reconcile_status_block(bufnr, start_row, end_row, new_lines)
-  status_reconcile.apply(bufnr, start_row, end_row, new_lines, status_line_keys)
+local function reconcile_status_block(bufnr, start_row, end_row, new_lines, keys)
+  status_reconcile.apply(bufnr, start_row, end_row, new_lines, keys or status_line_keys)
 end
 
 local function insert_index_flag_warning(bufnr, lines, flag_state)
@@ -476,6 +480,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
   local snapshot = opts.snapshot or (opts.cached and status_snapshot_by_buf[bufnr] or nil)
   if snapshot and snapshot.commit_scope ~= commit_scope then snapshot = nil end
   if opts.snapshot and snapshot then status_snapshot_by_buf[bufnr] = snapshot end
+  local model_refreshed = not snapshot or opts.snapshot ~= nil
 
   if not snapshot then
     local cached_details = status_snapshot_by_buf[bufnr]
@@ -595,20 +600,47 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
     unpushed_commits_by_buf[bufnr] = snapshot.unpushed_commits
     local custom_lines = build_final_lines(snapshot.commit_lines)
     local current_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-    local custom_start
-    if opts.cached then
-      for row, line in ipairs(current_lines) do
-        if line:match('^Stashes %(') or status_header_kind(line) == 'commit' then
-          custom_start = row > 1 and current_lines[row - 1] == '' and row - 1 or row
-          break
+    if status_modules.enabled() then
+      local base_lines, native_rows, old_owned = status_modules.strip(bufnr, current_lines)
+      if opts.cached and not model_refreshed then status_renderer.remap_entries(bufnr, native_rows) end
+      local custom_start
+      if opts.cached and not model_refreshed then
+        for row, line in ipairs(base_lines) do
+          if line:match('^Stashes %(') or status_header_kind(line) == 'commit' then
+            custom_start = row > 1 and base_lines[row - 1] == '' and row - 1 or row
+            break
+          end
         end
       end
-    end
-    if custom_start then
-      reconcile_status_block(bufnr, custom_start, #current_lines, custom_lines)
+      local desired
+      if custom_start then
+        desired = vim.list_slice(base_lines, 1, custom_start - 1)
+        vim.list_extend(desired, custom_lines)
+      else
+        desired = append_custom_status_lines(native_lines, custom_lines)
+      end
+      local projected, mapping, new_owned = status_modules.compose(bufnr, desired)
+      status_renderer.remap_entries(bufnr, mapping)
+      reconcile_status_block(bufnr, 1, #current_lines, projected, function(lines, side)
+        return status_modules.keys(lines, side == 'old' and old_owned or new_owned, status_line_keys)
+      end)
+      status_modules.commit(bufnr, new_owned)
     else
-      local desired_lines = append_custom_status_lines(native_lines, custom_lines)
-      reconcile_status_block(bufnr, 1, #current_lines, desired_lines)
+      local custom_start
+      if opts.cached then
+        for row, line in ipairs(current_lines) do
+          if line:match('^Stashes %(') or status_header_kind(line) == 'commit' then
+            custom_start = row > 1 and current_lines[row - 1] == '' and row - 1 or row
+            break
+          end
+        end
+      end
+      if custom_start then
+        reconcile_status_block(bufnr, custom_start, #current_lines, custom_lines)
+      else
+        local desired_lines = append_custom_status_lines(native_lines, custom_lines)
+        reconcile_status_block(bufnr, 1, #current_lines, desired_lines)
+      end
     end
 
     -- Update extmarks based on the new buffer contents
@@ -621,7 +653,9 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
     local current_wt_abs = vim.fn.fnamemodify(work_tree, ':p'):gsub('/+$', '')
 
     for i, l in ipairs(lines_after) do
-      if l:match('^Worktrees') then
+      if status_modules.at(bufnr, i) then
+        in_worktree, in_stash, in_pr = false, false, false
+      elseif l:match('^Worktrees') then
         vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, 0, { end_col = #l, hl_group = 'RainbowDelimiterViolet' })
         in_worktree, in_stash, in_pr = true, false, false
       elseif l:match('^Stashes') then
@@ -721,42 +755,43 @@ end
 
 local function get_stash_ref_at_cursor(bufnr)
   local row = vim.api.nvim_win_get_cursor(0)[1]
+  if status_modules.at(bufnr, row) then return nil end
   local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1]
   return stash_ref_from_line(line)
 end
 
 local function is_cursor_in_stash_area()
-  local line = vim.api.nvim_get_current_line()
+  local line = status_modules.git_line()
   if line:match('^%s*stash@%{%d+%}') then return true end
   local s = line:find('Stashes')
   return s ~= nil and (vim.api.nvim_win_get_cursor(0)[2] + 1) >= s
 end
 
 local function is_cursor_in_worktree_area()
-  local line = vim.api.nvim_get_current_line()
+  local line = status_modules.git_line()
   return line:match('^Worktrees') or line:match('^[~/]')
 end
 
 local function is_cursor_in_pull_request_area()
-  return pull_request_number_from_line(vim.api.nvim_get_current_line()) ~= nil
+  return pull_request_number_from_line(status_modules.git_line()) ~= nil
 end
 
 local function is_cursor_on_pull_request_header()
-  return vim.api.nvim_get_current_line():match('^Pull requests %(') ~= nil
+  return status_modules.git_line():match('^Pull requests %(') ~= nil
 end
 
 local function is_cursor_on_commit_header()
-  local line = vim.api.nvim_get_current_line()
+  local line = status_modules.git_line()
   return line:match('^Unpushed %[only%] %(%d+%)$') ~= nil
     or line:match('^Commits %[latest 15%+%] %(%d+%)$') ~= nil
 end
 
 local function submodule_path_at_cursor()
-  return repository_health.submodule_path(vim.api.nvim_get_current_line())
+  return repository_health.submodule_path(status_modules.git_line())
 end
 
 local function get_worktree_path_at_cursor()
-  local line = vim.api.nvim_get_current_line()
+  local line = status_modules.git_line()
   return line:match('^(%S+)')
 end
 
@@ -766,7 +801,7 @@ local function status_entry_at_cursor()
   local entry = status_renderer.entry_at(bufnr, row)
   if entry and not entry.header then return entry.status, entry.path, entry end
 
-  local line = vim.api.nvim_get_current_line()
+  local line = status_modules.git_line()
   local status, path = line:match('^([MADRCUT?!][MADRCUT?!]?) (.+)$')
   if not status then return nil, nil, nil end
   local _, new_path = path:match('^(.+) %-> (.+)$')
@@ -847,7 +882,7 @@ local function status_edit_command_at_cursor(bufnr)
     return 'edit ' .. vim.fn.fnameescape(absolute), nil, status_file_line_at_cursor(bufnr, row)
   end
 
-  local hash = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s')
+  local hash = status_modules.git_line():match('^(%x%x%x%x%x%x%x+)%s')
   if hash then return 'Gedit ' .. hash end
   return nil, 'No file or commit found at cursor'
 end
@@ -878,7 +913,7 @@ local function open_entry_from_status(bufnr, close_status)
   end
 
   local selected_commit = vim.api.nvim_win_call(status_win, function()
-    local line = vim.api.nvim_get_current_line()
+    local line = status_modules.git_line()
     return line:match('^(%x%x%x%x%x%x%x+)%s')
   end)
   local cmd, command_err, target_line = vim.api.nvim_win_call(status_win, function()
@@ -1126,6 +1161,16 @@ function M.setup(group)
         end
       end
 
+      local module_refresh_scheduled = false
+      status_modules.attach(b, function()
+        if module_refresh_scheduled then return end
+        module_refresh_scheduled = true
+        vim.schedule(function()
+          module_refresh_scheduled = false
+          if is_live() then refresh_cached() end
+        end)
+      end)
+
       local function schedule_refresh()
         if refresh_scheduled then return end
         refresh_scheduled = true
@@ -1170,6 +1215,8 @@ function M.setup(group)
               worktree_summary = previous and previous.worktree_summary or nil,
             },
           })
+
+          status_modules.refresh(b, status_renderer.context(b))
 
           local function schedule_details()
             -- Let the lightweight status and commits reach the screen before
@@ -1400,6 +1447,7 @@ function M.setup(group)
           index_flags_by_buf[b] = nil
           index_flag_diffs_by_buf[b] = nil
           status_snapshot_by_buf[b] = nil
+          status_modules.cleanup(b)
           status_folds.cleanup(b)
           status_renderer.cleanup(b)
           pcall(vim.api.nvim_del_augroup_by_id, bufgroupt)
@@ -1470,7 +1518,7 @@ function M.setup(group)
       end
 
       local function pull_request_at_cursor()
-        local number = pull_request_number_from_line(vim.api.nvim_get_current_line())
+        local number = pull_request_number_from_line(status_modules.git_line())
         if not number then return nil end
         for _, pr in ipairs(pull_requests_by_buf[b] or {}) do
           if pr.number == number then return pr end
@@ -1534,6 +1582,7 @@ function M.setup(group)
         local unpushed_hashes = commit_highlight.hash_set(unpushed_commits_by_buf[b])
         local in_unpulled = false
         for idx, line in ipairs(lines) do
+          if status_modules.at(b, idx) then line = '' end
           if line:match('^Unpulled ') then
             in_unpulled = true
           elseif in_unpulled and not line:match('^%x%x%x%x%x%x%x+%s') then
@@ -1622,7 +1671,8 @@ function M.setup(group)
             end
           end
         end
-        notes.apply_icons(b, utils.get_buf_work_tree(b), function(line)
+        notes.apply_icons(b, utils.get_buf_work_tree(b), function(line, row)
+          if status_modules.at(b, row) then return nil end
           return line:match('^(%x%x%x%x%x%x%x+)%s')
         end)
       end
@@ -2019,7 +2069,7 @@ function M.setup(group)
         local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
         for _ = 1, count do
           local candidate = row + direction
-          while candidate >= 1 and candidate <= #lines and not predicate(lines[candidate], candidate) do
+          while candidate >= 1 and candidate <= #lines and (status_modules.at(b, candidate) or not predicate(lines[candidate], candidate)) do
             candidate = candidate + direction
           end
           if candidate < 1 or candidate > #lines then break end
@@ -2230,13 +2280,13 @@ function M.setup(group)
 
       -- Reword the commit selected in status with the shared commit editor.
       vim.keymap.set('n', 'cw', function()
-        local stash_ref = stash_ref_from_line(vim.api.nvim_get_current_line())
+        local stash_ref = stash_ref_from_line(status_modules.git_line())
         if stash_ref then
           rename_stash_at_cursor(stash_ref)
           return
         end
 
-        local commit = vim.api.nvim_get_current_line():match('^%s*(%x%x%x%x%x%x%x+)')
+        local commit = status_modules.git_line():match('^%s*(%x%x%x%x%x%x%x+)')
         if not commit then
           vim.notify('No commit or stash found at cursor', vim.log.levels.WARN)
           return
@@ -2278,7 +2328,7 @@ function M.setup(group)
       local function drop_status_commits(first_row, last_row)
         local commits, seen = {}, {}
         for row = first_row, last_row do
-          local line = vim.api.nvim_buf_get_lines(b, row - 1, row, false)[1] or ''
+          local line = not status_modules.at(b, row) and vim.api.nvim_buf_get_lines(b, row - 1, row, false)[1] or ''
           local commit = line:match('^(%x%x%x%x%x%x%x+)%s')
           if commit and not seen[commit] then
             seen[commit] = true
@@ -2302,6 +2352,7 @@ function M.setup(group)
 
       local function index_flag_entry_at_cursor()
         local row = vim.api.nvim_win_get_cursor(0)[1]
+        if status_modules.at(b, row) then return nil end
         local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
         return index_flags.entry_at_row(index_flags_by_buf[b], lines, row)
       end
@@ -2433,8 +2484,10 @@ function M.setup(group)
 
       local function status_context_at_cursor(current_operation)
         local row = vim.api.nvim_win_get_cursor(0)[1]
-        local line = vim.api.nvim_get_current_line()
+        local line = status_modules.git_line()
         local lines = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local module = status_modules.at(b, row)
+        if module then return { kind = 'module', label = module.definition.title, module = module } end
         local flagged = index_flag_entry_at_cursor()
         if flagged then
           local mode = flagged.flag == 'skip' and 'skip-worktree' or 'assume-unchanged'
@@ -2506,6 +2559,14 @@ function M.setup(group)
 
       local function contextual_action_group(context, current_operation)
         local kind = context.kind
+        if kind == 'module' then
+          local info = context.module
+          local actions = { { key = '<Tab>', label = 'Toggle shelf' } }
+          if info.kind == 'header' or (info.kind == 'item' and info.definition.open) then
+            table.insert(actions, 1, { key = '<CR>', label = info.kind == 'header' and 'Toggle shelf' or 'Open item' })
+          end
+          return { title = context.label, actions = actions }
+        end
         if kind == 'change' then
           local entry = context.entry
           local staged, conflicted = entry.section == 'staged', entry.section == 'conflicted'
@@ -2773,7 +2834,7 @@ function M.setup(group)
         local context = status_context_at_cursor(current_operation)
         local groups = {}
         local contextual = contextual_action_group(context, current_operation)
-        local line = vim.api.nvim_get_current_line()
+        local line = status_modules.git_line()
         if status_folds.is_header(line) or line:match('^Index flags %[local%]') then
           contextual = contextual or { title = 'Section', actions = {} }
           table.insert(contextual.actions, 1, { key = '<Tab>', label = 'Toggle section' })
@@ -2815,7 +2876,7 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Show Git status actions' })
 
       local function note_target()
-        local commit = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s')
+        local commit = status_modules.git_line():match('^(%x%x%x%x%x%x%x+)%s')
         if not commit then vim.notify('No commit found at cursor', vim.log.levels.WARN) end
         return commit
       end
@@ -2847,7 +2908,7 @@ function M.setup(group)
 
       vim.keymap.set('n', 'gx', function()
         local root = utils.get_buf_work_tree(b)
-        local line = vim.api.nvim_get_current_line()
+        local line = status_modules.git_line()
         local pr = pull_request_at_cursor()
         if pr then
           github_open.open(pr.url ~= '' and pr.url or nil, 'Pull request URL is unavailable')
@@ -2874,7 +2935,8 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true, desc = 'Open selected item on GitHub' })
 
       local function open_status_item()
-        local current_line = vim.api.nvim_get_current_line()
+        if status_modules.open(b, vim.api.nvim_win_get_cursor(0)[1]) then return end
+        local current_line = status_modules.git_line()
         if current_line:match('^Hidden changes: %d+ files? %(Index flags%)$') then
           move_to_index_flags(true)
           return
@@ -2914,7 +2976,7 @@ function M.setup(group)
         end
         if is_cursor_in_pull_request_area() then
           local pr = pull_request_at_cursor()
-          local number = pr and pr.number or pull_request_number_from_line(vim.api.nvim_get_current_line())
+          local number = pr and pr.number or pull_request_number_from_line(status_modules.git_line())
           local repository = pr and pr.repository or nil
           if number and repository then
             require('git.features.pr').open({ root = utils.get_buf_work_tree(b), url = pr.url })
@@ -2932,7 +2994,7 @@ function M.setup(group)
           local wt = utils.get_buf_work_tree(b)
           local abs = wt and vim.fn.fnamemodify(wt .. '/' .. f, ':p') or nil
           -- Only open Oil when cursor is directly on the status line for that path
-          local cur_line = vim.api.nvim_get_current_line()
+          local cur_line = status_modules.git_line()
           local cur_match = cur_line:match('^[MADRCUT?!][MADRCUT?!]? (.+)$')
           if cur_match then
             local _, new = cur_match:match('^(.+) %-> (.+)$')
@@ -2949,6 +3011,7 @@ function M.setup(group)
       vim.keymap.set('n', '<CR>', open_status_item, { buffer = b, nowait = true, silent = true })
       vim.keymap.set('n', '<2-LeftMouse>', open_status_item, { buffer = b, nowait = true, silent = true })
       vim.keymap.set('n', '<Tab>', function()
+        if status_modules.toggle(b, vim.api.nvim_win_get_cursor(0)[1]) then return end
         local ctx = require('git.features.magit_actions').context(b)
         if ctx and ctx.commit then require('git.features.patch_collection').open(ctx)
         else status_folds.toggle(b, vim.api.nvim_win_get_cursor(0)[1]) end
@@ -3048,7 +3111,7 @@ function M.setup(group)
         { buffer = b, nowait = true, silent = true, desc = 'Open git branch list' })
       for key, command in pairs({ bs = 'GbranchSpinoff', bS = 'GbranchSpinout' }) do
         vim.keymap.set('n', key, function()
-          local commit = vim.api.nvim_get_current_line():match('^(%x%x%x%x%x%x%x+)%s')
+          local commit = status_modules.git_line():match('^(%x%x%x%x%x%x%x+)%s')
           vim.cmd(command .. (commit and (' ' .. commit) or ''))
         end, { buffer = b, nowait = true, silent = true, desc = command .. ' from selected commit' })
       end
@@ -3070,7 +3133,7 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true, desc = 'Review outgoing stack with range-diff' })
 
       local function commit_hash_at_cursor()
-        local l = vim.api.nvim_get_current_line()
+        local l = status_modules.git_line()
         local h = l:match('^(%x+)')
         if not h then vim.notify('No commit found at cursor', vim.log.levels.WARN); return nil end
         return h
@@ -3122,7 +3185,7 @@ function M.setup(group)
 
       -- gr: Revert commit under cursor
       vim.keymap.set('n', 'gr', function()
-        local l = vim.api.nvim_get_current_line()
+        local l = status_modules.git_line()
         local h = l:match('^(%x+)')
         if not h then vim.notify('No commit found at cursor', vim.log.levels.WARN) return end
         local confirm = vim.fn.confirm('Revert ' .. h:sub(1, 7) .. '?', '&Yes\n&No', 2)
@@ -3131,7 +3194,8 @@ function M.setup(group)
       end, { buffer = b, nowait = true, silent = true, desc = 'Revert commit under cursor' })
 
       local function open_diff_at_cursor(layout)
-        local line = vim.api.nvim_get_current_line()
+        if status_modules.at(b, vim.fn.line('.')) then return end
+        local line = status_modules.git_line()
         local diff = require('git.features.commit_diff')
         local work_tree = utils.get_buf_work_tree(b)
         local commit = line:match('^(%x%x%x%x%x%x%x+)%s')
@@ -3268,8 +3332,10 @@ function M.refresh_buffer(bufnr)
   local ns_pr = vim.api.nvim_create_namespace('git_status_pull_requests')
   pcall(function()
     refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr)
+    status_modules.refresh(bufnr, status_renderer.context(bufnr))
   end)
-  notes.apply_icons(bufnr, utils.get_buf_work_tree(bufnr), function(line)
+  notes.apply_icons(bufnr, utils.get_buf_work_tree(bufnr), function(line, row)
+    if status_modules.at(bufnr, row) then return nil end
     return line:match('^(%x%x%x%x%x%x%x+)%s')
   end)
 end
@@ -3298,7 +3364,7 @@ function M.focus_section(bufnr, section, opts)
     for row, line in ipairs(lines) do
       local matches = type(pattern) == 'function' and pattern(line)
         or type(pattern) == 'string' and line:match(pattern)
-      if matches then
+      if matches and not status_modules.at(bufnr, row) then
         local target = row < #lines and lines[row + 1] ~= '' and row + 1 or row
         if target > row and vim.api.nvim_win_call(winid, function()
           return vim.fn.foldclosed(row) == row

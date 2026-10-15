@@ -21,8 +21,8 @@ function M.apply(bufnr, start_row, end_row, new_lines, line_keys)
   if vim.deep_equal(old_lines, new_lines) then return end
 
   local ids = { ids = {}, count = 0 }
-  local old_keys = encode_keys(line_keys(old_lines), ids)
-  local new_keys = encode_keys(line_keys(new_lines), ids)
+  local old_keys = encode_keys(line_keys(old_lines, 'old'), ids)
+  local new_keys = encode_keys(line_keys(new_lines, 'new'), ids)
   local hunks = vim.diff(old_keys, new_keys, { result_type = 'indices', algorithm = 'minimal' })
 
   -- Apply edits from the bottom so earlier row indices remain valid. Matched

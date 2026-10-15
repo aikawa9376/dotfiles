@@ -2,6 +2,11 @@ return {
   "git",
   dir = vim.fn.stdpath("config") .. "/lua/plugins/git",
   main = "git",
+  opts = function()
+    return { status_modules = {
+      require('git.integrations.obsidian').module({ after = 'commits', limit = 8 }),
+    } }
+  end,
   config = true,
   ft = 'diff',
   cmd = {

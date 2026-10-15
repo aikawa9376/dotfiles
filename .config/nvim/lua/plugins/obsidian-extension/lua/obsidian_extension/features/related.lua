@@ -2,13 +2,7 @@ local M = {}
 local context = require("obsidian_extension.context")
 local uv = vim.uv or vim.loop
 
-local cache = {
-  root = nil,
-  entries = {},
-  signatures = {},
-  building = false,
-  callbacks = {},
-}
+local indexes = {}
 
 local function trim(text)
   return (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -91,14 +85,16 @@ local function file_signature(stat)
   return table.concat({ tostring(mtime.sec or 0), tostring(mtime.nsec or 0), tostring(stat and stat.size or 0) }, ":")
 end
 
-local function finish_build()
+local function finish_build(cache, err)
   cache.building = false
   local callbacks = cache.callbacks
   cache.callbacks = {}
-  for _, callback in ipairs(callbacks) do callback(cache.entries) end
+  for _, callback in ipairs(callbacks) do
+    if err then callback(nil, err) else callback(cache.entries) end
+  end
 end
 
-local function process_paths(root, paths)
+local function process_paths(root, paths, cache)
   local seen = {}
   local index = 1
   local batch_size = 40
@@ -116,6 +112,7 @@ local function process_paths(root, paths)
           local ok, lines = pcall(vim.fn.readfile, path)
           if ok then
             cache.entries[path] = parse_note(path, relative_path, lines)
+            cache.entries[path].mtime = stat.mtime.sec
             cache.signatures[path] = signature
           end
         end
@@ -133,33 +130,31 @@ local function process_paths(root, paths)
         cache.signatures[path] = nil
       end
     end
-    finish_build()
+    finish_build(cache)
   end
 
   process_batch()
 end
 
 local function refresh_index(root, callback)
-  if cache.root ~= root then
-    cache.root = root
-    cache.entries = {}
-    cache.signatures = {}
+  local index = indexes[root]
+  if not index then
+    index = { entries = {}, signatures = {}, building = false, callbacks = {} }
+    indexes[root] = index
   end
-  cache.callbacks[#cache.callbacks + 1] = callback
-  if cache.building then return end
-  cache.building = true
-
-  vim.system({ "rg", "--files", "-0", "-g", "*.md" }, { cwd = root, text = true }, function(result)
+  index.callbacks[#index.callbacks + 1] = callback
+  if index.building then return end
+  index.building = true
+  local ok, err = pcall(vim.system, { "rg", "--files", "-0", "-g", "*.md" }, { cwd = root, text = true }, function(result)
     vim.schedule(function()
       if result.code ~= 0 and result.code ~= 1 then
-        cache.building = false
-        cache.callbacks = {}
-        vim.notify("Failed to index Obsidian notes: " .. trim(result.stderr), vim.log.levels.ERROR)
+        finish_build(index, "Failed to index Obsidian notes: " .. trim(result.stderr))
         return
       end
-      process_paths(root, vim.split(result.stdout or "", "\0", { plain = true, trimempty = true }))
+      process_paths(root, vim.split(result.stdout or "", "\0", { plain = true, trimempty = true }), index)
     end)
   end)
+  if not ok then vim.schedule(function() finish_build(index, tostring(err)) end) end
 end
 
 local function branch_note_relative(git_context)
@@ -191,10 +186,10 @@ local function has_link(entry, target)
   return false
 end
 
-local function rank_entries(entries_by_path, git_context, query)
+local function rank_entries(entries_by_path, git_context, query, root)
   local entries = vim.tbl_values(entries_by_path)
   local branch_relative = branch_note_relative(git_context)
-  local branch_entry = branch_relative and entries_by_path[vim.fs.joinpath(cache.root or "", branch_relative)] or nil
+  local branch_entry = branch_relative and entries_by_path[vim.fs.joinpath(root or "", branch_relative)] or nil
   local terms = query_terms(query)
   local ranked = {}
 
@@ -204,6 +199,11 @@ local function rank_entries(entries_by_path, git_context, query)
     local same_branch = same_project and git_context.branch_name and entry.branch == git_context.branch_name
     if same_project then score = score + 100; reasons[#reasons + 1] = "project" end
     if same_branch then score = score + 100; reasons[#reasons + 1] = "branch" end
+    if branch_entry and entry.path == branch_entry.path then
+      -- Direct branch ownership outweighs combined outgoing/backlink bonuses.
+      score = score + 150
+      reasons[#reasons + 1] = "branch_note"
+    end
     if branch_entry and entry.path ~= branch_entry.path then
       for target in pairs(branch_entry.links) do
         if has_link(entry, target) then
@@ -240,7 +240,12 @@ local function rank_entries(entries_by_path, git_context, query)
   end
 
   table.sort(ranked, function(a, b)
-    if a.score == b.score then return a.entry.title < b.entry.title end
+    if a.score == b.score then
+      local a_modified, b_modified = a.entry.mtime or 0, b.entry.mtime or 0
+      if a_modified ~= b_modified then return a_modified > b_modified end
+      if a.entry.title == b.entry.title then return a.entry.path < b.entry.path end
+      return a.entry.title < b.entry.title
+    end
     return a.score > b.score
   end)
   return ranked
@@ -286,15 +291,34 @@ local function open_picker(root, ranked, git_context)
   })
 end
 
+-- One query service for the picker and embedding UIs. Results retain ranking
+-- reasons; callers choose whether zero-score search fallback entries belong.
+function M.query(opts, callback)
+  opts = opts or {}
+  local root = opts.root or context.vault_path()
+  if not root then callback(nil, "Could not determine the current Obsidian vault"); return end
+  local git_context = opts.git_context
+  if git_context == nil then git_context = context.git() end
+  local cancelled = false
+  refresh_index(root, function(entries, err)
+    if cancelled then return end
+    if not entries then callback(nil, err); return end
+    local ranked, result = rank_entries(entries, git_context, opts.query or "", root), {}
+    for _, candidate in ipairs(ranked) do
+      if candidate.score >= (opts.min_score or -math.huge) then
+        result[#result + 1] = candidate
+        if opts.limit and #result >= opts.limit then break end
+      end
+    end
+    callback(result, nil, root, git_context)
+  end)
+  return function() cancelled = true end
+end
+
 local function suggest(query)
-  local root = context.vault_path()
-  if not root then
-    vim.notify("Could not determine the current Obsidian vault", vim.log.levels.ERROR)
-    return
-  end
-  local git_context = context.git()
-  refresh_index(root, function(entries)
-    open_picker(root, rank_entries(entries, git_context, query), git_context)
+  M.query({ query = query }, function(ranked, err, root, git_context)
+    if not ranked then vim.notify(err, vim.log.levels.ERROR); return end
+    open_picker(root, ranked, git_context)
   end)
 end
 
@@ -307,7 +331,11 @@ function M.setup()
     pattern = "*.md",
     callback = function(event)
       local path = vim.api.nvim_buf_get_name(event.buf)
-      if context.is_vault_path(path, cache.root) then cache.signatures[path] = nil end
+      local changed = false
+      for root, index in pairs(indexes) do
+        if context.is_vault_path(path, root) then index.signatures[path] = nil; changed = true end
+      end
+      if changed then vim.api.nvim_exec_autocmds("User", { pattern = "ObsidianRelatedChanged" }) end
     end,
   })
 end
@@ -317,6 +345,5 @@ M._rank_entries = rank_entries
 M._branch_note_relative = branch_note_relative
 M._open_picker = open_picker
 M._refresh_index = refresh_index
-M._cache = cache
 
 return M

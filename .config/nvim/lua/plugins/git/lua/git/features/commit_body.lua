@@ -5,7 +5,8 @@ local states = {}
 local preview
 local icon = '󰍡'
 
-local function commit_at(line)
+local function commit_at(line, buf, row)
+  if require('git.features.status_modules').at(buf, row) then return nil end
   return line:match('^(%x%x%x%x%x%x%x+)%s')
 end
 
@@ -43,7 +44,7 @@ end
 local function render(bufnr, state)
   vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
   for row, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
-    local hash = commit_at(line)
+    local hash = commit_at(line, bufnr, row)
     if hash and state.bodies[hash] and state.bodies[hash] ~= '' then
       local col = #line
       if vim.bo[bufnr].filetype == 'gitlog' then
@@ -66,8 +67,8 @@ function M.refresh(bufnr)
   local state = states[bufnr]
   if not state or not vim.api.nvim_buf_is_loaded(bufnr) then return end
   local wanted, missing, seen = {}, {}, {}
-  for _, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
-    local hash = commit_at(line)
+  for row, line in ipairs(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)) do
+    local hash = commit_at(line, bufnr, row)
     if hash and not seen[hash] then
       seen[hash] = true
       if state.bodies[hash] ~= nil then wanted[hash] = state.bodies[hash]
@@ -111,7 +112,7 @@ end
 
 function M.show(bufnr)
   local state = states[bufnr]
-  local hash = commit_at(vim.api.nvim_get_current_line())
+  local hash = commit_at(vim.api.nvim_get_current_line(), bufnr, vim.fn.line('.'))
   if not state or not hash then
     vim.notify('No commit found at cursor', vim.log.levels.WARN)
     return

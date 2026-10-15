@@ -29,6 +29,7 @@ function M.status_items(bufnr, first, last)
   local renderer = require('git.features.status_renderer')
   local kind, values, section = nil, {}, nil
   for row = first, last do
+    if require('git.features.status_modules').at(bufnr, row) then return nil, 'Select only Git rows' end
     local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
     local entry = renderer.entry_at(bufnr, row)
     local commit = line:match('^(%x%x%x%x%x%x%x+)%s')

@@ -223,6 +223,91 @@ commits, and commit detail views. Branch and commit links require a matching
 local remote-tracking ref with a GitHub remote; unpushed items show a notice.
 `gi` manages index flags from the status panel.
 
+## Status shelves
+
+Status can embed independently loaded modules between its normal sections.
+The dotfiles configuration enables **Related notes** after the commit list.
+It shows up to eight Obsidian notes related to the captured repository/branch,
+using the same workspace, note index and ranking as `:ObsidianRelated`. Notes
+remain in the vault; no Git-specific copy or note database is created. Notes
+without a positive relevance score are omitted. An empty result hides the shelf.
+Names align at the left edge, with the note file's modification date
+(`YYYY-MM-DD`) in muted text on the right. The current branch's canonical
+branch note receives an additional 150 relevance points in the shared ranking,
+outweighing the combined outgoing-link/backlink bonus of 125. With matching
+project/branch metadata it scores 350, ahead of indirectly linked notes at 325.
+Candidates sort by relevance, then by modification time newest first, before
+the eight-item limit is applied. Title/path order only breaks remaining ties.
+Project and branch come from the Status buffer's Git snapshot, including when
+the current directory points at another repository.
+Enter opens the selected note in a tab. Enter on the heading or Tab anywhere
+in the shelf toggles its fold. Folding retains each window's view rather than
+reapplying `scrolloff`; folding from an item makes the ordinary move to its heading.
+Note writes refresh the shelf; `R` and repository
+reloads also reload its data. Unsaved note text is not indexed.
+
+Configure shelves once through `require('git').setup({ status_modules = ... })`
+(the dotfiles Lazy spec supplies these options in `init.lua`). The same module
+definition owns its identity, position, title, loader and open action:
+
+```lua
+status_modules = {
+  require('git.integrations.obsidian').module({ before = 'unstaged', limit = 8 }),
+  {
+    id = 'tasks', title = 'Project tasks', after = 'commits', folded = false,
+    load = function(context, done)
+      -- Read the existing task source; use async IO for expensive work.
+      done({ { id = 'task-42', text = 'Check the release checklist', url = 'https://example.com/tasks/42' } })
+      -- An asynchronous loader may return a cancellation function.
+    end,
+    open = function(context, item) vim.ui.open(item.url) end,
+  },
+}
+```
+
+Use either `before` or `after` with a native section ID: `header`, `conflicted`,
+`untracked`, `unstaged`, `staged`, `stashes`, `commits`, `unpulled`,
+`pull_requests`, `submodules`, `worktrees`, or `index_flags`. `top` and `bottom`
+are also available. Default placement is the bottom; a missing section also
+falls back to the bottom. Modules at the same position retain configuration
+order. These identities are shared with the native section/fold definitions.
+For example, the existing Obsidian shelf can move by changing only its
+`before`/`after` option.
+
+`load(context, done)` receives `bufnr`, repository `root`, `branch`, HEAD `oid`
+and changed `paths` from Status's existing Git snapshot. It must call
+`done(items)` or `done(nil, error)` once. Items need a unique stable string `id`
+and a one-line `text`; optional `detail` adds muted text after the name, and
+extra fields pass to `open(context, item)`. Text is
+display-only and never interpreted as a file path, commit or item identity.
+The loader starts on a scheduled callback; it must not block Neovim. Errors
+stay in that shelf, and results from superseded loads or closed views are
+discarded. Each status buffer owns its own results and cancellation handles.
+
+`hide_empty = false` keeps an empty shelf visible. Optional `highlight` sets
+the heading color; items may supply their own `highlight`. `events` can declare
+refresh triggers, for example `{ { event = 'User', pattern = 'ProjectTasksChanged' } }`.
+An integration can also call `require('git.features.status_modules').refresh(bufnr)`.
+Configure modules before opening Status; omitting `status_modules` from a
+standalone `git.setup()` enables none. Shelf folds, selection and native
+file/hunk identities survive asynchronous result updates and inline diff changes.
+
+`status_sections` owns native section IDs and heading/default-fold metadata;
+`status_modules` owns provider snapshots and their projection into Status.
+The renderer retains Git entry ownership and maps its rows through that
+projection. `git.integrations.obsidian` adapts the public
+`obsidian_extension.features.related.query()` service, whose index and ranking
+are also used by the existing picker. The API accepts a captured `git_context`,
+an optional workspace `root`, `query`, `min_score` and `limit`, and returns a
+cancellation function. Workspace indexes are isolated and shared by consumers.
+
+Checks: `status_modules` exercises real Git staging alongside shelves, placement,
+folds, semantic selection, provider errors, refresh events and stale callbacks;
+`status_obsidian` covers the adapter, and `status_obsidian_cold` uses the shipped
+Lazy specs with a real Obsidian client and temporary vault. The Obsidian extension's
+`tests/related_query_spec.lua` covers shared ranking, simultaneous vaults,
+cancellation, deleted notes and index errors.
+
 ## Repository initialization
 
 `<Space><Space> I` opens **Repository setup** in Git panels. Outside a Git

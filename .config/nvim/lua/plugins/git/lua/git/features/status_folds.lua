@@ -5,20 +5,9 @@ local tick_by_buf = {}
 local window_options = {}
 local marker_ns = vim.api.nvim_create_namespace('git_status_fold_markers')
 
+local native_sections = require('git.features.status_sections')
+local modules = require('git.features.status_modules')
 local heading_highlights = {
-  { '^Head:', 'RainbowDelimiterBlue' },
-  { '^Unmerged paths %(', 'RainbowDelimiterRed' },
-  { '^Untracked files %(', 'RainbowDelimiterOrange' },
-  { '^Unstaged changes %(', 'RainbowDelimiterYellow' },
-  { '^Staged changes %(', 'RainbowDelimiterGreen' },
-  { '^Unpulled ', 'RainbowDelimiterCyan' },
-  { '^Unpushed %[only%] %(', 'RainbowDelimiterViolet' },
-  { '^Commits %[latest 15%+%] %(', 'RainbowDelimiterViolet' },
-  { '^Submodules %(', 'RainbowDelimiterBlue' },
-  { '^Worktrees %(', 'RainbowDelimiterViolet' },
-  { '^Stashes %(', 'RainbowDelimiterOrange' },
-  { '^Pull requests %(', 'RainbowDelimiterGreen' },
-  { '^Index flags %[local%]', 'RainbowDelimiterCyan' },
   { '^Loading repository details', 'Comment' },
   { '^Bisecting', 'RainbowDelimiterYellow' },
   { '^Merge Current:', 'RainbowDelimiterYellow' },
@@ -26,50 +15,33 @@ local heading_highlights = {
 }
 
 function M.heading_group(line)
+  local definition = native_sections.match(line)
+  if definition then return definition.highlight end
   for _, item in ipairs(heading_highlights) do
     if line:match(item[1]) then return item[2] end
   end
 end
 
-local headers = {
-  { '^Head:', 'header' },
-  { '^Unmerged paths %(', 'conflicted' },
-  { '^Untracked files %(', 'untracked' },
-  { '^Unstaged changes %(', 'unstaged' },
-  { '^Staged changes %(', 'staged' },
-  { '^Stashes %(', 'stashes' },
-  { '^Unpushed %[only%] %(', 'commits' },
-  { '^Commits %[latest 15%+%] %(', 'commits' },
-  { '^Unpulled from .+ %(', 'unpulled' },
-  { '^Pull requests %(', 'pull_requests' },
-  { '^Submodules %(', 'submodules' },
-  { '^Worktrees %(', 'worktrees' },
-  { '^Index flags %[local%] %(', 'index_flags' },
-}
-
-local always_open = { header = true, conflicted = true, untracked = true, unstaged = true, staged = true, commits = true }
-
-local function header(line)
-  for _, item in ipairs(headers) do
-    if line:match(item[1]) then return item[2], tonumber(line:match('%((%d+)%)')) or 0 end
-  end
-end
-
 function M.is_header(line)
-  return header(line or '') ~= nil
+  return native_sections.match(line or '') ~= nil
 end
 
 local function sections(bufnr)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local found = {}
+  local owned, found = modules.rows(bufnr), modules.sections(bufnr)
   for row, line in ipairs(lines) do
-    local key, count = header(line)
-    if key then
+    local definition = not owned[row] and native_sections.match(line)
+    if definition then
       local last = row
       while last < #lines and lines[last + 1] ~= '' do last = last + 1 end
-      if last > row then table.insert(found, { key = key, count = count, first = row, last = last }) end
+      if last > row then
+        local count = tonumber(line:match('%((%d+)%)')) or 0
+        found[#found + 1] = { key = definition.id, count = count, first = row, last = last,
+          folded = definition.folded or (not definition.open and count >= 3) }
+      end
     end
   end
+  table.sort(found, function(a, b) return a.first < b.first end)
   return found
 end
 
@@ -120,7 +92,8 @@ end
 
 function M.foldtext()
   local line = vim.fn.getline(vim.v.foldstart)
-  local group = M.heading_group(line) or 'Normal'
+  local info = modules.at(vim.api.nvim_get_current_buf(), vim.v.foldstart)
+  local group = info and (info.definition.highlight or 'Title') or M.heading_group(line) or 'Normal'
   return { { line, group } }
 end
 
@@ -128,9 +101,10 @@ local function render_markers(bufnr, found, states)
   vim.api.nvim_buf_clear_namespace(bufnr, marker_ns, 0, -1)
   for _, section in ipairs(found) do
     local line = vim.api.nvim_buf_get_lines(bufnr, section.first - 1, section.first, false)[1]
+    local info = modules.at(bufnr, section.first)
     vim.api.nvim_buf_set_extmark(bufnr, marker_ns, section.first - 1, 0, {
       sign_text = states[section.key] and '▸' or '▾',
-      sign_hl_group = M.heading_group(line) or 'Normal',
+      sign_hl_group = info and (info.definition.highlight or 'Title') or M.heading_group(line) or 'Normal',
     })
   end
 end
@@ -159,8 +133,7 @@ function M.rebuild(bufnr, opts)
   folded_by_buf[bufnr] = states
   for _, section in ipairs(found) do
     if states[section.key] == nil then
-      states[section.key] = section.key == 'index_flags'
-        or (not always_open[section.key] and section.count >= 3)
+      states[section.key] = section.folded == true
     end
   end
   local windows = vim.fn.win_findbuf(bufnr)
@@ -168,12 +141,16 @@ function M.rebuild(bufnr, opts)
   for _, winid in ipairs(windows) do
     if vim.api.nvim_win_is_valid(winid) then
       vim.api.nvim_win_call(winid, function()
+        -- Recreating manual folds can reapply scrolloff even without moving
+        -- the selection; each window must retain its own viewport.
+        local view = vim.fn.winsaveview()
         M.setup_window(winid)
         vim.cmd('silent! normal! zE')
         for _, section in ipairs(found) do
           vim.cmd(('silent! %d,%dfold'):format(section.first, section.last))
           if not states[section.key] then vim.cmd(('silent! %dfoldopen'):format(section.first)) end
         end
+        vim.fn.winrestview(view)
       end)
     end
   end
@@ -183,7 +160,9 @@ end
 
 function M.toggle(bufnr, row)
   local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1]
-  local key = header(line or '')
+  local info = modules.at(bufnr, row)
+  local definition = native_sections.match(line or '')
+  local key = info and info.kind == 'header' and ('module:' .. info.definition.id) or definition and definition.id
   if not key then return false end
   local foldable = false
   for _, section in ipairs(sections(bufnr)) do

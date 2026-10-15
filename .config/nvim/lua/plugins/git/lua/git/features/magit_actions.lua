@@ -13,6 +13,7 @@ local function context(bufnr, row)
   if not panel then return nil end
   row = row or vim.api.nvim_win_get_cursor(0)[1]
   local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+  if panel == 'status' and require('git.features.status_modules').at(bufnr, row) then line = '' end
   local commit = line:match('^(%x%x%x%x%x%x%x+)')
   if panel == 'commit' then commit = vim.b[bufnr].git_commit end
   local branch = panel == 'branch' and (vim.b[bufnr].branch_map or {})[row] or nil
