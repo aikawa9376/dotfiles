@@ -116,10 +116,12 @@ end
 -- anchors only when their head/path belongs to this immutable snapshot.
 function M.apply_thread_status(threads, status, hash)
   for _, thread in ipairs(threads) do
+    thread.outdated = nil
     local remote = status.by_id[thread.id]
     if remote then
       if not remote.pending then thread.node_id, thread.resolved = remote.id, remote.isResolved end
       if status.head == hash and remote.path == thread.path then
+        if type(remote.isOutdated) == 'boolean' then thread.outdated = remote.isOutdated end
         thread.line, thread.start_line = nil, nil
         if remote.isOutdated == false and remote.subjectType == 'LINE' then
           thread.line, thread.start_line = github.scalar(remote.line), github.scalar(remote.startLine)
@@ -184,6 +186,7 @@ function M.load(ctx, opts)
   if not review_ok then errors[#errors + 1] = 'Review summaries unavailable: ' .. tostring(review) end
   local timeline_ok, timeline = reads[7].ok, reads[7].value
   if not timeline_ok then errors[#errors + 1] = 'PR timeline unavailable: ' .. tostring(timeline) end
+  if timeline_ok then for _, err in ipairs(timeline.errors or {}) do errors[#errors + 1] = 'PR timeline incomplete: ' .. err end end
   model.conversation = require('git.features.pr_conversation').build(ctx,
     conversation_ok and conversation or {}, review_ok and review.reviews or {}, errors, timeline_ok and timeline or nil)
   local viewed_ok, viewed = reads[5].ok, reads[5].value

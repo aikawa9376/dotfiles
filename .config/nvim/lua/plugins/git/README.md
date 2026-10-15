@@ -566,7 +566,9 @@ Events occupy one compact read-only row; Enter or `gx` opens their browser
 target. `gA` applies only to comments/review summaries, and `gR` does not resolve
 events. The same activity rows appear in PR-comment composer history.
 
-Conversation follows the paginated GitHub `timelineItems` order. It does not
+Conversation follows all paginated GitHub `timelineItems`, without an event-type
+allowlist. File/review/commit-comment threads stay outside Conversation,
+preserving the existing review separation; internal revision markers are omitted. It does not
 sort activity by Git author/committer timestamps: a commit authored before a
 review can have been pushed after it. Commit rows explicitly label their
 displayed timestamp as `commit date`, not push time. The independent Commits
@@ -576,7 +578,27 @@ existing REST records by node ID or public permalink, preserving their bodies,
 reactions and action identities without duplicate entries. Newly observed
 REST-only comments remain visible after the known timeline. A failed timeline
 read shows `PR timeline unavailable` and keeps available comments/reviews and
-diffs. Labels, assignees, project events and CI activity are not yet included.
+diffs. Activity includes bot/Actions label changes, assignees, review requests
+and removals/dismissals, title/base-branch edits, auto-merge/merge queues,
+deployments/statuses, projects/milestones, related issues/PRs/commits,
+locks, pins and other server-advertised events. Linked targets open with
+Enter / `gx`. Workflow job logs and the latest check results retain the CI
+section and native CI detail routes; they are not invented as timeline events.
+
+Colors stay concentrated on event icons and target names. Labels use Type,
+review requests blue, branches Special, projects Identifier, and references
+link colors. Deployments use blue, with successful/pending/failed statuses in
+green/yellow/red. Prose keeps Normal and dates stay subdued. The
+`GitPrTimelineLabel`, `GitPrTimelineReview`, `GitPrTimelineBranch`,
+`GitPrTimelineProject`, `GitPrTimelineDeployment` and `GitPrTimelineReference`
+groups can be overridden by the theme.
+
+The first timeline read per host discovers its supported event fields, so older
+servers do not receive queries for absent types. If introspection is disabled,
+the established event query is retained and additional event identities remain
+readable through generic labels. Missing/deleted targets show placeholders;
+partial GraphQL errors mark Conversation incomplete while keeping readable
+items. API head and pagination checks still protect the displayed snapshot.
 
 Keep a blank line between the title and description. Other normal editing keys retain
 their meaning inside that region. The other metadata and diffs are read-only
@@ -664,17 +686,27 @@ the comparison is unchanged; expanded patches for changed revisions load in
 the background before rendering. API state is always reread. Added, deleted,
 renamed and binary files use the shared commit change model. Binary comparisons
 open Diffview. Published threads use blue `💬` markers; private review drafts use
-amber `📝 [pending]` markers. On collapsed file headers, `💬` counts threads and
-adds `🆕` when the file has unread comments. On expanded file headers and
-LEFT/RIGHT diff lines, `💬` counts unread comments, including replies; it remains
-visible at zero so the conversation is still accessible. `📝` continues to count
-threads with private drafts. The thread summary keeps total thread counts and an
+amber `📝 [pending]` markers. File headers always show `💬 current/total`:
+`💬 2/5` means two published comments on non-outdated threads out of five
+published comments in that file. Counts include replies, your own comments and
+resolved threads, and stay the same when opening/closing diffs or reading comments.
+If outdated status is unavailable, only the confirmed total is shown.
+LEFT/RIGHT diff lines show the total published comment count at that position.
+Both headers and diff lines add `🆕` for unread comments, independently of the
+number. `📝` continues to count threads with private drafts. The thread summary keeps total thread counts and an
 unread indicator. File/outdated threads remain available through the file header.
 Opening a conversation or its preview marks its displayed comments read. Only other people's
 published comments count as unread; own comments and private drafts do not.
 Receipts persist locally per GitHub host/repository/PR/viewer across reopening
 and restarting Neovim. New replies or changes to previously read comments become
 unread on refresh. This state is independent of GitHub notifications and Octo.
+The Conversation heading also shows `🆕` for unread comments, reviews or timeline
+activity from other people. Revealing Conversation or opening its comment
+composer marks the displayed history read; collapsing it retains receipts.
+Comment, review and inline-comment IDs have separate receipt identities.
+Receipt fingerprints use a fixed, versioned field order so closing/reopening
+panels, changing worktrees or restarting Neovim preserves unchanged reads.
+Older receipt hashes remain recognized across their original JSON key orders.
 
 File review progress uses GitHub's Viewed state. Only a viewed file's path is
 dimmed with `GitPrViewedFile`; change letters, file icons, diff syntax and
@@ -705,6 +737,23 @@ for scrolling; `gc` from the popup opens the reply editor. Moving away or leavin
 the panel closes the preview.
 Conversation history inserts blank separators only between comments and omits
 trailing blank display lines, so the latest comment ends at the popup's bottom.
+File-thread previews and reply histories sort comments by creation time and
+place each comment's file/location and current resolved/unresolved state directly
+above that comment, including outdated threads and interleaved replies. The
+PR-wide Conversation retains GitHub's timeline order.
+
+Inline blocks retain their `suggestion` language (including `suggestion:-N+M`)
+and show a colored `-` / `+` diff, including removed code for deletion-only
+suggestions. The shared Git syntax/word-diff highlighter uses the selected
+display style and the source file's language within these owned ranges.
+Original code comes
+from the comment's historical `diff_hunk` and original side/line range, so moved
+or outdated anchors never compare against today's file. If that patch does not
+contain the complete selection, the original suggestion remains readable with
+an explicit source-unavailable label. Display conversion preserves the stored
+comment body and its edit/reply/apply targets. `gA` then `s` still opens the
+existing application preview; local and GitHub application parse the original
+suggestion, independently of the decorated history.
 
 The thread editor puts its context and conversation in a separate
 read-only Markdown panel above a body-only textarea. All composers use the same
@@ -1024,8 +1073,9 @@ existing lazy-loaded plugins. API processes, PR fetches and patch reads are
 asynchronous, and capture their original worktree before menus or input UIs open.
 Remote writes use literal argv and JSON stdin. `tests/pr_model.lua`,
 `tests/pr_view.lua`, `tests/pr_lifecycle.lua`, `tests/pr_refresh.lua`, `tests/pr_comments.lua`,
-`tests/pr_reviews.lua`, `tests/pr_markers.lua`, `tests/pr_review_migration.lua`,
-`tests/pr_help.lua`, `tests/pr_commits.lua`, `tests/pr_loading.lua` and `tests/github_actions.lua` exercise
+`tests/pr_reviews.lua`, `tests/pr_markers.lua`, `tests/pr_badges.lua`, `tests/pr_unread.lua`, `tests/pr_read_state.lua`,
+`tests/pr_history.lua`, `tests/pr_review_migration.lua`,
+`tests/pr_help.lua`, `tests/pr_commits.lua`, `tests/pr_loading.lua`, `tests/pr_timeline_events.lua` and `tests/github_actions.lua` exercise
 real local Git repositories/worktrees with mocked GitHub responses and writes.
 Live GitHub writes are not part of these checks.
 

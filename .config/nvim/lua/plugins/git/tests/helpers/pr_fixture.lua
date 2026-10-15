@@ -133,7 +133,16 @@ function M.new()
         end
         data = { comments }
       elseif path == 'graphql' then
-        if payload.query:find('timelineItems', 1, true) then
+        if payload.query:find('timelineTypes:', 1, true) then
+          local fixture = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))
+          local schema = f.timeline_schema or vim.json.decode(table.concat(vim.fn.readfile(fixture .. '/fixtures/pr_timeline_schema.json'), '\n'))
+          local possible = {}
+          for name, fields in pairs(schema) do
+            local names = {}; for _, name in ipairs(fields) do names[#names + 1] = { name = name } end
+            possible[#possible + 1] = { name = name, fields = names }
+          end
+          data = { data = { timelineTypes = { possibleTypes = possible } } }
+        elseif payload.query:find('timelineItems', 1, true) then
           if f.timeline_error then data = { errors = { { message = 'Timeline rejected' } } }
           else
             local pages = f.timeline_pages or { {} }
@@ -143,6 +152,7 @@ function M.new()
                 pageInfo = f.timeline_page_info or { hasNextPage = page < #pages, endCursor = tostring(page + 1) } },
             } } } }
           end
+          if f.timeline_partial_errors and data.data then data.errors = f.timeline_partial_errors end
         elseif payload.query:find('viewerViewedState', 1, true) then
           if f.viewed_error then data = { errors = { { message = 'Viewed status rejected' } } }
           else

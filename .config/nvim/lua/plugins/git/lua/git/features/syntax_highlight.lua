@@ -1466,7 +1466,16 @@ function M.attach(bufnr, opts)
           return
         end
       else
-        parsed_hunks = Parser.parse_buffer(bufnr, first_line)
+        if opts and opts.hunks then
+          -- Embedded patches supply owned ranges, so prose and unrelated
+          -- Markdown fences never become diff hunks through text heuristics.
+          parsed_hunks = vim.deepcopy(opts.hunks())
+          for _, hunk in ipairs(parsed_hunks) do
+            hunk.ft, hunk.lang = Parser.get_lang_info(hunk.filename or '')
+          end
+        else
+          parsed_hunks = Parser.parse_buffer(bufnr, first_line)
+        end
       end
       for _, region in ipairs(legacy_regions) do
         vim.cmd('silent! syntax clear ' .. region)

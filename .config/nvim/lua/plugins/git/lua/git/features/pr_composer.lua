@@ -97,7 +97,7 @@ function M.open(opts)
   -- Sending an empty summary needs a write event even without a local edit.
   local function write() vim.cmd('write') end
   vim.keymap.set({ 'n', 'i' }, '<C-s>', write, { buffer = buf, silent = true, desc = 'Send / save PR draft' })
-  require('git.features.pr_history').attach(buf, win, opts.history, opts.viewer, prefix, close, opts.hint)
+  require('git.features.pr_history').attach(buf, win, opts.history, opts.viewer, prefix, close, opts.hint, opts.history_contexts)
   vim.api.nvim_create_autocmd('BufWipeout', { group = group, buffer = buf, once = true, callback = function()
     stop_spinner()
     pcall(vim.api.nvim_del_augroup_by_id, group)

@@ -17,11 +17,11 @@ local function chunks(row)
   end
   return result
 end
-assert(chunks(ui.row('M file name.txt'))[' 💬 2'] and chunks(ui.row('M file name.txt'))[' 🆕'])
+assert(chunks(ui.row('M file name.txt'))[' 💬 4/4'] and chunks(ui.row('M file name.txt'))[' 🆕'])
 ui.key('o', ui.row('M file name.txt')); ui.wait(function() return pcall(ui.row, '+TWO') end)
-assert(chunks(ui.row('+TWO'))[' 💬 2'], 'Expanded badge counted threads / own comments instead of unread replies')
+assert(chunks(ui.row('+TWO'))[' 💬 3'] and chunks(ui.row('+TWO'))[' 🆕'], 'Diff badge did not count all comments and signal new replies separately')
 assert(chunks(ui.row('-two'))[' 💬 1'])
-assert(chunks(ui.row('M file name.txt'))[' 💬 3'] and not chunks(ui.row('M file name.txt'))[' 🆕'])
+assert(chunks(ui.row('M file name.txt'))[' 💬 4/4'] and chunks(ui.row('M file name.txt'))[' 🆕'])
 -- Reading repaints badges in place even after title edits shift the diff rows.
 local title = ui.row('PR title')
 vim.api.nvim_buf_set_lines(ui.buf, title - 1, title, false, { 'Edited title' })
@@ -35,7 +35,8 @@ assert(vim.bo[history].readonly and not vim.bo[history].modifiable)
 assert(not pcall(vim.api.nvim_buf_set_lines, history, 0, 1, false, { 'tampered' }), 'Conversation history was editable')
 assert(vim.deep_equal(before, vim.api.nvim_buf_get_lines(ui.buf, 0, -1, false)) and vim.bo[ui.buf].modified)
 assert(#f.calls == calls, 'Marking comments read triggered a remote request')
-assert(chunks(ui.row('+TWO'))[' 💬 0'] and chunks(ui.row('M file name.txt'))[' 💬 1'])
+assert(chunks(ui.row('+TWO'))[' 💬 3'] and not chunks(ui.row('+TWO'))[' 🆕'])
+assert(chunks(ui.row('M file name.txt'))[' 💬 4/4'] and chunks(ui.row('M file name.txt'))[' 🆕'])
 local own, other, own_author = false, false, false
 local history_lines = vim.api.nvim_buf_get_lines(history, 0, -1, false)
 assert(history_lines[#history_lines] == 'My own reply', 'History includes trailing blank rows')
@@ -53,13 +54,13 @@ ui.key('<Tab>'); assert(vim.api.nvim_get_current_buf() == history)
 ui.key('<Tab>'); assert(vim.api.nvim_get_current_buf() == input)
 ui.close_draft(input); assert(not vim.api.nvim_buf_is_valid(history))
 ui.key('<', ui.row('M file name.txt'))
-assert(chunks(ui.row('M file name.txt'))[' 💬 2'] and chunks(ui.row('M file name.txt'))[' 🆕'])
+assert(chunks(ui.row('M file name.txt'))[' 💬 4/4'] and chunks(ui.row('M file name.txt'))[' 🆕'])
 -- Reading the remaining LEFT thread clears the closed-file unread indicator.
 local model = view.model(ui.buf)
 local left = assert(model.threads[2])
 for _, thread in ipairs(model.threads) do if thread.id == 201 then left = thread end end
 reads.mark(model.ctx, f.viewer, left.comments)
-assert(chunks(ui.row('M file name.txt'))[' 💬 2'] and not chunks(ui.row('M file name.txt'))[' 🆕'])
+assert(chunks(ui.row('M file name.txt'))[' 💬 4/4'] and not chunks(ui.row('M file name.txt'))[' 🆕'])
 -- Receipts are durable and isolated by viewer / PR / host, and detect edits.
 package.loaded['git.features.pr_read_state'] = nil
 reads = require('git.features.pr_read_state')
@@ -83,7 +84,7 @@ f.comments[1][#f.comments[1] + 1] = { id = 104, in_reply_to_id = 101, path = 'fi
 ui.refresh()
 assert(chunks(ui.row('M file name.txt'))[' 🆕'])
 ui.key('o', ui.row('M file name.txt')); ui.wait(function() return pcall(ui.row, '+TWO') end)
-assert(chunks(ui.row('+TWO'))[' 💬 1'])
+assert(chunks(ui.row('+TWO'))[' 💬 4'] and chunks(ui.row('+TWO'))[' 🆕'])
 ui.key('gc', ui.row('+TWO')); input = vim.api.nvim_get_current_buf(); history = vim.b[input].git_pr_history
 ui.body({ 'Reply after reading' }); ui.key('<Tab>'); ui.key('<C-s>')
 ui.wait(function() return not vim.api.nvim_buf_is_valid(input) end); ui.loaded()

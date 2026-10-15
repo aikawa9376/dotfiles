@@ -4,18 +4,14 @@ local github = require('git.features.github')
 function M.open(ctx, thread, viewer)
   if thread.pending then return require('git.features.pr_review').drafts(ctx,
     { id = thread.review_id, comments = thread.comments }) end
+  local comments, contexts = require('git.features.pr_history').thread_history(ctx, { thread })
   local buf = require('git.features.pr_composer').open({
-    ctx = ctx, title = 'PR thread / reply', history = thread.comments, viewer = viewer,
-    prefix = require('git.features.pr_thread_status').context(ctx, { thread }),
+    ctx = ctx, title = 'PR thread / reply', history = comments, history_contexts = contexts, viewer = viewer,
     action = 'send', success = 'Reply sent',
     submit = function(resolved, body)
       return github.api(resolved, ('repos/%s/pulls/%d/comments/%d/replies'):format(resolved.repo, resolved.number, thread.id), { body = body })
     end,
   })
-  if vim.b[buf].git_pr_history then
-    local ok, err = pcall(require('git.features.pr_read_state').mark, ctx, viewer, thread.comments)
-    if not ok then vim.notify('Could not save comment read state: ' .. tostring(err), vim.log.levels.WARN) end
-  end
   return buf
 end
 function M.select(ctx, threads, viewer)

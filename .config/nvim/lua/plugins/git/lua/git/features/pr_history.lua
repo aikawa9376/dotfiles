@@ -1,10 +1,35 @@
 -- Context and conversation live above the compact input in an immutable buffer.
 local M = {}
-function M.buffer(prefix, comments, viewer)
+-- Thread histories have their own chronological order. PR-wide timeline
+-- entries keep the canonical GitHub ordering supplied by their caller.
+function M.thread_history(ctx, threads)
+  local comments, contexts, order = {}, {}, {}
+  for _, thread in ipairs(threads) do
+    local context = require('git.features.pr_thread_status').context(ctx, { thread })
+    for _, comment in ipairs(thread.comments) do
+      comments[#comments + 1], contexts[comment], order[comment] = comment, context, #comments + 1
+    end
+  end
+  table.sort(comments, function(a, b)
+    local first = require('git.features.github').scalar(a.created_at) or ''
+    local last = require('git.features.github').scalar(b.created_at) or ''
+    if first ~= last then return first < last end
+    if a.id and b.id and a.id ~= b.id then return a.id < b.id end
+    return order[a] < order[b]
+  end)
+  return comments, contexts
+end
+function M.buffer(prefix, comments, viewer, contexts)
   local lines, spans, rows = vim.deepcopy(prefix), {}, {}
+  local context_rows, diff_spans, suggestion_hunks = {}, {}, {}
   if #lines > 0 and comments and #comments > 0 and lines[#lines] ~= '' then lines[#lines + 1] = '' end
   for index, comment in ipairs(comments or {}) do
     if index > 1 then lines[#lines + 1] = '' end
+    for _, line in ipairs(contexts and contexts[comment] or {}) do
+      lines[#lines + 1], context_rows[#context_rows + 1] = line, #lines + 1
+      rows[#lines] = comment
+    end
+    if contexts and contexts[comment] then lines[#lines + 1] = '' end
     local first = #lines
     if require('git.features.pr_timeline').is_event(comment) then
       local chunks, line = require('git.features.pr_timeline').chunks(comment, viewer), ''
@@ -16,8 +41,17 @@ function M.buffer(prefix, comments, viewer)
       lines[#lines + 1] = '@' .. author .. (author == viewer and ' · you' or '')
         .. (comment.pending and ' [pending]' or '') .. ' · ' .. (comment.created_at or '')
         .. (comment.review_state and (' · Review ' .. comment.review_state) or '')
-      local body = vim.split(comment.body or '', '\n', { plain = true })
+      local body, highlights, hunks
+      if comment.path then body, highlights, hunks = require('git.features.pr_suggestions').display(comment)
+      else body, highlights, hunks = vim.split(comment.body or '', '\n', { plain = true }), {}, {} end
       while #body > 0 and body[#body]:match('^%s*$') do table.remove(body) end
+      for _, mark in ipairs(highlights) do
+        diff_spans[#diff_spans + 1] = { row = #lines + mark.row - 1, group = mark.group }
+      end
+      for _, hunk in ipairs(hunks) do
+        hunk.start_line = #lines + hunk.start_line
+        suggestion_hunks[#suggestion_hunks + 1] = hunk
+      end
       vim.list_extend(lines, body)
       local reactions = require('git.features.pr_reactions').format(comment.reactions)
       if reactions ~= '' then lines[#lines + 1] = reactions end
@@ -34,7 +68,9 @@ function M.buffer(prefix, comments, viewer)
   vim.api.nvim_set_hl(0, 'GitPrCommentContext', { default = true, link = 'Title' })
   vim.api.nvim_set_hl(0, 'GitPrCommentInstruction', { default = true, link = 'Comment' })
   local ns = vim.api.nvim_create_namespace('git_pr_history')
-  for at, line in ipairs(prefix) do
+  for at in ipairs(prefix) do context_rows[#context_rows + 1] = at end
+  for _, at in ipairs(context_rows) do
+    local line = lines[at]
     vim.api.nvim_buf_set_extmark(buf, ns, at - 1, 0, { end_col = #line,
       hl_group = 'GitPrCommentContext', priority = 160 })
     for label, group in pairs({ ['✅ resolved'] = 'GitPrPositive', ['💬 unresolved'] = 'DiagnosticInfo',
@@ -61,10 +97,17 @@ function M.buffer(prefix, comments, viewer)
         hl_group = span.own and 'GitPrCommentSelf' or 'DiagnosticWarn', priority = 160 })
     end
   end
+  for _, mark in ipairs(diff_spans) do
+    vim.api.nvim_buf_set_extmark(buf, ns, mark.row, 0, { end_col = #lines[mark.row + 1],
+      hl_group = mark.group, priority = 180 })
+  end
+  if #suggestion_hunks > 0 then
+    require('git.features.syntax_highlight').attach(buf, { hunks = function() return suggestion_hunks end })
+  end
   return buf, lines, rows
 end
-function M.attach(input, win, comments, viewer, prefix, close, hint)
-  local buf, lines, rows = M.buffer(prefix, comments, viewer)
+function M.attach(input, win, comments, viewer, prefix, close, hint, contexts)
+  local buf, lines, rows = M.buffer(prefix, comments, viewer, contexts)
   local config = vim.api.nvim_win_get_config(win)
   local context_height, content_height = 0, 0
   for at, line in ipairs(lines) do
@@ -85,7 +128,11 @@ function M.attach(input, win, comments, viewer, prefix, close, hint)
     local item = rows[vim.fn.line('.')]
     if item then require('git.features.pr_comment_actions').menu(vim.b[input].git_pr_ctx, item, viewer) end
   end, { buffer = buf, silent = true, desc = 'Comment reactions / edit / delete / apply suggestion' })
-  if comments and #comments > 0 then vim.b[input].git_pr_history = buf end
+  if comments and #comments > 0 then
+    vim.b[input].git_pr_history = buf
+    local ok, err = pcall(require('git.features.pr_read_state').mark, vim.b[input].git_pr_ctx, viewer, comments)
+    if not ok then vim.notify('Could not save comment read state: ' .. tostring(err), vim.log.levels.WARN) end
+  end
   vim.keymap.set('n', '<Tab>', function() if vim.api.nvim_win_is_valid(history) then vim.api.nvim_set_current_win(history) end end,
     { buffer = input, silent = true, desc = 'Read conversation history' })
   vim.keymap.set('n', '<Tab>', function() if vim.api.nvim_win_is_valid(win) then vim.api.nvim_set_current_win(win) end end,

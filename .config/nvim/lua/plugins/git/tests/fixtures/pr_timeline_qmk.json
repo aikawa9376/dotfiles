@@ -1,0 +1,193 @@
+{
+  "source": "https://github.com/qmk/qmk_firmware/pull/26413",
+  "nodes": [
+    {
+      "__typename": "PullRequestCommit",
+      "id": "PURC_lADOAac9Mc8AAAABAiXSYNoAKDJmMGI2ZDY4Yjk1YjgwNWVkZWQ1NTZkMGJmNzY0MzRiMDg0ZWM4YmE",
+      "url": "https://github.com/qmk/qmk_firmware/pull/26413/commits/2f0b6d68b95b805eded556d0bf76434b084ec8ba",
+      "commit": {
+        "oid": "2f0b6d68b95b805eded556d0bf76434b084ec8ba",
+        "abbreviatedOid": "2f0b6d6",
+        "messageHeadline": "Add 80Retros XT1981 keyboard",
+        "committedDate": "2026-08-21T10:27:07Z",
+        "author": {
+          "name": "Alex Price",
+          "user": {
+            "login": "awprice"
+          }
+        }
+      }
+    },
+    {
+      "__typename": "LabeledEvent",
+      "id": "LE_lADOAac9Mc8AAAABNrorKM8AAAAG8CeU-Q",
+      "createdAt": "2026-08-21T10:31:07Z",
+      "actor": {
+        "login": "github-actions"
+      },
+      "label": {
+        "name": "keyboard"
+      }
+    },
+    {
+      "__typename": "LabeledEvent",
+      "id": "LE_lADOAac9Mc8AAAABNrorKM8AAAAG8CeVLQ",
+      "createdAt": "2026-08-21T10:31:07Z",
+      "actor": {
+        "login": "github-actions"
+      },
+      "label": {
+        "name": "keymap"
+      }
+    },
+    {
+      "__typename": "PullRequestReview",
+      "id": "PRR_kwDOAac9Mc8AAAABKbWy9g",
+      "url": "https://github.com/qmk/qmk_firmware/pull/26413#pullrequestreview-4994740982",
+      "state": "CHANGES_REQUESTED"
+    },
+    {
+      "__typename": "PullRequestCommit",
+      "id": "PURC_lADOAac9Mc8AAAABAiXSYNoAKDg1OGU4MjI1NmMyNmVhNmY3NjkzMWRjYTEyMzJhZjcxNDRiOThlNWU",
+      "url": "https://github.com/qmk/qmk_firmware/pull/26413/commits/858e82256c26ea6f76931dca1232af7144b98e5e",
+      "commit": {
+        "oid": "858e82256c26ea6f76931dca1232af7144b98e5e",
+        "abbreviatedOid": "858e822",
+        "messageHeadline": "Address review feedback",
+        "committedDate": "2026-08-21T22:29:15Z",
+        "author": {
+          "name": "Alex Price",
+          "user": {
+            "login": "awprice"
+          }
+        }
+      }
+    },
+    {
+      "__typename": "ReferencedEvent",
+      "id": "REFE_lADOAac9Mc8AAAABNrorKM8AAAAG8iwRYQ",
+      "createdAt": "2026-08-21T23:30:31Z",
+      "actor": {
+        "login": "awprice"
+      },
+      "commit": {
+        "oid": "b7e31457cbd7a012a496f61bf82caf25abe60269",
+        "abbreviatedOid": "b7e3145",
+        "url": "https://github.com/awprice/qmk_userspace_via/commit/b7e31457cbd7a012a496f61bf82caf25abe60269",
+        "messageHeadline": "Add 80Retros XT1981 via keymap"
+      }
+    },
+    {
+      "__typename": "ReferencedEvent",
+      "id": "REFE_lADOAac9Mc8AAAABNrorKM8AAAAG8i0s7w",
+      "createdAt": "2026-08-21T23:33:43Z",
+      "actor": {
+        "login": "awprice"
+      },
+      "commit": {
+        "oid": "a59ecad3716a5ebc1da5df65d5cba9dc54d862b4",
+        "abbreviatedOid": "a59ecad",
+        "url": "https://github.com/awprice/keyboards-1/commit/a59ecad3716a5ebc1da5df65d5cba9dc54d862b4",
+        "messageHeadline": "Add 80Retros XT1981 definition"
+      }
+    },
+    {
+      "__typename": "ReviewRequestedEvent",
+      "id": "RRE_lADOAac9Mc8AAAABNrorKM8AAAAG8i5kAQ",
+      "createdAt": "2026-08-21T23:37:02Z",
+      "actor": {
+        "login": "awprice"
+      },
+      "requestedReviewer": {
+        "login": "zvecr"
+      }
+    },
+    {
+      "__typename": "PullRequestReview",
+      "id": "PRR_kwDOAac9Mc8AAAABK1W3Ew",
+      "url": "https://github.com/qmk/qmk_firmware/pull/26413#pullrequestreview-5022005011",
+      "state": "APPROVED"
+    },
+    {
+      "__typename": "CrossReferencedEvent",
+      "id": "CRE_kwDOEiF-4c8AAAACeE-_8g",
+      "createdAt": "2026-08-27T13:01:46Z",
+      "actor": {
+        "login": "awprice"
+      },
+      "url": "https://github.com/qmk/qmk_firmware/pull/26413#ref-pullrequest-5267815186",
+      "source": {
+        "number": 1038,
+        "title": "Add 80Retros XT1981 keyboard",
+        "url": "https://github.com/vial-kb/vial-qmk/pull/1038",
+        "repository": {
+          "nameWithOwner": "vial-kb/vial-qmk"
+        }
+      }
+    },
+    {
+      "__typename": "IssueComment",
+      "id": "IC_kwDOAac9Mc8AAAABRDqD1w",
+      "url": "https://github.com/qmk/qmk_firmware/pull/26413#issuecomment-5439652823"
+    },
+    {
+      "__typename": "MentionedEvent",
+      "id": "MEE_lADOAac9Mc8AAAABNrorKM8AAAAHAm6TvQ",
+      "createdAt": "2026-08-27T13:13:56Z",
+      "actor": {
+        "login": "zvecr"
+      }
+    },
+    {
+      "__typename": "SubscribedEvent",
+      "id": "SE_lADOAac9Mc8AAAABNrorKM8AAAAHAm6UMw",
+      "createdAt": "2026-08-27T13:13:57Z",
+      "actor": {
+        "login": "zvecr"
+      }
+    },
+    {
+      "__typename": "IssueComment",
+      "id": "IC_kwDOAac9Mc8AAAABbJJN6w",
+      "url": "https://github.com/qmk/qmk_firmware/pull/26413#issuecomment-6116494827"
+    },
+    {
+      "__typename": "LabeledEvent",
+      "id": "LE_lADOAac9Mc8AAAABNrorKM8AAAAHr8cJyQ",
+      "createdAt": "2026-10-12T02:09:16Z",
+      "actor": {
+        "login": "github-actions"
+      },
+      "label": {
+        "name": "stale"
+      }
+    },
+    {
+      "__typename": "IssueComment",
+      "id": "IC_kwDOAac9Mc8AAAABbJMsUw",
+      "url": "https://github.com/qmk/qmk_firmware/pull/26413#issuecomment-6116551763"
+    },
+    {
+      "__typename": "UnlabeledEvent",
+      "id": "UNLE_lADOAac9Mc8AAAABNrorKM8AAAAHsH_eTA",
+      "createdAt": "2026-10-12T07:10:16Z",
+      "actor": {
+        "login": "filterpaper"
+      },
+      "label": {
+        "name": "stale"
+      }
+    },
+    {
+      "__typename": "LabeledEvent",
+      "id": "LE_lADOAac9Mc8AAAABNrorKM8AAAAHsH_elw",
+      "createdAt": "2026-10-12T07:10:16Z",
+      "actor": {
+        "login": "filterpaper"
+      },
+      "label": {
+        "name": "awaiting review"
+      }
+    }
+  ]
+}

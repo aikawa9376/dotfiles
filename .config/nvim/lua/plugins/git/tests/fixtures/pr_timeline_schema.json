@@ -1,0 +1,681 @@
+{
+  "AddedToMergeQueueEvent": [
+    "actor",
+    "createdAt",
+    "enqueuer",
+    "id",
+    "mergeQueue",
+    "pullRequest"
+  ],
+  "AddedToProjectEvent": [
+    "actor",
+    "createdAt",
+    "id"
+  ],
+  "AddedToProjectV2Event": [
+    "actor",
+    "createdAt",
+    "id",
+    "project",
+    "wasAutomated"
+  ],
+  "AddedToStackEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "pullRequest",
+    "stackId",
+    "stackNumber"
+  ],
+  "AssignedEvent": [
+    "actor",
+    "assignable",
+    "assignee",
+    "createdAt",
+    "id",
+    "intent"
+  ],
+  "AutoMergeDisabledEvent": [
+    "actor",
+    "createdAt",
+    "disabler",
+    "id",
+    "pullRequest",
+    "reason",
+    "reasonCode"
+  ],
+  "AutoMergeEnabledEvent": [
+    "actor",
+    "createdAt",
+    "enabler",
+    "id",
+    "pullRequest"
+  ],
+  "AutoRebaseEnabledEvent": [
+    "actor",
+    "createdAt",
+    "enabler",
+    "id",
+    "pullRequest"
+  ],
+  "AutoSquashEnabledEvent": [
+    "actor",
+    "createdAt",
+    "enabler",
+    "id",
+    "pullRequest"
+  ],
+  "AutomaticBaseChangeFailedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "newBase",
+    "oldBase",
+    "pullRequest"
+  ],
+  "AutomaticBaseChangeSucceededEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "newBase",
+    "oldBase",
+    "pullRequest"
+  ],
+  "BaseRefChangedEvent": [
+    "actor",
+    "createdAt",
+    "currentRefName",
+    "databaseId",
+    "id",
+    "previousRefName",
+    "pullRequest"
+  ],
+  "BaseRefDeletedEvent": [
+    "actor",
+    "baseRefName",
+    "createdAt",
+    "id",
+    "pullRequest"
+  ],
+  "BaseRefForcePushedEvent": [
+    "actor",
+    "afterCommit",
+    "beforeCommit",
+    "createdAt",
+    "id",
+    "pullRequest",
+    "ref"
+  ],
+  "BlockedByAddedEvent": [
+    "actor",
+    "blockingIssue",
+    "createdAt",
+    "id"
+  ],
+  "BlockedByRemovedEvent": [
+    "actor",
+    "blockingIssue",
+    "createdAt",
+    "id"
+  ],
+  "BlockingAddedEvent": [
+    "actor",
+    "blockedIssue",
+    "createdAt",
+    "id"
+  ],
+  "BlockingRemovedEvent": [
+    "actor",
+    "blockedIssue",
+    "createdAt",
+    "id"
+  ],
+  "ClosedEvent": [
+    "actor",
+    "closable",
+    "closer",
+    "createdAt",
+    "duplicateOf",
+    "id",
+    "intent",
+    "resourcePath",
+    "stateReason",
+    "url"
+  ],
+  "CommentDeletedEvent": [
+    "actor",
+    "createdAt",
+    "databaseId",
+    "deletedCommentAuthor",
+    "id"
+  ],
+  "ConnectedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "isCrossRepository",
+    "source",
+    "subject"
+  ],
+  "ConvertToDraftEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "pullRequest",
+    "resourcePath",
+    "url"
+  ],
+  "ConvertedFromDraftEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "project",
+    "wasAutomated"
+  ],
+  "ConvertedNoteToIssueEvent": [
+    "actor",
+    "createdAt",
+    "databaseId",
+    "id",
+    "projectColumnName"
+  ],
+  "ConvertedToDiscussionEvent": [
+    "actor",
+    "createdAt",
+    "discussion",
+    "id"
+  ],
+  "CrossReferencedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "isCrossRepository",
+    "referencedAt",
+    "resourcePath",
+    "source",
+    "target",
+    "url",
+    "willCloseTarget"
+  ],
+  "DemilestonedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "milestoneTitle",
+    "subject"
+  ],
+  "DeployedEvent": [
+    "actor",
+    "createdAt",
+    "databaseId",
+    "deployment",
+    "id",
+    "pullRequest",
+    "ref"
+  ],
+  "DeploymentEnvironmentChangedEvent": [
+    "actor",
+    "createdAt",
+    "deploymentStatus",
+    "id",
+    "pullRequest"
+  ],
+  "DisconnectedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "isCrossRepository",
+    "source",
+    "subject"
+  ],
+  "HeadRefDeletedEvent": [
+    "actor",
+    "createdAt",
+    "headRef",
+    "headRefName",
+    "id",
+    "pullRequest"
+  ],
+  "HeadRefForcePushedEvent": [
+    "actor",
+    "afterCommit",
+    "beforeCommit",
+    "createdAt",
+    "id",
+    "pullRequest",
+    "ref"
+  ],
+  "HeadRefRestoredEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "pullRequest"
+  ],
+  "IssueComment": [
+    "author",
+    "authorAssociation",
+    "body",
+    "bodyHTML",
+    "bodyText",
+    "createdAt",
+    "createdViaEmail",
+    "databaseId",
+    "editor",
+    "fullDatabaseId",
+    "id",
+    "includesCreatedEdit",
+    "isMinimized",
+    "isPinned",
+    "issue",
+    "lastEditedAt",
+    "minimizedReason",
+    "pinnedAt",
+    "pinnedBy",
+    "publishedAt",
+    "pullRequest",
+    "reactionGroups",
+    "reactions",
+    "repository",
+    "resourcePath",
+    "updatedAt",
+    "url",
+    "userContentEdits",
+    "viewerCanDelete",
+    "viewerCanMinimize",
+    "viewerCanPin",
+    "viewerCanReact",
+    "viewerCanUnminimize",
+    "viewerCanUnpin",
+    "viewerCanUpdate",
+    "viewerCannotUpdateReasons",
+    "viewerDidAuthor"
+  ],
+  "IssueCommentPinnedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "issueComment"
+  ],
+  "IssueCommentUnpinnedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "issueComment"
+  ],
+  "IssueFieldAddedEvent": [
+    "actor",
+    "color",
+    "createdAt",
+    "id",
+    "intent",
+    "issueField",
+    "options",
+    "value"
+  ],
+  "IssueFieldChangedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "intent",
+    "issueField",
+    "newColor",
+    "newOptions",
+    "newValue",
+    "previousColor",
+    "previousOptions",
+    "previousValue"
+  ],
+  "IssueFieldRemovedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "intent",
+    "issueField",
+    "options"
+  ],
+  "IssueTypeAddedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "intent",
+    "issueType"
+  ],
+  "IssueTypeChangedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "intent",
+    "issueType",
+    "prevIssueType"
+  ],
+  "IssueTypeRemovedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "intent",
+    "issueType"
+  ],
+  "LabeledEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "intent",
+    "label",
+    "labelable"
+  ],
+  "LockedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "lockReason",
+    "lockable"
+  ],
+  "MarkedAsDuplicateEvent": [
+    "actor",
+    "canonical",
+    "createdAt",
+    "duplicate",
+    "id",
+    "isCrossRepository"
+  ],
+  "MentionedEvent": [
+    "actor",
+    "createdAt",
+    "databaseId",
+    "id"
+  ],
+  "MergedEvent": [
+    "actor",
+    "commit",
+    "createdAt",
+    "id",
+    "mergeRef",
+    "mergeRefName",
+    "pullRequest",
+    "resourcePath",
+    "url"
+  ],
+  "MilestonedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "milestoneTitle",
+    "subject"
+  ],
+  "MovedColumnsInProjectEvent": [
+    "actor",
+    "createdAt",
+    "id"
+  ],
+  "ParentIssueAddedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "parent"
+  ],
+  "ParentIssueRemovedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "parent"
+  ],
+  "PinnedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "issue"
+  ],
+  "ProjectV2ItemStatusChangedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "previousStatus",
+    "project",
+    "status",
+    "wasAutomated"
+  ],
+  "PullRequestCommit": [
+    "commit",
+    "id",
+    "pullRequest",
+    "resourcePath",
+    "url"
+  ],
+  "PullRequestCommitCommentThread": [
+    "comments",
+    "commit",
+    "id",
+    "path",
+    "position",
+    "pullRequest",
+    "repository"
+  ],
+  "PullRequestReview": [
+    "author",
+    "authorAssociation",
+    "authorCanPushToRepository",
+    "body",
+    "bodyHTML",
+    "bodyText",
+    "comments",
+    "commit",
+    "createdAt",
+    "createdViaEmail",
+    "editor",
+    "fullDatabaseId",
+    "id",
+    "includesCreatedEdit",
+    "isMinimized",
+    "lastEditedAt",
+    "minimizedReason",
+    "onBehalfOf",
+    "publishedAt",
+    "pullRequest",
+    "reactionGroups",
+    "reactions",
+    "repository",
+    "resourcePath",
+    "state",
+    "submittedAt",
+    "updatedAt",
+    "url",
+    "userContentEdits",
+    "viewerCanDelete",
+    "viewerCanMinimize",
+    "viewerCanReact",
+    "viewerCanUnminimize",
+    "viewerCanUpdate",
+    "viewerCannotUpdateReasons",
+    "viewerDidAuthor"
+  ],
+  "PullRequestReviewThread": [
+    "comments",
+    "diffSide",
+    "id",
+    "isCollapsed",
+    "isOutdated",
+    "isResolved",
+    "line",
+    "originalLine",
+    "originalStartLine",
+    "path",
+    "pullRequest",
+    "repository",
+    "resolvedBy",
+    "startDiffSide",
+    "startLine",
+    "subjectType",
+    "viewerCanReply",
+    "viewerCanResolve",
+    "viewerCanUnresolve"
+  ],
+  "PullRequestRevisionMarker": [
+    "createdAt",
+    "lastSeenCommit",
+    "pullRequest"
+  ],
+  "ReadyForReviewEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "pullRequest",
+    "resourcePath",
+    "url"
+  ],
+  "ReferencedEvent": [
+    "actor",
+    "commit",
+    "commitRepository",
+    "createdAt",
+    "id",
+    "isCrossRepository",
+    "isDirectReference",
+    "subject"
+  ],
+  "RemovedFromMergeQueueEvent": [
+    "actor",
+    "beforeCommit",
+    "createdAt",
+    "enqueuer",
+    "id",
+    "mergeQueue",
+    "pullRequest",
+    "reason"
+  ],
+  "RemovedFromProjectEvent": [
+    "actor",
+    "createdAt",
+    "id"
+  ],
+  "RemovedFromProjectV2Event": [
+    "actor",
+    "createdAt",
+    "id",
+    "project",
+    "wasAutomated"
+  ],
+  "RemovedFromStackEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "pullRequest",
+    "stackId",
+    "stackNumber"
+  ],
+  "RenamedTitleEvent": [
+    "actor",
+    "createdAt",
+    "currentTitle",
+    "id",
+    "previousTitle",
+    "subject"
+  ],
+  "ReopenedEvent": [
+    "actor",
+    "closable",
+    "createdAt",
+    "id",
+    "stateReason"
+  ],
+  "ReviewDismissedEvent": [
+    "actor",
+    "createdAt",
+    "databaseId",
+    "dismissalMessage",
+    "dismissalMessageHTML",
+    "id",
+    "previousReviewState",
+    "pullRequest",
+    "pullRequestCommit",
+    "resourcePath",
+    "review",
+    "url"
+  ],
+  "ReviewRequestRemovedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "pullRequest",
+    "requestedReviewer"
+  ],
+  "ReviewRequestedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "pullRequest",
+    "requestedReviewer"
+  ],
+  "SubIssueAddedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "subIssue"
+  ],
+  "SubIssueRemovedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "subIssue"
+  ],
+  "SubscribedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "subscribable"
+  ],
+  "TransferredEvent": [
+    "actor",
+    "createdAt",
+    "fromRepository",
+    "id",
+    "issue"
+  ],
+  "UnassignedEvent": [
+    "actor",
+    "assignable",
+    "assignee",
+    "createdAt",
+    "id"
+  ],
+  "UnlabeledEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "intent",
+    "label",
+    "labelable"
+  ],
+  "UnlockedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "lockable"
+  ],
+  "UnmarkedAsDuplicateEvent": [
+    "actor",
+    "canonical",
+    "createdAt",
+    "duplicate",
+    "id",
+    "isCrossRepository"
+  ],
+  "UnpinnedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "issue"
+  ],
+  "UnsubscribedEvent": [
+    "actor",
+    "createdAt",
+    "id",
+    "subscribable"
+  ],
+  "UserBlockedEvent": [
+    "actor",
+    "blockDuration",
+    "createdAt",
+    "id",
+    "subject"
+  ]
+}

@@ -10,7 +10,7 @@ local function git(root, args)
 end
 function M.parse(body)
   local suggestions, active, fence, inside = {}, nil, nil, false
-  for _, line in ipairs(vim.split((body or ''):gsub('\r\n', '\n'), '\n', { plain = true })) do
+  for row, line in ipairs(vim.split((body or ''):gsub('\r\n', '\n'), '\n', { plain = true })) do
     if not inside then
       local ticks, suffix = line:match('^%s*(```+)(.*)$')
       local before, after
@@ -18,22 +18,101 @@ function M.parse(body)
       if ticks then
         inside, fence = true, #ticks
         if suffix:match('^suggestion%s*$') or before then
-          active = { lines = {}, before = tonumber(before), after = tonumber(after) }
+          active = { lines = {}, before = tonumber(before), after = tonumber(after), first_row = row }
         end
       end
     elseif line:match('^%s*`+%s*$') and #(line:match('`+') or '') >= fence then
-      if active then suggestions[#suggestions + 1] = active end
+      if active then active.last_row = row; suggestions[#suggestions + 1] = active end
       active, inside, fence = nil, false, nil
     elseif active then active.lines[#active.lines + 1] = line end
   end
   return suggestions
 end
+local function range(item, suggestion)
+  local line = tonumber(github.scalar(item.line))
+  if not line then return end
+  return suggestion.before and line - suggestion.before or tonumber(github.scalar(item.start_line)) or line,
+    suggestion.after and line + suggestion.after or line
+end
+-- REST diff_hunk is the historical patch at comment creation, even when the
+-- current line has moved or disappeared. Never read today's file for this view.
+local function original(item, suggestion)
+  if item.subject_type == 'file' then return end
+  local line = github.scalar(item.original_line)
+  local start
+  if line then start = github.scalar(item.original_start_line)
+  else start = github.scalar(item.start_line) end
+  local first, last = range({ line = line or github.scalar(item.line),
+    start_line = start }, suggestion)
+  if not first or first < 1 or last < first then return end
+  local side = github.scalar(item.side)
+  if side ~= 'LEFT' and side ~= 'RIGHT' then return end
+  if start and github.scalar(item.start_side) and item.start_side ~= side then return end
+  local source, old, new = {}, nil, nil
+  for _, text in ipairs(vim.split((github.scalar(item.diff_hunk) or ''):gsub('\r\n', '\n'), '\n', { plain = true })) do
+    local left, right = text:match('^@@ %-(%d+),?%d* %+(%d+),?%d* @@')
+    if left then old, new = tonumber(left), tonumber(right)
+    elseif old then
+      local prefix = text:sub(1, 1)
+      if prefix == ' ' or prefix == '+' or prefix == '-' then
+        local at = side == 'LEFT' and old or new
+        if prefix == ' ' or (side == 'LEFT' and prefix == '-') or (side == 'RIGHT' and prefix == '+') then
+          source[at] = text:sub(2)
+        end
+        if prefix ~= '+' then old = old + 1 end
+        if prefix ~= '-' then new = new + 1 end
+      end
+    end
+  end
+  local lines = {}
+  for at = first, last do
+    if source[at] == nil then return end
+    lines[#lines + 1] = source[at]
+  end
+  return lines, first
+end
+-- Display only: retain the original comment body and action identity.
+function M.display(item)
+  local body = vim.split((item.body or ''):gsub('\r\n', '\n'), '\n', { plain = true })
+  local lines, highlights, hunks, next_row = {}, {}, {}, 1
+  for _, suggestion in ipairs(M.parse(item.body)) do
+    vim.list_extend(lines, vim.list_slice(body, next_row, suggestion.first_row - 1))
+    local old, first = original(item, suggestion)
+    if old then
+      local width = 3
+      for _, text in ipairs(vim.list_extend(vim.deepcopy(old), suggestion.lines)) do
+        for ticks in text:gmatch('`+') do width = math.max(width, #ticks + 1) end
+      end
+      local fence = string.rep('`', width)
+      local language = body[suggestion.first_row]:match('^%s*```+(.-)%s*$')
+      lines[#lines + 1] = fence .. language
+      local new_first = #suggestion.lines == 0 and first - 1 or first
+      lines[#lines + 1] = ('@@ -%d,%d +%d,%d @@'):format(first, #old, new_first, #suggestion.lines)
+      highlights[#highlights + 1] = { row = #lines, group = 'DiffChange' }
+      local hunk = { filename = item.path, start_line = #lines, old_start = first, new_start = new_first, lines = {} }
+      for _, change in ipairs({ { old, '-' }, { suggestion.lines, '+' } }) do
+        for _, text in ipairs(change[1]) do
+          lines[#lines + 1] = change[2] .. text
+          hunk.lines[#hunk.lines + 1] = change[2] .. text
+        end
+      end
+      hunks[#hunks + 1] = hunk
+      lines[#lines + 1] = fence
+    else
+      lines[#lines + 1] = #suggestion.lines == 0
+        and 'Suggestion deletes selected code (original lines unavailable).'
+        or 'Suggestion (original lines unavailable):'
+      vim.list_extend(lines, vim.list_slice(body, suggestion.first_row, suggestion.last_row))
+    end
+    next_row = suggestion.last_row + 1
+  end
+  vim.list_extend(lines, vim.list_slice(body, next_row))
+  return lines, highlights, hunks
+end
 function M.replace(source, item, suggestion)
   assert(item.side == 'RIGHT' and tonumber(github.scalar(item.line)), 'Suggestion must target a current RIGHT-side line')
   assert(not source:find('\0', 1, true), 'Binary suggestions are unsupported')
-  local line = tonumber(item.line)
-  local first = suggestion.before and line - suggestion.before or tonumber(github.scalar(item.start_line)) or line
-  local last = suggestion.after and line + suggestion.after or line
+  local first, last = range(item, suggestion)
   local crlf, eol = source:find('\r\n', 1, true) ~= nil, source:sub(-1) == '\n'
   local lines = vim.split(source:gsub('\r\n', '\n'), '\n', { plain = true })
   if eol then table.remove(lines) end

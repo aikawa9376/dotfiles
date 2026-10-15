@@ -42,7 +42,7 @@ for _, call in ipairs(f.calls) do if call.argv[2] == 'api' and vim.tbl_contains(
   local payload = vim.json.decode(call.opts.stdin)
   if payload.query:find('timelineItems', 1, true) then
     assert(payload.variables.owner == 'org' and payload.variables.name == 'repo' and payload.variables.number == 7)
-    assert(payload.query:find('HEAD_REF_FORCE_PUSHED_EVENT', 1, true))
+    assert(payload.query:find('HeadRefForcePushedEvent', 1, true) and not payload.query:find('itemTypes:', 1, true))
     pages[#pages + 1] = payload.variables.cursor or 'first'
   end
 end end
@@ -99,6 +99,6 @@ assert(ui.row('PR comments unavailable:') and ui.row('force-pushed') and ui.row(
 local unavailable = api.entry(view.model(ui.buf).ctx, { __typename = 'HeadRefForcePushedEvent', id = 'OLD',
   actor = vim.NIL, beforeCommit = vim.NIL, afterCommit = vim.NIL })
 assert(unavailable.label == 'force-pushed — → —')
-assert(api.entry(view.model(ui.buf).ctx, { __typename = 'UnknownEvent', id = 'UNKNOWN' }) == nil)
+assert(api.entry(view.model(ui.buf).ctx, { __typename = 'UnknownEvent', id = 'UNKNOWN' }).label == 'unknown')
 vim.api.nvim_buf_delete(ui.buf, { force = true }); f.cleanup()
 print('PASS: paginated authoritative timeline order, node/permalink identities, old commit dates, duplicate/private exclusion, semantic events/browser/actions, composer history, drafts and isolated timeline failures')

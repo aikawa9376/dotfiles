@@ -9,7 +9,8 @@ local function run(fn)
   assert(vim.wait(5000, function() return done end, 10)); return ok, value
 end
 local function succeed(fn) local ok, result = run(fn); assert(ok, result); return result end
-local item = { id = 101, body = 'Please change\n```suggestion\nnew TWO\n```', path = 'file name.txt', side = 'RIGHT', line = 2 }
+local item = { id = 101, body = 'Please change\n```suggestion\nnew TWO\n```', path = 'file name.txt', side = 'RIGHT', line = 2,
+  original_line = 2, diff_hunk = '@@ -1,3 +1,4 @@\n one\n-two\n+TWO\n three\n+four' }
 local mutation, reject
 f.api_response = function(path, method, payload)
   if path == 'repos/org/repo/pulls/comments/101' then return { data = vim.deepcopy(item) }
@@ -22,6 +23,33 @@ f.api_response = function(path, method, payload)
   end
 end
 local suggestions = api.parse(item.body); assert(#suggestions == 1)
+-- Go from a colored suggestion row through gA -> s -> preview -> local apply.
+-- Applying must parse the immutable original body, never the displayed -/+ rows.
+local original_item = vim.deepcopy(item)
+local source = vim.api.nvim_get_current_buf()
+local preview = require('git.features.pr_comment_preview')
+local popup = preview.show({ ctx = ctx, buf = source, win = vim.api.nvim_get_current_win(), viewer = f.viewer,
+  threads = { { path = item.path, line = 2, side = 'RIGHT', comments = { item } } } })
+assert(popup and vim.deep_equal(item, original_item))
+local win = vim.fn.bufwinid(popup)
+vim.api.nvim_set_current_win(win)
+for row, line in ipairs(vim.api.nvim_buf_get_lines(popup, 0, -1, false)) do
+  if line == '+new TWO' then vim.api.nvim_win_set_cursor(win, { row, 0 }); break end
+end
+vim.fn.maparg('gA', 'n', false, true).callback()
+assert(vim.wait(5000, function() return vim.b.git_action_menu_kind == 'pr-comment-actions' end, 10))
+vim.fn.maparg('s', 'n', false, true).callback()
+assert(vim.wait(5000, function()
+  return vim.bo.filetype == 'diff' and vim.api.nvim_get_current_line():find('Suggestion · ', 1, true) ~= nil
+end, 10), table.concat(f.notifications, '\n'))
+local apply_buf = vim.api.nvim_get_current_buf()
+local apply_lines = table.concat(vim.api.nvim_buf_get_lines(apply_buf, 0, -1, false), '\n')
+assert(apply_lines:find('-TWO', 1, true) and apply_lines:find('+new TWO', 1, true))
+vim.fn.maparg('l', 'n', false, true).callback()
+assert(vim.wait(5000, function() return not vim.api.nvim_buf_is_valid(apply_buf) end, 10))
+assert(table.concat(vim.fn.readfile(f.root .. '/file name.txt'), '\n') == 'one\nnew TWO\nthree\nfour')
+assert(vim.deep_equal(item, original_item), 'The display/action route rewrote suggestion metadata')
+vim.fn.writefile({ 'one', 'TWO', 'three', 'four' }, f.root .. '/file name.txt')
 local plan = succeed(function() return api.prepare(ctx, item, suggestions[1]) end)
 assert(plan.replacement == 'one\nnew TWO\nthree\nfour\n')
 local head = f.git({ 'rev-parse', 'HEAD' })

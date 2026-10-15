@@ -17,23 +17,28 @@ local states = {}
 local window_options = {}
 local ns = vim.api.nvim_create_namespace('git_pr_status')
 local title_ns = vim.api.nvim_create_namespace('git_pr_title')
-local function comment_markers(threads, unread, expanded)
-  local published, pending, unread_count, resolved = 0, 0, 0, 0
+local function comment_markers(threads, unread, file_header)
+  local published, current, pending, unread_count, resolved, known = 0, 0, 0, 0, 0, true
   for _, thread in ipairs(threads) do
     local has_public, has_draft = false, false
     for _, comment in ipairs(thread.comments) do
-      if comment.pending then has_draft = true else has_public = true end
+      if comment.pending then has_draft = true
+      else
+        has_public, published = true, published + 1
+        if thread.outdated == false then current = current + 1
+        elseif thread.outdated == nil then known = false end
+      end
       if unread[comment.id] then unread_count = unread_count + 1 end
     end
     if has_public then
-      published = published + 1
       if thread.resolved then resolved = resolved + 1 end
     end
     if has_draft then pending = pending + 1 end
   end
   local chunks = {}
-  if published > 0 then chunks[#chunks + 1] = { ' 💬 ' .. (expanded and unread_count or published), 'DiagnosticInfo' } end
-  if not expanded and unread_count > 0 then chunks[#chunks + 1] = { ' 🆕', 'DiagnosticWarn' } end
+  local count = file_header and known and (current .. '/' .. published) or tostring(published)
+  if published > 0 then chunks[#chunks + 1] = { ' 💬 ' .. count, 'DiagnosticInfo' } end
+  if unread_count > 0 then chunks[#chunks + 1] = { ' 🆕', 'DiagnosticWarn' } end
   if pending > 0 then chunks[#chunks + 1] = { ' 📝 ' .. pending .. ' [pending]', 'DiagnosticWarn' } end
   if resolved > 0 then chunks[#chunks + 1] = { ' ✅ ' .. resolved, 'GitPrPositive' } end
   return chunks
@@ -142,16 +147,35 @@ end
 local function paint_comments(s)
   for _, id in ipairs(s.comment_marks or {}) do pcall(vim.api.nvim_buf_del_extmark, s.buf, ns, id) end
   s.comment_marks = {}
-  local unread = require('git.features.pr_read_state').unread(s.ctx, s.model.review and s.model.review.viewer, s.model.threads)
+  local reads = require('git.features.pr_read_state')
+  local viewer = s.model.review and s.model.review.viewer or s.model.viewed and s.model.viewed.viewer
+  local unread = reads.unread(s.ctx, viewer, s.model.threads)
   for row, info in pairs(s.rows) do
     local chunks = info.header and display.statistics(info.entry) or {}
-    vim.list_extend(chunks, comment_markers(info.threads, unread, not info.header or s.expanded[info.entry.path]))
+    vim.list_extend(chunks, comment_markers(info.threads, unread, info.header))
     if #chunks > 0 then s.comment_marks[#s.comment_marks + 1] = vim.api.nvim_buf_set_extmark(s.buf, ns, row + delta(s) - 1, 0,
       { virt_text = chunks, virt_text_pos = 'eol' }) end
   end
   local summary = comment_markers(s.model.threads, unread, false)
   if #summary > 0 then s.comment_marks[#s.comment_marks + 1] = vim.api.nvim_buf_set_extmark(s.buf, ns,
     vim.api.nvim_buf_line_count(s.buf) - 1, 0, { virt_text = summary, virt_text_pos = 'eol' }) end
+  local entries = s.model.conversation and s.model.conversation.entries or {}
+  for _, is_new in pairs(reads.unread_entries(s.ctx, viewer, entries)) do if is_new then
+    s.comment_marks[#s.comment_marks + 1] = vim.api.nvim_buf_set_extmark(s.buf, ns,
+      s.conversation_section.first + delta(s) - 1, 0, { virt_text = { { ' 🆕', 'DiagnosticWarn' } }, virt_text_pos = 'eol' })
+    break
+  end end
+end
+local function read_conversation(s)
+  if not s.conversation_expanded then return end
+  local reads = require('git.features.pr_read_state')
+  local viewer = s.model.review and s.model.review.viewer or s.model.viewed and s.model.viewed.viewer
+  local entries = s.model.conversation and s.model.conversation.entries or {}
+  local unread, fresh = reads.unread_entries(s.ctx, viewer, entries), {}
+  for _, entry in ipairs(entries) do if unread[entry.key or entry.id] then fresh[#fresh + 1] = entry end end
+  if #fresh == 0 then return end
+  local ok, err = pcall(reads.mark, s.ctx, viewer, fresh)
+  if not ok then vim.notify('Could not save conversation read state: ' .. tostring(err), vim.log.levels.WARN) end
 end
 local function render(s, current)
   s.rendering = true
@@ -288,6 +312,7 @@ local function render(s, current)
   paint_comments(s)
   syntax.refresh(s.buf)
   paint_markdown(s)
+  read_conversation(s)
   s.rendering = false
   if s.edit_guard then s.edit_guard.sync() end
 end
@@ -1133,8 +1158,9 @@ local function attach(s)
   end })
   vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitPrCommentsRead', callback = function(ev)
     local ctx = ev.data or {}
+    local viewer = s.model and (s.model.review and s.model.review.viewer or s.model.viewed and s.model.viewed.viewer)
     if s.model and ctx.host == s.ctx.host and ctx.repo == s.ctx.repo and ctx.number == s.ctx.number
-      and s.model.review and ctx.viewer == s.model.review.viewer then paint_comments(s) end
+      and ctx.viewer == viewer then paint_comments(s) end
   end })
   vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitPrViewedChanged', callback = function(ev)
     local ctx = ev.data or {}

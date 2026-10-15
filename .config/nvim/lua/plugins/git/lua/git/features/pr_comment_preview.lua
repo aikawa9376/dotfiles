@@ -18,11 +18,9 @@ function M.show(opts)
     vim.api.nvim_set_current_win(old.win); return old.buf
   end
   M.close(opts.buf)
-  local comments = {}
-  for _, thread in ipairs(opts.threads) do vim.list_extend(comments, thread.comments) end
-  table.sort(comments, function(a, b) return a.id < b.id end)
-  local prefix = require('git.features.pr_thread_status').context(opts.ctx, opts.threads)
-  local buf, lines, rows = require('git.features.pr_history').buffer(prefix, comments, opts.viewer)
+  local history = require('git.features.pr_history')
+  local comments, contexts = history.thread_history(opts.ctx, opts.threads)
+  local buf, lines, rows = history.buffer({}, comments, opts.viewer, contexts)
   local width = math.max(1, math.min(80, vim.o.columns - 4))
   local size = 0
   for _, line in ipairs(lines) do size = size + math.max(1, math.ceil(vim.fn.strdisplaywidth(line) / width)) end

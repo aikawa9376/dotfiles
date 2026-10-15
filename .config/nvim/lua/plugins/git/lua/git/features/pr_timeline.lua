@@ -1,43 +1,61 @@
 -- Server timeline order, not local commit author dates, places PR activity.
 local M = {}
 local github = require('git.features.github')
-local query = [[query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+local events = require('git.features.pr_timeline_events')
+local capabilities = {}
+local function event_types(ctx)
+  if capabilities[ctx.host] then return capabilities[ctx.host] end
+  local ok, result = pcall(github.api, ctx, 'graphql', {
+    query = 'query { timelineTypes:__type(name:"PullRequestTimelineItems") { possibleTypes { name fields { name } } } }', variables = {},
+  })
+  local data = ok and github.scalar(result.data)
+  local types = data and github.scalar(data.timelineTypes)
+  if type(types) ~= 'table' or type(types.possibleTypes) ~= 'table' then return events.fallback_types() end
+  local fields = {}
+  for _, item in ipairs(types.possibleTypes) do
+    fields[item.name] = {}
+    for _, field in ipairs(item.fields or {}) do fields[item.name][field.name] = true end
+  end
+  if not next(fields) then return events.fallback_types() end
+  capabilities[ctx.host] = fields
+  return fields
+end
+function M.query(types)
+  return [[query($owner: String!, $name: String!, $number: Int!, $cursor: String) {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) {
-    headRefOid timelineItems(first: 100, after: $cursor, itemTypes: [ISSUE_COMMENT, PULL_REQUEST_REVIEW,
-      PULL_REQUEST_COMMIT, HEAD_REF_FORCE_PUSHED_EVENT, MERGED_EVENT, CLOSED_EVENT, REOPENED_EVENT,
-      READY_FOR_REVIEW_EVENT, CONVERT_TO_DRAFT_EVENT, HEAD_REF_DELETED_EVENT, HEAD_REF_RESTORED_EVENT]) {
+    headRefOid timelineItems(first: 100, after: $cursor) {
       pageInfo { hasNextPage endCursor } nodes {
-        __typename
+        __typename ... on Node { id }
         ... on IssueComment { id url }
         ... on PullRequestReview { id url state }
         ... on PullRequestCommit { id url commit { oid abbreviatedOid messageHeadline committedDate
           author { name user { login } } } }
-        ... on HeadRefForcePushedEvent { id createdAt actor { login }
-          beforeCommit { oid abbreviatedOid } afterCommit { oid abbreviatedOid } }
-        ... on MergedEvent { id createdAt actor { login } commit { oid abbreviatedOid url } }
-        ... on ClosedEvent { id createdAt actor { login } }
-        ... on ReopenedEvent { id createdAt actor { login } }
-        ... on ReadyForReviewEvent { id createdAt actor { login } }
-        ... on ConvertToDraftEvent { id createdAt actor { login } }
-        ... on HeadRefDeletedEvent { id createdAt actor { login } headRefName }
-        ... on HeadRefRestoredEvent { id createdAt actor { login } }
+        ]] .. events.fragments(types) .. [[
       }
     }
   } }
 }]]
+end
 function M.load(ctx, hash)
   local owner, name = ctx.repo:match('^([^/]+)/([^/]+)$')
   local items, cursor, seen = {}, nil, {}
+  local query = M.query(event_types(ctx))
   repeat
     local response = github.api(ctx, 'graphql', { query = query,
       variables = { owner = owner, name = name, number = ctx.number, cursor = cursor } })
-    if response.errors then error(response.errors[1].message or 'Timeline read failed', 0) end
-    local pr = response.data and response.data.repository and response.data.repository.pullRequest
+    local repository = response.data and github.scalar(response.data.repository)
+    local pr = repository and github.scalar(repository.pullRequest)
+    local connection = type(pr) == 'table' and github.scalar(pr.timelineItems)
+    if response.errors and not connection then error(response.errors[1].message or 'Timeline read failed', 0) end
     assert(type(pr) == 'table' and pr.headRefOid == hash, 'PR head changed while reading its timeline; refresh the PR')
-    local connection = pr.timelineItems
     assert(type(connection) == 'table' and type(connection.nodes) == 'table' and type(connection.pageInfo) == 'table',
       'Invalid PR timeline response')
     assert(type(connection.pageInfo.hasNextPage) == 'boolean', 'Invalid timeline pagination state')
+    for _, err in ipairs(response.errors or {}) do
+      items.errors = items.errors or {}
+      local message = err.message or 'Some timeline details are unavailable'
+      if not vim.tbl_contains(items.errors, message) then items.errors[#items.errors + 1] = message end
+    end
     for _, node in ipairs(connection.nodes) do if type(node) == 'table' then items[#items + 1] = node end end
     local next_cursor = github.scalar(connection.pageInfo.endCursor)
     if connection.pageInfo.hasNextPage then
@@ -47,10 +65,6 @@ function M.load(ctx, hash)
   until not cursor
   return items
 end
-local labels = { HeadRefForcePushedEvent = 'force-pushed', MergedEvent = 'merged', ClosedEvent = 'closed the PR',
-  ReopenedEvent = 'reopened the PR', ReadyForReviewEvent = 'marked ready for review',
-  ConvertToDraftEvent = 'converted to draft', HeadRefDeletedEvent = 'deleted the head branch',
-  HeadRefRestoredEvent = 'restored the head branch' }
 local function short(commit)
   if type(commit) ~= 'table' then return '—' end
   local oid = github.scalar(commit.oid)
@@ -67,16 +81,7 @@ function M.entry(ctx, node)
       user = author and github.scalar(author.user), author_name = author and github.scalar(author.name),
       created_at = github.scalar(commit.committedDate) or '', updated_at = github.scalar(commit.committedDate) or '',
       url = github.scalar(node.url) or ('https://%s/%s/commit/%s'):format(ctx.host, ctx.repo, commit.oid) }
-  elseif labels[kind] and github.scalar(node.id) then
-    local detail = ''
-    if kind == 'HeadRefForcePushedEvent' then detail = ' ' .. short(node.beforeCommit) .. ' → ' .. short(node.afterCommit)
-    elseif kind == 'MergedEvent' and type(node.commit) == 'table' then detail = ' ' .. short(node.commit)
-    elseif kind == 'HeadRefDeletedEvent' and github.scalar(node.headRefName) then detail = ' ' .. node.headRefName end
-    return { kind = 'event', key = 'event:' .. node.id, id = node.id, event_type = kind,
-      label = labels[kind] .. detail, body = '', user = github.scalar(node.actor),
-      created_at = github.scalar(node.createdAt) or '', updated_at = github.scalar(node.createdAt) or '',
-      url = kind == 'MergedEvent' and type(node.commit) == 'table' and github.scalar(node.commit.url) or ctx.url }
-  end
+  else return events.entry(ctx, node) end
 end
 function M.apply(ctx, conversation, nodes)
   local indexed, by_key, used, ordered = {}, {}, {}, {}
@@ -106,11 +111,8 @@ function M.apply(ctx, conversation, nodes)
   return conversation
 end
 function M.chunks(entry, viewer)
-  local chunks, kind = {}, entry.event_type
-  local group = 'Comment'
-  if kind == 'MergedEvent' or kind == 'ReopenedEvent' or kind == 'ReadyForReviewEvent' then group = 'GitPrPositive' end
-  if kind == 'HeadRefForcePushedEvent' or kind == 'ConvertToDraftEvent' then group = 'DiagnosticWarn' end
-  chunks[#chunks + 1] = { entry.kind == 'commit' and '● ' or kind == 'HeadRefForcePushedEvent' and '↻ ' or kind == 'MergedEvent' and '✓ ' or '· ', group }
+  local chunks = {}
+  chunks[#chunks + 1] = { entry.kind == 'commit' and '● ' or entry.icon or '· ', entry.group or 'Comment' }
   local author = entry.user and github.scalar(entry.user.login)
   if author then chunks[#chunks + 1] = { '@' .. author .. ' ', author == viewer and 'GitPrCommentSelf' or 'Identifier' }
   elseif entry.author_name then chunks[#chunks + 1] = { entry.author_name .. ' ', 'Identifier' } end
@@ -118,7 +120,7 @@ function M.chunks(entry, viewer)
     chunks[#chunks + 1] = { 'committed ', 'Comment' }
     chunks[#chunks + 1] = { entry.short, require('git.features.commit_highlight').group('default') }
     chunks[#chunks + 1] = { ' ' .. entry.subject, 'Normal' }
-  else chunks[#chunks + 1] = { entry.label, group } end
+  else vim.list_extend(chunks, entry.parts or { { entry.label, entry.group or 'Comment' } }) end
   if entry.created_at ~= '' then
     local date = entry.created_at:gsub('T', ' '):gsub('Z$', ' UTC')
     chunks[#chunks + 1] = { ' · ' .. date .. (entry.kind == 'commit' and ' (commit date)' or ''), 'Comment' }
