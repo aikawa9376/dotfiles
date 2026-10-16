@@ -76,7 +76,7 @@ assert(vim.wait(5000, function()
     and lines:find('Index flags [local]', 1, true)
     and lines:find('Unpulled from origin/main (1)', 1, true)
     and lines:find('Stashes (1)', 1, true)
-    and not lines:find('Loading repository details', 1, true)
+    and not require('git.features.loading').busy(b)
 end, 20), 'initial headers were not loaded')
 
 local missing = {}
@@ -92,7 +92,7 @@ vim.api.nvim_buf_attach(b, false, {
 reads = flag_reads
 local commits_read = unpulled_reads
 vim.fn.maparg('R', 'n', false, true).callback()
-assert(vim.wait(5000, function() return flag_reads == reads and not contents():find('Loading', 1, true) end, 20))
+assert(vim.wait(5000, function() return flag_reads == reads and not require('git.features.loading').busy(b) end, 20))
 vim.wait(500, function() return false end)
 assert(#missing == 0, 'warm refresh hid a stable header: ' .. table.concat(missing, ', '))
 assert(flag_reads == reads, ('unrelated refresh reread index flags (%d -> %d)'):format(reads, flag_reads))

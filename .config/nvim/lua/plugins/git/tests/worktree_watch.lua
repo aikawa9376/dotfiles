@@ -37,7 +37,7 @@ local status = require('git.features.status')
 status.setup(vim.api.nvim_create_augroup('WorktreeEventsTest', { clear = true }))
 local b = status.open({ work_tree = root, split = true })
 local function contents() return table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n') end
-assert(vim.wait(5000, function() return live_handles == 4 and not contents():find('Loading') end, 20))
+assert(vim.wait(5000, function() return live_handles == 4 and not require('git.features.loading').busy(b) end, 20))
 local current = vim.api.nvim_get_current_win()
 -- No focus, buffer, write or shell autocommands are fired in these operations.
 vim.fn.writefile({ 'one', 'two' }, root .. '/nested/file.txt')

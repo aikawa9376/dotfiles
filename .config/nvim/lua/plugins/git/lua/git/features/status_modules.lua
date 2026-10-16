@@ -1,6 +1,7 @@
 -- Providers own data and actions. This module owns their projection into Status.
 local M = {}
 local sections = require('git.features.status_sections')
+local loading = require('git.features.loading')
 local definitions, states = {}, {}
 local ns = vim.api.nvim_create_namespace('git_status_modules')
 local function clean(value) return tostring(value or ''):gsub('[%z\1-\31\127]', ' ') end
@@ -25,7 +26,7 @@ function M.setup(specs)
 end
 function M.attach(buf, changed)
   M.cleanup(buf)
-  local state = { changed = changed, results = {}, marks = {}, generation = 0, cancels = {} }
+  local state = { changed = changed, results = {}, marks = {}, generation = 0, cancels = {}, finishes = {} }
   states[buf] = state
   state.group = vim.api.nvim_create_augroup('GitStatusModules' .. buf, { clear = true })
   local scheduled = false
@@ -45,7 +46,9 @@ end
 local function cancel(state)
   state.generation = state.generation + 1
   for _, stop in ipairs(state.cancels) do pcall(stop) end
+  for _, finish in ipairs(state.finishes) do finish() end
   state.cancels = {}
+  state.finishes = {}
 end
 local function normalize(items)
   assert(type(items) == 'table', 'Status module must return a list of items')
@@ -70,6 +73,8 @@ function M.refresh(buf, context)
   state.context = vim.deepcopy(context)
   local generation = state.generation
   for _, definition in ipairs(definitions) do
+    local finish = loading.begin(buf, 'module:' .. definition.id)
+    state.finishes[#state.finishes + 1] = finish
     local previous = same_context and state.results[definition.id]
     state.results[definition.id] = { items = previous and previous.items or {}, loading = true }
     local completed = false
@@ -79,7 +84,8 @@ function M.refresh(buf, context)
       vim.schedule(function()
         if states[buf] ~= state or generation ~= state.generation or not vim.api.nvim_buf_is_loaded(buf) then return end
         local ok, normalized = pcall(normalize, items or {})
-        state.results[definition.id] = { items = ok and normalized or {}, error = err or (not ok and tostring(normalized) or nil) }
+        state.results[definition.id] = { items = ok and normalized or {},
+          error = err or (not ok and tostring(normalized) or nil), finish = finish }
         state.changed()
       end)
     end
@@ -131,7 +137,7 @@ function M.compose(buf, lines)
   local ranges = sections.ranges(lines)
   for _, definition in ipairs(definitions) do
     local result = state.results[definition.id]
-    if result and (#result.items > 0 or result.loading or result.error or definition.hide_empty == false) then
+    if result and (#result.items > 0 or result.error or (not result.loading and definition.hide_empty == false)) then
       local anchor = definition.before or definition.after or 'bottom'
       local range = ranges[anchor]
       local position = anchor == 'top' and 0 or #lines
@@ -156,8 +162,7 @@ function M.compose(buf, lines)
         append(clean(item.text) .. detail, 'item', item)
       end
       if result.error then append('  Unavailable: ' .. clean(result.error), 'message')
-      elseif result.loading then append('  Loading…', 'message')
-      elseif #result.items == 0 then append('  No items', 'message') end
+      elseif not result.loading and #result.items == 0 then append('  No items', 'message') end
       -- Keep a following native section from becoming part of this module fold.
       if position < #lines and lines[position + 1] ~= '' then append('', 'spacer') end
     end
@@ -181,6 +186,10 @@ function M.commit(buf, rows)
         end_col = start + #clean(info.item.detail), hl_group = 'Comment', priority = 110,
       })
     end
+  end
+  -- A response is complete only after its projection reaches the buffer.
+  for _, result in pairs(state.results) do
+    if result.finish then result.finish(); result.finish = nil end
   end
 end
 function M.sections(buf)

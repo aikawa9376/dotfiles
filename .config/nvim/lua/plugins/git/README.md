@@ -246,6 +246,21 @@ reapplying `scrolloff`; folding from an item makes the ordinary move to its head
 Note writes refresh the shelf; `R` and repository
 reloads also reload its data. Unsaved note text is not indexed.
 
+Status loading is reported once through `git.features.loading`, including the
+initial snapshot, repository details, shelves and PR list. The dotfiles Lualine
+configuration displays it in active and inactive status lines. For another
+configuration, pass `require('git.features.loading').statusline` as a Lualine
+component; `status(bufnr)` reads an explicit view and `busy(bufnr)` reports
+unfinished work. The component does not take over window options or add rows.
+Shelf replies are projected in configuration order at their configured anchors;
+their loading tokens finish only after that projection is committed to the
+buffer, including empty results and errors. Pending empty shelves stay hidden,
+and a refresh retains existing items until their replacement arrives.
+The single indicator stays visible while any source remains pending. It waits
+120 ms before appearing, remains visible for at least 300 ms, and hides after
+150 ms without pending work to avoid flashes between successive stages.
+Inline diff syntax/word-comparison indicators keep their existing behavior.
+
 Configure shelves once through `require('git').setup({ status_modules = ... })`
 (the dotfiles Lazy spec supplies these options in `init.lua`). The same module
 definition owns its identity, position, title, loader and open action:
@@ -301,7 +316,9 @@ are also used by the existing picker. The API accepts a captured `git_context`,
 an optional workspace `root`, `query`, `min_score` and `limit`, and returns a
 cancellation function. Workspace indexes are isolated and shared by consumers.
 
-Checks: `status_modules` exercises real Git staging alongside shelves, placement,
+Checks: `loading` and `status_loading` cover concurrent/superseded sources,
+completion after projection, stable ordering, Lualine, errors and view cleanup.
+`status_modules` exercises real Git staging alongside shelves, placement,
 folds, semantic selection, provider errors, refresh events and stale callbacks;
 `status_obsidian` covers the adapter, and `status_obsidian_cold` uses the shipped
 Lazy specs with a real Obsidian client and temporary vault. The Obsidian extension's

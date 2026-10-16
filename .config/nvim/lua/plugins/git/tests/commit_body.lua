@@ -99,8 +99,7 @@ require('git.features.status').setup(group)
 require('git.features.log').setup(group)
 local status_buf = require('git.features.status').open({ work_tree = root, split = true })
 assert(vim.wait(5000, function()
-  local contents = table.concat(vim.api.nvim_buf_get_lines(status_buf, 0, -1, false), '\n')
-  return not contents:find('Loading') and #vim.api.nvim_buf_get_extmarks(status_buf, ns, 0, -1, {}) == 1
+  return not require('git.features.loading').busy(status_buf) and #vim.api.nvim_buf_get_extmarks(status_buf, ns, 0, -1, {}) == 1
 end, 20), 'status enrichment did not retain the body icon')
 assert(vim.fn.maparg('gk', 'n', false, true).desc == 'Show commit message body')
 vim.cmd('GitLog')

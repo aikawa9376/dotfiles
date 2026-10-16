@@ -48,7 +48,7 @@ local function row_for(pattern)
 end
 assert(vim.wait(5000, function()
   local all = table.concat(lines(), '\n')
-  return all:find('Unmerged paths', 1, true) and not all:find('Loading repository details', 1, true)
+  return all:find('Unmerged paths', 1, true) and not require('git.features.loading').busy(bufnr)
 end, 20), 'status did not finish loading')
 local header = assert(row_for('^Unmerged paths'))
 local added = assert(row_for('^AA added%.txt$'))

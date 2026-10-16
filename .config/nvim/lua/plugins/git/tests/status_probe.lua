@@ -24,7 +24,7 @@ local status = require('git.features.status')
 status.setup(vim.api.nvim_create_augroup('StatusProbeTest', { clear = true }))
 local b = status.open({ work_tree = root, split = true })
 local function contents() return table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n') end
-assert(vim.wait(5000, function() return not contents():find('Loading') end, 20))
+assert(vim.wait(5000, function() return not require('git.features.loading').busy(b) end, 20))
 local function event(name) vim.api.nvim_exec_autocmds(name, { buffer = b }) end
 local function additions()
   local renderer = require('git.features.status_renderer')

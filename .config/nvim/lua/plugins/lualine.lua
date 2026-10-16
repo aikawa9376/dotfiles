@@ -181,6 +181,15 @@ return {
       return git_operation_statusline() ~= ""
     end
 
+    local function git_loading_statusline()
+      local loading = package.loaded["git.features.loading"]
+      return loading and loading.statusline() or ""
+    end
+
+    local function git_loading_is_active()
+      return git_loading_statusline() ~= ""
+    end
+
     vim.api.nvim_create_autocmd("User", {
       pattern = { "OverseerListUpdate", "OverseerListClose" },
       callback = function()
@@ -331,6 +340,12 @@ return {
             padding = { left = 0, right = 1 },
           },
           {
+            git_loading_statusline,
+            cond = git_loading_is_active,
+            color = { fg = colors.cyan },
+            padding = { left = 0, right = 1 },
+          },
+          {
             "diagnostics",
             sources = { "nvim_diagnostic" },
             symbols = { error = " ", warn = " ", info = " " },
@@ -392,6 +407,12 @@ return {
             git_operation_statusline,
             cond = git_operation_is_active,
             color = { fg = colors.magenta, gui = "bold" },
+            padding = { left = 0, right = 1 },
+          },
+          {
+            git_loading_statusline,
+            cond = git_loading_is_active,
+            color = { fg = colors.cyan },
             padding = { left = 0, right = 1 },
           },
         },

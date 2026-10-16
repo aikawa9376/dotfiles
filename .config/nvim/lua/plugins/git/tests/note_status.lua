@@ -22,7 +22,7 @@ local status = require('git.features.status')
 status.setup(vim.api.nvim_create_augroup('StatusNoteIntegration', { clear = true }))
 local buf = status.open({ work_tree = root, split = true })
 assert(vim.wait(5000, function()
-  return not table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n'):find('Loading')
+  return not require('git.features.loading').busy(buf)
 end, 20))
 local notes = require('lazyagent.notes')
 local function press(key) vim.fn.maparg(key, 'n', false, true).callback() end

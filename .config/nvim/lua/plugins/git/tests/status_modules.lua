@@ -47,14 +47,15 @@ local function item(id)
   for row, info in pairs(modules.rows(b)) do if info.item and info.item.id == id then return row end end
 end
 local function reply(values) requests[#requests].done(values) end
-wait(function() return #requests > 0 and at('Related notes (0)') and at('Commits [latest 15+]') end)
-assert(at('Related notes') < at('Unstaged changes'), 'before placement was ignored')
+wait(function() return #requests > 0 and at('Tail (1)') and at('Unavailable:') and at('Commits [latest 15+]') end)
+assert(not at('Related notes'), 'Pending empty shelf should not introduce placeholder rows')
 assert(at('Tail (1)') > at('Unstaged changes'), 'after placement was ignored')
 assert(at('Unavailable:') and at('provider failed'), 'Provider error did not stay local to its shelf')
 assert(lines()[#lines()] == 'Last section', 'Missing anchors should fall back to the end')
 assert(requests[1].ctx.root == root and requests[1].ctx.branch == 'main' and requests[1].ctx.paths[1] == 'sample.txt')
 reply({ { id = 'a', text = 'Same title' }, { id = 'b', text = 'Same title' } })
 wait(function() return item('b') ~= nil end)
+assert(at('Related notes') < at('Unstaged changes'), 'before placement was ignored')
 vim.api.nvim_win_set_cursor(0, { item('b'), 0 })
 press('<CR>')
 assert(opened[1].item.id == 'b' and opened[1].ctx.root == root, 'Open used display text instead of item identity')

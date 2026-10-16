@@ -35,10 +35,10 @@ vim.api.nvim_set_option_value('list', true, { scope = 'local', win = source_win 
 local b = assert(status.open({ work_tree = root, split = true }))
 assert(vim.go.list and vim.wo[source_win].list and not vim.wo.list,
   'status panel should hide global listchars markers locally')
-assert(vim.api.nvim_get_current_line():find('Loading'), 'initial status should be asynchronous')
+assert(require('git.features.loading').busy(b), 'initial status should be asynchronous')
 assert(vim.wait(5000, function()
   local text = table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n')
-  return text:find('Commits %[latest 15%+%]') and not text:find('Loading')
+  return text:find('Commits %[latest 15%+%]') and not require('git.features.loading').busy(b)
 end, 20))
 assert(vim.api.nvim_get_current_line():match('sample%.txt$'), 'cold open did not focus unstaged entry')
 local function press(key) vim.fn.maparg(key, 'n', false, true).callback() end
@@ -103,7 +103,7 @@ end
 press('R')
 assert(vim.wait(5000, function()
   local text = table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n')
-  return not text:find('@@', 1, true) and not text:find('Loading', 1, true)
+  return not text:find('@@', 1, true) and not require('git.features.loading').busy(b)
 end, 20), 'R did not collapse the status diffs')
 for row, line in ipairs(vim.api.nvim_buf_get_lines(b, 0, -1, false)) do
   if section_states[line] ~= nil then
@@ -177,7 +177,7 @@ vim.api.nvim_buf_delete(b, { force = true })
 b = assert(status.open({ work_tree = root, split = true }))
 assert(vim.wait(5000, function()
   local text = table.concat(vim.api.nvim_buf_get_lines(b, 0, -1, false), '\n')
-  return text:find('Commits %[latest 15%+%]') and not text:find('Loading')
+  return text:find('Commits %[latest 15%+%]') and not require('git.features.loading').busy(b)
 end, 20))
 press('gU')
 status.refresh_buffer(b)

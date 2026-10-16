@@ -8,7 +8,6 @@ local marker_ns = vim.api.nvim_create_namespace('git_status_fold_markers')
 local native_sections = require('git.features.status_sections')
 local modules = require('git.features.status_modules')
 local heading_highlights = {
-  { '^Loading repository details', 'Comment' },
   { '^Bisecting', 'RainbowDelimiterYellow' },
   { '^Merge Current:', 'RainbowDelimiterYellow' },
   { ' in progress', 'RainbowDelimiterYellow' },

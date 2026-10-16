@@ -565,11 +565,6 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       end
     end
 
-    if snapshot.loading_details then
-      table.insert(final_lines, '')
-      table.insert(final_lines, 'Loading repository details…')
-    end
-
     if pull_requests and #pull_requests > 0 then
       local scope = pull_request_scope_by_buf[bufnr] or 'branch'
       local scope_label = scope == 'all'
@@ -1185,6 +1180,7 @@ function M.setup(group)
         if not work_tree then return end
         fast_refresh_serial = fast_refresh_serial + 1
         local serial = fast_refresh_serial
+        local finish_loading = require('git.features.loading').begin(b, 'repository')
         local previous = reuse_cache and status_snapshot_by_buf[b] or nil
         local header_lines = previous and repository_health.repository_lines(previous.health) or nil
         status_renderer.snapshot_async(b, work_tree, {
@@ -1194,6 +1190,7 @@ function M.setup(group)
           if not is_live() then return end
           if serial ~= fast_refresh_serial then return end
           if not native_lines then
+            finish_loading()
             vim.notify_once('Failed to render Git status: ' .. snapshot_err, vim.log.levels.ERROR)
             return
           end
@@ -1228,6 +1225,7 @@ function M.setup(group)
               else
                 refresh({ reuse_commits = true })
               end
+              finish_loading()
             end, 300)
           end
 
@@ -1272,8 +1270,10 @@ function M.setup(group)
         if not work_tree or vim.fn.executable('gh') ~= 1 then return end
 
         pr_state.fetching = true
+        local finish_loading = require('git.features.loading').begin(b, 'pull_requests')
         local generation = pr_state.generation
         local function finish_fetch()
+          finish_loading()
           pr_state.fetching = false
           if pr_state.pending then
             pr_state.pending = false
@@ -1417,7 +1417,7 @@ function M.setup(group)
       status_renderer.take_ownership(b)
       pending_status_cursor_anchors_by_buf[b] = nil
       utils.with_buf_modifiable(b, function()
-        vim.api.nvim_buf_set_lines(b, 0, -1, false, { 'Loading Git status…' })
+        vim.api.nvim_buf_set_lines(b, 0, -1, false, { '' })
       end)
       render_fast_status(false)
       fetch_pull_requests()
@@ -1448,6 +1448,7 @@ function M.setup(group)
           index_flag_diffs_by_buf[b] = nil
           status_snapshot_by_buf[b] = nil
           status_modules.cleanup(b)
+          require('git.features.loading').cleanup(b)
           status_folds.cleanup(b)
           status_renderer.cleanup(b)
           pcall(vim.api.nvim_del_augroup_by_id, bufgroupt)

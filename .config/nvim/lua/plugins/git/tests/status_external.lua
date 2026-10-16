@@ -23,7 +23,7 @@ local status = require('git.features.status')
 status.setup(vim.api.nvim_create_augroup('StatusExternalTest', { clear = true }))
 local b = status.open({ work_tree = root, split = true })
 local function contents(buf) return table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n') end
-assert(vim.wait(5000, function() return contents(b):find('M file.txt', 1, true) and not contents(b):find('Loading') end, 20))
+assert(vim.wait(5000, function() return contents(b):find('M file.txt', 1, true) and not require('git.features.loading').busy(b) end, 20))
 git(root, { 'add', '.' })
 git(root, { 'commit', '-qm', 'external commit' })
 assert(vim.wait(5000, function()
@@ -46,7 +46,7 @@ assert(vim.wait(5000, function() return contents(b):find('hidden external commit
 local linked = root .. '-linked'
 git(root, { 'worktree', 'add', '-qb', 'linked-test', linked })
 local linked_buf = status.open({ work_tree = linked, split = true })
-assert(vim.wait(5000, function() return not contents(linked_buf):find('Loading') end, 20))
+assert(vim.wait(5000, function() return not require('git.features.loading').busy(linked_buf) end, 20))
 git(linked, { 'commit', '--allow-empty', '-qm', 'linked external commit' })
 assert(vim.wait(5000, function() return contents(linked_buf):find('linked external commit', 1, true) end, 20))
 vim.api.nvim_buf_delete(linked_buf, { force = true })
