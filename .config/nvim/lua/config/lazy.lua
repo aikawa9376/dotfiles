@@ -77,6 +77,7 @@ require("lazy").setup({
     { import = "plugins.myutil" },
     { import = "plugins.dial" },
     { import = "plugins.treesitter" },
+    { import = "plugins.rainbow-delimiters" },
     { import = "plugins.bufjump" },
     { import = "plugins.gitlinker" },
     { import = "plugins.mcphub" },

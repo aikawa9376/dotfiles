@@ -89,23 +89,6 @@ return {
   { "windwp/nvim-ts-autotag", event = "BufReadPre", config = true },
   { "m-demare/hlargs.nvim", event = "BufReadPre", opts = { hl_priority = 150 } },
   {
-    "HiPhish/rainbow-delimiters.nvim",
-    event = "BufReadPre",
-    config = function()
-      require('rainbow-delimiters.setup').setup{
-        highlight = {
-          'RainbowDelimiterBlue',
-          'RainbowDelimiterGreen',
-          'RainbowDelimiterViolet',
-          'RainbowDelimiterYellow',
-          'RainbowDelimiterOrange',
-          'RainbowDelimiterCyan',
-          'RainbowDelimiterRed',
-        },
-      }
-    end
-  },
-  {
     "JoosepAlviste/nvim-ts-context-commentstring",
     lazy = true,
     opts = {
