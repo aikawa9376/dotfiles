@@ -2,15 +2,15 @@ local code_padding = { language_pad = 1, left_pad = 1, right_pad = 1, min_width 
 
 return {
   "MeanderingProgrammer/render-markdown.nvim",
-  ft = { 'markdown', 'blink-cmp-documentation', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr' },
+  ft = { 'markdown', 'blink-cmp-documentation', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr', 'gitissue' },
   opts = {
     -- restart_highlighter = true,
     anti_conceal = {
       enabled = false,
     },
-    file_types = { 'markdown', 'blink-cmp-documentation', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr' },
+    file_types = { 'markdown', 'blink-cmp-documentation', 'Avante', 'fzf', 'lazyagent', 'lazyagent_acp', 'gitpr', 'gitissue' },
     ignore = function(buf)
-      return vim.bo[buf].filetype == 'gitpr' and vim.b[buf].git_pr_markdown_ranges == nil
+      return (vim.bo[buf].filetype == 'gitpr' or vim.bo[buf].filetype == 'gitissue') and vim.b[buf].git_pr_markdown_ranges == nil
     end,
     heading = {
       sign = false,
@@ -64,7 +64,7 @@ return {
         parse = function(ctx)
           local bufnr = ctx and ctx.buf or nil
           local ft = bufnr and vim.bo[bufnr].filetype or ""
-          if ft == 'gitpr' then return require('git.features.pr_markdown').parse(ctx) end
+          if ft == 'gitpr' or ft == 'gitissue' then return require('git.features.pr_markdown').parse(ctx) end
           if ft == "lazyagent" or ft == "lazyagent_acp" then
             return require("lazyagent.render_markdown").parse(ctx)
           end
@@ -100,6 +100,11 @@ return {
         -- Preserve padding in the other scratch views that also use nofile buffers.
         Avante = { code = code_padding },
         fzf = { code = code_padding },
+        gitissue = {
+          sign = { enabled = false },
+          heading = { sign = false },
+          code = vim.tbl_extend('force', code_padding, { sign = false }),
+        },
         gitpr = {
           sign = { enabled = false },
           heading = { sign = false },

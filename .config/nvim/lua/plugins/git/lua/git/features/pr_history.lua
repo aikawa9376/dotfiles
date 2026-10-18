@@ -128,7 +128,7 @@ function M.attach(input, win, comments, viewer, prefix, close, hint, contexts)
     local item = rows[vim.fn.line('.')]
     if item then require('git.features.pr_comment_actions').menu(vim.b[input].git_pr_ctx, item, viewer) end
   end, { buffer = buf, silent = true, desc = 'Comment reactions / edit / delete / apply suggestion' })
-  if comments and #comments > 0 then
+  if comments and #comments > 0 and vim.b[input].git_pr_ctx.resource_kind ~= 'issue' then
     vim.b[input].git_pr_history = buf
     local ok, err = pcall(require('git.features.pr_read_state').mark, vim.b[input].git_pr_ctx, viewer, comments)
     if not ok then vim.notify('Could not save comment read state: ' .. tostring(err), vim.log.levels.WARN) end

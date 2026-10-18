@@ -12,7 +12,7 @@ function M.prepare(buf)
   -- {} means the entire source to LanguageTree; use an explicit empty region.
   parser:set_included_regions({ { { 0, 0, 0, 0 } } })
   vim.b[buf].git_pr_markdown_ranges = {}
-  vim.treesitter.language.register('markdown', 'gitpr')
+  vim.treesitter.language.register('markdown', { 'gitpr', 'gitissue' })
   local syntax = vim.bo[buf].syntax
   if not vim.treesitter.highlighter.active[buf] then pcall(vim.treesitter.start, buf, 'markdown') end
   if vim.bo[buf].syntax ~= syntax then vim.bo[buf].syntax = syntax end

@@ -1152,7 +1152,7 @@ local function attach(s)
     { buffer = b, silent = true, desc = 'Save PR title and description' })
   vim.api.nvim_create_autocmd('User', { group = group, pattern = 'GitHubChanged', callback = function(ev)
     local ctx = ev.data or {}
-    if s.model and ctx.host == s.ctx.host and ctx.repo == s.ctx.repo and (not ctx.number or ctx.number == s.ctx.number) then
+    if s.model and ctx.resource_kind ~= 'issue' and ctx.host == s.ctx.host and ctx.repo == s.ctx.repo and (not ctx.number or ctx.number == s.ctx.number) then
       M.refresh(b, false, true)
     end
   end })

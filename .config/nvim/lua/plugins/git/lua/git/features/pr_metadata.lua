@@ -8,7 +8,17 @@ local function pages(ctx, endpoint)
   end
   return result
 end
+function M.candidates(ctx, field)
+  assert(field == 'labels' or field == 'assignees', 'Invalid metadata candidates')
+  local result = {}
+  for _, item in ipairs(pages(ctx, 'repos/' .. ctx.repo .. '/' .. field)) do
+    result[#result + 1] = item[field == 'labels' and 'name' or 'login']
+  end
+  table.sort(result)
+  return result
+end
 function M.load(ctx, field)
+  assert(ctx.resource_kind ~= 'issue' or field ~= 'reviewers', 'Issues have no review requests')
   assert(vim.tbl_contains({ 'labels', 'assignees', 'reviewers' }, field), 'Invalid PR metadata field')
   local base, current, candidates = 'repos/' .. ctx.repo, {}, {}
   if field == 'reviewers' then
@@ -23,11 +33,9 @@ function M.load(ctx, field)
     local ok, teams = pcall(pages, ctx, 'orgs/' .. owner .. '/teams')
     if ok then for _, team in ipairs(teams) do candidates[#candidates + 1] = 'team:' .. team.slug end end
   else
-    local pr = github.pr(ctx)
+    local pr = ctx.resource_kind == 'issue' and github.issue(ctx) or github.pr(ctx)
     for _, item in ipairs(github.scalar(pr[field]) or {}) do current[item[field == 'labels' and 'name' or 'login']] = true end
-    for _, item in ipairs(pages(ctx, base .. '/' .. (field == 'labels' and 'labels' or 'assignees'))) do
-      candidates[#candidates + 1] = item[field == 'labels' and 'name' or 'login']
-    end
+    candidates = M.candidates(ctx, field)
   end
   for name in pairs(current) do if not vim.tbl_contains(candidates, name) then candidates[#candidates + 1] = name end end
   table.sort(candidates)
@@ -36,7 +44,8 @@ end
 function M.change(ctx, field, name, present)
   -- Change only the selected membership, preserving others' concurrent edits.
   local fresh = M.load(ctx, field)
-  assert((fresh.current[name] == true) == present, 'PR metadata changed; reopen the selector')
+  assert((fresh.current[name] == true) == present, 'Metadata changed; reopen the selector')
+  if ctx.resource_kind == 'issue' then require('git.features.issue_model').permit(ctx, field) end
   local base = 'repos/' .. ctx.repo
   if field == 'labels' then
     local path = base .. '/issues/' .. ctx.number .. '/labels'
@@ -55,23 +64,25 @@ function M.choose(ctx, field)
     if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= buf or vim.api.nvim_get_current_win() ~= win then return end
     local choices = { { done = true, name = 'Done' } }
     for _, name in ipairs(snapshot.candidates) do choices[#choices + 1] = { name = name, present = snapshot.current[name] == true } end
-    vim.ui.select(choices, { prompt = 'PR ' .. field .. ' · select to add/remove', format_item = function(item)
+    vim.ui.select(choices, { prompt = (ctx.resource_kind == 'issue' and 'Issue ' or 'PR ') .. field .. ' · select to add/remove', format_item = function(item)
       return item.done and item.name or ((item.present and '✓ ' or '  ') .. item.name)
     end }, function(item)
       if not item or item.done then return end
       if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= buf then return end
       actions.run(resolved, function(target) return M.change(target, field, item.name, item.present) end, function()
-        vim.notify('PR ' .. field .. ' updated'); M.choose(resolved, field)
+        vim.notify((ctx.resource_kind == 'issue' and 'Issue ' or 'PR ') .. field .. ' updated'); M.choose(resolved, field)
       end, true)
     end)
   end)
 end
 function M.menu(ctx)
-  require('git.features.transient_menu').show({ kind = 'pr-metadata', title = 'PR metadata',
-    groups = { { title = 'Choose / toggle', actions = {
-      { key = 'l', label = 'Labels…', run = function() M.choose(ctx, 'labels') end },
-      { key = 'a', label = 'Assignees…', run = function() M.choose(ctx, 'assignees') end },
-      { key = 'r', label = 'Review requests…', run = function() M.choose(ctx, 'reviewers') end },
-    } } } })
+  local issue = ctx.resource_kind == 'issue'
+  local entries = {
+    { key = 'l', label = 'Labels…', run = function() M.choose(ctx, 'labels') end },
+    { key = 'a', label = 'Assignees…', run = function() M.choose(ctx, 'assignees') end },
+  }
+  if not issue then entries[#entries + 1] = { key = 'r', label = 'Review requests…', run = function() M.choose(ctx, 'reviewers') end } end
+  require('git.features.transient_menu').show({ kind = issue and 'issue-metadata' or 'pr-metadata', title = issue and 'Issue metadata' or 'PR metadata',
+    groups = { { title = 'Choose / toggle', actions = entries } } })
 end
 return M

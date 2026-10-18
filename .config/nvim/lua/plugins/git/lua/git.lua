@@ -14,6 +14,7 @@ function M.setup(opts)
     git = true,
     gitcommitview = true,
     gitpr = true,
+    gitissue = true,
     gitstatus = true,
     gitblame = true,
     gitbranch = true,
@@ -72,6 +73,7 @@ function M.setup(opts)
   require('git.features.blame').setup(group)
   require('git.features.commit').setup(group)
   require('git.features.pr').setup()
+  require('git.features.issue').setup()
   require('git.features.github_actions').setup()
   require('git.features.repository_init').setup(opts.repository_init)
   require('git.features.magit_apply').setup()

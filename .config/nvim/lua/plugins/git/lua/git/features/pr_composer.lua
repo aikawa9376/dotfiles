@@ -9,11 +9,14 @@ function M.open(opts)
   vim.bo[buf].buftype, vim.bo[buf].bufhidden, vim.bo[buf].swapfile, vim.bo[buf].undofile = 'acwrite', 'hide', false, false
   local names = require('git.buffer_names')
   local comment = opts.history and opts.history[1]
-  local target = ('%s/%s/pull/%d/%s'):format(opts.ctx.host, opts.ctx.repo, opts.ctx.number, opts.title:gsub('[ /]', '-'))
+  local issue = opts.ctx.resource_kind == 'issue'
+  local target = ('%s/%s/%s/%s/%s'):format(opts.ctx.host, opts.ctx.repo, issue and 'issues' or 'pull',
+    opts.ctx.number or 'new', opts.title:gsub('[ /]', '-'))
   if comment and comment.id then target = target .. '/comment-' .. comment.id end
-  names.assign(buf, names.uri('git-pr-compose', opts.ctx.root, target))
+  names.assign(buf, names.uri(issue and 'git-issue-compose' or 'git-pr-compose', opts.ctx.root, target))
   vim.bo[buf].filetype = 'markdown'
   vim.b[buf].git_pr_ctx = opts.ctx
+  if issue then vim.b[buf].git_issue_ctx = opts.ctx end
   require('git.utils').set_buf_work_tree(buf, opts.ctx.root)
   local initial = vim.split(opts.body or '', '\n', { plain = true })
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, initial)
@@ -65,11 +68,13 @@ function M.open(opts)
     -- work. Subsequent saves refer to this request until it finishes.
     saving, vim.bo[buf].modifiable = true, false
     start_spinner()
-    require('git.features.github_actions').run(opts.ctx, submit, function()
+    require('git.features.github_actions').run(opts.ctx, submit, function(value, ctx)
       saving = false
       stop_spinner()
       vim.notify(success)
+      local follow = visible() and vim.api.nvim_get_current_win() == win
       if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
+      if follow and opts.on_success then opts.on_success(value, ctx) end
     end, true, function()
       saving = false
       if vim.api.nvim_buf_is_valid(buf) then vim.bo[buf].modifiable = true end

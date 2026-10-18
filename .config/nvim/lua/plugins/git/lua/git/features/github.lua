@@ -28,7 +28,25 @@ end
 function M.url_context(url)
   local host, repo, number = (url or ''):match('^https://([^/]+)/([^/]+/[^/]+)/pull/(%d+)')
   if not host then return nil end
-  return { host = host, repo = repo, number = tonumber(number), url = ('https://%s/%s/pull/%s'):format(host, repo, number) }
+  return { host = host, repo = repo, number = tonumber(number), resource_kind = 'pull_request', url = ('https://%s/%s/pull/%s'):format(host, repo, number) }
+end
+-- Issue resolution is explicit and never consults branch/PR associations.
+function M.issue_url_context(url)
+  local host, repo, number, tail = (url or ''):match('^https://([^/]+)/([^/]+/[^/]+)/issues/(%d+)(.*)$')
+  if not host or (tail ~= '' and not tail:match('^[#?]') and tail ~= '/') then return nil end
+  return { host = host, repo = repo, number = tonumber(number), resource_kind = 'issue',
+    url = ('https://%s/%s/issues/%s'):format(host, repo, number) }
+end
+function M.issue(ctx)
+  assert(ctx.resource_kind == 'issue' and ctx.number, 'Select an Issue number or URL')
+  local issue = M.api(ctx, ('repos/%s/issues/%d'):format(ctx.repo, ctx.number))
+  assert(type(issue) == 'table' and not M.scalar(issue.pull_request), 'This number is a pull request; use :GitPr')
+  local identity = M.issue_url_context(issue.html_url)
+  assert(identity and identity.host:lower() == ctx.host:lower() and identity.repo:lower() == ctx.repo:lower()
+    and identity.number == ctx.number and issue.number == ctx.number, 'Issue identity changed; reopen its URL')
+  issue.body, issue.author = M.scalar(issue.body) or '', M.scalar(issue.user) or {}
+  ctx.url = identity.url
+  return issue
 end
 function M.repo_arg(ctx) return ctx.host .. '/' .. ctx.repo end
 function M.command(ctx, args, opts)
@@ -92,11 +110,14 @@ function M.api(ctx, endpoint, payload, method)
 end
 function M.resolve(opts)
   opts = opts or {}
-  local ctx = M.url_context(opts.url) or vim.deepcopy(opts)
+  local issue = opts.resource_kind == 'issue'
+  local parsed = issue and M.issue_url_context(opts.url) or (not issue and M.url_context(opts.url))
+  if opts.url and issue and not parsed then error('Use an Issue URL, not a pull request URL', 0) end
+  local ctx = parsed and vim.tbl_extend('force', vim.deepcopy(opts), parsed) or vim.deepcopy(opts)
   ctx.root = utils.normalize_path(opts.root or opts.work_tree
     or utils.get_buf_work_tree(opts.bufnr or vim.api.nvim_get_current_buf()) or utils.get_work_tree({}))
   if not ctx.root then error('Not in a Git repository', 0) end
-  if not ctx.number and not opts.url and not opts.repository_only then
+  if not issue and not ctx.number and not opts.url and not opts.repository_only then
     local branch = async.git(ctx.root, { 'branch', '--show-current' })
     if branch and vim.trim(branch) ~= '' then
       local saved = async.git(ctx.root, { 'config', '--get', 'branch.' .. vim.trim(branch) .. '.pullRequestUrl' })
@@ -110,9 +131,10 @@ function M.resolve(opts)
     local default = scalar(repo.defaultBranchRef)
     ctx.repo, ctx.default_branch = repo.nameWithOwner, default and default.name
   end
+  ctx.resource_kind = issue and 'issue' or 'pull_request'
   ctx.host = ctx.host or 'github.com'
   if not ctx.host:match('^[%w%.%-]+$') or not ctx.repo:match('^[%w_.%-]+/[%w_.%-]+$') then error('Invalid GitHub host/repository', 0) end
-  if ctx.number and (type(ctx.number) ~= 'number' or ctx.number < 1 or ctx.number % 1 ~= 0) then error('Invalid PR number', 0) end
+  if ctx.number and (type(ctx.number) ~= 'number' or ctx.number < 1 or ctx.number % 1 ~= 0) then error(issue and 'Invalid Issue number' or 'Invalid PR number', 0) end
   return ctx
 end
 function M.pr(ctx)
@@ -166,7 +188,7 @@ function M.summary_chunks(pr)
   return chunks
 end
 function M.changed(ctx)
-  utils.fire_git_changed({ work_tree = ctx.root })
+  if ctx.resource_kind ~= 'issue' then utils.fire_git_changed({ work_tree = ctx.root }) end
   vim.api.nvim_exec_autocmds('User', { pattern = 'GitHubChanged', data = ctx })
 end
 return M

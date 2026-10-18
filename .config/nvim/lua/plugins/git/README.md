@@ -409,7 +409,98 @@ available through the GitHub menu as an alternative discussion/review UI.
 | `k` / `a` | CI checks / GitHub Actions runs |
 | `d` / `m` | Toggle draft/ready / choose a merge method |
 | `x` / `M` | Close/reopen the PR / change labels, assignees and review requests |
-| `i` / `n` | Octo issues / notifications |
+| `i` / `I` | Native Issue list / creation |
+| `o` / `n` | Octo issues / notifications |
+
+### Native Issues
+
+`:GitIssue [number|URL|list flags...]` opens an Issue in the native `gitissue` panel.
+With no selector it opens the Issue list; `:GitIssueList` and
+`:GitIssueCreate` also work before the plugin is loaded. The repository GitHub
+menu exposes the list on `i`, creation on `I`, and the alternative Octo list on
+`o`. Listing defaults to **open Issues, at most 50**. It requests only number,
+title and URL with bounded `gh issue list` pagination; repository size does not
+cause all Issue bodies or all pages to load. Pull requests are excluded.
+Both `GitIssueList` and `GitIssue` without a selector accept these flags:
+
+```vim
+:GitIssueList --state open --limit 50
+:GitIssue --state closed --limit 20
+:GitIssueList --state all --label "help wanted" --assignee @me --limit 100
+```
+
+`--state` accepts `open`, `closed` or `all`; `--limit` is a positive integer.
+`--label` can be repeated (all labels must match); `--assignee` accepts a login
+or `@me`. Short forms are `-s`, `-L`, `-l` and `-a`. Both `--state closed` and
+`--state=closed` work. Quotes and escaped spaces keep label names together.
+List flags cannot be combined with an Issue number/URL. Tab completes flag
+names, state values, common limits and `@me` locally, including on cold plugin
+loading; completion makes no GitHub requests. The picker can switch state and
+choose repository label/assignee filters while retaining the requested limit.
+The picker title displays the active state, cap and returned count.
+
+
+Numbers use the captured repository; URLs retain their host/repository. A PR
+number or URL is rejected rather than treated as an Issue. Opening does not
+require a branch PR, fetch revisions, compute diffs, or read PR/review/CI APIs.
+
+| Issue panel key | Action |
+|---|---|
+| `cw` / `A` outside the draft | Edit the title and Markdown body |
+| `<C-s>` / `:w` | Save the changed title/body fields |
+| `o` / `=` / `Tab` / `>` / `<` outside the draft | Toggle / expand / collapse header or Conversation |
+| `gc` / `gC` / `gcn` / `gcp` | Write a comment with immutable conversation history |
+| `gA` on a comment | Reactions; edit/delete your own published comment |
+| `gE` | Choose labels/assignees on their header row, or open the metadata panel |
+| `gco` / `gh` | Reveal Conversation / go to the header |
+| `gx` / `gy` | Open the Issue or selected comment in the browser / copy the Issue URL |
+| `N` / `<Space><Space>` / `:GitHub` | Issue actions, including metadata and close/reopen |
+| `R` outside the draft | Refresh while retaining local title/body edits |
+| `?` / `q` | Key guide / close (asks before discarding edited title/body) |
+
+Native editing keys continue to edit the title/body. The header and Conversation
+are protected; semantic row associations retain the selected comment even when
+its Markdown resembles a panel header or an edited body grows. The description
+and each comment use the PR Markdown renderer as independent regions, including
+fenced code blocks. Missing renderer/parser dependencies leave plain Markdown.
+Conversation contains ordinary comments plus close/reopen, label and assignee
+activity in API order. Unknown events remain read-only, duplicate comments are
+removed, and unavailable activity/comments show a source-specific warning while
+other available content stays readable. There are no PR diff, commit, review,
+merge, CI or worktree sections.
+
+Writes recheck resource identity and the relevant latest values. Title/body
+updates check `viewerCanUpdate` and compare only edited fields; labels and
+assignees check their specific permissions and change one membership at a time.
+Concurrent changes to an unedited body/title are adopted after a successful
+save. Later edits made while sending remain in the buffer. Automatic refresh
+retains the draft's original comparison baseline, so it cannot silently accept
+an overwritten remote field. Conflicts or failed requests retain the draft.
+These preflights do not provide a server-side atomic compare-and-swap guarantee.
+Comment edit/delete rechecks ownership and freshness; reaction removal targets
+only the current viewer's reaction. Issue comment history does not write PR read
+receipts. Successful Issue writes emit `GitHubChanged` with `resource_kind =
+'issue'` and do not trigger local Git status/revision refreshes.
+
+Close offers **completed** or **not planned**, verifies the displayed state/reason
+and current close permission, and writes only state/reason. Reopen verifies
+reopen permission and writes only state, leaving the reason to GitHub. Creation
+uses the shared composer: first line title, blank line, then Markdown body;
+`<C-s>`/`:w` submits, failure keeps input, and success opens the created Issue
+when its composer is still focused. `Tab` switches to/from context/history;
+`gA` in history uses the same comment actions. Duplicate sends are suppressed.
+
+Body reactions, milestones, Issue types, Projects, sub-issues and dependencies
+remain outside this surface. `tests/issue_model.lua`, `issue_view.lua`,
+`issue_actions.lua`, `issue_list.lua` and `issue_markdown.lua` cover bounded
+filtered listing, command/value completion, Issue-only IO, partial reads,
+permissions/conflicts, retained drafts, menus/composers, state reasons, filters,
+creation, callback ownership and actual Markdown rendering. GitHub writes are
+fixture-tested; real write validation requires a designated test Issue.
+API contracts: [Issues REST API](https://docs.github.com/en/rest/issues/issues),
+[Issue GraphQL schema](https://docs.github.com/en/graphql/reference/issues).
+
+### Pull requests
 
 In PR status, `<Space><Space>`, `N` and `:GitHub` open a **PR actions** menu.
 It is the common entry point for the current PR, including the existing comment
@@ -2174,8 +2265,8 @@ captured paths/commits. Definitions require unique keys and input names.
 These workflows run asynchronously against the worktree captured when the
 menu opens, emit refresh events after mutations (including conflict failures),
 and reuse transient argument presets. Repository lists/recent switching are
-outside this plugin's scope. Issue authoring uses Octo; PR metadata, comments and
-review also have the native UI described above. WIP timing and
+outside this plugin's scope. Issues and PR metadata/comments/review have the
+native UI described above; Octo remains available as an alternative. WIP timing and
 untracked snapshot policy remain unchanged. `tests/magit_workflows.lua` covers
 real sparse, subtree, full/incremental bundle, plain/binary/selected-commit and
 mail/Maildir operations, conflict continuation/skip/abort, Notes sync/merge,

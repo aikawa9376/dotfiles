@@ -7,7 +7,12 @@ function M.context(buf)
   buf = buf or vim.api.nvim_get_current_buf()
   local ctx = { root = utils.get_buf_work_tree(buf) or utils.get_work_tree({}), bufnr = buf }
   local pr
-  if vim.bo[buf].filetype == 'gitpr' then
+  if vim.bo[buf].filetype == 'gitissue' then
+    local model = require('git.features.issue').model(buf)
+    if model then ctx = vim.deepcopy(model.ctx) end
+  elseif vim.b[buf].git_issue_ctx then
+    ctx = vim.deepcopy(vim.b[buf].git_issue_ctx)
+  elseif vim.bo[buf].filetype == 'gitpr' then
     local model = require('git.features.pr').model(buf)
     if model then ctx = vim.deepcopy(model.ctx) end
   elseif vim.bo[buf].filetype == 'gitstatus' then
@@ -188,6 +193,15 @@ end
 function M.open(opts)
   opts = vim.deepcopy(opts or M.context())
   local source = opts.bufnr or vim.api.nvim_get_current_buf()
+  if vim.api.nvim_buf_is_valid(source) and vim.bo[source].filetype == 'gitissue' then
+    local issue = require('git.features.issue')
+    local current = issue.model(source)
+    if current and (not opts.root or opts.root == current.ctx.root) and (not opts.url or opts.url == current.ctx.url)
+      and (not opts.number or opts.number == current.ctx.number) then
+      return require('git.features.transient_menu').show({ kind = 'issue-actions', title = 'Issue actions',
+        context = current.ctx.url, groups = issue.action_groups(source) })
+    end
+  end
   local pr_panel = vim.api.nvim_buf_is_valid(source) and vim.bo[source].filetype == 'gitpr'
   local model = pr_panel and require('git.features.pr').model(source)
   if model and ((opts.root and opts.root ~= model.root) or (opts.url and opts.url ~= model.ctx.url)) then pr_panel = false end
@@ -230,7 +244,9 @@ function M.open(opts)
     { key = 'M', label = 'PR labels / assignees / review requests…', run = function()
       M.run(opts, github.pr, function(_, ctx) require('git.features.pr_metadata').menu(ctx) end)
     end },
-    { key = 'i', label = 'Issues (Octo)', run = function() octo_command(opts, 'Octo issue list') end },
+    { key = 'i', label = 'List Issues (native)', run = function() require('git.features.issue_actions').list(opts) end },
+    { key = 'I', label = 'Create Issue (native)', run = function() require('git.features.issue_actions').create(opts) end },
+    { key = 'o', label = 'Issues (Octo)', run = function() octo_command(opts, 'Octo issue list') end },
     { key = 'n', label = 'Notifications (Octo)', run = function() octo_command(opts, 'Octo notification list') end },
   }
   return require('git.features.transient_menu').show({ kind = 'github', title = 'GitHub',

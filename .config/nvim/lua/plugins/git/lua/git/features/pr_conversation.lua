@@ -41,13 +41,13 @@ function M.build(ctx, comments, reviews, errors, timeline)
 end
 -- Append immutable inline history to the main PR renderer. Return semantic row
 -- associations so body text resembling file/commit/header rows cannot misroute.
-function M.append(lines, highlights, conversation, viewer, markdown)
+function M.append(lines, highlights, conversation, viewer, markdown, opts)
   local rows, first, ranges = {}, nil, {}
   for _, err in ipairs(conversation.errors) do
     lines[#lines + 1] = err:gsub('[\r\n]', ' ')
     highlights[#highlights + 1] = { row = #lines, start = 0, finish = #lines[#lines], group = 'DiagnosticWarn' }
   end
-  if #conversation.entries == 0 and #conversation.errors == 0 then lines[#lines + 1] = 'No PR comments or review summaries.' end
+  if #conversation.entries == 0 and #conversation.errors == 0 then lines[#lines + 1] = opts and opts.empty or 'No PR comments or review summaries.' end
   for index, entry in ipairs(conversation.entries) do
     if index > 1 then lines[#lines + 1] = '' end
     if require('git.features.pr_timeline').is_event(entry) then

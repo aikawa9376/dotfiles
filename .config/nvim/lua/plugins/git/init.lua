@@ -19,7 +19,7 @@ return {
     "GitApply", "GitReverse", "GitFixupBase", "GitPatch", "GitRebasePlan", "GitRebaseBase", "GitRebaseContinue", "GitRebaseSkip", "GitRebaseAbort",
     "GitWipEnable", "GitWipDisable", "GitWipSave", "GitWipLog", "GitWipRestore",
     "GbranchSpinoff", "GbranchSpinout",
-    "GitHub", "GitPr", "GitPrCreate", "GitPrWorktree",
+    "GitHub", "GitIssue", "GitIssueList", "GitIssueCreate", "GitPr", "GitPrCreate", "GitPrWorktree",
     "GitInit",
     "GMove", "GRename", "GRemove", "GDelete", "GUnlink", "Gpedit", "Gdrop", "Gw", "Gr",
   },

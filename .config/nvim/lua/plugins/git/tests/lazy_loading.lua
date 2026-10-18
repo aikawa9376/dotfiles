@@ -7,7 +7,7 @@ require('lazy').setup({ spec = { spec }, install = { missing = false }, checker 
 assert(not package.loaded['git'], 'Git loaded before a trigger')
 assert(vim.fn.exists(':GitInit') == 2, 'repository setup was unavailable before loading')
 for _, name in ipairs({ 'GitWipEnable', 'GitWipDisable', 'GitWipSave', 'GitWipLog', 'GitWipRestore',
-  'GbranchSpinoff', 'GbranchSpinout' }) do
+  'GbranchSpinoff', 'GbranchSpinout', 'GitIssue', 'GitIssueList', 'GitIssueCreate' }) do
   assert(vim.fn.exists(':' .. name) == 2, 'Missing lazy trigger: ' .. name)
 end
 assert(vim.fn.exists(':GitStatusTree') == 2, 'tree command was unavailable before loading')
@@ -18,6 +18,8 @@ assert(vim.fn.exists(':GitUndo') == 2 and vim.fn.exists(':GitRedo') == 2,
   'history commands were unavailable before the plugin loaded')
 assert(vim.fn.exists(':GitRebasePlan') == 2 and vim.fn.exists(':GitRebaseBase') == 2,
   'rebase planning commands were unavailable before the plugin loaded')
+assert(vim.deep_equal(vim.fn.getcompletion('GitIssueList --state c', 'cmdline'), { 'closed' }),
+  'Cold Issue flag/value completion was unavailable')
 require('lazy').load({ plugins = { 'git' } })
 assert(package.loaded['git'])
 for _, name in ipairs(spec.cmd) do assert(vim.fn.exists(':' .. name) == 2, 'Missing command: ' .. name) end

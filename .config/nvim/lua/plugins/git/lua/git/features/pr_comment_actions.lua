@@ -5,15 +5,21 @@ local actions = require('git.features.github_actions')
 function M.endpoint(ctx, item)
   assert(type(item.id) == 'number' or tostring(item.id):match('^%d+$'), 'Invalid comment ID')
   local kind = item.kind or 'inline'
+  assert(ctx.resource_kind ~= 'issue' or kind == 'comment', 'Issues only have ordinary comments')
   if kind == 'review' then return ('repos/%s/pulls/%d/reviews/%s'):format(ctx.repo, ctx.number, item.id) end
   assert(kind == 'comment' or kind == 'inline', 'Select an issue or inline comment')
   return ('repos/%s/%s/comments/%s'):format(ctx.repo, kind == 'comment' and 'issues' or 'pulls', item.id)
 end
 function M.read(ctx, item)
+  if ctx.resource_kind == 'issue' then github.issue(ctx) end
   local fresh = github.api(ctx, M.endpoint(ctx, item))
   assert(tostring(fresh.id) == tostring(item.id), 'Comment identity changed; reopen it')
   local parent = github.scalar(fresh.issue_url) or github.scalar(fresh.pull_request_url)
-  if parent then assert(tonumber(parent:match('/(%d+)$')) == ctx.number, 'Comment belongs to another PR') end
+  if parent then
+    local repo, number = parent:match('/repos/([^/]+/[^/]+)/[^/]+/(%d+)$')
+    assert(repo and repo:lower() == ctx.repo:lower() and tonumber(number) == ctx.number, 'Comment belongs to another resource')
+  end
+  if ctx.resource_kind == 'issue' then assert(parent, 'Comment parent is unavailable') end
   return fresh
 end
 local function unchanged(ctx, item, own)

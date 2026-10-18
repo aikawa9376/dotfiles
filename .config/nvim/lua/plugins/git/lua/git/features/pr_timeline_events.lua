@@ -189,7 +189,8 @@ function M.entry(ctx, node)
     elseif state == 'PENDING' or state == 'IN_PROGRESS' or state == 'QUEUED' or state == 'WAITING' then category = { '◷ ', 'DiagnosticWarn' } end
   end
   local detail = spec.detail and spec.detail(node)
-  local parts = { { spec.label, 'Normal' } }
+  local label_text = ctx.resource_kind == 'issue' and spec.label:gsub('the PR', 'the Issue') or spec.label
+  local parts = { { label_text, 'Normal' } }
   if detail and detail ~= '' then parts[#parts + 1] = { ' ' .. text(detail), category[2] } end
   local label = ''; for _, part in ipairs(parts) do label = label .. part[1] end
   local url = (spec.link and spec.link(node)) or scalar(node.url) or ctx.url

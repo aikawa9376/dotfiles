@@ -248,7 +248,7 @@ local function setup()
   api.nvim_create_autocmd('User', { group = M.group, pattern = 'GitHubChanged', callback = function(ev)
     local ctx = ev.data or {}
     for _, s in pairs(states) do
-      if ctx.host == s.model.ctx.host and ctx.repo == s.model.ctx.repo and (not ctx.number or ctx.number == s.model.ctx.number) then
+      if ctx.resource_kind ~= 'issue' and ctx.host == s.model.ctx.host and ctx.repo == s.model.ctx.repo and (not ctx.number or ctx.number == s.model.ctx.number) then
         if s.loading then s.reload = true else M.refresh(s) end
       end
     end
