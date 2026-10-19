@@ -28,9 +28,9 @@ local function open(split)
   return assert(status.open({ work_tree = root, split = split or false }))
 end
 
--- q hides status in its existing split and retains the initialized buffer.
-local cached = open(true)
+-- New status splits close; edit-style reopen/close restores the existing window.
 local layout = vim.fn.winlayout()
+local cached = open(true)
 local initial_snapshots = #snapshots
 local initial_events = #vim.api.nvim_get_autocmds({ group = 'GitStatusRefresh' .. cached })
 for _ = 1, 50 do

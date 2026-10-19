@@ -220,7 +220,15 @@ function M.open(arg, command, root)
   end
   if kind == 'commit' then
     local name = require('git.buffer_names').commit(root, oid)
+    local source_win, previous = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+    local windows = {}
+    for _, win in ipairs(vim.api.nvim_list_wins()) do windows[win] = true end
+    require('utilities').remember_smart_close({ preserve = vim.b[previous].custom_git_commit == true
+      or vim.api.nvim_buf_get_name(previous):match('^git%-commit%-blob:') ~= nil })
     vim.cmd((command or 'edit') .. ' ' .. vim.fn.fnameescape(name))
+    if not windows[vim.api.nvim_get_current_win()] then
+      require('utilities').remember_smart_close({ source_win = source_win, created = true })
+    end
     return vim.fn.bufnr(name)
   end
   if kind == 'blob' and not object:match('^:[0-3]:') then

@@ -26,9 +26,10 @@ Normal panel keys use the selected row, file, hunk, or Visual selection as their
 context. Magit's `<Space><Space>` panels retain their existing keys and layout.
 
 Status, Commit, Log, Branch, Stash, Reflog, PR and Issue use
-`utilities.smart_close()` for `q`: ordinary splits stay in place and show the
-source or another available buffer. Status stays cached while hidden. A
-dedicated tab with one regular window still closes its tab. Floating menus and
+`utilities.smart_close()` for `q`: windows/tabs created to open a panel close,
+while a panel opened in an existing window restores its prior buffer and display
+options in place. This also preserves a reused window in a preexisting tab.
+Status stays cached while hidden. Floating menus and
 paired inspection views keep their own close behavior; `<C-c>` in Status
 explicitly closes its window.
 

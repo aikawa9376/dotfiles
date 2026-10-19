@@ -729,6 +729,17 @@ function M.open(opts)
   local model, err = opts.model, nil
   if not model then model, err = model_api.load(root, revision, opts.parent or (saved and saved.parent)) end
   if not model then notify(err); return end
+  if not opts.bufnr then
+    local previous = vim.api.nvim_get_current_buf()
+    require('utilities').remember_smart_close({ preserve = vim.b[previous].custom_git_commit == true
+      or vim.api.nvim_buf_get_name(previous):match('^git%-commit%-blob:') ~= nil })
+  end
+  local function open_window()
+    if not opts.tab and not opts.split then return end
+    local source_win = vim.api.nvim_get_current_win()
+    vim.cmd(opts.tab and 'tabnew' or 'belowright split')
+    require('utilities').remember_smart_close({ source_win = source_win, created = true })
+  end
   local canonical = names.commit(root, model.hash, model.parent_index)
   local existing = not opts.new and not opts.bufnr and names.find(canonical)
   if existing and not vim.api.nvim_buf_is_loaded(existing) then
@@ -738,7 +749,7 @@ function M.open(opts)
   end
   for b, s in pairs(states) do
     if not opts.new and not opts.bufnr and vim.api.nvim_buf_is_loaded(b) and s.model.root == root and s.model.hash == model.hash and s.model.parent_index == model.parent_index then
-      if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
+      open_window()
       show_buffer(b); configure_window(); return b
     end
   end
@@ -756,7 +767,7 @@ function M.open(opts)
   local s = { buf = b, name = name, model = model, expanded = saved and vim.deepcopy(saved.expanded) or {}, expected_head = opts.expected_head or vim.trim(model_api.git(root, { 'rev-parse', 'HEAD' }) or '') }
   states[b] = s
   render(s)
-  if opts.tab then vim.cmd('tabnew') elseif opts.split then vim.cmd('belowright split') end
+  open_window()
   show_buffer(b)
   vim.bo[b].filetype = 'gitcommitview'
   vim.bo[b].syntax = 'git'

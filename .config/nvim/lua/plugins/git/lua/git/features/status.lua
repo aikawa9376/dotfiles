@@ -3527,7 +3527,9 @@ function M.open(opts)
       utils.set_buf_work_tree(bufnr, work_tree)
     end
     if opts.tab then
+      local source_win = vim.api.nvim_get_current_win()
       vim.cmd('tabnew')
+      require('utilities').remember_smart_close({ source_win = source_win, created = true })
       vim.api.nvim_tabpage_set_var(0, 'git_status_work_tree', work_tree)
     elseif opts.split then
       local current_win = vim.api.nvim_get_current_win()
@@ -3546,6 +3548,8 @@ function M.open(opts)
       utils.open_panel_split(nil, {
         min_width = status_min_columns,
       })
+    else
+      require('utilities').remember_smart_close()
     end
     vim.api.nvim_win_set_buf(0, bufnr)
     if vim.bo[bufnr].filetype ~= 'gitstatus' then

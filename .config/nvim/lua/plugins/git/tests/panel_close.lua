@@ -37,22 +37,45 @@ local function snapshot()
   return { layout = vim.fn.winlayout(), sizes = sizes, tab = vim.api.nvim_get_current_tabpage() }
 end
 local function press_q() assert(vim.fn.maparg('q', 'n', false, true).callback)() end
-for _, command in ipairs({ 'G', 'GitCommit', 'GitLog', 'Gbranch', 'Gstash', 'Greflog' }) do
+-- Splits/tabs created by a panel close back to the original layout.
+for _, command in ipairs({ 'G', 'GitCommit', 'GitLog', 'Gbranch', 'Gstash', 'Greflog',
+  'Gsplit HEAD', 'Gvsplit HEAD', 'Gtabedit HEAD' }) do
   vim.api.nvim_set_current_win(source_win)
-  if command == 'GitCommit' then vim.cmd('belowright split') end
-  vim.cmd(command)
-  local panel, panel_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
   local before = snapshot()
+  if command == 'GitCommit' then
+    require('git.features.commit').open({ work_tree = root, split = true })
+  else vim.cmd(command) end
+  local panel, panel_win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
   local status = vim.bo[panel].filetype == 'gitstatus'
   press_q()
-  assert(vim.deep_equal(snapshot(), before), command .. ': q changed windows or their sizes')
-  assert(vim.api.nvim_get_current_win() == panel_win, command .. ': q moved focus')
-  assert(vim.api.nvim_get_current_buf() == source, command .. ': q did not restore the source buffer')
-  assert(vim.deep_equal(window_options(), source_options), command .. ': panel display options leaked into the file')
+  assert(vim.deep_equal(snapshot(), before), command .. ': q did not restore the original layout')
+  assert(not vim.api.nvim_win_is_valid(panel_win), command .. ': q retained a newly created window')
+  assert(vim.api.nvim_get_current_buf() == source, command .. ': q did not return to the source')
+  assert(vim.deep_equal(window_options(), source_options), command .. ': source options changed')
   assert(status == vim.api.nvim_buf_is_loaded(panel), command .. ': wrong buffer lifetime')
-  -- Close the preserved test window explicitly before opening the next panel.
-  vim.api.nvim_win_close(panel_win, false)
 end
+
+-- Edit-style opens reuse the existing window, so q restores its prior buffer.
+for _, command in ipairs({ 'Gedit :', 'GitCommit', 'Gedit HEAD' }) do
+  vim.api.nvim_set_current_win(source_win)
+  local before = snapshot()
+  vim.cmd(command)
+  local panel = vim.api.nvim_get_current_buf()
+  local status = vim.bo[panel].filetype == 'gitstatus'
+  press_q()
+  assert(vim.deep_equal(snapshot(), before), command .. ': q closed a reused window')
+  assert(vim.api.nvim_get_current_win() == source_win and vim.api.nvim_get_current_buf() == source)
+  assert(vim.deep_equal(window_options(), source_options), command .. ': panel options leaked')
+  if status then assert(vim.api.nvim_buf_is_loaded(panel)) end
+end
+
+-- A sole reused window in an existing tab must be kept too.
+vim.cmd('tabnew'); vim.api.nvim_set_current_buf(source)
+local tab, win = vim.api.nvim_get_current_tabpage(), vim.api.nvim_get_current_win()
+vim.cmd('Gedit HEAD'); press_q()
+assert(vim.api.nvim_get_current_tabpage() == tab and vim.api.nvim_get_current_win() == win)
+assert(vim.api.nvim_get_current_buf() == source)
+vim.cmd('tabclose')
 
 -- A modified commit keeps both its draft and layout when closing is cancelled.
 vim.api.nvim_set_current_win(source_win)
@@ -102,4 +125,4 @@ local float = vim.api.nvim_open_win(vim.api.nvim_create_buf(false, true), true,
 utilities.smart_close()
 assert(not vim.api.nvim_win_is_valid(float) and vim.deep_equal(snapshot(), before))
 vim.fn.delete(root, 'rf')
-print('PASS: panel q preserves split layout/source, status cache, commit draft guard, empty fallback, tabs and floats')
+print('PASS: new panel splits/tabs close, reused windows/tabs restore, status cache, draft guard and floats')

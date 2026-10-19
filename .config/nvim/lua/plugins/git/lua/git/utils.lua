@@ -24,7 +24,7 @@ function M.open_panel_split(target, opts)
   if not opened then error(open_err) end
 
   local target_win = vim.api.nvim_get_current_win()
-  require('utilities').remember_smart_close({ source_win = source_win })
+  require('utilities').remember_smart_close({ source_win = source_win, created = true })
   vim.api.nvim_create_autocmd('WinClosed', {
     pattern = tostring(target_win),
     once = true,

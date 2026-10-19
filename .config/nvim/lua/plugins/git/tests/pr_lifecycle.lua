@@ -70,9 +70,9 @@ vim.api.nvim_buf_delete(b, { force = true })
 assert(vim.wait(5000, function() return not async.busy(f.root) end, 10))
 assert(not view.model(b) and not vim.api.nvim_buf_is_valid(b))
 vim.api.nvim_set_current_win(vim.fn.bufwinid(b2))
-local layout = vim.fn.winlayout()
+local closing_win = vim.api.nvim_get_current_win()
 vim.fn.maparg('q', 'n', false, true).callback()
-assert(vim.deep_equal(vim.fn.winlayout(), layout) and not vim.api.nvim_buf_is_loaded(b2),
-  'PR q must delete its buffer while preserving the splits')
+assert(not vim.api.nvim_win_is_valid(closing_win) and not vim.api.nvim_buf_is_loaded(b2),
+  'PR q must close its owned window and release the hidden buffer')
 f.cleanup()
 print('PASS: no refresh loops, drafts across in-flight refresh/save, retryable failures, remote-edit conflicts, explicit reload and closed-view guards')
