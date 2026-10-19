@@ -127,20 +127,38 @@ local function pull_request_number_from_line(line)
   return line and tonumber(line:match('^#(%d+)%s'))
 end
 
-local function recent_commit_lines(work_tree, limit)
+local function recent_commit_lines(work_tree, limit, bufnr)
+  local commit_list = require('git.features.commit_list')
   local result = vim.system({
     'git', 'log',
     '--date=format:%Y-%m-%d %H:%M',
-    '--pretty=format:%h%x09%ad%x09%s',
+    commit_list.format,
     '-n', tostring(limit), 'HEAD', '--',
   }, { cwd = work_tree, text = true }):wait()
   if result.code ~= 0 then return {} end
 
-  local commits = {}
-  for line in (result.stdout or ''):gmatch('[^\r\n]+') do
-    table.insert(commits, (line:gsub('\t', ' ')))
+  return commit_list.lines(result.stdout, bufnr, 'recent')
+end
+
+local function pull_request_chunks(pr, now)
+  local chunks = { { '#' .. pr.number, 'GitPrPositive' } }
+  local age = require('git.features.github').age(pr.createdAt, now)
+  if age then chunks[#chunks + 1] = { ' ' .. age, 'Directory' } end
+  if pr.isDraft then chunks[#chunks + 1] = { ' [draft]', 'Comment' } end
+  chunks[#chunks + 1] = { ' ' .. pr.title, 'Normal' }
+  if pr.headRefName ~= '' then
+    chunks[#chunks + 1] = { ' ', 'Normal' }
+    chunks[#chunks + 1] = { pr.headRefName, 'GitBranch' }
   end
-  return commits
+  local author = pr.author and pr.author.login
+  if type(author) == 'string' and author ~= '' then
+    chunks[#chunks + 1] = { ' ', 'Normal' }
+    chunks[#chunks + 1] = { '@' .. author:gsub('[\r\n\t]', ' '), 'Type' }
+  end
+  chunks[#chunks + 1] = { ' [', 'Normal' }
+  vim.list_extend(chunks, require('git.features.github').summary_chunks(pr, { compact = true }))
+  chunks[#chunks + 1] = { ']', 'Normal' }
+  return chunks
 end
 
 local function append_custom_status_lines(lines, custom_lines)
@@ -514,7 +532,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
     if not (reusable_commits and reusable_commits.commit_scope == commit_scope)
       and commit_scope == 'recent' and #commit_lines < 15
     then
-      commit_lines = recent_commit_lines(work_tree, 15)
+      commit_lines = recent_commit_lines(work_tree, 15, bufnr)
     end
     local worktree_summary = reusable and reusable.worktree_summary or nil
     if not reusable then worktree_summary = worktree.get_summary(work_tree) end
@@ -540,6 +558,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
   local stash_list = snapshot.stash_list
   local pull_requests = pull_requests_by_buf[bufnr]
   local flag_state = snapshot.flag_state
+  local now = os.time()
 
   local function build_final_lines(commit_lines)
     local final_lines = {}
@@ -573,10 +592,9 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       table.insert(final_lines, '')
       table.insert(final_lines, ('Pull requests (%d) [%s]'):format(#pull_requests, scope_label))
       for _, pr in ipairs(pull_requests) do
-        local draft = pr.isDraft and ' [draft]' or ''
-        local branch = pr.headRefName ~= '' and ('  ' .. pr.headRefName) or ''
-        table.insert(final_lines, ('#%d%s %s%s  [%s]'):format(pr.number, draft, pr.title, branch,
-          require('git.features.github').summary(pr)))
+        local parts = {}
+        for _, chunk in ipairs(pull_request_chunks(pr, now)) do parts[#parts + 1] = chunk[1] end
+        table.insert(final_lines, table.concat(parts))
       end
     end
     vim.list_extend(final_lines, repository_health.submodule_lines(health))
@@ -661,11 +679,11 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
         local prefix, branch = l:match('^(Pull requests %(%d+%) %[branch: )(.*)%]$')
         if prefix and branch ~= '' then
           vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, #prefix,
-            { end_col = #prefix + #branch, hl_group = 'Type', priority = 110 })
+            { end_col = #prefix + #branch, hl_group = 'GitBranch', priority = 110 })
         end
         in_worktree, in_stash, in_pr = false, false, true
       elseif in_worktree then
-        -- 形式: [path]  [branch]  [head] [sync_icon]
+        -- 形式: [path] [branch] [head] [sync_icon]
         local p_part = l:match('^(%S+)')
         if p_part then
           local s_p, e_p = l:find(p_part, 1, true)
@@ -677,7 +695,7 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
           local s_b, e_b
           if br_part then
             s_b, e_b = l:find(br_part, e_p + 1, true)
-            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_b - 1, { end_col = e_b, hl_group = 'Type' })
+            vim.api.nvim_buf_set_extmark(bufnr, ns_worktree, i - 1, s_b - 1, { end_col = e_b, hl_group = 'GitBranch' })
           end
 
           -- ハッシュ
@@ -712,22 +730,10 @@ local function refresh_status_sections(bufnr, ns_worktree, ns_stash, ns_pr, opts
       elseif in_pr then
         local number = pull_request_number_from_line(l)
         if number then
-          local number_end = #tostring(number) + 1
-          vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, 0, { end_col = number_end, hl_group = 'Identifier' })
-          local draft_start, draft_end = l:find('%[draft%]')
-          if draft_start then
-            vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, draft_start - 1, { end_col = draft_end, hl_group = 'Comment' })
-          end
           local pr = M.pull_request_at(bufnr, i)
           if pr then
-            local github = require('git.features.github')
-            local prefix = ('#%d%s %s'):format(pr.number, pr.isDraft and ' [draft]' or '', pr.title)
-            if pr.headRefName ~= '' then
-              vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, #prefix + 2,
-                { end_col = #prefix + 2 + #pr.headRefName, hl_group = 'Type' })
-            end
-            local col = #l - #github.summary(pr) - 1
-            for _, chunk in ipairs(github.summary_chunks(pr)) do
+            local col = 0
+            for _, chunk in ipairs(pull_request_chunks(pr, now)) do
               vim.api.nvim_buf_set_extmark(bufnr, ns_pr, i - 1, col,
                 { end_col = col + #chunk[1], hl_group = chunk[2] })
               col = col + #chunk[1]
@@ -1114,6 +1120,7 @@ end
 function M.setup(group)
   vim.api.nvim_set_hl(0, 'GitStatAdd', { default = true, link = 'GitSignsAdd' })
   vim.api.nvim_set_hl(0, 'GitStatDelete', { default = true, link = 'GitSignsDelete' })
+  vim.api.nvim_set_hl(0, 'GitBranch', { default = true, link = 'Directory' })
 
   vim.api.nvim_create_autocmd('FileType', {
     group = group,
@@ -1285,7 +1292,7 @@ function M.setup(group)
           local args = {
             'gh', 'pr', 'list', '--state', 'open',
             '--limit', '100',
-            '--json', 'number,title,headRefName,isDraft,url,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup',
+            '--json', 'number,title,headRefName,isDraft,url,author,createdAt,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup',
           }
           if branch then vim.list_extend(args, { '--head', branch }) end
 
@@ -1304,6 +1311,8 @@ function M.setup(group)
                     number = number,
                     title = tostring(pr.title or ''):gsub('[\r\n]', ' '),
                     headRefName = tostring(pr.headRefName or ''):gsub('[\r\n]', ' '),
+                    author = type(pr.author) == 'table' and pr.author or nil,
+                    createdAt = pr.createdAt,
                     isDraft = pr.isDraft == true,
                     reviewDecision = pr.reviewDecision,
                     mergeable = pr.mergeable,
@@ -1611,9 +1620,9 @@ function M.setup(group)
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, 0, { end_col = #line, hl_group = 'DiagnosticWarn' })
           end
 
-          local subject_start = (line:match('^Head: .-  ()')
-            or line:match('^Upstream: .-  ()')
-            or line:match('^Remote: .-  ()'))
+          local subject_start = (line:match('^Head: %S+ ()')
+            or line:match('^Upstream: %S+ %(%+%d+/%-%d+%) ()')
+            or line:match('^Remote: %S+ ()'))
           if subject_start then
             vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, subject_start - 1, {
               end_col = #line,
@@ -1636,6 +1645,12 @@ function M.setup(group)
               vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, date_start - 1, {
                 end_col = date_end,
                 hl_group = 'Directory',
+              })
+            end
+            local author_start, author_end = require('git.features.commit_list').author_span(b, line)
+            if author_start then
+              vim.api.nvim_buf_set_extmark(b, ns_id, idx - 1, author_start, {
+                end_col = author_end, hl_group = 'Type',
               })
             end
           end
@@ -3093,14 +3108,11 @@ function M.setup(group)
         end
       end, { buffer = b, nowait = true, silent = true })
 
-      -- Keep the initialized status buffer when closing a split.
+      -- Keep the initialized status buffer and the surrounding split layout.
       vim.keymap.set('n', 'q', function()
-        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then vim.api.nvim_win_close(vim.g.flog_win, true) end
-        if #vim.api.nvim_tabpage_list_wins(0) > 1 then
-          vim.api.nvim_win_close(0, false)
-        else
-          require('utilities').smart_close()
-        end
+        require('utilities').smart_close({ keep_buffer = true, before = function()
+          if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then vim.api.nvim_win_close(vim.g.flog_win, true) end
+        end })
       end, { buffer = b, nowait = true, silent = true })
 
       vim.keymap.set('n', '<C-c>', '<C-w>c',

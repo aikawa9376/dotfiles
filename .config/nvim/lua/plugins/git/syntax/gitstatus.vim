@@ -48,7 +48,8 @@ hi def link gitStagedModifier Typedef
 hi def link gitInstruction Type
 hi def link gitStop Function
 hi def link gitHash Identifier
-hi def link gitSymbolicRef Function
+hi def link GitBranch Directory
+hi def link gitSymbolicRef GitBranch
 hi def link gitCount Number
 hi def link gitAheadBehind Number
 

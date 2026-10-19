@@ -398,8 +398,9 @@ function M.setup(group)
         if entry then vim.cmd('Gedit ' .. entry.hash) end
       end, { buffer = b, nowait = true, silent = true, desc = 'Inspect reflog destination' })
       vim.keymap.set('n', 'q', function()
-        commands.close_commit_info_float()
-        require('utilities').smart_close()
+        require('utilities').smart_close({ before = function()
+          commands.close_commit_info_float()
+        end })
       end, { buffer = b, nowait = true, silent = true, desc = 'Close reflog' })
 
       vim.api.nvim_create_autocmd('BufUnload', {

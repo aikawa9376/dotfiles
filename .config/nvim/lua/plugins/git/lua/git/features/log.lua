@@ -230,7 +230,7 @@ local function get_log_list(bufnr, reuse_line_history)
         local names = { G = 'good', B = 'bad', U = 'good (untrusted)',
           X = 'expired', Y = 'expired key', R = 'revoked key',
           E = 'cannot verify', N = 'none' }
-        commit_line = commit_line .. '  Signature: ' .. names[signature]
+        commit_line = commit_line .. ' Signature: ' .. names[signature]
         if signer ~= '' then commit_line = commit_line .. ' (' .. signer .. ')' end
       end
       if graph ~= '' then
@@ -831,15 +831,16 @@ function M.setup(group)
         end,
       })
 
-      -- q: Close window
+      -- q: Close the buffer while preserving ordinary splits.
       vim.keymap.set('n', 'q', function()
-        if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
-          vim.api.nvim_win_close(vim.g.flog_win, false)
-          vim.g.flog_win = nil
-          vim.g.flog_bufnr = nil
-        end
-        commands.close_commit_info_float()
-        require"utilities".smart_close()
+        require('utilities').smart_close({ before = function()
+          if vim.g.flog_win and vim.api.nvim_win_is_valid(vim.g.flog_win) then
+            vim.api.nvim_win_close(vim.g.flog_win, false)
+            vim.g.flog_win = nil
+            vim.g.flog_bufnr = nil
+          end
+          commands.close_commit_info_float()
+        end })
       end, { buffer = ev.buf, nowait = true, silent = true })
 
       -- <Leader>R: reset --mixed

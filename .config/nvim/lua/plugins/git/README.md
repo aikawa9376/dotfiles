@@ -25,6 +25,13 @@ the native Git backend.
 Normal panel keys use the selected row, file, hunk, or Visual selection as their
 context. Magit's `<Space><Space>` panels retain their existing keys and layout.
 
+Status, Commit, Log, Branch, Stash, Reflog, PR and Issue use
+`utilities.smart_close()` for `q`: ordinary splits stay in place and show the
+source or another available buffer. Status stays cached while hidden. A
+dedicated tab with one regular window still closes its tab. Floating menus and
+paired inspection views keep their own close behavior; `<C-c>` in Status
+explicitly closes its window.
+
 | Keys | Intent and context |
 | --- | --- |
 | `<CR>` / `q` / `?` / `R` | Open / close / contextual key guide / refresh; Stash and WIP also support help and refresh |
@@ -740,9 +747,21 @@ membership; the picker reopens for additional changes. Select Done or cancel
 to finish. Empty fields can be changed through `gE` elsewhere or `M` in the PR
 actions/repository GitHub menu. Review requests support users and `team:slug`;
 completed review decisions remain visible independently of outstanding requests.
-The existing `CI: … · Review: … · mergeable` summary remains.
+The detailed PR header uses `CI: … · Review: … · mergeable`.
 For merged PRs it shows green `merged`, regardless of the mergeability value.
 `checking` indicates an unknown mergeability decision, not merge execution progress.
+
+Status commit rows show `hash date subject author`, with author names in `Type`
+(the same yellow accent as Log). Status PR rows show title, branch, then `@author`.
+Branches use the blue `GitBranch` accent, including PR From/Into refs and
+Status header/worktree refs. PR numbers use green `GitPrPositive`; PR authors
+use the same `Type` accent. Status PR rows insert a blue creation age (`1d`, `3h`,
+`5m`, etc.) immediately after the PR number; missing creation dates omit the age.
+Metadata fields use single-space separators, including Status headers/worktrees,
+Branch columns and PR header details; spacing within subjects/paths is preserved.
+The Status PR suffix retains labeled text with
+tighter punctuation: `[CI:— Review:— conflicts]` or
+`[CI:✓ 2 Review:approved mergeable]`. Status values retain their semantic colors.
 The first line is `Repo: owner/name [ PR #N ] [STATE]`, followed immediately by
 the available metadata. Header items align with the other blocks at column zero;
 labels use `GitPrHeaderLabel` (DiagnosticInfo by default, `#7bb8c1` in dotfiles)

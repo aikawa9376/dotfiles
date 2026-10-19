@@ -4,6 +4,7 @@ local async = require('git.features.async')
 local utils = require('git.utils')
 vim.api.nvim_set_hl(0, 'GitPrPositive', { default = true, link = 'DiagnosticOk' })
 vim.api.nvim_set_hl(0, 'GitPrHeaderLabel', { default = true, link = 'DiagnosticInfo' })
+vim.api.nvim_set_hl(0, 'GitBranch', { default = true, link = 'Directory' })
 M.fields = 'number,title,body,url,state,isDraft,baseRefName,baseRefOid,headRefName,headRefOid,reviewDecision,mergeable,mergeStateStatus,statusCheckRollup,author,createdAt,updatedAt,assignees,milestone,labels,reviewRequests,additions,deletions,changedFiles'
 local function scalar(value)
   if value == vim.NIL or value == '' then return nil end
@@ -151,7 +152,22 @@ function M.pr(ctx)
   ctx.number, ctx.url = pr.number, pr.url
   return pr
 end
-function M.summary(pr)
+function M.age(value, now)
+  local timestamp = require('git.features.ci.model').timestamp(value)
+  if not timestamp then return nil end
+  local seconds = math.max(0, (now or os.time()) - timestamp)
+  for _, unit in ipairs({ { 31536000, 'y' }, { 2592000, 'mo' }, { 604800, 'w' },
+    { 86400, 'd' }, { 3600, 'h' }, { 60, 'm' }, { 1, 's' } }) do
+    if seconds >= unit[1] or unit[1] == 1 then return math.floor(seconds / unit[1]) .. unit[2] end
+  end
+end
+
+function M.summary(pr, opts)
+  if opts and opts.compact then
+    local text = {}
+    for _, chunk in ipairs(M.summary_chunks(pr, opts)) do text[#text + 1] = chunk[1] end
+    return table.concat(text)
+  end
   local checks = scalar(pr.statusCheckRollup)
   local failed, pending, total = 0, 0, 0
   for _, check in ipairs(type(checks) == 'table' and checks or {}) do
@@ -169,7 +185,16 @@ function M.summary(pr)
   return ci .. ' · Review: ' .. review .. (merge and (' · ' .. merge) or '')
 end
 -- Status lists and PR headers share label/value colors and neutral separators.
-function M.summary_chunks(pr)
+function M.summary_chunks(pr, opts)
+  if opts and opts.compact then
+    local full = M.summary_chunks(pr)
+    local chunks = {}
+    for _, chunk in ipairs(full) do
+      local text = chunk[1] == ': ' and ':' or chunk[1] == ' · ' and ' ' or chunk[1]
+      chunks[#chunks + 1] = { text, chunk[2] }
+    end
+    return chunks
+  end
   local parts = vim.split(M.summary(pr), ' · ', { plain = true })
   local ci, review = parts[1]:match('^CI: (.*)$'), parts[2]:match('^Review: (.*)$')
   local ci_group = ci:find('✓', 1, true) == 1 and 'GitPrPositive'

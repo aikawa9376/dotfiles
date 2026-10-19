@@ -297,9 +297,10 @@ local function attach(s)
     if editable(s, vim.fn.line('.')) then vim.cmd.normal({ 'R', bang = true }) else M.refresh(buf) end
   end, { buffer = buf, silent = true, desc = 'Refresh Issue, preserving draft' })
   vim.keymap.set('n', 'q', function()
-    if s.saving then vim.notify('An Issue save is running; wait for its result'); return end
-    if dirty(s) and vim.fn.confirm('Discard unsaved Issue title/body?', '&Discard\n&Keep', 2) ~= 1 then return end
-    vim.api.nvim_buf_delete(buf, { force = true })
+    require('utilities').smart_close({ force = true, before = function()
+      if s.saving then vim.notify('An Issue save is running; wait for its result'); return false end
+      if dirty(s) and vim.fn.confirm('Discard unsaved Issue title/body?', '&Discard\n&Keep', 2) ~= 1 then return false end
+    end })
   end, { buffer = buf, silent = true, desc = 'Close Issue' })
   actions.attach(buf)
   vim.keymap.set('n', '<Space><Space>', function() actions.open(actions.context(buf)) end, { buffer = buf, silent = true, desc = 'Issue action menu' })

@@ -137,7 +137,7 @@ function M.clear_cache()
   _cache.detected_mtime = 0
 end
 
--- 表示形式の統一: [marker][path]  [branch]  [head] [sync_icon]
+-- 表示形式の統一: [marker][path] [branch] [head] [sync_icon]
 local function format_line(wt, current_root, main_head, is_main)
   local is_current = (wt.path == current_root)
   -- 仕様変更: 同期されている（親と同じハッシュ）場合にアイコンを表示
@@ -149,7 +149,7 @@ local function format_line(wt, current_root, main_head, is_main)
   local head = (wt.head or ''):sub(1, 7)
   local sync_icon = is_synced and ' 󰚰' or ''
 
-  return string.format('%s%s  %s  %s%s', marker, path, branch, head, sync_icon)
+  return string.format('%s%s %s %s%s', marker, path, branch, head, sync_icon)
 end
 
 local function apply_highlights(bufnr)

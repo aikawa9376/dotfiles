@@ -122,7 +122,10 @@ f.delay = 20
 view.refresh(buf); vim.api.nvim_win_set_buf(win, other)
 settle(); assert(vim.api.nvim_get_current_buf() == other)
 source(); vim.api.nvim_win_set_buf(win, buf); view.refresh(buf)
-vim.api.nvim_buf_delete(buf, { force = true }); settle()
+local layout = vim.fn.winlayout()
+key('q'); settle()
+assert(vim.deep_equal(vim.fn.winlayout(), layout) and vim.api.nvim_win_is_valid(win),
+  'Issue q must preserve the split layout')
 assert(view.model(buf) == nil)
 require('git.features.transient_menu').show = show
 f.cleanup()

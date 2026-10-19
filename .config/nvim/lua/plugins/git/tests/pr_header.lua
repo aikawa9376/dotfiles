@@ -17,6 +17,15 @@ local function gutter(expected)
   assert(count == 1, 'Fold marker should be a single first-line sign')
 end
 assert(lines()[1] == first_line and lines()[2] == 'Created by: @author')
+local header = require('git.features.pr_header').build(require('git.features.pr').model(ui.buf), true, false)
+local function span(text, group)
+  for _, mark in ipairs(header.highlights) do
+    if mark.group == group and header.lines[mark.row]:sub(mark.start + 1, mark.finish) == text then return true end
+  end
+end
+assert(span('@author', 'Type') and span(f.pr.headRefName, 'GitBranch') and span(f.pr.baseRefName, 'GitBranch'),
+  'PR author and branch colors must match their status-list roles')
+assert(span(('[ PR #%d ] '):format(f.pr.number), 'GitPrPositive'), 'PR number should be green')
 gutter('▾')
 assert(vim.wo.signcolumn == 'yes:1' and vim.wo.statuscolumn == '%s' and vim.wo.foldcolumn == '0')
 vim.api.nvim_win_set_cursor(0, { 1, 0 }); vim.cmd('normal! zt'); vim.cmd('redraw')
@@ -34,7 +43,7 @@ ui.key('gx', 1); assert(opened == f.pr.url, 'PR title/state area should open the
 vim.api.nvim_win_set_cursor(0, { 1, #'Repo: ' }); ui.key('gx')
 assert(opened == 'https://ghe.example.test/org/repo', 'Repository area should open the repository')
 vim.ui.open = original_open
-assert(ui.row('Commits: 1  Changed files: 4  (+3 -2 ■■■■■)'))
+assert(ui.row('Commits: 1 Changed files: 4 (+3 -2 ■■■■■)'))
 absent('Assignees:'); absent('Labels:'); absent('Milestone:'); absent('Reviewers:')
 absent(f.pr.url); absent('No one assigned'); absent('None yet')
 absent('[Actions]'); absent('test:'); absent('external:')
@@ -84,7 +93,7 @@ f.reviews = {
 }
 ui.refresh()
 assert(ui.row('Assignees: assigned') and ui.row('Labels: 日本語, bug') and ui.row('Milestone: Version 1'))
-assert(lines()[ui.row('Reviewers:')] == 'Reviewers: @requested ◷  @reviewer ✓  @team ◷',
+assert(lines()[ui.row('Reviewers:')] == 'Reviewers: @requested ◷ @reviewer ✓ @team ◷',
   'Comment-only authors/viewers must not appear or overwrite an approval')
 absent('@private')
 absent('Your last review:')
@@ -92,7 +101,7 @@ assert(ui.row('Your review:') < ui.row('CI:') and ui.row('CI:') < ui.row('test:'
 -- A comment-only viewer belongs in the list when explicitly requested.
 f.pr.reviewRequests[#f.pr.reviewRequests + 1] = { login = f.viewer }
 ui.refresh()
-assert(lines()[ui.row('Reviewers:')] == 'Reviewers: @requested ◷  @reviewer ✓  @team ◷  @viewer ◷')
+assert(lines()[ui.row('Reviewers:')] == 'Reviewers: @requested ◷ @reviewer ✓ @team ◷ @viewer ◷')
 table.remove(f.pr.reviewRequests); ui.refresh()
 local header = require('git.features.pr_header').build(view.model(ui.buf), true, true)
 assert(header.lines[#header.lines]:find('external:', 1, true), 'CI checks should finish the Repo header')

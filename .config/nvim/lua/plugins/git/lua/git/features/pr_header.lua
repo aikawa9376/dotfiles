@@ -41,12 +41,12 @@ function M.build(model, expanded, checks_expanded)
     return row({ { label .. ': ', 'GitPrHeaderLabel' }, { value, group or 'Normal' } }, url)
   end
   local state = pr.isDraft and 'DRAFT' or pr.state or 'OPEN'
-  row({ { 'Repo: ', 'GitPrHeaderLabel' }, { ctx.repo .. ' ', 'Normal' }, { ('[ PR #%d ] '):format(pr.number), 'Title' },
+  row({ { 'Repo: ', 'GitPrHeaderLabel' }, { ctx.repo .. ' ', 'Normal' }, { ('[ PR #%d ] '):format(pr.number), 'GitPrPositive' },
     { '[' .. state .. ']', (state == 'OPEN' or state == 'MERGED') and 'GitPrPositive' or 'DiagnosticWarn' } }, pr.url)
   result.links[1] = { start_col = #'Repo: ', end_col = #'Repo: ' + #ctx.repo,
     url = ('https://%s/%s'):format(ctx.host, ctx.repo) }
   if expanded then
-    detail('Created by', pr.author and github.scalar(pr.author.login) and ('@' .. pr.author.login), 'Identifier')
+    detail('Created by', pr.author and github.scalar(pr.author.login) and ('@' .. pr.author.login), 'Type')
     for _, entry in ipairs({ { 'Created', pr.createdAt }, { 'Updated', pr.updatedAt } }) do
       if github.scalar(entry[2]) then detail(entry[1], entry[2]:sub(1, 10)) end
     end
@@ -80,21 +80,21 @@ function M.build(model, expanded, checks_expanded)
       local chunks = { { 'Reviewers: ', 'GitPrHeaderLabel' } }
       for i, name in ipairs(reviewer_names) do
         local icon, group = outcome(reviewers[name].state)
-        chunks[#chunks + 1] = { (i > 1 and '  ' or '') .. '@' .. name .. ' ', 'Identifier' }
+        chunks[#chunks + 1] = { (i > 1 and ' ' or '') .. '@' .. name .. ' ', 'Identifier' }
         chunks[#chunks + 1] = { icon, group }
       end
       result.metadata_rows[row(chunks)] = 'reviewers'
     end
-    row({ { 'From: ', 'GitPrHeaderLabel' }, { pr.headRefName, 'Normal' },
-      { '  Into: ', 'GitPrHeaderLabel' }, { pr.baseRefName, 'Normal' } })
+    row({ { 'From: ', 'GitPrHeaderLabel' }, { pr.headRefName, 'GitBranch' },
+      { ' Into: ', 'GitPrHeaderLabel' }, { pr.baseRefName, 'GitBranch' } })
     local add, del = tonumber(github.scalar(pr.additions)) or 0, tonumber(github.scalar(pr.deletions)) or 0
     local total = add + del
     local unit = total > 0 and math.ceil(total / 5) or 1
     local green = math.floor((add + 0.5) / unit)
     local red = math.floor((del + 0.5) / unit)
     local chunks = { { 'Commits: ', 'GitPrHeaderLabel' }, { tostring(model.commit_count or '—'), 'Normal' },
-      { '  Changed files: ', 'GitPrHeaderLabel' }, { tostring(github.scalar(pr.changedFiles) or #model.entries), 'Normal' },
-      { '  (', 'GitPrHeaderLabel' }, { '+' .. add .. ' ', 'GitPrPositive' }, { '-' .. del .. ' ', 'GitSignsDelete' },
+      { ' Changed files: ', 'GitPrHeaderLabel' }, { tostring(github.scalar(pr.changedFiles) or #model.entries), 'Normal' },
+      { ' (', 'GitPrHeaderLabel' }, { '+' .. add .. ' ', 'GitPrPositive' }, { '-' .. del .. ' ', 'GitSignsDelete' },
       { string.rep('■', green), 'GitPrPositive' }, { string.rep('■', red), 'GitSignsDelete' },
       { string.rep('■', math.max(0, 5 - green - red)), 'Comment' }, { ')', 'GitPrHeaderLabel' } }
     row(chunks)

@@ -33,7 +33,11 @@ def main():
     tests = [available[name] for name in args.names] if args.names else sorted(available.values())
 
     def run(path):
-        command = ['nvim', '--headless', '--clean', '-u', 'NONE', '-i', 'NONE']
+        utilities = Path(os.environ.get('NVIM_UTILITIES_PATH',
+                         str(Path(os.environ.get('XDG_DATA_HOME', str(Path.home() / '.local/share')))
+                             / 'nvim/lazy/utilities.lua')))
+        command = ['nvim', '--headless', '--clean', '-u', 'NONE', '-i', 'NONE',
+                   '--cmd', f'lua vim.opt.rtp:prepend({str(utilities)!r})']
         if path.suffix == '.py':
             command = [sys.executable, str(path)]
         elif path.stem == 'panel_layout':
@@ -44,6 +48,9 @@ def main():
         start = time.monotonic()
         with tempfile.TemporaryDirectory(prefix='git-check-' + path.stem + '-') as directory:
             env = os.environ | {'XDG_STATE_HOME': directory + '/state', 'XDG_CACHE_HOME': directory + '/cache'}
+            # TUI checks start their own Neovim process without our --cmd options.
+            env['LUA_PATH'] = (str(utilities / 'lua/?.lua') + ';' + str(utilities / 'lua/?/init.lua')
+                               + ';' + os.environ.get('LUA_PATH', ';'))
             # Keep XDG_DATA_HOME: integration checks use installed plugins/parsers.
             try:
                 result = subprocess.run(command, cwd=PLUGIN, env=env, capture_output=True,

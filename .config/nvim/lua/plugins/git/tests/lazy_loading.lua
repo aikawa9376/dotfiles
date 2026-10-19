@@ -1,7 +1,8 @@
 local plugin = vim.fs.dirname(vim.fs.dirname(vim.fn.fnamemodify(debug.getinfo(1, 'S').source:sub(2), ':p')))
 vim.opt.rtp:prepend(vim.fn.stdpath('data') .. '/lazy/lazy.nvim')
 local spec = dofile(plugin .. '/init.lua'); spec.dir = plugin
-require('lazy').setup({ spec = { spec }, install = { missing = false }, checker = { enabled = false },
+local utilities = dofile(vim.fs.dirname(plugin) .. '/myutil.lua')
+require('lazy').setup({ spec = { utilities, spec }, install = { missing = false }, checker = { enabled = false },
   change_detection = { enabled = false }, lockfile = vim.fn.tempname(),
   performance = { rtp = { reset = false }, cache = { enabled = false } } })
 assert(not package.loaded['git'], 'Git loaded before a trigger')
@@ -22,6 +23,10 @@ assert(vim.deep_equal(vim.fn.getcompletion('GitIssueList --state c', 'cmdline'),
   'Cold Issue flag/value completion was unavailable')
 require('lazy').load({ plugins = { 'git' } })
 assert(package.loaded['git'])
+require('lazy').load({ plugins = { 'utilities.lua' } })
+assert(not utilities.dir, 'utilities must use the regular Lazy installation')
+assert(require('lazy.core.config').plugins['utilities.lua'].dir == vim.fn.stdpath('data') .. '/lazy/utilities.lua')
+assert(type(require('utilities').register_smart_close) == 'function', 'Callback-enabled utilities did not load')
 for _, name in ipairs(spec.cmd) do assert(vim.fn.exists(':' .. name) == 2, 'Missing command: ' .. name) end
 local active = table.concat(vim.fn.readfile(vim.fs.dirname(vim.fs.dirname(plugin)) .. '/config/lazy.lua'), '\n')
 assert(active:find('import = "plugins.git"', 1, true))

@@ -7,7 +7,6 @@ local utils = require('git.utils')
 local renderer = require('git.features.status_renderer')
 local syntax = require('git.features.syntax_highlight')
 local status = require('git.features.status')
-package.loaded.utilities = { smart_close = function() vim.cmd('bdelete') end }
 local root = vim.fn.getcwd()
 local snapshots, commits = {}, 0
 local original_snapshot = renderer.snapshot_async
@@ -25,16 +24,18 @@ local function group_exists(name)
   return pcall(vim.api.nvim_get_autocmds, { group = name })
 end
 
-local function open()
-  return assert(status.open({ work_tree = root, split = true }))
+local function open(split)
+  return assert(status.open({ work_tree = root, split = split or false }))
 end
 
--- q hides a split status and retains its initialized buffer across repeated opens.
-local cached = open()
+-- q hides status in its existing split and retains the initialized buffer.
+local cached = open(true)
+local layout = vim.fn.winlayout()
 local initial_snapshots = #snapshots
 local initial_events = #vim.api.nvim_get_autocmds({ group = 'GitStatusRefresh' .. cached })
 for _ = 1, 50 do
   vim.fn.maparg('q', 'n', false, true).callback()
+  assert(vim.deep_equal(vim.fn.winlayout(), layout), 'q changed the split layout')
   assert(vim.api.nvim_buf_is_loaded(cached), 'q discarded the warm status buffer')
   assert(open() == cached, 'opening status created a new buffer')
   vim.api.nvim_exec_autocmds('FileType', { buffer = cached })

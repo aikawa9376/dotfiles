@@ -239,18 +239,18 @@ local function get_branch_list(bufnr, filter)
     local author_str, truncated_author_mode, author_content_len = pad_right(b.author, max_author_len, 'right')
     local subject_str, truncated_subject_mode, subject_content_len = pad_right(subject, max_subject_len, 'right')
 
-    local line = b.head .. branch_str .. '  ' .. date_str .. '  ' .. author_str .. '  ' .. subject_str
+    local line = b.head .. branch_str .. ' ' .. date_str .. ' ' .. author_str .. ' ' .. subject_str
 
     -- Add upstream if exists, otherwise trim trailing spaces
     if b.upstream_str ~= '' then
-      line = line .. '  ' .. b.upstream_str
+      line = line .. ' ' .. b.upstream_str
     else
       line = line:gsub('%s+$', '')
     end
     table.insert(formatted, line)
 
-    local date_start = #b.head + #branch_str + 2
-    local author_start = date_start + #date_str + 2
+    local date_start = #b.head + #branch_str + 1
+    local author_start = date_start + #date_str + 1
     local upstream_start = b.upstream_str ~= '' and (#line - #b.upstream_str) or nil
     branch_columns[#formatted] = {
       date_start = date_start,
@@ -271,8 +271,8 @@ local function get_branch_list(bufnr, filter)
     end
 
     if truncated_author_mode then
-      -- head + branch + 2 spaces + date + 2 spaces
-      local author_col = #b.head + #branch_str + 2 + #date_str + 2
+      -- head + branch + 1 space + date + 1 space
+      local author_col = #b.head + #branch_str + 1 + #date_str + 1
       table.insert(truncated_info, {
         line = #formatted - 1,
         col_start = author_col,
@@ -282,8 +282,8 @@ local function get_branch_list(bufnr, filter)
     end
 
     if truncated_subject_mode then
-      -- head + branch + 2 spaces + date + 2 spaces + author + 2 spaces
-      local subject_col = #b.head + #branch_str + 2 + #date_str + 2 + #author_str + 2
+      -- head + branch + 1 space + date + 1 space + author + 1 space
+      local subject_col = #b.head + #branch_str + 1 + #date_str + 1 + #author_str + 1
       table.insert(truncated_info, {
         line = #formatted - 1,
         col_start = subject_col,

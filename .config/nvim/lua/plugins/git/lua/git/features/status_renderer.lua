@@ -526,20 +526,16 @@ local function append_section(lines, entries_by_row, model, title, section, entr
   end
 end
 
-local function parse_commit_lines(result)
+local function parse_commit_lines(result, bufnr, kind)
   if result.code ~= 0 then return {}, false end
-  local commits = {}
-  for line in (result.stdout or ''):gmatch('[^\r\n]+') do
-    table.insert(commits, (line:gsub('\t', ' ')))
-  end
-  return commits, true
+  return require('git.features.commit_list').lines(result.stdout, bufnr, kind), true
 end
 
 local function commit_args(revisions)
   local args = {
     'log',
     '--date=format:%Y-%m-%d %H:%M',
-    '--pretty=format:%h%x09%ad%x09%s',
+    require('git.features.commit_list').format,
     '-n',
     '256',
   }
@@ -552,13 +548,13 @@ local function commit_args(revisions)
   return args
 end
 
-local function commit_lines(work_tree, revisions)
-  return parse_commit_lines(run(work_tree, commit_args(revisions)))
+local function commit_lines(work_tree, revisions, bufnr, kind)
+  return parse_commit_lines(run(work_tree, commit_args(revisions)), bufnr, kind)
 end
 
-local function commit_lines_async(work_tree, revisions, callback)
+local function commit_lines_async(work_tree, revisions, bufnr, callback)
   run_async(work_tree, commit_args(revisions), function(result)
-    local commits, ok = parse_commit_lines(result)
+    local commits, ok = parse_commit_lines(result, bufnr, 'unpushed')
     callback(commits, ok)
   end)
 end
@@ -601,7 +597,7 @@ local function snapshot_from_model(bufnr, model, opts)
   prune_conflict_cache(chosen_conflict_side_by_buf[bufnr])
   prune_conflict_cache(conflict_diff_cache_by_buf[bufnr])
   local function with_subject(line, subject)
-    return subject and (line .. '  ' .. subject) or line
+    return subject and (line .. ' ' .. subject) or line
   end
 
   local lines = {
@@ -654,7 +650,7 @@ local function snapshot_from_model(bufnr, model, opts)
     then
       model.unpulled = previous.unpulled
     else
-      model.unpulled = commit_lines(model.work_tree, 'HEAD..' .. model.upstream)
+      model.unpulled = commit_lines(model.work_tree, 'HEAD..' .. model.upstream, bufnr, 'unpulled')
     end
   end
 
@@ -869,13 +865,13 @@ function M.unpushed_commits(bufnr)
   local model = models[bufnr]
   if not model then return {} end
   if model.push then
-    local commits, ok = commit_lines(model.work_tree, model.push .. '..HEAD')
+    local commits, ok = commit_lines(model.work_tree, model.push .. '..HEAD', bufnr, 'unpushed')
     if ok then return commits end
   end
 
   local remotes = run(model.work_tree, { 'remote' })
   if remotes.code ~= 0 or vim.trim(remotes.stdout or '') == '' then return {} end
-  return commit_lines(model.work_tree, { 'HEAD', '--not', '--remotes' })
+  return commit_lines(model.work_tree, { 'HEAD', '--not', '--remotes' }, bufnr, 'unpushed')
 end
 
 function M.unpushed_commits_async(bufnr, callback)
@@ -883,7 +879,7 @@ function M.unpushed_commits_async(bufnr, callback)
   if not model then callback({}); return end
   local work_tree = model.work_tree
   if model.push then
-    commit_lines_async(work_tree, model.push .. '..HEAD', function(commits, ok)
+    commit_lines_async(work_tree, model.push .. '..HEAD', bufnr, function(commits, ok)
       if ok then callback(commits); return end
       callback({})
     end)
@@ -892,7 +888,7 @@ function M.unpushed_commits_async(bufnr, callback)
 
   run_async(work_tree, { 'remote' }, function(result)
     if result.code ~= 0 or vim.trim(result.stdout or '') == '' then callback({}); return end
-    commit_lines_async(work_tree, { 'HEAD', '--not', '--remotes' }, function(commits)
+    commit_lines_async(work_tree, { 'HEAD', '--not', '--remotes' }, bufnr, function(commits)
       callback(commits)
     end)
   end)
@@ -904,14 +900,14 @@ function M.recent_commits_async(bufnr, limit, callback)
   local args = {
     'log',
     '--date=format:%Y-%m-%d %H:%M',
-    '--pretty=format:%h%x09%ad%x09%s',
+    require('git.features.commit_list').format,
     '-n',
     tostring(limit),
     'HEAD',
     '--',
   }
   run_async(model.work_tree, args, function(result)
-    local commits = parse_commit_lines(result)
+    local commits = parse_commit_lines(result, bufnr, 'recent')
     callback(commits)
   end)
 end
@@ -1512,6 +1508,7 @@ end
 
 function M.cleanup(bufnr)
   statistics.cleanup(bufnr)
+  require('git.features.commit_list').cleanup(bufnr)
   models[bufnr] = nil
   expanded[bufnr] = nil
   subjects_by_buf[bufnr] = nil

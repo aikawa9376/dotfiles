@@ -27,6 +27,27 @@ assert(#right == 1 and right[1].id == 101, 'LEFT comments leaked onto addition r
 assert(github.summary(f.pr):find('CI: ✗ 1/2', 1, true))
 assert(github.summary({ statusCheckRollup = { { conclusion = 'SUCCESS' }, { conclusion = 'SKIPPED' } } }):find('CI: ✓ 2', 1, true))
 assert(github.summary({ statusCheckRollup = vim.NIL }):find('CI: —', 1, true))
+local function compact(pr) return github.summary(pr, { compact = true }) end
+local now = require('git.features.ci.model').timestamp('2026-10-20T00:00:00Z')
+assert(github.age('2026-10-19T00:00:00Z', now) == '1d')
+assert(github.age('2026-10-19T09:00:00+09:00', now) == '1d')
+assert(github.age('2026-10-19T21:00:00Z', now) == '3h')
+assert(github.age('2026-10-19T23:55:00Z', now) == '5m')
+assert(github.age('2026-10-21T00:00:00Z', now) == '0s')
+assert(github.age(vim.NIL, now) == nil and github.age('invalid', now) == nil)
+assert(compact({ statusCheckRollup = vim.NIL, mergeable = 'CONFLICTING' }) == 'CI:— Review:— conflicts')
+assert(compact({ reviewDecision = 'REVIEW_REQUIRED', mergeable = 'UNKNOWN' }) == 'CI:— Review:review required checking')
+assert(compact({ reviewDecision = 'APPROVED', mergeable = 'MERGEABLE',
+  statusCheckRollup = { { conclusion = 'SUCCESS' }, { conclusion = 'NEUTRAL' } } }) == 'CI:✓ 2 Review:approved mergeable')
+assert(compact({ reviewDecision = 'CHANGES_REQUESTED', mergeable = 'CONFLICTING',
+  statusCheckRollup = { { conclusion = 'FAILURE' }, { state = 'PENDING' } } }) == 'CI:✗ 1/2 Review:changes requested conflicts')
+assert(compact({ statusCheckRollup = { { state = 'PENDING' }, { conclusion = 'SUCCESS' } } }) == 'CI:◷ 1/2 Review:—')
+assert(compact({ state = 'MERGED', mergeable = 'CONFLICTING' }) == 'CI:— Review:— merged', 'Merged must override stale conflicts')
+assert(compact({ state = 'CLOSED', mergeable = 'UNKNOWN' }) == 'CI:— Review:— checking')
+for state, expected in pairs({ CONFLICTING = 'DiagnosticError', MERGEABLE = 'GitPrPositive', UNKNOWN = 'DiagnosticWarn' }) do
+  local chunks = github.summary_chunks({ mergeable = state }, { compact = true })
+  assert(chunks[#chunks][2] == expected)
+end
 local checks = github.checks(f.pr)
 assert(checks[1].url:find('/job/12', 1, true) and checks[2].url == 'https://ci.example.test/build/1')
 for _, call in ipairs(f.calls) do

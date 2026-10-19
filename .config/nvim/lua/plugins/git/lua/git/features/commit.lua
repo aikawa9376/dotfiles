@@ -69,6 +69,7 @@ local function close_inspection()
 end
 local function show_buffer(buf)
   local previous = vim.api.nvim_get_current_buf()
+  require('utilities').remember_smart_close({ preserve = true })
   if previous ~= buf and vim.g.flog_opener_bufnr == previous then
     vim.g.flog_opener_bufnr = buf
   end
@@ -620,13 +621,22 @@ local function attach(s)
       'Commit has no known GitHub remote ref')
   end, { desc = 'Open pushed commit on GitHub' })
   map('q', function()
-    if message_dirty(s) then
-      local choice = vim.fn.confirm('Save edited commit message?', '&Save\n&Discard\n&Cancel', 3)
-      if choice == 1 then if not M.write(b) then return end
-      elseif choice == 2 then render(s)
-      else return end
-    end
-    close_inspection()
+    require('utilities').smart_close({
+      before = function()
+        if message_dirty(s) then
+          local choice = vim.fn.confirm('Save edited commit message?', '&Save\n&Discard\n&Cancel', 3)
+          if choice == 1 then if not M.write(b) then return false end
+          elseif choice == 2 then render(s)
+          else return false end
+        end
+        close_flog()
+        require('git.features.commands').close_commit_info_float()
+      end,
+      close = function(_, default_close)
+        if vim.w.git_commit_return_win then close_inspection(); return true end
+        return default_close()
+      end,
+    })
   end)
   map('?', function()
     require('git.features.help').show_text('Commit view', {

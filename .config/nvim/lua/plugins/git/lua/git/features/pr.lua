@@ -1129,8 +1129,9 @@ local function attach(s)
   map('gD', display_menu, 'PR diff display settings')
   -- Loading and failed requests still need an exit even without a model.
   vim.keymap.set('n', 'q', function()
-    if s.model and edited(s) and vim.fn.confirm('Discard unsaved PR title/description?', '&Discard\n&Keep', 2) ~= 1 then return end
-    vim.api.nvim_buf_delete(b, { force = true })
+    require('utilities').smart_close({ force = true, before = function()
+      if s.model and edited(s) and vim.fn.confirm('Discard unsaved PR title/description?', '&Discard\n&Keep', 2) ~= 1 then return false end
+    end })
   end, { buffer = b, silent = true, desc = 'Close PR status' })
   vim.keymap.set('n', 'R', function()
     if s.model and editable_row(s, vim.fn.line('.')) then native_key('R'); return end

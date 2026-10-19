@@ -9,7 +9,6 @@ vim.g.clipboard = { name = 'test', copy = { ['+'] = copy, ['*'] = copy },
   paste = { ['+'] = paste, ['*'] = paste }, cache_enabled = 0 }
 package.loaded['git.features.status_watch'] = { subscribe = function() return function() end end }
 package.loaded['git.features.worktree_watch'] = { subscribe = function() return function() end end }
-package.loaded.utilities = { smart_close = function() vim.cmd('close') end }
 local executable = vim.fn.executable
 vim.fn.executable = function(name) return name == 'gh' and 0 or executable(name) end
 local root = vim.fn.tempname() .. ' keymaps'; vim.fn.mkdir(root, 'p')
