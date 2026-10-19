@@ -1,5 +1,64 @@
 local M = {}
 
+local function check_follow_viewport(view, state)
+  local agent = "conversation-filter-viewport-test"
+  local path = vim.fn.tempname() .. "-conversation-viewport.log"
+  local raw = { "─ User ─", " question", "─ Assistant ─" }
+  for index = 1, 60 do raw[#raw + 1] = " answer " .. index end
+  raw[#raw + 1] = "─ Tool ─"
+  for index = 1, 100 do raw[#raw + 1] = " hidden " .. index end
+  vim.fn.writefile(raw, path)
+  local old_session = state.sessions[agent]
+  local runtime = { backend = agent, transcript_path = path }
+  state.sessions[agent] = runtime
+  local pane, info
+  view.create_pane({ transcript_path = path, size = 12,
+    acp = { agent_name = agent, source_winid = vim.api.nvim_get_current_win() },
+  }, function(id, value) pane, info = id, value end)
+  assert(vim.wait(1000, function() return pane ~= nil end, 10))
+  local session = { pane_id = pane, agent_name = agent, transcript_path = path, view_state = {} }
+  runtime.pane_id = pane
+  vim.api.nvim_set_current_win(info.winid)
+  view.resume_follow(pane)
+  local function assert_filled(message)
+    local window = vim.fn.getwininfo(info.winid)[1]
+    local count = vim.api.nvim_buf_line_count(info.bufnr)
+    assert(window.topline == count - window.height + 1, message .. ": " .. vim.inspect(window))
+    assert(view.capture_thread_view(pane).follow_output == true, "structural reflow preserves follow")
+  end
+  local function append(text)
+    local file = assert(io.open(path, "a"))
+    file:write(text)
+    file:close()
+    view.on_transcript_updated(session, text, "a")
+    assert(vim.wait(1000, function() return session.view_state.append_timer == nil end, 10))
+  end
+  assert_filled("full transcript fills the window")
+  vim.fn.maparg("gC", "n", false, true).callback()
+  assert_filled("gC keeps the projected conversation above the footer")
+  for index = 1, 3 do
+    append("\n─ Tool ─\n hidden next " .. index)
+    assert_filled("hidden tool headings keep the viewport filled")
+    append(" continuation")
+    assert_filled("hidden tool continuations keep the viewport filled")
+  end
+  append("\n─ Assistant ─\n next reply")
+  assert_filled("visible replies continue following after hidden tools")
+
+  -- A hidden heading still rebuilds the projection while reading scrollback.
+  view.configure_pane(pane, { follow_output = false })
+  vim.cmd("normal! 20Gzt")
+  local before = vim.fn.winsaveview()
+  append("\n─ Tool ─\n hidden in scrollback")
+  local after = vim.fn.winsaveview()
+  assert(after.lnum == before.lnum and after.topline == before.topline,
+    "hidden tool headings preserve a paused viewport")
+  assert(view.capture_thread_view(pane).follow_output == false, "scrollback stays paused")
+  view.kill_pane(pane, session)
+  state.sessions[agent] = old_session
+  vim.fn.delete(path)
+end
+
 function M.run()
   local view = require("lazyagent.acp.view_buffer")
   local state = require("lazyagent.logic.state")
@@ -145,6 +204,7 @@ function M.run()
   view.kill_pane(pane, session)
   state.sessions[agent], state.backends[agent] = old_session, old_backend
   vim.fn.delete(path)
+  check_follow_viewport(view, state)
 end
 
 return M

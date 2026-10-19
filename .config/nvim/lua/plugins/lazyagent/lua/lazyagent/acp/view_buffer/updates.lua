@@ -441,7 +441,7 @@ function M.new(ctx)
     })
   end
 
-  scroll_buffer_to_end = function(bufnr)
+  scroll_buffer_to_end = function(bufnr, opts)
     local line_count = vim.api.nvim_buf_line_count(bufnr)
     if line_count <= 0 then
       return
@@ -453,6 +453,12 @@ function M.new(ctx)
       if vim.api.nvim_win_is_valid(win) then
         smooth_scroll.stop_window(win)
         vim.wo[win].scrolloff = FOLLOW_SCROLL_OFF
+        if opts and opts.reset_view then
+          -- Replacing the transcript can leave its last row at the top of the
+          -- window. Move away first so returning to the end fills the viewport.
+          -- Window-local APIs also keep command-line completion undisturbed.
+          pcall(vim.api.nvim_win_set_cursor, win, { 1, 0 })
+        end
         pcall(vim.api.nvim_win_set_cursor, win, { row, col })
       end
     end
@@ -661,6 +667,10 @@ function M.new(ctx)
     entry.pending_deferred_refresh = false
     entry.pending_deferred_changed_start = nil
     entry.transcript_file_signature = signature
+    if should_follow_output(bufnr) then
+      M._expect_follow_reflow(bufnr)
+      scroll_buffer_to_end(bufnr, { reset_view = true })
+    end
     refresh_buffer_layout(bufnr, { force_decorate = true, force_footer = true })
     restore_window_views(bufnr, saved_views)
     request_buffer_redraw(bufnr)
