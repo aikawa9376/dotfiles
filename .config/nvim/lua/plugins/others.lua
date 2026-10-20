@@ -52,6 +52,7 @@ return {
     opts = {
       library = {
         "lazy.nvim",
+        "/usr/share/hypr/stubs",
       }
     }
   },
