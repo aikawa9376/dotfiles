@@ -330,7 +330,8 @@ end
 
 local function generate_preview_pattern(query, generation)
   M.pattern_async(query, "vim", function(pattern)
-    apply_cmdline_preview(pattern or query, generation)
+    -- matchadd() needs an explicit case directive even without Migemo.
+    apply_cmdline_preview(pattern or vim_case_prefix(query) .. query, generation)
   end)
 end
 
@@ -349,7 +350,7 @@ local function update_cmdline_preview()
   -- A one-letter Migemo pattern expands to thousands of bytes (for example,
   -- `k` is about 2.8 KiB) and can dominate the cost of every later keypress.
   if #query == 1 or not query:match("[%w_-]") then
-    apply_cmdline_preview(query, generation)
+    apply_cmdline_preview(vim_case_prefix(query) .. query, generation)
     return
   end
 
