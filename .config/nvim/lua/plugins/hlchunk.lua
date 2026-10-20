@@ -1,6 +1,10 @@
 return {
   "shellRaining/hlchunk.nvim",
   event = "BufReadPre",
+  config = function(_, opts)
+    require("plugins.hlchunk_util").patch()
+    require("hlchunk").setup(opts)
+  end,
   opts = {
     chunk = {
       enable = true,

@@ -117,6 +117,13 @@ no thresholds. Async request cancellation and ellipsis parse readiness are
 covered separately by `markdown_rendering_spec.lua` and `view_diff_spec.lua`.
 This integration contract measures rendering work, not TUI input latency.
 
+With the same environment variables, run `tests/bench/markdown_injections.lua`
+to exercise two nested Markdown fences followed by a link. It replaces the
+text and parses only the lower viewport 30 times, checking that empty clipped
+injections never become whole-source trees and one link produces one icon.
+It records unguarded behavior for comparison, revisits the skipped fence, and
+checks that the native LanguageTree class remains unchanged.
+
 ## Native highlight timeout recovery
 
 ```sh
@@ -135,6 +142,32 @@ It also injects a timeout into the installed external renderer's parse of a
 7,000-row code fence, then requires actual visible code decorations through the
 LazyAgent custom handler, with retained Markdown marks proportional to the
 visible rows rather than the full block.
+
+## Native parser memory pressure
+
+```sh
+LAZYAGENT_PARSER_RTP=/path/to/nvim/site \
+LAZYAGENT_PARSER_GC_MODE=bounded \
+LAZYAGENT_BENCH_OUT=/tmp/lazyagent-parser-memory.json \
+nvim --headless --clean -u NONE -i NONE -l tests/bench/parser_memory.lua
+```
+
+Repeat in a fresh process with `LAZYAGENT_PARSER_GC_MODE=baseline` and a separate
+output path. This generates a 3,000-line paragraph and retains 128MiB of Lua
+metadata tables, then replaces the final line and completes a native async
+viewport parse 40 times. `LAZYAGENT_BENCH_HEAP_MIB` and `LAZYAGENT_BENCH_LOOPS`
+adjust the retained heap and repetitions. It does not load user history,
+contact providers, call `malloc_trim`, or change collector settings.
+
+It records RSS, Lua heap, native used/free arenas where glibc `mallinfo2` is
+available, elapsed time and GC callback latency. The final explicit full GC is
+diagnostic and occurs after the measured loop. Compare the transient native
+peak with that retained baseline; do not interpret reclaimed arena space as
+proof of a permanent leak. The generated long paragraph deliberately stresses
+both Markdown and inline reparsing. A large retained Lua heap matters because
+native tree allocations are not represented by the pointer-sized Lua userdata.
+There are no portable RSS/timing thresholds. `parser_gc_spec.lua` separately
+covers the scoped, coalesced incremental collector job and cancellation.
 
 ## Repeated image-reference scans
 

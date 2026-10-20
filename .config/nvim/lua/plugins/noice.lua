@@ -118,5 +118,6 @@ return {
   config = function(_, opts)
     require("noice").setup(opts)
     require("plugins.noice_util").patch_confirm_lifecycle()
+    require("plugins.noice_util").patch_mini_timers()
   end,
 }

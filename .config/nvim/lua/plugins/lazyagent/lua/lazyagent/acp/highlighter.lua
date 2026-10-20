@@ -55,10 +55,14 @@ function M.start(bufnr)
   pcall(require("lazyagent.render_markdown").enable_async_view_parse)
   local highlighter = vim.treesitter.highlighter
   if highlighter.active[bufnr] then
+    require("lazyagent.acp.injections").guard(highlighter.active[bufnr].tree)
+    require("lazyagent.acp.parser_gc").attach(highlighter.active[bufnr].tree, bufnr)
     recover_async_parse(highlighter.active[bufnr].tree, bufnr)
     return
   end
   local parser = assert(vim.treesitter.get_parser(bufnr, "markdown"))
+  require("lazyagent.acp.injections").guard(parser)
+  require("lazyagent.acp.parser_gc").attach(parser, bufnr)
   recover_async_parse(parser, bufnr)
   highlighter.new(parser, { queries = { markdown = markdown_query() } })
 end

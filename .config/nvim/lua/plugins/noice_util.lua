@@ -1,5 +1,36 @@
 local M = {}
 
+function M.patch_mini_timers()
+  local Mini = require("noice.view.backend.mini")
+  if Mini._bounded_mini_timers then return end
+  Mini._bounded_mini_timers = true
+  local function close(timer)
+    if not timer:is_closing() then timer:stop(); timer:close() end
+  end
+  -- The installed mini backend drops expired handles from self.timers without
+  -- closing them, retaining a callback and its view for every message.
+  Mini.autohide = function(self, id)
+    local timer = self.timers[id] or vim.uv.new_timer()
+    if not timer then return end
+    self.timers[id] = timer
+    timer:start(self._opts.timeout, 0, function()
+      local message = self.active[id]
+      if message and not self:can_hide(message) then return self:autohide(id) end
+      self.timers[id] = nil
+      close(timer)
+      if not message then return end
+      self.active[id] = nil
+      vim.schedule(function() self:update() end)
+    end)
+  end
+  local dismiss = Mini.dismiss
+  Mini.dismiss = function(self)
+    for _, timer in pairs(self.timers) do close(timer) end
+    self.timers = {}
+    return dismiss(self)
+  end
+end
+
 function M.patch_confirm_lifecycle()
   local cmdline = require("noice.ui.cmdline")
   if cmdline._confirm_lifecycle_patch then
