@@ -25,7 +25,7 @@ modules.setup({
     end,
     open = function(ctx, item) opened[#opened + 1] = { ctx = ctx, item = item } end },
   { id = 'tail', title = 'deadbeef Tail', after = 'unstaged', load = function(_, done)
-    done({ { id = 'fake', text = 'stash@{0}\nM fake.txt' } })
+    done({ { id = 'fake', text = 'stash@{0}\nM fake.txt', highlight = 'WarningMsg' } })
   end },
   { id = 'broken', title = 'Broken', before = 'commits', load = function() error('provider failed') end },
   { id = 'absent', title = 'Fallback', after = 'index_flags', load = function(_, done)
@@ -55,6 +55,16 @@ assert(lines()[#lines()] == 'Last section', 'Missing anchors should fall back to
 assert(requests[1].ctx.root == root and requests[1].ctx.branch == 'main' and requests[1].ctx.paths[1] == 'sample.txt')
 reply({ { id = 'a', text = 'Same title' }, { id = 'b', text = 'Same title' } })
 wait(function() return item('b') ~= nil end)
+local ns = vim.api.nvim_get_namespaces().git_status_modules
+local function row_highlight(row)
+  local marks = vim.api.nvim_buf_get_extmarks(b, ns, { row - 1, 0 }, { row - 1, -1 }, { details = true })
+  assert(#marks == 1, 'Item must retain its identity extmark')
+  return marks[1][4].line_hl_group or marks[1][4].hl_group
+end
+local plain = vim.api.nvim_get_hl(0, { name = row_highlight(item('b')), link = false })
+assert(plain.fg == vim.api.nvim_get_hl(0, { name = 'Normal', link = false }).fg
+  and not plain.bg and not plain.ctermbg, 'Plain items must use normal text without a background')
+assert(row_highlight(item('fake')) == 'WarningMsg', 'Provider item highlight was ignored')
 assert(at('Related notes') < at('Unstaged changes'), 'before placement was ignored')
 vim.api.nvim_win_set_cursor(0, { item('b'), 0 })
 press('<CR>')

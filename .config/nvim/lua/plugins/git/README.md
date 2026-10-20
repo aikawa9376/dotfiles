@@ -308,7 +308,9 @@ stay in that shelf, and results from superseded loads or closed views are
 discarded. Each status buffer owns its own results and cancellation handles.
 
 `hide_empty = false` keeps an empty shelf visible. Optional `highlight` sets
-the heading color; items may supply their own `highlight`. `events` can declare
+the heading color; items use normal text color and inherit the window background
+unless they supply their own `highlight`. Git syntax does not color item labels.
+`events` can declare
 refresh triggers, for example `{ { event = 'User', pattern = 'ProjectTasksChanged' } }`.
 An integration can also call `require('git.features.status_modules').refresh(bufnr)`.
 Configure modules before opening Status; omitting `status_modules` from a

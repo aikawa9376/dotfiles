@@ -4,6 +4,13 @@ local sections = require('git.features.status_sections')
 local loading = require('git.features.loading')
 local definitions, states = {}, {}
 local ns = vim.api.nvim_create_namespace('git_status_modules')
+local function setup_item_highlight()
+  local normal = vim.api.nvim_get_hl(0, { name = 'Normal', link = false })
+  vim.api.nvim_set_hl(0, 'GitStatusModuleItem', { fg = normal.fg, ctermfg = normal.ctermfg })
+end
+vim.api.nvim_create_autocmd('ColorScheme', {
+  group = vim.api.nvim_create_augroup('GitStatusModuleHighlights', { clear = true }), callback = setup_item_highlight,
+})
 local function clean(value) return tostring(value or ''):gsub('[%z\1-\31\127]', ' ') end
 local function identity(info)
   return info.definition.id .. '\0' .. info.kind .. '\0' .. (info.item and info.item.id or '')
@@ -175,10 +182,19 @@ function M.commit(buf, rows)
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   state.row_tick, state.row_cache = nil, nil
   state.marks = {}
+  setup_item_highlight()
   for row, info in pairs(rows) do
-    local group = info.kind == 'header' and (info.definition.highlight or 'Title')
-      or info.kind == 'item' and (info.item.highlight or 'Normal') or 'Comment'
-    local id = vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0, { right_gravity = true, line_hl_group = group })
+    -- Mask Git syntax in labels without overriding the window's background.
+    local group
+    if info.kind == 'header' then group = info.definition.highlight or 'Title'
+    elseif info.kind == 'item' then group = info.item.highlight or 'GitStatusModuleItem'
+    else group = 'Comment' end
+    local opts = { right_gravity = true, line_hl_group = group }
+    if info.kind == 'item' and not info.item.highlight then
+      opts.line_hl_group = nil
+      opts.hl_group, opts.end_col = group, #clean(info.item.text)
+    end
+    local id = vim.api.nvim_buf_set_extmark(buf, ns, row - 1, 0, opts)
     state.marks[id] = info
     if info.kind == 'item' and info.item.detail and info.item.detail ~= '' then
       local start = #clean(info.item.text) + 2
