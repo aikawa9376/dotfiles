@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 local M = {}
 
 local function assert_equal(actual, expected, message)
@@ -19,7 +20,9 @@ end
 
 local function item_for_path(items, path)
   local uri = vim.uri_from_fname(path)
-  return vim.iter(items or {}):find(function(item) return item.location and item.location.uri == uri end)
+  for _, item in ipairs(items or {}) do
+    if item.location and item.location.uri == uri then return item end
+  end
 end
 
 function M.run()
@@ -170,6 +173,11 @@ function M.run()
   vim.lsp.util.show_document = original_show_document
   definition.pick_locations = original_picker
   vim.cmd("enew")
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_get_name(buf):sub(1, #root + 1) == root .. "/" then
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+  end
   vim.fn.delete(root, "rf")
 end
 

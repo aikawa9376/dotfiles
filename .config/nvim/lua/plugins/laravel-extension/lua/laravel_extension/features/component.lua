@@ -5,18 +5,7 @@ local function trim(text)
 end
 
 local function project_root(bufnr)
-  local state = rawget(_G, "laravel_nvim")
-  if state and type(state.project_root) == "string" and state.project_root ~= "" then
-    return state.project_root
-  end
-
-  bufnr = bufnr or 0
-  local root = vim.fs.root(bufnr, { "artisan", "composer.json" })
-  if root and vim.fn.filereadable(root .. "/artisan") == 1 then
-    return root
-  end
-
-  return nil
+  return require("laravel_extension.utils").project_root(bufnr)
 end
 
 local function path_exists(path)

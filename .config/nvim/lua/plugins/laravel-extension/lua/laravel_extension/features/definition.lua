@@ -405,6 +405,7 @@ local function fallback_definition()
 end
 
 function M.goto_definition()
+  if require("laravel_extension.features.members").goto_at_cursor() then return true end
   local livewire = require("laravel_extension.features.livewire")
   if livewire.goto_livewire_at_cursor({ notify = false }) then
     return true

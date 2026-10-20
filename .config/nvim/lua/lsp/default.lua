@@ -29,7 +29,13 @@ M.settings = function(client, bufnr)
   buf_set_keymap("n", "gi", "m`:FzfLua lsp_implementations<CR>", keyopts)
   buf_set_keymap("n", "gy", "m`:FzfLua lsp_typedefs<CR>", keyopts)
   buf_set_keymap("n", "gk", "<cmd>lua vim.lsp.buf.hover()<CR>", keyopts)
-  buf_set_keymap("n", "<leader>rn", "<cmd>lua vim.lsp.buf.rename()<CR>", keyopts)
+  vim.keymap.set("n", "<leader>rn", function()
+    if vim.api.nvim_buf_get_name(0):match("%.blade%.php$") then
+      local ok, rename = pcall(require, "laravel_extension.features.rename")
+      if ok and require("laravel_extension.utils").project_root(0) then rename.rename(); return end
+    end
+    vim.lsp.buf.rename()
+  end, { buffer = bufnr, silent = true, desc = "Rename symbol or Blade view" })
   buf_set_keymap("n", "<Leader>ca", ":FzfLua lsp_code_actions<CR>", keyopts)
   buf_set_keymap("n", "<Leader>cl", "<cmd>lua vim.lsp.codelens.run()<CR>", keyopts)
   buf_set_keymap(

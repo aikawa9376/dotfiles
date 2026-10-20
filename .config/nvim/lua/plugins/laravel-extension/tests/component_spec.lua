@@ -72,6 +72,11 @@ function M.run()
   assert_equal(component.goto_references_at_cursor({ root = root }), false, "method gr falls back to normal LSP references")
 
   vim.cmd("enew")
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_get_name(buf):sub(1, #root + 1) == root .. "/" then
+      vim.api.nvim_buf_delete(buf, { force = true })
+    end
+  end
   vim.fn.delete(root, "rf")
 end
 

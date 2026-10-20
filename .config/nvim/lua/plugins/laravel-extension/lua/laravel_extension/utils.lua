@@ -5,17 +5,14 @@ function M.trim(text)
 end
 
 function M.project_root(bufnr)
+  bufnr = bufnr or 0
+  local path = vim.api.nvim_buf_get_name(bufnr)
+  local root = path ~= "" and vim.fs.root(bufnr, "artisan") or nil
+  if root and vim.fn.filereadable(root .. "/artisan") == 1 then return root end
   local state = rawget(_G, "laravel_nvim")
-  if state and type(state.project_root) == "string" and state.project_root ~= "" then
+  if path == "" and state and type(state.project_root) == "string" and state.project_root ~= "" then
     return state.project_root
   end
-
-  bufnr = bufnr or 0
-  local root = vim.fs.root(bufnr, { "artisan", "composer.json" })
-  if root and vim.fn.filereadable(root .. "/artisan") == 1 then
-    return root
-  end
-
   return nil
 end
 

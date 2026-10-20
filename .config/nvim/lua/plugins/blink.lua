@@ -259,9 +259,15 @@ return {
               'obsidian', 'obsidian_new', 'obsidian_tags',
             },
             lazyagent = { 'buffer', 'lazyagent_acp_buffer', 'ripgrep', 'romaji_japanese', 'japanese', 'tmux', 'lazyagent' },
-            php = { 'lsp', 'copilot', 'lazydev', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep', 'romaji_japanese', 'japanese'  },
+            php = { 'lsp', 'copilot', 'lazydev', 'laravel_extension', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep', 'romaji_japanese', 'japanese'  },
+            blade = { 'lsp', 'copilot', 'laravel_extension', 'laravel', 'path', 'snippets', 'buffer', 'ripgrep', 'romaji_japanese', 'japanese' },
           },
           providers = {
+            laravel_extension = {
+              name = '[LV]',
+              module = 'laravel_extension.blink',
+              score_offset = 20,
+            },
             lazyagent = {
               name = '[SA]',
               module = 'lazyagent.completion.blink',

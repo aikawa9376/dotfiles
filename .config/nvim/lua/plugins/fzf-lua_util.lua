@@ -796,7 +796,7 @@ vim.cmd([[command! MigemoRg lua require"plugins.fzf-lua_util".fzf_ripgrep_migemo
 -- ------------------------------------------------------------------
 -- Ast grep
 -- ------------------------------------------------------------------
---
+
 local getAstGrepOpts = function ()
   local opts = {}
   opts.prompt = '>'
@@ -1123,6 +1123,9 @@ local function goto_laravel_extension_context()
     return false
   end
 
+  local ok_members, members = pcall(require, "laravel_extension.features.members")
+  if ok_members and members.goto_at_cursor() then return true end
+
   local ok_livewire, livewire = pcall(require, "laravel_extension.features.livewire")
   if ok_livewire and livewire.goto_livewire_at_cursor({ notify = false }) then
     return true
@@ -1178,8 +1181,8 @@ M.fzf_laravel = function()
 end
 
 M.fzf_references = function()
-  local ok, component = pcall(require, "laravel_extension.features.component")
-  if ok and type(component.goto_references_at_cursor) == "function" and component.goto_references_at_cursor() then
+  local ok, references = pcall(require, "laravel_extension.features.references")
+  if ok and references.goto_at_cursor() then
     return
   end
   require("fzf-lua.cmd").run_command("lsp_references")
