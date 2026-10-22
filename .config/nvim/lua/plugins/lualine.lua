@@ -219,8 +219,16 @@ return {
     vim.api.nvim_set_hl(0, "LualineGitChanged", { fg = colors.yellow, bg = colors.bg, bold = true })
     vim.api.nvim_set_hl(0, "LualineGitRemoved", { fg = colors.red,    bg = colors.bg, bold = true })
 
+    local function diffview_filename()
+      local lib = package.loaded["diffview.lib"]
+      local view = lib and lib.get_current_view()
+      -- FileEntry.path is repository-relative, including for revision/snapshot buffers.
+      local entry = view and view.cur_entry
+      return entry and entry.path or nil
+    end
+
     local conditions = {
-      buffer_not_empty = function() return vim.fn.empty(vim.fn.expand("%:t")) ~= 1 end,
+      buffer_not_empty = function() return diffview_filename() ~= nil or vim.fn.empty(vim.fn.expand("%:t")) ~= 1 end,
       hide_in_width = function() return vim.fn.winwidth(0) > 80 end,
       obsession = function() return vim.fn.winwidth(0) >= 80 and vim.fn.exists("*ObsessionStatus") == 1 end,
       project = function()
@@ -287,14 +295,6 @@ return {
             end,
             cond = conditions.project,
           },
-          {
-            function()
-              local commit_info = package.loaded["diffview_extension.commit_info"]
-              return commit_info and commit_info.statusline(math.max(32, math.floor(vim.fn.winwidth(0) * 0.55))):gsub('%%', '%%%%') or ""
-            end,
-            icon = "",
-            color = { fg = colors.yellow, bold = true },
-          },
           -- Worktree sync marker (separate component)
           {
             function()
@@ -307,6 +307,11 @@ return {
           },
           {
             function()
+              local path = diffview_filename()
+              if path then
+                local icon = require("nvim-web-devicons").get_icon(vim.fs.basename(path))
+                return ((icon or "") .. " " .. path):gsub("%%", "%%%%")
+              end
               if vim.b.git_object then
                 return (require('git.display').name(vim.api.nvim_get_current_buf()):gsub('%%', '%%%%'))
               end
@@ -320,6 +325,14 @@ return {
               return (icon or "") .. " " .. name
             end,
             cond = conditions.buffer_not_empty,
+          },
+          {
+            function()
+              local commit_info = package.loaded["diffview_extension.commit_info"]
+              return commit_info and commit_info.statusline(math.max(32, math.floor(vim.fn.winwidth(0) * 0.55))):gsub('%%', '%%%%') or ""
+            end,
+            icon = "",
+            color = { fg = colors.yellow, bold = true },
           },
           {
             function()
@@ -393,6 +406,11 @@ return {
         lualine_a = {
           {
             function()
+              local path = diffview_filename()
+              if path then
+                local icon = require("nvim-web-devicons").get_icon(vim.fs.basename(path))
+                return ((icon or "") .. " " .. path):gsub("%%", "%%%%")
+              end
               if vim.b.git_object then
                 return (require('git.display').name(vim.api.nvim_get_current_buf()):gsub('%%', '%%%%'))
               end
