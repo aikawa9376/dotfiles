@@ -12,6 +12,22 @@ local branch_name_ns = vim.api.nvim_create_namespace("git_branch_names")
 local branch_fade_ns = vim.api.nvim_create_namespace("git_branch_fade")
 local branch_filter_ns = vim.api.nvim_create_namespace('git_branch_filter')
 local filters = { all = 'All', local_ = 'Local', remote = 'Remote', tags = 'Tags' }
+local refresh_controllers, opening_snapshots = {}, {}
+
+local function branch_queries(filter)
+  local format = '%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(upstream:track)|%(committerdate:relative)|%(authorname)|%(contents:subject)'
+  local queries = {}
+  local function add(kind, sort, fields, ref)
+    if filter == 'all' or filter == kind then
+      queries[#queries + 1] = { kind = kind,
+        args = { 'for-each-ref', '--sort=' .. sort, '--format=' .. fields, ref } }
+    end
+  end
+  add('local_', '-committerdate', format, 'refs/heads/')
+  add('remote', '-committerdate', '%(symref)|' .. format, 'refs/remotes/')
+  add('tags', '-creatordate', ' |%(refname:lstrip=2)|||%(creatordate:relative)|%(authorname)|%(contents:subject)', 'refs/tags/')
+  return queries
+end
 
 local function notify_branch_changed(bufnr, work_tree)
   utils.fire_git_changed({
@@ -52,27 +68,24 @@ _G.git_branch_completion = function(arg_lead, ...)
   return matches
 end
 
-local function get_branch_list(bufnr, filter)
+local function get_branch_list(bufnr, filter, inventory, layout)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
-  local cmd_prefix = get_git_prefix(bufnr)
-  if not cmd_prefix then
+  local work_tree = get_buffer_work_tree(bufnr)
+  if not work_tree then
     return {}, {}, {}, false, {}
   end
 
   filter = filter or vim.b[bufnr].branch_filter or 'all'
-  local local_branches, remote_branches, tags = {}, {}, {}
-  if filter == 'all' or filter == 'local_' then
-    local_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(upstream:track)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/heads/")
-    if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
+  if not inventory then
+    inventory = {}
+    for _, query in ipairs(branch_queries(filter)) do
+      local argv = { 'git', '-C', work_tree }; vim.list_extend(argv, query.args)
+      local result = vim.system(argv, { text = true }):wait()
+      if result.code ~= 0 then return {}, {}, {}, false, {} end
+      inventory[query.kind] = vim.split(result.stdout or '', '\n', { plain = true, trimempty = true })
+    end
   end
-  if filter == 'all' or filter == 'remote' then
-    remote_branches = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-committerdate --format='%(symref)|%(HEAD)|%(refname:lstrip=2)|%(upstream:short)|%(upstream:track)|%(committerdate:relative)|%(authorname)|%(contents:subject)' refs/remotes/")
-    if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
-  end
-  if filter == 'all' or filter == 'tags' then
-    tags = vim.fn.systemlist(cmd_prefix .. "for-each-ref --sort=-creatordate --format=' |%(refname:lstrip=2)|||%(creatordate:relative)|%(authorname)|%(contents:subject)' refs/tags/")
-    if vim.v.shell_error ~= 0 then return {}, {}, {}, false, {} end
-  end
+  local local_branches, remote_branches, tags = inventory.local_ or {}, inventory.remote or {}, inventory.tags or {}
 
   local raw_branches = {}
   if filter == 'all' or filter == 'local_' then
@@ -153,8 +166,12 @@ local function get_branch_list(bufnr, filter)
   -- Cap widths to avoid string.format limits (max 99)
   max_branch_len = math.min(max_branch_len, 40)
   max_subject_len = 40  -- Fixed width for subject
-  max_date_len = math.min(max_date_len, 6)
+  -- Relative labels grow with age; reserve their full column before first paint.
+  max_date_len = 6
   max_author_len = math.min(max_author_len, 15)
+  if #branches == 0 then layout = layout or vim.b[bufnr].branch_layout end
+  layout = layout or { branch = max_branch_len, date = max_date_len, author = max_author_len }
+  max_branch_len, max_date_len, max_author_len = layout.branch, layout.date, layout.author
 
   -- Helper function to pad string based on display width and truncate if necessary
   local function pad_right(str, width, truncate_mode)
@@ -300,7 +317,7 @@ local function get_branch_list(bufnr, filter)
     branch_kinds[i] = b.kind
   end
 
-  return formatted, branch_names, truncated_info, true, branch_kinds, branch_columns
+  return formatted, branch_names, truncated_info, true, branch_kinds, branch_columns, layout
 end
 
 local function apply_fade_highlight(bufnr, truncated_info)
@@ -442,31 +459,75 @@ _G.git_upstream_completion = function(arg_lead)
   return matches
 end
 
-local function refresh_branch_list(bufnr)
-  if not utils.is_valid_buf(bufnr) then return end
+local function branch_snapshot(bufnr, filter, inventory, layout)
+  local lines, names, truncated, ok, kinds, columns, widths = get_branch_list(bufnr, filter, inventory, layout)
+  if not ok then return nil end
+  return { lines = lines, names = names, truncated = truncated, kinds = kinds, columns = columns, layout = widths }
+end
 
-  local branch_output, branch_names, truncated_info, _, branch_kinds, branch_columns = get_branch_list(bufnr)
-  local old_row = vim.fn.line('.')
-  local selected = (vim.b[bufnr].branch_map or {})[old_row]
-  local selected_kind = (vim.b[bufnr].branch_kinds or {})[old_row]
+local function publish_branch_snapshot(bufnr, snapshot)
+  local views, names, kinds = {}, vim.b[bufnr].branch_map or {}, vim.b[bufnr].branch_kinds or {}
+  for _, win in ipairs(vim.fn.win_findbuf(bufnr)) do
+    local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    views[#views + 1] = { win = win, view = view, name = names[view.lnum], kind = kinds[view.lnum] }
+  end
+  local changed = not vim.deep_equal(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), snapshot.lines)
   utils.with_buf_modifiable(bufnr, function()
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
-    vim.b[bufnr].branch_map = branch_names
-    vim.b[bufnr].branch_kinds = branch_kinds
-    vim.b[bufnr].branch_columns = branch_columns
-    apply_fade_highlight(bufnr, truncated_info)
+    if changed then vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, snapshot.lines) end
+    vim.b[bufnr].branch_map = snapshot.names
+    vim.b[bufnr].branch_kinds = snapshot.kinds
+    vim.b[bufnr].branch_columns = snapshot.columns
+    vim.b[bufnr].branch_layout = snapshot.layout
+    apply_fade_highlight(bufnr, snapshot.truncated)
     apply_branch_highlight(bufnr)
   end)
   vim.bo[bufnr].modifiable = false
-  if vim.api.nvim_get_current_buf() == bufnr then
-    for row, name in ipairs(branch_names) do
-      if name == selected and branch_kinds[row] == selected_kind then
-        vim.api.nvim_win_set_cursor(0, { row, 0 })
-        return
+  for _, saved in ipairs(views) do
+    local view, row = saved.view, nil
+    for candidate, name in ipairs(snapshot.names) do
+      if name == saved.name and snapshot.kinds[candidate] == saved.kind then
+        row = candidate; break
       end
     end
-    vim.api.nvim_win_set_cursor(0, { math.min(old_row, math.max(#branch_names, 1)), 0 })
+    row = row or math.min(view.lnum, math.max(#snapshot.names, 1))
+    view.topline = math.max(1, row - (view.lnum - view.topline))
+    view.lnum = row
+    if vim.api.nvim_win_is_valid(saved.win) and vim.api.nvim_win_get_buf(saved.win) == bufnr then
+      vim.api.nvim_win_call(saved.win, function() vim.fn.winrestview(view) end)
+    end
   end
+end
+
+local function refresh_branch_list(bufnr)
+  if not utils.is_valid_buf(bufnr) then return end
+  if refresh_controllers[bufnr] then refresh_controllers[bufnr].clear() end
+  local snapshot = branch_snapshot(bufnr)
+  if snapshot then publish_branch_snapshot(bufnr, snapshot)
+  else vim.notify('Could not refresh branch list; keeping the previous list', vim.log.levels.WARN) end
+end
+
+local function load_branch_snapshot(bufnr, done)
+  local root = get_buffer_work_tree(bufnr)
+  local filter, layout = vim.b[bufnr].branch_filter or 'all', vim.b[bufnr].branch_layout
+  local async = require('git.features.async')
+  return async.run(root, function()
+    local reads = {}
+    for _, query in ipairs(branch_queries(filter)) do
+      reads[#reads + 1] = function()
+        local output, err = async.git(root, query.args, { text = true })
+        if not output then error(err, 0) end
+        return { kind = query.kind, lines = vim.split(output, '\n', { plain = true, trimempty = true }) }
+      end
+    end
+    local inventory = {}
+    for _, result in ipairs(async.gather(reads)) do
+      if not result.ok then error(result.value, 0) end
+      inventory[result.value.kind] = result.value.lines
+    end
+    local snapshot = branch_snapshot(bufnr, filter, inventory, layout)
+    if not snapshot then error('Could not format branch list', 0) end
+    return snapshot
+  end, done)
 end
 
 local function upstream_branch_at_cursor(bufnr)
@@ -1144,31 +1205,28 @@ local function open_branch_list(opts)
     utils.set_buf_work_tree(inventory_buf, work_tree, git_dir)
   end
   local filter = opts and opts.filter or 'all'
-  local branch_output, branch_names, truncated_info, ok, branch_kinds, branch_columns = get_branch_list(inventory_buf, filter)
+  local snapshot = branch_snapshot(inventory_buf, filter)
   if inventory_buf ~= source_bufnr then vim.api.nvim_buf_delete(inventory_buf, { force = true }) end
-  if not ok then
+  if not snapshot then
     vim.notify("Not a git repository or an error occurred.", vim.log.levels.ERROR)
     return
   end
 
-  if #branch_output == 0 then
+  if #snapshot.lines == 0 then
     vim.notify("No branches found.", vim.log.levels.INFO)
     return
   end
 
-  utils.open_panel_split('git-branch://' .. git_dir)
+  snapshot.filter = filter
+  opening_snapshots[git_dir] = snapshot
+  local opened, open_err = pcall(utils.open_panel_split, 'git-branch://' .. git_dir)
+  opening_snapshots[git_dir] = nil
+  if not opened then error(open_err, 0) end
   local bufnr = vim.api.nvim_get_current_buf()
   utils.set_buf_work_tree(bufnr, work_tree, git_dir)
   vim.b[bufnr].branch_filter = filter
 
-  utils.with_buf_modifiable(bufnr, function()
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, branch_output)
-    vim.b[bufnr].branch_map = branch_names
-    vim.b[bufnr].branch_kinds = branch_kinds
-    vim.b[bufnr].branch_columns = branch_columns
-    apply_fade_highlight(bufnr, truncated_info)
-    apply_branch_highlight(bufnr)
-  end)
+  publish_branch_snapshot(bufnr, snapshot)
 
   vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
   vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
@@ -1264,8 +1322,11 @@ function M.setup(group)
       vim.api.nvim_set_option_value('buftype', 'nofile', { buf = bufnr })
       vim.api.nvim_set_option_value('bufhidden', 'hide', { buf = bufnr })
       vim.api.nvim_set_option_value('swapfile', false, { buf = bufnr })
+      local snapshot = opening_snapshots[git_dir]
+      if snapshot then vim.b[bufnr].branch_filter = snapshot.filter end
       vim.bo[bufnr].filetype = 'gitbranch'
-      refresh_branch_list(bufnr)
+      if snapshot then publish_branch_snapshot(bufnr, snapshot)
+      else refresh_branch_list(bufnr) end
     end,
   })
 
@@ -1274,6 +1335,7 @@ function M.setup(group)
     pattern = 'gitbranch',
     callback = function(ev)
       local bufnr = ev.buf
+      if refresh_controllers[bufnr] then refresh_controllers[bufnr].stop() end
       local buf_group = vim.api.nvim_create_augroup('git_branch_buf_' .. bufnr, { clear = true })
       require('git.features.magit_actions').attach(bufnr)
 
@@ -1523,9 +1585,17 @@ function M.setup(group)
       apply_branch_highlight(bufnr)
 
 
-      utils.setup_repo_refresh(buf_group, bufnr, function(target_bufnr)
-        refresh_branch_list(target_bufnr)
-      end, { visible_only = true })
+      local controller
+      controller = require('git.features.branch_refresh').attach(bufnr, buf_group, {
+        root = get_buffer_work_tree(bufnr),
+        opening = function() return opening_snapshots[vim.b[bufnr].git_dir] ~= nil end,
+        load = function(done) return load_branch_snapshot(bufnr, done) end,
+        publish = function(snapshot) publish_branch_snapshot(bufnr, snapshot) end,
+        on_stop = function()
+          if refresh_controllers[bufnr] == controller then refresh_controllers[bufnr] = nil end
+        end,
+      })
+      refresh_controllers[bufnr] = controller
     end,
   })
 end

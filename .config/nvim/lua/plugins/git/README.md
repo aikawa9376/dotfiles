@@ -59,6 +59,11 @@ keys retain semantic colors. Unsupported targets report a notice rather than
 selecting an unrelated commit. Normal editing keys keep their meaning inside the
 Commit message and Blame code pane.
 
+Action choosers validate selected refs, commits, and Status shelf item IDs so
+relative dates, background commit statistics, or shelf labels can refresh
+without cancelling the action. A different target in the captured row is
+rejected; file and hunk rows retain strict text checks.
+
 Branch actions use `coo` checkout, `cod` duplicate, `cos` spin-off, `coS` spin-out,
 `cou` set upstream, and `coU` unset upstream. Rename uses `cw`; removal uses `X`.
 Worktree actions use `cZa` add, `cZt` create from a Branch row, and `cZs` sync
@@ -1291,6 +1296,14 @@ the local tracking ref; the branch on the remote server remains unchanged.
 On a local branch row, `cou` sets its upstream with completion for local and
 remote branches; `coU` removes its upstream. These keys also work on a local
 branch other than the currently checked-out one.
+Branch's first view and explicit `R`/filter changes read a complete list before
+displaying it. Automatic refreshes run in the background, retain the last list
+until every result is ready, and preserve column widths and each window's
+selected ref and screen position. Longer new names use the existing truncation;
+`R` and filter changes refit columns. Returning from an unchanged action menu
+reuses the list; other buffer entries revalidate external Git changes.
+Matching Git change notifications within 150 ms share one update. Hidden panels
+wait until reopened, and failed or superseded reads keep the last complete view.
 When the original branch has outgoing commits, it is moved back to the merge
 base with its upstream; without an upstream or outgoing commits it stays put.
 The branch name and any reset are confirmed before changing refs.
@@ -1964,6 +1977,8 @@ history scope/focus/rename following against behaviors verified with Fugitive.
 - `ci/github_actions.lua`, `ci/circleci.lua`: verified jobs, steps and logs.
 - `ci/view.lua`: detail tabs, log splits, per-view session cache and cancellation.
 - `panel_keys.lua`: normal key migration, contextual identifiers/help, and ordinary action choosers.
+- `action_selection.lua`: shared target validation for normal choosers and Status actions.
+- `branch_refresh.lua`: menu-return reuse, notification batching and cancellable background Branch reads.
 
 Run all standalone Lua and TUI checks from this directory with
 `python3 tests/run.py -j 3`, or select checks by stem, for example

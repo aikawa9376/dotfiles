@@ -2879,6 +2879,8 @@ function M.setup(group)
 
         -- Retain only registered actions and capture the source row for execution.
         local win, row = vim.api.nvim_get_current_win(), vim.fn.line('.')
+        local action_selection = require('git.features.action_selection')
+        local selection = action_selection.capture(b, row)
         local seen = {}
         for _, group in ipairs(groups) do
           local available = {}
@@ -2889,7 +2891,7 @@ function M.setup(group)
               seen[action.key] = true
               action.callback = function()
                 if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= b then return end
-                if vim.api.nvim_buf_get_lines(b, row - 1, row, false)[1] ~= line then
+                if not action_selection.matches(b, row, selection) then
                   vim.notify('Selected item changed; reopen the action menu', vim.log.levels.WARN); return
                 end
                 vim.api.nvim_win_set_cursor(win, { row, 0 })

@@ -69,6 +69,8 @@ assert(at('Related notes') < at('Unstaged changes'), 'before placement was ignor
 vim.api.nvim_win_set_cursor(0, { item('b'), 0 })
 press('<CR>')
 assert(opened[1].item.id == 'b' and opened[1].ctx.root == root, 'Open used display text instead of item identity')
+press('?'); press('<CR>')
+assert(opened[2] and opened[2].item.id == 'b', 'Status action menu rejected an unchanged shelf item')
 vim.api.nvim_exec_autocmds('CursorMoved', { buffer = b })
 modules.refresh(b)
 wait(function() return #requests == 2 end)
@@ -116,6 +118,30 @@ stale.done({ { id = 'stale', text = 'Old branch result' } })
 reply({ { id = 'fresh', text = 'Current branch result' } })
 wait(function() return at('Current branch result') ~= nil end)
 assert(not at('Old branch result'), 'Stale provider replaced the current branch')
+-- Metadata may refresh while a menu is open; stable item IDs own the target.
+vim.api.nvim_win_set_cursor(0, { item('fresh'), 0 })
+press('?')
+local pending = #requests
+modules.refresh(b)
+wait(function() return #requests > pending end)
+reply({ { id = 'fresh', text = 'Updated branch result' } })
+wait(function() return at('Updated branch result') ~= nil end)
+local opened_before = #opened
+press('<CR>')
+assert(#opened == opened_before + 1 and opened[#opened].item.id == 'fresh',
+  'Shelf label refresh suppressed opening the same item')
+vim.api.nvim_win_set_cursor(0, { item('fresh'), 0 })
+press('?')
+pending = #requests
+modules.refresh(b)
+wait(function() return #requests > pending end)
+reply({ { id = 'replacement', text = 'Updated branch result' } })
+wait(function() return item('replacement') ~= nil end)
+local notify, rejected = vim.notify, false
+vim.notify = function(message) rejected = message == 'Selected item changed; reopen the action menu' end
+press('<CR>')
+vim.notify = notify
+assert(rejected and #opened == opened_before + 1, 'Shelf menu opened a replacement item with the same label')
 vim.api.nvim_exec_autocmds('User', { pattern = 'ShelfTest' })
 local count = #requests
 wait(function() return #requests > count end)

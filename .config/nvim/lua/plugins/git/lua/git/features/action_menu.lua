@@ -24,6 +24,7 @@ function M.show(title, groups, opts)
   vim.bo[buf].bufhidden = 'wipe'
   vim.bo[buf].swapfile = false
   vim.bo[buf].filetype = 'gitactionmenu'
+  vim.b[buf].git_action_menu_source = vim.api.nvim_win_get_buf(parent_win)
 
   local lines, actions_by_row, headings, key_ranges = {}, {}, {}, {}
   local key_width = 0

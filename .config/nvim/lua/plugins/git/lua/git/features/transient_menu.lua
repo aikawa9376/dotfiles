@@ -25,6 +25,7 @@ function M.show(spec, opts)
   vim.bo[buf].bufhidden = 'wipe'
   vim.bo[buf].swapfile = false
   vim.bo[buf].filetype = 'gitactionmenu'
+  vim.b[buf].git_action_menu_source = source_buf
   vim.b[buf].git_action_menu_kind = spec.kind
 
   local rows, lines, headings = {}, {}, {}

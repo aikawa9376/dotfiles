@@ -1,5 +1,6 @@
 -- Normal panel keys. Magit's transient specifications are deliberately separate.
 local M = {}
+local action_selection = require('git.features.action_selection')
 local configured = {}
 local panels = {
   gitstatus = 'status', gitlog = 'log', gitbranch = 'branch',
@@ -168,13 +169,13 @@ end
 local function chooser(buf, title, actions)
   local win = vim.api.nvim_get_current_win()
   local row = vim.api.nvim_win_get_cursor(win)[1]
-  local line = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1]
+  local selection = action_selection.capture(buf, row)
   local ctx = M.context(buf)
   local choices = {}
   for index, action in ipairs(actions) do
     choices[#choices + 1] = { key = action.menu_key or tostring(index), label = action.label, callback = function()
       if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_win_get_buf(win) ~= buf then return end
-      if vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] ~= line then
+      if not action_selection.matches(buf, row, selection) then
         vim.notify('Selected item changed; reopen the action chooser', vim.log.levels.WARN); return
       end
       vim.api.nvim_set_current_win(win); vim.api.nvim_win_set_cursor(win, { row, 0 })
